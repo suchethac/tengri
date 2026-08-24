@@ -69,14 +69,14 @@ def chebyshev_basis(
 
     Parameters
     ----------
-    wavelength: array, shape (n_wave,)
+    wavelength : array, shape (n_wave,)
         Wavelength grid [Angstrom].
-    order: int
+    order : int
         Maximum polynomial order (returns order+1 basis functions,
         from T_0 through T_order).
-    wave_min: float
+    wave_min : float
         Minimum wavelength for normalization to [-1, 1] [Angstrom].
-    wave_max: float
+    wave_max : float
         Maximum wavelength for normalization to [-1, 1] [Angstrom].
 
     Returns
@@ -130,12 +130,12 @@ def calibration_polynomial(
 
     Parameters
     ----------
-    wavelength: array, shape (n_wave,)
+    wavelength : array, shape (n_wave,)
         Wavelength grid [Angstrom].
-    coeffs: array, shape (order,)
+    coeffs : array, shape (order,)
         Chebyshev coefficients a_1, ..., a_order. Empty array gives
         C(lambda) = 1 everywhere.
-    wave_min, wave_max: float
+    wave_min, wave_max : float
         Wavelength range for normalization to [-1, 1].
 
     Returns
@@ -187,30 +187,30 @@ def marginalize_calibration(
 
     Parameters
     ----------
-    model_flux: array, shape (n_wave,)
+    model_flux : array, shape (n_wave,)
         Physical model spectrum (any flux units, matching obs_flux).
-    obs_flux: array, shape (n_wave,)
+    obs_flux : array, shape (n_wave,)
         Observed spectrum (same units as model_flux).
-    obs_err: array, shape (n_wave,)
+    obs_err : array, shape (n_wave,)
         1-sigma uncertainties on the observed spectrum (same units).
-    wavelength: array, shape (n_wave,)
+    wavelength : array, shape (n_wave,)
         Wavelength grid [Angstrom].
-    n_poly: int, optional
+    n_poly : int, optional
         Number of Chebyshev polynomial coefficients (order 1 through
         n_poly). The constant term (T_0 = 1) is implicit and fixed.
         Default 3.
-    prior_sigma: float, optional
+    prior_sigma : float, optional
         Standard deviation of the Gaussian prior on each coefficient.
         Default 1.0.
 
     Returns
     -------
-    log_likelihood_marginal: scalar
+    log_likelihood_marginal : scalar
         Marginalized log-likelihood with calibration polynomial
         integrated out.
-    c_hat: ndarray, shape (n_poly,)
+    c_hat : ndarray, shape (n_poly,)
         MAP calibration coefficients (a_1 ... a_n_poly).
-    c_hat_err: ndarray, shape (n_poly,)
+    c_hat_err : ndarray, shape (n_poly,)
         Posterior standard deviations of the coefficients.
 
     Notes
@@ -333,13 +333,13 @@ def apply_calibration(
 
     Parameters
     ----------
-    spectrum: array, shape (n_wave,)
+    spectrum : array, shape (n_wave,)
         Physical model spectrum (any flux units).
-    wavelength: array, shape (n_wave,)
+    wavelength : array, shape (n_wave,)
         Wavelength grid [Angstrom].
-    coeffs: array, shape (order,)
+    coeffs : array, shape (order,)
         Chebyshev coefficients a_1, ..., a_order.
-    wave_min, wave_max: float
+    wave_min, wave_max : float
         Wavelength range for normalization to [-1, 1].
 
     Returns
@@ -374,13 +374,13 @@ def double_calibration_polynomial(
 
     Parameters
     ----------
-    wavelength: array, shape (n_wave,)
+    wavelength : array, shape (n_wave,)
         Wavelength grid [Angstrom], must be sorted.
-    coeffs_blue: array, shape (order_blue,)
+    coeffs_blue : array, shape (order_blue,)
         Chebyshev coefficients for the blue arm (wavelength < wave_split).
-    coeffs_red: array, shape (order_red,)
+    coeffs_red : array, shape (order_red,)
         Chebyshev coefficients for the red arm (wavelength >= wave_split).
-    wave_split: float
+    wave_split : float
         Wavelength boundary between blue and red arms [Angstrom].
 
     Returns
@@ -416,15 +416,15 @@ def apply_double_calibration(
 
     Parameters
     ----------
-    spectrum: array, shape (n_wave,)
+    spectrum : array, shape (n_wave,)
         Physical model spectrum (any flux units).
-    wavelength: array, shape (n_wave,)
+    wavelength : array, shape (n_wave,)
         Wavelength grid [Angstrom], must be sorted.
-    coeffs_blue: array, shape (order_blue,)
+    coeffs_blue : array, shape (order_blue,)
         Chebyshev coefficients for the blue arm (wavelength < wave_split).
-    coeffs_red: array, shape (order_red,)
+    coeffs_red : array, shape (order_red,)
         Chebyshev coefficients for the red arm (wavelength >= wave_split).
-    wave_split: float
+    wave_split : float
         Wavelength boundary [Angstrom].
 
     Returns

@@ -53,13 +53,13 @@ def integrate_lnu_over_band(
 
     Parameters
     ----------
-    wavelength_aa: array_like, shape (n_wave,)
+    wavelength_aa : array_like, shape (n_wave,)
         Wavelength grid in ascending order. [Å]
-    l_nu: array_like, shape (n_wave,)
+    l_nu : array_like, shape (n_wave,)
         Spectral luminosity density. [erg/s/Hz] or [Lsun/Hz]
-    lambda_lo_aa: float
+    lambda_lo_aa : float
         Lower band edge. [Å]
-    lambda_hi_aa: float
+    lambda_hi_aa : float
         Upper band edge. [Å]
 
     Returns
@@ -104,20 +104,20 @@ def dust_energy_balance(
 
     Parameters
     ----------
-    wavelength_aa: array_like, shape (n_wave,)
+    wavelength_aa : array_like, shape (n_wave,)
         Rest-frame wavelength grid (ascending). [Å]
-    l_nu_unattenuated: array_like, shape (n_wave,)
+    l_nu_unattenuated : array_like, shape (n_wave,)
         Stellar (+ AGN) :math:`L_\nu` *before* dust attenuation. [erg/s/Hz]
-    l_nu_attenuated: array_like, shape (n_wave,)
+    l_nu_attenuated : array_like, shape (n_wave,)
         Stellar (+ AGN) :math:`L_\nu` *after* dust attenuation. [erg/s/Hz]
-    l_nu_dust_emission: array_like, shape (n_wave,)
+    l_nu_dust_emission : array_like, shape (n_wave,)
         Dust thermal :math:`L_\nu` re-emission. [erg/s/Hz]
-    tol: float, optional
+    tol : float, optional
         Fractional tolerance on the absorbed/emitted ratio for the
         ``balanced`` flag. Default 0.05 (5%).
-    uv_nir_band_aa: tuple of (float, float), optional
+    uv_nir_band_aa : tuple of (float, float), optional
         Band over which absorption is integrated. Default (912, 3e4) Å.
-    ir_band_aa: tuple of (float, float), optional
+    ir_band_aa : tuple of (float, float), optional
         Band over which re-emission is integrated. Default (3e4, 3e7) Å.
 
     Returns

@@ -51,13 +51,13 @@ class WG00AttenuationSEDComponentConfig(SEDComponentConfig):
 
     Attributes
     ----------
-    name: str
+    name : str
         Diagnostic identifier. Default ``"wg00_attenuation"``.
-    dust_curve: {"mw", "smc"}
+    dust_curve : {"mw", "smc"}
         Underlying dust grain population. Default ``"mw"``.
-    geometry: {"shell", "cloudy", "dusty"}
+    geometry : {"shell", "cloudy", "dusty"}
         Large-scale star-dust geometry. Default ``"shell"`` (foreground screen).
-    structure: {"homogeneous", "clumpy"}
+    structure : {"homogeneous", "clumpy"}
         Local density structure. Default ``"homogeneous"``.
     """
 
@@ -73,7 +73,7 @@ class WG00AttenuationSEDComponentState(SEDComponentState):
 
     Attributes
     ----------
-    wg00_fn: callable or None
+    wg00_fn : callable or None
         ``fn(wave, tau_v) -> A(λ)`` from
         :func:`tengri.components.dust.wg00.create_wg00_from_grid`, or ``None``
         if the vendored grid is unavailable (apply() then no-ops).
@@ -215,10 +215,10 @@ class WG00AttenuationSEDComponent(TemplateThreading):
 
         Parameters
         ----------
-        state: ForwardState
+        state : ForwardState
             Must carry rest-frame ``wave``. No-op if ``sed_intrinsic`` is
             ``None`` or the WG00 grid is unavailable.
-        params: mapping
+        params : mapping
             Receives ``dust_tau_v``.
 
         Returns

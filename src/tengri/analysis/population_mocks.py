@@ -44,13 +44,13 @@ def assert_truth_is_discriminating(value, bounds, *, name, rel_tol=0.08):
 
     Parameters
     ----------
-    value: float
+    value : float
         The truth to inject [units vary by parameter].
-    bounds: tuple of float
+    bounds : tuple of float
         ``(lo, hi)`` prior support, in the same units as ``value``.
-    name: str
+    name : str
         Parameter name, for the error message.
-    rel_tol: float, optional
+    rel_tol : float, optional
         Fractional distance from a characteristic point that counts as too
         close [dimensionless]. Default 0.08.
         Note: For very wide bounds (e.g. (1e6, 3e8)), the span is dominated
@@ -108,20 +108,20 @@ def assert_truth_against_model(model, name, value, *, rel_tol=0.08):
 
     Parameters
     ----------
-    model: SEDModel
+    model : SEDModel
         The model the mock will be generated from and fitted with. Its
         ``spec.get_distribution(name).bounds`` is the authority.
-    name: str
+    name : str
         Full parameter name, e.g. ``"sfh_field_psd_sigma"``.
-    value: float
+    value : float
         The truth to inject, in that parameter's own units.
-    rel_tol: float, optional
+    rel_tol : float, optional
         Fractional distance from a characteristic point that counts as too
         close. Default 0.08.
 
     Returns
     -------
-    bounds: tuple of float
+    bounds : tuple of float
         The ``(lo, hi)`` read off the model, so callers can reuse it for grids
         without re-deriving it.
 
@@ -153,12 +153,12 @@ def _max_truncated_fraction(caught):
 
     Parameters
     ----------
-    caught: list of warnings.WarningMessage
+    caught : list of warnings.WarningMessage
         Records from a ``warnings.catch_warnings(record=True)`` block.
 
     Returns
     -------
-    fraction: float
+    fraction : float
         Largest fraction seen, or ``0.0`` if no such warning carried one. The
         maximum rather than the sum: repeated predictions of the same galaxy
         each describe the whole SFH, so summing would climb past 1.0.
@@ -182,22 +182,22 @@ def _resample_until_realizable(draw, *, max_fraction, max_attempts):
 
     Parameters
     ----------
-    draw: callable
+    draw : callable
         ``draw(attempt) -> float``, producing a galaxy and returning the
         fraction of its stellar mass placed before the Big Bang
         [dimensionless]. Called with a 0-based attempt index so the caller can
         vary its PRNG key.
-    max_fraction: float
+    max_fraction : float
         Largest acceptable truncated fraction [dimensionless]. Inclusive, to
         match the refuse path, which raises only on ``>``.
-    max_attempts: int
+    max_attempts : int
         Redraw budget for this galaxy [count].
 
     Returns
     -------
-    fraction: float
+    fraction : float
         Truncated fraction of the accepted draw [dimensionless].
-    attempts: int
+    attempts : int
         Draws taken, including the accepted one [count]. 1 means no redraw.
 
     Raises
@@ -231,16 +231,16 @@ class MockPopulation:
 
     Attributes
     ----------
-    table: ndarray
+    table : ndarray
         Per-galaxy record array with keys for photometry fluxes, errors,
         line fluxes, and line errors [various units].
-    truth_params: list[dict[str, ndarray]]
+    truth_params : list[dict[str, ndarray]]
         List of per-galaxy parameter dicts sampled from the prior
         with injected ``sigma`` and ``tau_myr`` values.
-    n_halpha_absorption: int
+    n_halpha_absorption : int
         Count of galaxies whose Halpha is predicted in absorption
         (non-positive flux). Never dropped; reported to avoid selection bias.
-    truncated_fraction: ndarray, shape (N,), optional
+    truncated_fraction : ndarray, shape (N,), optional
         Per-galaxy fraction of formed stellar mass placed before the Big Bang
         and therefore truncated [dimensionless]. Same policy as
         ``n_halpha_absorption``: measured and reported, never silently dropped,
@@ -255,7 +255,7 @@ class MockPopulation:
 
         **0.0 means "at most 1%", not "none":** the forward path only warns
         above ``frac > 0.01``, so smaller truncations are invisible here.
-    n_resampled: int, optional
+    n_resampled : int, optional
         Draws discarded and redrawn under ``resample_truncated`` [count]. Zero
         unless that option was used.
 
@@ -285,7 +285,7 @@ class MockPopulation:
 
         Parameters
         ----------
-        galaxy: int, optional
+        galaxy : int, optional
             Row whose fluxes and errors seed the template. Default 0.
 
         Returns
@@ -331,21 +331,21 @@ def make_population(
 
     Parameters
     ----------
-    model: SEDModel
+    model : SEDModel
         The parametrized SED model with an established prior.
-    n_galaxies: int
+    n_galaxies : int
         Number of mock galaxies to generate [count].
-    sigma_true: float
+    sigma_true : float
         Injected PSD burstiness parameter [dex].
-    tau_true_myr: float
+    tau_true_myr : float
         Injected PSD timescale [Myr].
-    key: jax.Array
+    key : jax.Array
         PRNGKey for galaxy sampling and noise realization.
-    snr_phot: float
+    snr_phot : float
         Signal-to-noise ratio for photometry [dimensionless].
-    snr_line: float
+    snr_line : float
         Signal-to-noise ratio for emission lines [dimensionless].
-    max_truncated_fraction: float, optional
+    max_truncated_fraction : float, optional
         Reject the population if any galaxy places more than this fraction of
         its stellar mass before the Big Bang [dimensionless]. Default ``None``
         (accept anything), which preserves the historical behavior: the
@@ -356,7 +356,7 @@ def make_population(
         contain such galaxies; the four-galaxy ESS-sweep mock truncates 3%, 5%,
         9% and 69%: so defaulting to a limit would reject the project's own
         populations rather than fix them (#1645).
-    resample_truncated: bool, optional
+    resample_truncated : bool, optional
         Redraw a galaxy that exceeds ``max_truncated_fraction`` instead of
         raising. Default ``False``. Requires ``max_truncated_fraction``, since
         without a threshold there is nothing to reject against.
@@ -366,14 +366,14 @@ def make_population(
         conditioning is reported as :attr:`MockPopulation.n_resampled`.
 
         Off by default for the same reason as above, plus one more: redrawing
-        would silently change every existing mock built from a fixed key; including the population
-        behind the banked ESS-vs-breadth curve in
+        would silently change every existing mock built from a fixed key,
+        including the population behind the banked ESS-vs-breadth curve in
         ``docs/dev/hierarchical-psd-handoff.md`` §4j.
 
         The whole galaxy is redrawn, not its redshift alone: truncation is a
         property of the sampled redshift *and* SFH age together, so redrawing
         one without the other need not change whether the history fits.
-    max_resample_attempts: int, optional
+    max_resample_attempts : int, optional
         Redraw budget per galaxy [count]. Default 20. Exhausting it raises
         rather than looping or quietly keeping the last draw: if no draw is
         realizable, the prior and the threshold are incompatible and rejection

@@ -69,17 +69,17 @@ def resolve_channel_data(baked, key, data_slice, data_args):
 
     Parameters
     ----------
-    baked: ndarray
+    baked : ndarray
         The array captured at adapter construction (fallback when the
         caller supplies no ``data_args``, e.g. user-facing ``log_prob``).
-    key: str or None
+    key : str or None
         ``data_args`` entry to read (``"data"``, ``"noise"``,
         ``"line_flux_obs"``, ...). ``None`` → always use ``baked``.
-    data_slice: tuple[int, int] or None
+    data_slice : tuple[int, int] or None
         Optional ``(start, stop)`` slice into the ``data_args`` array,
         used by joint phot+spec adapters that each own a segment of the
         concatenated data vector.
-    data_args: Mapping or None
+    data_args : Mapping or None
         The loss-function data dict, threaded from the call site.
 
     Returns
@@ -106,17 +106,17 @@ class GaussianLikelihood:
 
     Parameters
     ----------
-    obs: ndarray
+    obs : ndarray
         Observed values (shape matches the prediction at ``channel``).
-    err: ndarray
+    err : ndarray
         1-σ uncertainties.
-    channel: str, keyword-only
+    channel : str, keyword-only
         Which prediction-dict key to read. Examples: ``"phot_fnu"``,
         ``"spec_fnu"``, ``"line_fluxes"``, ``"indices"``,
         ``"imaging_fnu_pixel"``, ``"fiber_spec_fnu"``.
-    sigma_floor: float, keyword-only
+    sigma_floor : float, keyword-only
         Fractional floor: ``σ_total² = err² + (sigma_floor·obs)²``.
-    name: str, keyword-only
+    name : str, keyword-only
         Diagnostic identifier.
 
     Notes
@@ -177,15 +177,15 @@ class StudentTLikelihood:
 
     Parameters
     ----------
-    obs, err: ndarray
+    obs, err : ndarray
         Same as :class:`GaussianLikelihood`.
-    dof: float, keyword-only
+    dof : float, keyword-only
         Degrees of freedom. Heavy-tailed values: 2 (Alsing+2022),
         4 (moderate). ``None`` recovers Gaussian.
-    f_cal: float, keyword-only
+    f_cal : float, keyword-only
         Fractional calibration uncertainty added in quadrature to
         ``err`` before evaluating the t-density.
-    channel: str, keyword-only
+    channel : str, keyword-only
         Which prediction-dict key to read.
 
     Notes
@@ -245,17 +245,17 @@ class CensoredLikelihood:
 
     Parameters
     ----------
-    obs, err: ndarray
+    obs, err : ndarray
         Observed values and 1-σ uncertainties. For censored points,
         ``obs`` carries the limit value.
-    mask: ndarray, dtype int
+    mask : ndarray, dtype int
         Per-point flag: ``0`` = detected (Gaussian),
         ``1`` = upper limit (CDF), ``-1`` = lower limit (CDF).
-    f_cal: float, keyword-only
+    f_cal : float, keyword-only
         Fractional calibration uncertainty for detected points only.
-    dof: float | None, keyword-only
+    dof : float | None, keyword-only
         If set, detected points use a Student-t instead of a Gaussian.
-    channel: str, keyword-only
+    channel : str, keyword-only
         Which prediction-dict key to read.
 
     Notes
@@ -313,13 +313,13 @@ class MultivariateGaussianLikelihood:
 
     Parameters
     ----------
-    obs: ndarray, shape (n,)
+    obs : ndarray, shape (n,)
         Observed values.
-    cov_inv: ndarray, shape (n, n)
+    cov_inv : ndarray, shape (n, n)
         Inverse of the noise covariance matrix. Pre-inverted at
         construction so :meth:`log_prob` is a single matrix-vector
         product per call.
-    channel: str, keyword-only
+    channel : str, keyword-only
         Which prediction-dict key to read.
 
     Notes

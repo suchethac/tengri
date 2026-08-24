@@ -69,18 +69,18 @@ def precompute(
 
     Parameters
     ----------
-    filter_waves: list[ndarray]
+    filter_waves : list[ndarray]
         Wavelength grid per filter [Angstrom], observed frame.
-    filter_trans: list[ndarray]
+    filter_trans : list[ndarray]
         Transmission per filter (0–1).
-    redshift: float
+    redshift : float
         Source redshift. [dimensionless]
-    parameters: Parameters or None
+    parameters : Parameters or None
         Parameters spec, used to detect Fixed-axis parameters.
-    shock_abundance: str, keyword-only
+    shock_abundance : str, keyword-only
         Abundance set: ``"solar"``, ``"2xsolar"``, ``"dopita2005"``, ``"lmc"``,
         or ``"smc"``. Or full name from database. Default: ``"solar"``.
-    shock_component: str, keyword-only
+    shock_component : str, keyword-only
         Component: ``"shock"``, ``"precursor"``, or ``"combined"``.
         Default: ``"combined"``.
 
@@ -223,17 +223,17 @@ def build_lookup(preint: dict, **kwargs: Any) -> dict:
 
         Parameters
         ----------
-        l_shock_halpha: float
+        l_shock_halpha : float
             Total shock Hα luminosity [erg/s] (normalization anchor).
-        *free_axis_vals: tuple of float
+        *free_axis_vals : tuple of float
             Per remaining axis values (after collapse): velocity [km/s],
             B-field [μG], log_density [cm^-3].
 
         Returns
         -------
-        wavelengths: ndarray, shape (n_lines,)
+        wavelengths : ndarray, shape (n_lines,)
             Line vacuum wavelengths [Angstrom].
-        luminosities: ndarray, shape (n_lines,)
+        luminosities : ndarray, shape (n_lines,)
             Line luminosities [L_sun], scaled by Hα and normalized to unity
             Hα ratio.
 

@@ -70,7 +70,7 @@ def register(citation: Citation) -> None:
 
     Parameters
     ----------
-    citation: Citation
+    citation : Citation
 
     Raises
     ------
@@ -153,7 +153,7 @@ def format_list(citations: list[Citation], fmt: str = "short") -> str:
 
     Parameters
     ----------
-    fmt: {"short", "bibtex"}
+    fmt : {"short", "bibtex"}
         "short" prints one line per citation. "bibtex" emits full BibTeX blocks
         separated by blank lines.
     """

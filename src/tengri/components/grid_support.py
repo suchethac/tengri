@@ -108,14 +108,14 @@ def grid_support(selector: str, name: str) -> dict[str, tuple[float, float]]:
 
     Parameters
     ----------
-    selector: str
+    selector : str
         Dotted selector path, e.g. ``'agn.disc'`` or ``'dust.emission'``.
-    name: str
+    name : str
         Component name, e.g. ``'slone_netzer'`` or ``'themis'``.
 
     Returns
     -------
-    support: dict[str, tuple[float, float]]
+    support : dict[str, tuple[float, float]]
         ``{param_name: (lo, hi)}``. Empty when the component is not
         template-backed **or** when its grid is not installed -- an absent
         data file must not break model construction, since the component
@@ -153,14 +153,14 @@ def is_contained(active: tuple[float, float], grid: tuple[float, float]) -> bool
 
     Parameters
     ----------
-    active: tuple[float, float]
+    active : tuple[float, float]
         ``(lo, hi)`` the parameter can actually take.
-    grid: tuple[float, float]
+    grid : tuple[float, float]
         ``(lo, hi)`` covered by the template grid.
 
     Returns
     -------
-    contained: bool
+    contained : bool
         ``True`` when no reachable value can be clipped, within
         :data:`_CONTAINMENT_RTOL` of the grid width.
 
@@ -180,15 +180,15 @@ def live_fraction(active: tuple[float, float], grid: tuple[float, float]) -> flo
 
     Parameters
     ----------
-    active: tuple[float, float]
+    active : tuple[float, float]
         ``(lo, hi)`` the parameter can actually take -- a prior's bounds, or
         ``(v, v)`` for a fixed value.
-    grid: tuple[float, float]
+    grid : tuple[float, float]
         ``(lo, hi)`` covered by the template grid.
 
     Returns
     -------
-    fraction: float
+    fraction : float
         In ``[0, 1]``. ``1.0`` means fully contained (no clipping possible);
         ``0.0`` means every reachable value clips onto an edge node, so the
         parameter is entirely inert. A zero-width ``active`` (a fixed value)
@@ -219,14 +219,14 @@ def describe_clipping(active: tuple[float, float], grid: tuple[float, float]) ->
 
     Parameters
     ----------
-    active: tuple[float, float]
+    active : tuple[float, float]
         ``(lo, hi)`` the parameter can actually take.
-    grid: tuple[float, float]
+    grid : tuple[float, float]
         ``(lo, hi)`` covered by the template grid.
 
     Returns
     -------
-    detail: str or None
+    detail : str or None
         ``None`` when contained. Otherwise a clause such as ``"40% of its
         range [6, 10] lies outside the grid extent [7.4, 9.8] and is silently
         clipped onto an edge node"``.
@@ -276,16 +276,16 @@ def check_grid_support(
 
     Parameters
     ----------
-    selected: iterable of (str, str)
+    selected : iterable of (str, str)
         ``(selector, name)`` pairs for the components in play, e.g.
         ``[("dust.emission", "themis")]``.
-    param_support: mapping of str to (float, float)
+    param_support : mapping of str to (float, float)
         ``{param_name: (lo, hi)}`` the range each parameter can actually take
         -- a prior's bounds, or ``(v, v)`` for a fixed value.
 
     Returns
     -------
-    findings: list of tuple
+    findings : list of tuple
         ``(selector, name, param_name, detail, grid_extent)``, one per
         offending ``(component, parameter)`` pair. Empty when everything fits.
 

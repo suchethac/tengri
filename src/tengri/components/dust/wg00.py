@@ -58,7 +58,7 @@ def _load_wg00_arrays(grid_path: str) -> dict:
 
     Parameters
     ----------
-    grid_path: str
+    grid_path : str
         Path to ``wg00_attenuation_grid.h5`` from ``scripts/build_wg00_grid.py``.
 
     Returns
@@ -110,13 +110,13 @@ def create_wg00_from_grid(
 
     Parameters
     ----------
-    grid_path: str
+    grid_path : str
         Path to ``wg00_attenuation_grid.h5``.
-    dust_curve: {"mw", "smc"}
+    dust_curve : {"mw", "smc"}
         Underlying dust grain population.
-    geometry: {"dusty", "shell", "cloudy"}
+    geometry : {"dusty", "shell", "cloudy"}
         Large-scale star-dust geometry (Witt & Gordon 2000).
-    structure: {"homogeneous", "clumpy"}
+    structure : {"homogeneous", "clumpy"}
         Local density structure.
 
     Returns
@@ -162,9 +162,9 @@ def create_wg00_from_grid(
 
         Parameters
         ----------
-        wavelength: array_like, shape (n_wave,)
+        wavelength : array_like, shape (n_wave,)
             Rest-frame wavelength grid. [Å]
-        tau_v: float
+        tau_v : float
             V-band optical depth. Interpolated over the tabulated range
             [0.25, 10.0]; clamped at the edges. [dimensionless]
 
@@ -214,15 +214,15 @@ def wg00_attenuation(
 
     Parameters
     ----------
-    wavelength: array_like, shape (n_wave,)
+    wavelength : array_like, shape (n_wave,)
         Rest-frame wavelength grid. [Å]
-    tau_v: float
+    tau_v : float
         V-band optical depth (tabulated range 0.25–10.0). [dimensionless]
-    dust_curve: {"mw", "smc"}, optional
+    dust_curve : {"mw", "smc"}, optional
         Dust grain population. Default ``"mw"``.
-    geometry: {"dusty", "shell", "cloudy"}, optional
+    geometry : {"dusty", "shell", "cloudy"}, optional
         Large-scale star-dust geometry. Default ``"shell"`` (foreground screen).
-    structure: {"homogeneous", "clumpy"}, optional
+    structure : {"homogeneous", "clumpy"}, optional
         Local density structure. Default ``"homogeneous"``.
 
     Returns

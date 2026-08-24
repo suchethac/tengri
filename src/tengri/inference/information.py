@@ -79,15 +79,15 @@ class ParameterInformation:
 
     Attributes
     ----------
-    names: tuple of str
+    names : tuple of str
         Free-parameter names, in the order of the precision matrix.
-    eigenvalues: ndarray, shape (n_free,)
+    eigenvalues : ndarray, shape (n_free,)
         Posterior precision per mode [dimensionless], ascending. The
         standardized prior contributes 1 to each.
-    shrinkage: ndarray, shape (n_free,)
+    shrinkage : ndarray, shape (n_free,)
         Fraction of each mode's precision supplied by the data
         [dimensionless], in ``[0, 1]``, aligned with ``eigenvalues``.
-    directions: ndarray, shape (n_free, n_free)
+    directions : ndarray, shape (n_free, n_free)
         Eigenvectors as **columns**, aligned with ``eigenvalues``.
     """
 
@@ -146,7 +146,7 @@ class ParameterInformation:
 
         Parameters
         ----------
-        prefix: str
+        prefix : str
             Name prefix selecting the block, e.g. ``"psd_xi"`` for the
             stochastic field or ``"dust_"`` for the attenuation parameters.
 
@@ -260,13 +260,13 @@ def information_from_precision(
 
     Parameters
     ----------
-    precision: array_like, shape (n_free, n_free)
+    precision : array_like, shape (n_free, n_free)
         Posterior precision :math:`-\\nabla^2 \\log p` in the **standardized**
         latent space [dimensionless]. Symmetry is assumed; the symmetric part is
         used.
-    names: tuple of str
+    names : tuple of str
         Free-parameter names, one per row.
-    gradient: array_like, shape (n_free,), optional
+    gradient : array_like, shape (n_free,), optional
         Gradient of the **negative** log-posterior at the same point
         [dimensionless]. Supplied, it sets ``newton_decrement`` and so lets
         :attr:`ParameterInformation.at_a_mode` report whether the expansion
@@ -345,13 +345,13 @@ def parameter_information(target, params=None, *, key=None) -> ParameterInformat
 
     Parameters
     ----------
-    target: Posterior or InferenceContext or Fitter
+    target : Posterior or InferenceContext or Fitter
         A completed fit, or a context to expand around ``params``.
-    params: dict of str to float, optional
+    params : dict of str to float, optional
         Point to expand the posterior around, in **physical** units. Default
         ``None`` uses the posterior's own point estimate, which is where the
         quadratic approximation is tightest.
-    key: jax.Array, optional
+    key : jax.Array, optional
         PRNG key, used only when ``target`` supplies no point estimate and an
         initial position must be drawn.
 
@@ -465,7 +465,7 @@ def latent_names(latent: dict) -> tuple[str, ...]:
 
     Parameters
     ----------
-    latent: dict
+    latent : dict
         The latent parameter pytree, as returned by
         ``InferenceContext.initial_params``.
 

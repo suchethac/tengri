@@ -21,7 +21,7 @@ class NoiseModel:
 
     Parameters
     ----------
-    calibration_floor: float, Distribution, or array
+    calibration_floor : float, Distribution, or array
         Fractional calibration floor added in quadrature with observational
         noise: ``sigma_eff = sqrt(sigma_obs^2 + (f_cal * model)^2)``.
         A float value becomes ``Fixed(value)``; a ``Distribution`` (e.g.
@@ -29,7 +29,7 @@ class NoiseModel:
         An array (shape ``(n_filters,)``) specifies a per-band fixed floor;
         arrays of Distributions are not supported.
         Default: 0.0 (no calibration floor).
-    student_t_dof: float or None
+    student_t_dof : float or None
         Degrees of freedom for a Student-t likelihood (heavier tails for
         outlier robustness). ``None`` uses a standard Gaussian likelihood.
         Default: None.
@@ -41,9 +41,9 @@ class NoiseModel:
 
     Attributes
     ----------
-    calibration_floor: float, Distribution, or array
+    calibration_floor : float, Distribution, or array
         Fractional calibration uncertainty floor.
-    student_t_dof: float or None
+    student_t_dof : float or None
         Student-t degrees of freedom (or None for Gaussian).
 
     Notes
@@ -79,7 +79,7 @@ class NoiseModel:
             for elem in self.calibration_floor.flat:
                 if isinstance(elem, Distribution):
                     msg = (
-                        "per-band free floor (array of Distributions) is out of scope, "
+                        "per-band free floor (array of Distributions) is out of scope "
                         "only scalar or array of numeric values are supported"
                     )
                     raise TypeError(msg)
@@ -89,7 +89,7 @@ class NoiseModel:
 
         Parameters
         ----------
-        n_filters: int
+        n_filters : int
             Expected number of filters.
 
         Raises

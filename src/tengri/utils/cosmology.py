@@ -80,7 +80,7 @@ def cosmo_from_astropy(astropy_cosmo) -> CosmoParams:
 
     Parameters
     ----------
-    astropy_cosmo: astropy.cosmology.FLRW
+    astropy_cosmo : astropy.cosmology.FLRW
         Any astropy cosmology object with attributes ``Om0`` (Ω_m at z=0),
         ``H0`` (Hubble constant with units), and optionally ``w0`` and
         ``wa`` for the w₀wₐCDM family.
@@ -148,15 +148,15 @@ def _resolve_cosmo(
 
     Parameters
     ----------
-    cosmo: CosmoParams, optional
+    cosmo : CosmoParams, optional
         Full DSPS cosmology parameter set.
-    h0: float, optional
+    h0 : float, optional
         Hubble constant in km/s/Mpc. Converted to h = H0/100.
-    om0: float, optional
+    om0 : float, optional
         Matter density parameter Ω_m.
-    w0: float, optional
+    w0 : float, optional
         Dark-energy equation-of-state at z=0. Default -1.0 (ΛCDM).
-    wa: float, optional
+    wa : float, optional
         Dark-energy equation-of-state evolution. Default 0.0 (ΛCDM).
 
     Returns
@@ -216,13 +216,13 @@ def luminosity_distance(
 
     Parameters
     ----------
-    z: float
+    z : float
         Redshift.
-    h0: float, optional
+    h0 : float, optional
         Hubble constant in km/s/Mpc. If provided, used for CosmoParams.
-    om0: float, optional
+    om0 : float, optional
         Matter density parameter Ω_m. If provided, used for CosmoParams.
-    cosmo: CosmoParams, optional
+    cosmo : CosmoParams, optional
         Full cosmology parameter set (keyword-only). Overrides h0/om0 if both
         provided.
 
@@ -249,13 +249,13 @@ def luminosity_distance_mpc(
 
     Parameters
     ----------
-    z: float
+    z : float
         Redshift.
-    h0: float, optional
+    h0 : float, optional
         Hubble constant in km/s/Mpc.
-    om0: float, optional
+    om0 : float, optional
         Matter density parameter Ω_m.
-    cosmo: CosmoParams, optional
+    cosmo : CosmoParams, optional
         Full cosmology parameter set (keyword-only).
 
     Returns
@@ -278,13 +278,13 @@ def comoving_distance(
 
     Parameters
     ----------
-    z: float
+    z : float
         Redshift.
-    h0: float, optional
+    h0 : float, optional
         Hubble constant in km/s/Mpc.
-    om0: float, optional
+    om0 : float, optional
         Matter density parameter Ω_m.
-    cosmo: CosmoParams, optional
+    cosmo : CosmoParams, optional
         Full cosmology parameter set (keyword-only).
 
     Returns
@@ -308,13 +308,13 @@ def comoving_distance_mpc(
 
     Parameters
     ----------
-    z: float
+    z : float
         Redshift.
-    h0: float, optional
+    h0 : float, optional
         Hubble constant in km/s/Mpc.
-    om0: float, optional
+    om0 : float, optional
         Matter density parameter Ω_m.
-    cosmo: CosmoParams, optional
+    cosmo : CosmoParams, optional
         Full cosmology parameter set (keyword-only).
 
     Returns
@@ -337,13 +337,13 @@ def angular_diameter_distance(
 
     Parameters
     ----------
-    z: float
+    z : float
         Redshift.
-    h0: float, optional
+    h0 : float, optional
         Hubble constant in km/s/Mpc.
-    om0: float, optional
+    om0 : float, optional
         Matter density parameter Ω_m.
-    cosmo: CosmoParams, optional
+    cosmo : CosmoParams, optional
         Full cosmology parameter set (keyword-only).
 
     Returns
@@ -367,13 +367,13 @@ def angular_diameter_distance_mpc(
 
     Parameters
     ----------
-    z: float
+    z : float
         Redshift.
-    h0: float, optional
+    h0 : float, optional
         Hubble constant in km/s/Mpc.
-    om0: float, optional
+    om0 : float, optional
         Matter density parameter Ω_m.
-    cosmo: CosmoParams, optional
+    cosmo : CosmoParams, optional
         Full cosmology parameter set (keyword-only).
 
     Returns
@@ -399,13 +399,13 @@ def distance_modulus(
 
     Parameters
     ----------
-    z: float
+    z : float
         Redshift.
-    h0: float, optional
+    h0 : float, optional
         Hubble constant in km/s/Mpc.
-    om0: float, optional
+    om0 : float, optional
         Matter density parameter Ω_m.
-    cosmo: CosmoParams, optional
+    cosmo : CosmoParams, optional
         Full cosmology parameter set (keyword-only).
 
     Returns
@@ -431,13 +431,13 @@ def lookback_time(
 
     Parameters
     ----------
-    z: float
+    z : float
         Redshift.
-    h0: float, optional
+    h0 : float, optional
         Hubble constant in km/s/Mpc.
-    om0: float, optional
+    om0 : float, optional
         Matter density parameter Ω_m.
-    cosmo: CosmoParams, optional
+    cosmo : CosmoParams, optional
         Full cosmology parameter set (keyword-only).
 
     Returns
@@ -460,13 +460,13 @@ def age_at_z(
 
     Parameters
     ----------
-    z: float
+    z : float
         Redshift (scalar or array).
-    h0: float, optional
+    h0 : float, optional
         Hubble constant in km/s/Mpc.
-    om0: float, optional
+    om0 : float, optional
         Matter density parameter Ω_m.
-    cosmo: CosmoParams, optional
+    cosmo : CosmoParams, optional
         Full cosmology parameter set (keyword-only).
 
     Returns
@@ -492,11 +492,11 @@ def age_at_z0(
 
     Parameters
     ----------
-    h0: float, optional
+    h0 : float, optional
         Hubble constant in km/s/Mpc.
-    om0: float, optional
+    om0 : float, optional
         Matter density parameter Ω_m.
-    cosmo: CosmoParams, optional
+    cosmo : CosmoParams, optional
         Full cosmology parameter set (keyword-only).
 
     Returns
@@ -522,13 +522,13 @@ def comoving_volume_element(
 
     Parameters
     ----------
-    z: float
+    z : float
         Redshift (scalar or array).
-    h0: float, optional
+    h0 : float, optional
         Hubble constant in km/s/Mpc.
-    om0: float, optional
+    om0 : float, optional
         Matter density parameter Ω_m.
-    cosmo: CosmoParams, optional
+    cosmo : CosmoParams, optional
         Full cosmology parameter set (keyword-only).
 
     Returns
@@ -558,13 +558,13 @@ def arcsec_per_kpc(
 
     Parameters
     ----------
-    z: float
+    z : float
         Redshift.
-    h0: float, optional
+    h0 : float, optional
         Hubble constant in km/s/Mpc.
-    om0: float, optional
+    om0 : float, optional
         Matter density parameter Ω_m.
-    cosmo: CosmoParams, optional
+    cosmo : CosmoParams, optional
         Full cosmology parameter set (keyword-only).
 
     Returns
@@ -591,13 +591,13 @@ def kpc_per_arcsec(
 
     Parameters
     ----------
-    z: float
+    z : float
         Redshift.
-    h0: float, optional
+    h0 : float, optional
         Hubble constant in km/s/Mpc.
-    om0: float, optional
+    om0 : float, optional
         Matter density parameter Ω_m.
-    cosmo: CosmoParams, optional
+    cosmo : CosmoParams, optional
         Full cosmology parameter set (keyword-only).
 
     Returns
@@ -628,18 +628,18 @@ def z_at_cosmic_time(
 
     Parameters
     ----------
-    t_gyr: float or array
+    t_gyr : float or array
         Cosmic time (age of universe) in Gyr. Must be between 0 and
         age_at_z0. Values outside this range are clipped.
-    h0: float, optional
+    h0 : float, optional
         Hubble constant in km/s/Mpc.
-    om0: float, optional
+    om0 : float, optional
         Matter density parameter Ω_m.
-    cosmo: CosmoParams, optional
+    cosmo : CosmoParams, optional
         Full cosmology parameter set (keyword-only).
-    z_max: float
+    z_max : float
         Maximum redshift for the lookup table (default: 30).
-    n_grid: int
+    n_grid : int
         Number of points in the lookup table (default: 512).
 
     Returns
@@ -677,17 +677,17 @@ def z_at_lookback_time(
 
     Parameters
     ----------
-    t_lookback_gyr: float or array
+    t_lookback_gyr : float or array
         Lookback time in Gyr. 0 = now, age_at_z0 = Big Bang.
-    h0: float, optional
+    h0 : float, optional
         Hubble constant in km/s/Mpc.
-    om0: float, optional
+    om0 : float, optional
         Matter density parameter Ω_m.
-    cosmo: CosmoParams, optional
+    cosmo : CosmoParams, optional
         Full cosmology parameter set (keyword-only).
-    z_max: float
+    z_max : float
         Maximum redshift for the lookup table (default: 30).
-    n_grid: int
+    n_grid : int
         Number of points in the lookup table (default: 512).
 
     Returns

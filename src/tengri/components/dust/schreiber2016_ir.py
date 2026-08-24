@@ -36,9 +36,9 @@ class Schreiber2016IRConfig(SEDComponentConfig):
 
     Attributes
     ----------
-    name: str
+    name : str
         Diagnostic identifier. Default ``"schreiber2016_ir"``.
-    template_path: str, optional
+    template_path : str, optional
         Path to Schreiber2016 template HDF5 file. If None, attempts to auto-locate
         via standard search paths. If templates are unavailable, the component
         will skip gracefully with a warning.
@@ -57,11 +57,11 @@ class Schreiber2016IRSEDComponent(SEDModelComponent):
 
     Attributes
     ----------
-    name: str
+    name : str
         Stable identifier: ``"schreiber2016_ir"``.
-    parameter_prefix: str
+    parameter_prefix : str
         Domain prefix for parameters: ``"dust_"``.
-    config: Schreiber2016IRConfig
+    config : Schreiber2016IRConfig
         Frozen configuration with optional template path override.
 
     Notes
@@ -111,7 +111,7 @@ class Schreiber2016IRSEDComponent(SEDModelComponent):
 
         Parameters
         ----------
-        wave: ndarray, optional
+        wave : ndarray, optional
             Rest-frame wavelength grid in Angstrom (not used for Schreiber2016
             template loading, but kept for protocol compatibility).
 
@@ -168,18 +168,18 @@ class Schreiber2016IRSEDComponent(SEDModelComponent):
 
         Parameters
         ----------
-        p: mapping[str, ndarray]
+        p : mapping[str, ndarray]
             Sliced parameters (prefix stripped):
 
             - ``p["T"]``: dust temperature [K]
             - ``p["f_pah"]``: PAH fraction [dimensionless]
 
-        sed_in: ndarray, shape (n_wave,)
+        sed_in : ndarray, shape (n_wave,)
             Input SED in erg/s/Hz (ignored; Schreiber2016 emission is computed
             from L_ir independently).
-        wave: ndarray, shape (n_wave,)
+        wave : ndarray, shape (n_wave,)
             Rest-frame wavelength grid in Angstrom.
-        **inputs: ndarray
+        **inputs : ndarray
             Cross-component inputs:
 
             - ``L_ir``: absorbed luminosity [erg/s]

@@ -107,31 +107,31 @@ def sed_from_sfh(
 
     Parameters
     ----------
-    t_gyr: ndarray, shape (n_t,)
+    t_gyr : ndarray, shape (n_t,)
         Cosmic time grid in Gyr (increasing, from early to late universe).
-    sfr: ndarray, shape (n_t,)
+    sfr : ndarray, shape (n_t,)
         Star formation rate [Msun/yr] at each time point.
-    ssp_data: SSPData
+    ssp_data : SSPData
         SSP templates from ``load_ssp_data()``.
-    log_z: float or ndarray, optional
+    log_z : float or ndarray, optional
         Stellar metallicity log10(Z/Zsun).
 
         - float: constant metallicity for all stars. Default: -0.3.
         - ndarray shape (n_t,): metallicity history Z(t).
 
-    lgmet_scatter: float, optional
+    lgmet_scatter : float, optional
         Lognormal scatter in metallicity [dex]. Used only when log_z is
         scalar. Default: 0 (delta function).
-    dust_tau_bc: float, optional
+    dust_tau_bc : float, optional
         Birth cloud V-band optical depth. Default: 0 (no dust).
-    dust_tau_diff: float, optional
+    dust_tau_diff : float, optional
         Diffuse ISM V-band optical depth. Default: 0 (no dust).
-    dust_law: str, optional
+    dust_law : str, optional
         Dust attenuation curve name. Default: "power_law".
         Options: "power_law", "calzetti", "kriek_conroy", etc.
-    dust_slope: float, optional
+    dust_slope : float, optional
         Power-law slope (for power_law curve). Default: -0.7.
-    t_obs_gyr: float, optional
+    t_obs_gyr : float, optional
         Age of universe at observation [Gyr]. Default: 13.7.
     **dust_kwargs
         Additional dust parameters (dust_bump_strength, dust_delta, etc.).
@@ -233,23 +233,23 @@ def photometry_from_sfh(
 
     Parameters
     ----------
-    t_gyr: array, shape (n_t,)
+    t_gyr : array, shape (n_t,)
         Cosmic time in Gyr.
-    sfr: array, shape (n_t,)
+    sfr : array, shape (n_t,)
         SFR in Msun/yr.
-    ssp_data: SSPData
+    ssp_data : SSPData
         SSP templates.
     filters
-        Either the full return value of ``load_filter_set(names)`` (e.g.,
-        ``(waves, trans, curves)``) or a sequence of ``FilterCurve`` objects
-        (e.g. the third element of that tuple).
-    log_z: float or array
+        Either the full return value of ``load_filter_set(names)``, i.e.
+        ``(waves, trans, curves)``, or a sequence of ``FilterCurve``
+        objects (e.g. the third element of that tuple).
+    log_z : float or array
         Metallicity (scalar or history).
-    redshift: float
+    redshift : float
         Source redshift.
-    dust_tau_bc, dust_tau_diff: float
+    dust_tau_bc, dust_tau_diff : float
         Dust optical depths.
-    apply_igm: bool
+    apply_igm : bool
         Apply IGM absorption. Default True.
     **kwargs
         Additional dust/model parameters.
@@ -319,19 +319,19 @@ def spectrum_from_sfh(
 
     Parameters
     ----------
-    t_gyr: array, shape (n_t,)
+    t_gyr : array, shape (n_t,)
         Cosmic time in Gyr.
-    sfr: array, shape (n_t,)
+    sfr : array, shape (n_t,)
         SFR in Msun/yr.
-    ssp_data: SSPData
+    ssp_data : SSPData
         SSP templates.
-    wave_obs: array, shape (n_pix,)
+    wave_obs : array, shape (n_pix,)
         Observed wavelength grid in Angstrom.
-    log_z: float or array
+    log_z : float or array
         Metallicity.
-    redshift: float
+    redshift : float
         Source redshift.
-    sigma_v: float
+    sigma_v : float
         Velocity dispersion (km/s) for broadening. Default 0.
     **kwargs
         Additional parameters.
@@ -341,7 +341,7 @@ def spectrum_from_sfh(
     dict with keys:
         "flux": array (n_pix,): observed flux in erg/s/cm^2/Hz
         "sed": array (n_wave,): rest-frame SED
-        "stellar_mass": float
+        "stellar_mass" : float
     """
     from tengri.observation.spectrum import compute_spectrum
 

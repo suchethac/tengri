@@ -118,7 +118,7 @@ def association_keys_for(name: str) -> list[str]:
 
     Parameters
     ----------
-    name: str
+    name : str
         Component name as a registry or menu row spells it.
 
     Returns
@@ -155,7 +155,7 @@ def citation_keys_for(name: str | None) -> list[str]:
 
     Parameters
     ----------
-    name: str or None
+    name : str or None
         Component name; ``None`` and empty strings return ``[]`` so callers can
         pass an unset config field straight through.
 

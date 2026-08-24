@@ -42,23 +42,23 @@ def make_factory(
 
     Parameters
     ----------
-    variant: str
+    variant : str
         Variant name (becomes the ``'type'`` key in the emitted dict).
-    short_params: list of str
+    short_params : list of str
         Short-form parameter names the variant accepts (matches what the
         grammar parser's ``_extract_short_name`` will look up).
-    qualname_prefix: str
+    qualname_prefix : str
         Dotted prefix for ``__qualname__`` (e.g.
         ``"tengri.builders.radio"``).
-    module_name: str
+    module_name : str
         ``__module__`` for the factory function.
-    short_doc: str, optional
+    short_doc : str, optional
         One-line description placed at the top of the docstring.
-    bool_flags: tuple of str, optional
+    bool_flags : tuple of str, optional
         Names of boolean sub-keys this variant accepts (e.g. ``patchy``,
         ``dla`` for IGM). They're surfaced in the signature with default
         ``False`` and only included in the output dict when set ``True``.
-    flag_param_map: dict, optional
+    flag_param_map : dict, optional
         Map ``short_param`` → ``flag_name``: providing the param
         auto-enables the flag. Useful for IGM where setting
         ``bubble_mpc=...`` implies ``patchy=True``.
@@ -142,7 +142,7 @@ def make_factory(
         "center. Matches the ``'all_params'`` key in the dict grammar."
     )
     for flag in bool_flags:
-        lines.append(f"{flag}: bool, optional")
+        lines.append(f"{flag} : bool, optional")
         lines.append(
             f"    Toggle sub-feature {flag!r}; when ``True``, the relevant "
             "free parameters become activatable by the parser. Defaults to "
@@ -152,7 +152,7 @@ def make_factory(
         flag_note = (
             f" (auto-enables ``{flag_param_map[short]}=True``)" if short in flag_param_map else ""
         )
-        lines.append(f"{short}: Distribution, sentinel, or scalar, optional")
+        lines.append(f"{short} : Distribution, sentinel, or scalar, optional")
         lines.append(
             f"    Override the registry default prior for the matching free parameter.{flag_note}"
         )

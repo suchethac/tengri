@@ -45,16 +45,16 @@ def _type1_mask(
 
     Parameters
     ----------
-    cos_inc: float
+    cos_inc : float
         Cosine of inclination angle. 1 = face-on, 0 = edge-on.
-    opening_angle_deg: float
+    opening_angle_deg : float
         Torus half-opening angle in degrees (measured from equator).
-    sharpness: float
+    sharpness : float
         Sigmoid steepness. Higher = sharper transition. Default 20.
 
     Returns
     -------
-    mask: scalar
+    mask : scalar
         Value in [0, 1]. ~1 for Type 1, ~0 for Type 2, ~0.5 at boundary.
     """
     cos_threshold = jnp.cos(jnp.radians(90.0 - opening_angle_deg))
@@ -69,12 +69,12 @@ def calzetti2000_extinction_curve(wavelength: jnp.ndarray) -> jnp.ndarray:
 
     Parameters
     ----------
-    wavelength: array_like, shape (n_wave,)
+    wavelength : array_like, shape (n_wave,)
         Wavelength in Angstrom.
 
     Returns
     -------
-    k_lambda: ndarray, shape (n_wave,)
+    k_lambda : ndarray, shape (n_wave,)
         Extinction coefficient k(lambda) = A(lambda) / E(B-V).
         [dimensionless]
 
@@ -143,12 +143,12 @@ def gaskell2004_extinction_curve(wavelength: jnp.ndarray) -> jnp.ndarray:
 
     Parameters
     ----------
-    wavelength: array_like, shape (n_wave,)
+    wavelength : array_like, shape (n_wave,)
         Wavelength in Angstrom.
 
     Returns
     -------
-    k_lambda: ndarray, shape (n_wave,)
+    k_lambda : ndarray, shape (n_wave,)
         Extinction coefficient k(lambda) = A(lambda) / E(B-V).
         [dimensionless]
 
@@ -225,31 +225,31 @@ def polar_dust_extinction(
 
     Parameters
     ----------
-    l_nu: array, shape (n_wave,)
+    l_nu : array, shape (n_wave,)
         Input luminosity density [Lsun/Hz or any consistent unit].
-    wavelength: array, shape (n_wave,)
+    wavelength : array, shape (n_wave,)
         Wavelength in Angstrom.
-    cos_inc: float
+    cos_inc : float
         Cosine of inclination. 1 = face-on (Type 1), 0 = edge-on (Type 2).
         [dimensionless, 0–1]
-    opening_angle_deg: float
+    opening_angle_deg : float
         Torus half-opening angle in degrees (from equator). [degrees]
-    ebv: float
+    ebv : float
         Color excess E(B-V) for the polar dust. 0 = no extinction.
         [dimensionless, mag]
-    law: str
+    law : str
         Extinction law name: ``"smc"`` (Pei 1992), ``"calzetti"`` (Calzetti
         et al. 2000), or ``"gaskell"`` (Gaskell et al. 2004).
         Default: ``"smc"``.
-    sharpness: float
+    sharpness : float
         Sigmoid steepness at the Type 1/2 boundary. [dimensionless]
 
     Returns
     -------
-    l_nu_attenuated: array, shape (n_wave,)
+    l_nu_attenuated : array, shape (n_wave,)
         Observer-frame disc luminosity after Type-1-masked attenuation.
         Same units as input l_nu. Type-2 sightlines are unchanged (mask ≈ 0).
-    l_absorbed: array, shape (n_wave,)
+    l_absorbed : array, shape (n_wave,)
         Absorbed luminosity density (per wavelength bin): bi-conical dust
         absorbs a fraction (1 - exp(-tau_lambda)) regardless of viewing angle.
         Always >= 0. Same units as input l_nu.
@@ -321,22 +321,22 @@ def polar_dust_emission(
 
     Parameters
     ----------
-    l_absorbed_total: float
+    l_absorbed_total : float
         Total absorbed luminosity (scalar, integrated over frequency).
         Same units as input l_nu * delta_nu.
-    wavelength: array, shape (n_wave,)
+    wavelength : array, shape (n_wave,)
         Wavelength grid [Angstrom].
-    temperature: float
+    temperature : float
         Dust temperature [K]. Default 100.
-    beta: float
+    beta : float
         Dust emissivity index [dimensionless]. Default 1.6.
-    lambda_0: float
+    lambda_0 : float
         Reference wavelength for optical depth [Angstrom].
         Default 2e6 (= 200 um).
 
     Returns
     -------
-    l_nu_reemit: array, shape (n_wave,)
+    l_nu_reemit : array, shape (n_wave,)
         Reemitted luminosity density [same units as input l_absorbed_total].
 
     Notes
@@ -385,20 +385,20 @@ def anisotropic_polar_luminosity(
 
     Parameters
     ----------
-    l_nu_disk: array, shape (n_wave,)
+    l_nu_disk : array, shape (n_wave,)
         Intrinsic disc luminosity density [erg/s/Hz].
-    wavelength: array, shape (n_wave,)
+    wavelength : array, shape (n_wave,)
         Wavelength in Angstrom.
-    opening_angle_deg: float
+    opening_angle_deg : float
         Torus half-opening angle in degrees (from equator). [degrees]
-    extinction_factor: array, shape (n_wave,)
+    extinction_factor : array, shape (n_wave,)
         Wavelength-dependent transmission through polar dust
         (i.e., exp(-tau_lambda) from :func:`polar_dust_extinction`).
         [dimensionless, 0–1]
 
     Returns
     -------
-    l_total: float
+    l_total : float
         Total extincted luminosity integrated over frequency and solid angle
         [erg/s].
 
@@ -480,33 +480,33 @@ def polar_dust_total(
 
     Parameters
     ----------
-    l_nu_disc: array, shape (n_wave,)
+    l_nu_disc : array, shape (n_wave,)
         Input AGN disc luminosity density.  Unit-agnostic: output units
         match input (e.g. erg/s/Hz in → erg/s/Hz out).
-    wavelength: array, shape (n_wave,)
+    wavelength : array, shape (n_wave,)
         Wavelength in Angstrom.
-    cos_inc: float
+    cos_inc : float
         Cosine of inclination. 1 = face-on, 0 = edge-on.
-    opening_angle_deg: float
+    opening_angle_deg : float
         Torus half-opening angle in degrees.
-    ebv: float
+    ebv : float
         Color excess E(B-V).
-    temperature: float
+    temperature : float
         Polar dust temperature in Kelvin.
-    beta: float
+    beta : float
         Dust emissivity index.
-    lambda_0: float
+    lambda_0 : float
         Reference wavelength for optical depth in Angstrom.
-    law: str
+    law : str
         Extinction law name.
-    sharpness: float
+    sharpness : float
         Sigmoid steepness at the Type 1/2 boundary.
 
     Returns
     -------
-    l_nu_attenuated: array, shape (n_wave,)
+    l_nu_attenuated : array, shape (n_wave,)
         Attenuated disc luminosity (same units as input).
-    l_nu_reemit: array, shape (n_wave,)
+    l_nu_reemit : array, shape (n_wave,)
         Graybody reemission from polar dust (same units as input).
     """
     l_nu_attenuated, l_absorbed = polar_dust_extinction(

@@ -38,10 +38,10 @@ class SKIRTORTorusConfig(SEDComponentConfig):
 
     Parameters
     ----------
-    grid_path: str or None
+    grid_path : str or None
         Path to SKIRTOR template grid (.npz or .h5). If None, templates
         are not pre-loaded (deferred to first use in predict).
-    disk_type: int
+    disk_type : int
         Disc spectrum model selector (CIGALE ``skirtor2016.py`` ``disk_type``).
         Options:
 
@@ -66,9 +66,9 @@ class SKIRTORTorusState(SEDComponentState):
 
     Attributes
     ----------
-    name: str
+    name : str
         Component identifier.
-    skirtor_fn: callable or None
+    skirtor_fn : callable or None
         Compiled interpolation function from create_skirtor_from_grid,
         or None if templates are not available.
     """
@@ -88,38 +88,38 @@ class SKIRTORTorus(SEDModelComponent):
 
     Attributes
     ----------
-    name: str
+    name : str
         Component registry key: ``"skirtor"``.
-    parameter_prefix: str
+    parameter_prefix : str
         Parameter namespace: ``"agn_"``.
-    config: SKIRTORTorusConfig
+    config : SKIRTORTorusConfig
         Frozen configuration (grid path).
 
     Free parameters (class-level declarations, auto-discovered)
     -----------------------------------------------------------
-    log_lbol: Uniform
+    log_lbol : Uniform
         log₁₀(L_bol / L_sun). [dex, 8–14]
-    tau_skirtor: Uniform
+    tau_skirtor : Uniform
         Edge-on optical depth at 9.7 μm. [dimensionless, 3–11]
-    p_skirtor: Uniform
+    p_skirtor : Uniform
         Radial dust density power-law gradient. [dimensionless, 0–1.5]
-    q_skirtor: Uniform
+    q_skirtor : Uniform
         Polar dust density power-law gradient. [dimensionless, 0–1.5]
-    oa_skirtor: Uniform
+    oa_skirtor : Uniform
         Torus half-opening angle. [degrees, 20–60]
-    cos_inc: Uniform
+    cos_inc : Uniform
         Cosine of inclination (1 = face-on, 0 = edge-on). [dimensionless, 0–1]
-    frac_agn: Uniform
+    frac_agn : Uniform
         AGN fraction in a configurable band (CIGALE convention).
         [dimensionless, 0–1]
-    polar_ebv: Uniform
+    polar_ebv : Uniform
         Polar dust E(B-V) (Type-1 sightline only). [mag, 0–0.5]
-    polar_temperature: Uniform
+    polar_temperature : Uniform
         Polar dust graybody temperature. [K, 50–200]
-    polar_beta: Uniform
+    polar_beta : Uniform
         Polar dust emissivity index (Casey 2012 modified blackbody).
         [dimensionless, 1–2.5]
-    delta: Uniform
+    delta : Uniform
         Disc spectral slope modulation (CIGALE ``skirtor2016`` delta).
         [dimensionless, -1.0–1.0]. For ``disk_type`` 0/1 it tilts the disc
         power-law index at 100–5000 Å via α_mid = -1.5 + delta; for
@@ -128,17 +128,17 @@ class SKIRTORTorus(SEDModelComponent):
 
     Cross-component outputs
     -----------------------
-    L_agn_disc: erg/s
+    L_agn_disc : erg/s
         Bolometric luminosity from accretion disc (intrinsic, at θ=30°).
-    L_agn_torus: erg/s
+    L_agn_torus : erg/s
         Bolometric luminosity from torus dust thermal emission.
-    L_agn_polar_dust: erg/s
+    L_agn_polar_dust : erg/s
         Bolometric luminosity from polar dust reemission (Type 1 only).
-    L_2500_30deg: erg/s/Hz
+    L_2500_30deg : erg/s/Hz
         Specific luminosity at 2500 Å, θ=30°; feeds X-ray normalization.
-    L_6um: erg/s/Hz
+    L_6um : erg/s/Hz
         Specific luminosity at 6 μm for mid-IR diagnostics.
-    L_12um: erg/s/Hz
+    L_12um : erg/s/Hz
         Specific luminosity at 12 μm for mid-IR diagnostics.
 
     Notes
@@ -176,7 +176,7 @@ class SKIRTORTorus(SEDModelComponent):
 
     See Also
     --------
-    tengri.components.agn.skirtor: template loader and interpolation.
+    tengri.components.agn.skirtor : template loader and interpolation.
     """
 
     name = "skirtor"
@@ -284,7 +284,7 @@ class SKIRTORTorus(SEDModelComponent):
 
         Parameters
         ----------
-        wave: ndarray, optional
+        wave : ndarray, optional
             Rest-frame wavelength grid (not used by SKIRTOR; templates
             interpolate to any target grid).
 
@@ -335,7 +335,7 @@ class SKIRTORTorus(SEDModelComponent):
 
         Parameters
         ----------
-        p: mapping[str, ndarray]
+        p : mapping[str, ndarray]
             Parameters with prefix already stripped:
 
             - log_lbol: log₁₀(L_bol / L_sun)
@@ -350,11 +350,11 @@ class SKIRTORTorus(SEDModelComponent):
             - polar_temperature: polar dust graybody temperature (K)
             - polar_beta: polar dust emissivity index
 
-        sed_in: ndarray, shape (n_wave,)
+        sed_in : ndarray, shape (n_wave,)
             Input SED in erg/s/Hz.
-        wave: ndarray, shape (n_wave,)
+        wave : ndarray, shape (n_wave,)
             Rest-frame wavelength grid in Angstrom.
-        **inputs: ndarray
+        **inputs : ndarray
             Unused (AGN torus is self-contained).
 
         Returns

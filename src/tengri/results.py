@@ -62,27 +62,27 @@ class FitRecord:
 
     Parameters
     ----------
-    tengri_version: str
+    tengri_version : str
         Version string of tengri package.
-    python_version: str
+    python_version : str
         Python version string (e.g., "3.10.12").
-    platform: str
+    platform : str
         Platform string from platform.system() + platform.machine()
         (e.g., "Darwin arm64").
-    jax_version: str | None
+    jax_version : str | None
         JAX version string, None if import failed.
-    jax_backend: str | None
+    jax_backend : str | None
         JAX default backend at capture time (e.g., "gpu", "cpu"),
         None if JAX unavailable.
-    timestamp_utc: str
+    timestamp_utc : str
         ISO-8601 UTC timestamp (e.g., "2026-04-23T15:30:45Z").
-    wall_time_seconds: float | None
+    wall_time_seconds : float | None
         Total wall-clock runtime in seconds, None if not measured.
-    random_seed: int | None
+    random_seed : int | None
         Pseudo-random seed used (reproducibility), None if not applicable.
-    input_data_hash: str | None
+    input_data_hash : str | None
         SHA256 hash of input data array (optional audit field).
-    extras: dict[str, Any]
+    extras : dict[str, Any]
         Additional metadata keyed by string.
 
     Returns
@@ -92,16 +92,16 @@ class FitRecord:
 
     Attributes
     ----------
-    tengri_version: str
-    python_version: str
-    platform: str
-    jax_version: str | None
-    jax_backend: str | None
-    timestamp_utc: str
-    wall_time_seconds: float | None
-    random_seed: int | None
-    input_data_hash: str | None
-    extras: dict[str, Any]
+    tengri_version : str
+    python_version : str
+    platform : str
+    jax_version : str | None
+    jax_backend : str | None
+    timestamp_utc : str
+    wall_time_seconds : float | None
+    random_seed : int | None
+    input_data_hash : str | None
+    extras : dict[str, Any]
 
     Notes
     -----
@@ -144,13 +144,13 @@ class FitRecord:
 
         Parameters
         ----------
-        wall_time_seconds: float | None, optional
+        wall_time_seconds : float | None, optional
             Total wall-clock runtime in seconds.
-        random_seed: int | None, optional
+        random_seed : int | None, optional
             Pseudo-random seed for reproducibility.
-        input_data_hash: str | None, optional
+        input_data_hash : str | None, optional
             SHA256 hash of input data (optional audit).
-        extras: dict[str, Any] | None, optional
+        extras : dict[str, Any] | None, optional
             Additional metadata. Default: {}.
 
         Returns
@@ -207,18 +207,18 @@ class FitResult:
 
     Parameters
     ----------
-    inner: Any
+    inner : Any
         The underlying result object (Posterior, SEDResult, or list[Posterior]).
         Attributes are forwarded via __getattr__ for transparent access.
-    record: FitRecord
+    record : FitRecord
         Execution environment and timing metadata.
-    citation_keys: list[str], optional
+    citation_keys : list[str], optional
         Registry keys for citations that apply to this fit
         (e.g., ["dsps", "tengri", "fsps"]). Default: [].
-    backend: str | None, optional
+    backend : str | None, optional
         Inference backend name (e.g., "vi", "mcmc_nuts", "map").
         Default: None.
-    preset: str | None, optional
+    preset : str | None, optional
         Name of the preset used, if any (e.g., "starforming").
         Default: None.
 
@@ -229,17 +229,17 @@ class FitResult:
 
     Attributes
     ----------
-    inner: Any
+    inner : Any
         The result object (Posterior, SEDResult, etc.).
-    record: FitRecord
+    record : FitRecord
         Execution environment snapshot.
-    citation_keys: list[str]
+    citation_keys : list[str]
         Registry keys for citations.
-    backend: str | None
+    backend : str | None
         Inference backend name.
-    preset: str | None
+    preset : str | None
         Preset name if applicable.
-    citations: list[Citation]
+    citations : list[Citation]
         Resolved citations (property).
 
     Notes
@@ -290,7 +290,7 @@ class FitResult:
 
         Parameters
         ----------
-        name: str
+        name : str
             Attribute name.
 
         Returns
@@ -398,7 +398,7 @@ class FitResult:
 
         Parameters
         ----------
-        path: str
+        path : str
             File system path (e.g., "/data/result.h5").
 
         Raises
@@ -431,7 +431,7 @@ class FitResult:
 
         See Also
         --------
-        load: Inverse operation. Warns if the file records skipped keys.
+        load : Inverse operation. Warns if the file records skipped keys.
 
         Examples
         --------
@@ -547,7 +547,7 @@ class FitResult:
 
         Parameters
         ----------
-        path: str
+        path : str
             File system path to HDF5 file.
 
         Returns
@@ -571,7 +571,7 @@ class FitResult:
 
         See Also
         --------
-        save: Forward operation.
+        save : Forward operation.
 
         Examples
         --------
@@ -655,9 +655,9 @@ def posteriors_to_dataframe(results: list, params: list[str] | None = None):
 
     Parameters
     ----------
-    results: list of Posterior
+    results : list of Posterior
         Output of ``model.fit_batch()`` or any list of Posterior objects.
-    params: list of str or None
+    params : list of str or None
         Parameter names to include. Default: all scalar free parameters,
         excluding ``psd_xi``.
 

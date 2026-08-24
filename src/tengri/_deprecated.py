@@ -68,21 +68,21 @@ def resolve_renamed_flag(
 
     Parameters
     ----------
-    new_value: Any
+    new_value : Any
         Value supplied under the *new* keyword, or its default.
-    old_value: Any
+    old_value : Any
         Value supplied under the *old* keyword, or :data:`UNSET` when the
         caller did not pass it.
-    old_name, new_name: str
+    old_name, new_name : str
         The deprecated and current keyword names.
-    caller: str
+    caller : str
         Qualified name of the calling function, used in both messages
         (e.g. ``"Prediction.photometry"``).
-    default: bool, optional
+    default : bool, optional
         The new keyword's default. Used only to tell an explicit value
         apart from an unspecified one when checking for a contradiction.
         Default False.
-    drop_version: str, optional
+    drop_version : str, optional
         Version in which the old spelling stops working. Default ``"1.0"``.
 
     Returns
@@ -137,13 +137,13 @@ def deprecated_alias(
 
     Parameters
     ----------
-    new: callable
+    new : callable
         The replacement implementation. Forwarded to verbatim.
-    old_name: str
+    old_name : str
         The deprecated name (e.g. ``"get_dust_law"``).
-    new_name: str, optional
+    new_name : str, optional
         The replacement name. Defaults to ``new.__name__``.
-    drop_version: str, optional
+    drop_version : str, optional
         Version in which the old name will be removed. Default ``"1.0"``.
 
     Returns
@@ -206,13 +206,13 @@ def deprecated_attribute(
 
     Parameters
     ----------
-    value: object
+    value : object
         The replacement object (class, constant, module, ...).
-    old_name: str
+    old_name : str
         Fully qualified deprecated name.
-    new_name: str
+    new_name : str
         Fully qualified replacement name.
-    drop_version: str, optional
+    drop_version : str, optional
         Version in which the old name will be removed. Default ``"1.0"``.
     """
     warnings.warn(

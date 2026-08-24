@@ -63,18 +63,18 @@ def powerlaw_disc_block(
 
     Parameters
     ----------
-    wavelength: array_like, shape (n_wave,)
+    wavelength : array_like, shape (n_wave,)
         Rest-frame wavelength [Å].
-    agn_log_lbol: float
+    agn_log_lbol : float
         :math:`\log_{10}(L_{\rm bol}/L_\odot)`.
-    agn_alpha: float, optional
+    agn_alpha : float, optional
         Power-law spectral index in :math:`L_\nu`. Default ``-1.0``.
-    agn_T_max: float, optional
+    agn_T_max : float, optional
         UV cutoff temperature [K]. Default ``1e5``.
 
     Returns
     -------
-    L_lambda: ndarray, shape (n_wave,)
+    L_lambda : ndarray, shape (n_wave,)
         Disc :math:`L_\lambda` [erg/s/Å].
     """
     wave_aa = jnp.asarray(wavelength)
@@ -118,13 +118,13 @@ def simple_torus_block(
 
     Parameters
     ----------
-    wavelength: array_like, shape (n_wave,)
-    agn_log_lbol: float
-    l5100_disc: array_like, scalar
+    wavelength : array_like, shape (n_wave,)
+    agn_log_lbol : float
+    l5100_disc : array_like, scalar
         Ignored (kept for protocol compatibility).
-    agn_T_torus: float, optional
+    agn_T_torus : float, optional
         Graybody temperature [K]. Default ``1000``.
-    agn_torus_frac: float, optional
+    agn_torus_frac : float, optional
         Fraction of :math:`L_{\rm bol}` re-emitted by torus. Default ``0.5``.
     """
     del l5100_disc  # unused: simple torus normalizes off agn_log_lbol directly.
@@ -219,9 +219,9 @@ def smc_prevot_block(
 
     Parameters
     ----------
-    wavelength: array_like, shape (n_wave,)
+    wavelength : array_like, shape (n_wave,)
         Rest-frame wavelength [Å].
-    agn_attenuation_ebv: float, optional
+    agn_attenuation_ebv : float, optional
         :math:`E(B-V)` extinction [mag]. Default ``0.0`` (no attenuation).
 
     References
@@ -274,9 +274,9 @@ def qsogen_quasar_ext_block(
 
     Parameters
     ----------
-    wavelength: array_like, shape (n_wave,)
+    wavelength : array_like, shape (n_wave,)
         Rest-frame wavelength [Å].
-    agn_attenuation_ebv: float, optional
+    agn_attenuation_ebv : float, optional
         Quasar color excess :math:`E(B-V)` [mag]. Default ``0.0`` (no
         attenuation, a no-op, :math:`10^0 = 1`).
 

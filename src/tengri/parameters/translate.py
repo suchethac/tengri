@@ -212,10 +212,10 @@ def resolve_short_names(sfh_type: str | list[str], priors: dict) -> dict:
 
     Parameters
     ----------
-    sfh_type: str or list of str
+    sfh_type : str or list of str
         SFH type tokens, e.g. ``"tsnorm"`` or ``["dpl", "field"]``.
         Determines which short names are valid.
-    priors: dict
+    priors : dict
         User-supplied prior dict, may contain short names like ``"log_total_mass"``
         or full names like ``"sfh_tsnorm_log_total_mass"``. Full names pass through
         unchanged.
@@ -283,9 +283,9 @@ def _build_param_map(mean_sfh_type, dust_model="two_component"):
 
     Parameters
     ----------
-    mean_sfh_type: list[str]
+    mean_sfh_type : list[str]
         SFH type tokens, e.g. ``["tsnorm"]`` or ``["tsnorm", "field"]``.
-    dust_model: str
+    dust_model : str
         ``"two_component"`` or ``"single_component"``.
 
     Returns
@@ -371,17 +371,17 @@ def get_internal_params(params, param_map, spec, has_field, *, strict_unknown_pa
 
     Parameters
     ----------
-    params: dict
+    params : dict
         Public parameter dict, e.g. from ``spec.sample(key)``.
-    param_map: dict
+    param_map : dict
         Mapping ``public_name -> (internal_name, scale, offset)``, as built
         by ``_build_param_map``.
-    spec: Parameters
+    spec : Parameters
         The parameter specification (used to look up fixed defaults).
-    has_field: bool
+    has_field : bool
         Whether the model uses a stochastic field component. When ``True``
         the latent vector ``xi`` is passed through from ``params``.
-    strict_unknown_params: bool, optional
+    strict_unknown_params : bool, optional
         When ``True`` (default), raise :class:`ValueError` if ``params`` contains
         keys that aren't in ``param_map``, the reverse-alias map, or the latent
         vector slots. When ``False``, emit a :class:`UserWarning` instead; used
@@ -561,9 +561,9 @@ def check_unknown_params(params, param_map):
 
     Parameters
     ----------
-    params: Mapping
+    params : Mapping
         User-supplied parameter dict.
-    param_map: Mapping
+    param_map : Mapping
         ``public_name -> (internal_name, scale, offset)`` from the SEDModel.
 
     Raises
@@ -586,18 +586,18 @@ def check_missing_free_params(params, spec, param_map=None):
     entry. Without it, a missing free parameter survives the
     ``{**fixed_values, **params}`` merge and surfaces deep inside a
     component as a bare ``KeyError`` (e.g. ``'dust_tau_bc'``) with no hint
-    that the model simply expected a value for every free parameter: commonly hit by
-    ``model.mock({})`` on a model whose default dust group
+    that the model simply expected a value for every free parameter;
+    commonly hit by ``model.mock({})`` on a model whose default dust group
     carries free optical depths.
 
     Parameters
     ----------
-    params: Mapping
+    params : Mapping
         User-supplied parameter dict (public names, short-form aliases, or
         legacy internal names).
-    spec: Parameters
+    spec : Parameters
         The model's parameter specification.
-    param_map: Mapping, optional
+    param_map : Mapping, optional
         ``public_name -> (internal_name, scale, offset)``. When given, a
         value supplied under the parameter's internal name also counts
         (mirrors the backwards-compat acceptance in

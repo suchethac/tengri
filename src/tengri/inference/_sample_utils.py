@@ -109,7 +109,7 @@ def _data_fingerprint(fitter: Any) -> str:
 
     Parameters
     ----------
-    fitter: Fitter
+    fitter : Fitter
         Fitter whose ``data``/``noise`` (and optional mask, presence and
         runtime redshift) identify the target.
 
@@ -171,9 +171,9 @@ def _as_posterior_like(fitter: Any, init_from: Any) -> Any:
 
     Parameters
     ----------
-    fitter: Fitter
+    fitter : Fitter
         Supplies the free and fixed parameter names for validation.
-    init_from: Mapping or posterior-like
+    init_from : Mapping or posterior-like
         Starting point. A mapping is wrapped; anything exposing ``.params``
         (a :class:`~tengri.inference.posterior.Posterior`, a MAP result) is
         returned unchanged.

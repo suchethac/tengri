@@ -40,7 +40,7 @@ def _nu_quadrature_weights(obs_wavelengths: jnp.ndarray) -> jnp.ndarray:
 
     Parameters
     ----------
-    obs_wavelengths: ndarray, shape (n_wave,)
+    obs_wavelengths : ndarray, shape (n_wave,)
         Wavelength grid, increasing. [Å]
 
     Returns
@@ -80,16 +80,16 @@ def _grid_bracket(
 
     Parameters
     ----------
-    obs_wavelengths: ndarray, shape (n_wave,)
+    obs_wavelengths : ndarray, shape (n_wave,)
         Wavelength grid, increasing. [Å]
-    line_wavelengths: ndarray, shape (n_lines,)
+    line_wavelengths : ndarray, shape (n_lines,)
         Line centers. [Å]
 
     Returns
     -------
-    spacing: ndarray, shape (n_lines,)
+    spacing : ndarray, shape (n_lines,)
         Width of the grid interval containing each line. [Å]
-    nearest: ndarray, shape (n_lines,)
+    nearest : ndarray, shape (n_lines,)
         Index of the closest grid node.
 
     Notes
@@ -131,19 +131,19 @@ def _render_conserving(
 
     Parameters
     ----------
-    profiles: ndarray, shape (n_wave, n_lines)
+    profiles : ndarray, shape (n_wave, n_lines)
         Analytically normalized profiles [1/Hz].
-    obs_wavelengths: ndarray, shape (n_wave,)
+    obs_wavelengths : ndarray, shape (n_wave,)
         Wavelength grid the profiles were rendered on, increasing. [Å]
-    line_wavelengths: ndarray, shape (n_lines,)
+    line_wavelengths : ndarray, shape (n_lines,)
         Line centers. [Å]
-    line_luminosities: ndarray, shape (n_lines,)
+    line_luminosities : ndarray, shape (n_lines,)
         Integrated line luminosities. [erg/s] or [erg/s/Msun]
-    support_half_width: ndarray, shape (n_lines,)
+    support_half_width : ndarray, shape (n_lines,)
         Half-width beyond which each profile is negligible: exact for the
         compact-support triweight, a 4-sigma convention for the Gaussian. Used
         only to decide containment, never to shape the profile. [Å]
-    nearest: ndarray, shape (n_lines,)
+    nearest : ndarray, shape (n_lines,)
         Index of the grid node closest to each line, from :func:`_grid_bracket`.
         Where a profile vanishes on the grid entirely, its luminosity is
         scattered here instead.
@@ -227,16 +227,16 @@ def place_line_profiles(
 
     Parameters
     ----------
-    line_wavelengths: array, shape (n_lines,)
+    line_wavelengths : array, shape (n_lines,)
         Rest-frame line centers in Å (vacuum wavelength). [Å]
-    line_luminosities: array, shape (n_lines,)
+    line_luminosities : array, shape (n_lines,)
         Line luminosities in consistent units [erg/s] or [erg/s/Msun].
-    obs_wavelengths: array, shape (n_wave,)
+    obs_wavelengths : array, shape (n_wave,)
         Output wavelength grid in Å (rest-frame, increasing). [Å]
-    line_sigma_aa: float
+    line_sigma_aa : float
         Fixed Gaussian line width in Å (legacy). Used only when
         ``line_sigma_kms <= 0``. [Å]
-    line_sigma_kms: float, optional
+    line_sigma_kms : float, optional
         Velocity dispersion in km/s. When > 0, lines are rendered as triweight
         profiles with per-line width :math:`\sigma_\lambda=(\sigma_v/c)\lambda`.
         Default 0 (fall back to ``line_sigma_aa`` / delta). [km/s]
@@ -382,13 +382,13 @@ def place_line_profiles_velocity(
 
     Parameters
     ----------
-    line_wavelengths: array, shape (n_lines,)
+    line_wavelengths : array, shape (n_lines,)
         Rest-frame line centers in Å (vacuum). [Å]
-    line_luminosities: array, shape (n_lines,)
+    line_luminosities : array, shape (n_lines,)
         Integrated line luminosities [erg/s] or [erg/s/Msun].
-    obs_wavelengths: array, shape (n_wave,)
+    obs_wavelengths : array, shape (n_wave,)
         Output wavelength grid in Å (increasing). [Å]
-    line_sigma_kms: float
+    line_sigma_kms : float
         Velocity dispersion. May be traced. [km/s]
 
     Returns
@@ -496,9 +496,9 @@ def sanitize_qh_table(qh_raw, *, backend_name: str):
 
     Parameters
     ----------
-    qh_raw: array_like, shape (n_met, n_age)
+    qh_raw : array_like, shape (n_met, n_age)
         Raw ionizing photon rate per SSP grid point. [1/s]
-    backend_name: str
+    backend_name : str
         Backend class name, for the error message.
 
     Returns
@@ -572,9 +572,9 @@ def compute_qh(ssp_wave: jnp.ndarray, ssp_flux: jnp.ndarray) -> float:
 
     Parameters
     ----------
-    ssp_wave: array, shape (n_wave,)
+    ssp_wave : array, shape (n_wave,)
         SSP wavelength grid in Å (rest-frame, increasing).
-    ssp_flux: array, shape (n_wave,)
+    ssp_flux : array, shape (n_wave,)
         SSP spectral luminosity density. [erg/s/Hz/Msun]
 
     Returns
@@ -635,9 +635,9 @@ def compute_qh_log10(ssp_wave: jnp.ndarray, ssp_flux: jnp.ndarray) -> float:
 
     Parameters
     ----------
-    ssp_wave: array, shape (n_wave,)
+    ssp_wave : array, shape (n_wave,)
         SSP wavelength grid [Angstrom], rest-frame, increasing.
-    ssp_flux: array, shape (n_wave,)
+    ssp_flux : array, shape (n_wave,)
         SSP spectral luminosity density [Lsun/Hz/Msun].
 
     Returns
@@ -705,16 +705,16 @@ def _interp_index_weight(
 
     Parameters
     ----------
-    x: float
+    x : float
         Query point.
-    grid: array, shape (n_grid,)
+    grid : array, shape (n_grid,)
         Sorted grid points.
 
     Returns
     -------
-    idx: int
+    idx : int
         Index of left bracket in ``grid``.
-    w: float
+    w : float
         Linear interpolation weight [0, 1].
 
     Notes
@@ -747,18 +747,18 @@ def _qh_bilinear(
 
     Parameters
     ----------
-    qh_table: array_like, shape (n_met, n_age) or None
+    qh_table : array_like, shape (n_met, n_age) or None
         Ionizing photon rate Q_H on the (metallicity, age) grid [1/s].
         ``None`` selects the ``missing`` fallback.
-    qh_log_met: array_like, shape (n_met,)
+    qh_log_met : array_like, shape (n_met,)
         Table metallicity axis, absolute ``log10(Z)``, sorted ascending.
-    qh_log_age: array_like, shape (n_age,)
+    qh_log_age : array_like, shape (n_age,)
         Table age axis, ``log10(age/yr)``, sorted ascending.
-    log_z: float
+    log_z : float
         Query metallicity, absolute ``log10(Z)``.
-    log_age_yr: float
+    log_age_yr : float
         Query age, ``log10(age/yr)``.
-    missing: float
+    missing : float
         Value returned when ``qh_table`` is ``None``. Backend-specific and
         deliberately not unified: Q_H is consumed multiplicatively, so ``1.0``
         means "no Q_H scaling" and ``0.0`` means "no ionizing photons".
@@ -814,7 +814,7 @@ def neb_logzsol_to_log_z_abs(logzsol: jnp.ndarray) -> jnp.ndarray:
 
     Parameters
     ----------
-    logzsol: array
+    logzsol : array
         Gas metallicity relative to solar [log10(Z/Zsun)].
 
     Returns
@@ -835,7 +835,7 @@ def neb_logzsol_to_cloudy_logoh(logzsol: jnp.ndarray) -> jnp.ndarray:
 
     Parameters
     ----------
-    logzsol: array
+    logzsol : array
         Gas metallicity relative to solar [log10(Z/Zsun)].
 
     Returns
@@ -856,7 +856,7 @@ def neb_logzsol_to_mappings_zeta(logzsol: jnp.ndarray) -> jnp.ndarray:
 
     Parameters
     ----------
-    logzsol: array
+    logzsol : array
         Gas metallicity relative to solar [log10(Z/Zsun)].
 
     Returns
@@ -911,15 +911,15 @@ def compute_analytic_nebular_continuum(
 
     Parameters
     ----------
-    wave_aa: array, shape (n_wave,)
+    wave_aa : array, shape (n_wave,)
         Wavelength grid in Å (rest-frame, increasing).
-    q_h: float
+    q_h : float
         Hydrogen-ionizing photon production rate. [photons/s]
-    log_z_abs: float
+    log_z_abs : float
         Absolute metallicity. [log10(Z/Z_sun)]
         Currently unused; included for forward compatibility (metallicity scaling
         of free-free via He/metal opacity is reserved for a future update).
-    temperature: float, optional
+    temperature : float, optional
         Electron temperature in K. Default: 10^4 K (typical HII region). [K]
 
     Returns
@@ -1076,24 +1076,24 @@ class NebularContinuumFallback:
 
     Parameters
     ----------
-    primary: NebularBackend
+    primary : NebularBackend
         Line-only nebular backend (has_continuum=False). Must implement
         ``predict_nebular_sed()``.
-    fallback: NebularBackend, optional
+    fallback : NebularBackend, optional
         Continuum-capable backend (CueBackend, CloudyGridBackend) for Tier 1
         fallback. Default: None.
-    fallback_mode: str, optional
+    fallback_mode : str, optional
         Fallback behavior if neither backend nor analytical continuum is
         available. One of "error" (raise NebularContinuumUnavailableError) or
         "warn" (emit warning, return lines only). Default: "error".
 
     Attributes
     ----------
-    has_continuum: bool
+    has_continuum : bool
         Always True; guarantees continuum provision via three-tier chain.
-    has_free_params: bool
+    has_free_params : bool
         Inherited from primary backend.
-    name: str
+    name : str
         Identifier string (e.g., "fallback(CB19Backend)").
 
     Notes

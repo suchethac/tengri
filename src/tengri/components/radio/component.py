@@ -20,8 +20,8 @@ The AGN radio component is selected via
   ``radio_alpha_thick``, ``radio_log_nu_t``, ``radio_log_nu_cut``.
 
 Physical synchrotron-aging kernels (Jaffe & Perola 1973;
-Kardashev/Pacholczyk; Tribble 1993): ``"JP"``, ``"KP"``, ``"tribble"`` are
-not yet implemented. Selecting them raises :class:`ValueError` at
+Kardashev/Pacholczyk; Tribble 1993), namely ``"JP"``, ``"KP"`` and ``"tribble"``,
+are not yet implemented. Selecting them raises :class:`ValueError` at
 construction. The physics + precomputed pitch-angle integrals (validated
 against BRATS, Harwood+2013) land together in a follow-up PR alongside
 the two free parameters they consume (``radio_alpha_inj``,
@@ -108,17 +108,17 @@ class RadioSEDComponentConfig(SEDComponentConfig):
 
     Attributes
     ----------
-    name: str
+    name : str
         Diagnostic identifier. Default ``"radio"``.
-    sfr_mode: str
+    sfr_mode : str
         Star-formation synchrotron mode. One of
         ``{"none", "bell2003", "delvecchio2021", "mccheyne2022"}``. The
         ``"none"`` mode turns off the SF component entirely (pure AGN radio).
         Default ``"bell2003"``.
-    include_freefree: bool
+    include_freefree : bool
         Add Murphy+2011 thermal free-free component. Default ``True``
         (matches :func:`radio_total`'s default).
-    agn_radio_model: str
+    agn_radio_model : str
         AGN radio sub-model. One of :data:`AGN_RADIO_MODELS` :
         ``{"none", "powerlaw", "dpl"}``. The ``"none"`` mode disables
         the AGN radio component (SF synchrotron + optional free-free only).
@@ -264,7 +264,7 @@ class RadioSEDComponent(TemplateThreading):
 
         Parameters
         ----------
-        derived: mapping
+        derived : mapping
             ``state.derived``. Missing keys take the documented fallbacks, a model
             with no dust block publishes no ``L_ir``, and radio must still build.
 
@@ -313,20 +313,20 @@ class RadioSEDComponent(TemplateThreading):
 
         Parameters
         ----------
-        params: mapping
+        params : mapping
             Full (un-sliced) parameter dict; reads the ``radio_*`` keys and the bare
             ``redshift``.
-        wave: array_like, shape (n_wave,)
+        wave : array_like, shape (n_wave,)
             Rest-frame wavelength grid [Angstrom]. Any grid: the full model grid in
             :meth:`apply`, or the per-term reference wavelengths under the LUT.
-        L_ir: array_like, scalar
+        L_ir : array_like, scalar
             Dust-reradiated IR luminosity [erg/s], drives the SF synchrotron and
             free-free amplitudes via the FIR-radio correlation.
-        L_agn_bol: array_like, scalar
+        L_agn_bol : array_like, scalar
             AGN bolometric luminosity [erg/s].
-        L_4400_intrinsic: array_like, scalar
+        L_4400_intrinsic : array_like, scalar
             Un-reddened AGN B-band luminosity [erg/s/Hz], the radio-loudness reference.
-        log_mstar: array_like, scalar
+        log_mstar : array_like, scalar
             log10 stellar mass [dex Msun]; used by the mass-evolving FIRRC modes.
 
         Returns
@@ -471,7 +471,7 @@ class RadioSEDComponent(TemplateThreading):
 
         Parameters
         ----------
-        params: mapping
+        params : mapping
             Receives all declared ``radio_*`` keys.
 
         Returns
@@ -508,10 +508,10 @@ class RadioSEDComponent(TemplateThreading):
 
         Parameters
         ----------
-        state: ForwardState
+        state : ForwardState
             Must carry rest-frame ``wave`` (Å). If ``sed_intrinsic`` is
             ``None`` it is initialized to zeros of the same shape.
-        params: mapping
+        params : mapping
             Receives ``radio_*`` keys plus the bare ``redshift`` from
             the allowlist. Cross-component scalars (``L_ir``,
             ``L_agn_bol``, ``log_mstar``) are read from

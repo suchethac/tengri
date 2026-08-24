@@ -50,9 +50,9 @@ class FritzComponents(NamedTuple):
 
     Attributes
     ----------
-    disk: jnp.ndarray, shape (n_wave,)
+    disk : jnp.ndarray, shape (n_wave,)
         Accretion disk emission (direct + scattered) [erg/s/Hz].
-    dust: jnp.ndarray, shape (n_wave,)
+    dust : jnp.ndarray, shape (n_wave,)
         Dust thermal emission from the torus [erg/s/Hz].
 
     Notes
@@ -73,7 +73,7 @@ def _load_grid_arrays(grid_path: str):
 
     Parameters
     ----------
-    grid_path: str
+    grid_path : str
         Path to ``.h5`` file.
 
     Returns
@@ -120,19 +120,19 @@ def _interpolate_and_normalize(
 
     Parameters
     ----------
-    grid_jax: ndarray, shape (n_r, n_tau, n_beta, n_gamma, n_oa, n_psy, n_wave)
+    grid_jax : ndarray, shape (n_r, n_tau, n_beta, n_gamma, n_oa, n_psy, n_wave)
         Template grid [erg/s/Hz, per-L_sun normalized at runtime].
-    wave_grid: ndarray, shape (n_wave_grid,)
+    wave_grid : ndarray, shape (n_wave_grid,)
         Grid wavelength array [Angstrom].
-    axes: tuple of ndarray
+    axes : tuple of ndarray
         Grid axis values (r_ratio, tau, beta, gamma, oa, psy).
-    edges: tuple of ndarray
+    edges : tuple of ndarray
         Precomputed bin edges for triweight interpolation.
-    wavelength: ndarray, shape (n_wave,)
+    wavelength : ndarray, shape (n_wave,)
         Target wavelength array [Angstrom].
-    point: tuple
+    point : tuple
         (r_ratio, tau, beta, gamma, oa, psy) query point.
-    l_scale: float
+    l_scale : float
         Luminosity scale factor [erg s^-1].
 
     Returns
@@ -162,13 +162,13 @@ class FritzGrid(NamedTuple):
 
     Attributes
     ----------
-    dust: ndarray, shape (n_r, n_tau, n_beta, n_gamma, n_oa, n_psy, n_wave)
+    dust : ndarray, shape (n_r, n_tau, n_beta, n_gamma, n_oa, n_psy, n_wave)
         Tabulated torus SEDs [shape only; renormalized on use].
-    wave_grid: ndarray, shape (n_wave,)
+    wave_grid : ndarray, shape (n_wave,)
         Template rest-frame wavelength grid [Angstrom].
-    axes: tuple of ndarray
+    axes : tuple of ndarray
         The six parameter axes, in interpolation order.
-    edges: tuple of ndarray
+    edges : tuple of ndarray
         Triweight bin edges derived from ``axes``.
     """
 
@@ -184,7 +184,7 @@ def load_fritz_grid(grid_path: str) -> FritzGrid:
 
     Parameters
     ----------
-    grid_path: str
+    grid_path : str
         Path to a Fritz2006 HDF5 grid file.
 
     Returns
@@ -228,25 +228,25 @@ def fritz_sed_from_grid(
 
     Parameters
     ----------
-    grid: FritzGrid
+    grid : FritzGrid
         Template arrays, passed as an argument so they thread through JIT.
-    wavelength: ndarray, shape (n_wave,)
+    wavelength : ndarray, shape (n_wave,)
         Wavelength grid. [Angstrom]
-    agn_log_lbol: float
+    agn_log_lbol : float
         :math:`\log_{10}(L_{\rm bol}/L_\odot)`. [dimensionless]
-    agn_torus_frac: float
+    agn_torus_frac : float
         Fraction of L_bol reprocessed by the torus. [dimensionless]
-    agn_fritz_r_ratio: float
+    agn_fritz_r_ratio : float
         Dust torus radius ratio (r_max / r_min). Allowed: 10, 30, 60, 100, 150.
-    agn_fritz_tau: float
+    agn_fritz_tau : float
         Optical depth at 9.7 um. Allowed: 0.1, 0.3, 0.6, 1, 2, 3, 6, 10.
-    agn_fritz_beta: float
+    agn_fritz_beta : float
         Radial dust density power-law index. Allowed: -1, -0.75, -0.5, -0.25, 0.
-    agn_fritz_gamma: float
+    agn_fritz_gamma : float
         Polar dust density gradient. Allowed: 0, 2, 4, 6.
-    agn_fritz_oa: float
+    agn_fritz_oa : float
         Dust torus half-opening angle [degrees]. Allowed: 60, 100, 140.
-    agn_fritz_psy: float
+    agn_fritz_psy : float
         Viewing angle from torus axis [degrees]; 0 = type-2 (edge-on),
         90 = type-1 (face-on).
 
@@ -289,7 +289,7 @@ def create_fritz_from_grid(grid_path: str) -> Callable:
 
     Parameters
     ----------
-    grid_path: str
+    grid_path : str
         Path to the Fritz grid file (``.h5``).
 
     Returns
@@ -341,28 +341,28 @@ def create_fritz_from_grid(grid_path: str) -> Callable:
 
         Parameters
         ----------
-        wavelength: ndarray, shape (n_wave,)
+        wavelength : ndarray, shape (n_wave,)
             Wavelength grid. [Å]
-        agn_log_lbol: float
+        agn_log_lbol : float
             log₁₀(L_bol / L_sun). [dimensionless]
-        agn_torus_frac: float
+        agn_torus_frac : float
             Fraction of L_bol reprocessed by the torus. [dimensionless]
-        agn_fritz_r_ratio: float
+        agn_fritz_r_ratio : float
             Dust torus radius ratio (r_max / r_min). [dimensionless]
             Allowed values: 10, 30, 60, 100, 150.
-        agn_fritz_tau: float
+        agn_fritz_tau : float
             Optical depth at 9.7 µm. [dimensionless]
             Allowed values: 0.1, 0.3, 0.6, 1.0, 2.0, 3.0, 6.0, 10.0.
-        agn_fritz_beta: float
+        agn_fritz_beta : float
             Radial dust density power-law index. [dimensionless]
             Allowed values: -1.0, -0.75, -0.5, -0.25, 0.0.
-        agn_fritz_gamma: float
+        agn_fritz_gamma : float
             Polar dust density gradient. [dimensionless]
             Allowed values: 0, 2, 4, 6.
-        agn_fritz_oa: float
+        agn_fritz_oa : float
             Dust torus half-opening angle. [degrees]
             Allowed values: 60, 100, 140.
-        agn_fritz_psy: float
+        agn_fritz_psy : float
             Viewing angle from torus axis. [degrees]
             0° = type-2 AGN (edge-on), 90° = type-1 AGN (face-on).
             Allowed values: 0.001, 10.1, 20.1, 30.1, 40.1, 50.1, 60.1, 70.1, 80.1, 89.99.
@@ -393,7 +393,7 @@ def create_fritz_components_from_grid(grid_path: str) -> Callable:
 
     Parameters
     ----------
-    grid_path: str
+    grid_path : str
         Path to a Fritz2006 HDF5 grid file.
 
     Returns
@@ -448,14 +448,14 @@ def create_fritz_components_from_grid(grid_path: str) -> Callable:
 
         Parameters
         ----------
-        wavelength: ndarray, shape (n_wave,)
+        wavelength : ndarray, shape (n_wave,)
             Wavelength grid. [Å]
-        agn_log_lbol: float
+        agn_log_lbol : float
             log₁₀(L_bol / L_sun). [dimensionless]
-        agn_torus_frac: float
+        agn_torus_frac : float
             Fraction of bolometric luminosity. [dimensionless]
         agn_fritz_r_ratio, agn_fritz_tau, agn_fritz_beta, agn_fritz_gamma,
-        agn_fritz_oa, agn_fritz_psy: float
+        agn_fritz_oa, agn_fritz_psy : float
             Grid parameters (see create_fritz_from_grid docstring).
 
         Returns
@@ -571,32 +571,32 @@ def fritz_sed(*args, **kwargs):
 
     Parameters
     ----------
-    wavelength: array_like, shape (n_wave,)
+    wavelength : array_like, shape (n_wave,)
         Rest-frame wavelength grid [Angstrom].
-    agn_log_lbol: float, optional
+    agn_log_lbol : float, optional
         AGN bolometric luminosity [log10(L_sun)]. Default: 10.0.
-    agn_torus_frac: float, optional
+    agn_torus_frac : float, optional
         Fraction of bolometric luminosity in torus [dimensionless, 0–1].
         Default: 0.5.
-    agn_fritz_r_ratio: float, optional
+    agn_fritz_r_ratio : float, optional
         Dust torus radius ratio (r_max / r_min) [dimensionless].
         Default: 60.0. Allowed: 10, 30, 60, 100, 150.
-    agn_fritz_tau: float, optional
+    agn_fritz_tau : float, optional
         Optical depth at 9.7 µm [dimensionless]. Default: 1.0.
         Allowed: 0.1, 0.3, 0.6, 1.0, 2.0, 3.0, 6.0, 10.0.
-    agn_fritz_beta: float, optional
+    agn_fritz_beta : float, optional
         Radial dust density power-law index [dimensionless].
         Default: -0.5. Allowed: -1.0, -0.75, -0.5, -0.25, 0.0.
-    agn_fritz_gamma: float, optional
+    agn_fritz_gamma : float, optional
         Polar dust density gradient [dimensionless]. Default: 4.0.
         Allowed: 0, 2, 4, 6.
-    agn_fritz_oa: float, optional
+    agn_fritz_oa : float, optional
         Dust torus half-opening angle [degrees]. Default: 60.0.
         Allowed: 60, 100, 140.
-    agn_fritz_psy: float, optional
+    agn_fritz_psy : float, optional
         Viewing angle from torus axis [degrees]. Default: 0.001 (type-2).
         Allowed: 0.001, 10.1, 20.1, 30.1, 40.1, 50.1, 60.1, 70.1, 80.1, 89.99.
-    _template: callable, optional
+    _template : callable, optional
         Pre-loaded template function (for JIT threading). When provided,
         uses this instead of the module-level cached loader. Internal use.
     **kwargs
@@ -634,16 +634,16 @@ def fritz_components(*args, **kwargs) -> FritzComponents:
 
     Parameters
     ----------
-    wavelength: array_like, shape (n_wave,)
+    wavelength : array_like, shape (n_wave,)
         Rest-frame wavelength grid [Angstrom].
-    agn_log_lbol: float, optional
+    agn_log_lbol : float, optional
         AGN bolometric luminosity [log10(L_sun)]. Default: 10.0.
-    agn_torus_frac: float, optional
+    agn_torus_frac : float, optional
         Covering factor [0, 1]. Default: 0.5.
     agn_fritz_r_ratio, agn_fritz_tau, agn_fritz_beta, agn_fritz_gamma,
-    agn_fritz_oa, agn_fritz_psy: float, optional
+    agn_fritz_oa, agn_fritz_psy : float, optional
         Grid parameters (see fritz_analytic docstring).
-    _template: callable, optional
+    _template : callable, optional
         Pre-loaded template function (for JIT threading). When provided,
         uses this instead of the module-level cached loader. Internal use.
     **kwargs

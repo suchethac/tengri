@@ -29,36 +29,36 @@ class Citation:
 
     Attributes
     ----------
-    key: str
+    key : str
         Registry key, lowercase (e.g., "calzetti2000", "dsps").
-    short: str
+    short : str
         Human-readable short form (e.g., "Calzetti et al. (2000)").
-    role: str
+    role : str
         Purpose in tengri (e.g., "Starburst dust attenuation law").
-    category: str
+    category : str
         Component-type category (one of :data:`CATEGORIES`: "framework",
         "ssp", "dust_attenuation", "nebular", "igm", "inference", ...).
         Used by ``Bibliography.by_category()`` to group the report.
-    authors: str
+    authors : str
         Full author list in BibTeX style.
-    year: int
+    year : int
         Publication year.
-    title: str
+    title : str
         Publication title.
-    journal: str | None
+    journal : str | None
         Journal name (None for preprints or code packages).
-    doi: str | None
+    doi : str | None
         DOI URL or identifier (e.g., "10.1086/512090").
-    arxiv: str | None
+    arxiv : str | None
         ArXiv identifier (e.g., "astro-ph/0309170").
-    bibtex_key: str
+    bibtex_key : str
         BibTeX citation key (e.g., "Calzetti2000").
-    upstream_code: str | None
+    upstream_code : str | None
         Repository path of the upstream reference
         (e.g., "bd-j/prospector").
-    license: str | None
+    license : str | None
         License of upstream code if applicable.
-    note: str | None
+    note : str | None
         Additional notes or caveats.
 
     """

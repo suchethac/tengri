@@ -224,14 +224,14 @@ class AGNRegistryEntry:
 
     Attributes
     ----------
-    callable: Callable
+    callable : Callable
         The AGN model function.
-    citation: str
+    citation : str
         Optional academic citation. Default empty string.
-    status: str
+    status : str
         Model status: "production", "experimental", "demo", or "deprecated".
         Default "production".
-    short_doc: str
+    short_doc : str
         Optional one-line description. Default empty string.
 
     Notes
@@ -274,14 +274,14 @@ def register_agn_model(
 
     Parameters
     ----------
-    name: str
+    name : str
         Unique model name for the registry.
-    citation: str, optional
+    citation : str, optional
         Academic citation for the model. Default empty string.
-    status: str, optional
+    status : str, optional
         Model status ("production", "experimental", "demo", "deprecated").
         Default "production".
-    short_doc: str, optional
+    short_doc : str, optional
         One-line description. Default empty string.
 
     Returns
@@ -327,7 +327,7 @@ def _resolve_monolithic_model(name: str) -> Callable | None:
 
     Parameters
     ----------
-    name: str
+    name : str
         Deprecated AGN model name.
 
     Returns
@@ -373,7 +373,7 @@ def resolve_agn_model(name: str) -> Callable:
 
     Parameters
     ----------
-    name: str
+    name : str
         Model name. Both old monolithic names (deprecated) and ``"composable"``
         are supported.
 
@@ -561,17 +561,17 @@ def unified_agn(
 
     Parameters
     ----------
-    wavelength: array_like, shape (n_wave,)
+    wavelength : array_like, shape (n_wave,)
         Rest-frame wavelength [Angstrom].
-    agn_log_lbol: float
+    agn_log_lbol : float
         log10 of bolometric luminosity [Lsun].
-    disc_model: str, optional
+    disc_model : str, optional
         Disc model name: "powerlaw", "multicolor", "kubota_done_3zone", "adaf".
         Default "powerlaw".
-    torus_model: str, optional
+    torus_model : str, optional
         Torus model name: "silva04" (production, default), "skirtor".
         Default "silva04" (radiative-transfer based Silva+04 smooth torus).
-    agn_torus_frac: float, optional
+    agn_torus_frac : float, optional
         Torus covering factor [dimensionless], range [0, 1]. Disc gets
         (1 - agn_torus_frac). Default 0.5.
     **kwargs
@@ -657,23 +657,23 @@ def multicolor_agn(
 
     Parameters
     ----------
-    wavelength: array_like, shape (n_wave,)
+    wavelength : array_like, shape (n_wave,)
         Rest-frame wavelength [Angstrom].
-    agn_log_lbol: float
+    agn_log_lbol : float
         log10 of bolometric luminosity [Lsun].
-    agn_lum_ratio: float, optional
+    agn_lum_ratio : float, optional
         AGN luminosity fraction [dimensionless]. Default 0.1.
-    agn_log_mbh: float, optional
+    agn_log_mbh : float, optional
         log10 of black hole mass [Msun]. Default 8.0.
-    agn_log_ledd: float, optional
+    agn_log_ledd : float, optional
         log10 of Eddington ratio [dimensionless]. Default -1.0.
-    agn_a_spin: float, optional
+    agn_a_spin : float, optional
         Black hole spin [dimensionless], range [0, 0.998]. Default 0.0.
-    agn_cos_inc: float, optional
+    agn_cos_inc : float, optional
         cos(inclination) [dimensionless], range [0, 1]. Default 0.5.
-    agn_log_nh_silva: float, optional
+    agn_log_nh_silva : float, optional
         Torus hydrogen column density, log10(N_H / cm^-2). Default 23.0.
-    agn_torus_frac: float, optional
+    agn_torus_frac : float, optional
         Torus covering factor [dimensionless]. Default 0.5.
 
     Returns
@@ -740,37 +740,37 @@ def kubota_done_full_agn(
 
     Parameters
     ----------
-    wavelength: array_like, shape (n_wave,)
+    wavelength : array_like, shape (n_wave,)
         Rest-frame wavelength [Angstrom].
-    agn_log_lbol: float
+    agn_log_lbol : float
         log10 of bolometric luminosity [Lsun].
-    agn_lum_ratio: float, optional
+    agn_lum_ratio : float, optional
         AGN luminosity fraction [dimensionless]. Default 0.1.
-    agn_log_mbh: float, optional
+    agn_log_mbh : float, optional
         log10 of black hole mass [Msun]. Default 8.0.
-    agn_log_ledd: float, optional
+    agn_log_ledd : float, optional
         log10 of Eddington ratio [dimensionless]. Default -1.0.
-    agn_a_spin: float, optional
+    agn_a_spin : float, optional
         Black hole spin [dimensionless], range [0, 0.998]. Default 0.0.
-    agn_cos_inc: float, optional
+    agn_cos_inc : float, optional
         cos(inclination) [dimensionless]. Default 0.5.
-    agn_f_hard: float, optional
+    agn_f_hard : float, optional
         Fraction of L_Edd in corona [dimensionless]. Default 0.02.
-    agn_gamma_warm: float, optional
+    agn_gamma_warm : float, optional
         Warm Comptonization photon index [dimensionless]. Default 2.5.
-    agn_kt_warm: float, optional
+    agn_kt_warm : float, optional
         Warm electron temperature [keV]. Default 0.2.
-    agn_gamma_hard: float, optional
+    agn_gamma_hard : float, optional
         Hard X-ray photon index [dimensionless]. Default 1.8.
-    agn_kt_hot: float, optional
+    agn_kt_hot : float, optional
         Hot corona temperature [keV]. Default 100.0.
-    agn_r_warm_ratio: float, optional
+    agn_r_warm_ratio : float, optional
         R_warm / R_hot ratio [dimensionless]. Default 2.0.
-    agn_log_nh_silva: float, optional
+    agn_log_nh_silva : float, optional
         Torus hydrogen column density, log10(N_H / cm^-2). Default 23.0.
-    agn_torus_frac: float, optional
+    agn_torus_frac : float, optional
         Torus covering factor [dimensionless]. Default 0.5.
-    agn_ebv_disc: float, optional
+    agn_ebv_disc : float, optional
         SMC-law color excess on disc [mag]. Default 0.0.
 
     Returns
@@ -837,23 +837,23 @@ def skirtor_agn(
 
     Parameters
     ----------
-    wavelength: array_like, shape (n_wave,)
+    wavelength : array_like, shape (n_wave,)
         Rest-frame wavelength [Angstrom].
-    agn_log_lbol: float, optional
+    agn_log_lbol : float, optional
         log10 of bolometric luminosity [Lsun]. Default 11.0.
-    agn_lum_ratio: float, optional
+    agn_lum_ratio : float, optional
         AGN luminosity fraction [dimensionless]. Default 0.1.
-    agn_tau_skirtor: float, optional
+    agn_tau_skirtor : float, optional
         Optical depth at 9.7 um [dimensionless], range [3, 11]. Default 7.0.
-    agn_p_skirtor: float, optional
+    agn_p_skirtor : float, optional
         Radial density gradient [dimensionless], range [0, 1.5]. Default 1.0.
-    agn_q_skirtor: float, optional
+    agn_q_skirtor : float, optional
         Polar density gradient [dimensionless], range [0, 1.5]. Default 1.0.
-    agn_oa_skirtor: float, optional
+    agn_oa_skirtor : float, optional
         Opening angle [degrees], range [20, 60]. Default 40.0.
-    agn_cos_inc: float, optional
+    agn_cos_inc : float, optional
         cos(inclination) [dimensionless], 0=edge-on, 1=face-on. Default 0.5.
-    agn_torus_frac: float, optional
+    agn_torus_frac : float, optional
         Torus covering factor [dimensionless]. Default 0.5.
 
     Returns
@@ -920,19 +920,19 @@ def skirtor_stalevski_agn(
 
     Parameters
     ----------
-    wavelength: array_like, shape (n_wave,)
+    wavelength : array_like, shape (n_wave,)
         Rest-frame wavelength [Angstrom].
-    agn_log_lbol: float, optional
+    agn_log_lbol : float, optional
         log10 of bolometric luminosity [Lsun]. Default 11.0.
-    agn_lum_ratio: float, optional
+    agn_lum_ratio : float, optional
         AGN luminosity fraction (host scaling) [dimensionless]. Default 0.1.
-    agn_tau_skirtor: float, optional
+    agn_tau_skirtor : float, optional
         Optical depth at 9.7 um [dimensionless], grid range [3, 11]. Default 7.0.
-    agn_p_skirtor, agn_q_skirtor: float, optional
+    agn_p_skirtor, agn_q_skirtor : float, optional
         Radial / polar dust-density gradients [dimensionless]. Default 1.0.
-    agn_oa_skirtor: float, optional
+    agn_oa_skirtor : float, optional
         Half-opening angle of the dust-free cone [degrees]. Default 40.0.
-    agn_cos_inc: float, optional
+    agn_cos_inc : float, optional
         cos(inclination); 1 = face-on (Type 1), 0 = edge-on. Default cos(30 deg).
 
     Returns
@@ -983,16 +983,16 @@ def silva04_agn(
 
     Parameters
     ----------
-    wavelength: array_like, shape (n_wave,)
+    wavelength : array_like, shape (n_wave,)
         Rest-frame wavelength. [Å]
-    agn_log_lbol: float, optional
+    agn_log_lbol : float, optional
         ``log10(L_bol / L_sun)``. Default 11.0.
-    agn_lum_ratio: float, optional
+    agn_lum_ratio : float, optional
         Overall AGN luminosity fraction applied on top of the
         disc-plus-torus sum. Default 0.1.
-    agn_log_nh_silva: float, optional
+    agn_log_nh_silva : float, optional
         Hydrogen column density, ``log10(N_H / cm^-2)``. Default 23.0.
-    agn_torus_frac: float, optional
+    agn_torus_frac : float, optional
         Fraction of L_bol reprocessed by the torus. Disc receives
         ``1 - agn_torus_frac``. Default 0.5.
 
@@ -1040,21 +1040,21 @@ def cat3d_wind_agn(
 
     Parameters
     ----------
-    wavelength: array_like, shape (n_wave,)
+    wavelength : array_like, shape (n_wave,)
         Rest-frame wavelength. [Å]
-    agn_log_lbol: float, optional
+    agn_log_lbol : float, optional
         ``log10(L_bol / L_sun)``. Default 11.0.
-    agn_lum_ratio: float, optional
+    agn_lum_ratio : float, optional
         Overall AGN luminosity fraction applied on top of the
         disc-plus-torus sum. Default 0.1.
-    agn_cos_inc: float, optional
+    agn_cos_inc : float, optional
         Cosine of inclination. Default 0.5.
-    agn_a_cat3d: float, optional
+    agn_a_cat3d : float, optional
         Radial power-law index of the clumpy-cloud distribution. Default
         −2.0.
-    agn_fwd_cat3d: float, optional
+    agn_fwd_cat3d : float, optional
         Polar-wind mass fraction. Default 1.0.
-    agn_torus_frac: float, optional
+    agn_torus_frac : float, optional
         Fraction of L_bol reprocessed by the torus. Disc receives
         ``1 - agn_torus_frac``. Default 0.5.
 
@@ -1114,26 +1114,26 @@ def adaf_agn(
 
     Parameters
     ----------
-    wavelength: array_like, shape (n_wave,)
+    wavelength : array_like, shape (n_wave,)
         Rest-frame wavelength [Angstrom].
-    agn_log_lbol: float
+    agn_log_lbol : float
         log10 of bolometric luminosity [Lsun].
-    agn_lum_ratio: float, optional
+    agn_lum_ratio : float, optional
         AGN luminosity fraction [dimensionless]. Default 0.1.
-    agn_log_mbh: float, optional
+    agn_log_mbh : float, optional
         log10 of black hole mass [Msun]. Default 8.0.
-    agn_adaf_alpha: float, optional
+    agn_adaf_alpha : float, optional
         ADAF viscosity parameter alpha. Default 0.3.
-    agn_adaf_beta: float, optional
+    agn_adaf_beta : float, optional
         Gas-to-total pressure ratio (magnetic fraction is 1-beta). Default 0.5.
-    agn_adaf_delta: float, optional
+    agn_adaf_delta : float, optional
         Electron viscous-heating fraction (default 0.1 = modern preference;
         Mahadevan 1997 fiducial is 1/2000). Default 0.1.
-    agn_torus_frac: float, optional
+    agn_torus_frac : float, optional
         Torus covering factor [dimensionless]. Default 0.5.
-    agn_log_nh_silva: float, optional
+    agn_log_nh_silva : float, optional
         Torus hydrogen column density, log10(N_H / cm^-2). Default 23.0.
-    agn_ebv_disc: float, optional
+    agn_ebv_disc : float, optional
         SMC-law color excess on disc [mag]. Default 0.0.
 
     Returns
@@ -1197,22 +1197,22 @@ def relagn_agn(
 
     Parameters
     ----------
-    wavelength: array_like, shape (n_wave,)
+    wavelength : array_like, shape (n_wave,)
         Rest-frame wavelength. [Å]
-    agn_log_mbh: float, optional
+    agn_log_mbh : float, optional
         ``log10(M_BH / M_sun)``, range [7, 10]. Default 8.0.
-    agn_log_mdot: float, optional
+    agn_log_mdot : float, optional
         ``log10(Ṁ / Ṁ_Edd)``, range [−1.5, 0.3]. Default −1.0.
-    agn_astar: float, optional
+    agn_astar : float, optional
         Dimensionless BH spin, prograde only, range [0, 0.998]. Default 0.0.
-    agn_cos_inc: float, optional
+    agn_cos_inc : float, optional
         Cosine of inclination (1 = face-on). Default 0.5.
-    agn_torus_frac: float, optional
+    agn_torus_frac : float, optional
         Torus covering factor; torus re-emits this fraction of disc L_bol.
         Disc is attenuated by ``(1 − agn_torus_frac)``. Default 0.5.
-    agn_log_nh_silva: float, optional
+    agn_log_nh_silva : float, optional
         Torus hydrogen column density, log10(N_H / cm^-2). Default 23.0.
-    agn_ebv_disc: float, optional
+    agn_ebv_disc : float, optional
         SMC-law color excess applied to disc [mag]. Default 0.0.
 
     Returns
@@ -1306,11 +1306,11 @@ def _sigmoid_mask(
 
     Parameters
     ----------
-    cos_inc: float
+    cos_inc : float
         Cosine of inclination (0 = edge-on, 1 = face-on).
-    theta_torus: float
+    theta_torus : float
         Torus half-opening angle [degrees].
-    width: float
+    width : float
         Sigmoid transition width [degrees]. Default 2.0.
 
     Returns
@@ -1451,9 +1451,9 @@ def unified_nlr_blr(
 
     Parameters
     ----------
-    wavelength: array, shape (n_wave,)
+    wavelength : array, shape (n_wave,)
         Rest-frame wavelength [Angstrom].
-    agn_log_lbol: float
+    agn_log_lbol : float
         :math:`\\log_{10}(L_{\\rm bol} / L_\\odot)`: total AGN bolometric
         luminosity expressed in **solar luminosities** (not erg/s).
         Convert from synthesizer's ``bolometric_luminosity`` [erg/s] via
@@ -1462,52 +1462,52 @@ def unified_nlr_blr(
         bright quasar: 12.5. The default ``44.0`` is a legacy test fixture
         that is **not a physical AGN luminosity**: set this parameter
         explicitly. See module-level "Convention" note. Default 11.0.
-    agn_cos_inc: float
+    agn_cos_inc : float
         Cosine of inclination angle (0 = edge-on/Type 2,
         1 = face-on/Type 1). Synthesizer uses inclination in degrees;
         tengri uses cos(inclination). Default 0.5.
-    agn_theta_torus: float
+    agn_theta_torus : float
         Torus half-opening angle [degrees]. Controls the critical inclination
         above which the disc and BLR are obscured. Same meaning as
         ``theta_torus`` in Synthesizer. Default 30.0.
-    agn_nlr_cf: float
+    agn_nlr_cf : float
         NLR covering fraction (0 to 1). Fraction of disc luminosity
         reprocessed into NLR emission. Synthesizer: ``covering_fraction_nlr``.
         Default 0.1.
-    agn_blr_cf: float
+    agn_blr_cf : float
         BLR covering fraction (0 to 1). Fraction of disc luminosity
         reprocessed into BLR emission. Synthesizer: ``covering_fraction_blr``.
         Default 0.1.
-    agn_log_mbh: float
+    agn_log_mbh : float
         log10(M_BH / Msun). Default 7.0.
-    agn_log_ledd: float
+    agn_log_ledd : float
         log10(L/L_Edd). Default -1.0.
-    agn_a_spin: float
+    agn_a_spin : float
         BH spin (0 to 0.998). Default 0.0.
-    agn_T_hot: float
+    agn_T_hot : float
         Hot dust temperature [K]. Default 1200.
-    agn_T_warm: float
+    agn_T_warm : float
         Warm dust temperature [K]. Default 300.
-    agn_frac_hot: float
+    agn_frac_hot : float
         Hot-to-warm dust fraction. Default 0.3.
-    agn_tau_torus: float
+    agn_tau_torus : float
         Torus optical depth at 9.7 um. Default 5.
-    agn_torus_frac: float
+    agn_torus_frac : float
         Torus covering factor (fraction of L_bol intercepted by torus).
         In Synthesizer this is derived as ``theta_torus / 90°``; here it is
         an independent free parameter. Default 0.5.
-    agn_lum_ratio: float
+    agn_lum_ratio : float
         Overall AGN fraction scaling. Default 0.1.
-    agn_blr_fwhm: float
+    agn_blr_fwhm : float
         BLR line FWHM [km/s]. Synthesizer uses ``velocity_dispersion_blr``;
         tengri uses FWHM directly. Default 5000.
-    agn_nlr_fwhm: float
+    agn_nlr_fwhm : float
         NLR line FWHM [km/s]. Default 500.
-    agn_polar_ebv: float
+    agn_polar_ebv : float
         Polar dust E(B-V) applied to disc + BLR for Type 1 views (SMC law).
         Follows CIGALE skirtor2016 [3]_. Not in Synthesizer's basic
         UnifiedAGN. Default 0.0 (no reddening).
-    nlr_fn: callable or None
+    nlr_fn : callable or None
         NLR emission backend. Signature::
 
             nlr_fn(wavelength, l_disc_bol_erg, covering_fraction,
@@ -1517,29 +1517,29 @@ def unified_nlr_blr(
         built-in analytic template from :func:`~tengri.components.agn.nlr.compute_nlr_sed`.
         To use the Cue neural-net emulator, pass the result of
         :func:`make_cue_nlr_fn`.
-    blr_fn: callable or None
+    blr_fn : callable or None
         BLR emission backend. Same signature as ``nlr_fn``. Default ``None``
         uses the built-in analytic template from
         :func:`~tengri.components.agn.blr.compute_blr_sed`.
-    include_xray: bool
+    include_xray : bool
         If True, include X-ray corona emission. Default False (UV-optical-IR only).
-    xray_gamma_agn: float
+    xray_gamma_agn : float
         X-ray photon index (power-law slope). Default 1.8. Valid range: 1.4–2.4.
-    xray_alpha_ox: float
+    xray_alpha_ox : float
         Offset [dex] to the empirical alpha_OX (Just+2007). Default 0.0 (pure
         empirical). Negative values harden the corona, positive soften it.
         Valid range: -2.0 to -1.0 for typical AGN.
-    xray_E_cut: float
+    xray_E_cut : float
         X-ray exponential cutoff energy [keV]. Default 300.0.
-    include_radio: bool
+    include_radio : bool
         If True, include radio synchrotron + AGN radio jet emission. Default False.
-    radio_q_ir: float
+    radio_q_ir : float
         FIR–radio correlation parameter (Bell+2003 mode). Default 2.64.
-    radio_alpha_sf: float
+    radio_alpha_sf : float
         Star-forming synchrotron spectral index. Default 0.8.
-    radio_loudness: float
+    radio_loudness : float
         AGN radio-loudness log10(L_5GHz/L_B). Default 0.0 (no radio AGN).
-    radio_alpha_agn: float
+    radio_alpha_agn : float
         AGN radio spectral index. Default 0.7.
 
     Returns

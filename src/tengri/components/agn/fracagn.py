@@ -47,16 +47,16 @@ def fracagn_to_log_lbol(
 
     Parameters
     ----------
-    frac_agn: float
+    frac_agn : float
         Fraction of total luminosity from AGN. Range: [0, 1).
         0 = no AGN, approaching 1 = pure AGN. [dimensionless]
-    l_dust: float
+    l_dust : float
         Dust luminosity (observed or modeled total) in solar luminosities.
         [L_sun]
 
     Returns
     -------
-    log_lbol: float
+    log_lbol : float
         Logarithmic AGN bolometric luminosity [log10(L_sun)].
 
     Notes
@@ -94,15 +94,15 @@ def log_lbol_to_fracagn(
 
     Parameters
     ----------
-    log_lbol: float
+    log_lbol : float
         Logarithmic AGN bolometric luminosity [log10(L_sun)].
-    l_dust: float
+    l_dust : float
         Dust luminosity (observed or modeled total) in solar luminosities.
         [L_sun]
 
     Returns
     -------
-    frac_agn: float
+    frac_agn : float
         AGN bolometric luminosity fraction. [dimensionless, 0–1)
 
     Notes

@@ -148,21 +148,21 @@ def register_agn_block(
 
     Parameters
     ----------
-    category: {"disc", "nlr", "blr", "feii", "torus", "attenuation"}
+    category : {"disc", "nlr", "blr", "feii", "torus", "attenuation"}
         Pipeline stage this block implements.
-    name: str
+    name : str
         Unique identifier within the category. Examples: ``"grahsp"``,
         ``"powerlaw"``, ``"none"``, ``"smc_prevot"``.
-    citation: str, optional
+    citation : str, optional
         Academic citation (e.g., paper title, authors, journal reference).
         Default ``""``.
-    status: str, optional
+    status : str, optional
         Block maturity: ``"production"``, ``"experimental"``, ``"demo"``,
         or ``"deprecated"``. Default ``"production"``.
-    short_doc: str, optional
+    short_doc : str, optional
         One-line description (e.g., "Power-law continuum with 2 free params").
         Default ``""``.
-    template_loader: callable, optional
+    template_loader : callable, optional
         Zero-argument callable returning this block's template library as a
         JAX pytree (e.g. :func:`~tengri.components.agn.silva04.load_silva04_default_grid`).
         Declaring it makes the forward model load the library **outside** the
@@ -172,7 +172,7 @@ def register_agn_block(
 
     Returns
     -------
-    decorator: callable
+    decorator : callable
         Inner decorator that registers the function and returns it
         unchanged.
 
@@ -220,7 +220,7 @@ def collect_block_templates(recipe: dict[str, str]) -> dict[str, object]:
 
     Parameters
     ----------
-    recipe: dict
+    recipe : dict
         Maps block category to selected block name, e.g.
         ``{"torus": "skirtor", "disc": "multicolor"}``. Unknown categories
         and unregistered names are ignored.
@@ -267,12 +267,12 @@ def resolve_agn_block(category: BlockCategory, name: str) -> Callable:
 
     Parameters
     ----------
-    category: str
-    name: str
+    category : str
+    name : str
 
     Returns
     -------
-    block_fn: callable
+    block_fn : callable
 
     Raises
     ------

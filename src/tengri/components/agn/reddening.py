@@ -34,12 +34,12 @@ def redden_disc(wavelength: Array, l_disc: Array, agn_ebv_disc: Array) -> Array:
 
     Parameters
     ----------
-    wavelength: array_like, shape (n_wave,)
+    wavelength : array_like, shape (n_wave,)
         Rest-frame wavelength grid [Å].
-    l_disc: array_like, shape (n_wave,)
+    l_disc : array_like, shape (n_wave,)
         Un-reddened disc SED [erg/s/Hz] or [erg/s/Å], the multiplicative
         extinction factor is dimensionless, so either convention passes through.
-    agn_ebv_disc: float
+    agn_ebv_disc : float
         Disc color excess :math:`E(B-V)` [mag].
 
     Returns

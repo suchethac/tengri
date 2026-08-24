@@ -73,31 +73,31 @@ def _build_grid_qsogen(
 
     Parameters
     ----------
-    filter_waves: list[ndarray]
+    filter_waves : list[ndarray]
         Per-filter wavelength arrays [Angstrom].
-    filter_trans: list[ndarray]
+    filter_trans : list[ndarray]
         Per-filter transmission curves.
-    redshift: float
+    redshift : float
         Source redshift.
-    plslp1_grid: ndarray, shape (n_plslp1,)
+    plslp1_grid : ndarray, shape (n_plslp1,)
         Grid of UV/optical power-law slopes (dimensionless).
-    ebv_grid: ndarray, shape (n_ebv,)
+    ebv_grid : ndarray, shape (n_ebv,)
         Grid of dust reddening E(B-V) values [mag].
-    agn_log_lbol: float
+    agn_log_lbol : float
         Reference bolometric luminosity [log10(L_sun)].
-    agn_lum_ratio: float
+    agn_lum_ratio : float
         Fraction of luminosity emitted by QSOgen component.
-    agn_plslp2: float
+    agn_plslp2 : float
         Red power-law slope (kept fixed).
-    agn_plbrk: float
+    agn_plbrk : float
         Break wavelength [Angstrom] (kept fixed).
-    agn_tbb: float
+    agn_tbb : float
         Hot dust temperature [K] (kept fixed).
-    agn_bbnorm: float
+    agn_bbnorm : float
         Hot dust normalization (kept fixed).
-    agn_emline_scale: float
+    agn_emline_scale : float
         Emission-line strength multiplier (kept fixed).
-    agn_bcnorm: float
+    agn_bcnorm : float
         Balmer continuum normalization (kept fixed).
 
     Returns
@@ -166,18 +166,18 @@ def precompute(
 
     Parameters
     ----------
-    filter_waves: list[ndarray]
+    filter_waves : list[ndarray]
         Wavelength grid per filter [Angstrom], observed frame.
-    filter_trans: list[ndarray]
+    filter_trans : list[ndarray]
         Transmission per filter (0–1).
-    redshift: float
+    redshift : float
         Source redshift. [dimensionless]
-    parameters: Parameters | None
+    parameters : Parameters | None
         Parameters spec, used to detect Fixed-axis parameters.
-    plslp1_grid: ndarray, optional
+    plslp1_grid : ndarray, optional
         Grid for agn_plslp1. If None, uses [-0.8, -0.35, 0.1] (covers
         typical range around default -0.349).
-    ebv_grid: ndarray, optional
+    ebv_grid : ndarray, optional
         Grid for agn_ebv. If None, uses [0.0, 0.05, 0.1, 0.2, 0.3]
         (covers typical reddening from 0 to SMC-like).
 
@@ -255,10 +255,10 @@ def build_lookup(preint: dict, *, free_param_names: tuple[str, ...] | None = Non
 
     Parameters
     ----------
-    preint: dict
+    preint : dict
         Preintegrated data dict with keys "grid_phot", "axes", optionally
         "_collapsed_axes".
-    free_param_names: tuple of str, optional
+    free_param_names : tuple of str, optional
         Names of remaining free axes in the collapsed case.
         Not used in the default (no-collapse) case.
 

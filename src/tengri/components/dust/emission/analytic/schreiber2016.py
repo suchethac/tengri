@@ -102,15 +102,15 @@ class Schreiber2016AnalyticIRSEDComponent(EmissionComponent):
 
         Parameters
         ----------
-        p: dict
+        p : dict
             Parameters with prefix stripped: keys are "T", "f_pah"
             (or subset if some are Fixed). Note: "f_pah" is mapped to the
             closure's "dust_f_pah" argument.
-        sed_in: ndarray, shape (n_wave,)
+        sed_in : ndarray, shape (n_wave,)
             Input SED in erg/s/Hz (typically zeros for a dust emission component).
-        wave: ndarray, shape (n_wave,)
+        wave : ndarray, shape (n_wave,)
             Rest-frame wavelength grid in Angstrom.
-        L_ir: float
+        L_ir : float
             Total absorbed luminosity in erg/s.
 
         Returns

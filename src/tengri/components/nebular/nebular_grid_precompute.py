@@ -95,7 +95,7 @@ def validate_n_grid(n_grid):
 
     Parameters
     ----------
-    n_grid: int or dict
+    n_grid : int or dict
         Points per free ionization axis. A scalar applies to every axis; a dict
         ``{axis_name: n}`` sets axes individually and falls back to
         :data:`_DEFAULT_N_GRID` for any it omits.
@@ -169,20 +169,20 @@ class NebularGridTable:
 
     Attributes
     ----------
-    axis_names: tuple of str
+    axis_names : tuple of str
         Free parameters gridded, in interpolation order (subset of
         :data:`_CANDIDATE_AXES`). Empty when all ionization params are fixed.
-    axes: tuple of ndarray
+    axes : tuple of ndarray
         One grid-value array per axis, ascending.
-    log_line_per_qh: ndarray, shape ``(*grid_dims, n_lines)``
+    log_line_per_qh : ndarray, shape ``(*grid_dims, n_lines)``
         ``log10`` of the line **luminosity** per unit ``nion`` [erg/s per
         (photons/s)], distance-independent. Stored in log space because line
         luminosities span decades across (met, logU, logZ_gas): geometric
         (log-space) interpolation is far more accurate than arithmetic there.
         ``grid_dims`` matches ``axes``; a 0-axis table is shape ``(n_lines,)``.
-    wavelengths: ndarray, shape (n_lines,)
+    wavelengths : ndarray, shape (n_lines,)
         Rest-frame vacuum line wavelengths [Angstrom].
-    log_phot_per_qh: ndarray, shape ``(*grid_dims, n_filter)`` or None
+    log_phot_per_qh : ndarray, shape ``(*grid_dims, n_filter)`` or None
         ``log10`` of the **intrinsic** (un-reddened) nebular filter-integrated
         rest-frame ``L_nu`` per unit ``nion`` [erg/s/Hz per (photons/s)]: the
         broadband analog of ``log_line_per_qh``, one column per photometric
@@ -190,13 +190,13 @@ class NebularGridTable:
         :meth:`Observation.predict_via_precomp` consumes) without the per-eval
         Cue forward + filter integration. ``None`` when the reference model had
         no ``WavePrecomp`` filters to integrate against (line-only grid).
-    axis_kinds: tuple of str
+    axis_kinds : tuple of str
         Interpolation kind per axis (``'pchip'`` / ``'linear'``), matching
         ``axes``. The ``met_logzsol`` axis is ``'linear'`` when its knots are
         snapped to the SSP metallicity nodes: the exact emissivity has C0 kinks
         there, and a cubic's two-sided tangent straddles them (#1020). Empty
         tuple means PCHIP everywhere (the pre-#1020 default).
-    log_restband_per_qh: ndarray, shape ``(*grid_dims, n_filter)`` or None
+    log_restband_per_qh : ndarray, shape ``(*grid_dims, n_filter)`` or None
         The **rest-frame** twin of ``log_phot_per_qh``: the same filters
         integrated at ``redshift=0`` instead of at the model redshift, so the
         band sits in the rest frame and samples the rest SED at its own pivot
@@ -259,12 +259,12 @@ def _snap_axis_to_nodes(lo, hi, n, nodes):
 
     Parameters
     ----------
-    lo, hi: float
+    lo, hi : float
         Axis bounds [log10(Z/Zsun)].
-    n: int
+    n : int
         Uniform-axis point count. The returned axis has ``n`` to ``n + n_interior``
         points depending on how many uniform points merge into nodes.
-    nodes: array_like, shape (n_ssp_met,)
+    nodes : array_like, shape (n_ssp_met,)
         SSP metallicity nodes [log10(Z/Zsun)]; those outside ``(lo, hi)`` are ignored.
 
     Returns
@@ -391,11 +391,11 @@ def precompute_nebular_grid(
 
     Parameters
     ----------
-    model: SEDModel
+    model : SEDModel
         A model with a Q_H-linear nebular backend (Cue / CloudyGrid).
-    wavelengths: array_like, shape (n_lines,)
+    wavelengths : array_like, shape (n_lines,)
         Rest-frame vacuum target line wavelengths [Angstrom].
-    n_grid: int or dict, default 16
+    n_grid : int or dict, default 16
         Grid points per free axis. As a scalar it resolves the smooth gas axes
         (``neb_logU`` / ``neb_logZ_gas``) at ``n_grid``; the ``met_logzsol`` axis
         also starts at ``n_grid`` and then gains the interior SSP metallicity nodes
@@ -410,13 +410,13 @@ def precompute_nebular_grid(
         strictly inside the grid range, never with random draws: a narrow feature
         hides from random draws, and an error that ignores ``n_grid`` is an
         unresolved kink, not interpolation error.
-    ranges: dict, optional
+    ranges : dict, optional
         Override ``{param: (lo, hi)}`` grid bounds. Defaults to each free param's
         prior support (else :data:`_DEFAULT_RANGE`).
-    ref_params: dict, optional
+    ref_params : dict, optional
         Reference parameter dict (grid axes are overwritten per point). Defaults
         to a mid-range sample.
-    snap_met_to_ssp_nodes: bool, optional
+    snap_met_to_ssp_nodes : bool, optional
         Place knots on the SSP metallicity nodes and interpolate that axis
         linearly (default True). ``met_logzsol`` reaches the forward through a
         bilinear interpolation of the ionizing-spectrum tables, so the exact
@@ -674,14 +674,14 @@ def reconstruct_nebular_lines(nion, params, redshift, table) -> jnp.ndarray:
 
     Parameters
     ----------
-    nion: float
+    nion : float
         Ionizing photon rate for this evaluation (stellar-published; == q_h).
-    params: Mapping
+    params : Mapping
         Parameter dict: the free-axis values (``params[name]`` for ``name`` in
         ``table.axis_names``) locate the query point.
-    redshift: float
+    redshift : float
         Evaluation redshift: the cosmology is applied here, not baked in.
-    table: NebularGridTable
+    table : NebularGridTable
         The grid from :func:`precompute_nebular_grid`.
 
     Returns
@@ -710,13 +710,13 @@ def reconstruct_nebular_line_lums(nion, params, table) -> jnp.ndarray:
 
     Parameters
     ----------
-    nion: float
+    nion : float
         Ionizing photon rate for this evaluation (stellar-published; == q_h).
-    params: Mapping
+    params : Mapping
         Parameter dict: the free-axis values (``params[name]`` for ``name`` in
         ``table.axis_names``) locate the query point. Use full public names
         (``met_logzsol`` / ``neb_logU`` / ``neb_logZ_gas``).
-    table: NebularGridTable
+    table : NebularGridTable
         The grid from :func:`precompute_nebular_grid`.
 
     Returns
@@ -751,12 +751,12 @@ def reconstruct_nebular_phot(log_nion, params, table) -> jnp.ndarray:
 
     Parameters
     ----------
-    log_nion: float
+    log_nion : float
         log10 ionizing photon rate for this evaluation [dex re photons/s]
         (stellar-published; == log10(q_h)).
-    params: Mapping
+    params : Mapping
         Parameter dict: the free-axis values locate the query point.
-    table: NebularGridTable
+    table : NebularGridTable
         The grid from :func:`precompute_nebular_grid`, built from a
         ``WavePrecomp`` model so ``log_phot_per_qh`` is populated.
 
@@ -768,7 +768,7 @@ def reconstruct_nebular_phot(log_nion, params, table) -> jnp.ndarray:
     Raises
     ------
     ValueError
-        If the table carries no photometry channel (``log_phot_per_qh is None``);
+        If the table carries no photometry channel (``log_phot_per_qh is None``)
         rebuild from a ``WavePrecomp`` model with photometric filters.
 
     Notes
@@ -791,15 +791,15 @@ def _reconstruct_band_channel(log_nion, params, table, field, label) -> jnp.ndar
 
     Parameters
     ----------
-    log_nion: float
+    log_nion : float
         log10 ionizing photon rate [dex re photons/s].
-    params: Mapping
+    params : Mapping
         Parameter dict; free-axis values locate the query point.
-    table: NebularGridTable
+    table : NebularGridTable
         The grid from :func:`precompute_nebular_grid`.
-    field: str
+    field : str
         Grid attribute to read (``'log_phot_per_qh'`` / ``'log_restband_per_qh'``).
-    label: str
+    label : str
         Human name of the channel for the error message (``'photometry'`` /
         ``'rest-band'``).
 
@@ -837,12 +837,12 @@ def reconstruct_nebular_restband(log_nion, params, table) -> jnp.ndarray:
 
     Parameters
     ----------
-    log_nion: float
+    log_nion : float
         log10 ionizing photon rate for this evaluation [dex re photons/s]
         (stellar-published; == log10(q_h)).
-    params: Mapping
+    params : Mapping
         Parameter dict: the free-axis values locate the query point.
-    table: NebularGridTable
+    table : NebularGridTable
         The grid from :func:`precompute_nebular_grid`, built from a
         ``WavePrecomp`` model so ``log_restband_per_qh`` is populated.
 

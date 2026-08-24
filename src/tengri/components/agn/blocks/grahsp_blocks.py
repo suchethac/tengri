@@ -70,11 +70,11 @@ def grahsp_sbpl_disc_block(
 
     Parameters
     ----------
-    wavelength: array_like, shape (n_wave,)
+    wavelength : array_like, shape (n_wave,)
         Rest-frame wavelength [Å].
-    agn_log_lbol: float
+    agn_log_lbol : float
         :math:`\log_{10}(L_{\rm bol}/L_\odot)`.
-    agn_grahsp_l5100: float, optional
+    agn_grahsp_l5100 : float, optional
         :math:`\lambda L_\lambda(5100\,\mathrm{\AA})` in erg/s. ``None``
         triggers automatic normalization from ``agn_log_lbol``.
     agn_grahsp_uvslope, agn_grahsp_plslope, agn_grahsp_plbendloc_nm, \
@@ -83,7 +83,7 @@ agn_grahsp_plbendwidth, agn_grahsp_cutoff_nm
 
     Returns
     -------
-    L_lambda: ndarray, shape (n_wave,)
+    L_lambda : ndarray, shape (n_wave,)
         Disc :math:`L_\lambda` [erg/s/Å].
     """
     wave_aa = jnp.asarray(wavelength)
@@ -163,7 +163,7 @@ def grahsp_nlr_block(
 
     Parameters
     ----------
-    templates: GRAHSPTemplates, optional
+    templates : GRAHSPTemplates, optional
         Pre-loaded template bundle threaded in via the runner's
         ``template_state``. When ``None`` (default), the block falls back to
         the lru_cache-backed :func:`load_grahsp_templates` for backwards
@@ -219,7 +219,7 @@ def grahsp_blr_block(
 
     Parameters
     ----------
-    templates: GRAHSPTemplates, optional
+    templates : GRAHSPTemplates, optional
         Pre-loaded template bundle threaded in via the runner's
         ``template_state``. When ``None`` (default), the block falls back to
         the lru_cache-backed :func:`load_grahsp_templates` for backwards
@@ -269,7 +269,7 @@ def grahsp_feii_block(
 
     Parameters
     ----------
-    templates: GRAHSPTemplates, optional
+    templates : GRAHSPTemplates, optional
         Same template-hoist contract as :func:`grahsp_lines_block`.
     """
     wave_aa = jnp.asarray(wavelength)

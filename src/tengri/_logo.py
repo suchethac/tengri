@@ -3,11 +3,11 @@
 
 Size/style variants (pass via ``print_logo(size=...)`` / ``logo_str(size=...)``):
 
-    LOGO          : default, 37-line solid-block rendering (universally
+    LOGO           : default, 37-line solid-block rendering (universally
                      readable, matches the official mark most faithfully)
     LOGO_STIPPLE  : same dimensions, stippled with ``}[)`` etc., more
                      textured on fonts that render those glyphs well
-    LOGO_SMALL    : 21-line compact stippled rendering (smallest supported
+    LOGO_SMALL     : 21-line compact stippled rendering (smallest supported
                      size; used when space is tight)
     LOGO_BANNER   : plain text ``tengri``; no art below the smallest size
 
@@ -159,12 +159,12 @@ def print_logo(size: str = "default", *, compact: bool | None = None) -> None:
 
     Parameters
     ----------
-    size: {"default", "small", "stipple", "compact"}
+    size : {"default", "small", "stipple", "compact"}
         Which rendering to print. "default" is the 37-line solid-block mark.
         "small" is the 21-line compact stipple. "stipple" is the 37-line
         textured variant. "compact" prints plain text ("tengri") because
         rendering the logo any smaller would misrepresent the mark.
-    compact: bool or None
+    compact : bool or None
         Deprecated alias for ``size="compact"``. Kept for backward compatibility.
 
     Notes
@@ -188,8 +188,8 @@ def logo_str(size: str = "default", *, compact: bool | None = None) -> str:
 
     Parameters
     ----------
-    size: {"default", "small", "stipple", "compact"}
-    compact: bool or None
+    size : {"default", "small", "stipple", "compact"}
+    compact : bool or None
         Deprecated alias for ``size="compact"``.
 
     Returns

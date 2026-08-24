@@ -60,15 +60,15 @@ def generate_mock(model, params, key=None, snr=20.0):
 
     Parameters
     ----------
-    model: object
+    model : object
         Any object with a ``predict_photometry(params)`` method that returns
         an array of flux densities.
-    params: dict[str, ndarray]
+    params : dict[str, ndarray]
         Model parameter values (typically sampled or optimized).
-    key: jax.Array (PRNGKey), optional
+    key : jax.Array (PRNGKey), optional
         Random key for noise realization. If ``None``, only noiseless
         photometry is returned (no ``flux_obs`` key in output).
-    snr: float, optional
+    snr : float, optional
         Signal-to-noise ratio (flux_true / noise_std). Default: 20.0.
 
     Returns
@@ -78,10 +78,10 @@ def generate_mock(model, params, key=None, snr=20.0):
         its keys as attributes (so ``mock.flux_obs`` works, matching the
         :class:`MockData` object returned by :meth:`SEDModel.mock`). Keys:
 
-        - ``flux_true``: noiseless predicted photometry [erg/s/cm²/Hz]
-        - ``noise``: noise standard deviation per band [erg/s/cm²/Hz]
-        - ``params``: the input parameter values
-        - ``flux_obs``: observed (noisy) photometry (only if key is not None)
+        - ``flux_true`` : noiseless predicted photometry [erg/s/cm²/Hz]
+        - ``noise`` : noise standard deviation per band [erg/s/cm²/Hz]
+        - ``params`` : the input parameter values
+        - ``flux_obs`` : observed (noisy) photometry (only if key is not None)
 
     Notes
     -----

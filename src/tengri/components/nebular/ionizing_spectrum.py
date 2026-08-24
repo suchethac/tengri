@@ -55,11 +55,11 @@ def _ssp_fingerprint(ssp_wave: np.ndarray, ssp_flux: np.ndarray, ssp_lgmet: np.n
 
     Parameters
     ----------
-    ssp_wave: array_like, shape (n_wave,)
+    ssp_wave : array_like, shape (n_wave,)
         SSP wavelength grid [Angstrom].
-    ssp_flux: array_like, shape (n_met, n_age, n_wave)
+    ssp_flux : array_like, shape (n_met, n_age, n_wave)
         SSP flux grid [Lsun/Hz/Msun].
-    ssp_lgmet: array_like, shape (n_met,)
+    ssp_lgmet : array_like, shape (n_met,)
         SSP metallicity grid, log10(Z) absolute.
 
     Returns
@@ -221,13 +221,13 @@ def _fit_segment(
 
     Parameters
     ----------
-    seg_wave: array, shape (n_seg,)
+    seg_wave : array, shape (n_seg,)
         Segment wavelength grid [Å]
-    seg_flux: array, shape (n_seg,)
+    seg_flux : array, shape (n_seg,)
         Normalized segment flux (already multiplied by norm factor for stability)
-    norm: float
+    norm : float
         Normalization factor applied to flux (used to denormalize log_A later)
-    init: (float, float), optional
+    init : (float, float), optional
         Initial guess ``(slope, log_norm)``. When ``None`` (default), an
         endpoint-derived linear fit in log-log is used. Pass canonical
         values from a reference SSP to reduce convergence iterations and
@@ -236,7 +236,7 @@ def _fit_segment(
 
     Returns
     -------
-    coeff: array, shape (2,)
+    coeff : array, shape (2,)
         [slope, log_norm_denormalized]: power-law parameters α and log10(A).
         If segment has no positive flux, returns [0.0, -inf].
 
@@ -334,14 +334,14 @@ def _compute_segment_luminosities(
 
     Parameters
     ----------
-    coeff: array, shape (4, 2)
+    coeff : array, shape (4, 2)
         [slope, log_norm] pairs for each segment [Å, dimensionless]
-    edges: array, shape (5,)
+    edges : array, shape (5,)
         Segment boundaries [Å]: [1, HeII, OII, HeI, HI_limit]
 
     Returns
     -------
-    log_L: array, shape (4,)
+    log_L : array, shape (4,)
         log10(integrated luminosity) for each segment [log10(erg/s)]
 
     Notes
@@ -417,12 +417,12 @@ def fit_ionizing_spectrum(
 
     Parameters
     ----------
-    wave: array, shape (n_wave,)
+    wave : array, shape (n_wave,)
         Wavelength grid in Å (must cover λ < 912 Å). [Å]
-    flux: array, shape (n_wave,)
+    flux : array, shape (n_wave,)
         Spectral luminosity density [erg/s/Hz/Msun] or [erg/s/Hz];
         units cancel in power-law fit.
-    edges: array, shape (5,), optional
+    edges : array, shape (5,), optional
         Segment boundaries in Å: [1, HeII, OII, HeI, HI_limit].
         Default: SEGMENT_EDGES (1, 227.84, 353.07, 504.26, 911.76 Å).
 
@@ -610,13 +610,13 @@ def precompute_ionizing_params_table(
 
     Parameters
     ----------
-    ssp_wave: array, shape (n_wave,)
+    ssp_wave : array, shape (n_wave,)
         Wavelength grid in Å. [Å]
-    ssp_flux: array, shape (n_met, n_age, n_wave)
+    ssp_flux : array, shape (n_met, n_age, n_wave)
         SSP spectra on (metallicity, age) grid. [erg/s/Hz/Msun]
-    ssp_lgmet: array, shape (n_met,)
+    ssp_lgmet : array, shape (n_met,)
         Metallicity grid in log10(Z). [log10(Z)]
-    ssp_log_age_yr: array, shape (n_age,), optional
+    ssp_log_age_yr : array, shape (n_age,), optional
         log10(age/yr) for each age bin. When provided, bins older than
         :data:`MAX_NEB_LOG_AGE` (100 Myr) are skipped without
         invoking scipy: a ~140× speedup for unusually fine age grids
@@ -772,25 +772,25 @@ def interpolate_ionizing_params(
 
     Parameters
     ----------
-    ionspec_table: array, shape (n_met, n_age, 7)
+    ionspec_table : array, shape (n_met, n_age, 7)
         Precomputed ionizing spectrum parameters (ionspec_index1..4, logLratio1..3).
-    logqion_table: array, shape (n_met, n_age)
+    logqion_table : array, shape (n_met, n_age)
         Ionizing photon rates Q_H. [log10(photons/s)]
-    ssp_lgmet: array, shape (n_met,)
+    ssp_lgmet : array, shape (n_met,)
         SSP metallicity grid. [log10(Z)]
-    ssp_log_age_yr: array, shape (n_age,)
+    ssp_log_age_yr : array, shape (n_age,)
         SSP age grid. [log10(yr)]
-    log_z: float
+    log_z : float
         Target metallicity. [log10(Z)]
-    log_age_yr: float
+    log_age_yr : float
         Target age. [log10(yr)]
 
     Returns
     -------
-    ionspec_7: array, shape (7,)
+    ionspec_7 : array, shape (7,)
         Ionizing spectrum parameters: [index1, index2, index3, index4,
         logLratio1, logLratio2, logLratio3]
-    logqion: float
+    logqion : float
         Interpolated Q_H. [log10(photons/s)]
 
     Notes
@@ -862,19 +862,19 @@ def interpolate_ionizing_seglum(
 
     Parameters
     ----------
-    seglum_table: array, shape (n_met, n_age, 4)
+    seglum_table : array, shape (n_met, n_age, 4)
         ``log10`` integrated luminosity of each of the 4 ionization segments.
         Empty/unfit bins carry ``-99`` so ``10**-99 == 0`` adds nothing to a sum.
-    ssp_lgmet: array, shape (n_met,)
+    ssp_lgmet : array, shape (n_met,)
         SSP metallicity grid. [log10(Z)]
-    ssp_log_age_yr: array, shape (n_age,)
+    ssp_log_age_yr : array, shape (n_age,)
         SSP age grid. [log10(yr)]
-    log_z, log_age_yr: float
+    log_z, log_age_yr : float
         Target metallicity and age.
 
     Returns
     -------
-    log_seglum: array, shape (4,)
+    log_seglum : array, shape (4,)
         ``log10`` integrated luminosity per segment at the target point.
 
     Notes

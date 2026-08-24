@@ -188,18 +188,18 @@ def build_catalog_mcmc_engine(
 
     Parameters
     ----------
-    fitter: Fitter
+    fitter : Fitter
         A template :class:`~tengri.inference.fitter.Fitter` for the shared
         model. Only its structure is used, its log-posterior and the shared
         ``_jit_inputs`` are captured; per-galaxy ``data``/``noise`` are supplied
         at call time so the compiled program is reused across galaxies.
-    sampler: {"nuts", "hmc"}
+    sampler : {"nuts", "hmc"}
         Which BlackJAX sampler to vectorize.
-    n_warmup: int
+    n_warmup : int
         Window-adaptation steps, run per galaxy.
-    n_burnin: int
+    n_burnin : int
         Post-warmup samples discarded (sliced inside the traced call, static).
-    n_samples: int
+    n_samples : int
         Posterior samples kept per galaxy.
     max_num_doublings : int, default DEFAULT_MAX_NUM_DOUBLINGS (10)
         NUTS tree depth cap (ignored for HMC). Shares the single-fit
@@ -207,14 +207,14 @@ def build_catalog_mcmc_engine(
         ``tengri.inference.backends.mcmc._shared``.
     n_leapfrog : int, default 10
         HMC leapfrog steps per proposal (ignored for NUTS).
-    target_accept_rate: float, default 0.85
+    target_accept_rate : float, default 0.85
         Dual-averaging target acceptance rate.
-    use_dense: bool, default False
+    use_dense : bool, default False
         Dense vs diagonal mass matrix. Catalog sampling defaults to **diagonal**:
         each galaxy is low-D and the width parallelism is over galaxies, so a
         diagonal mass keeps the vmap flat and avoids the dense-mass warmup memory
         spike documented in :func:`tengri.inference.backends.mcmc.nuts.run_nuts`.
-    thread_line_fluxes: bool, default False
+    thread_line_fluxes : bool, default False
         Whether to thread per-galaxy emission-line fluxes through the engine.
         When False, line fluxes are not used and the compiled program is
         unchanged. When True, per-galaxy line_flux_obs and line_flux_err arrays
@@ -222,13 +222,13 @@ def build_catalog_mcmc_engine(
 
     Returns
     -------
-    run_one: callable
+    run_one : callable
         ``(init_flat, key, data, noise, presence, redshift, line_flux_obs,
         line_flux_err) -> (positions, divergent)`` with ``positions`` shape
         ``(n_samples, D)`` and ``divergent`` shape ``(n_samples,)``. When
         ``thread_line_fluxes=False``, line_flux_obs and line_flux_err are ignored.
         Safe to wrap with ``jax.vmap`` / ``jax.lax.map``.
-    unravel_fn: callable
+    unravel_fn : callable
         ``1D ndarray -> pytree`` for turning flat positions back into parameter
         dicts.
 

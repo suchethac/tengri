@@ -18,7 +18,7 @@ def read_sdss(path: str) -> SpectrumTuple:
 
     Parameters
     ----------
-    path: str
+    path : str
         Path to FITS file (e.g., spec-*.fits or spPlate-*.fits).
 
     Returns

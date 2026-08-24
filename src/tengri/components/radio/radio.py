@@ -68,7 +68,7 @@ def _synchrotron_suppression(L_ref: jnp.ndarray) -> jnp.ndarray:
 
     Parameters
     ----------
-    L_ref: array or float
+    L_ref : array or float
         Synchrotron luminosity density at reference frequency. [erg/s/Hz]
 
     Returns
@@ -135,15 +135,15 @@ def radio_sfr_bell2003(
 
     Parameters
     ----------
-    wavelength: array, shape (n_wave,)
+    wavelength : array, shape (n_wave,)
         Wavelength [Angstrom].
-    L_ir: float
+    L_ir : float
         Total infrared luminosity (8-1000 μm) [erg/s].
-    q_ir: float
+    q_ir : float
         FIR-radio correlation parameter. Default 2.64 (Bell 2003, z=0).
-    alpha_sf: float
+    alpha_sf : float
         Synchrotron spectral index (S_ν ∝ ν^{-α}). Default 0.8.
-    nu_ref: float
+    nu_ref : float
         Reference frequency [Hz]. Default 1.4 GHz.
 
     Returns
@@ -202,28 +202,28 @@ def radio_sfr_delvecchio2021(
 
     Parameters
     ----------
-    wavelength: array, shape (n_wave,)
+    wavelength : array, shape (n_wave,)
         Wavelength [Angstrom].
-    L_ir: float
+    L_ir : float
         Total infrared luminosity (8-1000 μm) [erg/s].
-    log_mstar: float
+    log_mstar : float
         log10(M★ / M⊙). Typical range [8, 12].
-    redshift: float
+    redshift : float
         Galaxy redshift. Valid range [0.1, 4] per Delvecchio+2021.
-    q0: float
+    q0 : float
         FIRRC normalization at log(M★)=10, z=0. Default 2.743.
         Hierarchical prior suggestion: Uniform(2.4, 3.1).
-    mass_slope: float
+    mass_slope : float
         ∂q / ∂log(M★). Default 0.234 (negative: massive → lower q → more radio).
         Hierarchical prior suggestion: Uniform(0.0, 0.5).
-    z_slope: float
+    z_slope : float
         Power-law exponent on (1+z). Default -0.025 (slight decline with z).
         Hierarchical prior suggestion: Uniform(-0.2, 0.05).
-    alpha_sf: float
+    alpha_sf : float
         Synchrotron spectral index. Default 0.7 (consensus: Novak+2017, SEMPER).
-    nu_ref: float
+    nu_ref : float
         Reference frequency [Hz]. Default 1.4 GHz (calibration frequency).
-    apply_suppression: bool
+    apply_suppression : bool
         Apply Bell+2003 synchrotron suppression for low-SFR galaxies.
         Default True.
 
@@ -295,29 +295,29 @@ def radio_sfr_mccheyne2022(
 
     Parameters
     ----------
-    wavelength: array, shape (n_wave,)
+    wavelength : array, shape (n_wave,)
         Wavelength [Angstrom].
-    L_ir: float
+    L_ir : float
         Total infrared luminosity (8-1000 μm) [erg/s].
-    log_mstar: float
+    log_mstar : float
         log10(M★ / M⊙). Typical range [10.05, 11.4] per McCheyne+2022.
-    redshift: float
+    redshift : float
         Galaxy redshift. Valid range [0, 1] per McCheyne+2022.
-    q0: float
+    q0 : float
         FIRRC normalization at log(M★)=10, z=0. Default 1.98.
         Hierarchical prior suggestion: Uniform(1.5, 2.5).
-    mass_slope: float
+    mass_slope : float
         ∂q / ∂log(M★). Default -0.22 (negative sign convention differs from
         Delvecchio: here higher M★ → lower q directly via negative coefficient).
         Hierarchical prior suggestion: Uniform(-0.5, 0.0).
-    z_slope: float
+    z_slope : float
         Power-law exponent on (1+z). Default 0.02 (nearly no z evolution).
         Hierarchical prior suggestion: Uniform(-0.1, 0.2).
-    alpha_sf: float
+    alpha_sf : float
         Synchrotron spectral index. Default 0.7.
-    nu_ref: float
+    nu_ref : float
         Reference frequency [Hz]. Default 150 MHz (calibration frequency).
-    apply_suppression: bool
+    apply_suppression : bool
         Apply Bell+2003 synchrotron suppression. Default True.
 
     Returns
@@ -379,14 +379,14 @@ def radio_freefree(
 
     Parameters
     ----------
-    wavelength: array, shape (n_wave,)
+    wavelength : array, shape (n_wave,)
         Wavelength [Angstrom].
-    L_ir: float
+    L_ir : float
         Total infrared luminosity (8-1000 μm) [erg/s].
-    T_e: float
+    T_e : float
         Electron temperature [K]. Default 1e4.
         Prior suggestion: LogUniform(5e3, 2e4).
-    alpha_ff: float
+    alpha_ff : float
         Free-free spectral index (L_ν ∝ ν^{α_ff}). Default −0.1 (nearly flat).
         Prior suggestion: Uniform(−0.15, 0.0).
 
@@ -445,28 +445,28 @@ def _dispatch_sfr(
 
     Parameters
     ----------
-    wavelength: array, shape (n_wave,)
+    wavelength : array, shape (n_wave,)
         Wavelength [Angstrom].
-    L_ir: float
+    L_ir : float
         IR luminosity [erg/s].
-    sfr_mode: str
+    sfr_mode : str
         One of ``"none"``, ``"bell2003"``, ``"delvecchio2021"``,
         ``"mccheyne2022"``. Default ``"bell2003"``.
-    q_ir: float
+    q_ir : float
         Fixed q_IR (bell2003 mode only) [dimensionless].
-    alpha_sf: float
+    alpha_sf : float
         Synchrotron spectral index [dimensionless].
-    log_mstar: float
+    log_mstar : float
         log10(M★/M⊙) [dex].
-    redshift: float
+    redshift : float
         Galaxy redshift [dimensionless].
-    q0: float or None
+    q0 : float or None
         FIRRC normalization override; None uses mode default.
-    mass_slope: float or None
+    mass_slope : float or None
         Mass slope override; None uses mode default.
-    z_slope: float or None
+    z_slope : float or None
         Redshift slope override; None uses mode default.
-    apply_suppression: bool
+    apply_suppression : bool
         Apply Bell+2003 synchrotron suppression.
 
     Returns
@@ -547,21 +547,21 @@ def radio_agn(
 
     Parameters
     ----------
-    wavelength: array, shape (n_wave,)
+    wavelength : array, shape (n_wave,)
         Wavelength [Angstrom].
-    L_agn_bol: float
+    L_agn_bol : float
         AGN bolometric luminosity [erg/s].
-    radio_loudness: float
+    radio_loudness : float
         log10(L_5GHz / L_B). Default 0 (radio-quiet). Range: -2 to 5.
-    alpha_agn: float
+    alpha_agn : float
         AGN radio spectral index. Default 0.7.
-    nu_ref: float
+    nu_ref : float
         Reference frequency [Hz]. Default 1.4 GHz.
-    l_bband: float
+    l_bband : float
         AGN intrinsic disc B-band (4400 A) monochromatic luminosity [erg/s/Hz].
         When > 0, used directly instead of deriving from L_agn_bol bolometric
         correction. Default 0.0 (uses L_bol correction).
-    log_nu_cut: float
+    log_nu_cut : float
         log10 of the synchrotron-aging cutoff frequency [Hz]. Default 13.0
         (10 THz), matching AGNfitter-rX's SPL jet ``exp(-nu/1e13)``.
 
@@ -641,24 +641,24 @@ def radio_agn_dpl(
 
     Parameters
     ----------
-    wavelength: array (n_wave,)
+    wavelength : array (n_wave,)
         Wavelength in Angstrom.
-    L_agn_bol: float
+    L_agn_bol : float
         AGN bolometric luminosity in erg/s.
-    radio_loudness: float
+    radio_loudness : float
         log10(L_5GHz / L_B). Default 0 (radio-quiet). Range: [-2, 5].
-    alpha1: float
+    alpha1 : float
         Optically thin (steep) spectral slope. Default -0.75. Range: [-2, 0].
-    alpha2: float
+    alpha2 : float
         Optically thick (flat/inverted) spectral slope. Default -0.1.
         Range: [-1, 1].
-    log_nu_t: float
+    log_nu_t : float
         log10(transition frequency / Hz). Default 10.0. Range: [7, 13].
-    log_nu_cut: float
+    log_nu_cut : float
         log10(synchrotron aging cutoff frequency / Hz). Default 13.0.
-    nu_ref: float
+    nu_ref : float
         Reference frequency for L_5GHz normalization. Default 5 GHz.
-    l_bband: float
+    l_bband : float
         AGN intrinsic disc B-band (4400 A) monochromatic luminosity [erg/s/Hz].
         When > 0, used directly instead of deriving from L_agn_bol bolometric
         correction. Default 0.0 (uses L_bol correction).
@@ -752,52 +752,52 @@ def radio_total_terms(
 
     Parameters
     ----------
-    wavelength: array, shape (n_wave,)
+    wavelength : array, shape (n_wave,)
         Wavelength [Angstrom].
-    L_ir: float
+    L_ir : float
         Total infrared luminosity (8–1000 μm) [erg/s] for star-forming and
         free-free components.
-    L_agn_bol: float
+    L_agn_bol : float
         AGN bolometric luminosity [erg/s] for AGN component.
-    q_ir: float
+    q_ir : float
         FIR-radio correlation parameter (bell2003 mode only) [dimensionless].
         Default 2.64.
-    alpha_sf: float
+    alpha_sf : float
         Synchrotron spectral index [dimensionless]. Default 0.8.
-    radio_loudness: float
+    radio_loudness : float
         AGN radio-loudness log10(L_5GHz / L_B) [dimensionless]. Default 0.0.
-    alpha_agn: float
+    alpha_agn : float
         AGN radio spectral index [dimensionless]. Default 0.7.
-    sfr_mode: str
+    sfr_mode : str
         Star formation radio physics model. One of:
 
         - ``"bell2003"`` (default): fixed q_IR, no mass/z dependence.
         - ``"delvecchio2021"``: mass+z dependent FIRRC at 1.4 GHz.
         - ``"mccheyne2022"``: mass+z dependent FIRRC at 150 MHz.
 
-    log_mstar: float
+    log_mstar : float
         log10(M★ / M⊙). Used by delvecchio2021 and mccheyne2022 modes.
         Default 10.0.
-    redshift: float
+    redshift : float
         Galaxy redshift. Used by delvecchio2021 and mccheyne2022 modes.
         Default 0.0.
-    q0: float or None
+    q0 : float or None
         FIRRC normalization override; None uses the mode's literature default.
-    mass_slope: float or None
+    mass_slope : float or None
         Mass slope override; None uses the mode's literature default.
-    z_slope: float or None
+    z_slope : float or None
         Redshift slope override; None uses the mode's literature default.
-    apply_suppression: bool
+    apply_suppression : bool
         Apply Bell+2003 synchrotron suppression for low-SFR galaxies
         (delvecchio2021/mccheyne2022 modes). Default True.
-    include_freefree: bool
+    include_freefree : bool
         Include thermal free-free (bremsstrahlung) component. Default True.
-    T_e: float
+    T_e : float
         Electron temperature [K] for free-free component. Default 1e4.
-    alpha_ff: float
+    alpha_ff : float
         Free-free spectral index (L_ν ∝ ν^{α}) [dimensionless].
         Default -0.1.
-    l_bband: float
+    l_bband : float
         AGN intrinsic disc B-band (4400 A) monochromatic luminosity
         [erg/s/Hz]. When > 0, used directly in radio_agn instead of deriving
         from L_agn_bol bolometric correction. Default 0.0 (uses L_bol
@@ -881,47 +881,47 @@ def radio_total(
 
     Parameters
     ----------
-    wavelength: array (n_wave,)
+    wavelength : array (n_wave,)
         Wavelength in Angstrom.
-    L_ir: float
+    L_ir : float
         Total IR luminosity (erg/s) for SF component.
-    L_agn_bol: float
+    L_agn_bol : float
         AGN bolometric luminosity (erg/s) for AGN component.
-    q_ir: float
+    q_ir : float
         FIR-radio correlation parameter (bell2003 mode only).
-    alpha_sf: float
+    alpha_sf : float
         SF synchrotron spectral index. Default 0.8 in bell2003 mode; the
         Delvecchio/McCheyne modes default to 0.7 internally.
-    radio_loudness: float
+    radio_loudness : float
         AGN radio-loudness log10(L_5GHz/L_B).
-    alpha_agn: float
+    alpha_agn : float
         AGN radio spectral index.
-    sfr_mode: str
+    sfr_mode : str
         Which SFR physics model to use. One of:
 
         - ``"bell2003"`` (default): fixed q_IR, no mass/z dependence.
         - ``"delvecchio2021"``: mass+z dependent FIRRC at 1.4 GHz.
         - ``"mccheyne2022"``: mass+z dependent FIRRC at 150 MHz.
 
-    log_mstar: float
+    log_mstar : float
         log10(M★/M⊙). Used by delvecchio2021 and mccheyne2022 modes.
-    redshift: float
+    redshift : float
         Galaxy redshift. Used by delvecchio2021 and mccheyne2022 modes.
-    q0: float or None
+    q0 : float or None
         FIRRC normalization override. None uses the mode's literature default.
-    mass_slope: float or None
+    mass_slope : float or None
         Mass slope override. None uses the mode's literature default.
-    z_slope: float or None
+    z_slope : float or None
         Redshift slope override. None uses the mode's literature default.
-    apply_suppression: bool
+    apply_suppression : bool
         Apply Bell+2003 synchrotron suppression (delvecchio/mccheyne modes).
-    include_freefree: bool
+    include_freefree : bool
         Add thermal free-free component (Murphy+2011). Default False.
-    T_e: float
+    T_e : float
         Electron temperature [K] for free-free component. Default 1e4.
-    alpha_ff: float
+    alpha_ff : float
         Free-free spectral index (L_ν ∝ ν^{α}). Default -0.1.
-    l_bband: float
+    l_bband : float
         AGN intrinsic disc B-band (4400 A) monochromatic luminosity [erg/s/Hz].
         When > 0, used directly in radio_agn instead of deriving from L_agn_bol
         bolometric correction. Default 0.0 (uses L_bol correction).
@@ -995,62 +995,62 @@ def radio_total_dpl_terms(
 
     Parameters
     ----------
-    wavelength: array, shape (n_wave,)
+    wavelength : array, shape (n_wave,)
         Wavelength [Angstrom].
-    L_ir: float
+    L_ir : float
         Total infrared luminosity (8–1000 μm) [erg/s] for star-forming and
         free-free components.
-    L_agn_bol: float
+    L_agn_bol : float
         AGN bolometric luminosity [erg/s] for AGN component.
-    q_ir: float
+    q_ir : float
         FIR-radio correlation parameter (bell2003 mode only) [dimensionless].
         Default 2.64.
-    alpha_sf: float
+    alpha_sf : float
         Synchrotron spectral index [dimensionless]. Default 0.8.
-    radio_loudness: float
+    radio_loudness : float
         AGN radio-loudness log10(L_5GHz / L_B) [dimensionless]. Default 0.0.
-    alpha1: float
+    alpha1 : float
         AGN optically thin (steep) spectral slope [dimensionless].
         Default -0.75.
-    alpha2: float
+    alpha2 : float
         AGN optically thick (flat/inverted) spectral slope [dimensionless].
         Default -0.1.
-    log_nu_t: float
+    log_nu_t : float
         log10(AGN spectral break frequency / Hz) [dimensionless].
         Default 10.0.
-    log_nu_cut: float
+    log_nu_cut : float
         log10(synchrotron aging cutoff frequency / Hz) [dimensionless].
         Default 13.0.
-    sfr_mode: str
+    sfr_mode : str
         Star formation radio physics model. One of:
 
         - ``"bell2003"`` (default): fixed q_IR, no mass/z dependence.
         - ``"delvecchio2021"``: mass+z dependent FIRRC at 1.4 GHz.
         - ``"mccheyne2022"``: mass+z dependent FIRRC at 150 MHz.
 
-    log_mstar: float
+    log_mstar : float
         log10(M★ / M⊙). Used by delvecchio2021 and mccheyne2022 modes.
         Default 10.0.
-    redshift: float
+    redshift : float
         Galaxy redshift. Used by delvecchio2021 and mccheyne2022 modes.
         Default 0.0.
-    q0: float or None
+    q0 : float or None
         FIRRC normalization override; None uses the mode's literature default.
-    mass_slope: float or None
+    mass_slope : float or None
         Mass slope override; None uses the mode's literature default.
-    z_slope: float or None
+    z_slope : float or None
         Redshift slope override; None uses the mode's literature default.
-    apply_suppression: bool
+    apply_suppression : bool
         Apply Bell+2003 synchrotron suppression for low-SFR galaxies
         (delvecchio2021/mccheyne2022 modes). Default True.
-    include_freefree: bool
+    include_freefree : bool
         Include thermal free-free (bremsstrahlung) component. Default True.
-    T_e: float
+    T_e : float
         Electron temperature [K] for free-free component. Default 1e4.
-    alpha_ff: float
+    alpha_ff : float
         Free-free spectral index (L_ν ∝ ν^{α}) [dimensionless].
         Default -0.1.
-    l_bband: float
+    l_bband : float
         AGN intrinsic disc B-band (4400 A) monochromatic luminosity
         [erg/s/Hz]. When > 0, used directly in radio_agn_dpl instead of
         deriving from L_agn_bol bolometric correction. Default 0.0 (uses
@@ -1141,47 +1141,47 @@ def radio_total_dpl(
 
     Parameters
     ----------
-    wavelength: array (n_wave,)
+    wavelength : array (n_wave,)
         Wavelength in Angstrom.
-    L_ir: float
+    L_ir : float
         Total IR luminosity (erg/s) for SF component.
-    L_agn_bol: float
+    L_agn_bol : float
         AGN bolometric luminosity (erg/s) for AGN component.
-    q_ir: float
+    q_ir : float
         FIR-radio correlation parameter (bell2003 mode only).
-    alpha_sf: float
+    alpha_sf : float
         SF synchrotron spectral index.
-    radio_loudness: float
+    radio_loudness : float
         AGN radio-loudness log10(L_5GHz/L_B).
-    alpha1: float
+    alpha1 : float
         Optically thin spectral slope.
-    alpha2: float
+    alpha2 : float
         Optically thick spectral slope.
-    log_nu_t: float
+    log_nu_t : float
         log10(transition frequency / Hz).
-    log_nu_cut: float
+    log_nu_cut : float
         log10(synchrotron aging cutoff frequency / Hz).
-    sfr_mode: str
+    sfr_mode : str
         SFR physics model. See ``radio_total`` for options.
-    log_mstar: float
+    log_mstar : float
         log10(M★/M⊙). Used by delvecchio2021 and mccheyne2022 modes.
-    redshift: float
+    redshift : float
         Galaxy redshift. Used by delvecchio2021 and mccheyne2022 modes.
-    q0: float or None
+    q0 : float or None
         FIRRC normalization override.
-    mass_slope: float or None
+    mass_slope : float or None
         Mass slope override.
-    z_slope: float or None
+    z_slope : float or None
         Redshift slope override.
-    apply_suppression: bool
+    apply_suppression : bool
         Apply Bell+2003 synchrotron suppression.
-    include_freefree: bool
+    include_freefree : bool
         Add thermal free-free component (Murphy+2011). Default False.
-    T_e: float
+    T_e : float
         Electron temperature [K] for free-free component. Default 1e4.
-    alpha_ff: float
+    alpha_ff : float
         Free-free spectral index. Default -0.1.
-    l_bband: float
+    l_bband : float
         AGN intrinsic disc B-band (4400 A) monochromatic luminosity [erg/s/Hz].
         When > 0, used directly in radio_agn_dpl instead of deriving from
         L_agn_bol bolometric correction. Default 0.0 (uses L_bol correction).
@@ -1249,35 +1249,35 @@ def compute_radio_components(
 
     Parameters
     ----------
-    wavelength: array (n_wave,)
+    wavelength : array (n_wave,)
         Wavelength in Angstrom.
-    L_ir: float
+    L_ir : float
         IR luminosity (erg/s).
-    L_agn_bol: float
+    L_agn_bol : float
         AGN bolometric luminosity (erg/s).
-    q_ir: float
+    q_ir : float
         FIR-radio q_IR (bell2003 mode only).
-    alpha_sf: float
+    alpha_sf : float
         Synchrotron spectral index.
-    radio_loudness: float
+    radio_loudness : float
         AGN radio-loudness log10(L_5GHz/L_B).
-    alpha_agn: float
+    alpha_agn : float
         AGN spectral index.
-    sfr_mode: str
+    sfr_mode : str
         SFR physics mode. See ``radio_total`` for options.
-    log_mstar: float
+    log_mstar : float
         log10(M★/M⊙).
-    redshift: float
+    redshift : float
         Galaxy redshift.
-    q0, mass_slope, z_slope: float or None
+    q0, mass_slope, z_slope : float or None
         FIRRC parameter overrides.
-    apply_suppression: bool
+    apply_suppression : bool
         Apply Bell+2003 synchrotron suppression.
-    include_freefree: bool
+    include_freefree : bool
         Include free-free component. Default True (diagnostic function).
-    T_e: float
+    T_e : float
         Electron temperature for free-free. Default 1e4 K.
-    alpha_ff: float
+    alpha_ff : float
         Free-free spectral index. Default -0.1.
 
     Returns

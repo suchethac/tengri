@@ -45,22 +45,22 @@ def standardized_neg_log_prior(
 
     Parameters
     ----------
-    params_unbounded: dict of str to array_like
+    params_unbounded : dict of str to array_like
         Latents in unbounded (standardized) space. Entries may be scalars for a
         single galaxy or shape ``(n_gal,)`` for a hierarchical fit.
-    free_names: sequence of str
+    free_names : sequence of str
         Names of the free scalar parameters to include.
-    stochastic: bool
+    stochastic : bool
         Whether the model carries a stochastic-SFH field. When ``True`` and
         ``"psd_xi"`` is present, the field latents are included.
-    centering: float, optional
+    centering : float, optional
         Field parameterization ``a`` in ``[0, 1]`` [dimensionless]. Default
         ``1.0``, the standardized map, where the field term is
         :math:`\tfrac12 \xi^\top \xi` exactly as before. At ``a < 1`` the field
         latent's prior is :math:`\mathcal{N}(0, \sigma_s^{2-2a} I)` and this
         term is replaced by
         :func:`~tengri.components.stellar.sfh.gp_sfh.drw_latent_log_prior`.
-    psd_sigma_dex: array_like, optional
+    psd_sigma_dex : array_like, optional
         Physical modulation amplitude :math:`\sigma` [dex]. Required when
         ``centering < 1``, the latent prior depends on it, which is precisely
         what partial centering trades away. Ignored at ``a = 1``.
@@ -518,7 +518,7 @@ def build_loss_fn(fitter):
 
     Parameters
     ----------
-    fitter: Fitter
+    fitter : Fitter
         Fitter instance with model, data, parameters, and configuration.
 
     Returns
@@ -626,7 +626,7 @@ def build_logprior_fn(fitter):
 
     Parameters
     ----------
-    fitter: Fitter
+    fitter : Fitter
         Fitter instance with ``spec`` (Parameters) and ``_free_names``.
 
     Returns
@@ -700,7 +700,7 @@ def build_loglikelihood_fn(fitter):
 
     Parameters
     ----------
-    fitter: Fitter
+    fitter : Fitter
         Fitter instance with model, data, parameters, and likelihood config.
 
     Returns
@@ -732,8 +732,8 @@ def build_loglikelihood_fn(fitter):
 
     See Also
     --------
-    build_loss_fn: Returns likelihood + isotropic prior (Hamiltonian).
-    build_logprior_fn: Returns only prior log-density.
+    build_loss_fn : Returns likelihood + isotropic prior (Hamiltonian).
+    build_logprior_fn : Returns only prior log-density.
     """
     fixed_values = fitter._fixed_values
     spec = fitter.spec
@@ -758,7 +758,7 @@ def build_loglikelihood_unbounded_fn(fitter):
 
     Parameters
     ----------
-    fitter: Fitter
+    fitter : Fitter
 
     Returns
     -------

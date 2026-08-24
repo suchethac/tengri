@@ -32,16 +32,16 @@ def centered_fields(xi, psd_sigma_dex, psd_tau_yr, log_age_grid, centering=1.0):
 
     Parameters
     ----------
-    xi: array_like, shape (..., n)
+    xi : array_like, shape (..., n)
         Standard normal latents, as stored under ``Posterior.samples["psd_xi"]``.
         Leading axes are mapped over.
-    psd_sigma_dex: array_like, shape (...)
+    psd_sigma_dex : array_like, shape (...)
         Modulation amplitude [dex], broadcasting against ``xi``'s leading axes.
-    psd_tau_yr: array_like, shape (...)
+    psd_tau_yr : array_like, shape (...)
         Damping timescale [yr].
-    log_age_grid: array_like, shape (n,)
+    log_age_grid : array_like, shape (n,)
         ``log10(age / yr)`` nodes, monotone.
-    centering: float, optional
+    centering : float, optional
         The ``sfh={'field_centering': a}`` the fit was run with, in ``[0, 1]``
         [dimensionless]. Default ``1.0`` (non-centered), which is what stored
         latents mean unless the model set otherwise. **Pass the model's value**:
@@ -51,7 +51,7 @@ def centered_fields(xi, psd_sigma_dex, psd_tau_yr, log_age_grid, centering=1.0):
 
     Returns
     -------
-    m: ndarray, shape (..., n)
+    m : ndarray, shape (..., n)
         Centered field [natural-log units].
 
     Notes

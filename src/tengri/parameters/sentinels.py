@@ -34,12 +34,12 @@ class _Sentinel:
 
     Parameters
     ----------
-    name: str
+    name : str
         Human-readable name returned by repr().
 
     Attributes
     ----------
-    name: str
+    name : str
         Name of the sentinel, used in repr().
     """
 
@@ -50,7 +50,7 @@ class _Sentinel:
 
         Parameters
         ----------
-        name: str
+        name : str
             Unique name for this sentinel.
 
         Returns
@@ -104,7 +104,7 @@ class _Sentinel:
 
         Parameters
         ----------
-        other: object
+        other : object
             Object to compare with.
 
         Returns

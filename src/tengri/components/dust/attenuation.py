@@ -103,9 +103,9 @@ def power_law(
 
     Parameters
     ----------
-    wavelength: array_like, shape (n_wave,)
+    wavelength : array_like, shape (n_wave,)
         Wavelength grid. [Å]
-    n_slope: float, optional
+    n_slope : float, optional
         Power-law slope. Default: -0.7 (standard Charlot & Fall). [dimensionless]
 
     Returns
@@ -151,7 +151,7 @@ def vw07_bc(
 
     Parameters
     ----------
-    wavelength: array_like, shape (n_wave,)
+    wavelength : array_like, shape (n_wave,)
         Wavelength grid. [Å]
 
     Returns
@@ -192,7 +192,7 @@ def vw07_diff(
 
     Parameters
     ----------
-    wavelength: array_like, shape (n_wave,)
+    wavelength : array_like, shape (n_wave,)
         Wavelength grid. [Å]
 
     Returns
@@ -240,7 +240,7 @@ def calzetti(
 
     Parameters
     ----------
-    wavelength: array_like, shape (n_wave,)
+    wavelength : array_like, shape (n_wave,)
         Wavelength grid. [Å]
 
     Returns
@@ -309,7 +309,7 @@ def reddy15(
 
     Parameters
     ----------
-    wavelength: array_like, shape (n_wave,)
+    wavelength : array_like, shape (n_wave,)
         Wavelength grid. [Å]
 
     Returns
@@ -386,14 +386,14 @@ def kriek_conroy(
 
     Parameters
     ----------
-    wavelength: array_like, shape (n_wave,)
+    wavelength : array_like, shape (n_wave,)
         Wavelength grid. [Å]
-    dust_bump_strength: float
+    dust_bump_strength : float
         Multiplier on the KC13-derived bump amplitude
         :math:`E_b = 0.85 - 1.9\,\delta`. [dimensionless] Default: 1.0,
         which reproduces FSPS ``dust_type=4`` exactly; set to 0.0 to
         remove the bump, or scale to weaken/strengthen it.
-    dust_delta: float
+    dust_delta : float
         Power-law slope modification :math:`\delta`. [dimensionless]
         Default: 0.0. Steeper (more negative) :math:`\delta` gives a
         stronger bump, per KC13 Eqn 3.
@@ -471,17 +471,17 @@ def _pei92_curve(
 
     Parameters
     ----------
-    wavelength: array_like, shape (n_wave,)
+    wavelength : array_like, shape (n_wave,)
         Wavelength grid. [Å]
-    lam_i: array_like, shape (n_components,)
+    lam_i : array_like, shape (n_components,)
         Central wavelengths (in μm) of Drude components. [μm]
-    a_i: array_like, shape (n_components,)
+    a_i : array_like, shape (n_components,)
         Amplitudes of Drude components. [dimensionless]
-    b_i: array_like, shape (n_components,)
+    b_i : array_like, shape (n_components,)
         Denominatornormalization coefficients. [dimensionless]
-    n_i: array_like, shape (n_components,)
+    n_i : array_like, shape (n_components,)
         Power-law exponents for profile broadening. [dimensionless]
-    R_V: float
+    R_V : float
         Total-to-selective extinction ratio. [dimensionless]
 
     Returns
@@ -563,7 +563,7 @@ def smc(
 
     Parameters
     ----------
-    wavelength: array_like, shape (n_wave,)
+    wavelength : array_like, shape (n_wave,)
         Wavelength grid. [Å]
 
     Returns
@@ -600,7 +600,7 @@ def lmc(
 
     Parameters
     ----------
-    wavelength: array_like, shape (n_wave,)
+    wavelength : array_like, shape (n_wave,)
         Wavelength grid. [Å]
 
     Returns
@@ -652,7 +652,7 @@ def prevot_smc(
 
     Parameters
     ----------
-    wavelength: array_like, shape (n_wave,)
+    wavelength : array_like, shape (n_wave,)
         Wavelength grid. [Å]
 
     Returns
@@ -734,9 +734,9 @@ def cardelli(
 
     Parameters
     ----------
-    wavelength: array_like, shape (n_wave,)
+    wavelength : array_like, shape (n_wave,)
         Wavelength grid. [Å]
-    dust_Rv: float
+    dust_Rv : float
         Total-to-selective extinction ratio. [dimensionless] Default: 3.1.
 
     Returns
@@ -850,15 +850,15 @@ def li08(
 
     Parameters
     ----------
-    wavelength: array, shape (n_wave,)
+    wavelength : array, shape (n_wave,)
         Wavelength grid in Angstrom.
-    dust_c1: float
+    dust_c1 : float
         Continuum amplitude. Controls overall UV-optical shape.
-    dust_c2: float
+    dust_c2 : float
         Continuum curvature. Higher values produce steeper UV rises.
-    dust_c3: float
+    dust_c3 : float
         Continuum offset. Shifts the overall curve level.
-    dust_c4: float
+    dust_c4 : float
         UV bump amplitude at 2175 Angstrom. Set to 0 for bump-free.
 
     Returns
@@ -926,11 +926,11 @@ def salim(
 
     Parameters
     ----------
-    wavelength: array_like, shape (n_wave,)
+    wavelength : array_like, shape (n_wave,)
         Rest-frame wavelengths. [Angstrom]
-    dust_bump_strength: float
+    dust_bump_strength : float
         Amplitude of the 2175 Angstrom UV bump. [dimensionless]
-    dust_delta: float
+    dust_delta : float
         Power-law tilt relative to Calzetti slope. [dimensionless]
     **_kwargs
         Ignored extra keyword arguments (for registry compatibility).
@@ -976,7 +976,7 @@ def leitherer02(
 
     Parameters
     ----------
-    wavelength: array_like, shape (n_wave,)
+    wavelength : array_like, shape (n_wave,)
         Wavelength grid. [Å]
 
     Returns
@@ -1060,15 +1060,15 @@ def noll09(
 
     Parameters
     ----------
-    wavelength: array_like, shape (n_wave,)
+    wavelength : array_like, shape (n_wave,)
         Wavelength grid. [Å]
-    dust_bump_strength: float
+    dust_bump_strength : float
         Amplitude of 2175 Å UV bump (E_b). [dimensionless] Default: 0.0 (no bump).
-    dust_delta: float
+    dust_delta : float
         Power-law slope modification. [dimensionless] Default: 0.0 (pure Calzetti+L02).
-    dust_bump_x0: float
+    dust_bump_x0 : float
         Central wavelength of UV bump. [μm] Default: 0.2175.
-    dust_bump_gamma: float
+    dust_bump_gamma : float
         FWHM of UV bump. [μm] Default: 0.035.
 
     Returns
@@ -1152,15 +1152,15 @@ def salim_sbl18(
 
     Parameters
     ----------
-    wavelength: array_like, shape (n_wave,)
+    wavelength : array_like, shape (n_wave,)
         Wavelength grid. [Å]
-    dust_bump_strength: float
+    dust_bump_strength : float
         Amplitude of 2175 Å UV bump (E_b). [dimensionless] Default: 0.0 (no bump).
-    dust_delta: float
+    dust_delta : float
         Power-law slope modification. [dimensionless] Default: 0.0 (pure Calzetti+L02).
-    dust_bump_x0: float
+    dust_bump_x0 : float
         Central wavelength of UV bump. [μm] Default: 0.2175.
-    dust_bump_gamma: float
+    dust_bump_gamma : float
         FWHM of UV bump. [μm] Default: 0.035.
 
     Returns
@@ -1235,12 +1235,12 @@ def tea(
 
     Parameters
     ----------
-    wavelength: array_like, shape (n_wave,)
+    wavelength : array_like, shape (n_wave,)
         Wavelength grid. [Å]
-    dust_delta: float
+    dust_delta : float
         Power-law slope modification. [dimensionless] Default: -0.2.
         Steeper (more negative) = weaker bump.
-    dust_tea_scatter: float
+    dust_tea_scatter : float
         Scatter in E_b around the median relation. [dex] Default: 0.0 (median).
 
     Returns
@@ -1291,13 +1291,13 @@ def narayanan_z(
 
     Parameters
     ----------
-    wavelength: array_like, shape (n_wave,)
+    wavelength : array_like, shape (n_wave,)
         Wavelength grid. [Å]
-    dust_delta: float
+    dust_delta : float
         Power-law slope modification. [dimensionless] Default: -0.2 (triggers z-scaling).
-    dust_bump_strength: float
+    dust_bump_strength : float
         UV bump amplitude E_b. [dimensionless] Default: 1.0 (triggers z-scaling).
-    redshift: float
+    redshift : float
         Galaxy redshift. [dimensionless] Default: 0.0.
 
     Returns
@@ -1351,11 +1351,11 @@ def conroy2010(
 
     Parameters
     ----------
-    wavelength: array_like, shape (n_wave,)
+    wavelength : array_like, shape (n_wave,)
         Wavelength grid. [Å]
-    dust_Rv: float
+    dust_Rv : float
         Total-to-selective extinction ratio for the MW component. [dimensionless] Default: 3.1.
-    n_slope: float
+    n_slope : float
         Power-law index for the long-wavelength component. [dimensionless] Default: -0.7.
 
     Returns
@@ -1427,11 +1427,11 @@ def wg00_shell(
 
     Parameters
     ----------
-    wavelength: array_like, shape (n_wave,)
+    wavelength : array_like, shape (n_wave,)
         Wavelength grid. [Å]
-    tau_v: float
+    tau_v : float
         V-band optical depth (at 5500 Å). [dimensionless]
-    law: str
+    law : str
         Underlying extinction curve name. Default: "cardelli" (MW).
     **law_params
         Passed to the extinction curve function (e.g., ``dust_Rv``).
@@ -1481,11 +1481,11 @@ def wg00_cloudy(
 
     Parameters
     ----------
-    wavelength: array_like, shape (n_wave,)
+    wavelength : array_like, shape (n_wave,)
         Wavelength grid. [Å]
-    tau_v: float
+    tau_v : float
         Total V-band optical depth through the slab. [dimensionless]
-    law: str, optional
+    law : str, optional
         Underlying attenuation curve name, from ``DUST_LAWS`` registry. Default: "cardelli" (MW).
     **law_params
         Keyword arguments passed to the attenuation curve function (e.g., ``dust_Rv``).
@@ -1571,13 +1571,13 @@ def wg00_dusty(
 
     Parameters
     ----------
-    wavelength: array_like, shape (n_wave,)
+    wavelength : array_like, shape (n_wave,)
         Wavelength grid. [Å]
-    tau_v: float
+    tau_v : float
         Total V-band optical depth (= ``n_clumps × tau_clump``). [dimensionless]
-    law: str
+    law : str
         Underlying extinction curve name. Default: "cardelli" (MW).
-    n_clumps: float
+    n_clumps : float
         Mean number of clumps along a sightline. [dimensionless] Default: 10.0.
         Higher values approach the homogeneous limit. Typical range: 1–40.
     **law_params
@@ -1641,7 +1641,7 @@ def dust_to_gas_scaling_remy_ruyer(logzsol: float) -> float:
 
     Parameters
     ----------
-    logzsol: float
+    logzsol : float
         log10(Z / Z_sun). [dimensionless]
 
     Returns
@@ -1688,16 +1688,16 @@ def _precompute_grain_curve(model_cls: type, submodel: str) -> tuple[np.ndarray,
 
     Parameters
     ----------
-    model_cls: type
+    model_cls : type
         Class from ``dust_extinction.grain_models``.
-    submodel: str
+    submodel : str
         Submodel key (e.g. ``"SMCBar"``, ``"MWRV31"``).
 
     Returns
     -------
-    wave_aa: ndarray, shape (n,)
+    wave_aa : ndarray, shape (n,)
         Wavelength array [Å], sorted ascending.
-    k_norm: ndarray, shape (n,)
+    k_norm : ndarray, shape (n,)
         Normalized attenuation curve k(λ), k(5500 Å) = 1 [dimensionless].
 
     Notes
@@ -1726,9 +1726,9 @@ def _make_grain_law(wave_aa: np.ndarray, k_norm: np.ndarray):
 
     Parameters
     ----------
-    wave_aa: ndarray, shape (n,)
+    wave_aa : ndarray, shape (n,)
         Precomputed wavelength grid [Å].
-    k_norm: ndarray, shape (n,)
+    k_norm : ndarray, shape (n,)
         Precomputed k(λ) values, k(5500 Å) = 1 [dimensionless].
 
     Returns
@@ -1781,7 +1781,7 @@ def wd01_smcbar(wavelength: jnp.ndarray, **_kwargs) -> jnp.ndarray:
 
     Parameters
     ----------
-    wavelength: array_like, shape (n_wave,)
+    wavelength : array_like, shape (n_wave,)
         Wavelength grid [Å].
 
     Returns
@@ -1829,7 +1829,7 @@ def wd01_mwrv31(wavelength: jnp.ndarray, **_kwargs) -> jnp.ndarray:
 
     Parameters
     ----------
-    wavelength: array_like, shape (n_wave,)
+    wavelength : array_like, shape (n_wave,)
         Wavelength grid [Å].
 
     Returns
@@ -1873,7 +1873,7 @@ def d03_mwrv31(wavelength: jnp.ndarray, **_kwargs) -> jnp.ndarray:
 
     Parameters
     ----------
-    wavelength: array_like, shape (n_wave,)
+    wavelength : array_like, shape (n_wave,)
         Wavelength grid [Å].
 
     Returns
@@ -1916,7 +1916,7 @@ def hd23_mwrv31(wavelength: jnp.ndarray, **_kwargs) -> jnp.ndarray:
 
     Parameters
     ----------
-    wavelength: array_like, shape (n_wave,)
+    wavelength : array_like, shape (n_wave,)
         Wavelength grid [Å].
 
     Returns

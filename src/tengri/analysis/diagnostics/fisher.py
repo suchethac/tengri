@@ -30,11 +30,11 @@ def compute_jacobian(predict_fn, params, param_keys):
 
     Parameters
     ----------
-    predict_fn: callable
+    predict_fn : callable
         Function mapping a flat parameter array to model predictions.
-    params: array, shape (n_params,)
+    params : array, shape (n_params,)
         Parameter values.
-    param_keys: tuple of str
+    param_keys : tuple of str
         Parameter names (for static hashing).
 
     Returns
@@ -60,23 +60,23 @@ def compute_fisher_matrix(forward_model, params, noise, data_type="photometry", 
 
     Parameters
     ----------
-    forward_model: ForwardModel
+    forward_model : ForwardModel
         Configured forward model.
-    params: dict
+    params : dict
         Parameter values at which to evaluate the FIM.
-    noise: array
+    noise : array
         1-sigma uncertainties on the data.
-    data_type: str
+    data_type : str
         "photometry" or "spectroscopy".
-    param_names: list of str, optional
+    param_names : list of str, optional
         Which parameters to include. Defaults to all physical params
         (excludes xi; the GP latent is high-dimensional).
 
     Returns
     -------
-    fim: array, shape (n_params, n_params)
+    fim : array, shape (n_params, n_params)
         Fisher Information Matrix.
-    names: list of str
+    names : list of str
         Parameter names corresponding to FIM rows/columns.
     """
     if param_names is None:
@@ -99,7 +99,7 @@ def compute_fisher_matrix(forward_model, params, noise, data_type="photometry", 
 
         Parameters
         ----------
-        flat_params: array, shape (n_params,)
+        flat_params : array, shape (n_params,)
             Flattened free parameter vector.
 
         Returns
@@ -156,7 +156,7 @@ def fisher_parameter_errors(fim):
 
     Parameters
     ----------
-    fim: array, shape (n_params, n_params)
+    fim : array, shape (n_params, n_params)
         Fisher Information Matrix.
 
     Returns
@@ -173,7 +173,7 @@ def fisher_correlation_matrix(fim):
 
     Parameters
     ----------
-    fim: array, shape (n_params, n_params)
+    fim : array, shape (n_params, n_params)
         Fisher Information Matrix.
 
     Returns

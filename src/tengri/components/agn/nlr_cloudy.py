@@ -126,7 +126,7 @@ def get_feltre_backend(grid_path: str | None = None) -> FeltreNLRBackend:
 
     Parameters
     ----------
-    grid_path: str or None, optional
+    grid_path : str or None, optional
         Path to ``feltre_grid.h5``. If ``None``, uses the package default
         from ``tengri.components.nebular.agn_nebular._DEFAULT_FELTRE_GRID_PATH``.
 
@@ -160,7 +160,7 @@ def get_synthesizer_nlr_backend(grid_path: str) -> SynthesizerNLRBackend:
 
     Parameters
     ----------
-    grid_path: str
+    grid_path : str
         Path to a Synthesizer CLOUDY AGN NLR HDF5 grid.
 
     Returns
@@ -185,7 +185,7 @@ def get_synthesizer_blr_backend(grid_path: str) -> SynthesizerBLRBackend:
 
     Parameters
     ----------
-    grid_path: str
+    grid_path : str
         Path to a Synthesizer CLOUDY AGN BLR HDF5 grid.
 
     Returns
@@ -214,14 +214,14 @@ def _lines_to_lnu(
 
     Parameters
     ----------
-    wavelength: array, shape (n_wave,)
+    wavelength : array, shape (n_wave,)
         Rest-frame wavelength grid [Å].
-    line_wavelengths: array, shape (n_lines,)
+    line_wavelengths : array, shape (n_lines,)
         Line rest wavelengths [Å].
-    line_luminosities_erg_s: array, shape (n_lines,)
+    line_luminosities_erg_s : array, shape (n_lines,)
         Line luminosities [erg/s] (already in CGS: convert from L_sun
         upstream if needed).
-    fwhm_kms: float
+    fwhm_kms : float
         Velocity FWHM applied to each line [km/s].
 
     Returns
@@ -260,37 +260,37 @@ def compute_nlr_sed_feltre(
 
     Parameters
     ----------
-    wavelength: array, shape (n_wave,)
+    wavelength : array, shape (n_wave,)
         Rest-frame wavelength grid [Å].
-    l_disc_bol_erg: float
+    l_disc_bol_erg : float
         AGN disc bolometric luminosity [erg/s]. The Feltre grid is
         driven by Q_H, derived from ``covering_fraction × l_disc_bol_erg``
         via the ionizing-spectrum mean photon energy.
-    covering_fraction: float, optional
+    covering_fraction : float, optional
         NLR covering factor. Default 0.1.
-    fwhm_kms: float, optional
+    fwhm_kms : float, optional
         NLR line FWHM [km/s]. Default 500.
-    alpha_pl: float, optional
+    alpha_pl : float, optional
         AGN ionizing power-law slope :math:`f_\nu \propto \nu^{\alpha}`.
         Feltre grid discretizes α ∈ {−2.0, −1.7, −1.4, −1.2}; the backend
         snaps to the nearest grid point. Default −1.7.
-    neb_logU: float, optional
+    neb_logU : float, optional
         :math:`\log_{10}(U)` gas ionization parameter. Default −2.0.
-    neb_logn: float, optional
+    neb_logn : float, optional
         :math:`\log_{10}(n_H/\mathrm{cm}^{-3})` gas density. Feltre grid
         discretizes log n_H ∈ {2, 3, 4}. Default 3.0 (typical NLR).
-    neb_logZ_gas: float, optional
+    neb_logZ_gas : float, optional
         :math:`\log_{10}(Z_{\rm gas})` absolute gas metallicity. Default
         −1.8477 = :math:`\log_{10}(Z_\odot)`.
-    xi_d: float, optional
+    xi_d : float, optional
         Dust-to-metal ratio. Feltre discretizes ξ_d ∈ {0.1, 0.3, 0.5};
         snaps to nearest. Default 0.3.
-    grid_path: str or None, optional
+    grid_path : str or None, optional
         Path to ``feltre_grid.h5``. If ``None``, uses tengri's default
         location (``data/feltre_grid.h5``) built via
         ``scripts/build_feltre_grid.py``.
     **_kwargs
-        Accepted for signature compatibility with ``unified_nlr_blr``;
+        Accepted for signature compatibility with ``unified_nlr_blr``
         ignored.
 
     Returns
@@ -348,7 +348,7 @@ def get_cue_agn_backend(weights_path: str | None = None):
 
     Parameters
     ----------
-    weights_path: str or None, optional
+    weights_path : str or None, optional
         Path to ``cue_weights.npz``. ``None`` uses
         :data:`_DEFAULT_CUE_WEIGHTS_PATH`.
 
@@ -430,26 +430,26 @@ def compute_nlr_sed_cue(
 
     Parameters
     ----------
-    wavelength: array, shape (n_wave,)
+    wavelength : array, shape (n_wave,)
         Rest-frame wavelength grid [Å].
-    l_disc_bol_erg: float
+    l_disc_bol_erg : float
         AGN disc bolometric luminosity [erg/s]; drives :math:`Q_{\rm H}`.
-    covering_fraction: float, optional
+    covering_fraction : float, optional
         NLR covering factor; scales the emergent line luminosity. Default 0.1.
-    fwhm_kms: float, optional
+    fwhm_kms : float, optional
         NLR line FWHM [km/s]. Default 500.
-    alpha_pl: float, optional
+    alpha_pl : float, optional
         AGN EUV ionizing power-law slope. Default −1.7.
-    neb_logU: float, optional
+    neb_logU : float, optional
         :math:`\log_{10}(U)` gas ionization parameter. Default −2.0.
-    neb_logn: float, optional
+    neb_logn : float, optional
         :math:`\log_{10}(n_H/\mathrm{cm}^{-3})` gas density. Default 3.0.
-    neb_logZ_gas: float, optional
+    neb_logZ_gas : float, optional
         :math:`\log_{10}(Z_{\rm gas})` **absolute** gas metallicity (same
         convention as the Feltre block). Converted to Cue's native
         :math:`\log_{10}(Z/Z_\odot)` internally via ``_LOG10_ZSUN``. Default
         −1.8477 = solar.
-    weights_path: str or None, optional
+    weights_path : str or None, optional
         Path to ``cue_weights.npz``. ``None`` uses the package default.
     **_kwargs
         Accepted for signature compatibility; ignored.
@@ -517,23 +517,23 @@ def compute_nlr_sed_synthesizer(
 
     Parameters
     ----------
-    wavelength: array, shape (n_wave,)
+    wavelength : array, shape (n_wave,)
         Rest-frame wavelength grid [Å].
-    l_disc_bol_erg: float
+    l_disc_bol_erg : float
         Disc bolometric luminosity [erg/s]. Used only for Q_H normalization
         via the Synthesizer backend's internal accounting.
-    covering_fraction: float, optional
+    covering_fraction : float, optional
         NLR covering factor. Default 0.1.
-    fwhm_kms: float, optional
+    fwhm_kms : float, optional
         NLR line FWHM [km/s]. Default 500.
-    grid_path: str, required
+    grid_path : str, required
         Path to a Synthesizer AGN NLR HDF5 grid (no default: these
         grids are not packaged with tengri because they can be many GB
         in size; supply your own).
-    log_bh_mass, log_eddington, cosine_inclination: float
+    log_bh_mass, log_eddington, cosine_inclination : float
         Synthesizer-specific physical drivers (see
         :class:`SynthesizerNLRBackend.predict_agn_nlr_lines` for details).
-    neb_logU, neb_logZ_gas: float
+    neb_logU, neb_logZ_gas : float
         Standard photoionization parameters. Defaults reflect typical
         NLR conditions.
     **_kwargs
@@ -642,23 +642,23 @@ def compute_blr_sed_synthesizer(
 
     Parameters
     ----------
-    wavelength: array, shape (n_wave,)
+    wavelength : array, shape (n_wave,)
         Rest-frame wavelength grid [Å].
-    l_disc_bol_erg: float
+    l_disc_bol_erg : float
         Disc bolometric luminosity [erg/s] (used for :math:`Q_H` normalization
         via the backend's internal accounting).
-    covering_fraction: float, optional
+    covering_fraction : float, optional
         BLR covering factor. Default 0.1.
-    fwhm_kms: float, optional
+    fwhm_kms : float, optional
         BLR line FWHM [km/s]. Default 5000 (broad permitted lines).
-    grid_path: str, required
+    grid_path : str, required
         Path to a Synthesizer AGN BLR HDF5 grid (e.g.
         ``test_grid_agn-blr.hdf5``). No default: these grids are not packaged
         with tengri.
-    log_bh_mass, log_eddington, cosine_inclination: float
+    log_bh_mass, log_eddington, cosine_inclination : float
         Synthesizer-specific physical drivers (see
         :meth:`SynthesizerBLRBackend.predict_agn_blr_lines`).
-    neb_logU, neb_logZ_gas: float
+    neb_logU, neb_logZ_gas : float
         Photoionization parameters. Defaults reflect denser, more ionized BLR
         conditions (``neb_logU = -1`` vs the NLR's ``-2``).
     **_kwargs
@@ -748,19 +748,19 @@ def compute_nlr_sed_synthesizer_spectra(
 
     Parameters
     ----------
-    wavelength: array_like, shape (n_wave,)
+    wavelength : array_like, shape (n_wave,)
         Rest-frame wavelength grid [Angstrom].
-    l_disc_bol_erg: float
+    l_disc_bol_erg : float
         Disc bolometric luminosity [erg/s].
-    covering_fraction: float, optional
+    covering_fraction : float, optional
         Line-region covering factor. Default 0.1.
-    grid_path: str, required
+    grid_path : str, required
         Path to a Synthesizer AGN HDF5 grid carrying ``/spectra/nebular``.
-    log_bh_mass, log_eddington: float
+    log_bh_mass, log_eddington : float
         Grid drivers (``cosine_inclination`` is held at 0.5 internally).
-    neb_logU, neb_logn, neb_logZ_gas: float
+    neb_logU, neb_logn, neb_logZ_gas : float
         Photoionization knobs (log U, log n_H, log Z absolute).
-    region: {"nlr", "blr"}, optional
+    region : {"nlr", "blr"}, optional
         Which grid (and backend) to read. Default ``"nlr"``.
 
     Returns

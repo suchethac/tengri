@@ -7,8 +7,8 @@ instances and threads :class:`ForwardState` through them in
 :meth:`run`.
 
 A :class:`SpatialModel` is one of the three concrete sub-models that
-:class:`tengri.ForwardModel` orchestrates per architecture spec §4, the others being ``SEDModel``
-(already in place) and
+:class:`tengri.ForwardModel` orchestrates per architecture spec §4,
+the others being ``SEDModel`` (already in place) and
 ``SpatialSEDModel`` (the joint composer, also in this file).
 
 The wave-grid field of the incoming :class:`ForwardState` is preserved
@@ -43,9 +43,9 @@ def default_grid_kpc(
 
     Parameters
     ----------
-    n: int, default 64
+    n : int, default 64
         Number of points per axis.
-    extent_kpc: float, default 10.0
+    extent_kpc : float, default 10.0
         Half-width of the grid in kpc; the full grid spans
         ``[-extent_kpc, +extent_kpc]`` in both x and y.
 
@@ -67,9 +67,9 @@ class SpatialModel:
 
     Parameters
     ----------
-    components: sequence of :class:`SpatialComponent`
+    components : sequence of :class:`SpatialComponent`
         Spatial physics blocks to thread state through, in order.
-    grid_kpc: tuple of (ndarray, ndarray), optional
+    grid_kpc : tuple of (ndarray, ndarray), optional
         ``(x_grid_kpc, y_grid_kpc)``, the 2D spatial coordinate grids,
         each of shape ``(ny, nx)``. If omitted, a sensible default
         ``64×64`` grid spanning ±10 kpc is constructed via
@@ -121,10 +121,10 @@ class SpatialModel:
 
         Parameters
         ----------
-        state: ForwardState
+        state : ForwardState
             Incoming state. Wave grid is preserved; spatial grid is
             inserted (or kept if caller already set it).
-        params: Mapping
+        params : Mapping
             Free parameter values.
 
         Returns
@@ -151,9 +151,9 @@ class SpatialSEDModel:
 
     Parameters
     ----------
-    sed: :class:`tengri.SEDModel`
+    sed : :class:`tengri.SEDModel`
         SED sub-model (or anything satisfying :class:`SubModel`).
-    spatial: :class:`SpatialModel`
+    spatial : :class:`SpatialModel`
         Spatial sub-model.
 
     Notes

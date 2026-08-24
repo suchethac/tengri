@@ -60,7 +60,7 @@ class FilterConvention(StrEnum):
 
     See Also
     --------
-    list_filter_conventions: Names + descriptions of the supported conventions.
+    list_filter_conventions : Names + descriptions of the supported conventions.
 
     """
 
@@ -117,9 +117,9 @@ def filter_weight(filter_wave: jnp.ndarray, convention: FilterConvention) -> jnp
 
     Parameters
     ----------
-    filter_wave: ndarray, shape (n_filt,)
+    filter_wave : ndarray, shape (n_filt,)
         Filter wavelength grid [Ångström]; may contain zero padding.
-    convention: FilterConvention
+    convention : FilterConvention
         Selects the weight (a static Python value, not a traced array).
 
     Returns

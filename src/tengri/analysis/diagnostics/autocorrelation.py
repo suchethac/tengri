@@ -73,7 +73,7 @@ def _never_moved(values: np.ndarray) -> bool:
 
     Parameters
     ----------
-    values: ndarray
+    values : ndarray
         Draws for one parameter, shape ``(n_draw,)`` or ``(n_chain, n_draw)``.
 
     Returns
@@ -103,11 +103,11 @@ def autocorrelation_at_lag(
 
     Parameters
     ----------
-    x: array, shape (N,)
+    x : array, shape (N,)
         1D chain (single parameter).
-    lag: int
+    lag : int
         Lag in samples (must be >= 1).
-    absolute: bool
+    absolute : bool
         If True, compute correlation of |x - mean| (catches non-Gaussian
         correlations in magnitude of deviations).
 
@@ -167,9 +167,9 @@ def autocorrelation_time(
 
     Parameters
     ----------
-    x: array, shape (N,)
+    x : array, shape (N,)
         1D chain (single parameter).
-    absolute: bool
+    absolute : bool
         If True, use absolute-deviation autocorrelation.
 
     Returns
@@ -212,7 +212,7 @@ def autocorrelation_time_combined(x: np.ndarray) -> dict:
 
     Parameters
     ----------
-    x: array, shape (N,)
+    x : array, shape (N,)
         1D chain.
 
     Returns
@@ -245,9 +245,9 @@ def effective_sample_size(
 
     Parameters
     ----------
-    chains: dict
+    chains : dict
         Parameter name → array of shape (N,) or (N, ...).
-    exclude_prefixes: tuple of str
+    exclude_prefixes : tuple of str
         Parameter name prefixes to skip (e.g., GP latent vector).
 
     Returns
@@ -283,11 +283,11 @@ def check_chain_length(
 
     Parameters
     ----------
-    chains: dict
+    chains : dict
         Parameter name → array of shape (N,).
-    exclude_prefixes: tuple of str
+    exclude_prefixes : tuple of str
         Prefixes to skip.
-    verbose: bool
+    verbose : bool
         Print diagnostics.
 
     Returns
@@ -348,7 +348,7 @@ def split_rhat(chain: np.ndarray) -> float:
 
     Parameters
     ----------
-    chain: array_like
+    chain : array_like
         Either a 1-D array of length ``N`` (single chain split into two
         halves), or a 2-D array of shape ``(m, n)`` with ``m`` chains of
         length ``n`` (used as-is, no further splitting). [any units]
@@ -429,10 +429,10 @@ def rhat(
 
     Parameters
     ----------
-    chains: dict
+    chains : dict
         Parameter name → 1-D chain array (or 2-D array of multiple
         chains).
-    exclude_prefixes: tuple of str, optional
+    exclude_prefixes : tuple of str, optional
         Parameter name prefixes to skip (default skips ``psd_xi`` GP
         latent fields).
 
@@ -444,7 +444,7 @@ def rhat(
 
     See Also
     --------
-    split_rhat: underlying scalar/vector implementation.
+    split_rhat : underlying scalar/vector implementation.
     """
     result: dict[str, float] = {}
     for name, arr in chains.items():
@@ -517,7 +517,7 @@ def rank_normalized_rhat(chain: np.ndarray) -> float:
 
     Parameters
     ----------
-    chain: array_like
+    chain : array_like
         1-D chain of length ``N`` (split into halves), or 2-D ``(m, n)``
         with ``m`` chains used as-is.
 

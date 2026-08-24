@@ -62,14 +62,14 @@ def bolometric_luminosity_bbb(
 
     Parameters
     ----------
-    wave_nm: array_like, shape (n_wave,)
+    wave_nm : array_like, shape (n_wave,)
         Wavelength grid [nm].
-    L_lambda_bbb_total: array_like, shape (n_wave,)
+    L_lambda_bbb_total : array_like, shape (n_wave,)
         Sum of BBB + lines + FeII luminosity densities [erg/s/nm].
 
     Returns
     -------
-    L_bol_BBB: float
+    L_bol_BBB : float
         Integrated luminosity [erg/s] above 91.2 nm.
 
     Notes
@@ -89,13 +89,13 @@ def bolometric_luminosity_torus(
 
     Parameters
     ----------
-    wave_nm: array_like, shape (n_wave,)
-    L_lambda_torus: array_like, shape (n_wave,)
+    wave_nm : array_like, shape (n_wave,)
+    L_lambda_torus : array_like, shape (n_wave,)
         Torus L_lambda [erg/s/nm] (continuum + Si feature).
 
     Returns
     -------
-    L_bol_TOR: float
+    L_bol_TOR : float
         Integrated luminosity [erg/s] over the entire wavelength range.
     """
     return jnp.trapezoid(jnp.asarray(L_lambda_torus), jnp.asarray(wave_nm))
@@ -118,15 +118,15 @@ def agn_fraction_dale(
 
     Parameters
     ----------
-    wave_nm: array_like, shape (n_wave,)
-    L_lambda_agn_total, L_lambda_gal_total: array_like, shape (n_wave,)
+    wave_nm : array_like, shape (n_wave,)
+    L_lambda_agn_total, L_lambda_gal_total : array_like, shape (n_wave,)
         AGN-side and galaxy-side luminosity densities [erg/s/nm].
-    lower_um, upper_um: float, optional
+    lower_um, upper_um : float, optional
         Integration band [um]. Defaults reproduce Dale+ 2014.
 
     Returns
     -------
-    fraction: float
+    fraction : float
         Dimensionless. Returns 0 when the denominator is zero.
 
     Notes
@@ -151,13 +151,13 @@ def ratio_tor_bbb(l_bol_torus: Array, l_bol_bbb: Array) -> Array:
 
     Parameters
     ----------
-    l_bol_torus, l_bol_bbb: float
+    l_bol_torus, l_bol_bbb : float
         Torus and BBB bolometric luminosities [erg/s] (see
         :func:`bolometric_luminosity_torus`, :func:`bolometric_luminosity_bbb`).
 
     Returns
     -------
-    ratio: float
+    ratio : float
         Dimensionless; 0 when ``l_bol_bbb`` is non-positive.
 
     Notes
@@ -179,14 +179,14 @@ def frac_agn_tor(l_bol_torus: Array, l_gal_bol: Array) -> Array:
 
     Parameters
     ----------
-    l_bol_torus: float
+    l_bol_torus : float
         Torus bolometric luminosity [erg/s].
-    l_gal_bol: float
+    l_gal_bol : float
         Galaxy bolometric luminosity [erg/s].
 
     Returns
     -------
-    fraction: float
+    fraction : float
         Dimensionless in [0, 1]; 0 when the denominator is non-positive.
 
     Notes

@@ -21,25 +21,25 @@ class CatalogArrays(NamedTuple):
 
     Fields
     ------
-    flux: ndarray, shape (N, n_bands)
+    flux : ndarray, shape (N, n_bands)
         Spectral flux density [erg/s/cm²/Hz].
-    noise: ndarray, shape (N, n_bands)
+    noise : ndarray, shape (N, n_bands)
         Flux uncertainty [erg/s/cm²/Hz].
-    redshift: ndarray, shape (N,) or None
+    redshift : ndarray, shape (N,) or None
         Redshift for each galaxy.
-    censor: ndarray, shape (N, n_bands) or None
+    censor : ndarray, shape (N, n_bands) or None
         Censoring flags: 0 (detected), 1 (upper limit), -1 (lower limit).
-    presence: ndarray, shape (N, n_bands), dtype=bool
+    presence : ndarray, shape (N, n_bands), dtype=bool
         Mask indicating which bands are present (not NaN-masked).
-    n_galaxies: int
+    n_galaxies : int
         Number of galaxies (N).
-    band_names: tuple[str, ...]
+    band_names : tuple[str, ...]
         Band identifiers in order.
-    line_flux_obs: ndarray, shape (N, n_lines) or None
+    line_flux_obs : ndarray, shape (N, n_lines) or None
         Per-galaxy observed emission-line fluxes [erg/s/cm²].
-    line_flux_err: ndarray, shape (N, n_lines) or None
+    line_flux_err : ndarray, shape (N, n_lines) or None
         Per-galaxy emission-line flux uncertainties [erg/s/cm²].
-    line_censor: ndarray, shape (N, n_lines) or None
+    line_censor : ndarray, shape (N, n_lines) or None
         Per-galaxy emission-line censoring flags: 0 (detected), 1 (upper
         limit), -1 (lower limit). Same convention as ``censor``, which is
         the photometric band axis.
@@ -75,15 +75,15 @@ def ingest_catalog(
 
     Parameters
     ----------
-    table: dict-like or array-like
+    table : dict-like or array-like
         Column mapping or object supporting `__getitem__[col] -> array`
         and `len()`. Covers dict, pandas DataFrame, astropy Table, etc.
-    photometry: object
+    photometry : object
         Photometry object with `.names` and `.n_filters` attributes.
-    flux_unit: str
+    flux_unit : str
         Unit of flux columns. One of: "cgs_fnu", "mJy", "uJy", "maggies",
         "ab_mag".
-    flux_cols: list[str], optional
+    flux_cols : list[str], optional
         Flux column names **in your table**, they need not resemble the band
         names. If None, defaults to ``"{name}"`` for each band in photometry.
 
@@ -98,30 +98,30 @@ def ingest_catalog(
 
         A name absent from the table raises, listing the table's actual
         columns.
-    err_cols: list[str], optional
+    err_cols : list[str], optional
         Error column names in your table, bound positionally in the same way.
         If None, defaults to ``"{name}_err"`` for each band.
-    redshift_col: str, optional
+    redshift_col : str, optional
         Column name for redshifts. If None, redshift field is None.
-    censor_cols: dict[str, str], optional
+    censor_cols : dict[str, str], optional
         Mapping from band name to censoring flag column. Flag values: 0
         (detected), 1 (upper limit), -1 (lower limit).
-    line_cols: list[str], optional
+    line_cols : list[str], optional
         Emission-line flux column names in your table, bound positionally to the
         observation's line order. If None and the observation carries line fluxes,
         raises ValueError with guidance. If None and no line fluxes are configured,
         this parameter is ignored.
-    line_err_cols: list[str], optional
+    line_err_cols : list[str], optional
         Emission-line error column names, bound positionally the same way.
         If None, defaults to ``"{name}_err"`` for each line, matching the
         ``err_cols`` convention.
-    line_censor_cols: list[str], optional
+    line_censor_cols : list[str], optional
         Emission-line censoring-flag column names, bound positionally the
         same way. Flag values: 0 (detected), 1 (upper limit), -1 (lower
         limit) -- the ``censor_cols`` convention, on the line axis instead
         of the band axis. A list rather than a name-keyed dict because its
         two siblings ``line_cols`` / ``line_err_cols`` bind positionally.
-    missing: {"error", "mask"}, default "error"
+    missing : {"error", "mask"}, default "error"
         Policy for NaN flux values. "error" raises with guidance on
         `missing="mask"`; "mask" sets presence to False for that cell.
 
@@ -444,16 +444,16 @@ def _convert_flux_unit(
 
     Parameters
     ----------
-    flux_raw: ndarray, shape (N, n_bands)
+    flux_raw : ndarray, shape (N, n_bands)
         Flux in the input unit.
-    err_raw: ndarray, shape (N, n_bands)
+    err_raw : ndarray, shape (N, n_bands)
         Error in the input unit.
-    flux_unit: str
+    flux_unit : str
         Unit identifier.
 
     Returns
     -------
-    flux, err: (ndarray, ndarray)
+    flux, err : (ndarray, ndarray)
         Converted to CGS f_ν.
 
     Raises

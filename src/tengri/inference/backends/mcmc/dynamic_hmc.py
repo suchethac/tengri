@@ -61,17 +61,17 @@ def run_dynamic_hmc(
 
     Parameters
     ----------
-    n_warmup: int
+    n_warmup : int
         Warmup/adaptation steps.
-    n_burnin: int
+    n_burnin : int
         Post-warmup burn-in steps (discarded).
-    n_samples: int
+    n_samples : int
         Posterior samples to collect.
-    target_accept_rate: float
+    target_accept_rate : float
         Target acceptance rate for step size adaptation.
-    dense_mass_matrix: bool
+    dense_mass_matrix : bool
         Use dense mass matrix. Set False for D>30.
-    precondition: bool, float or None, default None
+    precondition : bool, float or None, default None
         Sample in metric-whitened coordinates, mapping draws back afterwards.
         A linear change of variables, so the posterior is unchanged. **Opt-in**
         (#1397): ``None`` (default) and ``False`` are off; ``True`` uses
@@ -80,7 +80,7 @@ def run_dynamic_hmc(
         whitening, which amplifies a misspecified metric without bound, #1442).
         See :func:`~tengri.inference.backends.mcmc.nuts.run_nuts` for the full
         rationale and :mod:`tengri.inference.preconditioning` for the math.
-    verbose: bool
+    verbose : bool
         Print progress.
     """
     try:

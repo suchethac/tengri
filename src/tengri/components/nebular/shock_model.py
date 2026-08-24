@@ -63,16 +63,16 @@ class ShockNebularConfig(SEDComponentConfig):
 
     Attributes
     ----------
-    name: str
+    name : str
         Diagnostic identifier. Default ``"shock"``.
-    norm: str
+    norm : str
         Normalization mode: ``"frac"`` (relative to the galaxy's approximate
         Hα) or ``"lhalpha"`` (absolute ``shock_log_lhalpha``). Default
         ``"frac"``.
-    abundance: str
+    abundance : str
         MAPPINGS abundance set: ``"solar"`` | ``"2xsolar"`` | ``"lmc"`` |
         ``"smc"`` | ``"dopita2005"``. Default ``"solar"``.
-    component: str
+    component : str
         Emission component: ``"shock"`` (post-shock only) | ``"precursor"``
         (pre-shock photoionization) | ``"combined"`` (sum). Default
         ``"combined"``.
@@ -155,7 +155,7 @@ class ShockNebular(SEDModelComponent):
 
         Parameters
         ----------
-        wave: ndarray, optional
+        wave : ndarray, optional
             Unused: the shock grid is wavelength-independent (it carries its
             own line wavelengths). Present for the :meth:`load` contract.
 
@@ -185,16 +185,16 @@ class ShockNebular(SEDModelComponent):
 
         Parameters
         ----------
-        p: dict[str, ndarray]
+        p : dict[str, ndarray]
             Shock parameters, ``shock_`` prefix stripped: ``frac``,
             ``log_lhalpha``, ``velocity`` [km/s], ``log_density`` [dex cm^-3],
             ``b_over_sqrt_n`` [μG].
-        sed_in: ndarray, shape (n_wave,)
+        sed_in : ndarray, shape (n_wave,)
             SED accumulated so far [erg/s/Hz]. Used for the ``norm="frac"``
             Hα normalization only.
-        wave: ndarray, shape (n_wave,)
+        wave : ndarray, shape (n_wave,)
             Rest-frame wavelength grid [Angstrom].
-        templates: ShockTemplateGrid, optional
+        templates : ShockTemplateGrid, optional
             MAPPINGS V ratio cubes, supplied by :meth:`apply` from the threaded
             ``template_data`` so they arrive as a JIT argument rather than a
             baked constant (#1694). ``None`` falls back to the module-level
@@ -202,9 +202,9 @@ class ShockNebular(SEDModelComponent):
 
         Returns
         -------
-        sed_out: ndarray, shape (n_wave,)
+        sed_out : ndarray, shape (n_wave,)
             ``sed_in`` plus the shock contribution [erg/s/Hz].
-        published: dict
+        published : dict
             ``{"sed_shock": ndarray}``: the shock contribution [erg/s/Hz].
             Its total luminosity is recoverable as :math:`-\int S_\nu\,d\nu`.
 
@@ -347,12 +347,12 @@ class ShockNebular(SEDModelComponent):
 
         Parameters
         ----------
-        state: ForwardState
+        state : ForwardState
             Current state; ``state.wave`` and ``state.sed_intrinsic`` supply the
             full-grid context the LUT needs.
-        params: mapping
+        params : mapping
             Full parameter dict (sliced by prefix here).
-        ssp_data, template_data: object, optional
+        ssp_data, template_data : object, optional
             Unused by this component; accepted for protocol conformance.
 
         Returns

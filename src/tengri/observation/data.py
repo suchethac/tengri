@@ -75,11 +75,11 @@ class Data:
 
     Parameters
     ----------
-    photometry: tuple of (flux, err) or None
+    photometry : tuple of (flux, err) or None
         Each ``array_like, shape (n_filters,)`` [erg/s/cm^2/Hz].
-    spectrum: tuple of (flux, err) or None
+    spectrum : tuple of (flux, err) or None
         Each ``array_like, shape (n_pix,)`` [erg/s/cm^2/Hz].
-    lines: dict or None
+    lines : dict or None
         ``{line_name: (value, err)}``, or
         ``{line_name: (value, err, 'upper'|'lower')}`` [erg/s/cm^2]; names
         must be a subset of the observation's ``LineList``. The optional
@@ -88,7 +88,7 @@ class Data:
         :meth:`~tengri.observation.line_flux_data.LineFluxData.from_dict`.
         Line limits belong here, not in ``censor``, that field is
         per-photometric-band.
-    censor: array_like or None
+    censor : array_like or None
         Per-band censoring flags, shape ``(n_filters,)``: ``0`` =
         detected, ``1`` = upper limit, ``-1`` = lower limit. Boolean
         arrays are rejected (they silently invert the semantics).

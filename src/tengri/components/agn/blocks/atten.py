@@ -46,24 +46,24 @@ def polar_dust_attenuation_block(
 
     Parameters
     ----------
-    wavelength: array_like, shape (n_wave,)
+    wavelength : array_like, shape (n_wave,)
         Rest-frame wavelength [Å].
-    agn_polar_ebv: float, optional
+    agn_polar_ebv : float, optional
         :math:`E(B-V)` of the polar dust [mag]. ``0.0`` (default) is no
         attenuation.
-    agn_cos_inc: float, optional
+    agn_cos_inc : float, optional
         :math:`\cos(i)` (1 = face-on, 0 = edge-on). Defaults to the declared
         ``agn_cos_inc`` default, ``cos(30 deg)``.
-    agn_polar_oa: float, optional
+    agn_polar_oa : float, optional
         Torus half-opening angle [deg, measured from equator]. Default
         ``45``.
-    agn_polar_law: {"smc", "calzetti", "gaskell"}, optional
+    agn_polar_law : {"smc", "calzetti", "gaskell"}, optional
         Extinction law (passes to upstream). Default ``"smc"`` (Pei 1992).
         **Static** under JIT (Python string).
 
     Returns
     -------
-    factor: ndarray, shape (n_wave,)
+    factor : ndarray, shape (n_wave,)
         Multiplicative attenuation factor in :math:`(0, 1]`.
 
     References
@@ -112,28 +112,28 @@ def polar_dust_reemission_lnu(
 
     Parameters
     ----------
-    wavelength: array_like, shape (n_wave,)
+    wavelength : array_like, shape (n_wave,)
         Rest-frame wavelength [Å].
-    l_in: array_like, shape (n_wave,)
+    l_in : array_like, shape (n_wave,)
         Pre-attenuation AGN SED in :math:`L_\lambda` [erg/s/Å].
-    agn_polar_ebv: float, optional
+    agn_polar_ebv : float, optional
         :math:`E(B-V)` of the polar dust [mag]. Default ``0.0``.
-    agn_cos_inc: float, optional
+    agn_cos_inc : float, optional
         :math:`\cos(i)` (1 = face-on, 0 = edge-on). Defaults to the declared
         ``agn_cos_inc`` default, ``cos(30 deg)``.
-    agn_polar_oa: float, optional
+    agn_polar_oa : float, optional
         Torus half-opening angle [deg, measured from equator]. Default ``45``.
-    agn_polar_temperature: float, optional
+    agn_polar_temperature : float, optional
         Dust temperature [K]. Default ``100.0``.
-    agn_polar_beta: float, optional
+    agn_polar_beta : float, optional
         Dust emissivity index [dimensionless]. Default ``1.6``.
-    agn_polar_law: str, optional
+    agn_polar_law : str, optional
         Extinction law (``"smc"`` / ``"calzetti"`` / ``"gaskell"``).
         Default ``"smc"``.
 
     Returns
     -------
-    l_nu_reemit: ndarray, shape (n_wave,)
+    l_nu_reemit : ndarray, shape (n_wave,)
         Reemitted graybody :math:`L_\nu` [erg/s/Hz].
 
     Notes

@@ -110,23 +110,23 @@ def resolve_forward_chunk_size(
 
     Parameters
     ----------
-    requested: int, ``"auto"``, or None
+    requested : int, ``"auto"``, or None
         An explicit ``int >= 1`` is honored exactly, so a caller that has
         measured its own machine always wins and stays reproducible.
         ``"auto"`` / ``None`` derives K from the budget.
-    n_gal: int
+    n_gal : int
         Galaxies in the fit. K is never larger than this.
-    n_data_per_gal: int or None
+    n_data_per_gal : int or None
         Data points per galaxy. ``None`` (unknown) forces ``K = 1``: guessing a
         width from an unknown shape is how an OOM gets shipped.
-    n_chains: int, default 1
+    n_chains : int, default 1
         MCMC chains, the second ``vmap`` axis. The budget is divided across
         ``K * n_chains``.
-    homogeneous: bool, default True
+    homogeneous : bool, default True
         Whether every galaxy has the same ``n_data``. ``K > 1`` requires it,
         the callers raise otherwise, so a heterogeneous catalog resolves to
         ``K = 1`` rather than turning a working fit into an error.
-    memory_budget_gb: float, optional
+    memory_budget_gb : float, optional
         Overrides the ``TENGRI_FORWARD_MEMORY_BUDGET_GB`` env var and the
         default.
 
@@ -177,7 +177,7 @@ def chunking_was_requested(forward_chunk_size) -> bool:
 
     Parameters
     ----------
-    forward_chunk_size: int, ``"auto"``, or None
+    forward_chunk_size : int, ``"auto"``, or None
         The argument exactly as the caller supplied it, before
         :func:`resolve_forward_chunk_size`.
 

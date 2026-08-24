@@ -25,7 +25,7 @@ def representable_floor(value: float) -> float:
 
     Parameters
     ----------
-    value: float
+    value : float
         The intended floor, as written at the call site.
 
     Returns
@@ -78,7 +78,7 @@ def representable_denominator(value: float) -> float:
 
     Parameters
     ----------
-    value: float
+    value : float
         The intended floor, as written at the call site [dimensionless].
 
     Returns
@@ -168,10 +168,10 @@ def representable_exponent(value: float, *, base: float = 10.0) -> float:
 
     Parameters
     ----------
-    value: float
+    value : float
         The intended exponent ceiling, as written at the call site [dex for
         ``base=10``, nats for ``base=e``].
-    base: float, keyword-only, optional
+    base : float, keyword-only, optional
         Base of the power the bound feeds. ``10.0`` (default) for
         ``10**clip(x, lo, hi)``; :data:`math.e` for ``exp(clip(x, lo, hi))``.
         One function rather than a per-base copy; the arithmetic is identical
@@ -251,8 +251,8 @@ def representable_exponent(value: float, *, base: float = 10.0) -> float:
 def whiten(x, sigma):
     r""":math:`x / \sigma`, with the division made binding on the compiler.
 
-    The single seam through which every noise-weighting in tengri passes; :math:`\chi^2`
-    residuals, Gauss-Newton metrics, and the normal equations of
+    The single seam through which every noise-weighting in tengri passes:
+    :math:`\chi^2` residuals, Gauss-Newton metrics, and the normal equations of
     the analytic emission-line marginalization.
 
     Dividing by :math:`\sigma` once is always representable; forming
@@ -277,10 +277,10 @@ def whiten(x, sigma):
 
     Parameters
     ----------
-    x: array_like
+    x : array_like
         Quantity to whiten: a residual, a Jacobian-vector product, or a
         data-space vector.
-    sigma: array_like
+    sigma : array_like
         1-σ uncertainty [same units as ``x``], broadcastable against ``x``.
 
     Returns
@@ -305,7 +305,7 @@ def pow10(x):
 
     Parameters
     ----------
-    x: array_like
+    x : array_like
         Exponent [dimensionless].
 
     Returns
@@ -326,7 +326,7 @@ def log10_four_pi_dl2(dl_cm):
 
     Parameters
     ----------
-    dl_cm: array_like
+    dl_cm : array_like
         Luminosity distance :math:`d_L` [cm].
 
     Returns
@@ -372,9 +372,9 @@ def log10_flux_scale(redshift, dl_cm):
 
     Parameters
     ----------
-    redshift: array_like
+    redshift : array_like
         Redshift :math:`z` [dimensionless].
-    dl_cm: array_like
+    dl_cm : array_like
         Luminosity distance :math:`d_L` [cm].
 
     Returns
@@ -441,7 +441,7 @@ def log10_magnitude(value):
 
     Parameters
     ----------
-    value: array_like
+    value : array_like
         A signed or unsigned magnitude in linear space.
 
     Returns
@@ -487,9 +487,9 @@ def apply_log10_scale(arr, log10_scale):
 
     Parameters
     ----------
-    arr: array_like
+    arr : array_like
         Values to scale (any magnitude within the dtype range).
-    log10_scale: array_like, scalar
+    log10_scale : array_like, scalar
         Base-10 log of the multiplicative factor [dimensionless]. May be far
         outside the dtype range (e.g. -58); only the *net* result must be
         representable.
@@ -570,9 +570,9 @@ def log10_add(log_a, log_b, *, sign_a=1.0, sign_b=1.0):
 
     Parameters
     ----------
-    log_a, log_b: array_like
+    log_a, log_b : array_like
         Base-10 log magnitudes [dex]. ``-inf`` denotes an exactly zero term.
-    sign_a, sign_b: array_like, optional
+    sign_a, sign_b : array_like, optional
         Signs of the two terms (+1.0 or -1.0). Default +1.0. Cancellation
         between opposite signs is resolved at the precision of the larger
         term, as in any signed sum.
@@ -599,8 +599,8 @@ def log10_add(log_a, log_b, *, sign_a=1.0, sign_b=1.0):
     summed = jnp.where(positive, offset + jnp.log10(safe), -jnp.inf)
     # ``finite`` is False for BOTH infinities, but they mean opposite things:
     # -inf is "no term here", +inf is an overflow upstream. Folding the latter
-    # into the -inf sentinel would report an overflowed term as exactly zero: # a fail-open on
-    # precisely the axis this module exists to close.
+    # into the -inf sentinel would report an overflowed term as exactly zero,
+    # a fail-open on precisely the axis this module exists to close.
     #
     # This used to test ``isposinf(larger)`` alone, which caught +inf and missed
     # NaN entirely: ``maximum(43.0, nan)`` is NaN, ``isposinf(nan)`` is False,
@@ -630,12 +630,12 @@ def log10_weighted_sum(log_values, weights, axis=-1):
 
     Parameters
     ----------
-    log_values: array_like
+    log_values : array_like
         Base-10 log magnitudes [dex]. ``-inf`` denotes an exactly zero term.
-    weights: array_like
+    weights : array_like
         Non-negative weights, broadcastable against ``log_values``. A weight of
         exactly zero drops its term exactly, including when that term is ``-inf``.
-    axis: int, optional
+    axis : int, optional
         Axis to reduce over. Default ``-1``.
 
     Returns

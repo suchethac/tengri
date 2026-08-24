@@ -39,14 +39,14 @@ class LineFluxData:
 
     Parameters
     ----------
-    names: tuple[str, ...]
+    names : tuple[str, ...]
         Line identifiers matching ``LineList`` convention
         (e.g. ``"Halpha"``, ``"OIII_5007"``).
-    fluxes: jnp.ndarray
+    fluxes : jnp.ndarray
         Observed integrated line fluxes in erg/s/cm^2, shape ``(n_lines,)``.
-    errors: jnp.ndarray
+    errors : jnp.ndarray
         1-sigma uncertainties on fluxes in erg/s/cm^2, shape ``(n_lines,)``.
-    wavelengths: jnp.ndarray
+    wavelengths : jnp.ndarray
         Rest-frame vacuum wavelengths in Angstrom, shape ``(n_lines,)``.
         Used to match against the nebular backend's line output.
 
@@ -57,17 +57,17 @@ class LineFluxData:
 
     Attributes
     ----------
-    names: tuple[str, ...]
+    names : tuple[str, ...]
         Line identifiers.
-    fluxes: ndarray, shape (n_lines,)
+    fluxes : ndarray, shape (n_lines,)
         Observed line fluxes [erg/s/cm²].
-    errors: ndarray, shape (n_lines,)
+    errors : ndarray, shape (n_lines,)
         1-sigma measurement uncertainties [erg/s/cm²].
-    wavelengths: ndarray, shape (n_lines,)
+    wavelengths : ndarray, shape (n_lines,)
         Rest-frame vacuum wavelengths [Angstrom].
-    is_upper_limit: ndarray or None
+    is_upper_limit : ndarray or None
         Boolean mask indicating upper limits [dimensionless].
-    is_lower_limit: ndarray or None
+    is_lower_limit : ndarray or None
         Boolean mask indicating lower limits [dimensionless].
 
     Notes
@@ -154,8 +154,8 @@ class LineFluxData:
         Returns
         -------
         ndarray, shape (n_lines,), or None
-            ``None`` when no line carries a limit flag (all detections),             callers use
-            this to select the plain Gaussian likelihood.
+            ``None`` when no line carries a limit flag (all detections);
+            callers use this to select the plain Gaussian likelihood.
         """
         if self.is_upper_limit is None and self.is_lower_limit is None:
             return None
@@ -189,7 +189,7 @@ class LineFluxData:
 
         Parameters
         ----------
-        model_fluxes: ndarray, shape (n_lines,)
+        model_fluxes : ndarray, shape (n_lines,)
             Model-predicted line fluxes [erg/s/cm^2].
 
         Returns
@@ -226,7 +226,7 @@ class LineFluxData:
 
         Parameters
         ----------
-        model_fluxes: ndarray, shape (n_lines,)
+        model_fluxes : ndarray, shape (n_lines,)
             Model-predicted line fluxes [erg/s/cm^2].
 
         Returns
@@ -269,7 +269,7 @@ class LineFluxData:
 
         Parameters
         ----------
-        line_data: dict[str, tuple]
+        line_data : dict[str, tuple]
             Mapping from line name to ``(flux, error)``, both
             [erg/s/cm^2], with an optional third element ``"upper"`` or
             ``"lower"`` marking the flux as a censored limit rather than a

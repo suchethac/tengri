@@ -58,7 +58,7 @@ def inv_noise_std(noise: jnp.ndarray) -> jnp.ndarray:
 
     Parameters
     ----------
-    noise: array_like
+    noise : array_like
         Per-point 1-σ uncertainty. Must be > 0.
 
     Returns
@@ -106,14 +106,14 @@ def diag_noise_operators(noise: jnp.ndarray) -> tuple[Partial, Partial]:
 
     Parameters
     ----------
-    noise: array_like
+    noise : array_like
         Per-point 1-σ uncertainty. Must be > 0.
 
     Returns
     -------
-    cov_inv: jax.tree_util.Partial
+    cov_inv : jax.tree_util.Partial
         ``x -> (x/sigma)/sigma``.
-    std_inv: jax.tree_util.Partial
+    std_inv : jax.tree_util.Partial
         ``x -> x/sigma``.
 
     Notes
@@ -139,11 +139,11 @@ def standardized_residual(
 
     Parameters
     ----------
-    observed: array_like
+    observed : array_like
         Data :math:`d`.
-    predicted: array_like
+    predicted : array_like
         Model prediction :math:`\mu`.
-    sigma_eff: array_like
+    sigma_eff : array_like
         Effective 1-σ uncertainty, already combined with any floor.
 
     Returns
@@ -174,18 +174,18 @@ def diag_gaussian_chi2(
 
     Parameters
     ----------
-    predicted: array_like
+    predicted : array_like
         Model prediction :math:`\mu`.
-    observed: array_like
+    observed : array_like
         Data :math:`d`.
-    sigma: array_like
+    sigma : array_like
         Per-point 1-σ uncertainty. Must be > 0.
-    sigma_floor: float, optional
+    sigma_floor : float, optional
         Fractional systematic floor :math:`f` added in quadrature
         relative to ``observed``: total variance becomes
         ``sigma**2 + (sigma_floor * observed)**2``. Default ``0``
         (pure measurement noise).
-    presence: array_like, optional
+    presence : array_like, optional
         Per-band presence mask (0.0 or 1.0 float). Absent bands
         (presence=0) contribute exactly zero to χ² and its gradient.
         Default ``None`` (all-ones; all bands present).
@@ -227,13 +227,13 @@ def diag_gaussian_log_prob(
     r"""Data-term log-probability of a diagonal Gaussian: :math:`-\tfrac12 \chi^2`.
 
     The Gaussian normalization constant
-    :math:`-\tfrac{1}{2} n \log(2\pi) - \sum_i \log\sigma_i` is dropped,
+    :math:`-\tfrac{1}{2} n \log(2\pi) - \sum_i \log\sigma_i` is dropped
     most inference engines treat it as an additive constant. Add it
     back explicitly if you need a true log-evidence term.
 
     Parameters
     ----------
-    presence: array_like, optional
+    presence : array_like, optional
         Per-band presence mask (0.0 or 1.0 float). Absent bands
         contribute exactly zero to the log-probability and its gradient.
         Default ``None`` (all-ones; all bands present).

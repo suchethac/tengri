@@ -29,10 +29,10 @@ All functions are pure JAX (JIT-compilable, differentiable).
 Parameters
 ----------
 
-- ``dla_log_n_hi``: log10(N_HI / cm⁻²), typically 19–22.
-- ``dla_z``: redshift of the absorber.
-- ``dla_temp``: gas temperature [K], typically fixed at 10⁴ K.
-- ``dla_b_turb``: turbulent broadening [km/s], typically 0–30.
+- ``dla_log_n_hi`` : log10(N_HI / cm⁻²), typically 19–22.
+- ``dla_z`` : redshift of the absorber.
+- ``dla_temp`` : gas temperature [K], typically fixed at 10⁴ K.
+- ``dla_b_turb`` : turbulent broadening [km/s], typically 0–30.
 
 References
 ----------
@@ -82,9 +82,9 @@ def _deltanu_doppler(temp: float, b_turb_kms: float) -> float:
 
     Parameters
     ----------
-    temp: float
+    temp : float
         Gas temperature [K].
-    b_turb_kms: float
+    b_turb_kms : float
         Turbulent broadening parameter [km/s].
 
     Returns
@@ -111,9 +111,9 @@ def _voigt_tepper_garcia(
 
     Parameters
     ----------
-    x: array
+    x : array
         Dimensionless frequency offset (ν − ν₀) / Δν_D.
-    a: float
+    a : float
         Voigt damping parameter Γ / (4π Δν_D).
 
     Returns
@@ -153,11 +153,11 @@ def _sigma_lya(
 
     Parameters
     ----------
-    x: array
+    x : array
         Dimensionless frequency offset.
-    temp: float
+    temp : float
         Gas temperature [K].
-    b_turb_kms: float
+    b_turb_kms : float
         Turbulent broadening [km/s].
 
     Returns
@@ -187,14 +187,14 @@ def dla_transmission(
 
     Parameters
     ----------
-    wave_rest: array, shape (n_wave,)
+    wave_rest : array, shape (n_wave,)
         Rest-frame wavelength [Å] in the absorber frame
         (i.e., already de-redshifted to the absorber's rest frame).
-    log_n_hi: float
+    log_n_hi : float
         log10(N_HI / cm⁻²). Typical DLA: 20.3–22.
-    temp: float
+    temp : float
         Gas temperature [K]. Default 10⁴ K (warm neutral medium).
-    b_turb_kms: float
+    b_turb_kms : float
         Turbulent broadening [km/s]. Default 0.
 
     Returns
@@ -239,15 +239,15 @@ def dla_transmission_obs(
 
     Parameters
     ----------
-    wave_obs: array, shape (n_wave,)
+    wave_obs : array, shape (n_wave,)
         Observed-frame wavelength [Å].
-    z_dla: float
+    z_dla : float
         Redshift of the DLA absorber.
-    log_n_hi: float
+    log_n_hi : float
         log10(N_HI / cm⁻²).
-    temp: float
+    temp : float
         Gas temperature [K]. Default 10⁴ K.
-    b_turb_kms: float
+    b_turb_kms : float
         Turbulent broadening [km/s]. Default 0.
 
     Returns

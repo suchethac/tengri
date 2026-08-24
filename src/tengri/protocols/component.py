@@ -2,8 +2,8 @@
 """SEDComponent protocol: the shape each physics block satisfies.
 
 A component owns one block of the forward model: stellar emission,
-dust attenuation+emission, nebular lines, AGN, IGM, radio, X-ray: plus the parameters and
-precomputed tensors that go with it. The
+dust attenuation+emission, nebular lines, AGN, IGM, radio and X-ray,
+plus the parameters and precomputed tensors that go with it. The
 :class:`tengri.SEDModel` orchestrator runs components in order, threading
 a :class:`ForwardState` through them. Each component declares the
 derived keys it reads (`inputs()`) and the ones it writes (`outputs()`),
@@ -32,8 +32,8 @@ import jax.numpy as jnp
 
 from tengri.protocols.derived_state import DerivedState
 
-# Deprecated alias kept on tengri.protocols.component for one release: # imports of
-# ``DerivedBundle`` from this module continue to work via the
+# Deprecated alias kept on tengri.protocols.component for one release;
+# imports of ``DerivedBundle`` from this module continue to work via the
 # renamed canonical type ``DerivedState``. The walker in
 # ``tengri.citations.collect`` and a few legacy test fixtures still
 # read this attribute; remove in v1.0.
@@ -93,35 +93,35 @@ class ParamDeclaration(NamedTuple):
 
     Fields
     ------
-    name: str
+    name : str
         Parameter name. Must start with the component's
         :attr:`SEDComponent.parameter_prefix` *or* be in
         :data:`BARE_NAME_ALLOWLIST`.
-    prior: Any
+    prior : Any
         A :class:`tengri.parameters.priors.Distribution` (Uniform,
         Gaussian, Fixed, …). Typed loosely as ``Any`` here to avoid an
         import cycle between :mod:`tengri.protocols` and
         :mod:`tengri.parameters`.
-    description: str
+    description : str
         One-line human-readable description, mirrored into the prior
         registry when a component's parameters are registered.
-    bound_check: Any, optional
+    bound_check : Any, optional
         Callable ``(lo, hi) -> bool`` invoked when a user narrows the
         prior at construction time. Returns ``True`` for an admissible
         bound. ``None`` (default) means no check. Typed loosely as
         ``Any`` for the same import-cycle reason as :attr:`prior`.
-    bound_error: str
+    bound_error : str
         Human-readable message attached to a :class:`ValueError` when
         :attr:`bound_check` rejects a bound. Empty string means the
         default generic message is used.
-    units: str
+    units : str
         Free-form units string (e.g. ``"Myr"``, ``"erg/s/Hz"``,
         ``"Msun/yr"``, ``"dex"``). Used by translation and introspection
         code to document parameter semantics. Empty string means unitless
         or not-yet-documented. Placed last in the NamedTuple so positional
         callsites: which historically use up to 5 args ending with
         ``bound_error``; remain backwards-compatible.
-    free_prior: Any, optional
+    free_prior : Any, optional
         The distribution to use when the user asks for this parameter to be
         **free**: i.e. ``all_params: FREE`` or a bare ``FREE`` sentinel.
 
@@ -164,9 +164,9 @@ def declared_default(params: Sequence[ParamDeclaration], name: str) -> float:
 
     Parameters
     ----------
-    params: sequence of ParamDeclaration
+    params : sequence of ParamDeclaration
         The declaring component's ``PARAMS`` tuple.
-    name: str
+    name : str
         Parameter name to look up, e.g. ``"agn_log_lbol"``.
 
     Returns
@@ -217,10 +217,10 @@ class DerivedKey(NamedTuple):
 
     Fields
     ------
-    name: str
+    name : str
         Stable key written to / read from :attr:`ForwardState.derived`.
         Compared by string equality, so renames are caught at construction.
-    units: str
+    units : str
         Free-form units tag, e.g. ``"erg/s"``, ``"Msun/yr"``, ``"dex"``,
         ``"erg/s/Hz"``, ``"yr"``, ``"photons/s"``. The validator compares
         publisher and consumer units strings for equality; the
@@ -228,7 +228,7 @@ class DerivedKey(NamedTuple):
         :mod:`tengri.forward.orchestrator` pins the expected string for
         every well-known key. Use ``""`` for unitless quantities (e.g.
         transmission factors, mass weights, attenuation factors).
-    description: str
+    description : str
         One-line human-readable description shown in error messages and
         by future introspection helpers. Optional.
 
@@ -239,8 +239,8 @@ class DerivedKey(NamedTuple):
     will not convert ``"Lsun"`` to ``"erg/s"`` for the consumer. Each
     component is responsible for converting at its own boundary.
 
-    The strings are deliberately *not* :mod:`astropy.units` quantities; that path is
-    JIT-incompatible and would cost a 5–100× performance
+    The strings are deliberately *not* :mod:`astropy.units` quantities;
+    that path is JIT-incompatible and would cost a 5–100× performance
     hit on the hot pipeline. Stringly-typed-with-a-canonical-table is
     enough to catch the realistic failure modes (`L_SUN` vs `L_SUN_CUE`
     confusion, ``"Lsun"`` vs ``"erg/s"`` cross-talk).
@@ -304,13 +304,13 @@ class ForwardState:
     Each component reads what it needs and returns a new ``ForwardState``
     (immutable). Field semantics match :mod:`tengri.forward.prediction`:
 
-    - ``wave``              : rest-frame wavelength grid in Å
-    - ``sed_intrinsic``     : pre-attenuation rest-frame L_nu in erg/s/Hz
-    - ``sed_attenuated``    : post-attenuation rest-frame L_nu in erg/s/Hz
-    - ``sed_observed``      : observer-frame F_nu (after IGM, redshift,
+    - ``wave``               : rest-frame wavelength grid in Å
+    - ``sed_intrinsic``      : pre-attenuation rest-frame L_nu in erg/s/Hz
+    - ``sed_attenuated``     : post-attenuation rest-frame L_nu in erg/s/Hz
+    - ``sed_observed``       : observer-frame F_nu (after IGM, redshift,
                                and units conversion)
-    - ``lines``             : optional dict of emission-line spectra
-    - ``derived``           : free-form dict for diagnostics
+    - ``lines``              : optional dict of emission-line spectra
+    - ``derived``            : free-form dict for diagnostics
                                (per-component intermediate L_nu, taus, etc.)
 
     All array fields use ``jnp.ndarray`` so the whole state can be a
@@ -378,7 +378,7 @@ class ForwardState:
 
         Parameters
         ----------
-        L_component: ndarray
+        L_component : ndarray
             Component's contribution to the intrinsic SED in erg/s/Hz.
             Broadcasts against ``self.wave`` via JAX's standard rules.
 
@@ -459,11 +459,11 @@ class SEDComponent(Protocol):
 
     Required attributes
     -------------------
-    name: str
+    name : str
         Stable identifier for diagnostics and registry lookup. Examples:
         ``"stellar"``, ``"dust"``, ``"nebular"``, ``"agn"``, ``"igm"``.
 
-    parameter_prefix: str
+    parameter_prefix : str
         Domain prefix from NAMING_CONTRACT §3.2: every parameter this
         component reads must start with this prefix. Used by the
         orchestrator to slice the global ``params`` dict before
@@ -473,7 +473,7 @@ class SEDComponent(Protocol):
         (e.g. ``redshift``) are passed via
         :data:`BARE_NAME_ALLOWLIST`, not via an empty prefix.
 
-    config: SEDComponentConfig
+    config : SEDComponentConfig
         The frozen knobs that configure the *shape* of this
         component's computation. Held as a Python attribute, not a
         traced value.
@@ -548,8 +548,8 @@ class SEDComponent(Protocol):
     #
     # ``inputs`` declares HARD dependencies: a missing producer is a
     # construction error. ``optional_inputs`` (Phase B of issue #21)
-    # declares opportunistic reads that have a documented fallback: # the validator still checks
-    # units on the optional read if an
+    # declares opportunistic reads that have a documented fallback;
+    # the validator still checks units on the optional read if an
     # upstream component outputs the key, but a missing producer is not
     # an error. See ``RadioSEDComponent`` and ``XRaySEDComponent`` for
     # the canonical optional-read pattern, and ADR-0009 for the full
@@ -604,22 +604,22 @@ class SEDComponent(Protocol):
 
         Parameters
         ----------
-        state: ForwardState
+        state : ForwardState
             Current state from upstream components (e.g. stellar emits
             ``sed_intrinsic``; dust then reads it and writes
             ``sed_attenuated``).
-        params: mapping of str -> array
+        params : mapping of str -> array
             Free parameters whose name starts with
             :attr:`parameter_prefix`. The orchestrator does the
             slicing.
-        ssp_data: Any | None, optional
+        ssp_data : Any | None, optional
             SSP stellar population synthesis grid. Passed by the
             orchestrator for components that need it (typically stellar).
             Components that do not use it should ignore this argument.
             When provided, should override any SSP data held in ``self``
             for JIT purposes (threading as a runtime parameter instead of
             closure-capturing).
-        template_data: Any | None, optional
+        template_data : Any | None, optional
             Nebular backend grids and weights (Cue, CloudyGrid, etc.).
             Passed by the orchestrator for components that need it
             (typically nebular). Components that do not use it should

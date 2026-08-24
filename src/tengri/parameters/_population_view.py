@@ -44,11 +44,11 @@ class PopulationSpecView:
 
     Parameters
     ----------
-    template: Parameters
+    template : Parameters
         The SED template's spec. Provides the scalar Protocol surface.
-    n_galaxies: int
+    n_galaxies : int
         Population size. Determines the leading axis of batched samples.
-    shared: tuple[str, ...]
+    shared : tuple[str, ...]
         Names of parameters tied across the population. Samples of
         these stay scalar; samples of every other free parameter get
         a leading ``(N,)`` axis.
@@ -172,7 +172,7 @@ class PopulationSpecView:
     def psd_xi_init_shape(self) -> tuple[int, ...]:
         """Initial-shape for the stochastic-SFH latent field.
 
-        Hierarchical fits have one ``psd_xi`` realization per galaxy;
+        Hierarchical fits have one ``psd_xi`` realization per galaxy
         shape ``(N_galaxies, n_grid)``. Scalar fits stay
         ``(n_grid,)``.
         """

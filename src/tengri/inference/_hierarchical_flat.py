@@ -138,23 +138,23 @@ class FlatProblem:
 
     Attributes
     ----------
-    init_flat: ndarray, shape (D,)
+    init_flat : ndarray, shape (D,)
         MAP-initialized starting point in unconstrained space.
-    unravel: callable
+    unravel : callable
         ``ndarray (D,) -> pytree``, the inverse of the flattening.
-    n_dim: int
+    n_dim : int
         D, shared hyperparameters plus every galaxy's free parameters (plus the
         stochastic field latents when the SFH is stochastic).
-    log_likelihood: callable
+    log_likelihood : callable
         ``ndarray (D,) -> scalar``. Gaussian data term only, no prior.
-    log_prior: callable
+    log_prior : callable
         ``ndarray (D,) -> scalar``. Unnormalized iid standard normal.
-    log_prob: callable
+    log_prob : callable
         ``ndarray (D,) -> scalar``. Their sum, the log posterior.
-    prior_transform: callable
+    prior_transform : callable
         ``ndarray (D,) in [0,1]^D -> ndarray (D,)``. Unit cube to N(0,1) latent,
         for nested sampling. Exact, because the prior is iid standard normal.
-    extract_shared: callable
+    extract_shared : callable
         ``ndarray (D,) -> ndarray (2,)`` giving physical
         ``(psd_sigma, psd_tau_myr)``.
 
@@ -190,17 +190,17 @@ def build_flat_problem(fitter, *, key, memory_mode="low", verbose=False, map_ste
 
     Parameters
     ----------
-    fitter: PopulationFitter
+    fitter : PopulationFitter
         The hierarchical fit to flatten. Read-only, nothing is mutated.
-    key: PRNGKey
+    key : PRNGKey
         Used for the per-galaxy MAP initialization.
-    memory_mode: {"low", "high"}
+    memory_mode : {"low", "high"}
         ``"low"`` wraps the per-galaxy forward in :func:`jax.checkpoint`,
         trading recomputation for activation memory. This matters: the graph
         holds every galaxy's forward pass at once.
-    verbose: bool
+    verbose : bool
         Print initialization progress.
-    map_steps: int
+    map_steps : int
         Gradient steps for the per-galaxy MAP initialization.
 
     Returns
@@ -463,7 +463,7 @@ def _require_moving_chain(chain, method):
 
     #1530's lesson generalized past its raytrace origin: MAP-echo draws look
     like a plausible answer. ``_require_finite_tuning`` catches the MCLMC
-    starved-tuner *cause*; this is the effect-side net for every MCMC driver,
+    starved-tuner *cause*; this is the effect-side net for every MCMC driver
     whatever produced it, a chain that never moved is not a posterior.
     """
     import numpy as np
@@ -705,12 +705,12 @@ def run_flat_sampler(
 
     Parameters
     ----------
-    fitter: PopulationFitter
+    fitter : PopulationFitter
         The hierarchical problem.
-    method: str
+    method : str
         Canonical registry name; must be a key of :data:`FLAT_SAMPLERS`.
-    key: PRNGKey
-    n_warmup, n_burnin, n_samples: int
+    key : PRNGKey
+    n_warmup, n_burnin, n_samples : int
         Window adaptation / discarded / retained chain lengths (MCMC drivers).
         The ``ess`` driver has no warmup, its exact-prior ellipse needs no
         tuning, so ``n_warmup`` and the HMC-family knobs below are ignored
@@ -720,9 +720,9 @@ def run_flat_sampler(
         ``nss`` driver ignores both, nested sampling has no warmup or
         burn-in; ``n_samples`` is the number of equal-weight posterior draws
         resampled from the dead-point history.
-    n_leapfrog: int
+    n_leapfrog : int
         Leapfrog steps per HMC proposal.
-    max_num_doublings: int
+    max_num_doublings : int
         NUTS tree depth cap; the trajectory may reach ``2**max_num_doublings``
         leapfrog steps, each a full ``grad(log_prob)`` over every galaxy.
 
@@ -737,62 +737,62 @@ def run_flat_sampler(
 
         Raise it if trajectories are hitting the cap (check ``divergent`` and
         the step size); the cost is roughly the step above.
-    dense_mass_matrix: bool
+    dense_mass_matrix : bool
         Dense vs diagonal metric. Defaults **False** here, unlike the
         single-galaxy path: hierarchical D grows with the number of galaxies, and
         a dense matrix is O(D^2) in both memory and adaptation cost.
-    target_accept_rate: float
+    target_accept_rate : float
         Dual-averaging target.
-    memory_mode: {"low", "high"}
+    memory_mode : {"low", "high"}
         Passed to :func:`build_flat_problem`.
-    map_steps, map_learning_rate: int, float
+    map_steps, map_learning_rate : int, float
         Gradient-ascent settings for the ``map`` and ``laplace`` drivers
         (one shared ascent, laplace IS map plus a verified-mode covariance).
-    laplace_grad_tol: float
+    laplace_grad_tol : float
         Convergence tolerance on ``max |grad log_prob|`` at the point the
         ``laplace`` ascent reaches [dimensionless in the standardized latent
         space]. Curvature measured off a mode is a covariance for the wrong
         distribution (#1537), so exceeding this raises rather than returning
         plausible wrong error bars.
-    ghmc_alpha: float
+    ghmc_alpha : float
         GHMC momentum persistence, in [0, 1] [dimensionless]. Same default as
         the single-galaxy ``run_ghmc``. The GHMC driver always uses a diagonal
         mass matrix (momentum-generator constraint), regardless of
         ``dense_mass_matrix``.
-    ghmc_delta: float
+    ghmc_delta : float
         GHMC proposal step-size scaling [dimensionless]. Same default as the
         single-galaxy ``run_ghmc``.
-    mclmc_target_accept_rate: float
+    mclmc_target_accept_rate : float
         Metropolis acceptance target for the ``adjusted_mclmc`` driver's
         tuner [dimensionless]. Same default (0.65) as the single-galaxy
         ``run_adjusted_mclmc``, deliberately NOT the HMC-family
         ``target_accept_rate``, whose 0.8 default tunes a different
         proposal mechanism. Unused by the unadjusted ``mclmc`` driver,
         which has no accept/reject step.
-    nss_n_live: int
+    nss_n_live : int
         Live points for the ``nss`` driver. Must exceed the problem's D,
         the HRSS direction covariance is estimated from the live set and is
         singular otherwise (refused loudly). The default (500, matching the
         single-galaxy ``run_nss``) therefore refuses stochastic-field
         hierarchies at their usual D by construction; those want
         ``mcmc_nuts`` anyway.
-    nss_num_delete: int
+    nss_num_delete : int
         Live points retired and replaced per NS iteration (``nss`` driver).
-    nss_num_inner_steps: int or None
+    nss_num_inner_steps : int or None
         HRSS walk length per replacement (``nss`` driver). ``None`` (the
         default) uses D, matching the single-galaxy ``run_nss``.
-    nss_log_evidence_tol: float
+    nss_log_evidence_tol : float
         Terminate when ``log(Z_live / Z_accumulated)`` falls below this
         (``nss`` driver) [dimensionless]. Hitting ``nss_max_iterations``
         first raises, the live set still holds posterior mass, and
         resampling then is the silently-truncated bias of #1429.
-    nss_max_iterations: int
+    nss_max_iterations : int
         Safety cap on NS iterations (``nss`` driver).
-    allow_unvalidated: bool
+    allow_unvalidated : bool
         Opt in to ``tier="broken"`` backends, exactly as ``Fitter.run`` does.
         Required for ``pathfinder`` and ``mcmc_ghmc``, the tier="broken" names
         this seam drives, reachable, but not safe by default.
-    verbose: bool
+    verbose : bool
 
     Returns
     -------

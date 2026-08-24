@@ -80,10 +80,10 @@ def richards2006_disc(
 
     Parameters
     ----------
-    wavelength: array_like, shape (n_wave,)
+    wavelength : array_like, shape (n_wave,)
         Rest-frame wavelength grid [Å]. Values outside the template's
-        coverage (30.5 Å: 3×10⁸ Å) yield 0.
-    log_lbol: float, optional
+        coverage (30.5 Å to 3×10⁸ Å) yield 0.
+    log_lbol : float, optional
         Bolometric luminosity in :math:`\log_{10}(L/L_\odot)`. Defaults to
         the declared ``agn_log_lbol`` default.
 
@@ -139,12 +139,12 @@ def richards2006(
 
     Parameters
     ----------
-    wavelength: array_like, shape (n_wave,)
+    wavelength : array_like, shape (n_wave,)
         Rest-frame wavelength grid [Å].
-    agn_log_lbol: float, optional
+    agn_log_lbol : float, optional
         Total AGN bolometric luminosity, :math:`\\log_{10}(L_\\odot)`.
         Defaults to the declared ``agn_log_lbol`` default.
-    agn_lum_ratio: float, optional
+    agn_lum_ratio : float, optional
         Fraction of bolometric luminosity emitted by this component.
         Default: 1.0.
     **_kwargs

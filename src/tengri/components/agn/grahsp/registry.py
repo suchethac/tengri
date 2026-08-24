@@ -95,47 +95,47 @@ def grahsp(
 
     Parameters
     ----------
-    wavelength: array_like, shape (n_wave,)
+    wavelength : array_like, shape (n_wave,)
         Rest-frame wavelength grid [Å].
-    agn_log_lbol: float, optional
+    agn_log_lbol : float, optional
         :math:`\log_{10}(L_\mathrm{bol}/L_\odot)`. Defaults to the declared
         ``agn_log_lbol`` default.
-    agn_lum_ratio: float, optional
+    agn_lum_ratio : float, optional
         AGN fraction scaling [dimensionless, 0-1]. Default ``1.0``.
-    agn_grahsp_uvslope: float, optional
+    agn_grahsp_uvslope : float, optional
         BBB UV slope :math:`\alpha_1`. Default ``0.0`` (paper §2.1.1).
-    agn_grahsp_plslope: float, optional
+    agn_grahsp_plslope : float, optional
         BBB optical slope :math:`\alpha_2`. Default ``-1.7``
         (Kishimoto+ 2008).
-    agn_grahsp_plbendloc_nm: float, optional
+    agn_grahsp_plbendloc_nm : float, optional
         BBB bend wavelength [nm]. Default ``100``.
-    agn_grahsp_plbendwidth: float, optional
+    agn_grahsp_plbendwidth : float, optional
         BBB bend width :math:`\Lambda` [dex]. Default ``1.0``.
-    agn_grahsp_cutoff_nm: float, optional
+    agn_grahsp_cutoff_nm : float, optional
         IR cutoff [nm]; ``-1`` disables. Default ``10000``.
-    agn_grahsp_a_lines: float, optional
+    agn_grahsp_a_lines : float, optional
         Line strength scale (paper ``Alines``). Default ``1.0``.
-    agn_grahsp_a_feii: float, optional
+    agn_grahsp_a_feii : float, optional
         FeII strength relative to broad H-beta (paper ``AFeII``).
         Default ``5.0``.
-    agn_grahsp_linewidth_kms: float, optional
+    agn_grahsp_linewidth_kms : float, optional
         Line FWHM [km/s] (paper ``Wline``). Default ``5000``.
-    agn_grahsp_fcov: float, optional
+    agn_grahsp_fcov : float, optional
         Torus covering factor at 12 um. Default ``0.4``.
-    agn_grahsp_si: float, optional
+    agn_grahsp_si : float, optional
         Si feature strength (paper ``Si``). Default ``0.0``.
-    agn_grahsp_cool_lam_um, agn_grahsp_cool_width: float, optional
+    agn_grahsp_cool_lam_um, agn_grahsp_cool_width : float, optional
         Cool dust peak [um] / log-width [dex]. Defaults ``17.0`` / ``0.45``.
-    agn_grahsp_hot_lam_um, agn_grahsp_hot_width: float, optional
+    agn_grahsp_hot_lam_um, agn_grahsp_hot_width : float, optional
         Hot dust peak [um] / log-width [dex]. Defaults ``2.0`` / ``0.5``.
-    agn_grahsp_hot_fcov: float, optional
+    agn_grahsp_hot_fcov : float, optional
         Hot/cool peak ratio in :math:`\lambda L_\lambda` (paper
         :math:`f_\mathrm{hot}`). Default ``1.0``.
-    agn_grahsp_ebv: float, optional
+    agn_grahsp_ebv : float, optional
         Galaxy E(B-V) [mag]. Default ``0.0``.
-    agn_grahsp_ebv_agn: float, optional
+    agn_grahsp_ebv_agn : float, optional
         Additional AGN E(B-V) [mag]. Default ``0.0``.
-    agn_type: int, optional
+    agn_type : int, optional
         ``1`` (BL/QSO), ``2`` (Sy2), ``3`` (LINER). Default ``1``.
         **Static** under JIT.
     **_kwargs
@@ -144,7 +144,7 @@ def grahsp(
 
     Returns
     -------
-    L_nu: ndarray, shape (n_wave,)
+    L_nu : ndarray, shape (n_wave,)
         Specific luminosity :math:`L_\nu` [erg/s/Hz].
 
     Notes

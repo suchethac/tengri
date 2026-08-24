@@ -19,21 +19,21 @@ def interval_width_scaling(widths: np.ndarray, n_values: np.ndarray) -> dict[str
 
     Parameters
     ----------
-    widths: array_like, shape (M,)
+    widths : array_like, shape (M,)
         Credible interval widths [dimensionless].
-    n_values: array_like, shape (M,)
+    n_values : array_like, shape (M,)
         Sample sizes [dimensionless].
 
     Returns
     -------
-    scaling: dict
+    scaling : dict
         Dictionary with keys:
 
-        - ``"slope"``: float
+        - ``"slope"`` : float
             Slope of ``log(width)`` vs ``log(N)`` [dimensionless].
-        - ``"slope_err"``: float
+        - ``"slope_err"`` : float
             Standard error of the slope [dimensionless].
-        - ``"excludes_zero_3sigma"``: bool
+        - ``"excludes_zero_3sigma"`` : bool
             True if ``abs(slope) > 3 * slope_err``, i.e., the slope is
             significantly different from zero at the 3-sigma level. Flat
             widths return False.
@@ -129,28 +129,28 @@ def credible_interval(log_posterior: np.ndarray, grid: Any, level: float = 0.68)
 
     Parameters
     ----------
-    log_posterior: array_like, shape (A * B,)
+    log_posterior : array_like, shape (A * B,)
         Unnormalized log-posterior [nats] on the grid (C-ordered as node
         ``a*B + b`` is ``(sigma[a], tau_yr[b])``).
-    grid: SharedGrid
+    grid : SharedGrid
         Quadrature grid with attributes ``sigma`` (A,) and ``tau_yr`` (B,).
-    level: float, optional
+    level : float, optional
         Credible level (default 0.68 for 1-sigma intervals) [dimensionless].
 
     Returns
     -------
-    intervals: dict
+    intervals : dict
         Dictionary with keys:
 
-        - ``"sigma_lower"``: float
+        - ``"sigma_lower"`` : float
             Lower bound of sigma interval [dex].
-        - ``"sigma_upper"``: float
+        - ``"sigma_upper"`` : float
             Upper bound of sigma interval [dex].
-        - ``"tau_lower_yr"``: float
+        - ``"tau_lower_yr"`` : float
             Lower bound of tau interval [yr].
-        - ``"tau_upper_yr"``: float
+        - ``"tau_upper_yr"`` : float
             Upper bound of tau interval [yr].
-        - ``"credible_levels"``: tuple of float
+        - ``"credible_levels"`` : tuple of float
             Pair of (level, level) for the marginal probabilities [dimensionless].
     """
     log_posterior = np.asarray(log_posterior)
@@ -223,24 +223,24 @@ def report(interim_result: dict[str, Any], shared_posterior: tuple[Any, Any]) ->
 
     Parameters
     ----------
-    interim_result: dict
+    interim_result : dict
         Result from a single-galaxy interim fit with keys like
         ``"n_divergent"``, etc.
-    shared_posterior: tuple
+    shared_posterior : tuple
         A 2-tuple from :func:`shared_log_posterior`, where the second
         element is an ESSSummary with ``.at_mode`` and ``.min_high_mass``.
 
     Returns
     -------
-    diagnostics: dict
+    diagnostics : dict
         Dictionary with keys:
 
-        - ``"ess_at_mode"``: ndarray, shape (N,)
+        - ``"ess_at_mode"`` : ndarray, shape (N,)
             ESS at the posterior mode [dimensionless]; primary diagnostic.
-        - ``"ess_min_high_mass"``: ndarray, shape (N,)
+        - ``"ess_min_high_mass"`` : ndarray, shape (N,)
             Minimum ESS over nodes carrying top 99% of posterior mass
             [dimensionless]; use to detect tail degeneracy.
-        - ``"zero_divergence_flag"``: bool
+        - ``"zero_divergence_flag"`` : bool
             True if the population reported zero divergences across all
             galaxies (a red flag, not a pass).
 

@@ -164,12 +164,12 @@ def _resolve_registry_component(
 
     Parameters
     ----------
-    domain: str
+    domain : str
         Component domain (e.g., "dust_emission"). Used for error messages.
-    type_str: str
+    type_str : str
         Grammar type name, resolved via ``_EMISSION_TYPE_ALIASES`` to a
         registry key.
-    config: SEDComponentConfig, optional
+    config : SEDComponentConfig, optional
         Pre-constructed config object (not typically used for components).
     **config_kwargs
         Construction-time keyword arguments forwarded to the component's
@@ -427,44 +427,44 @@ def build_components(
 
     Parameters
     ----------
-    ssp_data: SSPData
+    ssp_data : SSPData
         Stellar-population templates, required by stellar.
-    sfh_model: str
+    sfh_model : str
         Registered SFH model, currently ``"tsnorm"`` or ``"dpl"``.
-    field: bool
+    field : bool
         Add a stochastic GP field on top of the mean SFH.
-    metallicity_model: str
+    metallicity_model : str
         ``"delta"`` (constant Z) or ``"ramp"`` (linear log10(Z) ramp).
-    n_grid: int
+    n_grid : int
         SFH lookback-time grid resolution.
-    lgmet_scatter: float
+    lgmet_scatter : float
         Gaussian σ in log10(Z) for the DSPS triweight kernel [dex].
-    age_kernel: str or None
+    age_kernel : str or None
         SFH→SSP age-weight kernel: ``"cic"`` (dense cloud-in-cell integrand),
         ``"dsps"`` (DSPS's histogram kernel), or ``None`` (default) to
         auto-select. See :class:`~tengri.components.stellar.component.StellarSEDComponentConfig`
         for the accuracy/cost tradeoff (#964).
-    nebular_backend: str | None
+    nebular_backend : str | None
         ``"baked_in"`` (default), ``"cloudy_grid"``, ``"cb19"``,
         ``"mappings"``, ``"cue"``, ``"shock"``, or ``None`` to omit
         nebular entirely.
-    nebular_backend_instance: object | None
+    nebular_backend_instance : object | None
         Pre-constructed backend object for ``cloudy_grid`` / ``cb19`` /
         ``mappings`` / ``cue`` / ``shock`` (which need HDF5 / weights
         paths). Required for those backends.
-    agn_model: str | None
+    agn_model : str | None
         AGN model registry key (``"simple"``, ``"standard"``, …) or
         ``None`` to omit AGN.
-    dust_law_bc, dust_law_diff: str
+    dust_law_bc, dust_law_diff : str
         Birth-cloud / diffuse-ISM attenuation-law registry keys.
-    dust_law_neb: str or None
+    dust_law_neb : str or None
         Nebular birth-cloud attenuation-law key. ``None`` inherits
         ``dust_law_bc`` (nebular reddened like the youngest stars).
-    dust_emission_model: str
+    dust_emission_model : str
         IR emission template registry key.
-    use_dust: bool
+    use_dust : bool
         If ``False`` no dust component is added (no attenuation, no IR).
-    use_radio, use_xray, use_igm: bool
+    use_radio, use_xray, use_igm : bool
         Add the corresponding adapter to the chain.
 
     Returns
@@ -727,8 +727,8 @@ def build_components(
     # ADR-0006: derive the dependency-respecting order from declared
     # publishes/requires. The sort is stable (preserves input order
     # among components with no ordering constraint), so the canonical
-    # pipeline reproduces the previous hand-coded order byte-for-byte,     # verified by
-    # tests/contract/test_topological_sort.py. This cited
+    # pipeline reproduces the previous hand-coded order byte-for-byte,
+    # verified by tests/contract/test_topological_sort.py. This cited
     # tests/integration/test_derived_contract_snapshots.py until that file was
     # deleted in #1029; the SED-output half of the check went with it, so the
     # surviving guarantee is the ordering one.
@@ -777,7 +777,7 @@ def state_to_sfh_quantities(state: Any):
 
     Parameters
     ----------
-    state: ForwardState
+    state : ForwardState
         Output of :func:`run_components` on a chain that includes
         :class:`StellarSEDComponent`.
 
@@ -871,7 +871,7 @@ def state_to_sed_quantities(state: Any):
 
     Parameters
     ----------
-    state: ForwardState
+    state : ForwardState
         Output of :func:`run_components` on a chain that includes
         :class:`StellarSEDComponent` (and ideally
         :class:`DustSEDComponent` for ``l_tir`` / ``l_dust_absorbed``).
@@ -928,8 +928,8 @@ def state_to_sed_quantities(state: Any):
     l_dust_absorbed = derived_luminosity_lsun(derived, "L_absorbed", "log_L_ir")
     # L_TIR uses the legacy semantics (integration of the SED over the
     # 8–1000 μm window) for parity with ``predict_sed_quantities``,
-    # not the orchestrator's energy-balance ``L_ir`` derived key,     # the two agree when the
-    # wavelength grid extends to FIR but
+    # not the orchestrator's energy-balance ``L_ir`` derived key;
+    # the two agree when the wavelength grid extends to FIR but
     # differ on UV/optical-only grids (where the IR window is empty
     # and the energy-balance value lives outside the SED).
     l_tir = compute_l_tir(sed, wave)
@@ -1149,15 +1149,15 @@ def state_to_sed_components(state: Any) -> dict:
 
     Parameters
     ----------
-    state: ForwardState
+    state : ForwardState
         Output of :func:`run_components` on any component chain
         (missing components decompose to zeros).
 
     Returns
     -------
     dict
-        ``wavelength``, rest-frame grid [Angstrom], shape ``(n_wave,)``,         plus
-        per-component rest-frame :math:`L_\nu` [erg/s/Hz], each of
+        ``wavelength`` (rest-frame grid [Angstrom], shape ``(n_wave,)``),
+        plus per-component rest-frame :math:`L_\nu` [erg/s/Hz], each of
         shape ``(n_wave,)``:
 
         - ``sed_total``: accumulated post-chain total
@@ -1246,8 +1246,8 @@ def state_to_emission_lines(state: Any):
     Notes
     -----
     Returns all-NaN headlines and empty ``all_*`` arrays when the
-    chain's nebular backend did not publish a line catalog (BakedIn,     emission baked into SSP
-    grid; shock, publishes a continuous line
+    chain's nebular backend did not publish a line catalog (BakedIn:
+    emission baked into SSP grid; shock: publishes a continuous line
     SED, not a discrete list). For those cases callers should query
     ``state.derived["sed_nebular"]`` and perform their own narrow-band
     integration.

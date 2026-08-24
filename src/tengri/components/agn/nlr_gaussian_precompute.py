@@ -55,15 +55,15 @@ def precompute(
 
     Parameters
     ----------
-    filter_waves: list[ndarray]
+    filter_waves : list[ndarray]
         Per-filter observed-frame wavelengths [Angstrom].
-    filter_trans: list[ndarray]
+    filter_trans : list[ndarray]
         Per-filter transmission (0–1).
-    redshift: float
+    redshift : float
         Source redshift. [dimensionless]
-    parameters: Parameters or None
+    parameters : Parameters or None
         Unused, the NLR Gaussian composer has no grid axes.
-    **kwargs: optional
+    **kwargs : optional
         Ignored.
 
     Returns
@@ -109,9 +109,9 @@ def build_lookup(preint: dict, **kwargs: Any):
 
     Parameters
     ----------
-    preint: dict
+    preint : dict
         Output of :func:`precompute`.
-    **kwargs: optional
+    **kwargs : optional
         Ignored.
 
     Returns

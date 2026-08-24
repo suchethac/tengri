@@ -40,17 +40,17 @@ def interp_collapsed(grid_phot, axes, free_axis_values, *, kernel, edges=None):
 
     Parameters
     ----------
-    grid_phot: ndarray, shape (*axis_lengths, n_filters)
+    grid_phot : ndarray, shape (*axis_lengths, n_filters)
         Filter-integrated grid, normalized per unit scale [erg/s/Hz].
-    axes: tuple of array_like
+    axes : tuple of array_like
         Node values of the axes that remain free. Empty when every axis was
         fixed, in which case ``grid_phot`` is already the answer.
-    free_axis_values: tuple
+    free_axis_values : tuple
         Runtime value for each surviving axis, in ``axes`` order.
-    kernel: {'triweight', 'pchip'}
+    kernel : {'triweight', 'pchip'}
         Interpolation kernel. Keyword-only and required -- defaulting it would
         let a caller silently change the interpolation their component uses.
-    edges: tuple of array_like, optional
+    edges : tuple of array_like, optional
         Bin edges per axis. Required by ``triweight``, unused by ``pchip``.
 
     Returns

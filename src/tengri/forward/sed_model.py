@@ -178,7 +178,7 @@ def _nebular_continuum_consumers(chain):
 
     Parameters
     ----------
-    chain: sequence
+    chain : sequence
         The assembled component chain.
 
     Returns
@@ -213,9 +213,9 @@ def _chain_consumes(chain, key: str) -> bool:
 
     Parameters
     ----------
-    chain: sequence
+    chain : sequence
         The component chain.
-    key: str
+    key : str
         Derived-state key, e.g. ``"L_ir"``.
 
     Returns
@@ -270,7 +270,7 @@ class WavePrecomp:
 
     Parameters
     ----------
-    n_z: int, default 250
+    n_z : int, default 250
         Number of grid points in the ztable. Higher → finer redshift
         interpolation, slower precompute. Default 250 holds the ztable's *own*
         contribution below 1 % across all bands over z ∈ [0, 1.5] with ~37s
@@ -286,15 +286,15 @@ class WavePrecomp:
         as 1/K² only on smooth integrands. Reach for ``n_z`` to fix a wobble
         along the redshift axis; reach for the band-integration knobs to fix a
         band whose SED has an edge in it.
-    z_min: float or None, default None
+    z_min : float or None, default None
         Lower bound of the ztable grid. ``None`` → pull from the redshift
         prior with 1 % padding. Ignored when redshift is ``Fixed`` unless
         ``catalog_z_range`` is set.
-    z_max: float or None, default None
+    z_max : float or None, default None
         Upper bound of the ztable grid. ``None`` → pull from the redshift
         prior with 1 % padding. Ignored when redshift is ``Fixed`` unless
         ``catalog_z_range`` is set.
-    catalog_z_range: tuple of float or None, default None
+    catalog_z_range : tuple of float or None, default None
         Catalog-fit reuse knob (Approach A, 2026-05). When set to
         ``(z_min, z_max)``, the ztable mechanism is forced on even when
         ``redshift`` is ``Fixed`` in the spec. The Fixed value is then
@@ -335,8 +335,8 @@ class WavePrecomp:
 
     **Accuracy has an SNR ceiling, not just a percentage** (#1671). The
     LUT's forward photometry bias (measured 0.13-0.26 % on a 4-band
-    reference model) is constant in SNR, so no forward check can see it,     but it enters the
-    posterior gradient multiplied by SNR: ~5 % relative
+    reference model) is constant in SNR (so no forward check can see it)
+    but it enters the posterior gradient multiplied by SNR: ~5 % relative
     gradient error at SNR 30, ~50 % at SNR 300 on the same model. It is a
     bias, not noise: it moves the posterior mode, and better data makes it
     worse. Fits price this automatically, at run time one exact-vs-LUT
@@ -582,9 +582,9 @@ class SpectrumPrecomp:
 
     Parameters
     ----------
-    n_z: int, default 100
+    n_z : int, default 100
         Number of grid points in the free-z redshift table.
-    z_min, z_max: float or None
+    z_min, z_max : float or None
         Bounds of the free-z table. When None, taken from the redshift
         prior with 1% padding. Ignored for fixed redshift.
 
@@ -677,7 +677,7 @@ class FeaturePrecomp:
 
     Parameters
     ----------
-    n_grid: int or dict, default 16
+    n_grid : int or dict, default 16
         Grid points per free ionization axis (Cue backend only; ignored for
         baked-in, whose window LUT has no ionization axes). Denser is tighter.
 
@@ -688,10 +688,10 @@ class FeaturePrecomp:
         *product* over free axes, so per-axis resolution is what keeps a model
         with several free axes affordable: spend points on the axis whose lines
         actually move, not on the one you barely vary.
-    lines: array_like or None, optional
+    lines : array_like or None, optional
         Rest-frame vacuum line wavelengths [Angstrom] to tabulate. ``None``
         (default) takes them from ``Observation.line_fluxes``.
-    ranges: dict, optional
+    ranges : dict, optional
         Override ``{param: (lo, hi)}`` grid bounds (Cue only). Defaults to each
         free parameter's prior support.
 
@@ -765,16 +765,16 @@ class ApproxState:
 
     Attributes
     ----------
-    wave_precomp: bool
+    wave_precomp : bool
         The SSP x filter photometry LUT is active.
-    spectrum_precomp: bool
+    spectrum_precomp : bool
         The spectrum LUT is active.
-    feature_precomp: bool
+    feature_precomp : bool
         The emission-line LUT is active.
-    ztable: bool
+    ztable : bool
         Photometry is interpolated through a redshift table (free redshift, or
         a ``catalog_z_range`` reuse window).
-    n_subbands: int
+    n_subbands : int
         Sub-band samples per filter used by the photometry LUT; ``0`` when the
         LUT is off or unsampled.
 
@@ -877,17 +877,17 @@ def _warn_dead_gradient_params(spec) -> None:
 def _warn_agn_dust_double_count(spec) -> None:
     """Warn when composable AGN and Dale2014 ``dust_frac_agn`` both inject AGN IR.
 
-       The composable AGN's ``agn_ir_frac`` (CIGALE-joint tie) and Dale2014's
-       embedded quasar template ``dust_frac_agn`` are two distinct AGN surfaces,
-       both keyed off the same stellar ``L_absorbed`` (component_factory.py:346,
-       ADR-0018 §5, issue #721). With both > 0 the AGN mid/far-IR is double-counted,
+    The composable AGN's ``agn_ir_frac`` (CIGALE-joint tie) and Dale2014's
+    embedded quasar template ``dust_frac_agn`` are two distinct AGN surfaces,
+    both keyed off the same stellar ``L_absorbed`` (component_factory.py:346,
+    ADR-0018 §5, issue #721). With both > 0 the AGN mid/far-IR is double-counted
     the SKIRTOR/torus block already models AGN IR, so Dale2014's fracAGN should
-       be 0 (matching CIGALE's skirtor2016-vs-dale2014-fracAGN choice).
+    be 0 (matching CIGALE's skirtor2016-vs-dale2014-fracAGN choice).
 
-       Value-aware (the structural ``build_components`` guard cannot be): a FREE
-       param counts as positive-active; a Fixed param counts only if its value is
-       > 0, so ``dust_frac_agn`` pinned to 0 (e.g. a torus-only AGN recipe) does
-       not warn. Emits a filterable :class:`AGNDustDoubleCountWarning`.
+    Value-aware (the structural ``build_components`` guard cannot be): a FREE
+    param counts as positive-active; a Fixed param counts only if its value is
+    > 0, so ``dust_frac_agn`` pinned to 0 (e.g. a torus-only AGN recipe) does
+    not warn. Emits a filterable :class:`AGNDustDoubleCountWarning`.
     """
     if getattr(spec, "dust_emission", None) != "dale2014":
         return
@@ -1043,7 +1043,7 @@ def _state_has_content(state) -> bool:
 
     Parameters
     ----------
-    state: SEDComponentState or None
+    state : SEDComponentState or None
         Any component state, of any subclass.
 
     Returns
@@ -1079,8 +1079,8 @@ def _fold_igm_into_subbands(igm_comp, stellar_state):
     transmission *alone*, unweighted by the spectrum, so it forms
     :math:`\langle S \rangle \langle T \rangle` where the flux needs
     :math:`\langle S T \rangle`. Where :math:`T` varies strongly *inside* a
-    bandpass, GALEX FUV at :math:`z \approx 0.8`, where it runs from ~1 to ~0,     that covariance
-    term reaches −9.5 %.
+    bandpass (GALEX FUV at :math:`z \approx 0.8`, where it runs from ~1 to ~0),
+    that covariance term reaches −9.5 %.
 
     The sub-band quadrature already carries the machinery to fix it: evaluate
     :math:`T` at the same nodes the dust screen uses and multiply it into the
@@ -1103,9 +1103,9 @@ def _fold_igm_into_subbands(igm_comp, stellar_state):
 
     Parameters
     ----------
-    igm_comp: IGMSEDComponent
+    igm_comp : IGMSEDComponent
         Supplies :meth:`~IGMSEDComponent.subband_node_transmission` and the gate.
-    stellar_state: StellarSEDComponentState
+    stellar_state : StellarSEDComponentState
         Carrying the fixed-z photometry LUT or the free-z z-table.
 
     Returns
@@ -1192,15 +1192,15 @@ class SEDModel:
 
     Parameters
     ----------
-    spec: Parameters
+    spec : Parameters
         Parameter specification from ``tengri.Parameters``. Defines
         free/fixed parameters and their priors.
-    ssp_data: SSPData
+    ssp_data : SSPData
         Pre-loaded SSP templates (from ``load_ssp_data()``). Contains
         absolute SSP grid in ``log10(Z)`` absolute, age array, and
         optional mass-remaining tables for stellar mass surviving
         constraints.
-    filters: list or tuple, optional
+    filters : list or tuple, optional
         Filter transmission curves for photometric prediction. Accepts either:
 
         - 3-tuple from :func:`load_filter_set`: ``(filter_waves, filter_trans, filter_curves)``
@@ -1209,10 +1209,10 @@ class SEDModel:
         If provided, enables photometry prediction and automatic precomputation
         at initialization. Either ``filters`` or ``observation`` may be passed,
         not both.
-    observation: Observation, optional
+    observation : Observation, optional
         Unified observation config (photometry + spectroscopy + emission lines).
         Mutually exclusive with ``filters``.
-    precompute: bool, optional
+    precompute : bool, optional
         **Legacy / largely superseded.** Builds the pre-``approx=``-era
         ``PrecomputedData`` container (fixed-z SSP photometry/spectroscopy grid
         defaults). This predates, and is NOT, the fast LUT path: the
@@ -1224,7 +1224,7 @@ class SEDModel:
         to be folded into ``approx`` (tracked in the precompute-naming cleanup
         issue). Default True; leave it unless you know you need the legacy
         container. Set False to skip building it.
-    forward_dtype: str or jnp.dtype, optional
+    forward_dtype : str or jnp.dtype, optional
         Dtype for forward model computation. Default ``"float64"``.
 
         .. deprecated:: 2026-07
@@ -1264,7 +1264,7 @@ class SEDModel:
         (photometry, spectrum, line flux projections) apply cosmological factors as
         range-safe log offsets (see :mod:`tengri.utils.scale`), so float32 arrays do
         not materialize out-of-range intermediates there.
-    approx: dict or bool, optional
+    approx : dict or bool, optional
         Control which approximations enter the component chain. Default True enables
         all approximations (fastest). False disables all (forces exact path
         everywhere). A dict enables selective control:
@@ -1278,7 +1278,7 @@ class SEDModel:
         - ``ztable=True`` requires ``wave_precomp=True``.
         - Unknown flag names raise ``ValueError`` with list of legal flags.
 
-    compile: str, optional
+    compile : str, optional
         JIT-wrapping strategy for the forward pass. Default ``"per_component"``
         wraps each :class:`SEDComponent.apply` independently for faster cold-starts
         in notebooks; ``"fused"`` compiles the entire ``observation.predict ∘
@@ -1288,7 +1288,7 @@ class SEDModel:
         **Legal values:** ``"per_component"`` (default), ``"fused"``, ``"auto"``.
         Invalid values raise ``ValueError``.
 
-    csp_integration: str, optional
+    csp_integration : str, optional
         **Deprecated and inert** (#1500); accepted so existing calls keep
         working, and slated for removal in v1.0. Any non-default value raises a
         :class:`DeprecationWarning`. Accepted: ``"trapz"`` (default),
@@ -1319,14 +1319,14 @@ class SEDModel:
 
     Attributes
     ----------
-    observation: Observation or None
+    observation : Observation or None
         Attached observation object containing photometry and/or spectroscopy
         configuration. Set by constructor if filters or observation= passed.
-    spec: Parameters
+    spec : Parameters
         Parameter specification defining all free/fixed parameters and their priors.
-    ssp_data: SSPData
+    ssp_data : SSPData
         Pre-loaded stellar population synthesis templates (from ``load_ssp_data()``).
-    config: ModelConfig
+    config : ModelConfig
         Frozen model configuration (immutable after init).
 
     Notes
@@ -1520,8 +1520,8 @@ class SEDModel:
         strategy=None,
         compile=None,
     ):
-        # ``strategy`` is accepted for backwards-compat signature but ignored,         # the
-        # kernel-selection strategy machinery was removed in 2026-05
+        # ``strategy`` is accepted for backwards-compat signature but ignored;
+        # the kernel-selection strategy machinery was removed in 2026-05
         # (kernel adapters deleted). ``predict_observables_jit`` is the only
         # forward path now.
         del strategy
@@ -1899,9 +1899,9 @@ class SEDModel:
 
         Parameters
         ----------
-        cfg: FeaturePrecomp
+        cfg : FeaturePrecomp
             The requested configuration.
-        observation: Observation
+        observation : Observation
             Source of the line wavelengths when ``cfg.lines`` is None.
 
         Raises
@@ -2302,7 +2302,7 @@ class SEDModel:
 
         Parameters
         ----------
-        observation: object
+        observation : object
             The value passed as ``observation=``. Expected to be one of the
             single-slot observation component types.
 
@@ -3067,8 +3067,8 @@ class SEDModel:
 
         # Canonicalize to the session's working float dtype (#1206, #1439).
         # ``make_union_grid`` already builds at the working precision, but the
-        # ``else`` branch hands back the SSP loader's float64 array verbatim,         # so under
-        # ``jax.enable_x64(False)`` the grid's dtype depended on
+        # ``else`` branch hands back the SSP loader's float64 array verbatim,
+        # so under ``jax.enable_x64(False)`` the grid's dtype depended on
         # whether some component happened to contribute a wing. That is not
         # cosmetic: thirteen precision gates in ``components/`` (AGN disc x6,
         # X-ray x2, radio, shock, ...) ask ``wave.dtype == jnp.float32`` to
@@ -3152,7 +3152,7 @@ class SEDModel:
 
         Parameters
         ----------
-        param_map_deltas: list[dict[str, tuple[str, float, float]]]
+        param_map_deltas : list[dict[str, tuple[str, float, float]]]
             List of parameter map deltas from each _init_* method, in order.
             Each delta is a mapping: public_name -> (internal_name, scale, offset).
 
@@ -3293,7 +3293,7 @@ class SEDModel:
 
         Parameters
         ----------
-        p: dict
+        p : dict
             Internal parameter dict from _get_internal_params().
 
         Returns
@@ -3332,9 +3332,9 @@ class SEDModel:
 
         Returns
         -------
-        sfr_mean: array
+        sfr_mean : array
             SFR without GP modulation.
-        sfr_full: array
+        sfr_full : array
             SFR with GP modulation (same as sfr_mean if no field).
         """
         kw = {
@@ -3389,8 +3389,8 @@ class SEDModel:
         Notes
         -----
         Reads the same lowered ``_approx`` flags the forward pipeline itself
-        consumes, so it reports what the code *does*, not what was requested,         a
-        ``SpectrumPrecomp`` that fell back to the exact path reports
+        consumes, so it reports what the code *does*, not what was requested:
+        a ``SpectrumPrecomp`` that fell back to the exact path reports
         ``spectrum_precomp=False``. Deriving it from any other source would
         make this a third spelling of the question and free it to drift.
 
@@ -3452,12 +3452,12 @@ class SEDModel:
 
         Parameters
         ----------
-        approx: WavePrecomp or SpectrumPrecomp or FeaturePrecomp or tuple or None
+        approx : WavePrecomp or SpectrumPrecomp or FeaturePrecomp or tuple or None
             Approximation policy for the clone, with the same grammar as the
             ``approx=`` constructor argument: ``None`` for the exact wave-grid
             path, a single precompute config for one LUT family, or a composite
             tuple (at most one of each) such as ``(WavePrecomp(), FeaturePrecomp())``.
-        observation: Observation, optional
+        observation : Observation, optional
             Observation for the clone. Defaults to this model's own. Passing a
             different one rebuilds the LUT against *its* filters, the seam
             :meth:`ForwardModel.build` uses to make its authoritative
@@ -3511,13 +3511,13 @@ class SEDModel:
 
         Parameters
         ----------
-        params: dict
+        params : dict
             Parameter values using public parameter names.
-        n_linear: int, optional
+        n_linear : int, optional
             Number of output grid points, evenly spaced in lookback time.
             Default 1000 (sufficient for smooth visualization). Ignored when
             ``grid="native"``.
-        grid: {"linear", "native"}, optional
+        grid : {"linear", "native"}, optional
             ``"linear"`` (default, backward compatible) resamples onto a uniform
             lookback-time grid for plotting. ``"native"`` returns the SFH on the
             model's own ``log_age_grid`` nodes, unresampled, use this for any
@@ -3527,11 +3527,11 @@ class SEDModel:
         -------
         dict with keys:
 
-            - ``"t_gyr"``: ndarray, shape (n_linear,) or (n_grid,).
+            - ``"t_gyr"`` : ndarray, shape (n_linear,) or (n_grid,).
               Lookback time [Gyr], from 0 (now) to ~13.8 (Big Bang).
-            - ``"sfr_mean"``: ndarray, shape (n_linear,) or (n_grid,).
+            - ``"sfr_mean"`` : ndarray, shape (n_linear,) or (n_grid,).
               Parametric mean SFR [M☉/yr] (no GP modulation).
-            - ``"sfr_full"``: ndarray, shape (n_linear,) or (n_grid,).
+            - ``"sfr_full"`` : ndarray, shape (n_linear,) or (n_grid,).
               Full SFH including GP field [M☉/yr]. Identical to ``sfr_mean``
               if stochastic SFH not enabled.
 
@@ -3578,8 +3578,8 @@ class SEDModel:
 
         See Also
         --------
-        predict_properties: Integrated SFH quantities, JIT/vmap-safe.
-        predict: Lazy access to SFH and all derived quantities.
+        predict_properties : Integrated SFH quantities, JIT/vmap-safe.
+        predict : Lazy access to SFH and all derived quantities.
         """
         if grid not in ("linear", "native"):
             raise ValueError(f"grid must be 'linear' or 'native', got {grid!r}")
@@ -3641,9 +3641,9 @@ class SEDModel:
 
         Parameters
         ----------
-        params: dict
+        params : dict
             Parameter values using public parameter names.
-        wave: array, optional
+        wave : array, optional
             Custom rest-frame wavelength grid [Angstrom]. If None,
             uses the model's default: SSP wavelength grid
             (``ssp_data.ssp_wave``), or auto-extended grid if
@@ -3654,8 +3654,8 @@ class SEDModel:
         SEDResult
             NamedTuple with:
 
-            - ``wavelength``: array, shape (n_wave,). Rest-frame wavelength [Ångstrom]
-            - ``sed``: array, shape (n_wave,). Spectral luminosity density [erg/s/Hz]
+            - ``wavelength`` : array, shape (n_wave,). Rest-frame wavelength [Ångstrom]
+            - ``sed`` : array, shape (n_wave,). Spectral luminosity density [erg/s/Hz]
 
         Notes
         -----
@@ -3695,16 +3695,16 @@ class SEDModel:
 
         See Also
         --------
-        predict_obs_sed: Observed-frame SED (redshifted + IGM).
-        predict_sed_quantities: JIT-compatible SED-derived quantities.
+        predict_obs_sed : Observed-frame SED (redshifted + IGM).
+        predict_sed_quantities : JIT-compatible SED-derived quantities.
         """
         from tengri.forward.result import SEDResult
 
         state = self.predict_state(params)
         if wave is None:
             # Use ``state.wave`` (the orchestrator's runtime wavelength
-            # grid, which may differ from ``self._rest_wavelength``,             # e.g. when
-            # radio/xray extends the SSP grid panchromatically
+            # grid, which may differ from ``self._rest_wavelength``,
+            # e.g. when radio/xray extends the SSP grid panchromatically
             # but the orchestrator hasn't been wired to that extension
             # yet). Mismatched shapes would otherwise break boolean
             # masking on (wavelength, sed) pairs in test_panchromatic_*.
@@ -3752,9 +3752,9 @@ class SEDModel:
 
         Parameters
         ----------
-        params: dict
+        params : dict
             Parameter values using public parameter names.
-        wave: array, optional
+        wave : array, optional
             Custom rest-frame wavelength grid [Angstrom] before redshifting.
             If None, uses model default.
 
@@ -3763,9 +3763,9 @@ class SEDModel:
         SEDResult
             NamedTuple with:
 
-            - ``wavelength``: array, shape (n_wave,).
+            - ``wavelength`` : array, shape (n_wave,).
               Observed-frame wavelength [Ångstrom]
-            - ``sed``: array, shape (n_wave,).
+            - ``sed`` : array, shape (n_wave,).
               Observed-frame spectral luminosity density [erg/s/Hz]
 
         Notes
@@ -3802,8 +3802,8 @@ class SEDModel:
 
         See Also
         --------
-        predict_rest_sed: Rest-frame SED (before redshift/IGM).
-        predict_photometry: Filter-integrated observed flux (uses this internally).
+        predict_rest_sed : Rest-frame SED (before redshift/IGM).
+        predict_photometry : Filter-integrated observed flux (uses this internally).
 
         References
         ----------
@@ -3879,7 +3879,7 @@ class SEDModel:
 
         Parameters
         ----------
-        params: dict
+        params : dict
             Parameter values using public parameter names.
 
         Returns
@@ -3887,12 +3887,12 @@ class SEDModel:
         Prediction
             Lazy caching wrapper with property groups:
 
-            - ``.sfh``: SFH-derived quantities (stellar mass, SFR, age, metallicity)
-            - ``.sed``: SED-derived quantities (luminosities, colors, indices)
-            - ``.lines``: Emission line properties (luminosities, fluxes, ratios)
-            - ``.radio``: Radio SED properties (if ``radio=True``)
-            - ``.xray``: X-ray SED properties (if ``xray=True``)
-            - ``.ionizing``: Ionizing photon budget properties
+            - ``.sfh`` : SFH-derived quantities (stellar mass, SFR, age, metallicity)
+            - ``.sed`` : SED-derived quantities (luminosities, colors, indices)
+            - ``.lines`` : Emission line properties (luminosities, fluxes, ratios)
+            - ``.radio`` : Radio SED properties (if ``radio=True``)
+            - ``.xray`` : X-ray SED properties (if ``xray=True``)
+            - ``.ionizing`` : Ionizing photon budget properties
 
         Notes
         -----
@@ -3939,9 +3939,9 @@ class SEDModel:
 
         See Also
         --------
-        predict_properties: JIT/vmap-safe derived quantities for batch.
-        :meth:`Prediction.rest_sed`: Full rest-frame SED for custom analysis.
-        :attr:`Prediction.lines`: Emission-line luminosities.
+        predict_properties : JIT/vmap-safe derived quantities for batch.
+        :meth:`Prediction.rest_sed` : Full rest-frame SED for custom analysis.
+        :attr:`Prediction.lines` : Emission-line luminosities.
         """
         from collections.abc import Mapping
 
@@ -4143,8 +4143,8 @@ class SEDModel:
         uses_xray = bool(self._uses_xray)
         # WHICH X-ray model, not merely whether one is attached. ``_xray_model``
         # was stored at construction but never keyed, so `agn_xray_corona` and
-        # `xray_aird` shared a compiled kernel and the first one built won,         # the same
-        # class as the AGN block selectors (#1450) and the radio
+        # `xray_aird` shared a compiled kernel and the first one built won,
+        # the same class as the AGN block selectors (#1450) and the radio
         # models beside it, which do carry their selector. The collision is
         # invisible in optical/IR photometry because X-ray emission lands at
         # keV, which is why a flux-based sweep reads this axis as "inert"
@@ -4405,8 +4405,8 @@ class SEDModel:
         # the Cue forward is pruned. That is a DIFFERENT compiled graph AND the
         # kernel closes over the grid arrays, so a fast model must not share a
         # slot with the exact model, nor with a fast model over different
-        # ionization axes / grid values (would silently reuse a stale kernel,         # the
-        # color-leak failure mode this signature exists to prevent).
+        # ionization axes / grid values (would silently reuse a stale kernel,
+        # the color-leak failure mode this signature exists to prevent).
         _grid = getattr(self, "_nebular_grid_table", None)
         if _grid is not None:
             nebular_grid_sig = (
@@ -4500,23 +4500,23 @@ class SEDModel:
 
         Parameters
         ----------
-        params: dict
+        params : dict
             Parameter values using public parameter names (e.g.,
             ``sfh_tsnorm_log_total_mass``, ``met_logzsol``, ``redshift``).
             See :class:`Parameters` for canonical names.
-        ssp_data: SSPData | None, keyword-only, optional
+        ssp_data : SSPData | None, keyword-only, optional
             SSP grid to thread in as a traced argument. ``None`` (default) uses
             ``self.ssp_data``, which is correct for every ordinary call. Pass it
             explicitly **only when you wrap this method in your own JAX
             transform**, see the JIT note below.
-        template_data: Any | None, keyword-only, optional
+        template_data : Any | None, keyword-only, optional
             Template arrays (nebular grids, dust IR LUTs, AGN libraries) to thread
             in. ``None`` (default) uses :meth:`_template_data_for_jit`. Same
             rationale as ``ssp_data``.
 
         Returns
         -------
-        flux_density: array, shape (n_filters,)
+        flux_density : array, shape (n_filters,)
             Observed flux densities in erg/s/cm²/Hz (AB system, rest-frame
             reference frame corrected for luminosity distance and (1+z)
             redshift factor).
@@ -4550,8 +4550,8 @@ class SEDModel:
 
         Only the exact wave-grid path pays: under ``approx=WavePrecomp()`` the
         cube is dead code and XLA eliminates it before codegen. And if you are
-        not composing this into a larger jitted program, do not wrap it at all,         the plain
-        call is already compiled and cached.
+        not composing this into a larger jitted program, do not wrap it at all;
+        the plain call is already compiled and cached.
 
         **Approximation accuracy**: Driven by the build-time ``approx=``
         policy. :class:`WavePrecomp` swaps in the SSP×filter LUT, which is
@@ -4573,9 +4573,9 @@ class SEDModel:
 
         See Also
         --------
-        predict: Lazy prediction object for all derived quantities.
-        predict_spectrum: Spectral flux at arbitrary wavelengths.
-        :meth:`Prediction.magnitudes`: AB magnitudes (uses photometry internally).
+        predict : Lazy prediction object for all derived quantities.
+        predict_spectrum : Spectral flux at arbitrary wavelengths.
+        :meth:`Prediction.magnitudes` : AB magnitudes (uses photometry internally).
 
         Examples
         --------
@@ -4641,22 +4641,22 @@ class SEDModel:
 
         Parameters
         ----------
-        params: dict
+        params : dict
             Parameter values using public parameter names.
-        wave_obs: array, optional
+        wave_obs : array, optional
             Observed-frame wavelength grid [Angstrom]. If None, uses:
 
             1. The grid bound at construction from
                ``observation.spectroscopy.wave_obs``
             2. Raises ValueError if no grid is available
 
-        wave_chunk_size: int, optional
+        wave_chunk_size : int, optional
             If specified, split observed-frame wavelength axis into chunks of
             this size and evaluate via ``jax.lax.map`` to reduce per-chunk HLO
             size for XLA compilation. Default None (no chunking, exact behavior).
             For spectroscopy with R~500 at N≥64 galaxies, typical value is 32–64
             to avoid XLA compilation wall-clock.
-        ssp_data, template_data: Any | None, keyword-only, optional
+        ssp_data, template_data : Any | None, keyword-only, optional
             The JIT-threading channel, see :meth:`predict_photometry` for what it
             is for and what baking costs (#1753). Honored on the configured-
             spectroscopy route (the inference hot path, taken when ``wave_obs`` is
@@ -4666,7 +4666,7 @@ class SEDModel:
 
         Returns
         -------
-        flux: array, shape (n_pix,)
+        flux : array, shape (n_pix,)
             Observed spectral flux density [erg/s/cm²/Hz] in the AB system
             at the specified wavelengths.
 
@@ -4723,9 +4723,9 @@ class SEDModel:
 
         See Also
         --------
-        predict_photometry: Filter-integrated flux (simpler, faster).
-        predict: Lazy access to all SED and SFH quantities.
-        predict_photometry: Filter-integrated flux (simpler, faster).
+        predict_photometry : Filter-integrated flux (simpler, faster).
+        predict : Lazy access to all SED and SFH quantities.
+        predict_photometry : Filter-integrated flux (simpler, faster).
         """
         # Fast-nebular guard (#950): the fast path is for photometry + line
         # fluxes only. Shared with every other rest-SED consumer (#1665).
@@ -4755,7 +4755,7 @@ class SEDModel:
                 params, ssp_data=ssp_data, template_data=template_data
             ).spec_fnu
 
-        # No spectroscopy channel but a manually attached grid (``model._wave_obs``),
+        # No spectroscopy channel but a manually attached grid (``model._wave_obs``)
         # evaluate directly so photometry-only models with an ad-hoc grid work
         # regardless of the predict_observables cache state (#707).
         manual_grid = getattr(self, "_wave_obs", None)
@@ -4782,11 +4782,11 @@ class SEDModel:
 
         Parameters
         ----------
-        params: dict
+        params : dict
             Public-name parameter values.
-        wave_obs: array_like, shape (n_pix,)
+        wave_obs : array_like, shape (n_pix,)
             Observed-frame wavelength grid [Angstrom].
-        wave_chunk_size: int, optional
+        wave_chunk_size : int, optional
             Currently advisory on this direct path, the per-pixel projection is
             cheap and LSF convolution couples pixels, so the grid is evaluated in
             one pass. Chunking remains active on the configured-grid orchestrator
@@ -4874,12 +4874,12 @@ class SEDModel:
 
         Parameters
         ----------
-        params: dict
+        params : dict
             Parameter values using public parameter names.
 
         Returns
         -------
-        magnitudes: ndarray, shape (n_filters,)
+        magnitudes : ndarray, shape (n_filters,)
             Observed AB magnitudes [mag].
 
         Notes
@@ -4910,7 +4910,7 @@ class SEDModel:
 
         Parameters
         ----------
-        params: dict
+        params : dict
             Parameter values using public parameter names.
 
         Returns
@@ -5000,28 +5000,28 @@ class SEDModel:
 
         Parameters
         ----------
-        params: dict
+        params : dict
             Parameter values (public names).
-        target_wavelengths: array, shape (n_target,), optional
+        target_wavelengths : array, shape (n_target,), optional
             Rest-frame vacuum wavelengths (Angstrom) of lines to predict.
             Each wavelength is matched to the nearest backend line.
             If None, returns all lines from the nebular backend.
-        tolerance_aa: float or None, default 5.0
+        tolerance_aa : float or None, default 5.0
             Maximum allowed wavelength delta [Angstrom] between a requested
             target and the matched catalog line. Raises ``ValueError`` on
             any miss, listing the offending targets. Pass ``None`` to disable
             (recovers legacy nearest-line-no-matter-what behavior).
-        redden: bool, default True
+        redden : bool, default True
             Apply dust attenuation to the lines (HII regions see birth-cloud +
             diffuse dust; Charlot & Fall 2000). ``True`` returns **observed**
             fluxes comparable to a raw catalog; set ``False`` for **intrinsic**
             (un-reddened) fluxes, e.g. when fitting extinction-corrected
-            catalog line fluxes. (Before 2026-07 this was always intrinsic,             silently
-            omitting the line reddening; ``redden=True`` is the fix.)
+            catalog line fluxes. (Before 2026-07 this was always intrinsic,
+            silently omitting the line reddening; ``redden=True`` is the fix.)
 
         Returns
         -------
-        fluxes: array, shape (n_target,) or (n_all_lines,)
+        fluxes : array, shape (n_target,) or (n_all_lines,)
             Observed line fluxes in erg/s/cm^2.
 
         Raises
@@ -5154,7 +5154,7 @@ class SEDModel:
             else:
                 from tengri.utils.scale import pow10
 
-                # The published catalog is indexed on ``state.derived['line_waves']``,
+                # The published catalog is indexed on ``state.derived['line_waves']``
                 # the backend's FULL line list, while the fast branch above set
                 # ``all_waves`` to ``grid.wavelengths``, which holds only the lines
                 # the observation asked for. Taking the luminosities without the
@@ -5188,8 +5188,8 @@ class SEDModel:
             # within 1.4 Aa and OK; asking for a missing 6300 [OI] line could
             # match Halpha 264 Aa away). ``tolerance_aa=None`` disables.
             # The guard needs concrete values; under a jitted loss
-            # (NUTS/HMC) ``min_deltas`` is a Tracer, so skip it there,             # line matching
-            # is structural (static catalog × static
+            # (NUTS/HMC) ``min_deltas`` is a Tracer, so skip it there;
+            # line matching is structural (static catalog × static
             # targets), and any eager call on the same model (mock
             # generation, prediction, the first Fitter setup) runs the
             # loud check for the identical matching.
@@ -5244,16 +5244,16 @@ class SEDModel:
 
         Parameters
         ----------
-        target_wavelengths: array_like, shape (n_lines,)
+        target_wavelengths : array_like, shape (n_lines,)
             Rest-frame vacuum line wavelengths [Angstrom] the grid tabulates and
             :meth:`predict_line_fluxes` serves.
-        n_grid: int or dict, default 16
+        n_grid : int or dict, default 16
             Grid points per free ionization axis. Denser → tighter interpolation.
             A dict ``{axis_name: n}`` resolves ``met_logzsol`` / ``neb_logU`` /
             ``neb_logZ_gas`` independently; omitted axes take 16 and an
             unrecognized key raises (#1311). Build cost is the product over free
             axes.
-        ranges: dict, optional
+        ranges : dict, optional
             Override ``{param: (lo, hi)}`` grid bounds (defaults to each free
             param's prior support).
 
@@ -5306,8 +5306,8 @@ class SEDModel:
         practice the residual is small (the 0.42 % above is measured across free-SFH
         draws), but it is an approximation, not an identity.
 
-        Validate accuracy with a **dense sweep strictly inside the grid range**,         random
-        parameter draws under-sample structure and report optimistic bounds.
+        Validate accuracy with a **dense sweep strictly inside the grid range**:
+        random parameter draws under-sample structure and report optimistic bounds.
 
         For the photometry channel the model must be built with
         ``approx=WavePrecomp()`` (so the grid can capture the intrinsic
@@ -5395,9 +5395,9 @@ class SEDModel:
 
         Parameters
         ----------
-        params: dict
+        params : dict
             Parameter values (public names).
-        line_ratio_data: LineRatioData
+        line_ratio_data : LineRatioData
             The observed ratio set; supplies ``numerator_waves`` /
             ``denominator_waves`` for matching and the ``log_space`` flag.
 
@@ -5476,14 +5476,14 @@ class SEDModel:
 
         Parameters
         ----------
-        params: dict
+        params : dict
             Parameter values (public names).
-        index_defs: tuple of SpectralIndexDef
+        index_defs : tuple of SpectralIndexDef
             Index definitions to measure.
-        state: ForwardState, optional
+        state : ForwardState, optional
             A pre-computed forward state to measure on (shares one
             ``predict_state`` across channels). Ignored when ``approx=True``.
-        approx: bool, default False
+        approx : bool, default False
             Route through the FeaturePrecomp window-LUT path
             (:meth:`_feature_fast_indices`): contract precomputed SSP window
             integrals with SED-free SFH weights and the model's per-age dust
@@ -5499,7 +5499,7 @@ class SEDModel:
 
             Named for the build-time ``approx=FeaturePrecomp(...)`` it selects.
             Spelled ``fast`` until 2026-08.
-        fast: bool, optional
+        fast : bool, optional
             Deprecated spelling of `approx`. Removed in v1.0.
 
         Returns
@@ -5572,11 +5572,11 @@ class SEDModel:
     def _index_window_precomp(self, index_defs):
         """Build (and memoize) the SSP window-integral LUT for ``index_defs``.
 
-               Depends only on the model's (concrete) SSP grid and the index windows,
-               so it is built once per distinct index set and reused across evaluations,
+        Depends only on the model's (concrete) SSP grid and the index windows,
+        so it is built once per distinct index set and reused across evaluations
         the FeaturePrecomp analog of the WavePrecomp SSP x filter LUT. Built
-               from concrete SSP data (not traced params), and forced to eager evaluation
-               so the cached LUT is a true compile-time constant (see below).
+        from concrete SSP data (not traced params), and forced to eager evaluation
+        so the cached LUT is a true compile-time constant (see below).
         """
         from tengri.observation.spectral_indices import precompute_index_windows
 
@@ -5630,36 +5630,36 @@ class SEDModel:
     def _require_feature_fast_eligible(self, chain, *, caller="predict_spectral_indices"):
         r"""Return the stellar component, or raise if the chain is unsupported.
 
-               The window LUT reconstructs the measurement from ``scale * sum(jw * SSP * T)``,
+        The window LUT reconstructs the measurement from ``scale * sum(jw * SSP * T)``
         the baked-in stellar+dust-screen SED only. Any component that adds
-               rest-frame flux the LUT does not model (additive nebular, AGN, radio, …)
-               would make the fast measurement silently wrong, so those raise. IGM is
-               rest-frame-neutral (observer-frame, applied after redshifting) and is
-               allowed.
+        rest-frame flux the LUT does not model (additive nebular, AGN, radio, …)
+        would make the fast measurement silently wrong, so those raise. IGM is
+        rest-frame-neutral (observer-frame, applied after redshifting) and is
+        allowed.
 
-               Dust *emission* is admitted for line fluxes but not for indices, and the
-               asymmetry is physical rather than a concession. A line flux is measured as
-               the window integral minus a continuum fitted from the sidebands. Dust IR
-               emission contributes a smooth continuum that is common to the window and
-               its sidebands, so it cancels in that subtraction: measured bias on the ten
-               DESI optical lines stays below :math:`10^{-7}` even at
-               :math:`\tau_{\rm bc}=4,\ \tau_{\rm diff}=3`, where the IR term is already
-               3% of the continuum *level*. A break index is a flux **ratio** of two
-               bands, with no such subtraction, so the same smooth offset does not cancel
-               and the exclusion stands.
+        Dust *emission* is admitted for line fluxes but not for indices, and the
+        asymmetry is physical rather than a concession. A line flux is measured as
+        the window integral minus a continuum fitted from the sidebands. Dust IR
+        emission contributes a smooth continuum that is common to the window and
+        its sidebands, so it cancels in that subtraction: measured bias on the ten
+        DESI optical lines stays below :math:`10^{-7}` even at
+        :math:`\tau_{\rm bc}=4,\ \tau_{\rm diff}=3`, where the IR term is already
+        3% of the continuum *level*. A break index is a flux **ratio** of two
+        bands, with no such subtraction, so the same smooth offset does not cancel
+        and the exclusion stands.
 
-               Parameters
-               ----------
-               chain: list
-                   The component chain to validate.
-               caller: str, default "predict_spectral_indices"
-                   Name used in the error messages, and the switch for the dust-emission
-                   rule: ``"measure_line_fluxes"`` admits a dust-IR component.
+        Parameters
+        ----------
+        chain : list
+            The component chain to validate.
+        caller : str, default "predict_spectral_indices"
+            Name used in the error messages, and the switch for the dust-emission
+            rule: ``"measure_line_fluxes"`` admits a dust-IR component.
 
-               Returns
-               -------
-               StellarSEDComponent
-                   The chain's stellar component.
+        Returns
+        -------
+        StellarSEDComponent
+            The chain's stellar component.
         """
         from tengri.components.dust.emission._component_base import EmissionComponent
         from tengri.components.dust.two_component import DustSEDComponent
@@ -5755,10 +5755,10 @@ class SEDModel:
 
         Parameters
         ----------
-        params: dict
+        params : dict
             Parameter values (public names). ``redshift`` sets the luminosity
             distance for the observed flux.
-        line_defs: sequence of LineDef, optional
+        line_defs : sequence of LineDef, optional
             Lines + continuum windows to measure. Defaults to the lines this
             model's ``observation`` declares (``Observation.line_fluxes``), and
             only to :data:`tengri.observation.line_measurement.DESI_LINES` when
@@ -5766,7 +5766,7 @@ class SEDModel:
             unconditionally, so a model built with an eight-line
             :class:`~tengri.observation.LineFluxData` silently returned **five**
             fluxes, for different lines, in a different order.
-        approx: bool, default False
+        approx : bool, default False
             Route through the window-LUT path
             (:func:`~tengri.observation.line_measurement.measure_line_fluxes_from_window_lut`):
             SED-free SFH weights × precomputed SSP line-window integrals × the
@@ -5780,9 +5780,9 @@ class SEDModel:
 
             Named for the build-time ``approx=FeaturePrecomp(...)`` it selects.
             Spelled ``fast`` until 2026-08.
-        state: ForwardState, optional
+        state : ForwardState, optional
             Pre-computed forward state to measure on (exact path only).
-        fast: bool, optional
+        fast : bool, optional
             Deprecated spelling of `approx`. Removed in v1.0.
 
         Returns
@@ -5885,7 +5885,7 @@ class SEDModel:
 
         Parameters
         ----------
-        params: dict
+        params : dict
             Model parameters (from ``spec.sample()`` or a ``Posterior``).
 
         Returns
@@ -5914,7 +5914,7 @@ class SEDModel:
 
         See Also
         --------
-        predict_sfh_quantities: JIT-compatible SFH quantities including sfr_10myr.
+        predict_sfh_quantities : JIT-compatible SFH quantities including sfr_10myr.
 
         References
         ----------
@@ -5979,7 +5979,7 @@ class SEDModel:
 
         Parameters
         ----------
-        params: dict
+        params : dict
             Parameter values.
 
         Returns
@@ -6075,13 +6075,13 @@ class SEDModel:
 
         Parameters
         ----------
-        params: dict
+        params : dict
             Parameter values using public parameter names.
-        names: tuple[str] or list[str], optional
+        names : tuple[str] or list[str], optional
             Property names to compute. If None, computes all available
             properties. Each name must be in :attr:`available_properties`,
             else :exc:`KeyError` is raised.
-        ssp_data, template_data: Any | None, keyword-only, optional
+        ssp_data, template_data : Any | None, keyword-only, optional
             The JIT-threading channel, forwarded to :meth:`predict_state`. Pass
             these only when wrapping this method in your own ``jax.jit`` /
             ``vmap`` / ``grad``, where closure-captured grids would otherwise
@@ -6148,8 +6148,8 @@ class SEDModel:
 
         See Also
         --------
-        available_properties: List of properties available in this model.
-        predict: Lazy Prediction object with attribute-access syntax.
+        available_properties : List of properties available in this model.
+        predict : Lazy Prediction object with attribute-access syntax.
         """
         self._ensure_property_catalog()
 
@@ -6239,7 +6239,7 @@ class SEDModel:
 
         Parameters
         ----------
-        params: dict
+        params : dict
             Parameter values using public parameter names.
 
         Returns
@@ -6247,14 +6247,14 @@ class SEDModel:
         SFHQuantities
             NamedTuple with fields:
 
-            - ``stellar_mass``: float. Total stellar mass formed [M☉]
-            - ``stellar_mass_surviving``: float. Mass in living stars + remnants [M☉],
+            - ``stellar_mass`` : float. Total stellar mass formed [M☉]
+            - ``stellar_mass_surviving`` : float. Mass in living stars + remnants [M☉],
               or NaN if SSP mass-remaining tables not loaded.
-            - ``sfr_100myr``: float. SFR time-averaged over last 100 Myr [M☉/yr]
-            - ``sfr_10myr``: float. SFR time-averaged over last 10 Myr [M☉/yr]
-            - ``ssfr``: float. Specific SFR (SFR/M_surv or SFR/M_formed) [yr⁻¹]
-            - ``mass_weighted_age_gyr``: float. Mass-weighted age [Gyr]
-            - ``mass_weighted_metallicity``: float. Mass-weighted log₁₀(Z/Z☉)
+            - ``sfr_100myr`` : float. SFR time-averaged over last 100 Myr [M☉/yr]
+            - ``sfr_10myr`` : float. SFR time-averaged over last 10 Myr [M☉/yr]
+            - ``ssfr`` : float. Specific SFR (SFR/M_surv or SFR/M_formed) [yr⁻¹]
+            - ``mass_weighted_age_gyr`` : float. Mass-weighted age [Gyr]
+            - ``mass_weighted_metallicity`` : float. Mass-weighted log₁₀(Z/Z☉)
               [dex], the same convention ``met_logzsol`` is set in. The old
               "or absolute log₁₀(Z) depending on metallicity mode" hedge was
               wrong twice over: the value was absolute in *every* mode, and
@@ -6308,9 +6308,9 @@ class SEDModel:
 
         See Also
         --------
-        predict: Lazy prediction for single-galaxy exploration (non-JIT).
-        predict_sfh: SFH on linear-time grid for visualization.
-        predict_sed_quantities: JIT-compatible SED quantities.
+        predict : Lazy prediction for single-galaxy exploration (non-JIT).
+        predict_sfh : SFH on linear-time grid for visualization.
+        predict_sed_quantities : JIT-compatible SED quantities.
         """
         from tengri.forward.prediction import SFHQuantities
         from tengri.utils.sed_quantities import (
@@ -6442,7 +6442,7 @@ class SEDModel:
 
         Parameters
         ----------
-        params: dict
+        params : dict
             Parameter values using public parameter names.
 
         Returns
@@ -6450,30 +6450,30 @@ class SEDModel:
         SEDQuantities
             NamedTuple with fields:
 
-            - ``l_bol``: float. Bolometric luminosity [L☉]
-            - ``l_tir``: float. Total infrared (8–1000 μm) luminosity [L☉]
-            - ``l_dust_absorbed``: float. Dust-absorbed luminosity [L☉]
+            - ``l_bol`` : float. Bolometric luminosity [L☉]
+            - ``l_tir`` : float. Total infrared (8–1000 μm) luminosity [L☉]
+            - ``l_dust_absorbed`` : float. Dust-absorbed luminosity [L☉]
               (intrinsic − attenuated), or NaN if intrinsic SED unavailable.
-            - ``irx``: float. Infrared excess := L_TIR / L_UV(1600 Å).
+            - ``irx`` : float. Infrared excess := L_TIR / L_UV(1600 Å).
               Common probe of dust obscuration (Dale et al. 2001).
-            - ``uv_slope_beta``: float. UV slope (power-law index) in
+            - ``uv_slope_beta`` : float. UV slope (power-law index) in
               f_λ ∝ λ^β for 1200–2600 Å.
-            - ``dn4000``: float. D_n(4000) break ratio: flux average
+            - ``dn4000`` : float. D_n(4000) break ratio: flux average
               at 3750–3950 Å / 4050–4250 Å. Indicator of stellar age.
-            - ``balmer_break``: float. Balmer break: flux ratio
+            - ``balmer_break`` : float. Balmer break: flux ratio
               ~3700 Å / ~4000 Å. Old stellar population signature.
-            - ``m_uv``: float. Absolute magnitude at 1500 Å
+            - ``m_uv`` : float. Absolute magnitude at 1500 Å
               (M_1500, standard reionization-era indicator).
-            - ``fuv_flux``: float. Flux at 1500 Å [erg/s/cm²]
-            - ``nuv_flux``: float. Flux at 2300 Å [erg/s/cm²]
-            - ``fuv_flux_intrinsic``: float. FUV flux, dust-free
+            - ``fuv_flux`` : float. Flux at 1500 Å [erg/s/cm²]
+            - ``nuv_flux`` : float. Flux at 2300 Å [erg/s/cm²]
+            - ``fuv_flux_intrinsic`` : float. FUV flux, dust-free
               (intrinsic SED). NaN if unavailable.
-            - ``nuv_flux_intrinsic``: float. NUV flux, dust-free. NaN
+            - ``nuv_flux_intrinsic`` : float. NUV flux, dust-free. NaN
               if unavailable.
-            - ``rest_uv_color``: float. Rest-frame UV color (f_1500 − f_2300).
-            - ``luminosity_weighted_age_gyr``: float. Luminosity-weighted
+            - ``rest_uv_color`` : float. Rest-frame UV color (f_1500 − f_2300).
+            - ``luminosity_weighted_age_gyr`` : float. Luminosity-weighted
               age [Gyr] (∫L_λ age dλ / ∫L_λ dλ).
-            - ``luminosity_weighted_metallicity``: float. Luminosity-weighted
+            - ``luminosity_weighted_metallicity`` : float. Luminosity-weighted
               log₁₀(Z/Z☉) or absolute log₁₀(Z).
 
         Notes
@@ -6530,9 +6530,9 @@ class SEDModel:
 
         See Also
         --------
-        predict: Lazy prediction for single-galaxy exploration.
-        predict_sfh_quantities: JIT-compatible SFH quantities.
-        predict_rest_sed: Full rest-frame SED (for custom analysis).
+        predict : Lazy prediction for single-galaxy exploration.
+        predict_sfh_quantities : JIT-compatible SFH quantities.
+        predict_rest_sed : Full rest-frame SED (for custom analysis).
         """
         # Dispatch to the orchestrator-backed bridge. Same semantics shift
         # PR 5a applied to ``predict_rest_sed``: the orchestrator's
@@ -6673,13 +6673,13 @@ class SEDModel:
 
         Parameters
         ----------
-        params: Mapping
+        params : Mapping
             Free-parameter dict (same shape as
             :meth:`predict_state`).
 
         Returns
         -------
-        flux_density: ndarray, shape (n_filters,)
+        flux_density : ndarray, shape (n_filters,)
             Observed flux densities [erg/s/cm²/Hz].
 
         Raises
@@ -6724,17 +6724,17 @@ class SEDModel:
 
         Parameters
         ----------
-        params: Mapping
+        params : Mapping
             Free-parameter dict (same shape as
             :meth:`predict_state`).
-        wave_obs: array_like, shape (n_pix,), optional
+        wave_obs : array_like, shape (n_pix,), optional
             Observed-frame wavelength grid [Angstrom]. If ``None``,
             falls back to the precomputed grid (`self._wave_obs` or
             `self._precomputed.spectroscopy.wave_obs_pixels`).
 
         Returns
         -------
-        flux: ndarray, shape (n_pix,)
+        flux : ndarray, shape (n_pix,)
             Observed-frame spectral flux density [erg/s/cm^2/Hz].
 
         Raises
@@ -6751,8 +6751,8 @@ class SEDModel:
         **The flux calibration IS applied here** (since #1086). This routes through
         :meth:`Observation.predict`, which passes ``cal_c1..cN`` into
         :func:`~tengri.observation.spectrum.project_spectrum`. This note previously
-        said the opposite, that callers should compose the calibration on top,         which would
-        now apply the polynomial twice.
+        said the opposite, that callers should compose the calibration on top,
+        which would now apply the polynomial twice.
         """
         # (legacy dead ``self._precomputed.spectroscopy`` tier removed, #620)
         if wave_obs is None and hasattr(self, "_wave_obs"):
@@ -6984,9 +6984,9 @@ class SEDModel:
 
         Parameters
         ----------
-        state: ForwardState
+        state : ForwardState
             Incoming state (empty for SED as the head of the chain).
-        params: Mapping
+        params : Mapping
             Free parameter values.
 
         Returns
@@ -7092,27 +7092,27 @@ class SEDModel:
 
         Parameters
         ----------
-        params: Mapping
+        params : Mapping
             Free parameters keyed by canonical name (``sfh_*``,
             ``met_*``, ``dust_*``, ``agn_*``, ``radio_*``, ``xray_*``,
             ``igm_*``, ``redshift``).
-        fixed_values: Mapping | None, optional
+        fixed_values : Mapping | None, optional
             Fixed parameter values. When provided, overrides
             ``self.spec.get_fixed_values()``. Used by :meth:`predict_observables_jit`
             to thread per-galaxy fixed values as JIT runtime inputs.
-        ssp_data: Any | None, optional
+        ssp_data : Any | None, optional
             SSP grid. When provided, passed to components that need it as a
             JIT runtime input instead of using closure capture.
             Defaults to ``None``, which causes components to use their
             internal ``self.ssp_data``.
-        template_data: Any | None, optional
+        template_data : Any | None, optional
             Nebular backend grids and weights. When provided, passed to
             components as JIT runtime inputs instead of closure capture.
             Defaults to ``None``, which causes components to use their
             internal template data.
-        observables_only: bool, keyword-only, optional
-            Declare that the caller reads only the *projected observables*,             photometry
-            and spectra off the LUT, and never the SED arrays or
+        observables_only : bool, keyword-only, optional
+            Declare that the caller reads only the *projected observables*
+            (photometry and spectra off the LUT) and never the SED arrays or
             ``derived`` publications. Components may then take publication
             shortcuts: the per-Q_H nebular grid zeroes ``sed_nebular`` because
             skipping the Cue forward is the whole saving (#1596).
@@ -7234,7 +7234,7 @@ class SEDModel:
 
         Parameters
         ----------
-        params: Mapping
+        params : Mapping
             Free-parameter dict.
 
         Returns
@@ -7291,7 +7291,7 @@ class SEDModel:
 
         Parameters
         ----------
-        params: Mapping
+        params : Mapping
             Free-parameter dict.
 
         Returns
@@ -7317,8 +7317,8 @@ class SEDModel:
 
         See Also
         --------
-        predict_observables: un-JIT'd version (debug / one-shot).
-        compile_signature: structural fingerprint controlling cache reuse.
+        predict_observables : un-JIT'd version (debug / one-shot).
+        compile_signature : structural fingerprint controlling cache reuse.
 
         2026-05-20: ``self.ssp_data`` is now passed as a JIT
         runtime input rather than closure-captured. The SSP grid becomes a
@@ -7463,9 +7463,9 @@ class SEDModel:
 
         Parameters
         ----------
-        ssp_data: Any | None
+        ssp_data : Any | None
             Caller-supplied SSP grid, or ``None`` to use ``self.ssp_data``.
-        template_data: Any | None
+        template_data : Any | None
             Caller-supplied template arrays, or ``None`` to use
             :meth:`_template_data_for_jit`.
 
@@ -7911,9 +7911,9 @@ class SEDModel:
 
         Parameters
         ----------
-        chain: sequence
+        chain : sequence
             The cached component chain.
-        name: str
+        name : str
             Component name to look for (``"xray"``, ``"radio"``).
 
         Returns
@@ -8037,7 +8037,7 @@ class SEDModel:
 
         Parameters
         ----------
-        *laws: str or None
+        *laws : str or None
             Attenuation-law registry keys in play. ``None`` entries are
             skipped. Defaults to the diffuse law alone, which is the single
             screen's only law.
@@ -8468,7 +8468,7 @@ class SEDModel:
 
         Parameters
         ----------
-        params_batch: dict of arrays
+        params_batch : dict of arrays
             Each value has shape (N, ...) with leading batch dimension.
 
         Returns
@@ -8504,7 +8504,7 @@ class SEDModel:
 
         Parameters
         ----------
-        params_batch: dict of arrays
+        params_batch : dict of arrays
             Each value has leading batch dimension.
 
         Returns
@@ -8553,24 +8553,24 @@ class SEDModel:
 
         Parameters
         ----------
-        ssp: str or SSPData
+        ssp : str or SSPData
             Path to SSP HDF5 file, or a pre-loaded ``SSPData`` instance.
-        sfh: str
+        sfh : str
             SFH family name, e.g. ``"tsnorm"``, ``"dpl"``, ``"dpl+field"``.
-        dust: str
+        dust : str
             Dust attenuation law. ``"charlot_fall"`` (default), ``"calzetti"``, etc.
-        nebular: str or None
+        nebular : str or None
             Nebular emission backend. ``"baked_in"``, ``"cloudy_grid"``, ``"cb19"``,
             ``"mappings"``, ``"cue"``, ``"shock"``, or None.
-        agn: str or None
+        agn : str or None
             AGN model. None (disabled) or any AGN model name.
-        redshift: float or str
+        redshift : float or str
             Fixed redshift (float), or ``"free"`` to add a free redshift parameter.
-        filters: list of str, optional
+        filters : list of str, optional
             Filter names for photometry, e.g. ``["sdss_u", "sdss_g", "sdss_r"]``.
-        wave_obs: array, optional
+        wave_obs : array, optional
             Observed-frame wavelength array for spectroscopy.
-        priors: dict, optional
+        priors : dict, optional
             Parameter priors. Keys may be short names (``"log_total_mass"``),
             universal short names (``"logzsol"``), or full prefixed names.
             Short names are expanded automatically.
@@ -8675,7 +8675,7 @@ class SEDModel:
 
         Parameters
         ----------
-        ssp_data: SSPData
+        ssp_data : SSPData
             Pre-loaded SSP grid (from :func:`load_ssp_data`).
         sfh : dict, optional
             Star-formation history. Keys: ``'type'`` (required; e.g., ``'dpl'``,
@@ -8744,7 +8744,7 @@ class SEDModel:
             With ``approx=WavePrecomp()``, a free redshift adds ~9 s to the
             build (for IGM z-table folding); a fixed z adds ~0.4 s. See
             :doc:`/performance/compilation`.
-        filters: list of str, optional
+        filters : list of str, optional
             Filter names; forwarded to ``__init__``.
         observation : Observation, optional
             Observation object (photometry, spectroscopy); forwarded to
@@ -8790,7 +8790,7 @@ class SEDModel:
 
         See Also
         --------
-        tengri.parse_groups: The underlying nested-dict parser that returns
+        tengri.parse_groups : The underlying nested-dict parser that returns
             a :class:`Parameters` spec.
         tengri.recipes : Pre-built configuration dicts for common cases
             (star-forming galaxies, AGN, high-z, etc.).
@@ -9054,9 +9054,9 @@ class SEDModel:
 
         Parameters
         ----------
-        n: int
+        n : int
             Number of prior samples. Default 500.
-        seed: int
+        seed : int
             Random seed. Default 42.
 
         Returns
@@ -9098,32 +9098,32 @@ class SEDModel:
             result = forward.fit(data, noise, method=method, ...)
 
         For full control, a custom likelihood, per-fit parameter overrides,
-        iterative refinement, or anything with a non-trivial output shape,         build the
-        :class:`ForwardModel` yourself and call
+        iterative refinement, or anything with a non-trivial output shape,
+        build the :class:`ForwardModel` yourself and call
         :meth:`ForwardModel.fit`, the canonical inference surface. For many
         independent galaxies, use :class:`~tengri.Catalog`.
 
         Parameters
         ----------
-        data: array, optional
+        data : array, optional
             Observed flux array (photometry or spectroscopy). For joint fitting,
             leave as ``None`` and use ``photometry=`` / ``spectrum=`` instead.
-        noise: array, optional
+        noise : array, optional
             1-sigma uncertainties matching ``data``.
-        method: str
+        method : str
             Inference method. Default ``"vi"`` (geoVI variational inference).
             Any canonical name accepted by ``Fitter.run()`` works here:
             ``"vi"``, ``"vi_linear"``, ``"mcmc"``, ``"mcmc_raytrace"``,
             ``"mcmc_nuts"``, ``"map"``, ``"laplace"``, ``"auto"``, etc.
-        data_type: str or None
+        data_type : str or None
             ``"photometry"``, ``"spectroscopy"``, or ``"joint"``.
             When ``None`` (default), inferred from the model's ``observation``
             or from whether ``photometry=`` / ``spectrum=`` kwargs are used.
-        photometry: tuple of (flux, noise), optional
+        photometry : tuple of (flux, noise), optional
             Photometric data for joint fitting. Pass alongside ``spectrum=``.
-        spectrum: tuple of (flux, noise), optional
+        spectrum : tuple of (flux, noise), optional
             Spectroscopic data for joint fitting. Pass alongside ``photometry=``.
-        init: str or None
+        init : str or None
             Initialization strategy. ``"map"`` runs MAP optimization first, then
             uses the result to warm-start the requested method. ``None`` (default)
             uses the method's own default initialization.
@@ -9183,23 +9183,23 @@ class SEDModel:
 
         Parameters
         ----------
-        catalog: DataFrame, Table, or list of dict
+        catalog : DataFrame, Table, or list of dict
             Input catalog.
-        flux_cols: list of str
+        flux_cols : list of str
             Column names for per-band flux values.
-        err_cols: list of str
+        err_cols : list of str
             Column names for per-band 1-sigma uncertainties.
-        redshift_col: str or None
+        redshift_col : str or None
             If provided, use this column as per-row redshift.
-        method: str
+        method : str
             Inference method. Default ``"vi"``.
-        n_workers: int
+        n_workers : int
             Currently ignored (reserved for multiprocessing). Default 1.
-        verbose: bool
+        verbose : bool
             Print per-galaxy progress. Default True.
-        output_dir: str or None
+        output_dir : str or None
             If provided, save each Posterior to ``{output_dir}/{id}.h5``.
-        id_col: str or None
+        id_col : str or None
             Column name for galaxy identifiers in checkpoint filenames.
         **kwargs
             Forwarded to Fitter.run().
@@ -9252,11 +9252,11 @@ class SEDModel:
 
         Parameters
         ----------
-        observations_list: list
+        observations_list : list
             Each element is a (flux, noise) tuple or dict with flux_obs/noise keys.
-        method: str
+        method : str
             Hierarchical inference method. Default ``"vi"``.
-        population_prior: dict or None
+        population_prior : dict or None
             Hyperpriors on shared PSD parameters.
         **kwargs
             Forwarded to PopulationFitter.run().
@@ -9292,11 +9292,11 @@ class SEDModel:
 
         Parameters
         ----------
-        params: dict
+        params : dict
             Parameter values.
-        snr: float
+        snr : float
             Signal-to-noise ratio. Default 20.0.
-        key: PRNGKey, optional
+        key : PRNGKey, optional
             Random key for noise. If None, returns noiseless.
 
         Returns
@@ -9324,13 +9324,13 @@ class SEDModel:
 
         Parameters
         ----------
-        params: dict
+        params : dict
             Parameter values.
-        wave_obs: array
+        wave_obs : array
             Observed wavelength grid [Angstrom].
-        snr: float
+        snr : float
             Signal-to-noise ratio per pixel. Default 30.0.
-        key: PRNGKey, optional
+        key : PRNGKey, optional
             Random key for noise. If None, returns noiseless.
 
         Returns
@@ -9357,11 +9357,11 @@ class SEDModel:
 
         Parameters
         ----------
-        params_batch: dict of arrays
+        params_batch : dict of arrays
             Each value has leading batch dimension.
-        snr: float
+        snr : float
             Signal-to-noise ratio. Default 20.0.
-        key: PRNGKey, optional
+        key : PRNGKey, optional
             Random key for noise. If None, returns noiseless.
 
         Returns
@@ -9392,22 +9392,22 @@ class SEDModel:
 
         Parameters
         ----------
-        posterior: Posterior
+        posterior : Posterior
             Inference results with samples (if available) or params.
-        true_params: dict, optional
+        true_params : dict, optional
             True parameter values (if known) to overlay on plot.
-        ax: matplotlib.axes.Axes, optional
+        ax : matplotlib.axes.Axes, optional
             Axes object to plot on. If None, creates new figure.
-        n_draws: int
+        n_draws : int
             Number of posterior samples to show as thin lines. Default 50.
-        color: str
+        color : str
             Color for posterior lines. Default "C0" (first color in style).
-        label: str
+        label : str
             Label for posterior. Default "Posterior".
 
         Returns
         -------
-        ax: matplotlib.axes.Axes
+        ax : matplotlib.axes.Axes
             The matplotlib Axes object with the plot.
 
         Notes
@@ -9505,7 +9505,7 @@ class SEDModel:
 
         Parameters
         ----------
-        z: float or jnp.ndarray
+        z : float or jnp.ndarray
             Redshift.
 
         Returns

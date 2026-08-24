@@ -49,7 +49,7 @@ class SFHBeforeBigBangWarning(UserWarning):
 
     Attributes
     ----------
-    truncated_fraction: float or None
+    truncated_fraction : float or None
         Fraction of formed stellar mass placed before the Big Bang
         [dimensionless], exact. ``None`` on an instance not raised by the
         forward path. The message renders this as ``{:.0%}``, so a consumer
@@ -133,7 +133,7 @@ def _resolve_age_kernel(config) -> str:
 
     Parameters
     ----------
-    config: StellarSEDComponentConfig
+    config : StellarSEDComponentConfig
         The component config; reads ``age_kernel`` and ``field``.
 
     Returns
@@ -253,16 +253,16 @@ def _apply_gp_field(sfr_history, params, n_grid, log_age_grid, centering: float 
 
     Parameters
     ----------
-    sfr_history: ndarray, shape (n_grid,)
+    sfr_history : ndarray, shape (n_grid,)
         Smooth (mean) SFR on the lookback grid [Msun/yr].
-    params: Mapping
+    params : Mapping
         Free-parameter dict carrying ``sfh_field_psd_sigma`` [dex],
         ``sfh_field_psd_tau_myr`` [Myr], and the latent ``sfh_field_xi``.
-    n_grid: int
+    n_grid : int
         SFH grid resolution (the field latent dimension).
-    log_age_grid: ndarray, shape (n_grid,)
+    log_age_grid : ndarray, shape (n_grid,)
         ``log10(age/yr)`` grid the field lives on.
-    centering: float, optional
+    centering : float, optional
         Parameterization of the field latent, in ``[0, 1]`` [dimensionless].
         ``1.0`` (default) is the non-centered map ``s = L(sigma, tau) xi``;
         ``a < 1`` moves amplitude dependence out of it (#1355). Must be paired
@@ -333,9 +333,9 @@ def _refine_sfh_table_ages(ssp_ages_yr, factor: int = INTEGRAND_FACTOR_PARAMETRI
 
     Parameters
     ----------
-    ssp_ages_yr: ndarray, shape (n_ssp,)
+    ssp_ages_yr : ndarray, shape (n_ssp,)
         Ascending SSP template ages [yr].
-    factor: int, optional
+    factor : int, optional
         Sub-sampling factor between adjacent SSP ages (static; default 16).
 
     Returns
@@ -441,22 +441,22 @@ def _extend_integrand_to_history(fine_age_yr, tab_lbt_yr, ssp_ages_yr, factor: i
 
     Parameters
     ----------
-    fine_age_yr: ndarray, shape (n_fine,)
+    fine_age_yr : ndarray, shape (n_fine,)
         Dense ascending lookback-age grid [yr] from :func:`_refine_sfh_table_ages`.
-    tab_lbt_yr: ndarray, shape (n_t,)
+    tab_lbt_yr : ndarray, shape (n_t,)
         The tabulated history's own lookback ages [yr]; may be traced. Already
         capped at cosmic time by :func:`_tabulated_sfh`, so the tail never runs
         past the Big Bang.
-    ssp_ages_yr: ndarray, shape (n_age,)
+    ssp_ages_yr : ndarray, shape (n_age,)
         Ascending SSP template ages [yr].
-    factor: int, optional
+    factor : int, optional
         Number of tail samples appended (static; default 16).
 
     Returns
     -------
-    age_yr: ndarray, shape (n_fine + factor,)
+    age_yr : ndarray, shape (n_fine + factor,)
         The integrand grid with the tail appended, ascending.
-    top_yr: ndarray, shape ()
+    top_yr : ndarray, shape ()
         The tail's upper limit [yr]: the clip bound for any edge knots injected
         afterwards, so the table's own nodes out there stay representable.
 
@@ -482,14 +482,14 @@ def _warn_if_history_exceeds_ssp_grid(age_yr, sfr, ssp_ages_yr, tab_lbt_yr, cons
 
     Parameters
     ----------
-    age_yr, sfr: ndarray, shape (n,)
+    age_yr, sfr : ndarray, shape (n,)
         The extended integrand: lookback ages [yr] and SFR [Msun/yr].
-    ssp_ages_yr: ndarray, shape (n_age,)
+    ssp_ages_yr : ndarray, shape (n_age,)
         Ascending SSP template ages [yr].
-    tab_lbt_yr: ndarray or None
+    tab_lbt_yr : ndarray or None
         The tabulated history's lookback nodes, or None for a non-tabulated SFH
         (which cannot trigger this: see :class:`SFHBeyondSSPGridWarning`).
-    conserved: bool, optional
+    conserved : bool, optional
         Whether the caller's kernel accumulates that mass onto the oldest
         template (the CIC path, default) or drops it (``age_kernel="dsps"``,
         whose histogram kernel has no bin out there). Only the wording differs;
@@ -574,22 +574,22 @@ def _cic_integrand(ssp_ages_yr, sfh_fn, sfh_kwargs, sfh_spec_fn, tab_lbt_yr):
 
     Parameters
     ----------
-    ssp_ages_yr: ndarray, shape (n_age,)
+    ssp_ages_yr : ndarray, shape (n_age,)
         Ascending SSP template ages [yr].
-    sfh_fn: callable
+    sfh_fn : callable
         ``sfh_fn(age_yr, **sfh_kwargs) -> SFR [Msun/yr]``.
-    sfh_kwargs: dict
+    sfh_kwargs : dict
         Keyword arguments for ``sfh_fn``.
-    sfh_spec_fn: callable
+    sfh_spec_fn : callable
         The registry's SFH function, for bin-edge discovery on binned families.
-    tab_lbt_yr: ndarray or None
+    tab_lbt_yr : ndarray or None
         A tabulated history's own lookback nodes [yr], else None.
 
     Returns
     -------
-    age_yr: ndarray, shape (n,)
+    age_yr : ndarray, shape (n,)
         Ascending dense lookback-age grid [yr].
-    sfr: ndarray, shape (n,)
+    sfr : ndarray, shape (n,)
         SFR on that grid [Msun/yr].
     """
     # Resolution is chosen per family, because their integrands are not the same
@@ -649,7 +649,7 @@ def _youngest_bin_lookback_multiplier(ssp_lg_age_gyr):
 
     Parameters
     ----------
-    ssp_lg_age_gyr: array_like, shape (n_age,)
+    ssp_lg_age_gyr : array_like, shape (n_age,)
         log10(SSP template age / Gyr), ascending. A leading ``-inf`` flags an
         ``age = 0`` template.
 
@@ -692,9 +692,9 @@ def _mass_scale_lnu(per_msun_lsun, total_mass):
 
     Parameters
     ----------
-    per_msun_lsun: array_like
+    per_msun_lsun : array_like
         Per-solar-mass weighted SSP luminosity. [Lsun/(Hz*Msun)]
-    total_mass: array_like, scalar
+    total_mass : array_like, scalar
         Formed stellar mass. [Msun]
 
     Returns
@@ -780,7 +780,7 @@ def _flux_weighted_node(num, den):
 
     Parameters
     ----------
-    num, den: array_like
+    num, den : array_like
         Numerator ``Σ(w·λ·φ)`` and denominator ``Σ(w·φ)`` of the flux-weighted
         mean wavelength. ``den`` is pre-floored away from exact zero by the
         caller.
@@ -836,23 +836,23 @@ def _age_weights_cic(age_yr, sfr, ssp_ages_yr, t_obs_gyr):
 
     Parameters
     ----------
-    age_yr: ndarray, shape (n,)
+    age_yr : ndarray, shape (n,)
         Ascending lookback ages [yr] of the SFH integrand (the dense grid
         from :func:`_refine_sfh_table_ages`, plus any edge knots).
-    sfr: ndarray, shape (n,)
+    sfr : ndarray, shape (n,)
         Star-formation rate at ``age_yr`` [Msun/yr].
-    ssp_ages_yr: ndarray, shape (n_age,)
+    ssp_ages_yr : ndarray, shape (n_age,)
         Ascending SSP template ages [yr].
-    t_obs_gyr: float
+    t_obs_gyr : float
         Cosmic age at the observation redshift [Gyr]; mass at lookback ages
         older than this (pre-Big-Bang) is dropped, matching
         :func:`_build_dsps_sfh_table`'s invalid-bin zeroing.
 
     Returns
     -------
-    age_weights: ndarray, shape (n_age,)
+    age_weights : ndarray, shape (n_age,)
         Normalized (sum = 1) SSP age weights.
-    total_mass: ndarray, shape ()
+    total_mass : ndarray, shape ()
         Trapezoidal mass formed on ``age_yr`` [Msun], excluding the
         prepended ``[0, age_yr[0]]`` lookback segment; that sliver
         *redistributes* mass into the youngest bin (the #538 young-knot
@@ -919,11 +919,11 @@ def _lgmet_weights(log_z, lgmet_scatter, ssp_lgmet):
 
     Parameters
     ----------
-    log_z: array_like, scalar
+    log_z : array_like, scalar
         Absolute ``log10(Z)`` of the parcel. [dex]
-    lgmet_scatter: array_like, scalar
+    lgmet_scatter : array_like, scalar
         Width of the lognormal MDF. [dex]
-    ssp_lgmet: array_like, shape (n_met,)
+    ssp_lgmet : array_like, shape (n_met,)
         SSP metallicity axis, absolute ``log10(Z)``. [dex]
 
     Returns
@@ -979,11 +979,11 @@ def _lgmet_weights_parcels(log_z, lgmet_scatter, ssp_lgmet):
 
     Parameters
     ----------
-    log_z: array_like, shape (n_parcel,)
+    log_z : array_like, shape (n_parcel,)
         Absolute ``log10(Z)`` of each parcel. [dex]
-    lgmet_scatter: array_like, scalar
+    lgmet_scatter : array_like, scalar
         Width of the lognormal MDF. [dex]
-    ssp_lgmet: array_like, shape (n_met,)
+    ssp_lgmet : array_like, shape (n_met,)
         SSP metallicity axis, absolute ``log10(Z)``. [dex]
 
     Returns
@@ -1076,18 +1076,18 @@ def _joint_weights_cic_met_table(
     ----------
     age_yr, sfr, ssp_ages_yr, t_obs_gyr
         As in :func:`_age_weights_cic`.
-    lgmet_on_ssp_ages: ndarray, shape (n_age,)
+    lgmet_on_ssp_ages : ndarray, shape (n_age,)
         log10(Z) absolute at each SSP age (ascending lookback).
-    lgmet_scatter: float
+    lgmet_scatter : float
         Lognormal MDF scatter [dex].
-    ssp_lgmet: ndarray, shape (n_met,)
+    ssp_lgmet : ndarray, shape (n_met,)
         SSP grid metallicities, log10(Z) absolute.
 
     Returns
     -------
-    joint_weights: ndarray, shape (n_met, n_age)
+    joint_weights : ndarray, shape (n_met, n_age)
         Normalized (sum = 1) joint weights.
-    total_mass: ndarray, shape ()
+    total_mass : ndarray, shape ()
         The #538-contract trapezoidal mass [Msun].
 
     Notes
@@ -1130,20 +1130,20 @@ def _tabulated_sfh(params, t_obs_gyr):
 
     Parameters
     ----------
-    params: Mapping
+    params : Mapping
         Must contain ``sfh_t_gyr`` (cosmic time [Gyr]) and ``sfh_sfr`` [Msun/yr].
-    t_obs_gyr: ndarray, shape ()
+    t_obs_gyr : ndarray, shape ()
         Cosmic time at the observed redshift [Gyr].
 
     Returns
     -------
-    sfh_fn: callable
+    sfh_fn : callable
         ``f(t_lookback_yr, **kwargs) -> SFR [Msun/yr]``, matching the registry
         SFH-callable signature so every downstream consumer is unchanged.
-    lbt_yr: ndarray, shape (n_t,)
+    lbt_yr : ndarray, shape (n_t,)
         Table nodes as ascending lookback time [yr]. Doubles as the exact-knot
         edge set for :func:`_inject_edge_knots`.
-    order: ndarray, shape (n_t,)
+    order : ndarray, shape (n_t,)
         The descending-cosmic-time argsort, so a caller can reorder a companion
         array (e.g. ``met_history``) onto the same nodes.
 
@@ -1187,27 +1187,27 @@ def _tabulated_lgmet_on_ssp_ages(params, config, ssp_lg_age_gyr, tab_lbt_yr, tab
 
     Parameters
     ----------
-    params: Mapping
+    params : Mapping
         May contain ``met_history``, log10(Z/Zsun) at the SFH table's nodes.
-    config: StellarSEDComponentConfig
+    config : StellarSEDComponentConfig
         Supplies the optional build-time ``met_table_log_age_yr`` /
         ``met_table_log_z_abs``.
-    ssp_lg_age_gyr: ndarray, shape (n_age,)
+    ssp_lg_age_gyr : ndarray, shape (n_age,)
         SSP grid log10(age/Gyr).
-    tab_lbt_yr: ndarray, shape (n_t,) or None
+    tab_lbt_yr : ndarray, shape (n_t,) or None
         Ascending lookback nodes from :func:`_tabulated_sfh`. Required for the
         runtime path: the Z(t) nodes have no time axis of their own.
-    tab_order: ndarray, shape (n_t,) or None
+    tab_order : ndarray, shape (n_t,) or None
         The matching argsort, applied to ``met_history`` so Z and SFR stay paired.
 
     Returns
     -------
-    lgmet_on_ssp_ages: ndarray, shape (n_age,)
+    lgmet_on_ssp_ages : ndarray, shape (n_age,)
         log10(Z) **absolute** at each SSP age.
-    met_log_age_yr: ndarray, shape (n_t,)
+    met_log_age_yr : ndarray, shape (n_t,)
         The resolved table's age axis: returned so ``apply`` can reuse the very
         same table for its SFH-grid diagnostic instead of re-resolving it.
-    met_log_z_abs: ndarray, shape (n_t,)
+    met_log_z_abs : ndarray, shape (n_t,)
         The resolved table's log10(Z) absolute values.
 
     Raises
@@ -1261,11 +1261,11 @@ def _inject_edge_knots(fine_age_yr, edges_yr, lo_yr, hi_yr):
 
     Parameters
     ----------
-    fine_age_yr: ndarray, shape (n_fine,)
+    fine_age_yr : ndarray, shape (n_fine,)
         Dense ascending lookback-age grid [yr].
-    edges_yr: ndarray, shape (n_edges,)
+    edges_yr : ndarray, shape (n_edges,)
         SFH bin edges in lookback time [yr] (may be traced).
-    lo_yr, hi_yr: float
+    lo_yr, hi_yr : float
         SSP age span bounds [yr] to clamp knots into.
 
     Returns
@@ -1288,24 +1288,24 @@ def _build_dsps_sfh_table(age_yr, sfr, t_obs_gyr, add_young_knot=False):
 
     Parameters
     ----------
-    age_yr: ndarray, shape (n,)
+    age_yr : ndarray, shape (n,)
         Ascending lookback ages [yr].
-    sfr: ndarray, shape (n,)
+    sfr : ndarray, shape (n,)
         Star-formation rate at ``age_yr`` [Msun/yr].
-    t_obs_gyr: float
+    t_obs_gyr : float
         Cosmic age at the observation redshift [Gyr].
-    add_young_knot: bool, optional
+    add_young_knot : bool, optional
         Prepend a lookback-0 knot so DSPS integrates the youngest SSP bin down
         to the observation time (#538). Default ``False``.
 
     Returns
     -------
-    t_cosmic_asc: ndarray, shape (n,) or (n+1,)
+    t_cosmic_asc : ndarray, shape (n,) or (n+1,)
         Strictly-increasing cosmic time [Gyr]. Length ``n+1`` when
         ``add_young_knot`` is set.
-    sfr_asc: ndarray, shape (n,) or (n+1,)
+    sfr_asc : ndarray, shape (n,) or (n+1,)
         SFR aligned to ``t_cosmic_asc`` [Msun/yr] (pre-Big-Bang bins zeroed).
-    total_mass: float
+    total_mass : float
         Trapezoidal mass formed [Msun], EXCLUDING the young-boundary knot's
         ``[0, age0]`` segment so the knot redistributes; not inflates: mass.
     """
@@ -1419,13 +1419,13 @@ def _integrate_nion_log10(
 
     Parameters
     ----------
-    sed_lnu: ndarray, shape (n_wave,)
+    sed_lnu : ndarray, shape (n_wave,)
         Rest-frame stellar :math:`L_\nu` [erg/s/Hz] (pre-dust intrinsic SED).
-    wave: ndarray, shape (n_wave,)
+    wave : ndarray, shape (n_wave,)
         Wavelength grid [Angstrom]; must span the Lyman limit (a few points
         above 911.76 A suffice: the boundary bin needs the first non-ionizing
         point).
-    log10_scale: float, optional
+    log10_scale : float, optional
         Log10-scale offset [dex] to apply to the result. Default 0.0 (no scaling).
         Used for mass-scaling: ``log10_scale = log10(total_mass * LSUN_ERG_PER_S)``.
 
@@ -1480,9 +1480,9 @@ def _integrate_nion(sed_lnu: jnp.ndarray, wave: jnp.ndarray) -> jnp.ndarray:
 
     Parameters
     ----------
-    sed_lnu: ndarray, shape (n_wave,)
+    sed_lnu : ndarray, shape (n_wave,)
         Rest-frame stellar :math:`L_\nu` [erg/s/Hz] (pre-dust intrinsic SED).
-    wave: ndarray, shape (n_wave,)
+    wave : ndarray, shape (n_wave,)
         Wavelength grid [Angstrom]; must span the Lyman limit (a few points
         above 911.76 A suffice: the boundary bin needs the first non-ionizing
         point).
@@ -1506,13 +1506,13 @@ class StellarSEDComponentConfig(SEDComponentConfig):
 
     Parameters
     ----------
-    name: str
+    name : str
         Diagnostic identifier.
-    sfh_model: str
+    sfh_model : str
         Registered SFH name. Currently supports ``"tsnorm"``, ``"dpl"``,
         ``"continuity"``, ``"dirichlet"``, ``"dense_basis"``, and several
         parametric/bursty variants.
-    field: bool
+    field : bool
         If ``True``, applies stochastic log-normal GP modulation to the mean SFH.
         Default ``False`` (no field). **CIC/DSPS coupling** (issue #1470): when
         ``field=True``, the integration kernel is always ``"dsps"`` regardless of
@@ -1523,7 +1523,7 @@ class StellarSEDComponentConfig(SEDComponentConfig):
     n_grid : int
         Lookback-time grid resolution for SFH evaluation and the published
         ``state.derived["sfh_grid_lbt_yr"]`` array.
-    metallicity_model: str
+    metallicity_model : str
         Metallicity evolution model. Currently supports ``"delta"`` (constant Z),
         ``"ramp"`` (linear Z(t)), ``"two_step"`` (step function), ``"bins"``
         (piecewise-constant per age bin), ``"table"`` (user-provided), and
@@ -1581,9 +1581,9 @@ class StellarSEDComponentConfig(SEDComponentConfig):
         so there is no dense integrand to cloud-in-cell (#964). Asking for
         ``age_kernel="cic"`` together with ``field=True`` raises rather than
         silently returning DSPS weights.
-    use_alpha_grid: bool
+    use_alpha_grid : bool
         Whether the SSP grid carries an α/Fe axis. Currently ``False``.
-    lgmet_scatter: float
+    lgmet_scatter : float
         Gaussian scatter in log10(Z) (dex) for the DSPS triweight kernel.
         Default 0.2 dex matches Prospector / DSPS convention.
     """
@@ -1895,14 +1895,14 @@ class StellarSEDComponent:
 
         Parameters
         ----------
-        approx: Mapping[str, bool] | None
+        approx : Mapping[str, bool] | None
             Approximation flags. Reads ``"wave_precomp"`` and
             ``"spectrum_precomp"``.
-        filters: tuple of (filter_wave_obs, filter_trans) pairs, optional
+        filters : tuple of (filter_wave_obs, filter_trans) pairs, optional
             Required when ``wave_precomp=True``. Tuple shape:
             ((fw_0, ft_0), (fw_1, ft_1), ...) where each pair is a pair of
             1-D arrays. The filter_wave is observed-frame.
-        redshift_spec: dict[str, Any] | None
+        redshift_spec : dict[str, Any] | None
             Redshift specification for precomputation. If None or
             mode="fixed", builds a fixed-z LUT.
 
@@ -1910,7 +1910,7 @@ class StellarSEDComponent:
             - mode="free", z_min=float, z_max=float, n_z=int: builds
               ztable via precompute_photometry_ztable with the given grid.
 
-        spec_wave_obs: array_like, shape (n_pix,), optional
+        spec_wave_obs : array_like, shape (n_pix,), optional
             Observed-frame spectrum pixel wavelengths [Angstrom]. Required
             when ``spectrum_precomp=True``.
         """
@@ -2092,13 +2092,13 @@ class StellarSEDComponent:
 
         Parameters
         ----------
-        state: ForwardState
+        state : ForwardState
             Initial pipeline state. Carries ``wave`` (rest-frame Å); the
             component reads ``redshift`` from ``params`` (allowlist).
-        params: mapping
+        params : mapping
             Receives ``sfh_*``, ``met_*``, ``chem_*`` keys plus the bare
             ``redshift`` from :data:`BARE_NAME_ALLOWLIST`.
-        ssp_data: Any | None, optional
+        ssp_data : Any | None, optional
             SSP data passed as a JIT runtime input.
             When provided, uses this instead of ``self.ssp_data``. Enables
             SSP arrays to be ``Parameter`` ops in compiled code rather than
@@ -3259,18 +3259,18 @@ class StellarSEDComponent:
 
         Parameters
         ----------
-        params: Mapping
+        params : Mapping
             Free-parameter dict (same shape as :meth:`apply`).
-        ssp_data: SSPData, optional
+        ssp_data : SSPData, optional
             Override for the model's SSP grid.
 
         Returns
         -------
-        joint_weights: ndarray, shape (n_met, n_age)
+        joint_weights : ndarray, shape (n_met, n_age)
             Normalized (met, age) CSP weight distribution (sums to 1).
-        total_mass: ndarray, shape ()
+        total_mass : ndarray, shape ()
             Total formed stellar mass [Msun] (coarse, pre-young-knot basis).
-        ssp_ages_yr: ndarray, shape (n_age,)
+        ssp_ages_yr : ndarray, shape (n_age,)
             SSP lookback ages [yr].
 
         Raises
@@ -3494,9 +3494,9 @@ class StellarSEDComponent:
 
         Parameters
         ----------
-        params: Mapping
+        params : Mapping
             Free-parameter dict (same shape as :meth:`apply`).
-        ssp_data: SSPData, optional
+        ssp_data : SSPData, optional
             Override for the model's SSP grid.
 
         Returns
@@ -3555,9 +3555,9 @@ class StellarSEDComponent:
 
         Parameters
         ----------
-        params: Mapping
+        params : Mapping
             Free-parameter dict (same shape as :meth:`apply`).
-        ssp_data: SSPData, optional
+        ssp_data : SSPData, optional
             Override for the model's SSP grid.
 
         Returns

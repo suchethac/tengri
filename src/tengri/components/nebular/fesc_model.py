@@ -32,13 +32,13 @@ def compute_uv_slope(
 
     Parameters
     ----------
-    wavelength_aa: array, shape (n_wave,)
+    wavelength_aa : array, shape (n_wave,)
         Wavelength grid in Å (rest-frame, increasing).
-    l_nu: array, shape (n_wave,)
+    l_nu : array, shape (n_wave,)
         Spectral luminosity density. [erg/s/Hz] (units cancel in slope fit)
-    lam_lo: float, optional
+    lam_lo : float, optional
         Lower edge of fitting window. Default: 1500 Å. [Å]
-    lam_hi: float, optional
+    lam_hi : float, optional
         Upper edge of fitting window. Default: 2500 Å. [Å]
 
     Returns
@@ -120,24 +120,24 @@ def fesc_chisholm2022(
 
     Parameters
     ----------
-    beta_uv: float
+    beta_uv : float
         UV spectral slope. [dimensionless]
         Typical range [−3, 0]: −3 = very blue (young, metal-poor);
         0 = red (old, dust-attenuation-dominated).
-    log_ssfr: float, optional
+    log_ssfr : float, optional
         Specific star formation rate. [log10(yr^{-1})]
         Defined as log10(SFR / M_star). Typical range [−11, −8].
         Default: −9.0 (quiescent galaxies).
-    fesc_0: float, optional
+    fesc_0 : float, optional
         Normalization: f_esc at pivot point (β = −2, log sSFR = ssfr_0).
         Default: 0.15 (Chisholm+ calibration on local LyC survey).
-    a1: float, optional
+    a1 : float, optional
         UV slope coefficient. Default: −1.22 (Chisholm+).
         Negative a1 means bluer UV → higher f_esc (physically expected).
-    a2: float, optional
+    a2 : float, optional
         sSFR coefficient. Default: 0.0 (no sSFR dependence by default).
         Set to non-zero value to enable sSFR-dependent f_esc.
-    ssfr_0: float, optional
+    ssfr_0 : float, optional
         Reference sSFR for normalization. [log10(yr^{-1})]
         Default: −9.0 (matches log_ssfr default).
 

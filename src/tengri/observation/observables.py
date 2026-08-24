@@ -30,7 +30,7 @@ def build_observables_class(observation) -> type:
 
     Parameters
     ----------
-    observation: Observation
+    observation : Observation
         Configured observation. Used only to read capability flags
         (``can_do_photometry``, ``can_do_spectroscopy``,
         ``has_line_fluxes``, ``has_spectral_indices``); the data

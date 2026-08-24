@@ -40,23 +40,23 @@ class SpectralIndexDef:
 
     Parameters
     ----------
-    name: str
+    name : str
         Human-readable name (e.g. ``"Dn4000"``).
-    index_type: str
+    index_type : str
         ``"EW"`` (equivalent width), ``"break"`` (flux ratio), or
         ``"slope"`` (power-law spectral slope β over a window, e.g. the
         UV continuum slope, Calzetti+1994).
-    continuum: tuple of tuple
+    continuum : tuple of tuple
         Continuum/sideband windows as ``((lo1, hi1), (lo2, hi2), ...)``.
         Rest-frame wavelengths in Angstrom.
         For EW indices: blue and red pseudo-continuum sidebands.
         For break indices: exactly two windows (numerator, denominator).
         For slope indices: unused (pass ``()``); the fit range is ``feature``.
-    feature: tuple of float or None
+    feature : tuple of float or None
         Feature window ``(lo, hi)`` in Angstrom. Required for EW indices
         (the absorption feature) and slope indices (the fit range), None
         for break indices.
-    units: str
+    units : str
         ``"AA"`` for Angstrom (default) or ``"mag"`` for magnitude.
 
     Examples
@@ -245,16 +245,16 @@ class CompositeIndexDef:
 
     Parameters
     ----------
-    name: str
+    name : str
         Human-readable name, e.g. ``"[MgFe]'"`` or ``"<Fe>"``.
-    components: tuple of SpectralIndexDef
+    components : tuple of SpectralIndexDef
         The atomic indices this composite is built from.
-    combiner: Callable
+    combiner : Callable
         Function that takes one argument per atomic index (in the same
         order as ``components``) and returns the composite value. Must be
         JAX-compatible (operate on ``jnp`` arrays) so the composite stays
         differentiable through ``measure_index_jax``.
-    units: str
+    units : str
         Units of the composite value, for display only. Default ``"AA"``.
 
     Examples
@@ -340,12 +340,12 @@ def measure_index_jax(
 
     Parameters
     ----------
-    wave_rest: ndarray, shape (n_pix,)
+    wave_rest : ndarray, shape (n_pix,)
         Rest-frame wavelengths [Angstrom]. Must cover all windows defined
         in ``index_def``.
-    flux: ndarray, shape (n_pix,)
+    flux : ndarray, shape (n_pix,)
         Flux density (any consistent units, only ratios matter).
-    index_def: SpectralIndexDef or CompositeIndexDef
+    index_def : SpectralIndexDef or CompositeIndexDef
         Atomic index (EW or break) or a composite that combines several
         atomic measurements via a user-provided function.
 
@@ -498,22 +498,22 @@ class IndexWindowPrecomputation:
 
     Attributes
     ----------
-    window_integrals: ndarray, shape (n_met, n_age, n_window)
+    window_integrals : ndarray, shape (n_met, n_age, n_window)
         :math:`\\sum_\\lambda \\mathrm{SSP}_{ij}(\\lambda)\\,W_w(\\lambda)`, the
         soft-window integral of each SSP spectrum, in the SSP flux units
         [erg/s/Hz/Msun · Å] summed on the SSP wave grid.
-    window_norms: ndarray, shape (n_window,)
+    window_norms : ndarray, shape (n_window,)
         :math:`\\sum_\\lambda W_w(\\lambda)`, window normalization, so
         ``mean = integral / norm`` matches :func:`_window_mean_flux`.
-    window_centers: ndarray, shape (n_window,)
+    window_centers : ndarray, shape (n_window,)
         Window mid-wavelength ``0.5*(lo+hi)`` [Å], for per-window dust.
-    index_slots: tuple
+    index_slots : tuple
         Per index, ``(kind, payload, meta)`` describing which window slots the
         index consumes and how to combine them, see
         :func:`measure_indices_from_windows`. ``kind`` is ``"break"``,
         ``"EW"``, or ``"slope"`` (the last carries ``payload=None`` and is a
         sentinel that the caller must measure exactly).
-    names: tuple of str
+    names : tuple of str
         Index names in order, for diagnostics / alignment with observed data.
     """
 
@@ -544,20 +544,20 @@ def soft_window_ssp_integral(ssp_wave, ssp_flux, lo, hi, edge_width: float = 1.0
 
     Parameters
     ----------
-    ssp_wave: ndarray, shape (n_wave,)
+    ssp_wave : ndarray, shape (n_wave,)
         SSP wavelength grid [Å].
-    ssp_flux: ndarray, shape (n_met, n_age, n_wave)
+    ssp_flux : ndarray, shape (n_met, n_age, n_wave)
         SSP spectra [erg/s/Hz/Msun].
-    lo, hi: float
+    lo, hi : float
         Window bounds [Å].
-    edge_width: float, default 1.0
+    edge_width : float, default 1.0
         Sigmoid edge width [Å].
 
     Returns
     -------
-    integral: ndarray, shape (n_met, n_age)
+    integral : ndarray, shape (n_met, n_age)
         :math:`\\sum_\\lambda \\mathrm{SSP}(\\lambda)\\,W(\\lambda)`.
-    norm: ndarray, shape ()
+    norm : ndarray, shape ()
         :math:`\\sum_\\lambda W(\\lambda)`.
     """
     w = jax.nn.sigmoid((ssp_wave - lo) / edge_width) * jax.nn.sigmoid((hi - ssp_wave) / edge_width)
@@ -575,14 +575,14 @@ def precompute_index_windows(
 
     Parameters
     ----------
-    ssp_wave: ndarray, shape (n_wave,)
+    ssp_wave : ndarray, shape (n_wave,)
         Rest-frame SSP wavelength grid [Å].
-    ssp_flux: ndarray, shape (n_met, n_age, n_wave)
+    ssp_flux : ndarray, shape (n_met, n_age, n_wave)
         SSP spectra [erg/s/Hz/Msun].
-    index_defs: sequence of SpectralIndexDef
+    index_defs : sequence of SpectralIndexDef
         The indices to precompute. Slope indices are recorded as sentinels
         (no window integrals) so the caller falls back to the exact path.
-    edge_width: float, default 1.0
+    edge_width : float, default 1.0
         Sigmoid edge width [Å], MUST match :func:`_window_mean_flux` so the
         LUT and exact paths agree.
 
@@ -656,17 +656,17 @@ def measure_indices_from_windows(
 
     Parameters
     ----------
-    window_means: ndarray, shape (n_window,)
+    window_means : ndarray, shape (n_window,)
         SFH-weighted (and optionally dust-attenuated) mean flux in each unique
         window: ``Σ_ij w_ij window_integrals_ijw / window_norm_w``.
-    precomp: IndexWindowPrecomputation
+    precomp : IndexWindowPrecomputation
         The build-time window recipe.
 
     Returns
     -------
     ndarray, shape (n_index,)
-        Index values in ``precomp.names`` order. Slope slots return ``nan``,         the caller
-        must fill them from the exact path.
+        Index values in ``precomp.names`` order. Slope slots return ``nan``;
+        the caller must fill them from the exact path.
 
     Notes
     -----
@@ -726,15 +726,15 @@ def measure_indices_from_window_lut(
 
     Parameters
     ----------
-    joint_weights: ndarray, shape (n_met, n_age)
+    joint_weights : ndarray, shape (n_met, n_age)
         Published SFH × metallicity CSP weights (sum to 1).
-    scale: float
+    scale : float
         ``stellar_mass_scale`` = total_mass · L_sun [erg/s per (Msun weight)];
         cancels for break/EW ratios but keeps the window means physical.
-    transmission_at_centers: ndarray, shape (n_age, n_window)
+    transmission_at_centers : ndarray, shape (n_age, n_window)
         Two-component transmission evaluated at each window center per SSP age
         (``two_component_dust(window_centers, ssp_ages, tau_bc, tau_diff, ...)``).
-    precomp: IndexWindowPrecomputation
+    precomp : IndexWindowPrecomputation
         Per-(met, age) window integrals from :func:`precompute_index_windows`.
 
     Returns
@@ -772,11 +772,11 @@ class SpectralIndexData:
 
     Parameters
     ----------
-    index_defs: tuple of SpectralIndexDef
+    index_defs : tuple of SpectralIndexDef
         Index definitions.
-    values: jnp.ndarray
+    values : jnp.ndarray
         Observed index values, shape ``(n_indices,)``.
-    errors: jnp.ndarray
+    errors : jnp.ndarray
         1-sigma uncertainties, shape ``(n_indices,)``.
 
     Returns
@@ -786,11 +786,11 @@ class SpectralIndexData:
 
     Attributes
     ----------
-    index_defs: tuple[SpectralIndexDef, ...]
+    index_defs : tuple[SpectralIndexDef, ...]
         Index definitions.
-    values: ndarray, shape (n_indices,)
+    values : ndarray, shape (n_indices,)
         Observed index values [dimensionless].
-    errors: ndarray, shape (n_indices,)
+    errors : ndarray, shape (n_indices,)
         1-sigma measurement uncertainties [dimensionless].
 
     Notes
@@ -905,12 +905,12 @@ class SpectralIndexData:
 
         Parameters
         ----------
-        names: list[str]
+        names : list[str]
             Index names from ``STANDARD_INDICES`` (e.g. ``["Dn4000", "HdA"]``).
-        values: list[float]
+        values : list[float]
             Observed index values. Units depend on index type: [Angstrom] for
             EW indices, [dimensionless] for break indices.
-        errors: list[float]
+        errors : list[float]
             1-sigma uncertainties (same units as ``values``).
 
         Returns
@@ -948,7 +948,7 @@ class SpectralIndexData:
 
         Parameters
         ----------
-        model_values: ndarray, shape (n_indices,)
+        model_values : ndarray, shape (n_indices,)
             Model-predicted index values (same units as ``values``).
 
         Returns
@@ -971,7 +971,7 @@ class SpectralIndexData:
 
         Parameters
         ----------
-        model_values: ndarray, shape (n_indices,)
+        model_values : ndarray, shape (n_indices,)
             Model-predicted index values (same units as ``values``).
 
         Returns

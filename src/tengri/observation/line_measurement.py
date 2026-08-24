@@ -57,14 +57,14 @@ class LineDef:
 
     Parameters
     ----------
-    name: str
+    name : str
         Line identifier (e.g. ``"Halpha"``).
-    wavelength: float
+    wavelength : float
         Rest-frame **vacuum** line center [Å] (for labeling / data alignment).
-    continuum: tuple of (float, float)
+    continuum : tuple of (float, float)
         ``((blue_lo, blue_hi), (red_lo, red_hi))``, the two pseudo-continuum
         side-bands [Å], used for a linear continuum under the line.
-    feature: tuple of float
+    feature : tuple of float
         ``(lo, hi)``, the feature window [Å] over which the continuum-subtracted
         emission is integrated. Its center is the effective :math:`\\lambda_c`.
     """
@@ -94,13 +94,13 @@ def _line_flux_from_means(feat_mean, cont_mean, lam_c, feat_width, log10_four_pi
 
     Parameters
     ----------
-    feat_mean, cont_mean: ndarray, shape ()
+    feat_mean, cont_mean : ndarray, shape ()
         Feature-window and continuum mean :math:`L_\nu` [erg/s/Hz].
-    lam_c: float
+    lam_c : float
         Feature-window center :math:`\lambda_c` [Å].
-    feat_width: float
+    feat_width : float
         Feature-window width :math:`\Delta\lambda` [Å].
-    log10_four_pi_dl2: ndarray, shape ()
+    log10_four_pi_dl2 : ndarray, shape ()
         :math:`\log_{10}(4\pi d_L^2)` [dex], from
         :func:`tengri.utils.scale.log10_four_pi_dl2`.
 
@@ -147,14 +147,14 @@ def measure_line_flux_jax(wave, sed_lnu, line_def, log10_four_pi_dl2):
 
     Parameters
     ----------
-    wave: ndarray, shape (n_wave,)
+    wave : ndarray, shape (n_wave,)
         Rest-frame wavelength grid [Å].
-    sed_lnu: ndarray, shape (n_wave,)
+    sed_lnu : ndarray, shape (n_wave,)
         Rest-frame spectral luminosity :math:`L_\nu` [erg/s/Hz] (dust-attenuated
         total SED, e.g. ``predict_rest_sed(...).sed``).
-    line_def: LineDef
+    line_def : LineDef
         The line + continuum window definition.
-    log10_four_pi_dl2: ndarray, shape ()
+    log10_four_pi_dl2 : ndarray, shape ()
         :math:`\log_{10}(4\pi d_L^2)` [dex] at the evaluation redshift, from
         :func:`tengri.utils.scale.log10_four_pi_dl2`. The linear divisor is
         ``inf`` in float32 at every distance (#1859).
@@ -190,15 +190,15 @@ class LineWindowPrecomputation:
 
     Attributes
     ----------
-    window_integrals: ndarray, shape (n_met, n_age, n_window)
+    window_integrals : ndarray, shape (n_met, n_age, n_window)
         Soft-window SSP integrals [erg/s/Hz/Msun · Å], deduplicated windows.
-    window_norms: ndarray, shape (n_window,)
+    window_norms : ndarray, shape (n_window,)
         Window normalizations (``mean = integral / norm``).
-    window_centers: ndarray, shape (n_window,)
+    window_centers : ndarray, shape (n_window,)
         Window mid-wavelengths [Å] (for per-window dust + the continuum slope).
-    line_slots: tuple
+    line_slots : tuple
         Per line, ``(name, blue_slot, red_slot, feat_slot, lambda_c, width)``.
-    names: tuple of str
+    names : tuple of str
         Line names in order.
     """
 
@@ -214,13 +214,13 @@ def precompute_line_windows(ssp_wave, ssp_flux, line_defs, edge_width: float = 1
 
     Parameters
     ----------
-    ssp_wave: ndarray, shape (n_wave,)
+    ssp_wave : ndarray, shape (n_wave,)
         SSP wavelength grid [Å].
-    ssp_flux: ndarray, shape (n_met, n_age, n_wave)
+    ssp_flux : ndarray, shape (n_met, n_age, n_wave)
         SSP spectra [erg/s/Hz/Msun].
-    line_defs: sequence of LineDef
+    line_defs : sequence of LineDef
         Lines to precompute.
-    edge_width: float, default 1.0
+    edge_width : float, default 1.0
         Sigmoid edge width [Å], MUST match :func:`_window_mean_flux`.
 
     Returns
@@ -284,15 +284,15 @@ def measure_line_fluxes_from_window_lut(
 
     Parameters
     ----------
-    joint_weights: ndarray, shape (n_met, n_age)
+    joint_weights : ndarray, shape (n_met, n_age)
         Published SFH × metallicity CSP weights (sum to 1).
-    scale: ndarray, shape ()
+    scale : ndarray, shape ()
         ``stellar_mass_scale`` = ``total_mass · L_sun`` [erg/s per Msun weight].
-    transmission: ndarray, shape (n_age, n_window)
+    transmission : ndarray, shape (n_age, n_window)
         Two-component transmission at each window center per SSP age.
-    precomp: LineWindowPrecomputation
+    precomp : LineWindowPrecomputation
         Per-(met, age) window integrals + per-line window recipe.
-    log10_four_pi_dl2: ndarray, shape ()
+    log10_four_pi_dl2 : ndarray, shape ()
         :math:`\log_{10}(4\pi d_L^2)` [dex] at the evaluation redshift, from
         :func:`tengri.utils.scale.log10_four_pi_dl2`.
 
@@ -333,13 +333,13 @@ def default_line_defs(
 
     Parameters
     ----------
-    wavelengths: array_like, shape (n_line,)
+    wavelengths : array_like, shape (n_line,)
         Rest-frame vacuum line centers [Å].
-    names: sequence of str, optional
+    names : sequence of str, optional
         Per-line names; defaults to ``line_<λ>``.
-    feature_halfwidth: float, default 8.0
+    feature_halfwidth : float, default 8.0
         Half-width of the feature window [Å].
-    cont_gap, cont_width: float, default 17.0, 20.0
+    cont_gap, cont_width : float, default 17.0, 20.0
         The continuum side-bands sit at ``[λ ± (gap+width), λ ± gap]`` [Å].
 
     Returns
@@ -391,9 +391,9 @@ def resolve_line_defs(line_defs, observation=None):
 
     Parameters
     ----------
-    line_defs: sequence of LineDef or None
+    line_defs : sequence of LineDef or None
         Explicit windows. Returned as a tuple when given.
-    observation: Observation or None, optional
+    observation : Observation or None, optional
         The model's observation. When it declares ``line_fluxes``, its line
         identities and wavelengths are used.
 

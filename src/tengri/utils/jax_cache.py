@@ -185,10 +185,10 @@ def enable_persistent_cache(
 
     Parameters
     ----------
-    cache_dir: str or PathLike or None
+    cache_dir : str or PathLike or None
         Cache directory. If ``None``, resolves via
         :func:`_default_cache_dir` (env var → XDG → ``~/.cache``).
-    min_compile_time_secs: float
+    min_compile_time_secs : float
         Minimum compile time before a cached entry is persisted to disk.
         Default 0.05 captures the per-filter ``compute_flux_density``
         micro-kernels (~150–250 ms each) and other orchestrator-component
@@ -200,7 +200,7 @@ def enable_persistent_cache(
         Threshold history: 5.0 (≤ 2026-05-04, missed orchestrator),
         0.5 (≤ 2026-05-22, missed per-filter micro-compiles),
         0.05 (current).
-    max_size_bytes: int or None
+    max_size_bytes : int or None
         If provided and supported by the installed JAX, sets
         ``jax_compilation_cache_max_size`` so JAX evicts old entries
         once the cache exceeds this size. Older JAX versions silently
@@ -304,7 +304,7 @@ def orphaned_entries(cache_dir: str | os.PathLike[str] | None = None) -> list[st
 
     Parameters
     ----------
-    cache_dir: str or PathLike or None
+    cache_dir : str or PathLike or None
         Directory to inspect. Defaults to the currently enabled cache, falling
         back to :func:`_default_cache_dir`.
 
@@ -350,7 +350,7 @@ def repair_orphaned_atimes(cache_dir: str | os.PathLike[str] | None = None) -> i
 
     Parameters
     ----------
-    cache_dir: str or PathLike or None
+    cache_dir : str or PathLike or None
         Directory to repair. Defaults to the currently enabled cache, falling
         back to :func:`_default_cache_dir`.
 
@@ -409,7 +409,7 @@ def cache_size_bytes(cache_dir: str | os.PathLike[str] | None = None) -> int:
 
     Parameters
     ----------
-    cache_dir: str or PathLike or None
+    cache_dir : str or PathLike or None
         Directory to measure. Defaults to the currently enabled cache,
         falling back to :func:`_default_cache_dir`.
 
@@ -441,7 +441,7 @@ def clear_cache(cache_dir: str | os.PathLike[str] | None = None) -> int:
 
     Parameters
     ----------
-    cache_dir: str or PathLike or None
+    cache_dir : str or PathLike or None
         Directory to clear. Defaults to the currently enabled cache,
         falling back to :func:`_default_cache_dir`.
 

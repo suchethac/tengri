@@ -147,31 +147,31 @@ class SubNetWeights(NamedTuple):
 
     Parameters
     ----------
-    W: tuple of ndarray
+    W : tuple of ndarray
         Weight matrices per layer, shape (in, out) for each layer.
-    b: tuple of ndarray
+    b : tuple of ndarray
         Bias vectors per layer, shape (out,) for each layer.
-    alphas: tuple of ndarray
+    alphas : tuple of ndarray
         Learned Swish activation scale parameters (hidden layers only).
-    betas: tuple of ndarray
+    betas : tuple of ndarray
         Learned Swish activation offset parameters (hidden layers only).
-    param_shift: ndarray, shape (n_params,)
+    param_shift : ndarray, shape (n_params,)
         Input normalization offset [dimensionless].
-    param_scale: ndarray, shape (n_params,)
+    param_scale : ndarray, shape (n_params,)
         Input normalization scale [dimensionless].
-    pca_shift: ndarray, shape (n_pcas,)
+    pca_shift : ndarray, shape (n_pcas,)
         PCA centering offset [dimensionless].
-    pca_scale: ndarray, shape (n_pcas,)
+    pca_scale : ndarray, shape (n_pcas,)
         PCA scaling factor [dimensionless].
-    log_spec_shift: ndarray, shape (n_wavelengths,)
+    log_spec_shift : ndarray, shape (n_wavelengths,)
         Log-spectrum shift [dimensionless].
-    log_spec_scale: ndarray, shape (n_wavelengths,)
+    log_spec_scale : ndarray, shape (n_wavelengths,)
         Log-spectrum scale [dimensionless].
-    pca_components: ndarray, shape (n_pcas, n_wavelengths)
+    pca_components : ndarray, shape (n_pcas, n_wavelengths)
         PCA basis vectors (sklearn convention).
-    pca_mean: ndarray, shape (n_wavelengths,)
+    pca_mean : ndarray, shape (n_wavelengths,)
         PCA mean spectrum [log10 Lsun/Hz/Q_H].
-    n_layers: int
+    n_layers : int
         Total number of layers (including output layer).
 
     Notes
@@ -206,53 +206,53 @@ class CueWeights(NamedTuple):
 
     Parameters
     ----------
-    line_nets: tuple of SubNetWeights
+    line_nets : tuple of SubNetWeights
         16 sub-networks, one per emission line group.
-    cont_net: SubNetWeights
+    cont_net : SubNetWeights
         Single continuum sub-network.
-    line_names: tuple of str
+    line_names : tuple of str
         Line group names corresponding to ``line_nets``.
-    line_wav_selections: tuple of ndarray
+    line_wav_selections : tuple of ndarray
         Wavelength selection masks per sub-network.
-    sorted_line_wav: ndarray, shape (n_lines_total,)
+    sorted_line_wav : ndarray, shape (n_lines_total,)
         Sorted emission line wavelengths [Angstrom].
-    nn_line_wav: ndarray, shape (n_nn_lines,)
+    nn_line_wav : ndarray, shape (n_nn_lines,)
         Concatenated NN output wavelengths [Angstrom].
-    line_old_idx: ndarray
+    line_old_idx : ndarray
         Indices of CLOUDY/FSPS-matched (old) lines.
-    cont_wav: ndarray, shape (n_wave_cont,)
+    cont_wav : ndarray, shape (n_wave_cont,)
         Continuum wavelength grid [Angstrom].
-    batched_param_shifts: ndarray, shape (16, 12)
+    batched_param_shifts : ndarray, shape (16, 12)
         Stacked input normalization offsets.
-    batched_param_scales: ndarray, shape (16, 12)
+    batched_param_scales : ndarray, shape (16, 12)
         Stacked input normalization scales.
-    batched_W_hidden: tuple of ndarray
+    batched_W_hidden : tuple of ndarray
         Stacked weight matrices for hidden layers.
-    batched_b_hidden: tuple of ndarray
+    batched_b_hidden : tuple of ndarray
         Stacked bias vectors for hidden layers.
-    batched_alpha_hidden: tuple of ndarray
+    batched_alpha_hidden : tuple of ndarray
         Stacked Swish activation scales (hidden layers).
-    batched_beta_hidden: tuple of ndarray
+    batched_beta_hidden : tuple of ndarray
         Stacked Swish activation offsets (hidden layers).
-    batched_W_out: ndarray, shape (16, 256, max_pcas)
+    batched_W_out : ndarray, shape (16, 256, max_pcas)
         Stacked output weights (zero-padded).
-    batched_b_out: ndarray, shape (16, max_pcas)
+    batched_b_out : ndarray, shape (16, max_pcas)
         Stacked output biases.
-    batched_pca_scale: ndarray, shape (16, max_pcas)
+    batched_pca_scale : ndarray, shape (16, max_pcas)
         Stacked PCA scaling factors.
-    batched_pca_shift: ndarray, shape (16, max_pcas)
+    batched_pca_shift : ndarray, shape (16, max_pcas)
         Stacked PCA centering offsets.
-    batched_pca_comp: ndarray, shape (16, max_pcas, max_lines)
+    batched_pca_comp : ndarray, shape (16, max_pcas, max_lines)
         Stacked PCA basis vectors (zero-padded).
-    batched_pca_mean: ndarray, shape (16, max_lines)
+    batched_pca_mean : ndarray, shape (16, max_lines)
         Stacked PCA means (zero-padded).
-    batched_spec_scale: ndarray, shape (16, max_lines)
+    batched_spec_scale : ndarray, shape (16, max_lines)
         Stacked log-spectrum scaling factors (zero-padded).
-    batched_spec_shift: ndarray, shape (16, max_lines)
+    batched_spec_shift : ndarray, shape (16, max_lines)
         Stacked log-spectrum shifts (zero-padded).
-    batched_n_lines: tuple of int
+    batched_n_lines : tuple of int
         Actual number of output lines per sub-network.
-    batched_sort_idx: ndarray, shape (n_total_lines,)
+    batched_sort_idx : ndarray, shape (n_total_lines,)
         Wavelength sort indices for line ordering.
 
     Notes
@@ -356,7 +356,7 @@ def load_cue_weights(npz_path: str) -> CueWeights:
 
     Parameters
     ----------
-    npz_path: str
+    npz_path : str
         Path to ``cue_weights.npz`` produced by ``convert_cue_weights.py``.
 
     Returns
@@ -509,11 +509,11 @@ def _speculator_activation(x: jnp.ndarray, alpha: jnp.ndarray, beta: jnp.ndarray
 
     Parameters
     ----------
-    x: array
+    x : array
         Input activations.
-    alpha: array
+    alpha : array
         Scaling parameter (learned during training).
-    beta: array
+    beta : array
         Offset parameter (learned during training).
 
     Returns
@@ -537,9 +537,9 @@ def _speculator_forward_pca(
 
     Parameters
     ----------
-    params: array, shape (12,) or (batch, 12)
+    params : array, shape (12,) or (batch, 12)
         Network input parameters (already converted: logq, 10**logn, etc.).
-    net: SubNetWeights
+    net : SubNetWeights
         Pre-loaded network weights.
 
     Returns
@@ -571,9 +571,9 @@ def _speculator_log_spectrum(
 
     Parameters
     ----------
-    params: array, shape (12,) or (batch, 12)
+    params : array, shape (12,) or (batch, 12)
         Network input parameters.
-    net: SubNetWeights
+    net : SubNetWeights
         Pre-loaded weights.
 
     Returns
@@ -605,11 +605,11 @@ def _logq_from_logu(
 
     Parameters
     ----------
-    gas_logu: array
+    gas_logu : array
         Ionization parameter [log10(U)].
-    gas_logn: array
+    gas_logn : array
         Gas density [log10(n_H / cm^-3)].
-    log_R: float, optional
+    log_R : float, optional
         Reference radius [log10(R / cm)]. Default: 19.0 (Stromgren radius).
 
     Returns
@@ -649,17 +649,17 @@ def _prepare_nn_params(
 
     Parameters
     ----------
-    ionspec_index1, ionspec_index2, ionspec_index3, ionspec_index4: array
+    ionspec_index1, ionspec_index2, ionspec_index3, ionspec_index4 : array
         Ionizing spectrum slope per segment.
-    ionspec_logLratio1, ionspec_logLratio2, ionspec_logLratio3: array
+    ionspec_logLratio1, ionspec_logLratio2, ionspec_logLratio3 : array
         Log luminosity ratios between adjacent segment boundaries.
-    gas_logu: array
+    gas_logu : array
         Ionization parameter [log10(U)].
-    gas_logn: array
+    gas_logn : array
         Gas density [log10(n_H / cm^-3)].
-    gas_logz: array
+    gas_logz : array
         Gas metallicity relative to solar [log10(Z/Zsun)].
-    gas_logno, gas_logco: array
+    gas_logno, gas_logco : array
         N/O and C/O abundance offsets [log10(X/X_sun)].
 
     Returns
@@ -715,20 +715,20 @@ def predict_all_lines(
 
     Parameters
     ----------
-    nn_params: array, shape (12,)
+    nn_params : array, shape (12,)
         NN-ready parameters [dimensionless].
-    weights: CueWeights
+    weights : CueWeights
         Pre-loaded weights.
-    gas_logq: float
+    gas_logq : float
         log10(Q) ionization charge parameter [dimensionless].
-    gas_logqion: float
+    gas_logqion : float
         log10(Q_H) total ionizing photon rate [log10(photons/s)].
 
     Returns
     -------
-    wavelengths: array, shape (n_lines,)
+    wavelengths : array, shape (n_lines,)
         Line wavelengths in Angstrom (sorted, vacuum) [Angstrom].
-    luminosities: array, shape (n_lines,)
+    luminosities : array, shape (n_lines,)
         Line luminosities in Lsun [Lsun].
 
     Notes
@@ -810,20 +810,20 @@ def predict_continuum(
 
     Parameters
     ----------
-    nn_params: array, shape (12,)
+    nn_params : array, shape (12,)
         NN-ready parameters [dimensionless].
-    weights: CueWeights
+    weights : CueWeights
         Pre-loaded weights.
-    gas_logq: float
+    gas_logq : float
         log10(Q) ionization charge parameter [dimensionless].
-    gas_logqion: float
+    gas_logqion : float
         log10(Q_H) for normalization [log10(photons/s)].
 
     Returns
     -------
-    wavelength: array, shape (n_wave,)
+    wavelength : array, shape (n_wave,)
         Continuum wavelength grid in Angstrom (sorted) [Angstrom].
-    luminosity: array, shape (n_wave,)
+    luminosity : array, shape (n_wave,)
         Nebular continuum in erg/s/Hz [erg/s/Hz].
 
     Notes
@@ -962,14 +962,14 @@ class CueBackend:
 
     Parameters
     ----------
-    weights_path: str
+    weights_path : str
         Path to ``cue_weights.npz`` file containing pre-trained network weights.
-    ssp_data: object, optional
+    ssp_data : object, optional
         SSP data container with fields ``ssp_wave``, ``ssp_flux``,
         ``ssp_lgmet``, ``ssp_lg_age_gyr``. If provided, ionizing spectrum
         parameters and Q_H are precomputed for all (metallicity, age) bins
         and cached for fast interpolation. Default: None (no precomputation).
-    default_gas_logqion: float, optional
+    default_gas_logqion : float, optional
         Default log10(Q_H) normalization [log10(photons/s)] when not specified
         per call. Default: 49.1 (typical for young stellar populations).
 
@@ -1144,19 +1144,19 @@ class CueBackend:
 
         Parameters
         ----------
-        log_z: float
+        log_z : float
             Target stellar metallicity log10(Z) [log10(Z)].
-        log_age_yr: float
+        log_age_yr : float
             Target stellar age log10(age/yr) [log10(yr)].
 
         Returns
         -------
-        ionspec_7: ndarray, shape (7,) or None
+        ionspec_7 : ndarray, shape (7,) or None
             Interpolated ionizing spectrum parameters:
             [ionspec_index1, ionspec_index2, ionspec_index3, ionspec_index4,
             ionspec_logLratio1, ionspec_logLratio2, ionspec_logLratio3]
             [dimensionless] or None if not precomputed.
-        logqion: float or None
+        logqion : float or None
             Interpolated log10(Q_H) [log10(photons/s)] or None if not precomputed.
 
         Notes
@@ -1404,17 +1404,17 @@ class CueBackend:
 
         Parameters
         ----------
-        ssp_weights: array (n_age,)
+        ssp_weights : array (n_age,)
             CSP mass weights (Msun per age bin).
-        ssp_log_ages_yr: array (n_age,)
+        ssp_log_ages_yr : array (n_age,)
             log10(age/yr) of SSP age bins.
-        log_z: float
+        log_z : float
             Stellar metallicity log10(Z) (absolute).
-        neb_logU: float
+        neb_logU : float
             Ionization parameter log10(U).
-        neb_logZ_gas: float or None
+        neb_logZ_gas : float or None
             Gas metallicity log10(Z) (absolute). None = tie to stellar.
-        gas_logn, gas_logno, gas_logco: float
+        gas_logn, gas_logno, gas_logco : float
             Cue gas properties (defaults match Cue paper).
 
         Returns
@@ -1592,36 +1592,36 @@ class CueBackend:
 
         Parameters
         ----------
-        ssp_weights: array or None
+        ssp_weights : array or None
             CSP mass weights.  If provided, activates high-level mode.
-        ssp_log_ages_yr: array or None
+        ssp_log_ages_yr : array or None
             log10(age/yr) of SSP age bins.
-        log_z: float or None
+        log_z : float or None
             Stellar metallicity log10(Z) (absolute).
-        neb_logU: float
+        neb_logU : float
             Ionization parameter log10(U). Default -3.0.
-        neb_logZ_gas: float or None
+        neb_logZ_gas : float or None
             Gas metallicity log10(Z) (absolute). None = tie to stellar.
-        neb_fesc: float
+        neb_fesc : float
             Escape fraction [0, 1].
-        neb_fesc_lya: float
+        neb_fesc_lya : float
             Ly-alpha escape fraction [0, 1].
-        neb_fdust: float
+        neb_fdust : float
             Dust-absorption fraction of ionizing photons in HII regions [0, 1].
-        cloudyfsps_only: bool
+        cloudyfsps_only : bool
             If True, return 128 CLOUDY/FSPS-matched lines.
-        gas_logu, gas_logn, gas_logz, gas_logno, gas_logco: float
+        gas_logu, gas_logn, gas_logz, gas_logno, gas_logco : float
             Cue gas params (low-level). Override high-level derivation.
-        gas_logqion: float or None
+        gas_logqion : float or None
             log10(Q_H) total. Override high-level derivation.
-        ionspec_*: float or None
+        ionspec_* : float or None
             Ionizing spectrum shape. Override high-level derivation.
 
         Returns
         -------
-        wavelengths: ndarray, shape (n_lines,)
+        wavelengths : ndarray, shape (n_lines,)
             Emission line wavelengths (vacuum) [Angstrom].
-        luminosities: ndarray, shape (n_lines,)
+        luminosities : ndarray, shape (n_lines,)
             Emission line luminosities **[Lsun]**, matching CloudyGrid, CB19 and
             MappingsPhoto. :class:`~tengri.components.nebular.component.NebularSEDComponent`
             applies the single ``* L_sun`` before publishing
@@ -1719,32 +1719,32 @@ class CueBackend:
 
         Parameters
         ----------
-        ssp_weights: array or None
+        ssp_weights : array or None
             CSP mass weights. If provided, activates high-level mode.
-        ssp_log_ages_yr: array or None
+        ssp_log_ages_yr : array or None
             log10(age/yr) of SSP age bins.
-        log_z: float or None
+        log_z : float or None
             Stellar metallicity log10(Z) (absolute).
-        neb_logU: float
+        neb_logU : float
             Ionization parameter log10(U). Default -3.0.
-        neb_logZ_gas: float or None
+        neb_logZ_gas : float or None
             Gas metallicity log10(Z) (absolute). None = tie to stellar.
-        neb_fesc: float
+        neb_fesc : float
             Escape fraction [0, 1]. Suppresses continuum luminosity.
-        neb_fdust: float
+        neb_fdust : float
             Dust-absorption fraction of ionizing photons in HII regions [0, 1].
-        gas_logu, gas_logn, gas_logz, gas_logno, gas_logco: float
+        gas_logu, gas_logn, gas_logz, gas_logno, gas_logco : float
             Cue gas params (low-level). Override high-level derivation.
-        gas_logqion: float or None
+        gas_logqion : float or None
             log10(Q_H) total. Override high-level derivation.
-        ionspec_*: float or None
+        ionspec_* : float or None
             Ionizing spectrum shape. Override high-level derivation.
 
         Returns
         -------
-        wavelength: ndarray, shape (n_wave,)
+        wavelength : ndarray, shape (n_wave,)
             Wavelength grid (sorted) [Angstrom].
-        luminosity: ndarray, shape (n_wave,)
+        luminosity : ndarray, shape (n_wave,)
             Nebular continuum [erg/s/Hz].
 
         Notes
@@ -1814,27 +1814,27 @@ class CueBackend:
 
         Parameters
         ----------
-        ssp_wave: array, shape (n_wave,)
+        ssp_wave : array, shape (n_wave,)
             Output wavelength grid in Angstrom.
-        ssp_weights: array or None
+        ssp_weights : array or None
             CSP mass weights.  Activates high-level mode.
-        ssp_log_ages_yr: array or None
+        ssp_log_ages_yr : array or None
             log10(age/yr) of SSP age bins.
-        log_z: float or None
+        log_z : float or None
             Stellar metallicity log10(Z) (absolute).
-        neb_logU: float
+        neb_logU : float
             Ionization parameter.
-        neb_logZ_gas: float or None
+        neb_logZ_gas : float or None
             Gas metallicity log10(Z) (absolute). None = tie to stellar.
-        neb_fesc, neb_fesc_lya: float
+        neb_fesc, neb_fesc_lya : float
             Escape fractions [dimensionless, in [0, 1]].
-        neb_fdust: float
+        neb_fdust : float
             Dust-absorption fraction of ionizing photons in HII regions
             [dimensionless, in [0, 1]]. Reduces nebular emission via the
             CIGALE k-factor (Inoue 2011).
-        line_sigma_aa: float
+        line_sigma_aa : float
             Gaussian width for emission lines (Angstrom). 0 = delta function.
-        template_data: Any | None, optional
+        template_data : Any | None, optional
             Cue weights object. When provided, overrides ``self.weights``
             for JIT purposes (threading as a runtime parameter instead of
             closure-capturing). Default ``None`` uses ``self.weights``.
@@ -1928,20 +1928,20 @@ def predict_lines_jit(
 
     Parameters
     ----------
-    nn_params_12: array, shape (12,)
+    nn_params_12 : array, shape (12,)
         NN-ready parameters (already converted via _prepare_nn_params).
-    weights: CueWeights
+    weights : CueWeights
         Pre-loaded weights (treated static by JIT via pytree).
-    gas_logq: scalar
+    gas_logq : scalar
         log10(Q) ionizing photon rate normalization.
-    gas_logqion: scalar
+    gas_logqion : scalar
         log10(Q_H) total ionizing photon rate.
 
     Returns
     -------
-    wavelengths: array, shape (n_lines,)
+    wavelengths : array, shape (n_lines,)
         Line wavelengths [Angstrom].
-    luminosities: array, shape (n_lines,)
+    luminosities : array, shape (n_lines,)
         Line luminosities [Lsun].
 
     Notes
@@ -1966,20 +1966,20 @@ def predict_continuum_jit(
 
     Parameters
     ----------
-    nn_params_12: array, shape (12,)
+    nn_params_12 : array, shape (12,)
         NN-ready parameters (already converted via _prepare_nn_params).
-    weights: CueWeights
+    weights : CueWeights
         Pre-loaded weights (treated static by JIT via pytree).
-    gas_logq: scalar
+    gas_logq : scalar
         log10(Q) ionizing photon rate normalization.
-    gas_logqion: scalar
+    gas_logqion : scalar
         log10(Q_H) total ionizing photon rate.
 
     Returns
     -------
-    wavelength: array, shape (n_wave,)
+    wavelength : array, shape (n_wave,)
         Wavelength grid [Angstrom].
-    luminosity: array, shape (n_wave,)
+    luminosity : array, shape (n_wave,)
         Nebular continuum [erg/s/Hz].
 
     Notes

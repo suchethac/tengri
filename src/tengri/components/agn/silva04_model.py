@@ -41,7 +41,7 @@ class Silva04TorusConfig(SEDComponentConfig):
 
     Parameters
     ----------
-    grid_path: str or None
+    grid_path : str or None
         Path to Silva+04 template grid (HDF5). If None, templates
         are not pre-loaded (deferred to first use in predict).
     """
@@ -55,9 +55,9 @@ class Silva04TorusState(SEDComponentState):
 
     Attributes
     ----------
-    name: str
+    name : str
         Component identifier.
-    silva04_fn: callable or None
+    silva04_fn : callable or None
         Compiled interpolation function from create_silva04_from_grid,
         or None if templates are not available.
     """
@@ -76,25 +76,25 @@ class Silva04Torus(SEDModelComponent):
 
     Attributes
     ----------
-    name: str
+    name : str
         Component registry key: ``"silva04"``.
-    parameter_prefix: str
+    parameter_prefix : str
         Parameter namespace: ``"agn_"``.
-    config: Silva04TorusConfig
+    config : Silva04TorusConfig
         Frozen configuration (grid path).
 
     Free parameters (class-level declarations, auto-discovered)
     -----------------------------------------------------------
-    log_lbol: Uniform
+    log_lbol : Uniform
         log₁₀(L_bol / L_sun). [dex, 8–14]
-    log_nh_silva: Uniform
+    log_nh_silva : Uniform
         log₁₀(N_H / cm^-2), hydrogen column density. [dex, 22–25]
-    torus_frac: Uniform
+    torus_frac : Uniform
         Fraction of L_bol reprocessed by torus. [dimensionless, 0–1]
 
     Cross-component outputs
     -----------------------
-    L_agn_torus: erg/s
+    L_agn_torus : erg/s
         Bolometric luminosity contribution from torus emission.
 
     Notes
@@ -129,7 +129,7 @@ class Silva04Torus(SEDModelComponent):
 
     See Also
     --------
-    tengri.components.agn.silva04: template loader and interpolation.
+    tengri.components.agn.silva04 : template loader and interpolation.
     """
 
     name = "silva04"
@@ -167,7 +167,7 @@ class Silva04Torus(SEDModelComponent):
 
         Parameters
         ----------
-        wave: ndarray, optional
+        wave : ndarray, optional
             Rest-frame wavelength grid (not used by Silva+04; templates
             interpolate to any target grid).
 
@@ -201,18 +201,18 @@ class Silva04Torus(SEDModelComponent):
 
         Parameters
         ----------
-        p: mapping[str, ndarray]
+        p : mapping[str, ndarray]
             Parameters with prefix already stripped:
 
             - log_lbol: log₁₀(L_bol / L_sun)
             - log_nh_silva: log₁₀(N_H / cm^-2)
             - torus_frac: torus luminosity fraction
 
-        sed_in: ndarray, shape (n_wave,)
+        sed_in : ndarray, shape (n_wave,)
             Input SED in erg/s/Hz.
-        wave: ndarray, shape (n_wave,)
+        wave : ndarray, shape (n_wave,)
             Rest-frame wavelength grid in Angstrom.
-        **inputs: ndarray
+        **inputs : ndarray
             Unused (AGN torus is self-contained).
 
         Returns

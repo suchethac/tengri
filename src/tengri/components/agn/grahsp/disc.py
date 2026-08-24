@@ -52,20 +52,20 @@ def netzer_disc(
 
     Parameters
     ----------
-    wave_nm: array_like, shape (n_wave,)
+    wave_nm : array_like, shape (n_wave,)
         Output wavelength grid [nm].
-    l5100: float
+    l5100 : float
         :math:`\lambda L_\lambda` at 5100 Å [erg/s].
-    disc_wave_nm: array_like, shape (n_disc_wave,)
+    disc_wave_nm : array_like, shape (n_disc_wave,)
         Disc template wavelength grid [nm] (from
         ``data/grahsp/grahsp_templates.h5`` group ``netzer_disc``).
-    disc_lumin_model: array_like, shape (n_disc_wave,)
+    disc_lumin_model : array_like, shape (n_disc_wave,)
         Disc template :math:`L_\lambda` per (M, a, Mdot) model,
         normalized to 1 at 510 nm.
 
     Returns
     -------
-    L_lambda: ndarray, shape (n_wave,)
+    L_lambda : ndarray, shape (n_wave,)
         Specific disc luminosity [erg/s/nm], interpolated onto
         ``wave_nm`` grid.
 
@@ -97,20 +97,20 @@ def select_disc_model(
 
     Parameters
     ----------
-    disc_m, disc_a, disc_mdot: tuple[str, ...], each shape (16,)
+    disc_m, disc_a, disc_mdot : tuple[str, ...], each shape (16,)
         Disc grid labels from the GRAHSP template bundle
         (``load_grahsp_templates().disc_m``, etc.). Each tuple contains
         string representations of black-hole mass, spin, and Eddington ratio.
-    m: str, optional
+    m : str, optional
         Black-hole mass :math:`\\log_{10}(M_{\\rm BH}/M_\\odot)`. Default: "8.0".
-    a: str, optional
+    a : str, optional
         Spin parameter. Default: "0".
-    mdot: str, optional
+    mdot : str, optional
         Eddington accretion rate. Default: "0.3".
 
     Returns
     -------
-    idx: int
+    idx : int
         Row index into the disc template grid (0–15 for GRAHSP bundle).
         Raises ``ValueError`` if the requested model is not found.
 

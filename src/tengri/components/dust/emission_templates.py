@@ -113,7 +113,7 @@ def create_dl07_from_grid(grid_path: str | dict) -> Callable:
 
     Parameters
     ----------
-    grid_path: str
+    grid_path : str
         Path to ``dl07_templates.h5`` (from ``scripts/convert_dl07_templates.py``).
 
     Returns
@@ -171,15 +171,15 @@ def create_dl07_from_grid(grid_path: str | dict) -> Callable:
 
         Parameters
         ----------
-        wavelength_aa: array_like, shape (n_wave,)
+        wavelength_aa : array_like, shape (n_wave,)
             Rest-frame wavelength grid [Å].
-        L_absorbed: float
+        L_absorbed : float
             Total absorbed luminosity [Lsun].
-        dust_umin: float
+        dust_umin : float
             Minimum radiation field intensity [dimensionless]. Default: 1.0.
-        dust_gamma_dl: float
+        dust_gamma_dl : float
             Mixing fraction for power-law component [dimensionless]. Default: 0.01.
-        dust_qpah: float
+        dust_qpah : float
             PAH mass fraction [dimensionless]. Default: 2.5.
         **_kwargs
             Extra keyword arguments (ignored).
@@ -264,7 +264,7 @@ def load_draine_li_templates(filepath: str) -> dict:
 
     Parameters
     ----------
-    filepath: str
+    filepath : str
         Path to template file (.h5).
 
     Returns
@@ -370,17 +370,17 @@ def dl14_sed_from_grid(
 
     Parameters
     ----------
-    wavelength_aa: array_like, shape (n_wave,)
+    wavelength_aa : array_like, shape (n_wave,)
         Rest-frame wavelength grid [Å].
-    L_absorbed: float
+    L_absorbed : float
         Total absorbed luminosity [Lsun].
-    dust_umin: float
+    dust_umin : float
         Minimum radiation field intensity [dimensionless]. Default: 1.0.
-    dust_gamma_dl: float
+    dust_gamma_dl : float
         Mixing fraction for power-law component [dimensionless]. Default: 0.01.
-    dust_qpah: float
+    dust_qpah : float
         PAH mass fraction [dimensionless]. Default: 2.5.
-    dust_alpha_dl14: float
+    dust_alpha_dl14 : float
         Radiation field power-law slope [dimensionless]. Default: 2.0.
     **_kwargs
         Extra keyword arguments (ignored).
@@ -482,7 +482,7 @@ def create_dl14_from_grid(grid_path: str) -> Callable:
 
     Parameters
     ----------
-    grid_path: str
+    grid_path : str
         Path to ``dl14_templates.h5`` (from ``scripts/convert_dl14_templates.py``).
 
     Returns
@@ -513,7 +513,7 @@ def load_dl14_templates(filepath: str) -> dict:
 
     Parameters
     ----------
-    filepath: str
+    filepath : str
         Path to HDF5 template file.
 
     Returns
@@ -581,9 +581,9 @@ def register_dl14_tabulated(grid_path: str, name: str = "dl14_tabulated") -> Non
 
     Parameters
     ----------
-    grid_path: str
+    grid_path : str
         Path to ``dl14_templates.h5``.
-    name: str
+    name : str
         Registry name. Default: "dl14_tabulated".
 
     Returns
@@ -638,23 +638,23 @@ def dale2014_emission_lnu(
 
     Parameters
     ----------
-    wavelength_aa: ndarray, shape (n_wave,)
+    wavelength_aa : ndarray, shape (n_wave,)
         Output rest-frame wavelength grid [Å].
-    L_absorbed: float
+    L_absorbed : float
         Dust-absorbed luminosity [erg/s].
-    wavelength_grid: ndarray, shape (n_tmpl,)
+    wavelength_grid : ndarray, shape (n_tmpl,)
         Template wavelength grid [Å].
-    alpha_grid: ndarray, shape (n_alpha,)
+    alpha_grid : ndarray, shape (n_alpha,)
         Radiation-field slope grid [dimensionless].
-    templates_sf: ndarray, shape (n_alpha, n_tmpl)
+    templates_sf : ndarray, shape (n_alpha, n_tmpl)
         Unit-normalized SF templates [L_nu].
-    templates_qso: ndarray, shape (n_tmpl,) or None
+    templates_qso : ndarray, shape (n_tmpl,) or None
         AGN template [L_nu], CIGALE full-grid normalization. ``None`` if absent.
-    has_qso: bool
+    has_qso : bool
         Whether ``templates_qso`` is available (static branch selector).
-    dust_alpha_dale: float
+    dust_alpha_dale : float
         Radiation-field power-law slope [dimensionless]. Default 2.0.
-    dust_frac_agn: float
+    dust_frac_agn : float
         AGN heating fraction [dimensionless, [0, 0.99)]. Default 0.0.
 
     Returns
@@ -703,7 +703,7 @@ def load_dale2014_lnu_grid(grid_path: str) -> dict:
 
     Parameters
     ----------
-    grid_path: str
+    grid_path : str
         Path to a ``.npz`` or ``.h5`` Dale2014 template file. Must contain
         ``wavelength_aa`` (or ``wavelength``), ``alpha_grid`` (or ``grid/alpha``),
         ``templates_sf`` (or ``spectra/templates``), and optionally
@@ -805,7 +805,7 @@ def load_dale2014_lnu_grid(grid_path: str) -> dict:
         # normalization, so ``int templates_qso_raw dlambda`` over the stored
         # grid is ~0.54 (the SF templates integrate to 1). We preserve that
         # fraction: dividing by the L_nu integral fixes the unit scale,
-        # multiplying by ``qso_frac`` restores the 1: ~0.54 SF:QSO ratio that
+        # multiplying by ``qso_frac`` restores the 1 : ~0.54 SF:QSO ratio that
         # matches CIGALE's energy partition. Forcing the QSO to unit (the old
         # behavior) over-weighted its IR share to ~0.78 and made the
         # ``dust_frac_agn`` mid-IR mixing grow too bright with fracAGN
@@ -864,7 +864,7 @@ def create_dale2014_from_grid(grid_path: str) -> Callable:
 
     Parameters
     ----------
-    grid_path: str
+    grid_path : str
         Path to ``dale2014_templates_v2.h5`` or ``dale2014_templates.h5``.
 
     Returns
@@ -912,7 +912,7 @@ def load_dale2014_templates(filepath: str) -> dict:
 
     Parameters
     ----------
-    filepath: str
+    filepath : str
         Path to HDF5 template file.
 
     Returns
@@ -982,7 +982,7 @@ def create_schreiber2018_from_grid(grid_path: str | dict) -> Callable:
 
     Parameters
     ----------
-    grid_path: str
+    grid_path : str
         Path to ``schreiber2018_templates.h5``.
 
     Returns
@@ -1026,14 +1026,14 @@ def create_schreiber2018_from_grid(grid_path: str | dict) -> Callable:
 
         Parameters
         ----------
-        wavelength_aa: array_like, shape (n_wave,)
+        wavelength_aa : array_like, shape (n_wave,)
             Rest-frame wavelength grid [Å].
-        L_absorbed: float
+        L_absorbed : float
             Total absorbed luminosity. The output L_nu is in the same units
             per Hz.
-        dust_T: float
+        dust_T : float
             Dust temperature [K]. Clipped to the grid range. Default: 30.0.
-        dust_f_pah: float
+        dust_f_pah : float
             Fractional PAH contribution in [0, 1]. Default: 0.05.
         **_kwargs
             Extra keyword arguments (ignored, e.g. ``redshift``).
@@ -1082,7 +1082,7 @@ def load_schreiber2018_templates(filepath: str) -> dict:
 
     Parameters
     ----------
-    filepath: str
+    filepath : str
         Path to ``schreiber2018_templates.h5``.
 
     Returns
@@ -1120,7 +1120,7 @@ def load_schreiber2016_templates(filepath: str) -> dict:
 
     Parameters
     ----------
-    filepath: str
+    filepath : str
         Path to ``schreiber2016_templates.h5``.
 
     Returns
@@ -1188,9 +1188,9 @@ def register_dale2014_tabulated(grid_path: str, name: str = "dale2014_tabulated"
 
     Parameters
     ----------
-    grid_path: str
+    grid_path : str
         Path to ``dale2014_templates_v2.h5`` or ``dale2014_templates.h5``.
-    name: str
+    name : str
         Registry name. Default: "dale2014_tabulated".
 
     Returns
@@ -1217,9 +1217,9 @@ def register_dl07_tabulated(grid_path: str, name: str = "dl07_tabulated") -> Non
 
     Parameters
     ----------
-    grid_path: str
+    grid_path : str
         Path to ``dl07_templates_v2.h5`` or ``dl07_templates.h5``.
-    name: str
+    name : str
         Registry name. Default: "dl07_tabulated".
 
     Returns
@@ -1253,7 +1253,7 @@ def load_astrodust_templates(filepath: str) -> dict:
 
     Parameters
     ----------
-    filepath: str
+    filepath : str
         Path to ``astrodust_templates_v2.h5`` or ``astrodust_templates.h5``.
 
     Returns
@@ -1397,10 +1397,10 @@ def _normalize_dl07_like_grid(raw: dict, q_key: str = "qpah_grid") -> dict:
 
     Parameters
     ----------
-    raw: dict
+    raw : dict
         Raw template grid with wavelength_um, spectra_single, spectra_pdr,
         umin_grid, and either qpah_grid or qhac_grid.
-    q_key: str
+    q_key : str
         Key for the grain composition parameter grid (``"qpah_grid"`` for
         Astrodust/DL07, ``"qhac_grid"`` for THEMIS).
 
@@ -1461,7 +1461,7 @@ def create_dh02_ce01_from_grid(grid_path: str | dict) -> Callable:
 
     Parameters
     ----------
-    grid_path: str or dict
+    grid_path : str or dict
         Path to ``dh02_ce01_grid.h5`` (built by
         ``scripts/build_dh02_ce01_grid.py``), or an already-loaded grid dict
         from :func:`load_dh02_ce01_lnu_grid`. The dict form is what lets the
@@ -1506,11 +1506,11 @@ def create_dh02_ce01_from_grid(grid_path: str | dict) -> Callable:
 
         Parameters
         ----------
-        wavelength_aa: array_like, shape (n_wave,)
+        wavelength_aa : array_like, shape (n_wave,)
             Rest-frame wavelength grid [Å].
-        L_absorbed: float
+        L_absorbed : float
             Total absorbed luminosity [Lsun].
-        dust_log_lir: float
+        dust_log_lir : float
             Log₁₀ of the infrared luminosity [log₁₀(L_IR/L_sun)].
             Clipped to the grid range [8.3, 14.3]. Default: 10.0.
         **_kwargs
@@ -1565,7 +1565,7 @@ def load_dh02_ce01_lnu_grid(grid_path: str) -> dict:
 
     Parameters
     ----------
-    grid_path: str
+    grid_path : str
         Path to ``dh02_ce01_grid.h5``.
 
     Returns
@@ -1605,7 +1605,7 @@ def _normalize_bosa_grid(raw: dict) -> dict:
 
     Parameters
     ----------
-    raw: dict
+    raw : dict
         Raw BOSA grid with wavelength_um, log_ltir_grid, log_ssfr_grid,
         and spectra.
 
@@ -1659,7 +1659,7 @@ def create_astrodust_from_grid(
 
     Parameters
     ----------
-    template_data: dict or str
+    template_data : dict or str
         Either a dict (from ``load_astrodust_templates``) or a file path.
         If a string, ``load_astrodust_templates`` is called automatically.
 
@@ -1710,17 +1710,17 @@ def create_astrodust_from_grid(
 
         Parameters
         ----------
-        wavelength_aa: array, shape (n_wave,)
+        wavelength_aa : array, shape (n_wave,)
             Wavelength grid in Angstrom (sorted ascending).
-        L_absorbed: float
+        L_absorbed : float
             Total absorbed luminosity in Lsun.
-        dust_umin: float
+        dust_umin : float
             Minimum radiation field intensity (Mathis ISRF units).
-        dust_gamma_dl: float
+        dust_gamma_dl : float
             Fraction of dust mass in PDR (high-U) component.
-        dust_qpah: float
+        dust_qpah : float
             PAH mass fraction (%).
-        redshift: float
+        redshift : float
             Source redshift (for CMB contrast correction).
 
         Returns
@@ -1796,9 +1796,9 @@ def register_astrodust_tabulated(grid_path: str, name: str = "astrodust_tabulate
 
     Parameters
     ----------
-    grid_path: str
+    grid_path : str
         Path to ``astrodust_templates_v2.h5`` or ``astrodust_templates.h5``.
-    name: str
+    name : str
         Registry name. Default: "astrodust_tabulated".
 
     Returns
@@ -1831,7 +1831,7 @@ def load_bosa_templates(filepath: str) -> dict:
 
     Parameters
     ----------
-    filepath: str
+    filepath : str
         Path to ``bosa_templates_v2.h5`` or ``bosa_templates.h5``.
 
     Returns
@@ -1919,7 +1919,7 @@ def create_bosa_from_grid(template_data: dict | str) -> Callable:
 
     Parameters
     ----------
-    template_data: dict or str
+    template_data : dict or str
         Either a dict (from ``load_bosa_templates``) or a file path.
 
     Returns
@@ -1962,13 +1962,13 @@ def create_bosa_from_grid(template_data: dict | str) -> Callable:
 
         Parameters
         ----------
-        wavelength_aa: array, shape (n_wave,)
+        wavelength_aa : array, shape (n_wave,)
             Wavelength grid in Angstrom (sorted ascending).
-        L_absorbed: float
+        L_absorbed : float
             Total absorbed luminosity in Lsun (= L_TIR).
-        dust_log_ssfr: float
+        dust_log_ssfr : float
             log10(sSFR / yr^-1).  Typical range: -12 to -8.
-        redshift: float
+        redshift : float
             Source redshift (for CMB contrast correction).
 
         Returns
@@ -2031,9 +2031,9 @@ def register_bosa_tabulated(grid_path: str, name: str = "bosa_tabulated") -> Non
 
     Parameters
     ----------
-    grid_path: str
+    grid_path : str
         Path to ``bosa_templates_v2.h5`` or ``bosa_templates.h5``.
-    name: str
+    name : str
         Registry name. Default: "bosa_tabulated".
 
     Returns
@@ -2070,7 +2070,7 @@ def load_themis_templates(filepath: str) -> dict:
 
     Parameters
     ----------
-    filepath: str
+    filepath : str
         Path to ``themis_templates_v2.h5`` or ``themis_templates.h5``.
 
     Returns
@@ -2248,12 +2248,12 @@ def dust_emission_grid_support(name: str) -> dict[str, tuple[float, float]]:
 
     Parameters
     ----------
-    name: str
+    name : str
         Registry name of the emission model, e.g. ``'themis'``.
 
     Returns
     -------
-    support: dict[str, tuple[float, float]]
+    support : dict[str, tuple[float, float]]
         ``{parameter_name: (lo, hi)}``, empty when the model is not
         template-backed or its grid file is not installed.
 
@@ -2326,7 +2326,7 @@ def _qhac_axis_to_cigale(qhac_grid: jnp.ndarray) -> jnp.ndarray:
 
     Parameters
     ----------
-    qhac_grid: ndarray, shape (n_qhac,)
+    qhac_grid : ndarray, shape (n_qhac,)
         Raw a-C(:H) mass-fraction axis, either convention [dimensionless].
 
     Returns
@@ -2361,7 +2361,7 @@ def create_themis_from_grid(template_data: dict | str) -> Callable:
 
     Parameters
     ----------
-    template_data: dict or str
+    template_data : dict or str
         Either a dict (from ``load_themis_templates``) or a file path.
 
     Returns
@@ -2425,21 +2425,21 @@ def create_themis_from_grid(template_data: dict | str) -> Callable:
 
         Parameters
         ----------
-        wavelength_aa: array, shape (n_wave,)
+        wavelength_aa : array, shape (n_wave,)
             Wavelength grid in Angstrom (sorted ascending).
-        L_absorbed: float
+        L_absorbed : float
             Total absorbed luminosity in Lsun.
-        dust_umin: float
+        dust_umin : float
             Minimum radiation field intensity (Mathis ISRF units).
-        dust_gamma_dl: float
+        dust_gamma_dl : float
             Fraction of dust mass in PDR (high-U) component.
-        dust_qhac: float
+        dust_qhac : float
             a-C(:H) aromatic carbon mass fraction.
             Typical range: 0.02--0.30.
-        dust_alpha: float
+        dust_alpha : float
             Radiation field power-law slope [dimensionless].
             Default: 2.0 (back-compat with 2D powerlaw slice).
-        redshift: float
+        redshift : float
             Source redshift (for CMB contrast correction).
 
         Returns
@@ -2555,9 +2555,9 @@ def register_themis_tabulated(grid_path: str, name: str = "themis_tabulated") ->
 
     Parameters
     ----------
-    grid_path: str
+    grid_path : str
         Path to ``themis_templates_v2.h5`` or ``themis_templates.h5``.
-    name: str
+    name : str
         Registry name.  Default ``"themis_tabulated"``.
 
     Returns
@@ -2588,12 +2588,12 @@ def _make_lazy_loader(
 
     Parameters
     ----------
-    name: str
+    name : str
         Registry name (e.g. ``"dale2014"``).
-    template_filename: str
+    template_filename : str
         Canonical HDF5 filename to search for in data/ (e.g. ``"dale2014_templates.h5"``).
         The v2 variant (``"*_v2.h5"``) is tried first if present.
-    loader_fn_name: str
+    loader_fn_name : str
         Name of the ``create_*_from_grid`` function in this module.
     """
 
@@ -2692,7 +2692,7 @@ def load_draine2021_pahspec_templates(filepath: str) -> Draine2021PAHTemplates:
 
     Parameters
     ----------
-    filepath: str
+    filepath : str
         Path to the HDF5 file.  See ``scripts/build_pahspec_hdf5.py``
         for the layout.
 

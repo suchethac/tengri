@@ -684,7 +684,7 @@ _MOCK_RECOVERY = _Tutorial(
         )
         model = tengri.SEDModel(spec, ssp_data, observation=obs)
 
-        # 2. Sample the truth point, then generate a mock at SNR=20.
+        # 2. Sample the truth point, then generate a mock at SNR=20
         #    generate_mock returns flux_obs, noise, and params (the truth)
         truth = spec.sample(jax.random.PRNGKey(0))
         mock = tengri.generate_mock(model, truth, key=jax.random.PRNGKey(1), snr=20.0)
@@ -1114,9 +1114,9 @@ def tutorial(name: str | None = None, *, run: bool = False) -> None:
 
     Parameters
     ----------
-    name: str, optional
+    name : str, optional
         Tutorial name.  Pass without an argument to list all topics.
-    run: bool
+    run : bool
         If ``True`` and the tutorial supports live execution, run it
         after printing the recipe.  Tutorials that need an SSP file or
         external data print a "skipping live execution" note instead.
@@ -1197,7 +1197,7 @@ def explain(thing) -> None:
 
     Parameters
     ----------
-    thing: type or str
+    thing : type or str
         Either a tengri class (``tengri.Parameters``, ``tengri.SEDModel``,
         ``tengri.Fitter``, ``tengri.Posterior``, ``tengri.Observation``)
         or a registered name (``"skirtor"``, ``"calzetti"``, ``"dpl"``…).

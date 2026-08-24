@@ -45,9 +45,9 @@ class BandedMatrix(NamedTuple):
 
     Attributes
     ----------
-    offsets: ndarray, shape (K,)
+    offsets : ndarray, shape (K,)
         Integer diagonal offsets; diagonal ``k`` holds ``A[i, i + offsets[k]]``.
-    data: ndarray, shape (K, n)
+    data : ndarray, shape (K, n)
         Diagonal values; ``data[k, i]`` is the weight applied to
         ``x[i + offsets[k]]`` when forming ``y[i]``.
     """
@@ -68,11 +68,11 @@ def banded_matvec(offsets: jnp.ndarray, data: jnp.ndarray, x: jnp.ndarray) -> jn
 
     Parameters
     ----------
-    offsets: array_like, shape (K,)
+    offsets : array_like, shape (K,)
         Integer diagonal offsets (static, baked into the trace).
-    data: array_like, shape (K, n)
+    data : array_like, shape (K, n)
         Diagonal values.
-    x: array_like, shape (n,)
+    x : array_like, shape (n,)
         Input vector.
 
     Returns
@@ -103,9 +103,9 @@ def resolution_bands_from_desi(diag_data: jnp.ndarray, offsets: jnp.ndarray) -> 
 
     Parameters
     ----------
-    diag_data: array_like, shape (n_diag, n_pix)
+    diag_data : array_like, shape (n_diag, n_pix)
         Resolution diagonals as stored by desispec.
-    offsets: array_like, shape (n_diag,)
+    offsets : array_like, shape (n_diag,)
         Integer diagonal offsets (desispec uses descending order, e.g.
         ``[+5, +4, ..., -5]`` for ``n_diag = 11``).
 
@@ -140,53 +140,53 @@ def resolution_bands_from_desi(diag_data: jnp.ndarray, offsets: jnp.ndarray) -> 
 def block_diagonal_bands(blocks: Sequence[BandedMatrix]) -> BandedMatrix:
     r"""Compose per-segment banded operators into one block-diagonal operator.
 
-       Multi-arm spectrographs deliver one resolution operator per camera, each on
-       its own pixel grid (DESI b/r/z; Guy et al. 2023 [2]_). Concatenating the
-       camera grids in camera order gives a single pixel vector, and the resolution
-       operator over that vector is block diagonal, camera :math:`m` occupying rows
-       and columns :math:`[s_m, s_m + n_m)`:
+    Multi-arm spectrographs deliver one resolution operator per camera, each on
+    its own pixel grid (DESI b/r/z; Guy et al. 2023 [2]_). Concatenating the
+    camera grids in camera order gives a single pixel vector, and the resolution
+    operator over that vector is block diagonal, camera :math:`m` occupying rows
+    and columns :math:`[s_m, s_m + n_m)`:
 
-       .. math::
+    .. math::
 
-           A = \mathrm{diag}(A_0, A_1, \ldots, A_{M-1}), \qquad
-           s_m = \sum_{m' < m} n_{m'}
+        A = \mathrm{diag}(A_0, A_1, \ldots, A_{M-1}), \qquad
+        s_m = \sum_{m' < m} n_{m'}
 
-       No band is allowed to reach across a segment boundary: an entry of block
-       :math:`m` whose column index leaves :math:`[0, n_m)` is set to zero, so
-       camera :math:`m`'s LSF never mixes photons into camera :math:`m+1`.
+    No band is allowed to reach across a segment boundary: an entry of block
+    :math:`m` whose column index leaves :math:`[0, n_m)` is set to zero, so
+    camera :math:`m`'s LSF never mixes photons into camera :math:`m+1`.
 
-       Parameters
-       ----------
-       blocks: sequence of BandedMatrix
-           Per-segment operators, in the order their pixel grids are concatenated.
-           Block ``m`` has ``data`` of shape ``(K_m, n_m)``; the ``K_m`` and the
-           offsets may differ between blocks.
+    Parameters
+    ----------
+    blocks : sequence of BandedMatrix
+        Per-segment operators, in the order their pixel grids are concatenated.
+        Block ``m`` has ``data`` of shape ``(K_m, n_m)``; the ``K_m`` and the
+        offsets may differ between blocks.
 
-       Returns
-       -------
-       BandedMatrix
-           Operator of width ``sum(n_m)`` whose ``offsets`` are the sorted union of
-           the per-block offsets.
+    Returns
+    -------
+    BandedMatrix
+        Operator of width ``sum(n_m)`` whose ``offsets`` are the sorted union of
+        the per-block offsets.
 
-       Raises
-       ------
-       ValueError
-           If ``blocks`` is empty.
+    Raises
+    ------
+    ValueError
+        If ``blocks`` is empty.
 
-       Notes
-       -----
-       Build-time helper (NumPy; offsets are static). JIT-compatible: the returned
-       operator is consumed by :func:`banded_matvec`, which is. Gradient-safe: yes,
+    Notes
+    -----
+    Build-time helper (NumPy; offsets are static). JIT-compatible: the returned
+    operator is consumed by :func:`banded_matvec`, which is. Gradient-safe: yes
     the composition is a rearrangement of the block data.
 
-       Zeroing the cross-boundary reach is done here rather than inherited from the
-       blocks: :func:`resolution_bands_from_desi` already zeroes its own edges, but
-       :func:`gaussian_resolution_bands` does not, so relying on the blocks would
-       leak one camera's LSF into the next.
+    Zeroing the cross-boundary reach is done here rather than inherited from the
+    blocks: :func:`resolution_bands_from_desi` already zeroes its own edges, but
+    :func:`gaussian_resolution_bands` does not, so relying on the blocks would
+    leak one camera's LSF into the next.
 
-       References
-       ----------
-       .. [2] Guy, J. et al. 2023, AJ, 165, 144, arXiv:2209.14482.
+    References
+    ----------
+    .. [2] Guy, J. et al. 2023, AJ, 165, 144, arXiv:2209.14482.
     """
     blocks = tuple(blocks)
     if not blocks:
@@ -229,13 +229,13 @@ def gaussian_resolution_bands(wave_obs: jnp.ndarray, resolution, n_diag: int = 1
 
     Parameters
     ----------
-    wave_obs: array_like, shape (n_pix,)
+    wave_obs : array_like, shape (n_pix,)
         Observed wavelength grid [Angstrom]. Any strictly increasing grid; the
         kernel width is set from the local ``d ln lambda`` at each pixel, so a
         linearly-spaced grid is handled exactly rather than approximately (#1791).
-    resolution: float or array_like, shape (n_pix,)
+    resolution : float or array_like, shape (n_pix,)
         Spectral resolution ``R`` (scalar or per-pixel), dimensionless.
-    n_diag: int, optional
+    n_diag : int, optional
         Number of diagonals (odd). Default 11.
 
     Returns

@@ -84,27 +84,27 @@ class HistoryArrays(NamedTuple):
 
     Attributes
     ----------
-    t_gyr: ndarray, shape (N, n_t)
+    t_gyr : ndarray, shape (N, n_t)
         Cosmic time [Gyr], strictly increasing along axis 1. A shared 1-D grid
         has already been broadcast to per-galaxy rows.
-    sfr: ndarray, shape (N, n_t)
+    sfr : ndarray, shape (N, n_t)
         Star formation rate [Msun/yr] at those times, finite and non-negative.
-    met: ndarray, shape (N, n_t) or None
+    met : ndarray, shape (N, n_t) or None
         **Stellar** metallicity history as log10(Z/Zsun), the Z each generation
         of stars formed from, which selects the SSP templates. Converted at
         ingest so exactly one convention leaves this module. ``None`` when no
         history was supplied.
-    met_gas: ndarray, shape (N,) or None
+    met_gas : ndarray, shape (N,) or None
         **Gas-phase** metallicity at the observed epoch, log10(Z/Zsun), the Z
         of the ionized gas, which drives nebular emission. A per-galaxy scalar
         rather than a history: nebular emission is powered by stars younger than
         ~10 Myr, so only the present-day value is observable. ``None`` when not
         supplied, in which case the model's own ``neb_logZ_gas`` applies.
-    n_galaxies: int
+    n_galaxies : int
         Number of galaxies, N.
-    n_t: int
+    n_t : int
         Number of history nodes.
-    mass_formed: ndarray, shape (N,)
+    mass_formed : ndarray, shape (N,)
         Stellar mass formed by trapezoidal integration of the history [Msun].
         Carried because the out-of-grid diagnostic is mass-weighted, and a
         caller comparing against a simulation's own catalog mass wants the
@@ -125,9 +125,9 @@ def met_to_logzsol(met, met_unit):
 
     Parameters
     ----------
-    met: array_like
+    met : array_like
         Metallicity values in ``met_unit``. Any shape.
-    met_unit: str
+    met_unit : str
         One of :data:`MET_UNITS`.
 
     Returns
@@ -198,9 +198,9 @@ def _check_unit_plausibility(logzsol, met_unit):
 
     Parameters
     ----------
-    logzsol: ndarray, shape (N, n_t)
+    logzsol : ndarray, shape (N, n_t)
         The **converted** history [log10(Z/Zsun)].
-    met_unit: str
+    met_unit : str
         The unit the caller declared, quoted back in the message.
 
     Warns
@@ -248,9 +248,9 @@ def _mass_weights(t_gyr, sfr):
 
     Parameters
     ----------
-    t_gyr: ndarray, shape (N, n_t)
+    t_gyr : ndarray, shape (N, n_t)
         Cosmic time [Gyr], strictly increasing along axis 1.
-    sfr: ndarray, shape (N, n_t)
+    sfr : ndarray, shape (N, n_t)
         Star formation rate [Msun/yr].
 
     Returns
@@ -307,14 +307,14 @@ def _check_ssp_grid(logzsol, mass_w, ssp_lgmet, policy):
 
     Parameters
     ----------
-    logzsol: ndarray, shape (N, n_t)
+    logzsol : ndarray, shape (N, n_t)
         Metallicity history [log10(Z/Zsun)].
-    mass_w: ndarray, shape (N, n_t)
+    mass_w : ndarray, shape (N, n_t)
         Per-node stellar mass [Msun] from :func:`_mass_weights`, used only to
         report how much of the history the clamp would touch.
-    ssp_lgmet: array_like, shape (n_met,)
+    ssp_lgmet : array_like, shape (n_met,)
         The SSP library's metallicity grid, absolute log10(Z).
-    policy: {"raise", "warn", "ignore"}
+    policy : {"raise", "warn", "ignore"}
         What to do when nodes fall outside.
 
     Raises
@@ -413,29 +413,29 @@ def ingest_histories(
 
     Parameters
     ----------
-    t_gyr: array_like, shape (n_t,) or (N, n_t)
+    t_gyr : array_like, shape (n_t,) or (N, n_t)
         Cosmic time [Gyr], strictly increasing. A 1-D grid is shared by every
         galaxy and broadcast.
-    sfr: array_like, shape (N, n_t)
+    sfr : array_like, shape (N, n_t)
         Star formation rate [Msun/yr]. Finite and non-negative.
-    met: array_like, shape (n_t,) or (N, n_t), optional
+    met : array_like, shape (n_t,) or (N, n_t), optional
         **Stellar** metallicity history in ``met_unit`` at the same nodes, the
         Z each generation of stars formed from. A 1-D history is shared and
         broadcast, the same way ``t_gyr`` is: one chemical-evolution track
         across many mass scalings is a common simulation case.
-    met_gas: array_like, shape (N,), (n_t,) or (N, n_t), optional
+    met_gas : array_like, shape (N,), (n_t,) or (N, n_t), optional
         **Gas-phase** metallicity in ``met_unit``, the Z of the ionized gas that
         drives nebular emission. A separate physical quantity from ``met``, and
         settable independently. Given as a track, the last node is taken as the
         observed epoch, nebular emission comes from stars younger than ~10 Myr,
         so only the present-day value is observable.
-    met_unit: str, default "logzsol"
+    met_unit : str, default "logzsol"
         The unit ``met`` **and** ``met_gas`` arrive in. One of :data:`MET_UNITS`.
         A snapshot stores both the same way, so one declaration covers both.
-    on_out_of_grid: {"raise", "warn", "ignore"}, default "raise"
+    on_out_of_grid : {"raise", "warn", "ignore"}, default "raise"
         What to do when a metallicity node falls outside the SSP grid, where the
         lookup would silently clip.
-    ssp_lgmet: array_like, shape (n_met,), optional
+    ssp_lgmet : array_like, shape (n_met,), optional
         The SSP library's absolute log10(Z) grid. When ``None`` the grid check is
         skipped, there is nothing to check against.
 
@@ -535,12 +535,12 @@ def _present_day(name, value, n_galaxies, n_t):
 
     Parameters
     ----------
-    name: str
+    name : str
         Argument name, for the error messages.
-    value: array_like, shape (N,), (n_t,) or (N, n_t)
+    value : array_like, shape (N,), (n_t,) or (N, n_t)
         Either the per-galaxy value already, or a full track to read the
         observed epoch off.
-    n_galaxies, n_t: int
+    n_galaxies, n_t : int
         The catalog's shape, from ``sfr``.
 
     Returns

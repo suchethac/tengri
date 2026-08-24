@@ -48,21 +48,21 @@ def run_nifty_fast_vi(
 
     Parameters
     ----------
-    n_iterations: int
+    n_iterations : int
         Number of KL minimization iterations.
-    n_samples: int
+    n_samples : int
         Samples per iteration (doubled by mirror_samples).
-    n_posterior_samples: int
+    n_posterior_samples : int
         Posterior samples drawn after convergence.
-    sample_mode: str
+    sample_mode : str
         ``"nonlinear_resample"`` (geoVI), ``"linear_resample"`` (MGVI),
         or ``"evi"`` (MGVI first half, geoVI second half).
-    vi_config: VIConfig, optional
+    vi_config : VIConfig, optional
         Advanced configuration. If None, uses defaults.
-    posterior_method: str
+    posterior_method : str
         ``"jit"`` (default), fast JIT CG sampling.
         ``"blackjax"``, independent NUTS sampling.
-    verbose: bool
+    verbose : bool
         Print progress.
     """
     import time
@@ -396,24 +396,24 @@ def run_nifty_vi(
 
     Parameters
     ----------
-    n_iterations: int
+    n_iterations : int
         Number of KL minimization iterations (optimization).
-    n_samples: int
+    n_samples : int
         Samples per iteration during optimization.
         With ``mirror_samples=True`` (default), this doubles internally.
-    n_posterior_samples: int
+    n_posterior_samples : int
         Number of posterior samples to draw after convergence.
         These are cheap to generate once the approximation is found.
-    sample_mode: str
+    sample_mode : str
         "nonlinear_resample" (geoVI), "linear_resample" (MGVI),
         or "evi" (MGVI first, then geoVI, recommended).
-    vi_config: VIConfig, optional
+    vi_config : VIConfig, optional
         Advanced configuration for NIFTy optimize_kl.
         If None, uses Philipp Frank's recommended defaults.
-    posterior_method: str
+    posterior_method : str
         "linear" (default), draw_linear_residual, consistent with geoVI.
         "blackjax", BlackJAX NUTS, independent MCMC samples.
-    verbose: bool
+    verbose : bool
         Print progress.
     """
     import time

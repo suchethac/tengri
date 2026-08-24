@@ -33,7 +33,7 @@ for each declared parameter, decide its final prior/value by:
 
 Parameters
 ----------
-**kwargs: keyword arguments
+**kwargs : keyword arguments
     Model configuration. Keys are either group names (sfh, dust, neb, etc.),
     top-level settings (redshift, apply_igm), or both.
 
@@ -155,9 +155,9 @@ def _expand_free(param_name: str, registry_default: Distribution) -> Distributio
 
     Parameters
     ----------
-    param_name: str
+    param_name : str
         Canonical (fully-prefixed) parameter name, e.g. ``"neb_logU"``.
-    registry_default: Distribution
+    registry_default : Distribution
         The parameter's registry default.
 
     Returns
@@ -660,7 +660,7 @@ def _normalize_wildcard_keys(group: object) -> object:
 
     Parameters
     ----------
-    group: object
+    group : object
         A group dict (or any value). Non-dict values pass through unchanged.
 
     Returns
@@ -1158,7 +1158,7 @@ def _base_provenance(tag: str) -> str:
 
     Parameters
     ----------
-    tag: str
+    tag : str
         Raw provenance tag.
 
     Returns
@@ -1195,9 +1195,9 @@ def _selected_component(selector: str, structural) -> str | None:
 
     Parameters
     ----------
-    selector: str
+    selector : str
         Dotted selector, e.g. ``'agn.disc'``.
-    structural: Parameters
+    structural : Parameters
         Structural-only spec carrying the component selections.
 
     Returns
@@ -1229,8 +1229,8 @@ def _narrow_free_priors_to_grid(
 
     A template-backed component clips its parameters onto the grid axes it
     interpolates over, where ``jnp.clip`` is flat: the SED is bit-identical and
-    the gradient is exactly zero (#1586). ``astrodust`` ships the live case; ``dust_lgU`` declares
-    ``free_prior=Uniform(0, 7)`` against a grid of
+    the gradient is exactly zero (#1586). ``astrodust`` ships the live case:
+    ``dust_lgU`` declares ``free_prior=Uniform(0, 7)`` against a grid of
     ``[-3, 6]``, so ``all_params: FREE`` handed a sampler a range whose top
     14.3% could not move. Intersecting removes the dead region instead of only
     warning about it.
@@ -1241,11 +1241,11 @@ def _narrow_free_priors_to_grid(
 
     Parameters
     ----------
-    resolved: dict
+    resolved : dict
         Resolved ``{param_name: Distribution}`` kwargs, mutated in place.
-    provenance: dict of str to str
+    provenance : dict of str to str
         Resolution tag per parameter.
-    structural: Parameters
+    structural : Parameters
         Structural-only spec carrying the component selections, e.g. its
         ``dust_emission`` attribute.
 
@@ -1261,8 +1261,8 @@ def _narrow_free_priors_to_grid(
     - The **declaration is never touched**. ``dust_lgU`` is shared with
       ``draine2021_pah_ir``, whose grid need not match ``astrodust``'s, and
       ``dust_umin``'s cap is 20 / 50 / 80 depending only on which backend is
-      selected. That is why the constraint lives per ``(component, parameter)``
-    see :mod:`tengri.components.grid_support`.
+      selected. That is why the constraint lives per ``(component, parameter)``;
+      see :mod:`tengri.components.grid_support`.
     - Narrowing only ever shrinks. The grid may extend *below* a declared
       bound (astrodust reaches ``lgU = -3`` where the declaration floors at 0);
       widening there would assert physics the declaration deliberately excluded.
@@ -1325,7 +1325,7 @@ def _declared_param_names(component_type: str) -> frozenset[str] | None:
 
     Parameters
     ----------
-    component_type: str
+    component_type : str
         Grammar type name as written in the spec, e.g. ``"dale2014"`` or
         ``"dl07"``. Grammar names that are aliases (``dl07`` -> ``draine_li2007``,
         ``mbb`` -> ``modified_blackbody``) are resolved through
@@ -1392,8 +1392,8 @@ def _narrow_outcome_to_selected_component(
 ) -> dict[str, list[tuple[str, bool]]]:
     """Restrict a sub-block's wildcard outcome to its selected component's params.
 
-    A sub-block's parameter partition spans every backend it can dispatch to: ``dust.emission``
-    covers 22 names across nine engines. Seven of those carry
+    A sub-block's parameter partition spans every backend it can dispatch to:
+    ``dust.emission`` covers 22 names across nine engines. Seven of those carry
     distribution registry defaults and so are freed by ``'*': FREE`` whichever
     engine is selected, which makes the group-level ``any(freed)`` test in
     :func:`_check_wildcard_freed_something` unfalsifiable: it cannot fire even
@@ -1406,9 +1406,9 @@ def _narrow_outcome_to_selected_component(
 
     Parameters
     ----------
-    outcome: dict
+    outcome : dict
         Group name -> list of ``(param_name, was_freed)``.
-    structural_params: StructuralParams
+    structural_params : StructuralParams
         Carries the selected component per sub-block.
 
     Returns
@@ -1439,18 +1439,18 @@ def _format_stuck(group: str, stuck: list[str]) -> tuple[str, str, str]:
 
     Parameters
     ----------
-    group: str
+    group : str
         Group name, possibly dotted for a sub-block (``'agn.torus'``).
-    stuck: list of str
+    stuck : list of str
         Fully-prefixed names of the parameters that stayed ``Fixed``.
 
     Returns
     -------
-    shown: str
+    shown : str
         Comma-joined names, truncated with a ``(+N more)`` tail.
-    top: str
+    top : str
         Top-level group name: what the caller writes as the kwarg.
-    example: str
+    example : str
         A ready-to-paste snippet freeing the first stuck parameter, nested at
         the level the grammar accepts.
 
@@ -1503,7 +1503,7 @@ def _check_wildcard_freed_something(
 
     Parameters
     ----------
-    outcome: dict
+    outcome : dict
         Group name -> list of ``(param_name, was_freed)`` for every parameter an
         *active* wildcard-FREE touched. Blocks scoped out by an inactive model
         selection are excluded by the caller and never reach here.
@@ -1757,7 +1757,7 @@ def _law_shape_params(law_name: str) -> frozenset[str]:
 
     Parameters
     ----------
-    law_name: str
+    law_name : str
         Key in ``DUST_LAWS`` as written in the grammar, e.g. ``"calzetti"``.
 
     Returns
@@ -1847,11 +1847,11 @@ def _wildcard_scopes(
 
     Parameters
     ----------
-    structural_kwargs: dict
+    structural_kwargs : dict
         Translated structural choices (``dust_law_bc``, ``shock_norm``, ...).
-    structural_params: Parameters
+    structural_params : Parameters
         Structural-only spec, used for the selected ``dust_emission`` engine.
-    param_partition: dict
+    param_partition : dict
         Parameter name -> owning group, from :func:`_partition_by_group`.
 
     Returns
@@ -1962,8 +1962,8 @@ def _wildcard_scopes(
         )
         scopes["shock"] = frozenset(shock_group_params - {unused})
 
-    # Note: sfh scoping is handled differently in parse_groups(): # met_* parameters in sfh (when
-    # no met block) skip the group dict to avoid
+    # Note: sfh scoping is handled differently in parse_groups();
+    # met_* parameters in sfh (when no met block) skip the group dict to avoid
     # forcing them through wildcard scoping (see line ~850 for the check).
 
     return scopes
@@ -2321,9 +2321,9 @@ def _translate_met(met_dict: dict, result: dict) -> None:
 
     Parameters
     ----------
-    met_dict: dict
+    met_dict : dict
         The ``met=`` group. ``'type'`` selects a mode from ``MET_REGISTRY``.
-    result: dict
+    result : dict
         Parameters kwargs being assembled; ``met_mode`` is written into it.
 
     Raises
@@ -3019,8 +3019,8 @@ def _translate_igm(igm_dict: dict, result: dict) -> None:
         result["igm_patchy"] = True
 
     # ``dla`` accepts either the legacy boolean form (``dla=True``) or the
-    # nested-dict form ``dla={'log_n_hi': Uniform(...), '*': FREE, ...}``: # both activate the DLA
-    # absorber (closes #507). The per-parameter
+    # nested-dict form ``dla={'log_n_hi': Uniform(...), '*': FREE, ...}``;
+    # both activate the DLA absorber (closes #507). The per-parameter
     # overrides inside the dict are resolved by the ``igm.dla`` sub-group
     # path in :func:`parse_groups`.
     dla_spec = igm_dict.get("dla", False)
@@ -3033,7 +3033,7 @@ def _legacy_radio_type_to_blocks(radio_type: str) -> tuple[str, str]:
 
     Parameters
     ----------
-    radio_type: str
+    radio_type : str
         A member of :func:`_valid_radio_types` other than ``"none"``.
 
     Returns
@@ -3057,8 +3057,8 @@ def _legacy_radio_type_to_blocks(radio_type: str) -> tuple[str, str]:
     validator already reads: a hand-written third list is how the radio
     error message and the dust menu each drifted out of agreement with
     the builder. A ``radio_*`` component whose stripped name matches
-    neither axis raises here rather than silently taking the defaults; that silent path is #1461,
-    where ``radio_dpl`` was accepted and the
+    neither axis raises here rather than silently taking the defaults;
+    that silent path is #1461, where ``radio_dpl`` was accepted and the
     single power-law ran in place of the Martinez-Ramirez+2024 double
     power-law.
     """
@@ -3244,8 +3244,8 @@ _RADIO_AGN_PARAMS_BY_MODEL: dict[str, frozenset[str]] = {
 #: ``xray_det_hmxb`` / ``xray_det_lmxb`` which could.
 #:
 #: So every entry now lists what its model reads in full, rather than only the
-#: names unique to it. Omission no longer means "shared", it means "not read": #: which is what
-#: the narrowing needs to be able to say.
+#: names unique to it. Omission no longer means "shared", it means "not read",
+#: which is what the narrowing needs to be able to say.
 _XRAY_PARAMS_BY_MODEL: dict[str, frozenset[str]] = {
     "lopez24": frozenset(
         {
@@ -3487,20 +3487,20 @@ class _Structural(NamedTuple):
 
     Attributes
     ----------
-    key: str
+    key : str
         Name the setting carries inside its group dict (grammar side).
-    attr: str
+    attr : str
         Attribute :class:`~tengri.parameters.parameters.Parameters` stores it
         on (spec side).
-    default: object
+    default : object
         Value the spec holds when the user did not set the key. The key is
         emitted only when the spec differs from this, so an untouched group
         stays absent from the round-trip rather than growing noise.
-    only_types: tuple of str or None
+    only_types : tuple of str or None
         Emit only when the group's resolved ``type`` is one of these. Guards
         settings whose mere presence *implies* a backend; a ``neb['grid']``
         emitted onto a non-CLOUDY spec would switch the backend on re-parse.
-    resolved_default: callable or None
+    resolved_default : callable or None
         ``callable(spec)`` returning the value the spec would hold had the
         user not set the key, for defaults resolved at construction rather
         than fixed literals (CLOUDY's auto-located grid path). Overrides
@@ -3612,9 +3612,9 @@ def _differs_from_default(value: object, default: object) -> bool:
 
     Parameters
     ----------
-    value: object
+    value : object
         Value read off the spec.
-    default: object
+    default : object
         Value the spec holds when the user did not set the key.
 
     Returns
@@ -3638,12 +3638,12 @@ def _emit_declared_structural(group_name: str, group_output: dict, spec: Paramet
 
     Parameters
     ----------
-    group_name: str
+    group_name : str
         Group name (e.g. ``'sfh'``).
-    group_output: dict
+    group_output : dict
         Group dict to fill (modified in place). Its ``'type'`` entry, when
         already present, gates the ``only_types`` settings.
-    spec: Parameters
+    spec : Parameters
         The Parameters object to read settings from.
     """
     group_type = group_output.get("type")
@@ -3812,8 +3812,8 @@ def _validate_user_keys(
         # qpah pinned at its default and one fewer free dimension than the
         # author wrote. A form that silently does nothing can have no working
         # caller, so refusing it cannot break code that works today.
-        # (``agn`` genuinely resolves its cross-level names: 14/14 applied; # which is why that
-        # union below stays.)
+        # (``agn`` genuinely resolves its cross-level names, 14/14 applied,
+        # which is why that union below stays.)
         elif top_key == "igm":
             # The IGM top-level accepts DLA param short names for the
             # builder-factory output form ``igm={'dla': True, 'log_n_hi': ...}``,
@@ -3944,11 +3944,11 @@ def _subblock_owning(key: str, group: str, param_partition: dict[str, str]) -> s
 
     Parameters
     ----------
-    key: str
+    key : str
         The rejected key, short or fully prefixed.
-    group: str
+    group : str
         The group the key was written under.
-    param_partition: dict
+    param_partition : dict
         Full parameter name -> owning group.
 
     Returns
@@ -3995,11 +3995,11 @@ def _build_agn_search_view(param_name: str, agn_dict: dict, group: str) -> dict:
 
     Parameters
     ----------
-    param_name: str
+    param_name : str
         Full parameter name (e.g. ``"agn_log_lbol"``).
-    agn_dict: dict
+    agn_dict : dict
         User's top-level ``agn`` dict.
-    group: str
+    group : str
         Partition group for ``param_name`` (``"agn"`` for shared,
         ``"agn.<subblock>"`` for sub-block).
 
@@ -4133,9 +4133,9 @@ def _translate_agn(agn_dict: dict, result: dict) -> None:
 
     Parameters
     ----------
-    agn_dict: dict
+    agn_dict : dict
         User's agn group specification.
-    result: dict
+    result : dict
         Structural kwargs dict (modified in-place).
 
     Raises
@@ -4151,8 +4151,8 @@ def _translate_agn(agn_dict: dict, result: dict) -> None:
     # silent-failure footgun (closes #417 second case).
     top_type = agn_dict.get("type")
     if top_type is not None and top_type != "composable":
-        # Reject mixing a monolithic ``type`` with sub-block selectors: # the two surfaces are
-        # mutually exclusive.
+        # Reject mixing a monolithic ``type`` with sub-block selectors;
+        # the two surfaces are mutually exclusive.
         used_blocks = sorted(k for k in _AGN_SUBBLOCK_KEYS if k in agn_dict)
         if used_blocks:
             raise ValueError(
@@ -4362,13 +4362,13 @@ def _partition_by_group(
 
     Parameters
     ----------
-    all_param_names: list[str]
+    all_param_names : list[str]
         All declared parameter names from the structural Parameters.
-    dust_emission_active: bool
+    dust_emission_active : bool
         If True, dust_emission params belong to "dust.emission"; else ignored.
-    met_group: str, optional
+    met_group : str, optional
         Group that ``met_*`` parameters belong to.
-    agn_flat: bool, optional
+    agn_flat : bool, optional
         Route every ``agn_*`` parameter to a flat ``"agn"`` group instead of
         its ``agn.<block>`` sub-block. Set by the round-trip emitter when a
         *monolithic* AGN model is selected: ``_translate_agn`` raises on a
@@ -4455,18 +4455,18 @@ def _resolve_value(
 
     Parameters
     ----------
-    param_name: str
+    param_name : str
         Full parameter name (e.g., 'sfh_dpl_alpha').
-    group_dict: dict
+    group_dict : dict
         The user's group dict (e.g., sfh[...]).
-    registry_default: Distribution
+    registry_default : Distribution
         The registry's default prior/value for this param.
 
     Returns
     -------
-    distribution: Distribution
+    distribution : Distribution
         The resolved distribution (or Fixed wrapper).
-    provenance: str
+    provenance : str
         Tag describing why this resolution was chosen. One of:
         ``"user_prior"``, ``"user_fixed"``, ``"user_free"``,
         ``"wildcard_free"``, ``"wildcard_fixed"``, ``"registry_default"``.
@@ -4615,9 +4615,9 @@ def _extract_short_name(full_param_name: str, group_dict: dict) -> str:
 
     Parameters
     ----------
-    full_param_name: str
+    full_param_name : str
         Full parameter name.
-    group_dict: dict
+    group_dict : dict
         The group dict (to check for full-prefix overrides and short-name ambiguities).
 
     Returns
@@ -4705,7 +4705,7 @@ def parameters_to_groups(spec: Parameters) -> dict:
 
     Parameters
     ----------
-    spec: Parameters
+    spec : Parameters
         The Parameters object to convert.
 
     Returns
@@ -4908,7 +4908,7 @@ def _default_group_type(group_name: str) -> str | tuple | None:
 
     Parameters
     ----------
-    group_name: str
+    group_name : str
         Group name, e.g. ``"neb"`` or ``"agn.torus"``.
 
     Returns
@@ -5007,11 +5007,11 @@ def _add_structural_settings(group_name: str, group_output: dict, spec: Paramete
 
     Parameters
     ----------
-    group_name: str
+    group_name : str
         Group name.
-    group_output: dict
+    group_output : dict
         The group dict to fill (modified in place).
-    spec: Parameters
+    spec : Parameters
         The Parameters object.
 
     Notes
@@ -5062,11 +5062,11 @@ def _analyze_wildcard_intent(
 
     Parameters
     ----------
-    param_names: list[str]
+    param_names : list[str]
         Full parameter names in this group.
-    spec: Parameters
+    spec : Parameters
         The Parameters object.
-    provenance: dict
+    provenance : dict
         The _group_provenance dict (or empty dict).
 
     Returns
@@ -5107,13 +5107,13 @@ def _get_explicit_overrides(
 
     Parameters
     ----------
-    param_names: list[str]
+    param_names : list[str]
         Full parameter names in the group.
-    spec: Parameters
+    spec : Parameters
         The Parameters object.
-    provenance: dict
+    provenance : dict
         The _group_provenance dict.
-    wildcard_intent: str or None
+    wildcard_intent : str or None
         The wildcard intent (FREE, FIXED, or None).
 
     Returns

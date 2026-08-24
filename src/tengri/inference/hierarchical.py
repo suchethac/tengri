@@ -69,9 +69,9 @@ def chain_is_degenerate(chain, accept_rate: float) -> bool:
 
     Parameters
     ----------
-    chain: array_like, shape (n_samples, n_dim)
+    chain : array_like, shape (n_samples, n_dim)
         Post-burn-in draws.
-    accept_rate: float
+    accept_rate : float
         Mean acceptance probability over the same draws.
 
     Returns
@@ -100,20 +100,20 @@ class PopulationPosterior:
 
     Parameters
     ----------
-    shared_samples: dict
+    shared_samples : dict
         Posterior samples for shared PSD params. Keys are param names (e.g.,
         'psd_sigma', 'psd_tau_myr'), values are arrays of shape (n_samples,).
-    shared_params: dict
+    shared_params : dict
         Posterior mean of shared PSD params (computed from shared_samples).
-    individual_samples: list of dict, optional
+    individual_samples : list of dict, optional
         Per-galaxy posterior samples. Each element is a dict with per-galaxy
         parameter names as keys. If None, individual posteriors are not stored
         (for memory efficiency).
-    method: str
+    method : str
         Inference method used (e.g., "Hierarchical EVI (JIT)").
-    wall_time_s: float
+    wall_time_s : float
         Total wall-clock time for inference.
-    diagnostics: dict
+    diagnostics : dict
         Method-specific diagnostics (e.g., number of iterations, convergence info).
 
     Notes
@@ -276,7 +276,7 @@ class PopulationPosterior:
 
         Parameters
         ----------
-        exclude_prefixes: tuple of str, optional
+        exclude_prefixes : tuple of str, optional
             Parameter-name prefixes to skip when computing per-galaxy
             diagnostics. Default ``("psd_xi",)`` skips the GP latent
             fields, which carry one chain entry per grid point and
@@ -378,9 +378,9 @@ class PopulationPosterior:
 
         Parameters
         ----------
-        params: tuple of str
+        params : tuple of str
             Two parameter names for x and y axes.
-        ax: matplotlib Axes, optional
+        ax : matplotlib Axes, optional
             If None, creates a new figure.
 
         Returns
@@ -426,20 +426,20 @@ class PopulationFitter:
 
     Parameters
     ----------
-    model_factory: callable
+    model_factory : callable
         Function(psd_sigma, psd_tau_myr) → Model.
         Creates a model with the given PSD params. All other params
         (SFH, dust, etc.) come from the model's Parameters.
-    galaxies: list of dict
+    galaxies : list of dict
         Each dict has 'flux_obs', 'noise', and optionally 'spec_obs',
         'spec_noise', 'wave_spec'.
-    psd_sigma_prior: tuple
+    psd_sigma_prior : tuple
         (lo, hi) for uniform prior on σ_PSD.
-    psd_tau_prior: tuple
+    psd_tau_prior : tuple
         (lo, hi) for uniform prior on τ_PSD (Myr).
-    data_type: str
+    data_type : str
         "photometry" or "spectroscopy".
-    approx: "auto" or None or precompute config, optional
+    approx : "auto" or None or precompute config, optional
         Fit-time precompute policy, mirroring :class:`Fitter`. ``"auto"``
         (default) routes every factory-built model through the LUT for the
         data type (photometry -> ``WavePrecomp``, spectroscopy ->
@@ -458,7 +458,7 @@ class PopulationFitter:
 
     Attributes
     ----------
-    n_galaxies: int
+    n_galaxies : int
         Number of galaxies in the population.
 
     Examples
@@ -577,9 +577,9 @@ class PopulationFitter:
 
         Parameters
         ----------
-        method: str
+        method : str
             The unrecognized name the caller passed.
-        method_map: dict
+        method_map : dict
             The live NIFTy dispatch table. Passed rather than imported because
             it is a local of :meth:`run`; the other two sources are module
             constants and are read directly.
@@ -615,7 +615,7 @@ class PopulationFitter:
 
         Parameters
         ----------
-        method: str
+        method : str
             **NIFTy-backed (CorrelatedFieldMaker, native PSD learning)**
 
             - ``"vi"``: the canonical name, shared with every other fit
@@ -697,9 +697,9 @@ class PopulationFitter:
               stochastic-field D (hundreds of latents) prefer
               ``"mcmc_nuts"``, or shrink ``n_grid`` at build time.
 
-        key: PRNGKey, optional
+        key : PRNGKey, optional
             Random key for reproducibility. If None, uses PRNGKey(0).
-        allow_unvalidated: bool, optional
+        allow_unvalidated : bool, optional
             Run a ``tier="broken"`` method anyway, for benchmarking or backend
             development, not for science. Default False.
         **kwargs
@@ -860,23 +860,23 @@ class PopulationFitter:
 
         Parameters
         ----------
-        n_iterations: int
+        n_iterations : int
             Maximum KL iterations. Auto-stops when converged.
-        n_samples: int
+        n_samples : int
             Samples per iteration (doubled by mirror_samples).
-        n_posterior_samples: int
+        n_posterior_samples : int
             Posterior samples drawn after convergence.
-        forward_chunk_size: int
+        forward_chunk_size : int
             Number of galaxies to evaluate in parallel per ``lax.map`` step (K).
             ``K=1`` (default) gives pure sequential lax.map, O(1) peak memory.
             ``K>1`` vmaps K galaxies per iteration for K-way parallelism.
             Must divide ``n_gal`` evenly after padding; all galaxies must have the
             same number of data points when ``K>1``.
-        kl_rtol: float
+        kl_rtol : float
             Relative KL tolerance for early stopping.
-        n_seeds: int
+        n_seeds : int
             Number of random seeds. Best result (lowest H) is kept.
-        verbose: bool
+        verbose : bool
             Print progress.
 
         Notes
@@ -955,7 +955,7 @@ class PopulationFitter:
 
             Parameters
             ----------
-            p: dict
+            p : dict
                 Hierarchical parameter dict with shared PSD + per-galaxy params.
 
             Returns
@@ -1237,23 +1237,23 @@ class PopulationFitter:
 
         Parameters
         ----------
-        n_iterations: int
+        n_iterations : int
             Maximum KL iterations. Auto-stops when converged.
-        n_samples: int
+        n_samples : int
             Samples per iteration (doubled by mirror_samples).
-        n_posterior_samples: int
+        n_posterior_samples : int
             Posterior samples drawn after convergence.
-        forward_chunk_size: int
+        forward_chunk_size : int
             Number of galaxies to evaluate in parallel per ``lax.map`` step (K).
             ``K=1`` (default) gives pure sequential lax.map, O(1) peak memory.
             ``K>1`` vmaps K galaxies per iteration for K-way parallelism.
             Must divide ``n_gal`` evenly after padding; all galaxies must have the
             same number of data points when ``K>1``.
-        kl_rtol: float
+        kl_rtol : float
             Relative KL tolerance for early stopping.
-        n_seeds: int
+        n_seeds : int
             Number of random seeds. Best result (lowest H) is kept.
-        verbose: bool
+        verbose : bool
             Print progress.
         """
 
@@ -1315,7 +1315,7 @@ class PopulationFitter:
 
             Parameters
             ----------
-            p: dict
+            p : dict
                 Hierarchical parameter dict. Keys 'psd_sigma' and 'psd_tau' map to
                 unbounded optimizer space internally; 'gal' contains per-galaxy unbounded
                 params; 'gal_xi' present if stochastic field is enabled.

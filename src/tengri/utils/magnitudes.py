@@ -84,7 +84,7 @@ def fnu_to_ab_mag(fnu_cgs: jnp.ndarray) -> jnp.ndarray:
 
     Parameters
     ----------
-    fnu_cgs: jnp.ndarray
+    fnu_cgs : jnp.ndarray
         Flux density in erg s⁻¹ cm⁻² Hz⁻¹. Shape: arbitrary.
 
     Returns
@@ -131,7 +131,7 @@ def ab_mag_to_fnu(mag_ab: jnp.ndarray) -> jnp.ndarray:
 
     Parameters
     ----------
-    mag_ab: jnp.ndarray
+    mag_ab : jnp.ndarray
         AB magnitude. Shape: arbitrary.
 
     Returns
@@ -176,7 +176,7 @@ def lnu_to_absolute_ab_mag(lnu: jnp.ndarray) -> jnp.ndarray:
 
     Parameters
     ----------
-    lnu: jnp.ndarray
+    lnu : jnp.ndarray
         Monochromatic luminosity in erg s⁻¹ Hz⁻¹. Shape: arbitrary.
 
     Returns
@@ -190,8 +190,8 @@ def lnu_to_absolute_ab_mag(lnu: jnp.ndarray) -> jnp.ndarray:
 
     The distance 10 pc is defined in `tengri.utils.physics_constants.TEN_PC_CM`.
     The geometric factor is subtracted in the log domain: ``4π (10 pc)^2`` is
-    1.196e40 and its float32 evaluation is ``inf``; already at ``TEN_PC_CM**2``: so the linear
-    form returned ``inf`` for every input, despite M_UV being
+    1.196e40 and its float32 evaluation is ``inf`` (already at ``TEN_PC_CM**2``)
+    so the linear form returned ``inf`` for every input, despite M_UV being
     ~-17 (#1837). Clamping in the log domain is exactly equivalent to the
     previous linear clamp because ``log10`` is monotone:
     ``log10(max(x, f)) == max(log10(x), log10(f))``.
@@ -216,7 +216,7 @@ def absolute_ab_mag_to_lnu(mag_abs: jnp.ndarray) -> jnp.ndarray:
 
     Parameters
     ----------
-    mag_abs: jnp.ndarray
+    mag_abs : jnp.ndarray
         Absolute AB magnitude. Shape: arbitrary.
 
     Returns
@@ -255,9 +255,9 @@ def apparent_to_absolute(m_app: jnp.ndarray, dist_modulus: jnp.ndarray) -> jnp.n
 
     Parameters
     ----------
-    m_app: jnp.ndarray
+    m_app : jnp.ndarray
         Apparent magnitude. Shape: arbitrary.
-    dist_modulus: jnp.ndarray
+    dist_modulus : jnp.ndarray
         Distance modulus μ. Same shape as m_app, or broadcastable.
 
     Returns
@@ -283,9 +283,9 @@ def absolute_to_apparent(m_abs: jnp.ndarray, dist_modulus: jnp.ndarray) -> jnp.n
 
     Parameters
     ----------
-    m_abs: jnp.ndarray
+    m_abs : jnp.ndarray
         Absolute magnitude. Shape: arbitrary.
-    dist_modulus: jnp.ndarray
+    dist_modulus : jnp.ndarray
         Distance modulus μ. Same shape as m_abs, or broadcastable.
 
     Returns
@@ -306,7 +306,7 @@ def distance_modulus_from_dl(dl_cm: jnp.ndarray) -> jnp.ndarray:
 
     Parameters
     ----------
-    dl_cm: jnp.ndarray
+    dl_cm : jnp.ndarray
         Luminosity distance in cm. Shape: arbitrary.
 
     Returns
@@ -338,7 +338,7 @@ def distance_modulus_from_dl_mpc(dl_mpc: jnp.ndarray) -> jnp.ndarray:
 
     Parameters
     ----------
-    dl_mpc: jnp.ndarray
+    dl_mpc : jnp.ndarray
         Luminosity distance in Mpc. Shape: arbitrary.
 
     Returns
@@ -376,9 +376,9 @@ def cosmological_dimming(dist_modulus: jnp.ndarray, redshift: jnp.ndarray) -> jn
 
     Parameters
     ----------
-    dist_modulus: jnp.ndarray
+    dist_modulus : jnp.ndarray
         Distance modulus μ. Shape: arbitrary.
-    redshift: jnp.ndarray
+    redshift : jnp.ndarray
         Redshift z. Same shape as dist_modulus, or broadcastable.
 
     Returns
@@ -444,9 +444,9 @@ def ab_to_vega(mag_ab: jnp.ndarray, ab_vega_offset: float) -> jnp.ndarray:
 
     Parameters
     ----------
-    mag_ab: jnp.ndarray
+    mag_ab : jnp.ndarray
         AB magnitude. Shape: arbitrary.
-    ab_vega_offset: float
+    ab_vega_offset : float
         Zero-magnitude offset for this band, e.g.
         ``tengri.units.AB_VEGA_OFFSETS["V"]``. A float, not a band name.
 
@@ -481,9 +481,9 @@ def vega_to_ab(mag_vega: jnp.ndarray, ab_vega_offset: float) -> jnp.ndarray:
 
     Parameters
     ----------
-    mag_vega: jnp.ndarray
+    mag_vega : jnp.ndarray
         Vega magnitude. Shape: arbitrary.
-    ab_vega_offset: float
+    ab_vega_offset : float
         Zero-magnitude offset for this band, e.g.
         ``tengri.units.AB_VEGA_OFFSETS["V"]``. A float, not a band name.
 
@@ -517,9 +517,9 @@ def mag_to_surface_brightness(mag: jnp.ndarray, area_arcsec2: jnp.ndarray) -> jn
 
     Parameters
     ----------
-    mag: jnp.ndarray
+    mag : jnp.ndarray
         Total magnitude. Shape: arbitrary.
-    area_arcsec2: jnp.ndarray
+    area_arcsec2 : jnp.ndarray
         Area in arcsec². Same shape as mag, or broadcastable.
 
     Returns
@@ -548,9 +548,9 @@ def surface_brightness_to_mag(mu: jnp.ndarray, area_arcsec2: jnp.ndarray) -> jnp
 
     Parameters
     ----------
-    mu: jnp.ndarray
+    mu : jnp.ndarray
         Surface brightness in mag/arcsec². Shape: arbitrary.
-    area_arcsec2: jnp.ndarray
+    area_arcsec2 : jnp.ndarray
         Area in arcsec². Same shape as mu, or broadcastable.
 
     Returns

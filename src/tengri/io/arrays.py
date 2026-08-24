@@ -13,14 +13,14 @@ class SpectrumTuple(NamedTuple):
 
     Attributes
     ----------
-    wave: array_like, shape (n_wave,)
+    wave : array_like, shape (n_wave,)
         Vacuum wavelength [Angstrom].
-    flux: array_like, shape (n_wave,)
+    flux : array_like, shape (n_wave,)
         Observed-frame flux [erg/s/cm^2/A].
-    flux_err: array_like, shape (n_wave,)
+    flux_err : array_like, shape (n_wave,)
         1-sigma error on flux [erg/s/cm^2/A]. May contain NaN for
         flagged/invalid pixels.
-    meta: dict
+    meta : dict
         Metadata dictionary. Common keys: ``redshift`` (float or None),
         ``instrument`` (str), ``header_keys`` (dict of original FITS
         keywords). Application-specific loaders may add other keys.

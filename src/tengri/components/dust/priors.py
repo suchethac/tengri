@@ -34,7 +34,7 @@ def narayanan_prior(z: float) -> dict:
 
     Parameters
     ----------
-    z: float
+    z : float
         Source redshift [dimensionless].
 
     Returns
@@ -78,9 +78,9 @@ def narayanan_tau_prior(z: float, log_mstar: float = 10.0) -> dict:
 
     Parameters
     ----------
-    z: float
+    z : float
         Source redshift [dimensionless].
-    log_mstar: float, optional
+    log_mstar : float, optional
         log₁₀(M_star / M_sun) [dimensionless]. Default: 10.0.
 
     Returns

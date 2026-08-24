@@ -30,38 +30,38 @@ class GRAHSPTemplates:
 
     Attributes
     ----------
-    feii_wave_nm: ndarray, shape (n_feii,)
+    feii_wave_nm : ndarray, shape (n_feii,)
         Bruhweiler+Verner 2008 FeII template wavelengths [nm], de-redshifted.
-    feii_lumin: ndarray, shape (n_feii,)
+    feii_lumin : ndarray, shape (n_feii,)
         FeII relative intensity (arbitrary units; multiply by ``A_FeII *
         L_Hb_broad`` per upstream).
-    line_wave_nm: ndarray, shape (36,)
+    line_wave_nm : ndarray, shape (36,)
         Netzer 1990 / Mor & Netzer 2012 line central wavelengths [nm].
-    line_broad, line_narrow_sy2, line_narrow_liner: ndarray, shape (36,)
+    line_broad, line_narrow_sy2, line_narrow_liner : ndarray, shape (36,)
         Line strengths relative to H-beta.
-    line_names: tuple[str, ...]
+    line_names : tuple[str, ...]
         Line names.
-    torus_wave_nm: ndarray, shape (n_torus,)
+    torus_wave_nm : ndarray, shape (n_torus,)
         Fixed torus wave grid [nm] (from upstream ``activategtorus``).
-    torus_mn12_wave_nm: ndarray, shape (n_mn12,)
+    torus_mn12_wave_nm : ndarray, shape (n_mn12,)
         Mor & Netzer 2012 template-torus continuum grid [nm].
-    torus_mn12_avg, torus_mn12_lo, torus_mn12_hi: ndarray, shape (n_mn12,)
+    torus_mn12_avg, torus_mn12_lo, torus_mn12_hi : ndarray, shape (n_mn12,)
         Mean / 25th-percentile / 75th-percentile :math:`L_\\lambda` torus
         templates, normalized to 1 at 12 µm (from upstream ``activatetorus``).
-    torus_mn12_si_wave_nm: ndarray, shape (n_si,)
+    torus_mn12_si_wave_nm : ndarray, shape (n_si,)
         Mullaney+2011 silicate-feature grid [nm].
-    torus_mn12_si_lumin: ndarray, shape (n_si,)
+    torus_mn12_si_lumin : ndarray, shape (n_si,)
         Silicate difference spectrum, normalized by the 12 µm continuum.
-    feii_vc04_wave_nm: ndarray, shape (n_vc04,)
+    feii_vc04_wave_nm : ndarray, shape (n_vc04,)
         Veron-Cetty+2004 FeII template wavelengths [nm] (rest frame).
-    feii_vc04_lumin: ndarray, shape (n_vc04,)
+    feii_vc04_lumin : ndarray, shape (n_vc04,)
         Veron-Cetty+2004 FeII :math:`L_\\lambda`, normalized at rest 4575 Å.
-    disc_wave_nm: ndarray, shape (n_disc_wave,)
+    disc_wave_nm : ndarray, shape (n_disc_wave,)
         Netzer accretion-disc grid [nm].
-    disc_lumin: ndarray, shape (16, n_disc_wave)
+    disc_lumin : ndarray, shape (16, n_disc_wave)
         Netzer disc :math:`L_\\lambda` per (M, a, Mdot) model, normalized to 1
         at 510 nm (inc=0).
-    disc_m, disc_a, disc_mdot: tuple[str, ...], shape (16,)
+    disc_m, disc_a, disc_mdot : tuple[str, ...], shape (16,)
         Disc grid labels: log10 M_BH/Msun, spin a, Eddington ratio Mdot.
 
     Notes
@@ -102,13 +102,13 @@ def load_grahsp_templates(
 
     Parameters
     ----------
-    path: path-like, optional
+    path : path-like, optional
         HDF5 file path. Default: ``data/grahsp/grahsp_templates.h5`` next
         to the installed package.
 
     Returns
     -------
-    templates: GRAHSPTemplates
+    templates : GRAHSPTemplates
     """
     path = Path(path)
     if not path.exists():

@@ -416,13 +416,13 @@ def profile_pipeline(
 
     Parameters
     ----------
-    model: SEDModel
+    model : SEDModel
         A tengri SEDModel instance.
-    params: dict
+    params : dict
         Parameter values (public names).
-    n: int
+    n : int
         Number of timed iterations per step.
-    config_name: str
+    config_name : str
         Label for this configuration (e.g., "stellar+dust, D=7").
 
     Returns

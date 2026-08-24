@@ -36,7 +36,7 @@ def _filters_fingerprint(obs):
 
     Parameters
     ----------
-    obs: object
+    obs : object
         Observation model with optional ``.photometry`` attribute.
 
     Returns
@@ -111,10 +111,10 @@ class ForwardModel:
 
     Parameters
     ----------
-    populations: tuple of Population
+    populations : tuple of Population
         One or more populations. Each carries an SED ``SubModel`` and
         optionally a spatial ``SubModel``. Names must be distinct.
-    observation: object
+    observation : object
         Observation model exposing ``predict(state, params) -> dict``
         (single-population) and ``predict_summed(per_pop_states, params)``
         (multi-population).
@@ -139,10 +139,10 @@ class ForwardModel:
 
     See Also
     --------
-    build: construct one, the recommended path.
-    fit: run inference; the canonical entry point.
-    tengri.SEDModel: the SED physics chain that goes inside a population.
-    tengri.Fitter: the inference engine :meth:`fit` delegates to.
+    build : construct one, the recommended path.
+    fit : run inference; the canonical entry point.
+    tengri.SEDModel : the SED physics chain that goes inside a population.
+    tengri.Fitter : the inference engine :meth:`fit` delegates to.
 
     Examples
     --------
@@ -518,9 +518,9 @@ class ForwardModel:
 
         Parameters
         ----------
-        params: Mapping
+        params : Mapping
             Free-parameter dict.
-        ssp_data, template_data: Any | None, keyword-only, optional
+        ssp_data, template_data : Any | None, keyword-only, optional
             The JIT-threading channel, see
             :meth:`SEDModel.predict_photometry`. Pass these only when wrapping
             this method in your own JAX transform; ``None`` (default) uses the
@@ -570,23 +570,23 @@ class ForwardModel:
 
         Parameters
         ----------
-        sed: SEDModel or SubModel, optional
+        sed : SEDModel or SubModel, optional
             Single-population shortcut. Mutually exclusive with
             ``population`` and ``populations``.
-        spatial: SpatialModel or SubModel, optional
+        spatial : SpatialModel or SubModel, optional
             Single-population spatial side. Only valid when ``sed=``
             is also given.
-        population: PopulationSEDModel or SubModel, optional
+        population : PopulationSEDModel or SubModel, optional
             Hierarchical-population shortcut. Mutually exclusive with
             ``sed`` and ``populations``. The PopulationSEDModel is held
-            inside ``Population(name="default", sed=population)``,             the outer-shell
-            signature stays uniform.
-        populations: iterable of Population, optional
+            inside ``Population(name="default", sed=population)``;
+            the outer-shell signature stays uniform.
+        populations : iterable of Population, optional
             Explicit population list for galaxy decompositions.
             Mutually exclusive with ``sed`` and ``population``.
-        observation: object, optional
+        observation : object, optional
             Observation model. Inherited from ``sed`` when omitted.
-        approx: WavePrecomp or SpectrumPrecomp or FeaturePrecomp or tuple, optional
+        approx : WavePrecomp or SpectrumPrecomp or FeaturePrecomp or tuple, optional
             LUT policy, built against the **authoritative** observation
             (spec §5, #1367). Same grammar as ``SEDModel.build(approx=...)``.
             Reuse-on-match: a sed already carrying exactly this LUT against
@@ -730,7 +730,7 @@ class ForwardModel:
 
         Parameters
         ----------
-        params: mapping of str -> array
+        params : mapping of str -> array
             Free parameter values. Single-population fits use bare
             names (``"sfh_dpl_alpha"``).
 
@@ -794,8 +794,8 @@ class ForwardModel:
         For a single-population fit, the observation receives the one
         state via ``observation.predict(state, params)``. For
         multi-population, the observation receives the dict of states
-        via ``observation.predict_summed(per_pop_states, params)``,         falling back to a
-        default sum if the observation does not
+        via ``observation.predict_summed(per_pop_states, params)``,
+        falling back to a default sum if the observation does not
         provide ``predict_summed``.
 
         Cross-population reads (a component in one population reading
@@ -806,7 +806,7 @@ class ForwardModel:
 
         Parameters
         ----------
-        params: mapping of str -> array
+        params : mapping of str -> array
             Free parameter values. Single-population fits use bare
             names (``"sfh_dpl_alpha"``); multi-population fits use
             namespaced names (``"disc.sfh_dpl_alpha"``).
@@ -820,8 +820,8 @@ class ForwardModel:
         # photometry-only model built with a WavePrecomp LUT can serve its
         # photometry straight from the inner SEDModel's LUT-aware orchestrator
         # (``predict_observables_jit``), skipping the full-resolution component
-        # cube that the general per-population path below builds. That cube,         # not the LUT
-        # projection, is the ~11-16x cost on plain photometry, so
+        # cube that the general per-population path below builds. That cube,
+        # not the LUT projection, is the ~11-16x cost on plain photometry, so
         # without this the LUT never helps ``predict_observables`` (the fit path
         # already routes through ``predict_photometry`` and was unaffected).
         # Tightly guarded: multi-population, spatial, spectroscopy/joint,
@@ -970,7 +970,7 @@ class ForwardModel:
 
         Parameters
         ----------
-        approx: WavePrecomp or SpectrumPrecomp or FeaturePrecomp or tuple or None
+        approx : WavePrecomp or SpectrumPrecomp or FeaturePrecomp or tuple or None
             Approximation policy for the clone (same grammar as ``approx=`` on
             :class:`SEDModel`).
 
@@ -1015,29 +1015,29 @@ class ForwardModel:
 
         Parameters
         ----------
-        data: array_like or Data, optional
+        data : array_like or Data, optional
             Observed flux (photometry / spectroscopy) or a :class:`Data`
             record. Optional for hierarchical fits where the per-galaxy data
             lives on the :class:`PopulationSEDModel`.
-        noise: array, optional
+        noise : array, optional
             1-sigma uncertainties matching ``data``. Must be ``None`` if
             ``data`` is a :class:`Data` record.
-        method: str, default ``"vi"``
+        method : str, default ``"vi"``
             Inference method. Any value accepted by
             :meth:`Fitter.run` (``"vi"``, ``"mcmc_nuts"``, ``"map"``,
             …).
-        approx: {"auto", None} or WavePrecomp or SpectrumPrecomp or tuple, default ``"auto"``
+        approx : {"auto", None} or WavePrecomp or SpectrumPrecomp or tuple, default ``"auto"``
             Approximation policy for the fit. ``"auto"`` (default) routes the
             fit through the fast precompute LUT selected by data type
             (``WavePrecomp`` for photometry, ``SpectrumPrecomp`` for
             spectroscopy/joint, plus ``FeaturePrecomp`` when emission lines are
             fit); ``None`` forces the exact wave-grid path; an explicit config
-            (or tuple) overrides. Model **prediction** stays exact regardless,             only
-            the fit is accelerated. The user's model object is left
+            (or tuple) overrides. Model **prediction** stays exact regardless;
+            only the fit is accelerated. The user's model object is left
             unchanged; the returned posterior references the fit clone.
-        key: jax.random.PRNGKey, optional
+        key : jax.random.PRNGKey, optional
             Inference seed.
-        params: dict, optional
+        params : dict, optional
             Per-fit parameter override dict. Keys that name fixed parameters
             (not free) will override their values for this fit only; the model
             object is left unchanged. Useful for catalog-fitting with per-galaxy
@@ -1045,7 +1045,7 @@ class ForwardModel:
             valid parameters (raise ``ValueError`` if not); keys naming free
             parameters raise ``ValueError`` (you cannot pin a parameter being fit).
             Default ``None`` (no override).
-        **kwargs: Any
+        **kwargs : Any
             Forwarded to :meth:`Fitter.run` (e.g. ``prewarm=``, JIT-compile the
             loss/sampler/predict surface before the fit loop, default ``True``).
 
@@ -1213,12 +1213,12 @@ class ForwardModel:
 
         Parameters
         ----------
-        data_shape: tuple of int or None, optional
+        data_shape : tuple of int or None, optional
             Shape of the data to pre-warm against. If ``None``, uses the
             observation's photometry shape. Dummy data (zeros) of this shape
             are created internally, pre-warm is value-independent and only
             needs the compile signature (shape, filters, wavelengths, etc.).
-        method: str, default ``"mcmc_nuts"``
+        method : str, default ``"mcmc_nuts"``
             Inference method to pre-warm. Any name accepted by
             :meth:`fit`.
         **kwargs
@@ -1239,7 +1239,7 @@ class ForwardModel:
 
         See Also
         --------
-        Fitter.prewarm: Low-level pre-warm interface
+        Fitter.prewarm : Low-level pre-warm interface
 
         Examples
         --------
@@ -1352,8 +1352,8 @@ def _predict_observation(
 
     Composability: ``observation.predict`` is the un-batched
     primitive. Callers wanting outer ``pmap`` / ``shard_map`` can
-    wrap this helper (or just ``observation.predict``) themselves,     the hidden batching here is
-    the default, not the only path.
+    wrap this helper (or just ``observation.predict``) themselves;
+    the hidden batching here is the default, not the only path.
     """
     import jax
 

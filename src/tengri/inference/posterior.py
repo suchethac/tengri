@@ -52,13 +52,13 @@ class PosteriorProperties(ReadOnlyPropertyMapping, Mapping):
 
     Parameters
     ----------
-    posterior: Posterior
+    posterior : Posterior
         The parent posterior, supplying ``samples`` (or ``params`` for a MAP
         fit, which has no sample axis) and the model.
 
     See Also
     --------
-    tengri.forward.prediction.PropertyCatalog: the scalar (single-Prediction) twin.
+    tengri.forward.prediction.PropertyCatalog : the scalar (single-Prediction) twin.
     """
 
     def __init__(self, posterior):
@@ -141,9 +141,9 @@ class PosteriorProperties(ReadOnlyPropertyMapping, Mapping):
 
         Parameters
         ----------
-        name: str
+        name : str
             Property name.
-        level: float, default 0.68
+        level : float, default 0.68
             Central credible level. ``0.68`` gives the 16th/84th percentiles.
 
         Returns
@@ -198,31 +198,31 @@ class Posterior:
 
     Parameters
     ----------
-    samples: dict or None
+    samples : dict or None
         Posterior samples in physical parameter space (optional, set by inference).
-    params: dict
+    params : dict
         Best-fit or posterior mean parameters.
-    method: str
+    method : str
         Inference method name (e.g., ``"vi"``, ``"mcmc_nuts"``, ``"map"``).
-    wall_time_s: float
+    wall_time_s : float
         Total wall-clock runtime in seconds.
-    diagnostics: dict
+    diagnostics : dict
         Method-specific convergence metrics.
-    loss_history: ndarray or None
+    loss_history : ndarray or None
         Optimization loss values (optimization methods only).
-    log_evidence: float or None
+    log_evidence : float or None
         Log Bayesian evidence (NSS only).
-    _model: SEDModel, optional
+    _model : SEDModel, optional
         Forward model reference.
-    _fitter: Fitter, optional
+    _fitter : Fitter, optional
         Fitter reference for refinement methods.
-    eline_fluxes: ndarray or None
+    eline_fluxes : ndarray or None
         Emission line fluxes [erg/s/cm²].
-    eline_flux_cov: ndarray or None
+    eline_flux_cov : ndarray or None
         Emission line flux covariance.
-    eline_names: tuple or None
+    eline_names : tuple or None
         Emission line identifiers.
-    eline_wavelengths: ndarray or None
+    eline_wavelengths : ndarray or None
         Rest-frame vacuum wavelengths [Angstrom].
 
     Returns
@@ -232,23 +232,23 @@ class Posterior:
 
     Attributes
     ----------
-    samples: dict or None
+    samples : dict or None
         Posterior samples in physical parameter space. Each value has shape
         (n_samples, ...). Keys are parameter names (e.g., ``"stellar_mass"``,
         ``"age_gyr"``, ``"psd_xi"``). ``None`` for point estimates (MAP, Laplace,
         Pathfinder).
 
-    params: dict
+    params : dict
         Best-fit (MAP for point estimation) or posterior mean parameters in
         physical space. Same keys as ``samples`` (without ``"psd_xi"`` latent field).
 
-    method: str
+    method : str
         Inference method name (e.g., ``"vi"``, ``"mcmc_nuts"``, ``"map"``).
 
-    wall_time_s: float
+    wall_time_s : float
         Total wall-clock runtime in seconds, including compilation and sampling.
 
-    diagnostics: dict
+    diagnostics : dict
         Method-specific convergence and quality metrics. Contents vary by method:
 
         - **VI methods**: ``{"kl_iter": int, "kl_final": float}``, etc.
@@ -257,36 +257,36 @@ class Posterior:
         - **MAP**: ``{"final_loss": float, "n_steps": int}``, etc.
         - **NSS**: ``{"n_live": int, "log_evidence_err": float}``, etc.
 
-    loss_history: ndarray or None
+    loss_history : ndarray or None
         Optimization loss values over iterations (MAP/Laplace/Pathfinder only).
         Shape (n_iterations,). ``None`` for sampling methods.
 
-    log_evidence: float or None
+    log_evidence : float or None
         Bayesian evidence log(Z) integral (NSS only). ``None`` for other methods.
         Used for model comparison via Bayes factors.
 
-    _model: SEDModel, optional
+    _model : SEDModel, optional
         Reference to the forward model. Required for computing derived quantities
         (stellar mass, SFR, sSFR, etc.). Set by ``Fitter.run()`` automatically.
 
-    _fitter: Fitter, optional
+    _fitter : Fitter, optional
         Reference to the Fitter instance. Enables ``refine()`` and other
         refinement methods. Set by ``Fitter.run()`` automatically.
 
-    eline_fluxes: ndarray or None
+    eline_fluxes : ndarray or None
         Emission line fluxes. Shape (n_lines,) for MAP, (n_samples, n_lines) for
         sampling. ``None`` if no emission line fitting/marginalization was enabled.
         Flux units match input data [erg/s/cm²].
 
-    eline_flux_cov: ndarray or None
+    eline_flux_cov : ndarray or None
         Posterior covariance of emission line fluxes. Shape (n_lines, n_lines) for
         MAP, (n_samples, n_lines, n_lines) for sampling. ``None`` if unavailable.
 
-    eline_names: tuple or None
+    eline_names : tuple or None
         Emission line identifiers (e.g., ``("Halpha", "Hbeta", ...)``)
         matching ``eline_fluxes`` column order.
 
-    eline_wavelengths: ndarray or None
+    eline_wavelengths : ndarray or None
         Rest-frame vacuum wavelengths [Angstrom] of emission lines, matching
         ``eline_fluxes`` column order.
 
@@ -309,8 +309,8 @@ class Posterior:
 
     See Also
     --------
-    Fitter.run: Returns Posterior with all attributes populated.
-    Fitter: Primary interface for inference.
+    Fitter.run : Returns Posterior with all attributes populated.
+    Fitter : Primary interface for inference.
 
     Examples
     --------
@@ -445,8 +445,8 @@ class Posterior:
 
         See Also
         --------
-        PosteriorProperties: the catalog object.
-        tengri.vmap_chunked: the memory-bounded evaluation used underneath.
+        PosteriorProperties : the catalog object.
+        tengri.vmap_chunked : the memory-bounded evaluation used underneath.
         """
         return PosteriorProperties(self)
 
@@ -624,9 +624,9 @@ class Posterior:
 
         Returns
         -------
-        log_nii_ha: ndarray, shape (n_samples,) or scalar
+        log_nii_ha : ndarray, shape (n_samples,) or scalar
             log10([NII]6584 / Hα). For MAP, returns scalar.
-        log_oiii_hb: ndarray, shape (n_samples,) or scalar
+        log_oiii_hb : ndarray, shape (n_samples,) or scalar
             log10([OIII]5007 / Hβ). For MAP, returns scalar.
 
         Raises
@@ -850,7 +850,7 @@ class Posterior:
 
         Parameters
         ----------
-        wavelength: array_like, optional
+        wavelength : array_like, optional
             Ignored, kept for backwards compatibility. The orchestrator
             uses the model's SSP wavelength grid; pass-through to a
             different grid is no longer supported here. Interpolate the
@@ -938,7 +938,7 @@ class Posterior:
 
         Parameters
         ----------
-        wavelength: array_like, optional
+        wavelength : array_like, optional
             Rest-frame wavelength grid. Defaults to the model's grid.
 
         Returns
@@ -1032,9 +1032,9 @@ class Posterior:
 
         Parameters
         ----------
-        window_aa: float, optional
+        window_aa : float, optional
             Half-width of the line integration window [Angstrom]. Default 20.
-        continuum_width_aa: float, optional
+        continuum_width_aa : float, optional
             Width of each sideband used to estimate the continuum [Angstrom].
             Sidebands sit at ``[lambda_0 +/- window +/- continuum_width]``.
             Default 50.
@@ -1123,7 +1123,7 @@ class Posterior:
 
         Parameters
         ----------
-        params: dict of str to float, optional
+        params : dict of str to float, optional
             Point to expand around, in physical units. Default ``None`` uses
             this fit's own point estimate.
 
@@ -1144,7 +1144,7 @@ class Posterior:
 
         See Also
         --------
-        tengri.parameter_information: the same measurement as a free function.
+        tengri.parameter_information : the same measurement as a free function.
 
         Notes
         -----
@@ -1352,7 +1352,7 @@ class Posterior:
 
         Parameters
         ----------
-        max_lag: int, optional
+        max_lag : int, optional
             Maximum lag. Default: n_samples // 2.
 
         Returns
@@ -1471,7 +1471,7 @@ class Posterior:
 
         Parameters
         ----------
-        verbose: bool
+        verbose : bool
             Print diagnostics table.
 
         Returns
@@ -1521,17 +1521,17 @@ class Posterior:
 
         Parameters
         ----------
-        data: array_like, shape (n_obs,)
+        data : array_like, shape (n_obs,)
             Observed data the posterior was conditioned on. Same units
             as ``predict_photometry``'s output.
-        noise: array_like, shape (n_obs,)
+        noise : array_like, shape (n_obs,)
             Per-observation 1-sigma uncertainty (Gaussian).
-        n_samples: int, optional
+        n_samples : int, optional
             How many posterior draws to evaluate. ``None`` (default)
             uses every available draw; for MAP results this is
             implicitly 1. For sampling results, draws are selected
             via :meth:`resample` (with replacement) using ``key``.
-        key: PRNGKey, optional
+        key : PRNGKey, optional
             JAX PRNG key for resampling. If ``None``, defaults to
             ``jax.random.PRNGKey(0)``.
 
@@ -1619,7 +1619,7 @@ class Posterior:
 
         Parameters
         ----------
-        exclude_prefixes: tuple of str, optional
+        exclude_prefixes : tuple of str, optional
             Parameter name prefixes to skip. Default skips ``psd_xi``
             (GP latent vector, high-D, not informative per-component).
 
@@ -1748,26 +1748,26 @@ class Posterior:
 
         Parameters
         ----------
-        filters: sequence of str or FilterCurve, or Photometry, optional
+        filters : sequence of str or FilterCurve, or Photometry, optional
             Bands to integrate, filter names (``["jwst_f356w", ...]``), curves, or
             a prebuilt :class:`~tengri.observation.Photometry`. Accepts exactly what
             :meth:`Prediction.photometry` accepts. Defaults to the ones the model
             was built with.
-        n_draws: int, optional
+        n_draws : int, optional
             Thin to this many draws (resampled with replacement) before
             evaluating. ``None`` uses every draw, which for a large posterior is
             exactly the memory problem :func:`~tengri.vmap_chunked` exists to
             bound, so it is chunked either way.
-        approx: bool, default False
+        approx : bool, default False
             Route through the lean ``predict_photometry`` (whatever build-time
             ``approx=`` the model carries) instead of the exact projector.
             On a model built without one this is a no-op, not an error, the
             lean surface *is* exact there.
-        key: PRNGKey, optional
+        key : PRNGKey, optional
             Used only when ``n_draws`` is given. Defaults to ``PRNGKey(0)``.
-        chunk_size: int, default 64
+        chunk_size : int, default 64
             Draws per compiled kernel.
-        fast: bool, optional
+        fast : bool, optional
             Deprecated spelling of `approx`. Removed in v1.0.
 
         Returns
@@ -1844,20 +1844,20 @@ class Posterior:
 
         Parameters
         ----------
-        wave_obs: array_like, shape (n_wave,), optional
+        wave_obs : array_like, shape (n_wave,), optional
             Observed-frame wavelength grid [Angstrom]. Defaults to the
             instrument grid the model was built with.
-        n_draws: int, optional
+        n_draws : int, optional
             Thin to this many draws (resampled with replacement). ``None`` uses
             every draw, chunked either way.
-        approx: bool, default False
+        approx : bool, default False
             Route through the lean ``predict_spectrum`` (build-time
             ``SpectrumPrecomp``) instead of the exact projector.
-        key: PRNGKey, optional
+        key : PRNGKey, optional
             Used only when ``n_draws`` is given. Defaults to ``PRNGKey(0)``.
-        chunk_size: int, default 64
+        chunk_size : int, default 64
             Draws per compiled kernel.
-        fast: bool, optional
+        fast : bool, optional
             Deprecated spelling of `approx`. Removed in v1.0.
 
         Returns
@@ -1962,9 +1962,9 @@ class Posterior:
 
         Parameters
         ----------
-        key: PRNGKey
+        key : PRNGKey
             JAX random key.
-        n: int
+        n : int
             Number of resamples.
 
         Returns
@@ -2117,7 +2117,7 @@ class Posterior:
 
         Parameters
         ----------
-        path: str
+        path : str
             Output HDF5 file path.
 
         Returns
@@ -2191,16 +2191,16 @@ class Posterior:
 
         Parameters
         ----------
-        container: h5py.Group
+        container : h5py.Group
             Group to write into, the diagnostics group, or a nested subgroup.
-        key: str
+        key : str
             Entry name within ``container``.
-        val: object
+        val : object
             Value to store.
-        path: str
+        path : str
             Dotted prefix of ``key`` for reporting, e.g. ``"nested."``. Empty
             at the top level.
-        skipped: list of str
+        skipped : list of str
             Accumulator, appended in place for entries h5py cannot hold.
         """
         if isinstance(val, dict):
@@ -2262,9 +2262,9 @@ class Posterior:
 
         Parameters
         ----------
-        path: str
+        path : str
             Path to HDF5 file saved by :meth:`save`.
-        model: SEDModel, optional
+        model : SEDModel, optional
             Model reference for derived quantity computation.
             If provided, enables ``derived``, ``plot_sed()``, ``plot_sfh()``.
 
@@ -2396,23 +2396,23 @@ class Posterior:
 
         Parameters
         ----------
-        params: list of str, optional
+        params : list of str, optional
             Parameter names to include. Defaults to all scalar physical params.
             Automatically excludes ``psd_xi`` (latent field) and constant parameters.
-        truths: dict, optional
+        truths : dict, optional
             True values to mark with dashed lines. Keys should match parameter names.
-        figsize: tuple, optional
+        figsize : tuple, optional
             Figure size (width, height). Default: auto-scaled.
-        color: str
+        color : str
             Color for this posterior's contours and histograms.
-        fig, axes: matplotlib Figure, ndarray of Axes, optional
+        fig, axes : matplotlib Figure, ndarray of Axes, optional
             If provided, overlay on existing corner plot (for comparing posteriors).
-        label: str, optional
+        label : str, optional
             Legend label for this posterior (appears in legend on diagonal).
 
         Returns
         -------
-        fig: matplotlib Figure
+        fig : matplotlib Figure
             The corner plot figure.
 
         Notes
@@ -2644,17 +2644,17 @@ class Posterior:
 
         Parameters
         ----------
-        n_draws: int
+        n_draws : int
             Number of posterior draws to use for the band. Ignored for
             MAP results (plots single SED).
-        wave_range: (float, float)
+        wave_range : (float, float)
             Wavelength range in [Angstrom] to display.
-        ax: matplotlib Axes, optional
+        ax : matplotlib Axes, optional
             Axes to plot on. Creates new figure if None.
 
         Returns
         -------
-        fig: matplotlib Figure
+        fig : matplotlib Figure
             The SED plot figure.
 
         Notes
@@ -2745,14 +2745,14 @@ class Posterior:
 
         Parameters
         ----------
-        n_draws: int
+        n_draws : int
             Number of posterior draws. Ignored for MAP (plots single SFH).
-        ax: matplotlib Axes, optional
+        ax : matplotlib Axes, optional
             Axes to plot on. Creates new figure if None.
 
         Returns
         -------
-        fig: matplotlib Figure
+        fig : matplotlib Figure
             The SFH plot figure.
 
         Notes
@@ -2916,7 +2916,7 @@ class Posterior:
 
         Parameters
         ----------
-        method: str
+        method : str
             Any canonical method name accepted by ``Fitter.run()``.
             E.g. ``"mcmc_raytrace"``, ``"mcmc_nuts"``, ``"vi"``.
         **kwargs
@@ -2962,7 +2962,7 @@ class Posterior:
 
         Parameters
         ----------
-        n_steps: int
+        n_steps : int
             Number of MCMC steps. Default 200 (quick sanity check).
         **kwargs
             Forwarded to the MCMC run.

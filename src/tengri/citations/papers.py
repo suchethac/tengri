@@ -60,9 +60,9 @@ def paper_citation(paper: int | str | None = None) -> str:
 
     Parameters
     ----------
-    paper: int, str, or None
+    paper : int, str, or None
         Which paper. Accepts ``1``/``2``/``3`` or ``"I"``/``"II"``/``"III"``.
-        If ``None`` (default), returns the full contents of ``CITATION.bib``,
+        If ``None`` (default), returns the full contents of ``CITATION.bib``
         every paper plus the ``tengri`` alias.
 
     Returns

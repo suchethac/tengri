@@ -1,4 +1,4 @@
-# Richards et al. 2006 ApJ 166, 470: mean Type-1 quasar SED template (SDSS composite).
+# Richards et al. 2006 ApJ 166, 470 — mean Type-1 quasar SED template (SDSS composite).
 # Columns: wavelength [Angstrom]   nu*F_nu [arbitrary units; normalise per use].
 # Source: extracted from AGNfitter (https://github.com/GabrielaCR/AGNfitter)
 #   models/BBB/R06.pickle (sha256 e14c380014fc07b4ecc2cb3ce0b3e2bee100f3753b90fcf24c500fd94386e791).

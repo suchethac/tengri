@@ -60,7 +60,7 @@ class AGNXRayCoronaSEDComponentConfig(SEDComponentConfig):
 
     Attributes
     ----------
-    name: str
+    name : str
         Diagnostic identifier. Default ``"agn_xray_corona"``.
     """
 
@@ -177,14 +177,14 @@ class AGNXRayCoronaSEDComponent(SEDModelComponent):
 
         Parameters
         ----------
-        p: mapping[str, ndarray]
+        p : mapping[str, ndarray]
             Parameters with the ``xray_`` prefix stripped: ``gamma_agn``,
             ``delta_alpha_ox``, ``E_cut``.
-        sed_in: ndarray
+        sed_in : ndarray
             Input SED (stellar + nebular + radio).
-        wave: ndarray
+        wave : ndarray
             Rest-frame wavelength grid in Angstrom.
-        **inputs: ndarray
+        **inputs : ndarray
             Opportunistic cross-component reads: L_agn_bol (with fallback
             to 0.0 if not present from AGN component).
 

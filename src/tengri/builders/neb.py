@@ -47,8 +47,8 @@ def _discover_params(variant: str) -> list[str]:
 
     Returns an empty list for ``none`` / ``ssp`` (zero free params).
     For ``cloudy`` (which needs a Cloudy grid path the parser can't
-    fabricate during introspection), falls back to the ``cue`` set: they share ``_NEBULAR_PARAMS``
-    in the param registry.
+    fabricate during introspection), falls back to the ``cue`` set;
+    they share ``_NEBULAR_PARAMS`` in the param registry.
     """
     if variant in {"none", "ssp"}:
         return []

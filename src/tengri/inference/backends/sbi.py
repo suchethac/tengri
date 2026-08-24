@@ -65,19 +65,19 @@ def generate_sbi_training_data(
 
     Parameters
     ----------
-    model: Model
+    model : Model
         Configured tengri Model with filters/wavelength grid.
-    spec: Parameters
+    spec : Parameters
         Parameter specification with priors.
-    n_samples: int
+    n_samples : int
         Number of training simulations. Default 100,000.
-    key: PRNGKey or None
+    key : PRNGKey or None
         Random key. If None, uses ``jax.random.key(42)``.
-    obs_type: str
+    obs_type : str
         ``"photometry"`` or ``"spectroscopy"``.
-    noise_model: str
+    noise_model : str
         ``"gaussian"`` (default) or ``"heteroscedastic"``.
-    snr_range: tuple of float
+    snr_range : tuple of float
         Range of S/N ratios to sample uniformly.
 
     Returns
@@ -178,9 +178,9 @@ def save_sbi_training_data(data: dict[str, Any], path: str) -> None:
 
     Parameters
     ----------
-    data: dict
+    data : dict
         Output from :func:`generate_sbi_training_data`.
-    path: str
+    path : str
         Output file path (should end in ``.h5``).
 
     Raises
@@ -210,7 +210,7 @@ def load_sbi_training_data(path: str) -> dict[str, Any]:
 
     Parameters
     ----------
-    path: str
+    path : str
         Path to HDF5 file saved by :func:`save_sbi_training_data`.
 
     Returns
@@ -267,11 +267,11 @@ class SBIPosterior:
 
     Parameters
     ----------
-    posterior: object
+    posterior : object
         A trained neural posterior with ``sample`` and ``log_prob`` methods.
-    param_names: list of str
+    param_names : list of str
         Parameter names corresponding to columns of theta.
-    metadata: dict or None
+    metadata : dict or None
         Optional metadata (training config, architecture, etc.).
     """
 
@@ -291,7 +291,7 @@ class SBIPosterior:
 
         Parameters
         ----------
-        path: str
+        path : str
             Path to the saved posterior (``.pkl``).
 
         Returns
@@ -328,7 +328,7 @@ class SBIPosterior:
 
         Parameters
         ----------
-        path: str
+        path : str
             Output path (``.pkl``).
         """
         filepath = Path(path)
@@ -351,9 +351,9 @@ class SBIPosterior:
 
         Parameters
         ----------
-        observation: array, shape (n_obs,)
+        observation : array, shape (n_obs,)
             Observed data vector (photometry or spectrum).
-        n_samples: int
+        n_samples : int
             Number of posterior samples to draw.
 
         Returns
@@ -377,9 +377,9 @@ class SBIPosterior:
 
         Parameters
         ----------
-        theta: array, shape (n_samples, n_params) or (n_params,)
+        theta : array, shape (n_samples, n_params) or (n_params,)
             Parameter values at which to evaluate.
-        observation: array, shape (n_obs,)
+        observation : array, shape (n_obs,)
             Observed data vector.
 
         Returns

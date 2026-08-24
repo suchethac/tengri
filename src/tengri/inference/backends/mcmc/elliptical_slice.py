@@ -42,24 +42,24 @@ def run_elliptical_slice(
 
     Parameters
     ----------
-    key: PRNGKey
+    key : PRNGKey
         Random key.
-    loglikelihood_unbounded_fn: callable
+    loglikelihood_unbounded_fn : callable
         Log-likelihood function in unbounded space (no prior terms).
         ``(unbounded param dict, data_args) -> scalar``.
-    data_args: dict
+    data_args : dict
         Observed data dict (``data``, ``noise``, etc.).
-    init_params: dict
+    init_params : dict
         Initial parameters in unbounded space.
-    to_physical_fn: callable
+    to_physical_fn : callable
         Converts unbounded param dict to physical space.
-    model: Model
+    model : Model
         Forward model (stored in Posterior).
-    n_samples: int
+    n_samples : int
         Number of posterior samples to collect.
-    n_burnin: int
+    n_burnin : int
         Burn-in steps to discard.
-    verbose: bool
+    verbose : bool
         Print progress.
 
     Returns
@@ -164,11 +164,11 @@ def run_elliptical_slice_fitter(context, *, key, init_from=None, **kwargs):
 
     Parameters
     ----------
-    context: InferenceContext | Fitter
+    context : InferenceContext | Fitter
         Inference context (or Fitter, normalized on entry).
-    key: PRNGKey
+    key : PRNGKey
         Random key.
-    init_from: Posterior or None
+    init_from : Posterior or None
         Initial parameters. If None, use MAP initialization.
     **kwargs
         Passed to run_elliptical_slice (n_samples, n_burnin, verbose).

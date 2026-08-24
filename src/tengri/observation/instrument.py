@@ -47,15 +47,15 @@ class Instrument:
 
     Attributes
     ----------
-    name: str
+    name : str
         Short identifier (e.g. ``"JWST_NIRCam"``).
-    photometry: Photometry, optional
+    photometry : Photometry, optional
         Photometric filter set. ``None`` for spectroscopy-only instruments.
-    spectroscopy: Spectroscopy, optional
+    spectroscopy : Spectroscopy, optional
         Spectroscopic configuration. ``None`` for photometry-only instruments.
-    noise: NoiseModel, optional
+    noise : NoiseModel, optional
         Default noise model for this instrument. Users can override at fit time.
-    description: str
+    description : str
         One-line human description.
 
     Notes

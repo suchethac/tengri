@@ -14,26 +14,26 @@ class BackendEntry:
 
     Parameters
     ----------
-    name: str
+    name : str
         Canonical method name (e.g., ``"map"``, ``"mcmc_nuts"``).
-    runner: Callable
+    runner : Callable
         Backend entry point. Signature depends on ``legacy_fitter``:
 
         - ``legacy_fitter=True``  → ``runner(fitter, *, key, **kwargs)``
         - ``legacy_fitter=False`` → ``runner(context, *, key, **kwargs)``
 
         where ``context`` is an :class:`InferenceContext`.
-    tier: str
+    tier : str
         ``"primary"`` for promoted methods, ``"experimental"`` for backends
         that work but are not yet validated, ``"broken"`` for backends known
         to produce wrong answers or crash. ``"broken"`` is hidden from the
         default :func:`tengri.list_inference_methods` listing and refused by
         ``Fitter.run`` unless the caller passes ``allow_unvalidated=True``.
-    short_doc: str
+    short_doc : str
         Brief description.
-    requires: tuple[str, ...]
+    requires : tuple[str, ...]
         Optional dependency import names (e.g. ``("blackjax",)``).
-    legacy_fitter: bool
+    legacy_fitter : bool
         If ``True`` (default), ``Fitter.run`` passes the full Fitter to
         the runner. Set to ``False`` for backends migrated to the
         :class:`InferenceContext` Protocol (ADR-0010).
@@ -45,7 +45,7 @@ class BackendEntry:
         default is *for*, which is why the flag outlived the migration it
         was named after. It is a compatibility shim for third-party
         backends, not unfinished work.
-    accepts_precondition: bool
+    accepts_precondition : bool
         Whether the runner understands ``precondition=``, metric preconditioning
         of the standardized latent space (see
         :mod:`tengri.inference.preconditioning`). True for the Hamiltonian samplers,
@@ -115,19 +115,19 @@ def register_backend(
 
     Parameters
     ----------
-    name: str
+    name : str
         Canonical method name (e.g., "map", "mcmc_nuts").
-    tier: str
+    tier : str
         One of :data:`TIERS`. ``"primary"`` for promoted methods,
         ``"experimental"`` for working-but-unvalidated ones, ``"broken"``
         for backends known to return wrong answers or crash.
-    short_doc: str
+    short_doc : str
         Brief description of the method.
-    requires: tuple[str, ...]
+    requires : tuple[str, ...]
         Optional dependency import names (e.g., ("blackjax",)).
-    aliases: tuple[str, ...]
+    aliases : tuple[str, ...]
         Additional names that map to this backend.
-    accepts_precondition: bool
+    accepts_precondition : bool
         Declare that the runner takes ``precondition=``. See
         :class:`BackendEntry`. Kept honest against the runner's real signature by
         ``tests/contract/test_preconditioning_capability.py``.
@@ -167,7 +167,7 @@ def get_backend(name: str) -> BackendEntry:
 
     Parameters
     ----------
-    name: str
+    name : str
         Method name.
 
     Returns
@@ -202,7 +202,7 @@ def check_requires(entry: BackendEntry) -> None:
 
     Parameters
     ----------
-    entry: BackendEntry
+    entry : BackendEntry
         The backend whose ``requires`` tuple should be checked.
 
     Raises
@@ -245,9 +245,9 @@ def check_usable(entry: BackendEntry, *, allow_unvalidated: bool = False) -> Non
 
     Parameters
     ----------
-    entry: BackendEntry
+    entry : BackendEntry
         The backend about to be dispatched.
-    allow_unvalidated: bool, optional
+    allow_unvalidated : bool, optional
         Escape hatch for benchmarking and backend development. Default False.
 
     Raises
@@ -300,9 +300,9 @@ def refuse_if_broken(method: str, *, allow_unvalidated: bool = False) -> None:
 
     Parameters
     ----------
-    method: str
+    method : str
         Canonical method name, already resolved.
-    allow_unvalidated: bool, optional
+    allow_unvalidated : bool, optional
         Escape hatch, forwarded to :func:`check_usable`. Default False.
 
     Raises
@@ -348,9 +348,9 @@ def check_capabilities(entry: BackendEntry, kwargs: dict) -> None:
 
     Parameters
     ----------
-    entry: BackendEntry
+    entry : BackendEntry
         The backend about to be dispatched.
-    kwargs: dict
+    kwargs : dict
         Keyword arguments destined for ``entry.runner``.
 
     Raises
@@ -389,11 +389,11 @@ def check_unknown_kwargs(
 
     Parameters
     ----------
-    entry: BackendEntry
+    entry : BackendEntry
         The backend about to be dispatched.
-    kwargs: dict
+    kwargs : dict
         Keyword arguments destined for ``entry.runner``.
-    also_accepted: frozenset of str, optional
+    also_accepted : frozenset of str, optional
         Names the calling *surface* accepts but routes elsewhere -- the
         ``Fitter.__init__`` parameters ``split_fitter_kwargs`` sends to
         construction. Used for suggestions only, never to widen the
@@ -502,7 +502,7 @@ def lookup_backend(name: str) -> BackendEntry | None:
 
     Parameters
     ----------
-    name: str
+    name : str
         A method name or alias, as passed to ``fit(method=...)``.
 
     Returns
@@ -522,7 +522,7 @@ def all_backends(*, include_broken: bool = True) -> list[BackendEntry]:
 
     Parameters
     ----------
-    include_broken: bool, optional
+    include_broken : bool, optional
         Include ``tier="broken"`` entries. Default True, so internal callers
         that need the complete registry (dispatch, conformance tests) keep
         seeing everything; the user-facing listing opts out.

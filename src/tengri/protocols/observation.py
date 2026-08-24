@@ -39,7 +39,7 @@ class ObservationModel(Protocol):
 
     Required attributes
     -------------------
-    name: str
+    name : str
         Stable identifier for diagnostics. Examples: ``"photometry"``,
         ``"spectroscopy"``, ``"joint"``.
 

@@ -40,14 +40,14 @@ A bare-minimum custom component::
 
             Parameters
             ----------
-            p: dict
+            p : dict
                 Sliced parameter dict (prefix already stripped).
                 p["T"] = temperature value.
-            sed_in: ndarray
+            sed_in : ndarray
                 Input SED in erg/s/Hz.
-            wave: ndarray
+            wave : ndarray
                 Rest-frame wavelength grid in Angstrom.
-            L_in: ndarray
+            L_in : ndarray
                 Published quantity from upstream component.
 
             Returns
@@ -123,7 +123,7 @@ class SEDModelComponentState(SEDComponentState):
 
     Attributes
     ----------
-    data: object or None
+    data : object or None
         Cached static tensors from load(). May be template grid, precomputed
         masks, or any other data prepared at build time. None until
         precompute() runs successfully.
@@ -142,25 +142,25 @@ class SEDModelComponent(TemplateThreading):
 
     Required attributes (set by subclass)
     ------------------------------------
-    name: str
+    name : str
         Stable identifier (e.g., ``"dust_ir"``, ``"radio"``).
-    parameter_prefix: str
+    parameter_prefix : str
         Domain prefix for all free parameters this component owns
         (e.g., ``"dust_"``, ``"radio_"``).
-    config: SEDComponentConfig
+    config : SEDComponentConfig
         Frozen structural knobs (e.g., which dust law, which radio model).
         Defaults to base :class:`SEDComponentConfig` if not overridden.
-    taylor_order: int, default 0
+    taylor_order : int, default 0
         Taylor expansion order for WavePrecomp refinement. Set to 1 to enable
         first-order derivative publishing (``{name}_phot_lnu_slope_precomp``).
 
     Optional class-level declarations (auto-processed by __init_subclass__)
     ----------
-    inputs: dict[str, str]
+    inputs : dict[str, str]
         Cross-component inputs: dict mapping key name to units string.
         Example: ``{"L_absorbed": "erg/s"}``.
         Default: ``{}``.
-    outputs: dict[str, str]
+    outputs : dict[str, str]
         Cross-component outputs: dict mapping key name to units string.
         Example: ``{"L_ir": "erg/s"}``.
         Default: ``{}``.
@@ -279,10 +279,10 @@ class SEDModelComponent(TemplateThreading):
 
     See Also
     --------
-    SEDComponent: the Protocol this class implements.
-    ParamDeclaration, DerivedKey: contract types.
-    docs/dev/archive/forward-model-architecture.md: the architecture design.
-    docs/dev/sed-model-components.md: detailed authoring guide.
+    SEDComponent : the Protocol this class implements.
+    ParamDeclaration, DerivedKey : contract types.
+    docs/dev/archive/forward-model-architecture.md : the architecture design.
+    docs/dev/sed-model-components.md : detailed authoring guide.
     """
 
     # Class attributes populated by __init_subclass__
@@ -504,7 +504,7 @@ class SEDModelComponent(TemplateThreading):
 
         Parameters
         ----------
-        wave: ndarray, optional
+        wave : ndarray, optional
             Rest-frame wavelength grid in Angstrom. Components that don't
             need a grid (radio, IGM, X-ray) may ignore this.
 
@@ -600,14 +600,14 @@ class SEDModelComponent(TemplateThreading):
 
         Parameters
         ----------
-        ssp_data: object, optional
+        ssp_data : object, optional
             SSP stellar population synthesis grid. Some components (stellar,
             nebular) need this; others (radio, IGM) ignore it.
-        wave_grid: ndarray, optional
+        wave_grid : ndarray, optional
             Rest-frame wavelength grid in Angstrom.
-        approx: mapping, optional
+        approx : mapping, optional
             Build-time approximation flags (e.g., ``wave_precomp=True``).
-        filters: tuple, optional
+        filters : tuple, optional
             Photometric filter curves for precomputation.
 
         Returns
@@ -669,7 +669,7 @@ class SEDModelComponent(TemplateThreading):
 
         Parameters
         ----------
-        params: mapping[str, ndarray]
+        params : mapping[str, ndarray]
             Full parameter dict, prefixed names (``dust_alpha_dale``, …).
 
         Returns
@@ -720,14 +720,14 @@ class SEDModelComponent(TemplateThreading):
 
         Parameters
         ----------
-        state: ForwardState
+        state : ForwardState
             Current state with wave, sed_intrinsic, and derived keys.
-        params: mapping
+        params : mapping
             Full parameter dict (this method slices by prefix).
-        ssp_data: object, optional
+        ssp_data : object, optional
             SSP data (ignored for dust emission components; available for
             subclasses that need it).
-        template_data: mapping, optional
+        template_data : mapping, optional
             Threaded template grids and precomputed data, keyed
             ``[namespace][component_name]``. Forwarded to :meth:`predict` as
             ``templates=`` when :attr:`accepts_threaded_templates` is set;
@@ -857,13 +857,13 @@ class SEDModelComponent(TemplateThreading):
 
         Parameters
         ----------
-        p: mapping[str, ndarray]
+        p : mapping[str, ndarray]
             Parameters with prefix stripped.
-        sed_in: ndarray
+        sed_in : ndarray
             Input SED (used for shape/dtype, but not consumed on LUT path).
-        filter_eff_waves: ndarray, shape (n_filter,)
+        filter_eff_waves : ndarray, shape (n_filter,)
             Rest-frame effective wavelengths of filters in Angstrom.
-        **inputs: ndarray
+        **inputs : ndarray
             Cross-component inputs from state.derived.
 
         Returns
@@ -907,13 +907,13 @@ class SEDModelComponent(TemplateThreading):
 
         Parameters
         ----------
-        p: mapping[str, ndarray]
+        p : mapping[str, ndarray]
             Parameters with prefix stripped.
-        sed_in: ndarray
+        sed_in : ndarray
             Input SED (used for shape/dtype, but not consumed on LUT path).
-        spec_eff_waves: ndarray, shape (n_spec_pixel,)
+        spec_eff_waves : ndarray, shape (n_spec_pixel,)
             Rest-frame effective wavelengths of spectrum pixels in Angstrom.
-        **inputs: ndarray
+        **inputs : ndarray
             Cross-component inputs from state.derived.
 
         Returns
@@ -956,11 +956,11 @@ class SEDModelComponent(TemplateThreading):
 
         Parameters
         ----------
-        p: mapping[str, ndarray]
+        p : mapping[str, ndarray]
             Parameters with prefix stripped.
-        filter_eff_waves: ndarray, shape (n_filter,)
+        filter_eff_waves : ndarray, shape (n_filter,)
             Rest-frame effective filter wavelengths in Angstrom.
-        **inputs: ndarray
+        **inputs : ndarray
             Cross-component inputs from state.derived.
 
         Returns
@@ -986,13 +986,13 @@ class SEDModelComponent(TemplateThreading):
 
         Parameters
         ----------
-        p: mapping[str, ndarray]
+        p : mapping[str, ndarray]
             Parameters with prefix stripped. Access via p["T"], p["beta"], etc.
-        sed_in: ndarray
+        sed_in : ndarray
             Input rest-frame L_nu in erg/s/Hz.
-        wave: ndarray
+        wave : ndarray
             Rest-frame wavelength grid in Angstrom.
-        **inputs: ndarray
+        **inputs : ndarray
             Cross-component inputs, keyed by the names declared in
             the ``inputs`` dict. Example: ``L_absorbed=1e45``.
 

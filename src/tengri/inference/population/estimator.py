@@ -19,9 +19,9 @@ class ESSSummary(NamedTuple):
 
     Attributes
     ----------
-    at_mode: ndarray, shape (N,)
+    at_mode : ndarray, shape (N,)
         ESS at the posterior mode [dimensionless], the primary diagnostic.
-    min_high_mass: ndarray, shape (N,)
+    min_high_mass : ndarray, shape (N,)
         Minimum ESS over nodes carrying the top 99% of posterior mass
         [dimensionless]. Use this to detect degeneracy in the tails.
     """
@@ -50,9 +50,9 @@ def _validate_grid_bounds(sigma_bounds, tau_bounds_yr):
 
     Parameters
     ----------
-    sigma_bounds: tuple of float
+    sigma_bounds : tuple of float
         ``(lo, hi)`` amplitude support [dex].
-    tau_bounds_yr: tuple of float
+    tau_bounds_yr : tuple of float
         ``(lo, hi)`` timescale support [yr].
 
     Raises
@@ -118,14 +118,14 @@ class SharedGrid:
 
     Attributes
     ----------
-    sigma: ndarray, shape (A,)
+    sigma : ndarray, shape (A,)
         Amplitude nodes [dex].
-    tau_yr: ndarray, shape (B,)
+    tau_yr : ndarray, shape (B,)
         Timescale nodes [yr].
-    log_prior: ndarray, shape (A * B,)
+    log_prior : ndarray, shape (A * B,)
         Log prior density at each node [nats], C-ordered so node ``a * B + b``
         is ``(sigma[a], tau_yr[b])``.
-    log_volume: ndarray, shape (A * B,)
+    log_volume : ndarray, shape (A * B,)
         Log quadrature weight of each node [nats], representing the differential
         volume element in ``(sigma, log tau)`` space.
     """
@@ -163,13 +163,13 @@ class SharedGrid:
 
         Parameters
         ----------
-        sigma_bounds: tuple of float
+        sigma_bounds : tuple of float
             ``(lo, hi)`` amplitude support [dex].
-        tau_bounds_yr: tuple of float
+        tau_bounds_yr : tuple of float
             ``(lo, hi)`` timescale support [yr].
-        n_sigma, n_tau: int
+        n_sigma, n_tau : int
             Node counts.
-        tau_prior: {"log_uniform", "uniform"}, optional
+        tau_prior : {"log_uniform", "uniform"}, optional
             Prior shape in tau. Default ``"log_uniform"`` (flat in log tau).
             Use ``"uniform"`` for a prior flat in tau itself.
 
@@ -190,7 +190,7 @@ class SharedGrid:
 
         Returns
         -------
-        grid: SharedGrid
+        grid : SharedGrid
 
         Raises
         ------
@@ -243,12 +243,12 @@ def effective_sample_size(log_weights):
 
     Parameters
     ----------
-    log_weights: array_like, shape (..., K)
+    log_weights : array_like, shape (..., K)
         Unnormalized log weights [nats]; the reduction is over the last axis.
 
     Returns
     -------
-    ess: ndarray, shape (...)
+    ess : ndarray, shape (...)
         Effective number of draws [dimensionless], in ``[1, K]``.
     """
     lw = jnp.asarray(log_weights)
@@ -312,17 +312,17 @@ def shared_log_posterior(fields, times_yr, grid, *, method="b2", node_chunk=_DEF
 
     Parameters
     ----------
-    fields: array_like, shape (N, K, n)
+    fields : array_like, shape (N, K, n)
         Interim centered-field draws [natural-log units].
-    times_yr: array_like, shape (n,)
+    times_yr : array_like, shape (n,)
         Physical times [yr].
-    grid: SharedGrid
+    grid : SharedGrid
         Quadrature grid.
-    method: {"b2", "b1"}, optional
+    method : {"b2", "b1"}, optional
         ``"b2"`` (default) is the reweighting estimator. ``"b1"`` is the
         marginal-posterior product, retained as an independent cross-check
         whose error mode is different; see Notes.
-    node_chunk: int, optional
+    node_chunk : int, optional
         Grid nodes evaluated per streaming chunk [count]. Default 128. Peak
         memory is ``node_chunk * N * K * 8`` bytes and does **not** grow with
         the grid, so this is the knob that decouples population size from
@@ -330,9 +330,9 @@ def shared_log_posterior(fields, times_yr, grid, *, method="b2", node_chunk=_DEF
 
     Returns
     -------
-    log_posterior: ndarray, shape (A * B,)
+    log_posterior : ndarray, shape (A * B,)
         Unnormalized log-posterior [nats] on ``grid.nodes``.
-    ess: ESSSummary
+    ess : ESSSummary
         Per-galaxy effective sample size diagnostic. Gate on ``ess.at_mode``
         (ESS at the posterior mode). Inspect ``ess.min_high_mass`` (minimum
         ESS over nodes carrying the top 99% of posterior mass) to detect

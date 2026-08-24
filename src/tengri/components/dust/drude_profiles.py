@@ -27,11 +27,11 @@ class PAHFeature(NamedTuple):
 
     Attributes
     ----------
-    wave_um: float
+    wave_um : float
         Central wavelength in microns.
-    gamma: float
+    gamma : float
         Fractional FWHM (Δλ/λ₀).  Absolute FWHM = gamma * wave_um.
-    strength: float
+    strength : float
         Relative strength (Smith+2007 PAHFIT SINGS median; 7.60 μm = 1.0).
 
     Notes
@@ -101,11 +101,11 @@ def drude_profile(
 
     Parameters
     ----------
-    wave_um: array_like, shape (n_wave,)
+    wave_um : array_like, shape (n_wave,)
         Wavelength grid [μm].
-    wave0_um: float
+    wave0_um : float
         Central wavelength [μm].
-    gamma: float
+    gamma : float
         Fractional FWHM Δλ/λ₀ [dimensionless].
 
     Returns
@@ -138,9 +138,9 @@ def compute_pah_template(
 
     Parameters
     ----------
-    wave_um: array_like, shape (n_wave,)
+    wave_um : array_like, shape (n_wave,)
         Wavelength grid [μm].
-    strengths: array_like, shape (18,) or None
+    strengths : array_like, shape (18,) or None
         Per-feature amplitude weights [dimensionless].  If ``None``, the
         Smith+2007 SINGS median strengths (``SMITH2007_PAH_FEATURES``) are used.
 
@@ -193,11 +193,11 @@ def decompose_pah(
 
     Parameters
     ----------
-    wave_um: array_like, shape (n_wave,)
+    wave_um : array_like, shape (n_wave,)
         Wavelength grid [μm].
-    sed: array_like, shape (n_wave,)
+    sed : array_like, shape (n_wave,)
         Observed (or model) SED [arbitrary units].
-    continuum: array_like, shape (n_wave,) or None
+    continuum : array_like, shape (n_wave,) or None
         Underlying continuum to subtract before fitting [same units as ``sed``].
         If ``None``, the raw ``sed`` is used.
 

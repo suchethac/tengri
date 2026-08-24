@@ -307,7 +307,7 @@ def _make_dust_factory(
         else:
             doc_lines.append("    Attenuation law name from DUST_LAWS. Required (no default).")
     for short in short_params:
-        doc_lines.append(f"{short}: Distribution, sentinel, or scalar, optional")
+        doc_lines.append(f"{short} : Distribution, sentinel, or scalar, optional")
         doc_lines.append("    Override the registry-default prior.")
     doc_lines.append("")
     doc_lines.append("Returns")

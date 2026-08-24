@@ -75,21 +75,21 @@ def simple_torus(
 
     Parameters
     ----------
-    wavelength: array, shape (n_wave,)
+    wavelength : array, shape (n_wave,)
         Rest-frame wavelength [Angstrom].
-    agn_log_lbol: float
+    agn_log_lbol : float
         log10(L_bol / Lsun). Total AGN bolometric luminosity.
         [log10(L_sun)]
-    agn_torus_frac: float
+    agn_torus_frac : float
         Fraction of L_bol re-emitted by torus (covering factor).
         Typical range: 0.1 to 0.9. Default 0.5. [dimensionless]
-    agn_T_torus: float
+    agn_T_torus : float
         Torus dust temperature [K].
         Typical range: 500 to 1500. Default 1000.
-    agn_tau_torus: float
+    agn_tau_torus : float
         Optical depth at 9.7 um silicate feature [dimensionless].
         Typical range: 1 to 10. Default 5.
-    agn_tau_beta: float
+    agn_tau_beta : float
         Power-law index for opacity wavelength dependence [dimensionless].
         Typical range: 1.0 to 2.0. Default 1.5.
 
@@ -163,26 +163,26 @@ def two_temperature_torus(
 
     Parameters
     ----------
-    wavelength: array, shape (n_wave,)
+    wavelength : array, shape (n_wave,)
         Rest-frame wavelength [Angstrom].
-    agn_log_lbol: float
+    agn_log_lbol : float
         log10(L_bol / Lsun). Total AGN bolometric luminosity.
         [log10(L_sun)]
-    agn_torus_frac: float
+    agn_torus_frac : float
         Fraction of L_bol re-emitted by torus. Default 0.5.
         [dimensionless]
-    agn_T_hot: float
+    agn_T_hot : float
         Hot dust temperature [K], near sublimation.
         Typical range: 1000 to 1500. Default 1200.
-    agn_T_warm: float
+    agn_T_warm : float
         Warm dust temperature [K], outer torus.
         Typical range: 200 to 800. Default 300.
-    agn_frac_hot: float
+    agn_frac_hot : float
         Luminosity fraction in hot component (0 to 1). Default 0.3.
         [dimensionless]
-    agn_tau_torus: float
+    agn_tau_torus : float
         Optical depth at 9.7 um [dimensionless]. Default 5.
-    agn_tau_beta: float
+    agn_tau_beta : float
         Opacity power-law index [dimensionless]. Default 1.5.
 
     Returns
@@ -256,7 +256,7 @@ def _load_nenkova_arrays(grid_path: str) -> dict:
 
     Parameters
     ----------
-    grid_path: str
+    grid_path : str
         Path to ``nenkova08_torus_grid.h5`` produced by
         ``scripts/build_nenkova_grid.py``.
 
@@ -286,7 +286,7 @@ def create_nenkova_from_grid(grid_path: str) -> Callable:
 
     Parameters
     ----------
-    grid_path: str
+    grid_path : str
         Path to ``nenkova08_torus_grid.h5``.
 
     Returns
@@ -338,14 +338,14 @@ def create_nenkova_from_grid(grid_path: str) -> Callable:
 
         Parameters
         ----------
-        wavelength: array_like, shape (n_wave,)
+        wavelength : array_like, shape (n_wave,)
             Rest-frame wavelength grid. [Å]
-        agn_log_lbol: float, optional
+        agn_log_lbol : float, optional
             Bolometric luminosity, ``log10(L_bol / L_sun)``. Default 10.0.
-        agn_tau: float, optional
+        agn_tau : float, optional
             Equatorial optical depth of the clumpy torus. Valid over the grid
             extent (5–150). Default 30.0. [dimensionless]
-        agn_torus_frac: float, optional
+        agn_torus_frac : float, optional
             Fraction of L_bol re-emitted by the torus (covering factor).
             Default 0.5. [dimensionless]
 
@@ -410,20 +410,20 @@ def nenkova_torus(*args, **kwargs) -> jnp.ndarray:
 
     Parameters
     ----------
-    wavelength: array_like, shape (n_wave,)
+    wavelength : array_like, shape (n_wave,)
         Rest-frame wavelength [Angstrom].
-    agn_log_lbol: float, optional
+    agn_log_lbol : float, optional
         ``log10(L_bol / L_sun)``. AGN bolometric luminosity. Default 10.0.
-    agn_tau: float, optional
+    agn_tau : float, optional
         Equatorial optical depth of the clumpy torus. Valid range 5–150.
         Default 30.0. [dimensionless]
-    agn_torus_frac: float, optional
+    agn_torus_frac : float, optional
         Fraction of L_bol re-emitted by the torus (covering factor).
         Default 0.5.
 
     Returns
     -------
-    L_nu: jnp.ndarray, shape (n_wave,)
+    L_nu : jnp.ndarray, shape (n_wave,)
         Specific luminosity [erg s^-1 Hz^-1].
 
     Raises

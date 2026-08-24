@@ -69,7 +69,7 @@ law_diff = ""
 #                   "dale2014" | "draine_li2007" | "draine_li2014" | "" (off)
 emission = "modified_blackbody"
 
-# Use fused (approximate) photometry path: faster, <0.1% error
+# Use fused (approximate) photometry path — faster, <0.1% error
 approx = true
 
 
@@ -106,7 +106,7 @@ apply_igm = true
 [inference]
 # Default method for model.fit() and fitter.run()
 #
-# Run `tengri.list_inference_methods()` for the live list; it is generated
+# Run `tengri.list_inference_methods()` for the live list — it is generated
 # from the backend registry and cannot go stale. Four of the fifteen names
 # this comment used to advertise were never registered and raised KeyError if
 # set; they have been removed (#1289). A contract test now asserts every name

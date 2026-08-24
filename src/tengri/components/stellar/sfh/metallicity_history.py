@@ -52,13 +52,13 @@ def two_step_metallicity(
 
     Parameters
     ----------
-    ssp_lg_age_gyr: array_like, shape (n_age,)
+    ssp_lg_age_gyr : array_like, shape (n_age,)
         Log10(age/Gyr) of SSP templates. Lookback time (younger ages first).
-    log_z_abs_old: float
+    log_z_abs_old : float
         log10(Z) absolute for old stars [dimensionless].
-    log_z_abs_young: float
+    log_z_abs_young : float
         log10(Z) absolute for young stars [dimensionless].
-    step_age_gyr: float
+    step_age_gyr : float
         Lookback time of the metallicity step [Gyr].
 
     Returns
@@ -112,13 +112,13 @@ def psb_two_step_metallicity(
 
     Parameters
     ----------
-    ssp_lg_age_gyr: array_like, shape (n_age,)
+    ssp_lg_age_gyr : array_like, shape (n_age,)
         Log10(age/Gyr) of SSP templates [dimensionless].
-    log_z_abs_old: float
+    log_z_abs_old : float
         log10(Z) absolute for pre-burst stars [dimensionless].
-    log_z_abs_burst: float
+    log_z_abs_burst : float
         log10(Z) absolute for burst stars [dimensionless].
-    burstage_gyr: float
+    burstage_gyr : float
         Lookback time of the burst [Gyr].
 
     Returns
@@ -147,11 +147,11 @@ def metallicity_bins_on_ssp_grid(
 
     Parameters
     ----------
-    ssp_lg_age_gyr: array_like, shape (n_age,)
+    ssp_lg_age_gyr : array_like, shape (n_age,)
         Log10(age/Gyr) of SSP templates [dimensionless].
-    bin_edges_log_yr: array_like, shape (n_bins+1,)
+    bin_edges_log_yr : array_like, shape (n_bins+1,)
         Bin edges in log10(age/yr), sorted ascending [dimensionless].
-    metallicities_abs: array_like, shape (n_bins,)
+    metallicities_abs : array_like, shape (n_bins,)
         log10(Z) absolute per bin [dimensionless]. Index convention:
         metallicities_abs[0] = youngest bin, metallicities_abs[-1] = oldest bin.
 
@@ -207,13 +207,13 @@ def metallicity_bins_continuity_on_ssp_grid(
 
     Parameters
     ----------
-    ssp_lg_age_gyr: array, shape (n_age,)
+    ssp_lg_age_gyr : array, shape (n_age,)
         Log10(age/Gyr) of SSP templates.
-    bin_edges_log_yr: array, shape (n_bins + 1,)
+    bin_edges_log_yr : array, shape (n_bins + 1,)
         Bin edges in log10(age/yr), sorted ascending.
-    log_z_abs_base: float
+    log_z_abs_base : float
         log10(Z) absolute of the oldest bin.
-    d_log_z: array, shape (n_bins - 1,)
+    d_log_z : array, shape (n_bins - 1,)
         Delta-log-Z steps from old to young.  ``d_log_z[0]`` is the
         step from the oldest bin to the second-oldest, etc.
 
@@ -249,12 +249,12 @@ def tabulated_metallicity_on_ssp_grid(
 
     Parameters
     ----------
-    ssp_lg_age_gyr: array_like, shape (n_age,)
+    ssp_lg_age_gyr : array_like, shape (n_age,)
         Log10(age/Gyr) of SSP templates [dimensionless].
-    met_log_age_yr: array_like, shape (n_table,)
+    met_log_age_yr : array_like, shape (n_table,)
         Log10(age/yr) of the tabulated metallicity history [dimensionless],
         sorted ascending (youngest first).
-    met_log_z_abs: array_like, shape (n_table,)
+    met_log_z_abs : array_like, shape (n_table,)
         log10(Z) absolute at each table age [dimensionless].
 
     Returns
@@ -288,15 +288,15 @@ def massmap_lin_metallicity(
 
     Parameters
     ----------
-    ssp_lg_age_gyr: array_like, shape (n_age,)
+    ssp_lg_age_gyr : array_like, shape (n_age,)
         Log10(age/Gyr) of SSP templates [dimensionless].
-    ssp_ages_yr: array_like, shape (n_age,)
+    ssp_ages_yr : array_like, shape (n_age,)
         Age of each SSP template in years [yr].
-    sfr_on_ssp: array_like, shape (n_age,)
+    sfr_on_ssp : array_like, shape (n_age,)
         Star formation rate at each SSP age [Msun/yr].
-    log_z_abs_start: float
+    log_z_abs_start : float
         log10(Z) absolute at the oldest age (Zstart) [dimensionless].
-    log_z_abs_final: float
+    log_z_abs_final : float
         log10(Z) absolute at the present day (Zfinal) [dimensionless].
 
     Returns
@@ -395,17 +395,17 @@ def massmap_box_metallicity(
 
     Parameters
     ----------
-    ssp_lg_age_gyr: array_like, shape (n_age,)
+    ssp_lg_age_gyr : array_like, shape (n_age,)
         Log10(age/Gyr) of SSP templates [dimensionless].
-    ssp_ages_yr: array_like, shape (n_age,)
+    ssp_ages_yr : array_like, shape (n_age,)
         Age of each SSP template in years [yr].
-    sfr_on_ssp: array_like, shape (n_age,)
+    sfr_on_ssp : array_like, shape (n_age,)
         Star formation rate at each SSP age [Msun/yr].
-    log_z_abs_start: float
+    log_z_abs_start : float
         log10(Z) absolute at the oldest age (Zstart) [dimensionless].
-    log_z_abs_final: float
+    log_z_abs_final : float
         log10(Z) absolute at the present day (Zfinal) [dimensionless].
-    yield_rho: float, optional
+    yield_rho : float, optional
         Fixed nucleosynthetic yield parameter [dimensionless].
         Default 0.03. Controls the rate of metallicity increase per unit mass.
 

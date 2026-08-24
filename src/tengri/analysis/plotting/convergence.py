@@ -18,9 +18,9 @@ def diagnostics_table(results, names=None):
 
     Parameters
     ----------
-    results: dict
+    results : dict
         Mapping from method name to :class:`Posterior` (e.g. from :meth:`Fitter.run`).
-    names: list of str, optional
+    names : list of str, optional
         Display order. Defaults to ``list(results.keys())``.
 
     Returns
@@ -38,7 +38,8 @@ def diagnostics_table(results, names=None):
         # Method          Wall time   ESS (min)   ESS (med)   Accept %
         # ----------------------------------------------------------------
         # NUTS               42.3s         812         934      82.4%
-        # VI                  3.1s          : ;:"""
+        # VI                  3.1s           —           —         —
+    """
     if names is None:
         names = list(results.keys())
 
@@ -80,18 +81,18 @@ def posterior_plot_sfh(result, truth_sfh=None, ax=None):
 
     Parameters
     ----------
-    result: Posterior
+    result : Posterior
         Posterior inference result with model reference.
-    truth_sfh: dict, optional
+    truth_sfh : dict, optional
         Truth SFH parameters to plot as dashed line. Should be a
         parameter dict (will be passed to model.predict_sfh).
-    ax: matplotlib Axes, optional
+    ax : matplotlib Axes, optional
         Axes to plot on. If None, creates a new figure.
 
     Returns
     -------
-    fig: matplotlib Figure
-    ax: matplotlib Axes
+    fig : matplotlib Figure
+    ax : matplotlib Axes
 
     Raises
     ------
@@ -174,11 +175,11 @@ def convergence_check(result, method_name="", verbose=True):
 
     Parameters
     ----------
-    result: Posterior
+    result : Posterior
         Inference result with .samples and .diagnostics.
-    method_name: str, optional
+    method_name : str, optional
         Label for printing (e.g., "RT", "NUTS", "geoVI"). Default "".
-    verbose: bool, optional
+    verbose : bool, optional
         If True, print detailed diagnostics. Default True.
 
     Returns
@@ -358,9 +359,9 @@ def convergence_table(results_dict, verbose=True):
 
     Parameters
     ----------
-    results_dict: dict
+    results_dict : dict
         Mapping from method name to :class:`Posterior`.
-    verbose: bool, optional
+    verbose : bool, optional
         If True, print formatted table. Default True.
 
     Returns
@@ -417,18 +418,18 @@ def plot_autocorrelation(result, params=None, max_lag=None, figsize=None):
 
     Parameters
     ----------
-    result: Posterior
+    result : Posterior
         Inference result with samples.
-    params: list of str, optional
+    params : list of str, optional
         Parameters to plot. Default: all scalar params (excluding psd_xi).
-    max_lag: int, optional
+    max_lag : int, optional
         Maximum lag to display. Default: min(500, n_samples // 2).
-    figsize: tuple, optional
+    figsize : tuple, optional
         Figure size. Default auto-scaled from number of parameters.
 
     Returns
     -------
-    fig: matplotlib Figure
+    fig : matplotlib Figure
 
     Examples
     --------

@@ -57,7 +57,7 @@ def _citations_from_components(obj: Any) -> list[str]:
 
     Parameters
     ----------
-    obj: Any
+    obj : Any
         Object that may expose a ``.components`` attribute (e.g.
         SEDModel, SEDModelConfig, or any container of SEDComponent
         instances). Components without a ``citations()`` method are
@@ -222,7 +222,7 @@ def _citable_chain(obj: Any) -> list[Any]:
 
     Parameters
     ----------
-    obj: Any
+    obj : Any
         Any citable object (``Posterior``, ``ForwardModel``, ``SEDModel``, ...).
 
     Returns
@@ -293,7 +293,7 @@ def _collect_keys_for_one(
 
     Parameters
     ----------
-    scan_attributes: bool, optional
+    scan_attributes : bool, optional
         Sweep every public attribute for ``@cites`` annotations. Default
         ``True``. Callers set it ``False`` for delegated nodes so the sweep
         never forces attribute evaluation on an object the user did not pass.
@@ -501,13 +501,13 @@ def collect_citations(
 
     Parameters
     ----------
-    obj: Galaxy | SEDModel | Fitter | SEDModelConfig | FitResult | Any
+    obj : Galaxy | SEDModel | Fitter | SEDModelConfig | FitResult | Any
         Object whose configuration is inspected. If ``obj`` exposes a
         ``bibliography`` attribute, its contents are returned verbatim; for
         plain objects the citations are reconstructed from ``model_config``.
         Unknown objects yield only the core citations (``tengri``, ``jax``,
         ``dsps``).
-    include_backend: bool, optional
+    include_backend : bool, optional
         Include citations for the last inference backend used. Default
         ``True``. Pass ``False`` to get citations for the model
         configuration alone, independent of how it will be fit.
@@ -543,9 +543,9 @@ def collect_citations(
 
     See Also
     --------
-    tengri.citations.Bibliography.from_object: the class method this wraps.
-    citations_report: formatted grouped text version.
-    citations_bibtex: BibTeX version of the same list.
+    tengri.citations.Bibliography.from_object : the class method this wraps.
+    citations_report : formatted grouped text version.
+    citations_bibtex : BibTeX version of the same list.
 
     Examples
     --------
@@ -585,10 +585,10 @@ def citations_report(obj: Any, *, include_backend: bool = True) -> str:
 
     Parameters
     ----------
-    obj: Any
+    obj : Any
         Any object understood by :func:`collect_citations` (Galaxy,
         SEDModelConfig, Fitter, FitResult, ...).
-    include_backend: bool, optional
+    include_backend : bool, optional
         Include inference-backend citations. Default ``True``.
 
     Returns
@@ -608,8 +608,8 @@ def citations_report(obj: Any, *, include_backend: bool = True) -> str:
 
     See Also
     --------
-    print_citations: same output, printed to stdout.
-    citations_bibtex: BibTeX-formatted companion.
+    print_citations : same output, printed to stdout.
+    citations_bibtex : BibTeX-formatted companion.
 
     Examples
     --------
@@ -649,9 +649,9 @@ def citations_bibtex(obj: Any, *, include_backend: bool = True) -> str:
 
     Parameters
     ----------
-    obj: Any
+    obj : Any
         Any object understood by :func:`collect_citations`.
-    include_backend: bool, optional
+    include_backend : bool, optional
         Include inference-backend citations. Default ``True``.
 
     Returns
@@ -666,8 +666,8 @@ def citations_bibtex(obj: Any, *, include_backend: bool = True) -> str:
 
     See Also
     --------
-    tengri.citations.Citation.to_bibtex: single-entry BibTeX formatter.
-    print_bibtex: same output printed to stdout.
+    tengri.citations.Citation.to_bibtex : single-entry BibTeX formatter.
+    print_bibtex : same output printed to stdout.
 
     Examples
     --------
@@ -688,9 +688,9 @@ def print_citations(obj: Any, *, include_backend: bool = True) -> None:
 
     Parameters
     ----------
-    obj: Any
+    obj : Any
         Any object understood by :func:`collect_citations`.
-    include_backend: bool, optional
+    include_backend : bool, optional
         Include inference-backend citations. Default ``True``.
 
     Returns
@@ -720,9 +720,9 @@ def print_bibtex(obj: Any, *, include_backend: bool = True) -> None:
 
     Parameters
     ----------
-    obj: Any
+    obj : Any
         Any object understood by :func:`collect_citations`.
-    include_backend: bool, optional
+    include_backend : bool, optional
         Include inference-backend citations. Default ``True``.
 
     Returns

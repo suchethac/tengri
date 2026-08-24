@@ -74,19 +74,19 @@ def warn_if_nuts_high_dim(method, n_dim, *, surface, stacklevel=3):
 
     Parameters
     ----------
-    method: str
+    method : str
         Resolved (canonical) method name. Only members of :data:`NUTS_LIKE`
         trigger anything, so this is safe to call unconditionally on any
         dispatch path.
-    n_dim: int or None
+    n_dim : int or None
         Free-parameter count for the problem actually being fitted. ``None``
         means the surface could not determine it cheaply, in which case no
         warning is emitted, a wrong D would be worse than none.
-    surface: str
+    surface : str
         Human name of the calling entry point, e.g. ``"Fitter.run"``. Appears in
         the message so the reader knows which of the three fits is being
         described.
-    stacklevel: int
+    stacklevel : int
         Passed to :func:`warnings.warn`. Default 3 points at the user's own
         ``run()`` call rather than at this helper.
 

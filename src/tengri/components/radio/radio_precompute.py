@@ -186,17 +186,17 @@ def precompute(
 
     Parameters
     ----------
-    filter_waves: list[ndarray]
+    filter_waves : list[ndarray]
         Per-filter observed-frame wavelength arrays [Angstrom].
-    filter_trans: list[ndarray]
+    filter_trans : list[ndarray]
         Per-filter transmission curves.
-    redshift: float
+    redshift : float
         Source redshift. [dimensionless]
-    parameters: Parameters or None
+    parameters : Parameters or None
         Parameters spec; used to detect Fixed axes.
-    model: str, keyword-only
+    model : str, keyword-only
         One of ``"radio_synchrotron"``, ``"radio_freefree"``, ``"radio_agn_jet"``.
-    alpha_grid: ndarray, optional
+    alpha_grid : ndarray, optional
         Custom spectral-index grid. Defaults: synchrotron [0.5, 1.0],
         free-free [-0.2, 0.0], AGN [0.4, 1.2].
 
@@ -251,9 +251,9 @@ def build_lookup(preint: dict, *, model: str = "radio_synchrotron"):
 
     Parameters
     ----------
-    preint: dict
+    preint : dict
         Output of :func:`precompute`.
-    model: str, keyword-only
+    model : str, keyword-only
         Selects the spectral-axis name used in the lookup (cosmetic; the
         actual interpolation is identical across models).
 

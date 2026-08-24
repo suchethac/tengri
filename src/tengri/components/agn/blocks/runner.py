@@ -235,19 +235,19 @@ def validate_block_recipe(
     Parameters
     ----------
     agn_disc_block, agn_nlr_block, agn_blr_block, agn_feii_block, \
-agn_torus_block, agn_attenuation_block: str
+agn_torus_block, agn_attenuation_block : str
         Selectors for each pipeline stage.
-    params: dict, optional
+    params : dict, optional
         Concrete parameter values, used by Rule 7 to surface a no-op
         ``agn_polar_ebv``. Values may legitimately be absent or traced.
-    param_support: dict[str, tuple[float, float]], optional
+    param_support : dict[str, tuple[float, float]], optional
         ``{param_name: (lo, hi)}``, the range each parameter can actually
         take, i.e. a prior's bounds or ``(v, v)`` for a fixed value. Consumed
         by Rule 9; when omitted, that rule is skipped.
 
     Returns
     -------
-    issues: list[str]
+    issues : list[str]
         Human-readable strings describing each warning emitted (empty if
         the recipe is clean).
 
@@ -394,22 +394,22 @@ def compose_l_nu(
 
     Parameters
     ----------
-    wavelength: array_like, shape (n_wave,)
+    wavelength : array_like, shape (n_wave,)
         Rest-frame wavelength grid [Å].
-    agn_log_lbol: float
+    agn_log_lbol : float
         :math:`\log_{10}(L_{\rm bol}/L_\odot)`.
     agn_disc_block, agn_nlr_block, agn_blr_block, agn_feii_block, \
-agn_torus_block, agn_attenuation_block: str
+agn_torus_block, agn_attenuation_block : str
         Names of the registered block implementations to use. **Static**
         under JIT (Python strings; the runner resolves them at trace time).
-    template_state: dict, optional
+    template_state : dict, optional
         Pre-loaded template bundles keyed by family name (e.g.
         ``{"grahsp": GRAHSPTemplates}``). When supplied, each block reads
         templates from this dict instead of calling its own
         ``load_*_templates()`` helper at trace time: keeps HDF5 / file
         I/O out of the JIT trace boundary. ``None`` (default) falls back
         to the in-block lru_cache load.
-    return_l2500: bool, optional
+    return_l2500 : bool, optional
         When True, return ``(L_nu, L_2500_intrinsic, L_4400_intrinsic)``
         tuple. When False (default), return only ``L_nu`` for backward
         compatibility with existing single-return callers. Default: False.
@@ -419,14 +419,14 @@ agn_torus_block, agn_attenuation_block: str
 
     Returns
     -------
-    L_nu: ndarray, shape (n_wave,)
+    L_nu : ndarray, shape (n_wave,)
         Total AGN-side :math:`L_\nu` [erg/s/Hz].
-    L_2500_intrinsic: float, optional
+    L_2500_intrinsic : float, optional
         When ``return_l2500=True``, the un-reddened intrinsic disc
         monochromatic luminosity at 2500 Å [erg/s/Hz], capturing the
         disc shape at the ``agn_log_lbol`` normalization. Returned as
         second element of tuple. Otherwise not returned.
-    L_4400_intrinsic: float, optional
+    L_4400_intrinsic : float, optional
         When ``return_l2500=True``, the un-reddened intrinsic disc
         monochromatic luminosity at 4400 Å [erg/s/Hz], capturing the
         disc shape at the ``agn_log_lbol`` normalization. Returned as
@@ -817,18 +817,18 @@ def composable_agn_l_nu(
 
     Parameters
     ----------
-    wavelength: array_like, shape (n_wave,)
+    wavelength : array_like, shape (n_wave,)
         Rest-frame wavelength [Å].
-    agn_log_lbol: float, optional
+    agn_log_lbol : float, optional
         :math:`\log_{10}(L_{\rm bol}/L_\odot)`. Defaults to the declared
         ``agn_log_lbol`` default.
-    agn_lum_ratio: float, optional
+    agn_lum_ratio : float, optional
         Overall AGN fraction scaling [dimensionless]. Default ``1.0``.
     agn_disc_block, agn_nlr_block, agn_blr_block, agn_feii_block, \
-agn_torus_block, agn_attenuation_block: str, optional
+agn_torus_block, agn_attenuation_block : str, optional
         Per-stage block selectors. Default ``"none"`` for every stage
         (a no-op pipeline; users **must** opt in by name).
-    return_l2500: bool, optional
+    return_l2500 : bool, optional
         When True, return ``(L_nu, L_2500_intrinsic, L_4400_intrinsic)``
         tuple. When False (default), return only ``L_nu`` for backward
         compatibility. Default: False.
@@ -837,14 +837,14 @@ agn_torus_block, agn_attenuation_block: str, optional
 
     Returns
     -------
-    L_nu: ndarray, shape (n_wave,)
+    L_nu : ndarray, shape (n_wave,)
         Total AGN :math:`L_\nu` [erg/s/Hz], scaled by ``agn_lum_ratio``.
-    L_2500_intrinsic: float, optional
+    L_2500_intrinsic : float, optional
         When ``return_l2500=True``, the un-reddened intrinsic disc
         monochromatic luminosity at 2500 Å [erg/s/Hz]. NOT scaled by
         ``agn_lum_ratio`` (maintains the unscaled-intrinsic convention of
         ``L_agn_bol``). Returned as second element of tuple when enabled.
-    L_4400_intrinsic: float, optional
+    L_4400_intrinsic : float, optional
         When ``return_l2500=True``, the un-reddened intrinsic disc
         monochromatic luminosity at 4400 Å [erg/s/Hz]. NOT scaled by
         ``agn_lum_ratio`` (maintains the unscaled-intrinsic convention of

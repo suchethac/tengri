@@ -107,7 +107,7 @@ class PrecomputeModule(Protocol):
 
     Attributes
     ----------
-    AXIS_PARAMS: tuple or dict
+    AXIS_PARAMS : tuple or dict
         Ordered tuple of parameter names defining preintegration grid axes,
         or dict mapping model variant to tuple (for multi-variant components).
         Empty tuple means scalar template (no grid axes). [dimensionless]
@@ -132,15 +132,15 @@ class PrecomputeModule(Protocol):
 
         Parameters
         ----------
-        filter_waves: list of array_like
+        filter_waves : list of array_like
             Per-filter wavelength arrays. [Angstrom]
-        filter_trans: list of array_like
+        filter_trans : list of array_like
             Per-filter transmission curves (normalized). [dimensionless]
-        redshift: float
+        redshift : float
             Source redshift. [dimensionless]
-        parameters: Any
+        parameters : Any
             Free and fixed parameter specification.
-        **kwargs: Any
+        **kwargs : Any
             Component-specific options.
 
         Returns
@@ -167,9 +167,9 @@ class PrecomputeModule(Protocol):
 
         Parameters
         ----------
-        preint: PreintegratedResult
+        preint : PreintegratedResult
             Output of :meth:`precompute`.
-        **kwargs: Any
+        **kwargs : Any
             Component-specific options.
 
         Returns

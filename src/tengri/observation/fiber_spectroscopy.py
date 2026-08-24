@@ -63,17 +63,17 @@ class FiberSpectroscopyObservation:
 
     Parameters
     ----------
-    observation: object
+    observation : object
         Wrapped observation. Must expose ``predict(state, params)``.
-    fiber_radius_arcsec: float
+    fiber_radius_arcsec : float
         Fiber radius in arcseconds (e.g. 1.0 for an SDSS-like
         2-arcsec-diameter fiber).
-    fiber_center_arcsec: tuple of (float, float), default (0.0, 0.0)
+    fiber_center_arcsec : tuple of (float, float), default (0.0, 0.0)
         Fiber center offset in arcsec (x, y) from the galaxy nucleus.
-    softness: float, default 0.01
+    softness : float, default 0.01
         Sigmoidal edge softening (fraction of aperture radius). Set
         to 0 for a hard top-hat (non-differentiable at the edge).
-    name: str, default "fiber_spec"
+    name : str, default "fiber_spec"
         Identifier for diagnostics.
 
     Notes

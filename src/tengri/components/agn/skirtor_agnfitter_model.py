@@ -46,7 +46,7 @@ class SKIRTORAgnfitterTorusConfig(SEDComponentConfig):
 
     Parameters
     ----------
-    grid_path: str or None
+    grid_path : str or None
         Path to SKIRTOR_mean_3p template grid (HDF5). If None, templates
         are not pre-loaded (deferred to first use in predict).
     """
@@ -60,9 +60,9 @@ class SKIRTORAgnfitterTorusState(SEDComponentState):
 
     Attributes
     ----------
-    name: str
+    name : str
         Component identifier.
-    skirtor_agnfitter_fn: callable or None
+    skirtor_agnfitter_fn : callable or None
         Compiled interpolation function from create_skirtor_agnfitter_from_grid,
         or None if templates are not available.
     """
@@ -83,29 +83,29 @@ class SKIRTORAgnfitterTorus(SEDModelComponent):
 
     Attributes
     ----------
-    name: str
+    name : str
         Component registry key: ``"skirtor_agnfitter"``.
-    parameter_prefix: str
+    parameter_prefix : str
         Parameter namespace: ``"agn_"``.
-    config: SKIRTORAgnfitterTorusConfig
+    config : SKIRTORAgnfitterTorusConfig
         Frozen configuration (grid path).
 
     Free parameters (class-level declarations, auto-discovered)
     -----------------------------------------------------------
-    log_lbol: Uniform
+    log_lbol : Uniform
         log₁₀(L_bol / L_sun). [dex, 8–14]
-    oa_skirtor: Uniform
+    oa_skirtor : Uniform
         Half-opening angle [deg]. [deg, 10–80]
-    incl_skirtor: Uniform
+    incl_skirtor : Uniform
         Inclination angle measured from pole [deg]. [deg, 0–90]
-    tv_skirtor: Uniform
+    tv_skirtor : Uniform
         Equatorial optical depth τ_9.7. [dimensionless, 3–11]
-    torus_frac: Uniform
+    torus_frac : Uniform
         Fraction of L_bol reprocessed by torus. [dimensionless, 0–1]
 
     Cross-component outputs
     -----------------------
-    L_agn_torus: erg/s
+    L_agn_torus : erg/s
         Bolometric luminosity contribution from torus emission.
 
     Notes
@@ -149,8 +149,8 @@ class SKIRTORAgnfitterTorus(SEDModelComponent):
 
     See Also
     --------
-    tengri.components.agn.skirtor_agnfitter: template loader and interpolation.
-    tengri.components.agn.skirtor_model: default (X-CIGALE-faithful) SKIRTOR.
+    tengri.components.agn.skirtor_agnfitter : template loader and interpolation.
+    tengri.components.agn.skirtor_model : default (X-CIGALE-faithful) SKIRTOR.
     """
 
     name = "skirtor_agnfitter"
@@ -202,7 +202,7 @@ class SKIRTORAgnfitterTorus(SEDModelComponent):
 
         Parameters
         ----------
-        wave: ndarray, optional
+        wave : ndarray, optional
             Rest-frame wavelength grid (not used by SKIRTOR; templates
             interpolate to any target grid).
 
@@ -236,7 +236,7 @@ class SKIRTORAgnfitterTorus(SEDModelComponent):
 
         Parameters
         ----------
-        p: mapping[str, ndarray]
+        p : mapping[str, ndarray]
             Parameters with prefix already stripped:
 
             - log_lbol: log₁₀(L_bol / L_sun)
@@ -245,11 +245,11 @@ class SKIRTORAgnfitterTorus(SEDModelComponent):
             - tv_skirtor: equatorial optical depth
             - torus_frac: torus luminosity fraction
 
-        sed_in: ndarray, shape (n_wave,)
+        sed_in : ndarray, shape (n_wave,)
             Input SED in erg/s/Hz.
-        wave: ndarray, shape (n_wave,)
+        wave : ndarray, shape (n_wave,)
             Rest-frame wavelength grid in Angstrom.
-        **inputs: ndarray
+        **inputs : ndarray
             Unused (AGN torus is self-contained).
 
         Returns

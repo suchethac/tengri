@@ -18,7 +18,7 @@ class TengriError(Exception):
 
     Parameters
     ----------
-    message: str
+    message : str
         Human-readable error description.
     """
 
@@ -28,7 +28,7 @@ class ParameterError(TengriError, ValueError):
 
     Parameters
     ----------
-    message: str
+    message : str
         Human-readable error description.
     """
 
@@ -44,7 +44,7 @@ class ParameterMapError(ParameterError):
 
     Parameters
     ----------
-    message: str
+    message : str
         Human-readable error description.
     """
 
@@ -65,7 +65,7 @@ class UnknownParameterError(ParameterError):
 
     Parameters
     ----------
-    message: str
+    message : str
         Human-readable error description, listing unknown keys and
         suggested matches.
     """
@@ -76,13 +76,13 @@ class MissingParameterError(ParameterError):
 
     Every non-``Fixed`` parameter needs a value at predict time. Without
     this check the missing key surfaces deep inside a component as a bare
-    ``KeyError`` (e.g. ``'dust_tau_bc'``) with no hint about the cause; commonly hit by
-    ``model.mock({})`` / ``model.predict_photometry({})``
+    ``KeyError`` (e.g. ``'dust_tau_bc'``) with no hint about the cause;
+    commonly hit by ``model.mock({})`` / ``model.predict_photometry({})``
     on a model whose default dust group carries free optical depths.
 
     Parameters
     ----------
-    message: str
+    message : str
         Human-readable error description listing the missing names and how
         to supply or fix them.
     """
@@ -96,7 +96,7 @@ class ParameterDefaultMissingError(ParameterError):
     to a registry entry whose ``Distribution`` carries no ``default=``. Prior
     behavior silently fell back to the midpoint of the prior support, which
     was an implicit and often physically wrong choice (e.g. ``Uniform(0, 5)``
-    for ``log10(n_H/cm^-3)`` collapsed to 2.5; 316 cm^-3: when the
+    for ``log10(n_H/cm^-3)`` collapsed to 2.5 (316 cm^-3) when the
     CIGALE-faithful value is 2.0).
 
     Fix: register a default at the declaration site, e.g.
@@ -104,7 +104,7 @@ class ParameterDefaultMissingError(ParameterError):
 
     Parameters
     ----------
-    message: str
+    message : str
         Human-readable error description naming the offending parameter and
         suggesting where to add the default.
     """
@@ -115,7 +115,7 @@ class ConfigError(TengriError, ValueError):
 
     Parameters
     ----------
-    message: str
+    message : str
         Human-readable error description.
     """
 
@@ -125,7 +125,7 @@ class BackendError(TengriError, RuntimeError):
 
     Parameters
     ----------
-    message: str
+    message : str
         Human-readable error description.
     """
 
@@ -135,7 +135,7 @@ class InferenceError(TengriError, RuntimeError):
 
     Parameters
     ----------
-    message: str
+    message : str
         Human-readable error description.
     """
 
@@ -145,7 +145,7 @@ class TengriIOError(TengriError, OSError):
 
     Parameters
     ----------
-    message: str
+    message : str
         Human-readable error description.
     """
 
@@ -656,12 +656,12 @@ def warn_measured(message, category=UserWarning, *, stacklevel=2, **measurements
 
     Parameters
     ----------
-    message: str
+    message : str
         Human-readable text, formatted as usual. Round freely here.
-    category: type, optional
+    category : type, optional
         Warning class. Default ``UserWarning``. Unchanged by this helper, so
         existing ``warnings.filterwarnings`` entries keep working.
-    stacklevel: int, optional
+    stacklevel : int, optional
         Frames to skip, counted from the *caller* exactly as ``warnings.warn``
         counts them. Default 2. This helper's own frame is added internally, so
         a site migrating from ``warnings.warn(..., stacklevel=2)`` keeps the
@@ -729,13 +729,13 @@ def measurements_of(warning):
 
     Parameters
     ----------
-    warning: Warning or object
+    warning : Warning or object
         Typically ``record.message`` from
         ``warnings.catch_warnings(record=True)``.
 
     Returns
     -------
-    values: dict
+    values : dict
         Mapping of name to exact value [units vary by measurement]. Empty for
         warnings that carry none.
     """

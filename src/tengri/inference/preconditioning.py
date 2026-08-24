@@ -110,21 +110,21 @@ def negative_hessian_metric(
 
     Parameters
     ----------
-    logdensity_fn: callable
+    logdensity_fn : callable
         ``log_p(position, data_args) -> scalar`` in the standardized latent space.
-    position: array_like, shape (D,)
+    position : array_like, shape (D,)
         Flat latent position to expand around, normally the MAP.
-    data_args: pytree
+    data_args : pytree
         Observed-data tensors, passed through to ``logdensity_fn``.
-    floor: float, optional
+    floor : float, optional
         Lower clip applied to the eigenvalue *magnitudes* [dimensionless]. Default
         :data:`PRIOR_METRIC_FLOOR` (1.0). Pass ``0.0`` to disable clipping when
         the curvature is already known to be positive definite.
 
     Returns
     -------
-    metric: ndarray, shape (D, D)
-        Symmetric positive-definite metric, eigenvalues ``max(|lambda|, floor)``,
+    metric : ndarray, shape (D, D)
+        Symmetric positive-definite metric, eigenvalues ``max(|lambda|, floor)``
         **provided the curvature at ``position`` is finite**. The floor cannot
         rescue a non-finite input: ``jnp.maximum(nan, floor)`` is ``nan``, so a
         NaN log-density or Hessian propagates through unchanged (#1397).
@@ -173,19 +173,19 @@ def temper_metric(
 
     Parameters
     ----------
-    metric: array_like, shape (D, D)
+    metric : array_like, shape (D, D)
         Symmetric positive-definite metric ``G``, e.g. from
         :func:`negative_hessian_metric`.
-    strength: float
+    strength : float
         Exponent :math:`\\alpha \\in [0, 1]` [dimensionless]. ``1.0`` returns the
         metric unchanged, ``0.0`` returns the identity.
-    max_condition: float, optional
+    max_condition : float, optional
         Largest permitted ratio of the metric's eigenvalues, applied **before** the
         exponent. Default :data:`MAX_METRIC_CONDITION`. Pass ``inf`` to disable.
 
     Returns
     -------
-    tempered: ndarray, shape (D, D)
+    tempered : ndarray, shape (D, D)
         ``G^strength`` with its spectrum clipped, symmetric positive definite.
 
     Raises
@@ -235,9 +235,9 @@ class LinearPreconditioner:
 
     Attributes
     ----------
-    matrix: ndarray, shape (D, D)
+    matrix : ndarray, shape (D, D)
         The map ``A`` from sampled coordinates to standardized latents.
-    inverse: ndarray, shape (D, D)
+    inverse : ndarray, shape (D, D)
         ``A^-1``, the map back.
     """
 
@@ -257,12 +257,12 @@ class LinearPreconditioner:
 
         Parameters
         ----------
-        logdensity_fn: callable
+        logdensity_fn : callable
             ``log_p(xi, data_args) -> scalar``.
 
         Returns
         -------
-        wrapped: callable
+        wrapped : callable
             ``log_p(A @ zeta, data_args) -> scalar``.
 
         Notes
@@ -288,13 +288,13 @@ def metric_preconditioner(metric: jnp.ndarray) -> LinearPreconditioner:
 
     Parameters
     ----------
-    metric: array_like, shape (D, D)
+    metric : array_like, shape (D, D)
         Symmetric positive-definite metric ``G``, e.g. from
         :func:`negative_hessian_metric`.
 
     Returns
     -------
-    preconditioner: LinearPreconditioner
+    preconditioner : LinearPreconditioner
         Satisfies ``A A^T = G^-1``, hence ``A^T G A = I``.
 
     Raises
@@ -355,30 +355,30 @@ def preconditioned_logdensity(
 
     Parameters
     ----------
-    logdensity_fn: callable
+    logdensity_fn : callable
         ``log_p(xi, data_args) -> scalar`` in the standardized latent space.
-    init_flat: array_like, shape (D,)
+    init_flat : array_like, shape (D,)
         Starting position, normally the MAP, which is where the metric is most
         representative of the region a chain explores.
-    data_args: pytree
+    data_args : pytree
         Observed-data tensors, passed through to ``logdensity_fn``.
-    floor: float, optional
+    floor : float, optional
         Eigenvalue floor for the metric. Default :data:`PRIOR_METRIC_FLOOR`.
-    strength: float, optional
+    strength : float, optional
         Whitening exponent :math:`\\alpha` in :math:`A A^\\top = G^{-\\alpha}`
         [dimensionless]. Default :data:`DEFAULT_WHITENING_STRENGTH`. See
         :func:`temper_metric` for why the default is not 1.
-    max_condition: float, optional
+    max_condition : float, optional
         Condition-number cap on the metric. Default :data:`MAX_METRIC_CONDITION`.
 
     Returns
     -------
-    wrapped: callable
+    wrapped : callable
         ``log_p(A @ zeta, data_args) -> scalar``, to be sampled in place of
         ``logdensity_fn``.
-    preconditioner: LinearPreconditioner
+    preconditioner : LinearPreconditioner
         Map draws back with ``preconditioner.to_xi(zeta)``.
-    init_zeta: ndarray, shape (D,)
+    init_zeta : ndarray, shape (D,)
         ``init_flat`` expressed in the sampled coordinates.
 
     Notes
@@ -450,8 +450,8 @@ def _preconditioner_with_conditioning(
 
     Returns
     -------
-    preconditioner: LinearPreconditioner
-    conditioning: tuple of float
+    preconditioner : LinearPreconditioner
+    conditioning : tuple of float
         ``(raw, whitened)`` condition numbers [dimensionless], the metric as built,
         and the curvature the sampler actually faces at the expansion point.
 
@@ -515,11 +515,11 @@ def _resolve_whitening_strength(precondition: bool | float | None, n_dim: int) -
 
     Parameters
     ----------
-    precondition: bool, float or None
+    precondition : bool, float or None
         ``None`` / ``False`` (default, off), ``True`` (on at
         :data:`DEFAULT_WHITENING_STRENGTH`), or a float in ``[0, 1]` naming the
         strength directly. ``1.0`` is full whitening; ``0.0`` is off.
-    n_dim: int
+    n_dim : int
         Flat latent dimension. Unused by the policy; retained because callers pass it
         and because a future cost-based warning belongs here.
 
@@ -572,25 +572,25 @@ class PreconditionedProblem:
 
     Attributes
     ----------
-    logdensity: callable
+    logdensity : callable
         ``log_p(zeta, data_args) -> scalar`` to hand the sampler. The original
         function itself when disabled.
-    init_flat: ndarray, shape (D,)
+    init_flat : ndarray, shape (D,)
         Starting position in the sampled coordinates.
-    enabled: bool
+    enabled : bool
         Whether the coordinates were actually whitened. Fold this into any adaptation
         cache key: a step size or mass matrix tuned in one basis is meaningless in
         the other.
-    preconditioner: LinearPreconditioner or None
+    preconditioner : LinearPreconditioner or None
         The map, or ``None`` when disabled.
-    strength: float or None
+    strength : float or None
         The whitening exponent actually applied, or ``None`` when disabled. Report it:
         two fits whitened at different strengths are not comparable, and a number that
         is not recorded will be assumed to have been the default (#1442).
-    metric_condition: float or None
+    metric_condition : float or None
         Condition number of the metric as built, before tempering [dimensionless].
         ``None`` when disabled.
-    whitened_condition: float or None
+    whitened_condition : float or None
         Condition number the sampler actually faces at the expansion point
         [dimensionless]. ``None`` when disabled. The ratio of the two is what the
         transform bought; without them a run cannot say whether the metric was
@@ -633,7 +633,7 @@ class PreconditionedProblem:
 
         Parameters
         ----------
-        positions: array_like, shape (D,) or (n_draw, D)
+        positions : array_like, shape (D,) or (n_draw, D)
             Draws in the sampled coordinates.
 
         Returns
@@ -671,20 +671,20 @@ def prepare_preconditioning(
 
     Parameters
     ----------
-    logdensity_fn: callable
+    logdensity_fn : callable
         ``log_p(xi, data_args) -> scalar`` in the standardized latent space.
-    init_flat: array_like, shape (D,)
+    init_flat : array_like, shape (D,)
         Starting position, normally the MAP.
-    data_args: pytree
+    data_args : pytree
         Observed-data tensors, passed through to ``logdensity_fn``.
-    precondition: bool, float or None, optional
+    precondition : bool, float or None, optional
         ``None`` (default) and ``False`` are off, preconditioning is opt-in
         (#1397, :func:`_resolve_whitening_strength`). ``True`` enables it at
         :data:`DEFAULT_WHITENING_STRENGTH`. A float in ``[0, 1]`` names the
         whitening strength directly; ``1.0`` is full whitening and ``0.0`` is off.
-    floor: float, optional
+    floor : float, optional
         Eigenvalue floor for the metric. Default :data:`PRIOR_METRIC_FLOOR`.
-    max_condition: float, optional
+    max_condition : float, optional
         Condition-number cap on the metric. Default :data:`MAX_METRIC_CONDITION`.
 
     Returns

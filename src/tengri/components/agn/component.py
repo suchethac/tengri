@@ -97,9 +97,9 @@ class AGNSEDComponentConfig(SEDComponentConfig):
 
     Parameters
     ----------
-    name: str
+    name : str
         Diagnostic identifier. Default ``"agn"``.
-    model: str
+    model : str
         AGN model registry key. One of ``"multicolor_agn"`` (Kubota & Done
         outer-zone disc + 2-T torus), ``"kubota_done_full"`` (full 3-zone
         disc), ``"adaf"``, ``"unified_nlr_blr"``, ``"skirtor"``,
@@ -107,14 +107,14 @@ class AGNSEDComponentConfig(SEDComponentConfig):
         ``"composable"`` (block-composed via the selectors below).
         Default ``"multicolor_agn"``.
     agn_disc_block, agn_nlr_block, agn_blr_block, agn_feii_block,
-    agn_torus_block, agn_attenuation_block: str
+    agn_torus_block, agn_attenuation_block : str
         Composable-AGN block selectors. Only consulted when
         ``model == "composable"``, the runner reads them from this config
         (they are static strings, not traced JAX values, so they cannot
         ride in ``params``). Each defaults to ``"none"`` so non-composable
         AGN models receive harmless no-op selectors that the underlying
         registry function absorbs via ``**kwargs``.
-    agn_norm: str
+    agn_norm : str
         Cross-block normalization policy (#556). ``"cigale_joint"``
         (default) ties the disc, torus and polar to CIGALE's single
         ``agn_power`` reference via the fixed SKIRTOR template ratios
@@ -251,14 +251,14 @@ class AGNSEDComponent(TemplateThreading):
 
         Parameters
         ----------
-        ssp_data: Any | None
+        ssp_data : Any | None
             Unused; accepted for Protocol uniformity.
-        wave_grid: ndarray | None
+        wave_grid : ndarray | None
             Unused; accepted for Protocol uniformity.
-        approx: Mapping[str, bool] | None
+        approx : Mapping[str, bool] | None
             Approximation flags. When ``approx.get('wave_precomp')``
             is ``True``, cache templates and filters.
-        filters: tuple of (wave, trans) pairs | None
+        filters : tuple of (wave, trans) pairs | None
             Filter wavelengths and transmissions to cache.
 
         Returns
@@ -337,12 +337,12 @@ class AGNSEDComponent(TemplateThreading):
 
         Parameters
         ----------
-        state: ForwardState
+        state : ForwardState
             Must carry rest-frame ``wave`` (Å). If ``sed_intrinsic`` is
             ``None`` it is initialized to zeros of the same shape.
-        params: mapping
+        params : mapping
             Receives ``agn_*`` keys plus the bare ``redshift``.
-        template_data: dict | None
+        template_data : dict | None
             Nested dict with component namespaces ("nebular", "agn", etc)
             carrying template grids/weights for JIT threading. When present,
             SKIRTOR templates are read from ``template_data["agn"]["skirtor"]``

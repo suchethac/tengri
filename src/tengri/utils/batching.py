@@ -78,10 +78,10 @@ def vmap_chunked(fn, chunk_size: int = 16):
 
     Parameters
     ----------
-    fn: callable
+    fn : callable
         A function of a single parameter pytree (e.g. ``params -> dict``). It is
         mapped over the leading axis of every leaf of the batch.
-    chunk_size: int, default 16
+    chunk_size : int, default 16
         Draws per compiled call. Larger is faster and hungrier. Values larger
         than the batch are harmless (one chunk).
 
@@ -108,8 +108,8 @@ def vmap_chunked(fn, chunk_size: int = 16):
 
     Notes
     -----
-    **JIT-compatible**: the returned callable is *not* itself meant to be jitted: it drives
-    compilation internally and does Python-level slicing. Use it
+    **JIT-compatible**: the returned callable is *not* itself meant to be jitted;
+    it drives compilation internally and does Python-level slicing. Use it
     around a jittable ``fn``, not inside another ``jit``.
 
     The ragged final chunk (when ``n`` is not a multiple of ``chunk_size``)
@@ -143,7 +143,7 @@ def vmap_chunked(fn, chunk_size: int = 16):
 
         ``jax.vmap`` *removes* the mapped axis before calling ``fn``, so ``fn``
         sees a scalar per draw. The loop must index (``x[i]``), not slice
-        (``x[i: i + 1]``), or the fallback hands ``fn`` a shape-``(1,)`` array
+        (``x[i : i + 1]``), or the fallback hands ``fn`` a shape-``(1,)`` array
         where the fast path hands it a scalar. That difference is invisible for
         a jittable ``fn`` (everything broadcasts) and fatal for exactly the
         concrete-inspecting functions this fallback exists to serve.

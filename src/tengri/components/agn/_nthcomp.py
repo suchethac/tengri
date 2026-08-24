@@ -144,15 +144,15 @@ class NthcompTable(NamedTuple):
 
     Attributes
     ----------
-    gamma: ndarray, shape (n_gamma,)
+    gamma : ndarray, shape (n_gamma,)
         Photon-index axis.
-    kte: ndarray, shape (n_kte,)
+    kte : ndarray, shape (n_kte,)
         Electron-temperature axis [keV].
-    ktbb: ndarray, shape (n_ktbb,)
+    ktbb : ndarray, shape (n_ktbb,)
         Seed-blackbody-temperature axis [keV].
-    nu: ndarray, shape (n_nu,)
+    nu : ndarray, shape (n_nu,)
         Template frequency grid [Hz].
-    table_log: ndarray, shape (n_gamma, n_kte, n_ktbb, n_nu)
+    table_log : ndarray, shape (n_gamma, n_kte, n_ktbb, n_nu)
         ``log`` of the spectral shape.
 
     Notes
@@ -288,21 +288,21 @@ def _nthcomp_interp(
 
     Parameters
     ----------
-    table: NthcompTable
+    table : NthcompTable
         Template arrays. Also read by the JVP rule, which re-evaluates the
         interpolation at shifted operands.
-    nu: jnp.ndarray
+    nu : jnp.ndarray
         Frequency grid [Hz].
-    gamma: scalar jnp array
+    gamma : scalar jnp array
         Photon index.  Clamped to grid range.
-    kTe_keV: scalar jnp array
+    kTe_keV : scalar jnp array
         Electron temperature [keV].  Clamped to grid range.
-    kTbb_keV: scalar jnp array
+    kTbb_keV : scalar jnp array
         Seed temperature [keV].  Clamped to grid range.
 
     Returns
     -------
-    lnu_shape: jnp.ndarray, shape (len(nu),)
+    lnu_shape : jnp.ndarray, shape (len(nu),)
         Non-negative spectral shape (integrates to ~1 over nu).
 
     Notes
@@ -348,9 +348,9 @@ def _nthcomp_interp_jvp(primals: tuple, tangents: tuple) -> tuple:
 
     Parameters
     ----------
-    primals: tuple
+    primals : tuple
         ``(table, nu, gamma, kTe_keV, kTbb_keV)`` -- see :func:`_nthcomp_interp`.
-    tangents: tuple
+    tangents : tuple
         Tangents of those same five operands. ``gamma`` and ``kTe_keV``
         contribute; ``nu`` and ``kTbb_keV`` do not, and ``table`` is a library,
         never a fit parameter, so its tangent is structurally zero -- the
@@ -477,12 +477,12 @@ def nthcomp_lnu_interp(
 
     Parameters
     ----------
-    nu: ndarray, shape (n_nu,)
+    nu : ndarray, shape (n_nu,)
         Frequency grid [Hz].
-    gamma, kTe_keV, kTbb_keV: Array
+    gamma, kTe_keV, kTbb_keV : Array
         Photon index, electron temperature [keV], seed temperature [keV].
         Each is clamped to the grid range.
-    _template: NthcompTable, optional
+    _template : NthcompTable, optional
         Pre-loaded templates, threaded in as a JIT argument by the forward
         model. ``None`` (default) reads the module-level cache, which: under
         trace: bakes ~15 MB into the graph as constants.

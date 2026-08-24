@@ -91,13 +91,13 @@ def tw_ndhist(
 
     Parameters
     ----------
-    nddata: array, shape (npts, ndim)
+    nddata : array, shape (npts, ndim)
         Data points in N-dimensional space.
-    ndsig: array, shape (npts, ndim)
+    ndsig : array, shape (npts, ndim)
         Triweight scatter for each point in each dimension.
-    ndbins_lo: array, shape (nbins, ndim)
+    ndbins_lo : array, shape (nbins, ndim)
         Lower bound of each bin in each dimension.
-    ndbins_hi: array, shape (nbins, ndim)
+    ndbins_hi : array, shape (nbins, ndim)
         Upper bound of each bin in each dimension.
 
     Returns
@@ -146,15 +146,15 @@ def tw_ndhist_weighted(
 
     Parameters
     ----------
-    nddata: array, shape (npts, ndim)
+    nddata : array, shape (npts, ndim)
         Data points in N-dimensional space.
-    ndsig: array, shape (npts, ndim)
+    ndsig : array, shape (npts, ndim)
         Triweight scatter for each point in each dimension.
-    ydata: array, shape (npts,)
+    ydata : array, shape (npts,)
         Quantity to sum within each bin.
-    ndbins_lo: array, shape (nbins, ndim)
+    ndbins_lo : array, shape (nbins, ndim)
         Lower bound of each bin in each dimension.
-    ndbins_hi: array, shape (nbins, ndim)
+    ndbins_hi : array, shape (nbins, ndim)
         Upper bound of each bin in each dimension.
 
     Returns

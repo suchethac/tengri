@@ -92,11 +92,11 @@ def _young_indicator(
 
     Parameters
     ----------
-    ssp_ages_yr: ndarray, shape (n_age,)
+    ssp_ages_yr : ndarray, shape (n_age,)
         SSP lookback ages [yr].
-    t_birth_yr: float
+    t_birth_yr : float
         Birth-cloud dispersal age: the sigmoid center [yr].
-    transition_width_dex: float
+    transition_width_dex : float
         Sigmoid width [dex].
 
     Returns
@@ -137,10 +137,10 @@ class DustSEDComponentConfig(SEDComponentConfig):
         birth-cloud law from the stars while still sharing the diffuse ISM
         screen (``law_diff``). See ``neb_law_overrides`` for the matching
         per-parameter knob.
-    t_birth_yr: float
+    t_birth_yr : float
         Birth-cloud dispersal age (sigmoid center, yr).
         Default 1e7 (10 Myr) per Charlot & Fall (2000).
-    transition_width_dex: float
+    transition_width_dex : float
         Sigmoid width (dex) for the BC→diffuse age transition.
     """
 
@@ -418,13 +418,13 @@ class DustSEDComponent(TemplateThreading):
 
         Parameters
         ----------
-        ssp_data: Any | None
+        ssp_data : Any | None
             Unused; accepted for Protocol uniformity.
-        wave_grid: ndarray | None
+        wave_grid : ndarray | None
             Unused; accepted for Protocol uniformity.
-        approx: dict[str, bool] | None
+        approx : dict[str, bool] | None
             Unused; accepted for Protocol uniformity.
-        filters: tuple of (wave, trans) pairs | None
+        filters : tuple of (wave, trans) pairs | None
             Unused; accepted for Protocol uniformity.
 
         Returns
@@ -457,12 +457,12 @@ class DustSEDComponent(TemplateThreading):
 
         Parameters
         ----------
-        params: mapping
+        params : mapping
             Receives ``dust_tau_bc`` / ``dust_tau_diff`` (+ optional
             ``dust_f_obscuration`` and per-law override keys).
-        wavelength: ndarray, shape (n_wave,)
+        wavelength : ndarray, shape (n_wave,)
             Rest-frame wavelengths [Å] at which to evaluate the screen.
-        ssp_ages_yr: ndarray, shape (n_age,)
+        ssp_ages_yr : ndarray, shape (n_age,)
             SSP lookback ages [yr]: the birth-cloud axis.
 
         Returns
@@ -524,11 +524,11 @@ class DustSEDComponent(TemplateThreading):
 
         Parameters
         ----------
-        state: ForwardState
+        state : ForwardState
             Must carry ``wave`` and have stellar published
             ``lnu_age`` (n_age, n_wave) and ``ssp_ages_yr`` (n_age,)
             in its ``derived`` dict.
-        params: mapping
+        params : mapping
             Receives ``dust_*`` keys plus the bare ``redshift``.
 
         Returns

@@ -81,30 +81,30 @@ def torus_dust_continuum(
 
     Parameters
     ----------
-    wave_nm: array_like, shape (n_wave,)
+    wave_nm : array_like, shape (n_wave,)
         Wavelength grid [nm].
-    l5100: float
+    l5100 : float
         :math:`\lambda L_\lambda` at 5100 Å [erg/s].
-    fcov: float
+    fcov : float
         Covering factor :math:`f_{\rm cov}`. Sets normalization via
         :math:`\lambda L_\lambda(12\,\mu m) = 2.5 \cdot \mathrm{l5100} \cdot f_{\rm cov}`.
-    cool_lam_um: float
+    cool_lam_um : float
         Cool component peak wavelength :math:`\lambda_{\rm COOL}` [um].
         Reasonable: 15-30 um.
-    cool_width: float
+    cool_width : float
         Cool component log-width :math:`W_{\rm COOL}` [dex]. Reasonable: 0.2-0.65.
-    hot_lam_um: float
+    hot_lam_um : float
         Hot component peak wavelength [um]. Reasonable: 1-5.5 um.
-    hot_width: float
+    hot_width : float
         Hot component log-width [dex].
-    hot_fcov: float
+    hot_fcov : float
         Peak-to-peak ratio :math:`f_{\rm hot} =
         \lambda_{\rm HOT} L_{\rm HOT} / (\lambda_{\rm COOL} L_{\rm COOL})`
         in :math:`\lambda L_\lambda` (Eq. fhot in paper).
 
     Returns
     -------
-    L_lambda: ndarray, shape (n_wave,)
+    L_lambda : ndarray, shape (n_wave,)
         Specific torus luminosity [erg/s/nm].
 
     Notes
@@ -159,13 +159,13 @@ def si_feature(
 
     Parameters
     ----------
-    wave_nm: array_like, shape (n_wave,)
+    wave_nm : array_like, shape (n_wave,)
         Wavelength grid [nm].
-    l5100: float
+    l5100 : float
         :math:`\lambda L_\lambda` at 5100 Å [erg/s].
-    fcov: float
+    fcov : float
         Torus covering factor (Eq. fcov in paper).
-    si: float
+    si : float
         Si feature strength (paper parameter ``Si``); positive = emission,
         negative = absorption.
     si_em_ampl, si_ratio, si_em_lam_nm, si_abs_lam_nm, si_em_width_nm, \
@@ -175,7 +175,7 @@ si_abs_width_nm
 
     Returns
     -------
-    L_Si: ndarray, shape (n_wave,)
+    L_Si : ndarray, shape (n_wave,)
         Si feature contribution :math:`L_\lambda` [erg/s/nm]. May be
         negative (absorption): caller should clip the total torus
         :math:`L_\lambda` to non-negative values, mirroring upstream's
@@ -238,29 +238,29 @@ def torus_mn12_continuum(
 
     Parameters
     ----------
-    wave_nm: array_like, shape (n_wave,)
+    wave_nm : array_like, shape (n_wave,)
         Output wavelength grid [nm].
-    l5100: float
+    l5100 : float
         :math:`\lambda L_\lambda` at 5100 Å [erg/s].
-    fcov: float
+    fcov : float
         Torus covering factor :math:`f_{\rm cov}`.
-    tor_temp: float
+    tor_temp : float
         Temperature parameter :math:`T_{\rm tor}` [-1, +1]. Positive values
         interpolate towards the warm (hi) template; negative towards cool (lo).
-    tor_cutoff_um: float
+    tor_cutoff_um : float
         Cutoff wavelength :math:`\lambda_{\rm cut}` [µm]. Typical: 1.2–1.7 µm.
-    mn12_wave_nm: array_like, shape (n_mn12,)
+    mn12_wave_nm : array_like, shape (n_mn12,)
         Native template grid wavelengths [nm].
-    mn12_avg: array_like, shape (n_mn12,)
+    mn12_avg : array_like, shape (n_mn12,)
         Mean :math:`L_\lambda` template, normalized to 1 at 12 µm.
-    mn12_lo: array_like, shape (n_mn12,)
+    mn12_lo : array_like, shape (n_mn12,)
         25th-percentile :math:`L_\lambda` template (cool), normalized to 1 at 12 µm.
-    mn12_hi: array_like, shape (n_mn12,)
+    mn12_hi : array_like, shape (n_mn12,)
         75th-percentile :math:`L_\lambda` template (warm), normalized to 1 at 12 µm.
 
     Returns
     -------
-    L_lambda: ndarray, shape (n_wave,)
+    L_lambda : ndarray, shape (n_wave,)
         Torus continuum specific luminosity [erg/s/nm], interpolated onto
         ``wave_nm`` grid.
 
@@ -345,23 +345,23 @@ def torus_mn12_si(
 
     Parameters
     ----------
-    wave_nm: array_like, shape (n_wave,)
+    wave_nm : array_like, shape (n_wave,)
         Output wavelength grid [nm].
-    l5100: float
+    l5100 : float
         :math:`\lambda L_\lambda` at 5100 Å [erg/s].
-    fcov: float
+    fcov : float
         Torus covering factor :math:`f_{\rm cov}`.
-    si: float
+    si : float
         Silicate feature strength (Mor & Netzer 2012 parameter ``Si``);
         positive = emission, negative = absorption.
-    si_wave_nm: array_like, shape (n_si,)
+    si_wave_nm : array_like, shape (n_si,)
         Native silicate template wavelengths [nm].
-    si_lumin: array_like, shape (n_si,)
+    si_lumin : array_like, shape (n_si,)
         Silicate template, normalized by the 12 µm continuum.
 
     Returns
     -------
-    L_Si: ndarray, shape (n_wave,)
+    L_Si : ndarray, shape (n_wave,)
         Silicate feature contribution :math:`L_\lambda` [erg/s/nm], interpolated
         onto ``wave_nm`` grid. May be negative (absorption): caller should
         ensure the total torus :math:`L_\lambda` (continuum + feature) is

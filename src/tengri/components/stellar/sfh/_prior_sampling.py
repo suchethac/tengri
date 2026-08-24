@@ -50,9 +50,9 @@ def _draw_internal_kwargs(
 
     Returns
     -------
-    family_list: list[str]
+    family_list : list[str]
         Normalized list of model names (input as list, even if scalar str).
-    internal_kwargs: dict[str, ndarray of shape (n,)]
+    internal_kwargs : dict[str, ndarray of shape (n,)]
         Dict keyed by the *internal* parameter name expected by the SFH closure.
     """
     family_list = [family] if isinstance(family, str) else list(family)
@@ -91,27 +91,27 @@ def sample_sfh_prior(
 
     Parameters
     ----------
-    family: str or list[str]
+    family : str or list[str]
         Registered SFH model name (e.g. ``"tsnorm"``, ``"dpl"``) or a
         composed list (e.g. ``["tsnorm", "burst"]``). The ``"field"``
         modulator is intentionally not supported here: see notes.
-    key: jax.Array
+    key : jax.Array
         JAX PRNG key.
-    n: int, optional
+    n : int, optional
         Number of prior draws. Default 20.
-    age_grid_yr: array_like, shape (n_age,), optional
+    age_grid_yr : array_like, shape (n_age,), optional
         Lookback time grid [yr]. Defaults to a 256-point log grid spanning
         1 Myr to ~13.8 Gyr (matches :func:`make_log_age_grid`).
-    **prior_overrides: Distribution
+    **prior_overrides : Distribution
         Per-parameter prior overrides keyed by the *public* parameter name
         (e.g. ``sfh_dpl_alpha=Uniform(0.5, 2.0)``). Anything not overridden
         uses the registry default from :data:`SFH_REGISTRY`.
 
     Returns
     -------
-    age_grid_yr: ndarray, shape (n_age,)
+    age_grid_yr : ndarray, shape (n_age,)
         Lookback time grid [yr].
-    sfr_curves: ndarray, shape (n, n_age)
+    sfr_curves : ndarray, shape (n, n_age)
         SFR(t_lookback) [Msun/yr] for each prior draw.
 
     Raises
@@ -150,7 +150,7 @@ def sample_sfh_prior(
 
     See Also
     --------
-    tengri.components.stellar.sfh.registry.resolve_sfh: the underlying
+    tengri.components.stellar.sfh.registry.resolve_sfh : the underlying
         model resolver used by the fitter.
     """
     if age_grid_yr is None:

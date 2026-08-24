@@ -3,8 +3,8 @@
 
 Pinned to the ``"phot_fnu"`` prediction-dict key with the legacy
 ``fnu_obs`` / ``fnu_err`` constructor argument names. Identical
-math to :class:`tengri.inference.likelihoods.GaussianLikelihood`,
- this class exists for ergonomic discovery (autocomplete, docs,
+math to :class:`tengri.inference.likelihoods.GaussianLikelihood`;
+this class exists for ergonomic discovery (autocomplete, docs,
 :func:`isinstance`-style channel detection in
 :meth:`Fitter._maybe_build_default_likelihood`) and for the legacy
 constructor signature.
@@ -34,11 +34,11 @@ class PhotometryLikelihood(GaussianLikelihood):
 
     Parameters
     ----------
-    fnu_obs: ndarray, shape (n_filters,)
+    fnu_obs : ndarray, shape (n_filters,)
         Observed flux densities [erg/s/cm²/Hz].
-    fnu_err: ndarray, shape (n_filters,)
+    fnu_err : ndarray, shape (n_filters,)
         1-σ uncertainties [erg/s/cm²/Hz]. Must be > 0.
-    sigma_floor: float, optional
+    sigma_floor : float, optional
         Fractional systematic floor added in quadrature.
 
     Notes

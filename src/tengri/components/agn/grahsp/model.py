@@ -109,39 +109,39 @@ class GRAHSPParams:
 
     Attributes
     ----------
-    l5100: float
+    l5100 : float
         :math:`\lambda L_\lambda(5100\,\mathrm{\AA})` [erg/s].
         Upstream: ``lum5100A``; paper: :math:`L_\mathrm{AGN}^{5100\,\mathrm{\AA}}`.
-    uvslope: float
+    uvslope : float
         BBB UV power-law index :math:`\alpha_1`.
-    plslope: float
+    plslope : float
         BBB optical power-law index :math:`\alpha_2`.
-    plbendloc_nm: float
+    plbendloc_nm : float
         BBB bend wavelength :math:`\lambda_\mathrm{break}` [nm].
-    plbendwidth: float
+    plbendwidth : float
         BBB bend width :math:`\Lambda` [dex].
-    cutoff_nm: float
+    cutoff_nm : float
         IR cutoff [nm]; ``-1`` disables.
-    a_lines: float
+    a_lines : float
         Line-strength scale (paper ``Alines``).
-    a_feii: float
+    a_feii : float
         FeII forest amplitude relative to broad H-beta (paper ``AFeII``).
-    linewidth_kms: float
+    linewidth_kms : float
         FWHM of all lines [km/s] (paper ``Wline``).
-    agn_type: int
+    agn_type : int
         ``1`` (BL/QSO), ``2`` (Sy2), ``3`` (LINER).
-    fcov: float
+    fcov : float
         Torus covering factor (paper :math:`f_\mathrm{cov}`).
-    si: float
+    si : float
         Si feature strength (paper ``Si``).
-    cool_lam_um, cool_width: float
+    cool_lam_um, cool_width : float
         Cool dust component peak [um] and log-width [dex].
-    hot_lam_um, hot_width, hot_fcov: float
+    hot_lam_um, hot_width, hot_fcov : float
         Hot dust peak [um], log-width [dex], peak ratio
         (paper :math:`f_\mathrm{hot}`).
-    ebv: float
+    ebv : float
         Galaxy E(B-V) [mag].
-    ebv_agn: float
+    ebv_agn : float
         Additional AGN-only E(B-V) [mag].
     """
 
@@ -221,17 +221,17 @@ def evaluate_grahsp_agn(
 
     Parameters
     ----------
-    wave_nm: array_like, shape (n_wave,)
+    wave_nm : array_like, shape (n_wave,)
         Rest-frame wavelength grid [nm].
-    params: GRAHSPParams
+    params : GRAHSPParams
         Model parameters.
-    templates: GRAHSPTemplates, optional
+    templates : GRAHSPTemplates, optional
         Pre-loaded HDF5 template bundle. ``None`` triggers the default
         cached load via :func:`load_grahsp_templates`.
 
     Returns
     -------
-    sed: GRAHSPSED
+    sed : GRAHSPSED
         Per-component :math:`L_\lambda` plus bolometric scalars.
 
     Notes
@@ -434,12 +434,12 @@ def compute_grahsp_sed(
 
     Parameters
     ----------
-    wavelength: array_like, shape (n_wave,)
+    wavelength : array_like, shape (n_wave,)
         Rest-frame wavelength grid [Å].
-    agn_log_lbol: float, optional
+    agn_log_lbol : float, optional
         :math:`\log_{10}(L_\mathrm{bol}/L_\odot)`. Defaults to the declared
         ``agn_log_lbol`` default.
-    agn_lum_ratio: float, optional
+    agn_lum_ratio : float, optional
         Fraction of bolometric luminosity carried by this AGN component.
         Default ``1.0``.
     agn_grahsp_uvslope, agn_grahsp_plslope, agn_grahsp_plbendloc_nm, \
@@ -455,10 +455,10 @@ agn_grahsp_hot_fcov
         :func:`si_feature`.
     agn_grahsp_ebv, agn_grahsp_ebv_agn
         Bi-attenuation; see :func:`attenuation_factors`.
-    agn_type: int, optional
+    agn_type : int, optional
         ``1`` (BL/QSO, default), ``2`` (Sy2), ``3`` (LINER). **Static** :
         do not pass as a traced JAX value.
-    templates: GRAHSPTemplates, optional
+    templates : GRAHSPTemplates, optional
         Pre-loaded HDF5 template bundle.
     **_kwargs
         Ignored. Accepted for compatibility with the AGN_MODELS registry
@@ -466,7 +466,7 @@ agn_grahsp_hot_fcov
 
     Returns
     -------
-    L_nu: ndarray, shape (n_wave,)
+    L_nu : ndarray, shape (n_wave,)
         Specific luminosity :math:`L_\nu` [erg/s/Hz].
 
     Notes

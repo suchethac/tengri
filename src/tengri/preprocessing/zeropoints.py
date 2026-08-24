@@ -28,18 +28,18 @@ class ZeropointEntry:
 
     Parameters
     ----------
-    survey: str
+    survey : str
         Survey name (e.g., "JADES", "CEERS", "COSMOS-Web").
-    release: str
+    release : str
         Data release identifier (e.g., "DR5", "v1").
-    filter_name: str
+    filter_name : str
         Filter identifier (e.g., "F150W", "F277W").
-    mag_offset: float, optional
+    mag_offset : float, optional
         AB magnitude offset to ADD to the data. Default 0.0.
-    fractional_sys_err: float, optional
+    fractional_sys_err : float, optional
         Fractional multiplicative systematic error floor.
         Added in quadrature to reported flux uncertainty. Default 0.0.
-    source: str, optional
+    source : str, optional
         Citation string or URL describing the origin of these values.
         Default "".
 
@@ -268,11 +268,11 @@ def lookup_zeropoints(survey: str, release: str, filters: list[str]) -> list[Zer
 
     Parameters
     ----------
-    survey: str
+    survey : str
         Survey name (e.g., "JADES").
-    release: str
+    release : str
         Data release identifier (e.g., "DR5").
-    filters: list of str
+    filters : list of str
         Filter names to retrieve (e.g., ["F150W", "F277W"]).
 
     Returns
@@ -330,18 +330,18 @@ def apply_zeropoints(
 
     Parameters
     ----------
-    flux: ndarray, shape (n_filters,) or (n_sources, n_filters)
+    flux : ndarray, shape (n_filters,) or (n_sources, n_filters)
         Flux array in original units (e.g., microjansky).
-    flux_err: ndarray, same shape as flux
+    flux_err : ndarray, same shape as flux
         Flux uncertainty array.
-    entries: list of ZeropointEntry
+    entries : list of ZeropointEntry
         Zero-point entries to apply. Must have length matching flux.shape[-1].
 
     Returns
     -------
-    flux_corrected: ndarray, same shape as flux
+    flux_corrected : ndarray, same shape as flux
         Flux after magnitude offset corrections.
-    err_corrected: ndarray, same shape as flux_err
+    err_corrected : ndarray, same shape as flux_err
         Error after magnitude offset and systematic floor additions.
 
     Raises

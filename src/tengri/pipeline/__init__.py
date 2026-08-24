@@ -6,8 +6,8 @@ This namespace gathers the :class:`SEDComponent` Protocol, the
 (:func:`run_components`, :func:`merge_declared_parameters`), and the
 shipped adapters.
 
-The legacy :class:`tengri.SEDModel` tier-dispatch path is unchanged; this is an *additive* surface
-for users who want to compose SED
+The legacy :class:`tengri.SEDModel` tier-dispatch path is unchanged;
+this is an *additive* surface for users who want to compose SED
 forward models out of explicit components.
 
 Example

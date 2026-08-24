@@ -100,9 +100,9 @@ def components_consuming(
 
     Parameters
     ----------
-    component_list: sequence of SEDComponent
+    component_list : sequence of SEDComponent
         The assembled component chain.
-    key_name: str
+    key_name : str
         Derived-state key to look for, e.g. ``'sed_nebular'``.
 
     Returns
@@ -165,7 +165,7 @@ def materialized_chain(component_list: Sequence[SEDComponent]) -> tuple[SEDCompo
 
     Parameters
     ----------
-    component_list: sequence of SEDComponent
+    component_list : sequence of SEDComponent
         The assembled component chain.
 
     Returns
@@ -351,7 +351,7 @@ def validate_pipeline(components: Iterable[SEDComponent]) -> None:
 
     Parameters
     ----------
-    components: iterable of SEDComponent
+    components : iterable of SEDComponent
         Ordered list of pipeline components, in the order they will run.
 
     Raises
@@ -480,59 +480,59 @@ def validate_pipeline(components: Iterable[SEDComponent]) -> None:
 def topological_sort(components: Iterable[SEDComponent]) -> list[SEDComponent]:
     r"""Stable topological sort over the output/input dependency graph.
 
-       Produces an ordering where every component appears strictly after
-       every other component whose :meth:`outputs` it consumes via
-       :meth:`inputs` or :meth:`optional_inputs`. Among components with
-       no ordering constraint, the input order is preserved (stable sort).
+    Produces an ordering where every component appears strictly after
+    every other component whose :meth:`outputs` it consumes via
+    :meth:`inputs` or :meth:`optional_inputs`. Among components with
+    no ordering constraint, the input order is preserved (stable sort).
 
-       This is the inverse of :func:`validate_pipeline`'s "out-of-order
-       publisher" check, instead of refusing pipelines whose hand-coded
-       order violates declared dependencies, it *derives* the order from
-       the declarations. See ADR-0006.
+    This is the inverse of :func:`validate_pipeline`'s "out-of-order
+    publisher" check, instead of refusing pipelines whose hand-coded
+    order violates declared dependencies, it *derives* the order from
+    the declarations. See ADR-0006.
 
-       Parameters
-       ----------
-       components: iterable of SEDComponent
-           The unordered (or arbitrarily-ordered) component list. Typically
-           passed straight from :func:`tengri.forward.build_components`
-           which appends in domain-grouped order; the sort tightens that
-           into the dependency-respecting order before downstream consumers
-           observe it.
+    Parameters
+    ----------
+    components : iterable of SEDComponent
+        The unordered (or arbitrarily-ordered) component list. Typically
+        passed straight from :func:`tengri.forward.build_components`
+        which appends in domain-grouped order; the sort tightens that
+        into the dependency-respecting order before downstream consumers
+        observe it.
 
-       Returns
-       -------
-       list of SEDComponent
-           Topologically ordered. For the canonical pipeline (stellar,
-           nebular, AGN, dust, radio, X-ray, IGM), this reproduces the
-           hand-coded order byte-for-byte, the snapshot test in
-           :mod:`tests.integration.test_derived_contract_snapshots` is the
-           regression guarantee.
+    Returns
+    -------
+    list of SEDComponent
+        Topologically ordered. For the canonical pipeline (stellar,
+        nebular, AGN, dust, radio, X-ray, IGM), this reproduces the
+        hand-coded order byte-for-byte, the snapshot test in
+        :mod:`tests.integration.test_derived_contract_snapshots` is the
+        regression guarantee.
 
-       Raises
-       ------
-       ComponentIOError
-           If the dependency graph contains a cycle. The error message
-           names every component still pending when the algorithm stalls,
-    typically the cycle's participants.
+    Raises
+    ------
+    ComponentIOError
+        If the dependency graph contains a cycle. The error message
+        names every component still pending when the algorithm stalls
+        typically the cycle's participants.
 
-       Notes
-       -----
-       **Algorithm.** Kahn's algorithm with stable tie-breaking: at each
-       step, the lowest-input-index component whose dependencies are all
-       already emitted is picked next. With deterministic-order producer
-       resolution (first publisher wins on duplicates, see
-       :data:`_ALTERNATE_PUBLISHERS`), the sort is fully deterministic.
+    Notes
+    -----
+    **Algorithm.** Kahn's algorithm with stable tie-breaking: at each
+    step, the lowest-input-index component whose dependencies are all
+    already emitted is picked next. With deterministic-order producer
+    resolution (first publisher wins on duplicates, see
+    :data:`_ALTERNATE_PUBLISHERS`), the sort is fully deterministic.
 
-       **Why both ``inputs`` and ``optional_inputs``.** A hard
-       requirement establishes ordering by definition. An optional
-       requirement *also* establishes ordering when the publisher is
-       present: the consumer reads from ``state.derived`` with a fallback,
-       so it can only read meaningful data if the publisher has already
-       written. The validator enforces strict-before for both flavors
-       (ADR-0004 Phase B); the sort must too, else
-       :func:`validate_pipeline` would reject sort output.
+    **Why both ``inputs`` and ``optional_inputs``.** A hard
+    requirement establishes ordering by definition. An optional
+    requirement *also* establishes ordering when the publisher is
+    present: the consumer reads from ``state.derived`` with a fallback,
+    so it can only read meaningful data if the publisher has already
+    written. The validator enforces strict-before for both flavors
+    (ADR-0004 Phase B); the sort must too, else
+    :func:`validate_pipeline` would reject sort output.
 
-       **Zero JIT cost.** Runs once at :func:`build_components` time.
+    **Zero JIT cost.** Runs once at :func:`build_components` time.
     """
     component_list = list(components)
     n = len(component_list)
@@ -641,7 +641,7 @@ def merge_declared_parameters(
 
     Parameters
     ----------
-    components: iterable of SEDComponent
+    components : iterable of SEDComponent
         Adapters whose declarations should be merged.
 
     Returns
@@ -704,12 +704,12 @@ def sample_params_dict(
 
     Parameters
     ----------
-    components: iterable of SEDComponent
+    components : iterable of SEDComponent
         Adapters whose declared priors should be sampled.
-    key: jax.Array
+    key : jax.Array
         PRNG key. Split internally with :func:`jax.random.split` once
         per declared parameter.
-    overrides: mapping, optional
+    overrides : mapping, optional
         Fixed values that override the prior draw. Useful for pinning
         ``redshift`` or other scalars during a forward pass without
         building a custom prior.
@@ -768,9 +768,9 @@ def default_params_dict(
 
     Parameters
     ----------
-    components: iterable of SEDComponent
+    components : iterable of SEDComponent
         Adapters whose declared defaults should be collected.
-    overrides: mapping, optional
+    overrides : mapping, optional
         Values that replace the declared default. Also the only way to
         supply a :data:`BARE_NAME_ALLOWLIST` name (typically ``redshift``),
         which no component declares.
@@ -803,8 +803,8 @@ def default_params_dict(
 
     See Also
     --------
-    sample_params_dict: the same loop, drawing from the priors instead.
-    tengri.protocols.component.declared_default: one parameter, for a
+    sample_params_dict : the same loop, drawing from the priors instead.
+    tengri.protocols.component.declared_default : one parameter, for a
         function signature default.
     """
     merged = merge_declared_parameters(components)
@@ -851,11 +851,11 @@ def _name_missing_parameter(
 
     Parameters
     ----------
-    component: SEDComponent
+    component : SEDComponent
         The component whose ``apply`` raised.
-    sliced: mapping
+    sliced : mapping
         The prefix-sliced params the component was given.
-    exc: KeyError
+    exc : KeyError
         The original exception.
 
     Returns
@@ -898,22 +898,22 @@ def run_components(
 
     Parameters
     ----------
-    components: iterable of SEDComponent
+    components : iterable of SEDComponent
         Ordered list. Each component reads what it needs from
         ``state`` and returns a *new* :class:`ForwardState`.
-    state: ForwardState
+    state : ForwardState
         Initial pipeline state. Typically carries just ``wave`` and
         any seed values (e.g. ``sed_observed`` already populated).
-    params: mapping
+    params : mapping
         Full parameter dict. Each component sees only its
         prefix-matched slice plus the bare-name allowlist.
-    ssp_data: Any | None, optional
+    ssp_data : Any | None, optional
         SSP stellar population synthesis grid. When provided, is passed
         to each component's ``apply()`` method as a JIT runtime
         parameter. Components that do not need it should ignore the
         argument. Default ``None`` means components rely on their
         internal ``self.ssp_data``.
-    template_data: Any | None, optional
+    template_data : Any | None, optional
         Nebular backend grids and weights. When provided, is passed
         to each component's ``apply()`` method as a JIT runtime
         parameter. Components that do not need it should ignore the
@@ -937,8 +937,8 @@ def run_components(
         catches this for the 3 snapshotted recipes; the runtime check
         here broadens the guard to every hand-rolled component list.
 
-        Bypass with the env var ``TENGRI_ALLOW_DERIVED_EXTRAS=1``,         useful during in-flight
-        migrations or when external user code
+        Bypass with the env var ``TENGRI_ALLOW_DERIVED_EXTRAS=1``,
+        useful during in-flight migrations or when external user code
         explicitly attaches non-canonical keys via
         ``DerivedState.from_dict(..., allow_extras=True)``. Not for
         production code.

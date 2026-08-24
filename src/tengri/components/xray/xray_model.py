@@ -63,7 +63,7 @@ class XRayAirdSEDComponentConfig(SEDComponentConfig):
 
     Attributes
     ----------
-    name: str
+    name : str
         Diagnostic identifier. Default ``"xray_aird"``.
     """
 
@@ -242,14 +242,14 @@ class XRayAirdSEDComponent(SEDModelComponent):
 
         Parameters
         ----------
-        p: mapping[str, ndarray]
+        p : mapping[str, ndarray]
             Parameters with prefix stripped: gamma_hmxb, gamma_lmxb, gamma_agn,
             log_nh, det_hmxb, det_lmxb.
-        sed_in: ndarray
+        sed_in : ndarray
             Input SED (stellar + nebular + AGN + radio).
-        wave: ndarray
+        wave : ndarray
             Rest-frame wavelength grid in Angstrom.
-        **inputs: ndarray
+        **inputs : ndarray
             Declared cross-component reads with documented fallback behavior:
 
             - sfr [Msun/yr], when stellar publishes, reads the value; when

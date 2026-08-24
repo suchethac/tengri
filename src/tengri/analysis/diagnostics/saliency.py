@@ -20,18 +20,18 @@ def compute_gradient_sed(forward_model, params, param_name):
 
     Parameters
     ----------
-    forward_model: ForwardModel
+    forward_model : ForwardModel
         Configured forward model.
-    params: dict
+    params : dict
         Parameter values.
-    param_name: str
+    param_name : str
         Which parameter to differentiate with respect to.
 
     Returns
     -------
-    gradient_sed: array, shape (n_wave,)
+    gradient_sed : array, shape (n_wave,)
         ∂SED/∂θ at each wavelength.
-    wavelength: array, shape (n_wave,)
+    wavelength : array, shape (n_wave,)
         Rest-frame wavelengths (Angstrom).
     """
 
@@ -40,7 +40,7 @@ def compute_gradient_sed(forward_model, params, param_name):
 
         Parameters
         ----------
-        val: float
+        val : float
             Parameter value to substitute.
 
         Returns
@@ -63,18 +63,18 @@ def compute_all_gradient_seds(forward_model, params, param_names=None):
 
     Parameters
     ----------
-    forward_model: ForwardModel
+    forward_model : ForwardModel
         Configured forward model.
-    params: dict
+    params : dict
         Parameter values.
-    param_names: list of str, optional
+    param_names : list of str, optional
         Parameters to compute gradients for.
 
     Returns
     -------
-    gradients: dict of {param_name: array (n_wave,)}
+    gradients : dict of {param_name: array (n_wave,)}
         Gradient SED per parameter.
-    wavelength: array, shape (n_wave,)
+    wavelength : array, shape (n_wave,)
         Rest-frame wavelengths.
     """
     if param_names is None:
@@ -108,18 +108,18 @@ def compute_photometry_sensitivity(forward_model, params, param_names=None):
 
     Parameters
     ----------
-    forward_model: ForwardModel
+    forward_model : ForwardModel
         Configured forward model (must have filters set).
-    params: dict
+    params : dict
         Parameter values.
-    param_names: list of str, optional
+    param_names : list of str, optional
         Parameters to include.
 
     Returns
     -------
-    sensitivity: array, shape (n_filters, n_params)
+    sensitivity : array, shape (n_filters, n_params)
         ∂flux_band/∂θ_param matrix.
-    param_names: list of str
+    param_names : list of str
         Parameter names (columns).
     """
     if param_names is None:
@@ -141,7 +141,7 @@ def compute_photometry_sensitivity(forward_model, params, param_names=None):
 
         Parameters
         ----------
-        flat: array, shape (n_params,)
+        flat : array, shape (n_params,)
             Flattened free parameter vector.
 
         Returns

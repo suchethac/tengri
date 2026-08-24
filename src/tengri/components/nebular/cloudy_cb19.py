@@ -220,9 +220,9 @@ def _warn_if_degenerate_line_ratios(ratios: np.ndarray, filepath: Path) -> None:
 
     Parameters
     ----------
-    ratios: ndarray
+    ratios : ndarray
         Loaded line-ratio slab (L_line / L_Hbeta), any shape.
-    filepath: Path
+    filepath : Path
         Source file, for the diagnostic message.
     """
     finite = ratios[np.isfinite(ratios)]
@@ -332,16 +332,16 @@ def load_cb19_grid(
 
     Parameters
     ----------
-    filepath: str or Path
+    filepath : str or Path
         Path to ``cb19_templates.h5`` (built by ``scripts/download_cb19_templates.py``).
-    sed_type: {"SSP", "CSF"}
+    sed_type : {"SSP", "CSF"}
         Ionizing SED type. "SSP" = single stellar population (use for line-weighted
         CSP sums); "CSF" = constant star formation.
-    imf: {"Kroupa01", "x030"}
+    imf : {"Kroupa01", "x030"}
         Initial mass function. "Kroupa01" = standard Kroupa (2001).
-    mup: {100.0, 300.0}
+    mup : {100.0, 300.0}
         Upper stellar mass limit (M_sun).
-    hbfrac: float
+    hbfrac : float
         HbFrac value (snapped to nearest grid point). HbFrac=1.0 = radiation-bounded.
         Ionizing photon escape fraction ≈ 1 − HbFrac.
 
@@ -461,11 +461,11 @@ def _interp_6d(
 
     Parameters
     ----------
-    data: array, shape (N_OH, N_age, N_U, N_nH, N_CO, N_dNO, N_lines)
+    data : array, shape (N_OH, N_age, N_U, N_nH, N_CO, N_dNO, N_lines)
         Log-space grid values.
-    grids: 6-tuple of 1-D arrays
+    grids : 6-tuple of 1-D arrays
         Axis values for each of the 6 continuous dimensions.
-    vals: 6-tuple of floats
+    vals : 6-tuple of floats
         Query point in the same order as grids.
 
     Returns
@@ -554,19 +554,19 @@ class CB19Backend:
 
     Parameters
     ----------
-    sed_type: {"SSP", "CSF"}
+    sed_type : {"SSP", "CSF"}
         Ionizing SED type. Use "SSP" for SED fitting with DSPS SSP weights.
-    imf: {"Kroupa01", "x030"}
+    imf : {"Kroupa01", "x030"}
         IMF. "Kroupa01" = Kroupa (2001); "x030" = top-heavy (x=−0.30 high-mass slope).
-    mup: {100.0, 300.0}
+    mup : {100.0, 300.0}
         Upper stellar mass limit in M_sun.
-    hbfrac: float
+    hbfrac : float
         HbFrac = L_Hβ(matter-bounded)/L_Hβ(radiation-bounded). 1.0 = fully
         radiation-bounded (default). Snapped to nearest grid point at init.
         Ionizing photon escape fraction ≈ 1 − hbfrac.
-    grid_path: str or Path, optional
+    grid_path : str or Path, optional
         Path to ``cb19_templates.h5``. Defaults to ``data/cb19_templates.h5``.
-    ssp_data: SSPData, optional
+    ssp_data : SSPData, optional
         SSP templates used to precompute Q_H(Z, age) table. If None, Q_H must
         be provided externally via ``_qh_table``.
 
@@ -681,26 +681,26 @@ class CB19Backend:
 
         Parameters
         ----------
-        filter_waves: list[ndarray]
+        filter_waves : list[ndarray]
             Per-filter observed-frame wavelength grids [Angstrom].
-        filter_trans: list[ndarray]
+        filter_trans : list[ndarray]
             Per-filter transmission curves (0-1).
-        redshift: float
+        redshift : float
             Source redshift [dimensionless].
-        dl_cm: float
+        dl_cm : float
             Luminosity distance [cm]. Currently unused (CB19 has no
             continuum and lines are projected via filter weights), kept for
             signature compatibility with CloudyGridBackend.
-        fixed: dict[int, float], optional
+        fixed : dict[int, float], optional
             CLOUDY-shape axis index → value mapping. ``0`` = absolute
             log10(Z), ``1`` = log10(age/yr), ``2`` = log10(U).
-        neb_log_nH: float, keyword-only
+        neb_log_nH : float, keyword-only
             Default density to collapse the log_nH axis on. CB19 grid range
             [1, 4]. Default 2.0 (HII region) [log10(cm^-3)].
-        neb_co: float, keyword-only
+        neb_co : float, keyword-only
             Default log10(C/O) for the log_CO axis collapse. Default -0.36
             (≈ solar) [log10].
-        neb_dno: float, keyword-only
+        neb_dno : float, keyword-only
             Default ΔN/O offset for the dNO axis collapse. Default 0.0.
 
         Notes
@@ -897,40 +897,40 @@ class CB19Backend:
 
         Parameters
         ----------
-        ssp_weights: array, shape (n_age,)
+        ssp_weights : array, shape (n_age,)
             CSP stellar mass weights (Msun per SSP age bin).
-        ssp_log_ages_yr: array, shape (n_age,)
+        ssp_log_ages_yr : array, shape (n_age,)
             log10(age/yr) of SSP bins [log10(yr)].
-        log_z: float
+        log_z : float
             Stellar metallicity log10(Z) (absolute). Used for Q_H interpolation
             [log10(Z)].
-        neb_logU: float
+        neb_logU : float
             Log ionization parameter log10(U) [log10(U)]. Grid range: [−4, −1.5].
             Default -3.0.
-        neb_logZ_gas: float or None
+        neb_logZ_gas : float or None
             Gas metallicity log10(Z) absolute [log10(Z)]. None → tied to stellar
             ``log_z``. Converted internally to log10(O/H) using CLOUDY c17.01
             solar scale (log(O/H)_sun = −3.07, i.e. 12+log(O/H)_sun = 8.93).
-        neb_fesc: float
+        neb_fesc : float
             Ionizing photon escape fraction [dimensionless, in [0, 1]].
             Default 0.0.
-        neb_fesc_lya: float
+        neb_fesc_lya : float
             Ly-alpha-specific escape fraction [dimensionless, in [0, 1]].
             Default 0.0. Applied on top of the k-factor.
-        neb_fdust: float
+        neb_fdust : float
             Lyman-continuum dust-absorption fraction in HII regions
             [dimensionless, in [0, 1]]. Default 0.0. Both ``neb_fesc`` and
             ``neb_fdust`` reduce the ionizing photon budget via the CIGALE
             k-factor.
-        neb_log_nH: float
+        neb_log_nH : float
             Log hydrogen density log10(n_H/cm⁻³) [log10(cm^-3)]. Grid range: [1, 4].
             Default 2.0.
-        neb_co: float
+        neb_co : float
             Log C/O ratio log10(C/O) [log10]. Grid range: [−1, 0.15]. Default -0.36.
-        neb_dno: float
+        neb_dno : float
             ΔN/O offset (log10) from default N/O scaling [log10]. Grid range:
             [−0.25, 0.25]. Default 0.0.
-        template_data: CB19GridData, optional
+        template_data : CB19GridData, optional
             Pre-loaded grid threaded as a JIT argument instead of read from
             ``self.grid`` under the trace, where it bakes 0.665 MB of
             ``log_line_ratios`` into every compile (#1694). ``None`` uses
@@ -938,9 +938,9 @@ class CB19Backend:
 
         Returns
         -------
-        wavelengths: array, shape (n_lines,)
+        wavelengths : array, shape (n_lines,)
             Rest-frame vacuum wavelengths [Angstrom].
-        luminosities: array, shape (n_lines,)
+        luminosities : array, shape (n_lines,)
             Emission line luminosities [Lsun].
 
         Notes
@@ -1050,20 +1050,20 @@ class CB19Backend:
 
         Parameters
         ----------
-        ssp_weights: array, shape (n_age,)
+        ssp_weights : array, shape (n_age,)
             SSP mass weights (unused).
-        ssp_log_ages_yr: array, shape (n_age,)
+        ssp_log_ages_yr : array, shape (n_age,)
             SSP log-space ages in years (unused) [log10(yr)].
-        log_z: float
+        log_z : float
             Stellar metallicity log10(Z) (unused) [log10(Z)].
         **_kwargs
             Additional keyword arguments (all unused).
 
         Returns
         -------
-        wavelength: array, shape (1,)
+        wavelength : array, shape (1,)
             Dummy wavelength [Angstrom].
-        luminosity: array, shape (1,)
+        luminosity : array, shape (1,)
             Zero array [erg/s/Hz]: no continuum from CB_19.
 
         References
@@ -1118,42 +1118,42 @@ class CB19Backend:
 
         Parameters
         ----------
-        ssp_weights: array, shape (n_age,)
+        ssp_weights : array, shape (n_age,)
             CSP stellar mass weights (Msun per SSP age bin).
-        ssp_wave: array, shape (n_wave,)
+        ssp_wave : array, shape (n_wave,)
             SSP wavelength grid [Angstrom].
-        ssp_log_ages_yr: array, shape (n_age,)
+        ssp_log_ages_yr : array, shape (n_age,)
             log10(age/yr) of SSP bins [log10(yr)].
-        log_z: float
+        log_z : float
             Stellar metallicity log10(Z) absolute [log10(Z)].
-        neb_logU: float
+        neb_logU : float
             Log ionization parameter log10(U) [log10(U)]. Grid range: [−4, −1.5].
             Default -3.0.
-        neb_logZ_gas: float or None
+        neb_logZ_gas : float or None
             Gas metallicity log10(Z) absolute [log10(Z)]. None → tied to stellar
             ``log_z``.
-        neb_fesc: float
+        neb_fesc : float
             Ionizing photon escape fraction [dimensionless, in [0, 1]].
             Default 0.0.
-        neb_fesc_lya: float
+        neb_fesc_lya : float
             Ly-alpha-specific escape fraction [dimensionless, in [0, 1]].
             Default 0.0.
-        neb_fdust: float
+        neb_fdust : float
             Lyman-continuum dust-absorption fraction in HII regions
             [dimensionless, in [0, 1]]. Default 0.0. Both ``neb_fesc`` and
             ``neb_fdust`` reduce the ionizing photon budget via the CIGALE
             k-factor.
-        neb_log_nH: float
+        neb_log_nH : float
             log10(n_H / cm⁻³) [log10(cm^-3)]. Grid range [1, 4]. Default 2.0.
-        neb_co: float
+        neb_co : float
             log10(C/O) [log10]. Grid range [−1, 0.15]. Default −0.36 (near-solar).
-        neb_dno: float
+        neb_dno : float
             ΔN/O offset from default N/O scaling [log10]. Grid range [−0.25, 0.25].
             Default 0.0.
-        line_sigma_aa: float
+        line_sigma_aa : float
             Gaussian line width (σ) for line profiles [Å]. 0 = nearest-pixel
             delta function. Default 0.0.
-        template_data: CB19GridData, optional
+        template_data : CB19GridData, optional
             Pre-loaded grid, forwarded to
             :meth:`predict_nebular_line_luminosities` so it threads as a JIT
             argument rather than baking 0.665 MB into every compile (#1694).

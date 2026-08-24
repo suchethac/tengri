@@ -60,7 +60,7 @@ PARAMS: tuple[ParamDeclaration, ...] = (
     ParamDeclaration(
         "sigma_v_kms",
         Fixed(0.0),
-        "Stellar velocity dispersion sigma_v [km/s]: Added in quadrature "
+        "Stellar velocity dispersion sigma_v [km/s], added in quadrature "
         "to the instrumental LSF when computing spectra",
         lambda lo, hi: lo >= 0 and hi <= 2000,
         "sigma_v_kms must be in [0, 2000]",

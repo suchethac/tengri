@@ -99,17 +99,17 @@ class CompileEvent:
 
     Attributes
     ----------
-    timestamp: str
+    timestamp : str
         ISO 8601 timestamp when compilation started.
-    name: str
+    name : str
         Function or phase name (e.g., "signal_response", "run_hmc").
-    method: str | None
+    method : str | None
         Inference method if applicable (e.g., "mcmc_hmc", "vi", "vi_native").
-    signature: str
+    signature : str
         Stringified compile_signature tuple for deduplication.
-    duration_s: float
+    duration_s : float
         Wall-clock compile time in seconds.
-    inferred_cache_hit: bool
+    inferred_cache_hit : bool
         Heuristic: True if duration < 1.0 s (suggests disk cache hit).
 
     Notes
@@ -137,7 +137,7 @@ def record_compile_event(event: CompileEvent | dict) -> None:
 
     Parameters
     ----------
-    event: CompileEvent or dict
+    event : CompileEvent or dict
         Event to log. If a CompileEvent, converted to dict via asdict.
         If a dict, must have keys: timestamp, name, method, signature,
         duration_s, inferred_cache_hit.
@@ -172,11 +172,11 @@ def compile_timer(name: str, signature: tuple, method: str | None = None):
 
     Parameters
     ----------
-    name: str
+    name : str
         Function or phase name (e.g., "signal_response", "run_hmc").
-    signature: tuple
+    signature : tuple
         Compile signature tuple (will be converted to str for logging).
-    method: str | None, optional
+    method : str | None, optional
         Inference method (e.g., "mcmc_hmc", "vi"). Default None.
 
     Yields
@@ -241,14 +241,14 @@ def instrument_first_call(
 
     Parameters
     ----------
-    jit_fn: callable
+    jit_fn : callable
         A jax.jit'd function (or any callable whose first invocation
         triggers compilation).
-    name: str
+    name : str
         Event name (e.g., "signal_response", "run_hmc_scan").
-    signature: tuple
+    signature : tuple
         Compile signature tuple (str-ified for logging).
-    method: str | None, optional
+    method : str | None, optional
         Inference method label (e.g., "mcmc_hmc"). Default None.
 
     Returns

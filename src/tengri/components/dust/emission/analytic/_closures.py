@@ -75,18 +75,18 @@ def modified_blackbody(
 
     Parameters
     ----------
-    wavelength_aa: array, shape (n_wave,)
+    wavelength_aa : array, shape (n_wave,)
         Wavelength grid in Angstrom (sorted ascending). [Å]
-    L_absorbed: float
+    L_absorbed : float
         Total absorbed luminosity.  Unit-agnostic: the output L_nu will be
         in the same units per Hz (e.g. pass erg/s → get erg/s/Hz; pass
         Lsun → get Lsun/Hz).  In ``sed_pipeline.py`` the pipeline passes
         erg/s (from a frequency-integrated trapezoid) and receives erg/s/Hz.
-    dust_T: float
+    dust_T : float
         Dust temperature in Kelvin.  Typical range: 20--60 K. [K]
-    dust_beta_ir: float
+    dust_beta_ir : float
         Emissivity index.  Typical range: 1.5--2.0. [dimensionless]
-    redshift: float
+    redshift : float
         Source redshift. When > 0, CMB heating correction is applied.
         Default 0 (no correction). [dimensionless]
 
@@ -270,23 +270,23 @@ def casey2012(
 
     Parameters
     ----------
-    wavelength_aa: array, shape (n_wave,)
+    wavelength_aa : array, shape (n_wave,)
         Wavelength grid in Angstrom (sorted ascending). [Å]
-    L_absorbed: float
+    L_absorbed : float
         Total absorbed luminosity (sets the normalization). Unit-agnostic:
         the output L_nu is in the same units per Hz.
-    dust_T: float
+    dust_T : float
         Dust temperature. Typical range: 20-60. [K]
-    dust_beta_ir: float
+    dust_beta_ir : float
         Dust emissivity index. Typical range: 1.5-2.0. [dimensionless]
-    dust_alpha_mir: float
+    dust_alpha_mir : float
         Mid-IR power-law slope. Typical range: 1.5-2.5. [dimensionless]
-    optically_thin: bool
+    optically_thin : bool
         If True, use the optically-thin graybody limit
         :math:`(\lambda_0/\lambda)^\beta \nu^3 / (e^{h\nu/kT}-1)`
         instead of the general form. The mid-IR power law is present in
         both variants. Default: False (Casey 2012 Eq. 1). [dimensionless]
-    redshift: float
+    redshift : float
         Source redshift; > 0 applies the CMB corrections. Default 0.
         [dimensionless]
 
@@ -351,11 +351,11 @@ def _drude_profile(
 
     Parameters
     ----------
-    wavelength_aa: array_like, shape (n_wave,)
+    wavelength_aa : array_like, shape (n_wave,)
         Wavelength grid in Ångstrom.
-    lambda0_aa: float
+    lambda0_aa : float
         Center wavelength in Ångstrom.
-    fwhm_um: float
+    fwhm_um : float
         FWHM in micrometers.
 
     Returns
@@ -412,11 +412,11 @@ def pah_drude(
 
     Parameters
     ----------
-    wavelength_aa: array, shape (n_wave,)
+    wavelength_aa : array, shape (n_wave,)
         Wavelength grid in Angstrom (sorted ascending). [Å]
-    L_absorbed: float
+    L_absorbed : float
         Total absorbed luminosity. [Lsun or erg/s, as passed]
-    redshift: float
+    redshift : float
         Source redshift (unused for this model). [dimensionless]
 
     Returns
@@ -479,18 +479,18 @@ def schreiber2016(
 
     Parameters
     ----------
-    wavelength_aa: array_like, shape (n_wave,)
+    wavelength_aa : array_like, shape (n_wave,)
         Wavelength grid in Ångstrom (sorted ascending).
-    L_absorbed: float
+    L_absorbed : float
         Total absorbed luminosity. Unit-agnostic: the output L_nu will be
         in the same units per Hz.
-    dust_T: float
+    dust_T : float
         Dust continuum temperature in Kelvin.
         Typical range: 15--60 K. Default: 30.0.
-    dust_f_pah: float
+    dust_f_pah : float
         Fractional contribution from PAH emission in [0, 1].
         Default: 0.05.
-    redshift: float
+    redshift : float
         Source redshift. When > 0, CMB heating correction is applied.
         Default: 0.
 
@@ -600,27 +600,27 @@ def energy_balance_split(
 
     Parameters
     ----------
-    wavelength_aa: array_like, shape (n_wave,)
+    wavelength_aa : array_like, shape (n_wave,)
         Wavelength grid. [Å] Must be sorted ascending.
-    L_absorbed_stellar: float
+    L_absorbed_stellar : float
         Total absorbed stellar luminosity. [Lsun]
-    L_agn_ir: float
+    L_agn_ir : float
         Additional AGN-heated IR luminosity. [Lsun] Default: 0.0.
-    eta_balance: float
+    eta_balance : float
         Energy balance parameter: ratio of re-emitted to absorbed stellar luminosity.
         [dimensionless] Default: 1.0 (strict energy balance).
-    f_cold: float
+    f_cold : float
         Fraction of total IR luminosity in the cold component.
         [dimensionless, in [0, 1]] Default: 0.5.
-    dust_T_warm: float
+    dust_T_warm : float
         Warm dust temperature. [K] Default: 45.0.
-    dust_T_cold: float
+    dust_T_cold : float
         Cold dust temperature. [K] Default: 20.0.
-    dust_beta_warm: float
+    dust_beta_warm : float
         Warm component emissivity index. [dimensionless] Default: 1.5.
-    dust_beta_cold: float
+    dust_beta_cold : float
         Cold component emissivity index. [dimensionless] Default: 2.0.
-    redshift: float
+    redshift : float
         Source redshift. [dimensionless] When > 0, CMB heating correction is applied
         to both components. Default: 0.0.
 

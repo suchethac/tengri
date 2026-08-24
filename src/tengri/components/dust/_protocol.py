@@ -57,7 +57,7 @@ class DustAttenuationLaw(Protocol):
 
         Parameters
         ----------
-        wavelength: jax.Array, shape (n_wave,)
+        wavelength : jax.Array, shape (n_wave,)
             Rest-frame wavelength grid [Å].
         **kwargs
             Law-specific parameters (e.g., dust_bump_strength, dust_delta,
@@ -134,9 +134,9 @@ class DustEmissionTemplate(Protocol):
 
         Parameters
         ----------
-        wavelength: jax.Array, shape (n_wave,)
+        wavelength : jax.Array, shape (n_wave,)
             Rest-frame wavelength grid [Å].
-        L_absorbed: float
+        L_absorbed : float
             Total bolometric luminosity absorbed by dust [L_sun].
             This is computed from the attenuation step as the integral
             of (1 - transmission) × stellar_luminosity over wavelength.

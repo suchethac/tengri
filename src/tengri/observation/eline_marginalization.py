@@ -93,18 +93,18 @@ def build_eline_design_matrix(
 
     Parameters
     ----------
-    wave_obs: array, shape (n_pix,)
+    wave_obs : array, shape (n_pix,)
         Observed-frame wavelength grid [Angstrom].
-    line_wavelengths: array, shape (n_lines,)
+    line_wavelengths : array, shape (n_lines,)
         Rest-frame vacuum wavelengths of the lines [Angstrom].
-    spectral_resolution: float
+    spectral_resolution : float
         Instrument spectral resolution R = lambda / delta_lambda
         [dimensionless].
-    redshift: float
+    redshift : float
         Source redshift [dimensionless].
-    eline_sigma_kms: float
+    eline_sigma_kms : float
         Intrinsic velocity broadening [km/s]. Default 0.
-    eline_delta_v_kms: float
+    eline_delta_v_kms : float
         Velocity offset from systemic [km/s]. Default 0.
 
     Returns
@@ -147,18 +147,18 @@ def build_broad_design_matrix(
 
     Parameters
     ----------
-    wave_obs: array, shape (n_pix,)
+    wave_obs : array, shape (n_pix,)
         Observed-frame wavelength grid [Angstrom].
-    line_wavelengths: array, shape (n_lines,)
+    line_wavelengths : array, shape (n_lines,)
         Rest-frame vacuum wavelengths of broad-line candidates [Angstrom].
-    spectral_resolution: float
+    spectral_resolution : float
         Instrument spectral resolution R = lambda/delta_lambda
         [dimensionless].
-    redshift: float
+    redshift : float
         Source redshift [dimensionless].
-    broad_sigma_kms: float
+    broad_sigma_kms : float
         Broad component velocity dispersion [km/s]. Typical: 500–5000.
-    eline_delta_v_kms: float
+    eline_delta_v_kms : float
         Velocity offset of broad component from systemic [km/s]. Default 0.
 
     Returns
@@ -201,9 +201,9 @@ def apply_doublet_constraints(
 
     Parameters
     ----------
-    design_matrix: array, shape (n_pix, n_lines)
+    design_matrix : array, shape (n_pix, n_lines)
         Full design matrix with one column per emission line.
-    constraint_matrix: array, shape (n_lines, n_independent)
+    constraint_matrix : array, shape (n_lines, n_independent)
         Constraint matrix from ``LineList.build_constraint_matrix()``.
         Encodes doublet ratios as a linear transformation.
 
@@ -244,19 +244,19 @@ def expand_constrained_amplitudes(
 
     Parameters
     ----------
-    a_hat: array, shape (n_independent,)
+    a_hat : array, shape (n_independent,)
         Posterior-mean amplitudes for the independent parameters.
-    a_cov: array, shape (n_independent, n_independent)
+    a_cov : array, shape (n_independent, n_independent)
         Posterior covariance for the independent parameters.
-    constraint_matrix: array, shape (n_lines, n_independent)
+    constraint_matrix : array, shape (n_lines, n_independent)
         Constraint matrix from ``LineList.build_constraint_matrix()``.
 
     Returns
     -------
-    a_hat_full: ndarray, shape (n_lines,)
+    a_hat_full : ndarray, shape (n_lines,)
         Amplitudes for all lines including constrained doublet secondaries
         [erg/s] or [erg/s/Angstrom] depending on line fitting context.
-    a_cov_full: ndarray, shape (n_lines, n_lines)
+    a_cov_full : ndarray, shape (n_lines, n_lines)
         Full covariance, propagated through the constraint matrix:
         ``C @ a_cov @ C.T``.
 
@@ -291,23 +291,23 @@ def marginalize_emission_lines(
 
     Parameters
     ----------
-    residual: array, shape (n_pix,)
+    residual : array, shape (n_pix,)
         Data minus continuum model: ``d - m``.
-    noise: array, shape (n_pix,)
+    noise : array, shape (n_pix,)
         Per-pixel noise standard deviation (sigma).
-    design_matrix: array, shape (n_pix, n_lines)
+    design_matrix : array, shape (n_pix, n_lines)
         Gaussian design matrix from :func:`build_eline_design_matrix`.
-    prior_variance: scalar or array, shape (n_lines,)
+    prior_variance : scalar or array, shape (n_lines,)
         Prior variance on line amplitudes.  Large values (default 1e10)
         give an uninformative prior.
 
     Returns
     -------
-    ln_L_marg: scalar
+    ln_L_marg : scalar
         Marginalized log-likelihood (dimensionless).
-    a_hat: ndarray, shape (n_lines,)
+    a_hat : ndarray, shape (n_lines,)
         Posterior-mean (optimal) line amplitudes [same units as residual].
-    a_cov: ndarray, shape (n_lines, n_lines)
+    a_cov : ndarray, shape (n_lines, n_lines)
         Posterior covariance of line amplitudes.
 
     Notes
@@ -378,11 +378,11 @@ def predict_with_marginalized_lines(
 
     Parameters
     ----------
-    model_continuum: array, shape (n_pix,)
+    model_continuum : array, shape (n_pix,)
         Continuum-only model spectrum.
-    design_matrix: array, shape (n_pix, n_lines)
+    design_matrix : array, shape (n_pix, n_lines)
         Gaussian design matrix.
-    a_hat: array, shape (n_lines,)
+    a_hat : array, shape (n_lines,)
         Optimal line amplitudes from :func:`marginalize_emission_lines`.
 
     Returns
@@ -421,22 +421,22 @@ def build_line_design_matrix(
 
     Parameters
     ----------
-    wave_obs: array, shape (n_pix,)
+    wave_obs : array, shape (n_pix,)
         Observed wavelength grid [Angstrom].
-    narrow_wavelengths: array, shape (n_narrow,)
+    narrow_wavelengths : array, shape (n_narrow,)
         Rest-frame narrow line wavelengths [Angstrom].
-    broad_wavelengths: array or None, shape (n_broad,)
+    broad_wavelengths : array or None, shape (n_broad,)
         Rest-frame broad line wavelengths [Angstrom].
         If ``None``, only narrow columns are returned.
-    spectral_resolution: float
+    spectral_resolution : float
         Spectral resolution R = lambda/delta_lambda. Default 2000.
-    redshift: float
+    redshift : float
         Redshift for shifting lines to observed frame. Default 0.
-    narrow_sigma_kms: float
+    narrow_sigma_kms : float
         Intrinsic narrow line width [km/s]. Default 0 (instrument-limited).
-    broad_sigma_kms: float
+    broad_sigma_kms : float
         Intrinsic broad line width [km/s]. Default 5000.
-    delta_v_kms: float
+    delta_v_kms : float
         Systematic velocity offset [km/s]. Default 0.
 
     Returns

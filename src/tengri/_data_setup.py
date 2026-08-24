@@ -167,7 +167,7 @@ def data_path(filename: str) -> Path:
 
     Parameters
     ----------
-    filename: str
+    filename : str
         Basename of the data file, e.g. ``"bosa_templates.h5"``.
 
     Returns
@@ -211,7 +211,7 @@ def find_data(*filenames: str) -> Path | None:
 
     Parameters
     ----------
-    *filenames: str
+    *filenames : str
         Candidate files in preference order.
 
     Returns
@@ -243,7 +243,7 @@ def find_data_str(*filenames: str) -> str | None:
 
     Parameters
     ----------
-    *filenames: str
+    *filenames : str
         Candidate files in preference order, as for :func:`find_data`.
 
     Returns
@@ -271,9 +271,9 @@ def require_data(filename: str, not_found_msg: str) -> str:
 
     Parameters
     ----------
-    filename: str
+    filename : str
         Basename of the grid file, e.g. ``"cat3d_wind_torus_grid.h5"``.
-    not_found_msg: str
+    not_found_msg : str
         Message to raise when the file is absent. Replaces :func:`data_path`'s
         generic text *entirely* rather than wrapping it.
 
@@ -312,7 +312,7 @@ def package_or_env_data_path(filename: str) -> Path:
 
     Parameters
     ----------
-    filename: str
+    filename : str
         Basename of the data file, e.g. ``"cue_weights.npz"``.
 
     Returns
@@ -509,7 +509,7 @@ def list_available_ssps() -> list[dict]:
 
     See also
     --------
-    list_known_ssps: The flat ``name → filename`` mapping that this
+    list_known_ssps : The flat ``name → filename`` mapping that this
         view groups and enriches.
     """
     from tengri.components.stellar.sps.dsps_wrapper import _KNOWN_IMFS
@@ -606,19 +606,19 @@ def download_ssp(
 
     Parameters
     ----------
-    name: str, optional
+    name : str, optional
         Short SSP identifier (see ``list_known_ssps()``) or a bare catalog
         filename ending in ``.h5``. Defaults to ``"fsps_prsc_miles_chabrier"``
         (FSPS PARSEC tracks + MILES library, Chabrier IMF, bare-stellar,
         Cue/CloudyGrid-compatible).
-    dest: path-like, optional
+    dest : path-like, optional
         Target directory. Defaults to :func:`download_dir`, ``$TENGRI_DATA_DIR``
         if set, else ``data/`` relative to the working directory. Either way it
         is a directory :func:`data_dirs` searches, so the loaders find the file
         afterwards.
-    force: bool, optional
+    force : bool, optional
         Re-download even if the file already exists. Default ``False``.
-    progress: bool, optional
+    progress : bool, optional
         Print download progress. Default ``True``; pass ``False`` for clean log
         output.
 
@@ -706,12 +706,12 @@ def download_template(
 
     Parameters
     ----------
-    filename: str
+    filename : str
         Basename of the hosted file, e.g. ``"fritz2006_torus_grid.h5"``.
-    dest: path-like, optional
+    dest : path-like, optional
         Target directory. Defaults to ``$TENGRI_DATA_DIR`` if set, else ``data/``
         relative to the current working directory.
-    force: bool, optional
+    force : bool, optional
         Re-download even if the file already exists. Default ``False``.
 
     Returns
@@ -770,7 +770,7 @@ def require_remote_url(url: str) -> str:
 
     Parameters
     ----------
-    url: str
+    url : str
         URL about to be passed to :func:`urllib.request.urlopen`.
 
     Returns
@@ -798,13 +798,13 @@ def _download_file(url: str, dest: Path, chunk_size: int = 8192, progress: bool 
 
     Parameters
     ----------
-    url: str
+    url : str
         URL to download from.
-    dest: Path
+    dest : Path
         Destination file path (should end with .partial for atomic write).
-    chunk_size: int, optional
+    chunk_size : int, optional
         Size of each download chunk in bytes. Default 8192.
-    progress: bool, optional
+    progress : bool, optional
         Show a progress bar when ``tqdm`` is installed. Default ``True``;
         ``False`` downloads silently.
 

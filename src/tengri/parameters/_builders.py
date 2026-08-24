@@ -248,28 +248,28 @@ def _build_param_registry(
 
     Parameters
     ----------
-    mean_sfh_type: list[str]
+    mean_sfh_type : list[str]
         SFH model components.
-    nebular: bool or str
+    nebular : bool or str
         Enable nebular parameters. True or "cloudy" adds neb_logU, neb_logZ_gas, neb_fesc.
-    dust_model: str
+    dust_model : str
         Dust geometry model: ``"two_component"`` (Charlot & Fall) or
         ``"single_component"`` (uniform screen).
-    dust_law_bc: str
+    dust_law_bc : str
         Birth cloud dust law name. Non-power-law laws may add extra parameters.
-    dust_law_diff: str or None
+    dust_law_diff : str or None
         Diffuse ISM dust law. None = same as bc.
-    evolving_metallicity: bool
+    evolving_metallicity : bool
         If True, replace met_logzsol with met_logzsol_0 and met_logzsol_final.
-    chem_evol: bool
+    chem_evol : bool
         If True, derive Z(t) from SFH via gas-regulator model. Replaces
         met_logzsol with chem_yield, chem_eta_outflow, etc.
 
     Returns
     -------
-    registry: dict
+    registry : dict
         param_name -> (description, bound_check, bound_error)
-    defaults: dict
+    defaults : dict
         param_name -> default Distribution
     """
     from tengri.components.stellar.sfh.met_registry import resolve_met

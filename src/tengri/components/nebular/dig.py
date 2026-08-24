@@ -46,33 +46,33 @@ def mix_dig_emission(
 
     Parameters
     ----------
-    nebular_backend: NebularBackend (CloudyGridBackend or CueBackend)
+    nebular_backend : NebularBackend (CloudyGridBackend or CueBackend)
         Backend with predict_nebular_sed() method. Called twice (HII, DIG).
-    ssp_wave: array, shape (n_wave,)
+    ssp_wave : array, shape (n_wave,)
         SSP wavelength grid in Å. [Å]
-    ssp_weights: array, shape (n_age,)
+    ssp_weights : array, shape (n_age,)
         Stellar mass weights of composite stellar population per age bin.
         [Msun]
-    ssp_log_ages_yr: array, shape (n_age,)
+    ssp_log_ages_yr : array, shape (n_age,)
         Age grid of SSP basis (in cosmic time). [log10(yr)]
-    log_z: float
+    log_z : float
         Stellar metallicity (SSP grid metallicity). [log10(Z)]
-    neb_logU: float, optional
+    neb_logU : float, optional
         HII region ionization parameter. Default: −3.0. [log10(U)]
-    neb_logZ_gas: float, optional
+    neb_logZ_gas : float, optional
         Gas-phase metallicity (relative to solar). If None, defaults to
         stellar metallicity. Default: None. [log10(Z/Zsun)]
-    neb_fesc: float, optional
+    neb_fesc : float, optional
         Ionizing photon escape fraction (applies to both HII and DIG).
         Default: 0.0. [dimensionless, ∈ [0, 1]]
-    neb_fesc_lya: float, optional
+    neb_fesc_lya : float, optional
         Lyman-α-specific escape fraction. Default: 0.0. [dimensionless, ∈ [0, 1]]
-    neb_dig_frac: float, optional
+    neb_dig_frac : float, optional
         DIG mass fraction. Default: 0.0. [dimensionless, ∈ [0, 1]]
-    neb_dig_delta_logU: float, optional
+    neb_dig_delta_logU : float, optional
         Offset in ionization parameter for DIG (negative). Default: −1.0 dex.
         [dex]
-    line_sigma_aa: float, optional
+    line_sigma_aa : float, optional
         Gaussian line width for emission-line placement. Default: 0.0 (delta).
         [Å]
     **kwargs

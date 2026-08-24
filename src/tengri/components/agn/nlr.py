@@ -82,15 +82,15 @@ def compute_nlr_sed(
 
     Parameters
     ----------
-    wavelength: array, shape (n_wave,)
+    wavelength : array, shape (n_wave,)
         Rest-frame wavelength [Angstrom].
-    l_disc_bol_erg: float
+    l_disc_bol_erg : float
         Bolometric disc luminosity [erg s^-1].
-    covering_fraction: float
+    covering_fraction : float
         NLR covering fraction (0 to 1). Default 0.1.
-    fwhm_kms: float
+    fwhm_kms : float
         Line FWHM [km/s]. Default 500.
-    line_efficiency: float
+    line_efficiency : float
         Fraction of intercepted luminosity converted to line emission.
         Default 0.10.
 
@@ -221,21 +221,21 @@ def compute_nlr_sed_richardson2014(
 
     Parameters
     ----------
-    wavelength: array_like, shape (n_wave,)
+    wavelength : array_like, shape (n_wave,)
         Rest-frame wavelength [Angstrom].
-    l_disc_bol_erg: float
+    l_disc_bol_erg : float
         Bolometric disc luminosity [erg s^-1].
-    covering_fraction: float, optional
+    covering_fraction : float, optional
         NLR covering fraction (0 to 1). Default 0.1.
-    fwhm_kms: float, optional
+    fwhm_kms : float, optional
         Line FWHM [km/s]. Default 500.
-    line_efficiency: float, optional
+    line_efficiency : float, optional
         Fraction of intercepted luminosity converted to line emission.
         Default 0.10.
 
     Returns
     -------
-    l_nu: ndarray, shape (n_wave,)
+    l_nu : ndarray, shape (n_wave,)
         NLR L_nu [erg s^-1 Hz^-1].
 
     Notes

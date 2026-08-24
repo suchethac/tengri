@@ -171,13 +171,13 @@ class EmissionComponent(SEDModelComponent):
 
         Parameters
         ----------
-        state: ForwardState
+        state : ForwardState
             Current pipeline state with wave, sed_intrinsic, derived keys.
-        params: mapping
+        params : mapping
             Full parameter dict (sliced by prefix inside).
-        ssp_data: object, optional
+        ssp_data : object, optional
             SSP data (ignored for emission components).
-        template_data: mapping, optional
+        template_data : mapping, optional
             Cached templates and LUTs (e.g., dust_ir["energy_balance_lut"],
             dust_ir["emission_band_response"]).
 
@@ -336,15 +336,15 @@ class EmissionComponent(SEDModelComponent):
 
         Parameters
         ----------
-        p: mapping[str, ndarray]
+        p : mapping[str, ndarray]
             Parameters with prefix stripped.
-        state: ForwardState
+        state : ForwardState
             Pipeline state (provides wave, derived keys).
-        filter_eff_waves: ndarray, shape (n_filter,)
+        filter_eff_waves : ndarray, shape (n_filter,)
             Rest-frame filter effective wavelengths in Angstrom.
-        template_data: mapping, optional
+        template_data : mapping, optional
             Cached LUTs and responses (dust_ir dict).
-        **inputs: ndarray
+        **inputs : ndarray
             Cross-component inputs (L_ir, etc.).
 
         Returns
@@ -406,13 +406,13 @@ class EmissionComponent(SEDModelComponent):
 
         Parameters
         ----------
-        p: mapping[str, ndarray]
+        p : mapping[str, ndarray]
             Parameters with prefix stripped.
-        state: ForwardState
+        state : ForwardState
             Pipeline state.
-        spec_eff_waves: ndarray, shape (n_pixel,)
+        spec_eff_waves : ndarray, shape (n_pixel,)
             Rest-frame spectrum effective wavelengths in Angstrom.
-        **inputs: ndarray
+        **inputs : ndarray
             Cross-component inputs (L_ir, etc.).
 
         Returns
@@ -433,13 +433,13 @@ class EmissionComponent(SEDModelComponent):
 
         Parameters
         ----------
-        p: mapping[str, ndarray]
+        p : mapping[str, ndarray]
             Parameters with prefix stripped.
-        sed_in: ndarray, shape (n_wave,)
+        sed_in : ndarray, shape (n_wave,)
             Input SED (ignored for emission: typically zeros).
-        wave: ndarray, shape (n_wave,)
+        wave : ndarray, shape (n_wave,)
             Rest-frame wavelength grid in Angstrom.
-        **inputs: ndarray
+        **inputs : ndarray
             L_ir (scalar) and other inputs.
 
         Returns

@@ -34,7 +34,7 @@ def split_lines_result(result: Array | tuple[Array, Array]) -> tuple[Array, Arra
 
     Parameters
     ----------
-    result: Array or tuple of (Array, Array)
+    result : Array or tuple of (Array, Array)
         A lines block's return value.
 
     Returns
@@ -72,11 +72,11 @@ def sigmoid_visibility_mask(
 
     Parameters
     ----------
-    cos_inc: array_like or float
+    cos_inc : array_like or float
         Cosine of inclination (0 = edge-on, 1 = face-on).
-    theta_torus: array_like or float
+    theta_torus : array_like or float
         Torus half-opening angle [deg].
-    width: float, optional
+    width : float, optional
         Sigmoid transition half-width [deg]. Default ``2.0``. As ``width → 0``
         this converges to Synthesizer's hard binary mask.
 

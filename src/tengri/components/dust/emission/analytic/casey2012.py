@@ -86,14 +86,14 @@ class Casey2012IRSEDComponent(EmissionComponent):
 
         Parameters
         ----------
-        p: dict
+        p : dict
             Parameters with prefix stripped: keys are "T", "beta_ir", "alpha_mir"
             (or subset if some are Fixed).
-        sed_in: ndarray, shape (n_wave,)
+        sed_in : ndarray, shape (n_wave,)
             Input SED in erg/s/Hz (typically zeros for a dust emission component).
-        wave: ndarray, shape (n_wave,)
+        wave : ndarray, shape (n_wave,)
             Rest-frame wavelength grid in Angstrom.
-        L_ir: float
+        L_ir : float
             Total absorbed luminosity in erg/s.
 
         Returns

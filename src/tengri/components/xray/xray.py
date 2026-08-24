@@ -141,9 +141,9 @@ def tbabs_transmission(E_keV: jnp.ndarray, log_nh: float) -> jnp.ndarray:
 
     Parameters
     ----------
-    E_keV: array_like, shape (n,)
+    E_keV : array_like, shape (n,)
         Photon energy. [keV]
-    log_nh: float
+    log_nh : float
         Equivalent hydrogen column density. [log10(cm⁻²)]
         Typical AGN range: 20 (unobscured) → 24 (Compton-thick).
 
@@ -211,7 +211,7 @@ def compton_scattering_transmission(log_nh: float) -> float:
 
     Parameters
     ----------
-    log_nh: float
+    log_nh : float
         Equivalent hydrogen column density. [log10(cm⁻²)]
 
     Returns
@@ -300,20 +300,20 @@ def pexrav_reflection(
 
     Parameters
     ----------
-    wavelength: array, shape (n_wave,)
+    wavelength : array, shape (n_wave,)
         Rest-frame wavelength grid. [Å]
-    l_primary: array, shape (n_wave,)
+    l_primary : array, shape (n_wave,)
         Primary AGN corona spectrum L_ν(E), the unabsorbed
         ``xray_agn_corona`` output before line-of-sight obscuration.
         [erg/s/Hz]
-    R: float, optional
+    R : float, optional
         Reflection covering fraction Ω/2π. Range 0–2; default 0.5
         (typical of luminous local AGN, Ricci+2017; Matsumoto+2026 use
         R = 0.5 in their pexrav fits). R = 0 disables reflection.
-    cos_inc: float, optional
+    cos_inc : float, optional
         Cosine of disc inclination angle. Default 0.5 (≈ 60°), the
         canonical mean inclination assumed in pexrav fits. Range 0–1.
-    n_h_disc: float, optional
+    n_h_disc : float, optional
         Cold-disc surface column density. Default 1e24 cm⁻²; should
         rarely be changed (represents the disc, not the LoS obscurer).
         [cm⁻²]
@@ -430,15 +430,15 @@ def _cutoff_powerlaw_band_norm(
 
     Parameters
     ----------
-    gamma: float
+    gamma : float
         Photon index :math:`\Gamma`.
-    E_cut: float
+    E_cut : float
         Exponential cutoff energy [keV].
-    E_ref: float
+    E_ref : float
         Reference energy for the power-law shape [keV].
-    E_lo, E_hi: float
+    E_lo, E_hi : float
         Band edges [keV].
-    n_grid: int, optional
+    n_grid : int, optional
         Trapezoid grid points. Default 200.
 
     Returns
@@ -468,7 +468,7 @@ def metallicity_from_history(log_z_history: Any) -> jnp.ndarray | float:
 
     Parameters
     ----------
-    log_z_history: array_like, shape (n_grid,), or None, or scalar
+    log_z_history : array_like, shape (n_grid,), or None, or scalar
         ``state.derived["log_metallicity_history"]``: absolute log10(Z) per SFH
         bin, index 0 being the present day. [dex]
 
@@ -527,37 +527,37 @@ def xray_xrb_terms(
 
     Parameters
     ----------
-    wavelength: array_like, shape (n_wave,)
+    wavelength : array_like, shape (n_wave,)
         Wavelength grid in Å (rest-frame). [Å]
-    sfr: float
+    sfr : float
         Star formation rate. [Msun/yr]
-    stellar_mass: float
+    stellar_mass : float
         Stellar mass. [Msun]
-    metallicity_z: float, optional
+    metallicity_z : float, optional
         Metallicity (mass fraction, not log Z/Z_sun). Default:
         :data:`~tengri.utils.physics_constants.Z_SUN` = 0.0142, the project-wide
         solar (Asplund 2009). A *fallback* only: on the model path the X-ray
         component passes the galaxy's own present-day Z, read from the
         stellar-published ``log_metallicity_history`` (#1755). []
-    stellar_age_gyr: float, optional
+    stellar_age_gyr : float, optional
         Stellar age in Gyr. Default: 1.0. [Gyr]
-    gamma_hmxb: float, optional
+    gamma_hmxb : float, optional
         HMXB photon index (Γ, where F_ν ∝ ν^{−Γ}). Default: 2.0.
-    gamma_lmxb: float, optional
+    gamma_lmxb : float, optional
         LMXB photon index. Default: 1.6.
-    E_cut: float, optional
+    E_cut : float, optional
         Exponential cutoff energy for both populations. Default: 100 keV. [keV]
-    log_L_hmxb_offset: float, optional
+    log_L_hmxb_offset : float, optional
         Departure from mean SFR relation (dex). Default: 0.0. [dex]
-    log_L_lmxb_offset: float, optional
+    log_L_lmxb_offset : float, optional
         Departure from mean stellar-mass relation (dex). Default: 0.0. [dex]
 
     Returns
     -------
     dict with keys {"hmxb", "lmxb"}
-        "hmxb": ndarray, shape (n_wave,)
+        "hmxb" : ndarray, shape (n_wave,)
             High-mass X-ray binary spectral luminosity density. [erg/s/Hz]
-        "lmxb": ndarray, shape (n_wave,)
+        "lmxb" : ndarray, shape (n_wave,)
             Low-mass X-ray binary spectral luminosity density. [erg/s/Hz]
 
     Notes
@@ -732,30 +732,30 @@ def xray_xrb(
 
     Parameters
     ----------
-    wavelength: array_like, shape (n_wave,)
+    wavelength : array_like, shape (n_wave,)
         Wavelength grid in Å (rest-frame). [Å]
-    sfr: float
+    sfr : float
         Star formation rate. [Msun/yr]
-    stellar_mass: float
+    stellar_mass : float
         Stellar mass. [Msun]
-    metallicity_z: float, optional
+    metallicity_z : float, optional
         Metallicity (mass fraction, not log Z/Z_sun). Default:
         :data:`~tengri.utils.physics_constants.Z_SUN` = 0.0142, the project-wide
         solar (Asplund 2009). A *fallback* only: on the model path the X-ray
         component passes the galaxy's own present-day Z, read from the
         stellar-published ``log_metallicity_history`` (#1755). []
-    stellar_age_gyr: float, optional
+    stellar_age_gyr : float, optional
         Stellar age in Gyr. Default: 1.0. [Gyr]
-    gamma_hmxb: float, optional
+    gamma_hmxb : float, optional
         HMXB photon index (Γ, where F_ν ∝ ν^{−Γ}). Default: 2.0.
-    gamma_lmxb: float, optional
+    gamma_lmxb : float, optional
         LMXB photon index. Default: 1.6.
-    E_cut: float, optional
+    E_cut : float, optional
         Exponential cutoff energy for both populations. Default: 100 keV. [keV]
-    log_L_hmxb_offset: float, optional
+    log_L_hmxb_offset : float, optional
         Departure from mean SFR relation (dex). Allows scatter or evolution.
         Default: 0.0. [dex]
-    log_L_lmxb_offset: float, optional
+    log_L_lmxb_offset : float, optional
         Departure from mean stellar-mass relation (dex). Default: 0.0. [dex]
 
     Returns
@@ -891,9 +891,9 @@ def alpha_ox_from_l2500(
 
     Parameters
     ----------
-    l_2500_erg_hz: float
+    l_2500_erg_hz : float
         Monochromatic luminosity density at rest-frame 2500 A. [erg/s/Hz]
-    relation: {"just2007", "lusso_risaliti_2016", "lusso_risaliti_2017"}
+    relation : {"just2007", "lusso_risaliti_2016", "lusso_risaliti_2017"}
         Which empirical α_OX(L_2500) correlation to use. Default
         ``"just2007"`` matches X-CIGALE (yang20.py:227). The Lusso–Risaliti
         variants are used by AGNfitter-rx.
@@ -979,13 +979,13 @@ def xray_hotgas(
 
     Parameters
     ----------
-    wavelength: array, shape (n_wave,)
+    wavelength : array, shape (n_wave,)
         Wavelength grid in Å (rest-frame). [Å]
-    sfr: float
+    sfr : float
         Star formation rate. [Msun/yr]
-    gamma: float, optional
+    gamma : float, optional
         Photon index (Γ, where F_ν ∝ ν^{−Γ}). Default: 1.0 (thermal).
-    E_cut: float, optional
+    E_cut : float, optional
         Exponential cutoff energy. Default: 1.0 keV (hot gas characteristic). [keV]
 
     Returns
@@ -1079,15 +1079,15 @@ def xray_anisotropy(
 
     Parameters
     ----------
-    l_x: array_like, shape (n_wave,)
+    l_x : array_like, shape (n_wave,)
         Corona luminosity spectrum at the Yang+2020 30° reference
         inclination: i.e. the α_ox-predicted spectrum. [erg/s/Hz]
-    cos_inc: float
+    cos_inc : float
         Cosine of inclination angle (1 = face-on, 0 = edge-on).
         [dimensionless]
-    a1: float, optional
+    a1 : float, optional
         Linear anisotropy coefficient. Default 0.5. [dimensionless]
-    a2: float, optional
+    a2 : float, optional
         Quadratic anisotropy coefficient. Default 0.0. [dimensionless]
 
     Returns
@@ -1156,25 +1156,25 @@ def xray_agn_corona_from_disc(
 
     Parameters
     ----------
-    wavelength: array, shape (n_wave,)
+    wavelength : array, shape (n_wave,)
         Wavelength [Angstrom].
-    l_2500_erg_hz: float
+    l_2500_erg_hz : float
         Monochromatic luminosity density at 2500 A [erg/s/Hz].
-    cos_inc: float
+    cos_inc : float
         Cosine of inclination (1 = face-on, 0 = edge-on). Default
         ``COS_INC_REF_30DEG``, the Yang+2020 anchor where the anisotropy
         factor is exactly 1 (#980).
-    delta_alpha_ox: float
+    delta_alpha_ox : float
         Additive offset to the Just+2007 alpha_ox. Default 0.0.
-    gamma: float
+    gamma : float
         Photon index. Default 1.8. Range: 1.4-2.4.
-    E_cut: float
+    E_cut : float
         Exponential cutoff energy [keV]. Default 300.
-    apply_anisotropy: bool
+    apply_anisotropy : bool
         Whether to apply Yang+2022 viewing-angle correction.
-    a1: float
+    a1 : float
         Linear anisotropy coefficient. Default 0.5.
-    a2: float
+    a2 : float
         Quadratic anisotropy coefficient. Default 0.0.
 
     Returns
@@ -1264,25 +1264,25 @@ def xray_agn_corona(
 
     Parameters
     ----------
-    wavelength: array, shape (n_wave,)
+    wavelength : array, shape (n_wave,)
         Wavelength grid in Å (rest-frame). [Å]
-    l_2500_30deg_erg_hz: float
+    l_2500_30deg_erg_hz : float
         Monochromatic luminosity density at 2500 Å from the AGN disc
         at 30° inclination angle (intrinsic). [erg/s/Hz]
-    gamma: float, optional
+    gamma : float, optional
         Photon index (Γ, where F_ν ∝ ν^{−Γ}). Default: 1.8. Range: 1.4–2.4.
-    E_cut: float, optional
+    E_cut : float, optional
         Exponential cutoff energy. Default: 300 keV. [keV]
-    delta_alpha_ox: float, optional
+    delta_alpha_ox : float, optional
         Additive offset to the Just+2007 α_ox relation. Default: 0.0. [dex]
-    cos_inc: float, optional
+    cos_inc : float, optional
         Cosine of inclination angle (1 = face-on, 0 = edge-on). Default:
         ``COS_INC_REF_30DEG``, the Yang+2020 anchor, factor exactly 1 (#980). []
-    apply_anisotropy: bool, optional
+    apply_anisotropy : bool, optional
         Whether to apply Yang+2022 viewing-angle correction. Default: True.
-    a1: float, optional
+    a1 : float, optional
         Linear anisotropy coefficient. Default: 0.5. []
-    a2: float, optional
+    a2 : float, optional
         Quadratic anisotropy coefficient. Default: 0.0. []
 
     Returns
@@ -1391,20 +1391,20 @@ def _xray_agn_corona_bolometric(
 
     Parameters
     ----------
-    wavelength: array, shape (n_wave,)
+    wavelength : array, shape (n_wave,)
         Wavelength [Angstrom].
-    L_agn_bol: float
+    L_agn_bol : float
         AGN bolometric luminosity [erg/s].
-    gamma: float
+    gamma : float
         Photon index. Default 1.8. Range: 1.4-2.4.
-    E_cut: float
+    E_cut : float
         Cutoff energy [keV]. Default 300.
-    alpha_ox: float
+    alpha_ox : float
         UV-to-X-ray slope. Default -1.4. Range: -2.0 to -1.0.
-    log_nh: float
+    log_nh : float
         Line-of-sight equivalent hydrogen column density. [log10(cm⁻²)]
         Default 20.0 (unobscured). Range 20.0 – 26.0.
-    scattered_frac: float
+    scattered_frac : float
         Fraction of the intrinsic continuum reaching the observer via
         warm-electron scattering on scales beyond the obscurer. [dimensionless]
         Default 0.01 (Ricci+2017, typical for type-2 AGN). Range 0.0 – 0.1.
@@ -1483,54 +1483,54 @@ def xray_total_terms(
 
     Parameters
     ----------
-    wavelength: array_like, shape (n_wave,)
+    wavelength : array_like, shape (n_wave,)
         Wavelength [Angstrom].
-    sfr: float
+    sfr : float
         Star formation rate [Msun/yr]. Default: 1.0.
-    stellar_mass: float
+    stellar_mass : float
         Stellar mass [Msun]. Default: 1e10.
-    metallicity_z: float
+    metallicity_z : float
         Metallicity (mass fraction). Default:
         :data:`~tengri.utils.physics_constants.Z_SUN` = 0.0142, the project-wide
         solar (Asplund 2009). A *fallback* only: on the model path the X-ray
         component passes the galaxy's own present-day Z, read from the
         stellar-published ``log_metallicity_history`` (#1755). []
-    stellar_age_gyr: float
+    stellar_age_gyr : float
         Stellar age in Gyr. Default: 1.0. [Gyr]
-    l_2500_30deg: float
+    l_2500_30deg : float
         AGN monochromatic luminosity at 2500 Å at 30° inclination [erg/s/Hz].
         Default: 0.0 (no AGN X-ray).
-    gamma_hmxb: float
+    gamma_hmxb : float
         HMXB photon index. Default: 2.0.
-    gamma_lmxb: float
+    gamma_lmxb : float
         LMXB photon index. Default: 1.6.
-    gamma_agn: float
+    gamma_agn : float
         AGN X-ray photon index. Default: 1.8.
-    E_cut: float
+    E_cut : float
         Exponential cutoff energy [keV]. Default: 300.
-    delta_alpha_ox: float
+    delta_alpha_ox : float
         Additive offset to Just+2007 α_ox relation [dex]. Default: 0.0.
-    cos_inc: float
+    cos_inc : float
         Cosine of inclination angle (1 = face-on, 0 = edge-on). Default:
         ``COS_INC_REF_30DEG``, the Yang+2020 anchor, factor exactly 1 (#980). []
-    apply_anisotropy: bool
+    apply_anisotropy : bool
         Whether to apply Yang+2022 viewing-angle correction. Default: True.
-    a1: float
+    a1 : float
         Linear anisotropy coefficient. Default: 0.5. []
-    a2: float
+    a2 : float
         Quadratic anisotropy coefficient. Default: 0.0. []
-    log_nh: float
+    log_nh : float
         Line-of-sight equivalent hydrogen column density [log10(cm⁻²)].
         Default: 20.0. Range: 20.0–26.0.
-    alpha_ox_relation: str
+    alpha_ox_relation : str
         Empirical α_OX relation. Default: "just2007". Options: "just2007",
         "lusso_risaliti_2016", "lusso_risaliti_2017".
-    pexrav_R: float
+    pexrav_R : float
         Cold-disc Compton reflection covering fraction. Default: 0.0 (disabled).
         [dimensionless]
-    log_L_hmxb_offset: float
+    log_L_hmxb_offset : float
         Departure from expected HMXB log L_X [dex]. Default: 0.0. [dex]
-    log_L_lmxb_offset: float
+    log_L_lmxb_offset : float
         Departure from expected LMXB log L_X [dex]. Default: 0.0. [dex]
 
     Returns
@@ -1631,54 +1631,54 @@ def xray_total(
 
     Parameters
     ----------
-    wavelength: array_like, shape (n_wave,)
+    wavelength : array_like, shape (n_wave,)
         Wavelength [Angstrom].
-    sfr: float
+    sfr : float
         Star formation rate [Msun/yr]. Default: 1.0.
-    stellar_mass: float
+    stellar_mass : float
         Stellar mass [Msun]. Default: 1e10.
-    metallicity_z: float
+    metallicity_z : float
         Metallicity (mass fraction). Default:
         :data:`~tengri.utils.physics_constants.Z_SUN` = 0.0142, the project-wide
         solar (Asplund 2009). A *fallback* only: on the model path the X-ray
         component passes the galaxy's own present-day Z, read from the
         stellar-published ``log_metallicity_history`` (#1755). []
-    stellar_age_gyr: float
+    stellar_age_gyr : float
         Stellar age in Gyr. Default: 1.0. [Gyr]
-    l_2500_30deg: float
+    l_2500_30deg : float
         AGN monochromatic luminosity at 2500 Å at 30° inclination [erg/s/Hz].
         Default: 0.0 (no AGN X-ray).
-    gamma_hmxb: float
+    gamma_hmxb : float
         HMXB photon index. Default: 2.0.
-    gamma_lmxb: float
+    gamma_lmxb : float
         LMXB photon index. Default: 1.6.
-    gamma_agn: float
+    gamma_agn : float
         AGN X-ray photon index. Default: 1.8.
-    E_cut: float
+    E_cut : float
         Exponential cutoff energy [keV]. Default: 300.
-    delta_alpha_ox: float
+    delta_alpha_ox : float
         Additive offset to Just+2007 α_ox relation [dex]. Default: 0.0.
-    cos_inc: float
+    cos_inc : float
         Cosine of inclination angle (1 = face-on, 0 = edge-on). Default:
         ``COS_INC_REF_30DEG``, the Yang+2020 anchor, factor exactly 1 (#980). []
-    apply_anisotropy: bool
+    apply_anisotropy : bool
         Whether to apply Yang+2022 viewing-angle correction. Default: True.
-    a1: float
+    a1 : float
         Linear anisotropy coefficient. Default: 0.5. []
-    a2: float
+    a2 : float
         Quadratic anisotropy coefficient. Default: 0.0. []
-    log_nh: float
+    log_nh : float
         Line-of-sight equivalent hydrogen column density [log10(cm⁻²)].
         Default: 20.0. Range: 20.0–26.0.
-    alpha_ox_relation: str
+    alpha_ox_relation : str
         Empirical α_OX relation. Default: "just2007". Options: "just2007",
         "lusso_risaliti_2016", "lusso_risaliti_2017".
-    pexrav_R: float
+    pexrav_R : float
         Cold-disc Compton reflection covering fraction. Default: 0.0 (disabled).
         [dimensionless]
-    log_L_hmxb_offset: float
+    log_L_hmxb_offset : float
         Departure from expected HMXB log L_X [dex]. Default: 0.0. [dex]
-    log_L_lmxb_offset: float
+    log_L_lmxb_offset : float
         Departure from expected LMXB log L_X [dex]. Default: 0.0. [dex]
 
     Returns
@@ -1743,7 +1743,7 @@ def xray_bolometric_correction_duras(l_bol_erg: float) -> float:
 
     Parameters
     ----------
-    l_bol_erg: float
+    l_bol_erg : float
         AGN bolometric luminosity. [erg/s]
 
     Returns
@@ -1807,31 +1807,31 @@ def xray_agn_corona_lopez24(
 
     Parameters
     ----------
-    wavelength: array, shape (n_wave,)
+    wavelength : array, shape (n_wave,)
         Wavelength grid in Angstrom (rest-frame). [Å]
-    l_12um_erg_hz: float
+    l_12um_erg_hz : float
         Nuclear monochromatic luminosity density at 12 μm. [erg/s/Hz]
-    alpha_irx: float
+    alpha_irx : float
         Log ratio of νL_ν(12μm) to 2–10 keV luminosity (Asmus+2015 convention,
         matching CIGALE ``lopez24``):
         α_IRX = log₁₀(νL_ν(12μm) / L_X(2–10 keV)). [dimensionless]
         Default: 0.3 (X-ray ≈ 0.5·νL_ν(12μm)). Typical range: 0.0–0.6.
-    gamma: float
+    gamma : float
         X-ray photon index (Γ, where F_ν ∝ ν^{1−Γ}). [dimensionless]
         Default: 1.8. Typical range: 1.4–3.5.
-    E_cut: float
+    E_cut : float
         Exponential cutoff energy. [keV]
         Default: 300.0.
-    cos_inc: float
+    cos_inc : float
         Cosine of inclination angle (1 = face-on, 0 = edge-on). [dimensionless]
         Default: 1.0.
-    apply_anisotropy: bool
+    apply_anisotropy : bool
         Whether to apply Yang+2022 viewing-angle correction.
         Default: True.
-    a1: float
+    a1 : float
         Linear anisotropy coefficient. [dimensionless]
         Default: 0.5.
-    a2: float
+    a2 : float
         Quadratic anisotropy coefficient. [dimensionless]
         Default: 0.0.
 
@@ -1949,35 +1949,35 @@ def xray_total_lopez24_terms(
 
     Parameters
     ----------
-    wavelength: array_like, shape (n_wave,)
+    wavelength : array_like, shape (n_wave,)
         Wavelength grid in Angstrom. [Å]
-    sfr: float
+    sfr : float
         Star formation rate. [Msun/yr]. Default: 1.0.
-    stellar_mass: float
+    stellar_mass : float
         Stellar mass. [Msun]. Default: 1e10.
-    stellar_age_gyr: float
+    stellar_age_gyr : float
         Stellar age in Gyr. Default: 1.0. [Gyr]
-    metallicity_z: float
+    metallicity_z : float
         Metallicity (mass fraction). Default:
         :data:`~tengri.utils.physics_constants.Z_SUN` = 0.0142, the project-wide
         solar (Asplund 2009). A *fallback* only: on the model path the X-ray
         component passes the galaxy's own present-day Z, read from the
         stellar-published ``log_metallicity_history`` (#1755). []
-    l_12um_erg_hz: float
+    l_12um_erg_hz : float
         Nuclear 12μm luminosity density. [erg/s/Hz]
         Default: 0.0 (no AGN X-ray contribution).
-    alpha_irx: float
+    alpha_irx : float
         Log ratio of L_X to L_12μm. [dimensionless]
         Default: 0.3.
-    gamma_hmxb: float
+    gamma_hmxb : float
         HMXB photon index. Default: 2.0.
-    gamma_lmxb: float
+    gamma_lmxb : float
         LMXB photon index. Default: 1.6.
-    gamma_agn: float
+    gamma_agn : float
         AGN photon index. Default: 1.8.
-    E_cut: float
+    E_cut : float
         Exponential cutoff energy. [keV] Default: 300.
-    log_nh: float
+    log_nh : float
         Line-of-sight hydrogen column density [log10(cm⁻²)].
         Default: 20.0.
 
@@ -2057,35 +2057,35 @@ def xray_total_lopez24(
 
     Parameters
     ----------
-    wavelength: array_like, shape (n_wave,)
+    wavelength : array_like, shape (n_wave,)
         Wavelength grid in Angstrom. [Å]
-    sfr: float
+    sfr : float
         Star formation rate. [Msun/yr]. Default: 1.0.
-    stellar_mass: float
+    stellar_mass : float
         Stellar mass. [Msun]. Default: 1e10.
-    stellar_age_gyr: float
+    stellar_age_gyr : float
         Stellar age in Gyr. Default: 1.0. [Gyr]
-    metallicity_z: float
+    metallicity_z : float
         Metallicity (mass fraction). Default:
         :data:`~tengri.utils.physics_constants.Z_SUN` = 0.0142, the project-wide
         solar (Asplund 2009). A *fallback* only: on the model path the X-ray
         component passes the galaxy's own present-day Z, read from the
         stellar-published ``log_metallicity_history`` (#1755). []
-    l_12um_erg_hz: float
+    l_12um_erg_hz : float
         Nuclear 12μm luminosity density. [erg/s/Hz]
         Default: 0.0 (no AGN X-ray contribution).
-    alpha_irx: float
+    alpha_irx : float
         Log ratio of L_X to L_12μm. [dimensionless]
         Default: 0.3.
-    gamma_hmxb: float
+    gamma_hmxb : float
         HMXB photon index. Default: 2.0.
-    gamma_lmxb: float
+    gamma_lmxb : float
         LMXB photon index. Default: 1.6.
-    gamma_agn: float
+    gamma_agn : float
         AGN photon index. Default: 1.8.
-    E_cut: float
+    E_cut : float
         Exponential cutoff energy. [keV] Default: 300.
-    log_nh: float
+    log_nh : float
         Line-of-sight hydrogen column density [log10(cm⁻²)].
         Default: 20.0.
 

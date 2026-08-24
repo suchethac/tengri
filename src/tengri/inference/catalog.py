@@ -259,21 +259,21 @@ class Catalog:
 
     Parameters
     ----------
-    fwd: ForwardModel
+    fwd : ForwardModel
         Shared forward model for all galaxies.
-    table: dict-like or None
+    table : dict-like or None
         Column mapping or object supporting `__getitem__[col] -> array`
         and `len()`. Required for `.fit()`; pass `None` for prediction-only.
-    flux_unit: str
+    flux_unit : str
         Unit of the flux columns, **required**, with no default, so a table
         is never ingested under a guessed unit. One of: ``"cgs_fnu"``
         [erg/s/cm²/Hz], ``"mJy"``, ``"uJy"``, ``"maggies"``, ``"ab_mag"``.
-    redshift_col: str, optional
+    redshift_col : str, optional
         Column name for per-galaxy redshifts. If given, the model must have
         a ``Fixed`` redshift and a ``catalog_z_range`` that covers the
         redshift span in the table. If not given, the model must have a
         free redshift parameter. Exactly one of the two conditions is required.
-    flux_cols: list[str], optional
+    flux_cols : list[str], optional
         Flux column names **in your table**, they need not resemble the band
         names. If None, use ``"{name}"`` for each band in the model's
         observation.
@@ -285,29 +285,29 @@ class Catalog:
             # observation bands ("sdss_g", "sdss_r")
             Catalog(model, table, flux_cols=["FLUX_G", "FLUX_R"],
                     err_cols=["ERR_G", "ERR_R"], flux_unit="cgs_fnu")
-    err_cols: list[str], optional
+    err_cols : list[str], optional
         Error column names in your table, bound positionally the same way. If
         None, use ``"{name}_err"`` for each band.
-    censor_cols: dict[str, str], optional
+    censor_cols : dict[str, str], optional
         Mapping from band name to censoring flag column. Flag values: 0
         (detected), 1 (upper limit), -1 (lower limit).
-    line_cols: list[str], optional
+    line_cols : list[str], optional
         Emission-line flux column names in your table, bound positionally to the
         observation's line order (from ``observation.line_fluxes.names``).
         If None and the model carries line fluxes, raises ValueError.
         If None and the model has no line fluxes, this parameter is ignored.
-    line_err_cols: list[str], optional
+    line_err_cols : list[str], optional
         Emission-line error column names, bound positionally the same way.
         If None, use ``"{name}_err"`` for each line, matching the ``err_cols``
         convention.
-    line_censor_cols: list[str], optional
+    line_censor_cols : list[str], optional
         Emission-line censoring-flag columns, bound positionally the same
         way: 0 (detected), 1 (upper limit), -1 (lower limit). This is the
         catalog-scale form of ``Data(lines={'Halpha': (f, e, 'upper')})``.
         ``censor_cols`` is the *photometric* band axis and cannot express a
         line limit. Non-detection is a per-galaxy property, so declaring the
         flag on the Observation would apply it to the whole catalog.
-    missing: {"error", "mask"}, default "error"
+    missing : {"error", "mask"}, default "error"
         Policy for NaN flux values. ``"error"`` raises with guidance on
         ``missing="mask"``; ``"mask"`` sets presence to False for that cell.
 
@@ -464,36 +464,36 @@ class Catalog:
 
         Parameters
         ----------
-        method: str, default "map"
+        method : str, default "map"
             Inference method. Recommended: ``"map"`` for quick point estimates,
             ``"mcmc_nuts"`` for posteriors. Never defaults to VI.
-        key: jax.random.PRNGKey
+        key : jax.random.PRNGKey
             Base random key; per-galaxy keys are derived via ``jax.random.split``.
-        forward_chunk_size: int or "auto", default "auto"
+        forward_chunk_size : int or "auto", default "auto"
             K galaxies evaluated in parallel per ``lax.map`` step (native methods only).
             ``"auto"`` derives K from the memory budget; an explicit int is honored.
-        n_pad: int, "auto", or None
+        n_pad : int, "auto", or None
             Pad the catalog up to this many galaxies before running. Allows
             different catalog sizes to share XLA cache entries. ``None``
             (default) pads only to the next multiple of K.
-        store: {"full", "summary"} or None
+        store : {"full", "summary"} or None
             Storage mode for posterior samples. ``None`` (default) auto-selects:
             ``"full"`` if N <= 1000, else ``"summary"`` with a warning.
             ``"full"`` retains all samples. ``"summary"`` computes percentiles
             and reducer statistics per name, then drops samples. A method that
             produces no samples (``"map"``, ``"laplace"``) has nothing to
             summarize: it warns and the result reports ``store="full"``.
-        percentiles: tuple, optional
+        percentiles : tuple, optional
             Percentile levels to compute when ``store="summary"``, in the order
             they should appear as columns. Default ``(16, 50, 84)``. The levels
             are recorded on the result as ``percentile_levels`` and drive both
             ``post[name]`` (which reads the 50 column) and ``to_table()``
             labels, include 50 if you want a median.
-        reducers: dict, optional
+        reducers : dict, optional
             Additional reducer functions {name: callable} to apply per name
             (e.g., {"mean": np.mean, "std": np.std}). With store="full", these
             are ignored.
-        properties: tuple of str or None
+        properties : tuple of str or None
             Derived properties to include in the summary block alongside the
             sampled parameters. ``None`` (default) includes every property the
             model provides, so ``post.percentiles["stellar_mass"]`` works;
@@ -599,16 +599,16 @@ class Catalog:
 
         Parameters
         ----------
-        fwd: ForwardModel
+        fwd : ForwardModel
             Model built with ``sfh={'type': 'table'}`` (and
             ``met={'type': 'table'}`` if ``met`` is given).
-        t_gyr: array_like, shape (n_t,) or (N, n_t)
+        t_gyr : array_like, shape (n_t,) or (N, n_t)
             Cosmic time [Gyr], strictly increasing. A 1-D grid is shared by
             every galaxy and broadcast.
-        sfr: array_like, shape (N, n_t)
+        sfr : array_like, shape (N, n_t)
             Star formation rate [Msun/yr] at those times. Must be finite and
             non-negative.
-        met: array_like, shape (n_t,) or (N, n_t), optional
+        met : array_like, shape (n_t,) or (N, n_t), optional
             **Stellar** metallicity history in ``met_unit`` at the same nodes,
             the Z each generation of stars formed from, which selects the SSP
             templates. A 1-D history is shared by every galaxy and broadcast,
@@ -616,7 +616,7 @@ class Catalog:
             ``metallicity_model='table'``; conversely a model built that way
             requires a history here, and says so at construction rather than
             inside the first forward pass.
-        met_gas: array_like, shape (N,), (n_t,) or (N, n_t), optional
+        met_gas : array_like, shape (N,), (n_t,) or (N, n_t), optional
             **Gas-phase** metallicity in ``met_unit``, the Z of the ionized gas
             that drives nebular emission. A separate physical quantity from
             ``met`` and set independently of it: inflow of pristine gas genuinely
@@ -631,7 +631,7 @@ class Catalog:
             rather than quietly enriching the stars but not the gas (#1677).
             Requires an active nebular backend; without one there is nothing to
             consume it and it is refused.
-        met_unit: {"logzsol", "log_z_abs", "z_mass_fraction"}, default "logzsol"
+        met_unit : {"logzsol", "log_z_abs", "z_mass_fraction"}, default "logzsol"
             The unit ``met`` arrives in. ``"logzsol"`` is log10(Z/Zsun),
             tengri's user-facing convention; ``"log_z_abs"`` is absolute
             log10(Z), the SSP grid's own; ``"z_mass_fraction"`` is the raw metal
@@ -643,7 +643,7 @@ class Catalog:
             :class:`~tengri.config.exceptions.MetallicityUnitWarning`, the
             SSP-grid check cannot catch that case, because those values are
             in-grid.
-        on_out_of_grid: {"raise", "warn", "ignore"}, default "raise"
+        on_out_of_grid : {"raise", "warn", "ignore"}, default "raise"
             What to do when a metallicity node falls outside the SSP's grid,
             where the lookup silently clips to the edge. ``"warn"`` emits
             :class:`~tengri.config.exceptions.OutOfSSPGridWarning` carrying the
@@ -651,13 +651,13 @@ class Catalog:
             silence. Simulations reach primordial metallicities at early times
             routinely, so this fires on real data, clip the history, load a
             wider SSP, or downgrade the policy deliberately.
-        redshift: array_like, shape (N,), optional
+        redshift : array_like, shape (N,), optional
             Per-galaxy redshift. Needs a ``catalog_z_range`` on the model for
             the catalog to stay one compile (#1316).
-        params: dict, optional
+        params : dict, optional
             Per-galaxy scalars, ``{name: (N,)}``, every free parameter of the
             model that is not supplied by the histories.
-        flux_unit: str, default "cgs_fnu"
+        flux_unit : str, default "cgs_fnu"
             Recorded for symmetry with the data-table constructor; predictions
             are returned in [erg/s/cm²/Hz] regardless.
 
@@ -824,24 +824,24 @@ class Catalog:
 
         Parameters
         ----------
-        lines: sequence of str, optional
+        lines : sequence of str, optional
             Emission line names to measure, from
             :data:`~tengri.observation.line_measurement.DESI_LINES` (e.g.
             ``("Halpha", "OIII_5007")``). Measured through the window-LUT fast
             path, which since #1396 serves tabulated histories.
-        properties: sequence of str, optional
+        properties : sequence of str, optional
             Derived quantities to evaluate, e.g. ``("stellar_mass",)``.
-        chunk_size: int, default 1024
+        chunk_size : int, default 1024
             Galaxies per vmapped batch. Chunks are padded to a uniform width,
             so each channel costs one compile for the whole catalog.
-        n_pad: int, optional
+        n_pad : int, optional
             Pad the catalog to at least this many galaxies, so catalogs of
             different sizes share one XLA cache entry per channel.
-        noise: optional
+        noise : optional
             **Not implemented**, noise draws are #1312. Refused rather than
             ignored, so a caller asking for a noisy mock never silently receives
             a noiseless one.
-        key: optional
+        key : optional
             Reserved for the noise draw (#1312); refused for the same reason.
 
         Returns
@@ -933,7 +933,7 @@ class Catalog:
         consumer merges them for itself: ``predict_photometry`` does, but the
         window-LUT line path reaches ``compute_joint_weights``, which reads
         ``params["met_logzsol"]`` directly and raises ``KeyError`` on a dict
-        carrying only the free parameters. Merging once here keeps every channel,
+        carrying only the free parameters. Merging once here keeps every channel
         photometry, lines, properties, seeing the same complete dict. Caller
         columns win, so a per-galaxy ``redshift`` still overrides a fixed one.
         """
@@ -1002,17 +1002,17 @@ class Catalog:
 
         Parameters
         ----------
-        fn: callable
+        fn : callable
             Single-galaxy callable, returning an array or a dict of scalars.
-        columns: dict
+        columns : dict
             ``{name: (N, ...) ndarray}``.
-        n_galaxies: int
+        n_galaxies : int
             True galaxy count, before padding.
-        chunk_size: int
+        chunk_size : int
             Maximum galaxies per batch.
-        tag: str
+        tag : str
             Cache key for the memoized ``jit(vmap(fn))``.
-        n_pad: int, optional
+        n_pad : int, optional
             Pad the catalog to at least this many galaxies before chunking, so
             catalogs of *different* sizes share one XLA cache entry (the same
             meaning ``fit`` gives it). Must be >= ``n_galaxies``.
@@ -1069,14 +1069,14 @@ class Catalog:
 
         Parameters
         ----------
-        param_table: dict-like
+        param_table : dict-like
             Mapping of name → array whose leading axis indexes galaxies.
 
         Returns
         -------
-        columns: dict
+        columns : dict
             ``{name: ndarray}``, every value at least 1-D.
-        n_galaxies: int
+        n_galaxies : int
             The shared leading-axis length.
 
         Raises
@@ -1120,7 +1120,7 @@ class Catalog:
 
         Parameters
         ----------
-        param_table: dict-like, optional
+        param_table : dict-like, optional
             Mapping of name → array whose **leading axis indexes galaxies**;
             the trailing shape is free. A per-galaxy scalar is ``(N,)``; a
             tabulated history (``sfh_t_gyr``, ``sfh_sfr``, ``met_history``) is
@@ -1129,11 +1129,11 @@ class Catalog:
             unknown-parameter check, so a typo cannot pass silently. Omit it
             entirely on a catalog built by :meth:`from_histories`, which
             already carries its columns.
-        chunk_size: int, default 1024
+        chunk_size : int, default 1024
             Galaxies evaluated per vmapped batch. Larger batches are faster
             but use more memory. Chunks are padded to a uniform width, so the
             whole catalog costs **one** compile regardless of how it divides.
-        n_pad: int, optional
+        n_pad : int, optional
             Pad the catalog to at least this many galaxies before chunking, so
             catalogs of *different* sizes share one XLA cache entry (the same
             meaning :meth:`fit` gives it). Padding rows are discarded from the

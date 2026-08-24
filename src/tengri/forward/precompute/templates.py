@@ -56,39 +56,39 @@ def collapse_fixed_axes(
 
     Parameters
     ----------
-    preint: PreintegratedGrid or PreintegratedLines
+    preint : PreintegratedGrid or PreintegratedLines
         The freshly built grid, before collapse.
-    axis_params: sequence of str
+    axis_params : sequence of str
         Parameter name governing each grid axis, **in axis order**. Position
         ``i`` in this sequence must be axis ``i`` of ``preint``; the whole
         mechanism is positional, so a reordering silently collapses the wrong
         axis at another parameter's value.
-    parameters: Parameters or None
+    parameters : Parameters or None
         The model's parameter specification. ``None`` skips collapse entirely
         (the caller has no way to know which axes are Fixed).
-    defaults: mapping of str to float, optional
+    defaults : mapping of str to float, optional
         Fallback values for axis parameters that are neither declared ``Fixed``
         nor free. Used by the components that carry their own axis defaults
         (GRAHSP) or accept caller-supplied ones (the composable AGN block). A
         name absent from both the model and this mapping leaves its axis alone.
-    internal_axes: frozenset of str, optional
+    internal_axes : frozenset of str, optional
         Axis labels that are deliberately internal grid-axis constructs, not
         user-facing parameters. Names in this set are skipped silently (no
         warning, never collapsed). Used for grid axes like ``log_age`` in
         CLOUDY adapters or ``HbFrac`` in CB19 that are internal bookkeeping
         and not meant to be user parameters. Default: None. See issue #1827.
-    origin: str, optional
+    origin : str, optional
         Module or component name, used only in the ``DeadPrecomputeAxisWarning``
         message so the report names the declaration that needs fixing.
 
     Returns
     -------
-    preint_out: PreintegratedGrid or PreintegratedLines
+    preint_out : PreintegratedGrid or PreintegratedLines
         The collapsed grid, or ``preint`` unchanged when nothing collapsed.
-    remaining_axes: tuple
+    remaining_axes : tuple
         Axes surviving the collapse, in order, the axes a runtime lookup must
         still be queried at. Equal to ``preint_out.axes``.
-    collapsed: dict[int, float]
+    collapsed : dict[int, float]
         Axis index to the value it was collapsed at, empty when nothing
         collapsed. Callers branch on this to decide whether to rebuild their
         result dict.
@@ -219,25 +219,25 @@ def precompute_template_photometry(
 
     Parameters
     ----------
-    templates: ndarray
+    templates : ndarray
         Shape ``(*grid_dims, n_wave)``.  Template spectra.
-    wave_rest: ndarray
+    wave_rest : ndarray
         Shape ``(n_wave,)``.  Rest-frame wavelengths [Ångström].
-    filter_waves: list[ndarray]
+    filter_waves : list[ndarray]
         Per-filter wavelength arrays (observed frame).
-    filter_trans: list[ndarray]
+    filter_trans : list[ndarray]
         Per-filter transmission curves.
-    axes: tuple[ndarray, ...]
+    axes : tuple[ndarray, ...]
         One array per grid dimension (for triweight interpolation).
-    redshift: float
+    redshift : float
         Source redshift (0 for rest-frame templates).
-    dl_cm: float
+    dl_cm : float
         Luminosity distance [cm] (1 for normalized templates).
-    energy_normalize: bool
+    energy_normalize : bool
         Normalize each template to unit bolometric luminosity before
         integration.  Required for templates scaled by L_absorbed or
         L_bol at runtime (DL07, Dale, SKIRTOR, etc.).  Default True.
-    units: str
+    units : str
         ``"lnu"`` if templates are in L_ν [erg/s/Hz], or ``"llam"``
         if templates are in L_λ [erg/s/Å].  When ``"llam"``, converts
         to L_ν via L_ν = L_λ × λ²/c before integration.
@@ -281,7 +281,7 @@ def build_template_photometry_lookup(preint: PreintegratedGrid):
 
     Parameters
     ----------
-    preint: PreintegratedGrid
+    preint : PreintegratedGrid
         Output of :func:`precompute_template_photometry`.
 
     Returns
@@ -305,9 +305,9 @@ def build_template_photometry_lookup(preint: PreintegratedGrid):
 
         Parameters
         ----------
-        scale: float
+        scale : float
             Luminosity scaling factor (L_absorbed, L_bol, etc.) [erg/s].
-        *grid_params: float
+        *grid_params : float
             Per-axis query points for triweight interpolation (one per free grid axis).
 
         Returns

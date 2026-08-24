@@ -320,7 +320,7 @@ def cites(*keys: str) -> Callable[[F], F]:
 
     Parameters
     ----------
-    *keys: str
+    *keys : str
         Citation registry keys (see ``references.bib``).
 
     Examples

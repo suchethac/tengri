@@ -232,7 +232,7 @@ def _population_sed(model):
 
     Parameters
     ----------
-    model: object
+    model : object
         Candidate forward model.
 
     Returns
@@ -278,10 +278,10 @@ def resolve_method(method: str, emit_warning: bool = True) -> str:
 
     Parameters
     ----------
-    method: str
+    method : str
         Method name: canonical (e.g. ``"vi"``, ``"mcmc_nuts"``), ``"auto"``,
         or invalid.
-    emit_warning: bool, optional
+    emit_warning : bool, optional
         Unused; retained for signature compatibility.
 
     Returns
@@ -393,14 +393,14 @@ def split_fitter_kwargs(kwargs):
 
     Parameters
     ----------
-    kwargs: dict
+    kwargs : dict
         The surface's collected ``**kwargs``. Not mutated.
 
     Returns
     -------
-    ctor_kwargs: dict
+    ctor_kwargs : dict
         The subset belonging to ``Fitter.__init__``.
-    run_kwargs: dict
+    run_kwargs : dict
         Everything else, for ``Fitter.run`` (unknown names still fail loudly
         there, as before).
     """
@@ -437,9 +437,9 @@ def _memoized_approx_clone(model, cfg):
 
     Parameters
     ----------
-    model: SEDModel or ForwardModel
+    model : SEDModel or ForwardModel
         Source model. Never mutated; used as the weak cache key.
-    cfg: precompute config or tuple
+    cfg : precompute config or tuple
         The **resolved** configuration. Keyed on this rather than on the caller's
         ``approx`` argument because resolution depends on fitter state (whether
         the fit has a line channel), so ``approx="auto"`` can legitimately resolve
@@ -565,7 +565,7 @@ def fast_nebular_can_engage(model) -> bool:
 
     Parameters
     ----------
-    model: SEDModel
+    model : SEDModel
         The fit's model.
 
     Returns
@@ -617,7 +617,7 @@ def _observation_serves_line_channel(model) -> bool:
 
     Parameters
     ----------
-    model: SEDModel
+    model : SEDModel
         The fit's model.
 
     Returns
@@ -705,13 +705,13 @@ def _lut_forward_bias(exact_model, lut_model, data_type):
 
     Parameters
     ----------
-    exact_model: SEDModel or ForwardModel
+    exact_model : SEDModel or ForwardModel
         The caller's un-resolved model, the exact path. Must be the SAME
         model the LUT clone was resolved from: pairing models that differ in
         anything but the LUT measures physics, not approximation.
-    lut_model: SEDModel or ForwardModel
+    lut_model : SEDModel or ForwardModel
         The resolved clone.
-    data_type: {"photometry", "spectroscopy"}
+    data_type : {"photometry", "spectroscopy"}
 
     Returns
     -------
@@ -756,10 +756,10 @@ def _warn_if_lut_bias_amplified(exact_model, lut_model, data, noise, data_type, 
 
     Parameters
     ----------
-    data, noise: array_like
+    data, noise : array_like
         The fit's observed vector and 1-sigma noise, flattened; batch
         surfaces pass the per-galaxy concatenation.
-    surface: str
+    surface : str
         The fitting surface name, quoted in the warning.
     """
     if data_type not in ("photometry", "spectroscopy"):
@@ -819,16 +819,16 @@ def _resolve_batch_fit_approx(model, approx, data_type):
 
     Parameters
     ----------
-    model: SEDModel or ForwardModel
+    model : SEDModel or ForwardModel
         The batch fit's model (or one built by its factory). Never mutated;
         ``with_approx`` clones, memoized via :func:`_memoized_approx_clone`.
-    approx: "auto" or None or precompute config
+    approx : "auto" or None or precompute config
         ``"auto"`` selects the LUT for the data type (photometry ->
         ``WavePrecomp``, spectroscopy/joint -> ``SpectrumPrecomp``) and
         respects a model that already carries it; ``None`` returns the model
         untouched (the exact path); anything else is handed to
         ``with_approx`` verbatim.
-    data_type: str
+    data_type : str
         The fit's data type; selects the LUT under ``"auto"``.
 
     Returns
@@ -951,9 +951,9 @@ def _memoized_predict_jit(model, name: str):
 
     Parameters
     ----------
-    model: SEDModel or ForwardModel
+    model : SEDModel or ForwardModel
         Fit model; the weak cache key.
-    name: str
+    name : str
         Attribute name of the accessor to wrap, e.g. ``"predict_photometry"``.
 
     Returns
@@ -990,19 +990,19 @@ class Fitter:
 
     Parameters
     ----------
-    model: SEDModel
+    model : SEDModel
         Configured forward model with ``spec`` (Parameters), ``observation``
         (Photometry/Spectroscopy/etc.), and predictor methods.
-    data: array_like, shape (n_data,)
+    data : array_like, shape (n_data,)
         Observed data (photometric fluxes or spectra). Units match the model's
         ``observation`` configuration. [erg/s/cm²/Hz] for photometry.
-    noise: array_like, shape (n_data,)
+    noise : array_like, shape (n_data,)
         1-sigma measurement uncertainties. Same shape and units as ``data``.
-    data_type: str or None
+    data_type : str or None
         Data type indicator: ``"photometry"``, ``"spectroscopy"``, or
         ``"joint"``. If ``None`` (default), inferred from
         ``model.observation``. Explicit values override inference.
-    data_mask: array_like or None
+    data_mask : array_like or None
         Optional per-datum censoring flags (CIGALE-style limits):
         ``0`` = detected (Gaussian term), ``1`` = upper limit
         (``ln Φ((limit − model)/σ)``), ``-1`` = lower limit
@@ -1012,28 +1012,28 @@ class Fitter:
         "upper limit", the opposite of the include/exclude semantics a
         boolean mask suggests. To exclude a datum, drop it from ``data``
         and ``noise`` (or inflate its ``noise``).
-    calibration_marginalize: bool, optional
+    calibration_marginalize : bool, optional
         If ``True``, analytically marginalize over spectroscopic calibration
         polynomial coefficients (Chebyshev order 1--``cal_n_poly``) when
         computing spectroscopic log-likelihood. Only applies when
         ``data_type`` ∈ {``"spectroscopy"``, ``"joint"``}. Follows Prospector
         (Johnson et al. 2021). Default ``False``.
-    cal_n_poly: int, optional
+    cal_n_poly : int, optional
         Number of Chebyshev polynomial coefficients for calibration
         marginalization (order 1 through ``cal_n_poly``). Default ``3``.
-    cal_prior_sigma: float, optional
+    cal_prior_sigma : float, optional
         Standard deviation of Gaussian prior on each calibration coefficient.
         Default ``1.0``.
-    eline_marginalize: bool or None, optional
+    eline_marginalize : bool or None, optional
         Whether to analytically marginalize emission line amplitudes.
         ``None`` (default) auto-detects from the model's ``Spectroscopy``
         config (checks ``eline_mode == "marginalized"``).
-    eline_prior_type: str or None, optional
+    eline_prior_type : str or None, optional
         Prior type for emission line marginalization: ``"flat"`` (uniform) or
         ``"cloudy"`` (grid-interpolated from Cloudy models).
         ``None`` auto-detects from ``Spectroscopy.eline_prior_type``.
         Default ``None``.
-    compile_modes: tuple[str, ...] or str or None, optional
+    compile_modes : tuple[str, ...] or str or None, optional
         Control background JIT compilation during ``__init__``. Accepted values:
 
         - ``None`` (default) → no background compile; first ``run()`` compiles
@@ -1058,15 +1058,15 @@ class Fitter:
 
     Attributes
     ----------
-    model: SEDModel
+    model : SEDModel
         Reference to the input forward model.
-    data: ndarray, shape (n_data,)
+    data : ndarray, shape (n_data,)
         Input data as JAX array.
-    noise: ndarray, shape (n_data,)
+    noise : ndarray, shape (n_data,)
         Input noise as JAX array.
-    data_type: str
+    data_type : str
         Resolved data type (``"photometry"``, ``"spectroscopy"``, ``"joint"``).
-    spec: Parameters
+    spec : Parameters
         Reference to ``model.spec``.
 
     Notes
@@ -1442,7 +1442,7 @@ class Fitter:
 
         Parameters
         ----------
-        model: SEDModel
+        model : SEDModel
             The model whose ``observation`` carries the line schema.
 
         Returns
@@ -1578,9 +1578,9 @@ class Fitter:
 
         Parameters
         ----------
-        model: SEDModel
+        model : SEDModel
             The fit's model. Never mutated; ``with_approx`` clones.
-        warn_on_failure: bool, keyword-only, optional
+        warn_on_failure : bool, keyword-only, optional
             Whether an unavailable LUT is worth telling the caller about.
             ``True`` for a line channel, where the documented cost of going
             without is ~21x per gradient. ``False`` for the photometry-only
@@ -2002,7 +2002,7 @@ class Fitter:
 
         Parameters
         ----------
-        compile_modes: tuple[str, ...] or str or None
+        compile_modes : tuple[str, ...] or str or None
             User-provided compile modes specification.
 
         Returns
@@ -2391,40 +2391,40 @@ class Fitter:
 
         Parameters
         ----------
-        n_iterations: int
+        n_iterations : int
             Iteration count for the pre-compilation run.  Changing
             ``n_iterations`` at run time does NOT trigger recompilation
             (the iteration count is a dynamic traced value).
-        n_samples: int
+        n_samples : int
             Compile for this sample count.  Changing ``n_samples``
             at run time DOES trigger recompilation (array shapes
             depend on it).
-        n_posterior_samples: int
+        n_posterior_samples : int
             Compile posterior draw for this many samples.
-        modes: tuple of str
+        modes : tuple of str
             Which VI sample modes to pre-compile. Each mode compiles
             separately. Default covers MGVI + geoVI update (fastest).
             Add ``"nonlinear_resample"`` for full geoVI (~56s extra).
-        mcmc_methods: tuple of str
+        mcmc_methods : tuple of str
             MCMC methods to pre-compile. Supported values:
             ``"nuts"``, ``"hmc"``, ``"dynamic_hmc"``, ``"ghmc"``.
             Each call runs the full warmup + chain scan through JIT so
             the XLA disk cache is populated before the first user call.
             After ``fitter.compile(mcmc_methods=["nuts"])``, a fresh
             kernel restart deserializes in <1s instead of ~23s.
-        n_warmup: int
+        n_warmup : int
             Warmup steps used for the MCMC compilation run.
-        n_burnin: int
+        n_burnin : int
             Burn-in steps used for the MCMC compilation run.
-        n_mcmc_samples: int
+        n_mcmc_samples : int
             Sample steps used for the MCMC compilation run.
-        nss: bool
+        nss : bool
             Pre-compile the NSS (nested slice sampling) step and init
             functions.  NSS has a ~10–15s cold compile on the first
             ``fitter.run("nss")`` call; setting ``nss=True`` moves that cost
             to compile time.  ``data_args`` is traced so the compiled program
             is reused across galaxies with the same model configuration.
-        verbose: bool
+        verbose : bool
             Print compilation progress.
 
         Returns
@@ -2880,16 +2880,16 @@ class Fitter:
 
         Parameters
         ----------
-        method: str, default ``"mcmc_nuts"``
+        method : str, default ``"mcmc_nuts"``
             Inference method to pre-warm. Any name accepted by
             :meth:`run`.
-        n_chains: int or None
+        n_chains : int or None
             If set and greater than 1, also pre-compile the multichain
             ``jax.vmap`` path for ``n_chains`` so the second multichain
             call has zero compile latency. Only meaningful for backends
             that support ``n_chains`` (NUTS / HMC / dHMC / GHMC / MCLMC /
             adjusted MCLMC / raytrace).
-        key: jax.random.PRNGKey or None
+        key : jax.random.PRNGKey or None
             Optional seed. Default uses a fixed key, the pre-warm run
             is throwaway and its randomness does not affect the
             subsequent real fit.
@@ -2909,7 +2909,7 @@ class Fitter:
         -----
         Pre-warming is **soft**: any exception raised during the throwaway
         call is swallowed so the real ``run()`` surfaces the genuine error
-        with a richer traceback. Calling ``prewarm`` redundantly is cheap,
+        with a richer traceback. Calling ``prewarm`` redundantly is cheap
         both caches are short-circuited.
         """
         import jax as _jax
@@ -3012,13 +3012,13 @@ class Fitter:
 
         - ``adaptation``: dict keyed by ``(engine_key, method_key)``, the
           contents of the model's cache namespace under ``"adaptation"``.
-        - ``spec_fingerprint``: a content hash of the free-parameter names
+        - ``spec_fingerprint`` : a content hash of the free-parameter names
           and prior shape, used by :meth:`load_cache` to refuse to load a
           cache that was written for a different model.
 
         Parameters
         ----------
-        path: str or Path
+        path : str or Path
             Destination file (``.pkl`` recommended). Parent directory is
             created if missing.
 
@@ -3053,7 +3053,7 @@ class Fitter:
 
         Parameters
         ----------
-        path: str or Path
+        path : str or Path
             File written by :meth:`save_cache`.
 
         Returns
@@ -3133,7 +3133,7 @@ class Fitter:
 
         Parameters
         ----------
-        method: str, optional
+        method : str, optional
             Inference method (case-sensitive). Default ``"vi"``.
 
             **Variational Inference (VI)**
@@ -3174,23 +3174,23 @@ class Fitter:
 
             - ``"auto"``: NUTS (D≤20) or geoVI (D>20) based on dimensionality
 
-        init_from: Posterior, optional
+        init_from : Posterior, optional
             Previous inference result to use as warm-start initialization.
             The posterior mean is extracted and converted to unbounded space.
             Useful for refining results across different methods. Default ``None``.
 
-        key: PRNGKey, optional
+        key : PRNGKey, optional
             JAX random key. Default ``PRNGKey(42)`` for reproducibility.
             Ignored for deterministic methods (``"map"``, ``"laplace"``).
 
-        allow_unvalidated: bool, optional
+        allow_unvalidated : bool, optional
             Run a backend registered at ``tier="broken"``, one that reports
             wrong answers or crashes in its own registry entry. Default
             ``False``, which raises :class:`~tengri.BackendError` naming the
             specific failure. Intended for benchmarking and backend
             development, not for science (#1287).
 
-        prewarm: bool, optional
+        prewarm : bool, optional
             JIT-compile the loss/gradient and the predict surface
             (``predict_photometry`` / ``predict_properties``) before the fit
             loop, populating the persistent cache so the fit runs warm and
@@ -3732,11 +3732,11 @@ class Fitter:
 
         Parameters
         ----------
-        method: str
+        method : str
             "jit" (default), JIT-compiled CG solve, ~0.2ms/sample.
             "blackjax", BlackJAX NUTS (independent MCMC, not geoVI).
             "nifty", NIFTy draw_linear_residual (slow, ~540ms/sample).
-        posterior_chunk_size: int, optional
+        posterior_chunk_size : int, optional
             If set, process CG draws in chunks of this size, peak memory
             becomes O(chunk · D) instead of O(n_samples · D). JIT cache
             hits across chunks, so wall-time overhead is negligible.
@@ -4054,13 +4054,13 @@ class Fitter:
 
         Parameters
         ----------
-        batch: list of dict
+        batch : list of dict
             Each dict has "flux_obs" and "noise" arrays.
-        method: str
+        method : str
             Default "vi". Any method from run().
-        key: PRNGKey, optional
+        key : PRNGKey, optional
             Random seed for sampling methods. Default: ``jax.random.PRNGKey(42)``.
-        verbose: bool
+        verbose : bool
             Print progress. Default: ``True``.
         **kwargs
             Passed to run() (n_iterations, n_samples, n_seeds, etc).
@@ -4263,7 +4263,7 @@ class Fitter:
         # Adaptation on the first galaxy, shared across the batch. Wrapped in a
         # memoized jax.jit that takes the galaxy data as a *traced* argument so the
         # compiled warmup is reused across fit_batch calls. The eager form built a
-        # fresh ``window_adaptation`` (with a fresh log-density closure) every call,
+        # fresh ``window_adaptation`` (with a fresh log-density closure) every call
         # a fresh function identity that JAX's in-memory compile cache never
         # reused, so it retained one warmup executable per call (~20 MB/call leak on
         # a long-lived Fitter). Data enters traced, so the adaptation still runs on
@@ -4343,7 +4343,7 @@ class Fitter:
 
                     Parameters
                     ----------
-                    pos: ndarray, shape (n_dim,)
+                    pos : ndarray, shape (n_dim,)
                         Flattened unbounded parameters.
 
                     Returns
@@ -4386,7 +4386,7 @@ class Fitter:
 
                     Parameters
                     ----------
-                    pos: ndarray, shape (n_dim,)
+                    pos : ndarray, shape (n_dim,)
                         Flattened unbounded parameters.
 
                     Returns
@@ -4429,7 +4429,7 @@ class Fitter:
 
                     Parameters
                     ----------
-                    pos: ndarray, shape (n_dim,)
+                    pos : ndarray, shape (n_dim,)
                         Flattened unbounded parameters.
 
                     Returns
@@ -4470,7 +4470,7 @@ class Fitter:
 
                     Parameters
                     ----------
-                    pos: ndarray, shape (n_dim,)
+                    pos : ndarray, shape (n_dim,)
                         Flattened unbounded parameters.
 
                     Returns
@@ -4505,11 +4505,11 @@ class Fitter:
 
             Parameters
             ----------
-            gal_key: jax.random.PRNGKey
+            gal_key : jax.random.PRNGKey
                 Random seed for this galaxy.
-            init_flat_i: ndarray, shape (n_dim,)
+            init_flat_i : ndarray, shape (n_dim,)
                 Initial flattened unbounded parameters.
-            data_args_i: dict
+            data_args_i : dict
                 Data arguments (fluxes, noise) for this galaxy.
 
             Returns
@@ -4531,7 +4531,7 @@ class Fitter:
 
                 Parameters
                 ----------
-                pos: ndarray, shape (n_dim,)
+                pos : ndarray, shape (n_dim,)
                     Flattened unbounded parameters.
 
                 Returns
@@ -4670,10 +4670,10 @@ class Fitter:
 
         Parameters
         ----------
-        key: hashable or None
+        key : hashable or None
             Signature that fully determines the built kernel, or ``None`` to
             skip caching.
-        builder: callable
+        builder : callable
             Zero-arg factory returning the ``jax.jit(jax.vmap(...))`` wrapper.
 
         Returns
@@ -4844,11 +4844,11 @@ class Fitter:
 
             Parameters
             ----------
-            params: ndarray, shape (n_dim,)
+            params : ndarray, shape (n_dim,)
                 Flattened unbounded parameters for this galaxy.
-            opt_state: optax.OptState
+            opt_state : optax.OptState
                 Optimizer state (e.g., Adam momentum buffers).
-            data_args_i: dict
+            data_args_i : dict
                 Data arguments (fluxes, noise) for this galaxy.
 
             Returns

@@ -184,9 +184,9 @@ def run_nss(
         Overrides preset if not None.
     max_iterations : int
         Safety limit on iterations.
-    n_posterior_samples: int
+    n_posterior_samples : int
         Number of posterior samples to draw after convergence.
-    max_steps: int
+    max_steps : int
         Maximum stepping-out steps in slice sampling.
     max_shrinkage : int or None
         Maximum shrinking steps in slice sampling. Overrides preset if not None.

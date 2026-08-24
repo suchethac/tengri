@@ -65,22 +65,22 @@ def _cigale_disc_lambda(
 
     Parameters
     ----------
-    wavelength_aa: array_like, shape (n_wave,)
+    wavelength_aa : array_like, shape (n_wave,)
         Rest-frame wavelength [Å].
-    agn_log_lbol: float
+    agn_log_lbol : float
         :math:`\log_{10}(L_{\rm bol}/L_\odot)`.
-    spectrum_per_nm_fn: callable
+    spectrum_per_nm_fn : callable
         One of :func:`skirtor_disk_spectrum`,
         :func:`schartmann2005_disk_spectrum`, or
         :func:`adaf_disk_spectrum`. Takes ``(wave_nm, delta)`` and returns
         a dimensionless spectrum normalized so its integral over the
         nm axis equals one.
-    delta: float
+    delta : float
         CIGALE ``delta`` slope/blend modulator.
 
     Returns
     -------
-    L_lambda: ndarray, shape (n_wave,)
+    L_lambda : ndarray, shape (n_wave,)
         :math:`L_\lambda` [erg/s/Å].
     """
     wave_aa = jnp.asarray(wavelength_aa)
@@ -133,22 +133,22 @@ def adaf_disc_block(
 
     Parameters
     ----------
-    wavelength: array_like, shape (n_wave,)
+    wavelength : array_like, shape (n_wave,)
         Rest-frame wavelength [Å].
-    agn_log_lbol, agn_log_mbh: float
+    agn_log_lbol, agn_log_mbh : float
         ADAF bolometric luminosity [log10(L_sun)] and black hole mass
         [log10(M_sun)].
-    agn_adaf_alpha: float, optional
+    agn_adaf_alpha : float, optional
         Viscosity parameter :math:`\alpha`. Default ``0.3``.
-    agn_adaf_beta: float, optional
+    agn_adaf_beta : float, optional
         Gas-to-total pressure ratio :math:`\beta` (magnetic fraction ``1-beta``).
         Default ``0.5``.
-    agn_adaf_delta: float, optional
+    agn_adaf_delta : float, optional
         Fraction of viscous energy heating electrons directly. Default ``0.1``.
 
     Returns
     -------
-    L_lambda: ndarray, shape (n_wave,)
+    L_lambda : ndarray, shape (n_wave,)
         ADAF :math:`L_\lambda` [erg/s/Å].
 
     References
@@ -193,18 +193,18 @@ def cigale_adaf_disc_block(
 
     Parameters
     ----------
-    wavelength: array_like, shape (n_wave,)
+    wavelength : array_like, shape (n_wave,)
         Rest-frame wavelength [Å].
-    agn_log_lbol: float
+    agn_log_lbol : float
         :math:`\log_{10}(L_{\rm bol}/L_\odot)`.
-    agn_cigale_disk_delta: float, optional
+    agn_cigale_disk_delta : float, optional
         Blend weight in ``[0, 1]`` (paper ``delta``). ``0`` -> pure ADAF;
         ``1`` -> pure thin disc. Note: for this block the parameter is a
         blend weight, **not** a slope modulator. Default ``0.0``.
 
     Returns
     -------
-    L_lambda: ndarray, shape (n_wave,)
+    L_lambda : ndarray, shape (n_wave,)
         :math:`L_\lambda` [erg/s/Å].
 
     Notes
@@ -257,17 +257,17 @@ def cigale_schartmann_disc_block(
 
     Parameters
     ----------
-    wavelength: array_like, shape (n_wave,)
+    wavelength : array_like, shape (n_wave,)
         Rest-frame wavelength [Å].
-    agn_log_lbol: float
+    agn_log_lbol : float
         :math:`\log_{10}(L_{\rm bol}/L_\odot)`.
-    agn_cigale_disk_delta: float, optional
+    agn_cigale_disk_delta : float, optional
         Slope modulator (paper ``delta``); 100-10000 nm index becomes
         :math:`-1.5 + \delta`. Default ``0.0``.
 
     Returns
     -------
-    L_lambda: ndarray, shape (n_wave,)
+    L_lambda : ndarray, shape (n_wave,)
         :math:`L_\lambda` [erg/s/Å].
 
     Notes
@@ -343,22 +343,22 @@ def cigale_schartmann_skirtor_attenuated_disc_block(
 
     Parameters
     ----------
-    wavelength: array_like, shape (n_wave,)
+    wavelength : array_like, shape (n_wave,)
         Rest-frame wavelength [Å].
-    agn_log_lbol: float
+    agn_log_lbol : float
         :math:`\log_{10}(L_{\rm bol}/L_\odot)`: intrinsic 4π disc
         bolometric (= CIGALE ``accretion_power``).
-    agn_cigale_disk_delta: float, optional
+    agn_cigale_disk_delta : float, optional
         Slope modulator (paper ``delta``); default 0.0.
     agn_tau_skirtor, agn_p_skirtor, agn_q_skirtor, agn_oa_skirtor,
-    agn_cos_inc: float, optional
+    agn_cos_inc : float, optional
         SKIRTOR template parameters defining the attenuation pattern.
         Defaults match CIGALE ``skirtor2016`` defaults (t=7, pl=q=1,
         oa=40°, i=30°).
 
     Returns
     -------
-    L_lambda: ndarray, shape (n_wave,)
+    L_lambda : ndarray, shape (n_wave,)
         :math:`L_\lambda` [erg/s/Å], face-on physical disc luminosity
         (not 4π-averaged, the geometric / anisotropy correction lives
         in the polar-dust integration of the torus block).
@@ -421,18 +421,18 @@ def cigale_skirtor_disc_block(
 
     Parameters
     ----------
-    wavelength: array_like, shape (n_wave,)
+    wavelength : array_like, shape (n_wave,)
         Rest-frame wavelength [Å].
-    agn_log_lbol: float
+    agn_log_lbol : float
         :math:`\log_{10}(L_{\rm bol}/L_\odot)`. Sets the integrated disc
         luminosity.
-    agn_cigale_disk_delta: float, optional
+    agn_cigale_disk_delta : float, optional
         Slope modulator (paper ``delta``). The 100-5000 nm power-law
         index becomes :math:`-1.5 + \delta`. Default ``0.0``.
 
     Returns
     -------
-    L_lambda: ndarray, shape (n_wave,)
+    L_lambda : ndarray, shape (n_wave,)
         :math:`L_\lambda` [erg/s/Å].
 
     Notes
@@ -496,22 +496,22 @@ def kubota_done_disc_block(
 
     Parameters
     ----------
-    wavelength: array_like, shape (n_wave,)
+    wavelength : array_like, shape (n_wave,)
         Rest-frame wavelength [Å].
     agn_log_lbol, agn_log_mbh, agn_log_ledd, agn_a_spin, agn_cos_inc
         Standard disc parameters; see :func:`multicolor_disc_block`.
-    agn_f_hard: float, optional
+    agn_f_hard : float, optional
         Coronal luminosity fraction. Default ``0.02``.
-    agn_gamma_warm, agn_kt_warm: float, optional
+    agn_gamma_warm, agn_kt_warm : float, optional
         Warm Comptonization photon index and electron temperature [keV].
-    agn_gamma_hard, agn_kt_hot: float, optional
+    agn_gamma_hard, agn_kt_hot : float, optional
         Hot Comptonization photon index and electron temperature [keV].
-    agn_r_warm_ratio: float, optional
+    agn_r_warm_ratio : float, optional
         :math:`R_{\rm warm}/R_{\rm hot}`. Default ``2.0``.
 
     Returns
     -------
-    L_lambda: ndarray, shape (n_wave,)
+    L_lambda : ndarray, shape (n_wave,)
         :math:`L_\lambda` [erg/s/Å].
 
     References
@@ -563,21 +563,21 @@ def multicolor_disc_block(
 
     Parameters
     ----------
-    wavelength: array_like, shape (n_wave,)
+    wavelength : array_like, shape (n_wave,)
         Rest-frame wavelength [Å].
-    agn_log_lbol: float
+    agn_log_lbol : float
         :math:`\log_{10}(L_{\rm bol}/L_\odot)`.
-    agn_log_mbh: float, optional
+    agn_log_mbh : float, optional
         :math:`\log_{10}(M_{\rm BH}/M_\odot)`. Defaults to the declared
         ``agn_log_mbh`` default.
-    agn_log_ledd: float, optional
+    agn_log_ledd : float, optional
         :math:`\log_{10}(\lambda_{\rm Edd})`. Default ``-1.0``.
-    agn_a_spin: float, optional
+    agn_a_spin : float, optional
         BH spin parameter. Default ``0.0``.
-    agn_cos_inc: float, optional
+    agn_cos_inc : float, optional
         Cosine of viewing inclination. Defaults to the declared
         ``agn_cos_inc`` default, ``cos(30 deg)``.
-    euv_tail: {"powerlaw", "both", "wien"}, float, or None, optional
+    euv_tail : {"powerlaw", "both", "wien"}, float, or None, optional
         EUV / soft-X-ray behavior below the Lyman limit. ``"powerlaw"``
         (default) gives the disc a CIGALE-like power-law tail below ~100 Å;
         ``"wien"`` / ``None`` recovers the bare Shakura-Sunyaev Wien cutoff;
@@ -586,7 +586,7 @@ def multicolor_disc_block(
 
     Returns
     -------
-    L_lambda: ndarray, shape (n_wave,)
+    L_lambda : ndarray, shape (n_wave,)
         Disc :math:`L_\lambda` [erg/s/Å].
 
     References
@@ -643,27 +643,27 @@ def relagn_disc_block(
 
     Parameters
     ----------
-    wavelength: array_like, shape (n_wave,)
+    wavelength : array_like, shape (n_wave,)
         Rest-frame wavelength [Å].
-    agn_log_lbol: float
+    agn_log_lbol : float
         *Unused.* Kept for block protocol; RELAGN sets its luminosity from
         M_BH and Mdot.
-    agn_log_mbh: float, optional
+    agn_log_mbh : float, optional
         :math:`\log_{10}(M_{\rm BH}/M_\odot)`, range [6, 10]. Defaults to the
         declared ``agn_log_mbh`` default.
-    agn_log_mdot: float, optional
+    agn_log_mdot : float, optional
         :math:`\log_{10}(\dot M/\dot M_{\rm Edd})`, range [-1.5, 0.3].
         Default ``-1.0``.
-    agn_astar: float, optional
+    agn_astar : float, optional
         Dimensionless black hole spin a* (prograde only), range [0, 0.998].
         Default ``0.0``.
-    agn_cos_inc: float, optional
+    agn_cos_inc : float, optional
         Cosine of inclination (1 = face-on, 0 = edge-on). Default ``0.866``
         (≈30°, matching CIGALE convention).
 
     Returns
     -------
-    L_lambda: ndarray, shape (n_wave,)
+    L_lambda : ndarray, shape (n_wave,)
         Disc :math:`L_\lambda` [erg/s/Å].
 
     Notes
@@ -729,14 +729,14 @@ def richards2006_disc_block(
 
     Parameters
     ----------
-    wavelength: array_like, shape (n_wave,)
+    wavelength : array_like, shape (n_wave,)
         Rest-frame wavelength [Å].
-    agn_log_lbol: float
+    agn_log_lbol : float
         :math:`\log_{10}(L_{\rm bol}/L_\odot)`.
 
     Returns
     -------
-    L_lambda: ndarray, shape (n_wave,)
+    L_lambda : ndarray, shape (n_wave,)
         Disc :math:`L_\lambda` [erg/s/Å].
 
     Notes
@@ -789,18 +789,18 @@ def slone_netzer_disc_block(
 
     Parameters
     ----------
-    wavelength: array_like, shape (n_wave,)
+    wavelength : array_like, shape (n_wave,)
         Rest-frame wavelength [Å].
-    agn_log_lbol: float
+    agn_log_lbol : float
         :math:`\log_{10}(L_{\rm bol}/L_\odot)`.
-    agn_log_mbh: float, optional
+    agn_log_mbh : float, optional
         :math:`\log_{10}(M_{\rm BH}/M_\odot)`. Default ``8.6``.
-    agn_log_ledd: float, optional
+    agn_log_ledd : float, optional
         :math:`\log_{10}(\dot m / \dot m_{\rm Edd})`. Default ``-2.0``.
 
     Returns
     -------
-    L_lambda: ndarray, shape (n_wave,)
+    L_lambda : ndarray, shape (n_wave,)
         Disc :math:`L_\lambda` [erg/s/Å].
 
     References

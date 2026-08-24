@@ -72,15 +72,15 @@ def cache_key(waves_rest, z_grid, igm_model, *, igm_patchy=False, use_dla=False)
 
     Parameters
     ----------
-    waves_rest: array_like
+    waves_rest : array_like
         Sub-band node wavelengths [Angstrom], rest frame. Hashed by content
         *and* shape: two tables with the same values in a different layout
         index different nodes.
-    z_grid: array_like
+    z_grid : array_like
         Redshift grid the table is evaluated on.
-    igm_model: str
+    igm_model : str
         Transmission law name (``"inoue"``, ``"madau"``, ...).
-    igm_patchy, use_dla: bool, optional
+    igm_patchy, use_dla : bool, optional
         Included for the reason given in the module docstring: the current
         gate makes them unreachable, and the key should not depend on that
         staying true.
@@ -115,17 +115,17 @@ def band_factor_key(wave_rest, filter_waves, filter_trans, z_grid, igm_model, co
 
     Parameters
     ----------
-    wave_rest: array_like
+    wave_rest : array_like
         Rest-frame wavelength grid [Angstrom].
-    filter_waves, filter_trans: sequence of array_like
+    filter_waves, filter_trans : sequence of array_like
         Per-filter wavelength and transmission curves. Hashed in order: the
         table is indexed by filter position, so a reordering is a different
         table.
-    z_grid: array_like
+    z_grid : array_like
         Redshift nodes.
-    igm_model: str
+    igm_model : str
         Transmission law name.
-    convention: Any
+    convention : Any
         Filter convolution convention (ADR-0017); changes the integral.
 
     Returns

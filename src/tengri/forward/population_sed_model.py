@@ -126,26 +126,26 @@ class PopulationSEDModel:
 
     Parameters
     ----------
-    sed: SEDModel
+    sed : SEDModel
         Template SED chain. Its physics (SFH family, dust law,
         nebular backend, …) is shared across the population.
-    galaxies: sequence of mapping
+    galaxies : sequence of mapping
         Per-galaxy data. Each dict must contain ``flux_obs`` and
         ``noise``; optionally ``spec_obs``, ``spec_noise``, ``wave_spec``.
-    shared: sequence of str, optional
+    shared : sequence of str, optional
         Parameter names tied across the population. Default is the
         two canonical PSD hyperparameters.
-    priors: mapping of str -> (lo, hi), optional
+    priors : mapping of str -> (lo, hi), optional
         Uniform prior bounds for the shared parameters. Must contain
         an entry for every name in ``shared``. Defaults to
         PSD-typical ranges.
-    data_type: str, default ``"photometry"``
+    data_type : str, default ``"photometry"``
         Inference channel; passed to the underlying
         :class:`tengri.PopulationFitter`.
 
     Attributes
     ----------
-    name: str
+    name : str
         The :class:`tengri.protocols.SubModel` identifier,
         ``"population_sed_model"``. Read-only, the protocol calls it a
         *stable* identifier, and this constructor has never accepted it.
@@ -259,9 +259,9 @@ class PopulationSEDModel:
 
         Returns
         -------
-        flux_obs: ndarray, shape ``(N_galaxies, n_filters)``
+        flux_obs : ndarray, shape ``(N_galaxies, n_filters)``
             Per-galaxy observed flux.
-        noise: ndarray, shape ``(N_galaxies, n_filters)``
+        noise : ndarray, shape ``(N_galaxies, n_filters)``
             Per-galaxy 1-sigma uncertainty.
 
         Raises
@@ -344,9 +344,9 @@ class PopulationSEDModel:
 
         Parameters
         ----------
-        state: ForwardState
+        state : ForwardState
             Initial state. Wavelength grid + any upstream state.
-        params_one: Mapping
+        params_one : Mapping
             **Un-batched** parameters for a single galaxy. Every
             value is a scalar (no leading ``N_galaxies`` axis).
 
@@ -381,7 +381,7 @@ class PopulationSEDModel:
 
         Parameters
         ----------
-        params: Mapping[str, Any]
+        params : Mapping[str, Any]
             The parameters dict that ``run`` will be called with.
 
         Returns
@@ -418,10 +418,10 @@ class PopulationSEDModel:
 
         Parameters
         ----------
-        state: ForwardState
+        state : ForwardState
             Initial state. The wavelength grid is shared across the
             population (broadcast), the SED template owns the grid.
-        params: Mapping
+        params : Mapping
             Per-parameter values. Shared params are scalars; per-galaxy
             params are length-N arrays. ``parameter_axes(params)``
             returns the vmap-axis dict.

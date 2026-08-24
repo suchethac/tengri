@@ -94,7 +94,7 @@ def parse_bibtex(text: str) -> list[dict]:
 
     Parameters
     ----------
-    text: str
+    text : str
         Full contents of a .bib file.
 
     Returns

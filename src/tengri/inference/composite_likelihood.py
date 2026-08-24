@@ -48,7 +48,7 @@ class CompositeLikelihood:
 
     Parameters
     ----------
-    *likelihoods: :class:`tengri.protocols.Likelihood`
+    *likelihoods : :class:`tengri.protocols.Likelihood`
         Concrete Likelihood objects. Order doesn't matter, sums are
         commutative, but is preserved for diagnostic ``name``
         construction.
@@ -155,15 +155,15 @@ def _check_channel_scales(likelihoods, prediction, params, data_args):
 
     Parameters
     ----------
-    likelihoods: tuple of Likelihood
+    likelihoods : tuple of Likelihood
         The constituent likelihood objects to check (a composite's members,
         or a one-element tuple).
-    prediction: dict
+    prediction : dict
         The prediction dict the loss path builds (``phot_fnu`` / ``spec_fnu``
         / feature channels) at the reference parameters.
-    params: dict
+    params : dict
         The reference physical parameters the prediction was evaluated at.
-    data_args: dict
+    data_args : dict
         The fitter's concrete data arguments (same object the traced loss
         receives at call time).
 

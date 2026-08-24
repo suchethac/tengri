@@ -31,11 +31,11 @@ def precompute_dust_age_weights(
 
     Parameters
     ----------
-    age_grid: array_like, shape (n_ages,)
+    age_grid : array_like, shape (n_ages,)
         Stellar population ages. [yr]
-    t_birth: float
+    t_birth : float
         Birth cloud dispersal age. [yr] Default: 1e7 (10 Myr).
-    transition_width: float
+    transition_width : float
         Sigmoid width in dex. [dimensionless] Default: 0.3.
 
     Returns
@@ -72,16 +72,16 @@ def precompute_dust_age_mask(
 
     Parameters
     ----------
-    age_grid: array_like, shape (n_ages,)
+    age_grid : array_like, shape (n_ages,)
         Stellar population ages. [yr]
-    t_birth: float
+    t_birth : float
         Birth cloud dispersal age. [yr] Default: 1e7 (10 Myr).
 
     Returns
     -------
-    young_mask: ndarray, shape (n_ages,)
+    young_mask : ndarray, shape (n_ages,)
         1.0 for young ages (< t_birth), 0.0 for old. [dimensionless]
-    old_mask: ndarray, shape (n_ages,)
+    old_mask : ndarray, shape (n_ages,)
         1.0 for old ages (≥ t_birth), 0.0 for young. [dimensionless]
 
     Notes
@@ -137,13 +137,13 @@ def resolve_bc_diff_law_params(
 
     Parameters
     ----------
-    params: Mapping
+    params : Mapping
         Flat ``dust_*`` parameter mapping (JAX scalars or floats).
-    bc_overrides, diff_overrides: Mapping, optional
+    bc_overrides, diff_overrides : Mapping, optional
         Per-component law-kwarg overrides (e.g. ``{"n_slope": -1.0}`` for the
         FSPS birth-cloud convention). Always honored: an override *is* a
         request, whatever the provenance of the shared parameter.
-    live_shape_params: frozenset of str, optional
+    live_shape_params : frozenset of str, optional
         Flat names a caller actually asked for, resolved from spec provenance
         by :meth:`SEDModel._requested_law_shape_params` (#1808). Names outside
         this set are left out of the returned dicts. ``None`` keeps the
@@ -152,7 +152,7 @@ def resolve_bc_diff_law_params(
 
     Returns
     -------
-    bc_params, diff_params: dict
+    bc_params, diff_params : dict
         Keyword dicts ready to splat into an attenuation-law function (keys are
         law-function kwargs, e.g. ``n_slope``).
 
@@ -201,11 +201,11 @@ def apply_lyman_cutoff(
 
     Parameters
     ----------
-    k: ndarray, shape (n_wave,)
+    k : ndarray, shape (n_wave,)
         Attenuation curve :math:`k(\lambda) = A_\lambda / A_V`. [dimensionless]
-    wavelength: array_like, shape (n_wave,)
+    wavelength : array_like, shape (n_wave,)
         Rest-frame wavelength grid. [Å]
-    cutoff_aa: float, optional
+    cutoff_aa : float, optional
         Cutoff wavelength. [Å] Default ``0.0`` -> no-op (``wavelength >= 0`` is
         always true), so passing ``0.0`` disables the clip without a Python
         branch.
@@ -247,37 +247,37 @@ def two_component_dust(
 
     Parameters
     ----------
-    wavelength: array_like, shape (n_wave,)
+    wavelength : array_like, shape (n_wave,)
         Wavelength grid. [Å]
-    age_grid: array_like, shape (n_ages,)
+    age_grid : array_like, shape (n_ages,)
         Stellar population ages. [yr]
-    tau_v1: float
+    tau_v1 : float
         Birth-cloud V-band optical depth (at 5500 Å). [dimensionless]
         Note: tengri applies ``tau_bc`` internally but exposes ``tau_v1`` after normalizing
         by attenuation curve slope. See docs/known_bugs.md (CROSSVAL-01) for cross-code comparison.
-    tau_v2: float
+    tau_v2 : float
         Diffuse ISM V-band optical depth. [dimensionless]
-    law_bc: str, optional
+    law_bc : str, optional
         Attenuation curve name for birth cloud. Default: "power_law". Resolved from ``DUST_LAWS`` registry.
-    law_diff: str, optional
+    law_diff : str, optional
         Attenuation curve name for diffuse ISM. Default: "power_law".
-    f_obscuration: float, optional
+    f_obscuration : float, optional
         Fraction of unattenuated sightlines in clumpy geometry (Lower 2022). [dimensionless, in [0, 1]]
         Default: 0.0 (uniform screen).
-    t_birth: float, optional
+    t_birth : float, optional
         Birth-cloud dispersal age (sigmoid center). [yr] Default: 1e7 (10 Myr).
-    transition_width: float, optional
+    transition_width : float, optional
         Sigmoid transition width in dex. [dimensionless] Default: 0.3 (~5-20 Myr range).
-    bc_params: dict, optional
+    bc_params : dict, optional
         Per-component overrides for the **birth-cloud** law (e.g.
         ``{"n_slope": -1.0}``). Merged on top of ``**law_params``, so any key
         absent here falls back to the shared value. Enables FSPS-style
         independent indices (birth cloud ``dust1_index`` ≠ diffuse
         ``dust_index``). Default ``None`` → shared parameters.
-    diff_params: dict, optional
+    diff_params : dict, optional
         Per-component overrides for the **diffuse ISM** law. Same merge
         semantics as ``bc_params``. Default ``None`` → shared parameters.
-    lyman_cutoff_aa: float, optional
+    lyman_cutoff_aa : float, optional
         Zero both attenuation curves below this wavelength. [Å] Default ``0.0``
         -> disabled (the polynomial extrapolates through the FUV). Set to
         ``912.0`` to match CIGALE's Lyman-limit clip (see
@@ -388,20 +388,20 @@ def two_component_dust_separable(
 
     Parameters
     ----------
-    wavelength: array_like, shape (n_wave,)
+    wavelength : array_like, shape (n_wave,)
         Wavelength grid. [Å]
-    dust_age_weights: array_like, shape (n_ages,)
+    dust_age_weights : array_like, shape (n_ages,)
         Pre-computed sigmoid birth-cloud weights from ``precompute_dust_age_weights``.
         Computed once at Model init and cached.
-    tau_v1: float
+    tau_v1 : float
         Birth-cloud V-band optical depth. [dimensionless]
-    tau_v2: float
+    tau_v2 : float
         Diffuse ISM V-band optical depth. [dimensionless]
-    law_bc_fn: Callable
+    law_bc_fn : Callable
         Pre-resolved birth-cloud attenuation function (e.g., ``resolve_dust_law("calzetti")``).
-    law_diff_fn: Callable
+    law_diff_fn : Callable
         Pre-resolved diffuse ISM attenuation function.
-    f_obscuration: float, optional
+    f_obscuration : float, optional
         Unattenuated sightline fraction. [dimensionless, in [0, 1]] Default: 0.0.
     **law_params
         Keyword arguments passed to both law functions.
@@ -488,22 +488,22 @@ def two_component_dust_fast(
 
     Parameters
     ----------
-    wavelengths: array_like, shape (n_wave,)
+    wavelengths : array_like, shape (n_wave,)
         Evaluation wavelengths (rest-frame). [Å] Can be the full
         SSP grid or just the filter effective wavelengths.
-    dust_age_weights: array_like, shape (n_ages,)
+    dust_age_weights : array_like, shape (n_ages,)
         Pre-computed sigmoid weights from ``precompute_dust_age_weights``.
         Computed once at Model init.
-    tau_v1: float
+    tau_v1 : float
         Birth-cloud V-band optical depth. [dimensionless]
-    tau_v2: float
+    tau_v2 : float
         Diffuse ISM V-band optical depth. [dimensionless]
-    law_bc: str
+    law_bc : str
         Attenuation curve name for birth cloud. [dimensionless] Default: "power_law".
         Looked up in ``DUST_LAWS`` registry.
-    law_diff: str
+    law_diff : str
         Attenuation curve name for diffuse ISM. Default: "power_law".
-    f_obscuration: float
+    f_obscuration : float
         Fraction of unattenuated sightlines. [dimensionless, in [0, 1]] Default: 0.0 (Lower 2022).
     **law_params
         Passed to curve functions: ``n_slope``, ``dust_bump_strength``,
@@ -547,13 +547,13 @@ def single_component_dust(
 
     Parameters
     ----------
-    wavelength: array_like, shape (n_wave,)
+    wavelength : array_like, shape (n_wave,)
         Wavelength grid. [Å]
-    tau_v: float
+    tau_v : float
         V-band optical depth at 5500 Å. [dimensionless]
-    law: str, optional
+    law : str, optional
         Attenuation curve name, resolved from ``DUST_LAWS`` registry. Default: "power_law".
-    f_obscuration: float, optional
+    f_obscuration : float, optional
         Unattenuated sightline fraction in clumpy geometry (Lower 2022). [dimensionless, in [0, 1]]
         Default: 0.0 (uniform foreground screen).
     **law_params
@@ -616,15 +616,15 @@ def single_component_dust_fast(
 
     Parameters
     ----------
-    wavelengths: array_like, shape (n_wave,)
+    wavelengths : array_like, shape (n_wave,)
         Evaluation wavelengths (rest-frame). [Å]
-    n_ages: int
+    n_ages : int
         Number of SSP age bins (for output shape). [dimensionless]
-    tau_v: float
+    tau_v : float
         V-band optical depth. [dimensionless]
-    law: str
+    law : str
         Attenuation curve name (from ``DUST_LAWS`` registry). Default: "power_law".
-    f_obscuration: float
+    f_obscuration : float
         Fraction of unattenuated sightlines. [dimensionless, in [0, 1]] Default: 0.0 (Lower 2022).
     **law_params
         Passed to curve function.

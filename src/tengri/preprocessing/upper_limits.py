@@ -23,18 +23,18 @@ def detect_upper_limits(
 
     Parameters
     ----------
-    flux: ndarray
+    flux : ndarray
         Flux array in any shape.
-    flux_err: ndarray
+    flux_err : ndarray
         Flux uncertainty array, same shape as `flux`.
-    sn_threshold: float, optional
+    sn_threshold : float, optional
         Signal-to-noise ratio threshold for classification.
         Default 1.0 (conservative: typical observational S/N
         limits are ~2-3 sigma).
 
     Returns
     -------
-    is_upper_limit: ndarray, dtype bool, same shape as flux
+    is_upper_limit : ndarray, dtype bool, same shape as flux
         True where |flux| / flux_err < sn_threshold.
 
     Notes
@@ -78,15 +78,15 @@ def sigma_upper_limit_from_flux(
 
     Parameters
     ----------
-    flux_err: ndarray
+    flux_err : ndarray
         1-sigma flux uncertainty in any shape.
-    n_sigma: float, optional
+    n_sigma : float, optional
         Number of sigma for the upper limit. Default 3.0
         (typical astrophysical convention for a detection threshold).
 
     Returns
     -------
-    upper_limit_flux: ndarray, same shape as flux_err
+    upper_limit_flux : ndarray, same shape as flux_err
         Upper limit flux = n_sigma * flux_err.
 
     Notes

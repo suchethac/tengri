@@ -85,7 +85,7 @@ def setup_style(style="tengri"):
 
     Parameters
     ----------
-    style: str
+    style : str
         Which composite style to apply. One of:
 
         - ``"tengri"`` (default); ``scienceplots.science`` + ``no-latex`` +

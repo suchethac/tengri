@@ -10,7 +10,7 @@ The module exposes:
 
 - ``AXIS_PARAMS[model_name]``: ordered parameter names corresponding to grid
   axes, per dust-emission model.
-- ``precompute(filter_waves, filter_trans, redshift, parameters, *, model_name)``:
+- ``precompute(filter_waves, filter_trans, redshift, parameters, *, model_name)``
   builds the preintegrated grid, auto-collapsing axes whose parameter is
   :class:`~tengri.parameters.priors.Fixed`.
 - ``build_lookup(preint, *, model_name)``: JIT-compiled ``(scale, *free) →
@@ -95,14 +95,14 @@ def precompute_dl07_photometry(
 
     Parameters
     ----------
-    templates: dict
+    templates : dict
         DL07 template arrays with keys: ``single_u``, ``powerlaw``,
         ``wavelength``, ``umin_grid``, ``qpah_grid`` [erg/s/Hz or L_sun/Hz].
-    filter_waves: list of array_like, shape (n_filt,)
+    filter_waves : list of array_like, shape (n_filt,)
         Filter wavelength arrays [Å].
-    filter_trans: list of array_like, shape (n_filt,)
+    filter_trans : list of array_like, shape (n_filt,)
         Filter transmission curves [dimensionless].
-    redshift: float
+    redshift : float
         Source redshift [dimensionless]. Default: 0.0.
 
     Returns
@@ -172,9 +172,9 @@ def build_dl07_photometry_lookup(precomp: dict, grid_arrays: tuple | None = None
 
     Parameters
     ----------
-    precomp: dict
+    precomp : dict
         Output of ``precompute_dl07_photometry()``.
-    grid_arrays: tuple or None
+    grid_arrays : tuple or None
         Optional tuple of (single_u_phot, powerlaw_phot, umin_grid, qpah_grid)
         passed as JIT-traced inputs. When None, grids are closure-captured
         (backwards compatible).
@@ -211,16 +211,16 @@ def build_dl07_photometry_lookup(precomp: dict, grid_arrays: tuple | None = None
 
         Parameters
         ----------
-        L_absorbed: float
+        L_absorbed : float
             Absorbed luminosity (scaling factor) [Lsun].
-        dust_umin: float
+        dust_umin : float
             Minimum radiation field intensity [dimensionless].
-        dust_gamma_dl: float
+        dust_gamma_dl : float
             Mixing fraction for power-law component (gamma parameter)
             [dimensionless, in [0, 1]].
-        dust_qpah: float
+        dust_qpah : float
             PAH mass fraction [dimensionless].
-        grid_arrays_traced: tuple or None
+        grid_arrays_traced : tuple or None
             Optional JIT-traced (single_u_phot, powerlaw_phot, umin_grid,
             qpah_grid). When provided, these arrays are used instead of
             closure-captured versions.
@@ -315,15 +315,15 @@ def _precompute_dl07_like_photometry(
 
     Parameters
     ----------
-    templates: dict
+    templates : dict
         Loader output with ``single_u``, ``powerlaw``, ``umin_grid``,
         the q-axis grid (``qpah_grid`` or ``qhac_grid``), and the
         wavelength array (``wavelength`` or ``wavelength_aa``).
-    q_key: str
+    q_key : str
         Key for the second grid axis (``"qpah_grid"`` or ``"qhac_grid"``).
-    wave_key: str
+    wave_key : str
         Key for the wavelength array (``"wavelength"`` or ``"wavelength_aa"``).
-    powerlaw_weight: ndarray or None
+    powerlaw_weight : ndarray or None
         Per-``U_min`` PDR luminosity weight ``W(U_min)`` (shape ``(n_umin,)``)
         baked into the power-law template. ``None`` ⇒ ``W = 1`` (THEMIS).
     """
@@ -391,9 +391,9 @@ def _build_dl07_like_lookup(precomp: dict, grid_arrays: tuple | None = None):
 
     Parameters
     ----------
-    precomp: dict
+    precomp : dict
         Precomputed photometry data from precompute function.
-    grid_arrays: tuple or None
+    grid_arrays : tuple or None
         Optional tuple of (single_u_phot, powerlaw_phot, q_grid, umin_grid)
         to be passed as JIT-traced inputs. When None, grids are closure-captured.
     """
@@ -498,11 +498,11 @@ def precompute_draine2021_pah_photometry(
 
     Parameters
     ----------
-    templates: Draine2021PAHTemplates
+    templates : Draine2021PAHTemplates
         Loader output from :func:`load_draine2021_pahspec_templates`.
-    filter_waves, filter_trans: list of array_like
+    filter_waves, filter_trans : list of array_like
         Filter curves (observed-frame Å, dimensionless).
-    redshift: float
+    redshift : float
         Source redshift; defaults to rest-frame photometry.
     starlight, ionization, size_distribution, slab :
         Categorical PAHspec axes to slice.  See
@@ -593,7 +593,7 @@ def build_draine2021_pah_photometry_lookup(precomp: dict):
 
     Parameters
     ----------
-    precomp: dict
+    precomp : dict
         Output of :func:`precompute_draine2021_pah_photometry`.
 
     Returns
@@ -723,9 +723,9 @@ def build_dl14_photometry_lookup(precomp: dict, grid_arrays: tuple | None = None
 
     Parameters
     ----------
-    precomp: dict
+    precomp : dict
         Precomputed photometry data.
-    grid_arrays: tuple or None
+    grid_arrays : tuple or None
         Optional tuple of (single_u_phot, powerlaw_phot, qpah_grid, umin_grid,
         alpha_grid) passed as JIT-traced inputs. When None, grids are
         closure-captured.
@@ -862,9 +862,9 @@ def build_bosa_photometry_lookup(precomp: dict, grid_arrays: tuple | None = None
 
     Parameters
     ----------
-    precomp: dict
+    precomp : dict
         Precomputed photometry data.
-    grid_arrays: tuple or None
+    grid_arrays : tuple or None
         Optional tuple of (phot, log_ltir_grid, log_ssfr_grid) passed as
         JIT-traced inputs. When None, grids are closure-captured.
     """
@@ -935,9 +935,9 @@ def build_dale2014_photometry_lookup(precomp: dict, grid_arrays: tuple | None = 
 
     Parameters
     ----------
-    precomp: dict
+    precomp : dict
         Precomputed photometry data.
-    grid_arrays: tuple or None
+    grid_arrays : tuple or None
         Optional tuple of (phot, alpha_grid) passed as JIT-traced inputs.
         When None, grids are closure-captured.
     """
@@ -976,11 +976,11 @@ def _auto_collapse(preint: PreintegratedGrid, axis_params, parameters) -> Preint
 
     Parameters
     ----------
-    preint: PreintegratedGrid
+    preint : PreintegratedGrid
         Preintegrated photometry grid.
-    axis_params: tuple[str, ...]
+    axis_params : tuple[str, ...]
         Ordered parameter names corresponding to grid axes [dimensionless].
-    parameters: Parameters or None
+    parameters : Parameters or None
         Parameter specification for prior queries.
 
     Returns
@@ -1032,28 +1032,28 @@ def precompute(
 
     Parameters
     ----------
-    filter_waves: list of array_like, shape (n_filt,)
+    filter_waves : list of array_like, shape (n_filt,)
         Filter wavelength curves (observed frame) [Å].
-    filter_trans: list of array_like, shape (n_filt,)
+    filter_trans : list of array_like, shape (n_filt,)
         Filter transmission curves (observed frame) [dimensionless].
-    redshift: float
+    redshift : float
         Source redshift [dimensionless]; filter integrals bake this in.
-    parameters: Parameters or None
+    parameters : Parameters or None
         Parameter specification. Used only to detect which AXIS_PARAMS are Fixed.
-    model_name: str
+    model_name : str
         One of the keys in :data:`AXIS_PARAMS`.
-    templates: dict, optional
+    templates : dict, optional
         Required for DL07 (``{"single_u"``, ``"powerlaw"``, ``"wavelength"``,
         ``"umin_grid"``, ``"qpah_grid"}``) [erg/s/Hz].
-    grid: ndarray, optional
+    grid : ndarray, optional
         Template grid array, shape ``(*grid_dims, n_wave)`` [erg/s/Hz or L_sun/Hz].
         Required for generic path (Dale2014/DL14/Astrodust/BOSA/THEMIS).
-    axes: tuple[ndarray, ...], optional
+    axes : tuple[ndarray, ...], optional
         Grid axis coordinate arrays [various dimensionless units].
         Required for generic path.
-    wavelength: ndarray, optional
+    wavelength : ndarray, optional
         Template wavelength array [Å]. Required for generic path.
-    units: {"lnu", "llam"}
+    units : {"lnu", "llam"}
         Template flux units [dimensionless]; ``"llam"`` triggers L_λ → L_ν conversion.
 
     Returns
@@ -1100,9 +1100,9 @@ def build_lookup(preint, *, model_name: str):
 
     Parameters
     ----------
-    preint: dict or PreintegratedGrid
+    preint : dict or PreintegratedGrid
         Precomputed photometry grid from ``precompute()``.
-    model_name: str
+    model_name : str
         Dust model identifier (same as used in ``precompute()``).
 
     Returns
@@ -1152,18 +1152,18 @@ def precompute_for_model(
 
     Parameters
     ----------
-    model_name: str
+    model_name : str
         Dust emission model identifier: ``"draine_li2007"``, ``"dale2014"``,
         ``"draine_li2014"``, ``"astrodust"``, ``"bosa"``, ``"themis"``.
         Other names (``"dl07"`` alias, ``"modified_blackbody"``,
         ``"casey2012"``) return ``None``.
-    filter_waves: list of array_like, shape (n_filt,)
+    filter_waves : list of array_like, shape (n_filt,)
         Filter wavelength curves (observed frame) [Å].
-    filter_trans: list of array_like, shape (n_filt,)
+    filter_trans : list of array_like, shape (n_filt,)
         Filter transmission curves (observed frame) [dimensionless].
-    redshift: float
+    redshift : float
         Source redshift [dimensionless] (fixed at init time).
-    parameters: Parameters or None
+    parameters : Parameters or None
         Parameter specification. Used for auto-collapse on Fixed parameters (Protocol surface).
 
     Returns

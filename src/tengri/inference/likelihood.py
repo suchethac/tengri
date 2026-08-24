@@ -61,7 +61,7 @@ def build_base_likelihood(context: InferenceContext):
 
     Parameters
     ----------
-    context: InferenceContext
+    context : InferenceContext
         Seam exposing data, noise, parameter spec, and likelihood-shape
         configuration. See :class:`InferenceContext` for the contract.
 
@@ -443,7 +443,7 @@ def build_likelihood_extras(context: InferenceContext):
 
     Parameters
     ----------
-    context: InferenceContext
+    context : InferenceContext
         Seam exposing ``data_args`` (the loss-function closure dict).
 
     Returns

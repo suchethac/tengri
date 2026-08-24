@@ -132,12 +132,12 @@ def load_catalog(
 
     Parameters
     ----------
-    path: str or Path
+    path : str or Path
         Catalog file. Format is detected from the suffix:
         ``.csv`` / ``.tsv`` / ``.txt`` (pandas), ``.vot`` / ``.xml``
         (astropy VOTable), ``.fits`` / ``.fit`` / ``.fts`` (astropy
         Table).
-    redshift_col: str, optional
+    redshift_col : str, optional
         Name of the redshift column. If ``None`` (default), tries the
         common names: ``redshift``, ``z``, ``z_phot``, ``z_spec``,
         ``z_best``, ``zphot``, ``zspec``, ``z_peak``.
@@ -147,15 +147,15 @@ def load_catalog(
     dict
         Always contains:
 
-        - ``"path"``: ``Path`` of the source file.
-        - ``"n_rows"``: int.
-        - ``"bands"``: dict mapping each detected band (e.g.
+        - ``"path"`` : ``Path`` of the source file.
+        - ``"n_rows"`` : int.
+        - ``"bands"`` : dict mapping each detected band (e.g.
           ``"sdss_g"``) to ``{"flux": ndarray, "err": ndarray}``,
           one ndarray per row.
 
         When a redshift column is detected:
 
-        - ``"redshift"``: ndarray of shape ``(n_rows,)``.
+        - ``"redshift"`` : ndarray of shape ``(n_rows,)``.
         - ``"redshift_col"``: str: name of the column used.
 
     Raises

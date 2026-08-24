@@ -23,7 +23,7 @@ def _log10_nonneg(value: jnp.ndarray) -> jnp.ndarray:
 
     Parameters
     ----------
-    value: array_like
+    value : array_like
         A non-negative luminosity [erg/s]; ``0`` denotes an exactly absent term.
 
     Returns
@@ -142,18 +142,18 @@ class EnergyBalanceSplitIRSEDComponent(EmissionComponent):
 
         Parameters
         ----------
-        p: dict
+        p : dict
             Parameters with the ``dust_`` prefix stripped. Reads the globally
             declared ``T_warm``, ``T_cold``, ``f_cold``, ``beta_warm``,
             ``beta_cold``, ``L_agn_ir`` (falling back to their defaults).
-        sed_in: ndarray, shape (n_wave,)
+        sed_in : ndarray, shape (n_wave,)
             Input SED in erg/s/Hz (typically zeros for an emission component).
-        wave: ndarray, shape (n_wave,)
+        wave : ndarray, shape (n_wave,)
             Rest-frame wavelength grid in Angstrom.
-        L_ir: float
+        L_ir : float
             Absorbed (eta-scaled) luminosity [erg/s]. Ignored: ~2.4e43 and so
             ``inf`` in float32; the log form ``log_L_ir`` is used instead.
-        log_L_ir: float
+        log_L_ir : float
             ``log10(L_ir / (erg/s))`` [dex], the float32-safe budget published
             by the attenuator. ``-inf`` (its absent sentinel) means nothing was
             absorbed and the emission is exactly zero.

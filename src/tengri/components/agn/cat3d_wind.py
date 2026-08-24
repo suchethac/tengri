@@ -99,7 +99,7 @@ def load_cat3d_wind_grid(grid_path: str) -> TorusTemplateGrid:
 
     Parameters
     ----------
-    grid_path: str
+    grid_path : str
         Path to ``cat3d_wind_torus_grid.h5``.
 
     Returns
@@ -157,18 +157,18 @@ def cat3d_wind_sed_from_grid(
 
     Parameters
     ----------
-    wavelength: array_like, shape (n_wave,)
+    wavelength : array_like, shape (n_wave,)
         Rest-frame wavelength grid. [Å]
-    agn_log_lbol: float, optional
+    agn_log_lbol : float, optional
         ``log10(L_bol / L_sun)``. Default 10.0.
-    agn_cos_inc: float, optional
+    agn_cos_inc : float, optional
         Cosine of inclination (1 = face-on). Default 0.5.
-    agn_a_cat3d: float, optional
+    agn_a_cat3d : float, optional
         Radial power-law index of the clumpy-cloud distribution
         (Hönig & Kishimoto 2017 ``a``). Default −2.0.
-    agn_fwd_cat3d: float, optional
+    agn_fwd_cat3d : float, optional
         Polar-wind mass fraction. Default 1.0.
-    agn_torus_frac: float, optional
+    agn_torus_frac : float, optional
         Fraction of L_bol reprocessed by the torus. Default 0.5.
 
     Returns
@@ -217,7 +217,7 @@ def create_cat3d_wind_from_grid(grid_path: str) -> Callable:
 
     Parameters
     ----------
-    grid_path: str
+    grid_path : str
         Path to ``cat3d_wind_torus_grid.h5``.
 
     Returns
@@ -278,17 +278,17 @@ def cat3d_wind_sed(*args, _template: TorusTemplateGrid | None = None, **kwargs) 
 
     Parameters
     ----------
-    wavelength: array_like, shape (n_wave,)
+    wavelength : array_like, shape (n_wave,)
         Rest-frame wavelength. [Å]
-    agn_log_lbol: float, optional
+    agn_log_lbol : float, optional
         ``log10(L_bol / L_sun)``. Default 10.0.
-    agn_cos_inc: float, optional
+    agn_cos_inc : float, optional
         Cosine of inclination. Default 0.5.
-    agn_a_cat3d: float, optional
+    agn_a_cat3d : float, optional
         Radial power-law index. Default −2.0.
-    agn_fwd_cat3d: float, optional
+    agn_fwd_cat3d : float, optional
         Wind fraction. Default 1.0.
-    agn_torus_frac: float, optional
+    agn_torus_frac : float, optional
         Torus reprocessing fraction. Default 0.5.
     **kwargs
         Accepted and ignored for unified-dispatch compatibility.

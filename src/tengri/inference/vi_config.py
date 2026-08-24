@@ -42,38 +42,38 @@ class VIConfig:
 
     Parameters
     ----------
-    n_samples: int or callable
+    n_samples : int or callable
         Samples per KL iteration. ``mirror_samples=True`` (default in NIFTy)
         doubles this internally, so 3 → 6 effective samples.
-    n_iterations: int
+    n_iterations : int
         Number of KL minimization iterations.
-    use_vmap: bool
+    use_vmap : bool
         Use ``jax.vmap`` for ``residual_map`` (faster, slightly more memory).
-    evi_linear_fraction: float
+    evi_linear_fraction : float
         Fraction of iterations using ``linear_resample`` before switching to
         ``nonlinear_resample`` in EVI mode.
-    draw_linear_kwargs: dict
+    draw_linear_kwargs : dict
         Kwargs for the CG solver that generates each sample.
-    nonlinearly_update_kwargs: dict
+    nonlinearly_update_kwargs : dict
         Kwargs for the Newton-CG that inverts the coordinate transform.
-    kl_kwargs: dict
+    kl_kwargs : dict
         Kwargs for the outer KL minimization.
 
     Attributes
     ----------
-    n_samples: int or callable
+    n_samples : int or callable
         Samples per KL iteration (doubled by NIFTy's ``mirror_samples``).
-    n_iterations: int
+    n_iterations : int
         Number of KL minimization iterations.
-    use_vmap: bool
+    use_vmap : bool
         Whether to use ``jax.vmap`` for residual mapping.
-    evi_linear_fraction: float
+    evi_linear_fraction : float
         Fraction of iterations to use linear (MGVI) before nonlinear (geoVI).
-    draw_linear_kwargs: dict
+    draw_linear_kwargs : dict
         Conjugate gradient solver configuration for sampling.
-    nonlinearly_update_kwargs: dict
+    nonlinearly_update_kwargs : dict
         Newton-CG configuration for coordinate transform inversion.
-    kl_kwargs: dict
+    kl_kwargs : dict
         Outer KL minimization configuration.
 
     Notes
@@ -137,9 +137,9 @@ def evi_sample_mode(n_iterations: int, linear_fraction: float = 0.5):
 
     Parameters
     ----------
-    n_iterations: int
+    n_iterations : int
         Total number of KL iterations.
-    linear_fraction: float
+    linear_fraction : float
         Fraction of iterations to run as MGVI (linear_resample).
         Default: 0.5.
 

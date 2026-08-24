@@ -59,16 +59,16 @@ class LinePerQHTable:
 
     Attributes
     ----------
-    met_grid: ndarray, shape (n_met,)
+    met_grid : ndarray, shape (n_met,)
         ``met_logzsol`` grid points [dex], ascending.
-    line_per_qh: ndarray, shape (n_met, n_lines)
+    line_per_qh : ndarray, shape (n_met, n_lines)
         Line **luminosity** per unit ``nion`` at each grid metallicity:
         ``L_line(ref) / nion(ref)`` [erg/s per (photons/s)]. **Distance-
         independent** (luminosity, not observed flux) so the table is valid at
         any redshift; :func:`reconstruct_line_lums` applies the cosmology at the
         evaluation redshift. (Storing observed flux here would bake the
         reference distance and be silently wrong at any other z.)
-    wavelengths: ndarray, shape (n_lines,)
+    wavelengths : ndarray, shape (n_lines,)
         Rest-frame vacuum line wavelengths [Angstrom], matching the target
         lines the table was built for.
     """
@@ -117,16 +117,16 @@ def precompute_line_per_qh(
 
     Parameters
     ----------
-    model: SEDModel
+    model : SEDModel
         A model with a Cue (or other Q_H-linear) nebular backend and FIXED
         ``neb_logU`` / ``neb_logZ_gas`` / ``neb_fesc``.
-    wavelengths: array_like, shape (n_lines,)
+    wavelengths : array_like, shape (n_lines,)
         Rest-frame vacuum target line wavelengths [Angstrom].
-    met_lo, met_hi: float
+    met_lo, met_hi : float
         Grid bounds in ``met_logzsol`` [dex]: cover the fit's metallicity prior.
-    n_met: int, default 40
+    n_met : int, default 40
         Grid points. 40 gives < 4e-4 on strong DESI lines; raise for tighter.
-    ref_params: dict, optional
+    ref_params : dict, optional
         Reference parameter dict (the metallicity is overwritten per grid
         point). Defaults to a mid-range single sample.
 
@@ -215,14 +215,14 @@ def reconstruct_line_lums(
 
     Parameters
     ----------
-    nion: float
+    nion : float
         Ionizing photon rate for this evaluation (stellar-published; == q_h).
-    met_logzsol: float
+    met_logzsol : float
         Stellar metallicity for this evaluation [dex].
-    redshift: float
+    redshift : float
         Evaluation redshift: the cosmology is applied here, NOT baked into the
         table (that was the redshift-lock bug).
-    table: LinePerQHTable
+    table : LinePerQHTable
         The dense-met table from :func:`precompute_line_per_qh`.
 
     Returns

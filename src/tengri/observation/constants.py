@@ -19,8 +19,8 @@ from the user-facing containers and physics primitives.
 
 See Also
 --------
-tengri.observation.containers: user-facing data classes
-tengri.observation.physics: transformation functions
+tengri.observation.containers : user-facing data classes
+tengri.observation.physics : transformation functions
 """
 
 from __future__ import annotations

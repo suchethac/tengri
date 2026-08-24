@@ -299,7 +299,7 @@ def agn_active_param_set(structural_kwargs: dict) -> frozenset[str]:
 
     Parameters
     ----------
-    structural_kwargs: dict
+    structural_kwargs : dict
         Resolved structural kwargs (post ``_translate_structural``), carrying
         ``agn_model`` and, for the composable model, the per-block selectors
         ``agn_{disc,torus,lines,feii,attenuation}_block``.

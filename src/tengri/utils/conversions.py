@@ -78,9 +78,9 @@ def lnu_to_llambda(
 
     Parameters
     ----------
-    lnu: jnp.ndarray
+    lnu : jnp.ndarray
         Spectral luminosity density L_ν [erg/s/Hz].
-    wavelength_aa: jnp.ndarray
+    wavelength_aa : jnp.ndarray
         Wavelength [Ångström]. Shape must be broadcastable with lnu.
 
     Returns
@@ -110,9 +110,9 @@ def llambda_to_lnu(
 
     Parameters
     ----------
-    llambda: jnp.ndarray
+    llambda : jnp.ndarray
         Spectral luminosity density L_λ [erg/s/Å].
-    wavelength_aa: jnp.ndarray
+    wavelength_aa : jnp.ndarray
         Wavelength [Ångström]. Shape must be broadcastable with llambda.
 
     Returns
@@ -139,9 +139,9 @@ def fnu_to_flambda(
 
     Parameters
     ----------
-    fnu: jnp.ndarray
+    fnu : jnp.ndarray
         Spectral flux density f_ν [erg/s/cm²/Hz].
-    wavelength_aa: jnp.ndarray
+    wavelength_aa : jnp.ndarray
         Wavelength [Ångström]. Shape must be broadcastable with fnu.
 
     Returns
@@ -168,9 +168,9 @@ def flambda_to_fnu(
 
     Parameters
     ----------
-    flambda: jnp.ndarray
+    flambda : jnp.ndarray
         Spectral flux density f_λ [erg/s/cm²/Å].
-    wavelength_aa: jnp.ndarray
+    wavelength_aa : jnp.ndarray
         Wavelength [Ångström]. Shape must be broadcastable with flambda.
 
     Returns
@@ -195,7 +195,7 @@ def fnu_to_jy(fnu_cgs: jnp.ndarray) -> jnp.ndarray:
 
     Parameters
     ----------
-    fnu_cgs: jnp.ndarray
+    fnu_cgs : jnp.ndarray
         Spectral flux density [erg/s/cm²/Hz].
 
     Returns
@@ -216,7 +216,7 @@ def jy_to_fnu(fnu_jy: jnp.ndarray) -> jnp.ndarray:
 
     Parameters
     ----------
-    fnu_jy: jnp.ndarray
+    fnu_jy : jnp.ndarray
         Spectral flux density [Jy].
 
     Returns
@@ -237,7 +237,7 @@ def fnu_to_ujy(fnu_cgs: jnp.ndarray) -> jnp.ndarray:
 
     Parameters
     ----------
-    fnu_cgs: jnp.ndarray
+    fnu_cgs : jnp.ndarray
         Spectral flux density [erg/s/cm²/Hz].
 
     Returns
@@ -258,7 +258,7 @@ def ujy_to_fnu(fnu_ujy: jnp.ndarray) -> jnp.ndarray:
 
     Parameters
     ----------
-    fnu_ujy: jnp.ndarray
+    fnu_ujy : jnp.ndarray
         Spectral flux density [μJy].
 
     Returns
@@ -279,7 +279,7 @@ def fnu_to_njy(fnu_cgs: jnp.ndarray) -> jnp.ndarray:
 
     Parameters
     ----------
-    fnu_cgs: jnp.ndarray
+    fnu_cgs : jnp.ndarray
         Spectral flux density [erg/s/cm²/Hz].
 
     Returns
@@ -300,7 +300,7 @@ def njy_to_fnu(fnu_njy: jnp.ndarray) -> jnp.ndarray:
 
     Parameters
     ----------
-    fnu_njy: jnp.ndarray
+    fnu_njy : jnp.ndarray
         Spectral flux density [nJy].
 
     Returns
@@ -321,7 +321,7 @@ def fnu_to_maggies(fnu_cgs: jnp.ndarray) -> jnp.ndarray:
 
     Parameters
     ----------
-    fnu_cgs: jnp.ndarray
+    fnu_cgs : jnp.ndarray
         Spectral flux density [erg/s/cm²/Hz].
 
     Returns
@@ -345,7 +345,7 @@ def maggies_to_fnu(maggies: jnp.ndarray) -> jnp.ndarray:
 
     Parameters
     ----------
-    maggies: jnp.ndarray
+    maggies : jnp.ndarray
         Spectral flux in maggies (dimensionless).
 
     Returns
@@ -369,7 +369,7 @@ def erg_per_s_to_lsun(luminosity_erg: jnp.ndarray) -> jnp.ndarray:
 
     Parameters
     ----------
-    luminosity_erg: jnp.ndarray
+    luminosity_erg : jnp.ndarray
         Luminosity [erg/s].
 
     Returns
@@ -390,7 +390,7 @@ def lsun_to_erg_per_s(luminosity_lsun: jnp.ndarray) -> jnp.ndarray:
 
     Parameters
     ----------
-    luminosity_lsun: jnp.ndarray
+    luminosity_lsun : jnp.ndarray
         Luminosity [L_⊙].
 
     Returns
@@ -420,11 +420,11 @@ def lnu_to_fnu(
 
     Parameters
     ----------
-    lnu: jnp.ndarray
+    lnu : jnp.ndarray
         Spectral luminosity density L_ν [erg/s/Hz] in the rest frame.
-    dl_cm: jnp.ndarray
+    dl_cm : jnp.ndarray
         Luminosity distance d_L [cm].
-    redshift: jnp.ndarray
+    redshift : jnp.ndarray
         Redshift z. Shape must be broadcastable with lnu and dl_cm.
 
     Returns
@@ -462,11 +462,11 @@ def fnu_to_lnu(
 
     Parameters
     ----------
-    fnu: jnp.ndarray
+    fnu : jnp.ndarray
         Spectral flux density f_ν [erg/s/cm²/Hz] in the observed frame.
-    dl_cm: jnp.ndarray
+    dl_cm : jnp.ndarray
         Luminosity distance d_L [cm].
-    redshift: jnp.ndarray
+    redshift : jnp.ndarray
         Redshift z. Shape must be broadcastable with fnu and dl_cm.
 
     Returns
@@ -504,7 +504,7 @@ def logzsol_to_log_z_abs(logzsol: jnp.ndarray) -> jnp.ndarray:
 
     Parameters
     ----------
-    logzsol: array_like
+    logzsol : array_like
         Metallicity relative to solar [dex, log10(Z/Zsun)].
 
     Returns
@@ -536,7 +536,7 @@ def log_z_abs_to_logzsol(log_z_abs: jnp.ndarray) -> jnp.ndarray:
 
     Parameters
     ----------
-    log_z_abs: array_like
+    log_z_abs : array_like
         Absolute metallicity [dex, log10(Z)], as the SSP grid stores it.
 
     Returns
@@ -566,7 +566,7 @@ def tau_to_attenuation(tau: jnp.ndarray) -> jnp.ndarray:
 
     Parameters
     ----------
-    tau: jnp.ndarray
+    tau : jnp.ndarray
         Optical depth τ (dimensionless). Typically in range [0, 10].
 
     Returns
@@ -593,7 +593,7 @@ def attenuation_to_tau(a_mag: jnp.ndarray) -> jnp.ndarray:
 
     Parameters
     ----------
-    a_mag: jnp.ndarray
+    a_mag : jnp.ndarray
         Attenuation A_λ [magnitudes].
 
     Returns
@@ -618,7 +618,7 @@ def vacuum_to_air(wavelength_aa: np.ndarray) -> np.ndarray:
 
     Parameters
     ----------
-    wavelength_aa: np.ndarray
+    wavelength_aa : np.ndarray
         Vacuum wavelengths [Ångström].
 
     Returns
@@ -649,7 +649,7 @@ def air_to_vacuum(wavelength_aa: np.ndarray) -> np.ndarray:
 
     Parameters
     ----------
-    wavelength_aa: np.ndarray
+    wavelength_aa : np.ndarray
         Air wavelengths [Ångström].
 
     Returns

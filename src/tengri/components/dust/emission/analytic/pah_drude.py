@@ -83,13 +83,13 @@ class PAHDrudeIRSEDComponent(EmissionComponent):
 
         Parameters
         ----------
-        p: dict
+        p : dict
             Parameters with prefix stripped. Empty for PAH Drude (no free params).
-        sed_in: ndarray, shape (n_wave,)
+        sed_in : ndarray, shape (n_wave,)
             Input SED in erg/s/Hz (typically zeros for a dust emission component).
-        wave: ndarray, shape (n_wave,)
+        wave : ndarray, shape (n_wave,)
             Rest-frame wavelength grid in Angstrom.
-        L_ir: float
+        L_ir : float
             Total absorbed luminosity in erg/s. Scales the template but does not
             normalize it to conserve energy (see Notes above).
 

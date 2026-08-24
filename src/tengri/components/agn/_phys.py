@@ -53,9 +53,9 @@ def planck_lnu(
 
     Parameters
     ----------
-    nu: array_like, shape (n_freq,)
+    nu : array_like, shape (n_freq,)
         Frequency. [Hz]
-    temperature: float
+    temperature : float
         Blackbody temperature. Must be positive. [K]
 
     Returns
@@ -100,7 +100,7 @@ def wavelength_to_nu(wavelength_angstrom: jnp.ndarray) -> jnp.ndarray:
 
     Parameters
     ----------
-    wavelength_angstrom: array_like, shape (n,)
+    wavelength_angstrom : array_like, shape (n,)
         Wavelength. [Angstrom]
 
     Returns
@@ -145,11 +145,11 @@ def bolometric_integral_nu(
 
     Parameters
     ----------
-    lnu: array_like, shape (n_wave,)
+    lnu : array_like, shape (n_wave,)
         Spectral luminosity density on the same grid as ``nu``. [erg/s/Hz]
-    nu: array_like, shape (n_wave,)
+    nu : array_like, shape (n_wave,)
         Frequency grid, any ordering. [Hz]
-    floor: float, optional
+    floor : float, optional
         When given, return ``max(|integral|, floor)``, the safe form used
         as a normalization denominator (templates can be identically zero
         outside their tabulated range). When ``None`` (default), return
@@ -196,11 +196,11 @@ def gaussian_line_profile(
 
     Parameters
     ----------
-    wavelength: array_like, shape (n_wave,)
+    wavelength : array_like, shape (n_wave,)
         Wavelength grid. [Angstrom]
-    line_center: float
+    line_center : float
         Line center wavelength. [Angstrom]
-    fwhm_kms: float
+    fwhm_kms : float
         Full-width half-maximum of the profile. [km/s]
 
     Returns
@@ -253,11 +253,11 @@ def ring_area(r_cm: float, dr_cm: float, cos_inc: float) -> float:
 
     Parameters
     ----------
-    r_cm: float
+    r_cm : float
         Ring radius. [cm]
-    dr_cm: float
+    dr_cm : float
         Ring radial width. [cm]
-    cos_inc: float
+    cos_inc : float
         Cosine of the inclination angle. Must be in (0, 1].
 
     Returns
@@ -308,9 +308,9 @@ def compute_l_12um_from_lbol(
 
     Parameters
     ----------
-    agn_log_lbol: float or jnp.ndarray
+    agn_log_lbol : float or jnp.ndarray
         AGN bolometric luminosity. [log10(L_sun)]
-    f_12: float, optional
+    f_12 : float, optional
         Bolometric correction fraction L_12μm / L_bol. Default: 0.07.
         [dimensionless]
 
@@ -368,13 +368,13 @@ def lines_to_sed(
 
     Parameters
     ----------
-    line_wavelengths: array_like, shape (n_lines,)
+    line_wavelengths : array_like, shape (n_lines,)
         Rest-frame line center wavelengths. [Angstrom]
-    line_luminosities: array_like, shape (n_lines,)
+    line_luminosities : array_like, shape (n_lines,)
         Per-line bolometric luminosities. [Lsun]
-    wave_obs: array_like, shape (n_wave,)
+    wave_obs : array_like, shape (n_wave,)
         Output wavelength grid. [Angstrom]
-    fwhm_kms: float, optional
+    fwhm_kms : float, optional
         Gaussian line FWHM. Default: 500.0 [km/s]
 
     Returns

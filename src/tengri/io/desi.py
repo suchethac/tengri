@@ -45,20 +45,20 @@ class DesiCamera(NamedTuple):
 
     Attributes
     ----------
-    name: str
+    name : str
         Camera name, one of ``"B"``, ``"R"``, ``"Z"``.
-    wave: ndarray, shape (n_pix,)
+    wave : ndarray, shape (n_pix,)
         Observed-frame vacuum wavelength [Angstrom].
-    flux: ndarray, shape (n_pix,)
+    flux : ndarray, shape (n_pix,)
         Observed flux [erg/s/cm^2/A], already scaled by the ``BUNIT`` the file
         declares.
-    flux_err: ndarray, shape (n_pix,)
+    flux_err : ndarray, shape (n_pix,)
         1-sigma flux error [erg/s/cm^2/A]; ``NaN`` where ``ivar <= 0``.
-    ivar: ndarray, shape (n_pix,)
+    ivar : ndarray, shape (n_pix,)
         Inverse variance in the file's native units.
-    mask: ndarray, shape (n_pix,) or None
+    mask : ndarray, shape (n_pix,) or None
         Pixel mask, or ``None`` when the file ships no ``_MASK`` HDU.
-    resolution: ndarray, shape (n_diag, n_pix) or None
+    resolution : ndarray, shape (n_diag, n_pix) or None
         Resolution band array in desispec ``dia_matrix`` storage, or ``None``
         when the file ships no ``_RESOLUTION`` HDU.
     """
@@ -90,7 +90,7 @@ def bunit_scale(bunit: str | None) -> float:
 
     Parameters
     ----------
-    bunit: str or None
+    bunit : str or None
         The ``BUNIT`` header value, or ``None`` when absent.
 
     Returns
@@ -114,7 +114,7 @@ def desi_resolution_offsets(n_diag: int) -> np.ndarray:
 
     Parameters
     ----------
-    n_diag: int
+    n_diag : int
         Number of stored diagonals (odd).
 
     Returns
@@ -258,14 +258,14 @@ def read_desi_cameras(
 
     Parameters
     ----------
-    path: str
+    path : str
         Path to a DESI FITS file (``coadd-*.fits``, ``spectra-*.fits``).
-    targetid: int, optional
+    targetid : int, optional
         Select the target by ``FIBERMAP`` TARGETID. Mutually exclusive with
         ``row`` in intent; when given, ``row`` is ignored.
-    row: int, optional
+    row : int, optional
         Zero-based spectrum index when ``targetid`` is not given. Default 0.
-    cameras: tuple of str, optional
+    cameras : tuple of str, optional
         Camera names to read, in concatenation order. Default ``("B", "R", "Z")``.
 
     Returns
@@ -317,7 +317,7 @@ def desi_resolution_matrix(cameras: tuple[DesiCamera, ...]):
 
     Parameters
     ----------
-    cameras: tuple of DesiCamera
+    cameras : tuple of DesiCamera
         Cameras in the same order their grids are concatenated.
 
     Returns
@@ -366,7 +366,7 @@ def desi_spectroscopy(cameras: tuple[DesiCamera, ...], **kwargs):
 
     Parameters
     ----------
-    cameras: tuple of DesiCamera
+    cameras : tuple of DesiCamera
         As returned by :func:`read_desi_cameras`.
     **kwargs
         Forwarded to :class:`~tengri.observation.spectroscopy.Spectroscopy`.
@@ -423,11 +423,11 @@ def read_desi(
 
     Parameters
     ----------
-    path: str
+    path : str
         Path to a DESI FITS file (e.g. ``coadd-*.fits``).
-    targetid: int, optional
+    targetid : int, optional
         Select the target by ``FIBERMAP`` TARGETID.
-    row: int, optional
+    row : int, optional
         Zero-based spectrum index when ``targetid`` is not given. Default 0.
 
     Returns

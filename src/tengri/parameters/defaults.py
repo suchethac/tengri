@@ -157,7 +157,7 @@ def get_inference_defaults(method: str | None = None) -> dict[str, Any]:
 
     Parameters
     ----------
-    method: str or None
+    method : str or None
         If given, return only the sub-section for that method (e.g. ``"vi"``,
         ``"mcmc_raytrace"``).  If None, return the full ``[inference]`` dict.
 

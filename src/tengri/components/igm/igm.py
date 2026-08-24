@@ -372,11 +372,11 @@ def _cgm_damping_wing_tau(
 
     Parameters
     ----------
-    wave_obs: array_like, shape (n_wave,)
+    wave_obs : array_like, shape (n_wave,)
         Observed-frame wavelength. [Å]
-    z_source: float
+    z_source : float
         Redshift of the source. [dimensionless]
-    z_mid, dz, log_nhi: float, optional
+    z_mid, dz, log_nhi : float, optional
         Legacy sigmoid knobs
         :math:`N_{\rm HI}(z) = 10^{\rm log\_nhi} / (1 + e^{-(z-z_{\rm mid})/dz})`.
         If any of the three is supplied the legacy form is used; otherwise the
@@ -469,19 +469,19 @@ def igm_transmission(
 
     Parameters
     ----------
-    wave_obs: array_like, shape (n_wave,)
+    wave_obs : array_like, shape (n_wave,)
         Observed-frame wavelength. [Å]
-    z_source: float
+    z_source : float
         Redshift of the source galaxy. [dimensionless]
-    add_cgm: bool, optional
+    add_cgm : bool, optional
         If True, add CGM damping wing absorption (Asada et al. 2025) at z > 5.
         Default: False (experimental feature, not yet fully validated against observations).
-    cgm_z_mid: float, optional
+    cgm_z_mid : float, optional
         Redshift midpoint of the sigmoid column density evolution. [dimensionless]
         Default: 7.0.
-    cgm_dz: float, optional
+    cgm_dz : float, optional
         Redshift width of the sigmoid transition. [dimensionless] Default: 0.5.
-    cgm_log_nhi: float, optional
+    cgm_log_nhi : float, optional
         log10(N_HI / cm^-2) at the plateau of the sigmoid evolution. Canonical Asada+2025 value (21.0)
         produces τ ≈ 0.15 (15% absorption) redward of Lyα at z=7; log_nhi ≤ 19 is invisible. [dimensionless]
         Default: 21.0.
@@ -597,13 +597,13 @@ def _damping_wing_tau(
 
     Parameters
     ----------
-    wave_obs: array, shape (n_wave,)
+    wave_obs : array, shape (n_wave,)
         Observed-frame wavelength [Angstrom].
-    z: float
+    z : float
         Source redshift.
-    x_HI: float
+    x_HI : float
         Volume-averaged neutral fraction (0 = ionized, 1 = neutral).
-    R_bubble: float
+    R_bubble : float
         Ionized bubble radius [proper Mpc].
 
     Returns
@@ -705,15 +705,15 @@ def igm_transmission_patchy(
 
     Parameters
     ----------
-    wave_obs: array, shape (n_wave,)
+    wave_obs : array, shape (n_wave,)
         Observed-frame wavelength [Angstrom].
-    z: float
+    z : float
         Source redshift.
-    x_HI: float
+    x_HI : float
         Volume-averaged neutral hydrogen fraction. 0 = fully ionized
         (standard Inoue+2014), 1 = fully neutral. At z~6: x_HI ~ 0.1-0.5.
         At z~8: x_HI ~ 0.5-0.9. Default 0.0.
-    R_bubble: float
+    R_bubble : float
         Radius of ionized bubble around the source [proper Mpc].
         Typical: 0.5-5 pMpc at z~7. Larger bubbles reduce the damping
         wing absorption. Default 1.0.
@@ -819,16 +819,16 @@ def igm_transmission_madau(
 
     Parameters
     ----------
-    wave_obs: array_like, shape (n_wave,)
+    wave_obs : array_like, shape (n_wave,)
         Observed-frame wavelengths [Angstrom].
-    z: float
+    z : float
         Source redshift.
-    igm_factor: float, optional
+    igm_factor : float, optional
         Multiplicative fudge factor for IGM strength. Default 1.0 (mean IGM).
 
     Returns
     -------
-    T_igm: jnp.ndarray, shape (n_wave,)
+    T_igm : jnp.ndarray, shape (n_wave,)
         Mean IGM transmission [dimensionless], in [0, 1]. Values outside the modeled
         wavelength range are set to 1.0 (no attenuation).
 
@@ -969,7 +969,7 @@ def resolve_igm_model(name: str) -> object:
 
     Parameters
     ----------
-    name: str
+    name : str
         Registry key (e.g. ``"inoue14"``, ``"madau"``) or a recognized
         alias (e.g. ``"inoue"``).
 
@@ -1024,21 +1024,21 @@ def igm_absorption(
 
     Parameters
     ----------
-    wave_obs: ndarray, shape (n_wave,)
+    wave_obs : ndarray, shape (n_wave,)
         Observed-frame wavelength [Angstrom].
-    z: float
+    z : float
         Source redshift [dimensionless].
-    igm_x_HI, igm_bubble_mpc: float, optional
+    igm_x_HI, igm_bubble_mpc : float, optional
         Patchy-reionization neutral fraction (0-1) and bubble radius [proper
         Mpc]; only used when ``igm_patchy=True``.
-    igm_patchy: bool, optional
+    igm_patchy : bool, optional
         Use the patchy reionization damping-wing model instead of the mean
         IGM. Default ``False``.
-    igm_model: str, optional
+    igm_model : str, optional
         Registry key or alias of the mean-IGM model. Default ``"inoue"``.
-    use_dla: bool, optional
+    use_dla : bool, optional
         Multiply by a damped-Lyman-α absorber. Default ``False``.
-    dla_z, dla_log_n_hi, dla_temp, dla_b_turb: float, optional
+    dla_z, dla_log_n_hi, dla_temp, dla_b_turb : float, optional
         DLA absorber redshift (0 → source ``z``), log10 H I column density
         [cm^-2], temperature [K], and turbulent Doppler velocity [km/s].
 

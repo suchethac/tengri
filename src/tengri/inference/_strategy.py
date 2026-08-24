@@ -87,9 +87,9 @@ def resolve_status(entry: BackendEntry, target: Any | None = None) -> BackendSta
 
     Parameters
     ----------
-    entry: BackendEntry
+    entry : BackendEntry
         Registry entry for the backend.
-    target: Fitter | InferenceContext, optional
+    target : Fitter | InferenceContext, optional
         If supplied, evaluated against ``entry.is_compatible``. If
         ``None`` (or the entry has no predicate), compatibility is
         deferred to dispatch time and only dependency presence is

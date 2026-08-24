@@ -46,32 +46,32 @@ class Draine2021PAHIRConfig(SEDComponentConfig):
 
     Attributes
     ----------
-    name: str
+    name : str
         Diagnostic identifier. Default ``"draine2021_pah_ir"``.
-    template_path: str, optional
+    template_path : str, optional
         Path to PAHspec template HDF5 file. If None, attempts to auto-locate
         via TENGRI_PAHSPEC_PATH environment variable or standard search paths.
         If templates are unavailable, the component will skip gracefully.
-    starlight: str
+    starlight : str
         Starlight spectrum selector: one of the 13 PAHspec choices
         (e.g. ``"mMMP"``, ``"BPASS_Z0.02_3Myr"``, ``"m31bulge"``),
         or ``"auto"`` to auto-select based on upstream stellar parameters.
         Default ``"mMMP"``.
-    ionization: str
+    ionization : str
         PAH ionization state: ``"lo"`` (low), ``"st"`` (standard), ``"hi"`` (high).
         Default ``"st"``.
-    size_distribution: str
+    size_distribution : str
         PAH size distribution: ``"sma"`` (small), ``"std"`` (standard), ``"lrg"`` (large).
         Default ``"std"``.
-    slab: bool
+    slab : bool
         Whether to use the :math:`A_V=2` slab variant. Default ``False``.
-    auto_age_myr: float, optional
+    auto_age_myr : float, optional
         (``starlight="auto"`` only.) Characteristic age of the FUV-emitting
         young population in Myr. Required when ``starlight="auto"``.
-    auto_log_z_solar: float, optional
+    auto_log_z_solar : float, optional
         (``starlight="auto"`` only.) :math:`\\log_{10}(Z/Z_\\odot)` for the
         ionizing stellar population. Required when ``starlight="auto"``.
-    auto_sps_family: str, optional
+    auto_sps_family : str, optional
         (``starlight="auto"`` only.) SPS family (``"BC03"``, ``"BPASS"``, or ``None``
         for non-SSP ambient spectra). Default ``None``.
     """
@@ -96,11 +96,11 @@ class Draine2021PAHIRSEDComponent(SEDModelComponent):
 
     Attributes
     ----------
-    name: str
+    name : str
         Stable identifier: ``"draine2021_pah_ir"``.
-    parameter_prefix: str
+    parameter_prefix : str
         Domain prefix for parameters: ``"dust_"``.
-    config: Draine2021PAHIRConfig
+    config : Draine2021PAHIRConfig
         Frozen configuration with template path and categorical choices.
 
     Notes
@@ -170,7 +170,7 @@ class Draine2021PAHIRSEDComponent(SEDModelComponent):
 
         Parameters
         ----------
-        wave: ndarray, optional
+        wave : ndarray, optional
             Rest-frame wavelength grid in Angstrom. Required for slicing
             templates onto the pipeline wavelength grid.
 
@@ -265,17 +265,17 @@ class Draine2021PAHIRSEDComponent(SEDModelComponent):
 
         Parameters
         ----------
-        p: mapping[str, ndarray]
+        p : mapping[str, ndarray]
             Sliced parameters (prefix stripped):
 
             - ``p["lgU"]``: log10(U) [dex]
 
-        sed_in: ndarray, shape (n_wave,)
+        sed_in : ndarray, shape (n_wave,)
             Input SED in erg/s/Hz (ignored; PAHspec emission is computed
             from L_ir independently).
-        wave: ndarray, shape (n_wave,)
+        wave : ndarray, shape (n_wave,)
             Rest-frame wavelength grid in Angstrom.
-        **inputs: ndarray
+        **inputs : ndarray
             Cross-component inputs:
 
             - ``L_ir``: absorbed luminosity [erg/s]

@@ -52,7 +52,7 @@ class InferenceContext:
 
     Parameters
     ----------
-    fitter: Fitter
+    fitter : Fitter
         Source-of-truth orchestrator. Currently the canonical place where
         the loss function, JIT engine cache, and parameter spec live.
         Backends are encouraged to read through the explicit accessors

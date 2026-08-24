@@ -44,9 +44,9 @@ def integrate_lnu_over_nu(
 
     Parameters
     ----------
-    L_nu: array_like, shape ``(..., n_wave_aa)``
+    L_nu : array_like, shape ``(..., n_wave_aa)``
         :math:`L_\nu` in [erg/s/Hz] (or any per-Hz unit).
-    wave_aa: array_like, shape ``(n_wave_aa,)``
+    wave_aa : array_like, shape ``(n_wave_aa,)``
         Wavelength grid in Angstrom; strictly increasing.
 
     Returns
@@ -79,9 +79,9 @@ def planck_bnu(
 
     Parameters
     ----------
-    wavelength_aa: array_like, shape (n_wave,)
+    wavelength_aa : array_like, shape (n_wave,)
         Wavelength grid. [Å]
-    temperature: float
+    temperature : float
         Blackbody temperature. [K]
 
     Returns
@@ -126,11 +126,11 @@ def cmb_corrected_temperature(
 
     Parameters
     ----------
-    T_dust: float
+    T_dust : float
         Intrinsic dust temperature (what the galaxy would have at z=0 in isolation). [K]
-    redshift: float
+    redshift : float
         Source redshift. [dimensionless]
-    beta_ir: float
+    beta_ir : float
         Dust emissivity index. [dimensionless] Default: 1.6.
 
     Returns
@@ -174,11 +174,11 @@ def cmb_contrast_factor(
 
     Parameters
     ----------
-    wavelength_aa: array_like, shape (n_wave,)
+    wavelength_aa : array_like, shape (n_wave,)
         Wavelength grid. [Å]
-    T_eff: float
+    T_eff : float
         CMB-corrected effective dust temperature. [K]
-    redshift: float
+    redshift : float
         Source redshift. [dimensionless]
 
     Returns
@@ -246,11 +246,11 @@ def compute_absorbed_luminosity(
 
     Parameters
     ----------
-    wavelength_aa: array_like, shape (n_wave,)
+    wavelength_aa : array_like, shape (n_wave,)
         Rest-frame wavelength grid. [Å] Must be sorted ascending.
-    L_nu_intrinsic: array_like, shape (n_wave,)
+    L_nu_intrinsic : array_like, shape (n_wave,)
         Intrinsic (dust-free) luminosity density. [Lsun Hz⁻¹]
-    transmission: array_like, shape (n_wave,)
+    transmission : array_like, shape (n_wave,)
         Dust transmission fraction in [0, 1]. For age-dependent models
         this should be the SFH-weighted effective transmission.
 
@@ -292,11 +292,11 @@ def compute_absorbed_luminosity_from_tau(
 
     Parameters
     ----------
-    wavelength_aa: array_like, shape (n_wave,)
+    wavelength_aa : array_like, shape (n_wave,)
         Rest-frame wavelength grid. [Å] Must be sorted ascending.
-    L_nu_intrinsic: array_like, shape (n_wave,)
+    L_nu_intrinsic : array_like, shape (n_wave,)
         Intrinsic luminosity density. [Lsun Hz⁻¹]
-    tau_lambda: array_like, shape (n_wave,)
+    tau_lambda : array_like, shape (n_wave,)
         Optical depth as a function of wavelength. [dimensionless]
 
     Returns

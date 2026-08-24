@@ -50,23 +50,23 @@ def run_ghmc(
 
     Parameters
     ----------
-    n_warmup: int
+    n_warmup : int
         Warmup/adaptation steps.
-    n_burnin: int
+    n_burnin : int
         Post-warmup burn-in steps (discarded).
-    n_samples: int
+    n_samples : int
         Posterior samples to collect.
-    alpha: float
+    alpha : float
         Momentum persistence parameter (0-1). 0 = full refresh (standard HMC),
         1 = no refresh (deterministic). Default 0.8 gives good mixing for
         correlated posteriors.
-    delta: float
+    delta : float
         Step size scaling in the GHMC proposal. Default 0.65.
-    target_accept_rate: float
+    target_accept_rate : float
         Target acceptance rate for warmup adaptation.
-    dense_mass_matrix: bool
+    dense_mass_matrix : bool
         Use dense mass matrix. Set False for D>30.
-    verbose: bool
+    verbose : bool
         Print progress.
     """
     try:

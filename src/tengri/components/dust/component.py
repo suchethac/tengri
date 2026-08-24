@@ -99,7 +99,7 @@ class DustAttenuationSEDComponentState(SEDComponentState):
 
     Attributes
     ----------
-    k_lambda: jnp.ndarray, shape (n_wave,) | None
+    k_lambda : jnp.ndarray, shape (n_wave,) | None
         Pre-evaluated normalized attenuation curve k(λ) (with k(5500 Å) = 1).
         ``None`` until :meth:`DustAttenuationSEDComponent.precompute` runs.
     """
@@ -265,10 +265,10 @@ class DustAttenuationSEDComponent(TemplateThreading):
 
         Parameters
         ----------
-        ssp_data: object | None
+        ssp_data : object | None
             Unused (this adapter does not depend on SSP data). Kept in
             the signature to match the :class:`SEDComponent` Protocol.
-        wave_grid: jnp.ndarray, shape (n_wave,) | None
+        wave_grid : jnp.ndarray, shape (n_wave,) | None
             Rest-frame wavelength grid in Å. Required.
 
         Returns
@@ -310,11 +310,11 @@ class DustAttenuationSEDComponent(TemplateThreading):
 
         Parameters
         ----------
-        state: ForwardState
+        state : ForwardState
             Must carry rest-frame ``wave``. If ``sed_intrinsic`` is
             ``None`` this method is a no-op (returns the input
             unchanged).
-        params: mapping
+        params : mapping
             Receives ``dust_*`` keys plus ``redshift`` (unused here).
 
         Returns

@@ -35,10 +35,10 @@ class Bibliography:
 
     Attributes
     ----------
-    keys: list[str]
+    keys : list[str]
         Registry keys (e.g. ``"calzetti2000"``), in insertion order, without
         duplicates.
-    source: str
+    source : str
         Human-readable label describing what the bibliography is tied to
         (e.g. ``"Galaxy(preset=starforming)"``); used in ``report()``.
     """
@@ -54,7 +54,7 @@ class Bibliography:
 
         Parameters
         ----------
-        *keys: str
+        *keys : str
             Registry keys (e.g. ``"calzetti2000"``). Empty strings and
             keys already present are skipped.
 
@@ -85,7 +85,7 @@ class Bibliography:
 
         Parameters
         ----------
-        other: Bibliography | Iterable[str]
+        other : Bibliography | Iterable[str]
             Source bibliography or plain iterable of registry keys.
 
         Returns
@@ -111,7 +111,7 @@ class Bibliography:
 
         Parameters
         ----------
-        key: str
+        key : str
             Registry key to drop.
 
         Examples
@@ -213,7 +213,7 @@ class Bibliography:
 
         Parameters
         ----------
-        group_by_category: bool, optional
+        group_by_category : bool, optional
             If True (default), citations are grouped under category headings
             (Stellar populations / Dust / Nebular / Inference …). If False,
             print one flat numbered list.
@@ -330,10 +330,10 @@ class Bibliography:
 
         Parameters
         ----------
-        obj: Any
+        obj : Any
             Galaxy, SEDModel, Fitter, SEDModelConfig, FitResult, or any other
             object whose configuration can be inspected for component choices.
-        include_backend: bool, optional
+        include_backend : bool, optional
             Include inference-backend citations from ``obj._last_backend``
             or ``obj.backend_name``. Default ``True``.
 
@@ -413,11 +413,11 @@ class Bibliography:
 
         Parameters
         ----------
-        model_config: SEDModelConfig or None
+        model_config : SEDModelConfig or None
             Configuration whose dust law, nebular backend, IGM model, and
             AGN sub-components are inspected. ``None`` yields just the
             core citations.
-        source: str, optional
+        source : str, optional
             Label recorded on the returned Bibliography for display in
             :meth:`report`.
 
@@ -498,7 +498,7 @@ class Bibliography:
 
         Parameters
         ----------
-        backend: str or None
+        backend : str or None
             Name as passed to :meth:`tengri.Fitter.run`; e.g. ``"map"``,
             ``"vi"``, ``"mcmc_nuts"``, ``"mcmc_raytrace"``, ``"evidence"``,
             ``"ess"``, ``"pathfinder"``. ``None`` is a silent no-op.

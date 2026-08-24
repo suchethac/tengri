@@ -38,11 +38,11 @@ def time_weighted_sfr(
 
     Parameters
     ----------
-    sfr: array_like, shape (n_grid,)
+    sfr : array_like, shape (n_grid,)
         SFR(t) on the lookback-time grid [Msun/yr].
-    lbt_grid: array_like, shape (n_grid,)
+    lbt_grid : array_like, shape (n_grid,)
         Lookback-time grid, **ascending** (oldest bin last) [yr].
-    window_yr: float, optional
+    window_yr : float, optional
         Time window over which to average [yr]. Default ``1e7`` (10 Myr),
         matching the Murphy+2011 radio-SFR / H-alpha / X-ray timescale.
 

@@ -36,25 +36,25 @@ def project_additive_onto_photometry(
 
     Parameters
     ----------
-    precomputed_phot: ndarray, shape (n_filters,), optional
+    precomputed_phot : ndarray, shape (n_filters,), optional
         Band-response result [erg/s/Hz], or ``None`` when the caller has no
         response available. When given it is returned unchanged.
-    sed: ndarray, shape (n_wave,)
+    sed : ndarray, shape (n_wave,)
         Rest-frame specific luminosity of this emitter [erg/s/Hz]. Read only by
         branches 2 and 3.
-    wave: ndarray, shape (n_wave,)
+    wave : ndarray, shape (n_wave,)
         Rest-frame wavelength grid [Angstrom], ascending.
-    filter_eff_waves: ndarray, shape (n_filters,)
+    filter_eff_waves : ndarray, shape (n_filters,)
         Filter effective wavelengths [Angstrom]. Read by branch 3 only.
-    padded_filter_waves: ndarray, shape (n_filters, max_len), optional
+    padded_filter_waves : ndarray, shape (n_filters, max_len), optional
         Zero-padded observed-frame filter wavelengths [Angstrom]. ``None``
         selects branch 3.
-    padded_filter_trans: ndarray, shape (n_filters, max_len), optional
+    padded_filter_trans : ndarray, shape (n_filters, max_len), optional
         Zero-padded filter transmission [dimensionless], as published --
         normalization is applied inside the integral, not here.
-    redshift: ndarray, scalar
+    redshift : ndarray, scalar
         Source redshift [dimensionless]. Read by branch 2 only.
-    fallback_fn: callable, optional
+    fallback_fn : callable, optional
         Maps wavelengths [Angstrom] to specific luminosity [erg/s/Hz]. Lets a
         caller re-evaluate its own emission at the effective wavelengths rather
         than interpolate a precomputed SED. Defaults to interpolating ``sed``.

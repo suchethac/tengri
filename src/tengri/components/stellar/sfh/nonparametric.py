@@ -106,11 +106,11 @@ def continuity(
 
     Parameters
     ----------
-    age_yr: array_like, shape (n_age,)
+    age_yr : array_like, shape (n_age,)
         Lookback time grid [yr].
-    log_total_mass: float, optional
+    log_total_mass : float, optional
         log10 of total stellar mass formed [Msun]. Default 10.0.
-    bin_edges_gyr: array_like, shape (n_bins+1,), optional
+    bin_edges_gyr : array_like, shape (n_bins+1,), optional
         Bin edges [Gyr]. Default: 7-edge log-spaced grid from 0 to 13.7 Gyr.
     **ratio_kwargs
         Keyword arguments ``ratio_0``, ``ratio_1``, ..., ``ratio_{N-2}``
@@ -177,11 +177,11 @@ def continuity_prior_logp(
 
     Parameters
     ----------
-    log_sfr_ratios: array (n_bins-1,)
+    log_sfr_ratios : array (n_bins-1,)
         Log10 SFR ratios between adjacent bins.
-    df: float
+    df : float
         Degrees of freedom for the Student-t distribution. Default 2.
-    scale: float
+    scale : float
         Scale parameter. Default 0.3 dex.
 
     Returns
@@ -214,28 +214,28 @@ def bursty_continuity_prior_logp(
 
     Parameters
     ----------
-    log_sfr_ratios: array_like, shape (n_bins-1,)
+    log_sfr_ratios : array_like, shape (n_bins-1,)
         Log10 SFR ratios between adjacent bins [dimensionless].
         Ratio ``i`` controls the transition from bin ``i+1`` (older) to bin
         ``i`` (younger), following the continuity SFH convention.
-    bin_edges_gyr: array_like, shape (n_bins+1,)
+    bin_edges_gyr : array_like, shape (n_bins+1,)
         Age bin edges [Gyr], monotonically increasing. Must match the edges
         used to construct the SFH (e.g. ``DEFAULT_BIN_EDGES_GYR``).
-    t_split_gyr: float, optional
+    t_split_gyr : float, optional
         Lookback time split [Gyr] separating the bursty (young) regime from
         the smooth (old) regime. Default 1.0 Gyr.
-    scale_young: float, optional
+    scale_young : float, optional
         Student-t scale for ratios whose *younger* bin edge is inside the
         bursty regime (``bin_edges_gyr[i+1] < t_split_gyr``). Default 1.0 dex.
-    scale_old: float, optional
+    scale_old : float, optional
         Student-t scale for old-regime ratios. Default 0.3 dex (same as the
         standard continuity prior).
-    df: float, optional
+    df : float, optional
         Degrees of freedom for both Student-t distributions. Default 2.
 
     Returns
     -------
-    logp: scalar
+    logp : scalar
         Total log-probability [dimensionless] summed over all ratios.
 
     Notes
@@ -290,7 +290,7 @@ def _stick_breaking(z_fractions: jnp.ndarray) -> jnp.ndarray:
 
     Parameters
     ----------
-    z_fractions: array (N-1,)
+    z_fractions : array (N-1,)
         Auxiliary variables in (0, 1), each drawn from Beta(1, 1) = Uniform.
 
     Returns
@@ -332,11 +332,11 @@ def dirichlet(
 
     Parameters
     ----------
-    age_yr: array_like, shape (n_age,)
+    age_yr : array_like, shape (n_age,)
         Lookback time grid [yr].
-    log_total_mass: float, optional
+    log_total_mass : float, optional
         log10(total stellar mass formed / Msun). Default: 10.0 (10 Gyr Msun).
-    bin_edges_gyr: array_like, shape (n_bins+1,), optional
+    bin_edges_gyr : array_like, shape (n_bins+1,), optional
         Bin edges in Gyr. Default: 7-edge log-spaced grid from 0 to 13.7 Gyr.
     **z_kwargs
         Keyword arguments ``z_frac_0``, ``z_frac_1``, ..., ``z_frac_{N-2}``
@@ -428,16 +428,16 @@ def make_agebins_from_zred(
 
     Parameters
     ----------
-    zred: float
+    zred : float
         Galaxy redshift. Sets the age of the universe that caps the bins.
-    n_bins: int, optional
+    n_bins : int, optional
         Total number of age bins. Default 7 (matches the tengri default).
-    cosmo: CosmoParams, optional
+    cosmo : CosmoParams, optional
         DSPS cosmology parameters. Default: tengri's Planck 2018 cosmology.
 
     Returns
     -------
-    bin_edges_gyr: np.ndarray, shape (n_bins+1,)
+    bin_edges_gyr : np.ndarray, shape (n_bins+1,)
         Age bin edges [Gyr], monotonically increasing from 0, capped at age of
         universe at ``zred``.
 
@@ -515,16 +515,16 @@ def psb_continuity(
 
     Parameters
     ----------
-    age_yr: array_like, shape (n_age,)
+    age_yr : array_like, shape (n_age,)
         Lookback time grid [yr].
-    log_total_mass: float, optional
+    log_total_mass : float, optional
         log10 of total stellar mass formed [Msun]. Default 10.0.
-    tlast_gyr: float, optional
+    tlast_gyr : float, optional
         Lookback time of quenching onset [Gyr]. Sets the youngest bin width.
         Typical range: 0.01 to 1.0 Gyr.
-    tflex_gyr: float, optional
+    tflex_gyr : float, optional
         Upper boundary of the flexible zone [Gyr]. Default 2.0.
-    bin_edges_gyr: array_like, shape (n_fixed+1,), optional
+    bin_edges_gyr : array_like, shape (n_fixed+1,), optional
         Fixed old bin edges [Gyr]. Default: ``DEFAULT_BIN_EDGES_GYR[2:]``
         = [0.3, 1.0, 3.0, 6.0, 13.7] Gyr.
     **ratio_kwargs
@@ -535,7 +535,7 @@ def psb_continuity(
 
     Returns
     -------
-    sfr: jnp.ndarray, shape (n_age,)
+    sfr : jnp.ndarray, shape (n_age,)
         Star formation rate [Msun yr^-1], non-negative.
 
     Notes
@@ -628,20 +628,20 @@ def continuity_flex(
 
     Parameters
     ----------
-    age_yr: array_like, shape (n_age,)
+    age_yr : array_like, shape (n_age,)
         Lookback time grid [yr].
-    log_total_mass: float, optional
+    log_total_mass : float, optional
         log10 total stellar mass formed [Msun]. Default 10.0.
-    bin_edges_gyr: array_like, shape (3,), optional
+    bin_edges_gyr : array_like, shape (3,), optional
         Anchor bin edges ``[t_young_end, t_old_start, t_max]`` [Gyr].
         Default: ``[0.0316, 5.012, 13.7]`` (matches synthesizer ContinuityFlex).
     **ratio_kwargs
-        ``ratio_young``: float
+        ``ratio_young`` : float
             log10(SFR_young / SFR_flex[0]) [dimensionless]. Default 0.
-        ``flex_0``, ``flex_1``, …, ``flex_{N-1}``: float
+        ``flex_0``, ``flex_1``, …, ``flex_{N-1}`` : float
             log10 SFR ratios that control flex bin widths [dimensionless]. The
             number of ``flex_*`` keys auto-sets N. Default: N=0 (1 flat flex bin).
-        ``ratio_old``: float
+        ``ratio_old`` : float
             log10(SFR_old / SFR_flex[N]) [dimensionless]. Default 0.
 
     Returns
@@ -851,20 +851,20 @@ def continuity_flex_prior_logp(
 
     Parameters
     ----------
-    logsfr_ratio_young: float
+    logsfr_ratio_young : float
         log10(SFR_young / SFR_flex[0]) [dimensionless].
-    logsfr_ratios: array_like, shape (N,)
+    logsfr_ratios : array_like, shape (N,)
         log10 flex bin SFR ratios [dimensionless].
-    logsfr_ratio_old: float
+    logsfr_ratio_old : float
         log10(SFR_old / SFR_flex[N]) [dimensionless].
-    df: float, optional
+    df : float, optional
         Degrees of freedom. Default 2.
-    scale: float, optional
+    scale : float, optional
         Scale parameter [dex]. Default 0.3 (same as :func:`continuity_prior_logp`).
 
     Returns
     -------
-    logp: scalar
+    logp : scalar
         Total log-probability [dimensionless], summed over all ratios.
 
     Notes

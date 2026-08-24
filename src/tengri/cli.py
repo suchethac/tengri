@@ -61,7 +61,7 @@ def main(argv: Sequence[str] | None = None) -> int:
 
     Parameters
     ----------
-    argv: Sequence of str, optional
+    argv : Sequence of str, optional
         Command-line arguments. If None, uses sys.argv[1:].
 
     Returns

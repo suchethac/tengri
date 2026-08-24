@@ -130,7 +130,7 @@ def find_cached_filter(filename: str) -> Path | None:
 
     Parameters
     ----------
-    filename: str
+    filename : str
         Cache file name from :func:`_svo_id_to_filename`, e.g.
         ``"GALEX_GALEX_FUV.dat"``.
 
@@ -273,9 +273,9 @@ def compute_effective_wavelength(wave: np.ndarray, trans: np.ndarray) -> float:
 
     Parameters
     ----------
-    wave: array, shape (n_wave,)
+    wave : array, shape (n_wave,)
         Wavelength [Angstrom].
-    trans: array, shape (n_wave,)
+    trans : array, shape (n_wave,)
         Transmission (dimensionless [0, 1]).
 
     Returns
@@ -309,9 +309,9 @@ def compute_fwhm(wave: np.ndarray, trans: np.ndarray) -> float:
 
     Parameters
     ----------
-    wave: array, shape (n_wave,)
+    wave : array, shape (n_wave,)
         Wavelength [Angstrom].
-    trans: array, shape (n_wave,)
+    trans : array, shape (n_wave,)
         Transmission (dimensionless [0, 1]).
 
     Returns
@@ -590,9 +590,9 @@ def download_filter(
 
     Parameters
     ----------
-    svo_id: str
+    svo_id : str
         SVO filter identifier (e.g. ``"JWST/NIRCam.F200W"``).
-    cache_dir: str or pathlib.Path or None, optional
+    cache_dir : str or pathlib.Path or None, optional
         Directory for cached filter files. ``None`` (default) resolves through
         :func:`default_filter_cache_dir`, which is independent of the working
         directory.
@@ -601,9 +601,9 @@ def download_filter(
 
     Returns
     -------
-    wave: ndarray
+    wave : ndarray
         Wavelength in Angstrom.
-    trans: ndarray
+    trans : ndarray
         Transmission (dimensionless).
 
     Raises
@@ -777,20 +777,20 @@ def load_filter_set(
 
     Parameters
     ----------
-    names: list of str
+    names : list of str
         Short names from ``FILTER_REGISTRY``.
-    cache_dir: str or pathlib.Path or None, optional
+    cache_dir : str or pathlib.Path or None, optional
         Directory for cached filter files. ``None`` (default) resolves through
         :func:`default_filter_cache_dir`.
 
     Returns
     -------
-    filter_waves: list of jnp.ndarray
+    filter_waves : list of jnp.ndarray
         Wavelength arrays per filter, each shape ``(n_wave,)`` [Angstrom].
-    filter_trans: list of jnp.ndarray
+    filter_trans : list of jnp.ndarray
         Transmission arrays per filter, each shape ``(n_wave,)``
         (dimensionless [0, 1]).
-    filter_curves: list of FilterCurve
+    filter_curves : list of FilterCurve
         Full FilterCurve objects with wavelength, transmission, and name.
 
     Raises
@@ -828,7 +828,7 @@ def load_custom_filter(filepath: str) -> FilterCurve:
 
     Parameters
     ----------
-    filepath: str
+    filepath : str
         Path to a text file with columns: wavelength (Angstrom),
         transmission.
 
@@ -880,13 +880,13 @@ def load_tophat_filter(
 
     Parameters
     ----------
-    wave_center_aa: float
+    wave_center_aa : float
         Central wavelength [Angstrom].
-    width_aa: float
+    width_aa : float
         Full width of the top-hat [Angstrom].
-    name: str
+    name : str
         Label for this filter (e.g. ``"alma_band6"``). Default: empty string.
-    n_points: int
+    n_points : int
         Number of wavelength samples. Default: 50.
 
     Returns
@@ -915,9 +915,9 @@ def load_alma_band(band: int, name: str | None = None) -> FilterCurve:
 
     Parameters
     ----------
-    band: int
+    band : int
         ALMA band number (1–10).
-    name: str, optional
+    name : str, optional
         Label for the filter. Defaults to ``"alma_band{N}"``.
 
     Returns
@@ -961,15 +961,15 @@ def list_available_filters(
 
     Parameters
     ----------
-    group_by: str
+    group_by : str
         Row ordering. ``"facility"`` (default) sorts by telescope /
         instrument and then by name; ``"none"`` sorts alphabetically by
         name alone. Default: ``"facility"``.
-    compute_properties: bool
+    compute_properties : bool
         If ``True``, add ``lambda_eff`` and ``fwhm`` columns. This loads
         every transmission curve and triggers SVO downloads for any
         filter not yet cached. Default: ``False``.
-    cache_dir: str, optional
+    cache_dir : str, optional
         Override cache directory for filter downloads. Default: ``None``.
 
     Returns
@@ -1031,7 +1031,7 @@ def list_filter_aliases(instrument: str | None = None) -> _RegistryTable:
 
     Parameters
     ----------
-    instrument: str, optional
+    instrument : str, optional
         Keep only aliases containing this substring (case-insensitive).
         E.g. ``"sdss"``, ``"jwst"``, ``"hst"``. Default: ``None`` (all).
 
@@ -1097,16 +1097,16 @@ def load(names: list[str]):
 
     Parameters
     ----------
-    names: list of str
+    names : list of str
         Short filter names from the registry (e.g., ["sdss_r", "jwst_f200w"]).
 
     Returns
     -------
-    filter_waves: list of jnp.ndarray
+    filter_waves : list of jnp.ndarray
         Wavelength arrays per filter, shape (n_wave,) [Angstrom].
-    filter_trans: list of jnp.ndarray
+    filter_trans : list of jnp.ndarray
         Transmission arrays per filter, shape (n_wave,) (dimensionless [0, 1]).
-    filter_curves: list of FilterCurve
+    filter_curves : list of FilterCurve
         Full FilterCurve objects with wavelength, transmission, and name.
 
     Raises
@@ -1138,7 +1138,7 @@ def describe(name: str) -> str:
 
     Parameters
     ----------
-    name: str
+    name : str
         Filter short name from the registry (``"sdss_r"``) or the SVO-style
         curve-file stem (``"SLOAN_SDSS_r"``). Both resolve to the same curve.
 
@@ -1213,9 +1213,9 @@ def suggest(
 
     Parameters
     ----------
-    redshift: float
+    redshift : float
         Redshift of the source (z >= 0).
-    coverage: str
+    coverage : str
         Rest-frame wavelength coverage preset. Options:
 
         - "visible": 3500–9000 Å (optical)

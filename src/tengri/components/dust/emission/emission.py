@@ -80,7 +80,7 @@ def register_emission_model(name: str) -> Callable:
 
     Parameters
     ----------
-    name: str
+    name : str
         Registry key (e.g. ``"dale2014"``, ``"draine_li2007"``).
 
     Returns
@@ -103,7 +103,7 @@ def register_emission_model(name: str) -> Callable:
 
         Parameters
         ----------
-        fn: Callable
+        fn : Callable
             Dust emission model function matching ``DustEmissionTemplate`` protocol.
 
         Returns
@@ -136,7 +136,7 @@ def preload_emission_model(name: str) -> Callable:
 
     Parameters
     ----------
-    name: str
+    name : str
         Registry name (e.g. ``"draine_li2007"``).
 
     Returns
@@ -210,9 +210,9 @@ def draine_li2007(*args, **kwargs):
 
     Parameters
     ----------
-    wavelength: array_like, shape (n_wave,)
+    wavelength : array_like, shape (n_wave,)
         Rest-frame wavelength grid. [Å]
-    L_absorbed: float
+    L_absorbed : float
         Total absorbed luminosity. [L_sun]
     **kwargs
         Model-specific parameters (alpha, U_min, gamma, q_pah). See registered
@@ -239,9 +239,9 @@ def dale2014(*args, **kwargs):
 
     Parameters
     ----------
-    wavelength: array_like, shape (n_wave,)
+    wavelength : array_like, shape (n_wave,)
         Rest-frame wavelength grid. [Å]
-    L_absorbed: float
+    L_absorbed : float
         Total absorbed luminosity. [L_sun]
     **kwargs
         Model-specific parameters (alpha). See registered function for details.
@@ -267,9 +267,9 @@ def draine_li2014(*args, **kwargs):
 
     Parameters
     ----------
-    wavelength: array_like, shape (n_wave,)
+    wavelength : array_like, shape (n_wave,)
         Rest-frame wavelength grid. [Å]
-    L_absorbed: float
+    L_absorbed : float
         Total absorbed luminosity. [L_sun]
     **kwargs
         Model-specific parameters (alpha, U_min, gamma, q_pah). See registered
@@ -297,9 +297,9 @@ def astrodust(*args, **kwargs):
 
     Parameters
     ----------
-    wavelength: array_like, shape (n_wave,)
+    wavelength : array_like, shape (n_wave,)
         Rest-frame wavelength grid. [Å]
-    L_absorbed: float
+    L_absorbed : float
         Total absorbed luminosity. [L_sun]
     **kwargs
         Model-specific parameters. See registered function for details.
@@ -325,9 +325,9 @@ def bosa(*args, **kwargs):
 
     Parameters
     ----------
-    wavelength: array_like, shape (n_wave,)
+    wavelength : array_like, shape (n_wave,)
         Rest-frame wavelength grid. [Å]
-    L_absorbed: float
+    L_absorbed : float
         Total absorbed luminosity. [L_sun]
     **kwargs
         Model-specific parameters. See registered function for details.
@@ -353,9 +353,9 @@ def themis(*args, **kwargs):
 
     Parameters
     ----------
-    wavelength: array_like, shape (n_wave,)
+    wavelength : array_like, shape (n_wave,)
         Rest-frame wavelength grid. [Å]
-    L_absorbed: float
+    L_absorbed : float
         Total absorbed luminosity. [L_sun]
     **kwargs
         Model-specific parameters. See registered function for details.
@@ -392,11 +392,11 @@ def apply_dust_emission(
 
     Parameters
     ----------
-    model_name: str
+    model_name : str
         Registered model name (e.g. "modified_blackbody", "draine_li2007").
-    wavelength_aa: array_like, shape (n_wave,)
+    wavelength_aa : array_like, shape (n_wave,)
         Wavelength grid. [Å]
-    L_absorbed: float
+    L_absorbed : float
         Absorbed luminosity. [Lsun]
     **params
         Model-specific keyword arguments (e.g., dust_T, dust_umin, dust_gamma_dl).
@@ -436,12 +436,12 @@ def _make_lazy_loader(
 
     Parameters
     ----------
-    name: str
+    name : str
         Registry name (e.g. ``"dale2014"``).
-    template_filename: str
+    template_filename : str
         Canonical HDF5 filename to search for in data/ (e.g. ``"dale2014_templates.h5"``).
         The v2 variant (``"*_v2.h5"``) is tried first if present.
-    loader_fn_name: str
+    loader_fn_name : str
         Name of the ``create_*_from_grid`` function in this module.
 
     """

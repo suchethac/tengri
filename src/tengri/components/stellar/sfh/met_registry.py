@@ -38,16 +38,16 @@ class MetParamDef(NamedTuple):
 
     Attributes
     ----------
-    description: str
+    description : str
         Human-readable description.
-    bound_check: callable
+    bound_check : callable
         Function(lo, hi) -> bool for physical bound validation.
-    bound_error: str
+    bound_error : str
         Error message when bound check fails.
-    default: Distribution
+    default : Distribution
         Default prior distribution: what the parameter resolves to when
         nothing asks for it to be free. Usually ``Fixed``.
-    free_prior: Distribution or None, optional
+    free_prior : Distribution or None, optional
         The admissible range ``all_params: FREE`` expands to. ``None`` means
         the parameter is not freeable by the wildcard.
 
@@ -75,16 +75,16 @@ class MetModelSpec(NamedTuple):
 
     Attributes
     ----------
-    name: str
+    name : str
         Mode name (e.g., "delta", "two_step", "bins").
-    fn: callable or None
+    fn : callable or None
         Pure JAX function that returns log10(Z) absolute per SSP age.
         None for modes handled specially (delta, chem_evol, table).
-    params: dict[str, MetParamDef]
+    params : dict[str, MetParamDef]
         Fittable parameters: public_name -> MetParamDef.
-    settings: dict[str, Any]
+    settings : dict[str, Any]
         Non-fittable settings with defaults.
-    internal_param_map: dict[str, tuple[str, float, float]]
+    internal_param_map : dict[str, tuple[str, float, float]]
         public_name -> (internal_name, scale, offset).
         Conversion: internal = public * scale + offset.
 
@@ -113,7 +113,7 @@ def _register(spec: MetModelSpec) -> None:
 
     Parameters
     ----------
-    spec: MetModelSpec
+    spec : MetModelSpec
         Metallicity mode specification to register.
 
     Returns
@@ -532,7 +532,7 @@ def infer_met_mode(provided_keys: set[str] | frozenset[str]) -> str:
 
     Parameters
     ----------
-    provided_keys: set or frozenset of str
+    provided_keys : set or frozenset of str
         The set of parameter / kwarg names the user passed to
         :class:`Parameters`. Typically ``set(kwargs.keys())`` after
         the constructor pops its non-prior settings.
@@ -584,18 +584,18 @@ def resolve_met(
 
     Parameters
     ----------
-    met_mode: str
+    met_mode : str
         Metallicity mode name (e.g., "delta", "two_step", "bins").
 
     Returns
     -------
-    spec: MetModelSpec
+    spec : MetModelSpec
         Full model specification.
-    params: dict[str, MetParamDef]
+    params : dict[str, MetParamDef]
         Fittable parameters: public_name -> MetParamDef.
-    param_map: dict[str, tuple[str, float, float]]
+    param_map : dict[str, tuple[str, float, float]]
         public_name -> (internal_name, scale, offset) for unit/offset conversion.
-    settings: dict[str, Any]
+    settings : dict[str, Any]
         Non-fittable settings (e.g., met_n_bins for binned modes).
 
     Raises

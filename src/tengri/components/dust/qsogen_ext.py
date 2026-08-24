@@ -65,9 +65,9 @@ def qsogen_quasar_extinction(wavelength: Array, R: float = QSOGEN_EXT_R) -> Arra
 
     Parameters
     ----------
-    wavelength: array_like, shape (n_wave,)
+    wavelength : array_like, shape (n_wave,)
         Rest-frame wavelength grid [Å].
-    R: float, optional
+    R : float, optional
         Total-to-selective ratio :math:`R = A_V/E(B-V)`. Default ``3.1``
         (qsogen's ``redden_spectrum`` default).
 

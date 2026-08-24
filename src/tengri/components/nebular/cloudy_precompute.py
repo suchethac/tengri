@@ -41,13 +41,13 @@ def precompute(
 
     Parameters
     ----------
-    filter_waves: list
+    filter_waves : list
         Filter wavelength arrays [Angstrom] (observed frame).
-    filter_trans: list
+    filter_trans : list
         Filter transmission curves (unitless).
-    redshift: float
+    redshift : float
         Source redshift.
-    parameters: Parameters, optional
+    parameters : Parameters, optional
         Parameter spec (unused: CLOUDY backend handles auto-collapse
         internally). Default: None.
     **kwargs
@@ -77,7 +77,7 @@ def build_lookup(preint: object, **kwargs: object) -> object:
 
     Parameters
     ----------
-    preint: object
+    preint : object
         Unused: CLOUDY preintegration is handled inside CloudyGridBackend.
     **kwargs
         Additional arguments (ignored for Protocol consistency).

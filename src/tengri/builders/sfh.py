@@ -95,7 +95,7 @@ def _build_docstring(variant: str, spec, param_records: list[tuple[str, Any]]) -
     )
     for short, pdef in param_records:
         default_repr = repr(pdef.default) if pdef.default is not None else "registry default"
-        lines.append(f"{short}: Distribution, sentinel, or scalar, optional")
+        lines.append(f"{short} : Distribution, sentinel, or scalar, optional")
         lines.append(f"    {pdef.description}. Default prior: {default_repr}.")
     lines.append("")
     lines.append("Returns")
@@ -218,8 +218,8 @@ def available() -> list[str]:
     """Return the SFH variant names that can actually be built.
 
     The canonical keys of :data:`SFH_REGISTRY` **minus**
-    :data:`~tengri.components.stellar.sfh.registry.UNVALIDATED_SFH_TYPES`: types that are
-    registered but not yet wired into the DSPS forward path, so
+    :data:`~tengri.components.stellar.sfh.registry.UNVALIDATED_SFH_TYPES`:
+    types that are registered but not yet wired into the DSPS forward path, so
     ``SEDModel.build`` raises on them. Aliases are not surfaced; call them via
     the canonical name.
 

@@ -16,17 +16,17 @@ def normalized_rank(log_posterior, grid, truth_sigma, truth_tau_yr):
 
     Parameters
     ----------
-    log_posterior: array_like, shape (A * B,)
+    log_posterior : array_like, shape (A * B,)
         Unnormalized log-posterior [nats] on ``grid.nodes``.
-    grid: SharedGrid
-    truth_sigma: float
+    grid : SharedGrid
+    truth_sigma : float
         Injected amplitude [dex].
-    truth_tau_yr: float
+    truth_tau_yr : float
         Injected timescale [yr].
 
     Returns
     -------
-    rank_sigma, rank_tau: float
+    rank_sigma, rank_tau : float
         Fraction of marginal posterior mass at or below the truth, in ``[0, 1]``.
         For a calibrated posterior these are uniformly distributed.
     """
@@ -60,27 +60,27 @@ def run_population_sbc(
 
     Parameters
     ----------
-    simulate_fn: callable
+    simulate_fn : callable
         ``(sigma_dex, tau_yr, seed) -> (fields, times_yr)``. ``fields`` is
         ``(N, K, n)`` interim centered-field draws [natural-log units] and
         ``times_yr`` is ``(n,)`` [yr]. Injected rather than imported so this
         module depends on no particular simulator: pass the analytic toy to
         calibrate the estimator alone, or the forward model plus the interim
         fit driver to calibrate the whole pipeline.
-    n_replicates: int
+    n_replicates : int
         Number of replicate populations.
-    prior_sigma_bounds: tuple of float
+    prior_sigma_bounds : tuple of float
         Amplitude support [dex]; truths are drawn uniformly within it.
-    prior_tau_bounds_yr: tuple of float
+    prior_tau_bounds_yr : tuple of float
         Timescale support [yr]; truths are drawn log-uniformly within it.
-    seed: int
+    seed : int
         NumPy seed for the truth draws and the per-replicate simulator seeds.
-    n_sigma, n_tau: int, optional
+    n_sigma, n_tau : int, optional
         Quadrature grid resolution. Default 24 each.
 
     Returns
     -------
-    ranks: dict
+    ranks : dict
         Keys ``"sigma"`` and ``"tau"``, each an ``(n_replicates,)`` float array
         of normalized ranks in ``[0, 1]``.
     """

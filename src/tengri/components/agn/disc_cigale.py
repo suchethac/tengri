@@ -44,19 +44,19 @@ def piecewise_powerlaw_disk(
 
     Parameters
     ----------
-    wavelength: array_like, shape (n_wave,)
+    wavelength : array_like, shape (n_wave,)
         Wavelength grid in nanometer (CIGALE convention).
-    limits: array_like, shape (n_segment + 1,)
+    limits : array_like, shape (n_segment + 1,)
         Wavelength breakpoints in the same unit as ``wavelength`` (nm).
         Must be strictly increasing.
         Defines n_segment wavelength intervals.
-    coefs: array_like, shape (n_segment,)
+    coefs : array_like, shape (n_segment,)
         Power-law indices for each segment. The spectrum in segment i
         follows :math:`\\lambda^{\\alpha_i}` where :math:`\\alpha_i` is coefs[i].
 
     Returns
     -------
-    spectrum: ndarray, shape (n_wave,)
+    spectrum : ndarray, shape (n_wave,)
         Dimensionless normalized spectrum (integral over wavelength = 1.0).
 
     Notes
@@ -142,16 +142,16 @@ def skirtor_disk_spectrum(
 
     Parameters
     ----------
-    wavelength: array_like, shape (n_wave,)
+    wavelength : array_like, shape (n_wave,)
         Wavelength grid in nanometer (CIGALE convention).
-    delta: float
+    delta : float
         Slope modulation parameter. Range: [-1.0, 1.0]. Default: 0.0.
         Higher delta → steeper mid-IR falloff. This parameter shifts the
         slope coefficient at 100-5000 A from -1.5 by :math:`-\\delta`.
 
     Returns
     -------
-    spectrum: ndarray, shape (n_wave,)
+    spectrum : ndarray, shape (n_wave,)
         Dimensionless normalized spectrum.
 
     Notes
@@ -187,15 +187,15 @@ def schartmann2005_disk_spectrum(
 
     Parameters
     ----------
-    wavelength: array_like, shape (n_wave,)
+    wavelength : array_like, shape (n_wave,)
         Wavelength grid in nanometer (CIGALE convention).
-    delta: float
+    delta : float
         Slope modulation parameter. Range: [-1.0, 1.0]. Default: 0.0.
         Higher delta → steeper mid-IR falloff.
 
     Returns
     -------
-    spectrum: ndarray, shape (n_wave,)
+    spectrum : ndarray, shape (n_wave,)
         Dimensionless normalized spectrum.
 
     Notes
@@ -234,16 +234,16 @@ def adaf_disk_spectrum(
 
     Parameters
     ----------
-    wavelength: array_like, shape (n_wave,)
+    wavelength : array_like, shape (n_wave,)
         Wavelength grid in nanometer (CIGALE convention).
-    delta: float
+    delta : float
         Blend parameter. Range: [0.0, 1.0]. Default: 0.0.
         delta=0 → pure ADAF. delta=1 → pure thin disc.
         The spectrum is: (1 - delta) * ADAF + delta * DISC.
 
     Returns
     -------
-    spectrum: ndarray, shape (n_wave,)
+    spectrum : ndarray, shape (n_wave,)
         Dimensionless normalized spectrum.
 
     Notes

@@ -45,15 +45,15 @@ class Recipe:
     Attributes
     ----------
     agn_disc_block, agn_nlr_block, agn_blr_block, agn_feii_block, \
-agn_torus_block, agn_attenuation_block: str
+agn_torus_block, agn_attenuation_block : str
         Names of registered block implementations (see
         :data:`tengri.components.agn.blocks.AGN_BLOCKS`). Each defaults
         to ``"none"`` so a bare ``Recipe()`` is the no-op pipeline.
-    axis_params: tuple[str, ...]
+    axis_params : tuple[str, ...]
         Parameter names to vary in the precompute grid; everything else
         is held at the user's fixed value (or registry default). Empty
         tuple means "no precompute axes: recipe is fully scalar."
-    template_state: Any, optional
+    template_state : Any, optional
         Pre-loaded template bundle to thread through block bodies so they
         skip in-block ``load_*_templates()`` calls. ``None`` triggers the
         backwards-compatible lru_cache fallback inside each block. Set
@@ -100,14 +100,14 @@ agn_torus_block, agn_attenuation_block: str
 
         Parameters
         ----------
-        params: Parameters
+        params : Parameters
             Tengri ``Parameters`` object whose ``agn_*_block`` attributes
             were populated either via the flat ``Parameters(...)`` kwargs
             or by the companion nested-dict parser.
-        axis_params: sequence of str, optional
+        axis_params : sequence of str, optional
             Parameter names that the precompute will vary over a grid.
             Default ``()`` (no precompute).
-        template_state: Any, optional
+        template_state : Any, optional
             Pre-loaded template bundle. Default ``None``.
 
         Returns

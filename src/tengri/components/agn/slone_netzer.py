@@ -81,7 +81,7 @@ def create_slone_netzer_from_grid(grid_path: str) -> Callable:
 
     Parameters
     ----------
-    grid_path: str
+    grid_path : str
         Path to ``slone_netzer_disc_grid.h5``.
 
     Returns
@@ -119,13 +119,13 @@ class SloneNetzerGrid(NamedTuple):
 
     Attributes
     ----------
-    template: ndarray, shape (n_mbh, n_edd, n_wave)
+    template : ndarray, shape (n_mbh, n_edd, n_wave)
         Tabulated disc SEDs [shape only; renormalized on use].
-    wave_grid: ndarray, shape (n_wave,)
+    wave_grid : ndarray, shape (n_wave,)
         Template rest-frame wavelength grid [Angstrom].
-    log_mbh: ndarray, shape (n_mbh,)
+    log_mbh : ndarray, shape (n_mbh,)
         Grid axis, :math:`\\log_{10}(M_{\\rm BH}/M_\\odot)`.
-    log_edd: ndarray, shape (n_edd,)
+    log_edd : ndarray, shape (n_edd,)
         Grid axis, :math:`\\log_{10}(\\dot M/\\dot M_{\\rm Edd})`.
     """
 
@@ -141,7 +141,7 @@ def load_slone_netzer_grid(grid_path: str) -> SloneNetzerGrid:
 
     Parameters
     ----------
-    grid_path: str
+    grid_path : str
         Path to ``slone_netzer_disc_grid.h5``.
 
     Returns
@@ -193,15 +193,15 @@ def slone_netzer_sed_from_grid(
 
     Parameters
     ----------
-    grid: SloneNetzerGrid
+    grid : SloneNetzerGrid
         Template arrays, passed as an argument so they thread through JIT.
-    wavelength: array_like, shape (n_wave,)
+    wavelength : array_like, shape (n_wave,)
         Rest-frame wavelength grid. [Å]
-    agn_log_lbol: float, optional
+    agn_log_lbol : float, optional
         ``log10(L_bol / L_sun)``. Default 11.0.
-    agn_log_mbh: float, optional
+    agn_log_mbh : float, optional
         ``log10(M_BH / M_sun)``. Default 8.6.
-    agn_log_ledd: float, optional
+    agn_log_ledd : float, optional
         ``log10(Mdot / Mdot_Edd)``. Default −2.0.
 
     Returns
@@ -310,7 +310,7 @@ def slone_netzer_grid_support() -> dict[str, tuple[float, float]]:
 
     Returns
     -------
-    support: dict[str, tuple[float, float]]
+    support : dict[str, tuple[float, float]]
         ``{'agn_log_mbh': (lo, hi), 'agn_log_ledd': (lo, hi)}``: inclusive
         bounds, both dimensionless. ``agn_log_mbh`` is
         :math:`\log_{10}(M_{\rm BH}/M_\odot)`, ``agn_log_ledd`` is
@@ -343,7 +343,7 @@ def slone_netzer_sed(*args, _template: SloneNetzerGrid | None = None, **kwargs) 
 
     Parameters
     ----------
-    _template: SloneNetzerGrid, optional
+    _template : SloneNetzerGrid, optional
         Pre-loaded grid, threaded in as a JIT argument by the forward model.
         When ``None`` (default) the packaged grid is loaded from disk and :
         if this call happens under trace: baked into the graph as constants.

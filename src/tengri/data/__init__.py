@@ -126,17 +126,17 @@ def download_ssp(
 
     Parameters
     ----------
-    name: str
+    name : str
         Filename in the catalog (e.g. ``"fsps_prsc_miles_chabrier.h5"``), or a
         short identifier from ``tengri.list_known_ssps()``. Use
         :func:`list_remote_ssps` to discover catalog filenames.
-    dest_dir: str or os.PathLike, optional
+    dest_dir : str or os.PathLike, optional
         Directory to write into. Created if missing. Default ``None`` →
         ``$TENGRI_DATA_DIR`` if set, else ``data/``.
-    overwrite: bool, optional
+    overwrite : bool, optional
         If False (default), an existing file at the target path is kept and its
         path is returned without re-downloading.
-    progress: bool, optional
+    progress : bool, optional
         If True (default), report download progress. False for clean logs.
 
     Returns

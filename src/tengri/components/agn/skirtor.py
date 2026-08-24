@@ -52,11 +52,11 @@ class SKIRTORComponents(NamedTuple):
 
     Attributes
     ----------
-    disk: jnp.ndarray, shape (n_wave,)
+    disk : jnp.ndarray, shape (n_wave,)
         Accretion disk emission (direct + scattered) [erg/s/Hz].
-    dust: jnp.ndarray, shape (n_wave,)
+    dust : jnp.ndarray, shape (n_wave,)
         Dust thermal emission from the torus [erg/s/Hz].
-    total: jnp.ndarray, shape (n_wave,)
+    total : jnp.ndarray, shape (n_wave,)
         Total emission (disk + dust) [erg/s/Hz].
 
     Notes
@@ -79,7 +79,7 @@ def _load_grid_arrays(grid_path: str):
 
     Parameters
     ----------
-    grid_path: str
+    grid_path : str
         Path to ``.npz`` or ``.h5`` file.
 
     Returns
@@ -190,19 +190,19 @@ def _interpolate_and_normalize(
 
     Parameters
     ----------
-    grid_jax: ndarray, shape (n_tau, n_p, n_q, n_oa, n_inc, n_wave)
+    grid_jax : ndarray, shape (n_tau, n_p, n_q, n_oa, n_inc, n_wave)
         L_λ-like template grid [erg/s/Å, normalized per unit bolometric].
-    wave_grid: ndarray, shape (n_wave_grid,)
+    wave_grid : ndarray, shape (n_wave_grid,)
         Grid wavelength array [Angstrom].
-    axes: tuple of ndarray
+    axes : tuple of ndarray
         Grid axis values (tau, p, q, oa, cos_inc).
-    edges: tuple of ndarray
+    edges : tuple of ndarray
         Precomputed bin edges for triweight interpolation.
-    wavelength: ndarray, shape (n_wave,)
+    wavelength : ndarray, shape (n_wave,)
         Target wavelength array [Angstrom].
-    point: tuple
+    point : tuple
         (tau, p, q, oa, cos_inc) query point.
-    l_scale: float
+    l_scale : float
         Bolometric luminosity scale factor [erg/s].
 
     Returns
@@ -260,13 +260,13 @@ class SKIRTORGrid(NamedTuple):
 
     Attributes
     ----------
-    grid: ndarray
+    grid : ndarray
         Template luminosity cube (dust-only for v3 grids, total for v2).
-    wave_grid: ndarray, shape (n_wave,)
+    wave_grid : ndarray, shape (n_wave,)
         Template rest-frame wavelength grid. [Å]
-    axes: tuple of ndarray
+    axes : tuple of ndarray
         Parameter-axis node values (tau, p, q, oa, radius, inc).
-    edges: tuple of ndarray
+    edges : tuple of ndarray
         Per-axis triweight-kernel bin edges.
     """
 
@@ -316,12 +316,12 @@ def _skirtor_grid_sed(
 
     Parameters
     ----------
-    wavelength: array_like, shape (n_wave,)
+    wavelength : array_like, shape (n_wave,)
         Rest-frame wavelength grid. [Å]
-    grid_data: SKIRTORGrid
+    grid_data : SKIRTORGrid
         Threadable template arrays.
     agn_log_lbol, agn_tau_skirtor, agn_p_skirtor, agn_q_skirtor, \
-agn_oa_skirtor, agn_radius_ratio, agn_cos_inc, agn_torus_frac: float
+agn_oa_skirtor, agn_radius_ratio, agn_cos_inc, agn_torus_frac : float
         SKIRTOR grid coordinates and normalization (see
         :func:`create_skirtor_from_grid`).
 
@@ -372,7 +372,7 @@ def create_skirtor_from_grid(grid_path: str) -> Callable:
 
     Parameters
     ----------
-    grid_path: str
+    grid_path : str
         Path to the SKIRTOR grid file (``.npz`` or ``.h5``).
 
     Returns
@@ -430,21 +430,21 @@ def create_skirtor_from_grid(grid_path: str) -> Callable:
 
         Parameters
         ----------
-        wavelength: ndarray, shape (n_wave,)
+        wavelength : ndarray, shape (n_wave,)
             Wavelength grid. [Å]
-        agn_log_lbol: float
+        agn_log_lbol : float
             log₁₀(L_bol / L_sun). [dimensionless]
-        agn_tau_skirtor: float
+        agn_tau_skirtor : float
             Edge-on optical depth at 9.7 μm. [dimensionless]
-        agn_p_skirtor: float
+        agn_p_skirtor : float
             Radial dust density power-law index. [dimensionless]
-        agn_q_skirtor: float
+        agn_q_skirtor : float
             Polar dust density gradient index. [dimensionless]
-        agn_oa_skirtor: float
+        agn_oa_skirtor : float
             Torus half-opening angle. [degrees]
-        agn_cos_inc: float
+        agn_cos_inc : float
             Cosine of inclination (1 = face-on, 0 = edge-on). [dimensionless]
-        agn_torus_frac: float
+        agn_torus_frac : float
             Fraction of L_bol reprocessed by the torus, integrated
             over the dust-emission spectrum. With the v3 grid (dust-
             only template), this is the true covering-factor × dust
@@ -480,7 +480,7 @@ def create_skirtor_components_from_grid(grid_path: str) -> Callable:
 
     Parameters
     ----------
-    grid_path: str
+    grid_path : str
         Path to a v3 SKIRTOR HDF5 file.
 
     Returns
@@ -554,24 +554,24 @@ def create_skirtor_components_from_grid(grid_path: str) -> Callable:
 
         Parameters
         ----------
-        wavelength: ndarray, shape (n_wave,)
+        wavelength : ndarray, shape (n_wave,)
             Wavelength grid. [Å]
-        agn_log_lbol: float
+        agn_log_lbol : float
             log₁₀(L_bol / L_sun). [dimensionless]
-        agn_tau_skirtor: float
+        agn_tau_skirtor : float
             Edge-on optical depth at 9.7 μm. [dimensionless]
-        agn_p_skirtor: float
+        agn_p_skirtor : float
             Radial dust density power-law index. [dimensionless]
-        agn_q_skirtor: float
+        agn_q_skirtor : float
             Polar dust density gradient index. [dimensionless]
-        agn_oa_skirtor: float
+        agn_oa_skirtor : float
             Torus half-opening angle. [degrees]
-        agn_cos_inc: float
+        agn_cos_inc : float
             Cosine of inclination. [dimensionless]
-        frac_agn: float
+        frac_agn : float
             CIGALE-style AGN fraction (L_AGN / L_total) in a configurable band.
             [dimensionless, 0–1]
-        agn_torus_frac: float, optional
+        agn_torus_frac : float, optional
             **Deprecated**: use frac_agn instead.
 
         Returns
@@ -642,12 +642,12 @@ def skirtor_disc_dust_ratio(
 
     Parameters
     ----------
-    wave: ndarray, shape (n_wave,)
+    wave : ndarray, shape (n_wave,)
         Rest-frame wavelength grid [Å].
-    disc_lambda_unreddened: ndarray, shape (n_wave,)
+    disc_lambda_unreddened : ndarray, shape (n_wave,)
         Analytic disc spectrum *before* reddening, any normalization
         (shape only is used). [erg/s/Å]
-    disc_ext_fac: ndarray, shape (n_wave,)
+    disc_ext_fac : ndarray, shape (n_wave,)
         Line-of-sight reddening factor ``10^(-0.4·k·E(B-V))`` (1.0 = no
         reddening). [dimensionless]
     agn_tau_skirtor, agn_p_skirtor, agn_q_skirtor, agn_oa_skirtor, agn_cos_inc
@@ -656,14 +656,14 @@ def skirtor_disc_dust_ratio(
 
     Returns
     -------
-    R: ndarray, scalar
+    R : ndarray, scalar
         Disc/dust bolometric luminosity ratio. Returns 1.0 if the v3 grid
         (separate disk/dust components) is unavailable.
-    incl_ratio: ndarray, shape (n_wave,)
+    incl_ratio : ndarray, shape (n_wave,)
         Wavelength-dependent disc inclination attenuation ``disk(i)/disk(0)``
         for reweighting the disc output spectrum. Ones if the grid is
         unavailable.
-    R_faceon: ndarray, scalar
+    R_faceon : ndarray, scalar
         Face-on UN-reddened disc/dust ratio ``∫disk(i=0)/∫dust(i)``: the
         ratio the polar ``l_ext`` proxy needs (CIGALE ``l_ext =
         geom·∫AGN1.disk·(1-ext_fac)``). 1.0 if the grid is unavailable.
@@ -774,9 +774,9 @@ class SKIRTORBundle(NamedTuple):
 
     Attributes
     ----------
-    torus: SKIRTORGrid
+    torus : SKIRTORGrid
         Dust-cube grid consumed by :func:`skirtor_sed`.
-    disc_dust: tuple or None
+    disc_dust : tuple or None
         ``(disk, dust, wave_grid, axes)`` for
         :func:`skirtor_disc_dust_ratio`; ``None`` when the on-disk grid
         predates the v3 split and carries no separate disk component.
@@ -860,7 +860,7 @@ def create_skirtor_raw_total_from_grid(grid_path: str) -> Callable:
 
     Parameters
     ----------
-    grid_path: str
+    grid_path : str
         Path to a v4 SKIRTOR HDF5 grid.
 
     Returns
@@ -961,7 +961,7 @@ def create_skirtor_disc_attenuation_from_grid(grid_path: str) -> Callable:
 
     Parameters
     ----------
-    grid_path: str
+    grid_path : str
         Path to a v3 SKIRTOR HDF5 file with ``spectra/disk_emission``.
 
     Returns
@@ -999,13 +999,13 @@ class SKIRTORDiscAttenGrid(NamedTuple):
 
     Attributes
     ----------
-    disk: ndarray
+    disk : ndarray
         SKIRTOR disc template cube.
-    wave_grid: ndarray, shape (n_wave,)
+    wave_grid : ndarray, shape (n_wave,)
         Template rest-frame wavelength grid [Angstrom].
-    axes: tuple of ndarray
+    axes : tuple of ndarray
         The SKIRTOR parameter axes.
-    edges: tuple of ndarray
+    edges : tuple of ndarray
         Triweight bin edges derived from ``axes``.
     """
 
@@ -1045,14 +1045,14 @@ def skirtor_disc_attenuation_from_grid(
 
     Parameters
     ----------
-    grid: SKIRTORDiscAttenGrid or None
+    grid : SKIRTORDiscAttenGrid or None
         Disc-column template arrays, passed as an **argument** so they thread
         through JIT. ``None`` (a v2 grid, which carries no separate disc
         column) yields identity attenuation.
-    wavelength: array_like, shape (n_wave,)
+    wavelength : array_like, shape (n_wave,)
         Rest-frame wavelength [Angstrom].
     agn_tau_skirtor, agn_p_skirtor, agn_q_skirtor, agn_oa_skirtor, \
-agn_radius_ratio, agn_cos_inc: float, optional
+agn_radius_ratio, agn_cos_inc : float, optional
         SKIRTOR grid coordinates.
 
     Returns
@@ -1150,7 +1150,7 @@ def skirtor_disc_attenuation(*args, _template: SKIRTORDiscAttenGrid | None = Non
 
     Parameters
     ----------
-    _template: SKIRTORDiscAttenGrid, optional
+    _template : SKIRTORDiscAttenGrid, optional
         Pre-loaded disc arrays, threaded in as a JIT argument by the forward
         model. When ``None`` (default) the grid is loaded from disk and: if
         this call happens under trace: baked into the graph as constants.
@@ -1168,29 +1168,29 @@ def skirtor_sed(*args, **kwargs):
 
     Parameters
     ----------
-    wavelength: array_like, shape (n_wave,)
+    wavelength : array_like, shape (n_wave,)
         Rest-frame wavelength grid [Angstrom].
-    agn_log_lbol: float, optional
+    agn_log_lbol : float, optional
         AGN bolometric luminosity [log10(L_sun)]. Default: 10.0.
-    agn_tau_skirtor: float, optional
+    agn_tau_skirtor : float, optional
         V-band optical depth of torus [dimensionless]. Default: 7.0.
         Range: ~1–15 (grid-dependent).
-    agn_p_skirtor: float, optional
+    agn_p_skirtor : float, optional
         Radial dust distribution power-law index [dimensionless].
         Default: 1.0. Range: ~0–2 (grid-dependent).
-    agn_q_skirtor: float, optional
+    agn_q_skirtor : float, optional
         Radial dust distribution power-law index (temperature profile)
         [dimensionless]. Default: 1.0. Range: ~0–2 (grid-dependent).
-    agn_oa_skirtor: float, optional
+    agn_oa_skirtor : float, optional
         Half-opening angle of the torus [degrees]. Default: 40.0.
         Range: ~10–80° (grid-dependent).
-    agn_cos_inc: float, optional
+    agn_cos_inc : float, optional
         Cosine of inclination angle [dimensionless, 0–1].
         Default: 0.5 (60°).
-    agn_torus_frac: float, optional
+    agn_torus_frac : float, optional
         Fraction of bolometric luminosity from torus [dimensionless, 0–1].
         Default: 0.5.
-    _template: callable, optional
+    _template : callable, optional
         Pre-loaded template function (for JIT threading). When provided,
         uses this instead of the module-level cached loader. Internal use.
     **kwargs
@@ -1227,28 +1227,28 @@ def skirtor_components(*args, **kwargs) -> SKIRTORComponents:
 
     Parameters
     ----------
-    wavelength: array_like, shape (n_wave,)
+    wavelength : array_like, shape (n_wave,)
         Rest-frame wavelength grid [Angstrom].
-    agn_log_lbol: float, optional
+    agn_log_lbol : float, optional
         AGN bolometric luminosity [log10(L_sun)]. Default: 10.0.
-    agn_tau_skirtor: float, optional
+    agn_tau_skirtor : float, optional
         V-band optical depth of torus [dimensionless]. Default: 7.0.
-    agn_p_skirtor: float, optional
+    agn_p_skirtor : float, optional
         Radial dust distribution power-law index [dimensionless].
         Default: 1.0.
-    agn_q_skirtor: float, optional
+    agn_q_skirtor : float, optional
         Temperature profile power-law index [dimensionless]. Default: 1.0.
-    agn_oa_skirtor: float, optional
+    agn_oa_skirtor : float, optional
         Half-opening angle of the torus [degrees]. Default: 40.0.
-    agn_cos_inc: float, optional
+    agn_cos_inc : float, optional
         Cosine of inclination angle [dimensionless, 0–1].
         Default: 0.5 (60°).
-    frac_agn: float, optional
+    frac_agn : float, optional
         AGN fraction (CIGALE-style). Preferred parameter. Default: 0.5.
-    agn_torus_frac: float, optional
+    agn_torus_frac : float, optional
         **Deprecated**: use frac_agn instead. Falls back to this if
         frac_agn is not provided.
-    _template: callable, optional
+    _template : callable, optional
         Pre-loaded template function (for JIT threading). When provided,
         uses this instead of the module-level cached loader. Internal use.
     **kwargs

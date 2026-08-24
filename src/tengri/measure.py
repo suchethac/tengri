@@ -70,8 +70,8 @@ Measure off bare arrays (no model anywhere):
 
 See Also
 --------
-tengri.forward.sed_model.SEDModel.predict_spectral_indices: model-side twin, same operator.
-tengri.forward.sed_model.SEDModel.measure_line_fluxes: model-side twin, same operator.
+tengri.forward.sed_model.SEDModel.predict_spectral_indices : model-side twin, same operator.
+tengri.forward.sed_model.SEDModel.measure_line_fluxes : model-side twin, same operator.
 """
 
 from __future__ import annotations
@@ -171,15 +171,15 @@ def spectral_index(wave_rest, flux, index_def):
 
     Parameters
     ----------
-    wave_rest: array_like, shape (n_wave,)
+    wave_rest : array_like, shape (n_wave,)
         **Rest-frame** wavelengths [Angstrom]. Must span every window the index
         defines: de-redshift an observed grid before passing it (``wave_obs /
         (1 + z)``).
-    flux: array_like, shape (n_wave,)
+    flux : array_like, shape (n_wave,)
         Flux density on ``wave_rest``. **Any consistent units**; indices are
         ratios of window means, so :math:`L_\nu` [erg/s/Hz] and :math:`F_\nu`
         [erg/s/cm^2/Hz] give the same answer, and no distance is needed.
-    index_def: str or SpectralIndexDef or CompositeIndexDef
+    index_def : str or SpectralIndexDef or CompositeIndexDef
         An index name from :data:`STANDARD_INDICES` (e.g. ``"Dn4000"``,
         ``"HdA"``) or a definition object.
 
@@ -224,18 +224,18 @@ def line_flux(wave_rest, lnu, line_def, *, redshift, dl_cm=None):
 
     Parameters
     ----------
-    wave_rest: array_like, shape (n_wave,)
+    wave_rest : array_like, shape (n_wave,)
         **Rest-frame** wavelengths [Angstrom].
-    lnu: array_like, shape (n_wave,)
+    lnu : array_like, shape (n_wave,)
         **Rest-frame** spectral luminosity :math:`L_\nu` [erg/s/Hz]. Unlike
         :func:`spectral_index`, the units matter here: the output is an absolute
         flux, so a dimensionless or :math:`F_\nu` input gives a wrong answer.
-    line_def: str or LineDef
+    line_def : str or LineDef
         A line name from :data:`DESI_LINES` (e.g. ``"Halpha"``) or a
         :class:`~tengri.observation.line_measurement.LineDef` for anything else.
-    redshift: float
+    redshift : float
         Source redshift, used **only** to set the luminosity distance.
-    dl_cm: float, optional
+    dl_cm : float, optional
         Luminosity distance [cm]. Pass this to override the package cosmology;
         otherwise it is derived from ``redshift`` via
         :func:`tengri.cosmology.luminosity_distance`.
@@ -290,20 +290,20 @@ def photometry(wave_rest, lnu, filters, *, redshift, convention=None, dl_cm=None
 
     Parameters
     ----------
-    wave_rest: array_like, shape (n_wave,)
+    wave_rest : array_like, shape (n_wave,)
         **Rest-frame** wavelengths [Angstrom].
-    lnu: array_like, shape (n_wave,)
-        **Rest-frame** spectral luminosity :math:`L_\nu` [erg/s/Hz]. Units matter;
+    lnu : array_like, shape (n_wave,)
+        **Rest-frame** spectral luminosity :math:`L_\nu` [erg/s/Hz]. Units matter
         the output is an absolute flux density.
-    filters: Photometry or sequence of FilterCurve
+    filters : Photometry or sequence of FilterCurve
         The bands to integrate through. **Passing a**
         :class:`~tengri.observation.photometry_config.Photometry` **is the safe
         form**: it carries its own ``convention``, so the measurement cannot
         silently disagree with the model that owns it.
-    redshift: float
+    redshift : float
         Source redshift. Sets both the wavelength shift and (via the cosmology)
         the luminosity distance.
-    convention: FilterConvention, optional
+    convention : FilterConvention, optional
         The bandpass weight :math:`w(\lambda)`. Resolved in this order: an
         explicit argument wins; else the ``convention`` carried by a
         ``Photometry`` object; else :attr:`FilterConvention.BESSELL`
@@ -319,7 +319,7 @@ def photometry(wave_rest, lnu, filters, *, redshift, convention=None, dl_cm=None
            :func:`from_prediction`, which inherits it: and the question cannot
            arise.
 
-    dl_cm: float, optional
+    dl_cm : float, optional
         Luminosity distance [cm]; overrides the package cosmology.
 
     Returns
@@ -382,13 +382,13 @@ def from_prediction(pred, *, indices=None, lines=None, filters=_UNSET):
 
     Parameters
     ----------
-    pred: Prediction
+    pred : Prediction
         A cached prediction, from ``model.predict(params)``.
-    indices: sequence of str or SpectralIndexDef, optional
+    indices : sequence of str or SpectralIndexDef, optional
         Indices to measure. Names resolve against :data:`STANDARD_INDICES`.
-    lines: sequence of str or LineDef, optional
+    lines : sequence of str or LineDef, optional
         Emission lines to measure. Names resolve against :data:`DESI_LINES`.
-    filters: None or sequence of str, optional
+    filters : None or sequence of str, optional
         Bands to synthesize, delegated to :meth:`Prediction.photometry`; so the
         model's filter convention and IGM attenuation apply. ``filters=None``
         means *the filters the model was built with* (matching

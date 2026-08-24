@@ -23,17 +23,17 @@ class NebularRegistryEntry:
 
     Attributes
     ----------
-    callable: Callable or None
+    callable : Callable or None
         The backend class (or any reference). ``None`` for the
         ``'none'`` disable-toggle. Dispatch in
         ``tengri.parameters.groups._translate_neb`` still routes
         through ``nebular_ssp`` / ``nebular_cue`` / ``nebular`` flags
         on :class:`Parameters`; this field is metadata.
-    citation: str
+    citation : str
         Academic citation. Empty for the disable-toggle.
-    status: str
+    status : str
         ``"production"`` / ``"experimental"`` / ``"demo"`` / ``"deprecated"``.
-    short_doc: str
+    short_doc : str
         One-line description.
     """
 

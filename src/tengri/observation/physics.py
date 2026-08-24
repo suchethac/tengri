@@ -27,8 +27,8 @@ Examples
 
 See Also
 --------
-tengri.observation.containers: user-facing data classes
-tengri.observation.constants: module-level constants (catalogs, status flags)
+tengri.observation.containers : user-facing data classes
+tengri.observation.constants : module-level constants (catalogs, status flags)
 """
 
 from __future__ import annotations

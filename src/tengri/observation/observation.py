@@ -43,8 +43,8 @@ def _restband_lnu(state) -> jnp.ndarray:
     redshift and on which ``approx`` was passed.
 
     Assembled from the ``*_restband_lnu_precomp`` family, **auto-discovered** exactly
-    as ``predict_via_precomp`` discovers the observed ``*_phot_lnu_precomp`` family,     so a new
-    emitter gets rest-frame photometry for free and cannot silently drop out
+    as ``predict_via_precomp`` discovers the observed ``*_phot_lnu_precomp`` family,
+    so a new emitter gets rest-frame photometry for free and cannot silently drop out
     of it, which is how the fast path lost AGN and nebular emission once already
     (#737/#740).
 
@@ -53,7 +53,7 @@ def _restband_lnu(state) -> jnp.ndarray:
 
     Parameters
     ----------
-    state: PipelineState
+    state : PipelineState
         Carrying the ``*_restband_lnu_precomp`` family and the rest-band dust screens.
 
     Returns
@@ -147,13 +147,13 @@ class Observation:
 
     Parameters
     ----------
-    photometry: Photometry or None
+    photometry : Photometry or None
         Photometric filter configuration.
-    spectroscopy: Spectroscopy or None
+    spectroscopy : Spectroscopy or None
         Spectroscopic instrument configuration.
-    noise: NoiseModel or None
+    noise : NoiseModel or None
         Noise model configuration (calibration floor, Student-t dof).
-    line_fluxes: LineFluxData or None
+    line_fluxes : LineFluxData or None
         Observed emission line fluxes for direct fitting.
         When provided, the likelihood includes an additive chi-squared
         term comparing model line luminosities against these fluxes.
@@ -165,15 +165,15 @@ class Observation:
 
     Attributes
     ----------
-    photometry: Photometry or None
+    photometry : Photometry or None
         Photometric filter configuration.
-    spectroscopy: Spectroscopy or None
+    spectroscopy : Spectroscopy or None
         Spectroscopic instrument configuration.
-    noise: NoiseModel or None
+    noise : NoiseModel or None
         Noise model configuration.
-    line_fluxes: LineFluxData or None
+    line_fluxes : LineFluxData or None
         Observed emission line fluxes.
-    spectral_indices: SpectralIndexData or None
+    spectral_indices : SpectralIndexData or None
         Observed spectral indices for fitting.
 
     Notes
@@ -477,9 +477,9 @@ class Observation:
 
         Parameters
         ----------
-        phot: array or None
+        phot : array or None
             Photometric data, shape ``(n_filters,)``.
-        spec: array or None
+        spec : array or None
             Spectroscopic data, shape ``(n_pixels,)``.
 
         Returns
@@ -536,7 +536,7 @@ class Observation:
 
         Parameters
         ----------
-        predicted: array
+        predicted : array
             Packed prediction array, shape ``(n_data,)``.
 
         Returns
@@ -601,11 +601,11 @@ class Observation:
 
         Parameters
         ----------
-        sed_result: SEDResult
+        sed_result : SEDResult
             Observed-frame SED with ``wavelength`` and ``sed``.
-        z: float
+        z : float
             Redshift.
-        dl_cm: float
+        dl_cm : float
             Luminosity distance [cm].
 
         Returns
@@ -644,15 +644,15 @@ class Observation:
 
         Parameters
         ----------
-        sed_result: SEDResult
+        sed_result : SEDResult
             Observed-frame SED with ``wavelength`` and ``sed``.
-        z: float
+        z : float
             Redshift.
-        dl_cm: float
+        dl_cm : float
             Luminosity distance [cm].
-        sigma_v_kms: float, optional
+        sigma_v_kms : float, optional
             Intrinsic velocity dispersion [km/s]. Default 0.0.
-        cal_coeffs: ndarray, shape (order,), or None, optional
+        cal_coeffs : ndarray, shape (order,), or None, optional
             Calibration polynomial coefficients to apply after LSF.
             If ``None`` (default), no calibration is applied.
 
@@ -717,29 +717,29 @@ class Observation:
 
         Parameters
         ----------
-        state: ForwardState
+        state : ForwardState
             Orchestrator output. Reads ``state.sed_intrinsic`` (rest-frame
             L_nu in erg/s/Hz) and ``state.wave`` (rest-frame Angstrom).
-        params: Mapping[str, jnp.ndarray]
+        params : Mapping[str, jnp.ndarray]
             Parameter dict. Reads ``redshift`` for the cosmology calculation.
-        dl_cm: float or jnp.ndarray, optional
+        dl_cm : float or jnp.ndarray, optional
             Luminosity distance [cm]. If ``None``, derived from
             ``params["redshift"]`` via :func:`tengri.utils.cosmology.luminosity_distance`.
-        wave_obs: jnp.ndarray, optional
+        wave_obs : jnp.ndarray, optional
             Observed-frame wavelength grid for the spectrum. Defaults to
             ``self.spectroscopy.wave_obs``.
-        sigma_v_kms: float, default 0.0
+        sigma_v_kms : float, default 0.0
             Velocity dispersion [km/s] for LSF convolution.
-        lsf_resolution: float, ndarray, or None
+        lsf_resolution : float, ndarray, or None
             Override LSF resolution. ``None`` reuses
             ``self.spectroscopy.resolution``.
-        lsf_sigma_lib_kms: float, optional
+        lsf_sigma_lib_kms : float, optional
             Override SSP library sigma [km/s]. ``None`` reuses
             ``self.spectroscopy.sigma_lib_kms``.
-        lsf_n_bins: int, optional
+        lsf_n_bins : int, optional
             Override piecewise-constant LSF bin count. ``None`` reuses
             ``self.spectroscopy.lsf_n_bins``.
-        observables_type: type or None
+        observables_type : type or None
             If provided, a :class:`typing.NamedTuple` class produced by
             :func:`build_observables_class`. When ``None``, returns a dict
             (backward-compat). When provided, populates and returns an instance
@@ -945,11 +945,11 @@ class Observation:
 
         Parameters
         ----------
-        state: ForwardState
+        state : ForwardState
             Orchestrator state with at least ``stellar_phot_lnu_precomp``.
-        params: Mapping[str, jnp.ndarray]
+        params : Mapping[str, jnp.ndarray]
             Param dict; reads ``redshift``.
-        observables_type: type, optional
+        observables_type : type, optional
             Per-model :class:`Observables` NamedTuple class (from
             :meth:`SEDModel.Observables`). When provided, returns an
             instance; when ``None``, returns a dict.
@@ -1051,7 +1051,7 @@ class Observation:
 
         See Also
         --------
-        predict: The default projection path that integrates
+        predict : The default projection path that integrates
             ``sed_intrinsic`` through filters. Stays the canonical
             reference; the exact path remains the default (``approx=None``).
         """
@@ -1198,7 +1198,7 @@ class Observation:
 
         # The sub-band tensor with the IGM already folded in at the quadrature
         # nodes (#1135). Present only when a mean-IGM model is precomputable.
-        # ``igm_phot_factor`` band-averages T *alone*, unweighted by the spectrum,
+        # ``igm_phot_factor`` band-averages T *alone*, unweighted by the spectrum
         # ⟨S⟩·⟨T⟩ where the flux needs ⟨S·T⟩; across GALEX FUV at z≈0.8 the
         # transmission runs from ~1 to ~0 inside the band and that covariance term
         # reaches −9.5 %. Contracting this tensor against the same dust screen
@@ -1256,7 +1256,7 @@ class Observation:
                     )
 
             # Nebular emission (Cue / CloudyGrid) arises in the HII regions
-            # around the youngest stars, so it sees the full young-limit screen,
+            # around the youngest stars, so it sees the full young-limit screen
             # birth cloud AND diffuse (A_bc·A_diff, i.e. y=1), matching the
             # exact path (two_component.py reddens the nebular SED by both
             # screens). The earlier diffuse-only ``A_diff·Φ_neb`` left
@@ -1329,8 +1329,8 @@ class Observation:
                     dust_attenuated = dust_attenuated + a_slope_lut * stellar_psi
             total_lnu = dust_attenuated + unattenuated_phi
         elif sub_per_age_igm is not None and sub_per_age is not None:
-            # No dust component at all, but the IGM still needs the quadrature,             # the
-            # ⟨S⟩·⟨T⟩ gap is a property of the band average, not of the dust.
+            # No dust component at all, but the IGM still needs the quadrature;
+            # the ⟨S⟩·⟨T⟩ gap is a property of the band average, not of the dust.
             # Rebuild the stellar term from the sub-band sums so the IGM-free and
             # IGM-folded halves are consistent (Σ_k Φ_k = Φ exactly, the partition
             # is flux-conserving by construction, asserted in subband_quadrature).
@@ -1370,8 +1370,8 @@ class Observation:
         # Only the observed-frame flux is attenuated; ``phot_rest_fnu`` (z=0)
         # carries no IGM.
         # Prefer the build-time band factors. <T>_f depends only on (z, filter,
-        # convention), the transmission is averaged alone, unweighted by the SED,         # so the
-        # IGM component tabulates it against z at build time and publishes
+        # convention); the transmission is averaged alone, unweighted by the SED,
+        # so the IGM component tabulates it against z at build time and publishes
         # ``igm_phot_factor``. Consuming the full-grid ``igm_transmission`` here
         # instead forced a 5994-point Inoue+2014 evaluation on EVERY call (12.1
         # MFLOPs to produce n_filters numbers) and kept the full-resolution grid
@@ -1435,12 +1435,12 @@ class Observation:
 
         Parameters
         ----------
-        state: ForwardState
+        state : ForwardState
             Orchestrator state with at least ``spec_eff_waves`` and
             one or more ``*_spec_lnu_precomp`` entries.
-        params: Mapping[str, jnp.ndarray]
+        params : Mapping[str, jnp.ndarray]
             Param dict; reads ``redshift``.
-        observables_type: type, optional
+        observables_type : type, optional
             Per-model :class:`Observables` NamedTuple class (from
             :meth:`SEDModel.Observables`). When provided, returns an
             instance; when ``None``, returns a dict.
@@ -1599,22 +1599,22 @@ class Observation:
         lines.append("-" * 50)
 
         if self.photometry is not None:
-            lines.append(f"  Photometry: {self.photometry.summary()}")
+            lines.append(f"  Photometry : {self.photometry.summary()}")
 
         if self.spectroscopy is not None:
-            lines.append(f"  Spectroscopy: {self.spectroscopy.summary()}")
+            lines.append(f"  Spectroscopy : {self.spectroscopy.summary()}")
 
         if self.line_fluxes is not None:
             lines.append(f"  Line fluxes: {self.line_fluxes.summary()}")
 
         if self.spectral_indices is not None:
-            lines.append(f"  Indices   : {self.spectral_indices.summary()}")
+            lines.append(f"  Indices    : {self.spectral_indices.summary()}")
 
         if self.noise is not None:
-            lines.append(f"  Noise     : {self.noise.summary()}")
+            lines.append(f"  Noise      : {self.noise.summary()}")
 
-        lines.append(f"  Data type : {self.data_type}")
-        lines.append(f"  N data    : {self.n_data}")
+        lines.append(f"  Data type  : {self.data_type}")
+        lines.append(f"  N data     : {self.n_data}")
         if self.is_joint:
             lines.append(f"               ({self.n_data_phot} phot + {self.n_data_spec} spec)")
         if self.has_line_fluxes:

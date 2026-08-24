@@ -186,7 +186,7 @@ class _RegistryTable(list):
 
         Parameters
         ----------
-        value: str, optional
+        value : str, optional
             Which column becomes the dict value. Defaults to ``"short_doc"``.
 
         Returns
@@ -217,7 +217,7 @@ class _RegistryTable(list):
 
         Parameters
         ----------
-        title: str, optional
+        title : str, optional
             Optional title for the directive (appears as table caption).
 
         Returns
@@ -668,7 +668,7 @@ def list_agn_models(*, status: str | None = None) -> _RegistryTable:
 
     Parameters
     ----------
-    status: str, optional
+    status : str, optional
         Filter by ``"production"``, ``"experimental"``, ``"demo"``, or
         ``"deprecated"``.
 
@@ -693,17 +693,17 @@ def list_agn_blocks(*, category: str | None = None, status: str | None = None) -
     ``SEDModel.build(..., agn={"disc": {"type": "multicolor"},
     "nlr": {"type": "analytic"}})``.
 
-    This coexists with monolithic AGN models (:func:`list_agn_models`): blocks offer mix-and-match
-    flexibility while monolithic models bundle
+    This coexists with monolithic AGN models (:func:`list_agn_models`):
+    blocks offer mix-and-match flexibility while monolithic models bundle
     a complete recipe.
 
     Parameters
     ----------
-    category: str, optional
+    category : str, optional
         Filter to a specific category: ``"disc"``, ``"nlr"``, ``"blr"``,
         ``"feii"``, ``"torus"``, or ``"attenuation"``. If ``None``, list
         all categories.
-    status: str, optional
+    status : str, optional
         Filter by ``"production"``, ``"experimental"``, ``"demo"``, or
         ``"deprecated"``.
 
@@ -1073,8 +1073,8 @@ def list_nebular_backends(*, status: str | None = None) -> _RegistryTable:
         # The generic CLOUDY backend needs a user-supplied grid file:
         # ``neb={'type': 'cloudy'}`` raises "The CLOUDY nebular backend needs a
         # grid file." The key is ``grid``; this hint advertised ``gridfile``,
-        # so the line printed to fix one failure raised a different one: # "Unknown key 'gridfile'
-        # in group 'neb'. Did you mean: grid?"; and
+        # so the line printed to fix one failure raised a different one:
+        # "Unknown key 'gridfile' in group 'neb'. Did you mean: grid?", and
         # nothing checked either. (``cb19`` ships its own grid and stands alone.)
         if m["name"] == "cloudy":
             m["use"] = "SEDModel.build(..., neb={'type': 'cloudy', 'grid': 'grid.h5'})"
@@ -1196,9 +1196,9 @@ def list_radio_blocks(*, category: str | None = None, status: str | None = None)
 
     Parameters
     ----------
-    category: str, optional
+    category : str, optional
         Filter to ``"sf"`` or ``"agn"``. If ``None``, list both.
-    status: str, optional
+    status : str, optional
         Filter by ``"production"``, ``"experimental"``, ``"demo"``, or
         ``"deprecated"``.
 
@@ -1263,7 +1263,7 @@ def list_shock_models(*, status: str | None = None) -> _RegistryTable:
 
     Parameters
     ----------
-    status: str, optional
+    status : str, optional
         Filter by ``"production"``, ``"experimental"``, ``"demo"``, or
         ``"deprecated"``.
 
@@ -1332,7 +1332,7 @@ def list_metallicity_modes(*, status: str | None = None) -> _RegistryTable:
 
     Parameters
     ----------
-    status: str, optional
+    status : str, optional
         Filter by ``"production"``, ``"experimental"``, ``"demo"``, or
         ``"deprecated"``.
 
@@ -1424,7 +1424,7 @@ def list_age_kernels(*, status: str | None = None) -> _RegistryTable:
 
     Parameters
     ----------
-    status: str, optional
+    status : str, optional
         Filter to one status; ``"production"`` or ``"comparison"``.
 
     Returns
@@ -1507,7 +1507,7 @@ def _plot_call_hint(name: str) -> str:
 
     Parameters
     ----------
-    name: str
+    name : str
         Attribute name in :mod:`tengri.plot`.
 
     Returns
@@ -1623,7 +1623,7 @@ def cite_components(obj=None) -> _RegistryTable:
 
     Parameters
     ----------
-    obj: Parameters or SEDModel or Posterior, optional
+    obj : Parameters or SEDModel or Posterior, optional
         Object whose structural choices to inspect.  If ``None``, returns
         the citations attached to the four core dependencies (tengri,
         JAX, DSPS) plus an empty per-component slate.
@@ -1905,8 +1905,8 @@ def print_components_bibtex(obj=None) -> None:
                 continue
         if emitted:
             continue
-        # Fallback: free-form citation note. Say what is actually missing: # a *mapping* from this
-        # component name to a key, not necessarily the
+        # Fallback: free-form citation note. Say what is actually missing:
+        # a *mapping* from this component name to a key, not necessarily the
         # entry. Four references (Charlot & Fall 2000, Bell 2003, Inoue+2014,
         # Yang+2020) were in references.bib the whole time and still printed
         # "no bib entry", so readers pasted the output and silently lost them.
@@ -1928,7 +1928,7 @@ def list_filters(survey: str | None = None) -> _RegistryTable:
 
     Parameters
     ----------
-    survey: str, optional
+    survey : str, optional
         Narrow to one survey/instrument family (case-insensitive).  Smart
         about the SVO-vs-astronomer-speak mismatch: ``survey="SDSS"``
         finds the ``SLOAN_SDSS_*`` rows even though SDSS is technically
@@ -1948,7 +1948,7 @@ def list_filters(survey: str | None = None) -> _RegistryTable:
 
     See Also
     --------
-    tengri.observation.filters.list_filter_aliases: the same curves keyed
+    tengri.observation.filters.list_filter_aliases : the same curves keyed
         by short alias. Both names were once ``list_filters`` (#1574).
 
     Notes
@@ -2020,8 +2020,8 @@ def list_filters(survey: str | None = None) -> _RegistryTable:
         def _match(entry: dict) -> bool:
             sv_lc = str(entry.get("survey", "")).lower()
             in_lc = str(entry.get("instrument", "")).lower()
-            # Match either field against either component of the alias: # so "SDSS" hits
-            # SLOAN/SDSS rows and "SLOAN" still works too.
+            # Match either field against either component of the alias,
+            # so "SDSS" hits SLOAN/SDSS rows and "SLOAN" still works too.
             return q in (sv_lc, in_lc) or target[0] == sv_lc or target[1] == in_lc
 
         out = [e for e in out if _match(e)]
@@ -2093,13 +2093,13 @@ def list_inference_methods(
 
     Parameters
     ----------
-    tier: str, optional
+    tier : str, optional
         Filter by ``"primary"`` (recommended for new users),
         ``"experimental"``, or ``"broken"``. Backends registered as
         ``"broken"``; those whose own ``short_doc`` reports wrong answers or
         crashes: are **excluded from the default listing** (#1287); pass
         ``tier="broken"`` to see them.
-    target: Fitter | InferenceContext, optional
+    target : Fitter | InferenceContext, optional
         If supplied, each entry's ``status`` column reflects whether the
         backend's ``is_compatible`` predicate (if any) accepts the
         target. If ``None``, ``status`` reflects only whether the
@@ -2238,8 +2238,8 @@ def _every_menu_lister() -> tuple:
             continue
         # Exclude the one meta-lister: list_all calls _every_menu_lister, so
         # discovering it as a menu lister recurses until the stack is nearly
-        # exhausted (measured depth 988 of 1000; #853). Every real menu: # list_properties
-        # included; must stay in the sweep: describe() resolves
+        # exhausted (measured depth 988 of 1000; #853). Every real menu,
+        # list_properties included, must stay in the sweep: describe() resolves
         # a name only if some swept menu advertises it.
         if attr == "list_all":
             continue
@@ -2285,7 +2285,7 @@ def describe(name: str) -> _DescribeRecord:
 
     Parameters
     ----------
-    name: str
+    name : str
         Name of a model, method, or component.
 
     Returns
@@ -2305,8 +2305,8 @@ def describe(name: str) -> _DescribeRecord:
     matches = [entry for fn in _every_menu_lister() for entry in fn() if entry["name"] == name]
     if matches:
         record = dict(matches[0])
-        # Some names are registered in more than one menu or AGN category: # e.g. 'skirtor' is
-        # both a disc and a torus, 'simple' is both a torus
+        # Some names are registered in more than one menu or AGN category;
+        # e.g. 'skirtor' is both a disc and a torus, 'simple' is both a torus
         # block and an X-ray model, 'cue' is both an NLR block and a nebular
         # backend. Returning the first match silently would describe the wrong
         # component; disclose every place the name lives so the user can pick.
@@ -2439,8 +2439,8 @@ _EXTERNAL_GRID_BLOCKS: dict[str, str] = {
 def _recipe_data_status(kwargs: dict) -> str:
     """Report whether a recipe's non-SSP data is present on this machine.
 
-    ``list_recipes`` presented all ten recipes as equals while one of them: ``unified_agn``;
-    cannot produce a number without a Synthesizer AGN grid
+    ``list_recipes`` presented all ten recipes as equals while one of them,
+    ``unified_agn``, cannot produce a number without a Synthesizer AGN grid
     that does not ship with tengri. A recipe is by definition the thing a new
     user is told to start from, so "this one needs a download" belongs in the
     table rather than in a traceback (#1462 §3).
@@ -2529,7 +2529,7 @@ def describe_recipe(name: str) -> _DescribeRecord:
 
     Parameters
     ----------
-    name: str
+    name : str
         Recipe name (see :func:`list_recipes`).
 
     Returns
@@ -2611,9 +2611,9 @@ def describe_agn_block(
 
     Parameters
     ----------
-    name: str
+    name : str
         Block name (e.g., ``"grahsp"``, ``"multicolor"``, ``"analytic"``).
-    category: str, optional
+    category : str, optional
         Category to narrow the search: ``"disc"``, ``"nlr"``, ``"blr"``,
         ``"feii"``, ``"torus"``, or ``"attenuation"``. If ``None``, search
         all categories.
@@ -2703,7 +2703,7 @@ def describe_inference_method(name: str) -> _DescribeRecord:
 
     Parameters
     ----------
-    name: str
+    name : str
         A method name or alias, as passed to ``fit(method=...)``.
 
     Returns
@@ -2766,8 +2766,8 @@ def suggest_parameters(
     agn_model, dust_law, dust_emission, nebular_backend, …).  This
     function answers the working question:
 
-        "I want a DPL SFH with SKIRTOR AGN and DL07 dust emission; what kwargs can I pass to
-        Parameters()?"
+        "I want a DPL SFH with SKIRTOR AGN and DL07 dust emission.
+        What kwargs can I pass to Parameters()?"
 
     by building the full param registry for that configuration and
     returning a printable table with every parameter, its default
@@ -2775,10 +2775,10 @@ def suggest_parameters(
 
     Parameters
     ----------
-    mean_sfh_type: str or list[str], default "dpl"
+    mean_sfh_type : str or list[str], default "dpl"
         SFH model name (or list including "field" for stochastic).  See
         ``tengri.list_sfh_models()`` for the menu.
-    agn_model: str, optional
+    agn_model : str, optional
         Name from ``tengri.list_agn_models()``.  ``None`` → AGN off.
     dust_law : str, optional
         Attenuation law name. For flat-kwarg Parameter() builds, defaults to
@@ -2787,13 +2787,13 @@ def suggest_parameters(
     dust_emission : str, optional
         IR emission template family from
         ``tengri.list_dust_emission_models()``.
-    nebular_backend: str, optional
+    nebular_backend : str, optional
         Nebular emission backend from ``tengri.list_nebular_backends()``:
         ``"ssp"`` (emission baked into the SSP grid), ``"cue"``,
         ``"cloudy"``, or ``"cb19"``.
-    radio, xray, shock, chem_evol, evolving_metallicity: bool
+    radio, xray, shock, chem_evol, evolving_metallicity : bool
         Toggle the corresponding physics module.
-    eline_mode: str, default "off"
+    eline_mode : str, default "off"
         ``"off"`` | ``"marginalize"`` | ``"sample"`` for emission lines.
 
     Returns
@@ -2877,7 +2877,7 @@ def search(query: str) -> _RegistryTable:
 
     Parameters
     ----------
-    query: str
+    query : str
         Substring to match (case-insensitive).
 
     Returns
@@ -3016,7 +3016,7 @@ def list_properties(*, group: str | None = None) -> _RegistryTable:
 
     Parameters
     ----------
-    group: str, optional
+    group : str, optional
         Filter by property group (e.g., ``"sfh"`` for star-formation-history
         properties). If None, lists all properties across all groups.
 
@@ -3071,7 +3071,7 @@ def describe_property(name: str) -> _DescribeRecord:
 
     Parameters
     ----------
-    name: str
+    name : str
         Property name (e.g., ``"stellar_mass"``).
 
     Returns
@@ -3231,7 +3231,7 @@ def help(topic: str | None = None) -> None:
 
     Parameters
     ----------
-    topic: str, optional
+    topic : str, optional
         If given, narrow the cheatsheet to one menu. Recognized topics:
         ``"agn"``, ``"dust"``, ``"sfh"``, ``"nebular"``, ``"components"``,
         ``"inference"``, ``"filters"``, ``"properties"``. Without a topic
@@ -3261,8 +3261,8 @@ def help(topic: str | None = None) -> None:
     n_neb = len(list_nebular_backends())
     n_inf = len(list_inference_methods(tier="primary"))
     n_recipes = len(list_recipes())
-    # The one default, read from the registry rather than written down here: # the whole point of
-    # #1289 was that hard-coded defaults drifted apart.
+    # The one default, read from the registry rather than written down here;
+    # the whole point of #1289 was that hard-coded defaults drifted apart.
     from tengri.inference._backend_registry import DEFAULT_METHOD as default_method
 
     try:

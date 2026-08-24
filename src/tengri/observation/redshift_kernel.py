@@ -53,21 +53,21 @@ def shift_to_obs_frame(
 
     Parameters
     ----------
-    wave_rest: ndarray, shape (n_wave_rest,)
+    wave_rest : ndarray, shape (n_wave_rest,)
         Rest-frame wavelength grid [Ångstrom], strictly increasing.
-    L_nu_rest: ndarray, shape (n_wave_rest,)
+    L_nu_rest : ndarray, shape (n_wave_rest,)
         Rest-frame specific luminosity [erg/s/Hz].
-    wave_obs: ndarray, shape (n_wave_obs,)
+    wave_obs : ndarray, shape (n_wave_obs,)
         Observed-frame wavelength grid [Ångstrom] on which to return
         the result.
-    z: scalar
+    z : scalar
         Redshift.
-    cosmo: CosmoParams, optional
+    cosmo : CosmoParams, optional
         Flat w₀wₐCDM parameters. Defaults to PLANCK18.
 
     Returns
     -------
-    f_nu_obs: ndarray, shape (n_wave_obs,)
+    f_nu_obs : ndarray, shape (n_wave_obs,)
         Observed-frame specific flux [erg/s/cm²/Hz]. Zero outside the
         observed-frame support of ``wave_rest``.
 

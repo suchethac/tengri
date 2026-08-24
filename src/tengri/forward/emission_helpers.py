@@ -44,31 +44,31 @@ def attenuate_emission(
 
     Parameters
     ----------
-    sed: ndarray, shape (n_wave,)
+    sed : ndarray, shape (n_wave,)
         Input SED [erg/s/Hz] (before dust).
-    wave: ndarray, shape (n_wave,)
+    wave : ndarray, shape (n_wave,)
         Wavelength grid [Angstrom].
-    mode: str
+    mode : str
         Attenuation mode: ``"bc"`` (birth-cloud + diffuse), ``"diff"`` (diffuse only),
         ``"neb"`` (separate BC law + diffuse), or ``"none"`` (no attenuation).
-    tau_bc: float
+    tau_bc : float
         Birth-cloud V-band optical depth [dimensionless].
-    tau_diff: float
+    tau_diff : float
         Diffuse V-band optical depth [dimensionless].
-    law_bc_fn: callable
+    law_bc_fn : callable
         Birth-cloud dust law ``(wave, n_slope, dust_bump_strength) -> k(λ)`` [1/mag].
-    law_diff_fn: callable
+    law_diff_fn : callable
         Diffuse dust law ``(wave, n_slope, dust_bump_strength) -> k(λ)`` [1/mag].
-    neb_bc_fn: callable, optional
+    neb_bc_fn : callable, optional
         Separate BC law for ``mode="neb"``. Falls back to ``law_bc_fn`` if None.
-    dust_slope: float, optional
+    dust_slope : float, optional
         Dust law slope parameter. Default -0.7.
-    dust_bump_strength: float, optional
+    dust_bump_strength : float, optional
         Dust law bump strength parameter. Default 0.0.
 
     Returns
     -------
-    sed_attenuated: ndarray, shape (n_wave,)
+    sed_attenuated : ndarray, shape (n_wave,)
         Attenuated SED [erg/s/Hz].
 
     Notes
@@ -124,21 +124,21 @@ def shock_emission(
 
     Parameters
     ----------
-    wave: ndarray, shape (n_wave,)
+    wave : ndarray, shape (n_wave,)
         Wavelength grid [Angstrom].
-    sed_so_far: ndarray, shape (n_wave,)
+    sed_so_far : ndarray, shape (n_wave,)
         Current cumulative SED [erg/s/Hz] for bolometric luminosity estimation.
-    shock_frac: float
+    shock_frac : float
         Fraction of Halpha luminosity channeled into shocks [dimensionless].
-    shock_velocity: float, optional
+    shock_velocity : float, optional
         Shock velocity [km/s]. Default 300.0.
-    shock_log_density: float, optional
+    shock_log_density : float, optional
         Log10 of electron density [cm^-3]. Default 0.0.
-    shock_b_over_sqrt_n: float, optional
+    shock_b_over_sqrt_n : float, optional
         Magnetic parameter B/sqrt(n). Default 1.0.
-    shock_abundance: str, optional
+    shock_abundance : str, optional
         Abundance set ("solar", etc.). Default "solar".
-    shock_component: str, optional
+    shock_component : str, optional
         Component to return ("combined", etc.). Default "combined".
 
     Returns

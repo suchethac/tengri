@@ -83,9 +83,9 @@ def _warn_once_if_legacy(name: str, canonical_name: str) -> None:
 
     Parameters
     ----------
-    name: str
+    name : str
         The legacy parameter name used by the user.
-    canonical_name: str
+    canonical_name : str
         The canonical parameter name it maps to.
     """
     if name not in _WARNED_ALIASES:
@@ -108,7 +108,7 @@ def resolve_param_name(name: str) -> str:
 
     Parameters
     ----------
-    name: str
+    name : str
         The parameter name (possibly a legacy alias).
 
     Returns
@@ -142,7 +142,7 @@ def legacy_names_for(canonical: str) -> list[str]:
 
     Parameters
     ----------
-    canonical: str
+    canonical : str
         A current parameter name.
 
     Returns
@@ -162,7 +162,7 @@ def resolve_sfh_type(raw_sfh_type: str | list[str] | None) -> list[str]:
 
     Parameters
     ----------
-    raw_sfh_type: str, list of str, or None
+    raw_sfh_type : str, list of str, or None
         The SFH type(s) to resolve.
 
     Returns
@@ -199,9 +199,9 @@ def find_short_param(params: dict[str, Any], target_public_name: str) -> Any | N
 
     Parameters
     ----------
-    params: dict
+    params : dict
         Parameter dict (may contain legacy names).
-    target_public_name: str
+    target_public_name : str
         The canonical public name to look up, e.g., ``"sfh_dpl_alpha"``.
 
     Returns

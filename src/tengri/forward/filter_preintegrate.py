@@ -83,23 +83,23 @@ def preintegrate_ssp_filter_grid(
     :math:`1/\lambda` ``BESSELL`` default, per ADR-0017; pre-#960 this
     function used a :math:`\lambda` weight, which matched neither
     convention). Identical to the per-filter integral in
-    :func:`tengri.observation.photometry.compute_flux_density`,     union-grid quadrature included
-    (#960), but without the
+    :func:`tengri.observation.photometry.compute_flux_density`,
+    union-grid quadrature included (#960), but without the
     ``(1+z)/4\pi d_L^2`` source→observer scaling; that is applied later
     when the SSP grid is combined with mass-per-bin weights.
 
     Parameters
     ----------
-    ssp_data: SSPData
+    ssp_data : SSPData
         Full SSP grid (n_met, n_age, n_wave) in Lsun/Hz/Msun on
         the rest-frame ``ssp_data.ssp_wave`` array.
-    filter_waves: sequence of array_like
+    filter_waves : sequence of array_like
         Per-filter wavelength arrays in Å (observed-frame already
         if you precompute for a fixed redshift; otherwise rest-frame
         and the function redshifts the SSP wave grid by ``1+z``).
-    filter_trans: sequence of array_like
+    filter_trans : sequence of array_like
         Per-filter transmission curves matching ``filter_waves``.
-    redshift: float, optional
+    redshift : float, optional
         Source redshift. Default 0.0. The function redshifts the
         SSP wavelength grid (multiplies by ``1+z``) before
         interpolating onto each filter's wavelength array, which is
@@ -108,7 +108,7 @@ def preintegrate_ssp_filter_grid(
 
     Returns
     -------
-    ssp_phot: ndarray, shape (n_met, n_age, n_filters)
+    ssp_phot : ndarray, shape (n_met, n_age, n_filters)
         Filter-integrated SSP grid in Lsun/Hz/Msun. Multiply by
         mass-per-age-bin (Msun) and the source→observer factor
         ``(1+z) / (4 π d_L²)`` to get observed flux densities.

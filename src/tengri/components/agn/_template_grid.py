@@ -35,11 +35,11 @@ class TorusTemplateGrid(NamedTuple):
 
     Attributes
     ----------
-    template: ndarray, shape (n_ax1, ..., n_axk, n_wave)
+    template : ndarray, shape (n_ax1, ..., n_axk, n_wave)
         Tabulated SEDs [arbitrary units: shape only; renormalized on use].
-    axes: tuple of ndarray
+    axes : tuple of ndarray
         One 1-D coordinate array per leading template axis, ascending.
-    wave_grid: ndarray, shape (n_wave,)
+    wave_grid : ndarray, shape (n_wave,)
         Template rest-frame wavelength grid [Angstrom].
 
     Notes
@@ -66,16 +66,16 @@ def torus_lnu_from_grid(
 
     Parameters
     ----------
-    grid: TorusTemplateGrid
+    grid : TorusTemplateGrid
         Template arrays, passed in so they can thread through ``jax.jit``.
-    wavelength: array_like, shape (n_wave,)
+    wavelength : array_like, shape (n_wave,)
         Rest-frame output wavelength grid [Angstrom].
-    coords: tuple of float
+    coords : tuple of float
         Interpolation coordinate per leading axis of ``grid.template``,
         in the same order as ``grid.axes``.
-    agn_log_lbol: float
+    agn_log_lbol : float
         :math:`\log_{10}(L_{\rm bol}/L_\odot)`.
-    agn_torus_frac: float
+    agn_torus_frac : float
         Fraction of :math:`L_{\rm bol}` reprocessed by the torus [0, 1].
 
     Returns

@@ -95,30 +95,30 @@ def gaussian_lines(
 
     Parameters
     ----------
-    wave_nm: array_like, shape (n_wave,)
+    wave_nm : array_like, shape (n_wave,)
         Output wavelength grid [nm].
-    line_wave_nm: array_like, shape (n_lines,)
+    line_wave_nm : array_like, shape (n_lines,)
         Line central wavelengths [nm]. Loaded from
         ``data/grahsp/grahsp_templates.h5`` group ``netzer1990_lines``.
-    line_broad, line_narrow_sy2, line_narrow_liner: array_like, shape (n_lines,)
+    line_broad, line_narrow_sy2, line_narrow_liner : array_like, shape (n_lines,)
         Line strengths relative to H-beta. From the same HDF5 group.
-    l5100: float
+    l5100 : float
         :math:`\lambda L_\lambda` at 5100 Å [erg/s].
-    a_lines: float
+    a_lines : float
         Multiplicative scale factor for line strengths (paper parameter
         ``Alines``).
-    linewidth_kms: float
+    linewidth_kms : float
         FWHM of all lines [km/s].
-    agn_type: {1, 2, 3}, optional
+    agn_type : {1, 2, 3}, optional
         ``1`` = broad-line AGN (Sy1/QSO; broad+narrow_sy2 + FeII enabled).
         ``2`` = Sy2 (narrow_sy2 only). ``3`` = LINER (narrow_liner only).
         Default ``1``. **static** under JIT.
 
     Returns
     -------
-    broad_lumin: ndarray, shape (n_wave,)
+    broad_lumin : ndarray, shape (n_wave,)
         Broad-line luminosity density [erg/s/nm]. Zero for type 2 / 3.
-    narrow_lumin: ndarray, shape (n_wave,)
+    narrow_lumin : ndarray, shape (n_wave,)
         Narrow-line luminosity density [erg/s/nm].
 
     Notes
@@ -183,22 +183,22 @@ def feii_forest(
 
     Parameters
     ----------
-    wave_nm: array_like, shape (n_wave,)
+    wave_nm : array_like, shape (n_wave,)
         Output wavelength grid [nm].
-    template_wave_nm, template_lumin: array_like, shape (n_template,)
+    template_wave_nm, template_lumin : array_like, shape (n_template,)
         FeII template (de-redshifted from upstream's z=0.004; loaded from
         ``data/grahsp/grahsp_templates.h5`` group ``feii_bruhweiler2008``).
-    l5100: float
+    l5100 : float
         :math:`\lambda L_\lambda` at 5100 Å [erg/s].
-    a_lines: float
+    a_lines : float
         Line-strength scale factor.
-    a_feii: float
+    a_feii : float
         FeII strength relative to broad H-beta (paper ``AFeII``,
         reasonable range 2-10).
 
     Returns
     -------
-    L_FeII: ndarray, shape (n_wave,)
+    L_FeII : ndarray, shape (n_wave,)
         FeII forest contribution [erg/s/nm].
 
     Notes

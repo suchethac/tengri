@@ -63,35 +63,35 @@ class KDPreintegratedData:
 
     Attributes
     ----------
-    planck_table: jnp.ndarray
+    planck_table : jnp.ndarray
         Shape (n_T, n_filters). Filter-integrated Planck B_nu(T) [erg/s/cm^3]
         for each temperature grid point and filter.
-    planck_T_grid: jnp.ndarray
+    planck_T_grid : jnp.ndarray
         Shape (n_T,). Temperature grid [K] (log-spaced).
-    nthcomp_table: jnp.ndarray or None
+    nthcomp_table : jnp.ndarray or None
         Shape (n_gamma, n_kTe, n_kTbb, n_filters). Filter-integrated
         nthcomp spectral shape [erg/s/cm^3]. None if templates not available.
-    nthcomp_gamma_grid: jnp.ndarray or None
+    nthcomp_gamma_grid : jnp.ndarray or None
         Shape (n_gamma,). Photon index grid for warm Comptonization.
-    nthcomp_kTe_grid: jnp.ndarray or None
+    nthcomp_kTe_grid : jnp.ndarray or None
         Shape (n_kTe,). Electron temperature grid [keV] for warm zone.
-    nthcomp_kTbb_grid: jnp.ndarray or None
+    nthcomp_kTbb_grid : jnp.ndarray or None
         Shape (n_kTbb,). Seed blackbody temperature grid [keV].
-    corona_table: jnp.ndarray
+    corona_table : jnp.ndarray
         Shape (n_Gamma, n_kT, n_kTbb, n_filters). Filter-integrated
         thermal-Comptonization shape [erg/s/cm^3] for the hot corona, with
         both the electron-temperature cutoff and the seed-photon rollover.
-    corona_Gamma_grid: jnp.ndarray
+    corona_Gamma_grid : jnp.ndarray
         Shape (n_Gamma,). Hard X-ray photon index grid [dimensionless].
-    corona_kT_grid: jnp.ndarray
+    corona_kT_grid : jnp.ndarray
         Shape (n_kT,). Hot corona electron-temperature grid [keV].
-    corona_kTbb_grid: jnp.ndarray
+    corona_kTbb_grid : jnp.ndarray
         Shape (n_kTbb,). Seed-photon temperature grid [keV] for the
         low-energy rollover (K&D 2018, Section 2.2).
-    effective_bandwidths_hz: jnp.ndarray
+    effective_bandwidths_hz : jnp.ndarray
         Shape (n_filters,). Effective frequency bandwidths [Hz] for L_bol
         estimation via sum(f_nu * bw).
-    n_filters: int
+    n_filters : int
         Number of photometric filters [dimensionless].
 
     Notes
@@ -154,13 +154,13 @@ def _build_planck_filter_table(
 
     Parameters
     ----------
-    T_grid: ndarray, shape (n_T,)
+    T_grid : ndarray, shape (n_T,)
         Temperature grid [K].
-    filter_waves: list[ndarray]
+    filter_waves : list[ndarray]
         Wavelength grid per filter [Angstrom], observed frame.
-    filter_trans: list[ndarray]
+    filter_trans : list[ndarray]
         Transmission per filter.
-    redshift: float
+    redshift : float
         Source redshift.
 
     Returns
@@ -215,13 +215,13 @@ def _build_nthcomp_filter_table(
 
     Parameters
     ----------
-    filter_waves: list[ndarray]
+    filter_waves : list[ndarray]
         Wavelength grid per filter [Angstrom], observed frame.
-    filter_trans: list[ndarray]
+    filter_trans : list[ndarray]
         Transmission per filter.
-    redshift: float
+    redshift : float
         Source redshift.
-    template_path: Path, optional
+    template_path : Path, optional
         Path to nthcomp_templates.h5. Defaults to data/nthcomp_templates.h5.
 
     Returns
@@ -343,18 +343,18 @@ def _build_corona_filter_table(
 
     Parameters
     ----------
-    Gamma_grid: ndarray, shape (n_Gamma,)
+    Gamma_grid : ndarray, shape (n_Gamma,)
         Hard X-ray photon index grid.
-    kT_grid_keV: ndarray, shape (n_kT,)
+    kT_grid_keV : ndarray, shape (n_kT,)
         Hot corona electron-temperature grid [keV].
-    kTbb_seed_grid_keV: ndarray, shape (n_kTbb,)
+    kTbb_seed_grid_keV : ndarray, shape (n_kTbb,)
         Seed-photon temperature grid [keV] setting the low-energy rollover
         frequency :math:`\nu_{\rm seed} = kT_{\rm seed} / h`.
-    filter_waves: list[ndarray]
+    filter_waves : list[ndarray]
         Wavelength grid per filter [Angstrom], observed frame.
-    filter_trans: list[ndarray]
+    filter_trans : list[ndarray]
         Transmission per filter.
-    redshift: float
+    redshift : float
         Source redshift.
 
     Returns
@@ -428,11 +428,11 @@ def _compute_effective_bandwidths_hz(
 
     Parameters
     ----------
-    filter_waves: list[ndarray]
+    filter_waves : list[ndarray]
         Wavelength grid per filter [Angstrom], observed frame.
-    filter_trans: list[ndarray]
+    filter_trans : list[ndarray]
         Transmission per filter.
-    redshift: float
+    redshift : float
         Source redshift.
 
     Returns
@@ -498,20 +498,20 @@ def preintegrate_kd_components(
 
     Parameters
     ----------
-    filter_waves: list[ndarray]
+    filter_waves : list[ndarray]
         Wavelength grid per filter [Angstrom], observed frame.
-    filter_trans: list[ndarray]
+    filter_trans : list[ndarray]
         Transmission per filter (0-1).
-    redshift: float
+    redshift : float
         Source redshift (fixed).
-    n_T: int
+    n_T : int
         Number of temperature grid points for the Planck table.
-    T_min, T_max: float
+    T_min, T_max : float
         Temperature range [K] for the Planck table. Must span from
         cool outer disc (~1000 K) to hot inner disc (~3e7 K).
-    n_Gamma: int
+    n_Gamma : int
         Number of photon index grid points for the corona table.
-    n_kT_corona: int
+    n_kT_corona : int
         Number of temperature grid points for the corona table.
 
     Returns
@@ -604,11 +604,11 @@ def _lookup_planck_filter(
 
     Parameters
     ----------
-    T: scalar
+    T : scalar
         Temperature [K].
-    T_grid: (n_T,)
+    T_grid : (n_T,)
         Temperature grid [K] (log-spaced).
-    planck_table: (n_T, n_filters)
+    planck_table : (n_T, n_filters)
         Precomputed Planck filter table.
 
     Returns
@@ -643,11 +643,11 @@ def _lookup_nthcomp_filter(
 
     Parameters
     ----------
-    gamma, kTe, kTbb: scalar
+    gamma, kTe, kTbb : scalar
         Query point (photon index, electron T [keV], seed T [keV]).
-    *_grid: 1D arrays
+    *_grid : 1D arrays
         Grid axes.
-    nthcomp_table: (n_gamma, n_kTe, n_kTbb, n_filters)
+    nthcomp_table : (n_gamma, n_kTe, n_kTbb, n_filters)
         Precomputed table.
 
     Returns
@@ -696,15 +696,15 @@ def _lookup_corona_filter(
 
     Parameters
     ----------
-    Gamma: scalar
+    Gamma : scalar
         Hard X-ray photon index.
-    kT_keV: scalar
+    kT_keV : scalar
         Hot corona electron temperature [keV].
-    kTbb_seed_keV: scalar
+    kTbb_seed_keV : scalar
         Seed-photon temperature [keV] (sets the low-energy rollover).
-    Gamma_grid, kT_grid, kTbb_grid: 1D arrays
+    Gamma_grid, kT_grid, kTbb_grid : 1D arrays
         Grid axes.
-    corona_table: (n_Gamma, n_kT, n_kTbb, n_filters)
+    corona_table : (n_Gamma, n_kT, n_kTbb, n_filters)
         Precomputed table.
 
     Returns
@@ -764,26 +764,26 @@ def _compute_bh_and_radii(
 
     Parameters
     ----------
-    agn_log_mbh: float
+    agn_log_mbh : float
         log10(M_bh / Msun).
-    agn_a_spin: float
+    agn_a_spin : float
         Dimensionless spin parameter [0, 1].
-    agn_log_lbol: float
+    agn_log_lbol : float
         Bolometric luminosity log10(L_bol / L_sun). The Eddington ratio is
         derived from it (#846).
-    agn_f_hard: float
+    agn_f_hard : float
         Fractional hard X-ray luminosity [0, 0.5].
-    agn_r_warm_ratio: float
+    agn_r_warm_ratio : float
         Warm-to-hot radius ratio [1.1, 10].
-    l_edd: ndarray
+    l_edd : ndarray
         Eddington luminosity [erg/s].
-    r_isco_cm: ndarray
+    r_isco_cm : ndarray
         ISCO radius [cm].
-    _G_GRAV: float
+    _G_GRAV : float
         Gravitational constant [cm^3 g^-1 s^-2].
-    _MSUN_G: float
+    _MSUN_G : float
         Solar mass [g].
-    _SIGMA_SB: float
+    _SIGMA_SB : float
         Stefan-Boltzmann constant [erg cm^-2 K^-4 s^-1].
 
     Returns
@@ -853,21 +853,21 @@ def _integrate_outer_zone(
 
     Parameters
     ----------
-    r_warm_cm: ndarray, scalar
+    r_warm_cm : ndarray, scalar
         Warm-zone boundary radius [cm].
-    r_out_cm: ndarray, scalar
+    r_out_cm : ndarray, scalar
         Outer disc boundary radius [cm].
-    r_isco_cm: ndarray, scalar
+    r_isco_cm : ndarray, scalar
         ISCO radius [cm].
-    t_in: ndarray, scalar
+    t_in : ndarray, scalar
         Inner disc temperature [K].
-    n_radii: int
+    n_radii : int
         Number of radial rings [dimensionless].
-    kd_data: KDPreintegratedData
+    kd_data : KDPreintegratedData
         Precomputed Planck filter table.
-    agn_cos_inc: float
+    agn_cos_inc : float
         cos(inclination angle).
-    _SIGMA_SB: float
+    _SIGMA_SB : float
         Stefan-Boltzmann constant [erg cm^-2 K^-4 s^-1].
 
     Returns
@@ -925,27 +925,27 @@ def _integrate_warm_zone(
 
     Parameters
     ----------
-    r_hot_cm: ndarray, scalar
+    r_hot_cm : ndarray, scalar
         Hot-zone boundary radius [cm].
-    r_warm_cm: ndarray, scalar
+    r_warm_cm : ndarray, scalar
         Warm-zone boundary radius [cm].
-    r_isco_cm: ndarray, scalar
+    r_isco_cm : ndarray, scalar
         ISCO radius [cm].
-    t_in: ndarray, scalar
+    t_in : ndarray, scalar
         Inner disc temperature [K].
-    n_radii: int
+    n_radii : int
         Number of radial rings [dimensionless].
-    kd_data: KDPreintegratedData
+    kd_data : KDPreintegratedData
         Precomputed nthcomp and Planck filter tables.
-    agn_cos_inc: float
+    agn_cos_inc : float
         cos(inclination angle).
-    agn_gamma_warm: float
+    agn_gamma_warm : float
         Photon index for warm Comptonization [dimensionless].
-    agn_kt_warm: float
+    agn_kt_warm : float
         Electron temperature for warm zone [keV].
-    _SIGMA_SB: float
+    _SIGMA_SB : float
         Stefan-Boltzmann constant [erg cm^-2 K^-4 s^-1].
-    _K_BOLTZ_KEV: float
+    _K_BOLTZ_KEV : float
         Boltzmann constant [keV/K].
 
     Returns
@@ -1034,9 +1034,9 @@ def kubota_done_disc_preintegrated(
 
     Parameters
     ----------
-    kd_data: KDPreintegratedData
+    kd_data : KDPreintegratedData
         Precomputed filter tables from ``preintegrate_kd_components()``.
-    agn_log_lbol: float
+    agn_log_lbol : float
         log10(L_bol / Lsun).
     [remaining params identical to kubota_done_disc]
 
@@ -1195,13 +1195,13 @@ def precompute(filter_waves: list, filter_trans: list, redshift: float, paramete
 
     Parameters
     ----------
-    filter_waves: list[ndarray]
+    filter_waves : list[ndarray]
         Wavelength grid per filter [Angstrom], observed frame.
-    filter_trans: list[ndarray]
+    filter_trans : list[ndarray]
         Transmission per filter (0–1).
-    redshift: float
+    redshift : float
         Source redshift (fixed at init time). [dimensionless]
-    parameters: Parameters | None, optional
+    parameters : Parameters | None, optional
         Unused: K&D grid axes are internal physics coords, not user priors.
     **kwargs
         Forwarded to :func:`preintegrate_kd_components` (e.g. ``n_T``,
@@ -1232,7 +1232,7 @@ def build_lookup(preint, **kwargs):
 
     Parameters
     ----------
-    preint: KDPreintegratedData
+    preint : KDPreintegratedData
         Preintegrated K&D data.
     **kwargs
         Ignored; accepted for Protocol consistency.

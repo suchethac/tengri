@@ -57,13 +57,13 @@ def precompute_nenkova_agnfitter_photometry(
 
     Parameters
     ----------
-    grid_path: str
+    grid_path : str
         Path to ``nenkova_agnfitter_torus_grid.h5``.
-    filter_waves: list[ndarray]
+    filter_waves : list[ndarray]
         Wavelength grid per filter [Angstrom], observed frame.
-    filter_trans: list[ndarray]
+    filter_trans : list[ndarray]
         Transmission per filter (0–1).
-    redshift: float, optional
+    redshift : float, optional
         Source redshift. Used to shift rest-frame templates into the
         observed frame before integrating against observed-frame filters.
         Default 0.0.
@@ -71,11 +71,11 @@ def precompute_nenkova_agnfitter_photometry(
     Returns
     -------
     dict
-        ``grid_phot``: ndarray, shape (n_incl, n_filters)
+        ``grid_phot`` : ndarray, shape (n_incl, n_filters)
             Filter-integrated L_ν [erg/s/Hz] per L_sun (unit torus fraction).
-        ``axes``: tuple of 1 grid array (jnp.ndarray)
+        ``axes`` : tuple of 1 grid array (jnp.ndarray)
             Grid axis (cos_inc, ascending).
-        ``_preint``: PreintegratedGrid
+        ``_preint`` : PreintegratedGrid
             Internal preintegration data structure.
 
     References
@@ -155,7 +155,7 @@ def build_nenkova_agnfitter_photometry_lookup(precomp: dict):
 
     Parameters
     ----------
-    precomp: dict
+    precomp : dict
         Output of :func:`precompute_nenkova_agnfitter_photometry` or
         :func:`precompute` (the Protocol-shaped entry point).
 
@@ -224,15 +224,15 @@ def precompute(
 
     Parameters
     ----------
-    filter_waves: list[ndarray]
+    filter_waves : list[ndarray]
         Wavelength grid per filter [Angstrom], observed frame.
-    filter_trans: list[ndarray]
+    filter_trans : list[ndarray]
         Transmission per filter (0–1).
-    redshift: float
+    redshift : float
         Source redshift. [dimensionless]
-    parameters: Parameters | None
+    parameters : Parameters | None
         Parameters spec, used to detect Fixed-axis parameters.
-    grid_path: str, keyword-only
+    grid_path : str, keyword-only
         Path to ``nenkova_agnfitter_torus_grid.h5``.
 
     Returns
@@ -279,10 +279,10 @@ def build_lookup(preint: dict, *, free_param_names: tuple[str, ...] | None = Non
 
     Parameters
     ----------
-    preint: dict
+    preint : dict
         Preintegrated data dict with keys ``"grid_phot"``, ``"axes"``,
         and optionally ``"_collapsed_axes"`` and ``"_preint"``.
-    free_param_names: tuple of str or None, optional
+    free_param_names : tuple of str or None, optional
         Names of remaining free axes in the collapsed case.
         Not used in the default (no-collapse) case.
 

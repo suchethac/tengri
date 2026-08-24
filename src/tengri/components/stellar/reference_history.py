@@ -64,7 +64,7 @@ def stellar_config_of(model):
 
     Parameters
     ----------
-    model: SEDModel
+    model : SEDModel
         A built model.
 
     Returns
@@ -94,12 +94,12 @@ def reference_history_params(model, *, redshift=0.0, n_nodes=_N_NODES):
 
     Parameters
     ----------
-    model: SEDModel
+    model : SEDModel
         The model whose reference evaluation is about to run.
-    redshift: float, optional
+    redshift : float, optional
         Reference redshift, used only to end the time axis at the right cosmic
         age so no star formation falls after the epoch of observation. [dimensionless]
-    n_nodes: int, optional
+    n_nodes : int, optional
         Nodes in the stand-in history.
 
     Returns
@@ -133,11 +133,11 @@ def reference_history_for_config(config, *, redshift=0.0, n_nodes=_N_NODES):
 
     Parameters
     ----------
-    config: StellarSEDComponentConfig or None
+    config : StellarSEDComponentConfig or None
         ``None`` yields ``{}``.
-    redshift: float, optional
+    redshift : float, optional
         Reference redshift, setting where the time axis ends. [dimensionless]
-    n_nodes: int, optional
+    n_nodes : int, optional
         Nodes in the stand-in history.
 
     Returns

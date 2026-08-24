@@ -37,26 +37,26 @@ def run_pathfinder(
 
     Parameters
     ----------
-    key: PRNGKey
+    key : PRNGKey
         Random key.
-    log_posterior_flat: callable
+    log_posterior_flat : callable
         Log-density on flattened parameter vector, cached via
         ``_get_flat_logdensity()`` for stable JIT identity.
-    init_flat: jnp.ndarray
+    init_flat : jnp.ndarray
         Initial parameters as a flat 1-D array.
-    unravel_fn: callable
+    unravel_fn : callable
         Converts flat array back to parameter dict.
-    to_physical_fn: callable
+    to_physical_fn : callable
         Converts unbounded param dict to physical space.
-    model: Model
+    model : Model
         Forward model (stored in Posterior).
-    n_samples: int
+    n_samples : int
         Number of posterior samples to draw.
-    maxiter: int
+    maxiter : int
         Maximum L-BFGS iterations along the path.
-    maxcor: int
+    maxcor : int
         L-BFGS memory (number of past gradients to store).
-    n_elbo_draws: int
+    n_elbo_draws : int
         Monte-Carlo draws used to estimate the ELBO at each L-BFGS iterate, which
         is how Pathfinder picks the best Gaussian along the path. Default 25,
         matching Stan's ``num_elbo_draws``. **This is a memory knob, not an
@@ -64,7 +64,7 @@ def run_pathfinder(
         peak memory scales as ``n_elbo_draws * maxiter * <cost of one SED>``.
         BlackJAX's own default is 200, which drove a 7-parameter photometry fit to
         26 GB and OOM-killed the slow test tier.
-    verbose: bool
+    verbose : bool
         Print progress.
 
     Returns

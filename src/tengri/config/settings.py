@@ -45,36 +45,36 @@ class AGNConfig:
 
     Parameters
     ----------
-    disc: str
+    disc : str
         AGN accretion disc model.
         ``"powerlaw"``; simple power-law SED.
         ``"multicolor"``: multi-color blackbody disc (default).
         ``"kubota_done"``; Kubota & Done (2018) 3-zone model.
         ``"adaf"``; ADAF (low-luminosity AGN).
-    torus: str
+    torus : str
         AGN torus/obscuration model.
         ``"simple"``; single-temperature MBB (toy).
         ``"two_temperature"``; two-temperature MBB (toy).
         ``"skirtor"``; SKIRTOR clumpy torus (default, science-grade).
-    nlr: str
+    nlr : str
         Narrow Line Region emission model.
         ``"analytic"``; analytic Gaussian line profiles (default, fast).
         ``"cue"``; Cue neural emulator (physically consistent).
-    blr: bool
+    blr : bool
         Include Broad Line Region emission (Type 1 AGN). Default True.
-    polar_dust: bool
+    polar_dust : bool
         Include SMC polar dust reddening. Default False.
-    fe2: bool
+    fe2 : bool
         Include Fe II pseudo-continuum. Default False.
-    agn_blr_enabled: bool
+    agn_blr_enabled : bool
         Enable BLR Gaussian emitter (additive to disc SED). Default False.
         **Reserved**: declared for an upcoming AGN-nebular PR; no effect in
         the current version.
-    agn_nlr_gaussian_enabled: bool
+    agn_nlr_gaussian_enabled : bool
         Enable NLR Gaussian emitter (additive to disc SED). Default False.
         **Reserved**: declared for an upcoming AGN-nebular PR; no effect in
         the current version.
-    agn_nlr_backend: str or None
+    agn_nlr_backend : str or None
         Enable Feltre NLR backend. Options: None (disabled), "feltre".
         Default None. Mutually exclusive with Cue path.
         **Reserved**: declared for an upcoming AGN-nebular PR; no effect in
@@ -82,23 +82,23 @@ class AGNConfig:
 
     Attributes
     ----------
-    disc: str
+    disc : str
         AGN accretion disc model choice.
-    torus: str
+    torus : str
         AGN torus/obscuration model choice.
-    nlr: str
+    nlr : str
         Narrow Line Region emission model choice.
-    blr: bool
+    blr : bool
         Whether to include Broad Line Region emission.
-    polar_dust: bool
+    polar_dust : bool
         Whether to include SMC polar dust reddening.
-    fe2: bool
+    fe2 : bool
         Whether to include Fe II pseudo-continuum.
-    agn_blr_enabled: bool
+    agn_blr_enabled : bool
         Whether to enable BLR Gaussian emitter.
-    agn_nlr_gaussian_enabled: bool
+    agn_nlr_gaussian_enabled : bool
         Whether to enable NLR Gaussian emitter.
-    agn_nlr_backend: str or None
+    agn_nlr_backend : str or None
         Feltre backend choice for AGN NLR.
 
     Notes
@@ -141,22 +141,22 @@ class SFHConfig:
 
     Parameters
     ----------
-    mean_type: list[str]
+    mean_type : list[str]
         Analytic mean-SFH components, e.g. ``["tsnorm"]``, ``["dpl"]``,
         ``["dpl", "field"]``.
-    n_grid: int
+    n_grid : int
         GP latent grid size (only relevant when ``"field"`` is in ``mean_type``).
         Default: 64.
-    evolving_metallicity: bool
+    evolving_metallicity : bool
         Replace ``met_logzsol`` with a two-endpoint ramp.  Default: ``False``.
-    alpha_fe_evolving: bool
+    alpha_fe_evolving : bool
         Enable [α/Fe] evolution with lookback time.  Default: ``False``.
-    chem_evol: bool
+    chem_evol : bool
         Derive Z(t) from SFH via gas-regulator model.  Default: ``False``.
-    met_interp: str
+    met_interp : str
         Metallicity interpolation method: ``"smooth"`` (triweight, default)
         or ``"linear"`` (FSPS/Prospector-compatible).
-    lgmet_scatter: float
+    lgmet_scatter : float
         Triweight kernel bandwidth in dex (``met_interp="smooth"``).
         Default: 0.1.
 
@@ -198,16 +198,16 @@ class DustConfig:
 
     Parameters
     ----------
-    model: str
+    model : str
         Geometry model: ``"two_component"`` (Charlot & Fall, default) or
         ``"single_component"`` (uniform screen).
-    law_bc: str
+    law_bc : str
         Birth cloud attenuation law.  Default: ``"power_law"``.
         Options: ``power_law``, ``calzetti``, ``kriek_conroy``, ``smc``,
         ``cardelli``, ``salim``, ``li08``.
-    law_diff: str or None
+    law_diff : str or None
         Diffuse ISM attenuation law.  ``None`` = same as ``law_bc``.
-    emission: str or None
+    emission : str or None
         IR dust emission model.  ``None`` disables IR emission (default).
         Options: ``"modified_blackbody"``, ``"casey2012"``, ``"dale2014"``,
         ``"draine_li2007"``, ``"draine_li2014"``.
@@ -270,24 +270,24 @@ class NebularConfig:
 
     Parameters
     ----------
-    backend: str
+    backend : str
         Nebular emission backend.
         ``"off"``; disabled (default).
         ``"baked_in"``; lines from SSP grid (no free nebular params).
         ``"cloudy"``; CLOUDY grid interpolation.
         ``"cue"``: Cue neural emulator.
-    grid_path: str or None
+    grid_path : str or None
         Path to CLOUDY HDF5 grid (required when ``backend="cloudy"``).
-    weights_path: str or None
+    weights_path : str or None
         Override default Cue weights path (only for ``backend="cue"``).
-    ionization: str
+    ionization : str
         Ionization source for Cue: ``"ssp"`` (default).
-    eline_mode: str
+    eline_mode : str
         Emission line fitting mode.
         ``"off"``; no line treatment (default).
         ``"fixed"``; fixed profiles.
         ``"marginalized"``: analytic marginalization.
-    eline_broad: bool
+    eline_broad : bool
         Enable broad AGN emission line component.  Default: ``False``.
 
     Attributes
@@ -332,15 +332,15 @@ class MultiwavelengthConfig:
 
     Parameters
     ----------
-    radio: bool
+    radio : bool
         Enable radio synchrotron + AGN jet emission.  Default: ``False``.
-    xray: bool
+    xray : bool
         Enable X-ray (XRB + AGN corona) emission.  Default: ``False``.
-    shock: bool
+    shock : bool
         Enable shock emission (MAPPINGS III).  Default: ``False``.
-    apply_igm: bool
+    apply_igm : bool
         Apply IGM absorption.  Default: ``True``.
-    igm_model: str
+    igm_model : str
         IGM absorption model: ``"inoue"`` (Inoue+2014, default) or
         ``"madau"`` (Madau+1995, 17 absorption lines).
 
@@ -380,18 +380,18 @@ class SEDModelConfig:
 
     Parameters
     ----------
-    sfh: SFHConfig
+    sfh : SFHConfig
         SFH structural settings.
-    dust: DustConfig
+    dust : DustConfig
         Dust attenuation and emission settings.
-    nebular: NebularConfig
+    nebular : NebularConfig
         Nebular emission settings.
-    multiwavelength: MultiwavelengthConfig
+    multiwavelength : MultiwavelengthConfig
         Radio, X-ray, shock, and IGM settings.
-    agn_model: str or None
+    agn_model : str or None
         AGN SED model name.  ``None`` disables AGN (default).
         See ``tengri.components.agn.unified`` for valid names.
-    agn_config: AGNConfig or None
+    agn_config : AGNConfig or None
         Detailed AGN sub-model choices.  ``None`` = use defaults when
         ``agn_model`` is set.
 

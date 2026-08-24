@@ -69,27 +69,27 @@ class ApproxPolicy(Mapping):
 
     Parameters
     ----------
-    wave_precomp: bool, default False
+    wave_precomp : bool, default False
         Route photometry through the SSP x filter LUT rather than the exact
         wavelength grid.
-    ztable: bool, default False
+    ztable : bool, default False
         Interpolate the LUT over a redshift table. An internal extension of
         ``wave_precomp`` for free or catalog-ranged redshift, not a user flag.
-    spectrum_precomp: bool, default False
+    spectrum_precomp : bool, default False
         Route spectroscopy through the per-pixel LUT.
-    igm: bool, default True
+    igm : bool, default True
         Precompute IGM transmission at filter effective wavelengths for the
         fixed-redshift hybrid kernel.
-    band_integration: {'quadrature', 'taylor', 'effective_wavelength'}
+    band_integration : {'quadrature', 'taylor', 'effective_wavelength'}
         How the multiplicative dust screen is integrated through a bandpass.
         See :class:`~tengri.WavePrecomp` for the accuracy of each.
-    taylor_correction: bool, default False
+    taylor_correction : bool, default False
         Whether the first-order spectral-moment tensors are built. Implied by
         ``band_integration``; kept as a separate switch because the stellar
         precompute consumes it directly.
-    n_subbands: int, default 5
+    n_subbands : int, default 5
         Quadrature nodes per filter. Implied by ``band_integration`` as above.
-    fast_dust_emission: bool, default False
+    fast_dust_emission : bool, default False
         Sample the dust IR template at the filter effective wavelength when
         its exact constant-response form cannot be built.
 

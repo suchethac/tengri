@@ -78,15 +78,15 @@ def precompute(
 
     Parameters
     ----------
-    filter_waves: list[ndarray]
+    filter_waves : list[ndarray]
         Wavelength grid per filter [Angstrom], observed frame.
-    filter_trans: list[ndarray]
+    filter_trans : list[ndarray]
         Transmission per filter (0–1).
-    redshift: float
+    redshift : float
         Source redshift. [dimensionless]
-    parameters: Parameters or None
+    parameters : Parameters or None
         Not used; BLR has no grid axes.
-    **kwargs: optional
+    **kwargs : optional
         Ignored.
 
     Returns
@@ -216,11 +216,11 @@ def build_lookup(preint: dict, **kwargs: Any) -> dict:
 
         Parameters
         ----------
-        l_cont_erg_s_hz: float
+        l_cont_erg_s_hz : float
             Continuum luminosity [erg/s/Hz] intercepted by BLR.
-        sigma_blr_kms: float
+        sigma_blr_kms : float
             Gaussian line width [km/s].
-        blr_strength: float
+        blr_strength : float
             Overall BLR emission strength [0, 1].
 
         Returns

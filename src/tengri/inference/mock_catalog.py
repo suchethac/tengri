@@ -22,13 +22,13 @@ class MockCatalog:
 
     Parameters
     ----------
-    photometry: ndarray, shape (N, n_filters)
+    photometry : ndarray, shape (N, n_filters)
         Observed-frame spectral flux density [erg/s/cm²/Hz].
-    filter_names: tuple of str
+    filter_names : tuple of str
         Band names, in ``photometry`` column order.
-    lines: dict, optional
+    lines : dict, optional
         ``{line_name: (N,) ndarray}`` observed line fluxes [erg/s/cm²].
-    properties: dict, optional
+    properties : dict, optional
         ``{property_name: (N,) ndarray}`` derived quantities, e.g.
         ``stellar_mass`` [Msun].
 

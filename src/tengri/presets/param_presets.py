@@ -84,7 +84,7 @@ def starforming(redshift: float | None = None) -> tuple[Parameters, SEDModelConf
 
     Parameters
     ----------
-    redshift: float or None, optional
+    redshift : float or None, optional
         Redshift of the galaxy. If None (default), redshift is a free parameter
         with Uniform(0.01, 6.0). If specified, redshift is fixed.
 
@@ -167,7 +167,7 @@ def quiescent(redshift: float | None = None) -> tuple[Parameters, SEDModelConfig
 
     Parameters
     ----------
-    redshift: float or None, optional
+    redshift : float or None, optional
         Redshift of the galaxy. If None (default), redshift is a free parameter
         with Uniform(0.01, 3.0). If specified, redshift is fixed.
 
@@ -247,7 +247,7 @@ def high_z(redshift: float | None = None) -> tuple[Parameters, SEDModelConfig]:
 
     Parameters
     ----------
-    redshift: float or None, optional
+    redshift : float or None, optional
         Redshift of the galaxy. If None (default), redshift is a free parameter
         with Uniform(3.5, 10.0). If specified, redshift is fixed.
 
@@ -331,7 +331,7 @@ def photoz(redshift: float | None = None) -> tuple[Parameters, SEDModelConfig]:
 
     Parameters
     ----------
-    redshift: float or None, optional
+    redshift : float or None, optional
         Redshift of the galaxy. If None (default), redshift is a free parameter
         with Uniform(0.01, 12). If specified, redshift is fixed.
 
@@ -410,7 +410,7 @@ def jwst_spec(redshift: float | None = None) -> tuple[Parameters, SEDModelConfig
 
     Parameters
     ----------
-    redshift: float or None, optional
+    redshift : float or None, optional
         Redshift of the galaxy. If None (default), redshift is a free parameter
         with Uniform(0.01, 15) to cover ground-based and space-based spectroscopy.
         If specified, redshift is fixed.
@@ -499,7 +499,7 @@ def agn_host(redshift: float | None = None) -> tuple[Parameters, SEDModelConfig]
 
     Parameters
     ----------
-    redshift: float or None, optional
+    redshift : float or None, optional
         Redshift of the galaxy. If None (default), redshift is a free parameter
         with Uniform(0.01, 6.0). If specified, redshift is fixed.
 
@@ -587,11 +587,11 @@ def resolve_preset(
 
     Parameters
     ----------
-    name: str
+    name : str
         Preset name, one of :func:`list_presets`.
-    redshift: float or None
+    redshift : float or None
         Redshift to pass through to the preset factory.
-    model_config: SEDModelConfig or None
+    model_config : SEDModelConfig or None
         Optional override for the returned SEDModelConfig. If provided, it is
         returned verbatim; the preset's own SEDModelConfig is discarded.
 
@@ -617,7 +617,7 @@ def describe(name: str) -> str:
 
     Parameters
     ----------
-    name: str
+    name : str
         Preset name, one of the keys of the package preset registry
         (:func:`tengri.presets.list_presets`).
 

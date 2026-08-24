@@ -3,8 +3,8 @@
 
 The single implementation of :math:`B_\\nu(T)` for the whole tree. It lives in
 ``utils/`` rather than inside a component because two independent subsystems
-need it: the AGN torus/polar-dust closures and the dust IR emission closures; and ``utils/`` is
-the layer below both. Importing it from either component
+need it (the AGN torus/polar-dust closures and the dust IR emission closures)
+and ``utils/`` is the layer below both. Importing it from either component
 would invert the layering and couple the two.
 
 Both historical spellings delegate here: ``tengri.components.agn._phys.planck_lnu``
@@ -56,9 +56,9 @@ def _planck_core(nu_w: jnp.ndarray, x: jnp.ndarray) -> jnp.ndarray:
 
     Parameters
     ----------
-    nu_w: array_like, shape (n_freq,)
+    nu_w : array_like, shape (n_freq,)
         Frequency, already cast to the working dtype. [Hz]
-    x: array_like, shape (n_freq,)
+    x : array_like, shape (n_freq,)
         Already-clamped exponent :math:`h\nu/k_B T`. [dimensionless]
 
     Returns
@@ -75,8 +75,8 @@ def _planck_core(nu_w: jnp.ndarray, x: jnp.ndarray) -> jnp.ndarray:
     # (``1/(e^x - 1) == e^-x/(1 - e^-x)``), but with a denominator that cannot
     # overflow (#1439). Division's derivative needs the denominator *squared*:
     # ``expm1(x)**2`` passes float32's 3.4e38 once x > ~44, so with a large
-    # incoming cotangent the reverse pass formed ``inf/inf`` and returned NaN: # while the forward
-    # value stayed perfectly healthy, because a saturated
+    # incoming cotangent the reverse pass formed ``inf/inf`` and returned NaN,
+    # while the forward value stayed perfectly healthy, because a saturated
     # denominator still gives the right Wien-tail limit. A dtype-aware clamp
     # used to sit above, sized on ``expm1``'s *forward* overflow (~88.7 in
     # float32): but the derivative breaks at half that, so no setting of that
@@ -124,8 +124,8 @@ def _planck_core_jvp(
     Why a rule at all. Autodiff differentiates the primal's division by
     :math:`1-e^{-x}` with the quotient rule, which needs that denominator
     *squared*. With a caller's ~1e30 cotangent arriving before the ~3.97e-13
-    prefactor, :math:`g/(1-e^{-x})^2` reaches 4.8e39: past float32's 3.4e38; for a true answer of
-    1.9e27. Stating the derivative means the square is
+    prefactor, :math:`g/(1-e^{-x})^2` reaches 4.8e39 (past float32's 3.4e38)
+    for a true answer of 1.9e27. Stating the derivative means the square is
     never formed by autodiff at all, which is what source-level regrouping
     could not achieve: three groupings were measured and all three still
     overflowed, because XLA reassociates.
@@ -178,9 +178,9 @@ def planck_bnu_nu(nu: jnp.ndarray, temperature: float) -> jnp.ndarray:
 
     Parameters
     ----------
-    nu: array_like, shape (n_freq,)
+    nu : array_like, shape (n_freq,)
         Frequency. [Hz]
-    temperature: float
+    temperature : float
         Blackbody temperature. Must be positive; clamped to >= 1 K. [K]
 
     Returns
@@ -257,8 +257,8 @@ def planck_bnu_nu(nu: jnp.ndarray, temperature: float) -> jnp.ndarray:
     # Grouped as ``(h/k)·nu / T``, NOT ``h·nu / (k·T)``: associativity, but the
     # reverse pass is not associative in float32 (#1439). Division's derivative
     # w.r.t. its denominator is ``-g·A/den**2``. Spelled ``h·nu / (k·T)`` the
-    # denominator is ``k·T``, so that intermediate is ``-g·(h·nu)/(k·T)**2``: # measured 2e40 for
-    # a disc ring, past float32's 3.4e38; and the small ``k``
+    # denominator is ``k·T``, so that intermediate is ``-g·(h·nu)/(k·T)**2``,
+    # measured 2e40 for a disc ring, past float32's 3.4e38, and the small ``k``
     # that would bring it back into range is only applied *afterwards*, by which
     # point it is ``inf``. With ``k`` folded into the numerator the denominator is
     # just ``T``, the same intermediate is ``-g·(h·nu/k)/T**2``, and nothing
@@ -279,9 +279,9 @@ def planck_bnu_wave(wavelength_aa: jnp.ndarray, temperature: float) -> jnp.ndarr
 
     Parameters
     ----------
-    wavelength_aa: array_like, shape (n_wave,)
+    wavelength_aa : array_like, shape (n_wave,)
         Wavelength grid. [Angstrom]
-    temperature: float
+    temperature : float
         Blackbody temperature. Must be positive; clamped to >= 1 K. [K]
 
     Returns

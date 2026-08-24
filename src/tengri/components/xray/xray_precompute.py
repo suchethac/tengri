@@ -237,15 +237,15 @@ def precompute(
 
     Parameters
     ----------
-    filter_waves, filter_trans: list[ndarray]
+    filter_waves, filter_trans : list[ndarray]
         Per-filter observed-frame wavelengths [Angstrom] and transmission curves.
-    redshift: float
+    redshift : float
         Source redshift. [dimensionless]
-    parameters: Parameters or None
+    parameters : Parameters or None
         Parameters spec; used to detect Fixed axes via ``is_fixed``/``fixed_value``.
-    model: str, keyword-only
+    model : str, keyword-only
         One of ``"xray_xrb"``, ``"xray_corona"``, ``"xray_corona_lopez24"``.
-    axis_grids: tuple[ndarray, ndarray], optional
+    axis_grids : tuple[ndarray, ndarray], optional
         Custom 2D grid axes; defaults match the documented validity ranges
         of the underlying physics functions.
 

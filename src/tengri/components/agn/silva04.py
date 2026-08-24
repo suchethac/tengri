@@ -69,13 +69,13 @@ class Silva04Grid(NamedTuple):
 
     Attributes
     ----------
-    template: ndarray, shape (n_nh, n_wave)
+    template : ndarray, shape (n_nh, n_wave)
         Tabulated torus templates [arbitrary units; normalized on use].
-    log_nh_axis: ndarray, shape (n_nh,)
+    log_nh_axis : ndarray, shape (n_nh,)
         Grid axis, :math:`\\log_{10}(N_H / {\\rm cm}^{-2})`.
-    edges: ndarray, shape (n_nh + 1,)
+    edges : ndarray, shape (n_nh + 1,)
         Triweight-kernel bin edges derived from ``log_nh_axis``.
-    wave_grid: ndarray, shape (n_wave,)
+    wave_grid : ndarray, shape (n_wave,)
         Template rest-frame wavelength grid [Angstrom].
     """
 
@@ -90,7 +90,7 @@ def _load_silva04_arrays(grid_path: str) -> dict:
 
     Parameters
     ----------
-    grid_path: str
+    grid_path : str
         Path to ``silva04_torus_grid.h5`` produced by
         ``scripts/build_silva04_grid.py``.
 
@@ -120,7 +120,7 @@ def create_silva04_from_grid(grid_path: str) -> Callable:
 
     Parameters
     ----------
-    grid_path: str
+    grid_path : str
         Path to ``silva04_torus_grid.h5``.
 
     Returns
@@ -163,7 +163,7 @@ def load_silva04_grid(grid_path: str) -> Silva04Grid:
 
     Parameters
     ----------
-    grid_path: str
+    grid_path : str
         Path to ``silva04_torus_grid.h5``.
 
     Returns
@@ -212,19 +212,19 @@ def silva04_sed_from_grid(
 
     Parameters
     ----------
-    grid: Silva04Grid
+    grid : Silva04Grid
         Template arrays. Passing these as an **argument** (rather than
         closing over them) is what lets the forward model thread the
         library through ``jax.jit`` as a ``Parameter`` instead of baking
         ~2 MB into the graph as ``Constant`` ops.
-    wavelength: array_like, shape (n_wave,)
+    wavelength : array_like, shape (n_wave,)
         Rest-frame wavelength grid. [Å]
-    agn_log_lbol: float, optional
+    agn_log_lbol : float, optional
         Bolometric luminosity, ``log10(L_bol / L_sun)``. Default 10.0.
-    agn_log_nh_silva: float, optional
+    agn_log_nh_silva : float, optional
         Hydrogen column density, ``log10(N_H / cm^-2)``. Valid over the
         grid extent (Silva+04 bins typically 22–25). Default 23.0.
-    agn_torus_frac: float, optional
+    agn_torus_frac : float, optional
         Fraction of L_bol reprocessed by the torus. Default 0.5.
 
     Returns
@@ -314,15 +314,15 @@ def silva04_sed(*args, _template: Silva04Grid | None = None, **kwargs) -> jnp.nd
 
     Parameters
     ----------
-    wavelength: array_like, shape (n_wave,)
+    wavelength : array_like, shape (n_wave,)
         Rest-frame wavelength grid. [Å]
-    agn_log_lbol: float, optional
+    agn_log_lbol : float, optional
         ``log10(L_bol / L_sun)``. Default 10.0.
-    agn_log_nh_silva: float, optional
+    agn_log_nh_silva : float, optional
         ``log10(N_H / cm^-2)``. Default 23.0.
-    agn_torus_frac: float, optional
+    agn_torus_frac : float, optional
         Torus reprocessing fraction. Default 0.5.
-    _template: Silva04Grid, optional
+    _template : Silva04Grid, optional
         Pre-loaded grid, threaded in as a JIT argument by the forward
         model. When ``None`` (default) the packaged grid is loaded from
         disk and: if this call happens under trace: baked into the

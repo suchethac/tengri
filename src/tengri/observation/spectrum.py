@@ -46,7 +46,7 @@ def nirspec_prism_resolution(wave_um: jnp.ndarray) -> jnp.ndarray:
 
     Parameters
     ----------
-    wave_um: array, shape (n_wave,)
+    wave_um : array, shape (n_wave,)
         Observed wavelength [micron].
 
     Returns
@@ -67,7 +67,7 @@ def nirspec_g140m_resolution(wave_um: jnp.ndarray) -> jnp.ndarray:
 
     Parameters
     ----------
-    wave_um: array, shape (n_wave,)
+    wave_um : array, shape (n_wave,)
         Observed wavelength [micron].
 
     Returns
@@ -93,7 +93,7 @@ def _resolution_to_sigma_kms(resolution: jnp.ndarray) -> jnp.ndarray:
 
     Parameters
     ----------
-    resolution: array or scalar
+    resolution : array or scalar
         Spectral resolution R = lambda / delta_lambda (dimensionless).
 
     Returns
@@ -121,7 +121,7 @@ def _is_log_uniform(wave) -> bool:
 
     Parameters
     ----------
-    wave: array_like, shape (n_pix,)
+    wave : array_like, shape (n_pix,)
         Wavelength grid [Angstrom].
 
     Returns
@@ -160,16 +160,16 @@ def _apply_lsf_constant_r(
 
     Parameters
     ----------
-    spectrum: array, shape (n_pix,)
+    spectrum : array, shape (n_pix,)
         Input spectral flux.
-    wave_obs: array, shape (n_pix,)
+    wave_obs : array, shape (n_pix,)
         Observed wavelength grid [Angstrom]. Must be uniform in ``ln(lambda)``,
         not merely evenly spaced, the pixel scale is read once from the first
         pair, so a linear grid under-broadens by ``wave[0]/lambda`` (#1742).
         ``apply_lsf`` dispatches here only for a grid that satisfies this, and
         sends the rest to :func:`_apply_lsf_variable_r` (#1791), so the
         precondition binds only direct callers of this helper.
-    sigma_eff_kms: float
+    sigma_eff_kms : float
         Effective velocity dispersion [km/s] (after library subtraction).
 
     Returns
@@ -211,15 +211,15 @@ def _apply_lsf_variable_r(
 
     Parameters
     ----------
-    spectrum: array, shape (n_pix,)
+    spectrum : array, shape (n_pix,)
         Input spectral flux.
-    wave_obs: array, shape (n_pix,)
+    wave_obs : array, shape (n_pix,)
         Observed wavelength grid [Angstrom]. Any strictly increasing grid: each
         bin takes its pixel scale from the local ``d ln lambda``, so a grid that
         is not log-uniform is handled here rather than refused (#1791).
-    sigma_eff_kms: array, shape (n_pix,)
+    sigma_eff_kms : array, shape (n_pix,)
         Effective velocity dispersion at each pixel [km/s].
-    n_bins: int, optional
+    n_bins : int, optional
         Number of piecewise-constant segments. More bins gives better
         accuracy but requires more FFTs. Typical: 10–20. Default 16.
 
@@ -341,21 +341,21 @@ def apply_lsf(
 
     Parameters
     ----------
-    spectrum: array, shape (n_pix,)
+    spectrum : array, shape (n_pix,)
         Input spectral flux at observed wavelengths [erg/s/cm²/Hz or arbitrary units].
-    wave_obs: array, shape (n_pix,)
+    wave_obs : array, shape (n_pix,)
         Observed-frame wavelength grid [Ångstrom]. Any strictly increasing grid
         is accepted. One not uniform in log-wavelength, a linearly-spaced grid,
         for instance, is routed through the piecewise path, which carries a
         per-bin pixel scale, so the requested width is delivered either way
         (#1791). A log-uniform grid with scalar ``R`` keeps the single-FFT path.
-    resolution: array, shape (n_pix,) or float
+    resolution : array, shape (n_pix,) or float
         Spectral resolution :math:`R(\\lambda) = \\lambda / \\Delta\\lambda`.
 
         - Scalar: constant resolution across wavelength (fast path)
         - Array: per-pixel wavelength-dependent resolution (e.g., JWST NIRSpec PRISM)
 
-    sigma_lib_kms: float, optional
+    sigma_lib_kms : float, optional
         SSP library velocity dispersion [km/s]. Subtracted in quadrature
         from instrument LSF. Default 0.0 (no subtraction). Common values:
 
@@ -364,11 +364,11 @@ def apply_lsf(
         - IRTF: 20 km/s
 
         Use ``SSP_LIBRARY_RESOLUTIONS[library_name]`` for pre-defined values.
-    n_bins: int, optional
+    n_bins : int, optional
         Number of piecewise-constant segments for variable-R approximation.
         Ignored for scalar R. Higher values are more accurate but slower.
         Typical: 10–20. Default 16.
-    sigma_v_kms: float, optional
+    sigma_v_kms : float, optional
         Intrinsic galaxy velocity dispersion :math:`\\sigma_v` [km/s] added
         in quadrature to :math:`\\sigma_{\\rm eff}`. This is the broadening
         from stellar dynamics, distinct from instrument LSF
@@ -377,7 +377,7 @@ def apply_lsf(
 
     Returns
     -------
-    spectrum_smoothed: array, shape (n_pix,)
+    spectrum_smoothed : array, shape (n_pix,)
         Spectrum convolved with the effective LSF kernel [same units as input].
 
     Notes
@@ -406,9 +406,9 @@ def apply_lsf(
 
     See Also
     --------
-    velocity_broaden: Convolve with velocity dispersion only (no library subtraction).
-    nirspec_prism_resolution: JWST NIRSpec PRISM variable-R function.
-    nirspec_g140m_resolution: JWST NIRSpec G140M constant-R function.
+    velocity_broaden : Convolve with velocity dispersion only (no library subtraction).
+    nirspec_prism_resolution : JWST NIRSpec PRISM variable-R function.
+    nirspec_g140m_resolution : JWST NIRSpec G140M constant-R function.
 
     Examples
     --------
@@ -498,47 +498,47 @@ def project_spectrum(
 
     Parameters
     ----------
-    sed_rest: array, shape (n_wave,)
+    sed_rest : array, shape (n_wave,)
         Rest-frame spectral luminosity density [erg/s/Hz] on the
         rest-frame wavelength grid.
-    wave_rest: array, shape (n_wave,)
+    wave_rest : array, shape (n_wave,)
         Rest-frame wavelength grid [Angstrom].
-    wave_obs: array, shape (n_pix,)
+    wave_obs : array, shape (n_pix,)
         Observed-frame wavelength at each spectral pixel [Angstrom].
-    redshift: float
+    redshift : float
         Source redshift z.
-    dl_cm: float
+    dl_cm : float
         Luminosity distance [cm].
-    resolution: float, array, or None
+    resolution : float, array, or None
         Spectral resolution :math:`R(\lambda) = \lambda / \Delta\lambda`.
         If ``None``, LSF is skipped. If scalar, constant resolution; if array,
         per-pixel wavelength-dependent resolution (e.g., JWST NIRSpec PRISM).
-    sigma_lib_kms: float, optional
+    sigma_lib_kms : float, optional
         SSP library velocity dispersion [km/s], subtracted in quadrature from
         instrument LSF. Default 0.0 (no subtraction). Common values: MILES 70 km/s,
         C3K 15 km/s.
-    n_bins: int, optional
+    n_bins : int, optional
         Number of piecewise-constant segments for variable-R LSF approximation.
         Ignored when resolution is scalar. Default 16.
-    sigma_v_kms: float, optional
+    sigma_v_kms : float, optional
         Intrinsic galaxy velocity dispersion [km/s] added in quadrature to LSF.
         Default 0.0 (no extra broadening).
-    cal_coeffs: array, shape (order,), or None, optional
+    cal_coeffs : array, shape (order,), or None, optional
         Chebyshev calibration polynomial coefficients ``[a_1, ..., a_N]``,
         where ``N`` is the calibration order. If ``None`` (default), no
         calibration is applied. Empty array ``[]`` gives unity calibration
         (no-op).
-    cal_wave_range: tuple[float, float], optional
+    cal_wave_range : tuple[float, float], optional
         ``(wave_min, wave_max)`` wavelength range for normalizing the
         Chebyshev polynomial to [-1, 1]. Used only when ``cal_coeffs`` is not
         ``None``. If omitted, defaults to ``(wave_obs.min(), wave_obs.max())``.
-    conserving: bool, optional
+    conserving : bool, optional
         Resample the model onto the pixel grid with a flux-conserving bin
         integral (:func:`compute_spectrum_conserving`) instead of point
         interpolation. Default ``False`` (point sampling, unbiased only when
         the model grid is much finer than the pixels). Set for low-resolution
         spectroscopy where point sampling aliases; see #1166.
-    resolution_matrix: BandedMatrix or None, optional
+    resolution_matrix : BandedMatrix or None, optional
         Banded instrument resolution operator (DESI/PFS spectro-perfectionism;
         Bolton & Schlegel 2010). When supplied, the flux-conserving-resampled
         model is projected through ``R @ model`` at pixel resolution and this
@@ -604,10 +604,10 @@ def project_spectrum(
 
     See Also
     --------
-    compute_spectrum: Compute observed spectrum (no LSF).
-    apply_lsf: Apply LSF convolution separately.
-    velocity_broaden: Broaden by velocity dispersion only.
-    apply_calibration: Apply calibration polynomial to a spectrum.
+    compute_spectrum : Compute observed spectrum (no LSF).
+    apply_lsf : Apply LSF convolution separately.
+    velocity_broaden : Broaden by velocity dispersion only.
+    apply_calibration : Apply calibration polynomial to a spectrum.
 
     """
     from tengri.observation.calibration import apply_calibration
@@ -659,16 +659,16 @@ def compute_spectrum(
 
     Parameters
     ----------
-    sed_rest: array, shape (n_wave,)
+    sed_rest : array, shape (n_wave,)
         Rest-frame spectral luminosity density [erg/s/Hz] on the
         rest-frame wavelength grid.
-    wave_rest: array, shape (n_wave,)
+    wave_rest : array, shape (n_wave,)
         Rest-frame wavelength grid [Angstrom].
-    wave_obs: array, shape (n_pix,)
+    wave_obs : array, shape (n_pix,)
         Observed-frame wavelength at each spectral pixel [Angstrom].
-    redshift: float
+    redshift : float
         Source redshift z.
-    dl_cm: float
+    dl_cm : float
         Luminosity distance [cm].
 
     Returns
@@ -711,49 +711,49 @@ def _flux_conserving_resample(
 ) -> jnp.ndarray:
     r"""Bin-integrated (flux-conserving) resample of ``sed_rest`` onto ``wave_query``.
 
-       Each output value is the *mean flux density over that pixel's wavelength bin*,
+    Each output value is the *mean flux density over that pixel's wavelength bin*
     the integral of the model over the bin divided by the bin width, rather
-       than a point sample at the pixel center (Carnall 2017, SpectRes, eq. 3):
+    than a point sample at the pixel center (Carnall 2017, SpectRes, eq. 3):
 
-       .. math::
+    .. math::
 
-           \tilde{f}_j = \frac{1}{\Delta\lambda_j}
-                         \int_{\lambda_j^-}^{\lambda_j^+} f(\lambda)\, d\lambda
+        \tilde{f}_j = \frac{1}{\Delta\lambda_j}
+                      \int_{\lambda_j^-}^{\lambda_j^+} f(\lambda)\, d\lambda
 
-       where the bin edges :math:`\lambda_j^\pm` are the midpoints between adjacent
-       ``wave_query`` centers. Point sampling is unbiased only when the model grid is
-       much finer than the pixel spacing; when a pixel spans one or more model bins
-       (low-resolution spectroscopy, e.g. NIRSpec PRISM) it aliases the sub-pixel
-       structure, biasing the integrated continuum. The bin integral does not.
+    where the bin edges :math:`\lambda_j^\pm` are the midpoints between adjacent
+    ``wave_query`` centers. Point sampling is unbiased only when the model grid is
+    much finer than the pixel spacing; when a pixel spans one or more model bins
+    (low-resolution spectroscopy, e.g. NIRSpec PRISM) it aliases the sub-pixel
+    structure, biasing the integrated continuum. The bin integral does not.
 
-       Implemented as a difference of the cumulative trapezoidal integral evaluated
-       at the bin edges, so it is O(n_wave + n_pix), JIT-compatible, and
-       differentiable w.r.t. ``sed_rest`` (the edges are static; only the SED varies).
-       Outside the model grid the cumulative integral is flat, so out-of-range bins
-       contribute zero, matching ``compute_spectrum``'s ``left=0, right=0`` clamp.
+    Implemented as a difference of the cumulative trapezoidal integral evaluated
+    at the bin edges, so it is O(n_wave + n_pix), JIT-compatible, and
+    differentiable w.r.t. ``sed_rest`` (the edges are static; only the SED varies).
+    Outside the model grid the cumulative integral is flat, so out-of-range bins
+    contribute zero, matching ``compute_spectrum``'s ``left=0, right=0`` clamp.
 
-       Parameters
-       ----------
-       wave_rest: array, shape (n_wave,)
-           Rest-frame model wavelength grid [Angstrom], strictly increasing.
-       sed_rest: array, shape (n_wave,)
-           Rest-frame flux density on ``wave_rest`` [erg/s/Hz].
-       wave_query: array, shape (n_pix,)
-           Rest-frame pixel-center wavelengths to resample onto [Angstrom].
+    Parameters
+    ----------
+    wave_rest : array, shape (n_wave,)
+        Rest-frame model wavelength grid [Angstrom], strictly increasing.
+    sed_rest : array, shape (n_wave,)
+        Rest-frame flux density on ``wave_rest`` [erg/s/Hz].
+    wave_query : array, shape (n_pix,)
+        Rest-frame pixel-center wavelengths to resample onto [Angstrom].
 
-       Returns
-       -------
-       ndarray, shape (n_pix,)
-           Bin-averaged flux density at each pixel [erg/s/Hz].
+    Returns
+    -------
+    ndarray, shape (n_pix,)
+        Bin-averaged flux density at each pixel [erg/s/Hz].
 
-       Notes
-       -----
-       **JIT-compatible**: yes. **Gradient-safe**: yes (linear in ``sed_rest``).
+    Notes
+    -----
+    **JIT-compatible**: yes. **Gradient-safe**: yes (linear in ``sed_rest``).
 
-       References
-       ----------
-       .. [1] Carnall, A. C. 2017, "SpectRes: A Fast Spectral Resampling Tool in
-              Python", arXiv:1705.05165.
+    References
+    ----------
+    .. [1] Carnall, A. C. 2017, "SpectRes: A Fast Spectral Resampling Tool in
+           Python", arXiv:1705.05165.
     """
     mid = 0.5 * (wave_query[1:] + wave_query[:-1])
     lo = wave_query[:1] - 0.5 * (wave_query[1:2] - wave_query[:1])
@@ -815,9 +815,9 @@ def _require_log_uniform_grid(wave, caller: str) -> None:
 
     Parameters
     ----------
-    wave: array_like, shape (n_pix,)
+    wave : array_like, shape (n_pix,)
         Wavelength grid to check [Angstrom].
-    caller: str
+    caller : str
         Function name, quoted in the error so the message names the API the user
         actually called.
     """
@@ -862,13 +862,13 @@ def velocity_broaden(
 
     Parameters
     ----------
-    flux: array, shape (n_pix,)
+    flux : array, shape (n_pix,)
         Input spectral flux.
-    wave: array, shape (n_pix,)
+    wave : array, shape (n_pix,)
         Wavelength grid [Angstrom]. Must be uniformly spaced **in
         log-wavelength**, e.g. ``jnp.logspace(...)``, not ``jnp.linspace(...)``.
         A linearly-spaced grid is rejected; see Notes.
-    sigma_km_s: float
+    sigma_km_s : float
         Velocity dispersion [km/s]. Typical range: 50–300 km/s.
 
     Returns
@@ -983,17 +983,17 @@ def blend_emission_lines(
 
     Parameters
     ----------
-    line_wavelengths: array, shape (n_lines,)
+    line_wavelengths : array, shape (n_lines,)
         Rest-frame line wavelengths [Angstrom].
-    line_luminosities: array, shape (n_lines,)
+    line_luminosities : array, shape (n_lines,)
         Line luminosities [L_sun]. Total integrated luminosity per line.
-    spectral_resolution: float
+    spectral_resolution : float
         Instrument spectral resolution R = lambda / delta_lambda (dimensionless).
         Typical values: R ~ 100 (photometry), R ~ 1000 (low-res spectroscopy),
         R ~ 5000 (medium-res).
-    wave_out: array, shape (n_pix,)
+    wave_out : array, shape (n_pix,)
         Output wavelength grid [Angstrom] in observed frame.
-    redshift: float, optional
+    redshift : float, optional
         Source redshift. Default 0.0.
 
     Returns
@@ -1019,9 +1019,9 @@ def blend_emission_lines(
 
         Parameters
         ----------
-        lam_rest: scalar
+        lam_rest : scalar
             Rest-frame wavelength (Angstrom).
-        lum: scalar
+        lum : scalar
             Line luminosity (Lsun).
 
         Returns

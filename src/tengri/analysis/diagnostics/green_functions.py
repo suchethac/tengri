@@ -54,15 +54,15 @@ def compute_green_function(
 
     Parameters
     ----------
-    ssp_flux_at_z: array, shape (n_age, n_wave)
+    ssp_flux_at_z : array, shape (n_age, n_wave)
         SSP spectra at fixed metallicity.
-    ssp_wave: array, shape (n_wave,)
+    ssp_wave : array, shape (n_wave,)
         Wavelength grid (Angstrom).
-    filter_wave: array, optional
+    filter_wave : array, optional
         Filter wavelength grid.
-    filter_trans: array, optional
+    filter_trans : array, optional
         Filter transmission.
-    wave_target: float, optional
+    wave_target : float, optional
         Single wavelength (Angstrom). Used if no filter provided.
 
     Returns
@@ -102,9 +102,9 @@ def compute_window_function(green_fn, mean_sfr_on_ages):
 
     Parameters
     ----------
-    green_fn: array, shape (n_age,)
+    green_fn : array, shape (n_age,)
         Green's function G(t_age).
-    mean_sfr_on_ages: array, shape (n_age,)
+    mean_sfr_on_ages : array, shape (n_age,)
         Mean SFR evaluated at the SSP age grid (Msun/yr).
 
     Returns
@@ -127,16 +127,16 @@ def compute_window_function_fourier(window_fn, ssp_ages_yr):
 
     Parameters
     ----------
-    window_fn: array, shape (n_age,)
+    window_fn : array, shape (n_age,)
         Window function W(t_age).
-    ssp_ages_yr: array, shape (n_age,)
+    ssp_ages_yr : array, shape (n_age,)
         SSP ages in years (for frequency axis).
 
     Returns
     -------
-    power_transfer: array, shape (n_freq,)
+    power_transfer : array, shape (n_freq,)
         ``|W_tilde(omega)|^2``: the PSD-to-observable transfer function.
-    omega: array, shape (n_freq,)
+    omega : array, shape (n_freq,)
         Angular frequencies (rad/yr).
     """
     n = len(window_fn)
@@ -163,18 +163,18 @@ def compute_time_sensitivity_matrix(ssp_flux_at_z, ssp_wave, wavelengths_target)
 
     Parameters
     ----------
-    ssp_flux_at_z: array, shape (n_age, n_wave)
+    ssp_flux_at_z : array, shape (n_age, n_wave)
         SSP spectra at fixed metallicity.
-    ssp_wave: array, shape (n_wave,)
+    ssp_wave : array, shape (n_wave,)
         Wavelength grid (Angstrom).
-    wavelengths_target: array, shape (n_target,)
+    wavelengths_target : array, shape (n_target,)
         Target wavelengths to evaluate (Angstrom).
         E.g., [1500, 2500, 4000, 5500, 6563, 8000, 16000] for
         FUV, NUV, Balmer break, V-band, H-alpha, I-band, H-band.
 
     Returns
     -------
-    sensitivity: array, shape (n_target, n_age)
+    sensitivity : array, shape (n_target, n_age)
         G(wavelength, age) matrix. Each row is the Green's function
         at that wavelength.
     """

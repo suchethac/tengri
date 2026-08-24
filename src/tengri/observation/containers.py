@@ -26,8 +26,8 @@ Examples
 
 See Also
 --------
-tengri.observation.physics: transformation functions (LSF, aperture, etc.)
-tengri.observation.constants: module-level constants (line catalogs, status flags)
+tengri.observation.physics : transformation functions (LSF, aperture, etc.)
+tengri.observation.constants : module-level constants (line catalogs, status flags)
 """
 
 from __future__ import annotations

@@ -59,13 +59,13 @@ def matern32_kernel(
 
     Parameters
     ----------
-    x1: array_like, shape (n1,)
+    x1 : array_like, shape (n1,)
         First kernel argument [dimensionless].
-    x2: array_like, shape (n2,)
+    x2 : array_like, shape (n2,)
         Second kernel argument [dimensionless].
-    variance: float
+    variance : float
         Signal variance σ² [dimensionless].
-    length_scale: float
+    length_scale : float
         Length scale ℓ [dimensionless].
 
     Returns
@@ -142,9 +142,9 @@ def _george_combined_kernel(
 
     Parameters
     ----------
-    x1, x2: array_like
+    x1, x2 : array_like
         Kernel inputs.
-    y_train: array_like
+    y_train : array_like
         Training y-values used to compute the kernel hyperparameters
         ``variance = var(y)`` and the metric/log_gamma2 ``= median(y)``.
     """
@@ -192,13 +192,13 @@ def gp_interpolate(
 
     Parameters
     ----------
-    x_train: array_like, shape (n_train,)
+    x_train : array_like, shape (n_train,)
         Training input points [dimensionless].
-    y_train: array_like, shape (n_train,)
+    y_train : array_like, shape (n_train,)
         Training values [dimensionless].
-    y_err: array_like, shape (n_train,)
+    y_err : array_like, shape (n_train,)
         Per-point noise, added in quadrature on the diagonal [dimensionless].
-    x_eval: array_like, shape (n_eval,)
+    x_eval : array_like, shape (n_eval,)
         Evaluation points [dimensionless].
 
     Returns
@@ -258,24 +258,24 @@ def _build_quantile_points(
 
     Parameters
     ----------
-    tx_fracs: array, shape (n_param,)
+    tx_fracs : array, shape (n_param,)
         Cosmic time fractions in (0, 1), sorted.
-    n_param: int
+    n_param : int
         Number of intermediate quantile parameters.
-    log_total_mass: float
+    log_total_mass : float
         log10(total stellar mass / Msun).
-    log_sfr_inst: float
+    log_sfr_inst : float
         log10(instantaneous SFR at observation / Msun/yr).
-    age_universe_yr: float
+    age_universe_yr : float
         Age of the universe at observation epoch (yr).
 
     Returns
     -------
-    time_q: array
+    time_q : array
         Time fractions for GP training.
-    mass_q: array
+    mass_q : array
         Cumulative mass fractions for GP training.
-    yerr: array
+    yerr : array
         Noise standard deviations for each training point.
     """
     # Mass quantiles: evenly spaced from 0 to 1
@@ -400,15 +400,15 @@ def dense_basis(
 
     Parameters
     ----------
-    age_yr: array_like, shape (n_age,)
+    age_yr : array_like, shape (n_age,)
         Lookback time grid [yr].
-    log_total_mass: float, optional
+    log_total_mass : float, optional
         log10(total stellar mass formed / Msun). Default: 10.0 (10 Gyr Msun).
-    log_sfr_inst: float, optional
+    log_sfr_inst : float, optional
         log10(instantaneous SFR at observation / Msun/yr). Default: 0.0 (1 Msun/yr).
         Used to add 3 constraint points near t=1 (today) that pin the recent SFH
         shape to be consistent with the observed instantaneous SFR.
-    age_universe_yr: float, optional
+    age_universe_yr : float, optional
         Age of the universe at observation epoch [yr].
         Default: 13.47e9 (FlatLambdaCDM, H0=70, Omega_m=0.3, z=0).
     **tx_kwargs
@@ -565,7 +565,7 @@ def _build_quantile_points_pure(
 
     Returns (time_q, mass_q, yerr) with n_param+3 points:
     (0,0), (0.01,0), (tx_i, mass_i), (1,1). The user quantiles sit at indices
-    ``2: 2+n_param``, which is where ``dense_basis`` puts its noise.
+    ``2 : 2+n_param``, which is where ``dense_basis`` puts its noise.
     """
     mass_quantiles = jnp.linspace(0.0, 1.0, n_param + 2)
     time_quantiles = jnp.concatenate(
@@ -616,11 +616,11 @@ def dense_basis_pure(
 
     Parameters
     ----------
-    age_yr: array_like, shape (n_age,)
+    age_yr : array_like, shape (n_age,)
         Lookback time grid [yr].
-    log_total_mass: float, optional
+    log_total_mass : float, optional
         log10(total stellar mass formed / Msun). Default: 10.0 (10 Gyr Msun).
-    age_universe_yr: float, optional
+    age_universe_yr : float, optional
         Age of the universe at observation epoch [yr].
         Default: 13.47e9 (FlatLambdaCDM, H0=70, Omega_m=0.3, z=0).
     **tx_kwargs

@@ -50,7 +50,7 @@ def register_component(cls: type) -> type:
 
     Parameters
     ----------
-    cls: type
+    cls : type
         A class conforming to the :class:`SEDComponent` protocol. It must
         expose ``name``, ``parameter_prefix``, and a
         ``declared_parameters()`` method returning the parameter

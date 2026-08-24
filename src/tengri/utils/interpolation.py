@@ -38,11 +38,11 @@ def tw_cuml_kern(x: float, m: float, h: float) -> float:
 
     Parameters
     ----------
-    x: float
+    x : float
         Query point (kernel center).
-    m: float or array
+    m : float or array
         Location(s) at which to evaluate the CDF.
-    h: float
+    h : float
         Kernel bandwidth (same units as *x* and *m*).
 
     Returns
@@ -74,7 +74,7 @@ def edges_for_grid(grid: jnp.ndarray) -> jnp.ndarray:
 
     Parameters
     ----------
-    grid: array, shape (n,)
+    grid : array, shape (n,)
         Sorted grid node values (ascending).
 
     Returns
@@ -109,20 +109,20 @@ def compute_grid_weights(
 
     Parameters
     ----------
-    x: float
+    x : float
         Query point on the axis.
-    grid: array, shape (n,)
+    grid : array, shape (n,)
         Sorted grid node values (ascending). May be uniform or non-uniform.
-    scatter: float
+    scatter : float
         Kernel bandwidth (same units as ``grid``).  Smaller values concentrate
         weight near the nearest node; larger values spread across more bins.
         Default 0.2, consistent with the DSPS lgmet_scatter convention.
         For non-uniform axes, this is interpreted in the physical coordinate space;
         the mapping to index space is automatic.
-    edges: array, shape (n + 1,) or None
+    edges : array, shape (n + 1,) or None
         Precomputed bin edges from :func:`edges_for_grid`.  When ``None``
         (default), edges are computed on the fly.
-    index_space_interp: bool or None
+    index_space_interp : bool or None
         Whether to use index-space interpolation for non-uniform axes:
         - ``None`` (default): use pre-#1851 physical-space path, but emit a warning
           if non-uniformity is detected. This preserves backward compatibility while
@@ -318,7 +318,7 @@ def _check_uniform(grid: jnp.ndarray) -> None:
 
     Parameters
     ----------
-    grid: array, shape (n,)
+    grid : array, shape (n,)
         Candidate grid node values.
     """
     try:
@@ -344,7 +344,7 @@ def _uniform_rtol(grid: np.ndarray) -> float:
 
     Parameters
     ----------
-    grid: ndarray, shape (n,)
+    grid : ndarray, shape (n,)
         Grid nodes **in their original dtype**; the tolerance depends on the
         precision the grid was built in, so this must be called before any
         upcast to float64.
@@ -418,12 +418,12 @@ def compute_grid_window(
 
     Parameters
     ----------
-    x: float
+    x : float
         Query point on the axis (same units as ``grid``).
-    grid: array, shape (n,)
+    grid : array, shape (n,)
         Uniformly spaced, ascending grid node values.  May be traced; only its
         shape is needed at trace time.
-    bandwidth_cells: float
+    bandwidth_cells : float
         Kernel bandwidth in units of the **grid spacing**, so the absolute
         bandwidth is ``bandwidth_cells * (grid[1] - grid[0])``.  Default 0.5,
         the tengri convention (smooth across one neighbor on each side).
@@ -435,7 +435,7 @@ def compute_grid_window(
         ``jnp`` operation is staged into the jaxpr; so that expression is a
         tracer even when ``grid`` itself is a concrete constant, and cannot
         size anything.
-    edges: array, shape (n + 1,) or None
+    edges : array, shape (n + 1,) or None
         Precomputed bin edges from :func:`edges_for_grid`.  Passing them keeps
         the whole-axis edge construction out of the traced graph.
     on_out_of_grid : str
@@ -446,12 +446,12 @@ def compute_grid_window(
 
     Returns
     -------
-    start: ndarray, shape (), int32
+    start : ndarray, shape (), int32
         Index of the first node in the window.  Clipped so the window stays in
         bounds, so ``start`` is not always ``nearest - half_width``.
-    weights: ndarray, shape (2 * half_width + 1,)
+    weights : ndarray, shape (2 * half_width + 1,)
         Non-negative weights summing to 1, equal element-for-element to
-        ``compute_grid_weights(...)[start: start + weights.size]``, where
+        ``compute_grid_weights(...)[start : start + weights.size]``, where
         ``half_width = ceil(3 * bandwidth_cells + 1/2)``.
 
     Raises
@@ -554,11 +554,11 @@ def apply_grid_window(
 
     Parameters
     ----------
-    table: array, shape (n, ...)
+    table : array, shape (n, ...)
         Table whose leading axis lies on the interpolation grid.
-    start: ndarray, shape (), int
+    start : ndarray, shape (), int
         Window start index from :func:`compute_grid_window`.
-    weights: array, shape (w,)
+    weights : array, shape (w,)
         Window weights from :func:`compute_grid_window`.
 
     Returns

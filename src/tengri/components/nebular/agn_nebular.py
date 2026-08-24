@@ -184,7 +184,7 @@ def agn_ionspec_from_alpha_pl(alpha_pl: float) -> dict:
 
     Parameters
     ----------
-    alpha_pl: float
+    alpha_pl : float
         EUV power-law slope in the BEAGLE-AGN convention (f_nu ~ nu^alpha_pl)
         [dimensionless]. Typical AGN: alpha_pl ~ -1.7.
 
@@ -288,9 +288,9 @@ def _log_qh_from_lacc(l_acc_erg: float, alpha_pl: float) -> float:
 
     Parameters
     ----------
-    l_acc_erg: float
+    l_acc_erg : float
         Accretion luminosity [erg s^-1].
-    alpha_pl: float
+    alpha_pl : float
         EUV power-law slope (f_nu ~ nu^alpha_pl) [dimensionless].
 
     Returns
@@ -376,34 +376,34 @@ def agn_nlr_cue(
 
     Parameters
     ----------
-    cue_backend: CueBackend
+    cue_backend : CueBackend
         Initialized Cue emulator backend with loaded weights.
-    l_acc_erg: float
+    l_acc_erg : float
         AGN accretion luminosity [erg s^-1].
-    covering_fraction: float
+    covering_fraction : float
         NLR covering fraction (0 to 1). Default 0.1 [dimensionless].
-    neb_logU: float
+    neb_logU : float
         Gas ionization parameter log10(U). Default -3.0 [log10(U)].
-    gas_logn: float
+    gas_logn : float
         Gas electron density log10(n_e / cm^-3). Default 3.0 [log10(cm^-3)].
-    gas_logz: float
+    gas_logz : float
         Gas metallicity log10(Z/Zsun). Default 0.0 (solar) [dimensionless].
-    gas_logno: float
+    gas_logno : float
         Gas N/O abundance ratio offset [dimensionless]. Default 0.0.
-    gas_logco: float
+    gas_logco : float
         Gas C/O abundance ratio offset [dimensionless]. Default 0.0.
-    alpha_pl: float
+    alpha_pl : float
         AGN EUV power-law slope (f_nu ~ nu^alpha_pl) [dimensionless].
         Default -1.7.
-    ionspec_params: dict or None
+    ionspec_params : dict or None
         Explicit Cue ionizing spectrum parameters (overrides alpha_pl).
         Keys: ``ionspec_index1..4``, ``ionspec_logLratio1..3`` [dimensionless].
 
     Returns
     -------
-    line_wavelengths: array, shape (n_lines,)
+    line_wavelengths : array, shape (n_lines,)
         Emission line vacuum wavelengths [Angstrom].
-    line_luminosities: array, shape (n_lines,)
+    line_luminosities : array, shape (n_lines,)
         Emission line luminosities [L_sun], scaled by covering fraction.
 
     References
@@ -481,21 +481,21 @@ class SynthesizerGridData:
 
     Attributes
     ----------
-    mass_axis: ndarray, shape (n_mass,)
+    mass_axis : ndarray, shape (n_mass,)
         Black hole mass in log10 space [log10(kg)].
-    eddington_axis: ndarray, shape (n_edd,)
+    eddington_axis : ndarray, shape (n_edd,)
         Accretion rate (Eddington ratio) in log10 space [log10(Eddington ratio)].
-    cosine_axis: ndarray, shape (n_inc,)
+    cosine_axis : ndarray, shape (n_inc,)
         Inclination angle cosine, linear not log [dimensionless].
-    metallicity_axis: ndarray, shape (n_met,)
+    metallicity_axis : ndarray, shape (n_met,)
         Metallicity in log10 space [log10(Z_sun)].
-    logU_axis: ndarray, shape (n_ionU,)
+    logU_axis : ndarray, shape (n_ionU,)
         Ionization parameter in log10 space [log10(U)].
-    logn_axis: ndarray, shape (n_nH,)
+    logn_axis : ndarray, shape (n_nH,)
         Hydrogen density in log10 space [log10(n_H / cm^-3)].
-    line_wavelengths_aa: ndarray, shape (n_lines,)
+    line_wavelengths_aa : ndarray, shape (n_lines,)
         Emission line vacuum wavelengths [Angstrom].
-    log_line_per_qh: ndarray, shape (n_mass, n_edd, n_inc, n_met, n_ionU, n_nH, n_lines)
+    log_line_per_qh : ndarray, shape (n_mass, n_edd, n_inc, n_met, n_ionU, n_nH, n_lines)
         log10(L_line / Q_H) where L_line is in L_sun and Q_H is in photons/s
         [log10(L_sun·s/photons)].
 
@@ -541,7 +541,7 @@ def _load_synthesizer_nlr_grid(filepath: str | Path) -> SynthesizerGridData:
 
     Parameters
     ----------
-    filepath: str or Path
+    filepath : str or Path
         Path to Synthesizer test grid HDF5 file
         (e.g. ``data/synthesizer_grids/test_grid_agn-nlr.hdf5``).
 
@@ -676,7 +676,7 @@ class SynthesizerNLRBackend:
 
     Parameters
     ----------
-    grid_path: str or Path
+    grid_path : str or Path
         Path to Synthesizer grid HDF5 file.
 
     Example
@@ -755,30 +755,30 @@ class SynthesizerNLRBackend:
 
         Parameters
         ----------
-        log_bh_mass: float
+        log_bh_mass : float
             log10(BH mass [M_sun]).  Default 8.0.
-        log_eddington: float
+        log_eddington : float
             log10(accretion rate / L_Eddington).  Default -0.3.
-        cosine_inclination: float
+        cosine_inclination : float
             cos(inclination angle).  Linear, not log.  Default 0.2.
-        log_metallicity: float
+        log_metallicity : float
             log10(metallicity [Z_sun]).  Default 0.0 (solar).
-        log_ionU: float
+        log_ionU : float
             log10(ionization parameter U).  Default -1.5.
-        log_nH: float
+        log_nH : float
             log10(hydrogen density [cm^-3]).  Default 4.0.
-        log_qh: float
+        log_qh : float
             log10(Q_H) ionizing photon rate [photons/s].  Default 53.0.
-        neb_fesc: float
+        neb_fesc : float
             Ionizing photon escape fraction [0, 1].  Default 0.0.
         **_kwargs
             Additional keyword arguments (ignored).
 
         Returns
         -------
-        wavelengths: ndarray, shape (n_lines,)
+        wavelengths : ndarray, shape (n_lines,)
             Emission line vacuum wavelengths [Angstrom].
-        luminosities: ndarray, shape (n_lines,)
+        luminosities : ndarray, shape (n_lines,)
             Emission line luminosities [L_sun], scaled by ionizing photon
             rate and escape fraction.
 
@@ -859,7 +859,7 @@ class SynthesizerNLRBackend:
 
         Parameters
         ----------
-        log_bh_mass, log_eddington, cosine_inclination, log_metallicity, log_ionU, log_nH: float
+        log_bh_mass, log_eddington, cosine_inclination, log_metallicity, log_ionU, log_nH : float
             Grid coordinates (same convention as :meth:`predict_agn_nlr_lines`).
 
         Returns
@@ -927,13 +927,13 @@ class SynthesizerNLRBackend:
 
         Parameters
         ----------
-        wavelength_out: array_like, shape (n_wave,)
+        wavelength_out : array_like, shape (n_wave,)
             Output (rest-frame) wavelength grid [Angstrom].
-        l_bol_erg: float
+        l_bol_erg : float
             Disc bolometric luminosity [erg/s].
-        covering_fraction: float, optional
+        covering_fraction : float, optional
             Line-region covering fraction. Default 0.1.
-        log_bh_mass, log_eddington, log_metallicity, log_ionU, log_nH: float
+        log_bh_mass, log_eddington, log_metallicity, log_ionU, log_nH : float
             Grid coordinates (``cosine_inclination`` is held at 0.5 internally).
 
         Returns
@@ -1049,25 +1049,25 @@ class FeltreGridData:
 
     Attributes
     ----------
-    alpha_axis: ndarray, shape (n_alpha,)
+    alpha_axis : ndarray, shape (n_alpha,)
         Ionizing EUV power-law slope values (discrete: -1.2, -1.4, -1.7, -2.0)
         [dimensionless].
-    logUs_axis: ndarray, shape (n_logUs,)
+    logUs_axis : ndarray, shape (n_logUs,)
         Ionization parameter log10(U_S) values [log10(U)]. May be in descending
         order.
-    logn_axis: ndarray, shape (n_logn,)
+    logn_axis : ndarray, shape (n_logn,)
         Hydrogen density log10(n_H / cm^-3) values [log10(cm^-3)].
-    logZ_axis: ndarray, shape (n_logZ,)
+    logZ_axis : ndarray, shape (n_logZ,)
         Absolute metallicity log10(Z) values [log10(Z_sun)].
-    xi_d_axis: ndarray, shape (n_xi_d,)
+    xi_d_axis : ndarray, shape (n_xi_d,)
         Dust-to-metal ratio values (discrete: 0.1, 0.3, 0.5)
         [dimensionless].
-    line_wavelengths_aa: ndarray, shape (n_lines,)
+    line_wavelengths_aa : ndarray, shape (n_lines,)
         Emission line vacuum wavelengths [Angstrom].
-    logHB_per_logq: ndarray, shape (n_alpha, n_logUs, n_logn, n_logZ, n_xi_d)
+    logHB_per_logq : ndarray, shape (n_alpha, n_logUs, n_logn, n_logZ, n_xi_d)
         log10(L_Hβ / Q_H) where Q_H is ionizing photon rate [photons/s]
         and L_Hβ is in erg/s [log10(erg/s·s/photons)].
-    line_ratios: ndarray, shape (n_alpha, n_logUs, n_logn, n_logZ, n_xi_d, n_lines)
+    line_ratios : ndarray, shape (n_alpha, n_logUs, n_logn, n_logZ, n_xi_d, n_lines)
         Line-to-Hβ luminosity ratios L_line / L_Hβ [dimensionless].
 
     Notes
@@ -1093,7 +1093,7 @@ def _load_feltre_grid(filepath: str | Path) -> FeltreGridData:
 
     Parameters
     ----------
-    filepath: str or Path
+    filepath : str or Path
         Path to ``feltre_grid.h5``.
 
     Raises
@@ -1142,9 +1142,9 @@ def _nearest_idx(axis: jnp.ndarray, value: float) -> jnp.ndarray:
 
     Parameters
     ----------
-    axis: array_like, shape (n,)
+    axis : array_like, shape (n,)
         Axis node values.
-    value: float or Array
+    value : float or Array
         Coordinate to snap. May be a JAX tracer.
 
     Returns
@@ -1191,7 +1191,7 @@ class FeltreNLRBackend:
 
     Parameters
     ----------
-    grid_path: str or Path
+    grid_path : str or Path
         Path to ``feltre_grid.h5``.
 
     Example
@@ -1252,30 +1252,30 @@ class FeltreNLRBackend:
 
         Parameters
         ----------
-        alpha_pl: float
+        alpha_pl : float
             AGN EUV power-law slope (f_nu ~ nu^alpha_pl).  Nearest-neighbor
             mapped to grid values [-1.2, -1.4, -1.7, -2.0].
-        neb_logU: float
+        neb_logU : float
             Gas ionization parameter log10(U_S).  Interpolated continuously
             over [-4, -1].
-        neb_logn: float
+        neb_logn : float
             Gas density log10(n_H / cm^-3).  Interpolated continuously
             over [2, 4].
-        neb_logZ_gas: float
+        neb_logZ_gas : float
             Gas metallicity log10(Z) absolute.  Interpolated continuously.
             Converts to log10(Z) if absolute; use _LOG10_ZSUN = -1.8477 for solar.
-        xi_d: float
+        xi_d : float
             Dust-to-metal ratio.  Nearest-neighbor mapped to [0.1, 0.3, 0.5].
-        log_qh: float
+        log_qh : float
             log10(Q_H) ionizing photon rate [photons/s].
-        neb_fesc: float
+        neb_fesc : float
             Ionizing photon escape fraction [0, 1].
 
         Returns
         -------
-        wavelengths: ndarray, shape (n_lines,)
+        wavelengths : ndarray, shape (n_lines,)
             Emission line vacuum wavelengths [Angstrom].
-        luminosities: ndarray, shape (n_lines,)
+        luminosities : ndarray, shape (n_lines,)
             Emission line luminosities [L_sun], scaled by ionizing photon
             rate and escape fraction.
 
@@ -1367,53 +1367,53 @@ def agn_nlr_emission(
 
     Parameters
     ----------
-    backend: str
+    backend : str
         Backend name: ``"cue"``, ``"feltre"``, or ``"synthesizer_nlr"``.
-    cue_backend: CueBackend or None
+    cue_backend : CueBackend or None
         Required when ``backend="cue"``.
-    feltre_backend: FeltreNLRBackend or None
+    feltre_backend : FeltreNLRBackend or None
         Required when ``backend="feltre"``. Initialize with
         ``FeltreNLRBackend(grid_path)`` before calling.
-    synthesizer_nlr_backend: SynthesizerNLRBackend or None
+    synthesizer_nlr_backend : SynthesizerNLRBackend or None
         Required when ``backend="synthesizer_nlr"``. Initialize with
         ``SynthesizerNLRBackend(grid_path)`` before calling.
-    l_acc_erg: float
+    l_acc_erg : float
         AGN accretion luminosity [erg s^-1]. Default 1e44.
-    covering_fraction: float
+    covering_fraction : float
         NLR covering fraction [dimensionless]. Default 0.1.
-    alpha_pl: float
+    alpha_pl : float
         AGN EUV power-law slope [dimensionless]. Default -1.7.
-    neb_logU: float
+    neb_logU : float
         Gas ionization parameter log10(U) [log10(U)].
-    gas_logn: float
+    gas_logn : float
         Gas density log10(n_e / cm^-3) (Cue backend) [log10(cm^-3)].
-    gas_logz: float
+    gas_logz : float
         Gas metallicity log10(Z/Zsun) (Cue backend) [dimensionless].
-    gas_logno: float
+    gas_logno : float
         Gas N/O offset (Cue backend) [dimensionless].
-    gas_logco: float
+    gas_logco : float
         Gas C/O offset (Cue backend) [dimensionless].
-    ionspec_params: dict or None
+    ionspec_params : dict or None
         Explicit Cue ionizing spectrum parameters (override alpha_pl).
         Keys: ``ionspec_index1..4``, ``ionspec_logLratio1..3`` [dimensionless].
-    neb_logZ_gas: float or None
+    neb_logZ_gas : float or None
         Gas metallicity log10(Z) absolute (Feltre backend) [log10(Z)].
         If None, defaults to log10(Z_sun) = -1.8477.
-    xi_d: float
+    xi_d : float
         Dust-to-metal ratio (Feltre backend) [dimensionless]. Default 0.3.
-    log_qh: float
+    log_qh : float
         log10(Q_H) ionizing photon rate (all backends) [log10(photons/s)].
         Default 53.0.
-    neb_fesc: float
+    neb_fesc : float
         Ionizing photon escape fraction (all backends) [dimensionless].
         Default 0.0.
-    log_bh_mass: float
+    log_bh_mass : float
         log10(BH mass [M_sun]) (Synthesizer backend) [log10(M_sun)].
         Default 8.0.
-    log_eddington: float
+    log_eddington : float
         log10(accretion rate / L_Eddington) (Synthesizer backend)
         [dimensionless]. Default -0.3.
-    cosine_inclination: float
+    cosine_inclination : float
         cos(inclination angle) (Synthesizer backend) [dimensionless].
         Default 0.2.
     **kwargs

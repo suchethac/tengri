@@ -57,9 +57,9 @@ def resolve_fixed_params(model, params):
 
     Parameters
     ----------
-    model: SEDModel
+    model : SEDModel
         The model, whose ``spec`` carries the fixed values.
-    params: dict
+    params : dict
         User-supplied parameters (free params, and optionally some fixed ones).
 
     Returns
@@ -99,9 +99,9 @@ def require_redshift(params, where):
 
     Parameters
     ----------
-    params: dict
+    params : dict
         Parameter dict. Must contain ``"redshift"``.
-    where: str
+    where : str
         Caller identification for the error message, e.g.
         ``"observation.observation.project_photometry"``. Shown verbatim, so
         make it the thing a reader would grep for.

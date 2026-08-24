@@ -22,19 +22,19 @@ class InterimResult(NamedTuple):
 
     Attributes
     ----------
-    fields: ndarray, shape (N, K, n)
+    fields : ndarray, shape (N, K, n)
         Centered field samples [natural-log units] from the interim posterior.
-    times_yr: ndarray, shape (n,)
+    times_yr : ndarray, shape (n,)
         Physical times [yr] of the age grid nodes.
-    ess: ndarray, shape (N,)
+    ess : ndarray, shape (N,)
         Effective sample size at the posterior mode for each galaxy
         [dimensionless].
-    rhat: dict
+    rhat : dict
         Convergence diagnostics keyed by parameter name, including
         ``"psd_xi"`` for field-latent convergence.
-    n_divergent: ndarray, shape (N,)
+    n_divergent : ndarray, shape (N,)
         Number of divergent transitions per galaxy [count].
-    wall_time_s: float
+    wall_time_s : float
         Total elapsed time [seconds].
     """
 
@@ -85,7 +85,7 @@ def _validate_map_options(map_options):
 
     Parameters
     ----------
-    map_options: dict or None
+    map_options : dict or None
         Options for the MAP that initializes each galaxy's HMC. ``None`` means
         no separate MAP stage, which is the historical behavior.
 
@@ -146,7 +146,7 @@ def _assert_interim_bounds_are_physical(interim_bounds):
 
     Parameters
     ----------
-    interim_bounds: dict
+    interim_bounds : dict
         ``{"sigma_bounds": (lo, hi), "tau_bounds_myr": (lo, hi)}``. Keys that
         are absent are left to the existing ``KeyError``.
 
@@ -198,11 +198,11 @@ def _assert_truth_within_interim_bounds(mock, interim_bounds):
 
     Parameters
     ----------
-    mock: MockPopulation
+    mock : MockPopulation
         Population carrying ``truth_params``. Real data has no injected truth,
         so an absent or unrelated ``truth_params`` is skipped rather than
         rejected.
-    interim_bounds: dict
+    interim_bounds : dict
         ``{"sigma_bounds": (lo, hi), "tau_bounds_myr": (lo, hi)}``, the bounds
         the fit will actually use.
 
@@ -254,36 +254,36 @@ def fit_interim(
 
     Parameters
     ----------
-    model: SEDModel
+    model : SEDModel
         The parametrized SED model.
-    mock: MockPopulation
+    mock : MockPopulation
         The mock galaxy population with photometry and noise.
-    key: jax.Array
+    key : jax.Array
         PRNG key for fit initialization and sampling.
-    interim_bounds: dict
+    interim_bounds : dict
         Bounds for the interim priors, with keys ``'sigma_bounds'``
         ``(sigma_lo, sigma_hi)`` [dex] and ``'tau_bounds_myr'``
         ``(tau_lo, tau_hi)`` [Myr].
-    n_leapfrog_steps: int, optional
+    n_leapfrog_steps : int, optional
         Number of leapfrog steps per HMC trajectory [count]. Default 100.
         (This parameter controls trajectory length and honest interval coverage.)
-    dense_mass_matrix: bool, optional
+    dense_mass_matrix : bool, optional
         Whether to use a dense mass matrix [dimensionless]. Default True.
-    forward_chunk_size: int, optional
+    forward_chunk_size : int, optional
         Chunk size for the forward model vmap [count]. If None, not passed
         to the fit backend (uses default).
-    n_warmup: int, optional
+    n_warmup : int, optional
         Number of warmup iterations [count]. If None, uses backend default.
-    n_samples: int, optional
+    n_samples : int, optional
         Number of posterior samples [count]. If None, defaults to 1000.
-    thin: int, optional
+    thin : int, optional
         Keep every ``thin``-th posterior draw before the population step.
         Default 8. The estimator's (n_nodes, N, K) table is what limits the
         population size; measured ESS is ~600 of 4000 draws, so thinning costs
         little and buys a linear reduction in that table.
-    n_chains: int, optional
+    n_chains : int, optional
         Number of independent MCMC chains [count]. If None, uses backend default.
-    map_options: dict, optional
+    map_options : dict, optional
         Options for an explicit MAP stage that initializes each galaxy's HMC,
         e.g. ``{"n_steps": 40000}`` or ``{"learning_rate": 1e-3}``. Default
         ``None`` runs no separate MAP, which is the historical behavior: the HMC
@@ -310,7 +310,7 @@ def fit_interim(
 
     Returns
     -------
-    result: InterimResult
+    result : InterimResult
         Per-galaxy samples, convergence diagnostics, and wall-clock time.
 
     Notes
@@ -556,18 +556,18 @@ def choose_interim_bounds(measured_curve, *, target_min_ess):
 
     Parameters
     ----------
-    measured_curve: list[dict]
+    measured_curve : list[dict]
         ESS measurements at each interim-prior breadth, from pilot runs.
         Each element has keys: ``'sigma_bounds'``, ``'tau_bounds_myr'``,
         ``'min_ess'``, ``'median_ess'``, ``'recovered_posterior'``.
-    target_min_ess: float
+    target_min_ess : float
         Target minimum ESS [dimensionless], e.g., 50 or 100.
 
     Returns
     -------
-    sigma_bounds: tuple of float
+    sigma_bounds : tuple of float
         ``(lo, hi)`` amplitude support [dex].
-    tau_bounds_myr: tuple of float
+    tau_bounds_myr : tuple of float
         ``(lo, hi)`` timescale support [Myr].
 
     Raises

@@ -109,9 +109,9 @@ def qsogen_continuum_block(wavelength: Array, agn_log_lbol: float, **params) -> 
 
     Parameters
     ----------
-    wavelength: array_like, shape (n_wave,)
+    wavelength : array_like, shape (n_wave,)
         Rest-frame wavelength [Å].
-    agn_log_lbol: float
+    agn_log_lbol : float
         :math:`\log_{10}(L_{\rm bol}/L_\odot)`.
     **params
         ``agn_plslp1``, ``agn_plslp2``, ``agn_plbrk``, ``agn_tbb``,
@@ -145,9 +145,9 @@ def qsogen_hot_dust_block(
 
     Parameters
     ----------
-    wavelength: array_like, shape (n_wave,)
-    agn_log_lbol: float
-    l5100_disc: array
+    wavelength : array_like, shape (n_wave,)
+    agn_log_lbol : float
+    l5100_disc : array
         Ignored: qsogen's BB anchors directly off the recomputed broken
         power-law continuum.
     **params
@@ -180,11 +180,11 @@ def qsogen_blr_block(wavelength: Array, agn_log_lbol: float, l5100_disc: Array, 
 
     Parameters
     ----------
-    wavelength: array_like, shape (n_wave,)
+    wavelength : array_like, shape (n_wave,)
         Rest-frame wavelength [Å].
-    agn_log_lbol: float
+    agn_log_lbol : float
         log10(L_bol / L_sun) of the AGN.
-    l5100_disc: array
+    l5100_disc : array
         Ignored: qsogen lines anchor on the internally-computed
         normalized continuum at line wavelengths, not on a single 5100 Å
         scalar.
@@ -193,7 +193,7 @@ def qsogen_blr_block(wavelength: Array, agn_log_lbol: float, l5100_disc: Array, 
 
     Returns
     -------
-    L_lambda: ndarray, shape (n_wave,)
+    L_lambda : ndarray, shape (n_wave,)
         BLR :math:`L_\lambda` [erg/s/Å].
     """
     del l5100_disc
@@ -227,9 +227,9 @@ def qsogen_balmer_block(
 
     Parameters
     ----------
-    wavelength: array_like, shape (n_wave,)
-    agn_log_lbol: float
-    l5100_disc: array
+    wavelength : array_like, shape (n_wave,)
+    agn_log_lbol : float
+    l5100_disc : array
         Ignored.
     **params
         QSOgen kwargs.
@@ -263,7 +263,7 @@ def qsogen_smc_block(wavelength: Array, **params) -> Array:
 
     Parameters
     ----------
-    wavelength: array_like, shape (n_wave,)
+    wavelength : array_like, shape (n_wave,)
     **params
         ``agn_ebv`` [mag] is consumed; all other QSOgen kwargs are absorbed
         but unused.

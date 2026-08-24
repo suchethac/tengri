@@ -39,21 +39,21 @@ class ModelCacheOwner:
 
     Parameters
     ----------
-    max_kernel_entries: int, optional
+    max_kernel_entries : int, optional
         Maximum number of structural kernel cache entries to hold before
         evicting oldest. Default 4; tune via TENGRI_STRUCTURAL_CACHE_MAXSIZE.
-    _model_caches: weakref.WeakKeyDictionary
+    _model_caches : weakref.WeakKeyDictionary
         Per-model runtime namespaces keyed on SEDModel object identity.
         Do not access directly; use get_or_compile_model().
-    _kernel_cache: OrderedDict
+    _kernel_cache : OrderedDict
         Structural kernel cache for JIT functions keyed on compile signature.
         Do not access directly; use get_structural_kernel().
-    _lock: threading.Lock
+    _lock : threading.Lock
         Thread safety for concurrent access.
 
     Attributes
     ----------
-    max_kernel_entries: int
+    max_kernel_entries : int
     """
 
     max_kernel_entries: int = field(
@@ -68,9 +68,9 @@ class ModelCacheOwner:
 
         Parameters
         ----------
-        model: SEDModel
+        model : SEDModel
             Model instance (key identity).
-        build_fn: callable, optional
+        build_fn : callable, optional
             Unused; present for API symmetry with CompileCache.get_or_compile().
             The model cache is always created empty and populated lazily by consumers.
 
@@ -96,9 +96,9 @@ class ModelCacheOwner:
 
         Parameters
         ----------
-        signature: tuple
+        signature : tuple
             Structural fingerprint from SEDModel.compile_signature().
-        build_fn: callable, optional
+        build_fn : callable, optional
             Unused; present for API symmetry with CompileCache.get_or_compile().
             The kernel cache is always created empty and populated lazily.
 
@@ -172,7 +172,7 @@ def get_structural_kernel_cache(signature: tuple) -> dict:
 
     Parameters
     ----------
-    signature: tuple
+    signature : tuple
         Structural fingerprint from SEDModel.compile_signature().
 
     Returns

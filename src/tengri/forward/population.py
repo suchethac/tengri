@@ -26,15 +26,15 @@ class Population:
 
     Parameters
     ----------
-    name: str
+    name : str
         Population namespace. Used as the outer prefix in parameter
         names: ``{name}.{prefix}_{param}`` (ADR-0012). Must be
         non-empty and must not contain ``.`` (the namespace separator).
         Convention: use ``"default"`` for single-population fits;
         ``"agn"``, ``"bulge"``, ``"disc"`` for galaxy decompositions.
-    sed: SubModel
+    sed : SubModel
         SED SubModel for this population.
-    spatial: SubModel or None, optional
+    spatial : SubModel or None, optional
         Spatial SubModel for this population. ``None`` for SED-only
         populations.
     """

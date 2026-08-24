@@ -3,7 +3,7 @@
 
 A thin SEDComponent that dispatches to a chosen backend (BakedIn,
 CloudyGrid, or Cue). For ``BakedInBackend`` the nebular emission is
-already folded into the SSP grid at fixed ``logU`` and escape fraction;
+already folded into the SSP grid at fixed ``logU`` and escape fraction
 the component is then a no-op on the SED, and only publishes
 ``state.derived["nebular_backend"]`` so downstream observation models
 know whether emission lines need adding separately or are already
@@ -65,7 +65,7 @@ def _backend_accepted_params(backend_cls: type) -> frozenset[str]:
 
     Parameters
     ----------
-    backend_cls: type
+    backend_cls : type
         Backend class (not instance), so the result caches per class.
 
     Returns
@@ -111,9 +111,9 @@ class NebularSEDComponentConfig(SEDComponentConfig):
 
     Attributes
     ----------
-    name: str
+    name : str
         Diagnostic identifier. Default ``"nebular"``.
-    backend: str
+    backend : str
         Nebular backend identifier: used for parameter declarations
         and the :data:`state.derived["nebular_backend"]` marker.
         ``"baked_in"`` (zero-parameter no-op marker; emission is
@@ -121,11 +121,11 @@ class NebularSEDComponentConfig(SEDComponentConfig):
         (HDF5 grid interpolation, requires a backend instance via
         :attr:`NebularSEDComponent.backend`), or ``"cue"`` (NN
         emulator, also requires a backend instance).
-    suppress_baked_in_warning: bool
+    suppress_baked_in_warning : bool
         Whether to silence the ``BakedInNebularWarning`` emitted when
         :class:`BakedInBackend` is constructed. Default ``True`` for
         adapter use.
-    cue_full_catalog: bool
+    cue_full_catalog : bool
         For the ``"cue"`` backend only. When ``True``, expose the full
         Cue-trained line catalog (~271 species) via ``state.derived
         ["line_waves"]`` / ``["line_lums"]`` so users can query HeII

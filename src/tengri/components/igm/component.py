@@ -66,19 +66,19 @@ class IGMSEDComponentConfig(SEDComponentConfig):
 
     Attributes
     ----------
-    name: str
+    name : str
         Diagnostic identifier. Default ``"igm"``.
-    igm_model: str
+    igm_model : str
         Mean-IGM transmission model resolved from the registry: ``"inoue"``
         (Inoue+2014, default), ``"madau"`` (Madau+1995), ``"meiksin06"``
         (Meiksin 2006), or ``"asada25"`` (Inoue + Asada+2025 CGM damping
         wing). Threaded from ``spec.igm_model`` so the observed-frame
         photometry and spectroscopy honor the configured model rather than
         always falling back to Inoue.
-    igm_patchy: bool
+    igm_patchy : bool
         Use the patchy-reionization damping-wing model instead of the mean
         IGM. Default ``False``.
-    use_dla: bool
+    use_dla : bool
         Multiply by a damped-Lyman-α absorber (params read at apply time),
         so photometry/spectroscopy see the DLA: not only
         ``predict_obs_sed``. Default ``False``.
@@ -96,10 +96,10 @@ class IGMSEDComponentState(SEDComponentState):
 
     Attributes
     ----------
-    band_zgrid: ndarray, shape (n_z,) or None
+    band_zgrid : ndarray, shape (n_z,) or None
         Redshift nodes at which ``band_table`` was evaluated. A single node
         for a fixed-redshift model (then the lookup is exact).
-    band_table: ndarray, shape (n_z, n_filters) or None
+    band_table : ndarray, shape (n_z, n_filters) or None
         Filter-averaged IGM transmission :math:`\langle T \rangle_f(z)`,
         dimensionless. ``None`` when the factors cannot be precomputed
         (patchy reionization or a DLA: both carry free parameters, so the
@@ -119,7 +119,7 @@ class IGMSEDComponent(TemplateThreading):
 
     Parameters
     ----------
-    config: IGMSEDComponentConfig, optional
+    config : IGMSEDComponentConfig, optional
         Frozen structural settings. Default :class:`IGMSEDComponentConfig`.
 
     Notes
@@ -225,11 +225,11 @@ class IGMSEDComponent(TemplateThreading):
 
         Parameters
         ----------
-        wave_rest: array_like, shape (n_wave,)
+        wave_rest : array_like, shape (n_wave,)
             Rest-frame model wavelength grid [Angstrom].
-        photometry: Photometry
+        photometry : Photometry
             Supplies the padded filter curves and the convention.
-        redshift_spec: mapping or None
+        redshift_spec : mapping or None
             ``{'mode': 'fixed', 'value': z}`` or
             ``{'mode': 'free', 'z_min':, 'z_max':, 'n_z':}``.
 
@@ -352,11 +352,11 @@ class IGMSEDComponent(TemplateThreading):
 
         Parameters
         ----------
-        wave_rest: array_like, shape (n_wave,)
+        wave_rest : array_like, shape (n_wave,)
             Rest-frame model wavelength grid [Angstrom].
-        spec_wave_obs: array_like, shape (n_pix,)
+        spec_wave_obs : array_like, shape (n_pix,)
             Observed-frame spectrum pixel centers [Angstrom].
-        redshift_spec: mapping or None
+        redshift_spec : mapping or None
             ``{'mode': 'fixed', 'value': z}`` or ``{'mode': 'free', ...}``.
 
         Returns
@@ -444,12 +444,12 @@ class IGMSEDComponent(TemplateThreading):
 
         Parameters
         ----------
-        subband_waves_rest: array_like
+        subband_waves_rest : array_like
             Rest-frame quadrature nodes [Angstrom], shape
             ``(n_met, n_age, n_filters, n_subbands)`` for a fixed-redshift model
             or ``(n_z, n_met, n_age, n_filters, n_subbands)`` for the free-z
             z-table.
-        z_grid: array_like
+        z_grid : array_like
             The redshift(s) the nodes were tabulated at; a single value for a
             fixed-redshift model, else the z-table's own grid, whose length must
             match the leading axis of ``subband_waves_rest``.
@@ -565,10 +565,10 @@ class IGMSEDComponent(TemplateThreading):
 
         Parameters
         ----------
-        state: ForwardState
+        state : ForwardState
             Must carry rest-frame ``wave`` (Å). If ``sed_observed`` is
             ``None`` this returns ``state`` unchanged.
-        params: mapping
+        params : mapping
             Receives ``igm_*`` keys plus the bare ``redshift`` from the
             allowlist.
 

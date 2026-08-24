@@ -49,10 +49,10 @@ class CompileCache:
 
     Parameters
     ----------
-    max_entries: int, optional
+    max_entries : int, optional
         Maximum number of cache entries to hold before evicting oldest.
         Default 2; tune via TENGRI_ENGINE_CACHE_MAXSIZE env var or per-instance.
-    mode: {'normal', 'lean', 'persistent'}, optional
+    mode : {'normal', 'lean', 'persistent'}, optional
         Cache behavior mode. Default 'normal'.
 
         - 'normal': keep all cached entries (existing behavior).
@@ -60,15 +60,15 @@ class CompileCache:
           before each inference to drop stale entries.
         - 'persistent': never clear automatically; user calls clear() manually.
 
-    _store: OrderedDict
+    _store : OrderedDict
         Internal LRU dict. Do not access directly; use get_or_compile().
-    _store_lock: threading.Lock
+    _store_lock : threading.Lock
         Thread safety for concurrent Fitter instances.
 
     Attributes
     ----------
-    max_entries: int
-    mode: str
+    max_entries : int
+    mode : str
     """
 
     max_entries: int = field(
@@ -83,9 +83,9 @@ class CompileCache:
 
         Parameters
         ----------
-        key: hashable
+        key : hashable
             Cache key (typically a tuple of compile parameters).
-        build_fn: callable
+        build_fn : callable
             Function to call if key is not in cache. Must return the value to cache.
 
         Returns
@@ -118,7 +118,7 @@ class CompileCache:
 
         Parameters
         ----------
-        mode: {'normal', 'lean', 'persistent'}
+        mode : {'normal', 'lean', 'persistent'}
             New mode.
         """
         if mode not in ("normal", "lean", "persistent"):
@@ -392,7 +392,7 @@ def clear_shared_caches(
 
     Parameters
     ----------
-    scope: {"all", "inference_body"}, default "all"
+    scope : {"all", "inference_body"}, default "all"
         Scope of caches to clear:
 
         - ``"all"``: Clear *everything*, engines, loss fns, grad fns,
@@ -407,12 +407,12 @@ def clear_shared_caches(
           Suitable for ``lean()`` context manager, keeps shareable forward
           compiles across phases.
 
-    drop_xla: bool, default True
+    drop_xla : bool, default True
         Also call ``jax.clear_caches()`` to release JAX's own XLA-executable
         and tracing caches. Set False if you have other live JAX programs
         in the same process that you want to keep compiled.
 
-    keep_sig: tuple, optional
+    keep_sig : tuple, optional
         If supplied, entries whose key starts with this signature are
         preserved while every other entry in the affected caches is
         dropped. Used by ``Fitter.run(lean=True)`` to drop *stale* prior-
@@ -518,9 +518,9 @@ def get_or_build_engine_cached(fitter, pos_dict):
 
     Parameters
     ----------
-    fitter: Fitter
+    fitter : Fitter
         The Fitter instance requesting the engine.
-    pos_dict: dict
+    pos_dict : dict
         Position dict for computing static shapes.
 
     Returns
@@ -687,9 +687,9 @@ def build_jit_engine(fitter, pos_dict):
 
     Parameters
     ----------
-    fitter: Fitter
+    fitter : Fitter
         Configured Fitter instance (read-only; only attributes are accessed).
-    pos_dict: dict
+    pos_dict : dict
         Position dict mapping parameter names to initial JAX arrays.
         Used only to compute static shapes for flatten/unflatten.
 
@@ -1216,15 +1216,15 @@ def build_jit_engine(fitter, pos_dict):
 
         Parameters
         ----------
-        m: flat array, expansion point
-        r_linear: flat array, linear residual (covariance M^{-1})
-        metric_key: PRNG key (same as used for draw_residuals)
-        sign: +1.0 or -1.0 (for mirrored samples)
-        data_args: dict, data-dependent arguments
+        m : flat array, expansion point
+        r_linear : flat array, linear residual (covariance M^{-1})
+        metric_key : PRNG key (same as used for draw_residuals)
+        sign : +1.0 or -1.0 (for mirrored samples)
+        data_args : dict, data-dependent arguments
 
         Returns
         -------
-        flat array: curved residual (x_opt - m)
+        flat array : curved residual (x_opt - m)
         """
         x0 = m + r_linear
         ms = sign * draw_metric_sample(m, metric_key, data_args)
@@ -1447,13 +1447,13 @@ def build_jit_engine(fitter, pos_dict):
 
         Parameters
         ----------
-        sample_mode: str  (STATIC, triggers recompilation per value)
+        sample_mode : str  (STATIC, triggers recompilation per value)
             ``"linear_resample"``, fresh MGVI samples (standard MGVI)
             ``"linear_sample"``, reuse keys from prev iter (deterministic MGVI)
             ``"nonlinear_resample"``, fresh geoVI samples (standard geoVI)
             ``"nonlinear_sample"``, reuse keys + curve (deterministic geoVI)
             ``"nonlinear_update"``, re-curve existing residuals at new m
-        data_args: dict
+        data_args : dict
             Data-dependent arguments (data, noise, sqrt_noise_inv, etc.).
 
         Returns

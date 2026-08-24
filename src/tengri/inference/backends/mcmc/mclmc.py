@@ -53,11 +53,11 @@ def run_mclmc(
 
     Parameters
     ----------
-    n_warmup: int
+    n_warmup : int
         Warmup steps for tuning L (trajectory length) and step size.
-    n_samples: int
+    n_samples : int
         Posterior samples to collect.
-    verbose: bool
+    verbose : bool
         Print progress.
     """
     try:
@@ -219,14 +219,14 @@ def run_adjusted_mclmc(
 
     Parameters
     ----------
-    n_warmup: int
+    n_warmup : int
         Warmup steps for tuning step size and trajectory length.
-    n_samples: int
+    n_samples : int
         Posterior samples to collect.
-    target_accept_rate: float
+    target_accept_rate : float
         Target Metropolis acceptance rate. Default 0.65 balances
         bias correction with mixing efficiency.
-    verbose: bool
+    verbose : bool
         Print progress.
     """
     try:

@@ -68,9 +68,9 @@ class XRaySEDComponentConfig(SEDComponentConfig):
 
     Attributes
     ----------
-    name: str
+    name : str
         Diagnostic identifier. Default ``"xray"``.
-    model: str
+    model : str
         X-ray corona prescription. ``"yang20"``/``"simple"`` (default) ties the
         corona to the disc ``L_2500`` via the α_ox relation; ``"lopez24"`` ties
         it to the AGN 12 µm luminosity via the α_IRX relation (Lopez+2024).
@@ -225,10 +225,10 @@ class XRaySEDComponent(TemplateThreading):
 
         Parameters
         ----------
-        state: ForwardState
+        state : ForwardState
             Must carry rest-frame ``wave`` (Å). If ``sed_intrinsic`` is
             ``None`` it is initialized to zeros of the same shape.
-        params: mapping
+        params : mapping
             Receives ``xray_*`` keys plus the bare ``redshift`` from
             the allowlist. Cross-component scalars (``sfr``,
             ``log_mstar``, ``L_agn_bol``) are read from
@@ -354,7 +354,7 @@ class XRaySEDComponent(TemplateThreading):
 
         Parameters
         ----------
-        derived: mapping
+        derived : mapping
             ``state.derived``.
 
         Returns
@@ -466,26 +466,26 @@ class XRaySEDComponent(TemplateThreading):
 
         Parameters
         ----------
-        params: mapping
+        params : mapping
             Full (un-sliced) parameter dict; reads the ``xray_*`` keys.
-        wave: array_like, shape (n_wave,)
+        wave : array_like, shape (n_wave,)
             Rest-frame wavelength grid [Angstrom].
-        sfr: array_like, scalar
+        sfr : array_like, scalar
             Star-formation rate [Msun/yr]: sets the HMXB and hot-gas amplitudes.
-        stellar_mass: array_like, scalar
+        stellar_mass : array_like, scalar
             Stellar mass [Msun]: sets the LMXB amplitude.
-        stellar_age_gyr: array_like, scalar
+        stellar_age_gyr : array_like, scalar
             Mass-weighted stellar age [Gyr]: Lehmer+2016 LMXB age term.
-        metallicity_z: array_like, scalar
+        metallicity_z : array_like, scalar
             Present-day metallicity [mass fraction, absolute Z]: Lehmer+2016
             HMXB metallicity term. []
-        l_2500: array_like, scalar
+        l_2500 : array_like, scalar
             Disc L_nu at rest-frame 2500 A seen at 30 deg [erg/s/Hz]; drives the
             corona through the alpha_ox relation (``yang20``).
-        cos_inc: array_like, scalar
+        cos_inc : array_like, scalar
             Cosine of the AGN inclination [dimensionless]; a Yang+2022 anisotropy
             factor, hence a pure *amplitude* term, not a spectral shape.
-        l_12um: array_like, scalar
+        l_12um : array_like, scalar
             AGN L_nu at 12 micron [erg/s/Hz]; drives the corona through alpha_IRX
             (``lopez24``).
 

@@ -21,7 +21,7 @@ def method_recommendation(model: SEDModel) -> tuple[str, str]:
 
     Parameters
     ----------
-    model: SEDModel
+    model : SEDModel
         Configured model instance.
 
     Returns
@@ -55,7 +55,7 @@ def tree(model: SEDModel) -> str:
 
     Parameters
     ----------
-    model: SEDModel
+    model : SEDModel
         Configured model instance.
 
     Returns
@@ -175,7 +175,7 @@ def summary(model: SEDModel) -> str:
 
     Parameters
     ----------
-    model: SEDModel
+    model : SEDModel
         Configured model instance.
 
     Returns

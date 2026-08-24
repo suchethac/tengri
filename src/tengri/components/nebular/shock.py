@@ -20,7 +20,7 @@ Interpolation strategy
   triweight kernel (Hearin et al. 2023 / DSPS), jointly interpolated across
   all three continuous axes.  Bin edges are precomputed at grid load time via
   ``edges_for_grid`` to avoid rebuilding inside JIT traces.
-- abundance, component, version: Python string → integer index (static)
+- abundance, component, version : Python string → integer index (static)
 
 References
 ----------
@@ -301,11 +301,11 @@ class ShockTemplateGrid(NamedTuple):
 
     Attributes
     ----------
-    shock_ratios, precursor_ratios, combined_ratios: ndarray
+    shock_ratios, precursor_ratios, combined_ratios : ndarray
         Line ratios relative to Hbeta, shape
         ``(n_abund, n_n, n_v, n_b, n_lines)`` [dimensionless]. Sparse grid
         cells are NaN in the file and stored as 0.0 here.
-    hbeta_log_lum_erg_s: ndarray
+    hbeta_log_lum_erg_s : ndarray
         Hbeta luminosity normalization [log10(erg/s)].
 
     Notes
@@ -366,30 +366,30 @@ def shock_line_ratios(
 
     Parameters
     ----------
-    shock_velocity: float
+    shock_velocity : float
         Shock velocity in km/s.  Must be within the grid range
         (100–1000 km/s fallback; 200–1000 km/s HDF5).  Raises ``ValueError``
         if out of range.  Continuously interpolated: safe under ``jax.jit``.
-    shock_log_density: float
+    shock_log_density : float
         Log10 pre-shock density in cm⁻³ (e.g. ``0.0`` = 1 cm⁻³).
         Must be within ``[0, 3]``.  Continuously interpolated via triweight
         kernel: safe under ``jax.jit``.  Raises ``ValueError`` if out of range.
-    shock_b_over_sqrt_n: float
+    shock_b_over_sqrt_n : float
         Absolute B-field strength in μG (3MdBs MAPPINGS V convention).
         Must be within ``[0.0001, 10]`` μG.  Continuously interpolated via
         triweight kernel: safe under ``jax.jit``.  Raises ``ValueError`` if
         out of range.
-    shock_abundance: str
+    shock_abundance : str
         Abundance pattern.  Accepted short names:
         ``"solar"``, ``"2xsolar"`` / ``"twice_solar"``, ``"dopita2005"``,
         ``"lmc"``, ``"smc"``.  Full 3MdBs DB names (e.g.
         ``"Allen2008_Solar"``) also accepted.  Raises ``ValueError`` for
         unknown names.
-    shock_component: str
+    shock_component : str
         Which emission component to return.  One of ``"shock"``,
         ``"precursor"``, ``"combined"`` (default).  Raises ``ValueError``
         for unknown values.
-    templates: ShockTemplateGrid, optional
+    templates : ShockTemplateGrid, optional
         Pre-loaded ratio cubes, threaded as a JIT argument so they are not
         baked into the compiled graph as constants (#1694). ``None`` (the
         default) reads them from the module-level cache, which is correct but
@@ -585,23 +585,23 @@ def compute_shock_sed(
 
     Parameters
     ----------
-    wavelength: array, shape (n_wave,)
+    wavelength : array, shape (n_wave,)
         Wavelength grid in Å (rest-frame, increasing).
-    shock_velocity: float
+    shock_velocity : float
         Shock velocity in km/s.
-    l_shock_halpha: float
+    l_shock_halpha : float
         Total shock Hα luminosity in erg/s (normalization anchor).
-    shock_log_density: float
+    shock_log_density : float
         Log10 pre-shock density in cm⁻³.
-    shock_b_over_sqrt_n: float
+    shock_b_over_sqrt_n : float
         Absolute B-field in μG (3MdBs MAPPINGS V).  Snapped to nearest grid point.
-    shock_abundance: str
+    shock_abundance : str
         Abundance set (see ``shock_line_ratios``).
-    shock_component: str
+    shock_component : str
         ``"shock"``, ``"precursor"``, or ``"combined"``.
-    line_sigma_aa: float
+    line_sigma_aa : float
         Gaussian line width in Å.  ``0`` → delta function into nearest pixel.
-    templates: ShockTemplateGrid, optional
+    templates : ShockTemplateGrid, optional
         Pre-loaded ratio cubes threaded as a JIT argument instead of baked into
         the graph as 3.73 MB of constants (#1694). Forwarded to
         :func:`shock_line_ratios`; ``None`` reads the module-level cache.
@@ -652,15 +652,15 @@ class ShockBackend:
 
     Parameters
     ----------
-    shock_abundance: str
+    shock_abundance : str
         Abundance set name: ``"solar"``, ``"2xsolar"``, ``"lmc"``, ``"smc"``, etc.
-    shock_component: str
+    shock_component : str
         ``"shock"``, ``"precursor"``, or ``"combined"``.
-    has_continuum: bool
+    has_continuum : bool
         Always ``False``: MAPPINGS V provides line emission only.
-    has_free_params: bool
+    has_free_params : bool
         Always ``True``: velocity, density, B-field are differentiable parameters.
-    name: str
+    name : str
         Backend identifier string ("shock").
 
     Notes
@@ -696,17 +696,17 @@ class ShockBackend:
 
         Parameters
         ----------
-        wavelength: array, shape (n_wave,)
+        wavelength : array, shape (n_wave,)
             Wavelength grid in Å (rest-frame, increasing).
-        shock_velocity: float
+        shock_velocity : float
             Shock velocity in km/s.
-        l_shock_halpha: float
+        l_shock_halpha : float
             Total shock Hα luminosity in erg/s (normalization anchor).
-        shock_log_density: float
+        shock_log_density : float
             Log10 pre-shock density in cm⁻³.
-        shock_b_over_sqrt_n: float
+        shock_b_over_sqrt_n : float
             Absolute B-field in μG.
-        line_sigma_aa: float
+        line_sigma_aa : float
             Gaussian line width in Å.  ``0`` → delta function into nearest pixel.
         **_kwargs
             Extra keyword arguments silently ignored for protocol compatibility.

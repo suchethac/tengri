@@ -365,30 +365,30 @@ def _nuts_full_scan(
 
     Parameters
     ----------
-    init_flat: ndarray, shape (D,)
+    init_flat : ndarray, shape (D,)
         Initial position in unbounded latent space.
-    warmup_key: PRNGKey
+    warmup_key : PRNGKey
         Random key for window adaptation.
-    chain_keys: ndarray, shape (n_chain, 2)
+    chain_keys : ndarray, shape (n_chain, 2)
         Pre-split keys for the chain. ``n_chain = n_burnin + n_samples``;
         burnin is discarded by the *caller* via Python slicing rather
         than inside JIT, so changing ``n_burnin`` while keeping
         ``n_chain`` constant does not trigger recompilation.
-    logdensity_fn_2arg: callable (static)
+    logdensity_fn_2arg : callable (static)
         ``log_p(position, data_args)``, galaxy-agnostic log-posterior.
-    data_args: pytree (traced)
+    data_args : pytree (traced)
         Observed data tensors; changing these does NOT trigger recompilation.
-    n_warmup: int (static)
+    n_warmup : int (static)
         Window adaptation steps.
-    max_doublings: int (static)
+    max_doublings : int (static)
         Maximum NUTS tree doublings.
-    use_dense: bool (static)
+    use_dense : bool (static)
         Dense vs diagonal mass matrix. Ignored when ``use_pathfinder_warmup``
         is True (Pathfinder always returns a full inverse-covariance matrix
         from its L-BFGS Hessian approximation).
-    target_accept_rate: float (static)
+    target_accept_rate : float (static)
         Target acceptance rate for dual averaging.
-    use_pathfinder_warmup: bool (static)
+    use_pathfinder_warmup : bool (static)
         When True, use ``blackjax.adaptation.pathfinder_adaptation`` in
         place of ``blackjax.window_adaptation``. Pathfinder runs L-BFGS
         to locate the posterior mode and derives an inverse mass matrix
@@ -477,8 +477,8 @@ def _nuts_warmup_only(
 
     Returns
     -------
-    step_size: scalar
-    inv_mass_matrix: ndarray, shape (D,) or (D, D)
+    step_size : scalar
+    inv_mass_matrix : ndarray, shape (D,) or (D, D)
     """
     import blackjax
 
@@ -533,15 +533,15 @@ def _nuts_chain_scan(
 
     Parameters
     ----------
-    state: NUTSState
+    state : NUTSState
         Initial chain state (from ``blackjax.mcmc.nuts.init``).
-    chain_keys: ndarray, shape (n_chain, 2)
+    chain_keys : ndarray, shape (n_chain, 2)
         Pre-split keys; caller slices ``[n_burnin:]`` Python-side.
-    logdensity_fn_2arg: callable (static)
-    data_args: pytree (traced)
-    step_size: scalar (traced)
-    inv_mass_matrix: ndarray (traced)
-    max_doublings: int (static)
+    logdensity_fn_2arg : callable (static)
+    data_args : pytree (traced)
+    step_size : scalar (traced)
+    inv_mass_matrix : ndarray (traced)
+    max_doublings : int (static)
 
     Returns
     -------
@@ -593,8 +593,8 @@ def _hmc_warmup_only(
 
     Returns
     -------
-    step_size: scalar
-    inv_mass_matrix: ndarray, shape (D,) or (D, D)
+    step_size : scalar
+    inv_mass_matrix : ndarray, shape (D,) or (D, D)
     """
     import blackjax
 
@@ -633,32 +633,32 @@ def _hmc_full_scan(
 
     Parameters
     ----------
-    init_flat: ndarray, shape (D,)
+    init_flat : ndarray, shape (D,)
         Initial position in unbounded latent space.
-    warmup_key: PRNGKey
+    warmup_key : PRNGKey
         Random key for warmup adaptation.
-    chain_keys: ndarray, shape (n_chain, 2)
+    chain_keys : ndarray, shape (n_chain, 2)
         Pre-split keys (``n_chain = n_burnin + n_samples``).
-    logdensity_fn_2arg: callable (static)
+    logdensity_fn_2arg : callable (static)
         ``log_p(position, data_args)``, galaxy-agnostic log-posterior.
-    data_args: pytree (traced)
+    data_args : pytree (traced)
         Observed data tensors; changing these does NOT trigger recompilation.
-    n_warmup: int (static)
+    n_warmup : int (static)
         Window adaptation steps.
-    n_leapfrog: int (static)
+    n_leapfrog : int (static)
         Leapfrog integration steps per HMC proposal.
-    use_dense: bool (static)
+    use_dense : bool (static)
         Dense vs diagonal mass matrix.
-    target_accept_rate: float (static)
+    target_accept_rate : float (static)
         Target acceptance rate for dual averaging.
 
     Returns
     -------
-    positions: ndarray, shape (n_chain, D)
-    divergent: ndarray, shape (n_chain,)
+    positions : ndarray, shape (n_chain, D)
+    divergent : ndarray, shape (n_chain,)
         Caller slices ``[n_burnin:]``.
-    step_size: scalar
-    inv_mass_matrix: ndarray, shape (D,) or (D, D)
+    step_size : scalar
+    inv_mass_matrix : ndarray, shape (D,) or (D, D)
     """
     import blackjax
 
@@ -701,25 +701,25 @@ def _hmc_chain_scan(
 
     Parameters
     ----------
-    state: HMCState
+    state : HMCState
         Initial chain state (from ``blackjax.mcmc.hmc.init``).
-    chain_keys: ndarray, shape (n_chain, 2)
+    chain_keys : ndarray, shape (n_chain, 2)
         Pre-split keys; caller slices ``[n_burnin:]`` Python-side.
-    logdensity_fn_2arg: callable (static)
+    logdensity_fn_2arg : callable (static)
         ``log_p(position, data_args)``.
-    data_args: pytree (traced)
+    data_args : pytree (traced)
         Observed data tensors.
-    step_size: scalar (traced)
+    step_size : scalar (traced)
         Step size from warmup adaptation.
-    inv_mass_matrix: ndarray (traced), shape (D,) or (D, D)
+    inv_mass_matrix : ndarray (traced), shape (D,) or (D, D)
         Inverse mass matrix from warmup adaptation.
-    n_leapfrog: int (static)
+    n_leapfrog : int (static)
         Leapfrog integration steps per proposal.
 
     Returns
     -------
-    positions: ndarray, shape (n_chain, D)
-    divergent: ndarray, shape (n_chain,)
+    positions : ndarray, shape (n_chain, D)
+    divergent : ndarray, shape (n_chain,)
         Caller slices ``[n_burnin:]``.
     """
 
@@ -764,32 +764,32 @@ def _dynamic_hmc_full_scan(
 
     Parameters
     ----------
-    init_flat: ndarray, shape (D,)
+    init_flat : ndarray, shape (D,)
         Initial position in unbounded latent space.
-    warmup_key: PRNGKey
+    warmup_key : PRNGKey
         Random key for HMC window adaptation.
-    dhmc_init_key: PRNGKey (traced)
+    dhmc_init_key : PRNGKey (traced)
         Random key for ``dynamic_hmc.init`` (requires a random generator arg).
-    chain_keys: ndarray, shape (n_chain, 2)
+    chain_keys : ndarray, shape (n_chain, 2)
         Pre-split keys; caller slices ``[n_burnin:]`` Python-side.
-    logdensity_fn_2arg: callable (static)
+    logdensity_fn_2arg : callable (static)
         ``log_p(position, data_args)``, galaxy-agnostic log-posterior.
-    data_args: pytree (traced)
+    data_args : pytree (traced)
         Observed data tensors; changing these does NOT trigger recompilation.
-    n_warmup: int (static)
+    n_warmup : int (static)
         Window adaptation steps.
-    use_dense: bool (static)
+    use_dense : bool (static)
         Dense vs diagonal mass matrix for HMC warmup.
-    target_accept_rate: float (static)
+    target_accept_rate : float (static)
         Target acceptance rate for dual averaging.
 
     Returns
     -------
-    positions: ndarray, shape (n_chain, D)
-    divergent: ndarray, shape (n_chain,)
+    positions : ndarray, shape (n_chain, D)
+    divergent : ndarray, shape (n_chain,)
         Caller slices ``[n_burnin:]``.
-    step_size: scalar
-    inv_mass_matrix: ndarray, shape (D,) or (D, D)
+    step_size : scalar
+    inv_mass_matrix : ndarray, shape (D,) or (D, D)
     """
     import blackjax
 
@@ -832,23 +832,23 @@ def _dynamic_hmc_chain_scan(
 
     Parameters
     ----------
-    state: DynamicHMCState
+    state : DynamicHMCState
         Initial chain state (from ``blackjax.mcmc.dynamic_hmc.init``).
-    chain_keys: ndarray, shape (n_chain, 2)
+    chain_keys : ndarray, shape (n_chain, 2)
         Pre-split keys; caller slices ``[n_burnin:]`` Python-side.
-    logdensity_fn_2arg: callable (static)
+    logdensity_fn_2arg : callable (static)
         ``log_p(position, data_args)``.
-    data_args: pytree (traced)
+    data_args : pytree (traced)
         Observed data tensors.
-    step_size: scalar (traced)
+    step_size : scalar (traced)
         Step size from HMC window adaptation.
-    inv_mass_matrix: ndarray (traced), shape (D,) or (D, D)
+    inv_mass_matrix : ndarray (traced), shape (D,) or (D, D)
         Inverse mass matrix from HMC window adaptation.
 
     Returns
     -------
-    positions: ndarray, shape (n_chain, D)
-    divergent: ndarray, shape (n_chain,)
+    positions : ndarray, shape (n_chain, D)
+    divergent : ndarray, shape (n_chain,)
         Caller slices ``[n_burnin:]``.
     """
 
@@ -893,34 +893,34 @@ def _ghmc_full_scan(
 
     Parameters
     ----------
-    init_flat: ndarray, shape (D,)
+    init_flat : ndarray, shape (D,)
         Initial position in unbounded latent space.
-    warmup_key: PRNGKey
+    warmup_key : PRNGKey
         Random key for HMC window adaptation.
-    ghmc_init_key: PRNGKey (traced)
+    ghmc_init_key : PRNGKey (traced)
         Random key for ``ghmc.init`` momentum initialization.
-    chain_keys: ndarray, shape (n_chain, 2)
+    chain_keys : ndarray, shape (n_chain, 2)
         Pre-split keys; caller slices ``[n_burnin:]`` Python-side.
-    logdensity_fn_2arg: callable (static)
+    logdensity_fn_2arg : callable (static)
         ``log_p(position, data_args)``, galaxy-agnostic log-posterior.
-    data_args: pytree (traced)
+    data_args : pytree (traced)
         Observed data tensors; changing these does NOT trigger recompilation.
-    n_warmup: int (static)
+    n_warmup : int (static)
         HMC window adaptation steps.
-    target_accept_rate: float (static)
+    target_accept_rate : float (static)
         Target acceptance rate for HMC dual averaging.
-    alpha: float (static)
+    alpha : float (static)
         Momentum persistence (0=full refresh, 1=no refresh).
-    delta: float (static)
+    delta : float (static)
         Step size scaling in the GHMC proposal.
 
     Returns
     -------
-    positions: ndarray, shape (n_chain, D)
-    divergent: ndarray, shape (n_chain,)
+    positions : ndarray, shape (n_chain, D)
+    divergent : ndarray, shape (n_chain,)
         Caller slices ``[n_burnin:]``.
-    step_size: scalar
-    momentum_inv_scale: ndarray, shape (D,)
+    step_size : scalar
+    momentum_inv_scale : ndarray, shape (D,)
     """
     import blackjax
 
@@ -971,32 +971,32 @@ def _ghmc_chain_scan(
 
     Parameters
     ----------
-    state: GHMCState
+    state : GHMCState
         Initial chain state (from ``blackjax.mcmc.ghmc.init``).
-    chain_keys: ndarray, shape (n_chain, 2)
+    chain_keys : ndarray, shape (n_chain, 2)
         Pre-split keys; caller slices ``[n_burnin:]`` Python-side.
-    logdensity_fn_2arg: callable (static)
+    logdensity_fn_2arg : callable (static)
         ``log_p(position, data_args)``.
-    data_args: pytree (traced)
+    data_args : pytree (traced)
         Observed data tensors.
-    step_size: scalar (traced)
+    step_size : scalar (traced)
         Step size from HMC window adaptation.
-    momentum_inv_scale: ndarray (traced), shape (D,)
+    momentum_inv_scale : ndarray (traced), shape (D,)
         Diagonal inverse mass matrix from HMC window adaptation.
-    alpha: float (traced)
+    alpha : float (traced)
         Momentum persistence passed to the GHMC kernel.
-    delta: float (traced)
+    delta : float (traced)
         Step size scaling passed to the GHMC kernel.
-    alpha_static: float (static)
+    alpha_static : float (static)
         Mirrors ``alpha`` as a static arg; belongs in the XLA cache key
         because it controls the momentum-refresh geometry. Pass the same value.
-    delta_static: float (static)
+    delta_static : float (static)
         Mirrors ``delta`` as a static arg. Pass the same value as ``delta``.
 
     Returns
     -------
-    positions: ndarray, shape (n_chain, D)
-    divergent: ndarray, shape (n_chain,)
+    positions : ndarray, shape (n_chain, D)
+    divergent : ndarray, shape (n_chain,)
         Caller slices ``[n_burnin:]``.
     """
 
@@ -1038,23 +1038,23 @@ def _ess_full_scan(
 
     Parameters
     ----------
-    init_flat: ndarray, shape (D,)
+    init_flat : ndarray, shape (D,)
         Initial position in unbounded latent space, where every coordinate
         carries an iid standard-normal prior.
-    chain_keys: ndarray, shape (n_chain, 2)
+    chain_keys : ndarray, shape (n_chain, 2)
         Pre-split keys (``n_chain = n_burnin + n_samples``).
-    loglikelihood_fn_2arg: callable (static)
+    loglikelihood_fn_2arg : callable (static)
         ``log_L(position, data_args)``, the Gaussian data term ALONE, no
         prior. Taking the data as a traced argument keeps one compiled
         program serving every catalog, same as the other scans here.
-    data_args: pytree (traced)
+    data_args : pytree (traced)
         Observed data tensors; changing these does NOT trigger recompilation.
 
     Returns
     -------
-    positions: ndarray, shape (n_chain, D)
+    positions : ndarray, shape (n_chain, D)
         Caller slices ``[n_burnin:]``.
-    subiters: ndarray, shape (n_chain,)
+    subiters : ndarray, shape (n_chain,)
         Ellipse-shrinkage iterations per step, ESS's only tuning-free
         diagnostic; caller slices ``[n_burnin:]``.
 
@@ -1245,25 +1245,25 @@ def _vmap_chains(
 
     Parameters
     ----------
-    init_state_fn: callable(init_pos_for_chain) -> chain_state
+    init_state_fn : callable(init_pos_for_chain) -> chain_state
         Builds the sampler's initial state from a chain's starting position.
         May close over the log-density callable.
-    chain_scan_fn: callable(chain_state, chain_keys) -> outputs
+    chain_scan_fn : callable(chain_state, chain_keys) -> outputs
         Runs the per-chain scan (burn-in + sampling). Outputs may be a
         single jnp.ndarray (e.g. positions) or a tuple where the leading
         axis is iterations (e.g. ``(positions, divergent)``).
-    init_flat: jnp.ndarray, shape (D,)
+    init_flat : jnp.ndarray, shape (D,)
         Reference initial position; each chain is jittered around this.
-    chain_key: PRNGKey
+    chain_key : PRNGKey
         Splits into per-chain init jitter, per-chain init keys, and the
         flat key block fed to ``chain_scan_fn``.
-    n_chains: int
+    n_chains : int
         Number of chains to vmap (≥ 2; callers handle the single-chain case).
-    n_iter: int
+    n_iter : int
         Iterations per chain (caller passes ``n_burnin + n_samples``).
-    n_burnin: int
+    n_burnin : int
         Per-chain burn-in to discard before flatten.
-    jitter_scale: float, default 1e-3
+    jitter_scale : float, default 1e-3
         Gaussian jitter scale applied to ``init_flat`` for each chain.
 
     Returns

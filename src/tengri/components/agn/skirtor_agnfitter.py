@@ -72,7 +72,7 @@ def _load_skirtor_agnfitter_arrays(grid_path: str) -> dict:
 
     Parameters
     ----------
-    grid_path: str
+    grid_path : str
         Path to ``skirtor_mean3p_torus_grid.h5``.
 
     Returns
@@ -109,7 +109,7 @@ def load_skirtor_agnfitter_grid(grid_path: str) -> TorusTemplateGrid:
 
     Parameters
     ----------
-    grid_path: str
+    grid_path : str
         Path to ``skirtor_mean3p_torus_grid.h5``.
 
     Returns
@@ -156,17 +156,17 @@ def skirtor_agnfitter_sed_from_grid(
 
     Parameters
     ----------
-    wavelength: array_like, shape (n_wave,)
+    wavelength : array_like, shape (n_wave,)
         Rest-frame wavelength grid. [Å]
-    agn_log_lbol: float, optional
+    agn_log_lbol : float, optional
         ``log10(L_bol / L_sun)``. Default 11.0.
-    agn_oa_skirtor: float, optional
+    agn_oa_skirtor : float, optional
         Half-opening angle [deg]. Default 40.0.
-    agn_incl_skirtor: float, optional
+    agn_incl_skirtor : float, optional
         Inclination angle [deg]. Default 30.0.
-    agn_tv_skirtor: float, optional
+    agn_tv_skirtor : float, optional
         Equatorial optical depth τ_9.7. Default 7.0.
-    agn_torus_frac: float, optional
+    agn_torus_frac : float, optional
         Fraction of L_bol reprocessed by the torus. Default 0.5.
 
     Returns
@@ -215,7 +215,7 @@ def create_skirtor_agnfitter_from_grid(grid_path: str) -> Callable:
 
     Parameters
     ----------
-    grid_path: str
+    grid_path : str
         Path to ``skirtor_mean3p_torus_grid.h5``.
 
     Returns
@@ -277,17 +277,17 @@ def skirtor_agnfitter_sed(
 
     Parameters
     ----------
-    wavelength: array_like, shape (n_wave,)
+    wavelength : array_like, shape (n_wave,)
         Rest-frame wavelength. [Å]
-    agn_log_lbol: float, optional
+    agn_log_lbol : float, optional
         ``log10(L_bol / L_sun)``. Default 11.0.
-    agn_oa_skirtor: float, optional
+    agn_oa_skirtor : float, optional
         Half-opening angle [deg]. Default 40.0.
-    agn_incl_skirtor: float, optional
+    agn_incl_skirtor : float, optional
         Inclination angle [deg]. Default 30.0.
-    agn_tv_skirtor: float, optional
+    agn_tv_skirtor : float, optional
         Equatorial optical depth τ_9.7. Default 7.0.
-    agn_torus_frac: float, optional
+    agn_torus_frac : float, optional
         Torus reprocessing fraction. Default 0.5.
     **kwargs
         Accepted and ignored for unified-dispatch compatibility.

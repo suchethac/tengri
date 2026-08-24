@@ -87,26 +87,26 @@ def run_hmc(
 
     Parameters
     ----------
-    n_warmup: int
+    n_warmup : int
         Warmup/adaptation steps (tunes step size and mass matrix).
-    n_burnin: int
+    n_burnin : int
         Post-warmup burn-in steps (discarded). Discarded Python-side
         rather than inside JIT, so changing this does NOT trigger a
         recompile when ``n_burnin + n_samples`` is unchanged.
-    n_samples: int
+    n_samples : int
         Posterior samples per chain to collect.
-    n_chains: int, default 1
+    n_chains : int, default 1
         Number of independent HMC chains, sharing one adapted step size and
         mass matrix. Warmup is adapted once; the chains then sample from
         jittered starts, honored on the **first** call as well as cached ones.
         Final posterior has ``n_chains * n_samples`` samples. Under the default
         ``chain_method="vmap"`` the chains are SIMD-batched, so wall scales ~
         linearly with ``n_chains`` on CPU.
-    n_leapfrog_steps: int
+    n_leapfrog_steps : int
         Number of leapfrog integration steps per proposal.
-    target_accept_rate: float
+    target_accept_rate : float
         Target acceptance rate for step size adaptation.
-    dense_mass_matrix: bool or None, default None
+    dense_mass_matrix : bool or None, default None
         ``None`` (auto) switches to diagonal at D >= 8, the same policy NUTS
         uses (``tengri.inference.backends.mcmc.nuts._resolve_dense_mass_matrix``,
         #319). ``True`` / ``False`` force the choice.
@@ -119,7 +119,7 @@ def run_hmc(
         SIGKILLed, while ``mcmc_nuts`` at the same D was already diagonal
         (#1413, #1454). The high-D advisory could not catch it either, it
         fires above D = 30, by which point HMC has *stopped* using dense.
-    chain_method: {"vmap", "sequential", "parallel"}, default "vmap"
+    chain_method : {"vmap", "sequential", "parallel"}, default "vmap"
         How ``n_chains > 1`` chains are executed.
 
         - ``"vmap"`` (default): SIMD-batch the chains into one kernel. Peak
@@ -134,7 +134,7 @@ def run_hmc(
           importing jax; falls back to ``"vmap"`` with a warning if fewer than
           ``n_chains`` devices are visible.
 
-    precondition: bool, float or None, default None
+    precondition : bool, float or None, default None
         Sample in metric-whitened coordinates (#1301): the metric is built
         analytically at the initial point and the chain samples ``H(A zeta)``
         with ``A A^T = G^-alpha``, draws mapped back exactly, the posterior is
@@ -144,7 +144,7 @@ def run_hmc(
         a float in ``[0, 1]`` sets the strength (``1.0`` is full whitening).
         Full whitening amplifies a misspecified metric without bound (#1442).
         See :mod:`tengri.inference.preconditioning`.
-    verbose: bool
+    verbose : bool
         Print progress.
     """
     try:

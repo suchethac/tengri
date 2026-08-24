@@ -86,7 +86,7 @@ def resolve(component_name: str) -> ModuleType | None:
 
     Parameters
     ----------
-    component_name: str
+    component_name : str
         Component identifier used in ModelConfig (e.g., ``"ssp"``, ``"dl07"``,
         ``"skirtor"``).
 
@@ -144,9 +144,9 @@ def validate_precompute_module(component_name: str, module: ModuleType) -> None:
 
     Parameters
     ----------
-    component_name: str
+    component_name : str
         Component identifier from the registry (e.g., ``"ssp"``, ``"dl07"``).
-    module: ModuleType
+    module : ModuleType
         The imported precompute module.
 
     Raises

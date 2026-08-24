@@ -53,27 +53,27 @@ def _regularize_hessian(hessian, min_eigenvalue, regularize=True):
 
     Parameters
     ----------
-    hessian: jnp.ndarray, shape (n, n)
+    hessian : jnp.ndarray, shape (n, n)
         Symmetric Hessian of the loss at the expansion point.
-    min_eigenvalue: float
+    min_eigenvalue : float
         Floor applied to the eigenvalue spectrum.
-    regularize: bool, optional
+    regularize : bool, optional
         When ``False`` the spectrum is returned untouched and no warning is
         issued. Default ``True``.
 
     Returns
     -------
-    eigenvalues: jnp.ndarray
+    eigenvalues : jnp.ndarray
         The raw spectrum, before flooring.
-    eigenvalues_clipped: jnp.ndarray
+    eigenvalues_clipped : jnp.ndarray
         The floored spectrum (identical to ``eigenvalues`` when
         ``regularize=False``).
-    eigenvectors: jnp.ndarray
+    eigenvectors : jnp.ndarray
         Eigenvectors of ``hessian``; the caller reuses them for the Newton
         decrement rather than decomposing twice.
-    hessian_reg: jnp.ndarray
+    hessian_reg : jnp.ndarray
         Hessian rebuilt from the floored spectrum.
-    n_clipped: int
+    n_clipped : int
         How many directions hit the floor.
 
     Warns
@@ -161,11 +161,11 @@ def _newton_decrement(grad_flat, eigenvalues, eigenvectors):
 
     Parameters
     ----------
-    grad_flat: array_like, shape (n_dim,)
+    grad_flat : array_like, shape (n_dim,)
         Gradient of the loss at the expansion point, in unbounded space.
-    eigenvalues: array_like, shape (n_dim,)
+    eigenvalues : array_like, shape (n_dim,)
         Hessian eigenvalues, already floored to be positive.
-    eigenvectors: array_like, shape (n_dim, n_dim)
+    eigenvectors : array_like, shape (n_dim, n_dim)
         Corresponding eigenvectors, as columns.
 
     Returns
@@ -210,36 +210,36 @@ def run_laplace(
 
     Parameters
     ----------
-    key: PRNGKey
+    key : PRNGKey
         Random key for sampling.
-    loss_fn: callable
+    loss_fn : callable
         Loss function: ``(unbounded param dict, data_args) -> scalar``.
-    data_args: dict
+    data_args : dict
         Observed data dict (``data``, ``noise``, etc.).
-    map_params_unbounded: dict
+    map_params_unbounded : dict
         MAP parameters in unbounded space.
-    to_physical_fn: callable
+    to_physical_fn : callable
         Converts unbounded param dict to physical space.
-    model: Model
+    model : Model
         Forward model (stored in Posterior).
-    grad_fn: callable, optional
+    grad_fn : callable, optional
         Pre-compiled ``(params, data_args) -> (loss, grad)`` function.
         When provided, the Hessian is computed via central finite
         differences, avoiding the monolithic ``jax.hessian`` compilation
         (55s → 5ms for D=7).  Falls back to ``jax.hessian`` if ``None``.
-    n_samples: int
+    n_samples : int
         Number of posterior samples to draw.
-    regularize: bool
+    regularize : bool
         Clip small Hessian eigenvalues to ensure positive definiteness.
-    min_eigenvalue: float
+    min_eigenvalue : float
         Minimum eigenvalue threshold (only if regularize=True).
-    stationarity_tol: float
+    stationarity_tol : float
         Newton decrement [nats] above which the expansion point is reported as
         off-mode via :class:`~tengri.config.exceptions.LaplaceNotAtModeWarning`.
         Default 0.1, an offset of ~0.45 standard deviations. Raise it to
         silence the check; the decrement is reported in ``diagnostics`` either
         way.
-    verbose: bool
+    verbose : bool
         Print progress.
 
     Returns

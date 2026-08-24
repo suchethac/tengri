@@ -57,17 +57,17 @@ def torus_screen_transmission(
 
     Parameters
     ----------
-    wavelength: array_like, shape (n_wave,)
+    wavelength : array_like, shape (n_wave,)
         Rest-frame wavelength grid. [Å]
-    cos_inc: float
+    cos_inc : float
         Cosine of the inclination (angle from the polar axis); 1 = face-on.
         [dimensionless]
-    oa_deg: float
+    oa_deg : float
         Torus half-opening angle from the equatorial plane. [deg]
-    tau_v: float
+    tau_v : float
         Torus equatorial V-band optical depth (the disc seen through the torus
         rim is reddened by ~this depth). [dimensionless]
-    law: str
+    law : str
         Reddening curve: ``"smc"`` (default) or ``"calzetti"``.
 
     Returns

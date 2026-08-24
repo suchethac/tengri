@@ -132,17 +132,17 @@ class DH02CE01IRSEDComponent(EmissionComponent):
 
         Parameters
         ----------
-        p: dict
+        p : dict
             Parameters with the ``dust_`` prefix stripped. Empty: this model
             declares none; see the class Notes.
-        sed_in: array_like, shape (n_wave,)
+        sed_in : array_like, shape (n_wave,)
             SED from upstream [erg/s/Hz]; zeros when this is the first
             emission component.
-        wave: array_like, shape (n_wave,)
+        wave : array_like, shape (n_wave,)
             Rest-frame wavelength grid [Angstrom].
-        L_ir: float
+        L_ir : float
             Dust-absorbed luminosity to re-radiate [erg/s].
-        templates: dict, optional
+        templates : dict, optional
             Grid threaded in as a traced argument. When ``None`` the
             module-level lazy loader is used, which captures the library as a
             compile-time constant (1.32 MB, #1649).

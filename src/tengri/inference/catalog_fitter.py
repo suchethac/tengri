@@ -49,9 +49,9 @@ def _sample_dict_for_summary(posterior, properties=None):
 
     Parameters
     ----------
-    posterior: Posterior
+    posterior : Posterior
         A single galaxy's fit result; must still hold its samples.
-    properties: sequence of str, ``None``, or empty
+    properties : sequence of str, ``None``, or empty
         Derived-property names to fold in. ``None`` (default) takes every
         property the model provides; an empty sequence takes none.
 
@@ -96,15 +96,15 @@ def _attach_summaries(posterior, store, percentiles, reducers, properties):
 
     Parameters
     ----------
-    posterior: Posterior
+    posterior : Posterior
         A single galaxy's result, still holding its samples.
-    store: str
+    store : str
         ``"summary"`` to summarize; anything else is a no-op.
-    percentiles: tuple
+    percentiles : tuple
         Levels to compute, in the order the caller asked for them.
-    reducers: dict or None
+    reducers : dict or None
         Extra reducers ``{name: callable}``.
-    properties: sequence of str or None
+    properties : sequence of str or None
         Derived properties to fold in (``None`` = all, ``()`` = none).
 
     Returns
@@ -179,21 +179,21 @@ def _compute_summaries(samples, percentiles=None, reducers=None):
 
     Parameters
     ----------
-    samples: dict
+    samples : dict
         Samples keyed by name, values are (n_samples,) arrays. Both sampled
         parameters and derived properties belong here, see
         :func:`_sample_dict_for_summary`.
-    percentiles: tuple, optional
+    percentiles : tuple, optional
         Percentile values to compute. Default (16, 50, 84).
-    reducers: dict, optional
+    reducers : dict, optional
         Additional reducers {name: callable} (e.g., {"mean": jnp.mean}).
 
     Returns
     -------
-    percentiles_dict: dict
+    percentiles_dict : dict
         Keys are names, values are (n_pct,) arrays **in the order the levels
         were requested**, the caller must record those levels alongside.
-    summary_dict: dict
+    summary_dict : dict
         Nested dict: {reducer_name: {name: scalar value}}.
     """
     if percentiles is None:
@@ -233,17 +233,17 @@ class GalaxyChannel:
 
     Attributes
     ----------
-    name: str
+    name : str
         Short identifier, for messages and tests.
-    keys: tuple of str
+    keys : tuple of str
         The galaxy-dict keys this channel occupies. Several keys can belong
         to one channel -- line fluxes travel as a value/error pair.
-    engines: frozenset of str
+    engines : frozenset of str
         Engine kinds that actually thread it into the objective. An engine
         absent here must refuse, not ignore.
-    what: str
+    what : str
         Human-readable subject, opening the refusal message.
-    remedy: str
+    remedy : str
         What the caller should do instead, as a full sentence.
 
     Notes
@@ -333,11 +333,11 @@ def _resolve_n_padded(n_gal: int, K: int, n_pad: int | str | None) -> int:
 
     Parameters
     ----------
-    n_gal: int
+    n_gal : int
         Real galaxy count.
-    K: int
+    K : int
         ``forward_chunk_size`` (>=1).
-    n_pad: int, "auto", or None
+    n_pad : int, "auto", or None
         ``None`` → multiple-of-K minimum (existing behavior).
         ``"auto"`` → next power of 2 (also at least multiple of K).
         ``int`` → exact target (must be ``>= n_gal``).
@@ -373,27 +373,27 @@ class CatalogPosterior:
 
     Parameters
     ----------
-    posteriors: list of Posterior
+    posteriors : list of Posterior
         One result per galaxy, in the same order as the input catalog.
-    method: str
+    method : str
         Inference method used.
-    wall_time_s: float
+    wall_time_s : float
         Total wall-clock time for all galaxies. [s]
-    n_galaxies: int
+    n_galaxies : int
         Number of galaxies.
-    diagnostics: dict
+    diagnostics : dict
         Method-specific diagnostics (e.g. ``mean_n_iterations`` for native VI).
-    percentiles: dict or None
+    percentiles : dict or None
         Per-galaxy percentile summaries when store="summary". Keys are property
         names, values are (n_galaxies, n_percentiles) arrays. None for store="full".
-    summary: dict or None
+    summary : dict or None
         Per-galaxy summary statistics when store="summary". Keys are reducer names
         (e.g., "mean", "std"), values are dicts mapping property names to
         (n_galaxies,) arrays. None for store="full".
-    store: str
+    store : str
         Storage mode: "full" keeps all samples, "summary" computes percentiles
         and reducers and drops samples to save memory.
-    percentile_levels: tuple of float or None
+    percentile_levels : tuple of float or None
         The percentile levels the ``percentiles`` block holds, in column order
         (e.g. ``(16, 50, 84)``). ``None`` when no summary was computed.
 
@@ -699,14 +699,14 @@ class _CatalogFitterOriginal:
 
     Parameters
     ----------
-    model: SEDModel
+    model : SEDModel
         Forward model shared across all galaxies.
-    galaxies: list of dict
+    galaxies : list of dict
         Each dict must contain ``'flux_obs'`` array, shape ``(n_data,)`` [erg/s/Hz],
         and ``'noise'`` array, shape ``(n_data,)`` [erg/s/Hz] (per-band 1-sigma errors).
         For ``forward_chunk_size > 1`` with native methods, all galaxies must
         have the same ``n_data``.
-    data_type: str
+    data_type : str
         ``"photometry"`` (default), ``"spectroscopy"``, or ``"joint"``.
 
     Raises
@@ -755,7 +755,7 @@ class _CatalogFitterOriginal:
 
         Parameters
         ----------
-        resolved: str
+        resolved : str
             The resolved method name, as returned by ``resolve_method``.
 
         Raises
@@ -803,7 +803,7 @@ class _CatalogFitterOriginal:
 
         Parameters
         ----------
-        galaxy: dict
+        galaxy : dict
             One entry of ``self.galaxies``; carries ``line_flux_obs`` /
             ``line_flux_err`` when the catalog was built with ``line_cols``.
 
@@ -899,7 +899,7 @@ class _CatalogFitterOriginal:
 
         Parameters
         ----------
-        method: str
+        method : str
             Any method accepted by :class:`~tengri.inference.fitter.Fitter`.
             ``mcmc_nuts`` (default), ``mcmc_hmc`` and the two ``native_vi_*``
             backends support ``forward_chunk_size``-based on-device
@@ -916,14 +916,14 @@ class _CatalogFitterOriginal:
             Both ``native_vi_*`` backends now refuse to run at all without
             ``allow_unvalidated=True``, changing the default alone left them
             one keystroke away, since this path never consulted the tier.
-        key: jax.random.PRNGKey
+        key : jax.random.PRNGKey
             Base random key; per-galaxy keys are derived via ``jax.random.split``.
-        forward_chunk_size: int
+        forward_chunk_size : int
             K galaxies evaluated in parallel per ``lax.map`` step. Applies to
             ``mcmc_nuts`` / ``mcmc_hmc`` and to ``native_vi_linear`` /
             ``native_vi_nonlinear``; ignored (with a warning) for every other
             method. ``K=1`` (default) = sequential; ``K=N`` = fully vmapped.
-        n_pad: int, "auto", or None
+        n_pad : int, "auto", or None
             Pad the catalog up to this many galaxies before running. The
             extra slots are dummy galaxies whose results are discarded
             after the run; their only purpose is to make the XLA program
@@ -939,18 +939,18 @@ class _CatalogFitterOriginal:
             Only applies to native methods. Ignored with a warning for
             sequential paths (each galaxy is fit in its own jit, so
             shape-bucketing has no effect).
-        store: {"full", "summary"} or None
+        store : {"full", "summary"} or None
             Storage mode for posterior samples. ``None`` (default) auto-selects:
             ``"full"`` if N <= 1000, else ``"summary"`` with a warning.
             ``"full"`` retains all samples. ``"summary"`` computes percentiles
             and reducer statistics per property, then drops samples.
-        percentiles: tuple, optional
+        percentiles : tuple, optional
             Percentiles to compute when store="summary". Default (16, 50, 84).
-        reducers: dict, optional
+        reducers : dict, optional
             Additional reducer functions {name: callable} to apply per property
             (e.g., {"mean": jnp.mean, "std": jnp.std}). With store="full", these
             are ignored.
-        allow_unvalidated: bool, optional
+        allow_unvalidated : bool, optional
             Run a ``tier="broken"`` method anyway, for benchmarking or backend
             development, not for science. Default False.
         **kwargs

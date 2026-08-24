@@ -81,32 +81,32 @@ def _cg_solve(
 
     Parameters
     ----------
-    mat_fn: callable
+    mat_fn : callable
         ``(x) -> Ax``. Symmetric positive-definite matrix-vector product.
-    b: ndarray, shape (d,)
+    b : ndarray, shape (d,)
         Right-hand side.
-    x0: ndarray, shape (d,)
+    x0 : ndarray, shape (d,)
         Initial guess.
-    maxiter: int
+    maxiter : int
         Hard iteration cap.  NIFTy default: ``max(min(200, 20*d), miniter)``.
-    miniter: int
+    miniter : int
         Minimum iterations before convergence is checked.
         NIFTy default: ``min(6, maxiter)``.
-    absdelta: float or None
+    absdelta : float or None
         Energy-improvement convergence threshold (secondary).
         ``None`` (default) disables this criterion, matching NIFTy's
         default for all internal CG calls.
-    resnorm: float or None
+    resnorm : float or None
         Absolute residual-norm threshold (primary).
         ``None`` (default) disables unless ``absdelta`` is also ``None``,
         in which case ``tol``-based fallback activates.
-    tol: float
+    tol : float
         Relative tolerance for ``tol``-based fallback: ``tol * ||b||``.
         Used only when both ``absdelta`` and ``resnorm`` are ``None``.
         NIFTy default: ``1e-5``.
-    atol: float
+    atol : float
         Absolute tolerance for fallback.  NIFTy default: ``0.0``.
-    norm_ord: int or None
+    norm_ord : int or None
         Norm order for residual and gradient norms.
         NIFTy default (CG): ``2`` (``None`` → 2).
 
@@ -208,42 +208,42 @@ def _newton_cg_flat(
 
     Parameters
     ----------
-    fun_and_grad: callable
+    fun_and_grad : callable
         ``(x) -> (value, grad)``.
-    hessp: callable
+    hessp : callable
         ``(x, v) -> Hessian-vector product``.
-    x0: ndarray, shape (d,)
+    x0 : ndarray, shape (d,)
         Initial guess.  ``d = x0.shape[0]`` used for convergence scaling
         (``ncg_xtol = xtol * d``).
-    miniter: int
+    miniter : int
         Minimum Newton iterations before convergence is checked.
         NIFTy default: ``0``.
-    maxiter: int
+    maxiter : int
         Newton iteration limit.  NIFTy default: ``200``.
-    energy_reduction_factor: float
+    energy_reduction_factor : float
         Fraction of expected energy decrease used as CG ``absdelta``.
         NIFTy default: ``0.1``.
-    old_fval: float or None
+    old_fval : float or None
         Energy at a previous position for warm-starting the old-energy
         tracker.  ``None`` → ``inf`` (NIFTy default).
-    absdelta: float or None
+    absdelta : float or None
         Energy-improvement convergence threshold.  ``None`` (default)
         disables this criterion, matching NIFTy's default for
         ``nonlinearly_update_residual`` (no ``absdelta`` is passed).
-    norm_ord: int or None
+    norm_ord : int or None
         Norm order for gradient norm.  NIFTy default: ``1`` (L1).
-    xtol: float
+    xtol : float
         Descent-norm convergence threshold (scaled by ``d``).
         NIFTy default: ``1e-5``.
-    custom_gradnorm: callable or None
+    custom_gradnorm : callable or None
         Custom gradient norm ``(v) -> scalar``.  Overrides ``norm_ord``
         when provided (used by ``curve_residual`` for Fisher-metric norm).
 
     Returns
     -------
-    pos: ndarray, shape (d,)
+    pos : ndarray, shape (d,)
         Converged position.
-    energy: float
+    energy : float
         Final objective value.
 
     References
@@ -408,7 +408,7 @@ def run_native_vi(
 
     Parameters
     ----------
-    init_from: str, Posterior, or None
+    init_from : str, Posterior, or None
         ``"auto"`` (default): MAP for ``n_seeds=1``, random for
         ``n_seeds>1``. MAP gives better convergence for a single
         seed; random init is better for multi-seed because vmap
@@ -416,26 +416,26 @@ def run_native_vi(
         ``"map"``: quick MAP estimate as starting point for all seeds.
         ``"random"`` or ``None``: random init near prior midpoint.
         ``Posterior``: use a previous result as initialization.
-    n_iterations: int
+    n_iterations : int
         Maximum KL iterations. Auto-stops when converged.
-    n_samples: int
+    n_samples : int
         Samples per iteration (doubled by mirror_samples).
-    n_posterior_samples: int
+    n_posterior_samples : int
         Posterior samples drawn after convergence.
-    kl_rtol: float
+    kl_rtol : float
         Relative KL tolerance for early stopping. Set to 0 to
         disable and run all ``n_iterations``.
-    n_seeds: int
+    n_seeds : int
         Number of random seeds to run in parallel via ``jax.vmap``.
         The best result (lowest Hamiltonian) is returned. Multiple
         seeds catch bad initialization and multimodality.
-    parallel_seeds: bool or None
+    parallel_seeds : bool or None
         If ``None`` (default), auto-detect: ``True`` on GPU/TPU,
         ``False`` on CPU. On CPU, sequential is typically faster
         because early-converging seeds exit early, while vmap must
         run all seeds for the maximum iteration count.
         Set explicitly to override.
-    verbose: bool
+    verbose : bool
         Print progress.
     """
     import warnings
@@ -895,25 +895,25 @@ def build_native_vi_linear_engine(signal_response, data, noise, flatten, unflatt
 
     Parameters
     ----------
-    signal_response: callable
+    signal_response : callable
         ``(pytree) -> ndarray, shape (n_data,)``. Differentiable forward model.
-    data: ndarray, shape (n_data,)
+    data : ndarray, shape (n_data,)
         Observed data vector.
-    noise: ndarray, shape (n_data,)
+    noise : ndarray, shape (n_data,)
         Per-datum noise standard deviations.
-    flatten: callable
+    flatten : callable
         ``pytree -> 1D ndarray``.
-    unflatten: callable
+    unflatten : callable
         ``1D ndarray -> pytree``.
 
     Returns
     -------
-    run_native_vi_linear_jit: callable
+    run_native_vi_linear_jit : callable
         ``(init_flat, vi_key, n_iter, n_samp, rtol) -> (best_flat, n_iters)``.
         JIT-compiled with ``static_argnames=("n_iter", "n_samp")``.
-    draw_residuals_jit: callable
+    draw_residuals_jit : callable
         ``(pos_flat, subkeys) -> residuals_flat``, shape ``(n_samples, d_total)``.
-    hamiltonian_fn: callable
+    hamiltonian_fn : callable
         ``(flat) -> scalar``. Useful for seed selection.
 
     Notes
@@ -1043,26 +1043,26 @@ def build_native_vi_nonlinear_engine(signal_response, data, noise, flatten, unfl
 
     Parameters
     ----------
-    signal_response: callable
+    signal_response : callable
         ``(pytree) -> ndarray, shape (n_data,)``. Differentiable forward model.
-    data: ndarray, shape (n_data,)
+    data : ndarray, shape (n_data,)
         Observed data vector.
-    noise: ndarray, shape (n_data,)
+    noise : ndarray, shape (n_data,)
         Per-datum noise standard deviations.
-    flatten: callable
+    flatten : callable
         ``pytree -> 1D ndarray``.
-    unflatten: callable
+    unflatten : callable
         ``1D ndarray -> pytree``.
 
     Returns
     -------
-    run_native_vi_nonlinear_jit: callable
+    run_native_vi_nonlinear_jit : callable
         ``(init_flat, vi_key, n_iter, n_samp, rtol) -> (best_flat, n_iters)``.
         JIT-compiled with ``static_argnames=("n_iter", "n_samp")``.
-    draw_nonlinear_residuals_jit: callable
+    draw_nonlinear_residuals_jit : callable
         ``(pos_flat, subkeys) -> residuals_flat``, shape
         ``(2*n_samples, d_total)``. Each key produces one mirrored pair.
-    hamiltonian_fn: callable
+    hamiltonian_fn : callable
         ``(flat) -> scalar``. Useful for seed selection.
 
     Notes
@@ -1292,23 +1292,23 @@ def build_native_vi_catalog_linear_engine(signal_response, flatten, unflatten):
 
     Parameters
     ----------
-    signal_response: callable
+    signal_response : callable
         ``(pytree) -> ndarray, shape (n_data,)``. Must NOT capture any galaxy-specific
         data, depends only on the model and parameter structure.
-    flatten: callable
+    flatten : callable
         ``pytree -> 1D ndarray``.
-    unflatten: callable
+    unflatten : callable
         ``1D ndarray -> pytree``.
 
     Returns
     -------
-    run_fn: callable
+    run_fn : callable
         ``(init_flat, vi_key, data, noise, n_iter, n_samp, rtol) -> (best_flat, n_iters)``.
         JIT-compiled; vmappable over ``(init_flat, vi_key, data, noise)``.
-    draw_fn: callable
+    draw_fn : callable
         ``(pos_flat, subkeys, noise) -> residuals``, shape ``(n_samples, d_total)``.
         JIT-compiled; vmappable.
-    hamiltonian_fn: callable
+    hamiltonian_fn : callable
         ``(flat, data, noise) -> scalar``. Vmappable for seed selection.
 
     Notes
@@ -1466,22 +1466,22 @@ def build_native_vi_catalog_nonlinear_engine(signal_response, flatten, unflatten
 
     Parameters
     ----------
-    signal_response: callable
+    signal_response : callable
         ``(pytree) -> ndarray, shape (n_data,)``. Must not capture galaxy data.
-    flatten: callable
+    flatten : callable
         ``pytree -> 1D ndarray``.
-    unflatten: callable
+    unflatten : callable
         ``1D ndarray -> pytree``.
 
     Returns
     -------
-    run_fn: callable
+    run_fn : callable
         ``(init_flat, vi_key, data, noise, n_iter, n_samp, rtol) -> (best_flat, n_iters)``.
         JIT-compiled; vmappable over ``(init_flat, vi_key, data, noise)``.
-    draw_fn: callable
+    draw_fn : callable
         ``(pos_flat, subkeys, noise) -> residuals``, shape ``(2*n_keys, d_total)``.
         Each key produces one mirrored pair (geoVI). JIT-compiled; vmappable.
-    hamiltonian_fn: callable
+    hamiltonian_fn : callable
         ``(flat, data, noise) -> scalar``. Vmappable.
 
     Notes

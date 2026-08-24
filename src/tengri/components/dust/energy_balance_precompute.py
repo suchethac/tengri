@@ -67,15 +67,15 @@ class EnergyBalanceLUT(NamedTuple):
 
     Attributes
     ----------
-    B: ndarray, shape (n_met, n_age)
+    B : ndarray, shape (n_met, n_age)
         Intrinsic bolometric SSP luminosity per unit mass, ``∫ SSP dν`` (signed,
         masked to λ ≥ 912 Å). [erg/s/Hz · Hz per Lsun-flux unit]
-    G: ndarray, shape (n_met, n_age, n_tau_bc, n_tau_diff)
+    G : ndarray, shape (n_met, n_age, n_tau_bc, n_tau_diff)
         Attenuated bolometric SSP luminosity ``∫ SSP·T_a dν`` on the optical-depth
         grid.
-    tau_bc_grid: ndarray, shape (n_tau_bc,)
+    tau_bc_grid : ndarray, shape (n_tau_bc,)
         Birth-cloud optical-depth grid nodes.
-    tau_diff_grid: ndarray, shape (n_tau_diff,)
+    tau_diff_grid : ndarray, shape (n_tau_diff,)
         Diffuse-ISM optical-depth grid nodes.
     """
 
@@ -110,23 +110,23 @@ def build_energy_balance_lut(
 
     Parameters
     ----------
-    ssp_flux: ndarray, shape (n_met, n_age, n_wave)
+    ssp_flux : ndarray, shape (n_met, n_age, n_wave)
         SSP specific luminosity per unit mass [Lsun/Hz/Msun].
-    ssp_wave: ndarray, shape (n_wave,)
+    ssp_wave : ndarray, shape (n_wave,)
         Rest-frame SSP wavelength grid [Å], ascending.
-    ssp_ages_yr: ndarray, shape (n_age,)
+    ssp_ages_yr : ndarray, shape (n_age,)
         SSP age axis [yr].
-    law_bc, law_diff: str
+    law_bc, law_diff : str
         Attenuation-law registry keys (fixed shape).
     f_obscuration, t_birth_yr, transition_width_dex, bc_params, diff_params,
     lyman_cutoff_aa
         Passed verbatim to :func:`two_component_dust` for node-exact agreement.
-    eb_include_lyc: bool, optional
+    eb_include_lyc : bool, optional
         FSPS-parity toggle (#961): when True, the LyC (λ < 912 Å) is kept in
         the absorbed-luminosity integrand: all absorbed energy heats dust:
         instead of the canonical LyC mask (#922). Must match the runtime
         ``DustSEDComponent.config.eb_include_lyc``.
-    tau_bc_grid, tau_diff_grid: ndarray
+    tau_bc_grid, tau_diff_grid : ndarray
         Optical-depth grid nodes (keyword-only).
 
     Returns
@@ -191,16 +191,16 @@ def _interp_bracket(grid: jnp.ndarray, x: jnp.ndarray) -> tuple[jnp.ndarray, jnp
 
     Parameters
     ----------
-    grid: ndarray, shape (n_nodes,)
+    grid : ndarray, shape (n_nodes,)
         Uniform ascending grid.
-    x: ndarray, shape ()
+    x : ndarray, shape ()
         Query point. May lie outside ``grid``.
 
     Returns
     -------
-    i0: ndarray, shape (), int32
+    i0 : ndarray, shape (), int32
         Lower node index, clipped to ``[0, n_nodes - 2]``.
-    weights: ndarray, shape (2,)
+    weights : ndarray, shape (2,)
         Weights on nodes ``i0`` and ``i0 + 1``. Both are zero when ``x`` lies
         more than one spacing outside the grid, reproducing the dense form.
 
@@ -269,21 +269,21 @@ def lut_l_absorbed_stellar_log10(
 
     Parameters
     ----------
-    lut: EnergyBalanceLUT
+    lut : EnergyBalanceLUT
         Precomputed ``B``/``G``.
-    joint_weights: ndarray, shape (n_met, n_age)
+    joint_weights : ndarray, shape (n_met, n_age)
         Runtime DSPS joint (metallicity, age) weights.
-    log10_mass_scale: ndarray, shape ()
+    log10_mass_scale : ndarray, shape ()
         ``log10(total_mass x L_sun)`` [dex].
-    tau_bc, tau_diff: ndarray, shape ()
+    tau_bc, tau_diff : ndarray, shape ()
         Runtime optical depths.
 
     Returns
     -------
-    log_magnitude: ndarray, shape ()
+    log_magnitude : ndarray, shape ()
         :math:`\log_{10}|L_{\rm abs}^\star / (\mathrm{erg/s})|` [dex]. ``-inf``
         when nothing is absorbed; ``+inf`` when the contraction is non-finite.
-    sign: ndarray, shape ()
+    sign : ndarray, shape ()
         Sign of the signed luminosity (follows the grid orientation), so the
         caller can combine it with other terms via
         :func:`tengri.utils.scale.log10_add`. ``NaN`` when the contraction is
@@ -329,13 +329,13 @@ def lut_l_absorbed_stellar(
 
     Parameters
     ----------
-    lut: EnergyBalanceLUT
+    lut : EnergyBalanceLUT
         Precomputed ``B``/``G``.
-    joint_weights: ndarray, shape (n_met, n_age)
+    joint_weights : ndarray, shape (n_met, n_age)
         Runtime DSPS joint (metallicity, age) weights.
-    mass_scale: float
+    mass_scale : float
         ``total_mass × L_sun`` scaling applied to the SSP luminosities.
-    tau_bc, tau_diff: float
+    tau_bc, tau_diff : float
         Runtime optical depths.
 
     Returns

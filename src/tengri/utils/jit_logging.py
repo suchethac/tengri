@@ -42,9 +42,9 @@ def logged_jit(fn: Callable, *, name: str | None = None, **jit_kwargs) -> Callab
 
     Parameters
     ----------
-    fn: callable
+    fn : callable
         The function to JIT-compile.
-    name: str, optional
+    name : str, optional
         Human-readable label for log messages.  Defaults to ``fn.__qualname__``.
     **jit_kwargs
         Forwarded to ``jax.jit`` (e.g. ``static_argnums``, ``donate_argnums``).

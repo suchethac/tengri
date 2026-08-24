@@ -28,7 +28,7 @@ answer to "can my component thread?" is the same everywhere.
 
 Declaring only :data:`~typing.ClassVar` attributes and methods, it composes
 with the ``@dataclass(frozen=True)`` declarations the bare-Protocol family uses
- -  dataclass field collection ignores ``ClassVar`` by construction.
+-  dataclass field collection ignores ``ClassVar`` by construction.
 """
 
 from __future__ import annotations
@@ -76,7 +76,7 @@ class TemplateThreading:
 
         Parameters
         ----------
-        template_data: mapping, optional
+        template_data : mapping, optional
             The nested threading dict published by
             ``SEDModel._template_data_for_jit``, keyed
             ``[namespace][component_name]``.

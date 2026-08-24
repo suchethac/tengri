@@ -134,23 +134,23 @@ def cloudy_line_priors(
 
     Parameters
     ----------
-    log_z: float
+    log_z : float
         Gas-phase metallicity log10(Z/Zsun). Default 0.0 (solar).
-    neb_logU: float
+    neb_logU : float
         Ionization parameter log10(U). Default -3.0.
-    line_wavelengths: array (n_lines,) or None
+    line_wavelengths : array (n_lines,) or None
         Rest-frame wavelengths to return priors for. If None, returns
         priors for all CLOUDY reference lines.
-    prior_width_dex: float
+    prior_width_dex : float
         Gaussian prior width in dex (applied in log-space as fractional
         scatter). Default 0.3 dex to accommodate non-solar abundances,
         AGN contamination, etc.
 
     Returns
     -------
-    prior_means: array, shape (n_lines,)
+    prior_means : array, shape (n_lines,)
         Expected line luminosities relative to Hbeta [dimensionless].
-    prior_sigmas: array, shape (n_lines,)
+    prior_sigmas : array, shape (n_lines,)
         Prior standard deviations [dimensionless], linear-space scatter
         corresponding to ``prior_width_dex``.
 
@@ -208,32 +208,32 @@ def marginalize_emission_lines_cloudy(
 
     Parameters
     ----------
-    residual: array (n_pix,)
+    residual : array (n_pix,)
         Data minus continuum model: ``d - m``.
-    noise: array (n_pix,)
+    noise : array (n_pix,)
         Per-pixel noise standard deviation.
-    design_matrix: array (n_pix, n_lines)
+    design_matrix : array (n_pix, n_lines)
         Gaussian line profile design matrix.
-    log_z: float
+    log_z : float
         Gas-phase metallicity log10(Z/Zsun).
-    neb_logU: float
+    neb_logU : float
         Ionization parameter log10(U).
-    line_wavelengths: array (n_lines,) or None
+    line_wavelengths : array (n_lines,) or None
         Rest-frame wavelengths of the lines in the design matrix.
         Must match column order of ``design_matrix``.
-    prior_width_dex: float
+    prior_width_dex : float
         Prior scatter in dex. Default 0.3.
-    l_hbeta: float
+    l_hbeta : float
         Estimated Hbeta luminosity (or flux) to scale the CLOUDY
         ratios to absolute amplitudes. Default 1.0 (ratios only).
 
     Returns
     -------
-    ln_L_marg: scalar
+    ln_L_marg : scalar
         Marginalized log-likelihood [dimensionless].
-    a_hat: array, shape (n_lines,)
+    a_hat : array, shape (n_lines,)
         Posterior-mean line amplitudes (same units as ``residual``).
-    a_cov: array, shape (n_lines, n_lines)
+    a_cov : array, shape (n_lines, n_lines)
         Posterior covariance of line amplitudes (same units^2 as ``a_hat``).
 
     Notes
@@ -291,31 +291,31 @@ def cloudy_grid_line_priors(
 
     Parameters
     ----------
-    grid_data: CloudyGridData
+    grid_data : CloudyGridData
         Loaded CLOUDY grid (from ``load_cloudy_grid(path)`` in
         ``tengri.components.nebular``). Must have attributes:
         ``line_luminosity`` (n_met, n_age, n_logU, n_lines),
         ``line_log_met``, ``line_log_age``, ``line_log_U``,
         ``line_wavelengths``.
-    log_z: float
+    log_z : float
         Gas-phase metallicity log10(Z) (absolute, not Z/Zsun).
-    neb_logU: float
+    neb_logU : float
         Ionization parameter log10(U).
-    log_age_yr: float
+    log_age_yr : float
         log10(age / yr) for the dominant stellar population.
         Default 7.0 (10 Myr, typical for HII regions).
-    prior_width_dex: float
+    prior_width_dex : float
         Gaussian prior width in dex. Default 0.3.
-    target_wavelengths: array (n_target,) or None
+    target_wavelengths : array (n_target,) or None
         If provided, return priors only for these rest-frame wavelengths
         by matching each to the nearest grid line. If None, returns priors
         for all grid lines.
 
     Returns
     -------
-    prior_means: array, shape (n_lines_out,)
+    prior_means : array, shape (n_lines_out,)
         Line luminosities relative to Hbeta [dimensionless].
-    prior_sigmas: array, shape (n_lines_out,)
+    prior_sigmas : array, shape (n_lines_out,)
         Prior standard deviations [dimensionless].
 
     Notes
@@ -420,18 +420,18 @@ def balmer_decrement_prior(
 
     Parameters
     ----------
-    dust_tau_diff: float
+    dust_tau_diff : float
         Diffuse ISM optical depth at V-band (the ``dust_tau_diff``
         physical parameter in tengri).
-    R_V: float
+    R_V : float
         Total-to-selective extinction ratio. Default 4.05 (Calzetti+2000).
 
     Returns
     -------
-    wavelengths: array, shape (4,)
+    wavelengths : array, shape (4,)
         Balmer line rest-frame vacuum wavelengths [Hα, Hβ, Hγ, Hδ]
         [Angstrom].
-    predicted_ratios: array, shape (4,)
+    predicted_ratios : array, shape (4,)
         Predicted observed Balmer ratios relative to Hβ = 1.0 [dimensionless],
         after applying nebular dust attenuation.
 

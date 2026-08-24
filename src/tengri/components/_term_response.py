@@ -26,11 +26,11 @@ def term_band_response(template_data: Any, name: str) -> Mapping[str, Any] | Non
 
     Parameters
     ----------
-    template_data: Any
+    template_data : Any
         The threaded template data. Any non-mapping value (including ``None``,
         the common case when the model was built without ``approx=WavePrecomp``)
         yields ``None``.
-    name: str
+    name : str
         Emitter namespace: ``"xray"`` or ``"radio"``.
 
     Returns

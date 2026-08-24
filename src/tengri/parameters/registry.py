@@ -164,13 +164,13 @@ def _register_model_registry_params(
 
     Parameters
     ----------
-    out: dict
+    out : dict
         Registry map being built. Mutated in place.
-    model_registry: dict
+    model_registry : dict
         Name -> model spec carrying a ``params`` mapping.
-    owner: str
+    owner : str
         Fully-qualified module path recorded on each record.
-    label: str
+    label : str
         Registry name used to build the record's ``group`` field, e.g.
         ``"SFH_REGISTRY"``.
     """
@@ -216,8 +216,8 @@ def _walk_param_modules() -> dict[str, ParameterRecord]:
             mod = importlib.import_module(module_info.name)
         except ImportError as exc:
             # A component may legitimately be unimportable when an optional
-            # dependency is absent. Degrade rather than break introspection: # but say so: a
-            # silently vanishing component reads as "this
+            # dependency is absent. Degrade rather than break introspection,
+            # but say so: a silently vanishing component reads as "this
             # parameter does not exist" and has shipped as a bug twice
             # (#1165, #1179). Anything that is not an ImportError is a real
             # defect and propagates.
@@ -310,8 +310,8 @@ def _walk_param_modules() -> dict[str, ParameterRecord]:
     # Neither owns a ``_params.py``: their parameters are declared per model in
     # ``SFH_REGISTRY[<type>].params`` / ``MET_REGISTRY[<type>].params``, a
     # different mechanism that the walk above cannot see. The result was that
-    # *every* SFH parameter was missing from introspection: # ``list_parameters()`` returned 189
-    # names with no ``sfh_*`` at all, and
+    # *every* SFH parameter was missing from introspection:
+    # ``list_parameters()`` returned 189 names with no ``sfh_*`` at all, and
     # ``describe_parameter("sfh_dpl_alpha")`` raised ``KeyError`` for the very
     # identifier the naming contract uses as its worked example (#1264).
     #
@@ -449,7 +449,7 @@ def list_parameters(prefix: str | None = None):
 
     Parameters
     ----------
-    prefix: str, optional
+    prefix : str, optional
         If given, only return names starting with this prefix
         (e.g. ``"dust_"``, ``"agn_"``). Useful for surveying a
         physics domain.
@@ -530,7 +530,7 @@ def recipe_parameters(recipe_dict: dict, free_only: bool = True) -> list[Paramet
 
     Parameters
     ----------
-    recipe_dict: dict
+    recipe_dict : dict
         A recipe dictionary matching the format of :mod:`tengri.recipes`.
         Example::
 
@@ -541,7 +541,7 @@ def recipe_parameters(recipe_dict: dict, free_only: bool = True) -> list[Paramet
                 "redshift": Uniform(0.01, 6.0),
             }
 
-    free_only: bool, optional
+    free_only : bool, optional
         If True (default), return only the free parameters (entries with
         non-fixed priors). If False, return all parameters the recipe
         activates (including FIXED ones). Default is True.
@@ -588,8 +588,8 @@ def recipe_parameters(recipe_dict: dict, free_only: bool = True) -> list[Paramet
 
     See Also
     --------
-    ~tengri.recipes: Curated recipe functions.
-    describe_parameter: Look up a single parameter by name.
+    ~tengri.recipes : Curated recipe functions.
+    describe_parameter : Look up a single parameter by name.
     """
     # Translate recipe to Parameters (no SSP data needed).
     #

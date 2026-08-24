@@ -167,20 +167,20 @@ class SFHQuantities(NamedTuple):
 
     Attributes
     ----------
-    stellar_mass: jnp.ndarray
+    stellar_mass : jnp.ndarray
         Total formed stellar mass [Msun].
-    stellar_mass_surviving: jnp.ndarray
+    stellar_mass_surviving : jnp.ndarray
         Surviving mass in living stars + remnants [Msun].
         Returns NaN if the mass-remaining table was not loaded.
-    sfr_100myr: jnp.ndarray
+    sfr_100myr : jnp.ndarray
         Star formation rate averaged over the last 100 Myr [Msun/yr].
-    sfr_10myr: jnp.ndarray
+    sfr_10myr : jnp.ndarray
         Star formation rate averaged over the last 10 Myr [Msun/yr].
-    ssfr: jnp.ndarray
+    ssfr : jnp.ndarray
         Specific star formation rate SFR/M* [1/yr].
-    mass_weighted_age_gyr: jnp.ndarray
+    mass_weighted_age_gyr : jnp.ndarray
         Mass-weighted stellar age [Gyr].
-    mass_weighted_metallicity: jnp.ndarray
+    mass_weighted_metallicity : jnp.ndarray
         Mass-weighted metallicity log10(Z), evolving-Z aware.
 
     Returns
@@ -229,35 +229,35 @@ class SEDQuantities(NamedTuple):
 
     Attributes
     ----------
-    l_bol: jnp.ndarray
+    l_bol : jnp.ndarray
         Bolometric luminosity [Lsun].
-    l_tir: jnp.ndarray
+    l_tir : jnp.ndarray
         Total infrared luminosity 8–1000 μm [Lsun].
-    l_dust_absorbed: jnp.ndarray
+    l_dust_absorbed : jnp.ndarray
         Dust-absorbed luminosity [Lsun]. Returns NaN if no intrinsic SED.
-    irx: jnp.ndarray
+    irx : jnp.ndarray
         Infrared excess log10(L_TIR / νLν_1600) [dimensionless].
-    uv_slope_beta: jnp.ndarray
+    uv_slope_beta : jnp.ndarray
         UV spectral slope β in range 1250–2600 Å [dimensionless].
-    dn4000: jnp.ndarray
+    dn4000 : jnp.ndarray
         Narrow 4000 Å break, Balogh et al. 1999 [dimensionless].
-    balmer_break: jnp.ndarray
+    balmer_break : jnp.ndarray
         Modified Balmer break, Wang et al. 2024 [dimensionless].
-    m_uv: jnp.ndarray
+    m_uv : jnp.ndarray
         Absolute UV magnitude at rest-frame 1500 Å [AB].
-    fuv_flux: jnp.ndarray
+    fuv_flux : jnp.ndarray
         Mean flux density in FUV 1000–1700 Å [erg/s/Hz].
-    nuv_flux: jnp.ndarray
+    nuv_flux : jnp.ndarray
         Mean flux density in NUV 1700–3200 Å [erg/s/Hz].
-    fuv_flux_intrinsic: jnp.ndarray
+    fuv_flux_intrinsic : jnp.ndarray
         Dust-free FUV flux [erg/s/Hz]. Returns NaN if no intrinsic SED.
-    nuv_flux_intrinsic: jnp.ndarray
+    nuv_flux_intrinsic : jnp.ndarray
         Dust-free NUV flux [erg/s/Hz]. Returns NaN if no intrinsic SED.
-    rest_uv_color: jnp.ndarray
+    rest_uv_color : jnp.ndarray
         Rest-frame U-V color [AB magnitudes].
-    luminosity_weighted_age_gyr: jnp.ndarray
+    luminosity_weighted_age_gyr : jnp.ndarray
         Luminosity-weighted age [Gyr].
-    luminosity_weighted_metallicity: jnp.ndarray
+    luminosity_weighted_metallicity : jnp.ndarray
         Luminosity-weighted metallicity log10(Z).
 
     Returns
@@ -316,33 +316,33 @@ class EmissionLines(NamedTuple):
 
     Attributes
     ----------
-    lya: jnp.ndarray
+    lya : jnp.ndarray
         Lyman-alpha at 1216 Å [erg/s].
-    civ_1549: jnp.ndarray
+    civ_1549 : jnp.ndarray
         C IV doublet 1548+1551 Å, summed [erg/s].
-    oii: jnp.ndarray
+    oii : jnp.ndarray
         [OII] doublet 3726+3729 Å, summed [erg/s].
-    hbeta: jnp.ndarray
+    hbeta : jnp.ndarray
         H-beta at 4861 Å [erg/s].
-    oiii_4959: jnp.ndarray
+    oiii_4959 : jnp.ndarray
         [OIII] at 4959 Å [erg/s].
-    oiii_5007: jnp.ndarray
+    oiii_5007 : jnp.ndarray
         [OIII] at 5007 Å [erg/s].
-    nii_6548: jnp.ndarray
+    nii_6548 : jnp.ndarray
         [NII] at 6548 Å [erg/s].
-    halpha: jnp.ndarray
+    halpha : jnp.ndarray
         H-alpha at 6563 Å [erg/s].
-    nii_6584: jnp.ndarray
+    nii_6584 : jnp.ndarray
         [NII] at 6584 Å [erg/s].
-    sii_6717: jnp.ndarray
+    sii_6717 : jnp.ndarray
         [SII] at 6717 Å [erg/s].
-    sii_6731: jnp.ndarray
+    sii_6731 : jnp.ndarray
         [SII] at 6731 Å [erg/s].
-    all_waves: jnp.ndarray, shape ``(n_lines,)``
+    all_waves : jnp.ndarray, shape ``(n_lines,)``
         Vacuum rest-frame wavelengths of every species published by the
         active nebular backend [Angstrom]. Empty when the backend does
         not expose a discrete catalog (BakedIn, shock).
-    all_lums: jnp.ndarray, shape ``(n_lines,)``
+    all_lums : jnp.ndarray, shape ``(n_lines,)``
         Luminosities at ``all_waves``, in the same dust regime as the
         headline fields (i.e. attenuated by the active dust model when
         present) [erg/s].
@@ -394,9 +394,9 @@ class EmissionLines(NamedTuple):
 
         Parameters
         ----------
-        wavelength: float
+        wavelength : float
             Rest-frame vacuum wavelength to look up [Angstrom].
-        tol_aa: float, optional
+        tol_aa : float, optional
             Acceptable distance to the nearest cataloged line [Angstrom].
             Returns ``nan`` if the nearest line is further than this. Default 2.0.
 
@@ -421,9 +421,9 @@ class DerivedQuantities(NamedTuple):
 
     Attributes
     ----------
-    sfh: SFHQuantities
+    sfh : SFHQuantities
         Star formation history derived quantities.
-    sed: SEDQuantities
+    sed : SEDQuantities
         Spectral energy distribution derived quantities.
 
     Returns
@@ -482,23 +482,23 @@ class SFHProperties(_CachedBase):
 
     Attributes
     ----------
-    stellar_mass: property
+    stellar_mass : property
         Total formed stellar mass [Msun].
-    stellar_mass_surviving: property
+    stellar_mass_surviving : property
         Surviving stellar mass [Msun].
-    sfr_100myr: property
+    sfr_100myr : property
         SFR averaged over 100 Myr [Msun/yr].
-    sfr_10myr: property
+    sfr_10myr : property
         SFR averaged over 10 Myr [Msun/yr].
-    ssfr: property
+    ssfr : property
         Specific SFR [1/yr].
-    mass_weighted_age_gyr: property
+    mass_weighted_age_gyr : property
         Mass-weighted age [Gyr].
-    mass_weighted_metallicity: property
+    mass_weighted_metallicity : property
         Mass-weighted metallicity log10(Z).
-    luminosity_weighted_age_gyr: property
+    luminosity_weighted_age_gyr : property
         Luminosity-weighted age [Gyr].
-    luminosity_weighted_metallicity: property
+    luminosity_weighted_metallicity : property
         Luminosity-weighted metallicity log10(Z).
 
     Notes
@@ -685,35 +685,35 @@ class SEDProperties(_CachedBase):
 
     Attributes
     ----------
-    l_bol: property
+    l_bol : property
         Bolometric luminosity [Lsun].
-    l_tir: property
+    l_tir : property
         Total infrared luminosity [Lsun].
-    l_dust_absorbed: property
+    l_dust_absorbed : property
         Dust-absorbed luminosity [Lsun].
-    irx: property
+    irx : property
         Infrared excess [dimensionless].
-    uv_slope_beta: property
+    uv_slope_beta : property
         UV spectral slope [dimensionless].
-    dn4000: property
+    dn4000 : property
         4000 Å break [dimensionless].
-    balmer_break: property
+    balmer_break : property
         Balmer break [dimensionless].
-    m_uv: property
+    m_uv : property
         Absolute UV magnitude [AB].
-    fuv_flux: property
+    fuv_flux : property
         FUV flux density [erg/s/Hz].
-    nuv_flux: property
+    nuv_flux : property
         NUV flux density [erg/s/Hz].
-    fuv_flux_intrinsic: property
+    fuv_flux_intrinsic : property
         Dust-free FUV flux [erg/s/Hz].
-    nuv_flux_intrinsic: property
+    nuv_flux_intrinsic : property
         Dust-free NUV flux [erg/s/Hz].
-    rest_uv_color: property
+    rest_uv_color : property
         Rest-frame U-V color [AB magnitudes].
-    luminosity_weighted_age_gyr: property
+    luminosity_weighted_age_gyr : property
         Luminosity-weighted age [Gyr].
-    luminosity_weighted_metallicity: property
+    luminosity_weighted_metallicity : property
         Luminosity-weighted metallicity log10(Z).
 
     Notes
@@ -1052,39 +1052,39 @@ class LineProperties(_CachedBase):
 
     Attributes
     ----------
-    lya: property
+    lya : property
         Lyman-alpha [erg/s].
-    civ_1549: property
+    civ_1549 : property
         C IV doublet [erg/s].
-    oii: property
+    oii : property
         [OII] doublet [erg/s].
-    hbeta: property
+    hbeta : property
         H-beta [erg/s].
-    oiii_4959: property
+    oiii_4959 : property
         [OIII] 4959 [erg/s].
-    oiii_5007: property
+    oiii_5007 : property
         [OIII] 5007 [erg/s].
-    nii_6548: property
+    nii_6548 : property
         [NII] 6548 [erg/s].
-    halpha: property
+    halpha : property
         H-alpha [erg/s].
-    nii_6584: property
+    nii_6584 : property
         [NII] 6584 [erg/s].
-    sii_6717: property
+    sii_6717 : property
         [SII] 6717 [erg/s].
-    sii_6731: property
+    sii_6731 : property
         [SII] 6731 [erg/s].
-    bpt_nii: property
+    bpt_nii : property
         BPT [NII] diagnostic [dimensionless].
-    bpt_sii: property
+    bpt_sii : property
         BPT [SII] diagnostic [dimensionless].
-    o3hb: property
+    o3hb : property
         [OIII]/Hβ diagnostic [dimensionless].
-    r23: property
+    r23 : property
         R23 metallicity diagnostic [dimensionless].
-    o32: property
+    o32 : property
         O32 ionization parameter [dimensionless].
-    balmer_decrement: property
+    balmer_decrement : property
         Hα/Hβ ratio [dimensionless].
 
     Notes
@@ -1441,9 +1441,9 @@ class LineProperties(_CachedBase):
 
         Parameters
         ----------
-        wavelength: float
+        wavelength : float
             Rest-frame vacuum wavelength to look up [Angstrom].
-        tol_aa: float, optional
+        tol_aa : float, optional
             Acceptable distance to the nearest cataloged line [Angstrom].
             Returns ``nan`` if the nearest line is further than this. Default 2.0.
 
@@ -1486,13 +1486,13 @@ class RadioProperties(_CachedBase):
 
     Attributes
     ----------
-    l_1p4ghz: property
+    l_1p4ghz : property
         Radio luminosity at 1.4 GHz [erg/s/Hz].
-    l_thermal: property
+    l_thermal : property
         Thermal free-free luminosity [erg/s/Hz].
-    l_nonthermal: property
+    l_nonthermal : property
         Non-thermal synchrotron luminosity [erg/s/Hz].
-    q_ir: property
+    q_ir : property
         FIR-radio correlation parameter [dimensionless].
 
     Notes
@@ -1584,11 +1584,11 @@ class XRayProperties(_CachedBase):
 
     Attributes
     ----------
-    l_x_xrb: property
+    l_x_xrb : property
         X-ray binary luminosity [erg/s].
-    l_x_agn: property
+    l_x_agn : property
         AGN X-ray luminosity [erg/s].
-    l_x_total: property
+    l_x_total : property
         Total X-ray luminosity [erg/s].
 
     Notes
@@ -1665,9 +1665,9 @@ class IonizingProperties(_CachedBase):
 
     Attributes
     ----------
-    q_h: property
+    q_h : property
         Ionizing photon production rate [photons/s].
-    xi_ion: property
+    xi_ion : property
         Ionizing photon production efficiency [Hz/erg].
 
     Notes
@@ -1734,12 +1734,12 @@ class PropertyCatalog(ReadOnlyPropertyMapping):
 
     Parameters
     ----------
-    prediction: Prediction
+    prediction : Prediction
         Parent Prediction object (which caches the ForwardState and params).
 
     Attributes
     ----------
-    _prediction: Prediction
+    _prediction : Prediction
         Reference to parent Prediction instance.
     """
 
@@ -1752,7 +1752,7 @@ class PropertyCatalog(ReadOnlyPropertyMapping):
 
         Parameters
         ----------
-        name: str
+        name : str
             Property name (e.g., ``"stellar_mass"``).
 
         Returns
@@ -1797,9 +1797,9 @@ class PropertyCatalog(ReadOnlyPropertyMapping):
 
         Parameters
         ----------
-        name: str
+        name : str
             Property name (e.g., ``"stellar_mass"``).
-        default: object, optional
+        default : object, optional
             Value to return when ``name`` is not available. Default ``None``.
 
         Returns
@@ -1852,24 +1852,24 @@ class Prediction:
 
     Parameters
     ----------
-    model: SEDModel
+    model : SEDModel
         The tengri SEDModel instance.
-    params: dict
+    params : dict
         Parameter values (public names).
 
     Attributes
     ----------
-    sfh: SFHProperties
+    sfh : SFHProperties
         Star formation history derived quantities. Lazy accessor.
-    sed: SEDProperties
+    sed : SEDProperties
         Spectral energy distribution derived quantities. Lazy accessor.
-    lines: LineProperties
+    lines : LineProperties
         Emission line luminosities and diagnostic ratios. Lazy accessor.
-    radio: RadioProperties
+    radio : RadioProperties
         Radio-derived quantities from empirical relations. Lazy accessor.
-    xray: XRayProperties
+    xray : XRayProperties
         X-ray derived quantities from empirical relations. Lazy accessor.
-    ionizing: IonizingProperties
+    ionizing : IonizingProperties
         Ionizing photon budget quantities. Lazy accessor.
 
     Returns
@@ -1954,7 +1954,7 @@ class Prediction:
 
         Parameters
         ----------
-        name: str
+        name : str
             Property name.
 
         Returns
@@ -2241,106 +2241,106 @@ class Prediction:
     def photometry(self, filters=None, approx=False, *, fast=UNSET):
         r"""Observed-frame photometric flux densities.
 
-               Integrates the model SED through each filter and applies the cosmological
-               dimming, returning :math:`F_\nu` in the observer frame. For the same
-               quantity as AB magnitudes, see :meth:`magnitudes`.
+        Integrates the model SED through each filter and applies the cosmological
+        dimming, returning :math:`F_\nu` in the observer frame. For the same
+        quantity as AB magnitudes, see :meth:`magnitudes`.
 
-               **Exact by default, approximate by choice.** The default integrates the
-               full SED, including on a model built with ``approx=WavePrecomp(...)``,
-               where the lean :meth:`~tengri.SEDModel.predict_photometry` would instead
-               read the lookup table. That is deliberate: ``pred.photometry()`` must mean
-               the same thing on every model. The LUT is an approximation carrying real
-               error, so you reach it only by asking for it, with ``approx=True``.
+        **Exact by default, approximate by choice.** The default integrates the
+        full SED, including on a model built with ``approx=WavePrecomp(...)``,
+        where the lean :meth:`~tengri.SEDModel.predict_photometry` would instead
+        read the lookup table. That is deliberate: ``pred.photometry()`` must mean
+        the same thing on every model. The LUT is an approximation carrying real
+        error, so you reach it only by asking for it, with ``approx=True``.
 
-               The keyword is spelled ``approx`` because it selects exactly the object
-               installed at build time by ``SEDModel.build(..., approx=WavePrecomp(...))``,
+        The keyword is spelled ``approx`` because it selects exactly the object
+        installed at build time by ``SEDModel.build(..., approx=WavePrecomp(...))``
         one mechanism, one name at both ends. It was called ``fast`` until
-               2026-08, which named the benefit and hid the cost; that spelling still
-               works and emits a ``DeprecationWarning``.
+        2026-08, which named the benefit and hid the cost; that spelling still
+        works and emits a ``DeprecationWarning``.
 
-               Parameters
-               ----------
-               filters: sequence of str or FilterCurve, optional
-                   Filter names (e.g., ``["jwst_f356w", "jwst_f444w"]``) or
-                   :class:`~tengri.observation.photometry.FilterCurve` objects.
-                   If None, uses the filters configured at model build time.
-               approx: bool, optional
-                   If True, use the build-time WavePrecomp LUT (20–50× faster, and an
-                   approximation). Only valid when the model was built with
-                   ``approx=WavePrecomp(...)``. If `filters` is also provided, raises
-                   ValueError. Default: False (exact path).
-               fast: bool, optional
-                   Deprecated spelling of `approx`. Removed in v1.0.
+        Parameters
+        ----------
+        filters : sequence of str or FilterCurve, optional
+            Filter names (e.g., ``["jwst_f356w", "jwst_f444w"]``) or
+            :class:`~tengri.observation.photometry.FilterCurve` objects.
+            If None, uses the filters configured at model build time.
+        approx : bool, optional
+            If True, use the build-time WavePrecomp LUT (20–50× faster, and an
+            approximation). Only valid when the model was built with
+            ``approx=WavePrecomp(...)``. If `filters` is also provided, raises
+            ValueError. Default: False (exact path).
+        fast : bool, optional
+            Deprecated spelling of `approx`. Removed in v1.0.
 
-               Returns
-               -------
-               ndarray, shape (n_filters,)
-                   Observed-frame flux densities [erg/s/cm²/Hz].
+        Returns
+        -------
+        ndarray, shape (n_filters,)
+            Observed-frame flux densities [erg/s/cm²/Hz].
 
-               Raises
-               ------
-               ValueError
-                   If the model was not built with ``approx=WavePrecomp(...)`` but
-                   ``approx=True`` is requested, or if both `filters` and ``approx=True``.
-               ValueError
-                   If no photometry is configured on the model.
-               TypeError
-                   If both `approx` and the deprecated `fast` are passed with
-                   contradictory values.
+        Raises
+        ------
+        ValueError
+            If the model was not built with ``approx=WavePrecomp(...)`` but
+            ``approx=True`` is requested, or if both `filters` and ``approx=True``.
+        ValueError
+            If no photometry is configured on the model.
+        TypeError
+            If both `approx` and the deprecated `fast` are passed with
+            contradictory values.
 
-               Notes
-               -----
-               **JIT-compatible**: no, Python method with caching. Use in postprocessing,
-               not inside :func:`jax.jit`.
+        Notes
+        -----
+        **JIT-compatible**: no, Python method with caching. Use in postprocessing,
+        not inside :func:`jax.jit`.
 
-               **Default (exact) path**: integrates ``state.sed_intrinsic`` through each
-               filter via :func:`~tengri.observation.photometry.project_photometry`, the
-               same kernel the likelihood uses, on the ``ForwardState`` this Prediction
-               already cached, so it costs the filter integration and not a second
-               forward pass.
+        **Default (exact) path**: integrates ``state.sed_intrinsic`` through each
+        filter via :func:`~tengri.observation.photometry.project_photometry`, the
+        same kernel the likelihood uses, on the ``ForwardState`` this Prediction
+        already cached, so it costs the filter integration and not a second
+        forward pass.
 
-               **Approximate path** (``approx=True``): Uses the precomputed photometric
-               LUT (filter effective wavelengths × SSP grid). Requires
-               ``approx=WavePrecomp(...)`` at model build time. Runtime cost is
-               ~150 μs per forward model (20–50× speedup for typical models).
+        **Approximate path** (``approx=True``): Uses the precomputed photometric
+        LUT (filter effective wavelengths × SSP grid). Requires
+        ``approx=WavePrecomp(...)`` at model build time. Runtime cost is
+        ~150 μs per forward model (20–50× speedup for typical models).
 
-               **How wrong is it?** Measured against this exact path on a 12-band
-               tsnorm + two-component-dust model, worst band per redshift: 0.085 % at
-               z = 0.05, 1.5 % at z = 1, 10.4 % at z = 1.5, 83 % at z = 3, but the
-               large numbers are all GALEX FUV, which by z = 2 is below the Lyman
-               break and carries 1e-7 of the g-band flux. On bands carrying flux the
-               error is 1e-4 to 1e-2 (sdss_g is 1.38 % at z = 3). The error is set by
-               :class:`~tengri.WavePrecomp`'s ``band_integration``, not by ``n_z``
-               (measured: 250 -> 1000 nodes moves it by nothing). It is a *bias*, so
-               per #1671 it enters the posterior gradient multiplied by SNR.
-               Full numbers: ``bench/reports/2026-08-17_wave_precomp_accuracy.md``.
+        **How wrong is it?** Measured against this exact path on a 12-band
+        tsnorm + two-component-dust model, worst band per redshift: 0.085 % at
+        z = 0.05, 1.5 % at z = 1, 10.4 % at z = 1.5, 83 % at z = 3, but the
+        large numbers are all GALEX FUV, which by z = 2 is below the Lyman
+        break and carries 1e-7 of the g-band flux. On bands carrying flux the
+        error is 1e-4 to 1e-2 (sdss_g is 1.38 % at z = 3). The error is set by
+        :class:`~tengri.WavePrecomp`'s ``band_integration``, not by ``n_z``
+        (measured: 250 -> 1000 nodes moves it by nothing). It is a *bias*, so
+        per #1671 it enters the posterior gradient multiplied by SNR.
+        Full numbers: ``bench/reports/2026-08-17_wave_precomp_accuracy.md``.
 
-               **Runtime filters** (``filters=...``): Constructs a runtime Photometry
-               object from filter names or objects. Cached on ``self._photometry_cache``
-               keyed by filter tuple for zero-cost repeat calls. Issues a one-time
-               UserWarning (exact-path cost). The exact path is always used; a LUT
-               built for one filter set cannot cover filters it was never built for.
+        **Runtime filters** (``filters=...``): Constructs a runtime Photometry
+        object from filter names or objects. Cached on ``self._photometry_cache``
+        keyed by filter tuple for zero-cost repeat calls. Issues a one-time
+        UserWarning (exact-path cost). The exact path is always used; a LUT
+        built for one filter set cannot cover filters it was never built for.
 
-               Examples
-               --------
-               **Default exact path:**
+        Examples
+        --------
+        **Default exact path:**
 
-               >>> pred = model.predict(params)
-               >>> phot = pred.photometry()  # shape (n_filters,)
-               >>> phot.shape
-               (8,)
+        >>> pred = model.predict(params)
+        >>> phot = pred.photometry()  # shape (n_filters,)
+        >>> phot.shape
+        (8,)
 
-               **Approximate path (requires WavePrecomp):**
+        **Approximate path (requires WavePrecomp):**
 
-               >>> phot_lut = pred.photometry(approx=True)  # 20-50x faster, approximate
-               >>> bool(jnp.allclose(phot, phot_lut, rtol=1e-2))
-               True
+        >>> phot_lut = pred.photometry(approx=True)  # 20-50x faster, approximate
+        >>> bool(jnp.allclose(phot, phot_lut, rtol=1e-2))
+        True
 
-               **Runtime filter set:**
+        **Runtime filter set:**
 
-               >>> phot_custom = pred.photometry(filters=["jwst_f356w", "jwst_f444w"])
-               >>> phot_custom.shape
-               (2,)
+        >>> phot_custom = pred.photometry(filters=["jwst_f356w", "jwst_f444w"])
+        >>> phot_custom.shape
+        (2,)
         """
         approx = resolve_renamed_flag(
             approx,
@@ -2447,16 +2447,16 @@ class Prediction:
 
         Parameters
         ----------
-        filters: sequence of str or FilterCurve, optional
+        filters : sequence of str or FilterCurve, optional
             Filter names or :class:`~tengri.observation.photometry.FilterCurve`
             objects. If None, uses the filters configured at model build time.
-        approx: bool, optional
+        approx : bool, optional
             If True, use the build-time WavePrecomp LUT (20–50× faster, and an
             approximation). Only valid when the model was built with
             ``approx=WavePrecomp(...)``. If `filters` is also provided, raises
             ValueError. Default: False (exact path). See :meth:`photometry` for
             the measured size of the approximation.
-        fast: bool, optional
+        fast : bool, optional
             Deprecated spelling of `approx`. Removed in v1.0.
 
         Returns
@@ -2523,15 +2523,15 @@ class Prediction:
 
         Parameters
         ----------
-        wave_obs: ndarray, optional
+        wave_obs : ndarray, optional
             Custom observed-frame wavelength grid [Angstrom]. If None, uses
             the grid configured in the spectroscopy setup at model build time.
-        approx: bool, optional
+        approx : bool, optional
             If True, use the build-time ``SpectrumPrecomp`` LUT. Only valid when
             the model was built with ``approx=SpectrumPrecomp(...)``.
             Default False, the exact projector. Named for the object it
             selects, which is the same word the build takes.
-        fast: bool, optional
+        fast : bool, optional
             Deprecated spelling of `approx`. Removed in v1.0.
 
         Returns
@@ -2584,7 +2584,7 @@ class Prediction:
 
         # Same rule as :meth:`photometry`, for the same reason. ``predict_spectrum``
         # honors the SpectrumPrecomp LUT, so defaulting to it would make
-        # ``pred.spectrum()`` mean "exact" on one model and "approximate" on another,
+        # ``pred.spectrum()`` mean "exact" on one model and "approximate" on another
         # measured 5-7% apart on a SpectrumPrecomp model, the same order as the
         # photometry LUT error, and not a rounding difference.
         if approx:
@@ -2598,8 +2598,8 @@ class Prediction:
 
         # Exact: project the cached ForwardState through the shared spectrum
         # projector. ``Observation.predict`` is the canonical exact path, it calls
-        # ``project_spectrum`` (#1052) and applies the flux calibration (#1086),         # and it
-        # never falls through to the LUT.
+        # ``project_spectrum`` (#1052) and applies the flux calibration (#1086),
+        # and it never falls through to the LUT.
         out = self._model.observation.predict(
             self._ensure_state(), self._params, wave_obs=wave_obs
         )
@@ -2614,7 +2614,7 @@ class Prediction:
 
         Parameters
         ----------
-        wave: array_like, shape (n_out,), optional
+        wave : array_like, shape (n_out,), optional
             Rest-frame wavelength grid to resample onto [Angstrom]. Default
             ``None`` returns the SED on the model's own grid
             (:attr:`wave_rest`), with no interpolation.
@@ -2650,8 +2650,8 @@ class Prediction:
 
         See Also
         --------
-        obs_sed: Observed-frame SED (redshifted + IGM + DLA).
-        wave_rest: The wavelength axis this SED lives on.
+        obs_sed : Observed-frame SED (redshifted + IGM + DLA).
+        wave_rest : The wavelength axis this SED lives on.
         """
         return _SEDCallable(self._rest_sed_on, "rest_sed")
 
@@ -2678,9 +2678,9 @@ class Prediction:
 
         Parameters
         ----------
-        wave_obs: array_like, shape (n_out,), optional
-            **Observed**-frame wavelength grid to resample onto [Angstrom],             the same
-            frame as :attr:`wave_obs`, and as :meth:`spectrum`. Default
+        wave_obs : array_like, shape (n_out,), optional
+            **Observed**-frame wavelength grid to resample onto [Angstrom],
+            the same frame as :attr:`wave_obs`, and as :meth:`spectrum`. Default
             ``None`` returns the SED on the model's own grid.
 
         Returns
@@ -2737,9 +2737,9 @@ class Prediction:
 
         See Also
         --------
-        rest_sed: Rest-frame SED (no absorption, no redshift).
-        wave_obs: The observed-frame wavelength axis this SED lives on.
-        spectrum: Instrument-grid observable (LSF-convolved).
+        rest_sed : Rest-frame SED (no absorption, no redshift).
+        wave_obs : The observed-frame wavelength axis this SED lives on.
+        spectrum : Instrument-grid observable (LSF-convolved).
         """
         return _SEDCallable(self._obs_sed_on, "obs_sed")
 
@@ -2793,8 +2793,8 @@ class Prediction:
 
         See Also
         --------
-        wave_obs: Observed-frame wavelength grid.
-        rest_sed: Rest-frame SED on this grid.
+        wave_obs : Observed-frame wavelength grid.
+        rest_sed : Rest-frame SED on this grid.
         """
         self._ensure_sfh()
         return self._cache["_state"].wave
@@ -2840,8 +2840,8 @@ class Prediction:
 
         See Also
         --------
-        wave_rest: Rest-frame wavelength grid.
-        obs_sed: Observed-frame SED on this grid.
+        wave_rest : Rest-frame wavelength grid.
+        obs_sed : Observed-frame SED on this grid.
         """
         z = self._model._get_redshift(self._params)
         return self.wave_rest * (1.0 + z)

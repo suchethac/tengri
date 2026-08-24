@@ -94,7 +94,7 @@ def init_state_strategy(
         (2-arg, compile-once mode).  Otherwise ``loglikelihood_fn(position)`` (1-arg).
     loglikelihood_birth
         Log-likelihood threshold the particle must exceed.
-    data_args: dict, optional
+    data_args : dict, optional
         Observed-data dict passed as a traced JAX argument for
         compile-once reuse across galaxies.
 

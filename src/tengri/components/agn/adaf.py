@@ -72,7 +72,7 @@ def _bessel_k0e_k1e(x: jnp.ndarray) -> tuple[jnp.ndarray, jnp.ndarray]:
 
     Parameters
     ----------
-    x: array_like
+    x : array_like
         Argument, ``x > 0``.
 
     Returns
@@ -150,7 +150,7 @@ def _bessel_k2e(x: jnp.ndarray) -> jnp.ndarray:
 
     Parameters
     ----------
-    x: array_like
+    x : array_like
         Argument, ``x > 0``.
 
     Returns
@@ -175,7 +175,7 @@ def _adaf_g_theta(t_e: jnp.ndarray) -> jnp.ndarray:
 
     Parameters
     ----------
-    t_e: array_like
+    t_e : array_like
         Electron temperature [K].
 
     Returns
@@ -229,11 +229,11 @@ def _adaf_ne_b_rmin(
 
     Parameters
     ----------
-    m: float
+    m : float
         Black hole mass ``M / M_sun``.
-    mdot: float
+    mdot : float
         Accretion rate in Eddington units.
-    alpha, beta: float
+    alpha, beta : float
         Viscosity and gas-to-total pressure ratio.
 
     Returns
@@ -262,9 +262,9 @@ def _adaf_tau_es(mdot: float, alpha: float) -> jnp.ndarray:
 
     Parameters
     ----------
-    mdot: float
+    mdot : float
         Accretion rate in Eddington units.
-    alpha: float
+    alpha : float
         Viscosity parameter.
 
     Returns
@@ -297,9 +297,9 @@ def _adaf_alpha_c(tau_es: jnp.ndarray, t_e: jnp.ndarray) -> jnp.ndarray:
 
     Parameters
     ----------
-    tau_es: array_like
+    tau_es : array_like
         Electron-scattering optical depth (Eq. 31).
-    t_e: array_like
+    t_e : array_like
         Electron temperature [K].
 
     Returns
@@ -334,9 +334,9 @@ def _adaf_x_m(t_e: jnp.ndarray, m: float, mdot: float, alpha: float, beta: float
 
     Parameters
     ----------
-    t_e: array_like
+    t_e : array_like
         Electron temperature [K] (sets :math:`\theta_e`).
-    m, mdot, alpha, beta: float
+    m, mdot, alpha, beta : float
         Mass, accretion rate, viscosity, gas-to-total pressure ratio.
 
     Returns
@@ -408,7 +408,7 @@ def _adaf_electron_temperature(
 
     Parameters
     ----------
-    m, mdot, alpha, beta, delta: float
+    m, mdot, alpha, beta, delta : float
         Mass, accretion rate, viscosity, gas-to-total pressure ratio, and electron
         viscous-heating fraction.
 
@@ -474,7 +474,7 @@ def _adaf_F_theta(t_e: jnp.ndarray) -> jnp.ndarray:
 
     Parameters
     ----------
-    t_e: array_like
+    t_e : array_like
         Electron temperature [K].
 
     Returns
@@ -582,9 +582,9 @@ def _adaf_mdot_from_lbol(
 
     Parameters
     ----------
-    l_bol_erg: array_like
+    l_bol_erg : array_like
         ADAF bolometric (radiated) luminosity [erg/s].
-    m, alpha, beta, delta: float
+    m, alpha, beta, delta : float
         Mass, viscosity, gas-to-total pressure, electron-heating fraction.
 
     Returns
@@ -646,20 +646,20 @@ def adaf_spectrum(
 
     Parameters
     ----------
-    wavelength: array_like, shape (n_wave,)
+    wavelength : array_like, shape (n_wave,)
         Rest-frame wavelength grid [Angstrom].
-    agn_log_lbol: float
+    agn_log_lbol : float
         log10 of the ADAF bolometric luminosity [log10(L_sun)].
-    agn_lum_ratio: float, optional
+    agn_lum_ratio : float, optional
         Fraction of the bolometric assigned to the ADAF. Default 1.0.
-    agn_log_mbh: float, optional
+    agn_log_mbh : float, optional
         Black hole mass [log10(M_sun)]. Default 8.0.
-    agn_adaf_alpha: float, optional
+    agn_adaf_alpha : float, optional
         Viscosity parameter :math:`\alpha`. Default 0.3.
-    agn_adaf_beta: float, optional
+    agn_adaf_beta : float, optional
         Gas-to-total pressure ratio :math:`\beta` (magnetic fraction is
         :math:`1-\beta`). Default 0.5.
-    agn_adaf_delta: float, optional
+    agn_adaf_delta : float, optional
         Fraction of viscous energy heating electrons directly :math:`\delta` :
         the single most consequential ADAF parameter (it sets the flow luminosity
         at fixed :math:`\dot m`). Default ``0.1`` **departs from Mahadevan 1997's

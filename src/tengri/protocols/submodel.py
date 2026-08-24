@@ -30,7 +30,7 @@ class SubModel(Protocol):
 
     Required attributes
     -------------------
-    name: str
+    name : str
         Stable identifier for diagnostics. Examples: ``"sed"``,
         ``"spatial"``, ``"spatial_sed"``.
 
@@ -90,10 +90,10 @@ class SubModel(Protocol):
 
         Parameters
         ----------
-        state: ForwardState
+        state : ForwardState
             Current state from upstream sub-models (e.g. spatial reads
             keys produced by SED in :class:`SpatialSEDModel`).
-        params: mapping of str -> array
+        params : mapping of str -> array
             Free parameter values for parameters owned by this
             SubModel's components.
 

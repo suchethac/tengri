@@ -96,27 +96,27 @@ class SSPData(NamedTuple):
 
     Parameters
     ----------
-    ssp_wave: array, shape (n_wave,)
+    ssp_wave : array, shape (n_wave,)
         Rest-frame wavelength grid [Angstrom].
-    ssp_flux: array, shape (n_met, n_age, n_wave)
+    ssp_flux : array, shape (n_met, n_age, n_wave)
         Spectral luminosity density of simple stellar populations (SSPs)
         per unit stellar mass [erg/s/Hz/Msun].
         Origin: BC03, BPASS, FSPS, ProGeny, or other DSPS-compatible library.
-    ssp_lg_age_gyr: array, shape (n_age,)
+    ssp_lg_age_gyr : array, shape (n_age,)
         Age grid in log10 space [log10(Gyr)].
-    ssp_lgmet: array, shape (n_met,)
+    ssp_lgmet : array, shape (n_met,)
         Metallicity grid (absolute, NOT solar-relative) [log10(Z)].
         Offset: log10(Z_sun) ≈ −1.848 (Asplund+2009).
         Do NOT confuse with user-facing log10(Z/Z_sun).
-    ssp_mass_remaining: array, shape (n_met, n_age), optional
+    ssp_mass_remaining : array, shape (n_met, n_age), optional
         Fraction of initial stellar mass still present (living stars + remnants)
         at each (age, metallicity) [dimensionless, ∈ [0, 1]].
         Used for stellar mass normalization in CSP integral. Depends on IMF
         and isochrone library; None if unavailable.
-    ssp_alpha_fe: array, optional
+    ssp_alpha_fe : array, optional
         Alpha enhancement grid (for future use). Currently None.
         When implemented: ssp_flux will be (n_met, n_alpha, n_age, n_wave).
-    nebular: str, optional
+    nebular : str, optional
         Nebular provenance: ``"included"`` (wNE: nebular continuum and
         lines baked in), ``"bare"``, or ``"unknown"`` (default). Resolved
         by :func:`load_ssp_data` from the ``nebular_included`` HDF5
@@ -278,15 +278,15 @@ def load_ssp(name: str | None = None, *, download: bool = False) -> "SSPData":
 
     Parameters
     ----------
-    name: str or None, optional
+    name : str or None, optional
         Short alias from ``_LOAD_SSP_PRESETS``, a key from
         ``tengri.list_known_ssps()``, or a literal filename (with or
-        without ``.h5``). ``None`` (default) loads ``tengri._data_setup.DEFAULT_SSP``,
+        without ``.h5``). ``None`` (default) loads ``tengri._data_setup.DEFAULT_SSP``
         the bare-stellar PRSC/MILES Chabrier grid, the same one
         ``tengri.download_ssp()`` fetches and the one the Cue/CloudyGrid nebular
         backends require. For the nebular-baked demo grid pass the alias
         explicitly: ``load_ssp("prsc_miles_chabrier_wNE")``.
-    download: bool, optional
+    download : bool, optional
         Fetch the grid from the hosted catalog if it is not found locally.
         Default ``False``, which raises instead; a default-on fetch would
         turn any mistyped grid name into a silent multi-tens-of-megabyte
@@ -383,9 +383,9 @@ def _load_float(dataset, dtype=None) -> jnp.ndarray:
 
     Parameters
     ----------
-    dataset: h5py.Dataset
+    dataset : h5py.Dataset
         The HDF5 dataset to read.
-    dtype: DTypeLike, optional
+    dtype : DTypeLike, optional
         Target dtype. ``None`` (default) follows tengri's working precision
         (``jnp.result_type(float)``); an explicit dtype (e.g. ``jnp.float32``)
         forces it regardless of the ``jax_enable_x64`` flag: the opt-in for a
@@ -405,10 +405,10 @@ def load_ssp_data(filepath: str, *, dtype=None, download: bool = False) -> SSPDa
 
     Parameters
     ----------
-    filepath: str
+    filepath : str
         Path to HDF5 file. Expected fields: ssp_wave, ssp_flux,
         ssp_lg_age_gyr, ssp_lgmet. Optional: ssp_mass_remaining, ssp_alpha_fe.
-    dtype: DTypeLike, optional
+    dtype : DTypeLike, optional
         Dtype for every loaded float array. ``None`` (default) follows tengri's
         working precision (float64 under ``jax_enable_x64``, its default). Pass
         ``jnp.float32`` for a fully 32-bit pipeline: it halves the host-side
@@ -417,7 +417,7 @@ def load_ssp_data(filepath: str, *, dtype=None, download: bool = False) -> SSPDa
         ~1e42 ``stellar_mass_scale`` and ~1e56 ``nion`` seams are carried in log
         space (#1206); before that, a float32 grid overflowed them silently,
         which is why the default still upcasts.
-    download: bool, optional
+    download : bool, optional
         Fetch the grid from the hosted catalog when ``filepath`` does not
         exist and its basename is one the catalog ships. Default ``False``,
         which raises instead. See Notes for why the default is off.
@@ -646,9 +646,9 @@ def _detect_native_lsun(h5_file, filename: str) -> float | None:
 
     Parameters
     ----------
-    h5_file: h5py.File
+    h5_file : h5py.File
         Open HDF5 handle (for the attribute lookup).
-    filename: str
+    filename : str
         Basename of the file (for the catalog-prefix fallback).
 
     Returns
@@ -675,8 +675,8 @@ def _detect_imf(h5_file, filename: str) -> str:
     Resolution order:
 
     1. ``h5_file.attrs["imf"]`` (when SSP files start shipping the metadata).
-    2. Filename tail matched against :data:`_KNOWN_IMFS`, e.g.
-       ``"fsps_prsc_miles_chabrier.h5"`` → ``"chabrier"``.
+    2. Filename tail matched against :data:`_KNOWN_IMFS`,
+       e.g. ``"fsps_prsc_miles_chabrier.h5"`` → ``"chabrier"``.
     3. Fallback: ``"unknown"``.
 
     Falsely returning a wrong IMF is worse than returning ``"unknown"``,
@@ -820,9 +820,9 @@ def csp_age_dt(ssp_ages_yr: jnp.ndarray, method: str = "trapz") -> jnp.ndarray:
 
     Parameters
     ----------
-    ssp_ages_yr: array, shape (n_age,)
+    ssp_ages_yr : array, shape (n_age,)
         SSP ages in years [yr], sorted ascending.
-    method: {"trapz", "log_trapz"}
+    method : {"trapz", "log_trapz"}
         Integration scheme. Default ``"trapz"`` matches DSPS.
 
     Returns
@@ -904,9 +904,9 @@ def csp_log_interp_matrix(ssp_ages_yr, n_gl: int = 5):
 
     Parameters
     ----------
-    ssp_ages_yr: array-like, shape (n_age,)
+    ssp_ages_yr : array-like, shape (n_age,)
         SSP ages in years [yr], sorted ascending.
-    n_gl: int, optional
+    n_gl : int, optional
         Number of Gauss-Legendre quadrature points per interval. Default 5
         (exact for degree-9 polynomials; more than sufficient).
 
@@ -975,7 +975,7 @@ def enforce_increasing_cosmic_time(t_cosmic_asc: jnp.ndarray) -> jnp.ndarray:
 
     Parameters
     ----------
-    t_cosmic_asc: array_like, shape (n_age,)
+    t_cosmic_asc : array_like, shape (n_age,)
         Cosmic-time knots [Gyr], ascending.
 
     Returns
@@ -1031,33 +1031,33 @@ def compute_dsps_native_weights(
 
     Parameters
     ----------
-    sfr_on_ssp_ages: array, shape (n_age,)
+    sfr_on_ssp_ages : array, shape (n_age,)
         Star formation rate (Msun/yr) evaluated at each SSP lookback age,
         sorted **ascending by age** (youngest = index 0).
-    ssp_ages_yr: array, shape (n_age,)
+    ssp_ages_yr : array, shape (n_age,)
         SSP lookback ages in years (ascending).
-    ssp_lgmet: array, shape (n_met,)
+    ssp_lgmet : array, shape (n_met,)
         log10(Z) metallicity grid of the SSP library (absolute, not Z/Zsun).
-    ssp_lg_age_gyr: array, shape (n_age,)
+    ssp_lg_age_gyr : array, shape (n_age,)
         log10(age/Gyr) of SSP templates.
-    ssp_flux: array, shape (n_met, n_age, n_wave)
+    ssp_flux : array, shape (n_met, n_age, n_wave)
         SSP spectra in Lsun/Hz/Msun.
-    t_obs_gyr: float
+    t_obs_gyr : float
         Age of the universe in Gyr at the observation redshift.
         Computed from tengri's cosmology (not DSPS's DEFAULT_COSMOLOGY).
-    lgmet: float
+    lgmet : float
         log10(Z) metallicity of the galaxy (absolute, same units as ssp_lgmet).
-    lgmet_scatter: float, optional
+    lgmet_scatter : float, optional
         Gaussian scatter in log10(Z) (dex). Default 0.2 dex, matching DSPS
         and Prospector conventions (Conroy & van Dokkum 2009; Johnson+2021).
 
     Returns
     -------
-    age_weights_msun: array, shape (n_age,)
+    age_weights_msun : array, shape (n_age,)
         Mass formed per SSP age bin (Msun), sorted ascending by age.
         Sum = total stellar mass formed.  Directly replaces the output of
         :func:`compute_csp_weights`.
-    ssp_flux_at_z: array, shape (n_age, n_wave)
+    ssp_flux_at_z : array, shape (n_age, n_wave)
         SSP flux marginalized over the metallicity distribution
         (Lsun/Hz/Msun).
 
@@ -1190,19 +1190,19 @@ def compute_dsps_age_weights(
 
     Parameters
     ----------
-    sfr_on_ssp_ages: array, shape (n_age,)
+    sfr_on_ssp_ages : array, shape (n_age,)
         Star formation rate (Msun/yr) at each SSP lookback age,
         sorted **ascending by age** (youngest = index 0).
-    ssp_ages_yr: array, shape (n_age,)
+    ssp_ages_yr : array, shape (n_age,)
         SSP lookback ages in years (ascending).
-    ssp_lg_age_gyr: array, shape (n_age,)
+    ssp_lg_age_gyr : array, shape (n_age,)
         log10(age/Gyr) of SSP templates (DSPS convention).
-    t_obs_gyr: float
+    t_obs_gyr : float
         Age of the universe in Gyr at the observation redshift.
 
     Returns
     -------
-    age_weights_msun: ndarray, shape (n_age,)
+    age_weights_msun : ndarray, shape (n_age,)
         Mass formed per SSP age bin (Msun), sorted ascending by age.
         Sum = total stellar mass formed.
 
@@ -1283,30 +1283,30 @@ def compute_dsps_met_table_weights(
 
     Parameters
     ----------
-    sfr_on_ssp_ages: array, shape (n_age,)
+    sfr_on_ssp_ages : array, shape (n_age,)
         Star formation rate (Msun/yr) at each SSP lookback age,
         sorted **ascending by age** (youngest = index 0).
-    lgmet_on_ssp_ages: array, shape (n_age,)
+    lgmet_on_ssp_ages : array, shape (n_age,)
         log10(Z) metallicity at each SSP lookback age (absolute, not Z/Zsun),
         sorted ascending by age (youngest = index 0).
-    ssp_ages_yr: array, shape (n_age,)
+    ssp_ages_yr : array, shape (n_age,)
         SSP lookback ages in years (ascending).
-    ssp_lgmet: array, shape (n_met,)
+    ssp_lgmet : array, shape (n_met,)
         log10(Z) metallicity grid of the SSP library (absolute).
-    ssp_lg_age_gyr: array, shape (n_age,)
+    ssp_lg_age_gyr : array, shape (n_age,)
         log10(age/Gyr) of SSP templates.
-    ssp_flux: array, shape (n_met, n_age, n_wave)
+    ssp_flux : array, shape (n_met, n_age, n_wave)
         SSP spectra in Lsun/Hz/Msun.
-    t_obs_gyr: float
+    t_obs_gyr : float
         Age of the universe in Gyr at the observation redshift.
-    lgmet_scatter: float, optional
+    lgmet_scatter : float, optional
         Gaussian scatter in log10(Z) per age bin (dex). Default 0.2 dex.
 
     Returns
     -------
-    age_weights_msun: array, shape (n_age,)
+    age_weights_msun : array, shape (n_age,)
         Mass formed per SSP age bin (Msun), ascending by age (youngest first).
-    ssp_flux_at_z: array, shape (n_age, n_wave)
+    ssp_flux_at_z : array, shape (n_age, n_wave)
         SSP flux marginalized over the per-age metallicity distribution
         (Lsun/Hz/Msun), ascending by age.
 
@@ -1383,17 +1383,17 @@ def compute_csp_weights(
 
     Parameters
     ----------
-    sfr_on_ssp_ages: array, shape (n_age,)
+    sfr_on_ssp_ages : array, shape (n_age,)
         Star formation rate at each SSP age [Msun/yr].
-    ssp_ages_yr: array, shape (n_age,)
+    ssp_ages_yr : array, shape (n_age,)
         SSP ages [yr], sorted ascending.
-    method: {"trapz", "log_trapz", "log_interp"}
+    method : {"trapz", "log_trapz", "log_interp"}
         Integration method. See :func:`csp_age_dt` for details.
         Default ``"trapz"`` is the DSPS-compatible linear-age trapezoid rule.
         ``"log_trapz"`` applies the log-age Jacobian.
         ``"log_interp"`` uses Johnson+2021 log-linear interpolation (matrix
         multiply); requires ``_log_interp_matrix`` to be supplied.
-    _log_interp_matrix: array, shape (n_age, n_age), optional
+    _log_interp_matrix : array, shape (n_age, n_age), optional
         Precomputed weight matrix from :func:`csp_log_interp_matrix`.
         Required when ``method="log_interp"``.
 
@@ -1445,9 +1445,9 @@ def salaris_mh_from_feh(feh: float, alpha_fe: float) -> float:
 
     Parameters
     ----------
-    feh: float
+    feh : float
         Iron abundance [Fe/H] (relative to solar, dimensionless).
-    alpha_fe: float
+    alpha_fe : float
         Alpha-element enhancement [α/Fe] (relative to solar, dimensionless).
 
     Returns
@@ -1486,9 +1486,9 @@ def salaris_feh_from_mh(mh: float, alpha_fe: float) -> float:
 
     Parameters
     ----------
-    mh: float
+    mh : float
         Total metallicity [M/H] (relative to solar, dimensionless).
-    alpha_fe: float
+    alpha_fe : float
         Alpha-element enhancement [α/Fe] (relative to solar, dimensionless).
 
     Returns
@@ -1526,10 +1526,10 @@ def effective_metallicity(log_z_fe: float, alpha_fe: float = 0.0) -> float:
 
     Parameters
     ----------
-    log_z_fe: float
+    log_z_fe : float
         Iron abundance [Fe/H] (equivalently, log10(Z/Zsun) when
         ``alpha_fe = 0``). [dex]
-    alpha_fe: float, optional
+    alpha_fe : float, optional
         Alpha-element enhancement [alpha/Fe] relative to solar.
         Default 0.0 (solar abundance ratios). [dex]
 
@@ -1582,7 +1582,7 @@ def has_alpha_grid(ssp_data: SSPData) -> bool:
 
     Parameters
     ----------
-    ssp_data: SSPData
+    ssp_data : SSPData
         Loaded SSP template data.
 
     Returns
@@ -1621,11 +1621,11 @@ def interpolate_alpha_only(
 
     Parameters
     ----------
-    ssp_flux: array, shape (n_met, n_alpha, n_age, n_wave)
+    ssp_flux : array, shape (n_met, n_alpha, n_age, n_wave)
         SSP flux on the full 4D (Z, [α/Fe]) grid. [Lsun/Hz/Msun]
-    ssp_alpha_fe: array, shape (n_alpha,)
+    ssp_alpha_fe : array, shape (n_alpha,)
         [α/Fe] grid values, relative to solar.
-    alpha_fe: float
+    alpha_fe : float
         Target [α/Fe] (dimensionless, relative to solar). Clipped to
         the grid bounds before interpolation.
 
@@ -1667,17 +1667,17 @@ def interpolate_met_alpha(
 
     Parameters
     ----------
-    ssp_flux: array, shape (n_met, n_alpha, n_age, n_wave)
+    ssp_flux : array, shape (n_met, n_alpha, n_age, n_wave)
         SSP flux [Lsun/Hz/Msun] on the full (Z, [α/Fe]) grid.
-    ssp_lgmet: array, shape (n_met,)
+    ssp_lgmet : array, shape (n_met,)
         [Fe/H] iron abundance grid (log10 relative to solar, dimensionless).
         All source libraries must be converted to [Fe/H] at load time.
-    ssp_alpha_fe: array, shape (n_alpha,)
+    ssp_alpha_fe : array, shape (n_alpha,)
         [α/Fe] grid values (relative to solar, dimensionless;
         e.g., [-0.2, 0.0, +0.2, +0.4, +0.6]).
-    log_z: float
+    log_z : float
         Target [Fe/H] (iron abundance, log10 relative to solar).
-    alpha_fe: float
+    alpha_fe : float
         Target [α/Fe] (relative to solar, dimensionless).
 
     Returns
@@ -1726,15 +1726,15 @@ def interpolate_met_alpha_evolving(
 
     Parameters
     ----------
-    ssp_flux: array, shape (n_met, n_alpha, n_age, n_wave)
+    ssp_flux : array, shape (n_met, n_alpha, n_age, n_wave)
         SSP flux [Lsun/Hz/Msun] on the full (Z, [α/Fe]) grid.
-    ssp_lgmet: array, shape (n_met,)
+    ssp_lgmet : array, shape (n_met,)
         [Fe/H] iron abundance grid (log10 relative to solar, dimensionless).
-    ssp_alpha_fe: array, shape (n_alpha,)
+    ssp_alpha_fe : array, shape (n_alpha,)
         [α/Fe] grid values (relative to solar, dimensionless).
-    log_z_per_age: array, shape (n_age,)
+    log_z_per_age : array, shape (n_age,)
         Target [Fe/H] at each SSP age bin (dimensionless).
-    alpha_fe_per_age: array, shape (n_age,)
+    alpha_fe_per_age : array, shape (n_age,)
         Target [α/Fe] at each SSP age bin (relative to solar, dimensionless).
 
     Returns
@@ -1791,15 +1791,15 @@ def compute_alpha_fe_evolving(
 
     Parameters
     ----------
-    ssp_lg_age_gyr: array, shape (n_age,)
+    ssp_lg_age_gyr : array, shape (n_age,)
         Log10(age [Gyr]) of SSP templates (= lookback time for SSP bins).
-    alpha_fe_old: float
+    alpha_fe_old : float
         [α/Fe] of the oldest stars (at t_lookback = t_universe, dimensionless).
         Typically +0.3 to +0.5 for massive ellipticals.
-    alpha_fe_young: float
+    alpha_fe_young : float
         [α/Fe] at present day (t_lookback ≈ 0, dimensionless).
         Typically ~0.0 (solar) for disk galaxies.
-    t_universe_gyr: float
+    t_universe_gyr : float
         Age of the universe at the observed redshift [Gyr].
 
     Returns
@@ -1834,11 +1834,11 @@ def compute_csp_sed(
 
     Parameters
     ----------
-    weights: array, shape (n_age,)
+    weights : array, shape (n_age,)
         Mass formed per age bin [Msun] from :func:`compute_csp_weights`.
-    ssp_flux_at_met: array, shape (n_age, n_wave)
+    ssp_flux_at_met : array, shape (n_age, n_wave)
         SSP spectra at fixed metallicity [Lsun/Hz/Msun].
-    dust_attenuation: array, shape (n_age, n_wave)
+    dust_attenuation : array, shape (n_age, n_wave)
         Multiplicative dust transmission per age and wavelength
         (dimensionless, in [0, 1]).
 
@@ -1869,11 +1869,11 @@ def interpolate_metallicity(
 
     Parameters
     ----------
-    ssp_flux: array_like, shape (n_met, n_age, n_wave)
+    ssp_flux : array_like, shape (n_met, n_age, n_wave)
         Full SSP flux grid. [Lsun/Hz/Msun]
-    ssp_lgmet: array_like, shape (n_met,)
+    ssp_lgmet : array_like, shape (n_met,)
         log10(Z/Zsun) grid points. [dimensionless]
-    log_z: float
+    log_z : float
         Target metallicity log10(Z/Zsun). Values outside the grid
         bounds are clamped to ``[ssp_lgmet[0], ssp_lgmet[-1]]``. [dimensionless]
 
@@ -1977,11 +1977,11 @@ def compute_lgmet_weights(log_z, ssp_lgmet, lgmet_scatter=0.1):
 
     Parameters
     ----------
-    log_z: float
+    log_z : float
         Target log10(Z/Zsun) (dimensionless).
-    ssp_lgmet: array, shape (n_met,)
+    ssp_lgmet : array, shape (n_met,)
         SSP metallicity grid [log10(Z/Zsun)], sorted ascending.
-    lgmet_scatter: float
+    lgmet_scatter : float
         Kernel bandwidth [dex]. DSPS default: 0.1.
 
     Returns
@@ -2022,13 +2022,13 @@ def interpolate_metallicity_smooth(ssp_flux, ssp_lgmet, log_z, lgmet_scatter=0.1
 
     Parameters
     ----------
-    ssp_flux: array, shape (n_met, n_age, n_wave)
+    ssp_flux : array, shape (n_met, n_age, n_wave)
         Full SSP flux grid [Lsun/Hz/Msun].
-    ssp_lgmet: array, shape (n_met,)
+    ssp_lgmet : array, shape (n_met,)
         SSP metallicity grid [log10(Z/Zsun)], sorted ascending.
-    log_z: float
+    log_z : float
         Target log10(Z/Zsun).
-    lgmet_scatter: float
+    lgmet_scatter : float
         Kernel bandwidth [dex]. Default 0.1.
 
     Returns
@@ -2052,13 +2052,13 @@ def interpolate_metallicity_smooth_evolving(ssp_flux, ssp_lgmet, log_z_per_age, 
 
     Parameters
     ----------
-    ssp_flux: array, shape (n_met, n_age, n_wave)
+    ssp_flux : array, shape (n_met, n_age, n_wave)
         Full SSP flux grid [Lsun/Hz/Msun].
-    ssp_lgmet: array, shape (n_met,)
+    ssp_lgmet : array, shape (n_met,)
         SSP metallicity grid [log10(Z/Zsun)], sorted ascending.
-    log_z_per_age: array, shape (n_age,)
+    log_z_per_age : array, shape (n_age,)
         Target log10(Z/Zsun) at each SSP age bin (dimensionless).
-    lgmet_scatter: float
+    lgmet_scatter : float
         Kernel bandwidth [dex]. Default 0.1.
 
     Returns
@@ -2091,13 +2091,13 @@ def interpolate_mass_remaining_smooth(ssp_mass_remaining, ssp_lgmet, log_z, lgme
 
     Parameters
     ----------
-    ssp_mass_remaining: array, shape (n_met, n_age)
+    ssp_mass_remaining : array, shape (n_met, n_age)
         Surviving mass fraction per metallicity and age (dimensionless, in [0, 1]).
-    ssp_lgmet: array, shape (n_met,)
+    ssp_lgmet : array, shape (n_met,)
         SSP metallicity grid [log10(Z/Zsun)], sorted ascending.
-    log_z: float
+    log_z : float
         Target log10(Z/Zsun).
-    lgmet_scatter: float
+    lgmet_scatter : float
         Kernel bandwidth [dex]. Default 0.1.
 
     Returns
@@ -2128,11 +2128,11 @@ def interpolate_metallicity_evolving(
 
     Parameters
     ----------
-    ssp_flux: array, shape (n_met, n_age, n_wave)
+    ssp_flux : array, shape (n_met, n_age, n_wave)
         Full SSP flux grid [Lsun/Hz/Msun].
-    ssp_lgmet: array, shape (n_met,)
+    ssp_lgmet : array, shape (n_met,)
         Log10(Z/Zsun) grid (dimensionless), sorted ascending.
-    log_z_per_age: array, shape (n_age,)
+    log_z_per_age : array, shape (n_age,)
         Target log10(Z/Zsun) at each age bin (dimensionless).
 
     Returns
@@ -2152,9 +2152,9 @@ def interpolate_metallicity_evolving(
 
         Parameters
         ----------
-        log_z_i: scalar
+        log_z_i : scalar
             Target log10(Z/Zsun) for this age bin.
-        ssp_flux_at_age_i: array, shape (n_met, n_wave)
+        ssp_flux_at_age_i : array, shape (n_met, n_wave)
             SSP flux at all metallicities for this age bin.
 
         Returns
@@ -2188,11 +2188,11 @@ def interpolate_mass_remaining_evolving(
 
     Parameters
     ----------
-    ssp_mass_remaining: array, shape (n_met, n_age)
+    ssp_mass_remaining : array, shape (n_met, n_age)
         Surviving mass fraction per metallicity and age (dimensionless, in [0, 1]).
-    ssp_lgmet: array, shape (n_met,)
+    ssp_lgmet : array, shape (n_met,)
         Log10(Z/Zsun) grid (dimensionless), sorted ascending.
-    log_z_per_age: array, shape (n_age,)
+    log_z_per_age : array, shape (n_age,)
         Target log10(Z/Zsun) at each age bin (dimensionless).
 
     Returns
@@ -2243,14 +2243,14 @@ def compute_log_z_evolving(
 
     Parameters
     ----------
-    ssp_lg_age_gyr: array, shape (n_age,)
+    ssp_lg_age_gyr : array, shape (n_age,)
         Log10(age [Gyr]) of SSP templates (= lookback time for SSP bins).
-    log_z_initial: float
+    log_z_initial : float
         Metallicity of the oldest stars (at t_lookback = t_universe),
         in log10(Z/Zsun) (dimensionless).
-    log_z_final: float
+    log_z_final : float
         Metallicity at present day (t_lookback = 0) [log10(Z/Zsun)].
-    t_universe_gyr: float
+    t_universe_gyr : float
         Age of the universe at the observed redshift [Gyr].
 
     Returns
@@ -2278,11 +2278,11 @@ def interpolate_mass_remaining(
 
     Parameters
     ----------
-    ssp_mass_remaining: array, shape (n_met, n_age)
+    ssp_mass_remaining : array, shape (n_met, n_age)
         Surviving mass fraction per metallicity and age (dimensionless, in [0, 1]).
-    ssp_lgmet: array, shape (n_met,)
+    ssp_lgmet : array, shape (n_met,)
         Log10(Z/Zsun) grid (dimensionless), sorted ascending.
-    log_z: float
+    log_z : float
         Target log10(Z/Zsun).
 
     Returns
@@ -2309,9 +2309,9 @@ def compute_surviving_mass(weights: jnp.ndarray, mass_remaining_at_met: jnp.ndar
 
     Parameters
     ----------
-    weights: array, shape (n_age,)
+    weights : array, shape (n_age,)
         Mass formed per age bin [Msun] from :func:`compute_csp_weights`.
-    mass_remaining_at_met: array, shape (n_age,)
+    mass_remaining_at_met : array, shape (n_age,)
         Fraction of formed mass surviving at each age (dimensionless, in [0, 1])
         from :func:`interpolate_mass_remaining`.
 
@@ -2359,16 +2359,16 @@ def predict_surviving_mass(
 
     Parameters
     ----------
-    sfr: array_like, shape (n_lb,)
+    sfr : array_like, shape (n_lb,)
         SFR on the lookback grid [Msun/yr]. Typically the output of one of
         the parametric SFH callables (e.g. ``tau(t, log_total_mass=10.0, …)``).
-    t_lookback_yr: array_like, shape (n_lb,)
+    t_lookback_yr : array_like, shape (n_lb,)
         Lookback time grid [yr], ascending.
-    ssp: SSPData
+    ssp : SSPData
         SSP container with populated ``ssp_mass_remaining`` (n_met, n_age)
         and ``ssp_lg_age_gyr``, ``ssp_lgmet`` axes. Raises if
         ``ssp_mass_remaining`` is ``None``.
-    log_z_zsun: float, optional
+    log_z_zsun : float, optional
         Metallicity at which to evaluate the surviving-mass fraction,
         :math:`\\log_{10}(Z/Z_\\odot)`. Default 0.0 (solar). Add
         :data:`tengri.utils.physics_constants.LOG10_ZSUN` if you have
@@ -2405,8 +2405,8 @@ def predict_surviving_mass(
 
     See Also
     --------
-    compute_surviving_mass: low-level helper that takes pre-computed weights.
-    interpolate_mass_remaining: metallicity interpolation used internally.
+    compute_surviving_mass : low-level helper that takes pre-computed weights.
+    interpolate_mass_remaining : metallicity interpolation used internally.
 
     """
     if ssp.ssp_mass_remaining is None:

@@ -25,14 +25,14 @@ def setup_jax(
 
     Parameters
     ----------
-    platform: str, optional
+    platform : str, optional
         Force platform: "cpu", "gpu", "tpu". If None, auto-detect.
-    enable_x64: bool
+    enable_x64 : bool
         Enable 64-bit precision (recommended for SED fitting).
-    gpu_memory_fraction: float, optional
+    gpu_memory_fraction : float, optional
         Fraction of GPU memory to use (0-1). If None, use JAX default.
         Set to e.g. 0.8 to leave room for other processes.
-    preallocate_gpu: bool
+    preallocate_gpu : bool
         If True, pre-allocate all GPU memory at startup (faster but greedy).
         If False (default), allocate on demand (better for shared GPUs).
 
@@ -158,7 +158,7 @@ def get_n_parallel_chains(memory_per_chain_mb: float = 50.0) -> int:
 
     Parameters
     ----------
-    memory_per_chain_mb: float
+    memory_per_chain_mb : float
         Estimated memory per chain (MB). Depends on model complexity.
         Default 50 MB is conservative for a 12-param photometry model.
 

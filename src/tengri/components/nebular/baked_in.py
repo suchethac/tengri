@@ -37,18 +37,18 @@ class BakedInBackend:
 
     Parameters
     ----------
-    ionizing_source_warning: str, optional
+    ionizing_source_warning : str, optional
         Verbosity control for the fixed-nebular limitation warning. One of
         'raise' (raise ValueError), 'warn' (emit UserWarning), or 'suppress'
         (silent). Default: 'warn'.
 
     Attributes
     ----------
-    has_continuum: bool
+    has_continuum : bool
         True: continuum is baked into the SSP.
-    has_free_params: bool
+    has_free_params : bool
         False: ionization parameter and escape fraction are fixed.
-    name: str
+    name : str
         Identifier "baked_in".
 
     Notes
@@ -67,7 +67,7 @@ class BakedInBackend:
 
         Parameters
         ----------
-        ionizing_source_warning: str, optional
+        ionizing_source_warning : str, optional
             Verbosity control. Default: "warn".
 
         """
@@ -107,11 +107,11 @@ class BakedInBackend:
 
         Parameters
         ----------
-        ssp_weights: array, shape (n_age,) or (n_met, n_age)
+        ssp_weights : array, shape (n_age,) or (n_met, n_age)
             CSP mass weights (unused).
-        ssp_wave: array, shape (n_wave,)
+        ssp_wave : array, shape (n_wave,)
             Wavelength grid [Angstrom].
-        log_z: float
+        log_z : float
             Stellar metallicity (unused) [log10(Z)].
         **neb_params
             Additional nebular parameters (all unused).
@@ -138,18 +138,18 @@ class BakedInBackend:
 
         Parameters
         ----------
-        ssp_weights: array, shape (n_age,) or (n_met, n_age)
+        ssp_weights : array, shape (n_age,) or (n_met, n_age)
             CSP mass weights (unused).
-        log_z: float
+        log_z : float
             Stellar metallicity (unused) [log10(Z)].
         **neb_params
             Additional nebular parameters (all unused).
 
         Returns
         -------
-        wavelengths: array, shape (0,)
+        wavelengths : array, shape (0,)
             Empty array [Angstrom].
-        luminosities: array, shape (0,)
+        luminosities : array, shape (0,)
             Empty array [erg/s].
 
         References

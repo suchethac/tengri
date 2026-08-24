@@ -49,9 +49,9 @@ def log_age_grid_step(
 
     Parameters
     ----------
-    n_grid: int
+    n_grid : int
         Number of grid points (must be ≥ 2).
-    log_age_min, log_age_max: float, optional
+    log_age_min, log_age_max : float, optional
         Grid bounds; default to :data:`LOG_AGE_MIN` / :data:`LOG_AGE_MAX`.
 
     Returns
@@ -79,12 +79,12 @@ def gp_from_xi(xi: jnp.ndarray, sqrt_power: jnp.ndarray, n_points: int) -> jnp.n
 
     Parameters
     ----------
-    xi: array_like, shape (n_points,)
+    xi : array_like, shape (n_points,)
         Standardized latent vector :math:`\xi \sim \mathcal{N}(0, I)` under the prior.
-    sqrt_power: array_like, shape (n_freq,)
+    sqrt_power : array_like, shape (n_freq,)
         Amplitude operator :math:`\sqrt{P(\omega) / d_{\rm grid}}` at rfft frequencies
         (pre-compute with :func:`psd_to_sqrt_power`). [dimensionless]
-    n_points: int
+    n_points : int
         Number of grid points (should match the length of xi).
 
     Returns
@@ -169,20 +169,20 @@ def drw_linear_gp_from_xi(xi, psd_sigma_dex, psd_tau_yr, log_age_grid):
 
     Parameters
     ----------
-    xi: array_like, shape (n,)
+    xi : array_like, shape (n,)
         Standardized latent vector, :math:`\xi \sim \mathcal{N}(0, I)`.
-    psd_sigma_dex: float
+    psd_sigma_dex : float
         Modulation amplitude [dex] = std of :math:`\log_{10}(\mathrm{SFR})`.
-    psd_tau_yr: float
+    psd_tau_yr : float
         Physical DRW decorrelation timescale [yr].
-    log_age_grid: array_like, shape (n,)
+    log_age_grid : array_like, shape (n,)
         ``log10(age/yr)`` grid the SFH is represented on.
 
     Returns
     -------
-    gp_x: ndarray, shape (n,)
+    gp_x : ndarray, shape (n,)
         Natural-log SFH modulation (applied as ``exp(gp_x - k0_half)``).
-    k0_half: ndarray, scalar
+    k0_half : ndarray, scalar
         Log-normal bias correction :math:`(\sigma \ln 10)^2 / 2`.
 
     Notes
@@ -259,22 +259,22 @@ def drw_innovations_gp_from_xi(xi, psd_sigma_dex, psd_tau_yr, log_age_grid):
 
     Parameters
     ----------
-    xi: array_like, shape (n,)
+    xi : array_like, shape (n,)
         Standardized latent vector, :math:`\xi \sim \mathcal{N}(0, I)`.
-    psd_sigma_dex: float
+    psd_sigma_dex : float
         Modulation amplitude [dex] = std of :math:`\log_{10}(\mathrm{SFR})`.
-    psd_tau_yr: float
+    psd_tau_yr : float
         Physical DRW decorrelation timescale [yr].
-    log_age_grid: array_like, shape (n,)
+    log_age_grid : array_like, shape (n,)
         ``log10(age/yr)`` grid the SFH is represented on. Monotone: ascending is
         canonical, descending is equally valid (see above). A **non-monotone** grid
         has no DRW square root and the result is meaningless, though bounded.
 
     Returns
     -------
-    gp_x: ndarray, shape (n,)
+    gp_x : ndarray, shape (n,)
         Natural-log SFH modulation (applied as ``exp(gp_x - k0_half)``).
-    k0_half: ndarray, scalar
+    k0_half : ndarray, scalar
         Log-normal bias correction :math:`(\sigma \ln 10)^2 / 2`.
 
     Notes
@@ -357,17 +357,17 @@ def drw_unit_gp_from_xi(xi, psd_tau_yr, log_age_grid):
 
     Parameters
     ----------
-    xi: array_like, shape (n,)
+    xi : array_like, shape (n,)
         Standardized latent vector, :math:`\xi \sim \mathcal{N}(0, I)`.
-    psd_tau_yr: float
+    psd_tau_yr : float
         Damping timescale [yr].
-    log_age_grid: array_like, shape (n,)
+    log_age_grid : array_like, shape (n,)
         ``log10(age/yr)`` grid, monotone (either direction: see
         :func:`drw_innovations_gp_from_xi`).
 
     Returns
     -------
-    u: ndarray, shape (n,)
+    u : ndarray, shape (n,)
         Unit-variance correlated field [dimensionless]; ``diag(Cov(u)) == 1``.
 
     Notes
@@ -434,25 +434,25 @@ def drw_partial_gp_from_zeta(zeta, psd_sigma_dex, psd_tau_yr, log_age_grid, cent
 
     Parameters
     ----------
-    zeta: array_like, shape (n,)
+    zeta : array_like, shape (n,)
         Latent vector. Its prior is :math:`\mathcal{N}(0, \sigma_s^{2-2a} I)`: **not**
         :math:`\mathcal{N}(0, I)` unless ``centering == 1``. Pair it with
         :func:`drw_latent_log_prior`.
-    psd_sigma_dex: float
+    psd_sigma_dex : float
         Modulation amplitude :math:`\sigma` [dex].
-    psd_tau_yr: float
+    psd_tau_yr : float
         Damping timescale [yr].
-    log_age_grid: array_like, shape (n,)
+    log_age_grid : array_like, shape (n,)
         ``log10(age/yr)`` grid, monotone.
-    centering: float, optional
+    centering : float, optional
         Exponent :math:`a \in [0, 1]`. Default ``1.0``: today's non-centered field,
         reproduced through the original code path so the result is unchanged.
 
     Returns
     -------
-    gp_x: ndarray, shape (n,)
+    gp_x : ndarray, shape (n,)
         Correlated log-SFR modulation [natural log units].
-    k0_over_2: float
+    k0_over_2 : float
         Log-normal bias correction :math:`K(0)/2 = \sigma_s^2 / 2`. Independent of
         ``a``, since the marginal variance is.
 
@@ -505,16 +505,16 @@ def drw_latent_log_prior(zeta, psd_sigma_dex, centering=1.0):
 
     Parameters
     ----------
-    zeta: array_like, shape (n,)
+    zeta : array_like, shape (n,)
         Latent vector from :func:`drw_partial_gp_from_zeta`.
-    psd_sigma_dex: float
+    psd_sigma_dex : float
         Modulation amplitude :math:`\sigma` [dex].
-    centering: float, optional
+    centering : float, optional
         Exponent :math:`a \in [0, 1]`. Default ``1.0``.
 
     Returns
     -------
-    log_prior: float
+    log_prior : float
         Log-density [nats], **fully normalized**.
 
     Notes
@@ -550,12 +550,12 @@ def generate_gp_fourier(key: jax.Array, sqrt_power: jnp.ndarray, n_points: int) 
 
     Parameters
     ----------
-    key: jax.random.PRNGKey
+    key : jax.random.PRNGKey
         JAX random key for reproducibility.
-    sqrt_power: array_like, shape (n_freq,)
+    sqrt_power : array_like, shape (n_freq,)
         Amplitude operator :math:`\sqrt{P(\omega) / d_{\rm grid}}` at rfft frequencies
         (pre-compute with :func:`psd_to_sqrt_power`). [dimensionless]
-    n_points: int
+    n_points : int
         Number of grid points.
 
     Returns
@@ -573,8 +573,8 @@ def generate_gp_fourier(key: jax.Array, sqrt_power: jnp.ndarray, n_points: int) 
 
     See Also
     --------
-    gp_from_xi: Deterministic GP mapping (used internally).
-    generate_gp_batch: Generate multiple independent realizations.
+    gp_from_xi : Deterministic GP mapping (used internally).
+    generate_gp_batch : Generate multiple independent realizations.
 
     Examples
     --------
@@ -602,14 +602,14 @@ def generate_gp_batch(
 
     Parameters
     ----------
-    key: jax.random.PRNGKey
+    key : jax.random.PRNGKey
         JAX random key (will be split into n_realizations independent keys).
-    sqrt_power: array_like, shape (n_freq,)
+    sqrt_power : array_like, shape (n_freq,)
         Amplitude operator :math:`\sqrt{P(\omega) / d_{\rm grid}}` at rfft frequencies.
         [dimensionless]
-    n_points: int
+    n_points : int
         Number of grid points.
-    n_realizations: int
+    n_realizations : int
         Number of independent realizations to generate.
 
     Returns
@@ -627,7 +627,7 @@ def generate_gp_batch(
 
     See Also
     --------
-    generate_gp_fourier: Single realization.
+    generate_gp_fourier : Single realization.
 
     Examples
     --------
@@ -657,15 +657,15 @@ def compute_sqrt_power_drw(
 
     Parameters
     ----------
-    n_points: int
+    n_points : int
         Grid size (number of age samples).
-    d_log_age: float
+    d_log_age : float
         Grid spacing in dex [dimensionless].
-    psd_sigma: float
+    psd_sigma : float
         DRW PSD amplitude [dimensionless].
-    psd_tau_yr: float
+    psd_tau_yr : float
         DRW damping timescale [yr].
-    log_age_ref: float, optional
+    log_age_ref : float, optional
         Reference log10(age/yr) for Jacobian correction. Default: 8.0 (100 Myr).
 
     Returns

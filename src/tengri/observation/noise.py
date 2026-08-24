@@ -70,12 +70,12 @@ def compute_effective_noise(
 
     Parameters
     ----------
-    noise_obs: array, shape (n_bands,)
+    noise_obs : array, shape (n_bands,)
         Observed 1-sigma uncertainties [flux units].
-    model_flux: array, shape (n_bands,)
+    model_flux : array, shape (n_bands,)
         Model-predicted fluxes [flux units] (absolute value used for
         calibration term).
-    f_cal: float or array, shape (n_bands,)
+    f_cal : float or array, shape (n_bands,)
         Fractional calibration uncertainty [dimensionless].
         A scalar applies the same floor to all bands. An array applies
         a per-band floor; shape must match ``noise_obs`` and ``model_flux``.
@@ -135,11 +135,11 @@ def compute_std_inv(
 
     Parameters
     ----------
-    noise_obs: array, shape (n_bands,)
+    noise_obs : array, shape (n_bands,)
         Observed 1-sigma uncertainties [flux units].
-    model_flux: array, shape (n_bands,)
+    model_flux : array, shape (n_bands,)
         Model-predicted fluxes [flux units].
-    f_cal: float or scalar array
+    f_cal : float or scalar array
         Fractional calibration uncertainty [dimensionless].
 
     Returns
@@ -178,7 +178,7 @@ def has_noise_model(spec) -> bool:
 
     Parameters
     ----------
-    spec: Parameters
+    spec : Parameters
         Parameter specification.
 
     Returns
@@ -223,7 +223,7 @@ def get_noise_dof(spec) -> float | None:
 
     Parameters
     ----------
-    spec: Parameters
+    spec : Parameters
         Parameter specification.
 
     Returns
@@ -260,7 +260,7 @@ def uses_student_t(spec) -> bool:
 
     Parameters
     ----------
-    spec: Parameters
+    spec : Parameters
         Parameter specification.
 
     Returns
@@ -324,20 +324,20 @@ def censored_neg_log_likelihood(
 
     Parameters
     ----------
-    data: array, shape (n_bands,)
+    data : array, shape (n_bands,)
         Observed fluxes [flux units]. For censored bands, this holds the
         limit value.
-    noise_obs: array, shape (n_bands,)
+    noise_obs : array, shape (n_bands,)
         Observed 1-sigma uncertainties [flux units].
-    predicted: array, shape (n_bands,)
+    predicted : array, shape (n_bands,)
         Model-predicted fluxes [flux units].
-    mask: array, shape (n_bands,)
+    mask : array, shape (n_bands,)
         Per-band type: 0 = detected, 1 = upper limit, -1 = lower limit
         [dimensionless].
-    f_cal: float or scalar array
+    f_cal : float or scalar array
         Fractional calibration uncertainty (applied to detected bands
         only) [dimensionless]. Default 0.0.
-    dof: float or None
+    dof : float or None
         Student-t degrees of freedom for detected bands. None = Gaussian
         (default).
 
@@ -414,15 +414,15 @@ def variable_noise_hamiltonian(
 
     Parameters
     ----------
-    data: array, shape (n_bands,)
+    data : array, shape (n_bands,)
         Observed fluxes [flux units].
-    noise_obs: array, shape (n_bands,)
+    noise_obs : array, shape (n_bands,)
         Observed 1-sigma uncertainties [flux units].
-    predicted: array, shape (n_bands,)
+    predicted : array, shape (n_bands,)
         Model-predicted fluxes [flux units].
-    f_cal: float or scalar array
+    f_cal : float or scalar array
         Fractional calibration uncertainty [dimensionless].
-    dof: float or None
+    dof : float or None
         Student-t degrees of freedom. None = Gaussian (default).
         Typical values: 2 (heavy tails, Alsing+2022), 4 (moderate).
 
@@ -487,17 +487,17 @@ def variable_noise_metric_vec(
 
     Parameters
     ----------
-    xi: array, shape (n_latent,)
+    xi : array, shape (n_latent,)
         Flattened latent parameters.
-    v: array, shape (n_latent,)
+    v : array, shape (n_latent,)
         Vector to multiply.
-    signal_noise_fn: callable
+    signal_noise_fn : callable
         Maps primals dict → (predicted, std_inv) tuple.
-    data: array, shape (n_bands,)
+    data : array, shape (n_bands,)
         Observed data.
-    unflatten: callable
+    unflatten : callable
         xi flat array → dict.
-    flatten: callable
+    flatten : callable
         dict → xi flat array.
 
     Returns
@@ -579,19 +579,19 @@ def exp_squared_kernel(
 
     Parameters
     ----------
-    x: array, shape (n,)
+    x : array, shape (n,)
         Coordinate values [Angstrom] (or any real-valued coordinate).
-    amplitude: float or scalar array
+    amplitude : float or scalar array
         Kernel amplitude :math:`\sigma`. Controls overall variance.
-    length_scale: float or scalar array
+    length_scale : float or scalar array
         Kernel length scale :math:`\ell`. Controls correlation length.
-    x2: array, shape (m,), optional
+    x2 : array, shape (m,), optional
         Second set of coordinates for cross-covariance. If None,
         computes auto-covariance (x vs x).
 
     Returns
     -------
-    K: ndarray, shape (n, n) or (n, m)
+    K : ndarray, shape (n, n) or (n, m)
         Covariance matrix. If x2 is None, returns symmetric (n, n)
         auto-covariance; otherwise returns (n, m) cross-covariance.
 
@@ -636,19 +636,19 @@ def matern32_kernel(
 
     Parameters
     ----------
-    x: array, shape (n,)
+    x : array, shape (n,)
         Coordinate values [Angstrom] (or any real coordinate).
-    amplitude: float or scalar array
+    amplitude : float or scalar array
         Kernel amplitude :math:`\sigma`.
-    length_scale: float or scalar array
+    length_scale : float or scalar array
         Correlation length :math:`\ell`.
-    x2: array, shape (m,), optional
+    x2 : array, shape (m,), optional
         Second set of coordinates for cross-covariance. Defaults to ``x``
         (auto-covariance).
 
     Returns
     -------
-    K: ndarray, shape (n, n) or (n, m)
+    K : ndarray, shape (n, n) or (n, m)
 
     Notes
     -----
@@ -689,20 +689,20 @@ def gp_noise_covariance(
 
     Parameters
     ----------
-    wavelength: array, shape (n_wave,)
+    wavelength : array, shape (n_wave,)
         Wavelengths [Angstrom].
-    noise_obs: array, shape (n_wave,)
+    noise_obs : array, shape (n_wave,)
         Observed 1-sigma uncertainties [same units as flux].
-    gp_amplitude: float or scalar array
+    gp_amplitude : float or scalar array
         GP kernel amplitude. Dimensionless scaling of kernel.
-    gp_length_scale: float or scalar array
+    gp_length_scale : float or scalar array
         GP kernel length scale [Angstrom].
-    kernel: str, optional
+    kernel : str, optional
         Kernel type: "exp_squared" (default) or "matern32".
 
     Returns
     -------
-    N: ndarray, shape (n_wave, n_wave)
+    N : ndarray, shape (n_wave, n_wave)
         Covariance matrix :math:`N = \text{diag}(\sigma_{\text{obs}}^2) + K_{\text{gp}}`.
 
     Notes
@@ -762,11 +762,11 @@ def apply_zp_floor(
 
     Parameters
     ----------
-    flux: array_like, shape (n_bands,)
+    flux : array_like, shape (n_bands,)
         Observed flux density per band. [erg/s/cm^2/Hz]
-    noise: array_like, shape (n_bands,)
+    noise : array_like, shape (n_bands,)
         Statistical 1-sigma noise per band. Same units as ``flux``.
-    floor: float or array_like, shape (n_bands,)
+    floor : float or array_like, shape (n_bands,)
         Fractional ZP floor (e.g. ``0.02`` for 2%). Scalar applies
         the same floor to all bands; array gives per-band values.
         Must be non-negative.
@@ -848,24 +848,24 @@ class PoissonNoiseLikelihood:
 
     Parameters
     ----------
-    gain: float
+    gain : float
         CCD gain in electrons per ADU [e⁻/ADU]. Default 1.0 (pure Poisson
         in ADU counts).
-    sky_var: float
+    sky_var : float
         Background (sky + dark) variance in count space [counts²].
         Default 0.0.
-    read_noise: float
+    read_noise : float
         Read noise standard deviation in electrons [e⁻]. Default 0.0.
-    systematic_floor: float
+    systematic_floor : float
         Fractional flux-dependent systematic uncertainty added in quadrature
         [dimensionless]. Typical range: 0.01–0.05. Default 0.0.
 
     Attributes
     ----------
-    gain: float
-    sky_var: float
-    read_noise: float
-    systematic_floor: float
+    gain : float
+    sky_var : float
+    read_noise : float
+    systematic_floor : float
 
     Notes
     -----
@@ -903,14 +903,14 @@ class PoissonNoiseLikelihood:
 
         Parameters
         ----------
-        observed: array, shape (n_data,)
+        observed : array, shape (n_data,)
             Observed flux or counts [counts or flux units, depending on gain].
-        predicted: array, shape (n_data,)
+        predicted : array, shape (n_data,)
             Model-predicted flux [same units as observed].
 
         Returns
         -------
-        log_prob: array, shape (n_data,)
+        log_prob : array, shape (n_data,)
             Per-datum log-likelihood (likelihood, not log-likelihood energy).
             Caller is responsible for summing and negating for energy.
 
@@ -967,13 +967,13 @@ class StudentTLikelihood:
 
     Parameters
     ----------
-    dof: float
+    dof : float
         Degrees of freedom ν [dimensionless]. Default 4.0. Smaller values
         give heavier tails; ν=1 is Cauchy. Typical range: [1, 30].
 
     Attributes
     ----------
-    dof: float
+    dof : float
         Degrees of freedom.
 
     Notes
@@ -1014,18 +1014,18 @@ class StudentTLikelihood:
 
         Parameters
         ----------
-        observed: array, shape (n_data,)
+        observed : array, shape (n_data,)
             Observed values [arbitrary units].
-        predicted: array, shape (n_data,)
+        predicted : array, shape (n_data,)
             Model-predicted values [same units as observed].
-        sigma: array, shape (n_data,)
+        sigma : array, shape (n_data,)
             Noise standard deviation per datum [same units as observed].
             Typically computed via ``compute_effective_noise(...)`` or
             similar noise model.
 
         Returns
         -------
-        log_prob: array, shape (n_data,)
+        log_prob : array, shape (n_data,)
             Per-datum log-likelihood. Caller sums for total likelihood.
 
         Notes

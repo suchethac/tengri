@@ -98,22 +98,22 @@ def precompute(
 
     Parameters
     ----------
-    filter_waves: list[ndarray]
+    filter_waves : list[ndarray]
         Wavelength grid per filter [Angstrom], observed frame.
-    filter_trans: list[ndarray]
+    filter_trans : list[ndarray]
         Transmission per filter (0–1).
-    redshift: float
+    redshift : float
         Source redshift. [dimensionless]
-    parameters: Parameters or None
+    parameters : Parameters or None
         Parameters spec, used to detect Fixed-axis parameters.
-    filepath: str or Path, keyword-only
+    filepath : str or Path, keyword-only
         Path to ``cb19_templates.h5``. If None, defaults to
         ``data/cb19_templates.h5`` relative to package root.
-    sed_type: str, keyword-only
+    sed_type : str, keyword-only
         "SSP" (single stellar population, default) or "CSF" (constant SFR).
-    imf: str, keyword-only
+    imf : str, keyword-only
         "Kroupa01" (default) or "x030".
-    mup: float, keyword-only
+    mup : float, keyword-only
         Upper stellar mass limit (100.0 or 300.0 M_sun).
 
     Returns
@@ -270,18 +270,18 @@ def build_lookup(preint: dict, **kwargs: Any) -> dict:
 
         Parameters
         ----------
-        log_qh: float
+        log_qh : float
             log10(Q_H [photons/s]).
-        *free_axis_vals: tuple of float
+        *free_axis_vals : tuple of float
             Per remaining axis values (after collapse).
-        neb_fesc: float
+        neb_fesc : float
             Ionizing photon escape fraction [0, 1]. Default 0.0.
 
         Returns
         -------
-        wavelengths: ndarray, shape (n_lines,)
+        wavelengths : ndarray, shape (n_lines,)
             Line vacuum wavelengths [Angstrom].
-        luminosities: ndarray, shape (n_lines,)
+        luminosities : ndarray, shape (n_lines,)
             Line luminosities [L_sun], scaled by Q_H and escape fraction.
 
         """

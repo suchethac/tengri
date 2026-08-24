@@ -68,14 +68,14 @@ def synthesizer_default(
 
     Parameters
     ----------
-    redshift: float, default 1.0
+    redshift : float, default 1.0
         Source redshift (fixed, not fitted).
 
     Returns
     -------
-    config: SEDModelConfig
+    config : SEDModelConfig
         Frozen configuration encoding which physics modules are active.
-    params: Parameters
+    params : Parameters
         Default Parameters with priors matching synthesizer's fitting ranges
         (per docs/dev/synthesizer_parity.md Parameter Prefix Mapping).
 

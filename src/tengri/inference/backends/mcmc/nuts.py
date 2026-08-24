@@ -125,9 +125,9 @@ def _resolve_dense_mass_matrix(dense_mass_matrix: bool | None, n_dim: int) -> bo
 
     Parameters
     ----------
-    dense_mass_matrix: bool or None
+    dense_mass_matrix : bool or None
         ``None`` (auto), ``True`` (force dense), or ``False`` (force diagonal).
-    n_dim: int
+    n_dim : int
         Number of free parameters in the model.
 
     Returns
@@ -229,23 +229,23 @@ def run_nuts(
 
     Parameters
     ----------
-    init_from: str, Posterior, or None
+    init_from : str, Posterior, or None
         Initialization strategy. None (default) runs a quick MAP
         for warm-starting the chain. Pass a Posterior to start from
         a previous result.
-    n_warmup: int
+    n_warmup : int
         Warmup/adaptation steps (tunes step size and mass matrix).
         300 is sufficient for D≤15 with MAP init. Increase for
         high-D or difficult geometries.
-    n_burnin: int
+    n_burnin : int
         Post-warmup burn-in steps (discarded). Lets the chain forget
         the MAP initialization and reach the typical set. Set to 0
         if init_from is already a Posterior from a converged chain.
-    n_samples: int
+    n_samples : int
         Posterior samples per chain to collect. 1000 gives convergence
         for most SED fitting scenarios at D≤10. Increase if
         ``check_convergence()`` reports unconverged parameters.
-    n_chains: int, default 1
+    n_chains : int, default 1
         Number of independent NUTS chains to run in parallel via
         ``jax.vmap`` over chain seeds. Each chain shares the cached
         warmup adaptation (so this is only honored on the second
@@ -255,7 +255,7 @@ def run_nuts(
         ceiling (CPU SIMD; GPU/TPU scales further). Initial chain
         positions are MAP + small Gaussian jitter so the chains
         explore independent neighborhoods.
-    target_accept_rate: float
+    target_accept_rate : float
         Target acceptance rate for step size adaptation. 0.85 is
         slightly more conservative than the Stan default (0.8),
         reducing divergences in the SED degeneracy banana. Range
@@ -302,7 +302,7 @@ def run_nuts(
 
         Pass ``True`` or ``False`` explicitly to override. Explicit
         ``True`` at D >= 8 emits a memory warning but is honored.
-    pathfinder_warmstart: bool, default False
+    pathfinder_warmstart : bool, default False
         Use ``blackjax.pathfinder_adaptation`` (L-BFGS mode-finding +
         Hessian-derived inverse mass matrix + short step-size refinement)
         instead of the default window adaptation. Expected to be 3-10x
@@ -322,7 +322,7 @@ def run_nuts(
         - Zhang et al. 2022, "Pathfinder: Parallel quasi-Newton variational
           inference", JMLR 23, 306, arXiv:2108.03782.
 
-    precondition: bool, float or None, default None
+    precondition : bool, float or None, default None
         Sample in metric-whitened coordinates. **Opt-in** (#1397): ``None``
         (default) and ``False`` are off, a NaN MAP init makes the metric
         non-finite and turned working fits into hard errors, so the feature must
@@ -359,7 +359,7 @@ def run_nuts(
         difference is that NIFTy recomputes it every iteration while a
         Hamiltonian sampler needs one fixed metric for the whole chain.
 
-    verbose: bool
+    verbose : bool
         Print progress.
     """
     try:

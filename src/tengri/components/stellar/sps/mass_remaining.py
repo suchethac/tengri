@@ -75,7 +75,7 @@ def _chabrier_imf(log_m: jnp.ndarray) -> jnp.ndarray:
 
     Parameters
     ----------
-    log_m: array
+    log_m : array
         log10(m / Msun).
 
     Returns
@@ -148,7 +148,7 @@ def _ms_lifetime_gyr(mass: jnp.ndarray) -> jnp.ndarray:
 
     Parameters
     ----------
-    mass: array
+    mass : array
         Stellar mass in Msun.
 
     Returns
@@ -173,7 +173,7 @@ def _turnoff_mass(age_gyr: jnp.ndarray) -> jnp.ndarray:
 
     Parameters
     ----------
-    age_gyr: array
+    age_gyr : array
         Stellar population age in Gyr.
 
     Returns
@@ -212,7 +212,7 @@ def _remnant_mass(m_init: jnp.ndarray) -> jnp.ndarray:
 
     Parameters
     ----------
-    m_init: array
+    m_init : array
         Initial stellar mass in Msun.
 
     Returns
@@ -257,15 +257,15 @@ def compute_mass_remaining_fraction(
 
     Parameters
     ----------
-    age_gyr: array, shape (n_age,)
+    age_gyr : array, shape (n_age,)
         Population ages [Gyr], sorted ascending.
-    imf: str
+    imf : str
         IMF name: ``"chabrier"``, ``"salpeter"``, or ``"kroupa"``.
-    m_low: float
+    m_low : float
         Lower mass limit of the IMF [Msun]. Default 0.08.
-    m_high: float
+    m_high : float
         Upper mass limit of the IMF [Msun]. Default 120.
-    n_mass: int
+    n_mass : int
         Number of mass grid points for logarithmic integration. Default 500.
 
     Returns

@@ -64,13 +64,13 @@ class Property:
 
     Parameters
     ----------
-    units: str
+    units : str
         Physical units of the quantity (e.g., ``"Msun"``, ``"1/yr"``).
-    group: str
+    group : str
         Group name for related properties (e.g., ``"sfh"``, ``"sed"``).
-    doc: str
+    doc : str
         One-line description of the quantity.
-    fn: Callable
+    fn : Callable
         Pure function ``fn(state, params) -> scalar`` that reads
         ``state.derived[...]`` and returns a JAX scalar.
 
@@ -92,17 +92,17 @@ class PropertyEntry:
 
     Parameters
     ----------
-    name: str
+    name : str
         Canonical name of the property (e.g., ``"stellar_mass"``).
-    units: str
+    units : str
         Physical units (e.g., ``"Msun"``).
-    group: str
+    group : str
         Group name (e.g., ``"sfh"``).
-    doc: str
+    doc : str
         Short description.
-    component_name: str
+    component_name : str
         Name of the component that declared this property.
-    fn: Callable
+    fn : Callable
         Pure function ``fn(state, params) -> scalar``.
     """
 
@@ -121,9 +121,9 @@ def register_properties(component_name: str, props: dict[str, Property]) -> None
 
     Parameters
     ----------
-    component_name: str
+    component_name : str
         Name of the component (e.g., ``"stellar"``).
-    props: dict[str, Property]
+    props : dict[str, Property]
         Mapping of property name to :class:`Property` instance.
 
     Notes
@@ -157,7 +157,7 @@ def assemble_available_properties(active_component_names: set[str]) -> dict[str,
 
     Parameters
     ----------
-    active_component_names: set[str]
+    active_component_names : set[str]
         Set of component names present in the model
         (e.g., ``{"stellar", "dust", "neb"}``).
 
@@ -230,9 +230,9 @@ def missing_property_message(*names: str, available: dict | set | list) -> str:
 
     Parameters
     ----------
-    *names: str
+    *names : str
         The properties the caller asked for that could not be served.
-    available: dict | set | list
+    available : dict | set | list
         The names this model can compute.
 
     Returns
@@ -282,9 +282,9 @@ def warn_if_lines_are_unavailable(model, names) -> None:
 
     Parameters
     ----------
-    model: SEDModel
+    model : SEDModel
         The model whose nebular backend is inspected.
-    names: iterable of str
+    names : iterable of str
         Property names the caller asked for.
 
     Notes

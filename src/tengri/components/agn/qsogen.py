@@ -258,17 +258,17 @@ def _broken_powerlaw_continuum(
 
     Parameters
     ----------
-    wavelength: array, shape (n_wave,)
+    wavelength : array, shape (n_wave,)
         Rest-frame wavelength [Angstrom].
-    plslp1: float
+    plslp1 : float
         Blue f_nu spectral index. f_nu ~ nu^plslp1 = wavelength^(-plslp1).
-    plslp2: float
+    plslp2 : float
         Red f_nu spectral index.
-    plbrk: float
+    plbrk : float
         Break wavelength between blue and red [Angstrom].
-    plstep: float
+    plstep : float
         Extra steepening in the EUV below plbrk3. Default -1.0.
-    plbrk3: float
+    plbrk3 : float
         EUV break wavelength [Angstrom]. Default 1200.
 
     Returns
@@ -340,13 +340,13 @@ def _hot_dust_blackbody(
 
     Parameters
     ----------
-    wavelength: array, shape (n_wave,)
+    wavelength : array, shape (n_wave,)
         Rest-frame wavelength [Angstrom].
-    continuum_flam: array, shape (n_wave,)
+    continuum_flam : array, shape (n_wave,)
         Power-law continuum f_lambda (normalized at 5500 A).
-    tbb: float
+    tbb : float
         Hot dust temperature [K].
-    bbnorm: float
+    bbnorm : float
         Normalization: ratio of blackbody to continuum at 2 um.
 
     Returns
@@ -394,18 +394,18 @@ def _balmer_continuum(
 
     Parameters
     ----------
-    wavelength: array, shape (n_wave,)
+    wavelength : array, shape (n_wave,)
         Rest-frame wavelength [Angstrom].
-    continuum_flam: array, shape (n_wave,)
+    continuum_flam : array, shape (n_wave,)
         Power-law continuum (for normalization reference at 3000 A).
-    bcnorm: float
+    bcnorm : float
         Balmer continuum strength relative to power-law at 3000 A.
         Default 1.0 (from original qsogen).
-    tbc: float
+    tbc : float
         BC temperature [K]. Default 15000.
-    taube: float
+    taube : float
         Optical depth at Balmer edge. Default 1.0.
-    wavbe: float
+    wavbe : float
         Balmer edge wavelength [Angstrom]. Default 3646.
 
     Returns
@@ -477,15 +477,15 @@ def _empirical_emission_lines(
 
     Parameters
     ----------
-    wavelength: array, shape (n_wave,)
+    wavelength : array, shape (n_wave,)
         Rest-frame wavelength [Angstrom].
-    continuum_fnu: array, shape (n_wave,)
+    continuum_fnu : array, shape (n_wave,)
         Continuum f_nu (power-law + hot dust, normalized ~1 at 5500 A).
-    emline_scale: float
+    emline_scale : float
         Overall emission line strength multiplier (positive values scale
         line fluxes; negative values preserve EW ratios). Default usage
         is negative (EW-scaling), matching original qsogen.
-    m_i: float
+    m_i : float
         Absolute i-band magnitude (at z=2) for Baldwin effect scaling.
         Controls the ``emline_type`` parameter via ``beslope``.
 
@@ -556,11 +556,11 @@ def _apply_dust_reddening(
 
     Parameters
     ----------
-    wavelength: array, shape (n_wave,)
+    wavelength : array, shape (n_wave,)
         Rest-frame wavelength [Angstrom].
-    f_lam: array, shape (n_wave,)
+    f_lam : array, shape (n_wave,)
         Input spectrum (f_lambda).
-    ebv: float
+    ebv : float
         E(B-V) reddening [mag].
 
     Returns
@@ -588,7 +588,7 @@ def _lbol_to_m_i(log_lbol_lsun: float) -> float:
 
     Parameters
     ----------
-    log_lbol_lsun: float
+    log_lbol_lsun : float
         log10(L_bol / Lsun).
 
     Returns
@@ -715,33 +715,33 @@ def compute_qsogen_sed(
 
     Parameters
     ----------
-    wavelength: array, shape (n_wave,)
+    wavelength : array, shape (n_wave,)
         Rest-frame wavelength [Angstrom].
-    agn_plslp1: float
+    agn_plslp1 : float
         Blue power-law slope in f_nu (UV/blue side). Default -0.349.
         [dimensionless]
-    agn_plslp2: float
+    agn_plslp2 : float
         Red power-law slope in f_nu (optical/red side). Default 0.593.
         [dimensionless]
-    agn_plbrk: float
+    agn_plbrk : float
         Break wavelength [Angstrom]. Default 3880.
-    agn_tbb: float
+    agn_tbb : float
         Hot dust temperature [K]. Default 1240.
-    agn_bbnorm: float
+    agn_bbnorm : float
         Hot dust normalization (relative to continuum at 2 um).
         Default 3.96. [dimensionless]
-    agn_emline_scale: float
+    agn_emline_scale : float
         Emission line strength multiplier. Default 1.0 (negative values
         use EW-scaling, matching the original qsogen). [dimensionless]
-    agn_ebv: float
+    agn_ebv : float
         E(B-V) dust reddening [mag]. Default 0.0 (no reddening).
-    agn_log_lbol: float
+    agn_log_lbol : float
         log10(L_bol / Lsun). Bolometric luminosity. Defaults to the declared
         ``agn_log_lbol`` default.
         [log10(L_sun)]
-    agn_lum_ratio: float
+    agn_lum_ratio : float
         Overall AGN fraction scaling. Default 1.0. [dimensionless]
-    agn_bcnorm: float
+    agn_bcnorm : float
         Balmer continuum normalization. Default 0.0 (disabled).
         Set to ~1.0 to enable Balmer continuum emission. [dimensionless]
 
@@ -806,32 +806,32 @@ def qsogen(
 
     Parameters
     ----------
-    wavelength: array_like, shape (n_wave,)
+    wavelength : array_like, shape (n_wave,)
         Rest-frame wavelength grid [Angstrom].
-    agn_log_lbol: float, optional
+    agn_log_lbol : float, optional
         Total AGN bolometric luminosity [log10(L_sun)]. Defaults to the declared
         ``agn_log_lbol`` default.
-    agn_lum_ratio: float, optional
+    agn_lum_ratio : float, optional
         Fraction of bolometric luminosity emitted by this component.
         Default: 1.0. [dimensionless, 0–1]
-    agn_plslp1: float, optional
+    agn_plslp1 : float, optional
         Power-law slope for the UV/optical continuum. Default: -0.5.
         [dimensionless]
-    agn_plslp2: float, optional
+    agn_plslp2 : float, optional
         Power-law slope for the X-ray continuum. Default: -1.0.
         [dimensionless]
-    agn_plbrk: float, optional
+    agn_plbrk : float, optional
         Break wavelength between UV/optical and X-ray slopes [Angstrom].
         Default: 3000.0.
-    agn_tbb: float, optional
+    agn_tbb : float, optional
         Hot dust blackbody temperature [K]. Default: 1000.0.
-    agn_bbnorm: float, optional
+    agn_bbnorm : float, optional
         Hot dust blackbody normalization [dimensionless]. Default: 0.5.
-    agn_emline_scale: float, optional
+    agn_emline_scale : float, optional
         Emission-line template normalization [dimensionless]. Default: 1.0.
-    agn_ebv: float, optional
+    agn_ebv : float, optional
         Dust reddening (color excess) [dimensionless, E(B-V)]. Default: 0.0.
-    agn_bcnorm: float, optional
+    agn_bcnorm : float, optional
         Balmer continuum normalization [dimensionless]. Default: 0.0.
     **_kwargs
         Additional keyword arguments (ignored, for compatibility with AGN

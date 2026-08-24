@@ -23,18 +23,18 @@ def add_systematic_floor(
 
     Parameters
     ----------
-    flux: ndarray
+    flux : ndarray
         Flux array in any shape. Can be negative (absolute value used).
-    flux_err: ndarray
+    flux_err : ndarray
         Flux uncertainty array, same shape as `flux`.
-    fractional: float, optional
+    fractional : float, optional
         Fraction of flux magnitude to add as systematic floor.
         Default 0.02 (2%, a common conservative choice for e.g.
         photometric zero-point uncertainty).
 
     Returns
     -------
-    err_total: ndarray, same shape as flux_err
+    err_total : ndarray, same shape as flux_err
         Combined statistical + systematic uncertainty.
 
     Notes

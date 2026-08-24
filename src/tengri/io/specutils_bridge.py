@@ -20,7 +20,7 @@ def from_spectrum1d(sp: Any) -> SpectrumTuple:
 
     Parameters
     ----------
-    sp: specutils.Spectrum1D
+    sp : specutils.Spectrum1D
         Input spectrum object. Must have wavelength and flux attributes
         with astropy.units.
 

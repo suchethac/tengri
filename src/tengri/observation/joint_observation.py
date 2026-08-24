@@ -43,9 +43,9 @@ class JointObservation:
 
     Parameters
     ----------
-    *children: object
+    *children : object
         Each must expose ``predict(state, params) → mapping``.
-    name: str, default "joint"
+    name : str, default "joint"
         Identifier for diagnostics.
 
     Notes
@@ -87,10 +87,10 @@ class JointObservation:
 
         Parameters
         ----------
-        per_pop_states: mapping of population name -> ForwardState
+        per_pop_states : mapping of population name -> ForwardState
             One state per population (already namespace-merged in
             ``derived`` so cross-population reads work).
-        per_pop_params: mapping of population name -> params dict
+        per_pop_params : mapping of population name -> params dict
             The fixed-values-merged parameter dict each population
             saw, useful when child observations read
             population-specific parameters (e.g. per-population

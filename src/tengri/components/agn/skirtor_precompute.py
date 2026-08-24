@@ -59,13 +59,13 @@ def precompute_skirtor_photometry(
 
     Parameters
     ----------
-    grid_path: str
+    grid_path : str
         Path to ``skirtor_templates.npz`` or ``.h5``.
-    filter_waves: list[ndarray]
+    filter_waves : list[ndarray]
         Wavelength grid per filter [Angstrom], observed frame.
-    filter_trans: list[ndarray]
+    filter_trans : list[ndarray]
         Transmission per filter (0–1).
-    redshift: float, optional
+    redshift : float, optional
         Source redshift. Used to shift rest-frame templates into the
         observed frame before integrating against observed-frame filters.
         Default 0.0.
@@ -73,11 +73,11 @@ def precompute_skirtor_photometry(
     Returns
     -------
     dict
-        ``grid_phot``: ndarray, shape (n_tau, n_p, n_q, n_oa, n_inc, n_filters)
+        ``grid_phot`` : ndarray, shape (n_tau, n_p, n_q, n_oa, n_inc, n_filters)
             Filter-integrated L_ν [erg/s/Hz] per L_sun (unit torus fraction).
-        ``axes``: tuple of 5 grid arrays (jnp.ndarray)
+        ``axes`` : tuple of 5 grid arrays (jnp.ndarray)
             Grid axes (tau, p, q, oa, cos_inc).
-        ``_preint``: PreintegratedGrid
+        ``_preint`` : PreintegratedGrid
             Internal preintegration data structure.
 
     References
@@ -178,10 +178,10 @@ def build_skirtor_photometry_lookup(precomp: dict, grid_arrays_traced: tuple | N
 
     Parameters
     ----------
-    precomp: dict
+    precomp : dict
         Output of :func:`precompute_skirtor_photometry` or :func:`precompute`
         (the Protocol-shaped entry point).
-    grid_arrays_traced: tuple or None, optional
+    grid_arrays_traced : tuple or None, optional
         Tuple of (grid_phot, axes) to pass as JIT-traced arguments instead of
         capturing them in closure. When None (default), captures from precomp
         for backward compatibility. Threading these as kwargs avoids closure-
@@ -327,15 +327,15 @@ def precompute(
 
     Parameters
     ----------
-    filter_waves: list[ndarray]
+    filter_waves : list[ndarray]
         Wavelength grid per filter [Angstrom], observed frame.
-    filter_trans: list[ndarray]
+    filter_trans : list[ndarray]
         Transmission per filter (0–1).
-    redshift: float
+    redshift : float
         Source redshift. [dimensionless]
-    parameters: Parameters | None
+    parameters : Parameters | None
         Parameters spec, used to detect Fixed-axis parameters.
-    grid_path: str, keyword-only
+    grid_path : str, keyword-only
         Path to ``skirtor_templates.npz`` or ``.h5``.
 
     Returns
@@ -389,10 +389,10 @@ def build_lookup(preint: dict, *, free_param_names: tuple[str, ...] | None = Non
 
     Parameters
     ----------
-    preint: dict
+    preint : dict
         Preintegrated data dict with keys ``"grid_phot"``, ``"axes"``,
         and optionally ``"_collapsed_axes"`` and ``"_preint"``.
-    free_param_names: tuple of str or None, optional
+    free_param_names : tuple of str or None, optional
         Names of remaining free axes in the collapsed case.
         Not used in the default (no-collapse) case.
 

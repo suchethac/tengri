@@ -64,11 +64,11 @@ def _vectorized_interp(
 
     Parameters
     ----------
-    xp_target: array, shape (n_target,)
+    xp_target : array, shape (n_target,)
         Target x-coordinates (e.g. filter wavelengths).
-    xp_source: array, shape (n_source,)
+    xp_source : array, shape (n_source,)
         Source x-coordinates (must be sorted ascending).
-    yp_source: array, shape (n_met, n_age, n_source)
+    yp_source : array, shape (n_met, n_age, n_source)
         Source y-values for all metallicities and ages.
 
     Returns
@@ -103,36 +103,36 @@ class PhotometricPrecomputation(NamedTuple):
 
     Attributes
     ----------
-    ssp_phot: array, shape (n_met, n_age, n_filters)
+    ssp_phot : array, shape (n_met, n_age, n_filters)
         SSP broadband flux per metallicity, age, and filter [erg/s/Hz/Msun].
         Φ_{ijb} = ∫ SSP(Z_i, t_j, λ) T_b(λ) λ dλ / ∫ T_b(λ) λ dλ
-    ssp_phot_moment: array or None, shape (n_met, n_age, n_filters)
+    ssp_phot_moment : array or None, shape (n_met, n_age, n_filters)
         First spectral moment of the SSP within each filter [Angstrom].
         Ψ_{ijb} = ∫ SSP(Z_i, t_j, λ) (λ - λ_eff) T_b(λ) λ dλ / ∫ T_b(λ) λ dλ
         Used for the Taylor-corrected dust approximation:
         f_b ≈ A(λ_eff)·Φ + A'(λ_eff)·Ψ, which captures the SSP–dust
         covariance to first order and reduces the factorization error by ~5×.
         None when Taylor correction is disabled.
-    effective_wavelengths: array, shape (n_filters,)
+    effective_wavelengths : array, shape (n_filters,)
         Effective wavelength of each filter [Angstrom], observed frame.
         Used for evaluating dust at a single wavelength per band.
-    effective_wavelengths_rest: array, shape (n_filters,)
+    effective_wavelengths_rest : array, shape (n_filters,)
         Effective wavelength in rest frame [Angstrom].
-    log10_flux_scale: float
+    log10_flux_scale : float
         ``log10`` of the geometric factor (1+z) / (4π dL²) [dex re cm⁻²]. Stored
         as a log: the linear factor is ``0.0`` in float32 at every distance, so a
         stored linear scale is zeroed by the cast alone (#1859).
-    redshift: float
+    redshift : float
         Source redshift [dimensionless].
-    n_filters: int
+    n_filters : int
         Number of filters [dimensionless].
-    ssp_subband_phot: array or None, shape (n_met, n_age, n_filters, n_subbands)
+    ssp_subband_phot : array or None, shape (n_met, n_age, n_filters, n_subbands)
         Filter integral restricted to each sub-band. Sums over the last axis
         to ``ssp_phot``. None unless ``n_subbands > 0``. [erg/s/Hz]
-    ssp_subband_waves_rest: array or None, shape (n_met, n_age, n_filters, n_subbands)
+    ssp_subband_waves_rest : array or None, shape (n_met, n_age, n_filters, n_subbands)
         Rest-frame quadrature node of each sub-band: the template's own
         flux-weighted centroid there. None unless ``n_subbands > 0``. [Angstrom]
-    ssp_subband_phot_igm: array or None, shape (n_met, n_age, n_filters, n_subbands)
+    ssp_subband_phot_igm : array or None, shape (n_met, n_age, n_filters, n_subbands)
         ``ssp_subband_phot`` with the IGM transmission at each node folded in
         (#1135): Φ_{majk} · T_IGM(λ*_{majk} · (1+z), z) [erg/s/Hz], where λ* is
         the sub-band's quadrature node. Injected by ``SEDModel.build`` when a
@@ -169,18 +169,18 @@ class SpectroscopicPrecomputation(NamedTuple):
 
     Attributes
     ----------
-    ssp_on_pixels: array, shape (n_met, n_age, n_pix)
+    ssp_on_pixels : array, shape (n_met, n_age, n_pix)
         SSP flux interpolated to observed spectral pixel wavelengths
         in rest frame [erg/s/Hz/Msun].
-    wave_rest_pixels: array, shape (n_pix,)
+    wave_rest_pixels : array, shape (n_pix,)
         Rest-frame wavelengths of spectral pixels [Angstrom].
-    wave_obs_pixels: array, shape (n_pix,)
+    wave_obs_pixels : array, shape (n_pix,)
         Observed-frame wavelengths [Angstrom].
-    log10_flux_scale: float
+    log10_flux_scale : float
         ``log10`` of the geometric scaling factor (1+z) / (4π dL²)
         [dex re cm⁻²]. Stored as a log for the reason given in
         :class:`PhotometricPrecomputation` (#1859).
-    redshift: float
+    redshift : float
         Source redshift [dimensionless].
 
     Notes
@@ -223,18 +223,18 @@ def precompute_photometry(
 
     Parameters
     ----------
-    ssp_data: SSPData
+    ssp_data : SSPData
         SSP templates with ssp_wave [Angstrom], ssp_flux [Lsun/Hz/Msun],
         ssp_lg_age_gyr, ssp_lgmet.
-    filter_waves: list of array
+    filter_waves : list of array
         Wavelength grid per filter (observed frame [Angstrom]).
-    filter_trans: list of array
+    filter_trans : list of array
         Transmission curve per filter (dimensionless, in [0, 1]).
-    redshift: float
+    redshift : float
         Source redshift (dimensionless).
-    dl_cm: float
+    dl_cm : float
         Luminosity distance [cm].
-    taylor_correction: bool
+    taylor_correction : bool
         Precompute the spectral moment tensor Ψ for first-order Taylor
         dust correction (default True).  Adds one tensor of the same shape
         as Φ; inference cost is negligible (one extra dust derivative per
@@ -243,13 +243,13 @@ def precompute_photometry(
         Superseded by ``n_subbands``: the Taylor form *extrapolates* the
         attenuation linearly away from λ_eff, which diverges where the
         curve steepens (GALEX FUV +45 % at z=0.05, +215 % at z=1). See #1122.
-    n_subbands: int
+    n_subbands : int
         Number of sub-bands K for the multiplicative dust quadrature
         (default 0 = off). Builds Φ_k and the per-template quadrature nodes,
         so the screen is *evaluated* at K points per band rather than
         extrapolated from one. Converges as 1/K²; K=3 is the working point
         and is cheaper at runtime than the Taylor moment it replaces.
-    fixed: dict[int, float], optional
+    fixed : dict[int, float], optional
         Mapping of axis index → fixed value. Axes are numbered from 0:
 
         - 0: lgmet (metallicity in log10(Z/Zsun))
@@ -311,13 +311,13 @@ class RestBandPrecomputation(NamedTuple):
 
     Attributes
     ----------
-    ssp_restband_phot: array, shape (n_met, n_age, n_filters)
+    ssp_restband_phot : array, shape (n_met, n_age, n_filters)
         Filter integral at z=0 [erg/s/Hz/Msun].
-    ssp_restband_subband_phot: array or None, shape (n_met, n_age, n_filters, n_subbands)
+    ssp_restband_subband_phot : array or None, shape (n_met, n_age, n_filters, n_subbands)
         Sub-band quadrature weights for the rest band. None unless ``n_subbands > 0``.
-    ssp_restband_subband_waves: array or None, shape (n_met, n_age, n_filters, n_subbands)
+    ssp_restband_subband_waves : array or None, shape (n_met, n_age, n_filters, n_subbands)
         Quadrature nodes of the rest band [Angstrom].
-    restband_eff_waves: array, shape (n_filters,)
+    restband_eff_waves : array, shape (n_filters,)
         The wavelength the rest band samples: the filter's own pivot [Angstrom].
 
     Notes
@@ -367,16 +367,16 @@ def precompute_restband_photometry(
 
     Parameters
     ----------
-    ssp_data: SSPData
+    ssp_data : SSPData
         SSP templates.
-    filter_waves: list of array
+    filter_waves : list of array
         Wavelength grid per filter [Angstrom].
-    filter_trans: list of array
+    filter_trans : list of array
         Transmission curve per filter [dimensionless].
-    n_subbands: int
+    n_subbands : int
         Sub-band quadrature order K for the dust screen across the rest band
         (#1122). 0 disables it, leaving the screen evaluated at the pivot.
-    fixed: dict[int, float], optional
+    fixed : dict[int, float], optional
         Axis index → fixed value, collapsed at build time (axis 0 = lgmet).
 
     Returns
@@ -426,13 +426,13 @@ def precompute_spectroscopy(
 
     Parameters
     ----------
-    ssp_data: SSPData
+    ssp_data : SSPData
         SSP templates with ssp_flux [Lsun/Hz/Msun] and ssp_wave [Angstrom].
-    wave_obs_pixels: array, shape (n_pix,)
+    wave_obs_pixels : array, shape (n_pix,)
         Observed-frame wavelengths of spectral pixels [Angstrom].
-    redshift: float
+    redshift : float
         Source redshift (dimensionless).
-    dl_cm: float
+    dl_cm : float
         Luminosity distance [cm].
 
     Returns
@@ -497,9 +497,9 @@ class SpectroscopicZTable(NamedTuple):
 
     Attributes
     ----------
-    wave_obs_pixels: array, shape (n_pix,)
+    wave_obs_pixels : array, shape (n_pix,)
         Observed-frame pixel wavelengths [Angstrom] (z-independent).
-    z_min, z_max: float
+    z_min, z_max : float
         Redshift bounds the table was built for (advisory; runtime z is
         not clamped to them).
 
@@ -532,16 +532,16 @@ def precompute_spectroscopy_ztable(
 
     Parameters
     ----------
-    ssp_data: SSPData
+    ssp_data : SSPData
         SSP templates (unused here; kept for signature symmetry with the
         photometric ztable builder).
-    wave_obs_pixels: array, shape (n_pix,)
+    wave_obs_pixels : array, shape (n_pix,)
         Observed-frame pixel wavelengths [Angstrom].
-    z_grid: array, optional
+    z_grid : array, optional
         Custom redshift grid; only its min/max are recorded.
-    z_min, z_max: float
+    z_min, z_max : float
         Redshift bounds [dimensionless].
-    n_z: int
+    n_z : int
         Unused (kept for signature symmetry).
 
     Returns
@@ -574,18 +574,18 @@ class PhotometricZTable(NamedTuple):
 
     Attributes
     ----------
-    ssp_phot_table: array, shape (n_z, n_met, n_age, n_filters)
+    ssp_phot_table : array, shape (n_z, n_met, n_age, n_filters)
         SSP broadband flux at each redshift, metallicity, age, and filter
         [erg/s/Hz/Msun].
-    eff_waves_rest_table: array, shape (n_z, n_filters)
+    eff_waves_rest_table : array, shape (n_z, n_filters)
         Rest-frame effective wavelengths at each redshift [Angstrom].
-    log10_flux_scale_table: array, shape (n_z,)
+    log10_flux_scale_table : array, shape (n_z,)
         Geometric factor (1+z)/(4π dL²) at each redshift [dimensionless].
-    z_grid: array, shape (n_z,)
+    z_grid : array, shape (n_z,)
         Redshift grid [dimensionless].
-    n_filters: int
+    n_filters : int
         Number of filters [dimensionless].
-    igm_trans_table: array, shape (n_z, n_filters)
+    igm_trans_table : array, shape (n_z, n_filters)
         IGM transmission at effective observed wavelengths per redshift
         [dimensionless]. All ones when IGM is not applied.
 
@@ -826,22 +826,22 @@ def _compute_photometry_ztable(
 
     Parameters
     ----------
-    ssp_data: SSPData
+    ssp_data : SSPData
         SSP templates with ssp_flux [Lsun/Hz/Msun], ssp_wave [Angstrom].
-    filter_waves: list of array
+    filter_waves : list of array
         Wavelength grid per filter (observed frame [Angstrom]).
-    filter_trans: list of array
+    filter_trans : list of array
         Transmission curve per filter (dimensionless, in [0, 1]).
-    z_grid: array, optional
+    z_grid : array, optional
         Custom redshift grid (dimensionless). If None, uses
         linspace(z_min, z_max, n_z).
-    z_min: float
+    z_min : float
         Minimum redshift (dimensionless, default 0.001).
-    z_max: float
+    z_max : float
         Maximum redshift (dimensionless, default 3.0).
-    n_z: int
+    n_z : int
         Number of redshift grid points (default 100).
-    apply_igm: bool
+    apply_igm : bool
         If True, precompute IGM transmission (Inoue+2014) at the
         effective observed wavelengths for each z in the grid.
         Default False (igm_trans_table will be all ones).
@@ -1021,15 +1021,15 @@ def fast_photometry(
 
     Parameters
     ----------
-    weights: array, shape (n_age,)
+    weights : array, shape (n_age,)
         Normalized SFH weights [Msun].
-    ssp_phot_at_z: array, shape (n_age, n_filters)
+    ssp_phot_at_z : array, shape (n_age, n_filters)
         Pre-computed SSP broadband fluxes [Lsun/Hz/Msun] at the target metallicity.
         Already interpolated in Z from the full grid.
-    dust_at_eff: array, shape (n_age, n_filters)
+    dust_at_eff : array, shape (n_age, n_filters)
         Dust transmission (dimensionless, in [0, 1]) evaluated at
         effective wavelengths per age/band.
-    log10_flux_scale: float
+    log10_flux_scale : float
         ``log10`` of the geometric factor (1+z) / (4 π d_L²) [dex re cm⁻²], from
         :func:`tengri.utils.scale.log10_flux_scale`.
 
@@ -1066,14 +1066,14 @@ def fast_spectrum(
 
     Parameters
     ----------
-    weights: array, shape (n_age,)
+    weights : array, shape (n_age,)
         Normalized SFH weights [Msun].
-    ssp_on_pixels_at_z: array, shape (n_age, n_pix)
+    ssp_on_pixels_at_z : array, shape (n_age, n_pix)
         Pre-rebinned SSP flux [Lsun/Hz/Msun] at target metallicity.
-    dust_at_pixels: array, shape (n_age, n_pix)
+    dust_at_pixels : array, shape (n_age, n_pix)
         Dust transmission (dimensionless, in [0, 1]) at each pixel
         wavelength per age.
-    log10_flux_scale: float
+    log10_flux_scale : float
         ``log10`` of the geometric factor (1+z) / (4 π d_L²) [dex re cm⁻²], from
         :func:`tengri.utils.scale.log10_flux_scale`.
 
@@ -1102,11 +1102,11 @@ def interpolate_ssp_phot_metallicity(
 
     Parameters
     ----------
-    ssp_phot: array, shape (n_met, n_age, n_filters)
+    ssp_phot : array, shape (n_met, n_age, n_filters)
         Pre-computed SSP broadband fluxes [Lsun/Hz/Msun].
-    ssp_lgmet: array, shape (n_met,)
+    ssp_lgmet : array, shape (n_met,)
         Metallicity grid [log10(Z/Zsun)], sorted ascending.
-    log_z: float
+    log_z : float
         Target log10(Z/Zsun).
 
     Returns
@@ -1134,25 +1134,25 @@ def interpolate_ztable(ztable_ssp_phot, ztable_eff_rest, ztable_log10_flux_scale
 
     Parameters
     ----------
-    ztable_ssp_phot: array, shape (n_z, n_met, n_age, n_filters)
+    ztable_ssp_phot : array, shape (n_z, n_met, n_age, n_filters)
         Precomputed SSP photometry [Lsun/Hz/Msun] on z grid.
-    ztable_eff_rest: array, shape (n_z, n_filters)
+    ztable_eff_rest : array, shape (n_z, n_filters)
         Rest-frame effective wavelengths [Angstrom] on z grid.
-    ztable_log10_flux_scale: array, shape (n_z,)
+    ztable_log10_flux_scale : array, shape (n_z,)
         ``log10`` of the geometric flux scale (1+z)/(4π d_L²) [dex re cm⁻²] on
         the z grid.
-    z_grid: array, shape (n_z,)
+    z_grid : array, shape (n_z,)
         Redshift grid (dimensionless), sorted ascending.
-    z: float
+    z : float
         Target redshift (dimensionless).
 
     Returns
     -------
-    ssp_phot: array, shape (n_met, n_age, n_filters)
+    ssp_phot : array, shape (n_met, n_age, n_filters)
         Interpolated SSP photometry [Lsun/Hz/Msun].
-    eff_waves_rest: array, shape (n_filters,)
+    eff_waves_rest : array, shape (n_filters,)
         Interpolated rest-frame effective wavelengths [Angstrom].
-    log10_flux_scale: float
+    log10_flux_scale : float
         ``log10`` of the interpolated geometric factor [dex re cm⁻²].
 
     Notes
@@ -1205,18 +1205,18 @@ def interpolate_ztable_smooth(
 
     Parameters
     ----------
-    ztable_ssp_phot: array, shape (n_z, n_met, n_age, n_filters)
+    ztable_ssp_phot : array, shape (n_z, n_met, n_age, n_filters)
         Precomputed SSP photometry [Lsun/Hz/Msun] on z grid.
-    ztable_eff_rest: array, shape (n_z, n_filters)
+    ztable_eff_rest : array, shape (n_z, n_filters)
         Rest-frame effective wavelengths [Angstrom] on z grid.
-    ztable_log10_flux_scale: array, shape (n_z,)
+    ztable_log10_flux_scale : array, shape (n_z,)
         ``log10`` of the geometric flux scale (1+z)/(4π d_L²) [dex re cm⁻²] on
         the z grid.
-    z_grid: array, shape (n_z,)
+    z_grid : array, shape (n_z,)
         Redshift grid (dimensionless, sorted ascending).
-    z: float
+    z : float
         Target redshift (dimensionless).
-    scatter: float
+    scatter : float
         Triweight kernel bandwidth (same units as z_grid).
         Recommended: ``0.5 * dz`` where ``dz`` is the grid spacing;
         gives < 0.05% interpolation error with C²-continuous gradients.
@@ -1225,11 +1225,11 @@ def interpolate_ztable_smooth(
 
     Returns
     -------
-    ssp_phot: array, shape (n_met, n_age, n_filters)
+    ssp_phot : array, shape (n_met, n_age, n_filters)
         Interpolated SSP photometry [Lsun/Hz/Msun].
-    eff_waves_rest: array, shape (n_filters,)
+    eff_waves_rest : array, shape (n_filters,)
         Interpolated rest-frame effective wavelengths [Angstrom].
-    log10_flux_scale: float
+    log10_flux_scale : float
         ``log10`` of the interpolated geometric factor [dex re cm⁻²].
 
     Notes
@@ -1257,16 +1257,16 @@ def interpolate_igm_ztable(igm_trans_table, z_grid, z):
 
     Parameters
     ----------
-    igm_trans_table: array, shape (n_z, n_filters)
+    igm_trans_table : array, shape (n_z, n_filters)
         Precomputed IGM transmission (dimensionless, in [0, 1]) on z grid.
-    z_grid: array, shape (n_z,)
+    z_grid : array, shape (n_z,)
         Redshift grid (dimensionless), sorted ascending.
-    z: float
+    z : float
         Target redshift (dimensionless).
 
     Returns
     -------
-    igm_trans: array, shape (n_filters,)
+    igm_trans : array, shape (n_filters,)
         Interpolated IGM transmission (dimensionless).
 
     Notes
@@ -1303,18 +1303,18 @@ def precompute(
 
     Parameters
     ----------
-    filter_waves, filter_trans: list
+    filter_waves, filter_trans : list
         Filter curves (observed frame [Angstrom]).
-    redshift: float
+    redshift : float
         Source redshift (dimensionless).
-    parameters: Parameters | None
+    parameters : Parameters | None
         Parameter spec, used to detect Fixed-axis parameters.
-    ssp_data: dict
+    ssp_data : dict
         SSP data: wavelength [Angstrom], metallicity grid [log10(Z/Zsun)],
         age grid [log10(Gyr)], SSP spectra [Lsun/Hz/Msun].
-    dl_cm: float
+    dl_cm : float
         Luminosity distance [cm].
-    taylor_correction: bool, optional
+    taylor_correction : bool, optional
         If True, compute and include SSP first-moment correction for dust
         attenuation. Default True.
 
@@ -1355,7 +1355,7 @@ def build_lookup(preint, **kwargs):
 
     Parameters
     ----------
-    preint: PhotometricPrecomputation
+    preint : PhotometricPrecomputation
         Precomputed SSP photometry with ssp_phot, effective wavelengths,
         and flux scaling factors.
     **kwargs

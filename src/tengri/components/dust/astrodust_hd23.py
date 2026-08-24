@@ -64,46 +64,46 @@ class AstrodustHD23Templates:
 
     Attributes
     ----------
-    wavelength_um: jnp.ndarray, shape ``(1000,)``
+    wavelength_um : jnp.ndarray, shape ``(1000,)``
         Wavelength axis in microns; strictly increasing from 0.1 to
         3e4 μm.
-    lgU: jnp.ndarray, shape ``(91,)``
+    lgU : jnp.ndarray, shape ``(91,)``
         :math:`\log_{10} U` from -3 to +6 in 0.1 steps.  ``U=1`` is
         the local Galactic ISRF (Mathis-Mezger-Panagia 1983).
-    L_nu_total: jnp.ndarray, shape ``(91, 1000)``
+    L_nu_total : jnp.ndarray, shape ``(91, 1000)``
         Total thermal :math:`L_\nu` (Astrodust + PAHs) per H atom
         [erg/s/Hz/H], converted from the FITS file's
         :math:`\lambda I_\lambda / N_H` [erg/s/sr/H] via
         :math:`L_\nu = 4\pi \lambda^2 I_\lambda / c`.
-    L_nu_astrodust, L_nu_pah: jnp.ndarray, shape ``(91, 1000)``
+    L_nu_astrodust, L_nu_pah : jnp.ndarray, shape ``(91, 1000)``
         Astrodust-only and PAH-only thermal-emission components.
-    L_nu_spdust_total: jnp.ndarray, shape ``(1000,)``
+    L_nu_spdust_total : jnp.ndarray, shape ``(1000,)``
         Total spinning-dust microwave emission (HDU 9, total column)
         per H atom [erg/s/Hz/H].  Assumes :math:`f_{\rm CNM}=0.28`.
         Not :math:`U`-dependent: spinning dust is mostly insensitive
         to radiation field intensity.
     L_nu_spdust_Ad_CNM, L_nu_spdust_Ad_WNM, L_nu_spdust_PAH_CNM,
-    L_nu_spdust_PAH_WNM: jnp.ndarray, shape ``(1000,)``
+    L_nu_spdust_PAH_WNM : jnp.ndarray, shape ``(1000,)``
         Per-component / per-phase spinning dust spectra, allowing
         custom :math:`f_{\rm CNM}` mixing.
-    tau_per_H: jnp.ndarray, shape ``(1000, 4)``
+    tau_per_H : jnp.ndarray, shape ``(1000, 4)``
         Extinction cross-section :math:`\tau_\lambda/N_H` [cm²/H]
         with columns ``(lambda_um, tau_Ad, tau_PAH, tau_total)``.
-    sigma_sca_per_H: jnp.ndarray, shape ``(1000, 4)``
+    sigma_sca_per_H : jnp.ndarray, shape ``(1000, 4)``
         Scattering cross-section [cm²/H], same column layout as
         extinction.  Albedo = scattering / extinction.
-    p_pol_per_H: jnp.ndarray, shape ``(1000, 2)``
+    p_pol_per_H : jnp.ndarray, shape ``(1000, 2)``
         Polarized extinction cross-section
         :math:`(p_\lambda/N_H)^{\rm max}` [cm²/H] from Astrodust;
         columns ``(lambda_um, p_Ad)``.
-    lambda_P_lambda_polarized: jnp.ndarray, shape ``(91, 1000)``
+    lambda_P_lambda_polarized : jnp.ndarray, shape ``(91, 1000)``
         Polarized emission :math:`\lambda P_\lambda/N_H`
         [erg/s/sr/H] (HDU 8) from Astrodust grains.
-    M_Ad_over_M_H: float
+    M_Ad_over_M_H : float
         Astrodust mass per H atom (0.00642).
-    M_PAH_over_M_H: float
+    M_PAH_over_M_H : float
         PAH mass per H atom (0.000659).
-    paper, arxiv, doi: str
+    paper, arxiv, doi : str
         Citation traceability strings.
     """
 
@@ -181,7 +181,7 @@ def load_astrodust_hd23_or_raise(template_path: str | None) -> AstrodustHD23Temp
 
     Parameters
     ----------
-    template_path: str or None
+    template_path : str or None
         Path override.  When ``None``, falls back to the
         :data:`ASTRODUST_HD23_PATH_ENV` env var, then to
         :data:`ASTRODUST_HD23_DEFAULT_PATH`.
@@ -255,7 +255,7 @@ def load_astrodust_hd23(template_path: str | None = None) -> AstrodustHD23Templa
 
     Parameters
     ----------
-    template_path: str or None, optional
+    template_path : str or None, optional
         Override the grid location. When ``None`` (default), resolves the
         :data:`ASTRODUST_HD23_PATH_ENV` env var, then the bundled
         :data:`ASTRODUST_HD23_DEFAULT_PATH` (``data/astrodust_templates.h5``).
@@ -299,12 +299,12 @@ def resample_lnu_on_aa_grid(
 
     Parameters
     ----------
-    L_nu_um: array_like, shape ``(..., n_wave_um)``
+    L_nu_um : array_like, shape ``(..., n_wave_um)``
         :math:`L_\nu` (per H) on the template's microns grid
         [erg/s/Hz/H].
-    wave_um: array_like, shape ``(n_wave_um,)``
+    wave_um : array_like, shape ``(n_wave_um,)``
         Template wavelength axis in microns; strictly increasing.
-    wave_aa: array_like, shape ``(n_wave_aa,)``
+    wave_aa : array_like, shape ``(n_wave_aa,)``
         Pipeline rest-frame wavelength grid in Angstrom.
 
     Returns

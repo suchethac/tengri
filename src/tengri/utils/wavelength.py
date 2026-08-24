@@ -41,9 +41,9 @@ def make_union_grid(
 
     Parameters
     ----------
-    *arrays: array_like
+    *arrays : array_like
         Wavelength grids in Angstrom. Empty / ``None`` arrays are ignored.
-    dedupe_tol_rel: float
+    dedupe_tol_rel : float
         Relative tolerance for collapsing near-coincident points (defaults
         to 1e-9, i.e. one part in a billion). Two values are considered
         equal when their relative gap falls below this tolerance.
@@ -103,13 +103,13 @@ def make_panchromatic_grid(
 
     Parameters
     ----------
-    ssp_wave: array (n_ssp,)
+    ssp_wave : array (n_ssp,)
         Base SSP wavelength grid in Angstrom, sorted ascending.
-    extend_xray: bool
+    extend_xray : bool
         If True, prepend log-spaced points from 0.1 Å to the SSP minimum.
-    extend_radio: bool
+    extend_radio : bool
         If True, append log-spaced points from the SSP maximum to 3×10¹¹ Å.
-    n_per_decade: int
+    n_per_decade : int
         Number of log-spaced points per decade in the X-ray and radio wings.
 
     Returns
@@ -165,11 +165,11 @@ def interpolate_sed_to_grid(
 
     Parameters
     ----------
-    wave_src: array (n_src,)
+    wave_src : array (n_src,)
         Source wavelengths (Angstrom), sorted ascending.
-    sed_src: array (n_src,)
+    sed_src : array (n_src,)
         SED on source grid (erg/s/Hz or Lsun/Hz).
-    wave_target: array (n_tgt,)
+    wave_target : array (n_tgt,)
         Target wavelengths (Angstrom), sorted ascending.
 
     Returns

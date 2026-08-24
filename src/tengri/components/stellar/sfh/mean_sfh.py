@@ -66,11 +66,11 @@ def _renormalize_to_mass(
 
     Parameters
     ----------
-    shape: array_like, shape (n_age,)
+    shape : array_like, shape (n_age,)
         Unnormalized SFR shape [arbitrary units], non-negative.
-    t_lookback: array_like, shape (n_age,)
+    t_lookback : array_like, shape (n_age,)
         Lookback time grid [yr].
-    log_total_mass: float
+    log_total_mass : float
         log10 of total stellar mass formed [Msun].
 
     Returns
@@ -116,9 +116,9 @@ def window_weight(
 
     Parameters
     ----------
-    t_lookback: array_like, shape (n_age,)
+    t_lookback : array_like, shape (n_age,)
         Lookback time grid [yr]. Monotone; either direction.
-    lo, hi: float or ndarray
+    lo, hi : float or ndarray
         Window bounds [yr], same units as ``t_lookback``. Default to
         :math:`\mp\infty`, i.e. a one-sided window when only one is given.
 
@@ -184,7 +184,7 @@ def _clamp_age(t_lookback: jnp.ndarray) -> jnp.ndarray:
 
     Parameters
     ----------
-    t_lookback: array
+    t_lookback : array
         Lookback time (yr).
 
     Returns
@@ -207,13 +207,13 @@ def _skewed_gaussian_kernel(
 
     Parameters
     ----------
-    age: array
+    age : array
         Lookback time (yr), should be clamped.
-    peak_lbt: float
+    peak_lbt : float
         Peak lookback time (yr).
-    width: float
+    width : float
         Width of the Gaussian (yr).
-    skew: float
+    skew : float
         Skewness parameter. 0 = symmetric, >0 skews toward older ages.
 
     Returns
@@ -245,14 +245,14 @@ def truncated_skewnormal(
 
     Parameters
     ----------
-    t_lookback: array_like, shape (n_age,)
+    t_lookback : array_like, shape (n_age,)
         Lookback time [yr].
-    log_total_mass: float
+    log_total_mass : float
         log10 of total stellar mass formed [Msun]. The shape is rescaled so
         that ``trapezoid(sfr, t_lookback) = 10**log_total_mass`` exactly.
-    peak_lbt: float
+    peak_lbt : float
         Peak lookback time [yr].
-    width: float
+    width : float
         Gaussian width parameter [yr]. **SSP grid aliasing**: the forward
         model interpolates ``SFR(t)`` at SSP grid points (a point-sample,
         not a bin-integral), so a ``width`` narrower than the local SSP
@@ -262,9 +262,9 @@ def truncated_skewnormal(
         See issue #299. ``SEDModel.build`` emits a
         :class:`SFHBurstAliasingWarning` when the chosen ``width`` is
         too narrow for the SSP grid.
-    skew: float
+    skew : float
         Skewness parameter [dimensionless]. 0 = symmetric, >0 skews toward older ages.
-    trunc: float
+    trunc : float
         Truncation sharpness [dimensionless]. Larger values produce sharper truncation.
         Typical range: 1-10.
 
@@ -357,16 +357,16 @@ def skewnormal(
 
     Parameters
     ----------
-    t_lookback: array_like, shape (n_age,)
+    t_lookback : array_like, shape (n_age,)
         Lookback time [yr].
-    log_total_mass: float
+    log_total_mass : float
         log10 of total stellar mass formed [Msun]. The shape is rescaled so
         that ``trapezoid(sfr, t_lookback) = 10**log_total_mass`` exactly.
-    peak_lbt: float
+    peak_lbt : float
         Peak lookback time [yr].
-    width: float
+    width : float
         Gaussian width [yr].
-    skew: float
+    skew : float
         Skewness parameter [dimensionless]. 0 = symmetric, >0 skews toward older ages.
 
     Returns
@@ -407,14 +407,14 @@ def gaussian(
 
     Parameters
     ----------
-    t_lookback: array_like, shape (n_age,)
+    t_lookback : array_like, shape (n_age,)
         Lookback time [yr].
-    log_total_mass: float
+    log_total_mass : float
         log10 of total stellar mass formed [Msun]. The shape is rescaled so
         that ``trapezoid(sfr, t_lookback) = 10**log_total_mass`` exactly.
-    peak_lbt: float
+    peak_lbt : float
         Peak lookback time [yr].
-    width: float
+    width : float
         Gaussian width [yr].
 
     Returns
@@ -477,17 +477,17 @@ def lognormal(
 
     Parameters
     ----------
-    t_lookback: array_like, shape (n_age,)
+    t_lookback : array_like, shape (n_age,)
         Lookback time [yr].
-    log_total_mass: float
+    log_total_mass : float
         log10 of total stellar mass formed [Msun]. The shape is rescaled so
         that ``trapezoid(sfr, t_lookback) = 10**log_total_mass`` exactly.
-    peak: float
+    peak : float
         Peak location (mode) in cosmic time since formation [yr].
-    width: float
+    width : float
         Width in log10(T) space [dex]. Converted internally to natural-log
         standard deviation σ = width × ln(10).
-    age: float
+    age : float
         Cosmic time available for star formation [yr] = lookback time of
         formation. Set to ``age_of_universe(z)`` for BAGPIPES direction.
         SFR is zero before formation (``t_lookback > age``).
@@ -562,17 +562,17 @@ def double_powerlaw(
 
     Parameters
     ----------
-    t_lookback: array_like, shape (n_age,)
+    t_lookback : array_like, shape (n_age,)
         Lookback time [yr].
-    alpha: float
+    alpha : float
         Falling slope exponent [dimensionless]. Controls the decline from peak
         to present. Larger alpha = steeper decline. Typical range: 0.5-4.
-    beta: float
+    beta : float
         Rising slope exponent [dimensionless]. Controls the rise from early times
         to peak. Larger beta = steeper rise. Typical range: 0.3-3.
-    tau: float
+    tau : float
         Turnover timescale [yr]. Approximately when SFR peaks (in cosmic time).
-    norm: float
+    norm : float
         Normalization factor [Msun/yr]. Note: this controls overall amplitude,
         not stellar mass. :math:`M_\\star = \\int \\mathrm{SFR}(t) \\, dt` is derived.
 
@@ -659,19 +659,19 @@ def dpl(
 
     Parameters
     ----------
-    t_lookback: array_like, shape (n_age,)
+    t_lookback : array_like, shape (n_age,)
         Lookback time [yr].
-    alpha: float
+    alpha : float
         Falling (late-time) slope exponent [dimensionless]. Typical 0.5-4.
-    beta: float
+    beta : float
         Rising (early-time) slope exponent [dimensionless]. Typical 0.3-3.
-    tau: float
+    tau : float
         Turnover timescale [yr], in cosmic time since formation.
-    age: float
+    age : float
         Cosmic time available for star formation [yr] = lookback time of
         formation. Set to ``age_of_universe(z)`` for BAGPIPES parity.
         SFR is zero before formation (``t_lookback > age``).
-    log_total_mass: float
+    log_total_mass : float
         log10 of total stellar mass formed [Msun]. The shape is rescaled
         so that ``trapezoid(sfr, t_lookback) = 10**log_total_mass``.
 
@@ -722,14 +722,14 @@ def constant(
 
     Parameters
     ----------
-    t_lookback: array_like, shape (n_age,)
+    t_lookback : array_like, shape (n_age,)
         Lookback time [yr].
-    log_total_mass: float
+    log_total_mass : float
         log10 of total stellar mass formed [Msun].
-    start: float
+    start : float
         Younger lookback boundary [yr]. Default 0 (present). Maps from user-facing
         ``sfh_const_end_gyr``.
-    end: float
+    end : float
         Older lookback boundary [yr]. Default AGEMAX_YR. Maps from user-facing
         ``sfh_const_start_gyr``.
 
@@ -775,13 +775,13 @@ def exponential(
 
     Parameters
     ----------
-    t_lookback: array_like, shape (n_age,)
+    t_lookback : array_like, shape (n_age,)
         Lookback time [yr].
-    log_total_mass: float
+    log_total_mass : float
         log10 of total stellar mass formed [Msun].
-    tau: float
+    tau : float
         e-folding timescale [yr].
-    start: float
+    start : float
         Start lookback time [yr]. Default 0 (present).
 
     Returns
@@ -823,13 +823,13 @@ def delayed_exponential(
 
     Parameters
     ----------
-    t_lookback: array_like, shape (n_age,)
+    t_lookback : array_like, shape (n_age,)
         Lookback time [yr].
-    log_total_mass: float
+    log_total_mass : float
         log10 of total stellar mass formed [Msun].
-    tau: float
+    tau : float
         Timescale [yr]. Peak shape value occurs at start + tau.
-    start: float
+    start : float
         Start lookback time [yr]. Default 0 (present).
 
     Returns
@@ -881,14 +881,14 @@ def sfhdelayed(
 
     Parameters
     ----------
-    t_lookback: array_like, shape (n_age,)
+    t_lookback : array_like, shape (n_age,)
         Lookback time [yr].
-    log_total_mass: float
+    log_total_mass : float
         log10 of total stellar mass formed [Msun].
-    tau: float
+    tau : float
         Timescale [yr]. Cosmic-time location of the SFR peak relative
         to galaxy formation.
-    age: float
+    age : float
         Galaxy age [yr] = lookback time of formation. Required ``> τ``
         for the peak to lie inside the observable window.
 
@@ -962,13 +962,13 @@ def declining_exponential(
 
     Parameters
     ----------
-    t_lookback: array_like, shape (n_age,)
+    t_lookback : array_like, shape (n_age,)
         Lookback time [yr].
-    log_total_mass: float
+    log_total_mass : float
         log10 of total stellar mass formed [Msun].
-    tau: float
+    tau : float
         e-folding timescale [yr]. Larger tau = slower decline.
-    age: float
+    age : float
         Galaxy age [yr] = lookback time of galaxy formation.
 
     Returns
@@ -1004,16 +1004,16 @@ def constant_then_exponential(
 
     Parameters
     ----------
-    t_lookback: array_like, shape (n_age,)
+    t_lookback : array_like, shape (n_age,)
         Lookback time [yr].
-    log_total_mass: float
+    log_total_mass : float
         log10 of total stellar mass formed [Msun], summed over constant and
         decline phases.
-    tau: float
+    tau : float
         e-folding decline timescale [yr] after quenching.
-    quench_age: float
+    quench_age : float
         Lookback time when quenching began [yr].
-    age: float
+    age : float
         Galaxy age [yr] = lookback time of formation. Must be > quench_age.
 
     Returns
@@ -1049,11 +1049,11 @@ def triweight_burst(
 
     Parameters
     ----------
-    t_lookback: array_like, shape (n_age,)
+    t_lookback : array_like, shape (n_age,)
         Lookback time [yr].
-    log_tpeak_myr: float
+    log_tpeak_myr : float
         log10 of burst peak time [Myr]. Center of the kernel in log-age space.
-    log_tmax_myr: float
+    log_tmax_myr : float
         log10 of burst duration [Myr]. Controls the kernel half-width.
         The kernel has support roughly ±:math:`3 \times 10^{\log_{\mathrm{tmax}}}` Myr.
 
@@ -1113,11 +1113,11 @@ def delayed_tau(t_lookback: jnp.ndarray, tau: float, norm: float) -> jnp.ndarray
 
     Parameters
     ----------
-    t_lookback: array_like, shape (n_age,)
+    t_lookback : array_like, shape (n_age,)
         Lookback time [yr].
-    tau: float
+    tau : float
         Timescale [yr].
-    norm: float
+    norm : float
         Normalization factor [Msun/yr].
 
     Returns
@@ -1161,23 +1161,23 @@ def psb_wild2020(
 
     Parameters
     ----------
-    t_lookback: array_like, shape (n_age,)
+    t_lookback : array_like, shape (n_age,)
         Lookback time [yr].
-    log_total_mass: float
+    log_total_mass : float
         log10 of total stellar mass formed [Msun], summed over both
         old and burst components.
-    age: float
+    age : float
         Galaxy age [yr] = lookback time of old component formation.
         Exponential is active for burstage < t < age.
-    tau: float
+    tau : float
         e-folding timescale of old exponential component [yr].
-    burstage: float
+    burstage : float
         Lookback time of burst onset [yr]. Burst active for 0 < t < burstage.
-    alpha: float
+    alpha : float
         DPL falling slope [dimensionless] (post-peak in cosmic time).
-    beta: float
+    beta : float
         DPL rising slope [dimensionless] (pre-peak in cosmic time).
-    fburst: float
+    fburst : float
         Fraction of total stellar mass in burst [dimensionless], range [0, 1].
 
     Returns
@@ -1224,13 +1224,13 @@ def powerlaw(
 
     Parameters
     ----------
-    t_lookback: array_like, shape (n_age,)
+    t_lookback : array_like, shape (n_age,)
         Lookback time [yr].
-    alpha: float
+    alpha : float
         Power-law exponent [dimensionless].
-    norm: float
+    norm : float
         Normalization factor [Msun/yr].
-    t_ref: float
+    t_ref : float
         Reference timescale [yr]. Default 1e8.
 
     Returns
@@ -1262,16 +1262,16 @@ def delayed_bq(
 
     Parameters
     ----------
-    t_lookback: array_like, shape (n_age,)
+    t_lookback : array_like, shape (n_age,)
         Lookback time [yr].
-    tau_main_yr: float
+    tau_main_yr : float
         e-folding timescale of main component [yr]. Peak occurs at tau_main_yr.
-    age_main_yr: float
+    age_main_yr : float
         Age of the main stellar population / galaxy age [yr]. The delayed tau
         model extends from 0 to age_main_yr.
-    age_bq_yr: float
+    age_bq_yr : float
         Age at which burst/quench episode begins [yr].
-    r_sfr: float
+    r_sfr : float
         Ratio of SFR after/before burst/quench [dimensionless].
         r_sfr < 1 is quenching, r_sfr > 1 is bursting.
 
@@ -1349,18 +1349,18 @@ def periodic(
 
     Parameters
     ----------
-    t_lookback: array_like, shape (n_age,)
+    t_lookback : array_like, shape (n_age,)
         Lookback time [yr].
-    delta_bursts_yr: float
+    delta_bursts_yr : float
         Elapsed time between the beginning of each burst [yr].
-    tau_bursts_yr: float
+    tau_bursts_yr : float
         Duration (for rectangular) or e-folding timescale [yr] of each event.
-    burst_type: int
+    burst_type : int
         Type of burst event [dimensionless]:
         0 = exponential: exp(-t/tau),
         1 = delayed: (t/tau^2) * exp(-t/tau),
         2 = rectangular: constant 1 for t < tau, 0 otherwise.
-    age_yr: float
+    age_yr : float
         Age of the galaxy / maximum time [yr].
 
     Returns
@@ -1453,20 +1453,20 @@ def sfh2exp(
 
     Parameters
     ----------
-    t_lookback: array_like, shape (n_age,)
+    t_lookback : array_like, shape (n_age,)
         Lookback time [yr]; 0 = present, increasing into the past.
-    log_total_mass: float
+    log_total_mass : float
         log10 of total stellar mass formed [Msun].
-    tau_main_yr: float
+    tau_main_yr : float
         e-folding timescale of the main population [yr].
-    tau_burst_yr: float
+    tau_burst_yr : float
         e-folding timescale of the burst [yr].
-    f_burst: float
+    f_burst : float
         Fraction of the total stellar mass formed in the burst
         [dimensionless, in [0, 1)].
-    age_yr: float
+    age_yr : float
         Age of the main population / lookback to formation [yr].
-    burst_age_yr: float
+    burst_age_yr : float
         Lookback time at which the burst began [yr] (``< age_yr``).
 
     Returns
@@ -1568,9 +1568,9 @@ def buat08(
 
     Parameters
     ----------
-    t_lookback: array_like, shape (n_age,)
+    t_lookback : array_like, shape (n_age,)
         Lookback time [yr].
-    velocity_km_s: float
+    velocity_km_s : float
         Rotational velocity of the galaxy [km/s]. Must be between 40 and 360.
         Will be clipped to this range if necessary.
 
@@ -1654,11 +1654,11 @@ def spline(
 
     Parameters
     ----------
-    t_lookback: array_like, shape (n_age,)
+    t_lookback : array_like, shape (n_age,)
         Lookback time grid [yr].
-    sfr_nodes: array_like, shape (n_nodes,)
+    sfr_nodes : array_like, shape (n_nodes,)
         SFR at each control node [Msun/yr]. Free parameters. Must be non-negative.
-    node_ages_yr: array_like, shape (n_nodes,)
+    node_ages_yr : array_like, shape (n_nodes,)
         Lookback times of control nodes [yr]. Must be strictly increasing.
         **Not JIT-traced**: pass as a concrete array constructed before JIT.
         Typical 4-node default: ``[1e5, 2e9, 9e9, 13e9]`` yr.
@@ -1748,22 +1748,22 @@ def snorm_burst(
 
     Parameters
     ----------
-    t_lookback: array_like, shape (n_age,)
+    t_lookback : array_like, shape (n_age,)
         Lookback time grid [yr].
-    log_total_mass: float
+    log_total_mass : float
         log10 of total stellar mass formed [Msun], summed over both
         smooth and burst components.
-    peak_lbt: float
+    peak_lbt : float
         Peak lookback time of the skew-normal component [yr].
-    width: float
+    width : float
         Gaussian width of the skew-normal component [yr].
-    skew: float
+    skew : float
         Skewness parameter [dimensionless]. 0 = symmetric, >0 skews toward older ages.
-    burst_sfr: float
+    burst_sfr : float
         Relative burst amplitude [dimensionless]. Ratio of the burst plateau
         height to the (unnormalized) skew-normal kernel peak; the absolute
         SFR is set by the global ``log_total_mass`` rescale. Set to 0 to disable.
-    burst_age: float
+    burst_age : float
         Lookback time below which the burst is active [yr]. Default 1e8 yr (100 Myr).
 
     Returns
@@ -1837,24 +1837,24 @@ def snorm_trunc_burst(
 
     Parameters
     ----------
-    t_lookback: array_like, shape (n_age,)
+    t_lookback : array_like, shape (n_age,)
         Lookback time grid [yr].
-    log_total_mass: float
+    log_total_mass : float
         log10 of total stellar mass formed [Msun], summed over both
         smooth and burst components.
-    peak_lbt: float
+    peak_lbt : float
         Peak lookback time [yr].
-    width: float
+    width : float
         Gaussian width [yr].
-    skew: float
+    skew : float
         Skewness parameter [dimensionless].
-    trunc: float
+    trunc : float
         Truncation sharpness [dimensionless]. Larger values = sharper truncation.
-    burst_sfr: float
+    burst_sfr : float
         Relative burst amplitude [dimensionless]. Ratio of the burst plateau
         height to the (unnormalized) tsnorm kernel peak; the absolute SFR is
         set by the global ``log_total_mass`` rescale. Set to 0 to disable.
-    burst_age: float
+    burst_age : float
         Lookback time below which the burst is active [yr].
 
     Returns
@@ -1941,15 +1941,15 @@ def top_hat(
 
     Parameters
     ----------
-    t_lookback: array_like, shape (n_age,)
+    t_lookback : array_like, shape (n_age,)
         Lookback time [yr].
-    log_total_mass: float
+    log_total_mass : float
         log10 of total stellar mass formed in the window [Msun].
-    t_start: float
+    t_start : float
         Older lookback boundary [yr]. Must have t_start > t_end.
-    t_end: float
+    t_end : float
         Younger lookback boundary [yr]. Must have t_end < t_start.
-    smooth_width: float, optional
+    smooth_width : float, optional
         Width of sigmoid transition region [yr]. Controls gradient smoothness
         at edges. Default 1e8 (100 Myr). Typical range: 1e7 - 1e9.
 
@@ -2016,13 +2016,13 @@ def gaussian_burst(
 
     Parameters
     ----------
-    t_lookback: array_like, shape (n_age,)
+    t_lookback : array_like, shape (n_age,)
         Lookback time [yr].
-    log_total_mass: float
+    log_total_mass : float
         log10 of total stellar mass formed in the burst [Msun].
-    t_peak: float
+    t_peak : float
         Peak lookback time (age of burst) [yr].
-    sigma: float
+    sigma : float
         Standard deviation of the Gaussian envelope [yr]. The FWHM is
         approximately 2.355 * sigma.
 

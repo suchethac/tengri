@@ -51,11 +51,11 @@ def random_split_like_tree(rng_key, target=None, treedef=None):
 
     Parameters
     ----------
-    rng_key: PRNGKey
+    rng_key : PRNGKey
         Random key to split.
-    target: pytree, optional
+    target : pytree, optional
         Reference pytree to match structure. Required if treedef is None.
-    treedef: PyTreeDef, optional
+    treedef : PyTreeDef, optional
         Pre-computed tree definition. If None, inferred from target.
 
     Returns
@@ -74,13 +74,13 @@ def normal_like_tree(rng_key, target, mean=0, std=1):
 
     Parameters
     ----------
-    rng_key: PRNGKey
+    rng_key : PRNGKey
         Random key.
-    target: pytree
+    target : pytree
         Reference pytree structure and dtypes.
-    mean: float
+    mean : float
         Mean of normal distribution. [dimensionless]
-    std: float
+    std : float
         Standard deviation of normal distribution. [dimensionless]
 
     Returns
@@ -101,11 +101,11 @@ def ifelse(cond, val_true, val_false):
 
     Parameters
     ----------
-    cond: bool or traced bool
+    cond : bool or traced bool
         Condition to evaluate.
-    val_true: any
+    val_true : any
         Value if cond is True.
-    val_false: any
+    val_false : any
         Value if cond is False.
 
     Returns
@@ -123,13 +123,13 @@ def ScatterV(momentum, refresh_rate, dt, key):
 
     Parameters
     ----------
-    momentum: pytree
+    momentum : pytree
         Current momentum vector(s).
-    refresh_rate: float
+    refresh_rate : float
         Refresh rate parameter (1/correlation time). [1/time]
-    dt: float
+    dt : float
         Time step. [time]
-    key: PRNGKey
+    key : PRNGKey
         Random key for noise generation.
 
     Returns
@@ -153,19 +153,19 @@ def hmc_leapfrog_refresh(params, momentum, log_prob_fn, step_size, n_steps, refr
 
     Parameters
     ----------
-    params: pytree
+    params : pytree
         Current parameter values.
-    momentum: pytree
+    momentum : pytree
         Current momentum (velocity).
-    log_prob_fn: callable
+    log_prob_fn : callable
         Log-probability function mapping params → scalar.
-    step_size: float
+    step_size : float
         Leapfrog step size. [time]
-    n_steps: int
+    n_steps : int
         Number of leapfrog steps.
-    refresh_rate: float
+    refresh_rate : float
         Momentum refresh rate. [1/time]
-    key: PRNGKey
+    key : PRNGKey
         Random key.
 
     Returns
@@ -202,19 +202,19 @@ def hmc_leapfrog_norefresh(params, momentum, log_prob_fn, step_size, n_steps, re
 
     Parameters
     ----------
-    params: pytree
+    params : pytree
         Current parameter values.
-    momentum: pytree
+    momentum : pytree
         Current momentum (velocity).
-    log_prob_fn: callable
+    log_prob_fn : callable
         Log-probability function mapping params → scalar.
-    step_size: float
+    step_size : float
         Leapfrog step size. [time]
-    n_steps: int
+    n_steps : int
         Number of leapfrog steps.
-    refresh_rate: float
+    refresh_rate : float
         Unused (included for API consistency).
-    key: PRNGKey
+    key : PRNGKey
         Random key.
 
     Returns
@@ -256,13 +256,13 @@ def UpdateV(momentum, grad, D, step_size):
 
     Parameters
     ----------
-    momentum: array
+    momentum : array
         Current velocity vector.
-    grad: array
+    grad : array
         Gradient of log-probability (∝ grad(ln n)).
-    D: int
+    D : int
         Number of dimensions.
-    step_size: float
+    step_size : float
         Integration step size.
 
     Returns
@@ -336,19 +336,19 @@ def raytracer_leapfrog_refresh(
 
     Parameters
     ----------
-    params: pytree
+    params : pytree
         Current parameter values.
-    momentum: pytree
+    momentum : pytree
         Current momentum (velocity).
-    log_prob_fn: callable
+    log_prob_fn : callable
         Log-probability function mapping params → scalar.
-    step_size: float
+    step_size : float
         Leapfrog step size. [time]
-    n_steps: int
+    n_steps : int
         Number of leapfrog steps.
-    refresh_rate: float
+    refresh_rate : float
         Momentum refresh rate. [1/time]
-    key: PRNGKey
+    key : PRNGKey
         Random key.
 
     Returns
@@ -383,19 +383,19 @@ def raytracer_leapfrog_norefresh(
 
     Parameters
     ----------
-    params: pytree
+    params : pytree
         Current parameter values.
-    momentum: pytree
+    momentum : pytree
         Current momentum (velocity).
-    log_prob_fn: callable
+    log_prob_fn : callable
         Log-probability function mapping params → scalar.
-    step_size: float
+    step_size : float
         Leapfrog step size. [time]
-    n_steps: int
+    n_steps : int
         Number of leapfrog steps.
-    refresh_rate: float
+    refresh_rate : float
         Unused (included for API consistency).
-    key: PRNGKey
+    key : PRNGKey
         Random key.
 
     Returns
@@ -433,19 +433,19 @@ def raytracer_kdk_norefresh(params, momentum, log_prob_fn, step_size, n_steps, r
 
     Parameters
     ----------
-    params: pytree
+    params : pytree
         Current parameter values.
-    momentum: pytree
+    momentum : pytree
         Current momentum (velocity).
-    log_prob_fn: callable
+    log_prob_fn : callable
         Log-probability function mapping params → scalar.
-    step_size: float
+    step_size : float
         Full step size (half-steps are dt/2). [time]
-    n_steps: int
+    n_steps : int
         Number of KDK steps.
-    refresh_rate: float
+    refresh_rate : float
         Unused (included for API consistency).
-    key: PRNGKey
+    key : PRNGKey
         Random key.
 
     Returns
@@ -482,19 +482,19 @@ def hmc_kdk_norefresh(params, momentum, log_prob_fn, step_size, n_steps, refresh
 
     Parameters
     ----------
-    params: pytree
+    params : pytree
         Current parameter values.
-    momentum: pytree
+    momentum : pytree
         Current momentum (velocity).
-    log_prob_fn: callable
+    log_prob_fn : callable
         Log-probability function mapping params → scalar.
-    step_size: float
+    step_size : float
         Full step size (half-steps are dt/2). [time]
-    n_steps: int
+    n_steps : int
         Number of KDK steps.
-    refresh_rate: float
+    refresh_rate : float
         Unused (included for API consistency).
-    key: PRNGKey
+    key : PRNGKey
         Random key.
 
     Returns
@@ -544,23 +544,23 @@ def sample_hamiltonian(
 
     Parameters
     ----------
-    key: PRNGKey
+    key : PRNGKey
         Random key.
-    params_init: array, shape (D,)
+    params_init : array, shape (D,)
         Initial parameters (flat).
-    log_prob_fn: callable
+    log_prob_fn : callable
         Log-probability function.
-    n_steps: int
+    n_steps : int
         Number of MCMC steps.
-    n_leapfrog_steps: int
+    n_leapfrog_steps : int
         Leapfrog steps per trajectory.
-    step_size: float
+    step_size : float
         Integration step size. [time]
-    refresh_rate: float
+    refresh_rate : float
         Momentum refresh rate. Default 0 (no refresh). [1/time]
-    metro_check: int
+    metro_check : int
         1 = apply Metropolis correction, 0 = skip.
-    sample_hmc: bool
+    sample_hmc : bool
         Always True for this function (use HMC, not ray tracing).
 
     Returns
@@ -597,25 +597,25 @@ def sample_raytrace(
 
     Parameters
     ----------
-    key: PRNGKey
+    key : PRNGKey
         Random key.
-    params_init: array
+    params_init : array
         Initial parameter values (flat 1D array).
-    log_prob_fn: callable
+    log_prob_fn : callable
         Function mapping params → scalar log probability.
-    n_steps: int
+    n_steps : int
         Number of MCMC steps (samples to collect).
-    n_leapfrog_steps: int
+    n_leapfrog_steps : int
         Leapfrog integration steps per trajectory.
-    step_size: float
+    step_size : float
         Leapfrog step size. Recommended: ~0.03 * sqrt(D).
-    refresh_rate: float
+    refresh_rate : float
         Partial momentum refresh rate. 0 = no refresh.
-    metro_check: int
+    metro_check : int
         1 = apply Metropolis correction, 0 = skip.
-    sample_hmc: bool
+    sample_hmc : bool
         If True, use HMC instead of ray tracing.
-    integrator: str
+    integrator : str
         Leapfrog integrator scheme: ``"dkd"`` (Drift-Kick-Drift, default)
         or ``"kdk"`` (Kick-Drift-Kick). KDK is the time-reversed partner
         of DKD. Both are symplectic and second-order. DKD matches
@@ -623,11 +623,11 @@ def sample_raytrace(
 
     Returns
     -------
-    chain: array, shape (n_steps, D)
+    chain : array, shape (n_steps, D)
         Parameter samples.
-    log_likelihood: array, shape (n_steps,)
+    log_likelihood : array, shape (n_steps,)
         Log-likelihood at each accepted sample.
-    accept_prob: array, shape (n_steps,)
+    accept_prob : array, shape (n_steps,)
         Acceptance probability at each step.
 
     Notes
@@ -681,9 +681,9 @@ def sample_raytrace(
 
         Parameters
         ----------
-        carry: tuple
+        carry : tuple
             (params, key, old_lnl) state.
-        x: None
+        x : None
             Unused (scan compatibility).
 
         Returns
@@ -768,22 +768,22 @@ def run_raytrace(
 
     Parameters
     ----------
-    n_burnin: int
+    n_burnin : int
         Per-chain burn-in steps (discarded).
-    n_steps: int
+    n_steps : int
         Post-burn-in samples per chain to collect.
-    n_chains: int, default 1
+    n_chains : int, default 1
         Number of independent ray-tracing chains run in parallel via
         ``jax.vmap``. Each chain starts from ``init + small jitter`` and
         gets its own RNG. Final posterior has ``n_chains * n_steps``
         samples. Wall ≈ one chain's worth on CPU SIMD.
-    n_leapfrog_steps: int
+    n_leapfrog_steps : int
         Leapfrog integration steps per trajectory.
-    step_size: float, optional
+    step_size : float, optional
         Integration step size. Default: 0.03 * sqrt(D).
-    refresh_rate: float
+    refresh_rate : float
         Partial momentum refresh rate. 0 = no refresh (pure ray tracing).
-    verbose: bool
+    verbose : bool
         Print progress.
     """
     from tengri.inference.backends.mcmc.raytrace import sample_raytrace

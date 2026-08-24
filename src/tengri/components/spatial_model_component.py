@@ -181,15 +181,15 @@ class SpatialModelComponent:
 
         Parameters
         ----------
-        p: mapping[str, ndarray]
+        p : mapping[str, ndarray]
             Parameters with prefix stripped (``p["re_kpc"]``, not
             ``p["spatial_re_kpc"]``).
-        profile_in: ndarray, shape (ny, nx)
+        profile_in : ndarray, shape (ny, nx)
             Running 2D surface-brightness profile from upstream components,
             or zeros if this component is first.
-        grid_kpc: tuple of (ndarray, ndarray), each shape (ny, nx)
+        grid_kpc : tuple of (ndarray, ndarray), each shape (ny, nx)
             ``(x_grid_kpc, y_grid_kpc)``: the 2D spatial coordinate grids.
-        **inputs: ndarray
+        **inputs : ndarray
             Cross-component reads keyed by names in :attr:`reads`.
 
         Returns

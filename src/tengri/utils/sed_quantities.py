@@ -104,10 +104,10 @@ def compute_mass_weighted_age(weights: jnp.ndarray, ssp_ages_yr: jnp.ndarray) ->
 
     Parameters
     ----------
-    weights: array, shape (n_age,)
+    weights : array, shape (n_age,)
         CSP mass weights (Msun per SSP age bin), from
         :func:`~tengri.components.stellar.sps.dsps_wrapper.compute_csp_weights`.
-    ssp_ages_yr: array, shape (n_age,)
+    ssp_ages_yr : array, shape (n_age,)
         SSP isochrone ages in years (lookback time).
 
     Returns
@@ -165,15 +165,15 @@ def compute_mass_weighted_metallicity(
 
     Parameters
     ----------
-    weights: array, shape (n_age,)
+    weights : array, shape (n_age,)
         CSP mass weights.
-    ssp_ages_yr: array, shape (n_age,)
+    ssp_ages_yr : array, shape (n_age,)
         SSP ages in years.
-    log_z: float
+    log_z : float
         Single metallicity log10(Z) (used when not evolving).
-    log_z_initial: float, optional
+    log_z_initial : float, optional
         Initial (oldest) metallicity log10(Z). If None, returns ``log_z``.
-    log_z_final: float, optional
+    log_z_final : float, optional
         Final (present-day) metallicity log10(Z).
 
     Returns
@@ -222,13 +222,13 @@ def derived_luminosity_lsun(
 
     Parameters
     ----------
-    derived: Mapping
+    derived : Mapping
         ``state.derived``.
-    key: str
+    key : str
         Linear key name [erg/s], used only when the companion is absent.
-    log_key: str
+    log_key : str
         ``log10`` companion key name [dex re erg/s].
-    default: float, optional
+    default : float, optional
         Value in erg/s when neither key is present. Default 0.0.
 
     Returns
@@ -262,11 +262,11 @@ def derived_weights_peak_relative(
 
     Parameters
     ----------
-    derived: Mapping
+    derived : Mapping
         ``state.derived``.
-    key: str
+    key : str
         Linear per-bin key [erg/s], used only when the companion is absent.
-    log_key: str
+    log_key : str
         ``log10`` companion key [dex re erg/s].
 
     Returns
@@ -308,9 +308,9 @@ def _trapz_to_lsun(integrand: jnp.ndarray, nu: jnp.ndarray) -> jnp.ndarray:
 
     Parameters
     ----------
-    integrand: array_like, shape (n_wave,)
+    integrand : array_like, shape (n_wave,)
         Rest-frame :math:`L_\nu` [erg/s/Hz]; may be signed.
-    nu: array_like, shape (n_wave,)
+    nu : array_like, shape (n_wave,)
         Frequency grid [Hz], descending when wavelength ascends.
 
     Returns
@@ -347,9 +347,9 @@ def compute_bolometric_luminosity(sed: jnp.ndarray, wave: jnp.ndarray) -> jnp.nd
 
     Parameters
     ----------
-    sed: array, shape (n_wave,)
+    sed : array, shape (n_wave,)
         Rest-frame SED in erg/s/Hz.
-    wave: array, shape (n_wave,)
+    wave : array, shape (n_wave,)
         Wavelength grid in Angstrom (ascending).
 
     Returns
@@ -367,9 +367,9 @@ def compute_l_tir(sed: jnp.ndarray, wave: jnp.ndarray) -> jnp.ndarray:
 
     Parameters
     ----------
-    sed: array, shape (n_wave,)
+    sed : array, shape (n_wave,)
         Rest-frame SED in erg/s/Hz.
-    wave: array, shape (n_wave,)
+    wave : array, shape (n_wave,)
         Wavelength grid in Angstrom.
 
     Returns
@@ -399,11 +399,11 @@ def compute_l_dust_absorbed(
 
     Parameters
     ----------
-    sed_intrinsic: array, shape (n_wave,)
+    sed_intrinsic : array, shape (n_wave,)
         Unattenuated stellar SED in erg/s/Hz.
-    sed_attenuated: array, shape (n_wave,)
+    sed_attenuated : array, shape (n_wave,)
         Dust-attenuated stellar SED in erg/s/Hz.
-    wave: array, shape (n_wave,)
+    wave : array, shape (n_wave,)
         Wavelength grid in Angstrom.
 
     Returns
@@ -423,11 +423,11 @@ def _mean_flux_in_band(sed, wave, lam_lo, lam_hi):
 
     Parameters
     ----------
-    sed: array, shape (n_wave,)
+    sed : array, shape (n_wave,)
         SED in erg/s/Hz.
-    wave: array, shape (n_wave,)
+    wave : array, shape (n_wave,)
         Wavelength in Angstrom (ascending).
-    lam_lo, lam_hi: float
+    lam_lo, lam_hi : float
         Band edges in Angstrom.
 
     Returns
@@ -462,9 +462,9 @@ def compute_dn4000(sed: jnp.ndarray, wave: jnp.ndarray) -> jnp.ndarray:
 
     Parameters
     ----------
-    sed: array, shape (n_wave,)
+    sed : array, shape (n_wave,)
         SED in erg/s/Hz.
-    wave: array, shape (n_wave,)
+    wave : array, shape (n_wave,)
         Wavelength in Angstrom.
 
     Returns
@@ -493,9 +493,9 @@ def compute_balmer_break(sed: jnp.ndarray, wave: jnp.ndarray) -> jnp.ndarray:
 
     Parameters
     ----------
-    sed: array, shape (n_wave,)
+    sed : array, shape (n_wave,)
         SED in erg/s/Hz.
-    wave: array, shape (n_wave,)
+    wave : array, shape (n_wave,)
         Wavelength in Angstrom.
 
     Returns
@@ -524,9 +524,9 @@ def compute_uv_slope_beta(sed: jnp.ndarray, wave: jnp.ndarray) -> jnp.ndarray:
 
     Parameters
     ----------
-    sed: array, shape (n_wave,)
+    sed : array, shape (n_wave,)
         SED in erg/s/Hz.
-    wave: array, shape (n_wave,)
+    wave : array, shape (n_wave,)
         Wavelength in Angstrom.
 
     Returns
@@ -567,9 +567,9 @@ def compute_fuv_flux(sed: jnp.ndarray, wave: jnp.ndarray) -> jnp.ndarray:
 
     Parameters
     ----------
-    sed: array, shape (n_wave,)
+    sed : array, shape (n_wave,)
         SED in erg/s/Hz.
-    wave: array, shape (n_wave,)
+    wave : array, shape (n_wave,)
         Wavelength in Angstrom.
 
     Returns
@@ -588,9 +588,9 @@ def compute_nuv_flux(sed: jnp.ndarray, wave: jnp.ndarray) -> jnp.ndarray:
 
     Parameters
     ----------
-    sed: array, shape (n_wave,)
+    sed : array, shape (n_wave,)
         SED in erg/s/Hz.
-    wave: array, shape (n_wave,)
+    wave : array, shape (n_wave,)
         Wavelength in Angstrom.
 
     Returns
@@ -616,9 +616,9 @@ def compute_m_uv(sed: jnp.ndarray, wave: jnp.ndarray) -> jnp.ndarray:
 
     Parameters
     ----------
-    sed: array, shape (n_wave,)
+    sed : array, shape (n_wave,)
         SED in erg/s/Hz (rest-frame luminosity).
-    wave: array, shape (n_wave,)
+    wave : array, shape (n_wave,)
         Wavelength in Angstrom.
 
     Returns
@@ -637,9 +637,9 @@ def compute_uv_luminosity_1600(sed: jnp.ndarray, wave: jnp.ndarray) -> jnp.ndarr
 
     Parameters
     ----------
-    sed: array, shape (n_wave,)
+    sed : array, shape (n_wave,)
         SED in erg/s/Hz.
-    wave: array, shape (n_wave,)
+    wave : array, shape (n_wave,)
         Wavelength in Angstrom.
 
     Returns
@@ -673,9 +673,9 @@ def compute_log_uv_luminosity_1600(sed: jnp.ndarray, wave: jnp.ndarray) -> jnp.n
 
     Parameters
     ----------
-    sed: array_like, shape (n_wave,)
+    sed : array_like, shape (n_wave,)
         Rest-frame :math:`L_\nu` [erg/s/Hz].
-    wave: array_like, shape (n_wave,)
+    wave : array_like, shape (n_wave,)
         Rest-frame wavelength grid [Angstrom], ascending.
 
     Returns
@@ -711,13 +711,13 @@ def compute_irx(
 
     Parameters
     ----------
-    l_tir_lsun: array_like, shape ()
+    l_tir_lsun : array_like, shape ()
         Total IR luminosity [Lsun].
-    l_uv_erg: array_like, shape (), optional
+    l_uv_erg : array_like, shape (), optional
         UV luminosity :math:`\nu L_\nu` [erg/s]. Mutually exclusive with
         ``log_l_uv_erg``. **Not float32-representable** for a normal galaxy
         (~5e42 against a 3.4e38 ceiling); prefer the log form there.
-    log_l_uv_erg: array_like, shape (), optional
+    log_l_uv_erg : array_like, shape (), optional
         :math:`\log_{10}(\nu L_\nu / (\mathrm{erg/s}))` [dex], as returned by
         :func:`compute_log_uv_luminosity_1600`. The float32-safe route.
 
@@ -769,9 +769,9 @@ def compute_rest_uv_color(sed: jnp.ndarray, wave: jnp.ndarray) -> jnp.ndarray:
 
     Parameters
     ----------
-    sed: array, shape (n_wave,)
+    sed : array, shape (n_wave,)
         SED in erg/s/Hz.
-    wave: array, shape (n_wave,)
+    wave : array, shape (n_wave,)
         Wavelength in Angstrom.
 
     Returns
@@ -812,9 +812,9 @@ def _emits_enough_to_weight_by(l_per_bin: jnp.ndarray, l_total: jnp.ndarray) -> 
 
     Parameters
     ----------
-    l_per_bin: array_like, shape (n_age,)
+    l_per_bin : array_like, shape (n_age,)
         Per-age-bin luminosity in any common units.
-    l_total: array_like, scalar
+    l_total : array_like, scalar
         ``sum(l_per_bin)``, passed in because both callers already have it.
 
     Returns
@@ -845,11 +845,11 @@ def _per_bin_luminosity_relative(
 
     Parameters
     ----------
-    weights: array_like, shape (n_age,)
+    weights : array_like, shape (n_age,)
         CSP mass weights [Msun per bin].
-    ssp_flux_at_z: array_like, shape (n_age, n_wave)
+    ssp_flux_at_z : array_like, shape (n_age, n_wave)
         Metallicity-interpolated SSP flux [Lsun/Hz/Msun].
-    wave: array_like, shape (n_wave,)
+    wave : array_like, shape (n_wave,)
         Wavelength grid [Angstrom].
 
     Returns
@@ -896,13 +896,13 @@ def compute_luminosity_weighted_age(
 
     Parameters
     ----------
-    weights: array, shape (n_age,)
+    weights : array, shape (n_age,)
         CSP mass weights.
-    ssp_flux_at_z: array, shape (n_age, n_wave)
+    ssp_flux_at_z : array, shape (n_age, n_wave)
         Metallicity-interpolated SSP flux.
-    ssp_ages_yr: array, shape (n_age,)
+    ssp_ages_yr : array, shape (n_age,)
         SSP ages in years.
-    wave: array, shape (n_wave,)
+    wave : array, shape (n_wave,)
         Wavelength in Angstrom.
 
     Returns
@@ -934,17 +934,17 @@ def compute_luminosity_weighted_metallicity(
 
     Parameters
     ----------
-    weights: array, shape (n_age,)
+    weights : array, shape (n_age,)
         CSP mass weights.
-    ssp_flux_at_z: array, shape (n_age, n_wave)
+    ssp_flux_at_z : array, shape (n_age, n_wave)
         Metallicity-interpolated SSP flux.
-    ssp_ages_yr: array, shape (n_age,)
+    ssp_ages_yr : array, shape (n_age,)
         SSP ages in years.
-    wave: array, shape (n_wave,)
+    wave : array, shape (n_wave,)
         Wavelength in Angstrom.
-    log_z: float
+    log_z : float
         Single metallicity log10(Z).
-    log_z_initial, log_z_final: float, optional
+    log_z_initial, log_z_final : float, optional
         For evolving metallicity.
 
     Returns
@@ -984,14 +984,14 @@ def extract_line_luminosity(
 
     Parameters
     ----------
-    line_waves: array, shape (n_lines,)
+    line_waves : array, shape (n_lines,)
         Rest-frame line wavelengths from nebular model.
-    line_lums: array, shape (n_lines,)
+    line_lums : array, shape (n_lines,)
         Line luminosities. **Unit-preserving**: this function indexes and sums,
         so the output carries whatever unit the input did. Its caller
         :func:`~tengri.forward.component_factory.state_to_emission_lines`
         passes ``state.derived["line_lums"]``, which is [erg/s].
-    target_waves: tuple of float
+    target_waves : tuple of float
         Target wavelength(s) in Angstrom. For doublets, pass both
         components (e.g., ``(3727.12, 3730.12)`` for [OII]).
 
@@ -1004,8 +1004,8 @@ def extract_line_luminosity(
     Notes
     -----
     This said "Lsun" on both sides until #1559, at which point the only caller
-    had been passing erg/s for some time. Nothing computed the wrong answer: the function never
-    converts; but the docstring was evidence for the belief
+    had been passing erg/s for some time. Nothing computed the wrong answer
+    (the function never converts), but the docstring was evidence for the belief
     that the published catalog was in Lsun, which is how three backends came to
     publish it that way.
     """
@@ -1037,13 +1037,13 @@ def extract_log_line_luminosity(
 
     Parameters
     ----------
-    line_waves: array, shape (n_lines,)
+    line_waves : array, shape (n_lines,)
         Rest-frame line wavelengths [Angstrom].
-    log_line_lums: array, shape (n_lines,)
+    log_line_lums : array, shape (n_lines,)
         ``log10`` line luminosities [dex re erg/s]. **Unit-preserving in the same
         sense as the linear form**: the output is ``log10`` of whatever unit the
         input is the ``log10`` of.
-    target_waves: tuple of float
+    target_waves : tuple of float
         Target wavelength(s) [Angstrom]. For doublets, pass both components.
 
     Returns
@@ -1095,7 +1095,7 @@ def compute_l_radio_1p4ghz_from_sfr(sfr: jnp.ndarray) -> jnp.ndarray:
 
     Parameters
     ----------
-    sfr: float
+    sfr : float
         Star formation rate in Msun/yr.
 
     Returns
@@ -1120,7 +1120,7 @@ def compute_l_radio_thermal(q_h: jnp.ndarray) -> jnp.ndarray:
 
     Parameters
     ----------
-    q_h: float
+    q_h : float
         Ionizing photon production rate in photons/s.
 
     Returns
@@ -1143,7 +1143,7 @@ def compute_l_radio_thermal_from_log_qh(log_q_h: jnp.ndarray) -> jnp.ndarray:
 
     Parameters
     ----------
-    log_q_h: array_like, scalar
+    log_q_h : array_like, scalar
         log10 of the ionizing photon rate [dex re photons/s]; -inf for zero flux.
 
     Returns
@@ -1178,11 +1178,11 @@ def compute_xi_ion_from_log_qh(
 
     Parameters
     ----------
-    log_q_h: array_like, scalar
+    log_q_h : array_like, scalar
         log10 ionizing photon rate [dex re photons/s].
-    sed: array_like, shape (n_wave,)
+    sed : array_like, shape (n_wave,)
         Rest-frame :math:`L_\nu` [erg/s/Hz] used to measure the FUV.
-    wave: array_like, shape (n_wave,)
+    wave : array_like, shape (n_wave,)
         Rest-frame wavelength grid [Angstrom].
 
     Returns
@@ -1218,9 +1218,9 @@ def compute_q_ir(l_tir_lsun: jnp.ndarray, l_1p4ghz: jnp.ndarray) -> jnp.ndarray:
 
     Parameters
     ----------
-    l_tir_lsun: float
+    l_tir_lsun : float
         Total IR luminosity in Lsun.
-    l_1p4ghz: float
+    l_1p4ghz : float
         1.4 GHz luminosity in erg/s/Hz.
 
     Returns
@@ -1251,9 +1251,9 @@ def compute_l_x_xrb(sfr: jnp.ndarray, stellar_mass: jnp.ndarray) -> jnp.ndarray:
 
     Parameters
     ----------
-    sfr: float
+    sfr : float
         Star formation rate in Msun/yr.
-    stellar_mass: float
+    stellar_mass : float
         Stellar mass in Msun.
 
     Returns
@@ -1284,9 +1284,9 @@ def compute_log_l_x_xrb(sfr: jnp.ndarray, log_stellar_mass: jnp.ndarray) -> jnp.
 
     Parameters
     ----------
-    sfr: array_like
+    sfr : array_like
         Star formation rate [Msun/yr].
-    log_stellar_mass: array_like
+    log_stellar_mass : array_like
         ``log10`` stellar mass [dex re Msun]. Taken in log because that is how the
         stellar component publishes it (``log_mstar``); the linear form is ~1e10
         and representable, but round-tripping through it is pointless.
@@ -1319,8 +1319,8 @@ def compute_log_l_x_xrb(sfr: jnp.ndarray, log_stellar_mass: jnp.ndarray) -> jnp.
     """
     log_sfr = log10_magnitude(jnp.asarray(sfr))
     # The COEFFICIENTS are pre-logged as Python floats. Writing `jnp.log10(2.6e39)`
-    # instead puts 2.6e39 into a float32 array first, where it is already `inf`: # the log is
-    # taken of infinity and the whole companion returns `inf` on inputs
+    # instead puts 2.6e39 into a float32 array first, where it is already `inf`,
+    # the log is taken of infinity and the whole companion returns `inf` on inputs
     # that are perfectly representable. Caught by this module's own float32 test.
     log_hmxb = _LOG10_HMXB_COEFF + log_sfr
     log_lmxb = _LOG10_LMXB_COEFF + jnp.asarray(log_stellar_mass)
@@ -1333,7 +1333,7 @@ def compute_log_l_x_agn(log_l_bol_agn_erg: jnp.ndarray) -> jnp.ndarray:
 
     Parameters
     ----------
-    log_l_bol_agn_erg: array_like
+    log_l_bol_agn_erg : array_like
         ``log10`` AGN bolometric luminosity [dex re erg/s].
 
     Returns
@@ -1386,7 +1386,7 @@ def compute_l_x_agn(l_bol_agn_erg: jnp.ndarray) -> jnp.ndarray:
 
     Parameters
     ----------
-    l_bol_agn_erg: float
+    l_bol_agn_erg : float
         AGN bolometric luminosity in erg/s.
 
     Returns
@@ -1418,9 +1418,9 @@ def compute_ionizing_efficiency(q_h: jnp.ndarray, l_uv_erg: jnp.ndarray) -> jnp.
 
     Parameters
     ----------
-    q_h: float
+    q_h : float
         Ionizing photon production rate (photons/s).
-    l_uv_erg: float
+    l_uv_erg : float
         UV luminosity νL_ν at 1600 Å in erg/s, or L_ν in erg/s/Hz.
         Convention varies: typically expressed as
         ``log10(ξ_ion / Hz erg^-1)``.

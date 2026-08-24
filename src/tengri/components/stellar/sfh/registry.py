@@ -98,14 +98,14 @@ class SFHRegistryEntry:
 
     Attributes
     ----------
-    callable: Callable
+    callable : Callable
         The pure JAX SFH function.
-    citation: str
+    citation : str
         Optional academic citation. Default empty string.
-    status: str
+    status : str
         Model status: "production", "experimental", "demo", or "deprecated".
         Default "production".
-    short_doc: str
+    short_doc : str
         Optional one-line description. Default empty string.
 
     Notes
@@ -134,16 +134,16 @@ class ParamDef(NamedTuple):
 
     Attributes
     ----------
-    description: str
+    description : str
         Human-readable description.
-    bound_check: callable
+    bound_check : callable
         Function(lo, hi) -> bool for physical bound validation.
-    bound_error: str
+    bound_error : str
         Error message when bound check fails.
-    default: Distribution
+    default : Distribution
         Default prior distribution: what the parameter resolves to when
         nothing asks for it to be free. Usually ``Fixed``.
-    free_prior: Distribution or None, optional
+    free_prior : Distribution or None, optional
         The admissible range ``all_params: FREE`` expands to. ``None`` means
         the parameter is not freeable by the wildcard and ``FREE`` falls back
         to ``default``.
@@ -173,18 +173,18 @@ class SFHModelSpec(NamedTuple):
 
     Attributes
     ----------
-    name: str
+    name : str
         Model name (e.g., "tsnorm", "dpl", "burst", "field").
-    fn: callable
+    fn : callable
         Pure JAX function: fn(t_lookback, **internal_params) -> SFR.
-    params: dict[str, ParamDef]
+    params : dict[str, ParamDef]
         Fittable parameters: public_name -> ParamDef.
-    settings: dict[str, Any]
+    settings : dict[str, Any]
         Non-fittable settings with defaults (e.g., ngrid for field).
-    internal_param_map: dict[str, tuple[str, float, float]]
+    internal_param_map : dict[str, tuple[str, float, float]]
         public_name -> (internal_name, scale, offset).
         Conversion: internal = public * scale + offset.
-    composition_type: str
+    composition_type : str
         "additive", "mixture", or "modulator".
 
     Notes
@@ -259,14 +259,14 @@ def _register(
 
     Parameters
     ----------
-    spec: SFHModelSpec
+    spec : SFHModelSpec
         Model specification to register.
-    citation: str, optional
+    citation : str, optional
         Academic citation for the model. Default empty string.
-    status: str, optional
+    status : str, optional
         Model status ("production", "experimental", "demo", "deprecated").
         Default "production".
-    short_doc: str, optional
+    short_doc : str, optional
         One-line description. Default empty string.
 
     Returns
@@ -1265,7 +1265,7 @@ def _table_sfh_placeholder(t_lookback, **kwargs):
 
     Parameters
     ----------
-    t_lookback: array_like, shape (n_age,)
+    t_lookback : array_like, shape (n_age,)
         Lookback time [yr].
     **kwargs
         Unused; for registry compatibility.
@@ -1717,7 +1717,7 @@ def _field_fn_placeholder(t_lookback, **kwargs):
 
     Parameters
     ----------
-    t_lookback: array_like, shape (n_age,)
+    t_lookback : array_like, shape (n_age,)
         Lookback time [yr].
     **kwargs
         Unused.
@@ -1847,7 +1847,7 @@ def apply_compositor_swap(names: list[str]) -> list[str]:
 
     Parameters
     ----------
-    names: list of str
+    names : list of str
         Requested SFH model names, e.g. ``["dense_basis", "field"]``.
 
     Returns
@@ -1947,9 +1947,9 @@ def resolve_sfh(
 
     Parameters
     ----------
-    mean_sfh_type: str or list[str]
+    mean_sfh_type : str or list[str]
         Model name(s). E.g., ``"tsnorm"`` or ``["tsnorm", "burst", "field"]``.
-    bin_edges_gyr: array-like, shape (n_bins+1,), optional
+    bin_edges_gyr : array-like, shape (n_bins+1,), optional
         Custom age bin edges [Gyr] for ``continuity`` and ``dirichlet`` models.
         When provided, overrides the default ``DEFAULT_BIN_EDGES_GYR``. Use
         ``make_agebins_from_zred`` to generate redshift-appropriate edges.
@@ -1957,14 +1957,14 @@ def resolve_sfh(
 
     Returns
     -------
-    composed_fn: callable
+    composed_fn : callable
         Pure JAX function ``fn(t_lookback, **all_internal_kwargs) -> SFR``
         [Msun/yr].
-    merged_params: dict[str, ParamDef]
+    merged_params : dict[str, ParamDef]
         All fittable parameters across selected models.
-    merged_param_map: dict[str, tuple[str, float, float]]
+    merged_param_map : dict[str, tuple[str, float, float]]
         Public name -> (internal, scale, offset) for all params.
-    merged_settings: dict[str, Any]
+    merged_settings : dict[str, Any]
         Non-fittable settings (e.g., sfh_field_ngrid).
 
     Raises
@@ -2131,29 +2131,29 @@ def compute_field_gp(
 
     Parameters
     ----------
-    xi: array, shape (n_grid,)
+    xi : array, shape (n_grid,)
         Latent vector (xi ~ N(0, I)).
-    psd_sigma: float
+    psd_sigma : float
         PSD amplitude (dex).
-    psd_tau_yr: float
+    psd_tau_yr : float
         PSD timescale (yr).
-    n_grid: int
+    n_grid : int
         Grid size.
-    d_log_age: float
+    d_log_age : float
         Grid spacing in dex.
-    field_model: str
+    field_model : str
         PSD model name. Default "drw".
 
-    log_age_grid: array, shape (n_grid,), optional
+    log_age_grid : array, shape (n_grid,), optional
         ``log10(age/yr)`` grid the SFH is sampled on. Required by the ``drw``
         (linear-time) path to place the covariance in physical time; if omitted
         it is reconstructed with :func:`make_log_age_grid`.
 
     Returns
     -------
-    gp_x: array, shape (n_grid,)
+    gp_x : array, shape (n_grid,)
         GP realization sampled on the log-age grid.
-    k0_half: float
+    k0_half : float
         Lognormal bias correction K(0)/2 so ``exp(gp_x - k0_half)`` is
         mean-preserving. For ``drw`` this is ``(psd_sigma * ln10)^2 / 2``.
 

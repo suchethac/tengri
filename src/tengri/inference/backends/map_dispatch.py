@@ -85,7 +85,7 @@ def _reject_nonfinite_map(params: dict) -> None:
 
     Parameters
     ----------
-    params: dict
+    params : dict
         Parameter name -> value. Values may be scalars or arrays (field latents
         arrive as vectors).
 
@@ -145,20 +145,20 @@ def _build_jaxopt_solver(optimizer, loss_fn, *, maxiter, tol):
 
     Parameters
     ----------
-    optimizer: str
+    optimizer : str
         One of ``_QUASI_NEWTON``.
-    loss_fn: callable
+    loss_fn : callable
         ``(params, data_args) -> scalar`` loss function.
-    maxiter: int
+    maxiter : int
         Maximum number of solver iterations.
-    tol: float
+    tol : float
         Gradient norm tolerance for convergence.
 
     Returns
     -------
-    solver: jaxopt solver
+    solver : jaxopt solver
         Configured solver instance.
-    name: str
+    name : str
         Display name for diagnostics.
     """
     try:
@@ -352,7 +352,7 @@ def _best_finite_restart(final_losses) -> int:
 
     Parameters
     ----------
-    final_losses: array_like, shape (n_restarts,)
+    final_losses : array_like, shape (n_restarts,)
         Each restart's loss at its last step [dimensionless].
 
     Returns
@@ -520,28 +520,28 @@ def run_map(
 
     Parameters
     ----------
-    n_steps: int
+    n_steps : int
         Maximum number of optimization steps.
-    learning_rate: float
+    learning_rate : float
         Learning rate (optax optimizers only; ignored for quasi-Newton).
-    optimizer: str or optax optimizer
+    optimizer : str or optax optimizer
         Optax: ``"adam"``, ``"sgd"``, ``"adamw"``, or a pre-built optax
         optimizer.  ``"lbfgs"`` (or ``"lbfgs_scipy"``) uses scipy
         L-BFGS-B with Wolfe line search, reliable convergence, zero
         JAX compilation for the optimizer itself.
-    early_stopping: bool
+    early_stopping : bool
         Stop if loss doesn't improve (optax only; quasi-Newton uses ``tol``).
-    patience: int
+    patience : int
         Steps to wait for improvement before stopping (optax only).
-    rtol: float
+    rtol : float
         Relative tolerance for early stopping (optax only).
-    tol: float
+    tol : float
         Gradient norm tolerance for convergence (quasi-Newton solvers).
-    verbose: bool
+    verbose : bool
         Print progress summary.
-    verbose_steps: bool
+    verbose_steps : bool
         Print per-step loss (quasi-Newton only).
-    print_every: int
+    print_every : int
         Print interval.
     """
     from tengri.inference.posterior import Posterior
@@ -720,23 +720,23 @@ def build_vectorized_map_solver(
 
     Parameters
     ----------
-    fitter: Fitter
+    fitter : Fitter
         Template fitter, its model, observation, spec, and ``_data_args``
         layout are reused for every galaxy. The galaxy-varying fields
         (``data``, ``noise``, ``sqrt_noise_inv``) are replaced inside the
         scan; all other fields (filter curves, masks, spec covariance) are
         shared from the template.
-    n_steps: int, optional
+    n_steps : int, optional
         Number of optax steps (default 200).  No early stopping, the
         scan length is static, so compile cost is independent of n_steps.
-    learning_rate: float, optional
+    learning_rate : float, optional
         Adam learning rate (default 0.03).
-    optimizer: str, optional
+    optimizer : str, optional
         ``"adam"`` (default), ``"adamw"``, or ``"sgd"``.
 
     Returns
     -------
-    map_solve_one: callable
+    map_solve_one : callable
         ``map_solve_one(flux, noise, key) -> dict`` of unbounded params.
 
     Notes

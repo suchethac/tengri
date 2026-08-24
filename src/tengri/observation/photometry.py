@@ -50,13 +50,13 @@ class FilterCurve:
 
     Attributes
     ----------
-    wave: array, shape (n_wave,)
+    wave : array, shape (n_wave,)
         Wavelength grid [Ångstrom]. Should be at least 10 points spanning
         the transmission curve from near zero to near zero.
-    trans: array, shape (n_wave,)
+    trans : array, shape (n_wave,)
         Transmission at each wavelength (dimensionless, 0.0–1.0).
         Typically peaked at 1.0 and falls to 0 at the filter edges.
-    name: str, optional
+    name : str, optional
         Filter identifier (e.g., ``"sdss_r"``, ``"jwst_f200w"``, ``"hsc_i"``).
         Used for diagnostic output and filter registry lookups. Default empty string.
 
@@ -76,9 +76,9 @@ class FilterCurve:
 
     See Also
     --------
-    load_filter_set: Load filter set from SVO database.
-    compute_flux_density: Convolve SED through this filter.
-    pad_filters: Stack variable-length filter arrays.
+    load_filter_set : Load filter set from SVO database.
+    compute_flux_density : Convolve SED through this filter.
+    pad_filters : Stack variable-length filter arrays.
 
     """
 
@@ -171,22 +171,22 @@ def lnu_filter_integral(
 
     Parameters
     ----------
-    L_nu_rest: array, shape (n_wave,)
+    L_nu_rest : array, shape (n_wave,)
         Rest-frame specific luminosity [erg/s/Hz].
-    wave_rest: array, shape (n_wave,)
+    wave_rest : array, shape (n_wave,)
         Rest-frame wavelength grid [Ångstrom].
-    filter_wave: array, shape (n_filt,)
+    filter_wave : array, shape (n_filt,)
         Filter wavelength grid [Ångstrom], in observed frame.
-    filter_trans: array, shape (n_filt,)
+    filter_trans : array, shape (n_filt,)
         Filter transmission (dimensionless, 0–1).
-    redshift: float
+    redshift : float
         Source redshift z.
-    convention: FilterConvention, optional
+    convention : FilterConvention, optional
         Bandpass weight (``BESSELL`` 1/lambda default, ``ENERGY`` 1/lambda^2).
 
     Returns
     -------
-    L_nu_filter: float
+    L_nu_filter : float
         Filter-weighted rest-frame L_ν [erg/s/Hz].
 
     Notes
@@ -199,16 +199,16 @@ def lnu_filter_integral(
     ``_phot_lnu_precomp`` tensors a named function for "the L_ν step".
 
     **Quadrature (#960)**: the integral is evaluated on the sorted union of
-    the SED nodes and the filter nodes, with the transmission interpolated,     never the SED
-    alone at the filter table's nodes. Instrument filter tables
+    the SED nodes and the filter nodes, with the transmission interpolated,
+    never the SED alone at the filter table's nodes. Instrument filter tables
     (25–70 Å spacing) under-sample MILES-resolution spectra; the pre-#960
     point-sampling quadrature biased SDSS-like bands by up to 3 %.
 
     See Also
     --------
-    compute_flux_density: The full L→F conversion (composes this with
+    compute_flux_density : The full L→F conversion (composes this with
         :func:`lnu_to_fnu`).
-    FilterConvention: The supported bandpass weights.
+    FilterConvention : The supported bandpass weights.
     """
     wave_obs = wave_rest * (1.0 + redshift)
     return _filter_integral_union(L_nu_rest, wave_obs, filter_wave, filter_trans, convention)
@@ -241,22 +241,22 @@ def lnu_filter_integral_batch(
 
     Parameters
     ----------
-    sed_rest: array, shape (n_wave,)
+    sed_rest : array, shape (n_wave,)
         Rest-frame specific luminosity on ``wave_rest`` [erg/s/Hz].
-    wave_rest: array, shape (n_wave,)
+    wave_rest : array, shape (n_wave,)
         Rest-frame wavelength grid [Ångström], ascending.
-    fw_padded: array, shape (n_filters, max_len)
+    fw_padded : array, shape (n_filters, max_len)
         Zero-padded observed-frame filter wavelengths [Ångström].
-    ft_padded: array, shape (n_filters, max_len)
+    ft_padded : array, shape (n_filters, max_len)
         Zero-padded filter transmission (dimensionless).
-    redshift: float
+    redshift : float
         Source redshift.
-    convention: FilterConvention, optional
+    convention : FilterConvention, optional
         Bandpass weight (``BESSELL`` 1/λ default, matching the SSP Φ-tensor LUT).
 
     Returns
     -------
-    L_nu_filter: array, shape (n_filters,)
+    L_nu_filter : array, shape (n_filters,)
         Filter-weighted rest-frame L_ν per band [erg/s/Hz].
 
     Notes
@@ -300,29 +300,29 @@ def compute_flux_density(
 
     Parameters
     ----------
-    sed_rest: array, shape (n_wave,)
+    sed_rest : array, shape (n_wave,)
         Rest-frame spectral luminosity density [erg/s/Hz] or [L☉/Hz] at
         rest-frame wavelengths.
-    wave_rest: array, shape (n_wave,)
+    wave_rest : array, shape (n_wave,)
         Rest-frame wavelength grid [Ångstrom].
-    filter_wave: array, shape (n_filt,)
+    filter_wave : array, shape (n_filt,)
         Filter wavelength grid [Ångstrom], already in observed frame
         (redshifted by the model).
-    filter_trans: array, shape (n_filt,)
+    filter_trans : array, shape (n_filt,)
         Filter transmission at each wavelength (dimensionless, 0–1).
-    redshift: float
+    redshift : float
         Source redshift z. Used to redshift rest-frame wavelengths and
         scale flux by (1+z) factor.
-    dl_cm: float
+    dl_cm : float
         Luminosity distance [cm]. Typically from :func:`luminosity_distance`.
-    convention: FilterConvention, optional
+    convention : FilterConvention, optional
         Bandpass weight. ``BESSELL`` (default) is photon-counting
         (:math:`w=1/\\lambda`, matching DSPS/FSPS/sedpy); ``ENERGY`` is the
         flat-in-frequency mean (:math:`w=1/\\lambda^2`, matching CIGALE).
 
     Returns
     -------
-    flux_density: float
+    flux_density : float
         Observed flux density [erg/s/cm²/Hz] in the AB system.
 
     Notes
@@ -363,9 +363,9 @@ def compute_flux_density(
 
     See Also
     --------
-    FilterCurve: Photometric filter transmission curve.
-    FilterConvention: The supported bandpass weights.
-    pad_filters: Stack variable-length filter arrays.
+    FilterCurve : Photometric filter transmission curve.
+    FilterConvention : The supported bandpass weights.
+    pad_filters : Stack variable-length filter arrays.
 
     """
     # Composition of the two canonical operations (ADR-0016, 2026-05):
@@ -382,19 +382,19 @@ def pad_filters(filter_waves: list, filter_trans: list):
 
     Parameters
     ----------
-    filter_waves: list[ndarray]
+    filter_waves : list[ndarray]
         Wavelength grids per filter (different lengths allowed, units
         [Angstrom]).
-    filter_trans: list[ndarray]
+    filter_trans : list[ndarray]
         Transmission per filter (same lengths as ``filter_waves``, dimensionless).
 
     Returns
     -------
-    fw_padded: ndarray, shape (n_filters, max_len)
+    fw_padded : ndarray, shape (n_filters, max_len)
         Zero-padded filter wavelengths [Angstrom].
-    ft_padded: ndarray, shape (n_filters, max_len)
+    ft_padded : ndarray, shape (n_filters, max_len)
         Zero-padded filter transmissions (dimensionless).
-    n_valid: ndarray, shape (n_filters,), dtype int
+    n_valid : ndarray, shape (n_filters,), dtype int
         Number of valid (non-padded) points per filter.
 
     Notes
@@ -448,17 +448,17 @@ def pad_filters_to_bucket(filter_waves: list, filter_trans: list):
     to one compile per bucket. Two observations with 5 and 6 filters at the
     same max wavelength length share a compile by padding both to 6.
 
-    For ``n_filters > max(FILTER_COUNT_BUCKETS)``, no padding is applied,     each unique large
-    count gets its own compile (the "force compilation"
+    For ``n_filters > max(FILTER_COUNT_BUCKETS)``, no padding is applied;
+    each unique large count gets its own compile (the "force compilation"
     escape hatch).
 
     Returns
     -------
-    fw_padded: ndarray, shape (n_padded, max_len)
-    ft_padded: ndarray, shape (n_padded, max_len)
-    n_valid: ndarray, shape (n_padded,), dtype int
+    fw_padded : ndarray, shape (n_padded, max_len)
+    ft_padded : ndarray, shape (n_padded, max_len)
+    n_valid : ndarray, shape (n_padded,), dtype int
         Number of valid samples per filter; 0 for padded-out filters.
-    n_filters_real: int
+    n_filters_real : int
         Original number of filters (use to slice the projected result).
     """
     fw_padded, ft_padded, n_valid = pad_filters(filter_waves, filter_trans)
@@ -487,24 +487,24 @@ def _compute_flux_density_padded(
 
     Parameters
     ----------
-    sed_rest: array, shape (n_wave,)
+    sed_rest : array, shape (n_wave,)
         Rest-frame SED [erg/s/Hz].
-    wave_rest: array, shape (n_wave,)
+    wave_rest : array, shape (n_wave,)
         Rest-frame wavelength [Angstrom].
-    filter_wave_padded: array, shape (max_len,)
+    filter_wave_padded : array, shape (max_len,)
         Zero-padded filter wavelengths [Angstrom].
-    filter_trans_padded: array, shape (max_len,)
+    filter_trans_padded : array, shape (max_len,)
         Zero-padded filter transmission (dimensionless).
-    redshift: float
+    redshift : float
         Source redshift.
-    dl_cm: float
+    dl_cm : float
         Luminosity distance [cm].
-    convention: FilterConvention, optional
+    convention : FilterConvention, optional
         Bandpass weight (``BESSELL`` 1/lambda default, ``ENERGY`` 1/lambda^2).
 
     Returns
     -------
-    flux_density: float
+    flux_density : float
         Observed flux density [erg/s/cm²/Hz].
 
     Notes
@@ -541,19 +541,19 @@ def compute_flux_density_batch(
 
     Parameters
     ----------
-    sed_rest: array, shape (n_wave,)
+    sed_rest : array, shape (n_wave,)
         Rest-frame SED [erg/s/Hz].
-    wave_rest: array, shape (n_wave,)
+    wave_rest : array, shape (n_wave,)
         Rest-frame wavelength [Angstrom].
-    fw_padded: array, shape (n_filters, max_len)
+    fw_padded : array, shape (n_filters, max_len)
         Zero-padded filter wavelengths [Angstrom] (from ``pad_filters``).
-    ft_padded: array, shape (n_filters, max_len)
+    ft_padded : array, shape (n_filters, max_len)
         Zero-padded filter transmissions (dimensionless, from ``pad_filters``).
-    redshift: float
+    redshift : float
         Source redshift.
-    dl_cm: float
+    dl_cm : float
         Luminosity distance [cm].
-    convention: FilterConvention, optional
+    convention : FilterConvention, optional
         Bandpass weight (``BESSELL`` 1/lambda default, ``ENERGY`` 1/lambda^2).
 
     Returns
@@ -590,19 +590,19 @@ def project_photometry(state, params, photometry, *, dl_cm=None) -> jnp.ndarray:
 
     Parameters
     ----------
-    state: ForwardState
+    state : ForwardState
         Orchestrator output. Reads ``state.sed_intrinsic`` (rest-frame
         L_nu [erg/s/Hz]), ``state.wave`` (rest-frame Angstrom), and
         optionally ``state.derived["igm_transmission"]`` (dimensionless,
         same shape as ``state.wave``).
-    params: Mapping[str, jnp.ndarray]
+    params : Mapping[str, jnp.ndarray]
         Parameter dict. Reads ``params["redshift"]`` for cosmology and
         redshift. If redshift is absent, defaults to 0.0.
-    photometry: Photometry
+    photometry : Photometry
         Photometry configuration. Reads ``n_filters`` (count of real filters),
         ``_fw_padded`` and ``_ft_padded`` (zero-padded filter wavelengths and
         transmissions), and ``convention`` (FilterConvention for bandpass weight).
-    dl_cm: float or jnp.ndarray, optional
+    dl_cm : float or jnp.ndarray, optional
         Luminosity distance [cm]. If ``None``, derived from
         ``params["redshift"]`` via :func:`tengri.cosmology.luminosity_distance`.
 
@@ -627,8 +627,8 @@ def project_photometry(state, params, photometry, *, dl_cm=None) -> jnp.ndarray:
 
     See Also
     --------
-    compute_flux_density_batch: Low-level batched filter convolution.
-    project_spectrum: Spectroscopy projection twin (IGM composed by callers).
+    compute_flux_density_batch : Low-level batched filter convolution.
+    project_spectrum : Spectroscopy projection twin (IGM composed by callers).
     """
     from tengri.cosmology import luminosity_distance
 
@@ -682,15 +682,15 @@ def compute_photometry(
 
     Parameters
     ----------
-    sed_rest: array, shape (n_wave,)
+    sed_rest : array, shape (n_wave,)
         Rest-frame SED [erg/s/Hz].
-    wave_rest: array, shape (n_wave,)
+    wave_rest : array, shape (n_wave,)
         Rest-frame wavelength [Angstrom].
-    filters: list of FilterCurve
+    filters : list of FilterCurve
         Filter transmission curves to convolve.
-    redshift: float
+    redshift : float
         Source redshift [dimensionless].
-    dl_cm: float
+    dl_cm : float
         Luminosity distance [cm].
 
     Returns
@@ -709,8 +709,8 @@ def compute_photometry(
 
     See Also
     --------
-    compute_flux_density: Single filter convolution (JIT-compatible).
-    compute_flux_density_batch: Vectorized convolution via vmap.
+    compute_flux_density : Single filter convolution (JIT-compatible).
+    compute_flux_density_batch : Vectorized convolution via vmap.
     """
     fluxes = []
     for filt in filters:
@@ -727,7 +727,7 @@ def ab_mag_from_flux(flux_cgs: jnp.ndarray) -> jnp.ndarray:
 
     Parameters
     ----------
-    flux_cgs: array, shape (n_band,)
+    flux_cgs : array, shape (n_band,)
         Flux density [erg/s/cm²/Hz].
 
     Returns

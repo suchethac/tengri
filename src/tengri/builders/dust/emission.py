@@ -126,10 +126,10 @@ def relaxed_energy_balance(model: str = "dale2014", *, sigma: float = 0.2) -> di
 
     Parameters
     ----------
-    model: str
+    model : str
         Emission model variant carrying the IR shape (default ``'dale2014'``).
         Any name in :func:`available` works.
-    sigma: float
+    sigma : float
         Standard deviation (in natural-log space) of the ``LogNormal`` prior on
         ``eta``. ``0.2`` allows ~+/-20% deviation; widen for looser balance.
 
