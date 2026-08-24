@@ -325,7 +325,7 @@ def silva04_sed(*args, _template: Silva04Grid | None = None, **kwargs) -> jnp.nd
     _template : Silva04Grid, optional
         Pre-loaded grid, threaded in as a JIT argument by the forward
         model. When ``None`` (default) the packaged grid is loaded from
-        disk and: if this call happens under trace: baked into the
+        disk and (if this call happens under trace) baked into the
         graph as constants.
     **kwargs
         Accepted and ignored for unified-dispatch compatibility.
@@ -345,7 +345,7 @@ def silva04_sed(*args, _template: Silva04Grid | None = None, **kwargs) -> jnp.nd
     return _load_silva04_default()(*args, **kwargs)
 
 
-# Deprecated: "_analytic" was a misnomer: this is grid interpolation, not a
+# Deprecated: "_analytic" was a misnomer; this is grid interpolation, not a
 # closed-form model. Use silva04_sed. Alias removed in v1.0.
 silva04_analytic = deprecated_alias(
     silva04_sed, old_name="silva04_analytic", new_name="silva04_sed"

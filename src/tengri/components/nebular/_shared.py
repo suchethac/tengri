@@ -64,13 +64,13 @@ def _grid_bracket(
     r"""Local grid spacing and nearest-node index for each line, from one search.
 
     Both facts come from the same bracketing interval, and both are needed on
-    every render (#1836): the spacing floors the profile width: a *local*
+    every render (#1836): the spacing floors the profile width, a *local*
     question, since the MILES SSP grid runs 0.9 Å inside 3500–7500 Å and 10 Å at
     Lyα, so a global statistic answers it wrongly: and the nearest node is where
     a line the grid cannot resolve gets placed.
 
     Returned together because they share the search, not because the search is
-    expensive: measured, it is not: an ablation on an isolated (6185, 128) block
+    expensive; measured, it is not: an ablation on an isolated (6185, 128) block
     put the whole of ``searchsorted`` + containment mask + scatter at **768**
     gradient FLOPs against 38,006,660 for the render. What costs is the discrete
     area itself (``quad_w @ profiles``, +41 % over the un-rescaled form), and
@@ -166,7 +166,7 @@ def _render_conserving(
     area = quad_w @ profiles  # (n_lines,)
 
     # Rescale ONLY the profiles the grid fully contains. The rescale corrects
-    # *quadrature* error: too few nodes under the profile: and a truncated
+    # *quadrature* error (too few nodes under the profile) and a truncated
     # profile is a different thing that must not be corrected: a line near or
     # past the grid edge legitimately contributes only the part that lands in
     # range. Dividing its visible sliver by that sliver's own area would inflate
@@ -216,7 +216,7 @@ def place_line_profiles(
     Converts line luminosities (point-like) to spectral luminosity density on a
     wavelength grid using one of three modes, in priority order:
 
-    1. **Velocity triweight** (``line_sigma_kms > 0``): the recommended path:
+    1. **Velocity triweight** (``line_sigma_kms > 0``), the recommended path:
        each line is a triweight kernel whose width scales with wavelength,
        :math:`\sigma_\lambda = (\sigma_v / c)\,\lambda`, giving every line the
        same velocity dispersion (as a real emission line has). Mirrors
@@ -294,7 +294,7 @@ def place_line_profiles(
     """
     n_wave = obs_wavelengths.shape[0]
 
-    # NOTE: ``line_sigma_kms`` here is only honored for *concrete* values: the
+    # NOTE: ``line_sigma_kms`` here is only honored for *concrete* values; the
     # ``if`` below is a Python branch. The forward model, where the velocity
     # width is a fittable (traced) parameter, must call
     # :func:`place_line_profiles_velocity` directly to stay JIT-safe.
@@ -600,7 +600,7 @@ def compute_qh(ssp_wave: jnp.ndarray, ssp_flux: jnp.ndarray) -> float:
         The integral is computed via trapezoidal quadrature in frequency space
         (not wavelength space) to avoid nonlinear Jacobian effects.
 
-    **Warning: wNE SSPs**:
+    **Warning (wNE SSPs)**:
         Returns ~0 for "with Nebular Emission" (wNE) SSP spectra because CLOUDY
         consumes ionizing photons during SSP generation. If you see Q_H ≈ 0 for
         young SSPs (which should have Q_H > 1e50 photons/s), check that your

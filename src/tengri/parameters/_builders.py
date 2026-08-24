@@ -52,7 +52,7 @@ def _bucket_from_declarations(
 # It is read only by the Feltre NLR backend, and the ``neb`` group wildcard is
 # not backend-scoped the way ``dust.emission`` has been since #1482, so freeing
 # it under any other nebular backend would add an inert dimension. Its grid is
-# also three nodes: {0.1, 0.3, 0.5}; inside a validator interval of
+# also three nodes ({0.1, 0.3, 0.5}) inside a validator interval of
 # [0.05, 0.6], so the admissible interval and the tabulated one are not the same
 # object and a uniform over the former would spend most of its mass off-grid.
 #

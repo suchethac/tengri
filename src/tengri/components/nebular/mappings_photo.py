@@ -567,7 +567,7 @@ class MappingsPhotoStellarBackend:
         -----
         **JIT-compatible**: yes, all grid interpolations use ``jnp`` primitives.
 
-        **SFH modes**: "inst" (instantaneous), "cont" (continuous): determines
+        **SFH modes**: "inst" (instantaneous), "cont" (continuous), determines
         which MAPPINGS grid row is used for logHB_per_logq.
 
         **Metallicity**: Input neb_logZ_gas is absolute log10(Z); internally
@@ -693,7 +693,7 @@ class MappingsPhotoStellarBackend:
         collapses. The resulting attributes are JAX arrays usable inside
         the JIT'd kernel body.
         """
-        del dl_cm  # MAPPINGS V: no continuum, lines via point-sampling: no F_nu scaling needed
+        del dl_cm  # MAPPINGS V: no continuum, lines via point-sampling, no F_nu scaling needed
         grid = self.grid
         sfh_idx = self._sfh_idx
 

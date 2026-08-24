@@ -308,7 +308,7 @@ def cat3d_wind_sed(*args, _template: TorusTemplateGrid | None = None, **kwargs) 
     return _load_cat3d_default()(*args, **kwargs)
 
 
-# Deprecated: "_analytic" was a misnomer: this is grid interpolation, not a
+# Deprecated: "_analytic" was a misnomer; this is grid interpolation, not a
 # closed-form model. Use cat3d_wind_sed. Alias removed in v1.0.
 cat3d_wind_analytic = deprecated_alias(
     cat3d_wind_sed, old_name="cat3d_wind_analytic", new_name="cat3d_wind_sed"

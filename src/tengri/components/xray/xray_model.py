@@ -260,7 +260,7 @@ class XRayAirdSEDComponent(SEDModelComponent):
               used in practice since X-ray requires stellar component).
             - L_2500_30deg [erg/s/Hz], when AGN publishes L_2500, reads it;
               when absent, injected 0.0 (no AGN → no corona).
-            - age_weights [Msun]: mass weights on SSP grid. Uses zero-sum check:
+            - age_weights [Msun], mass weights on SSP grid. Uses zero-sum check:
               if sum > 0, computes mass-weighted stellar age; if sum == 0 (absent
               or truly zero-weighted), falls back to 1.0 Gyr.
             - ssp_ages_yr [yr]; SSP age grid; paired with age_weights.

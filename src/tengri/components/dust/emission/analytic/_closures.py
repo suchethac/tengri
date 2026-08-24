@@ -29,7 +29,7 @@ from tengri.utils.physics_constants import (
 
 # x = h*nu/(k_B*T) ceiling.  A plain constant, not a dtype-dependent one: the
 # denominator below is ``-expm1(-x)`` in (0, 1], so nothing here can overflow
-# at any x, and ``exp(-x)`` underflows to exactly 0.0: the true Wien limit:
+# at any x, and ``exp(-x)`` underflows to exactly 0.0 (the true Wien limit)
 # rather than needing to be clamped short of it (#1439).
 _X_MAX: float = 500.0
 

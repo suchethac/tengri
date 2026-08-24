@@ -66,7 +66,7 @@ __all__ = [
 #: Remaining log-posterior improvement, in nats, still counted as "at the mode".
 #:
 #: Estimated by half the squared Newton decrement, :math:`\\tfrac12 g^T H^{-1} g`
-#:, scale-free, so it means the same thing whether a mass is carried in dex or
+#: which is scale-free, so it means the same thing whether a mass is carried in dex or
 #: in log10. Half a nat is well inside the noise of any posterior worth
 #: summarizing, and far below the gap that matters: a MAP stopped early measured
 #: ``n_eff`` = 17.6 where the converged fit gives 6.3.
@@ -448,7 +448,7 @@ def parameter_information(target, params=None, *, key=None) -> ParameterInformat
             f"unclaimed (tolerance {MODE_TOLERANCE_NATS}). Curvature away from a "
             f"stationary point is not the posterior precision, so n_eff = "
             f"{info.n_eff:.2f} is not meaningful. Re-run the fit to convergence "
-            f", more restarts or more steps, or pass params= at a converged "
+            f"(more restarts or more steps) or pass params= at a converged "
             f"point. Measured on one model: an under-converged MAP reported "
             f"n_eff 17.6 where the converged fit gives 6.3.",
             RuntimeWarning,

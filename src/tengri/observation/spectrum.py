@@ -712,7 +712,7 @@ def _flux_conserving_resample(
     r"""Bin-integrated (flux-conserving) resample of ``sed_rest`` onto ``wave_query``.
 
     Each output value is the *mean flux density over that pixel's wavelength bin*
-    the integral of the model over the bin divided by the bin width, rather
+    (the integral of the model over the bin divided by the bin width) rather
     than a point sample at the pixel center (Carnall 2017, SpectRes, eq. 3):
 
     .. math::
@@ -909,7 +909,7 @@ def velocity_broaden(
 
     The check is skipped when ``wave`` is a tracer, since a traced grid cannot
     be inspected at trace time. Under ``jax.jit`` with a concrete (closed-over)
-    grid, the usual case for a fixed instrument grid, it still fires.
+    grid (the usual case for a fixed instrument grid) it still fires.
 
     Examples
     --------

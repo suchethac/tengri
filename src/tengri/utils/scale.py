@@ -135,7 +135,7 @@ def representable_denominator(value: float) -> float:
 
     Note the difference from :func:`representable_floor`, which is a no-op in
     float64 for *every* literal the tree uses. This one is not: a floor below
-    1.5e-154; the tree carries ``1e-300``: is raised in float64 as well,
+    1.5e-154 (the tree carries ``1e-300``) is raised in float64 as well,
     because it is derivative-unsafe *there too* (``(1e-300)**2`` is ``0.0`` in
     float64, whose smallest normal is 2.2e-308). That is the intended behavior
     and not a float64 regression, but it does mean this helper cannot be applied
@@ -530,7 +530,7 @@ def apply_log10_scale(arr, log10_scale):
     mode does not** (#1415, open as #1388). The remaining defect is a property of
     autodiff *mode*, not of this function. With ``log10_scale`` ~ -58 (the
     cosmological dimming), reverse mode has to form ``d out/d arr = 10**(-58)``
-    explicitly; below float32's smallest subnormal (~1.4e-45); so the cotangent
+    explicitly (below float32's smallest subnormal (~1.4e-45)) so the cotangent
     flushes to exactly zero, even when the gradient it was heading for (~1e-27) is
     perfectly representable. Forward mode carries the tangent instead, and because
     the tangent is divided by the same ``safe_peak`` as the primal it is O(1) when

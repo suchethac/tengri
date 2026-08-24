@@ -505,7 +505,7 @@ _AGN_PRESETS = {
         "agn_norm": "cigale_joint",
         "_description": "disc=powerlaw + torus=skirtor",
     },
-    # NOTE: ``skirtor_stalevski`` is intentionally absent: it is an
+    # NOTE: ``skirtor_stalevski`` is intentionally absent; it is an
     # un-composable raw radiative-transfer template routed directly to the
     # monolithic ``skirtor_stalevski_agn`` in ``resolve_agn_model``.
     "qsogen": {
@@ -520,7 +520,7 @@ _AGN_PRESETS = {
             "disc=qsogen + blr=qsogen + feii=qsogen_balmer + torus=qsogen + atten=qsogen_smc"
         ),
     },
-    # NOTE: ``grahsp`` is intentionally absent: it is a self-contained parity
+    # NOTE: ``grahsp`` is intentionally absent; it is a self-contained parity
     # model whose torus_model/disc_model variant selectors are not composable
     # kwargs, so it routes directly to the monolithic GRAHSP function in
     # ``resolve_agn_model`` (via ``_resolve_monolithic_model``). The block
@@ -708,7 +708,7 @@ def multicolor_agn(
     return l_nu * agn_lum_ratio
 
 
-# kubota_done alias removed: use composable blocks instead:
+# kubota_done alias removed; use composable blocks instead:
 # agn_model="composable", agn_disc_block="multicolor", agn_torus_block="silva04"
 
 
@@ -1068,7 +1068,7 @@ def cat3d_wind_agn(
     **JIT-compatible**: yes.
 
     Grid templates published with AGNfitter-rX (Martínez-Ramírez
-    et al. 2024, A&A 688, A46, arXiv:2405.12111): Hönig & Kishimoto 2017
+    et al. 2024, A&A 688, A46, arXiv:2405.12111), a Hönig & Kishimoto 2017
     CAT3D-Wind three-parameter projection. See
     :mod:`tengri.components.agn.cat3d_wind` and
     ``scripts/build_cat3d_wind_grid.py``.

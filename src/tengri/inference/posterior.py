@@ -368,7 +368,7 @@ class Posterior:
         - Any free parameter has all identical draws (``np.ptp == 0``) over >= 100
           draws (frozen parameter). Small test posteriors (< 100 draws) are exempt.
 
-        Raises no exception, only warns, so the result is still usable for
+        Raises no exception (only warns) so the result is still usable for
         inspection. The warning message states the failure signature and remedies
         (shorter warmup, lower target_accept_rate, smaller step_size, or
         dense_mass_matrix=False per issue #1999).
@@ -517,7 +517,7 @@ class Posterior:
         """
         warnings.warn(
             "Posterior.derived is deprecated; use Posterior.properties instead. "
-            "It carries every property the model provides, not this hardcoded five, "
+            "It carries every property the model provides (not this hardcoded five) "
             "under the same names the model side uses, and evaluates them in "
             "memory-bounded chunks. Replace posterior.derived['stellar_mass'] with "
             "posterior.properties['stellar_mass'] (or posterior.stellar_mass); "

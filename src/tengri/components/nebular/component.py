@@ -228,7 +228,7 @@ class NebularSEDComponent(TemplateThreading):
 
         Notes
         -----
-        **JIT-compatible**: not applicable: composition-time only.
+        **JIT-compatible**: not applicable; composition-time only.
         """
         if self.must_materialize_sed:
             return self

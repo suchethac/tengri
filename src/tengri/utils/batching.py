@@ -22,7 +22,7 @@ error.
 each batch shape*, so a chunk of 8 and a batch of 37 vectorize and reassociate
 their reductions differently and the last bit can move (measured: ~1 ULP on
 ``sfr_100myr``; exact on ``stellar_mass``). If you are chasing bit-for-bit
-reproducibility; a reproduction notebook, a parity audit: pin ``chunk_size``
+reproducibility (a reproduction notebook, a parity audit) pin ``chunk_size``
 along with everything else, or evaluate unchunked.
 """
 
@@ -67,7 +67,7 @@ def vmap_chunked(fn, chunk_size: int = 16):
     than with the batch. Each chunk runs as one compiled ``jit(vmap(fn))``
     kernel.
 
-    If ``fn`` cannot be jitted; some nebular backends are not traceable: the
+    If ``fn`` cannot be jitted (some nebular backends are not traceable) the
     call degrades to an **eager per-draw loop** rather than raising, and warns
     once so the ~7x slowdown is never silent. The jittability probe runs **once**
     per returned callable, not once per draw.

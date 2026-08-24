@@ -674,6 +674,6 @@ def fritz_components(*args, **kwargs) -> FritzComponents:
     return fn(*args, **kwargs)
 
 
-# Deprecated: "_analytic" was a misnomer: Fritz+2006 is a 6D template-grid
+# Deprecated: "_analytic" was a misnomer; Fritz+2006 is a 6D template-grid
 # interpolation, not a closed-form model. Use fritz_sed. Removed in v1.0.
 fritz_analytic = deprecated_alias(fritz_sed, old_name="fritz_analytic", new_name="fritz_sed")

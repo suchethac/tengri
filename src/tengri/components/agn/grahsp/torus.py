@@ -3,7 +3,7 @@
 
 Implements the ``activategtorus`` module from upstream
 ``JohannesBuchner/GRAHSP`` (CeCILL-v2). The infrared continuum is the sum of
-two log-quadratic ("log-Gaussian") components in :math:`L_\\lambda` :
+two log-quadratic ("log-Gaussian") components in :math:`L_\\lambda`:
 a cool dust peak at :math:`\\lambda_{\\rm COOL}` and a hot dust peak at
 :math:`\\lambda_{\\rm HOT}`, each with log-width :math:`W` (dex). The hot
 component is scaled by :math:`f_{\\rm hot}` (Eq. fhot in the paper) relative

@@ -249,7 +249,7 @@ def _build_quantile_points(
 
     Constructs (in order):
     1. Endpoint: (0, 0)
-    2. Big Bang constraint: (0.01, 0): enforces SFR=0 at early times
+    2. Big Bang constraint: (0.01, 0), which enforces SFR=0 at early times
     3. Intermediate quantiles from tx_fracs: (tx_i, mass_i)
     4. Endpoint: (1, 1)
     5. Observation-epoch SFR constraints: 3 points near t=1 that

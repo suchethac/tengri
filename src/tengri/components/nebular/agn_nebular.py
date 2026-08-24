@@ -452,7 +452,7 @@ def agn_nlr_cue(
     # Cue predicts the line luminosity for the full Q_H; the NLR
     # intercepts only a fraction of those ionizing photons.
     #
-    # Units: this function's contract is [Lsun] **IAU 2015**: the unit its
+    # Units: this function's contract is [Lsun] **IAU 2015**, the unit its
     # Feltre and Synthesizer siblings behind :func:`agn_nlr_emission` return,
     # and the one every consumer multiplies back out by. Cue's catalog is
     # [Lsun] in *Cue's own* convention (3.839e33, the value its network was
@@ -1423,9 +1423,9 @@ def agn_nlr_emission(
     -------
     tuple
 
-        - line_wavelengths: ndarray, shape (n_lines,): emission line vacuum
+        - line_wavelengths : ndarray, shape (n_lines,). Emission line vacuum
           wavelengths [Angstrom]
-        - line_luminosities: ndarray, shape (n_lines,): emission line
+        - line_luminosities : ndarray, shape (n_lines,). Emission line
           luminosities [L_sun]
 
     Raises

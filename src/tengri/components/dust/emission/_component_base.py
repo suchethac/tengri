@@ -88,7 +88,7 @@ class EmissionComponent(SEDModelComponent):
     ) -> tuple[dict[str, Any], jnp.ndarray | None]:
         """Swap ``L_ir`` for unity, returning the log10 offset to re-apply.
 
-        Returns ``(input_kwargs, None)``: leaving the inputs untouched: when
+        Returns ``(input_kwargs, None)`` (leaving the inputs untouched) when
         the component is not proportional to ``L_ir`` or when the producer has
         published no ``log_L_ir`` to factor with.
         """

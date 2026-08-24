@@ -75,7 +75,7 @@ class DraineLi2007IRSEDComponent(EmissionComponent):
 
         Notes
         -----
-        **JIT-compatible**: no, deliberately: runs at build time.
+        **JIT-compatible**: no, deliberately; runs at build time.
         """
         del wave
         from tengri._data_setup import find_data_str
@@ -185,7 +185,7 @@ class DraineLi2014IRSEDComponent(EmissionComponent):
 
         Notes
         -----
-        **JIT-compatible**: no, deliberately: this runs at build time so the
+        **JIT-compatible**: no, deliberately; this runs at build time so the
         arrays reach ``predict`` as a traced argument (#1649).
         """
         del wave

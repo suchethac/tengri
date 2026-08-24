@@ -86,7 +86,7 @@ def _young_indicator(
     ``tengri.components.dust._apply.two_component_dust`` uses for the screen
     itself, so the stars that sit behind the birth cloud, the stars whose Lyman
     continuum is reprocessed, and the stars the photometry LUT reddens are all the
-    same stars. Two other spellings: ``1 / (1 + 10**u)``: existed here and in the
+    same stars. Two other spellings (``1 / (1 + 10**u)``) existed here and in the
     LUT's ``dust_young_indicator``; because :math:`10^u = e^{u\ln 10}`, they were
     2.3x sharper than the screen they claimed to match (#1122).
 
@@ -179,7 +179,7 @@ class DustSEDComponentConfig(SEDComponentConfig):
     #: rather than heat dust. Static, non-fittable; enters ``compile_signature``.
     lyman_cutoff_aa: float = 0.0
     #: Which stellar populations have their Lyman continuum (λ < 912 Å) absorbed
-    #: by ``neb_fesc``. ``False`` (default): **young/birth-cloud only**: only
+    #: by ``neb_fesc``. ``False`` (default) is **young/birth-cloud only**: only
     #: stars inside birth clouds (weighted by the young indicator) have their LyC
     #: reprocessed, so the old/diffuse stellar LyC passes through (matches
     #: bagpipes ``model_galaxy``, which zeros only ``spectrum_bc[<912]``, and is

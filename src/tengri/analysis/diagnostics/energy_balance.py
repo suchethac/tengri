@@ -125,13 +125,13 @@ def dust_energy_balance(
     dict
         Keys:
 
-        - ``absorbed``: float: :math:`\int (L_\nu^{\rm unatten} -
+        - ``absorbed`` : float: :math:`\int (L_\nu^{\rm unatten} -
           L_\nu^{\rm atten}) d\nu` over the UV-NIR band. [erg/s]
-        - ``emitted``: float; :math:`\int L_\nu^{\rm dust} d\nu` over
+        - ``emitted`` : float; :math:`\int L_\nu^{\rm dust} d\nu` over
           the IR band. [erg/s]
-        - ``ratio``: float: ``emitted / absorbed`` (``inf`` if
+        - ``ratio`` : float. ``emitted / absorbed`` (``inf`` if
           ``absorbed`` is zero, ``nan`` if both are zero).
-        - ``balanced``: bool; ``abs(ratio - 1) <= tol`` and absorbed > 0.
+        - ``balanced`` : bool; ``abs(ratio - 1) <= tol`` and absorbed > 0.
 
     Notes
     -----

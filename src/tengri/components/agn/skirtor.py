@@ -255,7 +255,7 @@ class SKIRTORGrid(NamedTuple):
 
     Holds the interpolation grid as pure array data so it threads through
     ``jax.jit`` as a runtime input (small compile), instead of baking into the
-    trace as a constant or: worse: being threaded as a Python closure, which
+    trace as a constant or (worse) being threaded as a Python closure, which
     JAX cannot treat as a traced argument (issue #1198).
 
     Attributes
@@ -1128,7 +1128,7 @@ def load_skirtor_disc_atten_grid() -> SKIRTORDiscAttenGrid | None:
     Returns
     -------
     SKIRTORDiscAttenGrid or None
-        ``None`` for a v2 grid, which carries no separate disc column :
+        ``None`` for a v2 grid, which carries no separate disc column;
         the attenuation is then identity.
 
     Raises

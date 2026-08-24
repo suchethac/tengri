@@ -610,7 +610,7 @@ class GRAHSPSEDComponent:
         L_bol_BBB = bolometric_luminosity_bbb(wave_nm, bbb_intrinsic)
         L_bol_torus = bolometric_luminosity_torus(wave_nm, torus_intrinsic)
         # Diagnostic: integrated AGN-side absorbed luminosity (intrinsic - attenuated).
-        # Reported but NOT injected into the Dale 2014 dust-emission loop :
+        # Reported but NOT injected into the Dale 2014 dust-emission loop;
         # GRAHSP's torus already empirically captures dust re-radiation.
         L_agn_absorbed = jnp.trapezoid((bbb_intrinsic + torus_intrinsic) - L_lambda_total, wave_nm)
 

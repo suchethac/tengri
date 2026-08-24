@@ -210,7 +210,7 @@ def temper_metric(
 
     .. math:: \\kappa_{\\rm whitened} = \\kappa(H)^{|1 - \\alpha\\gamma|}
 
-    which exceeds :math:`\\kappa(H)`, worse than no preconditioning at all, exactly
+    which exceeds :math:`\\kappa(H)` (worse than no preconditioning at all) exactly
     when :math:`\\gamma > 2/\\alpha`. See :data:`DEFAULT_WHITENING_STRENGTH` (#1442).
 
     **Not JIT-safe**: validates ``strength`` as a concrete Python float. The
@@ -320,7 +320,7 @@ def metric_preconditioner(metric: jnp.ndarray) -> LinearPreconditioner:
             "metric is non-finite (NaN or inf), so it cannot be factorized. This "
             "is an upstream failure, not a curvature one: the metric is built at "
             "the expansion point (normally the MAP), so a non-finite value there "
-            ", a diverged MAP, or a log-density that is NaN at that point, "
+            "(a diverged MAP, or a log-density that is NaN at that point) "
             "propagates straight into the metric. The eigenvalue floor cannot "
             "repair it. Check the initial point is finite, or pass "
             "precondition=False to sample without whitening."
@@ -432,7 +432,7 @@ def _reject_nonfinite_expansion_point(init_flat: jnp.ndarray) -> None:
             f"the expansion point is non-finite ({n_bad} of {init_flat.size} "
             "coordinates are NaN or inf), so no metric can be built at it. This "
             "normally means the MAP initialization diverged. Fix the starting "
-            "point, pass an explicit init_from=, or adjust the MAP settings, "
+            "point (pass an explicit init_from=, or adjust the MAP settings) "
             "or pass precondition=False to sample without whitening."
         )
 

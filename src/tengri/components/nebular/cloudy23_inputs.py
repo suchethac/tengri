@@ -9,7 +9,7 @@ neural-emulator predictions against fresh Cloudy runs.
 Running Cloudy itself is out-of-band via external subprocess:
 ``cloudy -p <prefix>``.
 
-**Optional component:** ``pip install tengri[cloudy]``: though the module
+**Optional component:** ``pip install tengri[cloudy]``, though the module
 itself has no external Cloudy dependency (text generation only).
 
 Notes

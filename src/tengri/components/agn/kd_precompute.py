@@ -1244,7 +1244,7 @@ def build_lookup(preint, **kwargs):
 
     Notes
     -----
-    **JIT-compatible**: not applicable: K&D integration happens at
+    **JIT-compatible**: not applicable; K&D integration happens at
     model initialization time, not at inference time.
     """
     return None

@@ -331,7 +331,7 @@ def cites(*keys: str) -> Callable[[F], F]:
     ...     '''Calzetti et al. (2000) starburst attenuation law.'''
     ...     ...
 
-    The decorator is transparent; it returns ``func`` unchanged: and
+    The decorator is transparent (it returns ``func`` unchanged) and
     simply registers the function's fully-qualified name in
     ``FUNCTION_CITATIONS``.
     """

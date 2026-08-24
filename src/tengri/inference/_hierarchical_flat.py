@@ -653,7 +653,7 @@ def _require_converged_evidence(n_iter, max_iterations, remaining, tol, method):
 
     Terminating while ``log(Z_live/Z)`` still exceeds tolerance means the
     live set still holds unintegrated posterior mass; resampling then returns
-    a silently truncated, therefore biased, sample set, which is precisely
+    a silently truncated (therefore biased) sample set, which is precisely
     the failure that kept this name refused (the blind-rejection stand-in
     terminated at iteration 147 of a requested 200 and handed back a
     plausible-looking answer, #1429). Same state, different road, same loud

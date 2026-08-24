@@ -54,7 +54,7 @@ from tengri.components.agn.blr import (
 # emission lines; Fe II flows through the runtime template path.
 _FE2_GROUPS = np.empty((0, 3), dtype=np.float64)
 
-# Axis parameters: BLR Gaussian composer has NO grid axes: all parameters are
+# Axis parameters: BLR Gaussian composer has NO grid axes; all parameters are
 # runtime. This tuple is empty; precompute returns only the filter table.
 AXIS_PARAMS: tuple[str, ...] = ()
 

@@ -16,7 +16,7 @@ hardcoded arrays (solar, n=1 cm⁻³, 8 velocity points, 10 lines) with a
 Interpolation strategy
 ----------------------
 
-- velocity, B-field, log_density: ``interp_nd_triweight``: C²-continuous
+- velocity, B-field, log_density : ``interp_nd_triweight``, a C²-continuous
   triweight kernel (Hearin et al. 2023 / DSPS), jointly interpolated across
   all three continuous axes.  Bin edges are precomputed at grid load time via
   ``edges_for_grid`` to avoid rebuilding inside JIT traces.
@@ -260,7 +260,7 @@ def _load_mappings_grids() -> dict | None:
             "abundance_names": _decode(g["abundance_names"][:]),
             "line_names": _decode(g["line_names"][:]),
             "line_wavelengths_aa": jnp.array(g["line_wavelengths_aa"][:], dtype=jnp.float32),
-            # Shape: (N_abund, N_n, N_v, N_B, N_lines): NaN-filled cells → 0.0
+            # Shape (N_abund, N_n, N_v, N_B, N_lines): NaN-filled cells → 0.0
             "shock_ratios": _load_ratios(g["shock_ratios"]),
             "precursor_ratios": _load_ratios(g["precursor_ratios"]),
             "combined_ratios": _load_ratios(g["combined_ratios"]),
@@ -668,7 +668,7 @@ class ShockBackend:
     **JIT-compatible**: Methods return JAX arrays suitable for JIT compilation.
     All computations use pure functions with no side effects.
 
-    **Attributes**: ``has_continuum`` is always False: MAPPINGS V provides
+    **Attributes**: ``has_continuum`` is always False; MAPPINGS V provides
     shock-associated emission lines only (no underlying continuum).
     ``has_free_params`` is always True: all parameters (velocity, density,
     B-field) are differentiable and suitable for optimization.

@@ -2,13 +2,13 @@
 """AGN block protocol, the contract each pluggable AGN sub-component obeys.
 
 Tengri's existing AGN registry (:data:`tengri.components.agn.AGN_MODELS`)
-holds *monolithic* models: qsogen, skirtor, kubota_done, GRAHSP: each one
+holds *monolithic* models (qsogen, skirtor, kubota_done, GRAHSP) each one
 a complete recipe (disc + lines + torus + attenuation) bundled into a single
 function. Picking ``agn_model="qsogen"`` means inheriting *all* of qsogen's
 pieces; users cannot mix QSOgen's BBB with SKIRTOR's torus without writing
 custom glue code.
 
-This module introduces a finer-grained registry for pluggable **blocks** :
+This module introduces a finer-grained registry for pluggable **blocks**,
 the natural spectral decomposition of an AGN SED::
 
     disc → nlr → blr → feii → torus → attenuation
@@ -233,7 +233,7 @@ def collect_block_templates(recipe: dict[str, str]) -> dict[str, object]:
 
     Notes
     -----
-    **JIT-compatible**: no, deliberately: this performs the HDF5 I/O that
+    **JIT-compatible**: no, deliberately; this performs the HDF5 I/O that
     must happen *before* tracing so the arrays can be passed in as
     arguments. Calling it inside a trace defeats its entire purpose.
 

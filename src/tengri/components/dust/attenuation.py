@@ -22,10 +22,10 @@ where w(age) is a smooth sigmoid transition at t_birth.
 Available Attenuation Curves
 ----------------------------
 
-- **power_law**: (lambda/5500)^n: original Charlot & Fall (2000)
+- **power_law**: (lambda/5500)^n, original Charlot & Fall (2000)
 - **calzetti**: Calzetti et al. (2000) starburst polynomial, R_V=4.05
 - **leitherer02**: Leitherer et al. (2002) UV extension of Calzetti (970-1800 A)
-- **kriek_conroy**: Calzetti + UV bump + slope delta: Prospector default
+- **kriek_conroy**: Calzetti + UV bump + slope delta, the Prospector default
 - **noll09**: Noll et al. (2009) modified Calzetti+L02: (base+bump)*slope
 - **salim_sbl18**: Salim+2018 modified Calzetti+L02: base*slope+bump
 - **smc**: Pei (1992, ApJ 395 130) SMC Bar, steep UV, no 2175A bump
@@ -41,9 +41,9 @@ Available Attenuation Curves
 Dust Geometries (Witt & Gordon 2000)
 -------------------------------------
 
-- **wg00_shell**: Foreground screen: standard exp(-tau*k)
-- **wg00_cloudy**: Homogeneous dust-star mix (slab): grayer than screen
-- **wg00_dusty**: Clumpy two-phase medium (Natta & Panagia 1984): grayest
+- **wg00_shell**: Foreground screen, standard exp(-tau*k)
+- **wg00_cloudy**: Homogeneous dust-star mix (slab), grayer than screen
+- **wg00_dusty**: Clumpy two-phase medium (Natta & Panagia 1984), grayest
 
 References
 ----------

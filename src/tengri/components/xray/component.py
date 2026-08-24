@@ -421,7 +421,7 @@ class XRaySEDComponent(TemplateThreading):
         # sightline, exactly as X-CIGALE reads cos i from its AGN module
         # (yang20.py). Components only see their prefix-matched param slice,
         # so the inclination arrives on the derived channel like L_2500.
-        # Without this the corona was stuck face-on, a flat ×1.072: and
+        # Without this the corona was stuck face-on (a flat ×1.072) and
         # ``agn_cos_inc`` was a silent no-op for the X-ray block (#980).
         # No published AGN inclination → stay at the anchor (factor 1).
         cos_inc = jnp.asarray(derived.get("agn_cos_inc", COS_INC_REF_30DEG))
@@ -505,7 +505,7 @@ class XRaySEDComponent(TemplateThreading):
         is irrelevant: it is still a scalar, and a scalar is all the factorization needs.
 
         The *total* is not rank-1: HMXB (Gamma=2.0) and LMXB (Gamma=1.6) carry different
-        photon indices, so the HMXB/LMXB mix, and hence the summed spectral shape :
+        photon indices, so the HMXB/LMXB mix (and hence the summed spectral shape)
         shifts with SFR and stellar mass. That is why the terms are exposed separately.
         """
         if self.config.model == "lopez24":

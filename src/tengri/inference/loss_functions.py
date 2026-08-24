@@ -528,8 +528,8 @@ def build_loss_fn(fitter):
 
         Parameters:
 
-        - ``params_unbounded``: dict, Standardized parameters ξ (any real values).
-        - ``data_args``: dict, Observed data, noise, and noise models
+        - ``params_unbounded`` : dict, Standardized parameters ξ (any real values).
+        - ``data_args`` : dict, Observed data, noise, and noise models
           from ``fitter._data_args``.
 
         Returns scalar loss value suitable for optimization/sampling.

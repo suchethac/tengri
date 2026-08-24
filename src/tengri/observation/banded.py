@@ -223,7 +223,7 @@ def gaussian_resolution_bands(wave_obs: jnp.ndarray, resolution, n_diag: int = 1
     (:math:`\sigma_v = c / (\mathrm{FWHM} \cdot R)`,
     :math:`\sigma_{\mathrm{pix}} = (\sigma_v / c) / \Delta\ln\lambda`),
     truncated to ``n_diag`` diagonals. Provided so the banded operator can be
-    validated against, and can subsume, the Gaussian ``apply_lsf`` path, and
+    validated against (and can subsume) the Gaussian ``apply_lsf`` path, and
     as an explicit-matrix fallback for instruments that publish only a
     scalar/array ``R``.
 

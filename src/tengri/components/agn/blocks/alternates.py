@@ -112,7 +112,7 @@ def simple_torus_block(
 ) -> Array:
     r"""tengri ``simple_torus`` (single-temperature graybody) block.
 
-    The torus is normalized by ``agn_torus_frac × 10^agn_log_lbol`` :
+    The torus is normalized by ``agn_torus_frac × 10^agn_log_lbol``,
     *not* by ``l5100_disc``: so this block ignores the disc 5100Å
     luminosity. That choice matches upstream :func:`unified_agn`.
 

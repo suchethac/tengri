@@ -184,7 +184,7 @@ class EnergyBalanceSplitIRSEDComponent(EmissionComponent):
         in float64 (to ~1e-14 relative, the log round-trip) and finite in float32
         whenever the *net* budget is representable (#1206).
 
-        The default ``dust_L_agn_ir = 0``: strict stellar energy balance: is
+        The default ``dust_L_agn_ir = 0`` (strict stellar energy balance) is
         fully float32-clean. A nonzero AGN-IR luminosity is a linear erg/s
         parameter and must itself be float32-representable (:math:`\lesssim
         3\times10^{38}` erg/s); a larger value stays out of range until

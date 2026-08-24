@@ -389,7 +389,7 @@ def _refine_sfh_table_ages(ssp_ages_yr, factor: int = INTEGRAND_FACTOR_PARAMETRI
     a step, and resolving a step costs samples that resolving a kink does not.
 
     Injecting the tabulated history's own knots is **already done** by #765 in
-    :func:`_cic_integrand`: ``edges_yr = tab_lbt_yr``; which is why adding
+    :func:`_cic_integrand` (``edges_yr = tab_lbt_yr``) which is why adding
     them a second time was measured to change the worst-case error not at all.
     Read that null result as "already handled", not as "knot placement does not
     matter".
@@ -1307,7 +1307,7 @@ def _build_dsps_sfh_table(age_yr, sfr, t_obs_gyr, add_young_knot=False):
         SFR aligned to ``t_cosmic_asc`` [Msun/yr] (pre-Big-Bang bins zeroed).
     total_mass : float
         Trapezoidal mass formed [Msun], EXCLUDING the young-boundary knot's
-        ``[0, age0]`` segment so the knot redistributes; not inflates: mass.
+        ``[0, age0]`` segment so the knot redistributes (not inflates) mass.
     """
     T_TABLE_MIN = 0.01  # Gyr; matches dsps.constants.T_TABLE_MIN
     # Young-boundary knot (#538): ``age_yr`` starts at the youngest SSP age
@@ -1440,7 +1440,7 @@ def _integrate_nion_log10(
     ionizing-only slice. Peak normalization and deferred 1/h keep all
     intermediates within float32 range.
     """
-    # stop_gradient: pure factorization constant (#1436): log10(peak) is added back
+    # stop_gradient: pure factorization constant (#1436); log10(peak) is added back
     # below, so the peak cancels analytically.
     peak = jax.lax.stop_gradient(jnp.max(jnp.abs(sed_lnu), initial=0.0))  # #1207
     peak = jnp.where(peak > 0, peak, jnp.ones_like(peak))
@@ -2656,7 +2656,7 @@ class StellarSEDComponent:
                     )
                 )
                 joint_weights = dsps_result.weights  # (n_met, n_age)
-        else:  # ramp / chem_evol: per-age metallicity table
+        else:  # ramp / chem_evol, per-age metallicity table
             if _age_kernel == "cic":
                 # CIC joint weights on the dense integrand (#964), so the
                 # per-age metallicity modes stay consistent with the delta
@@ -3451,7 +3451,7 @@ class StellarSEDComponent:
         # with the SFH's exact bin-edge knots injected for binned families) times
         # the lognormal-MDF metallicity marginal. ``_age_weights_cic`` already
         # applies the youngest-bin lookback correction and returns the conserved
-        # total_mass, so: unlike the DSPS histogram path: the caller must NOT
+        # total_mass, so (unlike the DSPS histogram path) the caller must NOT
         # also multiply by ``_youngest_bin_lookback_multiplier`` here.
         # The SAME builder apply uses, so the two integrands are identical point
         # for point: the #982 contract, now enforced by construction.
@@ -3700,7 +3700,7 @@ def _mass_weighted_age_gyr_fn(state, params):
     -----
     **JIT-compatible**: yes.
 
-    Weighted on the **SSP age grid**: the stars that actually exist in the SED;
+    Weighted on the **SSP age grid** (the stars that actually exist in the SED),
     not by integrating the raw SFH grid. The two are not equivalent: an SFH can
     place stellar mass at lookback times beyond the age of the universe at the
     model's redshift (the orchestrator already warns when it does), and the SED
@@ -3847,7 +3847,7 @@ def _irx_fuv_fn(state, params):
 
     The pivot frequency takes ``C_AA`` from
     :mod:`tengri.utils.physics_constants`. It previously used a hardcoded
-    ``2.998e15``: the speed of light 1000x too small in [A/s]; which inflated
+    ``2.998e15`` (the speed of light 1000x too small in [A/s]) which inflated
     every reported IRX by exactly :math:`\log_{10}(1000) = 3` dex (#1131).
     """
     import math

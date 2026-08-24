@@ -37,7 +37,7 @@ def _publish_map_init_cache(context, posterior):
 
     ``_maybe_map_init`` seeds HMC/NUTS/VI from a cached MAP point, but only ever
     saw the short MAP *it* ran itself. An explicit ``fit(method='map')`` wrote
-    nothing there, so the ordinary two-step workflow, optimize, then sample,
+    nothing there, so the ordinary two-step workflow (optimize, then sample)
     silently paid for a **second** MAP: a full user-configured run, followed by
     another 1000-step one inside the sampler, on the same model and the same
     data.
@@ -411,7 +411,7 @@ def _run_map_multistart(context, *, key, n_restarts, n_steps, learning_rate, opt
     opt, opt_name = _build_optax_optimizer(optimizer, learning_rate)
 
     # Both the restart inits (parameters) and ``data_args`` (the data) are
-    # threaded as runtime arguments, never closure-captured, so the compiled
+    # threaded as runtime arguments (never closure-captured) so the compiled
     # kernel is reused across galaxies/datasets instead of baking the data in as
     # a constant (which would recompile per dataset). ``in_axes=(0, None)`` maps
     # over the restart axis while broadcasting the shared data.

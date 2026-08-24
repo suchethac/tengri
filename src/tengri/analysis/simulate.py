@@ -141,10 +141,10 @@ def sed_from_sfh(
     dict
         Rest-frame SED with keys:
 
-        - "wavelength": ndarray shape (n_wave,): wavelength [Angstrom]
-        - "sed": ndarray shape (n_wave,): luminosity density [erg/s/Hz]
-        - "stellar_mass": float: total stellar mass formed [Msun]
-        - "weights": ndarray shape (n_age,): CSP age weights
+        - "wavelength" : ndarray shape (n_wave,). Wavelength [Angstrom]
+        - "sed" : ndarray shape (n_wave,). Luminosity density [erg/s/Hz]
+        - "stellar_mass" : float. Total stellar mass formed [Msun]
+        - "weights" : ndarray shape (n_age,). CSP age weights
 
     Notes
     -----
@@ -257,9 +257,9 @@ def photometry_from_sfh(
     Returns
     -------
     dict with keys:
-        "flux": array (n_filters,): observed flux in erg/s/cm^2/Hz
-        "sed": array (n_wave,): rest-frame SED in erg/s/Hz
-        "stellar_mass": float: total mass formed
+        "flux" : array (n_filters,). Observed flux in erg/s/cm^2/Hz
+        "sed" : array (n_wave,). Rest-frame SED in erg/s/Hz
+        "stellar_mass" : float. Total mass formed
     """
     from tengri.observation.photometry import compute_flux_density
 
@@ -339,8 +339,8 @@ def spectrum_from_sfh(
     Returns
     -------
     dict with keys:
-        "flux": array (n_pix,): observed flux in erg/s/cm^2/Hz
-        "sed": array (n_wave,): rest-frame SED
+        "flux" : array (n_pix,). Observed flux in erg/s/cm^2/Hz
+        "sed" : array (n_wave,). Rest-frame SED
         "stellar_mass" : float
     """
     from tengri.observation.spectrum import compute_spectrum

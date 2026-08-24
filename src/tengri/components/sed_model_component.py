@@ -233,7 +233,7 @@ class SEDModelComponent(TemplateThreading):
         falls back to :meth:`predict`; subclasses with direct photometric
         paths should override for specialized LUT generation.
 
-    Vocabulary: **precompute** (verb) names build-time work: the
+    Vocabulary: **precompute** (verb) names build-time work, the
     :meth:`precompute` hook and ``*_precompute.py`` modules. **precomp**
     (noun) names the resulting LUT path and its artifacts;
     ``predict_precomp`` / ``_apply_precomp``, the ``*_lnu_precomp`` keys,
@@ -921,7 +921,7 @@ class SEDModelComponent(TemplateThreading):
         mapping[str, ndarray]
             ``{self.name}_spec_lnu_precomp`` (the per-pixel contribution)
             plus every key the component's :meth:`predict` published. The
-            published dict is preserved: **not discarded**; so grid-
+            published dict is preserved (**not discarded**) so grid-
             independent derived quantities survive the LUT path. This is
             what lets a line-publishing nebular backend (Cue, CloudyGrid)
             still surface ``line_waves`` / ``line_lums`` under

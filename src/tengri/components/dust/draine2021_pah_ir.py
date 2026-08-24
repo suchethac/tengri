@@ -107,8 +107,8 @@ class Draine2021PAHIRSEDComponent(SEDModelComponent):
     -----
     **Cross-component contract**:
 
-    - Reads: ``state.derived["L_ir"]`` (erg/s): luminosity absorbed by dust.
-    - Publishes: ``{"L_ir_emission": erg/s}``: bolometric IR from templates.
+    - Reads: ``state.derived["L_ir"]`` (erg/s), the luminosity absorbed by dust.
+    - Publishes: ``{"L_ir_emission": erg/s}``, the bolometric IR from templates.
 
     **Template loading**: Templates are loaded during :meth:`load` (precomputation)
     and stored on ``self.data``. If template files are unavailable, the component

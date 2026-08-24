@@ -295,7 +295,7 @@ PARAMS: tuple[ParamDeclaration, ...] = (
         # Caught by tests/contract/test_dust_emission_wildcard.py::
         # test_no_freed_parameter_is_inert[dale2014].
     ),
-    # dust_tdust (#849): retired: the Schreiber tabulated components now share the
+    # dust_tdust (#849): retired; the Schreiber tabulated components now share the
     # canonical ``dust_T`` (used by modified_blackbody / casey2012 / the
     # schreiber2016 closure). ``dust_tdust`` resolves to ``dust_T`` via
     # _LEGACY_PARAM_ALIASES.

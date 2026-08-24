@@ -71,7 +71,7 @@ class ThemisIRSEDComponent(EmissionComponent):
 
         Notes
         -----
-        **JIT-compatible**: no, deliberately: runs at build time so the arrays
+        **JIT-compatible**: no, deliberately; runs at build time so the arrays
         reach ``predict`` as a traced argument (#1649).
         """
         del wave

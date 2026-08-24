@@ -11,7 +11,7 @@ For computational efficiency this module uses analytic line profiles
 rather than full CLOUDY grids. Each emission line is a Gaussian with
 FWHM ~ 500 km/s (narrow lines) placed at the rest-frame wavelength.
 
-Line ratios come from Richardson et al. (2014) Table 3, column 'a42' :
+Line ratios come from Richardson et al. (2014) Table 3, column 'a42':
 *dereddened emission-line strengths for the AGN locus, relative to Hbeta*.
 Richardson et al. selected SDSS galaxies whose spectra are not dominated by
 star formation, then co-added them into fifteen high-S/N composite spectra

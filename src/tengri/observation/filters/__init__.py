@@ -154,7 +154,7 @@ def find_cached_filter(filename: str) -> Path | None:
     committed curves and ``examples/inference/data/filters/`` five, beside the
     249 in ``data/filters/``. Because the gallery runner ``chdir``s into each
     script's directory, every example in those two directories resolved to the
-    partial copy, and any band outside it, GALEX, VISTA, 2MASS, was fetched
+    partial copy, and any band outside it (GALEX, VISTA, 2MASS) was fetched
     from SVO on every CI run. A miss is indistinguishable from a cold cache, so
     it failed *open*: the network call succeeded and nothing reported that the
     committed curves had been bypassed. It surfaced only when ``astroquery``

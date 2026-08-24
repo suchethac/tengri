@@ -509,7 +509,7 @@ _register(
 # - "delta": no positive discriminator (it's the default fallback).
 # - "chem_evol": detected separately via any `chem_*` key, since the
 #   four chem_ params can independently appear as Fixed or Free.
-# - "table": cannot be inferred: has no fittable params, so users
+# - "table": cannot be inferred; it has no fittable params, so users
 #   must set ``met_mode="table"`` explicitly.
 _MET_MODE_DISCRIMINATORS: tuple[tuple[str, frozenset[str]], ...] = (
     ("bins_continuity", frozenset({"met_logzsol_base"})),

@@ -681,7 +681,7 @@ def radio_agn_dpl(
     # (disc-derived), use it directly; else derive from L_bol bolometric correction.
     _NU_B = 6.818e14  # Hz
     _BC_B = 5.15  # Hopkins+2007
-    # float32-safe (#1206): see radio_agn: form the fallback from
+    # float32-safe (#1206): see radio_agn; form the fallback from
     # log10(L_agn_bol) so the ~1e46 linear L_agn_bol never materializes, and so
     # the dead ``jnp.where`` branch is finite (avoiding 0 * inf = nan in grad).
     if log_L_agn_bol is None:
@@ -808,9 +808,9 @@ def radio_total_terms(
     dict[str, ndarray]
         Dictionary with three keys:
 
-        - ``"sf"``: array, shape (n_wave,): star-forming synchrotron [erg/s/Hz]
-        - ``"ff"``: array, shape (n_wave,): thermal free-free [erg/s/Hz]
-        - ``"agn"``: array, shape (n_wave,); AGN radio [erg/s/Hz]
+        - ``"sf"`` : array, shape (n_wave,); star-forming synchrotron [erg/s/Hz]
+        - ``"ff"`` : array, shape (n_wave,); thermal free-free [erg/s/Hz]
+        - ``"agn"`` : array, shape (n_wave,); AGN radio [erg/s/Hz]
 
     Notes
     -----
@@ -1061,9 +1061,9 @@ def radio_total_dpl_terms(
     dict[str, ndarray]
         Dictionary with three keys:
 
-        - ``"sf"``: array, shape (n_wave,): star-forming synchrotron [erg/s/Hz]
-        - ``"ff"``: array, shape (n_wave,): thermal free-free [erg/s/Hz]
-        - ``"agn"``: array, shape (n_wave,); AGN double power-law [erg/s/Hz]
+        - ``"sf"`` : array, shape (n_wave,); star-forming synchrotron [erg/s/Hz]
+        - ``"ff"`` : array, shape (n_wave,); thermal free-free [erg/s/Hz]
+        - ``"agn"`` : array, shape (n_wave,); AGN double power-law [erg/s/Hz]
 
     Notes
     -----
@@ -1283,10 +1283,10 @@ def compute_radio_components(
     Returns
     -------
     dict with keys:
-        ``"synchrotron"``: array (n_wave,); SFR synchrotron L_nu [erg/s/Hz]
-        ``"freefree"``: array (n_wave,): thermal free-free L_nu [erg/s/Hz]
-        ``"agn"``: array (n_wave,); AGN radio L_nu [erg/s/Hz]
-        ``"total"``: array (n_wave,): sum of above [erg/s/Hz]
+        ``"synchrotron"`` : array (n_wave,); SFR synchrotron L_nu [erg/s/Hz]
+        ``"freefree"`` : array (n_wave,): thermal free-free L_nu [erg/s/Hz]
+        ``"agn"`` : array (n_wave,); AGN radio L_nu [erg/s/Hz]
+        ``"total"`` : array (n_wave,): sum of above [erg/s/Hz]
 
     Notes
     -----

@@ -1215,7 +1215,7 @@ class SEDModel:
     precompute : bool, optional
         **Legacy / largely superseded.** Builds the pre-``approx=``-era
         ``PrecomputedData`` container (fixed-z SSP photometry/spectroscopy grid
-        defaults). This predates, and is NOT, the fast LUT path: the
+        defaults). This predates (and is NOT) the fast LUT path: the
         Zacharegkas+2025 fast-photometry / spectroscopy speedup is selected at
         build time via ``approx=WavePrecomp()`` / ``approx=SpectrumPrecomp()``
         (see ``approx`` below), which builds its own LUTs through the component
@@ -1874,7 +1874,7 @@ class SEDModel:
         # SSP×filter integral at zero dust and re-applies attenuation as a
         # first-order Taylor projection about each filter's effective
         # wavelength. That linear-in-λ model breaks down where the attenuation
-        # curve is steep across the bandpass, the rest-UV, so blue bands at
+        # curve is steep across the bandpass (the rest-UV) so blue bands at
         # moderate/high z are biased silently (the far-UV by >10×). Warn loudly
         # so no fit is biased without the astronomer knowing. Cheap: no SED
         # evaluation, so it is safe on every build.
@@ -2779,7 +2779,7 @@ class SEDModel:
             # Same reasoning as the AGN backend warm below: this exists only to
             # pull templates into the registry before the JIT trace, since
             # loading them inside it raises UnexpectedTracerError. A load
-            # failure here is recoverable, the exact path still works, but a
+            # failure here is recoverable (the exact path still works) but a
             # *bug* in the loader should not be. Narrowed to the
             # data/dependency family so it is not both.
             with contextlib.suppress(ImportError, OSError, KeyError):
@@ -3952,7 +3952,7 @@ class SEDModel:
                 f"model.predict() expects a params dict (e.g. from "
                 f"spec.sample(key)), got {type(params).__name__}."
             )
-        # Validate eagerly, matching predict_photometry, so a typo'd or
+        # Validate eagerly (matching predict_photometry) so a typo'd or
         # missing free parameter raises a helpful error here instead of a bare
         # KeyError deferred to the first accessor of the lazy Prediction. Both
         # asymmetries were flagged as silent-wrong footguns in a fresh-user audit.
@@ -3987,7 +3987,7 @@ class SEDModel:
         "Structure" includes **precision**. The structural-kernel cache in
         :meth:`_get_or_build_predict_observables_jit` returns a closure that
         captured ``self``, so a signature collision hands one model's compiled
-        kernel, and its wavelength grid, to another. A float64/float32 collision
+        kernel (and its wavelength grid) to another. A float64/float32 collision
         used to reach the components as a float64 ``wave`` under
         ``jax.enable_x64(False)``, which switched off every dtype-keyed float32
         path downstream and produced NaN gradients with nothing raised (#1392).
@@ -4313,7 +4313,7 @@ class SEDModel:
         )
 
         # The sub-band quadrature order changes the compiled kernel and the numbers
-        # it produces (#1122). It is an int, so, unlike ``taylor_correction``, it
+        # it produces (#1122). It is an int, so (unlike ``taylor_correction``) it
         # is NOT picked up by ``approx_resolved_flags`` above, which filters on
         # ``isinstance(v, bool)``. Without it, WavePrecomp(n_subbands=3) and
         # (n_subbands=8) collide and the second silently reuses the first's kernel.
@@ -5155,7 +5155,7 @@ class SEDModel:
                 from tengri.utils.scale import pow10
 
                 # The published catalog is indexed on ``state.derived['line_waves']``
-                # the backend's FULL line list, while the fast branch above set
+                # (the backend's FULL line list) while the fast branch above set
                 # ``all_waves`` to ``grid.wavelengths``, which holds only the lines
                 # the observation asked for. Taking the luminosities without the
                 # wavelengths that index them pairs two different catalogs, and the
@@ -5292,7 +5292,7 @@ class SEDModel:
 
            That stale ~10-23 % figure is a **trap**. It happens to bracket both the
            20.9 % photometry and 14.7 % line-flux drifts reported in #1154, so it
-           offers a ready-made, and wrong, explanation for them. It cost a full
+           offers a ready-made (and wrong) explanation for them. It cost a full
            debugging session. When a number in a docstring matches your bug
            suspiciously well, check that the mechanism behind it still exists before
            you believe it: this one was removed by #1019.
@@ -5432,7 +5432,7 @@ class SEDModel:
         all_waves = jnp.asarray(state.derived["line_waves"])
         # Dust-reddened catalog when a dust component published one (#1867).
         # This surface used to read the INTRINSIC catalog while the data it is
-        # fitted against, observed Balmer decrements, BPT positions, are
+        # fitted against (observed Balmer decrements, BPT positions) are
         # reddened, so a line-ratio fit compared two different things. The
         # comment here said "same fix as predict_line_fluxes"; that method's
         # unit hygiene was copied across and its reddening was not.
@@ -7938,7 +7938,7 @@ class SEDModel:
         **Rank-1 probe.** Being a sum of rank-1 terms is a *property*, not a promise, so
         it is verified rather than declared: each term is built twice from deliberately
         distant input draws (``EMITTER_PROBE_INPUTS``) and must come back proportional.
-        A term whose *shape*, not just amplitude, responds to a runtime input fails,
+        A term whose *shape* (not just amplitude) responds to a runtime input fails,
         and the whole emitter drops to the dense path. This is the BOSA lesson from
         #1107: an emitter whose template shape tracked its luminosity sailed through a
         band response built at ``L_ir = 1`` and returned fluxes 13 % wrong, silently.

@@ -81,7 +81,7 @@ _LAMBDA_LYMAN = jnp.array(
 _LAMBDA_LIMIT = 911.8  # Angstrom
 
 # ── LAF coefficients: A_j^LAF for 3 regimes (Inoue+2014 Eq. 21) ───
-# Shape: (39, 3): [A_j1, A_j2, A_j3]
+# Shape (39, 3): [A_j1, A_j2, A_j3]
 # From eazy-py LAFcoeff.txt
 _A_LAF = jnp.array(
     [
@@ -128,7 +128,7 @@ _A_LAF = jnp.array(
 )
 
 # ── DLA coefficients: A_j^DLA for 2 regimes (Inoue+2014 Eq. 22) ───
-# Shape: (39, 2): [A_j^DLA1 (power 2, lambda_obs < 3 lambda_j),
+# Shape (39, 2): [A_j^DLA1 (power 2, lambda_obs < 3 lambda_j),
 #                   A_j^DLA2 (power 3, lambda_obs >= 3 lambda_j)].
 # Values are Inoue+2014 (MNRAS 442, 1805) Table 2 columns A_DLA_J_1 /
 # A_DLA_J_2 verbatim (the same table eazy-py, BAGPIPES and Synthesizer
@@ -408,7 +408,7 @@ def _cgm_damping_wing_tau(
     :mod:`tengri.components.igm.dla`. The previous implementation used a flat
     Lorentzian with a numerical constant that was ~10⁹ too small.
 
-    **Upstream**: Asada et al. (2025), ApJL 983, L2: column-density evolution;
+    **Upstream**: Asada et al. (2025), ApJL 983, L2, column-density evolution;
     Totani et al. (2006), PASJ 58, 485; Lyα cross-section.
     """
     # Column-density evolution N_HI(z): paper sigmoid by default; legacy form

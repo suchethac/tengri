@@ -32,7 +32,7 @@ References
 - Johnson+2021: Prospector implementation.
 - Tacchella et al. 2022, ApJ, 926, 134 (arXiv:2102.11954): Bursty continuity.
 - Wang et al. 2024 (arXiv:2401.12198): Prospector-β agebins scheme.
-- Synthesizer (ContinuityFlex upstream ref): cite both: Lovell et al. 2025
+- Synthesizer (ContinuityFlex upstream ref); cite both: Lovell et al. 2025
   (OJA) + Roper et al. 2026 (JOSS).
 
 """

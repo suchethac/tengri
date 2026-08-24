@@ -232,7 +232,7 @@ def planck_bnu_nu(nu: jnp.ndarray, temperature: float) -> jnp.ndarray:
     overflow is not inside this function at all. A caller multiplies
     :math:`B_\nu` by a ring area or a template normalization ~1e30, so the
     reverse pass arrives carrying a cotangent that large and forms
-    :math:`g/(1-e^{-x})^2`; 4.8e39 at a real disc ring: *before* the tiny
+    :math:`g/(1-e^{-x})^2` (4.8e39 at a real disc ring) *before* the tiny
     :math:`2h\nu(\nu/c)^2` prefactor (3.97e-13) can bring it back. The correct
     answer, 1.9e27, is perfectly representable; only the intermediate is not,
     and the two factors live on opposite sides of the function boundary, so no

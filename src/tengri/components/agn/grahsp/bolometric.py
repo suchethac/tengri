@@ -75,7 +75,7 @@ def bolometric_luminosity_bbb(
     Notes
     -----
     JIT-compatible. The far-UV/X-ray contribution below 91.2 nm is
-    deliberately excluded: see paper §2.1.4: that band is rarely observed
+    deliberately excluded; see paper §2.1.4: that band is rarely observed
     and a model-dependent correction is left to the user.
     """
     return _trapz_above(jnp.asarray(wave_nm), jnp.asarray(L_lambda_bbb_total), LYMAN_LIMIT_NM)

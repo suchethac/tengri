@@ -34,7 +34,7 @@ import jax.numpy as jnp
 def warn_if_corrupt(log_l_absorbed: jnp.ndarray, *, component: str) -> None:
     """Attribute a ``+inf`` energy balance to its component, on the eager path.
 
-    ``+inf`` is loud, it reaches ``L_ir`` and surfaces as a NaN fit, but on
+    ``+inf`` is loud (it reaches ``L_ir`` and surfaces as a NaN fit) but on
     its own it says nothing about *where* the corruption entered. This supplies
     that, so the user is not left bisecting a NaN.
 

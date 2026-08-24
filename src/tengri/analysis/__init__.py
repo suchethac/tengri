@@ -5,7 +5,7 @@
 import time. The attribute used to exist only as a side effect: ``tengri``'s own
 ``__init__`` did ``from tengri.analysis.plotting import (...)``, which binds the
 submodule on its parent package as a by-product of importing it. Making that
-import lazy; so ``import tengri`` no longer drags in matplotlib, removed the
+import lazy (so ``import tengri`` no longer drags in matplotlib) removed the
 side effect along with the cost, and ``tengri.analysis.plotting.setup_style()``
 began raising ``AttributeError``.
 

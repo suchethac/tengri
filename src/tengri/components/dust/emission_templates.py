@@ -1488,7 +1488,7 @@ def create_dh02_ce01_from_grid(grid_path: str | dict) -> Callable:
     .. [2] Chary, R. & Elbaz, D. 2001, ApJ, 556, 562.
            (https://doi.org/10.1086/321609)
     .. [3] Martínez-Ramírez, L. N. et al., 2024, A&A, 688, A46.
-           (https://doi.org/10.1051/0004-6361/202449329): AGNfitter-rX packaging.
+           (https://doi.org/10.1051/0004-6361/202449329), AGNfitter-rX packaging.
     """
     templates = grid_path if isinstance(grid_path, dict) else load_dh02_ce01_lnu_grid(grid_path)
 
@@ -2052,7 +2052,7 @@ def register_bosa_tabulated(grid_path: str, name: str = "bosa_tabulated") -> Non
 
 
 # Load and create THEMIS
-# ── Model 8: THEMIS (Jones et al. 2017): template-based ──────────
+# ── Model 8: THEMIS (Jones et al. 2017), template-based ──────────
 
 
 def load_themis_templates(filepath: str) -> dict:

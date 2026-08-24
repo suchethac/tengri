@@ -451,7 +451,7 @@ _PHILOSOPHY = _Tutorial(
 
         4.  Modular, swappable physics.
 
-            Every block has a registry of alternatives: see:
+            Every block has a registry of alternatives. See:
 
                 tengri.list_agn_models()        # AGN model families
                 tengri.list_agn_blocks()        # composable AGN blocks
@@ -887,8 +887,8 @@ _PROPERTIES = _Tutorial(
         • Population / Catalog (many galaxies): shape (n_galaxies, ...)
         All use the same property names and discovery API.
 
-        See:  tengri.tutorial("mock_catalog"): batch mock using vmap
-              tengri.tutorial("approx_vs_exact"): exact vs precomputed paths
+        See:  tengri.tutorial("mock_catalog")     (batch mock using vmap)
+              tengri.tutorial("approx_vs_exact")  (exact vs precomputed paths)
         """
     ).strip(),
 )
@@ -980,8 +980,8 @@ _APPROX_VS_EXACT = _Tutorial(
         must think about: "Am I using build-time filters? Is this on the
         z grid?" If you answer no, the exact path is your only choice.
 
-        See:  tengri.tutorial("mock_catalog"): batch examples
-              tengri.list_properties()       : derived quantities
+        See:  tengri.tutorial("mock_catalog")  (batch examples)
+              tengri.list_properties()       (derived quantities)
         """
     ).strip(),
 )
@@ -1075,8 +1075,8 @@ _MOCK_CATALOG = _Tutorial(
         • Parametric study: "how does SFR depend on stellar mass?"
         • Generate training data for a neural network surrogate
 
-        See:  tengri.tutorial("properties")   : derived quantities
-              tengri.tutorial("approx_vs_exact"): exact vs precomputed paths
+        See:  tengri.tutorial("properties")     (derived quantities)
+              tengri.tutorial("approx_vs_exact")  (exact vs precomputed paths)
         """
     ).strip(),
 )

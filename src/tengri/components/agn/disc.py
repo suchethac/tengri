@@ -712,8 +712,8 @@ def multicolor_disc(
     # r_sg ~ 2150 * (alpha/0.1)^{2/9} * lambda_Edd^{4/9} * (M/1e8)^{-2/9} R_g.
     if wavelength.dtype == jnp.float32:
         # Log-space so the ~1e44 L_bol, ~1e46 L_Edd and ~1e58 erg/s ``t_in**4``
-        # numerator never materialize (float32 max 3.4e38). The RESULTS :
-        # lambda_Edd ~1e-2, mdot ~1e24 g/s, t_in ~1e5 K: are all representable.
+        # numerator never materialize (float32 max 3.4e38). The RESULTS
+        # (lambda_Edd ~1e-2, mdot ~1e24 g/s, t_in ~1e5 K) are all representable.
         _log_l_bol_erg = _log_lbol_shape + _LOG10_LSUN_ERG
         _log_l_edd = _LOG10_L_EDD_1MSUN + agn_log_mbh
         l_edd_ratio = jnp.clip(_pow10(_log_l_bol_erg - _log_l_edd), 1e-10, 1.0)
@@ -779,7 +779,7 @@ def multicolor_disc(
     l_nu_intrinsic = _apply_euv_tail(wavelength, nu, l_nu_intrinsic, euv_tail)
 
     # Renormalize to requested L_bol * agn_lum_ratio (the MAGNITUDE is set by
-    # ``agn_log_lbol``, the reference on the float32 path; NOT the shape
+    # ``agn_log_lbol`` (the reference on the float32 path) NOT the shape
     # luminosity above).
     # Sort by ascending frequency before integrating (nu descends when wave ascends).
     # Using jnp.abs() on a descending-x trapezoid is brittle: sort explicitly.
@@ -798,7 +798,7 @@ def multicolor_disc(
         _hat_total = jnp.trapezoid(l_nu_intrinsic[_sort_idx] / _peak, _nu[_sort_idx])
         # ``representable_floor``, not the bare ``1e-100`` (#1492): float32's
         # smallest subnormal is 1.4e-45, so the literal IS 0.0 there and this
-        # branch, the float32 one: was the guard providing nothing. A zero
+        # branch (the float32 one) was the guard providing nothing. A zero
         # integral would take log10 to -inf and the scale to inf. Returns
         # ``1e-100`` unchanged under x64, so float64 is bit-identical.
         _log_l_nu_total = jnp.log10(_peak) + jnp.log10(

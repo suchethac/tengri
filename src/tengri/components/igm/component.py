@@ -216,7 +216,7 @@ class IGMSEDComponent(TemplateThreading):
         where :math:`T` is the IGM transmission [dimensionless], :math:`R_f`
         the filter response, and :math:`w` the convention weight (ADR-0017:
         :math:`1/\lambda` photon-counting, :math:`1/\lambda^2` energy). The SED
-        does *not* enter: the transmission is averaged alone; so the whole
+        does *not* enter (the transmission is averaged alone) so the whole
         table moves to build time.
 
         Evaluated with the same :func:`lnu_filter_integral_batch` quadrature
@@ -241,7 +241,7 @@ class IGMSEDComponent(TemplateThreading):
 
         Notes
         -----
-        **JIT-compatible**: build-time only: call outside any trace.
+        **JIT-compatible**: build-time only; call outside any trace.
 
         **Not precomputable** when ``igm_patchy`` or ``use_dla`` is set: both
         read free parameters (``igm_x_HI``, ``dla_log_n_hi``, …), so
@@ -463,7 +463,7 @@ class IGMSEDComponent(TemplateThreading):
 
         Notes
         -----
-        **JIT-compatible**: build-time only: call outside any trace.
+        **JIT-compatible**: build-time only; call outside any trace.
 
         **Not precomputable** when ``igm_patchy`` or ``use_dla`` is set: both read
         free parameters (``igm_x_HI``, ``igm_bubble_mpc``, ``dla_log_n_hi``, …),
@@ -608,7 +608,7 @@ class IGMSEDComponent(TemplateThreading):
 
         # The LUT photometry path consumes ``igm_phot_factor`` (n_filters,) rather
         # than band-averaging ``T`` (n_wave,) at runtime. Publishing the precomputed
-        # factor leaves the full-grid curve; and the SED it multiplies: as dead
+        # factor leaves the full-grid curve (and the SED it multiplies) as dead
         # code, which is what XLA must be able to eliminate for WavePrecomp to be
         # fast at all (#932 regressed this: 108 us -> 1764 us).
         band_factor = self._band_factor(z)

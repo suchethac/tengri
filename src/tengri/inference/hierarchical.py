@@ -748,7 +748,7 @@ class PopulationFitter:
         #
         # There used to be one: `mcmc_ess -> native_vi_linear`, on the grounds
         # that "ESS is a Fitter-only method". It silently substituted a
-        # DIFFERENT sampler, and after #231 a tier="broken" one, for the
+        # DIFFERENT sampler (and after #231 a tier="broken" one) for the
         # method the caller named, with no warning and no entry in the result's
         # diagnostics. A user who asked for elliptical slice sampling got MGVI
         # and had no way to notice.

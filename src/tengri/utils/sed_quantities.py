@@ -1268,7 +1268,7 @@ def compute_l_x_xrb(sfr: jnp.ndarray, stellar_mass: jnp.ndarray) -> jnp.ndarray:
 
 #: ``log10`` of the Lehmer+ XRB coefficients, as Python floats. Kept pre-logged
 #: because ``2.6e39`` is past float32's ceiling: any expression that materializes it
-#: in the working dtype: including ``jnp.log10(2.6e39)``; is ``inf`` before the log
+#: in the working dtype (including ``jnp.log10(2.6e39)``) is ``inf`` before the log
 #: is applied. Computed in numpy (float64) at import, read as a scalar thereafter.
 _LOG10_HMXB_COEFF: float = float(np.log10(2.6e39))
 _LOG10_LMXB_COEFF: float = float(np.log10(9.05e28))

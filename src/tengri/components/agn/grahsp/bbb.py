@@ -38,7 +38,7 @@ XRAY_FLOOR_NM: float = 12.4
 ``wavelength < 124.0`` band in ``components/xray/xray.py``). GRAHSP has no
 X-ray physics, so its disc must not emit below this edge; left free, the smooth
 bending power law extrapolates unbounded into the X-ray and double-counts with
-the separately-added corona (#1168). Applied in tengri's assembly layer only :
+the separately-added corona (#1168). Applied in tengri's assembly layer only;
 :func:`sbpl_bbb` stays upstream-faithful for the bit-exact parity fixtures.
 """
 

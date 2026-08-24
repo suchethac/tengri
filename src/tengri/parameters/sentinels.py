@@ -141,7 +141,7 @@ Notes
 -----
 ``'all_params': FREE`` frees only the parameters a group declares with a
 default prior. Groups whose parameters default to :class:`tengri.Fixed`
-values: radio and shock; are unaffected by the wildcard; give those an
+values (radio and shock) are unaffected by the wildcard; give those an
 explicit prior instead (e.g. ``shock={"frac": Uniform(0.0, 1.0)}``).
 """
 

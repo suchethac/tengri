@@ -310,7 +310,7 @@ def load_ssp(name: str | None = None, *, download: bool = False) -> "SSPData":
     ``download=True`` makes this the single call a script needs, replacing the
     resolve-test-fetch-load sequence each one used to carry. That sequence
     began with a working-directory-relative path, so it looked in the wrong
-    place; and therefore re-downloaded: whenever the script ran from
+    place (and therefore re-downloaded) whenever the script ran from
     anywhere but its own directory (#1486). The resolver here is
     cwd-independent: it honors ``$TENGRI_DATA_DIR``, walks every ancestor for
     ``data/``, and falls back to the package's own source tree.
@@ -377,7 +377,7 @@ def _load_float(dataset, dtype=None) -> jnp.ndarray:
 
     Several repackaged grids store float32 (``bc03_*``, ``pgny_*``). Left as
     float32, ``stellar_mass_scale = total_mass x L_sun`` ~ 1e42 overflows the
-    float32 ceiling of 3.4e38 to ``inf``; silently; and poisons the ionizing
+    float32 ceiling of 3.4e38 to ``inf`` (silently) and poisons the ionizing
     SED the nebular backends consume. The default upcast is lossless: every
     float32 is exactly a float64, so no stored value changes.
 
@@ -412,7 +412,7 @@ def load_ssp_data(filepath: str, *, dtype=None, download: bool = False) -> SSPDa
         Dtype for every loaded float array. ``None`` (default) follows tengri's
         working precision (float64 under ``jax_enable_x64``, its default). Pass
         ``jnp.float32`` for a fully 32-bit pipeline: it halves the host-side
-        grid: the ``ssp_flux`` cube is the model's largest single array; and
+        grid (the ``ssp_flux`` cube is the model's largest single array) and
         is applied regardless of the ``jax_enable_x64`` flag. Safe now that the
         ~1e42 ``stellar_mass_scale`` and ~1e56 ``nion`` seams are carried in log
         space (#1206); before that, a float32 grid overflowed them silently,
@@ -710,7 +710,7 @@ def _detect_nebular(h5_file, filename: str) -> str:
        An explicit ``False`` classifies the grid as ``"bare"`` even when the
        filename says wNE (the attribute is authoritative).
     2. ``wNE`` filename convention → ``"included"``.
-    3. Fallback: ``"unknown"``: absence of the marker cannot prove the grid
+    3. Fallback: ``"unknown"``; absence of the marker cannot prove the grid
        is bare, and no Q_H heuristic can either: a retained-LyC wNE grid
        measures young-bin log Q_H identical to its bare parent.
     """
@@ -801,13 +801,13 @@ def csp_age_dt(ssp_ages_yr: jnp.ndarray, method: str = "trapz") -> jnp.ndarray:
     Both methods implement trapezoidal integration of the CSP integral
     ∫ SFR(t) dt, but differ in the quadrature variable:
 
-    ``"trapz"``: standard trapezoidal rule in **linear age**:
+    ``"trapz"`` is the standard trapezoidal rule in **linear age**:
 
         dt_i = 0.5 * (t_{i+1} - t_{i-1})   [interior]
         dt_0 = 0.5 * (t_1 - t_0)            [left endpoint]
         dt_N = 0.5 * (t_N - t_{N-1})        [right endpoint]
 
-    ``"log_trapz"``: trapezoidal rule in **log₁₀-age** with Jacobian:
+    ``"log_trapz"`` is the trapezoidal rule in **log₁₀-age** with Jacobian:
 
         dt_i = t_i * ln(10) * d(log₁₀ t)_i
 

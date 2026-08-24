@@ -323,7 +323,7 @@ def slone_netzer_grid_support() -> dict[str, tuple[float, float]]:
 
     Notes
     -----
-    **JIT-compatible**: not applicable: pure Python/NumPy, called at
+    **JIT-compatible**: not applicable; pure Python/NumPy, called at
     composition time only. Cached, so the grid is read once per process.
 
     The bounds are **read from the file**, and taken as ``axis[0]`` /
@@ -345,8 +345,8 @@ def slone_netzer_sed(*args, _template: SloneNetzerGrid | None = None, **kwargs) 
     ----------
     _template : SloneNetzerGrid, optional
         Pre-loaded grid, threaded in as a JIT argument by the forward model.
-        When ``None`` (default) the packaged grid is loaded from disk and :
-        if this call happens under trace: baked into the graph as constants.
+        When ``None`` (default) the packaged grid is loaded from disk and,
+        if this call happens under trace, baked into the graph as constants.
 
     Returns
     -------

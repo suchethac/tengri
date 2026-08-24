@@ -170,7 +170,7 @@ elif _X64_REQUEST.strip().lower() in {"0", "false", "no", "off"}:
     _warnings.warn(
         f"JAX_ENABLE_X64={_X64_REQUEST}: tengri is honoring your request for "
         "float32 and is NOT enabling 64-bit precision. Cosmological distances "
-        "are the known hazard: d_L^2 at z > 0.01 overflows float32: so any "
+        "are the known hazard (d_L^2 at z > 0.01 overflows float32) so any "
         "code that forms d_L^2 directly will produce inf. tengri's own "
         "projection avoids it by applying (1+z)/(4*pi*d_L^2) as a log10 "
         "offset, but third-party code may not. Unset JAX_ENABLE_X64 to "

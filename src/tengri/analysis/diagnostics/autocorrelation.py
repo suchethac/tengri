@@ -47,7 +47,7 @@ def _never_moved(values: np.ndarray) -> bool:
     two draws differ?* Three call sites used to ask ``np.var(a) < 1e-30``
     instead, which is an **absolute** tolerance on a quantity carrying the
     square of the parameter's units. ``np.var`` of N identical floats is not
-    exactly zero; it is rounding noise of order ``(value * eps)**2``, so the
+    exactly zero (it is rounding noise of order ``(value * eps)**2``) so the
     threshold's sensitivity drifted with the parameter's magnitude.
 
     Measured on 600 identical draws, the same completely frozen chain:

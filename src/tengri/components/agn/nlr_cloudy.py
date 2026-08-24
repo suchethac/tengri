@@ -96,7 +96,7 @@ def _eager_construction():
     first caller is inside a ``jax.jit`` trace: any ``jnp`` operation run while
     a trace is active returns a tracer bound to that trace, however concrete
     its inputs are. The backend is then cached full of tracers, and the next
-    reader, a later test, the next fit: fails with ``UnexpectedTracerError``
+    reader (a later test, the next fit) fails with ``UnexpectedTracerError``
     naming the loader rather than whoever poisoned it.
 
     Three of these four constructors reach ``jnp``:
@@ -401,7 +401,7 @@ def load_cue_agn_weights():
 
     Notes
     -----
-    **JIT-compatible**: no, deliberately: it must run before tracing.
+    **JIT-compatible**: no, deliberately; it must run before tracing.
     """
     return get_cue_agn_backend().weights
 

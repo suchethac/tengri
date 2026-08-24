@@ -12,7 +12,7 @@ for bridging different parameterizations in AGN SED fitting.
     Currently unwired (no importers). Kept deliberately: the AGN energy-ledger
     design (issue #929, Phase-2b investigation) explicitly defers a
     user-facing ``fagn`` parameterization, and these conversions are its
-    natural seed. The energy-ledger stream owns the wire-or-delete decision :
+    natural seed. The energy-ledger stream owns the wire-or-delete decision;
     do not remove this module in unrelated dead-code sweeps (2026-07 audit).
 
 References

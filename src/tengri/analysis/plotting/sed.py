@@ -76,7 +76,7 @@ def plot_sed_fit(
     """
     # The residual panel needs `posterior_draws` to have anything in it, so it
     # is built only when both are present. Keying it on `show_residuals` alone
-    # meant the DEFAULT call: observed photometry, no posterior yet; drew an
+    # meant the DEFAULT call (observed photometry, no posterior yet) drew an
     # empty box under the SED. `ax=` is honored whenever no residual panel is
     # being added; a caller's own Axes cannot be split in two.
     want_residuals = show_residuals and posterior_draws is not None

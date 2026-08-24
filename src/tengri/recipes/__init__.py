@@ -179,7 +179,7 @@ def high_z() -> dict:
     z > 3.5: strong nebular emission, metal-poor stellar populations, and
     SMC/Calzetti-like dust.
 
-    **SSP requirement:** with-nebular-emission (wNE) SSP grids: the ``ssp``
+    **SSP requirement:** with-nebular-emission (wNE) SSP grids; the ``ssp``
     nebular backend reads line and continuum emission baked into the SSP
     file itself, so a bare-stellar grid would silently drop the nebular
     contribution.

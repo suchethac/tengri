@@ -182,7 +182,7 @@ def load_nthcomp_table() -> NthcompTable | None:
 
     Notes
     -----
-    **JIT-compatible**: no, deliberately: call it before tracing.
+    **JIT-compatible**: no, deliberately; call it before tracing.
     """
     gamma, kte, ktbb, nu, table_log, available = _get_nthcomp_templates()
     if not available:
@@ -248,7 +248,7 @@ def _nthcomp_lnu_interp_impl(
 
     # Return in the CALLER's precision, not the table's (#1822).
     #
-    # The table is float32 and the interpolation is done there, which is right :
+    # The table is float32 and the interpolation is done there, which is right;
     # promoting a float32 library to float64 buys no accuracy. But *returning*
     # float32 forced the caller's precision too, and that is what broke reverse
     # mode: ``custom_jvp`` takes the cotangent in the primal's dtype, and this
@@ -261,7 +261,7 @@ def _nthcomp_lnu_interp_impl(
     # The rule's docstring argued the old ``custom_vjp``'s overflow rescaling was
     # unnecessary because "forward mode never forms the cotangent product". True,
     # and beside the point: ``jax.grad`` transposes the jvp and forms exactly
-    # that product. Widening the output is the fix that needs no rescaling :
+    # that product. Widening the output is the fix that needs no rescaling;
     # float32 -> float64 is exact, so no forward value moves.
     #
     # A caller working entirely in float32 (the #1206 path) still gets float32
@@ -421,7 +421,7 @@ def _nthcomp_interp_jvp(primals: tuple, tangents: tuple) -> tuple:
     fd_grad = (shifted - primal_out) / eps
 
     # The kTe tangent, by the same one-sided rule (#1822). Discarding it made
-    # ``agn_kt_warm``: declared ``Uniform(0.1, 0.5)`` and freeable, a parameter
+    # ``agn_kt_warm`` (declared ``Uniform(0.1, 0.5)`` and freeable) a parameter
     # no gradient backend could move: measured exactly 0.0 against a central
     # difference of 7.0e41 through ``kubota_done_disc``, i.e. -100%. The forward
     # sensitivity is large (18.1x in sum(L_nu) across that prior), so the

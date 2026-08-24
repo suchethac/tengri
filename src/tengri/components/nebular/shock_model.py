@@ -16,7 +16,7 @@ dust screen exactly like the rest of the intrinsic SED.
 Normalization (two knobs, selected by the static ``norm`` config)
 -----------------------------------------------------------------
 
-* ``norm="frac"`` (**default**): *relative*: the shock Hα luminosity is a
+* ``norm="frac"`` (**default**) is *relative*: the shock Hα luminosity is a
   fraction ``shock_frac`` of the galaxy's approximate Hα
   (``L(Hα) ~ 1e-3 L_bol`` of the SED accumulated so far). Intuitive "how
   much of the line budget is shock-driven"; reproduces the legacy
@@ -228,7 +228,7 @@ class ShockNebular(SEDModelComponent):
         """
         nu = C_AA / wave
 
-        # Float32 (#1206): the shock Hα luminosity is ~1e41 erg/s: ``inf`` in
+        # Float32 (#1206): the shock Hα luminosity is ~1e41 erg/s, ``inf`` in
         # float32 (max 3.4e38): so ``l_shock_halpha * <line profile>`` becomes
         # ``inf * 0 = nan`` even though the resulting SED (~1e26 erg/s/Hz) is
         # perfectly representable. The shock SED is *exactly* linear in
@@ -341,7 +341,7 @@ class ShockNebular(SEDModelComponent):
         ``shock_restband_lnu_precomp`` (the same integral at ``z=0``; the rest
         band sits at its own pivot and reusing the observed value is what made
         the nebular LUT read 769 % high in ``des_g`` at z=0.5, #1148). Both are
-        intrinsic rest-frame Lν: no dust, no cosmology:
+        intrinsic rest-frame Lν (no dust, no cosmology),
         matching the precompute contract; ``predict_via_precomp`` applies the
         young-limit dust screen and the ``(1+z)/(4 pi d_L^2)`` dimming.
 

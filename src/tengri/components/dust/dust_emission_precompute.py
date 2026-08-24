@@ -895,7 +895,7 @@ def build_bosa_photometry_lookup(precomp: dict, grid_arrays: tuple | None = None
     return phot_fn
 
 
-# ── Dale 2014: single-grid (alpha): linear interpolation matching exact ─
+# ── Dale 2014: single-grid (alpha), linear interpolation matching exact ─
 
 
 def precompute_dale2014_photometry(
@@ -1199,7 +1199,7 @@ def precompute_for_model(
         templates = load_draine_li_templates(path)
         return precompute_dl07_photometry(templates, filter_waves, filter_trans, redshift=redshift)
 
-    # Bespoke (DL07-shaped) models: Astrodust/THEMIS/DL14/BOSA: each has a
+    # Bespoke (DL07-shaped) models (Astrodust/THEMIS/DL14/BOSA) each has a
     # dedicated precompute path. They use their own loader (not the generic
     # ``precompute_template_photometry`` route, which assumes a single-grid
     # ``{grid, axes, wavelength}`` schema that none of these loaders return).

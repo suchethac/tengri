@@ -137,7 +137,7 @@ class PhotometricPrecomputation(NamedTuple):
         (#1135): Φ_{majk} · T_IGM(λ*_{majk} · (1+z), z) [erg/s/Hz], where λ* is
         the sub-band's quadrature node. Injected by ``SEDModel.build`` when a
         mean-IGM model is present and precomputable; None otherwise. Folded here
-        on the metallicity axis, before the SSP contraction, because the
+        (on the metallicity axis, before the SSP contraction) because the
         runtime node is a met-weighted average whose weights move with the free
         ``met_logzsol``.
         The REST-frame band lives in :class:`RestBandPrecomputation`, built once by
@@ -708,7 +708,7 @@ def precompute_photometry_ztable(
     the SSP grid, the filter set, the z grid, and the quadrature flags, so
     it is content-hashed and persisted under ``~/.cache/tengri_precomp``:
     the first build of a given (SSP, filters, z-grid) combination pays the
-    quadrature; every later build: any process, any model: loads the npz
+    quadrature; every later build (any process, any model) loads the npz
     in well under a second. ``TENGRI_DISABLE_PRECOMP_CACHE=1`` opts out,
     ``TENGRI_PRECOMP_CACHE_DIR`` relocates the cache.
 

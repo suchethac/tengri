@@ -250,7 +250,7 @@ def _fit_segment(
          + 0.5 N (\log Q_\mathrm{true} - \log Q_\mathrm{pred}(\alpha, b))^2
 
     The analytical gradient mirrors :func:`yi-jia-li/cue/utils.py
-    :gradient_func_loglinear_analytical`: passing it explicitly to scipy
+    :gradient_func_loglinear_analytical`; passing it explicitly to scipy
     avoids finite-difference Jacobian evaluations (~3× more objective calls
     per iteration) and matches Cue's upstream optimization strategy.
 

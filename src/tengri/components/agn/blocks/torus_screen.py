@@ -41,7 +41,7 @@ TORUS_SCREEN_PARAMS: dict[str, tuple[str, str]] = {
 
 # Smoothing width in cos(i) units for the Type-1/2 edge. Kept small so a
 # clearly face-on sightline (cos_inc well above sin(oa)) has transmission ~1 to
-# <1e-3 even at large tau_v: i.e. default-inclination models are unchanged :
+# <1e-3 even at large tau_v (i.e. default-inclination models are unchanged),
 # while the screen still has a finite, differentiable slope across the edge.
 _TRANSITION_WIDTH = 0.025
 

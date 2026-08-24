@@ -91,7 +91,7 @@ AGN_RADIO_MODELS: tuple[str, ...] = ("none", "powerlaw", "dpl")
 # Mode strings for the star-formation radio sub-model, the sibling axis to
 # :data:`AGN_RADIO_MODELS`. Named here rather than spelled inline at each
 # check so the grammar validator (``parameters.groups._translate_radio``) and
-# the discovery menu (``registry.list_radio_blocks``) read the *same* tuple :
+# the discovery menu (``registry.list_radio_blocks``) read the *same* tuple;
 # a hand-copied second list is how the dust menu and the radio error message
 # both drifted out of agreement with what the builder actually accepts.
 #
@@ -119,7 +119,7 @@ class RadioSEDComponentConfig(SEDComponentConfig):
         Add Murphy+2011 thermal free-free component. Default ``True``
         (matches :func:`radio_total`'s default).
     agn_radio_model : str
-        AGN radio sub-model. One of :data:`AGN_RADIO_MODELS` :
+        AGN radio sub-model. One of :data:`AGN_RADIO_MODELS`:
         ``{"none", "powerlaw", "dpl"}``. The ``"none"`` mode disables
         the AGN radio component (SF synchrotron + optional free-free only).
         Default ``"powerlaw"`` preserves the pre-aging-cutoff behavior
@@ -234,7 +234,7 @@ class RadioSEDComponent(TemplateThreading):
     #: deliberately distant probe draws. The build-time band-response builder
     #: (``tengri.SEDModel._additive_term_band_response``) evaluates
     #: :meth:`emission_terms` at both and requires every term to come back
-    #: *proportional*: a term whose spectral **shape**: not merely its amplitude :
+    #: *proportional*: a term whose spectral **shape** (not merely its amplitude)
     #: responds to a runtime input is not rank-1, so no constant band response
     #: exists for it and the emitter drops to the dense per-call filter integral.
     #: Verifying the property beats declaring it (#1107: BOSA's template shape
@@ -523,7 +523,7 @@ class RadioSEDComponent(TemplateThreading):
             New state with ``sed_intrinsic`` updated.
         """
         # JP / KP / tribble were previously dispatched here with a runtime
-        # NotImplementedError. They now fail earlier: at construction :
+        # NotImplementedError. They now fail earlier, at construction,
         # because they are no longer in AGN_RADIO_MODELS. That validation
         # lives in RadioSEDComponentConfig.__post_init__.
         wave = state.wave

@@ -274,7 +274,7 @@ def _collect_keys(obj: Any, *, include_backend: bool = True) -> list[str]:
         # The ``@cites`` sweep below reads *every* public attribute of its
         # target. That is safe on the object the caller handed us, but forcing
         # it on delegated nodes would touch every property of the wrapped
-        # SEDModel: including ones that compile or allocate; purely to look
+        # SEDModel (including ones that compile or allocate) purely to look
         # for citation annotations. Restrict it to the root; the delegated
         # nodes contribute through the targeted extractors, which is where the
         # component, SSP and backend keys come from anyway.

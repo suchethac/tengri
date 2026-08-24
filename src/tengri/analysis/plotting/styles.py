@@ -19,24 +19,24 @@ import numpy as np
 #: notebooks, the gallery, and the paper.
 COLORS = {
     # Sampler colors (consistent across all notebooks)
-    "map": "#888888",  # gray: point estimate
-    "rt": "#1f77b4",  # blue: Ray Tracing (exact MCMC)
+    "map": "#888888",  # gray, point estimate
+    "rt": "#1f77b4",  # blue, Ray Tracing (exact MCMC)
     # Canonical names
-    "vi": "#ff7f0e",  # orange: geoVI (variational)
-    "vi_linear": "#9467bd",  # purple: MGVI (linear VI)
-    "mcmc_nuts": "#2ca02c",  # green: NUTS (gold standard)
-    "mcmc_raytrace": "#1f77b4",  # blue: Ray Tracing (exact MCMC)
+    "vi": "#ff7f0e",  # orange, geoVI (variational)
+    "vi_linear": "#9467bd",  # purple, MGVI (linear VI)
+    "mcmc_nuts": "#2ca02c",  # green, NUTS (gold standard)
+    "mcmc_raytrace": "#1f77b4",  # blue, Ray Tracing (exact MCMC)
     "geovi": "#ff7f0e",  # geoVI (old method name)
     "nuts": "#2ca02c",  # NUTS (old method name)
     "mgvi": "#9467bd",  # MGVI (old method name)
     # Data colors
-    "truth": "#1a1a1a",  # near-black: ground truth
+    "truth": "#1a1a1a",  # near-black, ground truth
     "data": "#333333",  # dark gray; observed data
-    "model": "#d62728",  # red: model prediction
+    "model": "#d62728",  # red, model prediction
     # SFH components
-    "sfh_mean": "#1f77b4",  # blue: mean SFH backbone
-    "sfh_full": "#ff7f0e",  # orange: full SFH (mean + GP)
-    "sfh_gp": "#2ca02c",  # green: GP contribution
+    "sfh_mean": "#1f77b4",  # blue, mean SFH backbone
+    "sfh_full": "#ff7f0e",  # orange, full SFH (mean + GP)
+    "sfh_gp": "#2ca02c",  # green, GP contribution
     # Band colors (SDSS)
     "u": "#7b3294",
     "g": "#008837",

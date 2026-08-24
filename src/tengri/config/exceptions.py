@@ -165,7 +165,7 @@ class WildcardPartialFreeWarning(UserWarning):
     """``all_params: FREE`` freed only some of the parameters it covered.
 
     ``FREE`` resolves each parameter to its declared ``free_prior``. A parameter
-    with no ``free_prior`` falls back to its ``prior``; a ``Fixed`` scalar: and
+    with no ``free_prior`` falls back to its ``prior`` (a ``Fixed`` scalar) and
     stays pinned. When a group holds both kinds, the wildcard frees one subset
     and silently leaves the rest frozen, and the fit reports a posterior with
     that physics held constant (issue #1474).
@@ -318,7 +318,7 @@ class DegenerateParameterPairWarning(AdvisoryWarning):
 
     A flat direction is not merely a weak constraint. The Hessian is singular
     there, so :func:`~tengri.inference.backends.laplace.run_laplace` clips the
-    eigenvalue to ``min_eigenvalue`` and: because ``cov = H^-1``: *assigns*
+    eigenvalue to ``min_eigenvalue`` and (because ``cov = H^-1``) *assigns*
     that direction variance ``1 / min_eigenvalue`` (issue #1515). The reported
     error bar is an artifact of the floor.
 
@@ -465,7 +465,7 @@ class PrecompBiasWarning(AdvisoryWarning):
 
     ``WavePrecomp`` / ``SpectrumPrecomp`` carry a small forward bias (measured
     0.13-0.26 % on photometry) that is constant in SNR; so no forward-model
-    check can see it: but enters the posterior gradient as ``bias x SNR``:
+    check can see it, but enters the posterior gradient as ``bias x SNR``:
     ~5 % wrong at SNR 30, ~50 % at SNR 300, rotated as well as rescaled at the
     high end (issue #1671). It is a bias, not noise: it does not average out
     over MCMC draws, it moves the mode, and better data makes it worse. #1688

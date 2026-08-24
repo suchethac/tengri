@@ -737,7 +737,7 @@ class Catalog:
                 f"this model's metallicity_model is {cfg.metallicity_model!r}. "
                 f"Either rebuild with a tabulated metallicity or drop met=. "
                 f"('table' is the one metallicity mode that cannot be inferred "
-                f"from parameter names, it declares no fittable parameters, so "
+                f"from parameter names (it declares no fittable parameters) so "
                 f"it has to be named explicitly.)"
             )
         if met is None and cfg.metallicity_model == "table" and not _has_build_time_met(cfg):
@@ -934,7 +934,7 @@ class Catalog:
         window-LUT line path reaches ``compute_joint_weights``, which reads
         ``params["met_logzsol"]`` directly and raises ``KeyError`` on a dict
         carrying only the free parameters. Merging once here keeps every channel
-        photometry, lines, properties, seeing the same complete dict. Caller
+        (photometry, lines, properties) seeing the same complete dict. Caller
         columns win, so a per-galaxy ``redshift`` still overrides a fixed one.
         """
         if param_table is None:
@@ -1147,7 +1147,7 @@ class Catalog:
         Notes
         -----
         Columns are **not** restricted to ``spec.free_params``. A tabulated SFH
-        declares zero free parameters, the table *is* the SFH, so extracting
+        declares zero free parameters (the table *is* the SFH) so extracting
         only free parameters dropped the history arrays entirely and the forward
         then refused with the #996 runtime check (#1396).
 

@@ -13,7 +13,7 @@ recipes are grammar implementations of the presets here.
 
 .. note::
     Relocated from the former top-level ``tengri/presets.py`` module (2026-07),
-    which had been silently shadowed; and made unreachable: by this
+    which had been silently shadowed (and made unreachable) by this
     ``tengri.presets`` package since the package landed.
 
 Usage

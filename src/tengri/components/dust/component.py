@@ -354,7 +354,7 @@ class DustAttenuationSEDComponent(TemplateThreading):
         from tengri.utils.scale import pow10
 
         nu = C_AA / state.wave  # Hz
-        # Absorbed luminosities are ~1e43 erg/s: outside float32: so the
+        # Absorbed luminosities are ~1e43 erg/s (outside float32) so the
         # integral is done in log space and the linear form derived from it
         # (#1206). The sign only tracks grid orientation; the energy is |L|.
         log_l_ir, _ = bolometric_absorbed_log10(

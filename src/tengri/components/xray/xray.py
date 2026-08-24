@@ -1053,7 +1053,7 @@ def xray_hotgas(
 
     # Float32 (#1206): ``10**38.919 = 8.3e38`` already exceeds the float32
     # maximum (3.4e38) BEFORE ``sfr`` is applied, so ``L_hotgas_ref`` is ``inf``
-    # and ``inf * spec`` is ``nan`` wherever the spectrum underflows to zero :
+    # and ``inf * spec`` is ``nan`` wherever the spectrum underflows to zero,
     # even though the result ``L_nu`` (~1e26 erg/s/Hz) is perfectly
     # representable. Divide the constant by the band integral in log space so no
     # out-of-range intermediate forms. Float64 keeps the literal expression.
@@ -1115,7 +1115,7 @@ def xray_anisotropy(
     (:math:`0.13397 = 1 - \cos 30^\circ`, :math:`0.25 = 1 - \cos^2 30^\circ`),
     so :math:`f(\cos 30^\circ) = 1`: the input spectrum is interpreted as the
     30° (α_ox-anchored) corona, matching CIGALE's ``*_30deg`` bookkeeping.
-    Face-on (:math:`\mu = 1`) is *brighter* than the anchor :
+    Face-on (:math:`\mu = 1`) is *brighter* than the anchor:
     :math:`f(1) \approx 1.072` at the default :math:`a_1 = 0.5,\, a_2 = 0`
     (the "intermediate" obscuration solution adopted in X-CIGALE). See #980
     for the parity audit that pinned this convention against CIGALE 2025.1.

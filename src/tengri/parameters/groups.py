@@ -1486,7 +1486,7 @@ def _check_wildcard_freed_something(
     """Adjudicate what an ``all_params: FREE`` wildcard actually freed.
 
     ``FREE`` resolves each parameter to its declared ``free_prior``. A parameter
-    with no ``free_prior`` falls back to its ``prior``; a ``Fixed`` scalar: and
+    with no ``free_prior`` falls back to its ``prior`` (a ``Fixed`` scalar) and
     stays pinned. A group can therefore hold both kinds, and the wildcard frees
     one subset while leaving the rest frozen. The fit then runs to completion
     with that physics constant, which is indistinguishable from success at the
@@ -1825,7 +1825,7 @@ def _all_law_shape_params() -> frozenset[str]:
 
     The ``dust`` wildcard frees the group's parameters *minus* the members of
     this set that the selected laws do not read, so parameters no law takes as
-    a shape argument: the Charlot & Fall optical depths; are never narrowed
+    a shape argument (the Charlot & Fall optical depths) are never narrowed
     away by a law that happens to be shape-free.
     """
     from tengri.components.dust.laws._registry import DUST_LAWS
@@ -3238,7 +3238,7 @@ _RADIO_AGN_PARAMS_BY_MODEL: dict[str, frozenset[str]] = {
 #: It held while every X-ray type resolved to one component, so ``gamma_agn`` /
 #: ``E_cut`` / ``log_nh`` / the XRB offsets were read by all of them and could
 #: not be pinned by omission. ``xray_aird`` now builds ``XRayAirdSEDComponent``,
-#: which reads the XRB offsets and none of the corona parameters: measured:
+#: which reads the XRB offsets and none of the corona parameters. Measured:
 #: under ``xray_aird`` the wildcard freed ``xray_E_cut``, ``xray_gamma_agn`` and
 #: ``xray_log_nh`` while none of the three could move the SED, beside
 #: ``xray_det_hmxb`` / ``xray_det_lmxb`` which could.
@@ -3346,7 +3346,7 @@ def _translate_foreground(fg_dict: dict, result: dict) -> None:
 
     **Intentional design**: ``foreground`` is deliberately settings-only
     (no ``type`` key, no free parameters). Milky Way dust extinction is not a
-    fittable model choice (it is observational / astronomical data), so it
+    fittable model choice (it is observational / astronomical data) so it
     remains a bare configuration dictionary. Unlike other groups (dust, AGN,
     radio, etc.), foreground carries no sub-blocks and no structural type.
     """
@@ -3805,7 +3805,7 @@ def _validate_user_keys(
         # NOTE: the dust top level deliberately does NOT accept dust.emission
         # short names. It used to, "for legacy code that flattens emission
         # params at the dust level ... still resolved via the dust.emission
-        # group path": but the resolution half was never wired. Measured:
+        # group path", but the resolution half was never wired. Measured:
         # **22 of 22** emission params written at the dust level were accepted
         # and silently discarded, with no error and no warning, so
         # ``dust={'emission': {...}, 'qpah': Uniform(1, 4)}`` ran the fit with
@@ -3907,7 +3907,7 @@ def _check_dict_keys(
             suggestion_pool.add(_extract_short_name(full_name, {}))
             suggestion_pool.add(full_name)
         # A parameter written one level too high is the common case, and
-        # "Unknown key 'alpha' ... Did you mean: alpha?": the message this
+        # "Unknown key 'alpha' ... Did you mean: alpha?", the message this
         # produced before: tells the reader to write exactly what they wrote.
         # Name the sub-block instead.
         owner = _subblock_owning(str(key), group, param_partition)
@@ -4592,7 +4592,7 @@ def _resolve_value(
                 f"The 'all_params' wildcard (also '*') must be FREE or FIXED "
                 f"(the sentinels exported from tengri), got {wildcard!r}. "
                 f"Did you mean ``'all_params': FREE`` or ``'all_params': FIXED``? "
-                f"Note: string 'free'/'fixed' is not accepted: use the sentinel."
+                f"Note: string 'free'/'fixed' is not accepted; use the sentinel."
             )
 
     # No override, no wildcard: fall through to registry default (auto-fixed)

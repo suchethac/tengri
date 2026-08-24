@@ -2,7 +2,7 @@
 """Free-parameter declarations owned by the stellar component.
 
 Currently holds the alpha-element enhancement priors. Stellar's main
-families of free parameters; SFH and metallicity: are produced by
+families of free parameters (SFH and metallicity) are produced by
 the live registries in ``tengri.components.stellar.sfh.{registry,
 met_registry}`` and travel a different code path. Those registries
 themselves *are* per-component sources of truth and aren't migrated

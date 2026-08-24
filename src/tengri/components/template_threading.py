@@ -4,7 +4,7 @@
 A component backed by a template library must hand that library to the
 compiled graph as a traced **argument**, not read it from module state while
 tracing. Read at trace time, the whole library freezes into the HLO as XLA
-``Constant`` ops: measured against a 0.05 MB bare-stellar floor: 66.6 MB for
+``Constant`` ops, measured against a 0.05 MB bare-stellar floor: 66.6 MB for
 Draine & Li 2014, 39.4 for THEMIS, 29.95 for SKIRTOR, 3.7 for the MAPPINGS V
 shock grid (#1649, #1694).
 

@@ -3,7 +3,7 @@
 
 ``Observation`` is the schema (instrument: filters, wave grid, noise
 character, which lines); ``Data`` is one record conforming to it.
-Validation happens in exactly one place, ``validate_against``, so
+Validation happens in exactly one place (``validate_against``) so
 shape errors, boolean-censor traps, NaNs, and unknown line names all
 fail loudly with the offending channel named. See the API spec
 (2026-07-23) sections 3.2-3.3 and issue #1321.

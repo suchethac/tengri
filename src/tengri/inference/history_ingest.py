@@ -3,7 +3,7 @@
 
 The sibling of :mod:`tengri.inference.catalog_ingest`. That module turns an
 observed flux table into contiguous validated arrays; this one does the same for
-the *records* a simulation supplies, SFR(t) and, optionally, Z(t), so
+the *records* a simulation supplies (SFR(t) and, optionally, Z(t)) so
 :meth:`tengri.Catalog.from_histories` validates once, at the boundary, before
 anything compiles.
 

@@ -294,7 +294,7 @@ def refuse_if_broken(method: str, *, allow_unvalidated: bool = False) -> None:
     user call.
 
     (This paragraph long cited ``vi_nonlinear`` as the unregistered example.
-    It is registered, a ``tier="primary"`` alias of ``vi``, so the
+    It is registered (a ``tier="primary"`` alias of ``vi``) so the
     justification named a case that never reaches this branch; ``evi_nifty``
     is the one that does.)
 
@@ -415,7 +415,7 @@ def check_unknown_kwargs(
         raises ``TypeError`` everywhere else: from Python itself, and from
         ``SEDModel.build`` for a kwarg it does not take. Two types for one
         mistake is the inconsistency, so this is ``TypeError`` and #1378's
-        regression test, which pins exactly that, passes again.
+        regression test (which pins exactly that) passes again.
 
     Notes
     -----

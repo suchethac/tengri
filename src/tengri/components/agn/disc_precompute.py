@@ -168,7 +168,7 @@ def _build_grid_ss(
     Templates are energy-normalized to unit bolometric luminosity so the grid
     captures pure shape variation; the absolute normalization is reintroduced by
     the runtime ``agn_log_lbol`` scaling in :func:`build_lookup`. Varying L_bol
-    here: rather than the now-ignored ``agn_log_ledd``: fixes the silently
+    here (rather than the now-ignored ``agn_log_ledd``) fixes the silently
     degenerate second axis of #902.
 
     Parameters

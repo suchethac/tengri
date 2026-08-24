@@ -497,7 +497,7 @@ def preintegrate_grid(
     # under a surrounding jit trace ``dl_cm`` and ``redshift`` arrive as tracers
     # and ``float(traced)`` raises ``ConcretizationTypeError``. The shared helper
     # returns a Python-float-compatible scalar when inputs are concrete and a JAX
-    # scalar when traced, and: unlike the linear form this replaced; survives
+    # scalar when traced, and (unlike the linear form this replaced) survives
     # float32, where (1+z)/(4 pi d_L^2) is exactly 0.0 at every distance (#1859).
     log10_flux_scale = _log10_flux_scale(redshift, dl_cm)
 

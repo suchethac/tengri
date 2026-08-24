@@ -156,7 +156,7 @@ def load_catalog(
         When a redshift column is detected:
 
         - ``"redshift"`` : ndarray of shape ``(n_rows,)``.
-        - ``"redshift_col"``: str: name of the column used.
+        - ``"redshift_col"`` : str. Name of the column used.
 
     Raises
     ------

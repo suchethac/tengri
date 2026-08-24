@@ -289,7 +289,7 @@ def _register(
 
 # ── Register smooth (additive) models ─────────────────────────────
 
-# --- tsnorm (truncated skew-normal): canonical: truncated_skewnormal_sfh ---
+# --- tsnorm (truncated skew-normal), canonical: truncated_skewnormal_sfh ---
 _tsnorm_spec = SFHModelSpec(
     name="tsnorm",
     fn=tsnorm,
@@ -336,7 +336,7 @@ _register(
     short_doc="Truncated skew-normal SFH (Bellstedt+2020)",
 )
 
-# --- snorm (skew-normal): canonical: skewnormal_sfh ---
+# --- snorm (skew-normal), canonical: skewnormal_sfh ---
 _snorm_spec = SFHModelSpec(
     name="snorm",
     fn=snorm,
@@ -773,7 +773,7 @@ _register(
 #
 # Registered as ``declining_exp``, NOT as ``tau`` (#1750). It was previously
 # registered as ``tau``, and #406 removed it because users read that name as
-# CIGALE's ``sfhdelayed``: which is τ-*delayed* and rises from zero: giving a
+# CIGALE's ``sfhdelayed`` (which is τ-*delayed* and rises from zero) giving a
 # silent wavelength-dependent residual. Both models have a τ, so ``tau`` cannot
 # distinguish them and putting that name back would reinstate the defect. What
 # #406 actually established is that the *name* was wrong, not that the model

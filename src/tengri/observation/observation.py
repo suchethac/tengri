@@ -32,7 +32,7 @@ _OBSERVATION_DEPRECATION_WARNED = False
 def _restband_lnu(state) -> jnp.ndarray:
     r"""Total rest-frame band luminosity for ``phot_rest_fnu`` (#1148).
 
-    ``phot_rest_fnu``, and so ``Observables.mag_absolute``, is the SED reprojected
+    ``phot_rest_fnu`` (and so ``Observables.mag_absolute``) is the SED reprojected
     at :math:`z=0`, :math:`d_L=10\,{\rm pc}`: *the galaxy as it is*. The filter
     therefore sits in the **rest** frame and samples the rest SED at its own pivot.
 
@@ -791,7 +791,7 @@ class Observation:
         # IGM attenuation is an observed-frame transmission the IGM component
         # publishes on the rest grid (``T`` evaluated at ``wave_obs =
         # wave*(1+z)``). Every projection below redshifts the rest SED
-        # internally, so attenuating here, once, before projection, is what
+        # internally, so attenuating here (once, before projection) is what
         # captures the sharp Lyman break across broad bands and spectral pixels
         # at high redshift (#932); a single per-band effective-wavelength factor
         # would not. ``T`` shares the rest grid with ``sed_rest``, and the key is
@@ -875,7 +875,7 @@ class Observation:
                 # a line-of-sight absorber *between us and the source*; it is not part
                 # of the galaxy's rest-frame SED. Feeding the attenuated SED here made
                 # an object's absolute magnitude depend on how far away it happens to
-                # be. (The galaxy's own LyC absorption, ``neb_fesc``, dust, already
+                # be. (The galaxy's own LyC absorption (``neb_fesc``, dust) already
                 # lives in ``sed_rest`` and correctly stays.)
                 #
                 # This projects at z=0, so the filter's OWN wavelengths are read as
@@ -1003,7 +1003,7 @@ class Observation:
           wrong within a day of being written. :class:`DustAttenuationSEDComponent`
           declares ``sed_nebular`` an *optional* input purely as a topological
           ordering edge, its own docstring notes the screen "does not read the
-          key directly, it acts on the already-summed ``sed_intrinsic``", so no
+          key directly (it acts on the already-summed ``sed_intrinsic``") so no
           separately reddened nebular SED exists there to project. Measured on an
           FSPS SSP through SDSS *gri*: 1.787e-03 at :math:`\tau_v`\ =1/z=0.05 and
           1.955e-03 at :math:`\tau_v`\ =2/z=1, against a stellar-only floor of
@@ -1257,7 +1257,7 @@ class Observation:
 
             # Nebular emission (Cue / CloudyGrid) arises in the HII regions
             # around the youngest stars, so it sees the full young-limit screen
-            # birth cloud AND diffuse (A_bc·A_diff, i.e. y=1), matching the
+            # (birth cloud AND diffuse (A_bc·A_diff, i.e. y=1)) matching the
             # exact path (two_component.py reddens the nebular SED by both
             # screens). The earlier diffuse-only ``A_diff·Φ_neb`` left
             # nebular-line-dominated bands ~18 % (τ=0.5) to ~37 % (τ=1) too

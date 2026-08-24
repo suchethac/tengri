@@ -789,7 +789,7 @@ def _warn_if_lut_bias_amplified(exact_model, lut_model, data, noise, data_type, 
         f"fit's SNR, gives an estimated relative posterior-gradient error "
         f"of {est:.0%} (worst channel {channel}: forward bias "
         f"{bias_at:.2%} at SNR {snr_at:.0f}). The bias is constant in SNR "
-        f", invisible to any forward check, but enters the gradient "
+        f"(invisible to any forward check) but enters the gradient "
         f"multiplied by SNR, moves the mode, and better data makes it "
         f"worse (#1671; spectroscopy sibling measured in #1688). For "
         f"final inference at this SNR, rerun with approx=None (the exact "
@@ -885,7 +885,7 @@ def _resolve_batch_fit_approx(model, approx, data_type):
             # re-appending WavePrecomp would duplicate it.
             #
             # #1748: and only when the fast path can ENGAGE. Since #1281 a chain
-            # that reads ``sed_nebular``, anything with dust, disarms the grid's
+            # that reads ``sed_nebular`` (anything with dust) disarms the grid's
             # photometry shortcut, so the top-up is bit-identical in compiled FLOPs
             # while still changing ``compile_signature()``. Batch surfaces pay that
             # per resolved clone, so skipping it here is the larger of the two wins.
@@ -1715,7 +1715,7 @@ class Fitter:
                 and not self._fits_lines(model)
                 and not _has_line_adjacent_channel(model)
                 # #1748: and only when the grid can actually serve photometry. A
-                # chain that reads ``sed_nebular``, anything with dust, disarms
+                # chain that reads ``sed_nebular`` (anything with dust) disarms
                 # the shortcut since #1281, making this append bit-identical in
                 # compiled FLOPs while still changing ``compile_signature()``.
                 # This branch appends the config directly rather than through
@@ -3010,7 +3010,7 @@ class Fitter:
 
         Stored payload:
 
-        - ``adaptation``: dict keyed by ``(engine_key, method_key)``, the
+        - ``adaptation`` : dict keyed by ``(engine_key, method_key)``, the
           contents of the model's cache namespace under ``"adaptation"``.
         - ``spec_fingerprint`` : a content hash of the free-parameter names
           and prior shape, used by :meth:`load_cache` to refuse to load a
@@ -3218,12 +3218,12 @@ class Fitter:
         Posterior
             Inference results object with attributes:
 
-            - ``samples``: dict or None, Posterior samples (None for MAP).
-            - ``params``: dict, Best-fit or posterior mean parameters.
-            - ``method``: str, Method used.
-            - ``diagnostics``: dict, Convergence/quality metrics.
-            - ``log_evidence``: float or None, Bayesian evidence (NSS only).
-            - ``wall_time_s``: float, Total runtime.
+            - ``samples`` : dict or None, Posterior samples (None for MAP).
+            - ``params`` : dict, Best-fit or posterior mean parameters.
+            - ``method`` : str, Method used.
+            - ``diagnostics`` : dict, Convergence/quality metrics.
+            - ``log_evidence`` : float or None, Bayesian evidence (NSS only).
+            - ``wall_time_s`` : float, Total runtime.
 
             The Posterior also has derived quantity methods:
             ``derived``, ``summary()``, ``to_arviz()``, ``refine()``, etc.
@@ -3414,7 +3414,7 @@ class Fitter:
         # _cache_policy selects the L3 (inference-body) eviction policy.
         #
         # Catalog deliberately does NOT pass 'sweep' (#1344). ``_lean_keep_sig``
-        # is ``compile_signature()``, data *shape*, never data values, so two
+        # is ``compile_signature()`` (data *shape*, never data values) so two
         # galaxies of the same model and shape produce the same key. 'iterate'
         # therefore keeps the one entry both galaxies share and the catalog pays
         # one inference-body compile; 'sweep' passes ``keep_sig=None`` and drops

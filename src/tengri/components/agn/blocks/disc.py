@@ -332,7 +332,7 @@ def cigale_schartmann_skirtor_attenuated_disc_block(
 
     where the SKIRTOR ratio captures the inclination-dependent clumpy
     self-attenuation through the torus (near unity for type-1 face-on
-    views, much smaller for type-2 sightlines). Without this factor :
+    views, much smaller for type-2 sightlines). Without this factor,
     plain :func:`cigale_schartmann_disc_block`, the disc carries
     only the analytic Schartmann shape with no SKIRTOR template
     fingerprint, leaving a ~10 % wavelength-resolved residual against
@@ -718,7 +718,7 @@ def richards2006_disc_block(
 
     Empirical disc template from a composite of SDSS quasars (Richards
     et al. 2006). The template is a fixed UV-optical shape, normalized to
-    the requested bolometric luminosity. Wavelength coverage 30.5 Å :
+    the requested bolometric luminosity. Wavelength coverage 30.5 Å to
     3×10⁸ Å with zero flux outside.
 
     This template carries no free spectral-shape parameters. Use it when

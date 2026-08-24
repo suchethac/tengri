@@ -583,8 +583,8 @@ def _component_entry(name: str, *, kind: str) -> dict:
 # ──────────────────────────────────────────────────────────────────
 
 #: The word for "do not filter". Every menu accepts it, because it is what a
-#: reader types first and because ``status='all'`` used to return nothing at all
-#:: the worst possible answer to "show me everything".
+#: reader types first and because ``status='all'`` used to return nothing at all,
+#: the worst possible answer to "show me everything".
 ALL = "all"
 
 
@@ -615,7 +615,7 @@ def _filter_menu(rows: list[dict], column: str, value: str | None, *, listing: s
     ``status='all'`` (#1679).
 
     The distinction kept here is between a value that is not a ``column`` value
-    at all; a typo, which raises: and one that is real but absent from *this*
+    at all (a typo, which raises) and one that is real but absent from *this*
     menu, which is a legitimate empty answer: there simply are no unvalidated
     dust laws.
     """
@@ -814,7 +814,7 @@ def list_dust_models(*, status: str | None = None) -> _RegistryTable:
 
     The other two axes had menus; this one did not, so the structural
     names; including ``two_component``, the type the recipes themselves
-    build with: were absent from every discovery surface: no ``list_*``
+    build with, were absent from every discovery surface: no ``list_*``
     named them, ``describe('two_component')`` raised ``KeyError`` and
     ``search('two_component')`` returned nothing.
 
@@ -1093,7 +1093,7 @@ def list_xray_models(*, status: str | None = None) -> _RegistryTable:
     Names come from the grammar validator itself
     (``tengri.parameters.groups._valid_xray_types``), which accepts the
     union of :data:`XRAY_MODELS` and the ``SEDModelComponent`` X-ray variants
-    in ``_REGISTRY``. Reading only ``XRAY_MODELS``: as this menu did; hid
+    in ``_REGISTRY``. Reading only ``XRAY_MODELS`` (as this menu did) hid
     ``xray_aird`` and ``agn_xray_corona`` from every discovery surface from the
     moment #1323 made them builder-reachable, while the validator's own
     docstring asserted the menu and builder "cannot drift".
@@ -2689,7 +2689,7 @@ def describe_nebular_backend(name: str) -> _DescribeRecord:
 def describe_inference_method(name: str) -> _DescribeRecord:
     """Return the descriptor row for one inference backend (MAP / VI / NUTS / NSS / …).
 
-    Resolves any name the fitter dispatches: every tier: including
+    Resolves any name the fitter dispatches: every tier, including
     ``"broken"``, which :func:`list_inference_methods` hides by default
     (#1287); and every registered alias.
 

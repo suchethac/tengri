@@ -13,7 +13,7 @@ Models
 Canonical names (short name alias in parentheses):
 
 - **truncated_skewnormal** (tsnorm): Bellstedt+2020, Robotham+2020 snorm_trunc.
-  Most flexible smooth model: 5 params: peak location, width, skew, truncation.
+  Most flexible smooth model, 5 params: peak location, width, skew, truncation.
 - **skewnormal** (snorm): ``truncated_skewnormal`` without truncation (4 params).
 - **gaussian** (norm): ``skewnormal`` with skew=0 (3 params).
 - **lognormal** (lnorm): Gaussian in log10(age) space (3 params).

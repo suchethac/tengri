@@ -3,7 +3,7 @@ r"""Model-free measurement operators: indices, line fluxes, synthetic photometry
 
 The measurement counterpart to the forward model. Where ``model.predict_*``
 asks *"what does this galaxy emit?"*, ``tengri.measure.*`` asks *"what would a
-pipeline measure off this spectrum?"*: and it will measure **any** spectrum:
+pipeline measure off this spectrum?"*, and it will measure **any** spectrum:
 one tengri just predicted, one exported to disk, or one that a user reduced
 themselves.
 
@@ -376,7 +376,7 @@ def from_prediction(pred, *, indices=None, lines=None, filters=_UNSET):
 
     The convenient path. It pairs the model's rest-frame SED with the grid it
     lives on (``Prediction.rest_sed()`` alone does not carry its axis), reads the
-    redshift from the prediction's parameters, and; for photometry: routes
+    redshift from the prediction's parameters, and (for photometry) routes
     through the model's own exact projector so the **filter convention and IGM
     attenuation are inherited rather than re-derived**.
 

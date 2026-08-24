@@ -190,8 +190,8 @@ class SubNetWeights(NamedTuple):
     pca_scale: jnp.ndarray  # (n_pcas,)
     log_spec_shift: jnp.ndarray  # (n_wavelengths,)
     log_spec_scale: jnp.ndarray  # (n_wavelengths,)
-    pca_components: jnp.ndarray  # (n_pcas, n_wavelengths): sklearn PCA basis
-    pca_mean: jnp.ndarray  # (n_wavelengths,): sklearn PCA centering
+    pca_components: jnp.ndarray  # (n_pcas, n_wavelengths), sklearn PCA basis
+    pca_mean: jnp.ndarray  # (n_wavelengths,), sklearn PCA centering
     n_layers: int
 
 
@@ -370,7 +370,7 @@ def load_cue_weights(npz_path: str) -> CueWeights:
     **JIT-compatible**: no, performs file I/O and array padding at load time.
     Call once per model initialization; results are re-used for all inference.
 
-    **Why NumPy and not** ``jnp`` (#1631): these arrays are cached: the AGN
+    **Why NumPy and not** ``jnp`` (#1631): these arrays are cached; the AGN
     NLR path memoizes a backend in ``nlr_cloudy._CUE_AGN_BACKEND``. Under
     omnistaging every ``jnp`` call inside a jit trace stages out to the jaxpr
     and returns a ``DynamicJaxprTracer``, *even on constant inputs*. So a
@@ -413,7 +413,7 @@ def _load_cue_weights_eager(npz_path: str) -> CueWeights:
     ``nlr_cloudy._CUE_AGN_BACKEND`` holds the backend for the process. The first
     caller therefore decides what every later caller gets. If the first call
     happens inside a ``jax.jit`` trace, the cache is filled with tracers and the
-    next reader: a different test, a different fit: dies with
+    next reader (a different test, a different fit) dies with
     ``UnexpectedTracerError`` pointing here, far from whatever actually did it.
 
     That is not hypothetical: it is the CI failure in
@@ -447,7 +447,7 @@ def _load_cue_weights_eager(npz_path: str) -> CueWeights:
     nets = line_nets
     n_hidden = nets[0].n_layers - 1
 
-    # Hidden layers: stack (16, in, out): all same architecture
+    # Hidden layers: stack (16, in, out), all same architecture
     b_W_h = tuple(np.stack([n.W[i] for n in nets]) for i in range(n_hidden))
     b_b_h = tuple(np.stack([n.b[i] for n in nets]) for i in range(n_hidden))
     b_a_h = tuple(np.stack([n.alphas[i] for n in nets]) for i in range(n_hidden))
@@ -893,7 +893,7 @@ class CueWNESSPError(ValueError):
     photons have already been absorbed by an internal nebular layer, so the
     SSP spectrum reports ``log10(Q_H) ~ 0`` instead of the physical 47–50.
     Feeding such an SSP to Cue produces line luminosities that are
-    under-predicted by 4–7 dex: silently: because Cue infers Q_H from the
+    under-predicted by 4–7 dex (silently) because Cue infers Q_H from the
     SSP rather than receiving it explicitly.
 
     Detection
@@ -935,7 +935,7 @@ class CueWNESSPError(ValueError):
 # wNE SSPs fail in BOTH directions: grids with the LyC pre-absorbed report
 # Q_H ≈ 0 (log10 stored as –99, caught by the lower bound), while grids
 # that keep the baked-in nebular continuum corrupt the ionizing power-law
-# fit UPWARD (observed: log10(Q_H) ≈ 62 for ssp_prsc_*_wNE_* files: the
+# fit UPWARD (observed: log10(Q_H) ≈ 62 for ssp_prsc_*_wNE_* files; the
 # nebular continuum in the fit window masquerades as ionizing flux).
 # The band gives > 2 dex headroom on each side of the physical range.
 _WNE_LOGQH_THRESHOLD: float = 44.0

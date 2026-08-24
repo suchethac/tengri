@@ -215,7 +215,7 @@ def drw_innovations_gp_from_xi(xi, psd_sigma_dex, psd_tau_yr, log_age_grid):
     r"""DRW realization via the OU state-space (innovations) recursion.
 
     Realizes the *same* linear-time damped-random-walk field as
-    :func:`drw_linear_gp_from_xi`: same covariance, same prior; but through the
+    :func:`drw_linear_gp_from_xi` (same covariance, same prior) but through the
     exact first-order Markov (Ornstein–Uhlenbeck) forward recursion rather than a
     dense Cholesky factor:
 
@@ -279,7 +279,7 @@ def drw_innovations_gp_from_xi(xi, psd_sigma_dex, psd_tau_yr, log_age_grid):
 
     Notes
     -----
-    **JIT/grad/vmap-safe**: the recursion is a single ``jax.lax.scan``: :math:`O(n)`
+    **JIT/grad/vmap-safe**: the recursion is a single ``jax.lax.scan``, so :math:`O(n)`
     time, :math:`O(1)` memory, differentiable w.r.t. ``psd_sigma_dex``,
     ``psd_tau_yr`` and ``xi``. No dense matrix, so (unlike
     :func:`drw_linear_gp_from_xi`) there is no Cholesky and no

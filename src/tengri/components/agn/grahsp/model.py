@@ -456,7 +456,7 @@ agn_grahsp_hot_fcov
     agn_grahsp_ebv, agn_grahsp_ebv_agn
         Bi-attenuation; see :func:`attenuation_factors`.
     agn_type : int, optional
-        ``1`` (BL/QSO, default), ``2`` (Sy2), ``3`` (LINER). **Static** :
+        ``1`` (BL/QSO, default), ``2`` (Sy2), ``3`` (LINER). **Static**;
         do not pass as a traced JAX value.
     templates : GRAHSPTemplates, optional
         Pre-loaded HDF5 template bundle.

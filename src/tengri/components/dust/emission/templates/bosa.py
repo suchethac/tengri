@@ -67,7 +67,7 @@ class BosaIRSEDComponent(EmissionComponent):
 
         Notes
         -----
-        **JIT-compatible**: no, deliberately: runs at build time.
+        **JIT-compatible**: no, deliberately; runs at build time.
         """
         del wave
         from tengri._data_setup import find_data_str

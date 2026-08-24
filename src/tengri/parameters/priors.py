@@ -847,7 +847,7 @@ class LogUniform(Distribution):
 
     where Φ(ξ) = 0.5 * (1 + erf(ξ / sqrt(2))) is the standard normal CDF.
     This ensures an N(0,1) latent yields a genuine log-uniform prior on
-    [lo, hi]; matching ``log_prob`` and ``sample``: not a midpoint-peaked
+    [lo, hi] (matching ``log_prob`` and ``sample``) not a midpoint-peaked
     one. (A sigmoid map here would silently substitute a logit-normal
     prior in log space, biasing weakly-constrained scale parameters toward
     the geometric midpoint and compressing the tails.)

@@ -254,7 +254,7 @@ def marginalize_calibration(
     # Whitened weights. NEVER form 1/sigma**2 (#1588): it is ~1e59 at a real
     # flux uncertainty, and the variance-domain floor this replaced
     # (``maximum(obs_err**2, 1e-30)``) bound on *every pixel of every realistic
-    # spectrum*, sigma < 1e-15 trips it, pinning inv_var to exactly 1e30 in
+    # spectrum* (sigma < 1e-15 trips it) pinning inv_var to exactly 1e30 in
     # **float64**. The data term then lost to the prior and the recovered
     # polynomial collapsed toward zero: c_hat[0] 5.0e-02 -> 7.5e-04 at
     # F_lambda ~1e-17, and -> 7.6e-26 at F_nu ~1e-28. Guard only against

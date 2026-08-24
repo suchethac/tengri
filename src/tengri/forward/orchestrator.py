@@ -844,7 +844,7 @@ def _name_missing_parameter(
     from wherever the component happened to read first, which is what all fifty
     of #1832's failures looked like.
 
-    Returns ``None``, meaning "not mine, re-raise unchanged", unless the key is
+    Returns ``None`` (meaning "not mine, re-raise unchanged") unless the key is
     a parameter this component *declares* and the sliced dict genuinely lacks. A
     guard that relabels every internal dict lookup would turn real bugs into
     confident wrong explanations, which is worse than the bare message.

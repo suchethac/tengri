@@ -123,7 +123,7 @@ def build_energy_balance_lut(
         Passed verbatim to :func:`two_component_dust` for node-exact agreement.
     eb_include_lyc : bool, optional
         FSPS-parity toggle (#961): when True, the LyC (λ < 912 Å) is kept in
-        the absorbed-luminosity integrand: all absorbed energy heats dust:
+        the absorbed-luminosity integrand (all absorbed energy heats dust)
         instead of the canonical LyC mask (#922). Must match the runtime
         ``DustSEDComponent.config.eb_include_lyc``.
     tau_bc_grid, tau_diff_grid : ndarray
@@ -239,7 +239,7 @@ def _lut_contract(
 
     # Bilinear interpolation touches four nodes of ``G``, so slice those four
     # out before contracting. Contracting the whole optical-depth grid instead
-    #: which is what a dense weight vector forces: costs n_met x n_age x
+    # (which is what a dense weight vector forces) costs n_met x n_age x
     # n_bc x n_diff multiply-adds to use n_met x n_age x 4 of them: on a
     # (15, 93, 24, 24) LUT that is 803,520 versus 5,580, a 144x overshoot, and
     # it dominated the whole WavePrecomp forward pass.
@@ -301,7 +301,7 @@ def lut_l_absorbed_stellar_log10(
     only the nebular term on the configuration most fits actually use.
 
     ``positive = magnitude > 0`` is False for NaN, so before this the whole
-    stellar absorbed luminosity silently became ``-inf``: i.e. exactly 0.0:
+    stellar absorbed luminosity silently became ``-inf`` (i.e. exactly 0.0)
     on a corrupt contraction.
     """
     from tengri.utils.scale import _not_computable, log10_magnitude

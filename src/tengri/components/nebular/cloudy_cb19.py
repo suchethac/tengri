@@ -709,7 +709,7 @@ class CB19Backend:
         collapses. The resulting attributes are JAX arrays usable inside
         the JIT'd kernel body.
         """
-        del dl_cm  # CB19: no continuum, lines via point-sampling: no F_nu scaling needed
+        del dl_cm  # CB19: no continuum, lines via point-sampling, no F_nu scaling needed
         grid = self.grid
 
         # 1. Lift line ratios into log10(L_line/Q_H) [Lsun·s/photon].

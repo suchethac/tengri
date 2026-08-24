@@ -323,7 +323,7 @@ def _check_uniform(grid: jnp.ndarray) -> None:
     """
     try:
         g0 = np.asarray(grid)
-    except Exception:  # a JAX tracer cannot be converted: nothing to check
+    except Exception:  # a JAX tracer cannot be converted, nothing to check
         return
     if not np.issubdtype(g0.dtype, np.floating):
         return
@@ -406,7 +406,7 @@ def compute_grid_window(
     On a uniform grid that is a fixed number of adjacent nodes regardless of how
     fine the grid is, so the dense vector is mostly exact zeros.  This function
     returns just the supported window; a start index and the weights at
-    ``grid[start: start + 2 * half_width + 1]``: for use with
+    ``grid[start: start + 2 * half_width + 1]`` : for use with
     :func:`apply_grid_window`.
 
     The dropped weights are **exactly** zero (:func:`tw_cuml_kern` clamps the

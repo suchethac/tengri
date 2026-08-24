@@ -91,7 +91,7 @@ class AGNXRayCoronaSEDComponent(SEDModelComponent):
 
     The corona is evaluated at the Yang+2020 30° reference inclination
     (anisotropy factor exactly 1): this component has no inclination input,
-    so it stays at the anchor where the alpha_ox relation is defined :
+    so it stays at the anchor where the alpha_ox relation is defined;
     same policy as ``XRayAirdSEDComponent`` (#980).
     """
 
@@ -152,7 +152,7 @@ class AGNXRayCoronaSEDComponent(SEDModelComponent):
     # ``sed_xray`` and nothing else, matching XRayAirdSEDComponent. This
     # previously declared ``L_xray_agn``, which is not a DerivedState field, so
     # it spilled into ``_extras`` and tripped the ADR-0007 guard on every build.
-    # Nothing consumed it, the component was never built: and
+    # Nothing consumed it (the component was never built) and
     # ``state_to_xray_quantities`` derives ``l_x_agn`` independently.
     outputs: ClassVar[dict[str, str]] = {
         "sed_xray": "erg/s/Hz",

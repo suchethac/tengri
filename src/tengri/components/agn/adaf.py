@@ -386,7 +386,7 @@ def _adaf_electron_temperature(
     total cooling to the heating :math:`Q^{e+} = Q^-` fixes ``T_e``. The paper gives
     two analytic branches selected by the Compton slope :math:`\alpha_c`:
 
-    - :math:`\alpha_c > 1` (weak Compton, low ``mdot``): Eq. 40:
+    - :math:`\alpha_c > 1` (weak Compton, low ``mdot``), Eq. 40:
 
       .. math::
 
@@ -394,7 +394,7 @@ def _adaf_electron_temperature(
                 (\alpha/0.3)^{3/14} ((1-\beta)/0.5)^{-1/14}
                 m^{1/14} \dot m^{-1/14}\ \mathrm{K}
 
-    - :math:`\alpha_c < 1` (strong Compton, high ``mdot``): Eq. 43:
+    - :math:`\alpha_c < 1` (strong Compton, high ``mdot``), Eq. 43:
 
       .. math::
 
@@ -660,7 +660,7 @@ def adaf_spectrum(
         Gas-to-total pressure ratio :math:`\beta` (magnetic fraction is
         :math:`1-\beta`). Default 0.5.
     agn_adaf_delta : float, optional
-        Fraction of viscous energy heating electrons directly :math:`\delta` :
+        Fraction of viscous energy heating electrons directly :math:`\delta`,
         the single most consequential ADAF parameter (it sets the flow luminosity
         at fixed :math:`\dot m`). Default ``0.1`` **departs from Mahadevan 1997's
         own fiducial** :math:`\delta \sim m_e/m_i \sim 1/2000`; ``0.1`` follows the

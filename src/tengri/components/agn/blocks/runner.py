@@ -78,7 +78,7 @@ from tengri.utils.physics_constants import L_SUN
 
 #: Torus selectors that do NOT receive the gray Type-1/2 visibility mask:
 #: ``none`` (no torus) and the self-contained empirical quasar templates
-#: (``qsogen``, ``grahsp``), which already encode an inclination-averaged SED :
+#: (``qsogen``, ``grahsp``), which already encode an inclination-averaged SED;
 #: masking them would be double-counting. The dusty-screen tori (skirtor/fritz)
 #: are handled by their own wavelength-dependent screen above.
 _SELF_CONTAINED_TORI: frozenset[str] = frozenset({"none", "qsogen", "grahsp"})
@@ -601,7 +601,7 @@ agn_torus_block, agn_attenuation_block : str
     L_lambda_disc = L_lambda_disc * _disc_ext
 
     # Compute lambda*L_lambda(5100Å) for downstream block (line/FeII/torus)
-    # normalizations. Convention: this is the LOS-reddened disc: taken *after*
+    # normalizations. Convention: this is the LOS-reddened disc, taken *after*
     # the polar/LOS disc extinction (``_disc_ext`` above) but *before* the
     # conserving debit below. With agn_polar_ebv=0 (the common case) it equals
     # the intrinsic disc; with Type-1 polar reddening it carries the extinction.
