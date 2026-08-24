@@ -623,7 +623,7 @@ class PhotometricZTable(NamedTuple):
 
 # Bump when the quadrature or table layout changes — invalidates every
 # cached z-table built by an older algorithm.
-_ZTABLE_CACHE_VERSION = 1
+_ZTABLE_CACHE_VERSION = 2
 
 
 def _ztable_cache_dir():
@@ -652,8 +652,17 @@ def _ztable_cache_key(
     convention,
     n_subbands=0,
 ) -> str:
-    """Content hash over everything the table depends on."""
+    """Content hash over everything the table depends on.
+
+    Includes session precision (jax_enable_x64) and JAX backend since stored
+    values are computed through JAX and inherit session precision.
+    Contamination without these: float32 session writes an entry, float64
+    session reads it (~1e-7 relative error silently poisoning precision
+    benchmarks/parity tests that share a cache dir between arms).
+    """
     import hashlib
+
+    import jax
 
     h = hashlib.sha256()
     h.update(f"v{_ZTABLE_CACHE_VERSION}".encode())
@@ -681,7 +690,9 @@ def _ztable_cache_key(
                 bool(taylor_correction),
                 str(convention),
                 int(n_subbands),
-                "schema=2",
+                "schema=3",
+                bool(jax.config.jax_enable_x64),
+                jax.default_backend(),
             )
         ).encode()
     )
