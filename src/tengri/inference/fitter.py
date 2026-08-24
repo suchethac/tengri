@@ -2327,8 +2327,12 @@ class Fitter:
 
         Engines are cached in a module-level shared cache keyed by
         compile_signature(), enabling zero-recompile fits when multiple
-        Fitters share the same model structure (e.g., catalog fits with
-        different SSP files of identical shape).
+        Fitters share the same model structure. Since PR #1973, the compile
+        signature includes a blake2b content digest of ssp_flux, so the sharing
+        contract is identical *content* (e.g., the same SSP file reloaded),
+        not merely identical shape. Two SSP grids with the same shape but
+        different flux values produce different signatures and do not share
+        an engine.
 
         Also maintains a backward-compat per-model cache for any code
         that reads the model's cache namespace under ``"jit_engine"``.

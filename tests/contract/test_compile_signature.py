@@ -73,7 +73,7 @@ class TestSEDModelCompileSignature:
         assert sig1 == sig2
 
     def test_identical_models_same_signature(self, mock_ssp_data, photometry, spec_dpl):
-        """Two models with identical shape should produce identical signatures."""
+        """Two models sharing the same SSP instance should produce identical signatures."""
         model1 = SEDModel(spec_dpl, mock_ssp_data, observation=photometry)
         model2 = SEDModel(spec_dpl, mock_ssp_data, observation=photometry)
 
