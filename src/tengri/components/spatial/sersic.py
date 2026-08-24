@@ -16,7 +16,7 @@ References
 ----------
 .. [Sersic1968] Sérsic, J. L. 1968, *Atlas de Galaxias Australes*,
    Cordoba, Argentina: Observatorio Astronomico.
-.. [Ciotti1999] Ciotti, L. & Bertin, G. 1999, A&A, 352, 447 —
+.. [Ciotti1999] Ciotti, L. & Bertin, G. 1999, A&A, 352, 447:
    asymptotic expansion for :math:`b_n`,
    https://arxiv.org/abs/astro-ph/9911078.
 """

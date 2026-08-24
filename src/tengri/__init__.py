@@ -9,7 +9,7 @@ Where the public API lives
 
 There are three surfaces, and they are deliberately not the same set. This
 section used to claim ``__all__`` was a tiered map of everything below, which
-was wrong in both directions — it advertised eleven names ``__all__`` excludes
+was wrong in both directions: it advertised eleven names ``__all__`` excludes
 and omitted sixty-five it contains (#1283).
 
 **1. The canonical import path is the sub-namespace.** For the objects a fit is
@@ -24,10 +24,10 @@ canonical. See ``docs/dev/api_migration_v0.x.md``.
 
 **2. ``__all__`` is the star-import surface**, kept deliberately narrower than
 "everything public" so that ``from tengri import *`` does not dump the whole
-package into a namespace. Names above are excluded on purpose — their absence
+package into a namespace. Names above are excluded on purpose: their absence
 from ``import *`` is the design, not a defect.
 
-**3. ``dir(tengri)`` is the discovery surface** — a curated subset sized for
+**3. ``dir(tengri)`` is the discovery surface**, a curated subset sized for
 tab-completion rather than completeness.
 
 Building a first fit
@@ -93,12 +93,12 @@ if not _os.environ.get("TENGRI_VERBOSE_JAX"):
     _os.environ.setdefault("TF_CPP_MIN_LOG_LEVEL", "3")
     _os.environ.setdefault("ABSL_LOG_LEVEL", "ERROR")
 
-# Enable float64 by DEFAULT — required for cosmological distance calculations
+# Enable float64 by DEFAULT: required for cosmological distance calculations
 # (dL^2 at z>0.01 overflows float32).
 #
 # Default, not decree (#1840). This used to be an unconditional
 # ``jax.config.update("jax_enable_x64", True)``, which silently discarded
-# ``JAX_ENABLE_X64=0`` — the documented JAX way to ask for float32. The
+# ``JAX_ENABLE_X64=0``: the documented JAX way to ask for float32. The
 # environment and the live config then disagreed with no warning, so every
 # float32 probe, benchmark and bug report that selected float32 that way ran
 # in float64 and reported float32 as healthy. A measurement that cannot fail
@@ -120,14 +120,14 @@ def _install_x64_guard() -> None:
 
     Restoring the flag at the end of the import is not enough. Five DSPS modules
     flip x64 on early and transitively, and every module-scope ``jnp`` constant
-    evaluated after that point is allocated as **float64** — 70 of them, tree
+    evaluated after that point is allocated as **float64**: 70 of them, tree
     wide. :func:`_reassert_x64_preference` puts the flag back but cannot
     un-allocate an array.
 
     On CPU that is only a doubled footprint: with x64 off, JAX's promotion caps
     results at float32 regardless of a float64 operand, so the numbers are
     unaffected. On a backend with **no** float64 the allocation itself raises
-    (``MLX does not support float64``), and ``import tengri`` fails outright —
+    (``MLX does not support float64``), and ``import tengri`` fails outright:
     measured on Apple MPS via ``jax-mps``.
 
     So while the user has explicitly asked for float32, refuse to turn x64 on at
@@ -170,7 +170,7 @@ elif _X64_REQUEST.strip().lower() in {"0", "false", "no", "off"}:
     _warnings.warn(
         f"JAX_ENABLE_X64={_X64_REQUEST}: tengri is honoring your request for "
         "float32 and is NOT enabling 64-bit precision. Cosmological distances "
-        "are the known hazard — d_L^2 at z > 0.01 overflows float32 — so any "
+        "are the known hazard (d_L^2 at z > 0.01 overflows float32) so any "
         "code that forms d_L^2 directly will produce inf. tengri's own "
         "projection avoids it by applying (1+z)/(4*pi*d_L^2) as a log10 "
         "offset, but third-party code may not. Unset JAX_ENABLE_X64 to "
@@ -191,7 +191,7 @@ if not _os.environ.get("TENGRI_VERBOSE_JAX"):
         pass
 
 # Enable persistent XLA compilation cache. Universal speedup across
-# notebook restarts, slurm tasks, benchmark workers — first compile is
+# notebook restarts, slurm tasks, benchmark workers: first compile is
 # persisted to disk, every later process loads it in ~100 ms.
 # Override location via TENGRI_JAX_CACHE_DIR; opt out via
 # TENGRI_DISABLE_JAX_CACHE=1. See tengri.utils.jax_cache for details.
@@ -204,7 +204,7 @@ def gc() -> None:
     """Drop tengri JIT caches + JAX caches + run Python GC.
 
     Shorthand for ``clear_shared_caches(drop_xla=True)``. Use between
-    notebook cells when iterating on hyperparameters or model variants —
+    notebook cells when iterating on hyperparameters or model variants;
     each ``jax.jit`` over a new closure leaks compile artefacts that
     ``Fitter.run(lean=True)`` does not see.
 
@@ -373,7 +373,7 @@ class _KernelsRemoved:
             "The structural-cache opt-in for fast photometry is now "
             "``approx=WavePrecomp(...)`` at build time; the JIT-safe "
             "forward path is ``model.predict_observables_jit(params)``. "
-            f"{self._name} has no replacement — drop it."
+            f"{self._name} has no replacement: drop it."
         )
 
     __call__ = _raise
@@ -494,13 +494,13 @@ sys.modules["tengri.io"] = io
 
 # New namespace hierarchy (Phase 1+2, see docs/dev/api_migration_v0.x.md)
 # These are pure re-exports: no behavioral change, just clearer locations.
-#   tengri.cosmology — Planck18 + distance/age helpers
-#   tengri.units     — F_nu/L_nu/AB-mag conversions
-#   tengri.plot      — plotting helpers
-#   tengri.results   — FitResult, Posterior, MockData, generate_mock, ...
-#   tengri.inference — Fitter, CatalogFitter, PopulationFitter, VIConfig, ...
-#   tengri.config    — *Config dataclasses, exceptions
-#   tengri.observation — Photometry, Spectroscopy, NoiseModel, ...
+#   tengri.cosmology: Planck18 + distance/age helpers
+#   tengri.units: F_nu/L_nu/AB-mag conversions
+#   tengri.plot: plotting helpers
+#   tengri.results: FitResult, Posterior, MockData, generate_mock, ...
+#   tengri.inference: Fitter, CatalogFitter, PopulationFitter, VIConfig, ...
+#   tengri.config: *Config dataclasses, exceptions
+#   tengri.observation: Photometry, Spectroscopy, NoiseModel, ...
 #
 # ``plot`` is deliberately absent: it is resolved lazily in ``__getattr__``
 # below, because importing it pulls matplotlib into every ``import tengri``.
@@ -515,7 +515,7 @@ from tengri import (
     units,
 )
 
-# Introspection façade — public registry lookups
+# Introspection façade: public registry lookups
 from tengri._tutorials import examples, explain, tutorial
 from tengri.registry import (
     cite_components,
@@ -564,7 +564,7 @@ from tengri.registry import (
 # a subpackage namespace (tengri.sfh, tengri.dust, tengri.cosmology, ...).
 # Implementation details (noise kernels, branding strings, individual
 # citation helpers, single-purpose loaders) are no longer advertised
-# but remain importable for backward compatibility — see
+# but remain importable for backward compatibility: see
 # docs/dev/api_migration_v0.x.md for the full story.
 # Top-level surface, sorted alphabetically (ruff RUF022).
 # Buckets:
@@ -605,7 +605,7 @@ __all__ = [  # noqa: RUF022
     "Parameters",
     "ParameterRecord",
     "parse_groups",
-    # Observations — the instrument-schema family, re-promoted (#1338)
+    # Observations: the instrument-schema family, re-promoted (#1338)
     "Observation",
     "Photometry",
     "Spectroscopy",
@@ -685,7 +685,7 @@ __all__ = [  # noqa: RUF022
     "gp_noise_covariance",
     "matern32_kernel",
     "fit_batch",
-    # Catalog fitting — the astronomer-facing noun (#1317)
+    # Catalog fitting: the astronomer-facing noun (#1317)
     "Catalog",
     "compute_mass_remaining_fraction",
     "recipe_parameters",
@@ -816,7 +816,7 @@ from tengri.results import (
 #
 # `tengri.<TAB>` should give a fresh user ~30 obvious entry points,
 # not the 175-item kitchen sink of every public symbol.  Everything
-# remains accessible via attribute access — only `dir(tengri)` is
+# remains accessible via attribute access: only `dir(tengri)` is
 # filtered.  `__all__` (above) keeps `from tengri import *` working
 # unchanged.
 # ──────────────────────────────────────────────────────────────────
@@ -869,8 +869,8 @@ _CURATED_DIR = (
     "FeaturePrecomp",
     "WavePrecomp",
     # ``Fitter`` is deliberately absent: it is the cache-reuse mechanism, not a
-    # taught noun (api_migration_v0.x.md). It stays importable — no public API
-    # is removed — it just must not be what tab-completion suggests first. The
+    # taught noun (api_migration_v0.x.md). It stays importable: no public API
+    # is removed: it just must not be what tab-completion suggests first. The
     # canonical multi-galaxy entry point is ``Catalog``, below (#1455).
     "Catalog",
     "fit_batch",
@@ -991,7 +991,7 @@ def __getattr__(name: str) -> object:
         from tengri.config import settings as _settings
 
         warnings.warn(
-            f"tengri.{name} is internal — build models with the nested-dict "
+            f"tengri.{name} is internal: build models with the nested-dict "
             f"grammar (SEDModel.build(...)) instead. For expert use import it "
             f"from tengri.config ({name} stays there without a warning). "
             f"Top-level access will be removed in tengri v1.0.",
@@ -1017,8 +1017,8 @@ def _reassert_x64_preference() -> None:
     ``JAX_ENABLE_X64=0 python -c "import tengri; ..."`` reported
     ``jax_enable_x64 = True`` and a ``float64`` default dtype.
 
-    A DSPS module imported *lazily* later — several tengri functions import
-    from ``dsps`` inside the function body — can still flip the flag mid-run.
+    A DSPS module imported *lazily* later: several tengri functions import
+    from ``dsps`` inside the function body: can still flip the flag mid-run.
     That is upstream behavior this package cannot intercept; the supported
     route for a float32 session remains
     ``jax.config.update("jax_enable_x64", False)`` immediately before the work,

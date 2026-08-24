@@ -49,7 +49,7 @@ def make_log_age_grid(
 
     Notes
     -----
-    **JIT-compatible**: yes — uses ``jnp.linspace``.
+    **JIT-compatible**: yes, uses ``jnp.linspace``.
 
     This grid is the internal representation for age in GP-based SFH models.
     The log-space parametrization provides better resolution at young ages and

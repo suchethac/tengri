@@ -2,7 +2,7 @@
 """Content-hashed cache for the sub-band IGM transmission table.
 
 ``IGMSEDComponent.subband_node_transmission`` evaluates the IGM transmission at
-every sub-band quadrature node on the photometry z-grid — a Python loop over
+every sub-band quadrature node on the photometry z-grid; a Python loop over
 the z axis, one :func:`igm_absorption` call per redshift. It is a **build-time
 constant**, so neither the JAX compilation cache nor the photometry z-table
 cache covers it, and every ``SEDModel.build`` re-paid it in full: measured at
@@ -15,7 +15,7 @@ The z-table computed in the same call is content-hashed to
 Key completeness
 ----------------
 A cross-process cache whose key omits an input returns wrong physics silently
-and persistently — that is exactly how #1122 happened, and the z-table's own
+and persistently; that is exactly how #1122 happened, and the z-table's own
 key carries a comment about it. So the key here is derived from a closed
 reading of what the computation consumes rather than from what seemed likely.
 
@@ -87,7 +87,7 @@ def cache_key(waves_rest, z_grid, igm_model, *, igm_patchy=False, use_dla=False)
     igm_model : str
         Transmission law name (``"inoue"``, ``"madau"``, ...).
     igm_patchy, use_dla : bool, optional
-        Included for the reason given in the module docstring — the current
+        Included for the reason given in the module docstring: the current
         gate makes them unreachable, and the key should not depend on that
         staying true.
 
@@ -129,7 +129,7 @@ def band_factor_key(wave_rest, filter_waves, filter_trans, z_grid, igm_model, co
 
     ``precompute_band_factors`` integrates the transmission against each filter
     response, so its result depends on the filter curves and the convolution
-    convention as well — inputs the sub-band node table never sees.
+    convention as well: inputs the sub-band node table never sees.
 
     Includes session precision (jax_enable_x64) and JAX backend since the
     band factor values are computed through JAX and inherit session precision.
@@ -252,7 +252,7 @@ def store(key: str, table) -> None:
         # The temp name must itself end in ``.npz``: ``savez_compressed``
         # appends the extension when it is absent, so a name like
         # ``foo.npz.tmp123`` is written as ``foo.npz.tmp123.npz`` and the
-        # rename below silently finds nothing. That failure is invisible —
+        # rename below silently finds nothing. That failure is invisible;
         # every build recomputes and the cache simply never hits.
         tmp = directory / f"igm_subband_{key}.{os.getpid()}.tmp.npz"
         np.savez_compressed(tmp, table=np.asarray(table))

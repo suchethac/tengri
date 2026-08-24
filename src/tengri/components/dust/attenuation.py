@@ -22,10 +22,10 @@ where w(age) is a smooth sigmoid transition at t_birth.
 Available Attenuation Curves
 ----------------------------
 
-- **power_law**: (lambda/5500)^n — original Charlot & Fall (2000)
+- **power_law**: (lambda/5500)^n, original Charlot & Fall (2000)
 - **calzetti**: Calzetti et al. (2000) starburst polynomial, R_V=4.05
 - **leitherer02**: Leitherer et al. (2002) UV extension of Calzetti (970-1800 A)
-- **kriek_conroy**: Calzetti + UV bump + slope delta — Prospector default
+- **kriek_conroy**: Calzetti + UV bump + slope delta, the Prospector default
 - **noll09**: Noll et al. (2009) modified Calzetti+L02: (base+bump)*slope
 - **salim_sbl18**: Salim+2018 modified Calzetti+L02: base*slope+bump
 - **smc**: Pei (1992, ApJ 395 130) SMC Bar, steep UV, no 2175A bump
@@ -41,9 +41,9 @@ Available Attenuation Curves
 Dust Geometries (Witt & Gordon 2000)
 -------------------------------------
 
-- **wg00_shell**: Foreground screen — standard exp(-tau*k)
-- **wg00_cloudy**: Homogeneous dust-star mix (slab) — grayer than screen
-- **wg00_dusty**: Clumpy two-phase medium (Natta & Panagia 1984) — grayest
+- **wg00_shell**: Foreground screen, standard exp(-tau*k)
+- **wg00_cloudy**: Homogeneous dust-star mix (slab), grayer than screen
+- **wg00_dusty**: Clumpy two-phase medium (Natta & Panagia 1984), grayest
 
 References
 ----------
@@ -115,7 +115,7 @@ def power_law(
 
     Notes
     -----
-    **JIT-compatible**: yes — all operations are ``jnp`` primitives.
+    **JIT-compatible**: yes, all operations are ``jnp`` primitives.
 
     The attenuation is:
 
@@ -161,7 +161,7 @@ def vw07_bc(
 
     Notes
     -----
-    **JIT-compatible**: yes — all operations are ``jnp`` primitives.
+    **JIT-compatible**: yes, all operations are ``jnp`` primitives.
 
     The attenuation is:
 
@@ -202,7 +202,7 @@ def vw07_diff(
 
     Notes
     -----
-    **JIT-compatible**: yes — all operations are ``jnp`` primitives.
+    **JIT-compatible**: yes, all operations are ``jnp`` primitives.
 
     The attenuation is:
 
@@ -250,7 +250,7 @@ def calzetti(
 
     Notes
     -----
-    **JIT-compatible**: yes — all operations are ``jnp`` primitives.
+    **JIT-compatible**: yes, all operations are ``jnp`` primitives.
 
     Uses piecewise polynomials in :math:`x = 1/\lambda` [μm⁻¹]:
 
@@ -278,7 +278,7 @@ def calzetti(
     rv = 4.05
     k_prime = jnp.where(wave_um >= 0.63, k_ir, k_uv)
     # Polynomial is extrapolated through the FUV (< 1200 Å) to keep the
-    # dust attenuation defined across the full SED range — users
+    # dust attenuation defined across the full SED range: users
     # modeling galaxies where Lyman-continuum dust attenuation matters
     # need the curve there. (CIGALE's ``a_vs_ebv`` clips at 912 Å on
     # the assumption that H ionization handles those photons separately;
@@ -319,7 +319,7 @@ def reddy15(
 
     Notes
     -----
-    **JIT-compatible**: yes — all operations are ``jnp`` primitives.
+    **JIT-compatible**: yes, all operations are ``jnp`` primitives.
 
     Uses piecewise polynomials in :math:`x = 1/\lambda` [μm⁻¹]:
 
@@ -405,7 +405,7 @@ def kriek_conroy(
 
     Notes
     -----
-    **JIT-compatible**: yes — all operations are ``jnp`` primitives.
+    **JIT-compatible**: yes, all operations are ``jnp`` primitives.
 
     Following FSPS ``attn_curve.f90`` (``dust_type=4``), the unnormalized
     curve is:
@@ -491,7 +491,7 @@ def _pei92_curve(
 
     Notes
     -----
-    **JIT-compatible**: yes — all operations are ``jnp`` primitives.
+    **JIT-compatible**: yes, all operations are ``jnp`` primitives.
 
     The extinction function is:
 
@@ -531,14 +531,14 @@ def _pei92_curve(
     return jnp.clip(xi / xi_v, 0.0)
 
 
-# Pei 1992 Table 4 — SMC Bar (6 components, R_V = 2.93, no 2175 A bump)
+# Pei 1992 Table 4: SMC Bar (6 components, R_V = 2.93, no 2175 A bump)
 _SMC_LAM = jnp.array([0.042, 0.08, 0.22, 9.7, 18.0, 25.0])
 _SMC_A = jnp.array([185.0, 27.0, 0.005, 0.010, 0.012, 0.030])
 _SMC_B = jnp.array([90.0, 5.50, -1.95, -1.95, -1.80, 0.00])
 _SMC_N = jnp.array([2.0, 4.0, 2.0, 2.0, 2.0, 2.0])
 _SMC_RV = 2.93
 
-# Pei 1992 Table 4 — LMC (6 components, R_V = 3.16, weak 2175 A bump)
+# Pei 1992 Table 4: LMC (6 components, R_V = 3.16, weak 2175 A bump)
 _LMC_LAM = jnp.array([0.046, 0.08, 0.22, 9.7, 18.0, 25.0])
 _LMC_A = jnp.array([175.0, 19.0, 0.023, 0.005, 0.006, 0.020])
 _LMC_B = jnp.array([90.0, 5.50, -1.95, -1.95, -1.80, 0.00])
@@ -558,7 +558,7 @@ def smc(
     """SMC Bar extinction curve (Pei 1992, ApJ, 395, 130).
 
     Steep UV rise, NO 2175 Å bump. Common at high redshift. R_V = 2.93.
-    Uses generalized Drude profile sum — fully continuous, no piecewise
+    Uses generalized Drude profile sum: fully continuous, no piecewise
     boundaries.
 
     Parameters
@@ -573,7 +573,7 @@ def smc(
 
     Notes
     -----
-    **JIT-compatible**: yes — all operations are ``jnp`` primitives.
+    **JIT-compatible**: yes, all operations are ``jnp`` primitives.
 
     From Pei (1992) Table 4: Small Magellanic Cloud Bar parameters,
     6 Drude components with R_V = 2.93 (relatively gray).
@@ -596,7 +596,7 @@ def lmc(
     """LMC average extinction curve (Pei 1992, ApJ, 395, 130).
 
     Weak 2175 Å bump, intermediate between MW and SMC. R_V = 3.16.
-    Uses generalized Drude profile sum — fully continuous.
+    Uses generalized Drude profile sum: fully continuous.
 
     Parameters
     ----------
@@ -610,7 +610,7 @@ def lmc(
 
     Notes
     -----
-    **JIT-compatible**: yes — all operations are ``jnp`` primitives.
+    **JIT-compatible**: yes, all operations are ``jnp`` primitives.
 
     From Pei (1992) Table 4: Large Magellanic Cloud average parameters,
     6 Drude components with R_V = 3.16. Shows weak 2175 Å bump feature.
@@ -663,7 +663,7 @@ def prevot_smc(
 
     Notes
     -----
-    **JIT-compatible**: yes — all operations are ``jnp`` primitives.
+    **JIT-compatible**: yes, all operations are ``jnp`` primitives.
 
     .. math::
 
@@ -678,13 +678,13 @@ def prevot_smc(
     sigmoid (no hard discontinuity) to suppress extinction in the X-ray regime
     where dust is ineffective.
 
-    **Gradient-compatible**: yes — enables optimization of extinction parameters.
+    **Gradient-compatible**: yes, enables optimization of extinction parameters.
 
     References
     ----------
     .. [1] M. Prevot et al., "The Ultraviolet Extinction Curve in the Small
        Magellanic Cloud from 1200 Å to 3200 Å," A&A, 132, 389 (1984).
-    .. [2] J. Calistro Rivera et al., "AGNfitter — A Bayesian MCMC approach to
+    .. [2] J. Calistro Rivera et al., "AGNfitter: A Bayesian MCMC approach to
        fitting spectral energy distributions of Active Galactic Nuclei,"
        ApJ, 863, 56 (2018). arXiv:1808.04989.
        https://doi.org/10.3847/1538-4357/aad235
@@ -695,7 +695,7 @@ def prevot_smc(
     # published fit is only calibrated for 1200–3200 Å (UV); beyond
     # ~5–10 μm the analytic form goes negative because of the constant
     # offset (k_raw → -0.38 as λ → ∞). Clamp to zero to enforce the
-    # physical constraint k(λ) ≥ 0 — extrapolation past the calibrated
+    # physical constraint k(λ) ≥ 0: extrapolation past the calibrated
     # range gets no attenuation rather than negative attenuation, in
     # keeping with how Synthesizer extrapolates the Calzetti grid.
     k_raw = jnp.maximum(1.39 * jnp.power(wavelength_um, -1.2) - 0.38, 0.0)
@@ -746,7 +746,7 @@ def cardelli(
 
     Notes
     -----
-    **JIT-compatible**: yes — all operations are ``jnp`` primitives.
+    **JIT-compatible**: yes, all operations are ``jnp`` primitives.
 
     Uses piecewise polynomials in infrared, optical, UV, and far-UV regimes.
     Parameterized by :math:`x = 1/\lambda` [μm⁻¹] with :math:`a(x)` and :math:`b(x)`
@@ -943,9 +943,9 @@ def salim(
 
     Notes
     -----
-    **JIT-compatible**: yes — uses only jnp primitives.
+    **JIT-compatible**: yes, uses only jnp primitives.
 
-    **Gradient-safe**: yes — differentiable everywhere.
+    **Gradient-safe**: yes, differentiable everywhere.
 
     This is the default attenuation law in DSPS and Zacharegkas+2025
     simulations. It combines Calzetti et al. (2000) optical/NIR continuum
@@ -986,7 +986,7 @@ def leitherer02(
 
     Notes
     -----
-    **JIT-compatible**: yes — all operations are ``jnp`` primitives.
+    **JIT-compatible**: yes, all operations are ``jnp`` primitives.
 
     The reddening curve k'(λ) = A(λ)/E(B−V) follows:
 
@@ -1017,7 +1017,7 @@ def leitherer02(
     k_ir = 2.659 * (-1.857 + 1.040 * x) + rv
 
     # Use L02 up to 1800 Å (full L02 range), Calzetti above.
-    # Compare in Å (exact for clean integers) rather than wave_um <= 0.18 —
+    # Compare in Å (exact for clean integers) rather than wave_um <= 0.18:
     # the latter is platform-dependent at the boundary because 1800/1e4 is
     # not exactly representable in float64.
     k_calz = jnp.where(wave_um >= 0.63, k_ir, k_uv)
@@ -1078,7 +1078,7 @@ def noll09(
 
     Notes
     -----
-    **JIT-compatible**: yes — all operations are ``jnp`` primitives.
+    **JIT-compatible**: yes, all operations are ``jnp`` primitives.
 
     The attenuation is:
 
@@ -1170,7 +1170,7 @@ def salim_sbl18(
 
     Notes
     -----
-    **JIT-compatible**: yes — all operations are ``jnp`` primitives.
+    **JIT-compatible**: yes, all operations are ``jnp`` primitives.
 
     The attenuation is:
 
@@ -1250,7 +1250,7 @@ def tea(
 
     Notes
     -----
-    **JIT-compatible**: yes — all operations are ``jnp`` primitives.
+    **JIT-compatible**: yes, all operations are ``jnp`` primitives.
 
     The bump amplitude is derived from the slope via:
 
@@ -1307,7 +1307,7 @@ def narayanan_z(
 
     Notes
     -----
-    **JIT-compatible**: yes — all operations are ``jnp`` primitives.
+    **JIT-compatible**: yes, all operations are ``jnp`` primitives.
 
     When default parameters are used (δ = -0.2, E_b = 1.0), the z-dependent
     medians from SIMBA are applied:
@@ -1365,7 +1365,7 @@ def conroy2010(
 
     Notes
     -----
-    **JIT-compatible**: yes — all operations are ``jnp`` primitives.
+    **JIT-compatible**: yes, all operations are ``jnp`` primitives.
 
     A smooth sigmoid transition function weights between MW (short wavelength)
     and power-law (long wavelength) components at the V-band (5500 Å):
@@ -1420,7 +1420,7 @@ def wg00_shell(
     law: str = "cardelli",
     **law_params,
 ) -> jnp.ndarray:
-    r"""Witt & Gordon (2000) SHELL geometry — foreground screen.
+    r"""Witt & Gordon (2000) SHELL geometry: foreground screen.
 
     The simplest geometry: a uniform dust slab in front of all stars.
     Transmission is the standard Beer-Lambert law.
@@ -1443,9 +1443,9 @@ def wg00_shell(
 
     Notes
     -----
-    **JIT-compatible**: yes — all operations are ``jnp`` primitives.
+    **JIT-compatible**: yes, all operations are ``jnp`` primitives.
 
-    **Gradient-safe**: yes — differentiable everywhere.
+    **Gradient-safe**: yes, differentiable everywhere.
 
     The transmission is:
 
@@ -1472,7 +1472,7 @@ def wg00_cloudy(
     law: str = "cardelli",
     **law_params,
 ) -> jnp.ndarray:
-    r"""Witt & Gordon (2000) CLOUDY dust geometry — homogeneous dust-star mix.
+    r"""Witt & Gordon (2000) CLOUDY dust geometry: homogeneous dust-star mix.
 
     Stars and dust are uniformly mixed throughout a slab of total V-band optical depth.
     The analytic solution integrates radiative transfer, producing a wavelength-dependent
@@ -1497,10 +1497,10 @@ def wg00_cloudy(
 
     Notes
     -----
-    **JIT-compatible**: yes — all operations are ``jnp`` primitives, with numerically stable
+    **JIT-compatible**: yes, all operations are ``jnp`` primitives, with numerically stable
     Taylor expansion for small optical depth.
 
-    **Gradient-safe**: yes — differentiable everywhere via smooth blending between exact
+    **Gradient-safe**: yes, differentiable everywhere via smooth blending between exact
     and Taylor regimes.
 
     The transmission for a homogeneous slab is:
@@ -1546,7 +1546,7 @@ def wg00_cloudy(
     # (1 - exp(-x)) / x -> 1 - x/2 + x^2/6 - ... for x -> 0
     # Switch at |x| < 1e-4 to avoid loss of precision
     # Use jnp.maximum (not jnp.where) so the gradient of ratio w.r.t. tau_k stays
-    # connected when tau_k is small — jnp.where with a constant fallback gives zero
+    # connected when tau_k is small: jnp.where with a constant fallback gives zero
     # gradient in the masked branch, producing dead gradients near tau_k=0.
     ratio = (1.0 - jnp.exp(-jnp.maximum(tau_k, 1e-10))) / jnp.maximum(tau_k, 1e-10)
     # Taylor expansion for small tau_k: correct gradient throughout [0, 1e-4]
@@ -1561,7 +1561,7 @@ def wg00_dusty(
     n_clumps: float = 10.0,
     **law_params,
 ) -> jnp.ndarray:
-    r"""Witt & Gordon (2000) DUSTY geometry — clumpy two-phase medium.
+    r"""Witt & Gordon (2000) DUSTY geometry: clumpy two-phase medium.
 
     The ISM is modeled as ``n_clumps`` identical clumps, each with
     optical depth ``tau_clump = tau_V / n_clumps``, distributed along
@@ -1590,9 +1590,9 @@ def wg00_dusty(
 
     Notes
     -----
-    **JIT-compatible**: yes — all operations are ``jnp`` primitives.
+    **JIT-compatible**: yes, all operations are ``jnp`` primitives.
 
-    **Gradient-safe**: yes — differentiable everywhere.
+    **Gradient-safe**: yes, differentiable everywhere.
 
     The transmission is:
 
@@ -1651,7 +1651,7 @@ def dust_to_gas_scaling_remy_ruyer(logzsol: float) -> float:
 
     Notes
     -----
-    **JIT-compatible**: yes — all operations are ``jnp`` primitives.
+    **JIT-compatible**: yes, all operations are ``jnp`` primitives.
 
     The scaling is a broken power law:
 
@@ -1702,7 +1702,7 @@ def _precompute_grain_curve(model_cls: type, submodel: str) -> tuple[np.ndarray,
 
     Notes
     -----
-    **JIT-compatible**: no — uses astropy units at call time.
+    **JIT-compatible**: no, uses astropy units at call time.
     Call at module level (import time), not inside JIT.
     """
     from dust_extinction.grain_models import WD01  # noqa: F401 (ensures package present)
@@ -1791,7 +1791,7 @@ def wd01_smcbar(wavelength: jnp.ndarray, **_kwargs) -> jnp.ndarray:
 
     Notes
     -----
-    **JIT-compatible**: yes — uses ``jnp.interp`` on precomputed curve.
+    **JIT-compatible**: yes, uses ``jnp.interp`` on precomputed curve.
 
     Precomputed from ``dust_extinction.grain_models.WD01("SMCBar")`` at module
     import time. Data cover ~100–10\ :sup:`7` Å. Values outside the tabulated
@@ -1839,7 +1839,7 @@ def wd01_mwrv31(wavelength: jnp.ndarray, **_kwargs) -> jnp.ndarray:
 
     Notes
     -----
-    **JIT-compatible**: yes — uses ``jnp.interp`` on precomputed curve.
+    **JIT-compatible**: yes, uses ``jnp.interp`` on precomputed curve.
 
     Upstream credit: grain model data from Weingartner & Draine (2001) [1]_,
     accessed via the ``dust-extinction`` astropy-affiliated package.
@@ -1883,7 +1883,7 @@ def d03_mwrv31(wavelength: jnp.ndarray, **_kwargs) -> jnp.ndarray:
 
     Notes
     -----
-    **JIT-compatible**: yes — uses ``jnp.interp`` on precomputed curve.
+    **JIT-compatible**: yes, uses ``jnp.interp`` on precomputed curve.
 
     Upstream credit: grain model data from Draine (2003) [1]_,
     accessed via the ``dust-extinction`` astropy-affiliated package.
@@ -1926,7 +1926,7 @@ def hd23_mwrv31(wavelength: jnp.ndarray, **_kwargs) -> jnp.ndarray:
 
     Notes
     -----
-    **JIT-compatible**: yes — uses ``jnp.interp`` on precomputed curve.
+    **JIT-compatible**: yes, uses ``jnp.interp`` on precomputed curve.
 
     Upstream credit: grain model data from Hensley & Draine (2023) [1]_,
     accessed via the ``dust-extinction`` astropy-affiliated package.

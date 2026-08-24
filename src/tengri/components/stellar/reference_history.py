@@ -9,7 +9,7 @@ parameters, because the table *is* the SFH, so no prior can produce
 before the builder gets its first row.
 
 The fix is not to teach the sampler about tables. It is that these builders do
-not need the caller's SFH at all — they only need *an* ionizing spectrum. Both
+not need the caller's SFH at all: they only need *an* ionizing spectrum. Both
 nebular tables store luminosity **per ionizing photon** and divide Q_H back out,
 which ``line_precompute`` states outright: the table is "a property of the gas,
 independent of the reference SFH". Q_H itself is recomputed at every evaluation
@@ -17,7 +17,7 @@ from whatever SFH is live then.
 
 Measured on the PRSC/MILES grid with Cue, at fixed
 ``met_logzsol=-0.3, logU=-2.5, logZ_gas=-0.2``, across delayed-exponential SFHs
-from ``tau=0.1`` to ``tau=10`` Gyr — Q_H itself spanning 1.3e50 to 4.6e53, four
+from ``tau=0.1`` to ``tau=10`` Gyr; Q_H itself spanning 1.3e50 to 4.6e53, four
 orders of magnitude:
 
 ===============  ==================
@@ -74,7 +74,7 @@ def stellar_config_of(model):
 
     Notes
     -----
-    **JIT-compatible**: no — eager introspection at build time.
+    **JIT-compatible**: no; eager introspection at build time.
     """
     from tengri.components.stellar.component import StellarSEDComponent
 
@@ -110,7 +110,7 @@ def reference_history_params(model, *, redshift=0.0, n_nodes=_N_NODES):
 
     Notes
     -----
-    **JIT-compatible**: no — numpy, once per build.
+    **JIT-compatible**: no, numpy, once per build.
 
     The stand-in is a **constant SFR** over cosmic time, anchored to zero at
     ``t=0`` so nothing extrapolates past the Big Bang. Constant is the deliberate
@@ -124,7 +124,7 @@ def reference_history_params(model, *, redshift=0.0, n_nodes=_N_NODES):
 
 
 def reference_history_for_config(config, *, redshift=0.0, n_nodes=_N_NODES):
-    """The stand-in for a resolved stellar config — the model-free half.
+    """The stand-in for a resolved stellar config: the model-free half.
 
     Split out from :func:`reference_history_params` so the decision can be tested
     without standing up a model: the config is the only thing it reads, and a
@@ -147,7 +147,7 @@ def reference_history_for_config(config, *, redshift=0.0, n_nodes=_N_NODES):
 
     Notes
     -----
-    **JIT-compatible**: no — numpy, once per build.
+    **JIT-compatible**: no, numpy, once per build.
     """
     if config is None or getattr(config, "sfh_model", None) != "table":
         return {}
@@ -162,6 +162,6 @@ def reference_history_for_config(config, *, redshift=0.0, n_nodes=_N_NODES):
     out = {"sfh_t_gyr": jnp.asarray(t), "sfh_sfr": jnp.asarray(sfr)}
     if getattr(config, "metallicity_model", None) == "table":
         # Z(t) shares the SFH's time axis by contract (#996), so it is only
-        # meaningful alongside a tabulated SFH — which the branch above assures.
+        # meaningful alongside a tabulated SFH: which the branch above assures.
         out["met_history"] = jnp.full(n_nodes, _REF_LOGZSOL)
     return out

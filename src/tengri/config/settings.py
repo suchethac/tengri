@@ -1,7 +1,7 @@
 # SPDX-License-Identifier: BSD-3-Clause
 """Frozen configuration dataclasses for sub-model selection.
 
-These objects encode *which* physics modules are active — structural choices that
+These objects encode *which* physics modules are active: structural choices that
 do NOT appear in the gradient tape.  They are distinct from fittable Parameters.
 
 Usage
@@ -47,19 +47,19 @@ class AGNConfig:
     ----------
     disc : str
         AGN accretion disc model.
-        ``"powerlaw"`` — simple power-law SED.
-        ``"multicolor"`` — multi-color blackbody disc (default).
-        ``"kubota_done"`` — Kubota & Done (2018) 3-zone model.
-        ``"adaf"`` — ADAF (low-luminosity AGN).
+        ``"powerlaw"``; simple power-law SED.
+        ``"multicolor"``: multi-color blackbody disc (default).
+        ``"kubota_done"``; Kubota & Done (2018) 3-zone model.
+        ``"adaf"``; ADAF (low-luminosity AGN).
     torus : str
         AGN torus/obscuration model.
-        ``"simple"`` — single-temperature MBB (toy).
-        ``"two_temperature"`` — two-temperature MBB (toy).
-        ``"skirtor"`` — SKIRTOR clumpy torus (default, science-grade).
+        ``"simple"``; single-temperature MBB (toy).
+        ``"two_temperature"``; two-temperature MBB (toy).
+        ``"skirtor"``; SKIRTOR clumpy torus (default, science-grade).
     nlr : str
         Narrow Line Region emission model.
-        ``"analytic"`` — analytic Gaussian line profiles (default, fast).
-        ``"cue"`` — Cue neural emulator (physically consistent).
+        ``"analytic"``; analytic Gaussian line profiles (default, fast).
+        ``"cue"``; Cue neural emulator (physically consistent).
     blr : bool
         Include Broad Line Region emission (Type 1 AGN). Default True.
     polar_dust : bool
@@ -68,16 +68,16 @@ class AGNConfig:
         Include Fe II pseudo-continuum. Default False.
     agn_blr_enabled : bool
         Enable BLR Gaussian emitter (additive to disc SED). Default False.
-        **Reserved**: declared for an upcoming AGN-nebular PR — no effect in
+        **Reserved**: declared for an upcoming AGN-nebular PR; no effect in
         the current version.
     agn_nlr_gaussian_enabled : bool
         Enable NLR Gaussian emitter (additive to disc SED). Default False.
-        **Reserved**: declared for an upcoming AGN-nebular PR — no effect in
+        **Reserved**: declared for an upcoming AGN-nebular PR; no effect in
         the current version.
     agn_nlr_backend : str or None
         Enable Feltre NLR backend. Options: None (disabled), "feltre".
         Default None. Mutually exclusive with Cue path.
-        **Reserved**: declared for an upcoming AGN-nebular PR — no effect in
+        **Reserved**: declared for an upcoming AGN-nebular PR; no effect in
         the current version.
 
     Attributes
@@ -103,7 +103,7 @@ class AGNConfig:
 
     Notes
     -----
-    **JIT-compatible**: no — configuration object, frozen dataclass.
+    **JIT-compatible**: no, configuration object, frozen dataclass.
 
     Examples
     --------
@@ -168,7 +168,7 @@ class SFHConfig:
 
     Notes
     -----
-    Frozen dataclass — all fields are immutable after construction. Pass to
+    Frozen dataclass; all fields are immutable after construction. Pass to
     :class:`~tengri.forward.sed_model.SEDModel` via the ``sfh`` field of
     :class:`SEDModelConfig`. Changes require constructing a new instance.
 
@@ -219,7 +219,7 @@ class DustConfig:
 
     Notes
     -----
-    Frozen dataclass — all fields are immutable after construction. Validated
+    Frozen dataclass; all fields are immutable after construction. Validated
     in ``__post_init__``: invalid ``model``, ``law_bc``, ``law_diff``, or
     ``emission`` strings raise :exc:`ValueError` immediately. Pass to
     :class:`SEDModelConfig` via the ``dust`` field.
@@ -272,10 +272,10 @@ class NebularConfig:
     ----------
     backend : str
         Nebular emission backend.
-        ``"off"`` — disabled (default).
-        ``"baked_in"`` — lines from SSP grid (no free nebular params).
-        ``"cloudy"`` — CLOUDY grid interpolation.
-        ``"cue"`` — Cue neural emulator.
+        ``"off"``; disabled (default).
+        ``"baked_in"``; lines from SSP grid (no free nebular params).
+        ``"cloudy"``; CLOUDY grid interpolation.
+        ``"cue"``: Cue neural emulator.
     grid_path : str or None
         Path to CLOUDY HDF5 grid (required when ``backend="cloudy"``).
     weights_path : str or None
@@ -284,9 +284,9 @@ class NebularConfig:
         Ionization source for Cue: ``"ssp"`` (default).
     eline_mode : str
         Emission line fitting mode.
-        ``"off"`` — no line treatment (default).
-        ``"fixed"`` — fixed profiles.
-        ``"marginalized"`` — analytic marginalization.
+        ``"off"``; no line treatment (default).
+        ``"fixed"``; fixed profiles.
+        ``"marginalized"``: analytic marginalization.
     eline_broad : bool
         Enable broad AGN emission line component.  Default: ``False``.
 
@@ -297,7 +297,7 @@ class NebularConfig:
 
     Notes
     -----
-    Frozen dataclass — all fields are immutable after construction. Validated
+    Frozen dataclass: all fields are immutable after construction. Validated
     in ``__post_init__``: unsupported ``backend`` or ``eline_mode`` strings raise
     :exc:`ValueError`; ``grid_path`` is required when ``backend="cloudy"``.
     Pass to :class:`SEDModelConfig` via the ``nebular`` field.
@@ -351,7 +351,7 @@ class MultiwavelengthConfig:
 
     Notes
     -----
-    Frozen dataclass — all fields are immutable after construction.
+    Frozen dataclass; all fields are immutable after construction.
     ``apply_igm=True`` applies IGM absorption to the full SED at the galaxy
     redshift.  The model is selected via ``igm_model``.  Pass to
     :class:`SEDModelConfig` via the ``multiwavelength`` field.
@@ -402,7 +402,7 @@ class SEDModelConfig:
 
     Notes
     -----
-    Frozen dataclass — all fields are immutable after construction.
+    Frozen dataclass; all fields are immutable after construction.
     ``SEDModelConfig()`` with no arguments produces the default smooth parametric
     SED model (double power-law SFH, power-law dust, no nebular emission, no
     AGN). Pass a ``SEDModelConfig`` instance as the ``config`` argument to
@@ -430,7 +430,7 @@ class SEDModelConfig:
     agn_config: AGNConfig | None = None
 
 
-# Deprecated alias — removed in v1.0 per docs/dev/NAMING_CONTRACT.md
+# Deprecated alias: removed in v1.0 per docs/dev/NAMING_CONTRACT.md
 def __getattr__(name: str):
     if name == "ModelConfig":
         import warnings

@@ -35,9 +35,9 @@ class ModifiedBlackbodyIRSEDComponent(EmissionComponent):
 
     Notes
     -----
-    **JIT-compatible**: yes — all operations are ``jnp`` primitives.
+    **JIT-compatible**: yes, all operations are ``jnp`` primitives.
 
-    **Gradient-safe**: yes — differentiable everywhere.
+    **Gradient-safe**: yes, differentiable everywhere.
 
     References
     ----------

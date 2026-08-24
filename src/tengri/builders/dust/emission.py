@@ -55,7 +55,7 @@ _EMISSION_PREFIXES = (
     # to fit galaxies whose UV/optical and FIR are spatially decoupled and so
     # violate strict energy balance (high-z sources). See ``_params.py``.
     "dust_eta_balance",
-    # Two-temperature ``energy_balance_split`` knobs — warm/cold split with an
+    # Two-temperature ``energy_balance_split`` knobs: warm/cold split with an
     # optional AGN-IR term. Threaded through ``two_component`` so the model is
     # fully free-able through the grammar (no silent-dropped params).
     "dust_f_cold",
@@ -119,7 +119,7 @@ def relaxed_energy_balance(model: str = "dale2014", *, sigma: float = 0.2) -> di
     ``dust_eta_balance`` (``L_IR = eta * L_absorbed``) under a soft
     ``LogNormal(mu=0, sigma)`` prior centered on strict balance (median
     ``eta = 1``). Use it for galaxies whose UV/optical and FIR are spatially
-    decoupled and so violate strict energy balance (e.g. high-z sources) — the
+    decoupled and so violate strict energy balance (e.g. high-z sources): the
     way AGNfitter offers an *optional* energy-balance prior, in contrast to
     CIGALE/MAGPHYS which enforce it. The IR template shape stays fixed; only the
     overall IR luminosity is allowed to float around the absorbed energy.

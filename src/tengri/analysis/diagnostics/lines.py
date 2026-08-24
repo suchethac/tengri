@@ -58,7 +58,7 @@ def compute_line_fluxes(
 
     Notes
     -----
-    **JIT-compatible**: yes — differentiable through ``amplitudes``,
+    **JIT-compatible**: yes, differentiable through ``amplitudes``,
     ``sigma_kms``, and ``spectral_resolution``.
 
     The observed-frame line center is :math:`\lambda_z = \lambda_{\rm rest}(1+z)`.
@@ -127,7 +127,7 @@ def compute_equivalent_widths(
 
     Notes
     -----
-    **JIT-compatible**: yes — differentiable through ``line_fluxes`` and
+    **JIT-compatible**: yes; differentiable through ``line_fluxes`` and
     ``continuum_at_lines``.
 
     The rest-frame EW is
@@ -201,7 +201,7 @@ def compute_line_moments(
 
     Notes
     -----
-    **JIT-compatible**: yes — differentiable through ``sigma_kms``.
+    **JIT-compatible**: yes; differentiable through ``sigma_kms``.
 
     Velocity of pixel :math:`k` relative to the line center:
 

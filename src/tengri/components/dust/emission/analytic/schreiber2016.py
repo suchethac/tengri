@@ -28,7 +28,7 @@ class Schreiber2016AnalyticIRSEDComponent(EmissionComponent):
     wavelengths (not the full Schreiber+ mid-IR aromatic forest).
 
     For the CIGALE-faithful tabulated version with the real PAH feature forest,
-    select ``schreiber2018`` (``data/schreiber2018_templates.h5``) instead —
+    select ``schreiber2018`` (``data/schreiber2018_templates.h5``) instead:
     this analytic model is the lightweight, grid-free approximation.
 
     The model composition is:
@@ -52,9 +52,9 @@ class Schreiber2016AnalyticIRSEDComponent(EmissionComponent):
 
     Notes
     -----
-    **JIT-compatible**: yes — all operations are ``jnp`` primitives.
+    **JIT-compatible**: yes, all operations are ``jnp`` primitives.
 
-    **Gradient-safe**: yes — differentiable everywhere.
+    **Gradient-safe**: yes, differentiable everywhere.
 
     **Naming note** (#849): the user-facing parameters are the canonical
     ``dust_T`` and ``dust_f_pah`` (the closure arg is likewise ``dust_f_pah``,

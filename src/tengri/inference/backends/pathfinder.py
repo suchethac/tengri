@@ -109,7 +109,7 @@ def run_pathfinder(
     # ``blackjax.pathfinder(logdensity).approximate(...)``. blackjax 1.4+ made
     # ``blackjax.pathfinder(logdensity)`` return a ``VIAlgorithm`` that no longer
     # carries ``.approximate`` (AttributeError), whereas the module functions
-    # have kept a stable signature across ≥1.3 — so this works on old and new
+    # have kept a stable signature across ≥1.3, so this works on old and new
     # blackjax without pinning.
     # ``num_samples`` here is blackjax's ELBO-draw count, NOT the posterior draw
     # count -- it defaults to 200 and each draw is a full forward evaluation.

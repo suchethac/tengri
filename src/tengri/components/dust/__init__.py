@@ -14,7 +14,7 @@ Components (selected via the model grammar):
   re-emission with energy balance).
 - ``wg00_model.py``: WG00 radiative-transfer attenuation component
   (physics in ``wg00.py``).
-- ``schreiber2016_ir.py``, ``draine2021_pah_ir.py`` — standalone IR
+- ``schreiber2016_ir.py``, ``draine2021_pah_ir.py``: standalone IR
   emission components (Draine+2021 physics in ``draine2021_pah.py``).
 
 Physics libraries:
@@ -24,7 +24,7 @@ Physics libraries:
 - ``emission/``: IR re-emission package (analytic models + tabulated
   template components + shared ``_physics.py`` integrals) with
   energy-balance normalization.
-- ``astrodust_hd23.py``, ``emission_templates.py`` — template grid
+- ``astrodust_hd23.py``, ``emission_templates.py``: template grid
   loaders (not components).
 - ``drude_profiles.py``: PAH Drude decomposition helpers.
 - ``priors.py``: redshift-dependent attenuation priors from
@@ -42,7 +42,7 @@ Internal plumbing:
 """
 
 # Convenience re-exports for `from tengri.dust import ...`
-# Dust block in the SEDComponent pipeline — combines UV–optical attenuation
+# Dust block in the SEDComponent pipeline: combines UV–optical attenuation
 # with IR re-emission via per-template emission components (``type='astrodust'``,
 # ``'draine2021_pah'``, ``'modified_blackbody'``, ``'dale2014'``, …).
 from tengri._completion import curated_dir
@@ -154,7 +154,7 @@ from tengri.components.dust.wg00_model import (
 # Curated tab-completion surface for `tengri.dust.<TAB>`.
 # Hides internal helpers (compute_*, create_*_from_grid, load_*_templates,
 # precompute_*, drude_profile, etc.) and constants. Everything is still
-# importable via attribute access — only `dir(tengri.dust)` is filtered.
+# importable via attribute access: only `dir(tengri.dust)` is filtered.
 # ──────────────────────────────────────────────────────────────────
 _CURATED_DIR = (
     # Registries

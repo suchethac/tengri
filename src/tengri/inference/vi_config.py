@@ -83,8 +83,8 @@ class VIConfig:
     ``'vi_linear'`` (NIFTy MGVI) are the working paths.
 
     The pure-JAX ``native_vi_nonlinear`` / ``native_vi_linear`` backends are
-    registered ``tier="broken"`` (#1287) — they segfault on DPL/dense_basis
-    photometry mocks — and ``'vi_native'`` was never a registered name at all;
+    registered ``tier="broken"`` (#1287), they segfault on DPL/dense_basis
+    photometry mocks, and ``'vi_native'`` was never a registered name at all;
     it raises ``KeyError``. The "~19x faster" figure once quoted here was
     withdrawn: it compared MGVI against geoVI, not native against NIFTy.
 

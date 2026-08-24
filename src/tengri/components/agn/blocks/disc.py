@@ -1,12 +1,12 @@
 # SPDX-License-Identifier: BSD-3-Clause
 r"""Accretion-disc blocks for the composable AGN pipeline.
 
-One file, every disc — pick via ``agn={'disc': {'type': ...}}``.
-Consolidated 2026-07; registration unchanged. (``alternates.py`` — the
-power-law disc + toy tori — stays separate; it is cross-category.)
+One file, every disc: pick via ``agn={'disc': {'type': ...}}``.
+Consolidated 2026-07; registration unchanged. (``alternates.py``: the
+power-law disc + toy tori: stays separate; it is cross-category.)
 
 NAME NOTE: this composable-*block* module shadows the physics kernel
-``tengri.components.agn.disc`` one package up — always import by full path,
+``tengri.components.agn.disc`` one package up: always import by full path,
 never a bare ``disc``.
 """
 
@@ -111,7 +111,7 @@ def adaf_disc_block(
     agn_log_lbol_shape: float | None = None,
     **_params,
 ) -> Array:
-    r"""Advection-dominated accretion flow (ADAF) — faithful Mahadevan 1997.
+    r"""Advection-dominated accretion flow (ADAF): faithful Mahadevan 1997.
 
     Radio-to-X-ray SED of a radiatively inefficient inner flow: rising
     cyclo-synchrotron (:math:`\nu^{2/5}`) to a sub-mm self-absorption peak, a
@@ -119,7 +119,7 @@ def adaf_disc_block(
     (see :func:`tengri.components.agn.adaf.adaf_spectrum`).
 
     ``agn_log_lbol`` is the canonical luminosity; the accretion rate is derived
-    from it via Mahadevan Eq. 49 (``agn_log_ledd`` is retired — consistent with
+    from it via Mahadevan Eq. 49 (``agn_log_ledd`` is retired: consistent with
     the disc convention of #846). Pure ADAF: no bundled truncated thin disc (the
     ad-hoc split of the old model is removed; use a separate disc block or the
     Nemmen template block for the outer-disc red bump).
@@ -332,8 +332,8 @@ def cigale_schartmann_skirtor_attenuated_disc_block(
 
     where the SKIRTOR ratio captures the inclination-dependent clumpy
     self-attenuation through the torus (near unity for type-1 face-on
-    views, much smaller for type-2 sightlines). Without this factor —
-    plain :func:`cigale_schartmann_disc_block` — the disc carries
+    views, much smaller for type-2 sightlines). Without this factor,
+    plain :func:`cigale_schartmann_disc_block`, the disc carries
     only the analytic Schartmann shape with no SKIRTOR template
     fingerprint, leaving a ~10 % wavelength-resolved residual against
     CIGALE.
@@ -346,7 +346,7 @@ def cigale_schartmann_skirtor_attenuated_disc_block(
     wavelength : array_like, shape (n_wave,)
         Rest-frame wavelength [Å].
     agn_log_lbol : float
-        :math:`\log_{10}(L_{\rm bol}/L_\odot)` — intrinsic 4π disc
+        :math:`\log_{10}(L_{\rm bol}/L_\odot)`: intrinsic 4π disc
         bolometric (= CIGALE ``accretion_power``).
     agn_cigale_disk_delta : float, optional
         Slope modulator (paper ``delta``); default 0.0.
@@ -360,12 +360,12 @@ def cigale_schartmann_skirtor_attenuated_disc_block(
     -------
     L_lambda : ndarray, shape (n_wave,)
         :math:`L_\lambda` [erg/s/Å], face-on physical disc luminosity
-        (not 4π-averaged — the geometric / anisotropy correction lives
+        (not 4π-averaged, the geometric / anisotropy correction lives
         in the polar-dust integration of the torus block).
 
     Notes
     -----
-    **JIT-compatible**: yes — triweight interpolation on the SKIRTOR
+    **JIT-compatible**: yes, triweight interpolation on the SKIRTOR
     disc grid.
 
     **Gradient-safe**: yes.
@@ -637,7 +637,7 @@ def relagn_disc_block(
 
     .. warning::
 
-       ``agn_log_lbol`` is ignored — RELAGN disc luminosity is derived from
+       ``agn_log_lbol`` is ignored; RELAGN disc luminosity is derived from
        ``agn_log_mbh`` and ``agn_log_mdot`` via the grid; the parameter is
        retained for block-protocol compatibility only.
 
@@ -668,9 +668,9 @@ def relagn_disc_block(
 
     Notes
     -----
-    **JIT-compatible**: yes — triweight kernel interpolation on RELAGN grid.
+    **JIT-compatible**: yes, triweight kernel interpolation on RELAGN grid.
 
-    **Gradient-safe**: yes — C² continuous on all axes.
+    **Gradient-safe**: yes, C² continuous on all axes.
 
     **Grid required**: ``data/relagn_disc_grid.h5`` (gitignored). Build via
     ``scripts/build_relagn_disc_grid.py`` (requires HEASOFT/XSPEC + KYCONV).
@@ -718,7 +718,7 @@ def richards2006_disc_block(
 
     Empirical disc template from a composite of SDSS quasars (Richards
     et al. 2006). The template is a fixed UV-optical shape, normalized to
-    the requested bolometric luminosity. Wavelength coverage 30.5 Å —
+    the requested bolometric luminosity. Wavelength coverage 30.5 Å to
     3×10⁸ Å with zero flux outside.
 
     This template carries no free spectral-shape parameters. Use it when

@@ -13,17 +13,17 @@ integrating the emission that remains:
         \,(c/\lambda_c^2)\,\Delta\lambda_{\rm feat}}{4\pi d_L^2}
 
 with the continuum a linear interpolation between blue and red side-band means.
-This module applies that **same operator** to a *model* spectrum — "measure the
-observable the way it was measured" — so a forward-modeled line flux is directly
+This module applies that **same operator** to a *model* spectrum, "measure the
+observable the way it was measured", so a forward-modeled line flux is directly
 comparable to a catalog line flux (including, self-consistently, the stellar
 Balmer absorption under the emission for baked-in nebular SSPs).
 
 The reduction :func:`_line_flux_from_means` takes window mean fluxes and is
 single-sourced across two window-mean sources:
 
-* **exact** (:func:`measure_line_flux_jax`) — means from a reconstructed
+* **exact** (:func:`measure_line_flux_jax`), means from a reconstructed
   rest-frame :math:`L_\nu` SED (any nebular backend: Cue additive, baked-in, …);
-* **fast** (:func:`measure_line_fluxes_from_window_lut`) — means from the
+* **fast** (:func:`measure_line_fluxes_from_window_lut`), means from the
   precomputed SSP window-integral LUT contracted with SFH+metallicity weights
   and the per-age dust screen (baked-in / LUT-eligible models only).
 
@@ -34,7 +34,7 @@ Notes
 **Continuum caveat (Balmer).** The side-band continuum carries the stellar
 absorption around the line. For a baked-in SSP the stellar and nebular light are
 inseparable, so the measured Balmer flux depends on the continuum windows exactly
-as a real pipeline's does — a crude window pair biases the Balmer decrement (see
+as a real pipeline's does, a crude window pair biases the Balmer decrement (see
 the #950 probe). Choose continuum windows that match the target catalog, and
 prefer the direct nebular luminosity (Cue ``predict_line_fluxes``) when an
 absorption-clean intrinsic line flux is wanted.
@@ -62,10 +62,10 @@ class LineDef:
     wavelength : float
         Rest-frame **vacuum** line center [Å] (for labeling / data alignment).
     continuum : tuple of (float, float)
-        ``((blue_lo, blue_hi), (red_lo, red_hi))`` — the two pseudo-continuum
+        ``((blue_lo, blue_hi), (red_lo, red_hi))``, the two pseudo-continuum
         side-bands [Å], used for a linear continuum under the line.
     feature : tuple of float
-        ``(lo, hi)`` — the feature window [Å] over which the continuum-subtracted
+        ``(lo, hi)``, the feature window [Å] over which the continuum-subtracted
         emission is integrated. Its center is the effective :math:`\\lambda_c`.
     """
 
@@ -76,7 +76,7 @@ class LineDef:
 
 
 def _line_flux_from_means(feat_mean, cont_mean, lam_c, feat_width, log10_four_pi_dl2):
-    r"""Observed line flux from feature + continuum mean fluxes — the one operator.
+    r"""Observed line flux from feature + continuum mean fluxes, the one operator.
 
     ``feat_mean`` / ``cont_mean`` are physical mean :math:`L_\nu` [erg/s/Hz]
     (SFH-weighted, dust-attenuated, mass-scaled). Converts the continuum-
@@ -117,7 +117,7 @@ def _line_flux_from_means(feat_mean, cont_mean, lam_c, feat_width, log10_four_pi
     are out of float32 range and in opposite directions, while the answer sits
     comfortably inside it: for an ordinary galaxy the ``erg/s`` line luminosity is
     ~1.4e40 (float32 max 3.4e38) and :math:`4\pi d_L^2` is ~1.0e57, so the linear
-    spelling was ``inf/inf`` — ``nan`` at *every* redshift, including the 10-pc
+    spelling was ``inf/inf``, ``nan`` at *every* redshift, including the 10-pc
     :math:`z=0` convention. Grouping the two conversion constants with the
     distance into one log offset and applying it to the O(1e28) mean keeps every
     intermediate in range.
@@ -125,7 +125,7 @@ def _line_flux_from_means(feat_mean, cont_mean, lam_c, feat_width, log10_four_pi
     The line-luminosity overflow is distance-independent, so repairing only the
     divisor would have left the ``nan`` in place.
     """
-    # log10 of (c / lam_c^2) * feat_width / (4 pi d_L^2) — a ~-45 dex offset that
+    # log10 of (c / lam_c^2) * feat_width / (4 pi d_L^2), a ~-45 dex offset that
     # exists only as an exponent. feat_width == 0 gives -inf, which powers back to
     # an exact 0.0, matching the linear form's multiply-by-zero.
     log10_conv = jnp.log10(C_AA) - 2.0 * jnp.log10(lam_c) + jnp.log10(feat_width)
@@ -221,7 +221,7 @@ def precompute_line_windows(ssp_wave, ssp_flux, line_defs, edge_width: float = 1
     line_defs : sequence of LineDef
         Lines to precompute.
     edge_width : float, default 1.0
-        Sigmoid edge width [Å] — MUST match :func:`_window_mean_flux`.
+        Sigmoid edge width [Å], MUST match :func:`_window_mean_flux`.
 
     Returns
     -------
@@ -280,7 +280,7 @@ def measure_line_fluxes_from_window_lut(
     The FeaturePrecomp line-flux path: contract precomputed SSP window integrals
     with the SFH+metallicity weights, apply the age-dependent two-component screen
     at each window center, then run the same :func:`_line_flux_from_means`
-    reduction as the exact path — no full-grid SED reconstruction.
+    reduction as the exact path, no full-grid SED reconstruction.
 
     Parameters
     ----------
@@ -327,7 +327,7 @@ def default_line_defs(
     """Build generic :class:`LineDef` windows around a set of line centers.
 
     Used to fit line fluxes through the measure-as-catalog path when only line
-    *centers* are known (e.g. a :class:`LineFluxData` set) — the likelihood needs
+    *centers* are known (e.g. a :class:`LineFluxData` set), the likelihood needs
     continuum windows and these are concrete, built once at fitter setup (never
     from traced ``data_args``).
 

@@ -3,7 +3,7 @@
 
 Single source of truth for redshift, metallicity, noise, and spectroscopy
 parameters. These are the "non-domain-owned" parameters that don't belong
-to any single component — they apply globally to every model.
+to any single component; they apply globally to every model.
 
 ``tengri.parameters._builders`` derives its legacy ``_NON_SFH_PARAMS``
 bucket dict from this tuple, and the registry walker in
@@ -60,7 +60,7 @@ PARAMS: tuple[ParamDeclaration, ...] = (
     ParamDeclaration(
         "sigma_v_kms",
         Fixed(0.0),
-        "Stellar velocity dispersion sigma_v [km/s] — added in quadrature "
+        "Stellar velocity dispersion sigma_v [km/s], added in quadrature "
         "to the instrumental LSF when computing spectra",
         lambda lo, hi: lo >= 0 and hi <= 2000,
         "sigma_v_kms must be in [0, 2000]",

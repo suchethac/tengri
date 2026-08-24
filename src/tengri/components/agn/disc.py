@@ -3,14 +3,14 @@
 
 Four models are provided:
 
-1. **Simple power-law + UV cutoff** — minimal AGN disc with 3 parameters.
-2. **Multi-color disc (Shakura-Sunyaev)** — physically-motivated standard thin
+1. **Simple power-law + UV cutoff**: minimal AGN disc with 3 parameters.
+2. **Multi-color disc (Shakura-Sunyaev)**: physically-motivated standard thin
    disc following Kubota & Done (2018), simplified to the key parameters.
    Implements the outer standard disc zone only.
-3. **Kubota & Done 3-zone disc** — full K&D (2018) model with outer standard
+3. **Kubota & Done 3-zone disc**: full K&D (2018) model with outer standard
    disc, warm Comptonization (soft X-ray excess), and hot corona (hard X-ray
    power law). Three radially-stratified zones with self-consistent radii.
-4. **ADAF + truncated disc** — for low-luminosity AGN (L/L_Edd < 0.01).
+4. **ADAF + truncated disc**, for low-luminosity AGN (L/L_Edd < 0.01).
    The inner disc transitions to an advection-dominated accretion flow
    (optically thin, radiatively inefficient). Based on Mahadevan (1997)
    and Nemmen+2014.
@@ -77,8 +77,8 @@ from tengri.utils.scale import pow10 as _pow10, representable_floor as _represen
 
 # log10 of the cgs constants that make the Shakura-Sunyaev disc's bolometric /
 # Eddington / accretion-rate intermediates overflow float32 (#1206). At a
-# realistic AGN luminosity the LINEAR forms — L_bol ~1e44, L_Edd ~1e46, the
-# ``t_in**4`` numerator ~1e58 erg/s — all exceed float32 max (3.4e38), yet the
+# realistic AGN luminosity the LINEAR forms: L_bol ~1e44, L_Edd ~1e46, the
+# ``t_in**4`` numerator ~1e58 erg/s: all exceed float32 max (3.4e38), yet the
 # RESULTS (mdot ~1e24 g/s, t_in ~1e5 K, lambda_Edd ~1e-2) are representable.
 # The float32 branch of ``multicolor_disc`` forms every such quantity as a log10
 # sum and materializes it only at the representable result via ``pow10``.
@@ -153,7 +153,7 @@ def powerlaw_disc(
 
     Notes
     -----
-    **JIT-compatible**: yes — all operations use ``jnp`` primitives.
+    **JIT-compatible**: yes, all operations use ``jnp`` primitives.
 
     The unnormalized spectral shape is:
 
@@ -299,7 +299,7 @@ def _r_hot_bisect(
     :math:`L_{\rm diss}(x) = L_0\,[1/10 - 1/(2x^2) + 2/(5 x^{5/2})]`,
     strictly monotone in :math:`x = R_{\rm hot}/R_{\rm ISCO}`. After
     ``n_iter=40`` the bracket width is :math:`< 2^{-40} \approx 10^{-12}`
-    of its initial log-width — enough for machine precision.
+    of its initial log-width: enough for machine precision.
 
     ``l_hot_target`` is clipped below :math:`L_{\max} = L_0/10`.
     """
@@ -472,7 +472,7 @@ def _self_gravity_radius(log_mbh: float, l_edd_ratio: float, alpha_visc: float =
 # CIGALE's SKIRTOR piecewise power law) instead carry a rising power-law
 # tail into the EUV / soft X-ray. ``multicolor_disc`` can optionally blend
 # such a tail onto the Wien core (the ``euv_tail`` argument).
-_EUV_TAIL_LAMBDA_BREAK_AA = 912.0  # [A] Lyman limit — onset of the EUV tail
+_EUV_TAIL_LAMBDA_BREAK_AA = 912.0  # [A] Lyman limit: onset of the EUV tail
 _EUV_TAIL_LAMBDA_CUT_AA = 30.0  # [A] short-wavelength floor (~0.41 keV)
 _EUV_TAIL_DEFAULT_SLOPE = 1.0  # L_nu ~ nu^slope (CIGALE-skirtor-like rise)
 _EUV_TAIL_FRAC = 0.02  # tail bolometric budget as a fraction of L_disc
@@ -492,11 +492,11 @@ def _apply_euv_tail(wavelength, nu, l_nu_wien, euv_tail):
     euv_tail : None or str or float
         EUV behavior over :math:`\lambda \in [30, 912]` A:
 
-        * ``None`` / ``"wien"`` — no tail; pure Wien cutoff (bare thin disc).
-        * ``"powerlaw"`` / ``"both"`` — blend a power-law tail at the default
+        * ``None`` / ``"wien"``: no tail; pure Wien cutoff (bare thin disc).
+        * ``"powerlaw"`` / ``"both"``: blend a power-law tail at the default
           slope ``_EUV_TAIL_DEFAULT_SLOPE``. ``"both"`` is a synonym; the Wien
           core is always preserved (the tail only fills where it exceeds Wien).
-        * float — user-defined slope :math:`s` with :math:`L_\nu \propto \nu^s`.
+        * float: user-defined slope :math:`s` with :math:`L_\nu \propto \nu^s`.
 
     Returns
     -------
@@ -505,7 +505,7 @@ def _apply_euv_tail(wavelength, nu, l_nu_wien, euv_tail):
 
     Notes
     -----
-    **JIT-compatible**: yes — ``euv_tail`` is resolved to a static slope and a
+    **JIT-compatible**: yes, ``euv_tail`` is resolved to a static slope and a
     static on/off flag at trace time (it is not a traced array), so the
     branch is a Python-level decision and the math is pure ``jnp``.
 
@@ -513,7 +513,7 @@ def _apply_euv_tail(wavelength, nu, l_nu_wien, euv_tail):
     :math:`\lambda \in [30, 912]` A but its **amplitude** is fixed by
     normalizing its bolometric content to a small fraction
     (``_EUV_TAIL_FRAC``, default 2 %) of the disc's pre-tail bolometric
-    luminosity — a bounded "soft-excess"-like budget. (A bare power law
+    luminosity, a bounded "soft-excess"-like budget. (A bare power law
     anchored to the disc peak would diverge in energy and swamp the optical.)
     It is blended via ``maximum`` so the UV/optical/Wien-peak region is
     untouched: the tail only contributes where the Wien spectrum has already
@@ -540,7 +540,7 @@ def _apply_euv_tail(wavelength, nu, l_nu_wien, euv_tail):
     shape_bol = jnp.maximum(jnp.abs(jnp.trapezoid(shape[sort_idx], nu[sort_idx])), 1e-100)
     if l_nu_wien.dtype == jnp.float32:
         # Float32 (#1206): the disc bolometric integral ``trapz(l_nu_wien, nu)`` ~
-        # 1e28 erg/s/Hz over ~1e15 Hz is ~1e43 erg/s — past float32 max (3.4e38).
+        # 1e28 erg/s/Hz over ~1e15 Hz is ~1e43 erg/s: past float32 max (3.4e38).
         # Peak-factor it (integrate the O(1) residual, carry the peak) and group
         # the small factors (``frac · disc_bol/shape_bol`` ~ few·1e-4) before the
         # ~1e28 peak so no out-of-range product materializes.
@@ -604,12 +604,12 @@ def multicolor_disc(
     euv_tail : {"powerlaw", "both", "wien"}, float, or None, optional
         EUV / soft-X-ray behavior below the Lyman limit (912 A).
 
-        * ``"powerlaw"`` (default) / ``"both"`` — blend a CIGALE-like power-law
+        * ``"powerlaw"`` (default) / ``"both"``: blend a CIGALE-like power-law
           tail onto the Wien core so the disc carries flux below ~100 A.
-        * ``"wien"`` / ``None`` — pure Shakura-Sunyaev Wien cutoff (the bare
+        * ``"wien"`` / ``None``: pure Shakura-Sunyaev Wien cutoff (the bare
           thin disc; emission below ~150 A is negligible and the EUV / soft
           X-ray is supplied by the corona instead).
-        * float — user-defined slope :math:`s` with :math:`L_\\nu \\propto \\nu^s`.
+        * float: user-defined slope :math:`s` with :math:`L_\\nu \\propto \\nu^s`.
 
         Default: ``"powerlaw"``. The tail only fills the EUV where the Wien
         spectrum has already dropped below it, so the UV/optical is unchanged
@@ -623,7 +623,7 @@ def multicolor_disc(
 
     Notes
     -----
-    **JIT-compatible**: yes — uses ``jnp`` primitives and ``jax.vmap``.
+    **JIT-compatible**: yes, uses ``jnp`` primitives and ``jax.vmap``.
     ``euv_tail`` is a static (trace-time) selector, not a traced argument.
 
     The temperature profile follows the Novikov-Thorne (1974) emissivity for
@@ -692,7 +692,7 @@ def multicolor_disc(
     # DERIVED from it (lambda_Edd = L_bol / L_Edd, matching RELAGN's
     # mdot = L_bol/L_edd, relagn.py:288,330), so the disc shape (T_in, r_out) is
     # self-consistent with the requested L_bol. Previously the shape was built
-    # from agn_log_ledd and then rescaled to agn_log_lbol — a decoupling that
+    # from agn_log_ledd and then rescaled to agn_log_lbol, a decoupling that
     # left T_in / r_out corresponding to the wrong luminosity. agn_log_ledd is
     # now ignored here (a build-time warning fires if a user sets/frees it).
     #
@@ -700,7 +700,7 @@ def multicolor_disc(
     # lambda_Edd) is set by ``_log_lbol_shape``; the output MAGNITUDE by
     # ``agn_log_lbol`` (the renorm target below). They coincide by default
     # (``agn_log_lbol_shape=None``), which is the float64 path. Only float32
-    # separates them — the AGN component evaluates the SHAPE at the true L_bol
+    # separates them, the AGN component evaluates the SHAPE at the true L_bol
     # but normalizes MAGNITUDE to a low reference so the runner's ~1e40 L_lambda
     # arithmetic stays in float32 range; the true magnitude is re-applied
     # downstream. See the float32 branch below.
@@ -712,8 +712,8 @@ def multicolor_disc(
     # r_sg ~ 2150 * (alpha/0.1)^{2/9} * lambda_Edd^{4/9} * (M/1e8)^{-2/9} R_g.
     if wavelength.dtype == jnp.float32:
         # Log-space so the ~1e44 L_bol, ~1e46 L_Edd and ~1e58 erg/s ``t_in**4``
-        # numerator never materialize (float32 max 3.4e38). The RESULTS —
-        # lambda_Edd ~1e-2, mdot ~1e24 g/s, t_in ~1e5 K — are all representable.
+        # numerator never materialize (float32 max 3.4e38). The RESULTS
+        # (lambda_Edd ~1e-2, mdot ~1e24 g/s, t_in ~1e5 K) are all representable.
         _log_l_bol_erg = _log_lbol_shape + _LOG10_LSUN_ERG
         _log_l_edd = _LOG10_L_EDD_1MSUN + agn_log_mbh
         l_edd_ratio = jnp.clip(_pow10(_log_l_bol_erg - _log_l_edd), 1e-10, 1.0)
@@ -779,10 +779,10 @@ def multicolor_disc(
     l_nu_intrinsic = _apply_euv_tail(wavelength, nu, l_nu_intrinsic, euv_tail)
 
     # Renormalize to requested L_bol * agn_lum_ratio (the MAGNITUDE is set by
-    # ``agn_log_lbol`` — the reference on the float32 path — NOT the shape
+    # ``agn_log_lbol`` (the reference on the float32 path) NOT the shape
     # luminosity above).
     # Sort by ascending frequency before integrating (nu descends when wave ascends).
-    # Using jnp.abs() on a descending-x trapezoid is brittle — sort explicitly.
+    # Using jnp.abs() on a descending-x trapezoid is brittle: sort explicitly.
     _nu = _wavelength_to_nu(wavelength)
     _sort_idx = jnp.argsort(_nu)
     if wavelength.dtype == jnp.float32:
@@ -798,7 +798,7 @@ def multicolor_disc(
         _hat_total = jnp.trapezoid(l_nu_intrinsic[_sort_idx] / _peak, _nu[_sort_idx])
         # ``representable_floor``, not the bare ``1e-100`` (#1492): float32's
         # smallest subnormal is 1.4e-45, so the literal IS 0.0 there and this
-        # branch — the float32 one — was the guard providing nothing. A zero
+        # branch (the float32 one) was the guard providing nothing. A zero
         # integral would take log10 to -inf and the scale to inf. Returns
         # ``1e-100`` unchanged under x64, so float64 is bit-identical.
         _log_l_nu_total = jnp.log10(_peak) + jnp.log10(
@@ -939,7 +939,7 @@ def _hot_corona_lnu(
 
     Notes
     -----
-    **JIT-compatible**: yes — pure ``jnp`` primitives, no Python branching on
+    **JIT-compatible**: yes, pure ``jnp`` primitives, no Python branching on
     traced values.
 
     References
@@ -1008,7 +1008,7 @@ def _compute_bh_params(
 
     Notes
     -----
-    **JIT-compatible**: yes — uses only ``jnp`` primitives.
+    **JIT-compatible**: yes, uses only ``jnp`` primitives.
 
     The radiative efficiency follows the Novikov-Thorne formula for thin discs
     around Kerr black holes (Novikov & Thorne 1973, Kerr metric).
@@ -1091,7 +1091,7 @@ def _compute_zone_radii(
 
     Notes
     -----
-    **JIT-compatible**: yes — uses ``jax.lax.scan`` for JAX-compatible bisection.
+    **JIT-compatible**: yes, uses ``jax.lax.scan`` for JAX-compatible bisection.
 
     **Self-consistent R_hot**: Uses bisection on the analytic Novikov-Thorne
     integral (40 iterations, exact to ~1e-12) to solve L_diss,hot(R_hot) = f_hard
@@ -1211,7 +1211,7 @@ def _compute_zone_luminosities(
 
     Notes
     -----
-    **JIT-compatible**: yes — uses ``jax.vmap`` for radial integration.
+    **JIT-compatible**: yes, uses ``jax.vmap`` for radial integration.
 
     **Energy conservation**: The normalization integral is computed analytically
     from the radial integration (σ T^4 × dA) rather than spectrally, making the
@@ -1285,7 +1285,7 @@ def _compute_zone_luminosities(
     # ── Zone 3: Hot corona (R_ISCO < r < R_hot) ───────────────────
     f_hard_safe = jnp.clip(agn_f_hard, 1e-6, 0.5)
     # Float32 (#1206): l_hot_erg ~5e43 and l_seed ~1e44 erg/s overflow. Work both
-    # in L_sun units (l_edd from M_BH, L_bol from the SHAPE luminosity — the
+    # in L_sun units (l_edd from M_BH, L_bol from the SHAPE luminosity: the
     # corona fraction lambda_Edd must track the TRUE L_bol, not the reference the
     # magnitude normalizes to). Beloborodov uses only their ratio, so units cancel.
     if float32:
@@ -1316,7 +1316,7 @@ def _compute_zone_luminosities(
     nu_seed_hot = _K_BOLTZ * t_seed_hot / _H_PLANCK
 
     # The corona L_nu scales linearly with l_hot_erg. On the float32 path
-    # l_hot_erg is in L_sun, so the corona comes out in L_sun/Hz — convert back to
+    # l_hot_erg is in L_sun, so the corona comes out in L_sun/Hz: convert back to
     # erg/s/Hz by folding L_sun in (the ~1e28 product forms without the ~5e43
     # intermediate).
     l_nu_hot = _hot_corona_lnu(nu, l_hot_erg, gamma_hard_eff, kt_hot_erg, nu_seed_hot)
@@ -1400,7 +1400,7 @@ def beloborodov_gamma_hot(
 
     Notes
     -----
-    **JIT-compatible**: yes — uses only ``jnp`` primitives.
+    **JIT-compatible**: yes, uses only ``jnp`` primitives.
 
     This implementation follows Kubota & Done (2018, MNRAS 480 1247, Eq. 6),
     which rewrites the Beloborodov (1999) Compton-amplification result as a
@@ -1447,7 +1447,7 @@ def compute_l2500(
 
     Notes
     -----
-    **JIT-compatible**: yes — uses ``jnp`` primitives.
+    **JIT-compatible**: yes, uses ``jnp`` primitives.
 
     The 2500 Å point is a canonical AGN diagnostic wavelength, used to
     compute the optical-to-X-ray spectral index (alpha_ox) and as a
@@ -1531,8 +1531,8 @@ def kubota_done_disc(
         Black hole mass. Determines the Eddington luminosity and temperature
         scaling. Default: 8.0. [log10(M_sun)]
     agn_log_ledd : float, optional
-        **DEPRECATED / IGNORED (#846).** The Eddington ratio — and hence the
-        inner temperature, accretion rate, and zone radii — is now DERIVED from
+        **DEPRECATED / IGNORED (#846).** The Eddington ratio, and hence the
+        inner temperature, accretion rate, and zone radii: is now DERIVED from
         ``agn_log_lbol`` and ``agn_log_mbh`` (lambda_Edd = L_bol / L_Edd), so the
         3-zone structure is self-consistent with the requested L_bol. Retained
         for backward compatibility but has no effect; setting or freeing it
@@ -1581,9 +1581,9 @@ def kubota_done_disc(
 
     Notes
     -----
-    **JIT-compatible**: yes — uses ``jnp`` primitives and ``jax.vmap``.
+    **JIT-compatible**: yes, uses ``jnp`` primitives and ``jax.vmap``.
 
-    **Gradient-safe**: yes — fully differentiable w.r.t. all parameters,
+    **Gradient-safe**: yes, fully differentiable w.r.t. all parameters,
     including the bisection-solved R_hot.
 
     **Key self-consistent physics**:
@@ -1737,7 +1737,7 @@ def kubota_done_disc(
     return l_nu_total * scale
 
 
-# ── Model 4: ADAF — DEPRECATED delegator to the faithful adaf_spectrum ────────
+# ── Model 4: ADAF; DEPRECATED delegator to the faithful adaf_spectrum ────────
 
 
 def adaf_disc(
@@ -1870,10 +1870,10 @@ def create_relagn_disc_from_grid(grid_path: str) -> Callable:
 
     Notes
     -----
-    **JIT-compatible**: yes — the returned function is pure JAX.
+    **JIT-compatible**: yes, the returned function is pure JAX.
     Grid loading is cached via ``@functools.cache``.
 
-    **Gradient-safe**: yes — triweight interpolation is C²-continuous.
+    **Gradient-safe**: yes, triweight interpolation is C²-continuous.
 
     **Inclination**: grid stored at cos_inc = 0.5; scaled by 2·cos_inc.
     This is exact for r > 1000 r_g (non-relativistic regime) and approximate
@@ -1950,7 +1950,7 @@ def relagn_disc_from_grid(
     wavelength : ndarray, shape (n_wave,)
         Rest-frame wavelength. [Å]
     agn_log_lbol : float
-        :math:`\log_{10}(L_{\rm bol}/L_\odot)` — the normalization the template
+        :math:`\log_{10}(L_{\rm bol}/L_\odot)`, the normalization the template
         is scaled to. [dimensionless]
     agn_log_mbh : float
         :math:`\log_{10}(M_{\rm BH}/M_\odot)`. [dimensionless]
@@ -1969,13 +1969,13 @@ def relagn_disc_from_grid(
     Notes
     -----
     **JIT-compatible**: yes.
-    **Gradient-safe**: yes — triweight kernel, C²-continuous.
+    **Gradient-safe**: yes, triweight kernel, C²-continuous.
 
     **Normalization (behavior change, #1206).** The template *shape* comes from
     (M_BH, Ṁ, a\*); its **normalization** is set by ``agn_log_lbol``, matching
     every other disc in the composable menu (``multicolor``, ``kubota_done``,
     ``slone_netzer``, …). Previously the grid's own absolute normalization was
-    used and ``agn_log_lbol`` had no effect — which both surprised users who set
+    used and ``agn_log_lbol`` had no effect, which both surprised users who set
     it and made the disc unusable in float32, since the grid's absolute
     ``λL_λ(5100 Å) ≈ 2.6e44`` erg/s exceeds the float32 maximum (3.4e38).
 
@@ -2006,7 +2006,7 @@ def relagn_disc_from_grid(
     if wavelength.dtype == jnp.float32:
         # Float32: the template's own bolometric integral is ~1e45 erg/s and
         # overflows, which would flush the disc to zero. Peak-factor and
-        # regroup — ``(l_scale / hat_int) * (lnu / peak)`` is algebraically
+        # regroup: ``(l_scale / hat_int) * (lnu / peak)`` is algebraically
         # identical to ``l_scale * lnu / (peak * hat_int)``.
         # stop_gradient: factorization constant; peak * hat_int == bolint(lnu) (#1436).
         peak = jax.lax.stop_gradient(jnp.max(jnp.abs(lnu_interp)))

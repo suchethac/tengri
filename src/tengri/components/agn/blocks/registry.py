@@ -21,7 +21,7 @@ __all__ = ["composable"]
 
 @register_agn_model(
     "composable",
-    citation="(no single paper — block recipe of registered tengri AGN blocks)",
+    citation="(no single paper: block recipe of registered tengri AGN blocks)",
     short_doc="Composable AGN: pick one block per stage (disc/nlr/blr/feii/torus/atten)",
 )
 def composable(
@@ -37,7 +37,7 @@ def composable(
     agn_norm: str = "cigale_joint",
     **params,
 ) -> jnp.ndarray:
-    r"""Composable AGN — registered AGN_MODELS entry.
+    r"""Composable AGN: registered AGN_MODELS entry.
 
     Thin wrapper around :func:`composable_agn_l_nu`; see that function
     and ``tengri.components.agn.blocks._protocol`` for the full
@@ -54,14 +54,14 @@ def composable(
         Overall AGN fraction scaling [dimensionless]. Default ``1.0``.
     agn_disc_block, agn_nlr_block, agn_blr_block, agn_feii_block, \
 agn_torus_block, agn_attenuation_block : str, optional
-        Per-stage block selectors (default ``"none"`` everywhere — the
+        Per-stage block selectors (default ``"none"`` everywhere: the
         user **must** opt in by name, and a warning is emitted if the
         recipe is degenerate).
     agn_norm : {"cigale_joint", "conserving", "independent"}, optional
         Cross-block normalization policy (single-sourced from
         :data:`AGN_NORM_POLICIES`). ``"cigale_joint"`` (current default)
         ties the disc, torus, and polar dust to a *single* ``agn_power``
-        reference via the fixed SKIRTOR template ratios — bit-identical to
+        reference via the fixed SKIRTOR template ratios: bit-identical to
         X-CIGALE's energy balance (Stalevski+2016). ``"conserving"`` debits
         the disc by the reprocessed fraction so ``disc(1-f) + torus(f)``
         conserves ``L_bol`` for *every* torus (reproduces the monolithic

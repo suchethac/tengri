@@ -107,7 +107,7 @@ def precompute(
 
     Notes
     -----
-    **JIT-compatible**: no — this is a build-time function using NumPy.
+    **JIT-compatible**: no, this is a build-time function using NumPy.
 
     Emission lines are preintegrated by placing Gaussian profiles (or delta
     functions) at each line's vacuum wavelength and convolving with filter
@@ -215,9 +215,9 @@ def build_lookup(preint: dict, **kwargs: Any) -> dict:
 
     Notes
     -----
-    **JIT-compatible**: yes — the returned function is fully JAX-native.
+    **JIT-compatible**: yes, the returned function is fully JAX-native.
 
-    **Gradient-safe**: yes — triweight interpolation is fully differentiable.
+    **Gradient-safe**: yes, triweight interpolation is fully differentiable.
 
     """
     line_wavelengths = preint["line_wavelengths"]

@@ -41,7 +41,7 @@ from tengri.components.nebular.mappings_photo import (
 )
 
 # Continuous axes of the stellar MAPPINGS V grid. (The discrete
-# stellar_lib axis — sb99 or bpass — is selected at build time.)
+# stellar_lib axis (sb99 or bpass) is selected at build time.)
 AXIS_PARAMS: tuple[str, ...] = (
     "neb_logZ_gas",
     "log_age",
@@ -109,7 +109,7 @@ def precompute(
 
     Notes
     -----
-    **JIT-compatible**: no — this is a build-time function using NumPy.
+    **JIT-compatible**: no, this is a build-time function using NumPy.
 
     """
     if grid_path is None:
@@ -185,7 +185,7 @@ def build_lookup(preint: dict, **kwargs: Any) -> dict:
 
     Notes
     -----
-    **JIT-compatible**: yes — the returned function is fully JAX-native.
+    **JIT-compatible**: yes, the returned function is fully JAX-native.
 
     """
     line_wavelengths = preint["line_wavelengths"]

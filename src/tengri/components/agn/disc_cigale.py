@@ -61,7 +61,7 @@ def piecewise_powerlaw_disk(
 
     Notes
     -----
-    **JIT-compatible**: yes — uses ``jnp`` primitives.
+    **JIT-compatible**: yes, uses ``jnp`` primitives.
 
     The construction proceeds as follows:
 
@@ -84,7 +84,7 @@ def piecewise_powerlaw_disk(
         # the float32 window in OPPOSITE directions even though their product is
         # O(1). With a steep segment (coef = -4) at λ ~1e6-1e7 nm,
         # ``wavelength**coef`` ~1e-36..1e-40 flushes to 0 while the matching
-        # continuity ``norm`` ~1e40 overflows to inf — so ``0 * inf = nan`` over the
+        # continuity ``norm`` ~1e40 overflows to inf: so ``0 * inf = nan`` over the
         # whole long-wavelength tail. Build the same spectrum as a single log10 sum
         # (continuity norms become a cumulative SUM of ``coef_step * log10(limit)``)
         # and materialize only the representable result. Exact in float64, which is
@@ -156,7 +156,7 @@ def skirtor_disk_spectrum(
 
     Notes
     -----
-    **JIT-compatible**: yes — uses ``jnp`` primitives.
+    **JIT-compatible**: yes, uses ``jnp`` primitives.
 
     **Reference**: Implements CIGALE ``skirtor2016.py`` (Boquien et al. 2019
     [2]_); validated against its output.
@@ -200,7 +200,7 @@ def schartmann2005_disk_spectrum(
 
     Notes
     -----
-    **JIT-compatible**: yes — uses ``jnp`` primitives.
+    **JIT-compatible**: yes, uses ``jnp`` primitives.
 
     **Reference**: Implements CIGALE ``skirtor2016.py`` (Boquien et al. 2019
     [2]_); validated against its output.

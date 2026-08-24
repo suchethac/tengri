@@ -84,7 +84,7 @@ def ingest_catalog(
         Unit of flux columns. One of: "cgs_fnu", "mJy", "uJy", "maggies",
         "ab_mag".
     flux_cols : list[str], optional
-        Flux column names **in your table** — they need not resemble the band
+        Flux column names **in your table**, they need not resemble the band
         names. If None, defaults to ``"{name}"`` for each band in photometry.
 
         Binding is **positional**: ``flux_cols[i]`` is read as the flux for
@@ -159,7 +159,7 @@ def ingest_catalog(
     else:
         # No band-name check here, deliberately. This used to require every
         # entry to already BE a band name, which meant `flux_cols` could only
-        # ever be a permutation of its own default — it could not name a real
+        # ever be a permutation of its own default; it could not name a real
         # catalog column, the only reason the parameter exists (#1458). Column
         # existence is validated against the TABLE in step 2 below, which is
         # the right referent and already reports the actual column list.
@@ -242,7 +242,7 @@ def ingest_catalog(
         if redshift.ndim != 1 or len(redshift) != n_galaxies:
             raise ValueError(f"redshift must be 1D with length {n_galaxies}")
         # A non-finite or negative redshift produces a NaN/garbage loss with no
-        # trail back to the offending row — reject it at this seam.
+        # trail back to the offending row, reject it at this seam.
         if not np.all(np.isfinite(redshift)):
             bad = np.where(~np.isfinite(redshift))[0].tolist()
             raise ValueError(
@@ -273,7 +273,7 @@ def ingest_catalog(
                 raise ValueError(
                     f"censor column '{col_name}' is boolean; censor flags are "
                     f"integers 0 (detected), 1 (upper limit), -1 (lower limit). "
-                    f"A boolean mask is not a censor flag — convert it explicitly."
+                    f"A boolean mask is not a censor flag, convert it explicitly."
                 )
             # Reject garbage flag values (-99, 2, 0.5, NaN, ...) at the seam.
             in_range = np.isin(col, (-1, 0, 1))
@@ -365,7 +365,7 @@ def ingest_catalog(
                         f"line censor column '{col_name}' is boolean; censor "
                         "flags are integers 0 (detected), 1 (upper limit), "
                         "-1 (lower limit). A boolean mask is not a censor "
-                        "flag — convert it explicitly."
+                        "flag, convert it explicitly."
                     )
                 bad = sorted(set(np.unique(col).tolist()) - {0, 1, -1})
                 if bad:

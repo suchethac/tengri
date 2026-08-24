@@ -31,9 +31,9 @@ class ThemisIRSEDComponent(EmissionComponent):
 
     Notes
     -----
-    **JIT-compatible**: yes — all operations are ``jnp`` primitives.
+    **JIT-compatible**: yes, all operations are ``jnp`` primitives.
 
-    **Gradient-safe**: yes — differentiable everywhere.
+    **Gradient-safe**: yes, differentiable everywhere.
 
     **Template auto-loading**: the closure lazy-loads HDF5 templates on
     first call (at trace time). After lazy loading, all subsequent calls
@@ -66,12 +66,12 @@ class ThemisIRSEDComponent(EmissionComponent):
         -------
         dict or None
             Template arrays with the two non-traceable preparation steps
-            already applied, or ``None`` when unavailable — the backend then
+            already applied, or ``None`` when unavailable: the backend then
             falls back to its module-level load, which bakes 39.4 MB.
 
         Notes
         -----
-        **JIT-compatible**: no, deliberately — runs at build time so the arrays
+        **JIT-compatible**: no, deliberately; runs at build time so the arrays
         reach ``predict`` as a traced argument (#1649).
         """
         del wave
@@ -87,8 +87,8 @@ class ThemisIRSEDComponent(EmissionComponent):
             if path is None:
                 continue
             grid = dict(load_themis_templates(path))
-            # Both preparation steps read concrete values — a key census, then
-            # a concrete max to pick the qhac unit convention — so neither can
+            # Both preparation steps read concrete values: a key census, then
+            # a concrete max to pick the qhac unit convention: so neither can
             # run once these arrays are traced. Do them here, eagerly.
             if "spectra_single" in grid and "single_u" not in grid:
                 grid = _normalize_dl07_like_grid(grid, q_key="qhac_grid")

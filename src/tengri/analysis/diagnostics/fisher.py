@@ -3,7 +3,7 @@
 
 The FIM quantifies how much information the data carries about each
 parameter. Because the entire forward model is differentiable, we
-can compute the exact FIM via autodiff — no finite differences needed.
+can compute the exact FIM via autodiff: no finite differences needed.
 
 Applications:
 1. Fisher forecasting: which parameters are constrained by which data?
@@ -46,7 +46,7 @@ def compute_jacobian(predict_fn, params, param_keys):
     -----
     Forward mode, deliberately. ``jax.jacobian`` is ``jacrev``, and in float32
     the reverse-mode Jacobian of a raw flux is *exactly all zeros* (#1388/#1415,
-    measured in #1542) — a silent, plausible-looking answer rather than a loud
+    measured in #1542); a silent, plausible-looking answer rather than a loud
     one. ``jacfwd`` is alive on the same model and, for ``n_params << n_data``,
     is also the cheaper mode. Identical in float64 up to accumulation order.
     """
@@ -70,7 +70,7 @@ def compute_fisher_matrix(forward_model, params, noise, data_type="photometry", 
         "photometry" or "spectroscopy".
     param_names : list of str, optional
         Which parameters to include. Defaults to all physical params
-        (excludes xi — the GP latent is high-dimensional).
+        (excludes xi; the GP latent is high-dimensional).
 
     Returns
     -------
@@ -122,13 +122,13 @@ def compute_fisher_matrix(forward_model, params, noise, data_type="photometry", 
     flat = jnp.array([float(params[n]) for n in param_names])
 
     # FIM = J^T N^{-1} J with N^{-1} = diag(1/sigma^2), computed as (J/sigma)^T
-    # (J/sigma) — algebraically identical, and the only spelling that survives
+    # (J/sigma): algebraically identical, and the only spelling that survives
     # float32 (#1542).
     #
     # Two independent float32 defects lived here, and the first hid the second:
     #
     # 1. ``jax.jacobian`` is ``jacrev``. In float32 the reverse-mode Jacobian of a
-    #    raw flux is *exactly all zeros* (#1388/#1415) — measured, not inferred.
+    #    raw flux is *exactly all zeros* (#1388/#1415): measured, not inferred.
     #    ``jacfwd`` is alive on the same model. Mathematically the same Jacobian;
     #    for n_params << n_bands it is also the cheaper mode.
     # 2. ``1.0 / noise**2`` is ``inf`` for the sigma ~ 5e-32 of a real flux, so
@@ -137,7 +137,7 @@ def compute_fisher_matrix(forward_model, params, noise, data_type="photometry", 
     # Removing only the ``inf`` yields a finite, entirely-zero Fisher matrix,
     # which is far more dangerous than the NaN: NaN propagates loudly, whereas a
     # zero FIM inverts to *infinite confidence*. ``assert isfinite`` is not a
-    # sufficient check here — the test also asserts the matrix is non-zero.
+    # sufficient check here: the test also asserts the matrix is non-zero.
     #
     # The barrier is the same measure as ``standardized_residual`` (#1535): the
     # divide-before-square grouping is only binding on XLA as a data dependency,

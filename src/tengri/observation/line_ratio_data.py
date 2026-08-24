@@ -1,8 +1,8 @@
 # SPDX-License-Identifier: BSD-3-Clause
 """Observed emission line *ratio* data for direct fitting.
 
-A declarative container for measured emission-line ratios — e.g. the Balmer
-decrement Hα/Hβ, or BPT diagnostics like [NII]/Hα — to be compared against
+A declarative container for measured emission-line ratios, e.g. the Balmer
+decrement Hα/Hβ, or BPT diagnostics like [NII]/Hα, to be compared against
 model predictions from the nebular backend.
 
 Ratios are the natural data product when the *absolute* flux calibration is
@@ -24,7 +24,7 @@ Usage::
 
 The model ratio is ``flux(numerator) / flux(denominator)`` evaluated from the
 nebular backend's line luminosities (see :meth:`SEDModel.predict_line_ratios`),
-so this works on both the exact and SpectrumPrecomp paths — line luminosities
+so this works on both the exact and SpectrumPrecomp paths, line luminosities
 are grid-independent.
 """
 
@@ -58,7 +58,7 @@ class LineRatioData:
         Rest-frame vacuum wavelengths [Angstrom] used to match the nebular
         backend's line output.
     log_space : bool, default False
-        If True, ``ratios``/``errors`` are interpreted in log10 space — a
+        If True, ``ratios``/``errors`` are interpreted in log10 space, a
         log-normal likelihood, appropriate for BPT-style diagnostics whose
         scatter is symmetric in dex. If False, a linear Gaussian on the ratio.
 
@@ -66,7 +66,7 @@ class LineRatioData:
     -----
     **Immutable container**: construct once with validated data.
 
-    **Why ratios** — when absolute flux calibration is uncertain (the common
+    **Why ratios**, when absolute flux calibration is uncertain (the common
     case for slit/fiber spectra) but line ratios are robust, constraining the
     ratio avoids injecting calibration error into the fit. See
     [[project_nebular_unit_conventions]] for the line-luminosity conventions.
@@ -118,7 +118,7 @@ class LineRatioData:
         ----------
         model_numerator_fluxes, model_denominator_fluxes : ndarray, shape (n_ratios,)
             Model fluxes for the numerator and denominator lines (any
-            consistent unit — the ratio is dimensionless).
+            consistent unit, the ratio is dimensionless).
 
         Returns
         -------
@@ -142,7 +142,7 @@ class LineRatioData:
 
         Notes
         -----
-        **JIT-compatible**: yes. **Gradient-safe**: yes — differentiable w.r.t.
+        **JIT-compatible**: yes. **Gradient-safe**: yes, differentiable w.r.t.
         both flux arrays.
         """
         model = self.model_ratio(model_numerator_fluxes, model_denominator_fluxes)

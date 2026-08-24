@@ -28,7 +28,7 @@ __all__ = [
 # ──────────────────────────────────────────────────────────────────
 # SEDComponent discovery registry
 #
-# Holds every SEDComponent class — built-ins (auto-registered the first
+# Holds every SEDComponent class: built-ins (auto-registered the first
 # time `_get_registered_components()` is called) and any contributor
 # class decorated with `@register_component`. Consumed by
 # `tengri.parameters.translate._build_param_map` to auto-derive identity
@@ -126,7 +126,7 @@ def _get_registered_components() -> list:
     -------
     list
         SEDComponent classes available in the current process. The
-        list is freshly copied — callers may not mutate it; use
+        list is freshly copied; callers may not mutate it; use
         :func:`register_component` to add entries.
     """
     _ensure_builtins_loaded()

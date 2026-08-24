@@ -98,8 +98,8 @@ def _filter_integral_union(
 
     Integrates on the sorted union of the SED nodes and the filter nodes,
     interpolating the *transmission* (smooth by construction) rather than
-    the SED. Point-sampling the SED at the filter table's nodes — the
-    pre-#960 quadrature — biases any band whose table is coarser than the
+    the SED. Point-sampling the SED at the filter table's nodes, the
+    pre-#960 quadrature, biases any band whose table is coarser than the
     spectral structure it covers: SVO/sedpy instrument tables are 25–70 Å
     spaced while MILES spectra carry ~1 Å absorption-line structure, which
     produced band-dependent errors up to 3 % (SDSS g). FSPS
@@ -114,11 +114,11 @@ def _filter_integral_union(
     (#1860). ``pad_filters_to_bucket`` pads the filter-count axis with all-zero
     rows, so a padded row arrives here with ``num == den == 0``. Forward that is
     safe at any floor, but the quotient's VJP carries ``-num/den**2``, and the
-    former literal ``1e-30`` squares to exactly ``0.0`` in float32 — the reverse
+    former literal ``1e-30`` squares to exactly ``0.0`` in float32, the reverse
     pass then divided by zero and returned a **NaN redshift gradient**. Only
     redshift saw it: ``den`` integrates over ``grid``, which scales with
     ``(1+z)``, so z is the one parameter that reaches the denominator at all.
-    ``representable_floor`` does not catch this — ``1e-30`` is above float32's
+    ``representable_floor`` does not catch this, ``1e-30`` is above float32's
     ``tiny`` and passes through untouched. float64 is bit-identical.
     """
     grid = jnp.sort(jnp.concatenate([wave_obs, filter_wave]))
@@ -154,7 +154,7 @@ def lnu_filter_integral(
 ) -> jnp.ndarray:
     r"""Filter-weighted rest-frame L_ν on the observed-frame filter grid.
 
-    Returns the filter-weighted rest-frame specific luminosity — no
+    Returns the filter-weighted rest-frame specific luminosity, no
     cosmological dimming. The flux conversion is a separate step
     (compose with :func:`lnu_to_fnu` or :func:`compute_flux_density`).
 
@@ -199,7 +199,7 @@ def lnu_filter_integral(
     ``_phot_lnu_precomp`` tensors a named function for "the L_ν step".
 
     **Quadrature (#960)**: the integral is evaluated on the sorted union of
-    the SED nodes and the filter nodes, with the transmission interpolated —
+    the SED nodes and the filter nodes, with the transmission interpolated,
     never the SED alone at the filter table's nodes. Instrument filter tables
     (25–70 Å spacing) under-sample MILES-resolution spectra; the pre-#960
     point-sampling quadrature biased SDSS-like bands by up to 3 %.
@@ -226,13 +226,13 @@ def lnu_filter_integral_batch(
 
     Vectorized, zero-padding-safe form of :func:`lnu_filter_integral` over a
     stack of filters ``(n_filters, max_len)``. This is the *exact* per-band
-    projection — the identical union-grid quadrature the exact photometry
+    projection, the identical union-grid quadrature the exact photometry
     path uses (:func:`compute_flux_density_batch`; see #960), minus the
     cosmological ``lnu_to_fnu`` step (the caller, ``predict_via_precomp``,
     applies cosmology after summing the L_ν families).
 
-    Used by additive, unattenuated emitters under WavePrecomp — dust IR
-    re-emission, radio, X-ray, AGN — so a band carrying both the stellar
+    Used by additive, unattenuated emitters under WavePrecomp, dust IR
+    re-emission, radio, X-ray, AGN, so a band carrying both the stellar
     continuum and one of these emitters matches the exact path bit-for-bit
     (only the stellar × dust-attenuation term keeps the effective-wavelength
     LUT, which is where the speedup lives). Sampling such a component at a
@@ -269,7 +269,7 @@ def lnu_filter_integral_batch(
     (:func:`_ascending_padded_filter_wave`): the union-grid quadrature
     interpolates on the filter nodes, and ``jnp.interp`` on a raw zero-pad
     tail (…, 4130, 0, 0) is unsorted-input garbage that silently zeroed
-    every shorter-table band for heterogeneous filter sets — same-length
+    every shorter-table band for heterogeneous filter sets, same-length
     sets never pad, which is why homogeneous fixtures missed it.
     """
 
@@ -327,10 +327,10 @@ def compute_flux_density(
 
     Notes
     -----
-    **JIT-compatible**: yes — all operations are ``jnp`` primitives;
+    **JIT-compatible**: yes, all operations are ``jnp`` primitives;
     ``convention`` is static. Safe to call inside :func:`jax.jit`.
 
-    **Gradient-safe**: yes — differentiable w.r.t. all inputs except
+    **Gradient-safe**: yes, differentiable w.r.t. all inputs except
     filter curves (considered fixed).
 
     **Filter convolution formula** (photon-counting, ``BESSELL`` default):
@@ -369,8 +369,8 @@ def compute_flux_density(
 
     """
     # Composition of the two canonical operations (ADR-0016, 2026-05):
-    #   1. ``lnu_filter_integral`` — filter-weighted rest-frame L_ν
-    #   2. ``lnu_to_fnu`` — apply (1+z) / (4π d_L²) cosmological dimming
+    #   1. ``lnu_filter_integral``, filter-weighted rest-frame L_ν
+    #   2. ``lnu_to_fnu``, apply (1+z) / (4π d_L²) cosmological dimming
     L_nu_filter = lnu_filter_integral(
         sed_rest, wave_rest, filter_wave, filter_trans, redshift, convention=convention
     )
@@ -431,13 +431,13 @@ def pad_filters_to_bucket(filter_waves: list, filter_trans: list):
     of filters) up to the next entry of :data:`FILTER_COUNT_BUCKETS`. The
     extra rows are all-zero, which contribute zero to ``compute_flux_density``
     (the integrand is ``trans × wave × SED`` and the denominator divides
-    out — :func:`_filter_integral_union` floors the denominator).
+    out, :func:`_filter_integral_union` floors the denominator).
 
     That floor makes the all-zero rows harmless in the **forward** pass only.
     This docstring previously cited the literal ``1e-30`` as the reason they are
     safe; in float32 it was the reason they were not (#1860). An all-zero row
     gives ``num == den == 0``, and the quotient's VJP carries ``-num/den**2``,
-    which needs ``1/floor**2`` representable — a strictly stronger condition than
+    which needs ``1/floor**2`` representable, a strictly stronger condition than
     the forward pass imposes. The floor is now sized with
     :func:`~tengri.utils.scale.representable_denominator`. Padding the count axis
     is therefore not free: it is safe *because* the floor is derivative-sized,
@@ -448,7 +448,7 @@ def pad_filters_to_bucket(filter_waves: list, filter_trans: list):
     to one compile per bucket. Two observations with 5 and 6 filters at the
     same max wavelength length share a compile by padding both to 6.
 
-    For ``n_filters > max(FILTER_COUNT_BUCKETS)``, no padding is applied —
+    For ``n_filters > max(FILTER_COUNT_BUCKETS)``, no padding is applied;
     each unique large count gets its own compile (the "force compilation"
     escape hatch).
 
@@ -563,7 +563,7 @@ def compute_flux_density_batch(
 
     Notes
     -----
-    JIT-compatible: yes — vmapped over filters; ``convention`` is static.
+    JIT-compatible: yes, vmapped over filters; ``convention`` is static.
     Gradient-safe: yes.
 
     """
@@ -580,7 +580,7 @@ def project_photometry(state, params, photometry, *, dl_cm=None) -> jnp.ndarray:
     and redshift from ``state`` and ``params``, apply IGM attenuation when
     present, compute observed-frame flux densities through all filters via
     :func:`compute_flux_density_batch`. This is the single canonical exact
-    projection path — the fast precompute LUT is available via
+    projection path, the fast precompute LUT is available via
     :meth:`Observation.predict_via_precomp`.
 
     **This is the canonical exact (compositional) projection path for photometry.**
@@ -613,12 +613,12 @@ def project_photometry(state, params, photometry, *, dl_cm=None) -> jnp.ndarray:
 
     Notes
     -----
-    **JIT-compatible**: yes — delegates to vmapped
+    **JIT-compatible**: yes, delegates to vmapped
     :func:`compute_flux_density_batch`. ``redshift`` and ``dl_cm``
     must be array scalars or scalars; ``photometry`` properties are
     pytree leaves and statically known. IGM multiplication is traceable.
 
-    **Gradient-safe**: yes — all operations are JAX operations.
+    **Gradient-safe**: yes, all operations are JAX operations.
 
     **Composition pattern**: This kernel applies IGM attenuation internally
     when ``state.derived["igm_transmission"]`` is present. The transmission
@@ -643,8 +643,8 @@ def project_photometry(state, params, photometry, *, dl_cm=None) -> jnp.ndarray:
 
     # IGM attenuation is an observed-frame transmission the IGM component
     # publishes on the rest grid (``T`` evaluated at ``wave_obs =
-    # wave*(1+z)``). Multiplying here — before redshifting in
-    # ``compute_flux_density_batch`` — applies the full transmission curve
+    # wave*(1+z)``). Multiplying here, before redshifting in
+    # ``compute_flux_density_batch``, applies the full transmission curve
     # (not a single per-band effective-wavelength factor) and captures the
     # sharp Lyman break across broad bands at high redshift (#932).
     # ``T`` shares the rest grid with ``sed_rest``; the key is absent
@@ -700,11 +700,11 @@ def compute_photometry(
 
     Notes
     -----
-    **JIT-compatible**: no — uses Python list comprehension and loops.
+    **JIT-compatible**: no, uses Python list comprehension and loops.
     For JIT-compiled photometry over many filters, use
     :func:`compute_flux_density_batch` with padded filter arrays.
 
-    **Gradient-safe**: yes — each call to :func:`compute_flux_density`
+    **Gradient-safe**: yes, each call to :func:`compute_flux_density`
     is differentiable w.r.t. ``sed_rest``.
 
     See Also

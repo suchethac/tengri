@@ -2,11 +2,11 @@
 """Command-line interface for tengri.
 
 Subcommands:
-    tengri doctor           — print environment health check
-    tengri cite             — list all registered citations (short form)
-    tengri cite KEY         — print a specific citation (short + bibtex)
-    tengri cite --bibtex    — list all citations in BibTeX format
-    tengri --version        — print tengri version
+    tengri doctor          : print environment health check
+    tengri cite            : list all registered citations (short form)
+    tengri cite KEY        : print a specific citation (short + bibtex)
+    tengri cite --bibtex   : list all citations in BibTeX format
+    tengri --version       : print tengri version
 """
 
 from __future__ import annotations

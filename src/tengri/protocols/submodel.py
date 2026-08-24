@@ -7,7 +7,7 @@ composer over a list of components. Each population carries one SED
 SubModel and optionally one spatial SubModel; ``ForwardModel`` runs the
 populations in sequence and hands the result to ``ObservationModel``.
 
-This is a Protocol, not an ABC — implementations satisfy it by shape.
+This is a Protocol, not an ABC: implementations satisfy it by shape.
 The runtime-checkable variant is provided so smoke tests can assert
 ``isinstance(obj, SubModel)`` without importing a concrete base.
 """

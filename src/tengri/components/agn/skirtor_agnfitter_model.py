@@ -14,9 +14,9 @@ fidelity target (see issue #614, #592, and #633 for motivation).
 References
 ----------
 .. [1] M. Stalevski et al., "3D radiative transfer modeling of the dusty
-   torus around AGN — the influence of clumping," MNRAS, 420, 2756 (2012).
+   torus around AGN, the influence of clumping," MNRAS, 420, 2756 (2012).
    arXiv:1109.1286. https://doi.org/10.1111/j.1365-2966.2011.19775.x
-.. [2] M. Stalevski et al., "The dust covering factor in AGN — combining the
+.. [2] M. Stalevski et al., "The dust covering factor in AGN: combining the
    IR torus emission with polar dust component," MNRAS, 458, 2288 (2016).
    arXiv:1602.01954. https://doi.org/10.1093/mnras/stw444
 .. [3] L. N. Martinez-Ramirez, et al., "AGNFITTER-RX: Modeling the
@@ -110,9 +110,9 @@ class SKIRTORAgnfitterTorus(SEDModelComponent):
 
     Notes
     -----
-    **JIT-compatible**: yes — predict() is pure JAX.
+    **JIT-compatible**: yes, predict() is pure JAX.
 
-    **Gradient-safe**: yes — triweight interpolation is fully differentiable
+    **Gradient-safe**: yes, triweight interpolation is fully differentiable
     across the three parameter axes.
 
     **Requires template grid**: The SKIRTOR_mean_3p template library must be
@@ -157,7 +157,7 @@ class SKIRTORAgnfitterTorus(SEDModelComponent):
     parameter_prefix = "agn_"
     config: SKIRTORAgnfitterTorusConfig = field(default_factory=SKIRTORAgnfitterTorusConfig)
 
-    # Free parameters — auto-discovered
+    # Free parameters: auto-discovered
     log_lbol = Uniform(
         8.0,
         14.0,
@@ -218,7 +218,7 @@ class SKIRTORAgnfitterTorus(SEDModelComponent):
         try:
             return create_skirtor_agnfitter_from_grid(self.config.grid_path)
         except (FileNotFoundError, OSError, KeyError):
-            # Templates not available — predict will return zero emission
+            # Templates not available: predict will return zero emission
             return None
 
     def predict(

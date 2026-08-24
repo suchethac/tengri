@@ -1,5 +1,5 @@
 # SPDX-License-Identifier: BSD-3-Clause
-"""Recipe — frozen envelope of AGN block selectors.
+"""Recipe: frozen envelope of AGN block selectors.
 
 A :class:`Recipe` is the internal representation of a composable AGN
 choice: which block implements each of the five pipeline stages
@@ -10,7 +10,7 @@ and the :mod:`composable_precompute` builder (precompute mode).
 **Users never construct ``Recipe`` directly.** The intended construction
 sites are:
 
-1. :meth:`Recipe.from_parameters` — read selectors off the flat
+1. :meth:`Recipe.from_parameters`: read selectors off the flat
    ``agn_*_block`` attributes that :class:`tengri.Parameters` already
    carries today.
 2. The companion nested-dict parser (see plan
@@ -52,7 +52,7 @@ agn_torus_block, agn_attenuation_block : str
     axis_params : tuple[str, ...]
         Parameter names to vary in the precompute grid; everything else
         is held at the user's fixed value (or registry default). Empty
-        tuple means "no precompute axes — recipe is fully scalar."
+        tuple means "no precompute axes: recipe is fully scalar."
     template_state : Any, optional
         Pre-loaded template bundle to thread through block bodies so they
         skip in-block ``load_*_templates()`` calls. ``None`` triggers the

@@ -141,14 +141,14 @@ def sed_from_sfh(
     dict
         Rest-frame SED with keys:
 
-        - "wavelength" : ndarray shape (n_wave,) — wavelength [Angstrom]
-        - "sed" : ndarray shape (n_wave,) — luminosity density [erg/s/Hz]
-        - "stellar_mass" : float — total stellar mass formed [Msun]
-        - "weights" : ndarray shape (n_age,) — CSP age weights
+        - "wavelength" : ndarray shape (n_wave,). Wavelength [Angstrom]
+        - "sed" : ndarray shape (n_wave,). Luminosity density [erg/s/Hz]
+        - "stellar_mass" : float. Total stellar mass formed [Msun]
+        - "weights" : ndarray shape (n_age,). CSP age weights
 
     Notes
     -----
-    **JIT-compatible**: yes — the entire function is JAX-native and
+    **JIT-compatible**: yes; the entire function is JAX-native and
     compatible with jax.jit, jax.grad, and jax.vmap.
 
     **Metallicity evolution**: When log_z is an array, it is interpolated
@@ -169,7 +169,7 @@ def sed_from_sfh(
 
     # Metallicity interpolation
     if isinstance(log_z, (float, int)) or (hasattr(log_z, "ndim") and log_z.ndim == 0):
-        # Scalar metallicity — convert to absolute log(Z)
+        # Scalar metallicity: convert to absolute log(Z)
         log_z_abs = float(log_z) + LOG10_ZSUN  # solar offset
         ssp_flux_at_z = interpolate_metallicity(
             ssp_data.ssp_flux,
@@ -177,7 +177,7 @@ def sed_from_sfh(
             log_z_abs,
         )
     else:
-        # Array metallicity history — interpolate onto SSP ages
+        # Array metallicity history: interpolate onto SSP ages
         log_z_array = jnp.asarray(log_z)
         log_z_on_ssp = jnp.interp(
             ssp_log_ages_yr,
@@ -240,8 +240,9 @@ def photometry_from_sfh(
     ssp_data : SSPData
         SSP templates.
     filters
-        Either the full return value of ``load_filter_set(names)`` — ``(waves, trans, curves)``
-        — or a sequence of ``FilterCurve`` objects (e.g. the third element of that tuple).
+        Either the full return value of ``load_filter_set(names)``, i.e.
+        ``(waves, trans, curves)``, or a sequence of ``FilterCurve``
+        objects (e.g. the third element of that tuple).
     log_z : float or array
         Metallicity (scalar or history).
     redshift : float
@@ -256,9 +257,9 @@ def photometry_from_sfh(
     Returns
     -------
     dict with keys:
-        "flux" : array (n_filters,) — observed flux in erg/s/cm^2/Hz
-        "sed" : array (n_wave,) — rest-frame SED in erg/s/Hz
-        "stellar_mass" : float — total mass formed
+        "flux" : array (n_filters,). Observed flux in erg/s/cm^2/Hz
+        "sed" : array (n_wave,). Rest-frame SED in erg/s/Hz
+        "stellar_mass" : float. Total mass formed
     """
     from tengri.observation.photometry import compute_flux_density
 
@@ -283,7 +284,7 @@ def photometry_from_sfh(
         igm_trans = igm_transmission(wave_obs, redshift)
         sed = sed * igm_trans
 
-    # Luminosity distance — ``luminosity_distance`` already applies the
+    # Luminosity distance: ``luminosity_distance`` already applies the
     # 10-pc absolute-magnitude convention at z=0 (returns ~3.086e19 cm).
     # The earlier ``if redshift > 0 else 1.0`` fallback was a 10^19×
     # flux error at z=0; the dead branch is gone.
@@ -338,8 +339,8 @@ def spectrum_from_sfh(
     Returns
     -------
     dict with keys:
-        "flux" : array (n_pix,) — observed flux in erg/s/cm^2/Hz
-        "sed" : array (n_wave,) — rest-frame SED
+        "flux" : array (n_pix,). Observed flux in erg/s/cm^2/Hz
+        "sed" : array (n_wave,). Rest-frame SED
         "stellar_mass" : float
     """
     from tengri.observation.spectrum import compute_spectrum
@@ -364,7 +365,7 @@ def spectrum_from_sfh(
         igm_trans = igm_transmission(wave_obs_full, redshift)
         sed = sed * igm_trans
 
-    # See note in ``sed_from_sfh`` — ``luminosity_distance`` already
+    # See note in ``sed_from_sfh``: ``luminosity_distance`` already
     # handles the z=0 → 10 pc absolute-magnitude convention.
     dl_cm = luminosity_distance(redshift)
 

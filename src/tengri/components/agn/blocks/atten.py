@@ -143,7 +143,7 @@ def polar_dust_reemission_lnu(
     :func:`polar_dust_emission` to compute the FIR graybody. The result is
     valid for all inclinations and should be added to the attenuated disc SED.
 
-    **JIT-compatible**: yes — uses JAX primitives throughout.
+    **JIT-compatible**: yes, uses JAX primitives throughout.
 
     References
     ----------

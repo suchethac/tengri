@@ -52,9 +52,9 @@ def narayanan_prior(z: float) -> dict:
 
     Notes
     -----
-    **JIT-compatible**: no — prior specification is a factory-time operation.
+    **JIT-compatible**: no, prior specification is a factory-time operation.
 
-    **Gradient-safe**: no — returns static prior distributions.
+    **Gradient-safe**: no, returns static prior distributions.
     """
     from tengri.parameters.priors import Gaussian
 
@@ -98,9 +98,9 @@ def narayanan_tau_prior(z: float, log_mstar: float = 10.0) -> dict:
 
     Notes
     -----
-    **JIT-compatible**: no — prior specification is a factory-time operation.
+    **JIT-compatible**: no, prior specification is a factory-time operation.
 
-    **Gradient-safe**: no — returns static prior distributions.
+    **Gradient-safe**: no, returns static prior distributions.
     """
     from tengri.parameters.priors import Gaussian
 

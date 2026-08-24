@@ -45,7 +45,7 @@ class MockData(NamedTuple):
 
     Notes
     -----
-    **JIT-compatible**: yes — NamedTuple is a JAX pytree.
+    **JIT-compatible**: yes, NamedTuple is a JAX pytree.
 
     **Immutable**: All fields are read-only by design. To create a modified
     version, use the ``_replace()`` method inherited from NamedTuple.
@@ -71,7 +71,7 @@ class MockData(NamedTuple):
     # MockData is the object returned by ``SEDModel.mock()``; the standalone
     # ``generate_mock()`` returns a mapping. Supporting both ``mock.flux_obs``
     # and ``mock["flux_obs"]`` here means notebook/user code written against
-    # either surface works against both — see ``src/tengri/analysis/mock.py``.
+    # either surface works against both, see ``src/tengri/analysis/mock.py``.
 
     def __getitem__(self, key):
         """Field access by name (``mock["flux_obs"]``) or position (``mock[0]``).
@@ -141,7 +141,7 @@ class MockData(NamedTuple):
 
         Notes
         -----
-        **JIT-compatible**: no — uses matplotlib for visualization.
+        **JIT-compatible**: no, uses matplotlib for visualization.
         """
         import matplotlib.pyplot as plt
         import numpy as np
@@ -255,7 +255,7 @@ class PriorPredictive:
 
         Notes
         -----
-        **JIT-compatible**: no — uses Python-level checking and warnings.
+        **JIT-compatible**: no, uses Python-level checking and warnings.
         """
         import numpy as np
 

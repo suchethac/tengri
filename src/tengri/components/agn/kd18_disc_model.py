@@ -4,7 +4,7 @@
 Implements the Kubota & Done (2018) accretion disc model on the
 SEDModelComponent contract, enabling use in the model-building API.
 
-This is an opt-in adapter — the existing AGNSEDComponent continues to
+This is an opt-in adapter, the existing AGNSEDComponent continues to
 support K&D18 through the unified AGN registry.
 
 References
@@ -103,9 +103,9 @@ class KD18Disc(SEDModelComponent):
 
     Notes
     -----
-    **JIT-compatible**: yes — predict() is pure JAX.
+    **JIT-compatible**: yes, predict() is pure JAX.
 
-    **Gradient-safe**: yes — self-consistent zone radii via bisection
+    **Gradient-safe**: yes, self-consistent zone radii via bisection
     are smooth over the parameter space.
 
     **Cross-component note**: AGN inclination (cos_inc) is shared with
@@ -136,7 +136,7 @@ class KD18Disc(SEDModelComponent):
     parameter_prefix = "agn_"
     config: KD18DiscConfig = field(default_factory=KD18DiscConfig)
 
-    # Free parameters — auto-discovered
+    # Free parameters: auto-discovered
     log_lbol = Uniform(
         8.0,
         14.0,

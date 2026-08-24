@@ -25,7 +25,7 @@ import jax.numpy as jnp
 import numpy as np
 
 from tengri.observation.eline_catalog import (
-    CLOUDY_LINE_NAMES,  # noqa: F401 — re-exported for convenience
+    CLOUDY_LINE_NAMES,  # noqa: F401, re-exported for convenience
     CLOUDY_LINE_WAVELENGTHS,
 )
 
@@ -55,18 +55,18 @@ _CLOUDY_SOLAR_LOGU3 = jnp.array(
 # Metal lines are weaker, Balmer ratios unchanged (Case B).
 _CLOUDY_SUBSOLAR_LOGU3 = jnp.array(
     [
-        0.52,  # [OII] 3726 — lower at low Z  (1.20 / 2.30)
-        0.68,  # [OII] 3729 — lower at low Z  (1.20 * 1.3 / 2.30)
+        0.52,  # [OII] 3726, lower at low Z  (1.20 / 2.30)
+        0.68,  # [OII] 3729, lower at low Z  (1.20 * 1.3 / 2.30)
         0.26,  # H-delta (Case B, Z-independent)
         0.47,  # H-gamma (Case B, Z-independent)
         1.00,  # H-beta
-        0.80,  # [OIII] 4959 — higher at low Z (less cooling)
-        2.40,  # [OIII] 5007 — higher at low Z
-        0.03,  # [NII] 6548 — much weaker at low Z
+        0.80,  # [OIII] 4959, higher at low Z (less cooling)
+        2.40,  # [OIII] 5007, higher at low Z
+        0.03,  # [NII] 6548, much weaker at low Z
         2.86,  # H-alpha (Case B)
-        0.09,  # [NII] 6583 — much weaker at low Z
-        0.10,  # [SII] 6716 — weaker at low Z
-        0.07,  # [SII] 6731 — weaker at low Z
+        0.09,  # [NII] 6583, much weaker at low Z
+        0.10,  # [SII] 6716, weaker at low Z
+        0.07,  # [SII] 6731, weaker at low Z
     ]
 )
 
@@ -74,18 +74,18 @@ _CLOUDY_SUBSOLAR_LOGU3 = jnp.array(
 # [OIII] is stronger, [NII]/[SII] weaker relative to logU=-3.
 _CLOUDY_SOLAR_LOGU2 = jnp.array(
     [
-        0.65,  # [OII] 3726 — lower at high U  (1.50 / 2.30)
-        0.85,  # [OII] 3729 — lower at high U  (1.50 * 1.3 / 2.30)
+        0.65,  # [OII] 3726, lower at high U  (1.50 / 2.30)
+        0.85,  # [OII] 3729, lower at high U  (1.50 * 1.3 / 2.30)
         0.26,  # H-delta (Case B)
         0.47,  # H-gamma (Case B)
         1.00,  # H-beta
-        1.10,  # [OIII] 4959 — much stronger at high U
-        3.30,  # [OIII] 5007 — much stronger at high U
-        0.08,  # [NII] 6548 — weaker at high U
+        1.10,  # [OIII] 4959, much stronger at high U
+        3.30,  # [OIII] 5007, much stronger at high U
+        0.08,  # [NII] 6548, weaker at high U
         2.86,  # H-alpha (Case B)
-        0.24,  # [NII] 6583 — weaker at high U
-        0.12,  # [SII] 6716 — weaker at high U
-        0.09,  # [SII] 6731 — weaker at high U
+        0.24,  # [NII] 6583, weaker at high U
+        0.12,  # [SII] 6716, weaker at high U
+        0.09,  # [SII] 6731, weaker at high U
     ]
 )
 
@@ -96,18 +96,18 @@ _CLOUDY_SOLAR_LOGU2 = jnp.array(
 # and low Z. Values derived from Byler+2017 CLOUDY trends.
 _CLOUDY_SUBSOLAR_LOGU2 = jnp.array(
     [
-        0.25,  # [OII] 3726 — strongly suppressed (low Z + high U)
-        0.32,  # [OII] 3729 — strongly suppressed (low Z + high U)
+        0.25,  # [OII] 3726, strongly suppressed (low Z + high U)
+        0.32,  # [OII] 3729, strongly suppressed (low Z + high U)
         0.26,  # H-delta (Case B, Z-independent)
         0.47,  # H-gamma (Case B, Z-independent)
         1.00,  # H-beta
-        1.80,  # [OIII] 4959 — enhanced (low Z + high U)
-        5.40,  # [OIII] 5007 — strongly enhanced (low Z + high U)
-        0.02,  # [NII] 6548 — very weak (low Z + high U)
+        1.80,  # [OIII] 4959, enhanced (low Z + high U)
+        5.40,  # [OIII] 5007, strongly enhanced (low Z + high U)
+        0.02,  # [NII] 6548, very weak (low Z + high U)
         2.86,  # H-alpha (Case B)
-        0.05,  # [NII] 6583 — very weak (low Z + high U)
-        0.05,  # [SII] 6716 — weak at low Z
-        0.04,  # [SII] 6731 — weak at low Z
+        0.05,  # [NII] 6583, very weak (low Z + high U)
+        0.05,  # [SII] 6716, weak at low Z
+        0.04,  # [SII] 6731, weak at low Z
     ]
 )
 
@@ -156,7 +156,7 @@ def cloudy_line_priors(
 
     Notes
     -----
-    **JIT-compatible**: yes — uses only jnp primitives.
+    **JIT-compatible**: yes, uses only jnp primitives.
     Performs bilinear interpolation over a 2×2 grid in (Z, logU) space.
     For richer priors using a full CLOUDY grid, use ``cloudy_grid_line_priors()``.
 
@@ -303,7 +303,7 @@ def cloudy_grid_line_priors(
         Ionization parameter log10(U).
     log_age_yr : float
         log10(age / yr) for the dominant stellar population.
-        Default 7.0 (10 Myr — typical for HII regions).
+        Default 7.0 (10 Myr, typical for HII regions).
     prior_width_dex : float
         Gaussian prior width in dex. Default 0.3.
     target_wavelengths : array (n_target,) or None
@@ -437,7 +437,7 @@ def balmer_decrement_prior(
 
     Notes
     -----
-    **JIT-compatible**: yes — uses only jnp primitives.
+    **JIT-compatible**: yes, uses only jnp primitives.
     The Calzetti nebular E(B-V) is related to the diffuse dust optical
     depth by:
 
@@ -455,8 +455,8 @@ def balmer_decrement_prior(
 
     References
     ----------
-    Calzetti, D. 2000, ApJ, 533, 682 — nebular attenuation law.
-    Osterbrock, D. E., & Ferland, G. J. 2006 — Case B ratios.
+    Calzetti, D. 2000, ApJ, 533, 682, nebular attenuation law.
+    Osterbrock, D. E., & Ferland, G. J. 2006, Case B ratios.
 
     """
     # Intrinsic Case B ratios (Hα, Hβ, Hγ, Hδ) relative to Hβ=1

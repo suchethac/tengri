@@ -1,7 +1,7 @@
 # SPDX-License-Identifier: BSD-3-Clause
 r"""Narrow-line region (NLR) blocks for the composable AGN pipeline.
 
-One file, every NLR option — pick one via ``agn={'nlr': {'type': ...}}``:
+One file, every NLR option: pick one via ``agn={'nlr': {'type': ...}}``:
 
 ======================  ===========================================  ==========
 ``type``                model                                        physical?
@@ -12,14 +12,14 @@ One file, every NLR option — pick one via ``agn={'nlr': {'type': ...}}``:
 ``synthesizer_spectra`` Synthesizer UnifiedAGN ``/spectra/nebular``  physical
 ======================  ===========================================  ==========
 
-All NLR blocks are **isotropic** — the NLR is spatially extended and
+All NLR blocks are **isotropic**, the NLR is spatially extended and
 illuminated by the intrinsic bolometric ``10**agn_log_lbol * L_sun`` (ADR-0018
 §3), so they return ``(0, L_lambda)`` and bypass the runner's Type-1/2 mask.
 The ``none`` block lives in :mod:`._protocol`.
 
 Consolidated 2026-07 from the former per-model files (``nlr_analytic``,
 ``nlr_feltre``, ``nlr_synthesizer``, ``nlr_synthesizer_spectra``, ``nlr_blocks``,
-``_nlr_common``) — registration is unchanged.
+``_nlr_common``): registration is unchanged.
 """
 
 from __future__ import annotations
@@ -104,7 +104,7 @@ def nlr_analytic_block(
     r"""Analytic NLR (Richardson+2014 line ratios + Gaussian broadening).
 
     Illuminated by the **intrinsic** AGN bolometric (``10**agn_log_lbol *
-    L_sun``), so inclination-independent — using the apparent ``l5100_disc``
+    L_sun``), so inclination-independent: using the apparent ``l5100_disc``
     would leak the disc's ``cos_inc`` foreshortening into the (isotropic) narrow
     lines. Returns ``(maskable=0, isotropic=L_lambda)``.
     """
@@ -155,19 +155,19 @@ def nlr_feltre_block(
     d\nu` from :math:`L_{\rm acc}`, and the Feltre, Charlot & Gutkin (2016)
     CLOUDY c13.03 grid converts :math:`Q_{\rm H}` into emission lines over the
     five grid axes (:math:`\alpha_{\rm pl}, \log U, \log n_{\rm H}, \log Z,
-    \xi_d`) — the same grid BEAGLE interpolates. The most physical NLR model.
+    \xi_d`), the same grid BEAGLE interpolates. The most physical NLR model.
     Requires ``data/feltre_grid.h5`` (skips gracefully if absent).
 
     The grid axes are **AGN-specific** (``agn_nlr_logU/logn/logZ``, not the
     galaxy ``neb_*`` names) so they route through the AGN component's ``agn_*``
-    parameter sweep — otherwise ``SEDModel.build`` would freeze them at their
+    parameter sweep: otherwise ``SEDModel.build`` would freeze them at their
     defaults (only ``agn_``-prefixed params reach the runner) and collide with
     the stellar nebular parameters.
 
     **Energy:** the NLR lines are reprocessed disc ionizing photons, so they
     *will* be debited from the disc under ``agn_norm="conserving"`` once emission
     lines join the Σf covering-fraction ledger (spec Phase 1.x). **Currently the
-    lines are additive** — the ledger debits the torus only.
+    lines are additive**, the ledger debits the torus only.
     """
     del l5100_disc
     wave_aa = jnp.asarray(wavelength)
@@ -218,21 +218,21 @@ def nlr_cue_block(
     Self-consistent photoionization: the disc's ionizing continuum
     (:math:`f_\nu \propto \nu^{\alpha}`) sets :math:`Q_{\rm H}` from
     :math:`L_{\rm acc}`, and the Cue neural-network emulator (Li+2025) predicts
-    the AGN-ionized narrow lines — the same disc → :math:`Q_{\rm H}` → nebular
+    the AGN-ionized narrow lines, the same disc → :math:`Q_{\rm H}` → nebular
     pipeline as ``nlr='feltre'``, but with Cue's fast differentiable emulator in
     place of a tabulated CLOUDY grid. Requires ``data/cue_weights.npz`` (skips
     gracefully if absent).
 
     The grid axes are **AGN-specific** (``agn_nlr_logU/logn/logZ``, not the
     galaxy ``neb_*`` names) so they route through the AGN component's ``agn_*``
-    parameter sweep — otherwise ``SEDModel.build`` would freeze them at their
+    parameter sweep: otherwise ``SEDModel.build`` would freeze them at their
     defaults (only ``agn_``-prefixed params reach the runner) and collide with
     the stellar nebular parameters. ``agn_nlr_logZ`` is **absolute**
     :math:`\log_{10} Z` (matching the Feltre block); the adapter converts to
     Cue's native :math:`\log_{10}(Z/Z_\odot)`.
 
     **Energy:** like the other NLR blocks the lines are reprocessed disc
-    ionizing photons — currently additive; they join the Σf covering-fraction
+    ionizing photons: currently additive; they join the Σf covering-fraction
     ledger under ``agn_norm="conserving"`` once emission lines are debited.
     """
     del l5100_disc
@@ -256,7 +256,7 @@ def nlr_cue_block(
 @register_agn_block(
     "nlr",
     "synthesizer",
-    citation="Lovell et al. 2025 (Open J. Astrophys.); Roper et al. 2026 (JOSS) — Synthesizer",
+    citation="Lovell et al. 2025 (Open J. Astrophys.); Roper et al. 2026 (JOSS): Synthesizer",
     status="production",
     short_doc="Synthesizer Cloudy grid narrow-line region",
 )
@@ -275,12 +275,12 @@ def nlr_synthesizer_block(
 
     Illuminated by the intrinsic bolometric (``10**agn_log_lbol * L_sun``), so
     isotropic. Grid path resolves from ``$TENGRI_SYNTHESIZER_AGN_GRID_DIR`` /
-    ``data/synthesizer_grids/``. Backend init reads HDF5 (Python-level) — call
+    ``data/synthesizer_grids/``. Backend init reads HDF5 (Python-level): call
     once eagerly before any ``jax.jit`` over the forward model.
 
     The photoionization axes are named ``agn_nlr_logU/logZ`` (not the galaxy
     ``neb_*`` names) so they survive the AGN component's ``agn_``-prefix filter
-    and are drivable through ``SEDModel.build`` — otherwise they were frozen at
+    and are drivable through ``SEDModel.build``: otherwise they were frozen at
     their defaults (a silent no-op, #931). They translate to the grid's
     ``neb_*`` axes internally.
     """
@@ -303,7 +303,7 @@ def nlr_synthesizer_block(
 @register_agn_block(
     "nlr",
     "synthesizer_spectra",
-    citation="Lovell et al. 2025 (Open J. Astrophys.); Roper et al. 2026 (JOSS) — Synthesizer",
+    citation="Lovell et al. 2025 (Open J. Astrophys.); Roper et al. 2026 (JOSS): Synthesizer",
     status="production",
     short_doc="Synthesizer UnifiedAGN NLR reprocessed nebular spectrum",
 )
@@ -317,15 +317,15 @@ def nlr_synthesizer_spectra_block(
     # Differs from the declared agn_nlr_logn default (3.0, the Feltre+2016 grid
     # center): this block reproduces Synthesizer's UnifiedAGN, and 4.0 sits at
     # the grid edge, which reads as that code's own NLR-density convention.
-    # Left as-is rather than unified — NOT verified against upstream Synthesizer.
+    # Left as-is rather than unified; NOT verified against upstream Synthesizer.
     agn_nlr_logn: float = 4.0,
     agn_nlr_logZ: float = -2.0,
     **_params,
 ) -> tuple[Array, Array]:
     r"""NLR reprocessed nebular spectrum reproducing Synthesizer's UnifiedAGN.
 
-    Reads the grid's ``/spectra/nebular`` array (continuum + lines) — the exact
-    product Synthesizer's ``UnifiedAGN`` extracts — instead of re-broadening the
+    Reads the grid's ``/spectra/nebular`` array (continuum + lines), the exact
+    product Synthesizer's ``UnifiedAGN`` extracts: instead of re-broadening the
     discrete ``/lines`` table (#694). Isotropic: illuminated by the intrinsic
     bolometric with the grid inclination held at its isotropic node.
 

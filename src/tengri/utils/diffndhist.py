@@ -5,7 +5,7 @@ Vendored from diffsky (Hearin et al.), commit 2024-xx:
 https://github.com/ArgonneCPAC/diffsky/blob/main/diffsky/diffndhist.py
 
 Provides smooth, differentiable histogram operations using the triweight
-kernel — the same kernel used throughout tengri for grid interpolation
+kernel: the same kernel used throughout tengri for grid interpolation
 (see ``utils/interpolation.py``).  While interpolation maps a query point
 to a grid value, histogramming maps a cloud of data points to bin counts.
 

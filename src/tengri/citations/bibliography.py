@@ -1,11 +1,11 @@
 # SPDX-License-Identifier: BSD-3-Clause
-"""``Bibliography`` — a live citation container carried by tengri objects.
+"""``Bibliography``: a live citation container carried by tengri objects.
 
 Each object that performs scientific work (``Galaxy``, ``SEDModel``, a future
 ``Fitter`` wrapper, ``FitResult``) owns a :class:`Bibliography` instance.
 Components register themselves into that bibliography at construction time
 or when they are invoked. Reading the bibliography gives the user exactly
-the citations that *their* configured run requires — no more, no less.
+the citations that *their* configured run requires; no more, no less.
 
 Basic usage
 -----------
@@ -40,7 +40,7 @@ class Bibliography:
         duplicates.
     source : str
         Human-readable label describing what the bibliography is tied to
-        (e.g. ``"Galaxy(preset=starforming)"``) — used in ``report()``.
+        (e.g. ``"Galaxy(preset=starforming)"``); used in ``report()``.
     """
 
     keys: list[str] = field(default_factory=list)
@@ -225,9 +225,9 @@ class Bibliography:
 
         Notes
         -----
-        **JIT-compatible**: no — pure Python string formatting.
+        **JIT-compatible**: no, pure Python string formatting.
 
-        Each citation renders as ``short — role`` on the first line, title
+        Each citation renders as ``short; role`` on the first line, title
         on the second, and DOI / arXiv / upstream-code links on the third.
         The category ordering is stable (framework → ssp → dust → nebular
         → agn → igm → preprocessing → inference → reference_code → other).
@@ -240,12 +240,12 @@ class Bibliography:
         >>> print(bib.report())  # doctest: +SKIP
         Please cite the following when publishing results:
           ── Framework & theory ─────────────────────────────
-            • Cooray et al. (2026, Paper I) — ...
+            • Cooray et al. (2026, Paper I): ...
           ── Stellar populations ────────────────────────────
-            • Hearin et al. (2023) — ...
+            • Hearin et al. (2023): ...
           ── Dust attenuation ───────────────────────────────
-            • Charlot & Fall (2000) — ...
-            • Calzetti et al. (2000) — ...
+            • Charlot & Fall (2000): ...
+            • Calzetti et al. (2000): ...
         """
         cites = self.to_list()
         if not cites:
@@ -275,7 +275,7 @@ class Bibliography:
     def _render_citation(c: Citation, *, index: int | None = None) -> list[str]:
         """Render a single citation into 2-3 output lines."""
         prefix = f"  [{index}] " if index is not None else "    • "
-        out = [f"{prefix}{c.short}  —  {c.role}"]
+        out = [f"{prefix}{c.short} : {c.role}"]
         if c.title:
             out.append(f"        {c.title}")
         bits: list[str] = []
@@ -345,7 +345,7 @@ class Bibliography:
 
         Notes
         -----
-        **JIT-compatible**: no — performs attribute introspection.
+        **JIT-compatible**: no, performs attribute introspection.
 
         Examples
         --------
@@ -478,7 +478,7 @@ class Bibliography:
             igm_model = getattr(igm, "model", None)
             bib.add(*IGM_CITATIONS.get(igm_model, []))
 
-        # AGN sub-components (disc / torus / BLR) — optional on SEDModelConfig.
+        # AGN sub-components (disc / torus / BLR): optional on SEDModelConfig.
         agn = getattr(model_config, "agn", None)
         if agn is not None:
             from tengri.citations.associations import (
@@ -499,7 +499,7 @@ class Bibliography:
         Parameters
         ----------
         backend : str or None
-            Name as passed to :meth:`tengri.Fitter.run` — e.g. ``"map"``,
+            Name as passed to :meth:`tengri.Fitter.run`; e.g. ``"map"``,
             ``"vi"``, ``"mcmc_nuts"``, ``"mcmc_raytrace"``, ``"evidence"``,
             ``"ess"``, ``"pathfinder"``. ``None`` is a silent no-op.
 

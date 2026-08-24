@@ -42,7 +42,7 @@ class Galaxy:
     """User-facing facade around SEDModel + Parameters + Observation + Fitter.
 
     Bundles SSP data, observation, parameters, and model into a single object
-    for simplified one-liner SED fitting. Not a dataclass — it has mutable state
+    for simplified one-liner SED fitting. Not a dataclass: it has mutable state
     (result after fit) and methods. Construction is via classmethods, not
     __init__ directly.
 
@@ -121,7 +121,7 @@ class Galaxy:
         flux_unit: str = "erg/s/cm2/Hz",
         model_config: SEDModelConfig | None = None,
     ) -> Galaxy:
-        """Build a Galaxy from plain arrays — the common entry point.
+        """Build a Galaxy from plain arrays: the common entry point.
 
         Parameters
         ----------
@@ -388,7 +388,7 @@ class Galaxy:
         .. note::
 
            Unlike :meth:`tengri.ForwardModel.fit`, which defaults to
-           ``"vi"``, this facade defaults to ``"map"`` — a point estimate with
+           ``"vi"``, this facade defaults to ``"map"``: a point estimate with
            **no uncertainties**. That difference is deliberate: ``Galaxy`` is
            the beginner-facing shortcut and ``"vi"`` costs ~100 s cold and
            ~20 GB RSS at D=6-7, which is not a reasonable thing to do by
@@ -400,7 +400,7 @@ class Galaxy:
         ----------
         method : str, optional
             Inference method. Default ``"map"``.
-            ``tengri.list_inference_methods()`` is the live list — "map",
+            ``tengri.list_inference_methods()`` is the live list; "map",
             "vi", "vi_linear", "mcmc_nuts", "mcmc_raytrace", "mcmc_hmc",
             "mcmc_dynamic_hmc", "mcmc_adjusted_mclmc", "mcmc_ess", "nss"
             among them.
@@ -589,7 +589,7 @@ class Galaxy:
         -----
         Base citations always include: "tengri", "dsps", "jax".
         Additional keys added based on model_config and inference backend.
-        Designed defensively — handles missing config fields gracefully.
+        Designed defensively: handles missing config fields gracefully.
         """
         # Base components
         citations = ["tengri", "dsps", "jax"]
@@ -706,7 +706,7 @@ class Galaxy:
 
         from tengri.results import FitRecord, FitResult
 
-        # Citation keys for this run — mirror the logic in self._infer_citation_keys()
+        # Citation keys for this run: mirror the logic in self._infer_citation_keys()
         citation_keys = self._infer_citation_keys()
 
         fr = FitResult(
@@ -722,7 +722,7 @@ class Galaxy:
     def load_result(cls, path: str):
         """Load a FitResult previously saved by Galaxy.save.
 
-        Returns the FitResult directly (not a reconstructed Galaxy — the
+        Returns the FitResult directly (not a reconstructed Galaxy; the
         underlying SEDModel and Observation are not part of the HDF5 schema).
 
         Parameters

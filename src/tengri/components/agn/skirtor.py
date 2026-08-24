@@ -19,9 +19,9 @@ All functions are pure JAX and JIT-compilable.
 References
 ----------
 .. [1] M. Stalevski et al., "3D radiative transfer modeling of the dusty
-   torus around AGN — the influence of clumping," MNRAS, 420, 2756 (2012).
+   torus around AGN, the influence of clumping," MNRAS, 420, 2756 (2012).
    arXiv:1109.1286. https://doi.org/10.1111/j.1365-2966.2011.19775.x
-.. [2] M. Stalevski et al., "The dust covering factor in AGN — combining the
+.. [2] M. Stalevski et al., "The dust covering factor in AGN: combining the
    IR torus emission with polar dust component," MNRAS, 458, 2288 (2016).
    arXiv:1602.01954. https://doi.org/10.1093/mnras/stw444
 """
@@ -90,7 +90,7 @@ def _load_grid_arrays(grid_path: str):
 
     Notes
     -----
-    **JIT-compatible**: no — performs file I/O at module load time.
+    **JIT-compatible**: no, performs file I/O at module load time.
     """
     import numpy as np
 
@@ -150,7 +150,7 @@ def _load_grid_arrays(grid_path: str):
     # ``has_radius_ratio`` tells callers whether the grid carries the R axis
     # (6-axis: tau, p, q, oa, radius_ratio, cos_inc) or is a legacy 5-axis grid
     # (tau, p, q, oa, cos_inc). The interpolation helpers drop the R coordinate
-    # from the query point for legacy grids — see ``_match_point_to_axes`` (#772).
+    # from the query point for legacy grids: see ``_match_point_to_axes`` (#772).
     return result
 
 
@@ -178,10 +178,10 @@ def _interpolate_and_normalize(
     r"""Interpolate a template grid and normalize to physical L_ν.
 
     SKIRTOR v3 templates are stored as L_λ-like (the download script does
-    ``disk /= wl`` and normalizes by ``trapezoid(dust, wl)`` — issue #459).
+    ``disk /= wl`` and normalizes by ``trapezoid(dust, wl)``: issue #459).
     The original implementation integrated the L_λ array against the
     frequency grid and treated the output as L_ν, leaving the returned
-    array with L_λ shape — so νL_ν (the visible torus IR bump) peaked at
+    array with L_λ shape: so νL_ν (the visible torus IR bump) peaked at
     ~5 µm instead of the SKIRTOR 30–50 µm thermal bump.
 
     Fix: normalize the bolometric integral in the wavelength variable
@@ -212,7 +212,7 @@ def _interpolate_and_normalize(
 
     Notes
     -----
-    **JIT-compatible**: yes — uses ``resample_template`` and ``jax.vmap``.
+    **JIT-compatible**: yes, uses ``resample_template`` and ``jax.vmap``.
 
     The template is put on the user wavelength grid by
     :func:`~tengri.utils.grid_interp.resample_template`, which interpolates in
@@ -227,10 +227,10 @@ def _interpolate_and_normalize(
     #1851 degeneracy: nearest-neighbor-like behavior over ~67.5% of the range.
     Re-baselining it to the corrected index-space path requires re-validating
     silicate features, golden-sample photometry, and parity tests against
-    CIGALE — see #1911.
+    CIGALE: see #1911.
     """
     # Use default index_space_interp=None (physical-space path) for backward
-    # compatibility. The cos_inc axis carries the #1851 degeneracy — see note above.
+    # compatibility. The cos_inc axis carries the #1851 degeneracy: see note above.
     template = interp_nd_triweight(grid_jax, axes, edges, _match_point_to_axes(point, axes))
     # Bolometric integral on the *template* wavelength grid (full UV–FIR
     # coverage). Using the user wave grid would clip the FIR tail and
@@ -239,7 +239,7 @@ def _interpolate_and_normalize(
     #
     # ``wave_grid`` is monotonically ascending (set at load time in
     # ``_load_grid_arrays``), so trapezoid integrates correctly without
-    # an explicit ``argsort`` — the prior ``trapezoid(sed[idx_sort],
+    # an explicit ``argsort``, the prior ``trapezoid(sed[idx_sort],
     # nu[idx_sort])`` pattern existed because ``nu = c/λ`` was
     # *descending* and needed reordering. Don't re-add a sort here.
     integral_lam = jnp.trapezoid(template, wave_grid)
@@ -251,11 +251,11 @@ def _interpolate_and_normalize(
 
 
 class SKIRTORGrid(NamedTuple):
-    """Threadable SKIRTOR template arrays — a JAX pytree.
+    """Threadable SKIRTOR template arrays, a JAX pytree.
 
     Holds the interpolation grid as pure array data so it threads through
     ``jax.jit`` as a runtime input (small compile), instead of baking into the
-    trace as a constant or — worse — being threaded as a Python closure, which
+    trace as a constant or (worse) being threaded as a Python closure, which
     JAX cannot treat as a traced argument (issue #1198).
 
     Attributes
@@ -332,7 +332,7 @@ agn_oa_skirtor, agn_radius_ratio, agn_cos_inc, agn_torus_frac : float
 
     Notes
     -----
-    **JIT/grad-safe**: yes — triweight interpolation over threaded arrays.
+    **JIT/grad-safe**: yes, triweight interpolation over threaded arrays.
     """
     l_scale = 10.0**agn_log_lbol * _L_SUN * agn_torus_frac
     point = (
@@ -393,10 +393,10 @@ def create_skirtor_from_grid(grid_path: str) -> Callable:
 
     Notes
     -----
-    **JIT-compatible**: yes — the returned function is pure JAX.
+    **JIT-compatible**: yes, the returned function is pure JAX.
     Grid loading is cached via ``@functools.cache``.
 
-    **Gradient-safe**: yes — triweight interpolation is fully differentiable.
+    **Gradient-safe**: yes, triweight interpolation is fully differentiable.
 
     Supports v2 (total-only) and v3 (separate disk/dust) HDF5 layouts.
     When v3 is available, use ``create_skirtor_components_from_grid``
@@ -501,10 +501,10 @@ def create_skirtor_components_from_grid(grid_path: str) -> Callable:
 
     Notes
     -----
-    **JIT-compatible**: yes — the returned function is pure JAX.
+    **JIT-compatible**: yes, the returned function is pure JAX.
     Grid loading is cached via ``@functools.cache``.
 
-    **Gradient-safe**: yes — triweight interpolation is fully differentiable.
+    **Gradient-safe**: yes, triweight interpolation is fully differentiable.
 
     The separate components enable:
 
@@ -527,7 +527,7 @@ def create_skirtor_components_from_grid(grid_path: str) -> Callable:
             "or use create_skirtor_from_grid() for total-only mode."
         )
 
-    # See note in create_skirtor_from_grid — wrap conversion in
+    # See note in create_skirtor_from_grid: wrap conversion in
     # ensure_compile_time_eval to keep the cached closure trace-safe.
     with jax.ensure_compile_time_eval():
         disk_jax = jnp.array(raw["disk"])
@@ -629,7 +629,7 @@ def skirtor_disc_dust_ratio(
     analytic disc shape is renormalized to the **face-on** SKIRTOR disc
     integral ``∫disk(i=0)``, reweighted by the inclination ratio
     ``disk(i)/disk(0)``, reddened, and the **anisotropy factor**
-    ``η(i) = cos(i)(1+2cos(i))/3`` (= 0.789 at i=30°) applied — then divided
+    ``η(i) = cos(i)(1+2cos(i))/3`` (= 0.789 at i=30°) applied: then divided
     by the SKIRTOR dust integral ``∫dust(i)``::
 
         R = η(i) · ∫[ŝ·∫disk(0) · disk(i)/disk(0) · ext_fac] dλ / ∫dust(i) dλ
@@ -664,13 +664,13 @@ def skirtor_disc_dust_ratio(
         for reweighting the disc output spectrum. Ones if the grid is
         unavailable.
     R_faceon : ndarray, scalar
-        Face-on UN-reddened disc/dust ratio ``∫disk(i=0)/∫dust(i)`` — the
+        Face-on UN-reddened disc/dust ratio ``∫disk(i=0)/∫dust(i)``: the
         ratio the polar ``l_ext`` proxy needs (CIGALE ``l_ext =
         geom·∫AGN1.disk·(1-ext_fac)``). 1.0 if the grid is unavailable.
 
     Notes
     -----
-    **JIT-compatible**: yes — grid interpolation is pure JAX.
+    **JIT-compatible**: yes, grid interpolation is pure JAX.
 
     **Reference**: Implements CIGALE ``skirtor2016.py`` (Boquien+2019).
     """
@@ -691,7 +691,7 @@ def skirtor_disc_dust_ratio(
             jnp.asarray(agn_radius_ratio),
             jnp.asarray(cos_inc),
         )
-        # RAW interpolated L_λ template on the NATIVE grid — NO per-component
+        # RAW interpolated L_λ template on the NATIVE grid; NO per-component
         # normalization (preserves the disk/dust ratio) and NO wave resampling
         # (CIGALE integrates lumin_disk/lumin_dust on the SKIRTOR template grid;
         # resampling onto the user grid distorts the integrals → R ~10% off).
@@ -718,7 +718,7 @@ def skirtor_disc_dust_ratio(
     int_dust = jnp.maximum(jnp.trapezoid(dust_i_n, wave_grid), 1e-30)
     eta = agn_cos_inc * (1.0 + 2.0 * agn_cos_inc) / 3.0
     R = eta * jnp.trapezoid(sk_disk_reddened, wave_grid) / int_dust
-    # ``R_faceon`` = ∫AGN1.disk(face-on, UN-reddened) / ∫dust — the ratio the
+    # ``R_faceon`` = ∫AGN1.disk(face-on, UN-reddened) / ∫dust, the ratio the
     # polar ``l_ext`` proxy needs (CIGALE l_ext = geom·∫AGN1.disk·(1-ext_fac)),
     # distinct from ``R`` (the reddened, inclination-weighted *observed* disc
     # used for the disc output bolometric).
@@ -853,7 +853,7 @@ def create_skirtor_raw_total_from_grid(grid_path: str) -> Callable:
 
     The v4 grid (``scripts/build_skirtor_raw_grid.py``) carries the full
     ``(tau_97, p, q, opening_angle, radius_ratio, inclination)`` axes and stores
-    the **radiative-transfer total** (``.dat`` column 2) — the disc + torus as
+    the **radiative-transfer total** (``.dat`` column 2), the disc + torus as
     Stalevski (2016) computed them, with no analytic-disc substitution. The
     returned function interpolates that total at any point (so a fixed parameter
     is just a slice) and scales it to the requested bolometric luminosity.
@@ -872,7 +872,7 @@ def create_skirtor_raw_total_from_grid(grid_path: str) -> Callable:
 
     Notes
     -----
-    **JIT-compatible**: yes — pure-JAX triweight interpolation; grid load cached.
+    **JIT-compatible**: yes, pure-JAX triweight interpolation; grid load cached.
     """
     import h5py
 
@@ -974,7 +974,7 @@ def create_skirtor_disc_attenuation_from_grid(grid_path: str) -> Callable:
 
     Notes
     -----
-    **JIT-compatible**: yes — triweight interpolation in JAX.
+    **JIT-compatible**: yes, triweight interpolation in JAX.
 
     **Gradient-safe**: yes.
     """
@@ -1062,7 +1062,7 @@ agn_radius_ratio, agn_cos_inc : float, optional
 
     Notes
     -----
-    **JIT-compatible**: yes. **Gradient-safe**: yes — the triweight kernel is
+    **JIT-compatible**: yes. **Gradient-safe**: yes, the triweight kernel is
     C2-continuous.
     """
     if grid is None:
@@ -1128,7 +1128,7 @@ def load_skirtor_disc_atten_grid() -> SKIRTORDiscAttenGrid | None:
     Returns
     -------
     SKIRTORDiscAttenGrid or None
-        ``None`` for a v2 grid, which carries no separate disc column —
+        ``None`` for a v2 grid, which carries no separate disc column;
         the attenuation is then identity.
 
     Raises
@@ -1152,8 +1152,8 @@ def skirtor_disc_attenuation(*args, _template: SKIRTORDiscAttenGrid | None = Non
     ----------
     _template : SKIRTORDiscAttenGrid, optional
         Pre-loaded disc arrays, threaded in as a JIT argument by the forward
-        model. When ``None`` (default) the grid is loaded from disk and — if
-        this call happens under trace — baked into the graph as constants.
+        model. When ``None`` (default) the grid is loaded from disk and: if
+        this call happens under trace: baked into the graph as constants.
     """
     if _template is not None:
         return skirtor_disc_attenuation_from_grid(_template, *args, **kwargs)
@@ -1203,7 +1203,7 @@ def skirtor_sed(*args, **kwargs):
 
     Notes
     -----
-    **JIT-compatible**: yes — delegates to cached grid function or
+    **JIT-compatible**: yes, delegates to cached grid function or
     pre-loaded template (when _template is threaded).
 
     See ``create_skirtor_from_grid`` for full parameter documentation and
@@ -1267,7 +1267,7 @@ def skirtor_components(*args, **kwargs) -> SKIRTORComponents:
 
     Notes
     -----
-    **JIT-compatible**: yes — delegates to cached grid function or
+    **JIT-compatible**: yes, delegates to cached grid function or
     pre-loaded template (when _template is threaded).
     """
     # Allow the template to be threaded as a JIT runtime input
@@ -1289,7 +1289,7 @@ def skirtor_components(*args, **kwargs) -> SKIRTORComponents:
     return fn(*args, **kwargs)
 
 
-# Deprecated: "_analytic" was a misnomer — SKIRTOR is a template-grid
+# Deprecated: "_analytic" was a misnomer; SKIRTOR is a template-grid
 # interpolation, not a closed-form model. Use skirtor_sed. Removed in v1.0.
 skirtor_analytic = deprecated_alias(
     skirtor_sed, old_name="skirtor_analytic", new_name="skirtor_sed"

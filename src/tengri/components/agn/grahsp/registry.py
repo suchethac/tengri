@@ -86,7 +86,7 @@ def grahsp(
     disc_mdot: str = _DEFAULT_DISC_MDOT,
     **_kwargs,
 ) -> jnp.ndarray:
-    r"""GRAHSP AGN SED (Buchner+ 2024) — registered AGN_MODELS entry point.
+    r"""GRAHSP AGN SED (Buchner+ 2024): registered AGN_MODELS entry point.
 
     Thin wrapper around :func:`compute_grahsp_sed` matching the
     AGN_MODELS registry signature::

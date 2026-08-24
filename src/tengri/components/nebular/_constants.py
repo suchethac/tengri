@@ -13,7 +13,7 @@ for the rationale.
 """
 
 from tengri.utils.physics_constants import (
-    AA_TO_CM as _AA_TO_CM,  # noqa: F401 — re-exported for ionizing_spectrum.py
+    AA_TO_CM as _AA_TO_CM,  # noqa: F401  (re-exported for ionizing_spectrum.py)
     C_AA as _C_AA,  # noqa: F401
     C_CGS as _C_CGS,  # noqa: F401
     H_PLANCK as _H_PLANCK,  # noqa: F401

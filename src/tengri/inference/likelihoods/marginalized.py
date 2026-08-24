@@ -3,10 +3,10 @@
 
 Wraps two existing math primitives:
 
-- :class:`CalibrationMarginalizedLikelihood` —
+- :class:`CalibrationMarginalizedLikelihood`,
   :func:`tengri.observation.calibration.marginalize_calibration`
   (Chebyshev polynomial calibration integrated out analytically).
-- :class:`ELineMarginalizedLikelihood` —
+- :class:`ELineMarginalizedLikelihood`,
   :func:`tengri.observation.eline_marginalization.marginalize_emission_lines`
   (linear emission-line amplitudes integrated out analytically).
 
@@ -42,7 +42,7 @@ __all__ = [
 
 
 # ─────────────────────────────────────────────────────────────────────
-# Calibration polynomial — Chebyshev marginalization
+# Calibration polynomial, Chebyshev marginalization
 # ─────────────────────────────────────────────────────────────────────
 
 
@@ -78,7 +78,7 @@ class CalibrationMarginalizedLikelihood:
 
     Notes
     -----
-    **JIT-compatible**: yes — ``n_poly`` is a static argument of the
+    **JIT-compatible**: yes, ``n_poly`` is a static argument of the
     underlying primitive.
 
     Returns the *positive* marginal log-likelihood (data term only;
@@ -126,7 +126,7 @@ class CalibrationMarginalizedLikelihood:
 
 
 # ─────────────────────────────────────────────────────────────────────
-# Emission-line amplitudes — analytic marginalization
+# Emission-line amplitudes, analytic marginalization
 # ─────────────────────────────────────────────────────────────────────
 
 
@@ -148,13 +148,13 @@ class ELineMarginalizedLikelihood:
     fnu_err : ndarray, shape (n_pixels,)
         1-σ uncertainties.
     design_matrix : ndarray, shape (n_pixels, n_lines)
-        Per-line shape evaluated at every pixel — built once via
+        Per-line shape evaluated at every pixel, built once via
         :func:`tengri.observation.eline_marginalization.build_eline_design_matrix`
         (or the broad-line / doublet-constrained variants). Held on
         ``self`` because line wavelengths and LSF widths are fixed.
     prior_variance : ndarray | None, keyword-only
         Per-line prior variance on the amplitude. ``None`` → flat
-        (1e10) — the original primitive's default.
+        (1e10), the original primitive's default.
     channel : str, keyword-only
         Prediction-dict key. Default ``"spec_fnu"``.
 
@@ -225,7 +225,7 @@ class ELineMarginalizedLikelihood:
 
 
 # ─────────────────────────────────────────────────────────────────────
-# Emission-line amplitudes — Cloudy-prior marginalization
+# Emission-line amplitudes, Cloudy-prior marginalization
 # ─────────────────────────────────────────────────────────────────────
 
 
@@ -236,7 +236,7 @@ class CloudyELineMarginalizedLikelihood:
     Same conjugate-Gaussian marginalization as
     :class:`ELineMarginalizedLikelihood`, but the per-line prior
     means come from a Cloudy grid evaluated at the current
-    ``(log_z, neb_logU)`` — both read from ``params`` at log-prob
+    ``(log_z, neb_logU)``, both read from ``params`` at log-prob
     time, so the prior shifts with the sampler. ``prior_width_dex``
     sets the prior width around the Cloudy expectation.
 
@@ -246,7 +246,7 @@ class CloudyELineMarginalizedLikelihood:
         Observed spectrum and 1-σ uncertainties [erg/s/cm²/Hz].
     design_matrix_builder : callable, keyword-only
         Closure that takes the params dict and returns a fresh
-        ``(n_pixels, n_lines)`` design matrix — typically wraps
+        ``(n_pixels, n_lines)`` design matrix, typically wraps
         ``tengri.inference.likelihood._build_eline_G_eff``.
         Per-call rebuild is required because line wavelengths shift
         with redshift.
@@ -309,7 +309,7 @@ class CloudyELineMarginalizedLikelihood:
 
 
 # ─────────────────────────────────────────────────────────────────────
-# Emission-line amplitudes — explicit free-parameter fitting
+# Emission-line amplitudes, explicit free-parameter fitting
 # ─────────────────────────────────────────────────────────────────────
 
 
@@ -339,7 +339,7 @@ class ELineFittedLikelihood:
 
     Notes
     -----
-    **JIT-compatible**: yes — the amplitude lookup is a simple list
+    **JIT-compatible**: yes, the amplitude lookup is a simple list
     comprehension over a static tuple.
     """
 
@@ -407,13 +407,13 @@ class CalibrationELineMarginalizedLikelihood:
     wavelength : ndarray, shape (n_pixels,)
         Wavelength grid for the Chebyshev calibration basis [Å].
     design_matrix_builder : callable, keyword-only
-        Per-call closure rebuilding the line design matrix. Required —
+        Per-call closure rebuilding the line design matrix. Required,
         line wavelengths shift with redshift. See
         :class:`ELineMarginalizedLikelihood`.
     n_poly, prior_sigma : keyword-only
         Calibration polynomial: order and per-coefficient prior σ.
     eline_prior_type : str, keyword-only
-        ``"flat"`` (default — Gaussian with per-line variance
+        ``"flat"`` (default, Gaussian with per-line variance
         ``eline_prior_sigma**2``) or ``"cloudy"`` (Cloudy-grid prior
         evaluated at ``params["met_logzsol"]`` /
         ``params["neb_logU"]``).

@@ -54,7 +54,7 @@ from tengri.components.agn.blr import (
 # emission lines; Fe II flows through the runtime template path.
 _FE2_GROUPS = np.empty((0, 3), dtype=np.float64)
 
-# Axis parameters: BLR Gaussian composer has NO grid axes — all parameters are
+# Axis parameters: BLR Gaussian composer has NO grid axes; all parameters are
 # runtime. This tuple is empty; precompute returns only the filter table.
 AXIS_PARAMS: tuple[str, ...] = ()
 
@@ -104,7 +104,7 @@ def precompute(
 
     Notes
     -----
-    **JIT-compatible**: no — this is a build-time function using NumPy.
+    **JIT-compatible**: no, this is a build-time function using NumPy.
 
     **Line profiles**: Emission lines and Fe II groups are integrated as delta
     functions at their center wavelengths (since runtime widths vary). The
@@ -193,9 +193,9 @@ def build_lookup(preint: dict, **kwargs: Any) -> dict:
 
     Notes
     -----
-    **JIT-compatible**: yes — the returned function is fully JAX-native.
+    **JIT-compatible**: yes, the returned function is fully JAX-native.
 
-    **Gradient-safe**: yes — Gaussian line profile and filter projection
+    **Gradient-safe**: yes. Gaussian line profile and filter projection
     are fully differentiable.
 
     **Runtime parameters (NOT precomputed)**:

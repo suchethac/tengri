@@ -15,8 +15,8 @@ Conventions
 
 References
 ----------
-Oke & Gunn 1983, ApJ, 266, 713 — AB magnitude zeropoint
-Blanton & Roweis 2007 — Vega offsets (Table 3, 5)
+Oke & Gunn 1983, ApJ, 266, 713: AB magnitude zeropoint
+Blanton & Roweis 2007: Vega offsets (Table 3, 5)
 """
 
 from __future__ import annotations
@@ -41,7 +41,7 @@ from tengri.utils.scale import pow10, representable_floor
 #: are of order 1-100 and perfectly representable (#1837).
 #:
 #: ``TEN_PC_CM**2 = 9.52e38`` overflows float32 *at the square*, one step before
-#: the expression it appears in — so the linear form cannot be rescued by
+#: the expression it appears in: so the linear form cannot be rescued by
 #: reordering the multiplication.
 LOG10_MAGGIES_ZP_CGS: float = math.log10(MAGGIES_ZP_CGS)
 LOG10_FOUR_PI_TEN_PC_CM2: float = math.log10(4.0 * math.pi * TEN_PC_CM**2)
@@ -111,7 +111,7 @@ def fnu_to_ab_mag(fnu_cgs: jnp.ndarray) -> jnp.ndarray:
 
     References
     ----------
-    Oke & Gunn 1983, ApJ, 266, 713 — definition of AB system
+    Oke & Gunn 1983, ApJ, 266, 713: definition of AB system
     """
     fnu_safe = jnp.maximum(fnu_cgs, representable_floor(1e-300))
     return -2.5 * (jnp.log10(fnu_safe) - LOG10_MAGGIES_ZP_CGS)
@@ -190,8 +190,8 @@ def lnu_to_absolute_ab_mag(lnu: jnp.ndarray) -> jnp.ndarray:
 
     The distance 10 pc is defined in `tengri.utils.physics_constants.TEN_PC_CM`.
     The geometric factor is subtracted in the log domain: ``4π (10 pc)^2`` is
-    1.196e40 and its float32 evaluation is ``inf`` — already at ``TEN_PC_CM**2``
-    — so the linear form returned ``inf`` for every input, despite M_UV being
+    1.196e40 and its float32 evaluation is ``inf`` (already at ``TEN_PC_CM**2``)
+    so the linear form returned ``inf`` for every input, despite M_UV being
     ~-17 (#1837). Clamping in the log domain is exactly equivalent to the
     previous linear clamp because ``log10`` is monotone:
     ``log10(max(x, f)) == max(log10(x), log10(f))``.
@@ -230,14 +230,14 @@ def absolute_ab_mag_to_lnu(mag_abs: jnp.ndarray) -> jnp.ndarray:
 
     The distance 10 pc is defined in `tengri.utils.physics_constants.TEN_PC_CM`.
     The geometric factor is folded into the exponent for the reason given in
-    :func:`lnu_to_absolute_ab_mag` — ``4π (10 pc)^2`` is not representable in
+    :func:`lnu_to_absolute_ab_mag`: ``4π (10 pc)^2`` is not representable in
     float32, so the multiplicative form returned ``inf`` for every input (#1837).
 
     References
     ----------
     Oke & Gunn 1983, ApJ, 266, 713
     """
-    # L_ν = f_ν × 4π d², with f_ν = 10^(-0.4(M + 48.6)) — one exponent, so no
+    # L_ν = f_ν × 4π d², with f_ν = 10^(-0.4(M + 48.6)): one exponent, so no
     # intermediate leaves float32 range.
     return pow10(-0.4 * mag_abs + LOG10_MAGGIES_ZP_CGS + LOG10_FOUR_PI_TEN_PC_CM2)
 
@@ -425,12 +425,12 @@ not filter-registry ids (``"sdss_r"``). Passing a registry id raises
 ``KeyError``; a filter-registry lookup for the offset does not exist.
 
 Available as ``tengri.units.AB_VEGA_OFFSETS`` as well as from
-``tengri.utils`` — it is the only argument ``ab_to_vega`` and ``vega_to_ab``
+``tengri.utils``: it is the only argument ``ab_to_vega`` and ``vega_to_ab``
 take besides the magnitude, so it lives wherever they do (#1613).
 
 Sources
 -------
-Blanton & Roweis 2007, AJ, 133, 734 — Table 3, 5 (SDSS and Johnson/Bessel).
+Blanton & Roweis 2007, AJ, 133, 734: Table 3, 5 (SDSS and Johnson/Bessel).
 """
 
 

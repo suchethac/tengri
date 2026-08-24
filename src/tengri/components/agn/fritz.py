@@ -83,7 +83,7 @@ def _load_grid_arrays(grid_path: str):
 
     Notes
     -----
-    **JIT-compatible**: no — performs file I/O at module load time.
+    **JIT-compatible**: no, performs file I/O at module load time.
     """
     import numpy as np
 
@@ -142,7 +142,7 @@ def _interpolate_and_normalize(
 
     Notes
     -----
-    **JIT-compatible**: yes — uses ``jnp.interp`` and ``jax.vmap``.
+    **JIT-compatible**: yes, uses ``jnp.interp`` and ``jax.vmap``.
     """
     # Fritz tau and r_dust axes are non-uniform (I6 fix #1851).
     # Use index-space interpolation for correct gradients throughout the range.
@@ -193,7 +193,7 @@ def load_fritz_grid(grid_path: str) -> FritzGrid:
 
     Notes
     -----
-    **JIT-compatible**: no — performs HDF5 I/O. Call outside the trace.
+    **JIT-compatible**: no, performs HDF5 I/O. Call outside the trace.
 
     ``jax.ensure_compile_time_eval`` keeps the derived edge arrays concrete
     even when this first runs inside a trace; without it the
@@ -257,7 +257,7 @@ def fritz_sed_from_grid(
 
     Notes
     -----
-    **JIT-compatible**: yes. **Gradient-safe**: yes — the triweight kernel
+    **JIT-compatible**: yes. **Gradient-safe**: yes, the triweight kernel
     is C2-continuous across all six axes.
     """
     l_scale = 10.0**agn_log_lbol * _L_SUN * agn_torus_frac
@@ -311,10 +311,10 @@ def create_fritz_from_grid(grid_path: str) -> Callable:
 
     Notes
     -----
-    **JIT-compatible**: yes — the returned function is pure JAX.
+    **JIT-compatible**: yes, the returned function is pure JAX.
     Grid loading is cached via ``@functools.cache``.
 
-    **Gradient-safe**: yes — triweight interpolation is fully differentiable.
+    **Gradient-safe**: yes, triweight interpolation is fully differentiable.
 
     References
     ----------
@@ -415,10 +415,10 @@ def create_fritz_components_from_grid(grid_path: str) -> Callable:
 
     Notes
     -----
-    **JIT-compatible**: yes — the returned function is pure JAX.
+    **JIT-compatible**: yes, the returned function is pure JAX.
     Grid loading is cached via ``@functools.cache``.
 
-    **Gradient-safe**: yes — triweight interpolation is fully differentiable.
+    **Gradient-safe**: yes, triweight interpolation is fully differentiable.
 
     The separate components enable applying different extinction laws to
     disk vs. dust and computing anisotropy corrections independently.
@@ -514,17 +514,17 @@ def _find_fritz_grid() -> str:
     from tengri._data_setup import find_data
 
     # Must consult $TENGRI_DATA_DIR before falling through to the download
-    # below (#1431) — otherwise a user whose grids live off the source tree
+    # below (#1431): otherwise a user whose grids live off the source tree
     # re-fetches a file they already have.
     found = find_data(*_GRID_SEARCH_PATHS)
     if found is not None:
         return str(found)
 
-    # Not on disk — try the public host (mirrors the SSP auto-fetch path).
+    # Not on disk: try the public host (mirrors the SSP auto-fetch path).
     try:
         from tengri._data_setup import download_template
 
-        # dest defaults to download_dir(), which is data_dirs()[0] — so the
+        # dest defaults to download_dir(), which is data_dirs()[0]: so the
         # loader above finds the file next time. The previous explicit
         # repo-root dest wrote where $TENGRI_DATA_DIR users never look.
         return str(download_template(_GRID_FILENAME))
@@ -609,7 +609,7 @@ def fritz_sed(*args, **kwargs):
 
     Notes
     -----
-    **JIT-compatible**: yes — delegates to cached grid function or
+    **JIT-compatible**: yes, delegates to cached grid function or
     pre-loaded template (when _template is threaded).
 
     See ``create_fritz_from_grid`` for full parameter documentation and
@@ -662,7 +662,7 @@ def fritz_components(*args, **kwargs) -> FritzComponents:
 
     Notes
     -----
-    **JIT-compatible**: yes — delegates to cached grid function or
+    **JIT-compatible**: yes, delegates to cached grid function or
     pre-loaded template (when _template is threaded).
     """
     _template = kwargs.pop("_template", None)
@@ -674,6 +674,6 @@ def fritz_components(*args, **kwargs) -> FritzComponents:
     return fn(*args, **kwargs)
 
 
-# Deprecated: "_analytic" was a misnomer — Fritz+2006 is a 6D template-grid
+# Deprecated: "_analytic" was a misnomer; Fritz+2006 is a 6D template-grid
 # interpolation, not a closed-form model. Use fritz_sed. Removed in v1.0.
 fritz_analytic = deprecated_alias(fritz_sed, old_name="fritz_analytic", new_name="fritz_sed")

@@ -185,7 +185,7 @@ def register_filter(
     Shadowing built-in curves (a name that already exists in ``FILTER_REGISTRY``,
     SVO display stems, or ``SYNTHETIC_BAND_REGISTRY``) requires explicit
     ``overwrite=True`` to prevent accidental collisions. This is a deliberate
-    gate — the default behavior keeps user registrations from silently hiding
+    gate: the default behavior keeps user registrations from silently hiding
     critical built-in data.
 
     **Immutability**: The returned :class:`FilterCurve` is immutable. The
@@ -376,7 +376,7 @@ def _load_filter_from_directory(name: str) -> FilterCurve | None:
 
     Notes
     -----
-    This route is reproducible across machines — a config referring to
+    This route is reproducible across machines: a config referring to
     ``"my_band"`` resolves anywhere the directory is present.
     """
     filter_dirs = os.environ.get("TENGRI_FILTER_DIR")
@@ -441,7 +441,7 @@ def load_filter_from_dsps_transmission_curve(
     -----
     **Unit verification**: DSPS ``TransmissionCurve`` documents wavelengths as
     λ/Å. This function validates that assumption and warns if the range looks
-    incorrect. Getting this wrong is a silent, catastrophic error — verify
+    incorrect. Getting this wrong is a silent, catastrophic error, so verify
     the conversion against the DSPS source, never assume.
 
     Examples

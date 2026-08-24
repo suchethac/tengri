@@ -1,5 +1,5 @@
 # SPDX-License-Identifier: BSD-3-Clause
-"""DESI spectrum reader — per-camera grids, fluxes, and resolution matrices.
+"""DESI spectrum reader: per-camera grids, fluxes, and resolution matrices.
 
 DESI delivers each target as three independently-extracted camera spectra
 (b/r/z), each on its own wavelength grid and each with its own resolution
@@ -8,8 +8,8 @@ operator stored as a ``(n_diag, n_pix)`` band array (Bolton & Schlegel 2010
 them into one sorted grid interleaves pixels whose line-spread functions differ
 and destroys the per-pixel correspondence the resolution operator requires.
 This module therefore keeps the cameras separate
-(:func:`read_desi_cameras`) and concatenates them in *camera order* — never
-sorted — so a block-diagonal operator
+(:func:`read_desi_cameras`) and concatenates them in *camera order*; never
+sorted: so a block-diagonal operator
 (:func:`~tengri.observation.banded.block_diagonal_bands`) describes the result
 exactly.
 
@@ -159,7 +159,7 @@ def _row_of(array: np.ndarray, row: int, n_pix: int, *, what: str = "spectrum") 
             )
         return array
     if array.shape[-1] != n_pix and array.shape[0] == n_pix:
-        # (n_pix, ...) rather than (n_spec, n_pix) — no target axis to select.
+        # (n_pix, ...) rather than (n_spec, n_pix): no target axis to select.
         return array
     if not 0 <= row < array.shape[0]:
         raise ValueError(f"row={row} is out of range: this file holds {array.shape[0]} spectra")
@@ -283,7 +283,7 @@ def read_desi_cameras(
 
     Notes
     -----
-    **JIT-compatible**: no — file I/O.
+    **JIT-compatible**: no, file I/O.
 
     Fluxes are scaled by the ``BUNIT`` the FLUX HDU declares (DESI ships
     ``10**-17 erg/(s cm2 Angstrom)``), so the returned arrays are in
@@ -328,7 +328,7 @@ def desi_resolution_matrix(cameras: tuple[DesiCamera, ...]):
     Raises
     ------
     ValueError
-        If any camera carries no resolution data — a partial operator would
+        If any camera carries no resolution data; a partial operator would
         silently apply no LSF to the cameras that lack one.
 
     Notes
@@ -361,7 +361,7 @@ def desi_spectroscopy(cameras: tuple[DesiCamera, ...], **kwargs):
 
     The wavelength grid is the camera grids concatenated **in camera order**
     (never sorted), and the instrument response is the block-diagonal resolution
-    operator over that grid — which replaces the Gaussian ``apply_lsf`` in
+    operator over that grid; which replaces the Gaussian ``apply_lsf`` in
     projection (#1163).
 
     Parameters
@@ -380,7 +380,7 @@ def desi_spectroscopy(cameras: tuple[DesiCamera, ...], **kwargs):
     ------
     ValueError
         If a flux-conserving ``resample`` mode is requested on a grid whose
-        cameras overlap — the bin-integral resampler needs a strictly
+        cameras overlap; the bin-integral resampler needs a strictly
         increasing grid, and the overlap makes it decrease at the seams.
 
     Notes
@@ -448,7 +448,7 @@ def read_desi(
 
     Notes
     -----
-    **JIT-compatible**: no — file I/O and astropy required.
+    **JIT-compatible**: no; file I/O and astropy required.
 
     Fluxes are scaled by the declared ``BUNIT`` (DESI: ``10**-17 erg/(s cm2
     Angstrom)``). Files that declare no ``BUNIT`` pass through unscaled.

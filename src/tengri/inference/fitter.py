@@ -110,7 +110,7 @@ _MANY_EVAL_SAMPLERS = frozenset(
 def _prewarm_logger():
     """Logger for the best-effort prewarm paths.
 
-    Prewarm legitimately catches everything — any exception a real fit can
+    Prewarm legitimately catches everything, any exception a real fit can
     raise can surface during warmup, and narrowing the type would let some
     escape and abort a run that was going to succeed. So the catch stays broad
     and the failure becomes *visible* instead: a warmup that silently stopped
@@ -139,8 +139,8 @@ def _warn_if_exact_forward_path(model, backend_name: str) -> None:
     fit is already routed through the LUT and this stays silent; it fires only
     when the exact path is genuinely in use (e.g. ``Fitter(..., approx=None)``).
 
-    Ask ``model.approx`` — the public accessor both SEDModel and ForwardModel
-    implement — never an inner attribute. ``Fitter.model`` is a ForwardModel,
+    Ask ``model.approx``, the public accessor both SEDModel and ForwardModel
+    implement, never an inner attribute. ``Fitter.model`` is a ForwardModel,
     which does not carry the lowered ``_approx`` dict itself; reading it off the
     wrapper silently yields "exact" and would warn on every wrapped model. The
     accessor delegates to the inner SED, so the question has one spelling and
@@ -166,7 +166,7 @@ def _warn_if_exact_forward_path(model, backend_name: str) -> None:
 # Canonical method names (public API)
 _CANONICAL_METHODS = {
     # --- Variational inference: 6 canonical names ---
-    "vi_nonlinear_fast",  # NIFTy geoVI, no logging overhead — default
+    "vi_nonlinear_fast",  # NIFTy geoVI, no logging overhead, default
     "vi_linear_fast",  # NIFTy MGVI, no logging overhead
     "vi_nonlinear",  # NIFTy geoVI, standard (with logging)
     "vi_linear",  # NIFTy MGVI, standard (with logging)
@@ -196,13 +196,13 @@ def _maybe_warn_legacy_sedmodel(model) -> None:
     """Nudge users from ``Fitter(sed_model, ...)`` to ``Fitter(forward, ...)``.
 
     Inference is canonically through :class:`ForwardModel` (issue #211).
-    Passing a bare :class:`SEDModel` keeps working — it's the legacy
-    pattern most existing notebooks use — but emits a one-shot
+    Passing a bare :class:`SEDModel` keeps working, it's the legacy
+    pattern most existing notebooks use, but emits a one-shot
     :class:`DeprecationWarning` pointing at the canonical surface.
 
     :class:`ForwardModel` instances pass through silently (they ARE
     the canonical surface). Anything else (a likelihood Protocol, a
-    test stub, …) also passes through silently — we don't want to
+    test stub, …) also passes through silently, we don't want to
     warn on legitimate non-SEDModel uses.
     """
     try:
@@ -264,7 +264,7 @@ def _maybe_extract_batched_data(model):
     from ``pop.batched_data()``. Lets users write
     ``Fitter(forward).run('vi')`` without manually stacking.
 
-    Explicit ``data=`` and ``noise=`` always override this default —
+    Explicit ``data=`` and ``noise=`` always override this default,
     auto-extraction only fires when both are ``None``.
     """
     pop_sed = _population_sed(model)
@@ -315,7 +315,7 @@ def resolve_method(method: str, emit_warning: bool = True) -> str:
 
 
 #: Constructor parameters the convenience fit surfaces manage themselves
-#: (positionally or via their own named parameters) — never routed from a
+#: (positionally or via their own named parameters), never routed from a
 #: surface's ``**kwargs``.
 # Names the fit surface supplies from its own call signature. These can never be
 # taken from ``**kwargs`` -- ``fit(data, noise, ...)`` already owns them.
@@ -341,7 +341,7 @@ def _model_catalog_z_range(model):
     """The model's ``catalog_z_range`` (runtime-redshift LUT span), or ``None``.
 
     Reads it from a ``ForwardModel`` (via its population's SED) or a bare
-    ``SEDModel`` — the same resolution the catalog engine uses.
+    ``SEDModel``, the same resolution the catalog engine uses.
     """
     if hasattr(model, "populations"):
         try:
@@ -382,9 +382,9 @@ def split_fitter_kwargs(kwargs):
     """Split a fit-surface ``**kwargs`` dict into (constructor, run) halves (#1378).
 
     The convenience surfaces (``ForwardModel.fit``, ``SEDModel.fit``) accept one
-    ``**kwargs``; parameters declared by ``Fitter.__init__`` — e.g.
+    ``**kwargs``; parameters declared by ``Fitter.__init__``, e.g.
     ``calibration_marginalize``, ``cal_n_poly``, ``eline_marginalize``,
-    ``likelihood`` — belong to construction (spec #1320 §7 teaches them at the
+    ``likelihood``, belong to construction (spec #1320 §7 teaches them at the
     fit call), everything else to :meth:`Fitter.run`. The allowlist is derived
     from the live constructor signature so it cannot drift when the
     constructor gains parameters. Parameters the surfaces manage themselves
@@ -415,7 +415,7 @@ def split_fitter_kwargs(kwargs):
 # Every ``Fitter`` resolves ``approx`` and clones the model, so N sequential
 # per-galaxy fits over one ``ForwardModel`` produced N distinct clone objects.
 # The compile caches (``_model_cache``, and the flat log-density built on it) key
-# on model **identity**, so each galaxy missed the cache and recompiled — even
+# on model **identity**, so each galaxy missed the cache and recompiled, even
 # though their ``_engine_cache_key()`` values were already identical. Returning
 # the *same* clone for the same (source, config) makes those identity-keyed caches
 # hit, without touching what any cache key means: same object implies same
@@ -448,7 +448,7 @@ def _memoized_approx_clone(model, cfg):
     Returns
     -------
     SEDModel or ForwardModel
-        The clone for ``(model, cfg)`` — identical object across calls.
+        The clone for ``(model, cfg)``, identical object across calls.
 
     Notes
     -----
@@ -476,11 +476,11 @@ def _component_chains(model) -> tuple:
     ``_build_component_chain`` lives on :class:`SEDModel` and nowhere else, so a
     bare ``getattr`` on the object the fitter is holding finds it only when that
     object *is* an ``SEDModel``. It usually is not: inference is canonically
-    through :class:`ForwardModel` (#211), which holds ``populations[i].sed`` —
+    through :class:`ForwardModel` (#211), which holds ``populations[i].sed``,
     the shape ``inference/catalog.py`` already reaches through by hand.
 
     That made :func:`fast_nebular_can_engage` answer ``True`` for every
-    ``ForwardModel``, dusty or not — so the **photometry** gate it exists to
+    ``ForwardModel``, dusty or not, so the **photometry** gate it exists to
     enforce (#1748: a dusty model may not zero ``sed_nebular``, so the per-Q_H
     grid cannot serve photometry) never applied on the canonical path. Verified
     before and after on a dusty two_component model: the bare ``SEDModel``
@@ -488,12 +488,12 @@ def _component_chains(model) -> tuple:
     (#1790).
 
     This is the photometry question only. Whether a *line-flux* fit gets the LUT
-    is a different question with a different answer — dust does not disarm that
-    half, and #1770 measured 4.77x on a dusty line fit — so a caller deciding the
+    is a different question with a different answer, dust does not disarm that
+    half, and #1770 measured 4.77x on a dusty line fit, so a caller deciding the
     line channel must not consult the predicate this feeds.
 
     Every population is consulted and :func:`fast_nebular_can_engage` requires
-    all of them to be clear, rather than reading ``populations[0]`` — picking one
+    all of them to be clear, rather than reading ``populations[0]``, picking one
     arbitrarily is the failing-open shape ``ForwardModel._single_inner_sed``
     already refuses for the same reason (#1271).
     """
@@ -537,8 +537,8 @@ def fast_nebular_can_engage(model) -> bool:
 
     Consult it for the photometry top-up. Do **not** consult it to decide whether
     a line-flux fit gets the LUT: #1760 did, on the strength of a guard that
-    measured ``jnp.sum(model.predict_photometry(params))`` — a photometry
-    objective, which cannot observe the line-channel saving — and every dusty
+    measured ``jnp.sum(model.predict_photometry(params))``, a photometry
+    objective, which cannot observe the line-channel saving, and every dusty
     line-flux fit silently went back to the pre-#1477 cost. Measured on the
     #1477 fixture, gradient FLOPs of the fit objective: 1,933,823 with
     ``WavePrecomp`` alone against 405,825 with the LUT added, beside a dust-free
@@ -559,7 +559,7 @@ def fast_nebular_can_engage(model) -> bool:
 
     This is not a regression to undo. On the pre-#1281 tree the fast pair's photometry
     for a dusty model differed from exact by **0.41 %**, against 0.0115 % for a
-    dust-free control — the shortcut was buying a biased answer, and a constant
+    dust-free control, the shortcut was buying a biased answer, and a constant
     forward bias enters the gradient multiplied by SNR (#1671). What was wrong was
     advertising a speedup that no longer existed.
 
@@ -592,14 +592,14 @@ def fast_nebular_can_engage(model) -> bool:
         # ``compile_signature()``, so the fit buys a second compiled kernel for
         # nothing. That was tried. Measured blast radius: 5 failures across
         # test_batch_inference_defaults_to_precomp, test_issue_1596_photometry_
-        # feature_default and test_issue_1683_build_time_approx_feature_topup —
+        # feature_default and test_issue_1683_build_time_approx_feature_topup,
         # every one a ``_StubModel`` exposing neither a chain nor populations,
         # i.e. objects that are not models rather than models we cannot read.
         #
         # Once ``_component_chains`` unwraps the wrapper, every real surface
         # (SEDModel, ForwardModel, the batch and catalog paths) resolves to a
         # chain, so flipping this default has no demonstrated effect on any
-        # production path — only on doubles. Rewriting five tests to enable a
+        # production path, only on doubles. Rewriting five tests to enable a
         # hardening with no measured benefit is a separate change; #1790 records
         # it as a follow-up with that blast radius attached.
         return True
@@ -637,18 +637,18 @@ def _has_line_adjacent_channel(model) -> bool:
     ``line_ratios`` needs the nebular backend's DISCRETE line catalog
     (``line_waves``/``line_lums``). The precise mechanism is narrower than
     594a60552 recorded: ``FeaturePrecomp`` *alone* publishes that catalog
-    fine — it is the ``WavePrecomp`` + ``FeaturePrecomp`` **pair** that drops
+    fine; it is the ``WavePrecomp`` + ``FeaturePrecomp`` **pair** that drops
     it, because the per-Q_H photometry channel only exists when WavePrecomp
     supplied filters, and that is what arms the fast grid branch.
 
     ``spectral_indices`` was included as "unverified rather than known-broken".
     It is now known-broken and quantified: under the pair, all 13 indices move
-    off the exact path — ``HgA`` by **+1733%**, ``Hbeta`` +734%, the Balmer
-    family 29–1733% — because the fast grid zeroes ``nebular_sed`` and indices
+    off the exact path, ``HgA`` by **+1733%**, ``Hbeta`` +734%, the Balmer
+    family 29–1733%, because the fast grid zeroes ``nebular_sed`` and indices
     are measured on the rest-frame SED. So this gate is load-bearing; do not
     relax it for speed.
 
-    ``line_fluxes`` is deliberately NOT here — that channel is the one
+    ``line_fluxes`` is deliberately NOT here, that channel is the one
     ``FeaturePrecomp`` exists to serve. But a fit may carry line fluxes *and*
     an index/ratio channel, and then the LUT must still be refused: the
     ``_fits_lines`` top-up paths consult this predicate for exactly that case.
@@ -659,7 +659,7 @@ def _has_line_adjacent_channel(model) -> bool:
     when it is *false*. A photometry + line-ratio fit answered "no lines" to
     both, so it was classed photometry-only, handed the LUT, and then asked
     ``predict_line_ratios`` for a catalog the LUT does not publish. Widening
-    ``_fits_lines`` would have fixed the second site by breaking the first —
+    ``_fits_lines`` would have fixed the second site by breaking the first,
     it would append the LUT for exactly the fits that cannot use it.
     """
     obs = getattr(model, "observation", None)
@@ -682,8 +682,8 @@ def _central_params(spec):
     """Free parameters at their declared prior medians, via ``unstandardize(0)``.
 
     The probe point for the LUT-bias estimate. ``unstandardize(0.0)`` is the
-    declared prior's median for every distribution class — the same single
-    source of truth the hierarchical seam standardizes through (#1651) — so
+    declared prior's median for every distribution class, the same single
+    source of truth the hierarchical seam standardizes through (#1651), so
     no second defaults mechanism is invented. Stochastic-field latents probe
     at the zero draw (the field's own prior median).
     """
@@ -706,7 +706,7 @@ def _lut_forward_bias(exact_model, lut_model, data_type):
     Parameters
     ----------
     exact_model : SEDModel or ForwardModel
-        The caller's un-resolved model — the exact path. Must be the SAME
+        The caller's un-resolved model, the exact path. Must be the SAME
         model the LUT clone was resolved from: pairing models that differ in
         anything but the LUT measures physics, not approximation.
     lut_model : SEDModel or ForwardModel
@@ -749,7 +749,7 @@ def _warn_if_lut_bias_amplified(exact_model, lut_model, data, noise, data_type, 
 
     Advisory contract: this function must never break a fit. Any failure in
     the probe (a forward that cannot run at the central parameters, shape
-    mismatches, exotic data layouts) degrades to silence — the fit proceeds
+    mismatches, exotic data layouts) degrades to silence, the fit proceeds
     exactly as it did before the advisory existed. ``data_type="joint"`` is
     deliberately skipped: its data vector interleaves both channels and a
     wrong pairing would produce a wrong number, which is worse than none.
@@ -789,7 +789,7 @@ def _warn_if_lut_bias_amplified(exact_model, lut_model, data, noise, data_type, 
         f"fit's SNR, gives an estimated relative posterior-gradient error "
         f"of {est:.0%} (worst channel {channel}: forward bias "
         f"{bias_at:.2%} at SNR {snr_at:.0f}). The bias is constant in SNR "
-        f"— invisible to any forward check — but enters the gradient "
+        f"(invisible to any forward check) but enters the gradient "
         f"multiplied by SNR, moves the mode, and better data makes it "
         f"worse (#1671; spectroscopy sibling measured in #1688). For "
         f"final inference at this SNR, rerun with approx=None (the exact "
@@ -811,7 +811,7 @@ def _resolve_batch_fit_approx(model, approx, data_type):
     Single-galaxy fits have defaulted to the LUT under ``approx="auto"``
     since that policy landed, but ``PopulationFitter`` consumed its
     ``model_factory`` output raw and ``CatalogFitter`` held the model it was
-    given — so exactly the fits that evaluate the forward model the most
+    given, so exactly the fits that evaluate the forward model the most
     (thousands of evaluations, times the catalog size) silently ran the
     exact wave-grid path at a measured ~2-6x per-evaluation premium. A
     hierarchical or catalog fit taking minutes instead of well under one is
@@ -836,7 +836,7 @@ def _resolve_batch_fit_approx(model, approx, data_type):
     SEDModel or ForwardModel
         The LUT-routed clone, or the input model where the policy says (or
         the model allows) nothing else. A ``with_approx`` failure warns and
-        stays exact — never break a fit that worked, only make its cost
+        stays exact, never break a fit that worked, only make its cost
         visible.
     """
     if approx is None:
@@ -860,7 +860,7 @@ def _resolve_batch_fit_approx(model, approx, data_type):
             cfg = WavePrecomp()
             # Attempt the feature top-up first: for a backend that can
             # tabulate its features (Cue's per-Q_H grid replaces the emulator
-            # call itself) this is the dominant lever — measured 1.45x warm /
+            # call itself) this is the dominant lever, measured 1.45x warm /
             # 1.68x cold on a 2-galaxy Cue population MAP fit (A/A floor
             # 1.17x) and ~7x per-gradient on the single-galaxy #1596 model,
             # where WavePrecomp alone does not clear the noise floor at all.
@@ -870,7 +870,7 @@ def _resolve_batch_fit_approx(model, approx, data_type):
             #
             # Only when NO line-adjacent channel exists: the ratio term reads
             # the backend's DISCRETE line catalog ('line_waves'/'line_lums'),
-            # which the feature-LUT path does not publish — measured red on
+            # which the feature-LUT path does not publish, measured red on
             # main at 594a60552 (test_ratio_term_constrains_fit) because the
             # first spelling checked line_fluxes only, the channel matrix's
             # classic unwritten cell (#1460/#1480/#1599). spectral_indices is
@@ -878,14 +878,14 @@ def _resolve_batch_fit_approx(model, approx, data_type):
             #
             # #1683: a model that ALREADY carries WavePrecomp returned here
             # untouched until this branch was restructured, so a batch fit built
-            # with approx=WavePrecomp() never reached the top-up either — the
+            # with approx=WavePrecomp() never reached the top-up either, the
             # mirror of the single-galaxy gap, and the worse half: population
             # and catalog fits evaluate the forward model the most. When the
             # wave LUT is already configured, only the feature LUT is appended;
             # re-appending WavePrecomp would duplicate it.
             #
             # #1748: and only when the fast path can ENGAGE. Since #1281 a chain
-            # that reads ``sed_nebular`` — anything with dust — disarms the grid's
+            # that reads ``sed_nebular`` (anything with dust) disarms the grid's
             # photometry shortcut, so the top-up is bit-identical in compiled FLOPs
             # while still changing ``compile_signature()``. Batch surfaces pay that
             # per resolved clone, so skipping it here is the larger of the two wins.
@@ -895,7 +895,7 @@ def _resolve_batch_fit_approx(model, approx, data_type):
             # ...unless a LINE channel is present, which is the other thing the LUT
             # serves and which dust does not disarm. #1775 drew that distinction on
             # the single-galaxy resolver and left this one gated, so the two
-            # surfaces disagreed on exactly one cell of the channel matrix — a
+            # surfaces disagreed on exactly one cell of the channel matrix, a
             # dusty catalog fit that carries line fluxes kept refusing the LUT that
             # the same model got as a single-galaxy fit. ``data_type`` names the
             # primary data array here, not the channel set, so "photometry" does
@@ -924,12 +924,12 @@ def _resolve_batch_fit_approx(model, approx, data_type):
 
     try:
         return _memoized_approx_clone(model, resolved)
-    except Exception as exc:  # broad on purpose — never break a working fit
+    except Exception as exc:  # broad on purpose, never break a working fit
         import warnings
 
         warnings.warn(
             f"Could not enable the precompute LUT for this batch fit "
-            f"({exc}). The fit is correct, only slower — a measured ~2-6x "
+            f"({exc}). The fit is correct, only slower, a measured ~2-6x "
             f"per forward evaluation on the exact path.",
             UserWarning,
             stacklevel=3,
@@ -940,7 +940,7 @@ def _resolve_batch_fit_approx(model, approx, data_type):
 # Jitted predict wrappers, memoized per (model, method name).
 #
 # ``jax.jit`` caches on the callable's identity, and ``model.predict_photometry``
-# constructs a fresh bound method on every attribute access — so
+# constructs a fresh bound method on every attribute access, so
 # ``jax.jit(model.predict_photometry)`` is a different function each time and
 # recompiles. Holding the wrapper keeps the identity stable across fits.
 _PREDICT_JIT_CACHE: weakref.WeakKeyDictionary = weakref.WeakKeyDictionary()
@@ -959,7 +959,7 @@ def _memoized_predict_jit(model, name: str):
     Returns
     -------
     callable
-        The jitted accessor — the same object on every call for a given
+        The jitted accessor, the same object on every call for a given
         ``(model, name)``, so JAX reuses its compiled executable.
 
     Notes
@@ -1111,7 +1111,7 @@ class Fitter:
     >>> print(result.params)  # doctest: +SKIP
 
     ``forward.fit(data, noise, method="vi", n_samples=100)`` is the same fit in
-    one line. Build the ``Fitter`` yourself when you want to keep it — warm
+    one line. Build the ``Fitter`` yourself when you want to keep it, warm
     starts, a reused compilation cache, or several backends over one model:
 
     >>> result_map = fitter.run("map", n_steps=1000)  # doctest: +SKIP
@@ -1174,7 +1174,7 @@ class Fitter:
         # When non-None, replaces the built-in χ² dispatch. The user
         # owns the entire data-term math and is responsible for
         # tracking their own observed arrays. Calibration / e-line
-        # marginalization are NOT applied automatically — wrap them
+        # marginalization are NOT applied automatically, wrap them
         # into the user likelihood if needed.
         self._user_likelihood = likelihood
         self._auto_protocol_likelihood = auto_protocol_likelihood
@@ -1263,7 +1263,7 @@ class Fitter:
         # clone, the caller's un-resolved object is the exact reference. When
         # the caller built the LUT into the model themselves there is no exact
         # reference and the check is skipped (with_approx(None) is not a safe
-        # substitute — see #1671's measurement-hygiene note). Deferred to
+        # substitute, see #1671's measurement-hygiene note). Deferred to
         # run() so that merely constructing a fitter stays cheap: the probe
         # costs one exact forward, and only an executed fit should pay it.
         self._pre_approx_model = model if self.model is not model else None
@@ -1275,7 +1275,7 @@ class Fitter:
         # model's spec, which does not carry the ``eline_amp_*`` priors that
         # _init_emission_lines merged into the pre-approx spec. Without this,
         # the amplitudes silently drop out of ``free_params`` (and thus
-        # ``_free_names``) while ``_eline_amplitude_names`` still lists them —
+        # ``_free_names``) while ``_eline_amplitude_names`` still lists them,
         # the sampler never varies parameters the fitter believes it is
         # fitting. See tests/inference/test_eline_fitting.py::TestFittedMode.
         if getattr(self, "_eline_amp_priors", None):
@@ -1305,7 +1305,7 @@ class Fitter:
                         f"Parameter {key!r} is not a valid parameter name. "
                         f"Valid parameters: {all_params}"
                     )
-            # Merge the override INTO the fixed-values dict — this is the single
+            # Merge the override INTO the fixed-values dict; this is the single
             # source of truth the loss closure bakes at build time
             # (``loss_functions.build_loss_fn`` -> ``fitter._fixed_values``) and the
             # output conversion (``_to_physical``) reads. Merging only in
@@ -1317,17 +1317,17 @@ class Fitter:
 
         # ── Runtime redshift routing (#1316, spec §9.4) ────────────
         # On a model whose ztable spans a ``catalog_z_range``, a redshift
-        # override is a RUNTIME input to the LUT interpolation — thread it
+        # override is a RUNTIME input to the LUT interpolation, thread it
         # through ``data_args`` (the #1349 seam: ``build_loss_fn`` replaces the
         # baked value with ``data_args["redshift"]``) and keep it OUT of the
         # engine cache key, so distinct per-row redshifts share one compiled
         # program instead of recompiling per row. The merge into
-        # ``_fixed_values`` above still happens — it keeps reporting
+        # ``_fixed_values`` above still happens; it keeps reporting
         # (``_to_physical``) honest, and the baked value is dead weight in the
         # loss because the ``data_args`` injection always overrides it.
         # Invariant: the key omits redshift *iff* ``data_args`` carries it, so
         # a shared loss closure can never silently run at another fit's baked z.
-        # Overrides on models without a ztable keep #1331's bake — there the
+        # Overrides on models without a ztable keep #1331's bake, there the
         # redshift genuinely is a compile constant.
         self._runtime_redshift = None
         if (
@@ -1407,7 +1407,7 @@ class Fitter:
           via ``CompositeLikelihood``
 
         Returns ``None`` only for cases the Protocol path does not yet
-        cover — currently the Cloudy-prior e-line marginalization
+        cover, currently the Cloudy-prior e-line marginalization
         (uses a different math primitive) and the e-line *fitted*
         amplitudes (line amplitudes are fit, not marginalized).
         """
@@ -1458,7 +1458,7 @@ class Fitter:
         about. The approx predicate read the attribute alone, so a fit
         supplying its fluxes per galaxy (``line_flux_data=``, #1599) published
         ``line_flux_waves`` and set ``has_line_fluxes`` in the loss while
-        classifying as photometry-only — and on a model built with
+        classifying as photometry-only, and on a model built with
         ``approx=WavePrecomp()`` it was then handed back untouched, losing the
         ``FeaturePrecomp`` top-up at ~21x the per-gradient cost, with no
         warning. A third source means editing this function and nothing else.
@@ -1471,15 +1471,15 @@ class Fitter:
     def _fits_line_fluxes(self, model) -> bool:
         """Whether this fit has a measured emission-line-flux channel.
 
-        Resolves through :meth:`_line_fluxes_for` — the same call
+        Resolves through :meth:`_line_fluxes_for`, the same call
         :meth:`_build_data_args` makes to publish ``line_flux_waves``, and hence
         what makes ``build_loss_fn`` set ``has_line_fluxes``. Single-sourcing
         the condition matters: the whole point is that the LUT is added when
         (and only when) the loss would otherwise pay for the full-grid forward,
         so the two must not be able to disagree.
 
-        ``_data_args`` itself is not available here — it is built after the
-        approx policy resolves — so the channel is resolved directly.
+        ``_data_args`` itself is not available here; it is built after the
+        approx policy resolves, so the channel is resolved directly.
         """
         return self._line_fluxes_for(model) is not None
 
@@ -1507,7 +1507,7 @@ class Fitter:
         """Whether any emission-line channel is fit, measured or marginalized.
 
         Answers only "is there a line channel". Whether the LUT may *serve* it
-        is :func:`_has_line_adjacent_channel` — see there for why the two are
+        is :func:`_has_line_adjacent_channel`, see there for why the two are
         deliberately separate predicates.
         """
         return bool(
@@ -1526,8 +1526,8 @@ class Fitter:
         "Emission lines are fit" means **any** line channel: the spectroscopy
         nuisance amplitudes (``_eline_marginalize`` / ``_eline_fitted``) *and*
         a measured line-flux channel on the observation. Only the former were
-        checked until 2026-07, so the channel most users mean — fitting
-        ``LineFluxData`` alongside photometry — silently stayed on the exact
+        checked until 2026-07, so the channel most users mean, fitting
+        ``LineFluxData`` alongside photometry, silently stayed on the exact
         path at ~21x the per-gradient cost.
         """
         from tengri.forward.sed_model import (
@@ -1554,7 +1554,7 @@ class Fitter:
         # materializing ``sed_nebular``, which dust disarms (#1748/#1281). This
         # branch serves a LINE channel, where the LUT's value is that the line
         # fluxes come from the table instead of ``needs_state=True`` forcing a
-        # full-grid ``predict_state`` per likelihood — dust does not touch that.
+        # full-grid ``predict_state`` per likelihood, dust does not touch that.
         # Gating it here cost a measured 4.77x on every dusty line-flux fit.
         wants_lut = self._fits_lines(model) and not _has_line_adjacent_channel(model)
         return (base, FeaturePrecomp()) if wants_lut else base
@@ -1566,14 +1566,14 @@ class Fitter:
 
         A model built with ``approx=WavePrecomp()`` used to be returned
         untouched by the ``"auto"`` policy, so naming WavePrecomp explicitly
-        made a fit *slower than passing nothing at all* — the exact opposite of
+        made a fit *slower than passing nothing at all*, the exact opposite of
         what the argument reads like it does. That was fixed for a lines fit
         first and for a photometry-only one in #1683; both spellings now reach
         here.
 
         The existing configs are carried over rather than rebuilt, so a
         configured ``catalog_z_range`` survives; see
-        :attr:`SEDModel.approx_configs`. Only ``FeaturePrecomp`` is appended —
+        :attr:`SEDModel.approx_configs`. Only ``FeaturePrecomp`` is appended,
         re-appending the wave LUT would duplicate it.
 
         Parameters
@@ -1585,7 +1585,7 @@ class Fitter:
             ``True`` for a line channel, where the documented cost of going
             without is ~21x per gradient. ``False`` for the photometry-only
             top-up, where a backend with nothing to tabulate is the *expected*
-            case rather than an anomaly — warning there would fire on every
+            case rather than an anomaly, warning there would fire on every
             non-Cue model and name a remedy the caller cannot apply.
 
         Returns
@@ -1596,7 +1596,7 @@ class Fitter:
 
         Notes
         -----
-        Adding the LUT can legitimately fail — a nebular backend that publishes
+        Adding the LUT can legitimately fail, a nebular backend that publishes
         neither a discrete catalog nor SSP-window lines has no fast path. That
         is a reason to stay exact, never to break a fit that worked, so the
         failure is caught either way; ``warn_on_failure`` decides only whether
@@ -1612,14 +1612,14 @@ class Fitter:
         # feature LUT, whatever route asked for it.
         if _has_line_adjacent_channel(model):
             return model
-        # Nor top up a model the LUT cannot help — but "cannot help" is channel
+        # Nor top up a model the LUT cannot help, but "cannot help" is channel
         # specific, and conflating the two channels is what #1770 was (see
         # ``fast_nebular_can_engage``). The dust gate applies to the PHOTOMETRY
         # shortcut only: since #1281 a chain that reads ``sed_nebular`` disarms it,
         # so appending the config there buys a second compiled kernel for no effect
-        # (#1748). A LINE channel is served by a different mechanism — the LUT
+        # (#1748). A LINE channel is served by a different mechanism, the LUT
         # supplies the line fluxes directly, instead of ``needs_state=True`` driving
-        # a full-grid ``predict_state`` rebuild per likelihood — and that mechanism
+        # a full-grid ``predict_state`` rebuild per likelihood, and that mechanism
         # is unaffected by dust. Measured on the #1477 fixture, a dusty model with
         # three line fluxes, gradient FLOPs of the fit objective:
         # WavePrecomp 1,933,823 -> WavePrecomp+FeaturePrecomp 405,825, a 4.77x
@@ -1630,7 +1630,7 @@ class Fitter:
         existing = tuple(getattr(model, "approx_configs", ()))
         try:
             return _memoized_approx_clone(model, (*existing, FeaturePrecomp()))
-        except Exception as exc:  # broad on purpose — never break a working fit
+        except Exception as exc:  # broad on purpose, never break a working fit
             if not warn_on_failure:
                 return model
             import warnings
@@ -1639,7 +1639,7 @@ class Fitter:
                 f"Fitting an emission-line channel, but the line look-up table "
                 f"could not be enabled for this model ({exc}). Every likelihood "
                 f"evaluation will reconstruct the full-wavelength SED to obtain "
-                f"the line fluxes — measured at ~21x the per-gradient cost. The "
+                f"the line fluxes, measured at ~21x the per-gradient cost. The "
                 f"fit is correct, only slow.",
                 UserWarning,
                 stacklevel=4,
@@ -1652,7 +1652,7 @@ class Fitter:
         - ``"auto"`` (default): route the fit through the precompute LUT chosen
           by data type (see :meth:`_auto_approx_config`). A build-time
           ``approx=`` is respected, but is **topped up** with ``FeaturePrecomp``
-          when a line channel is fit and it is missing — otherwise naming
+          when a line channel is fit and it is missing, otherwise naming
           ``WavePrecomp()`` at build time would make a lines fit slower than
           passing nothing at all.
         - ``None``: force the exact wave-grid path (overrides a build-time approx).
@@ -1661,7 +1661,7 @@ class Fitter:
         Only ``"auto"`` auto-activates. ``None`` means exact and stays exact; an
         explicit config means what it says. Both instead warn when a line
         channel is fit without the LUT, so the cost is visible rather than
-        silent — the prior decision was against *silent* auto-activation, and a
+        silent, the prior decision was against *silent* auto-activation, and a
         warning is how that is honored without leaving the cliff unmarked.
 
         ``model.with_approx`` returns a clone (or ``self`` for a no-op), so the
@@ -1681,13 +1681,13 @@ class Fitter:
             has = getattr(model, "_has_modern_approx", None)
             if callable(has) and has():
                 # Respect the build-time approx, but do not let it suppress the
-                # line LUT — top it up rather than bailing.
+                # line LUT, top it up rather than bailing.
                 #
                 # The lines branch deliberately does NOT repeat the ratio/index
                 # exclusion that this branch carried at the call site before the
                 # thirteenth merge. It lives inside ``_add_feature_precomp`` as
                 # "one seam for every caller of this top-up" (#1665), so a
-                # line-flux + ratio fit is still refused — just refused in one
+                # line-flux + ratio fit is still refused, just refused in one
                 # place. Restating it here is what let the two spellings drift
                 # apart in the first place.
                 if self._fits_lines(model):
@@ -1696,7 +1696,7 @@ class Fitter:
                 # in #1656 tops up only the branch below, where the model carries
                 # no approx at all; a photometry-only Cue model built WITH
                 # approx=WavePrecomp() still returned here untouched. So
-                # naming the wave LUT explicitly cost the feature LUT — the
+                # naming the wave LUT explicitly cost the feature LUT, the
                 # same "slower than passing nothing at all" pathology this
                 # method's docstring records for lines, measured at ~22x the
                 # per-gradient FLOPs on a 10-parameter Cue model. Silent on
@@ -1715,7 +1715,7 @@ class Fitter:
                 and not self._fits_lines(model)
                 and not _has_line_adjacent_channel(model)
                 # #1748: and only when the grid can actually serve photometry. A
-                # chain that reads ``sed_nebular`` — anything with dust — disarms
+                # chain that reads ``sed_nebular`` (anything with dust) disarms
                 # the shortcut since #1281, making this append bit-identical in
                 # compiled FLOPs while still changing ``compile_signature()``.
                 # This branch appends the config directly rather than through
@@ -1724,13 +1724,13 @@ class Fitter:
                 and fast_nebular_can_engage(model)
             ):
                 # #1596: a photometry-only Cue fit measured ~4x SLOWER than
-                # the same fit WITH a line channel, because FeaturePrecomp —
+                # the same fit WITH a line channel, because FeaturePrecomp,
                 # despite the name, the nebular precompute; for Cue the
                 # per-Q_H grid replaces the emulator call itself (~7x
-                # per-gradient) — was only added when lines were fit, and
+                # per-gradient), was only added when lines were fit, and
                 # WavePrecomp alone does not clear the noise floor on a Cue
                 # model. Attempt the feature top-up; a backend with nothing
-                # to tabulate raises, and that raise IS the detection — fall
+                # to tabulate raises, and that raise IS the detection, fall
                 # back to the wave LUT, never to the raw model. Mirrors the
                 # batch surfaces' _resolve_batch_fit_approx.
                 from tengri.forward.sed_model import FeaturePrecomp
@@ -1748,20 +1748,20 @@ class Fitter:
         """Warn when a line channel is fit on the exact path by explicit request.
 
         Fires for ``approx=None`` and for an explicit config that omits
-        ``FeaturePrecomp`` — the two cases the ``"auto"`` policy deliberately
+        ``FeaturePrecomp``, the two cases the ``"auto"`` policy deliberately
         does not override. Silence here is what let a 21x per-gradient cost look
         like the model simply being slow.
         """
         if not self._fits_lines(model):
             return
         if _has_line_adjacent_channel(model):
-            # The LUT is withheld here on purpose — a ratio/index channel needs
+            # The LUT is withheld here on purpose, a ratio/index channel needs
             # the discrete catalog it does not publish. Warning would point at a
             # remedy that cannot be applied, and advice you cannot act on reads
             # as a defect in the caller's model.
             return
         # No ``fast_nebular_can_engage`` gate (#1770). It was added here on the
-        # reading that a dusty model gains nothing from the LUT — true of the
+        # reading that a dusty model gains nothing from the LUT, true of the
         # photometry shortcut, false of this channel, where the saving is the
         # ``predict_state`` rebuild rather than the nebular grid. On a dusty
         # line-flux fit the advice IS actionable: 4.77x in gradient FLOPs.
@@ -1797,7 +1797,7 @@ class Fitter:
                 eline_marginalize = False
         self._eline_marginalize = bool(eline_marginalize) and self._has_spectroscopy
 
-        # Fitted emission line mode — amplitudes become explicit latent params
+        # Fitted emission line mode, amplitudes become explicit latent params
         if _spec_config is not None and hasattr(_spec_config, "eline_mode"):
             _eline_fitted = _spec_config.eline_mode == "fitted"
         else:
@@ -1900,7 +1900,7 @@ class Fitter:
         loss-fn-based samplers (HMC, NUTS, raytrace) sees them as
         Parameters, not Constants. Without this, the outer JIT inlines
         ``model.predict_observables_jit(params)`` and bakes the SSP
-        flux grid (15×93×5994 floats) into the HLO as a constant —
+        flux grid (15×93×5994 floats) into the HLO as a constant,
         ballooning compile time from <5 s to 40 s on photometry.
         """
         args = {
@@ -1954,7 +1954,7 @@ class Fitter:
         # ASKING (hasattr) rather than by catching AttributeError out of the body:
         # a blanket ``suppress(AttributeError, TypeError)`` around the whole block
         # also swallows an AttributeError raised *from inside* a real model, and
-        # then silently ships an un-threaded fit. That is exactly what happened —
+        # then silently ships an un-threaded fit. That is exactly what happened,
         # ``ForwardModel`` (the canonical surface) did not delegate ``ssp_data``, so
         # every fit through it baked the SSP grid into the compiled program as a
         # constant and XLA was OOM-killed on large grids. A guard that fails open
@@ -1966,7 +1966,7 @@ class Fitter:
         # has always been valid, so default True.
         #
         # Consequence worth stating: excluded topologies fall back to the eager
-        # ``_build_prediction`` path, which closure-captures the SSP grid — so
+        # ``_build_prediction`` path, which closure-captures the SSP grid, so
         # hierarchical fits keep paying the baking cost #1496 removed for
         # single-galaxy ones (measured 5.7 h / 6.25 GB for a joint NUTS at N=4,
         # D=98). Fixing that needs the batched forward (#211), not a wider gate.
@@ -1977,7 +1977,7 @@ class Fitter:
         ):
             # Per-fit params override (#1329): the forward pass reads fixed values
             # (e.g. redshift under ``catalog_z_range``) from this threaded dict at
-            # runtime, so the override MUST be merged here — not only in
+            # runtime, so the override MUST be merged here, not only in
             # ``_to_physical`` (the output-conversion path). Merging only there is a
             # silent relabel: the loss still runs at the model's fixed value while the
             # returned ``params`` echo the override. Keys are already validated in
@@ -2107,7 +2107,7 @@ class Fitter:
         those instances have the same compile_signature).
 
         The signature does NOT include memory_mode, as it does not change
-        the generated HLO graph — it only affects posterior-chunking
+        the generated HLO graph, it only affects posterior-chunking
         behavior in the analysis layer (see _draw_jit_samples and
         _draw_nonlinear_jit_samples). Toggling memory_mode between
         "fast" and "low" reuses the same cached engine.
@@ -2197,14 +2197,14 @@ class Fitter:
             self.data_mask is not None,
             # Per-fit params override (#1329): the loss closure bakes
             # ``fitter._fixed_values``, which now carries the override, so two
-            # fits differing only by override MUST get distinct loss functions —
+            # fits differing only by override MUST get distinct loss functions,
             # exactly like the feature channels above. Without this, fit #2
             # silently reuses fit #1's baked override.
             #
             # EXCEPT a runtime-routed redshift (#1316): it rides ``data_args``
             # as a traced input, so distinct z legitimately share one program.
             # Note a routed-z-only override yields ``()``, distinct from the
-            # no-override ``None`` — a plain fit (no data_args redshift) never
+            # no-override ``None``, a plain fit (no data_args redshift) never
             # shares a closure whose baked z differs from its spec.
             (
                 tuple(
@@ -2221,7 +2221,7 @@ class Fitter:
             # only data/noise through ``data_args``; the priors stay baked,
             # because ``_primals_to_params`` calls ``dist.unstandardize(xi)``
             # and that reads the distribution's Python floats at trace time
-            # (``Uniform``: ``lo + (hi - lo) * Phi(xi)``). Baked is fine — but
+            # (``Uniform``: ``lo + (hi - lo) * Phi(xi)``). Baked is fine, but
             # only if keyed. Without this entry two models differing solely in a
             # prior's bounds share one engine, and fit #2's latent is decoded
             # through fit #1's interval: a shift of order the prior width, which
@@ -2233,7 +2233,7 @@ class Fitter:
             self._free_prior_key(),
             # Spec FIXED values (#1972 instance 2). ``_primals_to_params`` also
             # bakes ``fitter._fixed_values``, so two models differing only in a
-            # fixed scalar share one engine and fit #2 runs fit #1's physics —
+            # fixed scalar share one engine and fit #2 runs fit #1's physics,
             # measured -0.18 dex on mass for ``dust_slope`` -0.7 -> 0.4.
             #
             # ``SEDModel.compile_signature`` dropped these on 2026-05-20 on the
@@ -2245,7 +2245,7 @@ class Fitter:
             # ``get_or_build_signal_response`` returns a *stable function
             # object* because JAX's trace cache is keyed by function identity,
             # so partial-applying fixed values per fit would re-trace the whole
-            # physics stack per galaxy — the cost that cache exists to avoid.
+            # physics stack per galaxy, the cost that cache exists to avoid.
             # The keying is free for catalogs: these are per-MODEL values and a
             # catalog uses one model, with per-galaxy variation flowing through
             # ``_params_override`` (keyed above) or a runtime-routed redshift.
@@ -2450,7 +2450,7 @@ class Fitter:
         guarantee a cache hit.  Changing galaxy data does **not** invalidate
         the cache (``data_args`` is traced, not static).
 
-        **JIT-compatible**: yes — internally calls JIT-compiled JAX functions.
+        **JIT-compatible**: yes, internally calls JIT-compiled JAX functions.
 
         Example
         -------
@@ -2660,15 +2660,15 @@ class Fitter:
         The built objective is wrapped in :func:`jax.jit` before caching so
         the callable exposed through
         :attr:`tengri.inference.context.InferenceContext.neg_log_posterior_fn`
-        is genuinely JIT-cached, as its docstring and ADR-0010 promise —
+        is genuinely JIT-cached, as its docstring and ADR-0010 promise,
         rather than a Python-level orchestration of the per-component chain.
         Without the wrapper a raw ``neg_log_posterior_fn(params, data_args)``
         call re-runs the chain dispatcher at Python level every evaluation:
         ~20x slower on joint fits that add a spectral-index / line-flux
         channel, where the feature forward (``predict_state``) is otherwise
-        never fused. Gradient-based backends were already protected —
+        never fused. Gradient-based backends were already protected,
         ``grad_fn`` / ``logdensity_fn`` wrap ``value_and_grad`` in their own
-        ``jax.jit`` — so this only closes the gap for the objective itself
+        ``jax.jit``, so this only closes the gap for the objective itself
         (VI, nested sampling, custom loops, MAP convergence logging).
         ``jax.value_and_grad`` differentiates transparently through the inner
         ``jax.jit`` (``grad(jit(f)) == grad(f)``), and XLA subsumes the nested
@@ -2792,7 +2792,7 @@ class Fitter:
         """Create initial unbounded parameter dict.
 
         Per-param shape comes from ``self.spec.param_init_shape(name)``
-        when available (the PopulationSpecView publishes this — see
+        when available (the PopulationSpecView publishes this, see
         PR #239 plan Task 5). Scalar specs (the standard
         :class:`Parameters`) fall back to shape ``()``.
 
@@ -2802,7 +2802,7 @@ class Fitter:
         """
         params = {}
         keys = jax.random.split(key, len(self._free_names) + 1)
-        # Shape provider — defaults to scalar for non-Population specs
+        # Shape provider, defaults to scalar for non-Population specs
         get_shape = getattr(self.spec, "param_init_shape", lambda _n: ())
 
         for i, name in enumerate(self._free_names):
@@ -2817,9 +2817,9 @@ class Fitter:
 
         if self.spec.stochastic:
             # psd_xi shape: scalar fits use (n_grid,); hierarchical
-            # populations use (N, n_grid) — published via the spec.
+            # populations use (N, n_grid), published via the spec.
             psd_shape = getattr(self.spec, "psd_xi_init_shape", None) or (self.spec.n_grid,)
-            # Property vs callable — both supported
+            # Property vs callable, both supported
             if callable(psd_shape):
                 psd_shape = psd_shape()
             params["psd_xi"] = 0.1 * jax.random.normal(keys[-1], shape=psd_shape)
@@ -2851,7 +2851,7 @@ class Fitter:
             params[name] = dist.unstandardize(params_unbounded[name])
         for name, val in self._fixed_values.items():
             # self._fixed_values already carries any per-fit params override
-            # (#1329, merged at construction) — no separate merge needed here.
+            # (#1329, merged at construction), no separate merge needed here.
             params[name] = jnp.array(val)
         if self.spec.stochastic and "psd_xi" in params_unbounded:
             # Publish under both names so the returned ``Posterior.params``
@@ -2871,7 +2871,7 @@ class Fitter:
 
         After this returns, a subsequent :meth:`run` call with the same
         ``method`` skips XLA compilation **and** sampler warmup window
-        adaptation — only the actual sampling work remains.
+        adaptation, only the actual sampling work remains.
 
         Concretely: runs the smallest meaningful inference (a few
         warmup steps + a handful of samples) to (1) compile every
@@ -2894,7 +2894,7 @@ class Fitter:
             that support ``n_chains`` (NUTS / HMC / dHMC / GHMC / MCLMC /
             adjusted MCLMC / raytrace).
         key : jax.random.PRNGKey or None
-            Optional seed. Default uses a fixed key — the pre-warm run
+            Optional seed. Default uses a fixed key, the pre-warm run
             is throwaway and its randomness does not affect the
             subsequent real fit.
 
@@ -2914,7 +2914,7 @@ class Fitter:
         Pre-warming is **soft**: any exception raised during the throwaway
         call is swallowed so the real ``run()`` surfaces the genuine error
         with a richer traceback. Calling ``prewarm`` redundantly is cheap
-        — both caches are short-circuited.
+        both caches are short-circuited.
         """
         import jax as _jax
 
@@ -2930,7 +2930,7 @@ class Fitter:
             return
         if n_chains is not None and n_chains > 1:
             warmup_kw["n_chains"] = n_chains
-            # Broad by design — this is a warmup, and any exception a real fit
+            # Broad by design; this is a warmup, and any exception a real fit
             # can raise can surface here too, so narrowing the type would just
             # let some failures escape and abort a run that was going to work.
             # What was wrong is that the failure left no trace: a warmup that
@@ -2951,10 +2951,10 @@ class Fitter:
         """JIT-compile the shared loss/grad + predict surface before the fit loop.
 
         Called by :meth:`run` when ``prewarm=True`` (the default). Compiles the
-        two forward-model-heavy pieces every fit needs — the negative-log-
+        two forward-model-heavy pieces every fit needs, the negative-log-
         posterior **gradient** (which every backend evaluates and which subsumes
         the loss compile) and the post-fit predict surface (``predict_photometry``
-        + ``predict_properties`` on the fit model) — by building and evaluating
+        + ``predict_properties`` on the fit model), by building and evaluating
         each once, blocked. This populates the persistent JAX cache so the fit
         loop and immediate posterior-predictive / derived-quantity exploration
         run warm.
@@ -2989,7 +2989,7 @@ class Fitter:
         # The wrappers are memoized per model: ``self.model.predict_photometry``
         # builds a NEW bound-method object on every attribute access, so a bare
         # ``jax.jit(...)`` here got a fresh cache entry and recompiled on every
-        # fit — the warming step was the one thing that never stayed warm. It cost
+        # fit, the warming step was the one thing that never stayed warm. It cost
         # two compiles per galaxy on a sequential catalog.
         try:
             warm_p = self.spec.sample(key)
@@ -3009,12 +3009,12 @@ class Fitter:
         Reload in a fresh Python process with :meth:`load_cache` to skip
         sampler warmup on the next :meth:`run` call. Useful when the same
         model+data is fit repeatedly across notebook restarts or batch
-        jobs — warmup window adaptation typically dominates first-call
+        jobs, warmup window adaptation typically dominates first-call
         wall time on a warm XLA cache.
 
         Stored payload:
 
-        - ``adaptation`` : dict keyed by ``(engine_key, method_key)`` — the
+        - ``adaptation`` : dict keyed by ``(engine_key, method_key)``, the
           contents of the model's cache namespace under ``"adaptation"``.
         - ``spec_fingerprint`` : a content hash of the free-parameter names
           and prior shape, used by :meth:`load_cache` to refuse to load a
@@ -3037,7 +3037,7 @@ class Fitter:
         adaptation = mc.get("adaptation", {})
         # Cached MAP point estimate (if a previous .run() or .prewarm()
         # populated it). Saving it skips MAP init on the next load_cache
-        # session — same speedup the adaptation cache gives for warmup.
+        # session, same speedup the adaptation cache gives for warmup.
         map_params = mc.get("map_params_physical")
         payload = {
             "adaptation": adaptation,
@@ -3095,7 +3095,7 @@ class Fitter:
 
         Stable across processes; changes if the user reorders / renames
         parameters or changes which are fixed vs free. Does NOT depend on
-        data tensors — the adaptation cache itself is data-conditional
+        data tensors, the adaptation cache itself is data-conditional
         and the user takes responsibility for fitting the same model+data
         combination after :meth:`load_cache`.
         """
@@ -3188,7 +3188,7 @@ class Fitter:
             Ignored for deterministic methods (``"map"``, ``"laplace"``).
 
         allow_unvalidated : bool, optional
-            Run a backend registered at ``tier="broken"`` — one that reports
+            Run a backend registered at ``tier="broken"``, one that reports
             wrong answers or crashes in its own registry entry. Default
             ``False``, which raises :class:`~tengri.BackendError` naming the
             specific failure. Intended for benchmarking and backend
@@ -3222,12 +3222,12 @@ class Fitter:
         Posterior
             Inference results object with attributes:
 
-            - ``samples`` : dict or None — Posterior samples (None for MAP).
-            - ``params`` : dict — Best-fit or posterior mean parameters.
-            - ``method`` : str — Method used.
-            - ``diagnostics`` : dict — Convergence/quality metrics.
-            - ``log_evidence`` : float or None — Bayesian evidence (NSS only).
-            - ``wall_time_s`` : float — Total runtime.
+            - ``samples`` : dict or None, Posterior samples (None for MAP).
+            - ``params`` : dict, Best-fit or posterior mean parameters.
+            - ``method`` : str, Method used.
+            - ``diagnostics`` : dict, Convergence/quality metrics.
+            - ``log_evidence`` : float or None, Bayesian evidence (NSS only).
+            - ``wall_time_s`` : float, Total runtime.
 
             The Posterior also has derived quantity methods:
             ``derived``, ``summary()``, ``to_arviz()``, ``refine()``, etc.
@@ -3297,7 +3297,7 @@ class Fitter:
         ``run`` accepts a ``lean`` kwarg (default inferred from
         ``tengri.lean()`` / ``tengri.persistent()`` context). With
         ``lean=True`` (the default), the inference-body cache is
-        cleared of *stale* entries — every entry whose
+        cleared of *stale* entries, every entry whose
         ``(compile_signature, method)`` differs from the current call
         is dropped, but the entry that matches the current call (if it
         exists from a prior identical run) is kept. Forward-model,
@@ -3307,7 +3307,7 @@ class Fitter:
         - Multi-phase notebooks (MAP → HMC → posterior-predictive)
           peak at one inference scan body in RAM, not several.
         - Catalog loops calling ``fitter.run(method)`` repeatedly with
-          the same model and method pay one compile, not N — without
+          the same model and method pay one compile, not N, without
           needing ``tengri.persistent()``.
 
         ``tengri.gc()`` drops everything including structural caches;
@@ -3367,7 +3367,7 @@ class Fitter:
         method = resolve_method(method)
 
         # #1671 made operational: this fit runs on a resolved precompute LUT,
-        # so price the LUT's forward bias against this fit's SNR once — the
+        # so price the LUT's forward bias against this fit's SNR once, the
         # amplified estimate (bias x SNR) is what moves the posterior mode,
         # and no forward-model check can see it. Once per fitter instance.
         if not self._lut_bias_checked and self._pre_approx_model is not None:
@@ -3385,7 +3385,7 @@ class Fitter:
         # Default: lean=True. The smart-lean path (below) preserves the
         # entry whose key matches this fitter's compile_signature, so
         # CatalogFitter loops and repeated identical fits hit the cache
-        # without any opt-in. ``tengri.persistent()`` is rarely needed —
+        # without any opt-in. ``tengri.persistent()`` is rarely needed,
         # it only matters if you want to keep *non-matching* entries
         # alive (e.g. swapping back and forth between MAP and HMC and
         # wanting both compiles in RAM). Override per-call via
@@ -3408,7 +3408,7 @@ class Fitter:
         if _user_lean is not None:
             warnings.warn(
                 "lean= is retired: every fit keeps its warm caches (iterate "
-                "policy), including catalog fits — one inference-body compile "
+                "policy), including catalog fits, one inference-body compile "
                 "serves the whole catalog. See #1318, #1344.",
                 DeprecationWarning,
                 stacklevel=2,
@@ -3418,11 +3418,11 @@ class Fitter:
         # _cache_policy selects the L3 (inference-body) eviction policy.
         #
         # Catalog deliberately does NOT pass 'sweep' (#1344). ``_lean_keep_sig``
-        # is ``compile_signature()`` — data *shape*, never data values — so two
+        # is ``compile_signature()`` (data *shape*, never data values) so two
         # galaxies of the same model and shape produce the same key. 'iterate'
         # therefore keeps the one entry both galaxies share and the catalog pays
         # one inference-body compile; 'sweep' passes ``keep_sig=None`` and drops
-        # that entry too, which would recompile per galaxy — the #1316 cliff the
+        # that entry too, which would recompile per galaxy, the #1316 cliff the
         # catalog path exists to avoid. 'sweep' remains reachable through
         # ``tengri.lean()`` for memory-constrained runs that would rather pay
         # the recompile. If not present,
@@ -3437,7 +3437,7 @@ class Fitter:
                 # Derive from context (persistent/lean/default)
                 if _is_persistent_mode():
                     # persistent() promises to keep ALL cached artifacts, including
-                    # non-matching L3 entries — a distinct policy, NOT "iterate"
+                    # non-matching L3 entries, a distinct policy, NOT "iterate"
                     # (which drops stale non-matching entries). Mapping it to
                     # "iterate" made persistent() a silent no-op.
                     _cache_policy = "persistent"
@@ -3450,15 +3450,15 @@ class Fitter:
         # - "iterate": drop only L3 entries that do NOT match this fitter's
         #   compile_signature() (smart-lean behavior, 2026-05)
         # - "sweep": drop all L3 entries (old lean=True behavior)
-        # The compile_signature() keys on shape, not values — so identical
+        # The compile_signature() keys on shape, not values, so identical
         # geometry always matches, even if parameters differ.
         if _cache_policy == "sweep":
             _clear_shared_caches(scope="inference_body", keep_sig=None)
         elif _cache_policy == "iterate":
             # Keep-matching: preserve the entry matching this fitter's signature
             # Smart lean (2026-05): drop only L3 entries that do NOT match
-            # this fitter's compile_signature(). The matching entry — if
-            # it exists from a prior identical run — is kept, so a
+            # this fitter's compile_signature(). The matching entry, if
+            # it exists from a prior identical run, is kept, so a
             # CatalogFitter loop or repeated identical fitter.run() call
             # hits the cache instead of recompiling. The engine cache
             # (``_SHARED_ENGINE_CACHE``) is keyed on the bare
@@ -3470,7 +3470,7 @@ class Fitter:
             # drop_xla=False (#1350): this policy's promise is "fit() keeps your
             # warm caches". jax.clear_caches() would wipe the process-wide XLA
             # executables, leaving the entries we deliberately keep as hollow
-            # shells that re-trace — and de-warming the caller's own
+            # shells that re-trace, and de-warming the caller's own
             # predict_photometry too. The stale non-matching tengri entries are
             # still dropped. "sweep" keeps drop_xla=True: it exists for memory
             # relief (the notebook-OOM class) and must keep releasing executables.
@@ -3478,7 +3478,7 @@ class Fitter:
                 scope="inference_body", keep_sig=self._lean_keep_sig, drop_xla=False
             )
         elif _cache_policy == "persistent":
-            # persistent(): keep EVERYTHING — no L3 clear at all, even
+            # persistent(): keep EVERYTHING, no L3 clear at all, even
             # non-matching stale entries. This is what the context manager /
             # TENGRI_PERSISTENT promise, and it is distinct from "iterate".
             pass
@@ -3489,7 +3489,7 @@ class Fitter:
 
             kwargs = {**get_inference_defaults(method), **kwargs}
         except (ImportError, FileNotFoundError, OSError):
-            # Config file unavailable or unreadable — skip defaults merge
+            # Config file unavailable or unreadable, skip defaults merge
             pass
 
         # Strip any stale vi_flavor kwarg that callers may pass (no longer used)
@@ -3500,7 +3500,7 @@ class Fitter:
         # rather than plumbing them through every _run_* backend signature.
         # - memory_mode="auto" picks "low" for stochastic (high-D field)
         #   models, "fast" otherwise. "low" wraps signal_response in
-        #   jax.checkpoint — 2-3x peak memory reduction inside CG at a
+        #   jax.checkpoint, 2-3x peak memory reduction inside CG at a
         #   modest wall-time cost. Used via _engine_cache_key so different
         #   modes get separate cached engines.
         # - posterior_chunk_size controls peak memory of _draw_jit_samples
@@ -3511,7 +3511,7 @@ class Fitter:
         if memory_mode not in ("fast", "low"):
             raise ValueError(f"memory_mode must be 'auto', 'fast', or 'low' (got {memory_mode!r})")
         if getattr(self, "_memory_mode", None) != memory_mode:
-            # Invalidate the per-instance engine reference — a different
+            # Invalidate the per-instance engine reference, a different
             # memory_mode needs a different cached engine.
             self._jit_sampler = None
         self._memory_mode = memory_mode
@@ -3529,7 +3529,7 @@ class Fitter:
 
                 threshold = int(get_inference_defaults().get("mcmc_auto_d", _AUTO_D_THRESHOLD))
             except (ImportError, FileNotFoundError, OSError, KeyError, ValueError):
-                # Config unavailable, missing key, or non-integer value — use hardcoded fallback
+                # Config unavailable, missing key, or non-integer value, use hardcoded fallback
                 threshold = _AUTO_D_THRESHOLD
             method = "mcmc_nuts" if d <= threshold else "vi_nonlinear_fast"
 
@@ -3580,7 +3580,7 @@ class Fitter:
         _warn_if_exact_forward_path(self.model, entry.name)
 
         # Pre-flight memory guard. `auto`/`mcmc` already switch away from NUTS
-        # above D=20, but an explicit method='mcmc_nuts' overrides nothing — the
+        # above D=20, but an explicit method='mcmc_nuts' overrides nothing, the
         # caller has chosen, so tell them the cost instead of silently paying it.
         # Same helper serves CatalogFitter and PopulationFitter (#1394 follow-up).
         _warn_if_nuts_high_dim(entry.name, self.spec.n_free, surface="Fitter.run")
@@ -3598,7 +3598,7 @@ class Fitter:
         # Refuse capability kwargs this backend cannot honor. Without it,
         # ``precondition=True`` on a non-Hamiltonian method travels until a terminal
         # function without ``**kwargs`` rejects it, surfacing as a TypeError naming
-        # ``run_nifty_vi`` or ``run_map`` — functions the caller never mentioned.
+        # ``run_nifty_vi`` or ``run_map``, functions the caller never mentioned.
         # Raises ValueError, matching the answer ``method='mcmc'`` already gave.
         check_capabilities(entry, kwargs)
         # Same answer for every other unrecognized name, so a typo or an
@@ -3737,11 +3737,11 @@ class Fitter:
         Parameters
         ----------
         method : str
-            "jit" (default) — JIT-compiled CG solve, ~0.2ms/sample.
-            "blackjax" — BlackJAX NUTS (independent MCMC, not geoVI).
-            "nifty" — NIFTy draw_linear_residual (slow, ~540ms/sample).
+            "jit" (default), JIT-compiled CG solve, ~0.2ms/sample.
+            "blackjax", BlackJAX NUTS (independent MCMC, not geoVI).
+            "nifty", NIFTy draw_linear_residual (slow, ~540ms/sample).
         posterior_chunk_size : int, optional
-            If set, process CG draws in chunks of this size — peak memory
+            If set, process CG draws in chunks of this size, peak memory
             becomes O(chunk · D) instead of O(n_samples · D). JIT cache
             hits across chunks, so wall-time overhead is negligible.
         """
@@ -3815,7 +3815,7 @@ class Fitter:
         #   2. stashed on self by Fitter.run(posterior_chunk_size=...)
         #   3. auto-chunk of 64 when memory_mode="low"
         #      (jax.checkpoint + jax.vmap(N_large) holds all N
-        #      recomputed forwards simultaneously — negating most
+        #      recomputed forwards simultaneously, negating most
         #      of the memory saving. Chunking keeps that to
         #      O(64 · activations) regardless of n_samples.)
         #   4. otherwise unchunked (preserves prior behavior)
@@ -3926,14 +3926,14 @@ class Fitter:
         # (closing over ``self._data_args``, which carries the SSP grid), a fresh
         # ``window_adaptation``, a fresh NUTS kernel and a fresh ``one_step`` on every
         # call. Fresh function identities miss JAX's compilation cache, so each call
-        # compiled and *retained* another set of executables — a measured ~72 MB/call
+        # compiled and *retained* another set of executables, a measured ~72 MB/call
         # leak (#1249), accrued per galaxy by a catalog VI run drawing samples with
         # ``posterior_method="blackjax"``.
         #
         # Memoizing only the log-density is not enough (measured: 72 -> 55 MB/call);
         # the adaptation-dependent kernel has to be inside the cached program too, and
         # it cannot be cached separately because it is built from the *runtime* warmup
-        # output — caching that would bake one call's step size, the bug fixed in #1234.
+        # output, caching that would bake one call's step size, the bug fixed in #1234.
         def _build_draw(ld_from):
             """Compile (window adaptation -> sampling scan) once, data traced."""
 
@@ -4053,7 +4053,7 @@ class Fitter:
         The first galaxy pays compile cost; subsequent galaxies load
         from the persistent XLA cache (milliseconds each).
 
-        Works with any inference method — vi (default) gives
+        Works with any inference method, vi (default) gives
         the best speed. Also usable for hierarchical individual fits.
 
         Parameters
@@ -4195,7 +4195,7 @@ class Fitter:
     ):
         """Vectorized MCMC sampling over a batch using jax.vmap.
 
-        All galaxies share the same compiled XLA kernel — adaptation
+        All galaxies share the same compiled XLA kernel, adaptation
         parameters are computed on the first galaxy and reused for all.
         A single ``jax.jit(jax.vmap(...))`` call runs sampling for all
         galaxies in parallel.
@@ -4232,7 +4232,7 @@ class Fitter:
         n_gal = len(batch)
         t0 = time.time()
 
-        # All galaxies must have the same band count — vmap requires uniform shapes.
+        # All galaxies must have the same band count, vmap requires uniform shapes.
         n_obs_set = {len(g["flux_obs"]) for g in batch}
         if len(n_obs_set) != 1:
             raise ValueError(
@@ -4268,7 +4268,7 @@ class Fitter:
         # memoized jax.jit that takes the galaxy data as a *traced* argument so the
         # compiled warmup is reused across fit_batch calls. The eager form built a
         # fresh ``window_adaptation`` (with a fresh log-density closure) every call
-        # — a fresh function identity that JAX's in-memory compile cache never
+        # a fresh function identity that JAX's in-memory compile cache never
         # reused, so it retained one warmup executable per call (~20 MB/call leak on
         # a long-lived Fitter). Data enters traced, so the adaptation still runs on
         # the current galaxy each call and the numbers are unchanged; this mirrors
@@ -4279,7 +4279,7 @@ class Fitter:
             _adapt_algo, _adapt_kwargs = blackjax.hmc, {"num_integration_steps": n_leapfrog_steps}
         elif method == "mcmc_dynamic_hmc":
             _adapt_algo, _adapt_kwargs = blackjax.hmc, {"num_integration_steps": 10}
-        else:  # mcmc_nuts, mcmc_ghmc — both tune with the NUTS window
+        else:  # mcmc_nuts, mcmc_ghmc, both tune with the NUTS window
             _adapt_algo, _adapt_kwargs = blackjax.nuts, {}
 
         def _run_window_adaptation(adapt_key, init_flat, data_args_first):
@@ -4330,7 +4330,7 @@ class Fitter:
                 float(step_size),
             )
 
-        # Raw scan functions (no @jax.jit — the outer jit+vmap handles it)
+        # Raw scan functions (no @jax.jit, the outer jit+vmap handles it)
         if method == "mcmc_nuts":
             kernel = _get_nuts_kernel()
 
@@ -4339,7 +4339,7 @@ class Fitter:
 
                 ``step_size`` / ``inv_mass_matrix`` are threaded in (not closed
                 over) so the compiled kernel is independent of the adapted
-                values — see :meth:`_fit_batch_vmap_mcmc`.
+                values, see :meth:`_fit_batch_vmap_mcmc`.
                 """
 
                 def ld(pos):
@@ -4382,7 +4382,7 @@ class Fitter:
                 """Scan over MCMC steps for a single galaxy (HMC variant).
 
                 Adaptation (``step_size`` / ``inv_mass_matrix``) is threaded in,
-                not closed over — see :meth:`_fit_batch_vmap_mcmc`.
+                not closed over, see :meth:`_fit_batch_vmap_mcmc`.
                 """
 
                 def ld(pos):
@@ -4425,7 +4425,7 @@ class Fitter:
                 """Scan over MCMC steps for a single galaxy (dynamic HMC variant).
 
                 Adaptation (``step_size`` / ``inv_mass_matrix``) is threaded in,
-                not closed over — see :meth:`_fit_batch_vmap_mcmc`.
+                not closed over, see :meth:`_fit_batch_vmap_mcmc`.
                 """
 
                 def ld(pos):
@@ -4460,7 +4460,7 @@ class Fitter:
             def _sample_scan(state, keys, data_args_i, step_size, inv_mass_matrix):
                 """Scan over MCMC steps for a single galaxy (GHMC variant).
 
-                Adaptation is threaded in, not closed over — see
+                Adaptation is threaded in, not closed over, see
                 :meth:`_fit_batch_vmap_mcmc`. The GHMC momentum scale is derived
                 from the passed ``inv_mass_matrix``.
                 """
@@ -4553,7 +4553,7 @@ class Fitter:
 
             if method == "mcmc_ghmc":
                 # Keyword args: blackjax reordered ghmc.init's (rng_key, logdensity_fn)
-                # between 1.3 and 1.6 — keywords are correct on both. (The single-galaxy
+                # between 1.3 and 1.6, keywords are correct on both. (The single-galaxy
                 # GHMC paths were already fixed this way; this batch path was missed
                 # because it had no test.)
                 state = blackjax.mcmc.ghmc.init(
@@ -4582,7 +4582,7 @@ class Fitter:
 
         # vmap + jit: one XLA kernel for all galaxies. The adapted step_size /
         # inv_mass_matrix are broadcast (in_axes None) so they enter as
-        # Parameter ops, not baked Constants — which lets the memo below reuse
+        # Parameter ops, not baked Constants, which lets the memo below reuse
         # the compiled sampler across repeated same-config fit_batch calls
         # (a fresh closure would otherwise miss jax.jit's cache and recompile).
         gal_keys = jax.random.split(key, n_gal)
@@ -4655,7 +4655,7 @@ class Fitter:
 
         The vmapped optimizer kernel is a *fresh* closure on every
         :meth:`fit_batch` call, and a fresh function object misses
-        ``jax.jit``'s compilation cache — so a catalog processed in repeated
+        ``jax.jit``'s compilation cache, so a catalog processed in repeated
         same-shape ``fit_batch("map")`` calls recompiles the (expensive)
         vmapped loss each time. Memoizing the wrapper object under a key that
         fully determines the closure lets ``jax.jit`` reuse the compiled
@@ -4667,9 +4667,9 @@ class Fitter:
         the optimizer configuration carried in ``key``. The cache lives on the
         Fitter instance, whose model structure is fixed at construction, so a
         cached kernel is only ever reused for the same model structure and the
-        same optimizer config — per-galaxy data still flows in fresh through the
+        same optimizer config, per-galaxy data still flows in fresh through the
         traced ``batch_data_args``. ``key=None`` (e.g. a caller-supplied custom
-        optimizer we cannot fingerprint) disables the memo — always build fresh
+        optimizer we cannot fingerprint) disables the memo, always build fresh
         rather than risk a stale kernel.
 
         Parameters
@@ -4724,7 +4724,7 @@ class Fitter:
             fn = builder()
             cache[key] = fn
             if len(cache) > self._BATCH_KERNEL_CACHE_MAX:
-                # dicts preserve insertion order — drop the oldest (least recent).
+                # dicts preserve insertion order, drop the oldest (least recent).
                 cache.pop(next(iter(cache)))
         else:
             # LRU touch: reinsert so a hit becomes the most-recently-used entry.
@@ -4735,7 +4735,7 @@ class Fitter:
     def _fit_batch_vmap_map(self, batch, *, key, verbose=True, **kwargs):
         """Vectorized MAP optimization over a batch using jax.vmap.
 
-        All galaxies share the same compiled XLA kernel — parameters and
+        All galaxies share the same compiled XLA kernel, parameters and
         optimizer states are batched across the first axis. A single
         ``jax.jit(jax.vmap(step))`` call optimizes all galaxies in parallel.
 

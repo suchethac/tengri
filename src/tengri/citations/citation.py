@@ -36,7 +36,7 @@ class Citation:
     role : str
         Purpose in tengri (e.g., "Starburst dust attenuation law").
     category : str
-        Component-type category (one of :data:`CATEGORIES` — "framework",
+        Component-type category (one of :data:`CATEGORIES`: "framework",
         "ssp", "dust_attenuation", "nebular", "igm", "inference", ...).
         Used by ``Bibliography.by_category()`` to group the report.
     authors : str
@@ -81,7 +81,7 @@ class Citation:
     def __str__(self) -> str:
         """Return one-line human-readable representation.
 
-        Format: "[role] — short. DOI:... (upstream: ...)"
+        Format: "[role]; short. DOI:... (upstream: ...)"
 
         Returns
         -------
@@ -89,7 +89,7 @@ class Citation:
             Single-line citation string.
 
         """
-        parts = [f"[{self.role}] — {self.short}"]
+        parts = [f"[{self.role}]; {self.short}"]
 
         if self.doi:
             parts.append(f"DOI: {self.doi}")

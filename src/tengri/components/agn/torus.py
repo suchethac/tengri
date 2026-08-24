@@ -9,9 +9,9 @@
 
 Two toy models are provided for testing and fast prototyping:
 
-1. **simple_torus** — single-temperature modified blackbody
+1. **simple_torus**: single-temperature modified blackbody
    with silicate opacity. 2 free parameters.
-2. **two_temperature_torus** — hot + warm dust components. 4 free params.
+2. **two_temperature_torus**: hot + warm dust components. 4 free params.
 
 Both return specific luminosity L_nu in erg/s/Hz. All functions are pure
 JAX and JIT-compilable.
@@ -106,7 +106,7 @@ def simple_torus(
         science. For production work, use the SKIRTOR templates in
         :mod:`tengri.components.agn.skirtor`.
 
-    **JIT-compatible**: yes — uses ``jnp`` primitives only.
+    **JIT-compatible**: yes, uses ``jnp`` primitives only.
     """
     if "simple_torus" not in _WARNED:
         warnings.warn(
@@ -198,7 +198,7 @@ def two_temperature_torus(
         science. For production work, use the SKIRTOR templates in
         :mod:`tengri.components.agn.skirtor`.
 
-    **JIT-compatible**: yes — uses ``jnp`` primitives only.
+    **JIT-compatible**: yes, uses ``jnp`` primitives only.
     """
     if "two_temperature_torus" not in _WARNED:
         warnings.warn(
@@ -237,7 +237,7 @@ def two_temperature_torus(
 # (``data/nenkova08_torus_grid.h5``, built by ``scripts/build_nenkova_grid.py``)
 # and interpolates it with a pure-JAX triweight kernel in optical depth so
 # that ``agn_tau`` is a fully differentiable, JIT/vmap-safe *fitted* parameter
-# — matching how SKIRTOR / Silva+04 / CAT3D are handled.
+#: matching how SKIRTOR / Silva+04 / CAT3D are handled.
 
 _NENKOVA_GRID_SEARCH_PATHS: tuple[str, ...] = (
     "data/nenkova08_torus_grid.h5",
@@ -268,7 +268,7 @@ def _load_nenkova_arrays(grid_path: str) -> dict:
 
     Notes
     -----
-    **JIT-compatible**: no — performs HDF5 I/O at grid-load time.
+    **JIT-compatible**: no, performs HDF5 I/O at grid-load time.
     """
     import h5py
 
@@ -304,10 +304,10 @@ def create_nenkova_from_grid(grid_path: str) -> Callable:
 
     Notes
     -----
-    **JIT-compatible**: yes — the returned closure uses only ``jnp`` and a
+    **JIT-compatible**: yes, the returned closure uses only ``jnp`` and a
     triweight interpolation kernel.
 
-    **Gradient-safe**: yes — the triweight kernel is C²-continuous in
+    **Gradient-safe**: yes, the triweight kernel is C²-continuous in
     ``agn_tau``, so it survives ``jax.grad`` / ``jax.vmap``.
 
     References
@@ -365,7 +365,7 @@ def create_nenkova_from_grid(grid_path: str) -> Callable:
         where :math:`T` is the tabulated CLUMPY template and the integral is
         evaluated on the (sorted) frequency grid of ``wavelength``.
 
-        **JIT-compatible**: yes. **Gradient-safe**: yes — ``agn_tau`` is a
+        **JIT-compatible**: yes. **Gradient-safe**: yes, ``agn_tau`` is a
         differentiable, traceable parameter.
         """
         # Nenkova tau axis is non-uniform (I6 fix #1851).
@@ -434,9 +434,9 @@ def nenkova_torus(*args, **kwargs) -> jnp.ndarray:
 
     Notes
     -----
-    **JIT-compatible**: yes — loads the vendored grid
+    **JIT-compatible**: yes, loads the vendored grid
     (``data/nenkova08_torus_grid.h5``) once via a cached closure, then
-    interpolates with pure JAX. **Gradient-safe**: yes — ``agn_tau`` is a
+    interpolates with pure JAX. **Gradient-safe**: yes, ``agn_tau`` is a
     differentiable, traceable parameter (it can be freely sampled/optimized by
     MAP, NUTS, and VI).
 

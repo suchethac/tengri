@@ -113,23 +113,23 @@ def run_hmc(
 
         This used to default to ``True``, which combined with the
         ``n_dim <= 30`` cap below meant HMC ran a **dense** mass matrix over
-        the whole D = 8-30 band — exactly the band where NUTS deliberately
+        the whole D = 8-30 band, exactly the band where NUTS deliberately
         switches to diagonal to dodge the 20+ GB warmup spike. Measured
         consequence: ``mcmc_hmc`` at D = 9 peaked at 13.47 GB and was
         SIGKILLed, while ``mcmc_nuts`` at the same D was already diagonal
-        (#1413, #1454). The high-D advisory could not catch it either — it
+        (#1413, #1454). The high-D advisory could not catch it either, it
         fires above D = 30, by which point HMC has *stopped* using dense.
     chain_method : {"vmap", "sequential", "parallel"}, default "vmap"
         How ``n_chains > 1`` chains are executed.
 
         - ``"vmap"`` (default): SIMD-batch the chains into one kernel. Peak
-          memory ~ ``n_chains`` × one chain — can OOM a dense-mass fit on
+          memory ~ ``n_chains`` × one chain, can OOM a dense-mass fit on
           modest RAM.
         - ``"sequential"``: loop the single-chain scan (compiled once, reused).
           **Peak memory = one chain**, so it runs on cheap hardware; wall ~
           ``n_chains`` × one chain. Prefer this when RAM is the constraint.
         - ``"parallel"``: one chain per device via ``jax.pmap`` (~one chain's
-          wall) — on CPU needs
+          wall), on CPU needs
           ``XLA_FLAGS=--xla_force_host_platform_device_count=N`` set before
           importing jax; falls back to ``"vmap"`` with a warning if fewer than
           ``n_chains`` devices are visible.
@@ -137,7 +137,7 @@ def run_hmc(
     precondition : bool, float or None, default None
         Sample in metric-whitened coordinates (#1301): the metric is built
         analytically at the initial point and the chain samples ``H(A zeta)``
-        with ``A A^T = G^-alpha``, draws mapped back exactly — the posterior is
+        with ``A A^T = G^-alpha``, draws mapped back exactly, the posterior is
         unchanged, only the integrator's geometry. **Opt-in** (#1397): ``None``
         (default) and ``False`` are off; ``True`` uses
         :data:`~tengri.inference.preconditioning.DEFAULT_WHITENING_STRENGTH`, and
@@ -167,7 +167,7 @@ def run_hmc(
         init_params,
     )
 
-    # Metric preconditioning (#1301) — see ``run_nuts`` for the rationale. Linear change
+    # Metric preconditioning (#1301), see ``run_nuts`` for the rationale. Linear change
     # of variables, so the posterior is untouched; draws are mapped back below.
     problem = prepare_preconditioning(
         log_posterior_flat_2arg, init_flat, data_args, precondition=precondition

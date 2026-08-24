@@ -1,7 +1,7 @@
 # SPDX-License-Identifier: BSD-3-Clause
 r"""FeII forest blocks for the composable AGN pipeline.
 
-One file, every FeII option — pick via ``agn={'feii': {'type': ...}}``.
+One file, every FeII option: pick via ``agn={'feii': {'type': ...}}``.
 Consolidated 2026-07 from boroson_green_feii + feii_blocks; registration
 unchanged.
 """

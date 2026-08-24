@@ -276,7 +276,7 @@ def compute_mass_remaining_fraction(
 
     Notes
     -----
-    **JIT-compatible**: yes — uses ``jax.vmap`` for vectorized age integration.
+    **JIT-compatible**: yes, uses ``jax.vmap`` for vectorized age integration.
     **Gradient-safe**: yes.
 
     This function numerically integrates the IMF in logarithmic mass space
@@ -317,7 +317,7 @@ def compute_mass_remaining_fraction(
         # NaN rather than a clamped zero when the IMF integral vanishes (#1404).
         # ``total_mass`` is the IMF mass integral over a fixed, strictly positive
         # log-mass grid, so it cannot be zero for any real IMF. A 1e-30 floor
-        # therefore guards a state that is already broken — and guards it the
+        # therefore guards a state that is already broken; and guards it the
         # wrong way: with total_mass zero, living_mass and dead_remnant_mass are
         # zero too, so the clamp returns 0/1e-30 = 0, i.e. a surviving fraction
         # of exactly zero. That is a plausible-looking number ("all mass lost")

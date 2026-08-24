@@ -3,7 +3,7 @@
 
 The single implementation of :math:`B_\\nu(T)` for the whole tree. It lives in
 ``utils/`` rather than inside a component because two independent subsystems
-need it — the AGN torus/polar-dust closures and the dust IR emission closures —
+need it (the AGN torus/polar-dust closures and the dust IR emission closures)
 and ``utils/`` is the layer below both. Importing it from either component
 would invert the layering and couple the two.
 
@@ -29,7 +29,7 @@ __all__ = ["planck_bnu_nu", "planck_bnu_wave"]
 # x = h*nu/(k_B*T) is clamped to this interval.  The ceiling is a plain
 # constant, not a dtype-dependent one: the denominator below is ``-expm1(-x)``,
 # which lives in (0, 1] and cannot overflow at any x in any dtype, while
-# ``exp(-x)`` underflows to exactly 0.0 — the true Wien limit.  Measured
+# ``exp(-x)`` underflows to exactly 0.0: the true Wien limit.  Measured
 # identical values AND gradients at x = 40, 60, 87, 90, 150, 400 in both
 # dtypes with and without a dtype-aware cap, so the cap was inert (#1439).
 # The floor is what still earns its keep: it bounds 1/x as x -> 0.
@@ -44,13 +44,13 @@ _T_MIN: float = 1.0
 
 @jax.custom_jvp
 def _planck_core(nu_w: jnp.ndarray, x: jnp.ndarray) -> jnp.ndarray:
-    r"""``2h nu (nu/c)**2 * e**-x / (1 - e**-x)`` — the smooth part of :math:`B_\nu`.
+    r"""``2h nu (nu/c)**2 * e**-x / (1 - e**-x)``: the smooth part of :math:`B_\nu`.
 
     Split out from :func:`planck_bnu_nu` so the explicit derivative rule below
     covers *only* this, and the clamps on ``x`` and ``T`` stay ordinary
     ``jnp`` ops that autodiff handles exactly as it always has. Re-deriving a
     clamp's derivative by hand would mean matching ``lax.max``'s tie-breaking
-    (it splits the tangent evenly at equality) — a second source of truth that
+    (it splits the tangent evenly at equality); a second source of truth that
     can disagree with the first, and did: masking on ``T > _T_MIN`` severed the
     derivative at exactly ``T = _T_MIN`` where the primal passes it through.
 
@@ -71,21 +71,21 @@ def _planck_core(nu_w: jnp.ndarray, x: jnp.ndarray) -> jnp.ndarray:
     # peaks at ~8e-12 and is perfectly representable. Grouping as nu·(nu/c)²
     # caps the largest intermediate at ~1e12; identical in float64 to ~4e-16.
     #
-    # ``1/expm1(x)`` is spelled ``exp(-x) / -expm1(-x)`` — the same number
+    # ``1/expm1(x)`` is spelled ``exp(-x) / -expm1(-x)``: the same number
     # (``1/(e^x - 1) == e^-x/(1 - e^-x)``), but with a denominator that cannot
     # overflow (#1439). Division's derivative needs the denominator *squared*:
     # ``expm1(x)**2`` passes float32's 3.4e38 once x > ~44, so with a large
-    # incoming cotangent the reverse pass formed ``inf/inf`` and returned NaN —
+    # incoming cotangent the reverse pass formed ``inf/inf`` and returned NaN,
     # while the forward value stayed perfectly healthy, because a saturated
     # denominator still gives the right Wien-tail limit. A dtype-aware clamp
     # used to sit above, sized on ``expm1``'s *forward* overflow (~88.7 in
-    # float32) — but the derivative breaks at half that, so no setting of that
+    # float32): but the derivative breaks at half that, so no setting of that
     # clamp could ever have covered this. That is why the fix is the rewrite
     # here and not a tighter bound; with it in place the clamp measured inert
     # and was removed.
     #
     # The rewritten denominator ``1 - e^-x`` lives in (0, 1], so its square is
-    # bounded by 1 at every x and in every dtype — the failure mode is removed
+    # bounded by 1 at every x and in every dtype: the failure mode is removed
     # rather than bounded. Accuracy is preserved at both ends: for small x,
     # ``-expm1(-x) -> x`` is exactly what ``expm1`` exists to compute.
     #
@@ -124,7 +124,7 @@ def _planck_core_jvp(
     Why a rule at all. Autodiff differentiates the primal's division by
     :math:`1-e^{-x}` with the quotient rule, which needs that denominator
     *squared*. With a caller's ~1e30 cotangent arriving before the ~3.97e-13
-    prefactor, :math:`g/(1-e^{-x})^2` reaches 4.8e39 — past float32's 3.4e38 —
+    prefactor, :math:`g/(1-e^{-x})^2` reaches 4.8e39 (past float32's 3.4e38)
     for a true answer of 1.9e27. Stating the derivative means the square is
     never formed by autodiff at all, which is what source-level regrouping
     could not achieve: three groupings were measured and all three still
@@ -133,13 +133,13 @@ def _planck_core_jvp(
     Why ``custom_jvp`` and not the ``custom_vjp`` #1439 originally prescribed.
     Three reasons, in order of what they cost:
 
-    1. A ``custom_vjp`` is **opaque to forward mode** — ``jvp`` raises
+    1. A ``custom_vjp`` is **opaque to forward mode**: ``jvp`` raises
        ``TypeError: can't apply forward-mode autodiff (jvp) to a custom_vjp
        function``. Forward mode already computes this gradient *correctly* in
        pure float32 (measured 2.761298e+16, matching float64, where reverse
        mode returned ``inf``), and geoVI and ``inference/preconditioning.py``
        both differentiate forward. The ``custom_vjp`` spelling would trade a
-       silent NaN in one mode for a hard error in a mode that works — the same
+       silent NaN in one mode for a hard error in a mode that works; the same
        regression this branch already had to undo for
        ``tengri.components.stellar.component._mass_scale_lnu``.
     2. A ``custom_vjp`` would have to reduce ``g * dB/dT`` back to the
@@ -161,8 +161,8 @@ def _planck_core_jvp(
     b_nu = _planck_core(nu_w, x)
 
     # ``B/(1-e^-x)`` is the whole point: it is the only place a squared
-    # denominator appears, and forming it HERE — one value, ~2e-3 at the
-    # failing disc ring, before any cotangent exists — is what keeps it in
+    # denominator appears, and forming it HERE: one value, ~2e-3 at the
+    # failing disc ring, before any cotangent exists: is what keeps it in
     # range. ``B/nu`` is likewise spelled with one power of nu removed rather
     # than divided out, so nu never reaches a denominator: at nu = 0 the naive
     # ``3*b_nu/nu`` is 0/0 = NaN where the true derivative is 0.
@@ -190,7 +190,7 @@ def planck_bnu_nu(nu: jnp.ndarray, temperature: float) -> jnp.ndarray:
 
     Notes
     -----
-    **JIT-compatible**: yes — all operations use ``jnp`` primitives. Safe under
+    **JIT-compatible**: yes, all operations use ``jnp`` primitives. Safe under
     ``grad`` and ``vmap``.
 
     .. math::
@@ -204,8 +204,8 @@ def planck_bnu_nu(nu: jnp.ndarray, temperature: float) -> jnp.ndarray:
     **Numerical stability**: the prefactor is grouped as
     :math:`2h\nu(\nu/c)^2` so :math:`\nu^3` is never formed. Written out, that
     intermediate reaches :math:`\approx 3\times10^{52}` at
-    :math:`\lambda \sim 100` Angstrom — far beyond the float32 maximum of
-    :math:`3.4\times10^{38}` — even though :math:`B_\nu` itself peaks around
+    :math:`\lambda \sim 100` Angstrom; far beyond the float32 maximum of
+    :math:`3.4\times10^{38}`: even though :math:`B_\nu` itself peaks around
     1e-11 and is representable. This grouping caps the largest intermediate at
     :math:`\sim 10^{12}` and is identical in float64 to ~4e-16 relative.
 
@@ -232,7 +232,7 @@ def planck_bnu_nu(nu: jnp.ndarray, temperature: float) -> jnp.ndarray:
     overflow is not inside this function at all. A caller multiplies
     :math:`B_\nu` by a ring area or a template normalization ~1e30, so the
     reverse pass arrives carrying a cotangent that large and forms
-    :math:`g/(1-e^{-x})^2` — 4.8e39 at a real disc ring — *before* the tiny
+    :math:`g/(1-e^{-x})^2` (4.8e39 at a real disc ring) *before* the tiny
     :math:`2h\nu(\nu/c)^2` prefactor (3.97e-13) can bring it back. The correct
     answer, 1.9e27, is perfectly representable; only the intermediate is not,
     and the two factors live on opposite sides of the function boundary, so no
@@ -254,11 +254,11 @@ def planck_bnu_nu(nu: jnp.ndarray, temperature: float) -> jnp.ndarray:
     nu_w = jnp.asarray(nu, dtype=dtype)
     t_safe = jnp.maximum(jnp.asarray(temperature, dtype=dtype), _T_MIN)
 
-    # Grouped as ``(h/k)·nu / T``, NOT ``h·nu / (k·T)`` — associativity, but the
+    # Grouped as ``(h/k)·nu / T``, NOT ``h·nu / (k·T)``: associativity, but the
     # reverse pass is not associative in float32 (#1439). Division's derivative
     # w.r.t. its denominator is ``-g·A/den**2``. Spelled ``h·nu / (k·T)`` the
-    # denominator is ``k·T``, so that intermediate is ``-g·(h·nu)/(k·T)**2`` —
-    # measured 2e40 for a disc ring, past float32's 3.4e38 — and the small ``k``
+    # denominator is ``k·T``, so that intermediate is ``-g·(h·nu)/(k·T)**2``,
+    # measured 2e40 for a disc ring, past float32's 3.4e38, and the small ``k``
     # that would bring it back into range is only applied *afterwards*, by which
     # point it is ``inf``. With ``k`` folded into the numerator the denominator is
     # just ``T``, the same intermediate is ``-g·(h·nu/k)/T**2``, and nothing

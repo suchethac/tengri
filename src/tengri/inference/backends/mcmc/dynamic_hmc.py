@@ -33,7 +33,7 @@ logger = logging.getLogger(__name__)
 #: dynamic kernel then draws its own per-step length while sampling. Must stay
 #: equal to the ``num_integration_steps`` in
 #: ``tengri.inference.backends.mcmc._shared._dynamic_hmc_full_scan``,
-#: which the prewarm, hierarchical and catalog paths still call — the two
+#: which the prewarm, hierarchical and catalog paths still call, the two
 #: disagreeing would mean a cached adaptation tuned against a different
 #: trajectory length than the fused path produces.
 _DHMC_WARMUP_LEAPFROG_STEPS = 10
@@ -55,7 +55,7 @@ def run_dynamic_hmc(
 ):
     """Dynamic HMC sampling via BlackJAX.
 
-    HMC with dynamic trajectory length selection — adapts the number
+    HMC with dynamic trajectory length selection, adapts the number
     of leapfrog steps per proposal based on a heuristic that balances
     exploration vs cost. Similar to NUTS but without the binary tree.
 
@@ -77,7 +77,7 @@ def run_dynamic_hmc(
         (#1397): ``None`` (default) and ``False`` are off; ``True`` uses
         :data:`~tengri.inference.preconditioning.DEFAULT_WHITENING_STRENGTH`, and
         a float in ``[0, 1]`` sets the whitening strength (``1.0`` is full
-        whitening, which amplifies a misspecified metric without bound — #1442).
+        whitening, which amplifies a misspecified metric without bound, #1442).
         See :func:`~tengri.inference.backends.mcmc.nuts.run_nuts` for the full
         rationale and :mod:`tengri.inference.preconditioning` for the math.
     verbose : bool
@@ -103,7 +103,7 @@ def run_dynamic_hmc(
         init_params,
     )
 
-    # Metric preconditioning (#1301) — see ``run_nuts`` for the rationale. Linear
+    # Metric preconditioning (#1301), see ``run_nuts`` for the rationale. Linear
     # change of variables, so the posterior is untouched; draws are mapped back below.
     problem = prepare_preconditioning(
         log_posterior_flat_2arg, init_flat, data_args, precondition=precondition
@@ -138,7 +138,7 @@ def run_dynamic_hmc(
     adapt_key = ("dynamic_hmc", not use_dense, tuning, problem.cache_key)
     cached = _get_cached_adaptation(fitter, adapt_key)
 
-    # Both branches must advance the key identically — cache presence is
+    # Both branches must advance the key identically, cache presence is
     # invisible to the caller and must not steer the RNG stream, or two
     # identical ``fit`` calls with one ``key`` return different chains. These
     # two splits used to live only in the ``else``; they are unused on the
@@ -153,7 +153,7 @@ def run_dynamic_hmc(
     # Split from sampling so a fresh call and a cached one end in the SAME
     # sampling scan. While the two were fused, a first fit ran warmup+sampling
     # inside `_dynamic_hmc_full_scan` and every later fit ran a sampling-only
-    # scan against the cached parameters — structurally different computations,
+    # scan against the cached parameters, structurally different computations,
     # so one pinned `key` returned two different posteriors.
     #
     # The adaptation is plain HMC window adaptation (dynamic_hmc.init needs a

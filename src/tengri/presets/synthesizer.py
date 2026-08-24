@@ -38,7 +38,7 @@ from tengri.presets._registry import register_preset
         "Stalevski_2016",  # SKIRTOR torus
         "Groves_2004",  # NLR templates
         "Lovell_2025",  # Synthesizer (cite together with Roper_2026)
-        "Roper_2026",  # Synthesizer JOSS paper — both required by citation policy
+        "Roper_2026",  # Synthesizer JOSS paper: both required by citation policy
     ],
     status="experimental",
 )

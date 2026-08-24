@@ -54,7 +54,7 @@ def read_generic_fits_spectrum(
 
     Notes
     -----
-    **JIT-compatible**: no — file I/O and astropy required.
+    **JIT-compatible**: no, file I/O and astropy required.
 
     Examples
     --------

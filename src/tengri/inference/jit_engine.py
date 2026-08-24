@@ -180,7 +180,7 @@ _LEAN_MODE_LOCK = threading.Lock()
 # Persistent mode: opt-out from the lean default. When True, ``Fitter.run()``
 # skips the auto-clear entirely and keeps every prior compile in RAM.
 # After smart lean (2026-05) was wired to keep the matching ``(sig, method)``
-# entry across runs, ``persistent()`` is rarely needed — smart lean already
+# entry across runs, ``persistent()`` is rarely needed, smart lean already
 # preserves what catalog and same-method loops want. ``persistent()`` is now
 # only useful for keeping *non-matching* entries (e.g. an MAP and HMC
 # compile alive simultaneously, swapping back and forth).
@@ -219,11 +219,11 @@ def persistent(enabled: bool = True):
 
     After smart lean (2026-05), this is rarely needed. Smart lean already
     keeps the entry that matches the upcoming run's
-    ``(compile_signature, method)`` — so a CatalogFitter loop or repeated
+    ``(compile_signature, method)``, so a CatalogFitter loop or repeated
     identical fit hits the cache without any wrapping context.
 
     Use ``persistent()`` only when you genuinely want to keep *non-matching*
-    L3 entries alive — e.g. swapping back and forth between MAP and HMC
+    L3 entries alive, e.g. swapping back and forth between MAP and HMC
     on the same fitter and wanting both compiles in RAM simultaneously.
 
     Equivalent ``TENGRI_PERSISTENT=1`` env var sets it process-wide.
@@ -272,12 +272,12 @@ def lean(enabled: bool = True):
     compiles (loss, gradient, logdensity, structural kernels). This keeps
     peak RSS bounded while avoiding recompile of the smaller forward graphs.
 
-    Lean is now *surgical* — it drops the 5–6 GB inference loop body but
+    Lean is now *surgical*, it drops the 5–6 GB inference loop body but
     reuses the 0.5–1.5 GB forward compiles across phases, a significant
     improvement over clearing everything (see Phase B in the compilation
     cache architecture).
 
-    Safe inside ``CatalogFitter`` / ``PopulationFitter`` — smart lean
+    Safe inside ``CatalogFitter`` / ``PopulationFitter``, smart lean
     keeps the matching entry across the loop, so you get reuse without
     needing ``persistent()``.
 
@@ -395,7 +395,7 @@ def clear_shared_caches(
     scope : {"all", "inference_body"}, default "all"
         Scope of caches to clear:
 
-        - ``"all"``: Clear *everything* — engines, loss fns, grad fns,
+        - ``"all"``: Clear *everything*, engines, loss fns, grad fns,
           logdensity fns, prediction kernels, per-model caches, and JAX's
           XLA cache (if ``drop_xla=True``). Used by ``tengri.gc()``.
         - ``"inference_body"``: Drop only the heavy inference-loop body
@@ -404,7 +404,7 @@ def clear_shared_caches(
           ``_SHARED_LOSS_FN_CACHE``, ``_SHARED_GRAD_FN_CACHE``,
           ``_SHARED_LOGDENSITY_FN_CACHE``, ``_SHARED_LOGLIK_FN_CACHE``,
           structural kernels) and per-model caches.
-          Suitable for ``lean()`` context manager — keeps shareable forward
+          Suitable for ``lean()`` context manager, keeps shareable forward
           compiles across phases.
 
     drop_xla : bool, default True
@@ -417,7 +417,7 @@ def clear_shared_caches(
         preserved while every other entry in the affected caches is
         dropped. Used by ``Fitter.run(lean=True)`` to drop *stale* prior-
         phase compiles while keeping the entry that matches the current
-        fitter — so a CatalogFitter loop over N galaxies all of the same
+        fitter, so a CatalogFitter loop over N galaxies all of the same
         shape pays exactly one compile, not N. ``None`` (the default)
         clears every entry in scope.
 
@@ -468,7 +468,7 @@ def clear_shared_caches(
 
     # Engine cache is the heavy inference-loop artefact (5-6 GB).
     # Signal-response is a forward-model JIT keyed on _engine_cache_key()
-    # (a different shape from compile_signature) — keep_sig prefix
+    # (a different shape from compile_signature), keep_sig prefix
     # matching cannot preserve it, so clearing it on every Fitter.run
     # would silently nuke a useful forward compile. Treat it like the
     # other forward-model caches (loss/grad/logdensity) and only drop
@@ -492,7 +492,7 @@ def clear_shared_caches(
 
         # Drops both the structural prediction kernels and the per-model
         # namespaces (loss/grad/engine handles). scope="inference_body"
-        # deliberately leaves per-model caches in place — see the scope
+        # deliberately leaves per-model caches in place, see the scope
         # contract in the docstring above.
         _model_cache_owner.clear()
         _clear_vmap_to_physical_cache()
@@ -550,7 +550,7 @@ def _build_signal_response(fitter):
     with ``jax.jit`` (for standalone eager use) or leave unwrapped (so an
     outer ``jax.jit`` can inline it and differentiate through it).
 
-    Neither closure captures any galaxy data — they depend only on model
+    Neither closure captures any galaxy data, they depend only on model
     structure and parameter configuration.  This makes them the
     "reproducible components" that can be compiled once and shared across
     all Fitters for the same model.
@@ -607,26 +607,26 @@ def get_or_build_signal_response(fitter):
     "reproducible component": it does not depend on any galaxy's data.
     Caching it in a module-level dict enables cross-galaxy reuse:
 
-    1. **Native path** — the same ``signal_response`` closure is used inside
+    1. **Native path**, the same ``signal_response`` closure is used inside
        ``build_jit_engine``.  Because the outer ``run_evi_geovi_jit`` is
        itself cached per compile_signature(), the physics is traced only
        once per model structure regardless of galaxy count.
 
-    2. **NIFTy path** — ``signal_response_jit`` is the stable function object
+    2. **NIFTy path**, ``signal_response_jit`` is the stable function object
        passed to ``jft.Model``.  JAX's trace cache is keyed by Python function
        identity, so both ``run_nifty_vi`` (full path) and ``run_nifty_fast_vi``
        (tight loop) share one compiled physics kernel.  NIFTy's
        ``OptimizeVI.update`` skips re-tracing the SPS/dust/AGN stack for
        every new galaxy.
 
-    Keyed by ``compile_signature()`` — ``(model_sig, _engine_cache_key())``.
+    Keyed by ``compile_signature()``: ``(model_sig, _engine_cache_key())``.
 
     It keyed on ``_engine_cache_key()`` alone until #1972, on the claim that
     that key "captures ... model structure". It does not: it carries data_type,
     spec flags, free names, feature channels and the params override, while the
     model's physics config (dust law, nebular backend, AGN model, SSP identity,
     build precision) lives in ``SEDModel.compile_signature`` only. So two models
-    differing solely in an attenuation law received the SAME cached closure —
+    differing solely in an attenuation law received the SAME cached closure,
     which then predicts with the wrong law, silently. ``_key_matches_sig`` had
     already documented these keys as ``compile_signature()`` tuples, so surgical
     lean was matching against a shape this cache did not store.
@@ -681,7 +681,7 @@ def build_jit_engine(fitter, pos_dict):
     for zero Python overhead.
 
     The geoVI path uses NIFTy's actual implementations of CG,
-    Newton-CG, sample drawing, and nonlinear curving — imported
+    Newton-CG, sample drawing, and nonlinear curving, imported
     directly and called within the JIT boundary. This ensures
     mathematical equivalence with ``jft.optimize_kl``.
 
@@ -726,7 +726,7 @@ def build_jit_engine(fitter, pos_dict):
     use_components = bool(getattr(fitter, "use_components", False))
 
     # --- Signal response (physics only) ---
-    # NOT JIT'd here — must remain traceable so jax.jvp/vjp (in metric_vec)
+    # NOT JIT'd here, must remain traceable so jax.jvp/vjp (in metric_vec)
     # and jax.value_and_grad (in hamiltonian) can differentiate through it.
     # The JIT-compiled version lives in get_or_build_signal_response() for
     # NIFTy and eager use; this unwrapped copy is for the native VI path.
@@ -841,7 +841,7 @@ def build_jit_engine(fitter, pos_dict):
             r"""M(xi) @ v = (J/sigma)^T (J/sigma) v + v.
 
             Algebraically ``J^T N^{-1} J v + v``, but never forming
-            :math:`N^{-1} = 1/\sigma^2` — that is ~1e59 at a real photometric
+            :math:`N^{-1} = 1/\sigma^2`; that is ~1e59 at a real photometric
             sigma and simply does not exist in float32, so the shipped
             spelling returned ``inf``, or ``NaN`` wherever ``Jv`` was exactly
             zero. Whitening twice keeps every intermediate representable
@@ -963,12 +963,12 @@ def build_jit_engine(fitter, pos_dict):
             """Draw one posterior residual sample."""
             k1, k2 = jax.random.split(subkey)
             eta_pr = jax.random.normal(k1, shape=(d_total,))
-            # Whitened-data residual draw matches the data array's shape — 1-D
+            # Whitened-data residual draw matches the data array's shape, 1-D
             # ``(n_pix,)`` for a single galaxy, ``(N_gal, n_pix)`` for a
             # hierarchical fit. Deriving it from ``sqrt_ni`` keeps the engine
             # topology-agnostic (was ``shape=(len(fitter.data),)``, which
             # collapsed a batched ``(N_gal, n_pix)`` data array to ``N_gal``
-            # and broke population spectroscopy — suchethac/tengri#711).
+            # and broke population spectroscopy, suchethac/tengri#711).
             eta_lh = jax.random.normal(k2, shape=sqrt_ni.shape)
             _, vjp_fn = jax.vjp(signal_response, unflatten(pos_f))
             jt = flatten(vjp_fn(sqrt_ni * eta_lh)[0])
@@ -1438,7 +1438,7 @@ def build_jit_engine(fitter, pos_dict):
         data_args,
         iteration=0,
     ):
-        """One geoVI iteration — ``sample_mode`` must be a static string.
+        """One geoVI iteration, ``sample_mode`` must be a static string.
 
         When used inside ``run_evi_geovi`` (which marks ``sample_mode``
         as static), JAX compiles a separate version per mode.  The
@@ -1447,12 +1447,12 @@ def build_jit_engine(fitter, pos_dict):
 
         Parameters
         ----------
-        sample_mode : str  (STATIC — triggers recompilation per value)
-            ``"linear_resample"`` — fresh MGVI samples (standard MGVI)
-            ``"linear_sample"`` — reuse keys from prev iter (deterministic MGVI)
-            ``"nonlinear_resample"`` — fresh geoVI samples (standard geoVI)
-            ``"nonlinear_sample"`` — reuse keys + curve (deterministic geoVI)
-            ``"nonlinear_update"`` — re-curve existing residuals at new m
+        sample_mode : str  (STATIC, triggers recompilation per value)
+            ``"linear_resample"``, fresh MGVI samples (standard MGVI)
+            ``"linear_sample"``, reuse keys from prev iter (deterministic MGVI)
+            ``"nonlinear_resample"``, fresh geoVI samples (standard geoVI)
+            ``"nonlinear_sample"``, reuse keys + curve (deterministic geoVI)
+            ``"nonlinear_update"``, re-curve existing residuals at new m
         data_args : dict
             Data-dependent arguments (data, noise, sqrt_noise_inv, etc.).
 
@@ -1468,7 +1468,7 @@ def build_jit_engine(fitter, pos_dict):
         else:  # _sample modes: reuse
             sample_keys = prev_keys
 
-        # Python if — only the used branch is traced by JAX
+        # Python if, only the used branch is traced by JAX
         if sample_mode == "vi":
             # Optimal schedule: resample at iter 0 and every
             # _RESAMPLE_EVERY, nonlinear_update in between.
@@ -1502,11 +1502,11 @@ def build_jit_engine(fitter, pos_dict):
     def run_evi_geovi(init_pos, key, data_args, n_iterations, n_samples, kl_rtol, sample_mode):
         """Run geoVI with automatic convergence detection.
 
-        ``n_iterations`` is a **dynamic** traced value — changing it
+        ``n_iterations`` is a **dynamic** traced value, changing it
         does NOT trigger recompilation.  Keys are generated on-the-fly
         via ``jax.random.fold_in`` instead of pre-splitting.
 
-        ``sample_mode`` is a **static** string — JAX compiles a
+        ``sample_mode`` is a **static** string, JAX compiles a
         separate XLA program per mode.  All 5 NIFTy modes supported:
 
         - ``"linear_resample"``: fresh MGVI samples each iteration
@@ -1602,7 +1602,7 @@ def build_jit_engine(fitter, pos_dict):
     # ``_nifty_model`` wraps the shared signal_response_jit so NIFTy's trace
     # cache hits on the second galaxy.  The per-Fitter nifty_likelihood
     # (which captures galaxy data) is built in run_nifty_fast_vi via
-    # _get_or_build_nifty_likelihood — NOT here, so the shared engine
+    # _get_or_build_nifty_likelihood, NOT here, so the shared engine
     # never holds a stale reference to any galaxy's flux/noise arrays.
     _nifty_model = None
     if _has_nifty:
@@ -1621,7 +1621,7 @@ def build_jit_engine(fitter, pos_dict):
             _nifty_model = None
 
     # Wrap core functions in JIT but do NOT pre-compile (no dummy calls).
-    # Compilation happens lazily on first real call — avoids the 2+ GB
+    # Compilation happens lazily on first real call, avoids the 2+ GB
     # protobuf size limit that eager compilation can hit when the forward
     # model is large.  signal_response is already JIT'd above so it
     # won't be re-traced into these scopes.

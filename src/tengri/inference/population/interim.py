@@ -134,7 +134,7 @@ def _assert_interim_bounds_are_physical(interim_bounds):
     downstream would not have caught them:
 
     * ``tau = 0`` does not produce NaN. ``rho = exp(-dt/0) = 0``, so the field
-      degenerates to independent draws — a silently different model.
+      degenerates to independent draws, a silently different model.
     * ``sigma < 0`` returns a density bit-identical to ``|sigma|``, because
       sigma enters only through the even quantity ``(sigma ln10)^2``. The
       sampler then explores a spurious mirror of the physical mode.
@@ -187,13 +187,13 @@ def _assert_truth_within_interim_bounds(mock, interim_bounds):
 
     ``make_population`` validates each truth against the *model's* prior, but
     ``fit_interim`` then overrides the shared PSD priors with
-    ``interim_bounds`` — so a truth that was reachable before the override can
+    ``interim_bounds``, so a truth that was reachable before the override can
     be unreachable after it, and nothing re-checked (issue #1575).
 
     The failure this prevents is expensive and misdirects: the optimizer walks
     to a boundary that sits at infinity in unbounded space, every MAP restart
     returns a non-finite loss, and the resulting message advises tuning
-    ``learning_rate``/``n_restarts`` — none of which can reach a mode outside
+    ``learning_rate``/``n_restarts``, none of which can reach a mode outside
     the support. On the N=8 PSD pilot that arrived 50 minutes into the run.
 
     Parameters
@@ -295,8 +295,8 @@ def fit_interim(
         none of them, so its own advice could not be followed.
 
         The regime is real, not hypothetical. The configuration recorded in
-        ``psd_bank_conv/bank_meta.json`` — truths 0.75 dex / 150 Myr at SNR
-        20/10, behind §5 of ``docs/dev/hierarchical-psd-handoff.md`` — diverges
+        ``psd_bank_conv/bank_meta.json``, truths 0.75 dex / 150 Myr at SNR
+        20/10, behind §5 of ``docs/dev/hierarchical-psd-handoff.md``, diverges
         from every restart under the default budget. The bank that produced
         those numbers never called this function;
         ``scripts/hierarchical_psd_fit_bank.py`` drives ``Fitter`` directly and
@@ -322,7 +322,7 @@ def fit_interim(
 
     **Memory and trajectory length.** Warmup on D~8 models has been measured
     at 3-6 GB for small grids and 20+ GB for dense basis SFH. Run under a
-    memory watchdog. Do not lower ``n_leapfrog_steps`` below 100 — an earlier
+    memory watchdog. Do not lower ``n_leapfrog_steps`` below 100, an earlier
     study measured honest coverage at L=100 but overconfident bands at L=25
     (0.44 nominal coverage). Trajectory length matters more than sampler name.
     """
@@ -364,7 +364,7 @@ def fit_interim(
 
     # ``field_centering`` rides along explicitly: this spec is rebuilt from the
     # free-parameter distributions alone, so any structural setting not named
-    # here is silently reset to its default — and an interim fit that quietly
+    # here is silently reset to its default, and an interim fit that quietly
     # reverts to the non-centered map is exactly the null result #1355's A/B
     # would misread as "the knob does nothing" (#1355).
     spec_interim = Parameters(
@@ -445,7 +445,7 @@ def fit_interim(
         # Release the per-galaxy Posterior and Fitter before the next iteration.
         # A Posterior holds a reference to its model, and a Fitter's data_args
         # carry the threaded SSP grid (~62 MB). Holding N of those alive is how
-        # two sweeps were OOM-killed at N=16 with no traceback — the kernel
+        # two sweeps were OOM-killed at N=16 with no traceback, the kernel
         # SIGKILLs without letting Python report anything.
         del post_i, fitter
         gc.collect()

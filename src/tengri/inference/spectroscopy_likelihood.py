@@ -3,8 +3,8 @@
 
 Pinned to the ``"spec_fnu"`` prediction-dict key with the legacy
 ``fnu_obs`` / ``fnu_err`` constructor argument names. Identical
-math to :class:`tengri.inference.likelihoods.GaussianLikelihood`
-— this class exists for ergonomic discovery (autocomplete, docs,
+math to :class:`tengri.inference.likelihoods.GaussianLikelihood`;
+this class exists for ergonomic discovery (autocomplete, docs,
 ``isinstance``-style channel detection in the Fitter auto-build
 path) and for the legacy constructor signature.
 

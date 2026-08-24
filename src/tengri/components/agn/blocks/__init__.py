@@ -1,5 +1,5 @@
 # SPDX-License-Identifier: BSD-3-Clause
-"""AGN block subsystem — fine-grained, composable AGN sub-components.
+"""AGN block subsystem: fine-grained, composable AGN sub-components.
 
 See :mod:`._protocol` for the contract and :mod:`.runner` for the
 :func:`composable_agn_l_nu` runner. Importing this package side-effects
@@ -20,7 +20,7 @@ Public API
 
 # Importing these submodules side-effects @register_agn_block calls.
 # Side-effect: registers AGN_MODELS["composable"]. Imported last to avoid
-# circular imports — registry depends on the runner being defined.
+# circular imports: registry depends on the runner being defined.
 # composable_precompute is the third (precomputed-lookup) evaluation mode;
 # mirror of qsogen_precompute / skirtor_precompute for the composable runner.
 from tengri.components.agn.blocks import (

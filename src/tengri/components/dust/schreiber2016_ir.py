@@ -68,14 +68,14 @@ class Schreiber2016IRSEDComponent(SEDModelComponent):
     -----
     **Cross-component contract**:
 
-    - Reads: ``state.derived["L_ir"]`` (erg/s) — luminosity absorbed by dust.
-    - Publishes: ``{"L_ir_emission": erg/s}`` — bolometric IR from templates.
+    - Reads: ``state.derived["L_ir"]`` (erg/s), the luminosity absorbed by dust.
+    - Publishes: ``{"L_ir_emission": erg/s}``, the bolometric IR from templates.
 
     **Template loading**: Templates are loaded during :meth:`load` (precomputation)
     and stored on ``self.data``. If template files are unavailable, the component
     gracefully skips with a warning.
 
-    **JIT-compatible**: yes — all operations in :meth:`predict` are ``jnp``
+    **JIT-compatible**: yes, all operations in :meth:`predict` are ``jnp``
     primitives.
 
     **Parameter discovery**: Free parameters (``T``, ``f_pah``) are
@@ -92,7 +92,7 @@ class Schreiber2016IRSEDComponent(SEDModelComponent):
     parameter_prefix = "dust_"
     config: Schreiber2016IRConfig = Schreiber2016IRConfig()
 
-    # Free parameters — auto-discovered by base class. Canonical names (#849):
+    # Free parameters, auto-discovered by base class. Canonical names (#849):
     # ``dust_T`` (was ``dust_tdust``) + ``dust_f_pah`` (was ``dust_fpah``);
     # the old spellings resolve via _LEGACY_PARAM_ALIASES.
     T = Uniform(15.0, 99.0, default=25.0, description="Dust temperature", units="K")
@@ -196,7 +196,7 @@ class Schreiber2016IRSEDComponent(SEDModelComponent):
         -----
         **JIT-compatible**: yes.
 
-        **Gradient-safe**: yes — 1D linear interpolation is differentiable
+        **Gradient-safe**: yes, 1D linear interpolation is differentiable
         everywhere except at grid boundaries (where clipping occurs).
         """
         L_ir = inputs["L_ir"]

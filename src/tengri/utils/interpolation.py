@@ -6,7 +6,7 @@ Used by the CLOUDY nebular grid interpolation and available for any
 future grid-based model component.
 
 Note: the DSPS/SPS metallicity interpolation in ``dsps_wrapper.py``
-keeps its own triweight kernel — that code mirrors upstream DSPS exactly
+keeps its own triweight kernel: that code mirrors upstream DSPS exactly
 and should not be replaced.
 
 References
@@ -97,8 +97,8 @@ def compute_grid_weights(
 ) -> jnp.ndarray:
     """Smooth triweight-kernel weights over a 1-D grid axis.
 
-    Integrates the triweight kernel CDF between bin edges — the same approach
-    as DSPS's ``triweighted_histogram`` — and returns a weight vector that
+    Integrates the triweight kernel CDF between bin edges: the same approach
+    as DSPS's ``triweighted_histogram``; and returns a weight vector that
     sums to 1.  Unlike piecewise-linear interpolation the weights transition
     smoothly through grid nodes, giving C²-continuous gradients.
 
@@ -153,10 +153,10 @@ def compute_grid_weights(
     piecewise-linear index-space coordinate via inverse linear interpolation, then
     triweight weights are computed in index space where spacing is uniform (=1).
     The interpolant is **C2 within intervals and C0 at nodes where adjacent
-    spacings differ** — a property of piecewise-linear coordinate mapping (not a
+    spacings differ**; a property of piecewise-linear coordinate mapping (not a
     bug). The magnitude of the derivative jump at a node equals the ratio of the
     adjacent spacings. HMC/NUTS samplers and equivalently-robust optimizers tolerate
-    such kinks — they are in the same smoothness class as linear interpolation.
+    such kinks; they are in the same smoothness class as linear interpolation.
 
     This eliminates the nearest-neighbor degeneracy (zero gradients over 67.5%
     of the range) that occurred on non-uniform axes when bandwidth was derived
@@ -189,7 +189,7 @@ def compute_grid_weights(
     # Detect non-uniformity: use dtype-aware tolerance to avoid false positives on
     # uniform float32 grids (e.g., linspace(0, 10, 50) in float32 has spacing ratio
     # ~1.00000465 due to accumulated rounding). Tolerance is 64 * machine epsilon
-    # times the grid magnitude — this catches intentionally non-uniform grids
+    # times the grid magnitude: this catches intentionally non-uniform grids
     # (e.g. geometric series with ratio 1.3+) while ignoring floating-point noise.
     # Guard against grids with < 2 elements: diff() creates an empty array, and
     # min/max would crash.
@@ -323,7 +323,7 @@ def _check_uniform(grid: jnp.ndarray) -> None:
     """
     try:
         g0 = np.asarray(grid)
-    except Exception:  # a JAX tracer cannot be converted — nothing to check
+    except Exception:  # a JAX tracer cannot be converted, nothing to check
         return
     if not np.issubdtype(g0.dtype, np.floating):
         return
@@ -345,7 +345,7 @@ def _uniform_rtol(grid: np.ndarray) -> float:
     Parameters
     ----------
     grid : ndarray, shape (n,)
-        Grid nodes **in their original dtype** — the tolerance depends on the
+        Grid nodes **in their original dtype**; the tolerance depends on the
         precision the grid was built in, so this must be called before any
         upcast to float64.
 
@@ -371,7 +371,7 @@ def _uniform_rtol(grid: np.ndarray) -> float:
 
     The former hardcoded ``rtol=1e-9`` was a float64 tolerance. Measured on the
     z-grid ``linspace(0, 4, 494)``: float64 spreads by 5.5e-14 and passes, while
-    **float32 spreads by 2.9e-05 and fails** — so a genuinely uniform grid was
+    **float32 spreads by 2.9e-05 and fails**; so a genuinely uniform grid was
     rejected in float32 and `compute_grid_window` raised on the default fit path
     (``Fitter`` resolves ``approx="auto"`` to ``WavePrecomp``, whose z-table
     reaches this guard). Same class as the float64 literals in
@@ -405,14 +405,14 @@ def compute_grid_window(
     axis, but the triweight kernel has support only on ``|x - m| < 3 * scatter``.
     On a uniform grid that is a fixed number of adjacent nodes regardless of how
     fine the grid is, so the dense vector is mostly exact zeros.  This function
-    returns just the supported window — a start index and the weights at
-    ``grid[start : start + 2 * half_width + 1]`` — for use with
+    returns just the supported window; a start index and the weights at
+    ``grid[start: start + 2 * half_width + 1]`` : for use with
     :func:`apply_grid_window`.
 
     The dropped weights are **exactly** zero (:func:`tw_cuml_kern` clamps the
     CDF outside ``|z| > 3``), so this is an algebraic identity, not an
     approximation: the interpolated value, its gradient, and its C²-continuity
-    are all unchanged.  What changes is cost — contracting a ``(n, ...)`` table
+    are all unchanged.  What changes is cost; contracting a ``(n, ...)`` table
     over the window instead of over ``n`` makes the contraction independent of
     the grid length.
 
@@ -432,7 +432,7 @@ def compute_grid_window(
         width is a shape, so it must be fixed from a static Python value.
         An absolute bandwidth would in practice be computed as
         ``0.5 * (grid[1] - grid[0])``, and inside a ``jit`` trace every
-        ``jnp`` operation is staged into the jaxpr — so that expression is a
+        ``jnp`` operation is staged into the jaxpr; so that expression is a
         tracer even when ``grid`` itself is a concrete constant, and cannot
         size anything.
     edges : array, shape (n + 1,) or None
@@ -510,7 +510,7 @@ def compute_grid_window(
     n = grid.shape[0]
     # Rounded before the ceil: the window size sets the returned shape and so
     # the compile-cache key, and 3*b + 0.5 lands on an integer only up to float
-    # noise — without the snap an unlucky bandwidth silently widens the window.
+    # noise: without the snap an unlucky bandwidth silently widens the window.
     half_width = math.ceil(round(3.0 * b + 0.5, 9))
     width = min(2 * half_width + 1, n)
 
@@ -568,7 +568,7 @@ def apply_grid_window(
 
     Notes
     -----
-    **JIT-compatible**: yes.  **Gradient-safe**: yes — differentiable in both
+    **JIT-compatible**: yes.  **Gradient-safe**: yes, differentiable in both
     ``table`` and (via ``weights``) the query point.
     """
     window = jax.lax.dynamic_slice_in_dim(table, start, weights.shape[0], axis=0)

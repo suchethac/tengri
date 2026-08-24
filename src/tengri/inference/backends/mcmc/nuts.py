@@ -31,8 +31,8 @@ logger = logging.getLogger(__name__)
 
 #: Post-burnin fraction of iterations at the tree-depth cap above which a
 #: deep cap triggers NUTSTreeDepthWarning. 0.25 keeps the warning out of
-#: healthy runs — a well-adapted chain touches its cap on a few percent of
-#: iterations — while catching the pathological regime: the measured
+#: healthy runs (a well-adapted chain touches its cap on a few percent of
+#: iterations) while catching the pathological regime: the measured
 #: continuity fit saturated 46% of iterations at cap 10.
 _SATURATION_WARN_FRAC = 0.25
 
@@ -40,7 +40,7 @@ _SATURATION_WARN_FRAC = 0.25
 #: costs at most 63 gradient evaluations, and a low cap is typically a
 #: deliberate wall-time bound (taken knowingly, at a measured ESS cost).
 #: At cap >= 7 each saturated iteration burns >= 127 gradients on a
-#: trajectory the U-turn criterion never terminated — the signature of
+#: trajectory the U-turn criterion never terminated, the signature of
 #: heavy-tailed or strongly-correlated geometry worth surfacing.
 _SATURATION_WARN_MIN_CAP = 7
 
@@ -83,7 +83,7 @@ def _warn_if_tree_depth_saturated(stats: dict) -> None:
         return
     warn_measured(
         f"NUTS hit its tree-depth cap on {frac:.0%} of post-burnin iterations "
-        f"at max_num_doublings={cap} — each such iteration paid up to "
+        f"at max_num_doublings={cap}; each such iteration paid up to "
         f"{2**cap - 1} gradient evaluations on a trajectory the U-turn "
         f"criterion never terminated. On SED posteriors this is the signature "
         f"of heavy-tailed priors or strong parameter correlations (the "
@@ -97,12 +97,12 @@ def _warn_if_tree_depth_saturated(stats: dict) -> None:
         f"min-ESS of 118 over six seeds against 119 for this sampler, and "
         f"never fell below 64 where 80 steps returned 31 and 60 steps 23 on "
         f"their worst seed. "
-        f"dense_mass_matrix=True is not a safe default here — it measured 12 "
+        f"dense_mass_matrix=True is not a safe default here: it measured 12 "
         f"divergences per run on that fit (77 per 400 draws before the bins "
         f"were fixed) against 2 for the diagonal, so check n_divergent before "
         f"trusting its higher speed. Lowering max_num_doublings bounds the "
         f"wall instead, at a real ESS cost (cap 6 measured min-ESS 5 on the "
-        f"same fit) — quick looks only. "
+        f"same fit); quick looks only. "
         f"See posterior.diagnostics['tree_depth_mean'/'frac_max_depth'].",
         NUTSTreeDepthWarning,
         stacklevel=3,
@@ -147,7 +147,7 @@ def _maybe_warn_high_memory_nuts(n_dim: int, dense_mass_matrix: bool, spec) -> N
     The trace graph for full mass-matrix adaptation grows quadratically
     in D and is amplified by SFH variants that publish many per-sample
     derived quantities (``mean_sfh_type="dense_basis"`` is the
-    documented worst case — peak 22.78 GB on a D=8 photometry fit).
+    documented worst case, peak 22.78 GB on a D=8 photometry fit).
     Small D <= 7 fits peak at 3-6 GB and are fine.
 
     Pulled out of :func:`run_nuts` so the heuristic is unit-testable
@@ -166,7 +166,7 @@ def _maybe_warn_high_memory_nuts(n_dim: int, dense_mass_matrix: bool, spec) -> N
         if any("dense_basis" in str(t) for t in types_iter):
             heavy_sfh_hint = (
                 " (your mean_sfh_type includes 'dense_basis', which "
-                "amplifies this — peak was 22.78 GB on a D=8 fit in "
+                "amplifies this, peak was 22.78 GB on a D=8 fit in "
                 "the original report)"
             )
     warnings.warn(
@@ -174,7 +174,7 @@ def _maybe_warn_high_memory_nuts(n_dim: int, dense_mass_matrix: bool, spec) -> N
         # this same auto-policy. While HMC defaulted to `dense_mass_matrix=True`
         # gated on `n_dim <= 30`, it used a DENSE matrix across the whole D =
         # 8-30 band, so this advice sent an OOM-ing user to the more expensive
-        # sampler — measured at 13.47 GB and SIGKILLed at D = 9 (#1413, #1454).
+        # sampler, measured at 13.47 GB and SIGKILLed at D = 9 (#1413, #1454).
         # With both on diagonal above D = 8, HMC's fixed-length trajectory is
         # genuinely lighter than NUTS's adaptive doubling.
         f"NUTS warmup with dense_mass_matrix=True at D={n_dim} can "
@@ -217,7 +217,7 @@ def run_nuts(
        time by ~5x and improving mass matrix quality.
     2. **Warmup** (300 steps): BlackJAX window adaptation tunes
        step size and mass matrix.  Dense mass matrix (default)
-       captures parameter correlations — critical for the
+       captures parameter correlations, critical for the
        age-dust-metallicity degeneracy.
     3. **Burn-in** (100 steps): post-warmup samples discarded.
        Lets the chain diffuse away from the MAP point estimate
@@ -249,7 +249,7 @@ def run_nuts(
         Number of independent NUTS chains to run in parallel via
         ``jax.vmap`` over chain seeds. Each chain shares the cached
         warmup adaptation (so this is only honored on the second
-        ``run_nuts(...)`` call against the same model — the first call
+        ``run_nuts(...)`` call against the same model, the first call
         populates the cache). Final posterior has ``n_chains * n_samples``
         total samples. Wall ≈ one chain's worth up to the arithmetic
         ceiling (CPU SIMD; GPU/TPU scales further). Initial chain
@@ -264,12 +264,12 @@ def run_nuts(
     max_num_doublings : int, default DEFAULT_MAX_NUM_DOUBLINGS (10)
         Maximum tree depth for NUTS trajectory (up to 2^max_num_doublings - 1
         leapfrog steps per sample). Default 10 follows the BlackJAX/Stan
-        convention — and survived a deliberate attempt to lower it
+        convention, and survived a deliberate attempt to lower it
         (2026-08-18): on a 19-band continuity fit (D=9, 500+500 draws) cap 6
         cut the wall 118 s → 11 s but collapsed min-ESS 93 → 5, strictly
         worse per effective sample. When a fit saturates this cap (the same
-        measurement saw 46% of iterations at depth 10), the geometry — not
-        the cap — is the problem, and on a nonparametric SFH part of that
+        measurement saw 46% of iterations at depth 10), the geometry, not
+        the cap, is the problem, and on a nonparametric SFH part of that
         geometry is self-inflicted: bin edges running past the age of the
         universe leave bins with no likelihood sampling a heavy-tailed prior
         (#1975). Matching the edges to the redshift took the same fit from
@@ -286,7 +286,7 @@ def run_nuts(
         ``frac_max_depth`` in ``posterior.diagnostics``. The earlier finding
         that 10→8 gave no benefit on nb06's well-conditioned posterior
         (``bench/reports/2026-05-06_compile_vs_sampling_breakdown.md``) is
-        the quiet side of the same fact — a chain that never builds deep
+        the quiet side of the same fact: a chain that never builds deep
         trees does not feel the cap. Compile cost scales with this knob but
         is typically <3s at warm cache (see docs/performance/compilation.md).
     dense_mass_matrix : bool or None, optional
@@ -307,13 +307,13 @@ def run_nuts(
         Hessian-derived inverse mass matrix + short step-size refinement)
         instead of the default window adaptation. Expected to be 3-10x
         faster warmup on *high-dimensional* problems (D>~30). When
-        enabled, ``dense_mass_matrix`` is ignored — Pathfinder always
+        enabled, ``dense_mass_matrix`` is ignored, Pathfinder always
         returns a full inverse-covariance matrix.
 
         **At low D (<~20), window adaptation is faster and produces
         better posterior geometry.** See
         ``bench/reports/2026-04-22_pathfinder_vs_window_nuts.md``.
-        If you enable this, keep ``n_warmup >= 300`` — reducing it
+        If you enable this, keep ``n_warmup >= 300``, reducing it
         blindly gives a poorly-conditioned mass matrix that silently
         saturates NUTS tree depth and slows sampling 10-20x.
 
@@ -324,7 +324,7 @@ def run_nuts(
 
     precondition : bool, float or None, default None
         Sample in metric-whitened coordinates. **Opt-in** (#1397): ``None``
-        (default) and ``False`` are off — a NaN MAP init makes the metric
+        (default) and ``False`` are off, a NaN MAP init makes the metric
         non-finite and turned working fits into hard errors, so the feature must
         be asked for. ``True`` enables it at
         :data:`~tengri.inference.preconditioning.DEFAULT_WHITENING_STRENGTH`, and
@@ -332,7 +332,7 @@ def run_nuts(
         full whitening, ``0.0`` is off).
 
         Every tengri parameter is standardized, so the prior contributes exactly
-        ``I`` to the metric and everything left is the likelihood's — which on the
+        ``I`` to the metric and everything left is the likelihood's, which on the
         correlated-field posterior spans ``cond(grad^2 H) ~ 1e5``, far beyond what
         any single mass matrix estimated from warmup draws can cover. This builds
         the metric analytically at the initial point instead and samples
@@ -340,7 +340,7 @@ def run_nuts(
         ``xi = A zeta``.
 
         The map is **linear**, so its Jacobian is constant and the posterior is
-        unchanged — only the geometry the integrator sees. Pass ``init_from`` a
+        unchanged, only the geometry the integrator sees. Pass ``init_from`` a
         MAP result so the metric is built where the chain will actually be.
 
         **The strength is not cosmetic.** For a true precision ``H`` and a metric
@@ -397,7 +397,7 @@ def run_nuts(
     n_dim = len(init_flat)
 
     # Metric preconditioning (#1301). Every parameter is standardized, so the prior
-    # contributes exactly I to the metric and the rest is the likelihood's — which on
+    # contributes exactly I to the metric and the rest is the likelihood's, which on
     # every configuration measured spans cond 8.5e4 to 3.1e8, far beyond what a mass
     # matrix estimated from warmup draws can cover. Sample the whitened coordinates
     # instead and map the draws back; the map is linear, so the posterior is unchanged.
@@ -488,7 +488,7 @@ def run_nuts(
     # Split from sampling so a fresh call and a cached one end in the SAME
     # sampling scan. While the two were fused, a first fit ran warmup+sampling
     # inside `_nuts_full_scan` and every later fit on the same model ran a
-    # sampling-only scan against the cached parameters — structurally different
+    # sampling-only scan against the cached parameters, structurally different
     # computations, so one pinned `key` returned two different posteriors. HMC
     # had already been split this way and was reproducible; NUTS had not.
     if cached is not None:

@@ -26,7 +26,7 @@ __all__ = ["Catalog"]
 
 #: How far the present-day stellar metallicity may sit from a fixed gas-phase
 #: value before :func:`_warn_gas_left_at_default` speaks up [dex]. 0.3 dex is
-#: 2x in Z — comfortably inside the scatter of the observed mass-metallicity
+#: 2x in Z, comfortably inside the scatter of the observed mass-metallicity
 #: relation, so a deliberate offset of that size stays quiet, while the
 #: default-vs-enriched mismatch this guards (typically >1 dex) does not.
 _GAS_STELLAR_TOLERANCE_DEX = 0.3
@@ -51,7 +51,7 @@ def _batched_cache_for(fwd):
     catalogs of different sizes costs one compile rather than three.
 
     Measured before this existed, on six predictions over one model (sizes
-    5/8/13, chunk widths 3/4/8): **six wrappers, one variant each — six
+    5/8/13, chunk widths 3/4/8): **six wrappers, one variant each, six
     compiles, including an exact repeat of a previous case**, because the memo
     lived on the ``Catalog`` and every catalog is a new object. The shapes
     already matched; only the wrapper identity differed.
@@ -60,7 +60,7 @@ def _batched_cache_for(fwd):
     assumed: two ``ForwardModel``\\ s built from different SSP flux compare
     unequal, hash differently, and stay separate in a ``WeakKeyDictionary``.
     Equal models produce the same traced program, so sharing between them is
-    correct — and it is what lets two independently built but identical models
+    correct, and it is what lets two independently built but identical models
     reuse one compile.
 
     Falls back to a private namespace if a model is ever unhashable: that costs
@@ -136,7 +136,7 @@ def _stellar_component(fwd):
 
     Used to tell a tabulated-SFH model from a parametric one before accepting
     histories, so :meth:`Catalog.from_histories` can name the fix instead of
-    letting the #996 runtime check fire deep in the forward pass — and to reach
+    letting the #996 runtime check fire deep in the forward pass, and to reach
     the SSP metallicity grid the ingest checks a Z(t) history against (#1677).
     """
     from tengri.components.stellar.component import StellarSEDComponent
@@ -158,14 +158,14 @@ def _warn_gas_left_at_default(fwd, hist, params):
 
     A tabulated stellar metallicity says the galaxy chemically evolved. The
     gas-phase metallicity that drives nebular emission is a *separate*
-    parameter, and its declared default is a fixed 0.5 Zsun — the four backends
+    parameter, and its declared default is a fixed 0.5 Zsun, the four backends
     do carry an ``if neb_logZ_gas is None: neb_logZ_gas = log_z`` inheritance,
     but the build grammar always supplies the default, so that branch never runs
     and the gas never follows the stars. Measured: unset is bit-identical to
     ``neb_logZ_gas=-0.3``.
 
-    Nothing is wrong with decoupling them — real galaxies do it, through inflow
-    of pristine gas — but it should be a decision, not an oversight, so this
+    Nothing is wrong with decoupling them, real galaxies do it, through inflow
+    of pristine gas, but it should be a decision, not an oversight, so this
     warns only when the model left the value at its declaration *and* the caller
     supplied neither ``met_gas=`` nor a ``neb_logZ_gas`` column.
     """
@@ -189,7 +189,7 @@ def _warn_gas_left_at_default(fwd, hist, params):
     warn_measured(
         f"the stellar metallicity history reaches {present_day.min():.2f} to "
         f"{present_day.max():.2f} log10(Z/Zsun) at the present day, but the "
-        f"gas-phase metallicity is fixed at its default {gas:.2f} — up to "
+        f"gas-phase metallicity is fixed at its default {gas:.2f}, up to "
         f"{offset:.2f} dex apart. They are separate parameters and the gas does "
         f"not follow the stars, so nebular emission here is computed for gas "
         f"that never enriched with the population that ionizes it. Pass "
@@ -227,7 +227,7 @@ def _nebular_backend(fwd):
 def _has_build_time_met(cfg):
     """Does the component already carry a Z(t) table from build time?
 
-    ``metallicity_model='table'`` has two sources — a table pinned onto the
+    ``metallicity_model='table'`` has two sources, a table pinned onto the
     config at build, or the runtime ``met_history`` array. Only the second is
     ``from_histories``' business, so the missing-``met=`` check has to let the
     first one through.
@@ -241,8 +241,8 @@ def _has_build_time_met(cfg):
 def _ssp_lgmet(fwd):
     """The model's SSP metallicity grid (absolute log10(Z)), or None.
 
-    ``None`` for a component built without SSP data — a synthetic or
-    placeholder construction path — in which case there is no grid to check a
+    ``None`` for a component built without SSP data, a synthetic or
+    placeholder construction path, in which case there is no grid to check a
     metallicity history against and the check is skipped rather than guessed.
     """
     stellar = _stellar_component(fwd)
@@ -265,7 +265,7 @@ class Catalog:
         Column mapping or object supporting `__getitem__[col] -> array`
         and `len()`. Required for `.fit()`; pass `None` for prediction-only.
     flux_unit : str
-        Unit of the flux columns — **required**, with no default, so a table
+        Unit of the flux columns, **required**, with no default, so a table
         is never ingested under a guessed unit. One of: ``"cgs_fnu"``
         [erg/s/cm²/Hz], ``"mJy"``, ``"uJy"``, ``"maggies"``, ``"ab_mag"``.
     redshift_col : str, optional
@@ -274,7 +274,7 @@ class Catalog:
         redshift span in the table. If not given, the model must have a
         free redshift parameter. Exactly one of the two conditions is required.
     flux_cols : list[str], optional
-        Flux column names **in your table** — they need not resemble the band
+        Flux column names **in your table**, they need not resemble the band
         names. If None, use ``"{name}"`` for each band in the model's
         observation.
 
@@ -354,7 +354,7 @@ class Catalog:
         self._history_columns = None
         # Memoized jit(vmap(...)) per channel, so the XLA cache survives across
         # calls instead of being rebuilt (and recompiled) each time. Shared with
-        # every other Catalog over this model — see _batched_cache_for.
+        # every other Catalog over this model, see _batched_cache_for.
         self._batched_cache = _batched_cache_for(fwd)
 
         # Fail fast: ingest and validate at construction.
@@ -406,7 +406,7 @@ class Catalog:
 
                 # A catalog_z_range lets per-galaxy redshift flow as a runtime
                 # input so the program compiles ONCE. Without it, each distinct
-                # redshift recompiles the fit (correct, just slow) — warn loudly
+                # redshift recompiles the fit (correct, just slow), warn loudly
                 # rather than refuse, so ``fit_batch``-style catalogs still run.
                 z_range = fwd.populations[0].sed._catalog_z_range
                 if z_range is None:
@@ -430,7 +430,7 @@ class Catalog:
                         )
             else:
                 # Condition 2: no redshift_col. A free redshift is fit per galaxy;
-                # a Fixed redshift is legitimate too — every galaxy is fit at the
+                # a Fixed redshift is legitimate too, every galaxy is fit at the
                 # model's shared redshift (e.g. a cluster at known z, or the
                 # fit_batch shared-redshift case). Nothing to validate here.
                 pass
@@ -488,7 +488,7 @@ class Catalog:
             they should appear as columns. Default ``(16, 50, 84)``. The levels
             are recorded on the result as ``percentile_levels`` and drive both
             ``post[name]`` (which reads the 50 column) and ``to_table()``
-            labels — include 50 if you want a median.
+            labels, include 50 if you want a median.
         reducers : dict, optional
             Additional reducer functions {name: callable} to apply per name
             (e.g., {"mean": np.mean, "std": np.std}). With store="full", these
@@ -497,7 +497,7 @@ class Catalog:
             Derived properties to include in the summary block alongside the
             sampled parameters. ``None`` (default) includes every property the
             model provides, so ``post.percentiles["stellar_mass"]`` works;
-            ``()`` includes none (parameters only — cheapest); an explicit
+            ``()`` includes none (parameters only, cheapest); an explicit
             tuple narrows it, which is the knob to reach for on a large
             catalog since each name costs one property evaluation per galaxy.
         **kwargs
@@ -524,7 +524,7 @@ class Catalog:
         # truth (spec 9.1); engine-native arrays are T5's problem.
         # Per-galaxy redshift rides in the galaxy dict; the engine injects it into
         # each galaxy's fit as a fixed-value override (the #1329 mechanism) so it
-        # actually reaches the forward pass — NOT just the reported params.
+        # actually reaches the forward pass, NOT just the reported params.
         # Per-galaxy presence mask (for heterogeneous photometry) rides in the dict too.
         galaxies = []
         for i in range(ca.n_galaxies):
@@ -537,7 +537,7 @@ class Catalog:
             # Only thread a presence mask for galaxies that ACTUALLY have an
             # absent band. An all-present galaxy needs no mask (the likelihood is
             # bit-identical without it), and threading an all-ones mask would trip
-            # the batched-method guard for every ordinary catalog fit — silently
+            # the batched-method guard for every ordinary catalog fit, silently
             # blocking MCMC/VI on catalogs with no masking at all.
             if ca.presence is not None and not bool(np.all(ca.presence[i])):
                 galaxy_dict["presence"] = ca.presence[i].astype(np.float32)
@@ -594,7 +594,7 @@ class Catalog:
 
         Histories are **records, not parameters**. They enter at the action, the
         same way fluxes do, which is why this is a classmethod rather than a
-        model-construction argument — the ``table`` SFH declares zero free
+        model-construction argument, the ``table`` SFH declares zero free
         parameters because the table *is* the SFH.
 
         Parameters
@@ -609,7 +609,7 @@ class Catalog:
             Star formation rate [Msun/yr] at those times. Must be finite and
             non-negative.
         met : array_like, shape (n_t,) or (N, n_t), optional
-            **Stellar** metallicity history in ``met_unit`` at the same nodes —
+            **Stellar** metallicity history in ``met_unit`` at the same nodes,
             the Z each generation of stars formed from, which selects the SSP
             templates. A 1-D history is shared by every galaxy and broadcast,
             the same way ``t_gyr`` is. Requires the model's
@@ -617,14 +617,14 @@ class Catalog:
             requires a history here, and says so at construction rather than
             inside the first forward pass.
         met_gas : array_like, shape (N,), (n_t,) or (N, n_t), optional
-            **Gas-phase** metallicity in ``met_unit`` — the Z of the ionized gas
+            **Gas-phase** metallicity in ``met_unit``, the Z of the ionized gas
             that drives nebular emission. A separate physical quantity from
             ``met`` and set independently of it: inflow of pristine gas genuinely
             decouples the two. Given as a track, the last node is taken as the
             observed epoch, because nebular emission comes from stars younger
             than ~10 Myr and only the present-day value is observable.
 
-            Left unset, the model's own ``neb_logZ_gas`` applies — and its
+            Left unset, the model's own ``neb_logZ_gas`` applies, and its
             declared default is a fixed 0.5 Zsun that does **not** follow the
             stellar history, so a tabulated ``met=`` alongside it emits
             :class:`~tengri.config.exceptions.GasStellarMetallicityWarning`
@@ -640,7 +640,7 @@ class Catalog:
             value, so a mass fraction read as log10(Z/Zsun) is a silent factor
             of ~70 in metallicity (#1677). Leaving it at the default on a
             history that reads like a mass fraction emits
-            :class:`~tengri.config.exceptions.MetallicityUnitWarning` — the
+            :class:`~tengri.config.exceptions.MetallicityUnitWarning`, the
             SSP-grid check cannot catch that case, because those values are
             in-grid.
         on_out_of_grid : {"raise", "warn", "ignore"}, default "raise"
@@ -649,13 +649,13 @@ class Catalog:
             :class:`~tengri.config.exceptions.OutOfSSPGridWarning` carrying the
             share of stellar mass affected; ``"ignore"`` restores the pre-#1677
             silence. Simulations reach primordial metallicities at early times
-            routinely, so this fires on real data — clip the history, load a
+            routinely, so this fires on real data, clip the history, load a
             wider SSP, or downgrade the policy deliberately.
         redshift : array_like, shape (N,), optional
             Per-galaxy redshift. Needs a ``catalog_z_range`` on the model for
             the catalog to stay one compile (#1316).
         params : dict, optional
-            Per-galaxy scalars, ``{name: (N,)}`` — every free parameter of the
+            Per-galaxy scalars, ``{name: (N,)}``, every free parameter of the
             model that is not supplied by the histories.
         flux_unit : str, default "cgs_fnu"
             Recorded for symmetry with the data-table constructor; predictions
@@ -702,7 +702,7 @@ class Catalog:
 
         Notes
         -----
-        **JIT-compatible**: no — eager validation at construction, by design.
+        **JIT-compatible**: no, eager validation at construction, by design.
         The forward model clips metallicity onto the SSP grid inside JIT, where
         no Python exception can be raised, so ingest is the only place a bad
         history can still be refused.
@@ -737,13 +737,13 @@ class Catalog:
                 f"this model's metallicity_model is {cfg.metallicity_model!r}. "
                 f"Either rebuild with a tabulated metallicity or drop met=. "
                 f"('table' is the one metallicity mode that cannot be inferred "
-                f"from parameter names — it declares no fittable parameters — so "
+                f"from parameter names (it declares no fittable parameters) so "
                 f"it has to be named explicitly.)"
             )
         if met is None and cfg.metallicity_model == "table" and not _has_build_time_met(cfg):
             raise ValueError(
                 "this model was built with met={'type': 'table'}, so its "
-                "metallicity arrives at runtime the same way its SFH does — but "
+                "metallicity arrives at runtime the same way its SFH does, but "
                 "no met= history was given and the component carries no build-time "
                 "table either. Pass met= alongside sfr=, or rebuild without "
                 "met_mode='table' (the default 'delta' takes a single "
@@ -838,7 +838,7 @@ class Catalog:
             Pad the catalog to at least this many galaxies, so catalogs of
             different sizes share one XLA cache entry per channel.
         noise : optional
-            **Not implemented** — noise draws are #1312. Refused rather than
+            **Not implemented**, noise draws are #1312. Refused rather than
             ignored, so a caller asking for a noisy mock never silently receives
             a noiseless one.
         key : optional
@@ -864,7 +864,7 @@ class Catalog:
         """
         if noise is not None or key is not None:
             raise NotImplementedError(
-                "simulate(noise=..., key=...) is not implemented — the noise draw "
+                "simulate(noise=..., key=...) is not implemented, the noise draw "
                 "is tracked as #1312. simulate() currently returns noiseless "
                 "predictions; drawing from a NoiseModel will compose here once "
                 "#1312 lands."
@@ -927,14 +927,14 @@ class Catalog:
         )
 
     def _prediction_columns(self, param_table):
-        """Resolve the columns to predict from — explicit table, or the stored one.
+        """Resolve the columns to predict from, explicit table, or the stored one.
 
         Fixed parameter values are broadcast in as ``(N,)`` columns. Not every
         consumer merges them for itself: ``predict_photometry`` does, but the
         window-LUT line path reaches ``compute_joint_weights``, which reads
         ``params["met_logzsol"]`` directly and raises ``KeyError`` on a dict
         carrying only the free parameters. Merging once here keeps every channel
-        — photometry, lines, properties — seeing the same complete dict. Caller
+        (photometry, lines, properties) seeing the same complete dict. Caller
         columns win, so a per-galaxy ``redshift`` still overrides a fixed one.
         """
         if param_table is None:
@@ -970,8 +970,8 @@ class Catalog:
         module-level cache keyed on the ForwardModel, which is a frozen
         dataclass holding JAX arrays: the lifetime and hashing hazards are not
         worth one compile". Both halves of that were measured and neither held.
-        The hazards are absent — ForwardModel is hashable and weak-referenceable,
-        and unequal models stay separate in a WeakKeyDictionary — and the cost
+        The hazards are absent, ForwardModel is hashable and weak-referenceable,
+        and unequal models stay separate in a WeakKeyDictionary, and the cost
         was never "one compile": it is one **per Catalog object**, so a script
         that predicts N catalogs off one model paid N compiles, an exact repeat
         of a previous case included.
@@ -989,13 +989,13 @@ class Catalog:
         hundreds, and both are necessary:
 
         1. **jit the vmapped call.** ``jax.vmap`` alone does not build a
-           compiled program — it dispatches op by op, so each primitive is
+           compiled program, it dispatches op by op, so each primitive is
            compiled separately and keyed on its own shapes. Measured on a
            3-band tabulated-history model: 236 compiles for a bare
            ``vmap(predict_photometry)``, versus 1 for ``jit(vmap(...))``.
         2. **Pad the galaxy axis to a uniform chunk width.** Those caches key on
            shape, so a ragged trailing chunk is a second shape and pays the whole
-           cost again — ``chunk_size=3`` over 8 galaxies means widths 3 and 2,
+           cost again, ``chunk_size=3`` over 8 galaxies means widths 3 and 2,
            i.e. two compiles (and, unjitted, 472). The catalog is padded by
            repeating its last row so every chunk is exactly ``width`` wide, and
            the padding is discarded before returning.
@@ -1099,7 +1099,7 @@ class Catalog:
         if scalars:
             raise ValueError(
                 f"predict() columns {scalars} are 0-D and carry no galaxy axis. "
-                f"Every column's leading axis indexes galaxies — pass (N,) even "
+                f"Every column's leading axis indexes galaxies, pass (N,) even "
                 f"when the value is the same for all N."
             )
 
@@ -1147,7 +1147,7 @@ class Catalog:
         Notes
         -----
         Columns are **not** restricted to ``spec.free_params``. A tabulated SFH
-        declares zero free parameters — the table *is* the SFH — so extracting
+        declares zero free parameters (the table *is* the SFH) so extracting
         only free parameters dropped the history arrays entirely and the forward
         then refused with the #996 runtime check (#1396).
 
@@ -1169,7 +1169,7 @@ class Catalog:
         ... )
         """
         # vmap maps the leading axis of every leaf of the dict pytree, so
-        # (N,) scalars and (N, n_t) histories batch through the same call —
+        # (N,) scalars and (N, n_t) histories batch through the same call,
         # no stacking, and no shape agreement required beyond the galaxy axis.
         columns, n_galaxies = self._prediction_columns(param_table)
         return self._map_chunks(

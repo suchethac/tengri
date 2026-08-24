@@ -42,7 +42,7 @@ Naming conventions
 - ``AA_TO_CM``: Ångström → cm conversion factor
 - ``KEV_TO_ERG``: keV → erg energy conversion
 - ``KEV_TO_HZ``: keV → Hz frequency conversion (E = hν)
-- ``K_BOLTZ_KEV``— k_B in keV/K (for temperature → seed photon energy)
+- ``K_BOLTZ_KEV``: k_B in keV/K (for temperature → seed photon energy)
 
 Special constants
 -----------------
@@ -256,7 +256,7 @@ Reference: Asplund et al. (2009), ARA&A 47, 481, "The Chemical Composition of
 the Sun", https://doi.org/10.1146/annurev.astro.46.060407.145222
 
 This is the photospheric present-day value, and matches the MIST/DSPS
-convention.  Other SSP libraries adopt different solar scales — BC03/Padova
+convention.  Other SSP libraries adopt different solar scales: BC03/Padova
 = 0.0190, PARSEC = 0.0152, BASTI = 0.0200.  Per-library values live in
 ``LOG10_ZSUN_BY_LIBRARY`` (:mod:`tengri.parameters.translate`); use those,
 not this constant, when reproducing another code bit-exactly.

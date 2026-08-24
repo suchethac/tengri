@@ -10,7 +10,7 @@
 | `fuv_flux_intrinsic` | erg/s/Hz | sed | stellar | Intrinsic FUV flux before dust attenuation |
 | `halpha` | erg/s | lines | nebular | Hα line luminosity |
 | `hbeta` | erg/s | lines | nebular | Hβ line luminosity |
-| `irx` | dex | sed | stellar | Infrared excess, log10(L_TIR / nu*L_nu at 1600 A) — the Meurer+99 IRX-beta anchor |
+| `irx` | dex | sed | stellar | Infrared excess, log10(L_TIR / nu*L_nu at 1600 A): the Meurer+99 IRX-beta anchor |
 | `irx_fuv` | dex | sed | stellar | Infrared excess against the band-averaged FUV (1000-1700 A), pivoted at 1500 A |
 | `l_1p4ghz` | erg/s/Hz | radio | radio | 1.4 GHz radio flux |
 | `l_bol` | Lsun | sed | stellar | Bolometric luminosity |
@@ -33,7 +33,7 @@
 | `log_oii` | dex | lines | nebular | log10 of oii line luminosity [dex re erg/s]; float32-safe form of `oii` |
 | `log_oiii_4959` | dex | lines | nebular | log10 of oiii 4959 line luminosity [dex re erg/s]; float32-safe form of `oiii_4959` |
 | `log_oiii_5007` | dex | lines | nebular | log10 of oiii 5007 line luminosity [dex re erg/s]; float32-safe form of `oiii_5007` |
-| `log_q_h` | dex | ionizing | stellar | log10(ionizing photon production rate / (photons/s)) — float32-safe form of q_h |
+| `log_q_h` | dex | ionizing | stellar | log10(ionizing photon production rate / (photons/s)): float32-safe form of q_h |
 | `log_sii_6717` | dex | lines | nebular | log10 of sii 6717 line luminosity [dex re erg/s]; float32-safe form of `sii_6717` |
 | `log_sii_6731` | dex | lines | nebular | log10 of sii 6731 line luminosity [dex re erg/s]; float32-safe form of `sii_6731` |
 | `luminosity_weighted_age_gyr` | Gyr | sfh | stellar | Luminosity-weighted mean age of stellar population |
@@ -60,7 +60,7 @@
 | `sii_6717` | erg/s | lines | nebular | SII 6717 line luminosity |
 | `sii_6731` | erg/s | lines | nebular | SII 6731 line luminosity |
 | `ssfr` | 1/yr | sfh | stellar | Specific star formation rate (sfr_100myr / stellar_mass_surviving; falls back to the formed mass when the SSP has no mass-remaining table) |
-| `stellar_mass` | Msun | sfh | stellar | Total stellar mass formed by the SFH — its time-integral, 1.5-1.9x above stellar_mass_surviving |
+| `stellar_mass` | Msun | sfh | stellar | Total stellar mass formed by the SFH: its time-integral, 1.5-1.9x above stellar_mass_surviving |
 | `stellar_mass_surviving` | Msun | sfh | stellar | Total surviving stellar mass |
 | `uv_slope_beta` | — | sed | stellar | UV slope (β in L_ν ∝ ν^β) |
 | `xi_ion` | Hz/erg | ionizing | stellar | Ionizing photon efficiency |

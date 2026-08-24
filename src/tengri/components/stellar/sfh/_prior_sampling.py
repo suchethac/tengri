@@ -58,7 +58,7 @@ def _draw_internal_kwargs(
     family_list = [family] if isinstance(family, str) else list(family)
 
     if any(name in ("field",) for name in family_list):
-        # Field modulator depends on a latent xi vector + GP machinery — not in v1 scope.
+        # Field modulator depends on a latent xi vector + GP machinery; not in v1 scope.
         raise NotImplementedError(
             "sample_sfh_prior does not yet support the 'field' (GP) modulator. "
             "Use a smooth family (e.g. 'tsnorm', 'dpl') for the prior fan; the "
@@ -94,7 +94,7 @@ def sample_sfh_prior(
     family : str or list[str]
         Registered SFH model name (e.g. ``"tsnorm"``, ``"dpl"``) or a
         composed list (e.g. ``["tsnorm", "burst"]``). The ``"field"``
-        modulator is intentionally not supported here — see notes.
+        modulator is intentionally not supported here: see notes.
     key : jax.Array
         JAX PRNG key.
     n : int, optional
@@ -126,7 +126,7 @@ def sample_sfh_prior(
     **JIT-compatible**: yes for the inner evaluation; the outer Python loop
     over draws is intentional (one-shot helper, not a hot path).
 
-    The returned curves are not mass-normalized — they are raw SFR(t) at the
+    The returned curves are not mass-normalized: they are raw SFR(t) at the
     sampled parameter point. Use :math:`\\int \\mathrm{SFR}\\,\\mathrm{d}t`
     to recover total stellar mass formed if needed.
 

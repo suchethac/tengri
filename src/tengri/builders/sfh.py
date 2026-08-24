@@ -13,7 +13,7 @@ freely interchangeable.
 
 Why factories rather than dicts
 -------------------------------
-The dict form has no IDE autocomplete on inner parameter names — typos
+The dict form has no IDE autocomplete on inner parameter names: typos
 like ``{'beta_': Uniform(1, 3)}`` surface only at construction time. The
 factories give per-variant signatures generated from the registry, so:
 
@@ -21,7 +21,7 @@ factories give per-variant signatures generated from the registry, so:
   list (``alpha``, ``beta``, ``tau_gyr``, ``log_total_mass``).
 - A typo (``beat=Uniform(1,3)``) is rejected immediately with a
   :class:`TypeError` listing valid parameter names.
-- The registry remains the canonical source — factories regenerate
+- The registry remains the canonical source; factories regenerate
   automatically when variants are added or their parameters change.
 
 Examples
@@ -188,7 +188,7 @@ def _populate_factories() -> dict[str, Callable[..., dict]]:
     factories: dict[str, Callable[..., dict]] = {}
     seen: set[int] = set()
     for key, entry in SFH_REGISTRY.items():
-        # Skip SFHs not yet validated against the DSPS forward path — the
+        # Skip SFHs not yet validated against the DSPS forward path: the
         # grammar rejects them, so emitting a factory would produce a callable
         # that errors at build (advertised-but-unusable). See UNVALIDATED_SFH_TYPES.
         if key in UNVALIDATED_SFH_TYPES:
@@ -196,7 +196,7 @@ def _populate_factories() -> dict[str, Callable[..., dict]]:
         spec = entry.callable if hasattr(entry, "callable") else entry
         if id(spec) in seen:
             continue
-        # Skip alias keys — only emit under the canonical name.
+        # Skip alias keys: only emit under the canonical name.
         if getattr(spec, "name", None) != key:
             continue
         seen.add(id(spec))
@@ -209,7 +209,7 @@ _FACTORIES = _populate_factories()
 # Promote each factory to a module-level attribute so users can call
 # ``builders.sfh.dpl(...)``. Doing this via ``globals().update`` (rather
 # than emitting one ``def`` per variant) keeps the registry as the single
-# source of truth — adding or removing a variant in ``SFH_REGISTRY``
+# source of truth: adding or removing a variant in ``SFH_REGISTRY``
 # automatically reflects here.
 globals().update(_FACTORIES)
 
@@ -218,7 +218,7 @@ def available() -> list[str]:
     """Return the SFH variant names that can actually be built.
 
     The canonical keys of :data:`SFH_REGISTRY` **minus**
-    :data:`~tengri.components.stellar.sfh.registry.UNVALIDATED_SFH_TYPES` —
+    :data:`~tengri.components.stellar.sfh.registry.UNVALIDATED_SFH_TYPES`:
     types that are registered but not yet wired into the DSPS forward path, so
     ``SEDModel.build`` raises on them. Aliases are not surfaced; call them via
     the canonical name.
@@ -231,8 +231,8 @@ def available() -> list[str]:
     Notes
     -----
     This is deliberately shorter than :func:`tengri.list_sfh_models`, which
-    reports every *registered* type — including the unvalidated ones, marked
-    ``status='unvalidated'`` — so the two answer different questions: "what can
+    reports every *registered* type; including the unvalidated ones, marked
+    ``status='unvalidated'``: so the two answer different questions: "what can
     I build?" versus "what exists?". The counts differ by exactly the
     unvalidated set.
 

@@ -13,7 +13,7 @@ The line profile uses upstream's slightly unusual normalization
 :math:`N = 510 / \\sqrt{\\pi\\sigma^2}` rather than the textbook
 :math:`1/\\sqrt{2\\pi\\sigma^2}`. This is because :math:`\\mathrm{l5100}`
 is :math:`\\lambda L_\\lambda` (W or erg/s) while the SED is in
-:math:`L_\\lambda` (W/nm) — the 510 (= 5100 Å in nm) absorbs the
+:math:`L_\\lambda` (W/nm), the 510 (= 5100 Å in nm) absorbs the
 :math:`\\lambda` factor; the :math:`\\sqrt{\\pi}` rather than
 :math:`\\sqrt{2\\pi}` is a convention baked into upstream and matched here
 exactly for fixture parity.
@@ -204,7 +204,7 @@ def feii_forest(
     Notes
     -----
     JIT-compatible. Uses :func:`jax.numpy.interp` with zero-padding outside
-    template support — no extrapolation.
+    template support: no extrapolation.
     """
     wave_nm = jnp.asarray(wave_nm)
     l_broadlines = _HBETA_BROAD_RATIO * (l5100 / _LAMBDA_5100_NM) * a_lines

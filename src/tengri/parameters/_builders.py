@@ -52,7 +52,7 @@ def _bucket_from_declarations(
 # It is read only by the Feltre NLR backend, and the ``neb`` group wildcard is
 # not backend-scoped the way ``dust.emission`` has been since #1482, so freeing
 # it under any other nebular backend would add an inert dimension. Its grid is
-# also three nodes — {0.1, 0.3, 0.5} — inside a validator interval of
+# also three nodes ({0.1, 0.3, 0.5}) inside a validator interval of
 # [0.05, 0.6], so the admissible interval and the tabulated one are not the same
 # object and a uniform over the former would spend most of its mass off-grid.
 #
@@ -216,7 +216,7 @@ SETTINGS_KEYS = frozenset(
         "lgmet_scatter",
         # Emission line fitting mode
         "eline_mode",  # "off", "fixed", "marginalized", "fitted"
-        "eline_broad",  # bool — enable broad AGN emission line component
+        "eline_broad",  # bool: enable broad AGN emission line component
     }
 )
 
@@ -320,7 +320,7 @@ def _build_param_registry(
         registry[pname] = (pdef.description, pdef.bound_check, pdef.bound_error)
         defaults[pname] = pdef.default
 
-    # Nebular params (CLOUDY, Cue, or CB_19 — not BakedIn/ssp/off).
+    # Nebular params (CLOUDY, Cue, or CB_19; not BakedIn/ssp/off).
     if nebular in ("cloudy", "cue", "cb19"):
         nebular_bucket = _resolve_lazy_bucket("_NEBULAR_PARAMS")
         for pname, (desc, check, err, default) in nebular_bucket.items():

@@ -29,9 +29,9 @@ class DraineLi2007IRSEDComponent(EmissionComponent):
 
     Notes
     -----
-    **JIT-compatible**: yes — all operations are ``jnp`` primitives.
+    **JIT-compatible**: yes, all operations are ``jnp`` primitives.
 
-    **Gradient-safe**: yes — differentiable everywhere.
+    **Gradient-safe**: yes, differentiable everywhere.
 
     **Template auto-loading**: the closure lazy-loads HDF5 templates on
     first call (at trace time). After lazy loading, all subsequent calls
@@ -43,7 +43,7 @@ class DraineLi2007IRSEDComponent(EmissionComponent):
     ``dust/dustem`` headers); everywhere else the two tabulations agree to
     ≤1.2 % at matched (q_PAH, U_min). Bands sampling rest-frame ~3–3.6 µm
     (e.g. WISE W1 at low z) therefore sit higher here than in
-    FSPS/Prospector — measured +65 % in the dust-only component, ~+5 % at
+    FSPS/Prospector; measured +65 % in the dust-only component, ~+5 % at
     band level for a star-forming galaxy where starlight dominates W1.
 
     References
@@ -70,12 +70,12 @@ class DraineLi2007IRSEDComponent(EmissionComponent):
         Returns
         -------
         dict or None
-            Template arrays, or ``None`` when unavailable — the backend then
+            Template arrays, or ``None`` when unavailable: the backend then
             falls back to its module-level load, which bakes 3.76 MB (#1649).
 
         Notes
         -----
-        **JIT-compatible**: no, deliberately — runs at build time.
+        **JIT-compatible**: no, deliberately; runs at build time.
         """
         del wave
         from tengri._data_setup import find_data_str
@@ -146,9 +146,9 @@ class DraineLi2014IRSEDComponent(EmissionComponent):
 
     Notes
     -----
-    **JIT-compatible**: yes — all operations are ``jnp`` primitives.
+    **JIT-compatible**: yes, all operations are ``jnp`` primitives.
 
-    **Gradient-safe**: yes — differentiable everywhere.
+    **Gradient-safe**: yes, differentiable everywhere.
 
     **Template auto-loading**: the closure lazy-loads HDF5 templates on
     first call (at trace time). After lazy loading, all subsequent calls
@@ -180,12 +180,12 @@ class DraineLi2014IRSEDComponent(EmissionComponent):
         Returns
         -------
         dict or None
-            Template arrays, or ``None`` when the grid is unavailable — the
+            Template arrays, or ``None`` when the grid is unavailable: the
             backend then falls back to its module-level load, which bakes.
 
         Notes
         -----
-        **JIT-compatible**: no, deliberately — this runs at build time so the
+        **JIT-compatible**: no, deliberately; this runs at build time so the
         arrays reach ``predict`` as a traced argument (#1649).
         """
         del wave

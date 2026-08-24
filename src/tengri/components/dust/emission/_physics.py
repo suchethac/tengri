@@ -1,7 +1,7 @@
 # SPDX-License-Identifier: BSD-3-Clause
 """Shared physics utilities for dust IR emission models.
 
-Pure, dependency-light helpers used by every emission closure — the Planck
+Pure, dependency-light helpers used by every emission closure: the Planck
 function, the da Cunha et al. (2013) CMB heating correction, and the
 energy-balance absorbed-luminosity integrals. This module is a leaf: it
 imports only ``jax.numpy`` and physical constants, so closure modules
@@ -56,10 +56,10 @@ def integrate_lnu_over_nu(
 
     Notes
     -----
-    **JIT-compatible**: yes — pure ``jnp.trapezoid`` over a static
+    **JIT-compatible**: yes, pure ``jnp.trapezoid`` over a static
     axis.  **Gradient-safe**: yes.
 
-    The single canonical implementation — consolidated from bit-identical
+    The single canonical implementation: consolidated from bit-identical
     per-module copies in ``draine2021_pah.py`` and ``astrodust_hd23.py``
     (2026-07).
     """
@@ -91,7 +91,7 @@ def planck_bnu(
 
     Notes
     -----
-    **JIT-compatible**: yes — all operations are ``jnp`` primitives.
+    **JIT-compatible**: yes, all operations are ``jnp`` primitives.
 
     The Planck function is:
 
@@ -140,7 +140,7 @@ def cmb_corrected_temperature(
 
     Notes
     -----
-    **JIT-compatible**: yes — all operations are ``jnp`` primitives.
+    **JIT-compatible**: yes, all operations are ``jnp`` primitives.
 
     The effective temperature is:
 
@@ -188,7 +188,7 @@ def cmb_contrast_factor(
 
     Notes
     -----
-    **JIT-compatible**: yes — all operations are ``jnp`` primitives.
+    **JIT-compatible**: yes, all operations are ``jnp`` primitives.
 
     The contrast factor is:
 
@@ -261,7 +261,7 @@ def compute_absorbed_luminosity(
 
     Notes
     -----
-    **JIT-compatible**: yes — all operations are ``jnp`` primitives.
+    **JIT-compatible**: yes, all operations are ``jnp`` primitives.
 
     The absorbed luminosity is:
 
@@ -306,7 +306,7 @@ def compute_absorbed_luminosity_from_tau(
 
     Notes
     -----
-    **JIT-compatible**: yes — all operations are ``jnp`` primitives.
+    **JIT-compatible**: yes, all operations are ``jnp`` primitives.
 
     Internally converts τ(λ) to transmission via T(λ) = exp(−τ(λ))
     then calls ``compute_absorbed_luminosity``.

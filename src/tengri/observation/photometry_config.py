@@ -18,13 +18,13 @@ from tengri.utils.filter_convention import FilterConvention
 
 @dataclasses.dataclass(frozen=True)
 class Photometry:
-    """Photometric observation configuration — filter set, not the fluxes.
+    """Photometric observation configuration, filter set, not the fluxes.
 
     This class holds *which bands* the model should evaluate.  Measured
     fluxes and uncertainties are passed separately to
     :class:`tengri.Fitter` (``data=`` and ``noise=``).
 
-    Don't call ``Photometry(...)`` directly — use the factory:
+    Don't call ``Photometry(...)`` directly, use the factory:
 
         >>> phot = tengri.Photometry.from_names(["sdss_g", "sdss_r", "sdss_i"])
 
@@ -91,7 +91,7 @@ class Photometry:
     # (1/lambda^2; matches CIGALE). Flows into the exact predict path.
     convention: FilterConvention = FilterConvention.BESSELL
 
-    # Derived fields — set in __post_init__
+    # Derived fields, set in __post_init__
     filter_waves: tuple[jnp.ndarray, ...] = dataclasses.field(default=(), hash=False, repr=False)
     filter_trans: tuple[jnp.ndarray, ...] = dataclasses.field(default=(), hash=False, repr=False)
     n_filters: int = 0
@@ -152,7 +152,7 @@ class Photometry:
         hands out exactly the strings a new user then passes here, so
         ``Photometry(["sdss_g", ...])`` is the obvious first guess. Without this
         the strings were accepted, stored, and only failed partway through
-        ``__post_init__`` with ``'str' object has no attribute 'name'`` — a
+        ``__post_init__`` with ``'str' object has no attribute 'name'``, a
         message naming neither filters, nor ``from_names``, nor what was
         expected.
         """
@@ -316,7 +316,7 @@ def resolve_runtime_photometry(filters, build_time=None):
     r"""Build a :class:`Photometry` from user-supplied filters at predict time.
 
     The single normalizer behind every ``filters=[...]`` argument on the public
-    surface — :meth:`Prediction.photometry`, :meth:`Prediction.magnitudes`, and
+    surface, :meth:`Prediction.photometry`, :meth:`Prediction.magnitudes`, and
     :meth:`Posterior.observables`. They shared a concept and not an
     implementation, so ``filters=`` meant *filter names* on one and *a Photometry
     object* on the other (#1129); routing them all through here is what keeps the
@@ -340,7 +340,7 @@ def resolve_runtime_photometry(filters, build_time=None):
     The convention (Bessell photon-counting vs energy, ADR-0017) belongs to the
     filter *integral*, not to the filter. ``Photometry.from_names`` defaults to
     Bessell, so resolving runtime filters without the model's own convention
-    silently answers a different question than the model's own photometry does —
+    silently answers a different question than the model's own photometry does:
     the same filters, two numbers, ~0.5% apart on an energy-convention model.
     Inheriting it is therefore a correctness requirement, not a convenience.
     """

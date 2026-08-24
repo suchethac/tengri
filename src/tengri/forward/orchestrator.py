@@ -12,7 +12,7 @@ of components (stellar, dust, nebular, AGN, IGM, radio, X-ray, …), it:
    :attr:`~ForwardState.derived` carries the cross-component
    physics quantities (``L_ir``, ``lnu_age``, ``sed_nebular``, …).
 
-Not a public API — astronomers use :class:`tengri.SEDModel` and never
+Not a public API, astronomers use :class:`tengri.SEDModel` and never
 touch this module directly.
 """
 
@@ -113,14 +113,14 @@ def components_consuming(
 
     Notes
     -----
-    **JIT-compatible**: not applicable — composition-time only.
+    **JIT-compatible**: not applicable, composition-time only.
 
     Exists so a fast path can ask "does anything still need this?" instead of
     asserting it from a hand-written census. ``sed_nebular`` was zeroed under
     the per-Q_H nebular grid on the stated grounds that its "only live
     consumers are the exact spectrum / dust-continuum paths"; the dust energy
     balance consumes it too, and a model with dust emission then re-emitted
-    the stellar absorbed budget alone — 11 % low in the far-IR, with the
+    the stellar absorbed budget alone, 11 % low in the far-IR, with the
     posterior gradient up to 380 % wrong, silently and in float64. A census
     written next to the code it guards goes stale the first time a consumer is
     added somewhere else; a derived one cannot.
@@ -146,7 +146,7 @@ def materialized_chain(component_list: Sequence[SEDComponent]) -> tuple[SEDCompo
     """Chain variant in which every component publishes the outputs it declares.
 
     A component may skip publishing an output when :func:`components_consuming`
-    says nothing needs it — :class:`~tengri.components.nebular.component.NebularSEDComponent`
+    says nothing needs it, :class:`~tengri.components.nebular.component.NebularSEDComponent`
     zeroes ``sed_nebular`` under the per-Q_H grid, because skipping the Cue
     forward *is* the saving.
 
@@ -156,7 +156,7 @@ def materialized_chain(component_list: Sequence[SEDComponent]) -> tuple[SEDCompo
     state has several: ``state_to_sed_components`` behind
     ``Posterior.sed_components``, and the accumulated ``state.sed_intrinsic``
     behind ``pred.rest_sed()``. On a dust-free Cue model that cost the whole
-    nebular continuum — ``sed_nebular`` exactly zero and the published SED 97 %
+    nebular continuum, ``sed_nebular`` exactly zero and the published SED 97 %
     short at its peak, in float64 and silently (#1673).
 
     Those callers ask for this chain rather than each teaching the census about
@@ -176,7 +176,7 @@ def materialized_chain(component_list: Sequence[SEDComponent]) -> tuple[SEDCompo
 
     Notes
     -----
-    **JIT-compatible**: not applicable — composition-time only. Variants come
+    **JIT-compatible**: not applicable, composition-time only. Variants come
     from :func:`dataclasses.replace` over static config, so no JAX work happens
     here and the result is safe to build outside a trace and reuse inside one.
     """
@@ -189,31 +189,31 @@ def materialized_chain(component_list: Sequence[SEDComponent]) -> tuple[SEDCompo
 # a one-line edit here, in the same PR that introduces the publisher.
 # Same friction model as ``tools/check_param_prefixes.py::ALLOWED_PREFIXES``.
 _CANONICAL_UNITS: dict[str, str] = {
-    # Stellar — surviving / formed mass + SFR variants
+    # Stellar, surviving / formed mass + SFR variants
     "log_mstar": "dex",
     "log_mstar_formed": "dex",
     "sfr": "Msun/yr",
     "sfr_10myr": "Msun/yr",
     "sfr_100myr": "Msun/yr",
-    # Stellar — age-resolved tensors (hard needs for nebular / dust2c)
+    # Stellar, age-resolved tensors (hard needs for nebular / dust2c)
     "L_age": "erg/s",
     "lnu_age": "erg/s/Hz",
     "ssp_ages_yr": "yr",
     "age_weights": "Msun",
     "log_stellar_mass_scale": "dex",
-    # Stellar — ionizing rate + SFH grid + chemistry history
+    # Stellar, ionizing rate + SFH grid + chemistry history
     "nion": "photons/s",
     "log_nion": "dex",
     "sfh_grid_lbt_yr": "yr",
     "sfr_history": "Msun/yr",
     "log_metallicity_history": "dex",
-    # Stellar — photometry LUT (only published when
+    # Stellar, photometry LUT (only published when
     # ``approx=WavePrecomp()`` is set on SEDModel).
     "stellar_phot_lnu_precomp": "erg/s/Hz",
-    # Stellar — Taylor moment. Same conditions as
+    # Stellar, Taylor moment. Same conditions as
     # stellar_phot_lnu_precomp. Used by the filter-level dust integration.
     "stellar_phot_moment_precomp": "erg*Angstrom/s/Hz",
-    # Stellar — age-resolved per-filter LUT (shape
+    # Stellar, age-resolved per-filter LUT (shape
     # (n_age, n_filter)). Sum over age axis equals stellar_phot_lnu_precomp.
     "stellar_phot_lnu_per_age_precomp": "erg/s/Hz",
     "stellar_phot_moment_per_age_precomp": "erg*Angstrom/s/Hz",
@@ -246,7 +246,7 @@ _CANONICAL_UNITS: dict[str, str] = {
     "L_4400_intrinsic": "erg/s/Hz",
     "sed_agn": "erg/s/Hz",
     "sed_grahsp": "erg/s/Hz",
-    # AGN — filter LUT (WavePrecomp).
+    # AGN, filter LUT (WavePrecomp).
     "agn_phot_lnu_precomp": "erg/s/Hz",
     # Nebular outputs (continuous SED in erg/s/Hz per the 2026-04-08
     # standard; discrete line/continuum primitives are Lsun per the
@@ -261,17 +261,17 @@ _CANONICAL_UNITS: dict[str, str] = {
     # luminosities are ~1e40-1e43 erg/s and the linear array is already ``inf``
     # in float32 (#1534/#1837).
     "log_line_lums_attenuated": "dex",
-    # Nebular — photometry LUT (only non-BakedIn backends
+    # Nebular, photometry LUT (only non-BakedIn backends
     # publish, when ``approx=WavePrecomp()`` is set).
     "nebular_phot_lnu_precomp": "erg/s/Hz",
     # The same bucket with the young-limit screen integrated THROUGH each band,
     # published by the dust component from the reddened continuum (#1738). Replaces
-    # the lambda_eff screening of the key above rather than adding to it — the
+    # the lambda_eff screening of the key above rather than adding to it, the
     # ``_attenuated_`` infix is what keeps it out of the ``*_phot_lnu_precomp``
     # summation sweep in ``predict_via_precomp``.
     "nebular_phot_lnu_attenuated_precomp": "erg/s/Hz",
     "nebular_restband_lnu_attenuated_precomp": "erg/s/Hz",
-    # Shock (MAPPINGS V) — filter LUT. A separate additive component from the
+    # Shock (MAPPINGS V), filter LUT. A separate additive component from the
     # photoionized nebular backend (#851), so it carries its own key (#1375).
     "shock_phot_lnu_precomp": "erg/s/Hz",
     # Spectrum LUT (published when approx=SpectrumPrecomp() is set).
@@ -288,7 +288,7 @@ _CANONICAL_UNITS: dict[str, str] = {
     "igm_transmission": "",
     # Shock (MAPPINGS path)
     "shock_log_lhalpha": "dex",
-    # Spatial — 2D surface-brightness profile + the (x, y) kpc grid
+    # Spatial, 2D surface-brightness profile + the (x, y) kpc grid
     # underlying it. Published by spatial components (Sersic, Exponential,
     # FlatSlab, …). See architecture spec §3.3.
     "spatial_profile_2d": "",
@@ -321,20 +321,20 @@ def validate_pipeline(components: Iterable[SEDComponent]) -> None:
     r"""Check that every component's inputs are produced by upstream components.
 
     Runs at :class:`tengri.SEDModel` construction time, once per model.
-    Zero hot-path / JIT cost — all checks are pure-Python over the
+    Zero hot-path / JIT cost, all checks are pure-Python over the
     metadata returned by :meth:`SEDComponent.outputs` and
     :meth:`SEDComponent.inputs`.
 
     The five checks
     ---------------
-    1. **Duplicate output.** Two components publish the same key — unless
+    1. **Duplicate output.** Two components publish the same key, unless
        they are listed in :data:`_ALTERNATE_PUBLISHERS` as alternate
        implementations of the same role (e.g. one-component vs two-component
        dust).
     2. **Missing producer.** A key declared in :meth:`inputs` has no
        upstream :meth:`outputs`. The error message includes a
        ``Did you mean: ...`` suggestion when a published key is within edit
-       distance 2 — this is what catches the silent-rename hazard
+       distance 2; this is what catches the silent-rename hazard
        (``L_ir`` → ``L_dust_total`` produces a suggestion).
     3. **Out-of-order producer.** A required key is published by a
        component that appears *after* the consumer in the pipeline list.
@@ -346,7 +346,7 @@ def validate_pipeline(components: Iterable[SEDComponent]) -> None:
     5. **Canonical-units mismatch.** Either side declares a units string
        that differs from :data:`_CANONICAL_UNITS` for that key (where the
        table has an entry). Catches the case where a *new* component
-       independently invents a units convention — the contract pins the
+       independently invents a units convention, the contract pins the
        project-wide answer.
 
     Parameters
@@ -424,7 +424,7 @@ def validate_pipeline(components: Iterable[SEDComponent]) -> None:
                 raise ComponentIOError(
                     f"Component {type(component).__name__!r} (position {idx}) "
                     f"needs {needed.name!r} but it is published by "
-                    f"{type(pub_comp).__name__!r} at position {pub_idx} — "
+                    f"{type(pub_comp).__name__!r} at position {pub_idx}, "
                     f"the producer must come strictly before the consumer."
                 )
             if pub_key.units != needed.units:
@@ -437,7 +437,7 @@ def validate_pipeline(components: Iterable[SEDComponent]) -> None:
                     f"answer is in _CANONICAL_UNITS)."
                 )
 
-    # Stage 3: optional reads — Phase B of issue #21. Same checks as
+    # Stage 3: optional reads, Phase B of issue #21. Same checks as
     # required reads EXCEPT that a missing publisher is OK (the
     # consumer has a documented fallback). Catches a future publisher
     # rename or unit drift without forcing every pipeline to instantiate
@@ -463,7 +463,7 @@ def validate_pipeline(components: Iterable[SEDComponent]) -> None:
                 raise ComponentIOError(
                     f"Component {type(component).__name__!r} (position {idx}) "
                     f"optionally needs {needed.name!r} but it is published by "
-                    f"{type(pub_comp).__name__!r} at position {pub_idx} — "
+                    f"{type(pub_comp).__name__!r} at position {pub_idx}, "
                     f"the producer must come strictly before the consumer."
                 )
             if pub_key.units != needed.units:
@@ -486,7 +486,7 @@ def topological_sort(components: Iterable[SEDComponent]) -> list[SEDComponent]:
     no ordering constraint, the input order is preserved (stable sort).
 
     This is the inverse of :func:`validate_pipeline`'s "out-of-order
-    publisher" check — instead of refusing pipelines whose hand-coded
+    publisher" check, instead of refusing pipelines whose hand-coded
     order violates declared dependencies, it *derives* the order from
     the declarations. See ADR-0006.
 
@@ -504,7 +504,7 @@ def topological_sort(components: Iterable[SEDComponent]) -> list[SEDComponent]:
     list of SEDComponent
         Topologically ordered. For the canonical pipeline (stellar,
         nebular, AGN, dust, radio, X-ray, IGM), this reproduces the
-        hand-coded order byte-for-byte — the snapshot test in
+        hand-coded order byte-for-byte, the snapshot test in
         :mod:`tests.integration.test_derived_contract_snapshots` is the
         regression guarantee.
 
@@ -513,14 +513,14 @@ def topological_sort(components: Iterable[SEDComponent]) -> list[SEDComponent]:
     ComponentIOError
         If the dependency graph contains a cycle. The error message
         names every component still pending when the algorithm stalls
-        — typically the cycle's participants.
+        typically the cycle's participants.
 
     Notes
     -----
     **Algorithm.** Kahn's algorithm with stable tie-breaking: at each
     step, the lowest-input-index component whose dependencies are all
     already emitted is picked next. With deterministic-order producer
-    resolution (first publisher wins on duplicates — see
+    resolution (first publisher wins on duplicates, see
     :data:`_ALTERNATE_PUBLISHERS`), the sort is fully deterministic.
 
     **Why both ``inputs`` and ``optional_inputs``.** A hard
@@ -575,7 +575,7 @@ def topological_sort(components: Iterable[SEDComponent]) -> list[SEDComponent]:
                 f"Topological sort failed: cycle in output/input graph "
                 f"involving {pending_names!r}. Every inputs() / "
                 f"optional_inputs() declaration must be satisfiable in some "
-                f"linear order — check the offending components."
+                f"linear order, check the offending components."
             )
         emitted.append(picked)
         emitted_set.add(picked)
@@ -598,7 +598,7 @@ def slice_params_for_component(
     Notes
     -----
     A component with ``parameter_prefix == ""`` would see *everything*
-    via rule 1 — that's why ``""`` is forbidden by the contract test.
+    via rule 1, that's why ``""`` is forbidden by the contract test.
     Components that need bare names must declare a non-empty prefix and
     rely on the allowlist for shared scalars.
     """
@@ -635,7 +635,7 @@ def merge_declared_parameters(
     2. No two components declare the same parameter name (a collision
        would make the orchestrator's prefix-slicing ambiguous).
 
-    The output maps each parameter name to its prior — suitable for
+    The output maps each parameter name to its prior, suitable for
     spreading into :class:`tengri.Parameters` once the component-driven
     builder in :mod:`tengri.parameters.parameters` lands.
 
@@ -681,7 +681,7 @@ def merge_declared_parameters(
             if decl.name in out:
                 raise ValueError(
                     f"Parameter {decl.name!r} is declared by both "
-                    f"{owners[decl.name]!r} and {component.name!r} — "
+                    f"{owners[decl.name]!r} and {component.name!r}, "
                     f"two components cannot own the same parameter."
                 )
             out[decl.name] = decl.prior
@@ -722,7 +722,7 @@ def sample_params_dict(
 
     Notes
     -----
-    Not for inference — the priors here come from registry defaults,
+    Not for inference, the priors here come from registry defaults,
     not user-tuned posteriors. Use :class:`tengri.Parameters` for
     proper inference workflows. This helper is for prior-predictive
     smoke tests and notebook demos.
@@ -757,7 +757,7 @@ def default_params_dict(
     each value is read off the prior's ``default`` instead of drawn from it.
 
     Use it wherever a params dict is wanted for the whole of a component
-    chain — pipeline tests, notebook demos, a forward pass at the declared
+    chain, pipeline tests, notebook demos, a forward pass at the declared
     fiducial. The alternative is a literal, and a literal is a copy of the
     declaration that cannot follow it: eight fixtures listed the ``xray_*``
     parameters by hand and broke the day ``xray_det_hmxb`` gained a reader,
@@ -841,10 +841,10 @@ def _name_missing_parameter(
     deliberately: a ``.get(..., 0.0)`` default is what let two declared knobs go
     unread for months, because a dict missing them looked complete (#1706). The
     cost is that the omission surfaces as a bare ``KeyError: 'xray_det_hmxb'``
-    from wherever the component happened to read first — which is what all fifty
+    from wherever the component happened to read first, which is what all fifty
     of #1832's failures looked like.
 
-    Returns ``None`` — meaning "not mine, re-raise unchanged" — unless the key is
+    Returns ``None`` (meaning "not mine, re-raise unchanged") unless the key is
     a parameter this component *declares* and the sliced dict genuinely lacks. A
     guard that relabels every internal dict lookup would turn real bugs into
     confident wrong explanations, which is worse than the bare message.
@@ -865,7 +865,7 @@ def _name_missing_parameter(
 
     Notes
     -----
-    **JIT-compatible**: yes — a missing key fails at trace time, before any
+    **JIT-compatible**: yes, a missing key fails at trace time, before any
     array work, so this runs under ``jax.jit`` exactly as it does eagerly.
 
     The type stays ``KeyError``: :meth:`SEDModel.predict` already raises one
@@ -929,7 +929,7 @@ def run_components(
     ------
     ComponentIOError
         If, after every component has applied, the final
-        ``state.derived._extras`` is non-empty — i.e. some component's
+        ``state.derived._extras`` is non-empty, i.e. some component's
         ``apply()`` slipped data through the ``DerivedState``'s opt-in
         spillover instead of using ``state.derived.with_(X=value)``
         (ADR-0007 Phase 3). The snapshot test
@@ -937,7 +937,7 @@ def run_components(
         catches this for the 3 snapshotted recipes; the runtime check
         here broadens the guard to every hand-rolled component list.
 
-        Bypass with the env var ``TENGRI_ALLOW_DERIVED_EXTRAS=1`` —
+        Bypass with the env var ``TENGRI_ALLOW_DERIVED_EXTRAS=1``,
         useful during in-flight migrations or when external user code
         explicitly attaches non-canonical keys via
         ``DerivedState.from_dict(..., allow_extras=True)``. Not for
@@ -955,7 +955,7 @@ def run_components(
                 raise
             raise named from exc
 
-    # ADR-0007 Phase 4 invariant — strict typed-only writes (#64
+    # ADR-0007 Phase 4 invariant, strict typed-only writes (#64
     # added the same check at the snapshot-test boundary; this one
     # makes the guard apply to *every* run_components call regardless
     # of whether the pipeline is snapshotted).

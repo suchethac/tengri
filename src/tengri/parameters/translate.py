@@ -27,7 +27,7 @@ Metallicity:
     generated against the *same* Zsun, the round-trip is self-consistent.
     When comparing against a code that uses a different Zsun (e.g. CIGALE
     BC03 on Padova), reason in **absolute** ``log_z_abs = met_logzsol +
-    LOG10_ZSUN`` and pin that — see ``reproduction/cigale/_drivers/
+    LOG10_ZSUN`` and pin that: see ``reproduction/cigale/_drivers/
     consistency_audit.py`` for the canonical CIGALE-comparison pattern.
     See also #412.
 
@@ -69,14 +69,14 @@ from tengri.utils.physics_constants import LOG10_ZSUN
 # Solar metallicity convention: tengri uses **Asplund 2009 Zsun = 0.0142**,
 # i.e. LOG10_ZSUN = log10(0.0142) = -1.8477. This matches the MIST isochrone
 # family. SSP libraries built on Padova (BC03, default CIGALE), PARSEC, or
-# BASTI use different Zsun — see module docstring for the table. Reason in
+# BASTI use different Zsun: see module docstring for the table. Reason in
 # absolute ``log_z_abs`` (not solar-normalized) for cross-code comparisons.
 # ``LOG10_ZSUN`` is imported from physics_constants above and re-exported
 # here: this remains the canonical import path for the rest of the tree.
 
 # Per-SSP-library solar Z values (kept as a reference dict so downstream
 # code or audits can look up the right Zsun if they need to translate
-# between conventions). Not consumed by the forward model directly — the
+# between conventions). Not consumed by the forward model directly: the
 # public surface uses LOG10_ZSUN above.
 LOG10_ZSUN_BY_LIBRARY: dict[str, float] = {
     "mist": -1.8477,  # Asplund 2009, Zsun = 0.0142
@@ -105,14 +105,14 @@ _EVOLVING_ALPHA_PARAM_MAP = {
 # here are gone. The two Cue lists below stay because
 # :class:`SEDModel._init_nebular` consults them at construction time
 # to register only the Cue free params the user actually opted into
-# via the spec — that's a deliberate filter the auto-derive can't
+# via the spec: that's a deliberate filter the auto-derive can't
 # express.
 #
 # No unit-conversion filter is needed: every Cue parameter name is
 # ``gas_*`` or ``ionspec_*`` and maps identity. The legacy
 # ``_PARAMS_WITH_UNIT_CONVERSION`` frozenset (``met_*``, ``dust_*``,
 # ``redshift``, ``noise_*``, ``sigma_v_kms``, ``neb_logZ_gas``) had
-# zero overlap with these two Cue buckets — the filter never fired.
+# zero overlap with these two Cue buckets: the filter never fired.
 # Verified empty by name-set intersection on 2026-05-19; retired in
 # the same pass.
 _CUE_GAS_IDENTITY_PARAMS: list[str] = sorted(_resolve_lazy_bucket("_CUE_GAS_EXTRA_PARAMS"))
@@ -141,7 +141,7 @@ _NON_SFH_PARAM_MAP = {
     "neb_logZ_gas": ("neb_logZ_gas", 1.0, LOG10_ZSUN),
 }
 
-# (Reverse alias map now managed in _aliases.py — imported at top)
+# (Reverse alias map now managed in _aliases.py: imported at top)
 
 # ── High-level API: short name → full prefixed name ──────────────
 
@@ -301,7 +301,7 @@ def _build_param_map(mean_sfh_type, dust_model="two_component"):
     synchronized without manual editing.
 
     Identity entries come from ``tengri.parameters.registry.as_param_map``
-    (ADR-0008) — walks every ``components/*/_params.py`` directly. Manual
+    (ADR-0008): walks every ``components/*/_params.py`` directly. Manual
     entries above (``resolve_sfh``, ``_NON_SFH_PARAM_MAP``, etc.) always
     take precedence because they carry unit conversions that identity
     mapping would otherwise silently break.
@@ -329,7 +329,7 @@ def _build_param_map(mean_sfh_type, dust_model="two_component"):
 
     # Auto-derive identity entries from the parameter registry (ADR-0008).
     # The registry walks every ``components/*/_params.py`` directly and reads
-    # the static ``ParamDeclaration`` tuples — it does not instantiate
+    # the static ``ParamDeclaration`` tuples: it does not instantiate
     # components with default configs, so we get the full declared-parameter
     # universe regardless of which variant a default ``comp_cls()`` would
     # have picked. This means the registry is strictly safer than the older
@@ -339,7 +339,7 @@ def _build_param_map(mean_sfh_type, dust_model="two_component"):
     # injected parameters from the wrong variant.
     #
     # Manual entries above (``resolve_sfh``, ``_NON_SFH_PARAM_MAP``, etc.)
-    # always take precedence — they carry unit conversions that identity
+    # always take precedence: they carry unit conversions that identity
     # mapping would otherwise silently break.
     try:
         from tengri.parameters.registry import as_param_map as _registry_as_param_map
@@ -357,7 +357,7 @@ def _build_param_map(mean_sfh_type, dust_model="two_component"):
 # ── Translation functions ──────────────────────────────────────────
 
 
-# (find_short_param moved to _aliases.py — imported at top)
+# (find_short_param moved to _aliases.py: imported at top)
 
 
 def get_internal_params(params, param_map, spec, has_field, *, strict_unknown_params: bool = True):
@@ -384,7 +384,7 @@ def get_internal_params(params, param_map, spec, has_field, *, strict_unknown_pa
     strict_unknown_params : bool, optional
         When ``True`` (default), raise :class:`ValueError` if ``params`` contains
         keys that aren't in ``param_map``, the reverse-alias map, or the latent
-        vector slots. When ``False``, emit a :class:`UserWarning` instead — used
+        vector slots. When ``False``, emit a :class:`UserWarning` instead; used
         by JIT kernel call sites to avoid double-flagging keys already validated
         by the outer ``Model._get_internal_params`` entry point.
 
@@ -414,7 +414,7 @@ def get_internal_params(params, param_map, spec, has_field, *, strict_unknown_pa
         if pub_name in params:
             value = params[pub_name]
             # String-typed Fixed params (e.g. shock_abundance="solar") are config
-            # enums, not numeric values — pass them through verbatim so downstream
+            # enums, not numeric values: pass them through verbatim so downstream
             # code that branches on the string still sees it. Numeric params get
             # the standard scale/offset translation.
             if isinstance(value, str):
@@ -447,7 +447,7 @@ def get_internal_params(params, param_map, spec, has_field, *, strict_unknown_pa
                 # IGM, X-ray) regardless of whether the active
                 # spec actually uses them. When a spec doesn't use a
                 # given component, its parameters are absent from both
-                # ``params`` and ``spec`` — silently skipping the entry
+                # ``params`` and ``spec``: silently skipping the entry
                 # is correct (the param has no internal use either, since
                 # the SEDModel doesn't dispatch to that component). Free
                 # params that ARE in spec but missing from params still
@@ -465,7 +465,7 @@ def get_internal_params(params, param_map, spec, has_field, *, strict_unknown_pa
                     if isinstance(fixed_val, str) or fixed_val is None:
                         # String-typed Fixed config (e.g. shock_abundance="solar"):
                         # bounds[0] is the literal value, not a numeric range. Pass
-                        # through verbatim — downstream code branches on the string.
+                        # through verbatim: downstream code branches on the string.
                         # None handles enum-typed Fixed where bounds isn't populated.
                         resolved = fixed_val if fixed_val is not None else dist.value
                         internal[int_name] = resolved
@@ -586,7 +586,7 @@ def check_missing_free_params(params, spec, param_map=None):
     entry. Without it, a missing free parameter survives the
     ``{**fixed_values, **params}`` merge and surfaces deep inside a
     component as a bare ``KeyError`` (e.g. ``'dust_tau_bc'``) with no hint
-    that the model simply expected a value for every free parameter —
+    that the model simply expected a value for every free parameter;
     commonly hit by ``model.mock({})`` on a model whose default dust group
     carries free optical depths.
 

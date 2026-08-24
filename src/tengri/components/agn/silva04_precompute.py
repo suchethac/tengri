@@ -88,7 +88,7 @@ def precompute_silva04_photometry(
 
     Notes
     -----
-    **JIT-compatible**: no — this is a build-time function using NumPy.
+    **JIT-compatible**: no, this is a build-time function using NumPy.
 
     **Build-time operation**: This function performs frequency-domain
     integration via NumPy. The precomputed photometry is grid-independent
@@ -174,10 +174,10 @@ def build_silva04_photometry_lookup(precomp: dict):
 
     Notes
     -----
-    **JIT-compatible**: yes — the returned function uses ``jnp`` and
+    **JIT-compatible**: yes, the returned function uses ``jnp`` and
     triweight interpolation, which are JAX-native.
 
-    **Gradient-safe**: yes — triweight kernel is fully differentiable.
+    **Gradient-safe**: yes, triweight kernel is fully differentiable.
 
     **Interpolation kernel**: Triweight kernel provides C²-continuous
     gradients for autodiff, unlike nearest-neighbor or linear interpolation.
@@ -248,7 +248,7 @@ def precompute(
 
     Notes
     -----
-    **JIT-compatible**: no — this is a build-time function using NumPy.
+    **JIT-compatible**: no, this is a build-time function using NumPy.
     """
     result = precompute_silva04_photometry(
         grid_path, filter_waves, filter_trans, redshift=redshift
@@ -304,9 +304,9 @@ def build_lookup(preint: dict, *, free_param_names: tuple[str, ...] | None = Non
 
     Notes
     -----
-    **JIT-compatible**: yes — the returned function is fully JAX-native.
+    **JIT-compatible**: yes, the returned function is fully JAX-native.
 
-    **Gradient-safe**: yes — triweight interpolation is fully differentiable.
+    **Gradient-safe**: yes, triweight interpolation is fully differentiable.
     """
     if not preint.get("_collapsed_axes"):
         return build_silva04_photometry_lookup(preint)

@@ -1,13 +1,13 @@
 # SPDX-License-Identifier: BSD-3-Clause
 r"""Dusty torus blocks for the composable AGN pipeline.
 
-One file, every torus — pick via ``agn={'torus': {'type': ...}}``.
-Consolidated 2026-07; registration unchanged. (``torus_screen.py`` — the
-Type-1/2 screen helper used by the runner — stays separate.)
+One file, every torus: pick via ``agn={'torus': {'type': ...}}``.
+Consolidated 2026-07; registration unchanged. (``torus_screen.py``: the
+Type-1/2 screen helper used by the runner: stays separate.)
 
 NAME NOTE: this composable-*block* module shadows the physics kernel
 ``tengri.components.agn.torus`` one package up (the *toy* simple/two-temperature
-tori — see the CLAUDE.md gotchas). Always import by full path, never a bare
+tori: see the CLAUDE.md gotchas). Always import by full path, never a bare
 ``torus``.
 """
 
@@ -206,7 +206,7 @@ def nenkova_torus_block(
     wavelength : array_like, shape (n_wave,)
     agn_log_lbol : float
     l5100_disc : array
-        Ignored (kept for protocol compatibility — this block normalizes
+        Ignored (kept for protocol compatibility: this block normalizes
         from ``agn_log_lbol``).
     agn_tau : float, optional
         Equatorial optical depth (5-150). Default ``30``.

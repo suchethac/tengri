@@ -16,7 +16,7 @@ cloudy_grid.py:360-434).  This module documents the axis mapping.
 from __future__ import annotations
 
 # CLOUDY continuum grid axes: (log_met, log_age, log_U). The line grid uses
-# the same axes. Auto-collapse is currently done at backend init — see
+# the same axes. Auto-collapse is currently done at backend init: see
 # CloudyGridBackend._preintegrate_photometry in cloudy_grid.py.
 AXIS_PARAMS: tuple[str, ...] = ("met_logzsol", "log_age", "neb_logU")
 
@@ -48,7 +48,7 @@ def precompute(
     redshift : float
         Source redshift.
     parameters : Parameters, optional
-        Parameter spec (unused — CLOUDY backend handles auto-collapse
+        Parameter spec (unused: CLOUDY backend handles auto-collapse
         internally). Default: None.
     **kwargs
         Additional arguments (ignored for Protocol consistency).
@@ -60,7 +60,7 @@ def precompute(
 
     Notes
     -----
-    **JIT-compatible**: no — returns None (metadata function).
+    **JIT-compatible**: no, returns None (metadata function).
 
     Auto-collapse for fixed parameters (met_logzsol, log_age, neb_logU) is
     wired inside CloudyGridBackend._preintegrate_photometry().
@@ -78,7 +78,7 @@ def build_lookup(preint: object, **kwargs: object) -> object:
     Parameters
     ----------
     preint : object
-        Unused — CLOUDY preintegration is handled inside CloudyGridBackend.
+        Unused: CLOUDY preintegration is handled inside CloudyGridBackend.
     **kwargs
         Additional arguments (ignored for Protocol consistency).
 
@@ -89,7 +89,7 @@ def build_lookup(preint: object, **kwargs: object) -> object:
 
     Notes
     -----
-    **JIT-compatible**: no — returns None (metadata function).
+    **JIT-compatible**: no, returns None (metadata function).
 
     """
     return None

@@ -11,29 +11,29 @@ For computational efficiency this module uses analytic line profiles
 rather than full CLOUDY grids. Each emission line is a Gaussian with
 FWHM ~ 500 km/s (narrow lines) placed at the rest-frame wavelength.
 
-Line ratios come from Richardson et al. (2014) Table 3, column 'a42' —
+Line ratios come from Richardson et al. (2014) Table 3, column 'a42':
 *dereddened emission-line strengths for the AGN locus, relative to Hbeta*.
 Richardson et al. selected SDSS galaxies whose spectra are not dominated by
 star formation, then co-added them into fifteen high-S/N composite spectra
 (``a00`` ... ``a42``) forming a sequence in **NLR ionization level**. The
-column label is a position on that ionization sequence — it is not a
+column label is a position on that ionization sequence: it is not a
 luminosity, an inclination, or a photoionization-model grid point. The
 numbers are *measurements* off stacked observed spectra, which is what makes
 them empirical rather than theoretical (see the doublet note below).
 
 All functions are pure JAX and JIT-compilable.
 
-NLR module map (#897) — these are **distinct**, not duplicates
+NLR module map (#897): these are **distinct**, not duplicates
 ---------------------------------------------------------------
 
-* ``nlr.py`` (this module) — the single-source **analytic** NLR physics
+* ``nlr.py`` (this module), the single-source **analytic** NLR physics
   kernel (``compute_nlr_sed``, Richardson+2014 line ratios). Consumed by the
   composable block ``blocks/nlr_analytic.py`` (the canonical, grammar-reachable
   path via ``agn={'nlr': {'type': 'analytic'}}``).
 * ``nlr_cloudy.py``: grid-backed (Feltre / Synthesizer CLOUDY) NLR **adapters**.
   A *different* physics source (photoionization grids, not analytic line
   ratios), consumed by ``blocks/nlr_synthesizer*.py``. Not a duplicate.
-* (removed) ``nlr_model.py`` — a one-file ``SEDModelComponent`` that
+* (removed) ``nlr_model.py``, a one-file ``SEDModelComponent`` that
   wrapped this kernel but was a grammar-unreachable orphan with drifted param
   names (``agn_nlr_cov_frac`` vs the canonical ``agn_nlr_cf``); deleted in #897
   since ``blocks/nlr_analytic`` already delivers this physics bit-identically.
@@ -101,7 +101,7 @@ def compute_nlr_sed(
 
     Notes
     -----
-    **JIT-compatible**: yes — uses ``jnp`` primitives and ``jax.vmap``.
+    **JIT-compatible**: yes, uses ``jnp`` primitives and ``jax.vmap``.
     """
     return compute_nlr_sed_richardson2014(
         wavelength=wavelength,
@@ -159,12 +159,12 @@ _RICHARDSON_WAVES = jnp.array(
 #: deblending and S/N systematics of the stack. As tabulated, a42 gives
 #: 5007/4959 = 2.97 (atomic 2.98), 6584/6548 = 2.70 (atomic ~2.94) and
 #: 6300/6363 = 3.67 (atomic ~3.00). The [N II] and [O I] deviations are real
-#: properties of the measurement — [N II] 6548 is a weak line on the H-alpha
-#: wing, and 6363 is quoted to one significant figure — not defects to repair.
+#: properties of the measurement: [N II] 6548 is a weak line on the H-alpha
+#: wing, and 6363 is quoted to one significant figure: not defects to repair.
 #:
 #: #1752 rewrote 6548 to 2.13/2.96 and 4959 to 8.53/2.98 on the atomic argument.
 #: That was wrong twice over: it imposed model physics on a measurement, and it
-#: broke the parity this table exists for — the values below are the published
+#: broke the parity this table exists for, the values below are the published
 #: a42 column, agreeing value-for-value with the same table as carried by
 #: Prospector (``AGNSpecModel.init_aline_info``), which is the claim the
 #: docstring makes. Reverted; the guard is now a parity test against the
@@ -211,7 +211,7 @@ def compute_nlr_sed_richardson2014(
     The narrow-line region (NLR) is photoionized gas illuminated by the AGN
     accretion disc. This function synthesizes the NLR emission spectrum using
     the emission-line template from Richardson et al. (2014), which provides
-    AGN-specific line ratios derived from the 'a42' column of Table 3 — one
+    AGN-specific line ratios derived from the 'a42' column of Table 3: one
     of fifteen composite SDSS spectra forming a sequence in NLR ionization
     level.
 
@@ -240,7 +240,7 @@ def compute_nlr_sed_richardson2014(
 
     Notes
     -----
-    **JIT-compatible**: yes — uses ``jnp`` primitives and ``jax.vmap``.
+    **JIT-compatible**: yes, uses ``jnp`` primitives and ``jax.vmap``.
 
     The Richardson+2014 'a42' template uses 23 emission lines normalized to
     H-beta = 1. The strongest line is [O III] 5007 at 8.53× H-beta,
@@ -251,7 +251,7 @@ def compute_nlr_sed_richardson2014(
     off stacked observed spectra, so the forbidden doublets do not reproduce
     their atomic branching ratios exactly ([N II] 6584/6548 = 2.70 against an
     atomic ~2.94). Those deviations are inherited from the measurement and are
-    deliberately preserved — see the note above ``_RICHARDSON_FLUXES``. For a
+    deliberately preserved: see the note above ``_RICHARDSON_FLUXES``. For a
     template whose doublets are tied by construction, use a photoionization
     backend (``agn={'nlr': {'type': 'synthesizer'}}``) instead.
 

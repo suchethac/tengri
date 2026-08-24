@@ -47,7 +47,7 @@ def canonical_dsps_kwargs(**kwargs):
 
     Only *floating* operands are canonicalized, and only they contribute to the
     promotion. Folding an integer into ``result_type`` would promote it to float
-    and hand a DSPS kernel a float where it expects an index — the cast this
+    and hand a DSPS kernel a float where it expects an index: the cast this
     function exists to prevent, in the opposite direction.
 
     The SSP grids (``ssp_lgmet``, ``ssp_lg_age_gyr``, ``ssp_flux``) are cached
@@ -64,7 +64,7 @@ def canonical_dsps_kwargs(**kwargs):
     none in float64; canonicalizing first takes it to zero.
 
     Under ``x64=True`` the canonical float *is* float64, so this is a no-op
-    there and float64 results are bit-unchanged — the property that makes the
+    there and float64 results are bit-unchanged: the property that makes the
     pattern safe to apply at every DSPS boundary. Same treatment as
     :func:`tengri.utils.interpolation.compute_grid_weights` (#1206, #1448).
 
@@ -117,7 +117,7 @@ class SSPData(NamedTuple):
         Alpha enhancement grid (for future use). Currently None.
         When implemented: ssp_flux will be (n_met, n_alpha, n_age, n_wave).
     nebular : str, optional
-        Nebular provenance: ``"included"`` (wNE — nebular continuum and
+        Nebular provenance: ``"included"`` (wNE: nebular continuum and
         lines baked in), ``"bare"``, or ``"unknown"`` (default). Resolved
         by :func:`load_ssp_data` from the ``nebular_included`` HDF5
         attribute, else the ``wNE`` filename convention (#1014).
@@ -168,23 +168,23 @@ class SSPData(NamedTuple):
     # :func:`load_ssp_data` so the citation machinery can infer the SPS code,
     # isochrone set, and spectral library from the
     # ``<code>_<isochrone>_<library>_<imf>`` token convention. Empty when
-    # unknown. Metadata only — never a JIT leaf.
+    # unknown. Metadata only: never a JIT leaf.
     source: str = ""
     # Nebular provenance of the grid (#1014): ``"included"`` (wNE
-    # post-processed — nebular continuum and lines baked into the templates
+    # post-processed: nebular continuum and lines baked into the templates
     # at fixed logU/logZ_gas), ``"bare"`` (pure stellar), or ``"unknown"``
     # (no metadata). Resolved by :func:`load_ssp_data` from the
     # ``nebular_included`` HDF5 attribute when present (stamp existing files
     # with ``tools/stamp_ssp_nebular_attrs.py``), else from the ``wNE``
     # filename convention. The Cue / CloudyGrid backends refuse
-    # ``"included"`` grids — a retained-LyC wNE grid is indistinguishable
+    # ``"included"`` grids; a retained-LyC wNE grid is indistinguishable
     # from bare by any Q_H heuristic, so the flag is the only reliable
-    # signal. Metadata only — never a JIT leaf.
+    # signal. Metadata only: never a JIT leaf.
     nebular: str = "unknown"
 
 
 def _sspdata_flatten(s):
-    # ``imf``/``source``/``nebular`` are metadata, not JIT leaves — keep
+    # ``imf``/``source``/``nebular`` are metadata, not JIT leaves: keep
     # strings out of the trace.
     children = (
         s.ssp_wave,
@@ -210,7 +210,7 @@ jax.tree_util.register_pytree_node(SSPData, _sspdata_flatten, _sspdata_unflatten
 #: nothing can be cached on the instance (tuples reject ``__setattr__`` and
 #: weakrefs); jax/numpy arrays support weakrefs, so the flux array itself is
 #: the anchor. A recycled ``id`` after garbage collection fails the identity
-#: check and recomputes — it can never return another grid's digest.
+#: check and recomputes, so it can never return another grid's digest.
 _SSP_CONTENT_HASH_CACHE: dict[int, tuple[object, int]] = {}
 
 
@@ -219,7 +219,7 @@ def get_ssp_content_hash(ssp_data: SSPData) -> int:
 
     Two SSPData instances with identical shape and ``ssp_lgmet`` but
     different flux must produce different values, so the compile signature
-    can distinguish SSP libraries — the collision this closes silently ran
+    can distinguish SSP libraries; the collision this closes silently ran
     one grid's physics for another (+0.9962 dex on ``log_total_mass`` by
     fit order).
 
@@ -227,13 +227,13 @@ def get_ssp_content_hash(ssp_data: SSPData) -> int:
     -------
     int
         blake2b digest (8 bytes, as int) of the flux buffer. Deterministic
-        across processes — unlike ``hash(bytes)``, which PYTHONHASHSEED
+        across processes, unlike ``hash(bytes)``, which PYTHONHASHSEED
         salts per process (the #1032 nondeterminism class).
 
     Notes
     -----
-    **Cost**: one digest per distinct flux array object — ~30 ms for the
-    default 66.9 MB grid — then O(1) via the module cache above. Two
+    **Cost**: one digest per distinct flux array object, about 30 ms for the
+    default 66.9 MB grid, then O(1) via the module cache above. Two
     SSPData objects sharing one flux array share the cache entry; two
     objects loaded separately with identical content recompute but return
     EQUAL digests (content-based), so catalog fits that reload an SSP file
@@ -282,13 +282,13 @@ def load_ssp(name: str | None = None, *, download: bool = False) -> "SSPData":
         Short alias from ``_LOAD_SSP_PRESETS``, a key from
         ``tengri.list_known_ssps()``, or a literal filename (with or
         without ``.h5``). ``None`` (default) loads ``tengri._data_setup.DEFAULT_SSP``
-        — the bare-stellar PRSC/MILES Chabrier grid, the same one
+        the bare-stellar PRSC/MILES Chabrier grid, the same one
         ``tengri.download_ssp()`` fetches and the one the Cue/CloudyGrid nebular
         backends require. For the nebular-baked demo grid pass the alias
         explicitly: ``load_ssp("prsc_miles_chabrier_wNE")``.
     download : bool, optional
         Fetch the grid from the hosted catalog if it is not found locally.
-        Default ``False``, which raises instead — a default-on fetch would
+        Default ``False``, which raises instead; a default-on fetch would
         turn any mistyped grid name into a silent multi-tens-of-megabyte
         download (#1486). Pass ``True`` in tutorials and gallery scripts,
         where a fresh checkout is expected not to have the grid yet.
@@ -310,7 +310,7 @@ def load_ssp(name: str | None = None, *, download: bool = False) -> "SSPData":
     ``download=True`` makes this the single call a script needs, replacing the
     resolve-test-fetch-load sequence each one used to carry. That sequence
     began with a working-directory-relative path, so it looked in the wrong
-    place — and therefore re-downloaded — whenever the script ran from
+    place (and therefore re-downloaded) whenever the script ran from
     anywhere but its own directory (#1486). The resolver here is
     cwd-independent: it honors ``$TENGRI_DATA_DIR``, walks every ancestor for
     ``data/``, and falls back to the package's own source tree.
@@ -330,7 +330,7 @@ def load_ssp(name: str | None = None, *, download: bool = False) -> "SSPData":
         catalog_key = DEFAULT_SSP
         filename = _KNOWN_SSPS[DEFAULT_SSP]
     elif name in _LOAD_SSP_PRESETS:
-        # Produced locally, not hosted — so there is nothing to fall back to.
+        # Produced locally, not hosted; so there is nothing to fall back to.
         catalog_key = None
         filename = _LOAD_SSP_PRESETS[name]
     elif name in _KNOWN_SSPS:
@@ -338,7 +338,7 @@ def load_ssp(name: str | None = None, *, download: bool = False) -> "SSPData":
         filename = _KNOWN_SSPS[name]
     else:
         # Accept an explicit absolute/relative path to an .h5 file directly
-        # (closes #496 — reproduction notebooks ship SSPs under
+        # (closes #496: reproduction notebooks ship SSPs under
         # ``reproduction/<code>/_drivers/data/`` rather than ``<root>/data/``).
         as_path = Path(name)
         if as_path.suffix == ".h5" and as_path.exists():
@@ -358,7 +358,7 @@ def load_ssp(name: str | None = None, *, download: bool = False) -> "SSPData":
 
     catalog_note = (
         f"{filename!r} is not in the download catalog, so download=True cannot "
-        f"fetch it — the wNE (with-nebular-emission) grids are produced locally. "
+        f"fetch it: the wNE (with-nebular-emission) grids are produced locally. "
         if download
         else "Call tengri.download_ssp('<short_name>') to fetch a bundled SSP "
         "(tengri.list_known_ssps() lists them), "
@@ -377,7 +377,7 @@ def _load_float(dataset, dtype=None) -> jnp.ndarray:
 
     Several repackaged grids store float32 (``bc03_*``, ``pgny_*``). Left as
     float32, ``stellar_mass_scale = total_mass x L_sun`` ~ 1e42 overflows the
-    float32 ceiling of 3.4e38 to ``inf`` — silently — and poisons the ionizing
+    float32 ceiling of 3.4e38 to ``inf`` (silently) and poisons the ionizing
     SED the nebular backends consume. The default upcast is lossless: every
     float32 is exactly a float64, so no stored value changes.
 
@@ -388,7 +388,7 @@ def _load_float(dataset, dtype=None) -> jnp.ndarray:
     dtype : DTypeLike, optional
         Target dtype. ``None`` (default) follows tengri's working precision
         (``jnp.result_type(float)``); an explicit dtype (e.g. ``jnp.float32``)
-        forces it regardless of the ``jax_enable_x64`` flag — the opt-in for a
+        forces it regardless of the ``jax_enable_x64`` flag: the opt-in for a
         fully 32-bit pipeline (#1206), safe now that the ~1e42/1e56 scale seams
         are carried in log space.
     """
@@ -412,7 +412,7 @@ def load_ssp_data(filepath: str, *, dtype=None, download: bool = False) -> SSPDa
         Dtype for every loaded float array. ``None`` (default) follows tengri's
         working precision (float64 under ``jax_enable_x64``, its default). Pass
         ``jnp.float32`` for a fully 32-bit pipeline: it halves the host-side
-        grid — the ``ssp_flux`` cube is the model's largest single array — and
+        grid (the ``ssp_flux`` cube is the model's largest single array) and
         is applied regardless of the ``jax_enable_x64`` flag. Safe now that the
         ~1e42 ``stellar_mass_scale`` and ~1e56 ``nion`` seams are carried in log
         space (#1206); before that, a float32 grid overflowed them silently,
@@ -442,13 +442,13 @@ def load_ssp_data(filepath: str, *, dtype=None, download: bool = False) -> SSPDa
 
     Notes
     -----
-    **JIT-compatible**: yes — only file I/O occurs; returned SSPData is
+    **JIT-compatible**: yes; only file I/O occurs; returned SSPData is
     immutable and suitable for use in JAX operations.
 
     **The fetch is opt-in, and the default changed in v0.9.** This function
     used to fetch whenever the path was absent and the *basename* matched the
     catalog. Because it matched on the basename alone, a mistyped **directory**
-    was not reported — ``load_ssp_data("/wrong/dir/fsps_prsc_miles_chabrier.h5")``
+    was not reported: ``load_ssp_data("/wrong/dir/fsps_prsc_miles_chabrier.h5")``
     wrote ~67 MB into ``/wrong/dir/`` and returned a grid, so the caller never
     learned the path was wrong. It also put a third-party host on the critical
     path of anything that merely named a grid, which reddened CI twice (#1486,
@@ -463,8 +463,8 @@ def load_ssp_data(filepath: str, *, dtype=None, download: bool = False) -> SSPDa
     and distributed templates on halos.as.arizona.edu for format details.
 
     **Precision**: this knob sets the dtype of the *host grid*. Under the default
-    x64 config a float32 grid gives correct results — intermediates promote to
-    float64 — so it halves grid memory (66.9 MB -> 33.5 MB for a typical SSP)
+    x64 config a float32 grid gives correct results: intermediates promote to
+    float64; so it halves grid memory (66.9 MB -> 33.5 MB for a typical SSP)
     with no change to the answer.
 
     It does **not**, on its own, buy a correct pure-float32 forward pass.
@@ -485,7 +485,7 @@ def load_ssp_data(filepath: str, *, dtype=None, download: bool = False) -> SSPDa
     can rescue them: ``stellar_mass_scale`` is ``total_mass * L_sun`` and
     ``nion`` is an ionizing-photon rate. Their log-domain counterparts
     (``log_stellar_mass_scale``, ``log_nion``) stay finite and are the float32-safe
-    reads — note that ``log_nion`` is finite in **every** row above, so a test that
+    reads; note that ``log_nion`` is finite in **every** row above, so a test that
     asserts on it will not notice the linear key going ``inf``. The remaining linear
     keys are issue #1206 item 3 (a breaking unit change, deliberately deferred); see
     ``docs/dev/float32-tier-b-boundary.md``.
@@ -518,7 +518,7 @@ def load_ssp_data(filepath: str, *, dtype=None, download: bool = False) -> SSPDa
     in_catalog = fp.name in KNOWN_SSP_FILENAMES
 
     if not fp.exists() and download and in_catalog:
-        # Must run BEFORE the existence check below — #1015 placed the raise
+        # Must run BEFORE the existence check below: #1015 placed the raise
         # first, which silently made this branch unreachable. Gated on
         # ``download`` since v0.9: the match is on the basename only, so an
         # unconditional fetch answers a wrong *directory* by writing the grid
@@ -526,7 +526,7 @@ def load_ssp_data(filepath: str, *, dtype=None, download: bool = False) -> SSPDa
         from tengri._data_setup import _KNOWN_SSPS, download_ssp
 
         short = next(k for k, v in _KNOWN_SSPS.items() if v == fp.name)
-        print(f"[tengri] {fp} not found — fetching '{short}' from public catalog...")
+        print(f"[tengri] {fp} not found: fetching '{short}' from public catalog...")
         download_ssp(short, dest=fp.parent if fp.parent != Path("") else "data")
 
     if not os.path.isfile(filepath):
@@ -572,7 +572,7 @@ def load_ssp_data(filepath: str, *, dtype=None, download: bool = False) -> SSPDa
                 f"'{fp.name}' is a wNE (with-Nebular-Emission) SSP: nebular "
                 "continuum and lines are already baked into the templates "
                 "at fixed logU/logZ_gas. Pair it with the default baked-in "
-                "nebular backend only — adding neb={'type': 'cue'} or a "
+                "nebular backend only: adding neb={'type': 'cue'} or a "
                 "CLOUDY grid on top double-counts nebular emission.",
                 UserWarning,
                 stacklevel=2,
@@ -580,7 +580,7 @@ def load_ssp_data(filepath: str, *, dtype=None, download: bool = False) -> SSPDa
 
         # Solar-luminosity unit contract (#969): ``ssp_flux`` is stored in
         # "Lsun/Hz per Msun", but WHICH Lsun depends on the code that wrote
-        # the file — the repackaged ``fsps_*`` catalog grids carry FSPS's
+        # the file: the repackaged ``fsps_*`` catalog grids carry FSPS's
         # native numbers (Lsun = 3.839e33 erg/s, ``sps_vars.f90``), while
         # tengri converts to erg/s with the IAU 2015 value (3.828e33), a
         # flat 0.29 % absolute-flux offset. Rescale on load so the
@@ -625,7 +625,7 @@ def load_ssp_data(filepath: str, *, dtype=None, download: bool = False) -> SSPDa
 
 #: FSPS's internal solar luminosity (``sps_vars.f90``, ``lsun = 3.839d33``)
 #: [erg/s]. The repackaged ``fsps_*`` catalog grids store flux in units of
-#: this Lsun — verified by the reproduction notebook's §1 bit-match of the
+#: this Lsun: verified by the reproduction notebook's §1 bit-match of the
 #: raw HDF5 values against live ``python-fsps`` output (#969).
 _FSPS_LSUN_ERG_PER_S: float = 3.839e33
 
@@ -635,12 +635,12 @@ def _detect_native_lsun(h5_file, filename: str) -> float | None:
 
     Resolution order (mirrors :func:`_detect_imf`):
 
-    1. ``h5_file.attrs["lsun_erg_per_s"]`` — the explicit unit contract;
+    1. ``h5_file.attrs["lsun_erg_per_s"]``: the explicit unit contract;
        components should write this going forward.
     2. Filename prefix ``fsps_`` → FSPS's native 3.839e33 erg/s (the
        published catalog grids store FSPS's raw numbers; §1 of the
        Prospector reproduction pins this bit-exactly).
-    3. ``None`` — unknown provenance; the loader assumes the file is
+    3. ``None``: unknown provenance; the loader assumes the file is
        already IAU-normalized and applies no rescale. Guessing a wrong
        constant is worse than a documented 0.3 %-scale uncertainty.
 
@@ -675,8 +675,8 @@ def _detect_imf(h5_file, filename: str) -> str:
     Resolution order:
 
     1. ``h5_file.attrs["imf"]`` (when SSP files start shipping the metadata).
-    2. Filename tail matched against :data:`_KNOWN_IMFS`
-       — e.g. ``"fsps_prsc_miles_chabrier.h5"`` → ``"chabrier"``.
+    2. Filename tail matched against :data:`_KNOWN_IMFS`,
+       e.g. ``"fsps_prsc_miles_chabrier.h5"`` → ``"chabrier"``.
     3. Fallback: ``"unknown"``.
 
     Falsely returning a wrong IMF is worse than returning ``"unknown"``,
@@ -705,12 +705,12 @@ def _detect_nebular(h5_file, filename: str) -> str:
 
     Resolution order:
 
-    1. ``h5_file.attrs["nebular_included"]`` — written at generation time
+    1. ``h5_file.attrs["nebular_included"]``: written at generation time
        or stamped onto existing files with ``tools/stamp_ssp_nebular_attrs.py``.
        An explicit ``False`` classifies the grid as ``"bare"`` even when the
        filename says wNE (the attribute is authoritative).
     2. ``wNE`` filename convention → ``"included"``.
-    3. Fallback: ``"unknown"`` — absence of the marker cannot prove the grid
+    3. Fallback: ``"unknown"``; absence of the marker cannot prove the grid
        is bare, and no Q_H heuristic can either: a retained-LyC wNE grid
        measures young-bin log Q_H identical to its bare parent.
     """
@@ -801,13 +801,13 @@ def csp_age_dt(ssp_ages_yr: jnp.ndarray, method: str = "trapz") -> jnp.ndarray:
     Both methods implement trapezoidal integration of the CSP integral
     ∫ SFR(t) dt, but differ in the quadrature variable:
 
-    ``"trapz"`` — standard trapezoidal rule in **linear age**:
+    ``"trapz"`` is the standard trapezoidal rule in **linear age**:
 
         dt_i = 0.5 * (t_{i+1} - t_{i-1})   [interior]
         dt_0 = 0.5 * (t_1 - t_0)            [left endpoint]
         dt_N = 0.5 * (t_N - t_{N-1})        [right endpoint]
 
-    ``"log_trapz"`` — trapezoidal rule in **log₁₀-age** with Jacobian:
+    ``"log_trapz"`` is the trapezoidal rule in **log₁₀-age** with Jacobian:
 
         dt_i = t_i * ln(10) * d(log₁₀ t)_i
 
@@ -833,7 +833,7 @@ def csp_age_dt(ssp_ages_yr: jnp.ndarray, method: str = "trapz") -> jnp.ndarray:
 
     Notes
     -----
-    **JIT-compatible**: yes — all operations use ``jnp`` primitives.
+    **JIT-compatible**: yes, all operations use ``jnp`` primitives.
     **Gradient-safe**: yes.
 
     References
@@ -918,7 +918,7 @@ def csp_log_interp_matrix(ssp_ages_yr, n_gl: int = 5):
 
     Notes
     -----
-    **JIT-compatible**: no — uses numpy and does not support traced evaluation.
+    **JIT-compatible**: no, uses numpy and does not support traced evaluation.
     Precompute the matrix at startup or outside JAX functions.
     **Gradient-safe**: not applicable (CPU-only computation).
 
@@ -970,7 +970,7 @@ def enforce_increasing_cosmic_time(t_cosmic_asc: jnp.ndarray) -> jnp.ndarray:
     Uses a subtract-ramp / cumulative-maximum / add-ramp projection: it
     removes any inversion or tie while staying an *exact* no-op for tables
     that already increase by more than ``eps`` per step (the normal low-z
-    case) — then ``t - ramp`` is still increasing, ``cummax`` is the
+    case); then ``t - ramp`` is still increasing, ``cummax`` is the
     identity, and adding ``ramp`` back recovers the input bit-for-bit.
 
     Parameters
@@ -991,7 +991,7 @@ def enforce_increasing_cosmic_time(t_cosmic_asc: jnp.ndarray) -> jnp.ndarray:
 
     References
     ----------
-    .. [1] suchethac/tengri#683 — SFH age weights NaN at high redshift.
+    .. [1] suchethac/tengri#683; SFH age weights NaN at high redshift.
     """
     eps = 0.01 * 1e-4  # 1e-6 Gyr (1000 yr); far below any SSP age step
     ramp = jnp.arange(t_cosmic_asc.shape[0]) * eps
@@ -1208,7 +1208,7 @@ def compute_dsps_age_weights(
 
     Notes
     -----
-    **JIT-compatible**: yes. **Differentiable**: yes — pure JAX,
+    **JIT-compatible**: yes. **Differentiable**: yes, pure JAX,
     no shape changes from inputs.
 
     References
@@ -1352,7 +1352,7 @@ def compute_dsps_met_table_weights(
 
     # See ``compute_dsps_native_weights`` for the rationale: use the
     # joint (n_met, n_age) ``result.weights`` directly. DSPS aligns its
-    # weights' age axis with the SSP grid (lookback-time ascending) —
+    # weights' age axis with the SSP grid (lookback-time ascending);
     # no axis flips required to dot with ``ssp_flux``.
     total_mass = jnp.trapezoid(sfr_asc, t_cosmic_asc * 1e9)
 
@@ -1404,7 +1404,7 @@ def compute_csp_weights(
 
     Notes
     -----
-    **JIT-compatible**: yes — all operations use ``jnp`` primitives.
+    **JIT-compatible**: yes, all operations use ``jnp`` primitives.
     **Gradient-safe**: yes.
 
     """
@@ -1457,7 +1457,7 @@ def salaris_mh_from_feh(feh: float, alpha_fe: float) -> float:
 
     Notes
     -----
-    **JIT-compatible**: yes — pure arithmetic operations.
+    **JIT-compatible**: yes, pure arithmetic operations.
     **Gradient-safe**: yes.
 
     References
@@ -1498,7 +1498,7 @@ def salaris_feh_from_mh(mh: float, alpha_fe: float) -> float:
 
     Notes
     -----
-    **JIT-compatible**: yes — pure arithmetic operations.
+    **JIT-compatible**: yes, pure arithmetic operations.
     **Gradient-safe**: yes.
 
     References
@@ -1541,7 +1541,7 @@ def effective_metallicity(log_z_fe: float, alpha_fe: float = 0.0) -> float:
 
     Notes
     -----
-    **JIT-compatible**: yes — pure arithmetic; decorated with ``@jax.jit``.
+    **JIT-compatible**: yes, pure arithmetic; decorated with ``@jax.jit``.
     **Gradient-safe**: yes.
 
     **Approximation** (Thomas, Maraston & Bender 2003 [1]_):
@@ -1592,7 +1592,7 @@ def has_alpha_grid(ssp_data: SSPData) -> bool:
 
     Notes
     -----
-    **JIT-compatible**: yes — pure shape checking and conditionals.
+    **JIT-compatible**: yes, pure shape checking and conditionals.
     **Gradient-safe**: yes.
 
     Examples
@@ -1612,7 +1612,7 @@ def interpolate_alpha_only(
     ssp_alpha_fe: jnp.ndarray,
     alpha_fe: float,
 ) -> jnp.ndarray:
-    """Linear interpolation along the [α/Fe] axis only — 4D → 3D.
+    """Linear interpolation along the [α/Fe] axis only: 4D → 3D.
 
     Collapses the [α/Fe] dimension of a 4D SSP grid at a single target
     value, leaving the metallicity axis intact. The result feeds the
@@ -1636,8 +1636,8 @@ def interpolate_alpha_only(
 
     Notes
     -----
-    **JIT-compatible**: yes — all operations use ``jnp`` primitives.
-    **Gradient-safe**: yes — linear interpolation is differentiable.
+    **JIT-compatible**: yes, all operations use ``jnp`` primitives.
+    **Gradient-safe**: yes, linear interpolation is differentiable.
 
     Complements :func:`interpolate_met_alpha`, which collapses both
     axes to a single (Z, [α/Fe]) point. Samplers that want lognormal
@@ -1687,8 +1687,8 @@ def interpolate_met_alpha(
 
     Notes
     -----
-    **JIT-compatible**: yes — all operations use ``jnp`` primitives.
-    **Gradient-safe**: yes — bilinear interpolation is differentiable.
+    **JIT-compatible**: yes, all operations use ``jnp`` primitives.
+    **Gradient-safe**: yes, bilinear interpolation is differentiable.
 
     """
     # Metallicity index and fraction
@@ -1744,7 +1744,7 @@ def interpolate_met_alpha_evolving(
 
     Notes
     -----
-    **JIT-compatible**: yes — uses ``jax.vmap`` for vectorized interpolation.
+    **JIT-compatible**: yes, uses ``jax.vmap`` for vectorized interpolation.
     **Gradient-safe**: yes.
 
     """
@@ -1809,7 +1809,7 @@ def compute_alpha_fe_evolving(
 
     Notes
     -----
-    **JIT-compatible**: yes — all operations use ``jnp`` primitives.
+    **JIT-compatible**: yes, all operations use ``jnp`` primitives.
     **Gradient-safe**: yes.
 
     """
@@ -1849,7 +1849,7 @@ def compute_csp_sed(
 
     Notes
     -----
-    **JIT-compatible**: yes — uses ``jnp.einsum`` for vectorized multiplication.
+    **JIT-compatible**: yes, uses ``jnp.einsum`` for vectorized multiplication.
     **Gradient-safe**: yes.
 
     """
@@ -1884,8 +1884,8 @@ def interpolate_metallicity(
 
     Notes
     -----
-    **JIT-compatible**: yes — all operations use ``jnp`` primitives.
-    **Gradient-safe**: yes — linear interpolation is differentiable.
+    **JIT-compatible**: yes, all operations use ``jnp`` primitives.
+    **Gradient-safe**: yes, linear interpolation is differentiable.
 
     **Approximation**: piecewise-linear interpolation in
     :math:`\log_{10}(Z/Z_\odot)`. Strictly valid only for grids whose
@@ -1926,7 +1926,7 @@ _LGMET_HI = 0.5
 
 @jax.jit
 def _tw_cuml_kern(x, m, h):
-    """Triweight kernel CDF — bit-exact mirror of DSPS ``_tw_cuml_kern``.
+    """Triweight kernel CDF: bit-exact mirror of DSPS ``_tw_cuml_kern``.
 
     Cumulative distribution of the triweight kernel with support |z| < 3.
     Returns 0 for z < -3, 1 for z > 3, smooth polynomial between.
@@ -1945,7 +1945,7 @@ def _tw_cuml_kern(x, m, h):
       with ``dsps.utils._tw_cuml_kern``.
 
     Measured difference between the two forms over ``z`` in [-4, 4]:
-    ``3.3e-16`` in float64 and ``2.4e-7`` in float32 — about 1 ulp, so either
+    ``3.3e-16`` in float64 and ``2.4e-7`` in float32: about 1 ulp, so either
     form is numerically fine in isolation. Rewriting this one to Horner would
     silently drop the upstream-parity property, which is the only reason the
     duplicate exists (#1401).
@@ -1991,7 +1991,7 @@ def compute_lgmet_weights(log_z, ssp_lgmet, lgmet_scatter=0.1):
 
     Notes
     -----
-    **JIT-compatible**: yes — uses ``jnp`` primitives and custom kernel CDF.
+    **JIT-compatible**: yes, uses ``jnp`` primitives and custom kernel CDF.
     **Gradient-safe**: yes.
 
     """
@@ -2038,8 +2038,8 @@ def interpolate_metallicity_smooth(ssp_flux, ssp_lgmet, log_z, lgmet_scatter=0.1
 
     Notes
     -----
-    **JIT-compatible**: yes — uses triweight kernel via :func:`compute_lgmet_weights`.
-    **Gradient-safe**: yes — C²-continuous gradients.
+    **JIT-compatible**: yes, uses triweight kernel via :func:`compute_lgmet_weights`.
+    **Gradient-safe**: yes; C²-continuous gradients.
 
     """
     w = compute_lgmet_weights(log_z, ssp_lgmet, lgmet_scatter)
@@ -2068,8 +2068,8 @@ def interpolate_metallicity_smooth_evolving(ssp_flux, ssp_lgmet, log_z_per_age, 
 
     Notes
     -----
-    **JIT-compatible**: yes — uses ``jax.vmap`` for per-age interpolation.
-    **Gradient-safe**: yes — C²-continuous gradients.
+    **JIT-compatible**: yes, uses ``jax.vmap`` for per-age interpolation.
+    **Gradient-safe**: yes; C²-continuous gradients.
 
     """
 
@@ -2107,8 +2107,8 @@ def interpolate_mass_remaining_smooth(ssp_mass_remaining, ssp_lgmet, log_z, lgme
 
     Notes
     -----
-    **JIT-compatible**: yes — uses triweight kernel via :func:`compute_lgmet_weights`.
-    **Gradient-safe**: yes — C²-continuous gradients.
+    **JIT-compatible**: yes, uses triweight kernel via :func:`compute_lgmet_weights`.
+    **Gradient-safe**: yes; C²-continuous gradients.
 
     """
     w = compute_lgmet_weights(log_z, ssp_lgmet, lgmet_scatter)
@@ -2142,8 +2142,8 @@ def interpolate_metallicity_evolving(
 
     Notes
     -----
-    **JIT-compatible**: yes — uses ``jax.vmap`` for vectorized interpolation.
-    **Gradient-safe**: yes — linear interpolation is differentiable.
+    **JIT-compatible**: yes, uses ``jax.vmap`` for vectorized interpolation.
+    **Gradient-safe**: yes, linear interpolation is differentiable.
 
     """
 
@@ -2202,8 +2202,8 @@ def interpolate_mass_remaining_evolving(
 
     Notes
     -----
-    **JIT-compatible**: yes — uses ``jax.vmap`` for vectorized interpolation.
-    **Gradient-safe**: yes — linear interpolation is differentiable.
+    **JIT-compatible**: yes, uses ``jax.vmap`` for vectorized interpolation.
+    **Gradient-safe**: yes, linear interpolation is differentiable.
 
     """
 
@@ -2260,7 +2260,7 @@ def compute_log_z_evolving(
 
     Notes
     -----
-    **JIT-compatible**: yes — all operations use ``jnp`` primitives.
+    **JIT-compatible**: yes, all operations use ``jnp`` primitives.
     **Gradient-safe**: yes.
 
     """
@@ -2292,8 +2292,8 @@ def interpolate_mass_remaining(
 
     Notes
     -----
-    **JIT-compatible**: yes — all operations use ``jnp`` primitives.
-    **Gradient-safe**: yes — linear interpolation is differentiable.
+    **JIT-compatible**: yes, all operations use ``jnp`` primitives.
+    **Gradient-safe**: yes, linear interpolation is differentiable.
 
     """
     log_z_clamped = jnp.clip(log_z, ssp_lgmet[0], ssp_lgmet[-1])
@@ -2322,7 +2322,7 @@ def compute_surviving_mass(weights: jnp.ndarray, mass_remaining_at_met: jnp.ndar
 
     Notes
     -----
-    **JIT-compatible**: yes — uses ``jnp.sum`` for reduction.
+    **JIT-compatible**: yes, uses ``jnp.sum`` for reduction.
     **Gradient-safe**: yes.
 
     """
@@ -2354,7 +2354,7 @@ def predict_surviving_mass(
     This formula follows from the post-2026-05-25 SFH normalization contract
     (``trapezoid(sfr, t) = 10**log_total_mass`` for every parametric SFH):
     the survivor fraction at each age becomes a *weight* on the SFR, and the
-    integral collapses to a single trapezoid rule on the SFH grid — no DSPS
+    integral collapses to a single trapezoid rule on the SFH grid; no DSPS
     convolution required.
 
     Parameters
@@ -2381,9 +2381,9 @@ def predict_surviving_mass(
 
     Notes
     -----
-    **JIT-compatible**: yes — uses ``jnp.interp``, ``jnp.trapezoid``,
+    **JIT-compatible**: yes, uses ``jnp.interp``, ``jnp.trapezoid``,
     and the existing :func:`interpolate_mass_remaining` helper.
-    **Gradient-safe**: yes — differentiable w.r.t. any SFH parameter
+    **Gradient-safe**: yes, differentiable w.r.t. any SFH parameter
     through ``sfr``.
 
     The result is also published as ``state.derived["log_mstar"]`` after
@@ -2425,7 +2425,7 @@ def predict_surviving_mass(
     ssp_log_age_yr = ssp.ssp_lg_age_gyr + 9.0
     log_lb_yr = jnp.log10(jnp.maximum(t_lookback_yr, 1.0))
     f_surv_on_lb = jnp.interp(log_lb_yr, ssp_log_age_yr, f_surv_on_ssp)
-    # Clamp to [0, 1] — extrapolation outside the SSP age range can drift.
+    # Clamp to [0, 1]: extrapolation outside the SSP age range can drift.
     f_surv_on_lb = jnp.clip(f_surv_on_lb, 0.0, 1.0)
     # Trapezoid: M_surv = ∫ SFR(t) f_surv(t) dt
     return jnp.trapezoid(sfr * f_surv_on_lb, t_lookback_yr)

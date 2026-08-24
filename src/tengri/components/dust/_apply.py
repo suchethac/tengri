@@ -45,7 +45,7 @@ def precompute_dust_age_weights(
 
     Notes
     -----
-    **JIT-compatible**: yes — all operations are ``jnp`` primitives.
+    **JIT-compatible**: yes, all operations are ``jnp`` primitives.
 
     The weight is:
 
@@ -86,7 +86,7 @@ def precompute_dust_age_mask(
 
     Notes
     -----
-    **JIT-compatible**: yes — all operations are ``jnp`` primitives.
+    **JIT-compatible**: yes, all operations are ``jnp`` primitives.
 
     The original Charlot & Fall (2000) model uses a hard cutoff instead of a sigmoid.
     This returns complementary masks: young_mask + old_mask = 1 everywhere.
@@ -133,7 +133,7 @@ def resolve_bc_diff_law_params(
     they cannot diverge.
 
     A parameter nobody asked for is **omitted** rather than defaulted, so the
-    selected law's own published default stands — see ``live_shape_params``.
+    selected law's own published default stands; see ``live_shape_params``.
 
     Parameters
     ----------
@@ -158,7 +158,7 @@ def resolve_bc_diff_law_params(
 
     Notes
     -----
-    **JIT-compatible**: yes — only dict construction and ``Mapping.get``; the
+    **JIT-compatible**: yes, only dict construction and ``Mapping.get``; the
     values pass through untouched (traced arrays stay traced).
 
     Passing all four unconditionally was #1833. The spec declares ONE shared
@@ -167,7 +167,7 @@ def resolve_bc_diff_law_params(
     ``dust_bump_strength=1.0``; ``narayanan_z`` and ``tea``
     ``dust_delta=-0.2``). Injecting the shared zero deleted the 2175 Å Drude
     bump that Kriek & Conroy (2013) Eqn 3 exists to add, so ``two_component``
-    silently returned a different law from the one selected — measured at 128%
+    silently returned a different law from the one selected; measured at 128%
     on the SED against ``single_component``, which had already been fixed by
     #1808. This is that fix reaching its second caller.
     """
@@ -217,9 +217,9 @@ def apply_lyman_cutoff(
 
     Notes
     -----
-    **JIT-compatible**: yes — a single ``jnp.where``; ``cutoff_aa`` is a static
+    **JIT-compatible**: yes, a single ``jnp.where``; ``cutoff_aa`` is a static
     Python float (never a traced parameter), so no ``TracerBoolConversionError``
-    risk. **Gradient-safe**: yes — ``jnp.where`` on a static mask.
+    risk. **Gradient-safe**: yes, ``jnp.where`` on a static mask.
     """
     return jnp.where(wavelength >= cutoff_aa, k, 0.0)
 
@@ -295,9 +295,9 @@ def two_component_dust(
 
     Notes
     -----
-    **JIT-compatible**: yes — all operations are ``jnp`` primitives and safe for ``jax.jit``.
+    **JIT-compatible**: yes, all operations are ``jnp`` primitives and safe for ``jax.jit``.
 
-    **Gradient-safe**: yes — differentiable everywhere; smooth sigmoid age transition preserves gradients
+    **Gradient-safe**: yes, differentiable everywhere; smooth sigmoid age transition preserves gradients
     through the birth-cloud boundary.
 
     The total optical depth is:
@@ -413,9 +413,9 @@ def two_component_dust_separable(
 
     Notes
     -----
-    **JIT-compatible**: yes — all operations are ``jnp`` primitives.
+    **JIT-compatible**: yes, all operations are ``jnp`` primitives.
 
-    **Gradient-safe**: yes — differentiable everywhere.
+    **Gradient-safe**: yes, differentiable everywhere.
 
     **Performance**: Reduces memory traffic by ~40% on (n_ages, n_wave) grids
     relative to ``two_component_dust`` because the diffuse exponential is computed
@@ -484,7 +484,7 @@ def two_component_dust_fast(
     (~1.6x speedup on CPU). That is a property of this function, not of the
     model: nothing hands it float32 wavelengths unless the whole run is in pure
     float32 (``jax.enable_x64(False)``). In particular
-    ``forward_dtype="float32"`` does not — it casts nothing (#1433).
+    ``forward_dtype="float32"`` does not; it casts nothing (#1433).
 
     Parameters
     ----------
@@ -516,9 +516,9 @@ def two_component_dust_fast(
 
     Notes
     -----
-    **JIT-compatible**: yes — all operations are ``jnp`` primitives.
+    **JIT-compatible**: yes, all operations are ``jnp`` primitives.
 
-    **Gradient-safe**: yes — differentiable everywhere.
+    **Gradient-safe**: yes, differentiable everywhere.
     """
     k_bc = resolve_dust_law(law_bc)(wavelengths, **law_params)
     k_diff = resolve_dust_law(law_diff)(wavelengths, **law_params)
@@ -567,9 +567,9 @@ def single_component_dust(
 
     Notes
     -----
-    **JIT-compatible**: yes — all operations are ``jnp`` primitives.
+    **JIT-compatible**: yes, all operations are ``jnp`` primitives.
 
-    **Gradient-safe**: yes — differentiable everywhere.
+    **Gradient-safe**: yes, differentiable everywhere.
 
     The transmission is:
 
@@ -637,9 +637,9 @@ def single_component_dust_fast(
 
     Notes
     -----
-    **JIT-compatible**: yes — all operations are ``jnp`` primitives.
+    **JIT-compatible**: yes, all operations are ``jnp`` primitives.
 
-    **Gradient-safe**: yes — differentiable everywhere.
+    **Gradient-safe**: yes, differentiable everywhere.
 
     **Memory efficiency**: Using ``jnp.broadcast_to`` avoids materializing
     the full (n_ages, n_wave) grid in memory; the result is a zero-copy view.

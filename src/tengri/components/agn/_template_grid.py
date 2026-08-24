@@ -9,7 +9,7 @@ renormalize by the frequency integral and scale to
 
 The reason the grid is a :class:`TorusTemplateGrid` **argument** rather than a
 closed-over array is threading. A closure's captured arrays are concrete at
-trace time, so JAX freezes them into the graph as ``Constant`` ops — the whole
+trace time, so JAX freezes them into the graph as ``Constant`` ops, the whole
 library, inlined, every time. A pytree passed as an argument becomes a
 ``Parameter`` instead. See ``tengri.components.agn.blocks._protocol.collect_block_templates``.
 """
@@ -36,7 +36,7 @@ class TorusTemplateGrid(NamedTuple):
     Attributes
     ----------
     template : ndarray, shape (n_ax1, ..., n_axk, n_wave)
-        Tabulated SEDs [arbitrary units — shape only; renormalized on use].
+        Tabulated SEDs [arbitrary units: shape only; renormalized on use].
     axes : tuple of ndarray
         One 1-D coordinate array per leading template axis, ascending.
     wave_grid : ndarray, shape (n_wave,)
@@ -96,7 +96,7 @@ def torus_lnu_from_grid(
     the integral runs over the frequency grid matching ``wavelength``.
     The template carries shape only; its absolute scale is divided out.
 
-    **JIT-compatible**: yes. **Gradient-safe**: yes — node-exact PCHIP is
+    **JIT-compatible**: yes. **Gradient-safe**: yes, node-exact PCHIP is
     C¹-continuous across every axis.
     """
     template = interp_nd_pchip(

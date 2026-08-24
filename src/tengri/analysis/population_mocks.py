@@ -30,9 +30,9 @@ def assert_truth_is_discriminating(value, bounds, *, name, rel_tol=0.08):
     Two distinct points in a bounded prior are indistinguishable from "the
     estimator returned its prior", depending on the standardization in force:
 
-    - **Arithmetic midpoint** ``0.5(lo + hi)`` — where a uniform prior or
+    - **Arithmetic midpoint** ``0.5(lo + hi)``: where a uniform prior or
       sigmoid-standardized logit-normal returns nothing (prior expectation).
-    - **Geometric mean** ``sqrt(lo * hi)`` — where a log-uniform prior returns
+    - **Geometric mean** ``sqrt(lo * hi)``; where a log-uniform prior returns
       nothing (same value as the lognormal median by mathematical identity).
 
     Which applies depends on tengri's standardization, which has changed
@@ -74,7 +74,7 @@ def assert_truth_is_discriminating(value, bounds, *, name, rel_tol=0.08):
     if not lo < value < hi:
         raise ValueError(
             f"Injected truth {name}={value:g} is OUTSIDE the prior bounds "
-            f"({lo:g}, {hi:g}), so no fit can reach it — estimates will pin at "
+            f"({lo:g}, {hi:g}), so no fit can reach it: estimates will pin at "
             f"the nearest bound and resemble shrinkage. If these bounds look "
             f"wrong, read them off the model rather than hardcoding them: "
             f"model.spec.get_distribution({name!r}).bounds."
@@ -176,7 +176,7 @@ def _resample_until_realizable(draw, *, max_fraction, max_attempts):
     """Redraw a galaxy until its SFH fits inside cosmic time (#1645).
 
     Rejection sampling, made explicit. The accepted draw is from the prior
-    **conditioned on** truncating no more than ``max_fraction`` — a different
+    **conditioned on** truncating no more than ``max_fraction``; a different
     distribution from the prior, which is why the caller opts in and why the
     count of redraws is reported back.
 
@@ -353,8 +353,8 @@ def make_population(
         :attr:`MockPopulation.truncated_fraction` regardless.
 
         Off by default deliberately. The fixtures this repository already ships
-        contain such galaxies — the four-galaxy ESS-sweep mock truncates 3%, 5%,
-        9% and 69% — so defaulting to a limit would reject the project's own
+        contain such galaxies; the four-galaxy ESS-sweep mock truncates 3%, 5%,
+        9% and 69%: so defaulting to a limit would reject the project's own
         populations rather than fix them (#1645).
     resample_truncated : bool, optional
         Redraw a galaxy that exceeds ``max_truncated_fraction`` instead of
@@ -366,7 +366,7 @@ def make_population(
         conditioning is reported as :attr:`MockPopulation.n_resampled`.
 
         Off by default for the same reason as above, plus one more: redrawing
-        would silently change every existing mock built from a fixed key —
+        would silently change every existing mock built from a fixed key,
         including the population behind the banked ESS-vs-breadth curve in
         ``docs/dev/hierarchical-psd-handoff.md`` §4j.
 
@@ -375,7 +375,7 @@ def make_population(
         one without the other need not change whether the history fits.
     max_resample_attempts : int, optional
         Redraw budget per galaxy [count]. Default 20. Exhausting it raises
-        rather than looping or quietly keeping the last draw — if no draw is
+        rather than looping or quietly keeping the last draw: if no draw is
         realizable, the prior and the threshold are incompatible and rejection
         sampling cannot rescue it.
 
@@ -420,7 +420,7 @@ def make_population(
     # same lines the likelihood will score, or the two disagree silently: a
     # model whose Observation carries no line_fluxes builds no line likelihood
     # at all, so mock lines generated here are simply discarded and the fit is
-    # photometry-only while appearing to use lines. That happened — every
+    # photometry-only while appearing to use lines. That happened: every
     # recovery run in this study was photometry-only for exactly this reason.
     #
     # Falling back to a default set is only correct for generating data that
@@ -516,7 +516,7 @@ def make_population(
 
         # Re-emit everything the accepted draw produced: capturing is for
         # measurement, not suppression, and a caller who watches stderr today
-        # must keep seeing what they see now. Rejected draws stay silent — a
+        # must keep seeing what they see now. Rejected draws stay silent: a
         # galaxy that was redrawn is not one the caller has to reason about.
         for record in caught:
             warnings.warn_explicit(record.message, record.category, record.filename, record.lineno)

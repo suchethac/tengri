@@ -1,7 +1,7 @@
 # SPDX-License-Identifier: BSD-3-Clause
 # Copyright (c) 2025 Suchetha Cooray
 
-"""Callable factories for the AGN group — most complex of the builders.
+"""Callable factories for the AGN group: most complex of the builders.
 
 AGN composition has five orthogonal sub-block axes (``disc``,
 ``torus``, ``nlr``, ``blr``, ``feii``, ``atten``) plus a top-level

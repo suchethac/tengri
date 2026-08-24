@@ -30,7 +30,7 @@ def plot_sfh(
     show_mean_sfh=True,
     xscale="linear",
 ):
-    """Plot SFH posterior with uncertainty band — BAGPIPES/Prospector style.
+    """Plot SFH posterior with uncertainty band: BAGPIPES/Prospector style.
 
     Features:
 
@@ -69,7 +69,7 @@ def plot_sfh(
     xscale : {"linear", "log"}
         Lookback-time axis scale. Default ``"linear"`` (BAGPIPES convention:
         present at right). ``"log"`` resolves the recent, bursty SFH that a
-        linear axis compresses into a sliver near the present — the lower limit
+        linear axis compresses into a sliver near the present; the lower limit
         is clamped off zero to ``max(xlim[0], 1e-3)`` Gyr (~1 Myr, the youngest
         SFH grid point) and the axis runs ascending (recent at left).
 

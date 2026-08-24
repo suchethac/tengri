@@ -112,7 +112,7 @@ def build_base_likelihood(context: InferenceContext):
     # uniformly across the concatenated prediction. Without this
     # bail-out, downstream branches would build a plain
     # SpectroscopyLikelihood / Composite that silently ignores the
-    # mask — a real bug, fix is the bail-out itself.
+    # mask, a real bug, fix is the bail-out itself.
     if context.data_mask is not None:
         return None
 
@@ -121,7 +121,7 @@ def build_base_likelihood(context: InferenceContext):
     # apply the variable-noise (Student-t) adapter per channel.
     # `f_cal_param="noise_frac_cal"` reads the fractional calibration
     # uncertainty from the params dict at log_prob time. The same
-    # f_cal applies to both phot and spec channels for joint data —
+    # f_cal applies to both phot and spec channels for joint data,
     # matches the legacy `variable_noise_hamiltonian` semantics.
     if has_noise_model(context.spec) or uses_student_t(context.spec):
         dof = get_noise_dof(context.spec) if uses_student_t(context.spec) else None
@@ -513,7 +513,7 @@ def build_likelihood_extras(context: InferenceContext):
 def _n_phot_split(context: InferenceContext) -> int:
     """Number of photometric data points in joint (phot+spec) data.
 
-    Raises ``ValueError`` if ``model.observation.n_data_phot`` is missing —
+    Raises ``ValueError`` if ``model.observation.n_data_phot`` is missing,
     joint data cannot be split without it.
     """
     obs = getattr(context.model, "observation", None)
@@ -528,12 +528,12 @@ def _n_phot_split(context: InferenceContext) -> int:
 def _eline_scalar_resolution(model) -> float:
     """Scalar R for the e-line design matrix, from the model's observation.
 
-    The old probe read ``model._spectral_resolution`` — an attribute nothing
-    in the codebase has ever set — so the 2000 fallback always won and the
+    The old probe read ``model._spectral_resolution``, an attribute nothing
+    in the codebase has ever set, so the 2000 fallback always won and the
     instrument's declared resolution never reached the line profiles.
     ``Spectroscopy.resolution`` may be a scalar or a per-pixel array; the
     Gaussian design matrix takes one number, so an array reduces to its
-    median (first-order — R varies slowly across a band). 2000 remains the
+    median (first-order, R varies slowly across a band). 2000 remains the
     fallback only when the observation declares no resolution at all.
     """
     spec_cfg = getattr(getattr(model, "observation", None), "spectroscopy", None)

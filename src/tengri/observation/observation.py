@@ -5,7 +5,7 @@ Bundles photometric and/or spectroscopic setup with noise configuration
 into a single declarative object. Follows the same Instrument pattern as
 Synthesizer, in tengri's JAX/differentiable inference context.
 
-The Observation class is a frozen configuration container — it never
+The Observation class is a frozen configuration container, it never
 enters JAX-traced code. It configures what the Model precomputes and
 what the Fitter dispatches.
 """
@@ -32,7 +32,7 @@ _OBSERVATION_DEPRECATION_WARNED = False
 def _restband_lnu(state) -> jnp.ndarray:
     r"""Total rest-frame band luminosity for ``phot_rest_fnu`` (#1148).
 
-    ``phot_rest_fnu`` — and so ``Observables.mag_absolute`` — is the SED reprojected
+    ``phot_rest_fnu`` (and so ``Observables.mag_absolute``) is the SED reprojected
     at :math:`z=0`, :math:`d_L=10\,{\rm pc}`: *the galaxy as it is*. The filter
     therefore sits in the **rest** frame and samples the rest SED at its own pivot.
 
@@ -43,13 +43,13 @@ def _restband_lnu(state) -> jnp.ndarray:
     redshift and on which ``approx`` was passed.
 
     Assembled from the ``*_restband_lnu_precomp`` family, **auto-discovered** exactly
-    as ``predict_via_precomp`` discovers the observed ``*_phot_lnu_precomp`` family —
+    as ``predict_via_precomp`` discovers the observed ``*_phot_lnu_precomp`` family,
     so a new emitter gets rest-frame photometry for free and cannot silently drop out
     of it, which is how the fast path lost AGN and nebular emission once already
     (#737/#740).
 
     The galaxy's own dust stays (it is part of the SED); the IGM does not (it is a
-    line-of-sight absorber between us and the source — #1115).
+    line-of-sight absorber between us and the source, #1115).
 
     Parameters
     ----------
@@ -63,7 +63,7 @@ def _restband_lnu(state) -> jnp.ndarray:
 
     Notes
     -----
-    **JIT-compatible**: yes — pure JAX.
+    **JIT-compatible**: yes, pure JAX.
 
     Falls back to the observed-band sum when no emitter published a rest-band tensor
     (a model built without ``WavePrecomp``, whose ``phot_rest_fnu`` the exact
@@ -110,7 +110,7 @@ def _restband_lnu(state) -> jnp.ndarray:
         a_bc_sub = state.derived.get("dust_bc_restband_attenuation_subband_precomp")
         a_diff_sub = state.derived.get("dust_diff_restband_attenuation_subband_precomp")
         if a_bc_sub is not None and sub_per_age is not None and y_age is not None:
-            # K-point quadrature across the rest band — the screen is EVALUATED at
+            # K-point quadrature across the rest band, the screen is EVALUATED at
             # each node, not extrapolated from the pivot (#1122).
             t_sub = a_diff_sub * a_bc_sub ** y_age[:, None, None]
             stellar_att = jnp.sum(sub_per_age * t_sub, axis=(0, 2))
@@ -751,9 +751,9 @@ class Observation:
             When ``observables_type`` is ``None``: Observable channels as dict,
             keyed by which sub-blocks are configured:
 
-            - ``"phot_fnu"`` if :attr:`can_do_photometry` — shape ``(n_filters,)``,
+            - ``"phot_fnu"`` if :attr:`can_do_photometry`, shape ``(n_filters,)``,
               F_nu [erg/s/cm^2/Hz].
-            - ``"spec_fnu"`` if :attr:`can_do_spectroscopy` — shape ``(n_pix,)``,
+            - ``"spec_fnu"`` if :attr:`can_do_spectroscopy`, shape ``(n_pix,)``,
               F_nu [erg/s/cm^2/Hz].
 
             When ``observables_type`` is provided: an instance of the passed
@@ -762,7 +762,7 @@ class Observation:
 
         Notes
         -----
-        **JIT-compatible**: yes — same kernels as
+        **JIT-compatible**: yes, same kernels as
         :meth:`observe_photometry` and :meth:`observe_spectrum`.
 
         Joint observations (``is_joint``) return both keys from a single
@@ -772,7 +772,7 @@ class Observation:
 
         When ``observables_type`` is provided and the observation has
         ``line_fluxes`` or ``spectral_indices`` configured, raises
-        ``NotImplementedError`` — those channels are not routed through
+        ``NotImplementedError``, those channels are not routed through
         this entry point yet.
         """
         from tengri.cosmology import luminosity_distance
@@ -791,14 +791,14 @@ class Observation:
         # IGM attenuation is an observed-frame transmission the IGM component
         # publishes on the rest grid (``T`` evaluated at ``wave_obs =
         # wave*(1+z)``). Every projection below redshifts the rest SED
-        # internally, so attenuating here — once, before projection — is what
+        # internally, so attenuating here (once, before projection) is what
         # captures the sharp Lyman break across broad bands and spectral pixels
         # at high redshift (#932); a single per-band effective-wavelength factor
         # would not. ``T`` shares the rest grid with ``sed_rest``, and the key is
         # absent (structural no-op) when IGM is disabled, so low-z / IGM-off
         # models are bit-unchanged.
         #
-        # ``sed_atten`` feeds the spectroscopy block ONLY — that is an observed-frame
+        # ``sed_atten`` feeds the spectroscopy block ONLY; that is an observed-frame
         # channel, where the absorber belongs.
         #
         # The observed-photometry block does NOT use it: ``project_photometry`` reads
@@ -821,7 +821,7 @@ class Observation:
             # integrates ``state.sed_intrinsic`` through each filter without
             # approximation. The precompute LUT path is opt-in via
             # :meth:`predict_via_precomp` (or its callers); this method does
-            # NOT fall through to the LUT by default — exact-first is the
+            # NOT fall through to the LUT by default, exact-first is the
             # default semantics for ``observation.predict``.
             out["phot_fnu"] = project_photometry(state, params, self.photometry, dl_cm=dl_cm)
 
@@ -858,7 +858,7 @@ class Observation:
 
         # If observables_type is provided, populate and return the NamedTuple.
         # Line fluxes / line ratios / spectral indices are NOT projection
-        # observables — they are scalar measurables computed separately
+        # observables; they are scalar measurables computed separately
         # (predict_line_fluxes / predict_line_ratios / predict_spectral_indices)
         # and composed into the likelihood via the prediction dict, so their
         # presence on the Observation no longer blocks the projection here.
@@ -871,23 +871,23 @@ class Observation:
                 dl_rest = TEN_PC_CM  # 10 pc in cm
                 n_real = self.photometry.n_filters
                 # ``sed_rest``, NOT ``sed_atten`` (#1115). ``phot_rest_fnu`` is the
-                # SED reprojected at z=0, d_L=10 pc — the galaxy as it is. The IGM is
+                # SED reprojected at z=0, d_L=10 pc, the galaxy as it is. The IGM is
                 # a line-of-sight absorber *between us and the source*; it is not part
                 # of the galaxy's rest-frame SED. Feeding the attenuated SED here made
                 # an object's absolute magnitude depend on how far away it happens to
-                # be. (The galaxy's own LyC absorption — ``neb_fesc``, dust — already
+                # be. (The galaxy's own LyC absorption (``neb_fesc``, dust) already
                 # lives in ``sed_rest`` and correctly stays.)
                 #
                 # This projects at z=0, so the filter's OWN wavelengths are read as
                 # REST wavelengths, and T is stored on the rest grid as
                 # T(λ_rest·(1+z)). The corruption was therefore confined to filters
-                # with support at rest λ < 1216 Å — blueward of Lyα, where Madau/Inoue
-                # absorption begins — and the (1+z) cancels, so that boundary is
+                # with support at rest λ < 1216 Å, blueward of Lyα, where Madau/Inoue
+                # absorption begins, and the (1+z) cancels, so that boundary is
                 # redshift-invariant while its depth is not. Measured on a rest-900 Å
                 # band: −5.2 % at z=1, −30.0 % at z=3, −95.9 % (≈ −3.5 mag) at z=6.
                 #
                 # Zero-diff for every shipped filter (the bluest, GALEX FUV, starts at
-                # 1341 Å and has no throughput below Lyα) — which is exactly why it
+                # 1341 Å and has no throughput below Lyα), which is exactly why it
                 # lands now, before a Lyman-continuum band added for escape-fraction
                 # work quietly returns an answer that scales with source redshift.
                 # ``predict_via_precomp`` already did this; the two paths now agree.
@@ -940,7 +940,7 @@ class Observation:
         Any additional ``*_phot_lnu_precomp`` entries (AGN, …) sum in
         automatically.
 
-        Photometry only — spectroscopy has its own LUT path
+        Photometry only, spectroscopy has its own LUT path
         (:meth:`predict_spectrum_via_precomp`).
 
         Parameters
@@ -970,7 +970,7 @@ class Observation:
 
         Notes
         -----
-        **JIT-compatible**: yes — pure JAX arithmetic on the LUT entries.
+        **JIT-compatible**: yes, pure JAX arithmetic on the LUT entries.
 
         **This is a second implementation of :meth:`predict`, not a spelling of
         it.** The two are kept in sync by hand, deliberately: the speedup exists
@@ -979,35 +979,35 @@ class Observation:
         (#1109). Collapsing the two would delete the optimization. The standing
         goal is therefore not to merge them but to shrink and *bound* the
         divergence channel by channel, and to keep the remaining approximations
-        named with their measured size — which is what follows.
+        named with their measured size, which is what follows.
 
-        **Accuracy ledger — where this path differs from** :meth:`predict`:
+        **Accuracy ledger, where this path differs from** :meth:`predict`:
 
         - **Stellar continuum**: K-point sub-band quadrature (#1122). The
           screen is *evaluated* at each node rather than sampled once, and
           converges as :math:`1/K^2`. K=5 (default): ≲0.6 % worst case in GALEX
           FUV; 3.2e-05 to 7.8e-04 on an FSPS/SDSS *griz* reference model over
           :math:`\tau_{\rm diff} \le 2`, :math:`z \le 1`. **This is the floor
-          for the whole path** — no other channel can do better than the
+          for the whole path**, no other channel can do better than the
           bucket that dominates the broadband.
-        - **Nebular, under** ``dust_attenuation={'type': 'two_component'}`` — *exact* since
+        - **Nebular, under** ``dust_attenuation={'type': 'two_component'}``: *exact* since
           #1738. That component publishes the reddened continuum integrated
           through each band (``nebular_phot_lnu_attenuated_precomp``), so there
           is no band-averaging error left to quote: ≤3.5e-06 against the exact
           path on a fixture built to maximize it. Previously screened at
           :math:`\lambda_{\rm eff}`, which inflated the total gap by up to 26x
           over the stellar floor while carrying only 0.8-3.5 % of the band flux.
-        - **Nebular, under** ``dust_attenuation={'type': 'single_component'}`` — **still at**
+        - **Nebular, under** ``dust_attenuation={'type': 'single_component'}``: **still at**
           :math:`\lambda_{\rm eff}`. The qualifier above is not pedantry: this
           docstring claimed nebular was exact full stop, and it was measured
           wrong within a day of being written. :class:`DustAttenuationSEDComponent`
           declares ``sed_nebular`` an *optional* input purely as a topological
-          ordering edge — its own docstring notes the screen "does not read the
-          key directly — it acts on the already-summed ``sed_intrinsic``" — so no
+          ordering edge, its own docstring notes the screen "does not read the
+          key directly (it acts on the already-summed ``sed_intrinsic``") so no
           separately reddened nebular SED exists there to project. Measured on an
           FSPS SSP through SDSS *gri*: 1.787e-03 at :math:`\tau_v`\ =1/z=0.05 and
           1.955e-03 at :math:`\tau_v`\ =2/z=1, against a stellar-only floor of
-          ~6.1e-04 — a ~3x inflation, versus the 26x removed on two-component.
+          ~6.1e-04, a ~3x inflation, versus the 26x removed on two-component.
           Bounded in ``tests/contract/test_precomp_channel_drift.py``.
 
           Fixing it means computing ``sed_neb · exp(-tau_v · k)`` in that
@@ -1025,7 +1025,7 @@ class Observation:
           ``two_component`` never reads ``sed_shock`` and adds the non-nebular
           remainder unattenuated. Measured on an FSPS SSP through SDSS *gri*:
           **4.5 %** at :math:`\tau_{\rm bc}`\ =1/z=0.05, **7.4 %** at
-          :math:`\tau`\ =2/z=0.05, **37.7 %** at :math:`\tau`\ =2/z=1 — and in
+          :math:`\tau`\ =2/z=0.05, **37.7 %** at :math:`\tau`\ =2/z=1, and in
           the exact path shock's contribution over its intrinsic value is
           1.66e-55 whatever :math:`\tau` is, i.e. the bare cosmology factor.
           A quadrature cannot close a factor-of-40 disagreement about *whether*
@@ -1039,7 +1039,7 @@ class Observation:
           term reaches **−9.5 %**. Folded into the sub-band weights (#1135)
           wherever a mean-IGM model is precomputable; patchy reionization and
           DLAs read free parameters, so those configs keep the live path.
-        - **Additive emitters** (dust IR, radio, X-ray, AGN) — exact via the
+        - **Additive emitters** (dust IR, radio, X-ray, AGN), exact via the
           rank-1/rank-K band response where the emitter factorizes, else a dense
           band integral, else a single :math:`\lambda_{\rm eff}` sample; see
           ``tengri.components._band_projection.project_additive_onto_photometry``
@@ -1059,7 +1059,7 @@ class Observation:
 
         # Sum all *_phot_lnu_precomp contributions from components that published
         # one. New components add their precompute field to DerivedState and
-        # apply() — no change to predict_via_precomp required.
+        # apply(), no change to predict_via_precomp required.
         precomp_keys = [k for k in state.derived.field_names() if k.endswith("_phot_lnu_precomp")]
         precomp_contribs = [state.derived[k] for k in precomp_keys if k in state.derived]
         if not precomp_contribs:
@@ -1072,12 +1072,12 @@ class Observation:
         # the spectrum channel is projected separately by
         # ``predict_spectrum_via_precomp`` and merged by the caller, and line
         # fluxes / spectral indices are served by their own grid-independent
-        # predict_* methods — so the presence of spectroscopy/lines/indices is
+        # predict_* methods, so the presence of spectroscopy/lines/indices is
         # not a blocker here.
         if not self.can_do_photometry:
             raise ValueError("predict_via_precomp requires photometry to be configured.")
 
-        # Sum all precompute contributions — rest-frame Lν at the source's z.
+        # Sum all precompute contributions, rest-frame Lν at the source's z.
         total_phi = precomp_contribs[0]
         for c in precomp_contribs[1:]:
             total_phi = total_phi + c
@@ -1113,19 +1113,19 @@ class Observation:
         # ``unattenuated_phi`` would make the LUT read high wherever the screen
         # bites, and only for models that enable shock (#1375, #851).
         #
-        # KNOWN RESIDUAL — and NOT the band-averaging one this comment used to
+        # KNOWN RESIDUAL, and NOT the band-averaging one this comment used to
         # claim. It read "like the nebular bucket, shock is a single number per
         # filter, so the screen is applied at λ_eff... fixing it means giving
         # shock a sub-band LUT". Measured, that is the wrong mechanism: the
         # EXACT path applies no stellar screen to shock at all. two_component
-        # never reads sed_shock — it forms non_stellar_other = non_stellar_pre_dust
-        # - sed_neb and adds that bucket unattenuated — while this line multiplies
+        # never reads sed_shock, it forms non_stellar_other = non_stellar_pre_dust
+        # - sed_neb and adds that bucket unattenuated, while this line multiplies
         # shock by a_diff·a_bc (0.025-0.109 at tau_bc=2). In the exact path
         # shock's photometric contribution over its intrinsic value measures
         # 1.66e-55 whatever tau is: the bare cosmology factor.
         #
         # So the gap is 4.5 % at tau_bc=1/z=0.05, 7.4 % at tau=2/z=0.05 and
-        # 37.7 % at tau=2/z=1 on an FSPS SSP through SDSS gri — a disagreement
+        # 37.7 % at tau=2/z=1 on an FSPS SSP through SDSS gri, a disagreement
         # about WHETHER the screen applies, which no quadrature can close. With
         # tau=0 the paths agree to roundoff, localizing it here rather than in
         # the filter integration. Whether shocked gas should sit behind the
@@ -1199,7 +1199,7 @@ class Observation:
         # The sub-band tensor with the IGM already folded in at the quadrature
         # nodes (#1135). Present only when a mean-IGM model is precomputable.
         # ``igm_phot_factor`` band-averages T *alone*, unweighted by the spectrum
-        # — ⟨S⟩·⟨T⟩ where the flux needs ⟨S·T⟩; across GALEX FUV at z≈0.8 the
+        # ⟨S⟩·⟨T⟩ where the flux needs ⟨S·T⟩; across GALEX FUV at z≈0.8 the
         # transmission runs from ~1 to ~0 inside the band and that covariance term
         # reaches −9.5 %. Contracting this tensor against the same dust screen
         # captures SED × dust × IGM in one sum.
@@ -1214,7 +1214,7 @@ class Observation:
             y_age = state.derived["dust_young_indicator"]
 
             if _have_subband:
-                # K-point sub-band quadrature (#1122) — supersedes the Taylor form.
+                # K-point sub-band quadrature (#1122), supersedes the Taylor form.
                 # Same Charlot & Fall factorization T(a, λ) = T_diff(λ)·T_bc(λ)^y(a),
                 # but the screen is EVALUATED at each sub-band's quadrature node
                 # rather than extrapolated from λ_eff:
@@ -1227,18 +1227,18 @@ class Observation:
                 t_sub = a_diff_sub * a_bc_sub ** y_age[:, None, None]
                 stellar_attenuated = jnp.sum(sub_per_age * t_sub, axis=(0, 2))
                 if sub_per_age_igm is not None:
-                    # Same screen, same nodes — only the weights carry T (#1135).
+                    # Same screen, same nodes, only the weights carry T (#1135).
                     stellar_attenuated_igm = jnp.sum(sub_per_age_igm * t_sub, axis=(0, 2))
             else:
                 atten_bc_per_age = a_bc_lut[None, :] ** y_age[:, None]  # A_bc(λ_eff)^y(a)
                 t_per_age = a_diff_lut[None, :] * atten_bc_per_age  # A_diff·A_bc^y
                 stellar_attenuated = jnp.sum(per_age * t_per_age, axis=0)
-                # First-order Taylor (Ψ) correction — only when the moment tensor was
+                # First-order Taylor (Ψ) correction, only when the moment tensor was
                 # built (approx=WavePrecomp(taylor_correction=True); #617).
                 # Expand T_a(λ) ≈ T_a(λ_eff) + T_a'(λ_eff)·(λ−λ_eff). Using the
                 # log-derivative identity T_a'/T_a = (ln A_diff)' + y·(ln A_bc)':
                 #   T_a' = T_a · (logslope_diff + y·logslope_bc)
-                # This avoids the A_bc^(y−1) pole — at X-ray/UV bands far off the
+                # This avoids the A_bc^(y−1) pole, at X-ray/UV bands far off the
                 # dust curve A_bc → 0, but T_a → 0 too, so T_a' → 0 (no 0·inf NaN).
                 moment_per_age = state.derived.get("stellar_phot_moment_per_age_precomp")
                 logslope_diff = state.derived.get("dust_diff_log_attenuation_slope_precomp")
@@ -1257,7 +1257,7 @@ class Observation:
 
             # Nebular emission (Cue / CloudyGrid) arises in the HII regions
             # around the youngest stars, so it sees the full young-limit screen
-            # — birth cloud AND diffuse (A_bc·A_diff, i.e. y=1) — matching the
+            # (birth cloud AND diffuse (A_bc·A_diff, i.e. y=1)) matching the
             # exact path (two_component.py reddens the nebular SED by both
             # screens). The earlier diffuse-only ``A_diff·Φ_neb`` left
             # nebular-line-dominated bands ~18 % (τ=0.5) to ~37 % (τ=1) too
@@ -1265,7 +1265,7 @@ class Observation:
             #
             # No longer evaluated at λ_eff (#1738). The dust component publishes the
             # reddened nebular continuum integrated THROUGH each band, which is the
-            # quantity the exact path computes — not the K-point approximation to it
+            # quantity the exact path computes, not the K-point approximation to it
             # that the stellar continuum uses (#1122), because the reddened nebular
             # continuum is already on the full grid wherever a dust component runs at
             # all. Sampling the screen at one wavelength per band is only correct
@@ -1275,7 +1275,7 @@ class Observation:
             # floor, on a bucket carrying just 0.8-3.5 % of the band flux.
             #
             # Shock is attenuated by the same dust screen (#1434). The dust component
-            # publishes shock_phot_lnu_attenuated_precomp — the band-integrated attenuated
+            # publishes shock_phot_lnu_attenuated_precomp, the band-integrated attenuated
             # form. This is added as-is (not rescreened) to avoid drift from the exact path.
             nebular_exact = state.derived.get("nebular_phot_lnu_attenuated_precomp")
             shock_attenuated_for_output = (
@@ -1307,17 +1307,17 @@ class Observation:
                 # Checked before the Taylor form because the quadrature supersedes
                 # it: without this branch a single-component model would silently
                 # drop to the bare A(λ_eff) form once ``taylor_correction``
-                # defaulted off — worse than what it replaced.
+                # defaulted off, worse than what it replaced.
                 stellar_attenuated = jnp.sum(sub_per_age * a_sub, axis=(0, 2))
                 if sub_per_age_igm is not None:
-                    # Same screen, same nodes — only the weights carry T (#1135).
+                    # Same screen, same nodes, only the weights carry T (#1135).
                     stellar_attenuated_igm = jnp.sum(sub_per_age_igm * a_sub, axis=(0, 2))
                 # Nebular (if any) publishes no sub-band tensors; keep it at λ_eff.
                 dust_attenuated = stellar_attenuated + a_lut * nebular_phi_for_dust
             else:
                 # Zeroth order: flat attenuation at the filter effective wavelength.
                 dust_attenuated = a_lut * dust_attenuable_phi
-                # First-order Taylor (Ψ) correction — applied only when the moment
+                # First-order Taylor (Ψ) correction, applied only when the moment
                 # tensor and attenuation slope were built, i.e.
                 # approx=WavePrecomp(taylor_correction=True) (#617). With
                 # taylor_correction=False neither is published, so the flat
@@ -1329,10 +1329,10 @@ class Observation:
                     dust_attenuated = dust_attenuated + a_slope_lut * stellar_psi
             total_lnu = dust_attenuated + unattenuated_phi
         elif sub_per_age_igm is not None and sub_per_age is not None:
-            # No dust component at all, but the IGM still needs the quadrature —
+            # No dust component at all, but the IGM still needs the quadrature;
             # the ⟨S⟩·⟨T⟩ gap is a property of the band average, not of the dust.
             # Rebuild the stellar term from the sub-band sums so the IGM-free and
-            # IGM-folded halves are consistent (Σ_k Φ_k = Φ exactly — the partition
+            # IGM-folded halves are consistent (Σ_k Φ_k = Φ exactly, the partition
             # is flux-conserving by construction, asserted in subband_quadrature).
             stellar_attenuated = jnp.sum(sub_per_age, axis=(0, 2))
             stellar_attenuated_igm = jnp.sum(sub_per_age_igm, axis=(0, 2))
@@ -1345,7 +1345,7 @@ class Observation:
         log10_cos = log10_flux_scale(z, dl_cm)
         phot_fnu = apply_log10_scale(total_lnu, log10_cos)
 
-        # phot_rest_fnu: the SED reprojected at z=0, d_L=10 pc — the galaxy as it is.
+        # phot_rest_fnu: the SED reprojected at z=0, d_L=10 pc, the galaxy as it is.
         from tengri.utils.physics_constants import TEN_PC_CM
 
         cosmology_rest = 1.0 / (4.0 * jnp.pi * TEN_PC_CM**2)
@@ -1354,15 +1354,15 @@ class Observation:
         # IGM / DLA attenuation. The IGM component publishes its full
         # transmission curve on the dense rest grid even under WavePrecomp, so
         # the per-band factor is the *filter-weighted mean* ⟨T⟩ through each
-        # true bandpass — the same union-grid quadrature the exact path uses
+        # true bandpass, the same union-grid quadrature the exact path uses
         # (#1026). A point sample at the effective wavelength is blind to the
         # sharp Lyman-α edge for bands straddling it (T(λ_eff) ≈ 1 while a
-        # third of the band sits in the forest — u band at z ≈ 1.9 read 4–7%
+        # third of the band sits in the forest, u band at z ≈ 1.9 read 4–7%
         # high). ⟨T⟩ drops only the covariance of the in-band SED structure
         # with T: −0.5% end-to-end for the same u band (the stellar Lyα
         # absorption sits on the smeared T edge), reaching a few % only in
         # Lyman-limit dropout bands (in-band T contrast ~1 × steep in-band
-        # SED) — use ``approx=None`` for precision work there.
+        # SED), use ``approx=None`` for precision work there.
         # A Taylor-Ψ cross-term cannot recover it: the moment expansion
         # assumes a smooth screen, and T_IGM steps within the band. The point
         # sample remains as the fallback when no padded filter curves were
@@ -1370,7 +1370,7 @@ class Observation:
         # Only the observed-frame flux is attenuated; ``phot_rest_fnu`` (z=0)
         # carries no IGM.
         # Prefer the build-time band factors. <T>_f depends only on (z, filter,
-        # convention) — the transmission is averaged alone, unweighted by the SED —
+        # convention); the transmission is averaged alone, unweighted by the SED,
         # so the IGM component tabulates it against z at build time and publishes
         # ``igm_phot_factor``. Consuming the full-grid ``igm_transmission`` here
         # instead forced a 5994-point Inoue+2014 evaluation on EVERY call (12.1
@@ -1402,7 +1402,7 @@ class Observation:
         if igm_factor is not None:
             if stellar_attenuated_igm is not None:
                 # Stellar already carries T evaluated AT the quadrature nodes
-                # (#1135), so the band factor must not touch it — that would apply
+                # (#1135), so the band factor must not touch it; that would apply
                 # the IGM twice. Everything the quadrature cannot reach (nebular
                 # lines, AGN, dust emission) keeps ⟨T⟩_f, which is what it had
                 # before; the stellar continuum dominates the broadband and is now
@@ -1457,7 +1457,7 @@ class Observation:
 
         Notes
         -----
-        **JIT-compatible**: yes — pure JAX arithmetic on the LUT entries.
+        **JIT-compatible**: yes, pure JAX arithmetic on the LUT entries.
         """
         from tengri.utils.cosmology import luminosity_distance
 
@@ -1470,7 +1470,7 @@ class Observation:
                 "in state.derived. Build the model with approx=SpectrumPrecomp()."
             )
 
-        # Sum all per-pixel emitter contributions — rest-frame Lν at the
+        # Sum all per-pixel emitter contributions, rest-frame Lν at the
         # source's z. Emitters (stellar, nebular continuum, AGN) publish
         # ``*_spec_lnu_precomp``; the dust component publishes per-pixel
         # *transmission* (not an Lν), applied below.
@@ -1480,7 +1480,7 @@ class Observation:
 
         # ── Dust attenuation on the pixel grid ──────────────────────────
         # A spectrum pixel is a single wavelength, so transmission T(λ_pix)
-        # is exact — no Taylor moment (contrast predict_via_precomp). Dust
+        # is exact, no Taylor moment (contrast predict_via_precomp). Dust
         # attenuates the stellar + nebular-continuum bucket; AGN carries its
         # own attenuation and is added unattenuated.
         stellar_phi = state.derived.get("stellar_spec_lnu_precomp")
@@ -1501,8 +1501,8 @@ class Observation:
             atten_bc_per_age = t_bc[None, :] ** y_age[:, None]  # (n_age, n_pix)
             stellar_attenuated = jnp.sum(per_age * atten_bc_per_age, axis=0) * t_diff
             # Nebular emission arises in the HII regions around the youngest
-            # stars, so it sees the full young-limit screen — birth cloud AND
-            # diffuse (T_bc · T_diff, i.e. y=1) — matching the exact path's
+            # stars, so it sees the full young-limit screen, birth cloud AND
+            # diffuse (T_bc · T_diff, i.e. y=1), matching the exact path's
             # emission treatment (two_component.py reddens the nebular SED by
             # τ_bc·k_bc + τ_diff·k_diff). Applying only T_diff here under-
             # attenuated the nebular lines by the missing 1/T_bc factor.
@@ -1511,7 +1511,7 @@ class Observation:
         elif t_single is not None:
             # Single-component: uniform screen T(λ_pix) on the attenuable bucket.
             total_spec_lnu = dust_attenuable * t_single + unattenuated
-        # else: no dust LUT published — leave total_spec_lnu unattenuated.
+        # else: no dust LUT published, leave total_spec_lnu unattenuated.
 
         # Apply cosmology: observed F_ν = L_ν / (4π·d_L²) × (1 + z)
         z = jnp.asarray(
@@ -1534,7 +1534,7 @@ class Observation:
         # is attenuated; spec_rest_fnu (z=0) carries no IGM (#932).
         # Prefer the build-time per-pixel table. A pixel's rest effective wavelength
         # is wave_obs/(1+z) and the curve is T(wave_rest*(1+z), z), so the sample
-        # collapses to T at the FIXED observed instrument grid — a function of
+        # collapses to T at the FIXED observed instrument grid, a function of
         # (z, pixel) alone. Sampling the full-grid curve here instead forced a
         # 5994-point Inoue+2014 evaluation on every call and left the LUT buying
         # NOTHING (2120 us exact vs 2098 us LUT). Bit-identical at the z-nodes.
@@ -1548,11 +1548,11 @@ class Observation:
         if igm_factor is not None:
             spec_fnu = spec_fnu * igm_factor
 
-        # Flux calibration — the same Chebyshev polynomial the exact path applies
+        # Flux calibration, the same Chebyshev polynomial the exact path applies
         # inside ``project_spectrum`` (#1046). The LUT path must apply it itself:
         # it never calls ``project_spectrum``, so without this a model built with
         # ``approx=SpectrumPrecomp()`` silently DROPPED its calibration while the
-        # exact model applied it — cal_c* gradients were exactly zero under the
+        # exact model applied it, cal_c* gradients were exactly zero under the
         # LUT. Same failure as the LUT dropping AGN + nebular (#737/#740): the
         # speed knob quietly changing the physics.
         #

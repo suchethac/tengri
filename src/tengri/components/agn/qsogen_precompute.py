@@ -17,7 +17,7 @@ precomputation. If a real fit needs to vary other dimensions, the runtime
 path will be used (falling back to per-call wavelength evaluation).
 
 Auto-collapses any axis whose corresponding parameter is ``Fixed`` in the
-user's ``Parameters`` — e.g., a user who pins ``agn_plslp1`` gets a 1D
+user's ``Parameters``: e.g., a user who pins ``agn_plslp1`` gets a 1D
 reddening grid instead of 2D.
 
 References
@@ -195,7 +195,7 @@ def precompute(
 
     Notes
     -----
-    **JIT-compatible**: no — this is a build-time function using NumPy.
+    **JIT-compatible**: no, this is a build-time function using NumPy.
 
     **Axis selection rationale**: agn_plslp1 (UV/optical slope) and agn_ebv
     (dust reddening) are the most frequently constrained parameters in real
@@ -215,7 +215,7 @@ def precompute(
         "_preint": _build_grid_qsogen(filter_waves, filter_trans, redshift, plslp1_grid, ebv_grid),
     }
 
-    # Auto-collapse any Fixed axes — including axes for params the user
+    # Auto-collapse any Fixed axes: including axes for params the user
     # never declared (treat as Fixed at the qsogen default). This avoids a
     # 0-d-vs-2-d shape mismatch in the runtime triweight interp when, e.g.,
     # the user only declares ``agn_log_lbol`` and leaves ``agn_plslp1`` /
@@ -279,10 +279,10 @@ def build_lookup(preint: dict, *, free_param_names: tuple[str, ...] | None = Non
 
     Notes
     -----
-    **JIT-compatible**: yes — the returned function uses ``jnp`` and triweight
+    **JIT-compatible**: yes, the returned function uses ``jnp`` and triweight
     interpolation.
 
-    **Gradient-safe**: yes — triweight kernel is fully differentiable.
+    **Gradient-safe**: yes, triweight kernel is fully differentiable.
     """
     if not preint.get("_collapsed_axes"):
         # No axes collapsed: use template helper directly

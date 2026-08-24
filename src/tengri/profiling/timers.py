@@ -2,7 +2,7 @@
 """JAX-aware timing infrastructure for tengri.
 
 Provides tic/toc timing, a ``@profiled`` decorator, and an
-``OperationTimers`` accumulator — all aware of JAX's async dispatch
+``OperationTimers`` accumulator: all aware of JAX's async dispatch
 and JIT compilation model.
 
 Design notes
@@ -146,7 +146,7 @@ def toc(name: str | None = None, result: Any = None) -> float:
     with _lock:
         entry = _get_or_create(name)
         if not entry["compiled"]:
-            # First call — record as compilation time
+            # First call: record as compilation time
             entry["compile_time"] = elapsed
             entry["compiled"] = True
         else:
@@ -173,7 +173,7 @@ def profiled(
     name : str, optional
         Operation name. Defaults to the function's qualified name.
     source : str
-        "python" or "jit" — used for display/filtering.
+        "python" or "jit": used for display/filtering.
     skip_first : bool
         If True, the first call is recorded as compilation time
         and excluded from the running average. Default True.
@@ -225,7 +225,7 @@ def profiled(
     return decorator
 
 
-# ── OperationTimers — dict-like access to accumulated data ────────
+# ── OperationTimers: dict-like access to accumulated data ────────
 
 
 class OperationTimers:
@@ -385,7 +385,7 @@ class OperationTimers:
         return self.summary()
 
 
-# ── bench() utility — standalone timing for quick benchmarks ──────
+# ── bench() utility: standalone timing for quick benchmarks ──────
 
 
 def bench(

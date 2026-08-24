@@ -1,10 +1,10 @@
 # SPDX-License-Identifier: BSD-3-Clause
-"""PopulationSEDModel — SubModel for hierarchical galaxy populations.
+"""PopulationSEDModel, SubModel for hierarchical galaxy populations.
 
 A single class that holds an :class:`tengri.SEDModel` template + a list
 of per-galaxy data dicts + the list of parameters that are tied across
 the population. Used inside :class:`tengri.ForwardModel` exactly like
-:class:`tengri.SEDModel` or :class:`tengri.SpatialSEDModel` — the
+:class:`tengri.SEDModel` or :class:`tengri.SpatialSEDModel`, the
 inference path stays uniform.
 
 Example
@@ -36,7 +36,7 @@ Example
 
 How it works
 ------------
-1. ``PopulationSEDModel`` satisfies :class:`tengri.protocols.SubModel` — it
+1. ``PopulationSEDModel`` satisfies :class:`tengri.protocols.SubModel`, it
    has ``name`` (``"population_sed_model"``), ``declared_parameters``
    (population-wide, from the SED template), and ``run`` (vmaps the
    template's ``run`` over the galaxy axis to produce a batched
@@ -90,7 +90,7 @@ def _validate_homogeneous_galaxies(galaxies: Sequence[Mapping[str, Any]]) -> Non
     The batched forward vmaps the SED template over the population and stacks
     per-galaxy data into a rectangular ``(N_gal, n_data)`` array
     (:meth:`PopulationSEDModel.batched_data`), so every galaxy must carry
-    ``flux_obs``/``noise`` of the **same** shape — i.e. the same measurement grid
+    ``flux_obs``/``noise`` of the **same** shape, i.e. the same measurement grid
     (same filters or the same observed-frame spectroscopy pixels). Per-galaxy
     *values* (flux, noise, redshift and other free parameters) still vary freely;
     only the grid is shared. Truly heterogeneous per-galaxy grids would need
@@ -114,7 +114,7 @@ def _validate_homogeneous_galaxies(galaxies: Sequence[Mapping[str, Any]]) -> Non
                 raise ValueError(
                     f"PopulationSEDModel: galaxy {i} '{key}' has shape {shape}, but "
                     f"galaxy 0 has {ref_shapes[key]}. All galaxies must share one "
-                    f"measurement grid (same filters / spectroscopy pixels) — the "
+                    f"measurement grid (same filters / spectroscopy pixels), the "
                     f"batched forward stacks them into a rectangular array. "
                     f"Per-galaxy redshift and other parameters may still differ."
                 )
@@ -147,13 +147,13 @@ class PopulationSEDModel:
     ----------
     name : str
         The :class:`tengri.protocols.SubModel` identifier,
-        ``"population_sed_model"``. Read-only — the protocol calls it a
+        ``"population_sed_model"``. Read-only, the protocol calls it a
         *stable* identifier, and this constructor has never accepted it.
 
     Notes
     -----
     Satisfies the :class:`tengri.protocols.SubModel` Protocol. The
-    forward-time ``.run`` path is a stub today — the batched-vmap
+    forward-time ``.run`` path is a stub today, the batched-vmap
     implementation lands when ``ForwardModel.predict_observables`` learns the
     PopulationSEDModel case (issue #211). Inference is routed at the
     :class:`tengri.Fitter` layer.
@@ -202,7 +202,7 @@ class PopulationSEDModel:
 
         Frozen-dataclass auto-generated ``__hash__`` would hash the
         field tuple, but ``galaxies`` is a tuple of ``Mapping``s
-        whose contents are JAX arrays / dicts — unhashable. The cache
+        whose contents are JAX arrays / dicts, unhashable. The cache
         machinery (:class:`weakref.WeakKeyDictionary` in
         ``tengri.inference._model_cache``) uses object identity
         anyway, so identity-hash is functionally equivalent and
@@ -225,7 +225,7 @@ class PopulationSEDModel:
         Returns a :class:`PopulationSpecView` wrapping the SED
         template's scalar spec. Implements the same implicit Protocol
         :class:`Fitter` consumes (``free_params``, ``get_fixed_values``,
-        ``sample(key)``, ``_distributions``, …) — but :meth:`sample`
+        ``sample(key)``, ``_distributions``, …), but :meth:`sample`
         returns per-galaxy free parameters with shape ``(N_galaxies,)``,
         keeping shared parameters scalar.
 
@@ -248,7 +248,7 @@ class PopulationSEDModel:
     def batched_data(self) -> tuple[jnp.ndarray, jnp.ndarray]:
         """Return ``(flux_obs, noise)`` arrays stacked across the population.
 
-        Each array has shape ``(N_galaxies, n_filters)`` — the
+        Each array has shape ``(N_galaxies, n_filters)``, the
         canonical batched shape that :class:`Fitter` accepts as the
         ``data`` and ``noise`` arguments for hierarchical fits.
 
@@ -296,7 +296,7 @@ class PopulationSEDModel:
     def batched_axes(self) -> dict[str, int]:
         """Named batched axes this SubModel introduces.
 
-        Returns ``{"galaxy": 0}`` — PopulationSEDModel publishes a single
+        Returns ``{"galaxy": 0}``, PopulationSEDModel publishes a single
         named axis (``"galaxy"``) at position 0 of every per-galaxy
         array. Single-galaxy SubModels (``SEDModel``, ``SpatialModel``,
         …) return ``{}``.
@@ -338,7 +338,7 @@ class PopulationSEDModel:
 
         Composable with outer ``jax.vmap`` / ``jax.pmap`` / ``shard_map``.
         Use this entry point when you need control over the batching
-        strategy — e.g. multi-device sharding, catalog × hierarchical
+        strategy, e.g. multi-device sharding, catalog × hierarchical
         fits, or posterior-predictive sweeps that already have an
         outer ``vmap``. Use :meth:`run` for the default batched path.
 
@@ -369,10 +369,10 @@ class PopulationSEDModel:
 
         Three cases, in order:
 
-        1. Names in :attr:`shared` always broadcast — axis ``None``.
+        1. Names in :attr:`shared` always broadcast, axis ``None``.
         2. Rank-0 / scalar values (e.g. fixed values like ``redshift``
-           merged from :attr:`spec`) also broadcast — axis ``None``.
-        3. Everything else is per-galaxy — axis ``0`` (the value is a
+           merged from :attr:`spec`) also broadcast, axis ``None``.
+        3. Everything else is per-galaxy, axis ``0`` (the value is a
            1-D array of length N_galaxies).
 
         The scalar-detection branch is what lets fixed values
@@ -420,7 +420,7 @@ class PopulationSEDModel:
         ----------
         state : ForwardState
             Initial state. The wavelength grid is shared across the
-            population (broadcast) — the SED template owns the grid.
+            population (broadcast), the SED template owns the grid.
         params : Mapping
             Per-parameter values. Shared params are scalars; per-galaxy
             params are length-N arrays. ``parameter_axes(params)``

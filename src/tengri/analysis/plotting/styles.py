@@ -9,34 +9,34 @@ import matplotlib.pyplot as plt
 import numpy as np
 
 # ═══════════════════════════════════════════════════════════════════
-# Color palette — colorblind-safe, print-friendly
+# Color palette: colorblind-safe, print-friendly
 # ═══════════════════════════════════════════════════════════════════
 
-#: The shared plotting palette — colorblind-safe and print-friendly. Keys are
+#: The shared plotting palette: colorblind-safe and print-friendly. Keys are
 #: sampler names (``'map'``, ``'rt'``, ``'nuts'``, …) and photometric bands
 #: (``'u'``, ``'g'``, ``'r'``, ``'i'``, ``'z'``); values are hex colors. Use
 #: these rather than matplotlib's cycle so figures stay consistent across
 #: notebooks, the gallery, and the paper.
 COLORS = {
     # Sampler colors (consistent across all notebooks)
-    "map": "#888888",  # gray — point estimate
-    "rt": "#1f77b4",  # blue — Ray Tracing (exact MCMC)
+    "map": "#888888",  # gray, point estimate
+    "rt": "#1f77b4",  # blue, Ray Tracing (exact MCMC)
     # Canonical names
-    "vi": "#ff7f0e",  # orange — geoVI (variational)
-    "vi_linear": "#9467bd",  # purple — MGVI (linear VI)
-    "mcmc_nuts": "#2ca02c",  # green — NUTS (gold standard)
-    "mcmc_raytrace": "#1f77b4",  # blue — Ray Tracing (exact MCMC)
+    "vi": "#ff7f0e",  # orange, geoVI (variational)
+    "vi_linear": "#9467bd",  # purple, MGVI (linear VI)
+    "mcmc_nuts": "#2ca02c",  # green, NUTS (gold standard)
+    "mcmc_raytrace": "#1f77b4",  # blue, Ray Tracing (exact MCMC)
     "geovi": "#ff7f0e",  # geoVI (old method name)
     "nuts": "#2ca02c",  # NUTS (old method name)
     "mgvi": "#9467bd",  # MGVI (old method name)
     # Data colors
-    "truth": "#1a1a1a",  # near-black — ground truth
-    "data": "#333333",  # dark gray — observed data
-    "model": "#d62728",  # red — model prediction
+    "truth": "#1a1a1a",  # near-black, ground truth
+    "data": "#333333",  # dark gray; observed data
+    "model": "#d62728",  # red, model prediction
     # SFH components
-    "sfh_mean": "#1f77b4",  # blue — mean SFH backbone
-    "sfh_full": "#ff7f0e",  # orange — full SFH (mean + GP)
-    "sfh_gp": "#2ca02c",  # green — GP contribution
+    "sfh_mean": "#1f77b4",  # blue, mean SFH backbone
+    "sfh_full": "#ff7f0e",  # orange, full SFH (mean + GP)
+    "sfh_gp": "#2ca02c",  # green, GP contribution
     # Band colors (SDSS)
     "u": "#7b3294",
     "g": "#008837",
@@ -66,7 +66,7 @@ SAMPLER_STYLE = {
 #: SDSS effective wavelengths [Angstrom], keyed by band name.
 SDSS_BANDS = {"u": 3551, "g": 4686, "r": 6166, "i": 7480, "z": 8932}
 
-#: SDSS effective wavelengths [Angstrom] as an array in ``ugriz`` order — the
+#: SDSS effective wavelengths [Angstrom] as an array in ``ugriz`` order: the
 #: x-axis for a five-band photometry plot.
 SDSS_WAVE_EFF = np.array([3551, 4686, 6166, 7480, 8932])
 SDSS_BAND_NAMES = ["u", "g", "r", "i", "z"]
@@ -82,7 +82,7 @@ def setup_style(style="tengri"):
     """Configure matplotlib for publication-quality astronomy figures.
 
     Defaults to a single cohesive style across every tengri notebook and example,
-    built on top of the `scienceplots` ``science`` preset — the standard
+    built on top of the `scienceplots` ``science`` preset: the standard
     Nature/PRL/ApJ-compatible look (serif fonts, thin inward ticks on all
     four sides, frameless legends, no grid).
 
@@ -91,7 +91,7 @@ def setup_style(style="tengri"):
     style : str
         Which composite style to apply. One of:
 
-        - ``"tengri"`` (default) — ``scienceplots.science`` + ``no-latex`` +
+        - ``"tengri"`` (default); ``scienceplots.science`` + ``no-latex`` +
           tengri-specific tick and font-size overrides. Safe everywhere (no
           system LaTeX required).
         - ``"tengri-nature"``: Nature-journal variant (single-column width,
@@ -133,7 +133,7 @@ def setup_style(style="tengri"):
             "savefig.dpi": 300,
             "savefig.bbox": "tight",
             "savefig.pad_inches": 0.05,
-            # Font — scienceplots uses Times; we keep DejaVu Serif so plots
+            # Font: scienceplots uses Times; we keep DejaVu Serif so plots
             # render identically on systems without Times installed.
             "font.size": 13,
             "font.family": "serif",
@@ -147,7 +147,7 @@ def setup_style(style="tengri"):
             # Axes frame and grid
             "axes.linewidth": 1.0,
             "axes.grid": False,
-            # Ticks — inward, all four sides, minor ticks visible
+            # Ticks: inward, all four sides, minor ticks visible
             "xtick.direction": "in",
             "ytick.direction": "in",
             "xtick.top": True,
@@ -162,16 +162,16 @@ def setup_style(style="tengri"):
             "ytick.minor.width": 0.6,
             "xtick.minor.size": 2.5,
             "ytick.minor.size": 2.5,
-            # Legend — no frame
+            # Legend: no frame
             "legend.frameon": False,
             "legend.handlelength": 1.5,
-            # Lines — bumped to 2.0 for better visibility in galleries
+            # Lines: bumped to 2.0 for better visibility in galleries
             # and slide decks; per-call lw= overrides still win.
             "lines.linewidth": 2.0,
             "lines.markersize": 6.0,
             "lines.markeredgewidth": 1.0,
             "patch.linewidth": 1.0,
-            # Image colormap — perceptually-uniform default. Specific plots
+            # Image colormap: perceptually-uniform default. Specific plots
             # can override (e.g. cividis, rocket) but the default must be
             # colorblind-safe and monotonic.
             "image.cmap": "viridis",
@@ -216,7 +216,7 @@ GALAXY_ANNOTATIONS = {
 
 
 # ═══════════════════════════════════════════════════════════════════
-# Visual language specification — import from here for consistency
+# Visual language specification: import from here for consistency
 # ═══════════════════════════════════════════════════════════════════
 
 SED_XLIM = (912, 1e7)  # Å, rest-frame
@@ -233,7 +233,7 @@ SFH_YLABEL = r"SFR (M$_\odot$ yr$^{-1}$)"
 #: perceptually-uniform and colorblind-safe; see ``SWEEP_VMIN`` and ``SWEEP_VMAX``
 #: for value clamping.
 SWEEP_CMAPS = {
-    # Default to viridis everywhere — perceptually-uniform, colorblind-safe,
+    # Default to viridis everywhere: perceptually-uniform, colorblind-safe,
     # and the bright-yellow tail is suppressed by the SWEEP_VMAX clamp below
     # so curves stay readable on light backgrounds.
     "dust": "viridis",

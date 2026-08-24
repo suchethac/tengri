@@ -4,7 +4,7 @@
 A component backed by a template library must hand that library to the
 compiled graph as a traced **argument**, not read it from module state while
 tracing. Read at trace time, the whole library freezes into the HLO as XLA
-``Constant`` ops — measured against a 0.05 MB bare-stellar floor: 66.6 MB for
+``Constant`` ops, measured against a 0.05 MB bare-stellar floor: 66.6 MB for
 Draine & Li 2014, 39.4 for THEMIS, 29.95 for SKIRTOR, 3.7 for the MAPPINGS V
 shock grid (#1649, #1694).
 
@@ -13,7 +13,7 @@ Why this is a mixin rather than a method on one base class
 ``_REGISTRY`` holds two families. Most components subclass
 :class:`~tengri.components.sed_model_component.SEDModelComponent` and write a
 ``predict(p, sed_in, wave, **inputs)``. Eight implement the bare
-:class:`~tengri.protocols.component.SEDComponent` Protocol instead — they own
+:class:`~tengri.protocols.component.SEDComponent` Protocol instead: they own
 ``apply`` outright because their shape does not fit ``predict`` (AGN, IGM,
 nebular, radio, X-ray, the three dust attenuation components). That split is
 deliberate and documented in ADR-0009/0011.
@@ -28,7 +28,7 @@ answer to "can my component thread?" is the same everywhere.
 
 Declaring only :data:`~typing.ClassVar` attributes and methods, it composes
 with the ``@dataclass(frozen=True)`` declarations the bare-Protocol family uses
-— dataclass field collection ignores ``ClassVar`` by construction.
+-  dataclass field collection ignores ``ClassVar`` by construction.
 """
 
 from __future__ import annotations
@@ -50,7 +50,7 @@ class TemplateThreading:
     Notes
     -----
     **JIT-compatible**: the methods here run at build time and during tracing,
-    but perform no array work themselves — they select which object the caller
+    but perform no array work themselves: they select which object the caller
     reads.
     """
 
@@ -67,7 +67,7 @@ class TemplateThreading:
     #: is keyed ``template_data[namespace][component_name]``. Empty string means
     #: "use :attr:`name`", the right default for a component that owns its
     #: namespace outright. Subsystems with several sibling components share one
-    #: namespace instead — dust emission pins ``"dust_ir"`` so all its backends
+    #: namespace instead: dust emission pins ``"dust_ir"`` so all its backends
     #: land together beside the LUTs published for that subsystem.
     template_namespace: ClassVar[str] = ""
 
@@ -84,7 +84,7 @@ class TemplateThreading:
         Returns
         -------
         object or None
-            The threaded bundle when present — its arrays are JIT arguments, so
+            The threaded bundle when present: its arrays are JIT arguments, so
             reading them costs nothing at compile time. Else ``self.data`` (set
             by ``precompute`` via ``load``), else ``None``, in which case the
             component falls back to its own module-level load and bakes.
@@ -107,7 +107,7 @@ class TemplateThreading:
         -------
         object or None
             ``self.data`` when ``precompute`` already ran, else the result of a
-            direct ``load`` call, else ``None`` — a component whose loader is
+            direct ``load`` call, else ``None``: a component whose loader is
             unavailable (a missing optional data file) simply does not thread,
             exactly as before threading existed.
         """

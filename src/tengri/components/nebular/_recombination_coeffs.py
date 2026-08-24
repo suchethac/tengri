@@ -110,8 +110,8 @@ def lyc_dust_escape_factor(f_esc: jnp.ndarray | float, f_dust: jnp.ndarray | flo
     f_dust = jnp.asarray(f_dust)
 
     # Clamp f_esc + f_dust to [0, 1]. The denominator ``1 + (α1/αB)·f`` is
-    # strictly positive for any ``f ∈ [0, 1]`` (it ranges [1, ~1.597]), so —
-    # unlike a denominator-vanishing case — no ``1 - ε`` margin is needed.
+    # strictly positive for any ``f ∈ [0, 1]`` (it ranges [1, ~1.597]), so:
+    # unlike a denominator-vanishing case: no ``1 - ε`` margin is needed.
     # Clamping to a hard 1.0 lets the numerator ``(1 - f)`` reach exactly 0 at
     # full photon loss (f_esc + f_dust = 1), so nebular emission vanishes
     # cleanly instead of leaving a ~6e-9 residual that, scaled by bright line

@@ -37,9 +37,9 @@ class Dale2014IRSEDComponent(EmissionComponent):
 
     Notes
     -----
-    **JIT-compatible**: yes — all operations are ``jnp`` primitives.
+    **JIT-compatible**: yes, all operations are ``jnp`` primitives.
 
-    **Gradient-safe**: yes — differentiable everywhere.
+    **Gradient-safe**: yes, differentiable everywhere.
 
     **Template auto-loading**: the closure lazy-loads HDF5 templates on
     first call (at trace time). After lazy loading, all subsequent calls
@@ -118,9 +118,9 @@ class Dale2014CigaleIRSEDComponent(EmissionComponent):
 
     Notes
     -----
-    **JIT-compatible**: yes — all operations are ``jnp`` primitives.
+    **JIT-compatible**: yes, all operations are ``jnp`` primitives.
 
-    **Gradient-safe**: yes — differentiable everywhere.
+    **Gradient-safe**: yes, differentiable everywhere.
 
     **Template auto-loading**: the closure lazy-loads HDF5 templates on
     first call (at trace time). After lazy loading, all subsequent calls

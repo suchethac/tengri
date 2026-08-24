@@ -8,7 +8,7 @@ a C²-continuous triweight kernel so gradients flow cleanly through
 
 Grid provenance
 ---------------
-Template data published with AGNfitter (Calistro Rivera et al. 2016) — see
+Template data published with AGNfitter (Calistro Rivera et al. 2016): see
 ``scripts/build_silva04_grid.py``.  The AGN-fitter pickle stores per-bin
 ``log10(nu)`` and ``F_nu`` arrays; the build script converts to
 ascending-wavelength [Å] and common-grid, then emits ``silva04_torus_grid.h5``.
@@ -102,7 +102,7 @@ def _load_silva04_arrays(grid_path: str) -> dict:
 
     Notes
     -----
-    **JIT-compatible**: no — performs HDF5 I/O at grid-load time.
+    **JIT-compatible**: no, performs HDF5 I/O at grid-load time.
     """
     import h5py
 
@@ -138,17 +138,17 @@ def create_silva04_from_grid(grid_path: str) -> Callable:
 
     Notes
     -----
-    **JIT-compatible**: yes — the returned closure uses only ``jnp`` and
+    **JIT-compatible**: yes, the returned closure uses only ``jnp`` and
     triweight interpolation.
 
-    **Gradient-safe**: yes — triweight kernel is C²-continuous in
+    **Gradient-safe**: yes, triweight kernel is C²-continuous in
     ``agn_log_nh_silva``.
     """
     # Keep the captured grid arrays as ``np.ndarray`` rather than
     # ``jnp.ndarray``. If this loader is first invoked inside a JIT trace
     # (e.g. via ``@functools.cache`` on ``_load_silva04_default``) and we
-    # convert to JAX here, any ``jnp`` ops on those arrays — including
-    # ``edges_for_grid`` — produce Tracers that the returned closure
+    # convert to JAX here, any ``jnp`` ops on those arrays: including
+    # ``edges_for_grid``: produce Tracers that the returned closure
     # captures. The cache then immortalizes a poisoned closure, leaking
     # tracers as ``UnexpectedTracerError`` on subsequent out-of-trace
     # calls. ``jnp.asarray`` of a numpy array inside the closure body is
@@ -173,7 +173,7 @@ def load_silva04_grid(grid_path: str) -> Silva04Grid:
 
     Notes
     -----
-    **JIT-compatible**: no — performs HDF5 I/O. Call it outside the trace
+    **JIT-compatible**: no, performs HDF5 I/O. Call it outside the trace
     and pass the result in as an argument.
 
     Leaves stay ``np.ndarray`` rather than ``jnp.ndarray`` on purpose. If
@@ -325,7 +325,7 @@ def silva04_sed(*args, _template: Silva04Grid | None = None, **kwargs) -> jnp.nd
     _template : Silva04Grid, optional
         Pre-loaded grid, threaded in as a JIT argument by the forward
         model. When ``None`` (default) the packaged grid is loaded from
-        disk and — if this call happens under trace — baked into the
+        disk and (if this call happens under trace) baked into the
         graph as constants.
     **kwargs
         Accepted and ignored for unified-dispatch compatibility.
@@ -345,7 +345,7 @@ def silva04_sed(*args, _template: Silva04Grid | None = None, **kwargs) -> jnp.nd
     return _load_silva04_default()(*args, **kwargs)
 
 
-# Deprecated: "_analytic" was a misnomer — this is grid interpolation, not a
+# Deprecated: "_analytic" was a misnomer; this is grid interpolation, not a
 # closed-form model. Use silva04_sed. Alias removed in v1.0.
 silva04_analytic = deprecated_alias(
     silva04_sed, old_name="silva04_analytic", new_name="silva04_sed"

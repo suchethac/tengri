@@ -364,7 +364,7 @@ def compute_blr_sed(
 
     Notes
     -----
-    **JIT-compatible**: yes — uses ``jnp`` primitives and ``jax.vmap``.
+    **JIT-compatible**: yes, uses ``jnp`` primitives and ``jax.vmap``.
 
     The broad emission lines are modeled as Gaussian profiles at rest-frame
     wavelengths. The line list (≥25 lines) is calibrated to the Vanden Berk

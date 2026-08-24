@@ -80,7 +80,7 @@ class AstrodustHD23Templates:
     L_nu_spdust_total : jnp.ndarray, shape ``(1000,)``
         Total spinning-dust microwave emission (HDU 9, total column)
         per H atom [erg/s/Hz/H].  Assumes :math:`f_{\rm CNM}=0.28`.
-        Not :math:`U`-dependent — spinning dust is mostly insensitive
+        Not :math:`U`-dependent: spinning dust is mostly insensitive
         to radiation field intensity.
     L_nu_spdust_Ad_CNM, L_nu_spdust_Ad_WNM, L_nu_spdust_PAH_CNM,
     L_nu_spdust_PAH_WNM : jnp.ndarray, shape ``(1000,)``
@@ -247,7 +247,7 @@ def load_astrodust_hd23_or_raise(template_path: str | None) -> AstrodustHD23Temp
 def load_astrodust_hd23(template_path: str | None = None) -> AstrodustHD23Templates:
     r"""Load the Hensley & Draine 2023 Astrodust+PAH emission grid.
 
-    Public entry point for the bundled Astrodust+PAH templates — emission
+    Public entry point for the bundled Astrodust+PAH templates: emission
     (:math:`L_\nu` per H for total / astrodust / PAH / spinning-dust
     components), extinction / scattering / polarization per H, and the
     fiducial grain ``size_distribution``. Use it instead of opening
@@ -272,7 +272,7 @@ def load_astrodust_hd23(template_path: str | None = None) -> AstrodustHD23Templa
 
     Notes
     -----
-    **JIT-compatible**: no — file I/O. Call once at setup, then pass the
+    **JIT-compatible**: no, file I/O. Call once at setup, then pass the
     returned arrays into JIT-compiled code.
 
     References

@@ -13,13 +13,13 @@ range is the documented physical or library-grid extent, and a
 ``default=`` equal to the historical fixed value. The two work together:
 
 * ``'all_params': FIXED`` (and the grammar's implicit default) collapses each
-  param to ``Fixed(default)`` — i.e. the exact pre-existing value, so behavior
+  param to ``Fixed(default)``: i.e. the exact pre-existing value, so behavior
   is unchanged for any model that did not opt a parameter free.
 * ``'all_params': FREE`` (dict grammar) or ``all_params=FREE`` (builders) now expands
   to the prior instead of silently resolving to a fixed scalar. Before this
   change every AGN parameter declared a ``Fixed(...)`` default, so the FREE
   grammar (and therefore ``recipes.agn_panchromatic()``) produced **zero**
-  free AGN parameters with no error — a silent no-op.
+  free AGN parameters with no error, a silent no-op.
 
 Range sources (already cited at the per-parameter / section level below):
 Nenkova et al. 2008 (CLUMPY grid extent), Stalevski et al. 2012/2016
@@ -33,7 +33,7 @@ use the "typical" interval stated in the original docstring.
 
 Scope note
 ----------
-The legacy ``_AGN_PARAMS`` bucket also contained ``neb_xid`` — a
+The legacy ``_AGN_PARAMS`` bucket also contained ``neb_xid``: a
 nebular-prefixed orphan kept inside the agn bucket because the Feltre
 NLR backend consumes it alongside ``agn_alpha_ion``. That entry remains
 in ``_param_defs.py`` so the bucket adapter can merge it back in;
@@ -51,7 +51,7 @@ PARAMS: tuple[ParamDeclaration, ...] = (
         "agn_lum_ratio",
         Uniform(0.0, 5.0, default=1.0),
         "AGN-to-stellar luminosity ratio (L_AGN / L_stellar_bol). Ranges to "
-        "5.0, so it is a ratio and not a fraction — which is why it is no "
+        "5.0, so it is a ratio and not a fraction, which is why it is no "
         "longer called ``agn_frac`` (#1296). Used as a scalar "
         "multiplier on the composable runner output and as the AGN-to-stellar "
         "ratio in the non-parametric AGN path. Default 1.0 means 'use the "
@@ -67,7 +67,7 @@ PARAMS: tuple[ParamDeclaration, ...] = (
         # log10(L_bol / Lsun): ~1e8 Lsun (low-luminosity Seyfert) to ~1e14
         # Lsun (luminous QSO) brackets the AGN population.
         Uniform(8.0, 14.0, default=10.0),
-        "AGN bolometric luminosity log10(L_bol / Lsun) — direct parametric mode",
+        "AGN bolometric luminosity log10(L_bol / Lsun): direct parametric mode",
     ),
     ParamDeclaration(
         "agn_alpha",
@@ -101,7 +101,7 @@ PARAMS: tuple[ParamDeclaration, ...] = (
     ParamDeclaration(
         "agn_torus_frac",
         Uniform(0.0, 1.0, default=0.5),
-        "AGN torus covering factor — DEPRECATED; use agn_band_frac",
+        "AGN torus covering factor; DEPRECATED; use agn_band_frac",
         lambda lo, hi: lo >= 0 and hi <= 1,
         "must be in [0, 1]",
     ),
@@ -128,7 +128,7 @@ PARAMS: tuple[ParamDeclaration, ...] = (
         Uniform(-2.0, 0.5, default=-1.0),
         "AGN Eddington ratio log10(L/L_Edd)",
     ),
-    # Disc dust obscuration (Prevot+1984 SMC, R_V = 2.72) — the AGNfitter
+    # Disc dust obscuration (Prevot+1984 SMC, R_V = 2.72), the AGNfitter
     # ``EBVbbb`` analog, applied to the disc stage by
     # ``reddening.redden_disc`` on both the composable and monolithic paths.
     # Upstream AGNfitter samples EBVbbb over [0, 1] (MODEL_AGNfitter.BBB).
@@ -155,7 +155,7 @@ PARAMS: tuple[ParamDeclaration, ...] = (
         Uniform(-1.5, 0.3, default=-1.0),
         "RELAGN Eddington-scaled accretion rate log10(Mdot/Mdot_Edd)",
     ),
-    # ── ADAF (Mahadevan 1997) plasma parameters — for disc='adaf' (#898) ──
+    # ── ADAF (Mahadevan 1997) plasma parameters, for disc='adaf' (#898) ──
     ParamDeclaration(
         "agn_adaf_alpha",
         # Shakura-Sunyaev viscosity; ADAF applications use ~0.1-0.3 (Narayan 1996).
@@ -186,7 +186,7 @@ PARAMS: tuple[ParamDeclaration, ...] = (
         Uniform(0.0, 0.998, default=0.0),
         "RELAGN black hole spin a* (prograde)",
     ),
-    # SKIRTOR clumpy torus parameters (Stalevski et al. 2012, 2016) — ranges
+    # SKIRTOR clumpy torus parameters (Stalevski et al. 2012, 2016): ranges
     # are the SKIRTOR library axes.
     ParamDeclaration(
         "agn_tau_skirtor",
@@ -228,7 +228,7 @@ PARAMS: tuple[ParamDeclaration, ...] = (
     ),
     ParamDeclaration(
         "agn_cos_inc",
-        # cos(30°) — matches CIGALE skirtor2016 ``i=30`` default
+        # cos(30°): matches CIGALE skirtor2016 ``i=30`` default
         # (Boquien+2019 A&A 622, A103). Previous library default 0.5
         # (= i=60°) silently disagreed with CIGALE's face-on type-1
         # convention; the §9 reproduction audit revealed the
@@ -367,7 +367,7 @@ PARAMS: tuple[ParamDeclaration, ...] = (
     ParamDeclaration(
         "agn_a_spin",
         Uniform(0.0, 0.998, default=0.0),
-        "BH spin parameter a* in [0, 0.998) — controls ISCO and radiative efficiency",
+        "BH spin parameter a* in [0, 0.998): controls ISCO and radiative efficiency",
         lambda lo, hi: lo >= 0 and hi < 1,
         "must be in [0, 1)",
     ),
@@ -441,7 +441,7 @@ PARAMS: tuple[ParamDeclaration, ...] = (
         "must be > 0",
     ),
     # Polar dust reddening of AGN disc (Type 1 SMC-law screen).
-    # Default 0.03 matches CIGALE skirtor2016 ``EBV`` default — polar dust
+    # Default 0.03 matches CIGALE skirtor2016 ``EBV`` default: polar dust
     # is part of the CIGALE-faithful AGN; set Fixed(0.0) explicitly to
     # disable.
     ParamDeclaration(
@@ -472,7 +472,7 @@ PARAMS: tuple[ParamDeclaration, ...] = (
     ParamDeclaration(
         "agn_polar_oa",
         Uniform(10.0, 80.0, default=45.0),
-        "Polar dust half-opening angle [degrees] — sets covering fraction",
+        "Polar dust half-opening angle [degrees]: sets covering fraction",
         lambda lo, hi: lo > 0 and hi <= 90,
         "must be in (0, 90]",
         units="deg",
@@ -483,7 +483,7 @@ PARAMS: tuple[ParamDeclaration, ...] = (
     ParamDeclaration(
         "agn_blr_cf",
         Uniform(0.0, 1.0, default=0.1),
-        "BLR covering fraction — fraction of disc luminosity intercepted by BLR. "
+        "BLR covering fraction: fraction of disc luminosity intercepted by BLR. "
         "Physical bound [0, 1]; typical values 0.05-0.2.",
         lambda lo, hi: lo >= 0 and hi <= 1.0,
         "must be in [0, 1]",
@@ -491,7 +491,7 @@ PARAMS: tuple[ParamDeclaration, ...] = (
     ParamDeclaration(
         "agn_nlr_cf",
         Uniform(0.0, 1.0, default=0.1),
-        "NLR Gaussian covering fraction — fraction of disc luminosity intercepted by NLR. "
+        "NLR Gaussian covering fraction: fraction of disc luminosity intercepted by NLR. "
         "Physical bound [0, 1]; typical values 0.05-0.2.",
         lambda lo, hi: lo >= 0 and hi <= 1.0,
         "must be in [0, 1]",
@@ -499,7 +499,7 @@ PARAMS: tuple[ParamDeclaration, ...] = (
     ParamDeclaration(
         "agn_nlr_line_efficiency",
         Uniform(0.0, 1.0, default=0.10),
-        "NLR line radiative efficiency — fraction of intercepted disc luminosity "
+        "NLR line radiative efficiency: fraction of intercepted disc luminosity "
         "re-emitted as emission-line luminosity. Physical bound [0, 1]; "
         "typical values 0.01-0.30.",
         lambda lo, hi: lo >= 0 and hi <= 1.0,
@@ -558,7 +558,7 @@ PARAMS: tuple[ParamDeclaration, ...] = (
     ParamDeclaration(
         "agn_blr_line_efficiency",
         Uniform(0.0, 1.0, default=0.08),
-        "BLR line radiative efficiency — fraction of intercepted disc luminosity "
+        "BLR line radiative efficiency: fraction of intercepted disc luminosity "
         "re-emitted as broad-line luminosity. Physical bound [0, 1]; "
         "typical values 0.05-0.15.",
         lambda lo, hi: lo >= 0 and hi <= 1.0,
@@ -725,7 +725,7 @@ PARAMS: tuple[ParamDeclaration, ...] = (
         "GRAHSP baseline E(B-V) [mag] applied to the AGN bi-attenuation "
         "(paper E(B-V)). In the upstream CIGALE pipeline this is also the "
         "galaxy E(B-V); in tengri it parameterizes only the AGN-side "
-        "attenuation — galaxy attenuation is handled by the standard "
+        "attenuation: galaxy attenuation is handled by the standard "
         "tengri ``dust_*`` component (configure them consistently).",
         lambda lo, hi: lo >= 0,
         "must be >= 0",
@@ -863,12 +863,12 @@ PARAMS: tuple[ParamDeclaration, ...] = (
 #: ``agn_log_lbol=`` signature default in this package must use this name: a
 #: bare ``skirtor_sed(wave)`` and a bare ``qsogen(wave)`` then agree on what
 #: "a typical AGN" means, and neither can drift out of the declared prior.
-#: Units are ``log10(L_bol / L_sun)`` — *not* ``log10(erg/s)``, the confusion
+#: Units are ``log10(L_bol / L_sun)``: *not* ``log10(erg/s)``, the confusion
 #: that put nine entry points at 45.0, some 1e33 too luminous (#1200, #1560).
 DEFAULT_AGN_LOG_LBOL = declared_default(PARAMS, "agn_log_lbol")
 
 #: Default black hole mass for standalone model functions. Paired with
-#: ``DEFAULT_AGN_LOG_LBOL`` this is ``lambda_Edd = 0.030`` — a typical Seyfert.
+#: ``DEFAULT_AGN_LOG_LBOL`` this is ``lambda_Edd = 0.030``, a typical Seyfert.
 #: Sixteen call sites instead said 8.0, which against the same L_bol is
 #: ``lambda_Edd = 0.0030``, LINER-like; they were written when the sibling
 #: default was the nonsense ``agn_log_lbol = 45.0`` and so were never
@@ -877,7 +877,7 @@ DEFAULT_AGN_LOG_LBOL = declared_default(PARAMS, "agn_log_lbol")
 #: Not used by ``slone_netzer``: the SN12 template's ``log_mbh`` axis starts at
 #: 7.4, so this value would be silently clipped. That model keeps its own
 #: grid-center default. (The declared support ``[6, 10]`` runs below the grid,
-#: so a *fit* on that model can also clip — tracked separately.)
+#: so a *fit* on that model can also clip: tracked separately.)
 DEFAULT_AGN_LOG_MBH = declared_default(PARAMS, "agn_log_mbh")
 
 #: Default disc inclination, ``cos(30 deg)``. Matches CIGALE's skirtor2016

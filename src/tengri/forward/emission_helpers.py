@@ -73,7 +73,7 @@ def attenuate_emission(
 
     Notes
     -----
-    **JIT-compatible**: yes — all operations use ``jnp`` primitives.
+    **JIT-compatible**: yes, all operations use ``jnp`` primitives.
 
     The absorbed luminosity is not computed here; the dust energy balance
     is owned by the dust attenuation components via
@@ -148,7 +148,7 @@ def shock_emission(
 
     Notes
     -----
-    **JIT-compatible**: yes — all operations use ``jnp`` primitives.
+    **JIT-compatible**: yes, all operations use ``jnp`` primitives.
     """
     from tengri.components.nebular.shock import compute_shock_sed
 
@@ -156,7 +156,7 @@ def shock_emission(
     l_bol = -jnp.trapezoid(sed_so_far, nu)
     # Order-of-magnitude approximation: L(Hα) ~ 1e-3 × L_bol for a star-
     # forming galaxy. Used only to set the *normalization* of the shock
-    # template — the resulting shock SED is then scaled by ``shock_frac``
+    # template, the resulting shock SED is then scaled by ``shock_frac``
     # at the call site. Magnitude not validity-ranged against a paper;
     # flagged for replacement with the case-B prediction from the SFH.
     l_halpha_approx = jnp.maximum(l_bol * 1e-3, 1e-30)
@@ -197,7 +197,7 @@ def shock_emission(
 # ═══════════════════════════════════════════════════════════════════════════
 
 
-# ``igm_absorption`` now lives solely in ``tengri.components.igm.igm`` — the
+# ``igm_absorption`` now lives solely in ``tengri.components.igm.igm``, the
 # single source of truth for the mean-IGM model dispatch (inoue / madau /
 # meiksin06 / asada25) plus the patchy and DLA modifiers (#932). Import it from
 # there; this module deliberately no longer defines a wrapper copy (an earlier

@@ -39,7 +39,7 @@ _FWHM_TO_SIGMA = 2.354820045030949  # 2*sqrt(2*ln(2))
 
 
 def nirspec_prism_resolution(wave_um: jnp.ndarray) -> jnp.ndarray:
-    """JWST NIRSpec PRISM R(lambda) — ranges from approximately 30 to 300.
+    """JWST NIRSpec PRISM R(lambda), ranges from approximately 30 to 300.
 
     Approximate from NIRSpec documentation. R increases roughly linearly
     from 0.6 to 5.3 microns.
@@ -63,7 +63,7 @@ def nirspec_prism_resolution(wave_um: jnp.ndarray) -> jnp.ndarray:
 
 
 def nirspec_g140m_resolution(wave_um: jnp.ndarray) -> jnp.ndarray:
-    """JWST NIRSpec G140M grating — roughly constant R ≈ 1000.
+    """JWST NIRSpec G140M grating, roughly constant R ≈ 1000.
 
     Parameters
     ----------
@@ -114,7 +114,7 @@ def _is_log_uniform(wave) -> bool:
 
     ``True`` for a tracer: a traced grid has no values to inspect at trace time.
     The gap is the one :func:`_require_log_uniform_grid` documents, and narrow for
-    the same reason — a spectroscopic wavelength grid is normally a fixed
+    the same reason, a spectroscopic wavelength grid is normally a fixed
     instrument array closed over by the jitted function, not an argument traced
     through it. Answering ``True`` keeps the single-FFT path, which is what such a
     grid got before #1791.
@@ -131,7 +131,7 @@ def _is_log_uniform(wave) -> bool:
 
     Notes
     -----
-    Private helper. Build-time (NumPy) — not JIT-compatible. Called with a
+    Private helper. Build-time (NumPy), not JIT-compatible. Called with a
     concrete grid it runs once at *trace* time, so it costs nothing per
     evaluation.
     """
@@ -164,7 +164,7 @@ def _apply_lsf_constant_r(
         Input spectral flux.
     wave_obs : array, shape (n_pix,)
         Observed wavelength grid [Angstrom]. Must be uniform in ``ln(lambda)``,
-        not merely evenly spaced — the pixel scale is read once from the first
+        not merely evenly spaced, the pixel scale is read once from the first
         pair, so a linear grid under-broadens by ``wave[0]/lambda`` (#1742).
         ``apply_lsf`` dispatches here only for a grid that satisfies this, and
         sends the rest to :func:`_apply_lsf_variable_r` (#1791), so the
@@ -230,7 +230,7 @@ def _apply_lsf_variable_r(
 
     Notes
     -----
-    JIT-compatible: yes — `n_bins` is a static argument.
+    JIT-compatible: yes, `n_bins` is a static argument.
     Gradient-safe: yes. Private helper for apply_lsf.
 
     """
@@ -271,7 +271,7 @@ def _apply_lsf_variable_r(
         # Both clamps written out rather than hoisted into a shared name: XLA
         # common-subexpression-eliminates them, and tools/check_zero_hiding_clamps.py
         # matches the division syntactically, so hoisting would retire a site from
-        # that audit while the clamp is still there — shrinking the inventory
+        # that audit while the clamp is still there, shrinking the inventory
         # silently is the one thing that guard exists to prevent.
         n_in_bin = jnp.sum(bin_mask)
         sigma_mean = jnp.sum(sigma_eff_kms * bin_mask) / jnp.maximum(n_in_bin, 1.0)
@@ -345,8 +345,8 @@ def apply_lsf(
         Input spectral flux at observed wavelengths [erg/s/cm²/Hz or arbitrary units].
     wave_obs : array, shape (n_pix,)
         Observed-frame wavelength grid [Ångstrom]. Any strictly increasing grid
-        is accepted. One not uniform in log-wavelength — a linearly-spaced grid,
-        for instance — is routed through the piecewise path, which carries a
+        is accepted. One not uniform in log-wavelength, a linearly-spaced grid,
+        for instance, is routed through the piecewise path, which carries a
         per-bin pixel scale, so the requested width is delivered either way
         (#1791). A log-uniform grid with scalar ``R`` keeps the single-FFT path.
     resolution : array, shape (n_pix,) or float
@@ -371,7 +371,7 @@ def apply_lsf(
     sigma_v_kms : float, optional
         Intrinsic galaxy velocity dispersion :math:`\\sigma_v` [km/s] added
         in quadrature to :math:`\\sigma_{\\rm eff}`. This is the broadening
-        from stellar dynamics — distinct from instrument LSF
+        from stellar dynamics, distinct from instrument LSF
         (``resolution``) and from the SSP-library template resolution
         (``sigma_lib_kms``). Default 0.0 (no extra broadening).
 
@@ -382,20 +382,20 @@ def apply_lsf(
 
     Notes
     -----
-    **JIT-compatible**: no — the dispatch logic (constant vs. variable R)
+    **JIT-compatible**: no, the dispatch logic (constant vs. variable R)
     uses Python-side branching. Wrap the result in :func:`jax.jit` only
     if R is known at trace time.
 
-    **Gradient-safe**: yes — all operations inside the conditionally-selected
+    **Gradient-safe**: yes, all operations inside the conditionally-selected
     path are differentiable.
 
     **Log-wavelength convolution**: Convolution is performed in log-wavelength
     space, which correctly represents velocity-space broadening. A grid that is
     not uniform in ``ln(lambda)`` takes the piecewise path, where each bin uses
-    its own local ``d ln lambda`` — ``n_bins`` FFTs instead of one, and nothing is
+    its own local ``d ln lambda``, ``n_bins`` FFTs instead of one, and nothing is
     resampled, so flux conservation and the zero-width identity stay exact to
     machine precision. Before #1791 such a grid was convolved with the pixel scale
-    read from its blue end, under-broadening by ``wave[0]/lambda`` — 0.60 at
+    read from its blue end, under-broadening by ``wave[0]/lambda``, 0.60 at
     5000 A on a 3000-10000 A grid, and biasing any fitted ``sigma_v_kms`` high by
     the reciprocal. Measured recovery of a requested 200 km/s on
     ``linspace(3000, 10000)``: 0.991 at the default ``n_bins=16``.
@@ -434,7 +434,7 @@ def apply_lsf(
 
     """
     # Clamp non-negative (priors enforce this; clamp keeps trace-safe path
-    # for callers that pass sigma_v_kms in via the params dict — the prior
+    # for callers that pass sigma_v_kms in via the params dict, the prior
     # guards against negatives, so this is purely defensive).
     sigma_v_kms = jnp.maximum(jnp.asarray(sigma_v_kms), 0.0)
 
@@ -455,9 +455,9 @@ def apply_lsf(
     # The single-FFT path reads one pixel scale, ``log(wave[1]/wave[0])``, which
     # describes the whole array only on a grid uniform in ln(lambda). On any other
     # grid it under-broadens by ``wave[0]/lambda`` (#1791). Rather than refuse such
-    # grids — #1742's remedy for ``velocity_broaden``, which would take
+    # grids, #1742's remedy for ``velocity_broaden``, which would take
     # spectroscopy with it, since tengri's own forward model runs on linear
-    # observed grids — send them through the piecewise path, which carries a
+    # observed grids, send them through the piecewise path, which carries a
     # per-bin pixel scale. Nothing is resampled, so the FFT normalization still
     # conserves flux exactly and a zero-width kernel is still the identity.
     if resolution.ndim == 0 and _is_log_uniform(wave_obs):
@@ -535,14 +535,14 @@ def project_spectrum(
     conserving : bool, optional
         Resample the model onto the pixel grid with a flux-conserving bin
         integral (:func:`compute_spectrum_conserving`) instead of point
-        interpolation. Default ``False`` (point sampling — unbiased only when
+        interpolation. Default ``False`` (point sampling, unbiased only when
         the model grid is much finer than the pixels). Set for low-resolution
         spectroscopy where point sampling aliases; see #1166.
     resolution_matrix : BandedMatrix or None, optional
         Banded instrument resolution operator (DESI/PFS spectro-perfectionism;
         Bolton & Schlegel 2010). When supplied, the flux-conserving-resampled
         model is projected through ``R @ model`` at pixel resolution and this
-        **replaces** the Gaussian ``apply_lsf`` — the matrix already encodes the
+        **replaces** the Gaussian ``apply_lsf``, the matrix already encodes the
         true LSF (the Redrock/FastSpecFit convention). Default ``None`` (Gaussian
         LSF from ``resolution``). See :func:`~tengri.observation.banded.banded_matvec`.
         #1163.
@@ -560,7 +560,7 @@ def project_spectrum(
     Python-level structural branches.
 
     **What this does**: Projects the panchromatic model-grid SED onto an
-    instrument wavelength grid — the result is a *spectrum* (observed-frame F_nu
+    instrument wavelength grid, the result is a *spectrum* (observed-frame F_nu
     on `wave_obs`), distinct from the model-grid SED itself.
 
     **Composition pattern**: Called by observers/projectors that (1) may apply
@@ -619,7 +619,7 @@ def project_spectrum(
     if resolution_matrix is not None:
         # The banded resolution matrix (DESI/PFS spectro-perfectionism; Bolton &
         # Schlegel 2010) encodes the true instrument LSF at pixel resolution and
-        # is applied to the model *after* resampling onto the pixel grid — it
+        # is applied to the model *after* resampling onto the pixel grid, it
         # REPLACES the Gaussian ``apply_lsf`` (Redrock/FastSpecFit convention).
         # ``resolution_matrix`` is static structural config, so this branch
         # resolves at trace time. #1163.
@@ -678,8 +678,8 @@ def compute_spectrum(
 
     Notes
     -----
-    JIT-compatible: yes — all operations are ``jnp`` primitives.
-    Gradient-safe: yes — differentiable w.r.t. redshift and dl_cm.
+    JIT-compatible: yes, all operations are ``jnp`` primitives.
+    Gradient-safe: yes, differentiable w.r.t. redshift and dl_cm.
 
     Uses linear interpolation (``jnp.interp``) to evaluate the rest-frame
     SED at rest-frame wavelengths corresponding to observed pixel wavelengths.
@@ -712,7 +712,7 @@ def _flux_conserving_resample(
     r"""Bin-integrated (flux-conserving) resample of ``sed_rest`` onto ``wave_query``.
 
     Each output value is the *mean flux density over that pixel's wavelength bin*
-    — the integral of the model over the bin divided by the bin width — rather
+    (the integral of the model over the bin divided by the bin width) rather
     than a point sample at the pixel center (Carnall 2017, SpectRes, eq. 3):
 
     .. math::
@@ -730,7 +730,7 @@ def _flux_conserving_resample(
     at the bin edges, so it is O(n_wave + n_pix), JIT-compatible, and
     differentiable w.r.t. ``sed_rest`` (the edges are static; only the SED varies).
     Outside the model grid the cumulative integral is flat, so out-of-range bins
-    contribute zero — matching ``compute_spectrum``'s ``left=0, right=0`` clamp.
+    contribute zero, matching ``compute_spectrum``'s ``left=0, right=0`` clamp.
 
     Parameters
     ----------
@@ -809,7 +809,7 @@ def _require_log_uniform_grid(wave, caller: str) -> None:
     """Raise unless ``wave`` is uniform in ``ln(lambda)`` (#1742).
 
     A no-op when ``wave`` is a tracer: a traced grid has no values to inspect at
-    trace time. That is a real gap rather than a safe default — it is narrow
+    trace time. That is a real gap rather than a safe default; it is narrow
     because a spectroscopic wavelength grid is normally a fixed instrument array
     closed over by the jitted function, not an argument traced through it.
 
@@ -840,7 +840,7 @@ def _require_log_uniform_grid(wave, caller: str) -> None:
     raise ValueError(
         f"{caller} requires a wavelength grid uniform in ln(lambda), but this "
         f"grid's d(ln lambda) varies by a fraction {spread:.3g} across the array "
-        f"(tolerance {_LOG_UNIFORM_RTOL:g}) — a linearly-spaced grid does this. "
+        f"(tolerance {_LOG_UNIFORM_RTOL:g}), a linearly-spaced grid does this. "
         f"The convolution is a constant Gaussian in ln(lambda), so one FFT is "
         f"correct only on a log grid; on this one the broadening would come out "
         f"low by about {factor:.4g}x at {lam_mid:.1f} A (issue #1742), with no "
@@ -866,7 +866,7 @@ def velocity_broaden(
         Input spectral flux.
     wave : array, shape (n_pix,)
         Wavelength grid [Angstrom]. Must be uniformly spaced **in
-        log-wavelength** — e.g. ``jnp.logspace(...)``, not ``jnp.linspace(...)``.
+        log-wavelength**, e.g. ``jnp.logspace(...)``, not ``jnp.linspace(...)``.
         A linearly-spaced grid is rejected; see Notes.
     sigma_km_s : float
         Velocity dispersion [km/s]. Typical range: 50–300 km/s.
@@ -896,20 +896,20 @@ def velocity_broaden(
     varies as ``1/lambda`` there, so a width read off the first pixel pair sets
     the kernel by the *bluest* pixel while the feature sits elsewhere. Measured
     on ``linspace(4500, 5500, 4096)`` with a line at 5000 A: 100 km/s recovered
-    as 90.2, 500 as 450.1 — a constant 0.900 = 4500/5000. The error scales with
+    as 90.2, 500 as 450.1, a constant 0.900 = 4500/5000. The error scales with
     the wavelength *range*, not the pixel count, so refining the grid does not
     help: across 3000–10000 A a line at 9000 A would be broadened to 0.33 of the
     requested width, and a fitted velocity dispersion inherits that smoothly,
     with nothing looking broken.
 
     This previously passed silently, and the Parameters section said "uniformly
-    spaced" — instructing users to do the thing that breaks it. It now raises
+    spaced", instructing users to do the thing that breaks it. It now raises
     instead, on the reasoning recorded in :mod:`tengri.forward.approx_policy`:
     a silently-defaulting read is worse than a loud failure.
 
     The check is skipped when ``wave`` is a tracer, since a traced grid cannot
     be inspected at trace time. Under ``jax.jit`` with a concrete (closed-over)
-    grid — the usual case for a fixed instrument grid — it still fires.
+    grid (the usual case for a fixed instrument grid) it still fires.
 
     Examples
     --------
@@ -941,7 +941,7 @@ def _velocity_broaden_impl(
     sigma_v = sigma_km_s / _C_KM_S  # fractional velocity dispersion
 
     # Pixel scale in log-wavelength. Constant across the array precisely because
-    # the grid is uniform in ln(lambda) — checked by the caller, not assumed.
+    # the grid is uniform in ln(lambda), checked by the caller, not assumed.
     dlnwave = jnp.log(wave[1] / wave[0])
 
     # Gaussian kernel width in pixels
@@ -1005,7 +1005,7 @@ def blend_emission_lines(
 
     Notes
     -----
-    JIT-compatible: yes — vmapped over lines. Gradient-safe: yes.
+    JIT-compatible: yes, vmapped over lines. Gradient-safe: yes.
 
     The Gaussian FWHM at each line is FWHM = lambda_obs / R, giving
     sigma = lambda_obs / (2.3548 * R). The profile is normalized to

@@ -1,5 +1,5 @@
 # SPDX-License-Identifier: BSD-3-Clause
-"""Per-object citation collection — the public ``collect_citations()`` API.
+"""Per-object citation collection: the public ``collect_citations()`` API.
 
 Inspects a Galaxy / SEDModel / Fitter / SEDModelConfig / Parameters instance and
 returns the subset of the citation registry that applies to *that specific
@@ -67,7 +67,7 @@ def _citations_from_components(obj: Any) -> list[str]:
     -------
     list of str
         Zero or more citation registry keys, in the order encountered.
-        Not deduplicated — that happens in ``_collect_keys``.
+        Not deduplicated; that happens in ``_collect_keys``.
 
     Notes
     -----
@@ -147,8 +147,8 @@ def _ssp_provenance_keys(ssp: Any) -> list[str]:
     ``SSPData.imf`` (falling back to a token).
 
     If neither an isochrone (stellar-evolution library) nor a spectral library
-    (stellar atmospheres) can be inferred — i.e. the filename does not match the
-    convention — a provenance warning is emitted so the user supplies those
+    (stellar atmospheres) can be inferred: i.e. the filename does not match the
+    convention; a provenance warning is emitted so the user supplies those
     citations manually.
     """
     import re
@@ -195,7 +195,7 @@ def _ssp_provenance_keys(ssp: Any) -> list[str]:
             missing.append("spectral/atmosphere library")
         warnings.warn(
             f"Could not infer the {' and '.join(missing)} from SSP source "
-            f"{source!r} — expected the <code>_<isochrone>_<library>_<imf> "
+            f"{source!r}: expected the <code>_<isochrone>_<library>_<imf> "
             f"convention (e.g. 'fsps_prsc_miles_chabrier'). Provenance citations "
             f"for these ingredients may be missing; add them manually.",
             stacklevel=3,
@@ -216,8 +216,8 @@ def _citable_chain(obj: Any) -> list[Any]:
     full set.
 
     The configuration is spread across the chain rather than concentrated at
-    either end — the sampler is known only to the result, the photometry only to
-    the forward model, the physics components only to the SED — so callers union
+    either end; the sampler is known only to the result, the photometry only to
+    the forward model, the physics components only to the SED: so callers union
     over the whole chain instead of resolving to a single root.
 
     Parameters
@@ -233,7 +233,7 @@ def _citable_chain(obj: Any) -> list[Any]:
 
     Notes
     -----
-    **JIT-compatible**: no — pure Python attribute introspection.
+    **JIT-compatible**: no; pure Python attribute introspection.
     """
     seen: set[int] = set()
     chain: list[Any] = []
@@ -251,7 +251,7 @@ def _citable_chain(obj: Any) -> list[Any]:
         inner = getattr(cur, "_inner_sed_for_delegation", None)
         if callable(inner):
             # The accessor raises deliberately on a multi-population forward,
-            # where ``populations[0]`` would be an arbitrary pick — that refusal
+            # where ``populations[0]`` would be an arbitrary pick: that refusal
             # is what this guard is for, and it arrives as ValueError/TypeError.
             # Catching everything meant a citation silently going missing looked
             # identical to a model that legitimately has none, and a bibliography
@@ -274,7 +274,7 @@ def _collect_keys(obj: Any, *, include_backend: bool = True) -> list[str]:
         # The ``@cites`` sweep below reads *every* public attribute of its
         # target. That is safe on the object the caller handed us, but forcing
         # it on delegated nodes would touch every property of the wrapped
-        # SEDModel — including ones that compile or allocate — purely to look
+        # SEDModel (including ones that compile or allocate) purely to look
         # for citation annotations. Restrict it to the root; the delegated
         # nodes contribute through the targeted extractors, which is where the
         # component, SSP and backend keys come from anyway.
@@ -387,7 +387,7 @@ def _collect_keys_for_one(
             if fq in FUNCTION_CITATIONS:
                 keys.extend(FUNCTION_CITATIONS[fq])
 
-    # Live registry walk (Parameters / SEDModel / Posterior) — picks up
+    # Live registry walk (Parameters / SEDModel / Posterior): picks up
     # citations registered via ``@register_agn_model("…", citation=…)``,
     # ``@register_dust_law``, SFH ``_register``, etc.  This bridges the
     # static association tables above (which only know the canonical
@@ -396,7 +396,7 @@ def _collect_keys_for_one(
     keys.extend(_keys_from_live_registry(obj))
 
     # Component-graph walk: collect citations declared by each SEDComponent
-    # in the object's component chain. Additive — the static tables and
+    # in the object's component chain. Additive: the static tables and
     # function annotations are still the primary source.
     keys.extend(_citations_from_components(obj))
 
@@ -430,7 +430,7 @@ def _keys_from_live_registry(obj: Any) -> list[str]:
     _push(getattr(spec, "agn_model", None))
 
     # Composable AGN NLR/BLR blocks map to a LIST of keys (the Synthesizer
-    # variants cite BOTH Synthesizer papers — Lovell 2025 + Roper 2026).
+    # variants cite BOTH Synthesizer papers: Lovell 2025 + Roper 2026).
     for attr, table in (
         ("agn_nlr_block", AGN_NLR_CITATIONS),
         ("agn_blr_block", AGN_BLR_CITATIONS),
@@ -456,7 +456,7 @@ def _keys_from_live_registry(obj: Any) -> list[str]:
     if getattr(spec, "dla", False):
         out.extend(DLA_CITATIONS)
 
-    # Nebular backend, X-ray, radio, shock — read off the live model (``obj``);
+    # Nebular backend, X-ray, radio, shock: read off the live model (``obj``);
     # these are not exposed as flat spec attributes the way the mean-IGM model
     # is. The config-based ``_collect_keys`` path handles nebular only when
     # ``_find_model_config`` resolves a ModelConfig (it returns None for a live
@@ -495,7 +495,7 @@ def collect_citations(
     Inspects the object's model configuration (dust law, nebular backend,
     IGM model, AGN sub-components), the last inference backend if a fit has
     been run, and any ``@cites``-annotated callables exposed as attributes.
-    Returns *only* the citations that apply to this specific run — no
+    Returns *only* the citations that apply to this specific run: no
     dust-emission citation if dust emission is off, no Cue citation if
     nebular emission is off, no NUTS citation if MAP was the backend.
 
@@ -522,11 +522,11 @@ def collect_citations(
     Raises
     ------
     No exceptions are raised for missing citation keys. A missing ``obj``
-    attribute is also not an error — the function degrades gracefully.
+    attribute is also not an error; the function degrades gracefully.
 
     Notes
     -----
-    **JIT-compatible**: no — pure Python, does attribute introspection.
+    **JIT-compatible**: no, pure Python, does attribute introspection.
 
     The static association tables live in
     :mod:`tengri.citations.associations`:
@@ -549,7 +549,7 @@ def collect_citations(
 
     Examples
     --------
-    Galaxy-level — only cites what this galaxy uses:
+    Galaxy-level; only cites what this galaxy uses:
 
     >>> import numpy as np, tengri as tg
     >>> g = tg.Galaxy.from_arrays(
@@ -600,7 +600,7 @@ def citations_report(obj: Any, *, include_backend: bool = True) -> str:
 
     Notes
     -----
-    **JIT-compatible**: no — pure Python string formatting.
+    **JIT-compatible**: no; pure Python string formatting.
 
     The default report is flat and numbered. For a category-grouped layout
     (Stellar populations / Dust / Nebular / Inference …) use
@@ -628,7 +628,7 @@ def citations_report(obj: Any, *, include_backend: bool = True) -> str:
         "",
     ]
     for i, c in enumerate(cites, 1):
-        lines.append(f"  [{i}] {c.short}  —  {c.role}")
+        lines.append(f"  [{i}] {c.short} ; {c.role}")
         if c.title:
             lines.append(f"       {c.title}")
         link_bits: list[str] = []
@@ -662,7 +662,7 @@ def citations_bibtex(obj: Any, *, include_backend: bool = True) -> str:
 
     Notes
     -----
-    **JIT-compatible**: no — pure Python string formatting.
+    **JIT-compatible**: no; pure Python string formatting.
 
     See Also
     --------
@@ -699,7 +699,7 @@ def print_citations(obj: Any, *, include_backend: bool = True) -> None:
 
     Notes
     -----
-    **JIT-compatible**: no — performs I/O.
+    **JIT-compatible**: no; performs I/O.
 
     Examples
     --------
@@ -707,7 +707,7 @@ def print_citations(obj: Any, *, include_backend: bool = True) -> None:
     >>> g = tg.Galaxy.from_arrays(..., preset="starforming")  # doctest: +SKIP
     >>> tg.print_citations(g)  # doctest: +SKIP
     Please cite the following when publishing results that use tengri:
-      [1] Cooray et al. (2026, Paper I) — SED fitting framework ...
+      [1] Cooray et al. (2026, Paper I); SED fitting framework ...
       ...
     """
     print(citations_report(obj, include_backend=include_backend))
@@ -731,7 +731,7 @@ def print_bibtex(obj: Any, *, include_backend: bool = True) -> None:
 
     Notes
     -----
-    **JIT-compatible**: no — performs I/O.
+    **JIT-compatible**: no; performs I/O.
 
     Examples
     --------

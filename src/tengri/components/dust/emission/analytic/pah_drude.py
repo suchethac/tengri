@@ -17,7 +17,7 @@ __all__ = ["PAHDrudeIRSEDComponent"]
 
 
 class PAHDrudeIRSEDComponent(EmissionComponent):
-    """Smith et al. (2007) PAH Drude profiles — mid-IR PAH building block.
+    """Smith et al. (2007) PAH Drude profiles: mid-IR PAH building block.
 
     Wraps the pure closure :func:`~tengri.components.dust.emission.pah_drude`,
     which provides a sum of 18 PAH Drude profiles (normalized to Smith+2007
@@ -25,7 +25,7 @@ class PAHDrudeIRSEDComponent(EmissionComponent):
 
     This is a **PAH-only building block**, not a standalone energy-balanced dust
     emitter: it carries the aromatic-feature forest only (no thermal continuum),
-    so its frequency integral is *not* renormalized to ``L_ir`` — it is
+    so its frequency integral is *not* renormalized to ``L_ir``: it is
     scaled by ``L_ir`` but deliberately leaves the bulk of the absorbed
     energy for a continuum component to carry.
 
@@ -36,11 +36,11 @@ class PAHDrudeIRSEDComponent(EmissionComponent):
 
     Notes
     -----
-    **JIT-compatible**: yes — pure ``jnp`` primitives.
+    **JIT-compatible**: yes, pure ``jnp`` primitives.
 
     **Gradient-safe**: yes.
 
-    **Not energy-balanced standalone** — this component deliberately leaves
+    **Not energy-balanced standalone**: this component deliberately leaves
     much of ``L_ir`` unaccounted for, so it should not be used alone
     or cross-validated against energy-balance tests.
 

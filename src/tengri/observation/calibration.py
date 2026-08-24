@@ -36,7 +36,7 @@ To add calibration coefficients as free parameters::
 
 References
 ----------
-Johnson et al. (2021) — Prospector calibration model.
+Johnson et al. (2021), Prospector calibration model.
 
 """
 
@@ -49,7 +49,7 @@ from tengri.utils.scale import representable_floor as _representable_floor, whit
 
 #: Guard against ``obs_err == 0`` only. Expressed in **sigma**, not variance:
 #: the previous ``maximum(obs_err**2, 1e-30)`` was a floor on the variance and
-#: so bound for every sigma below 1e-15 — i.e. every real spectrum (#1588).
+#: so bound for every sigma below 1e-15, i.e. every real spectrum (#1588).
 #: ``representable_floor`` raises it to the working dtype's smallest normal, so
 #: it is never itself a silent zero in float32.
 _ERR_FLOOR = 1e-300
@@ -87,8 +87,8 @@ def chebyshev_basis(
 
     Notes
     -----
-    **JIT-compatible**: yes — `order` is a static argument.
-    **Gradient-safe**: yes — differentiable w.r.t. wavelength.
+    **JIT-compatible**: yes, `order` is a static argument.
+    **Gradient-safe**: yes, differentiable w.r.t. wavelength.
 
     """
     x = 2.0 * (wavelength - wave_min) / (wave_max - wave_min) - 1.0
@@ -215,8 +215,8 @@ def marginalize_calibration(
 
     Notes
     -----
-    JIT-compatible: yes — `n_poly` is a static argument.
-    Gradient-safe: no — uses matrix inversion (not safe for gradient).
+    JIT-compatible: yes, `n_poly` is a static argument.
+    Gradient-safe: no, uses matrix inversion (not safe for gradient).
 
     The marginalized log-likelihood integrates the Gaussian likelihood and
     Gaussian prior on the polynomial coefficients in closed form via the
@@ -254,7 +254,7 @@ def marginalize_calibration(
     # Whitened weights. NEVER form 1/sigma**2 (#1588): it is ~1e59 at a real
     # flux uncertainty, and the variance-domain floor this replaced
     # (``maximum(obs_err**2, 1e-30)``) bound on *every pixel of every realistic
-    # spectrum* — sigma < 1e-15 trips it — pinning inv_var to exactly 1e30 in
+    # spectrum* (sigma < 1e-15 trips it) pinning inv_var to exactly 1e30 in
     # **float64**. The data term then lost to the prior and the recovered
     # polynomial collapsed toward zero: c_hat[0] 5.0e-02 -> 7.5e-04 at
     # F_lambda ~1e-17, and -> 7.6e-26 at F_nu ~1e-28. Guard only against
@@ -274,7 +274,7 @@ def marginalize_calibration(
 
     # Residual vector: r_j = sum_i [T_j(x_i) * m(x_i) * (d_i - m_i) / sigma_i^2]
     residual = obs_flux - model_flux
-    # r_j = sum_i [T_j * (m/sigma) * ((d-m)/sigma)] — algebraically the same as
+    # r_j = sum_i [T_j * (m/sigma) * ((d-m)/sigma)], algebraically the same as
     # T_j * m * (d-m) / sigma^2, without ever forming 1/sigma^2.
     rhs = jnp.sum(
         basis * weighted_model[jnp.newaxis, :] * _whiten(residual, err_safe)[jnp.newaxis, :],
@@ -349,7 +349,7 @@ def apply_calibration(
 
     Notes
     -----
-    JIT-compatible: yes. Gradient-safe: yes — differentiable w.r.t.
+    JIT-compatible: yes. Gradient-safe: yes, differentiable w.r.t.
     spectrum and coefficients.
 
     """
@@ -390,7 +390,7 @@ def double_calibration_polynomial(
 
     Notes
     -----
-    JIT-compatible: yes. Gradient-safe: yes — differentiable w.r.t.
+    JIT-compatible: yes. Gradient-safe: yes, differentiable w.r.t.
     coefficients and wavelengths.
 
     """
@@ -434,7 +434,7 @@ def apply_double_calibration(
 
     Notes
     -----
-    JIT-compatible: yes. Gradient-safe: yes — differentiable w.r.t.
+    JIT-compatible: yes. Gradient-safe: yes, differentiable w.r.t.
     spectrum and coefficients.
 
     """

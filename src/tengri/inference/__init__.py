@@ -1,7 +1,7 @@
 # SPDX-License-Identifier: BSD-3-Clause
 """Inference engine: Fitter, Posterior, PopulationFitter, and backends."""
 
-# Populate the backend registry. Imported for side effects only —
+# Populate the backend registry. Imported for side effects only,
 # every ``@register_backend(...)`` call in this module installs a
 # ``BackendEntry`` into ``_BACKENDS`` so that ``Fitter.run(method=...)``
 # can dispatch by name. See ADR-0010.

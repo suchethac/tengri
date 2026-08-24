@@ -40,9 +40,9 @@ mirroring :mod:`tengri.components.agn.skirtor` and
 References
 ----------
 .. [1] M. Stalevski et al., "3D radiative transfer modeling of the dusty
-   torus around AGN — the influence of clumping," MNRAS, 420, 2756 (2012).
+   torus around AGN, the influence of clumping," MNRAS, 420, 2756 (2012).
    arXiv:1109.1286. https://doi.org/10.1111/j.1365-2966.2011.19775.x
-.. [2] M. Stalevski et al., "The dust covering factor in AGN — combining the
+.. [2] M. Stalevski et al., "The dust covering factor in AGN: combining the
    IR torus emission with polar dust component," MNRAS, 458, 2288 (2016).
    arXiv:1602.01954. https://doi.org/10.1093/mnras/stw444
 .. [3] L. N. Martinez-Ramirez, et al., "AGNFITTER-RX: Modeling the
@@ -83,7 +83,7 @@ def _load_skirtor_agnfitter_arrays(grid_path: str) -> dict:
 
     Notes
     -----
-    **JIT-compatible**: no — performs HDF5 I/O at grid-load time.
+    **JIT-compatible**: no, performs HDF5 I/O at grid-load time.
 
     Templates may be stored as float32 or float64; they are cast to
     float64 for monotone-cubic interpolation.
@@ -127,7 +127,7 @@ def load_skirtor_agnfitter_grid(grid_path: str) -> TorusTemplateGrid:
 
     Notes
     -----
-    **JIT-compatible**: no — performs HDF5 I/O. Call outside the trace and
+    **JIT-compatible**: no, performs HDF5 I/O. Call outside the trace and
     pass the result in as an argument.
     """
     raw = _load_skirtor_agnfitter_arrays(grid_path)

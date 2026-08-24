@@ -41,7 +41,7 @@ def psd_drw(omega: jnp.ndarray, psd_sigma: float, psd_tau_yr: float) -> jnp.ndar
 
     Notes
     -----
-    **JIT-compatible**: yes — all operations use ``jnp`` primitives.
+    **JIT-compatible**: yes, all operations use ``jnp`` primitives.
 
     The damped random walk (Lorentzian) power spectral density is:
 
@@ -93,7 +93,7 @@ def drw_acf(delta_t: jnp.ndarray, psd_sigma: float, psd_tau_yr: float) -> jnp.nd
 
     Notes
     -----
-    **JIT-compatible**: yes — all operations use ``jnp`` primitives.
+    **JIT-compatible**: yes, all operations use ``jnp`` primitives.
 
     The autocovariance (autocorrelation function) of the DRW is:
 
@@ -134,7 +134,7 @@ def drw_variance(psd_sigma: float) -> float:
 
     Notes
     -----
-    **JIT-compatible**: yes — scalar arithmetic.
+    **JIT-compatible**: yes, scalar arithmetic.
 
     The stationary variance of a DRW is:
 
@@ -176,7 +176,7 @@ def psd_to_sqrt_power(psd_values: jnp.ndarray, d_grid: float) -> jnp.ndarray:
 
     Notes
     -----
-    **JIT-compatible**: yes — all operations use ``jnp`` primitives.
+    **JIT-compatible**: yes, all operations use ``jnp`` primitives.
 
     The amplitude operator is:
 
@@ -217,7 +217,7 @@ def psd_matern(omega: jnp.ndarray, variance: float, length_scale: float, nu: flo
 
     Notes
     -----
-    **JIT-compatible**: yes — uses ``jax.scipy.special.gammaln`` for log-gamma.
+    **JIT-compatible**: yes, uses ``jax.scipy.special.gammaln`` for log-gamma.
 
     The Matern PSD is a generalization of the DRW (which corresponds to nu=0.5).
     Larger nu values produce smoother realizations with steeper spectral fall-off
@@ -271,7 +271,7 @@ def psd_extended_regulator(
 
     Notes
     -----
-    **JIT-compatible**: yes — all operations use ``jnp`` primitives.
+    **JIT-compatible**: yes, all operations use ``jnp`` primitives.
 
     The extended regulator PSD combines feedback-regulated accretion and
     dynamical instability:

@@ -86,7 +86,7 @@ def mix_dig_emission(
 
     Notes
     -----
-    **JIT-compatible**: yes — all operations use ``jnp`` primitives, but note
+    **JIT-compatible**: yes, all operations use ``jnp`` primitives, but note
     that when neb_dig_frac is a traced JAX value, both HII and DIG forward
     passes execute (no short-circuit optimization).
 

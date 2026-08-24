@@ -48,7 +48,7 @@ def _vmap_samples_to_physical(
     method's ``__self__``) keyed on ``(id(fitter), n_dim)``. Without
     this cache every ``Fitter.run`` re-traces and recompiles the
     conversion (~700 ms photometry, more on spec). ``unravel_fn``
-    captured by the cache entry is the one from the first call —
+    captured by the cache entry is the one from the first call,
     structurally identical to subsequent ones for the same fitter, so
     reusing it is safe.
     """
@@ -101,8 +101,8 @@ def _data_fingerprint(fitter: Any) -> str:
     """Content hash of the observations this fitter was constructed against.
 
     The MAP cache lives in a per-model namespace keyed on the model object,
-    which says nothing about the data. Reusing one model across a catalog —
-    the ordinary loop — then hands every galaxy the first galaxy's MAP as its
+    which says nothing about the data. Reusing one model across a catalog,
+    the ordinary loop, then hands every galaxy the first galaxy's MAP as its
     starting point (issue #1529). Hashing the data separates targets while
     keeping the intended win: a genuine refit of the same target still hits,
     including across sessions, because this keys on content and not identity.
@@ -116,7 +116,7 @@ def _data_fingerprint(fitter: Any) -> str:
     Returns
     -------
     str
-        Hex digest. Cost is linear in the data bytes — negligible beside the
+        Hex digest. Cost is linear in the data bytes, negligible beside the
         thousands of forward passes a MAP run would otherwise repeat.
     """
     digest = hashlib.blake2b(digest_size=16)
@@ -224,7 +224,7 @@ def _as_posterior_like(fitter: Any, init_from: Any) -> Any:
             warnings.warn(
                 f"init_from seeds {len(supplied)} of {len(free)} free parameters; "
                 f"{missing} will start at the prior center. Partial starts mix "
-                "poorly — check split R-hat, or pass every free parameter (a MAP "
+                "poorly, check split R-hat, or pass every free parameter (a MAP "
                 "result supplies them all).",
                 UserWarning,
                 stacklevel=3,
@@ -250,9 +250,9 @@ def _maybe_map_init(
 
     Resolution order:
 
-    1. Explicit ``init_from`` from caller — converted to unbounded.
+    1. Explicit ``init_from`` from caller, converted to unbounded.
     2. Cached MAP point on the model, **if it was fit to this same data**
-       (populated by a previous fit or by :meth:`Fitter.load_cache`) — used
+       (populated by a previous fit or by :meth:`Fitter.load_cache`), used
        directly, no fresh MAP run.
     3. Run a short MAP optimization to find a good starting point.
        Caches the result so subsequent calls / sessions can skip step 3.
@@ -272,7 +272,7 @@ def _maybe_map_init(
     # Advance the key before branching, so a cache hit and a cache miss hand the
     # sampler the same stream. Previously the hit returned ``key`` untouched
     # while the miss returned it split for the MAP run, which made the chain
-    # depend on whether a *previous* fit had happened to populate the cache —
+    # depend on whether a *previous* fit had happened to populate the cache,
     # invisible to the caller, and enough to give two identical ``fit`` calls
     # with one ``key`` different posteriors.
     key, map_key = jax.random.split(key)

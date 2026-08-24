@@ -20,7 +20,7 @@ class MockDict(dict):
     (``mock["flux_obs"]``) and attribute access (``mock.flux_obs``) work. That
     matches the attribute surface of the :class:`MockData` object returned by
     :meth:`SEDModel.mock`, so notebook and user code written against either
-    surface works against both — the recurring "dict vs object" footgun.
+    surface works against both; the recurring "dict vs object" footgun.
 
     It is a genuine ``dict`` (``isinstance(mock, dict)`` is ``True`` and every
     ``dict`` method is available), so existing key-based consumers are

@@ -30,12 +30,12 @@ from tengri.utils.physics_constants import MPC_CM
 # Values from Planck Collaboration 2020, A&A 641, A6 (TT,TE,EE+lowE+lensing):
 #   H0 = 67.66 km/s/Mpc → h = 0.6766
 #   Om0 = 0.30966
-# These also match astropy.cosmology.Planck18 — see #401 for the drift fix.
+# These also match astropy.cosmology.Planck18: see #401 for the drift fix.
 PLANCK18 = CosmoParams(Om0=0.30966, w0=-1.0, wa=0.0, h=0.6766)
 DEFAULT_COSMO = PLANCK18
 
 # Backward-compat scalar defaults (for positional arg parsing).
-DEFAULT_H0 = 67.66  # km/s/Mpc — matches PLANCK18.h × 100
+DEFAULT_H0 = 67.66  # km/s/Mpc: matches PLANCK18.h × 100
 DEFAULT_OM0 = 0.30966
 
 __all__ = [
@@ -70,12 +70,12 @@ def cosmo_from_astropy(astropy_cosmo) -> CosmoParams:
 
     Provides build-time ergonomics for users who think in astropy terms.
     The returned :class:`CosmoParams` is the JIT-safe form tengri stores
-    internally — astropy objects are heavy and not JIT-compatible, so this
+    internally; astropy objects are heavy and not JIT-compatible, so this
     helper is the boundary between the two worlds.
 
     Supports flat cosmologies only: :class:`astropy.cosmology.FlatLambdaCDM`
     (``w0=-1``, ``wa=0``) and :class:`astropy.cosmology.Flatw0waCDM`.
-    Non-flat cosmologies raise :class:`ValueError` — DSPS's underlying
+    Non-flat cosmologies raise :class:`ValueError`; DSPS's underlying
     ``flat_wcdm`` engine has no support for them.
 
     Parameters
@@ -118,7 +118,7 @@ def cosmo_from_astropy(astropy_cosmo) -> CosmoParams:
     when it's actually invoked. The forward-model JIT path never
     imports astropy.
     """
-    # Flat-only guard — DSPS doesn't support non-flat cosmologies.
+    # Flat-only guard: DSPS doesn't support non-flat cosmologies.
     # Use astropy's curvature density Ok0 (0 for any flat cosmology,
     # regardless of how Ode0 splits between dark energy / neutrinos /
     # photons in Planck18, WMAP9, etc.).

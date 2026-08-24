@@ -94,7 +94,7 @@ def subband_quadrature(
                              {\int_k L_\nu T w \,d\lambda}
 
     Both are attenuation-independent, so a multiplicative screen is applied at
-    runtime as :math:`\sum_k \Phi_k A(\bar\lambda_k)` — an exact factorization.
+    runtime as :math:`\sum_k \Phi_k A(\bar\lambda_k)`: an exact factorization.
 
     The single implementation, shared by the fixed-z (:func:`preintegrate_grid`)
     and free-z (ztable) precomputes so the two cannot drift.
@@ -106,13 +106,13 @@ def subband_quadrature(
     tw_grid : ndarray, shape (m,)
         Transmission x filter weight on ``grid`` [dimensionless].
     integrand : ndarray, shape (..., m)
-        ``templates * tw_grid`` — the thing whose band integral is wanted.
+        ``templates * tw_grid``; the thing whose band integral is wanted.
     denom : float
         ``int tw dlambda``, the filter normalization.
     n_subbands : int
         Number of sub-bands K.
     eff_wave_obs : float
-        Filter effective wavelength, observed frame — the node fallback where a
+        Filter effective wavelength, observed frame: the node fallback where a
         template has no flux in a sub-band [Angstrom].
 
     Returns
@@ -129,7 +129,7 @@ def subband_quadrature(
 
     Notes
     -----
-    **JIT-compatible**: no — build-time numpy precompute.
+    **JIT-compatible**: no; build-time numpy precompute.
 
     The partition is built from CUMULATIVE integrals interpolated at the edges.
     Selecting grid points inside each sub-band instead silently drops the
@@ -155,11 +155,11 @@ def subband_quadrature(
             "sum to the full filter integral."
         )
 
-    # The node is the template's OWN flux-weighted centroid in the sub-band —
+    # The node is the template's OWN flux-weighted centroid in the sub-band;
     # that is what makes the rule track the spectrum and converge as 1/K^2, and
     # it also makes the first moment vanish identically, so a Taylor term on top
     # would add exactly zero. Where a template has no flux the weight is zero, so
-    # the node cannot change the result — but it is still fed through the dust
+    # the node cannot change the result: but it is still fed through the dust
     # law, which goes as 1/lambda, so it must stay finite and positive.
     live = i_k != 0.0
     nodes = np.where(live, l_k / np.where(live, i_k, 1.0), eff_wave_obs)
@@ -172,7 +172,7 @@ class PreintegratedGrid:
 
     Φ(*grid_dims, band) = ∫ L_ν(*grid_dims, λ) T_b(λ) λ dλ / ∫ T_b(λ) λ dλ
 
-    Grid dimensions are opaque — the caller knows what they mean
+    Grid dimensions are opaque: the caller knows what they mean
     (e.g. (n_met, n_age) for SSP, (n_logU, n_Z) for CLOUDY).
 
     Parameters
@@ -187,7 +187,7 @@ class PreintegratedGrid:
         each sub-band, or None. Sums over the sub-band axis to ``phot``.
     subband_waves : jnp.ndarray or None
         (*grid_dims, n_filters, n_subbands). Observed-frame quadrature node
-        of each sub-band — the template's own flux-weighted centroid there,
+        of each sub-band; the template's own flux-weighted centroid there,
         so it tracks the spectrum. [Ångström]
     subband_waves_rest : jnp.ndarray or None
         (*grid_dims, n_filters, n_subbands). Same nodes, rest frame. [Ångström]
@@ -227,7 +227,7 @@ class PreintegratedLines:
     """Emission lines preintegrated through filters via point-sampling.
 
     A line at λ_line contributes T_b(λ_line_obs) × λ_line_obs / ∫ T_b(λ) λ dλ
-    to filter b. This is exact — no numerical integration needed.
+    to filter b. This is exact; no numerical integration needed.
 
     Parameters
     ----------
@@ -380,11 +380,11 @@ def preintegrate_grid(
         If True, normalize each template to unit bolometric luminosity
         ``∫ L_ν dν = 1`` before filter integration, so runtime
         ``L_absorbed * lookup(...)`` produces correctly scaled photometry.
-        Inputs MUST be ``L_ν`` [erg/s/Hz] — historically this branch
+        Inputs MUST be ``L_ν`` [erg/s/Hz]: historically this branch
         divided by ``∫ L_ν dλ`` (frequency–wavelength mismatch), which
         caused a wavelength-shape-dependent normalization error. Pass
         ``False`` if templates are already normalized at load time
-        (Dale2014/Astrodust/BOSA/THEMIS) — the divide is then an
+        (Dale2014/Astrodust/BOSA/THEMIS); the divide is then an
         unnecessary round-trip. Default False.
     convention : FilterConvention
         Bandpass weight ``w(λ)``: ``BESSELL`` (default, photon-counting
@@ -427,7 +427,7 @@ def preintegrate_grid(
     wave_obs = wave_rest * (1.0 + redshift)
 
     # Precompute filter-integrated photometry and moments on the union
-    # quadrature grid — template nodes + filter nodes, with the smooth
+    # quadrature grid: template nodes + filter nodes, with the smooth
     # transmission interpolated, never the template point-sampled at the
     # filter table's nodes (#960). Matches lnu_filter_integral so the LUT
     # and exact paths agree. λ_eff = ∫ λ T w dλ / ∫ T w dλ (weight first
@@ -447,7 +447,7 @@ def preintegrate_grid(
         # Transmission is identically zero outside the filter table's
         # support (left=0/right=0 below), so union-grid segments with both
         # endpoints beyond an edge integrate to exactly zero. Keep one node
-        # past each edge (the straddle segments) and drop the rest — same
+        # past each edge (the straddle segments) and drop the rest: same
         # clip as precompute_photometry_ztable.
         lo = max(np.searchsorted(grid, fw_np[0]) - 1, 0)
         hi = min(np.searchsorted(grid, fw_np[-1], side="right") + 1, grid.size)
@@ -473,7 +473,7 @@ def preintegrate_grid(
             num_moment = _np_trapezoid(templates_on_grid * dlam * weight, grid, axis=-1)
             moment_flat[:, f_idx] = num_moment / np.maximum(denom, 1e-30)
 
-        # Sub-band quadrature nodes and weights (#1122) — the single
+        # Sub-band quadrature nodes and weights (#1122): the single
         # implementation, shared with the free-z ztable precompute so the two
         # cannot drift.
         if K > 0:
@@ -497,7 +497,7 @@ def preintegrate_grid(
     # under a surrounding jit trace ``dl_cm`` and ``redshift`` arrive as tracers
     # and ``float(traced)`` raises ``ConcretizationTypeError``. The shared helper
     # returns a Python-float-compatible scalar when inputs are concrete and a JAX
-    # scalar when traced, and — unlike the linear form this replaced — survives
+    # scalar when traced, and (unlike the linear form this replaced) survives
     # float32, where (1+z)/(4 pi d_L^2) is exactly 0.0 at every distance (#1859).
     log10_flux_scale = _log10_flux_scale(redshift, dl_cm)
 
@@ -772,7 +772,7 @@ def _pchip_slopes(x: jnp.ndarray, y: jnp.ndarray) -> jnp.ndarray:
     # secants have opposite signs, so w1/d_left + w2/d_right can pass through 0,
     # sending harmonic->inf. The outer where() discards that value, but its VJP
     # then forms 0*inf = NaN (poisoning the gradient of any param the grid
-    # values depend on — e.g. the SKIRTOR dust-template pchip in
+    # values depend on: e.g. the SKIRTOR dust-template pchip in
     # skirtor_disc_dust_ratio, #892). Replacing d_left/d_right with 1.0 wherever
     # the harmonic is unused keeps the denominator = w1+w2 > 0, so the reverse
     # pass stays finite. Forward is unchanged: interior is 0 in exactly the same
@@ -820,7 +820,7 @@ def _pchip_eval_axis0(x: jnp.ndarray, y: jnp.ndarray, xq, *, extrapolate: bool =
 def _linear_eval_axis0(x: jnp.ndarray, y: jnp.ndarray, xq) -> jnp.ndarray:
     """Evaluate the piecewise-linear interpolant at scalar ``xq`` over axis 0.
 
-    C0, not C1 — which is the point. Where the tabulated function has a genuine
+    C0, not C1: which is the point. Where the tabulated function has a genuine
     kink and a knot sits on it, a cubic's two-sided slope estimate straddles the
     corner and degrades to O(h); linear interpolation has no slope to get wrong.
     """
@@ -879,7 +879,7 @@ def pchip_interp_1d(
         w_0 = 2h_1 + h_0, \\quad w_1 = h_1 + 2h_0,
 
     where :math:`h_i` are the interval widths and :math:`\\delta_i` the secant
-    slopes. The weights matter only on a **non-uniform** grid — dropping them
+    slopes. The weights matter only on a **non-uniform** grid: dropping them
     reduces to the unweighted harmonic mean, which is a silent error wherever
     the nodes are not equally spaced.
 
@@ -916,7 +916,7 @@ def interp_nd_pchip(
     Unlike the triweight *smoother* (:func:`interp_nd_triweight`), this is an
     *interpolant*: it passes exactly through the tabulated nodes while keeping
     C¹-continuous gradients. The per-axis tangents use the Fritsch & Carlson
-    (1980) shape-preserving (monotone) rule, so the cubic never overshoots —
+    (1980) shape-preserving (monotone) rule, so the cubic never overshoots,
     safe even on sparse, nearest-neighbor-filled grids where a natural cubic
     spline would ring. Applied separably as a tensor product, one axis at a
     time.
@@ -943,7 +943,7 @@ def interp_nd_pchip(
         estimate straddles such a corner and the neighboring cells inherit an
         O(1) slope error, so the local interpolation error decays only as O(h).
         A linear interpolant with knots on the kinks converges normally. Applies
-        only where the kink locations are known and gridded — on a smooth axis,
+        only where the kink locations are known and gridded; on a smooth axis,
         or a kinked axis whose knots miss the kinks, PCHIP is the better choice.
 
     Returns
@@ -959,9 +959,9 @@ def interp_nd_pchip(
 
     Notes
     -----
-    **JIT-compatible**: yes — pure ``jnp`` ops with gathers on traced indices.
+    **JIT-compatible**: yes; pure ``jnp`` ops with gathers on traced indices.
 
-    **Gradient-safe**: yes — C¹ in the query coordinates; guarded divisions in
+    **Gradient-safe**: yes, C¹ in the query coordinates; guarded divisions in
     the slope computation keep the VJP finite at flat segments.
 
     Queries are clipped to the grid extent (no extrapolation beyond the
@@ -1012,7 +1012,7 @@ def resample_template(
     log-log slope [dimensionless].
 
     Template libraries are stored on coarse, log-spaced wavelength grids and
-    evaluated on a much finer model grid — SKIRTOR v3 is 136 points
+    evaluated on a much finer model grid: SKIRTOR v3 is 136 points
     (:math:`R \\sim 7`) against model grids oversampling it ~150x. SED tails
     (Rayleigh-Jeans, modified blackbody, synchrotron) are power laws, which
     this form reproduces exactly at any sampling density. Interpolating
@@ -1043,7 +1043,7 @@ def resample_template(
 
     Notes
     -----
-    **JIT-compatible**: yes — pure ``jnp`` ops with gathers on traced indices.
+    **JIT-compatible**: yes; pure ``jnp`` ops with gathers on traced indices.
 
     **Gradient-safe**: yes. Intervals with a non-positive endpoint fall back to
     linear-in-flux, gated with the double-``where`` pattern so the discarded
@@ -1096,7 +1096,7 @@ def loglog_integral(x: jnp.ndarray, y: jnp.ndarray) -> jnp.ndarray:
 
     Written with ``expm1(u)/u`` rather than the textbook
     :math:`(x_1 y_1 - x_0 y_0)/(s+1)` because that form is 0/0 at
-    :math:`s = -1` — a real case, since :math:`\\nu F_\\nu` flat is exactly
+    :math:`s = -1`: a real case, since :math:`\\nu F_\\nu` flat is exactly
     :math:`s = -1`.
 
     Parameters
@@ -1118,7 +1118,7 @@ def loglog_integral(x: jnp.ndarray, y: jnp.ndarray) -> jnp.ndarray:
     -----
     **JIT-compatible**: yes.
 
-    **Gradient-safe**: yes — segments with a non-positive endpoint fall back to
+    **Gradient-safe**: yes; segments with a non-positive endpoint fall back to
     the trapezoid rule under a double-``where``, so the discarded ``log``
     branch cannot form ``0 * inf`` in the VJP.
     """
@@ -1154,7 +1154,7 @@ def slice_fixed_axes(
 
     For example, if a CLOUDY grid has axes (logZ, log_age, logU) and
     logU is Fixed(-3.0), calling ``slice_fixed_axes(preint, {2: -3.0})``
-    returns a grid with axes (logZ, log_age) — the logU axis is removed
+    returns a grid with axes (logZ, log_age): the logU axis is removed
     by triweight-interpolating to -3.0.
 
     Works for both PreintegratedGrid and PreintegratedLines.
@@ -1192,7 +1192,7 @@ def slice_fixed_axes(
         # A quadrature node is a RATIO, λ_k = ∫λSw / ∫Sw, and the weighted mean
         # of ratios is not the ratio of weighted means. Interpolate the node's
         # numerator (λ_k·Φ_k) and denominator (Φ_k) separately and divide at the
-        # end — that reproduces the centroid of the interpolated template exactly,
+        # end: that reproduces the centroid of the interpolated template exactly,
         # where averaging the nodes directly would bias them.
         sub_num = None if sub_waves is None else sub_waves * sub_phot
         sub_num_rest = None if sub_waves_rest is None else sub_waves_rest * sub_phot
@@ -1231,7 +1231,7 @@ def slice_fixed_axes(
 
         if sub_phot is not None:
             # Where a template has no flux in a sub-band the node is multiplied by
-            # zero, so its value cannot change the result — but it is still fed
+            # zero, so its value cannot change the result: but it is still fed
             # through the dust law, which goes as 1/λ. A zero node there yields
             # inf/NaN that survives into the GRADIENT even though the forward value
             # is finite. Fall back to the filter's effective wavelength: finite,

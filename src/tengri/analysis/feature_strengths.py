@@ -124,7 +124,7 @@ def clip_feature(
 
     Notes
     -----
-    **JIT-compatible**: no — uses ``numpy.searchsorted`` with Python
+    **JIT-compatible**: no; uses ``numpy.searchsorted`` with Python
     branches.  Used in tests and analysis only, not in the JAX forward
     model.
     """

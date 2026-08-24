@@ -7,7 +7,7 @@ ellipses defined by the prior, guaranteeing acceptance without any
 step-size tuning.
 
 In tengri's unbounded parameter space, all parameters have effective
-N(0, I) priors — the psd_xi latent field explicitly, and bounded
+N(0, I) priors, the psd_xi latent field explicitly, and bounded
 physical parameters via the sigmoid transform. ESS with cov=I is
 therefore mathematically appropriate for the full parameter vector.
 
@@ -88,7 +88,7 @@ def run_elliptical_slice(
             f"{n_burnin} burn-in, {n_samples} samples"
         )
 
-    # Log-likelihood in flat space (no prior — ESS handles N(0,I) internally)
+    # Log-likelihood in flat space (no prior, ESS handles N(0,I) internally)
     def loglik_flat(position):
         """Evaluate log-likelihood in flat parameter space."""
         return loglikelihood_unbounded_fn(unravel_fn(position), data_args)

@@ -55,7 +55,7 @@ def uv_slope_beta(wavelength_aa: jnp.ndarray, l_nu: jnp.ndarray) -> float:
 
     Notes
     -----
-    **JIT-compatible**: yes — all operations are ``jnp`` primitives.
+    **JIT-compatible**: yes, all operations are ``jnp`` primitives.
 
     The method uses 10 wavelength windows (Calzetti+1994 Table 2) that avoid
     the 2175-Å absorption feature and Ly-alpha:
@@ -162,7 +162,7 @@ def dn4000(wavelength_aa: jnp.ndarray, l_nu: jnp.ndarray) -> float:
 
     Notes
     -----
-    **JIT-compatible**: yes — all operations are ``jnp`` primitives.
+    **JIT-compatible**: yes, all operations are ``jnp`` primitives.
 
     Dn4000 is a diagnostic of age: young star-forming galaxies with hot OB
     stars have Dn4000 ≈ 0.4–1.0 (weak 4000-Å break), while old quiescent
@@ -213,7 +213,7 @@ def irx(l_dust: float, l_fuv: float) -> float:
 
     Notes
     -----
-    **JIT-compatible**: yes — all operations are ``jnp`` primitives.
+    **JIT-compatible**: yes, all operations are ``jnp`` primitives.
 
     The infrared excess is:
 
@@ -280,7 +280,7 @@ def equivalent_width(
 
     Notes
     -----
-    **JIT-compatible**: yes — all operations are ``jnp`` primitives.
+    **JIT-compatible**: yes, all operations are ``jnp`` primitives.
 
     The equivalent width is:
 
@@ -366,7 +366,7 @@ def rest_frame_luminosity(
 
     Notes
     -----
-    **JIT-compatible**: yes — all operations are ``jnp`` primitives.
+    **JIT-compatible**: yes, all operations are ``jnp`` primitives.
 
     The photometric luminosity is:
 
@@ -436,7 +436,7 @@ def rest_frame_color(
 
     Notes
     -----
-    **JIT-compatible**: yes — all operations are ``jnp`` primitives.
+    **JIT-compatible**: yes, all operations are ``jnp`` primitives.
 
     The color is computed from the flux ratio:
 

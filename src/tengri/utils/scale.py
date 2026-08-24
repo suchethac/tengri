@@ -31,16 +31,16 @@ def representable_floor(value: float) -> float:
     Returns
     -------
     float
-        ``max(value, finfo(working dtype).tiny)`` — a static Python float, safe
+        ``max(value, finfo(working dtype).tiny)``: a static Python float, safe
         as a ``jnp.maximum`` / ``jnp.clip`` bound under JIT.
 
     Notes
     -----
-    **JIT-compatible**: yes — resolved at trace time from
+    **JIT-compatible**: yes; resolved at trace time from
     ``jnp.result_type(float)``, so it is a compile-time constant.
 
     float32's smallest normal is 1.18e-38 and its smallest subnormal 1.4e-45, so
-    a literal floor below that is **exactly 0.0** there — the guard reads as
+    a literal floor below that is **exactly 0.0** there; the guard reads as
     protection and provides none. The tree carries 36 such floors (``1e-50``,
     ``1e-60``, ``1e-100``, ``1e-300``), every one inert in the precision #1206
     exists to deliver (#1492).
@@ -54,7 +54,7 @@ def representable_floor(value: float) -> float:
     original literal and float64 results are bit-identical. Only float32, where
     the literal was doing nothing at all, sees a different number.
 
-    A floor sized for a *value* is still not sized for a *derivative* — division's
+    A floor sized for a *value* is still not sized for a *derivative*; division's
     VJP needs the denominator squared, so a derivative-safe bound is
     ``sqrt(tiny)`` (~1.1e-19 in float32). See #1397, #1436, #1439. That case has
     its own helper, :func:`representable_denominator`; use it whenever the
@@ -84,12 +84,12 @@ def representable_denominator(value: float) -> float:
     Returns
     -------
     float
-        ``max(value, sqrt(tiny))`` for the working dtype — a static Python float,
+        ``max(value, sqrt(tiny))`` for the working dtype; a static Python float,
         safe as a ``jnp.maximum`` / ``jnp.clip`` bound under JIT.
 
     Notes
     -----
-    **JIT-compatible**: yes — resolved at trace time from
+    **JIT-compatible**: yes, resolved at trace time from
     ``jnp.result_type(float)``, so it is a compile-time constant.
 
     The third member of the family, and the one :func:`representable_floor`'s
@@ -119,14 +119,14 @@ def representable_denominator(value: float) -> float:
 
     ``1e-30`` is *above* float32's ``tiny`` (1.175e-38), so
     ``representable_floor(1e-30)`` returns it unchanged and a floor census
-    reports the site as clean — while its VJP divides by zero (#1860). ``1e-20``
+    reports the site as clean; while its VJP divides by zero (#1860). ``1e-20``
     fails too, despite ``1e-40`` being a nominal subnormal, because the
     reciprocal overflows.
 
     The bound is analytic. Requiring :math:`1/d^{2} \le \mathrm{max}` gives
     :math:`d \ge 1/\sqrt{\mathrm{max}}`, and since
     :math:`1/\mathrm{max} \approx \mathrm{tiny}/4` the cliff sits at
-    :math:`\sqrt{\mathrm{tiny}}/2` — 5.42e-20 in float32. ``sqrt(tiny)``
+    :math:`\sqrt{\mathrm{tiny}}/2`; 5.42e-20 in float32. ``sqrt(tiny)``
     (1.084e-19) is therefore one factor of two inside it, not on it.
 
     **float64 is unchanged for any floor at or above 1.5e-154**
@@ -135,7 +135,7 @@ def representable_denominator(value: float) -> float:
 
     Note the difference from :func:`representable_floor`, which is a no-op in
     float64 for *every* literal the tree uses. This one is not: a floor below
-    1.5e-154 — the tree carries ``1e-300`` — is raised in float64 as well,
+    1.5e-154 (the tree carries ``1e-300``) is raised in float64 as well,
     because it is derivative-unsafe *there too* (``(1e-300)**2`` is ``0.0`` in
     float64, whose smallest normal is 2.2e-308). That is the intended behavior
     and not a float64 regression, but it does mean this helper cannot be applied
@@ -143,7 +143,7 @@ def representable_denominator(value: float) -> float:
 
     References
     ----------
-    .. [1] tengri issue #1860 — the filter-integral guard floor NaNs the redshift
+    .. [1] tengri issue #1860; the filter-integral guard floor NaNs the redshift
        gradient; ``(1e-30)**2`` flushes to zero in the VJP.
 
     Examples
@@ -174,19 +174,19 @@ def representable_exponent(value: float, *, base: float = 10.0) -> float:
     base : float, keyword-only, optional
         Base of the power the bound feeds. ``10.0`` (default) for
         ``10**clip(x, lo, hi)``; :data:`math.e` for ``exp(clip(x, lo, hi))``.
-        One function rather than a per-base copy — the arithmetic is identical
+        One function rather than a per-base copy; the arithmetic is identical
         and only ``log(max)/log(base)`` changes.
 
     Returns
     -------
     float
         ``min(value, x_max)`` where ``x_max`` is the largest float for which
-        ``base**x`` is finite in the working dtype — a static Python float, safe
+        ``base**x`` is finite in the working dtype; a static Python float, safe
         as a :func:`jax.numpy.clip` bound under JIT.
 
     Notes
     -----
-    **JIT-compatible**: yes — resolved at trace time from
+    **JIT-compatible**: yes, resolved at trace time from
     ``jnp.result_type(float)``, so it is a compile-time constant.
 
     float32 tops out at 3.4028e38, i.e. :math:`10^{38.53}` or :math:`e^{88.72}`.
@@ -232,7 +232,7 @@ def representable_exponent(value: float, *, base: float = 10.0) -> float:
     dtype = numpy.dtype(jnp.result_type(float))
     # The DERIVATIVE, not the value, sets the bound: d/dx base**x = base**x·ln(base),
     # so the headroom needed is ``max / ln(base)``. Capping the value alone leaves the
-    # forward finite and the reverse pass NaN — clip contributes a zero gradient
+    # forward finite and the reverse pass NaN: clip contributes a zero gradient
     # there, and 0 * inf is NaN. Measured on Cue at the cap: forward 3.4028e38
     # (finite), gradient NaN, while float64 gives a clean 0.0.
     #
@@ -242,7 +242,7 @@ def representable_exponent(value: float, *, base: float = 10.0) -> float:
     headroom = numpy.finfo(dtype).max / max(numpy.log(base), 1.0)
     # One ULP *of the working dtype* below the limit: base**that rounds up to inf in
     # the last bits, so the exact value is not usable. Stepping in float64 would not
-    # move it far enough to matter — float64's ULP at 38.5 is ~7e-15, float32's ~4e-6.
+    # move it far enough to matter: float64's ULP at 38.5 is ~7e-15, float32's ~4e-6.
     limit = numpy.log(headroom) / numpy.log(base)
     ceiling = numpy.nextafter(dtype.type(limit), dtype.type(0.0))
     return min(float(value), float(ceiling))
@@ -251,7 +251,7 @@ def representable_exponent(value: float, *, base: float = 10.0) -> float:
 def whiten(x, sigma):
     r""":math:`x / \sigma`, with the division made binding on the compiler.
 
-    The single seam through which every noise-weighting in tengri passes —
+    The single seam through which every noise-weighting in tengri passes:
     :math:`\chi^2` residuals, Gauss-Newton metrics, and the normal equations of
     the analytic emission-line marginalization.
 
@@ -272,13 +272,13 @@ def whiten(x, sigma):
     Measured: without the barrier the double division is finite eagerly and
     NaN under ``jit``, with a literal ``inf`` in the compiled HLO. The
     ``optimization_barrier`` makes the intended order a *data dependency*,
-    which the compiler must respect — a source-level grouping is only a
+    which the compiler must respect; a source-level grouping is only a
     suggestion.
 
     Parameters
     ----------
     x : array_like
-        Quantity to whiten — a residual, a Jacobian-vector product, or a
+        Quantity to whiten: a residual, a Jacobian-vector product, or a
         data-space vector.
     sigma : array_like
         1-σ uncertainty [same units as ``x``], broadcastable against ``x``.
@@ -292,7 +292,7 @@ def whiten(x, sigma):
     -----
     JIT/grad/vmap-safe, and it is only under JIT that the barrier does
     anything. ``optimization_barrier`` is semantically the identity, so values
-    and derivatives are unchanged — verified bit-exact in float64.
+    and derivatives are unchanged: verified bit-exact in float64.
 
     Lives here rather than beside the Gaussian likelihood so that
     ``observation/`` can use it without importing ``inference/`` (#1588).
@@ -322,7 +322,7 @@ def pow10(x):
 
 
 def log10_four_pi_dl2(dl_cm):
-    r"""``log10(4 pi d_L^2)`` [dex] — the luminosity-to-flux divisor, in log space.
+    r"""``log10(4 pi d_L^2)`` [dex]; the luminosity-to-flux divisor, in log space.
 
     Parameters
     ----------
@@ -340,7 +340,7 @@ def log10_four_pi_dl2(dl_cm):
 
     **The linear form has no safe distance.** :math:`4\pi d_L^2` is 1.1965e40 at
     the 10-pc :math:`z=0` convention and 8.12e58 at :math:`z=3`, against a float32
-    ceiling of 3.4028e38 — so it is ``inf`` at *every* distance, and a flux
+    ceiling of 3.4028e38; so it is ``inf`` at *every* distance, and a flux
     divided by it is ``nan``. Only the log form is representable, and only the
     *applied* result is meant to be: see :func:`apply_log10_scale`.
 
@@ -357,7 +357,7 @@ def log10_four_pi_dl2(dl_cm):
 
 
 def log10_flux_scale(redshift, dl_cm):
-    r"""``log10[(1+z) / (4 pi d_L^2)]`` [dex] — the cosmological dimming, in log space.
+    r"""``log10[(1+z) / (4 pi d_L^2)]`` [dex]; the cosmological dimming, in log space.
 
     The single spelling of a formula that was written longhand at twelve sites,
     seven correct and five not (#1859).
@@ -392,7 +392,7 @@ def log10_flux_scale(redshift, dl_cm):
     1.4692e-57 at :math:`z=0.5` and 8.3577e-41 even at 10 pc, both below float32's
     smallest normal (1.1755e-38), so a standalone ``flux_scale`` scalar is exactly
     ``0.0`` in float32 at every distance. Pass the log offset to
-    :func:`apply_log10_scale` — only the *net* product has to be representable,
+    :func:`apply_log10_scale`; only the *net* product has to be representable,
     and it always is (~1e-29 for an ordinary galaxy).
 
     A stored table of such scales has the same problem one step later: built
@@ -457,7 +457,7 @@ def log10_magnitude(value):
     **The two sentinels are not interchangeable, and that is the point.**
     ``-inf`` powers back through :func:`pow10` to exactly ``0.0``, so it is a
     *value*: "this quantity really is zero". ``+inf`` does not survive as a
-    number and is not meant to — it says "no answer exists here". Folding a
+    number and is not meant to; it says "no answer exists here". Folding a
     non-finite input into ``-inf`` reports a corrupt computation as a true zero,
     which is the failure mode that let one bad pixel silently switch off an
     entire dust IR budget or all nebular emission.
@@ -507,19 +507,19 @@ def apply_log10_scale(arr, log10_scale):
     is applied to an O(1) array; the peak's decades are folded into the exponent.
 
     The peak is held under ``stop_gradient`` (#1415). It is a pure factorization
-    constant — ``(arr/p) * 10**(s + log10 p)`` equals ``arr * 10**s`` for *any*
-    ``p`` — so its derivative contributions cancel analytically. Left free, they
+    constant; ``(arr/p) * 10**(s + log10 p)`` equals ``arr * 10**s`` for *any*
+    ``p``; so its derivative contributions cancel analytically. Left free, they
     are two separate autodiff paths (through the numerator, and through
     ``peak -> net -> pow10``) that must cancel numerically instead. They do in
     float64, but in float32 one side underflows while the other survives, the
     cancellation fails, and what is left is an uncancelled term the size of the
-    main one — gradients exactly **2x** too large. Measured on a photometry fit:
+    main one; gradients exactly **2x** too large. Measured on a photometry fit:
     ``d(neg_log_posterior)/d(sfh_delayed_log_total_mass)`` was ``-5915.16``
     against a true ``-2957.58``. Stopping the gradient leaves the single correct
     path, ``d out/d arr = 10**log10_scale``, and float32 then tracks float64 to
     ~1e-7.
 
-    Float64 **forward** values are untouched — ``stop_gradient`` is a no-op on the
+    Float64 **forward** values are untouched; ``stop_gradient`` is a no-op on the
     forward pass. Float64 **gradients** move by at most a few ulp: measured
     bit-identical where there is one scale seam (stellar, stellar+dust) and
     ``<= 1.5e-15`` relative where there are several (stellar+dust IR+AGN). That is
@@ -530,7 +530,7 @@ def apply_log10_scale(arr, log10_scale):
     mode does not** (#1415, open as #1388). The remaining defect is a property of
     autodiff *mode*, not of this function. With ``log10_scale`` ~ -58 (the
     cosmological dimming), reverse mode has to form ``d out/d arr = 10**(-58)``
-    explicitly — below float32's smallest subnormal (~1.4e-45) — so the cotangent
+    explicitly (below float32's smallest subnormal (~1.4e-45)) so the cotangent
     flushes to exactly zero, even when the gradient it was heading for (~1e-27) is
     perfectly representable. Forward mode carries the tangent instead, and because
     the tangent is divided by the same ``safe_peak`` as the primal it is O(1) when
@@ -540,7 +540,7 @@ def apply_log10_scale(arr, log10_scale):
     So: no local change here can fix reverse mode. The ratio follows from relating a
     ~1e30 quantity to a ~1e-28 one, which is what carrying the SED in scaled form
     (#1388) removes. In the meantime reverse mode is sound wherever the incoming
-    cotangent is large enough to absorb the scale — notably the likelihood, whose
+    cotangent is large enough to absorb the scale; notably the likelihood, whose
     ~1/sigma^2 keeps the product in range, which is why float32 inference works.
     """
     # initial=0.0 makes the peak of a zero-size array 0 (max over empty has no
@@ -551,7 +551,7 @@ def apply_log10_scale(arr, log10_scale):
     safe_peak = jnp.where(usable, peak, jnp.ones_like(peak))
     # With no peak to fold in, the exponent would collapse to the raw
     # ``log10_scale``. That is fine in float64, but a dust-luminosity scale
-    # (~43 dex) overflows float32, and ``0 * inf`` is NaN — so an all-zero
+    # (~43 dex) overflows float32, and ``0 * inf`` is NaN: so an all-zero
     # array would scale to NaN rather than to zero (#1206). Zeroing the
     # exponent keeps the identity ``0 * 10**s == 0`` at every scale, and costs
     # nothing when there is a peak.
@@ -565,7 +565,7 @@ def log10_add(log_a, log_b, *, sign_a=1.0, sign_b=1.0):
     A signed base-10 ``logaddexp``. Log-domain contracts (``log_nion``,
     ``log_L_ir``) are exact under multiplication but not under addition, so a
     seam that sums two such quantities would otherwise have to exponentiate
-    both — reintroducing the very out-of-range intermediate the log form
+    both: reintroducing the very out-of-range intermediate the log form
     exists to avoid.
 
     Parameters
@@ -599,13 +599,13 @@ def log10_add(log_a, log_b, *, sign_a=1.0, sign_b=1.0):
     summed = jnp.where(positive, offset + jnp.log10(safe), -jnp.inf)
     # ``finite`` is False for BOTH infinities, but they mean opposite things:
     # -inf is "no term here", +inf is an overflow upstream. Folding the latter
-    # into the -inf sentinel would report an overflowed term as exactly zero —
+    # into the -inf sentinel would report an overflowed term as exactly zero,
     # a fail-open on precisely the axis this module exists to close.
     #
     # This used to test ``isposinf(larger)`` alone, which caught +inf and missed
     # NaN entirely: ``maximum(43.0, nan)`` is NaN, ``isposinf(nan)`` is False,
     # and the result fell through to the -inf branch. A NaN term vanished as
-    # though it were zero — the same fail-open, in the function whose comment
+    # though it were zero: the same fail-open, in the function whose comment
     # argues against it (#1527). Signs are checked too: a NaN sign with a finite
     # magnitude poisons ``total`` and lands in the same place.
     corrupt = _not_computable(log_a, sign_a) | _not_computable(log_b, sign_b)
@@ -613,7 +613,7 @@ def log10_add(log_a, log_b, *, sign_a=1.0, sign_b=1.0):
 
 
 def log10_weighted_sum(log_values, weights, axis=-1):
-    r"""``log10(sum_i w_i * 10**log_i)`` — a weighted sum without leaving log space.
+    r"""``log10(sum_i w_i * 10**log_i)``: a weighted sum without leaving log space.
 
     :func:`log10_add` for an arbitrary number of terms, with weights. The seam an
     *interpolator* over a log-domain table needs: linear interpolation and any
@@ -652,7 +652,7 @@ def log10_weighted_sum(log_values, weights, axis=-1):
 
     **This is a re-spelling, not a re-model, and the distinction is the point.**
     Interpolating :math:`\log_{10} s` linearly is a *different function* from
-    interpolating :math:`s` linearly — it is the geometric rather than the
+    interpolating :math:`s` linearly; it is the geometric rather than the
     arithmetic mean at the midpoint. Migrating a stored table to log space with a
     naive ``lerp`` would therefore silently change float64 results. This
     reproduces the arithmetic weighted sum exactly (measured: rtol < 1e-12
@@ -678,8 +678,8 @@ def log10_weighted_sum(log_values, weights, axis=-1):
 # dtype's own ``exp`` overflow (~87.7 in float32) for the two Planck-family
 # closures that spelled the occupation number ``1/expm1(x)``. Both now spell it
 # ``exp(-x) / -expm1(-x)``, whose denominator lies in (0, 1] and cannot
-# overflow at any x in any dtype, so the cap became inert — measured identical
+# overflow at any x in any dtype, so the cap became inert: measured identical
 # values and gradients with and without it at x = 40, 60, 87, 90, 150, 400 in
 # both dtypes. Removed rather than left as a no-op with a justification that no
 # longer held (#1439). Restore it only alongside a caller that needs the raw
-# ``expm1(x)`` form — and note the derivative needs ``sqrt`` of the limit.
+# ``expm1(x)`` form: and note the derivative needs ``sqrt`` of the limit.

@@ -5,7 +5,7 @@ The composable AGN runner sums disc + lines + FeII + torus. Physically the
 dusty torus also *obscures* the central engine (disc + broad/narrow lines) along
 edge-on (Type-2) sightlines, while its own IR emission is not re-extinguished by
 that same screen. This module supplies the screen so the runner can apply it to
-the central-engine components only — closing the "disc + torus composed
+the central-engine components only: closing the "disc + torus composed
 additively, no torus screen on disc" gap (#294).
 
 Geometry (Stalevski+2016 / CIGALE ``skirtor2016`` convention): the torus has a
@@ -41,7 +41,7 @@ TORUS_SCREEN_PARAMS: dict[str, tuple[str, str]] = {
 
 # Smoothing width in cos(i) units for the Type-1/2 edge. Kept small so a
 # clearly face-on sightline (cos_inc well above sin(oa)) has transmission ~1 to
-# <1e-3 even at large tau_v — i.e. default-inclination models are unchanged —
+# <1e-3 even at large tau_v (i.e. default-inclination models are unchanged),
 # while the screen still has a finite, differentiable slope across the edge.
 _TRANSITION_WIDTH = 0.025
 
@@ -78,9 +78,9 @@ def torus_screen_transmission(
 
     Notes
     -----
-    **JIT-compatible**: yes — pure ``jnp`` primitives.
+    **JIT-compatible**: yes, pure ``jnp`` primitives.
 
-    **Gradient-safe**: yes — the Type-1/Type-2 edge is a sigmoid in ``cos_inc``,
+    **Gradient-safe**: yes, the Type-1/Type-2 edge is a sigmoid in ``cos_inc``,
     so the screen is differentiable everywhere (no hard ``where`` step).
 
     The screen multiplies only the central-engine components (disc + lines +

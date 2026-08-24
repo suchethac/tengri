@@ -16,7 +16,7 @@ three analytic dust-emission models:
 
 Each model is preintegrated through filter curves at model-initialization time.
 Auto-collapses axes whose corresponding parameters are ``Fixed`` in the user's
-``Parameters`` — e.g., a user who pins ``dust_T`` gets a 1D grid.
+``Parameters``: e.g., a user who pins ``dust_T`` gets a 1D grid.
 
 References
 ----------
@@ -329,7 +329,7 @@ def precompute(
 
     Notes
     -----
-    **JIT-compatible**: no — this is a build-time function using NumPy.
+    **JIT-compatible**: no, this is a build-time function using NumPy.
     """
     if model == "modified_blackbody":
         if T_grid is None:
@@ -433,10 +433,10 @@ def build_lookup(
 
     Notes
     -----
-    **JIT-compatible**: yes — the returned function uses ``jnp`` and triweight
+    **JIT-compatible**: yes, the returned function uses ``jnp`` and triweight
     interpolation.
 
-    **Gradient-safe**: yes — triweight kernel is fully differentiable.
+    **Gradient-safe**: yes, triweight kernel is fully differentiable.
     """
     if not preint.get("_collapsed_axes"):
         # No axes collapsed: use template helper directly

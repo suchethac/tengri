@@ -1,8 +1,8 @@
 # SPDX-License-Identifier: BSD-3-Clause
 """Loss and log-likelihood builders consumed by the Fitter inference engines.
 
-Three public builders — :func:`build_loss_fn`, :func:`build_loglikelihood_fn`,
-and :func:`build_loglikelihood_unbounded_fn` — are thin wrappers over a
+Three public builders, :func:`build_loss_fn`, :func:`build_loglikelihood_fn`,
+and :func:`build_loglikelihood_unbounded_fn`, are thin wrappers over a
 single private core, :func:`_build_data_neg_log_likelihood_fn`. The core
 routes through ``fitter._user_likelihood`` (the likelihood-adapter cohort
 auto-built by :meth:`Fitter._maybe_build_default_likelihood`) and falls
@@ -62,7 +62,7 @@ def standardized_neg_log_prior(
         :func:`~tengri.components.stellar.sfh.gp_sfh.drw_latent_log_prior`.
     psd_sigma_dex : array_like, optional
         Physical modulation amplitude :math:`\sigma` [dex]. Required when
-        ``centering < 1`` — the latent prior depends on it, which is precisely
+        ``centering < 1``, the latent prior depends on it, which is precisely
         what partial centering trades away. Ignored at ``a = 1``.
 
     Returns
@@ -81,7 +81,7 @@ def standardized_neg_log_prior(
     term the "penalty" keeps that shape, and an objective that is a vector either
     broadcasts into nonsense or fails somewhere unrelated to the cause.
     ``InferenceContext.log_prior_fn`` restated this rule without the reduction and
-    returned shape ``(n_gal,)`` against a docstring promising a scalar — harmless
+    returned shape ``(n_gal,)`` against a docstring promising a scalar, harmless
     only because nothing in ``src/`` called it. This is also the single seam a
     change of field parameterization has to touch (#1355).
     """
@@ -93,7 +93,7 @@ def standardized_neg_log_prior(
             # The prior travels with the map (#1355). At a < 1 the latent is no
             # longer standardized: its variance is sigma_s^(2-2a), and the
             # -n(1-a) log sigma_s normalizer couples it to a SAMPLED parameter,
-            # so omitting it does not shift the posterior by a constant — it
+            # so omitting it does not shift the posterior by a constant, it
             # changes the sigma marginal, silently, at every a.
             if psd_sigma_dex is None:
                 raise ValueError(
@@ -160,7 +160,7 @@ def _build_prediction(
     Returns ``(prediction_dict, predicted, pred_phot, pred_spec)``:
 
     - ``prediction_dict``: keys ``phot_fnu`` / ``spec_fnu`` / optional
-      ``line_fluxes`` / ``indices`` — fed to user / auto-built Likelihood adapters.
+      ``line_fluxes`` / ``indices``, fed to user / auto-built Likelihood adapters.
     - ``predicted``: concatenated array (legacy χ² fall-through still uses this).
     - ``pred_phot`` / ``pred_spec``: split components or ``None``.
 
@@ -170,14 +170,14 @@ def _build_prediction(
     supplied, the photometry / spectroscopy / joint channels route through the
     threaded orchestrator and the feature channels thread ``predict_state``. This
     keeps the SSP grid and template arrays as XLA ``Parameter`` ops in the outer
-    inference trace instead of closure-captured ``Constant`` ops — see
+    inference trace instead of closure-captured ``Constant`` ops, see
     :func:`_build_data_neg_log_likelihood_fn`. ``use_components`` keeps its own
     component-split path (not threaded here).
     """
     # Single threaded forward for phot/spec/joint: one orchestrator call
     # returns an Observables carrying every configured channel. ``_obs`` is
     # None when threading is unavailable (dummy models, ``use_components``) or
-    # when ``jit_inputs`` was not built — then we fall back to the eager
+    # when ``jit_inputs`` was not built, then we fall back to the eager
     # ``model.predict_*`` accessors (which closure-capture the SSP grid, so
     # this path bakes it; acceptable for the non-inference / dummy-model uses).
     _obs = None
@@ -226,7 +226,7 @@ def _build_prediction(
 
     # Line fluxes, line ratios, and spectral indices all derive from the SAME
     # orchestrator forward, so ``predict_state`` is computed ONCE when a feature
-    # channel needs it and threaded into each predictor — a joint fit with lines +
+    # channel needs it and threaded into each predictor, a joint fit with lines +
     # ratios + indices runs the full-grid forward once per loss eval, not three
     # times.
     #
@@ -234,7 +234,7 @@ def _build_prediction(
     # the emission-line precompute (``approx=FeaturePrecomp()``) exists to skip:
     # the window LUT reconstructs the lines from SED-free SFH weights. Calling
     # predict_state anyway would leave the LUT wrapped around the cost it was
-    # meant to avoid — a fast path that is a no-op. So when lines are the only
+    # meant to avoid, a fast path that is a no-op. So when lines are the only
     # feature channel and the model carries the precompute, the full-grid forward
     # is not built at all.
     # NB: reading ``model.approx.feature_precomp`` here instead looks like the
@@ -297,7 +297,7 @@ def _build_data_neg_log_likelihood_fn(fitter):
     cohort built by :meth:`Fitter._maybe_build_default_likelihood`). The
     only configuration that still falls through to the inline χ² is
     ``data_mask + non-photometry`` (censoring across the concatenated
-    data array — not yet expressible as a single-channel adapter); any
+    data array, not yet expressible as a single-channel adapter); any
     other configuration that reaches the fall-through hits an explicit
     ``AssertionError`` so missing auto-build coverage is loud, not
     silent.
@@ -325,7 +325,7 @@ def _build_data_neg_log_likelihood_fn(fitter):
         if obs_for_idx is not None and obs_for_idx.spectral_indices is not None:
             index_defs = obs_for_idx.spectral_indices.index_defs
     # Line-flux channel: backends with no discrete catalog (BakedIn) can't run
-    # predict_line_fluxes — measure the fluxes off the spectrum instead. Build the
+    # predict_line_fluxes, measure the fluxes off the spectrum instead. Build the
     # continuum windows ONCE from the observation's concrete line centers (never
     # from traced data_args) so the jitted loss sees a static LineDef set.
     measured_line_defs = None
@@ -358,9 +358,9 @@ def _build_data_neg_log_likelihood_fn(fitter):
     # outer-level Parameters. Without threading, the outer JIT inlines
     # ``model.predict_photometry`` / ``predict_spectrum`` / ``predict_state`` →
     # ``predict_observables_jit`` and bakes the SSP grid (15×93×5994 floats) into
-    # the HLO as a constant — ballooning cold compile to ~40 s. Threaded path:
+    # the HLO as a constant, ballooning cold compile to ~40 s. Threaded path:
     # cold ≈ 3-5 s. Originally photometry-only; now covers spectroscopy, joint,
-    # and the feature channels too (the SSP bake was identical on those paths —
+    # and the feature channels too (the SSP bake was identical on those paths,
     # the fast path just never reached them). ``_build_prediction`` reads the
     # threaded arrays out of ``data_args["_jit_inputs"]`` at call time.
     _threaded_impl = (
@@ -371,7 +371,7 @@ def _build_data_neg_log_likelihood_fn(fitter):
 
     # Eager channel-scale pre-check (#1495): evaluate every likelihood channel
     # once, at a reference parameter draw, against the SAME prediction dict the
-    # traced loss builds below — and refuse to hand back a loss whose channels
+    # traced loss builds below, and refuse to hand back a loss whose channels
     # cannot coexist on a representable scale. A units-mismatched channel
     # produces a chi-squared that silently annihilates every other channel via
     # floating-point absorption; this converts that into a loud construction
@@ -427,7 +427,7 @@ def _build_data_neg_log_likelihood_fn(fitter):
         # Auto-built / user-supplied Likelihood adapter handles the data
         # term (and any extras composed via CompositeLikelihood).
         # ``data_args`` is forwarded so adapters read the CURRENT
-        # Fitter's data — the compiled loss is shared across Fitters
+        # Fitter's data, the compiled loss is shared across Fitters
         # (get_or_build_cached), and adapter-baked arrays would XLA-bake
         # the first galaxy's data into every subsequent fit.
         if user_likelihood is not None:
@@ -441,7 +441,7 @@ def _build_data_neg_log_likelihood_fn(fitter):
         # adapter). All other configurations are covered by auto-build
         # in Fitter._maybe_build_default_likelihood. If you find yourself
         # hitting the AssertionError below, the auto-build cohort is
-        # missing coverage for your case — extend it there, don't add a
+        # missing coverage for your case, extend it there, don't add a
         # branch here.
         if use_censored:
             mask = data_args["data_mask"]
@@ -528,8 +528,8 @@ def build_loss_fn(fitter):
 
         Parameters:
 
-        - ``params_unbounded`` : dict — Standardized parameters ξ (any real values).
-        - ``data_args`` : dict — Observed data, noise, and noise models
+        - ``params_unbounded`` : dict, Standardized parameters ξ (any real values).
+        - ``data_args`` : dict, Observed data, noise, and noise models
           from ``fitter._data_args``.
 
         Returns scalar loss value suitable for optimization/sampling.
@@ -547,11 +547,11 @@ def build_loss_fn(fitter):
     by :func:`_build_data_neg_log_likelihood_fn`, which routes through the
     auto-built :class:`Likelihood` adapter cohort (see
     :meth:`Fitter._maybe_build_default_likelihood`). Each physically
-    distinct configuration — diagonal Gaussian, Student-t / variable
+    distinct configuration, diagonal Gaussian, Student-t / variable
     noise, censored photometry, multivariate Gaussian, calibration
     marginalization, emission-line marginalization (flat or Cloudy
     prior), explicitly-fitted line amplitudes, and the combined
-    calibration + e-line marginalization — is handled by a dedicated
+    calibration + e-line marginalization, is handled by a dedicated
     adapter, not by branches in this builder.
 
     **Data as explicit arguments**: Observed data, noise, and noise models are
@@ -600,7 +600,7 @@ def build_loss_fn(fitter):
         # cancels the prior density and leaves the isotropic quadratic
         # term. Exact for Uniform, Gaussian, LogUniform, LogNormal,
         # StudentT priors.  Reference: tengri paper §2.2 + Appendix A.
-        # The per-galaxy reduction lives in the helper — see its Notes for why a
+        # The per-galaxy reduction lives in the helper, see its Notes for why a
         # rank-0 result is load-bearing rather than cosmetic.
         return e_lh + standardized_neg_log_prior(
             params_unbounded,
@@ -740,7 +740,7 @@ def build_loglikelihood_fn(fitter):
     neg_log_lik = _build_data_neg_log_likelihood_fn(fitter)
 
     def loglikelihood_fn(free_params, data_args):
-        """Compute log p(d | params) — physical params, no prior."""
+        """Compute log p(d | params), physical params, no prior."""
         params = dict(free_params)
         for name, val in fixed_values.items():
             params[name] = val

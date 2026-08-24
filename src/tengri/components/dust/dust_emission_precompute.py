@@ -11,7 +11,7 @@ The module exposes:
 - ``AXIS_PARAMS[model_name]``: ordered parameter names corresponding to grid
   axes, per dust-emission model.
 - ``precompute(filter_waves, filter_trans, redshift, parameters, *, model_name)``
-  — builds the preintegrated grid, auto-collapsing axes whose parameter is
+  builds the preintegrated grid, auto-collapsing axes whose parameter is
   :class:`~tengri.parameters.priors.Fixed`.
 - ``build_lookup(preint, *, model_name)``: JIT-compiled ``(scale, *free) →
   phot`` runtime callable, with free-parameter count matching the collapsed axes.
@@ -43,7 +43,7 @@ from tengri.utils.interpolation import edges_for_grid
 from tengri.utils.physics_constants import AA_TO_CM as _AA_TO_CM, C_CGS as _C_CGS
 
 # Parameter names corresponding to grid axes, per dust-emission model. Order
-# matters — axis i of the preintegrated grid maps to AXIS_PARAMS[model][i].
+# matters: axis i of the preintegrated grid maps to AXIS_PARAMS[model][i].
 AXIS_PARAMS: dict[str, tuple[str, ...]] = {
     "draine_li2007": ("dust_qpah", "dust_umin"),
     "dl07": ("dust_qpah", "dust_umin"),  # alias
@@ -60,11 +60,11 @@ AXIS_PARAMS: dict[str, tuple[str, ...]] = {
 # four models marked ``False`` already enforce ∫L_ν dν=1 in their loaders
 # (see ``components/dust/emission_templates.py``: load_dale2014_templates ~L612,
 # load_astrodust_templates ~L847, load_bosa_templates ~L1202,
-# load_themis_templates ~L1442) — re-normalizing in precompute is an
+# load_themis_templates ~L1442): re-normalizing in precompute is an
 # unnecessary round-trip. DL14 has no load-time normalization and relies on
 # the precompute-time divide.
 _GENERIC_ENERGY_NORMALIZE: dict[str, bool] = {
-    # ``load_dale2014_templates`` returns raw L_λ — the runtime path
+    # ``load_dale2014_templates`` returns raw L_λ: the runtime path
     # ``create_dale2014_from_grid`` normalizes per-template at factory
     # time. The hybrid path normalizes in ``preintegrate_grid`` instead.
     "dale2014": True,
@@ -108,20 +108,20 @@ def precompute_dl07_photometry(
     Returns
     -------
     dict with keys:
-        ``"single_u_phot"`` — ndarray, shape (n_qpah, n_umin, n_filters),
+        ``"single_u_phot"``: ndarray, shape (n_qpah, n_umin, n_filters),
             photometry of single-U component [erg/s/Hz or L_sun/Hz].
-        ``"powerlaw_phot"`` — ndarray, shape (n_qpah, n_umin, n_filters),
+        ``"powerlaw_phot"``: ndarray, shape (n_qpah, n_umin, n_filters),
             photometry of power-law component [erg/s/Hz or L_sun/Hz].
-        ``"umin_grid"`` — ndarray, shape (n_umin,), minimum radiation field
+        ``"umin_grid"``: ndarray, shape (n_umin,), minimum radiation field
             intensity grid [dimensionless].
-        ``"qpah_grid"`` — ndarray, shape (n_qpah,), PAH fraction grid
+        ``"qpah_grid"``: ndarray, shape (n_qpah,), PAH fraction grid
             [dimensionless].
 
     Notes
     -----
-    **JIT-compatible**: no — precomputation happens at factory time.
+    **JIT-compatible**: no, precomputation happens at factory time.
 
-    **Gradient-safe**: no — precomputation is a offline preparation step.
+    **Gradient-safe**: no, precomputation is a offline preparation step.
     """
     single_u = templates["single_u"]  # (n_qpah, n_umin, n_wave)
     powerlaw = templates["powerlaw"]  # (n_qpah, n_umin, n_wave)
@@ -232,9 +232,9 @@ def build_dl07_photometry_lookup(precomp: dict, grid_arrays: tuple | None = None
 
         Notes
         -----
-        **JIT-compatible**: yes — returned from jax.jit decorator.
+        **JIT-compatible**: yes, returned from jax.jit decorator.
 
-        **Gradient-safe**: yes — triweight interpolation is C²-continuous.
+        **Gradient-safe**: yes, triweight interpolation is C²-continuous.
 
         Performs 2D triweight interpolation in (qpah, umin) space on the
         precomputed grid, then mixes single-U and power-law components
@@ -272,7 +272,7 @@ def build_dl07_photometry_lookup(precomp: dict, grid_arrays: tuple | None = None
 # pre-normalized to ``∫L_ν dν = 1`` per template at load time. The runtime
 # exact path mixes the two via ``j_ν = (1-γ)·single_u + γ·powerlaw`` then
 # scales by ``L_absorbed`` (CMB contrast applied at the wavelength level is
-# omitted from the hybrid path — same approximation as DL07).
+# omitted from the hybrid path: same approximation as DL07).
 
 
 def _node_bolometric(template_lnu: np.ndarray, tmpl_wave_aa: np.ndarray) -> np.ndarray:
@@ -309,7 +309,7 @@ def _precompute_dl07_like_photometry(
     ∫powerlaw/∫single_u ratio in the template itself (``W = 1``); Astrodust /
     DL14 use the analytic DL07 Eq. 33 ``R`` (passed via ``powerlaw_weight``).
 
-    ``energy_normalize`` is intentionally **off** — normalizing each template to
+    ``energy_normalize`` is intentionally **off**: normalizing each template to
     unit integral would discard the relative single_u↔powerlaw luminosity that
     the energy balance depends on (the #571/#572/#574 PDR-weight family).
 
@@ -335,7 +335,7 @@ def _precompute_dl07_like_photometry(
     # Mirror the exact THEMIS closure (create_themis_from_grid): the shipped
     # THEMIS grid stores qhac in FSPS scaling (CIGALE x 100/2.2). Relabel an
     # FSPS-scaled qhac axis to the user-facing CIGALE convention so this hybrid
-    # path interpolates in the same units as the exact path — otherwise the two
+    # path interpolates in the same units as the exact path: otherwise the two
     # disagree and the qhac default clips to the grid minimum here. Guarded on
     # the axis max so CIGALE-unit and Astrodust qpah grids are untouched.
     if q_key == "qhac_grid" and float(np.max(q_grid)) > 0.5:
@@ -518,7 +518,7 @@ def precompute_draine2021_pah_photometry(
 
     Notes
     -----
-    **JIT-compatible**: no — file I/O and template slicing happen at
+    **JIT-compatible**: no, file I/O and template slicing happen at
     factory time.
     """
     from tengri.components.dust.emission_templates import Draine2021PAHTemplates
@@ -753,7 +753,7 @@ def build_dl14_photometry_lookup(precomp: dict, grid_arrays: tuple | None = None
         grid_arrays_traced=None,
     ):
         # Use traced arrays if provided, else fall back to closure. Only the
-        # phot grids and the parameter axes are needed — the linear interp below
+        # phot grids and the parameter axes are needed: the linear interp below
         # works directly off the grids, so no triweight bin-edges are built.
         if grid_arrays_traced is not None:
             single_u_phot, powerlaw_phot, qpah_grid, umin_grid, alpha_grid = grid_arrays_traced
@@ -764,7 +764,7 @@ def build_dl14_photometry_lookup(precomp: dict, grid_arrays: tuple | None = None
             umin_grid = umin_grid_closure
             alpha_grid = alpha_grid_closure
 
-        # Linear (bi/trilinear) interpolation over the parameter grid — the same
+        # Linear (bi/trilinear) interpolation over the parameter grid: the same
         # scheme the exact runtime path uses, so the precomputed filter
         # photometry matches it exactly (linear interpolation commutes with the
         # filter integral). interp_nd_triweight (the smooth-gradient kernel used
@@ -895,7 +895,7 @@ def build_bosa_photometry_lookup(precomp: dict, grid_arrays: tuple | None = None
     return phot_fn
 
 
-# ── Dale 2014: single-grid (alpha) — linear interpolation matching exact ─
+# ── Dale 2014: single-grid (alpha), linear interpolation matching exact ─
 
 
 def precompute_dale2014_photometry(
@@ -990,15 +990,15 @@ def _auto_collapse(preint: PreintegratedGrid, axis_params, parameters) -> Preint
 
     Notes
     -----
-    **JIT-compatible**: no — helper for factory-time preprocessing.
+    **JIT-compatible**: no, helper for factory-time preprocessing.
 
-    **Gradient-safe**: no — operates on factory-time data structures.
+    **Gradient-safe**: no, operates on factory-time data structures.
     """
     if parameters is None or not axis_params:
         return preint
 
     # Parameters' fixed-prior introspection API varies across the in-flight
-    # parameter-routing refactor — prefer the canonical ``is_fixed/fixed_value``
+    # parameter-routing refactor: prefer the canonical ``is_fixed/fixed_value``
     # pair but degrade gracefully if a different shape is in scope.
     if not hasattr(parameters, "is_fixed") or not hasattr(parameters, "fixed_value"):
         return preint
@@ -1064,9 +1064,9 @@ def precompute(
 
     Notes
     -----
-    **JIT-compatible**: no — precomputation happens at factory time.
+    **JIT-compatible**: no, precomputation happens at factory time.
 
-    **Gradient-safe**: no — precomputation is an offline preparation step.
+    **Gradient-safe**: no, precomputation is an offline preparation step.
     """
     if model_name in ("draine_li2007", "dl07"):
         if templates is None:
@@ -1133,7 +1133,7 @@ def build_lookup(preint, *, model_name: str):
     return build_template_photometry_lookup(preint)
 
 
-# ── Turnkey loader + preintegrator — used by SEDModel.__init__ ────
+# ── Turnkey loader + preintegrator: used by SEDModel.__init__ ────
 
 
 def precompute_for_model(
@@ -1148,7 +1148,7 @@ def precompute_for_model(
     Encapsulates template loading + file discovery + preintegration (+
     auto-collapse on Fixed) into a single call so :class:`SEDModel` does not
     need a per-model switch. Returns ``None`` when required template data
-    is not on disk — callers fall back to full-wavelength evaluation.
+    is not on disk: callers fall back to full-wavelength evaluation.
 
     Parameters
     ----------
@@ -1174,9 +1174,9 @@ def precompute_for_model(
 
     Notes
     -----
-    **JIT-compatible**: no — template loading and precomputation happen at factory time.
+    **JIT-compatible**: no, template loading and precomputation happen at factory time.
 
-    **Gradient-safe**: no — returns precomputed factory-time data structures.
+    **Gradient-safe**: no, returns precomputed factory-time data structures.
     """
     # Analytic models have no preintegration
     if model_name in (None, "modified_blackbody", "casey2012"):
@@ -1199,7 +1199,7 @@ def precompute_for_model(
         templates = load_draine_li_templates(path)
         return precompute_dl07_photometry(templates, filter_waves, filter_trans, redshift=redshift)
 
-    # Bespoke (DL07-shaped) models — Astrodust/THEMIS/DL14/BOSA — each has a
+    # Bespoke (DL07-shaped) models (Astrodust/THEMIS/DL14/BOSA) each has a
     # dedicated precompute path. They use their own loader (not the generic
     # ``precompute_template_photometry`` route, which assumes a single-grid
     # ``{grid, axes, wavelength}`` schema that none of these loaders return).

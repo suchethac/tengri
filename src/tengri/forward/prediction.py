@@ -9,22 +9,22 @@ are cached so related quantities share the expensive computation.
 Two usage modes
 ---------------
 
-**Mode 1 — Single-galaxy exploration (lazy):**
+**Mode 1, Single-galaxy exploration (lazy):**
 
 .. code-block:: python
 
     pred = model.predict(params)
 
-    # SFH quantities — triggers only SFH computation (~100 μs)
+    # SFH quantities, triggers only SFH computation (~100 μs)
     pred.sfh.stellar_mass
     pred.sfh.mass_weighted_age_gyr
 
-    # SED quantities — triggers full SED computation (~300 μs)
+    # SED quantities, triggers full SED computation (~300 μs)
     pred.sed.l_bol
     pred.sed.uv_slope_beta
     pred.sed.dn4000
 
-    # Emission lines — triggers nebular computation (~200 μs)
+    # Emission lines, triggers nebular computation (~200 μs)
     pred.lines.halpha
     pred.lines.bpt_nii
 
@@ -32,7 +32,7 @@ Two usage modes
     pred.radio.l_1p4ghz
     pred.xray.l_x_xrb
 
-**Mode 2 — Population / batch computation (JIT + vmap):**
+**Mode 2, Population / batch computation (JIT + vmap):**
 
 For computing derived quantities over many parameter sets (posterior
 chains, mock catalogs), use the JIT-compatible group methods instead:
@@ -44,12 +44,12 @@ chains, mock catalogs), use the JIT-compatible group methods instead:
     # Batch of 10,000 parameter sets
     params_batch = spec.sample_batch(jax.random.PRNGKey(0), n=10_000)
 
-    # vmap over SFH quantities — returns SFHQuantities with shape (10000,)
+    # vmap over SFH quantities, returns SFHQuantities with shape (10000,)
     sfh_fn = jax.vmap(model.predict_sfh_quantities)
     sfh_batch = sfh_fn(params_batch)
     sfh_batch.stellar_mass  # shape (10000,)
 
-    # vmap over SED quantities — returns SEDQuantities
+    # vmap over SED quantities, returns SEDQuantities
     sed_fn = jax.vmap(model.predict_sed_quantities)
     sed_batch = sed_fn(params_batch)
     sed_batch.m_uv  # shape (10000,)
@@ -87,7 +87,7 @@ from tengri._mapping import ReadOnlyPropertyMapping
 class _SEDCallable:
     """A callable SED accessor that refuses to be mistaken for an array.
 
-    ``pred.rest_sed`` / ``pred.obs_sed`` are *methods* — ``pred.rest_sed()``
+    ``pred.rest_sed`` / ``pred.obs_sed`` are *methods*, ``pred.rest_sed()``
     gives the model's own grid, ``pred.rest_sed(wave)`` resamples onto yours
     (contract §4b.3: uniform callables with defaults, like ``photometry()``
     and ``spectrum()``).
@@ -97,7 +97,7 @@ class _SEDCallable:
     bound method yields a ``dtype=object`` array, which plots and arithmetics
     happily turn into garbage rather than an exception. Every numeric dunder
     below therefore raises with the fix spelled out. Failing loudly on a
-    misuse is the whole point — this package has shipped enough silent
+    misuse is the whole point, this package has shipped enough silent
     NaN-and-carry-on bugs already.
     """
 
@@ -112,7 +112,7 @@ class _SEDCallable:
 
     def _not_an_array(self, *_args, **_kwargs):
         raise TypeError(
-            f"Prediction.{self._name} is a method, not an array — you left off the "
+            f"Prediction.{self._name} is a method, not an array, you left off the "
             f"parentheses. Use pred.{self._name}() for the model's own grid, or "
             f"pred.{self._name}(wave) to resample onto your own grid [Angstrom]. "
             f"The matching wavelength axis is pred."
@@ -130,7 +130,7 @@ class _SEDCallable:
     __truediv__ = __rtruediv__ = _not_an_array
 
     def __repr__(self):
-        return f"<Prediction.{self._name}(wave=None) — a method; call it to get the array>"
+        return f"<Prediction.{self._name}(wave=None), a method; call it to get the array>"
 
 
 # ── Module-level warn-once guard ──────────────────────────────────
@@ -302,7 +302,7 @@ class SEDQuantities(NamedTuple):
 
 
 class EmissionLines(NamedTuple):
-    """Emission line luminosities — headline survey lines plus the full backend catalog.
+    """Emission line luminosities, headline survey lines plus the full backend catalog.
 
     NaN for the headline fields and empty arrays for ``all_*`` when no
     nebular model is active. For doublets ([O II], C IV) the headline
@@ -528,7 +528,7 @@ class SFHProperties(_CachedBase):
 
         Notes
         -----
-        **JIT-compatible**: no — Python property accessor. Use in postprocessing,
+        **JIT-compatible**: no, Python property accessor. Use in postprocessing,
         not inside :func:`jax.jit`.
         """
         return self._pred.properties["stellar_mass"]
@@ -547,7 +547,7 @@ class SFHProperties(_CachedBase):
 
         Notes
         -----
-        **JIT-compatible**: no — Python property accessor. Use in postprocessing,
+        **JIT-compatible**: no, Python property accessor. Use in postprocessing,
         not inside :func:`jax.jit`.
         """
         return self._pred.properties["stellar_mass_surviving"]
@@ -563,7 +563,7 @@ class SFHProperties(_CachedBase):
 
         Notes
         -----
-        **JIT-compatible**: no — Python property accessor. Use in postprocessing,
+        **JIT-compatible**: no, Python property accessor. Use in postprocessing,
         not inside :func:`jax.jit`.
         """
         return self._pred.properties["sfr_100myr"]
@@ -579,7 +579,7 @@ class SFHProperties(_CachedBase):
 
         Notes
         -----
-        **JIT-compatible**: no — Python property accessor. Use in postprocessing,
+        **JIT-compatible**: no, Python property accessor. Use in postprocessing,
         not inside :func:`jax.jit`.
         """
         return self._pred.properties["sfr_10myr"]
@@ -597,7 +597,7 @@ class SFHProperties(_CachedBase):
 
         Notes
         -----
-        **JIT-compatible**: no — Python property accessor. Use in postprocessing,
+        **JIT-compatible**: no, Python property accessor. Use in postprocessing,
         not inside :func:`jax.jit`.
         """
         return self._pred.properties["ssfr"]
@@ -613,7 +613,7 @@ class SFHProperties(_CachedBase):
 
         Notes
         -----
-        **JIT-compatible**: no — Python property accessor. Use in postprocessing,
+        **JIT-compatible**: no, Python property accessor. Use in postprocessing,
         not inside :func:`jax.jit`.
         """
         return self._pred.properties["mass_weighted_age_gyr"]
@@ -632,7 +632,7 @@ class SFHProperties(_CachedBase):
 
         Notes
         -----
-        **JIT-compatible**: no — Python property accessor. Use in postprocessing,
+        **JIT-compatible**: no, Python property accessor. Use in postprocessing,
         not inside :func:`jax.jit`.
         """
         return self._pred.properties["mass_weighted_metallicity"]
@@ -650,7 +650,7 @@ class SFHProperties(_CachedBase):
 
         Notes
         -----
-        **JIT-compatible**: no — Python property accessor. Use in postprocessing,
+        **JIT-compatible**: no, Python property accessor. Use in postprocessing,
         not inside :func:`jax.jit`.
         """
         return self._pred.properties["luminosity_weighted_age_gyr"]
@@ -668,7 +668,7 @@ class SFHProperties(_CachedBase):
 
         Notes
         -----
-        **JIT-compatible**: no — Python property accessor. Use in postprocessing,
+        **JIT-compatible**: no, Python property accessor. Use in postprocessing,
         not inside :func:`jax.jit`.
         """
         return self._pred.properties["luminosity_weighted_metallicity"]
@@ -736,7 +736,7 @@ class SEDProperties(_CachedBase):
         """Rest-frame wavelength grid of the cached ForwardState.
 
         The pipeline evaluates on its own grid (auto-extended for dust
-        emission, trimmed to the modeling range) — NOT the raw
+        emission, trimmed to the modeling range), NOT the raw
         ``ssp_data.ssp_wave``. Every cached SED array shares the state's
         axis, so quantities integrating sed × wave must use it too.
         """
@@ -749,7 +749,7 @@ class SEDProperties(_CachedBase):
 
         The single-prediction counterpart of
         :meth:`Posterior.sed_components
-        <tengri.inference.posterior.Posterior.sed_components>` — both
+        <tengri.inference.posterior.Posterior.sed_components>`, both
         read the per-component arrays every adapter publishes into
         ``state.derived`` (ADR-0009) via
         :func:`tengri.forward.state_to_sed_components`. Reuses the
@@ -763,7 +763,7 @@ class SEDProperties(_CachedBase):
             ``sed_total``, ``sed_intrinsic`` (stellar pre-dust),
             ``sed_attenuated`` (stellar post-dust), ``sed_nebular``,
             ``sed_shock``, ``sed_dust_ir``, ``sed_agn``, ``sed_radio``,
-            ``sed_xray`` — zeros for components not in the chain.
+            ``sed_xray``, zeros for components not in the chain.
 
         Examples
         --------
@@ -793,7 +793,7 @@ class SEDProperties(_CachedBase):
 
         Notes
         -----
-        **JIT-compatible**: no — Python property accessor. Use in postprocessing,
+        **JIT-compatible**: no, Python property accessor. Use in postprocessing,
         not inside :func:`jax.jit`.
         """
         return self._pred.properties["l_bol"]
@@ -809,7 +809,7 @@ class SEDProperties(_CachedBase):
 
         Notes
         -----
-        **JIT-compatible**: no — Python property accessor. Use in postprocessing,
+        **JIT-compatible**: no, Python property accessor. Use in postprocessing,
         not inside :func:`jax.jit`.
         """
         return self._pred.properties["l_tir"]
@@ -827,7 +827,7 @@ class SEDProperties(_CachedBase):
 
         Notes
         -----
-        **JIT-compatible**: no — Python property accessor. Use in postprocessing,
+        **JIT-compatible**: no, Python property accessor. Use in postprocessing,
         not inside :func:`jax.jit`.
         """
         return self._pred.properties["l_dust_absorbed"]
@@ -843,7 +843,7 @@ class SEDProperties(_CachedBase):
 
         Notes
         -----
-        **JIT-compatible**: no — Python property accessor. Use in postprocessing,
+        **JIT-compatible**: no, Python property accessor. Use in postprocessing,
         not inside :func:`jax.jit`.
         """
         return self._pred.properties["irx"]
@@ -859,7 +859,7 @@ class SEDProperties(_CachedBase):
 
         Notes
         -----
-        **JIT-compatible**: no — Python property accessor. Use in postprocessing,
+        **JIT-compatible**: no, Python property accessor. Use in postprocessing,
         not inside :func:`jax.jit`.
         """
         return self._pred.properties["uv_slope_beta"]
@@ -875,7 +875,7 @@ class SEDProperties(_CachedBase):
 
         Notes
         -----
-        **JIT-compatible**: no — Python property accessor. Use in postprocessing,
+        **JIT-compatible**: no, Python property accessor. Use in postprocessing,
         not inside :func:`jax.jit`.
         """
         return self._pred.properties["dn4000"]
@@ -891,7 +891,7 @@ class SEDProperties(_CachedBase):
 
         Notes
         -----
-        **JIT-compatible**: no — Python property accessor. Use in postprocessing,
+        **JIT-compatible**: no, Python property accessor. Use in postprocessing,
         not inside :func:`jax.jit`.
         """
         return self._pred.properties["balmer_break"]
@@ -907,7 +907,7 @@ class SEDProperties(_CachedBase):
 
         Notes
         -----
-        **JIT-compatible**: no — Python property accessor. Use in postprocessing,
+        **JIT-compatible**: no, Python property accessor. Use in postprocessing,
         not inside :func:`jax.jit`.
         """
         return self._pred.properties["m_uv"]
@@ -923,7 +923,7 @@ class SEDProperties(_CachedBase):
 
         Notes
         -----
-        **JIT-compatible**: no — Python property accessor. Use in postprocessing,
+        **JIT-compatible**: no, Python property accessor. Use in postprocessing,
         not inside :func:`jax.jit`.
         """
         return self._pred.properties["fuv_flux"]
@@ -939,7 +939,7 @@ class SEDProperties(_CachedBase):
 
         Notes
         -----
-        **JIT-compatible**: no — Python property accessor. Use in postprocessing,
+        **JIT-compatible**: no, Python property accessor. Use in postprocessing,
         not inside :func:`jax.jit`.
         """
         return self._pred.properties["nuv_flux"]
@@ -958,7 +958,7 @@ class SEDProperties(_CachedBase):
 
         Notes
         -----
-        **JIT-compatible**: no — Python property accessor. Use in postprocessing,
+        **JIT-compatible**: no, Python property accessor. Use in postprocessing,
         not inside :func:`jax.jit`.
         """
         return self._pred.properties["fuv_flux_intrinsic"]
@@ -977,7 +977,7 @@ class SEDProperties(_CachedBase):
 
         Notes
         -----
-        **JIT-compatible**: no — Python property accessor. Use in postprocessing,
+        **JIT-compatible**: no, Python property accessor. Use in postprocessing,
         not inside :func:`jax.jit`.
         """
         return self._pred.properties["nuv_flux_intrinsic"]
@@ -993,7 +993,7 @@ class SEDProperties(_CachedBase):
 
         Notes
         -----
-        **JIT-compatible**: no — Python property accessor. Use in postprocessing,
+        **JIT-compatible**: no, Python property accessor. Use in postprocessing,
         not inside :func:`jax.jit`.
         """
         return self._pred.properties["rest_uv_color"]
@@ -1009,7 +1009,7 @@ class SEDProperties(_CachedBase):
 
         Notes
         -----
-        **JIT-compatible**: no — Python property accessor. Use in postprocessing,
+        **JIT-compatible**: no, Python property accessor. Use in postprocessing,
         not inside :func:`jax.jit`.
         """
         return self._pred.properties["luminosity_weighted_age_gyr"]
@@ -1025,7 +1025,7 @@ class SEDProperties(_CachedBase):
 
         Notes
         -----
-        **JIT-compatible**: no — Python property accessor. Use in postprocessing,
+        **JIT-compatible**: no, Python property accessor. Use in postprocessing,
         not inside :func:`jax.jit`.
         """
         return self._pred.properties["luminosity_weighted_metallicity"]
@@ -1035,7 +1035,7 @@ class SEDProperties(_CachedBase):
 
 # ``_LINE_RATIO_FLOOR = 1e-50`` stood here until #1568, described as the floor
 # "used in BPT and other line-ratio diagnostics to avoid log10(0)". It had no
-# readers — the BPT ratios live in ``NebularSEDComponent`` and use that module's
+# readers, the BPT ratios live in ``NebularSEDComponent`` and use that module's
 # own floor. Removed rather than made representable: a dead constant that is
 # also 0.0 in float32 is the worst of both, since it reads as a live guard.
 
@@ -1116,7 +1116,7 @@ class LineProperties(_CachedBase):
 
         Notes
         -----
-        **JIT-compatible**: no — Python property accessor. Use in postprocessing,
+        **JIT-compatible**: no, Python property accessor. Use in postprocessing,
         not inside :func:`jax.jit`.
         """
         self._pred._ensure_lines()
@@ -1133,7 +1133,7 @@ class LineProperties(_CachedBase):
 
         Notes
         -----
-        **JIT-compatible**: no — Python property accessor. Use in postprocessing,
+        **JIT-compatible**: no, Python property accessor. Use in postprocessing,
         not inside :func:`jax.jit`.
         """
         self._pred._ensure_lines()
@@ -1150,7 +1150,7 @@ class LineProperties(_CachedBase):
 
         Notes
         -----
-        **JIT-compatible**: no — Python property accessor. Use in postprocessing,
+        **JIT-compatible**: no, Python property accessor. Use in postprocessing,
         not inside :func:`jax.jit`.
         """
         self._pred._ensure_lines()
@@ -1167,7 +1167,7 @@ class LineProperties(_CachedBase):
 
         Notes
         -----
-        **JIT-compatible**: no — Python property accessor. Use in postprocessing,
+        **JIT-compatible**: no, Python property accessor. Use in postprocessing,
         not inside :func:`jax.jit`.
         """
         self._pred._ensure_lines()
@@ -1184,7 +1184,7 @@ class LineProperties(_CachedBase):
 
         Notes
         -----
-        **JIT-compatible**: no — Python property accessor. Use in postprocessing,
+        **JIT-compatible**: no, Python property accessor. Use in postprocessing,
         not inside :func:`jax.jit`.
         """
         self._pred._ensure_lines()
@@ -1201,7 +1201,7 @@ class LineProperties(_CachedBase):
 
         Notes
         -----
-        **JIT-compatible**: no — Python property accessor. Use in postprocessing,
+        **JIT-compatible**: no, Python property accessor. Use in postprocessing,
         not inside :func:`jax.jit`.
         """
         self._pred._ensure_lines()
@@ -1218,7 +1218,7 @@ class LineProperties(_CachedBase):
 
         Notes
         -----
-        **JIT-compatible**: no — Python property accessor. Use in postprocessing,
+        **JIT-compatible**: no, Python property accessor. Use in postprocessing,
         not inside :func:`jax.jit`.
         """
         self._pred._ensure_lines()
@@ -1235,7 +1235,7 @@ class LineProperties(_CachedBase):
 
         Notes
         -----
-        **JIT-compatible**: no — Python property accessor. Use in postprocessing,
+        **JIT-compatible**: no, Python property accessor. Use in postprocessing,
         not inside :func:`jax.jit`.
         """
         self._pred._ensure_lines()
@@ -1252,7 +1252,7 @@ class LineProperties(_CachedBase):
 
         Notes
         -----
-        **JIT-compatible**: no — Python property accessor. Use in postprocessing,
+        **JIT-compatible**: no, Python property accessor. Use in postprocessing,
         not inside :func:`jax.jit`.
         """
         self._pred._ensure_lines()
@@ -1269,7 +1269,7 @@ class LineProperties(_CachedBase):
 
         Notes
         -----
-        **JIT-compatible**: no — Python property accessor. Use in postprocessing,
+        **JIT-compatible**: no, Python property accessor. Use in postprocessing,
         not inside :func:`jax.jit`.
         """
         self._pred._ensure_lines()
@@ -1286,7 +1286,7 @@ class LineProperties(_CachedBase):
 
         Notes
         -----
-        **JIT-compatible**: no — Python property accessor. Use in postprocessing,
+        **JIT-compatible**: no, Python property accessor. Use in postprocessing,
         not inside :func:`jax.jit`.
         """
         self._pred._ensure_lines()
@@ -1305,7 +1305,7 @@ class LineProperties(_CachedBase):
 
         Notes
         -----
-        **JIT-compatible**: no — Python property accessor. Use in postprocessing,
+        **JIT-compatible**: no, Python property accessor. Use in postprocessing,
         not inside :func:`jax.jit`.
         """
         self._pred._ensure_lines()
@@ -1322,7 +1322,7 @@ class LineProperties(_CachedBase):
 
         Notes
         -----
-        **JIT-compatible**: no — Python property accessor. Use in postprocessing,
+        **JIT-compatible**: no, Python property accessor. Use in postprocessing,
         not inside :func:`jax.jit`.
         """
         self._pred._ensure_lines()
@@ -1339,7 +1339,7 @@ class LineProperties(_CachedBase):
 
         Notes
         -----
-        **JIT-compatible**: no — Python property accessor. Use in postprocessing,
+        **JIT-compatible**: no, Python property accessor. Use in postprocessing,
         not inside :func:`jax.jit`.
         """
         self._pred._ensure_lines()
@@ -1356,7 +1356,7 @@ class LineProperties(_CachedBase):
 
         Notes
         -----
-        **JIT-compatible**: no — Python property accessor. Use in postprocessing,
+        **JIT-compatible**: no, Python property accessor. Use in postprocessing,
         not inside :func:`jax.jit`.
         """
         self._pred._ensure_lines()
@@ -1373,7 +1373,7 @@ class LineProperties(_CachedBase):
 
         Notes
         -----
-        **JIT-compatible**: no — Python property accessor. Use in postprocessing,
+        **JIT-compatible**: no, Python property accessor. Use in postprocessing,
         not inside :func:`jax.jit`.
         """
         self._pred._ensure_lines()
@@ -1390,7 +1390,7 @@ class LineProperties(_CachedBase):
 
         Notes
         -----
-        **JIT-compatible**: no — Python property accessor. Use in postprocessing,
+        **JIT-compatible**: no, Python property accessor. Use in postprocessing,
         not inside :func:`jax.jit`.
         """
         self._pred._ensure_lines()
@@ -1408,7 +1408,7 @@ class LineProperties(_CachedBase):
 
         Notes
         -----
-        **JIT-compatible**: no — Python property accessor. Use in postprocessing,
+        **JIT-compatible**: no, Python property accessor. Use in postprocessing,
         not inside :func:`jax.jit`.
         """
         self._pred._ensure_lines()
@@ -1427,7 +1427,7 @@ class LineProperties(_CachedBase):
 
         Notes
         -----
-        **JIT-compatible**: no — Python property accessor. Use in postprocessing,
+        **JIT-compatible**: no, Python property accessor. Use in postprocessing,
         not inside :func:`jax.jit`.
         """
         self._pred._ensure_lines()
@@ -1456,7 +1456,7 @@ class LineProperties(_CachedBase):
 
         Notes
         -----
-        **JIT-compatible**: no — Python property accessor. Use in postprocessing,
+        **JIT-compatible**: no, Python property accessor. Use in postprocessing,
         not inside :func:`jax.jit`.
 
         Examples
@@ -1519,7 +1519,7 @@ class RadioProperties(_CachedBase):
 
         Notes
         -----
-        **JIT-compatible**: no — Python property accessor. Use in postprocessing,
+        **JIT-compatible**: no, Python property accessor. Use in postprocessing,
         not inside :func:`jax.jit`.
         """
         return self._pred.properties["l_1p4ghz"]
@@ -1535,7 +1535,7 @@ class RadioProperties(_CachedBase):
 
         Notes
         -----
-        **JIT-compatible**: no — Python property accessor. Use in postprocessing,
+        **JIT-compatible**: no, Python property accessor. Use in postprocessing,
         not inside :func:`jax.jit`.
         """
         return self._pred.properties["l_thermal"]
@@ -1551,7 +1551,7 @@ class RadioProperties(_CachedBase):
 
         Notes
         -----
-        **JIT-compatible**: no — Python property accessor. Use in postprocessing,
+        **JIT-compatible**: no, Python property accessor. Use in postprocessing,
         not inside :func:`jax.jit`.
         """
         return self._pred.properties["l_nonthermal"]
@@ -1567,7 +1567,7 @@ class RadioProperties(_CachedBase):
 
         Notes
         -----
-        **JIT-compatible**: no — Python property accessor. Use in postprocessing,
+        **JIT-compatible**: no, Python property accessor. Use in postprocessing,
         not inside :func:`jax.jit`.
         """
         return self._pred.properties["q_ir"]
@@ -1615,7 +1615,7 @@ class XRayProperties(_CachedBase):
 
         Notes
         -----
-        **JIT-compatible**: no — Python property accessor. Use in postprocessing,
+        **JIT-compatible**: no, Python property accessor. Use in postprocessing,
         not inside :func:`jax.jit`.
         """
         return self._pred.properties["l_x_xrb"]
@@ -1631,7 +1631,7 @@ class XRayProperties(_CachedBase):
 
         Notes
         -----
-        **JIT-compatible**: no — Python property accessor. Use in postprocessing,
+        **JIT-compatible**: no, Python property accessor. Use in postprocessing,
         not inside :func:`jax.jit`.
         """
         return self._pred.properties["l_x_agn"]
@@ -1647,7 +1647,7 @@ class XRayProperties(_CachedBase):
 
         Notes
         -----
-        **JIT-compatible**: no — Python property accessor. Use in postprocessing,
+        **JIT-compatible**: no, Python property accessor. Use in postprocessing,
         not inside :func:`jax.jit`.
         """
         return self._pred.properties["l_x_total"]
@@ -1696,7 +1696,7 @@ class IonizingProperties(_CachedBase):
 
         Notes
         -----
-        **JIT-compatible**: no — Python property accessor. Use in postprocessing,
+        **JIT-compatible**: no, Python property accessor. Use in postprocessing,
         not inside :func:`jax.jit`.
         """
         return self._pred.properties["q_h"]
@@ -1715,7 +1715,7 @@ class IonizingProperties(_CachedBase):
 
         Notes
         -----
-        **JIT-compatible**: no — Python property accessor. Use in postprocessing,
+        **JIT-compatible**: no, Python property accessor. Use in postprocessing,
         not inside :func:`jax.jit`.
         """
         return self._pred.properties["xi_ion"]
@@ -1881,8 +1881,8 @@ class Prediction:
     -----
     This class is NOT JIT-compatible due to Python-level caching. For
     batch computations over many parameter sets (MCMC chains, mock
-    catalogs), use :meth:`SEDModel.predict_properties` — the one
-    JIT/vmap-safe surface for derived quantities — or
+    catalogs), use :meth:`SEDModel.predict_properties`, the one
+    JIT/vmap-safe surface for derived quantities, or
     :meth:`SEDModel.predict_photometry` on an inference hot path. Both
     return plain JAX values suitable for :func:`jax.vmap`,
     :func:`jax.jit`, and :func:`jax.grad`.
@@ -1983,7 +1983,7 @@ class Prediction:
                 return properties[name]
         except AttributeError:
             pass
-        # Not a property — raise AttributeError
+        # Not a property, raise AttributeError
         props = object.__getattribute__(self, "properties")
         available = sorted(props.keys()) if props else []
         raise AttributeError(
@@ -2022,14 +2022,14 @@ class Prediction:
         Raises
         ------
         TypeError
-            Always — with a message directing users to use
+            Always, with a message directing users to use
             ``model.predict_properties(...)``, which is JIT-compatible.
         """
         raise TypeError(
             "Prediction objects are not JIT/vmap-compatible due to Python-level "
             "caching. For batch computations use model.predict_properties("
-            "params, names=(...)) — the one JIT/vmap-safe surface for derived "
-            "quantities — or model.predict_photometry(params) on an inference "
+            "params, names=(...)), the one JIT/vmap-safe surface for derived "
+            "quantities, or model.predict_photometry(params) on an inference "
             "hot path. Both return plain JAX values suitable for jax.vmap "
             "and jax.jit."
         )
@@ -2137,7 +2137,7 @@ class Prediction:
         Issues a one-time :class:`UserWarning` when the active backend
         doesn't expose a per-line luminosity catalog (BakedIn / Shock).
         Without the warning, ``pred.lines.halpha`` etc. silently return
-        NaN — see #361.
+        NaN, see #361.
         """
         if "line_waves" in self._cache:
             return
@@ -2149,7 +2149,7 @@ class Prediction:
             # The warning moved to `warn_if_lines_are_unavailable`, which
             # `PropertyCatalog.__getitem__` calls. Every one of the 17
             # `_ensure_lines()` call sites reads `properties[...]` on the next
-            # line, so this surface still warns — and the dict accessor and
+            # line, so this surface still warns, and the dict accessor and
             # `predict_properties`, which used to return the same NaN in
             # silence, now warn too. Warning here as well fired it twice.
             self._cache["line_waves"] = jnp.array([])
@@ -2161,7 +2161,7 @@ class Prediction:
         # publication. BakedIn / Shock backends won't publish it; fall
         # back to all-NaN for those (matches the legacy "no catalog"
         # behavior without raising). Reuse the ForwardState cached by
-        # _ensure_sfh() — re-running predict_state here doubled the
+        # _ensure_sfh(), re-running predict_state here doubled the
         # forward pass (and its transient memory) for pred.lines.
         state = self._cache["_state"]
         derived = state.derived
@@ -2232,7 +2232,7 @@ class Prediction:
 
         Notes
         -----
-        **JIT-compatible**: no — Python property accessor. Use in postprocessing,
+        **JIT-compatible**: no, Python property accessor. Use in postprocessing,
         not inside :func:`jax.jit`.
         """
         self._ensure_sed()
@@ -2246,7 +2246,7 @@ class Prediction:
         quantity as AB magnitudes, see :meth:`magnitudes`.
 
         **Exact by default, approximate by choice.** The default integrates the
-        full SED — including on a model built with ``approx=WavePrecomp(...)``,
+        full SED, including on a model built with ``approx=WavePrecomp(...)``,
         where the lean :meth:`~tengri.SEDModel.predict_photometry` would instead
         read the lookup table. That is deliberate: ``pred.photometry()`` must mean
         the same thing on every model. The LUT is an approximation carrying real
@@ -2254,7 +2254,7 @@ class Prediction:
 
         The keyword is spelled ``approx`` because it selects exactly the object
         installed at build time by ``SEDModel.build(..., approx=WavePrecomp(...))``
-        — one mechanism, one name at both ends. It was called ``fast`` until
+        one mechanism, one name at both ends. It was called ``fast`` until
         2026-08, which named the benefit and hid the cost; that spelling still
         works and emits a ``DeprecationWarning``.
 
@@ -2290,12 +2290,12 @@ class Prediction:
 
         Notes
         -----
-        **JIT-compatible**: no — Python method with caching. Use in postprocessing,
+        **JIT-compatible**: no, Python method with caching. Use in postprocessing,
         not inside :func:`jax.jit`.
 
         **Default (exact) path**: integrates ``state.sed_intrinsic`` through each
-        filter via :func:`~tengri.observation.photometry.project_photometry` — the
-        same kernel the likelihood uses — on the ``ForwardState`` this Prediction
+        filter via :func:`~tengri.observation.photometry.project_photometry`, the
+        same kernel the likelihood uses, on the ``ForwardState`` this Prediction
         already cached, so it costs the filter integration and not a second
         forward pass.
 
@@ -2306,7 +2306,7 @@ class Prediction:
 
         **How wrong is it?** Measured against this exact path on a 12-band
         tsnorm + two-component-dust model, worst band per redshift: 0.085 % at
-        z = 0.05, 1.5 % at z = 1, 10.4 % at z = 1.5, 83 % at z = 3 — but the
+        z = 0.05, 1.5 % at z = 1, 10.4 % at z = 1.5, 83 % at z = 3, but the
         large numbers are all GALEX FUV, which by z = 2 is below the Lyman
         break and carries 1e-7 of the g-band flux. On bands carrying flux the
         error is 1e-4 to 1e-2 (sdss_g is 1.38 % at z = 3). The error is set by
@@ -2352,7 +2352,7 @@ class Prediction:
         # A model built without an observation is a valid rest-frame-only model
         # (pred.rest_sed(), pred.stellar_mass, ... all work), but has nothing to
         # project photometry onto. Name the fix instead of crashing with a bare
-        # ``'NoneType' object has no attribute 'photometry'`` — the lean
+        # ``'NoneType' object has no attribute 'photometry'``, the lean
         # model.predict_photometry() already raises a helpful ValueError here.
         if self._model.observation is None:
             raise ValueError(
@@ -2373,7 +2373,7 @@ class Prediction:
         # Route through the lean jitted shortcut, NOT through
         # ``predict_via_precomp`` on ``self._ensure_state()``. The whole saving of
         # WavePrecomp is that XLA dead-code-eliminates the full-resolution SED
-        # einsum when only the LUT is consumed — and ``_ensure_state`` materializes
+        # einsum when only the LUT is consumed, and ``_ensure_state`` materializes
         # that state eagerly, so the einsum runs and the saving is already spent.
         # Going through the state made ``approx=True`` *slower* than the exact
         # default (measured 0.7-0.8x) while also returning an approximation: the
@@ -2393,7 +2393,7 @@ class Prediction:
             # of the filter integral, not of the filter. ``Photometry.from_names``
             # defaults to Bessell, so resolving runtime filters without passing the
             # model's own convention silently answers a different question than
-            # ``photometry()`` does — same filters, two numbers (~0.5% apart on an
+            # ``photometry()`` does, same filters, two numbers (~0.5% apart on an
             # energy-convention model). It is part of the cache key for the same
             # reason.
             from tengri.observation.photometry_config import resolve_runtime_photometry
@@ -2419,7 +2419,7 @@ class Prediction:
 
             return project_photometry(self._ensure_state(), self._params, phot_obj)
 
-        # Mode 3: Default — the EXACT path, on the build-time filters.
+        # Mode 3: Default, the EXACT path, on the build-time filters.
         #
         # This deliberately does NOT call ``model.predict_photometry``: that is
         # the lean inference shortcut, and on a model built with
@@ -2427,7 +2427,7 @@ class Prediction:
         # here through it would make ``pred.photometry()`` silently mean "exact"
         # on one model and "approximate" on another, which is precisely the
         # ambiguity the exact-by-default rule exists to kill. The LUT path is
-        # reachable — but only by asking for it, with ``approx=True``.
+        # reachable, but only by asking for it, with ``approx=True``.
         if self._model.observation.photometry is None:
             raise ValueError(
                 "No photometry is configured on the model. "
@@ -2477,7 +2477,7 @@ class Prediction:
 
         Notes
         -----
-        **JIT-compatible**: no — Python method delegating to :meth:`photometry`.
+        **JIT-compatible**: no, Python method delegating to :meth:`photometry`.
         Use in postprocessing, not inside :func:`jax.jit`.
 
         **Semantics**: Computes :meth:`photometry` in the requested mode
@@ -2492,7 +2492,7 @@ class Prediction:
 
         References
         ----------
-        Oke & Gunn 1983, ApJ, 266, 713 — AB magnitude definition.
+        Oke & Gunn 1983, ApJ, 266, 713, AB magnitude definition.
 
         Examples
         --------
@@ -2529,7 +2529,7 @@ class Prediction:
         approx : bool, optional
             If True, use the build-time ``SpectrumPrecomp`` LUT. Only valid when
             the model was built with ``approx=SpectrumPrecomp(...)``.
-            Default False — the exact projector. Named for the object it
+            Default False, the exact projector. Named for the object it
             selects, which is the same word the build takes.
         fast : bool, optional
             Deprecated spelling of `approx`. Removed in v1.0.
@@ -2550,7 +2550,7 @@ class Prediction:
 
         Notes
         -----
-        **JIT-compatible**: no — Python accessor delegating to
+        **JIT-compatible**: no, Python accessor delegating to
         :meth:`SEDModel.predict_spectrum`. Use in postprocessing,
         not inside :func:`jax.jit`.
 
@@ -2585,7 +2585,7 @@ class Prediction:
         # Same rule as :meth:`photometry`, for the same reason. ``predict_spectrum``
         # honors the SpectrumPrecomp LUT, so defaulting to it would make
         # ``pred.spectrum()`` mean "exact" on one model and "approximate" on another
-        # — measured 5-7% apart on a SpectrumPrecomp model, the same order as the
+        # measured 5-7% apart on a SpectrumPrecomp model, the same order as the
         # photometry LUT error, and not a rounding difference.
         if approx:
             if not self._model._approx.get("spectrum_precomp"):
@@ -2597,8 +2597,8 @@ class Prediction:
             return self._model.predict_spectrum(self._params, wave_obs=wave_obs)
 
         # Exact: project the cached ForwardState through the shared spectrum
-        # projector. ``Observation.predict`` is the canonical exact path — it calls
-        # ``project_spectrum`` (#1052) and applies the flux calibration (#1086) —
+        # projector. ``Observation.predict`` is the canonical exact path, it calls
+        # ``project_spectrum`` (#1052) and applies the flux calibration (#1086),
         # and it never falls through to the LUT.
         out = self._model.observation.predict(
             self._ensure_state(), self._params, wave_obs=wave_obs
@@ -2607,7 +2607,7 @@ class Prediction:
 
     @property
     def rest_sed(self):
-        r"""Rest-frame panchromatic SED — **call it**: ``pred.rest_sed()``.
+        r"""Rest-frame panchromatic SED, **call it**: ``pred.rest_sed()``.
 
         A uniform callable with a default, like :meth:`photometry`,
         :meth:`magnitudes` and :meth:`spectrum` (contract §4b.3).
@@ -2626,7 +2626,7 @@ class Prediction:
 
         Notes
         -----
-        **JIT-compatible**: no — a postprocessing accessor. Use the lean
+        **JIT-compatible**: no, a postprocessing accessor. Use the lean
         ``model.predict_photometry`` / ``predict_properties`` shortcuts inside
         :func:`jax.jit`.
 
@@ -2636,7 +2636,7 @@ class Prediction:
 
         **Grid**: the model's SSP grid, auto-extended when dust emission,
         radio or X-ray components are configured. The axis is
-        :attr:`wave_rest` — the SED array does not carry it.
+        :attr:`wave_rest`, the SED array does not carry it.
 
         **Resampling** is ``jnp.interp`` onto ``wave``, bit-exact with the
         wavelength argument of the deprecated ``model.predict_rest_sed``.
@@ -2670,7 +2670,7 @@ class Prediction:
 
     @property
     def obs_sed(self):
-        r"""Observed-frame panchromatic SED — **call it**: ``pred.obs_sed()``.
+        r"""Observed-frame panchromatic SED, **call it**: ``pred.obs_sed()``.
 
         The rest-frame SED moved onto the observed-frame wavelength axis, with
         IGM (and DLA) absorption applied. "Observed" refers to the **frame**,
@@ -2679,35 +2679,35 @@ class Prediction:
         Parameters
         ----------
         wave_obs : array_like, shape (n_out,), optional
-            **Observed**-frame wavelength grid to resample onto [Angstrom] —
+            **Observed**-frame wavelength grid to resample onto [Angstrom],
             the same frame as :attr:`wave_obs`, and as :meth:`spectrum`. Default
             ``None`` returns the SED on the model's own grid.
 
         Returns
         -------
         ndarray, shape (n_wave,)
-            Luminosity density L_nu [erg/s/Hz] — **not** a flux.
+            Luminosity density L_nu [erg/s/Hz], **not** a flux.
 
         Notes
         -----
-        **Units — read this.** This returns **L_nu [erg/s/Hz]**, exactly like
+        **Units, read this.** This returns **L_nu [erg/s/Hz]**, exactly like
         :meth:`rest_sed`. It does **NOT** apply the cosmological dimming factor
         ``(1+z) / (4 pi d_L^2)``. The only differences from :meth:`rest_sed` are
         the wavelength axis and IGM absorption; at z = 3 the two arrays are
         identical everywhere above rest-frame Lyman-alpha.
 
-        The distance is applied at the **projection** step, not here — see
+        The distance is applied at the **projection** step, not here, see
         ``observation/redshift_kernel.py``. The surfaces that return a genuine
         flux F_nu [erg/s/cm^2/Hz] are :meth:`photometry`, :meth:`magnitudes`
         and :meth:`spectrum`. Integrating ``obs_sed()`` as if it were a flux is
         wrong by ~57 orders of magnitude.
 
-        (This docstring previously claimed the opposite — "Returns F_nu, not
+        (This docstring previously claimed the opposite, "Returns F_nu, not
         L_nu ... accounts for the (1+z)/(4 pi d_L^2) dimming factor". It was
         false, and the claim had propagated into the naming contract. Measured,
         not assumed.)
 
-        **JIT-compatible**: no — a postprocessing accessor.
+        **JIT-compatible**: no, a postprocessing accessor.
 
         **Naming contract**: SED = panchromatic model-grid array
         (:meth:`rest_sed` / :meth:`obs_sed`); spectrum = instrument-grid,
@@ -2725,7 +2725,7 @@ class Prediction:
 
         References
         ----------
-        .. [1] Inoue A. K., et al. 2014, MNRAS, 442, 1805 — IGM absorption
+        .. [1] Inoue A. K., et al. 2014, MNRAS, 442, 1805, IGM absorption
            tables and mean transmission.
 
         Examples
@@ -2747,12 +2747,12 @@ class Prediction:
         """Observed-frame F_nu, optionally resampled onto ``wave_obs`` [Angstrom].
 
         Refuses on a fast-nebular model for the same reason as
-        :meth:`_rest_sed_on` — this is the same SED, on a different axis (#1665).
+        :meth:`_rest_sed_on`; this is the same SED, on a different axis (#1665).
 
         ``wave_obs`` is OBSERVED-frame, matching this SED's own axis
         (:attr:`wave_obs`) and :meth:`spectrum`. The deprecated
         ``model.predict_obs_sed(params, wave=...)`` took a *rest*-frame grid
-        and redshifted it — an observed-frame result with a rest-frame
+        and redshifted it, an observed-frame result with a rest-frame
         argument. That asymmetry was a footgun; it is not reproduced here.
         """
         result = self._model._predict_obs_sed(self._params)
@@ -2775,7 +2775,7 @@ class Prediction:
 
         Notes
         -----
-        **JIT-compatible**: no — Python property accessor. Use in postprocessing,
+        **JIT-compatible**: no, Python property accessor. Use in postprocessing,
         not inside :func:`jax.jit`.
 
         Pairs exactly with ``rest_sed`` and forms the x-axis for plotting
@@ -2814,7 +2814,7 @@ class Prediction:
 
         Notes
         -----
-        **JIT-compatible**: no — Python property accessor. Use in postprocessing,
+        **JIT-compatible**: no, Python property accessor. Use in postprocessing,
         not inside :func:`jax.jit`.
 
         The redshift value is resolved through the model's spec:
@@ -2851,7 +2851,7 @@ class Prediction:
     # the flat form is for tab-completion convenience and aligns with how
     # astronomers typically refer to derived quantities (no domain prefix).
     # Where two groups expose the same name (e.g. luminosity_weighted_*),
-    # the flat shortcut points to the SED version — that's the canonical
+    # the flat shortcut points to the SED version, that's the canonical
     # "luminosity-weighted" meaning (uses attenuated SED, not stellar-only).
 
     # --- SFH-derived (forward to pred.sfh) ---

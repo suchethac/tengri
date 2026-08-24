@@ -201,7 +201,7 @@ class Spectroscopy:
 
         ``"point"`` maps to ``False`` and ``"conserving"`` to ``True``. ``"auto"``
         returns ``True`` only when the observed pixels are coarse enough that point
-        interpolation would skip model bins — the median rest-frame pixel spacing
+        interpolation would skip model bins, the median rest-frame pixel spacing
         exceeds the median model-grid spacing over their overlap, evaluated at
         ``z_ref`` (pass the lowest redshift in the prior, the worst case for
         under-sampling). A pure-Python decision made once before tracing, so the
@@ -874,7 +874,7 @@ def apply_wavelength_mask(
     """Mask spectral regions by setting noise to infinity.
 
     Masked pixels are effectively removed from the likelihood (chi2
-    contribution → 0). Returns a new array — does not mutate the input.
+    contribution → 0). Returns a new array, does not mutate the input.
 
     Parameters
     ----------
@@ -918,4 +918,4 @@ def apply_wavelength_mask(
     return noise
 
 
-# ── Deprecated alias — removed in tengri v1.0 ─────────────────────
+# ── Deprecated alias, removed in tengri v1.0 ─────────────────────

@@ -80,7 +80,7 @@ replaces the physical-BH axes with the 7 ionizing-spectrum shape parameters
 (``ionspec_index1..4``, ``ionspec_logLratio1..3``), which makes it agnostic
 to the specific accretion-disc model.
 
-The Cue emulator does NOT require grid files at inference time — the neural
+The Cue emulator does NOT require grid files at inference time: the neural
 network weights are loaded from ``data/cue_weights.npz``.  The Synthesizer
 test grids at ``data/synthesizer_grids/test_grid_agn-nlr.hdf5`` and
 ``data/synthesizer_grids/test_grid_agn-blr.hdf5`` are available for
@@ -117,7 +117,7 @@ from tengri.components.nebular._shared import render_nebular_lines
 # ── Physical constants ────────────────────────────────────────────
 from tengri.utils.physics_constants import (
     C_CGS as _C_CGS,
-    L_SUN_CUE as _LSUN_ERG,  # 3.839e33 — Cue training convention, NOT IAU 2015
+    L_SUN_CUE as _LSUN_ERG,  # 3.839e33: Cue training convention, NOT IAU 2015
 )
 from tengri.utils.scale import LN10, pow10, representable_exponent
 
@@ -176,7 +176,7 @@ class SubNetWeights(NamedTuple):
 
     Notes
     -----
-    **JIT-compatible**: yes — all fields are JAX arrays or tuples thereof.
+    **JIT-compatible**: yes, all fields are JAX arrays or tuples thereof.
 
     """
 
@@ -190,8 +190,8 @@ class SubNetWeights(NamedTuple):
     pca_scale: jnp.ndarray  # (n_pcas,)
     log_spec_shift: jnp.ndarray  # (n_wavelengths,)
     log_spec_scale: jnp.ndarray  # (n_wavelengths,)
-    pca_components: jnp.ndarray  # (n_pcas, n_wavelengths) — sklearn PCA basis
-    pca_mean: jnp.ndarray  # (n_wavelengths,) — sklearn PCA centering
+    pca_components: jnp.ndarray  # (n_pcas, n_wavelengths), sklearn PCA basis
+    pca_mean: jnp.ndarray  # (n_wavelengths,), sklearn PCA centering
     n_layers: int
 
 
@@ -257,7 +257,7 @@ class CueWeights(NamedTuple):
 
     Notes
     -----
-    **JIT-compatible**: yes — all fields are JAX arrays or tuples thereof.
+    **JIT-compatible**: yes, all fields are JAX arrays or tuples thereof.
 
     """
 
@@ -367,16 +367,16 @@ def load_cue_weights(npz_path: str) -> CueWeights:
 
     Notes
     -----
-    **JIT-compatible**: no — performs file I/O and array padding at load time.
+    **JIT-compatible**: no, performs file I/O and array padding at load time.
     Call once per model initialization; results are re-used for all inference.
 
-    **Why NumPy and not** ``jnp`` (#1631): these arrays are cached — the AGN
+    **Why NumPy and not** ``jnp`` (#1631): these arrays are cached; the AGN
     NLR path memoizes a backend in ``nlr_cloudy._CUE_AGN_BACKEND``. Under
     omnistaging every ``jnp`` call inside a jit trace stages out to the jaxpr
     and returns a ``DynamicJaxprTracer``, *even on constant inputs*. So a
     first caller that reached this function from inside a trace cached
     trace-scoped arrays, and the next trace raised ``UnexpectedTracerError``
-    on ``float32[16,12]`` — 16 line sub-networks x 12 Cue parameters, i.e.
+    on ``float32[16,12]``: 16 line sub-networks x 12 Cue parameters, i.e.
     ``batched_param_shifts``. A NumPy array cannot be trace-scoped under any
     trace, so the cache is trace-independent by construction rather than by
     discipline. Consumers wrap with ``jnp.asarray`` at use. Identical fix and
@@ -406,19 +406,19 @@ def _load_cue_weights_eager(npz_path: str) -> CueWeights:
     Every ``jnp`` call below runs on values read straight off disk, so it looks
     like it cannot produce a tracer. It can. **Any** ``jnp`` operation executed
     while a trace is active returns a tracer bound to that trace, however
-    concrete its inputs are — so whether this function yields real arrays or
+    concrete its inputs are: so whether this function yields real arrays or
     tracers is decided by its *caller's* context, not by anything here.
 
     That matters because the result is cached: ``CueBackend`` holds it, and
     ``nlr_cloudy._CUE_AGN_BACKEND`` holds the backend for the process. The first
     caller therefore decides what every later caller gets. If the first call
     happens inside a ``jax.jit`` trace, the cache is filled with tracers and the
-    next reader — a different test, a different fit — dies with
+    next reader (a different test, a different fit) dies with
     ``UnexpectedTracerError`` pointing here, far from whatever actually did it.
 
     That is not hypothetical: it is the CI failure in
     ``test_cue_nlr_grammar.py``, reported as ``float32[16,12]`` leaking from
-    line ``batched_param_shifts=jnp.stack(...)`` — 16 line sub-networks x 12
+    line ``batched_param_shifts=jnp.stack(...)``: 16 line sub-networks x 12
     parameters. It passed locally and failed on CI purely because the two run
     tests in a different order, so they disagreed about who warmed the cache.
 
@@ -447,7 +447,7 @@ def _load_cue_weights_eager(npz_path: str) -> CueWeights:
     nets = line_nets
     n_hidden = nets[0].n_layers - 1
 
-    # Hidden layers: stack (16, in, out) — all same architecture
+    # Hidden layers: stack (16, in, out), all same architecture
     b_W_h = tuple(np.stack([n.W[i] for n in nets]) for i in range(n_hidden))
     b_b_h = tuple(np.stack([n.b[i] for n in nets]) for i in range(n_hidden))
     b_a_h = tuple(np.stack([n.alphas[i] for n in nets]) for i in range(n_hidden))
@@ -523,7 +523,7 @@ def _speculator_activation(x: jnp.ndarray, alpha: jnp.ndarray, beta: jnp.ndarray
 
     Notes
     -----
-    **JIT-compatible**: yes — all operations use ``jnp`` primitives.
+    **JIT-compatible**: yes, all operations use ``jnp`` primitives.
 
     """
     return x * (beta + (1.0 - beta) * jax.nn.sigmoid(alpha * x))
@@ -619,7 +619,7 @@ def _logq_from_logu(
 
     Notes
     -----
-    **JIT-compatible**: yes — simple arithmetic.
+    **JIT-compatible**: yes, simple arithmetic.
 
     This formula matches Cue's internal convention with R = 1e19 cm
     (approximately the Stromgren radius for typical HII regions).
@@ -670,7 +670,7 @@ def _prepare_nn_params(
 
     Notes
     -----
-    **JIT-compatible**: yes — all operations use ``jnp`` primitives.
+    **JIT-compatible**: yes, all operations use ``jnp`` primitives.
 
     The network expects logq (not logu) and linear density (not logn).
     This function handles the conversion via _logq_from_logu().
@@ -733,7 +733,7 @@ def predict_all_lines(
 
     Notes
     -----
-    **JIT-compatible**: yes — all operations use stacked ``jnp`` primitives.
+    **JIT-compatible**: yes, all operations use stacked ``jnp`` primitives.
 
     **Batching**: Hidden layers process all 16 sub-networks simultaneously via
     stacked weight arrays. Individual output layers and PCA transforms follow,
@@ -828,7 +828,7 @@ def predict_continuum(
 
     Notes
     -----
-    **JIT-compatible**: yes — all operations use ``jnp`` primitives.
+    **JIT-compatible**: yes, all operations use ``jnp`` primitives.
 
     **Conversion**: Internal output is log10(Lsun/Hz/Q_H). Rescaled to
     Lsun/Hz via Q_H, then to erg/s/Hz via L_sun constant (3.839e33 erg/s).
@@ -859,7 +859,7 @@ def predict_continuum(
     # Convert from log10(Lsun/Hz/Q_H) to Lsun/Hz:
     # Internal computation stays in Lsun/Hz to avoid exponent overflow;
     # converted to erg/s/Hz at predict_nebular_sed return. Clip tightened
-    # from ±100 to ±50 dex in this revision — see predict_all_lines for the
+    # from ±100 to ±50 dex in this revision; see predict_all_lines for the
     # full rationale (#477 follow-up).
     exponent = log_spec_sorted - gas_logq + gas_logqion - _LOG_LSUN
     # Double-where guard to prevent NaN/inf propagation through 10.0**clip VJP in f32 (#1719)
@@ -893,7 +893,7 @@ class CueWNESSPError(ValueError):
     photons have already been absorbed by an internal nebular layer, so the
     SSP spectrum reports ``log10(Q_H) ~ 0`` instead of the physical 47–50.
     Feeding such an SSP to Cue produces line luminosities that are
-    under-predicted by 4–7 dex — silently — because Cue infers Q_H from the
+    under-predicted by 4–7 dex (silently) because Cue infers Q_H from the
     SSP rather than receiving it explicitly.
 
     Detection
@@ -901,14 +901,14 @@ class CueWNESSPError(ValueError):
     Two independent checks run during ``CueBackend.__init__`` when
     ``ssp_data`` is set. They differ in kind, and so does their bypass:
 
-    1. **Declaration** — ``ssp_data.nebular == "included"``, resolved by
+    1. **Declaration**: ``ssp_data.nebular == "included"``, resolved by
        :func:`load_ssp_data` from the ``nebular_included`` HDF5 attribute
        or the ``wNE`` filename convention. Checked first, because the
        retained-LyC wNE class keeps a physical-looking ``Q_H`` that no
        heuristic can catch. **Not bypassable** (#1579): a declaration has
        no false-positive mode, and Cue on top of baked-in nebular emission
        is double-counting in every case.
-    2. **Q_H heuristic** — the maximum ``log10(Q_H)`` across SSP bins
+    2. **Q_H heuristic**: the maximum ``log10(Q_H)`` across SSP bins
        younger than 10 Myr falling outside ``[44, 52]``, on either side of
        the physical 47-50 range for bare stellar populations. This one is a
        suspicion with routine false positives (synthetic test grids read
@@ -923,7 +923,7 @@ class CueWNESSPError(ValueError):
        ``data/``: ``fsps_prsc_miles_chabrier.h5``, ``fsps_mist_c3k_a_chabrier.h5``.
        The hosted catalog at https://halos.as.arizona.edu/suchethacooray/
        ssp-spectra/ ships only bare-stellar SSPs.
-    2. **Keep the SSP and drop** ``neb={'type': 'cue'}`` — a wNE grid's
+    2. **Keep the SSP and drop** ``neb={'type': 'cue'}``: a wNE grid's
        baked-in nebular backend already models the lines.
     3. **Pass ssp_data=None** to ``CueBackend`` and provide Q_H externally.
        Suitable when you have your own ionizing-spectrum source.
@@ -935,7 +935,7 @@ class CueWNESSPError(ValueError):
 # wNE SSPs fail in BOTH directions: grids with the LyC pre-absorbed report
 # Q_H ≈ 0 (log10 stored as –99, caught by the lower bound), while grids
 # that keep the baked-in nebular continuum corrupt the ionizing power-law
-# fit UPWARD (observed: log10(Q_H) ≈ 62 for ssp_prsc_*_wNE_* files — the
+# fit UPWARD (observed: log10(Q_H) ≈ 62 for ssp_prsc_*_wNE_* files; the
 # nebular continuum in the fit window masquerades as ionizing flux).
 # The band gives > 2 dex headroom on each side of the physical range.
 _WNE_LOGQH_THRESHOLD: float = 44.0
@@ -985,7 +985,7 @@ class CueBackend:
     gradient evaluation. Warnings are emitted if the SSP appears to have
     baked-in nebular emission (wNE), which violates Cue's assumptions.
 
-    **Calling conventions**: Two modes are supported—
+    **Calling conventions**: Two modes are supported:
 
     1. **High-level** (CloudyGridBackend compatible): Pass ``ssp_weights``,
        ``ssp_log_ages_yr``, ``log_z`` to ``predict_nebular_*`` methods.
@@ -1003,7 +1003,7 @@ class CueBackend:
     #: Cue is the exception, deliberately: its network was trained against
     #: ``L_sun = 3.839e33``, not IAU 2015's 3.828e33 (CLAUDE.md, "Physical
     #: constants"). Converting its output with the IAU value biases every Cue
-    #: line by +0.287% — systematic, and far too small for a units test to see,
+    #: line by +0.287%: systematic, and far too small for a units test to see,
     #: which is exactly the kind of error that survives.
     lsun_erg: float = _LSUN_ERG
 
@@ -1045,7 +1045,7 @@ class CueBackend:
         from tengri.components.nebular.ionizing_spectrum import precompute_ionizing_params_table
 
         # Metadata check (#1014): a grid flagged nebular-included is refused
-        # outright, BEFORE the Q_H heuristic below — the retained-LyC wNE
+        # outright, BEFORE the Q_H heuristic below: the retained-LyC wNE
         # class keeps its ionizing continuum (measured young-bin log Q_H =
         # 46.91, identical to the bare parent grid), so no physics heuristic
         # can catch it. The flag comes from the ``nebular_included`` HDF5
@@ -1053,7 +1053,7 @@ class CueBackend:
         if getattr(ssp_data, "nebular", "unknown") == "included":
             # Deliberately NOT bypassable by TENGRI_ALLOW_WNE_CUE (#1579).
             # That switch exists for the Q_H *heuristic* below, whose false
-            # positives are routine — the synthetic fixtures trip it, which
+            # positives are routine: the synthetic fixtures trip it, which
             # is why tests/conftest.py sets it suite-wide. This branch is a
             # *declaration*, not a suspicion: it reads the nebular_included
             # attribute (or the wNE filename), and there is no science case
@@ -1070,7 +1070,7 @@ class CueBackend:
                 "  1. Download a bare-stellar SSP and retry:\n"
                 "     tengri.download_ssp('fsps_prsc_miles_chabrier')\n"
                 "     Then rebuild the model with that grid.\n"
-                "  2. Keep this SSP and drop neb={'type': 'cue'} — the\n"
+                "  2. Keep this SSP and drop neb={'type': 'cue'}: the\n"
                 "     baked-in nebular backend already models the lines."
             )
 
@@ -1098,12 +1098,12 @@ class CueBackend:
             if not (_WNE_LOGQH_THRESHOLD <= max_logqion_young <= _WNE_LOGQH_UPPER):
                 direction = (
                     "well below the ~47-50 floor for bare stellar populations "
-                    "— the ionizing photons were pre-absorbed by a baked-in "
+                    ": the ionizing photons were pre-absorbed by a baked-in "
                     "nebular layer. Cue's ionizing-spectrum fit will "
                     "under-predict line luminosities by 4-7 dex"
                     if max_logqion_young < _WNE_LOGQH_THRESHOLD
                     else "far above the physical ~47-50 range for bare stellar "
-                    "populations — baked-in nebular continuum in the fit "
+                    "populations: baked-in nebular continuum in the fit "
                     "window masquerades as ionizing flux, corrupting Cue's "
                     "power-law fit"
                 )
@@ -1161,7 +1161,7 @@ class CueBackend:
 
         Notes
         -----
-        **JIT-compatible**: yes — bilinear interpolation uses ``jnp`` primitives.
+        **JIT-compatible**: yes, bilinear interpolation uses ``jnp`` primitives.
 
         **Caching**: Results are precomputed once at CueBackend.__init__ if
         ``ssp_data`` is provided. Subsequent calls perform fast interpolation
@@ -1182,7 +1182,7 @@ class CueBackend:
             log_age_yr,
         )
 
-    # ── High-level entry points — same signatures as CloudyGridBackend ────
+    # ── High-level entry points: same signatures as CloudyGridBackend ────
 
     # Default ionizing spectrum shape (young starburst)
     _IONSPEC_DEFAULTS: ClassVar[dict] = dict(
@@ -1347,7 +1347,7 @@ class CueBackend:
         # which divided out the general suppression: as ``neb_fesc → 1`` that
         # ratio diverges (``1 / 1e-10``) and *amplified* Ly-alpha by ~60×
         # instead of suppressing it (P-11 BUG: lines not suppressed at fesc=1).
-        # It was also unphysical — with all ionizing photons escaped (k → 0),
+        # It was also unphysical: with all ionizing photons escaped (k → 0),
         # Ly-alpha would have survived at ``L_orig · (1 - neb_fesc_lya)``.
         lya_idx = jnp.argmin(jnp.abs(wav - 1215.67))
         lya_scale = 1.0 - neb_fesc_lya
@@ -1472,11 +1472,11 @@ class CueBackend:
         # ── Effective ionizing-spectrum shape via per-segment max-offset (#1018) ──
         # Cue is trained on the *time-averaged* ionizing spectrum of the whole
         # population (see the module header), so the shape must combine every
-        # ionizing age bin — not the single argmax-dominant one. The old
+        # ionizing age bin: not the single argmax-dominant one. The old
         # ``i7 = ionspec_all[jnp.argmax(weighted_qh)]`` made the forward
         # DISCONTINUOUS in metallicity and SFH (the dominant bin flips → [OIII]
         # steps ~33 %) and, because ``argmax`` has no gradient and ``ionspec_all``
-        # does not depend on ``ssp_weights``, it forced d(shape)/d(SFH) ≡ 0 —
+        # does not depend on ``ssp_weights``, it forced d(shape)/d(SFH) ≡ 0:
         # silently starving gradient-based inference.
         #
         # Combine the way the physics does, now in log-domain for float32 safety.
@@ -1487,7 +1487,7 @@ class CueBackend:
         #     weighted mean          → α_k = Σ_a (w_a L_k,a / L_k) · α_k,a
         #   * the log-ratios follow as diff(log10 L_k)
         # Averaging the log-ratios directly (a geometric mean where an arithmetic
-        # one is required) biases [OIII] by ~12 % — worse than the argmax it would
+        # one is required) biases [OIII] by ~12 %: worse than the argmax it would
         # replace. This rule lands within ~1 % of re-fitting the true composite
         # spectrum, and is smooth + differentiable.
         log_seglum_all = jax.vmap(
@@ -1519,7 +1519,7 @@ class CueBackend:
         seg_pos = seg_tot_scaled > 0
         alpha_eff = jnp.sum(seg_w_scaled * ionspec_all[:, :4], axis=0) / jnp.where(
             seg_pos, seg_tot_scaled, 1.0
-        )  # (4,) — m_k cancels in the ratio
+        )  # (4,): m_k cancels in the ratio
         log_seg_tot = jnp.where(
             seg_pos, m_safe + jnp.log10(jnp.where(seg_pos, seg_tot_scaled, 1.0)), -jnp.inf
         )  # (4,)
@@ -1629,7 +1629,7 @@ class CueBackend:
 
         Notes
         -----
-        **JIT-compatible**: yes — all operations use ``jnp`` primitives.
+        **JIT-compatible**: yes, all operations use ``jnp`` primitives.
 
         **Units (#1559)**: this returned [erg/s] until 2026-08, alone among the
         four backends, while the component applied no conversion to any of them.
@@ -1639,7 +1639,7 @@ class CueBackend:
 
         **float32**: [Lsun] peaks around 1e22 here against a 3.4e38 ceiling, so
         this return is representable. Only the erg/s form the component
-        publishes is not — which is why it also publishes ``log_line_lums``,
+        publishes is not: which is why it also publishes ``log_line_lums``,
         derived at that seam from this value.
 
         **High-level mode**: When ``ssp_weights``, ``ssp_log_ages_yr``,
@@ -1749,7 +1749,7 @@ class CueBackend:
 
         Notes
         -----
-        **JIT-compatible**: yes — all operations use ``jnp`` primitives.
+        **JIT-compatible**: yes, all operations use ``jnp`` primitives.
 
         **Wavelength grid**: Returns the Cue native grid (fixed for all calls).
         For interpolation to an arbitrary wavelength grid, use
@@ -1849,7 +1849,7 @@ class CueBackend:
 
         Notes
         -----
-        **JIT-compatible**: yes — all operations use ``jnp`` primitives.
+        **JIT-compatible**: yes, all operations use ``jnp`` primitives.
 
         **Line+Continuum**: This method computes both lines (via
         ``predict_nebular_line_luminosities``) and continuum (via
@@ -1889,7 +1889,7 @@ class CueBackend:
             template_data=template_data,
         )
 
-        # Continuum (same resolved params — no double computation)
+        # Continuum (same resolved params: no double computation)
         cont_wav, cont_lum = self._forward_continuum(p, template_data=template_data)
         # Apply CIGALE nebular emission scaling factor (k) accounting for both
         # ionizing photon escape (neb_fesc) and dust absorption (neb_fdust).
@@ -1946,7 +1946,7 @@ def predict_lines_jit(
 
     Notes
     -----
-    **JIT-compatible**: yes — decorated with @jax.jit.
+    **JIT-compatible**: yes, decorated with @jax.jit.
 
     """
     return predict_all_lines(nn_params_12, weights, gas_logq, gas_logqion)
@@ -1984,7 +1984,7 @@ def predict_continuum_jit(
 
     Notes
     -----
-    **JIT-compatible**: yes — decorated with @jax.jit.
+    **JIT-compatible**: yes, decorated with @jax.jit.
 
     """
     return predict_continuum(nn_params_12, weights, gas_logq, gas_logqion)

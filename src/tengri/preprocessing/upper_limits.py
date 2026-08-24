@@ -29,7 +29,7 @@ def detect_upper_limits(
         Flux uncertainty array, same shape as `flux`.
     sn_threshold : float, optional
         Signal-to-noise ratio threshold for classification.
-        Default 1.0 (conservative — typical observational S/N
+        Default 1.0 (conservative: typical observational S/N
         limits are ~2-3 sigma).
 
     Returns
@@ -39,7 +39,7 @@ def detect_upper_limits(
 
     Notes
     -----
-    **JIT-compatible**: no — pure Python, uses boolean indexing.
+    **JIT-compatible**: no; pure Python, uses boolean indexing.
 
     The function does not modify the input arrays. The caller is
     responsible for interpreting the mask (e.g., applying an
@@ -91,7 +91,7 @@ def sigma_upper_limit_from_flux(
 
     Notes
     -----
-    **JIT-compatible**: no — pure numpy multiplication.
+    **JIT-compatible**: no, pure numpy multiplication.
 
     This function is a convenience wrapper that assumes the input
     error is symmetric and Gaussian. For non-Gaussian or

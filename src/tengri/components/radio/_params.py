@@ -33,12 +33,12 @@ class RadioFIRRCDegeneracyWarning(UserWarning):
 
 
 #: The FIRRC slope coefficients whose freedom is degenerate per-galaxy
-#: (the q0 normalizations are fine — they *are* the radio-excess knob).
+#: (the q0 normalizations are fine: they *are* the radio-excess knob).
 #:
 #: None of these four carries a ``free_prior``, and that is deliberate (#887).
 #: They have perfectly good ranges, but ``all_params: FREE`` is a single-galaxy
 #: gesture and at one galaxy's fixed (M*, z) a slope collapses to a scalar that
-#: is exactly degenerate with the normalization beside it — which is what
+#: is exactly degenerate with the normalization beside it, which is what
 #: :class:`RadioFIRRCDegeneracyWarning` exists to say. Declaring them would make
 #: the wildcard emit that warning by construction, i.e. ship a default whose own
 #: guard objects to it. They are identifiable as ``PopulationFitter``

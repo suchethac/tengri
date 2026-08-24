@@ -1,5 +1,5 @@
 # SPDX-License-Identifier: BSD-3-Clause
-"""FitResult — a thin record-and-citations wrapper around Posterior / SEDResult.
+"""FitResult: a thin record-and-citations wrapper around Posterior / SEDResult.
 
 Does not replace existing result types; wraps them so downstream code can access
 ``.samples`` or ``.params`` exactly as before via ``result.inner``.
@@ -41,7 +41,7 @@ class ResultSerializationError(RuntimeError):
     Raised by :meth:`FitResult.save` when one or more sample entries could not
     be written. The file is still created and holds everything that *could* be
     written, with the omitted names recorded in its ``samples.skipped_keys``
-    attribute — so the failure is recoverable, not fatal.
+    attribute; so the failure is recoverable, not fatal.
     :meth:`FitResult.load` reads that attribute back and warns, so a later
     reader of an incomplete file learns of it too.
 
@@ -426,7 +426,7 @@ class FitResult:
         group's ``skipped_keys`` attribute *and* raised. Until 2026-08 the
         whole block sat under ``contextlib.suppress(Exception)``, so an
         unwritable entry silently took every entry after it with it and
-        ``save`` still returned normally — this docstring already promised the
+        ``save`` still returned normally: this docstring already promised the
         ``RuntimeError`` that the code did not raise.
 
         See Also
@@ -490,7 +490,7 @@ class FitResult:
             # `save()` returned normally. Measured with
             # `{"good": ndarray, "bad": object()}`: the file kept `good`, dropped
             # `bad`, and said nothing. A partial silent write, whose extent
-            # depends on dict order — an unwritable first key costs everything
+            # depends on dict order: an unwritable first key costs everything
             # behind it. Of the ten blanket suppressors this is the only one that
             # loses data rather than merely hiding a diagnostic.
             #
@@ -542,7 +542,7 @@ class FitResult:
         """Inverse of :meth:`save`. Restore from HDF5.
 
         Reconstructs provenance and citation_keys fully. Inner result
-        is restored as a plain ``dict(samples={...})`` — not the original
+        is restored as a plain ``dict(samples={...})``: not the original
         class. Document this limitation if passing to downstream code.
 
         Parameters
@@ -624,8 +624,8 @@ class FitResult:
 
                 # `save` raises on entries it could not write, but that raise is
                 # heard once, by whoever ran the fit. The person who loads the
-                # file later — possibly on another machine, after the run is
-                # gone — would otherwise see a dict that looks complete. The
+                # file later: possibly on another machine, after the run is
+                # gone: would otherwise see a dict that looks complete. The
                 # record has to be read where the incomplete data is used, or
                 # writing it just moves the silence downstream.
                 if "skipped_keys" in grp["samples"].attrs:
@@ -669,7 +669,7 @@ def posteriors_to_dataframe(results: list, params: list[str] | None = None):
 
     Notes
     -----
-    **JIT-compatible**: no — pure Python, requires pandas library.
+    **JIT-compatible**: no, pure Python, requires pandas library.
 
     Examples
     --------

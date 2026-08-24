@@ -228,7 +228,7 @@ def instrument_first_call(
 ):
     """Wrap a jax.jit'd callable to time its first invocation.
 
-    `jax.jit(fn)` is lazy — it returns a wrapper that traces and compiles
+    `jax.jit(fn)` is lazy: it returns a wrapper that traces and compiles
     on the first call with concrete arguments. Wrapping `jax.jit(fn)` in
     a `compile_timer` records only metadata-construction time
     (microseconds), NOT the actual XLA compile. This wrapper instead

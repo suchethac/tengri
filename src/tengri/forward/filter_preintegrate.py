@@ -11,7 +11,7 @@ each filter's transmission curve. The result is an
 typical SDSS-class survey, and the orchestrator chain that consumes
 it compiles correspondingly faster.
 
-This module exposes the **ingredient** — a JAX-compatible
+This module exposes the **ingredient**, a JAX-compatible
 ``preintegrate_ssp_filter_grid`` function. Wiring it into a
 photometry-mode StellarSEDComponent variant (which would skip
 allocating the full ``lnu_age`` cube and produce ``state.photometry``
@@ -83,8 +83,8 @@ def preintegrate_ssp_filter_grid(
     :math:`1/\lambda` ``BESSELL`` default, per ADR-0017; pre-#960 this
     function used a :math:`\lambda` weight, which matched neither
     convention). Identical to the per-filter integral in
-    :func:`tengri.observation.photometry.compute_flux_density` —
-    union-grid quadrature included (#960) — but without the
+    :func:`tengri.observation.photometry.compute_flux_density`,
+    union-grid quadrature included (#960), but without the
     ``(1+z)/4\pi d_L^2`` source→observer scaling; that is applied later
     when the SSP grid is combined with mass-per-bin weights.
 
@@ -115,7 +115,7 @@ def preintegrate_ssp_filter_grid(
 
     Notes
     -----
-    **JIT-compatible**: yes — pure JAX. **Eager-recommended**:
+    **JIT-compatible**: yes, pure JAX. **Eager-recommended**:
     typically called once at construction time, so the JIT overhead
     of compiling the per-filter loop isn't worth paying.
 

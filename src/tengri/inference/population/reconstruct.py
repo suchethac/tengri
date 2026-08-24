@@ -77,7 +77,7 @@ def centered_fields(xi, psd_sigma_dex, psd_tau_yr, log_age_grid, centering=1.0):
             f"xi's trailing axis is {xi.shape[-1] if xi.ndim else '(scalar)'} but "
             f"log_age_grid has {n_grid} points; they must match, since the trailing "
             f"axis of xi IS the field grid. Pass the same n_grid the model was built "
-            f"with (SEDModel.build(..., n_grid=N), default 256) — a posterior's "
+            f"with (SEDModel.build(..., n_grid=N), default 256), a posterior's "
             f"'psd_xi' has shape (n_samples, n_grid)."
         )
 

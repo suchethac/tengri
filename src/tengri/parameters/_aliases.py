@@ -23,7 +23,7 @@ _LEGACY_PARAM_ALIASES = {
     "psd_sigma": "sfh_field_psd_sigma",
     "psd_tau_myr": "sfh_field_psd_tau_myr",
     # Dust-emission name unification (#849): the Schreiber tabulated components used
-    # divergent spellings for the same physics — dust temperature and PAH mass
+    # divergent spellings for the same physics: dust temperature and PAH mass
     # fraction. Canonical: ``dust_T`` (shared with modified_blackbody / casey2012
     # / the schreiber2016 closure) and ``dust_f_pah`` (matches the dust_f_cold /
     # dust_f_obscuration underscore family).

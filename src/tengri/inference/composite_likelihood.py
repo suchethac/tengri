@@ -16,8 +16,8 @@ The composition primitive for joint likelihoods. A user with photometry
 >>> fitter = tengri.Fitter(model, data=..., noise=..., likelihood=likelihood)
 
 The composite reads from each component's expected key in the
-prediction dict — :class:`PhotometryLikelihood` reads ``"phot_fnu"``,
-:class:`SpectroscopyLikelihood` reads ``"spec_fnu"`` — and sums their
+prediction dict, :class:`PhotometryLikelihood` reads ``"phot_fnu"``,
+:class:`SpectroscopyLikelihood` reads ``"spec_fnu"``, and sums their
 log-probabilities. Adding a custom upper-limit or emission-line
 likelihood to the joint set is one more constructor argument.
 
@@ -49,8 +49,8 @@ class CompositeLikelihood:
     Parameters
     ----------
     *likelihoods : :class:`tengri.protocols.Likelihood`
-        Concrete Likelihood objects. Order doesn't matter — sums are
-        commutative — but is preserved for diagnostic ``name``
+        Concrete Likelihood objects. Order doesn't matter, sums are
+        commutative, but is preserved for diagnostic ``name``
         construction.
 
     Notes
@@ -70,7 +70,7 @@ class CompositeLikelihood:
     def __init__(self, *likelihoods, name: str | None = None) -> None:
         # Variadic constructor for the natural call site
         # ``CompositeLikelihood(a, b, c)``. dataclass-generated init
-        # would force a list/tuple — this matches the
+        # would force a list/tuple, this matches the
         # :func:`run_components`-style ergonomics.
         object.__setattr__(self, "likelihoods", tuple(likelihoods))
         if name is None:
@@ -109,7 +109,7 @@ class CompositeLikelihood:
     ) -> jnp.ndarray:
         r"""Sum of log-probabilities across constituents.
 
-        Each constituent reads only the prediction keys it needs —
+        Each constituent reads only the prediction keys it needs,
         :class:`PhotometryLikelihood` ignores ``"spec_fnu"`` and vice
         versa. ``data_args`` is forwarded to constituents that accept it
         (the built-in adapter cohort) so a shared compiled loss reads the
@@ -144,7 +144,7 @@ def _check_channel_scales(likelihoods, prediction, params, data_args):
     """Eager pre-check that likelihood channels are on representable scales (#1495).
 
     Evaluates each channel's ``log_prob`` once, eagerly, at a reference
-    parameter point, against the SAME prediction dict the loss builds — and
+    parameter point, against the SAME prediction dict the loss builds, and
     raises when a channel's log-probability is non-finite or outside the
     float32 window (±3.4e38). A channel whose observations are supplied in
     the wrong units produces a chi-squared tens of orders of magnitude too
@@ -175,8 +175,8 @@ def _check_channel_scales(likelihoods, prediction, params, data_args):
     Notes
     -----
     Runs once at loss build time, outside JIT; the traced ``log_prob`` is
-    untouched. Not meant to detect every scale problem — only pathological
-    ones (a ~29-order units mismatch) — and it deliberately has NO fallback
+    untouched. Not meant to detect every scale problem, only pathological
+    ones (a ~29-order units mismatch), and it deliberately has NO fallback
     path: if a channel cannot be evaluated here, the same call fails inside
     the fit, so the error propagates instead of being swallowed.
     """
@@ -189,7 +189,7 @@ def _check_channel_scales(likelihoods, prediction, params, data_args):
     for i, lk in enumerate(likelihoods):
         lk_name = getattr(lk, "name", type(lk).__name__)
 
-        # Evaluate the channel exactly the way the loss does (no try/except —
+        # Evaluate the channel exactly the way the loss does (no try/except,
         # a failure here is a failure the fit would hit anyway; keep it loud).
         if "data_args" in inspect.signature(lk.log_prob).parameters:
             log_prob_val = float(lk.log_prob(prediction, params, data_args=data_args))
@@ -220,6 +220,6 @@ def _check_channel_scales(likelihoods, prediction, params, data_args):
             )
             + f". Max |prediction| = {pred_scale:.3e}, max |data| = {obs_scale:.3e}. "
             "A chi-squared this large silently absorbs every other channel "
-            "through floating-point rounding — check this channel's units "
+            "through floating-point rounding, check this channel's units "
             "against what the model predicts for it (#1495)."
         )

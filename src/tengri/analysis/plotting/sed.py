@@ -37,7 +37,7 @@ def plot_sed_fit(
     band_names=None,
     show_residuals=True,
 ):
-    """Plot observed photometry with model fit — Prospector style.
+    """Plot observed photometry with model fit: Prospector style.
 
     Parameters
     ----------
@@ -76,7 +76,7 @@ def plot_sed_fit(
     """
     # The residual panel needs `posterior_draws` to have anything in it, so it
     # is built only when both are present. Keying it on `show_residuals` alone
-    # meant the DEFAULT call — observed photometry, no posterior yet — drew an
+    # meant the DEFAULT call (observed photometry, no posterior yet) drew an
     # empty box under the SED. `ax=` is honored whenever no residual panel is
     # being added; a caller's own Axes cannot be split in two.
     want_residuals = show_residuals and posterior_draws is not None
@@ -165,7 +165,7 @@ def plot_sed_fit(
         ax_main.set_xlabel(r"Wavelength ($\AA$)")
     # One return type. This used to hand back a Figure on the residual branch
     # and an Axes otherwise, so what the caller held depended on whether they
-    # had passed `posterior_draws` — and `fig.savefig(...)`, which the
+    # had passed `posterior_draws`: and `fig.savefig(...)`, which the
     # docstring, the module example and the sibling plot_spectrum_fit all
     # imply, raised AttributeError on the common path.
     return fig
@@ -179,7 +179,7 @@ def plot_sed_fit(
 def plot_spectrum_fit(
     wave_obs, spec_obs, noise, spec_true=None, spec_draws=None, features=None, z=0.1
 ):
-    """Plot spectroscopic fit with residuals — CIGALE style.
+    """Plot spectroscopic fit with residuals: CIGALE style.
 
     Parameters
     ----------
@@ -279,7 +279,7 @@ def plot_spectrum_fit(
 
 
 # ═══════════════════════════════════════════════════════════════════
-# Sweep utilities — the engine behind all gallery notebooks
+# Sweep utilities: the engine behind all gallery notebooks
 # ═══════════════════════════════════════════════════════════════════
 
 
@@ -575,7 +575,7 @@ def sfh_sed_comparison(
 def mock_plot(mock, ax=None):
     """Plot mock photometry and true SED.
 
-    Convenience function for MockData.plot() — shows observed photometry
+    Convenience function for MockData.plot(): shows observed photometry
     with errorbars and the true noiseless SED as a line.
 
     Parameters
@@ -626,7 +626,7 @@ def mock_plot(mock, ax=None):
 def posterior_plot_sed(result, mock=None, ax=None):
     """Plot SED posterior with optional mock data.
 
-    Convenience function for Posterior.plot_sed() — creates a two-panel
+    Convenience function for Posterior.plot_sed(): creates a two-panel
     figure showing the posterior SED band and the star formation history
     over lookback time.
 

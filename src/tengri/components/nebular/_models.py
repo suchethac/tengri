@@ -6,7 +6,7 @@ and ``tengri.components.igm._models`` (#355) and the older
 ``SFH_REGISTRY`` / ``AGN_MODELS`` patterns. ``_VALID_NEBULAR_TYPES``
 in :mod:`tengri.parameters.groups` derives from
 :data:`NEBULAR_MODELS.keys()` per ADR-0005 / ADR-0008 (single source of
-truth) — adding a new backend is one ``register_nebular_model`` call,
+truth): adding a new backend is one ``register_nebular_model`` call,
 not a parallel edit to a validator set.
 """
 

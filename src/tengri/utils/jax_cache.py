@@ -427,7 +427,7 @@ def cache_size_bytes(cache_dir: str | os.PathLike[str] | None = None) -> int:
             try:
                 total += os.path.getsize(os.path.join(root, f))
             except OSError:
-                # Race with eviction, broken symlink, etc. — skip.
+                # Race with eviction, broken symlink, etc.: skip.
                 continue
     return total
 

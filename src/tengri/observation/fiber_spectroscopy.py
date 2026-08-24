@@ -1,5 +1,5 @@
 # SPDX-License-Identifier: BSD-3-Clause
-"""FiberSpectroscopyObservation — fiber-aperture-aware spectroscopy adapter.
+"""FiberSpectroscopyObservation, fiber-aperture-aware spectroscopy adapter.
 
 Wraps an existing :class:`tengri.Observation` (configured for
 spectroscopy) and scales its ``spec_fnu`` output by the aperture
@@ -80,7 +80,7 @@ class FiberSpectroscopyObservation:
     -----
     JIT/grad/vmap-compatible. The aperture-fraction integral is
     differentiable in the redshift (via angular diameter distance)
-    and the fiber radius — useful when either is a fitted parameter.
+    and the fiber radius, useful when either is a fitted parameter.
 
     When the state has no ``spatial_profile_2d`` key (i.e. the user
     didn't wire up a spatial sub-model), the wrapped predict is

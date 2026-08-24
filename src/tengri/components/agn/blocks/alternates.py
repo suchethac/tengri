@@ -1,5 +1,5 @@
 # SPDX-License-Identifier: BSD-3-Clause
-"""Non-GRAHSP block implementations — proof that the block protocol mixes
+"""Non-GRAHSP block implementations: proof that the block protocol mixes
 across models.
 
 Each adapter wraps an existing tengri AGN function (or dust attenuation
@@ -112,8 +112,8 @@ def simple_torus_block(
 ) -> Array:
     r"""tengri ``simple_torus`` (single-temperature graybody) block.
 
-    The torus is normalized by ``agn_torus_frac × 10^agn_log_lbol`` —
-    *not* by ``l5100_disc`` — so this block ignores the disc 5100Å
+    The torus is normalized by ``agn_torus_frac × 10^agn_log_lbol``,
+    *not* by ``l5100_disc``: so this block ignores the disc 5100Å
     luminosity. That choice matches upstream :func:`unified_agn`.
 
     Parameters
@@ -206,7 +206,7 @@ def smc_prevot_block(
     applies for ``agn_ebv_disc`` (Prevot et al. 1984 [1]_; the prescription
     AGNfitter's ``BBBred_Prevot`` uses for its ``EBVbbb``). Delegating to
     ``redden_disc`` keeps the two disc-reddening paths identical at matched
-    :math:`E(B-V)` — the block previously dropped the :math:`R_V` factor and
+    :math:`E(B-V)`, the block previously dropped the :math:`R_V` factor and
     under-attenuated by :math:`2.72\times` in magnitudes relative to
     ``agn_ebv_disc``.
 
@@ -214,7 +214,7 @@ def smc_prevot_block(
     (:math:`k_{\rm raw}(0.55\,\mu m) \approx 2.468`) instead of pinning the
     published :math:`R_V = 2.72`, so at matched :math:`E(B-V)` its
     :math:`A_\lambda` is a uniform factor :math:`2.468/2.72 \approx 0.907`
-    of tengri's — identical spectral shape, a ~10% rescaling of the
+    of tengri's: identical spectral shape, a ~10% rescaling of the
     effective :math:`E(B-V)`.
 
     Parameters
@@ -264,8 +264,8 @@ def qsogen_quasar_ext_block(
     a different law **and** a different convention from ``smc_prevot`` (the SMC
     Prevot fit AGNfitter uses, stored directly as :math:`A_\lambda/E(B-V)`).
 
-    Because it runs at the attenuation stage — after the disc, lines and FeII
-    are summed — it reddens the whole quasar spectrum at once, matching qsogen's
+    Because it runs at the attenuation stage: after the disc, lines and FeII
+    are summed: it reddens the whole quasar spectrum at once, matching qsogen's
     "redden the quasar flux, excluding the host". For a qsogen build with no
     separate torus this is exactly qsogen's reddening; if a torus block is
     present it is reddened too (qsogen bundles the near-IR into the quasar
@@ -278,7 +278,7 @@ def qsogen_quasar_ext_block(
         Rest-frame wavelength [Å].
     agn_attenuation_ebv : float, optional
         Quasar color excess :math:`E(B-V)` [mag]. Default ``0.0`` (no
-        attenuation — a no-op, :math:`10^0 = 1`).
+        attenuation, a no-op, :math:`10^0 = 1`).
 
     Returns
     -------

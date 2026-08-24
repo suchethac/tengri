@@ -8,7 +8,7 @@ absorber redshift.
 
 This is distinct from the *statistical* DLA contribution in ``igm.py``
 (Inoue+2014), which models the mean opacity from all DLA systems along
-a random sightline.  This module handles a *specific* absorber — e.g.,
+a random sightline.  This module handles a *specific* absorber: e.g.,
 when a spectrum shows a clear damped trough.
 
 Physics
@@ -204,7 +204,7 @@ def dla_transmission(
 
     Notes
     -----
-    **JIT-compatible**: yes — pure JAX function with ``@jax.jit`` decorator.
+    **JIT-compatible**: yes, pure JAX function with ``@jax.jit`` decorator.
 
     Examples
     --------
@@ -257,7 +257,7 @@ def dla_transmission_obs(
 
     Notes
     -----
-    **JIT-compatible**: yes — pure JAX function with ``@jax.jit`` decorator.
+    **JIT-compatible**: yes, pure JAX function with ``@jax.jit`` decorator.
 
     Examples
     --------

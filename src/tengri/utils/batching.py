@@ -1,5 +1,5 @@
 # SPDX-License-Identifier: BSD-3-Clause
-r"""Memory-bounded batched evaluation — :func:`vmap_chunked`.
+r"""Memory-bounded batched evaluation: :func:`vmap_chunked`.
 
 A bare :func:`jax.vmap` over a full posterior materializes every intermediate
 for every draw at once, which is how a 20 000-sample SED fit turns into an OOM
@@ -14,7 +14,7 @@ the results concatenated along the draw axis. Peak memory scales with
 Notes
 -----
 **Correctness contract**: the result must not depend on ``chunk_size`` beyond a
-few ULP. Chunking is a memory strategy, not a numerical one — a chunk-boundary
+few ULP. Chunking is a memory strategy, not a numerical one; a chunk-boundary
 bug is dangerous precisely because it produces plausible numbers rather than an
 error.
 
@@ -22,7 +22,7 @@ error.
 each batch shape*, so a chunk of 8 and a batch of 37 vectorize and reassociate
 their reductions differently and the last bit can move (measured: ~1 ULP on
 ``sfr_100myr``; exact on ``stellar_mass``). If you are chasing bit-for-bit
-reproducibility — a reproduction notebook, a parity audit — pin ``chunk_size``
+reproducibility (a reproduction notebook, a parity audit) pin ``chunk_size``
 along with everything else, or evaluate unchunked.
 """
 
@@ -35,7 +35,7 @@ import jax.numpy as jnp
 
 __all__ = ["vmap_chunked"]
 
-# The failures that genuinely mean "this function cannot be traced" — it inspects
+# The failures that genuinely mean "this function cannot be traced": it inspects
 # concrete values, or leaks a tracer. Everything else (a typo'd key, a shape
 # mismatch, an OOM) is a real bug and must propagate: catching it here would
 # silently reclassify it as a fact of life and route around it forever (#1128).
@@ -50,7 +50,7 @@ def _leading_axis_size(batch) -> int:
     """Length of the batch (draw) axis, read from the first leaf."""
     leaves = jax.tree_util.tree_leaves(batch)
     if not leaves:
-        raise ValueError("empty batch — nothing to map over")
+        raise ValueError("empty batch: nothing to map over")
     return leaves[0].shape[0]
 
 
@@ -67,7 +67,7 @@ def vmap_chunked(fn, chunk_size: int = 16):
     than with the batch. Each chunk runs as one compiled ``jit(vmap(fn))``
     kernel.
 
-    If ``fn`` cannot be jitted — some nebular backends are not traceable — the
+    If ``fn`` cannot be jitted (some nebular backends are not traceable) the
     call degrades to an **eager per-draw loop** rather than raising, and warns
     once so the ~7x slowdown is never silent. The jittability probe runs **once**
     per returned callable, not once per draw.
@@ -103,13 +103,13 @@ def vmap_chunked(fn, chunk_size: int = 16):
     ValueError
         If ``chunk_size`` is not positive, or the batch has no leaves.
     Exception
-        Whatever ``fn`` raises, if the failure is not a tracing failure — a real
+        Whatever ``fn`` raises, if the failure is not a tracing failure; a real
         bug is never swallowed by the jittability probe.
 
     Notes
     -----
-    **JIT-compatible**: the returned callable is *not* itself meant to be jitted
-    — it drives compilation internally and does Python-level slicing. Use it
+    **JIT-compatible**: the returned callable is *not* itself meant to be jitted;
+    it drives compilation internally and does Python-level slicing. Use it
     around a jittable ``fn``, not inside another ``jit``.
 
     The ragged final chunk (when ``n`` is not a multiple of ``chunk_size``)
@@ -139,7 +139,7 @@ def vmap_chunked(fn, chunk_size: int = 16):
     can_jit: list[bool | None] = [None]
 
     def _eager(batch, n):
-        """Per-draw Python loop — the fallback for non-traceable ``fn``.
+        """Per-draw Python loop: the fallback for non-traceable ``fn``.
 
         ``jax.vmap`` *removes* the mapped axis before calling ``fn``, so ``fn``
         sees a scalar per draw. The loop must index (``x[i]``), not slice
@@ -163,7 +163,7 @@ def vmap_chunked(fn, chunk_size: int = 16):
                 warnings.warn(
                     f"vmap_chunked: {getattr(fn, '__name__', 'the mapped function')} "
                     f"cannot be traced ({type(exc).__name__}), so it will be evaluated "
-                    f"one draw at a time in an eager loop — roughly 7x slower than the "
+                    f"one draw at a time in an eager loop; roughly 7x slower than the "
                     f"batched path. This is expected for backends that inspect concrete "
                     f"values; if you did not intend it, make the function jittable.",
                     UserWarning,

@@ -9,7 +9,7 @@ wavelength convention converted from nm (CIGALE) to Angstrom (tengri).
 
 Unlike Inoue+2014, Meiksin's diffuse Lyman-α-forest continuum
 suppression rises from ~0 just blueward of Lyα to ~0.25 by the optical
-at z = 3 — a *non-binary* continuum that Inoue's grid model misses.
+at z = 3; a *non-binary* continuum that Inoue's grid model misses.
 Issue #440 §12.
 
 References

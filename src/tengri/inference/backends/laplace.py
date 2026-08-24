@@ -1,7 +1,7 @@
 # SPDX-License-Identifier: BSD-3-Clause
 """Laplace approximation: Gaussian posterior from Hessian at MAP.
 
-The cheapest uncertainty estimate available — compute the Hessian of the
+The cheapest uncertainty estimate available, compute the Hessian of the
 loss function H(xi) at the MAP estimate, invert to get a covariance matrix,
 then draw samples from N(theta_MAP, H^{-1}).
 
@@ -41,7 +41,7 @@ def _regularize_hessian(hessian, min_eigenvalue, regularize=True):
     """Floor the Hessian spectrum, and report the variance that floors imply.
 
     Clipping is not damping. ``cov = H^-1``, so flooring an eigenvalue at
-    ``min_eigenvalue`` does not cap that direction's variance — it *assigns* it
+    ``min_eigenvalue`` does not cap that direction's variance, it *assigns* it
     ``1 / min_eigenvalue`` (``1e6``, i.e. std 1000, at the default). The
     directions the data constrain least therefore come back with the widest
     draws, and the width is an artifact of the floor (#1515).
@@ -101,12 +101,12 @@ def _regularize_hessian(hessian, min_eigenvalue, regularize=True):
             f"Laplace clipped {n_clipped}/{n_dim} Hessian eigenvalues at "
             f"min_eigenvalue={min_eigenvalue:g}. Because cov = H^-1, each "
             f"clipped direction is *assigned* variance {implied_variance:.6g} "
-            f"(std {implied_std:.6g}) in the unconstrained parameterization — "
+            f"(std {implied_std:.6g}) in the unconstrained parameterization, "
             f"that width is the floor, not a measurement, and it lands on the "
             f"directions the data determine least well. Smallest unclipped "
             f"eigenvalue is {smallest_unclipped:.4g}. If a clipped direction is "
             f"an exact degeneracy (two parameters entering the model only in "
-            f"combination, as met_alpha_fe and met_logzsol do — #1095), hold "
+            f"combination, as met_alpha_fe and met_logzsol do, #1095), hold "
             f"one of the pair Fixed rather than lowering the floor.",
             LaplaceVarianceCeilingWarning,
             stacklevel=3,
@@ -125,7 +125,7 @@ def _finite_diff_hessian(grad_fn, theta_flat, unravel_fn, data_args, eps=1e-5):
     """Hessian via central finite differences on pre-compiled grad_fn.
 
     2×D gradient evaluations using the already-JIT-compiled grad_fn.
-    Zero additional JAX compilation — each call is a cache hit on the
+    Zero additional JAX compilation, each call is a cache hit on the
     same compiled kernel.
 
     For D=7 at ~350μs/eval: total ≈ 5ms (vs 55s for ``jax.hessian``
@@ -156,7 +156,7 @@ def _newton_decrement(grad_flat, eigenvalues, eigenvectors):
 
     ``d = 0.5 g^T H^-1 g``, evaluated in the Hessian eigenbasis so no second
     inverse is needed. Zero exactly at a stationary point, and invariant under
-    affine reparameterization — unlike ``||g||``, which rescales with the
+    affine reparameterization, unlike ``||g||``, which rescales with the
     parameters and so cannot carry a fixed threshold.
 
     Parameters
@@ -178,7 +178,7 @@ def _newton_decrement(grad_flat, eigenvalues, eigenvectors):
 
     Notes
     -----
-    The non-positive case is not a corner case to tidy away — it is the one
+    The non-positive case is not a corner case to tidy away; it is the one
     input that breaks the formula's own algebra. A negative eigenvalue makes
     the sum **negative**, so a naive ``d > tol`` test reads as "converged" at a
     saddle. Reachable whenever ``regularize=False`` leaves the spectrum
@@ -225,7 +225,7 @@ def run_laplace(
     grad_fn : callable, optional
         Pre-compiled ``(params, data_args) -> (loss, grad)`` function.
         When provided, the Hessian is computed via central finite
-        differences — avoiding the monolithic ``jax.hessian`` compilation
+        differences, avoiding the monolithic ``jax.hessian`` compilation
         (55s → 5ms for D=7).  Falls back to ``jax.hessian`` if ``None``.
     n_samples : int
         Number of posterior samples to draw.
@@ -261,7 +261,7 @@ def run_laplace(
     **Posterior samples & uncertainty**: ``cov = H^-1`` holds only at a mode.
     ``run_map`` takes a fixed number of Adam steps with no convergence test, so
     an under-converged expansion point reaches here routinely and produces a
-    confident, plausible, wrong posterior — typically far too narrow, since a
+    confident, plausible, wrong posterior, typically far too narrow, since a
     point on a steep slope carries much higher curvature than the mode below it.
     The Newton decrement
 
@@ -283,7 +283,7 @@ def run_laplace(
     where :math:`H` is the Hessian of the loss at the expansion point
     :math:`\\theta^*`. The loss carries the standardized prior *unnormalized*
     (:math:`\\tfrac12\\sum\\xi^2`, no :math:`-\\tfrac{D}{2}\\log 2\\pi` term),
-    which exactly cancels the :math:`(2\\pi)^{D/2}` Gaussian-integral factor —
+    which exactly cancels the :math:`(2\\pi)^{D/2}` Gaussian-integral factor,
     hence no explicit :math:`2\\pi` term appears. This evidence is
     reparametrization-invariant within the standardized ξ~N(0,1) prior space
     used internally.
@@ -301,7 +301,7 @@ def run_laplace(
     independent evidence method (e.g., ``method="nss"``) once per model family
     to detect this.
 
-    Evidence scatter (uncertainties) are not reported — the Laplace
+    Evidence scatter (uncertainties) are not reported; the Laplace
     approximation has no intrinsic sampling error, only model-error bias which
     cannot be quantified without comparison to other methods.
     """
@@ -316,7 +316,7 @@ def run_laplace(
     if verbose:
         print(f"Laplace: {n_dim} parameters, {n_samples} samples")
 
-    # Hessian at MAP — finite differences on pre-compiled grad_fn (fast)
+    # Hessian at MAP, finite differences on pre-compiled grad_fn (fast)
     # or jax.hessian (slow compilation, exact).
     if grad_fn is not None:
         hessian = _finite_diff_hessian(
@@ -374,7 +374,7 @@ def run_laplace(
             f"{float(jnp.min(eigenvalues_clipped)):.4g}), gradient norm "
             f"{grad_norm:.4g}. The loss curves *downward* along those "
             f"directions, so this is a saddle or a maximum, not a mode, and "
-            f"H^-1 is not a covariance — the draws are meaningless rather "
+            f"H^-1 is not a covariance, the draws are meaningless rather "
             f"than merely mis-scaled. Leave regularize=True (the default) to "
             f"floor the spectrum at min_eigenvalue, or re-run the optimizer "
             f"from a different start.",

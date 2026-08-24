@@ -2,7 +2,7 @@
 """MAP optimization, Laplace approximation, and Pathfinder.
 
 Extracted from fitter.py. Migrated to the :class:`InferenceContext`
-Protocol — accepts either an ``InferenceContext`` or a ``Fitter`` (the
+Protocol, accepts either an ``InferenceContext`` or a ``Fitter`` (the
 latter is normalized internally during the multi-PR migration window).
 See ADR-0010.
 """
@@ -37,7 +37,7 @@ def _publish_map_init_cache(context, posterior):
 
     ``_maybe_map_init`` seeds HMC/NUTS/VI from a cached MAP point, but only ever
     saw the short MAP *it* ran itself. An explicit ``fit(method='map')`` wrote
-    nothing there, so the ordinary two-step workflow — optimize, then sample —
+    nothing there, so the ordinary two-step workflow (optimize, then sample)
     silently paid for a **second** MAP: a full user-configured run, followed by
     another 1000-step one inside the sampler, on the same model and the same
     data.
@@ -45,7 +45,7 @@ def _publish_map_init_cache(context, posterior):
     Publishing here closes that. The entry is stamped with
     ``tengri.inference._sample_utils._data_fingerprint``, the same guard
     the sampler's own writes use, so it can never seed a different target
-    (issue #1529) — and a user's MAP is typically the better starting point
+    (issue #1529), and a user's MAP is typically the better starting point
     anyway, being run at their chosen ``n_steps`` / ``n_restarts`` rather than
     the init default.
 
@@ -75,7 +75,7 @@ def _reject_nonfinite_map(params: dict) -> None:
     A MAP estimate containing NaN or inf is not a usable answer, and it is not a
     private problem either: every MCMC and VI backend takes ``init_from`` from here,
     so one bad point poisons whatever runs next. In #1397 it produced a NUTS run whose
-    every parameter was NaN and whose ``rhat()`` was NaN — which silently disarms a
+    every parameter was NaN and whose ``rhat()`` was NaN, which silently disarms a
     notebook's ``max_rhat < 1.01`` assertion, because NaN compares false against any
     threshold. Nothing raised.
 
@@ -104,7 +104,7 @@ def _reject_nonfinite_map(params: dict) -> None:
     if not bad:
         return
     raise ValueError(
-        f"MAP optimization produced a non-finite estimate for {bad} — the fit did not "
+        f"MAP optimization produced a non-finite estimate for {bad}, the fit did not "
         f"converge (a run ending in loss=nan is the usual cause). Handing this on as "
         f"an initialization gives a posterior of NaN with NaN R-hat, which raises "
         f"nothing and silently disarms any convergence check. Inspect data scaling "
@@ -255,7 +255,7 @@ def _run_map_scipy(
 ):
     """MAP optimization via scipy quasi-Newton solvers.
 
-    Uses scipy's L-BFGS-B / BFGS — pure Fortran optimizer with zero
+    Uses scipy's L-BFGS-B / BFGS, pure Fortran optimizer with zero
     JAX compilation.  Only the forward model + gradient evaluation is
     JIT-compiled (via the cached ``grad_fn``).
 
@@ -375,7 +375,7 @@ def _best_finite_restart(final_losses) -> int:
     same reason in reverse: a plain ``argmin`` would rank it the best fit
     possible.
 
-    Not JIT-safe by design — reads concrete values to decide, and runs once per
+    Not JIT-safe by design, reads concrete values to decide, and runs once per
     fit after ``block_until_ready``.
     """
     losses = np.asarray(final_losses, dtype=float)
@@ -411,7 +411,7 @@ def _run_map_multistart(context, *, key, n_restarts, n_steps, learning_rate, opt
     opt, opt_name = _build_optax_optimizer(optimizer, learning_rate)
 
     # Both the restart inits (parameters) and ``data_args`` (the data) are
-    # threaded as runtime arguments — never closure-captured — so the compiled
+    # threaded as runtime arguments (never closure-captured) so the compiled
     # kernel is reused across galaxies/datasets instead of baking the data in as
     # a constant (which would recompile per dataset). ``in_axes=(0, None)`` maps
     # over the restart axis while broadcasting the shared data.
@@ -527,7 +527,7 @@ def run_map(
     optimizer : str or optax optimizer
         Optax: ``"adam"``, ``"sgd"``, ``"adamw"``, or a pre-built optax
         optimizer.  ``"lbfgs"`` (or ``"lbfgs_scipy"``) uses scipy
-        L-BFGS-B with Wolfe line search — reliable convergence, zero
+        L-BFGS-B with Wolfe line search, reliable convergence, zero
         JAX compilation for the optimizer itself.
     early_stopping : bool
         Stop if loss doesn't improve (optax only; quasi-Newton uses ``tol``).
@@ -548,7 +548,7 @@ def run_map(
 
     # Normalize: dispatcher passes an InferenceContext for migrated
     # backends, but internal callsites (``Fitter._run_map``) may still
-    # pass a raw Fitter during the migration window — accept both.
+    # pass a raw Fitter during the migration window, accept both.
     context = InferenceContext.from_target(context)
     loss_fn = context.neg_log_posterior_fn
     data_args = context.data_args
@@ -721,13 +721,13 @@ def build_vectorized_map_solver(
     Parameters
     ----------
     fitter : Fitter
-        Template fitter — its model, observation, spec, and ``_data_args``
+        Template fitter, its model, observation, spec, and ``_data_args``
         layout are reused for every galaxy. The galaxy-varying fields
         (``data``, ``noise``, ``sqrt_noise_inv``) are replaced inside the
         scan; all other fields (filter curves, masks, spec covariance) are
         shared from the template.
     n_steps : int, optional
-        Number of optax steps (default 200).  No early stopping — the
+        Number of optax steps (default 200).  No early stopping, the
         scan length is static, so compile cost is independent of n_steps.
     learning_rate : float, optional
         Adam learning rate (default 0.03).
@@ -842,7 +842,7 @@ def run_pathfinder(context, *, key, init_from=None, **kwargs):
     context = InferenceContext.from_target(context)
     init_params = context.initial_params(key, init_from=init_from)
 
-    # ``_get_flat_logdensity`` still takes a Fitter — reach through
+    # ``_get_flat_logdensity`` still takes a Fitter, reach through
     # the context until ``mcmc/_shared.py`` migrates (PR4).
     log_posterior_flat_2arg, unravel_fn, init_flat, data_args = _get_flat_logdensity(
         context.fitter,
