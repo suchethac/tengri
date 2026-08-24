@@ -3,8 +3,8 @@ r"""Build-time LUT for the two-component dust energy balance (``L_ir``).
 
 Under ``approx=WavePrecomp()`` the photometry is projected from per-filter
 LUTs, so the full-wavelength stellar SED cube is normally dead-code-eliminated
-by XLA. Enabling dust IR re-emission, however, makes ``L_ir`` — the
-energy-balance absorbed luminosity — feed the output, and the exact
+by XLA. Enabling dust IR re-emission, however, makes ``L_ir``: the
+energy-balance absorbed luminosity: feed the output, and the exact
 :func:`L_absorbed` integral is taken over the full ``(n_met, n_age, n_wave)``
 stellar cube. That single dependency resurrects the cube and costs ~40× per
 evaluation (30 µs → 1.2 ms on a photometry-only fit).
@@ -30,7 +30,7 @@ where :math:`w_{m,a}` are the runtime DSPS joint (metallicity, age) weights and
 the fixed SSP grid, the (fixed-shape) attenuation curves, and the optical depths
 :math:`(\tau_{\rm bc}, \tau_{\rm diff})`. They are precomputed once on a small
 :math:`(\tau_{\rm bc}, \tau_{\rm diff})` grid; at runtime ``G`` is bilinearly
-interpolated and contracted with the weights — no full-wavelength cube.
+interpolated and contracted with the weights: no full-wavelength cube.
 
 The spectral integral is held at full SSP resolution (so #622's far-IR exactness
 is preserved); the only approximation is the smooth bilinear interpolation in
@@ -38,7 +38,7 @@ the two optical-depth axes, where :math:`\int \mathrm{SSP}\, e^{-\tau k}\, d\nu`
 is monotone and well behaved.
 
 This LUT is the precomputed factorization of the canonical energy-balance
-integral :func:`tengri.forward.energy_balance.bolometric_absorbed` — same
+integral :func:`tengri.forward.energy_balance.bolometric_absorbed`: same
 signed :math:`\int (L_\nu^{\rm intr} - L_\nu^{\rm att})\, d\nu` with the same
 912 Å Lyman-continuum mask (#922). The two must agree; the contract is pinned
 by ``tests/contract/test_energy_balance_lut.py``.
@@ -67,15 +67,15 @@ class EnergyBalanceLUT(NamedTuple):
 
     Attributes
     ----------
-    B : ndarray, shape (n_met, n_age)
+    B: ndarray, shape (n_met, n_age)
         Intrinsic bolometric SSP luminosity per unit mass, ``∫ SSP dν`` (signed,
         masked to λ ≥ 912 Å). [erg/s/Hz · Hz per Lsun-flux unit]
-    G : ndarray, shape (n_met, n_age, n_tau_bc, n_tau_diff)
+    G: ndarray, shape (n_met, n_age, n_tau_bc, n_tau_diff)
         Attenuated bolometric SSP luminosity ``∫ SSP·T_a dν`` on the optical-depth
         grid.
-    tau_bc_grid : ndarray, shape (n_tau_bc,)
+    tau_bc_grid: ndarray, shape (n_tau_bc,)
         Birth-cloud optical-depth grid nodes.
-    tau_diff_grid : ndarray, shape (n_tau_diff,)
+    tau_diff_grid: ndarray, shape (n_tau_diff,)
         Diffuse-ISM optical-depth grid nodes.
     """
 
@@ -110,23 +110,23 @@ def build_energy_balance_lut(
 
     Parameters
     ----------
-    ssp_flux : ndarray, shape (n_met, n_age, n_wave)
+    ssp_flux: ndarray, shape (n_met, n_age, n_wave)
         SSP specific luminosity per unit mass [Lsun/Hz/Msun].
-    ssp_wave : ndarray, shape (n_wave,)
+    ssp_wave: ndarray, shape (n_wave,)
         Rest-frame SSP wavelength grid [Å], ascending.
-    ssp_ages_yr : ndarray, shape (n_age,)
+    ssp_ages_yr: ndarray, shape (n_age,)
         SSP age axis [yr].
-    law_bc, law_diff : str
+    law_bc, law_diff: str
         Attenuation-law registry keys (fixed shape).
     f_obscuration, t_birth_yr, transition_width_dex, bc_params, diff_params,
     lyman_cutoff_aa
         Passed verbatim to :func:`two_component_dust` for node-exact agreement.
-    eb_include_lyc : bool, optional
+    eb_include_lyc: bool, optional
         FSPS-parity toggle (#961): when True, the LyC (λ < 912 Å) is kept in
-        the absorbed-luminosity integrand — all absorbed energy heats dust —
+        the absorbed-luminosity integrand: all absorbed energy heats dust:
         instead of the canonical LyC mask (#922). Must match the runtime
         ``DustSEDComponent.config.eb_include_lyc``.
-    tau_bc_grid, tau_diff_grid : ndarray
+    tau_bc_grid, tau_diff_grid: ndarray
         Optical-depth grid nodes (keyword-only).
 
     Returns
@@ -161,7 +161,7 @@ def build_energy_balance_lut(
 
     # Build-time Python loop over the (small) optical-depth grid. Eagerly,
     # the 576-node loop spends its time in per-op Python dispatch inside
-    # the attenuation law, not math — jit once and reuse. The SSP cube is
+    # the attenuation law, not math: jit once and reuse. The SSP cube is
     # threaded as an argument so it enters the graph as a runtime input,
     # not a constant to fold.
     g_at_compiled = jax.jit(g_at)
@@ -191,16 +191,16 @@ def _interp_bracket(grid: jnp.ndarray, x: jnp.ndarray) -> tuple[jnp.ndarray, jnp
 
     Parameters
     ----------
-    grid : ndarray, shape (n_nodes,)
+    grid: ndarray, shape (n_nodes,)
         Uniform ascending grid.
-    x : ndarray, shape ()
+    x: ndarray, shape ()
         Query point. May lie outside ``grid``.
 
     Returns
     -------
-    i0 : ndarray, shape (), int32
+    i0: ndarray, shape (), int32
         Lower node index, clipped to ``[0, n_nodes - 2]``.
-    weights : ndarray, shape (2,)
+    weights: ndarray, shape (2,)
         Weights on nodes ``i0`` and ``i0 + 1``. Both are zero when ``x`` lies
         more than one spacing outside the grid, reproducing the dense form.
 
@@ -239,7 +239,7 @@ def _lut_contract(
 
     # Bilinear interpolation touches four nodes of ``G``, so slice those four
     # out before contracting. Contracting the whole optical-depth grid instead
-    # — which is what a dense weight vector forces — costs n_met x n_age x
+    #: which is what a dense weight vector forces: costs n_met x n_age x
     # n_bc x n_diff multiply-adds to use n_met x n_age x 4 of them: on a
     # (15, 93, 24, 24) LUT that is 803,520 versus 5,580, a 144x overshoot, and
     # it dominated the whole WavePrecomp forward pass.
@@ -269,21 +269,21 @@ def lut_l_absorbed_stellar_log10(
 
     Parameters
     ----------
-    lut : EnergyBalanceLUT
+    lut: EnergyBalanceLUT
         Precomputed ``B``/``G``.
-    joint_weights : ndarray, shape (n_met, n_age)
+    joint_weights: ndarray, shape (n_met, n_age)
         Runtime DSPS joint (metallicity, age) weights.
-    log10_mass_scale : ndarray, shape ()
+    log10_mass_scale: ndarray, shape ()
         ``log10(total_mass x L_sun)`` [dex].
-    tau_bc, tau_diff : ndarray, shape ()
+    tau_bc, tau_diff: ndarray, shape ()
         Runtime optical depths.
 
     Returns
     -------
-    log_magnitude : ndarray, shape ()
+    log_magnitude: ndarray, shape ()
         :math:`\log_{10}|L_{\rm abs}^\star / (\mathrm{erg/s})|` [dex]. ``-inf``
         when nothing is absorbed; ``+inf`` when the contraction is non-finite.
-    sign : ndarray, shape ()
+    sign: ndarray, shape ()
         Sign of the signed luminosity (follows the grid orientation), so the
         caller can combine it with other terms via
         :func:`tengri.utils.scale.log10_add`. ``NaN`` when the contraction is
@@ -301,7 +301,7 @@ def lut_l_absorbed_stellar_log10(
     only the nebular term on the configuration most fits actually use.
 
     ``positive = magnitude > 0`` is False for NaN, so before this the whole
-    stellar absorbed luminosity silently became ``-inf`` — i.e. exactly 0.0 —
+    stellar absorbed luminosity silently became ``-inf``: i.e. exactly 0.0:
     on a corrupt contraction.
     """
     from tengri.utils.scale import _not_computable, log10_magnitude
@@ -329,13 +329,13 @@ def lut_l_absorbed_stellar(
 
     Parameters
     ----------
-    lut : EnergyBalanceLUT
+    lut: EnergyBalanceLUT
         Precomputed ``B``/``G``.
-    joint_weights : ndarray, shape (n_met, n_age)
+    joint_weights: ndarray, shape (n_met, n_age)
         Runtime DSPS joint (metallicity, age) weights.
-    mass_scale : float
+    mass_scale: float
         ``total_mass × L_sun`` scaling applied to the SSP luminosities.
-    tau_bc, tau_diff : float
+    tau_bc, tau_diff: float
         Runtime optical depths.
 
     Returns

@@ -60,12 +60,12 @@ class RadioPowerLawSEDComponentConfig(SEDComponentConfig):
 
     Attributes
     ----------
-    name : str
+    name: str
         Diagnostic identifier. Default ``"radio_powerlaw"``.
-    sfr_mode : str
+    sfr_mode: str
         FIR-radio correlation mode: ``"bell2003"``, ``"delvecchio2021"``,
         or ``"mccheyne2022"``. Default ``"bell2003"``.
-    include_freefree : bool
+    include_freefree: bool
         Include Murphy+2011 thermal free-free component. Default ``True``.
     """
 
@@ -131,7 +131,7 @@ class RadioPowerLawSEDComponent(SEDModelComponent):
     T_e = Fixed(8000.0, description="Electron temperature (free-free)", units="K")
     alpha_ff = Fixed(-0.1, description="Free-free spectral index", units="dimensionless")
 
-    # No required cross-component inputs — radio reads opportunistically
+    # No required cross-component inputs: radio reads opportunistically
     # with documented fallbacks (zero for missing).
     inputs: ClassVar[dict[str, str]] = {}
     optional_inputs: ClassVar[dict[str, str]] = {
@@ -162,14 +162,14 @@ class RadioPowerLawSEDComponent(SEDModelComponent):
 
         Parameters
         ----------
-        p : mapping[str, ndarray]
+        p: mapping[str, ndarray]
             Parameters with prefix stripped: q_ir, alpha_sf, loudness, alpha_agn,
             T_e, alpha_ff.
-        sed_in : ndarray
+        sed_in: ndarray
             Input SED (stellar + nebular + AGN continuum).
-        wave : ndarray
+        wave: ndarray
             Rest-frame wavelength grid in Angstrom.
-        **inputs : ndarray
+        **inputs: ndarray
             Opportunistic cross-component reads: L_ir, L_agn_bol, log_mstar
             (with defaults if not present).
 

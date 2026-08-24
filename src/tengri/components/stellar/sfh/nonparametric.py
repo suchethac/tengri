@@ -32,7 +32,7 @@ References
 - Johnson+2021: Prospector implementation.
 - Tacchella et al. 2022, ApJ, 926, 134 (arXiv:2102.11954): Bursty continuity.
 - Wang et al. 2024 (arXiv:2401.12198): Prospector-β agebins scheme.
-- Synthesizer (ContinuityFlex upstream ref) — cite both: Lovell et al. 2025
+- Synthesizer (ContinuityFlex upstream ref): cite both: Lovell et al. 2025
   (OJA) + Roper et al. 2026 (JOSS).
 
 """
@@ -70,7 +70,7 @@ def _piecewise_constant_sfr(age_yr, bin_edges_yr, sfr_bins, n_bins):
 
     Notes
     -----
-    **JIT-compatible**: yes — ``jnp`` primitives only.
+    **JIT-compatible**: yes, ``jnp`` primitives only.
 
     Ages *below* the first edge are deliberately clamped into the youngest bin.
     ``psb_suess2022`` starts its edges at 0.3 Gyr and relies on that.
@@ -106,11 +106,11 @@ def continuity(
 
     Parameters
     ----------
-    age_yr : array_like, shape (n_age,)
+    age_yr: array_like, shape (n_age,)
         Lookback time grid [yr].
-    log_total_mass : float, optional
+    log_total_mass: float, optional
         log10 of total stellar mass formed [Msun]. Default 10.0.
-    bin_edges_gyr : array_like, shape (n_bins+1,), optional
+    bin_edges_gyr: array_like, shape (n_bins+1,), optional
         Bin edges [Gyr]. Default: 7-edge log-spaced grid from 0 to 13.7 Gyr.
     **ratio_kwargs
         Keyword arguments ``ratio_0``, ``ratio_1``, ..., ``ratio_{N-2}``
@@ -123,7 +123,7 @@ def continuity(
 
     Notes
     -----
-    **JIT-compatible**: yes — all operations use ``jnp`` primitives.
+    **JIT-compatible**: yes, all operations use ``jnp`` primitives.
 
     The SFH is piecewise-constant (step function) with N bins. Free parameters
     are log-ratios between adjacent bins. The oldest bin is the reference,
@@ -157,7 +157,7 @@ def continuity(
     mass_unnorm = jnp.sum(sfr_unnorm * bin_widths_yr)
     sfr_bins = sfr_unnorm * 10.0**log_total_mass / mass_unnorm
 
-    # Piecewise-constant (step function) — Leja+2019 ApJ 876 3 defines the continuity
+    # Piecewise-constant (step function); Leja+2019 ApJ 876 3 defines the continuity
     # SFH as step functions, not linearly interpolated.  Use bin EDGES (not centers)
     # for searchsorted so ages near boundaries are assigned to the correct bin.
     bin_edges_yr = bin_edges_gyr * 1e9
@@ -177,11 +177,11 @@ def continuity_prior_logp(
 
     Parameters
     ----------
-    log_sfr_ratios : array (n_bins-1,)
+    log_sfr_ratios: array (n_bins-1,)
         Log10 SFR ratios between adjacent bins.
-    df : float
+    df: float
         Degrees of freedom for the Student-t distribution. Default 2.
-    scale : float
+    scale: float
         Scale parameter. Default 0.3 dex.
 
     Returns
@@ -191,7 +191,7 @@ def continuity_prior_logp(
 
     Notes
     -----
-    **JIT-compatible**: yes — uses ``jax.scipy.stats`` for Student-t density.
+    **JIT-compatible**: yes, uses ``jax.scipy.stats`` for Student-t density.
     """
     from jax.scipy.stats import t as student_t
 
@@ -214,37 +214,37 @@ def bursty_continuity_prior_logp(
 
     Parameters
     ----------
-    log_sfr_ratios : array_like, shape (n_bins-1,)
+    log_sfr_ratios: array_like, shape (n_bins-1,)
         Log10 SFR ratios between adjacent bins [dimensionless].
         Ratio ``i`` controls the transition from bin ``i+1`` (older) to bin
         ``i`` (younger), following the continuity SFH convention.
-    bin_edges_gyr : array_like, shape (n_bins+1,)
+    bin_edges_gyr: array_like, shape (n_bins+1,)
         Age bin edges [Gyr], monotonically increasing. Must match the edges
         used to construct the SFH (e.g. ``DEFAULT_BIN_EDGES_GYR``).
-    t_split_gyr : float, optional
+    t_split_gyr: float, optional
         Lookback time split [Gyr] separating the bursty (young) regime from
         the smooth (old) regime. Default 1.0 Gyr.
-    scale_young : float, optional
+    scale_young: float, optional
         Student-t scale for ratios whose *younger* bin edge is inside the
         bursty regime (``bin_edges_gyr[i+1] < t_split_gyr``). Default 1.0 dex.
-    scale_old : float, optional
+    scale_old: float, optional
         Student-t scale for old-regime ratios. Default 0.3 dex (same as the
         standard continuity prior).
-    df : float, optional
+    df: float, optional
         Degrees of freedom for both Student-t distributions. Default 2.
 
     Returns
     -------
-    logp : scalar
+    logp: scalar
         Total log-probability [dimensionless] summed over all ratios.
 
     Notes
     -----
-    **JIT-compatible**: yes — ``jnp.where`` selects the scale without branching.
+    **JIT-compatible**: yes, ``jnp.where`` selects the scale without branching.
     ``t_split_gyr``, ``scale_young``, ``scale_old``, and ``df`` must be
     concrete (non-traced) scalars.
 
-    **Gradient-safe**: yes — differentiable w.r.t. ``log_sfr_ratios`` everywhere.
+    **Gradient-safe**: yes, differentiable w.r.t. ``log_sfr_ratios`` everywhere.
 
     Ratio ``i`` is classified as *young* when ``bin_edges_gyr[i+1] < t_split_gyr``,
     i.e. its younger bin edge lies in the bursty regime. The per-ratio log-prob is:
@@ -290,7 +290,7 @@ def _stick_breaking(z_fractions: jnp.ndarray) -> jnp.ndarray:
 
     Parameters
     ----------
-    z_fractions : array (N-1,)
+    z_fractions: array (N-1,)
         Auxiliary variables in (0, 1), each drawn from Beta(1, 1) = Uniform.
 
     Returns
@@ -332,11 +332,11 @@ def dirichlet(
 
     Parameters
     ----------
-    age_yr : array_like, shape (n_age,)
+    age_yr: array_like, shape (n_age,)
         Lookback time grid [yr].
-    log_total_mass : float, optional
+    log_total_mass: float, optional
         log10(total stellar mass formed / Msun). Default: 10.0 (10 Gyr Msun).
-    bin_edges_gyr : array_like, shape (n_bins+1,), optional
+    bin_edges_gyr: array_like, shape (n_bins+1,), optional
         Bin edges in Gyr. Default: 7-edge log-spaced grid from 0 to 13.7 Gyr.
     **z_kwargs
         Keyword arguments ``z_frac_0``, ``z_frac_1``, ..., ``z_frac_{N-2}``
@@ -349,7 +349,7 @@ def dirichlet(
 
     Notes
     -----
-    **JIT-compatible**: yes — all operations use ``jnp`` primitives.
+    **JIT-compatible**: yes, all operations use ``jnp`` primitives.
 
     The mass fractions are derived from auxiliary variables :math:`z_j \\sim \\mathrm{Beta}(1,1)`
     via stick-breaking:
@@ -398,7 +398,7 @@ def dirichlet(
     total_mass = 10.0**log_total_mass
     sfr_bins = mass_fracs * total_mass / bin_widths_yr
 
-    # Piecewise-constant (step function) — Leja+2019 ApJ 876 3; use bin EDGES
+    # Piecewise-constant (step function); Leja+2019 ApJ 876 3; use bin EDGES
     # (not centers) so ages near boundaries go to the correct bin.
     bin_edges_yr = bin_edges_gyr * 1e9
 
@@ -420,7 +420,7 @@ def make_agebins_from_zred(
     bins are fixed at 30 Myr and 100 Myr; interior bins are log-spaced to
     90% of the universe age; the oldest bin spans 90–100% of the universe age.
 
-    This is a **setup-time utility** — call it when building a
+    This is a **setup-time utility**: call it when building a
     :class:`~tengri.Parameters` object, not inside the forward
     model. The returned array is plain NumPy so it can be passed as the
     ``bin_edges_gyr`` argument to :func:`continuity` or
@@ -428,22 +428,22 @@ def make_agebins_from_zred(
 
     Parameters
     ----------
-    zred : float
+    zred: float
         Galaxy redshift. Sets the age of the universe that caps the bins.
-    n_bins : int, optional
+    n_bins: int, optional
         Total number of age bins. Default 7 (matches the tengri default).
-    cosmo : CosmoParams, optional
+    cosmo: CosmoParams, optional
         DSPS cosmology parameters. Default: tengri's Planck 2018 cosmology.
 
     Returns
     -------
-    bin_edges_gyr : np.ndarray, shape (n_bins+1,)
+    bin_edges_gyr: np.ndarray, shape (n_bins+1,)
         Age bin edges [Gyr], monotonically increasing from 0, capped at age of
         universe at ``zred``.
 
     Notes
     -----
-    **Not JIT-compatible** — uses Python control flow and NumPy. Call once
+    **Not JIT-compatible**: uses Python control flow and NumPy. Call once
     at model-construction time, then pass the edges as a static array.
 
     Implements Prospector ``zred_to_agebins_pbeta`` (Johnson et al. 2021
@@ -515,32 +515,32 @@ def psb_continuity(
 
     Parameters
     ----------
-    age_yr : array_like, shape (n_age,)
+    age_yr: array_like, shape (n_age,)
         Lookback time grid [yr].
-    log_total_mass : float, optional
+    log_total_mass: float, optional
         log10 of total stellar mass formed [Msun]. Default 10.0.
-    tlast_gyr : float, optional
+    tlast_gyr: float, optional
         Lookback time of quenching onset [Gyr]. Sets the youngest bin width.
         Typical range: 0.01 to 1.0 Gyr.
-    tflex_gyr : float, optional
+    tflex_gyr: float, optional
         Upper boundary of the flexible zone [Gyr]. Default 2.0.
-    bin_edges_gyr : array_like, shape (n_fixed+1,), optional
+    bin_edges_gyr: array_like, shape (n_fixed+1,), optional
         Fixed old bin edges [Gyr]. Default: ``DEFAULT_BIN_EDGES_GYR[2:]``
         = [0.3, 1.0, 3.0, 6.0, 13.7] Gyr.
     **ratio_kwargs
         Log-SFR ratios. Convention:
 
         - ``ratio_young``: youngest bin vs flex bin (large positive = burst).
-        - ``ratio_old_0``, ``ratio_old_1``, ... — ratios among old fixed bins.
+        - ``ratio_old_0``, ``ratio_old_1``, ...: ratios among old fixed bins.
 
     Returns
     -------
-    sfr : jnp.ndarray, shape (n_age,)
+    sfr: jnp.ndarray, shape (n_age,)
         Star formation rate [Msun yr^-1], non-negative.
 
     Notes
     -----
-    **JIT-compatible**: yes — uses ``jnp`` primitives; ``tlast_gyr`` and
+    **JIT-compatible**: yes, uses ``jnp`` primitives; ``tlast_gyr`` and
     ``tflex_gyr`` must be concrete scalars (not traced inside JIT).
 
     Implements the same calculation as Prospector ``psb_logsfr_ratios_to_agebins`` and
@@ -628,20 +628,20 @@ def continuity_flex(
 
     Parameters
     ----------
-    age_yr : array_like, shape (n_age,)
+    age_yr: array_like, shape (n_age,)
         Lookback time grid [yr].
-    log_total_mass : float, optional
+    log_total_mass: float, optional
         log10 total stellar mass formed [Msun]. Default 10.0.
-    bin_edges_gyr : array_like, shape (3,), optional
+    bin_edges_gyr: array_like, shape (3,), optional
         Anchor bin edges ``[t_young_end, t_old_start, t_max]`` [Gyr].
         Default: ``[0.0316, 5.012, 13.7]`` (matches synthesizer ContinuityFlex).
     **ratio_kwargs
-        ``ratio_young`` : float
+        ``ratio_young``: float
             log10(SFR_young / SFR_flex[0]) [dimensionless]. Default 0.
-        ``flex_0``, ``flex_1``, …, ``flex_{N-1}`` : float
+        ``flex_0``, ``flex_1``, …, ``flex_{N-1}``: float
             log10 SFR ratios that control flex bin widths [dimensionless]. The
             number of ``flex_*`` keys auto-sets N. Default: N=0 (1 flat flex bin).
-        ``ratio_old`` : float
+        ``ratio_old``: float
             log10(SFR_old / SFR_flex[N]) [dimensionless]. Default 0.
 
     Returns
@@ -651,7 +651,7 @@ def continuity_flex(
 
     Notes
     -----
-    **JIT-compatible**: yes — all operations use ``jnp`` primitives.
+    **JIT-compatible**: yes, all operations use ``jnp`` primitives.
     Gradients flow through the SFR *amplitudes* (via ``ratio_young``,
     ``flex_*``, ``ratio_old`` and ``log_total_mass``). Flex bin *edge positions*
     depend on ``jnp.searchsorted`` and are not differentiable.
@@ -817,7 +817,7 @@ def sfh_bin_edges_yr(fn, sfh_kwargs: dict) -> jnp.ndarray | None:
     psb_continuity / continuity_flex) have sharp bin-edge transitions. When the
     SFH is sampled onto a log-spaced integrand grid for DSPS, those edges fall
     *between* grid points, so DSPS interpolates across each step and smears the
-    mass distribution — a resolution-insensitive 2-4.5 % optical residual vs
+    mass distribution; a resolution-insensitive 2-4.5 % optical residual vs
     Prospector (#765). Injecting these exact edges as knots makes the step
     representation exact at any resolution.
 
@@ -851,26 +851,26 @@ def continuity_flex_prior_logp(
 
     Parameters
     ----------
-    logsfr_ratio_young : float
+    logsfr_ratio_young: float
         log10(SFR_young / SFR_flex[0]) [dimensionless].
-    logsfr_ratios : array_like, shape (N,)
+    logsfr_ratios: array_like, shape (N,)
         log10 flex bin SFR ratios [dimensionless].
-    logsfr_ratio_old : float
+    logsfr_ratio_old: float
         log10(SFR_old / SFR_flex[N]) [dimensionless].
-    df : float, optional
+    df: float, optional
         Degrees of freedom. Default 2.
-    scale : float, optional
+    scale: float, optional
         Scale parameter [dex]. Default 0.3 (same as :func:`continuity_prior_logp`).
 
     Returns
     -------
-    logp : scalar
+    logp: scalar
         Total log-probability [dimensionless], summed over all ratios.
 
     Notes
     -----
-    **JIT-compatible**: yes — uses ``jax.scipy.stats.t``.
-    **Gradient-safe**: yes — differentiable w.r.t. all ratio arguments.
+    **JIT-compatible**: yes, uses ``jax.scipy.stats.t``.
+    **Gradient-safe**: yes, differentiable w.r.t. all ratio arguments.
 
     .. math::
 

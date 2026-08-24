@@ -48,21 +48,21 @@ def run_nifty_fast_vi(
 
     Parameters
     ----------
-    n_iterations : int
+    n_iterations: int
         Number of KL minimization iterations.
-    n_samples : int
+    n_samples: int
         Samples per iteration (doubled by mirror_samples).
-    n_posterior_samples : int
+    n_posterior_samples: int
         Posterior samples drawn after convergence.
-    sample_mode : str
+    sample_mode: str
         ``"nonlinear_resample"`` (geoVI), ``"linear_resample"`` (MGVI),
         or ``"evi"`` (MGVI first half, geoVI second half).
-    vi_config : VIConfig, optional
+    vi_config: VIConfig, optional
         Advanced configuration. If None, uses defaults.
-    posterior_method : str
-        ``"jit"`` (default) — fast JIT CG sampling.
-        ``"blackjax"`` — independent NUTS sampling.
-    verbose : bool
+    posterior_method: str
+        ``"jit"`` (default), fast JIT CG sampling.
+        ``"blackjax"``, independent NUTS sampling.
+    verbose: bool
         Print progress.
     """
     import time
@@ -75,7 +75,7 @@ def run_nifty_fast_vi(
     # VI backends still read most state directly off the Fitter
     # (``_jit_sampler``, ``_native_vi_nonlinear_engine``, ``_draw_*``,
     # ``data``, ``noise``, ``data_type``, ``_bounds``, ``_fixed_values``).
-    # Those caches must outlive any single ``run()`` call — keep them
+    # Those caches must outlive any single ``run()`` call, keep them
     # on the Fitter and reach through ``context.fitter`` until they
     # migrate in a follow-up.
     fitter = context.fitter
@@ -137,7 +137,7 @@ def run_nifty_fast_vi(
     init_pos = jft.Vector(init_params)
 
     # Use jft.optimize_kl with odir=None (no pickling/logging overhead).
-    # Shared likelihood means the physics kernel is already compiled — this
+    # Shared likelihood means the physics kernel is already compiled, this
     # call only pays for the KL minimization itself, not the SPS/dust/AGN stack.
     samples, _state = jft.optimize_kl(
         likelihood,
@@ -269,7 +269,7 @@ def _get_or_build_nifty_likelihood(fitter):
 
     if use_variable_noise:
         # Variable-noise: signal_response returns (predicted, noise_scale)
-        # and captures per-Fitter noise array — cannot be shared.
+        # and captures per-Fitter noise array, cannot be shared.
         model = fitter.model
         data_type = fitter.data_type
         free_names = fitter._free_names
@@ -339,7 +339,7 @@ def _get_or_build_nifty_likelihood(fitter):
         # the full engine if it is already in cache (built by a prior run() call).
         from tengri.inference.jit_engine import get_or_build_signal_response
 
-        # Prefer the nifty_model already in the engine cache if available —
+        # Prefer the nifty_model already in the engine cache if available,
         # avoids creating a second jft.Model object for the same physics.
         nifty_model = None
         if fitter._jit_sampler is not None:
@@ -396,24 +396,24 @@ def run_nifty_vi(
 
     Parameters
     ----------
-    n_iterations : int
+    n_iterations: int
         Number of KL minimization iterations (optimization).
-    n_samples : int
+    n_samples: int
         Samples per iteration during optimization.
         With ``mirror_samples=True`` (default), this doubles internally.
-    n_posterior_samples : int
+    n_posterior_samples: int
         Number of posterior samples to draw after convergence.
         These are cheap to generate once the approximation is found.
-    sample_mode : str
+    sample_mode: str
         "nonlinear_resample" (geoVI), "linear_resample" (MGVI),
-        or "evi" (MGVI first, then geoVI — recommended).
-    vi_config : VIConfig, optional
+        or "evi" (MGVI first, then geoVI, recommended).
+    vi_config: VIConfig, optional
         Advanced configuration for NIFTy optimize_kl.
         If None, uses Philipp Frank's recommended defaults.
-    posterior_method : str
-        "linear" (default) — draw_linear_residual, consistent with geoVI.
-        "blackjax" — BlackJAX NUTS, independent MCMC samples.
-    verbose : bool
+    posterior_method: str
+        "linear" (default), draw_linear_residual, consistent with geoVI.
+        "blackjax", BlackJAX NUTS, independent MCMC samples.
+    verbose: bool
         Print progress.
     """
     import time
@@ -428,7 +428,7 @@ def run_nifty_vi(
     from tengri.inference.vi_config import VIConfig, evi_sample_mode
 
     context = InferenceContext.from_target(context)
-    # See ``run_nifty_fast_vi`` — the JIT sampler cache and friends
+    # See ``run_nifty_fast_vi``, the JIT sampler cache and friends
     # live on the Fitter; we reach through ``context.fitter``.
     fitter = context.fitter
 
@@ -460,7 +460,7 @@ def run_nifty_vi(
 
     t0 = time.time()
 
-    # Resolve sample_mode — same optimal schedule as _run_nifty_fast_vi
+    # Resolve sample_mode, same optimal schedule as _run_nifty_fast_vi
     resample_every = 5
     if sample_mode == "evi":
         resolved_mode = evi_sample_mode(n_iterations, cfg.evi_linear_fraction)

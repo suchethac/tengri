@@ -1,10 +1,10 @@
 # SPDX-License-Identifier: BSD-3-Clause
-"""The result of :meth:`Catalog.simulate` — mock observables for N galaxies (#1396).
+"""The result of :meth:`Catalog.simulate`, mock observables for N galaxies (#1396).
 
 Table-out, matching the leg :class:`CatalogPosterior` already provides: the
 ``to_table`` dict is a duck-type match for ``ingest_catalog``'s input, so a
 simulated catalog can be written to parquet/FITS and read straight back in as
-data — which is the whole point of generating one.
+data, which is the whole point of generating one.
 """
 
 from __future__ import annotations
@@ -22,13 +22,13 @@ class MockCatalog:
 
     Parameters
     ----------
-    photometry : ndarray, shape (N, n_filters)
+    photometry: ndarray, shape (N, n_filters)
         Observed-frame spectral flux density [erg/s/cm²/Hz].
-    filter_names : tuple of str
+    filter_names: tuple of str
         Band names, in ``photometry`` column order.
-    lines : dict, optional
+    lines: dict, optional
         ``{line_name: (N,) ndarray}`` observed line fluxes [erg/s/cm²].
-    properties : dict, optional
+    properties: dict, optional
         ``{property_name: (N,) ndarray}`` derived quantities, e.g.
         ``stellar_mass`` [Msun].
 
@@ -61,7 +61,7 @@ class MockCatalog:
         Raises
         ------
         ValueError
-            If a line or property name collides with a band name — silently
+            If a line or property name collides with a band name, silently
             overwriting a flux column would corrupt the file rather than fail.
         """
         table = {

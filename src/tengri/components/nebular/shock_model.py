@@ -1,5 +1,5 @@
 # SPDX-License-Identifier: BSD-3-Clause
-"""Composable shock nebular emission — the canonical shock ``SEDModelComponent``.
+"""Composable shock nebular emission: the canonical shock ``SEDModelComponent``.
 
 MAPPINGS V (3MdBs) fast-radiative-shock + precursor emission, added as a
 *separate additive component* that composes with any photoionized nebular
@@ -16,7 +16,7 @@ dust screen exactly like the rest of the intrinsic SED.
 Normalization (two knobs, selected by the static ``norm`` config)
 -----------------------------------------------------------------
 
-* ``norm="frac"`` (**default**) — *relative*: the shock Hα luminosity is a
+* ``norm="frac"`` (**default**): *relative*: the shock Hα luminosity is a
   fraction ``shock_frac`` of the galaxy's approximate Hα
   (``L(Hα) ~ 1e-3 L_bol`` of the SED accumulated so far). Intuitive "how
   much of the line budget is shock-driven"; reproduces the legacy
@@ -47,7 +47,7 @@ from tengri.utils.scale import apply_log10_scale, pow10 as _pow10
 
 #: Reference Hα luminosity the float32 path carries the shock shape at, as log10
 #: of erg/s (#1206). The shock SED is exactly linear in L_Hα, so ANY split of the
-#: scale is exact — but the split point decides whether float32 survives. Carrying
+#: scale is exact: but the split point decides whether float32 survives. Carrying
 #: at unit Hα pushes the whole ~41 dex onto ``apply_log10_scale``, whose Jacobian
 #: is ``10**offset`` and therefore ``inf`` past 38.5 dex: the forward stayed finite
 #: while the gradient became NaN. At 1e30 the carried array (~1e18) and the
@@ -63,16 +63,16 @@ class ShockNebularConfig(SEDComponentConfig):
 
     Attributes
     ----------
-    name : str
+    name: str
         Diagnostic identifier. Default ``"shock"``.
-    norm : str
+    norm: str
         Normalization mode: ``"frac"`` (relative to the galaxy's approximate
         Hα) or ``"lhalpha"`` (absolute ``shock_log_lhalpha``). Default
         ``"frac"``.
-    abundance : str
+    abundance: str
         MAPPINGS abundance set: ``"solar"`` | ``"2xsolar"`` | ``"lmc"`` |
         ``"smc"`` | ``"dopita2005"``. Default ``"solar"``.
-    component : str
+    component: str
         Emission component: ``"shock"`` (post-shock only) | ``"precursor"``
         (pre-shock photoionization) | ``"combined"`` (sum). Default
         ``"combined"``.
@@ -90,8 +90,8 @@ class ShockNebular(SEDModelComponent):
     Reads its free parameters from the ``shock_*`` bucket
     (``tengri.components.nebular._params.SHOCK_PARAMS``, registered by
     ``Parameters(shock=True)`` / the ``shock`` grammar group) rather than
-    auto-declaring them, so it composes with — and never double-declares
-    against — the photoionized nebular backend.
+    auto-declaring them, so it composes with: and never double-declares
+    against: the photoionized nebular backend.
 
     Cross-component contract
     ------------------------
@@ -117,7 +117,7 @@ class ShockNebular(SEDModelComponent):
     nebular continuum. This is defensible for star-formation-linked shocks (``norm='frac'``
     mode), which originate in young stellar populations behind the birth cloud. For
     AGN outflow or NLR shocks (``norm='lhalpha'`` mode), the screen geometry is an
-    approximation — MAPPINGS traces often originate in partially or fully unobscured
+    approximation: MAPPINGS traces often originate in partially or fully unobscured
     AGN-driven outflows, so the birth-cloud dust in front of them is not the physical
     situation. Measure the effect with synthetic fixtures before using shock in
     conjunction with high-optical-depth dust models. Single-component dust models
@@ -147,7 +147,7 @@ class ShockNebular(SEDModelComponent):
 
     #: The MAPPINGS V ratio cubes thread as a JIT argument rather than baking
     #: into the graph. Without this the selected cube was an XLA ``Constant`` on
-    #: every compile — 3.73 MB against a 0.05 MB bare-stellar floor (#1694).
+    #: every compile: 3.73 MB against a 0.05 MB bare-stellar floor (#1694).
     accepts_threaded_templates: ClassVar[bool] = True
 
     def load(self, wave: jnp.ndarray | None = None) -> Any | None:
@@ -155,8 +155,8 @@ class ShockNebular(SEDModelComponent):
 
         Parameters
         ----------
-        wave : ndarray, optional
-            Unused — the shock grid is wavelength-independent (it carries its
+        wave: ndarray, optional
+            Unused: the shock grid is wavelength-independent (it carries its
             own line wavelengths). Present for the :meth:`load` contract.
 
         Returns
@@ -168,7 +168,7 @@ class ShockNebular(SEDModelComponent):
 
         Notes
         -----
-        **JIT-compatible**: no — build-time only, which is the point.
+        **JIT-compatible**: no, build-time only, which is the point.
         """
         from tengri.components.nebular.shock import load_shock_template_grid
 
@@ -185,27 +185,27 @@ class ShockNebular(SEDModelComponent):
 
         Parameters
         ----------
-        p : dict[str, ndarray]
+        p: dict[str, ndarray]
             Shock parameters, ``shock_`` prefix stripped: ``frac``,
             ``log_lhalpha``, ``velocity`` [km/s], ``log_density`` [dex cm^-3],
             ``b_over_sqrt_n`` [μG].
-        sed_in : ndarray, shape (n_wave,)
+        sed_in: ndarray, shape (n_wave,)
             SED accumulated so far [erg/s/Hz]. Used for the ``norm="frac"``
             Hα normalization only.
-        wave : ndarray, shape (n_wave,)
+        wave: ndarray, shape (n_wave,)
             Rest-frame wavelength grid [Angstrom].
-        templates : ShockTemplateGrid, optional
+        templates: ShockTemplateGrid, optional
             MAPPINGS V ratio cubes, supplied by :meth:`apply` from the threaded
             ``template_data`` so they arrive as a JIT argument rather than a
             baked constant (#1694). ``None`` falls back to the module-level
-            cache — correct, but 3.73 MB per compile.
+            cache: correct, but 3.73 MB per compile.
 
         Returns
         -------
-        sed_out : ndarray, shape (n_wave,)
+        sed_out: ndarray, shape (n_wave,)
             ``sed_in`` plus the shock contribution [erg/s/Hz].
-        published : dict
-            ``{"sed_shock": ndarray}`` — the shock contribution [erg/s/Hz].
+        published: dict
+            ``{"sed_shock": ndarray}``: the shock contribution [erg/s/Hz].
             Its total luminosity is recoverable as :math:`-\int S_\nu\,d\nu`.
 
         Notes
@@ -228,8 +228,8 @@ class ShockNebular(SEDModelComponent):
         """
         nu = C_AA / wave
 
-        # Float32 (#1206): the shock Hα luminosity is ~1e41 erg/s — ``inf`` in
-        # float32 (max 3.4e38) — so ``l_shock_halpha * <line profile>`` becomes
+        # Float32 (#1206): the shock Hα luminosity is ~1e41 erg/s: ``inf`` in
+        # float32 (max 3.4e38): so ``l_shock_halpha * <line profile>`` becomes
         # ``inf * 0 = nan`` even though the resulting SED (~1e26 erg/s/Hz) is
         # perfectly representable. The shock SED is *exactly* linear in
         # ``l_shock_halpha`` (verified: ×10 per dex), so on the float32 path we
@@ -237,13 +237,13 @@ class ShockNebular(SEDModelComponent):
         # log10 offset. Float64 keeps the linear expressions, bit-identical.
         #
         # The reference matters. Evaluating at unit Hα forces the whole ~41 dex
-        # onto ``apply_log10_scale``, whose Jacobian is exactly ``10**offset`` —
+        # onto ``apply_log10_scale``, whose Jacobian is exactly ``10**offset``:
         # 1e41, past the float32 maximum (3.4e38), so the FORWARD stayed finite
         # while the reverse pass produced NaN and broke float32 NUTS. Splitting
         # the scale (reference 1e30, residual ~11 dex) keeps the carried array
         # (~1e18) AND the derivative (~1e11) comfortably in range. The split is
         # exact: the shock SED is linear in L_Hα (verified x10/dex).
-        # Gate on ``sed_in`` — the SED actually being accumulated. This is the
+        # Gate on ``sed_in``: the SED actually being accumulated. This is the
         # quantity whose range is at stake, so it is the honest thing to key on.
         #
         # The justification here used to be that ``wave`` "arrives as float64 even
@@ -253,7 +253,7 @@ class ShockNebular(SEDModelComponent):
         # dtype at every gate-bearing component, in all four configurations
         # (exact/WavePrecomp x float64/pure float32), and ``forward_dtype`` casts
         # nothing so mixed mode leaves both in float64. Gating on ``sed_in`` and
-        # gating on ``wave`` are therefore equivalent today — this one is kept
+        # gating on ``wave`` are therefore equivalent today: this one is kept
         # because it names the array whose magnitude the rescale exists to protect.
         _f32 = jnp.asarray(sed_in).dtype == jnp.float32
 
@@ -328,7 +328,7 @@ class ShockNebular(SEDModelComponent):
         2. **The sampling misses the lines.** Shock emission is line-dominated.
            Evaluating it at a handful of filter *effective wavelengths* samples
            the continuum between lines instead of integrating the lines through
-           the filter response — wrong under ``norm="lhalpha"`` too, where the
+           the filter response: wrong under ``norm="lhalpha"`` too, where the
            absolute normalization makes defect 1 inapplicable.
 
         Both are fixed the same way the photoionized backends handle
@@ -341,18 +341,18 @@ class ShockNebular(SEDModelComponent):
         ``shock_restband_lnu_precomp`` (the same integral at ``z=0``; the rest
         band sits at its own pivot and reusing the observed value is what made
         the nebular LUT read 769 % high in ``des_g`` at z=0.5, #1148). Both are
-        intrinsic rest-frame Lν — no dust, no cosmology —
+        intrinsic rest-frame Lν: no dust, no cosmology:
         matching the precompute contract; ``predict_via_precomp`` applies the
         young-limit dust screen and the ``(1+z)/(4 pi d_L^2)`` dimming.
 
         Parameters
         ----------
-        state : ForwardState
+        state: ForwardState
             Current state; ``state.wave`` and ``state.sed_intrinsic`` supply the
             full-grid context the LUT needs.
-        params : mapping
+        params: mapping
             Full parameter dict (sliced by prefix here).
-        ssp_data, template_data : object, optional
+        ssp_data, template_data: object, optional
             Unused by this component; accepted for protocol conformance.
 
         Returns

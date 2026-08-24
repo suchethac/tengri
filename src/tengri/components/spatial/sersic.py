@@ -16,8 +16,7 @@ References
 ----------
 .. [Sersic1968] Sérsic, J. L. 1968, *Atlas de Galaxias Australes*,
    Cordoba, Argentina: Observatorio Astronomico.
-.. [Ciotti1999] Ciotti, L. & Bertin, G. 1999, A&A, 352, 447 —
-   asymptotic expansion for :math:`b_n`,
+.. [Ciotti1999] Ciotti, L. & Bertin, G. 1999, A&A, 352, 447: asymptotic expansion for :math:`b_n`,
    https://arxiv.org/abs/astro-ph/9911078.
 """
 
@@ -48,14 +47,14 @@ class Sersic(SpatialModelComponent):
 
     Free parameters
     ---------------
-    re_kpc : Uniform(0.1, 20.0) [kpc]
+    re_kpc: Uniform(0.1, 20.0) [kpc]
         Effective (half-light) radius.
-    n : Uniform(0.5, 8.0)
+    n: Uniform(0.5, 8.0)
         Sérsic index. n=1 recovers an exponential disk, n=4 a
         de Vaucouleurs spheroid.
-    axis_ratio : Uniform(0.1, 1.0)
+    axis_ratio: Uniform(0.1, 1.0)
         Minor-to-major axis ratio (b/a). 1.0 ↔ circular.
-    pa_deg : Uniform(-90.0, 90.0) [deg]
+    pa_deg: Uniform(-90.0, 90.0) [deg]
         Position angle of the major axis, measured east of north.
 
     Notes

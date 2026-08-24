@@ -3,7 +3,7 @@
 
 The forward model exposes a single quantity ``_sfr_current`` to all
 SFR-driven downstream components (radio, X-ray, nebular Q_H scaling).
-Historically this was set to ``sfr[-1]`` — the SFR at the boundary of
+Historically this was set to ``sfr[-1]``: the SFR at the boundary of
 whichever lookback grid happened to be in scope. That convention silently
 returned an "old SFR" rather than a recent one for non-constant SFHs
 because the canonical lookback grid runs ``[1 Myr -> 13.8 Gyr]`` and the
@@ -38,11 +38,11 @@ def time_weighted_sfr(
 
     Parameters
     ----------
-    sfr : array_like, shape (n_grid,)
+    sfr: array_like, shape (n_grid,)
         SFR(t) on the lookback-time grid [Msun/yr].
-    lbt_grid : array_like, shape (n_grid,)
+    lbt_grid: array_like, shape (n_grid,)
         Lookback-time grid, **ascending** (oldest bin last) [yr].
-    window_yr : float, optional
+    window_yr: float, optional
         Time window over which to average [yr]. Default ``1e7`` (10 Myr),
         matching the Murphy+2011 radio-SFR / H-alpha / X-ray timescale.
 
@@ -51,12 +51,12 @@ def time_weighted_sfr(
     scalar ndarray
         Time-weighted SFR over the window [Msun/yr]. Falls back to
         ``sfr[0]`` (the most recent grid point) if no bins fall inside
-        the window — e.g. a coarse grid where only the boundary bin
+        the window: e.g. a coarse grid where only the boundary bin
         qualifies.
 
     Notes
     -----
-    **JIT-compatible**: yes — uses ``jnp.where`` masking on a
+    **JIT-compatible**: yes, uses ``jnp.where`` masking on a
     fixed-shape array (no boolean indexing).
 
     **Physical interpretation**: 10 Myr is the canonical SFR-tracer

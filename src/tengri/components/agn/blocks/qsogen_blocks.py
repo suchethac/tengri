@@ -10,7 +10,7 @@ block-protocol signature so users can mix qsogen continuum with e.g. a
 SKIRTOR torus, or pair the qsogen SMC reddening with GRAHSP's BBB.
 
 Bit-for-bit equivalence to ``compute_qsogen_sed`` holds when all 5 blocks
-are summed and the SMC factor multiplied — the regression test
+are summed and the SMC factor multiplied, the regression test
 ``tests/components/agn/test_agn_qsogen_decomposition.py`` pins this.
 
 Block names registered::
@@ -87,7 +87,7 @@ def _l_nu_to_l_lambda(L_nu: Array, wave_aa: Array) -> Array:
 
 
 # ──────────────────────────────────────────────────────────────────────
-# Disc — broken power-law continuum
+# Disc: broken power-law continuum
 # ──────────────────────────────────────────────────────────────────────
 
 
@@ -109,9 +109,9 @@ def qsogen_continuum_block(wavelength: Array, agn_log_lbol: float, **params) -> 
 
     Parameters
     ----------
-    wavelength : array_like, shape (n_wave,)
+    wavelength: array_like, shape (n_wave,)
         Rest-frame wavelength [Å].
-    agn_log_lbol : float
+    agn_log_lbol: float
         :math:`\log_{10}(L_{\rm bol}/L_\odot)`.
     **params
         ``agn_plslp1``, ``agn_plslp2``, ``agn_plbrk``, ``agn_tbb``,
@@ -124,7 +124,7 @@ def qsogen_continuum_block(wavelength: Array, agn_log_lbol: float, **params) -> 
 
 
 # ──────────────────────────────────────────────────────────────────────
-# Torus — hot-dust blackbody
+# Torus: hot-dust blackbody
 # ──────────────────────────────────────────────────────────────────────
 
 
@@ -145,10 +145,10 @@ def qsogen_hot_dust_block(
 
     Parameters
     ----------
-    wavelength : array_like, shape (n_wave,)
-    agn_log_lbol : float
-    l5100_disc : array
-        Ignored — qsogen's BB anchors directly off the recomputed broken
+    wavelength: array_like, shape (n_wave,)
+    agn_log_lbol: float
+    l5100_disc: array
+        Ignored: qsogen's BB anchors directly off the recomputed broken
         power-law continuum.
     **params
         QSOgen kwargs (see :func:`qsogen_continuum_block`).
@@ -160,7 +160,7 @@ def qsogen_hot_dust_block(
 
 
 # ──────────────────────────────────────────────────────────────────────
-# BLR — Vanden Berk emission lines with Baldwin effect
+# BLR: Vanden Berk emission lines with Baldwin effect
 # ──────────────────────────────────────────────────────────────────────
 
 
@@ -180,12 +180,12 @@ def qsogen_blr_block(wavelength: Array, agn_log_lbol: float, l5100_disc: Array, 
 
     Parameters
     ----------
-    wavelength : array_like, shape (n_wave,)
+    wavelength: array_like, shape (n_wave,)
         Rest-frame wavelength [Å].
-    agn_log_lbol : float
+    agn_log_lbol: float
         log10(L_bol / L_sun) of the AGN.
-    l5100_disc : array
-        Ignored — qsogen lines anchor on the internally-computed
+    l5100_disc: array
+        Ignored: qsogen lines anchor on the internally-computed
         normalized continuum at line wavelengths, not on a single 5100 Å
         scalar.
     **params
@@ -193,7 +193,7 @@ def qsogen_blr_block(wavelength: Array, agn_log_lbol: float, l5100_disc: Array, 
 
     Returns
     -------
-    L_lambda : ndarray, shape (n_wave,)
+    L_lambda: ndarray, shape (n_wave,)
         BLR :math:`L_\lambda` [erg/s/Å].
     """
     del l5100_disc
@@ -203,7 +203,7 @@ def qsogen_blr_block(wavelength: Array, agn_log_lbol: float, l5100_disc: Array, 
 
 
 # ──────────────────────────────────────────────────────────────────────
-# FeII slot — Balmer continuum (closest semantic match in the 5-stage
+# FeII slot: Balmer continuum (closest semantic match in the 5-stage
 # pipeline; future revisions may grow a dedicated "balmer" category).
 # ──────────────────────────────────────────────────────────────────────
 
@@ -227,9 +227,9 @@ def qsogen_balmer_block(
 
     Parameters
     ----------
-    wavelength : array_like, shape (n_wave,)
-    agn_log_lbol : float
-    l5100_disc : array
+    wavelength: array_like, shape (n_wave,)
+    agn_log_lbol: float
+    l5100_disc: array
         Ignored.
     **params
         QSOgen kwargs.
@@ -241,7 +241,7 @@ def qsogen_balmer_block(
 
 
 # ──────────────────────────────────────────────────────────────────────
-# Attenuation — SMC reddening
+# Attenuation; SMC reddening
 # ──────────────────────────────────────────────────────────────────────
 
 
@@ -263,7 +263,7 @@ def qsogen_smc_block(wavelength: Array, **params) -> Array:
 
     Parameters
     ----------
-    wavelength : array_like, shape (n_wave,)
+    wavelength: array_like, shape (n_wave,)
     **params
         ``agn_ebv`` [mag] is consumed; all other QSOgen kwargs are absorbed
         but unused.

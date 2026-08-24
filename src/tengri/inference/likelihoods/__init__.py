@@ -1,5 +1,5 @@
 # SPDX-License-Identifier: BSD-3-Clause
-"""Likelihood primitives — single source of truth for χ² and friends.
+"""Likelihood primitives, single source of truth for χ² and friends.
 
 The submodules expose:
 

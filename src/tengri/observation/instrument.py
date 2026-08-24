@@ -6,7 +6,7 @@ the associated noise-floor and calibration defaults, so a notebook can say
 ``Instrument.JWST_NIRCam()`` instead of hand-rolling those pieces every time.
 
 This is a *thin convenience layer* over the existing :class:`Photometry`,
-:class:`Spectroscopy`, and :class:`NoiseModel` classes — it does not introduce
+:class:`Spectroscopy`, and :class:`NoiseModel` classes, it does not introduce
 new physics, and the underlying objects remain the source of truth.
 
 Examples
@@ -47,20 +47,20 @@ class Instrument:
 
     Attributes
     ----------
-    name : str
+    name: str
         Short identifier (e.g. ``"JWST_NIRCam"``).
-    photometry : Photometry, optional
+    photometry: Photometry, optional
         Photometric filter set. ``None`` for spectroscopy-only instruments.
-    spectroscopy : Spectroscopy, optional
+    spectroscopy: Spectroscopy, optional
         Spectroscopic configuration. ``None`` for photometry-only instruments.
-    noise : NoiseModel, optional
+    noise: NoiseModel, optional
         Default noise model for this instrument. Users can override at fit time.
-    description : str
+    description: str
         One-line human description.
 
     Notes
     -----
-    Frozen dataclass — safe to share across processes / treat as immutable.
+    Frozen dataclass, safe to share across processes / treat as immutable.
 
     Premade instruments live on the class itself as ``@classmethod`` factories
     (``Instrument.JWST_NIRCam()``, ``Instrument.SDSS()``, ...). They lazily
@@ -214,7 +214,7 @@ class Instrument:
         Rows are built once per process and copied out, because this menu is
         swept by ``describe()`` and ``search()`` on *every* lookup. Building
         each instrument once per column instead of once per row cost 160.6 ms
-        for nine rows — 99% of a 161.7 ms sweep.
+        for nine rows, 99% of a 161.7 ms sweep.
         """
         return _RegistryTable([dict(row) for row in _premade_rows()])
 
@@ -257,7 +257,7 @@ def _premade_rows() -> tuple[dict[str, object], ...]:
 
 
 def _reset_premade_rows_cache() -> None:
-    """Drop the memoized rows — for tests that monkeypatch the factories."""
+    """Drop the memoized rows, for tests that monkeypatch the factories."""
     _premade_rows.cache_clear()
 
 

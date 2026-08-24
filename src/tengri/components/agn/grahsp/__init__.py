@@ -1,5 +1,5 @@
 # SPDX-License-Identifier: BSD-3-Clause
-"""GRAHSP (Buchner+ 2024) AGN model — JAX implementation.
+"""GRAHSP (Buchner+ 2024) AGN model; JAX implementation.
 
 Implements the spectral model from Buchner et al. 2024 ("Genuine Retrieval
 of the AGN Host Stellar Population", arXiv:2405.19297). Templates are sourced

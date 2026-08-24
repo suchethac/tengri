@@ -1,9 +1,9 @@
 # SPDX-License-Identifier: BSD-3-Clause
-"""Population — one (SED, spatial) pair inside a :class:`ForwardModel`.
+"""Population, one (SED, spatial) pair inside a :class:`ForwardModel`.
 
 A galaxy decomposition (AGN point source + Sérsic bulge + exponential
 disc) is expressed as multiple :class:`Population` objects. The population's
-``name`` is the outer namespace in parameter names — e.g.
+``name`` is the outer namespace in parameter names, e.g.
 ``disc.sfh_dpl_alpha`` for the disc population's stellar
 parameter. See architecture spec §6 + ADR-0012 for the full namespace
 contract.
@@ -26,15 +26,15 @@ class Population:
 
     Parameters
     ----------
-    name : str
+    name: str
         Population namespace. Used as the outer prefix in parameter
         names: ``{name}.{prefix}_{param}`` (ADR-0012). Must be
         non-empty and must not contain ``.`` (the namespace separator).
         Convention: use ``"default"`` for single-population fits;
         ``"agn"``, ``"bulge"``, ``"disc"`` for galaxy decompositions.
-    sed : SubModel
+    sed: SubModel
         SED SubModel for this population.
-    spatial : SubModel or None, optional
+    spatial: SubModel or None, optional
         Spatial SubModel for this population. ``None`` for SED-only
         populations.
     """

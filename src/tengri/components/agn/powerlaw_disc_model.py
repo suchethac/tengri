@@ -4,7 +4,7 @@
 Implements the power-law accretion disc model on the SEDModelComponent
 contract for fast prototyping and simple AGN fits.
 
-This is an opt-in adapter — the existing AGNSEDComponent continues to
+This is an opt-in adapter, the existing AGNSEDComponent continues to
 support power-law discs through the unified AGN registry.
 
 Notes
@@ -45,32 +45,32 @@ class PowerLawDisc(SEDModelComponent):
 
     Attributes
     ----------
-    name : str
+    name: str
         Component registry key: ``"powerlaw_disc"``.
-    parameter_prefix : str
+    parameter_prefix: str
         Parameter namespace: ``"agn_"``.
-    config : PowerLawDiscConfig
+    config: PowerLawDiscConfig
         Frozen configuration (unused; here for consistency).
 
     Free parameters (class-level declarations, auto-discovered)
     -----------------------------------------------------------
-    log_lbol : Uniform
+    log_lbol: Uniform
         log₁₀(L_bol / L_sun). [dex, 8–14]
-    alpha : Uniform
+    alpha: Uniform
         Power-law spectral index. [dimensionless, -1.5–-0.5]
-    T_max : Uniform
+    T_max: Uniform
         UV cutoff temperature. [K, 10^4–10^6]
-    frac : Uniform
+    frac: Uniform
         Fraction of bolometric luminosity from disc. [dimensionless, 0–1]
 
     Cross-component outputs
     -----------------------
-    L_agn_disc : erg/s
+    L_agn_disc: erg/s
         Bolometric luminosity contribution from disc.
 
     Notes
     -----
-    **JIT-compatible**: yes — predict() is pure JAX.
+    **JIT-compatible**: yes, predict() is pure JAX.
 
     **Approximation**: This model is a simplified phenomenological
     representation. It does not capture multi-zone temperature structure,
@@ -96,7 +96,7 @@ class PowerLawDisc(SEDModelComponent):
     parameter_prefix = "agn_"
     config: PowerLawDiscConfig = PowerLawDiscConfig()
 
-    # Free parameters — auto-discovered
+    # Free parameters: auto-discovered
     log_lbol = Uniform(
         8.0,
         14.0,
@@ -140,7 +140,7 @@ class PowerLawDisc(SEDModelComponent):
 
         Parameters
         ----------
-        p : mapping[str, ndarray]
+        p: mapping[str, ndarray]
             Parameters with prefix already stripped:
 
             - log_lbol: log₁₀(L_bol / L_sun)
@@ -148,11 +148,11 @@ class PowerLawDisc(SEDModelComponent):
             - T_max: UV cutoff temperature (K)
             - frac: disc luminosity fraction
 
-        sed_in : ndarray, shape (n_wave,)
+        sed_in: ndarray, shape (n_wave,)
             Input SED in erg/s/Hz.
-        wave : ndarray, shape (n_wave,)
+        wave: ndarray, shape (n_wave,)
             Rest-frame wavelength grid in Angstrom.
-        **inputs : ndarray
+        **inputs: ndarray
             Unused (AGN disc is self-contained).
 
         Returns

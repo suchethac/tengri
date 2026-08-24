@@ -12,7 +12,7 @@ for bridging different parameterizations in AGN SED fitting.
     Currently unwired (no importers). Kept deliberately: the AGN energy-ledger
     design (issue #929, Phase-2b investigation) explicitly defers a
     user-facing ``fagn`` parameterization, and these conversions are its
-    natural seed. The energy-ledger stream owns the wire-or-delete decision —
+    natural seed. The energy-ledger stream owns the wire-or-delete decision :
     do not remove this module in unrelated dead-code sweeps (2026-07 audit).
 
 References
@@ -47,21 +47,21 @@ def fracagn_to_log_lbol(
 
     Parameters
     ----------
-    frac_agn : float
+    frac_agn: float
         Fraction of total luminosity from AGN. Range: [0, 1).
         0 = no AGN, approaching 1 = pure AGN. [dimensionless]
-    l_dust : float
+    l_dust: float
         Dust luminosity (observed or modeled total) in solar luminosities.
         [L_sun]
 
     Returns
     -------
-    log_lbol : float
+    log_lbol: float
         Logarithmic AGN bolometric luminosity [log10(L_sun)].
 
     Notes
     -----
-    **JIT-compatible**: yes — uses ``jnp`` primitives.
+    **JIT-compatible**: yes, uses ``jnp`` primitives.
 
     The relationship between fracAGN and luminosity ratio is:
 
@@ -94,20 +94,20 @@ def log_lbol_to_fracagn(
 
     Parameters
     ----------
-    log_lbol : float
+    log_lbol: float
         Logarithmic AGN bolometric luminosity [log10(L_sun)].
-    l_dust : float
+    l_dust: float
         Dust luminosity (observed or modeled total) in solar luminosities.
         [L_sun]
 
     Returns
     -------
-    frac_agn : float
+    frac_agn: float
         AGN bolometric luminosity fraction. [dimensionless, 0–1)
 
     Notes
     -----
-    **JIT-compatible**: yes — uses ``jnp`` primitives.
+    **JIT-compatible**: yes, uses ``jnp`` primitives.
 
     Derived from the inverse transformation:
 

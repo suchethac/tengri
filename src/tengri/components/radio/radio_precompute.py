@@ -4,11 +4,11 @@
 Implements :class:`~tengri.forward.precompute.protocol.PrecomputeModule` for the
 three radio components in :mod:`tengri.components.radio.radio`:
 
-1. **radio_synchrotron** — star-forming synchrotron via the Bell+2003 fixed-q
+1. **radio_synchrotron**: star-forming synchrotron via the Bell+2003 fixed-q
    far-IR/radio correlation.  One free axis: ``radio_alpha_sf`` (spectral index).
-2. **radio_freefree** — thermal bremsstrahlung from HII regions, Murphy+2011
+2. **radio_freefree**: thermal bremsstrahlung from HII regions, Murphy+2011
    calibration.  One free axis: ``radio_alpha_ff``.
-3. **radio_agn_jet** — radio-loudness scaled AGN jet power law.  One free
+3. **radio_agn_jet**: radio-loudness scaled AGN jet power law.  One free
    axis: ``radio_alpha_agn``.
 
 Each component has a multiplicative scalar runtime input (``L_ir`` for SF
@@ -73,7 +73,7 @@ AXIS_PARAMS: dict[str, tuple[str, ...]] = {
 # Reference luminosity used to build the grid; runtime ``scale`` factor
 # rescales linearly (all three models are L-linear in their respective
 # luminosity input).
-_L_REF = 1.0e44  # erg/s — convenient unit-luminosity reference
+_L_REF = 1.0e44  # erg/s: convenient unit-luminosity reference
 
 # Standard rest-frame wavelength grid covering radio (1 mm to 1 km) and
 # extending blueward enough that the suppression mask in radio.py
@@ -186,17 +186,17 @@ def precompute(
 
     Parameters
     ----------
-    filter_waves : list[ndarray]
+    filter_waves: list[ndarray]
         Per-filter observed-frame wavelength arrays [Angstrom].
-    filter_trans : list[ndarray]
+    filter_trans: list[ndarray]
         Per-filter transmission curves.
-    redshift : float
+    redshift: float
         Source redshift. [dimensionless]
-    parameters : Parameters or None
+    parameters: Parameters or None
         Parameters spec; used to detect Fixed axes.
-    model : str, keyword-only
+    model: str, keyword-only
         One of ``"radio_synchrotron"``, ``"radio_freefree"``, ``"radio_agn_jet"``.
-    alpha_grid : ndarray, optional
+    alpha_grid: ndarray, optional
         Custom spectral-index grid. Defaults: synchrotron [0.5, 1.0],
         free-free [-0.2, 0.0], AGN [0.4, 1.2].
 
@@ -208,7 +208,7 @@ def precompute(
 
     Notes
     -----
-    **JIT-compatible**: no — build-time NumPy.
+    **JIT-compatible**: no, build-time NumPy.
     """
     if model not in _BUILDERS:
         raise ValueError(f"Unknown radio model: {model!r}. Expected one of {sorted(_BUILDERS)}.")
@@ -251,9 +251,9 @@ def build_lookup(preint: dict, *, model: str = "radio_synchrotron"):
 
     Parameters
     ----------
-    preint : dict
+    preint: dict
         Output of :func:`precompute`.
-    model : str, keyword-only
+    model: str, keyword-only
         Selects the spectral-axis name used in the lookup (cosmetic; the
         actual interpolation is identical across models).
 

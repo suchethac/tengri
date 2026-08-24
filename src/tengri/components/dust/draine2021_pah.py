@@ -143,7 +143,7 @@ def missing_template_message(path: Path) -> str:
 
     Parameters
     ----------
-    path : pathlib.Path
+    path: pathlib.Path
         The expected HDF5 location that was not found.
 
     Returns
@@ -177,7 +177,7 @@ def load_pahspec_or_raise(template_path: str | None) -> Draine2021PAHTemplates:
 
     Parameters
     ----------
-    template_path : str or None
+    template_path: str or None
         Path override.  When ``None``, falls back to the
         :data:`PAHSPEC_PATH_ENV` environment variable, then to
         :data:`DRAINE2021_PAH_DEFAULT_PATH`.
@@ -222,7 +222,7 @@ def load_pahspec_draine2021(template_path: str | None = None) -> Draine2021PAHTe
 
     Parameters
     ----------
-    template_path : str or None, optional
+    template_path: str or None, optional
         Override the grid location. When ``None`` (default), resolves the
         :data:`PAHSPEC_PATH_ENV` env var, then the bundled
         :data:`DRAINE2021_PAH_DEFAULT_PATH` (``data/pahspec_draine2021.h5``).
@@ -239,7 +239,7 @@ def load_pahspec_draine2021(template_path: str | None = None) -> Draine2021PAHTe
 
     Notes
     -----
-    **JIT-compatible**: no — file I/O. Call once at setup.
+    **JIT-compatible**: no, file I/O. Call once at setup.
 
     References
     ----------
@@ -254,7 +254,7 @@ def load_pahspec_draine2021(template_path: str | None = None) -> Draine2021PAHTe
 # ─────────────────────────────────────────────────────────────────────
 
 
-# Score weights (relative units only — minimization).  Calibrated so that
+# Score weights (relative units only: minimization).  Calibrated so that
 # (i) within an SSP family, the nearest (age, log Z) wins;
 # (ii) without a family, mMMP wins for moderate ages (~1 Gyr-ish ambient
 #      Galactic ISM) and m31bulge wins only for genuinely old populations
@@ -283,7 +283,7 @@ def select_pahspec_starlight_auto(
     fallbacks to the two non-SSP starlights (``"mMMP"`` for diffuse
     ISM, ``"m31bulge"`` for old quiescent populations).
 
-    This function is *not* fully self-consistent — the PAHspec
+    This function is *not* fully self-consistent: the PAHspec
     library only tabulates 13 fixed starlight spectra.  Use this when
     you want to remove the manual config burden and accept
     "nearest of 13" approximation.  Truly arbitrary starlight would
@@ -315,17 +315,17 @@ def select_pahspec_starlight_auto(
 
     Parameters
     ----------
-    sps_family : {"BC03", "BPASS", None} or other str
+    sps_family: {"BC03", "BPASS", None} or other str
         Stellar population synthesis family used by the upstream
         stellar component.  ``None`` allows any SSP family.  Strings
         not in ``{"BC03", "BPASS"}`` fall back to non-SSP ambient
         starlights only.
-    age_myr : float
+    age_myr: float
         Characteristic age of the FUV-emitting young population, in
         Myr.  Typical values: 3-10 Myr for active starbursts,
         100-300 Myr for older star-forming galaxies, >5000 Myr for
         quiescent / bulge-dominated systems. [Myr]
-    log_z_solar : float
+    log_z_solar: float
         :math:`\log_{10}(Z/Z_\odot)` for the ionizing stellar
         population. [dimensionless]
 
@@ -342,7 +342,7 @@ def select_pahspec_starlight_auto(
 
     Notes
     -----
-    **JIT-compatible**: no — pure Python decision logic at factory
+    **JIT-compatible**: no, pure Python decision logic at factory
     time.
     """
     import math
@@ -405,17 +405,17 @@ def select_pahspec_axes(
 
     Parameters
     ----------
-    templates : Draine2021PAHTemplates
+    templates: Draine2021PAHTemplates
         Loader output.  Provides the integer-index lookup tables for
         the four categorical axes.
-    starlight : str
+    starlight: str
         Starlight spectrum name (one of
         ``templates.starlight_names``).
-    ionization : {"lo", "st", "hi"}
+    ionization: {"lo", "st", "hi"}
         PAH ionization fraction selector.
-    size_distribution : {"sma", "std", "lrg"}
+    size_distribution: {"sma", "std", "lrg"}
         PAH size distribution selector.
-    slab : bool
+    slab: bool
         ``True`` for the :math:`A_V=2` slab variant, ``False`` for
         unattenuated diffuse heating.
 
@@ -474,13 +474,13 @@ def resample_lnu_on_aa_grid(
 
     Parameters
     ----------
-    nu_pnu_um : array_like, shape ``(..., n_wave_um)``
+    nu_pnu_um: array_like, shape ``(..., n_wave_um)``
         :math:`\nu P_\nu` cubes on the template's native wavelength
         grid (microns).  Per-H units [erg/s/H]; the absolute
         normalization does not survive the energy-balance rescale.
-    wave_um : array_like, shape ``(n_wave_um,)``
+    wave_um: array_like, shape ``(n_wave_um,)``
         Template wavelengths in microns; strictly increasing.
-    wave_aa : array_like, shape ``(n_wave_aa,)``
+    wave_aa: array_like, shape ``(n_wave_aa,)``
         Pipeline rest-frame wavelength grid in Angstrom.
 
     Returns
@@ -490,7 +490,7 @@ def resample_lnu_on_aa_grid(
 
     Notes
     -----
-    **JIT-compatible**: yes — pure ``jnp`` primitives plus
+    **JIT-compatible**: yes, pure ``jnp`` primitives plus
     :func:`jax.vmap`.  **Gradient-safe**: yes.
     """
     lam_cm = wave_um * 1.0e-4

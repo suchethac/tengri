@@ -1,5 +1,5 @@
 # SPDX-License-Identifier: BSD-3-Clause
-r"""Prévot+1984 SMC disc reddening — the single source for ``agn_ebv_disc``.
+r"""Prévot+1984 SMC disc reddening, the single source for ``agn_ebv_disc``.
 
 Both the monolithic AGN forward models (:mod:`tengri.components.agn.unified`)
 and the composable runner (:mod:`tengri.components.agn.blocks.runner`) apply
@@ -10,7 +10,7 @@ import cycle.
 
 Note this is **distinct** from the polar-dust extinction (``agn_polar_ebv``),
 which uses the SMC curve at ``R_V = 2.93`` and is applied only for Type-1 lines
-of sight — see ``blocks/runner.py``'s ``_disc_ext``.
+of sight: see ``blocks/runner.py``'s ``_disc_ext``.
 """
 
 from __future__ import annotations
@@ -34,12 +34,12 @@ def redden_disc(wavelength: Array, l_disc: Array, agn_ebv_disc: Array) -> Array:
 
     Parameters
     ----------
-    wavelength : array_like, shape (n_wave,)
+    wavelength: array_like, shape (n_wave,)
         Rest-frame wavelength grid [Å].
-    l_disc : array_like, shape (n_wave,)
-        Un-reddened disc SED [erg/s/Hz] or [erg/s/Å] — the multiplicative
+    l_disc: array_like, shape (n_wave,)
+        Un-reddened disc SED [erg/s/Hz] or [erg/s/Å], the multiplicative
         extinction factor is dimensionless, so either convention passes through.
-    agn_ebv_disc : float
+    agn_ebv_disc: float
         Disc color excess :math:`E(B-V)` [mag].
 
     Returns

@@ -1,7 +1,7 @@
 # SPDX-License-Identifier: BSD-3-Clause
 r"""FeII forest blocks for the composable AGN pipeline.
 
-One file, every FeII option — pick via ``agn={'feii': {'type': ...}}``.
+One file, every FeII option: pick via ``agn={'feii': {'type': ...}}``.
 Consolidated 2026-07 from boroson_green_feii + feii_blocks; registration
 unchanged.
 """
@@ -54,31 +54,31 @@ def boroson_green_feii_block(
 
     Parameters
     ----------
-    wavelength : array_like, shape (n_wave,)
+    wavelength: array_like, shape (n_wave,)
         Rest-frame wavelength [Å].
-    agn_log_lbol : float
+    agn_log_lbol: float
         Ignored (kept for protocol compatibility).
-    l5100_disc : array, scalar
+    l5100_disc: array, scalar
         :math:`\lambda L_\lambda(5100\,\mathrm{\AA})` of the disc [erg/s].
-    agn_fe2_strength : float, optional
+    agn_fe2_strength: float, optional
         :math:`R_{\rm Fe} = F({\rm FeII})/F({\rm H}\beta)`. Typical range
         0.5–2.0. Default ``0.0`` (FeII pseudo-continuum disabled).
-    agn_blr_fwhm_kms : float, optional
+    agn_blr_fwhm_kms: float, optional
         BLR velocity broadening FWHM [km/s] applied to the FeII template.
         Default ``5000``.
-    agn_blr_f_bol : float, optional
+    agn_blr_f_bol: float, optional
         Bolometric correction :math:`L_{\rm bol}/\lambda L_\lambda(5100\,
         \mathrm{\AA})`. Default :data:`DEFAULT_F_BOL_5100`.
-    agn_blr_cf : float, optional
+    agn_blr_cf: float, optional
         BLR covering fraction (0 to 1). Used to compute H-beta luminosity
         normalization. Default ``0.1``.
-    agn_blr_line_efficiency : float, optional
+    agn_blr_line_efficiency: float, optional
         Fraction of intercepted luminosity re-emitted as broad emission lines.
         Used to compute H-beta luminosity normalization. Default ``0.08``.
 
     Returns
     -------
-    L_lambda : ndarray, shape (n_wave,)
+    L_lambda: ndarray, shape (n_wave,)
         FeII :math:`L_\lambda` [erg/s/Å].
 
     Notes

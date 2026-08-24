@@ -21,7 +21,7 @@ Three tuples, each the canonical source for one legacy bucket in
 
 Why not also share with `declared_parameters`
 ---------------------------------------------
-Each emission component's ``declared_parameters`` is **per-template** —
+Each emission component's ``declared_parameters`` is **per-template**:
 modified_blackbody returns ``dust_T`` + ``dust_beta_ir``,
 draine2021_pah returns only ``dust_lgU``, astrodust uses a different
 ``dust_lgU`` bound, etc. The flat-builder bucket is the static superset
@@ -135,7 +135,7 @@ PARAMS: tuple[ParamDeclaration, ...] = (
         "dust_eta_balance",
         Fixed(1.0),
         "Energy-balance relaxation factor: L_IR = eta * L_absorbed. "
-        "eta=1.0 (default) = strict energy balance, as in CIGALE/MAGPHYS — the "
+        "eta=1.0 (default) = strict energy balance, as in CIGALE/MAGPHYS: the "
         "total dust IR luminosity equals the stellar+nebular energy absorbed by "
         "dust. eta>1 = extra IR from obscured sources (embedded AGN, "
         "Kokorev+2021/Stardust); eta<1 = geometric mismatch where some absorbed "
@@ -158,7 +158,7 @@ PARAMS: tuple[ParamDeclaration, ...] = (
     ParamDeclaration(
         "dust_T_warm",
         Fixed(45.0),
-        "Warm birth-cloud grain temperature (K) — used by two-temp emission model (30-60K)",
+        "Warm birth-cloud grain temperature (K): used by two-temp emission model (30-60K)",
         lambda lo, hi: lo > 0,
         "must be > 0",
         units="K",
@@ -169,7 +169,7 @@ PARAMS: tuple[ParamDeclaration, ...] = (
     ParamDeclaration(
         "dust_T_cold",
         Fixed(20.0),
-        "Cold ISM grain temperature (K) — used by the two-temperature emission model (15-25K)",
+        "Cold ISM grain temperature (K): used by the two-temperature emission model (15-25K)",
         lambda lo, hi: lo > 0,
         "must be > 0",
         units="K",
@@ -194,7 +194,7 @@ PARAMS: tuple[ParamDeclaration, ...] = (
         "Additional AGN-heated IR luminosity added on top of the energy-balance "
         "budget by the ``energy_balance_split`` model (same units as L_absorbed; "
         ">= 0). Non-zero values intentionally exceed strict stellar energy "
-        "balance — the AGN supplies the extra IR.",
+        "balance: the AGN supplies the extra IR.",
         lambda lo, hi: lo >= 0,
         "must be >= 0",
         # Deliberately NO free_prior. Unlike every other entry here this is an
@@ -295,7 +295,7 @@ PARAMS: tuple[ParamDeclaration, ...] = (
         # Caught by tests/contract/test_dust_emission_wildcard.py::
         # test_no_freed_parameter_is_inert[dale2014].
     ),
-    # dust_tdust (#849): retired — the Schreiber tabulated components now share the
+    # dust_tdust (#849): retired: the Schreiber tabulated components now share the
     # canonical ``dust_T`` (used by modified_blackbody / casey2012 / the
     # schreiber2016 closure). ``dust_tdust`` resolves to ``dust_T`` via
     # _LEGACY_PARAM_ALIASES.
@@ -355,7 +355,7 @@ ATTENUATION_PARAMS: tuple[ParamDeclaration, ...] = (
         "must be in [0, 1]",
         # Deliberately NO free_prior, despite a clean [0, 1] domain. The test is
         # not "does this have a valid range?" but "is freeing it what a caller
-        # means by `dust: all_params: FREE`?" — and here that is empirically no:
+        # means by `dust: all_params: FREE`?": and here that is empirically no:
         # all 11 call sites in this repo (4 recipes, 7 gallery examples) want
         # that wildcard to mean {tau_bc, tau_diff}. f_obscuration is a
         # two-population geometry knob whose default 0.0 is a modeling stance,

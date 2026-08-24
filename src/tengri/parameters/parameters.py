@@ -102,8 +102,8 @@ class Parameters:
 
     Parameters are specified as keyword arguments, each of which can be:
 
-    - **Scalar** (int/float) → ``Fixed(value)`` — parameter is constant
-    - **Tuple** (lo, hi) → ``Uniform(lo, hi)`` — shorthand for uniform prior
+    - **Scalar** (int/float) → ``Fixed(value)``: parameter is constant
+    - **Tuple** (lo, hi) → ``Uniform(lo, hi)``: shorthand for uniform prior
     - **Distribution object**: ``Uniform``, ``Gaussian``, ``LogUniform``,
       ``LogNormal``, ``StudentT``, or ``Fixed``
 
@@ -113,39 +113,39 @@ class Parameters:
 
     Parameters
     ----------
-    **kwargs : keyword arguments
+    **kwargs: keyword arguments
         Model parameters (distribution objects or shorthands) and settings
         (see "Settings" section below).
 
     Attributes
     ----------
-    mean_sfh_type : list[str]
+    mean_sfh_type: list[str]
         Active SFH model(s). Read-only.
-    n_grid : int
+    n_grid: int
         Grid size for stochastic SFH. Read-only.
-    stochastic : bool
+    stochastic: bool
         True if mean_sfh_type includes 'field'. Read-only.
-    all_params : list[str]
+    all_params: list[str]
         All valid parameter names (free + fixed).
-    free_params : list[str]
+    free_params: list[str]
         Non-fixed parameter names (to be inferred).
-    fixed_params : list[str]
+    fixed_params: list[str]
         Fixed parameter names (constants).
-    n_free : int
+    n_free: int
         Number of free parameters.
-    nebular_mode : str
+    nebular_mode: str
         Nebular emission backend: 'off', 'ssp', 'cue', 'cloudy', or 'cb19'.
-    dust_model : str
+    dust_model: str
         Dust model: 'two_component' or 'single_component'.
-    dust_emission : str or None
+    dust_emission: str or None
         Dust emission template: 'modified_blackbody', 'casey2012', 'dale2014', etc.
-    agn_model : str or None
+    agn_model: str or None
         AGN SED model, e.g. 'kubota_done', 'skirtor', 'qsogen'.
-    apply_igm : bool
+    apply_igm: bool
         If True, apply IGM absorption (Inoue+2014).
-    radio : bool
+    radio: bool
         If True, include radio synchrotron + AGN jet emission.
-    xray : bool
+    xray: bool
         If True, include X-ray (XRB + AGN) emission.
 
     Raises
@@ -161,7 +161,7 @@ class Parameters:
     configuring model parameters and their priors. Parameters objects cannot be
     created or modified inside a JAX gradient tape (jax.grad, jax.vmap, jax.jit).
     Create all Parameters objects at the Python level before tracing. Once created,
-    a Parameters object is immutable — use the `with_params()` method to create
+    a Parameters object is immutable; use the `with_params()` method to create
     modified copies.
 
     **Parameter auto-detection**: If mean_sfh_type is not explicit, it is
@@ -174,65 +174,65 @@ class Parameters:
 
     Settings (model configuration, not fittable parameters)
     ========================================================
-    mean_sfh_type : str or list[str]
+    mean_sfh_type: str or list[str]
         SFH model(s). Composable: ``["dpl", "field"]``.
         Options: ``dpl``, ``tsnorm``, ``snorm``, ``norm``, ``lnorm``, ``const``,
         ``exp``, ``dexp``, ``burst``, ``field``.
         Default: ``["dpl", "field"]``.
-    n_grid : int
+    n_grid: int
         Grid size for stochastic SFH (latent dimensions).
         Default: 64.
-    stochastic : bool
+    stochastic: bool
         **DEPRECATED**. Use mean_sfh_type with/without 'field' instead.
 
     **Dust Attenuation Settings**
 
-    dust_law_bc : str
+    dust_law_bc: str
         Attenuation curve for birth cloud.  Default: ``"power_law"``.
         Options: ``power_law``, ``calzetti``, ``kriek_conroy``, ``smc``,
         ``cardelli``, ``salim``, ``li08``.
-    dust_law_diff : str
+    dust_law_diff: str
         Attenuation curve for diffuse ISM.  Default: same as ``dust_law_bc``.
         Can be different for per-component control.
-    dust_law_neb : str or None
-        Attenuation curve for the nebular birth cloud.  Default ``None`` —
-        inherit ``dust_law_bc`` so the nebular continuum is reddened exactly
+    dust_law_neb: str or None
+        Attenuation curve for the nebular birth cloud.  Default ``None``; inherit ``dust_law_bc``
+        so the nebular continuum is reddened exactly
         like the youngest stars (bagpipes/FSPS/CIGALE).  Set it to give
         HII-region emission its own birth-cloud curve while still sharing the
         diffuse ISM screen (``dust_law_diff``) with the stars.
 
     **Dust Emission Settings**
 
-    dust_emission : str or None
+    dust_emission: str or None
         IR emission model.  Default: ``None`` (disabled).
         Options: ``"modified_blackbody"``, ``"casey2012"``, ``"dale2014"``,
         ``"draine_li2007"``, ``"draine_li2014"``, ``"dl07_tabulated"``,
         ``"astrodust"``, ``"bosa"``, ``"themis"``, ``"draine2021_pah"``.
-    dl07_grid_path : str
+    dl07_grid_path: str
         Path to DL07 HDF5 template grid (for ``"dl07_tabulated"``).
 
     **Nebular Emission Settings**
 
-    nebular_ssp : bool
+    nebular_ssp: bool
         Use SSP files with pre-included nebular emission (wNE files).
         No free nebular parameters.  Default: ``False``.
-    nebular : bool
+    nebular: bool
         Enable CLOUDY grid nebular emission.  Requires ``cloudy_grid_path``.
         Default: ``False``.
-    nebular_cue : bool
+    nebular_cue: bool
         Enable Cue neural emulator.  Default weights loaded automatically.
         Default: ``False``.
-    cloudy_grid_path : str
+    cloudy_grid_path: str
         Path to CLOUDY HDF5 grid.  Required when ``nebular=True``.
-    cue_weights_path : str
+    cue_weights_path: str
         Override default Cue weights path.
-    neb_ionization : str
+    neb_ionization: str
         Ionization source for Cue: ``"ssp"`` (default), ``"agn"`` (future),
         ``"ssp+agn"`` (future).
 
     **AGN Settings**
 
-    agn_model : str or None
+    agn_model: str or None
         AGN SED model.  Default: ``None`` (disabled).
         Options: ``"simple"`` (3 params), ``"standard"`` (SS73 disc + 2T torus),
         ``"kubota_done"`` (physical disc), ``"unified_nlr_blr"`` (NLR/BLR with
@@ -241,30 +241,30 @@ class Parameters:
 
     **Multi-wavelength Settings**
 
-    radio : bool
+    radio: bool
         Enable radio synchrotron + AGN jet emission.  Default: ``False``.
-    xray : bool
+    xray: bool
         Enable X-ray (XRB + AGN corona) emission.  Default: ``False``.
 
     **IGM Settings**
 
-    apply_igm : bool
+    apply_igm: bool
         Apply Inoue+2014 IGM absorption.  Default: ``True``.
 
     **Metallicity Settings**
 
-    evolving_metallicity : bool
+    evolving_metallicity: bool
         Replace ``met_logzsol`` with ``met_logzsol_0`` (old stars) and
         ``met_logzsol_final`` (young stars) for a linear-in-log Z(t) ramp.
         Default: ``False``.
-    met_interp : str
+    met_interp: str
         Metallicity interpolation method.  Default: ``"smooth"``.
 
         - ``"smooth"``: Triweight kernel (same as DSPS, Hearin+2023).
           8.5x smoother gradients at <1% speed overhead. Recommended.
         - ``"linear"``: 2-point linear in log(Z) (same as FSPS/Prospector).
 
-    lgmet_scatter : float
+    lgmet_scatter: float
         Triweight kernel bandwidth in dex for ``met_interp="smooth"``.
         Default: 0.1 (DSPS default). Physically: intrinsic Z scatter.
 
@@ -424,7 +424,7 @@ class Parameters:
         # dependence out of it. A structural setting, not a free parameter, and
         # it must travel with the matching latent prior. See #1355.
         self.field_centering = float(kwargs.pop("field_centering", 1.0))
-        # MW foreground extinction screen — applied at the
+        # MW foreground extinction screen: applied at the
         # observed-frame SED boundary, independent of host-galaxy dust
         # (#297). ``foreground_ebmv_mw=0.0`` is the no-op default.
         self.foreground_ebmv_mw = float(kwargs.pop("foreground_ebmv_mw", 0.0))
@@ -678,7 +678,7 @@ class Parameters:
         # The grid-support checks need the range each parameter can actually
         # take, not its value: a prior's bounds, or (v, v) for a fixed one.
         # Every Distribution defines .bounds, so read it directly rather than
-        # behind a blanket except — a guard against a silent failure must not
+        # behind a blanket except: a guard against a silent failure must not
         # itself fail silently. A string-valued Fixed (a categorical choice)
         # reports (None, None) and is skipped.
         param_support: dict[str, tuple[float, float]] = {}
@@ -715,7 +715,7 @@ class Parameters:
         # jit-safe) if a user explicitly sets or frees it, so it is never a
         # silent no-op. Gated on _user_provided; agn_log_ledd is no longer in
         # those blocks' AGN_BLOCK_CONSUMES, so a scoped '*': FREE will not free
-        # it — only an explicit override triggers this.
+        # it: only an explicit override triggers this.
         if (
             self.agn_model == "composable"
             and getattr(self, "agn_disc_block", "none") in ("multicolor", "kubota_done")
@@ -778,7 +778,7 @@ class Parameters:
         if n_set > 1:
             raise ValueError(
                 "nebular_ssp, nebular (CLOUDY), and nebular_cue are "
-                "mutually exclusive — choose one."
+                "mutually exclusive: choose one."
             )
 
         # Resolve mode
@@ -806,7 +806,7 @@ class Parameters:
 
         if self.neb_ionization in ("agn", "ssp+agn"):
             raise NotImplementedError(
-                "AGN ionization not yet implemented — use neb_ionization='ssp'"
+                "AGN ionization not yet implemented: use neb_ionization='ssp'"
             )
 
         # Warn if nebular_ssp user sets nebular params
@@ -921,7 +921,7 @@ class Parameters:
         3. Auto-infer from the metallicity-related parameter keys the
            user passed (e.g. ``met_logzsol_0`` + ``met_logzsol_final``
            implies ``"ramp"``). Inference is data-driven from the
-           registry — adding a new mode + its discriminator keys to
+           registry: adding a new mode + its discriminator keys to
            ``met_registry._MET_MODE_DISCRIMINATORS`` is enough.
         4. Default ``"delta"`` if nothing matches.
 
@@ -938,7 +938,7 @@ class Parameters:
         # Inference only sees met_/chem_ keys; everything else is irrelevant
         # noise. Some modes share parameter keys (e.g. massmap_box's discriminator
         # is a superset of massmap_lin's), so inference can be genuinely
-        # ambiguous — only run it where it is needed and let an explicit
+        # ambiguous: only run it where it is needed and let an explicit
         # ``met_mode`` win over an ambiguous inference.
         if _met_mode_explicit is not None:
             if _evolving_met or _chem_evol:
@@ -985,14 +985,14 @@ class Parameters:
         # Redshift-table interpolation mode (used when a precomputed z-table
         # is enabled via ``approx=WavePrecomp(...)`` AND redshift is free).
         # "linear" → piecewise-linear (C^0, default).
-        # "smooth" → triweight kernel (C^2) — recommended for HMC/NUTS with free z.
+        # "smooth" → triweight kernel (C^2): recommended for HMC/NUTS with free z.
         self.z_interp = kwargs.pop("z_interp", "linear")
 
     @staticmethod
     def _default_cloudy_grid():
         """Auto-resolve the default CLOUDY grid, mirroring the Cue-weights default.
 
-        Prefers ``data/cloudy_grid_mist.h5`` at the repo root — the grid
+        Prefers ``data/cloudy_grid_mist.h5`` at the repo root; the grid
         matching the default MIST/FSPS SSP family. Returns None when absent
         (wheel installs, grid not generated) so the caller can raise the
         listing error instead.
@@ -1008,7 +1008,7 @@ class Parameters:
         """Raise ValueError listing available CLOUDY grids."""
         from tengri._data_setup import data_dirs
 
-        # Repo-level data/ — where convert_fsps_cloudy_grid.py writes grids.
+        # Repo-level data/: where convert_fsps_cloudy_grid.py writes grids.
         # (An earlier revision listed the packaged src/tengri/data/ directory,
         # which never contains CLOUDY grids, so the listing was always empty.)
         # Listing every searched directory keeps the message honest for users
@@ -1089,7 +1089,7 @@ class Parameters:
         if isinstance(dust_em, str):
             # Pass the selected name through verbatim. The registry carries
             # every selectable spelling, including aliases, so no normalization
-            # happens here — an earlier draft stripped a "_tabulated" suffix
+            # happens here: an earlier draft stripped a "_tabulated" suffix
             # and thereby missed "draine_li2007" entirely.
             selected.append(("dust.emission", dust_em))
         return selected
@@ -1099,7 +1099,7 @@ class Parameters:
 
         Parameters
         ----------
-        param_support : dict of str to (float, float)
+        param_support: dict of str to (float, float)
             ``{param_name: (lo, hi)}`` each parameter can actually take.
 
         Notes
@@ -1117,7 +1117,7 @@ class Parameters:
         findings = check_grid_support(self._selected_grid_components(), param_support)
         for selector, name, pname, detail, (g_lo, g_hi) in findings:
             warnings.warn(
-                f"{selector}={name!r}: {pname} — {detail}. The SED there is "
+                f"{selector}={name!r}: {pname}: {detail}. The SED there is "
                 "bit-identical to the edge node and the gradient is exactly "
                 f"zero, so a fit cannot move it. Narrow {pname} to "
                 f"[{g_lo:g}, {g_hi:g}], or select a {selector} component with "
@@ -1162,7 +1162,7 @@ class Parameters:
         """Reject parameter pairs whose ordering is physically contradictory.
 
         An inverted ``const`` window makes the top-hat empty, so the requested
-        ``log_total_mass`` is silently discarded and the galaxy has zero flux — and
+        ``log_total_mass`` is silently discarded and the galaxy has zero flux: and
         because the shape is identically zero, the gradient w.r.t. both bounds is
         zero too, giving a gradient sampler an absorbing basin with no way out
         (#1277). Free priors are rejected when their supports *overlap*, since an
@@ -1284,8 +1284,8 @@ class Parameters:
         """Flattened dimensionality of all free parameters (#1408).
 
         Sum of each free parameter's flattened size, including vector latents
-        (e.g., sfh_field_xi). This is the true sampled dimension for MCMC/VI —
-        what samplers actually see — as opposed to n_free which counts named
+        (e.g., sfh_field_xi). This is the true sampled dimension for MCMC/VI: what samplers
+        actually see; as opposed to n_free which counts named
         parameters only.
 
         Returns
@@ -1301,7 +1301,7 @@ class Parameters:
         model with few named parameters but hundreds of field latents must
         route to the high-D sampler, not NUTS (dense mass matrix OOM risk).
 
-        Mirrors the accounting of ``Fitter._initialize_unbounded`` — the two
+        Mirrors the accounting of ``Fitter._initialize_unbounded``; the two
         must stay in agreement (asserted against the engine's ``d_total`` in
         ``tests/inference/test_noise_broadcast_fix_1303.py``). ``sample()``
         is NOT the right source: its tree carries fixed/default parameters
@@ -1363,8 +1363,8 @@ class Parameters:
 
         See Also
         --------
-        tengri.parse_groups : The inverse operation.
-        tengri.SEDModel.build : End-to-end model construction from nested dicts.
+        tengri.parse_groups: The inverse operation.
+        tengri.SEDModel.build: End-to-end model construction from nested dicts.
 
         Notes
         -----
@@ -1380,7 +1380,7 @@ class Parameters:
         **Roundtrip guarantee**: The output dict, when passed to
         ``parse_groups(**output)``, produces a Parameters with identical
         free/fixed partitions and distributions, *and* identical structural
-        settings — including every group's ``type``.
+        settings: including every group's ``type``.
 
         The wording here used to stop at "distributions", and that narrowness
         is why two rounds of structural loss went unnoticed: the guarantee was
@@ -1411,7 +1411,7 @@ class Parameters:
 
         Creates an independent copy of this Parameters with extra parameters
         added (usually observation-level parameters like calibration or noise).
-        User-defined parameters take precedence — if a name already exists in
+        User-defined parameters take precedence; if a name already exists in
         this spec, the new value is silently skipped (user intent is preserved).
 
         Typically used internally by ``SEDModel`` to auto-inject noise and
@@ -1462,7 +1462,7 @@ class Parameters:
 
         for name, val in kwargs.items():
             if name in self._user_provided:
-                # User explicitly set this param — their definition wins
+                # User explicitly set this param: their definition wins
                 continue
             dist = resolve_shorthand(val)
             new_distributions[name] = dist
@@ -1481,7 +1481,7 @@ class Parameters:
             "_valid_param_names",
             frozenset(new_registry.keys()),
         )
-        # Preserve user_provided set — auto-merged params are NOT user-provided
+        # Preserve user_provided set: auto-merged params are NOT user-provided
         object.__setattr__(new_spec, "_user_provided", self._user_provided)
         return new_spec
 
@@ -1494,7 +1494,7 @@ class Parameters:
 
         Parameters
         ----------
-        params : dict[str, ndarray]
+        params: dict[str, ndarray]
             Parameter name → sampled value. Must include all source parameters.
 
         Returns
@@ -1540,7 +1540,7 @@ class Parameters:
 
         Parameters
         ----------
-        name : str
+        name: str
             Parameter name.
 
         Returns
@@ -1623,7 +1623,7 @@ class Parameters:
 
         Parameters
         ----------
-        name : str
+        name: str
             Parameter name (e.g., ``"redshift"``, ``"met_logzsol"``).
 
         Returns
@@ -1657,7 +1657,7 @@ class Parameters:
 
         Parameters
         ----------
-        name : str
+        name: str
             Parameter name (e.g., ``"redshift"``).
 
         Returns
@@ -1702,7 +1702,7 @@ class Parameters:
 
         Parameters
         ----------
-        **extra_params : Distribution
+        **extra_params: Distribution
             Mapping of parameter name → Distribution to add (e.g.,
             ``eline_EW_Halpha=Uniform(0, 1000)``).
 
@@ -1744,7 +1744,7 @@ class Parameters:
 
         Parameters
         ----------
-        key : jax.Array (PRNGKey)
+        key: jax.Array (PRNGKey)
             Random key for sampling.
 
         Returns
@@ -1758,7 +1758,7 @@ class Parameters:
 
         Notes
         -----
-        **JIT-compatible**: yes — safe to call inside :func:`jax.jit` on the
+        **JIT-compatible**: yes, safe to call inside :func:`jax.jit` on the
         key and parameters only (not on branching logic).
 
         **Stochastic SFH**: When the model includes a GP field, ``sfh_field_xi``
@@ -1790,7 +1790,7 @@ class Parameters:
         Without this, two specs sharing a free parameter but differing in
         their free-parameter set (e.g. one adds ``dust_emission`` →
         free ``dust_T``/``dust_beta_ir``) would split the key differently and
-        draw the *shared* parameter to different values — a silent footgun
+        draw the *shared* parameter to different values; a silent footgun
         that surfaced in #548 (an eta=0 "energy-balance" inequivalence that
         was really two galaxies with different sampled ``sfh_dpl_age_gyr``)
         and #563. crc32 (not the salted built-in ``hash``) keeps the mapping
@@ -1815,9 +1815,9 @@ class Parameters:
 
         Parameters
         ----------
-        key : jax.Array (PRNGKey)
+        key: jax.Array (PRNGKey)
             Random key for sampling.
-        n : int
+        n: int
             Number of independent samples to draw.
 
         Returns
@@ -1860,7 +1860,7 @@ class Parameters:
 
         Parameters
         ----------
-        params : dict[str, ndarray or float or str]
+        params: dict[str, ndarray or float or str]
             Parameter name → value (sampled or optimized).
 
         Returns
@@ -1876,7 +1876,7 @@ class Parameters:
 
         Notes
         -----
-        Missing parameters (not in dict) are silently ignored — this allows
+        Missing parameters (not in dict) are silently ignored; this allows
         checking partial parameter sets.
 
         Examples
@@ -1908,7 +1908,7 @@ class Parameters:
         (free first, then fixed). Useful for printing model status before fitting.
 
         Use :meth:`summary_str` if you need the underlying string (e.g. for
-        logging) — :meth:`summary` itself prints and returns ``None``,
+        logging); :meth:`summary` itself prints and returns ``None``,
         matching the rest of the discovery API
         (:func:`tengri.summary`, :func:`tengri.help`, etc.).
 
@@ -2087,7 +2087,7 @@ class Parameters:
 
     def _build_summary_str(self) -> str:
         """Build the same multi-line summary, returned as a string."""
-        # Reuse summary() logic by capturing stdout — simpler than refactor
+        # Reuse summary() logic by capturing stdout: simpler than refactor
         import contextlib
         import io
 

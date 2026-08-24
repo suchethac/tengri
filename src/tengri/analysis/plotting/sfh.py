@@ -30,7 +30,7 @@ def plot_sfh(
     show_mean_sfh=True,
     xscale="linear",
 ):
-    """Plot SFH posterior with uncertainty band — BAGPIPES/Prospector style.
+    """Plot SFH posterior with uncertainty band: BAGPIPES/Prospector style.
 
     Features:
 
@@ -42,40 +42,40 @@ def plot_sfh(
 
     Parameters
     ----------
-    model : SEDModel
+    model: SEDModel
         Fitted model instance.
-    posterior : Posterior
+    posterior: Posterior
         Posterior from :meth:`Fitter.run`.
-    true_params : dict, optional
+    true_params: dict, optional
         Ground truth parameters for mock recovery plots.
-    ax : matplotlib Axes, optional
+    ax: matplotlib Axes, optional
         Axes to plot on. Creates new figure if None.
-    color : str, optional
+    color: str, optional
         Line color. Defaults to sampler-specific color from style sheet.
-    label : str
+    label: str
         Legend label. Default ``"Posterior"``.
-    method : str
+    method: str
         Sampler name for auto-coloring (``"RT"``, ``"geoVI"``, ``"NUTS"``, ``"MAP"``).
-    show_draws : bool
+    show_draws: bool
         If True, draw faint individual SFH samples. Default True.
-    n_draws : int
+    n_draws: int
         Number of sample draws to plot. Default 30.
-    ci_levels : tuple of float
+    ci_levels: tuple of float
         Percentile levels for the filled credible interval. Default ``(16, 84)``.
-    xlim : tuple of float
+    xlim: tuple of float
         x-axis limits in lookback time. [Gyr]
-    show_mean_sfh : bool
+    show_mean_sfh: bool
         If True, overplot the smooth mean SFH backbone as a dashed line. Default True.
-    xscale : {"linear", "log"}
+    xscale: {"linear", "log"}
         Lookback-time axis scale. Default ``"linear"`` (BAGPIPES convention:
         present at right). ``"log"`` resolves the recent, bursty SFH that a
-        linear axis compresses into a sliver near the present — the lower limit
+        linear axis compresses into a sliver near the present; the lower limit
         is clamped off zero to ``max(xlim[0], 1e-3)`` Gyr (~1 Myr, the youngest
         SFH grid point) and the axis runs ascending (recent at left).
 
     Returns
     -------
-    ax : matplotlib Axes
+    ax: matplotlib Axes
 
     Raises
     ------
@@ -183,20 +183,20 @@ def add_sfh_inset(ax, t_gyr, sfr, inset_range_myr=200, **kwargs):
 
     Parameters
     ----------
-    ax : matplotlib Axes
+    ax: matplotlib Axes
         Parent axes to attach the inset to.
-    t_gyr : array_like
+    t_gyr: array_like
         Lookback time in Gyr. [Gyr]
-    sfr : array_like
+    sfr: array_like
         Star formation rate. [Msun/yr]
-    inset_range_myr : float, optional
+    inset_range_myr: float, optional
         Maximum lookback time to show in the inset. [Myr] Default 200 Myr.
     **kwargs
         Passed to ax_in.plot() (e.g., ``color``, ``lw``).
 
     Returns
     -------
-    ax_in : matplotlib Axes
+    ax_in: matplotlib Axes
         The inset axes (for further customization).
 
     Examples
@@ -228,21 +228,21 @@ def plot_sfh_comparison(model, results, true_params=None, methods=None, figsize=
 
     Parameters
     ----------
-    model : SEDModel
+    model: SEDModel
         Fitted model instance.
-    results : dict
+    results: dict
         Mapping from method name to :class:`Posterior` (e.g. ``{"NUTS": post, "VI": post2}``).
-    true_params : dict, optional
+    true_params: dict, optional
         Ground truth parameters for mock recovery plots.
-    methods : list of str, optional
+    methods: list of str, optional
         Panel order. Defaults to ``list(results.keys())``.
-    figsize : tuple of float
+    figsize: tuple of float
         Figure size in inches. Default ``(15, 4)``.
 
     Returns
     -------
-    fig : matplotlib Figure
-    axes : list of matplotlib Axes
+    fig: matplotlib Figure
+    axes: list of matplotlib Axes
 
     Examples
     --------

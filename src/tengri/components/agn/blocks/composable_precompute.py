@@ -154,28 +154,28 @@ def precompute(
 
     Parameters
     ----------
-    filter_waves : list[ndarray]
+    filter_waves: list[ndarray]
         Per-filter wavelength arrays [Å, observed frame].
-    filter_trans : list[ndarray]
+    filter_trans: list[ndarray]
         Per-filter transmission curves.
-    redshift : float
+    redshift: float
         Source redshift.
-    parameters : Parameters or None, optional
+    parameters: Parameters or None, optional
         Used to detect ``Fixed`` axes for auto-collapse. ``None`` skips
         auto-collapse and returns the full grid.
-    recipe : Recipe
+    recipe: Recipe
         Block selectors + axis-params for this fit. Constructed via
         :meth:`Recipe.from_parameters` or :meth:`Recipe.from_selectors`.
-    axis_grids : Mapping[str, ndarray]
+    axis_grids: Mapping[str, ndarray]
         ``{param_name: grid_values}`` per fast axis. Keys must match
         ``recipe.axis_params`` (or, when that's empty, be supplied in order).
-    fixed_values : Mapping[str, float], optional
+    fixed_values: Mapping[str, float], optional
         Static values for non-axis params (block kwargs). Overrides the
         registry defaults baked into each block.
-    wave_rest : ndarray, optional
+    wave_rest: ndarray, optional
         Rest-frame wavelength grid the spectra are evaluated on. Default:
         ``np.logspace(2.0, 6.0, 1500)`` (100 Å to 1e6 Å, log-spaced).
-    agn_log_lbol_default : float, optional
+    agn_log_lbol_default: float, optional
         Default ``agn_log_lbol`` when not in ``fixed_values`` or
         ``axis_grids``. Defaults to the declared
         ``agn_log_lbol`` default.
@@ -259,10 +259,10 @@ class ComposableLookup:
 
     Attributes
     ----------
-    lookup : callable
+    lookup: callable
         The JIT-compiled ``(scale, *free_axis_values) -> photometry``
         function from :func:`build_template_photometry_lookup`.
-    axis_names : tuple of str
+    axis_names: tuple of str
         Names of the remaining (non-collapsed) axis parameters, in the
         order ``lookup`` expects.
     """
@@ -292,9 +292,9 @@ def build_lookup(preint: dict, *, free_param_names: tuple[str, ...] | None = Non
 
     Parameters
     ----------
-    preint : dict
+    preint: dict
         Output of :func:`precompute`.
-    free_param_names : tuple of str, optional
+    free_param_names: tuple of str, optional
         Names of the remaining free axes (after auto-collapse). Currently
         unused but accepted for API symmetry with sibling modules.
     """

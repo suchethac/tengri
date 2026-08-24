@@ -7,8 +7,8 @@ on, implements, or compares against. Call ``tengri.cite("calzetti")`` for a sing
 
 See Also
 --------
-tengri.citations.citation.Citation : the record type.
-tengri.citations.registry : seed entries and registry functions.
+tengri.citations.citation.Citation: the record type.
+tengri.citations.registry: seed entries and registry functions.
 
 """
 

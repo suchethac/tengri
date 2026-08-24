@@ -28,7 +28,7 @@ class Schreiber2016AnalyticIRSEDComponent(EmissionComponent):
     wavelengths (not the full Schreiber+ mid-IR aromatic forest).
 
     For the CIGALE-faithful tabulated version with the real PAH feature forest,
-    select ``schreiber2018`` (``data/schreiber2018_templates.h5``) instead —
+    select ``schreiber2018`` (``data/schreiber2018_templates.h5``) instead:
     this analytic model is the lightweight, grid-free approximation.
 
     The model composition is:
@@ -52,9 +52,9 @@ class Schreiber2016AnalyticIRSEDComponent(EmissionComponent):
 
     Notes
     -----
-    **JIT-compatible**: yes — all operations are ``jnp`` primitives.
+    **JIT-compatible**: yes, all operations are ``jnp`` primitives.
 
-    **Gradient-safe**: yes — differentiable everywhere.
+    **Gradient-safe**: yes, differentiable everywhere.
 
     **Naming note** (#849): the user-facing parameters are the canonical
     ``dust_T`` and ``dust_f_pah`` (the closure arg is likewise ``dust_f_pah``,
@@ -102,15 +102,15 @@ class Schreiber2016AnalyticIRSEDComponent(EmissionComponent):
 
         Parameters
         ----------
-        p : dict
+        p: dict
             Parameters with prefix stripped: keys are "T", "f_pah"
             (or subset if some are Fixed). Note: "f_pah" is mapped to the
             closure's "dust_f_pah" argument.
-        sed_in : ndarray, shape (n_wave,)
+        sed_in: ndarray, shape (n_wave,)
             Input SED in erg/s/Hz (typically zeros for a dust emission component).
-        wave : ndarray, shape (n_wave,)
+        wave: ndarray, shape (n_wave,)
             Rest-frame wavelength grid in Angstrom.
-        L_ir : float
+        L_ir: float
             Total absorbed luminosity in erg/s.
 
         Returns

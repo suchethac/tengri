@@ -18,13 +18,13 @@ from tengri.utils.filter_convention import FilterConvention
 
 @dataclasses.dataclass(frozen=True)
 class Photometry:
-    """Photometric observation configuration — filter set, not the fluxes.
+    """Photometric observation configuration, filter set, not the fluxes.
 
     This class holds *which bands* the model should evaluate.  Measured
     fluxes and uncertainties are passed separately to
     :class:`tengri.Fitter` (``data=`` and ``noise=``).
 
-    Don't call ``Photometry(...)`` directly — use the factory:
+    Don't call ``Photometry(...)`` directly, use the factory:
 
         >>> phot = tengri.Photometry.from_names(["sdss_g", "sdss_r", "sdss_i"])
 
@@ -44,9 +44,9 @@ class Photometry:
 
     Parameters
     ----------
-    filters : tuple of FilterCurve
+    filters: tuple of FilterCurve
         Filter transmission curves.
-    names : tuple of str
+    names: tuple of str
         Human-readable filter names (e.g. ``("sdss_r", "sdss_i")``).
 
     Returns
@@ -56,15 +56,15 @@ class Photometry:
 
     Attributes
     ----------
-    filters : tuple[FilterCurve, ...]
+    filters: tuple[FilterCurve, ...]
         Filter transmission curves.
-    names : tuple[str, ...]
+    names: tuple[str, ...]
         Human-readable filter names.
-    filter_waves : tuple[ndarray, ...]
+    filter_waves: tuple[ndarray, ...]
         Wavelength arrays for each filter [Angstrom].
-    filter_trans : tuple[ndarray, ...]
+    filter_trans: tuple[ndarray, ...]
         Transmission curves for each filter [dimensionless].
-    n_filters : int
+    n_filters: int
         Number of filters.
 
     Notes
@@ -91,7 +91,7 @@ class Photometry:
     # (1/lambda^2; matches CIGALE). Flows into the exact predict path.
     convention: FilterConvention = FilterConvention.BESSELL
 
-    # Derived fields — set in __post_init__
+    # Derived fields, set in __post_init__
     filter_waves: tuple[jnp.ndarray, ...] = dataclasses.field(default=(), hash=False, repr=False)
     filter_trans: tuple[jnp.ndarray, ...] = dataclasses.field(default=(), hash=False, repr=False)
     n_filters: int = 0
@@ -152,7 +152,7 @@ class Photometry:
         hands out exactly the strings a new user then passes here, so
         ``Photometry(["sdss_g", ...])`` is the obvious first guess. Without this
         the strings were accepted, stored, and only failed partway through
-        ``__post_init__`` with ``'str' object has no attribute 'name'`` — a
+        ``__post_init__`` with ``'str' object has no attribute 'name'``, a
         message naming neither filters, nor ``from_names``, nor what was
         expected.
         """
@@ -199,17 +199,17 @@ class Photometry:
 
         Parameters
         ----------
-        names : sequence[str]
+        names: sequence[str]
             Short names from ``FILTER_REGISTRY`` (e.g. ``"sdss_r"``,
             ``"jwst_f200w"``).
-        cache_dir : str or None, optional
+        cache_dir: str or None, optional
             Directory for cached SVO filter files. ``None`` (default) resolves
             through :func:`tengri.observation.filters.default_filter_cache_dir`,
             which is independent of the working directory. The former default,
             the literal ``"data/filters"``, was relative to wherever the process
             started: from any other directory it silently missed the populated
             cache and re-fetched every curve from SVO (#1486).
-        convention : FilterConvention or str, optional
+        convention: FilterConvention or str, optional
             Filter-convolution convention: ``"bessell"`` (default,
             photon-counting 1/lambda; DSPS/FSPS) or ``"energy"`` (1/lambda^2;
             CIGALE). See :func:`tengri.list_filter_conventions`.
@@ -254,7 +254,7 @@ class Photometry:
 
         Parameters
         ----------
-        filter_set : tuple | list
+        filter_set: tuple | list
             Either a 3-tuple ``(filter_waves, filter_trans, filter_curves)``
             from ``load_filter_set()``, or a list/tuple of ``FilterCurve``
             objects.
@@ -316,7 +316,7 @@ def resolve_runtime_photometry(filters, build_time=None):
     r"""Build a :class:`Photometry` from user-supplied filters at predict time.
 
     The single normalizer behind every ``filters=[...]`` argument on the public
-    surface — :meth:`Prediction.photometry`, :meth:`Prediction.magnitudes`, and
+    surface, :meth:`Prediction.photometry`, :meth:`Prediction.magnitudes`, and
     :meth:`Posterior.observables`. They shared a concept and not an
     implementation, so ``filters=`` meant *filter names* on one and *a Photometry
     object* on the other (#1129); routing them all through here is what keeps the
@@ -324,10 +324,10 @@ def resolve_runtime_photometry(filters, build_time=None):
 
     Parameters
     ----------
-    filters : sequence of str or FilterCurve, or Photometry
+    filters: sequence of str or FilterCurve, or Photometry
         Filter names (``["jwst_f356w", ...]``), filter curves, or an
         already-built :class:`Photometry` (returned unchanged).
-    build_time : Photometry or None, optional
+    build_time: Photometry or None, optional
         The model's build-time photometry. Its **convention** is inherited.
 
     Returns
@@ -340,8 +340,8 @@ def resolve_runtime_photometry(filters, build_time=None):
     The convention (Bessell photon-counting vs energy, ADR-0017) belongs to the
     filter *integral*, not to the filter. ``Photometry.from_names`` defaults to
     Bessell, so resolving runtime filters without the model's own convention
-    silently answers a different question than the model's own photometry does —
-    the same filters, two numbers, ~0.5% apart on an energy-convention model.
+    silently answers a different question than the model's own photometry does,     the same
+    filters, two numbers, ~0.5% apart on an energy-convention model.
     Inheriting it is therefore a correctness requirement, not a convenience.
     """
     if isinstance(filters, Photometry):

@@ -49,21 +49,21 @@ def balmer_continuum(
 
     Parameters
     ----------
-    wave_nm : array_like, shape (n_wave,)
+    wave_nm: array_like, shape (n_wave,)
         Output wavelength grid [nm].
-    l5100 : float
+    l5100: float
         :math:`\lambda L_\lambda` at 5100 Å [erg/s]. Sets the absolute
         luminosity via :math:`l_{\rm BC} = (l5100 / 510) \cdot A_{\rm BC}`.
-    a_bc : float
+    a_bc: float
         Strength of the Balmer continuum relative to the power law at
         5100 Å. Typical values: 0.0–1.0. No physical bounds; set to 0.0
         to disable the BC.
-    linewidth_kms : float
+    linewidth_kms: float
         Broad-line region velocity width [km/s]. Typical: 1000–10000 km/s.
 
     Returns
     -------
-    sed : ndarray, shape (n_wave,)
+    sed: ndarray, shape (n_wave,)
         Balmer continuum luminosity density [erg/s/nm] on the input
         ``wave_nm`` grid. Exactly zero above the Balmer edge (364.6 nm)
         and at wavelengths below ~100 nm (unphysical for this component).

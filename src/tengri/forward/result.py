@@ -22,9 +22,9 @@ class SEDResult(NamedTuple):
 
     Parameters
     ----------
-    wavelength : ndarray, shape (n_wave,)
+    wavelength: ndarray, shape (n_wave,)
         Wavelength grid. [Angstrom]
-    sed : ndarray, shape (n_wave,)
+    sed: ndarray, shape (n_wave,)
         Spectral luminosity density for rest-frame SED or flux density for
         observed-frame. [erg/s/Hz] for rest-frame, [erg/s/cm^2/Hz] for
         observed-frame.
@@ -36,9 +36,9 @@ class SEDResult(NamedTuple):
 
     Attributes
     ----------
-    wavelength : ndarray, shape (n_wave,)
+    wavelength: ndarray, shape (n_wave,)
         Wavelength grid. [Angstrom]
-    sed : ndarray, shape (n_wave,)
+    sed: ndarray, shape (n_wave,)
         Spectral luminosity density for rest-frame SED or flux density for
         observed-frame. [erg/s/Hz] for rest-frame, [erg/s/cm^2/Hz] for
         observed-frame.

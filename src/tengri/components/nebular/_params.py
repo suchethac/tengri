@@ -28,7 +28,7 @@ defaults, bounds, and descriptions. Both the flat-builder bucket (via
 :meth:`NebularSEDComponent.declared_parameters` (which returns these tuples
 verbatim) consume them, so the two paths cannot drift. Previously the bucket
 carried ``None`` priors while the component re-declared the same params inline
-with ``Uniform`` priors + physical defaults — the divergence #887 removed.
+with ``Uniform`` priors + physical defaults: the divergence #887 removed.
 
 The flat-builder still registers these Cue params only when the user provides
 them explicitly (an opt-in policy on the ``Parameters`` path, unchanged); the
@@ -110,7 +110,7 @@ PARAMS: tuple[ParamDeclaration, ...] = (
     ParamDeclaration(
         "neb_eline_sigma_kms",
         Fixed(100.0),
-        "Intrinsic nebular emission-line velocity dispersion [km/s] — sets the "
+        "Intrinsic nebular emission-line velocity dispersion [km/s]: sets the "
         "triweight line profile width in the forward SED. Distinct from "
         "sigma_v_kms (stellar LOSVD) and eline_sigma_kms (line-fitting template).",
         lambda lo, hi: lo >= 0 and hi <= 2000,
@@ -220,11 +220,11 @@ ELINE_BROAD_PARAMS: tuple[ParamDeclaration, ...] = (
     ),
 )
 
-# Cue-specific optional params — only registered if the user provides
+# Cue-specific optional params: only registered if the user provides
 # them explicitly. The ``None`` prior is intentional: the registry
 # treats absence-of-default as "must come from user kwargs".
 # Canonical single source (#887) for the 7 Cue ionizing-spectrum shape
-# parameters — consumed BOTH by the flat-builder bucket (via
+# parameters: consumed BOTH by the flat-builder bucket (via
 # ``_bucket_from_declarations``) AND by
 # ``NebularSEDComponent.declared_parameters`` (which returns these verbatim).
 # Priors + physical defaults live here only; previously the component
@@ -233,10 +233,10 @@ ELINE_BROAD_PARAMS: tuple[ParamDeclaration, ...] = (
 # Defaults = a fiducial young-starburst ionizing spectrum: the 1-Myr solar-Z
 # BPASS SSP fit with ``fit_ionizing_spectrum`` (#845), so ``'*': FIXED`` yields a
 # physical ionizing SED instead of the prior midpoint (which, for these
-# correlated slopes, would be unphysical — #477 / #478).
+# correlated slopes, would be unphysical: #477 / #478).
 #
 # NOTE: these prior BOUNDS are the user-settable range and are DISTINCT from
-# ``ionizing_spectrum.py::_CLIP_RANGES`` — the tighter Cue-emulator training
+# ``ionizing_spectrum.py::_CLIP_RANGES``: the tighter Cue-emulator training
 # grid used to clip the auto-derived (SSP-fit) coefficients against
 # extrapolation. They are different quantities and are intentionally NOT
 # unified.
@@ -325,7 +325,7 @@ CUE_GAS_EXTRA_PARAMS: tuple[ParamDeclaration, ...] = (
 
 # MAPPINGS shock-emission backend (shock=True).
 # ``shock_abundance`` and ``shock_component`` carry string Fixed defaults
-# — registered for completeness but configured on the backend instance,
+#: registered for completeness but configured on the backend instance,
 # not as JAX-traced free parameters.
 SHOCK_PARAMS: tuple[ParamDeclaration, ...] = (
     ParamDeclaration(
@@ -340,7 +340,7 @@ SHOCK_PARAMS: tuple[ParamDeclaration, ...] = (
     ParamDeclaration(
         "shock_log_lhalpha",
         Fixed(41.0),
-        "log10(shock Halpha luminosity / [erg/s]) — absolute normalization "
+        "log10(shock Halpha luminosity / [erg/s]): absolute normalization "
         "(used when shock norm='lhalpha')",
         lambda lo, hi: lo >= 30 and hi <= 46,
         "must be in [30, 46]",
@@ -382,7 +382,7 @@ SHOCK_PARAMS: tuple[ParamDeclaration, ...] = (
         "snapped to nearest grid point",
     ),
     # NOTE: the categorical ``shock_abundance`` / ``shock_component`` knobs are
-    # NOT free parameters — they are static structural config on Parameters
+    # NOT free parameters: they are static structural config on Parameters
     # (``shock_abundance`` / ``shock_component``, like ``radio_sfr_mode``),
     # surfaced via the ``shock={...}`` grammar group (#851).
 )

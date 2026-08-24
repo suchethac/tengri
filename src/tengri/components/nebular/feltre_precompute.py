@@ -74,15 +74,15 @@ def precompute(
 
     Parameters
     ----------
-    filter_waves : list[ndarray]
+    filter_waves: list[ndarray]
         Wavelength grid per filter [Angstrom], observed frame.
-    filter_trans : list[ndarray]
+    filter_trans: list[ndarray]
         Transmission per filter (0–1).
-    redshift : float
+    redshift: float
         Source redshift. [dimensionless]
-    parameters : Parameters or None
+    parameters: Parameters or None
         Parameters spec, used to detect Fixed-axis parameters.
-    grid_path : str or Path, keyword-only
+    grid_path: str or Path, keyword-only
         Path to ``feltre_grid.h5``. If None, defaults to
         ``data/feltre_grid.h5`` relative to package root.
 
@@ -107,7 +107,7 @@ def precompute(
 
     Notes
     -----
-    **JIT-compatible**: no — this is a build-time function using NumPy.
+    **JIT-compatible**: no, this is a build-time function using NumPy.
 
     Emission lines are preintegrated by placing Gaussian profiles (or delta
     functions) at each line's vacuum wavelength and convolving with filter
@@ -215,9 +215,9 @@ def build_lookup(preint: dict, **kwargs: Any) -> dict:
 
     Notes
     -----
-    **JIT-compatible**: yes — the returned function is fully JAX-native.
+    **JIT-compatible**: yes, the returned function is fully JAX-native.
 
-    **Gradient-safe**: yes — triweight interpolation is fully differentiable.
+    **Gradient-safe**: yes, triweight interpolation is fully differentiable.
 
     """
     line_wavelengths = preint["line_wavelengths"]
@@ -238,18 +238,18 @@ def build_lookup(preint: dict, **kwargs: Any) -> dict:
 
         Parameters
         ----------
-        log_qh : float
+        log_qh: float
             log10(Q_H [photons/s]).
-        *free_axis_vals : tuple of float
+        *free_axis_vals: tuple of float
             Per remaining axis values (after collapse).
-        neb_fesc : float
+        neb_fesc: float
             Ionizing photon escape fraction [0, 1]. Default 0.0.
 
         Returns
         -------
-        wavelengths : ndarray, shape (n_lines,)
+        wavelengths: ndarray, shape (n_lines,)
             Line vacuum wavelengths [Angstrom].
-        luminosities : ndarray, shape (n_lines,)
+        luminosities: ndarray, shape (n_lines,)
             Line luminosities [L_sun], scaled by Q_H and escape fraction.
 
         """

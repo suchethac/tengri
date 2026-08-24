@@ -51,15 +51,15 @@ _IONSPEC_TABLE_CACHE: dict[tuple, dict] = {}
 
 
 def _ssp_fingerprint(ssp_wave: np.ndarray, ssp_flux: np.ndarray, ssp_lgmet: np.ndarray) -> tuple:
-    """Content fingerprint for an SSP grid — including the flux VALUES.
+    """Content fingerprint for an SSP grid: including the flux VALUES.
 
     Parameters
     ----------
-    ssp_wave : array_like, shape (n_wave,)
+    ssp_wave: array_like, shape (n_wave,)
         SSP wavelength grid [Angstrom].
-    ssp_flux : array_like, shape (n_met, n_age, n_wave)
+    ssp_flux: array_like, shape (n_met, n_age, n_wave)
         SSP flux grid [Lsun/Hz/Msun].
-    ssp_lgmet : array_like, shape (n_met,)
+    ssp_lgmet: array_like, shape (n_met,)
         SSP metallicity grid, log10(Z) absolute.
 
     Returns
@@ -71,18 +71,18 @@ def _ssp_fingerprint(ssp_wave: np.ndarray, ssp_flux: np.ndarray, ssp_lgmet: np.n
     -----
     The flux is digested, not merely shaped. It used to enter the key as nothing
     but ``(shape, dtype)`` while ``ssp_wave`` and ``ssp_lgmet`` were hashed
-    byte-for-byte — which made this a *shape* cache wearing a *content* cache's
+    byte-for-byte: which made this a *shape* cache wearing a *content* cache's
     clothes. A bare-stellar grid and its with-nebular-emission twin share a
     wavelength axis, a metallicity axis, a shape and a dtype, and differ only in
     the flux (by a factor ~100 in the Lyman continuum, which is precisely the part
     this table integrates). They therefore collided, and whichever grid was loaded
-    first in a process silently supplied the ionizing spectrum for the other — in
+    first in a process silently supplied the ionizing spectrum for the other: in
     memory, and then on disk under the colliding hash, outliving the process.
 
     That is the same wound the ``inf``-rejection guard in :func:`_load_ionspec_disk`
     was dressing (#458): it rejected a *symptom* of a bad table while leaving the
     key that produced one intact. Hashing the flux closes it at the source. Old
-    entries are not deleted — they simply stop being addressable, because the key
+    entries are not deleted: they simply stop being addressable, because the key
     they were written under no longer hashes to the same name.
 
     The digest costs one SHA-256 pass over the flux array per fingerprint, which is
@@ -105,7 +105,7 @@ def _fingerprint_hash(key: tuple) -> str:
     h.update(repr(key[:2]).encode())  # shape + dtype
     h.update(key[2])  # raw wave bytes
     h.update(key[3])  # raw lgmet bytes
-    h.update(key[4].encode())  # flux content digest — without it, see _ssp_fingerprint
+    h.update(key[4].encode())  # flux content digest: without it, see _ssp_fingerprint
     return h.hexdigest()
 
 
@@ -129,7 +129,7 @@ def _load_ionspec_disk(key: tuple) -> dict | None:
     """Load a cached ionspec table from disk if it exists, else return None.
 
     Rejects caches whose ``logqion_table`` contains ``inf`` (legacy artefact
-    of the float32 overflow bug — issue #458). Such tables were written by
+    of the float32 overflow bug: issue #458). Such tables were written by
     older versions and would silently poison Cue's nebular forward pass on
     every subsequent process. Treating them as a miss forces a refit, which
     after the float32 fix yields finite values.
@@ -141,7 +141,7 @@ def _load_ionspec_disk(key: tuple) -> dict | None:
         with np.load(path) as data:
             logqion = np.asarray(data["logqion_table"])
             if np.isinf(logqion).any():
-                # Legacy float32-overflow cache — discard.
+                # Legacy float32-overflow cache: discard.
                 return None
             return {
                 "ionspec_table": data["ionspec_table"],
@@ -181,7 +181,7 @@ class _single_thread_blas:
     use scipy / numpy linear algebra under the hood. Multi-threaded BLAS
     introduces non-determinism (thread scheduling perturbs the last ULPs of
     the LSQ solution), and those bits then bake into the JAX trace as
-    constants — so different processes produce different HLO modules. Pinning
+    constants: so different processes produce different HLO modules. Pinning
     BLAS / OpenMP to one thread for the duration of the fit loop gives
     bit-identical coefficients across processes and is also slightly faster
     on small (~10×80) SSP grids where the per-call overhead dominates.
@@ -216,18 +216,18 @@ def _fit_segment(
 ) -> np.ndarray:
     r"""Fit power-law model to a single ionization-regime segment.
 
-    **Internal helper** — fits L_ν ∝ λ^α to one wavelength segment using
+    **Internal helper**: fits L_ν ∝ λ^α to one wavelength segment using
     least-squares regression with a photon-count constraint to preserve Q_H.
 
     Parameters
     ----------
-    seg_wave : array, shape (n_seg,)
+    seg_wave: array, shape (n_seg,)
         Segment wavelength grid [Å]
-    seg_flux : array, shape (n_seg,)
+    seg_flux: array, shape (n_seg,)
         Normalized segment flux (already multiplied by norm factor for stability)
-    norm : float
+    norm: float
         Normalization factor applied to flux (used to denormalize log_A later)
-    init : (float, float), optional
+    init: (float, float), optional
         Initial guess ``(slope, log_norm)``. When ``None`` (default), an
         endpoint-derived linear fit in log-log is used. Pass canonical
         values from a reference SSP to reduce convergence iterations and
@@ -236,8 +236,8 @@ def _fit_segment(
 
     Returns
     -------
-    coeff : array, shape (2,)
-        [slope, log_norm_denormalized] — power-law parameters α and log10(A).
+    coeff: array, shape (2,)
+        [slope, log_norm_denormalized]: power-law parameters α and log10(A).
         If segment has no positive flux, returns [0.0, -inf].
 
     Notes
@@ -250,7 +250,7 @@ def _fit_segment(
          + 0.5 N (\log Q_\mathrm{true} - \log Q_\mathrm{pred}(\alpha, b))^2
 
     The analytical gradient mirrors :func:`yi-jia-li/cue/utils.py
-    :gradient_func_loglinear_analytical` — passing it explicitly to scipy
+    :gradient_func_loglinear_analytical`: passing it explicitly to scipy
     avoids finite-difference Jacobian evaluations (~3× more objective calls
     per iteration) and matches Cue's upstream optimization strategy.
 
@@ -271,7 +271,7 @@ def _fit_segment(
     else:
         init_slope, init_norm = float(init[0]), float(init[1])
 
-    # Q_H for this segment — cast to float64 defensively. Per-segment
+    # Q_H for this segment: cast to float64 defensively. Per-segment
     # magnitudes are typically smaller than the full-LyC integration in
     # fit_ionizing_spectrum, but the same overflow path applies on
     # float32 SSPs (see Q_H block below + issue #458).
@@ -298,7 +298,7 @@ def _fit_segment(
         return term1 + term2
 
     def gradient(params):
-        # Analytical gradient — mirrors Cue's gradient_func_loglinear_analytical
+        # Analytical gradient: mirrors Cue's gradient_func_loglinear_analytical
         # (https://github.com/yi-jia-li/cue/blob/main/src/cue/utils.py).
         alpha, b = params[0], params[1]
         x_max_alpha = xmax**alpha
@@ -329,19 +329,19 @@ def _compute_segment_luminosities(
 ) -> np.ndarray:
     """Compute integrated luminosity per segment from power-law parameters.
 
-    **Internal helper** — integrates L_ν ∝ λ^α over wavelength for each
+    **Internal helper**: integrates L_ν ∝ λ^α over wavelength for each
     of the 4 ionization segments, handling the special case α ≈ 1.
 
     Parameters
     ----------
-    coeff : array, shape (4, 2)
+    coeff: array, shape (4, 2)
         [slope, log_norm] pairs for each segment [Å, dimensionless]
-    edges : array, shape (5,)
+    edges: array, shape (5,)
         Segment boundaries [Å]: [1, HeII, OII, HeI, HI_limit]
 
     Returns
     -------
-    log_L : array, shape (4,)
+    log_L: array, shape (4,)
         log10(integrated luminosity) for each segment [log10(erg/s)]
 
     Notes
@@ -371,7 +371,7 @@ def _compute_segment_luminosities(
     return log_L
 
 
-# Ionization edges (Angstrom) — from cue/constants.py
+# Ionization edges (Angstrom): from cue/constants.py
 HEII_EDGE = 1e8 / 438908.8789  # 227.84 A
 OII_EDGE = 1e8 / 283270.9  # 353.07 A
 HEI_EDGE = 1e8 / 198310.66637  # 504.26 A
@@ -387,7 +387,7 @@ SEGMENT_EDGES = np.array([1.0, HEII_EDGE, OII_EDGE, HEI_EDGE, HI_LIMIT])
 # ``components/nebular/_params.py::CUE_IONSPEC_PARAMS`` (e.g. index1 clips to
 # [1, 42] here vs. the prior range [0, 50] there): the prior range is what a
 # user may sample, the clip range is what the emulator can faithfully evaluate.
-# Two different quantities — see #887 (which considered deriving one from the
+# Two different quantities; see #887 (which considered deriving one from the
 # other and confirmed they must stay separate).
 _CLIP_RANGES = {
     "ionspec_index1": (1.0, 42.0),
@@ -412,17 +412,17 @@ def fit_ionizing_spectrum(
     (HeII, OII, HeI, HI Lyman limit). Returns 7 parameters suitable for input
     to the Cue neural emulator: 4 power-law slopes + 3 log-flux ratios.
 
-    **Not JAX-compatible** — uses numpy and scipy.optimize; intended for
+    **Not JAX-compatible**: uses numpy and scipy.optimize; intended for
     one-time precomputation of SSP grids before inference.
 
     Parameters
     ----------
-    wave : array, shape (n_wave,)
+    wave: array, shape (n_wave,)
         Wavelength grid in Å (must cover λ < 912 Å). [Å]
-    flux : array, shape (n_wave,)
+    flux: array, shape (n_wave,)
         Spectral luminosity density [erg/s/Hz/Msun] or [erg/s/Hz];
         units cancel in power-law fit.
-    edges : array, shape (5,), optional
+    edges: array, shape (5,), optional
         Segment boundaries in Å: [1, HeII, OII, HeI, HI_limit].
         Default: SEGMENT_EDGES (1, 227.84, 353.07, 504.26, 911.76 Å).
 
@@ -498,13 +498,13 @@ def fit_ionizing_spectrum(
     # This routine's guard floors are written below what float32 can hold:
     # ``np.maximum(seg_flux, 1e-99)`` in :func:`_fit_segment` and
     # ``1e-70 * norm`` just below. float32's smallest subnormal is 1.4e-45, so
-    # on a float32 SSP BOTH become exactly 0.0 — the floors evaporate, zero flux
+    # on a float32 SSP BOTH become exactly 0.0: the floors evaporate, zero flux
     # survives the clamp, and ``log10(0) = -inf`` enters the least-squares
     # objective. The fit then returns a degenerate slope and ``log_seglum`` comes
     # back absurd: measured on fsps_prsc_miles_chabrier, segment 0 at
     # (met=14, age=28) gave **4.54 dex in float64 and 86.99 dex in float32**, and
     # 198 of 5580 table entries went ``-inf``. Cue's weighted segment sum then
-    # goes non-finite and takes the whole SED with it — the pure-float32 Cue NaN
+    # goes non-finite and takes the whole SED with it: the pure-float32 Cue NaN
     # that blocked #1206.
     #
     # Cast rather than re-floor: raising the two literals to representable values
@@ -516,7 +516,7 @@ def fit_ionizing_spectrum(
     # two casts are now redundant with this one and deliberately left in place:
     # they document their own overflow and cost nothing.
     #
-    # float64 input is unaffected — ``astype`` on a float64 array is a no-op copy.
+    # float64 input is unaffected: ``astype`` on a float64 array is a no-op copy.
     wave = np.asarray(wave, dtype=np.float64)
     flux = np.asarray(flux, dtype=np.float64)
 
@@ -541,14 +541,14 @@ def fit_ionizing_spectrum(
     log_L = _compute_segment_luminosities(coeff, edges)
     logLratios = np.diff(log_L)
 
-    # Total Q_H — integrate photon rate over frequency.
+    # Total Q_H: integrate photon rate over frequency.
     # wave is increasing → nu_all is decreasing.  Both integrand and
     # x must share the same element ordering for np.trapz.
     #
     # Cast to float64 for the integration. SSPs may ship in float32 (e.g.
     # BC03-from-CIGALE) to save disk; ``(flux * L_SUN) / (h * nu)`` then
     # produces intermediates ~ 1e30 and ``trapezoid`` over the ~ 1e16 Hz
-    # bandwidth integrates to ~ 1e46 — well past float32's 3.4e38 max,
+    # bandwidth integrates to ~ 1e46: well past float32's 3.4e38 max,
     # so the running sum overflows to ``inf`` from a few terms in. Result:
     # every (Z, age) bin in the cached table collapses to ``log10(inf) =
     # inf``, downstream treats the SSP as wNE / dead, and Cue silently
@@ -605,21 +605,21 @@ def precompute_ionizing_params_table(
 
     Batch-fits piecewise power laws to (metallicity, age) SSP spectra younger
     than 100 Myr (older bins contribute nothing to Cue's weighted Q_H so they
-    are skipped — ``logqion_table[im, ia] = -99`` for those). Called once at
+    are skipped: ``logqion_table[im, ia] = -99`` for those). Called once at
     model initialization; results are stored and interpolated at runtime.
 
     Parameters
     ----------
-    ssp_wave : array, shape (n_wave,)
+    ssp_wave: array, shape (n_wave,)
         Wavelength grid in Å. [Å]
-    ssp_flux : array, shape (n_met, n_age, n_wave)
+    ssp_flux: array, shape (n_met, n_age, n_wave)
         SSP spectra on (metallicity, age) grid. [erg/s/Hz/Msun]
-    ssp_lgmet : array, shape (n_met,)
+    ssp_lgmet: array, shape (n_met,)
         Metallicity grid in log10(Z). [log10(Z)]
-    ssp_log_age_yr : array, shape (n_age,), optional
+    ssp_log_age_yr: array, shape (n_age,), optional
         log10(age/yr) for each age bin. When provided, bins older than
         :data:`MAX_NEB_LOG_AGE` (100 Myr) are skipped without
-        invoking scipy — a ~140× speedup for unusually fine age grids
+        invoking scipy: a ~140× speedup for unusually fine age grids
         (BC03-from-CIGALE has 13700 ages of which only ~10 are young).
         When ``None`` (legacy callers), every bin is attempted; the per-bin
         ``np.max(flux_iz) <= 0`` early-exit still skips dead bins.
@@ -772,30 +772,30 @@ def interpolate_ionizing_params(
 
     Parameters
     ----------
-    ionspec_table : array, shape (n_met, n_age, 7)
+    ionspec_table: array, shape (n_met, n_age, 7)
         Precomputed ionizing spectrum parameters (ionspec_index1..4, logLratio1..3).
-    logqion_table : array, shape (n_met, n_age)
+    logqion_table: array, shape (n_met, n_age)
         Ionizing photon rates Q_H. [log10(photons/s)]
-    ssp_lgmet : array, shape (n_met,)
+    ssp_lgmet: array, shape (n_met,)
         SSP metallicity grid. [log10(Z)]
-    ssp_log_age_yr : array, shape (n_age,)
+    ssp_log_age_yr: array, shape (n_age,)
         SSP age grid. [log10(yr)]
-    log_z : float
+    log_z: float
         Target metallicity. [log10(Z)]
-    log_age_yr : float
+    log_age_yr: float
         Target age. [log10(yr)]
 
     Returns
     -------
-    ionspec_7 : array, shape (7,)
+    ionspec_7: array, shape (7,)
         Ionizing spectrum parameters: [index1, index2, index3, index4,
         logLratio1, logLratio2, logLratio3]
-    logqion : float
+    logqion: float
         Interpolated Q_H. [log10(photons/s)]
 
     Notes
     -----
-    **JIT-compatible**: yes — all operations use ``jnp`` primitives with
+    **JIT-compatible**: yes, all operations use ``jnp`` primitives with
     searchsorted and linear interpolation.
 
     **Clipping**: Target (log_z, log_age_yr) are clipped to grid bounds
@@ -862,19 +862,19 @@ def interpolate_ionizing_seglum(
 
     Parameters
     ----------
-    seglum_table : array, shape (n_met, n_age, 4)
+    seglum_table: array, shape (n_met, n_age, 4)
         ``log10`` integrated luminosity of each of the 4 ionization segments.
         Empty/unfit bins carry ``-99`` so ``10**-99 == 0`` adds nothing to a sum.
-    ssp_lgmet : array, shape (n_met,)
+    ssp_lgmet: array, shape (n_met,)
         SSP metallicity grid. [log10(Z)]
-    ssp_log_age_yr : array, shape (n_age,)
+    ssp_log_age_yr: array, shape (n_age,)
         SSP age grid. [log10(yr)]
-    log_z, log_age_yr : float
+    log_z, log_age_yr: float
         Target metallicity and age.
 
     Returns
     -------
-    log_seglum : array, shape (4,)
+    log_seglum: array, shape (4,)
         ``log10`` integrated luminosity per segment at the target point.
 
     Notes

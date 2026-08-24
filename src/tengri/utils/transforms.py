@@ -20,13 +20,13 @@ def sigmoid(x: jnp.ndarray, x0: float, k: float, ymin: float, ymax: float) -> jn
 
     Parameters
     ----------
-    x : array
+    x: array
         Unbounded input.
-    x0 : float
+    x0: float
         Midpoint of transition.
-    k : float
+    k: float
         Steepness (0.1 is typical).
-    ymin, ymax : float
+    ymin, ymax: float
         Output bounds.
 
     Returns
@@ -43,13 +43,13 @@ def inverse_sigmoid(y: jnp.ndarray, x0: float, k: float, ymin: float, ymax: floa
 
     Parameters
     ----------
-    y : array_like
+    y: array_like
         Bounded input in (ymin, ymax).
-    x0 : float
+    x0: float
         Midpoint of the forward sigmoid.
-    k : float
+    k: float
         Steepness of the forward sigmoid.
-    ymin, ymax : float
+    ymin, ymax: float
         Bounds used in the forward sigmoid.
 
     Returns
@@ -67,7 +67,7 @@ def softplus(x: jnp.ndarray) -> jnp.ndarray:
 
     Parameters
     ----------
-    x : array_like
+    x: array_like
         Input.
 
     Returns
@@ -89,9 +89,9 @@ def to_bounded(u_param: jnp.ndarray, lo: float, hi: float) -> jnp.ndarray:
 
     Parameters
     ----------
-    u_param : array_like
+    u_param: array_like
         Unbounded input.
-    lo, hi : float
+    lo, hi: float
         Lower and upper bounds of the target interval.
 
     Returns
@@ -119,9 +119,9 @@ def to_unbounded(param: jnp.ndarray, lo: float, hi: float) -> jnp.ndarray:
 
     Parameters
     ----------
-    param : array_like
+    param: array_like
         Bounded input in (lo, hi).
-    lo, hi : float
+    lo, hi: float
         Lower and upper bounds.
 
     Returns
@@ -155,9 +155,9 @@ def log_det_jacobian_to_bounded(u_param: jnp.ndarray, lo: float, hi: float) -> j
 
     Parameters
     ----------
-    u_param : array
+    u_param: array
         Unbounded parameter.
-    lo, hi : float
+    lo, hi: float
         Bounds of the transformed parameter.
 
     Returns
@@ -184,9 +184,9 @@ def log_det_jacobian_to_unbounded(param: jnp.ndarray, lo: float, hi: float) -> j
 
     Parameters
     ----------
-    param : array_like
+    param: array_like
         Bounded parameter in (lo, hi).
-    lo, hi : float
+    lo, hi: float
         Bounds.
 
     Returns

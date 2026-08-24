@@ -70,9 +70,9 @@ class AGNModel(Protocol):
 
         Parameters
         ----------
-        wavelength : array_like, shape (n_wave,)
+        wavelength: array_like, shape (n_wave,)
             Rest-frame wavelength grid. [Angstrom]
-        agn_log_lbol : float
+        agn_log_lbol: float
             AGN bolometric luminosity. [log10(L_sun)]
         **kwargs
             Model-specific keyword arguments passed from the unified AGN

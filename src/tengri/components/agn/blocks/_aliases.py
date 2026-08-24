@@ -35,7 +35,7 @@ def expand_lines_alias(lines_type: str) -> tuple[str, str]:
 
     Parameters
     ----------
-    lines_type : str
+    lines_type: str
         The legacy `lines` block name (e.g. ``"nlr"``, ``"blr"``,
         ``"nlr_blr"``).
 

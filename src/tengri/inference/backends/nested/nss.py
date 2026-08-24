@@ -205,7 +205,7 @@ def as_top_level_api(
         Maximum expansion steps in slice sampling.
     max_shrinkage
         Maximum shrinking steps in slice sampling.
-    data_args : dict, optional
+    data_args: dict, optional
         If provided, enables compile-once mode: ``loglikelihood_fn`` is
         2-arg and ``data_args`` is stored in the state so changing galaxy
         data does not trigger XLA recompilation.

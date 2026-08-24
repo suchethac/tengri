@@ -9,7 +9,7 @@ wavelength convention converted from nm (CIGALE) to Angstrom (tengri).
 
 Unlike Inoue+2014, Meiksin's diffuse Lyman-α-forest continuum
 suppression rises from ~0 just blueward of Lyα to ~0.25 by the optical
-at z = 3 — a *non-binary* continuum that Inoue's grid model misses.
+at z = 3; a *non-binary* continuum that Inoue's grid model misses.
 Issue #440 §12.
 
 References
@@ -68,15 +68,15 @@ def igm_transmission_meiksin06(
 
     Parameters
     ----------
-    wave_obs : array_like, shape (n_wave,)
+    wave_obs: array_like, shape (n_wave,)
         Observed-frame wavelengths [Angstrom]. Must be sorted ascending
         for the LLS-continuum branch to apply correctly.
-    z : float
+    z: float
         Source redshift (must be > 0).
 
     Returns
     -------
-    T_igm : jnp.ndarray, shape (n_wave,)
+    T_igm: jnp.ndarray, shape (n_wave,)
         Mean IGM transmission in ``[0, 1]``. Above ``912 * (1 + z)``
         Angstrom the value is exactly 1 (no Lyman absorption).
 
@@ -108,8 +108,8 @@ def igm_transmission_meiksin06(
 
     See Also
     --------
-    igm_transmission : Inoue+2014 (grid-based, default in tengri).
-    igm_transmission_madau : Madau+1995 (simpler, fewer lines).
+    igm_transmission: Inoue+2014 (grid-based, default in tengri).
+    igm_transmission_madau: Madau+1995 (simpler, fewer lines).
 
     References
     ----------

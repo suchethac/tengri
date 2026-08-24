@@ -2,24 +2,24 @@
 %%
 %% This file is the SINGLE SOURCE OF TRUTH for every citation registered in
 %% tengri.citations. Python code parses this file at import time and builds
-%% the REGISTRY dict from it. Do not hard-code citation data in Python —
+%% the REGISTRY dict from it. Do not hard-code citation data in Python;
 %% add or edit entries here.
 %%
 %% Every entry below is sourced from an authoritative ADS BibTeX export
 %% (taken from the tengri Paper I bibliography), not written from memory.
 %%
 %% Custom fields (non-standard BibTeX but accepted by our parser):
-%%   registry_key   — the short key used by tengri.cite(registry_key)
-%%   short          — one-line display string ("Author et al. (Year)")
-%%   role           — human-readable description of what tengri uses this for
-%%   upstream_code  — the URL path (e.g. "bd-j/prospector") when we implement a published model
+%%   registry_key   : the short key used by tengri.cite(registry_key)
+%%   short          : one-line display string ("Author et al. (Year)")
+%%   role           : human-readable description of what tengri uses this for
+%%   upstream_code  : the URL path (e.g. "bd-j/prospector") when we implement a published model
 %%
 %% Standard fields beyond ADS default set (doi, archivePrefix, eprint) are
 %% preserved verbatim.
 %%
 %% See also:
-%%   CITATION.bib at the repo root — the tengri papers (Paper I/II/III)
-%%   VERIFICATION.md — component-to-paper verification status
+%%   CITATION.bib at the repo root: the tengri papers (Paper I/II/III)
+%%   VERIFICATION.md: component-to-paper verification status
 
 %% =====================================================================
 %%  The tengri papers (in preparation). The authoritative versions of
@@ -36,7 +36,7 @@
   registry_key = {tengri},
   category = {framework},
   short  = {Cooray et al. (2026, Paper I)},
-  role   = {SED fitting framework — methods paper (this package)},
+  role   = {SED fitting framework: methods paper (this package)},
 }
 
 @article{Cooray_2026a,
@@ -47,7 +47,7 @@
   registry_key = {tengri_paper2},
   category = {framework},
   short  = {Cooray et al. (2026, Paper II)},
-  role   = {IFT stochastic SFH + geoVI — Paper II},
+  role   = {IFT stochastic SFH + geoVI: Paper II},
 }
 
 @article{Cooray_2026b,
@@ -58,7 +58,7 @@
   registry_key = {tengri_paper3},
   category = {framework},
   short  = {Cooray et al. (2026, Paper III)},
-  role   = {Application to real JWST data — Paper III},
+  role   = {Application to real JWST data: Paper III},
 }
 
 %% =====================================================================
@@ -698,7 +698,7 @@
 }
 
 %% =====================================================================
-%%  Nebular — CLOUDY photoionization
+%%  Nebular: CLOUDY photoionization
 %% =====================================================================
 
 @article{Ferland_2017,
@@ -722,7 +722,7 @@
 }
 
 %% =====================================================================
-%%  AGN — torus (SKIRTOR) and disc (Kubota-Done, ADAF, Shakura-Sunyaev)
+%%  AGN: torus (SKIRTOR) and disc (Kubota-Done, ADAF, Shakura-Sunyaev)
 %% =====================================================================
 
 @ARTICLE{Stalevski_2012,
@@ -739,7 +739,7 @@
   registry_key  = {skirtor_2012},
   category      = {agn},
   short         = {Stalevski et al. (2012)},
-  role          = {SKIRTOR 3D AGN torus radiative transfer — isotropic case},
+  role          = {SKIRTOR 3D AGN torus radiative transfer: isotropic case},
 }
 
 @ARTICLE{Stalevski_2016,
@@ -756,7 +756,7 @@
   registry_key  = {skirtor},
   category      = {agn},
   short         = {Stalevski et al. (2016)},
-  role          = {SKIRTOR AGN torus — dust covering factor},
+  role          = {SKIRTOR AGN torus: dust covering factor},
 }
 
 @ARTICLE{Kubota_2018,
@@ -822,7 +822,7 @@
 }
 
 %% =====================================================================
-%%  AGN — GRAHSP (Buchner+2024) and its empirical sub-model references
+%%  AGN: GRAHSP (Buchner+2024) and its empirical sub-model references
 %% =====================================================================
 
 @ARTICLE{Buchner_2024,
@@ -1055,11 +1055,11 @@
   registry_key  = {cigale},
   category      = {reference_code},
   short         = {Boquien et al. (2019)},
-  role          = {CIGALE — reference SED fitting framework},
+  role          = {CIGALE: reference SED fitting framework},
 }
 
 %% =====================================================================
-%%  ADS-verified additions (batch 2) — sourced 2026-04-23 via NASA ADS
+%%  ADS-verified additions (batch 2): sourced 2026-04-23 via NASA ADS
 %%  and arXiv. See docs/dev/archive/CITATIONS_ADS_VERIFIED.md for evidence URLs.
 %% =====================================================================
 
@@ -1146,7 +1146,7 @@
   registry_key  = {clumpy_nenkova2008},
   category      = {agn},
   short         = {Nenkova et al. (2008)},
-  role          = {CLUMPY — clumpy-medium AGN torus model},
+  role          = {CLUMPY: clumpy-medium AGN torus model},
 }
 
 @article{VandenBerk_2001,
@@ -1184,7 +1184,7 @@
   registry_key  = {ess_murray2010},
   category      = {inference},
   short         = {Murray, Adams & MacKay (2010)},
-  role          = {Elliptical Slice Sampling (ESS) — MCMC for Gaussian-prior models},
+  role          = {Elliptical Slice Sampling (ESS): MCMC for Gaussian-prior models},
 }
 
 @article{MartinezRamirez_2024,
@@ -1205,7 +1205,7 @@
   registry_key  = {agnfitter_rx},
   category      = {reference_code},
   short         = {Mart{\'\i}nez-Ram{\'\i}rez et al. (2024)},
-  role          = {AGNfitter-rx — radio-to-X-ray AGN SED fitting (peer code)},
+  role          = {AGNfitter-rx: radio-to-X-ray AGN SED fitting (peer code)},
 }
 
 @article{DraineLi_2007,
@@ -1425,7 +1425,7 @@
   registry_key  = {fsps2009},
   category      = {ssp},
   short         = {Conroy, Gunn \& White (2009)},
-  role          = {FSPS — flexible stellar population synthesis (grid generator)},
+  role          = {FSPS: flexible stellar population synthesis (grid generator)},
   upstream_code = {cconroy20/fsps},
 }
 
@@ -1721,7 +1721,7 @@
   registry_key = {pythonfsps},
   category     = {ssp},
   short        = {Foreman-Mackey et al. (2014)},
-  role         = {python-fsps — Python interface used to generate the SSP grids},
+  role         = {python-fsps: Python interface used to generate the SSP grids},
   upstream_code = {dfm/python-fsps},
 }
 
@@ -1844,7 +1844,7 @@
 }
 
 %% --------------------------------------------------------------------------
-%% Synthesizer — the upstream software whose Cloudy AGN NLR/BLR grids and
+%% Synthesizer: the upstream software whose Cloudy AGN NLR/BLR grids and
 %% nebular/SSP machinery whose physics tengri reproduces. Per the authors'
 %% citation policy, BOTH papers MUST be cited whenever Synthesizer is used.
 %% See https://synthesizer-project.github.io/synthesizer/#citation-acknowledgement
@@ -1861,8 +1861,8 @@
   registry_key  = {synthesizer},
   category      = {nebular},
   short         = {Lovell et al. (2025)},
-  role          = {Synthesizer — synthetic observables package (Cloudy AGN NLR/BLR grids, nebular/SSP machinery)},
-  note          = {Cite together with Roper et al. (2026) [synthesizer_joss] — both are required by the Synthesizer citation policy.},
+  role          = {Synthesizer: synthetic observables package (Cloudy AGN NLR/BLR grids, nebular/SSP machinery)},
+  note          = {Cite together with Roper et al. (2026) [synthesizer_joss]; both are required by the Synthesizer citation policy.},
 }
 
 @article{Roper2026Synthesizer,
@@ -1878,8 +1878,8 @@
   registry_key  = {synthesizer_joss},
   category      = {nebular},
   short         = {Roper et al. (2026)},
-  role          = {Synthesizer — JOSS software paper (companion to Lovell et al. 2025)},
-  note          = {Cite together with Lovell et al. (2025) [synthesizer] — both are required by the Synthesizer citation policy.},
+  role          = {Synthesizer: JOSS software paper (companion to Lovell et al. 2025)},
+  note          = {Cite together with Lovell et al. (2025) [synthesizer]; both are required by the Synthesizer citation policy.},
 }
 
 @ARTICLE{Meiksin_2006,

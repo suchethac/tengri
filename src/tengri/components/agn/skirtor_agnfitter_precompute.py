@@ -11,9 +11,9 @@ Auto-collapses any axis whose corresponding parameter is
 References
 ----------
 .. [1] M. Stalevski et al., "3D radiative transfer modeling of the dusty
-   torus around AGN — the influence of clumping," MNRAS, 420, 2756 (2012).
+   torus around AGN, the influence of clumping," MNRAS, 420, 2756 (2012).
    arXiv:1109.1286. https://doi.org/10.1111/j.1365-2966.2011.19775.x
-.. [2] M. Stalevski et al., "The dust covering factor in AGN — combining the
+.. [2] M. Stalevski et al., "The dust covering factor in AGN: combining the
    IR torus emission with polar dust component," MNRAS, 458, 2288 (2016).
    arXiv:1602.01954. https://doi.org/10.1093/mnras/stw444
 .. [3] L. N. Martinez-Ramirez, et al., "AGNFITTER-RX: Modeling the
@@ -68,13 +68,13 @@ def precompute_skirtor_agnfitter_photometry(
 
     Parameters
     ----------
-    grid_path : str
+    grid_path: str
         Path to ``skirtor_mean3p_torus_grid.h5``.
-    filter_waves : list[ndarray]
+    filter_waves: list[ndarray]
         Wavelength grid per filter [Angstrom], observed frame.
-    filter_trans : list[ndarray]
+    filter_trans: list[ndarray]
         Transmission per filter (0–1).
-    redshift : float, optional
+    redshift: float, optional
         Source redshift. Used to shift rest-frame templates into the
         observed frame before integrating against observed-frame filters.
         Default 0.0.
@@ -82,25 +82,25 @@ def precompute_skirtor_agnfitter_photometry(
     Returns
     -------
     dict
-        ``grid_phot`` : ndarray, shape (n_oa, n_incl, n_tv, n_filters)
+        ``grid_phot``: ndarray, shape (n_oa, n_incl, n_tv, n_filters)
             Filter-integrated L_ν [erg/s/Hz] per L_sun (unit torus fraction).
-        ``axes`` : tuple of 3 grid arrays (jnp.ndarray)
+        ``axes``: tuple of 3 grid arrays (jnp.ndarray)
             Grid axes (oa, incl, tv).
-        ``_preint`` : PreintegratedGrid
+        ``_preint``: PreintegratedGrid
             Internal preintegration data structure.
 
     References
     ----------
     .. [1] M. Stalevski et al., "3D radiative transfer modeling of the dusty
-       torus around AGN — the influence of clumping," MNRAS, 420, 2756 (2012).
+       torus around AGN, the influence of clumping," MNRAS, 420, 2756 (2012).
        arXiv:1109.1286.
-    .. [2] M. Stalevski et al., "The dust covering factor in AGN — combining the
+    .. [2] M. Stalevski et al., "The dust covering factor in AGN: combining the
        IR torus emission with polar dust component," MNRAS, 458, 2288 (2016).
        arXiv:1602.01954.
 
     Notes
     -----
-    **JIT-compatible**: no — this is a build-time function using NumPy.
+    **JIT-compatible**: no, this is a build-time function using NumPy.
 
     **Build-time operation**: This function performs frequency-domain
     integration via NumPy. The precomputed photometry is grid-independent
@@ -171,7 +171,7 @@ def build_skirtor_agnfitter_photometry_lookup(precomp: dict):
 
     Parameters
     ----------
-    precomp : dict
+    precomp: dict
         Output of :func:`precompute_skirtor_agnfitter_photometry`.
 
     Returns
@@ -184,7 +184,7 @@ def build_skirtor_agnfitter_photometry_lookup(precomp: dict):
 
     Notes
     -----
-    **JIT-compatible**: yes — pure JAX with no data I/O.
+    **JIT-compatible**: yes, pure JAX with no data I/O.
     """
     from tengri.utils.physics_constants import L_SUN as _LSUN_ERG
 
@@ -205,15 +205,15 @@ def build_skirtor_agnfitter_photometry_lookup(precomp: dict):
 
         Parameters
         ----------
-        agn_log_lbol : float
+        agn_log_lbol: float
             ``log10(L_bol / L_sun)``. Default 11.0.
-        agn_oa_skirtor : float
+        agn_oa_skirtor: float
             Half-opening angle [deg]. Default 40.0.
-        agn_incl_skirtor : float
+        agn_incl_skirtor: float
             Inclination [deg]. Default 30.0.
-        agn_tv_skirtor : float
+        agn_tv_skirtor: float
             Equatorial optical depth τ_9.7. Default 7.0.
-        agn_torus_frac : float
+        agn_torus_frac: float
             Torus reprocessing fraction. Default 0.5.
 
         Returns
@@ -225,7 +225,7 @@ def build_skirtor_agnfitter_photometry_lookup(precomp: dict):
         -----
         **JIT-compatible**: yes.
 
-        **Gradient-safe**: yes — node-exact PCHIP is C¹ differentiable.
+        **Gradient-safe**: yes, node-exact PCHIP is C¹ differentiable.
 
         See Also
         --------
@@ -257,15 +257,15 @@ def precompute(
 
     Parameters
     ----------
-    filter_waves : list[ndarray]
+    filter_waves: list[ndarray]
         Wavelength grid per filter [Angstrom], observed frame.
-    filter_trans : list[ndarray]
+    filter_trans: list[ndarray]
         Transmission per filter (0–1).
-    redshift : float
+    redshift: float
         Source redshift. [dimensionless]
-    parameters : Parameters | None
+    parameters: Parameters | None
         Parameters spec, used to detect Fixed-axis parameters.
-    grid_path : str, keyword-only
+    grid_path: str, keyword-only
         Path to ``skirtor_mean3p_torus_grid.h5``.
 
     Returns
@@ -276,7 +276,7 @@ def precompute(
 
     Notes
     -----
-    **JIT-compatible**: no — this is a build-time function using NumPy.
+    **JIT-compatible**: no, this is a build-time function using NumPy.
     """
     result = precompute_skirtor_agnfitter_photometry(
         grid_path, filter_waves, filter_trans, redshift=redshift
@@ -306,10 +306,10 @@ def build_lookup(preint: dict, *, free_param_names: tuple[str, ...] | None = Non
 
     Parameters
     ----------
-    preint : dict
+    preint: dict
         Preintegrated data dict with keys ``"grid_phot"``, ``"axes"``, and
         optionally ``"_collapsed_axes"``.
-    free_param_names : tuple of str or None, optional
+    free_param_names: tuple of str or None, optional
         Names of the remaining free axes in the collapsed case (unused in the
         default no-collapse case).
 
@@ -320,9 +320,9 @@ def build_lookup(preint: dict, *, free_param_names: tuple[str, ...] | None = Non
 
     Notes
     -----
-    **JIT-compatible**: yes — the returned function is fully JAX-native.
+    **JIT-compatible**: yes, the returned function is fully JAX-native.
 
-    **Gradient-safe**: yes — node-exact PCHIP is C¹-differentiable.
+    **Gradient-safe**: yes, node-exact PCHIP is C¹-differentiable.
     """
     if not preint.get("_collapsed_axes"):
         return build_skirtor_agnfitter_photometry_lookup(preint)

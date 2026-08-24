@@ -88,7 +88,7 @@ def _build_grid_grahsp(
     Structural selectors (``torus_model``, ``feii_template``, ``disc_model``,
     ``disc_*``) and the non-axis continuous parameters (``a_bc``, ``tor_temp``,
     ``tor_cutoff_um``, ...) are held fixed at the supplied values for the whole
-    grid — exactly as the other non-axis GRAHSP parameters are. Pass them so a
+    grid: exactly as the other non-axis GRAHSP parameters are. Pass them so a
     ``WavePrecomp`` build of a non-default variant (e.g. ``torus_model="mn12"``)
     pre-integrates the *correct* SED rather than silently defaulting.
     """
@@ -178,19 +178,19 @@ def precompute(
 
     Parameters
     ----------
-    filter_waves : list[ndarray]
+    filter_waves: list[ndarray]
         Per-filter wavelength curves [Å, observed frame].
-    filter_trans : list[ndarray]
+    filter_trans: list[ndarray]
         Per-filter transmission curves.
-    redshift : float
+    redshift: float
         Source redshift.
-    parameters : Parameters | None
+    parameters: Parameters | None
         If supplied, axes whose corresponding parameter is ``Fixed`` (or
         absent from the spec) are collapsed at the fixed value / GRAHSP
         default.
-    plslope_grid : ndarray, optional
+    plslope_grid: ndarray, optional
         Defaults to ``[-2.5, -1.7, -1.0]`` covering Brown 2019 atlas range.
-    ebv_grid : ndarray, optional
+    ebv_grid: ndarray, optional
         Defaults to ``[0.0, 0.05, 0.1, 0.3, 1.0]`` covering Sy1 to ULIRG
         attenuations.
     torus_model, feii_template, disc_model, disc_m, disc_a, disc_mdot

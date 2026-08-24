@@ -60,22 +60,22 @@ def smc_attenuation_curve(
 
     Parameters
     ----------
-    wave_nm : array_like, shape (n_wave,)
+    wave_nm: array_like, shape (n_wave,)
         Wavelength grid [nm].
-    opt_index : float, optional
+    opt_index: float, optional
         Power-law index :math:`\gamma_{\mathrm{OPT}}` for
         :math:`\lambda < \lambda_b`. Default ``-1.2`` (Prevot SMC).
-    nir_index : float, optional
+    nir_index: float, optional
         Power-law index :math:`\gamma_{\mathrm{NIR}}` for
         :math:`\lambda \geq \lambda_b`. Default ``-3.0``.
-    norm : float, optional
+    norm: float, optional
         Normalization :math:`N` at the break. Default ``1.2``.
-    lam_break_nm : float, optional
+    lam_break_nm: float, optional
         Break wavelength :math:`\lambda_b` [nm]. Default ``1100`` nm.
 
     Returns
     -------
-    A : ndarray, shape (n_wave,)
+    A: ndarray, shape (n_wave,)
         Dimensionless attenuation curve, normalized so that
         :math:`A(\lambda_b) = N`.
 
@@ -113,19 +113,19 @@ def attenuation_factors(
 
     Parameters
     ----------
-    wave_nm : array_like, shape (n_wave,)
+    wave_nm: array_like, shape (n_wave,)
         Wavelength grid [nm].
-    ebv : float
+    ebv: float
         Galaxy line-of-sight :math:`E(B-V)` [mag].
-    ebv_agn : float
+    ebv_agn: float
         Additional AGN-only :math:`E(B-V)` [mag].
     opt_index, nir_index, norm, lam_break_nm
         See :func:`smc_attenuation_curve`.
 
     Returns
     -------
-    factor_gal : ndarray, shape (n_wave,)
-    factor_agn : ndarray, shape (n_wave,)
+    factor_gal: ndarray, shape (n_wave,)
+    factor_agn: ndarray, shape (n_wave,)
 
     Notes
     -----

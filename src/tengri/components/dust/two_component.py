@@ -21,7 +21,7 @@ Cross-component reads
 Cross-component publications
 ----------------------------
 
-- ``state.derived["L_ir"]`` (scalar, erg/s) — total IR luminosity
+- ``state.derived["L_ir"]`` (scalar, erg/s): total IR luminosity
   re-radiated by dust, consumed by
   :class:`tengri.components.radio.component.RadioSEDComponent` (FIR-radio
   correlation) and :class:`tengri.components.xray.component.XRaySEDComponent`.
@@ -30,7 +30,7 @@ Cross-component publications
 
 Architectural notes
 -------------------
-``ssp_data`` is **not** held on this component — it reads what it
+``ssp_data`` is **not** held on this component: it reads what it
 needs from ``state.derived``. ``precompute()`` returns an empty
 marker, consistent with every adapter except the stellar one.
 The IR-emission backend is resolved lazily inside ``apply()`` so
@@ -86,17 +86,17 @@ def _young_indicator(
     ``tengri.components.dust._apply.two_component_dust`` uses for the screen
     itself, so the stars that sit behind the birth cloud, the stars whose Lyman
     continuum is reprocessed, and the stars the photometry LUT reddens are all the
-    same stars. Two other spellings — ``1 / (1 + 10**u)`` — existed here and in the
+    same stars. Two other spellings: ``1 / (1 + 10**u)``: existed here and in the
     LUT's ``dust_young_indicator``; because :math:`10^u = e^{u\ln 10}`, they were
     2.3x sharper than the screen they claimed to match (#1122).
 
     Parameters
     ----------
-    ssp_ages_yr : ndarray, shape (n_age,)
+    ssp_ages_yr: ndarray, shape (n_age,)
         SSP lookback ages [yr].
-    t_birth_yr : float
-        Birth-cloud dispersal age — the sigmoid center [yr].
-    transition_width_dex : float
+    t_birth_yr: float
+        Birth-cloud dispersal age: the sigmoid center [yr].
+    transition_width_dex: float
         Sigmoid width [dex].
 
     Returns
@@ -130,17 +130,17 @@ class DustSEDComponentConfig(SEDComponentConfig):
         Diagnostic identifier. Default ``"dust"``.
     law_neb : str or None
         Attenuation-law registry key for the **nebular** birth-cloud
-        screen. ``None`` (default) inherits ``law_bc`` — the nebular
+        screen. ``None`` (default) inherits ``law_bc``: the nebular
         continuum is then reddened by exactly the same young-limit screen
         as the youngest stars (Charlot & Fall 2000; bagpipes/FSPS/CIGALE
         behavior). Set it to give HII-region emission a *different*
         birth-cloud law from the stars while still sharing the diffuse ISM
         screen (``law_diff``). See ``neb_law_overrides`` for the matching
         per-parameter knob.
-    t_birth_yr : float
+    t_birth_yr: float
         Birth-cloud dispersal age (sigmoid center, yr).
         Default 1e7 (10 Myr) per Charlot & Fall (2000).
-    transition_width_dex : float
+    transition_width_dex: float
         Sigmoid width (dex) for the BC→diffuse age transition.
     """
 
@@ -179,19 +179,19 @@ class DustSEDComponentConfig(SEDComponentConfig):
     #: rather than heat dust. Static, non-fittable; enters ``compile_signature``.
     lyman_cutoff_aa: float = 0.0
     #: Which stellar populations have their Lyman continuum (λ < 912 Å) absorbed
-    #: by ``neb_fesc``. ``False`` (default) — **young/birth-cloud only**: only
+    #: by ``neb_fesc``. ``False`` (default): **young/birth-cloud only**: only
     #: stars inside birth clouds (weighted by the young indicator) have their LyC
     #: reprocessed, so the old/diffuse stellar LyC passes through (matches
     #: bagpipes ``model_galaxy``, which zeros only ``spectrum_bc[<912]``, and is
     #: consistent with ``neb_fesc`` being a birth-cloud escape fraction).
-    #: ``True`` — **all** stellar LyC absorbed (old + young), matching FSPS
+    #: ``True``: **all** stellar LyC absorbed (old + young), matching FSPS
     #: (``frac_obrun`` on the whole spectrum) and CIGALE (absorbed_old +
     #: absorbed_young). Static, non-fittable; enters ``compile_signature``.
     lyc_absorb_all: bool = False
     #: Include the Lyman continuum (λ < 912 Å) in the dust energy-balance
-    #: integral. ``False`` (default) — canonical LyC-masked ``L_absorbed``
+    #: integral. ``False`` (default): canonical LyC-masked ``L_absorbed``
     #: (#922): LyC photons ionize H and re-emerge as nebular emission, not
-    #: dust heating (CIGALE convention). ``True`` — all absorbed energy heats
+    #: dust heating (CIGALE convention). ``True``: all absorbed energy heats
     #: dust, matching FSPS/Prospector, whose ``add_dust_emission`` re-emits
     #: the full absorbed luminosity (measured ~10 % higher L_IR at the
     #: star-forming reproduction fiducial, #961). Grammar key
@@ -211,20 +211,20 @@ class DustSEDComponentConfig(SEDComponentConfig):
     #: than silently pinning every law to its signature default. Only
     #: ``SEDModel`` sets it, because only ``SEDModel`` knows who asked. The
     #: single-screen config spells its default ``frozenset()`` for the same
-    #: reason in reverse — passing nothing is *its* historical behavior.
+    #: reason in reverse: passing nothing is *its* historical behavior.
     live_shape_params: frozenset[str] | None = None
 
 
 @dataclass(frozen=True)
 class DustSEDComponentState(SEDComponentState):
-    """State for the dust component — the component name, and nothing else.
+    """State for the dust component: the component name, and nothing else.
 
     This class carried a ``dust_emission_templates`` field until 2026-08,
     documented as holding pre-loaded IR templates so they would thread through
     JIT as Parameter ops rather than bake into HLO Constants. Nothing ever set
     it: the only construction site passes ``name`` alone, and no reader existed
     anywhere in the package. The docstring described a mechanism that never ran,
-    which is worse than no docstring — it answers "are the dust templates
+    which is worse than no docstring: it answers "are the dust templates
     threaded?" with a confident yes.
 
     They are not. Threading dust IR templates is still open work, tracked
@@ -243,7 +243,7 @@ class DustSEDComponent(TemplateThreading):
 
     Notes
     -----
-    **JIT-compatible**: yes — :meth:`apply` is pure JAX once the
+    **JIT-compatible**: yes, :meth:`apply` is pure JAX once the
     attenuation-law registry lookup completes (these registries return
     plain JAX functions that fold cleanly into the JIT trace).
     **Pipeline ordering**: dust runs after stellar (and after nebular
@@ -258,7 +258,7 @@ class DustSEDComponent(TemplateThreading):
     parameter_prefix: str = "dust_"
     #: When set (via ``approx=WavePrecomp(fast_dust_emission=True)``), project IR
     #: re-emission at the filter effective wavelength rather than integrating the
-    #: dense template through each bandpass — much cheaper, slightly approximate.
+    #: dense template through each bandpass: much cheaper, slightly approximate.
     fast_emission: bool = False
 
     def citations(self) -> tuple[str, ...]:
@@ -308,7 +308,7 @@ class DustSEDComponent(TemplateThreading):
         emission-line treatment). Backends that bake nebular into the SSP
         (BakedIn) publish ``sed_nebular`` as zeros, so this is a no-op there.
 
-        Also reads ``lyc_transmission`` — the stellar Lyman-continuum survival
+        Also reads ``lyc_transmission``: the stellar Lyman-continuum survival
         fraction ``where(λ<912, neb_fesc, 1)`` published by a photoionized
         backend. Applied to the per-age stellar reconstruction so the fesc
         absorption is honored on the ``lnu_age`` path (see :meth:`apply` §2a
@@ -418,13 +418,13 @@ class DustSEDComponent(TemplateThreading):
 
         Parameters
         ----------
-        ssp_data : Any | None
+        ssp_data: Any | None
             Unused; accepted for Protocol uniformity.
-        wave_grid : ndarray | None
+        wave_grid: ndarray | None
             Unused; accepted for Protocol uniformity.
-        approx : dict[str, bool] | None
+        approx: dict[str, bool] | None
             Unused; accepted for Protocol uniformity.
-        filters : tuple of (wave, trans) pairs | None
+        filters: tuple of (wave, trans) pairs | None
             Unused; accepted for Protocol uniformity.
 
         Returns
@@ -447,23 +447,23 @@ class DustSEDComponent(TemplateThreading):
         The single source of this component's dust screen. :meth:`apply` calls it
         on the full SSP wave grid; the FeaturePrecomp path
         (:meth:`SEDModel.predict_spectral_indices` with ``approx=True``) calls it at
-        the index window centers — so the LUT path applies **exactly** the dust
+        the index window centers: so the LUT path applies **exactly** the dust
         the forward applies, with no second implementation to keep in sync.
 
-        Resolves per-component (birth-cloud vs diffuse) law parameters — the
+        Resolves per-component (birth-cloud vs diffuse) law parameters: the
         shared ``dust_<x>`` params with any config overrides layered on top; empty
         overrides reproduce the original single-slope Charlot & Fall (2000)
-        behavior exactly — then evaluates :func:`two_component_dust`.
+        behavior exactly: then evaluates :func:`two_component_dust`.
 
         Parameters
         ----------
-        params : mapping
+        params: mapping
             Receives ``dust_tau_bc`` / ``dust_tau_diff`` (+ optional
             ``dust_f_obscuration`` and per-law override keys).
-        wavelength : ndarray, shape (n_wave,)
+        wavelength: ndarray, shape (n_wave,)
             Rest-frame wavelengths [Å] at which to evaluate the screen.
-        ssp_ages_yr : ndarray, shape (n_age,)
-            SSP lookback ages [yr] — the birth-cloud axis.
+        ssp_ages_yr: ndarray, shape (n_age,)
+            SSP lookback ages [yr]: the birth-cloud axis.
 
         Returns
         -------
@@ -473,7 +473,7 @@ class DustSEDComponent(TemplateThreading):
 
         Notes
         -----
-        **JIT-compatible**: yes — pure ``jnp`` + registry law resolution.
+        **JIT-compatible**: yes, pure ``jnp`` + registry law resolution.
         """
         bc_law_params, diff_law_params = resolve_bc_diff_law_params(
             params,
@@ -519,16 +519,16 @@ class DustSEDComponent(TemplateThreading):
     ) -> ForwardState:
         """Apply two-component attenuation + IR re-emission.
 
-        ``ssp_data`` is accepted for Protocol uniformity but unused — this
+        ``ssp_data`` is accepted for Protocol uniformity but unused: this
         component reads only from ``state`` and ``params``.
 
         Parameters
         ----------
-        state : ForwardState
+        state: ForwardState
             Must carry ``wave`` and have stellar published
             ``lnu_age`` (n_age, n_wave) and ``ssp_ages_yr`` (n_age,)
             in its ``derived`` dict.
-        params : mapping
+        params: mapping
             Receives ``dust_*`` keys plus the bare ``redshift``.
 
         Returns
@@ -550,7 +550,7 @@ class DustSEDComponent(TemplateThreading):
         ssp_ages_yr = jnp.asarray(state.derived["ssp_ages_yr"])
 
         # ── 1. Two-component transmission T(λ, age) ─────────────────────
-        # Resolve per-component (birth-cloud vs diffuse) law parameters once —
+        # Resolve per-component (birth-cloud vs diffuse) law parameters once:
         # reused below for the nebular-continuum screen. The screen itself is
         # single-sourced with the FeaturePrecomp fast path via
         # :meth:`_transmission_from_law_params` (see :meth:`compute_transmission`).
@@ -583,7 +583,7 @@ class DustSEDComponent(TemplateThreading):
         # photoionized backend publishes ``lyc_transmission = where(λ<912,
         # neb_fesc, 1)``. This path rebuilds the stellar SED from the *unmasked*
         # per-age ``lnu_age`` cube, so without applying the mask here the nebular
-        # component's fesc mask on ``state.sed_intrinsic`` is bypassed — the LyC
+        # component's fesc mask on ``state.sed_intrinsic`` is bypassed: the LyC
         # leaks into ``sed_dust_attenuated`` and reappears as a phantom
         # ``-stellar_LyC`` in ``non_stellar_other`` (negative flux at fesc<1;
         # #824). Absent (BakedIn / no photoionized nebular) -> no factor.
@@ -595,7 +595,7 @@ class DustSEDComponent(TemplateThreading):
         # bookkeeping value never feeds L_ir.
         #
         # ``sed_attenuated`` (the actual stellar output) uses the physical rule:
-        #   * default (``lyc_absorb_all=False``) — **young/birth-cloud only**.
+        #   * default (``lyc_absorb_all=False``): **young/birth-cloud only**.
         #     ``neb_fesc`` is a birth-cloud escape fraction, so only stars inside
         #     birth clouds (young indicator ``y(a)``) have their LyC reprocessed;
         #     the old/diffuse stellar LyC passes through. Matches bagpipes.
@@ -614,7 +614,7 @@ class DustSEDComponent(TemplateThreading):
                 # three different ways: the logistic in ``two_component_dust``, and
                 # base-10 sigmoids here and in the LUT's ``dust_young_indicator``.
                 # 10^u = e^(u·ln10), so those two were 2.3× sharper than the screen
-                # they were supposed to agree with — the LyC escape fraction was
+                # they were supposed to agree with: the LyC escape fraction was
                 # applied to a different set of stars than the birth-cloud dust.
                 y_age = _young_indicator(
                     ssp_ages_yr, self.config.t_birth_yr, self.config.transition_width_dex
@@ -643,7 +643,7 @@ class DustSEDComponent(TemplateThreading):
         # default reddens the continuum exactly like the youngest stars. Setting
         # ``law_neb`` / ``neb_law_overrides`` decouples only the nebular
         # birth-cloud screen; the diffuse ISM screen (``law_diff`` +
-        # ``diff_law_params``) is always shared with the stars — HII regions sit
+        # ``diff_law_params``) is always shared with the stars: HII regions sit
         # in their own clouds behind the same foreground ISM.
         neb_law = self.config.law_neb or self.config.law_bc
         _neb_overrides = dict(self.config.neb_law_overrides)
@@ -651,7 +651,7 @@ class DustSEDComponent(TemplateThreading):
         # override on top. Merging rather than iterating ``bc_law_params`` keys:
         # since #1833 that dict omits shape parameters nobody requested, and a
         # comprehension over its keys would drop a ``neb_law_overrides`` entry
-        # for an omitted one — an explicit setting silently ignored, which is
+        # for an omitted one: an explicit setting silently ignored, which is
         # the failure class #1833 itself is.
         neb_bc_params = {k: jnp.asarray(v) for k, v in {**bc_law_params, **_neb_overrides}.items()}
         diff_law_kw = {k: jnp.asarray(v) for k, v in diff_law_params.items()}
@@ -673,7 +673,7 @@ class DustSEDComponent(TemplateThreading):
         # continuum in 2b, evaluated at the line wavelengths: same law, same
         # resolved parameters, same Lyman clip, same covering-fraction form.
         # Reusing `neb_law` / `neb_bc_params` / `diff_law_kw` rather than
-        # re-deriving them is the point — a second derivation is a second
+        # re-deriving them is the point: a second derivation is a second
         # thing that can disagree, which is #1858.
         #
         # Publishing it here rather than leaving each consumer to remember is
@@ -686,7 +686,7 @@ class DustSEDComponent(TemplateThreading):
         #
         # A model with no dust component publishes nothing here and every
         # consumer falls back to the intrinsic catalog, which is the right
-        # answer there — so the fallback is not a silent failure.
+        # answer there: so the fallback is not a silent failure.
         #
         # Reads and publishes the LOG companion, never the linear `line_lums`.
         # Line luminosities are ~1e40-1e43 erg/s, past float32's 3.4e38 ceiling
@@ -731,12 +731,12 @@ class DustSEDComponent(TemplateThreading):
         # Mirrors forward/pipeline.py:815.
         #
         # Lyman-continuum exclusion: photons at λ < 912 Å are absorbed by
-        # H ionization (→ nebular emission), not by dust grains — they
+        # H ionization (→ nebular emission), not by dust grains: they
         # don't contribute to the dust IR re-emission pool. Matches
         # CIGALE ``dustatt_modified_starburst`` (a_vs_ebv clips at 91.2
         # nm, so its energy-balance ∫ stops at 912 Å) without forcing
         # ``calzetti`` / ``leitherer02`` to zero the polynomial there
-        # — users querying the curve at any wavelength still get a
+        #: users querying the curve at any wavelength still get a
         # value, only the dust energy-balance integral excludes those
         # photons.
         nu = C_AA / wave
@@ -761,7 +761,7 @@ class DustSEDComponent(TemplateThreading):
         if eb_lut is not None and jw is not None and log_mass_scale is not None:
             # Fast path (WavePrecomp): the stellar bolometric absorption comes
             # from a precomputed (tau_bc, tau_diff) LUT contracted with the
-            # runtime DSPS weights — no full-wavelength stellar cube. The
+            # runtime DSPS weights: no full-wavelength stellar cube. The
             # nebular term is a single-SED integral (cheap), kept exact. Same
             # signed ∫(L_intrinsic - L_attenuated) dν, then abs(); when the
             # full cube is not otherwise needed XLA dead-code-eliminates it.
@@ -800,7 +800,7 @@ class DustSEDComponent(TemplateThreading):
         eta_balance = jnp.asarray(params.get("dust_eta_balance", 1.0))
         # ``eta_balance`` relaxes energy balance multiplicatively, so it is a
         # log offset. A non-positive factor means no re-emitted energy at all,
-        # which is -inf in log space (and exactly 0.0 back in linear space) —
+        # which is -inf in log space (and exactly 0.0 back in linear space):
         # matching the ``jnp.maximum(..., 0.0)`` clip of the linear form.
         eta_positive = eta_balance > 0
         log_L_ir = jnp.where(
@@ -841,8 +841,8 @@ class DustSEDComponent(TemplateThreading):
         # Shock gets the same young-limit screen as nebular (#1434: #927 physics):
         # shocked gas sits behind the dust column whether the shock is star-formation
         # related (norm='frac') or AGN-outflow related (norm='lhalpha'). For AGN-outflow
-        # shocks the screen geometry is an approximation — MAPPINGS traces often originate
-        # in unobscured outflows — but a single published dust path is more maintainable
+        # shocks the screen geometry is an approximation: MAPPINGS traces often originate
+        # in unobscured outflows: but a single published dust path is more maintainable
         # than per-mode branches that can diverge. Measure to assess the approximation.
         tau_shock = (
             jnp.asarray(params["dust_tau_bc"]) * k_bc_neb
@@ -885,8 +885,8 @@ class DustSEDComponent(TemplateThreading):
             tau_bc = jnp.asarray(params["dust_tau_bc"])
             tau_diff = jnp.asarray(params["dust_tau_diff"])
             # The SAME resolved law parameters as the full-grid screen above,
-            # splatted whole. This site used to thread `n_slope` alone —
-            # "matching its existing surface" — which silently dropped
+            # splatted whole. This site used to thread `n_slope` alone:
+            # "matching its existing surface": which silently dropped
             # dust_bump_strength / dust_delta / dust_Rv, so the per-filter
             # attenuation LUT evaluated a *different curve* from the screen in
             # the same model whenever any of the three was non-default. Every
@@ -930,21 +930,21 @@ class DustSEDComponent(TemplateThreading):
             # This is EXACT, not the K-point convergent form the stellar continuum
             # uses (#1122): ``sed_neb_attenuated`` is the reddened continuum on the
             # full grid, so its band integral is the answer ``predict()`` computes.
-            # Affordable for the same reason it is needed — a dusty model already
+            # Affordable for the same reason it is needed: a dusty model already
             # materializes the nebular continuum (``DustSEDComponent`` declares
             # ``sed_nebular`` an input, which is what disarms the fast nebular grid,
             # #1281/#1748), so the dense array is already live in the compiled graph
             # and no dead-code elimination is given up. Where it is NOT materialized
             # there is no dust consumer, hence no screen, hence nothing to correct.
             # Guarded on the bucket this term REPLACES, not on the continuum it reads.
-            # A ``neb={'type': 'none'}`` model still publishes ``sed_nebular`` — as
-            # zeros — so keying off the continuum does not discriminate, and the
+            # A ``neb={'type': 'none'}`` model still publishes ``sed_nebular``: as
+            # zeros: so keying off the continuum does not discriminate, and the
             # projection READS the dense grid: on a dust-only model it resurrects the
             # full-resolution chain XLA had eliminated, measured at 197,365 ->
             # 1,285,037 gradient FLOPs (6.5x). That elimination is the entire point of
             # the LUT (#1109), and spending it to integrate zeros is the worst
             # available trade. ``nebular_phot_lnu_precomp`` is absent exactly when
-            # there is no λ_eff screening to correct — including BakedIn nebular,
+            # there is no λ_eff screening to correct: including BakedIn nebular,
             # whose emission is already inside the stellar LUT.
             _neb_phot = state.derived.get("nebular_phot_lnu_precomp")
             if _neb_phot is not None and _sed_neb is not None:
@@ -972,7 +972,7 @@ class DustSEDComponent(TemplateThreading):
             # Shock photometry attenuation (#1434): publish the attenuated form so both
             # exact and precomp paths read the same value, not two independent
             # multiplications that can drift. Dust attenuates shock the same way as
-            # nebular continuum — young-limit screen (tau_bc·k_bc + tau_diff·k_diff).
+            # nebular continuum: young-limit screen (tau_bc·k_bc + tau_diff·k_diff).
             # Gate on sed_shock_unatt (the intrinsic form), not sed_shock (which falls back
             # to zeros_like if intrinsic was absent). This way, publish happens only if
             # ShockNebular actually emitted something (sed_shock_unatt is not None).
@@ -1008,7 +1008,7 @@ class DustSEDComponent(TemplateThreading):
 
             # Sub-band quadrature (#1122). The attenuation is EVALUATED at each
             # sub-band's quadrature node instead of being Taylor-extrapolated away
-            # from λ_eff — the extrapolation is what diverges in the rest-UV, where
+            # from λ_eff: the extrapolation is what diverges in the rest-UV, where
             # the curve steepens (GALEX FUV +45 % at z=0.05, +215 % at z=1).
             #
             # The law is evaluated live on the (n_age, n_filter, K) node grid, not
@@ -1030,7 +1030,7 @@ class DustSEDComponent(TemplateThreading):
                 derived_overrides["dust_diff_attenuation_subband_precomp"] = a_diff_sub
 
             # The same screen on the REST band (#1148). ``phot_rest_fnu`` projects at
-            # z=0, so its filter samples rest λ_pivot, not rest λ_pivot/(1+z) — a
+            # z=0, so its filter samples rest λ_pivot, not rest λ_pivot/(1+z): a
             # different set of wavelengths, and the galaxy's own dust must be
             # evaluated THERE. The law is analytic, so this is the same expression on
             # a different grid; τ, δ and the bump stay free.
@@ -1071,14 +1071,14 @@ class DustSEDComponent(TemplateThreading):
 
             # IR re-emission is now handled by separate dust emission components.
             # This component no longer computes or publishes photometric
-            # dust emission — the emission components handle that via their own
+            # dust emission: the emission components handle that via their own
             # precompute paths.
 
             # Young-star indicator on the SSP age grid: smooth sigmoid
             # transition around t_birth (matches two_component_dust).
             # The LUT must redden exactly the stars the exact screen reddens. This
             # line used to spell the indicator as ``1 / (1 + 10**u)`` while the
-            # exact path used the logistic — 2.3x sharper, so the fast path put a
+            # exact path used the logistic: 2.3x sharper, so the fast path put a
             # different set of stars behind the birth cloud (#1122). One function,
             # one definition.
             y_age = _young_indicator(
@@ -1087,7 +1087,7 @@ class DustSEDComponent(TemplateThreading):
             derived_overrides["dust_young_indicator"] = y_age
 
         # SpectrumPrecomp: per-pixel BC + diffuse transmission.
-        # T_bc(λ_pix), T_diff(λ_pix) are exact at the pixel — no Taylor slope.
+        # T_bc(λ_pix), T_diff(λ_pix) are exact at the pixel: no Taylor slope.
         # The young indicator y(a) is reused to weight the per-age BC layer in
         # ``predict_spectrum_via_precomp``.
         spec_eff = state.derived.get("spec_eff_waves")
@@ -1112,7 +1112,7 @@ class DustSEDComponent(TemplateThreading):
             # IR re-emission is now handled by separate dust emission components.
 
             # Young-star indicator y(a) on the SSP age grid (same sigmoid as
-            # the filter branch) — published even when only the spectrum LUT
+            # the filter branch): published even when only the spectrum LUT
             # is active.
             if "dust_young_indicator" not in derived_overrides:
                 t_birth = self.config.t_birth_yr

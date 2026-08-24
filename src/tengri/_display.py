@@ -26,7 +26,7 @@ def _display(text: str) -> None:
 
     Parameters
     ----------
-    text : str
+    text: str
         Text to display.
     """
     if os.environ.get("TENGRI_QUIET") == "1":

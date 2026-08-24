@@ -157,7 +157,7 @@ def quiescent_z0() -> dict:
         # ``all_params=FIXED``: only tau_bc / tau_diff are fitted here. The
         # remaining attenuation params (slope, Rv, delta, bump_strength,
         # f_obscuration) carry Fixed registry defaults, so the FREE this
-        # previously requested never freed any of them — the recipe now says
+        # previously requested never freed any of them: the recipe now says
         # what it has always actually done.
         dust_attenuation=builders.dust.two_component(
             all_params=FIXED,
@@ -179,14 +179,14 @@ def high_z() -> dict:
     z > 3.5: strong nebular emission, metal-poor stellar populations, and
     SMC/Calzetti-like dust.
 
-    **SSP requirement:** with-nebular-emission (wNE) SSP grids — the ``ssp``
+    **SSP requirement:** with-nebular-emission (wNE) SSP grids: the ``ssp``
     nebular backend reads line and continuum emission baked into the SSP
     file itself, so a bare-stellar grid would silently drop the nebular
     contribution.
 
     **Configuration:**
 
-    - **SFH**: Truncated skew-normal (tsnorm) — bursty, short timescales
+    - **SFH**: Truncated skew-normal (tsnorm); bursty, short timescales
     - **Dust**: Two-component, Calzetti birth cloud + power-law diffuse
       (slope fixed at -0.7), no IR emission block
     - **Nebular**: baked into the SSP grid (``ssp`` backend)
@@ -204,7 +204,7 @@ def high_z() -> dict:
     Rescued from the pre-grammar ``presets.high_z()`` factory (2026-07);
     prior ranges are unchanged. Deliberately **no** ``approx=WavePrecomp()``:
     the LUT's first-order dust projection biases rest-UV bands (#617, #731),
-    which is exactly the regime this recipe samples — the exact wave-grid
+    which is exactly the regime this recipe samples; the exact wave-grid
     path is the correct default here.
 
     Examples
@@ -360,7 +360,7 @@ def agn_panchromatic() -> dict:
         # ``all_params=FIXED``: the Dale+2014 knobs are a template-family
         # choice, not something a wildcard should open by default.
         # ``dale2014_cigale``: this recipe enables the radio component, and
-        # plain dale2014 embeds its own SF radio continuum — the pair
+        # plain dale2014 embeds its own SF radio continuum; the pair
         # double-counts the synchrotron and is refused at build (#1970).
         dust_emission=builders.dust.emission.dale2014_cigale(all_params=FIXED),
         met={"logzsol": FREE},
@@ -386,7 +386,7 @@ def agn_panchromatic() -> dict:
 
 
 def composable_agn() -> dict:
-    """Fully composable AGN — all slots switchable on committed data.
+    """Fully composable AGN: all slots switchable on committed data.
 
     Provides a fully wired AGN recipe where every slot (disc, NLR, BLR, FeII,
     torus, attenuation) uses committed data only. All six blocks are present
@@ -453,7 +453,7 @@ def composable_agn() -> dict:
         # ``all_params=FIXED``: the Dale+2014 knobs are a template-family
         # choice, not something a wildcard should open by default.
         # ``dale2014_cigale``: this recipe enables the radio component, and
-        # plain dale2014 embeds its own SF radio continuum — the pair
+        # plain dale2014 embeds its own SF radio continuum; the pair
         # double-counts the synchrotron and is refused at build (#1970).
         dust_emission=builders.dust.emission.dale2014_cigale(all_params=FIXED),
         met={"logzsol": FREE},
@@ -467,7 +467,7 @@ def composable_agn() -> dict:
             "torus": {"type": "skirtor"},
             "atten": {"type": "polar_dust"},
             "norm": "cigale_joint",
-            # agn_ir_frac constraint is [0, 1) — keep the upper bound strictly < 1.
+            # agn_ir_frac constraint is [0, 1): keep the upper bound strictly < 1.
             "ir_frac": Uniform(0.01, 0.99),
             WILDCARD_ALIAS: FREE,
         },
@@ -642,7 +642,7 @@ def dust_demo() -> dict:
         )
     """
     # Metallicity is not a parse_groups key; its default Gaussian(-0.3, 0.2)
-    # prior centers at the value we want, so we leave it FREE — sweep_parameter
+    # prior centers at the value we want, so we leave it FREE: sweep_parameter
     # uses the prior median (= -0.3) for every iteration anyway.
     return dict(
         sfh=builders.sfh.tsnorm(

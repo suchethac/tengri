@@ -13,7 +13,7 @@ nodes:
 This is a *point-sample*, not a bin-integral. If the SFH carries a
 burst that is narrower than the local SSP grid spacing, the sample
 falls between adjacent grid points differently as the burst peak slides
-across grid boundaries — producing a non-physical staircase in any
+across grid boundaries: producing a non-physical staircase in any
 quantity that varies smoothly with stellar age (e.g. the Mg b absorption
 strength in #299).
 
@@ -38,7 +38,7 @@ class SFHBurstAliasingWarning(UserWarning):
     """A burst-width SFH parameter is narrower than the SSP grid spacing.
 
     Predictions will exhibit a non-physical staircase as the burst peak
-    crosses adjacent SSP grid boundaries — the SFR(t) → SSP interpolation
+    crosses adjacent SSP grid boundaries: the SFR(t) → SSP interpolation
     is a point-sample, not a bin-integral. Workaround: widen the burst
     until ``width_gyr ≳ grid_spacing_at_peak``. See #299.
     """

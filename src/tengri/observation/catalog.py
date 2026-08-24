@@ -77,21 +77,21 @@ class Catalog:
 
     Attributes
     ----------
-    ids : array, shape (n_galaxies,)
+    ids: array, shape (n_galaxies,)
         Galaxy identifiers (string or int).
-    redshifts : array, shape (n_galaxies,)
+    redshifts: array, shape (n_galaxies,)
         Redshifts [dimensionless].
-    flux : array, shape (n_galaxies, n_filters)
+    flux: array, shape (n_galaxies, n_filters)
         Flux values [mJy or specified flux_unit].
         For upper-limit bands, holds the limit value.
-    noise : array, shape (n_galaxies, n_filters)
+    noise: array, shape (n_galaxies, n_filters)
         1-sigma uncertainties (always positive) [mJy or specified flux_unit].
-    mask : array, shape (n_galaxies, n_filters)
+    mask: array, shape (n_galaxies, n_filters)
         Per-band type: 0 = detected, 1 = upper limit, -1 = lower limit
         [dimensionless].
-    filter_names : tuple of str
+    filter_names: tuple of str
         Tengri filter names corresponding to flux columns.
-    flux_unit : str
+    flux_unit: str
         Unit of flux values (e.g. ``"mJy"``, ``"uJy"``). Default ``"mJy"``.
 
     Notes
@@ -114,7 +114,7 @@ class Catalog:
 
         Parameters
         ----------
-        idx : int
+        idx: int
             Row index (0-based).
 
         Returns
@@ -158,16 +158,16 @@ class Catalog:
 
         Parameters
         ----------
-        idx : int
+        idx: int
             Row index (0-based).
 
         Returns
         -------
-        flux : ndarray, shape (n_detected,)
+        flux: ndarray, shape (n_detected,)
             Flux values for detected bands [flux_unit].
-        noise : ndarray, shape (n_detected,)
+        noise: ndarray, shape (n_detected,)
             1-sigma noise for detected bands [flux_unit].
-        filter_names : tuple of str
+        filter_names: tuple of str
             Filter names for detected bands only.
 
         Notes
@@ -236,21 +236,21 @@ def read_catalog(
 
     Parameters
     ----------
-    filepath : str or Path
+    filepath: str or Path
         Path to CSV file.
-    filter_mapping : dict, optional
+    filter_mapping: dict, optional
         Maps catalog column names → tengri filter names.  If ``None``,
         column names are matched directly against ``FILTER_REGISTRY``.
         Default: ``None``.
-    flux_unit : str, optional
+    flux_unit: str, optional
         Unit label stored in the returned ``Catalog``. Default ``"mJy"``.
-    redshift_col : str, optional
+    redshift_col: str, optional
         Name of the redshift column. Default ``"redshift"``.
-    id_col : str, optional
+    id_col: str, optional
         Name of the ID column. Default ``"id"``.
-    missing_value : float, optional
+    missing_value: float, optional
         Value indicating missing data. Default ``-9999``.
-    delimiter : str, optional
+    delimiter: str, optional
         CSV delimiter. Default ``","``.
 
     Returns

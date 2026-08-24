@@ -64,13 +64,13 @@ class Property:
 
     Parameters
     ----------
-    units : str
+    units: str
         Physical units of the quantity (e.g., ``"Msun"``, ``"1/yr"``).
-    group : str
+    group: str
         Group name for related properties (e.g., ``"sfh"``, ``"sed"``).
-    doc : str
+    doc: str
         One-line description of the quantity.
-    fn : Callable
+    fn: Callable
         Pure function ``fn(state, params) -> scalar`` that reads
         ``state.derived[...]`` and returns a JAX scalar.
 
@@ -92,17 +92,17 @@ class PropertyEntry:
 
     Parameters
     ----------
-    name : str
+    name: str
         Canonical name of the property (e.g., ``"stellar_mass"``).
-    units : str
+    units: str
         Physical units (e.g., ``"Msun"``).
-    group : str
+    group: str
         Group name (e.g., ``"sfh"``).
-    doc : str
+    doc: str
         Short description.
-    component_name : str
+    component_name: str
         Name of the component that declared this property.
-    fn : Callable
+    fn: Callable
         Pure function ``fn(state, params) -> scalar``.
     """
 
@@ -121,9 +121,9 @@ def register_properties(component_name: str, props: dict[str, Property]) -> None
 
     Parameters
     ----------
-    component_name : str
+    component_name: str
         Name of the component (e.g., ``"stellar"``).
-    props : dict[str, Property]
+    props: dict[str, Property]
         Mapping of property name to :class:`Property` instance.
 
     Notes
@@ -157,7 +157,7 @@ def assemble_available_properties(active_component_names: set[str]) -> dict[str,
 
     Parameters
     ----------
-    active_component_names : set[str]
+    active_component_names: set[str]
         Set of component names present in the model
         (e.g., ``{"stellar", "dust", "neb"}``).
 
@@ -189,8 +189,8 @@ def _grammar_hint(component_name: str) -> str:
     """How to add the missing component, naming only things that exist.
 
     Two things are checked rather than assumed. The component name is *not*
-    always the grammar group — ``nebular`` declares the line properties but the
-    group is ``neb`` — so the group is named only when the grammar accepts it.
+    always the grammar group, ``nebular`` declares the line properties but the
+    group is ``neb``, so the group is named only when the grammar accepts it.
     And the menu verb is named only when it is actually exported. Advice that
     does not resolve is worse than no advice.
     """
@@ -203,7 +203,7 @@ def _grammar_hint(component_name: str) -> str:
 
     lister = f"list_{component_name}_models"
     if hasattr(tengri, lister):
-        hint += f" — tengri.{lister}() lists the choices"
+        hint += f", tengri.{lister}() lists the choices"
     return hint + "."
 
 
@@ -216,7 +216,7 @@ def _diagnose(name: str, known: list[str]) -> str:
         return (
             f"{name!r} comes from the {owner} component, which this model does "
             f"not include, so it cannot be computed.{hint} It is a real "
-            f"property — tengri.describe_property({name!r}) documents it."
+            f"property, tengri.describe_property({name!r}) documents it."
         )
     import difflib
 
@@ -226,20 +226,20 @@ def _diagnose(name: str, known: list[str]) -> str:
 
 
 def missing_property_message(*names: str, available: dict | set | list) -> str:
-    """Why a property lookup failed — misspelling, or a component not built?
+    """Why a property lookup failed, misspelling, or a component not built?
 
     Parameters
     ----------
-    *names : str
+    *names: str
         The properties the caller asked for that could not be served.
-    available : dict | set | list
+    available: dict | set | list
         The names this model can compute.
 
     Returns
     -------
     str
         Message body for the raised :exc:`KeyError`. One diagnosis per name,
-        then the available list **once** — repeating 43 names per bad name
+        then the available list **once**, repeating 43 names per bad name
         turned a two-name mistake into a 1600-character wall.
 
     Notes
@@ -248,7 +248,7 @@ def missing_property_message(*names: str, available: dict | set | list) -> str:
     what any one model contains, so "not available here" is the *common* case
     and "you misspelled it" is the rare one. Reporting both as ``Unknown
     property`` sent readers hunting for a typo in a name they had just copied
-    off the menu — the component was simply not in their model.
+    off the menu, the component was simply not in their model.
     """
     known = sorted(available)
     diagnoses = [_diagnose(name, known) for name in names]
@@ -282,16 +282,16 @@ def warn_if_lines_are_unavailable(model, names) -> None:
 
     Parameters
     ----------
-    model : SEDModel
+    model: SEDModel
         The model whose nebular backend is inspected.
-    names : iterable of str
+    names: iterable of str
         Property names the caller asked for.
 
     Notes
     -----
     ``BakedInBackend`` and the shock backends publish no per-line catalog, so
     every ``lines`` property is NaN. ``Prediction._ensure_lines`` has warned
-    about that since #361 — but only on the ``pred.lines.*`` route. The dict
+    about that since #361, but only on the ``pred.lines.*`` route. The dict
     accessor and :meth:`~tengri.SEDModel.predict_properties`, the documented
     jit/vmap surface for derived quantities, returned the same NaN in silence.
     One helper, called by all three, is what keeps them from drifting again.

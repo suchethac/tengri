@@ -169,7 +169,7 @@ def axes() -> dict[str, list[str]]:
     Returns
     -------
     dict
-        ``{"sf": [...], "agn": [...]}`` — the additive SF and AGN radio axes.
+        ``{"sf": [...], "agn": [...]}``: the additive SF and AGN radio axes.
         Use ``builders.radio.sf.<variant>()`` / ``builders.radio.agn.<variant>()``
         or hand-write ``radio={'sf': {'type': ...}, 'agn': {'type': ...}}``.
     """
@@ -178,7 +178,7 @@ def axes() -> dict[str, list[str]]:
 
 # ── Legacy flat factories (back-compat) ────────────────────────────────────
 # The pre-composable surface exposed ``builders.radio.<type>`` (e.g.
-# ``radio.condon92``) returning a flat ``{'type': X, ...}`` dict — still used by
+# ``radio.condon92``) returning a flat ``{'type': X, ...}`` dict, still used by
 # the CIGALE reproduction notebook and existing tests. #1980 retired that
 # spelling from ``parse_groups``, so the factories now EMIT the composable
 # form: the legacy name resolves through ``_legacy_radio_type_to_blocks`` onto

@@ -6,7 +6,7 @@ parameter family:
 
 - :data:`PARAMS`: CGM damping-wing knobs (``igm_z_mid``, ``igm_dz``,
   ``igm_log_nhi``) declared by :class:`IGMSEDComponent`. Not registered
-  by the flat ``Parameters(...)`` builder — these always traveled the
+  by the flat ``Parameters(...)`` builder: these always traveled the
   SEDComponent path.
 - :data:`PATCHY_PARAMS`: patchy reionization extras (``igm_x_HI``,
   ``igm_bubble_mpc``). Registered when ``igm_patchy=True``. Backs
@@ -133,7 +133,7 @@ DLA_PARAMS: tuple[ParamDeclaration, ...] = (
 
 #: Default DLA column for standalone calls, read from the declaration above
 #: (ADR-0011). ``igm_absorption`` previously hardcoded 20.0, which is *below*
-#: the 20.3 threshold that defines a damped Lyman-alpha system — so the default
+#: the 20.3 threshold that defines a damped Lyman-alpha system; so the default
 #: "DLA" was a sub-DLA.
 DEFAULT_DLA_LOG_N_HI = declared_default(DLA_PARAMS, "dla_log_n_hi")
 

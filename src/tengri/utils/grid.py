@@ -35,11 +35,11 @@ def make_log_age_grid(
 
     Parameters
     ----------
-    n_grid : int, optional
+    n_grid: int, optional
         Number of grid points (should be even for FFT efficiency). Default: 256.
-    log_age_min : float, optional
+    log_age_min: float, optional
         Minimum log10(age/yr) [dimensionless log years]. Default: 6.0 (1 Myr).
-    log_age_max : float, optional
+    log_age_max: float, optional
         Maximum log10(age/yr) [dimensionless log years]. Default: 10.14 (~13.8 Gyr).
 
     Returns
@@ -49,7 +49,7 @@ def make_log_age_grid(
 
     Notes
     -----
-    **JIT-compatible**: yes — uses ``jnp.linspace``.
+    **JIT-compatible**: yes, uses ``jnp.linspace``.
 
     This grid is the internal representation for age in GP-based SFH models.
     The log-space parametrization provides better resolution at young ages and
@@ -77,7 +77,7 @@ def log_age_to_age_yr(log_age_grid: jnp.ndarray) -> jnp.ndarray:
 
     Parameters
     ----------
-    log_age_grid : array_like, shape (n_grid,)
+    log_age_grid: array_like, shape (n_grid,)
         Grid of log10(age/yr) values.
 
     Returns
@@ -93,7 +93,7 @@ def grid_spacing(log_age_grid: jnp.ndarray) -> float:
 
     Parameters
     ----------
-    log_age_grid : array_like, shape (n_grid,)
+    log_age_grid: array_like, shape (n_grid,)
         Uniform grid of log10(age/yr) values.
 
     Returns
@@ -116,18 +116,18 @@ def interpolate_to_linear_time(
 
     Parameters
     ----------
-    log_age_grid : array, shape (n_grid,)
+    log_age_grid: array, shape (n_grid,)
         Log10(age/yr) grid.
-    values : array, shape (n_grid,)
+    values: array, shape (n_grid,)
         Values on the log-age grid (e.g., SFR).
-    n_linear : int
+    n_linear: int
         Number of points in the output linear grid.
 
     Returns
     -------
-    t_gyr : array, shape (n_linear,)
+    t_gyr: array, shape (n_linear,)
         Uniform lookback time grid in Gyr.
-    values_linear : array, shape (n_linear,)
+    values_linear: array, shape (n_linear,)
         Interpolated values on the linear grid.
     """
     age_yr_min = 10.0 ** float(log_age_grid[0])

@@ -41,7 +41,7 @@ from tengri.utils.transforms import to_bounded, to_unbounded
 
 #: Acceptance below which a Ray Tracing chain is treated as not having sampled.
 #:
-#: Not a tuning knob — a separator between "mixed poorly" and "did not move".
+#: Not a tuning knob, a separator between "mixed poorly" and "did not move".
 #: The observed failure sits at 3.4e-10, orders below anything a working chain
 #: produces, so the exact value is uncritical. 1e-4 leaves room for a genuinely
 #: bad but non-degenerate run to come back and be judged on its own diagnostics
@@ -54,7 +54,7 @@ class DegenerateChainError(RuntimeError):
 
     Distinct from a convergence warning. This is not a chain that mixed badly;
     it is a chain that did not sample. Raised rather than warned because the
-    draws are indistinguishable from a successful fit by inspection — they
+    draws are indistinguishable from a successful fit by inspection, they
     carry the MAP solution, so they look like a plausible answer (#1530).
     """
 
@@ -69,9 +69,9 @@ def chain_is_degenerate(chain, accept_rate: float) -> bool:
 
     Parameters
     ----------
-    chain : array_like, shape (n_samples, n_dim)
+    chain: array_like, shape (n_samples, n_dim)
         Post-burn-in draws.
-    accept_rate : float
+    accept_rate: float
         Mean acceptance probability over the same draws.
 
     Returns
@@ -100,20 +100,20 @@ class PopulationPosterior:
 
     Parameters
     ----------
-    shared_samples : dict
+    shared_samples: dict
         Posterior samples for shared PSD params. Keys are param names (e.g.,
         'psd_sigma', 'psd_tau_myr'), values are arrays of shape (n_samples,).
-    shared_params : dict
+    shared_params: dict
         Posterior mean of shared PSD params (computed from shared_samples).
-    individual_samples : list of dict, optional
+    individual_samples: list of dict, optional
         Per-galaxy posterior samples. Each element is a dict with per-galaxy
         parameter names as keys. If None, individual posteriors are not stored
         (for memory efficiency).
-    method : str
+    method: str
         Inference method used (e.g., "Hierarchical EVI (JIT)").
-    wall_time_s : float
+    wall_time_s: float
         Total wall-clock time for inference.
-    diagnostics : dict
+    diagnostics: dict
         Method-specific diagnostics (e.g., number of iterations, convergence info).
 
     Notes
@@ -142,7 +142,7 @@ class PopulationPosterior:
     def properties(self):
         """The property catalog over the galaxy axis of a population fit.
 
-        Contract §1 — **same names, more axes**. Each galaxy's properties are
+        Contract §1, **same names, more axes**. Each galaxy's properties are
         evaluated on its own parameter draws **merged with the shared
         hyperparameters**: in a hierarchical fit the per-galaxy block alone is
         not a complete parameter set, and evaluating it without the shared PSD
@@ -176,7 +176,7 @@ class PopulationPosterior:
             )
         if self._model is None:
             raise RuntimeError(
-                "No model reference on this PopulationPosterior — cannot compute "
+                "No model reference on this PopulationPosterior, cannot compute "
                 "properties. PopulationFitter.run() attaches one; it is a runtime "
                 "object and is not persisted, so a posterior read back from disk "
                 "has none and must be reloaded with the model passed in."
@@ -276,7 +276,7 @@ class PopulationPosterior:
 
         Parameters
         ----------
-        exclude_prefixes : tuple of str, optional
+        exclude_prefixes: tuple of str, optional
             Parameter-name prefixes to skip when computing per-galaxy
             diagnostics. Default ``("psd_xi",)`` skips the GP latent
             fields, which carry one chain entry per grid point and
@@ -306,7 +306,7 @@ class PopulationPosterior:
                 }
 
             Use ``"per_galaxy"`` to spot a single galaxy whose chain has
-            stalled — a high ``rhat_max`` with low ``rhat_p50`` is the
+            stalled, a high ``rhat_max`` with low ``rhat_p50`` is the
             signature.
 
         Notes
@@ -378,9 +378,9 @@ class PopulationPosterior:
 
         Parameters
         ----------
-        params : tuple of str
+        params: tuple of str
             Two parameter names for x and y axes.
-        ax : matplotlib Axes, optional
+        ax: matplotlib Axes, optional
             If None, creates a new figure.
 
         Returns
@@ -426,24 +426,24 @@ class PopulationFitter:
 
     Parameters
     ----------
-    model_factory : callable
+    model_factory: callable
         Function(psd_sigma, psd_tau_myr) → Model.
         Creates a model with the given PSD params. All other params
         (SFH, dust, etc.) come from the model's Parameters.
-    galaxies : list of dict
+    galaxies: list of dict
         Each dict has 'flux_obs', 'noise', and optionally 'spec_obs',
         'spec_noise', 'wave_spec'.
-    psd_sigma_prior : tuple
+    psd_sigma_prior: tuple
         (lo, hi) for uniform prior on σ_PSD.
-    psd_tau_prior : tuple
+    psd_tau_prior: tuple
         (lo, hi) for uniform prior on τ_PSD (Myr).
-    data_type : str
+    data_type: str
         "photometry" or "spectroscopy".
-    approx : "auto" or None or precompute config, optional
+    approx: "auto" or None or precompute config, optional
         Fit-time precompute policy, mirroring :class:`Fitter`. ``"auto"``
         (default) routes every factory-built model through the LUT for the
         data type (photometry -> ``WavePrecomp``, spectroscopy ->
-        ``SpectrumPrecomp``) — a hierarchical sampler evaluates the forward
+        ``SpectrumPrecomp``), a hierarchical sampler evaluates the forward
         model thousands of times, and the exact path costs a measured ~2-6x
         more per evaluation. ``None`` forces the exact wave-grid path; an
         explicit config is used verbatim. A factory whose models already
@@ -458,7 +458,7 @@ class PopulationFitter:
 
     Attributes
     ----------
-    n_galaxies : int
+    n_galaxies: int
         Number of galaxies in the population.
 
     Examples
@@ -537,7 +537,7 @@ class PopulationFitter:
         self.model_factory = _fit_factory
         # Kept for the #1671 bias advisory at fit time: the exact-path
         # reference must be built from the RAW factory at the SAME arguments
-        # as the resolved model — pairing models that differ in anything but
+        # as the resolved model, pairing models that differ in anything but
         # the LUT measures physics, not approximation.
         self._raw_model_factory = model_factory
 
@@ -548,13 +548,13 @@ class PopulationFitter:
         The literal this replaced named seven methods and got three things
         wrong at once (#1576):
 
-        * It omitted ``"vi"`` — a live ``method_map`` key, and the canonical
+        * It omitted ``"vi"``, a live ``method_map`` key, and the canonical
           ``tengri.inference._backend_registry.DEFAULT_METHOD`` that every
           other fit surface unified on (#1289). The message left out the single
           most correct answer.
         * It omitted ``"evi_nifty"``, which the branch directly above accepts.
         * It advertised ``native_vi_linear`` and ``native_vi_nonlinear``, both
-          ``tier="broken"`` — and ``refuse_if_broken`` three lines earlier had
+          ``tier="broken"``, and ``refuse_if_broken`` three lines earlier had
           already refused them. The message recommended what its own caller
           rejects, so taking the advice raised ``BackendError``.
 
@@ -567,7 +567,7 @@ class PopulationFitter:
         was written and stopped being so the moment the flat seam landed: it
         would silently under-report every sampler reachable only through
         ``tengri.inference._hierarchical_flat.FLAT_SAMPLERS`` (``map``,
-        ``mcmc_nuts``, ``mcmc_hmc``, …) — the same class of omission this
+        ``mcmc_nuts``, ``mcmc_hmc``, …), the same class of omission this
         helper exists to prevent, one layer further out.
 
         Names in ``tengri.inference._hierarchical_flat.FLAT_UNSUPPORTED``
@@ -577,9 +577,9 @@ class PopulationFitter:
 
         Parameters
         ----------
-        method : str
+        method: str
             The unrecognized name the caller passed.
-        method_map : dict
+        method_map: dict
             The live NIFTy dispatch table. Passed rather than imported because
             it is a local of :meth:`run`; the other two sources are module
             constants and are read directly.
@@ -598,7 +598,7 @@ class PopulationFitter:
         default = inspect.signature(cls.run).parameters["method"].default
         reachable = set(method_map) | set(FLAT_SAMPLERS) | {"evi_nifty"}
         # A name absent from the registry (evi_nifty) is dispatched anyway, so
-        # keep it — the same fail-open that refuse_if_broken applies.
+        # keep it, the same fail-open that refuse_if_broken applies.
         supported = sorted(
             m for m in reachable if (entry := lookup_backend(m)) is None or entry.tier != "broken"
         )
@@ -615,7 +615,7 @@ class PopulationFitter:
 
         Parameters
         ----------
-        method : str
+        method: str
             **NIFTy-backed (CorrelatedFieldMaker, native PSD learning)**
 
             - ``"vi"``: the canonical name, shared with every other fit
@@ -630,28 +630,28 @@ class PopulationFitter:
               (``sample_mode="evi"``). Dispatched by name, with no registry
               entry of its own.
 
-            **Pure-JAX (lax.while_loop, no NIFTy) — tier="broken"**
+            **Pure-JAX (lax.while_loop, no NIFTy), tier="broken"**
 
             - ``"native_vi_linear"``: MGVI inside ``lax.while_loop``.
               3–4× faster than NIFTy MGVI on CPU; O(1) memory in N.
             - ``"native_vi_nonlinear"``: geoVI inside ``lax.while_loop``.
               Comparable speed to NIFTy geoVI; prefers lower N (≤20).
 
-            Both native backends are registered ``tier="broken"`` — they
+            Both native backends are registered ``tier="broken"``, they
             segfault on DPL/dense_basis photometry mocks (#231). They are
             substantially faster when they run, so they are kept and remain
             reachable via ``allow_unvalidated=True``, but validate per-problem
             before relying on one. They are also **not posterior-equivalent**
             to the NIFTy path: the fitted PSD timescale
             ``sfh_field_psd_tau_myr`` has been measured to differ by an order
-            of magnitude between them (82 vs 6 Myr) — which is why reaching
+            of magnitude between them (82 vs 6 Myr), which is why reaching
             them has to be a deliberate act rather than a default.
 
             .. note::
                ``native_vi_linear`` was the default from ``b7c4fa1e2`` until
                2026-07. It was chosen for speed *before* the segfault was
                validated (#231, 2026-05-22), and the tier change never
-               propagated back to the signature — this method's own
+               propagated back to the signature, this method's own
                ``ValueError`` for an unknown method went on naming
                ``vi_nonlinear_fast`` "(default)" the whole time.
 
@@ -665,7 +665,7 @@ class PopulationFitter:
               single-galaxy auto-pick (raytrace above D~20): hierarchical D
               grows with the catalog, so that auto-pick would select the
               guaranteed-degenerate sampler.
-            - ``"mcmc_nuts"``, ``"mcmc_hmc"``, ``"mcmc_dynamic_hmc"`` — NUTS /
+            - ``"mcmc_nuts"``, ``"mcmc_hmc"``, ``"mcmc_dynamic_hmc"``, NUTS /
               static-leapfrog HMC / dynamic trajectory-length HMC on the flat
               vector.
             - ``"mcmc_ess"``: elliptical slice sampling, gradient-free. The
@@ -692,15 +692,15 @@ class PopulationFitter:
               the flat vector, with live points drawn from the exact iid
               N(0,1) prior; the only driver that also returns
               ``log_evidence`` (hierarchical model comparison). Requires
-              ``nss_n_live > D`` — the HRSS direction covariance is
-              estimated from the live set and is singular otherwise — so at
+              ``nss_n_live > D``, the HRSS direction covariance is
+              estimated from the live set and is singular otherwise, so at
               stochastic-field D (hundreds of latents) prefer
               ``"mcmc_nuts"``, or shrink ``n_grid`` at build time.
 
-        key : PRNGKey, optional
+        key: PRNGKey, optional
             Random key for reproducibility. If None, uses PRNGKey(0).
-        allow_unvalidated : bool, optional
-            Run a ``tier="broken"`` method anyway — for benchmarking or backend
+        allow_unvalidated: bool, optional
+            Run a ``tier="broken"`` method anyway, for benchmarking or backend
             development, not for science. Default False.
         **kwargs
             Passed to the inference method.
@@ -734,7 +734,7 @@ class PopulationFitter:
         ``psd_tau_myr``) even with masked likelihoods. To amortize XLA
         compile cost across notebook restarts, slurm tasks, or sweeps
         over different catalog sizes, rely on the persistent
-        compilation cache instead — see
+        compilation cache instead, see
         :func:`tengri.enable_persistent_cache` and
         ``docs/performance/compilation.md``.
         """
@@ -748,14 +748,14 @@ class PopulationFitter:
         #
         # There used to be one: `mcmc_ess -> native_vi_linear`, on the grounds
         # that "ESS is a Fitter-only method". It silently substituted a
-        # DIFFERENT sampler — and after #231 a tier="broken" one — for the
+        # DIFFERENT sampler, and after #231 a tier="broken" one, for the
         # method the caller named, with no warning and no entry in the result's
         # diagnostics. A user who asked for elliptical slice sampling got MGVI
         # and had no way to notice.
         #
         # The premise is now false: `mcmc_ess` runs hierarchically through the
         # flat seam like every other sampler. Silent substitution is never the
-        # right repair for an unsupported method — either support it, or raise
+        # right repair for an unsupported method, either support it, or raise
         # and say so. `resolve_method` above still maps deprecated *spellings*
         # to canonical names, which is renaming, not substitution.
 
@@ -800,7 +800,7 @@ class PopulationFitter:
             # Everything the flat seam can drive. The hierarchical posterior is
             # already a flat unconstrained vector with an iid N(0,1) prior (see
             # _hierarchical_flat), so a sampler being "hierarchical" is a
-            # property of the problem, not of the sampler — there is nothing
+            # property of the problem, not of the sampler, there is nothing
             # left to special-case per backend.
             if method in FLAT_SAMPLERS:
                 return run_flat_sampler(
@@ -810,7 +810,7 @@ class PopulationFitter:
             # reason rather than a generic "unknown method". A backend that is
             # absent because nobody wired it up and one that is absent because
             # its naive implementation returns biased samples deserve different
-            # errors — the second is a warning to whoever tries to add it.
+            # errors, the second is a warning to whoever tries to add it.
             if method in FLAT_UNSUPPORTED:
                 raise NotImplementedError(
                     f"method={method!r} is not available for hierarchical fits. "
@@ -860,23 +860,23 @@ class PopulationFitter:
 
         Parameters
         ----------
-        n_iterations : int
+        n_iterations: int
             Maximum KL iterations. Auto-stops when converged.
-        n_samples : int
+        n_samples: int
             Samples per iteration (doubled by mirror_samples).
-        n_posterior_samples : int
+        n_posterior_samples: int
             Posterior samples drawn after convergence.
-        forward_chunk_size : int
+        forward_chunk_size: int
             Number of galaxies to evaluate in parallel per ``lax.map`` step (K).
             ``K=1`` (default) gives pure sequential lax.map, O(1) peak memory.
             ``K>1`` vmaps K galaxies per iteration for K-way parallelism.
             Must divide ``n_gal`` evenly after padding; all galaxies must have the
             same number of data points when ``K>1``.
-        kl_rtol : float
+        kl_rtol: float
             Relative KL tolerance for early stopping.
-        n_seeds : int
+        n_seeds: int
             Number of random seeds. Best result (lowest H) is kept.
-        verbose : bool
+        verbose: bool
             Print progress.
 
         Notes
@@ -911,7 +911,7 @@ class PopulationFitter:
             n_data_per_gal=n_data_per_gal,
             homogeneous=_homogeneous,
         )
-        # batch_size=K in lax.map handles non-divisible N internally — no padding needed.
+        # batch_size=K in lax.map handles non-divisible N internally, no padding needed.
         # Only an EXPLICIT K > 1 can reach this: AUTO resolves to 1 when the
         # catalog is heterogeneous, so widening never turns a working fit into
         # an error.
@@ -955,7 +955,7 @@ class PopulationFitter:
 
             Parameters
             ----------
-            p : dict
+            p: dict
                 Hierarchical parameter dict with shared PSD + per-galaxy params.
 
             Returns
@@ -1230,30 +1230,30 @@ class PopulationFitter:
 
         Pure-JAX equivalent of ``vi_linear``: shared PSD parameters + per-galaxy
         latent vectors and physical params in a single flat array optimized via
-        Newton-CG. The entire loop runs inside ``jax.lax.while_loop`` — no NIFTy
+        Newton-CG. The entire loop runs inside ``jax.lax.while_loop``, no NIFTy
         overhead, O(1) XLA graph size regardless of N_gal.
 
         Mirrors ``Fitter._run_vi_native_linear`` for the single-galaxy case.
 
         Parameters
         ----------
-        n_iterations : int
+        n_iterations: int
             Maximum KL iterations. Auto-stops when converged.
-        n_samples : int
+        n_samples: int
             Samples per iteration (doubled by mirror_samples).
-        n_posterior_samples : int
+        n_posterior_samples: int
             Posterior samples drawn after convergence.
-        forward_chunk_size : int
+        forward_chunk_size: int
             Number of galaxies to evaluate in parallel per ``lax.map`` step (K).
             ``K=1`` (default) gives pure sequential lax.map, O(1) peak memory.
             ``K>1`` vmaps K galaxies per iteration for K-way parallelism.
             Must divide ``n_gal`` evenly after padding; all galaxies must have the
             same number of data points when ``K>1``.
-        kl_rtol : float
+        kl_rtol: float
             Relative KL tolerance for early stopping.
-        n_seeds : int
+        n_seeds: int
             Number of random seeds. Best result (lowest H) is kept.
-        verbose : bool
+        verbose: bool
             Print progress.
         """
 
@@ -1271,7 +1271,7 @@ class PopulationFitter:
             n_data_per_gal=n_data_per_gal,
             homogeneous=_homogeneous,
         )
-        # batch_size=K in lax.map handles non-divisible N internally — no padding needed.
+        # batch_size=K in lax.map handles non-divisible N internally, no padding needed.
         # Only an EXPLICIT K > 1 can reach this: AUTO resolves to 1 when the
         # catalog is heterogeneous, so widening never turns a working fit into
         # an error.
@@ -1315,7 +1315,7 @@ class PopulationFitter:
 
             Parameters
             ----------
-            p : dict
+            p: dict
                 Hierarchical parameter dict. Keys 'psd_sigma' and 'psd_tau' map to
                 unbounded optimizer space internally; 'gal' contains per-galaxy unbounded
                 params; 'gal_xi' present if stochastic field is enabled.
@@ -1418,7 +1418,7 @@ class PopulationFitter:
         # --- Initialize per-galaxy params via vectorized MAP ---
         # One JIT'd map_solve_one(flux, noise, key) compiled once, run for all
         # N galaxies via lax.map(batch_size=K). Compile time O(K), no Python
-        # per-galaxy dispatch — replaces the prior O(N) Python loop.
+        # per-galaxy dispatch, replaces the prior O(N) Python loop.
         from tengri import Fitter
         from tengri.inference.backends.map_dispatch import build_vectorized_map_solver
 
@@ -1427,7 +1427,7 @@ class PopulationFitter:
         if verbose:
             print("  Initializing per-galaxy params via vectorized MAP...")
 
-        # Template fitter: any galaxy's flux/noise will do — its model,
+        # Template fitter: any galaxy's flux/noise will do, its model,
         # observation, and _data_args layout are reused inside map_solve_one.
         _template_gal = self.galaxies[0]
         _template_fitter = Fitter(
@@ -1657,7 +1657,7 @@ class PopulationFitter:
         # ── Build shared correlated field maker ───────────────
         # The CFM creates the generative model for the GP field.
         # PSD hyperparameters (fluctuations, slope) are SHARED across
-        # all galaxies — this is the hierarchical coupling.
+        # all galaxies, this is the hierarchical coupling.
         cfm = jft.CorrelatedFieldMaker("psd_")
         cfm.set_amplitude_total_offset(offset_mean=0.0, offset_std=(1e-3, 1e-4))
 
@@ -1671,7 +1671,7 @@ class PopulationFitter:
             shape=(n_grid,),
             distances=(distance,),
             fluctuations=(1.0, 0.8),  # σ_PSD prior: lognormal(1.0, 0.8)
-            loglogavgslope=(-2.0, 1.0),  # slope prior: N(-2, 1) — DRW = -2
+            loglogavgslope=(-2.0, 1.0),  # slope prior: N(-2, 1), DRW = -2
             flexibility=(0.3, 0.2),  # small non-parametric correction
             asperity=None,
             prefix="shared_",
@@ -1713,7 +1713,7 @@ class PopulationFitter:
                 if k != "psd_xi":
                     cfm_primals[k] = primals[k]
 
-            # Batched per-galaxy primals are already (n_gal, ...) — no stacking.
+            # Batched per-galaxy primals are already (n_gal, ...), no stacking.
             gal_xi = primals["gal_xi"]
             gal_ub = {name: primals[f"gal_{name}"] for name in free_names}
 
@@ -1742,14 +1742,14 @@ class PopulationFitter:
                 params = spec.resolve_mirrors(params)
                 return _predict_cfm(params)
 
-            # lax.map keeps compiled graph O(1) in N_gal — see _run_vi_native_linear.
+            # lax.map keeps compiled graph O(1) in N_gal, see _run_vi_native_linear.
             fwd = jax.checkpoint(forward_one) if memory_mode == "low" else forward_one
             predictions = jax.lax.map(lambda args: fwd(args[0], args[1]), (gal_ub, gal_xi))
             return predictions.reshape(-1)
 
         signal_response_jit = jax.jit(signal_response)
         nifty_model = jft.Model(signal_response_jit, domain=domain)
-        # Operators, not arrays — see likelihoods.gaussian.diag_noise_operators (#1206).
+        # Operators, not arrays, see likelihoods.gaussian.diag_noise_operators (#1206).
         _cov_inv, _std_inv = diag_noise_operators(noise_concat)
         likelihood = jft.Gaussian(
             data_concat, noise_cov_inv=_cov_inv, noise_std_inv=_std_inv
@@ -1764,7 +1764,7 @@ class PopulationFitter:
                 init[k] = jnp.zeros_like(v)  # start at prior mean
 
         # Per-galaxy: vectorized MAP initialization via lax.map(batch_size=1).
-        # One JIT compile, then stream through all N galaxies — replaces the
+        # One JIT compile, then stream through all N galaxies, replaces the
         # prior O(N) Python dispatch loop. Stack into batched arrays to match
         # the batched-leaf domain layout.
         from tengri import Fitter
@@ -1991,7 +1991,7 @@ class PopulationFitter:
         # ── Build NIFTy domain ────────────────────────────────
         # Batched-leaf layout: one (n_gal,)-shaped array per per-galaxy param
         # instead of N separate scalar leaves. Collapses the NIFTy pytree from
-        # O(n_gal·n_free) leaves to O(n_free) — compile time, trace time, and
+        # O(n_gal·n_free) leaves to O(n_free), compile time, trace time, and
         # optimize_kl's per-sample pytree copies all drop by ~n_gal.
         domain = {}
         domain["psd_sigma_u"] = jft.ShapeWithDtype(())
@@ -2039,7 +2039,7 @@ class PopulationFitter:
             psd_sigma = to_bounded(primals["psd_sigma_u"], sigma_lo, sigma_hi)
             psd_tau = to_bounded(primals["psd_tau_u"], tau_lo, tau_hi)
 
-            # Batched per-galaxy primals are already (n_gal, ...) — no stacking.
+            # Batched per-galaxy primals are already (n_gal, ...), no stacking.
             gal_ub = {name: primals[f"gal_{name}"] for name in free_names}
             gal_xi = primals["gal_psd_xi"] if stochastic else jnp.zeros(n_gal)
 
@@ -2060,7 +2060,7 @@ class PopulationFitter:
                 params = spec.resolve_mirrors(params)
                 return _predict_single(params)
 
-            # lax.map keeps compiled graph O(1) in N_gal — see _run_vi_native_linear.
+            # lax.map keeps compiled graph O(1) in N_gal, see _run_vi_native_linear.
             fwd = jax.checkpoint(forward_one) if memory_mode == "low" else forward_one
             if stochastic:
                 predictions = jax.lax.map(lambda args: fwd(args[0], args[1]), (gal_ub, gal_xi))
@@ -2073,7 +2073,7 @@ class PopulationFitter:
         nifty_model = jft.Model(signal_response_jit, domain=domain)
 
         # Gaussian likelihood
-        # Operators, not arrays — see likelihoods.gaussian.diag_noise_operators (#1206).
+        # Operators, not arrays, see likelihoods.gaussian.diag_noise_operators (#1206).
         _cov_inv, _std_inv = diag_noise_operators(noise_concat)
         likelihood = jft.Gaussian(
             data_concat, noise_cov_inv=_cov_inv, noise_std_inv=_std_inv
@@ -2227,7 +2227,7 @@ class PopulationFitter:
 
         # ONE definition of the hierarchical posterior, shared with every other
         # sampler. This block used to build its own `init`, its own
-        # `ravel_pytree`, and its own `log_prob` inline — ~135 lines that were
+        # `ravel_pytree`, and its own `log_prob` inline, ~135 lines that were
         # textually equivalent to `build_flat_problem` but structurally
         # independent, so nothing stopped the two from drifting apart and
         # quietly sampling different distributions.
@@ -2266,7 +2266,7 @@ class PopulationFitter:
         accept_prob_post = accept_prob[n_burnin:]
 
         # A chain that accepted nothing has not sampled (#1530). Its draws are
-        # the initialization repeated n_steps times — and because that
+        # the initialization repeated n_steps times, and because that
         # initialization is a MAP solve, the numbers look *reasonable*. Measured
         # at D=516: acceptance 3.4e-10, all 500 draws collapsing to one point,
         # reporting sigma_PSD=2.05 beside MAP's 2.13. That reads as two
@@ -2284,12 +2284,12 @@ class PopulationFitter:
                 f"Ray Tracing accepted essentially nothing at D={D}: acceptance "
                 f"{_accept_rate:.3g}, and the {int(chain.shape[0])} post-burn-in "
                 f"draws collapse to {_n_unique} unique point(s). Those draws are "
-                f"the MAP initialization repeated, not a posterior — and they "
+                f"the MAP initialization repeated, not a posterior, and they "
                 f"look plausible, which is exactly why returning them is unsafe.\n\n"
                 f"step_size={float(step_size):.3g} is too large for this "
                 f"dimension. Acceptance falls off a cliff rather than degrading "
-                f"gently — measured at D=516, 3e-3 gives 53% and 4e-3 gives "
-                f"zero — so the working value can sit under a factor of two "
+                f"gently, measured at D=516, 3e-3 gives 53% and 4e-3 gives "
+                f"zero, so the working value can sit under a factor of two "
                 f"below where you are. Halve it and retry, keeping the largest "
                 f"value that holds acceptance in roughly the 50-90% band; going "
                 f"far smaller is not safer, it just buys 99% acceptance with "

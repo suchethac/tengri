@@ -18,7 +18,7 @@ class TengriError(Exception):
 
     Parameters
     ----------
-    message : str
+    message: str
         Human-readable error description.
     """
 
@@ -28,7 +28,7 @@ class ParameterError(TengriError, ValueError):
 
     Parameters
     ----------
-    message : str
+    message: str
         Human-readable error description.
     """
 
@@ -44,7 +44,7 @@ class ParameterMapError(ParameterError):
 
     Parameters
     ----------
-    message : str
+    message: str
         Human-readable error description.
     """
 
@@ -58,14 +58,14 @@ class UnknownParameterError(ParameterError):
     of the assembled model (typo, deleted param, or param from a component
     the spec doesn't use).
 
-    Silent no-ops on overrides are the worst class of bug — they make
+    Silent no-ops on overrides are the worst class of bug: they make
     plausibly-correct downstream plots/fits encode stale defaults. We raise
     instead, and include a "did you mean…" suggestion built from the live
     param-map.
 
     Parameters
     ----------
-    message : str
+    message: str
         Human-readable error description, listing unknown keys and
         suggested matches.
     """
@@ -76,13 +76,13 @@ class MissingParameterError(ParameterError):
 
     Every non-``Fixed`` parameter needs a value at predict time. Without
     this check the missing key surfaces deep inside a component as a bare
-    ``KeyError`` (e.g. ``'dust_tau_bc'``) with no hint about the cause —
-    commonly hit by ``model.mock({})`` / ``model.predict_photometry({})``
+    ``KeyError`` (e.g. ``'dust_tau_bc'``) with no hint about the cause; commonly hit by
+    ``model.mock({})`` / ``model.predict_photometry({})``
     on a model whose default dust group carries free optical depths.
 
     Parameters
     ----------
-    message : str
+    message: str
         Human-readable error description listing the missing names and how
         to supply or fix them.
     """
@@ -96,7 +96,7 @@ class ParameterDefaultMissingError(ParameterError):
     to a registry entry whose ``Distribution`` carries no ``default=``. Prior
     behavior silently fell back to the midpoint of the prior support, which
     was an implicit and often physically wrong choice (e.g. ``Uniform(0, 5)``
-    for ``log10(n_H/cm^-3)`` collapsed to 2.5 — 316 cm^-3 — when the
+    for ``log10(n_H/cm^-3)`` collapsed to 2.5; 316 cm^-3: when the
     CIGALE-faithful value is 2.0).
 
     Fix: register a default at the declaration site, e.g.
@@ -104,7 +104,7 @@ class ParameterDefaultMissingError(ParameterError):
 
     Parameters
     ----------
-    message : str
+    message: str
         Human-readable error description naming the offending parameter and
         suggesting where to add the default.
     """
@@ -115,7 +115,7 @@ class ConfigError(TengriError, ValueError):
 
     Parameters
     ----------
-    message : str
+    message: str
         Human-readable error description.
     """
 
@@ -125,7 +125,7 @@ class BackendError(TengriError, RuntimeError):
 
     Parameters
     ----------
-    message : str
+    message: str
         Human-readable error description.
     """
 
@@ -135,7 +135,7 @@ class InferenceError(TengriError, RuntimeError):
 
     Parameters
     ----------
-    message : str
+    message: str
         Human-readable error description.
     """
 
@@ -145,7 +145,7 @@ class TengriIOError(TengriError, OSError):
 
     Parameters
     ----------
-    message : str
+    message: str
         Human-readable error description.
     """
 
@@ -165,7 +165,7 @@ class WildcardPartialFreeWarning(UserWarning):
     """``all_params: FREE`` freed only some of the parameters it covered.
 
     ``FREE`` resolves each parameter to its declared ``free_prior``. A parameter
-    with no ``free_prior`` falls back to its ``prior`` — a ``Fixed`` scalar — and
+    with no ``free_prior`` falls back to its ``prior``; a ``Fixed`` scalar: and
     stays pinned. When a group holds both kinds, the wildcard frees one subset
     and silently leaves the rest frozen, and the fit reports a posterior with
     that physics held constant (issue #1474).
@@ -173,7 +173,7 @@ class WildcardPartialFreeWarning(UserWarning):
     A partial result is not always a defect: ``dust_Rv`` is fixed by definition
     for a Calzetti law, and ``dust_delta`` applies only to the Noll-modified
     variant. Whether a parameter *should* be freeable is a per-parameter physics
-    question — so this warns rather than raising. Filter this category when the
+    question; so this warns rather than raising. Filter this category when the
     partial free is deliberate.
 
     See Also
@@ -190,7 +190,7 @@ class DeadGradientParameterWarning(UserWarning):
     The parameter reaches the SED only through a kernel whose derivative rule
     does not differentiate it, so every gradient-based backend (MAP, NUTS, VI)
     sees exactly ``0.0``. The sampler never moves it, and the reported posterior
-    is the prior — which is indistinguishable, in the output, from a parameter
+    is the prior; which is indistinguishable, in the output, from a parameter
     the data genuinely failed to constrain.
 
     That ambiguity is the reason this warns at build time rather than being left
@@ -211,18 +211,18 @@ class DeadGradientParameterWarning(UserWarning):
 
 
 class DeadFitWarning(UserWarning):
-    """An MCMC fit returned a dead posterior — frozen or 100% divergent (#1999).
+    """An MCMC fit returned a dead posterior: frozen or 100% divergent (#1999).
 
     Two unambiguous signatures trigger this at :class:`Posterior` construction:
     every transition diverged (``n_divergent == n_samples``), or a free
     parameter shows a single unique draw across 100+ kept samples. Both mean
-    the sampler rejected essentially every proposal — typically an adapted
+    the sampler rejected essentially every proposal, typically an adapted
     step size past the model's stability limit (#1999 isolated the dense
     mass-matrix adaptation as one trigger).
 
     R-hat cannot detect this state: a chain that never moves has zero variance
     within and between chains, so the ratio reads ~1.0. ``Posterior.rhat()``
-    raises on it, but only if called — this warning is the fit-time announcement
+    raises on it, but only if called; this warning is the fit-time announcement
     for scripts that never read diagnostics.
 
     Warns rather than raises: the dead object remains inspectable (diagnostics,
@@ -235,7 +235,7 @@ class CorruptEnergyBalanceWarning(UserWarning):
     """The dust energy-balance integrand was non-finite (#1527).
 
     ``L_absorbed`` came back ``+inf`` because the intrinsic or attenuated SED
-    reaching the energy balance contained ``Inf`` or ``NaN`` — most often the
+    reaching the energy balance contained ``Inf`` or ``NaN``; most often the
     ``Inf * 0`` product of an extreme-metallicity SSP flux (the BUG-NSS-02
     artifact class), or an attenuation curve whose far-UV extrapolation
     amplified without bound.
@@ -244,12 +244,12 @@ class CorruptEnergyBalanceWarning(UserWarning):
     single corrupt pixel made the whole IR budget vanish and the model emitted
     a plausible dust-free galaxy, which is a wrong answer that looks like a
     right one. ``+inf`` instead propagates to ``L_ir`` and shows up as a NaN
-    fit — loud, but on its own it says nothing about *where* the corruption
+    fit; loud, but on its own it says nothing about *where* the corruption
     entered, which is what this warning supplies.
 
     Fires only on the eager forward path. Under ``jit``/``grad``/``vmap`` there
     is no concrete value to inspect, so nothing is emitted and the ``+inf``
-    travels on its own — exploring corrupt draws during inference is expected
+    travels on its own: exploring corrupt draws during inference is expected
     and warning per-sample would be unusable.
 
     See Also
@@ -305,7 +305,7 @@ class DegenerateParameterPairWarning(AdvisoryWarning):
     """Two freed parameters that enter the model only through one combination.
 
     Distinct from :class:`DeadGradientParameterWarning`: neither parameter is
-    dead — each moves the SED on its own. They are simply not *jointly*
+    dead: each moves the SED on its own. They are simply not *jointly*
     identifiable, because the forward model reads only a single function of the
     two. The likelihood is exactly flat along that combination, so the posterior
     has a ridge rather than a mode.
@@ -314,11 +314,11 @@ class DegenerateParameterPairWarning(AdvisoryWarning):
     grid carrying no [alpha/Fe] axis (issue #1095): [alpha/Fe] is folded into an
     effective metallicity as ``log_z_eff = met_logzsol + 0.75 * met_alpha_fe``,
     and an alpha-enhanced spectrum is *the same array* as a scaled-solar one at
-    0.75 dex higher metallicity — ``numpy.array_equal`` returns ``True``.
+    0.75 dex higher metallicity; ``numpy.array_equal`` returns ``True``.
 
     A flat direction is not merely a weak constraint. The Hessian is singular
     there, so :func:`~tengri.inference.backends.laplace.run_laplace` clips the
-    eigenvalue to ``min_eigenvalue`` and — because ``cov = H^-1`` — *assigns*
+    eigenvalue to ``min_eigenvalue`` and: because ``cov = H^-1``: *assigns*
     that direction variance ``1 / min_eigenvalue`` (issue #1515). The reported
     error bar is an artifact of the floor.
 
@@ -348,8 +348,8 @@ class OutOfSSPGridWarning(UserWarning):
     being constructed and are silenced wholesale by the introspection paths,
     whereas this describes *data* arriving at ingest and must survive them.
 
-    The payload carries ``mass_fraction_outside`` — the share of stellar mass
-    formed on clamped nodes — because node counts alone do not say whether the
+    The payload carries ``mass_fraction_outside``; the share of stellar mass
+    formed on clamped nodes: because node counts alone do not say whether the
     clamp matters. Read it back with
     :func:`~tengri.config.exceptions.measurements_of`.
     """
@@ -363,7 +363,7 @@ class NUTSTreeDepthWarning(UserWarning):
     costs up to ``2**max_num_doublings - 1`` gradient evaluations. When a
     large fraction of iterations saturate a *deep* cap (>= 7), the sampler is
     paying hundreds of gradients per iteration on trajectories the U-turn
-    criterion never terminates — on tengri's SED posteriors the measured case
+    criterion never terminates. On tengri's SED posteriors the measured case
     is the heavy-tailed StudentT SFR-ratio priors of the nonparametric SFHs
     under a diagonal mass matrix (46% of iterations at depth 10 on a 19-band
     continuity fit, D=9, 2026-08-18).
@@ -385,7 +385,7 @@ class NUTSTreeDepthWarning(UserWarning):
     measured 8.8 divergences per run against 3.3 for the diagonal, so read
     ``n_divergent`` before believing the speed. Lowering
     ``max_num_doublings`` bounds the worst-case wall but collapses sampling
-    quality — cap 6 measured min-ESS 5 on the same posterior, an 11x wall win
+    quality: cap 6 measured min-ESS 5 on the same posterior, an 11x wall win
     that evaporates the moment cost is counted per effective sample. Bound the
     cap for wall-limited quick looks only, and read the truncation you bought off
     ``posterior.diagnostics`` (``tree_depth_mean`` / ``tree_depth_max`` /
@@ -407,7 +407,7 @@ class MetallicityUnitWarning(UserWarning):
     arrives in, but declaring it is optional and the default is ``'logzsol'``.
     That default cannot be checked against the SSP grid, because a mass fraction
     is a small *positive* number and small positive log10(Z/Zsun) values are
-    legal — ``Z = 0.011`` read as log10(Z/Zsun) is 1.03 :math:`Z_\\odot`, well
+    legal; ``Z = 0.011`` read as log10(Z/Zsun) is 1.03 :math:`Z_\\odot`, well
     inside every grid. The out-of-range guard is structurally unable to see it;
     the result is a plausible all-solar SED (issue #1677).
 
@@ -427,7 +427,7 @@ class GasStellarMetallicityWarning(UserWarning):
 
     Stellar metallicity (which SSP templates the population is drawn from) and
     gas-phase metallicity (which drives nebular emission) are separate
-    parameters, and correctly so — inflow of pristine gas genuinely decouples
+    parameters, and correctly so; inflow of pristine gas genuinely decouples
     them. But ``neb_logZ_gas`` has a *declared default* of -0.3, and the build
     grammar always supplies it, so the ``if neb_logZ_gas is None: neb_logZ_gas
     = log_z`` inheritance inside the CLOUDY / Cue / MAPPINGS backends never
@@ -436,7 +436,7 @@ class GasStellarMetallicityWarning(UserWarning):
     A tabulated stellar history therefore enriches the stars while the gas stays
     pinned at 0.5 :math:`Z_\\odot`, silently. This warns only when the value was
     left at its declaration and the caller passed neither ``met_gas=`` nor a
-    ``neb_logZ_gas`` column — a deliberate offset never trips it.
+    ``neb_logZ_gas`` column; a deliberate offset never trips it.
     """
 
 
@@ -464,8 +464,8 @@ class PrecompBiasWarning(AdvisoryWarning):
     """The precompute LUT's forward bias, amplified by this fit's SNR, is material.
 
     ``WavePrecomp`` / ``SpectrumPrecomp`` carry a small forward bias (measured
-    0.13-0.26 % on photometry) that is constant in SNR — so no forward-model
-    check can see it — but enters the posterior gradient as ``bias x SNR``:
+    0.13-0.26 % on photometry) that is constant in SNR; so no forward-model
+    check can see it: but enters the posterior gradient as ``bias x SNR``:
     ~5 % wrong at SNR 30, ~50 % at SNR 300, rotated as well as rescaled at the
     high end (issue #1671). It is a bias, not noise: it does not average out
     over MCMC draws, it moves the mode, and better data makes it worse. #1688
@@ -495,7 +495,7 @@ class ComponentDataNotAvailableWarning(AdvisoryWarning):
 
     1. A required data file (template grid, precomputed table) is missing
        from the file system.
-    2. The component's requires_template_data flag is misconfigured — it
+    2. The component's requires_template_data flag is misconfigured; it
        should be False for closed-form analytic models that intentionally
        load nothing.
 
@@ -529,7 +529,7 @@ class DeadPrecomputeAxisWarning(AdvisoryWarning):
     never a user parameter at all, which a rename cannot fix (issue #1738).
 
     This fires only when *no* declared axis name is a valid parameter for the
-    model being built — a name set that cannot resolve under any assignment,
+    model being built; a name set that cannot resolve under any assignment,
     which is a declaration defect rather than a configuration. A model that
     simply leaves every axis parameter free resolves its names fine and is
     silent.
@@ -547,7 +547,7 @@ class LaplaceVarianceCeilingWarning(UserWarning):
     ``regularize=True`` floors the Hessian spectrum at ``min_eigenvalue`` to
     force positive-definiteness, then takes ``cov = H^-1``. Because the
     covariance is the *inverse*, the floor does not damp the clipped
-    directions — it **assigns** each of them variance ``1 / min_eigenvalue``.
+    directions; it **assigns** each of them variance ``1 / min_eigenvalue``.
     At the ``1e-6`` default that is a variance of ``1e6``, i.e. a standard
     deviation of 1000 in the unconstrained parameterization (issue #1515).
 
@@ -656,12 +656,12 @@ def warn_measured(message, category=UserWarning, *, stacklevel=2, **measurements
 
     Parameters
     ----------
-    message : str
+    message: str
         Human-readable text, formatted as usual. Round freely here.
-    category : type, optional
+    category: type, optional
         Warning class. Default ``UserWarning``. Unchanged by this helper, so
         existing ``warnings.filterwarnings`` entries keep working.
-    stacklevel : int, optional
+    stacklevel: int, optional
         Frames to skip, counted from the *caller* exactly as ``warnings.warn``
         counts them. Default 2. This helper's own frame is added internally, so
         a site migrating from ``warnings.warn(..., stacklevel=2)`` keeps the
@@ -729,13 +729,13 @@ def measurements_of(warning):
 
     Parameters
     ----------
-    warning : Warning or object
+    warning: Warning or object
         Typically ``record.message`` from
         ``warnings.catch_warnings(record=True)``.
 
     Returns
     -------
-    values : dict
+    values: dict
         Mapping of name to exact value [units vary by measurement]. Empty for
         warnings that carry none.
     """

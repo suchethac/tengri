@@ -4,7 +4,7 @@
 ``Fitter``, ``CatalogFitter`` and ``PopulationFitter`` all let a caller ask for
 ``mcmc_nuts`` explicitly, and all three can be handed a problem far larger than
 NUTS warmup comfortably fits. The advice is identical in each case, so it lives
-here once rather than as three copies that drift — the exact failure mode behind
+here once rather than as three copies that drift, the exact failure mode behind
 the two stale defaults fixed in #1394.
 
 Relationship to the *other* D thresholds
@@ -16,7 +16,7 @@ tracing. Those never fire for an explicit ``method="mcmc_nuts"``, because the
 caller has already made the choice.
 
 :data:`NUTS_WARN_D` is that missing case: the caller asked for NUTS by name, so
-nothing overrides them — they just get told what it will cost. The two numbers
+nothing overrides them, they just get told what it will cost. The two numbers
 are deliberately different. Auto-switching is a decision made *for* the user and
 should be conservative; a warning is information handed *to* the user and should
 not cry wolf in the 20-30 band where NUTS is expensive but still routine.
@@ -49,7 +49,7 @@ NUTS_WARN_D: int = 30
 #: ``"mcmc_ghmc"`` is absent for a different reason, and the distinction matters
 #: because its signature says otherwise. GHMC's momentum generator treats
 #: ``momentum_inverse_scale`` as a diagonal vector, so ``ghmc.py`` pins
-#: ``adapt_key = ("hmc", True)`` — always diagonal — regardless of the
+#: ``adapt_key = ("hmc", True)``, always diagonal, regardless of the
 #: ``dense_mass_matrix=True`` default in its signature. That default is inert;
 #: GHMC never allocates a dense mass matrix and never pays O(D^2). Adding it
 #: here would emit an advisory for a cost the method does not incur (#1454).
@@ -74,19 +74,19 @@ def warn_if_nuts_high_dim(method, n_dim, *, surface, stacklevel=3):
 
     Parameters
     ----------
-    method : str
+    method: str
         Resolved (canonical) method name. Only members of :data:`NUTS_LIKE`
         trigger anything, so this is safe to call unconditionally on any
         dispatch path.
-    n_dim : int or None
+    n_dim: int or None
         Free-parameter count for the problem actually being fitted. ``None``
         means the surface could not determine it cheaply, in which case no
-        warning is emitted — a wrong D would be worse than none.
-    surface : str
+        warning is emitted, a wrong D would be worse than none.
+    surface: str
         Human name of the calling entry point, e.g. ``"Fitter.run"``. Appears in
         the message so the reader knows which of the three fits is being
         described.
-    stacklevel : int
+    stacklevel: int
         Passed to :func:`warnings.warn`. Default 3 points at the user's own
         ``run()`` call rather than at this helper.
 
@@ -110,7 +110,7 @@ def warn_if_nuts_high_dim(method, n_dim, *, surface, stacklevel=3):
     warnings.warn(
         f"{surface}: method='{method}' at D={n_dim} free parameters "
         f"(> {threshold}). NUTS warmup memory is dominated by the mass matrix, "
-        f"which is O(D^2) when dense_mass_matrix=True — problems this size have "
+        f"which is O(D^2) when dense_mass_matrix=True, problems this size have "
         f"been measured at 20+ GB and can OOM the process. Options: pass "
         f"dense_mass_matrix=False to drop to a diagonal metric, use "
         f"method='mcmc_hmc' for a fixed trajectory length, or "

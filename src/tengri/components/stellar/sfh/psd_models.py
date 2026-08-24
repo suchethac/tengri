@@ -27,11 +27,11 @@ def psd_drw(omega: jnp.ndarray, psd_sigma: float, psd_tau_yr: float) -> jnp.ndar
 
     Parameters
     ----------
-    omega : array_like, shape (n_freq,)
+    omega: array_like, shape (n_freq,)
         Angular frequency [rad/yr].
-    psd_sigma : float
+    psd_sigma: float
         PSD amplitude (dimensionless).
-    psd_tau_yr : float
+    psd_tau_yr: float
         Characteristic damping timescale [yr].
 
     Returns
@@ -41,7 +41,7 @@ def psd_drw(omega: jnp.ndarray, psd_sigma: float, psd_tau_yr: float) -> jnp.ndar
 
     Notes
     -----
-    **JIT-compatible**: yes — all operations use ``jnp`` primitives.
+    **JIT-compatible**: yes, all operations use ``jnp`` primitives.
 
     The damped random walk (Lorentzian) power spectral density is:
 
@@ -79,11 +79,11 @@ def drw_acf(delta_t: jnp.ndarray, psd_sigma: float, psd_tau_yr: float) -> jnp.nd
 
     Parameters
     ----------
-    delta_t : array_like, shape (n_lag,)
+    delta_t: array_like, shape (n_lag,)
         Time lag [yr].
-    psd_sigma : float
+    psd_sigma: float
         PSD amplitude (dimensionless).
-    psd_tau_yr : float
+    psd_tau_yr: float
         Damping timescale [yr].
 
     Returns
@@ -93,7 +93,7 @@ def drw_acf(delta_t: jnp.ndarray, psd_sigma: float, psd_tau_yr: float) -> jnp.nd
 
     Notes
     -----
-    **JIT-compatible**: yes — all operations use ``jnp`` primitives.
+    **JIT-compatible**: yes, all operations use ``jnp`` primitives.
 
     The autocovariance (autocorrelation function) of the DRW is:
 
@@ -124,7 +124,7 @@ def drw_variance(psd_sigma: float) -> float:
 
     Parameters
     ----------
-    psd_sigma : float
+    psd_sigma: float
         PSD amplitude (dimensionless).
 
     Returns
@@ -134,7 +134,7 @@ def drw_variance(psd_sigma: float) -> float:
 
     Notes
     -----
-    **JIT-compatible**: yes — scalar arithmetic.
+    **JIT-compatible**: yes, scalar arithmetic.
 
     The stationary variance of a DRW is:
 
@@ -164,9 +164,9 @@ def psd_to_sqrt_power(psd_values: jnp.ndarray, d_grid: float) -> jnp.ndarray:
 
     Parameters
     ----------
-    psd_values : array_like, shape (n_freq,)
+    psd_values: array_like, shape (n_freq,)
         PSD evaluated at rfft frequencies [dimensionless].
-    d_grid : float
+    d_grid: float
         Grid spacing in the original domain (needed for FFT normalization) [dimensionless].
 
     Returns
@@ -176,7 +176,7 @@ def psd_to_sqrt_power(psd_values: jnp.ndarray, d_grid: float) -> jnp.ndarray:
 
     Notes
     -----
-    **JIT-compatible**: yes — all operations use ``jnp`` primitives.
+    **JIT-compatible**: yes, all operations use ``jnp`` primitives.
 
     The amplitude operator is:
 
@@ -201,13 +201,13 @@ def psd_matern(omega: jnp.ndarray, variance: float, length_scale: float, nu: flo
 
     Parameters
     ----------
-    omega : array_like, shape (n_freq,)
+    omega: array_like, shape (n_freq,)
         Angular frequency [rad/yr].
-    variance : float
+    variance: float
         Signal variance [dimensionless].
-    length_scale : float
+    length_scale: float
         Length scale parameter [yr].
-    nu : float
+    nu: float
         Matern smoothness parameter (dimensionless). nu=0.5 recovers the DRW.
 
     Returns
@@ -217,7 +217,7 @@ def psd_matern(omega: jnp.ndarray, variance: float, length_scale: float, nu: flo
 
     Notes
     -----
-    **JIT-compatible**: yes — uses ``jax.scipy.special.gammaln`` for log-gamma.
+    **JIT-compatible**: yes, uses ``jax.scipy.special.gammaln`` for log-gamma.
 
     The Matern PSD is a generalization of the DRW (which corresponds to nu=0.5).
     Larger nu values produce smoother realizations with steeper spectral fall-off
@@ -251,17 +251,17 @@ def psd_extended_regulator(
 
     Parameters
     ----------
-    f : array_like, shape (n_freq,)
+    f: array_like, shape (n_freq,)
         Cyclic frequency [Hz or 1/yr] (must match timescale parameters).
-    s_reg : float
+    s_reg: float
         Regulator component amplitude [dimensionless].
-    tau_in : float
+    tau_in: float
         Inflow timescale [inverse units of f].
-    tau_eq : float
+    tau_eq: float
         Equilibrium/feedback timescale [inverse units of f].
-    s_dyn : float
+    s_dyn: float
         Dynamical component amplitude [dimensionless].
-    tau_dyn : float
+    tau_dyn: float
         Dynamical timescale [inverse units of f].
 
     Returns
@@ -271,7 +271,7 @@ def psd_extended_regulator(
 
     Notes
     -----
-    **JIT-compatible**: yes — all operations use ``jnp`` primitives.
+    **JIT-compatible**: yes, all operations use ``jnp`` primitives.
 
     The extended regulator PSD combines feedback-regulated accretion and
     dynamical instability:

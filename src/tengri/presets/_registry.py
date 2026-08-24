@@ -27,15 +27,15 @@ class PresetEntry:
 
     Parameters
     ----------
-    name : str
+    name: str
         Unique identifier (e.g., "synthesizer_default").
-    callable : Callable
+    callable: Callable
         Factory function returning (model, params) tuple.
-    short_doc : str
+    short_doc: str
         One-line description.
-    citations : list[str]
+    citations: list[str]
         BibTeX keys from docs/dev/synthesizer_parity_citations.md.
-    status : str
+    status: str
         One of "stable", "experimental", "deprecated".
     """
 
@@ -60,14 +60,14 @@ def register_preset(
 
     Parameters
     ----------
-    name : str
+    name: str
         Unique identifier.
-    short_doc : str
+    short_doc: str
         One-line description for the menu.
-    citations : list[str]
+    citations: list[str]
         BibTeX keys (verified against
         docs/dev/synthesizer_parity_citations.md in tests).
-    status : str, optional
+    status: str, optional
         "stable" (default), "experimental", or "deprecated".
 
     Returns
@@ -143,7 +143,7 @@ def describe_preset(name: str) -> dict:
 
     Parameters
     ----------
-    name : str
+    name: str
         Preset name.
 
     Returns

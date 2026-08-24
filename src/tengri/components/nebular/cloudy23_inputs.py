@@ -9,12 +9,12 @@ neural-emulator predictions against fresh Cloudy runs.
 Running Cloudy itself is out-of-band via external subprocess:
 ``cloudy -p <prefix>``.
 
-**Optional component:** ``pip install tengri[cloudy]`` — though the module
+**Optional component:** ``pip install tengri[cloudy]``: though the module
 itself has no external Cloudy dependency (text generation only).
 
 Notes
 -----
-**JIT-compatible**: no — generates text, not arrays.
+**JIT-compatible**: no, generates text, not arrays.
 
 References
 ----------
@@ -47,15 +47,15 @@ class Cloudy23Deck:
 
     Attributes
     ----------
-    prefix : str
+    prefix: str
         Prefix for the Cloudy run (e.g., "tengri_logU-3.0_logZ-0.3").
         Output files: ``<prefix>.in``, ``<prefix>.sed`` (if tabulated),
         ``<prefix>.out`` (after Cloudy runs).
-    title : str
+    title: str
         Human-readable deck title (appears in Cloudy `.out` file).
-    commands : tuple[str, ...]
+    commands: tuple[str, ...]
         Non-abundance input commands (ionization, density, iteration, etc.).
-    abundances : tuple[str, ...]
+    abundances: tuple[str, ...]
         Cloudy abundance commands (``metals``, ``grains``, per-element scaling).
     """
 
@@ -87,7 +87,7 @@ class Cloudy23Deck:
 
         Parameters
         ----------
-        path : str or Path
+        path: str or Path
             Directory in which to write ``<prefix>.in``. If ``sed_table``
             was passed to :func:`build_cloudy23_deck`, also writes
             ``<prefix>.sed`` (tabulated ionizing spectrum).
@@ -136,40 +136,40 @@ def build_cloudy23_deck(
 
     Parameters
     ----------
-    log_u : float
+    log_u: float
         Ionization parameter log10(U). Typical range: [-5, 0].
-    log_n_h : float
+    log_n_h: float
         Hydrogen number density log10(n_H) [cm^-3]. Typical range: [-2, 6].
-    log_z_gas : float
+    log_z_gas: float
         Gas metallicity log10(Z / Z_sun). Typical range: [-4, 1].
-    sed_table : dict[str, ndarray], optional
+    sed_table: dict[str, ndarray], optional
         Tabulated ionizing spectrum. Keys: "wave_aa" (rest-frame Angstrom,
         shape ``(n_wave,)``) and "j_lambda" (``erg/s/Hz/cm^2/sr`` per pixel,
         shape ``(n_wave,)``). If provided, a sidecar ``.sed`` file is written
         in :meth:`Cloudy23Deck.write`. If None, use ``sed_keyword``.
         Default: None.
-    sed_keyword : str, optional
+    sed_keyword: str, optional
         Cloudy ionizing-spectrum keyword (e.g., ``"blackbody, T=40000 K"``).
         Ignored if ``sed_table`` is provided. If both None, raises ValueError.
         Default: None.
-    cloudy_iterations : int, optional
+    cloudy_iterations: int, optional
         Number of Cloudy iterations. Default: 30.
-    stop_temperature_k : float, optional
+    stop_temperature_k: float, optional
         Stop temperature [K] for nebular gas. Default: 100.0 K.
-    save_lines_path : str, optional
+    save_lines_path: str, optional
         Path (relative to Cloudy run directory) for ``save lines column`` output.
         If None, lines are not saved. Default: None.
-    save_continuum_path : str, optional
+    save_continuum_path: str, optional
         Path (relative to Cloudy run directory) for ``save continuum`` output.
         If None, continuum is not saved. Default: None.
-    abundance_set : str, optional
+    abundance_set: str, optional
         Abundance set: "gass10" (Grevesse+ 2010, Cloudy default), "ism"
         (ISM gas-phase), or "h_ii" (H II region, Gutkin+2016). Default:
         "gass10".
-    grain_set : str, optional
+    grain_set: str, optional
         Grain set: "ism" (graphite + silicate mix, default), "agn"
         (smaller grains for AGN), or None (no grains). Default: "ism".
-    extra_commands : tuple[str, ...], optional
+    extra_commands: tuple[str, ...], optional
         Additional Cloudy commands (e.g., ``("set nFnu = 4", "print lines")``)
         to append at the end. Default: empty tuple.
 

@@ -13,8 +13,8 @@ Scope
   present, else falls back to ``state.sed_intrinsic``.
 - Reads ``redshift`` from params (bare-name allowlist).
 - Computes luminosity distance from a fixed cosmology held on
-  ``self`` (default Planck18). Cosmology is *not* a free parameter —
-  it's a Python attribute set at construction.
+  ``self`` (default Planck18). Cosmology is *not* a free parameter,   it's a Python attribute set
+  at construction.
 - Returns ``{"phot_fnu": ndarray, shape (n_filters,)}`` in cgs.
 
 What this is NOT
@@ -23,9 +23,9 @@ What this is NOT
 - Not the spectroscopic observation model. ``SpectroscopyObservationModel``
   lands as the second adapter (the "two-adapter rule" graduates this
   protocol seam from hypothetical to real).
-- Not the calibration polynomial layer — that lives in a separate
+- Not the calibration polynomial layer, that lives in a separate
   adapter once spectroscopy is migrated.
-- Not the noise model — :class:`Likelihood` consumes the prediction
+- Not the noise model, :class:`Likelihood` consumes the prediction
   + a separate :class:`tengri.NoiseModel`.
 
 """
@@ -55,7 +55,7 @@ class PhotometryObservationModel:
 
     Notes
     -----
-    **JIT-compatible**: yes — :meth:`predict` is pure JAX once the
+    **JIT-compatible**: yes, :meth:`predict` is pure JAX once the
     padded filter arrays are computed (eagerly at construction).
 
     **Cosmology**: held as a frozen :class:`CosmoParams` attribute,
@@ -68,13 +68,13 @@ class PhotometryObservationModel:
 
     Parameters
     ----------
-    filters : sequence of :class:`tengri.observation.photometry.FilterCurve`
+    filters: sequence of :class:`tengri.observation.photometry.FilterCurve`
         The broadband filters to convolve through. Order is preserved
         in the output array.
-    cosmo : :class:`tengri.utils.cosmology.CosmoParams`, optional
+    cosmo: :class:`tengri.utils.cosmology.CosmoParams`, optional
         Cosmology used for the luminosity distance. Defaults to
         Planck18 if ``None``.
-    name : str
+    name: str
         Diagnostic identifier; default ``"photometry"``.
     """
 
@@ -129,11 +129,11 @@ class PhotometryObservationModel:
 
         Parameters
         ----------
-        state : :class:`ForwardState`
+        state: :class:`ForwardState`
             Must carry rest-frame ``wave`` (Å). Reads
             ``state.sed_attenuated`` if not ``None`` else
             ``state.sed_intrinsic``.
-        params : mapping
+        params: mapping
             Must contain ``redshift``. The orchestrator threads it via
             :data:`tengri.protocols.BARE_NAME_ALLOWLIST`.
 

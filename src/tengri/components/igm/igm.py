@@ -30,7 +30,7 @@ _N_LINES = 39
 
 # Rest-frame wavelengths of Lyman series lines (Angstrom), vacuum.
 # Values match Inoue+2014 Table 2 / eazy-py LAFcoeff.txt exactly. The first
-# line is vacuum Lyman-alpha = 1215.67 Å (NOT 1216.0 — a rounded value put the
+# line is vacuum Lyman-alpha = 1215.67 Å (NOT 1216.0; a rounded value put the
 # forest edge ~0.33 Å rest / ~2.6 Å observed at z=7 redward of every other
 # code; see tests/regression/paper/test_igm_inoue.py).
 _LAMBDA_LYMAN = jnp.array(
@@ -81,7 +81,7 @@ _LAMBDA_LYMAN = jnp.array(
 _LAMBDA_LIMIT = 911.8  # Angstrom
 
 # ── LAF coefficients: A_j^LAF for 3 regimes (Inoue+2014 Eq. 21) ───
-# Shape: (39, 3) — [A_j1, A_j2, A_j3]
+# Shape: (39, 3): [A_j1, A_j2, A_j3]
 # From eazy-py LAFcoeff.txt
 _A_LAF = jnp.array(
     [
@@ -128,7 +128,7 @@ _A_LAF = jnp.array(
 )
 
 # ── DLA coefficients: A_j^DLA for 2 regimes (Inoue+2014 Eq. 22) ───
-# Shape: (39, 2) — [A_j^DLA1 (power 2, lambda_obs < 3 lambda_j),
+# Shape: (39, 2): [A_j^DLA1 (power 2, lambda_obs < 3 lambda_j),
 #                   A_j^DLA2 (power 3, lambda_obs >= 3 lambda_j)].
 # Values are Inoue+2014 (MNRAS 442, 1805) Table 2 columns A_DLA_J_1 /
 # A_DLA_J_2 verbatim (the same table eazy-py, BAGPIPES and Synthesizer
@@ -295,7 +295,7 @@ def _tau_lc_laf(
         t_low,
         jnp.where(z_source < z2, t_mid, t_high),
     )
-    # Gate on z_source > 0 — the analytic fit is defined as an integral
+    # Gate on z_source > 0: the analytic fit is defined as an integral
     # over (0, z_S] and is only ≈ 0 (not exactly 0) at z_S = 0. Physically
     # the path length vanishes at z=0, so transmission must be 1.
     in_range = in_range & (z_source > 0.0)
@@ -324,12 +324,12 @@ def _tau_lc_dla(
     # Floor r away from zero so r**-0.3 stays finite under jnp.where (gradient safety).
     r_safe = jnp.maximum(r, 1e-3)
 
-    # ── z_S < 2 — single observed-wavelength regime ──
+    # ── z_S < 2: single observed-wavelength regime ──
     t_low = (
         0.2113 * one_plus_zs**2.0 - 0.07661 * one_plus_zs**2.3 * r_safe ** (-0.3) - 0.1347 * r**2.0
     )
 
-    # ── z_S ≥ 2 — two sub-regimes split at wave_obs = lamL*(1+z1) ──
+    # ── z_S ≥ 2: two sub-regimes split at wave_obs = lamL*(1+z1) ──
     above_z1 = wave_obs >= lam_L * (1.0 + z1)
     t_hi_above = (
         0.04696 * one_plus_zs**3.0
@@ -346,7 +346,7 @@ def _tau_lc_dla(
     t_high = jnp.where(above_z1, t_hi_above, t_hi_below)
 
     tau = jnp.where(z_source < z1, t_low, t_high)
-    # Gate on z_source > 0 — the analytic fit is defined as an integral
+    # Gate on z_source > 0: the analytic fit is defined as an integral
     # over (0, z_S] and is only ≈ 0 (not exactly 0) at z_S = 0. Physically
     # the path length vanishes at z=0, so transmission must be 1.
     in_range = in_range & (z_source > 0.0)
@@ -372,11 +372,11 @@ def _cgm_damping_wing_tau(
 
     Parameters
     ----------
-    wave_obs : array_like, shape (n_wave,)
+    wave_obs: array_like, shape (n_wave,)
         Observed-frame wavelength. [Å]
-    z_source : float
+    z_source: float
         Redshift of the source. [dimensionless]
-    z_mid, dz, log_nhi : float, optional
+    z_mid, dz, log_nhi: float, optional
         Legacy sigmoid knobs
         :math:`N_{\rm HI}(z) = 10^{\rm log\_nhi} / (1 + e^{-(z-z_{\rm mid})/dz})`.
         If any of the three is supplied the legacy form is used; otherwise the
@@ -408,10 +408,10 @@ def _cgm_damping_wing_tau(
     :mod:`tengri.components.igm.dla`. The previous implementation used a flat
     Lorentzian with a numerical constant that was ~10⁹ too small.
 
-    **Upstream**: Asada et al. (2025), ApJL 983, L2 — column-density evolution;
-    Totani et al. (2006), PASJ 58, 485 — Lyα cross-section.
+    **Upstream**: Asada et al. (2025), ApJL 983, L2: column-density evolution;
+    Totani et al. (2006), PASJ 58, 485; Lyα cross-section.
     """
-    # Column-density evolution N_HI(z) — paper sigmoid by default; legacy form
+    # Column-density evolution N_HI(z): paper sigmoid by default; legacy form
     # if the user supplies any of the (z_mid, dz, log_nhi) knobs.
     if z_mid is not None or dz is not None or log_nhi is not None:
         z_mid_eff = 7.0 if z_mid is None else z_mid
@@ -469,19 +469,19 @@ def igm_transmission(
 
     Parameters
     ----------
-    wave_obs : array_like, shape (n_wave,)
+    wave_obs: array_like, shape (n_wave,)
         Observed-frame wavelength. [Å]
-    z_source : float
+    z_source: float
         Redshift of the source galaxy. [dimensionless]
-    add_cgm : bool, optional
+    add_cgm: bool, optional
         If True, add CGM damping wing absorption (Asada et al. 2025) at z > 5.
         Default: False (experimental feature, not yet fully validated against observations).
-    cgm_z_mid : float, optional
+    cgm_z_mid: float, optional
         Redshift midpoint of the sigmoid column density evolution. [dimensionless]
         Default: 7.0.
-    cgm_dz : float, optional
+    cgm_dz: float, optional
         Redshift width of the sigmoid transition. [dimensionless] Default: 0.5.
-    cgm_log_nhi : float, optional
+    cgm_log_nhi: float, optional
         log10(N_HI / cm^-2) at the plateau of the sigmoid evolution. Canonical Asada+2025 value (21.0)
         produces τ ≈ 0.15 (15% absorption) redward of Lyα at z=7; log_nhi ≤ 19 is invisible. [dimensionless]
         Default: 21.0.
@@ -494,9 +494,9 @@ def igm_transmission(
 
     Notes
     -----
-    **JIT-compatible**: yes — all operations are ``jnp`` primitives, fully vectorized over wavelength.
+    **JIT-compatible**: yes, all operations are ``jnp`` primitives, fully vectorized over wavelength.
 
-    **Gradient-safe**: yes — differentiable everywhere via :math:`\exp(-\tau)` (no discontinuities).
+    **Gradient-safe**: yes, differentiable everywhere via :math:`\exp(-\tau)` (no discontinuities).
 
     The total IGM optical depth is:
 
@@ -597,13 +597,13 @@ def _damping_wing_tau(
 
     Parameters
     ----------
-    wave_obs : array, shape (n_wave,)
+    wave_obs: array, shape (n_wave,)
         Observed-frame wavelength [Angstrom].
-    z : float
+    z: float
         Source redshift.
-    x_HI : float
+    x_HI: float
         Volume-averaged neutral fraction (0 = ionized, 1 = neutral).
-    R_bubble : float
+    R_bubble: float
         Ionized bubble radius [proper Mpc].
 
     Returns
@@ -645,7 +645,7 @@ def _damping_wing_tau(
     # offset v_bubble = R_bubble * H(z), hence a wavelength offset
     # x_bubble = v_bubble / c.
     # H(z) = H_0 * sqrt(Omega_m * (1+z)^3) for matter-dominated era
-    # Use canonical PLANCK18 cosmology — sourced from tengri.cosmology
+    # Use canonical PLANCK18 cosmology: sourced from tengri.cosmology
     # (Planck 2020, A&A 641, A6: h = 0.6766, Om0 = 0.30966).
     h_z_kms_per_mpc = 100.0 * PLANCK18.h * jnp.sqrt(PLANCK18.Om0 * (1.0 + z) ** 3)
     v_bubble = R_bubble * h_z_kms_per_mpc  # km/s
@@ -705,15 +705,15 @@ def igm_transmission_patchy(
 
     Parameters
     ----------
-    wave_obs : array, shape (n_wave,)
+    wave_obs: array, shape (n_wave,)
         Observed-frame wavelength [Angstrom].
-    z : float
+    z: float
         Source redshift.
-    x_HI : float
+    x_HI: float
         Volume-averaged neutral hydrogen fraction. 0 = fully ionized
         (standard Inoue+2014), 1 = fully neutral. At z~6: x_HI ~ 0.1-0.5.
         At z~8: x_HI ~ 0.5-0.9. Default 0.0.
-    R_bubble : float
+    R_bubble: float
         Radius of ionized bubble around the source [proper Mpc].
         Typical: 0.5-5 pMpc at z~7. Larger bubbles reduce the damping
         wing absorption. Default 1.0.
@@ -819,22 +819,22 @@ def igm_transmission_madau(
 
     Parameters
     ----------
-    wave_obs : array_like, shape (n_wave,)
+    wave_obs: array_like, shape (n_wave,)
         Observed-frame wavelengths [Angstrom].
-    z : float
+    z: float
         Source redshift.
-    igm_factor : float, optional
+    igm_factor: float, optional
         Multiplicative fudge factor for IGM strength. Default 1.0 (mean IGM).
 
     Returns
     -------
-    T_igm : jnp.ndarray, shape (n_wave,)
+    T_igm: jnp.ndarray, shape (n_wave,)
         Mean IGM transmission [dimensionless], in [0, 1]. Values outside the modeled
         wavelength range are set to 1.0 (no attenuation).
 
     Notes
     -----
-    **JIT-compatible**: yes — pure ``jnp`` operations with ``jax.lax.scan``
+    **JIT-compatible**: yes, pure ``jnp`` operations with ``jax.lax.scan``
     for the line summation.
 
     **Line opacity formula**: The optical depth from each Lyman-series line is:
@@ -935,7 +935,7 @@ def igm_transmission_asada25(wave_obs: jnp.ndarray, z: float, **kwargs: object) 
 
     Notes
     -----
-    **JIT-compatible**: yes — delegates to :func:`igm_transmission`.
+    **JIT-compatible**: yes, delegates to :func:`igm_transmission`.
     """
     del kwargs
     return igm_transmission(wave_obs, z, add_cgm=True)
@@ -947,7 +947,7 @@ IGM_TRANSMISSION_MODELS: dict[str, object] = {
     # Added by #446 (CIGALE-matching IGM) but #343's refactor missed wiring
     # this into the canonical registry; the dict-grammar validator and
     # builder factory both accepted ``"meiksin06"`` while
-    # ``IGM_TRANSMISSION_MODELS`` and ``resolve_igm_model`` did not — exactly
+    # ``IGM_TRANSMISSION_MODELS`` and ``resolve_igm_model`` did not: exactly
     # the kind of drift the parity contract test was added to catch.
     "meiksin06": igm_transmission_meiksin06,
     # Inoue+2014 + Asada+2025 CGM damping wing, as its own model so new CGM
@@ -969,7 +969,7 @@ def resolve_igm_model(name: str) -> object:
 
     Parameters
     ----------
-    name : str
+    name: str
         Registry key (e.g. ``"inoue14"``, ``"madau"``) or a recognized
         alias (e.g. ``"inoue"``).
 
@@ -1004,7 +1004,7 @@ def igm_absorption(
     dla_temp: float = 1e4,
     dla_b_turb: float = 0.0,
 ) -> jnp.ndarray:
-    r"""Total observed-frame absorption — the single flat dispatch.
+    r"""Total observed-frame absorption: the single flat dispatch.
 
     Composes the observed-frame transmission from a *mean-IGM model* and
     optional *modifiers*, and is the ONE call every observed-frame consumer
@@ -1020,25 +1020,25 @@ def igm_absorption(
       see it rather than only ``predict_obs_sed``.
 
     New CGM prescriptions are added as new *registry models* (like
-    ``asada25``), not flags — keeping the per-model dispatch flat.
+    ``asada25``), not flags: keeping the per-model dispatch flat.
 
     Parameters
     ----------
-    wave_obs : ndarray, shape (n_wave,)
+    wave_obs: ndarray, shape (n_wave,)
         Observed-frame wavelength [Angstrom].
-    z : float
+    z: float
         Source redshift [dimensionless].
-    igm_x_HI, igm_bubble_mpc : float, optional
+    igm_x_HI, igm_bubble_mpc: float, optional
         Patchy-reionization neutral fraction (0-1) and bubble radius [proper
         Mpc]; only used when ``igm_patchy=True``.
-    igm_patchy : bool, optional
+    igm_patchy: bool, optional
         Use the patchy reionization damping-wing model instead of the mean
         IGM. Default ``False``.
-    igm_model : str, optional
+    igm_model: str, optional
         Registry key or alias of the mean-IGM model. Default ``"inoue"``.
-    use_dla : bool, optional
+    use_dla: bool, optional
         Multiply by a damped-Lyman-α absorber. Default ``False``.
-    dla_z, dla_log_n_hi, dla_temp, dla_b_turb : float, optional
+    dla_z, dla_log_n_hi, dla_temp, dla_b_turb: float, optional
         DLA absorber redshift (0 → source ``z``), log10 H I column density
         [cm^-2], temperature [K], and turbulent Doppler velocity [km/s].
 
@@ -1052,7 +1052,7 @@ def igm_absorption(
     **JIT-compatible**: yes. ``igm_patchy`` / ``use_dla`` are static structural
     flags, so their branches resolve at trace time. The absorber knobs
     (``igm_x_HI``, ``igm_bubble_mpc``, ``dla_*``) are runtime values that may be
-    traced free parameters — they must never gate a Python branch. At
+    traced free parameters: they must never gate a Python branch. At
     ``igm_x_HI = 0`` the patchy path reduces bit-for-bit to the mean-IGM model.
     """
     if igm_model in ("none", None):
@@ -1062,7 +1062,7 @@ def igm_absorption(
     elif igm_patchy:
         # ``igm_patchy`` is a static structural flag, so this branch resolves at
         # trace time. ``igm_x_HI`` is a (possibly free) param and therefore a
-        # tracer under jit — it must NOT gate the branch. Guarding on it with
+        # tracer under jit: it must NOT gate the branch. Guarding on it with
         # ``and igm_x_HI > 0.0`` raised TracerBoolConversionError on every path
         # (#1149). The guard was also redundant: the damping-wing optical depth
         # scales linearly with ``x_HI``, so ``igm_transmission_patchy`` reduces

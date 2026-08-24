@@ -1,8 +1,8 @@
 # SPDX-License-Identifier: BSD-3-Clause
-"""Central registry of citations — populated at import time from ``references.bib``.
+"""Central registry of citations: populated at import time from ``references.bib``.
 
 The BibTeX file at :data:`BIB_PATH` is the single source of truth. Do not
-hard-code citation data in this module — add or edit entries in the .bib.
+hard-code citation data in this module: add or edit entries in the .bib.
 """
 
 from __future__ import annotations
@@ -30,7 +30,7 @@ BIB_PATH: Path = _locate_bib()
 
 
 # ---------------------------------------------------------------------------
-# Registry — populated at import time by parsing BIB_PATH.
+# Registry: populated at import time by parsing BIB_PATH.
 # ---------------------------------------------------------------------------
 
 REGISTRY: dict[str, Citation] = {}
@@ -70,7 +70,7 @@ def register(citation: Citation) -> None:
 
     Parameters
     ----------
-    citation : Citation
+    citation: Citation
 
     Raises
     ------
@@ -153,7 +153,7 @@ def format_list(citations: list[Citation], fmt: str = "short") -> str:
 
     Parameters
     ----------
-    fmt : {"short", "bibtex"}
+    fmt: {"short", "bibtex"}
         "short" prints one line per citation. "bibtex" emits full BibTeX blocks
         separated by blank lines.
     """

@@ -6,7 +6,7 @@ adding to it: reads ``sed_intrinsic``, writes ``sed_attenuated``.
 
 Scope (intentionally small)
 ---------------------------
-Wraps a *single-component screen* attenuation law — picked at construction
+Wraps a *single-component screen* attenuation law: picked at construction
 time from the catalog in :mod:`tengri.components.dust.attenuation`
 (default: Calzetti+2000). For two-component (birth-cloud + diffuse ISM)
 attenuation that needs the per-age stellar luminosity grid, see the
@@ -16,7 +16,7 @@ sibling :class:`DustSEDComponent` in
 Cross-component reads
 ---------------------
 
-- ``sed_intrinsic`` (erg/s/Hz) — produced by upstream emitters (stellar +
+- ``sed_intrinsic`` (erg/s/Hz): produced by upstream emitters (stellar +
   AGN + radio + X-ray etc.). If ``None`` this adapter is a no-op.
 
 """
@@ -53,7 +53,7 @@ class DustAttenuationSEDComponentConfig(SEDComponentConfig):
         Attenuation law name resolved by
         :func:`tengri.components.dust.attenuation.resolve_dust_law`.
         Examples: ``"calzetti"``, ``"cardelli"``, ``"smc"``, ``"lmc"``,
-        ``"prevot_smc"``, ``"li08"``, etc. Default ``"calzetti"`` — this
+        ``"prevot_smc"``, ``"li08"``, etc. Default ``"calzetti"``. This
         default is a low-level construction convenience only (component
         tests that build ``DustAttenuationSEDComponent()`` directly to
         exercise pipeline mechanics, not curve choice); the public grammar
@@ -79,7 +79,7 @@ class DustAttenuationSEDComponentConfig(SEDComponentConfig):
     shape parameter was unreachable and unfittable (#1808). Passing the spec's
     values unconditionally is not the fix: the spec declares ONE shared
     ``dust_delta`` / ``dust_bump_strength``, both ``Fixed(0.0)``, while each law
-    carries its paper's value in its own signature — ``kriek_conroy``
+    carries its paper's value in its own signature: ``kriek_conroy``
     ``dust_bump_strength = 1.0``, ``narayanan_z`` ``dust_delta = -0.2``.
     Overriding those collapses three distinct published laws onto one curve
     (measured).
@@ -87,7 +87,7 @@ class DustAttenuationSEDComponentConfig(SEDComponentConfig):
     So only parameters with a provenance of ``user_fixed`` / ``user_prior`` /
     ``user_free`` / ``wildcard_free`` land here; ``registry_default`` and
     ``wildcard_fixed`` do not, and for those the law's own default stands.
-    ``SEDModel._build_component_chain`` computes the set — it has the spec, and
+    ``SEDModel._build_component_chain`` computes the set: it has the spec, and
     deciding once at build time keeps this a static Python branch rather than a
     comparison against a traced value inside ``apply()``.
     """
@@ -99,7 +99,7 @@ class DustAttenuationSEDComponentState(SEDComponentState):
 
     Attributes
     ----------
-    k_lambda : jnp.ndarray, shape (n_wave,) | None
+    k_lambda: jnp.ndarray, shape (n_wave,) | None
         Pre-evaluated normalized attenuation curve k(λ) (with k(5500 Å) = 1).
         ``None`` until :meth:`DustAttenuationSEDComponent.precompute` runs.
     """
@@ -114,12 +114,12 @@ class DustAttenuationSEDComponent(TemplateThreading):
 
     Notes
     -----
-    **JIT-compatible**: yes — :meth:`apply` is pure JAX once the
+    **JIT-compatible**: yes, :meth:`apply` is pure JAX once the
     attenuation curve is precomputed.
     **Transforms**: writes ``sed_attenuated = sed_intrinsic * exp(-tau_v * k(λ))``.
     Reads ``state.sed_intrinsic`` and is a no-op if it is ``None``.
 
-    The single-component model is intentional — see module docstring.
+    The single-component model is intentional; see module docstring.
     Two-component (Charlot & Fall 2000) attenuation will be a separate
     adapter once the stellar component publishes per-age luminosities.
     """
@@ -140,7 +140,7 @@ class DustAttenuationSEDComponent(TemplateThreading):
     def declared_parameters(self) -> list[ParamDeclaration]:
         r"""Free parameters this component owns.
 
-        Returns ``dust_tau_v`` only — the law shape is fixed by
+        Returns ``dust_tau_v`` only: the law shape is fixed by
         :attr:`config.law` and is not a free parameter (changing the
         attenuation law mid-fit would require re-precomputing).
         """
@@ -182,7 +182,7 @@ class DustAttenuationSEDComponent(TemplateThreading):
         topological sort (ADR-0006) place the nebular component *before*
         this single screen. The nebular component folds its continuum into
         ``sed_intrinsic``; running first means the screen reddens the
-        nebular continuum together with the stellar light — the single law
+        nebular continuum together with the stellar light: the single law
         attenuates HII-region emission by the same curve as the stars,
         matching bagpipes/FSPS/CIGALE. Without this declaration the stable
         sort kept dust *before* nebular, leaving the continuum unattenuated
@@ -190,13 +190,13 @@ class DustAttenuationSEDComponent(TemplateThreading):
 
         BakedIn backends publish ``sed_nebular`` as zeros (emission is
         already in the SSP grid), so this is a no-op there. The screen does
-        not read that key directly — it acts on the already-summed
-        ``sed_intrinsic`` — so it is purely an ordering edge.
+        not read that key directly: it acts on the already-summed
+        ``sed_intrinsic``: so it is purely an ordering edge.
 
         ``line_waves`` / ``line_lums`` ARE read directly: :meth:`apply`
         reddens the discrete catalog and publishes ``line_lums_attenuated``
         (#1867). The ``sed_nebular`` edge already sequences nebular first, so
-        declaring them adds no new constraint — they are declared because
+        declaring them adds no new constraint: they are declared because
         ADR-0009 says a component states what it reads. An undeclared read
         works until someone reorders the pipeline, and then fails silently.
         """
@@ -222,9 +222,9 @@ class DustAttenuationSEDComponent(TemplateThreading):
         r"""``k(lambda)`` for the selected law, with requested shape parameters.
 
         Returns ONE bound callable for the whole of :meth:`apply`. The screen
-        evaluates its curve at six places — the SED, the filter LUT, that LUT's
+        evaluates its curve at six places: the SED, the filter LUT, that LUT's
         finite-difference slope, the sub-band quadrature, the rest band and the
-        spectroscopy pixels — and every one must use the same curve with the
+        spectroscopy pixels: and every one must use the same curve with the
         same parameters. Six independent call sites are six chances for one to
         keep the old behavior and put two different screens in one model.
         """
@@ -265,10 +265,10 @@ class DustAttenuationSEDComponent(TemplateThreading):
 
         Parameters
         ----------
-        ssp_data : object | None
+        ssp_data: object | None
             Unused (this adapter does not depend on SSP data). Kept in
             the signature to match the :class:`SEDComponent` Protocol.
-        wave_grid : jnp.ndarray, shape (n_wave,) | None
+        wave_grid: jnp.ndarray, shape (n_wave,) | None
             Rest-frame wavelength grid in Å. Required.
 
         Returns
@@ -284,11 +284,11 @@ class DustAttenuationSEDComponent(TemplateThreading):
             return DustAttenuationSEDComponentState(name=self.name, k_lambda=None)
         if self.config.live_shape_params:
             # A curve cached here is frozen before any parameter value exists,
-            # and apply() prefers the cached array — which is what made the
+            # and apply() prefers the cached array: which is what made the
             # requested shape parameters unreachable (#1808). When somebody has
             # asked for one, leave the state unprimed and let apply() build the
             # curve from params. Laws with nothing requested (calzetti and the
-            # parameter-free curves — the default and common case) keep the
+            # parameter-free curves: the default and common case) keep the
             # cache and the fast path unchanged.
             return DustAttenuationSEDComponentState(name=self.name, k_lambda=None)
         if self.config.law == "calzetti":
@@ -310,11 +310,11 @@ class DustAttenuationSEDComponent(TemplateThreading):
 
         Parameters
         ----------
-        state : ForwardState
+        state: ForwardState
             Must carry rest-frame ``wave``. If ``sed_intrinsic`` is
             ``None`` this method is a no-op (returns the input
             unchanged).
-        params : mapping
+        params: mapping
             Receives ``dust_*`` keys plus ``redshift`` (unused here).
 
         Returns
@@ -325,14 +325,14 @@ class DustAttenuationSEDComponent(TemplateThreading):
         Notes
         -----
         Computes :math:`k(\lambda)` lazily inside :meth:`apply` if
-        :meth:`precompute` was not called — this keeps the adapter
+        :meth:`precompute` was not called: this keeps the adapter
         usable in tests that drive components directly without an
         orchestrator that schedules precompute.
         """
         if state.sed_intrinsic is None:
             return state
 
-        # One curve for the whole method — see :meth:`_curve`.
+        # One curve for the whole method; see :meth:`_curve`.
         curve = self._curve(params)
         if self._state is not None and self._state.k_lambda is not None:
             k = self._state.k_lambda
@@ -343,7 +343,7 @@ class DustAttenuationSEDComponent(TemplateThreading):
         attenuation = jnp.exp(-tau_v * k)
         attenuated = state.sed_intrinsic * attenuation
 
-        # Energy balance — integrate the absorbed luminosity in frequency
+        # Energy balance: integrate the absorbed luminosity in frequency
         # space and publish for downstream consumers (dust emission components
         # re-emit it; RadioSEDComponent uses it to set the SF radio
         # amplitude via the FIR-radio correlation). LyC photons ionize H
@@ -354,7 +354,7 @@ class DustAttenuationSEDComponent(TemplateThreading):
         from tengri.utils.scale import pow10
 
         nu = C_AA / state.wave  # Hz
-        # Absorbed luminosities are ~1e43 erg/s — outside float32 — so the
+        # Absorbed luminosities are ~1e43 erg/s: outside float32: so the
         # integral is done in log space and the linear form derived from it
         # (#1206). The sign only tracks grid orientation; the energy is |L|.
         log_l_ir, _ = bolometric_absorbed_log10(
@@ -365,7 +365,7 @@ class DustAttenuationSEDComponent(TemplateThreading):
 
         # Filter-level A(λ_eff) and A'(λ_eff) LUTs.
         # Published only when an upstream component (stellar) has put
-        # ``filter_eff_waves`` into ``state.derived`` — i.e. only when
+        # ``filter_eff_waves`` into ``state.derived``: i.e. only when
         # ``approx=WavePrecomp()`` is set on SEDModel.
         derived_overrides = dict(
             dust_attenuation_factor=attenuation,
@@ -416,7 +416,7 @@ class DustAttenuationSEDComponent(TemplateThreading):
 
             # Sub-band quadrature (#1122). Same treatment the two-component screen
             # gets: EVALUATE the law at each sub-band's quadrature node instead of
-            # extrapolating it from λ_eff. Wiring this here is not optional — the
+            # extrapolating it from λ_eff. Wiring this here is not optional: the
             # quadrature supersedes ``taylor_correction``, so a single-component
             # model whose sub-bands were never published would fall back to the bare
             # ``A(λ_eff)·Φ`` form and be *worse* than before.
@@ -426,7 +426,7 @@ class DustAttenuationSEDComponent(TemplateThreading):
                 derived_overrides["dust_attenuation_subband_precomp"] = jnp.exp(-tau_v * k_sub)
 
             # The same screen on the REST band (#1148). ``phot_rest_fnu`` projects at
-            # z=0, so its filter samples rest λ_pivot, not rest λ_pivot/(1+z) — a
+            # z=0, so its filter samples rest λ_pivot, not rest λ_pivot/(1+z): a
             # different set of wavelengths, and the galaxy's own dust belongs THERE.
             _law = curve
             rb_eff = state.derived.get("filter_restband_eff_waves")
@@ -441,7 +441,7 @@ class DustAttenuationSEDComponent(TemplateThreading):
                 )
 
         # SpectrumPrecomp: per-pixel transmission. A spectrum pixel
-        # is a single wavelength, so T(λ_pix) = exp(-τ·k(λ_pix)) is exact —
+        # is a single wavelength, so T(λ_pix) = exp(-τ·k(λ_pix)) is exact:
         # no Taylor slope needed (contrast the filter branch above).
         spec_eff = state.derived.get("spec_eff_waves")
         if spec_eff is not None:

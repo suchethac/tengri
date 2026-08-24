@@ -22,13 +22,13 @@ class XRayRegistryEntry:
 
     Attributes
     ----------
-    callable : Callable or None
+    callable: Callable or None
         The X-ray model function. ``None`` for the ``'none'`` toggle.
-    citation : str
+    citation: str
         Academic citation. Empty string for the disable-toggle.
-    status : str
+    status: str
         ``"production"`` / ``"experimental"`` / ``"demo"`` / ``"deprecated"``.
-    short_doc : str
+    short_doc: str
         One-line description.
     """
 

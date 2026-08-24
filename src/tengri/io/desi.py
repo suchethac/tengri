@@ -1,5 +1,5 @@
 # SPDX-License-Identifier: BSD-3-Clause
-"""DESI spectrum reader — per-camera grids, fluxes, and resolution matrices.
+"""DESI spectrum reader: per-camera grids, fluxes, and resolution matrices.
 
 DESI delivers each target as three independently-extracted camera spectra
 (b/r/z), each on its own wavelength grid and each with its own resolution
@@ -8,8 +8,8 @@ operator stored as a ``(n_diag, n_pix)`` band array (Bolton & Schlegel 2010
 them into one sorted grid interleaves pixels whose line-spread functions differ
 and destroys the per-pixel correspondence the resolution operator requires.
 This module therefore keeps the cameras separate
-(:func:`read_desi_cameras`) and concatenates them in *camera order* — never
-sorted — so a block-diagonal operator
+(:func:`read_desi_cameras`) and concatenates them in *camera order*; never
+sorted: so a block-diagonal operator
 (:func:`~tengri.observation.banded.block_diagonal_bands`) describes the result
 exactly.
 
@@ -45,20 +45,20 @@ class DesiCamera(NamedTuple):
 
     Attributes
     ----------
-    name : str
+    name: str
         Camera name, one of ``"B"``, ``"R"``, ``"Z"``.
-    wave : ndarray, shape (n_pix,)
+    wave: ndarray, shape (n_pix,)
         Observed-frame vacuum wavelength [Angstrom].
-    flux : ndarray, shape (n_pix,)
+    flux: ndarray, shape (n_pix,)
         Observed flux [erg/s/cm^2/A], already scaled by the ``BUNIT`` the file
         declares.
-    flux_err : ndarray, shape (n_pix,)
+    flux_err: ndarray, shape (n_pix,)
         1-sigma flux error [erg/s/cm^2/A]; ``NaN`` where ``ivar <= 0``.
-    ivar : ndarray, shape (n_pix,)
+    ivar: ndarray, shape (n_pix,)
         Inverse variance in the file's native units.
-    mask : ndarray, shape (n_pix,) or None
+    mask: ndarray, shape (n_pix,) or None
         Pixel mask, or ``None`` when the file ships no ``_MASK`` HDU.
-    resolution : ndarray, shape (n_diag, n_pix) or None
+    resolution: ndarray, shape (n_diag, n_pix) or None
         Resolution band array in desispec ``dia_matrix`` storage, or ``None``
         when the file ships no ``_RESOLUTION`` HDU.
     """
@@ -90,7 +90,7 @@ def bunit_scale(bunit: str | None) -> float:
 
     Parameters
     ----------
-    bunit : str or None
+    bunit: str or None
         The ``BUNIT`` header value, or ``None`` when absent.
 
     Returns
@@ -114,7 +114,7 @@ def desi_resolution_offsets(n_diag: int) -> np.ndarray:
 
     Parameters
     ----------
-    n_diag : int
+    n_diag: int
         Number of stored diagonals (odd).
 
     Returns
@@ -159,7 +159,7 @@ def _row_of(array: np.ndarray, row: int, n_pix: int, *, what: str = "spectrum") 
             )
         return array
     if array.shape[-1] != n_pix and array.shape[0] == n_pix:
-        # (n_pix, ...) rather than (n_spec, n_pix) — no target axis to select.
+        # (n_pix, ...) rather than (n_spec, n_pix): no target axis to select.
         return array
     if not 0 <= row < array.shape[0]:
         raise ValueError(f"row={row} is out of range: this file holds {array.shape[0]} spectra")
@@ -258,14 +258,14 @@ def read_desi_cameras(
 
     Parameters
     ----------
-    path : str
+    path: str
         Path to a DESI FITS file (``coadd-*.fits``, ``spectra-*.fits``).
-    targetid : int, optional
+    targetid: int, optional
         Select the target by ``FIBERMAP`` TARGETID. Mutually exclusive with
         ``row`` in intent; when given, ``row`` is ignored.
-    row : int, optional
+    row: int, optional
         Zero-based spectrum index when ``targetid`` is not given. Default 0.
-    cameras : tuple of str, optional
+    cameras: tuple of str, optional
         Camera names to read, in concatenation order. Default ``("B", "R", "Z")``.
 
     Returns
@@ -283,7 +283,7 @@ def read_desi_cameras(
 
     Notes
     -----
-    **JIT-compatible**: no — file I/O.
+    **JIT-compatible**: no, file I/O.
 
     Fluxes are scaled by the ``BUNIT`` the FLUX HDU declares (DESI ships
     ``10**-17 erg/(s cm2 Angstrom)``), so the returned arrays are in
@@ -317,7 +317,7 @@ def desi_resolution_matrix(cameras: tuple[DesiCamera, ...]):
 
     Parameters
     ----------
-    cameras : tuple of DesiCamera
+    cameras: tuple of DesiCamera
         Cameras in the same order their grids are concatenated.
 
     Returns
@@ -328,7 +328,7 @@ def desi_resolution_matrix(cameras: tuple[DesiCamera, ...]):
     Raises
     ------
     ValueError
-        If any camera carries no resolution data — a partial operator would
+        If any camera carries no resolution data; a partial operator would
         silently apply no LSF to the cameras that lack one.
 
     Notes
@@ -361,12 +361,12 @@ def desi_spectroscopy(cameras: tuple[DesiCamera, ...], **kwargs):
 
     The wavelength grid is the camera grids concatenated **in camera order**
     (never sorted), and the instrument response is the block-diagonal resolution
-    operator over that grid — which replaces the Gaussian ``apply_lsf`` in
+    operator over that grid; which replaces the Gaussian ``apply_lsf`` in
     projection (#1163).
 
     Parameters
     ----------
-    cameras : tuple of DesiCamera
+    cameras: tuple of DesiCamera
         As returned by :func:`read_desi_cameras`.
     **kwargs
         Forwarded to :class:`~tengri.observation.spectroscopy.Spectroscopy`.
@@ -380,7 +380,7 @@ def desi_spectroscopy(cameras: tuple[DesiCamera, ...], **kwargs):
     ------
     ValueError
         If a flux-conserving ``resample`` mode is requested on a grid whose
-        cameras overlap — the bin-integral resampler needs a strictly
+        cameras overlap; the bin-integral resampler needs a strictly
         increasing grid, and the overlap makes it decrease at the seams.
 
     Notes
@@ -423,11 +423,11 @@ def read_desi(
 
     Parameters
     ----------
-    path : str
+    path: str
         Path to a DESI FITS file (e.g. ``coadd-*.fits``).
-    targetid : int, optional
+    targetid: int, optional
         Select the target by ``FIBERMAP`` TARGETID.
-    row : int, optional
+    row: int, optional
         Zero-based spectrum index when ``targetid`` is not given. Default 0.
 
     Returns
@@ -448,7 +448,7 @@ def read_desi(
 
     Notes
     -----
-    **JIT-compatible**: no — file I/O and astropy required.
+    **JIT-compatible**: no; file I/O and astropy required.
 
     Fluxes are scaled by the declared ``BUNIT`` (DESI: ``10**-17 erg/(s cm2
     Angstrom)``). Files that declare no ``BUNIT`` pass through unscaled.

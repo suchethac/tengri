@@ -1,5 +1,5 @@
 # SPDX-License-Identifier: BSD-3-Clause
-"""The hierarchical model as a flat vector — one seam, every sampler.
+"""The hierarchical model as a flat vector, one seam, every sampler.
 
 ``PopulationFitter`` used to accept 8 of the 20 registered backends. The other
 12 raised ``ValueError``, not because hierarchical inference is incompatible
@@ -9,11 +9,11 @@ with them but because the only flat-vector formulation lived *inside*
 This seam drives the NUTS / HMC / dynamic-HMC / GHMC / elliptical-slice /
 MCLMC / adjusted-MCLMC / MAP / Laplace / pathfinder / nested-slice family.
 Every other registered name is either driven by ``PopulationFitter``'s
-own runners or refused with a stated reason — see :data:`FLAT_UNSUPPORTED`. A
+own runners or refused with a stated reason, see :data:`FLAT_UNSUPPORTED`. A
 name is driven here only when the driver runs the algorithm the name promises;
 a stand-in (the first draft ran plain HMC under five distinct-algorithm names)
 is silent substitution, not support. ``nss`` was the founding entry of the
-refused set — the prior transform it needs is exact and was provided here from
+refused set, the prior transform it needs is exact and was provided here from
 the start; what was missing was a real nested sampler on top of it, and a
 blind rejection stand-in returns biased samples rather than an approximation.
 The in-tree Nested Slice Sampler now fills that gap (#1429), and the refused
@@ -27,8 +27,8 @@ The prior is the reason this is clean
 -------------------------------------
 The hierarchical parameterization is already **iid standard normal**. Every
 free parameter is stored as an unconstrained latent and mapped through its
-distribution's own ``unstandardize`` pushforward — the classes' single source
-of truth, shared with ``sample`` and the single-galaxy unbounded machinery —
+distribution's own ``unstandardize`` pushforward, the classes' single source
+of truth, shared with ``sample`` and the single-galaxy unbounded machinery,
 so an N(0,1) latent yields the DECLARED physical prior exactly: Uniform via
 the Gaussian-CDF box map, and every other class via its quantile map (#1651;
 the pushforward-vs-``log_prob`` agreement is pinned class-by-class in the
@@ -42,7 +42,7 @@ regression suite). The log posterior is therefore separable by construction:
 Two consequences that do the work here:
 
 * Gradient samplers (NUTS, HMC, MCLMC, …) take ``log_prob = log_L + log_pi``
-  directly — no bijector stack, no Jacobian bookkeeping.
+  directly, no bijector stack, no Jacobian bookkeeping.
 * Nested sampling needs a unit-cube → prior map, and for an iid N(0,1) prior
   that is exactly the probit :func:`jax.scipy.special.ndtri`, applied
   elementwise. No prior-transform machinery had to be invented; it was implied
@@ -82,7 +82,7 @@ __all__ = ["FLAT_SAMPLERS", "FlatProblem", "build_flat_problem", "run_flat_sampl
 #: A name may appear here only when its driver runs the algorithm the name
 #: promises. The first draft mapped five distinct-algorithm names (ESS, dynamic
 #: HMC, GHMC, MCLMC, adjusted MCLMC) onto the plain static-leapfrog ``"hmc"``
-#: driver and ``laplace`` onto the bare ``"map"`` point estimate — the result's
+#: driver and ``laplace`` onto the bare ``"map"`` point estimate, the result's
 #: diagnostics recorded the requested name while a different algorithm ran.
 #: Dynamic HMC, GHMC and elliptical slice have since gained their real
 #: ``_shared.py`` full-scan drivers and rejoined; the MCLMC pair followed with
@@ -108,13 +108,13 @@ FLAT_SAMPLERS: dict[str, str] = {
     "laplace": "laplace",
     "pathfinder": "nuts_pathfinder",
     # The founding refusal, resolved by wiring rather than by lowering the
-    # bar: the in-tree Nested Slice Sampler (Yallup+2026 — constrained HRSS
+    # bar: the in-tree Nested Slice Sampler (Yallup+2026, constrained HRSS
     # exploration WITHIN the likelihood contour, the same implementation the
     # single-galaxy backend runs) on the standardized problem, with live
     # points drawn from the exact iid N(0,1) prior. The blind-rejection
     # stand-in this replaces exhausted its attempt budget at iteration
-    # 147/200 on a 2-galaxy D=18 problem and returned silently truncated —
-    # therefore biased — samples (#1429).
+    # 147/200 on a 2-galaxy D=18 problem and returned silently truncated,
+    # therefore biased, samples (#1429).
     "nss": "nss",
 }
 
@@ -138,23 +138,23 @@ class FlatProblem:
 
     Attributes
     ----------
-    init_flat : ndarray, shape (D,)
+    init_flat: ndarray, shape (D,)
         MAP-initialized starting point in unconstrained space.
-    unravel : callable
+    unravel: callable
         ``ndarray (D,) -> pytree``, the inverse of the flattening.
-    n_dim : int
-        D — shared hyperparameters plus every galaxy's free parameters (plus the
+    n_dim: int
+        D, shared hyperparameters plus every galaxy's free parameters (plus the
         stochastic field latents when the SFH is stochastic).
-    log_likelihood : callable
+    log_likelihood: callable
         ``ndarray (D,) -> scalar``. Gaussian data term only, no prior.
-    log_prior : callable
+    log_prior: callable
         ``ndarray (D,) -> scalar``. Unnormalized iid standard normal.
-    log_prob : callable
-        ``ndarray (D,) -> scalar``. Their sum — the log posterior.
-    prior_transform : callable
+    log_prob: callable
+        ``ndarray (D,) -> scalar``. Their sum, the log posterior.
+    prior_transform: callable
         ``ndarray (D,) in [0,1]^D -> ndarray (D,)``. Unit cube to N(0,1) latent,
         for nested sampling. Exact, because the prior is iid standard normal.
-    extract_shared : callable
+    extract_shared: callable
         ``ndarray (D,) -> ndarray (2,)`` giving physical
         ``(psd_sigma, psd_tau_myr)``.
 
@@ -173,13 +173,13 @@ class FlatProblem:
     log_prob: Callable
     prior_transform: Callable
     extract_shared: Callable
-    #: ``(all_data, all_noise)`` — the observed vectors, kept OUT of the closure.
+    #: ``(all_data, all_noise)``, the observed vectors, kept OUT of the closure.
     data_args: Any = ()
     #: ``(flat, data_args) -> scalar``. The form samplers must use: with the data
     #: supplied as a traced argument, one compiled program serves every catalog.
     log_prob_with_data: Callable | None = None
     #: ``(flat, data_args) -> scalar``. The LIKELIHOOD alone in the same
-    #: data-as-argument form — for samplers that handle the prior themselves
+    #: data-as-argument form, for samplers that handle the prior themselves
     #: (elliptical slice encodes the exact N(0,1) prior in its ellipse; handing
     #: it ``log_prob_with_data`` would double-count the prior).
     log_likelihood_with_data: Callable | None = None
@@ -190,17 +190,17 @@ def build_flat_problem(fitter, *, key, memory_mode="low", verbose=False, map_ste
 
     Parameters
     ----------
-    fitter : PopulationFitter
-        The hierarchical fit to flatten. Read-only — nothing is mutated.
-    key : PRNGKey
+    fitter: PopulationFitter
+        The hierarchical fit to flatten. Read-only, nothing is mutated.
+    key: PRNGKey
         Used for the per-galaxy MAP initialization.
-    memory_mode : {"low", "high"}
+    memory_mode: {"low", "high"}
         ``"low"`` wraps the per-galaxy forward in :func:`jax.checkpoint`,
         trading recomputation for activation memory. This matters: the graph
         holds every galaxy's forward pass at once.
-    verbose : bool
+    verbose: bool
         Print initialization progress.
-    map_steps : int
+    map_steps: int
         Gradient steps for the per-galaxy MAP initialization.
 
     Returns
@@ -211,7 +211,7 @@ def build_flat_problem(fitter, *, key, memory_mode="low", verbose=False, map_ste
     -----
     This is now the ONLY definition of the hierarchical posterior.
     ``_run_raytrace`` used to build its own ``init``, ``ravel_pytree`` and
-    ``log_prob`` inline — ~135 lines textually equivalent to this function but
+    ``log_prob`` inline, ~135 lines textually equivalent to this function but
     structurally independent, so nothing prevented the two from drifting into
     sampling different distributions while every docstring claimed otherwise.
     It calls this builder instead, verified bit-for-bit: raytrace on a fixed key
@@ -287,7 +287,7 @@ def build_flat_problem(fitter, *, key, memory_mode="low", verbose=False, map_ste
     # #1671 made operational, at the population surface: `model` above came
     # through the fit factory, which resolves the precompute LUT (#1641), so
     # price its forward bias against the whole catalog's SNR once. The exact
-    # reference is rebuilt from the RAW factory at the SAME psd arguments —
+    # reference is rebuilt from the RAW factory at the SAME psd arguments,
     # pairing models that differ in anything but the LUT would measure
     # physics, not approximation. Advisory: any failure degrades to silence.
     _raw_factory = getattr(fitter, "_raw_model_factory", None)
@@ -317,7 +317,7 @@ def build_flat_problem(fitter, *, key, memory_mode="low", verbose=False, map_ste
         Taking ``(all_data, all_noise)`` as a traced argument rather than
         capturing them is what lets one compiled NUTS program serve different
         galaxies. Capturing them bakes them in as constants, so every new
-        catalog is a new program — measured at one full recompile per fit.
+        catalog is a new program, measured at one full recompile per fit.
         """
         all_data, all_noise = data_args
         p = unravel_fn(flat_params)
@@ -327,7 +327,7 @@ def build_flat_problem(fitter, *, key, memory_mode="low", verbose=False, map_ste
         def forward_one(ub_scalars, xi):
             params = {}
             for name in free_names:
-                # The declared prior's own N(0,1) pushforward — Uniform's is
+                # The declared prior's own N(0,1) pushforward, Uniform's is
                 # bit-identical to the old to_bounded box map; every other
                 # distribution becomes EXACT instead of silently Uniform
                 # (#1651). Same convention as the per-galaxy MAP init and the
@@ -412,9 +412,9 @@ def build_flat_problem(fitter, *, key, memory_mode="low", verbose=False, map_ste
 def _physical_map(spec, free_names):
     """The per-parameter N(0,1) -> physical pushforwards for the seam.
 
-    Each free parameter's map IS its distribution's own ``unstandardize`` —
+    Each free parameter's map IS its distribution's own ``unstandardize``,
     the classes' declared single source of truth, already used by ``sample``
-    and by the single-galaxy unbounded machinery — so the seam's standardized
+    and by the single-galaxy unbounded machinery, so the seam's standardized
     space realizes the DECLARED prior exactly for every distribution
     (Uniform's pushforward is bit-identical to the old ``to_bounded`` box
     map; every other class becomes exact instead of being silently replaced
@@ -435,7 +435,7 @@ def _physical_map(spec, free_names):
             # math: Uniform.unstandardize is bitwise-equal to to_bounded
             # pointwise, but to_bounded is @jax.jit-decorated, so calling it
             # embeds a nested-jit boundary in the traced likelihood while the
-            # bound method inlines — different XLA fusion, one-ULP erf-chain
+            # bound method inlines, different XLA fusion, one-ULP erf-chain
             # differences, and a measurably different HMC chain (step_size
             # 0.06797 vs the historical 0.06732 on the reference fixture).
             # Routing Uniform through to_bounded keeps all-Uniform fits
@@ -463,8 +463,8 @@ def _require_moving_chain(chain, method):
 
     #1530's lesson generalized past its raytrace origin: MAP-echo draws look
     like a plausible answer. ``_require_finite_tuning`` catches the MCLMC
-    starved-tuner *cause*; this is the effect-side net for every MCMC driver
-    — whatever produced it, a chain that never moved is not a posterior.
+    starved-tuner *cause*; this is the effect-side net for every MCMC driver,
+    whatever produced it, a chain that never moved is not a posterior.
     """
     import numpy as np
 
@@ -473,7 +473,7 @@ def _require_moving_chain(chain, method):
     from tengri.inference.hierarchical import DegenerateChainError
 
     raise DegenerateChainError(
-        f"{method}: every retained draw is identical to the first — the "
+        f"{method}: every retained draw is identical to the first, the "
         f"chain never moved, so this is the initialization echoed "
         f"{int(chain.shape[0])} times, not a posterior. Check the sampler's "
         f"tuning diagnostics (step size, acceptance, warmup length) rather "
@@ -482,7 +482,7 @@ def _require_moving_chain(chain, method):
 
 
 def _adam_map_ascent(prob, map_steps, map_learning_rate):
-    """Adam gradient ascent on ``prob.log_prob`` — shared by map and laplace.
+    """Adam gradient ascent on ``prob.log_prob``, shared by map and laplace.
 
     One implementation so the two drivers cannot drift: laplace IS this
     ascent plus a verified-mode covariance.
@@ -513,7 +513,7 @@ def _newton_polish(prob, mode, *, tol, max_iters=12):
     gradient-equivalents each).
 
     Levenberg-Marquardt damping: the step solves ``(H + lambda*I) dx = g``
-    with ``lambda`` adapted — far from the mode the negative Hessian is
+    with ``lambda`` adapted, far from the mode the negative Hessian is
     typically indefinite (measured: a pure-Newton polish from Adam(300)'s
     endpoint stalled at |grad|=228 on the D=516 fixture), and a large
     ``lambda`` degrades the step gracefully toward plain gradient ascent,
@@ -553,7 +553,7 @@ def _require_converged_mode(grad_at_mode, method, map_steps, *, tol):
     """Refuse a Laplace expansion about a point that is not a mode (#1537).
 
     The single-galaxy laplace expanded about non-modes with no grad=0 check
-    and returned plausible wrong answers — curvature measured off a mode is
+    and returned plausible wrong answers, curvature measured off a mode is
     a covariance for the wrong distribution. The gradient's infinity norm at
     the reached point must be small; otherwise raise naming the knob.
     """
@@ -564,7 +564,7 @@ def _require_converged_mode(grad_at_mode, method, map_steps, *, tol):
         return
     raise RuntimeError(
         f"{method}: the point reached after map_steps={map_steps} is not a "
-        f"mode — max |grad log_prob| = {gmax:.3g} exceeds tol={tol:.3g}, and "
+        f"mode, max |grad log_prob| = {gmax:.3g} exceeds tol={tol:.3g}, and "
         f"a Laplace covariance measured off a mode is a plausible wrong "
         f"answer (#1537). Raise map_steps (or adjust map_learning_rate) "
         f"until the ascent converges, or loosen laplace_grad_tol if this "
@@ -576,7 +576,7 @@ def _require_psd_curvature(chol, method):
     """Refuse a non-negative-definite curvature at the expansion point.
 
     ``jnp.linalg.cholesky`` returns NaNs, not an exception, when the negative
-    Hessian is not positive definite — which means the reached point is a
+    Hessian is not positive definite, which means the reached point is a
     saddle or worse, not a maximum. Sampling from those NaNs would return a
     posterior of NaNs (or garbage that passes a finite-check downstream);
     refuse by name instead.
@@ -598,7 +598,7 @@ def _require_finite_tuning(L, step_size, method, n_warmup):
     """Refuse a non-finite (L, step size) tuning instead of sampling with it.
 
     A starved MCLMC tuner produces NaN parameters, and the chain then never
-    moves — measured on the 2-galaxy D=516 fixture at ``n_warmup=60``:
+    moves, measured on the 2-galaxy D=516 fixture at ``n_warmup=60``:
     ``L=nan``, ``step_size=nan``, 60 post-tuning draws all equal to the init
     point. That output LOOKS like a plausible populated posterior, which is
     the #1530 failure mode; #1569 made raytrace's version of it a loud
@@ -616,7 +616,7 @@ def _require_finite_tuning(L, step_size, method, n_warmup):
         f"{method}: the (L, step size) tuner returned non-finite values "
         f"(L={float(L)!r}, step_size={float(step_size)!r}) after "
         f"n_warmup={n_warmup} tuning steps, and a chain run with them never "
-        f"moves — every draw would be a copy of the initialization, which "
+        f"moves, every draw would be a copy of the initialization, which "
         f"looks like a posterior and is not one. The fraction-based tuning "
         f"phases starve at short warmup; raise n_warmup to a few hundred "
         f"(the single-galaxy default is 500; n_warmup=500 tunes this family "
@@ -630,7 +630,7 @@ def _require_nondegenerate_live_set(n_live, n_dim, method):
     HRSS draws its slice directions from the live points' empirical
     covariance, and ``n_live`` points give that matrix rank at most
     ``n_live - 1``. With ``n_live <= D`` every direction lies in a proper
-    subspace and the orthogonal complement is NEVER explored — the returned
+    subspace and the orthogonal complement is NEVER explored, the returned
     samples are confined to a hyperplane while passing every finite-check
     downstream. That is silent bias, not slowness, so it is refused by name
     rather than priced as a warning.
@@ -639,7 +639,7 @@ def _require_nondegenerate_live_set(n_live, n_dim, method):
         return
     raise ValueError(
         f"{method}: nss_n_live={n_live} live points cannot span a D={n_dim} "
-        f"parameter space — the HRSS direction covariance has rank at most "
+        f"parameter space, the HRSS direction covariance has rank at most "
         f"n_live-1, so slice directions never leave a proper subspace and "
         f"the samples are silently biased. Raise nss_n_live above D (cost "
         f"grows with both), or use mcmc_nuts / mcmc_hmc, which need no live "
@@ -653,7 +653,7 @@ def _require_converged_evidence(n_iter, max_iterations, remaining, tol, method):
 
     Terminating while ``log(Z_live/Z)`` still exceeds tolerance means the
     live set still holds unintegrated posterior mass; resampling then returns
-    a silently truncated — therefore biased — sample set, which is precisely
+    a silently truncated, therefore biased, sample set, which is precisely
     the failure that kept this name refused (the blind-rejection stand-in
     terminated at iteration 147 of a requested 200 and handed back a
     plausible-looking answer, #1429). Same state, different road, same loud
@@ -705,31 +705,31 @@ def run_flat_sampler(
 
     Parameters
     ----------
-    fitter : PopulationFitter
+    fitter: PopulationFitter
         The hierarchical problem.
-    method : str
+    method: str
         Canonical registry name; must be a key of :data:`FLAT_SAMPLERS`.
-    key : PRNGKey
-    n_warmup, n_burnin, n_samples : int
+    key: PRNGKey
+    n_warmup, n_burnin, n_samples: int
         Window adaptation / discarded / retained chain lengths (MCMC drivers).
-        The ``ess`` driver has no warmup — its exact-prior ellipse needs no
+        The ``ess`` driver has no warmup, its exact-prior ellipse needs no
         tuning, so ``n_warmup`` and the HMC-family knobs below are ignored
         there; only ``n_burnin`` / ``n_samples`` apply. The MCLMC family is
         the mirror image: ``n_warmup`` sets the (L, step size) tuning length,
         which consumes the transient, so ``n_burnin`` is ignored there. The
-        ``nss`` driver ignores both — nested sampling has no warmup or
+        ``nss`` driver ignores both, nested sampling has no warmup or
         burn-in; ``n_samples`` is the number of equal-weight posterior draws
         resampled from the dead-point history.
-    n_leapfrog : int
+    n_leapfrog: int
         Leapfrog steps per HMC proposal.
-    max_num_doublings : int
+    max_num_doublings: int
         NUTS tree depth cap; the trajectory may reach ``2**max_num_doublings``
         leapfrog steps, each a full ``grad(log_prob)`` over every galaxy.
 
         Defaults to **5** here against ``run_nuts``'s 10, because this is where
         the memory is. Measured on a 2-galaxy D=18 problem, marginal peak RSS
         over the built problem was 2.55 GB at 3, 2.58 GB at 5, then 3.95 GB at
-        7 and 3.96 GB at 10 — a ~1.4 GB step between 5 and 7 that then
+        7 and 3.96 GB at 10, a ~1.4 GB step between 5 and 7 that then
         saturates. The physics is not what costs: the SSP grid is 64 MB, the
         whole model plus one forward is 0.7 GB, and a single ``log_prob`` adds
         0.02 GB. Nearly all of the rest is the compiled NUTS trajectory buffer,
@@ -737,62 +737,62 @@ def run_flat_sampler(
 
         Raise it if trajectories are hitting the cap (check ``divergent`` and
         the step size); the cost is roughly the step above.
-    dense_mass_matrix : bool
+    dense_mass_matrix: bool
         Dense vs diagonal metric. Defaults **False** here, unlike the
         single-galaxy path: hierarchical D grows with the number of galaxies, and
         a dense matrix is O(D^2) in both memory and adaptation cost.
-    target_accept_rate : float
+    target_accept_rate: float
         Dual-averaging target.
-    memory_mode : {"low", "high"}
+    memory_mode: {"low", "high"}
         Passed to :func:`build_flat_problem`.
-    map_steps, map_learning_rate : int, float
+    map_steps, map_learning_rate: int, float
         Gradient-ascent settings for the ``map`` and ``laplace`` drivers
-        (one shared ascent — laplace IS map plus a verified-mode covariance).
-    laplace_grad_tol : float
+        (one shared ascent, laplace IS map plus a verified-mode covariance).
+    laplace_grad_tol: float
         Convergence tolerance on ``max |grad log_prob|`` at the point the
         ``laplace`` ascent reaches [dimensionless in the standardized latent
         space]. Curvature measured off a mode is a covariance for the wrong
         distribution (#1537), so exceeding this raises rather than returning
         plausible wrong error bars.
-    ghmc_alpha : float
+    ghmc_alpha: float
         GHMC momentum persistence, in [0, 1] [dimensionless]. Same default as
         the single-galaxy ``run_ghmc``. The GHMC driver always uses a diagonal
         mass matrix (momentum-generator constraint), regardless of
         ``dense_mass_matrix``.
-    ghmc_delta : float
+    ghmc_delta: float
         GHMC proposal step-size scaling [dimensionless]. Same default as the
         single-galaxy ``run_ghmc``.
-    mclmc_target_accept_rate : float
+    mclmc_target_accept_rate: float
         Metropolis acceptance target for the ``adjusted_mclmc`` driver's
         tuner [dimensionless]. Same default (0.65) as the single-galaxy
-        ``run_adjusted_mclmc`` — deliberately NOT the HMC-family
+        ``run_adjusted_mclmc``, deliberately NOT the HMC-family
         ``target_accept_rate``, whose 0.8 default tunes a different
         proposal mechanism. Unused by the unadjusted ``mclmc`` driver,
         which has no accept/reject step.
-    nss_n_live : int
-        Live points for the ``nss`` driver. Must exceed the problem's D —
+    nss_n_live: int
+        Live points for the ``nss`` driver. Must exceed the problem's D,
         the HRSS direction covariance is estimated from the live set and is
         singular otherwise (refused loudly). The default (500, matching the
         single-galaxy ``run_nss``) therefore refuses stochastic-field
         hierarchies at their usual D by construction; those want
         ``mcmc_nuts`` anyway.
-    nss_num_delete : int
+    nss_num_delete: int
         Live points retired and replaced per NS iteration (``nss`` driver).
-    nss_num_inner_steps : int or None
+    nss_num_inner_steps: int or None
         HRSS walk length per replacement (``nss`` driver). ``None`` (the
         default) uses D, matching the single-galaxy ``run_nss``.
-    nss_log_evidence_tol : float
+    nss_log_evidence_tol: float
         Terminate when ``log(Z_live / Z_accumulated)`` falls below this
         (``nss`` driver) [dimensionless]. Hitting ``nss_max_iterations``
-        first raises — the live set still holds posterior mass, and
+        first raises, the live set still holds posterior mass, and
         resampling then is the silently-truncated bias of #1429.
-    nss_max_iterations : int
+    nss_max_iterations: int
         Safety cap on NS iterations (``nss`` driver).
-    allow_unvalidated : bool
+    allow_unvalidated: bool
         Opt in to ``tier="broken"`` backends, exactly as ``Fitter.run`` does.
         Required for ``pathfinder`` and ``mcmc_ghmc``, the tier="broken" names
-        this seam drives — reachable, but not safe by default.
-    verbose : bool
+        this seam drives, reachable, but not safe by default.
+    verbose: bool
 
     Returns
     -------
@@ -806,7 +806,7 @@ def run_flat_sampler(
     difference in what was being fitted.
 
     ``dense_mass_matrix`` defaults to False and NUTS at large D still draws the
-    shared high-dimension advisory — see
+    shared high-dimension advisory, see
     ``tengri.inference._dimension_guard.warn_if_nuts_high_dim``.
     """
     import inspect
@@ -817,7 +817,7 @@ def run_flat_sampler(
     from tengri.inference.hierarchical import PopulationPosterior
 
     if unknown:
-        # The previous spelling was ``**_ignored`` — a silent kwarg sink. A
+        # The previous spelling was ``**_ignored``, a silent kwarg sink. A
         # typo'd fit option (or ``init_from``, which the hierarchical surface
         # documents as unsupported) vanished while the fit ran with defaults
         # and the caller believed otherwise (#1378's bug class).
@@ -831,7 +831,7 @@ def run_flat_sampler(
             f"{sorted(unknown)}. Accepted fit options for the hierarchical "
             f"flat seam: {accepted}. Note that some options are per-family "
             f"(the ess driver ignores warmup knobs; the MCLMC family ignores "
-            f"n_burnin) and init_from is not supported hierarchically — "
+            f"n_burnin) and init_from is not supported hierarchically, "
             f"per-galaxy initialization is automatic via MAP."
         )
 
@@ -847,7 +847,7 @@ def run_flat_sampler(
     # hierarchical seam must not quietly become a way around that: measured on a
     # 2-galaxy, D=18 problem, `pathfinder` OOM-kills the process outright
     # (SIGKILL, exit 137), which is precisely what its tier records. So the same
-    # gate applies here — the method stays available, the caller just has to say
+    # gate applies here, the method stays available, the caller just has to say
     # out loud that they accept it.
     with contextlib.suppress(KeyError):  # a FLAT_SAMPLERS key with no registry entry
         check_usable(get_backend(method), allow_unvalidated=allow_unvalidated)
@@ -876,7 +876,7 @@ def run_flat_sampler(
     # `logdensity_fn_2arg` is a STATIC argument, so a new lambda object per call
     # is a new compile key even when the code is identical; and capturing the
     # data bakes it in as a constant, making each catalog its own program.
-    # `data_args` must hold ARRAYS ONLY — it is traced. The callable goes in the
+    # `data_args` must hold ARRAYS ONLY, it is traced. The callable goes in the
     # static slot, and is built once per problem rather than once per call.
     ld2 = prob.log_prob_with_data
     data_args = prob.data_args
@@ -979,7 +979,7 @@ def run_flat_sampler(
         import blackjax
 
         # blackjax's (adjusted_)mclmc_find_L_and_step_size takes a ONE-argument
-        # logdensity, so the data must close over here — one compile per
+        # logdensity, so the data must close over here, one compile per
         # catalog for this family, exactly as the single-galaxy backends
         # behave. The (ld2, data_args) reuse contract is not reachable through
         # the tuner API without reimplementing the tuner.
@@ -1053,7 +1053,7 @@ def run_flat_sampler(
 
     elif driver == "nss":
         # The real Nested Slice Sampler (Yallup+2026) on the standardized
-        # problem — the sampler whose absence kept this name refused (#1429).
+        # problem, the sampler whose absence kept this name refused (#1429).
         # The prior needs no machinery at all here: live points are DRAWN
         # from the exact iid N(0,1) prior, and the HRSS walk explores within
         # the rising likelihood contour, so the sampler receives the
@@ -1072,7 +1072,7 @@ def run_flat_sampler(
         num_inner = prob.n_dim if nss_num_inner_steps is None else nss_num_inner_steps
 
         # NSS's native compile-once mode: a 2-arg likelihood plus data_args
-        # carried in the sampler state, so the data stays a traced value —
+        # carried in the sampler state, so the data stays a traced value,
         # the seam's (ld2, data_args) contract through the sampler's own
         # mechanism rather than a closure.
         algo = as_top_level_api(
@@ -1095,7 +1095,7 @@ def run_flat_sampler(
         while True:
             loop_key, sk = jax.random.split(loop_key)
             live, dead_info = step(sk, live)
-            # Keep the dead particles, drop update_info immediately — it is
+            # Keep the dead particles, drop update_info immediately, it is
             # the replacement step's MCMC internals, 3-4x larger than the
             # particles and unused by sample/ess (same choice as run_nss).
             dead.append(dead_info._replace(update_info=None))
@@ -1131,7 +1131,7 @@ def run_flat_sampler(
         extra = {"n_steps": map_steps, "log_prob": float(prob.log_prob(best))}
 
     elif driver == "laplace":
-        # MAP + a Gaussian covariance from the curvature AT A VERIFIED MODE —
+        # MAP + a Gaussian covariance from the curvature AT A VERIFIED MODE,
         # the two things whose absence kept this name refused: returning the
         # bare point estimate under 'laplace' silently dropped the error bars
         # (the map driver exists for that), and curvature off a mode is a

@@ -1,5 +1,5 @@
 # SPDX-License-Identifier: BSD-3-Clause
-"""SpatialModel — SubModel composer over a list of :class:`SpatialComponent` objects.
+"""SpatialModel, SubModel composer over a list of :class:`SpatialComponent` objects.
 
 Mirror of :class:`tengri.forward.sed_model.SEDModel` on the spatial side,
 at the SubModel layer. Holds a list of :class:`SpatialComponent`
@@ -7,8 +7,8 @@ instances and threads :class:`ForwardState` through them in
 :meth:`run`.
 
 A :class:`SpatialModel` is one of the three concrete sub-models that
-:class:`tengri.ForwardModel` orchestrates per architecture spec §4 —
-the others being ``SEDModel`` (already in place) and
+:class:`tengri.ForwardModel` orchestrates per architecture spec §4, the others being ``SEDModel``
+(already in place) and
 ``SpatialSEDModel`` (the joint composer, also in this file).
 
 The wave-grid field of the incoming :class:`ForwardState` is preserved
@@ -37,15 +37,15 @@ def default_grid_kpc(
 ) -> tuple[jnp.ndarray, jnp.ndarray]:
     """A square ``(n, n)`` grid spanning ``[-extent_kpc, +extent_kpc]`` per axis.
 
-    Returns ``(x_grid, y_grid)`` — both 2D arrays of shape ``(n, n)``.
+    Returns ``(x_grid, y_grid)``, both 2D arrays of shape ``(n, n)``.
     Used as the default for :class:`SpatialModel` when no explicit grid
     is provided.
 
     Parameters
     ----------
-    n : int, default 64
+    n: int, default 64
         Number of points per axis.
-    extent_kpc : float, default 10.0
+    extent_kpc: float, default 10.0
         Half-width of the grid in kpc; the full grid spans
         ``[-extent_kpc, +extent_kpc]`` in both x and y.
 
@@ -62,15 +62,15 @@ def default_grid_kpc(
 class SpatialModel:
     """Composer over a list of :class:`SpatialComponent` objects.
 
-    Satisfies :class:`tengri.protocols.SubModel` — has ``name``,
+    Satisfies :class:`tengri.protocols.SubModel`, has ``name``,
     :meth:`declared_parameters`, and :meth:`run`.
 
     Parameters
     ----------
-    components : sequence of :class:`SpatialComponent`
+    components: sequence of :class:`SpatialComponent`
         Spatial physics blocks to thread state through, in order.
-    grid_kpc : tuple of (ndarray, ndarray), optional
-        ``(x_grid_kpc, y_grid_kpc)`` — the 2D spatial coordinate grids,
+    grid_kpc: tuple of (ndarray, ndarray), optional
+        ``(x_grid_kpc, y_grid_kpc)``, the 2D spatial coordinate grids,
         each of shape ``(ny, nx)``. If omitted, a sensible default
         ``64×64`` grid spanning ±10 kpc is constructed via
         :func:`default_grid_kpc`. Pass an explicit grid when the
@@ -121,10 +121,10 @@ class SpatialModel:
 
         Parameters
         ----------
-        state : ForwardState
+        state: ForwardState
             Incoming state. Wave grid is preserved; spatial grid is
             inserted (or kept if caller already set it).
-        params : Mapping
+        params: Mapping
             Free parameter values.
 
         Returns
@@ -147,18 +147,18 @@ class SpatialSEDModel:
     into a single :class:`tengri.protocols.SubModel`. SED runs first
     (head of the chain); spatial runs second so spatial components can
     optionally read SED-derived keys from ``state.derived``
-    (architecture spec §4.3 — SED → Spatial ordering).
+    (architecture spec §4.3, SED → Spatial ordering).
 
     Parameters
     ----------
-    sed : :class:`tengri.SEDModel`
+    sed: :class:`tengri.SEDModel`
         SED sub-model (or anything satisfying :class:`SubModel`).
-    spatial : :class:`SpatialModel`
+    spatial: :class:`SpatialModel`
         Spatial sub-model.
 
     Notes
     -----
-    Composer-only — no physics of its own. Aggregates declared
+    Composer-only, no physics of its own. Aggregates declared
     parameters from both halves; runs SED, then spatial, on the same
     threaded :class:`ForwardState`.
 
@@ -168,7 +168,7 @@ class SpatialSEDModel:
     sed: Any
     spatial: SpatialModel
     #: The :class:`SubModel` identifier. ``init=False`` for the same reason as
-    #: on :class:`SpatialModel` — and here it also *closes* a hole: the
+    #: on :class:`SpatialModel`, and here it also *closes* a hole: the
     #: generated constructor accepted ``name=`` and let a caller overwrite the
     #: identifier the protocol promises is stable.
     name: str = field(default="spatial_sed", init=False)

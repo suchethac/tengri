@@ -6,7 +6,7 @@
 Most tengri recipes require an SSP file that may not be present in a fresh
 checkout. Four of the six recipes in :mod:`tengri.recipes` use the Cue
 nebular backend, which **requires a bare-stellar SSP** (no baked-in
-nebular emission) — without one they raise
+nebular emission): without one they raise
 :class:`~tengri.components.nebular.cue.CueWNESSPError` on
 ``SEDModel.build(...)``.
 
@@ -72,7 +72,7 @@ def list_remote_ssps() -> _RegistryTable:
 
     Notes
     -----
-    Makes a live HTTP request on every call — this is the one discovery
+    Makes a live HTTP request on every call: this is the one discovery
     verb that touches the network.
 
     Parses the Apache autoindex page with a single regex; it does not
@@ -120,23 +120,23 @@ def download_ssp(
         Use :func:`tengri.download_ssp`, which this now delegates to. The two
         were separate implementations of one job, reachable under the same name
         with incompatible signatures (``dest_dir``/``overwrite`` here versus
-        ``dest``/``force`` there) — and only the other honored
+        ``dest``/``force`` there): and only the other honored
         ``$TENGRI_DATA_DIR``, so a file fetched through this one could land
         somewhere the loaders never looked.
 
     Parameters
     ----------
-    name : str
+    name: str
         Filename in the catalog (e.g. ``"fsps_prsc_miles_chabrier.h5"``), or a
         short identifier from ``tengri.list_known_ssps()``. Use
         :func:`list_remote_ssps` to discover catalog filenames.
-    dest_dir : str or os.PathLike, optional
+    dest_dir: str or os.PathLike, optional
         Directory to write into. Created if missing. Default ``None`` →
         ``$TENGRI_DATA_DIR`` if set, else ``data/``.
-    overwrite : bool, optional
+    overwrite: bool, optional
         If False (default), an existing file at the target path is kept and its
         path is returned without re-downloading.
-    progress : bool, optional
+    progress: bool, optional
         If True (default), report download progress. False for clean logs.
 
     Returns

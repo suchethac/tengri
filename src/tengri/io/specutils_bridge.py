@@ -20,7 +20,7 @@ def from_spectrum1d(sp: Any) -> SpectrumTuple:
 
     Parameters
     ----------
-    sp : specutils.Spectrum1D
+    sp: specutils.Spectrum1D
         Input spectrum object. Must have wavelength and flux attributes
         with astropy.units.
 
@@ -40,7 +40,7 @@ def from_spectrum1d(sp: Any) -> SpectrumTuple:
 
     Notes
     -----
-    **JIT-compatible**: no — requires specutils and astropy.
+    **JIT-compatible**: no, requires specutils and astropy.
 
     The conversion uses astropy.units spectral equivalence, so flux
     in any spectral density unit (F_lambda, F_nu, Jy, mag/arcsec^2, etc.)

@@ -10,13 +10,13 @@ single-screen transform that reads ``sed_intrinsic`` and writes
 Unlike a fixed ``k(λ)`` law scaled by ``τ_V``, the WG00 *curve shape* depends on
 ``τ_V`` (high-τ sightlines self-shield → grayer attenuation), so the full
 ``A(λ; τ_V)`` table is interpolated (triweight in ``τ_V``) and applied directly.
-The structural choices — dust grain population (MW/SMC), large-scale geometry
-(shell/cloudy/dusty), and local density (homogeneous/clumpy) — are static
+The structural choices: dust grain population (MW/SMC), large-scale geometry
+(shell/cloudy/dusty), and local density (homogeneous/clumpy): are static
 selectors carried on :class:`WG00AttenuationSEDComponentConfig`; the single
 free parameter is ``dust_tau_v``.
 
 Data source: Witt & Gordon 2000 (ApJ 528, 799), as reformatted and distributed
-by FSPS (Conroy & Gunn 2010) in ``$SPS_HOME/dust/alldirty_{h,c}.dat`` — the same
+by FSPS (Conroy & Gunn 2010) in ``$SPS_HOME/dust/alldirty_{h,c}.dat``: the same
 tables FSPS reads for ``dust_type=3``. Vendored into
 ``data/wg00_attenuation_grid.h5`` by ``scripts/build_wg00_grid.py``.
 """
@@ -51,13 +51,13 @@ class WG00AttenuationSEDComponentConfig(SEDComponentConfig):
 
     Attributes
     ----------
-    name : str
+    name: str
         Diagnostic identifier. Default ``"wg00_attenuation"``.
-    dust_curve : {"mw", "smc"}
+    dust_curve: {"mw", "smc"}
         Underlying dust grain population. Default ``"mw"``.
-    geometry : {"shell", "cloudy", "dusty"}
+    geometry: {"shell", "cloudy", "dusty"}
         Large-scale star-dust geometry. Default ``"shell"`` (foreground screen).
-    structure : {"homogeneous", "clumpy"}
+    structure: {"homogeneous", "clumpy"}
         Local density structure. Default ``"homogeneous"``.
     """
 
@@ -73,7 +73,7 @@ class WG00AttenuationSEDComponentState(SEDComponentState):
 
     Attributes
     ----------
-    wg00_fn : callable or None
+    wg00_fn: callable or None
         ``fn(wave, tau_v) -> A(λ)`` from
         :func:`tengri.components.dust.wg00.create_wg00_from_grid`, or ``None``
         if the vendored grid is unavailable (apply() then no-ops).
@@ -89,11 +89,11 @@ class WG00AttenuationSEDComponent(TemplateThreading):
 
     Notes
     -----
-    **JIT-compatible**: yes — :meth:`apply` is pure JAX once the grid closure is
+    **JIT-compatible**: yes, :meth:`apply` is pure JAX once the grid closure is
     built; the structural selectors are resolved to static indices at
     construction.
 
-    **Gradient-safe**: yes — ``dust_tau_v`` is interpolated with a C²-continuous
+    **Gradient-safe**: yes, ``dust_tau_v`` is interpolated with a C²-continuous
     triweight kernel.
 
     **Transforms**: writes ``sed_attenuated = sed_intrinsic * exp(-A(λ; τ_V))``
@@ -148,7 +148,7 @@ class WG00AttenuationSEDComponent(TemplateThreading):
         topological sort (ADR-0006) place the nebular component *before*
         this single screen, so the WG00 attenuation reddens the nebular
         continuum (folded into ``sed_intrinsic`` by the nebular component)
-        together with the stellar light — matching bagpipes/FSPS/CIGALE.
+        together with the stellar light: matching bagpipes/FSPS/CIGALE.
         Without it the stable sort left dust *before* nebular, leaving the
         continuum unattenuated (the single-screen analog of the
         two-component bug fixed in #668). BakedIn backends publish zeros, so
@@ -199,7 +199,7 @@ class WG00AttenuationSEDComponent(TemplateThreading):
         -------
         WG00AttenuationSEDComponentState
             Holds the cached interpolation closure (``None`` if the grid is
-            unavailable — apply() then passes the SED through unchanged).
+            unavailable: apply() then passes the SED through unchanged).
         """
         del ssp_data, wave_grid, approx, filters
         return WG00AttenuationSEDComponentState(name=self.name, wg00_fn=self._build_curve_fn())
@@ -215,10 +215,10 @@ class WG00AttenuationSEDComponent(TemplateThreading):
 
         Parameters
         ----------
-        state : ForwardState
+        state: ForwardState
             Must carry rest-frame ``wave``. No-op if ``sed_intrinsic`` is
             ``None`` or the WG00 grid is unavailable.
-        params : mapping
+        params: mapping
             Receives ``dust_tau_v``.
 
         Returns
@@ -235,7 +235,7 @@ class WG00AttenuationSEDComponent(TemplateThreading):
         if wg00_fn is None:
             wg00_fn = self._build_curve_fn()
         if wg00_fn is None:
-            # Grid unavailable — transparent pass-through (documented).
+            # Grid unavailable: transparent pass-through (documented).
             return state
 
         tau_v = jnp.asarray(params["dust_tau_v"])
@@ -244,7 +244,7 @@ class WG00AttenuationSEDComponent(TemplateThreading):
         attenuated = state.sed_intrinsic * attenuation
 
         # Energy balance: L_ir = ∫ (L_nu_intrinsic − L_nu_attenuated) dν,
-        # LyC-masked (λ < 912 Å ionizes H, it does not heat dust — #922).
+        # LyC-masked (λ < 912 Å ionizes H, it does not heat dust: #922).
         from tengri.forward.energy_balance import bolometric_absorbed_log10, warn_if_corrupt
         from tengri.utils.physics_constants import C_AA
         from tengri.utils.scale import pow10

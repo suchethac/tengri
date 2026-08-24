@@ -10,11 +10,11 @@ in differentiation or JIT compilation.
 
 Template-based models:
 
-- ``load_draine_li_templates`` / ``create_dl07_from_grid`` — Draine & Li 2007
-- ``load_dl14_templates`` / ``create_dl14_from_grid`` — Draine & Li 2014 update
-- ``load_astrodust_templates`` / ``create_astrodust_from_grid`` — Astrodust+PAH
-- ``load_bosa_templates`` / ``create_bosa_from_grid`` — BOSA (Boquien & Salim 2021)
-- ``load_themis_templates`` / ``create_themis_from_grid`` — THEMIS (Jones et al. 2017)
+- ``load_draine_li_templates`` / ``create_dl07_from_grid``: Draine & Li 2007
+- ``load_dl14_templates`` / ``create_dl14_from_grid``: Draine & Li 2014 update
+- ``load_astrodust_templates`` / ``create_astrodust_from_grid``: Astrodust+PAH
+- ``load_bosa_templates`` / ``create_bosa_from_grid``: BOSA (Boquien & Salim 2021)
+- ``load_themis_templates`` / ``create_themis_from_grid``: THEMIS (Jones et al. 2017)
 
 Lazy loaders (auto-load templates on first call):
 
@@ -73,7 +73,7 @@ def _pdr_luminosity_weight(umin, umax, alpha):
     -----
     **JIT/grad-safe**: the general branch evaluates a pole-shifted ``alpha`` so
     it stays finite, and ``jnp.where`` selects the exact limit forms at
-    ``alpha = 1, 2`` — no NaN leaks through the ``where`` VJP.
+    ``alpha = 1, 2``: no NaN leaks through the ``where`` VJP.
     """
     x = umax / umin
     lnx = jnp.log(x)
@@ -113,7 +113,7 @@ def create_dl07_from_grid(grid_path: str | dict) -> Callable:
 
     Parameters
     ----------
-    grid_path : str
+    grid_path: str
         Path to ``dl07_templates.h5`` (from ``scripts/convert_dl07_templates.py``).
 
     Returns
@@ -124,7 +124,7 @@ def create_dl07_from_grid(grid_path: str | dict) -> Callable:
 
     Notes
     -----
-    **JIT-compatible**: yes — all operations inside the returned function are ``jnp`` primitives.
+    **JIT-compatible**: yes, all operations inside the returned function are ``jnp`` primitives.
 
     Example
     -------
@@ -132,7 +132,7 @@ def create_dl07_from_grid(grid_path: str | dict) -> Callable:
     >>> DUST_EMISSION_MODELS["dl07_tabulated"] = dl07  # optional: register
     >>> sed_ir = dl07(wavelength, L_absorbed, dust_umin=1.0, dust_gamma_dl=0.01, dust_qpah=2.5)
     """
-    # A dict means the caller already loaded the grid — typically the component,
+    # A dict means the caller already loaded the grid: typically the component,
     # so the arrays can be threaded into jit rather than baked (#1649). Building
     # this closure over traced arrays is fine; only capture of *concrete* arrays
     # freezes into the graph.
@@ -171,15 +171,15 @@ def create_dl07_from_grid(grid_path: str | dict) -> Callable:
 
         Parameters
         ----------
-        wavelength_aa : array_like, shape (n_wave,)
+        wavelength_aa: array_like, shape (n_wave,)
             Rest-frame wavelength grid [Å].
-        L_absorbed : float
+        L_absorbed: float
             Total absorbed luminosity [Lsun].
-        dust_umin : float
+        dust_umin: float
             Minimum radiation field intensity [dimensionless]. Default: 1.0.
-        dust_gamma_dl : float
+        dust_gamma_dl: float
             Mixing fraction for power-law component [dimensionless]. Default: 0.01.
-        dust_qpah : float
+        dust_qpah: float
             PAH mass fraction [dimensionless]. Default: 2.5.
         **_kwargs
             Extra keyword arguments (ignored).
@@ -191,9 +191,9 @@ def create_dl07_from_grid(grid_path: str | dict) -> Callable:
 
         Notes
         -----
-        **JIT-compatible**: yes — all operations are ``jnp`` primitives.
+        **JIT-compatible**: yes, all operations are ``jnp`` primitives.
 
-        **Gradient-safe**: yes — differentiable everywhere.
+        **Gradient-safe**: yes, differentiable everywhere.
         """
         dust_umin_c = jnp.clip(dust_umin, umin_grid[0], umin_grid[-1])
         dust_qpah_c = jnp.clip(dust_qpah, qpah_grid[0], qpah_grid[-1])
@@ -264,7 +264,7 @@ def load_draine_li_templates(filepath: str) -> dict:
 
     Parameters
     ----------
-    filepath : str
+    filepath: str
         Path to template file (.h5).
 
     Returns
@@ -275,7 +275,7 @@ def load_draine_li_templates(filepath: str) -> dict:
 
     Notes
     -----
-    **JIT-compatible**: no — file I/O operations not supported in JIT.
+    **JIT-compatible**: no, file I/O operations not supported in JIT.
     Call at factory/init time before JIT compilation.
     """
     import numpy as np
@@ -370,17 +370,17 @@ def dl14_sed_from_grid(
 
     Parameters
     ----------
-    wavelength_aa : array_like, shape (n_wave,)
+    wavelength_aa: array_like, shape (n_wave,)
         Rest-frame wavelength grid [Å].
-    L_absorbed : float
+    L_absorbed: float
         Total absorbed luminosity [Lsun].
-    dust_umin : float
+    dust_umin: float
         Minimum radiation field intensity [dimensionless]. Default: 1.0.
-    dust_gamma_dl : float
+    dust_gamma_dl: float
         Mixing fraction for power-law component [dimensionless]. Default: 0.01.
-    dust_qpah : float
+    dust_qpah: float
         PAH mass fraction [dimensionless]. Default: 2.5.
-    dust_alpha_dl14 : float
+    dust_alpha_dl14: float
         Radiation field power-law slope [dimensionless]. Default: 2.0.
     **_kwargs
         Extra keyword arguments (ignored).
@@ -392,9 +392,9 @@ def dl14_sed_from_grid(
 
     Notes
     -----
-    **JIT-compatible**: yes — all operations are ``jnp`` primitives.
+    **JIT-compatible**: yes, all operations are ``jnp`` primitives.
 
-    **Gradient-safe**: yes — differentiable everywhere.
+    **Gradient-safe**: yes, differentiable everywhere.
     """
     single_u = jnp.asarray(templates["single_u"])  # (n_qpah, n_umin, n_wave)
     powerlaw = jnp.asarray(templates["powerlaw"])  # (n_qpah, n_umin, n_alpha, n_wave)
@@ -482,7 +482,7 @@ def create_dl14_from_grid(grid_path: str) -> Callable:
 
     Parameters
     ----------
-    grid_path : str
+    grid_path: str
         Path to ``dl14_templates.h5`` (from ``scripts/convert_dl14_templates.py``).
 
     Returns
@@ -493,7 +493,7 @@ def create_dl14_from_grid(grid_path: str) -> Callable:
 
     Notes
     -----
-    **JIT-compatible**: yes — all operations inside the returned function are ``jnp`` primitives.
+    **JIT-compatible**: yes, all operations inside the returned function are ``jnp`` primitives.
 
     Example
     -------
@@ -513,7 +513,7 @@ def load_dl14_templates(filepath: str) -> dict:
 
     Parameters
     ----------
-    filepath : str
+    filepath: str
         Path to HDF5 template file.
 
     Returns
@@ -523,7 +523,7 @@ def load_dl14_templates(filepath: str) -> dict:
 
     Notes
     -----
-    **JIT-compatible**: no — file I/O operations not supported in JIT.
+    **JIT-compatible**: no, file I/O operations not supported in JIT.
     """
     import h5py as _h5py
     import numpy as _np_dl14
@@ -581,9 +581,9 @@ def register_dl14_tabulated(grid_path: str, name: str = "dl14_tabulated") -> Non
 
     Parameters
     ----------
-    grid_path : str
+    grid_path: str
         Path to ``dl14_templates.h5``.
-    name : str
+    name: str
         Registry name. Default: "dl14_tabulated".
 
     Returns
@@ -593,7 +593,7 @@ def register_dl14_tabulated(grid_path: str, name: str = "dl14_tabulated") -> Non
 
     Notes
     -----
-    **JIT-compatible**: no — registration happens at factory time before JIT.
+    **JIT-compatible**: no, registration happens at factory time before JIT.
     """
     from . import emission
 
@@ -638,23 +638,23 @@ def dale2014_emission_lnu(
 
     Parameters
     ----------
-    wavelength_aa : ndarray, shape (n_wave,)
+    wavelength_aa: ndarray, shape (n_wave,)
         Output rest-frame wavelength grid [Å].
-    L_absorbed : float
+    L_absorbed: float
         Dust-absorbed luminosity [erg/s].
-    wavelength_grid : ndarray, shape (n_tmpl,)
+    wavelength_grid: ndarray, shape (n_tmpl,)
         Template wavelength grid [Å].
-    alpha_grid : ndarray, shape (n_alpha,)
+    alpha_grid: ndarray, shape (n_alpha,)
         Radiation-field slope grid [dimensionless].
-    templates_sf : ndarray, shape (n_alpha, n_tmpl)
+    templates_sf: ndarray, shape (n_alpha, n_tmpl)
         Unit-normalized SF templates [L_nu].
-    templates_qso : ndarray, shape (n_tmpl,) or None
+    templates_qso: ndarray, shape (n_tmpl,) or None
         AGN template [L_nu], CIGALE full-grid normalization. ``None`` if absent.
-    has_qso : bool
+    has_qso: bool
         Whether ``templates_qso`` is available (static branch selector).
-    dust_alpha_dale : float
+    dust_alpha_dale: float
         Radiation-field power-law slope [dimensionless]. Default 2.0.
-    dust_frac_agn : float
+    dust_frac_agn: float
         AGN heating fraction [dimensionless, [0, 0.99)]. Default 0.0.
 
     Returns
@@ -664,7 +664,7 @@ def dale2014_emission_lnu(
 
     Notes
     -----
-    **JIT/grad/vmap-compatible**: yes — ``has_qso`` is a static Python bool and
+    **JIT/grad/vmap-compatible**: yes, ``has_qso`` is a static Python bool and
     all array ops are ``jnp`` primitives (guarded division).
     """
     dust_alpha_c = jnp.clip(dust_alpha_dale, alpha_grid[0], alpha_grid[-1])
@@ -703,7 +703,7 @@ def load_dale2014_lnu_grid(grid_path: str) -> dict:
 
     Parameters
     ----------
-    grid_path : str
+    grid_path: str
         Path to a ``.npz`` or ``.h5`` Dale2014 template file. Must contain
         ``wavelength_aa`` (or ``wavelength``), ``alpha_grid`` (or ``grid/alpha``),
         ``templates_sf`` (or ``spectra/templates``), and optionally
@@ -714,11 +714,11 @@ def load_dale2014_lnu_grid(grid_path: str) -> dict:
     dict
         ``wavelength_aa`` (n_wave,), ``alpha_grid`` (n_alpha,), ``templates_sf``
         (n_alpha, n_wave) [L_nu], ``templates_qso`` (n_wave,) [L_nu] or ``None``,
-        ``has_qso`` (bool) — arrays are jnp.
+        ``has_qso`` (bool): arrays are jnp.
 
     Notes
     -----
-    **JIT-compatible**: no — file I/O. Call at factory time (before JIT).
+    **JIT-compatible**: no, file I/O. Call at factory time (before JIT).
     """
     import numpy as np
 
@@ -763,7 +763,7 @@ def load_dale2014_lnu_grid(grid_path: str) -> dict:
         templates_raw = templates_raw.T  # -> (n_alpha, n_wave)
 
     if already_lnu:
-        # Templates are pre-normalized in L_nu convention — use directly
+        # Templates are pre-normalized in L_nu convention: use directly
         templates_np = np.asarray(templates_raw, dtype=np.float64)
         if templates_qso_raw is not None:
             templates_qso_np = np.asarray(templates_qso_raw, dtype=np.float64)
@@ -805,7 +805,7 @@ def load_dale2014_lnu_grid(grid_path: str) -> dict:
         # normalization, so ``int templates_qso_raw dlambda`` over the stored
         # grid is ~0.54 (the SF templates integrate to 1). We preserve that
         # fraction: dividing by the L_nu integral fixes the unit scale,
-        # multiplying by ``qso_frac`` restores the 1 : ~0.54 SF:QSO ratio that
+        # multiplying by ``qso_frac`` restores the 1: ~0.54 SF:QSO ratio that
         # matches CIGALE's energy partition. Forcing the QSO to unit (the old
         # behavior) over-weighted its IR share to ~0.78 and made the
         # ``dust_frac_agn`` mid-IR mixing grow too bright with fracAGN
@@ -858,13 +858,13 @@ def create_dale2014_from_grid(grid_path: str) -> Callable:
 
     Thin registry-closure wrapper: loads + normalizes the grid via
     :func:`load_dale2014_lnu_grid` and returns a function that delegates to the
-    shared :func:`dale2014_emission_lnu` mixing — identical physics and
+    shared :func:`dale2014_emission_lnu` mixing: identical physics and
     normalization across every consumer of the ``dale2014`` engine model
     (#717 consolidation).
 
     Parameters
     ----------
-    grid_path : str
+    grid_path: str
         Path to ``dale2014_templates_v2.h5`` or ``dale2014_templates.h5``.
 
     Returns
@@ -875,7 +875,7 @@ def create_dale2014_from_grid(grid_path: str) -> Callable:
 
     Notes
     -----
-    **JIT-compatible**: yes — the returned function is pure ``jnp``.
+    **JIT-compatible**: yes, the returned function is pure ``jnp``.
 
     Example
     -------
@@ -912,7 +912,7 @@ def load_dale2014_templates(filepath: str) -> dict:
 
     Parameters
     ----------
-    filepath : str
+    filepath: str
         Path to HDF5 template file.
 
     Returns
@@ -924,7 +924,7 @@ def load_dale2014_templates(filepath: str) -> dict:
 
     Notes
     -----
-    **JIT-compatible**: no — file I/O operations not supported in JIT.
+    **JIT-compatible**: no, file I/O operations not supported in JIT.
     """
     import h5py as _h5py
     import numpy as np
@@ -982,7 +982,7 @@ def create_schreiber2018_from_grid(grid_path: str | dict) -> Callable:
 
     Parameters
     ----------
-    grid_path : str
+    grid_path: str
         Path to ``schreiber2018_templates.h5``.
 
     Returns
@@ -993,7 +993,7 @@ def create_schreiber2018_from_grid(grid_path: str | dict) -> Callable:
 
     Notes
     -----
-    **JIT-compatible**: yes — all operations inside the returned function are
+    **JIT-compatible**: yes, all operations inside the returned function are
     ``jnp`` primitives.
 
     The temperature interpolation is node-exact piecewise-linear (matching
@@ -1006,7 +1006,7 @@ def create_schreiber2018_from_grid(grid_path: str | dict) -> Callable:
            (https://doi.org/10.1051/0004-6361/201731506).
     .. [2] Martinez-Ramirez et al. 2024, A&A, 688, A46 (AGNfitter-rX packaging).
     """
-    # A dict means the caller already loaded the grid — typically the component,
+    # A dict means the caller already loaded the grid: typically the component,
     # so the arrays can be threaded into jit rather than baked (#1649).
     grid = grid_path if isinstance(grid_path, dict) else load_schreiber2018_templates(grid_path)
 
@@ -1026,14 +1026,14 @@ def create_schreiber2018_from_grid(grid_path: str | dict) -> Callable:
 
         Parameters
         ----------
-        wavelength_aa : array_like, shape (n_wave,)
+        wavelength_aa: array_like, shape (n_wave,)
             Rest-frame wavelength grid [Å].
-        L_absorbed : float
+        L_absorbed: float
             Total absorbed luminosity. The output L_nu is in the same units
             per Hz.
-        dust_T : float
+        dust_T: float
             Dust temperature [K]. Clipped to the grid range. Default: 30.0.
-        dust_f_pah : float
+        dust_f_pah: float
             Fractional PAH contribution in [0, 1]. Default: 0.05.
         **_kwargs
             Extra keyword arguments (ignored, e.g. ``redshift``).
@@ -1045,7 +1045,7 @@ def create_schreiber2018_from_grid(grid_path: str | dict) -> Callable:
 
         Notes
         -----
-        **JIT-compatible**: yes — all operations are ``jnp`` primitives.
+        **JIT-compatible**: yes, all operations are ``jnp`` primitives.
         """
         # Node-exact linear interpolation in dust temperature.
         t = jnp.clip(dust_T, tdust[0], tdust[-1])
@@ -1055,8 +1055,8 @@ def create_schreiber2018_from_grid(grid_path: str | dict) -> Callable:
         pah_T_template = (1.0 - ft) * pah_templates[i] + ft * pah_templates[i + 1]
 
         # Resample both onto the requested grid, then mix natively (AGNfitter-rX
-        # mixes the unnormalized dust/PAH L_nu, so the relative amplitude — and
-        # hence the physical meaning of f_PAH — is preserved).
+        # mixes the unnormalized dust/PAH L_nu, so the relative amplitude: and
+        # hence the physical meaning of f_PAH: is preserved).
         dust_on_grid = resample_template(
             wavelength_aa, tmpl_wave, dust_T_template, left=0.0, right=0.0
         )
@@ -1082,7 +1082,7 @@ def load_schreiber2018_templates(filepath: str) -> dict:
 
     Parameters
     ----------
-    filepath : str
+    filepath: str
         Path to ``schreiber2018_templates.h5``.
 
     Returns
@@ -1093,7 +1093,7 @@ def load_schreiber2018_templates(filepath: str) -> dict:
 
     Notes
     -----
-    **JIT-compatible**: no — file I/O is not supported in JIT.
+    **JIT-compatible**: no, file I/O is not supported in JIT.
     """
     import h5py as _h5py
     import numpy as np
@@ -1120,7 +1120,7 @@ def load_schreiber2016_templates(filepath: str) -> dict:
 
     Parameters
     ----------
-    filepath : str
+    filepath: str
         Path to ``schreiber2016_templates.h5``.
 
     Returns
@@ -1133,7 +1133,7 @@ def load_schreiber2016_templates(filepath: str) -> dict:
 
     Notes
     -----
-    **JIT-compatible**: no — file I/O operations not supported in JIT.
+    **JIT-compatible**: no, file I/O operations not supported in JIT.
     Call at factory/init time before JIT compilation.
     """
     import h5py as _h5py
@@ -1188,9 +1188,9 @@ def register_dale2014_tabulated(grid_path: str, name: str = "dale2014_tabulated"
 
     Parameters
     ----------
-    grid_path : str
+    grid_path: str
         Path to ``dale2014_templates_v2.h5`` or ``dale2014_templates.h5``.
-    name : str
+    name: str
         Registry name. Default: "dale2014_tabulated".
 
     Returns
@@ -1200,7 +1200,7 @@ def register_dale2014_tabulated(grid_path: str, name: str = "dale2014_tabulated"
 
     Notes
     -----
-    **JIT-compatible**: no — registration happens at factory time before JIT.
+    **JIT-compatible**: no, registration happens at factory time before JIT.
     """
     from . import emission
 
@@ -1217,9 +1217,9 @@ def register_dl07_tabulated(grid_path: str, name: str = "dl07_tabulated") -> Non
 
     Parameters
     ----------
-    grid_path : str
+    grid_path: str
         Path to ``dl07_templates_v2.h5`` or ``dl07_templates.h5``.
-    name : str
+    name: str
         Registry name. Default: "dl07_tabulated".
 
     Returns
@@ -1229,7 +1229,7 @@ def register_dl07_tabulated(grid_path: str, name: str = "dl07_tabulated") -> Non
 
     Notes
     -----
-    **JIT-compatible**: no — registration happens at factory time before JIT.
+    **JIT-compatible**: no, registration happens at factory time before JIT.
     """
     from . import emission
 
@@ -1253,7 +1253,7 @@ def load_astrodust_templates(filepath: str) -> dict:
 
     Parameters
     ----------
-    filepath : str
+    filepath: str
         Path to ``astrodust_templates_v2.h5`` or ``astrodust_templates.h5``.
 
     Returns
@@ -1267,7 +1267,7 @@ def load_astrodust_templates(filepath: str) -> dict:
 
     Notes
     -----
-    **JIT-compatible**: no — file I/O operations not supported in JIT.
+    **JIT-compatible**: no, file I/O operations not supported in JIT.
     """
     import numpy as np
 
@@ -1397,10 +1397,10 @@ def _normalize_dl07_like_grid(raw: dict, q_key: str = "qpah_grid") -> dict:
 
     Parameters
     ----------
-    raw : dict
+    raw: dict
         Raw template grid with wavelength_um, spectra_single, spectra_pdr,
         umin_grid, and either qpah_grid or qhac_grid.
-    q_key : str
+    q_key: str
         Key for the grain composition parameter grid (``"qpah_grid"`` for
         Astrodust/DL07, ``"qhac_grid"`` for THEMIS).
 
@@ -1412,7 +1412,7 @@ def _normalize_dl07_like_grid(raw: dict, q_key: str = "qpah_grid") -> dict:
 
     Notes
     -----
-    **JIT-compatible**: no — this is a preprocessing step before JIT.
+    **JIT-compatible**: no, this is a preprocessing step before JIT.
     """
     import numpy as np
 
@@ -1461,7 +1461,7 @@ def create_dh02_ce01_from_grid(grid_path: str | dict) -> Callable:
 
     Parameters
     ----------
-    grid_path : str or dict
+    grid_path: str or dict
         Path to ``dh02_ce01_grid.h5`` (built by
         ``scripts/build_dh02_ce01_grid.py``), or an already-loaded grid dict
         from :func:`load_dh02_ce01_lnu_grid`. The dict form is what lets the
@@ -1478,7 +1478,7 @@ def create_dh02_ce01_from_grid(grid_path: str | dict) -> Callable:
 
     Notes
     -----
-    **JIT-compatible**: yes — all operations inside the returned function are
+    **JIT-compatible**: yes, all operations inside the returned function are
     ``jnp`` primitives.
 
     References
@@ -1488,7 +1488,7 @@ def create_dh02_ce01_from_grid(grid_path: str | dict) -> Callable:
     .. [2] Chary, R. & Elbaz, D. 2001, ApJ, 556, 562.
            (https://doi.org/10.1086/321609)
     .. [3] Martínez-Ramírez, L. N. et al., 2024, A&A, 688, A46.
-           (https://doi.org/10.1051/0004-6361/202449329) — AGNfitter-rX packaging.
+           (https://doi.org/10.1051/0004-6361/202449329): AGNfitter-rX packaging.
     """
     templates = grid_path if isinstance(grid_path, dict) else load_dh02_ce01_lnu_grid(grid_path)
 
@@ -1506,11 +1506,11 @@ def create_dh02_ce01_from_grid(grid_path: str | dict) -> Callable:
 
         Parameters
         ----------
-        wavelength_aa : array_like, shape (n_wave,)
+        wavelength_aa: array_like, shape (n_wave,)
             Rest-frame wavelength grid [Å].
-        L_absorbed : float
+        L_absorbed: float
             Total absorbed luminosity [Lsun].
-        dust_log_lir : float
+        dust_log_lir: float
             Log₁₀ of the infrared luminosity [log₁₀(L_IR/L_sun)].
             Clipped to the grid range [8.3, 14.3]. Default: 10.0.
         **_kwargs
@@ -1523,9 +1523,9 @@ def create_dh02_ce01_from_grid(grid_path: str | dict) -> Callable:
 
         Notes
         -----
-        **JIT-compatible**: yes — all operations are ``jnp`` primitives.
+        **JIT-compatible**: yes, all operations are ``jnp`` primitives.
 
-        **Gradient-safe**: yes — differentiable everywhere via linear interpolation.
+        **Gradient-safe**: yes, differentiable everywhere via linear interpolation.
         """
         # Clip input to grid bounds
         lir_c = jnp.clip(dust_log_lir, irlum_axis[0], irlum_axis[-1])
@@ -1565,7 +1565,7 @@ def load_dh02_ce01_lnu_grid(grid_path: str) -> dict:
 
     Parameters
     ----------
-    grid_path : str
+    grid_path: str
         Path to ``dh02_ce01_grid.h5``.
 
     Returns
@@ -1577,7 +1577,7 @@ def load_dh02_ce01_lnu_grid(grid_path: str) -> dict:
 
     Notes
     -----
-    **JIT-compatible**: no — file I/O operations not supported in JIT.
+    **JIT-compatible**: no, file I/O operations not supported in JIT.
     Call at factory time (before JIT compilation).
     """
     import h5py as _h5py
@@ -1605,7 +1605,7 @@ def _normalize_bosa_grid(raw: dict) -> dict:
 
     Parameters
     ----------
-    raw : dict
+    raw: dict
         Raw BOSA grid with wavelength_um, log_ltir_grid, log_ssfr_grid,
         and spectra.
 
@@ -1616,7 +1616,7 @@ def _normalize_bosa_grid(raw: dict) -> dict:
 
     Notes
     -----
-    **JIT-compatible**: no — this is a preprocessing step before JIT.
+    **JIT-compatible**: no, this is a preprocessing step before JIT.
     """
     import numpy as np
 
@@ -1659,7 +1659,7 @@ def create_astrodust_from_grid(
 
     Parameters
     ----------
-    template_data : dict or str
+    template_data: dict or str
         Either a dict (from ``load_astrodust_templates``) or a file path.
         If a string, ``load_astrodust_templates`` is called automatically.
 
@@ -1671,7 +1671,7 @@ def create_astrodust_from_grid(
 
     Notes
     -----
-    **JIT-compatible**: yes — all operations inside the returned function are ``jnp`` primitives.
+    **JIT-compatible**: yes, all operations inside the returned function are ``jnp`` primitives.
 
     References
     ----------
@@ -1710,17 +1710,17 @@ def create_astrodust_from_grid(
 
         Parameters
         ----------
-        wavelength_aa : array, shape (n_wave,)
+        wavelength_aa: array, shape (n_wave,)
             Wavelength grid in Angstrom (sorted ascending).
-        L_absorbed : float
+        L_absorbed: float
             Total absorbed luminosity in Lsun.
-        dust_umin : float
+        dust_umin: float
             Minimum radiation field intensity (Mathis ISRF units).
-        dust_gamma_dl : float
+        dust_gamma_dl: float
             Fraction of dust mass in PDR (high-U) component.
-        dust_qpah : float
+        dust_qpah: float
             PAH mass fraction (%).
-        redshift : float
+        redshift: float
             Source redshift (for CMB contrast correction).
 
         Returns
@@ -1730,9 +1730,9 @@ def create_astrodust_from_grid(
 
         Notes
         -----
-        **JIT-compatible**: yes — all operations are ``jnp`` primitives.
+        **JIT-compatible**: yes, all operations are ``jnp`` primitives.
 
-        **Gradient-safe**: yes — differentiable everywhere.
+        **Gradient-safe**: yes, differentiable everywhere.
         """
         dust_umin_c = jnp.clip(dust_umin, umin_grid[0], umin_grid[-1])
         dust_qpah_c = jnp.clip(dust_qpah, qpah_grid[0], qpah_grid[-1])
@@ -1765,7 +1765,7 @@ def create_astrodust_from_grid(
         # dust-mass fraction; weight the PDR template (built in the loader by
         # integrating the H&D per-U spectra over dM/dU ∝ U^-2) by its DL07
         # Eq. 33 relative luminosity R so gamma acts as a luminosity fraction
-        # (U_max = max grid U; same fix as DL07/DL14 — see #571).
+        # (U_max = max grid U; same fix as DL07/DL14; see #571).
         r_power = _pdr_luminosity_weight(dust_umin_c, umin_grid[-1], 2.0)
         template = (1.0 - dust_gamma_dl) * _bilinear(single_u) + (
             dust_gamma_dl * r_power
@@ -1781,7 +1781,7 @@ def create_astrodust_from_grid(
         # Interpolate onto target wavelength grid
         sed = resample_template(wavelength_aa, tmpl_wave, template, left=0.0, right=0.0)
 
-        # No CMB contrast factor here — see the note in ``create_themis_from_grid``.
+        # No CMB contrast factor here; see the note in ``create_themis_from_grid``.
         # It is an *observational* suppression, so applying it to the emitted SED
         # breaks the energy-balance invariant (int L_nu dnu == L_absorbed) that
         # this component exists to satisfy. ``redshift`` is kept in the signature
@@ -1796,9 +1796,9 @@ def register_astrodust_tabulated(grid_path: str, name: str = "astrodust_tabulate
 
     Parameters
     ----------
-    grid_path : str
+    grid_path: str
         Path to ``astrodust_templates_v2.h5`` or ``astrodust_templates.h5``.
-    name : str
+    name: str
         Registry name. Default: "astrodust_tabulated".
 
     Returns
@@ -1808,7 +1808,7 @@ def register_astrodust_tabulated(grid_path: str, name: str = "astrodust_tabulate
 
     Notes
     -----
-    **JIT-compatible**: no — registration happens at factory time before JIT.
+    **JIT-compatible**: no, registration happens at factory time before JIT.
     """
     from . import emission
 
@@ -1831,7 +1831,7 @@ def load_bosa_templates(filepath: str) -> dict:
 
     Parameters
     ----------
-    filepath : str
+    filepath: str
         Path to ``bosa_templates_v2.h5`` or ``bosa_templates.h5``.
 
     Returns
@@ -1844,7 +1844,7 @@ def load_bosa_templates(filepath: str) -> dict:
 
     Notes
     -----
-    **JIT-compatible**: no — file I/O operations not supported in JIT.
+    **JIT-compatible**: no, file I/O operations not supported in JIT.
     """
     import numpy as np
 
@@ -1919,7 +1919,7 @@ def create_bosa_from_grid(template_data: dict | str) -> Callable:
 
     Parameters
     ----------
-    template_data : dict or str
+    template_data: dict or str
         Either a dict (from ``load_bosa_templates``) or a file path.
 
     Returns
@@ -1930,7 +1930,7 @@ def create_bosa_from_grid(template_data: dict | str) -> Callable:
 
     Notes
     -----
-    **JIT-compatible**: yes — all operations inside the returned function are ``jnp`` primitives.
+    **JIT-compatible**: yes, all operations inside the returned function are ``jnp`` primitives.
 
     References
     ----------
@@ -1962,13 +1962,13 @@ def create_bosa_from_grid(template_data: dict | str) -> Callable:
 
         Parameters
         ----------
-        wavelength_aa : array, shape (n_wave,)
+        wavelength_aa: array, shape (n_wave,)
             Wavelength grid in Angstrom (sorted ascending).
-        L_absorbed : float
+        L_absorbed: float
             Total absorbed luminosity in Lsun (= L_TIR).
-        dust_log_ssfr : float
+        dust_log_ssfr: float
             log10(sSFR / yr^-1).  Typical range: -12 to -8.
-        redshift : float
+        redshift: float
             Source redshift (for CMB contrast correction).
 
         Returns
@@ -1978,9 +1978,9 @@ def create_bosa_from_grid(template_data: dict | str) -> Callable:
 
         Notes
         -----
-        **JIT-compatible**: yes — all operations are ``jnp`` primitives.
+        **JIT-compatible**: yes, all operations are ``jnp`` primitives.
 
-        **Gradient-safe**: yes — differentiable everywhere.
+        **Gradient-safe**: yes, differentiable everywhere.
         """
         # L_TIR ~ L_absorbed (energy balance)
         log_ltir = jnp.log10(jnp.clip(L_absorbed, 1.0e-30, None))
@@ -2016,7 +2016,7 @@ def create_bosa_from_grid(template_data: dict | str) -> Callable:
         # Interpolate onto target wavelength grid
         sed = resample_template(wavelength_aa, tmpl_wave, template, left=0.0, right=0.0)
 
-        # No CMB contrast factor here — see the note in ``create_themis_from_grid``.
+        # No CMB contrast factor here; see the note in ``create_themis_from_grid``.
         # It is an *observational* suppression, so applying it to the emitted SED
         # breaks the energy-balance invariant (int L_nu dnu == L_absorbed) that
         # this component exists to satisfy. ``redshift`` is kept in the signature
@@ -2031,9 +2031,9 @@ def register_bosa_tabulated(grid_path: str, name: str = "bosa_tabulated") -> Non
 
     Parameters
     ----------
-    grid_path : str
+    grid_path: str
         Path to ``bosa_templates_v2.h5`` or ``bosa_templates.h5``.
-    name : str
+    name: str
         Registry name. Default: "bosa_tabulated".
 
     Returns
@@ -2043,7 +2043,7 @@ def register_bosa_tabulated(grid_path: str, name: str = "bosa_tabulated") -> Non
 
     Notes
     -----
-    **JIT-compatible**: no — registration happens at factory time before JIT.
+    **JIT-compatible**: no, registration happens at factory time before JIT.
     """
     from . import emission
 
@@ -2052,7 +2052,7 @@ def register_bosa_tabulated(grid_path: str, name: str = "bosa_tabulated") -> Non
 
 
 # Load and create THEMIS
-# ── Model 8: THEMIS (Jones et al. 2017) — template-based ──────────
+# ── Model 8: THEMIS (Jones et al. 2017): template-based ──────────
 
 
 def load_themis_templates(filepath: str) -> dict:
@@ -2070,7 +2070,7 @@ def load_themis_templates(filepath: str) -> dict:
 
     Parameters
     ----------
-    filepath : str
+    filepath: str
         Path to ``themis_templates_v2.h5`` or ``themis_templates.h5``.
 
     Returns
@@ -2085,7 +2085,7 @@ def load_themis_templates(filepath: str) -> dict:
 
     Notes
     -----
-    **JIT-compatible**: no — file I/O operations not supported in JIT.
+    **JIT-compatible**: no, file I/O operations not supported in JIT.
     Call at factory/init time before JIT compilation.
     """
     import numpy as np
@@ -2248,12 +2248,12 @@ def dust_emission_grid_support(name: str) -> dict[str, tuple[float, float]]:
 
     Parameters
     ----------
-    name : str
+    name: str
         Registry name of the emission model, e.g. ``'themis'``.
 
     Returns
     -------
-    support : dict[str, tuple[float, float]]
+    support: dict[str, tuple[float, float]]
         ``{parameter_name: (lo, hi)}``, empty when the model is not
         template-backed or its grid file is not installed.
 
@@ -2326,7 +2326,7 @@ def _qhac_axis_to_cigale(qhac_grid: jnp.ndarray) -> jnp.ndarray:
 
     Parameters
     ----------
-    qhac_grid : ndarray, shape (n_qhac,)
+    qhac_grid: ndarray, shape (n_qhac,)
         Raw a-C(:H) mass-fraction axis, either convention [dimensionless].
 
     Returns
@@ -2361,7 +2361,7 @@ def create_themis_from_grid(template_data: dict | str) -> Callable:
 
     Parameters
     ----------
-    template_data : dict or str
+    template_data: dict or str
         Either a dict (from ``load_themis_templates``) or a file path.
 
     Returns
@@ -2372,7 +2372,7 @@ def create_themis_from_grid(template_data: dict | str) -> Callable:
 
     Notes
     -----
-    **JIT-compatible**: yes — all operations inside the returned function are ``jnp`` primitives.
+    **JIT-compatible**: yes, all operations inside the returned function are ``jnp`` primitives.
 
     References
     ----------
@@ -2425,21 +2425,21 @@ def create_themis_from_grid(template_data: dict | str) -> Callable:
 
         Parameters
         ----------
-        wavelength_aa : array, shape (n_wave,)
+        wavelength_aa: array, shape (n_wave,)
             Wavelength grid in Angstrom (sorted ascending).
-        L_absorbed : float
+        L_absorbed: float
             Total absorbed luminosity in Lsun.
-        dust_umin : float
+        dust_umin: float
             Minimum radiation field intensity (Mathis ISRF units).
-        dust_gamma_dl : float
+        dust_gamma_dl: float
             Fraction of dust mass in PDR (high-U) component.
-        dust_qhac : float
+        dust_qhac: float
             a-C(:H) aromatic carbon mass fraction.
             Typical range: 0.02--0.30.
-        dust_alpha : float
+        dust_alpha: float
             Radiation field power-law slope [dimensionless].
             Default: 2.0 (back-compat with 2D powerlaw slice).
-        redshift : float
+        redshift: float
             Source redshift (for CMB contrast correction).
 
         Returns
@@ -2449,9 +2449,9 @@ def create_themis_from_grid(template_data: dict | str) -> Callable:
 
         Notes
         -----
-        **JIT-compatible**: yes — all operations are ``jnp`` primitives.
+        **JIT-compatible**: yes, all operations are ``jnp`` primitives.
 
-        **Gradient-safe**: yes — differentiable everywhere.
+        **Gradient-safe**: yes, differentiable everywhere.
         """
         dust_umin_c = jnp.clip(dust_umin, umin_grid[0], umin_grid[-1])
         dust_qhac_c = jnp.clip(dust_qhac, qhac_grid[0], qhac_grid[-1])
@@ -2516,7 +2516,7 @@ def create_themis_from_grid(template_data: dict | str) -> Callable:
         # Mix single-U (diffuse) and power-law (PDR) components. ``gamma`` is a
         # dust-mass fraction; the FSPS/DustEM ``powerlaw`` template carries its
         # real relative luminosity (∫powerlaw/∫single_u ≈ 14-19), so gamma acts
-        # as a luminosity fraction directly — no analytic R needed (cf. DL07).
+        # as a luminosity fraction directly: no analytic R needed (cf. DL07).
         template = (1.0 - dust_gamma_dl) * _bilinear(single_u) + dust_gamma_dl * pdr_template
 
         # Energy balance: the mix integrates to (1-gamma) + gamma*ratio, so
@@ -2532,14 +2532,14 @@ def create_themis_from_grid(template_data: dict | str) -> Callable:
         # The da Cunha et al. (2013) CMB contrast factor is deliberately NOT
         # applied to the emitted SED.
         #
-        # It is an *observational* suppression — the flux you measure above the
-        # CMB background — so multiplying the emitted spectrum by it breaks the
+        # It is an *observational* suppression: the flux you measure above the
+        # CMB background: so multiplying the emitted spectrum by it breaks the
         # invariant this component exists to satisfy: the dust must re-emit the
         # starlight it absorbed, int L_nu dnu == L_absorbed. Applying it after the
         # unit-integral renormalization silently destroyed up to 1.6% of the
         # absorbed energy (worst for the aromatic-rich, mm-bright templates), and
-        # it never even received a real redshift — no component plumbs one through
-        # — so it only ever imposed the z=0 suppression. DL07/DL14 never applied
+        # it never even received a real redshift: no component plumbs one through
+        #: so it only ever imposed the z=0 suppression. DL07/DL14 never applied
         # it, and CIGALE conserves to 0.01%, so THEMIS/Astrodust/BOSA were the
         # odd ones out. If a CMB contrast is wanted it belongs at the observation
         # layer, applied uniformly, not inside the energy-balanced emitter.
@@ -2555,9 +2555,9 @@ def register_themis_tabulated(grid_path: str, name: str = "themis_tabulated") ->
 
     Parameters
     ----------
-    grid_path : str
+    grid_path: str
         Path to ``themis_templates_v2.h5`` or ``themis_templates.h5``.
-    name : str
+    name: str
         Registry name.  Default ``"themis_tabulated"``.
 
     Returns
@@ -2567,7 +2567,7 @@ def register_themis_tabulated(grid_path: str, name: str = "themis_tabulated") ->
 
     Notes
     -----
-    **JIT-compatible**: no — registration happens at factory time before JIT.
+    **JIT-compatible**: no, registration happens at factory time before JIT.
     """
     from . import emission
 
@@ -2588,12 +2588,12 @@ def _make_lazy_loader(
 
     Parameters
     ----------
-    name : str
+    name: str
         Registry name (e.g. ``"dale2014"``).
-    template_filename : str
+    template_filename: str
         Canonical HDF5 filename to search for in data/ (e.g. ``"dale2014_templates.h5"``).
         The v2 variant (``"*_v2.h5"``) is tried first if present.
-    loader_fn_name : str
+    loader_fn_name: str
         Name of the ``create_*_from_grid`` function in this module.
     """
 
@@ -2633,7 +2633,7 @@ def _make_lazy_loader(
 
 # --- DL07: tries v2 HDF5 first, then legacy .h5 ---
 def _dl07_lazy_wrapper(*args, **kwargs):
-    """Draine & Li (2007) — auto-loads tabulated templates on first call."""
+    """Draine & Li (2007): auto-loads tabulated templates on first call."""
     from . import emission
 
     if "draine_li2007" not in _resolved:
@@ -2692,7 +2692,7 @@ def load_draine2021_pahspec_templates(filepath: str) -> Draine2021PAHTemplates:
 
     Parameters
     ----------
-    filepath : str
+    filepath: str
         Path to the HDF5 file.  See ``scripts/build_pahspec_hdf5.py``
         for the layout.
 
@@ -2703,7 +2703,7 @@ def load_draine2021_pahspec_templates(filepath: str) -> Draine2021PAHTemplates:
 
     Notes
     -----
-    **JIT-compatible**: no — file I/O.  Call once outside the JIT
+    **JIT-compatible**: no, file I/O.  Call once outside the JIT
     boundary (typically in ``SEDComponent.precompute()``).
 
     References

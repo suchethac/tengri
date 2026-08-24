@@ -38,16 +38,16 @@ class MetParamDef(NamedTuple):
 
     Attributes
     ----------
-    description : str
+    description: str
         Human-readable description.
-    bound_check : callable
+    bound_check: callable
         Function(lo, hi) -> bool for physical bound validation.
-    bound_error : str
+    bound_error: str
         Error message when bound check fails.
-    default : Distribution
-        Default prior distribution — what the parameter resolves to when
+    default: Distribution
+        Default prior distribution: what the parameter resolves to when
         nothing asks for it to be free. Usually ``Fixed``.
-    free_prior : Distribution or None, optional
+    free_prior: Distribution or None, optional
         The admissible range ``all_params: FREE`` expands to. ``None`` means
         the parameter is not freeable by the wildcard.
 
@@ -59,7 +59,7 @@ class MetParamDef(NamedTuple):
 
     Notes
     -----
-    **JIT-compatible**: no — Python dataclass for registry initialization.
+    **JIT-compatible**: no; Python dataclass for registry initialization.
 
     """
 
@@ -75,22 +75,22 @@ class MetModelSpec(NamedTuple):
 
     Attributes
     ----------
-    name : str
+    name: str
         Mode name (e.g., "delta", "two_step", "bins").
-    fn : callable or None
+    fn: callable or None
         Pure JAX function that returns log10(Z) absolute per SSP age.
         None for modes handled specially (delta, chem_evol, table).
-    params : dict[str, MetParamDef]
+    params: dict[str, MetParamDef]
         Fittable parameters: public_name -> MetParamDef.
-    settings : dict[str, Any]
+    settings: dict[str, Any]
         Non-fittable settings with defaults.
-    internal_param_map : dict[str, tuple[str, float, float]]
+    internal_param_map: dict[str, tuple[str, float, float]]
         public_name -> (internal_name, scale, offset).
         Conversion: internal = public * scale + offset.
 
     Notes
     -----
-    **JIT-compatible**: no — Python dataclass for registry initialization.
+    **JIT-compatible**: no; Python dataclass for registry initialization.
 
     """
 
@@ -113,7 +113,7 @@ def _register(spec: MetModelSpec) -> None:
 
     Parameters
     ----------
-    spec : MetModelSpec
+    spec: MetModelSpec
         Metallicity mode specification to register.
 
     Returns
@@ -122,7 +122,7 @@ def _register(spec: MetModelSpec) -> None:
 
     Notes
     -----
-    **JIT-compatible**: no — mutates global registry dictionary.
+    **JIT-compatible**: no, mutates global registry dictionary.
 
     """
     MET_REGISTRY[spec.name] = spec
@@ -136,26 +136,26 @@ _register(
         fn=None,
         params={
             "met_logzsol": MetParamDef(
-                "log10(Z/Zsun) — Zsun = 0.0142 (Asplund 2009, MIST)",
+                "log10(Z/Zsun); Zsun = 0.0142 (Asplund 2009, MIST)",
                 _always_true,
                 "",
                 # Flat-in-log prior across the SSP template range. The
                 # wildcard-FIXED resolver special-cases ``met_logzsol`` to
                 # pin the default at **solar** (0.0) rather than the prior
-                # midpoint — matching FSPS (``logzsol=0.0``) and Bagpipes
+                # midpoint: matching FSPS (``logzsol=0.0``) and Bagpipes
                 # (``metallicity=1.0 Z⊙``). The previous default (midpoint
                 # -0.9) silently introduced a ~0.85 dex offset in CIGALE
-                # comparisons — see #412 for the trace.
+                # comparisons: see #412 for the trace.
                 #
                 # "Solar" is Asplund 2009 Zsun = 0.0142 (= MIST). For SSP
                 # libraries built against a different Zsun reference (BC03 /
                 # Padova: 0.0190; PARSEC: 0.0152; BASTI: 0.0200) reason in
-                # absolute ``log_z_abs`` for bit-exact cross-code matches —
+                # absolute ``log_z_abs`` for bit-exact cross-code matches;
                 # see tengri.parameters.translate.LOG10_ZSUN_BY_LIBRARY.
                 Uniform(-2.0, 0.2),
             ),
             "met_logzsol_scatter": MetParamDef(
-                "Lognormal metallicity scatter sigma [dex] — Gaussian-in-log10(Z) "
+                "Lognormal metallicity scatter sigma [dex]; Gaussian-in-log10(Z) "
                 "MDF width about the mean (Carnall+2018 §3.2). sigma -> 0 recovers "
                 "a single-Z (delta) population.",
                 _always_true,
@@ -421,7 +421,7 @@ _register(
     MetModelSpec(
         name="table",
         fn=None,  # handled via tabulated_metallicity_on_ssp_grid
-        params={},  # no fittable params — the table IS the Z(t)
+        params={},  # no fittable params: the table IS the Z(t)
         settings={},
         internal_param_map={},
     )
@@ -509,7 +509,7 @@ _register(
 # - "delta": no positive discriminator (it's the default fallback).
 # - "chem_evol": detected separately via any `chem_*` key, since the
 #   four chem_ params can independently appear as Fixed or Free.
-# - "table": cannot be inferred — has no fittable params, so users
+# - "table": cannot be inferred: has no fittable params, so users
 #   must set ``met_mode="table"`` explicitly.
 _MET_MODE_DISCRIMINATORS: tuple[tuple[str, frozenset[str]], ...] = (
     ("bins_continuity", frozenset({"met_logzsol_base"})),
@@ -532,7 +532,7 @@ def infer_met_mode(provided_keys: set[str] | frozenset[str]) -> str:
 
     Parameters
     ----------
-    provided_keys : set or frozenset of str
+    provided_keys: set or frozenset of str
         The set of parameter / kwarg names the user passed to
         :class:`Parameters`. Typically ``set(kwargs.keys())`` after
         the constructor pops its non-prior settings.
@@ -553,7 +553,7 @@ def infer_met_mode(provided_keys: set[str] | frozenset[str]) -> str:
 
     Notes
     -----
-    **JIT-compatible**: no — pure-Python set membership at construction time.
+    **JIT-compatible**: no, pure-Python set membership at construction time.
 
     Cannot infer ``"table"`` (no characteristic params); set explicitly.
     """
@@ -584,18 +584,18 @@ def resolve_met(
 
     Parameters
     ----------
-    met_mode : str
+    met_mode: str
         Metallicity mode name (e.g., "delta", "two_step", "bins").
 
     Returns
     -------
-    spec : MetModelSpec
+    spec: MetModelSpec
         Full model specification.
-    params : dict[str, MetParamDef]
+    params: dict[str, MetParamDef]
         Fittable parameters: public_name -> MetParamDef.
-    param_map : dict[str, tuple[str, float, float]]
+    param_map: dict[str, tuple[str, float, float]]
         public_name -> (internal_name, scale, offset) for unit/offset conversion.
-    settings : dict[str, Any]
+    settings: dict[str, Any]
         Non-fittable settings (e.g., met_n_bins for binned modes).
 
     Raises
@@ -605,7 +605,7 @@ def resolve_met(
 
     Notes
     -----
-    **JIT-compatible**: no — performs dictionary lookup at initialization time.
+    **JIT-compatible**: no, performs dictionary lookup at initialization time.
 
     All metallicity inputs are in **log10(Z/Zsun)** (relative to solar).
     The param_map applies LOG10_ZSUN offset to convert to absolute log10(Z) internally.

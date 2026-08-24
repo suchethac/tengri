@@ -34,12 +34,12 @@ class _Sentinel:
 
     Parameters
     ----------
-    name : str
+    name: str
         Human-readable name returned by repr().
 
     Attributes
     ----------
-    name : str
+    name: str
         Name of the sentinel, used in repr().
     """
 
@@ -50,7 +50,7 @@ class _Sentinel:
 
         Parameters
         ----------
-        name : str
+        name: str
             Unique name for this sentinel.
 
         Returns
@@ -104,7 +104,7 @@ class _Sentinel:
 
         Parameters
         ----------
-        other : object
+        other: object
             Object to compare with.
 
         Returns
@@ -141,7 +141,7 @@ Notes
 -----
 ``'all_params': FREE`` frees only the parameters a group declares with a
 default prior. Groups whose parameters default to :class:`tengri.Fixed`
-values — radio and shock — are unaffected by the wildcard; give those an
+values: radio and shock; are unaffected by the wildcard; give those an
 explicit prior instead (e.g. ``shock={"frac": Uniform(0.0, 1.0)}``).
 """
 
@@ -171,7 +171,7 @@ Notes
 -----
 The wildcard reaches only the group it appears in. Groups you do not mention
 are still built from their own defaults and may contribute free parameters of
-their own — the spec above leaves ``dust_tau_bc`` and ``dust_tau_diff`` free,
+their own; the spec above leaves ``dust_tau_bc`` and ``dust_tau_diff`` free,
 because no ``dust`` group was given. Read
 :meth:`tengri.Parameters.summary` on the built spec rather than assuming the
 wildcard fixed everything.

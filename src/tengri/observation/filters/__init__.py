@@ -17,7 +17,7 @@ are spelled bare (``hst_f105w``, ``hst_f127m``), while HST *narrow* bands carry
 their instrument (``hst_uvis_f656n``, ``hst_wfc3ir_f132n``, ``hst_acs_f502n``).
 
 F502N and F658N exist on both WFC3/UVIS and ACS/WFC with genuinely different
-curves, so a bare ``hst_f502n`` would have to pick one instrument silently —
+curves, so a bare ``hst_f502n`` would have to pick one instrument silently,
 an arbitrary choice that returns a wrong answer without raising. Qualifying the
 whole narrow set keeps one rule rather than a per-band exception list. The bare
 spelling is kept for wide and medium bands, where no such collision exists, so
@@ -29,7 +29,7 @@ Facilities whose "bandpass" is really a receiver spectral window (ALMA, in GHz)
 or a detector energy range (Chandra, NuSTAR, in keV) have nothing to fetch from
 SVO. Those are served as rectangular top-hats from
 :mod:`tengri.observation.filters.synthetic`, and :func:`load_filter` resolves
-them by name like any other filter — so they work in
+them by name like any other filter, so they work in
 ``Photometry.from_names([...])`` and therefore in a fit.
 
 Where a measured curve exists, it wins and no synthetic twin is defined. SPT-SZ
@@ -48,12 +48,12 @@ Real (sub)mm bandpasses already on SVO:
 User-supplied curves
 --------------------
 Three routes, all resolving through :func:`load_filter` so a custom band is
-usable anywhere a built-in one is — see
+usable anywhere a built-in one is; see
 :mod:`tengri.observation.filters.custom`:
 
-* :func:`register_filter` / :func:`register_filter_from_file` — in-memory,
+* :func:`register_filter` / :func:`register_filter_from_file`: in-memory,
   by name, for the current process.
-* ``$TENGRI_FILTER_DIR`` — a ``:``-separated directory list; any curve file
+* ``$TENGRI_FILTER_DIR``, a ``:``-separated directory list; any curve file
   dropped in loads by its file stem, with no code call, and resolves the same
   way on another machine that has the directory.
 * :func:`load_filter_from_dsps_transmission_curve` / DSPS curve files.
@@ -130,7 +130,7 @@ def find_cached_filter(filename: str) -> Path | None:
 
     Parameters
     ----------
-    filename : str
+    filename: str
         Cache file name from :func:`_svo_id_to_filename`, e.g.
         ``"GALEX_GALEX_FUV.dat"``.
 
@@ -147,14 +147,14 @@ def find_cached_filter(filename: str) -> Path | None:
     asks *which directory shall I use*. The difference is not cosmetic. The
     directory-level question commits to the first ancestor that merely owns a
     ``filters/`` folder, before knowing whether that folder holds the curve
-    being requested — so a partial cache anywhere below the canonical one makes
+    being requested, so a partial cache anywhere below the canonical one makes
     the canonical one unreachable.
 
     That is not hypothetical. ``examples/advanced/data/filters/`` held ten
     committed curves and ``examples/inference/data/filters/`` five, beside the
     249 in ``data/filters/``. Because the gallery runner ``chdir``s into each
     script's directory, every example in those two directories resolved to the
-    partial copy, and any band outside it — GALEX, VISTA, 2MASS — was fetched
+    partial copy, and any band outside it, GALEX, VISTA, 2MASS, was fetched
     from SVO on every CI run. A miss is indistinguishable from a cold cache, so
     it failed *open*: the network call succeeded and nothing reported that the
     committed curves had been bypassed. It surfaced only when ``astroquery``
@@ -240,7 +240,7 @@ def _unknown_filter_msg(name: str) -> str:
     hint = f" Did you mean {close}?" if close else ""
     return (
         f"Unknown filter '{name}'.{hint} tengri.list_filters() lists every "
-        "SVO filter — both the SVO-style names (e.g. 'SLOAN_SDSS_g') and "
+        "SVO filter: both the SVO-style names (e.g. 'SLOAN_SDSS_g') and "
         "their short aliases (e.g. 'sdss_g'). Synthetic bands (ALMA, X-ray, "
         "submillimeter) are in SYNTHETIC_BAND_REGISTRY. "
         "User-registered filters via register_filter() or TENGRI_FILTER_DIR "
@@ -273,9 +273,9 @@ def compute_effective_wavelength(wave: np.ndarray, trans: np.ndarray) -> float:
 
     Parameters
     ----------
-    wave : array, shape (n_wave,)
+    wave: array, shape (n_wave,)
         Wavelength [Angstrom].
-    trans : array, shape (n_wave,)
+    trans: array, shape (n_wave,)
         Transmission (dimensionless [0, 1]).
 
     Returns
@@ -309,9 +309,9 @@ def compute_fwhm(wave: np.ndarray, trans: np.ndarray) -> float:
 
     Parameters
     ----------
-    wave : array, shape (n_wave,)
+    wave: array, shape (n_wave,)
         Wavelength [Angstrom].
-    trans : array, shape (n_wave,)
+    trans: array, shape (n_wave,)
         Transmission (dimensionless [0, 1]).
 
     Returns
@@ -416,8 +416,8 @@ def _svo_name_to_key() -> dict[str, str]:
 
     ``tengri.list_filters()`` shows filters by their curve-file stem (the
     SVO convention ``Telescope_Instrument_Band``, e.g. ``2MASS_2MASS_H``),
-    but :data:`FILTER_REGISTRY` — and therefore :func:`load_filter` and
-    :meth:`Photometry.from_names` — is keyed by short aliases (``2mass_h``).
+    but :data:`FILTER_REGISTRY`, and therefore :func:`load_filter` and
+    :meth:`Photometry.from_names`, is keyed by short aliases (``2mass_h``).
     This reverse map lets the loader accept *either* form, so every name the
     discovery menu advertises round-trips.
 
@@ -426,7 +426,7 @@ def _svo_name_to_key() -> dict[str, str]:
     dict[str, str]
         ``{svo_stem: short_key}``. On the rare stem collision (two aliases
         resolve to the same curve file), the first alias in registry order
-        wins — both load the identical curve, so the choice is cosmetic.
+        wins, both load the identical curve, so the choice is cosmetic.
     """
     global _SVO_NAME_TO_KEY_CACHE
     if _SVO_NAME_TO_KEY_CACHE is None:
@@ -506,7 +506,7 @@ def _fetch_from_svo(svo_id: str, short_name: str | None = None) -> tuple[np.ndar
             "optional dependency.\n"
             "    pip install 'astro-tengri[filters]'\n"
             "Every filter tengri.list_filters() names ships as a cached curve "
-            "under data/filters/ and loads without it — this is only needed "
+            "under data/filters/ and loads without it, this is only needed "
             "to fetch a curve SVO has and tengri does not."
         ) from exc
 
@@ -590,9 +590,9 @@ def download_filter(
 
     Parameters
     ----------
-    svo_id : str
+    svo_id: str
         SVO filter identifier (e.g. ``"JWST/NIRCam.F200W"``).
-    cache_dir : str or pathlib.Path or None, optional
+    cache_dir: str or pathlib.Path or None, optional
         Directory for cached filter files. ``None`` (default) resolves through
         :func:`default_filter_cache_dir`, which is independent of the working
         directory.
@@ -601,9 +601,9 @@ def download_filter(
 
     Returns
     -------
-    wave : ndarray
+    wave: ndarray
         Wavelength in Angstrom.
-    trans : ndarray
+    trans: ndarray
         Transmission (dimensionless).
 
     Raises
@@ -617,14 +617,14 @@ def download_filter(
     -----
     Not JAX-compatible (uses file I/O and astroquery). Caching avoids
     redundant SVO downloads. The returned transmission values are not
-    normalized — the absolute scale cancels in the photometry integral
+    normalized, the absolute scale cancels in the photometry integral
     ``∫fλTλdλ / ∫Tλdλ``.
 
     This is the only entry point that touches the filesystem; ``load_filter``
     and ``load_filter_set`` pass ``cache_dir`` down unchanged, so ``None``
     is resolved here once rather than in each of them.
 
-    An explicit *cache_dir* is honored exactly as given — it is a caller
+    An explicit *cache_dir* is honored exactly as given, it is a caller
     saying "use this one". Only the ``None`` default searches every cache via
     :func:`find_cached_filter`, so a partial cache nearer the working directory
     can no longer hide a complete one further up (see that function's Notes).
@@ -777,20 +777,20 @@ def load_filter_set(
 
     Parameters
     ----------
-    names : list of str
+    names: list of str
         Short names from ``FILTER_REGISTRY``.
-    cache_dir : str or pathlib.Path or None, optional
+    cache_dir: str or pathlib.Path or None, optional
         Directory for cached filter files. ``None`` (default) resolves through
         :func:`default_filter_cache_dir`.
 
     Returns
     -------
-    filter_waves : list of jnp.ndarray
+    filter_waves: list of jnp.ndarray
         Wavelength arrays per filter, each shape ``(n_wave,)`` [Angstrom].
-    filter_trans : list of jnp.ndarray
+    filter_trans: list of jnp.ndarray
         Transmission arrays per filter, each shape ``(n_wave,)``
         (dimensionless [0, 1]).
-    filter_curves : list of FilterCurve
+    filter_curves: list of FilterCurve
         Full FilterCurve objects with wavelength, transmission, and name.
 
     Raises
@@ -828,7 +828,7 @@ def load_custom_filter(filepath: str) -> FilterCurve:
 
     Parameters
     ----------
-    filepath : str
+    filepath: str
         Path to a text file with columns: wavelength (Angstrom),
         transmission.
 
@@ -875,18 +875,18 @@ def load_tophat_filter(
     """Create a synthetic top-hat filter (e.g. for ALMA continuum bands).
 
     Use this when the photometric measurement does not correspond to a
-    standard bandpass on SVO — for example, an ALMA continuum flux at a
+    standard bandpass on SVO, for example, an ALMA continuum flux at a
     given observed frequency.
 
     Parameters
     ----------
-    wave_center_aa : float
+    wave_center_aa: float
         Central wavelength [Angstrom].
-    width_aa : float
+    width_aa: float
         Full width of the top-hat [Angstrom].
-    name : str
+    name: str
         Label for this filter (e.g. ``"alma_band6"``). Default: empty string.
-    n_points : int
+    n_points: int
         Number of wavelength samples. Default: 50.
 
     Returns
@@ -915,9 +915,9 @@ def load_alma_band(band: int, name: str | None = None) -> FilterCurve:
 
     Parameters
     ----------
-    band : int
+    band: int
         ALMA band number (1–10).
-    name : str, optional
+    name: str, optional
         Label for the filter. Defaults to ``"alma_band{N}"``.
 
     Returns
@@ -938,7 +938,7 @@ def load_alma_band(band: int, name: str | None = None) -> FilterCurve:
     Notes
     -----
     Band definitions follow the ALMA Cycle 11 receiver specifications.
-    Wavelengths are in the *observed* frame — the filter should be applied
+    Wavelengths are in the *observed* frame; the filter should be applied
     at the observed frequency. For a source at redshift *z*, Band N probes
     rest-frame wavelength λ_rest = λ_obs / (1 + z).
 
@@ -961,15 +961,15 @@ def list_available_filters(
 
     Parameters
     ----------
-    group_by : str
+    group_by: str
         Row ordering. ``"facility"`` (default) sorts by telescope /
         instrument and then by name; ``"none"`` sorts alphabetically by
         name alone. Default: ``"facility"``.
-    compute_properties : bool
+    compute_properties: bool
         If ``True``, add ``lambda_eff`` and ``fwhm`` columns. This loads
         every transmission curve and triggers SVO downloads for any
         filter not yet cached. Default: ``False``.
-    cache_dir : str, optional
+    cache_dir: str, optional
         Override cache directory for filter downloads. Default: ``None``.
 
     Returns
@@ -1031,7 +1031,7 @@ def list_filter_aliases(instrument: str | None = None) -> _RegistryTable:
 
     Parameters
     ----------
-    instrument : str, optional
+    instrument: str, optional
         Keep only aliases containing this substring (case-insensitive).
         E.g. ``"sdss"``, ``"jwst"``, ``"hst"``. Default: ``None`` (all).
 
@@ -1049,7 +1049,7 @@ def list_filter_aliases(instrument: str | None = None) -> _RegistryTable:
     (e.g. ``"SLOAN_SDSS_r"``). This lists the short aliases the loaders
     accept (e.g. ``"sdss_r"``). Both spellings load the same curve.
 
-    Both functions were once named ``list_filters`` — one name, two
+    Both functions were once named ``list_filters``, one name, two
     parameters (``survey`` vs ``instrument``), two return types and two
     value spaces, so a reader could not tell which one they held
     (#1574). The old name survives here as a deprecated alias.
@@ -1097,16 +1097,16 @@ def load(names: list[str]):
 
     Parameters
     ----------
-    names : list of str
+    names: list of str
         Short filter names from the registry (e.g., ["sdss_r", "jwst_f200w"]).
 
     Returns
     -------
-    filter_waves : list of jnp.ndarray
+    filter_waves: list of jnp.ndarray
         Wavelength arrays per filter, shape (n_wave,) [Angstrom].
-    filter_trans : list of jnp.ndarray
+    filter_trans: list of jnp.ndarray
         Transmission arrays per filter, shape (n_wave,) (dimensionless [0, 1]).
-    filter_curves : list of FilterCurve
+    filter_curves: list of FilterCurve
         Full FilterCurve objects with wavelength, transmission, and name.
 
     Raises
@@ -1138,7 +1138,7 @@ def describe(name: str) -> str:
 
     Parameters
     ----------
-    name : str
+    name: str
         Filter short name from the registry (``"sdss_r"``) or the SVO-style
         curve-file stem (``"SLOAN_SDSS_r"``). Both resolve to the same curve.
 
@@ -1158,7 +1158,7 @@ def describe(name: str) -> str:
     Effective wavelength is computed as the transmission-weighted mean.
 
     Until #1611 the whole body sat under a bare ``except Exception`` that
-    returned ``"<name>: (filter found; no summary available)"`` — for an
+    returned ``"<name>: (filter found; no summary available)"``, for an
     unknown name too, so the message asserted the opposite of what had
     happened and an unknown filter was indistinguishable from a curve that
     failed to load. The lookup is now outside the ``try``, so an unknown name
@@ -1202,7 +1202,7 @@ def describe(name: str) -> str:
         return f"{name}: λ_eff ~ {lam_eff_fmt} {unit} (range {min_fmt}–{max_fmt} {range_unit})"
 
     except Exception as exc:  # curve loaded, but its numbers are unusable
-        return f"{name}: (curve loaded; summary unavailable — {type(exc).__name__})"
+        return f"{name}: (curve loaded; summary unavailable, {type(exc).__name__})"
 
 
 def suggest(
@@ -1213,9 +1213,9 @@ def suggest(
 
     Parameters
     ----------
-    redshift : float
+    redshift: float
         Redshift of the source (z >= 0).
-    coverage : str
+    coverage: str
         Rest-frame wavelength coverage preset. Options:
 
         - "visible": 3500–9000 Å (optical)

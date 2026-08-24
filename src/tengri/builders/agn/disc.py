@@ -8,7 +8,7 @@ Variants from ``tengri.parameters.groups._VALID_AGN_DISC_TYPES``:
 ``qsogen``, ``grahsp_sbpl``. The disc-shaping parameters
 (``log_mbh``, ``a_spin``, ``alpha``, …) live in the top-level
 ``agn`` partition, not in ``agn.disc``, so individual disc factories
-expose only the variant selector itself — pass those parameters to
+expose only the variant selector itself: pass those parameters to
 ``builders.agn.composable(...)`` directly.
 """
 

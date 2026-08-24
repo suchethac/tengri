@@ -1,5 +1,5 @@
 # SPDX-License-Identifier: BSD-3-Clause
-"""Inference backend registry — single source of truth for fitter.run dispatch."""
+"""Inference backend registry, single source of truth for fitter.run dispatch."""
 
 from __future__ import annotations
 
@@ -14,44 +14,44 @@ class BackendEntry:
 
     Parameters
     ----------
-    name : str
+    name: str
         Canonical method name (e.g., ``"map"``, ``"mcmc_nuts"``).
-    runner : Callable
+    runner: Callable
         Backend entry point. Signature depends on ``legacy_fitter``:
 
         - ``legacy_fitter=True``  → ``runner(fitter, *, key, **kwargs)``
         - ``legacy_fitter=False`` → ``runner(context, *, key, **kwargs)``
 
         where ``context`` is an :class:`InferenceContext`.
-    tier : str
+    tier: str
         ``"primary"`` for promoted methods, ``"experimental"`` for backends
         that work but are not yet validated, ``"broken"`` for backends known
         to produce wrong answers or crash. ``"broken"`` is hidden from the
         default :func:`tengri.list_inference_methods` listing and refused by
         ``Fitter.run`` unless the caller passes ``allow_unvalidated=True``.
-    short_doc : str
+    short_doc: str
         Brief description.
-    requires : tuple[str, ...]
+    requires: tuple[str, ...]
         Optional dependency import names (e.g. ``("blackjax",)``).
-    legacy_fitter : bool
+    legacy_fitter: bool
         If ``True`` (default), ``Fitter.run`` passes the full Fitter to
         the runner. Set to ``False`` for backends migrated to the
         :class:`InferenceContext` Protocol (ADR-0010).
 
-        Every in-tree backend is migrated — ``test_backend_conformance``
+        Every in-tree backend is migrated, ``test_backend_conformance``
         asserts ``legacy_fitter is False`` for all of them, so the ``True``
         branch in ``Fitter.run`` is reachable only from an out-of-tree
         backend that registers without passing the flag. That is what the
         default is *for*, which is why the flag outlived the migration it
         was named after. It is a compatibility shim for third-party
         backends, not unfinished work.
-    accepts_precondition : bool
-        Whether the runner understands ``precondition=`` — metric preconditioning
+    accepts_precondition: bool
+        Whether the runner understands ``precondition=``, metric preconditioning
         of the standardized latent space (see
         :mod:`tengri.inference.preconditioning`). True for the Hamiltonian samplers,
         whose integrator has a metric to whiten. Declared here rather than inferred,
         so dispatch can refuse the kwarg at one seam instead of letting it raise
-        ``TypeError`` deep inside a backend — and so the ``mcmc`` auto-dispatcher
+        ``TypeError`` deep inside a backend, and so the ``mcmc`` auto-dispatcher
         can ask the registry about whichever backend it picked rather than naming
         one in an ``if``.
     """
@@ -115,19 +115,19 @@ def register_backend(
 
     Parameters
     ----------
-    name : str
+    name: str
         Canonical method name (e.g., "map", "mcmc_nuts").
-    tier : str
+    tier: str
         One of :data:`TIERS`. ``"primary"`` for promoted methods,
         ``"experimental"`` for working-but-unvalidated ones, ``"broken"``
         for backends known to return wrong answers or crash.
-    short_doc : str
+    short_doc: str
         Brief description of the method.
-    requires : tuple[str, ...]
+    requires: tuple[str, ...]
         Optional dependency import names (e.g., ("blackjax",)).
-    aliases : tuple[str, ...]
+    aliases: tuple[str, ...]
         Additional names that map to this backend.
-    accepts_precondition : bool
+    accepts_precondition: bool
         Declare that the runner takes ``precondition=``. See
         :class:`BackendEntry`. Kept honest against the runner's real signature by
         ``tests/contract/test_preconditioning_capability.py``.
@@ -167,7 +167,7 @@ def get_backend(name: str) -> BackendEntry:
 
     Parameters
     ----------
-    name : str
+    name: str
         Method name.
 
     Returns
@@ -202,7 +202,7 @@ def check_requires(entry: BackendEntry) -> None:
 
     Parameters
     ----------
-    entry : BackendEntry
+    entry: BackendEntry
         The backend whose ``requires`` tuple should be checked.
 
     Raises
@@ -235,7 +235,7 @@ def check_usable(entry: BackendEntry, *, allow_unvalidated: bool = False) -> Non
     """Refuse to run a backend that is known to give wrong answers (#1287).
 
     Five backends declared ``[POOR MIXING]`` or ``[UNSTABLE]`` in their own
-    ``short_doc`` while sitting at ``tier="experimental"`` — the same tier as
+    ``short_doc`` while sitting at ``tier="experimental"``, the same tier as
     backends that work. A user who picked ``mcmc_ghmc`` because it is "fast
     (cold ~17s)" got R-hat ~ 2.5-3.1 and no runtime signal that the chains
     had not converged.
@@ -245,9 +245,9 @@ def check_usable(entry: BackendEntry, *, allow_unvalidated: bool = False) -> Non
 
     Parameters
     ----------
-    entry : BackendEntry
+    entry: BackendEntry
         The backend about to be dispatched.
-    allow_unvalidated : bool, optional
+    allow_unvalidated: bool, optional
         Escape hatch for benchmarking and backend development. Default False.
 
     Raises
@@ -277,7 +277,7 @@ def refuse_if_broken(method: str, *, allow_unvalidated: bool = False) -> None:
 
     :func:`check_usable` takes a :class:`BackendEntry`, so every caller that
     holds only a method string has to look the entry up first. Two batched
-    entry points never did — ``CatalogFitter.run`` and ``PopulationFitter.run``
+    entry points never did, ``CatalogFitter.run`` and ``PopulationFitter.run``
     validated the name with
     :func:`~tengri.inference.fitter.resolve_method` and dispatched straight
     into the backend module, so a ``tier="broken"`` method ran with no refusal
@@ -288,21 +288,21 @@ def refuse_if_broken(method: str, *, allow_unvalidated: bool = False) -> None:
 
     Unknown names return silently: name validation belongs to
     ``resolve_method``, and a hierarchical method can legitimately have no
-    registry entry — ``evi_nifty`` is dispatched by
+    registry entry, ``evi_nifty`` is dispatched by
     :func:`~tengri.inference.hierarchical.PopulationFitter` but registered
     nowhere. Raising here would turn a missing registration into a broken
     user call.
 
     (This paragraph long cited ``vi_nonlinear`` as the unregistered example.
-    It is registered — a ``tier="primary"`` alias of ``vi`` — so the
+    It is registered, a ``tier="primary"`` alias of ``vi``, so the
     justification named a case that never reaches this branch; ``evi_nifty``
     is the one that does.)
 
     Parameters
     ----------
-    method : str
+    method: str
         Canonical method name, already resolved.
-    allow_unvalidated : bool, optional
+    allow_unvalidated: bool, optional
         Escape hatch, forwarded to :func:`check_usable`. Default False.
 
     Raises
@@ -323,7 +323,7 @@ def refuse_if_broken(method: str, *, allow_unvalidated: bool = False) -> None:
 #: Capability-gated keyword arguments: kwarg name -> :class:`BackendEntry` field.
 #:
 #: A kwarg belongs here when it names a *sampler capability* rather than a tuning
-#: knob — something a backend either implements or cannot. Gating at one seam keeps
+#: knob, something a backend either implements or cannot. Gating at one seam keeps
 #: the option out of the dispatcher's control flow: ``mcmc``'s auto-pick asks the
 #: registry about the backend it chose instead of naming one in an ``if``.
 _CAPABILITY_FIELDS: dict[str, str] = {"precondition": "accepts_precondition"}
@@ -348,9 +348,9 @@ def check_capabilities(entry: BackendEntry, kwargs: dict) -> None:
 
     Parameters
     ----------
-    entry : BackendEntry
+    entry: BackendEntry
         The backend about to be dispatched.
-    kwargs : dict
+    kwargs: dict
         Keyword arguments destined for ``entry.runner``.
 
     Raises
@@ -389,11 +389,11 @@ def check_unknown_kwargs(
 
     Parameters
     ----------
-    entry : BackendEntry
+    entry: BackendEntry
         The backend about to be dispatched.
-    kwargs : dict
+    kwargs: dict
         Keyword arguments destined for ``entry.runner``.
-    also_accepted : frozenset of str, optional
+    also_accepted: frozenset of str, optional
         Names the calling *surface* accepts but routes elsewhere -- the
         ``Fitter.__init__`` parameters ``split_fitter_kwargs`` sends to
         construction. Used for suggestions only, never to widen the
@@ -406,16 +406,16 @@ def check_unknown_kwargs(
 
         This raised ``ValueError`` when the check landed, on the grounds that
         "the caller never called that runner". The concrete harm that argued
-        against ``TypeError`` was the *message* — ``run_map() got an
+        against ``TypeError`` was the *message*, ``run_map() got an
         unexpected keyword argument 'lines'`` names an internal function the
-        caller never chose (#1469) — and rewriting the message already fixed
+        caller never chose (#1469), and rewriting the message already fixed
         that; the exception *type* was never what caused the confusion.
 
         Meanwhile the type is what callers catch, and the same user mistake
         raises ``TypeError`` everywhere else: from Python itself, and from
         ``SEDModel.build`` for a kwarg it does not take. Two types for one
         mistake is the inconsistency, so this is ``TypeError`` and #1378's
-        regression test — which pins exactly that — passes again.
+        regression test, which pins exactly that, passes again.
 
     Notes
     -----
@@ -474,7 +474,7 @@ def check_unknown_kwargs(
     # TypeError, not ValueError: this is "the callable does not take that
     # keyword", which is what Python raises for the same mistake, and what
     # the rest of tengri already raises for a kwarg `SEDModel.build` refuses.
-    # #1378's regression test pins it — a misspelled fit option must fail the
+    # #1378's regression test pins it, a misspelled fit option must fail the
     # same way whether the rejection comes from Python or from this check.
     raise TypeError(
         f"Inference method '{entry.name}' does not accept {unknown}. "
@@ -490,8 +490,8 @@ def lookup_backend(name: str) -> BackendEntry | None:
     """Return the entry ``name`` dispatches to, or ``None`` if unregistered.
 
     Resolves aliases (``"vi_nonlinear"`` -> the ``"vi"`` entry) and every
-    tier, including ``"broken"``. This is the *identification* question —
-    "what does this name run?" — as opposed to :func:`all_backends`, which
+    tier, including ``"broken"``. This is the *identification* question,
+    "what does this name run?", as opposed to :func:`all_backends`, which
     answers the *curation* question and is filtered for presentation.
 
     Answering identification through a curated listing is what made
@@ -502,7 +502,7 @@ def lookup_backend(name: str) -> BackendEntry | None:
 
     Parameters
     ----------
-    name : str
+    name: str
         A method name or alias, as passed to ``fit(method=...)``.
 
     Returns
@@ -522,7 +522,7 @@ def all_backends(*, include_broken: bool = True) -> list[BackendEntry]:
 
     Parameters
     ----------
-    include_broken : bool, optional
+    include_broken: bool, optional
         Include ``tier="broken"`` entries. Default True, so internal callers
         that need the complete registry (dispatch, conformance tests) keep
         seeing everything; the user-facing listing opts out.

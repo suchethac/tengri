@@ -11,7 +11,7 @@ AGN-radio model selection
 The AGN radio component is selected via
 :attr:`RadioSEDComponentConfig.agn_radio_model`:
 
-- ``"powerlaw"`` (default) — single power-law (:func:`radio_total`).
+- ``"powerlaw"`` (default): single power-law (:func:`radio_total`).
   Backwards-compatible default; behavior bit-identical to pre-aging
   releases.
 - ``"dpl"``: AGNfitter-rx broken double power-law with phenomenological
@@ -20,8 +20,8 @@ The AGN radio component is selected via
   ``radio_alpha_thick``, ``radio_log_nu_t``, ``radio_log_nu_cut``.
 
 Physical synchrotron-aging kernels (Jaffe & Perola 1973;
-Kardashev/Pacholczyk; Tribble 1993) — ``"JP"``, ``"KP"``, ``"tribble"``
-— are not yet implemented. Selecting them raises :class:`ValueError` at
+Kardashev/Pacholczyk; Tribble 1993): ``"JP"``, ``"KP"``, ``"tribble"`` are
+not yet implemented. Selecting them raises :class:`ValueError` at
 construction. The physics + precomputed pitch-angle integrals (validated
 against BRATS, Harwood+2013) land together in a follow-up PR alongside
 the two free parameters they consume (``radio_alpha_inj``,
@@ -31,12 +31,12 @@ Cross-component reads
 ---------------------
 Radio depends on quantities owned by other components:
 
-- ``L_ir`` (erg/s) — produced by the dust component as the integrated
+- ``L_ir`` (erg/s): produced by the dust component as the integrated
   absorbed luminosity. Read from ``state.derived["L_ir"]`` with a
   fallback to 0.0 when no dust component has run yet.
-- ``L_agn_bol`` (erg/s) — produced by the AGN component. Read from
+- ``L_agn_bol`` (erg/s): produced by the AGN component. Read from
   ``state.derived["L_agn_bol"]`` with a fallback to 0.0.
-- ``log_mstar`` (log10 M_⊙) — produced by the stellar component. Read
+- ``log_mstar`` (log10 M_⊙): produced by the stellar component. Read
   from ``state.derived["log_mstar"]`` with a fallback to 10.0.
 - ``redshift``: bare parameter from :data:`BARE_NAME_ALLOWLIST`.
 
@@ -77,12 +77,12 @@ __all__ = ["RadioSEDComponent", "RadioSEDComponentConfig"]
 # constant so tests and downstream code can import it without
 # instantiating the dataclass.
 #
-# - ``"none"`` (new 2026-06) — AGN radio turned off; SF component only.
-# - ``"powerlaw"`` (default) — single power-law AGN radio
+# - ``"none"`` (new 2026-06): AGN radio turned off; SF component only.
+# - ``"powerlaw"`` (default): single power-law AGN radio
 # - ``"dpl"``: double power-law AGN radio with aging cutoff
 #
 # JP / KP / tribble (Jaffe & Perola 1973; Kardashev/Pacholczyk; Tribble
-# 1993) are NOT in this tuple — they require precomputed pitch-angle
+# 1993) are NOT in this tuple: they require precomputed pitch-angle
 # integrals validated against BRATS (Harwood+2013). When that physics
 # lands, the kernel names and their two free parameters (radio_alpha_inj,
 # radio_log_nu_break) get added together in the same PR.
@@ -91,12 +91,12 @@ AGN_RADIO_MODELS: tuple[str, ...] = ("none", "powerlaw", "dpl")
 # Mode strings for the star-formation radio sub-model, the sibling axis to
 # :data:`AGN_RADIO_MODELS`. Named here rather than spelled inline at each
 # check so the grammar validator (``parameters.groups._translate_radio``) and
-# the discovery menu (``registry.list_radio_blocks``) read the *same* tuple —
+# the discovery menu (``registry.list_radio_blocks``) read the *same* tuple :
 # a hand-copied second list is how the dust menu and the radio error message
 # both drifted out of agreement with what the builder actually accepts.
 #
 # - ``"none"``: SF synchrotron turned off; AGN radio only.
-# - ``"bell2003"`` (default) — fixed-q FIR-radio correlation.
+# - ``"bell2003"`` (default): fixed-q FIR-radio correlation.
 # - ``"delvecchio2021"``: mass- and z-dependent FIRRC at 1.4 GHz.
 # - ``"mccheyne2022"``: mass- and z-dependent FIRRC at 150 MHz.
 SF_RADIO_MODELS: tuple[str, ...] = ("none", "bell2003", "delvecchio2021", "mccheyne2022")
@@ -108,18 +108,18 @@ class RadioSEDComponentConfig(SEDComponentConfig):
 
     Attributes
     ----------
-    name : str
+    name: str
         Diagnostic identifier. Default ``"radio"``.
-    sfr_mode : str
+    sfr_mode: str
         Star-formation synchrotron mode. One of
         ``{"none", "bell2003", "delvecchio2021", "mccheyne2022"}``. The
         ``"none"`` mode turns off the SF component entirely (pure AGN radio).
         Default ``"bell2003"``.
-    include_freefree : bool
+    include_freefree: bool
         Add Murphy+2011 thermal free-free component. Default ``True``
         (matches :func:`radio_total`'s default).
-    agn_radio_model : str
-        AGN radio sub-model. One of :data:`AGN_RADIO_MODELS` —
+    agn_radio_model: str
+        AGN radio sub-model. One of :data:`AGN_RADIO_MODELS` :
         ``{"none", "powerlaw", "dpl"}``. The ``"none"`` mode disables
         the AGN radio component (SF synchrotron + optional free-free only).
         Default ``"powerlaw"`` preserves the pre-aging-cutoff behavior
@@ -152,7 +152,7 @@ class RadioSEDComponentConfig(SEDComponentConfig):
 
 @dataclass(frozen=True)
 class RadioSEDComponentState(SEDComponentState):
-    r"""Radio has no precomputed tensors — typed marker only."""
+    r"""Radio has no precomputed tensors: typed marker only."""
 
     name: str = "radio"
 
@@ -217,7 +217,7 @@ class RadioSEDComponent(TemplateThreading):
         (photometry-only fits without dust or AGN). The validator does
         NOT require an upstream publisher for these, but it WILL check
         that if one is present, its units match. Catches a future
-        publisher rename or unit drift. Phase B of #21 — see ADR-0004.
+        publisher rename or unit drift. Phase B of #21: see ADR-0004.
         """
         return (
             DerivedKey("L_ir", "erg/s", "Read from dust if present; falls back to 0.0"),
@@ -234,15 +234,15 @@ class RadioSEDComponent(TemplateThreading):
     #: deliberately distant probe draws. The build-time band-response builder
     #: (``tengri.SEDModel._additive_term_band_response``) evaluates
     #: :meth:`emission_terms` at both and requires every term to come back
-    #: *proportional*: a term whose spectral **shape** — not merely its amplitude —
+    #: *proportional*: a term whose spectral **shape**: not merely its amplitude :
     #: responds to a runtime input is not rank-1, so no constant band response
     #: exists for it and the emitter drops to the dense per-call filter integral.
     #: Verifying the property beats declaring it (#1107: BOSA's template shape
     #: tracked its own luminosity and returned fluxes 13 % wrong, silently).
     #:
     #: Every value is nonzero on purpose. A term that stays identically zero across
-    #: both draws is zero for a *structural* reason — ``include_freefree=False``, or
-    #: ``radio_loudness = 0`` (the default, i.e. radio-quiet) — never because a probe
+    #: both draws is zero for a *structural* reason: ``include_freefree=False``, or
+    #: ``radio_loudness = 0`` (the default, i.e. radio-quiet): never because a probe
     #: happened to zero it out.
     EMITTER_PROBE_INPUTS: ClassVar[tuple[dict[str, float], dict[str, float]]] = (
         {
@@ -264,8 +264,8 @@ class RadioSEDComponent(TemplateThreading):
 
         Parameters
         ----------
-        derived : mapping
-            ``state.derived``. Missing keys take the documented fallbacks — a model
+        derived: mapping
+            ``state.derived``. Missing keys take the documented fallbacks, a model
             with no dust block publishes no ``L_ir``, and radio must still build.
 
         Returns
@@ -308,31 +308,31 @@ class RadioSEDComponent(TemplateThreading):
 
         Single source of truth: :meth:`apply` sums these to build the SED, and the
         build-time band-response precompute integrates *these same terms* through the
-        filters. Two paths, one definition — so they cannot drift, which is exactly
+        filters. Two paths, one definition: so they cannot drift, which is exactly
         how #1107 nearly shipped a band response built from the wrong parameters.
 
         Parameters
         ----------
-        params : mapping
+        params: mapping
             Full (un-sliced) parameter dict; reads the ``radio_*`` keys and the bare
             ``redshift``.
-        wave : array_like, shape (n_wave,)
+        wave: array_like, shape (n_wave,)
             Rest-frame wavelength grid [Angstrom]. Any grid: the full model grid in
             :meth:`apply`, or the per-term reference wavelengths under the LUT.
-        L_ir : array_like, scalar
+        L_ir: array_like, scalar
             Dust-reradiated IR luminosity [erg/s], drives the SF synchrotron and
             free-free amplitudes via the FIR-radio correlation.
-        L_agn_bol : array_like, scalar
+        L_agn_bol: array_like, scalar
             AGN bolometric luminosity [erg/s].
-        L_4400_intrinsic : array_like, scalar
+        L_4400_intrinsic: array_like, scalar
             Un-reddened AGN B-band luminosity [erg/s/Hz], the radio-loudness reference.
-        log_mstar : array_like, scalar
+        log_mstar: array_like, scalar
             log10 stellar mass [dex Msun]; used by the mass-evolving FIRRC modes.
 
         Returns
         -------
         dict of ndarray, each shape (n_wave,)
-            ``{"sf", "ff", "agn"}`` — star-forming synchrotron, free-free, and the AGN
+            ``{"sf", "ff", "agn"}``: star-forming synchrotron, free-free, and the AGN
             jet [erg/s/Hz]. ``"agn"`` is zeros when ``agn_radio_model == "none"``, and
             ``"ff"`` is zeros when ``include_freefree`` is off.
 
@@ -340,19 +340,19 @@ class RadioSEDComponent(TemplateThreading):
         -----
         **JIT/grad/vmap-safe.** Pure ``jnp``; the model branch is a static config read.
 
-        Each term is *rank-1* in wavelength — a scalar amplitude times a spectral shape
+        Each term is *rank-1* in wavelength, a scalar amplitude times a spectral shape
         set only by the shape parameters (``alpha_sf``, ``alpha_agn``/``alpha_thin``/
         ``alpha_thick``, ``log_nu_t``, ``log_nu_cut``, ``T_e``, ``alpha_ff``). The
         *total* is not: three power laws of different index do not share a shape. That
-        is why the terms are exposed separately — the band integral factorizes per term
+        is why the terms are exposed separately, the band integral factorizes per term
         and not on the sum (#1109).
         """
         model = self.config.agn_radio_model
         z = jnp.asarray(require_redshift(params, "components.radio.component.emission_terms"))
 
         # Float32 routing (#1206): only when the forward grid is float32 do we
-        # bypass the linear ``L_ir`` (~1e43) / ``L_agn_bol`` (~1e46) — which
-        # overflow float32 max (3.4e38) — by handing the log companions to the
+        # bypass the linear ``L_ir`` (~1e43) / ``L_agn_bol`` (~1e46), which
+        # overflow float32 max (3.4e38): by handing the log companions to the
         # radio kernels (they form the representable ~1e28 radio luminosity via
         # ``pow10``). In float64 the logs are withheld so the exact linear path
         # is bit-for-bit unchanged. Both require the producer to have published
@@ -471,7 +471,7 @@ class RadioSEDComponent(TemplateThreading):
 
         Parameters
         ----------
-        params : mapping
+        params: mapping
             Receives all declared ``radio_*`` keys.
 
         Returns
@@ -508,10 +508,10 @@ class RadioSEDComponent(TemplateThreading):
 
         Parameters
         ----------
-        state : ForwardState
+        state: ForwardState
             Must carry rest-frame ``wave`` (Å). If ``sed_intrinsic`` is
             ``None`` it is initialized to zeros of the same shape.
-        params : mapping
+        params: mapping
             Receives ``radio_*`` keys plus the bare ``redshift`` from
             the allowlist. Cross-component scalars (``L_ir``,
             ``L_agn_bol``, ``log_mstar``) are read from
@@ -523,7 +523,7 @@ class RadioSEDComponent(TemplateThreading):
             New state with ``sed_intrinsic`` updated.
         """
         # JP / KP / tribble were previously dispatched here with a runtime
-        # NotImplementedError. They now fail earlier — at construction —
+        # NotImplementedError. They now fail earlier: at construction :
         # because they are no longer in AGN_RADIO_MODELS. That validation
         # lives in RadioSEDComponentConfig.__post_init__.
         wave = state.wave
@@ -552,8 +552,8 @@ class RadioSEDComponent(TemplateThreading):
             # Compute precomputed photometry if band response is available.
             precomputed = None
             if band is not None:
-                # Exact fast path. Radio is a sum of rank-1 terms — SF synchrotron,
-                # free-free, AGN jet — each a scalar amplitude times a spectral shape
+                # Exact fast path. Radio is a sum of rank-1 terms; SF synchrotron,
+                # free-free, AGN jet: each a scalar amplitude times a spectral shape
                 # fixed by the (fixed) shape parameters. The filter integral is linear,
                 # so the band flux is sum_k A_k * R_kf with R_kf integrated once at
                 # build time through the true filter transmission. Recover each A_k
@@ -578,7 +578,7 @@ class RadioSEDComponent(TemplateThreading):
 
             # The REST band (#1148): ``phot_rest_fnu`` projects at z=0, so its
             # filter samples the pivot itself, not pivot/(1+z). Same emission,
-            # different wavelengths — reusing the observed-band value here is
+            # different wavelengths: reusing the observed-band value here is
             # what made the LUT report a different quantity from the exact path.
             _rb_eff = state.derived.get("filter_restband_eff_waves")
             if _rb_eff is not None:

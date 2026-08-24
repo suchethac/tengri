@@ -6,7 +6,7 @@ Decouples inference (:mod:`tengri.inference`) from the forward model
 that a likelihood produces a scalar log-probability given (data,
 prediction); it doesn't need to import any physics module.
 
-Nothing in `tengri` consumes this protocol yet — current inference
+Nothing in `tengri` consumes this protocol yet: current inference
 reaches into ``Fitter``-internal helpers. A future pass will rewire
 them to a Likelihood implementation.
 """
@@ -40,7 +40,7 @@ class Likelihood(Protocol):
 
     Required attributes
     -------------------
-    name : str
+    name: str
         Stable identifier. Examples: ``"gaussian"``, ``"student_t"``,
         ``"gp"``, ``"composite"``.
 
@@ -87,9 +87,9 @@ class Likelihood(Protocol):
 
         Parameters
         ----------
-        prediction : mapping of str -> array
+        prediction: mapping of str -> array
             Output of :meth:`tengri.protocols.ObservationModel.predict`.
-        params : mapping of str -> array
+        params: mapping of str -> array
             Free parameters whose name starts with the likelihood's
             domain prefix (``noise_``).
 

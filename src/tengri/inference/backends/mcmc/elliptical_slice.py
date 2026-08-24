@@ -7,7 +7,7 @@ ellipses defined by the prior, guaranteeing acceptance without any
 step-size tuning.
 
 In tengri's unbounded parameter space, all parameters have effective
-N(0, I) priors — the psd_xi latent field explicitly, and bounded
+N(0, I) priors, the psd_xi latent field explicitly, and bounded
 physical parameters via the sigmoid transform. ESS with cov=I is
 therefore mathematically appropriate for the full parameter vector.
 
@@ -42,24 +42,24 @@ def run_elliptical_slice(
 
     Parameters
     ----------
-    key : PRNGKey
+    key: PRNGKey
         Random key.
-    loglikelihood_unbounded_fn : callable
+    loglikelihood_unbounded_fn: callable
         Log-likelihood function in unbounded space (no prior terms).
         ``(unbounded param dict, data_args) -> scalar``.
-    data_args : dict
+    data_args: dict
         Observed data dict (``data``, ``noise``, etc.).
-    init_params : dict
+    init_params: dict
         Initial parameters in unbounded space.
-    to_physical_fn : callable
+    to_physical_fn: callable
         Converts unbounded param dict to physical space.
-    model : Model
+    model: Model
         Forward model (stored in Posterior).
-    n_samples : int
+    n_samples: int
         Number of posterior samples to collect.
-    n_burnin : int
+    n_burnin: int
         Burn-in steps to discard.
-    verbose : bool
+    verbose: bool
         Print progress.
 
     Returns
@@ -88,7 +88,7 @@ def run_elliptical_slice(
             f"{n_burnin} burn-in, {n_samples} samples"
         )
 
-    # Log-likelihood in flat space (no prior — ESS handles N(0,I) internally)
+    # Log-likelihood in flat space (no prior, ESS handles N(0,I) internally)
     def loglik_flat(position):
         """Evaluate log-likelihood in flat parameter space."""
         return loglikelihood_unbounded_fn(unravel_fn(position), data_args)
@@ -164,11 +164,11 @@ def run_elliptical_slice_fitter(context, *, key, init_from=None, **kwargs):
 
     Parameters
     ----------
-    context : InferenceContext | Fitter
+    context: InferenceContext | Fitter
         Inference context (or Fitter, normalized on entry).
-    key : PRNGKey
+    key: PRNGKey
         Random key.
-    init_from : Posterior or None
+    init_from: Posterior or None
         Initial parameters. If None, use MAP initialization.
     **kwargs
         Passed to run_elliptical_slice (n_samples, n_burnin, verbose).

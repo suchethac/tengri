@@ -2,7 +2,7 @@
 """Transformation primitives for the observation layer.
 
 This namespace gathers the JIT-compatible functions that transform a
-predicted SED into observable space — line-spread function convolution,
+predicted SED into observable space, line-spread function convolution,
 aperture corrections, emission-line design matrices, and instrument-resolution
 helpers.
 
@@ -27,8 +27,8 @@ Examples
 
 See Also
 --------
-tengri.observation.containers : user-facing data classes
-tengri.observation.constants : module-level constants (catalogs, status flags)
+tengri.observation.containers: user-facing data classes
+tengri.observation.constants: module-level constants (catalogs, status flags)
 """
 
 from __future__ import annotations

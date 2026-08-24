@@ -25,7 +25,7 @@ from a flat set of keyword arguments without constructing each
 This is the **public-facing** orchestrator entry point for users who
 want the raw component chain without a :class:`tengri.SEDModel`.
 ``SEDModel`` itself routes every prediction through the same
-orchestrator internally — there is one forward path.
+orchestrator internally, there is one forward path.
 """
 
 from __future__ import annotations
@@ -38,7 +38,7 @@ import jax.numpy as jnp
 from tengri.components.agn.component import AGNSEDComponentConfig
 
 # Attenuator component CLASSES are resolved from _REGISTRY via the dispatch
-# seam (single dispatch, #844) — only their config dataclasses are imported here.
+# seam (single dispatch, #844), only their config dataclasses are imported here.
 from tengri.components.dust.component import (
     DustAttenuationSEDComponentConfig,
 )
@@ -50,7 +50,7 @@ from tengri.components.dust.wg00_model import (
 )
 
 # Non-stellar component CLASSES (nebular/dust/radio/xray/igm/agn) are resolved
-# from _REGISTRY via the dispatch seam (single dispatch, #844/#845) — only their
+# from _REGISTRY via the dispatch seam (single dispatch, #844/#845), only their
 # config dataclasses are imported. Stellar stays a direct import (the permanent
 # exception: rich SFH+SSP orchestrator, never registry-dispatched).
 from tengri.components.nebular.component import NebularSEDComponentConfig
@@ -164,12 +164,12 @@ def _resolve_registry_component(
 
     Parameters
     ----------
-    domain : str
+    domain: str
         Component domain (e.g., "dust_emission"). Used for error messages.
-    type_str : str
+    type_str: str
         Grammar type name, resolved via ``_EMISSION_TYPE_ALIASES`` to a
         registry key.
-    config : SEDComponentConfig, optional
+    config: SEDComponentConfig, optional
         Pre-constructed config object (not typically used for components).
     **config_kwargs
         Construction-time keyword arguments forwarded to the component's
@@ -195,7 +195,7 @@ def _resolve_registry_component(
     This seam is construction-time only, never traced through JAX. Template
     HDF5 loading (for grid components) happens on first ``apply()`` invocation.
 
-    **Contract marker**: #1521 — domain-scoped error messages.
+    **Contract marker**: #1521, domain-scoped error messages.
     """
     # Resolve grammar type → registry key via alias map
     registry_key = _EMISSION_TYPE_ALIASES.get(type_str, type_str)
@@ -258,12 +258,12 @@ class RadioQuantities(NamedTuple):
 
     Fields:
 
-    - ``l_1p4ghz`` (erg/s/Hz) — radio luminosity at 1.4 GHz, integrated
+    - ``l_1p4ghz`` (erg/s/Hz), radio luminosity at 1.4 GHz, integrated
       from ``state.derived["sed_radio"]`` at 21 cm rest-frame.
-    - ``l_thermal`` (erg/s/Hz) — free-free thermal contribution
+    - ``l_thermal`` (erg/s/Hz), free-free thermal contribution
       computed from the published ``nion`` via
       :func:`tengri.utils.sed_quantities.compute_l_radio_thermal`.
-    - ``l_nonthermal`` (erg/s/Hz) — synchrotron component
+    - ``l_nonthermal`` (erg/s/Hz), synchrotron component
       (l_1p4ghz − l_thermal).
     - ``q_ir``: FIR-radio correlation parameter from L_TIR and l_1p4ghz.
 
@@ -282,12 +282,12 @@ class XRayQuantities(NamedTuple):
 
     Fields:
 
-    - ``l_x_xrb`` (erg/s) — X-ray-binary luminosity (Lehmer 2010, 2016)
+    - ``l_x_xrb`` (erg/s), X-ray-binary luminosity (Lehmer 2010, 2016)
       computed from ``sfh_quantities.sfr_100myr`` and
       ``sfh_quantities.stellar_mass``.
-    - ``l_x_agn`` (erg/s) — AGN X-ray luminosity from the published
+    - ``l_x_agn`` (erg/s), AGN X-ray luminosity from the published
       ``L_agn_bol`` via :func:`compute_l_x_agn`.
-    - ``l_x_total`` (erg/s) — sum of the two.
+    - ``l_x_total`` (erg/s), sum of the two.
 
     """
 
@@ -302,9 +302,9 @@ class IonizingQuantities(NamedTuple):
 
     Fields:
 
-    - ``q_h`` (photons/s) — total ionizing photon production rate;
+    - ``q_h`` (photons/s), total ionizing photon production rate;
       sourced directly from ``state.derived["nion"]``.
-    - ``xi_ion`` (Hz/erg) — production efficiency q_h / νLν(1500 Å).
+    - ``xi_ion`` (Hz/erg), production efficiency q_h / νLν(1500 Å).
 
     """
 
@@ -336,7 +336,7 @@ def build_components(
     # asks the Cue backend for the full ~271-species line catalog
     # instead of the default 128 CLOUDY/FSPS subset. See #303.
     cue_full_catalog: bool = False,
-    # Shock nebular emission (MAPPINGS V) — an ADDITIVE component that
+    # Shock nebular emission (MAPPINGS V), an ADDITIVE component that
     # composes with any photoionized ``nebular_backend`` (#851). Gated by
     # the top-level ``shock={...}`` grammar group / ``Parameters(shock=True)``.
     # ``shock_norm`` selects the relative (``"frac"``) or absolute
@@ -378,13 +378,13 @@ def build_components(
     # Shape parameters of the selected attenuation law that somebody actually
     # asked for (user-set or freed), resolved from spec provenance by
     # SEDModel._build_component_chain. Empty means "nobody asked", and each
-    # law's own published default then stands — see
+    # law's own published default then stands, see
     # DustAttenuationSEDComponentConfig.live_shape_params (#1808).
     #
     # None means "no spec was consulted" and is NOT the same as empty: the
     # two-component screen keeps its historical pass-all in that case, since a
     # caller with no provenance to read cannot conclude that nobody asked
-    # (#1833). The single screen treats both alike — passing nothing is its
+    # (#1833). The single screen treats both alike, passing nothing is its
     # historical behavior.
     dust_live_shape_params: frozenset[str] | None = None,
     # Witt & Gordon (2000) screen (dust_model="wg00", FSPS dust_type=3).
@@ -408,63 +408,63 @@ def build_components(
     The component order is the **canonical pipeline order**, which any
     orchestrator-driven prediction should follow:
 
-    1. ``StellarSEDComponent`` — emits the stellar SED, publishes
+    1. ``StellarSEDComponent``, emits the stellar SED, publishes
        ``lnu_age``, ``ssp_ages_yr``, ``log_metallicity_history``,
        ``nion``, etc.
-    2. ``NebularSEDComponent`` — adds nebular emission to
+    2. ``NebularSEDComponent``, adds nebular emission to
        ``sed_intrinsic`` (no-op for the BakedIn backend).
-    3. ``AGNSEDComponent`` — adds AGN disc + torus + lines and
+    3. ``AGNSEDComponent``, adds AGN disc + torus + lines and
        publishes ``L_agn_bol``.
-    4. ``DustSEDComponent`` — applies two-component attenuation to
+    4. ``DustSEDComponent``, applies two-component attenuation to
        the per-age cube, integrates absorbed luminosity, adds IR
        re-emission, publishes ``L_ir``.
-    5. ``RadioSEDComponent`` — synchrotron, reads ``L_ir``,
+    5. ``RadioSEDComponent``, synchrotron, reads ``L_ir``,
        ``log_mstar``, ``L_agn_bol`` with documented fallbacks.
-    6. ``XRaySEDComponent`` — XRBs + AGN corona, reads ``sfr``,
+    6. ``XRaySEDComponent``, XRBs + AGN corona, reads ``sfr``,
        ``log_mstar``, ``L_agn_bol``.
-    7. ``IGMSEDComponent`` — multiplies ``sed_observed`` by Inoue+2014
+    7. ``IGMSEDComponent``, multiplies ``sed_observed`` by Inoue+2014
        transmission (no-op if no observed-frame SED yet).
 
     Parameters
     ----------
-    ssp_data : SSPData
+    ssp_data: SSPData
         Stellar-population templates, required by stellar.
-    sfh_model : str
-        Registered SFH model — currently ``"tsnorm"`` or ``"dpl"``.
-    field : bool
+    sfh_model: str
+        Registered SFH model, currently ``"tsnorm"`` or ``"dpl"``.
+    field: bool
         Add a stochastic GP field on top of the mean SFH.
-    metallicity_model : str
+    metallicity_model: str
         ``"delta"`` (constant Z) or ``"ramp"`` (linear log10(Z) ramp).
-    n_grid : int
+    n_grid: int
         SFH lookback-time grid resolution.
-    lgmet_scatter : float
+    lgmet_scatter: float
         Gaussian σ in log10(Z) for the DSPS triweight kernel [dex].
-    age_kernel : str or None
+    age_kernel: str or None
         SFH→SSP age-weight kernel: ``"cic"`` (dense cloud-in-cell integrand),
         ``"dsps"`` (DSPS's histogram kernel), or ``None`` (default) to
         auto-select. See :class:`~tengri.components.stellar.component.StellarSEDComponentConfig`
         for the accuracy/cost tradeoff (#964).
-    nebular_backend : str | None
+    nebular_backend: str | None
         ``"baked_in"`` (default), ``"cloudy_grid"``, ``"cb19"``,
         ``"mappings"``, ``"cue"``, ``"shock"``, or ``None`` to omit
         nebular entirely.
-    nebular_backend_instance : object | None
+    nebular_backend_instance: object | None
         Pre-constructed backend object for ``cloudy_grid`` / ``cb19`` /
         ``mappings`` / ``cue`` / ``shock`` (which need HDF5 / weights
         paths). Required for those backends.
-    agn_model : str | None
+    agn_model: str | None
         AGN model registry key (``"simple"``, ``"standard"``, …) or
         ``None`` to omit AGN.
-    dust_law_bc, dust_law_diff : str
+    dust_law_bc, dust_law_diff: str
         Birth-cloud / diffuse-ISM attenuation-law registry keys.
-    dust_law_neb : str or None
+    dust_law_neb: str or None
         Nebular birth-cloud attenuation-law key. ``None`` inherits
         ``dust_law_bc`` (nebular reddened like the youngest stars).
-    dust_emission_model : str
+    dust_emission_model: str
         IR emission template registry key.
-    use_dust : bool
+    use_dust: bool
         If ``False`` no dust component is added (no attenuation, no IR).
-    use_radio, use_xray, use_igm : bool
+    use_radio, use_xray, use_igm: bool
         Add the corresponding adapter to the chain.
 
     Returns
@@ -475,7 +475,7 @@ def build_components(
 
     Notes
     -----
-    **JIT-compatible**: yes — the returned components flow through
+    **JIT-compatible**: yes, the returned components flow through
     ``jax.jit`` once :class:`tengri.protocols.ForwardState` is registered
     as a pytree.
 
@@ -484,7 +484,7 @@ def build_components(
     """
     components: list[SEDComponent] = []
 
-    # 1. Stellar (always required — it publishes the cross-component
+    # 1. Stellar (always required, it publishes the cross-component
     #    inputs that every later adapter reads).
     components.append(
         StellarSEDComponent(
@@ -502,7 +502,7 @@ def build_components(
         )
     )
 
-    # 2. Dust (optional) — runs BEFORE AGN so the AGN component can
+    # 2. Dust (optional), runs BEFORE AGN so the AGN component can
     # read ``state.derived["L_absorbed"]`` for the CIGALE-style
     # ``agn_power = L_abs × fracAGN/(1-fracAGN)`` cross-component
     # coupling (see ``agn/component.py`` and ``agn/_params.py:
@@ -557,7 +557,7 @@ def build_components(
         # Energy-balanced IR re-emission. The two-component attenuator re-emits
         # inside its own apply(); the single-screen path publishes L_ir (absorbed
         # UV/optical/NIR luminosity) and relies on a downstream emission component
-        # to re-radiate it — without one, L_ir is computed but never re-emitted,
+        # to re-radiate it, without one, L_ir is computed but never re-emitted,
         # silently dropping the dust IR (#565). The emission component reads L_ir
         # as an optional input and produces sed_dust_ir; the topological sort places
         # it after attenuation. Route through the same single dispatch seam. WG00
@@ -597,7 +597,7 @@ def build_components(
             )
         )
 
-    # 3b. Shock (optional, #851) — MAPPINGS V shock emission as a separate
+    # 3b. Shock (optional, #851), MAPPINGS V shock emission as a separate
     # additive component. Composes with the photoionized nebular backend
     # above: both accumulate into ``sed_intrinsic`` (so both are reddened by
     # the dust screen) and publish distinct diagnostic keys (``sed_nebular``
@@ -607,7 +607,7 @@ def build_components(
 
         # ShockNebular is a SEDModelComponent (config lives as a class
         # attribute, not a constructor arg), so resolve the class through the
-        # seam and set the per-model config as an instance attribute — the same
+        # seam and set the per-model config as an instance attribute, the same
         # post-construction configuration pattern the seam uses for ``name``.
         shock_component_obj = _resolve_registry_component("nebular", "shock")
         shock_component_obj.config = ShockNebularConfig(
@@ -617,12 +617,12 @@ def build_components(
         )
         components.append(shock_component_obj)
 
-    # 4. AGN (optional) — placed after dust so ``state.derived["L_absorbed"]``
+    # 4. AGN (optional), placed after dust so ``state.derived["L_absorbed"]``
     # is available for the CIGALE-coupled ``agn_ir_frac`` flow.
     if agn_model is not None:
         # NOTE (#721): ``dust_frac_agn`` (Dale2014's embedded quasar template) and
         # the composable AGN's ``agn_ir_frac`` are two distinct AGN surfaces, both
-        # keyed off the same stellar ``L_absorbed`` — using both with positive
+        # keyed off the same stellar ``L_absorbed``, using both with positive
         # values double-counts AGN MIR. A *value-aware* guard cannot live here:
         # ``build_components`` sees only structural selectors, not the resolved
         # ``dust_frac_agn``/``agn_ir_frac`` values (which may be FREE), so a
@@ -634,9 +634,9 @@ def build_components(
         # (FREE, or Fixed > 0), emitting a filterable ``AGNDustDoubleCountWarning``
         # (ADR-0018 §5).
         # Dispatch through the single ``_REGISTRY`` seam, like every other
-        # domain (nebular/radio/xray/dust). AGN is a *composite* — one
+        # domain (nebular/radio/xray/dust). AGN is a *composite*, one
         # component whose config selects the disc/torus/nlr/blr/feii/atten
-        # sub-blocks (ADR-0018) — but its top-level dispatch is still a single
+        # sub-blocks (ADR-0018), but its top-level dispatch is still a single
         # registered component (``_REGISTRY["agn"] = AGNSEDComponent``), so it
         # is routed and manifest-guarded uniformly (#846).
         components.append(
@@ -727,8 +727,8 @@ def build_components(
     # ADR-0006: derive the dependency-respecting order from declared
     # publishes/requires. The sort is stable (preserves input order
     # among components with no ordering constraint), so the canonical
-    # pipeline reproduces the previous hand-coded order byte-for-byte —
-    # verified by tests/contract/test_topological_sort.py. This cited
+    # pipeline reproduces the previous hand-coded order byte-for-byte,     # verified by
+    # tests/contract/test_topological_sort.py. This cited
     # tests/integration/test_derived_contract_snapshots.py until that file was
     # deleted in #1029; the SED-output half of the check went with it, so the
     # surviving guarantee is the ordering one.
@@ -777,7 +777,7 @@ def state_to_sfh_quantities(state: Any):
 
     Parameters
     ----------
-    state : ForwardState
+    state: ForwardState
         Output of :func:`run_components` on a chain that includes
         :class:`StellarSEDComponent`.
 
@@ -795,7 +795,7 @@ def state_to_sfh_quantities(state: Any):
     ``log_metallicity_history``. ``ssfr`` uses the **surviving** mass
     in the denominator to match the legacy convention.
 
-    **JIT-compatible**: yes — pure JAX.
+    **JIT-compatible**: yes, pure JAX.
     """
     from tengri.forward.prediction import SFHQuantities
 
@@ -806,7 +806,7 @@ def state_to_sfh_quantities(state: Any):
     # table, rather than ``log_mstar``'s silent fallback to the formed mass (which
     # asserts zero mass loss). ``predict_sfh_quantities`` already returned NaN
     # here; this path returned the formed mass, and the two had drifted apart
-    # under one name (#1131). sSFR below keeps the fallback on purpose — see there.
+    # under one name (#1131). sSFR below keeps the fallback on purpose, see there.
     log_mstar_surviving = jnp.asarray(derived["log_mstar_surviving"])
     stellar_mass_surviving = jnp.power(10.0, log_mstar_surviving)
     stellar_mass = jnp.power(10.0, log_mstar_formed)
@@ -815,7 +815,7 @@ def state_to_sfh_quantities(state: Any):
     sfr_history = jnp.asarray(derived["sfr_history"])
     log_z_history = jnp.asarray(derived["log_metallicity_history"])
 
-    # Mass-weighted age on the SSP age grid — the stars the SED actually contains.
+    # Mass-weighted age on the SSP age grid, the stars the SED actually contains.
     # Integrating the raw SFH grid instead counts mass the SED truncates (an SFH
     # can form stars before the Big Bang at the model's redshift), and the two
     # answers differed by ~4.6% under this one name until #1131. Shared with the
@@ -827,12 +827,12 @@ def state_to_sfh_quantities(state: Any):
         jnp.asarray(derived["age_weights"]), jnp.asarray(derived["ssp_ages_yr"])
     )
 
-    # Mass per SFH bin (∫ SFR dt locally) — the weight for the mass-weighted metallicity.
+    # Mass per SFH bin (∫ SFR dt locally), the weight for the mass-weighted metallicity.
     bin_widths = jnp.gradient(sfh_lbt)
     bin_mass = jnp.maximum(sfr_history * bin_widths, 0.0)
     bin_mass_total = jnp.maximum(jnp.sum(bin_mass), _TINY)
-    # ``log_metallicity_history`` is absolute log10(Z) — the SSP grid's
-    # convention — and every user-facing metallicity is log10(Z/Zsun), so the
+    # ``log_metallicity_history`` is absolute log10(Z), the SSP grid's
+    # convention, and every user-facing metallicity is log10(Z/Zsun), so the
     # weighted mean is converted before it leaves. This publish point and
     # ``_mass_weighted_metallicity_fn`` are separate implementations of the
     # same average, pinned bit-equal by test_property_catalog, so they have to
@@ -865,13 +865,13 @@ def state_to_sed_quantities(state: Any):
     UV/break diagnostics from ``state.sed_intrinsic`` and
     ``state.wave``. Fields that the orchestrator does not yet publish
     or that require luminosity-weighting infrastructure are returned
-    as ``NaN`` — callers that need them should keep using
+    as ``NaN``, callers that need them should keep using
     :meth:`SEDModel.predict_sed_quantities` until the orchestrator
     bridge is extended.
 
     Parameters
     ----------
-    state : ForwardState
+    state: ForwardState
         Output of :func:`run_components` on a chain that includes
         :class:`StellarSEDComponent` (and ideally
         :class:`DustSEDComponent` for ``l_tir`` / ``l_dust_absorbed``).
@@ -887,7 +887,7 @@ def state_to_sed_quantities(state: Any):
 
     Notes
     -----
-    **JIT-compatible**: yes — pure JAX.
+    **JIT-compatible**: yes, pure JAX.
     **Units**: bolometric luminosities returned in Lsun (matches the
     legacy NamedTuple convention).
     """
@@ -919,7 +919,7 @@ def state_to_sed_quantities(state: Any):
     l_bol = jnp.abs(compute_bolometric_luminosity(sed, wave))
 
     # Dust-absorbed luminosity from the orchestrator's energy-balance
-    # bookkeeping — exact match for legacy ``compute_l_dust_absorbed``.
+    # bookkeeping, exact match for legacy ``compute_l_dust_absorbed``.
     # Reads the ``log_L_ir`` companion when the chain publishes it: the linear
     # ``L_absorbed`` is ~3.6e43 erg/s and is ``inf`` in float32, while the
     # answer here (~9.5e9 Lsun) is representable, and the attenuator computes
@@ -928,20 +928,20 @@ def state_to_sed_quantities(state: Any):
     l_dust_absorbed = derived_luminosity_lsun(derived, "L_absorbed", "log_L_ir")
     # L_TIR uses the legacy semantics (integration of the SED over the
     # 8–1000 μm window) for parity with ``predict_sed_quantities``,
-    # not the orchestrator's energy-balance ``L_ir`` derived key —
-    # the two agree when the wavelength grid extends to FIR but
+    # not the orchestrator's energy-balance ``L_ir`` derived key,     # the two agree when the
+    # wavelength grid extends to FIR but
     # differ on UV/optical-only grids (where the IR window is empty
     # and the energy-balance value lives outside the SED).
     l_tir = compute_l_tir(sed, wave)
 
-    # UV / break diagnostics — pull from the legacy helpers, which
+    # UV / break diagnostics, pull from the legacy helpers, which
     # take ``(sed, wave)`` arrays directly.
     fuv = compute_fuv_flux(sed, wave)
     nuv = compute_nuv_flux(sed, wave)
 
     # IRX against the monochromatic 1600 A anchor (Meurer+99), the same
     # definition as the ``irx`` property. This used to read
-    # ``compute_irx(l_tir, fuv * 2.998e15 / 1500.0)`` — the speed of light 1000x
+    # ``compute_irx(l_tir, fuv * 2.998e15 / 1500.0)``, the speed of light 1000x
     # too small in [A/s], inflating IRX by exactly 3 dex. ``C_AA`` was already
     # imported in this very function. See #1131; the band-averaged FUV variant is
     # published separately as ``irx_fuv``.
@@ -970,7 +970,7 @@ def state_to_sed_quantities(state: Any):
     # ``L_age`` (bolometric luminosity per SSP age bin, erg/s) and
     # ``ssp_ages_yr`` (n_age,). For metallicity we use the SFH-grid
     # log_metallicity_history evaluated at each SSP age via linear
-    # interpolation — the metallicity ramp is monotonic in lookback
+    # interpolation, the metallicity ramp is monotonic in lookback
     # time so this is sound for the supported (delta, ramp) modes.
     #
     # The weights are used only inside ``sum(x*w)/sum(w)``, so any common
@@ -1098,7 +1098,7 @@ def state_to_xray_quantities(state: Any) -> XRayQuantities:
     l_x_xrb = compute_l_x_xrb(sfr, mstar)
 
     L_agn_bol = jnp.asarray(derived.get("L_agn_bol", 0.0))
-    # ``compute_l_x_agn`` uses log10 internally — protect against the
+    # ``compute_l_x_agn`` uses log10 internally, protect against the
     # zero-AGN case where the conversion would produce -inf/NaN.
     l_x_agn = jnp.where(L_agn_bol > 0.0, compute_l_x_agn(jnp.maximum(L_agn_bol, _TINY)), 0.0)
 
@@ -1141,7 +1141,7 @@ def state_to_sed_components(state: Any) -> dict:
     r"""Convert :class:`ForwardState` → per-component SED decomposition.
 
     Reads the per-component SED arrays every adapter publishes into
-    ``state.derived`` under the ADR-0009 typed contract — the single
+    ``state.derived`` under the ADR-0009 typed contract, the single
     source both :attr:`Prediction.sed.components
     <tengri.forward.prediction.SEDProperties.components>` and
     :meth:`Posterior.sed_components
@@ -1149,15 +1149,15 @@ def state_to_sed_components(state: Any) -> dict:
 
     Parameters
     ----------
-    state : ForwardState
+    state: ForwardState
         Output of :func:`run_components` on any component chain
         (missing components decompose to zeros).
 
     Returns
     -------
     dict
-        ``wavelength`` — rest-frame grid [Angstrom], shape ``(n_wave,)`` —
-        plus per-component rest-frame :math:`L_\nu` [erg/s/Hz], each of
+        ``wavelength``, rest-frame grid [Angstrom], shape ``(n_wave,)``,         plus
+        per-component rest-frame :math:`L_\nu` [erg/s/Hz], each of
         shape ``(n_wave,)``:
 
         - ``sed_total``: accumulated post-chain total
@@ -1168,12 +1168,12 @@ def state_to_sed_components(state: Any) -> dict:
           (``sed_dust_attenuated``; falls back to intrinsic when no
           dust adapter ran);
         - ``sed_nebular``, ``sed_shock``, ``sed_dust_ir``, ``sed_agn``,
-          ``sed_radio``, ``sed_xray`` — each component's own published
+          ``sed_radio``, ``sed_xray``, each component's own published
           contribution (zeros when the component is absent).
 
     Notes
     -----
-    **JIT-compatible**: yes — pure reads of published arrays with
+    **JIT-compatible**: yes, pure reads of published arrays with
     ``jnp`` fallbacks; no Python branching on traced values.
     """
     derived = state.derived
@@ -1224,7 +1224,7 @@ def state_to_emission_lines(state: Any):
     attenuation regime selected by the SEDModel's ``_neb_dust_mode``
     when ``predict_emission_lines`` routes through
     :meth:`SEDModel.predict_emission_lines`. Direct callers of this
-    helper see the *intrinsic* line luminosities — apply
+    helper see the *intrinsic* line luminosities, apply
     :func:`tengri.forward.emission_helpers.attenuate_emission` (or call
     via ``model.predict_emission_lines``) for the observed values.
 
@@ -1232,22 +1232,22 @@ def state_to_emission_lines(state: Any):
     -------
     EmissionLines
         Headline scalars (``halpha``, ``hbeta``, ``oiii_5007``, ...) plus
-        the full ``all_waves`` / ``all_lums`` arrays — all in **[erg/s]**,
+        the full ``all_waves`` / ``all_lums`` arrays, all in **[erg/s]**,
         passed through unconverted from ``state.derived["line_lums"]``, whose
         ``DerivedKey`` declares that unit and which
         :meth:`~tengri.forward.sed_model.SEDModel.predict_line_fluxes` consumes
         as such.
 
-        This said "Lsun" until #1559. It was wrong then too — the bridge has
-        never converted anything — and it was the documentation three backends
+        This said "Lsun" until #1559. It was wrong then too, the bridge has
+        never converted anything, and it was the documentation three backends
         were written against, which is how they came to publish [Lsun] into an
         [erg/s] key and emit line fluxes a factor 3.839e33 too faint.
 
     Notes
     -----
     Returns all-NaN headlines and empty ``all_*`` arrays when the
-    chain's nebular backend did not publish a line catalog (BakedIn —
-    emission baked into SSP grid; shock — publishes a continuous line
+    chain's nebular backend did not publish a line catalog (BakedIn,     emission baked into SSP
+    grid; shock, publishes a continuous line
     SED, not a discrete list). For those cases callers should query
     ``state.derived["sed_nebular"]`` and perform their own narrow-band
     integration.

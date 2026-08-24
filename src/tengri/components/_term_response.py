@@ -1,7 +1,7 @@
 # SPDX-License-Identifier: BSD-3-Clause
 """Shared accessor for the build-time term band response of an additive emitter.
 
-An additive emitter (dust IR, X-ray, radio) is a *sum of rank-1 terms* — each a
+An additive emitter (dust IR, X-ray, radio) is a *sum of rank-1 terms*: each a
 scalar amplitude times a spectral shape fixed by the emitter's shape parameters.
 Because the filter integral is linear, each term's per-filter response is a
 build-time constant and the band flux collapses to ``sum_k A_k * R_kf``. The
@@ -26,18 +26,18 @@ def term_band_response(template_data: Any, name: str) -> Mapping[str, Any] | Non
 
     Parameters
     ----------
-    template_data : Any
+    template_data: Any
         The threaded template data. Any non-mapping value (including ``None``,
         the common case when the model was built without ``approx=WavePrecomp``)
         yields ``None``.
-    name : str
-        Emitter namespace — ``"xray"`` or ``"radio"``.
+    name: str
+        Emitter namespace: ``"xray"`` or ``"radio"``.
 
     Returns
     -------
     mapping or None
         ``{"R": (n_terms, n_filters), "lam_ref": (n_terms,), "S_ref": (n_terms,)}``,
-        or ``None`` when no response was built — in which case the caller must keep
+        or ``None`` when no response was built: in which case the caller must keep
         the exact per-call dense filter integral. Term order matches the emitter's
         ``emission_terms`` dict order.
     """

@@ -34,8 +34,8 @@ __all__ = [
 
 # Hydrogen recombination coefficients [m^3/s] at T_e = 10^4 K (Ferland 1980),
 # matching CIGALE's ``pcigale/sed_modules/nebular.py`` exactly:
-#   ALPHA_B : Case B total recombination coefficient (sum over levels n >= 2).
-#   ALPHA_1 : direct recombination to the ground state (n = 1), i.e.
+#   ALPHA_B: Case B total recombination coefficient (sum over levels n >= 2).
+#   ALPHA_1: direct recombination to the ground state (n = 1), i.e.
 #             alpha_1 = alpha_A - alpha_B. Photons emitted in these
 #             recombinations re-ionize the gas and do not escape, so they
 #             enter the ionization balance via the k-factor below.
@@ -67,14 +67,14 @@ def lyc_dust_escape_factor(f_esc: jnp.ndarray | float, f_dust: jnp.ndarray | flo
 
     Parameters
     ----------
-    f_esc : array_like or float
+    f_esc: array_like or float
         Ionizing photon escape fraction [dimensionless, in [0, 1]].
-    f_dust : array_like or float
+    f_dust: array_like or float
         Ionizing photon dust-absorption fraction [dimensionless, in [0, 1]].
 
     Returns
     -------
-    k : ndarray
+    k: ndarray
         Nebular emission scaling factor [dimensionless, in [0, 1]].
         When ``f_esc + f_dust = 0`` returns 1.0 (no photon loss).
         When ``f_esc + f_dust -> 1`` returns -> 0 (complete photon loss).
@@ -110,8 +110,8 @@ def lyc_dust_escape_factor(f_esc: jnp.ndarray | float, f_dust: jnp.ndarray | flo
     f_dust = jnp.asarray(f_dust)
 
     # Clamp f_esc + f_dust to [0, 1]. The denominator ``1 + (α1/αB)·f`` is
-    # strictly positive for any ``f ∈ [0, 1]`` (it ranges [1, ~1.597]), so —
-    # unlike a denominator-vanishing case — no ``1 - ε`` margin is needed.
+    # strictly positive for any ``f ∈ [0, 1]`` (it ranges [1, ~1.597]), so:
+    # unlike a denominator-vanishing case: no ``1 - ε`` margin is needed.
     # Clamping to a hard 1.0 lets the numerator ``(1 - f)`` reach exactly 0 at
     # full photon loss (f_esc + f_dust = 1), so nebular emission vanishes
     # cleanly instead of leaving a ~6e-9 residual that, scaled by bright line

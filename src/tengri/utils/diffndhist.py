@@ -5,7 +5,7 @@ Vendored from diffsky (Hearin et al.), commit 2024-xx:
 https://github.com/ArgonneCPAC/diffsky/blob/main/diffsky/diffndhist.py
 
 Provides smooth, differentiable histogram operations using the triweight
-kernel — the same kernel used throughout tengri for grid interpolation
+kernel: the same kernel used throughout tengri for grid interpolation
 (see ``utils/interpolation.py``).  While interpolation maps a query point
 to a grid value, histogramming maps a cloud of data points to bin counts.
 
@@ -91,13 +91,13 @@ def tw_ndhist(
 
     Parameters
     ----------
-    nddata : array, shape (npts, ndim)
+    nddata: array, shape (npts, ndim)
         Data points in N-dimensional space.
-    ndsig : array, shape (npts, ndim)
+    ndsig: array, shape (npts, ndim)
         Triweight scatter for each point in each dimension.
-    ndbins_lo : array, shape (nbins, ndim)
+    ndbins_lo: array, shape (nbins, ndim)
         Lower bound of each bin in each dimension.
-    ndbins_hi : array, shape (nbins, ndim)
+    ndbins_hi: array, shape (nbins, ndim)
         Upper bound of each bin in each dimension.
 
     Returns
@@ -146,15 +146,15 @@ def tw_ndhist_weighted(
 
     Parameters
     ----------
-    nddata : array, shape (npts, ndim)
+    nddata: array, shape (npts, ndim)
         Data points in N-dimensional space.
-    ndsig : array, shape (npts, ndim)
+    ndsig: array, shape (npts, ndim)
         Triweight scatter for each point in each dimension.
-    ydata : array, shape (npts,)
+    ydata: array, shape (npts,)
         Quantity to sum within each bin.
-    ndbins_lo : array, shape (nbins, ndim)
+    ndbins_lo: array, shape (nbins, ndim)
         Lower bound of each bin in each dimension.
-    ndbins_hi : array, shape (nbins, ndim)
+    ndbins_hi: array, shape (nbins, ndim)
         Upper bound of each bin in each dimension.
 
     Returns

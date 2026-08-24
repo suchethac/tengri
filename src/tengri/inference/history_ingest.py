@@ -3,7 +3,7 @@
 
 The sibling of :mod:`tengri.inference.catalog_ingest`. That module turns an
 observed flux table into contiguous validated arrays; this one does the same for
-the *records* a simulation supplies — SFR(t) and, optionally, Z(t) — so
+the *records* a simulation supplies, SFR(t) and, optionally, Z(t), so
 :meth:`tengri.Catalog.from_histories` validates once, at the boundary, before
 anything compiles.
 
@@ -17,7 +17,7 @@ to the forward model, and each is measured in the #1677 trace:
   the edge case.
 * **Units.** A snapshot stores metallicity as a mass fraction :math:`Z`, not as
   :math:`\\log_{10}(Z/Z_\\odot)`. ``Z = 2e-4`` is a legal ``logzsol`` value
-  (1.0 :math:`Z_\\odot`) and the true value is 0.014 :math:`Z_\\odot` — a factor
+  (1.0 :math:`Z_\\odot`) and the true value is 0.014 :math:`Z_\\odot`, a factor
   of ~70, accepted without complaint. ``met_unit=`` lets a caller declare the
   convention, but it does not close the hole by itself: a mass fraction is
   *in-grid* when read as log10(Z/Zsun), so the range check cannot see it. The
@@ -57,9 +57,9 @@ __all__ = [
 #: Accepted values of ``met_unit``, mapped to a one-line description. The keys
 #: are the contract; :func:`met_to_logzsol` is the only place they are consumed.
 MET_UNITS = {
-    "logzsol": "log10(Z/Zsun) — tengri's user-facing metallicity unit",
-    "log_z_abs": "log10(Z) absolute — the SSP grid's own convention",
-    "z_mass_fraction": "Z, the metal mass fraction — what a simulation snapshot stores",
+    "logzsol": "log10(Z/Zsun), tengri's user-facing metallicity unit",
+    "log_z_abs": "log10(Z) absolute, the SSP grid's own convention",
+    "z_mass_fraction": "Z, the metal mass fraction, what a simulation snapshot stores",
 }
 
 #: Accepted values of ``on_out_of_grid``.
@@ -72,7 +72,7 @@ ON_OUT_OF_GRID = ("raise", "warn", "ignore")
 _Z_FLOOR = 0.0
 
 #: Upper edge of the log10(Z/Zsun) band that reads as a mass fraction. 0.1 dex
-#: above solar is 1.26 Zsun, and covers metal mass fractions up to Z = 0.1 —
+#: above solar is 1.26 Zsun, and covers metal mass fractions up to Z = 0.1,
 #: above anything a simulation snapshot holds. See
 #: :func:`_check_unit_plausibility` for why the band, not the magnitude, is the
 #: discriminator.
@@ -84,27 +84,27 @@ class HistoryArrays(NamedTuple):
 
     Attributes
     ----------
-    t_gyr : ndarray, shape (N, n_t)
+    t_gyr: ndarray, shape (N, n_t)
         Cosmic time [Gyr], strictly increasing along axis 1. A shared 1-D grid
         has already been broadcast to per-galaxy rows.
-    sfr : ndarray, shape (N, n_t)
+    sfr: ndarray, shape (N, n_t)
         Star formation rate [Msun/yr] at those times, finite and non-negative.
-    met : ndarray, shape (N, n_t) or None
-        **Stellar** metallicity history as log10(Z/Zsun) — the Z each generation
+    met: ndarray, shape (N, n_t) or None
+        **Stellar** metallicity history as log10(Z/Zsun), the Z each generation
         of stars formed from, which selects the SSP templates. Converted at
         ingest so exactly one convention leaves this module. ``None`` when no
         history was supplied.
-    met_gas : ndarray, shape (N,) or None
-        **Gas-phase** metallicity at the observed epoch, log10(Z/Zsun) — the Z
+    met_gas: ndarray, shape (N,) or None
+        **Gas-phase** metallicity at the observed epoch, log10(Z/Zsun), the Z
         of the ionized gas, which drives nebular emission. A per-galaxy scalar
         rather than a history: nebular emission is powered by stars younger than
         ~10 Myr, so only the present-day value is observable. ``None`` when not
         supplied, in which case the model's own ``neb_logZ_gas`` applies.
-    n_galaxies : int
+    n_galaxies: int
         Number of galaxies, N.
-    n_t : int
+    n_t: int
         Number of history nodes.
-    mass_formed : ndarray, shape (N,)
+    mass_formed: ndarray, shape (N,)
         Stellar mass formed by trapezoidal integration of the history [Msun].
         Carried because the out-of-grid diagnostic is mass-weighted, and a
         caller comparing against a simulation's own catalog mass wants the
@@ -125,9 +125,9 @@ def met_to_logzsol(met, met_unit):
 
     Parameters
     ----------
-    met : array_like
+    met: array_like
         Metallicity values in ``met_unit``. Any shape.
-    met_unit : str
+    met_unit: str
         One of :data:`MET_UNITS`.
 
     Returns
@@ -143,7 +143,7 @@ def met_to_logzsol(met, met_unit):
 
     Notes
     -----
-    **JIT-compatible**: no — numpy, and it raises on bad input by design.
+    **JIT-compatible**: no, numpy, and it raises on bad input by design.
 
     The absolute offset is ``LOG10_ZSUN = -1.848`` (Asplund 2009, Zsun = 0.0142),
     the same constant ``_tabulated_lgmet_on_ssp_ages`` adds when it lifts
@@ -198,9 +198,9 @@ def _check_unit_plausibility(logzsol, met_unit):
 
     Parameters
     ----------
-    logzsol : ndarray, shape (N, n_t)
+    logzsol: ndarray, shape (N, n_t)
         The **converted** history [log10(Z/Zsun)].
-    met_unit : str
+    met_unit: str
         The unit the caller declared, quoted back in the message.
 
     Warns
@@ -210,7 +210,7 @@ def _check_unit_plausibility(logzsol, met_unit):
 
     Notes
     -----
-    **JIT-compatible**: no — numpy diagnostic at ingest.
+    **JIT-compatible**: no, numpy diagnostic at ingest.
 
     This exists because ``met_unit=`` alone does not close the units hole, which
     was measured: the SSP-grid check cannot catch a mass fraction, since a small
@@ -218,7 +218,7 @@ def _check_unit_plausibility(logzsol, met_unit):
     grid. Dynamic range is the discriminator, not magnitude.
 
     Running on the converted values is what keeps this free of false alarms for
-    a caller who did declare ``z_mass_fraction`` — those convert to roughly
+    a caller who did declare ``z_mass_fraction``, those convert to roughly
     :math:`-2 \\ldots 0` and are nowhere near the band.
     """
     finite = logzsol[np.isfinite(logzsol)]
@@ -226,7 +226,7 @@ def _check_unit_plausibility(logzsol, met_unit):
         return
     lo, hi = float(finite.min()), float(finite.max())
     warn_measured(
-        f"every metallicity node lies in ({lo:g}, {hi:g}) log10(Z/Zsun) — a span of "
+        f"every metallicity node lies in ({lo:g}, {hi:g}) log10(Z/Zsun), a span of "
         f"{hi - lo:.3f} dex entirely just above solar, read as met_unit={met_unit!r}. "
         f"That is the signature of a metal mass fraction Z taken for log10(Z/Zsun): "
         f"chemical enrichment moves Z(t) by orders of magnitude over cosmic time, so a "
@@ -248,9 +248,9 @@ def _mass_weights(t_gyr, sfr):
 
     Parameters
     ----------
-    t_gyr : ndarray, shape (N, n_t)
+    t_gyr: ndarray, shape (N, n_t)
         Cosmic time [Gyr], strictly increasing along axis 1.
-    sfr : ndarray, shape (N, n_t)
+    sfr: ndarray, shape (N, n_t)
         Star formation rate [Msun/yr].
 
     Returns
@@ -261,7 +261,7 @@ def _mass_weights(t_gyr, sfr):
 
     Notes
     -----
-    **JIT-compatible**: no — numpy, diagnostic only, never on the forward path.
+    **JIT-compatible**: no, numpy, diagnostic only, never on the forward path.
 
     .. math::
 
@@ -295,7 +295,7 @@ def _require_finite(name, arr, unit):
     where = f"galaxy {first[0]}, node {first[1]}" if len(first) == 2 else f"index {first[0]}"
     raise ValueError(
         f"{name} has {int(bad.sum())} non-finite entries {unit}; first at {where}. "
-        f"NaN survives every comparison silently — a NaN SFR passes the "
+        f"NaN survives every comparison silently, a NaN SFR passes the "
         f"non-negativity check, and a NaN metallicity node was measured to leave "
         f"the predicted flux bit-identical, i.e. dropped without a word. Replace "
         f"or drop those nodes before ingest."
@@ -307,14 +307,14 @@ def _check_ssp_grid(logzsol, mass_w, ssp_lgmet, policy):
 
     Parameters
     ----------
-    logzsol : ndarray, shape (N, n_t)
+    logzsol: ndarray, shape (N, n_t)
         Metallicity history [log10(Z/Zsun)].
-    mass_w : ndarray, shape (N, n_t)
+    mass_w: ndarray, shape (N, n_t)
         Per-node stellar mass [Msun] from :func:`_mass_weights`, used only to
         report how much of the history the clamp would touch.
-    ssp_lgmet : array_like, shape (n_met,)
+    ssp_lgmet: array_like, shape (n_met,)
         The SSP library's metallicity grid, absolute log10(Z).
-    policy : {"raise", "warn", "ignore"}
+    policy: {"raise", "warn", "ignore"}
         What to do when nodes fall outside.
 
     Raises
@@ -329,7 +329,7 @@ def _check_ssp_grid(logzsol, mass_w, ssp_lgmet, policy):
 
     Notes
     -----
-    **JIT-compatible**: no — numpy validation, eager by design.
+    **JIT-compatible**: no, numpy validation, eager by design.
 
     Every node is checked, including nodes where the SFR is zero. That looks
     over-strict and is not: ``_tabulated_lgmet_on_ssp_ages`` **interpolates**
@@ -413,31 +413,31 @@ def ingest_histories(
 
     Parameters
     ----------
-    t_gyr : array_like, shape (n_t,) or (N, n_t)
+    t_gyr: array_like, shape (n_t,) or (N, n_t)
         Cosmic time [Gyr], strictly increasing. A 1-D grid is shared by every
         galaxy and broadcast.
-    sfr : array_like, shape (N, n_t)
+    sfr: array_like, shape (N, n_t)
         Star formation rate [Msun/yr]. Finite and non-negative.
-    met : array_like, shape (n_t,) or (N, n_t), optional
-        **Stellar** metallicity history in ``met_unit`` at the same nodes — the
+    met: array_like, shape (n_t,) or (N, n_t), optional
+        **Stellar** metallicity history in ``met_unit`` at the same nodes, the
         Z each generation of stars formed from. A 1-D history is shared and
         broadcast, the same way ``t_gyr`` is: one chemical-evolution track
         across many mass scalings is a common simulation case.
-    met_gas : array_like, shape (N,), (n_t,) or (N, n_t), optional
+    met_gas: array_like, shape (N,), (n_t,) or (N, n_t), optional
         **Gas-phase** metallicity in ``met_unit``, the Z of the ionized gas that
         drives nebular emission. A separate physical quantity from ``met``, and
         settable independently. Given as a track, the last node is taken as the
-        observed epoch — nebular emission comes from stars younger than ~10 Myr,
+        observed epoch, nebular emission comes from stars younger than ~10 Myr,
         so only the present-day value is observable.
-    met_unit : str, default "logzsol"
+    met_unit: str, default "logzsol"
         The unit ``met`` **and** ``met_gas`` arrive in. One of :data:`MET_UNITS`.
         A snapshot stores both the same way, so one declaration covers both.
-    on_out_of_grid : {"raise", "warn", "ignore"}, default "raise"
+    on_out_of_grid: {"raise", "warn", "ignore"}, default "raise"
         What to do when a metallicity node falls outside the SSP grid, where the
         lookup would silently clip.
-    ssp_lgmet : array_like, shape (n_met,), optional
+    ssp_lgmet: array_like, shape (n_met,), optional
         The SSP library's absolute log10(Z) grid. When ``None`` the grid check is
-        skipped — there is nothing to check against.
+        skipped, there is nothing to check against.
 
     Returns
     -------
@@ -457,12 +457,12 @@ def ingest_histories(
         Under ``on_out_of_grid='warn'``, once, carrying the measured values.
     MetallicityUnitWarning
         When the converted history reads like a metal mass fraction mistaken for
-        log10(Z/Zsun) — the case ``on_out_of_grid`` is structurally unable to
+        log10(Z/Zsun), the case ``on_out_of_grid`` is structurally unable to
         see, because such values are in-grid.
 
     Notes
     -----
-    **JIT-compatible**: no — eager numpy validation, run once at construction.
+    **JIT-compatible**: no, eager numpy validation, run once at construction.
 
     Examples
     --------
@@ -535,12 +535,12 @@ def _present_day(name, value, n_galaxies, n_t):
 
     Parameters
     ----------
-    name : str
+    name: str
         Argument name, for the error messages.
-    value : array_like, shape (N,), (n_t,) or (N, n_t)
+    value: array_like, shape (N,), (n_t,) or (N, n_t)
         Either the per-galaxy value already, or a full track to read the
         observed epoch off.
-    n_galaxies, n_t : int
+    n_galaxies, n_t: int
         The catalog's shape, from ``sfr``.
 
     Returns
@@ -555,15 +555,15 @@ def _present_day(name, value, n_galaxies, n_t):
 
     Notes
     -----
-    **JIT-compatible**: no — numpy, at ingest.
+    **JIT-compatible**: no, numpy, at ingest.
 
     Accepting a track is the convenience that matters for simulation data, where
     gas-phase metallicity is stored as a time series exactly like the SFH. The
     **last** node is the observed epoch because ``t_gyr`` is cosmic time and
-    ascending — the same orientation ``from_histories`` requires of the SFH.
+    ascending, the same orientation ``from_histories`` requires of the SFH.
 
     A 1-D input is ambiguous when ``N == n_t``: it could be one value per galaxy
-    or one shared track. That is refused rather than guessed — the two readings
+    or one shared track. That is refused rather than guessed, the two readings
     give different physics, and a silent choice between them is unrecoverable.
     """
     arr = np.asarray(value, dtype=float)
@@ -581,7 +581,7 @@ def _present_day(name, value, n_galaxies, n_t):
         raise ValueError(
             f"{name} is 1-D with {n_galaxies} entries and the catalog has "
             f"N == n_t == {n_galaxies}, so it could equally be one value per "
-            f"galaxy or one shared track — the two mean different things and "
+            f"galaxy or one shared track, the two mean different things and "
             f"neither can be recovered from the other afterwards. Pass it as "
             f"(N, n_t) to mean a track, or reshape to (N, 1) to mean per-galaxy."
         )

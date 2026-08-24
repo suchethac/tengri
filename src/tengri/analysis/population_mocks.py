@@ -30,9 +30,9 @@ def assert_truth_is_discriminating(value, bounds, *, name, rel_tol=0.08):
     Two distinct points in a bounded prior are indistinguishable from "the
     estimator returned its prior", depending on the standardization in force:
 
-    - **Arithmetic midpoint** ``0.5(lo + hi)`` — where a uniform prior or
+    - **Arithmetic midpoint** ``0.5(lo + hi)``: where a uniform prior or
       sigmoid-standardized logit-normal returns nothing (prior expectation).
-    - **Geometric mean** ``sqrt(lo * hi)`` — where a log-uniform prior returns
+    - **Geometric mean** ``sqrt(lo * hi)``; where a log-uniform prior returns
       nothing (same value as the lognormal median by mathematical identity).
 
     Which applies depends on tengri's standardization, which has changed
@@ -44,13 +44,13 @@ def assert_truth_is_discriminating(value, bounds, *, name, rel_tol=0.08):
 
     Parameters
     ----------
-    value : float
+    value: float
         The truth to inject [units vary by parameter].
-    bounds : tuple of float
+    bounds: tuple of float
         ``(lo, hi)`` prior support, in the same units as ``value``.
-    name : str
+    name: str
         Parameter name, for the error message.
-    rel_tol : float, optional
+    rel_tol: float, optional
         Fractional distance from a characteristic point that counts as too
         close [dimensionless]. Default 0.08.
         Note: For very wide bounds (e.g. (1e6, 3e8)), the span is dominated
@@ -74,7 +74,7 @@ def assert_truth_is_discriminating(value, bounds, *, name, rel_tol=0.08):
     if not lo < value < hi:
         raise ValueError(
             f"Injected truth {name}={value:g} is OUTSIDE the prior bounds "
-            f"({lo:g}, {hi:g}), so no fit can reach it — estimates will pin at "
+            f"({lo:g}, {hi:g}), so no fit can reach it: estimates will pin at "
             f"the nearest bound and resemble shrinkage. If these bounds look "
             f"wrong, read them off the model rather than hardcoding them: "
             f"model.spec.get_distribution({name!r}).bounds."
@@ -108,20 +108,20 @@ def assert_truth_against_model(model, name, value, *, rel_tol=0.08):
 
     Parameters
     ----------
-    model : SEDModel
+    model: SEDModel
         The model the mock will be generated from and fitted with. Its
         ``spec.get_distribution(name).bounds`` is the authority.
-    name : str
+    name: str
         Full parameter name, e.g. ``"sfh_field_psd_sigma"``.
-    value : float
+    value: float
         The truth to inject, in that parameter's own units.
-    rel_tol : float, optional
+    rel_tol: float, optional
         Fractional distance from a characteristic point that counts as too
         close. Default 0.08.
 
     Returns
     -------
-    bounds : tuple of float
+    bounds: tuple of float
         The ``(lo, hi)`` read off the model, so callers can reuse it for grids
         without re-deriving it.
 
@@ -153,12 +153,12 @@ def _max_truncated_fraction(caught):
 
     Parameters
     ----------
-    caught : list of warnings.WarningMessage
+    caught: list of warnings.WarningMessage
         Records from a ``warnings.catch_warnings(record=True)`` block.
 
     Returns
     -------
-    fraction : float
+    fraction: float
         Largest fraction seen, or ``0.0`` if no such warning carried one. The
         maximum rather than the sum: repeated predictions of the same galaxy
         each describe the whole SFH, so summing would climb past 1.0.
@@ -176,28 +176,28 @@ def _resample_until_realizable(draw, *, max_fraction, max_attempts):
     """Redraw a galaxy until its SFH fits inside cosmic time (#1645).
 
     Rejection sampling, made explicit. The accepted draw is from the prior
-    **conditioned on** truncating no more than ``max_fraction`` — a different
+    **conditioned on** truncating no more than ``max_fraction``; a different
     distribution from the prior, which is why the caller opts in and why the
     count of redraws is reported back.
 
     Parameters
     ----------
-    draw : callable
+    draw: callable
         ``draw(attempt) -> float``, producing a galaxy and returning the
         fraction of its stellar mass placed before the Big Bang
         [dimensionless]. Called with a 0-based attempt index so the caller can
         vary its PRNG key.
-    max_fraction : float
+    max_fraction: float
         Largest acceptable truncated fraction [dimensionless]. Inclusive, to
         match the refuse path, which raises only on ``>``.
-    max_attempts : int
+    max_attempts: int
         Redraw budget for this galaxy [count].
 
     Returns
     -------
-    fraction : float
+    fraction: float
         Truncated fraction of the accepted draw [dimensionless].
-    attempts : int
+    attempts: int
         Draws taken, including the accepted one [count]. 1 means no redraw.
 
     Raises
@@ -231,16 +231,16 @@ class MockPopulation:
 
     Attributes
     ----------
-    table : ndarray
+    table: ndarray
         Per-galaxy record array with keys for photometry fluxes, errors,
         line fluxes, and line errors [various units].
-    truth_params : list[dict[str, ndarray]]
+    truth_params: list[dict[str, ndarray]]
         List of per-galaxy parameter dicts sampled from the prior
         with injected ``sigma`` and ``tau_myr`` values.
-    n_halpha_absorption : int
+    n_halpha_absorption: int
         Count of galaxies whose Halpha is predicted in absorption
         (non-positive flux). Never dropped; reported to avoid selection bias.
-    truncated_fraction : ndarray, shape (N,), optional
+    truncated_fraction: ndarray, shape (N,), optional
         Per-galaxy fraction of formed stellar mass placed before the Big Bang
         and therefore truncated [dimensionless]. Same policy as
         ``n_halpha_absorption``: measured and reported, never silently dropped,
@@ -255,7 +255,7 @@ class MockPopulation:
 
         **0.0 means "at most 1%", not "none":** the forward path only warns
         above ``frac > 0.01``, so smaller truncations are invisible here.
-    n_resampled : int, optional
+    n_resampled: int, optional
         Draws discarded and redrawn under ``resample_truncated`` [count]. Zero
         unless that option was used.
 
@@ -285,7 +285,7 @@ class MockPopulation:
 
         Parameters
         ----------
-        galaxy : int, optional
+        galaxy: int, optional
             Row whose fluxes and errors seed the template. Default 0.
 
         Returns
@@ -331,21 +331,21 @@ def make_population(
 
     Parameters
     ----------
-    model : SEDModel
+    model: SEDModel
         The parametrized SED model with an established prior.
-    n_galaxies : int
+    n_galaxies: int
         Number of mock galaxies to generate [count].
-    sigma_true : float
+    sigma_true: float
         Injected PSD burstiness parameter [dex].
-    tau_true_myr : float
+    tau_true_myr: float
         Injected PSD timescale [Myr].
-    key : jax.Array
+    key: jax.Array
         PRNGKey for galaxy sampling and noise realization.
-    snr_phot : float
+    snr_phot: float
         Signal-to-noise ratio for photometry [dimensionless].
-    snr_line : float
+    snr_line: float
         Signal-to-noise ratio for emission lines [dimensionless].
-    max_truncated_fraction : float, optional
+    max_truncated_fraction: float, optional
         Reject the population if any galaxy places more than this fraction of
         its stellar mass before the Big Bang [dimensionless]. Default ``None``
         (accept anything), which preserves the historical behavior: the
@@ -353,10 +353,10 @@ def make_population(
         :attr:`MockPopulation.truncated_fraction` regardless.
 
         Off by default deliberately. The fixtures this repository already ships
-        contain such galaxies — the four-galaxy ESS-sweep mock truncates 3%, 5%,
-        9% and 69% — so defaulting to a limit would reject the project's own
+        contain such galaxies; the four-galaxy ESS-sweep mock truncates 3%, 5%,
+        9% and 69%: so defaulting to a limit would reject the project's own
         populations rather than fix them (#1645).
-    resample_truncated : bool, optional
+    resample_truncated: bool, optional
         Redraw a galaxy that exceeds ``max_truncated_fraction`` instead of
         raising. Default ``False``. Requires ``max_truncated_fraction``, since
         without a threshold there is nothing to reject against.
@@ -366,16 +366,16 @@ def make_population(
         conditioning is reported as :attr:`MockPopulation.n_resampled`.
 
         Off by default for the same reason as above, plus one more: redrawing
-        would silently change every existing mock built from a fixed key —
-        including the population behind the banked ESS-vs-breadth curve in
+        would silently change every existing mock built from a fixed key; including the population
+        behind the banked ESS-vs-breadth curve in
         ``docs/dev/hierarchical-psd-handoff.md`` §4j.
 
         The whole galaxy is redrawn, not its redshift alone: truncation is a
         property of the sampled redshift *and* SFH age together, so redrawing
         one without the other need not change whether the history fits.
-    max_resample_attempts : int, optional
+    max_resample_attempts: int, optional
         Redraw budget per galaxy [count]. Default 20. Exhausting it raises
-        rather than looping or quietly keeping the last draw — if no draw is
+        rather than looping or quietly keeping the last draw: if no draw is
         realizable, the prior and the threshold are incompatible and rejection
         sampling cannot rescue it.
 
@@ -420,7 +420,7 @@ def make_population(
     # same lines the likelihood will score, or the two disagree silently: a
     # model whose Observation carries no line_fluxes builds no line likelihood
     # at all, so mock lines generated here are simply discarded and the fit is
-    # photometry-only while appearing to use lines. That happened — every
+    # photometry-only while appearing to use lines. That happened: every
     # recovery run in this study was photometry-only for exactly this reason.
     #
     # Falling back to a default set is only correct for generating data that
@@ -516,7 +516,7 @@ def make_population(
 
         # Re-emit everything the accepted draw produced: capturing is for
         # measurement, not suppression, and a caller who watches stderr today
-        # must keep seeing what they see now. Rejected draws stay silent — a
+        # must keep seeing what they see now. Rejected draws stay silent: a
         # galaxy that was redrawn is not one the caller has to reason about.
         for record in caught:
             warnings.warn_explicit(record.message, record.category, record.filename, record.lineno)

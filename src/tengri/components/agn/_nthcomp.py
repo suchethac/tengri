@@ -5,7 +5,7 @@ Provides JAX-compatible log-space trilinear interpolation over a precomputed
 table of Kompaneets equation solutions.  The table is built by
 ``scripts/build_nthcomp_templates.py``, which calls RELAGN's ``pyNTHCOMP``
 (scotthgn/RELAGN, credit A.D. Thomas, ported from XSpec donthcomp.f) as an
-external dependency — tengri does **not** ship the Kompaneets solver itself.
+external dependency: tengri does **not** ship the Kompaneets solver itself.
 
 Usage
 -----
@@ -26,8 +26,8 @@ to the simplified QSOSED-style power-law proxy and emit a one-time warning.
 
 References
 ----------
-Kubota & Done (2018) MNRAS 480 1247 Section 2.2 — warm Comptonization zone.
-Zdziarski, Johnson & Magdziarz (1996) MNRAS 283 193 — Kompaneets solver.
+Kubota & Done (2018) MNRAS 480 1247 Section 2.2: warm Comptonization zone.
+Zdziarski, Johnson & Magdziarz (1996) MNRAS 283 193: Kompaneets solver.
 """
 
 from __future__ import annotations
@@ -43,7 +43,7 @@ import numpy as np
 
 from tengri._data_setup import package_or_env_data_path
 
-# ── Template loading (lazy — no computation at import time) ───────
+# ── Template loading (lazy: no computation at import time) ───────
 
 _DEFAULT_TEMPLATE_PATH = package_or_env_data_path("nthcomp_templates.h5")
 
@@ -144,15 +144,15 @@ class NthcompTable(NamedTuple):
 
     Attributes
     ----------
-    gamma : ndarray, shape (n_gamma,)
+    gamma: ndarray, shape (n_gamma,)
         Photon-index axis.
-    kte : ndarray, shape (n_kte,)
+    kte: ndarray, shape (n_kte,)
         Electron-temperature axis [keV].
-    ktbb : ndarray, shape (n_ktbb,)
+    ktbb: ndarray, shape (n_ktbb,)
         Seed-blackbody-temperature axis [keV].
-    nu : ndarray, shape (n_nu,)
+    nu: ndarray, shape (n_nu,)
         Template frequency grid [Hz].
-    table_log : ndarray, shape (n_gamma, n_kte, n_ktbb, n_nu)
+    table_log: ndarray, shape (n_gamma, n_kte, n_ktbb, n_nu)
         ``log`` of the spectral shape.
 
     Notes
@@ -177,12 +177,12 @@ def load_nthcomp_table() -> NthcompTable | None:
     Returns
     -------
     NthcompTable or None
-        ``None`` when the templates are absent — callers then fall back to
+        ``None`` when the templates are absent: callers then fall back to
         their analytic path, as they did before threading existed.
 
     Notes
     -----
-    **JIT-compatible**: no, deliberately — call it before tracing.
+    **JIT-compatible**: no, deliberately: call it before tracing.
     """
     gamma, kte, ktbb, nu, table_log, available = _get_nthcomp_templates()
     if not available:
@@ -199,8 +199,8 @@ def _nthcomp_lnu_interp_impl(
 ) -> jnp.ndarray:
     """Implementation of nthcomp interpolation (used by both forward and VJP).
 
-    ``table`` carries the template arrays. Passing them in — rather than
-    reading the module-level cache here — is what lets the forward model
+    ``table`` carries the template arrays. Passing them in: rather than
+    reading the module-level cache here: is what lets the forward model
     thread the ~15 MB library through ``jax.jit`` as a ``Parameter`` instead
     of freezing it into the graph as ``Constant`` ops (#1383).
     """
@@ -248,12 +248,12 @@ def _nthcomp_lnu_interp_impl(
 
     # Return in the CALLER's precision, not the table's (#1822).
     #
-    # The table is float32 and the interpolation is done there, which is right —
+    # The table is float32 and the interpolation is done there, which is right :
     # promoting a float32 library to float64 buys no accuracy. But *returning*
     # float32 forced the caller's precision too, and that is what broke reverse
     # mode: ``custom_jvp`` takes the cotangent in the primal's dtype, and this
     # kernel's output gets multiplied by a ring luminosity in ``disc.py``, so the
-    # cotangent handed back is ~1e66 — fine in float64, **inf in float32**, whose
+    # cotangent handed back is ~1e66: fine in float64, **inf in float32**, whose
     # ceiling is 3.4e38. ``inf * fd_grad`` is NaN, so ``jax.grad`` w.r.t.
     # ``agn_gamma_warm`` returned NaN on every realistic disc while ``jax.jvp``
     # returned 5.2e30. Every gradient backend (MAP, NUTS, VI) is reverse-mode.
@@ -261,7 +261,7 @@ def _nthcomp_lnu_interp_impl(
     # The rule's docstring argued the old ``custom_vjp``'s overflow rescaling was
     # unnecessary because "forward mode never forms the cotangent product". True,
     # and beside the point: ``jax.grad`` transposes the jvp and forms exactly
-    # that product. Widening the output is the fix that needs no rescaling —
+    # that product. Widening the output is the fix that needs no rescaling :
     # float32 -> float64 is exact, so no forward value moves.
     #
     # A caller working entirely in float32 (the #1206 path) still gets float32
@@ -288,26 +288,26 @@ def _nthcomp_interp(
 
     Parameters
     ----------
-    table : NthcompTable
+    table: NthcompTable
         Template arrays. Also read by the JVP rule, which re-evaluates the
         interpolation at shifted operands.
-    nu : jnp.ndarray
+    nu: jnp.ndarray
         Frequency grid [Hz].
-    gamma : scalar jnp array
+    gamma: scalar jnp array
         Photon index.  Clamped to grid range.
-    kTe_keV : scalar jnp array
+    kTe_keV: scalar jnp array
         Electron temperature [keV].  Clamped to grid range.
-    kTbb_keV : scalar jnp array
+    kTbb_keV: scalar jnp array
         Seed temperature [keV].  Clamped to grid range.
 
     Returns
     -------
-    lnu_shape : jnp.ndarray, shape (len(nu),)
+    lnu_shape: jnp.ndarray, shape (len(nu),)
         Non-negative spectral shape (integrates to ~1 over nu).
 
     Notes
     -----
-    **JIT-compatible**: yes — uses ``jnp`` primitives and a JAX-registered JVP.
+    **JIT-compatible**: yes, uses ``jnp`` primitives and a JAX-registered JVP.
 
     The underlying templates are precomputed Kompaneets equation solutions
     in log-space (Kubota & Done 2018, Section 2.2). Trilinear interpolation
@@ -325,7 +325,7 @@ def _nthcomp_interp(
     deliberately not repeated here.** This paragraph used to keep its own copy,
     and the copy went stale the moment the rule changed: after #1822 gave
     ``kTe`` a tangent, this text still read "``nu``, ``kTe_keV`` and ``kTbb_keV``
-    are held fixed during fitting and carry exactly zero derivative" — the
+    are held fixed during fitting and carry exactly zero derivative": the
     precise false belief #1822 existed to correct, restated one screen above the
     correction. Two copies of a contract do not stay in sync; one does.
 
@@ -348,9 +348,9 @@ def _nthcomp_interp_jvp(primals: tuple, tangents: tuple) -> tuple:
 
     Parameters
     ----------
-    primals : tuple
+    primals: tuple
         ``(table, nu, gamma, kTe_keV, kTbb_keV)`` -- see :func:`_nthcomp_interp`.
-    tangents : tuple
+    tangents: tuple
         Tangents of those same five operands. ``gamma`` and ``kTe_keV``
         contribute; ``nu`` and ``kTbb_keV`` do not, and ``table`` is a library,
         never a fit parameter, so its tangent is structurally zero -- the
@@ -421,7 +421,7 @@ def _nthcomp_interp_jvp(primals: tuple, tangents: tuple) -> tuple:
     fd_grad = (shifted - primal_out) / eps
 
     # The kTe tangent, by the same one-sided rule (#1822). Discarding it made
-    # ``agn_kt_warm`` — declared ``Uniform(0.1, 0.5)`` and freeable — a parameter
+    # ``agn_kt_warm``: declared ``Uniform(0.1, 0.5)`` and freeable, a parameter
     # no gradient backend could move: measured exactly 0.0 against a central
     # difference of 7.0e41 through ``kubota_done_disc``, i.e. -100%. The forward
     # sensitivity is large (18.1x in sum(L_nu) across that prior), so the
@@ -477,15 +477,15 @@ def nthcomp_lnu_interp(
 
     Parameters
     ----------
-    nu : ndarray, shape (n_nu,)
+    nu: ndarray, shape (n_nu,)
         Frequency grid [Hz].
-    gamma, kTe_keV, kTbb_keV : Array
+    gamma, kTe_keV, kTbb_keV: Array
         Photon index, electron temperature [keV], seed temperature [keV].
         Each is clamped to the grid range.
-    _template : NthcompTable, optional
+    _template: NthcompTable, optional
         Pre-loaded templates, threaded in as a JIT argument by the forward
-        model. ``None`` (default) reads the module-level cache, which — under
-        trace — bakes ~15 MB into the graph as constants.
+        model. ``None`` (default) reads the module-level cache, which: under
+        trace: bakes ~15 MB into the graph as constants.
 
     Returns
     -------

@@ -1,7 +1,7 @@
 # SPDX-License-Identifier: BSD-3-Clause
 """The resolved approximation policy for a built :class:`~tengri.SEDModel`.
 
-A model's ``approx=`` argument names *intent* — :class:`~tengri.WavePrecomp`,
+A model's ``approx=`` argument names *intent*, :class:`~tengri.WavePrecomp`,
 :class:`~tengri.SpectrumPrecomp`, :class:`~tengri.FeaturePrecomp`, or nothing.
 :class:`ApproxPolicy` is what that intent resolves to: the flat, settled set of
 switches the forward pass and the component precomputes actually read.
@@ -9,14 +9,14 @@ switches the forward pass and the component precomputes actually read.
 Why this is a class and not a dict
 ----------------------------------
 It was a dict, read at 43 sites across 9 modules, almost always as
-``approx.get("some_key", <default>)``. That call cannot fail on a dict — a
+``approx.get("some_key", <default>)``. That call cannot fail on a dict, a
 typo, a renamed key, or a key the caller never populated all quietly return
 the default.
 
 Here the defaults are not neutral. The default beside ``n_subbands`` at those
 call sites is ``0``, which is the sentinel that *disables* the dust
 quadrature, so ``approx.get("n_subbnads", 0)`` silently drops the band
-projection onto the effective-wavelength form — measured up to 42 % wrong in
+projection onto the effective-wavelength form, measured up to 42 % wrong in
 the rest-UV at z = 1. No exception, no warning, just different numbers.
 
 That shape shipped once already: ``approx=SpectrumPrecomp()`` on a joint
@@ -47,12 +47,12 @@ from typing import Any
 
 __all__ = ["BAND_PROJECTION_KEYS", "ApproxPolicy"]
 
-#: The band-projection knobs — the subset :class:`~tengri.WavePrecomp` owns.
+#: The band-projection knobs, the subset :class:`~tengri.WavePrecomp` owns.
 #:
 #: Both the default set and the copy that carries a user's ``WavePrecomp`` onto
 #: the policy key off this tuple, rather than naming the fields twice. Copying
 #: field-by-field is how one gets forgotten at one end and silently keeps a
-#: default that contradicts the others — which is what happened when
+#: default that contradicts the others, which is what happened when
 #: ``_DEFAULT_APPROX`` and ``WavePrecomp`` each carried their own copy and
 #: disagreed on two of them.
 BAND_PROJECTION_KEYS: tuple[str, ...] = (
@@ -69,27 +69,27 @@ class ApproxPolicy(Mapping):
 
     Parameters
     ----------
-    wave_precomp : bool, default False
+    wave_precomp: bool, default False
         Route photometry through the SSP x filter LUT rather than the exact
         wavelength grid.
-    ztable : bool, default False
+    ztable: bool, default False
         Interpolate the LUT over a redshift table. An internal extension of
         ``wave_precomp`` for free or catalog-ranged redshift, not a user flag.
-    spectrum_precomp : bool, default False
+    spectrum_precomp: bool, default False
         Route spectroscopy through the per-pixel LUT.
-    igm : bool, default True
+    igm: bool, default True
         Precompute IGM transmission at filter effective wavelengths for the
         fixed-redshift hybrid kernel.
-    band_integration : {'quadrature', 'taylor', 'effective_wavelength'}
+    band_integration: {'quadrature', 'taylor', 'effective_wavelength'}
         How the multiplicative dust screen is integrated through a bandpass.
         See :class:`~tengri.WavePrecomp` for the accuracy of each.
-    taylor_correction : bool, default False
+    taylor_correction: bool, default False
         Whether the first-order spectral-moment tensors are built. Implied by
         ``band_integration``; kept as a separate switch because the stellar
         precompute consumes it directly.
-    n_subbands : int, default 5
+    n_subbands: int, default 5
         Quadrature nodes per filter. Implied by ``band_integration`` as above.
-    fast_dust_emission : bool, default False
+    fast_dust_emission: bool, default False
         Sample the dust IR template at the filter effective wavelength when
         its exact constant-response form cannot be built.
 
@@ -99,7 +99,7 @@ class ApproxPolicy(Mapping):
     into mutual agreement by ``tengri.WavePrecomp.__post_init__`` before
     they reach here; this class stores the settled values. It does not
     re-derive them, so that there is one resolution site rather than two that
-    can disagree — which is the defect that motivated this type.
+    can disagree, which is the defect that motivated this type.
 
     Examples
     --------
@@ -148,7 +148,7 @@ class ApproxPolicy(Mapping):
             f"{key!r} is not an ApproxPolicy field.{hint} "
             f"Valid keys: {', '.join(names)}. "
             "This raises rather than returning a default because the defaults "
-            "here disable approximations rather than being neutral — a typo "
+            "here disable approximations rather than being neutral, a typo "
             "would silently change the numbers."
         )
 
@@ -160,7 +160,7 @@ class ApproxPolicy(Mapping):
 
         ``default`` is accepted for call-site compatibility and is never
         consulted: every field always holds a value, so the only way the
-        default could be reached is a key that does not exist — precisely the
+        default could be reached is a key that does not exist, precisely the
         case that must not pass silently.
         """
         return getattr(self, self._check_key(key))

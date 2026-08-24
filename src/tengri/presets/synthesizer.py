@@ -38,7 +38,7 @@ from tengri.presets._registry import register_preset
         "Stalevski_2016",  # SKIRTOR torus
         "Groves_2004",  # NLR templates
         "Lovell_2025",  # Synthesizer (cite together with Roper_2026)
-        "Roper_2026",  # Synthesizer JOSS paper — both required by citation policy
+        "Roper_2026",  # Synthesizer JOSS paper: both required by citation policy
     ],
     status="experimental",
 )
@@ -68,14 +68,14 @@ def synthesizer_default(
 
     Parameters
     ----------
-    redshift : float, default 1.0
+    redshift: float, default 1.0
         Source redshift (fixed, not fitted).
 
     Returns
     -------
-    config : SEDModelConfig
+    config: SEDModelConfig
         Frozen configuration encoding which physics modules are active.
-    params : Parameters
+    params: Parameters
         Default Parameters with priors matching synthesizer's fitting ranges
         (per docs/dev/synthesizer_parity.md Parameter Prefix Mapping).
 

@@ -4,12 +4,12 @@
 Implements :class:`~tengri.forward.precompute.protocol.PrecomputeModule` for
 three X-ray emitters in :mod:`tengri.components.xray.xray`:
 
-1. **xray_xrb** — high- and low-mass X-ray binaries (HMXB+LMXB), Grimm+2003
+1. **xray_xrb**: high- and low-mass X-ray binaries (HMXB+LMXB), Grimm+2003
    and Gilfanov+2004 calibrations.  Free axes: ``xray_gamma_hmxb``,
    ``xray_gamma_lmxb``.
-2. **xray_corona** — AGN corona via the α_OX relation (Lusso+2010 / Just+2007).
+2. **xray_corona**; AGN corona via the α_OX relation (Lusso+2010 / Just+2007).
    Free axes: ``xray_gamma_agn``, ``xray_delta_alpha_ox``.
-3. **xray_corona_lopez24** — AGN corona via the α_IRX relation (López+2024,
+3. **xray_corona_lopez24**; AGN corona via the α_IRX relation (López+2024,
    Yang+2022 anisotropy).  Free axes: ``xray_gamma_agn``, ``xray_alpha_irx``.
 
 Each model is L-linear in its scalar luminosity input (SFR×stellar_mass for
@@ -149,7 +149,7 @@ def _build_grid_corona(
                     delta_alpha_ox=float(daox),
                     # Templates are anchored at the Yang+2020 30° reference
                     # (anisotropy factor exactly 1). The inclination factor
-                    # is a wavelength-independent scalar — consumers fold
+                    # is a wavelength-independent scalar: consumers fold
                     # xray_anisotropy(1, cos_inc) into the runtime scale
                     # alongside l_2500/L_2500_REF (#980).
                     apply_anisotropy=False,
@@ -237,15 +237,15 @@ def precompute(
 
     Parameters
     ----------
-    filter_waves, filter_trans : list[ndarray]
+    filter_waves, filter_trans: list[ndarray]
         Per-filter observed-frame wavelengths [Angstrom] and transmission curves.
-    redshift : float
+    redshift: float
         Source redshift. [dimensionless]
-    parameters : Parameters or None
+    parameters: Parameters or None
         Parameters spec; used to detect Fixed axes via ``is_fixed``/``fixed_value``.
-    model : str, keyword-only
+    model: str, keyword-only
         One of ``"xray_xrb"``, ``"xray_corona"``, ``"xray_corona_lopez24"``.
-    axis_grids : tuple[ndarray, ndarray], optional
+    axis_grids: tuple[ndarray, ndarray], optional
         Custom 2D grid axes; defaults match the documented validity ranges
         of the underlying physics functions.
 
@@ -257,7 +257,7 @@ def precompute(
 
     Notes
     -----
-    **JIT-compatible**: no — build-time NumPy.
+    **JIT-compatible**: no, build-time NumPy.
     """
     if model not in _BUILDERS:
         raise ValueError(f"Unknown X-ray model: {model!r}. Expected one of {sorted(_BUILDERS)}.")

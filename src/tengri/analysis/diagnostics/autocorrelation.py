@@ -11,8 +11,8 @@ the actual correlation length).
 
 Two modes:
 
-- **Standard**: ρ(k) = Cor(x_i, x_{i+k}) — standard Pearson autocorrelation
-- **Absolute**: ρ(k) = Cor(|x_i - μ|, |x_{i+k} - μ|) — catches non-Gaussian
+- **Standard**: ρ(k) = Cor(x_i, x_{i+k}); standard Pearson autocorrelation
+- **Absolute**: ρ(k) = Cor(|x_i - μ|, |x_{i+k} - μ|); catches non-Gaussian
   correlations (e.g., skewed posteriors, multimodal chains)
 
 The effective sample size is N_eff = N / τ.
@@ -41,13 +41,13 @@ __all__ = [
 
 
 def _never_moved(values: np.ndarray) -> bool:
-    """True when every draw is identical — the parameter never moved (#1734).
+    """True when every draw is identical; the parameter never moved (#1734).
 
     The staticness test these diagnostics need is exact and scale-free: *did any
     two draws differ?* Three call sites used to ask ``np.var(a) < 1e-30``
     instead, which is an **absolute** tolerance on a quantity carrying the
     square of the parameter's units. ``np.var`` of N identical floats is not
-    exactly zero — it is rounding noise of order ``(value * eps)**2`` — so the
+    exactly zero; it is rounding noise of order ``(value * eps)**2``, so the
     threshold's sensitivity drifted with the parameter's magnitude.
 
     Measured on 600 identical draws, the same completely frozen chain:
@@ -55,15 +55,15 @@ def _never_moved(values: np.ndarray) -> bool:
     ==========  =======================  ===========================
     value       ``np.var``               vs ``1e-30``
     ==========  =======================  ===========================
-    0.693       4.930e-32                below — correctly skipped
-    4.130       0.000e+00                below — correctly skipped
-    10.634      **3.155e-30**            **above — survived**
+    0.693       4.930e-32                below; correctly skipped
+    4.130       0.000e+00                below; correctly skipped
+    10.634      **3.155e-30**            **above; survived**
     ==========  =======================  ===========================
 
     The survivor reached :func:`rhat` as a live parameter, split R-hat scored it
     ~1.0 (within- and between-chain variance are both zero on constant data),
     and the non-empty result then bypassed the frozen-chain guard in
-    ``Posterior.rhat`` — which raises only when *every* parameter is dropped.
+    ``Posterior.rhat``; which raises only when *every* parameter is dropped.
     A dead fit reported ``max R-hat 0.998``. Whether the guard fired depended on
     how large the numbers happened to be.
 
@@ -73,7 +73,7 @@ def _never_moved(values: np.ndarray) -> bool:
 
     Parameters
     ----------
-    values : ndarray
+    values: ndarray
         Draws for one parameter, shape ``(n_draw,)`` or ``(n_chain, n_draw)``.
 
     Returns
@@ -83,7 +83,7 @@ def _never_moved(values: np.ndarray) -> bool:
 
     Notes
     -----
-    **JIT-compatible**: no — a NumPy diagnostic, called outside traced code.
+    **JIT-compatible**: no; a NumPy diagnostic, called outside traced code.
     """
     if values.size == 0:
         return True
@@ -103,11 +103,11 @@ def autocorrelation_at_lag(
 
     Parameters
     ----------
-    x : array, shape (N,)
+    x: array, shape (N,)
         1D chain (single parameter).
-    lag : int
+    lag: int
         Lag in samples (must be >= 1).
-    absolute : bool
+    absolute: bool
         If True, compute correlation of |x - mean| (catches non-Gaussian
         correlations in magnitude of deviations).
 
@@ -167,9 +167,9 @@ def autocorrelation_time(
 
     Parameters
     ----------
-    x : array, shape (N,)
+    x: array, shape (N,)
         1D chain (single parameter).
-    absolute : bool
+    absolute: bool
         If True, use absolute-deviation autocorrelation.
 
     Returns
@@ -212,7 +212,7 @@ def autocorrelation_time_combined(x: np.ndarray) -> dict:
 
     Parameters
     ----------
-    x : array, shape (N,)
+    x: array, shape (N,)
         1D chain.
 
     Returns
@@ -245,9 +245,9 @@ def effective_sample_size(
 
     Parameters
     ----------
-    chains : dict
+    chains: dict
         Parameter name → array of shape (N,) or (N, ...).
-    exclude_prefixes : tuple of str
+    exclude_prefixes: tuple of str
         Parameter name prefixes to skip (e.g., GP latent vector).
 
     Returns
@@ -263,7 +263,7 @@ def effective_sample_size(
         arr = np.asarray(arr)
         if arr.ndim != 1:
             continue
-        # Skip static parameters — exactly, not by an absolute variance floor
+        # Skip static parameters: exactly, not by an absolute variance floor
         # whose sensitivity tracks the parameter's magnitude (#1734).
         if _never_moved(arr):
             continue
@@ -283,11 +283,11 @@ def check_chain_length(
 
     Parameters
     ----------
-    chains : dict
+    chains: dict
         Parameter name → array of shape (N,).
-    exclude_prefixes : tuple of str
+    exclude_prefixes: tuple of str
         Prefixes to skip.
-    verbose : bool
+    verbose: bool
         Print diagnostics.
 
     Returns
@@ -348,7 +348,7 @@ def split_rhat(chain: np.ndarray) -> float:
 
     Parameters
     ----------
-    chain : array_like
+    chain: array_like
         Either a 1-D array of length ``N`` (single chain split into two
         halves), or a 2-D array of shape ``(m, n)`` with ``m`` chains of
         length ``n`` (used as-is, no further splitting). [any units]
@@ -429,10 +429,10 @@ def rhat(
 
     Parameters
     ----------
-    chains : dict
+    chains: dict
         Parameter name → 1-D chain array (or 2-D array of multiple
         chains).
-    exclude_prefixes : tuple of str, optional
+    exclude_prefixes: tuple of str, optional
         Parameter name prefixes to skip (default skips ``psd_xi`` GP
         latent fields).
 
@@ -444,7 +444,7 @@ def rhat(
 
     See Also
     --------
-    split_rhat : underlying scalar/vector implementation.
+    split_rhat: underlying scalar/vector implementation.
     """
     result: dict[str, float] = {}
     for name, arr in chains.items():
@@ -512,12 +512,12 @@ def rank_normalized_rhat(chain: np.ndarray) -> float:
     samples (so the underlying distribution is Gaussian by
     construction), and additionally on the **folded** samples
     :math:`|x - \mathrm{median}(x)|` to detect scale drift. Returns the
-    maximum of the two — the recommended convergence statistic of
+    maximum of the two; the recommended convergence statistic of
     Vehtari et al. 2021 [1]_.
 
     Parameters
     ----------
-    chain : array_like
+    chain: array_like
         1-D chain of length ``N`` (split into halves), or 2-D ``(m, n)``
         with ``m`` chains used as-is.
 
@@ -533,7 +533,7 @@ def rank_normalized_rhat(chain: np.ndarray) -> float:
     The rank step makes the test robust to non-Gaussian / heavy-tailed
     posteriors where the classical :math:`\hat R` can be noisy. The
     folded step (Vehtari+2021 §4.2) catches scenarios where the chains
-    agree on the mean but disagree on the scale — the classical
+    agree on the mean but disagree on the scale; the classical
     diagnostic misses these because chain means converge while
     variances do not.
 

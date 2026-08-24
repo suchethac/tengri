@@ -3,8 +3,8 @@
 
 Search order (first found wins):
 
-1. ``~/.tengri/defaults.toml``  — user-level override
-2. ``<package root>/defaults.toml``  — package defaults shipped with tengri
+1. ``~/.tengri/defaults.toml``: user-level override
+2. ``<package root>/defaults.toml``: package defaults shipped with tengri
 
 Copy the package defaults file to ``~/.tengri/defaults.toml`` and edit it
 there to change defaults without touching the package itself.
@@ -135,7 +135,7 @@ def load_defaults() -> dict[str, Any]:
 def get_from_config_defaults() -> dict[str, Any]:
     """Return the ``[from_config]`` section with safe hardcoded fallbacks.
 
-    Never raises — falls back silently if the TOML file is unreadable.
+    Never raises; falls back silently if the TOML file is unreadable.
 
     Returns
     -------
@@ -157,7 +157,7 @@ def get_inference_defaults(method: str | None = None) -> dict[str, Any]:
 
     Parameters
     ----------
-    method : str or None
+    method: str or None
         If given, return only the sub-section for that method (e.g. ``"vi"``,
         ``"mcmc_raytrace"``).  If None, return the full ``[inference]`` dict.
 

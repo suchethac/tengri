@@ -9,7 +9,7 @@ three disc models:
 
 2. **disc_ss** (Shakura-Sunyaev): Multi-color thin disc with temperature
    gradient. Two free axes: ``agn_log_mbh``, ``agn_log_lbol`` (the post-#846
-   shape driver — the Eddington ratio, hence the disc temperature profile, is
+   shape driver, the Eddington ratio, hence the disc temperature profile, is
    derived from ``agn_log_lbol`` and ``agn_log_mbh``).
 
 3. **cigale_disc** (piecewise power-law from CIGALE): Empirical disc model
@@ -18,7 +18,7 @@ three disc models:
 
 Each model is preintegrated through filter curves at model-initialization time.
 Auto-collapses axes whose corresponding parameters are ``Fixed`` in the user's
-``Parameters`` — e.g., a user who pins ``agn_alpha`` gets a scalar template.
+``Parameters``: e.g., a user who pins ``agn_alpha`` gets a scalar template.
 
 References
 ----------
@@ -95,20 +95,20 @@ def _build_grid_powerlaw(
 
     Parameters
     ----------
-    filter_waves : list[ndarray]
+    filter_waves: list[ndarray]
         Per-filter wavelength arrays [Angstrom].
-    filter_trans : list[ndarray]
+    filter_trans: list[ndarray]
         Per-filter transmission curves.
-    redshift : float
+    redshift: float
         Source redshift.
-    alpha_grid : ndarray, shape (n_alpha,)
+    alpha_grid: ndarray, shape (n_alpha,)
         Power-law spectral index grid.
-    agn_log_lbol : float
+    agn_log_lbol: float
         Reference bolometric luminosity [log10(L/L_sun)].
         Defaults to the declared ``agn_log_lbol`` default.
-    agn_lum_ratio : float
+    agn_lum_ratio: float
         Disc fraction. Default 1.0.
-    agn_T_max : float
+    agn_T_max: float
         UV cutoff temperature [K]. Default 1e5.
 
     Returns
@@ -168,23 +168,23 @@ def _build_grid_ss(
     Templates are energy-normalized to unit bolometric luminosity so the grid
     captures pure shape variation; the absolute normalization is reintroduced by
     the runtime ``agn_log_lbol`` scaling in :func:`build_lookup`. Varying L_bol
-    here — rather than the now-ignored ``agn_log_ledd`` — fixes the silently
+    here: rather than the now-ignored ``agn_log_ledd``: fixes the silently
     degenerate second axis of #902.
 
     Parameters
     ----------
-    filter_waves : list[ndarray]
+    filter_waves: list[ndarray]
         Per-filter wavelength arrays [Angstrom].
-    filter_trans : list[ndarray]
+    filter_trans: list[ndarray]
         Per-filter transmission curves.
-    redshift : float
+    redshift: float
         Source redshift.
-    mbh_grid : ndarray, shape (n_mbh,)
+    mbh_grid: ndarray, shape (n_mbh,)
         Black hole mass grid [log10(M_sun)].
-    lbol_grid : ndarray, shape (n_lbol,)
+    lbol_grid: ndarray, shape (n_lbol,)
         Bolometric luminosity grid [log10(L_sun)]. Drives the disc temperature
         profile via the derived Eddington ratio.
-    agn_lum_ratio : float
+    agn_lum_ratio: float
         Disc fraction. Default 1.0.
 
     Returns
@@ -245,11 +245,11 @@ def _build_grid_cigale(
 
     Parameters
     ----------
-    filter_waves : list[ndarray]
+    filter_waves: list[ndarray]
         Per-filter wavelength arrays [Angstrom].
-    filter_trans : list[ndarray]
+    filter_trans: list[ndarray]
         Per-filter transmission curves.
-    redshift : float
+    redshift: float
         Source redshift.
 
     Returns
@@ -312,25 +312,25 @@ def precompute(
 
     Parameters
     ----------
-    filter_waves : list[ndarray]
+    filter_waves: list[ndarray]
         Wavelength grid per filter [Angstrom], observed frame.
-    filter_trans : list[ndarray]
+    filter_trans: list[ndarray]
         Transmission per filter (0–1).
-    redshift : float
+    redshift: float
         Source redshift. [dimensionless]
-    parameters : Parameters | None
+    parameters: Parameters | None
         Parameters spec, used to detect Fixed-axis parameters.
-    model : str, keyword-only
+    model: str, keyword-only
         One of "powerlaw_disc", "ss_disc", "cigale_disc".
         Default: "powerlaw_disc".
-    alpha_grid : ndarray, optional
+    alpha_grid: ndarray, optional
         Grid for agn_alpha (powerlaw_disc only). If None, uses a default
         range [-2, 0] with 15 points.
-    mbh_grid : ndarray, optional
+    mbh_grid: ndarray, optional
         Grid for agn_log_mbh (ss_disc only). If None, uses [6, 7, 8, 9, 10].
-    lbol_grid : ndarray, optional
+    lbol_grid: ndarray, optional
         Grid for agn_log_lbol (ss_disc only) [log10(L_sun)]. If None, uses
-        [9, 10, 11, 12, 13] — faint-Seyfert through bright-quasar bolometric
+        [9, 10, 11, 12, 13]: faint-Seyfert through bright-quasar bolometric
         luminosities (sub-Eddington across the default M_bh grid; the disc peak
         sweeps from the optical into the EUV over this range).
 
@@ -350,7 +350,7 @@ def precompute(
 
     Notes
     -----
-    **JIT-compatible**: no — this is a build-time function using NumPy.
+    **JIT-compatible**: no, this is a build-time function using NumPy.
     """
     if model == "powerlaw_disc":
         if alpha_grid is None:
@@ -413,12 +413,12 @@ def build_lookup(
 
     Parameters
     ----------
-    preint : dict
+    preint: dict
         Preintegrated data dict with keys "grid_phot", "axes", optionally
         "_collapsed_axes".
-    model : str, keyword-only
+    model: str, keyword-only
         Disc model name (for documentation; not used in lookup logic).
-    free_param_names : tuple of str, optional
+    free_param_names: tuple of str, optional
         Names of remaining free axes in the collapsed case.
         Not used in the default (no-collapse) case.
 
@@ -439,10 +439,10 @@ def build_lookup(
 
     Notes
     -----
-    **JIT-compatible**: yes — the returned function uses ``jnp`` and triweight
+    **JIT-compatible**: yes, the returned function uses ``jnp`` and triweight
     interpolation.
 
-    **Gradient-safe**: yes — triweight kernel is fully differentiable.
+    **Gradient-safe**: yes, triweight kernel is fully differentiable.
     """
     if not preint.get("_collapsed_axes"):
         # No axes collapsed: use template helper directly

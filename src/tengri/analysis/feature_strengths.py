@@ -64,9 +64,9 @@ def total_ir_power(
 
     Parameters
     ----------
-    wavelength_um : array_like, shape (n_wave,)
+    wavelength_um: array_like, shape (n_wave,)
         Wavelength grid in microns; strictly increasing.
-    nu_pnu : array_like, shape (n_wave,)
+    nu_pnu: array_like, shape (n_wave,)
         :math:`\nu P_\nu` in any per-frequency units; integrated over
         :math:`d\ln\nu` (equivalent to :math:`\int P_\nu\,d\nu`).
 
@@ -101,11 +101,11 @@ def clip_feature(
 
     Parameters
     ----------
-    wavelength_um : array_like, shape (n_wave,)
+    wavelength_um: array_like, shape (n_wave,)
         Wavelength grid in microns; strictly increasing.
-    nu_pnu : array_like, shape (n_wave,)
+    nu_pnu: array_like, shape (n_wave,)
         :math:`\nu P_\nu` spectrum on the same grid.
-    lam1_um, lam2_um : float
+    lam1_um, lam2_um: float
         Clip points in microns, with ``lam1_um < lam2_um``; both must
         lie within the provided grid.
 
@@ -124,7 +124,7 @@ def clip_feature(
 
     Notes
     -----
-    **JIT-compatible**: no — uses ``numpy.searchsorted`` with Python
+    **JIT-compatible**: no; uses ``numpy.searchsorted`` with Python
     branches.  Used in tests and analysis only, not in the JAX forward
     model.
     """

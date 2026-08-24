@@ -63,7 +63,7 @@ class XRayAirdSEDComponentConfig(SEDComponentConfig):
 
     Attributes
     ----------
-    name : str
+    name: str
         Diagnostic identifier. Default ``"xray_aird"``.
     """
 
@@ -134,7 +134,7 @@ class XRayAirdSEDComponent(SEDModelComponent):
     #: Cross-component reads with documented fallbacks. These are declared so
     #: the base ``apply`` can wire them from upstream publishers when present
     #: (see ADR-0009). The fallback chain distinguishes published 0.0 from
-    #: the injected 0.0 when a key is absent — sfr/log_mstar/L_2500_30deg check
+    #: the injected 0.0 when a key is absent: sfr/log_mstar/L_2500_30deg check
     #: against zero after injection (line 765 of sed_model_component.py),
     #: while stellar_age_gyr is computed as a mass-weighted average that requires
     #: its summand (age_weights) to distinguish absence. This fixes #1846, #1755,
@@ -212,7 +212,7 @@ class XRayAirdSEDComponent(SEDModelComponent):
         units="dex",
         default=0.0,
     )
-    # alpha_ox is deliberately NOT a free parameter here — PR #329 promotes it to
+    # alpha_ox is deliberately NOT a free parameter here; PR #329 promotes it to
     # an empirical prior derived from L_2500 via alpha_ox_from_l2500()
     # (Just+2007 / Lusso–Risaliti). Offsets from the empirical value are exposed
     # via delta_alpha_ox in xray_agn_corona{,_from_disc}. See ADR-0015.
@@ -242,29 +242,29 @@ class XRayAirdSEDComponent(SEDModelComponent):
 
         Parameters
         ----------
-        p : mapping[str, ndarray]
+        p: mapping[str, ndarray]
             Parameters with prefix stripped: gamma_hmxb, gamma_lmxb, gamma_agn,
             log_nh, det_hmxb, det_lmxb.
-        sed_in : ndarray
+        sed_in: ndarray
             Input SED (stellar + nebular + AGN + radio).
-        wave : ndarray
+        wave: ndarray
             Rest-frame wavelength grid in Angstrom.
-        **inputs : ndarray
+        **inputs: ndarray
             Declared cross-component reads with documented fallback behavior:
 
-            - sfr [Msun/yr] — when stellar publishes, reads the value; when
+            - sfr [Msun/yr], when stellar publishes, reads the value; when
               absent, the base apply() injects 0.0, yielding zero XRB luminosity
               (physically defensible: no SFH → no star-formation-driven X-rays).
-            - log_mstar [dex] — when stellar publishes, reads the value; when
+            - log_mstar [dex], when stellar publishes, reads the value; when
               absent, injected 0.0 (10^0 = 1 Msun, a degenerate case but not
               used in practice since X-ray requires stellar component).
-            - L_2500_30deg [erg/s/Hz] — when AGN publishes L_2500, reads it;
+            - L_2500_30deg [erg/s/Hz], when AGN publishes L_2500, reads it;
               when absent, injected 0.0 (no AGN → no corona).
-            - age_weights [Msun] — mass weights on SSP grid. Uses zero-sum check:
+            - age_weights [Msun]: mass weights on SSP grid. Uses zero-sum check:
               if sum > 0, computes mass-weighted stellar age; if sum == 0 (absent
               or truly zero-weighted), falls back to 1.0 Gyr.
-            - ssp_ages_yr [yr] — SSP age grid; paired with age_weights.
-            - log_metallicity_history [dex, absolute log10(Z)] — stellar's SFH-
+            - ssp_ages_yr [yr]; SSP age grid; paired with age_weights.
+            - log_metallicity_history [dex, absolute log10(Z)]: stellar's SFH-
               indexed metallicity history. Present-day bin (index 0) drives the
               Lehmer+2016 HMXB quartic; if absent, metallicity_from_history()
               returns Z_SUN (0.0142).
@@ -287,10 +287,10 @@ class XRayAirdSEDComponent(SEDModelComponent):
         (sum(age_weights) == 0) distinguishes "not published" from "truly zero-
         weighted" and enables the 1.0 Gyr fallback. Fixes #1846, #1755, #1706.
         """
-        # SFR [Msun/yr] — read when stellar publishes, else use physical default 1.0
+        # SFR [Msun/yr]: read when stellar publishes, else use physical default 1.0
         sfr = jnp.asarray(inputs.get("sfr", 1.0))
 
-        # Stellar mass [log10 Msun] — read when stellar publishes, else 10.0
+        # Stellar mass [log10 Msun]: read when stellar publishes, else 10.0
         log_mstar = jnp.asarray(inputs.get("log_mstar", 10.0))
         stellar_mass = 10.0**log_mstar
 
@@ -301,7 +301,7 @@ class XRayAirdSEDComponent(SEDModelComponent):
         # that nothing publishes, so the fallback was the only value ever seen.
         metallicity_z = metallicity_from_history(inputs.get("log_metallicity_history"))
 
-        # Stellar age [Gyr] — computed from age_weights and ssp_ages_yr when both
+        # Stellar age [Gyr]: computed from age_weights and ssp_ages_yr when both
         # are published (age_weights sum > 0), else falls back to 1.0 Gyr.
         # This mirrors yang20's emitter_inputs logic (component.py:374-388).
         # The base apply() injects 0.0 when these keys are absent; we distinguish
@@ -317,7 +317,7 @@ class XRayAirdSEDComponent(SEDModelComponent):
             1.0,
         )
 
-        # AGN UV luminosity [erg/s/Hz] — read when AGN publishes, else 0.0
+        # AGN UV luminosity [erg/s/Hz]: read when AGN publishes, else 0.0
         l_2500_30deg = jnp.asarray(inputs.get("L_2500_30deg", 0.0))
 
         # Call xray_total with new signature

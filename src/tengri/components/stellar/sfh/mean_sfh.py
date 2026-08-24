@@ -13,7 +13,7 @@ Models
 Canonical names (short name alias in parentheses):
 
 - **truncated_skewnormal** (tsnorm): Bellstedt+2020, Robotham+2020 snorm_trunc.
-  Most flexible smooth model — 5 params: peak location, width, skew, truncation.
+  Most flexible smooth model: 5 params: peak location, width, skew, truncation.
 - **skewnormal** (snorm): ``truncated_skewnormal`` without truncation (4 params).
 - **gaussian** (norm): ``skewnormal`` with skew=0 (3 params).
 - **lognormal** (lnorm): Gaussian in log10(age) space (3 params).
@@ -26,7 +26,7 @@ Canonical names (short name alias in parentheses):
 - **triweight_burst**: compact triweight kernel in log-age for burst component.
 - **spline**: N-node monotone cubic (PCHIP) spline in log-age space. Nodes are
   static (set at JIT-compile time); SFR values are free parameters. Use directly
-  (not via the registry — array node inputs don't fit the scalar-kwarg registry).
+  (not via the registry: array node inputs don't fit the scalar-kwarg registry).
 - **snorm_burst**: skew-normal SFH + flat recent burst.
 - **snorm_trunc_burst** (tsnorm_burst): truncated skew-normal + flat recent burst.
 
@@ -45,7 +45,7 @@ import jax.numpy as jnp
 
 from tengri.utils.grid_interp import pchip_interp_1d
 
-# Maximum age of the universe in years — hardcoded, not fittable.
+# Maximum age of the universe in years: hardcoded, not fittable.
 AGEMAX_YR = 14e9
 
 # Precomputed constant for erfc-based CDF: 1/sqrt(2).
@@ -66,11 +66,11 @@ def _renormalize_to_mass(
 
     Parameters
     ----------
-    shape : array_like, shape (n_age,)
+    shape: array_like, shape (n_age,)
         Unnormalized SFR shape [arbitrary units], non-negative.
-    t_lookback : array_like, shape (n_age,)
+    t_lookback: array_like, shape (n_age,)
         Lookback time grid [yr].
-    log_total_mass : float
+    log_total_mass: float
         log10 of total stellar mass formed [Msun].
 
     Returns
@@ -80,7 +80,7 @@ def _renormalize_to_mass(
 
     Notes
     -----
-    **JIT-compatible**: yes — uses ``jnp.trapezoid`` and elementwise ops.
+    **JIT-compatible**: yes, uses ``jnp.trapezoid`` and elementwise ops.
 
     The mass integral uses :func:`jax.numpy.trapezoid` over ``t_lookback`` so
     the rescaling is exact at the resolution of the input grid. A 1e-30 floor
@@ -100,8 +100,8 @@ def window_weight(
 
     The differentiable replacement for a hard boolean window
     ``(t >= lo) & (t <= hi)``. Point-sampling a step function makes the result a
-    **staircase** in ``lo`` and ``hi`` — it changes only when a grid node crosses
-    a boundary — so its autodiff gradient is zero almost everywhere and any
+    **staircase** in ``lo`` and ``hi``: it changes only when a grid node crosses
+    a boundary; so its autodiff gradient is zero almost everywhere and any
     gradient-based sampler gets no signal from the boundary parameters (#1374).
 
     This returns the exact cell average of the window indicator instead:
@@ -116,9 +116,9 @@ def window_weight(
 
     Parameters
     ----------
-    t_lookback : array_like, shape (n_age,)
+    t_lookback: array_like, shape (n_age,)
         Lookback time grid [yr]. Monotone; either direction.
-    lo, hi : float or ndarray
+    lo, hi: float or ndarray
         Window bounds [yr], same units as ``t_lookback``. Default to
         :math:`\mp\infty`, i.e. a one-sided window when only one is given.
 
@@ -129,7 +129,7 @@ def window_weight(
 
     Notes
     -----
-    **JIT/grad/vmap-safe**: yes — pure elementwise JAX, no boolean indexing.
+    **JIT/grad/vmap-safe**: yes, pure elementwise JAX, no boolean indexing.
 
     Three properties make this the right construction rather than an arbitrary
     smoothing:
@@ -184,7 +184,7 @@ def _clamp_age(t_lookback: jnp.ndarray) -> jnp.ndarray:
 
     Parameters
     ----------
-    t_lookback : array
+    t_lookback: array
         Lookback time (yr).
 
     Returns
@@ -207,13 +207,13 @@ def _skewed_gaussian_kernel(
 
     Parameters
     ----------
-    age : array
+    age: array
         Lookback time (yr), should be clamped.
-    peak_lbt : float
+    peak_lbt: float
         Peak lookback time (yr).
-    width : float
+    width: float
         Width of the Gaussian (yr).
-    skew : float
+    skew: float
         Skewness parameter. 0 = symmetric, >0 skews toward older ages.
 
     Returns
@@ -226,7 +226,7 @@ def _skewed_gaussian_kernel(
     return jnp.exp(-(y**2) / 2.0)
 
 
-# ── Smooth SFH models — all take t_lookback (yr), return SFR (Msun/yr)
+# ── Smooth SFH models: all take t_lookback (yr), return SFR (Msun/yr)
 
 
 def truncated_skewnormal(
@@ -245,14 +245,14 @@ def truncated_skewnormal(
 
     Parameters
     ----------
-    t_lookback : array_like, shape (n_age,)
+    t_lookback: array_like, shape (n_age,)
         Lookback time [yr].
-    log_total_mass : float
+    log_total_mass: float
         log10 of total stellar mass formed [Msun]. The shape is rescaled so
         that ``trapezoid(sfr, t_lookback) = 10**log_total_mass`` exactly.
-    peak_lbt : float
+    peak_lbt: float
         Peak lookback time [yr].
-    width : float
+    width: float
         Gaussian width parameter [yr]. **SSP grid aliasing**: the forward
         model interpolates ``SFR(t)`` at SSP grid points (a point-sample,
         not a bin-integral), so a ``width`` narrower than the local SSP
@@ -262,9 +262,9 @@ def truncated_skewnormal(
         See issue #299. ``SEDModel.build`` emits a
         :class:`SFHBurstAliasingWarning` when the chosen ``width`` is
         too narrow for the SSP grid.
-    skew : float
+    skew: float
         Skewness parameter [dimensionless]. 0 = symmetric, >0 skews toward older ages.
-    trunc : float
+    trunc: float
         Truncation sharpness [dimensionless]. Larger values produce sharper truncation.
         Typical range: 1-10.
 
@@ -276,9 +276,9 @@ def truncated_skewnormal(
 
     Notes
     -----
-    **JIT-compatible**: yes — uses ``jnp`` primitives and ``jax.lax.erfc``.
+    **JIT-compatible**: yes, uses ``jnp`` primitives and ``jax.lax.erfc``.
 
-    **Gradient-safe**: yes — differentiable everywhere except at SFR=0
+    **Gradient-safe**: yes, differentiable everywhere except at SFR=0
     (where gradient is ill-defined but finite).
 
     The SFH shape is:
@@ -357,16 +357,16 @@ def skewnormal(
 
     Parameters
     ----------
-    t_lookback : array_like, shape (n_age,)
+    t_lookback: array_like, shape (n_age,)
         Lookback time [yr].
-    log_total_mass : float
+    log_total_mass: float
         log10 of total stellar mass formed [Msun]. The shape is rescaled so
         that ``trapezoid(sfr, t_lookback) = 10**log_total_mass`` exactly.
-    peak_lbt : float
+    peak_lbt: float
         Peak lookback time [yr].
-    width : float
+    width: float
         Gaussian width [yr].
-    skew : float
+    skew: float
         Skewness parameter [dimensionless]. 0 = symmetric, >0 skews toward older ages.
 
     Returns
@@ -376,7 +376,7 @@ def skewnormal(
 
     Notes
     -----
-    **JIT-compatible**: yes — all operations use ``jnp`` primitives.
+    **JIT-compatible**: yes, all operations use ``jnp`` primitives.
 
     Examples
     --------
@@ -403,18 +403,18 @@ def gaussian(
     peak_lbt: float,
     width: float,
 ) -> jnp.ndarray:
-    """Gaussian (normal) SFH — skewnormal with skew=0.
+    """Gaussian (normal) SFH: skewnormal with skew=0.
 
     Parameters
     ----------
-    t_lookback : array_like, shape (n_age,)
+    t_lookback: array_like, shape (n_age,)
         Lookback time [yr].
-    log_total_mass : float
+    log_total_mass: float
         log10 of total stellar mass formed [Msun]. The shape is rescaled so
         that ``trapezoid(sfr, t_lookback) = 10**log_total_mass`` exactly.
-    peak_lbt : float
+    peak_lbt: float
         Peak lookback time [yr].
-    width : float
+    width: float
         Gaussian width [yr].
 
     Returns
@@ -424,7 +424,7 @@ def gaussian(
 
     Notes
     -----
-    **JIT-compatible**: yes — all operations use ``jnp`` primitives.
+    **JIT-compatible**: yes, all operations use ``jnp`` primitives.
 
     Examples
     --------
@@ -466,7 +466,7 @@ def lognormal(
 
     **Convention.** With ``age`` set to the age of the universe at the
     source redshift, the peak sits at cosmic time ``peak`` after the Big
-    Bang — the same direction as Carnall+2018 / BAGPIPES ``lognormal``.
+    Bang: the same direction as Carnall+2018 / BAGPIPES ``lognormal``.
     The time variable handed in is always lookback time; the cosmic-time
     conversion ``T = age - t_lookback`` happens here. Resolves the
     time-reversal of #514.
@@ -477,17 +477,17 @@ def lognormal(
 
     Parameters
     ----------
-    t_lookback : array_like, shape (n_age,)
+    t_lookback: array_like, shape (n_age,)
         Lookback time [yr].
-    log_total_mass : float
+    log_total_mass: float
         log10 of total stellar mass formed [Msun]. The shape is rescaled so
         that ``trapezoid(sfr, t_lookback) = 10**log_total_mass`` exactly.
-    peak : float
+    peak: float
         Peak location (mode) in cosmic time since formation [yr].
-    width : float
+    width: float
         Width in log10(T) space [dex]. Converted internally to natural-log
         standard deviation σ = width × ln(10).
-    age : float
+    age: float
         Cosmic time available for star formation [yr] = lookback time of
         formation. Set to ``age_of_universe(z)`` for BAGPIPES direction.
         SFR is zero before formation (``t_lookback > age``).
@@ -499,9 +499,9 @@ def lognormal(
 
     Notes
     -----
-    **JIT-compatible**: yes — all operations use ``jnp`` primitives.
+    **JIT-compatible**: yes, all operations use ``jnp`` primitives.
 
-    **Gradient-safe**: yes — the 1/T factor is computed using safe division
+    **Gradient-safe**: yes, the 1/T factor is computed using safe division
     to avoid NaN leakage in gradients when T ≤ 0.
 
     References
@@ -562,17 +562,17 @@ def double_powerlaw(
 
     Parameters
     ----------
-    t_lookback : array_like, shape (n_age,)
+    t_lookback: array_like, shape (n_age,)
         Lookback time [yr].
-    alpha : float
+    alpha: float
         Falling slope exponent [dimensionless]. Controls the decline from peak
         to present. Larger alpha = steeper decline. Typical range: 0.5-4.
-    beta : float
+    beta: float
         Rising slope exponent [dimensionless]. Controls the rise from early times
         to peak. Larger beta = steeper rise. Typical range: 0.3-3.
-    tau : float
+    tau: float
         Turnover timescale [yr]. Approximately when SFR peaks (in cosmic time).
-    norm : float
+    norm: float
         Normalization factor [Msun/yr]. Note: this controls overall amplitude,
         not stellar mass. :math:`M_\\star = \\int \\mathrm{SFR}(t) \\, dt` is derived.
 
@@ -583,9 +583,9 @@ def double_powerlaw(
 
     Notes
     -----
-    **JIT-compatible**: yes — all operations use ``jnp`` primitives.
+    **JIT-compatible**: yes, all operations use ``jnp`` primitives.
 
-    **Gradient-safe**: yes — differentiable everywhere for positive tau.
+    **Gradient-safe**: yes, differentiable everywhere for positive tau.
 
     The double power law SFH is:
 
@@ -659,19 +659,19 @@ def dpl(
 
     Parameters
     ----------
-    t_lookback : array_like, shape (n_age,)
+    t_lookback: array_like, shape (n_age,)
         Lookback time [yr].
-    alpha : float
+    alpha: float
         Falling (late-time) slope exponent [dimensionless]. Typical 0.5-4.
-    beta : float
+    beta: float
         Rising (early-time) slope exponent [dimensionless]. Typical 0.3-3.
-    tau : float
+    tau: float
         Turnover timescale [yr], in cosmic time since formation.
-    age : float
+    age: float
         Cosmic time available for star formation [yr] = lookback time of
         formation. Set to ``age_of_universe(z)`` for BAGPIPES parity.
         SFR is zero before formation (``t_lookback > age``).
-    log_total_mass : float
+    log_total_mass: float
         log10 of total stellar mass formed [Msun]. The shape is rescaled
         so that ``trapezoid(sfr, t_lookback) = 10**log_total_mass``.
 
@@ -682,7 +682,7 @@ def dpl(
 
     Notes
     -----
-    **JIT-compatible**: yes — all operations use ``jnp`` primitives.
+    **JIT-compatible**: yes, all operations use ``jnp`` primitives.
 
     See :func:`double_powerlaw` for the bare shape (no formation anchor).
 
@@ -722,14 +722,14 @@ def constant(
 
     Parameters
     ----------
-    t_lookback : array_like, shape (n_age,)
+    t_lookback: array_like, shape (n_age,)
         Lookback time [yr].
-    log_total_mass : float
+    log_total_mass: float
         log10 of total stellar mass formed [Msun].
-    start : float
+    start: float
         Younger lookback boundary [yr]. Default 0 (present). Maps from user-facing
         ``sfh_const_end_gyr``.
-    end : float
+    end: float
         Older lookback boundary [yr]. Default AGEMAX_YR. Maps from user-facing
         ``sfh_const_start_gyr``.
 
@@ -740,7 +740,7 @@ def constant(
 
     Notes
     -----
-    **JIT-compatible**: yes — uses ``jnp.where`` and element-wise operations.
+    **JIT-compatible**: yes, uses ``jnp.where`` and element-wise operations.
 
     Internal convention: ``start <= t_lookback <= end`` (both in lookback time).
     The user-facing API names are reversed for chronological intuition.
@@ -775,13 +775,13 @@ def exponential(
 
     Parameters
     ----------
-    t_lookback : array_like, shape (n_age,)
+    t_lookback: array_like, shape (n_age,)
         Lookback time [yr].
-    log_total_mass : float
+    log_total_mass: float
         log10 of total stellar mass formed [Msun].
-    tau : float
+    tau: float
         e-folding timescale [yr].
-    start : float
+    start: float
         Start lookback time [yr]. Default 0 (present).
 
     Returns
@@ -791,7 +791,7 @@ def exponential(
 
     Notes
     -----
-    **JIT-compatible**: yes — uses ``jnp`` primitives for exponential and masking.
+    **JIT-compatible**: yes, uses ``jnp`` primitives for exponential and masking.
 
     Examples
     --------
@@ -803,7 +803,7 @@ def exponential(
     (64,)
     """
     # Clamped so the exponential is finite where the window is zero, then the
-    # cell-averaged window multiplies (#1374 — a hard ``dt >= 0`` step left
+    # cell-averaged window multiplies (#1374; a hard ``dt >= 0`` step left
     # ``start`` with exactly zero autodiff gradient).
     dt = jnp.maximum(t_lookback - start, 0.0)
     shape = jnp.exp(-dt / tau) * window_weight(t_lookback, start, jnp.inf)
@@ -823,13 +823,13 @@ def delayed_exponential(
 
     Parameters
     ----------
-    t_lookback : array_like, shape (n_age,)
+    t_lookback: array_like, shape (n_age,)
         Lookback time [yr].
-    log_total_mass : float
+    log_total_mass: float
         log10 of total stellar mass formed [Msun].
-    tau : float
+    tau: float
         Timescale [yr]. Peak shape value occurs at start + tau.
-    start : float
+    start: float
         Start lookback time [yr]. Default 0 (present).
 
     Returns
@@ -839,7 +839,7 @@ def delayed_exponential(
 
     Notes
     -----
-    **JIT-compatible**: yes — all operations use ``jnp`` primitives.
+    **JIT-compatible**: yes, all operations use ``jnp`` primitives.
 
     Examples
     --------
@@ -863,7 +863,7 @@ def sfhdelayed(
     tau: float,
     age: float,
 ) -> jnp.ndarray:
-    """τ-delayed SFH — matches CIGALE ``sfh_delayed`` / Bagpipes ``delayed`` (#406).
+    """τ-delayed SFH: matches CIGALE ``sfh_delayed`` / Bagpipes ``delayed`` (#406).
 
     .. math::
 
@@ -877,18 +877,18 @@ def sfhdelayed(
     Distinct from :func:`declining_exponential` (registered as ``"tau"``),
     which peaks at galaxy formation (FSPS ``sfh=1`` / Bagpipes
     ``exponential``). The two functions have the same parameter set but
-    physically different shapes — see "Notes" below for the comparison.
+    physically different shapes: see "Notes" below for the comparison.
 
     Parameters
     ----------
-    t_lookback : array_like, shape (n_age,)
+    t_lookback: array_like, shape (n_age,)
         Lookback time [yr].
-    log_total_mass : float
+    log_total_mass: float
         log10 of total stellar mass formed [Msun].
-    tau : float
+    tau: float
         Timescale [yr]. Cosmic-time location of the SFR peak relative
         to galaxy formation.
-    age : float
+    age: float
         Galaxy age [yr] = lookback time of formation. Required ``> τ``
         for the peak to lie inside the observable window.
 
@@ -901,7 +901,7 @@ def sfhdelayed(
 
     Notes
     -----
-    **JIT-compatible**: yes — pure ``jnp`` primitives.
+    **JIT-compatible**: yes, pure ``jnp`` primitives.
 
     **Comparison with the ``"tau"`` shape** (``declining_exponential``):
 
@@ -917,7 +917,7 @@ def sfhdelayed(
 
     Reproduction-notebook audit (#385) traced a wavelength-dependent
     CIGALE-vs-tengri drift to comparing ``tengri.tau`` against
-    ``CIGALE.sfhdelayed`` — physically different SFHs with the same
+    ``CIGALE.sfhdelayed``: physically different SFHs with the same
     name. This function closes that gap.
 
     References
@@ -945,14 +945,14 @@ def declining_exponential(
     tau: float,
     age: float,
 ) -> jnp.ndarray:
-    """Declining tau SFH in lookback time — matches FSPS sfh=1 / bagpipes 'exponential'.
+    """Declining tau SFH in lookback time: matches FSPS sfh=1 / bagpipes 'exponential'.
 
     In cosmic time T, the standard tau model is SFR(T) ∝ exp(-T/tau) for
     ``0 <= T <= age``. Converting T = age - t_lb gives a shape that *increases*
     going back in lookback time (galaxy formed with highest SFR, declining to
     the present). This is opposite to ``exponential``.
 
-    **NOT the same as CIGALE ``sfh_delayed`` / Bagpipes ``delayed``** — those
+    **NOT the same as CIGALE ``sfh_delayed`` / Bagpipes ``delayed``**: those
     peak at cosmic time T = τ, not T = 0. For that shape use
     :func:`sfhdelayed` (registered as ``"delayed"``). Confusing the two
     silently produced a wavelength-dependent residual in the CIGALE
@@ -962,13 +962,13 @@ def declining_exponential(
 
     Parameters
     ----------
-    t_lookback : array_like, shape (n_age,)
+    t_lookback: array_like, shape (n_age,)
         Lookback time [yr].
-    log_total_mass : float
+    log_total_mass: float
         log10 of total stellar mass formed [Msun].
-    tau : float
+    tau: float
         e-folding timescale [yr]. Larger tau = slower decline.
-    age : float
+    age: float
         Galaxy age [yr] = lookback time of galaxy formation.
 
     Returns
@@ -978,7 +978,7 @@ def declining_exponential(
 
     Notes
     -----
-    **JIT-compatible**: yes — uses ``jnp`` primitives for exponential and masking.
+    **JIT-compatible**: yes, uses ``jnp`` primitives for exponential and masking.
     """
     dt = age - t_lookback  # cosmic time elapsed since galaxy formation
     # Clamped so ``raw`` stays finite where the window is zero (inf * 0 = nan).
@@ -996,7 +996,7 @@ def constant_then_exponential(
     quench_age: float,
     age: float,
 ) -> jnp.ndarray:
-    """Constant SFR followed by exponential decline — 'quenching at time T'.
+    """Constant SFR followed by exponential decline: 'quenching at time T'.
 
     Shape is constant (=1) for ``quench_age <= t_lb <= age`` and declines
     exponentially as ``exp(-(quench_age - t_lb)/tau)`` for ``t_lb < quench_age``.
@@ -1004,16 +1004,16 @@ def constant_then_exponential(
 
     Parameters
     ----------
-    t_lookback : array_like, shape (n_age,)
+    t_lookback: array_like, shape (n_age,)
         Lookback time [yr].
-    log_total_mass : float
+    log_total_mass: float
         log10 of total stellar mass formed [Msun], summed over constant and
         decline phases.
-    tau : float
+    tau: float
         e-folding decline timescale [yr] after quenching.
-    quench_age : float
+    quench_age: float
         Lookback time when quenching began [yr].
-    age : float
+    age: float
         Galaxy age [yr] = lookback time of formation. Must be > quench_age.
 
     Returns
@@ -1023,12 +1023,12 @@ def constant_then_exponential(
 
     Notes
     -----
-    **JIT-compatible**: yes — uses conditional masking via ``jnp.where``.
+    **JIT-compatible**: yes, uses conditional masking via ``jnp.where``.
     """
     # ``max(dt_quench, 0)`` makes the constant era fall out of the same
     # expression: before quenching (t_lookback >= quench_age) the clamp gives
     # exp(0) = 1, which is exactly the branch the old ``where`` selected. This
-    # also removes an overflow — the discarded branch evaluated exp(+large),
+    # also removes an overflow: the discarded branch evaluated exp(+large),
     # which autodiff still differentiates through.
     dt_quench = jnp.maximum(quench_age - t_lookback, 0.0)
     shape_full = jnp.exp(-dt_quench / tau)
@@ -1049,11 +1049,11 @@ def triweight_burst(
 
     Parameters
     ----------
-    t_lookback : array_like, shape (n_age,)
+    t_lookback: array_like, shape (n_age,)
         Lookback time [yr].
-    log_tpeak_myr : float
+    log_tpeak_myr: float
         log10 of burst peak time [Myr]. Center of the kernel in log-age space.
-    log_tmax_myr : float
+    log_tmax_myr: float
         log10 of burst duration [Myr]. Controls the kernel half-width.
         The kernel has support roughly ±:math:`3 \times 10^{\log_{\mathrm{tmax}}}` Myr.
 
@@ -1064,7 +1064,7 @@ def triweight_burst(
 
     Notes
     -----
-    **JIT-compatible**: yes — all operations use ``jnp`` primitives.
+    **JIT-compatible**: yes, all operations use ``jnp`` primitives.
 
     This is a **shape-only** function (unitless, not in Msun/yr). The burst
     amplitude is set by the burst mixture fraction in the composition step.
@@ -1113,11 +1113,11 @@ def delayed_tau(t_lookback: jnp.ndarray, tau: float, norm: float) -> jnp.ndarray
 
     Parameters
     ----------
-    t_lookback : array_like, shape (n_age,)
+    t_lookback: array_like, shape (n_age,)
         Lookback time [yr].
-    tau : float
+    tau: float
         Timescale [yr].
-    norm : float
+    norm: float
         Normalization factor [Msun/yr].
 
     Returns
@@ -1127,7 +1127,7 @@ def delayed_tau(t_lookback: jnp.ndarray, tau: float, norm: float) -> jnp.ndarray
 
     Notes
     -----
-    **JIT-compatible**: yes — uses ``jnp`` primitives.
+    **JIT-compatible**: yes, uses ``jnp`` primitives.
 
     Examples
     --------
@@ -1161,23 +1161,23 @@ def psb_wild2020(
 
     Parameters
     ----------
-    t_lookback : array_like, shape (n_age,)
+    t_lookback: array_like, shape (n_age,)
         Lookback time [yr].
-    log_total_mass : float
+    log_total_mass: float
         log10 of total stellar mass formed [Msun], summed over both
         old and burst components.
-    age : float
+    age: float
         Galaxy age [yr] = lookback time of old component formation.
         Exponential is active for burstage < t < age.
-    tau : float
+    tau: float
         e-folding timescale of old exponential component [yr].
-    burstage : float
+    burstage: float
         Lookback time of burst onset [yr]. Burst active for 0 < t < burstage.
-    alpha : float
+    alpha: float
         DPL falling slope [dimensionless] (post-peak in cosmic time).
-    beta : float
+    beta: float
         DPL rising slope [dimensionless] (pre-peak in cosmic time).
-    fburst : float
+    fburst: float
         Fraction of total stellar mass in burst [dimensionless], range [0, 1].
 
     Returns
@@ -1187,7 +1187,7 @@ def psb_wild2020(
 
     Notes
     -----
-    **JIT-compatible**: yes — uses ``jnp`` primitives and logical masking.
+    **JIT-compatible**: yes, uses ``jnp`` primitives and logical masking.
     """
     # --- Old component: declining exponential between burstage and age ---
     # Clamped, then windowed by cell-averaged weights: the hard mask left ``age``
@@ -1224,13 +1224,13 @@ def powerlaw(
 
     Parameters
     ----------
-    t_lookback : array_like, shape (n_age,)
+    t_lookback: array_like, shape (n_age,)
         Lookback time [yr].
-    alpha : float
+    alpha: float
         Power-law exponent [dimensionless].
-    norm : float
+    norm: float
         Normalization factor [Msun/yr].
-    t_ref : float
+    t_ref: float
         Reference timescale [yr]. Default 1e8.
 
     Returns
@@ -1240,7 +1240,7 @@ def powerlaw(
 
     Notes
     -----
-    **JIT-compatible**: yes — uses ``jnp`` primitives.
+    **JIT-compatible**: yes, uses ``jnp`` primitives.
     """
     return norm * (t_lookback / t_ref) ** alpha
 
@@ -1262,16 +1262,16 @@ def delayed_bq(
 
     Parameters
     ----------
-    t_lookback : array_like, shape (n_age,)
+    t_lookback: array_like, shape (n_age,)
         Lookback time [yr].
-    tau_main_yr : float
+    tau_main_yr: float
         e-folding timescale of main component [yr]. Peak occurs at tau_main_yr.
-    age_main_yr : float
+    age_main_yr: float
         Age of the main stellar population / galaxy age [yr]. The delayed tau
         model extends from 0 to age_main_yr.
-    age_bq_yr : float
+    age_bq_yr: float
         Age at which burst/quench episode begins [yr].
-    r_sfr : float
+    r_sfr: float
         Ratio of SFR after/before burst/quench [dimensionless].
         r_sfr < 1 is quenching, r_sfr > 1 is bursting.
 
@@ -1282,9 +1282,9 @@ def delayed_bq(
 
     Notes
     -----
-    **JIT-compatible**: yes — uses ``jnp`` primitives.
+    **JIT-compatible**: yes, uses ``jnp`` primitives.
 
-    **Gradient-safe**: yes — differentiable everywhere for positive tau_main_yr.
+    **Gradient-safe**: yes, differentiable everywhere for positive tau_main_yr.
 
     The SFR is defined as:
 
@@ -1327,7 +1327,7 @@ def delayed_bq(
     sfr_post_bq = r_sfr * sfr_at_bq
     raw = jnp.where(t_lookback >= t_bq, sfr_post_bq, sfr_delayed)
     # ``raw`` is finite for every t_lookback (both branches are), so the
-    # cell-averaged window can simply multiply — restoring a real gradient for
+    # cell-averaged window can simply multiply: restoring a real gradient for
     # ``age_main_yr`` (#1374).
     shape = raw * window_weight(t_lookback, 0.0, age_main_yr)
     return _renormalize_to_mass(jnp.maximum(shape, 0.0), t_lookback, log_total_mass)
@@ -1349,18 +1349,18 @@ def periodic(
 
     Parameters
     ----------
-    t_lookback : array_like, shape (n_age,)
+    t_lookback: array_like, shape (n_age,)
         Lookback time [yr].
-    delta_bursts_yr : float
+    delta_bursts_yr: float
         Elapsed time between the beginning of each burst [yr].
-    tau_bursts_yr : float
+    tau_bursts_yr: float
         Duration (for rectangular) or e-folding timescale [yr] of each event.
-    burst_type : int
+    burst_type: int
         Type of burst event [dimensionless]:
         0 = exponential: exp(-t/tau),
         1 = delayed: (t/tau^2) * exp(-t/tau),
         2 = rectangular: constant 1 for t < tau, 0 otherwise.
-    age_yr : float
+    age_yr: float
         Age of the galaxy / maximum time [yr].
 
     Returns
@@ -1370,9 +1370,9 @@ def periodic(
 
     Notes
     -----
-    **JIT-compatible**: yes — uses ``jnp`` primitives and ``jnp.mod``.
+    **JIT-compatible**: yes, uses ``jnp`` primitives and ``jnp.mod``.
 
-    **Gradient-safe**: yes — differentiable everywhere except at event boundaries
+    **Gradient-safe**: yes, differentiable everywhere except at event boundaries
     (discontinuities for rectangular type).
 
     The SFR is a superposition of multiple burst events spaced delta_bursts_yr
@@ -1453,20 +1453,20 @@ def sfh2exp(
 
     Parameters
     ----------
-    t_lookback : array_like, shape (n_age,)
+    t_lookback: array_like, shape (n_age,)
         Lookback time [yr]; 0 = present, increasing into the past.
-    log_total_mass : float
+    log_total_mass: float
         log10 of total stellar mass formed [Msun].
-    tau_main_yr : float
+    tau_main_yr: float
         e-folding timescale of the main population [yr].
-    tau_burst_yr : float
+    tau_burst_yr: float
         e-folding timescale of the burst [yr].
-    f_burst : float
+    f_burst: float
         Fraction of the total stellar mass formed in the burst
         [dimensionless, in [0, 1)].
-    age_yr : float
+    age_yr: float
         Age of the main population / lookback to formation [yr].
-    burst_age_yr : float
+    burst_age_yr: float
         Lookback time at which the burst began [yr] (``< age_yr``).
 
     Returns
@@ -1477,9 +1477,9 @@ def sfh2exp(
 
     Notes
     -----
-    **JIT-compatible**: yes — uses ``jnp`` primitives only.
+    **JIT-compatible**: yes, uses ``jnp`` primitives only.
 
-    **Gradient-safe**: yes — out-of-window regions use a finite (0.0) dummy
+    **Gradient-safe**: yes, out-of-window regions use a finite (0.0) dummy
     inside :func:`jnp.where` before the exponential, so no inf/NaN leaks through
     the VJP.
 
@@ -1568,9 +1568,9 @@ def buat08(
 
     Parameters
     ----------
-    t_lookback : array_like, shape (n_age,)
+    t_lookback: array_like, shape (n_age,)
         Lookback time [yr].
-    velocity_km_s : float
+    velocity_km_s: float
         Rotational velocity of the galaxy [km/s]. Must be between 40 and 360.
         Will be clipped to this range if necessary.
 
@@ -1581,9 +1581,9 @@ def buat08(
 
     Notes
     -----
-    **JIT-compatible**: yes — uses ``jnp`` primitives and ``jnp.interp``.
+    **JIT-compatible**: yes, uses ``jnp`` primitives and ``jnp.interp``.
 
-    **Gradient-safe**: yes — differentiable with respect to velocity.
+    **Gradient-safe**: yes, differentiable with respect to velocity.
 
     Coefficients from Buat et al. (2008) Table 2, extended with additional
     data provided by S. Boissier for velocities down to 40 km/s.
@@ -1654,13 +1654,13 @@ def spline(
 
     Parameters
     ----------
-    t_lookback : array_like, shape (n_age,)
+    t_lookback: array_like, shape (n_age,)
         Lookback time grid [yr].
-    sfr_nodes : array_like, shape (n_nodes,)
+    sfr_nodes: array_like, shape (n_nodes,)
         SFR at each control node [Msun/yr]. Free parameters. Must be non-negative.
-    node_ages_yr : array_like, shape (n_nodes,)
+    node_ages_yr: array_like, shape (n_nodes,)
         Lookback times of control nodes [yr]. Must be strictly increasing.
-        **Not JIT-traced** — pass as a concrete array constructed before JIT.
+        **Not JIT-traced**: pass as a concrete array constructed before JIT.
         Typical 4-node default: ``[1e5, 2e9, 9e9, 13e9]`` yr.
         Typical 6-node default: ``[1e5, 1e8, 1e9, 5e9, 9e9, 13e9]`` yr.
 
@@ -1671,7 +1671,7 @@ def spline(
 
     Notes
     -----
-    **JIT-compatible**: yes — ``sfr_nodes`` is fully traced. ``node_ages_yr``
+    **JIT-compatible**: yes, ``sfr_nodes`` is fully traced. ``node_ages_yr``
     must be a concrete (non-traced) array; pass it as a Python/NumPy array or
     mark it as static in :func:`jax.jit`.
 
@@ -1688,7 +1688,7 @@ def spline(
     that the interpolant cannot overshoot between adjacent nodes.
 
     Outside the range ``[node_ages_yr[0], node_ages_yr[-1]]``, ``jnp.searchsorted``
-    clamps to the nearest segment — equivalent to constant extrapolation beyond
+    clamps to the nearest segment: equivalent to constant extrapolation beyond
     the outermost nodes. Clamp ``node_ages_yr[0]`` to the youngest SSP age (typically
     1e5 yr) to avoid extrapolation into the stellar library edge.
 
@@ -1748,22 +1748,22 @@ def snorm_burst(
 
     Parameters
     ----------
-    t_lookback : array_like, shape (n_age,)
+    t_lookback: array_like, shape (n_age,)
         Lookback time grid [yr].
-    log_total_mass : float
+    log_total_mass: float
         log10 of total stellar mass formed [Msun], summed over both
         smooth and burst components.
-    peak_lbt : float
+    peak_lbt: float
         Peak lookback time of the skew-normal component [yr].
-    width : float
+    width: float
         Gaussian width of the skew-normal component [yr].
-    skew : float
+    skew: float
         Skewness parameter [dimensionless]. 0 = symmetric, >0 skews toward older ages.
-    burst_sfr : float
+    burst_sfr: float
         Relative burst amplitude [dimensionless]. Ratio of the burst plateau
         height to the (unnormalized) skew-normal kernel peak; the absolute
         SFR is set by the global ``log_total_mass`` rescale. Set to 0 to disable.
-    burst_age : float
+    burst_age: float
         Lookback time below which the burst is active [yr]. Default 1e8 yr (100 Myr).
 
     Returns
@@ -1773,7 +1773,7 @@ def snorm_burst(
 
     Notes
     -----
-    **JIT-compatible**: yes — all operations use ``jnp`` primitives.
+    **JIT-compatible**: yes, all operations use ``jnp`` primitives.
 
     The total SFH is:
 
@@ -1806,7 +1806,7 @@ def snorm_burst(
     >>> sfr.shape
     (64,)
     """
-    # Build the composite shape WITHOUT mass — use the bare skew kernel,
+    # Build the composite shape WITHOUT mass: use the bare skew kernel,
     # not the renormalized skewnormal SFR. Otherwise burst_sfr would have
     # to compete against an already-mass-scaled smooth component.
     age = _clamp_age(t_lookback)
@@ -1837,24 +1837,24 @@ def snorm_trunc_burst(
 
     Parameters
     ----------
-    t_lookback : array_like, shape (n_age,)
+    t_lookback: array_like, shape (n_age,)
         Lookback time grid [yr].
-    log_total_mass : float
+    log_total_mass: float
         log10 of total stellar mass formed [Msun], summed over both
         smooth and burst components.
-    peak_lbt : float
+    peak_lbt: float
         Peak lookback time [yr].
-    width : float
+    width: float
         Gaussian width [yr].
-    skew : float
+    skew: float
         Skewness parameter [dimensionless].
-    trunc : float
+    trunc: float
         Truncation sharpness [dimensionless]. Larger values = sharper truncation.
-    burst_sfr : float
+    burst_sfr: float
         Relative burst amplitude [dimensionless]. Ratio of the burst plateau
         height to the (unnormalized) tsnorm kernel peak; the absolute SFR is
         set by the global ``log_total_mass`` rescale. Set to 0 to disable.
-    burst_age : float
+    burst_age: float
         Lookback time below which the burst is active [yr].
 
     Returns
@@ -1864,7 +1864,7 @@ def snorm_trunc_burst(
 
     Notes
     -----
-    **JIT-compatible**: yes — all operations use ``jnp`` primitives.
+    **JIT-compatible**: yes, all operations use ``jnp`` primitives.
 
     The total SFH is:
 
@@ -1941,15 +1941,15 @@ def top_hat(
 
     Parameters
     ----------
-    t_lookback : array_like, shape (n_age,)
+    t_lookback: array_like, shape (n_age,)
         Lookback time [yr].
-    log_total_mass : float
+    log_total_mass: float
         log10 of total stellar mass formed in the window [Msun].
-    t_start : float
+    t_start: float
         Older lookback boundary [yr]. Must have t_start > t_end.
-    t_end : float
+    t_end: float
         Younger lookback boundary [yr]. Must have t_end < t_start.
-    smooth_width : float, optional
+    smooth_width: float, optional
         Width of sigmoid transition region [yr]. Controls gradient smoothness
         at edges. Default 1e8 (100 Myr). Typical range: 1e7 - 1e9.
 
@@ -1960,9 +1960,9 @@ def top_hat(
 
     Notes
     -----
-    **JIT-compatible**: yes — uses ``jax.nn.sigmoid`` for smooth edges.
+    **JIT-compatible**: yes, uses ``jax.nn.sigmoid`` for smooth edges.
 
-    **Gradient-safe**: yes — sigmoid ensures differentiability everywhere.
+    **Gradient-safe**: yes, sigmoid ensures differentiability everywhere.
 
     The SFH is:
 
@@ -2016,13 +2016,13 @@ def gaussian_burst(
 
     Parameters
     ----------
-    t_lookback : array_like, shape (n_age,)
+    t_lookback: array_like, shape (n_age,)
         Lookback time [yr].
-    log_total_mass : float
+    log_total_mass: float
         log10 of total stellar mass formed in the burst [Msun].
-    t_peak : float
+    t_peak: float
         Peak lookback time (age of burst) [yr].
-    sigma : float
+    sigma: float
         Standard deviation of the Gaussian envelope [yr]. The FWHM is
         approximately 2.355 * sigma.
 
@@ -2033,9 +2033,9 @@ def gaussian_burst(
 
     Notes
     -----
-    **JIT-compatible**: yes — uses ``jnp`` primitives for Gaussian kernel.
+    **JIT-compatible**: yes, uses ``jnp`` primitives for Gaussian kernel.
 
-    **Gradient-safe**: yes — differentiable everywhere.
+    **Gradient-safe**: yes, differentiable everywhere.
 
     The SFH is:
 

@@ -40,7 +40,7 @@ Two notes that matter for getting realistic IR SEDs:
 2. **The AGN side does not need an explicit re-emission loop.** GRAHSP's
    torus parameters (``fcov``, cool/hot log-Gaussians) already empirically
    model the dust re-radiation of absorbed UV/optical AGN light (paper
-   §2.1.5). We publish ``L_agn_absorbed`` for diagnostics only — it is
+   §2.1.5). We publish ``L_agn_absorbed`` for diagnostics only: it is
    *not* fed into the Dale 2014 dust-emission component, since doing so
    would double-count the torus contribution.
 
@@ -104,35 +104,35 @@ class GRAHSPSEDComponentConfig(SEDComponentConfig):
 
     Attributes
     ----------
-    name : str
+    name: str
         Diagnostic identifier.
-    agn_type : int
+    agn_type: int
         ``1`` Sy1 / QSO (broad+narrow_sy2+FeII), ``2`` Sy2 (narrow_sy2 only),
         ``3`` LINER (narrow_liner only).
-    include_bbb, include_lines, include_feii : bool
+    include_bbb, include_lines, include_feii: bool
         Which AGN-side components to include in the BBB-side SED.
-    include_torus, include_si : bool
+    include_torus, include_si: bool
         Whether to include the IR torus continuum and the Si difference
         feature.
-    include_balmer : bool
+    include_balmer: bool
         Include the Grandi 1982 Balmer continuum (only added for
         ``agn_type == 1``; controlled in strength by ``agn_grahsp_a_bc``).
-    apply_attenuation : bool
+    apply_attenuation: bool
         Apply the GRAHSP bi-attenuation curve to the AGN spectrum. When
         ``False`` the component emits the intrinsic SED only.
-    torus_model : {"gaussian", "mn12"}
+    torus_model: {"gaussian", "mn12"}
         ``"gaussian"`` -> empirical log-Gaussian torus (``activategtorus``);
         ``"mn12"`` -> Mor & Netzer 2012 template torus (``activatetorus``).
         **Static** (structural choice).
-    feii_template : {"bruhweiler2008", "veroncetty2004"}
+    feii_template: {"bruhweiler2008", "veroncetty2004"}
         FeII forest template. **Static**.
-    disc_model : {None, "netzer"}
+    disc_model: {None, "netzer"}
         ``None`` -> smooth bending power-law BBB; ``"netzer"`` -> Netzer
         accretion-disc grid (replaces the BBB). **Static**.
-    disc_m, disc_a, disc_mdot : str
+    disc_m, disc_a, disc_mdot: str
         Netzer disc grid selection (log10 M_BH/Msun, spin, Eddington ratio).
         Only used when ``disc_model == "netzer"``. **Static**.
-    template_path : str | None
+    template_path: str | None
         Override path to ``grahsp_templates.h5``. ``None`` -> default.
     """
 
@@ -221,7 +221,7 @@ class GRAHSPSEDComponent:
 
             - ``buchner2024``: always (the GRAHSP model itself).
             - ``grandi1982``: if ``include_balmer``.
-            - ``bruhweiler_verner2008`` / ``veron_cetty2004`` — if
+            - ``bruhweiler_verner2008`` / ``veron_cetty2004``: if
               ``include_feii``, selected by ``feii_template``.
             - ``mor_netzer2012``: if ``include_torus`` and
               ``torus_model == "mn12"`` (template torus).
@@ -229,7 +229,7 @@ class GRAHSPSEDComponent:
 
         Notes
         -----
-        **JIT-compatible**: no — reads ``self.config`` (static metadata).
+        **JIT-compatible**: no, reads ``self.config`` (static metadata).
         """
         cfg = self.config
         keys: list[str] = ["buchner2024"]
@@ -388,8 +388,8 @@ class GRAHSPSEDComponent:
 
         Parameters
         ----------
-        ssp_data : ignored
-        wave_grid : ignored — templates are independent of the user grid.
+        ssp_data: ignored
+        wave_grid: ignored: templates are independent of the user grid.
         """
         del ssp_data, wave_grid
         if self.config.template_path is not None:
@@ -429,18 +429,18 @@ class GRAHSPSEDComponent:
     ) -> ForwardState:
         r"""Add GRAHSP AGN emission to ``state.sed_intrinsic``.
 
-        ``ssp_data`` is accepted for Protocol uniformity but unused — this
+        ``ssp_data`` is accepted for Protocol uniformity but unused: this
         component reads only from ``state`` and ``params``.
 
         Parameters
         ----------
-        state : ForwardState
+        state: ForwardState
             ``state.wave`` is rest-frame Å.
-        params : mapping
+        params: mapping
             ``agn_grahsp_*`` keys.
-        templates_state : GRAHSPSEDComponentState, optional
+        templates_state: GRAHSPSEDComponentState, optional
             Pre-loaded template tensors. If ``None``, a fresh bundle is
-            loaded (eager file I/O — avoid in JITed paths).
+            loaded (eager file I/O: avoid in JITed paths).
 
         Returns
         -------
@@ -610,7 +610,7 @@ class GRAHSPSEDComponent:
         L_bol_BBB = bolometric_luminosity_bbb(wave_nm, bbb_intrinsic)
         L_bol_torus = bolometric_luminosity_torus(wave_nm, torus_intrinsic)
         # Diagnostic: integrated AGN-side absorbed luminosity (intrinsic - attenuated).
-        # Reported but NOT injected into the Dale 2014 dust-emission loop —
+        # Reported but NOT injected into the Dale 2014 dust-emission loop :
         # GRAHSP's torus already empirically captures dust re-radiation.
         L_agn_absorbed = jnp.trapezoid((bbb_intrinsic + torus_intrinsic) - L_lambda_total, wave_nm)
 

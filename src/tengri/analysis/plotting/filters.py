@@ -31,17 +31,17 @@ def plot_filter_curves(
 
     Parameters
     ----------
-    names : list of str
+    names: list of str
         Short filter names from ``FILTER_REGISTRY``.
-    ax : matplotlib.axes.Axes, optional
+    ax: matplotlib.axes.Axes, optional
         Axes to draw on.  Created if ``None``.
-    show_eff_wave : bool
+    show_eff_wave: bool
         Mark each filter's effective wavelength with a vertical line.
-    normalize : bool
+    normalize: bool
         Normalize each curve to unit peak before plotting.
-    label_filters : bool
+    label_filters: bool
         Add filter name labels to the legend.
-    alpha : float
+    alpha: float
         Curve transparency.
 
     Returns
@@ -91,13 +91,13 @@ def plot_filter_coverage(
 
     Parameters
     ----------
-    names : list of str
+    names: list of str
         Short filter names from ``FILTER_REGISTRY``.
-    ax : matplotlib.axes.Axes, optional
+    ax: matplotlib.axes.Axes, optional
         Axes to draw on.  Created if ``None``.
-    color_by_facility : bool
+    color_by_facility: bool
         Color bars by facility.
-    show_labels : bool
+    show_labels: bool
         Annotate bars with filter name.
 
     Returns
@@ -175,13 +175,13 @@ def compare_filter_sets(
 
     Parameters
     ----------
-    set_a, set_b : list of str
+    set_a, set_b: list of str
         Short filter names for each set.
-    ax : matplotlib.axes.Axes, optional
+    ax: matplotlib.axes.Axes, optional
         Axes to draw on.  Created if ``None``.
-    labels : tuple of str
+    labels: tuple of str
         Legend labels for each set.
-    normalize : bool
+    normalize: bool
         Normalize each curve to unit peak.
 
     Returns

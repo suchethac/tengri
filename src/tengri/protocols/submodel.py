@@ -7,7 +7,7 @@ composer over a list of components. Each population carries one SED
 SubModel and optionally one spatial SubModel; ``ForwardModel`` runs the
 populations in sequence and hands the result to ``ObservationModel``.
 
-This is a Protocol, not an ABC — implementations satisfy it by shape.
+This is a Protocol, not an ABC: implementations satisfy it by shape.
 The runtime-checkable variant is provided so smoke tests can assert
 ``isinstance(obj, SubModel)`` without importing a concrete base.
 """
@@ -30,7 +30,7 @@ class SubModel(Protocol):
 
     Required attributes
     -------------------
-    name : str
+    name: str
         Stable identifier for diagnostics. Examples: ``"sed"``,
         ``"spatial"``, ``"spatial_sed"``.
 
@@ -90,10 +90,10 @@ class SubModel(Protocol):
 
         Parameters
         ----------
-        state : ForwardState
+        state: ForwardState
             Current state from upstream sub-models (e.g. spatial reads
             keys produced by SED in :class:`SpatialSEDModel`).
-        params : mapping of str -> array
+        params: mapping of str -> array
             Free parameter values for parameters owned by this
             SubModel's components.
 

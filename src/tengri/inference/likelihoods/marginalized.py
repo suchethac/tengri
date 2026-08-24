@@ -3,10 +3,10 @@
 
 Wraps two existing math primitives:
 
-- :class:`CalibrationMarginalizedLikelihood` —
+- :class:`CalibrationMarginalizedLikelihood`,
   :func:`tengri.observation.calibration.marginalize_calibration`
   (Chebyshev polynomial calibration integrated out analytically).
-- :class:`ELineMarginalizedLikelihood` —
+- :class:`ELineMarginalizedLikelihood`,
   :func:`tengri.observation.eline_marginalization.marginalize_emission_lines`
   (linear emission-line amplitudes integrated out analytically).
 
@@ -42,7 +42,7 @@ __all__ = [
 
 
 # ─────────────────────────────────────────────────────────────────────
-# Calibration polynomial — Chebyshev marginalization
+# Calibration polynomial, Chebyshev marginalization
 # ─────────────────────────────────────────────────────────────────────
 
 
@@ -60,25 +60,25 @@ class CalibrationMarginalizedLikelihood:
 
     Parameters
     ----------
-    fnu_obs : ndarray, shape (n_pixels,)
+    fnu_obs: ndarray, shape (n_pixels,)
         Observed spectrum [erg/s/cm²/Hz].
-    fnu_err : ndarray, shape (n_pixels,)
+    fnu_err: ndarray, shape (n_pixels,)
         1-σ uncertainties.
-    wavelength : ndarray, shape (n_pixels,)
+    wavelength: ndarray, shape (n_pixels,)
         Wavelength grid [Å]. Required for the Chebyshev basis; held
         as a Python attribute (not a free parameter).
-    n_poly : int, keyword-only
+    n_poly: int, keyword-only
         Number of polynomial coefficients (T_1 through T_n_poly).
         T_0 = 1 is implicit. Default 3.
-    prior_sigma : float, keyword-only
+    prior_sigma: float, keyword-only
         Standard deviation of the Gaussian prior on each coefficient.
         Default 1.0.
-    channel : str, keyword-only
+    channel: str, keyword-only
         Prediction-dict key. Default ``"spec_fnu"``.
 
     Notes
     -----
-    **JIT-compatible**: yes — ``n_poly`` is a static argument of the
+    **JIT-compatible**: yes, ``n_poly`` is a static argument of the
     underlying primitive.
 
     Returns the *positive* marginal log-likelihood (data term only;
@@ -126,7 +126,7 @@ class CalibrationMarginalizedLikelihood:
 
 
 # ─────────────────────────────────────────────────────────────────────
-# Emission-line amplitudes — analytic marginalization
+# Emission-line amplitudes, analytic marginalization
 # ─────────────────────────────────────────────────────────────────────
 
 
@@ -143,19 +143,19 @@ class ELineMarginalizedLikelihood:
 
     Parameters
     ----------
-    fnu_obs : ndarray, shape (n_pixels,)
+    fnu_obs: ndarray, shape (n_pixels,)
         Observed spectrum [erg/s/cm²/Hz].
-    fnu_err : ndarray, shape (n_pixels,)
+    fnu_err: ndarray, shape (n_pixels,)
         1-σ uncertainties.
-    design_matrix : ndarray, shape (n_pixels, n_lines)
-        Per-line shape evaluated at every pixel — built once via
+    design_matrix: ndarray, shape (n_pixels, n_lines)
+        Per-line shape evaluated at every pixel, built once via
         :func:`tengri.observation.eline_marginalization.build_eline_design_matrix`
         (or the broad-line / doublet-constrained variants). Held on
         ``self`` because line wavelengths and LSF widths are fixed.
-    prior_variance : ndarray | None, keyword-only
+    prior_variance: ndarray | None, keyword-only
         Per-line prior variance on the amplitude. ``None`` → flat
-        (1e10) — the original primitive's default.
-    channel : str, keyword-only
+        (1e10), the original primitive's default.
+    channel: str, keyword-only
         Prediction-dict key. Default ``"spec_fnu"``.
 
     Notes
@@ -225,7 +225,7 @@ class ELineMarginalizedLikelihood:
 
 
 # ─────────────────────────────────────────────────────────────────────
-# Emission-line amplitudes — Cloudy-prior marginalization
+# Emission-line amplitudes, Cloudy-prior marginalization
 # ─────────────────────────────────────────────────────────────────────
 
 
@@ -236,27 +236,27 @@ class CloudyELineMarginalizedLikelihood:
     Same conjugate-Gaussian marginalization as
     :class:`ELineMarginalizedLikelihood`, but the per-line prior
     means come from a Cloudy grid evaluated at the current
-    ``(log_z, neb_logU)`` — both read from ``params`` at log-prob
+    ``(log_z, neb_logU)``, both read from ``params`` at log-prob
     time, so the prior shifts with the sampler. ``prior_width_dex``
     sets the prior width around the Cloudy expectation.
 
     Parameters
     ----------
-    fnu_obs, fnu_err : ndarray, shape (n_pixels,)
+    fnu_obs, fnu_err: ndarray, shape (n_pixels,)
         Observed spectrum and 1-σ uncertainties [erg/s/cm²/Hz].
-    design_matrix_builder : callable, keyword-only
+    design_matrix_builder: callable, keyword-only
         Closure that takes the params dict and returns a fresh
-        ``(n_pixels, n_lines)`` design matrix — typically wraps
+        ``(n_pixels, n_lines)`` design matrix, typically wraps
         ``tengri.inference.likelihood._build_eline_G_eff``.
         Per-call rebuild is required because line wavelengths shift
         with redshift.
-    line_wavelengths : ndarray, shape (n_lines,)
+    line_wavelengths: ndarray, shape (n_lines,)
         Rest-frame line wavelengths in vacuum [Å]. Used by the Cloudy
         prior to look up expected line ratios.
-    prior_width_dex : float, keyword-only
+    prior_width_dex: float, keyword-only
         Prior σ on log10 amplitude around the Cloudy expectation
         [dex]. Default 0.5.
-    channel : str, keyword-only
+    channel: str, keyword-only
         Prediction-dict key. Default ``"spec_fnu"``.
 
     Notes
@@ -309,7 +309,7 @@ class CloudyELineMarginalizedLikelihood:
 
 
 # ─────────────────────────────────────────────────────────────────────
-# Emission-line amplitudes — explicit free-parameter fitting
+# Emission-line amplitudes, explicit free-parameter fitting
 # ─────────────────────────────────────────────────────────────────────
 
 
@@ -326,20 +326,20 @@ class ELineFittedLikelihood:
 
     Parameters
     ----------
-    fnu_obs, fnu_err : ndarray, shape (n_pixels,)
+    fnu_obs, fnu_err: ndarray, shape (n_pixels,)
         Observed spectrum and 1-σ uncertainties [erg/s/cm²/Hz].
-    design_matrix_builder : callable, keyword-only
+    design_matrix_builder: callable, keyword-only
         Per-call closure (same shape as
         :class:`CloudyELineMarginalizedLikelihood.design_matrix_builder`).
-    amplitude_names : tuple of str, keyword-only
+    amplitude_names: tuple of str, keyword-only
         Param keys to read for each line amplitude. Order must match
         the columns of the design matrix.
-    channel : str, keyword-only
+    channel: str, keyword-only
         Prediction-dict key. Default ``"spec_fnu"``.
 
     Notes
     -----
-    **JIT-compatible**: yes — the amplitude lookup is a simple list
+    **JIT-compatible**: yes, the amplitude lookup is a simple list
     comprehension over a static tuple.
     """
 
@@ -402,28 +402,28 @@ class CalibrationELineMarginalizedLikelihood:
 
     Parameters
     ----------
-    fnu_obs, fnu_err : ndarray, shape (n_pixels,)
+    fnu_obs, fnu_err: ndarray, shape (n_pixels,)
         Observed spectrum and 1-σ uncertainties [erg/s/cm²/Hz].
-    wavelength : ndarray, shape (n_pixels,)
+    wavelength: ndarray, shape (n_pixels,)
         Wavelength grid for the Chebyshev calibration basis [Å].
-    design_matrix_builder : callable, keyword-only
-        Per-call closure rebuilding the line design matrix. Required —
+    design_matrix_builder: callable, keyword-only
+        Per-call closure rebuilding the line design matrix. Required,
         line wavelengths shift with redshift. See
         :class:`ELineMarginalizedLikelihood`.
-    n_poly, prior_sigma : keyword-only
+    n_poly, prior_sigma: keyword-only
         Calibration polynomial: order and per-coefficient prior σ.
-    eline_prior_type : str, keyword-only
-        ``"flat"`` (default — Gaussian with per-line variance
+    eline_prior_type: str, keyword-only
+        ``"flat"`` (default, Gaussian with per-line variance
         ``eline_prior_sigma**2``) or ``"cloudy"`` (Cloudy-grid prior
         evaluated at ``params["met_logzsol"]`` /
         ``params["neb_logU"]``).
-    eline_prior_sigma : float, keyword-only
+    eline_prior_sigma: float, keyword-only
         Per-line prior σ for the flat case [erg/s/cm²/Hz]. Default 1e10.
-    eline_line_wavelengths : ndarray | None, keyword-only
+    eline_line_wavelengths: ndarray | None, keyword-only
         Rest-frame line wavelengths (Cloudy case only) [Å].
-    eline_prior_width_dex : float, keyword-only
+    eline_prior_width_dex: float, keyword-only
         Cloudy prior width [dex]. Default 0.5.
-    channel : str, keyword-only
+    channel: str, keyword-only
         Prediction-dict key. Default ``"spec_fnu"``.
 
     Notes

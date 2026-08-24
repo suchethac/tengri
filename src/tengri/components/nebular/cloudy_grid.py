@@ -202,7 +202,7 @@ def load_cloudy_grid(filepath: str) -> CloudyGridData:
 
     Parameters
     ----------
-    filepath : str
+    filepath: str
         Path to cloudy_grid_*.h5 file (from convert_fsps_cloudy_grid.py).
 
     Returns
@@ -212,7 +212,7 @@ def load_cloudy_grid(filepath: str) -> CloudyGridData:
 
     Notes
     -----
-    **JIT-compatible**: no — HDF5 I/O is not JAX-compatible. Call once
+    **JIT-compatible**: no, HDF5 I/O is not JAX-compatible. Call once
     at model initialization and cache the result for repeated use.
 
     """
@@ -277,11 +277,11 @@ def _trilinear_interp(
 
     Parameters
     ----------
-    data : array, shape (n_z, n_age, n_u, ...)
+    data: array, shape (n_z, n_age, n_u, ...)
         Grid data with 3 leading axes and arbitrary trailing shape.
-    grid_z, grid_age, grid_u : array
+    grid_z, grid_age, grid_u: array
         Grid axis values.
-    z_val, age_val, u_val : float
+    z_val, age_val, u_val: float
         Query point.
 
     Returns
@@ -338,7 +338,7 @@ def _trilinear_interp_smooth(
 
     Uses :func:`_shared.compute_grid_weights` on each axis independently,
     then contracts all three weight vectors against the full grid array
-    via ``tensordot`` — equivalent to the outer-product weighted sum
+    via ``tensordot``: equivalent to the outer-product weighted sum
 
         result = Σ_{z,a,u} wz[z] · wa[a] · wu[u] · data[z, a, u, ...]
 
@@ -347,15 +347,15 @@ def _trilinear_interp_smooth(
 
     Parameters
     ----------
-    data : array, shape (n_z, n_age, n_u, ...)
+    data: array, shape (n_z, n_age, n_u, ...)
         Grid values with 3 leading axes and arbitrary trailing dimensions.
-    grid_z, grid_age, grid_u : array
+    grid_z, grid_age, grid_u: array
         Sorted axis values.
-    z_val, age_val, u_val : float
+    z_val, age_val, u_val: float
         Query point.
-    scatter : float
+    scatter: float
         Triweight kernel bandwidth (same units as each axis).  Default 0.2.
-    edges_z, edges_age, edges_u : array or None
+    edges_z, edges_age, edges_u: array or None
         Precomputed bin edges from :func:`edges_for_grid`.  When ``None``,
         edges are computed on the fly.
 
@@ -366,8 +366,8 @@ def _trilinear_interp_smooth(
 
     Notes
     -----
-    **JIT-compatible**: yes — all operations use ``jnp`` primitives.
-    **Gradient-safe**: yes — triweight kernel is C²-continuous.
+    **JIT-compatible**: yes, all operations use ``jnp`` primitives.
+    **Gradient-safe**: yes, triweight kernel is C²-continuous.
 
     """
     wz = compute_grid_weights(z_val, grid_z, scatter, edges=edges_z)
@@ -391,22 +391,22 @@ class CloudyGridBackend:
 
     Parameters
     ----------
-    grid_path : str
+    grid_path: str
         Path to tengri-format CLOUDY HDF5 grid.
-    ssp_data : SSPData
+    ssp_data: SSPData
         SSP templates (for Q_H computation).
-    grid_interp : {"linear", "triweight"}
+    grid_interp: {"linear", "triweight"}
         Interpolation mode for the CLOUDY grid axes (logZ_gas, log_age, logU).
 
-        ``"linear"`` (default) — piecewise-linear trilinear interpolation.
+        ``"linear"`` (default): piecewise-linear trilinear interpolation.
         Fast; exact at grid nodes; kinks in the gradient at node boundaries.
 
-        ``"triweight"`` — smooth triweight-kernel interpolation (Hearin et al.
+        ``"triweight"``: smooth triweight-kernel interpolation (Hearin et al.
         2023 Eq. 10).  C²-continuous gradients through every node; all three
         axes use the same kernel bandwidth ``grid_scatter``.  Slightly slower
         than linear (~3× tensordot cost vs 8-corner lookup) but fully
         differentiable everywhere.
-    grid_scatter : float
+    grid_scatter: float
         Triweight kernel bandwidth in the natural units of each axis (dex).
         Only used when ``grid_interp="triweight"``.  Default 0.2.
 
@@ -456,7 +456,7 @@ class CloudyGridBackend:
         # Max age for nebular emission: 100 Myr (conservative).
         # CLOUDY grid stops at ~20 Myr, but Q_H is non-negligible up to
         # ~100 Myr from post-AGB/HB stars. Beyond 100 Myr, Q_H drops
-        # >6 orders of magnitude below peak — safe to ignore.
+        # >6 orders of magnitude below peak: safe to ignore.
         self._max_neb_log_age = 8.0  # log10(100 Myr in yr)
 
         # Precompute triweight bin edges (static grid, avoids rebuilding in JIT)
@@ -509,15 +509,15 @@ class CloudyGridBackend:
 
         Parameters
         ----------
-        filter_waves : list
+        filter_waves: list
             List of filter wavelength arrays (Angstrom).
-        filter_trans : list
+        filter_trans: list
             List of filter transmission curves.
-        redshift : float
+        redshift: float
             Redshift for redshifting observed-frame wavelengths.
-        dl_cm : float
+        dl_cm: float
             Luminosity distance (cm).
-        fixed : dict[int, float], optional
+        fixed: dict[int, float], optional
             Mapping of axis index → fixed value. Axes are numbered from 0:
 
             - 0: log_met (metallicity)
@@ -604,7 +604,7 @@ class CloudyGridBackend:
         This avoids recomputing the ionizing integral at every inference step.
         """
         # Metadata check (#1014): a grid flagged nebular-included is refused
-        # outright, BEFORE the Q_H heuristic below — the retained-LyC wNE
+        # outright, BEFORE the Q_H heuristic below: the retained-LyC wNE
         # class keeps its ionizing continuum, so no physics heuristic can
         # catch it. The flag comes from the ``nebular_included`` HDF5
         # attribute or the wNE filename convention via ``load_ssp_data``.
@@ -621,14 +621,14 @@ class CloudyGridBackend:
                 "the templates, so adding a CLOUDY grid on top double-counts "
                 "nebular emission. Fix: use a bare-stellar SSP (e.g. "
                 "fsps_prsc_miles_chabrier.h5), or keep this SSP and drop the "
-                "neb={'type': 'cloudy'} group — the baked-in backend already "
+                "neb={'type': 'cloudy'} group: the baked-in backend already "
                 "models the lines."
             )
 
         ssp_wave = ssp_data.ssp_wave
         ssp_flux = ssp_data.ssp_flux  # (n_met, n_age, n_wave)
 
-        # Compute Q_H for each (met, age) — vectorized, in the log domain and
+        # Compute Q_H for each (met, age): vectorized, in the log domain and
         # stored normalized by its own peak (#1568). Q_H reaches ~1e46
         # photons/s/Msun; the linear build overflowed every entry to ``inf`` in
         # float32 and ``sanitize_qh_table`` then rewrote the lot to 0.0, so
@@ -636,7 +636,7 @@ class CloudyGridBackend:
         # silently zero. Same defect and same fix as CB19.
         #
         # Bilinear interpolation is linear, so interpolating ``table / scale``
-        # is exactly interpolating ``table`` and dividing — float64 unchanged.
+        # is exactly interpolating ``table`` and dividing: float64 unchanged.
         log_qh_raw = _compute_log_qh_grid(ssp_wave, ssp_flux)
         finite = jnp.isfinite(log_qh_raw)
         self._log_qh_scale = float(jnp.max(jnp.where(finite, log_qh_raw, -jnp.inf)))
@@ -664,7 +664,7 @@ class CloudyGridBackend:
         # baked-in nebular emission (wNE) and predictions will be unreliable.
         very_young_mask = ssp_log_ages <= _YOUNG_LOG_AGE_MAX_WNE
         if very_young_mask.any():
-            # Compare in log space against the *absolute* Q_H — ``_qh_table`` is
+            # Compare in log space against the *absolute* Q_H: ``_qh_table`` is
             # peak-normalized now, so its raw max is ~1 and would trip this
             # threshold for every SSP (#1568).
             log_qh_young = np.array(log_qh_raw)[:, very_young_mask]
@@ -768,21 +768,21 @@ class CloudyGridBackend:
 
         Parameters
         ----------
-        ssp_weights : array, shape (n_age,)
+        ssp_weights: array, shape (n_age,)
             CSP mass weights [Msun per age bin].
-        ssp_log_ages_yr : array, shape (n_age,)
+        ssp_log_ages_yr: array, shape (n_age,)
             log10(age/yr) of SSP age bins [log10(yr)].
-        log_z : float
+        log_z: float
             Stellar metallicity log10(Z) (absolute) [log10(Z)].
-        neb_logU : float
+        neb_logU: float
             Ionization parameter log10(U) [log10(U)]. Default -3.0.
-        neb_logZ_gas : float or None
+        neb_logZ_gas: float or None
             Gas metallicity log10(Z) absolute [log10(Z)]. None = tie to stellar Z.
-        neb_fesc : float
+        neb_fesc: float
             Ionizing photon escape fraction [dimensionless, in [0, 1]]. Default 0.0.
-        neb_fesc_lya : float
+        neb_fesc_lya: float
             Ly-alpha-specific escape fraction [dimensionless, in [0, 1]]. Default 0.0.
-        neb_fdust : float
+        neb_fdust: float
             Lyman-continuum dust-absorption fraction in HII regions
             [dimensionless, in [0, 1]]. Default 0.0. Both ``neb_fesc`` and
             ``neb_fdust`` reduce the ionizing photon budget via the CIGALE
@@ -790,16 +790,16 @@ class CloudyGridBackend:
 
         Returns
         -------
-        wavelengths : array, shape (n_lines,)
+        wavelengths: array, shape (n_lines,)
             Rest-frame vacuum wavelengths [Angstrom].
-        luminosities : array, shape (n_lines,)
+        luminosities: array, shape (n_lines,)
             Emission line luminosities [Lsun].
 
         Notes
         -----
-        **JIT-compatible**: yes — all operations use ``jnp`` primitives.
+        **JIT-compatible**: yes, all operations use ``jnp`` primitives.
 
-        **Gradient-safe**: yes — differentiable through neb_logU, neb_fesc, and
+        **Gradient-safe**: yes, differentiable through neb_logU, neb_fesc, and
         neb_fdust.
 
         **k-factor**: follows CIGALE nebular.py (Ferland 1980) with ionizing
@@ -819,7 +819,7 @@ class CloudyGridBackend:
         grid = template_data if template_data is not None else self.grid
 
         # Only young SSP age bins contribute (age < ~20 Myr)
-        # Slice to young bins only — 93 → ~10 bins, ~10x less work
+        # Slice to young bins only: 93 → ~10 bins, ~10x less work
         young_idx = self._young_idx
         young_ages = ssp_log_ages_yr[young_idx]
         young_weights = ssp_weights[young_idx]
@@ -886,19 +886,19 @@ class CloudyGridBackend:
 
         Parameters
         ----------
-        ssp_weights : array, shape (n_age,)
+        ssp_weights: array, shape (n_age,)
             CSP mass weights [Msun per age bin].
-        ssp_log_ages_yr : array, shape (n_age,)
+        ssp_log_ages_yr: array, shape (n_age,)
             log10(age/yr) of SSP age bins [log10(yr)].
-        log_z : float
+        log_z: float
             Stellar metallicity log10(Z) absolute [log10(Z)].
-        neb_logU : float
+        neb_logU: float
             Ionization parameter log10(U) [log10(U)]. Default -3.0.
-        neb_logZ_gas : float or None
+        neb_logZ_gas: float or None
             Gas metallicity log10(Z) absolute [log10(Z)]. None → tied to stellar.
-        neb_fesc : float
+        neb_fesc: float
             Ionizing photon escape fraction [dimensionless, in [0, 1]]. Default 0.0.
-        neb_fdust : float
+        neb_fdust: float
             Lyman-continuum dust-absorption fraction in HII regions
             [dimensionless, in [0, 1]]. Default 0.0. Both ``neb_fesc`` and
             ``neb_fdust`` reduce the ionizing photon budget via the CIGALE
@@ -908,9 +908,9 @@ class CloudyGridBackend:
 
         Returns
         -------
-        wavelength : array, shape (n_wave_cont,)
+        wavelength: array, shape (n_wave_cont,)
             Continuum wavelengths [Angstrom].
-        luminosity : array, shape (n_wave_cont,)
+        luminosity: array, shape (n_wave_cont,)
             Nebular continuum L_nu [L_sun/Hz].
 
         References
@@ -925,9 +925,9 @@ class CloudyGridBackend:
 
         Notes
         -----
-        **JIT-compatible**: yes — all operations use ``jnp`` primitives.
+        **JIT-compatible**: yes, all operations use ``jnp`` primitives.
 
-        **Gradient-safe**: yes — differentiable through neb_logU, neb_fesc, and
+        **Gradient-safe**: yes, differentiable through neb_logU, neb_fesc, and
         neb_fdust.
 
         """
@@ -998,26 +998,26 @@ class CloudyGridBackend:
 
         Parameters
         ----------
-        ssp_weights : array, shape (n_age,)
+        ssp_weights: array, shape (n_age,)
             CSP mass weights [Msun per age bin].
-        ssp_wave : array, shape (n_wave,)
+        ssp_wave: array, shape (n_wave,)
             SSP wavelength grid [Angstrom].
-        ssp_log_ages_yr : array, shape (n_age,)
+        ssp_log_ages_yr: array, shape (n_age,)
             log10(age/yr) of SSP bins [log10(yr)].
-        log_z : float
+        log_z: float
             Stellar metallicity log10(Z) absolute [log10(Z)].
-        neb_logU : float
+        neb_logU: float
             Ionization parameter log10(U) [log10(U)]. Default -3.0.
-        neb_logZ_gas : float or None
+        neb_logZ_gas: float or None
             Gas metallicity log10(Z) absolute [log10(Z)]. None = tie to stellar.
-        neb_fesc : float
+        neb_fesc: float
             Ionizing photon escape fraction [dimensionless, in [0, 1]]. Default 0.0.
-        neb_fesc_lya : float
+        neb_fesc_lya: float
             Ly-alpha-specific escape fraction [dimensionless, in [0, 1]]. Default 0.0.
-        neb_fdust : float
+        neb_fdust: float
             Lyman-continuum dust-absorption fraction in HII regions
             [dimensionless, in [0, 1]]. Default 0.0.
-        line_sigma_aa : float
+        line_sigma_aa: float
             Gaussian line width (σ) [Angstrom]. 0 = delta function
             (add to nearest pixel).
 
@@ -1038,9 +1038,9 @@ class CloudyGridBackend:
 
         Notes
         -----
-        **JIT-compatible**: yes — all operations use ``jnp`` primitives.
+        **JIT-compatible**: yes, all operations use ``jnp`` primitives.
 
-        **Gradient-safe**: yes — differentiable through neb_logU, neb_fesc, and
+        **Gradient-safe**: yes, differentiable through neb_logU, neb_fesc, and
         neb_fdust.
 
         """

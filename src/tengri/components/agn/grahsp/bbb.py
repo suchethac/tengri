@@ -38,7 +38,7 @@ XRAY_FLOOR_NM: float = 12.4
 ``wavelength < 124.0`` band in ``components/xray/xray.py``). GRAHSP has no
 X-ray physics, so its disc must not emit below this edge; left free, the smooth
 bending power law extrapolates unbounded into the X-ray and double-counts with
-the separately-added corona (#1168). Applied in tengri's assembly layer only —
+the separately-added corona (#1168). Applied in tengri's assembly layer only :
 :func:`sbpl_bbb` stays upstream-faithful for the bit-exact parity fixtures.
 """
 
@@ -48,9 +48,9 @@ def floor_disc_xray(wave_nm: Array, l_lambda: Array) -> Array:
 
     Parameters
     ----------
-    wave_nm : array_like, shape (n_wave,)
+    wave_nm: array_like, shape (n_wave,)
         Rest-frame wavelength grid. [nm]
-    l_lambda : array_like, shape (n_wave,)
+    l_lambda: array_like, shape (n_wave,)
         Assembled disc spectrum on ``wave_nm`` [erg/s/nm or erg/s/Å].
 
     Returns
@@ -96,29 +96,29 @@ def sbpl_bbb(
 
     Parameters
     ----------
-    wave_nm : array_like, shape (n_wave,)
+    wave_nm: array_like, shape (n_wave,)
         Rest-frame wavelength grid [nm]. Note: GRAHSP / CIGALE use **nm**, not
         Å; the conversion factor of 510 is baked into the normalization.
-    l5100 : float
+    l5100: float
         :math:`\lambda L_\lambda` at 5100 Å [erg/s]. Upstream parameter name
         in the paper is ``L_AGN`` / ``lum5100A``.
-    uvslope : float
+    uvslope: float
         UV power-law index :math:`\alpha_1` (``activatepl`` parameter
         ``uvslope``). Default in upstream is 0.
-    plslope : float
+    plslope: float
         Optical power-law index :math:`\alpha_2` (``plslope``).
         Must satisfy ``uvslope > plslope`` for a UV-bending continuum.
-    plbendloc_nm : float
+    plbendloc_nm: float
         Break wavelength :math:`\lambda_{\mathrm{break}}` [nm].
-    plbendwidth : float
+    plbendwidth: float
         Bend width :math:`\Lambda` (dimensionless).
-    cutoff_nm : float, optional
+    cutoff_nm: float, optional
         IR cutoff wavelength :math:`\lambda_{\mathrm{cut}}` [nm]. ``-1.0``
         disables the cutoff (default).
 
     Returns
     -------
-    L_lambda : ndarray, shape (n_wave,)
+    L_lambda: ndarray, shape (n_wave,)
         Specific luminosity :math:`L_\lambda` [W/nm; same as ``l5100``/nm].
 
     Notes

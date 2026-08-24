@@ -43,17 +43,17 @@ class NebularBackend(Protocol):
 
     Attributes
     ----------
-    has_continuum : bool
+    has_continuum: bool
         Whether the backend provides nebular continuum emission. True for
         physics-based grids (Cue, CloudyGrid); False for line-only backends
         (CB19, MAPPINGS, Shock). NebularContinuumFallback uses this flag to
         add continuum via fallback mechanisms.
-    has_free_params : bool
+    has_free_params: bool
         Whether the backend has differentiable (JAX-traced) free parameters
         that can be optimized during inference. True for data-driven emulators
         (Cue); False for tabular grids. Used by inference to decide whether
         the backend participates in gradient-based optimization.
-    name : str
+    name: str
         Short human-readable identifier (e.g., "Cue", "CB19", "Cloudy_CB19").
         Used in logging, configuration, and error messages.
 

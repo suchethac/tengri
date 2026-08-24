@@ -2,12 +2,12 @@
 """Inference-backend introspection helpers.
 
 Mirrors the role the forward-model kernel-strategy module played (ADR-0004)
-on the inference side. That module has since been removed — ``tengri.
-KernelStrategy`` is now a tombstone object — so it is named here as history
+on the inference side. That module has since been removed, ``tengri.
+KernelStrategy`` is now a tombstone object, so it is named here as history
 rather than cross-referenced:
 
 - :class:`BackendStatus` makes the difference between *missing optional
-  dep*, *incompatible with the given spec*, and *ready to run* legible —
+  dep*, *incompatible with the given spec*, and *ready to run* legible,
   the kernel-strategy module's "build failures surface explicitly" rule
   carried over one-to-one.
 - :func:`resolve_status` is the canonical predicate used by
@@ -39,7 +39,7 @@ class BackendStatus(StrEnum):
     -------
     OK
         Importable and compatible with the supplied target (or no target
-        was supplied — compatibility deferred to run time).
+        was supplied, compatibility deferred to run time).
     MISSING_DEP
         At least one entry in :attr:`BackendEntry.requires` is not
         importable. ``pip install <pkg>`` fixes it.
@@ -87,9 +87,9 @@ def resolve_status(entry: BackendEntry, target: Any | None = None) -> BackendSta
 
     Parameters
     ----------
-    entry : BackendEntry
+    entry: BackendEntry
         Registry entry for the backend.
-    target : Fitter | InferenceContext, optional
+    target: Fitter | InferenceContext, optional
         If supplied, evaluated against ``entry.is_compatible``. If
         ``None`` (or the entry has no predicate), compatibility is
         deferred to dispatch time and only dependency presence is

@@ -1,10 +1,10 @@
 # SPDX-License-Identifier: BSD-3-Clause
-"""PopulationSpecView — batched-sample wrapper over a template :class:`Parameters`.
+"""PopulationSpecView: batched-sample wrapper over a template :class:`Parameters`.
 
 A thin view that the :class:`PopulationSEDModel` returns from its
 ``.spec`` property. It duck-types ``Parameters`` so the standard
 :class:`Fitter` machinery doesn't need to know it's looking at a
-hierarchical fit — the **only** observable difference vs the template
+hierarchical fit: the **only** observable difference vs the template
 spec is that :meth:`sample` returns per-galaxy params with shape
 ``(N,)`` (or ``(N, n_grid)`` for stochastic-SFH ``psd_xi``).
 
@@ -44,11 +44,11 @@ class PopulationSpecView:
 
     Parameters
     ----------
-    template : Parameters
+    template: Parameters
         The SED template's spec. Provides the scalar Protocol surface.
-    n_galaxies : int
+    n_galaxies: int
         Population size. Determines the leading axis of batched samples.
-    shared : tuple[str, ...]
+    shared: tuple[str, ...]
         Names of parameters tied across the population. Samples of
         these stay scalar; samples of every other free parameter get
         a leading ``(N,)`` axis.
@@ -56,8 +56,8 @@ class PopulationSpecView:
     Notes
     -----
     The wasteful path: :meth:`sample` is implemented as
-    ``jax.vmap(template.sample)`` over a key split — which draws
-    ``(N, ...)`` for *every* parameter — then overwrites shared
+    ``jax.vmap(template.sample)`` over a key split: which draws
+    ``(N, ...)`` for *every* parameter; then overwrites shared
     parameter values with a single draw. The wasted draws for shared
     params (N-1 RNG calls per shared name) are acceptable because
     ``sample`` runs at init only, not in the inference hot loop.
@@ -103,7 +103,7 @@ class PopulationSpecView:
 
         Per-galaxy parameters count ``n_galaxies`` times (via
         :meth:`param_init_shape`) and shared parameters once, plus the
-        stochastic field latent when present — the dimension hierarchical
+        stochastic field latent when present: the dimension hierarchical
         samplers actually operate in. Mirrors the accounting of
         ``Fitter._initialize_unbounded``; agreement with the engine's
         ``d_total`` is asserted in
@@ -128,12 +128,12 @@ class PopulationSpecView:
 
     @property
     def _distributions(self):
-        """Underlying Distribution dict — Fitter sometimes reaches here."""
+        """Underlying Distribution dict: Fitter sometimes reaches here."""
         return self._template._distributions
 
     @property
     def n_grid(self) -> int:
-        """Stochastic-SFH grid size — delegates to the template's public ``n_grid``.
+        """Stochastic-SFH grid size: delegates to the template's public ``n_grid``.
 
         Mirrors :attr:`tengri.parameters.parameters.Parameters.n_grid` so the
         population spec satisfies the same Parameters-protocol surface the
@@ -145,7 +145,7 @@ class PopulationSpecView:
 
     @property
     def _n_grid(self):
-        """Private alias kept for back-compat — see the public :attr:`n_grid`."""
+        """Private alias kept for back-compat; see the public :attr:`n_grid`."""
         return getattr(self._template, "_n_grid", None)
 
     def get_distribution(self, name: str):
@@ -162,7 +162,7 @@ class PopulationSpecView:
         Standardized Inference): per-galaxy free parameters get a
         leading ``(N,)`` axis; shared parameters stay scalar.
         ``Parameters`` (the scalar template) implicitly returns
-        ``()`` for every name — that fallback is provided in
+        ``()`` for every name: that fallback is provided in
         :meth:`Fitter._initialize_unbounded` via ``getattr``, so
         scalar specs don't need this method.
         """
@@ -172,8 +172,8 @@ class PopulationSpecView:
     def psd_xi_init_shape(self) -> tuple[int, ...]:
         """Initial-shape for the stochastic-SFH latent field.
 
-        Hierarchical fits have one ``psd_xi`` realization per galaxy
-        — shape ``(N_galaxies, n_grid)``. Scalar fits stay
+        Hierarchical fits have one ``psd_xi`` realization per galaxy;
+        shape ``(N_galaxies, n_grid)``. Scalar fits stay
         ``(n_grid,)``.
         """
         n_grid = self._n_grid
@@ -187,7 +187,7 @@ class PopulationSpecView:
         Mirror parameters (target ← source value) are declared at the
         template level. Under batched sampling, the template's
         ``resolve_mirrors`` is applied to the per-galaxy and shared
-        param dict alike — the assignment broadcasts naturally.
+        param dict alike: the assignment broadcasts naturally.
         """
         return self._template.resolve_mirrors(params)
 

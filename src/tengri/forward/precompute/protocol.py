@@ -1,5 +1,5 @@
 # SPDX-License-Identifier: BSD-3-Clause
-"""Precompute Protocol — the contract each component's precompute module implements.
+"""Precompute Protocol, the contract each component's precompute module implements.
 
 Each component that supports preintegration (wavelength-integral cached against
 filter curves, optionally with parameter-axis triweight interpolation) exposes
@@ -16,7 +16,7 @@ Each `components/<component>/<name>_precompute.py` file defines:
   user-facing parameter for each grid axis. Empty tuple means no grid axes
   (scalar template, e.g. a fixed-shape IR template scaled by L_absorbed only).
 
-  Each entry must be a name the component actually declares — the *full*
+  Each entry must be a name the component actually declares, the *full*
   prefixed parameter (``agn_cos_inc``, not ``cat3d_cos_inc`` and not the bare
   ``cos_inc``), because it is matched against ``Parameters.get_fixed_values()``
   keys. Nothing forces the two namespaces to agree, so a rename on either side
@@ -32,7 +32,7 @@ Each `components/<component>/<name>_precompute.py` file defines:
     2. Building grid axes.
     3. Calling
        :func:`tengri.forward.precompute.grid.preintegrate_grid` (or the
-       component-specific equivalent — K&D has its own dataclass).
+       component-specific equivalent, K&D has its own dataclass).
     4. Auto-collapsing axes whose corresponding parameter in ``parameters`` is
        :class:`~tengri.parameters.priors.Fixed`, by calling
        :func:`tengri.forward.precompute.templates.collapse_fixed_axes`. Do not
@@ -71,7 +71,7 @@ class PreintegratedResult(Protocol):
 
     Attributes
     ----------
-    This is a **structural Protocol** — the caller is guaranteed only that:
+    This is a **structural Protocol**, the caller is guaranteed only that:
 
     1. The object is hashable (frozen dataclass or immutable wrapper).
     2. It has a ``.data`` attribute or is itself array-like with a ``.shape``
@@ -107,7 +107,7 @@ class PrecomputeModule(Protocol):
 
     Attributes
     ----------
-    AXIS_PARAMS : tuple or dict
+    AXIS_PARAMS: tuple or dict
         Ordered tuple of parameter names defining preintegration grid axes,
         or dict mapping model variant to tuple (for multi-variant components).
         Empty tuple means scalar template (no grid axes). [dimensionless]
@@ -132,15 +132,15 @@ class PrecomputeModule(Protocol):
 
         Parameters
         ----------
-        filter_waves : list of array_like
+        filter_waves: list of array_like
             Per-filter wavelength arrays. [Angstrom]
-        filter_trans : list of array_like
+        filter_trans: list of array_like
             Per-filter transmission curves (normalized). [dimensionless]
-        redshift : float
+        redshift: float
             Source redshift. [dimensionless]
-        parameters : Any
+        parameters: Any
             Free and fixed parameter specification.
-        **kwargs : Any
+        **kwargs: Any
             Component-specific options.
 
         Returns
@@ -153,7 +153,7 @@ class PrecomputeModule(Protocol):
 
         Notes
         -----
-        **JIT-compatible**: no — factory function, runs at model-init time outside JIT.
+        **JIT-compatible**: no, factory function, runs at model-init time outside JIT.
 
         Implementations must auto-collapse grid axes whose parameters are Fixed
         in ``parameters``, reducing dimensionality and lookup cost, by calling
@@ -167,9 +167,9 @@ class PrecomputeModule(Protocol):
 
         Parameters
         ----------
-        preint : PreintegratedResult
+        preint: PreintegratedResult
             Output of :meth:`precompute`.
-        **kwargs : Any
+        **kwargs: Any
             Component-specific options.
 
         Returns
@@ -185,10 +185,10 @@ class PrecomputeModule(Protocol):
 
         Notes
         -----
-        **JIT-compatible**: yes — returned function must be decorated with
+        **JIT-compatible**: yes, returned function must be decorated with
         ``@jax.jit`` and use only ``jnp`` primitives for gradient-safe
         interpolation.
 
-        **Gradient-safe**: yes — differentiable w.r.t. all free parameters.
+        **Gradient-safe**: yes, differentiable w.r.t. all free parameters.
         """
         ...

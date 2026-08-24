@@ -40,7 +40,7 @@ Node-exact monotone cubic (PCHIP, :func:`tengri.utils.grid_interp.interp_nd_pchi
 it reproduces every tabulated AGNfitter template at the grid nodes while
 keeping C¹-continuous gradients. The C²-smooth triweight *smoother* used
 elsewhere averages neighboring nodes, which smeared this torus's mid-IR
-peak by tens of percent (median ~30%) — the same peak-smear that moved
+peak by tens of percent (median ~30%), the same peak-smear that moved
 :mod:`tengri.components.agn.slone_netzer` to node-exact interpolation.
 Monotone cubic is shape-preserving, so it does not overshoot on the
 nearest-neighbor-filled grid.
@@ -99,7 +99,7 @@ def load_cat3d_wind_grid(grid_path: str) -> TorusTemplateGrid:
 
     Parameters
     ----------
-    grid_path : str
+    grid_path: str
         Path to ``cat3d_wind_torus_grid.h5``.
 
     Returns
@@ -117,7 +117,7 @@ def load_cat3d_wind_grid(grid_path: str) -> TorusTemplateGrid:
 
     Notes
     -----
-    **JIT-compatible**: no — performs HDF5 I/O. Call outside the trace and
+    **JIT-compatible**: no, performs HDF5 I/O. Call outside the trace and
     pass the result in as an argument; see ``tengri.components.agn._template_grid``.
     """
     raw = _load_cat3d_arrays(grid_path)
@@ -157,18 +157,18 @@ def cat3d_wind_sed_from_grid(
 
     Parameters
     ----------
-    wavelength : array_like, shape (n_wave,)
+    wavelength: array_like, shape (n_wave,)
         Rest-frame wavelength grid. [Å]
-    agn_log_lbol : float, optional
+    agn_log_lbol: float, optional
         ``log10(L_bol / L_sun)``. Default 10.0.
-    agn_cos_inc : float, optional
+    agn_cos_inc: float, optional
         Cosine of inclination (1 = face-on). Default 0.5.
-    agn_a_cat3d : float, optional
+    agn_a_cat3d: float, optional
         Radial power-law index of the clumpy-cloud distribution
         (Hönig & Kishimoto 2017 ``a``). Default −2.0.
-    agn_fwd_cat3d : float, optional
+    agn_fwd_cat3d: float, optional
         Polar-wind mass fraction. Default 1.0.
-    agn_torus_frac : float, optional
+    agn_torus_frac: float, optional
         Fraction of L_bol reprocessed by the torus. Default 0.5.
 
     Returns
@@ -217,7 +217,7 @@ def create_cat3d_wind_from_grid(grid_path: str) -> Callable:
 
     Parameters
     ----------
-    grid_path : str
+    grid_path: str
         Path to ``cat3d_wind_torus_grid.h5``.
 
     Returns
@@ -278,17 +278,17 @@ def cat3d_wind_sed(*args, _template: TorusTemplateGrid | None = None, **kwargs) 
 
     Parameters
     ----------
-    wavelength : array_like, shape (n_wave,)
+    wavelength: array_like, shape (n_wave,)
         Rest-frame wavelength. [Å]
-    agn_log_lbol : float, optional
+    agn_log_lbol: float, optional
         ``log10(L_bol / L_sun)``. Default 10.0.
-    agn_cos_inc : float, optional
+    agn_cos_inc: float, optional
         Cosine of inclination. Default 0.5.
-    agn_a_cat3d : float, optional
+    agn_a_cat3d: float, optional
         Radial power-law index. Default −2.0.
-    agn_fwd_cat3d : float, optional
+    agn_fwd_cat3d: float, optional
         Wind fraction. Default 1.0.
-    agn_torus_frac : float, optional
+    agn_torus_frac: float, optional
         Torus reprocessing fraction. Default 0.5.
     **kwargs
         Accepted and ignored for unified-dispatch compatibility.
@@ -308,7 +308,7 @@ def cat3d_wind_sed(*args, _template: TorusTemplateGrid | None = None, **kwargs) 
     return _load_cat3d_default()(*args, **kwargs)
 
 
-# Deprecated: "_analytic" was a misnomer — this is grid interpolation, not a
+# Deprecated: "_analytic" was a misnomer: this is grid interpolation, not a
 # closed-form model. Use cat3d_wind_sed. Alias removed in v1.0.
 cat3d_wind_analytic = deprecated_alias(
     cat3d_wind_sed, old_name="cat3d_wind_analytic", new_name="cat3d_wind_sed"

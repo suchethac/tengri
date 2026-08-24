@@ -95,7 +95,7 @@ class IonizingSpectrumInconsistencyWarning(UserWarning):
 def _emit_mappings_agn_ionizing_warning(mode: str) -> None:
     """Emit warning about MappingsPhotoAGNBackend Q_H source requirement."""
     msg = (
-        "MappingsPhotoAGNBackend: Q_H must be supplied by the AGN disc model — "
+        "MappingsPhotoAGNBackend: Q_H must be supplied by the AGN disc model: "
         "it is not self-consistently derived from SSPs. Ensure you are passing "
         "log_l_ion_erg from an AGN disc model (e.g. kubota_done_full). "
         "The ionizing shape is a power law; for a composite starburst+AGN region, "
@@ -113,7 +113,7 @@ def _emit_mappings_stellar_ionizing_warning(model: str, mode: str) -> None:
         f"MappingsPhotoStellarBackend (model='{model}'): the ionizing radiation field "
         "used to compute nebular line predictions is from a "
         f"{'Starburst99' if model == 'sb99' else 'BPASS v2.2'} grid embedded in "
-        "MAPPINGS V — this is NOT derived from your DSPS SSPs. The stellar continuum "
+        "MAPPINGS V: this is NOT derived from your DSPS SSPs. The stellar continuum "
         "and the nebular lines are driven by DIFFERENT stellar population models. "
         "This inconsistency can bias predicted line ratios at ages < 20 Myr and for "
         "non-solar metallicity. For self-consistent nebular emission, use "
@@ -158,10 +158,10 @@ class MappingsStellarGridData(NamedTuple):
     sfh_idx_inst: int  # index for "inst" SFH
     sfh_idx_cont: int  # index for "cont" SFH
 
-    # Grid values — shape (N_z, N_a, N_s, N_u, N_n)
+    # Grid values: shape (N_z, N_a, N_s, N_u, N_n)
     logHB_per_logq: jnp.ndarray
 
-    # Line flux ratios relative to Hβ — shape (N_z, N_a, N_s, N_u, N_n, N_lines)
+    # Line flux ratios relative to Hβ: shape (N_z, N_a, N_s, N_u, N_n, N_lines)
     line_ratios: jnp.ndarray
 
 
@@ -191,11 +191,11 @@ def _load_stellar_grid(filepath: str | Path, model: str, density: str) -> Mappin
 
     Parameters
     ----------
-    filepath : str or Path
+    filepath: str or Path
         Path to flury2024_grids.h5 (built by build_flury2024_grids.py).
-    model : str
+    model: str
         Stellar model: "sb99" or "bpass".
-    density : str
+    density: str
         Density structure: "cpr" (isobaric) or "cdn" (isochoric).
 
     """
@@ -245,9 +245,9 @@ def _load_agn_grid(filepath: str | Path, density: str) -> MappingsAGNGridData:
 
     Parameters
     ----------
-    filepath : str or Path
+    filepath: str or Path
         Path to flury2024_grids.h5.
-    density : str
+    density: str
         "cpr" or "cdn".
 
     """
@@ -307,8 +307,8 @@ def _interp_stellar_grid(
 
     Parameters
     ----------
-    data : (N_z, N_a, N_s, N_u, N_n, ...) array
-    sfh_idx : int
+    data: (N_z, N_a, N_s, N_u, N_n, ...) array
+    sfh_idx: int
         Index along the discrete sfh axis (0=cont, 1=inst, or as stored).
 
     """
@@ -355,7 +355,7 @@ def _interp_agn_grid(
 
     Parameters
     ----------
-    data : (N_z, N_m, N_e, N_u, N_n, ...) array
+    data: (N_z, N_m, N_e, N_u, N_n, ...) array
 
     """
     iz, wz = _interp_index_weight(zo_val, grid.zo_axis)
@@ -399,16 +399,16 @@ class MappingsPhotoStellarBackend:
 
     Parameters
     ----------
-    grid_path : str or Path
+    grid_path: str or Path
         Path to flury2024_grids.h5 (built by scripts/build_flury2024_grids.py).
-    model : str
+    model: str
         Stellar model: "sb99" (Starburst99) or "bpass" (BPASS v2.2).
-    density : str
+    density: str
         Density structure: "cpr" (isobaric, recommended) or "cdn" (isochoric).
-    ssp_data : optional
+    ssp_data: optional
         SSP data object with attributes ssp_wave, ssp_flux, ssp_lgmet,
         ssp_lg_age_gyr. If provided, Q_H table is precomputed at init.
-    sfh_mode : str
+    sfh_mode: str
         "inst" (instantaneous burst) or "cont" (continuous SF). Default "inst".
 
     Notes
@@ -501,7 +501,7 @@ class MappingsPhotoStellarBackend:
         ssp_wave = ssp_data.ssp_wave
         ssp_flux = ssp_data.ssp_flux  # (n_met, n_age, n_wave)
         qh_raw = _compute_qh_grid(ssp_wave, ssp_flux)
-        # Replace Inf/NaN with 0 — old SSP files with empty far-UV bins
+        # Replace Inf/NaN with 0: old SSP files with empty far-UV bins
         # produce non-finite Q_H values that would poison the interpolator.
         self._qh_table = sanitize_qh_table(qh_raw, backend_name="MappingsPhotoBackend")
         self._qh_log_met = ssp_data.ssp_lgmet
@@ -539,35 +539,35 @@ class MappingsPhotoStellarBackend:
 
         Parameters
         ----------
-        ssp_weights : array, (n_age,)
+        ssp_weights: array, (n_age,)
             CSP mass weights (Msun per SSP age bin).
-        ssp_log_ages_yr : array, (n_age,)
+        ssp_log_ages_yr: array, (n_age,)
             log10(age/yr) of SSP age bins.
-        log_z : float
+        log_z: float
             Stellar metallicity log10(Z) absolute (for Q_H lookup).
-        neb_logU : float
+        neb_logU: float
             Ionization parameter log10(U).
-        neb_logZ_gas : float or None
+        neb_logZ_gas: float or None
             Gas metallicity log10(Z) absolute. None → ties to stellar Z.
-        neb_logn : float
+        neb_logn: float
             log10(n_H / cm^-3). Default 2.0 (typical HII region density).
-        neb_fesc : float
+        neb_fesc: float
             Ionizing photon escape fraction [0, 1].
-        neb_fesc_lya : float
+        neb_fesc_lya: float
             Ly-alpha specific escape fraction [0, 1].
 
         Returns
         -------
-        wavelengths : array, shape (n_lines,)
+        wavelengths: array, shape (n_lines,)
             Line wavelengths in vacuum [Angstrom].
-        luminosities : array, shape (n_lines,)
+        luminosities: array, shape (n_lines,)
             Line luminosities [Lsun].
 
         Notes
         -----
-        **JIT-compatible**: yes — all grid interpolations use ``jnp`` primitives.
+        **JIT-compatible**: yes, all grid interpolations use ``jnp`` primitives.
 
-        **SFH modes**: "inst" (instantaneous), "cont" (continuous) — determines
+        **SFH modes**: "inst" (instantaneous), "cont" (continuous): determines
         which MAPPINGS grid row is used for logHB_per_logq.
 
         **Metallicity**: Input neb_logZ_gas is absolute log10(Z); internally
@@ -659,7 +659,7 @@ class MappingsPhotoStellarBackend:
            logn axis to the caller-supplied default (HII region by default).
         2. Relabeling axis 0 from ζ_O (solar-relative) to absolute log10(Z) so
            the kernel's ``_gas_z`` lands on correct coordinates.
-        3. Filling ``_preint_continuum.phot`` with zeros — MAPPINGS V provides
+        3. Filling ``_preint_continuum.phot`` with zeros: MAPPINGS V provides
            only line emission, no nebular continuum.
 
         After the call the backend exposes the same surface as
@@ -670,30 +670,30 @@ class MappingsPhotoStellarBackend:
 
         Parameters
         ----------
-        filter_waves : list[ndarray]
+        filter_waves: list[ndarray]
             Per-filter observed-frame wavelength grids [Angstrom].
-        filter_trans : list[ndarray]
+        filter_trans: list[ndarray]
             Per-filter transmission curves (0-1).
-        redshift : float
+        redshift: float
             Source redshift [dimensionless].
-        dl_cm : float
+        dl_cm: float
             Luminosity distance [cm]. Currently unused (MAPPINGS V provides only
             line emission and lines are projected via filter weights), kept for
             signature compatibility with CloudyGridBackend.
-        fixed : dict[int, float], optional
+        fixed: dict[int, float], optional
             CLOUDY-shape axis index → value mapping. ``0`` = absolute
             log10(Z), ``1`` = log10(age/yr), ``2`` = log10(U).
-        neb_logn : float, keyword-only
+        neb_logn: float, keyword-only
             Default density to collapse the logn axis on. MAPPINGS V grid range
             [0.5, 3.5]. Default 2.0 (typical HII region) [log10(cm^-3)].
 
         Notes
         -----
-        **JIT-compatible**: no — build-time NumPy / one-time triweight
+        **JIT-compatible**: no, build-time NumPy / one-time triweight
         collapses. The resulting attributes are JAX arrays usable inside
         the JIT'd kernel body.
         """
-        del dl_cm  # MAPPINGS V: no continuum, lines via point-sampling — no F_nu scaling needed
+        del dl_cm  # MAPPINGS V: no continuum, lines via point-sampling: no F_nu scaling needed
         grid = self.grid
         sfh_idx = self._sfh_idx
 
@@ -807,29 +807,29 @@ class MappingsPhotoStellarBackend:
         """Compute nebular emission line SED on the SSP wavelength grid.
 
         Lines are added as Gaussians (if line_sigma_aa > 0) or delta functions
-        (nearest pixel). No nebular continuum — use CloudyGridBackend for that.
+        (nearest pixel). No nebular continuum: use CloudyGridBackend for that.
 
         Parameters
         ----------
-        ssp_weights : array, shape (n_age,)
+        ssp_weights: array, shape (n_age,)
             CSP mass weights [Msun per age bin].
-        ssp_wave : array, shape (n_wave,)
+        ssp_wave: array, shape (n_wave,)
             SSP wavelength grid [Angstrom].
-        ssp_log_ages_yr : array, shape (n_age,)
+        ssp_log_ages_yr: array, shape (n_age,)
             log10(age/yr) of SSP age bins.
-        log_z : float
+        log_z: float
             Stellar metallicity [log10(Z)].
-        neb_logU : float, optional
+        neb_logU: float, optional
             Ionization parameter [log10(U)]. Default: -3.0.
-        neb_logZ_gas : float or None, optional
+        neb_logZ_gas: float or None, optional
             Gas metallicity [log10(Z)]. None → ties to stellar Z. Default: None.
-        neb_logn : float, optional
+        neb_logn: float, optional
             Hydrogen density [log10(n_H/cm^-3)]. Default: 2.0.
-        neb_fesc : float, optional
+        neb_fesc: float, optional
             Ionizing photon escape fraction [0, 1]. Default: 0.0.
-        neb_fesc_lya : float, optional
+        neb_fesc_lya: float, optional
             Ly-alpha specific escape fraction [0, 1]. Default: 0.0.
-        line_sigma_aa : float, optional
+        line_sigma_aa: float, optional
             Gaussian line width [Angstrom]. Default: 0.0 (delta function).
 
         Returns
@@ -839,7 +839,7 @@ class MappingsPhotoStellarBackend:
 
         Notes
         -----
-        **JIT-compatible**: yes — delegates to predict_nebular_line_luminosities
+        **JIT-compatible**: yes, delegates to predict_nebular_line_luminosities
         and place_line_profiles, both JIT-compatible.
 
         **Continuum**: This backend returns lines only; no nebular continuum.
@@ -883,7 +883,7 @@ class MappingsPhotoAGNBackend:
     Predicts NLR emission line luminosities by interpolating the OPTXAGNF
     MAPPINGS V grids over (ζ_O, log_MBH, log_Edd, logU, logn).
 
-    Unlike the stellar backend, Q_H is *not* derived from SSP spectra — the
+    Unlike the stellar backend, Q_H is *not* derived from SSP spectra: the
     AGN SED provides the ionizing photons. Call `predict_agn_line_luminosities`
     with an externally computed Q_H (photons/s) from the AGN disc model.
 
@@ -898,9 +898,9 @@ class MappingsPhotoAGNBackend:
 
     Parameters
     ----------
-    grid_path : str or Path
+    grid_path: str or Path
         Path to flury2024_grids.h5.
-    density : str
+    density: str
         Density structure: "cpr" or "cdn".
 
     Example
@@ -956,31 +956,31 @@ class MappingsPhotoAGNBackend:
 
         Parameters
         ----------
-        agn_log_l_ion_erg : float
+        agn_log_l_ion_erg: float
             log10 of the AGN ionizing luminosity in erg/s.
-        neb_logZ_gas : float
+        neb_logZ_gas: float
             Gas metallicity log10(Z) absolute.
-        neb_logU : float
+        neb_logU: float
             Ionization parameter log10(U).
-        agn_logmbh : float
+        agn_logmbh: float
             log10(M_BH / Msun).
-        agn_logedd : float
+        agn_logedd: float
             log10(L / L_Edd).
-        neb_logn : float
+        neb_logn: float
             log10(n_H / cm^-3). Default 3.0 (NLR density).
-        neb_fesc : float
+        neb_fesc: float
             Photon escape fraction [0, 1].
 
         Returns
         -------
-        wavelengths : array, shape (n_lines,)
+        wavelengths: array, shape (n_lines,)
             Line wavelengths in vacuum [Angstrom].
-        luminosities : array, shape (n_lines,)
+        luminosities: array, shape (n_lines,)
             Line luminosities [Lsun].
 
         Notes
         -----
-        **JIT-compatible**: yes — all grid interpolations use ``jnp`` primitives.
+        **JIT-compatible**: yes, all grid interpolations use ``jnp`` primitives.
 
         **Ionizing source**: Q_H is supplied by the caller and derived from
         the AGN disc model (e.g., Accretion disk spectrum), NOT from SSP spectra.

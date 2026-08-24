@@ -1,5 +1,5 @@
 # SPDX-License-Identifier: BSD-3-Clause
-"""Interactive tutorials — runnable, copy-pasteable code recipes.
+"""Interactive tutorials; runnable, copy-pasteable code recipes.
 
 Each tutorial is a small self-contained snippet teaching one concrete
 pattern (a fit, a custom model, a custom likelihood, an inference
@@ -33,7 +33,7 @@ class _Tutorial:
 
 
 # ──────────────────────────────────────────────────────────────────
-# Recipe 1 — first fit (synthetic)
+# Recipe 1: first fit (synthetic)
 # ──────────────────────────────────────────────────────────────────
 
 
@@ -83,7 +83,7 @@ _FIRST_FIT = _Tutorial(
 
 
 # ──────────────────────────────────────────────────────────────────
-# Recipe 2 — register a new AGN model alternative (LIVE)
+# Recipe 2: register a new AGN model alternative (LIVE)
 # ──────────────────────────────────────────────────────────────────
 
 
@@ -96,7 +96,7 @@ def _run_register_a_model() -> None:
 
     print(
         ">>> @register_agn_model('demo_torus', citation='Tutorial demo', "
-        "status='experimental', short_doc='Tutorial — single-T graybody')"
+        "status='experimental', short_doc='Tutorial: single-T graybody')"
     )
     print(">>> def demo_torus(wavelength, agn_log_lbol, **_kwargs): ...")
     print()
@@ -105,10 +105,10 @@ def _run_register_a_model() -> None:
         "demo_torus",
         citation="Tutorial demo",
         status="experimental",
-        short_doc="Tutorial — single-T graybody",
+        short_doc="Tutorial: single-T graybody",
     )
     def _demo_torus(wavelength, agn_log_lbol=10.0, **_kwargs):
-        # Trivial body — the point is registration, not physics.
+        # Trivial body; the point is registration, not physics.
         import jax.numpy as jnp
 
         return jnp.ones_like(wavelength) * (10.0**agn_log_lbol)
@@ -125,7 +125,7 @@ def _run_register_a_model() -> None:
 
 _REGISTER_A_MODEL = _Tutorial(
     name="register_a_model",
-    title="Add a new AGN torus alternative — discoverable in 6 lines",
+    title="Add a new AGN torus alternative; discoverable in 6 lines",
     runner=_run_register_a_model,
     code=textwrap.dedent(
         '''
@@ -157,29 +157,29 @@ _REGISTER_A_MODEL = _Tutorial(
 
 
 # ──────────────────────────────────────────────────────────────────
-# Recipe 3 — same model, swap inference (LIVE if SSP available)
+# Recipe 3: same model, swap inference (LIVE if SSP available)
 # ──────────────────────────────────────────────────────────────────
 
 
 _SWAP_INFERENCE = _Tutorial(
     name="swap_inference",
-    title="Same model, three samplers — no other changes",
+    title="Same model, three samplers: no other changes",
     needs_ssp=True,
     code=textwrap.dedent(
         """
         # Build the fitter once
         fitter = tengri.Fitter(model, data=mock["flux_obs"], noise=mock["noise"])
 
-        # MAP — Adam, fast, point estimate
+        # MAP: Adam, fast, point estimate
         map_result = fitter.run("map", n_steps=300)
 
-        # NUTS — exact, ≲20-D, gold standard
+        # NUTS: exact, ≲20-D, gold standard
         nuts_result = fitter.run("mcmc_nuts", init_from=map_result, n_warmup=500)
 
-        # geoVI — variational, scales to high-D, cheaper than NUTS
+        # geoVI: variational, scales to high-D, cheaper than NUTS
         vi_result = fitter.run("vi", init_from=map_result)
 
-        # "auto" — picks NUTS for low-D, ray-tracing for high-D
+        # "auto": picks NUTS for low-D, ray-tracing for high-D
         auto = fitter.run("mcmc", init_from=map_result)
 
         # See tengri.list_inference_methods(tier="primary") for all options.
@@ -189,7 +189,7 @@ _SWAP_INFERENCE = _Tutorial(
 
 
 # ──────────────────────────────────────────────────────────────────
-# Recipe 4 — custom likelihood
+# Recipe 4: custom likelihood
 # ──────────────────────────────────────────────────────────────────
 
 
@@ -227,7 +227,7 @@ _CUSTOM_LIKELIHOOD = _Tutorial(
 
 
 # ──────────────────────────────────────────────────────────────────
-# Recipe 5 — Protocol-conforming custom component (LIVE)
+# Recipe 5: Protocol-conforming custom component (LIVE)
 # ──────────────────────────────────────────────────────────────────
 
 
@@ -275,14 +275,14 @@ def _run_register_a_component() -> None:
         print(f"  demo_amp present in param-map: {m['demo_amp']}")
     else:
         print(
-            "  (demo_amp not yet in param-map — only auto-injected once "
+            "  (demo_amp not yet in param-map: only auto-injected once "
             "you build a Parameters with it)"
         )
 
 
 _REGISTER_A_COMPONENT = _Tutorial(
     name="register_a_component",
-    title="Register a Protocol-conforming SEDComponent — auto-derives translation",
+    title="Register a Protocol-conforming SEDComponent: auto-derives translation",
     runner=_run_register_a_component,
     code=textwrap.dedent(
         """
@@ -320,13 +320,13 @@ _REGISTER_A_COMPONENT = _Tutorial(
 
 
 # ──────────────────────────────────────────────────────────────────
-# Recipe 6 — diagnose a bad fit
+# Recipe 6: diagnose a bad fit
 # ──────────────────────────────────────────────────────────────────
 
 
 _DIAGNOSTICS = _Tutorial(
     name="diagnostics",
-    title="Diagnose a fit — convergence, ESS, divergences",
+    title="Diagnose a fit: convergence, ESS, divergences",
     code=textwrap.dedent(
         """
         # After fitter.run("mcmc_nuts"):
@@ -334,7 +334,7 @@ _DIAGNOSTICS = _Tutorial(
         posterior.diagnostics_summary()     # ESS, R-hat, divergences, accept rate
         posterior.check_convergence()       # bool + per-param details
 
-        # Per-param ESS — anything ≲ 100 is suspicious
+        # Per-param ESS: anything ≲ 100 is suspicious
         ess = posterior.effective_sample_size()
         rhat = posterior.rhat()             # should be ≲ 1.05 for all params
 
@@ -353,13 +353,13 @@ _DIAGNOSTICS = _Tutorial(
 
 
 # ──────────────────────────────────────────────────────────────────
-# Recipe 7 — population / hierarchical
+# Recipe 7: population / hierarchical
 # ──────────────────────────────────────────────────────────────────
 
 
 _HIERARCHICAL = _Tutorial(
     name="hierarchical",
-    title="Hierarchical / population fit — share priors across many galaxies",
+    title="Hierarchical / population fit: share priors across many galaxies",
     code=textwrap.dedent(
         """
         # Same model, N galaxies, per-galaxy free params + shared
@@ -403,7 +403,7 @@ _HIERARCHICAL = _Tutorial(
 
 
 # ──────────────────────────────────────────────────────────────────
-# Recipe 8 — design philosophy
+# Recipe 8: design philosophy
 # ──────────────────────────────────────────────────────────────────
 
 
@@ -424,10 +424,10 @@ _PHILOSOPHY = _Tutorial(
             is a pure function of (params, wavelength).  No side effects,
             no global state, no in-place mutation.  This buys us:
 
-            • analytic gradients — every parameter gets ∂loss/∂param free
-            • JIT compilation — the whole forward pass as one XLA graph
-            • vmap — parallel evaluation of N galaxies for free
-            • full sampler portfolio — MAP, NUTS, geoVI, ray-tracing,
+            • analytic gradients: every parameter gets ∂loss/∂param free
+            • JIT compilation: the whole forward pass as one XLA graph
+            • vmap: parallel evaluation of N galaxies for free
+            • full sampler portfolio: MAP, NUTS, geoVI, ray-tracing,
               MCLMC, Pathfinder all share the same forward model
 
         2.  Standardized latent space.
@@ -451,7 +451,7 @@ _PHILOSOPHY = _Tutorial(
 
         4.  Modular, swappable physics.
 
-            Every block has a registry of alternatives — see:
+            Every block has a registry of alternatives: see:
 
                 tengri.list_agn_models()        # AGN model families
                 tengri.list_agn_blocks()        # composable AGN blocks
@@ -460,7 +460,7 @@ _PHILOSOPHY = _Tutorial(
                 tengri.list_sfh_models()        # SFH variants
                 tengri.list_nebular_backends()  # nebular backends
 
-            Counts live in tengri.summary() — this page does not repeat
+            Counts live in tengri.summary(): this page does not repeat
             them, because a hand-written number goes stale the next time
             someone registers a model.
 
@@ -486,7 +486,7 @@ _PHILOSOPHY = _Tutorial(
 
 
 # ──────────────────────────────────────────────────────────────────
-# Recipe 9 — key classes
+# Recipe 9: key classes
 # ──────────────────────────────────────────────────────────────────
 
 
@@ -511,7 +511,7 @@ _KEY_CLASSES = _Tutorial(
         └────────────────────────────────────────────────────────────────┘
 
         ┌── Photometry / Spectroscopy / Observation  ──────────────────┐
-        │ The OBSERVATION configuration — which bands, which              │
+        │ The OBSERVATION configuration: which bands, which              │
         │ wavelength grid.  Doesn't carry the fluxes; those go to Fitter. │
         │                                                                │
         │   phot = tengri.Photometry.from_names(["sdss_g","sdss_r",...])  │
@@ -565,13 +565,13 @@ _KEY_CLASSES = _Tutorial(
 
 
 # ──────────────────────────────────────────────────────────────────
-# Recipe 10 — common use cases
+# Recipe 10: common use cases
 # ──────────────────────────────────────────────────────────────────
 
 
 _USE_CASES = _Tutorial(
     name="use_cases",
-    title="Common use cases — pick the recipe that matches your science",
+    title="Common use cases: pick the recipe that matches your science",
     code=textwrap.dedent(
         """
         Use case 1  ──  ONE GALAXY, broadband photometry
@@ -651,13 +651,13 @@ _USE_CASES = _Tutorial(
 
 
 # ──────────────────────────────────────────────────────────────────
-# Recipe 11 — mock recovery (validation pattern)
+# Recipe 11: mock recovery (validation pattern)
 # ──────────────────────────────────────────────────────────────────
 
 
 _MOCK_RECOVERY = _Tutorial(
     name="mock_recovery",
-    title="Mock recovery — sanity-check a model on synthetic data",
+    title="Mock recovery: sanity-check a model on synthetic data",
     needs_ssp=True,
     code=textwrap.dedent(
         """
@@ -684,12 +684,12 @@ _MOCK_RECOVERY = _Tutorial(
         )
         model = tengri.SEDModel(spec, ssp_data, observation=obs)
 
-        # 2. Sample the truth point, then generate a mock at SNR=20
-        #    — generate_mock returns flux_obs, noise, and params (the truth)
+        # 2. Sample the truth point, then generate a mock at SNR=20.
+        #    generate_mock returns flux_obs, noise, and params (the truth)
         truth = spec.sample(jax.random.PRNGKey(0))
         mock = tengri.generate_mock(model, truth, key=jax.random.PRNGKey(1), snr=20.0)
 
-        # 3. Fit it back — MAP for speed, then NUTS for posterior
+        # 3. Fit it back: MAP for speed, then NUTS for posterior
         fitter = tengri.Fitter(model, data=mock["flux_obs"], noise=mock["noise"])
         map_result = fitter.run("map", n_steps=300)
         posterior  = fitter.run("nuts", init_from=map_result, n_warmup=500)
@@ -708,13 +708,13 @@ _MOCK_RECOVERY = _Tutorial(
 
 
 # ──────────────────────────────────────────────────────────────────
-# Recipe 12 — model comparison
+# Recipe 12: model comparison
 # ──────────────────────────────────────────────────────────────────
 
 
 _COMPARE_MODELS = _Tutorial(
     name="compare_models",
-    title="Model comparison — same data, different physics, evidence-based ranking",
+    title="Model comparison: same data, different physics, evidence-based ranking",
     code=textwrap.dedent(
         """
         # Same data, vary one structural choice (here: AGN model).
@@ -744,7 +744,7 @@ _COMPARE_MODELS = _Tutorial(
             print(f"  {name!r:25s}  log Z = {post.log_evidence:7.2f}  "
                   f"ΔlogBF vs no-AGN = {log_BF:+5.2f}")
 
-        # Or via WAIC (if posterior samples available — needs arviz)
+        # Or via WAIC (if posterior samples available: needs arviz)
         for name, post in results.items():
             idata = post.to_arviz()
             print(f"  {name!r:25s}  WAIC = {idata.waic:.2f}")
@@ -758,7 +758,7 @@ _COMPARE_MODELS = _Tutorial(
 
 
 # ──────────────────────────────────────────────────────────────────
-# Recipe 13 — joint photometry + spectroscopy
+# Recipe 13: joint photometry + spectroscopy
 # ──────────────────────────────────────────────────────────────────
 
 
@@ -781,7 +781,7 @@ _JOINT_PHOT_SPEC = _Tutorial(
             + tengri.list_filters(survey="2MASS").names()
         )
 
-        # 2. Spectroscopy side — pass the spectral grid + LSF
+        # 2. Spectroscopy side: pass the spectral grid + LSF
         spectroscopy = tengri.Spectroscopy(
             wave_obs=spec_wavelengths,     # observed-frame [Angstrom]
             resolution=2000.0,             # resolving power R
@@ -798,7 +798,7 @@ _JOINT_PHOT_SPEC = _Tutorial(
         obs = tengri.Observation(photometry=photometry,
                                  spectroscopy=spectroscopy)
 
-        # 4. Build the spec — emission lines marginalized analytically
+        # 4. Build the spec: emission lines marginalized analytically
         spec = tengri.Parameters(
             mean_sfh_type="dpl",
             redshift=tengri.Fixed(z_observed),
@@ -807,7 +807,7 @@ _JOINT_PHOT_SPEC = _Tutorial(
         )
         model = tengri.SEDModel(spec, ssp_data, observation=obs)
 
-        # 5. Fit — pass the *concatenated* (phot, spec) flux + noise
+        # 5. Fit: pass the *concatenated* (phot, spec) flux + noise
         joint_flux  = jnp.concatenate([phot_fluxes, spec_fluxes])
         joint_noise = jnp.concatenate([phot_errors, spec_errors])
 
@@ -826,7 +826,7 @@ _JOINT_PHOT_SPEC = _Tutorial(
 
 
 # ──────────────────────────────────────────────────────────────────
-# Recipe 14 — derived quantities / properties
+# Recipe 14: derived quantities / properties
 # ──────────────────────────────────────────────────────────────────
 
 
@@ -844,12 +844,12 @@ _PROPERTIES = _Tutorial(
         import jax
         import tengri
 
-        # 1. DISCOVERY — see what properties are available
+        # 1. DISCOVERY: see what properties are available
         tengri.list_properties()                  # all 49 properties
         tengri.list_properties(group="sfh")       # SFH group only
         tengri.describe_property("stellar_mass")  # full metadata
 
-        # 2. SINGLE GALAXY — lazy access via model.predict()
+        # 2. SINGLE GALAXY: lazy access via model.predict()
         pred = model.predict(params)
         pred.stellar_mass              # attribute shorthand
         pred.properties["stellar_mass"]  # dict-like access
@@ -857,14 +857,14 @@ _PROPERTIES = _Tutorial(
         pred.sed.dn4000                # SED shape quantities
         pred.lines.halpha              # emission line luminosity
 
-        # 3. POSTERIOR — array of shape (n_samples,)
+        # 3. POSTERIOR: array of shape (n_samples,)
         posterior.properties["stellar_mass"]     # array
         lo, med, hi = posterior.properties.ci("stellar_mass")
         # → (lower 16%, median, upper 84%)
 
         posterior.properties.ci("stellar_mass", level=0.95)  # 95% CI
 
-        # 4. BATCH / MOCK CATALOG — JIT-compatible vmap
+        # 4. BATCH / MOCK CATALOG: JIT-compatible vmap
         # Compute properties for many parameter sets at once (no fit needed)
         import jax
         params_batch = spec.sample_batch(jax.random.PRNGKey(0), n=10_000)
@@ -875,7 +875,7 @@ _PROPERTIES = _Tutorial(
                         )(params_batch, ("stellar_mass", "sfr_100myr"))
         props["stellar_mass"]  # shape (10_000,)
 
-        # 5. FULL PROPERTY DICT — export names='all' or unspecified
+        # 5. FULL PROPERTY DICT: export names='all' or unspecified
         pred_dict = model.predict_properties(params)  # all 49
         pred_dict.to_dict(names=("stellar_mass", "dn4000"))  # select subset
 
@@ -887,30 +887,30 @@ _PROPERTIES = _Tutorial(
         • Population / Catalog (many galaxies): shape (n_galaxies, ...)
         All use the same property names and discovery API.
 
-        See:  tengri.tutorial("mock_catalog") — batch mock using vmap
-              tengri.tutorial("approx_vs_exact") — exact vs precomputed paths
+        See:  tengri.tutorial("mock_catalog"): batch mock using vmap
+              tengri.tutorial("approx_vs_exact"): exact vs precomputed paths
         """
     ).strip(),
 )
 
 
 # ──────────────────────────────────────────────────────────────────
-# Recipe 15 — exact vs approximate photometry prediction
+# Recipe 15: exact vs approximate photometry prediction
 # ──────────────────────────────────────────────────────────────────
 
 
 _APPROX_VS_EXACT = _Tutorial(
     name="approx_vs_exact",
-    title="Exact by default, approximate by choice — photometry prediction paths",
+    title="Exact by default, approximate by choice: photometry prediction paths",
     code=textwrap.dedent(
         """
         # Two prediction paths for photometry:
         #
-        # EXACT — full SED integration (default)
+        # EXACT: full SED integration (default)
         #   Always safe; valid for any filter and any redshift.
         #   Used in fitting.
         #
-        # APPROX — lookup table (WavePrecomp)
+        # APPROX: lookup table (WavePrecomp)
         #   Precomputed at build time on the model's filters + z grid.
         #   Cheaper per call, but valid only for build-time filters + grid;
         #   arbitrary filters always use EXACT. Measure before relying on it.
@@ -940,7 +940,7 @@ _APPROX_VS_EXACT = _Tutorial(
         # ── INFERENCE ──
 
         # Each model keeps its build-time choice. Fitting uses whatever
-        # was chosen at build — no per-call control there.
+        # was chosen at build: no per-call control there.
         posterior_exact = fitter_exact.run("map")
         posterior_fast  = fitter_fast.run("map")
 
@@ -980,21 +980,21 @@ _APPROX_VS_EXACT = _Tutorial(
         must think about: "Am I using build-time filters? Is this on the
         z grid?" If you answer no, the exact path is your only choice.
 
-        See:  tengri.tutorial("mock_catalog")  — batch examples
-              tengri.list_properties()         — derived quantities
+        See:  tengri.tutorial("mock_catalog"): batch examples
+              tengri.list_properties()       : derived quantities
         """
     ).strip(),
 )
 
 
 # ──────────────────────────────────────────────────────────────────
-# Recipe 16 — mock catalog via vmap (no fit required)
+# Recipe 16: mock catalog via vmap (no fit required)
 # ──────────────────────────────────────────────────────────────────
 
 
 _MOCK_CATALOG = _Tutorial(
     name="mock_catalog",
-    title="Mock a catalog from your own parameters — vmap, no fit needed",
+    title="Mock a catalog from your own parameters: vmap, no fit needed",
     code=textwrap.dedent(
         """
         # The SEDModel is a pure function: given params, compute observables.
@@ -1020,7 +1020,7 @@ _MOCK_CATALOG = _Tutorial(
         obs = tengri.Observation(photometry=photometry)
         model = tengri.SEDModel(spec, ssp_data, observation=obs)
 
-        # 2a. HAND-BUILT BATCH — dict of arrays
+        # 2a. HAND-BUILT BATCH: dict of arrays
         params_batch = {
             "sfh_dpl_alpha": jnp.array([0.5, 1.0, 2.0]),      # shape (3,)
             "sfh_dpl_beta": jnp.array([1.0, 2.0, 3.0]),
@@ -1028,7 +1028,7 @@ _MOCK_CATALOG = _Tutorial(
             "redshift": jnp.array([0.05, 0.05, 0.05]),
         }
 
-        # 2b. OR RANDOM BATCH — prior samples
+        # 2b. OR RANDOM BATCH: prior samples
         key = jax.random.PRNGKey(42)
         params_batch = spec.sample_batch(key, n=1_000)
 
@@ -1038,7 +1038,7 @@ _MOCK_CATALOG = _Tutorial(
         )
         batch_photos = fn_phot(params_batch)  # shape (n_params, n_filters)
 
-        # 4. VMAP OVER PROPERTIES — jit-compatible subset
+        # 4. VMAP OVER PROPERTIES: jit-compatible subset
         fn_props = jax.vmap(
             lambda p: model.predict_properties(p)
         )
@@ -1065,7 +1065,7 @@ _MOCK_CATALOG = _Tutorial(
         • No Python loop overhead; pure JAX graph.
         • Automatic differentiation works through batches (if needed).
         • Scales to millions of parameter sets (GPU memory permitting).
-        • Same binary as single-galaxy predict — one compile, many evals.
+        • Same binary as single-galaxy predict: one compile, many evals.
 
         Common uses
         ────────────
@@ -1075,8 +1075,8 @@ _MOCK_CATALOG = _Tutorial(
         • Parametric study: "how does SFR depend on stellar mass?"
         • Generate training data for a neural network surrogate
 
-        See:  tengri.tutorial("properties")     — derived quantities
-              tengri.tutorial("approx_vs_exact")  — exact vs precomputed paths
+        See:  tengri.tutorial("properties")   : derived quantities
+              tengri.tutorial("approx_vs_exact"): exact vs precomputed paths
         """
     ).strip(),
 )
@@ -1114,9 +1114,9 @@ def tutorial(name: str | None = None, *, run: bool = False) -> None:
 
     Parameters
     ----------
-    name : str, optional
+    name: str, optional
         Tutorial name.  Pass without an argument to list all topics.
-    run : bool
+    run: bool
         If ``True`` and the tutorial supports live execution, run it
         after printing the recipe.  Tutorials that need an SSP file or
         external data print a "skipping live execution" note instead.
@@ -1132,7 +1132,7 @@ def tutorial(name: str | None = None, *, run: bool = False) -> None:
     hierarchical         Population fit across many galaxies
     """
     if name is None:
-        print("\ntengri.tutorial(name) — copy-pasteable runnable recipes:\n")
+        print("\ntengri.tutorial(name): copy-pasteable runnable recipes:\n")
         width = max(len(t.name) for t in _TUTORIALS.values())
         for t in _TUTORIALS.values():
             star = "  ●" if t.runner is not None else "   "
@@ -1197,7 +1197,7 @@ def explain(thing) -> None:
 
     Parameters
     ----------
-    thing : type or str
+    thing: type or str
         Either a tengri class (``tengri.Parameters``, ``tengri.SEDModel``,
         ``tengri.Fitter``, ``tengri.Posterior``, ``tengri.Observation``)
         or a registered name (``"skirtor"``, ``"calzetti"``, ``"dpl"``…).
@@ -1215,7 +1215,7 @@ def explain(thing) -> None:
         return
 
     # Prefer ``__name__`` (for classes) but fall through to ``type(...)``
-    # for instances — a user with ``model = SEDModel(...)`` should be
+    # for instances: a user with ``model = SEDModel(...)`` should be
     # able to call ``tengri.explain(model)`` and get the SEDModel blurb.
     if isinstance(thing, type):
         name = thing.__name__
@@ -1223,7 +1223,7 @@ def explain(thing) -> None:
         name = type(thing).__name__
     blurbs: dict[str, str] = {
         "Parameters": (
-            "PRIOR SPECIFICATION  (layer 3 — user API)\n"
+            "PRIOR SPECIFICATION  (layer 3: user API)\n"
             "Built with **kwargs; structural choices (mean_sfh_type, "
             "agn_model, dust_emission, …) determine which params are legal.\n"
             "  Discovery:    tengri.suggest_parameters(mean_sfh_type='dpl')\n"
@@ -1262,7 +1262,7 @@ def explain(thing) -> None:
         ),
         "CatalogFitter": (
             "CATALOG FITTER  (vmap'd independent fits)\n"
-            "Same model, N galaxies, no shared params — one compile, N posteriors."
+            "Same model, N galaxies, no shared params: one compile, N posteriors."
         ),
         "Posterior": (
             "RESULT CONTAINER\n"
@@ -1273,7 +1273,7 @@ def explain(thing) -> None:
     }
     blurb = blurbs.get(name)
     if blurb is None:
-        print(f"  {name}: no architectural blurb yet — try tengri.describe('{name}').")
+        print(f"  {name}: no architectural blurb yet; try tengri.describe('{name}').")
         return
     print(f"\n{name}\n{'─' * len(name)}\n{blurb}\n")
 
@@ -1295,7 +1295,7 @@ def examples() -> None:
             repo_root = p
             break
     if repo_root is None:
-        # Installed wheel — look near the package
+        # Installed wheel: look near the package
         try:
             import tengri as _t  # type: ignore[import-not-found]
 

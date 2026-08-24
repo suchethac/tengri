@@ -10,7 +10,7 @@ during HMC / geoVI / MAP inference.
 Grid provenance
 ---------------
 Template data published with AGNfitter-rX (Martínez-Ramírez et al. 2024)
-— see ``scripts/build_nk08_agnfitter_grid.py``. The AGNfitter-rX pickle
+: see ``scripts/build_nk08_agnfitter_grid.py``. The AGNfitter-rX pickle
 stores per-inclination ``log10(nu / Hz)`` and ``F_nu`` arrays; the build
 script converts to ascending-wavelength [Å] and common-grid, then emits
 ``nenkova_agnfitter_torus_grid.h5``. This runtime module only consumes
@@ -55,7 +55,7 @@ def _load_nenkova_agnfitter_arrays(grid_path: str) -> dict:
 
     Parameters
     ----------
-    grid_path : str
+    grid_path: str
         Path to ``nenkova_agnfitter_torus_grid.h5`` produced by
         ``scripts/build_nk08_agnfitter_grid.py``.
 
@@ -67,7 +67,7 @@ def _load_nenkova_agnfitter_arrays(grid_path: str) -> dict:
 
     Notes
     -----
-    **JIT-compatible**: no — performs HDF5 I/O at grid-load time.
+    **JIT-compatible**: no, performs HDF5 I/O at grid-load time.
     """
     import h5py
 
@@ -86,7 +86,7 @@ def load_nenkova_agnfitter_grid(grid_path: str) -> TorusTemplateGrid:
 
     Parameters
     ----------
-    grid_path : str
+    grid_path: str
         Path to ``nenkova_agnfitter_torus_grid.h5``.
 
     Returns
@@ -104,7 +104,7 @@ def load_nenkova_agnfitter_grid(grid_path: str) -> TorusTemplateGrid:
 
     Notes
     -----
-    **JIT-compatible**: no — performs HDF5 I/O. Call outside the trace and
+    **JIT-compatible**: no, performs HDF5 I/O. Call outside the trace and
     pass the result in as an argument.
     """
     raw = _load_nenkova_agnfitter_arrays(grid_path)
@@ -138,13 +138,13 @@ def nenkova_agnfitter_sed_from_grid(
 
     Parameters
     ----------
-    wavelength : array_like, shape (n_wave,)
+    wavelength: array_like, shape (n_wave,)
         Rest-frame wavelength grid. [Å]
-    agn_log_lbol : float, optional
+    agn_log_lbol: float, optional
         Bolometric luminosity, ``log10(L_bol / L_sun)``. Default 10.0.
-    agn_cos_inc : float, optional
+    agn_cos_inc: float, optional
         Cosine of inclination (1 = face-on). Default 0.5.
-    agn_torus_frac : float, optional
+    agn_torus_frac: float, optional
         Fraction of L_bol reprocessed by the torus. Default 0.5.
 
     Returns
@@ -190,7 +190,7 @@ def create_nenkova_agnfitter_from_grid(grid_path: str) -> Callable:
 
     Parameters
     ----------
-    grid_path : str
+    grid_path: str
         Path to ``nenkova_agnfitter_torus_grid.h5``.
 
     Returns
@@ -254,13 +254,13 @@ def nenkova_agnfitter_sed(
 
     Parameters
     ----------
-    wavelength : array_like, shape (n_wave,)
+    wavelength: array_like, shape (n_wave,)
         Rest-frame wavelength grid. [Å]
-    agn_log_lbol : float, optional
+    agn_log_lbol: float, optional
         ``log10(L_bol / L_sun)``. Default 10.0.
-    agn_cos_inc : float, optional
+    agn_cos_inc: float, optional
         Cosine of inclination (1 = face-on). Default 0.5.
-    agn_torus_frac : float, optional
+    agn_torus_frac: float, optional
         Torus reprocessing fraction. Default 0.5.
     **kwargs
         Accepted and ignored for unified-dispatch compatibility.

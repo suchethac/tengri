@@ -7,10 +7,10 @@ predict **discrete line luminosities** from an AGN ionizing source. The
 continuous ``L_nu`` spectrum on the user's wavelength grid. This module
 provides thin adapter functions that bridge the two interfaces:
 
-1. ``compute_nlr_sed_feltre`` — Feltre, Charlot & Gutkin 2016 grid
+1. ``compute_nlr_sed_feltre``: Feltre, Charlot & Gutkin 2016 grid
    (CLOUDY c13.03; BEAGLE parity).
-2. ``compute_nlr_sed_synthesizer`` — Synthesizer CLOUDY c23.01 AGN NLR
-   grid (lazy — requires the user-supplied HDF5 path).
+2. ``compute_nlr_sed_synthesizer``: Synthesizer CLOUDY c23.01 AGN NLR
+   grid (lazy: requires the user-supplied HDF5 path).
 
 Both adapters use the canonical Gaussian-convolution path from the
 analytic ``nlr.py`` so the resulting continuous spectrum matches the
@@ -96,7 +96,7 @@ def _eager_construction():
     first caller is inside a ``jax.jit`` trace: any ``jnp`` operation run while
     a trace is active returns a tracer bound to that trace, however concrete
     its inputs are. The backend is then cached full of tracers, and the next
-    reader — a later test, the next fit — fails with ``UnexpectedTracerError``
+    reader, a later test, the next fit: fails with ``UnexpectedTracerError``
     naming the loader rather than whoever poisoned it.
 
     Three of these four constructors reach ``jnp``:
@@ -105,7 +105,7 @@ def _eager_construction():
     ``jnp.sort`` (which ``SynthesizerBLRBackend`` inherits).
 
     Only the Cue path had actually been caught, as the ``test_cue_nlr_grammar``
-    failure on main — and it reproduced only under a particular test order,
+    failure on main, and it reproduced only under a particular test order,
     which is why it passed locally and failed in CI. The others are the same
     construction under the same cache and differ only in whether anything has
     happened to call them from inside a trace yet. Guarding the cache boundary
@@ -126,7 +126,7 @@ def get_feltre_backend(grid_path: str | None = None) -> FeltreNLRBackend:
 
     Parameters
     ----------
-    grid_path : str or None, optional
+    grid_path: str or None, optional
         Path to ``feltre_grid.h5``. If ``None``, uses the package default
         from ``tengri.components.nebular.agn_nebular._DEFAULT_FELTRE_GRID_PATH``.
 
@@ -160,7 +160,7 @@ def get_synthesizer_nlr_backend(grid_path: str) -> SynthesizerNLRBackend:
 
     Parameters
     ----------
-    grid_path : str
+    grid_path: str
         Path to a Synthesizer CLOUDY AGN NLR HDF5 grid.
 
     Returns
@@ -185,7 +185,7 @@ def get_synthesizer_blr_backend(grid_path: str) -> SynthesizerBLRBackend:
 
     Parameters
     ----------
-    grid_path : str
+    grid_path: str
         Path to a Synthesizer CLOUDY AGN BLR HDF5 grid.
 
     Returns
@@ -214,14 +214,14 @@ def _lines_to_lnu(
 
     Parameters
     ----------
-    wavelength : array, shape (n_wave,)
+    wavelength: array, shape (n_wave,)
         Rest-frame wavelength grid [Å].
-    line_wavelengths : array, shape (n_lines,)
+    line_wavelengths: array, shape (n_lines,)
         Line rest wavelengths [Å].
-    line_luminosities_erg_s : array, shape (n_lines,)
-        Line luminosities [erg/s] (already in CGS — convert from L_sun
+    line_luminosities_erg_s: array, shape (n_lines,)
+        Line luminosities [erg/s] (already in CGS: convert from L_sun
         upstream if needed).
-    fwhm_kms : float
+    fwhm_kms: float
         Velocity FWHM applied to each line [km/s].
 
     Returns
@@ -260,38 +260,38 @@ def compute_nlr_sed_feltre(
 
     Parameters
     ----------
-    wavelength : array, shape (n_wave,)
+    wavelength: array, shape (n_wave,)
         Rest-frame wavelength grid [Å].
-    l_disc_bol_erg : float
+    l_disc_bol_erg: float
         AGN disc bolometric luminosity [erg/s]. The Feltre grid is
         driven by Q_H, derived from ``covering_fraction × l_disc_bol_erg``
         via the ionizing-spectrum mean photon energy.
-    covering_fraction : float, optional
+    covering_fraction: float, optional
         NLR covering factor. Default 0.1.
-    fwhm_kms : float, optional
+    fwhm_kms: float, optional
         NLR line FWHM [km/s]. Default 500.
-    alpha_pl : float, optional
+    alpha_pl: float, optional
         AGN ionizing power-law slope :math:`f_\nu \propto \nu^{\alpha}`.
         Feltre grid discretizes α ∈ {−2.0, −1.7, −1.4, −1.2}; the backend
         snaps to the nearest grid point. Default −1.7.
-    neb_logU : float, optional
+    neb_logU: float, optional
         :math:`\log_{10}(U)` gas ionization parameter. Default −2.0.
-    neb_logn : float, optional
+    neb_logn: float, optional
         :math:`\log_{10}(n_H/\mathrm{cm}^{-3})` gas density. Feltre grid
         discretizes log n_H ∈ {2, 3, 4}. Default 3.0 (typical NLR).
-    neb_logZ_gas : float, optional
+    neb_logZ_gas: float, optional
         :math:`\log_{10}(Z_{\rm gas})` absolute gas metallicity. Default
         −1.8477 = :math:`\log_{10}(Z_\odot)`.
-    xi_d : float, optional
+    xi_d: float, optional
         Dust-to-metal ratio. Feltre discretizes ξ_d ∈ {0.1, 0.3, 0.5};
         snaps to nearest. Default 0.3.
-    grid_path : str or None, optional
+    grid_path: str or None, optional
         Path to ``feltre_grid.h5``. If ``None``, uses tengri's default
         location (``data/feltre_grid.h5``) built via
         ``scripts/build_feltre_grid.py``.
     **_kwargs
-        Accepted for signature compatibility with ``unified_nlr_blr``
-        — ignored.
+        Accepted for signature compatibility with ``unified_nlr_blr``;
+        ignored.
 
     Returns
     -------
@@ -302,12 +302,12 @@ def compute_nlr_sed_feltre(
     -----
     **Not JIT-compatible at the closure level**: backend initialization
     loads HDF5. The numerical core (``predict_agn_nlr_lines`` + Gaussian
-    convolution) IS JIT-safe — call it inside a wrapping ``jax.jit`` and
+    convolution) IS JIT-safe: call it inside a wrapping ``jax.jit`` and
     the backend object stays as a Python-level closure.
 
     The Feltre+2016 grid covers narrow-line emission only (n_H ≤ 10⁴
     cm⁻³). For BLR-density photoionization use the analytic BLR template
-    in :mod:`tengri.components.agn.blr` — there is no Feltre BLR grid.
+    in :mod:`tengri.components.agn.blr`: there is no Feltre BLR grid.
 
     References
     ----------
@@ -343,12 +343,12 @@ def get_cue_agn_backend(weights_path: str | None = None):
     """Lazy singleton accessor for the Cue emulator (AGN-ionized NLR).
 
     Loading the ``cue_weights.npz`` neural-net weights is the slow step; the
-    backend is cached for the process. No SSP data is threaded — the AGN NLR is
+    backend is cached for the process. No SSP data is threaded, the AGN NLR is
     driven by the disc ionizing spectrum, not a stellar population.
 
     Parameters
     ----------
-    weights_path : str or None, optional
+    weights_path: str or None, optional
         Path to ``cue_weights.npz``. ``None`` uses
         :data:`_DEFAULT_CUE_WEIGHTS_PATH`.
 
@@ -367,7 +367,7 @@ def get_cue_agn_backend(weights_path: str | None = None):
     Construction runs inside ``jax.ensure_compile_time_eval()``. Without it,
     a backend first built *inside* a JIT trace captures ``DynamicJaxprTracer``
     values, and because it is cached in a module-level global that poisoned
-    instance outlives the trace — every later out-of-trace call then raises
+    instance outlives the trace: every later out-of-trace call then raises
     ``UnexpectedTracerError``. Whoever traces a Cue-NLR model first decides
     whether the rest of the process works, which makes the failure depend on
     execution order. Same defect class as the GRAHSP template cache (#1462).
@@ -401,7 +401,7 @@ def load_cue_agn_weights():
 
     Notes
     -----
-    **JIT-compatible**: no, deliberately — it must run before tracing.
+    **JIT-compatible**: no, deliberately: it must run before tracing.
     """
     return get_cue_agn_backend().weights
 
@@ -424,32 +424,32 @@ def compute_nlr_sed_cue(
     The disc's power-law ionizing continuum (:math:`f_\nu \propto \nu^{\alpha}`)
     sets :math:`Q_{\rm H}` from :math:`L_{\rm acc}`, and the Cue neural-network
     emulator (Li+2025) predicts AGN-ionized narrow lines from the ionizing
-    spectrum shape and gas parameters — the BEAGLE-style physical NLR, but with
+    spectrum shape and gas parameters, the BEAGLE-style physical NLR, but with
     Cue's fast differentiable emulator in place of a tabulated CLOUDY grid. Lines
     are Gaussian-broadened at ``fwhm_kms``. Output is :math:`L_\nu` [erg/s/Hz].
 
     Parameters
     ----------
-    wavelength : array, shape (n_wave,)
+    wavelength: array, shape (n_wave,)
         Rest-frame wavelength grid [Å].
-    l_disc_bol_erg : float
+    l_disc_bol_erg: float
         AGN disc bolometric luminosity [erg/s]; drives :math:`Q_{\rm H}`.
-    covering_fraction : float, optional
+    covering_fraction: float, optional
         NLR covering factor; scales the emergent line luminosity. Default 0.1.
-    fwhm_kms : float, optional
+    fwhm_kms: float, optional
         NLR line FWHM [km/s]. Default 500.
-    alpha_pl : float, optional
+    alpha_pl: float, optional
         AGN EUV ionizing power-law slope. Default −1.7.
-    neb_logU : float, optional
+    neb_logU: float, optional
         :math:`\log_{10}(U)` gas ionization parameter. Default −2.0.
-    neb_logn : float, optional
+    neb_logn: float, optional
         :math:`\log_{10}(n_H/\mathrm{cm}^{-3})` gas density. Default 3.0.
-    neb_logZ_gas : float, optional
+    neb_logZ_gas: float, optional
         :math:`\log_{10}(Z_{\rm gas})` **absolute** gas metallicity (same
         convention as the Feltre block). Converted to Cue's native
         :math:`\log_{10}(Z/Z_\odot)` internally via ``_LOG10_ZSUN``. Default
         −1.8477 = solar.
-    weights_path : str or None, optional
+    weights_path: str or None, optional
         Path to ``cue_weights.npz``. ``None`` uses the package default.
     **_kwargs
         Accepted for signature compatibility; ignored.
@@ -463,7 +463,7 @@ def compute_nlr_sed_cue(
     -----
     **Not JIT-compatible at the closure level**: backend init loads the weights.
     The numerical core (``agn_nlr_cue`` emulator call + Gaussian convolution) is
-    JIT-safe — call it inside a wrapping ``jax.jit`` with the backend held as a
+    JIT-safe: call it inside a wrapping ``jax.jit`` with the backend held as a
     Python closure.
 
     References
@@ -517,27 +517,27 @@ def compute_nlr_sed_synthesizer(
 
     Parameters
     ----------
-    wavelength : array, shape (n_wave,)
+    wavelength: array, shape (n_wave,)
         Rest-frame wavelength grid [Å].
-    l_disc_bol_erg : float
+    l_disc_bol_erg: float
         Disc bolometric luminosity [erg/s]. Used only for Q_H normalization
         via the Synthesizer backend's internal accounting.
-    covering_fraction : float, optional
+    covering_fraction: float, optional
         NLR covering factor. Default 0.1.
-    fwhm_kms : float, optional
+    fwhm_kms: float, optional
         NLR line FWHM [km/s]. Default 500.
-    grid_path : str, required
-        Path to a Synthesizer AGN NLR HDF5 grid (no default — these
+    grid_path: str, required
+        Path to a Synthesizer AGN NLR HDF5 grid (no default: these
         grids are not packaged with tengri because they can be many GB
         in size; supply your own).
-    log_bh_mass, log_eddington, cosine_inclination : float
+    log_bh_mass, log_eddington, cosine_inclination: float
         Synthesizer-specific physical drivers (see
         :class:`SynthesizerNLRBackend.predict_agn_nlr_lines` for details).
-    neb_logU, neb_logZ_gas : float
+    neb_logU, neb_logZ_gas: float
         Standard photoionization parameters. Defaults reflect typical
         NLR conditions.
     **_kwargs
-        Ignored — for ``unified_nlr_blr`` signature compatibility.
+        Ignored, for ``unified_nlr_blr`` signature compatibility.
 
     Returns
     -------
@@ -565,7 +565,7 @@ def compute_nlr_sed_synthesizer(
         neb_logn,
     )
     # Map the photoionization knobs onto the backend's parameter names
-    # (log_ionU / log_metallicity / log_nH) — passing the ``neb_*`` aliases lets
+    # (log_ionU / log_metallicity / log_nH): passing the ``neb_*`` aliases lets
     # them fall into ``**_kwargs`` and silently revert to grid defaults.
     line_wave_aa, line_lum_lsun = backend.predict_agn_nlr_lines(
         log_bh_mass=log_bh_mass,
@@ -602,8 +602,8 @@ def _resolve_log_qh(
     r"""Return log10(Q_H [photons/s]) for the line-luminosity normalization.
 
     With ``use_grid_qh`` (default) the grid's own specific ionizing luminosity is
-    used — ``log10(Q_H) = log10(Q_H/L_bol)_grid + log10(L_bol[erg/s]) - 7`` (the
-    −7 converts erg/s to W) — so tengri reproduces Synthesizer's own disc-model
+    used: ``log10(Q_H) = log10(Q_H/L_bol)_grid + log10(L_bol[erg/s]) - 7`` (the
+    −7 converts erg/s to W): so tengri reproduces Synthesizer's own disc-model
     :math:`Q_H` rather than assuming an ionizing-spectrum slope. The legacy path
     derives :math:`Q_H` from the accretion luminosity and an assumed slope.
     """
@@ -637,32 +637,32 @@ def compute_blr_sed_synthesizer(
     the requested wavelength grid through :class:`SynthesizerBLRBackend` (which
     reuses the NLR interpolation on the BLR grid file) and convolves the predicted
     broad lines into a continuous :math:`L_\nu`. The default ``fwhm_kms`` is
-    5000 km/s — broad-line widths smear the permitted lines into the familiar
+    5000 km/s: broad-line widths smear the permitted lines into the familiar
     quasar pseudo-continuum, in contrast to the ~500 km/s NLR width.
 
     Parameters
     ----------
-    wavelength : array, shape (n_wave,)
+    wavelength: array, shape (n_wave,)
         Rest-frame wavelength grid [Å].
-    l_disc_bol_erg : float
+    l_disc_bol_erg: float
         Disc bolometric luminosity [erg/s] (used for :math:`Q_H` normalization
         via the backend's internal accounting).
-    covering_fraction : float, optional
+    covering_fraction: float, optional
         BLR covering factor. Default 0.1.
-    fwhm_kms : float, optional
+    fwhm_kms: float, optional
         BLR line FWHM [km/s]. Default 5000 (broad permitted lines).
-    grid_path : str, required
+    grid_path: str, required
         Path to a Synthesizer AGN BLR HDF5 grid (e.g.
-        ``test_grid_agn-blr.hdf5``). No default — these grids are not packaged
+        ``test_grid_agn-blr.hdf5``). No default: these grids are not packaged
         with tengri.
-    log_bh_mass, log_eddington, cosine_inclination : float
+    log_bh_mass, log_eddington, cosine_inclination: float
         Synthesizer-specific physical drivers (see
         :meth:`SynthesizerBLRBackend.predict_agn_blr_lines`).
-    neb_logU, neb_logZ_gas : float
+    neb_logU, neb_logZ_gas: float
         Photoionization parameters. Defaults reflect denser, more ionized BLR
         conditions (``neb_logU = -1`` vs the NLR's ``-2``).
     **_kwargs
-        Ignored — for ``unified_nlr_blr`` signature compatibility.
+        Ignored, for ``unified_nlr_blr`` signature compatibility.
 
     Returns
     -------
@@ -671,7 +671,7 @@ def compute_blr_sed_synthesizer(
 
     Notes
     -----
-    **JIT** — backend init loads HDF5 (Python-level); the numerical core
+    **JIT**: backend init loads HDF5 (Python-level); the numerical core
     (interpolation + Gaussian convolution) is JIT-safe.
 
     References
@@ -740,27 +740,27 @@ def compute_nlr_sed_synthesizer_spectra(
 
     Unlike :func:`compute_nlr_sed_synthesizer` (which re-broadens the grid's
     discrete ``/lines`` table), this reads the grid's reprocessed
-    ``/spectra/nebular`` array — the *same* product Synthesizer's ``UnifiedAGN``
-    extracts (``extract="nebular"``) for its NLR/BLR components — so a unified
+    ``/spectra/nebular`` array, the *same* product Synthesizer's ``UnifiedAGN``
+    extracts (``extract="nebular"``) for its NLR/BLR components: so a unified
     AGN built through the grammar reproduces ``UnifiedAGN`` (issue #694). The
     line-region emission is isotropic (grid ``cosine_inclination`` held at 0.5,
     matching Synthesizer).
 
     Parameters
     ----------
-    wavelength : array_like, shape (n_wave,)
+    wavelength: array_like, shape (n_wave,)
         Rest-frame wavelength grid [Angstrom].
-    l_disc_bol_erg : float
+    l_disc_bol_erg: float
         Disc bolometric luminosity [erg/s].
-    covering_fraction : float, optional
+    covering_fraction: float, optional
         Line-region covering factor. Default 0.1.
-    grid_path : str, required
+    grid_path: str, required
         Path to a Synthesizer AGN HDF5 grid carrying ``/spectra/nebular``.
-    log_bh_mass, log_eddington : float
+    log_bh_mass, log_eddington: float
         Grid drivers (``cosine_inclination`` is held at 0.5 internally).
-    neb_logU, neb_logn, neb_logZ_gas : float
+    neb_logU, neb_logn, neb_logZ_gas: float
         Photoionization knobs (log U, log n_H, log Z absolute).
-    region : {"nlr", "blr"}, optional
+    region: {"nlr", "blr"}, optional
         Which grid (and backend) to read. Default ``"nlr"``.
 
     Returns

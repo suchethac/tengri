@@ -59,13 +59,13 @@ def precompute_silva04_photometry(
 
     Parameters
     ----------
-    grid_path : str
+    grid_path: str
         Path to ``silva04_torus_grid.h5``.
-    filter_waves : list[ndarray]
+    filter_waves: list[ndarray]
         Wavelength grid per filter [Angstrom], observed frame.
-    filter_trans : list[ndarray]
+    filter_trans: list[ndarray]
         Transmission per filter (0–1).
-    redshift : float, optional
+    redshift: float, optional
         Source redshift. Used to shift rest-frame templates into the
         observed frame before integrating against observed-frame filters.
         Default 0.0.
@@ -73,11 +73,11 @@ def precompute_silva04_photometry(
     Returns
     -------
     dict
-        ``grid_phot`` : ndarray, shape (n_nh, n_filters)
+        ``grid_phot``: ndarray, shape (n_nh, n_filters)
             Filter-integrated L_ν [erg/s/Hz] per L_sun (unit torus fraction).
-        ``axes`` : tuple of 1 grid array (jnp.ndarray)
+        ``axes``: tuple of 1 grid array (jnp.ndarray)
             Grid axis (log10(N_H)).
-        ``_preint`` : PreintegratedGrid
+        ``_preint``: PreintegratedGrid
             Internal preintegration data structure.
 
     References
@@ -88,7 +88,7 @@ def precompute_silva04_photometry(
 
     Notes
     -----
-    **JIT-compatible**: no — this is a build-time function using NumPy.
+    **JIT-compatible**: no, this is a build-time function using NumPy.
 
     **Build-time operation**: This function performs frequency-domain
     integration via NumPy. The precomputed photometry is grid-independent
@@ -151,7 +151,7 @@ def build_silva04_photometry_lookup(precomp: dict):
 
     Parameters
     ----------
-    precomp : dict
+    precomp: dict
         Output of :func:`precompute_silva04_photometry` or :func:`precompute`
         (the Protocol-shaped entry point).
 
@@ -174,10 +174,10 @@ def build_silva04_photometry_lookup(precomp: dict):
 
     Notes
     -----
-    **JIT-compatible**: yes — the returned function uses ``jnp`` and
+    **JIT-compatible**: yes, the returned function uses ``jnp`` and
     triweight interpolation, which are JAX-native.
 
-    **Gradient-safe**: yes — triweight kernel is fully differentiable.
+    **Gradient-safe**: yes, triweight kernel is fully differentiable.
 
     **Interpolation kernel**: Triweight kernel provides C²-continuous
     gradients for autodiff, unlike nearest-neighbor or linear interpolation.
@@ -223,15 +223,15 @@ def precompute(
 
     Parameters
     ----------
-    filter_waves : list[ndarray]
+    filter_waves: list[ndarray]
         Wavelength grid per filter [Angstrom], observed frame.
-    filter_trans : list[ndarray]
+    filter_trans: list[ndarray]
         Transmission per filter (0–1).
-    redshift : float
+    redshift: float
         Source redshift. [dimensionless]
-    parameters : Parameters | None
+    parameters: Parameters | None
         Parameters spec, used to detect Fixed-axis parameters.
-    grid_path : str, keyword-only
+    grid_path: str, keyword-only
         Path to ``silva04_torus_grid.h5``.
 
     Returns
@@ -248,7 +248,7 @@ def precompute(
 
     Notes
     -----
-    **JIT-compatible**: no — this is a build-time function using NumPy.
+    **JIT-compatible**: no, this is a build-time function using NumPy.
     """
     result = precompute_silva04_photometry(
         grid_path, filter_waves, filter_trans, redshift=redshift
@@ -279,10 +279,10 @@ def build_lookup(preint: dict, *, free_param_names: tuple[str, ...] | None = Non
 
     Parameters
     ----------
-    preint : dict
+    preint: dict
         Preintegrated data dict with keys ``"grid_phot"``, ``"axes"``,
         and optionally ``"_collapsed_axes"`` and ``"_preint"``.
-    free_param_names : tuple of str or None, optional
+    free_param_names: tuple of str or None, optional
         Names of remaining free axes in the collapsed case.
         Not used in the default (no-collapse) case.
 
@@ -304,9 +304,9 @@ def build_lookup(preint: dict, *, free_param_names: tuple[str, ...] | None = Non
 
     Notes
     -----
-    **JIT-compatible**: yes — the returned function is fully JAX-native.
+    **JIT-compatible**: yes, the returned function is fully JAX-native.
 
-    **Gradient-safe**: yes — triweight interpolation is fully differentiable.
+    **Gradient-safe**: yes, triweight interpolation is fully differentiable.
     """
     if not preint.get("_collapsed_axes"):
         return build_silva04_photometry_lookup(preint)

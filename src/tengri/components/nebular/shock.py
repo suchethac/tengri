@@ -16,11 +16,11 @@ hardcoded arrays (solar, n=1 cm⁻³, 8 velocity points, 10 lines) with a
 Interpolation strategy
 ----------------------
 
-- velocity, B-field, log_density : ``interp_nd_triweight`` — C²-continuous
+- velocity, B-field, log_density: ``interp_nd_triweight``: C²-continuous
   triweight kernel (Hearin et al. 2023 / DSPS), jointly interpolated across
   all three continuous axes.  Bin edges are precomputed at grid load time via
   ``edges_for_grid`` to avoid rebuilding inside JIT traces.
-- abundance, component, version : Python string → integer index (static)
+- abundance, component, version: Python string → integer index (static)
 
 References
 ----------
@@ -48,7 +48,7 @@ from tengri.components.nebular._shared import render_nebular_lines as _place_lin
 from tengri.utils.grid_interp import interp_nd_triweight as _interp_nd_triweight
 from tengri.utils.interpolation import edges_for_grid as _edges_for_grid
 
-# ── Legacy hardcoded fallback — Allen+2008 Table 5 (solar, n=1 cm⁻³)
+# ── Legacy hardcoded fallback: Allen+2008 Table 5 (solar, n=1 cm⁻³)
 
 # 8-point velocity grid [km/s]
 _FALLBACK_V = jnp.array([100.0, 150.0, 200.0, 300.0, 400.0, 500.0, 750.0, 1000.0])
@@ -144,7 +144,7 @@ def _validate_shock_params(
 
     Discrete parameters (density, B-field, abundance, component) are always
     validated because they must be concrete values (they are never JAX-traced
-    in normal use — they are Fixed in Parameters).
+    in normal use: they are Fixed in Parameters).
 
     Velocity is validated only when it is a concrete Python number; when called
     inside ``jax.jit`` with a traced velocity, the check is skipped so that JIT
@@ -159,7 +159,7 @@ def _validate_shock_params(
 
     # Each continuous param is checked independently: when traced under jax.jit
     # the float() cast raises and we defer that one param to build-time spec
-    # validation. We must NOT bundle them in a single try block — otherwise a
+    # validation. We must NOT bundle them in a single try block: otherwise a
     # traced first param would also skip the bounds check on concrete later
     # params (e.g. user passes traced velocity but a concrete out-of-range
     # density).
@@ -228,7 +228,7 @@ def _load_mappings_grids() -> dict | None:
         )
         return None
 
-    import h5py  # optional dependency — only needed when HDF5 exists
+    import h5py  # optional dependency: only needed when HDF5 exists
 
     def _decode(arr: object) -> list[str]:
         """Decode bytes array to string list, handling both bytes and str types."""
@@ -260,7 +260,7 @@ def _load_mappings_grids() -> dict | None:
             "abundance_names": _decode(g["abundance_names"][:]),
             "line_names": _decode(g["line_names"][:]),
             "line_wavelengths_aa": jnp.array(g["line_wavelengths_aa"][:], dtype=jnp.float32),
-            # Shape: (N_abund, N_n, N_v, N_B, N_lines) — NaN-filled cells → 0.0
+            # Shape: (N_abund, N_n, N_v, N_B, N_lines): NaN-filled cells → 0.0
             "shock_ratios": _load_ratios(g["shock_ratios"]),
             "precursor_ratios": _load_ratios(g["precursor_ratios"]),
             "combined_ratios": _load_ratios(g["combined_ratios"]),
@@ -280,7 +280,7 @@ class ShockTemplateGrid(NamedTuple):
     """The four MAPPINGS V ratio cubes, in a form that threads through ``jax.jit``.
 
     Read from the module-level cache inside a trace, the *selected* ratio cube
-    freezes into the graph as an XLA ``Constant`` — 3.73 MB for the
+    freezes into the graph as an XLA ``Constant``: 3.73 MB for the
     ``(5, 6, 37, 35, 24)`` float32 array, on every compile, against a 0.05 MB
     bare-stellar floor (#1694). Passed as an argument instead, it is a
     ``Parameter``.
@@ -295,22 +295,22 @@ class ShockTemplateGrid(NamedTuple):
     those Python-level guards into a ``TracerArrayConversionError``.
 
     Being a :class:`~typing.NamedTuple` of plain arrays, this is already a JAX
-    pytree — no custom registration, and no exposure to the "arrays cannot be
+    pytree: no custom registration, and no exposure to the "arrays cannot be
     passed as metadata fields" failure that a hand-rolled ``aux_data`` split
     invites (see :class:`~tengri.components.nebular.cue.CueWeights`, #464).
 
     Attributes
     ----------
-    shock_ratios, precursor_ratios, combined_ratios : ndarray
+    shock_ratios, precursor_ratios, combined_ratios: ndarray
         Line ratios relative to Hbeta, shape
         ``(n_abund, n_n, n_v, n_b, n_lines)`` [dimensionless]. Sparse grid
         cells are NaN in the file and stored as 0.0 here.
-    hbeta_log_lum_erg_s : ndarray
+    hbeta_log_lum_erg_s: ndarray
         Hbeta luminosity normalization [log10(erg/s)].
 
     Notes
     -----
-    **JIT-compatible**: yes — that is the point of the type. Pass an instance
+    **JIT-compatible**: yes, that is the point of the type. Pass an instance
     as an argument rather than closing over it.
     """
 
@@ -327,12 +327,12 @@ def load_shock_template_grid() -> ShockTemplateGrid | None:
     -------
     ShockTemplateGrid or None
         ``None`` when ``data/mappings_templates.h5`` is absent or carries no
-        ``mappings5`` group — the caller then falls back to the hardcoded
+        ``mappings5`` group: the caller then falls back to the hardcoded
         Allen+2008 subset, exactly as before threading existed.
 
     Notes
     -----
-    **JIT-compatible**: no — call at build time. The returned value is what
+    **JIT-compatible**: no, call at build time. The returned value is what
     threads.
     """
     grids = _load_mappings_grids()
@@ -366,30 +366,30 @@ def shock_line_ratios(
 
     Parameters
     ----------
-    shock_velocity : float
+    shock_velocity: float
         Shock velocity in km/s.  Must be within the grid range
         (100–1000 km/s fallback; 200–1000 km/s HDF5).  Raises ``ValueError``
-        if out of range.  Continuously interpolated — safe under ``jax.jit``.
-    shock_log_density : float
+        if out of range.  Continuously interpolated: safe under ``jax.jit``.
+    shock_log_density: float
         Log10 pre-shock density in cm⁻³ (e.g. ``0.0`` = 1 cm⁻³).
         Must be within ``[0, 3]``.  Continuously interpolated via triweight
-        kernel — safe under ``jax.jit``.  Raises ``ValueError`` if out of range.
-    shock_b_over_sqrt_n : float
+        kernel: safe under ``jax.jit``.  Raises ``ValueError`` if out of range.
+    shock_b_over_sqrt_n: float
         Absolute B-field strength in μG (3MdBs MAPPINGS V convention).
         Must be within ``[0.0001, 10]`` μG.  Continuously interpolated via
-        triweight kernel — safe under ``jax.jit``.  Raises ``ValueError`` if
+        triweight kernel: safe under ``jax.jit``.  Raises ``ValueError`` if
         out of range.
-    shock_abundance : str
+    shock_abundance: str
         Abundance pattern.  Accepted short names:
         ``"solar"``, ``"2xsolar"`` / ``"twice_solar"``, ``"dopita2005"``,
         ``"lmc"``, ``"smc"``.  Full 3MdBs DB names (e.g.
         ``"Allen2008_Solar"``) also accepted.  Raises ``ValueError`` for
         unknown names.
-    shock_component : str
+    shock_component: str
         Which emission component to return.  One of ``"shock"``,
         ``"precursor"``, ``"combined"`` (default).  Raises ``ValueError``
         for unknown values.
-    templates : ShockTemplateGrid, optional
+    templates: ShockTemplateGrid, optional
         Pre-loaded ratio cubes, threaded as a JIT argument so they are not
         baked into the compiled graph as constants (#1694). ``None`` (the
         default) reads them from the module-level cache, which is correct but
@@ -421,7 +421,7 @@ def shock_line_ratios(
 
     Notes
     -----
-    **JIT-compatible**: yes — continuous parameters (velocity, density,
+    **JIT-compatible**: yes, continuous parameters (velocity, density,
     B-field) are interpolated via ``interp_nd_triweight``, safe under
     ``jax.jit``. Discrete parameters (abundance, component) are resolved
     at call time and not traced.
@@ -448,7 +448,7 @@ def shock_line_ratios(
     if grids is not None and "mappings5" in grids:
         g = grids["mappings5"]
 
-        # Validate before any indexing — raises ValueError for out-of-range inputs
+        # Validate before any indexing: raises ValueError for out-of-range inputs
         _validate_shock_params(
             shock_velocity,
             shock_log_density,
@@ -470,7 +470,7 @@ def shock_line_ratios(
         # Prefer the threaded cube: read from ``g`` it is a closure-captured
         # concrete array and XLA inlines all 3.73 MB of it into every compile
         # (#1694). ``templates`` carries the identical values as a traced
-        # argument. The axes below stay concrete either way — they are ~730
+        # argument. The axes below stay concrete either way: they are ~730
         # bytes and the bounds checks above need real numbers.
         ratio_array = getattr(templates, ratio_field) if templates is not None else g[ratio_field]
         # shape: (N_abund, N_n, N_v, N_B, N_lines)
@@ -496,7 +496,7 @@ def shock_line_ratios(
 
         return {name: ratios_vec[j] for j, name in enumerate(g["line_names"])}
 
-    # ── Fallback path — hardcoded Allen+2008 Table 5 ───────────────
+    # ── Fallback path: hardcoded Allen+2008 Table 5 ───────────────
     v_clip = jnp.clip(shock_velocity, 100.0, 1000.0)
     r_oiii = jnp.interp(v_clip, _FALLBACK_V, _FALLBACK_R_OIII)
     r_nii = jnp.interp(v_clip, _FALLBACK_V, _FALLBACK_R_NII)
@@ -585,23 +585,23 @@ def compute_shock_sed(
 
     Parameters
     ----------
-    wavelength : array, shape (n_wave,)
+    wavelength: array, shape (n_wave,)
         Wavelength grid in Å (rest-frame, increasing).
-    shock_velocity : float
+    shock_velocity: float
         Shock velocity in km/s.
-    l_shock_halpha : float
+    l_shock_halpha: float
         Total shock Hα luminosity in erg/s (normalization anchor).
-    shock_log_density : float
+    shock_log_density: float
         Log10 pre-shock density in cm⁻³.
-    shock_b_over_sqrt_n : float
+    shock_b_over_sqrt_n: float
         Absolute B-field in μG (3MdBs MAPPINGS V).  Snapped to nearest grid point.
-    shock_abundance : str
+    shock_abundance: str
         Abundance set (see ``shock_line_ratios``).
-    shock_component : str
+    shock_component: str
         ``"shock"``, ``"precursor"``, or ``"combined"``.
-    line_sigma_aa : float
+    line_sigma_aa: float
         Gaussian line width in Å.  ``0`` → delta function into nearest pixel.
-    templates : ShockTemplateGrid, optional
+    templates: ShockTemplateGrid, optional
         Pre-loaded ratio cubes threaded as a JIT argument instead of baked into
         the graph as 3.73 MB of constants (#1694). Forwarded to
         :func:`shock_line_ratios`; ``None`` reads the module-level cache.
@@ -613,7 +613,7 @@ def compute_shock_sed(
 
     Notes
     -----
-    **JIT-compatible**: yes — all operations use ``jnp`` primitives and
+    **JIT-compatible**: yes, all operations use ``jnp`` primitives and
     calls to ``_shock_line_arrays`` and ``_place_line_profiles``.
 
     **Line placement**: Emission lines are placed as Gaussian profiles
@@ -652,15 +652,15 @@ class ShockBackend:
 
     Parameters
     ----------
-    shock_abundance : str
+    shock_abundance: str
         Abundance set name: ``"solar"``, ``"2xsolar"``, ``"lmc"``, ``"smc"``, etc.
-    shock_component : str
+    shock_component: str
         ``"shock"``, ``"precursor"``, or ``"combined"``.
-    has_continuum : bool
-        Always ``False`` — MAPPINGS V provides line emission only.
-    has_free_params : bool
-        Always ``True`` — velocity, density, B-field are differentiable parameters.
-    name : str
+    has_continuum: bool
+        Always ``False``: MAPPINGS V provides line emission only.
+    has_free_params: bool
+        Always ``True``: velocity, density, B-field are differentiable parameters.
+    name: str
         Backend identifier string ("shock").
 
     Notes
@@ -668,9 +668,9 @@ class ShockBackend:
     **JIT-compatible**: Methods return JAX arrays suitable for JIT compilation.
     All computations use pure functions with no side effects.
 
-    **Attributes**: ``has_continuum`` is always False — MAPPINGS V provides
+    **Attributes**: ``has_continuum`` is always False: MAPPINGS V provides
     shock-associated emission lines only (no underlying continuum).
-    ``has_free_params`` is always True — all parameters (velocity, density,
+    ``has_free_params`` is always True: all parameters (velocity, density,
     B-field) are differentiable and suitable for optimization.
 
     """
@@ -696,17 +696,17 @@ class ShockBackend:
 
         Parameters
         ----------
-        wavelength : array, shape (n_wave,)
+        wavelength: array, shape (n_wave,)
             Wavelength grid in Å (rest-frame, increasing).
-        shock_velocity : float
+        shock_velocity: float
             Shock velocity in km/s.
-        l_shock_halpha : float
+        l_shock_halpha: float
             Total shock Hα luminosity in erg/s (normalization anchor).
-        shock_log_density : float
+        shock_log_density: float
             Log10 pre-shock density in cm⁻³.
-        shock_b_over_sqrt_n : float
+        shock_b_over_sqrt_n: float
             Absolute B-field in μG.
-        line_sigma_aa : float
+        line_sigma_aa: float
             Gaussian line width in Å.  ``0`` → delta function into nearest pixel.
         **_kwargs
             Extra keyword arguments silently ignored for protocol compatibility.
@@ -718,7 +718,7 @@ class ShockBackend:
 
         Notes
         -----
-        **JIT-compatible**: yes — delegates to ``compute_shock_sed``.
+        **JIT-compatible**: yes, delegates to ``compute_shock_sed``.
 
         **Abundance and component**: These are fixed at backend initialization
         via ``shock_abundance`` and ``shock_component`` dataclass fields.

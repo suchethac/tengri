@@ -59,13 +59,13 @@ def matern32_kernel(
 
     Parameters
     ----------
-    x1 : array_like, shape (n1,)
+    x1: array_like, shape (n1,)
         First kernel argument [dimensionless].
-    x2 : array_like, shape (n2,)
+    x2: array_like, shape (n2,)
         Second kernel argument [dimensionless].
-    variance : float
+    variance: float
         Signal variance σ² [dimensionless].
-    length_scale : float
+    length_scale: float
         Length scale ℓ [dimensionless].
 
     Returns
@@ -75,7 +75,7 @@ def matern32_kernel(
 
     Notes
     -----
-    **JIT-compatible**: yes — uses ``jnp`` primitives throughout.
+    **JIT-compatible**: yes, uses ``jnp`` primitives throughout.
 
     Matches ``george.kernels.Matern32Kernel(metric=ℓ²)``.
     """
@@ -96,7 +96,7 @@ def linear_kernel(
 
     Notes
     -----
-    Kept for backward compatibility. **Not used by ``dense_basis()``** — the
+    Kept for backward compatibility. **Not used by ``dense_basis()``**: the
     GP-SFH path now calls :func:`_george_linear_kernel` to exactly mirror
     ``george.kernels.LinearKernel(log_gamma2, order=2)``.
     """
@@ -142,9 +142,9 @@ def _george_combined_kernel(
 
     Parameters
     ----------
-    x1, x2 : array_like
+    x1, x2: array_like
         Kernel inputs.
-    y_train : array_like
+    y_train: array_like
         Training y-values used to compute the kernel hyperparameters
         ``variance = var(y)`` and the metric/log_gamma2 ``= median(y)``.
     """
@@ -182,23 +182,23 @@ def gp_interpolate(
     y_err: jnp.ndarray,
     x_eval: jnp.ndarray,
 ) -> jnp.ndarray:
-    """GP conditional mean with the dense_basis kernel — the one GP path here.
+    """GP conditional mean with the dense_basis kernel: the one GP path here.
 
     Both :func:`dense_basis` and :func:`dense_basis_pure` interpolate the
     cumulative-mass quantiles through this function, so they cannot drift apart.
     The kernel is :func:`_george_combined_kernel`, which reproduces the
-    hyperparameters ``dense_basis`` hands to ``george`` — the kernel is built
+    hyperparameters ``dense_basis`` hands to ``george``: the kernel is built
     from ``y_train`` itself, so there is nothing to tune here.
 
     Parameters
     ----------
-    x_train : array_like, shape (n_train,)
+    x_train: array_like, shape (n_train,)
         Training input points [dimensionless].
-    y_train : array_like, shape (n_train,)
+    y_train: array_like, shape (n_train,)
         Training values [dimensionless].
-    y_err : array_like, shape (n_train,)
+    y_err: array_like, shape (n_train,)
         Per-point noise, added in quadrature on the diagonal [dimensionless].
-    x_eval : array_like, shape (n_eval,)
+    x_eval: array_like, shape (n_eval,)
         Evaluation points [dimensionless].
 
     Returns
@@ -208,7 +208,7 @@ def gp_interpolate(
 
     Notes
     -----
-    **JIT-compatible**: yes — uses ``jax.scipy.linalg.cho_factor`` and ``cho_solve``.
+    **JIT-compatible**: yes, uses ``jax.scipy.linalg.cho_factor`` and ``cho_solve``.
 
     Cholesky exploits the positive-definite structure of the kernel matrix,
     which is both faster and better conditioned than a general solve. The
@@ -245,11 +245,11 @@ def _build_quantile_points(
     log_sfr_inst: float,
     age_universe_yr: float,
 ) -> tuple[jnp.ndarray, jnp.ndarray, jnp.ndarray]:
-    """Build (time, mass, yerr) quantile points — matching dense_basis.
+    """Build (time, mass, yerr) quantile points: matching dense_basis.
 
     Constructs (in order):
     1. Endpoint: (0, 0)
-    2. Big Bang constraint: (0.01, 0) — enforces SFR=0 at early times
+    2. Big Bang constraint: (0.01, 0): enforces SFR=0 at early times
     3. Intermediate quantiles from tx_fracs: (tx_i, mass_i)
     4. Endpoint: (1, 1)
     5. Observation-epoch SFR constraints: 3 points near t=1 that
@@ -258,24 +258,24 @@ def _build_quantile_points(
 
     Parameters
     ----------
-    tx_fracs : array, shape (n_param,)
+    tx_fracs: array, shape (n_param,)
         Cosmic time fractions in (0, 1), sorted.
-    n_param : int
+    n_param: int
         Number of intermediate quantile parameters.
-    log_total_mass : float
+    log_total_mass: float
         log10(total stellar mass / Msun).
-    log_sfr_inst : float
+    log_sfr_inst: float
         log10(instantaneous SFR at observation / Msun/yr).
-    age_universe_yr : float
+    age_universe_yr: float
         Age of the universe at observation epoch (yr).
 
     Returns
     -------
-    time_q : array
+    time_q: array
         Time fractions for GP training.
-    mass_q : array
+    mass_q: array
         Cumulative mass fractions for GP training.
-    yerr : array
+    yerr: array
         Noise standard deviations for each training point.
     """
     # Mass quantiles: evenly spaced from 0 to 1
@@ -400,15 +400,15 @@ def dense_basis(
 
     Parameters
     ----------
-    age_yr : array_like, shape (n_age,)
+    age_yr: array_like, shape (n_age,)
         Lookback time grid [yr].
-    log_total_mass : float, optional
+    log_total_mass: float, optional
         log10(total stellar mass formed / Msun). Default: 10.0 (10 Gyr Msun).
-    log_sfr_inst : float, optional
+    log_sfr_inst: float, optional
         log10(instantaneous SFR at observation / Msun/yr). Default: 0.0 (1 Msun/yr).
         Used to add 3 constraint points near t=1 (today) that pin the recent SFH
         shape to be consistent with the observed instantaneous SFR.
-    age_universe_yr : float, optional
+    age_universe_yr: float, optional
         Age of the universe at observation epoch [yr].
         Default: 13.47e9 (FlatLambdaCDM, H0=70, Omega_m=0.3, z=0).
     **tx_kwargs
@@ -423,7 +423,7 @@ def dense_basis(
 
     Notes
     -----
-    **JIT-compatible**: yes — all operations use ``jnp`` primitives.
+    **JIT-compatible**: yes, all operations use ``jnp`` primitives.
 
     This is a faithful JAX reimplementation of the ``dense_basis.gp_sfh.tuple_to_sfh()``
     algorithm from Iyer & Gawiser (2017, 2019). Key design features:
@@ -533,7 +533,7 @@ def dense_basis(
     # ``log_sfr_inst``. That conditional creates a non-differentiable step at
     # the threshold, which breaks gradient-based inference. Since the whole
     # point of having ``log_sfr_inst`` as an explicit free parameter is to
-    # honor it during fitting, we override unconditionally — equivalent to
+    # honor it during fitting, we override unconditionally: equivalent to
     # ``sfr_tolerance = 0``. This is smooth in both ``log_sfr_inst`` and
     # ``log_total_mass`` (the override bins are independent of the latter).
     sfr_override_value = 10.0**log_sfr_inst
@@ -554,7 +554,7 @@ def dense_basis(
     return jnp.maximum(result, 0.0)
 
 
-# ── Pure quantile-only variant (no SFR constraint — for use with field)
+# ── Pure quantile-only variant (no SFR constraint: for use with field)
 
 
 def _build_quantile_points_pure(
@@ -565,7 +565,7 @@ def _build_quantile_points_pure(
 
     Returns (time_q, mass_q, yerr) with n_param+3 points:
     (0,0), (0.01,0), (tx_i, mass_i), (1,1). The user quantiles sit at indices
-    ``2 : 2+n_param``, which is where ``dense_basis`` puts its noise.
+    ``2: 2+n_param``, which is where ``dense_basis`` puts its noise.
     """
     mass_quantiles = jnp.linspace(0.0, 1.0, n_param + 2)
     time_quantiles = jnp.concatenate(
@@ -616,11 +616,11 @@ def dense_basis_pure(
 
     Parameters
     ----------
-    age_yr : array_like, shape (n_age,)
+    age_yr: array_like, shape (n_age,)
         Lookback time grid [yr].
-    log_total_mass : float, optional
+    log_total_mass: float, optional
         log10(total stellar mass formed / Msun). Default: 10.0 (10 Gyr Msun).
-    age_universe_yr : float, optional
+    age_universe_yr: float, optional
         Age of the universe at observation epoch [yr].
         Default: 13.47e9 (FlatLambdaCDM, H0=70, Omega_m=0.3, z=0).
     **tx_kwargs
@@ -634,7 +634,7 @@ def dense_basis_pure(
 
     Notes
     -----
-    **JIT-compatible**: yes — uses ``gp_interpolate``.
+    **JIT-compatible**: yes, uses ``gp_interpolate``.
 
     **Approximation**: Replaces the GP with monotone PCHIP (Piecewise Cubic
     Hermite Interpolating Polynomial), which guarantees a monotonically
@@ -680,7 +680,7 @@ def dense_basis_pure(
     # Build quantile points (NO SFR constraints)
     time_q, mass_q, yerr = _build_quantile_points_pure(tx_fracs, n_param)
 
-    # GP interpolation of cumulative mass — the same 'gp_george' path
+    # GP interpolation of cumulative mass: the same 'gp_george' path
     # dense_basis uses by default, shared with dense_basis() above.
     t_eval = jnp.linspace(0.0, 1.0, _DEFAULT_RES)
     m_cumul = gp_interpolate(time_q, mass_q, yerr, t_eval)

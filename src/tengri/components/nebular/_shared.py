@@ -40,7 +40,7 @@ def _nu_quadrature_weights(obs_wavelengths: jnp.ndarray) -> jnp.ndarray:
 
     Parameters
     ----------
-    obs_wavelengths : ndarray, shape (n_wave,)
+    obs_wavelengths: ndarray, shape (n_wave,)
         Wavelength grid, increasing. [Å]
 
     Returns
@@ -64,13 +64,13 @@ def _grid_bracket(
     r"""Local grid spacing and nearest-node index for each line, from one search.
 
     Both facts come from the same bracketing interval, and both are needed on
-    every render (#1836): the spacing floors the profile width — a *local*
+    every render (#1836): the spacing floors the profile width: a *local*
     question, since the MILES SSP grid runs 0.9 Å inside 3500–7500 Å and 10 Å at
-    Lyα, so a global statistic answers it wrongly — and the nearest node is where
+    Lyα, so a global statistic answers it wrongly: and the nearest node is where
     a line the grid cannot resolve gets placed.
 
     Returned together because they share the search, not because the search is
-    expensive — measured, it is not: an ablation on an isolated (6185, 128) block
+    expensive: measured, it is not: an ablation on an isolated (6185, 128) block
     put the whole of ``searchsorted`` + containment mask + scatter at **768**
     gradient FLOPs against 38,006,660 for the render. What costs is the discrete
     area itself (``quad_w @ profiles``, +41 % over the un-rescaled form), and
@@ -80,21 +80,21 @@ def _grid_bracket(
 
     Parameters
     ----------
-    obs_wavelengths : ndarray, shape (n_wave,)
+    obs_wavelengths: ndarray, shape (n_wave,)
         Wavelength grid, increasing. [Å]
-    line_wavelengths : ndarray, shape (n_lines,)
+    line_wavelengths: ndarray, shape (n_lines,)
         Line centers. [Å]
 
     Returns
     -------
-    spacing : ndarray, shape (n_lines,)
+    spacing: ndarray, shape (n_lines,)
         Width of the grid interval containing each line. [Å]
-    nearest : ndarray, shape (n_lines,)
+    nearest: ndarray, shape (n_lines,)
         Index of the closest grid node.
 
     Notes
     -----
-    **JIT-compatible**: yes — ``searchsorted`` accepts traced operands.
+    **JIT-compatible**: yes, ``searchsorted`` accepts traced operands.
     """
     hi = jnp.clip(
         jnp.searchsorted(obs_wavelengths, line_wavelengths), 1, obs_wavelengths.shape[0] - 1
@@ -117,33 +117,33 @@ def _render_conserving(
 
     Both profile shapes here (triweight, Gaussian) are normalized so that
     :math:`\int \phi\,d\nu = 1` in the continuum limit. The caller integrates on
-    a discrete grid, where that holds only if the grid resolves the profile —
+    a discrete grid, where that holds only if the grid resolves the profile:
     and the SSP grids in use do not, outside their high-resolution window. Each
     profile is therefore divided by its own trapezoid area, making the rendered
     flux exact on whatever grid it was handed.
 
     A profile can still vanish on the grid: a sub-pixel line centered between two
     nodes puts both at :math:`|u| = 1`, where the compact-support triweight is
-    *exactly* zero. Those lines are scattered into their nearest pixel instead —
+    *exactly* zero. Those lines are scattered into their nearest pixel instead:
     the grid cannot represent a width, but it must not lose the light. This is
     the one case the pre-#1836 code got wrong in the *quiet* direction, dropping
     the line with nothing raised.
 
     Parameters
     ----------
-    profiles : ndarray, shape (n_wave, n_lines)
+    profiles: ndarray, shape (n_wave, n_lines)
         Analytically normalized profiles [1/Hz].
-    obs_wavelengths : ndarray, shape (n_wave,)
+    obs_wavelengths: ndarray, shape (n_wave,)
         Wavelength grid the profiles were rendered on, increasing. [Å]
-    line_wavelengths : ndarray, shape (n_lines,)
+    line_wavelengths: ndarray, shape (n_lines,)
         Line centers. [Å]
-    line_luminosities : ndarray, shape (n_lines,)
+    line_luminosities: ndarray, shape (n_lines,)
         Integrated line luminosities. [erg/s] or [erg/s/Msun]
-    support_half_width : ndarray, shape (n_lines,)
-        Half-width beyond which each profile is negligible — exact for the
+    support_half_width: ndarray, shape (n_lines,)
+        Half-width beyond which each profile is negligible: exact for the
         compact-support triweight, a 4-sigma convention for the Gaussian. Used
         only to decide containment, never to shape the profile. [Å]
-    nearest : ndarray, shape (n_lines,)
+    nearest: ndarray, shape (n_lines,)
         Index of the grid node closest to each line, from :func:`_grid_bracket`.
         Where a profile vanishes on the grid entirely, its luminosity is
         scattered here instead.
@@ -158,7 +158,7 @@ def _render_conserving(
 
     Notes
     -----
-    **JIT-compatible**: yes. **Gradient-safe**: yes — *both* divisors are
+    **JIT-compatible**: yes. **Gradient-safe**: yes, *both* divisors are
     guarded (the profile area and the quadrature weight), so no NaN reaches the
     tape even on a degenerate single-node grid.
     """
@@ -166,7 +166,7 @@ def _render_conserving(
     area = quad_w @ profiles  # (n_lines,)
 
     # Rescale ONLY the profiles the grid fully contains. The rescale corrects
-    # *quadrature* error — too few nodes under the profile — and a truncated
+    # *quadrature* error: too few nodes under the profile: and a truncated
     # profile is a different thing that must not be corrected: a line near or
     # past the grid edge legitimately contributes only the part that lands in
     # range. Dividing its visible sliver by that sliver's own area would inflate
@@ -194,7 +194,7 @@ def _render_conserving(
     # Both divisors are guarded the same way, and for the same reason: a
     # single-node grid has zero extent in ν, so ``quad_w`` is identically zero
     # there and an unguarded ``0/0`` puts a NaN on the tape. Guarding only
-    # ``area`` left that hole — a 1-point grid returned ``nan`` where the
+    # ``area`` left that hole: a 1-point grid returned ``nan`` where the
     # pre-#1836 code returned a finite value. Zero flux is the honest answer: a
     # grid of one point cannot carry a line, because it has no measure to
     # integrate over.
@@ -216,27 +216,27 @@ def place_line_profiles(
     Converts line luminosities (point-like) to spectral luminosity density on a
     wavelength grid using one of three modes, in priority order:
 
-    1. **Velocity triweight** (``line_sigma_kms > 0``) — the recommended path:
+    1. **Velocity triweight** (``line_sigma_kms > 0``): the recommended path:
        each line is a triweight kernel whose width scales with wavelength,
        :math:`\sigma_\lambda = (\sigma_v / c)\,\lambda`, giving every line the
        same velocity dispersion (as a real emission line has). Mirrors
        Prospector's ``eline_sigma`` treatment (Johnson et al. 2021 [1]_).
-    2. **Fixed-Å Gaussian** (``line_sigma_aa > 0``) — legacy; one width in Å for
+    2. **Fixed-Å Gaussian** (``line_sigma_aa > 0``): legacy; one width in Å for
        every line.
-    3. **Delta function** (both <= 0) — nearest-pixel scatter-add.
+    3. **Delta function** (both <= 0): nearest-pixel scatter-add.
 
     Parameters
     ----------
-    line_wavelengths : array, shape (n_lines,)
+    line_wavelengths: array, shape (n_lines,)
         Rest-frame line centers in Å (vacuum wavelength). [Å]
-    line_luminosities : array, shape (n_lines,)
+    line_luminosities: array, shape (n_lines,)
         Line luminosities in consistent units [erg/s] or [erg/s/Msun].
-    obs_wavelengths : array, shape (n_wave,)
+    obs_wavelengths: array, shape (n_wave,)
         Output wavelength grid in Å (rest-frame, increasing). [Å]
-    line_sigma_aa : float
+    line_sigma_aa: float
         Fixed Gaussian line width in Å (legacy). Used only when
         ``line_sigma_kms <= 0``. [Å]
-    line_sigma_kms : float, optional
+    line_sigma_kms: float, optional
         Velocity dispersion in km/s. When > 0, lines are rendered as triweight
         profiles with per-line width :math:`\sigma_\lambda=(\sigma_v/c)\lambda`.
         Default 0 (fall back to ``line_sigma_aa`` / delta). [km/s]
@@ -257,7 +257,7 @@ def place_line_profiles(
 
     Notes
     -----
-    **JIT-compatible**: yes — all operations use ``jnp`` primitives and are
+    **JIT-compatible**: yes, all operations use ``jnp`` primitives and are
     vectorized over lines and wavelengths.
 
     **Velocity triweight mode** (``line_sigma_kms > 0``):
@@ -267,7 +267,7 @@ def place_line_profiles(
         (the triweight kernel has variance :math:`h^2/9`, so :math:`h=3\sigma`).
         The profile is normalized to unit area in frequency, so the integrated
         line flux equals ``line_luminosity``. Preferred over a Gaussian: it is a
-        polynomial (no ``exp``), has finite support, and is C²-continuous —
+        polynomial (no ``exp``), has finite support, and is C²-continuous:
         gradient-safe for a fitted ``line_sigma_kms``.
 
     **Fixed-Å Gaussian mode** (``line_sigma_aa > 0``):
@@ -277,13 +277,13 @@ def place_line_profiles(
     **Delta function mode** (both widths <= 0):
         Places each line in the nearest wavelength pixel by scatter-add,
         normalized by the local frequency spacing Δν. Carries no line width, and
-        places the line up to half a pixel off center — negligible through a
+        places the line up to half a pixel off center: negligible through a
         broadband filter, wrong for spectroscopy.
 
     **All three modes conserve flux** (#1836): each rescales its profiles to
     unit *discrete* area in ν, so ``|∫ sed dν| == sum(line_luminosities)`` on
     any grid. They therefore differ only in profile **shape**, which is the only
-    reason to prefer one. Before #1836 they differed in flux too — on the MILES
+    reason to prefer one. Before #1836 they differed in flux too: on the MILES
     SSP grid the same 128 Cue lines integrated to 2.2489x (triweight), 1.5711x
     (Gaussian, σ=2 Å) and 1.0000x (delta) of their true total, and the resulting
     broadband photometry differed between modes by up to 3.04x.
@@ -294,7 +294,7 @@ def place_line_profiles(
     """
     n_wave = obs_wavelengths.shape[0]
 
-    # NOTE: ``line_sigma_kms`` here is only honored for *concrete* values — the
+    # NOTE: ``line_sigma_kms`` here is only honored for *concrete* values: the
     # ``if`` below is a Python branch. The forward model, where the velocity
     # width is a fittable (traced) parameter, must call
     # :func:`place_line_profiles_velocity` directly to stay JIT-safe.
@@ -331,7 +331,7 @@ def place_line_profiles(
         )
     else:
         # Vectorized delta functions: nearest-pixel placement via scatter-add.
-        # Via searchsorted, not an (n_wave, n_lines) argmin — see
+        # Via searchsorted, not an (n_wave, n_lines) argmin: see
         # :func:`_grid_bracket` for why that matrix is worth avoiding.
         #
         # NOT clipped to [1, n_wave - 2]. That clip belonged to the old Δν,
@@ -365,7 +365,7 @@ def place_line_profiles_velocity(
     Each line is a compact-support triweight kernel
     :math:`K(u)=\tfrac{35}{32}(1-u^2)^3` (``|u|<1``) with a width that scales
     with wavelength, :math:`\sigma_\lambda=(\sigma_v/c)\,\lambda`, so every line
-    shares the same velocity dispersion — the intrinsic nebular line width, as in
+    shares the same velocity dispersion: the intrinsic nebular line width, as in
     Prospector's ``eline_sigma`` treatment (Johnson et al. 2021 [1]_). Each
     profile is normalized to unit area in frequency, conserving the integrated
     line flux.
@@ -382,13 +382,13 @@ def place_line_profiles_velocity(
 
     Parameters
     ----------
-    line_wavelengths : array, shape (n_lines,)
+    line_wavelengths: array, shape (n_lines,)
         Rest-frame line centers in Å (vacuum). [Å]
-    line_luminosities : array, shape (n_lines,)
+    line_luminosities: array, shape (n_lines,)
         Integrated line luminosities [erg/s] or [erg/s/Msun].
-    obs_wavelengths : array, shape (n_wave,)
+    obs_wavelengths: array, shape (n_wave,)
         Output wavelength grid in Å (increasing). [Å]
-    line_sigma_kms : float
+    line_sigma_kms: float
         Velocity dispersion. May be traced. [km/s]
 
     Returns
@@ -407,7 +407,7 @@ def place_line_profiles_velocity(
 
     Notes
     -----
-    **JIT-compatible**: yes. **Gradient-safe**: yes — the triweight kernel is
+    **JIT-compatible**: yes. **Gradient-safe**: yes, the triweight kernel is
     C²-continuous, so ``line_sigma_kms`` survives ``jax.grad``.
 
     **Flux is exact on any grid** (#1836). The analytic unit-area normalization
@@ -424,11 +424,11 @@ def place_line_profiles_velocity(
     h_raw = 3.0 * sigma_aa
     # Floor h at the LOCAL grid spacing, per line (#1836). The floor exists so
     # σ→0 stays finite, but it also decides whether the grid samples the profile
-    # at all — and a *global* statistic cannot answer a local question. The
+    # at all: and a *global* statistic cannot answer a local question. The
     # previous floor was 0.5·median(diff(grid)): on the MILES SSP grid that
     # median is 0.9 Å, set by the 4423 points inside the 3500–7500 Å window,
     # while the same grid is 10 Å at Lyα and 29000 Å in the far-IR. So it never
-    # fired where the grid was actually coarse — 0 of 128 Cue lines were floored
+    # fired where the grid was actually coarse: 0 of 128 Cue lines were floored
     # while 86 of them were rendered onto fewer than 4 points.
     # A window of half-width ≥ the local spacing always contains a grid node,
     # which is what makes the discrete renormalization below well-posed.
@@ -444,7 +444,7 @@ def place_line_profiles_velocity(
     # Unit area in λ is K(u)/h; the λ²/c Jacobian converts to unit area in ν.
     lam2_over_c = (line_wavelengths * 1e-8) ** 2 / _C_CGS  # (n_lines,) [s·cm]
     profiles = kernel / (h[None, :] * 1e-8) * lam2_over_c[None, :]  # [1/Hz]
-    # That normalization is ANALYTIC — ∫profile dν = 1 in the continuum limit.
+    # That normalization is ANALYTIC: ∫profile dν = 1 in the continuum limit.
     # On a grid that under-resolves the profile it is not, so make the flux
     # exact (#1836). Before this, recovered flux ran from 0.0026x (line silently
     # lost) to 3.04x (Lyα), and it was a function of ``line_sigma_kms``, so
@@ -492,13 +492,13 @@ class QHTableOverflowError(ValueError):
 
 
 def sanitize_qh_table(qh_raw, *, backend_name: str):
-    """Replace non-finite Q_H entries with zero — but only when zero is honest.
+    """Replace non-finite Q_H entries with zero: but only when zero is honest.
 
     Parameters
     ----------
-    qh_raw : array_like, shape (n_met, n_age)
+    qh_raw: array_like, shape (n_met, n_age)
         Raw ionizing photon rate per SSP grid point. [1/s]
-    backend_name : str
+    backend_name: str
         Backend class name, for the error message.
 
     Returns
@@ -519,7 +519,7 @@ def sanitize_qh_table(qh_raw, *, backend_name: str):
 
     It is wrong for the *other* way an entry goes non-finite. Q_H reaches
     ~1e47 photons/s, and float32 tops out at 3.4e38, so in a float32 build the
-    integral overflows on healthy input — and the guard then rewrites a real
+    integral overflows on healthy input: and the guard then rewrites a real
     ionizing budget to exactly zero, i.e. no nebular emission, silently.
     Measured on ``fsps_prsc_miles_chabrier.h5``: **0 of 1395** entries
     non-finite in float64, **861 of 1395 (61.7%)** in float32 (#1491).
@@ -530,7 +530,7 @@ def sanitize_qh_table(qh_raw, *, backend_name: str):
     dtype ceiling; an overflow leaves the survivors pressed against it. This
     checks that rather than guessing from the count.
 
-    Float64 behavior is unchanged — the condition cannot fire when the finite
+    Float64 behavior is unchanged: the condition cannot fire when the finite
     entries are orders below 1.8e308.
     """
     finite = jnp.isfinite(qh_raw)
@@ -541,7 +541,7 @@ def sanitize_qh_table(qh_raw, *, backend_name: str):
         # ``n_bad == size`` is the case the survivor test cannot see (#1568).
         # With nothing finite, ``largest_finite`` is 0.0 and the threshold below
         # is never crossed, so a *totally* overflowed table fell through and was
-        # zeroed in full — the worst case, not an edge case. A grid with no
+        # zeroed in full: the worst case, not an edge case. A grid with no
         # usable UV integrates to a finite 0.0 rather than a non-finite value,
         # so an all-non-finite table cannot be the honest-missing-data case.
         if largest_finite > 0.01 * ceiling or n_bad == qh_raw.size:
@@ -550,7 +550,7 @@ def sanitize_qh_table(qh_raw, *, backend_name: str):
                 f"{jnp.result_type(qh_raw)} (largest finite entry {largest_finite:.3e} sits "
                 f"against the {ceiling:.3e} ceiling). Q_H reaches ~1e47 photons/s, which "
                 "float32 cannot represent, so these are healthy SSP bins lost to dtype "
-                "range — not a grid with missing UV coverage. Zeroing them would remove "
+                "range: not a grid with missing UV coverage. Zeroing them would remove "
                 "the ionizing budget from most of the grid and silently produce no "
                 "nebular emission. Build this backend under float64 "
                 "(the default; `jax.enable_x64(True)`). Pure-float32 support needs the "
@@ -572,9 +572,9 @@ def compute_qh(ssp_wave: jnp.ndarray, ssp_flux: jnp.ndarray) -> float:
 
     Parameters
     ----------
-    ssp_wave : array, shape (n_wave,)
+    ssp_wave: array, shape (n_wave,)
         SSP wavelength grid in Å (rest-frame, increasing).
-    ssp_flux : array, shape (n_wave,)
+    ssp_flux: array, shape (n_wave,)
         SSP spectral luminosity density. [erg/s/Hz/Msun]
 
     Returns
@@ -584,7 +584,7 @@ def compute_qh(ssp_wave: jnp.ndarray, ssp_flux: jnp.ndarray) -> float:
 
     Notes
     -----
-    **JIT-compatible**: yes — all operations use ``jnp`` primitives. Safe inside
+    **JIT-compatible**: yes, all operations use ``jnp`` primitives. Safe inside
     :func:`jax.jit`, :func:`jax.vmap`, and :func:`jax.grad`.
 
     **Frequency integration**:
@@ -600,7 +600,7 @@ def compute_qh(ssp_wave: jnp.ndarray, ssp_flux: jnp.ndarray) -> float:
         The integral is computed via trapezoidal quadrature in frequency space
         (not wavelength space) to avoid nonlinear Jacobian effects.
 
-    **Warning — wNE SSPs**:
+    **Warning: wNE SSPs**:
         Returns ~0 for "with Nebular Emission" (wNE) SSP spectra because CLOUDY
         consumes ionizing photons during SSP generation. If you see Q_H ≈ 0 for
         young SSPs (which should have Q_H > 1e50 photons/s), check that your
@@ -617,7 +617,7 @@ def compute_qh(ssp_wave: jnp.ndarray, ssp_flux: jnp.ndarray) -> float:
 
 @jax.jit
 def compute_qh_log10(ssp_wave: jnp.ndarray, ssp_flux: jnp.ndarray) -> float:
-    r"""``log10(Q_H)`` [dex re photons/s/Msun] — the range-safe core integral.
+    r"""``log10(Q_H)`` [dex re photons/s/Msun]: the range-safe core integral.
 
     Same quantity as :func:`compute_qh`, computed so that no intermediate leaves
     float32 range. :func:`compute_qh` is a thin ``pow10`` wrapper over this, so
@@ -635,16 +635,16 @@ def compute_qh_log10(ssp_wave: jnp.ndarray, ssp_flux: jnp.ndarray) -> float:
 
     Parameters
     ----------
-    ssp_wave : array, shape (n_wave,)
+    ssp_wave: array, shape (n_wave,)
         SSP wavelength grid [Angstrom], rest-frame, increasing.
-    ssp_flux : array, shape (n_wave,)
+    ssp_flux: array, shape (n_wave,)
         SSP spectral luminosity density [Lsun/Hz/Msun].
 
     Returns
     -------
     float
         ``log10`` of the ionizing photon rate [dex re photons/s/Msun].
-        ``-inf`` when there is no ionizing flux — the exact-zero sentinel, so
+        ``-inf`` when there is no ionizing flux: the exact-zero sentinel, so
         ``pow10`` returns exactly 0.0 as the linear form always did.
 
     Notes
@@ -653,7 +653,7 @@ def compute_qh_log10(ssp_wave: jnp.ndarray, ssp_flux: jnp.ndarray) -> float:
     pass free of NaN where the integral vanishes.
 
     **Why the peak is factored out first (#1568)**: the division by
-    :math:`h\nu` is the step that leaves range —
+    :math:`h\nu` is the step that leaves range:
     :math:`h\nu \approx 2\times10^{-11}`, so a healthy
     :math:`L_\nu \sim 10^{30}` becomes :math:`\sim10^{41}` *before* the
     trapezoid, and the integral itself reaches :math:`\sim10^{46}` against a
@@ -671,7 +671,7 @@ def compute_qh_log10(ssp_wave: jnp.ndarray, ssp_flux: jnp.ndarray) -> float:
     nu = _C_CGS / (ssp_wave * 1e-8)  # Hz
     mask = ssp_wave < _LYMAN_LIMIT
 
-    # Factor the peak out BEFORE dividing by nu — that division is the one that
+    # Factor the peak out BEFORE dividing by nu: that division is the one that
     # leaves float32 range, so it must act on an O(1) quantity.
     peak = jnp.max(jnp.abs(ssp_flux))
     peak_safe = jnp.where(peak > 0, peak, jnp.ones_like(peak))
@@ -694,7 +694,7 @@ compute_qh_grid = jax.vmap(
 )
 
 
-# ── Grid interpolation — piecewise-linear ─────────────────────────
+# ── Grid interpolation: piecewise-linear ─────────────────────────
 
 
 def _interp_index_weight(
@@ -705,21 +705,21 @@ def _interp_index_weight(
 
     Parameters
     ----------
-    x : float
+    x: float
         Query point.
-    grid : array, shape (n_grid,)
+    grid: array, shape (n_grid,)
         Sorted grid points.
 
     Returns
     -------
-    idx : int
+    idx: int
         Index of left bracket in ``grid``.
-    w : float
+    w: float
         Linear interpolation weight [0, 1].
 
     Notes
     -----
-    **JIT-compatible**: yes — all operations use ``jnp`` primitives.
+    **JIT-compatible**: yes, all operations use ``jnp`` primitives.
 
     """
     x_clipped = jnp.clip(x, grid[0], grid[-1])
@@ -747,18 +747,18 @@ def _qh_bilinear(
 
     Parameters
     ----------
-    qh_table : array_like, shape (n_met, n_age) or None
+    qh_table: array_like, shape (n_met, n_age) or None
         Ionizing photon rate Q_H on the (metallicity, age) grid [1/s].
         ``None`` selects the ``missing`` fallback.
-    qh_log_met : array_like, shape (n_met,)
+    qh_log_met: array_like, shape (n_met,)
         Table metallicity axis, absolute ``log10(Z)``, sorted ascending.
-    qh_log_age : array_like, shape (n_age,)
+    qh_log_age: array_like, shape (n_age,)
         Table age axis, ``log10(age/yr)``, sorted ascending.
-    log_z : float
+    log_z: float
         Query metallicity, absolute ``log10(Z)``.
-    log_age_yr : float
+    log_age_yr: float
         Query age, ``log10(age/yr)``.
-    missing : float
+    missing: float
         Value returned when ``qh_table`` is ``None``. Backend-specific and
         deliberately not unified: Q_H is consumed multiplicatively, so ``1.0``
         means "no Q_H scaling" and ``0.0`` means "no ionizing photons".
@@ -778,7 +778,7 @@ def _qh_bilinear(
     with :math:`w_z, w_a \in [0, 1]` the linear weights from
     :func:`_interp_index_weight` along the metallicity and age axes. That
     function clips its query to the grid, so this is a convex combination of
-    four table entries and never extrapolates — a negative result is only
+    four table entries and never extrapolates: a negative result is only
     reachable from negative table entries, and is unphysical.
 
     The result is floored with ``jnp.maximum(..., 0.0)``. **NaN is deliberately
@@ -786,7 +786,7 @@ def _qh_bilinear(
     table is broken upstream. Propagating it makes that visible where a silent
     zero would not.
 
-    **JIT-compatible**: yes — the only Python-level branch is on ``qh_table
+    **JIT-compatible**: yes, the only Python-level branch is on ``qh_table
     is None``, which is structural, not traced.
 
     """
@@ -814,7 +814,7 @@ def neb_logzsol_to_log_z_abs(logzsol: jnp.ndarray) -> jnp.ndarray:
 
     Parameters
     ----------
-    logzsol : array
+    logzsol: array
         Gas metallicity relative to solar [log10(Z/Zsun)].
 
     Returns
@@ -824,7 +824,7 @@ def neb_logzsol_to_log_z_abs(logzsol: jnp.ndarray) -> jnp.ndarray:
 
     Notes
     -----
-    **JIT-compatible**: yes — simple addition.
+    **JIT-compatible**: yes, simple addition.
 
     """
     return logzsol + _LOG10_ZSUN
@@ -835,7 +835,7 @@ def neb_logzsol_to_cloudy_logoh(logzsol: jnp.ndarray) -> jnp.ndarray:
 
     Parameters
     ----------
-    logzsol : array
+    logzsol: array
         Gas metallicity relative to solar [log10(Z/Zsun)].
 
     Returns
@@ -845,7 +845,7 @@ def neb_logzsol_to_cloudy_logoh(logzsol: jnp.ndarray) -> jnp.ndarray:
 
     Notes
     -----
-    **JIT-compatible**: yes — simple addition.
+    **JIT-compatible**: yes, simple addition.
 
     """
     return logzsol + _LOG10_ZSUN - _LOG_OH_OFFSET
@@ -856,7 +856,7 @@ def neb_logzsol_to_mappings_zeta(logzsol: jnp.ndarray) -> jnp.ndarray:
 
     Parameters
     ----------
-    logzsol : array
+    logzsol: array
         Gas metallicity relative to solar [log10(Z/Zsun)].
 
     Returns
@@ -866,7 +866,7 @@ def neb_logzsol_to_mappings_zeta(logzsol: jnp.ndarray) -> jnp.ndarray:
 
     Notes
     -----
-    **JIT-compatible**: yes — simple exponentiation.
+    **JIT-compatible**: yes, simple exponentiation.
 
     """
     return 10.0**logzsol
@@ -888,8 +888,8 @@ _LYA_AA: float = 1216.0
 _FF_COEFF: float = 6.8e-38
 
 # Two-photon constants (Dopita & Osterbrock / pyNeb Continuum.two_photon):
-#   α_eff_2s(T) = _ALPHA_EFF_2S_T4 × (T/1e4)^{-0.728}  [cm³/s]  — effective recombination
-#   A_2s = 8.226 s^{-1}  — Einstein A coefficient for 2s→1s two-photon decay
+#   α_eff_2s(T) = _ALPHA_EFF_2S_T4 × (T/1e4)^{-0.728}  [cm³/s]: effective recombination
+#   A_2s = 8.226 s^{-1}: Einstein A coefficient for 2s→1s two-photon decay
 # Reference: pyNeb v1.1.30 (Luridiana et al. 2015), Osterbrock & Ferland (2006) eq 4.29
 _ALPHA_EFF_2S_T4: float = 0.838e-13
 _ALPHA_EFF_2S_SLOPE: float = -0.728
@@ -911,15 +911,15 @@ def compute_analytic_nebular_continuum(
 
     Parameters
     ----------
-    wave_aa : array, shape (n_wave,)
+    wave_aa: array, shape (n_wave,)
         Wavelength grid in Å (rest-frame, increasing).
-    q_h : float
+    q_h: float
         Hydrogen-ionizing photon production rate. [photons/s]
-    log_z_abs : float
+    log_z_abs: float
         Absolute metallicity. [log10(Z/Z_sun)]
         Currently unused; included for forward compatibility (metallicity scaling
         of free-free via He/metal opacity is reserved for a future update).
-    temperature : float, optional
+    temperature: float, optional
         Electron temperature in K. Default: 10^4 K (typical HII region). [K]
 
     Returns
@@ -929,7 +929,7 @@ def compute_analytic_nebular_continuum(
 
     Notes
     -----
-    **JIT-compatible**: yes — all operations use ``jnp`` primitives with no
+    **JIT-compatible**: yes, all operations use ``jnp`` primitives with no
     Python-level branching on traced values.
 
     **Case B recombination normalization** (Osterbrock & Ferland 2006, §4.3):
@@ -1043,7 +1043,7 @@ def compute_analytic_nebular_continuum(
     # ─── Two-photon ──────────────────────────────────────────────────────────
     # N&S 1984 shape: y = ν/ν_Lyα = λ_Lyα/λ, valid for 0 < y < 1 (λ > λ_Lyα).
     # Each 2s photon pair spans λ_Lyα < λ < ∞ (peak near λ ≈ 2 × λ_Lyα).
-    # Mask y ≥ 1 (λ ≤ λ_Lyα) to zero — photons cannot exceed Lyα energy.
+    # Mask y ≥ 1 (λ ≤ λ_Lyα) to zero: photons cannot exceed Lyα energy.
     # JAX NaN-safe pattern: supply y_safe=0.5 in masked pixels so the shape
     # formula evaluates to a finite value before the jnp.where mask is applied.
     y_raw = _LYA_AA / jnp.maximum(wave_aa, _LYA_AA + 1e-6)  # never > 1 (safe)
@@ -1076,29 +1076,29 @@ class NebularContinuumFallback:
 
     Parameters
     ----------
-    primary : NebularBackend
+    primary: NebularBackend
         Line-only nebular backend (has_continuum=False). Must implement
         ``predict_nebular_sed()``.
-    fallback : NebularBackend, optional
+    fallback: NebularBackend, optional
         Continuum-capable backend (CueBackend, CloudyGridBackend) for Tier 1
         fallback. Default: None.
-    fallback_mode : str, optional
+    fallback_mode: str, optional
         Fallback behavior if neither backend nor analytical continuum is
         available. One of "error" (raise NebularContinuumUnavailableError) or
         "warn" (emit warning, return lines only). Default: "error".
 
     Attributes
     ----------
-    has_continuum : bool
+    has_continuum: bool
         Always True; guarantees continuum provision via three-tier chain.
-    has_free_params : bool
+    has_free_params: bool
         Inherited from primary backend.
-    name : str
+    name: str
         Identifier string (e.g., "fallback(CB19Backend)").
 
     Notes
     -----
-    **JIT-compatible**: no — predict_nebular_sed may invoke non-JIT backends.
+    **JIT-compatible**: no, predict_nebular_sed may invoke non-JIT backends.
 
     **Continuum supply chain** (at prediction time):
 
@@ -1172,7 +1172,7 @@ class NebularContinuumFallback:
 
         Notes
         -----
-        **JIT-compatible**: no — may invoke non-JIT backends.
+        **JIT-compatible**: no, may invoke non-JIT backends.
 
         **Execution order**:
         1. Call primary.predict_nebular_sed(*args, **kwargs) → lines
@@ -1210,7 +1210,7 @@ class NebularContinuumFallback:
         import warnings
 
         warnings.warn(
-            f"{type(self.primary).__name__} has no nebular continuum — returning "
+            f"{type(self.primary).__name__} has no nebular continuum: returning "
             "lines only. Pass fallback= to NebularContinuumFallback to add continuum.",
             UserWarning,
             stacklevel=2,

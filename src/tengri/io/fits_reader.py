@@ -23,20 +23,20 @@ def read_generic_fits_spectrum(
 
     Parameters
     ----------
-    path : str
+    path: str
         Path to FITS file.
-    wave_col : str, optional
+    wave_col: str, optional
         Primary wavelength column name. Auto-detected if not found;
         tries WAVE, wavelength, LAMBDA, lambda. Default: 'WAVELENGTH'.
-    flux_col : str, optional
+    flux_col: str, optional
         Primary flux column name. Auto-detected if not found;
         tries FLUX_DENSITY, FLUX_OBS, flux. Default: 'FLUX'.
-    err_col : str or None, optional
+    err_col: str or None, optional
         Error column name. If 'IVAR', converts inverse variance to
         1-sigma error. If None, creates NaN-filled error array.
         Auto-detected if not found; tries ERROR, FLUX_ERR, ERR.
         Default: 'ERROR'.
-    hdu : int or str, optional
+    hdu: int or str, optional
         HDU index or name. Default: 1 (first extension).
 
     Returns
@@ -54,7 +54,7 @@ def read_generic_fits_spectrum(
 
     Notes
     -----
-    **JIT-compatible**: no — file I/O and astropy required.
+    **JIT-compatible**: no, file I/O and astropy required.
 
     Examples
     --------

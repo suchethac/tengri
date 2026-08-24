@@ -4,7 +4,7 @@
 Walks every per-component ``_params.py`` module under :mod:`tengri.components`,
 :mod:`tengri.observation`, and ``tengri.parameters._shared``, then exposes
 a single, queryable view of every :class:`~tengri.protocols.component.ParamDeclaration`
-the codebase declares. The underlying data ownership is unchanged — each
+the codebase declares. The underlying data ownership is unchanged: each
 component/module still owns its own ``_params.py`` (the decentralization that
 landed pre-ADR-0005). This module just gives users a single API to ask:
 
@@ -72,7 +72,7 @@ class ParameterRecord(NamedTuple):
 #: this project keeps finding. ``dex`` is used when the log is of a ratio or
 #: an offset, where there is no underlying unit to name.
 _SUFFIX_UNITS: tuple[tuple[str, str], ...] = (
-    # semantic stems (more specific — must precede the bare unit suffixes)
+    # semantic stems (more specific: must precede the bare unit suffixes)
     ("log_total_mass", "log10(Msun)"),
     ("log_sfr_inst", "log10(Msun/yr)"),
     ("burst_sfr", "Msun/yr"),
@@ -87,7 +87,7 @@ _SUFFIX_UNITS: tuple[tuple[str, str], ...] = (
 
 #: Patterns whose index varies, so a fixed suffix cannot catch them.
 _PATTERN_UNITS: tuple[tuple[str, str], ...] = (
-    # "log10 flex bin SFR ratio N (controls bin width)" — a log ratio.
+    # "log10 flex bin SFR ratio N (controls bin width)": a log ratio.
     (r"_flex_\d+$", "dex"),
 )
 
@@ -98,7 +98,7 @@ def _units_from_name(name: str) -> str:
     Notes
     -----
     Inference-from-name is how every model-registry parameter (SFH, MET) gets
-    its units — those registries have no per-parameter ``units`` field, unlike
+    its units; those registries have no per-parameter ``units`` field, unlike
     the component ``_params.py`` declarations. Before the stems above existed,
     that meant only the five bare unit suffixes were recognized, so all 137
     ``sfh_*`` parameters between them declared just ``Gyr``/``Myr``/``km/s``
@@ -133,7 +133,7 @@ def _is_log_valued(name: str) -> bool:
 #: declaration, via a per-model ``internal_param_map``. Their parameters belong
 #: in the introspection registry (so ``describe_parameter`` can find them) but
 #: must NOT contribute identity entries to :func:`as_param_map`: the real
-#: mapping is model-dependent and often non-identity — ``met_logzsol_0`` maps to
+#: mapping is model-dependent and often non-identity: ``met_logzsol_0`` maps to
 #: ``log_z_abs_initial`` with a ``-LOG10_ZSUN`` offset, and an identity entry
 #: alongside it raises ``ParameterMapError`` for conflicting mappings.
 _TRANSLATION_OWNED_ELSEWHERE: frozenset[str] = frozenset(
@@ -164,13 +164,13 @@ def _register_model_registry_params(
 
     Parameters
     ----------
-    out : dict
+    out: dict
         Registry map being built. Mutated in place.
-    model_registry : dict
+    model_registry: dict
         Name -> model spec carrying a ``params`` mapping.
-    owner : str
+    owner: str
         Fully-qualified module path recorded on each record.
-    label : str
+    label: str
         Registry name used to build the record's ``group`` field, e.g.
         ``"SFH_REGISTRY"``.
     """
@@ -216,8 +216,8 @@ def _walk_param_modules() -> dict[str, ParameterRecord]:
             mod = importlib.import_module(module_info.name)
         except ImportError as exc:
             # A component may legitimately be unimportable when an optional
-            # dependency is absent. Degrade rather than break introspection —
-            # but say so: a silently vanishing component reads as "this
+            # dependency is absent. Degrade rather than break introspection: # but say so: a
+            # silently vanishing component reads as "this
             # parameter does not exist" and has shipped as a bug twice
             # (#1165, #1179). Anything that is not an ImportError is a real
             # defect and propagates.
@@ -310,8 +310,8 @@ def _walk_param_modules() -> dict[str, ParameterRecord]:
     # Neither owns a ``_params.py``: their parameters are declared per model in
     # ``SFH_REGISTRY[<type>].params`` / ``MET_REGISTRY[<type>].params``, a
     # different mechanism that the walk above cannot see. The result was that
-    # *every* SFH parameter was missing from introspection —
-    # ``list_parameters()`` returned 189 names with no ``sfh_*`` at all, and
+    # *every* SFH parameter was missing from introspection: # ``list_parameters()`` returned 189
+    # names with no ``sfh_*`` at all, and
     # ``describe_parameter("sfh_dpl_alpha")`` raised ``KeyError`` for the very
     # identifier the naming contract uses as its worked example (#1264).
     #
@@ -381,7 +381,7 @@ def registry() -> dict[str, ParameterRecord]:
     """Return the full parameter registry as a name → record map.
 
     Lazily built on first call, then cached for the process lifetime.
-    The map is a fresh ``dict`` returned by reference — callers should
+    The map is a fresh ``dict`` returned by reference: callers should
     not mutate it. To force a rebuild (useful after editing
     ``_params.py`` in a live REPL), call :func:`_clear_cache`.
     """
@@ -434,7 +434,7 @@ def as_param_map() -> dict[str, tuple[str, float, float, str]]:
     for name, record in reg.items():
         # SFH / metallicity parameters are declared in their own model
         # registries, which also own the translation via ``internal_param_map``.
-        # Emitting an identity entry here would collide with it — see
+        # Emitting an identity entry here would collide with it: see
         # ``_TRANSLATION_OWNED_ELSEWHERE``.
         if record.owner in _TRANSLATION_OWNED_ELSEWHERE:
             continue
@@ -449,7 +449,7 @@ def list_parameters(prefix: str | None = None):
 
     Parameters
     ----------
-    prefix : str, optional
+    prefix: str, optional
         If given, only return names starting with this prefix
         (e.g. ``"dust_"``, ``"agn_"``). Useful for surveying a
         physics domain.
@@ -462,7 +462,7 @@ def list_parameters(prefix: str | None = None):
         table in a notebook.
 
         This used to return ``list[str]``, the only ``list_*`` that did
-        (#1285). Use ``.names()`` for the old shape — and note the bare names
+        (#1285). Use ``.names()`` for the old shape: and note the bare names
         were throwing away the description and units the registry stores.
 
     Examples
@@ -525,12 +525,12 @@ def recipe_parameters(recipe_dict: dict, free_only: bool = True) -> list[Paramet
 
     Takes a nested-dict recipe (output of e.g. :func:`tengri.recipes.star_forming_photometry()`)
     and returns a sorted list of :class:`ParameterRecord` objects for each
-    parameter that the recipe would activate — WITHOUT requiring SSP data or
+    parameter that the recipe would activate: WITHOUT requiring SSP data or
     building an :class:`~tengri.SEDModel`.
 
     Parameters
     ----------
-    recipe_dict : dict
+    recipe_dict: dict
         A recipe dictionary matching the format of :mod:`tengri.recipes`.
         Example::
 
@@ -541,7 +541,7 @@ def recipe_parameters(recipe_dict: dict, free_only: bool = True) -> list[Paramet
                 "redshift": Uniform(0.01, 6.0),
             }
 
-    free_only : bool, optional
+    free_only: bool, optional
         If True (default), return only the free parameters (entries with
         non-fixed priors). If False, return all parameters the recipe
         activates (including FIXED ones). Default is True.
@@ -563,7 +563,7 @@ def recipe_parameters(recipe_dict: dict, free_only: bool = True) -> list[Paramet
     **Does not require SSP data.** Unlike :meth:`~tengri.SEDModel.build`,
     which needs SSP data to build the full model, this function only translates
     the recipe structure to a :class:`~tengri.Parameters` object and introspects
-    its parameter names — the heaviest operation is a pure-Python dict traversal.
+    its parameter names; the heaviest operation is a pure-Python dict traversal.
 
     **Resolves sentinels.** FREE and FIXED sentinels are expanded to their
     registry defaults; if ``free_only=True``, FIXED entries are filtered out.
@@ -588,8 +588,8 @@ def recipe_parameters(recipe_dict: dict, free_only: bool = True) -> list[Paramet
 
     See Also
     --------
-    ~tengri.recipes : Curated recipe functions.
-    describe_parameter : Look up a single parameter by name.
+    ~tengri.recipes: Curated recipe functions.
+    describe_parameter: Look up a single parameter by name.
     """
     # Translate recipe to Parameters (no SSP data needed).
     #
@@ -597,7 +597,7 @@ def recipe_parameters(recipe_dict: dict, free_only: bool = True) -> list[Paramet
     # caller intends to fit. Introspection recipes use ``all_params: FREE`` to
     # mean "surface every parameter of this variant" and then read
     # ``all_params`` regardless of free/fixed, so a wildcard that frees nothing
-    # is harmless here — unlike in user model construction, where it silently
+    # is harmless here: unlike in user model construction, where it silently
     # pins the physics being fitted.
     #
     # ``AdvisoryWarning`` is silenced for the same reason: an advisory tells a

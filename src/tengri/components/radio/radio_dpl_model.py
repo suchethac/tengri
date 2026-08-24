@@ -1,5 +1,5 @@
 # SPDX-License-Identifier: BSD-3-Clause
-"""Radio AGN double-power-law model — SEDModelComponent implementation.
+"""Radio AGN double-power-law model; SEDModelComponent implementation.
 
 AGNfitter-rx broken double power-law with phenomenological
 ``exp(-ν/ν_cut)`` aging cutoff (Martinez-Ramirez+2024 Eq. 9-10).
@@ -37,7 +37,7 @@ class RadioDPL(SEDModelComponent):
             \end{cases}
 
     Pairs with the SF (Bell+2003 q_IR) and optional thermal free-free
-    components — those flow through the standard radio primitive.
+    components: those flow through the standard radio primitive.
 
     Cross-component contract
     ------------------------
@@ -49,7 +49,7 @@ class RadioDPL(SEDModelComponent):
 
     Reads:
 
-      * ``redshift`` (from BARE_NAME_ALLOWLIST) — for redshift evolution of q_IR.
+      * ``redshift`` (from BARE_NAME_ALLOWLIST), for redshift evolution of q_IR.
 
     Publishes:
 
@@ -113,7 +113,7 @@ class RadioDPL(SEDModelComponent):
     alpha_ff = Fixed(-0.1, description="thermal free-free spectral index", units="dimensionless")
 
     inputs: dict[str, str] = {}  # noqa: RUF012
-    # Opportunistic cross-component reads — fallback to 0 when not published.
+    # Opportunistic cross-component reads: fallback to 0 when not published.
     optional_inputs: dict[str, str] = {  # noqa: RUF012
         "L_ir": "erg/s",
         "L_agn_bol": "erg/s",
@@ -131,11 +131,11 @@ class RadioDPL(SEDModelComponent):
         wave: jnp.ndarray,
         **inputs: Any,
     ) -> tuple[jnp.ndarray, dict[str, jnp.ndarray]]:
-        # Optional cross-component reads — the base class supplies these
+        # Optional cross-component reads, the base class supplies these
         # via ``optional_inputs`` with a 0.0 fallback when upstream
         # didn't publish. The radio output is anchored to L_ir / L_agn_bol,
         # so when both are 0 the model produces zero output regardless of
-        # log_mstar — the 0 fallback for log_mstar is harmless in that case.
+        # log_mstar, the 0 fallback for log_mstar is harmless in that case.
         L_ir = jnp.asarray(inputs.get("L_ir", 0.0))
         L_agn_bol = jnp.asarray(inputs.get("L_agn_bol", 0.0))
         log_mstar = jnp.asarray(inputs.get("log_mstar", 10.0))

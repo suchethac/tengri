@@ -40,7 +40,7 @@ _PROPERTY_CHUNK = 64
 class PosteriorProperties(ReadOnlyPropertyMapping, Mapping):
     r"""The property catalog lifted over the sample axis.
 
-    The topology-agnostic seam of contract §1 — **same names, more axes**. Every
+    The topology-agnostic seam of contract §1, **same names, more axes**. Every
     key a :class:`~tengri.forward.prediction.Prediction` answers to, a
     :class:`Posterior` answers to as well; a scalar simply becomes
     ``(n_samples,)``. Nothing about the name, the units, or the meaning changes
@@ -52,13 +52,13 @@ class PosteriorProperties(ReadOnlyPropertyMapping, Mapping):
 
     Parameters
     ----------
-    posterior : Posterior
+    posterior: Posterior
         The parent posterior, supplying ``samples`` (or ``params`` for a MAP
         fit, which has no sample axis) and the model.
 
     See Also
     --------
-    tengri.forward.prediction.PropertyCatalog : the scalar (single-Prediction) twin.
+    tengri.forward.prediction.PropertyCatalog: the scalar (single-Prediction) twin.
     """
 
     def __init__(self, posterior):
@@ -71,17 +71,17 @@ class PosteriorProperties(ReadOnlyPropertyMapping, Mapping):
         post = object.__getattribute__(self, "_posterior")
         if post._model is None:
             raise RuntimeError(
-                "No model reference on this Posterior — cannot compute properties. "
+                "No model reference on this Posterior, cannot compute properties. "
                 "Fitter.run() attaches one; save() deliberately does not persist it "
                 "(a model is a runtime object), so a Posterior read back with "
                 "Posterior.load(path) has none. Reload passing the model: "
                 "Posterior.load(path, model=model). There is no way to attach one "
-                "afterwards, so reloading is the fix — not re-running the fit."
+                "afterwards, so reloading is the fix, not re-running the fit."
             )
         return post._model
 
     def __getitem__(self, name: str):
-        """Property values over the sample axis — ``(n_samples,)``, or a scalar for MAP."""
+        """Property values over the sample axis, ``(n_samples,)``, or a scalar for MAP."""
         cache = object.__getattribute__(self, "_cache")
         if name in cache:
             return cache[name]
@@ -122,8 +122,8 @@ class PosteriorProperties(ReadOnlyPropertyMapping, Mapping):
         Present so the class satisfies the mapping protocol it already almost
         implemented. ``__getitem__`` / ``__iter__`` / ``__contains__`` /
         ``keys`` all worked, so the object read as a dict right up to ``len()``
-        and ``.items()`` — the two calls one reaches for first when inspecting
-        a fit result — which raised a bare ``TypeError`` / ``AttributeError``
+        and ``.items()``, the two calls one reaches for first when inspecting
+        a fit result, which raised a bare ``TypeError`` / ``AttributeError``
         with nothing naming the supported surface (#1459). Registering as a
         :class:`collections.abc.Mapping` below supplies ``items``, ``values``,
         ``get`` and equality from this method plus the two that existed.
@@ -141,15 +141,15 @@ class PosteriorProperties(ReadOnlyPropertyMapping, Mapping):
 
         Parameters
         ----------
-        name : str
+        name: str
             Property name.
-        level : float, default 0.68
+        level: float, default 0.68
             Central credible level. ``0.68`` gives the 16th/84th percentiles.
 
         Returns
         -------
         tuple of float
-            ``(lo, median, hi)`` — the equal-tailed interval and the median.
+            ``(lo, median, hi)``, the equal-tailed interval and the median.
 
         Raises
         ------
@@ -198,31 +198,31 @@ class Posterior:
 
     Parameters
     ----------
-    samples : dict or None
+    samples: dict or None
         Posterior samples in physical parameter space (optional, set by inference).
-    params : dict
+    params: dict
         Best-fit or posterior mean parameters.
-    method : str
+    method: str
         Inference method name (e.g., ``"vi"``, ``"mcmc_nuts"``, ``"map"``).
-    wall_time_s : float
+    wall_time_s: float
         Total wall-clock runtime in seconds.
-    diagnostics : dict
+    diagnostics: dict
         Method-specific convergence metrics.
-    loss_history : ndarray or None
+    loss_history: ndarray or None
         Optimization loss values (optimization methods only).
-    log_evidence : float or None
+    log_evidence: float or None
         Log Bayesian evidence (NSS only).
-    _model : SEDModel, optional
+    _model: SEDModel, optional
         Forward model reference.
-    _fitter : Fitter, optional
+    _fitter: Fitter, optional
         Fitter reference for refinement methods.
-    eline_fluxes : ndarray or None
+    eline_fluxes: ndarray or None
         Emission line fluxes [erg/s/cm²].
-    eline_flux_cov : ndarray or None
+    eline_flux_cov: ndarray or None
         Emission line flux covariance.
-    eline_names : tuple or None
+    eline_names: tuple or None
         Emission line identifiers.
-    eline_wavelengths : ndarray or None
+    eline_wavelengths: ndarray or None
         Rest-frame vacuum wavelengths [Angstrom].
 
     Returns
@@ -232,23 +232,23 @@ class Posterior:
 
     Attributes
     ----------
-    samples : dict or None
+    samples: dict or None
         Posterior samples in physical parameter space. Each value has shape
         (n_samples, ...). Keys are parameter names (e.g., ``"stellar_mass"``,
         ``"age_gyr"``, ``"psd_xi"``). ``None`` for point estimates (MAP, Laplace,
         Pathfinder).
 
-    params : dict
+    params: dict
         Best-fit (MAP for point estimation) or posterior mean parameters in
         physical space. Same keys as ``samples`` (without ``"psd_xi"`` latent field).
 
-    method : str
+    method: str
         Inference method name (e.g., ``"vi"``, ``"mcmc_nuts"``, ``"map"``).
 
-    wall_time_s : float
+    wall_time_s: float
         Total wall-clock runtime in seconds, including compilation and sampling.
 
-    diagnostics : dict
+    diagnostics: dict
         Method-specific convergence and quality metrics. Contents vary by method:
 
         - **VI methods**: ``{"kl_iter": int, "kl_final": float}``, etc.
@@ -257,36 +257,36 @@ class Posterior:
         - **MAP**: ``{"final_loss": float, "n_steps": int}``, etc.
         - **NSS**: ``{"n_live": int, "log_evidence_err": float}``, etc.
 
-    loss_history : ndarray or None
+    loss_history: ndarray or None
         Optimization loss values over iterations (MAP/Laplace/Pathfinder only).
         Shape (n_iterations,). ``None`` for sampling methods.
 
-    log_evidence : float or None
+    log_evidence: float or None
         Bayesian evidence log(Z) integral (NSS only). ``None`` for other methods.
         Used for model comparison via Bayes factors.
 
-    _model : SEDModel, optional
+    _model: SEDModel, optional
         Reference to the forward model. Required for computing derived quantities
         (stellar mass, SFR, sSFR, etc.). Set by ``Fitter.run()`` automatically.
 
-    _fitter : Fitter, optional
+    _fitter: Fitter, optional
         Reference to the Fitter instance. Enables ``refine()`` and other
         refinement methods. Set by ``Fitter.run()`` automatically.
 
-    eline_fluxes : ndarray or None
+    eline_fluxes: ndarray or None
         Emission line fluxes. Shape (n_lines,) for MAP, (n_samples, n_lines) for
         sampling. ``None`` if no emission line fitting/marginalization was enabled.
         Flux units match input data [erg/s/cm²].
 
-    eline_flux_cov : ndarray or None
+    eline_flux_cov: ndarray or None
         Posterior covariance of emission line fluxes. Shape (n_lines, n_lines) for
         MAP, (n_samples, n_lines, n_lines) for sampling. ``None`` if unavailable.
 
-    eline_names : tuple or None
+    eline_names: tuple or None
         Emission line identifiers (e.g., ``("Halpha", "Hbeta", ...)``)
         matching ``eline_fluxes`` column order.
 
-    eline_wavelengths : ndarray or None
+    eline_wavelengths: ndarray or None
         Rest-frame vacuum wavelengths [Angstrom] of emission lines, matching
         ``eline_fluxes`` column order.
 
@@ -309,8 +309,8 @@ class Posterior:
 
     See Also
     --------
-    Fitter.run : Returns Posterior with all attributes populated.
-    Fitter : Primary interface for inference.
+    Fitter.run: Returns Posterior with all attributes populated.
+    Fitter: Primary interface for inference.
 
     Examples
     --------
@@ -368,7 +368,7 @@ class Posterior:
         - Any free parameter has all identical draws (``np.ptp == 0``) over >= 100
           draws (frozen parameter). Small test posteriors (< 100 draws) are exempt.
 
-        Raises no exception — only warns — so the result is still usable for
+        Raises no exception, only warns, so the result is still usable for
         inspection. The warning message states the failure signature and remedies
         (shorter warmup, lower target_accept_rate, smaller step_size, or
         dense_mass_matrix=False per issue #1999).
@@ -391,7 +391,7 @@ class Posterior:
         if n_divergent == n_samples and n_samples > 0:
             msg = (
                 f"dead fit: {n_divergent}/{n_samples} divergent transitions. "
-                f"R-hat cannot detect this — the chain moved nowhere. "
+                f"R-hat cannot detect this: the chain moved nowhere. "
                 f"Remedies: shorter warmup, lower target_accept_rate, smaller step_size, "
                 f"or dense_mass_matrix=False (issue #1999)."
             )
@@ -424,7 +424,7 @@ class Posterior:
     def properties(self) -> PosteriorProperties:
         r"""The property catalog, lifted over the sample axis.
 
-        Contract §1 — **same names, more axes**. Every property the model
+        Contract §1, **same names, more axes**. Every property the model
         provides is here under exactly the name a ``Prediction`` uses; a scalar
         becomes ``(n_samples,)``. Values are computed lazily per name and
         evaluated in memory-bounded chunks, so a large posterior does not OOM.
@@ -445,13 +445,13 @@ class Posterior:
 
         See Also
         --------
-        PosteriorProperties : the catalog object.
-        tengri.vmap_chunked : the memory-bounded evaluation used underneath.
+        PosteriorProperties: the catalog object.
+        tengri.vmap_chunked: the memory-bounded evaluation used underneath.
         """
         return PosteriorProperties(self)
 
     def __getattr__(self, name: str):
-        """Attribute sugar for catalog properties — ``post.stellar_mass``.
+        """Attribute sugar for catalog properties, ``post.stellar_mass``.
 
         Only reached for attributes that do not otherwise exist, so it never
         shadows a real field. Guards against recursion during ``__init__`` and
@@ -481,7 +481,7 @@ class Posterior:
         """Derived physical quantities (stellar mass, SFR, sSFR).
 
         .. deprecated:: 2026-07
-           Use :attr:`properties` instead — it exposes **every** property the
+           Use :attr:`properties` instead, it exposes **every** property the
            model provides (not a hardcoded five), under the same names as the
            model side, and evaluates them in memory-bounded chunks.
            ``posterior.derived["stellar_mass"]`` becomes
@@ -501,14 +501,14 @@ class Posterior:
 
         Notes
         -----
-        This is a cached property — computed on first access and cached thereafter.
+        This is a cached property, computed on first access and cached thereafter.
         Requires ``_model`` to be set (populated automatically by ``Fitter.run()``).
         For stochastic SFH, unresolved bursts are included in ``sfr_10myr`` and
         ``sfr_100myr`` outputs.
 
         Examples
         --------
-        Prefer :attr:`properties` — the same names, every property the model
+        Prefer :attr:`properties`, the same names, every property the model
         publishes rather than a hardcoded five, and credible intervals
         without a manual percentile call:
 
@@ -517,7 +517,7 @@ class Posterior:
         """
         warnings.warn(
             "Posterior.derived is deprecated; use Posterior.properties instead. "
-            "It carries every property the model provides — not this hardcoded five — "
+            "It carries every property the model provides, not this hardcoded five, "
             "under the same names the model side uses, and evaluates them in "
             "memory-bounded chunks. Replace posterior.derived['stellar_mass'] with "
             "posterior.properties['stellar_mass'] (or posterior.stellar_mass); "
@@ -534,14 +534,14 @@ class Posterior:
         # keep the old numbers rather than silently re-routing every existing
         # user's results through the new path.
         if self._model is None:
-            raise RuntimeError("No model reference — cannot compute derived quantities")
+            raise RuntimeError("No model reference, cannot compute derived quantities")
 
         if self.samples is None:
             # MAP: single point
             return self._model._predict_derived(self.params)
 
         # vmap materializes the whole batch at once, so very large posteriors
-        # can exhaust memory here with no obvious culprit — warn before it hurts.
+        # can exhaust memory here with no obvious culprit, warn before it hurts.
         n_samples = next(iter(self.samples.values())).shape[0]
         if n_samples > 20_000:
             warnings.warn(
@@ -555,7 +555,7 @@ class Posterior:
 
         # The PRIVATE twin. `predict_sfh_quantities` is deprecated (#1049), and a
         # deprecated shim must not warn about a *second* method the user never
-        # called — `derived` already tells them what to do. The public name is
+        # called, `derived` already tells them what to do. The public name is
         # also invisible to the acceptance grep, because vmap takes the method as
         # a REFERENCE (`vmap(model.name)`), not a call (`model.name(...)`).
         sfh_batch = jax.vmap(self._model._predict_sfh_quantities)(self.samples)
@@ -624,9 +624,9 @@ class Posterior:
 
         Returns
         -------
-        log_nii_ha : ndarray, shape (n_samples,) or scalar
+        log_nii_ha: ndarray, shape (n_samples,) or scalar
             log10([NII]6584 / Hα). For MAP, returns scalar.
-        log_oiii_hb : ndarray, shape (n_samples,) or scalar
+        log_oiii_hb: ndarray, shape (n_samples,) or scalar
             log10([OIII]5007 / Hβ). For MAP, returns scalar.
 
         Raises
@@ -687,9 +687,9 @@ class Posterior:
 
         Uses the standard demarcation lines:
 
-        - **Kauffmann et al. 2003** [1]_ — separates pure SF from
+        - **Kauffmann et al. 2003** [1]_, separates pure SF from
           composite (SF + AGN admixture).
-        - **Kewley et al. 2001** [2]_ — separates composite from
+        - **Kewley et al. 2001** [2]_, separates composite from
           pure AGN/Seyfert.
 
         Below Kauffmann ⇒ ``"SF"``; between Kauffmann and Kewley ⇒
@@ -850,8 +850,8 @@ class Posterior:
 
         Parameters
         ----------
-        wavelength : array_like, optional
-            Ignored — kept for backwards compatibility. The orchestrator
+        wavelength: array_like, optional
+            Ignored, kept for backwards compatibility. The orchestrator
             uses the model's SSP wavelength grid; pass-through to a
             different grid is no longer supported here. Interpolate the
             returned arrays externally if a different grid is needed.
@@ -877,7 +877,7 @@ class Posterior:
         Reads the orchestrator's per-component publications:
         ``sed_dust_attenuated`` (stellar post-attenuation),
         ``sed_dust_ir``, ``sed_nebular``, ``sed_shock``, ``sed_agn``,
-        ``sed_radio``, ``sed_xray`` — each adapter publishes its own
+        ``sed_radio``, ``sed_xray``, each adapter publishes its own
         contribution into ``state.derived``. ``sed_total`` is the
         accumulated ``state.sed_intrinsic`` after the chain runs;
         ``sed_intrinsic`` (stellar pre-attenuation) is reconstructed
@@ -938,7 +938,7 @@ class Posterior:
 
         Parameters
         ----------
-        wavelength : array_like, optional
+        wavelength: array_like, optional
             Rest-frame wavelength grid. Defaults to the model's grid.
 
         Returns
@@ -974,7 +974,7 @@ class Posterior:
         tuple
             ``(median, lo_68, hi_68)`` of A(V) in [mag]. For MAP results
             all three values are equal. Negative values are returned
-            as-is (unphysical, but informative for noisy data — clip
+            as-is (unphysical, but informative for noisy data, clip
             externally if desired).
 
         Raises
@@ -1032,9 +1032,9 @@ class Posterior:
 
         Parameters
         ----------
-        window_aa : float, optional
+        window_aa: float, optional
             Half-width of the line integration window [Angstrom]. Default 20.
-        continuum_width_aa : float, optional
+        continuum_width_aa: float, optional
             Width of each sideband used to estimate the continuum [Angstrom].
             Sidebands sit at ``[lambda_0 +/- window +/- continuum_width]``.
             Default 50.
@@ -1123,7 +1123,7 @@ class Posterior:
 
         Parameters
         ----------
-        params : dict of str to float, optional
+        params: dict of str to float, optional
             Point to expand around, in physical units. Default ``None`` uses
             this fit's own point estimate.
 
@@ -1144,7 +1144,7 @@ class Posterior:
 
         See Also
         --------
-        tengri.parameter_information : the same measurement as a free function.
+        tengri.parameter_information: the same measurement as a free function.
 
         Notes
         -----
@@ -1211,7 +1211,7 @@ class Posterior:
         """Print the per-parameter median ± 68% credible interval table.
 
         Convenience wrapper around :meth:`summary_table` that prints
-        directly — typically the first call after a fit::
+        directly, typically the first call after a fit::
 
             posterior = fitter.run("nuts")
             posterior.summary()
@@ -1221,7 +1221,7 @@ class Posterior:
     def summary_str(self) -> str:
         """Return the summary as a string (parity with Parameters.summary_str).
 
-        Same content as :meth:`summary_table` — alias for naming consistency
+        Same content as :meth:`summary_table`, alias for naming consistency
         across the discovery API (``tengri.Parameters.summary_str`` returns
         the same kind of string).
         """
@@ -1296,7 +1296,7 @@ class Posterior:
                 lo = f"{s['lo_68']:.4f}"
                 hi = f"{s['hi_68']:.4f}"
                 ess_val = ess.get(name)
-                ess_str = f"{ess_val:.0f}" if ess_val is not None else "—"
+                ess_str = f"{ess_val:.0f}" if ess_val is not None else ","
                 lines.append(f"  {name:<28s} {med:>9s} {lo:>9s} {hi:>9s} {ess_str:>7s}")
 
         # Diagnostics summary
@@ -1352,7 +1352,7 @@ class Posterior:
 
         Parameters
         ----------
-        max_lag : int, optional
+        max_lag: int, optional
             Maximum lag. Default: n_samples // 2.
 
         Returns
@@ -1471,7 +1471,7 @@ class Posterior:
 
         Parameters
         ----------
-        verbose : bool
+        verbose: bool
             Print diagnostics table.
 
         Returns
@@ -1521,17 +1521,17 @@ class Posterior:
 
         Parameters
         ----------
-        data : array_like, shape (n_obs,)
+        data: array_like, shape (n_obs,)
             Observed data the posterior was conditioned on. Same units
             as ``predict_photometry``'s output.
-        noise : array_like, shape (n_obs,)
+        noise: array_like, shape (n_obs,)
             Per-observation 1-sigma uncertainty (Gaussian).
-        n_samples : int, optional
+        n_samples: int, optional
             How many posterior draws to evaluate. ``None`` (default)
             uses every available draw; for MAP results this is
             implicitly 1. For sampling results, draws are selected
             via :meth:`resample` (with replacement) using ``key``.
-        key : PRNGKey, optional
+        key: PRNGKey, optional
             JAX PRNG key for resampling. If ``None``, defaults to
             ``jax.random.PRNGKey(0)``.
 
@@ -1619,9 +1619,9 @@ class Posterior:
 
         Parameters
         ----------
-        exclude_prefixes : tuple of str, optional
+        exclude_prefixes: tuple of str, optional
             Parameter name prefixes to skip. Default skips ``psd_xi``
-            (GP latent vector — high-D, not informative per-component).
+            (GP latent vector, high-D, not informative per-component).
 
         Returns
         -------
@@ -1673,7 +1673,7 @@ class Posterior:
             raise ValueError(
                 f"the chain did not move: every one of {n_draw} draws is identical "
                 f"for every parameter, so there is no split-R-hat to compute."
-                f"{divergence_note} This is a dead fit, not a converged one — R-hat "
+                f"{divergence_note} This is a dead fit, not a converged one, R-hat "
                 "cannot detect it (both variances are zero, so it reads ~1.0). The "
                 "usual cause is an adapted step size above the model's stability "
                 "limit, where acceptance collapses to zero: re-run with a shorter "
@@ -1737,37 +1737,37 @@ class Posterior:
     def observables(
         self, filters=None, n_draws=None, approx=False, key=None, chunk_size=64, *, fast=UNSET
     ):
-        r"""Photometry for every posterior draw — the arrays an SED plot needs.
+        r"""Photometry for every posterior draw, the arrays an SED plot needs.
 
         Contract §3, **exact by default**. The default path integrates the model
         SED through the filters with no approximation, per draw. ``approx=True``
         opts into the lean build-time path (the ``approx=`` LUT the model was
-        built with, if any) — much faster, and an approximation. The keyword
+        built with, if any), much faster, and an approximation. The keyword
         carries the same name as the build-time one because it selects exactly
         that object; it was spelled ``fast`` until 2026-08.
 
         Parameters
         ----------
-        filters : sequence of str or FilterCurve, or Photometry, optional
-            Bands to integrate — filter names (``["jwst_f356w", ...]``), curves, or
+        filters: sequence of str or FilterCurve, or Photometry, optional
+            Bands to integrate, filter names (``["jwst_f356w", ...]``), curves, or
             a prebuilt :class:`~tengri.observation.Photometry`. Accepts exactly what
             :meth:`Prediction.photometry` accepts. Defaults to the ones the model
             was built with.
-        n_draws : int, optional
+        n_draws: int, optional
             Thin to this many draws (resampled with replacement) before
-            evaluating. ``None`` uses every draw — which for a large posterior is
+            evaluating. ``None`` uses every draw, which for a large posterior is
             exactly the memory problem :func:`~tengri.vmap_chunked` exists to
             bound, so it is chunked either way.
-        approx : bool, default False
+        approx: bool, default False
             Route through the lean ``predict_photometry`` (whatever build-time
             ``approx=`` the model carries) instead of the exact projector.
-            On a model built without one this is a no-op, not an error — the
+            On a model built without one this is a no-op, not an error, the
             lean surface *is* exact there.
-        key : PRNGKey, optional
+        key: PRNGKey, optional
             Used only when ``n_draws`` is given. Defaults to ``PRNGKey(0)``.
-        chunk_size : int, default 64
+        chunk_size: int, default 64
             Draws per compiled kernel.
-        fast : bool, optional
+        fast: bool, optional
             Deprecated spelling of `approx`. Removed in v1.0.
 
         Returns
@@ -1803,7 +1803,7 @@ class Posterior:
             caller="Posterior.observables",
         )
         if self._model is None:
-            raise RuntimeError("No model reference — cannot compute observables")
+            raise RuntimeError("No model reference, cannot compute observables")
 
         model = self._model
         build_time = model.observation.photometry
@@ -1811,7 +1811,7 @@ class Posterior:
             phot = build_time
         else:
             # Same normalizer as Prediction.photometry, so ``filters=`` means the
-            # same thing on both surfaces — names, curves, or a Photometry (#1129).
+            # same thing on both surfaces, names, curves, or a Photometry (#1129).
             phot = resolve_runtime_photometry(filters, build_time=build_time)
         if phot is None:
             raise RuntimeError("This model has no photometry to evaluate.")
@@ -1823,7 +1823,7 @@ class Posterior:
             # built with. Faster, and an approximation.
             fn = model.predict_photometry
         else:
-            # The canonical exact projector — the same kernel Prediction.photometry()
+            # The canonical exact projector, the same kernel Prediction.photometry()
             # uses, so a posterior band and a Prediction band answer the same question.
             def fn(p):
                 return project_photometry(model.predict_state(p), p, phot)
@@ -1833,31 +1833,31 @@ class Posterior:
     def spectra(
         self, wave_obs=None, n_draws=None, approx=False, key=None, chunk_size=64, *, fast=UNSET
     ):
-        r"""Model spectrum for every posterior draw — the other half of an SED plot.
+        r"""Model spectrum for every posterior draw, the other half of an SED plot.
 
         The spectroscopic counterpart of :meth:`observables`, and the posterior
         lift of :meth:`Prediction.spectrum`. Contract §3, **exact by default**:
         the spectrum is LSF-convolved and calibrated exactly as the likelihood
         sees it, so a posterior band and a posterior spectrum answer the same
         question as the fit did. ``approx=True`` opts into the build-time
-        ``approx=`` path — same word at both ends, because it is the same object.
+        ``approx=`` path, same word at both ends, because it is the same object.
 
         Parameters
         ----------
-        wave_obs : array_like, shape (n_wave,), optional
+        wave_obs: array_like, shape (n_wave,), optional
             Observed-frame wavelength grid [Angstrom]. Defaults to the
             instrument grid the model was built with.
-        n_draws : int, optional
+        n_draws: int, optional
             Thin to this many draws (resampled with replacement). ``None`` uses
             every draw, chunked either way.
-        approx : bool, default False
+        approx: bool, default False
             Route through the lean ``predict_spectrum`` (build-time
             ``SpectrumPrecomp``) instead of the exact projector.
-        key : PRNGKey, optional
+        key: PRNGKey, optional
             Used only when ``n_draws`` is given. Defaults to ``PRNGKey(0)``.
-        chunk_size : int, default 64
+        chunk_size: int, default 64
             Draws per compiled kernel.
-        fast : bool, optional
+        fast: bool, optional
             Deprecated spelling of `approx`. Removed in v1.0.
 
         Returns
@@ -1895,7 +1895,7 @@ class Posterior:
             caller="Posterior.spectra",
         )
         if self._model is None:
-            raise RuntimeError("No model reference — cannot compute spectra")
+            raise RuntimeError("No model reference, cannot compute spectra")
 
         model = self._model
         if model.observation.spectroscopy is None:
@@ -1937,7 +1937,7 @@ class Posterior:
         Posterior draws carry only the FREE parameters. The exact projectors read
         the luminosity distance out of this dict, so a ``Fixed`` redshift would be
         silently dropped and every draw evaluated at 10 pc (#1124, #1127). Resolve
-        once, here, so every lift on this class inherits it — rather than each new
+        once, here, so every lift on this class inherits it, rather than each new
         method rediscovering the bug.
         """
         import jax
@@ -1962,9 +1962,9 @@ class Posterior:
 
         Parameters
         ----------
-        key : PRNGKey
+        key: PRNGKey
             JAX random key.
-        n : int
+        n: int
             Number of resamples.
 
         Returns
@@ -2117,7 +2117,7 @@ class Posterior:
 
         Parameters
         ----------
-        path : str
+        path: str
             Output HDF5 file path.
 
         Returns
@@ -2182,7 +2182,7 @@ class Posterior:
 
         Until 2026-08 this was an ``if/elif`` chain with no ``else`` and a
         nested branch that handled only int/float/str. Anything it had no
-        clause for was dropped without a word — measured on
+        clause for was dropped without a word, measured on
         ``{"a_float", "a_str", "a_none", "a_list_of_str", "nested":
         {"inner_float", "inner_none", "inner_list"}}``, three of the eight keys
         vanished: ``a_none``, ``nested.inner_none`` and ``nested.inner_list``.
@@ -2191,16 +2191,16 @@ class Posterior:
 
         Parameters
         ----------
-        container : h5py.Group
-            Group to write into — the diagnostics group, or a nested subgroup.
-        key : str
+        container: h5py.Group
+            Group to write into, the diagnostics group, or a nested subgroup.
+        key: str
             Entry name within ``container``.
-        val : object
+        val: object
             Value to store.
-        path : str
+        path: str
             Dotted prefix of ``key`` for reporting, e.g. ``"nested."``. Empty
             at the top level.
-        skipped : list of str
+        skipped: list of str
             Accumulator, appended in place for entries h5py cannot hold.
         """
         if isinstance(val, dict):
@@ -2223,7 +2223,7 @@ class Posterior:
             except (TypeError, ValueError):
                 container.attrs[key] = str(val)
             return
-        # No representation for this type — including ``None``, which h5py
+        # No representation for this type, including ``None``, which h5py
         # cannot store as an attribute. Recorded rather than invented: writing
         # ``str(None)`` would load back as the string "None", which is a
         # different wrong answer from an absent key.
@@ -2262,9 +2262,9 @@ class Posterior:
 
         Parameters
         ----------
-        path : str
+        path: str
             Path to HDF5 file saved by :meth:`save`.
-        model : SEDModel, optional
+        model: SEDModel, optional
             Model reference for derived quantity computation.
             If provided, enables ``derived``, ``plot_sed()``, ``plot_sfh()``.
 
@@ -2344,7 +2344,7 @@ class Posterior:
 
         Mirrors :meth:`_write_diagnostic`. The previous reader descended
         exactly one level and read only ``attrs`` there, so a nested dataset
-        would have been written and then never read back — the asymmetry that
+        would have been written and then never read back, the asymmetry that
         made adding nested array support pointless on its own.
         """
         out: dict = {}
@@ -2396,23 +2396,23 @@ class Posterior:
 
         Parameters
         ----------
-        params : list of str, optional
+        params: list of str, optional
             Parameter names to include. Defaults to all scalar physical params.
             Automatically excludes ``psd_xi`` (latent field) and constant parameters.
-        truths : dict, optional
+        truths: dict, optional
             True values to mark with dashed lines. Keys should match parameter names.
-        figsize : tuple, optional
+        figsize: tuple, optional
             Figure size (width, height). Default: auto-scaled.
-        color : str
+        color: str
             Color for this posterior's contours and histograms.
-        fig, axes : matplotlib Figure, ndarray of Axes, optional
+        fig, axes: matplotlib Figure, ndarray of Axes, optional
             If provided, overlay on existing corner plot (for comparing posteriors).
-        label : str, optional
+        label: str, optional
             Legend label for this posterior (appears in legend on diagonal).
 
         Returns
         -------
-        fig : matplotlib Figure
+        fig: matplotlib Figure
             The corner plot figure.
 
         Notes
@@ -2454,7 +2454,7 @@ class Posterior:
         derived_truths = {}
         if self._model is not None:
             try:
-                # The property catalog, not the deprecated `derived` — same keys,
+                # The property catalog, not the deprecated `derived`, same keys,
                 # and reading it here would otherwise fire a DeprecationWarning at
                 # every corner plot (contract §7: migrate internal callers with the
                 # deprecation, never after it).
@@ -2644,17 +2644,17 @@ class Posterior:
 
         Parameters
         ----------
-        n_draws : int
+        n_draws: int
             Number of posterior draws to use for the band. Ignored for
             MAP results (plots single SED).
-        wave_range : (float, float)
+        wave_range: (float, float)
             Wavelength range in [Angstrom] to display.
-        ax : matplotlib Axes, optional
+        ax: matplotlib Axes, optional
             Axes to plot on. Creates new figure if None.
 
         Returns
         -------
-        fig : matplotlib Figure
+        fig: matplotlib Figure
             The SED plot figure.
 
         Notes
@@ -2745,14 +2745,14 @@ class Posterior:
 
         Parameters
         ----------
-        n_draws : int
+        n_draws: int
             Number of posterior draws. Ignored for MAP (plots single SFH).
-        ax : matplotlib Axes, optional
+        ax: matplotlib Axes, optional
             Axes to plot on. Creates new figure if None.
 
         Returns
         -------
-        fig : matplotlib Figure
+        fig: matplotlib Figure
             The SFH plot figure.
 
         Notes
@@ -2845,7 +2845,7 @@ class Posterior:
             f"Posterior(method='{self.method}', n_samples={n}, wall_time={self.wall_time_s:.1f}s)"
         )
 
-    # Curated tab-completion list — the 35 public attrs/methods on
+    # Curated tab-completion list, the 35 public attrs/methods on
     # Posterior overwhelm a fresh user.  These ~15 are the canonical
     # postprocessing flow (inspect → diagnose → save → refine).  All
     # other names remain accessible by attribute access; only
@@ -2887,7 +2887,7 @@ class Posterior:
     def __dir__(self) -> list[str]:
         """Curated tab-completion list, plus this model's catalog properties.
 
-        The curation is deliberate — a Posterior has a large surface and the
+        The curation is deliberate, a Posterior has a large surface and the
         useful verbs would otherwise be lost in it. The catalog property names
         are appended because they are reachable as attributes (``__getattr__``)
         and would otherwise be invisible to autocomplete.
@@ -2898,8 +2898,8 @@ class Posterior:
             # AttributeError only: not every model type carries
             # ``available_properties``, and that absence is the expected case
             # this guard exists for. Catching everything also swallowed genuine
-            # failures *inside* ``available_properties`` — which is a property,
-            # so it runs real code — and the only symptom was a short tab-
+            # failures *inside* ``available_properties``, which is a property,
+            # so it runs real code, and the only symptom was a short tab-
             # completion list. A `__dir__` that silently under-reports is
             # indistinguishable from a model that has fewer properties.
             with contextlib.suppress(AttributeError):
@@ -2912,11 +2912,11 @@ class Posterior:
         """Re-run inference from this result using a different method.
 
         Requires that this Posterior was produced by ``model.fit()`` or
-        ``fitter.run()`` — both set the ``._fitter`` back-reference.
+        ``fitter.run()``, both set the ``._fitter`` back-reference.
 
         Parameters
         ----------
-        method : str
+        method: str
             Any canonical method name accepted by ``Fitter.run()``.
             E.g. ``"mcmc_raytrace"``, ``"mcmc_nuts"``, ``"vi"``.
         **kwargs
@@ -2962,7 +2962,7 @@ class Posterior:
 
         Parameters
         ----------
-        n_steps : int
+        n_steps: int
             Number of MCMC steps. Default 200 (quick sanity check).
         **kwargs
             Forwarded to the MCMC run.

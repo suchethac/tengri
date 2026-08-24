@@ -21,26 +21,26 @@ class Spectroscopy:
 
     Parameters
     ----------
-    wave_obs : jnp.ndarray
+    wave_obs: jnp.ndarray
         Observed-frame wavelength grid [Angstrom], shape ``(n_pix,)``.
-    resolution : float, jnp.ndarray, or None
+    resolution: float, jnp.ndarray, or None
         Spectral resolution ``R = lambda / delta_lambda``.
         Scalar for constant R, per-pixel array for wavelength-dependent,
         or None to skip LSF convolution. Default: None.
-    sigma_lib_kms : float
+    sigma_lib_kms: float
         SSP library velocity dispersion [km/s] to subtract in quadrature
         when applying the LSF. Default: 70.0 (MILES).
-    lsf_n_bins : int
+    lsf_n_bins: int
         Number of bins for piecewise constant approximation of
         variable-R LSF convolution. Default: 16.
-    calibration_order : int
+    calibration_order: int
         Order of multiplicative Chebyshev calibration polynomial.
         0 = no calibration (default). Order N adds N free params
         (``cal_c1``, ..., ``cal_cN``) with ``Gaussian(0, 0.1)`` priors.
-    eline_prior_sigma : float
+    eline_prior_sigma: float
         Prior width on emission line amplitudes for marginalization.
         Default: 100.0.
-    eline_mode : str
+    eline_mode: str
         Emission line fitting mode. One of:
 
         - ``"off"``: No emission line fitting (default).
@@ -50,22 +50,22 @@ class Spectroscopy:
         - ``"fitted"``: Line amplitudes as free MCMC parameters.
 
         Default: ``"off"``.
-    eline_catalog : LineList or None
+    eline_catalog: LineList or None
         Line catalog. ``None`` falls back to ``LineList.default_13()`` for
         Use ``LineList.default_optical()`` for
         FastSpecFit parity. Default: None.
-    eline_prior_type : str
+    eline_prior_type: str
         Prior type for line amplitudes. One of ``"flat"`` (uninformative) or
         ``"cloudy"`` (CLOUDY-grid-interpolated). Default: ``"flat"``.
-    eline_prior_width_dex : float
+    eline_prior_width_dex: float
         Prior scatter in dex for the ``"cloudy"`` prior. Default: 0.3.
-    eline_fix_doublets : bool
+    eline_fix_doublets: bool
         Enforce atomic physics doublet ratios. Default: True.
-    eline_broad : bool
+    eline_broad: bool
         Enable broad component for AGN candidate lines. Default: False.
-    eline_broad_fwhm_min_kms : float
+    eline_broad_fwhm_min_kms: float
         Minimum FWHM for the broad component [km/s]. Default: 500.0.
-    covariance : jnp.ndarray or None
+    covariance: jnp.ndarray or None
         Full spectral covariance matrix, shape ``(n_pix, n_pix)``.
         When provided, the likelihood uses ``diff @ C^{-1} @ diff``
         instead of per-pixel ``sum((diff/sigma)^2)``. The inverse is
@@ -78,35 +78,35 @@ class Spectroscopy:
 
     Attributes
     ----------
-    wave_obs : ndarray, shape (n_pix,)
+    wave_obs: ndarray, shape (n_pix,)
         Observed-frame wavelength grid [Angstrom].
-    resolution : float, ndarray, or None
+    resolution: float, ndarray, or None
         Spectral resolution.
-    sigma_lib_kms : float
+    sigma_lib_kms: float
         SSP library velocity dispersion [km/s].
-    lsf_n_bins : int
+    lsf_n_bins: int
         Number of LSF approximation bins.
-    calibration_order : int
+    calibration_order: int
         Chebyshev polynomial order.
-    eline_prior_sigma : float
+    eline_prior_sigma: float
         Emission line prior width.
-    eline_mode : str
+    eline_mode: str
         Emission line fitting mode.
-    eline_catalog : LineList or None
+    eline_catalog: LineList or None
         Emission line catalog.
-    eline_prior_type : str
+    eline_prior_type: str
         Prior type for line marginalization.
-    eline_prior_width_dex : float
+    eline_prior_width_dex: float
         Prior scatter [dex].
-    eline_fix_doublets : bool
+    eline_fix_doublets: bool
         Whether to enforce doublet ratios.
-    eline_broad : bool
+    eline_broad: bool
         Whether broad AGN component is enabled.
-    eline_broad_fwhm_min_kms : float
+    eline_broad_fwhm_min_kms: float
         Minimum broad component FWHM [km/s].
-    covariance : ndarray, shape (n_pix, n_pix) or None
+    covariance: ndarray, shape (n_pix, n_pix) or None
         Spectral covariance matrix.
-    covariance_inv : ndarray, shape (n_pix, n_pix) or None
+    covariance_inv: ndarray, shape (n_pix, n_pix) or None
         Inverse covariance matrix (precomputed).
 
     Notes
@@ -201,7 +201,7 @@ class Spectroscopy:
 
         ``"point"`` maps to ``False`` and ``"conserving"`` to ``True``. ``"auto"``
         returns ``True`` only when the observed pixels are coarse enough that point
-        interpolation would skip model bins — the median rest-frame pixel spacing
+        interpolation would skip model bins, the median rest-frame pixel spacing
         exceeds the median model-grid spacing over their overlap, evaluated at
         ``z_ref`` (pass the lowest redshift in the prior, the worst case for
         under-sampling). A pure-Python decision made once before tracing, so the
@@ -209,9 +209,9 @@ class Spectroscopy:
 
         Parameters
         ----------
-        wave_rest_model : array_like, shape (n_wave,)
+        wave_rest_model: array_like, shape (n_wave,)
             Rest-frame model wavelength grid [Angstrom].
-        z_ref : float, optional
+        z_ref: float, optional
             Redshift at which observed pixels are mapped to the rest frame.
             Default 0.0.
 
@@ -439,16 +439,16 @@ class Spectroscopy:
 
         Parameters
         ----------
-        wave_obs : ndarray, shape (n_pix,)
+        wave_obs: ndarray, shape (n_pix,)
             Observed-frame wavelength grid [Angstrom].
-        resolution : float, ndarray, or None
+        resolution: float, ndarray, or None
             Spectral resolution ``R = lambda / delta_lambda``. Scalar for
             constant R, per-pixel array for wavelength-dependent, or None
             to skip LSF convolution.
-        sigma_lib_kms : float, optional
+        sigma_lib_kms: float, optional
             SSP library velocity dispersion to subtract in quadrature [km/s].
             Default: 70.0 (MILES standard).
-        calibration_order : int, optional
+        calibration_order: int, optional
             Order of multiplicative Chebyshev calibration polynomial.
             Default: 0 (no calibration).
         **kwargs
@@ -479,7 +479,7 @@ class Spectroscopy:
 
         Parameters
         ----------
-        wave_obs : ndarray, shape (n_pix,)
+        wave_obs: ndarray, shape (n_pix,)
             Observed-frame wavelength grid [Angstrom].
         **kwargs
             Additional keyword arguments passed to ``Spectroscopy``.
@@ -509,7 +509,7 @@ class Spectroscopy:
 
         Parameters
         ----------
-        wave_obs : ndarray, shape (n_pix,)
+        wave_obs: ndarray, shape (n_pix,)
             Observed-frame wavelength grid [Angstrom].
         **kwargs
             Additional keyword arguments passed to ``Spectroscopy``.
@@ -539,9 +539,9 @@ class Spectroscopy:
 
         Parameters
         ----------
-        wave_obs : ndarray, shape (n_pix,)
+        wave_obs: ndarray, shape (n_pix,)
             Observed-frame wavelength grid [Angstrom].
-        R : float
+        R: float
             Spectral resolution ``R = lambda / delta_lambda`` (constant across
             all wavelengths, dimensionless).
         **kwargs
@@ -577,9 +577,9 @@ class Spectroscopy:
 
         Parameters
         ----------
-        wave_obs : ndarray, shape (n_pix,)
+        wave_obs: ndarray, shape (n_pix,)
             Observed-frame wavelength grid [Angstrom].
-        resolution : float, optional
+        resolution: float, optional
             Spectral resolution ``R = lambda / delta_lambda`` (dimensionless).
             Default: 2500 (DESI standard).
         **kwargs
@@ -631,11 +631,11 @@ class Spectroscopy:
 
         Parameters
         ----------
-        fits_path : str
+        fits_path: str
             Path to the x1d FITS file.
-        ext : int or str
+        ext: int or str
             FITS extension containing the spectrum table. Default: 1.
-        resolution : float, ndarray, or None
+        resolution: float, ndarray, or None
             Spectral resolution override.  If None, auto-selects based on
             the ``FILTER`` or ``GRATING`` header keyword. Default: None.
         **kwargs
@@ -711,23 +711,23 @@ class Spectroscopy:
 
         Parameters
         ----------
-        fits_path : str
+        fits_path: str
             Path to the FITS file.
-        wave_col : str
+        wave_col: str
             Column name for wavelength. Default: ``"WAVELENGTH"``.
-        flux_col : str
+        flux_col: str
             Column name for flux. Default: ``"FLUX"``.
-        err_col : str
+        err_col: str
             Column name for flux error. Default: ``"FLUX_ERROR"``.
-        wave_unit_aa : float
+        wave_unit_aa: float
             Multiplicative factor to convert wavelength column to Angstrom.
             E.g., 1e4 for µm input. Default: 1.0 (already Å).
-        flux_unit_cgs : float
+        flux_unit_cgs: float
             Multiplicative factor to convert flux column to erg/s/cm²/Hz.
             E.g., 1e-29 for µJy. Default: 1.0 (already CGS).
-        ext : int or str
+        ext: int or str
             FITS extension. Default: 1.
-        resolution : float, ndarray, or None
+        resolution: float, ndarray, or None
             Spectral resolution. Default: None.
         **kwargs
             Additional keyword arguments passed to ``Spectroscopy``.
@@ -814,15 +814,15 @@ def build_wavelength_grid(
 
     Parameters
     ----------
-    resolution_fn : callable
+    resolution_fn: callable
         Function R(wave_um) → spectral resolution, where wave_um is in
         micrometers.  Must accept and return arrays.  Use e.g.
         ``nirspec_prism_resolution`` or ``nirspec_g140m_resolution``.
-    wave_min_aa : float
+    wave_min_aa: float
         Minimum wavelength [Å].
-    wave_max_aa : float
+    wave_max_aa: float
         Maximum wavelength [Å].
-    n_pix_per_resel : float
+    n_pix_per_resel: float
         Number of pixels per resolution element (Nyquist = 2.0).
         Default: 2.5 (slight oversampling for interpolation safety).
 
@@ -874,15 +874,15 @@ def apply_wavelength_mask(
     """Mask spectral regions by setting noise to infinity.
 
     Masked pixels are effectively removed from the likelihood (chi2
-    contribution → 0). Returns a new array — does not mutate the input.
+    contribution → 0). Returns a new array, does not mutate the input.
 
     Parameters
     ----------
-    noise : ndarray, shape (n_pix,)
+    noise: ndarray, shape (n_pix,)
         Per-pixel 1-sigma noise [flux units].
-    wave_obs : ndarray, shape (n_pix,)
+    wave_obs: ndarray, shape (n_pix,)
         Observed-frame wavelength grid [Angstrom].
-    mask_ranges : list[tuple[float, float]]
+    mask_ranges: list[tuple[float, float]]
         Wavelength ranges to mask [Angstrom]. Each ``(lo, hi)`` pair
         defines a region where ``lo <= wave <= hi`` is masked.
 
@@ -918,4 +918,4 @@ def apply_wavelength_mask(
     return noise
 
 
-# ── Deprecated alias — removed in tengri v1.0 ─────────────────────
+# ── Deprecated alias, removed in tengri v1.0 ─────────────────────

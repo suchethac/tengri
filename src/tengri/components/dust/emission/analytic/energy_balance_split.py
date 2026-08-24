@@ -23,7 +23,7 @@ def _log10_nonneg(value: jnp.ndarray) -> jnp.ndarray:
 
     Parameters
     ----------
-    value : array_like
+    value: array_like
         A non-negative luminosity [erg/s]; ``0`` denotes an exactly absent term.
 
     Returns
@@ -62,7 +62,7 @@ class EnergyBalanceSplitIRSEDComponent(EmissionComponent):
     closure is called with ``eta_balance=1.0`` here (the incoming ``L_ir`` is
     already the scaled budget).
 
-    **JIT-compatible**: yes — all operations are ``jnp`` primitives.
+    **JIT-compatible**: yes, all operations are ``jnp`` primitives.
 
     References
     ----------
@@ -116,7 +116,7 @@ class EnergyBalanceSplitIRSEDComponent(EmissionComponent):
     citations = ("kokorev2021",)
 
     #: Affine, so it opts out of the generic ``apply``-level ``L_ir`` factoring
-    #: (which re-applies a single scale after evaluating at unit luminosity —
+    #: (which re-applies a single scale after evaluating at unit luminosity:
     #: valid only for a proportional model). Instead this component assembles its
     #: two-term budget in log space *inside* :meth:`predict` and does its own
     #: single rescale, so ``apply`` must leave the scale alone. See the
@@ -142,18 +142,18 @@ class EnergyBalanceSplitIRSEDComponent(EmissionComponent):
 
         Parameters
         ----------
-        p : dict
+        p: dict
             Parameters with the ``dust_`` prefix stripped. Reads the globally
             declared ``T_warm``, ``T_cold``, ``f_cold``, ``beta_warm``,
             ``beta_cold``, ``L_agn_ir`` (falling back to their defaults).
-        sed_in : ndarray, shape (n_wave,)
+        sed_in: ndarray, shape (n_wave,)
             Input SED in erg/s/Hz (typically zeros for an emission component).
-        wave : ndarray, shape (n_wave,)
+        wave: ndarray, shape (n_wave,)
             Rest-frame wavelength grid in Angstrom.
-        L_ir : float
+        L_ir: float
             Absorbed (eta-scaled) luminosity [erg/s]. Ignored: ~2.4e43 and so
             ``inf`` in float32; the log form ``log_L_ir`` is used instead.
-        log_L_ir : float
+        log_L_ir: float
             ``log10(L_ir / (erg/s))`` [dex], the float32-safe budget published
             by the attenuator. ``-inf`` (its absent sentinel) means nothing was
             absorbed and the emission is exactly zero.
@@ -165,7 +165,7 @@ class EnergyBalanceSplitIRSEDComponent(EmissionComponent):
 
         Notes
         -----
-        **JIT-compatible**: yes — all operations are ``jnp`` primitives.
+        **JIT-compatible**: yes, all operations are ``jnp`` primitives.
 
         The IR budget is *affine*, not proportional:
 
@@ -184,7 +184,7 @@ class EnergyBalanceSplitIRSEDComponent(EmissionComponent):
         in float64 (to ~1e-14 relative, the log round-trip) and finite in float32
         whenever the *net* budget is representable (#1206).
 
-        The default ``dust_L_agn_ir = 0`` — strict stellar energy balance — is
+        The default ``dust_L_agn_ir = 0``: strict stellar energy balance: is
         fully float32-clean. A nonzero AGN-IR luminosity is a linear erg/s
         parameter and must itself be float32-representable (:math:`\lesssim
         3\times10^{38}` erg/s); a larger value stays out of range until

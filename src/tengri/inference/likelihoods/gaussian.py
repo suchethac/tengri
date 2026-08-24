@@ -14,10 +14,10 @@ Rationale
 The legacy fitter inlined ``jnp.sum(((d - μ) / σ) ** 2)`` in 16
 distinct branches of ``build_loglikelihood_fn``. Two consequences:
 
-1. **Drift risk** — adding a systematic floor or robustification to
+1. **Drift risk**, adding a systematic floor or robustification to
    the photometric branch would silently miss the spectroscopy
    branch.
-2. **Adapter duplication** — the new ``Likelihood`` Protocol adapter
+2. **Adapter duplication**, the new ``Likelihood`` Protocol adapter
    would have had to re-write the same line, doubling the surface
    that needs to evolve together.
 
@@ -31,7 +31,7 @@ import jax.numpy as jnp
 from jax.tree_util import Partial
 
 # The whitening primitive lives in utils/ so that ``observation/`` can reach it
-# without importing ``inference/`` — the layering runs
+# without importing ``inference/``, the layering runs
 # observation -> inference, never back (#1588). Re-exported here because every
 # likelihood in this module is written in terms of it.
 from tengri.utils.scale import whiten
@@ -47,7 +47,7 @@ __all__ = [
 
 
 def inv_noise_std(noise: jnp.ndarray) -> jnp.ndarray:
-    r""":math:`\sqrt{N^{-1}} = 1/\sigma` — the float32-representable spelling.
+    r""":math:`\sqrt{N^{-1}} = 1/\sigma`, the float32-representable spelling.
 
     ``jnp.sqrt(1.0 / noise**2)`` is the *same number* by a route float32 cannot
     travel: at :math:`\sigma = 3\times10^{-30}` the destination
@@ -58,7 +58,7 @@ def inv_noise_std(noise: jnp.ndarray) -> jnp.ndarray:
 
     Parameters
     ----------
-    noise : array_like
+    noise: array_like
         Per-point 1-σ uncertainty. Must be > 0.
 
     Returns
@@ -68,7 +68,7 @@ def inv_noise_std(noise: jnp.ndarray) -> jnp.ndarray:
 
     Notes
     -----
-    **JIT-compatible**: yes — a single reciprocal, no barrier needed (there is
+    **JIT-compatible**: yes, a single reciprocal, no barrier needed (there is
     no grouping for XLA to re-associate).
 
     The variable-noise branch has always used this spelling
@@ -97,7 +97,7 @@ def diag_noise_operators(noise: jnp.ndarray) -> tuple[Partial, Partial]:
     uncertainty. As *operators* both are safe, because each application is a
     division and no intermediate ever leaves the representable range.
 
-    This is what NIFTy's :class:`nifty8.re.Gaussian` wants — it accepts
+    This is what NIFTy's :class:`nifty8.re.Gaussian` wants, it accepts
     callables for ``noise_cov_inv`` and ``noise_std_inv``, and derives whichever
     one it is not given from the other (``sqrt`` of the first, or the square of
     the second). Passing an array for either therefore reintroduces the
@@ -106,20 +106,20 @@ def diag_noise_operators(noise: jnp.ndarray) -> tuple[Partial, Partial]:
 
     Parameters
     ----------
-    noise : array_like
+    noise: array_like
         Per-point 1-σ uncertainty. Must be > 0.
 
     Returns
     -------
-    cov_inv : jax.tree_util.Partial
+    cov_inv: jax.tree_util.Partial
         ``x -> (x/sigma)/sigma``.
-    std_inv : jax.tree_util.Partial
+    std_inv: jax.tree_util.Partial
         ``x -> x/sigma``.
 
     Notes
     -----
     **JIT-compatible**: yes. ``Partial`` is a pytree, so ``noise`` stays a
-    traced leaf rather than a baked constant — matching the array spelling it
+    traced leaf rather than a baked constant, matching the array spelling it
     replaces, so a cached likelihood does not gain a recompile.
     """
     return Partial(_apply_noise_cov_inv, noise), Partial(_apply_noise_std_inv, noise)
@@ -139,11 +139,11 @@ def standardized_residual(
 
     Parameters
     ----------
-    observed : array_like
+    observed: array_like
         Data :math:`d`.
-    predicted : array_like
+    predicted: array_like
         Model prediction :math:`\mu`.
-    sigma_eff : array_like
+    sigma_eff: array_like
         Effective 1-σ uncertainty, already combined with any floor.
 
     Returns
@@ -174,18 +174,18 @@ def diag_gaussian_chi2(
 
     Parameters
     ----------
-    predicted : array_like
+    predicted: array_like
         Model prediction :math:`\mu`.
-    observed : array_like
+    observed: array_like
         Data :math:`d`.
-    sigma : array_like
+    sigma: array_like
         Per-point 1-σ uncertainty. Must be > 0.
-    sigma_floor : float, optional
+    sigma_floor: float, optional
         Fractional systematic floor :math:`f` added in quadrature
         relative to ``observed``: total variance becomes
         ``sigma**2 + (sigma_floor * observed)**2``. Default ``0``
         (pure measurement noise).
-    presence : array_like, optional
+    presence: array_like, optional
         Per-band presence mask (0.0 or 1.0 float). Absent bands
         (presence=0) contribute exactly zero to χ² and its gradient.
         Default ``None`` (all-ones; all bands present).
@@ -197,13 +197,13 @@ def diag_gaussian_chi2(
 
     Notes
     -----
-    **JIT-compatible**: yes — pure JAX.
+    **JIT-compatible**: yes, pure JAX.
 
     **Numerical stability (#1206)**: the standardized residual
     :math:`r = (d - \mu)/\sigma_{\rm eff}` is formed *before* squaring, rather
     than evaluating :math:`(d-\mu)^2/\sigma^2` directly. Flux uncertainties are
     ~1e-30, so :math:`\sigma^2` (~1e-60) and :math:`(d-\mu)^2` (~1e-56) both
-    underflow float32 to zero and the ratio becomes ``0/0 = NaN`` — even though
+    underflow float32 to zero and the ratio becomes ``0/0 = NaN``, even though
     :math:`r` itself is O(1) and representable. :func:`jnp.hypot` combines the
     measurement noise and the fractional floor without squaring either. This is
     what lets a pure-float32 fit produce a finite likelihood; identical in
@@ -227,19 +227,19 @@ def diag_gaussian_log_prob(
     r"""Data-term log-probability of a diagonal Gaussian: :math:`-\tfrac12 \chi^2`.
 
     The Gaussian normalization constant
-    :math:`-\tfrac{1}{2} n \log(2\pi) - \sum_i \log\sigma_i` is dropped
-    — most inference engines treat it as an additive constant. Add it
+    :math:`-\tfrac{1}{2} n \log(2\pi) - \sum_i \log\sigma_i` is dropped,
+    most inference engines treat it as an additive constant. Add it
     back explicitly if you need a true log-evidence term.
 
     Parameters
     ----------
-    presence : array_like, optional
+    presence: array_like, optional
         Per-band presence mask (0.0 or 1.0 float). Absent bands
         contribute exactly zero to the log-probability and its gradient.
         Default ``None`` (all-ones; all bands present).
 
     Notes
     -----
-    **JIT-compatible**: yes — pure JAX.
+    **JIT-compatible**: yes, pure JAX.
     """
     return -0.5 * diag_gaussian_chi2(predicted, observed, sigma, sigma_floor, presence)

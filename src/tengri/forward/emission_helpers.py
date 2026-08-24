@@ -44,36 +44,36 @@ def attenuate_emission(
 
     Parameters
     ----------
-    sed : ndarray, shape (n_wave,)
+    sed: ndarray, shape (n_wave,)
         Input SED [erg/s/Hz] (before dust).
-    wave : ndarray, shape (n_wave,)
+    wave: ndarray, shape (n_wave,)
         Wavelength grid [Angstrom].
-    mode : str
+    mode: str
         Attenuation mode: ``"bc"`` (birth-cloud + diffuse), ``"diff"`` (diffuse only),
         ``"neb"`` (separate BC law + diffuse), or ``"none"`` (no attenuation).
-    tau_bc : float
+    tau_bc: float
         Birth-cloud V-band optical depth [dimensionless].
-    tau_diff : float
+    tau_diff: float
         Diffuse V-band optical depth [dimensionless].
-    law_bc_fn : callable
+    law_bc_fn: callable
         Birth-cloud dust law ``(wave, n_slope, dust_bump_strength) -> k(λ)`` [1/mag].
-    law_diff_fn : callable
+    law_diff_fn: callable
         Diffuse dust law ``(wave, n_slope, dust_bump_strength) -> k(λ)`` [1/mag].
-    neb_bc_fn : callable, optional
+    neb_bc_fn: callable, optional
         Separate BC law for ``mode="neb"``. Falls back to ``law_bc_fn`` if None.
-    dust_slope : float, optional
+    dust_slope: float, optional
         Dust law slope parameter. Default -0.7.
-    dust_bump_strength : float, optional
+    dust_bump_strength: float, optional
         Dust law bump strength parameter. Default 0.0.
 
     Returns
     -------
-    sed_attenuated : ndarray, shape (n_wave,)
+    sed_attenuated: ndarray, shape (n_wave,)
         Attenuated SED [erg/s/Hz].
 
     Notes
     -----
-    **JIT-compatible**: yes — all operations use ``jnp`` primitives.
+    **JIT-compatible**: yes, all operations use ``jnp`` primitives.
 
     The absorbed luminosity is not computed here; the dust energy balance
     is owned by the dust attenuation components via
@@ -124,21 +124,21 @@ def shock_emission(
 
     Parameters
     ----------
-    wave : ndarray, shape (n_wave,)
+    wave: ndarray, shape (n_wave,)
         Wavelength grid [Angstrom].
-    sed_so_far : ndarray, shape (n_wave,)
+    sed_so_far: ndarray, shape (n_wave,)
         Current cumulative SED [erg/s/Hz] for bolometric luminosity estimation.
-    shock_frac : float
+    shock_frac: float
         Fraction of Halpha luminosity channeled into shocks [dimensionless].
-    shock_velocity : float, optional
+    shock_velocity: float, optional
         Shock velocity [km/s]. Default 300.0.
-    shock_log_density : float, optional
+    shock_log_density: float, optional
         Log10 of electron density [cm^-3]. Default 0.0.
-    shock_b_over_sqrt_n : float, optional
+    shock_b_over_sqrt_n: float, optional
         Magnetic parameter B/sqrt(n). Default 1.0.
-    shock_abundance : str, optional
+    shock_abundance: str, optional
         Abundance set ("solar", etc.). Default "solar".
-    shock_component : str, optional
+    shock_component: str, optional
         Component to return ("combined", etc.). Default "combined".
 
     Returns
@@ -148,7 +148,7 @@ def shock_emission(
 
     Notes
     -----
-    **JIT-compatible**: yes — all operations use ``jnp`` primitives.
+    **JIT-compatible**: yes, all operations use ``jnp`` primitives.
     """
     from tengri.components.nebular.shock import compute_shock_sed
 
@@ -156,7 +156,7 @@ def shock_emission(
     l_bol = -jnp.trapezoid(sed_so_far, nu)
     # Order-of-magnitude approximation: L(Hα) ~ 1e-3 × L_bol for a star-
     # forming galaxy. Used only to set the *normalization* of the shock
-    # template — the resulting shock SED is then scaled by ``shock_frac``
+    # template, the resulting shock SED is then scaled by ``shock_frac``
     # at the call site. Magnitude not validity-ranged against a paper;
     # flagged for replacement with the case-B prediction from the SFH.
     l_halpha_approx = jnp.maximum(l_bol * 1e-3, 1e-30)
@@ -197,7 +197,7 @@ def shock_emission(
 # ═══════════════════════════════════════════════════════════════════════════
 
 
-# ``igm_absorption`` now lives solely in ``tengri.components.igm.igm`` — the
+# ``igm_absorption`` now lives solely in ``tengri.components.igm.igm``, the
 # single source of truth for the mean-IGM model dispatch (inoue / madau /
 # meiksin06 / asada25) plus the patchy and DLA modifiers (#932). Import it from
 # there; this module deliberately no longer defines a wrapper copy (an earlier

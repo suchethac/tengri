@@ -41,28 +41,28 @@ class Distribution:
 
     Parameters
     ----------
-    (None — this is an abstract base class)
+    (None: this is an abstract base class)
 
     Attributes
     ----------
-    bounds : tuple[float, float]
-        (lo, hi) — lower and upper bounds on the parameter value.
-    description : str
+    bounds: tuple[float, float]
+        (lo, hi); lower and upper bounds on the parameter value.
+    description: str
         Human-readable summary of the quantity, surfaced by
         ``describe_parameter`` and ``spec.summary()``. Empty when unset.
-    units : str
+    units: str
         Physical units of the quantity, e.g. ``"erg/s"``, ``"yr"``,
         ``"Msun/yr"``. Empty when dimensionless or unset.
 
     Methods
     -------
-    sample(key : jax.Array) → ndarray
+    sample(key: jax.Array) → ndarray
         Draw a random sample from the prior distribution.
-    log_prob(x : ndarray) → ndarray
+    log_prob(x: ndarray) → ndarray
         Evaluate the log probability density at parameter value x.
-    unstandardize(xi : ndarray) → ndarray
+    unstandardize(xi: ndarray) → ndarray
         Map standardized latent variable ξ ~ N(0,1) to physical parameter space.
-    standardize(theta : ndarray) → ndarray
+    standardize(theta: ndarray) → ndarray
         Map physical parameter to standardized latent variable ξ ~ N(0,1).
 
     Notes
@@ -102,7 +102,7 @@ class Distribution:
     # Class-level defaults so that *every* distribution answers to
     # ``.description`` and ``.units``. Before these existed, four of the
     # seven subclasses raised AttributeError, which is why consumers read
-    # them as ``getattr(prior, "units", "")`` — a fail-open guard whose only
+    # them as ``getattr(prior, "units", "")``: a fail-open guard whose only
     # job was to paper over an incomplete base class. Subclasses that accept
     # the arguments shadow these with instance attributes.
     description: str = ""
@@ -129,7 +129,7 @@ class Distribution:
         if a registry entry is converted to ``Fixed`` via the ``'*': FIXED``
         wildcard but the distribution carries no default.
 
-        For ``Fixed(value)``, ``default`` is the value itself — see
+        For ``Fixed(value)``, ``default`` is the value itself: see
         ``Fixed.default``.
 
         Returns
@@ -148,7 +148,7 @@ class Distribution:
 
         Parameters
         ----------
-        default : float or None
+        default: float or None
             Physically-motivated default value, or ``None`` if no default is
             registered.
 
@@ -191,7 +191,7 @@ class Distribution:
 
         Parameters
         ----------
-        key : jax.Array
+        key: jax.Array
             JAX PRNG key for random sampling.
 
         Returns
@@ -206,7 +206,7 @@ class Distribution:
 
         Parameters
         ----------
-        x : float or array_like
+        x: float or array_like
             Parameter value in physical (unstandardized) space.
 
         Returns
@@ -220,7 +220,7 @@ class Distribution:
         """Map standardized latent ξ ~ N(0,1) → physical parameter.
 
         Must be JAX-differentiable. This is the core method for
-        standardized inference — it absorbs the prior into the
+        standardized inference: it absorbs the prior into the
         forward model so the loss is always ½χ² + ½ξᵀξ.
 
         The transform h(ξ) is chosen so that P(h(ξ)) |dh/dξ| = φ(ξ),
@@ -235,7 +235,7 @@ class Distribution:
 
         Parameters
         ----------
-        xi : float or array_like
+        xi: float or array_like
             Standardized latent value, typically from a standard normal
             distribution.
 
@@ -254,7 +254,7 @@ class Distribution:
 
         Parameters
         ----------
-        theta : float or array_like
+        theta: float or array_like
             Physical-space parameter value.
 
         Returns
@@ -277,7 +277,7 @@ class Distribution:
         from ``self._lo``/``self._hi``) and they enter the graph as
         **constants**. Any cache whose key omits them will hand one prior's
         compiled transform to another prior, decoding the latent through the
-        wrong distribution — see
+        wrong distribution; see
         ``tests/regression/bug/test_prior_bounds_key_the_engine_cache.py``.
 
         The key is *exclusion*-based on purpose: every attribute a subclass
@@ -294,7 +294,7 @@ class Distribution:
         Returns
         -------
         tuple
-            ``(class_name, ((attr, value), ...))`` — immutable and hashable,
+            ``(class_name, ((attr, value), ...))``: immutable and hashable,
             suitable for use as a dict key. Floats are kept at full precision:
             rounding could collapse genuinely distinct constants (e.g.
             ``LogUniform(1e-30, 1e-20)``) into one key.
@@ -315,7 +315,7 @@ def hashable_baked_value(value) -> object:
     and the spec's fixed parameter values
     (``Fitter._fixed_value_key``). Both reach ``_primals_to_params``.
 
-    Arrays are reduced to ``(shape, dtype, bytes-hash)`` — ``StudentT`` caches
+    Arrays are reduced to ``(shape, dtype, bytes-hash)`` because ``StudentT`` caches
     an interpolation grid derived from its scalars, and any future family that
     tabulates its transform must key on it too.
 
@@ -352,18 +352,18 @@ class Uniform(Distribution):
 
     Parameters
     ----------
-    lo : float
+    lo: float
         Lower bound (inclusive).
-    hi : float
+    hi: float
         Upper bound (inclusive). Must satisfy hi > lo.
 
     Attributes
     ----------
-    lo : float
+    lo: float
         Lower bound of the distribution.
-    hi : float
+    hi: float
         Upper bound of the distribution.
-    bounds : tuple[float, float]
+    bounds: tuple[float, float]
         ``(lo, hi)`` convenience tuple.
 
     Raises
@@ -373,7 +373,7 @@ class Uniform(Distribution):
 
     Notes
     -----
-    **JIT-compatible**: yes — all operations use ``jnp`` primitives.
+    **JIT-compatible**: yes, all operations use ``jnp`` primitives.
 
     **Standardization**: Maps ξ ~ N(0,1) to θ via the Gaussian CDF:
 
@@ -453,7 +453,7 @@ class Uniform(Distribution):
 
         Parameters
         ----------
-        key : jax.Array
+        key: jax.Array
             JAX PRNG key for random sampling.
 
         Returns
@@ -468,7 +468,7 @@ class Uniform(Distribution):
 
         Parameters
         ----------
-        x : float or array_like
+        x: float or array_like
             Parameter value in physical space.
 
         Returns
@@ -489,7 +489,7 @@ class Uniform(Distribution):
 
         Parameters
         ----------
-        xi : float or array_like
+        xi: float or array_like
             Standardized latent value from standard normal distribution.
 
         Returns
@@ -509,7 +509,7 @@ class Uniform(Distribution):
 
         Parameters
         ----------
-        theta : float or array_like
+        theta: float or array_like
             Physical-space parameter value in [lo, hi].
 
         Returns
@@ -540,26 +540,26 @@ class Gaussian(Distribution):
 
     Parameters
     ----------
-    mu : float
+    mu: float
         Mean of the Gaussian distribution.
-    sigma : float
+    sigma: float
         Standard deviation. Must be positive.
-    lo : float, optional
+    lo: float, optional
         Lower truncation bound. Default: -∞ (no lower truncation).
-    hi : float, optional
+    hi: float, optional
         Upper truncation bound. Default: +∞ (no upper truncation).
 
     Attributes
     ----------
-    mu : float
+    mu: float
         Mean of the distribution.
-    sigma : float
+    sigma: float
         Standard deviation of the distribution.
-    lo : float
+    lo: float
         Lower truncation bound (``-inf`` if unbounded).
-    hi : float
+    hi: float
         Upper truncation bound (``+inf`` if unbounded).
-    bounds : tuple[float, float]
+    bounds: tuple[float, float]
         ``(lo, hi)`` convenience tuple.
 
     Raises
@@ -569,7 +569,7 @@ class Gaussian(Distribution):
 
     Notes
     -----
-    **JIT-compatible**: yes — all operations use ``jnp`` primitives.
+    **JIT-compatible**: yes, all operations use ``jnp`` primitives.
 
     **Standardization**: Unbounded case maps ξ ~ N(0,1) to θ = μ + σ·ξ.
     With finite bounds, uses the truncated-normal inverse CDF:
@@ -579,7 +579,7 @@ class Gaussian(Distribution):
         \\theta = \\mu + \\sigma \\cdot \\Phi^{-1}\\left[\\Phi(\\alpha) +
         \\Phi(\\xi)\\,(\\Phi(\\beta) - \\Phi(\\alpha))\\right]
 
-    with α = (lo−μ)/σ, β = (hi−μ)/σ — the exact inverse-CDF pushforward
+    with α = (lo−μ)/σ, β = (hi−μ)/σ; the exact inverse-CDF pushforward
     (Knollmüller & Enßlin 2019, arXiv:1901.11033, Eqs. 18–25). Clipping
     would instead censor: point-masses at the bounds and zero gradient
     outside them.
@@ -688,7 +688,7 @@ class Gaussian(Distribution):
 
         Parameters
         ----------
-        key : jax.Array
+        key: jax.Array
             JAX PRNG key for random sampling.
 
         Returns
@@ -696,8 +696,8 @@ class Gaussian(Distribution):
         ndarray
             A single sample from N(mu, sigma²) truncated to [lo, hi].
         """
-        # Inverse-CDF sampling through the standardization pushforward —
-        # one source of truth with unstandardize(), exactly truncated
+        # Inverse-CDF sampling through the standardization pushforward: # one source of truth with
+        # unstandardize(), exactly truncated
         # (no clip point-masses at the bounds).
         return self.unstandardize(jax.random.normal(key))
 
@@ -706,7 +706,7 @@ class Gaussian(Distribution):
 
         Parameters
         ----------
-        x : float or array_like
+        x: float or array_like
             Parameter value in physical space.
 
         Returns
@@ -731,13 +731,13 @@ class Gaussian(Distribution):
 
         Unbounded case is the identity-affine map θ = μ + σξ. With finite
         bounds, uses the truncated-normal inverse CDF
-        θ = μ + σ·Φ⁻¹(Φ(α) + Φ(ξ)·(Φ(β) − Φ(α))) — a smooth bijection onto
+        θ = μ + σ·Φ⁻¹(Φ(α) + Φ(ξ)·(Φ(β) − Φ(α))): a smooth bijection onto
         (lo, hi), unlike clipping, which piles point-masses at the bounds
         and zeroes the gradient outside them.
 
         Parameters
         ----------
-        xi : float or array_like
+        xi: float or array_like
             Standardized latent value from standard normal distribution.
 
         Returns
@@ -757,7 +757,7 @@ class Gaussian(Distribution):
 
         Parameters
         ----------
-        theta : float or array_like
+        theta: float or array_like
             Physical-space parameter value.
 
         Returns
@@ -799,23 +799,23 @@ class LogUniform(Distribution):
 
     Parameters
     ----------
-    lo : float
+    lo: float
         Lower bound. Must be strictly positive.
-    hi : float
+    hi: float
         Upper bound. Must be greater than lo.
-    description : str, optional
+    description: str, optional
         Human-readable summary of the quantity, surfaced by
         ``describe_parameter`` and ``spec.summary()``.
-    units : str, optional
+    units: str, optional
         Physical units, e.g. ``"erg/s"``. Empty for dimensionless quantities.
 
     Attributes
     ----------
-    lo : float
+    lo: float
         Lower bound of the distribution.
-    hi : float
+    hi: float
         Upper bound of the distribution.
-    bounds : tuple[float, float]
+    bounds: tuple[float, float]
         ``(lo, hi)`` convenience tuple.
 
     Raises
@@ -825,7 +825,7 @@ class LogUniform(Distribution):
 
     Notes
     -----
-    **JIT-compatible**: yes — all operations use ``jnp`` primitives.
+    **JIT-compatible**: yes; all operations use ``jnp`` primitives.
 
     The probability density in linear space is:
 
@@ -847,7 +847,7 @@ class LogUniform(Distribution):
 
     where Φ(ξ) = 0.5 * (1 + erf(ξ / sqrt(2))) is the standard normal CDF.
     This ensures an N(0,1) latent yields a genuine log-uniform prior on
-    [lo, hi] — matching ``log_prob`` and ``sample`` — not a midpoint-peaked
+    [lo, hi]; matching ``log_prob`` and ``sample``: not a midpoint-peaked
     one. (A sigmoid map here would silently substitute a logit-normal
     prior in log space, biasing weakly-constrained scale parameters toward
     the geometric midpoint and compressing the tails.)
@@ -926,7 +926,7 @@ class LogUniform(Distribution):
 
         Parameters
         ----------
-        key : jax.Array
+        key: jax.Array
             JAX PRNG key for random sampling.
 
         Returns
@@ -944,7 +944,7 @@ class LogUniform(Distribution):
 
         Parameters
         ----------
-        x : float or array_like
+        x: float or array_like
             Parameter value in physical space.
 
         Returns
@@ -960,13 +960,13 @@ class LogUniform(Distribution):
         """ξ ~ N(0,1) → LogUniform(lo, hi) via Gaussian CDF in log space.
 
         Uses the standard normal CDF Φ(ξ) = 0.5 * (1 + erf(ξ / sqrt(2))) so
-        that an N(0,1) latent yields a genuine log-uniform prior — the exact
+        that an N(0,1) latent yields a genuine log-uniform prior; the exact
         inverse-CDF pushforward θ = F⁻¹(Φ(ξ)) required for the ½ξᵀξ prior
         term in the standardized information Hamiltonian.
 
         Parameters
         ----------
-        xi : float or array_like
+        xi: float or array_like
             Standardized latent value from standard normal distribution.
 
         Returns
@@ -988,7 +988,7 @@ class LogUniform(Distribution):
 
         Parameters
         ----------
-        theta : float or array_like
+        theta: float or array_like
             Physical-space parameter value in [lo, hi].
 
         Returns
@@ -1020,27 +1020,27 @@ class LogNormal(Distribution):
 
     Parameters
     ----------
-    mu : float, optional
+    mu: float, optional
         Mean of log(θ). Default: 0.0.
-    sigma : float, optional
+    sigma: float, optional
         Standard deviation of log(θ). Must be positive. Default: 1.0.
-    lo : float, optional
+    lo: float, optional
         Lower truncation bound. Default: 0.0 (ensures θ > 0).
-    hi : float, optional
+    hi: float, optional
         Upper truncation bound. Default: +∞ (no upper truncation).
-    description : str, optional
+    description: str, optional
         Human-readable summary of the quantity, surfaced by
         ``describe_parameter`` and ``spec.summary()``.
-    units : str, optional
+    units: str, optional
         Physical units, e.g. ``"erg/s"``. Empty for dimensionless quantities.
 
     Attributes
     ----------
-    mu : float
+    mu: float
         Mean of log(theta).
-    sigma : float
+    sigma: float
         Standard deviation of log(theta).
-    bounds : tuple[float, float]
+    bounds: tuple[float, float]
         ``(lo, hi)`` convenience tuple.
 
     Raises
@@ -1050,7 +1050,7 @@ class LogNormal(Distribution):
 
     Notes
     -----
-    **JIT-compatible**: yes — all operations use ``jnp`` primitives.
+    **JIT-compatible**: yes, all operations use ``jnp`` primitives.
 
     The probability density in linear space is:
 
@@ -1147,7 +1147,7 @@ class LogNormal(Distribution):
 
         Parameters
         ----------
-        key : jax.Array
+        key: jax.Array
             JAX PRNG key for random sampling.
 
         Returns
@@ -1155,8 +1155,8 @@ class LogNormal(Distribution):
         ndarray
             A single sample from LogNormal(mu, sigma²) truncated to [lo, hi].
         """
-        # Inverse-CDF sampling through the standardization pushforward —
-        # one source of truth with unstandardize(), exactly truncated.
+        # Inverse-CDF sampling through the standardization pushforward: # one source of truth with
+        # unstandardize(), exactly truncated.
         return self.unstandardize(jax.random.normal(key))
 
     def log_prob(self, x: jnp.ndarray) -> jnp.ndarray:
@@ -1167,7 +1167,7 @@ class LogNormal(Distribution):
 
         Parameters
         ----------
-        x : float or array_like
+        x: float or array_like
             Parameter value in physical space.
 
         Returns
@@ -1191,11 +1191,11 @@ class LogNormal(Distribution):
 
         Unbounded case is θ = exp(μ + σξ). With finite bounds, applies the
         truncated-normal inverse CDF in log space (see ``Gaussian`` for the
-        formula) — a smooth bijection onto (lo, hi) instead of clipping.
+        formula); a smooth bijection onto (lo, hi) instead of clipping.
 
         Parameters
         ----------
-        xi : float or array_like
+        xi: float or array_like
             Standardized latent value from standard normal distribution.
 
         Returns
@@ -1215,7 +1215,7 @@ class LogNormal(Distribution):
 
         Parameters
         ----------
-        theta : float or array_like
+        theta: float or array_like
             Physical-space parameter value.
 
         Returns
@@ -1263,11 +1263,11 @@ class StudentT(Distribution):
 
     Parameters
     ----------
-    mu : float, optional
+    mu: float, optional
         Location (center) of the distribution. Default: 0.0.
-    sigma : float, optional
+    sigma: float, optional
         Scale parameter. Must be positive. Default: 1.0.
-    df : float, optional
+    df: float, optional
         Degrees of freedom. Controls tail weight:
 
         - df → ∞ gives Gaussian (heaviest concentration at center)
@@ -1275,24 +1275,24 @@ class StudentT(Distribution):
         - df = 1 gives Cauchy (extremely heavy tails)
 
         Default: 3.0.
-    lo : float, optional
+    lo: float, optional
         Lower truncation bound. Default: -∞ (no lower truncation).
-    hi : float, optional
+    hi: float, optional
         Upper truncation bound. Default: +∞ (no upper truncation).
-    description : str, optional
+    description: str, optional
         Human-readable summary of the quantity, surfaced by
         ``describe_parameter`` and ``spec.summary()``.
-    units : str, optional
+    units: str, optional
         Physical units, e.g. ``"erg/s"``. Empty for dimensionless quantities.
 
     Attributes
     ----------
-    bounds : tuple[float, float]
+    bounds: tuple[float, float]
         ``(lo, hi)`` truncation bounds.
 
     Notes
     -----
-    **JIT-compatible**: yes — all operations use ``jnp`` primitives.
+    **JIT-compatible**: yes, all operations use ``jnp`` primitives.
 
     The probability density follows a Student's t distribution with the
     standard normalization. For finite df, it has heavier tails than a
@@ -1307,7 +1307,7 @@ class StudentT(Distribution):
     truncation bounds are applied in CDF space, giving a smooth bijection
     onto (lo, hi).
 
-    Heavy tails are preserved exactly — the previous variance-matched
+    Heavy tails are preserved exactly; the previous variance-matched
     Gaussian approximation silently discarded them, which matters for the
     Leja et al. (2019) [1]_ continuity-SFH log-SFR-ratio priors
     (StudentT(0, 0.3, df=2)) whose tails control burst flexibility.
@@ -1348,7 +1348,7 @@ class StudentT(Distribution):
         self.units = units
         # Quantile machinery: closed forms for df ∈ {1, 2}; otherwise a
         # monotone (F, z) table for interpolation, built once here (the
-        # NIFTy interpolation-operator pattern — no scipy dependency).
+        # NIFTy interpolation-operator pattern: no scipy dependency).
         if self._df not in (1.0, 2.0):
             self._cdf_grid, self._z_grid = self._build_cdf_table(self._df)
         else:
@@ -1399,7 +1399,7 @@ class StudentT(Distribution):
         """Standard-t quantile F⁻¹(p): closed form for df ∈ {1, 2}, else table.
 
         The df∉{1,2} branch is piecewise-linear (``jnp.interp``), so its
-        gradient is discontinuous at the 4097 knots — fine for MAP/NUTS in
+        gradient is discontinuous at the 4097 knots: fine for MAP/NUTS in
         practice, but the only df used in-repo are 1 and 2 (both closed-form
         above), so this branch is currently never exercised. Swap to a
         monotone-cubic interpolation if a fittable df∉{1,2} is introduced.
@@ -1426,7 +1426,7 @@ class StudentT(Distribution):
 
         Parameters
         ----------
-        key : jax.Array
+        key: jax.Array
             JAX PRNG key for random sampling.
 
         Returns
@@ -1434,8 +1434,8 @@ class StudentT(Distribution):
         ndarray
             A single sample from Student's t distribution truncated to [lo, hi].
         """
-        # Inverse-CDF sampling through the standardization pushforward —
-        # one source of truth with unstandardize(), exactly truncated.
+        # Inverse-CDF sampling through the standardization pushforward: # one source of truth with
+        # unstandardize(), exactly truncated.
         return self.unstandardize(jax.random.normal(key))
 
     def log_prob(self, x: jnp.ndarray) -> jnp.ndarray:
@@ -1443,7 +1443,7 @@ class StudentT(Distribution):
 
         Parameters
         ----------
-        x : float or array_like
+        x: float or array_like
             Parameter value in physical space.
 
         Returns
@@ -1451,7 +1451,7 @@ class StudentT(Distribution):
         float
             Log probability density at x.
         """
-        # Normalized (truncated) Student-t density — constants matter for
+        # Normalized (truncated) Student-t density: constants matter for
         # nested-sampling evidence.
         z = (x - self._mu) / self._sigma
         lp = -0.5 * (self._df + 1) * jnp.log(1 + z**2 / self._df) + self._log_norm
@@ -1468,7 +1468,7 @@ class StudentT(Distribution):
 
         Parameters
         ----------
-        xi : float or array_like
+        xi: float or array_like
             Standardized latent value from standard normal distribution.
 
         Returns
@@ -1486,7 +1486,7 @@ class StudentT(Distribution):
 
         Parameters
         ----------
-        theta : float or array_like
+        theta: float or array_like
             Physical-space parameter value.
 
         Returns
@@ -1532,7 +1532,7 @@ def _laplace_cdf_float(x: float, mu: float, b: float) -> float:
 
 
 class Laplace(Distribution):
-    r"""Laplace (double-exponential) prior — a sparsity/robustness prior.
+    r"""Laplace (double-exponential) prior: a sparsity/robustness prior.
 
     Heavier-tailed than a Gaussian and peaked at the location, the Laplace
     prior is the continuous analog of an L1 penalty (LASSO): it pulls weakly
@@ -1543,28 +1543,28 @@ class Laplace(Distribution):
 
     Parameters
     ----------
-    mu : float
+    mu: float
         Location (median and mode).
-    b : float
+    b: float
         Scale (diversity). Must be positive; variance is ``2 b^2``.
-    lo : float, optional
+    lo: float, optional
         Lower truncation bound. Default: ``-inf``.
-    hi : float, optional
+    hi: float, optional
         Upper truncation bound. Default: ``+inf``.
-    description : str, optional
+    description: str, optional
         Human-readable summary of the quantity, surfaced by
         ``describe_parameter`` and ``spec.summary()``.
-    units : str, optional
+    units: str, optional
         Physical units, e.g. ``"erg/s"``. Empty for dimensionless quantities.
 
     Attributes
     ----------
-    bounds : tuple[float, float]
+    bounds: tuple[float, float]
         ``(lo, hi)`` truncation bounds.
 
     Notes
     -----
-    **JIT-compatible**: yes — all operations use ``jnp`` primitives.
+    **JIT-compatible**: yes; all operations use ``jnp`` primitives.
 
     The density is
 
@@ -1634,7 +1634,7 @@ class Laplace(Distribution):
 
         Parameters
         ----------
-        key : jax.Array
+        key: jax.Array
             JAX PRNG key for random sampling.
 
         Returns
@@ -1650,7 +1650,7 @@ class Laplace(Distribution):
 
         Parameters
         ----------
-        x : float or array_like
+        x: float or array_like
             Parameter value in physical space.
 
         Returns
@@ -1673,7 +1673,7 @@ class Laplace(Distribution):
 
         Parameters
         ----------
-        xi : float or array_like
+        xi: float or array_like
             Standardized latent value from standard normal distribution.
 
         Returns
@@ -1691,7 +1691,7 @@ class Laplace(Distribution):
 
         Parameters
         ----------
-        theta : float or array_like
+        theta: float or array_like
             Physical-space parameter value.
 
         Returns
@@ -1732,7 +1732,7 @@ class Fixed(Distribution):
 
     Parameters
     ----------
-    value : float, int, or str
+    value: float, int, or str
         The fixed value. Can be numeric (for quantitative parameters) or
         string (for categorical choices, e.g. "solar" for shock abundance).
 
@@ -1743,14 +1743,14 @@ class Fixed(Distribution):
 
     Attributes
     ----------
-    value : float or str
+    value: float or str
         The constant value returned by ``sample()`` and ``unstandardize()``.
-    bounds : tuple[float, float]
-        Always ``(-inf, +inf)`` — Fixed parameters have no bounds.
+    bounds: tuple[float, float]
+        Always ``(-inf, +inf)``: Fixed parameters have no bounds.
 
     Notes
     -----
-    **JIT-compatible**: yes — ``unstandardize()`` returns the constant value
+    **JIT-compatible**: yes; ``unstandardize()`` returns the constant value
     regardless of the latent variable ξ.
 
     **Inference**: Fixed parameters are excluded from the inference set.
@@ -1788,7 +1788,7 @@ class Fixed(Distribution):
 
     @property
     def is_fixed(self) -> bool:
-        """Return True — this is a fixed (non-free) parameter.
+        """Return True; this is a fixed (non-free) parameter.
 
         Returns
         -------
@@ -1799,7 +1799,7 @@ class Fixed(Distribution):
 
     @property
     def default(self) -> float | str:
-        """Return the fixed value — for ``Fixed``, value and default coincide.
+        """Return the fixed value; for ``Fixed``, value and default coincide.
 
         Returns
         -------
@@ -1826,7 +1826,7 @@ class Fixed(Distribution):
 
         Parameters
         ----------
-        key : jax.Array
+        key: jax.Array
             JAX PRNG key (ignored for fixed parameters).
 
         Returns
@@ -1843,7 +1843,7 @@ class Fixed(Distribution):
 
         Parameters
         ----------
-        x : float or array_like
+        x: float or array_like
             Parameter value (ignored for fixed distributions).
 
         Returns
@@ -1858,7 +1858,7 @@ class Fixed(Distribution):
 
         Parameters
         ----------
-        xi : float or array_like
+        xi: float or array_like
             Standardized latent value (ignored for fixed parameters).
 
         Returns
@@ -1875,7 +1875,7 @@ class Fixed(Distribution):
 
         Parameters
         ----------
-        theta : float or array_like
+        theta: float or array_like
             Physical-space parameter value (ignored for fixed parameters).
 
         Returns
@@ -1905,7 +1905,7 @@ def resolve_shorthand(val) -> Distribution:
 
     Parameters
     ----------
-    val : float, int, tuple, or Distribution
+    val: float, int, tuple, or Distribution
         Parameter specification:
 
         - Scalar int/float → Fixed(value)

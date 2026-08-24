@@ -16,7 +16,7 @@ three analytic dust-emission models:
 
 Each model is preintegrated through filter curves at model-initialization time.
 Auto-collapses axes whose corresponding parameters are ``Fixed`` in the user's
-``Parameters`` — e.g., a user who pins ``dust_T`` gets a 1D grid.
+``Parameters``: e.g., a user who pins ``dust_T`` gets a 1D grid.
 
 References
 ----------
@@ -83,17 +83,17 @@ def _build_grid_modified_blackbody(
 
     Parameters
     ----------
-    filter_waves : list[ndarray]
+    filter_waves: list[ndarray]
         Per-filter wavelength arrays [Angstrom].
-    filter_trans : list[ndarray]
+    filter_trans: list[ndarray]
         Per-filter transmission curves.
-    redshift : float
+    redshift: float
         Source redshift.
-    T_grid : ndarray, shape (n_T,)
+    T_grid: ndarray, shape (n_T,)
         Temperature grid [K].
-    beta_grid : ndarray, shape (n_beta,)
+    beta_grid: ndarray, shape (n_beta,)
         Emissivity-index grid [dimensionless].
-    L_absorbed_ref : float
+    L_absorbed_ref: float
         Reference absorbed luminosity for normalization [L_sun]. Default 1.0.
 
     Returns
@@ -153,19 +153,19 @@ def _build_grid_casey2012(
 
     Parameters
     ----------
-    filter_waves : list[ndarray]
+    filter_waves: list[ndarray]
         Per-filter wavelength arrays [Angstrom].
-    filter_trans : list[ndarray]
+    filter_trans: list[ndarray]
         Per-filter transmission curves.
-    redshift : float
+    redshift: float
         Source redshift.
-    T_grid : ndarray, shape (n_T,)
+    T_grid: ndarray, shape (n_T,)
         Temperature grid [K].
-    beta_grid : ndarray, shape (n_beta,)
+    beta_grid: ndarray, shape (n_beta,)
         Emissivity-index grid [dimensionless].
-    alpha_mir_grid : ndarray, shape (n_alpha,)
+    alpha_mir_grid: ndarray, shape (n_alpha,)
         Mid-IR power-law slope grid [dimensionless].
-    L_absorbed_ref : float
+    L_absorbed_ref: float
         Reference absorbed luminosity for normalization [L_sun]. Default 1.0.
 
     Returns
@@ -231,13 +231,13 @@ def _build_grid_pah_drude(
 
     Parameters
     ----------
-    filter_waves : list[ndarray]
+    filter_waves: list[ndarray]
         Per-filter wavelength arrays [Angstrom].
-    filter_trans : list[ndarray]
+    filter_trans: list[ndarray]
         Per-filter transmission curves.
-    redshift : float
+    redshift: float
         Source redshift.
-    L_absorbed_ref : float
+    L_absorbed_ref: float
         Reference absorbed luminosity for normalization [L_sun]. Default 1.0.
 
     Returns
@@ -294,23 +294,23 @@ def precompute(
 
     Parameters
     ----------
-    filter_waves : list[ndarray]
+    filter_waves: list[ndarray]
         Wavelength grid per filter [Angstrom], observed frame.
-    filter_trans : list[ndarray]
+    filter_trans: list[ndarray]
         Transmission per filter (0–1).
-    redshift : float
+    redshift: float
         Source redshift. [dimensionless]
-    parameters : Parameters | None
+    parameters: Parameters | None
         Parameters spec, used to detect Fixed-axis parameters.
-    model : str, keyword-only
+    model: str, keyword-only
         One of "modified_blackbody", "casey2012", "pah_drude".
         Default: "modified_blackbody".
-    T_grid : ndarray, optional
+    T_grid: ndarray, optional
         Temperature grid for modified_blackbody/casey2012 [K]. If None, uses a
         default range [20, 60] with 9 points.
-    beta_grid : ndarray, optional
+    beta_grid: ndarray, optional
         Emissivity-index grid [dimensionless]. If None, uses [1.5, 1.8, 2.0].
-    alpha_mir_grid : ndarray, optional
+    alpha_mir_grid: ndarray, optional
         Mid-IR power-law slope grid for casey2012 [dimensionless]. If None,
         uses [1.5, 2.0, 2.5].
 
@@ -329,7 +329,7 @@ def precompute(
 
     Notes
     -----
-    **JIT-compatible**: no — this is a build-time function using NumPy.
+    **JIT-compatible**: no, this is a build-time function using NumPy.
     """
     if model == "modified_blackbody":
         if T_grid is None:
@@ -408,12 +408,12 @@ def build_lookup(
 
     Parameters
     ----------
-    preint : dict
+    preint: dict
         Preintegrated data dict with keys "grid_phot", "axes", optionally
         "_collapsed_axes".
-    model : str, keyword-only
+    model: str, keyword-only
         Analytic dust model name (for documentation; not used in lookup logic).
-    free_param_names : tuple of str, optional
+    free_param_names: tuple of str, optional
         Names of remaining free axes in the collapsed case.
         Not used in the default (no-collapse) case.
 
@@ -433,10 +433,10 @@ def build_lookup(
 
     Notes
     -----
-    **JIT-compatible**: yes — the returned function uses ``jnp`` and triweight
+    **JIT-compatible**: yes, the returned function uses ``jnp`` and triweight
     interpolation.
 
-    **Gradient-safe**: yes — triweight kernel is fully differentiable.
+    **Gradient-safe**: yes, triweight kernel is fully differentiable.
     """
     if not preint.get("_collapsed_axes"):
         # No axes collapsed: use template helper directly

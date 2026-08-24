@@ -1,5 +1,5 @@
 # SPDX-License-Identifier: BSD-3-Clause
-"""Observables — the dual of :class:`Observation` for predicted quantities.
+"""Observables, the dual of :class:`Observation` for predicted quantities.
 
 An :class:`Observables` NamedTuple is synthesized per-model at
 :class:`SEDModel` construction time from the ``Observation`` contents:
@@ -30,11 +30,11 @@ def build_observables_class(observation) -> type:
 
     Parameters
     ----------
-    observation : Observation
+    observation: Observation
         Configured observation. Used only to read capability flags
         (``can_do_photometry``, ``can_do_spectroscopy``,
         ``has_line_fluxes``, ``has_spectral_indices``); the data
-        contents are irrelevant — only the structural fingerprint
+        contents are irrelevant, only the structural fingerprint
         matters for the class shape.
 
     Returns
@@ -68,7 +68,7 @@ def build_observables_class(observation) -> type:
     DeviceArray([1.e-26], dtype=float64)
     >>> o.mag_apparent
     DeviceArray([23.4], dtype=float64)
-    >>> o.spec_fnu  # raises AttributeError — spectroscopy not configured
+    >>> o.spec_fnu  # raises AttributeError, spectroscopy not configured
     """
     fields: list[tuple[str, Any]] = []
 
@@ -76,8 +76,8 @@ def build_observables_class(observation) -> type:
     has_spec = bool(getattr(observation, "can_do_spectroscopy", False))
 
     # ``Observables`` is the *projection* output only (phot_fnu / spec_fnu and
-    # their rest-frame variants). Scalar measurables — line fluxes, line
-    # ratios, spectral indices — are NOT fields here: they are computed
+    # their rest-frame variants). Scalar measurables, line fluxes, line
+    # ratios, spectral indices, are NOT fields here: they are computed
     # separately (``predict_line_fluxes`` / ``predict_line_ratios`` /
     # ``predict_spectral_indices``) and fed to the likelihood via the
     # prediction dict, so the projection NamedTuple stays a clean
@@ -89,7 +89,7 @@ def build_observables_class(observation) -> type:
         fields.append(("spec_fnu", jnp.ndarray))
 
     if not fields:
-        # Defensive: no observable channels — give an empty NamedTuple
+        # Defensive: no observable channels, give an empty NamedTuple
         # so callers can still write `model.predict_observables(params)`
         # and get back a structurally-valid (but empty) result.
         class Observables(NamedTuple):
@@ -118,7 +118,7 @@ def build_observables_class(observation) -> type:
                 """Absolute AB magnitude, computed from ``phot_rest_fnu``.
 
                 The rest-frame photometry is the same-filter integral of
-                the rest-frame SED at d_L=10 pc — physically correct
+                the rest-frame SED at d_L=10 pc, physically correct
                 without distance-modulus / K-correction debate.
                 """
                 return fnu_to_ab_mag(self.phot_rest_fnu)

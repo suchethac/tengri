@@ -40,15 +40,15 @@ def compute_line_fluxes(
 
     Parameters
     ----------
-    amplitudes : array_like, shape (n_lines,)
+    amplitudes: array_like, shape (n_lines,)
         Gaussian amplitude of each line [erg/s/cm²/Angstrom].
-    line_rest_waves : array_like, shape (n_lines,)
+    line_rest_waves: array_like, shape (n_lines,)
         Rest-frame vacuum wavelengths [Angstrom].
-    redshift : float
+    redshift: float
         Galaxy redshift [dimensionless].
-    sigma_kms : float
+    sigma_kms: float
         Intrinsic line velocity dispersion [km/s].
-    spectral_resolution : float
+    spectral_resolution: float
         Spectral resolution :math:`R = \lambda/\Delta\lambda` [dimensionless].
 
     Returns
@@ -58,7 +58,7 @@ def compute_line_fluxes(
 
     Notes
     -----
-    **JIT-compatible**: yes — differentiable through ``amplitudes``,
+    **JIT-compatible**: yes, differentiable through ``amplitudes``,
     ``sigma_kms``, and ``spectral_resolution``.
 
     The observed-frame line center is :math:`\lambda_z = \lambda_{\rm rest}(1+z)`.
@@ -111,12 +111,12 @@ def compute_equivalent_widths(
 
     Parameters
     ----------
-    line_fluxes : array_like, shape (n_lines,)
+    line_fluxes: array_like, shape (n_lines,)
         Integrated emission line fluxes [erg/s/cm²].
-    continuum_at_lines : array_like, shape (n_lines,)
+    continuum_at_lines: array_like, shape (n_lines,)
         Continuum spectral flux density evaluated at each line center
         [erg/s/cm²/Angstrom].
-    redshift : float
+    redshift: float
         Galaxy redshift [dimensionless].
 
     Returns
@@ -127,7 +127,7 @@ def compute_equivalent_widths(
 
     Notes
     -----
-    **JIT-compatible**: yes — differentiable through ``line_fluxes`` and
+    **JIT-compatible**: yes; differentiable through ``line_fluxes`` and
     ``continuum_at_lines``.
 
     The rest-frame EW is
@@ -181,27 +181,27 @@ def compute_line_moments(
 
     Parameters
     ----------
-    wave_obs : array_like, shape (n_pix,)
+    wave_obs: array_like, shape (n_pix,)
         Observed-frame wavelength array [Angstrom].
-    flux_residual : array_like, shape (n_pix,)
+    flux_residual: array_like, shape (n_pix,)
         Continuum-subtracted flux [erg/s/cm²/Angstrom].
-    ivar : array_like, shape (n_pix,)
+    ivar: array_like, shape (n_pix,)
         Inverse variance [(erg/s/cm²/Angstrom)^-2].
-    line_obs_wave : float
+    line_obs_wave: float
         Observed-frame line center wavelength [Angstrom].
-    sigma_kms : float
+    sigma_kms: float
         Gaussian sigma for the soft integration window [km/s].
 
     Returns
     -------
-    v_centroid : ndarray, shape ()
+    v_centroid: ndarray, shape ()
         Flux-weighted velocity centroid relative to ``line_obs_wave`` [km/s].
-    sigma_int : ndarray, shape ()
+    sigma_int: ndarray, shape ()
         Flux-weighted velocity dispersion [km/s].
 
     Notes
     -----
-    **JIT-compatible**: yes — differentiable through ``sigma_kms``.
+    **JIT-compatible**: yes; differentiable through ``sigma_kms``.
 
     Velocity of pixel :math:`k` relative to the line center:
 

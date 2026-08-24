@@ -140,7 +140,7 @@ def _time_step(name: str, fn, n: int = 200, grad_fn=None) -> StepTiming:
         # Broad by design: a step whose gradient does not compile is a real
         # result for a profiler, and should not abort the rest of the report.
         # ``t_grad`` staying None is already visible in the output, so the log
-        # only has to say *why* — otherwise a missing timing reads as "not
+        # only has to say *why*: otherwise a missing timing reads as "not
         # measured" when it means "measurement failed".
         try:
             t_grad, _ = bench(grad_fn, n=n, warmup=3)
@@ -416,13 +416,13 @@ def profile_pipeline(
 
     Parameters
     ----------
-    model : SEDModel
+    model: SEDModel
         A tengri SEDModel instance.
-    params : dict
+    params: dict
         Parameter values (public names).
-    n : int
+    n: int
         Number of timed iterations per step.
-    config_name : str
+    config_name: str
         Label for this configuration (e.g., "stellar+dust, D=7").
 
     Returns

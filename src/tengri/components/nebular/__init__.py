@@ -16,20 +16,20 @@ continuum) to the stellar SED. Six backends:
 
 - **CB19Grid**: Charlot & Bruzual 2019 CLOUDY grid from 3MdB_17 (Martinez-
   Paredes et al. 2023). 6D grid over log(O/H), logU, log_nH, log(C/O), ΔN/O,
-  HbFrac. **Lines only — no nebular continuum.** Run
+  HbFrac. **Lines only: no nebular continuum.** Run
   ``scripts/download_cb19_templates.py`` to build the HDF5 file.
 
 - **MappingsPhotoStellar**: MAPPINGS V v5.2.1 photoionization grids (Flury
   et al. 2024, arXiv:2412.06763; Zenodo 14140949). Stellar ionizing spectra
   from Starburst99 or BPASS v2.2, with Nicholls+2017 abundance patterns and
   Jenkins+2009 dust depletion. 4D grid over ζ_O, logU, age, logn. **Lines
-  only — no nebular continuum.** Run ``scripts/build_flury2024_grids.py``
+  only: no nebular continuum.** Run ``scripts/build_flury2024_grids.py``
   to build the HDF5 file.
 
 - **MappingsPhotoAGN**: MAPPINGS V v5.2.1 AGN grids (Flury et al. 2024).
   Ionizing source is the OPTXAGNF accretion-disc SED. 5D grid over ζ_O,
   logU, log(M_BH), log(λ_Edd), logn. Normalized by ionizing luminosity
-  L_ion rather than Q_H. **Lines only — no nebular continuum.**
+  L_ion rather than Q_H. **Lines only: no nebular continuum.**
 
 Usage::
 
@@ -111,14 +111,14 @@ from tengri.components.nebular.shock_model import (
 )
 
 #: Cue network weights. Resolved through ``$TENGRI_DATA_DIR`` before the
-#: package's own ``data/`` (#1431) — the recipes that default to the Cue
+#: package's own ``data/`` (#1431): the recipes that default to the Cue
 #: backend are otherwise unusable whenever the grids live off the source tree.
 _DEFAULT_CUE_WEIGHTS_PATH = package_or_env_data_path("cue_weights.npz")
 
 
 # Populate the runtime registry. Grammar-layer names match the keys the
 # dict-grammar API has accepted historically (``none`` / ``ssp`` /
-# ``cue`` / ``cloudy`` / ``cb19``) — these are the user contract, so
+# ``cue`` / ``cloudy`` / ``cb19``): these are the user contract, so
 # don't rename them. The ``callable`` field carries the backend class
 # where there is one; the actual dispatch still happens in
 # ``tengri.parameters.groups._translate_neb``, which sets the

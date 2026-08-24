@@ -14,7 +14,7 @@ that activate additional free parameters:
 
 Variants are introspected from
 :data:`tengri.components.igm.IGM_TRANSMISSION_MODELS` (canonical names
-only — aliases like ``"inoue"`` are validator-side back-compat and get
+only: aliases like ``"inoue"`` are validator-side back-compat and get
 no separate factory); the activated free-param set comes from a one-shot
 call to :func:`tengri.parameters.registry.recipe_parameters`, so adding
 a new DLA / patchy parameter in the registry surfaces here automatically.
@@ -79,7 +79,7 @@ def _discover_params(variant: str) -> tuple[list[str], dict[str, str]]:
 
 def _populate_factories() -> dict[str, Callable[..., dict]]:
     # Aliases (e.g. ``"inoue"`` → ``"inoue14"``) are validator-side back-compat
-    # and don't get a separate user-facing factory — the canonical entry serves
+    # and don't get a separate user-facing factory: the canonical entry serves
     # both. Filter them out so ``builders.igm.available()`` only lists canonical
     # names + ``"none"``. (Contract: ``test_igm_builder_factories_skip_aliases``.)
     from tengri.components.igm.igm import _IGM_ALIASES

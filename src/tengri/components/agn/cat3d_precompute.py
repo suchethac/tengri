@@ -63,13 +63,13 @@ def precompute_cat3d_photometry(
 
     Parameters
     ----------
-    grid_path : str
+    grid_path: str
         Path to ``cat3d_wind_torus_grid.h5``.
-    filter_waves : list[ndarray]
+    filter_waves: list[ndarray]
         Wavelength grid per filter [Angstrom], observed frame.
-    filter_trans : list[ndarray]
+    filter_trans: list[ndarray]
         Transmission per filter (0–1).
-    redshift : float, optional
+    redshift: float, optional
         Source redshift. Used to shift rest-frame templates into the
         observed frame before integrating against observed-frame filters.
         Default 0.0.
@@ -77,11 +77,11 @@ def precompute_cat3d_photometry(
     Returns
     -------
     dict
-        ``grid_phot`` : ndarray, shape (n_cos_inc, n_a, n_fwd, n_filters)
+        ``grid_phot``: ndarray, shape (n_cos_inc, n_a, n_fwd, n_filters)
             Filter-integrated L_ν [erg/s/Hz] per L_sun (unit torus fraction).
-        ``axes`` : tuple of 3 grid arrays (jnp.ndarray)
+        ``axes``: tuple of 3 grid arrays (jnp.ndarray)
             Grid axes (cos_inc, a, fwd).
-        ``_preint`` : PreintegratedGrid
+        ``_preint``: PreintegratedGrid
             Internal preintegration data structure.
 
     References
@@ -92,7 +92,7 @@ def precompute_cat3d_photometry(
 
     Notes
     -----
-    **JIT-compatible**: no — this is a build-time function using NumPy.
+    **JIT-compatible**: no, this is a build-time function using NumPy.
 
     **Build-time operation**: This function performs frequency-domain
     integration via NumPy. The precomputed photometry is grid-independent
@@ -176,7 +176,7 @@ def build_cat3d_photometry_lookup(precomp: dict):
 
     Parameters
     ----------
-    precomp : dict
+    precomp: dict
         Output of :func:`precompute_cat3d_photometry` or :func:`precompute`
         (the Protocol-shaped entry point).
 
@@ -199,10 +199,10 @@ def build_cat3d_photometry_lookup(precomp: dict):
 
     Notes
     -----
-    **JIT-compatible**: yes — the returned function uses ``jnp`` and
+    **JIT-compatible**: yes, the returned function uses ``jnp`` and
     monotone-cubic interpolation, which are JAX-native.
 
-    **Gradient-safe**: yes — node-exact PCHIP is C¹-differentiable.
+    **Gradient-safe**: yes, node-exact PCHIP is C¹-differentiable.
 
     **Interpolation kernel**: node-exact monotone cubic (PCHIP), matching the
     exact-wave-grid path (:mod:`tengri.components.agn.cat3d_wind`) so the
@@ -251,15 +251,15 @@ def precompute(
 
     Parameters
     ----------
-    filter_waves : list[ndarray]
+    filter_waves: list[ndarray]
         Wavelength grid per filter [Angstrom], observed frame.
-    filter_trans : list[ndarray]
+    filter_trans: list[ndarray]
         Transmission per filter (0–1).
-    redshift : float
+    redshift: float
         Source redshift. [dimensionless]
-    parameters : Parameters | None
+    parameters: Parameters | None
         Parameters spec, used to detect Fixed-axis parameters.
-    grid_path : str, keyword-only
+    grid_path: str, keyword-only
         Path to ``cat3d_wind_torus_grid.h5``.
 
     Returns
@@ -276,7 +276,7 @@ def precompute(
 
     Notes
     -----
-    **JIT-compatible**: no — this is a build-time function using NumPy.
+    **JIT-compatible**: no, this is a build-time function using NumPy.
     """
     result = precompute_cat3d_photometry(grid_path, filter_waves, filter_trans, redshift=redshift)
 
@@ -306,10 +306,10 @@ def build_lookup(preint: dict, *, free_param_names: tuple[str, ...] | None = Non
 
     Parameters
     ----------
-    preint : dict
+    preint: dict
         Preintegrated data dict with keys ``"grid_phot"``, ``"axes"``,
         and optionally ``"_collapsed_axes"`` and ``"_preint"``.
-    free_param_names : tuple of str or None, optional
+    free_param_names: tuple of str or None, optional
         Names of remaining free axes in the collapsed case.
         Not used in the default (no-collapse) case.
 
@@ -331,9 +331,9 @@ def build_lookup(preint: dict, *, free_param_names: tuple[str, ...] | None = Non
 
     Notes
     -----
-    **JIT-compatible**: yes — the returned function is fully JAX-native.
+    **JIT-compatible**: yes, the returned function is fully JAX-native.
 
-    **Gradient-safe**: yes — node-exact PCHIP is C¹-differentiable.
+    **Gradient-safe**: yes, node-exact PCHIP is C¹-differentiable.
     """
     if not preint.get("_collapsed_axes"):
         return build_cat3d_photometry_lookup(preint)

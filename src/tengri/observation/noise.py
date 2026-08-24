@@ -70,12 +70,12 @@ def compute_effective_noise(
 
     Parameters
     ----------
-    noise_obs : array, shape (n_bands,)
+    noise_obs: array, shape (n_bands,)
         Observed 1-sigma uncertainties [flux units].
-    model_flux : array, shape (n_bands,)
+    model_flux: array, shape (n_bands,)
         Model-predicted fluxes [flux units] (absolute value used for
         calibration term).
-    f_cal : float or array, shape (n_bands,)
+    f_cal: float or array, shape (n_bands,)
         Fractional calibration uncertainty [dimensionless].
         A scalar applies the same floor to all bands. An array applies
         a per-band floor; shape must match ``noise_obs`` and ``model_flux``.
@@ -88,7 +88,7 @@ def compute_effective_noise(
 
     Notes
     -----
-    **JIT-compatible**: yes — uses only jnp primitives.
+    **JIT-compatible**: yes, uses only jnp primitives.
 
     The calibration term ``f_cal * |model|`` adds a flux-dependent
     floor to the noise budget, preventing zero-noise solutions when
@@ -116,7 +116,7 @@ def compute_effective_noise(
 
     cal_noise = f_cal * jnp.abs(model_flux)
     # hypot, not sqrt(a**2 + b**2): flux uncertainties are ~1e-30, so their
-    # squares (~1e-60) underflow float32 to zero — sigma_eff collapses to 0 and
+    # squares (~1e-60) underflow float32 to zero, sigma_eff collapses to 0 and
     # the likelihood residual (data - pred)/sigma_eff becomes NaN. hypot factors
     # out the larger term, keeping the intermediate O(1). Identical in float64
     # to the last bit (#1206).
@@ -135,11 +135,11 @@ def compute_std_inv(
 
     Parameters
     ----------
-    noise_obs : array, shape (n_bands,)
+    noise_obs: array, shape (n_bands,)
         Observed 1-sigma uncertainties [flux units].
-    model_flux : array, shape (n_bands,)
+    model_flux: array, shape (n_bands,)
         Model-predicted fluxes [flux units].
-    f_cal : float or scalar array
+    f_cal: float or scalar array
         Fractional calibration uncertainty [dimensionless].
 
     Returns
@@ -149,7 +149,7 @@ def compute_std_inv(
 
     Notes
     -----
-    **JIT-compatible**: yes — delegates to :func:`compute_effective_noise`
+    **JIT-compatible**: yes, delegates to :func:`compute_effective_noise`
     which is pure JAX.
 
     Used in variable-covariance likelihoods where the noise is a traced
@@ -178,7 +178,7 @@ def has_noise_model(spec) -> bool:
 
     Parameters
     ----------
-    spec : Parameters
+    spec: Parameters
         Parameter specification.
 
     Returns
@@ -223,7 +223,7 @@ def get_noise_dof(spec) -> float | None:
 
     Parameters
     ----------
-    spec : Parameters
+    spec: Parameters
         Parameter specification.
 
     Returns
@@ -249,7 +249,7 @@ def get_noise_dof(spec) -> float | None:
     dist = spec.get_distribution("noise_dof")
     if isinstance(dist, Fixed):
         return dist.value
-    # noise_dof is free — return None to signal it's in the latent vector
+    # noise_dof is free, return None to signal it's in the latent vector
     return None
 
 
@@ -260,7 +260,7 @@ def uses_student_t(spec) -> bool:
 
     Parameters
     ----------
-    spec : Parameters
+    spec: Parameters
         Parameter specification.
 
     Returns
@@ -324,20 +324,20 @@ def censored_neg_log_likelihood(
 
     Parameters
     ----------
-    data : array, shape (n_bands,)
+    data: array, shape (n_bands,)
         Observed fluxes [flux units]. For censored bands, this holds the
         limit value.
-    noise_obs : array, shape (n_bands,)
+    noise_obs: array, shape (n_bands,)
         Observed 1-sigma uncertainties [flux units].
-    predicted : array, shape (n_bands,)
+    predicted: array, shape (n_bands,)
         Model-predicted fluxes [flux units].
-    mask : array, shape (n_bands,)
+    mask: array, shape (n_bands,)
         Per-band type: 0 = detected, 1 = upper limit, -1 = lower limit
         [dimensionless].
-    f_cal : float or scalar array
+    f_cal: float or scalar array
         Fractional calibration uncertainty (applied to detected bands
         only) [dimensionless]. Default 0.0.
-    dof : float or None
+    dof: float or None
         Student-t degrees of freedom for detected bands. None = Gaussian
         (default).
 
@@ -349,7 +349,7 @@ def censored_neg_log_likelihood(
 
     Notes
     -----
-    **JIT-compatible**: yes — uses ``jnp.where`` dispatch (no Python
+    **JIT-compatible**: yes, uses ``jnp.where`` dispatch (no Python
     control flow). Differentiable w.r.t. predicted fluxes and f_cal.
 
     **Censoring model**:
@@ -414,15 +414,15 @@ def variable_noise_hamiltonian(
 
     Parameters
     ----------
-    data : array, shape (n_bands,)
+    data: array, shape (n_bands,)
         Observed fluxes [flux units].
-    noise_obs : array, shape (n_bands,)
+    noise_obs: array, shape (n_bands,)
         Observed 1-sigma uncertainties [flux units].
-    predicted : array, shape (n_bands,)
+    predicted: array, shape (n_bands,)
         Model-predicted fluxes [flux units].
-    f_cal : float or scalar array
+    f_cal: float or scalar array
         Fractional calibration uncertainty [dimensionless].
-    dof : float or None
+    dof: float or None
         Student-t degrees of freedom. None = Gaussian (default).
         Typical values: 2 (heavy tails, Alsing+2022), 4 (moderate).
 
@@ -434,7 +434,7 @@ def variable_noise_hamiltonian(
 
     Notes
     -----
-    **JIT-compatible**: yes — uses only jnp primitives.
+    **JIT-compatible**: yes, uses only jnp primitives.
 
     The log-determinant term ``Σ log(σ_eff)`` is crucial: it prevents
     the trivial solution σ → ∞ and makes the likelihood fully specified.
@@ -487,17 +487,17 @@ def variable_noise_metric_vec(
 
     Parameters
     ----------
-    xi : array, shape (n_latent,)
+    xi: array, shape (n_latent,)
         Flattened latent parameters.
-    v : array, shape (n_latent,)
+    v: array, shape (n_latent,)
         Vector to multiply.
-    signal_noise_fn : callable
+    signal_noise_fn: callable
         Maps primals dict → (predicted, std_inv) tuple.
-    data : array, shape (n_bands,)
+    data: array, shape (n_bands,)
         Observed data.
-    unflatten : callable
+    unflatten: callable
         xi flat array → dict.
-    flatten : callable
+    flatten: callable
         dict → xi flat array.
 
     Returns
@@ -507,9 +507,9 @@ def variable_noise_metric_vec(
 
     Notes
     -----
-    **JIT-compatible**: yes — uses only jax primitives (jax.jvp, jax.vjp).
+    **JIT-compatible**: yes, uses only jax primitives (jax.jvp, jax.vjp).
 
-    **Gradient-safe**: yes — differentiable w.r.t. data and model parameters.
+    **Gradient-safe**: yes, differentiable w.r.t. data and model parameters.
 
     Implements the metric-vector product for the Gauss-Newton approximation
     of the variational Hessian, used in information field theory inference.
@@ -522,11 +522,11 @@ def variable_noise_metric_vec(
     # Forward + JVP: get outputs and directional derivatives
     (f, tau), (Jv_f, Jv_tau) = jax.jvp(signal_noise_fn, (xi_d,), (v_d,))
 
-    # Hessian blocks of E(f, τ) — all diagonal in data space.
+    # Hessian blocks of E(f, τ), all diagonal in data space.
     #
     # Applied in factored form (#1617). Written directly, two of the four blocks
     # are destroyed in float32 at a real photometric sigma, in opposite
-    # directions — measured, not inferred:
+    # directions, measured, not inferred:
     #
     #     H_ff = tau**2               1.111e+59  ->  inf
     #     H_tt = r**2 + 1/tau**2      3.611e-56  ->  0.0   (both terms underflow)
@@ -539,8 +539,8 @@ def variable_noise_metric_vec(
     #     H_ff Jv_f    = tau**2 Jv_f          = (Jv_f/sigma)/sigma,  sigma = 1/tau
     #     H_tt Jv_tau  = ((r tau)**2 + 1) Jv_tau / tau**2
     #
-    # ``r_std = residual * tau`` is the standardized residual — O(1) by
-    # construction — so neither underflowing term is ever formed. ``whiten``
+    # ``r_std = residual * tau`` is the standardized residual, O(1) by
+    # construction, so neither underflowing term is ever formed. ``whiten``
     # carries the optimization_barrier that stops XLA re-associating the pairs
     # back into the overflowing square (#1535/#1588).
     residual = data - f
@@ -579,19 +579,19 @@ def exp_squared_kernel(
 
     Parameters
     ----------
-    x : array, shape (n,)
+    x: array, shape (n,)
         Coordinate values [Angstrom] (or any real-valued coordinate).
-    amplitude : float or scalar array
+    amplitude: float or scalar array
         Kernel amplitude :math:`\sigma`. Controls overall variance.
-    length_scale : float or scalar array
+    length_scale: float or scalar array
         Kernel length scale :math:`\ell`. Controls correlation length.
-    x2 : array, shape (m,), optional
+    x2: array, shape (m,), optional
         Second set of coordinates for cross-covariance. If None,
         computes auto-covariance (x vs x).
 
     Returns
     -------
-    K : ndarray, shape (n, n) or (n, m)
+    K: ndarray, shape (n, n) or (n, m)
         Covariance matrix. If x2 is None, returns symmetric (n, n)
         auto-covariance; otherwise returns (n, m) cross-covariance.
 
@@ -629,26 +629,26 @@ def matern32_kernel(
 ) -> jnp.ndarray:
     r"""Matérn 3/2 covariance kernel.
 
-    Once-differentiable GP kernel — smoother than the exponential kernel,
+    Once-differentiable GP kernel, smoother than the exponential kernel,
     rougher than squared-exponential. A good default for correlated spectral
     noise where the autocorrelation length is finite but the residuals are
     not infinitely smooth.
 
     Parameters
     ----------
-    x : array, shape (n,)
+    x: array, shape (n,)
         Coordinate values [Angstrom] (or any real coordinate).
-    amplitude : float or scalar array
+    amplitude: float or scalar array
         Kernel amplitude :math:`\sigma`.
-    length_scale : float or scalar array
+    length_scale: float or scalar array
         Correlation length :math:`\ell`.
-    x2 : array, shape (m,), optional
+    x2: array, shape (m,), optional
         Second set of coordinates for cross-covariance. Defaults to ``x``
         (auto-covariance).
 
     Returns
     -------
-    K : ndarray, shape (n, n) or (n, m)
+    K: ndarray, shape (n, n) or (n, m)
 
     Notes
     -----
@@ -689,20 +689,20 @@ def gp_noise_covariance(
 
     Parameters
     ----------
-    wavelength : array, shape (n_wave,)
+    wavelength: array, shape (n_wave,)
         Wavelengths [Angstrom].
-    noise_obs : array, shape (n_wave,)
+    noise_obs: array, shape (n_wave,)
         Observed 1-sigma uncertainties [same units as flux].
-    gp_amplitude : float or scalar array
+    gp_amplitude: float or scalar array
         GP kernel amplitude. Dimensionless scaling of kernel.
-    gp_length_scale : float or scalar array
+    gp_length_scale: float or scalar array
         GP kernel length scale [Angstrom].
-    kernel : str, optional
+    kernel: str, optional
         Kernel type: "exp_squared" (default) or "matern32".
 
     Returns
     -------
-    N : ndarray, shape (n_wave, n_wave)
+    N: ndarray, shape (n_wave, n_wave)
         Covariance matrix :math:`N = \text{diag}(\sigma_{\text{obs}}^2) + K_{\text{gp}}`.
 
     Notes
@@ -762,11 +762,11 @@ def apply_zp_floor(
 
     Parameters
     ----------
-    flux : array_like, shape (n_bands,)
+    flux: array_like, shape (n_bands,)
         Observed flux density per band. [erg/s/cm^2/Hz]
-    noise : array_like, shape (n_bands,)
+    noise: array_like, shape (n_bands,)
         Statistical 1-sigma noise per band. Same units as ``flux``.
-    floor : float or array_like, shape (n_bands,)
+    floor: float or array_like, shape (n_bands,)
         Fractional ZP floor (e.g. ``0.02`` for 2%). Scalar applies
         the same floor to all bands; array gives per-band values.
         Must be non-negative.
@@ -784,7 +784,7 @@ def apply_zp_floor(
 
     Notes
     -----
-    **JIT-compatible**: yes — pure ``jnp`` arithmetic.
+    **JIT-compatible**: yes, pure ``jnp`` arithmetic.
 
     Caps the achievable per-band SNR at :math:`1/f_{\rm floor}` (e.g.
     a 2% floor caps SNR at 50). Uses ``|F|`` so non-detections with
@@ -848,28 +848,28 @@ class PoissonNoiseLikelihood:
 
     Parameters
     ----------
-    gain : float
+    gain: float
         CCD gain in electrons per ADU [e⁻/ADU]. Default 1.0 (pure Poisson
         in ADU counts).
-    sky_var : float
+    sky_var: float
         Background (sky + dark) variance in count space [counts²].
         Default 0.0.
-    read_noise : float
+    read_noise: float
         Read noise standard deviation in electrons [e⁻]. Default 0.0.
-    systematic_floor : float
+    systematic_floor: float
         Fractional flux-dependent systematic uncertainty added in quadrature
         [dimensionless]. Typical range: 0.01–0.05. Default 0.0.
 
     Attributes
     ----------
-    gain : float
-    sky_var : float
-    read_noise : float
-    systematic_floor : float
+    gain: float
+    sky_var: float
+    read_noise: float
+    systematic_floor: float
 
     Notes
     -----
-    **JIT-compatible**: yes — pure JAX, differentiable w.r.t. predicted flux.
+    **JIT-compatible**: yes, pure JAX, differentiable w.r.t. predicted flux.
 
     For source counts F (in detected photons), the effective Gaussian
     variance is:
@@ -903,20 +903,20 @@ class PoissonNoiseLikelihood:
 
         Parameters
         ----------
-        observed : array, shape (n_data,)
+        observed: array, shape (n_data,)
             Observed flux or counts [counts or flux units, depending on gain].
-        predicted : array, shape (n_data,)
+        predicted: array, shape (n_data,)
             Model-predicted flux [same units as observed].
 
         Returns
         -------
-        log_prob : array, shape (n_data,)
+        log_prob: array, shape (n_data,)
             Per-datum log-likelihood (likelihood, not log-likelihood energy).
             Caller is responsible for summing and negating for energy.
 
         Notes
         -----
-        **JIT-compatible**: yes — pure ``jnp`` arithmetic.
+        **JIT-compatible**: yes, pure ``jnp`` arithmetic.
 
         Computes log(p(obs | pred)) under Gaussian approximation to Poisson.
         Avoids singularities by clamping predicted flux to ≥ eps internally.
@@ -967,18 +967,18 @@ class StudentTLikelihood:
 
     Parameters
     ----------
-    dof : float
+    dof: float
         Degrees of freedom ν [dimensionless]. Default 4.0. Smaller values
         give heavier tails; ν=1 is Cauchy. Typical range: [1, 30].
 
     Attributes
     ----------
-    dof : float
+    dof: float
         Degrees of freedom.
 
     Notes
     -----
-    **JIT-compatible**: yes — uses ``jax.scipy.stats.t.logpdf``.
+    **JIT-compatible**: yes, uses ``jax.scipy.stats.t.logpdf``.
 
     The log-likelihood per data point is:
 
@@ -990,7 +990,7 @@ class StudentTLikelihood:
     where :math:`T_\nu` is the Student-t PDF with :math:`\nu` degrees of freedom.
 
     The residual scale σ should be supplied by the caller; this class does
-    not manage observational uncertainties — use a noise model (e.g.
+    not manage observational uncertainties, use a noise model (e.g.
     ``compute_effective_noise``) to construct σ from data.
 
     References
@@ -1014,23 +1014,23 @@ class StudentTLikelihood:
 
         Parameters
         ----------
-        observed : array, shape (n_data,)
+        observed: array, shape (n_data,)
             Observed values [arbitrary units].
-        predicted : array, shape (n_data,)
+        predicted: array, shape (n_data,)
             Model-predicted values [same units as observed].
-        sigma : array, shape (n_data,)
+        sigma: array, shape (n_data,)
             Noise standard deviation per datum [same units as observed].
             Typically computed via ``compute_effective_noise(...)`` or
             similar noise model.
 
         Returns
         -------
-        log_prob : array, shape (n_data,)
+        log_prob: array, shape (n_data,)
             Per-datum log-likelihood. Caller sums for total likelihood.
 
         Notes
         -----
-        **JIT-compatible**: yes — delegates to
+        **JIT-compatible**: yes, delegates to
         ``jax.scipy.stats.t.logpdf``.
 
         Avoids numerical instability by clamping σ to ≥ eps internally.

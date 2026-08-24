@@ -108,7 +108,7 @@ def get_line_wavelengths(group: str | list[str]) -> jnp.ndarray:
 
     Parameters
     ----------
-    group : str or list of str
+    group: str or list of str
         Named group (e.g. ``"bpt"``, ``"optical_narrow"``) or list of
         line names (e.g. ``["Halpha", "OIII_5007"]``).
 

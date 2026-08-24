@@ -8,13 +8,13 @@ Dispatches to any registered AGN model (``"multicolor_agn"``,
 
 Cross-component reads
 ---------------------
-Nothing required — AGN is a self-contained additive emitter. ``redshift``
+Nothing required; AGN is a self-contained additive emitter. ``redshift``
 is read from :data:`BARE_NAME_ALLOWLIST`.
 
 Cross-component publications
 ----------------------------
 
-- ``state.derived["L_agn_bol"]`` (scalar, erg/s) — bolometric AGN
+- ``state.derived["L_agn_bol"]`` (scalar, erg/s): bolometric AGN
   luminosity. Consumed by
   :class:`tengri.components.xray.component.XRaySEDComponent` and
   :class:`tengri.components.radio.component.RadioSEDComponent` via their
@@ -25,7 +25,7 @@ Cross-component publications
 Architectural notes
 -------------------
 ``agn_torus_frac`` is **never** auto-derived from ``agn_cos_inc`` /
-``theta_torus`` (CLAUDE.md gotcha — gradient discontinuity). It is
+``theta_torus`` (CLAUDE.md gotcha: gradient discontinuity). It is
 read directly from ``params`` as an independent free parameter.
 """
 
@@ -76,7 +76,7 @@ _AGN_LBOL_REF: float = 10.0 - _LOG10_L_SUN
 #: L_bol-dependent shape) and ``powerlaw`` / ``richards2006`` / ``skirtor`` /
 #: ``qsogen`` / ``schartmann2005`` / ``adaf_lopez2024`` (shape-invariant).
 #: ``grahsp_sbpl`` is blocked on a linear erg/s *parameter* (``agn_grahsp_l5100``
-#: is ``inf`` in float32), not a kernel overflow — it needs a log-space parameter.
+#: is ``inf`` in float32), not a kernel overflow: it needs a log-space parameter.
 _NON_FLOAT32_SAFE_DISCS: frozenset[str] = frozenset({"grahsp_sbpl"})
 
 
@@ -97,9 +97,9 @@ class AGNSEDComponentConfig(SEDComponentConfig):
 
     Parameters
     ----------
-    name : str
+    name: str
         Diagnostic identifier. Default ``"agn"``.
-    model : str
+    model: str
         AGN model registry key. One of ``"multicolor_agn"`` (Kubota & Done
         outer-zone disc + 2-T torus), ``"kubota_done_full"`` (full 3-zone
         disc), ``"adaf"``, ``"unified_nlr_blr"``, ``"skirtor"``,
@@ -107,21 +107,21 @@ class AGNSEDComponentConfig(SEDComponentConfig):
         ``"composable"`` (block-composed via the selectors below).
         Default ``"multicolor_agn"``.
     agn_disc_block, agn_nlr_block, agn_blr_block, agn_feii_block,
-    agn_torus_block, agn_attenuation_block : str
+    agn_torus_block, agn_attenuation_block: str
         Composable-AGN block selectors. Only consulted when
-        ``model == "composable"`` — the runner reads them from this config
+        ``model == "composable"``, the runner reads them from this config
         (they are static strings, not traced JAX values, so they cannot
         ride in ``params``). Each defaults to ``"none"`` so non-composable
         AGN models receive harmless no-op selectors that the underlying
         registry function absorbs via ``**kwargs``.
-    agn_norm : str
+    agn_norm: str
         Cross-block normalization policy (#556). ``"cigale_joint"``
         (default) ties the disc, torus and polar to CIGALE's single
         ``agn_power`` reference via the fixed SKIRTOR template ratios
         (energy-conserving; only active for ``agn_torus_block="skirtor"`` +
         ``agn_ir_frac>0``). ``"independent"`` keeps each component on its own
         luminosity scale (disc on ``agn_log_lbol``, torus on ``agn_power``,
-        polar via the legacy face-on proxy) — the GRAHSP/AGNfitter-style
+        polar via the legacy face-on proxy), the GRAHSP/AGNfitter-style
         bookkeeping. A static string, read by the runner like the block
         selectors.
     """
@@ -166,7 +166,7 @@ class AGNSEDComponent(TemplateThreading):
 
     Notes
     -----
-    **JIT-compatible**: yes — :meth:`apply` delegates to a registered
+    **JIT-compatible**: yes, :meth:`apply` delegates to a registered
     AGN function which is pure JAX.
     **Additive**: writes ``sed_intrinsic = sed_intrinsic + L_AGN(λ)``,
     matching the convention used by :class:`RadioSEDComponent` and
@@ -228,7 +228,7 @@ class AGNSEDComponent(TemplateThreading):
             DerivedKey(
                 "agn_cos_inc",
                 "dimensionless",
-                "AGN cos(i) — the X-ray corona tilts its Yang+2022 anisotropy "
+                "AGN cos(i), the X-ray corona tilts its Yang+2022 anisotropy "
                 "to the same sightline (X-CIGALE yang20.py cosi; #980)",
             ),
         )
@@ -251,14 +251,14 @@ class AGNSEDComponent(TemplateThreading):
 
         Parameters
         ----------
-        ssp_data : Any | None
+        ssp_data: Any | None
             Unused; accepted for Protocol uniformity.
-        wave_grid : ndarray | None
+        wave_grid: ndarray | None
             Unused; accepted for Protocol uniformity.
-        approx : Mapping[str, bool] | None
+        approx: Mapping[str, bool] | None
             Approximation flags. When ``approx.get('wave_precomp')``
             is ``True``, cache templates and filters.
-        filters : tuple of (wave, trans) pairs | None
+        filters: tuple of (wave, trans) pairs | None
             Filter wavelengths and transmissions to cache.
 
         Returns
@@ -285,7 +285,7 @@ class AGNSEDComponent(TemplateThreading):
                 from tengri.components.agn.skirtor import _load_skirtor_default_grid
 
                 # Store the template ARRAYS (a SKIRTORGrid pytree), not the
-                # interpolation closure — arrays thread through jax.jit as a
+                # interpolation closure: arrays thread through jax.jit as a
                 # runtime input; a closure cannot (#1198).
                 skirtor_templates = _load_skirtor_default_grid()
             except Exception:
@@ -337,12 +337,12 @@ class AGNSEDComponent(TemplateThreading):
 
         Parameters
         ----------
-        state : ForwardState
+        state: ForwardState
             Must carry rest-frame ``wave`` (Å). If ``sed_intrinsic`` is
             ``None`` it is initialized to zeros of the same shape.
-        params : mapping
+        params: mapping
             Receives ``agn_*`` keys plus the bare ``redshift``.
-        template_data : dict | None
+        template_data: dict | None
             Nested dict with component namespaces ("nebular", "agn", etc)
             carrying template grids/weights for JIT threading. When present,
             SKIRTOR templates are read from ``template_data["agn"]["skirtor"]``
@@ -491,18 +491,18 @@ class AGNSEDComponent(TemplateThreading):
         # 1e10 erg/s, comfortably in range) and re-apply the
         # ``10^(agn_log_lbol − _AGN_LBOL_REF)`` scale in log space via
         # apply_log10_scale. That output factoring is EXACT for shape-invariant
-        # blocks — the SKIRTOR torus template and the power-law disc scale
-        # linearly with L_bol — and, since the ``agn_log_lbol_shape`` hand-off
+        # blocks, the SKIRTOR torus template and the power-law disc scale
+        # linearly with L_bol: and, since the ``agn_log_lbol_shape`` hand-off
         # below, exact for the multicolor disc too: the true L_bol drives the
         # temperature and geometry while only the MAGNITUDE is factored, and the
         # magnitude is linear by construction. Measured in float64, where float32
         # round-off cannot mask a shape error: max relative deviation from a
         # direct evaluation at the true L_bol is 2.2e-16 (one ulp) at
         # log L_bol = 11-14. Without the shape hand-off the same comparison is
-        # off by 100% at log L_bol = 11 and 3685% at 14 — that is what this
+        # off by 100% at log L_bol = 11 and 3685% at 14, that is what this
         # comment used to describe. In **float64** we evaluate at the true
         # ``agn_log_lbol`` and
-        # publish the block outputs unchanged — the reference implementation,
+        # publish the block outputs unchanged, the reference implementation,
         # bit-for-bit identical to pre-#1206 main for every disc type.
         from tengri.utils.scale import apply_log10_scale
 
@@ -513,10 +513,10 @@ class AGNSEDComponent(TemplateThreading):
             warnings.warn(
                 f"AGN disc_block={self.config.agn_disc_block!r} is not float32-safe "
                 "(#1206): it returns NaN/inf in pure float32 (JAX-Metal). "
-                "For float32 use a supported disc — "
+                "For float32 use a supported disc: "
                 "'multicolor', 'kubota_done', 'adaf' (physical), or 'powerlaw' / "
                 "'richards2006' / 'skirtor' / 'qsogen' / 'schartmann2005' "
-                "(shape-invariant) — or run in float64. See "
+                "(shape-invariant), or run in float64. See "
                 "docs/dev/float32-tier-b-boundary.md §8.",
                 Float32UnsafeAGNWarning,
                 stacklevel=2,
@@ -530,8 +530,8 @@ class AGNSEDComponent(TemplateThreading):
             # Multicolor-disc shape depends on L_bol (temperature), so evaluating
             # the whole runner at the reference L_bol would give the WRONG disc
             # shape. Hand the disc its TRUE L_bol for the temperature/geometry
-            # (``agn_log_lbol_shape``) while everything else — including the disc's
-            # output MAGNITUDE — stays on the reference so the runner's L_lambda
+            # (``agn_log_lbol_shape``) while everything else: including the disc's
+            # output MAGNITUDE: stays on the reference so the runner's L_lambda
             # arithmetic stays in float32 range. Shape-invariant blocks (torus
             # template, power-law disc) ignore the kwarg. The disc's internals are
             # float32-hardened (log-space) so the true-L_bol temperature computes
@@ -593,7 +593,7 @@ class AGNSEDComponent(TemplateThreading):
             # ``compute_flux_density(..., dl_cm=1) × inv_cosmology`` dance
             # that applied and immediately undid the (1+z)/(4π d_L²)
             # dimming. The new helper returns the bare filter-integrated
-            # rest-frame L_ν — matching the publish convention of
+            # rest-frame L_ν: matching the publish convention of
             # ``stellar_phot_lnu_precomp``.
             agn_phot_lnu_precomp = jnp.asarray(
                 [
@@ -608,7 +608,7 @@ class AGNSEDComponent(TemplateThreading):
             derived_overrides["agn_phot_lnu_precomp"] = agn_phot_lnu_precomp
             # The REST band (#1148). ``phot_rest_fnu`` is the SED reprojected at
             # z=0, so the filter sits in the REST frame and samples the rest SED at
-            # its own pivot — the SAME integral with redshift=0, not the observed-band
+            # its own pivot, the SAME integral with redshift=0, not the observed-band
             # value reused. Reusing it is what made the LUT report a different
             # physical quantity from the exact path (769 % in des_g at z=0.5).
             derived_overrides["agn_restband_lnu_precomp"] = jnp.asarray(
@@ -627,7 +627,7 @@ class AGNSEDComponent(TemplateThreading):
         # wavelengths is exact (mirrors radio/X-ray ``_emit(spec_eff)`` and the
         # dust-IR ``jnp.interp`` projection). Without this, ``predict_spectrum``
         # under ``approx=SpectrumPrecomp()`` silently dropped the AGN
-        # contribution — ``predict_spectrum_via_precomp`` only sums the
+        # contribution: ``predict_spectrum_via_precomp`` only sums the
         # ``*_spec_lnu_precomp`` families that components actually publish, and
         # AGN previously published only the photometry family.
         spec_eff = state.derived.get("spec_eff_waves")
@@ -641,8 +641,8 @@ class AGNSEDComponent(TemplateThreading):
 
 # Register in the unified component dispatch table so build_components resolves
 # the AGN component via _resolve_registry_component (single dispatch, #846)
-# instead of importing the class directly. AGN is a composite — its config
-# selects the disc/torus/nlr/blr/feii/atten sub-blocks (ADR-0018) — but its
+# instead of importing the class directly. AGN is a composite: its config
+# selects the disc/torus/nlr/blr/feii/atten sub-blocks (ADR-0018), but its
 # top-level dispatch is a single registered component, exactly like the other
 # composite domain (nebular).
 from tengri.components.sed_model_component import _REGISTRY

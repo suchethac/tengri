@@ -6,7 +6,7 @@ Wraps the pure closure from :mod:`tengri.components.dust.emission`.
 Without this class the grammar type ``dh02_ce01`` resolved on the exploration
 path (``model.predict``, which dispatches through the legacy
 ``DUST_EMISSION_MODELS`` dict) and raised on the inference path
-(``model.predict_photometry``, which resolves the ``_REGISTRY`` component) —
+(``model.predict_photometry``, which resolves the ``_REGISTRY`` component):
 so an advertised model could be looked at but never fitted (#1777).
 """
 
@@ -44,14 +44,14 @@ class DH02CE01IRSEDComponent(EmissionComponent):
     grid axis is :math:`L_{\rm TIR}`, "derived from L_absorbed by energy
     balance rather than set by the user, so no prior can overhang it". The
     closure's ``dust_log_lir`` therefore keeps its own default of 10.0, exactly
-    as the legacy dispatch has always called it — enabling the registry path
+    as the legacy dispatch has always called it: enabling the registry path
     changes no number.
 
     Notes
     -----
-    **JIT-compatible**: yes — all operations are ``jnp`` primitives.
+    **JIT-compatible**: yes, all operations are ``jnp`` primitives.
 
-    **Gradient-safe**: yes — differentiable via linear interpolation.
+    **Gradient-safe**: yes, differentiable via linear interpolation.
 
     **Known limitation, not introduced here**: the *shape* selected is
     always the :math:`\log_{10}(L_{\rm IR}/L_\odot) = 10` template, because the
@@ -105,12 +105,12 @@ class DH02CE01IRSEDComponent(EmissionComponent):
         -------
         dict or None
             Template arrays from :func:`load_dh02_ce01_lnu_grid`, or ``None``
-            when the HDF5 file is absent — the backend then falls back to its
+            when the HDF5 file is absent: the backend then falls back to its
             module-level load.
 
         Notes
         -----
-        **JIT-compatible**: no, deliberately — runs at build time.
+        **JIT-compatible**: no, deliberately: runs at build time.
         """
         del wave
         from tengri._data_setup import find_data_str
@@ -132,17 +132,17 @@ class DH02CE01IRSEDComponent(EmissionComponent):
 
         Parameters
         ----------
-        p : dict
-            Parameters with the ``dust_`` prefix stripped. Empty — this model
+        p: dict
+            Parameters with the ``dust_`` prefix stripped. Empty: this model
             declares none; see the class Notes.
-        sed_in : array_like, shape (n_wave,)
+        sed_in: array_like, shape (n_wave,)
             SED from upstream [erg/s/Hz]; zeros when this is the first
             emission component.
-        wave : array_like, shape (n_wave,)
+        wave: array_like, shape (n_wave,)
             Rest-frame wavelength grid [Angstrom].
-        L_ir : float
+        L_ir: float
             Dust-absorbed luminosity to re-radiate [erg/s].
-        templates : dict, optional
+        templates: dict, optional
             Grid threaded in as a traced argument. When ``None`` the
             module-level lazy loader is used, which captures the library as a
             compile-time constant (1.32 MB, #1649).
@@ -150,7 +150,7 @@ class DH02CE01IRSEDComponent(EmissionComponent):
         Returns
         -------
         tuple of (ndarray, dict)
-            ``(sed_out, published)`` — ``sed_out`` has shape ``(n_wave,)``
+            ``(sed_out, published)``: ``sed_out`` has shape ``(n_wave,)``
             [erg/s/Hz], and ``published`` carries ``"sed_dust_ir"`` [erg/s/Hz].
 
         Notes

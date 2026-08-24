@@ -29,7 +29,7 @@ def curated_dir(names: Sequence[str]) -> Callable[[], list[str]]:
 
     Parameters
     ----------
-    names : sequence of str
+    names: sequence of str
         The names to offer. Usually the module's own ``__all__``; two modules
         pass a wider ``_CURATED_DIR`` tuple because they re-export more than
         they advertise for ``import *``. Held by reference, so a module that

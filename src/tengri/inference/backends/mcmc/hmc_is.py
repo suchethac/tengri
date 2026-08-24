@@ -210,7 +210,7 @@ def _is_log_evidence(
     by n_draws. The error estimate uses the delta method:
     log_z_err ≈ std(log w) / (mean(log w) * sqrt(n_draws)).
 
-    Chunking does not affect the result for a given key — all n_draws are
+    Chunking does not affect the result for a given key; all n_draws are
     sampled upfront, then evaluated in batches.
     """
     mu = proposal.mean
@@ -382,7 +382,7 @@ def run_hmc_is(
     **Warning diagnostics**: If the effective sample size (ESS) is < 500
     or the maximum weight fraction is > 0.1, a warning is printed and the
     diagnostics include a quality flag. This indicates the proposal may
-    have missed posterior mass (e.g., multimodality) — increase n_is_draws
+    have missed posterior mass (e.g., multimodality); increase n_is_draws
     or proposal_inflation, or fall back to method='nss'.
 
     **Chunking**: Importance sampling samples are drawn all at once (with
@@ -445,7 +445,7 @@ def run_hmc_is(
         samples_xi[name] = xi
 
     # Flatten to (n_samples, D); column order follows free_names, matching
-    # _unflatten_xi below (scalar parameters only — the D ≲ 30 parametric scope).
+    # _unflatten_xi below (scalar parameters only, the D ≲ 30 parametric scope).
     n_samples_chain = next(iter(samples_xi.values())).shape[0]
     chain_flat = np.column_stack(
         [np.asarray(samples_xi[name]).reshape(n_samples_chain, -1) for name in free_names]
@@ -455,8 +455,8 @@ def run_hmc_is(
 
     # Drop non-finite rows before fitting the proposal. A physical sample that
     # lands exactly on a prior bound standardizes to ±inf (Phi^{-1} at 0 or 1),
-    # and a single such row turns the chain mean/covariance — and every
-    # downstream quantity, log Z included — into NaN.
+    # and a single such row turns the chain mean/covariance (and every
+    # downstream quantity, log Z included) into NaN.
     finite_rows = np.isfinite(chain_flat).all(axis=1)
     n_nonfinite = int((~finite_rows).sum())
     if n_nonfinite:

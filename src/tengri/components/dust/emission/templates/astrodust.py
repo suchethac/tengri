@@ -11,7 +11,7 @@ balance).
 
 This is the sole ``astrodust`` model.  The earlier registry entry parameterized
 astrodust with the Draine & Li (2007) ``(umin, gamma, qpah)`` knob-set by
-translating the HD23 grid into a synthetic ``(umin, qpah)`` table — but that
+translating the HD23 grid into a synthetic ``(umin, qpah)`` table: but that
 grid has no ``qpah`` axis (``dust_qpah`` was a silent no-op) and no ``umin``
 axis (``umin`` was merely ``10**lgU``).  The faithful ``lgU`` parameterization
 below replaces it (see :ref:`the migration note <#871>`).
@@ -72,20 +72,20 @@ class AstrodustIRConfig(SEDComponentConfig):
 
     Attributes
     ----------
-    name : str
+    name: str
         Diagnostic identifier. Default ``"astrodust"``.
-    component : {"total", "astrodust", "pah"}
+    component: {"total", "astrodust", "pah"}
         Which published emission column to re-radiate: the full thermal
         spectrum (``"total"`` = astrodust grains + PAHs), the astrodust-grain
         contribution only, or the PAH contribution only. Default ``"total"``.
-    spinning_dust : bool
+    spinning_dust: bool
         Add the (``lgU``-independent) spinning-dust microwave emission on top
         of the thermal template. Default ``False``.
-    f_cnm : float
+    f_cnm: float
         Cold-neutral-medium filling fraction used to mix the CNM/WNM
         spinning-dust spectra when ``spinning_dust=True``. Must lie in
         ``[0, 1]``. Default ``0.28`` (the published fiducial).
-    template_path : str or None
+    template_path: str or None
         Override path to the Astrodust+PAH HDF5 grid. When ``None``, resolves
         the ``TENGRI_ASTRODUST_PATH`` env var, then the bundled
         ``data/astrodust_templates.h5``. Default ``None``.
@@ -108,11 +108,11 @@ class AstrodustIRSEDComponent(EmissionComponent):
 
     Attributes
     ----------
-    name : str
+    name: str
         Registry key: ``"astrodust"``.
-    parameter_prefix : str
+    parameter_prefix: str
         Domain prefix for parameters: ``"dust_"`` (inherited).
-    config : AstrodustIRConfig
+    config: AstrodustIRConfig
         Frozen configuration (emission column, spinning-dust toggle, path).
 
     Notes
@@ -175,7 +175,7 @@ class AstrodustIRSEDComponent(EmissionComponent):
 
         Parameters
         ----------
-        templates : AstrodustHD23Templates
+        templates: AstrodustHD23Templates
             Loaded grid container.
 
         Returns
@@ -205,7 +205,7 @@ class AstrodustIRSEDComponent(EmissionComponent):
 
         Parameters
         ----------
-        templates : AstrodustHD23Templates
+        templates: AstrodustHD23Templates
             Loaded grid container.
 
         Returns
@@ -246,7 +246,7 @@ class AstrodustIRSEDComponent(EmissionComponent):
 
         Parameters
         ----------
-        wave : ndarray, shape ``(n_wave,)``, optional
+        wave: ndarray, shape ``(n_wave,)``, optional
             Rest-frame wavelength grid in Angstrom. When ``None``, the
             component skips (returns ``None``).
 
@@ -260,7 +260,7 @@ class AstrodustIRSEDComponent(EmissionComponent):
         ------
         FileNotFoundError
             When the resolved grid path does not exist on disk. Astrodust
-            carries no analytic fallback — the published templates are
+            carries no analytic fallback: the published templates are
             required for physically meaningful predictions.
         """
         if wave is None:
@@ -271,7 +271,7 @@ class AstrodustIRSEDComponent(EmissionComponent):
             )
             return None
 
-        # Missing grid raises loudly (no silent zeros — analytic fallbacks are
+        # Missing grid raises loudly (no silent zeros: analytic fallbacks are
         # not suitable for science). The raw grid is process-cached (concrete).
         templates = _cached_astrodust_grid(self.config.template_path)
 
@@ -326,14 +326,14 @@ class AstrodustIRSEDComponent(EmissionComponent):
 
         Parameters
         ----------
-        p : mapping[str, ndarray]
+        p: mapping[str, ndarray]
             Sliced parameters (prefix stripped): ``p["lgU"]`` [dex].
-        sed_in : ndarray, shape ``(n_wave,)``
+        sed_in: ndarray, shape ``(n_wave,)``
             Input SED [erg/s/Hz] (emission is added to it).
-        wave : ndarray, shape ``(n_wave,)``
+        wave: ndarray, shape ``(n_wave,)``
             Rest-frame wavelength grid [Angstrom].
-        **inputs : ndarray
-            ``L_ir`` — dust-absorbed luminosity [erg/s].
+        **inputs: ndarray
+            ``L_ir``: dust-absorbed luminosity [erg/s].
 
         Returns
         -------

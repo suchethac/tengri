@@ -22,19 +22,19 @@ class InterimResult(NamedTuple):
 
     Attributes
     ----------
-    fields : ndarray, shape (N, K, n)
+    fields: ndarray, shape (N, K, n)
         Centered field samples [natural-log units] from the interim posterior.
-    times_yr : ndarray, shape (n,)
+    times_yr: ndarray, shape (n,)
         Physical times [yr] of the age grid nodes.
-    ess : ndarray, shape (N,)
+    ess: ndarray, shape (N,)
         Effective sample size at the posterior mode for each galaxy
         [dimensionless].
-    rhat : dict
+    rhat: dict
         Convergence diagnostics keyed by parameter name, including
         ``"psd_xi"`` for field-latent convergence.
-    n_divergent : ndarray, shape (N,)
+    n_divergent: ndarray, shape (N,)
         Number of divergent transitions per galaxy [count].
-    wall_time_s : float
+    wall_time_s: float
         Total elapsed time [seconds].
     """
 
@@ -85,7 +85,7 @@ def _validate_map_options(map_options):
 
     Parameters
     ----------
-    map_options : dict or None
+    map_options: dict or None
         Options for the MAP that initializes each galaxy's HMC. ``None`` means
         no separate MAP stage, which is the historical behavior.
 
@@ -134,7 +134,7 @@ def _assert_interim_bounds_are_physical(interim_bounds):
     downstream would not have caught them:
 
     * ``tau = 0`` does not produce NaN. ``rho = exp(-dt/0) = 0``, so the field
-      degenerates to independent draws — a silently different model.
+      degenerates to independent draws, a silently different model.
     * ``sigma < 0`` returns a density bit-identical to ``|sigma|``, because
       sigma enters only through the even quantity ``(sigma ln10)^2``. The
       sampler then explores a spurious mirror of the physical mode.
@@ -146,7 +146,7 @@ def _assert_interim_bounds_are_physical(interim_bounds):
 
     Parameters
     ----------
-    interim_bounds : dict
+    interim_bounds: dict
         ``{"sigma_bounds": (lo, hi), "tau_bounds_myr": (lo, hi)}``. Keys that
         are absent are left to the existing ``KeyError``.
 
@@ -187,22 +187,22 @@ def _assert_truth_within_interim_bounds(mock, interim_bounds):
 
     ``make_population`` validates each truth against the *model's* prior, but
     ``fit_interim`` then overrides the shared PSD priors with
-    ``interim_bounds`` — so a truth that was reachable before the override can
+    ``interim_bounds``, so a truth that was reachable before the override can
     be unreachable after it, and nothing re-checked (issue #1575).
 
     The failure this prevents is expensive and misdirects: the optimizer walks
     to a boundary that sits at infinity in unbounded space, every MAP restart
     returns a non-finite loss, and the resulting message advises tuning
-    ``learning_rate``/``n_restarts`` — none of which can reach a mode outside
+    ``learning_rate``/``n_restarts``, none of which can reach a mode outside
     the support. On the N=8 PSD pilot that arrived 50 minutes into the run.
 
     Parameters
     ----------
-    mock : MockPopulation
+    mock: MockPopulation
         Population carrying ``truth_params``. Real data has no injected truth,
         so an absent or unrelated ``truth_params`` is skipped rather than
         rejected.
-    interim_bounds : dict
+    interim_bounds: dict
         ``{"sigma_bounds": (lo, hi), "tau_bounds_myr": (lo, hi)}``, the bounds
         the fit will actually use.
 
@@ -254,36 +254,36 @@ def fit_interim(
 
     Parameters
     ----------
-    model : SEDModel
+    model: SEDModel
         The parametrized SED model.
-    mock : MockPopulation
+    mock: MockPopulation
         The mock galaxy population with photometry and noise.
-    key : jax.Array
+    key: jax.Array
         PRNG key for fit initialization and sampling.
-    interim_bounds : dict
+    interim_bounds: dict
         Bounds for the interim priors, with keys ``'sigma_bounds'``
         ``(sigma_lo, sigma_hi)`` [dex] and ``'tau_bounds_myr'``
         ``(tau_lo, tau_hi)`` [Myr].
-    n_leapfrog_steps : int, optional
+    n_leapfrog_steps: int, optional
         Number of leapfrog steps per HMC trajectory [count]. Default 100.
         (This parameter controls trajectory length and honest interval coverage.)
-    dense_mass_matrix : bool, optional
+    dense_mass_matrix: bool, optional
         Whether to use a dense mass matrix [dimensionless]. Default True.
-    forward_chunk_size : int, optional
+    forward_chunk_size: int, optional
         Chunk size for the forward model vmap [count]. If None, not passed
         to the fit backend (uses default).
-    n_warmup : int, optional
+    n_warmup: int, optional
         Number of warmup iterations [count]. If None, uses backend default.
-    n_samples : int, optional
+    n_samples: int, optional
         Number of posterior samples [count]. If None, defaults to 1000.
-    thin : int, optional
+    thin: int, optional
         Keep every ``thin``-th posterior draw before the population step.
         Default 8. The estimator's (n_nodes, N, K) table is what limits the
         population size; measured ESS is ~600 of 4000 draws, so thinning costs
         little and buys a linear reduction in that table.
-    n_chains : int, optional
+    n_chains: int, optional
         Number of independent MCMC chains [count]. If None, uses backend default.
-    map_options : dict, optional
+    map_options: dict, optional
         Options for an explicit MAP stage that initializes each galaxy's HMC,
         e.g. ``{"n_steps": 40000}`` or ``{"learning_rate": 1e-3}``. Default
         ``None`` runs no separate MAP, which is the historical behavior: the HMC
@@ -295,8 +295,8 @@ def fit_interim(
         none of them, so its own advice could not be followed.
 
         The regime is real, not hypothetical. The configuration recorded in
-        ``psd_bank_conv/bank_meta.json`` — truths 0.75 dex / 150 Myr at SNR
-        20/10, behind §5 of ``docs/dev/hierarchical-psd-handoff.md`` — diverges
+        ``psd_bank_conv/bank_meta.json``, truths 0.75 dex / 150 Myr at SNR
+        20/10, behind §5 of ``docs/dev/hierarchical-psd-handoff.md``, diverges
         from every restart under the default budget. The bank that produced
         those numbers never called this function;
         ``scripts/hierarchical_psd_fit_bank.py`` drives ``Fitter`` directly and
@@ -310,7 +310,7 @@ def fit_interim(
 
     Returns
     -------
-    result : InterimResult
+    result: InterimResult
         Per-galaxy samples, convergence diagnostics, and wall-clock time.
 
     Notes
@@ -322,7 +322,7 @@ def fit_interim(
 
     **Memory and trajectory length.** Warmup on D~8 models has been measured
     at 3-6 GB for small grids and 20+ GB for dense basis SFH. Run under a
-    memory watchdog. Do not lower ``n_leapfrog_steps`` below 100 — an earlier
+    memory watchdog. Do not lower ``n_leapfrog_steps`` below 100, an earlier
     study measured honest coverage at L=100 but overconfident bands at L=25
     (0.44 nominal coverage). Trajectory length matters more than sampler name.
     """
@@ -364,7 +364,7 @@ def fit_interim(
 
     # ``field_centering`` rides along explicitly: this spec is rebuilt from the
     # free-parameter distributions alone, so any structural setting not named
-    # here is silently reset to its default — and an interim fit that quietly
+    # here is silently reset to its default, and an interim fit that quietly
     # reverts to the non-centered map is exactly the null result #1355's A/B
     # would misread as "the knob does nothing" (#1355).
     spec_interim = Parameters(
@@ -445,7 +445,7 @@ def fit_interim(
         # Release the per-galaxy Posterior and Fitter before the next iteration.
         # A Posterior holds a reference to its model, and a Fitter's data_args
         # carry the threaded SSP grid (~62 MB). Holding N of those alive is how
-        # two sweeps were OOM-killed at N=16 with no traceback — the kernel
+        # two sweeps were OOM-killed at N=16 with no traceback, the kernel
         # SIGKILLs without letting Python report anything.
         del post_i, fitter
         gc.collect()
@@ -556,18 +556,18 @@ def choose_interim_bounds(measured_curve, *, target_min_ess):
 
     Parameters
     ----------
-    measured_curve : list[dict]
+    measured_curve: list[dict]
         ESS measurements at each interim-prior breadth, from pilot runs.
         Each element has keys: ``'sigma_bounds'``, ``'tau_bounds_myr'``,
         ``'min_ess'``, ``'median_ess'``, ``'recovered_posterior'``.
-    target_min_ess : float
+    target_min_ess: float
         Target minimum ESS [dimensionless], e.g., 50 or 100.
 
     Returns
     -------
-    sigma_bounds : tuple of float
+    sigma_bounds: tuple of float
         ``(lo, hi)`` amplitude support [dex].
-    tau_bounds_myr : tuple of float
+    tau_bounds_myr: tuple of float
         ``(lo, hi)`` timescale support [Myr].
 
     Raises

@@ -30,13 +30,13 @@ def normalized_excess_variance(L_bol_BBB: Array | float) -> Array:
 
     Parameters
     ----------
-    L_bol_BBB : array_like or float
+    L_bol_BBB: array_like or float
         Bolometric BBB luminosity [erg/s] (the upper-limit-of-91.2-nm-integrated
         AGN BBB component, see :mod:`bbb`). Must be strictly positive.
 
     Returns
     -------
-    NEV : ndarray or float
+    NEV: ndarray or float
         Fractional variance :math:`F_{\rm var}^2`, capped at 0.1.
         :math:`F_{\rm var} = \sqrt{\mathrm{NEV}}` is the equivalent
         fractional 1-sigma flux scatter to add in quadrature.

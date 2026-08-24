@@ -4,7 +4,7 @@
 Implements the Kubota & Done (2018) accretion disc model on the
 SEDModelComponent contract, enabling use in the model-building API.
 
-This is an opt-in adapter — the existing AGNSEDComponent continues to
+This is an opt-in adapter, the existing AGNSEDComponent continues to
 support K&D18 through the unified AGN registry.
 
 References
@@ -38,11 +38,11 @@ class KD18DiscConfig(SEDComponentConfig):
 
     Parameters
     ----------
-    self_consistent_gamma : bool, optional
+    self_consistent_gamma: bool, optional
         If True, derive the hard X-ray photon index Γ_hot self-consistently
         from the Beloborodov (1999) energy-balance relation. If False,
         use the agn_gamma_hard parameter directly. Default: False.
-    n_radii : int, optional
+    n_radii: int, optional
         Number of radial grid points for zone integral approximations.
         Default: 50. Higher values increase accuracy but cost.
     """
@@ -61,51 +61,51 @@ class KD18Disc(SEDModelComponent):
 
     Attributes
     ----------
-    name : str
+    name: str
         Component registry key: ``"kd18_disc"``.
-    parameter_prefix : str
+    parameter_prefix: str
         Parameter namespace: ``"agn_"``.
-    config : KD18DiscConfig
+    config: KD18DiscConfig
         Frozen configuration (self-consistent gamma, radial grid).
 
     Free parameters (class-level declarations, auto-discovered)
     -----------------------------------------------------------
-    log_lbol : Uniform
+    log_lbol: Uniform
         log₁₀(L_bol / L_sun). [dex, 8–14]
-    log_mbh : Uniform
+    log_mbh: Uniform
         log₁₀(M_BH / M_sun). [dex, 6–10]
-    log_ledd : Uniform
+    log_ledd: Uniform
         Eddington ratio log₁₀(L / L_Edd). [dex, -3–0]
-    a_spin : Uniform
+    a_spin: Uniform
         Dimensionless black hole spin (prograde). [dimensionless, 0–0.998]
-    cos_inc : Uniform
+    cos_inc: Uniform
         Cosine of inclination (1 = face-on, 0 = edge-on). [dimensionless, 0.01–1]
-    f_hard : Uniform
+    f_hard: Uniform
         Fraction of Eddington luminosity in hot corona. [dimensionless, 0.01–0.5]
-    gamma_warm : Uniform
+    gamma_warm: Uniform
         Photon index of warm Comptonization zone. [dimensionless, 1.5–3.5]
-    kt_warm : Uniform
+    kt_warm: Uniform
         Warm zone electron temperature. [keV, 0.1–0.5]
-    gamma_hard : Uniform
+    gamma_hard: Uniform
         Hard X-ray photon index (used if self_consistent_gamma=False).
         [dimensionless, 1.5–2.5]
-    kt_hot : Uniform
+    kt_hot: Uniform
         Hot corona electron temperature. [keV, 50–200]
-    r_warm_ratio : Uniform
+    r_warm_ratio: Uniform
         Radius ratio R_warm / R_hot. [dimensionless, 1.1–5]
-    frac : Uniform
+    frac: Uniform
         Fraction of bolometric luminosity from disc. [dimensionless, 0–1]
 
     Cross-component outputs
     -----------------------
-    L_agn_disc : erg/s
+    L_agn_disc: erg/s
         Bolometric luminosity contribution from all three zones.
 
     Notes
     -----
-    **JIT-compatible**: yes — predict() is pure JAX.
+    **JIT-compatible**: yes, predict() is pure JAX.
 
-    **Gradient-safe**: yes — self-consistent zone radii via bisection
+    **Gradient-safe**: yes, self-consistent zone radii via bisection
     are smooth over the parameter space.
 
     **Cross-component note**: AGN inclination (cos_inc) is shared with
@@ -129,14 +129,14 @@ class KD18Disc(SEDModelComponent):
 
     See Also
     --------
-    tengri.components.agn.disc : Kubota & Done (2018) implementation.
+    tengri.components.agn.disc: Kubota & Done (2018) implementation.
     """
 
     name = "kd18_disc"
     parameter_prefix = "agn_"
     config: KD18DiscConfig = field(default_factory=KD18DiscConfig)
 
-    # Free parameters — auto-discovered
+    # Free parameters: auto-discovered
     log_lbol = Uniform(
         8.0,
         14.0,
@@ -236,7 +236,7 @@ class KD18Disc(SEDModelComponent):
 
         Parameters
         ----------
-        p : mapping[str, ndarray]
+        p: mapping[str, ndarray]
             Parameters with prefix already stripped:
 
             - log_lbol: log₁₀(L_bol / L_sun)
@@ -252,11 +252,11 @@ class KD18Disc(SEDModelComponent):
             - r_warm_ratio: R_warm / R_hot
             - frac: disc luminosity fraction
 
-        sed_in : ndarray, shape (n_wave,)
+        sed_in: ndarray, shape (n_wave,)
             Input SED in erg/s/Hz.
-        wave : ndarray, shape (n_wave,)
+        wave: ndarray, shape (n_wave,)
             Rest-frame wavelength grid in Angstrom.
-        **inputs : ndarray
+        **inputs: ndarray
             Unused (AGN disc is self-contained).
 
         Returns

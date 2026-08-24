@@ -41,8 +41,8 @@ def _env_data_dir() -> Path | None:
 
     Prefers ``$TENGRI_DATA_DIR``; falls back to the deprecated ``$TENGRI_DATA``
     with a warning. The two spellings previously governed *different* halves of
-    the data story — ``TENGRI_DATA_DIR`` where downloads were written,
-    ``TENGRI_DATA`` where ``doctor()`` looked — so setting either one alone left
+    the data story: ``TENGRI_DATA_DIR`` where downloads were written,
+    ``TENGRI_DATA`` where ``doctor()`` looked, so setting either one alone left
     the other half pointed somewhere else.
     """
     value = os.environ.get(TENGRI_DATA_ENV)
@@ -71,7 +71,7 @@ def data_dirs() -> list[Path]:
         set; each ancestor of the working directory with a ``data/``
         subdirectory; ``~/tengri/data``; the working directory itself; and the
         source tree beside the installed package. Directories are returned
-        whether or not they exist — callers test the file they want.
+        whether or not they exist; callers test the file they want.
 
     Notes
     -----
@@ -82,7 +82,7 @@ def data_dirs() -> list[Path]:
     The last two groups exist so this function is a superset of the per-module
     grid locators it replaces (#1431). Those searched
     ``Path(__file__).resolve().parents[4] / "data/<name>.h5"`` and the bare
-    ``<root>/<name>.h5``, plus the same two relative to the working directory —
+    ``<root>/<name>.h5``, plus the same two relative to the working directory,
     so the working directory *itself* and the package's own source root are both
     needed here, not only their ``data/`` subdirectories.
 
@@ -119,7 +119,7 @@ def package_data_dirs() -> list[Path]:
         root is resolved from this module's own location. For a ``src/`` layout
         checkout that is the repository root; for an installed wheel it is
         whatever sits above ``site-packages/tengri`` and simply will not
-        contain the files, which is harmless — callers test the file they want.
+        contain the files, which is harmless; callers test the file they want.
 
     Notes
     -----
@@ -167,7 +167,7 @@ def data_path(filename: str) -> Path:
 
     Parameters
     ----------
-    filename : str
+    filename: str
         Basename of the data file, e.g. ``"bosa_templates.h5"``.
 
     Returns
@@ -211,7 +211,7 @@ def find_data(*filenames: str) -> Path | None:
 
     Parameters
     ----------
-    *filenames : str
+    *filenames: str
         Candidate files in preference order.
 
     Returns
@@ -243,7 +243,7 @@ def find_data_str(*filenames: str) -> str | None:
 
     Parameters
     ----------
-    *filenames : str
+    *filenames: str
         Candidate files in preference order, as for :func:`find_data`.
 
     Returns
@@ -271,16 +271,16 @@ def require_data(filename: str, not_found_msg: str) -> str:
 
     Parameters
     ----------
-    filename : str
+    filename: str
         Basename of the grid file, e.g. ``"cat3d_wind_torus_grid.h5"``.
-    not_found_msg : str
+    not_found_msg: str
         Message to raise when the file is absent. Replaces :func:`data_path`'s
         generic text *entirely* rather than wrapping it.
 
     Returns
     -------
     str
-        Path to the file, as a string — the shape the loaders take.
+        Path to the file, as a string; the shape the loaders take.
 
     Raises
     ------
@@ -292,7 +292,7 @@ def require_data(filename: str, not_found_msg: str) -> str:
     ``data_path`` names the directories it searched, which is the more useful
     message for a *misconfigured* install; ``not_found_msg`` names the grid to
     fetch, which is the more useful one for a *missing* grid. The locators are
-    the missing-grid case, so the curated text wins outright — pinned by
+    the missing-grid case, so the curated text wins outright; pinned by
     ``tests/contract/test_data_file_resolution.py``. The generic text is
     deliberately not appended: an astronomer who sees a build command should not
     have to read past a directory listing to find it.
@@ -312,7 +312,7 @@ def package_or_env_data_path(filename: str) -> Path:
 
     Parameters
     ----------
-    filename : str
+    filename: str
         Basename of the data file, e.g. ``"cue_weights.npz"``.
 
     Returns
@@ -328,7 +328,7 @@ def package_or_env_data_path(filename: str) -> Path:
     Deliberately excludes the cwd ancestor walk that :func:`data_dirs` performs.
     An import-time constant would otherwise bind to whatever directory the
     process happened to start in, making the resolved path depend on the caller's
-    cwd at import — the ``parents[N]`` anchoring this replaces was at least
+    cwd at import; the ``parents[N]`` anchoring this replaces was at least
     cwd-independent, and that property is worth keeping.
     """
     env = _env_data_dir()
@@ -342,13 +342,13 @@ def package_or_env_data_path(filename: str) -> Path:
 
 SSP_BASE_URL = "https://halos.as.arizona.edu/suchethacooray/ssp-spectra/"
 
-#: The default SSP identifier — one constant consumed by BOTH
+#: The default SSP identifier: one constant consumed by BOTH
 #: :func:`download_ssp` and :func:`~tengri.load_ssp`, so a fresh user's
 #: ``tengri.download_ssp()`` fetches exactly what a subsequent
 #: ``tengri.load_ssp()`` loads. It is *bare-stellar* (no baked-in nebular
 #: emission): it is present in the hosted catalog, in :data:`_KNOWN_SSPS`, and
-#: is the grid the Cue/CloudyGrid nebular backends — and every
-#: ``tengri.recipes.*`` config — require. The ``_wNE_*`` (with-Nebular-Emission)
+#: is the grid the Cue/CloudyGrid nebular backends and every
+#: ``tengri.recipes.*`` config require. The ``_wNE_*`` (with-Nebular-Emission)
 #: grids are produced locally, are not shipped from the catalog, and must be
 #: named explicitly (``load_ssp("prsc_miles_chabrier_wNE")``).
 DEFAULT_SSP = "fsps_prsc_miles_chabrier"
@@ -429,8 +429,8 @@ def find_ssp_files() -> list[Path]:
     nebular-baked variants the catalog does not ship).
 
     Matching on ``*.h5`` alone would report ``dl07_templates.h5`` and other
-    component libraries as SSP grids; matching only ``ssp_*.h5`` — as the
-    callers previously did — cannot see a single file ``download_ssp()``
+    component libraries as SSP grids; matching only ``ssp_*.h5``, as the
+    callers previously did, cannot see a single file ``download_ssp()``
     produces. Both callers share this one answer so they cannot disagree about
     whether an install has data.
     """
@@ -457,7 +457,7 @@ def list_known_ssps():
         that did (#1285). Use ``.to_dict("filename")`` for the old mapping,
         or ``.names()`` for just the identifiers. Membership tests
         (``"name" in ...``) still work, because a row's ``name`` is what
-        ``.names()`` reports — but ``in`` on the table itself checks rows,
+        ``.names()`` reports: but ``in`` on the table itself checks rows,
         so prefer ``in ....names()``.
 
     Examples
@@ -495,7 +495,7 @@ def list_available_ssps() -> list[dict]:
         ``family`` is the SSP name with the IMF suffix stripped (e.g.
         ``"fsps_prsc_miles"`` from ``"fsps_prsc_miles_chabrier"``).
         ``downloaded`` is ``True`` iff the file is present under any
-        ``data/`` directory walked upward from ``Path.cwd()`` — the same
+        ``data/`` directory walked upward from ``Path.cwd()``, the same
         discovery rule :func:`tengri.load_ssp` uses.
 
     Examples
@@ -509,7 +509,7 @@ def list_available_ssps() -> list[dict]:
 
     See also
     --------
-    list_known_ssps : The flat ``name → filename`` mapping that this
+    list_known_ssps: The flat ``name → filename`` mapping that this
         view groups and enriches.
     """
     from tengri.components.stellar.sps.dsps_wrapper import _KNOWN_IMFS
@@ -579,7 +579,7 @@ def _resolve_ssp_filename(name: str) -> str:
     if "/" in name or "\\" in name or name.startswith("."):
         raise ValueError(
             f"download_ssp(name={name!r}): name must be a bare filename or a "
-            f"short identifier (see tengri.list_known_ssps()), not a path — so "
+            f"short identifier (see tengri.list_known_ssps()), not a path, so "
             f"it cannot write outside the destination directory."
         )
     if name in _KNOWN_SSPS:
@@ -606,19 +606,19 @@ def download_ssp(
 
     Parameters
     ----------
-    name : str, optional
+    name: str, optional
         Short SSP identifier (see ``list_known_ssps()``) or a bare catalog
         filename ending in ``.h5``. Defaults to ``"fsps_prsc_miles_chabrier"``
-        (FSPS PARSEC tracks + MILES library, Chabrier IMF — bare-stellar,
+        (FSPS PARSEC tracks + MILES library, Chabrier IMF, bare-stellar,
         Cue/CloudyGrid-compatible).
-    dest : path-like, optional
-        Target directory. Defaults to :func:`download_dir` — ``$TENGRI_DATA_DIR``
+    dest: path-like, optional
+        Target directory. Defaults to :func:`download_dir`, ``$TENGRI_DATA_DIR``
         if set, else ``data/`` relative to the working directory. Either way it
         is a directory :func:`data_dirs` searches, so the loaders find the file
         afterwards.
-    force : bool, optional
+    force: bool, optional
         Re-download even if the file already exists. Default ``False``.
-    progress : bool, optional
+    progress: bool, optional
         Print download progress. Default ``True``; pass ``False`` for clean log
         output.
 
@@ -686,7 +686,7 @@ def download_ssp(
 
 # Pre-converted component templates (HDF5) live alongside the SSP catalog on
 # the public host. These are tengri-native conversions of upstream libraries
-# whose raw form is awkward to redistribute — e.g. the Fritz 2006 torus grid,
+# whose raw form is awkward to redistribute, e.g. the Fritz 2006 torus grid,
 # which upstream ships only as ~24k pcigale-pickled objects (un-loadable
 # without pcigale). Hosting the converted grid lets end-users fetch it with
 # zero CIGALE dependency, exactly as SSPs are fetched.
@@ -702,16 +702,16 @@ def download_template(
 
     Mirrors :func:`download_ssp` but for component templates (AGN torus grids,
     dust IR libraries, …) hosted under :data:`TEMPLATE_BASE_URL`. The end-user
-    never needs CIGALE installed — the converted ``.h5`` is fetched directly.
+    never needs CIGALE installed; the converted ``.h5`` is fetched directly.
 
     Parameters
     ----------
-    filename : str
+    filename: str
         Basename of the hosted file, e.g. ``"fritz2006_torus_grid.h5"``.
-    dest : path-like, optional
+    dest: path-like, optional
         Target directory. Defaults to ``$TENGRI_DATA_DIR`` if set, else ``data/``
         relative to the current working directory.
-    force : bool, optional
+    force: bool, optional
         Re-download even if the file already exists. Default ``False``.
 
     Returns
@@ -770,7 +770,7 @@ def require_remote_url(url: str) -> str:
 
     Parameters
     ----------
-    url : str
+    url: str
         URL about to be passed to :func:`urllib.request.urlopen`.
 
     Returns
@@ -798,13 +798,13 @@ def _download_file(url: str, dest: Path, chunk_size: int = 8192, progress: bool 
 
     Parameters
     ----------
-    url : str
+    url: str
         URL to download from.
-    dest : Path
+    dest: Path
         Destination file path (should end with .partial for atomic write).
-    chunk_size : int, optional
+    chunk_size: int, optional
         Size of each download chunk in bytes. Default 8192.
-    progress : bool, optional
+    progress: bool, optional
         Show a progress bar when ``tqdm`` is installed. Default ``True``;
         ``False`` downloads silently.
 

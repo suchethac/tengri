@@ -1,13 +1,13 @@
 # SPDX-License-Identifier: BSD-3-Clause
-"""Component pipeline — public entry point.
+"""Component pipeline: public entry point.
 
 This namespace gathers the :class:`SEDComponent` Protocol, the
 :class:`ForwardState` it threads through, the orchestrator helpers
 (:func:`run_components`, :func:`merge_declared_parameters`), and the
 shipped adapters.
 
-The legacy :class:`tengri.SEDModel` tier-dispatch path is unchanged —
-this is an *additive* surface for users who want to compose SED
+The legacy :class:`tengri.SEDModel` tier-dispatch path is unchanged; this is an *additive* surface
+for users who want to compose SED
 forward models out of explicit components.
 
 Example

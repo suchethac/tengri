@@ -51,24 +51,24 @@ def closed_box_metallicity(
 
     Parameters
     ----------
-    age_yr : array_like, shape (n_age,)
+    age_yr: array_like, shape (n_age,)
         Lookback time grid [yr]. Convention: youngest (smallest lookback time) first,
         oldest last. This matches tengri's internal log-age grid convention.
-    sfr : array_like, shape (n_age,)
+    sfr: array_like, shape (n_age,)
         Star formation rate [Msun/yr] at each lookback time.
-    yield_y : float, optional
+    yield_y: float, optional
         Nucleosynthetic yield (mass of metals produced per unit mass locked
         in long-lived stars). Default: 0.03 (solar neighborhood for Chabrier IMF;
         Vincenzo et al. 2016). [dimensionless]
-    eta_outflow : float, optional
+    eta_outflow: float, optional
         Mass loading factor: Mdot_out / SFR. Default: 0.0 (closed box, no outflows).
         Typical range: 0.5-3 for dwarf galaxies, 0-0.5 for massive galaxies.
         [dimensionless]
-    f_gas_init : float, optional
+    f_gas_init: float, optional
         Initial gas fraction :math:`M_{\rm gas} / (M_{\rm gas} + M_{\star})` at
         earliest cosmic time. Default: 0.9 (galaxy starts gas-dominated).
         [dimensionless, in (0,1)]
-    return_frac : float, optional
+    return_frac: float, optional
         Instantaneous recycling fraction: fraction of formed stellar mass
         returned to the ISM via winds/SNe. Default: 0.4 (Chabrier IMF;
         Leitner & Kravtsov 2011). [dimensionless, in [0,1))
@@ -80,7 +80,7 @@ def closed_box_metallicity(
 
     Notes
     -----
-    **JIT-compatible**: yes — all operations use ``jnp`` primitives.
+    **JIT-compatible**: yes, all operations use ``jnp`` primitives.
 
     The closed-box and leaky-box chemical evolution models compute metallicity
     from the integrated SFR history:
@@ -195,15 +195,15 @@ def closed_box_metallicity_anchored(
 
     Parameters
     ----------
-    age_yr : array_like, shape (n_age,)
+    age_yr: array_like, shape (n_age,)
         Lookback time grid [yr] (youngest first).
-    sfr : array_like, shape (n_age,)
+    sfr: array_like, shape (n_age,)
         Star formation rate [Msun/yr] at each lookback time.
-    met_logzsol_final : float
+    met_logzsol_final: float
         Target present-day metallicity [dimensionless], log10(Z/Zsun).
-    eta_outflow : float, optional
+    eta_outflow: float, optional
         Mass loading factor [dimensionless]. Default 0.0 (closed box).
-    return_frac : float, optional
+    return_frac: float, optional
         Stellar mass return fraction [dimensionless]. Default 0.4.
 
     Returns
@@ -214,7 +214,7 @@ def closed_box_metallicity_anchored(
 
     Notes
     -----
-    **JIT-compatible**: yes — uses ``jnp`` primitives throughout.
+    **JIT-compatible**: yes, uses ``jnp`` primitives throughout.
 
     The effective yield is computed from the target metallicity and the
     implied gas fraction at the final time step.
@@ -276,19 +276,19 @@ def chem_evol_metallicity_on_ssp_grid(
 
     Parameters
     ----------
-    ssp_log_ages_yr : array_like, shape (n_ssp_age,)
+    ssp_log_ages_yr: array_like, shape (n_ssp_age,)
         Log10(age/yr) of the SSP templates [dimensionless].
-    log_age_grid : array_like, shape (n_grid,)
+    log_age_grid: array_like, shape (n_grid,)
         Log10(lookback time/yr) grid on which the SFR is defined [dimensionless].
-    sfr : array_like, shape (n_grid,)
+    sfr: array_like, shape (n_grid,)
         Star formation rate [Msun/yr] at each grid point.
-    yield_y : float, optional
+    yield_y: float, optional
         Nucleosynthetic yield [dimensionless]. Default 0.03.
-    eta_outflow : float, optional
+    eta_outflow: float, optional
         Mass loading factor [dimensionless]. Default 0.0.
-    f_gas_init : float, optional
+    f_gas_init: float, optional
         Initial gas fraction [dimensionless]. Default 0.9.
-    return_frac : float, optional
+    return_frac: float, optional
         Stellar return fraction [dimensionless]. Default 0.4.
 
     Returns
@@ -298,7 +298,7 @@ def chem_evol_metallicity_on_ssp_grid(
 
     Notes
     -----
-    **JIT-compatible**: yes — all operations use ``jnp`` primitives.
+    **JIT-compatible**: yes, all operations use ``jnp`` primitives.
     """
     # Convert log-age grid to linear years
     age_yr = 10.0**log_age_grid

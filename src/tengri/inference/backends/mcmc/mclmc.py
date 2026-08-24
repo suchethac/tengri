@@ -53,11 +53,11 @@ def run_mclmc(
 
     Parameters
     ----------
-    n_warmup : int
+    n_warmup: int
         Warmup steps for tuning L (trajectory length) and step size.
-    n_samples : int
+    n_samples: int
         Posterior samples to collect.
-    verbose : bool
+    verbose: bool
         Print progress.
     """
     try:
@@ -101,7 +101,7 @@ def run_mclmc(
     adapt_key = ("mclmc", int(n_warmup))
     cached = _get_cached_adaptation(fitter, adapt_key)
 
-    # Both branches must advance the key identically — cache presence is
+    # Both branches must advance the key identically, cache presence is
     # invisible to the caller and must not steer the RNG stream, or two
     # identical ``fit`` calls with one ``key`` return different chains.
     # ``tune_key`` is unused when the adaptation is reused.
@@ -219,14 +219,14 @@ def run_adjusted_mclmc(
 
     Parameters
     ----------
-    n_warmup : int
+    n_warmup: int
         Warmup steps for tuning step size and trajectory length.
-    n_samples : int
+    n_samples: int
         Posterior samples to collect.
-    target_accept_rate : float
+    target_accept_rate: float
         Target Metropolis acceptance rate. Default 0.65 balances
         bias correction with mixing efficiency.
-    verbose : bool
+    verbose: bool
         Print progress.
     """
     try:
@@ -272,7 +272,7 @@ def run_adjusted_mclmc(
     adapt_key = ("adjusted_mclmc", int(n_warmup), float(target_accept_rate))
     cached = _get_cached_adaptation(fitter, adapt_key)
 
-    # Both branches must advance the key identically — see run_mclmc above.
+    # Both branches must advance the key identically, see run_mclmc above.
     # ``tune_key`` is unused when the adaptation is reused.
     key, tune_key = jax.random.split(key)
     state = blackjax.mcmc.adjusted_mclmc.init(init_flat, ld_1arg)

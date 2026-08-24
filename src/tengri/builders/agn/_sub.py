@@ -29,8 +29,8 @@ def _discover_sub_block_params(axis: str, representative_variant: str) -> list[s
 
     All variants within an axis activate the same param set per
     ``_AGN_PARTITION``, so introspecting one representative variant is
-    enough. We filter to ``_AGN_PARTITION[name] == f"agn.{axis}"`` —
-    those are the parameters the parser routes into the sub-block dict.
+    enough. We filter to ``_AGN_PARTITION[name] == f"agn.{axis}"``: those are the parameters the
+    parser routes into the sub-block dict.
     """
     target_path = f"agn.{axis}"
 
@@ -70,12 +70,12 @@ def build_axis_factories(
 
     Parameters
     ----------
-    axis : str
+    axis: str
         One of ``"disc"``, ``"torus"``, ``"nlr"``, ``"blr"``, ``"feii"``,
         ``"atten"``.
-    variants : set[str]
+    variants: set[str]
         Variant names for this axis (from ``_VALID_AGN_<AXIS>_TYPES``).
-    representative_variant : str
+    representative_variant: str
         Variant used to probe parameter activation. Any non-``none``
         entry works; choose one with a stable activation profile.
     """

@@ -32,20 +32,20 @@ def ou_logpdf(m, mean, psd_sigma_dex, psd_tau_yr, times_yr):
 
     Parameters
     ----------
-    m : array_like, shape (n,)
+    m: array_like, shape (n,)
         Field values [natural-log units], ordered to match ``times_yr``.
-    mean : float
+    mean: float
         Mean of the field [natural-log units], broadcast over the grid.
-    psd_sigma_dex : float
+    psd_sigma_dex: float
         Modulation amplitude [dex].
-    psd_tau_yr : float
+    psd_tau_yr: float
         Damping timescale [yr].
-    times_yr : array_like, shape (n,)
+    times_yr: array_like, shape (n,)
         Physical times [yr], same order as ``m``.
 
     Returns
     -------
-    logpdf : ndarray, shape ()
+    logpdf: ndarray, shape ()
         Log-density [nats].
 
     Notes

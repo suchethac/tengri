@@ -17,7 +17,7 @@ from typing import TYPE_CHECKING
 
 import jax.numpy as jnp
 
-if TYPE_CHECKING:  # annotation only — see the local import in list_laws (#843)
+if TYPE_CHECKING:  # annotation only; see the local import in list_laws (#843)
     from tengri.registry import _RegistryTable
 
 # ── Attenuation law catalog ─────────────────────────────────────
@@ -29,19 +29,19 @@ class DustLawRegistryEntry:
 
     Attributes
     ----------
-    callable : Callable
+    callable: Callable
         The dust attenuation law function.
-    citation : str
+    citation: str
         Optional academic citation. Default empty string.
-    status : str
+    status: str
         Model status: "production", "experimental", "demo", or "deprecated".
         Default "production".
-    short_doc : str
+    short_doc: str
         Optional one-line description. Default empty string.
 
     Notes
     -----
-    **JIT-compatible**: no — dataclass for registry initialization.
+    **JIT-compatible**: no, dataclass for registry initialization.
 
     """
 
@@ -73,14 +73,14 @@ def register_dust_law(
 
     Parameters
     ----------
-    name : str
+    name: str
         Registry key (e.g. ``"calzetti"``, ``"power_law"``).
-    citation : str, optional
+    citation: str, optional
         Academic citation for the model. Default empty string.
-    status : str, optional
+    status: str, optional
         Model status ("production", "experimental", "demo", "deprecated").
         Default "production".
-    short_doc : str, optional
+    short_doc: str, optional
         One-line description. Default empty string.
 
     Returns
@@ -90,7 +90,7 @@ def register_dust_law(
 
     Notes
     -----
-    **JIT-compatible**: no — registration happens at factory time before JIT.
+    **JIT-compatible**: no, registration happens at factory time before JIT.
 
     Decorated functions must implement the ``DustAttenuationLaw`` protocol:
     accept a wavelength array and keyword arguments, returning an attenuation
@@ -102,7 +102,7 @@ def register_dust_law(
 
         Parameters
         ----------
-        fn : Callable
+        fn: Callable
             Dust attenuation law function matching ``DustAttenuationLaw`` protocol.
 
         Returns
@@ -131,7 +131,7 @@ def resolve_dust_law(name: str) -> Callable:
 
     Parameters
     ----------
-    name : str
+    name: str
         Registry key (e.g. ``"calzetti"``, ``"power_law"``).
 
     Returns
@@ -146,7 +146,7 @@ def resolve_dust_law(name: str) -> Callable:
 
     Notes
     -----
-    **JIT-compatible**: no — registry lookup happens at factory time.
+    **JIT-compatible**: no, registry lookup happens at factory time.
 
     The returned function matches the ``DustAttenuationLaw`` protocol and can
     be called with wavelengths and law-specific parameters.
@@ -178,7 +178,7 @@ def list_laws(headline: bool = True) -> _RegistryTable:
 
     Parameters
     ----------
-    headline : bool, optional
+    headline: bool, optional
         If True (default) list the 6 textbook laws, named by display
         label with citation. If False list every registered law by
         registry name with no kwargs baked in.
@@ -237,11 +237,11 @@ def _drude_profile(
 
     Parameters
     ----------
-    wave_um : array_like, shape (n_wave,)
+    wave_um: array_like, shape (n_wave,)
         Wavelength grid. [μm]
-    x0 : float, optional
+    x0: float, optional
         Central wavelength of the bump. [μm] Default: 0.2175 (2175 Å).
-    gamma : float, optional
+    gamma: float, optional
         FWHM of the profile. [μm] Default: 0.035 (350 Å).
 
     Returns
@@ -251,7 +251,7 @@ def _drude_profile(
 
     Notes
     -----
-    **JIT-compatible**: yes — all operations are ``jnp`` primitives.
+    **JIT-compatible**: yes, all operations are ``jnp`` primitives.
 
     The Drude profile is:
 
@@ -286,7 +286,7 @@ def _calzetti_l02_kprime(wavelength: jnp.ndarray) -> jnp.ndarray:
 
     Parameters
     ----------
-    wavelength : array_like, shape (n_wave,)
+    wavelength: array_like, shape (n_wave,)
         Wavelength grid. [Å]
 
     Returns
@@ -296,7 +296,7 @@ def _calzetti_l02_kprime(wavelength: jnp.ndarray) -> jnp.ndarray:
 
     Notes
     -----
-    **JIT-compatible**: yes — all operations are ``jnp`` primitives.
+    **JIT-compatible**: yes, all operations are ``jnp`` primitives.
 
     Uses piecewise polynomials following Leitherer et al. (2002) and Calzetti et al. (2000).
     The transition occurs at 0.18 μm (1800 Å), matching the standalone ``dust_attenuation.averages.L02`` model.
@@ -338,7 +338,7 @@ def _calzetti_kprime_unnormalized(wavelength: jnp.ndarray) -> jnp.ndarray:
 
     Parameters
     ----------
-    wavelength : array_like, shape (n_wave,)
+    wavelength: array_like, shape (n_wave,)
         Wavelength grid. [Å]
 
     Returns
@@ -348,7 +348,7 @@ def _calzetti_kprime_unnormalized(wavelength: jnp.ndarray) -> jnp.ndarray:
 
     Notes
     -----
-    **JIT-compatible**: yes — all operations are ``jnp`` primitives.
+    **JIT-compatible**: yes, all operations are ``jnp`` primitives.
 
     Uses piecewise polynomials following Calzetti et al. (2000).
     This is a pure polynomial evaluation with no normalization applied.

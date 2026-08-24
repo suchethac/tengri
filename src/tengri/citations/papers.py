@@ -19,7 +19,7 @@ from __future__ import annotations
 from pathlib import Path
 
 # CITATION.bib lives at the repo root. We locate it by walking up from this
-# file. In a wheel install the file is not necessarily shipped — callers can
+# file. In a wheel install the file is not necessarily shipped: callers can
 # still use ``tengri.cite("tengri")`` from the registry as a fallback.
 _THIS = Path(__file__).resolve()
 _REPO_ROOT = _THIS.parent.parent.parent.parent  # .../tengri
@@ -60,10 +60,10 @@ def paper_citation(paper: int | str | None = None) -> str:
 
     Parameters
     ----------
-    paper : int, str, or None
+    paper: int, str, or None
         Which paper. Accepts ``1``/``2``/``3`` or ``"I"``/``"II"``/``"III"``.
-        If ``None`` (default), returns the full contents of ``CITATION.bib``
-        — every paper plus the ``tengri`` alias.
+        If ``None`` (default), returns the full contents of ``CITATION.bib``,
+        every paper plus the ``tengri`` alias.
 
     Returns
     -------
@@ -98,7 +98,7 @@ def _extract_entry(bibtex_text: str, key: str) -> str:
     if idx == -1:
         raise KeyError(
             f"BibTeX key {key!r} not found in CITATION.bib. "
-            "This is a bug in tengri — please report it."
+            "This is a bug in tengri: please report it."
         )
 
     # Walk backward to find the '@' that starts this entry.

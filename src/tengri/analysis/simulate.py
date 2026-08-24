@@ -107,31 +107,31 @@ def sed_from_sfh(
 
     Parameters
     ----------
-    t_gyr : ndarray, shape (n_t,)
+    t_gyr: ndarray, shape (n_t,)
         Cosmic time grid in Gyr (increasing, from early to late universe).
-    sfr : ndarray, shape (n_t,)
+    sfr: ndarray, shape (n_t,)
         Star formation rate [Msun/yr] at each time point.
-    ssp_data : SSPData
+    ssp_data: SSPData
         SSP templates from ``load_ssp_data()``.
-    log_z : float or ndarray, optional
+    log_z: float or ndarray, optional
         Stellar metallicity log10(Z/Zsun).
 
         - float: constant metallicity for all stars. Default: -0.3.
         - ndarray shape (n_t,): metallicity history Z(t).
 
-    lgmet_scatter : float, optional
+    lgmet_scatter: float, optional
         Lognormal scatter in metallicity [dex]. Used only when log_z is
         scalar. Default: 0 (delta function).
-    dust_tau_bc : float, optional
+    dust_tau_bc: float, optional
         Birth cloud V-band optical depth. Default: 0 (no dust).
-    dust_tau_diff : float, optional
+    dust_tau_diff: float, optional
         Diffuse ISM V-band optical depth. Default: 0 (no dust).
-    dust_law : str, optional
+    dust_law: str, optional
         Dust attenuation curve name. Default: "power_law".
         Options: "power_law", "calzetti", "kriek_conroy", etc.
-    dust_slope : float, optional
+    dust_slope: float, optional
         Power-law slope (for power_law curve). Default: -0.7.
-    t_obs_gyr : float, optional
+    t_obs_gyr: float, optional
         Age of universe at observation [Gyr]. Default: 13.7.
     **dust_kwargs
         Additional dust parameters (dust_bump_strength, dust_delta, etc.).
@@ -141,14 +141,14 @@ def sed_from_sfh(
     dict
         Rest-frame SED with keys:
 
-        - "wavelength" : ndarray shape (n_wave,) — wavelength [Angstrom]
-        - "sed" : ndarray shape (n_wave,) — luminosity density [erg/s/Hz]
-        - "stellar_mass" : float — total stellar mass formed [Msun]
-        - "weights" : ndarray shape (n_age,) — CSP age weights
+        - "wavelength": ndarray shape (n_wave,): wavelength [Angstrom]
+        - "sed": ndarray shape (n_wave,): luminosity density [erg/s/Hz]
+        - "stellar_mass": float: total stellar mass formed [Msun]
+        - "weights": ndarray shape (n_age,): CSP age weights
 
     Notes
     -----
-    **JIT-compatible**: yes — the entire function is JAX-native and
+    **JIT-compatible**: yes; the entire function is JAX-native and
     compatible with jax.jit, jax.grad, and jax.vmap.
 
     **Metallicity evolution**: When log_z is an array, it is interpolated
@@ -169,7 +169,7 @@ def sed_from_sfh(
 
     # Metallicity interpolation
     if isinstance(log_z, (float, int)) or (hasattr(log_z, "ndim") and log_z.ndim == 0):
-        # Scalar metallicity — convert to absolute log(Z)
+        # Scalar metallicity: convert to absolute log(Z)
         log_z_abs = float(log_z) + LOG10_ZSUN  # solar offset
         ssp_flux_at_z = interpolate_metallicity(
             ssp_data.ssp_flux,
@@ -177,7 +177,7 @@ def sed_from_sfh(
             log_z_abs,
         )
     else:
-        # Array metallicity history — interpolate onto SSP ages
+        # Array metallicity history: interpolate onto SSP ages
         log_z_array = jnp.asarray(log_z)
         log_z_on_ssp = jnp.interp(
             ssp_log_ages_yr,
@@ -233,22 +233,23 @@ def photometry_from_sfh(
 
     Parameters
     ----------
-    t_gyr : array, shape (n_t,)
+    t_gyr: array, shape (n_t,)
         Cosmic time in Gyr.
-    sfr : array, shape (n_t,)
+    sfr: array, shape (n_t,)
         SFR in Msun/yr.
-    ssp_data : SSPData
+    ssp_data: SSPData
         SSP templates.
     filters
-        Either the full return value of ``load_filter_set(names)`` — ``(waves, trans, curves)``
-        — or a sequence of ``FilterCurve`` objects (e.g. the third element of that tuple).
-    log_z : float or array
+        Either the full return value of ``load_filter_set(names)`` (e.g.,
+        ``(waves, trans, curves)``) or a sequence of ``FilterCurve`` objects
+        (e.g. the third element of that tuple).
+    log_z: float or array
         Metallicity (scalar or history).
-    redshift : float
+    redshift: float
         Source redshift.
-    dust_tau_bc, dust_tau_diff : float
+    dust_tau_bc, dust_tau_diff: float
         Dust optical depths.
-    apply_igm : bool
+    apply_igm: bool
         Apply IGM absorption. Default True.
     **kwargs
         Additional dust/model parameters.
@@ -256,9 +257,9 @@ def photometry_from_sfh(
     Returns
     -------
     dict with keys:
-        "flux" : array (n_filters,) — observed flux in erg/s/cm^2/Hz
-        "sed" : array (n_wave,) — rest-frame SED in erg/s/Hz
-        "stellar_mass" : float — total mass formed
+        "flux": array (n_filters,): observed flux in erg/s/cm^2/Hz
+        "sed": array (n_wave,): rest-frame SED in erg/s/Hz
+        "stellar_mass": float: total mass formed
     """
     from tengri.observation.photometry import compute_flux_density
 
@@ -283,7 +284,7 @@ def photometry_from_sfh(
         igm_trans = igm_transmission(wave_obs, redshift)
         sed = sed * igm_trans
 
-    # Luminosity distance — ``luminosity_distance`` already applies the
+    # Luminosity distance: ``luminosity_distance`` already applies the
     # 10-pc absolute-magnitude convention at z=0 (returns ~3.086e19 cm).
     # The earlier ``if redshift > 0 else 1.0`` fallback was a 10^19×
     # flux error at z=0; the dead branch is gone.
@@ -318,19 +319,19 @@ def spectrum_from_sfh(
 
     Parameters
     ----------
-    t_gyr : array, shape (n_t,)
+    t_gyr: array, shape (n_t,)
         Cosmic time in Gyr.
-    sfr : array, shape (n_t,)
+    sfr: array, shape (n_t,)
         SFR in Msun/yr.
-    ssp_data : SSPData
+    ssp_data: SSPData
         SSP templates.
-    wave_obs : array, shape (n_pix,)
+    wave_obs: array, shape (n_pix,)
         Observed wavelength grid in Angstrom.
-    log_z : float or array
+    log_z: float or array
         Metallicity.
-    redshift : float
+    redshift: float
         Source redshift.
-    sigma_v : float
+    sigma_v: float
         Velocity dispersion (km/s) for broadening. Default 0.
     **kwargs
         Additional parameters.
@@ -338,9 +339,9 @@ def spectrum_from_sfh(
     Returns
     -------
     dict with keys:
-        "flux" : array (n_pix,) — observed flux in erg/s/cm^2/Hz
-        "sed" : array (n_wave,) — rest-frame SED
-        "stellar_mass" : float
+        "flux": array (n_pix,): observed flux in erg/s/cm^2/Hz
+        "sed": array (n_wave,): rest-frame SED
+        "stellar_mass": float
     """
     from tengri.observation.spectrum import compute_spectrum
 
@@ -364,7 +365,7 @@ def spectrum_from_sfh(
         igm_trans = igm_transmission(wave_obs_full, redshift)
         sed = sed * igm_trans
 
-    # See note in ``sed_from_sfh`` — ``luminosity_distance`` already
+    # See note in ``sed_from_sfh``: ``luminosity_distance`` already
     # handles the z=0 → 10 pc absolute-magnitude convention.
     dl_cm = luminosity_distance(redshift)
 

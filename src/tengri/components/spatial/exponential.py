@@ -27,11 +27,11 @@ class Exponential(SpatialModelComponent):
 
     Free parameters
     ---------------
-    rd_kpc : Uniform(0.1, 20.0) [kpc]
+    rd_kpc: Uniform(0.1, 20.0) [kpc]
         Disk scale length.
-    axis_ratio : Uniform(0.1, 1.0)
+    axis_ratio: Uniform(0.1, 1.0)
         Minor-to-major axis ratio.
-    pa_deg : Uniform(-90.0, 90.0) [deg]
+    pa_deg: Uniform(-90.0, 90.0) [deg]
         Position angle of the major axis.
 
     Notes

@@ -50,23 +50,23 @@ def run_ghmc(
 
     Parameters
     ----------
-    n_warmup : int
+    n_warmup: int
         Warmup/adaptation steps.
-    n_burnin : int
+    n_burnin: int
         Post-warmup burn-in steps (discarded).
-    n_samples : int
+    n_samples: int
         Posterior samples to collect.
-    alpha : float
+    alpha: float
         Momentum persistence parameter (0-1). 0 = full refresh (standard HMC),
         1 = no refresh (deterministic). Default 0.8 gives good mixing for
         correlated posteriors.
-    delta : float
+    delta: float
         Step size scaling in the GHMC proposal. Default 0.65.
-    target_accept_rate : float
+    target_accept_rate: float
         Target acceptance rate for warmup adaptation.
-    dense_mass_matrix : bool
+    dense_mass_matrix: bool
         Use dense mass matrix. Set False for D>30.
-    verbose : bool
+    verbose: bool
         Print progress.
     """
     try:
@@ -123,7 +123,7 @@ def run_ghmc(
     adapt_key = ("ghmc", tuning, True)
     cached = _get_cached_adaptation(fitter, adapt_key)
 
-    # Both branches must advance the key identically — cache presence is
+    # Both branches must advance the key identically, cache presence is
     # invisible to the caller and must not steer the RNG stream, or two
     # identical ``fit`` calls with one ``key`` return different chains. These
     # two splits used to live only in the ``else``; they are unused on the
@@ -148,7 +148,7 @@ def run_ghmc(
 
             def _init(p, init_key):
                 # Keyword args: blackjax reordered ghmc.init's (rng_key,
-                # logdensity_fn) between 1.3 and 1.6 — keywords work on both.
+                # logdensity_fn) between 1.3 and 1.6, keywords work on both.
                 return blackjax.mcmc.ghmc.init(position=p, logdensity_fn=ld_1arg, rng_key=init_key)
 
             def _scan(s, ks):

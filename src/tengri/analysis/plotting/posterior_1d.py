@@ -38,22 +38,22 @@ def plot_1d_posterior(
 
     Parameters
     ----------
-    posterior : Posterior
+    posterior: Posterior
         Output of :meth:`Fitter.run`. Must expose ``.samples`` as a
         dict ``{name: array, ...}`` of MCMC/VI draws.
-    param_name : str
+    param_name: str
         Free-parameter name (e.g. ``"redshift"``, ``"dust_tau_diff"``).
-    ax : matplotlib.axes.Axes, optional
+    ax: matplotlib.axes.Axes, optional
         Axes to draw on. Creates a new figure if ``None``.
-    bins : int, optional
+    bins: int, optional
         Number of histogram bins. Default ``40``.
-    color : str, optional
+    color: str, optional
         Histogram color. Defaults to the project's primary color.
-    prior : bool, optional
+    prior: bool, optional
         If ``True`` and ``posterior`` exposes a ``.model.spec.distributions``
         registry for this parameter, sample the prior 10000× and overlay
         it as a dashed black curve. Default ``False``.
-    show_summary : bool, optional
+    show_summary: bool, optional
         If ``True`` (default), annotate the panel with
         ``median +Δ_upper / -Δ_lower``.
 
@@ -135,19 +135,19 @@ def plot_calibration(
 
     Parameters
     ----------
-    posterior : Posterior
+    posterior: Posterior
         Posterior with calibration coefficient samples.
-    ax : matplotlib.axes.Axes, optional
+    ax: matplotlib.axes.Axes, optional
         Axes to draw on. Creates a new figure if ``None``.
-    wave_aa : ndarray, optional
+    wave_aa: ndarray, optional
         Observed-frame wavelength grid [Å]. Defaults to
         ``posterior.observation.spectroscopy.wave_obs`` if available,
         otherwise raises.
-    color : str, optional
+    color: str, optional
         Line/band color.
-    ci_levels : tuple of float, optional
+    ci_levels: tuple of float, optional
         Percentiles for the filled credible band. Default ``(16, 84)``.
-    show_median : bool, optional
+    show_median: bool, optional
         If ``True`` (default), overlay the median polynomial as a solid line.
 
     Returns
@@ -158,7 +158,7 @@ def plot_calibration(
         _, ax = plt.subplots(figsize=(6.5, 3.5))
 
     if posterior.samples is None:
-        raise ValueError("posterior has no samples — nothing to plot.")
+        raise ValueError("posterior has no samples: nothing to plot.")
 
     coeff_names = sorted(
         k for k in posterior.samples if k.startswith("cal_") and k[4:].lstrip("c").isdigit()

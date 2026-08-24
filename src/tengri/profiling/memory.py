@@ -139,7 +139,7 @@ def profile_memory(model) -> MemoryReport:
 
     Parameters
     ----------
-    model : Model
+    model: Model
         A tengri Model instance.
 
     Returns

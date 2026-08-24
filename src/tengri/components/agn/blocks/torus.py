@@ -1,13 +1,13 @@
 # SPDX-License-Identifier: BSD-3-Clause
 r"""Dusty torus blocks for the composable AGN pipeline.
 
-One file, every torus — pick via ``agn={'torus': {'type': ...}}``.
-Consolidated 2026-07; registration unchanged. (``torus_screen.py`` — the
-Type-1/2 screen helper used by the runner — stays separate.)
+One file, every torus: pick via ``agn={'torus': {'type': ...}}``.
+Consolidated 2026-07; registration unchanged. (``torus_screen.py``: the
+Type-1/2 screen helper used by the runner: stays separate.)
 
 NAME NOTE: this composable-*block* module shadows the physics kernel
 ``tengri.components.agn.torus`` one package up (the *toy* simple/two-temperature
-tori — see the CLAUDE.md gotchas). Always import by full path, never a bare
+tori: see the CLAUDE.md gotchas). Always import by full path, never a bare
 ``torus``.
 """
 
@@ -128,33 +128,33 @@ def fritz_torus_block(
 
     Parameters
     ----------
-    wavelength : array_like, shape (n_wave,)
-    agn_log_lbol : float
-    l5100_disc : array
+    wavelength: array_like, shape (n_wave,)
+    agn_log_lbol: float
+    l5100_disc: array
         Ignored.
-    agn_fritz_r_ratio : float, optional
+    agn_fritz_r_ratio: float, optional
         Dust torus radius ratio (r_max / r_min) [dimensionless].
         Default ``60.0``. Allowed: 10, 30, 60, 100, 150.
-    agn_fritz_tau : float, optional
+    agn_fritz_tau: float, optional
         Optical depth at 9.7 µm [dimensionless].
         Default ``1.0``. Allowed: 0.1, 0.3, 0.6, 1.0, 2.0, 3.0, 6.0, 10.0.
-    agn_fritz_beta : float, optional
+    agn_fritz_beta: float, optional
         Radial dust density power-law index [dimensionless].
         Default ``-0.5``. Allowed: -1.0, -0.75, -0.5, -0.25, 0.0.
-    agn_fritz_gamma : float, optional
+    agn_fritz_gamma: float, optional
         Polar dust density gradient [dimensionless].
         Default ``4.0``. Allowed: 0, 2, 4, 6.
-    agn_fritz_oa : float, optional
+    agn_fritz_oa: float, optional
         Dust torus half-opening angle [degrees], as keyed in CIGALE's
         ``SimpleDatabase`` (the user-facing "full opening angle" 60/100/140 is
         mapped to this half-angle via ``(180 - oa) / 2`` in CIGALE).
         Default ``60.0``. Allowed: 20, 40, 60.
-    agn_fritz_psy : float, optional
+    agn_fritz_psy: float, optional
         Viewing angle from torus axis [degrees].
         Default ``0.001`` (type-2 edge-on).
         Allowed: 0.001, 10.1, 20.1, 30.1, 40.1, 50.1, 60.1, 70.1, 80.1, 89.99.
         Values: 0° = type-2 AGN (edge-on), 90° = type-1 AGN (face-on).
-    agn_torus_frac : float, optional
+    agn_torus_frac: float, optional
         Covering factor [0, 1]. Default ``0.5``.
 
     References
@@ -203,14 +203,14 @@ def nenkova_torus_block(
 
     Parameters
     ----------
-    wavelength : array_like, shape (n_wave,)
-    agn_log_lbol : float
-    l5100_disc : array
-        Ignored (kept for protocol compatibility — this block normalizes
+    wavelength: array_like, shape (n_wave,)
+    agn_log_lbol: float
+    l5100_disc: array
+        Ignored (kept for protocol compatibility: this block normalizes
         from ``agn_log_lbol``).
-    agn_tau : float, optional
+    agn_tau: float, optional
         Equatorial optical depth (5-150). Default ``30``.
-    agn_torus_frac : float, optional
+    agn_torus_frac: float, optional
         Covering factor [0, 1]. Default ``0.5``.
 
     References
@@ -295,7 +295,7 @@ def silva04_torus_block(
 
     Parameters
     ----------
-    templates : Silva04Grid, optional
+    templates: Silva04Grid, optional
         Pre-loaded template grid, threaded in by the forward model. When
         ``None`` the block loads it from disk, which bakes the library into
         the graph as constants if this runs under trace.
@@ -400,29 +400,29 @@ def skirtor_torus_block(
 
     Parameters
     ----------
-    wavelength : array_like, shape (n_wave,)
-    agn_log_lbol : float
+    wavelength: array_like, shape (n_wave,)
+    agn_log_lbol: float
         :math:`\log_{10}(L_{\rm bol}/L_\odot)`.
-    l5100_disc : array
+    l5100_disc: array
         Ignored.
-    agn_tau_skirtor : float, optional
+    agn_tau_skirtor: float, optional
         V-band optical depth. Default ``7.0``.
-    agn_p_skirtor, agn_q_skirtor : float, optional
+    agn_p_skirtor, agn_q_skirtor: float, optional
         Radial / polar density gradients. Default ``1.0`` each.
-    agn_oa_skirtor : float, optional
+    agn_oa_skirtor: float, optional
         Half-opening angle [deg]. Default ``40``.
-    agn_cos_inc : float, optional
+    agn_cos_inc: float, optional
         :math:`\cos(i)`. Default ``cos(30°) ≈ 0.866`` matching CIGALE
         ``skirtor2016 i=30`` default.
-    agn_torus_frac : float, optional
+    agn_torus_frac: float, optional
         Covering factor. Default ``0.5``.
-    agn_polar_ebv : float, optional
+    agn_polar_ebv: float, optional
         Polar dust E(B-V) [mag] (SMC law). Default ``0.03`` (CIGALE
         ``skirtor2016`` default). Set ``0`` to disable the polar-dust
         graybody.
-    agn_polar_T : float, optional
+    agn_polar_T: float, optional
         Polar dust temperature [K]. Default ``100`` (CIGALE default).
-    agn_polar_beta : float, optional
+    agn_polar_beta: float, optional
         Polar dust emissivity index. Default ``1.6`` (CIGALE default).
 
     Notes

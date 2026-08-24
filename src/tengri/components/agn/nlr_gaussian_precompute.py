@@ -8,7 +8,7 @@ the Richardson+2014 narrow-line region template
 Like the BLR adapter (see :mod:`tengri.components.agn.blr_precompute`), this
 emitter is fundamentally *runtime-Gaussian*: line widths and the bolometric
 disc luminosity feeding the NLR are tunable on every gradient step.  The only
-work that can be moved to model build time is the filter projection — i.e. the
+work that can be moved to model build time is the filter projection: i.e. the
 ``(n_lines, n_filt)`` matrix obtained by evaluating each filter transmission
 curve at the redshifted line center.  Runtime then weighs lines by the
 Richardson+2014 ``a42`` flux template (normalized to H-beta = 1) and rescales
@@ -40,7 +40,7 @@ from tengri.components.agn.nlr import (
     _RICHARDSON_WAVES,
 )
 
-# NLR Gaussian composer has no grid axes — all parameters are runtime.
+# NLR Gaussian composer has no grid axes: all parameters are runtime.
 AXIS_PARAMS: tuple[str, ...] = ()
 
 
@@ -55,15 +55,15 @@ def precompute(
 
     Parameters
     ----------
-    filter_waves : list[ndarray]
+    filter_waves: list[ndarray]
         Per-filter observed-frame wavelengths [Angstrom].
-    filter_trans : list[ndarray]
+    filter_trans: list[ndarray]
         Per-filter transmission (0–1).
-    redshift : float
+    redshift: float
         Source redshift. [dimensionless]
-    parameters : Parameters or None
-        Unused — the NLR Gaussian composer has no grid axes.
-    **kwargs : optional
+    parameters: Parameters or None
+        Unused, the NLR Gaussian composer has no grid axes.
+    **kwargs: optional
         Ignored.
 
     Returns
@@ -74,7 +74,7 @@ def precompute(
 
     Notes
     -----
-    **JIT-compatible**: no — build-time NumPy.
+    **JIT-compatible**: no, build-time NumPy.
     """
     line_waves_rest = np.asarray(_RICHARDSON_WAVES, dtype=np.float64)
     line_strengths = np.asarray(_RICHARDSON_FLUXES, dtype=np.float64)
@@ -109,9 +109,9 @@ def build_lookup(preint: dict, **kwargs: Any):
 
     Parameters
     ----------
-    preint : dict
+    preint: dict
         Output of :func:`precompute`.
-    **kwargs : optional
+    **kwargs: optional
         Ignored.
 
     Returns
@@ -121,12 +121,12 @@ def build_lookup(preint: dict, **kwargs: Any):
         Wavelength integral is replaced by the precomputed projection
         matrix at line centers (delta-function approximation; runtime
         Gaussian widths affect only the spectral shape, not the band
-        integrals to first order — exact for narrow lines whose FWHM
+        integrals to first order: exact for narrow lines whose FWHM
         is much smaller than the filter width).
 
     Notes
     -----
-    **JIT-compatible**: yes — pure JAX.
+    **JIT-compatible**: yes, pure JAX.
 
     **Runtime parameters (NOT precomputed)**:
 

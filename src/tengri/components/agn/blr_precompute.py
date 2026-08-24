@@ -54,7 +54,7 @@ from tengri.components.agn.blr import (
 # emission lines; Fe II flows through the runtime template path.
 _FE2_GROUPS = np.empty((0, 3), dtype=np.float64)
 
-# Axis parameters: BLR Gaussian composer has NO grid axes — all parameters are
+# Axis parameters: BLR Gaussian composer has NO grid axes: all parameters are
 # runtime. This tuple is empty; precompute returns only the filter table.
 AXIS_PARAMS: tuple[str, ...] = ()
 
@@ -78,15 +78,15 @@ def precompute(
 
     Parameters
     ----------
-    filter_waves : list[ndarray]
+    filter_waves: list[ndarray]
         Wavelength grid per filter [Angstrom], observed frame.
-    filter_trans : list[ndarray]
+    filter_trans: list[ndarray]
         Transmission per filter (0–1).
-    redshift : float
+    redshift: float
         Source redshift. [dimensionless]
-    parameters : Parameters or None
+    parameters: Parameters or None
         Not used; BLR has no grid axes.
-    **kwargs : optional
+    **kwargs: optional
         Ignored.
 
     Returns
@@ -104,7 +104,7 @@ def precompute(
 
     Notes
     -----
-    **JIT-compatible**: no — this is a build-time function using NumPy.
+    **JIT-compatible**: no, this is a build-time function using NumPy.
 
     **Line profiles**: Emission lines and Fe II groups are integrated as delta
     functions at their center wavelengths (since runtime widths vary). The
@@ -193,9 +193,9 @@ def build_lookup(preint: dict, **kwargs: Any) -> dict:
 
     Notes
     -----
-    **JIT-compatible**: yes — the returned function is fully JAX-native.
+    **JIT-compatible**: yes, the returned function is fully JAX-native.
 
-    **Gradient-safe**: yes — Gaussian line profile and filter projection
+    **Gradient-safe**: yes. Gaussian line profile and filter projection
     are fully differentiable.
 
     **Runtime parameters (NOT precomputed)**:
@@ -216,11 +216,11 @@ def build_lookup(preint: dict, **kwargs: Any) -> dict:
 
         Parameters
         ----------
-        l_cont_erg_s_hz : float
+        l_cont_erg_s_hz: float
             Continuum luminosity [erg/s/Hz] intercepted by BLR.
-        sigma_blr_kms : float
+        sigma_blr_kms: float
             Gaussian line width [km/s].
-        blr_strength : float
+        blr_strength: float
             Overall BLR emission strength [0, 1].
 
         Returns

@@ -37,30 +37,30 @@ def plot_sed_fit(
     band_names=None,
     show_residuals=True,
 ):
-    """Plot observed photometry with model fit — Prospector style.
+    """Plot observed photometry with model fit: Prospector style.
 
     Parameters
     ----------
-    wave_eff : array_like, shape (n_bands,)
+    wave_eff: array_like, shape (n_bands,)
         Effective filter wavelengths. [Angstrom]
-    flux_obs : array_like, shape (n_bands,)
+    flux_obs: array_like, shape (n_bands,)
         Observed photometric fluxes. [erg/s/cm²/Hz]
-    noise : array_like, shape (n_bands,)
+    noise: array_like, shape (n_bands,)
         1-sigma photometric uncertainties. [erg/s/cm²/Hz]
-    flux_true : array_like, shape (n_bands,), optional
+    flux_true: array_like, shape (n_bands,), optional
         True (noiseless) fluxes for mock recovery plots.
-    posterior_draws : array_like, shape (n_draws, n_bands), optional
+    posterior_draws: array_like, shape (n_draws, n_bands), optional
         Posterior predictive flux draws for uncertainty shading.
-    ax : matplotlib Axes, optional
+    ax: matplotlib Axes, optional
         Axes to plot on. Creates new figure if None.
-    band_names : list of str, optional
+    band_names: list of str, optional
         Filter names for axis labels.
-    show_residuals : bool
+    show_residuals: bool
         If True, adds a residual panel below the main SED panel. Default True.
 
     Returns
     -------
-    fig : matplotlib Figure
+    fig: matplotlib Figure
 
     Examples
     --------
@@ -76,7 +76,7 @@ def plot_sed_fit(
     """
     # The residual panel needs `posterior_draws` to have anything in it, so it
     # is built only when both are present. Keying it on `show_residuals` alone
-    # meant the DEFAULT call — observed photometry, no posterior yet — drew an
+    # meant the DEFAULT call: observed photometry, no posterior yet; drew an
     # empty box under the SED. `ax=` is honored whenever no residual panel is
     # being added; a caller's own Axes cannot be split in two.
     want_residuals = show_residuals and posterior_draws is not None
@@ -165,7 +165,7 @@ def plot_sed_fit(
         ax_main.set_xlabel(r"Wavelength ($\AA$)")
     # One return type. This used to hand back a Figure on the residual branch
     # and an Axes otherwise, so what the caller held depended on whether they
-    # had passed `posterior_draws` — and `fig.savefig(...)`, which the
+    # had passed `posterior_draws`: and `fig.savefig(...)`, which the
     # docstring, the module example and the sibling plot_spectrum_fit all
     # imply, raised AttributeError on the common path.
     return fig
@@ -179,28 +179,28 @@ def plot_sed_fit(
 def plot_spectrum_fit(
     wave_obs, spec_obs, noise, spec_true=None, spec_draws=None, features=None, z=0.1
 ):
-    """Plot spectroscopic fit with residuals — CIGALE style.
+    """Plot spectroscopic fit with residuals: CIGALE style.
 
     Parameters
     ----------
-    wave_obs : array_like, shape (n_pix,)
+    wave_obs: array_like, shape (n_pix,)
         Observed-frame wavelength grid. [Angstrom]
-    spec_obs : array_like, shape (n_pix,)
+    spec_obs: array_like, shape (n_pix,)
         Observed spectrum flux density. [erg/s/cm²/Hz]
-    noise : array_like, shape (n_pix,)
+    noise: array_like, shape (n_pix,)
         1-sigma per-pixel uncertainties. [erg/s/cm²/Hz]
-    spec_true : array_like, shape (n_pix,), optional
+    spec_true: array_like, shape (n_pix,), optional
         True (noiseless) spectrum for mock recovery plots.
-    spec_draws : array_like, shape (n_draws, n_pix), optional
+    spec_draws: array_like, shape (n_draws, n_pix), optional
         Posterior predictive spectrum draws for uncertainty shading.
-    features : dict, optional
+    features: dict, optional
         Rest-frame line/feature wavelengths to annotate, e.g. ``{"Hα": 6563.0}``.
-    z : float
+    z: float
         Redshift for shifting feature wavelengths to observed frame. Default 0.1.
 
     Returns
     -------
-    fig : matplotlib Figure
+    fig: matplotlib Figure
 
     Examples
     --------
@@ -279,7 +279,7 @@ def plot_spectrum_fit(
 
 
 # ═══════════════════════════════════════════════════════════════════
-# Sweep utilities — the engine behind all gallery notebooks
+# Sweep utilities: the engine behind all gallery notebooks
 # ═══════════════════════════════════════════════════════════════════
 
 
@@ -302,34 +302,34 @@ def sweep_parameter(
 
     Parameters
     ----------
-    model : tengri.SEDModel
+    model: tengri.SEDModel
         Model instance with a ``predict`` or ``sed`` callable.
-    param_name : str
+    param_name: str
         Full parameter name (e.g. ``"dust_tau_bc"``).
-    values : sequence of float
+    values: sequence of float
         Parameter values to sweep.
-    ax : Axes, optional
+    ax: Axes, optional
         Existing axes to plot into. Creates new figure if None.
-    cmap : str
+    cmap: str
         Matplotlib colormap name. Use SWEEP_CMAPS[key] for standard sweeps.
-    label_fmt : str
+    label_fmt: str
         Format string for legend labels, e.g. ``"τ_BC = {:.1f}"``.
-    unit : str
+    unit: str
         Unit string appended to label, e.g. ``"K"``.
-    log_scale : bool
+    log_scale: bool
         If True, log-scale the y-axis.
-    components : bool
+    components: bool
         If True, also overplot individual SED components as dashed lines.
-    reference_idx : int or None
+    reference_idx: int or None
         Index into ``values`` to plot in REFERENCE_STYLE (gray). Others in cmap.
-    wave_range : (lo, hi) or None
+    wave_range: (lo, hi) or None
         Wavelength range in Å to plot. Defaults to SED_XLIM.
-    normalize_at : float or None
+    normalize_at: float or None
         Normalize SEDs at this rest-frame wavelength (Å). None = no normalization.
 
     Returns
     -------
-    fig, ax : Figure, Axes
+    fig, ax: Figure, Axes
     """
     if ax is None:
         fig, ax = plt.subplots(1, 1, figsize=(8, 4))
@@ -400,18 +400,18 @@ def parameter_gallery(
 
     Parameters
     ----------
-    model : tengri.SEDModel
-    param_sweep_specs : list of dict
+    model: tengri.SEDModel
+    param_sweep_specs: list of dict
         Each dict: ``{"param": "dust_tau_bc", "values": [...], "label": "τ_BC",
         "cmap": "YlOrRd", "label_fmt": "{:.1f}"}``.
-    ncols : int
+    ncols: int
         Number of columns in the grid.
-    figsize_per_panel : (w, h)
+    figsize_per_panel: (w, h)
         Size per panel in inches.
 
     Returns
     -------
-    fig : Figure
+    fig: Figure
     """
     n = len(param_sweep_specs)
     nrows = (n + ncols - 1) // ncols
@@ -460,21 +460,21 @@ def sfh_sed_comparison(
 
     Parameters
     ----------
-    model : tengri.SEDModel
-    param_name : str
+    model: tengri.SEDModel
+    param_name: str
         Parameter to sweep across ``values``.
-    values : sequence
+    values: sequence
         Parameter values.
-    cmap : str
+    cmap: str
         Colormap for the sweep.
-    n_stochastic : int
+    n_stochastic: int
         If > 0, draw this many stochastic SFH samples per value (thin, alpha=0.2).
-    key : jax.random.PRNGKey, optional
+    key: jax.random.PRNGKey, optional
         Required when n_stochastic > 0.
 
     Returns
     -------
-    fig : Figure  (two-panel, figsize=(12, 4))
+    fig: Figure  (two-panel, figsize=(12, 4))
     """
     import jax
 
@@ -575,20 +575,20 @@ def sfh_sed_comparison(
 def mock_plot(mock, ax=None):
     """Plot mock photometry and true SED.
 
-    Convenience function for MockData.plot() — shows observed photometry
+    Convenience function for MockData.plot(): shows observed photometry
     with errorbars and the true noiseless SED as a line.
 
     Parameters
     ----------
-    mock : MockData
+    mock: MockData
         Mock observation from model.mock().
-    ax : matplotlib Axes, optional
+    ax: matplotlib Axes, optional
         Axes to plot on. If None, creates a new figure.
 
     Returns
     -------
-    fig : matplotlib Figure
-    ax : matplotlib Axes
+    fig: matplotlib Figure
+    ax: matplotlib Axes
     """
     if ax is None:
         fig, ax = plt.subplots(1, 1, figsize=(7, 4))
@@ -626,24 +626,24 @@ def mock_plot(mock, ax=None):
 def posterior_plot_sed(result, mock=None, ax=None):
     """Plot SED posterior with optional mock data.
 
-    Convenience function for Posterior.plot_sed() — creates a two-panel
+    Convenience function for Posterior.plot_sed(): creates a two-panel
     figure showing the posterior SED band and the star formation history
     over lookback time.
 
     Parameters
     ----------
-    result : Posterior
+    result: Posterior
         Posterior inference result with model reference.
-    mock : MockData, optional
+    mock: MockData, optional
         Mock observation to overlay. If provided, shows observed
         photometry with errorbars.
-    ax : matplotlib Axes or array of Axes, optional
+    ax: matplotlib Axes or array of Axes, optional
         Axes to plot on. If None, creates a new figure.
 
     Returns
     -------
-    fig : matplotlib Figure
-    axes : array of matplotlib Axes
+    fig: matplotlib Figure
+    axes: array of matplotlib Axes
 
     Raises
     ------

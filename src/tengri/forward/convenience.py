@@ -45,13 +45,13 @@ def mock(model: SEDModel, params, snr=20.0, key=None) -> MockData:
 
     Parameters
     ----------
-    model : SEDModel
+    model: SEDModel
         Forward model instance.
-    params : dict
+    params: dict
         Parameter values (public-space names).
-    snr : float, optional
+    snr: float, optional
         Signal-to-noise ratio. Default 20.0.
-    key : PRNGKey, optional
+    key: PRNGKey, optional
         JAX random key for noise generation. If None, returns noiseless observation.
 
     Returns
@@ -63,10 +63,10 @@ def mock(model: SEDModel, params, snr=20.0, key=None) -> MockData:
 
     Notes
     -----
-    **JIT-compatible**: yes — all operations use ``jnp`` primitives.
+    **JIT-compatible**: yes, all operations use ``jnp`` primitives.
     """
     flux_true = model.predict_photometry(params)
-    # No abs() here (unlike mock_spectrum) — inherited difference kept bit-exact.
+    # No abs() here (unlike mock_spectrum), inherited difference kept bit-exact.
     return _assemble_mock(params, flux_true, flux_true / snr, key)
 
 
@@ -75,15 +75,15 @@ def mock_spectrum(model: SEDModel, params, wave_obs, snr=30.0, key=None) -> Mock
 
     Parameters
     ----------
-    model : SEDModel
+    model: SEDModel
         Forward model instance.
-    params : dict
+    params: dict
         Parameter values (public-space names).
-    wave_obs : array_like, shape (n_pix,)
+    wave_obs: array_like, shape (n_pix,)
         Observed wavelength grid [Angstrom].
-    snr : float, optional
+    snr: float, optional
         Signal-to-noise ratio per pixel. Default 30.0.
-    key : PRNGKey, optional
+    key: PRNGKey, optional
         JAX random key for noise generation. If None, returns noiseless observation.
 
     Returns
@@ -95,7 +95,7 @@ def mock_spectrum(model: SEDModel, params, wave_obs, snr=30.0, key=None) -> Mock
 
     Notes
     -----
-    **JIT-compatible**: yes — all operations use ``jnp`` primitives.
+    **JIT-compatible**: yes, all operations use ``jnp`` primitives.
     """
     flux_true = model.predict_spectrum(params, wave_obs)
     return _assemble_mock(params, flux_true, jnp.abs(flux_true) / snr, key)
@@ -106,13 +106,13 @@ def mock_batch(model: SEDModel, params_batch, snr=20.0, key=None) -> MockData:
 
     Parameters
     ----------
-    model : SEDModel
+    model: SEDModel
         Forward model instance.
-    params_batch : dict of arrays
+    params_batch: dict of arrays
         Each value has shape (N, ...) with leading batch dimension.
-    snr : float, optional
+    snr: float, optional
         Signal-to-noise ratio. Default 20.0.
-    key : PRNGKey, optional
+    key: PRNGKey, optional
         JAX random key for noise generation. If None, returns noiseless observations.
 
     Returns
@@ -124,7 +124,7 @@ def mock_batch(model: SEDModel, params_batch, snr=20.0, key=None) -> MockData:
 
     Notes
     -----
-    **JIT-compatible**: yes — all operations use ``jnp`` primitives.
+    **JIT-compatible**: yes, all operations use ``jnp`` primitives.
     """
     from tengri.forward.sed_model import MockData
 
@@ -158,7 +158,7 @@ def _threaded_batch(model, method_name, params_batch, ssp_data, template_data):
 
     ``jax.vmap(model.predict_photometry)`` closure-captures ``model``, so the SSP
     grid reaches the trace as a constant and a caller who wraps the batch helper
-    in their own ``jax.jit`` has no channel to pass it in — the #1753 gap, one
+    in their own ``jax.jit`` has no channel to pass it in, the #1753 gap, one
     level up (#1793). Making the grids *arguments* of the vmapped function, with
     ``in_axes=None`` so they are shared rather than mapped, puts them on the same
     threading footing as the scalar surfaces.
@@ -184,11 +184,11 @@ def predict_photometry_batch(model: SEDModel, params_batch, *, ssp_data=None, te
 
     Parameters
     ----------
-    model : SEDModel
+    model: SEDModel
         Forward model instance.
-    params_batch : dict of arrays
+    params_batch: dict of arrays
         Each value has shape (N, ...) with leading batch dimension.
-    ssp_data, template_data : Any | None, keyword-only, optional
+    ssp_data, template_data: Any | None, keyword-only, optional
         The JIT-threading channel (#1793). ``None`` (default) uses the model's
         own arrays, which is correct for every ordinary call. Pass them only
         when wrapping this helper in your own JAX transform, so the grid enters
@@ -201,7 +201,7 @@ def predict_photometry_batch(model: SEDModel, params_batch, *, ssp_data=None, te
 
     Notes
     -----
-    **JIT-compatible**: yes — all operations use ``jnp`` primitives.
+    **JIT-compatible**: yes, all operations use ``jnp`` primitives.
     See :func:`jax.vmap` for vmap internals.
 
     The grids are broadcast with ``in_axes=None``: one shared table across the
@@ -217,12 +217,12 @@ def predict_spectrum_batch(model: SEDModel, params_batch, *, ssp_data=None, temp
 
     Parameters
     ----------
-    model : SEDModel
+    model: SEDModel
         Forward model instance.
-    params_batch : dict of arrays
+    params_batch: dict of arrays
         Each value has shape (N, ...) with leading batch dimension.
-    ssp_data, template_data : Any | None, keyword-only, optional
-        The JIT-threading channel — see :func:`predict_photometry_batch` (#1793).
+    ssp_data, template_data: Any | None, keyword-only, optional
+        The JIT-threading channel, see :func:`predict_photometry_batch` (#1793).
 
     Returns
     -------
@@ -231,7 +231,7 @@ def predict_spectrum_batch(model: SEDModel, params_batch, *, ssp_data=None, temp
 
     Notes
     -----
-    **JIT-compatible**: yes — all operations use ``jnp`` primitives.
+    **JIT-compatible**: yes, all operations use ``jnp`` primitives.
     See :func:`jax.vmap` for vmap internals.
     """
     return _threaded_batch(model, "predict_spectrum", params_batch, ssp_data, template_data)
@@ -248,11 +248,11 @@ def prior_predictive(model: SEDModel, n: int = 500, seed: int = 42) -> PriorPred
 
     Parameters
     ----------
-    model : SEDModel
+    model: SEDModel
         Forward model instance.
-    n : int, optional
+    n: int, optional
         Number of prior draws. Default 500.
-    seed : int, optional
+    seed: int, optional
         Random seed for reproducibility. Default 42.
 
     Returns
@@ -260,13 +260,13 @@ def prior_predictive(model: SEDModel, n: int = 500, seed: int = 42) -> PriorPred
     PriorPredictive
         Object with attributes:
 
-        - ``flux``: ndarray, shape (n, n_filters) or None — photometry draws [erg/s/cm²/Hz]
-        - ``sfh``: ndarray, shape (n, n_grid) — SFR on internal time grid [Msun/yr]
-        - ``params``: dict of arrays, shape (n,) — parameter draws
+        - ``flux``: ndarray, shape (n, n_filters) or None, photometry draws [erg/s/cm²/Hz]
+        - ``sfh``: ndarray, shape (n, n_grid), SFR on internal time grid [Msun/yr]
+        - ``params``: dict of arrays, shape (n,), parameter draws
 
     Notes
     -----
-    **JIT-compatible**: no — uses Python-level for-loop to handle vmap failures gracefully.
+    **JIT-compatible**: no, uses Python-level for-loop to handle vmap failures gracefully.
     """
     from tengri.forward.sed_model import PriorPredictive
 
@@ -317,19 +317,19 @@ def fit_batch_map_vmap(
 
     Parameters
     ----------
-    model : SEDModel
+    model: SEDModel
         Forward model with ``Observation(photometry=...)``.
-    fluxes : array_like, shape (N, n_filters)
+    fluxes: array_like, shape (N, n_filters)
         Per-galaxy observed fluxes [erg/s/cm²/Hz].
-    noises : array_like, shape (N, n_filters)
+    noises: array_like, shape (N, n_filters)
         Per-galaxy 1-sigma noise [erg/s/cm²/Hz].
-    n_steps : int, optional
+    n_steps: int, optional
         Adam iterations per galaxy. Default 500.
-    learning_rate : float, optional
+    learning_rate: float, optional
         Adam learning rate for optimization. Default 0.02.
-    seed : int, optional
+    seed: int, optional
         PRNG seed for Adam initialization. Default 0.
-    verbose : bool, optional
+    verbose: bool, optional
         Print batch statistics and wall time. Default True.
 
     Returns
@@ -340,7 +340,7 @@ def fit_batch_map_vmap(
 
     Notes
     -----
-    **JIT-compatible**: no — uses Python-level vmap setup and optax integration.
+    **JIT-compatible**: no, uses Python-level vmap setup and optax integration.
     """
     import time
 
@@ -362,7 +362,7 @@ def fit_batch_map_vmap(
     n_gal = int(fluxes.shape[0])
 
     # Build a template Fitter on the first galaxy to derive the loss fn.
-    # Data baked into this fitter is ignored — loss_fn takes data_args explicitly.
+    # Data baked into this fitter is ignored, loss_fn takes data_args explicitly.
     template = Fitter(model, fluxes[0], noises[0])
     if template.data_type != "photometry":
         raise ValueError(
@@ -452,25 +452,25 @@ def fit_batch(
 
     Parameters
     ----------
-    model : SEDModel
+    model: SEDModel
         Forward model instance.
-    catalog : DataFrame, Table, or list of dict
+    catalog: DataFrame, Table, or list of dict
         Input catalog with flux and error columns.
-    flux_cols : list of str
+    flux_cols: list of str
         Column names for per-band flux [erg/s/cm²/Hz].
-    err_cols : list of str
+    err_cols: list of str
         Column names for per-band 1-sigma uncertainty [erg/s/cm²/Hz].
-    redshift_col : str, optional
+    redshift_col: str, optional
         Column name for per-row redshift. If None, uses model redshift.
-    method : str, optional
+    method: str, optional
         Inference method (e.g. "vi", "mcmc"). Default ``"vi"``.
-    n_workers : int, optional
+    n_workers: int, optional
         Reserved for future multiprocessing. Default 1.
-    verbose : bool, optional
+    verbose: bool, optional
         Print per-galaxy progress. Default True.
-    output_dir : str, optional
+    output_dir: str, optional
         Save each Posterior to ``{output_dir}/{id}.h5``. Supports checkpoint resume.
-    id_col : str, optional
+    id_col: str, optional
         Column name for galaxy IDs in output filenames. Default uses row index.
     **kwargs
         Forwarded to ``Fitter.run()`` for each galaxy.
@@ -482,7 +482,7 @@ def fit_batch(
 
     Notes
     -----
-    **JIT-compatible**: no — uses Python-level loop and file I/O.
+    **JIT-compatible**: no, uses Python-level loop and file I/O.
     """
     import os
     import time
@@ -531,7 +531,7 @@ def fit_batch(
         )
 
     # ── Consolidation (#1336): unless per-galaxy checkpointing is requested,
-    # route the whole batch through Catalog — the one fitting code path. Catalog
+    # route the whole batch through Catalog, the one fitting code path. Catalog
     # owns ingestion, unit conversion, and per-galaxy redshift; we unwrap its
     # CatalogPosterior back to the legacy list-of-Posterior. The output_dir
     # checkpoint/resume path below keeps the per-row loop (Catalog has no
@@ -543,7 +543,7 @@ def fit_batch(
         fwd = ForwardModel.build(sed=model)
         # Forward an explicit approx= (the legacy loop passed it to every Fitter).
         # "auto" is the default and Catalog/Fitter already resolve it, so only a
-        # non-default value needs applying — dropping it would silently change the
+        # non-default value needs applying, dropping it would silently change the
         # fit's approximation policy.
         if approx != "auto":
             fwd = fwd.with_approx(approx)
@@ -554,7 +554,7 @@ def fit_batch(
                 f"({len(band_names)}); got {len(flux_cols)} flux, {len(err_cols)} err."
             )
         # fit_batch's flux_cols/err_cols are POSITIONAL (catalog column names,
-        # mapped to the model's bands in order) — the catalog columns need not be
+        # mapped to the model's bands in order), the catalog columns need not be
         # named after the bands. Rename them to the observation band names so
         # Catalog can name-match, preserving fit_batch's positional contract.
         table: dict = {}
@@ -606,7 +606,7 @@ def fit_batch(
                 results.append(result_i)
                 n_skipped += 1
                 if verbose and n_skipped <= 3:
-                    print(f"  [{i + 1}/{n_gal}] {gal_id} — loaded from checkpoint")
+                    print(f"  [{i + 1}/{n_gal}] {gal_id}, loaded from checkpoint")
                 elif verbose and n_skipped == 4:
                     print("  ... skipping remaining cached results")
                 continue
@@ -663,11 +663,11 @@ def catalog_summary(
 
     Parameters
     ----------
-    results : list of Posterior
+    results: list of Posterior
         One per galaxy, from ``fit_batch()``.
-    percentiles : tuple of float, optional
+    percentiles: tuple of float, optional
         Percentiles to compute. Default (16, 50, 84) gives median + 68% CI.
-    include_derived : bool, optional
+    include_derived: bool, optional
         Include derived quantities (stellar_mass, sfr_100myr, etc.). Default True.
 
     Returns
@@ -679,7 +679,7 @@ def catalog_summary(
 
     Notes
     -----
-    **JIT-compatible**: no — uses Python loops for aggregation.
+    **JIT-compatible**: no, uses Python loops for aggregation.
 
     Examples
     --------
@@ -803,14 +803,14 @@ def fit_population(
 
     Parameters
     ----------
-    model : SEDModel
+    model: SEDModel
         Forward model instance.
-    observations_list : list
+    observations_list: list
         Each element is either (flux, noise) tuple or dict with
         ``"flux_obs"`` [erg/s/cm²/Hz] and ``"noise"`` [erg/s/cm²/Hz] keys.
-    method : str, optional
+    method: str, optional
         Hierarchical inference method (e.g. "vi", "mcmc"). Default ``"vi"``.
-    population_prior : dict, optional
+    population_prior: dict, optional
         Hyperpriors on shared PSD parameters (e.g. ``psd_sigma``, ``psd_tau_myr``).
     **kwargs
         Forwarded to ``PopulationFitter.run()``.
@@ -823,7 +823,7 @@ def fit_population(
 
     Notes
     -----
-    **JIT-compatible**: no — uses PopulationFitter wrapper with internal state.
+    **JIT-compatible**: no, uses PopulationFitter wrapper with internal state.
     """
     from tengri.forward.sed_model import SEDModel as ModelClass
     from tengri.inference.hierarchical import PopulationFitter
@@ -906,25 +906,25 @@ def build_model_from_config(
 
     Parameters
     ----------
-    model_cls : type
+    model_cls: type
         SEDModel class.
-    ssp : str or SSPData
+    ssp: str or SSPData
         Path to SSP data file or SSPData object.
-    sfh : str, optional
+    sfh: str, optional
         SFH model type (e.g. "dpl", "tsnorm"). Uses default if unset.
-    dust : str, optional
+    dust: str, optional
         Dust law (e.g. "charlot_fall", "kl04"). Uses default if unset.
-    nebular : str or None, optional
+    nebular: str or None, optional
         Nebular backend (e.g. "cloudy_grid", "linratios"). Uses default if unset.
-    agn : str or None, optional
+    agn: str or None, optional
         AGN model type. Uses default if unset.
-    redshift : float or str, optional
+    redshift: float or str, optional
         Redshift value (e.g. 0.5) [dimensionless] or "free" to enable free parameter.
-    filters : list of str, optional
+    filters: list of str, optional
         Filter names for photometry. If None, no photometry observation.
-    wave_obs : array_like, optional
+    wave_obs: array_like, optional
         Wavelength grid for spectroscopy [Angstrom]. If None, no spectroscopy.
-    priors : dict, optional
+    priors: dict, optional
         Prior overrides for parameters.
     **model_kwargs
         Additional keyword arguments for model constructor.
@@ -936,7 +936,7 @@ def build_model_from_config(
 
     Notes
     -----
-    **JIT-compatible**: no — uses Python-level model construction.
+    **JIT-compatible**: no, uses Python-level model construction.
     """
     from tengri.parameters.defaults import get_from_config_defaults
     from tengri.parameters.translate import resolve_short_names
@@ -1064,21 +1064,21 @@ def fit_model(
 
     Parameters
     ----------
-    model : SEDModel
+    model: SEDModel
         Forward model instance.
-    data : array_like, optional
+    data: array_like, optional
         Observed flux [erg/s/cm²/Hz]. Required unless photometry or spectrum given.
-    noise : array_like, optional
+    noise: array_like, optional
         1-sigma uncertainty [erg/s/cm²/Hz]. Required unless photometry or spectrum given.
-    method : str, optional
+    method: str, optional
         Inference method (e.g. "vi", "mcmc"). Uses default if unset.
-    data_type : str, optional
+    data_type: str, optional
         Data type ("photometry", "spectroscopy", "joint"). Auto-detected if None.
-    photometry : tuple, optional
+    photometry: tuple, optional
         Shorthand for (flux, noise) tuple from photometry [erg/s/cm²/Hz].
-    spectrum : tuple, optional
+    spectrum: tuple, optional
         Shorthand for (flux, noise) tuple from spectroscopy [erg/s/cm²/Hz].
-    init : str, optional
+    init: str, optional
         Initialization method ("map" runs MAP first for warm start).
     **kwargs
         Forwarded to ``Fitter.run()``.
@@ -1090,7 +1090,7 @@ def fit_model(
 
     Notes
     -----
-    **JIT-compatible**: no — uses Fitter with inference internals.
+    **JIT-compatible**: no, uses Fitter with inference internals.
     """
     from tengri.inference.fitter import Fitter
     from tengri.parameters.defaults import get_inference_defaults
@@ -1181,7 +1181,7 @@ def fit_model(
 
     # ``params`` is the per-fit Fixed-value override (#1329); constructor-owned
     # kwargs (calibration_marginalize, likelihood, ...) go to Fitter(...) and
-    # the rest to run() — spec §7's fit-time flags (#1378).
+    # the rest to run(), spec §7's fit-time flags (#1378).
     params_override = kwargs.pop("params", None)
     ctor_kwargs, kwargs = split_fitter_kwargs(kwargs)
 

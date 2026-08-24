@@ -1,5 +1,5 @@
 # SPDX-License-Identifier: BSD-3-Clause
-"""ForwardModel — the outer shell of the forward chain.
+"""ForwardModel, the outer shell of the forward chain.
 
 Owns a tuple of :class:`Population` objects and an :class:`Observation`.
 Exposes a single ``.predict(params)`` method that inference calls.
@@ -36,7 +36,7 @@ def _filters_fingerprint(obs):
 
     Parameters
     ----------
-    obs : object
+    obs: object
         Observation model with optional ``.photometry`` attribute.
 
     Returns
@@ -53,7 +53,7 @@ def _approx_family_map(approx):
     """Split an ``approx`` grammar value into per-family configs.
 
     Returns ``None`` when the value is not parseable (unknown member or a
-    duplicated family) — the caller then falls through to ``with_approx``,
+    duplicated family), the caller then falls through to ``with_approx``,
     whose canonical validation owns the teaching error.
     """
     from tengri.forward.sed_model import FeaturePrecomp, SpectrumPrecomp, WavePrecomp
@@ -101,8 +101,8 @@ class ForwardModel:
 
     Holds one or more populations plus an observation, and exposes
     ``.predict(params)`` as the single API every inference backend talks to.
-    A backend never has to ask which channels exist — the returned dict says
-    so — which is what lets one ``Fitter`` drive photometry, spectroscopy,
+    A backend never has to ask which channels exist, the returned dict says
+    so, which is what lets one ``Fitter`` drive photometry, spectroscopy,
     joint, and hierarchical fits without branching.
 
     Build the SED chain, wrap it, fit it. :meth:`fit` is the canonical entry
@@ -111,24 +111,24 @@ class ForwardModel:
 
     Parameters
     ----------
-    populations : tuple of Population
+    populations: tuple of Population
         One or more populations. Each carries an SED ``SubModel`` and
         optionally a spatial ``SubModel``. Names must be distinct.
-    observation : object
+    observation: object
         Observation model exposing ``predict(state, params) -> dict``
         (single-population) and ``predict_summed(per_pop_states, params)``
         (multi-population).
 
     Notes
     -----
-    **Construction.** Prefer :meth:`build` over the raw constructor — it
+    **Construction.** Prefer :meth:`build` over the raw constructor, it
     accepts the ``sed=`` / ``population=`` / ``populations=`` forms and wraps
     them into the uniform ``populations`` tuple for you.
 
     **Parameter names.** Single-population fits use flat names
     (``sfh_dpl_alpha``, ``dust_tau_v``). Multi-population decompositions
-    namespace by population, ``<population>.<component_prefix>_<param>`` —
-    ``disc.sfh_dpl_alpha``, ``bulge.dust_tau_v`` — so three stellar components
+    namespace by population, ``<population>.<component_prefix>_<param>``,
+    ``disc.sfh_dpl_alpha``, ``bulge.dust_tau_v``, so three stellar components
     in three populations no longer collide (ADR-0012).
 
     **JIT.** ``predict`` and the channel-specific ``predict_photometry`` /
@@ -139,10 +139,10 @@ class ForwardModel:
 
     See Also
     --------
-    build : construct one — the recommended path.
-    fit : run inference; the canonical entry point.
-    tengri.SEDModel : the SED physics chain that goes inside a population.
-    tengri.Fitter : the inference engine :meth:`fit` delegates to.
+    build: construct one, the recommended path.
+    fit: run inference; the canonical entry point.
+    tengri.SEDModel: the SED physics chain that goes inside a population.
+    tengri.Fitter: the inference engine :meth:`fit` delegates to.
 
     Examples
     --------
@@ -176,7 +176,7 @@ class ForwardModel:
     # properties delegate so a ForwardModel can stand in for an
     # SEDModel anywhere the Fitter needs it. For hierarchical fits,
     # the inner SubModel is a PopulationSEDModel whose own attributes
-    # delegate to its template SEDModel — three-level chain.
+    # delegate to its template SEDModel, three-level chain.
 
     @property
     def spec(self):
@@ -192,7 +192,7 @@ class ForwardModel:
         Notes
         -----
         For multi-population galaxy decompositions (ADR-0012), this
-        returns the *first* population's spec — those fits use
+        returns the *first* population's spec, those fits use
         namespaced parameter names and have their own conventions
         handled elsewhere in the pipeline.
         """
@@ -213,7 +213,7 @@ class ForwardModel:
     def wave_obs(self):
         """Observed-frame spectroscopy wavelength grid, or ``None``.
 
-        Delegates to the first population's inner SED — single-population
+        Delegates to the first population's inner SED, single-population
         and hierarchical fits share one spectroscopy grid across the
         channel. Migration 2 step 1 promotes this from the legacy
         ``__getattr__`` fall-through to a first-class property.
@@ -230,7 +230,7 @@ class ForwardModel:
     # ── Inner-SED delegation (#1300) ─────────────────────────────────
     #
     # ForwardModel is the canonical inference surface (#211) but has no
-    # ``__getattr__`` fall-through — it forwards through an explicit list. The
+    # ``__getattr__`` fall-through, it forwards through an explicit list. The
     # inference stack does ``model = fitter.model`` and then calls SEDModel
     # methods on it, so anything absent from that list raised AttributeError:
     # the DEPRECATED ``Fitter(sed_model, ...)`` path worked and the recommended
@@ -242,7 +242,7 @@ class ForwardModel:
     # is keyed on ``compile_signature()`` rather than object identity, and the
     # ``*_via_state`` pair runs the component chain against the SED's own
     # observation. It is NOT correct for a multi-population forward, where
-    # ``populations[0]`` is an arbitrary pick — those raise instead.
+    # ``populations[0]`` is an arbitrary pick, those raise instead.
 
     _DELEGATED_TO_INNER_SED = (
         "_has_line_catalog",
@@ -293,8 +293,8 @@ class ForwardModel:
     def _supports_jit_threading(self) -> bool:
         """Whether the threaded (``data_args``) forward is valid for this topology.
 
-        The threaded forward — ``predict_observables_jit`` / ``predict_state`` with
-        ``ssp_data`` and ``template_data`` passed in — is written for a plain
+        The threaded forward, ``predict_observables_jit`` / ``predict_state`` with
+        ``ssp_data`` and ``template_data`` passed in, is written for a plain
         single-population SED forward. On a hierarchical
         (:class:`PopulationSEDModel`-wrapped) forward it mis-broadcasts the galaxy
         axis against the SFH grid (``mul got incompatible shapes (256,), (3,)``).
@@ -332,7 +332,7 @@ class ForwardModel:
         to populate ``data_args["_jit_inputs"]``, and did so inside a
         ``contextlib.suppress(AttributeError, TypeError)``. While this property was
         missing, that read raised, the suppress swallowed it, and the whole
-        ``_jit_inputs`` assignment was skipped — so the SSP grid closure-captured
+        ``_jit_inputs`` assignment was skipped, so the SSP grid closure-captured
         into every compiled loss on the *canonical* inference surface. On a real
         grid (15x93x5994 float64) it inlined twice as hex, 267.6 MB of a 274.6 MB
         program, and XLA compilation was OOM-killed. Guarded by
@@ -390,7 +390,7 @@ class ForwardModel:
         (no explicit ``wave_obs``/``wave_chunk_size``) spectrum call through
         :meth:`predict_observables` keeps the **standardized forward seam**:
         single-galaxy fits return shape ``(n_pix,)`` and hierarchical fits
-        (:class:`PopulationSEDModel`) return ``(N_gal, n_pix)`` — the per-galaxy
+        (:class:`PopulationSEDModel`) return ``(N_gal, n_pix)``, the per-galaxy
         batching and the spectrum projection are vmapped *below* this method
         (see :func:`_predict_observation`). The previous delegation to the inner
         *scalar* SED bypassed the population vmap, so stacked per-galaxy SFH
@@ -400,7 +400,7 @@ class ForwardModel:
         custom grid) still delegates to the inner SED, which evaluates the SED
         on the requested grid (suchethac/tengri#707).
 
-        ``ssp_data``/``template_data`` are the JIT-threading channel — see
+        ``ssp_data``/``template_data`` are the JIT-threading channel, see
         :meth:`SEDModel.predict_photometry` (#1753).
         """
         if wave_obs is None and wave_chunk_size is None:
@@ -471,7 +471,7 @@ class ForwardModel:
 
         This signature must track :meth:`SEDModel.predict_state`. It previously took
         ``params`` only, so the threaded feature-channel call raised ``TypeError``
-        here — invisible, because the caller only reached this branch when
+        here, invisible, because the caller only reached this branch when
         ``_jit_inputs`` was populated, and a missing ``ssp_data`` delegation meant it
         never was. Two omissions masking each other.
         """
@@ -518,10 +518,10 @@ class ForwardModel:
 
         Parameters
         ----------
-        params : Mapping
+        params: Mapping
             Free-parameter dict.
-        ssp_data, template_data : Any | None, keyword-only, optional
-            The JIT-threading channel — see
+        ssp_data, template_data: Any | None, keyword-only, optional
+            The JIT-threading channel, see
             :meth:`SEDModel.predict_photometry`. Pass these only when wrapping
             this method in your own JAX transform; ``None`` (default) uses the
             model's own arrays, which is correct for every ordinary call.
@@ -565,33 +565,33 @@ class ForwardModel:
           to the hierarchical machinery when it detects a
           PopulationSEDModel.
         - **Multi-population explicit:** pass ``populations=[...]``
-          for galaxy decompositions (AGN + bulge + disc — ADR-0012).
+          for galaxy decompositions (AGN + bulge + disc, ADR-0012).
           Names must be unique and must not contain ``.``.
 
         Parameters
         ----------
-        sed : SEDModel or SubModel, optional
+        sed: SEDModel or SubModel, optional
             Single-population shortcut. Mutually exclusive with
             ``population`` and ``populations``.
-        spatial : SpatialModel or SubModel, optional
+        spatial: SpatialModel or SubModel, optional
             Single-population spatial side. Only valid when ``sed=``
             is also given.
-        population : PopulationSEDModel or SubModel, optional
+        population: PopulationSEDModel or SubModel, optional
             Hierarchical-population shortcut. Mutually exclusive with
             ``sed`` and ``populations``. The PopulationSEDModel is held
-            inside ``Population(name="default", sed=population)`` —
-            the outer-shell signature stays uniform.
-        populations : iterable of Population, optional
+            inside ``Population(name="default", sed=population)``,             the outer-shell
+            signature stays uniform.
+        populations: iterable of Population, optional
             Explicit population list for galaxy decompositions.
             Mutually exclusive with ``sed`` and ``population``.
-        observation : object, optional
+        observation: object, optional
             Observation model. Inherited from ``sed`` when omitted.
-        approx : WavePrecomp or SpectrumPrecomp or FeaturePrecomp or tuple, optional
+        approx: WavePrecomp or SpectrumPrecomp or FeaturePrecomp or tuple, optional
             LUT policy, built against the **authoritative** observation
             (spec §5, #1367). Same grammar as ``SEDModel.build(approx=...)``.
             Reuse-on-match: a sed already carrying exactly this LUT against
             the same filters is used as-is; a different-filter LUT is rebuilt
-            (superseding the mismatch guard below — the rebuild is the
+            (superseding the mismatch guard below, the rebuild is the
             guard's own suggested remedy); no LUT → built. Only valid with
             the ``sed=`` form; ``None`` (default) leaves the sed untouched.
 
@@ -638,9 +638,9 @@ class ForwardModel:
             ):
                 raise ValueError(
                     "This sed carries a WavePrecomp LUT integrated against different "
-                    "filters than the observation passed to ForwardModel.build — its "
+                    "filters than the observation passed to ForwardModel.build, its "
                     "photometry would be silently wrong (#1315). Rebuild the sed with "
-                    "this observation, or build it without approx= — or pass approx= "
+                    "this observation, or build it without approx=, or pass approx= "
                     "here to rebuild the LUT against this observation (#1367)."
                 )
 
@@ -726,11 +726,11 @@ class ForwardModel:
         For the JIT-safe channel dict consumed by the inference path
         (loss functions, ``Observation.predict_summed``,
         ``fiber_spectroscopy``), use :meth:`predict_observables`
-        instead — that's the path the Fitter dispatches into.
+        instead, that's the path the Fitter dispatches into.
 
         Parameters
         ----------
-        params : mapping of str -> array
+        params: mapping of str -> array
             Free parameter values. Single-population fits use bare
             names (``"sfh_dpl_alpha"``).
 
@@ -752,7 +752,7 @@ class ForwardModel:
 
         Notes
         -----
-        **JIT-compatible**: no — :class:`Prediction` uses Python-side
+        **JIT-compatible**: no, :class:`Prediction` uses Python-side
         caching. Use :meth:`predict_observables` inside JIT.
         """
         if len(self.populations) != 1:
@@ -794,8 +794,8 @@ class ForwardModel:
         For a single-population fit, the observation receives the one
         state via ``observation.predict(state, params)``. For
         multi-population, the observation receives the dict of states
-        via ``observation.predict_summed(per_pop_states, params)`` —
-        falling back to a default sum if the observation does not
+        via ``observation.predict_summed(per_pop_states, params)``,         falling back to a
+        default sum if the observation does not
         provide ``predict_summed``.
 
         Cross-population reads (a component in one population reading
@@ -806,7 +806,7 @@ class ForwardModel:
 
         Parameters
         ----------
-        params : mapping of str -> array
+        params: mapping of str -> array
             Free parameter values. Single-population fits use bare
             names (``"sfh_dpl_alpha"``); multi-population fits use
             namespaced names (``"disc.sfh_dpl_alpha"``).
@@ -820,8 +820,8 @@ class ForwardModel:
         # photometry-only model built with a WavePrecomp LUT can serve its
         # photometry straight from the inner SEDModel's LUT-aware orchestrator
         # (``predict_observables_jit``), skipping the full-resolution component
-        # cube that the general per-population path below builds. That cube —
-        # not the LUT projection — is the ~11-16x cost on plain photometry, so
+        # cube that the general per-population path below builds. That cube,         # not the LUT
+        # projection, is the ~11-16x cost on plain photometry, so
         # without this the LUT never helps ``predict_observables`` (the fit path
         # already routes through ``predict_photometry`` and was unaffected).
         # Tightly guarded: multi-population, spatial, spectroscopy/joint,
@@ -852,8 +852,8 @@ class ForwardModel:
         per_pop_params: dict[str, dict[str, Any]] = {}
         # The JIT-threading channel reaches ``run`` only on the topologies the
         # threaded forward is actually written for. ``_supports_jit_threading``
-        # is that predicate already — single, non-spatial, non-PopulationSEDModel
-        # — so ask it rather than restating the condition here. Restating it is
+        # is that predicate already, single, non-spatial, non-PopulationSEDModel,
+        # so ask it rather than restating the condition here. Restating it is
         # how the loss path acquired the bug its docstring records: hierarchical
         # forwards were excluded only by a swallowed AttributeError, and threading
         # silently turned on for a topology that mis-broadcasts the galaxy axis
@@ -970,7 +970,7 @@ class ForwardModel:
 
         Parameters
         ----------
-        approx : WavePrecomp or SpectrumPrecomp or FeaturePrecomp or tuple or None
+        approx: WavePrecomp or SpectrumPrecomp or FeaturePrecomp or tuple or None
             Approximation policy for the clone (same grammar as ``approx=`` on
             :class:`SEDModel`).
 
@@ -986,7 +986,7 @@ class ForwardModel:
         sub = self.populations[0].sed
         inner = getattr(sub, "sed", sub)
         if inner is not sub:
-            # PopulationSEDModel-wrapped (hierarchical) — leave unchanged.
+            # PopulationSEDModel-wrapped (hierarchical), leave unchanged.
             return self
         if not hasattr(inner, "with_approx"):
             return self
@@ -1009,35 +1009,35 @@ class ForwardModel:
         """Run inference. Canonical convenience entry point.
 
         Equivalent to ``Fitter(self, data, noise, approx=approx).run(method,
-        **kwargs)`` — wires the standard inference pipeline through the
+        **kwargs)``, wires the standard inference pipeline through the
         :class:`ForwardModel` exactly as the architecture spec prescribes
         ('inference is always through ForwardModel', issue #211).
 
         Parameters
         ----------
-        data : array_like or Data, optional
+        data: array_like or Data, optional
             Observed flux (photometry / spectroscopy) or a :class:`Data`
             record. Optional for hierarchical fits where the per-galaxy data
             lives on the :class:`PopulationSEDModel`.
-        noise : array, optional
+        noise: array, optional
             1-sigma uncertainties matching ``data``. Must be ``None`` if
             ``data`` is a :class:`Data` record.
-        method : str, default ``"vi"``
+        method: str, default ``"vi"``
             Inference method. Any value accepted by
             :meth:`Fitter.run` (``"vi"``, ``"mcmc_nuts"``, ``"map"``,
             …).
-        approx : {"auto", None} or WavePrecomp or SpectrumPrecomp or tuple, default ``"auto"``
+        approx: {"auto", None} or WavePrecomp or SpectrumPrecomp or tuple, default ``"auto"``
             Approximation policy for the fit. ``"auto"`` (default) routes the
             fit through the fast precompute LUT selected by data type
             (``WavePrecomp`` for photometry, ``SpectrumPrecomp`` for
             spectroscopy/joint, plus ``FeaturePrecomp`` when emission lines are
             fit); ``None`` forces the exact wave-grid path; an explicit config
-            (or tuple) overrides. Model **prediction** stays exact regardless —
-            only the fit is accelerated. The user's model object is left
+            (or tuple) overrides. Model **prediction** stays exact regardless,             only
+            the fit is accelerated. The user's model object is left
             unchanged; the returned posterior references the fit clone.
-        key : jax.random.PRNGKey, optional
+        key: jax.random.PRNGKey, optional
             Inference seed.
-        params : dict, optional
+        params: dict, optional
             Per-fit parameter override dict. Keys that name fixed parameters
             (not free) will override their values for this fit only; the model
             object is left unchanged. Useful for catalog-fitting with per-galaxy
@@ -1045,8 +1045,8 @@ class ForwardModel:
             valid parameters (raise ``ValueError`` if not); keys naming free
             parameters raise ``ValueError`` (you cannot pin a parameter being fit).
             Default ``None`` (no override).
-        **kwargs : Any
-            Forwarded to :meth:`Fitter.run` (e.g. ``prewarm=`` — JIT-compile the
+        **kwargs: Any
+            Forwarded to :meth:`Fitter.run` (e.g. ``prewarm=``, JIT-compile the
             loss/sampler/predict surface before the fit loop, default ``True``).
 
         Returns
@@ -1064,7 +1064,7 @@ class ForwardModel:
         from tengri.observation.data import Data as _Data
 
         # Constructor-owned kwargs (calibration_marginalize, likelihood, ...)
-        # go to Fitter(...); the rest to run() — spec §7's fit-time flags (#1378).
+        # go to Fitter(...); the rest to run(), spec §7's fit-time flags (#1378).
         ctor_kwargs, kwargs = split_fitter_kwargs(kwargs)
 
         data_mask = None
@@ -1155,7 +1155,7 @@ class ForwardModel:
                     ]
                     raise ValueError(
                         f"Observation.line_fluxes marks {flagged} as censored "
-                        "limits, but Data.lines supplies no limit markers — "
+                        "limits, but Data.lines supplies no limit markers, "
                         "those flags would be dropped and the lines fit as "
                         "detections. Pass them with the values instead: "
                         "Data(lines={'<line>': (flux, err, 'upper')})."
@@ -1213,12 +1213,12 @@ class ForwardModel:
 
         Parameters
         ----------
-        data_shape : tuple of int or None, optional
+        data_shape: tuple of int or None, optional
             Shape of the data to pre-warm against. If ``None``, uses the
             observation's photometry shape. Dummy data (zeros) of this shape
-            are created internally — pre-warm is value-independent and only
+            are created internally, pre-warm is value-independent and only
             needs the compile signature (shape, filters, wavelengths, etc.).
-        method : str, default ``"mcmc_nuts"``
+        method: str, default ``"mcmc_nuts"``
             Inference method to pre-warm. Any name accepted by
             :meth:`fit`.
         **kwargs
@@ -1231,7 +1231,7 @@ class ForwardModel:
 
         Notes
         -----
-        Pre-warm is idempotent — a second call with the same method is a
+        Pre-warm is idempotent, a second call with the same method is a
         fast no-op, reusing the compiled kernels from the first call.
         The persistent XLA cache (``~/.cache/tengri_jax_cache``) also
         captures the compile, so a fresh Python process sees a warm
@@ -1239,7 +1239,7 @@ class ForwardModel:
 
         See Also
         --------
-        Fitter.prewarm : Low-level pre-warm interface
+        Fitter.prewarm: Low-level pre-warm interface
 
         Examples
         --------
@@ -1260,14 +1260,14 @@ class ForwardModel:
                 data_shape = None
 
         # Without a data shape (e.g. a hierarchical model with no top-level
-        # photometry) there is nothing to build a dummy Fitter against — passing
+        # photometry) there is nothing to build a dummy Fitter against, passing
         # data=None would crash. Skip rather than raise: prewarm is a best-effort
         # optimization.
         if data_shape is None:
             return
 
         # Dummy data (zeros). The XLA compile is value-independent, but the
-        # sampler *adaptation* (step size + mass matrix) is NOT — a warmup on
+        # sampler *adaptation* (step size + mass matrix) is NOT, a warmup on
         # zeros produces geometry tuned to a meaningless posterior. We keep the
         # compile and DROP that adaptation below so a real fit re-adapts.
         data = jnp.zeros(data_shape)
@@ -1299,7 +1299,7 @@ class ForwardModel:
         Strips the ``"<pop.name>."`` namespace from any namespaced
         params; passes bare names (no ``.``) through unchanged.
         Cross-population namespaced reads (e.g. ``"agn.L_bol"`` in a
-        component's ``reads`` dict) are NOT stripped — they flow
+        component's ``reads`` dict) are NOT stripped, they flow
         through to the component's ``apply``, which looks them up in
         ``state.derived`` after the cross-pop merge.
 
@@ -1336,8 +1336,8 @@ def _predict_observation(
     SubModel's :meth:`run` has already returned a batched
     :class:`ForwardState` along those axes. This helper vmaps
     ``observation.predict`` once per batched axis so the predicted
-    observables — the channel dict :math:`\\hat{\\mathbf{d}}` that
-    enters the data term of the information Hamiltonian — carry
+    observables, the channel dict :math:`\\hat{\\mathbf{d}}` that
+    enters the data term of the information Hamiltonian, carry
     matching leading axes.
 
     The shape-consistency contract: regardless of which SubModel is
@@ -1352,8 +1352,8 @@ def _predict_observation(
 
     Composability: ``observation.predict`` is the un-batched
     primitive. Callers wanting outer ``pmap`` / ``shard_map`` can
-    wrap this helper (or just ``observation.predict``) themselves —
-    the hidden batching here is the default, not the only path.
+    wrap this helper (or just ``observation.predict``) themselves,     the hidden batching here is
+    the default, not the only path.
     """
     import jax
 
@@ -1396,7 +1396,7 @@ def _install_inner_sed_delegations() -> None:
     """Attach the method delegations named in ``ForwardModel._DELEGATED_TO_INNER_SED``.
 
     Generated from the tuple rather than written out thirteen times, so the
-    declared list and the installed methods cannot drift apart — that drift is
+    declared list and the installed methods cannot drift apart, that drift is
     what produced #1300 in the first place. ``_has_line_catalog`` and
     ``available_properties`` are defined explicitly on the class (one coerces to
     bool, the other is a property) and are skipped here.

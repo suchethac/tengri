@@ -1,8 +1,8 @@
 # SPDX-License-Identifier: BSD-3-Clause
-"""JointObservation — composer that merges multiple observation models.
+"""JointObservation, composer that merges multiple observation models.
 
-Used when a single fit consumes multiple data channels — total-flux
-photometry plus fiber spectroscopy plus resolved imaging plus … — each
+Used when a single fit consumes multiple data channels, total-flux
+photometry plus fiber spectroscopy plus resolved imaging plus …, each
 with its own observation model. The composer calls each wrapped model's
 ``predict`` and merges the dicts.
 
@@ -20,7 +20,7 @@ Example
     # from the second.
 
 No physics of its own. Pure dict merging. Last child wins on shared
-keys — child order matters when the same observable is published by
+keys, child order matters when the same observable is published by
 multiple wrapped models.
 """
 
@@ -43,9 +43,9 @@ class JointObservation:
 
     Parameters
     ----------
-    *children : object
+    *children: object
         Each must expose ``predict(state, params) → mapping``.
-    name : str, default "joint"
+    name: str, default "joint"
         Identifier for diagnostics.
 
     Notes
@@ -87,10 +87,10 @@ class JointObservation:
 
         Parameters
         ----------
-        per_pop_states : mapping of population name -> ForwardState
+        per_pop_states: mapping of population name -> ForwardState
             One state per population (already namespace-merged in
             ``derived`` so cross-population reads work).
-        per_pop_params : mapping of population name -> params dict
+        per_pop_params: mapping of population name -> params dict
             The fixed-values-merged parameter dict each population
             saw, useful when child observations read
             population-specific parameters (e.g. per-population

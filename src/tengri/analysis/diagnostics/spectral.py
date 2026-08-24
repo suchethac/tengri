@@ -43,9 +43,9 @@ def uv_slope_beta(wavelength_aa: jnp.ndarray, l_nu: jnp.ndarray) -> float:
 
     Parameters
     ----------
-    wavelength_aa : array_like, shape (n_wave,)
+    wavelength_aa: array_like, shape (n_wave,)
         Rest-frame wavelength grid in Ångstrom. [Å]
-    l_nu : array_like, shape (n_wave,)
+    l_nu: array_like, shape (n_wave,)
         Luminosity density L_ν. [erg s⁻¹ Hz⁻¹] or [Lsun Hz⁻¹]
 
     Returns
@@ -55,7 +55,7 @@ def uv_slope_beta(wavelength_aa: jnp.ndarray, l_nu: jnp.ndarray) -> float:
 
     Notes
     -----
-    **JIT-compatible**: yes — all operations are ``jnp`` primitives.
+    **JIT-compatible**: yes, all operations are ``jnp`` primitives.
 
     The method uses 10 wavelength windows (Calzetti+1994 Table 2) that avoid
     the 2175-Å absorption feature and Ly-alpha:
@@ -150,9 +150,9 @@ def dn4000(wavelength_aa: jnp.ndarray, l_nu: jnp.ndarray) -> float:
 
     Parameters
     ----------
-    wavelength_aa : array_like, shape (n_wave,)
+    wavelength_aa: array_like, shape (n_wave,)
         Rest-frame wavelength grid in Ångstrom. [Å]
-    l_nu : array_like, shape (n_wave,)
+    l_nu: array_like, shape (n_wave,)
         Luminosity density L_ν. [erg s⁻¹ Hz⁻¹] or [Lsun Hz⁻¹]
 
     Returns
@@ -162,7 +162,7 @@ def dn4000(wavelength_aa: jnp.ndarray, l_nu: jnp.ndarray) -> float:
 
     Notes
     -----
-    **JIT-compatible**: yes — all operations are ``jnp`` primitives.
+    **JIT-compatible**: yes, all operations are ``jnp`` primitives.
 
     Dn4000 is a diagnostic of age: young star-forming galaxies with hot OB
     stars have Dn4000 ≈ 0.4–1.0 (weak 4000-Å break), while old quiescent
@@ -201,9 +201,9 @@ def irx(l_dust: float, l_fuv: float) -> float:
 
     Parameters
     ----------
-    l_dust : float
+    l_dust: float
         Total dust emission luminosity. [Lsun] or [erg s⁻¹]
-    l_fuv : float
+    l_fuv: float
         Far-UV (rest-frame 1500 Å) luminosity. [Lsun] or [erg s⁻¹]
 
     Returns
@@ -213,7 +213,7 @@ def irx(l_dust: float, l_fuv: float) -> float:
 
     Notes
     -----
-    **JIT-compatible**: yes — all operations are ``jnp`` primitives.
+    **JIT-compatible**: yes, all operations are ``jnp`` primitives.
 
     The infrared excess is:
 
@@ -258,16 +258,16 @@ def equivalent_width(
 
     Parameters
     ----------
-    wavelength_aa : array_like, shape (n_wave,)
+    wavelength_aa: array_like, shape (n_wave,)
         Rest-frame wavelength grid [Å].
-    l_nu : array_like, shape (n_wave,)
+    l_nu: array_like, shape (n_wave,)
         Luminosity density L_ν [erg s⁻¹ Hz⁻¹].
-    line_center_aa : float
+    line_center_aa: float
         Central wavelength of the feature [Å].
-    window_aa : float
+    window_aa: float
         Half-width of the line integration window [Å].
         Default: 20.0.
-    continuum_width_aa : float
+    continuum_width_aa: float
         Width of each sideband used for continuum estimation [Å].
         Sidebands are placed at ``[line_center ± window ± continuum_width]``.
         Default: 50.0.
@@ -280,7 +280,7 @@ def equivalent_width(
 
     Notes
     -----
-    **JIT-compatible**: yes — all operations are ``jnp`` primitives.
+    **JIT-compatible**: yes, all operations are ``jnp`` primitives.
 
     The equivalent width is:
 
@@ -346,15 +346,15 @@ def rest_frame_luminosity(
 
     Parameters
     ----------
-    wavelength_aa : array_like, shape (n_wave,)
+    wavelength_aa: array_like, shape (n_wave,)
         Rest-frame wavelength grid in Ångstrom. [Å]
-    l_nu : array_like, shape (n_wave,)
+    l_nu: array_like, shape (n_wave,)
         Luminosity density L_ν. [erg s⁻¹ Hz⁻¹] or [Lsun Hz⁻¹]
-    filter_wave_aa : array_like, shape (n_filter,)
+    filter_wave_aa: array_like, shape (n_filter,)
         Filter wavelength grid in Ångstrom. [Å]
-    filter_trans : array_like, shape (n_filter,)
+    filter_trans: array_like, shape (n_filter,)
         Filter transmission (normalized to peak = 1). [dimensionless]
-    convention : FilterConvention, optional
+    convention: FilterConvention, optional
         Bandpass weight. ``BESSELL`` (default) is photon-counting
         (:math:`w=1/\lambda`, matches DSPS ``calc_rest_flux``); ``ENERGY``
         is :math:`w=1/\lambda^2` (CIGALE).
@@ -366,7 +366,7 @@ def rest_frame_luminosity(
 
     Notes
     -----
-    **JIT-compatible**: yes — all operations are ``jnp`` primitives.
+    **JIT-compatible**: yes, all operations are ``jnp`` primitives.
 
     The photometric luminosity is:
 
@@ -416,17 +416,17 @@ def rest_frame_color(
 
     Parameters
     ----------
-    wavelength_aa : array_like, shape (n_wave,)
+    wavelength_aa: array_like, shape (n_wave,)
         Rest-frame wavelength grid in Ångstrom. [Å]
-    l_nu : array_like, shape (n_wave,)
+    l_nu: array_like, shape (n_wave,)
         Luminosity density L_ν. [erg s⁻¹ Hz⁻¹] or [Lsun Hz⁻¹]
-    filter1_wave_aa : array_like, shape (n_f1,)
+    filter1_wave_aa: array_like, shape (n_f1,)
         First filter wavelength grid in Ångstrom. [Å]
-    filter1_trans : array_like, shape (n_f1,)
+    filter1_trans: array_like, shape (n_f1,)
         First filter transmission. [dimensionless]
-    filter2_wave_aa : array_like, shape (n_f2,)
+    filter2_wave_aa: array_like, shape (n_f2,)
         Second filter wavelength grid in Ångstrom. [Å]
-    filter2_trans : array_like, shape (n_f2,)
+    filter2_trans: array_like, shape (n_f2,)
         Second filter transmission. [dimensionless]
 
     Returns
@@ -436,7 +436,7 @@ def rest_frame_color(
 
     Notes
     -----
-    **JIT-compatible**: yes — all operations are ``jnp`` primitives.
+    **JIT-compatible**: yes, all operations are ``jnp`` primitives.
 
     The color is computed from the flux ratio:
 

@@ -3,7 +3,7 @@
 
 """Callable factories for dust attenuation groups.
 
-Two top-level factories — ``single_component`` and ``two_component`` —
+Two top-level factories, ``single_component`` and ``two_component``,
 for building ``dust_attenuation`` groups. IR emission is now a separate
 top-level ``dust_emission`` group; use :mod:`~tengri.builders.dust.emission`
 for that surface.
@@ -67,7 +67,7 @@ from tengri.components.dust.attenuation import DUST_LAWS
 from tengri.parameters.registry import recipe_parameters
 from tengri.parameters.sentinels import FIXED, FREE, WILDCARD_ALIAS
 
-# Param shortlists per dust_model — discovered at import time so adding a
+# Param shortlists per dust_model: discovered at import time so adding a
 # new attenuation knob in the registry surfaces here automatically.
 _PREFIXES = ("dust_",)
 _ATTEN_PREFIXES_TO_KEEP = (
@@ -248,7 +248,7 @@ def _make_dust_factory(
     if dust_model == "two_component":
         # law/law_bc/law_diff form an XOR group (see factory() above); shown
         # here as optional (UNSET) for IDE autocomplete, not enforced by the
-        # signature itself — factory() enforces the actual XOR requirement.
+        # signature itself; factory() enforces the actual XOR requirement.
         for law_kw in ("law", "law_bc", "law_diff"):
             sig_params.append(
                 inspect.Parameter(
@@ -270,7 +270,7 @@ def _make_dust_factory(
     if dust_model == "two_component":
         doc_lines.append(
             "Law: ``law`` (shared by both screens) XOR both ``law_bc`` and "
-            "``law_diff`` (per-screen). Required — no default. Each accepts "
+            "``law_diff`` (per-screen). Required, with no default. Each accepts "
             "any key registered in ``tengri.components.dust.attenuation.DUST_LAWS`` "
             "(e.g. ``'calzetti'``, ``'smc'``, ``'cardelli'``)."
         )
@@ -307,7 +307,7 @@ def _make_dust_factory(
         else:
             doc_lines.append("    Attenuation law name from DUST_LAWS. Required (no default).")
     for short in short_params:
-        doc_lines.append(f"{short} : Distribution, sentinel, or scalar, optional")
+        doc_lines.append(f"{short}: Distribution, sentinel, or scalar, optional")
         doc_lines.append("    Override the registry-default prior.")
     doc_lines.append("")
     doc_lines.append("Returns")

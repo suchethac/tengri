@@ -39,7 +39,7 @@ class FlatSlab(SpatialModelComponent):
 
     Free parameters
     ---------------
-    radius_kpc : Uniform(0.1, 50.0) [kpc]
+    radius_kpc: Uniform(0.1, 50.0) [kpc]
         Disk radius. Intensity = 1 inside, 0 outside, with a small
         sigmoidal smoothing at the edge for differentiability.
 

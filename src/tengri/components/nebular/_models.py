@@ -6,7 +6,7 @@ and ``tengri.components.igm._models`` (#355) and the older
 ``SFH_REGISTRY`` / ``AGN_MODELS`` patterns. ``_VALID_NEBULAR_TYPES``
 in :mod:`tengri.parameters.groups` derives from
 :data:`NEBULAR_MODELS.keys()` per ADR-0005 / ADR-0008 (single source of
-truth) — adding a new backend is one ``register_nebular_model`` call,
+truth): adding a new backend is one ``register_nebular_model`` call,
 not a parallel edit to a validator set.
 """
 
@@ -23,17 +23,17 @@ class NebularRegistryEntry:
 
     Attributes
     ----------
-    callable : Callable or None
+    callable: Callable or None
         The backend class (or any reference). ``None`` for the
         ``'none'`` disable-toggle. Dispatch in
         ``tengri.parameters.groups._translate_neb`` still routes
         through ``nebular_ssp`` / ``nebular_cue`` / ``nebular`` flags
         on :class:`Parameters`; this field is metadata.
-    citation : str
+    citation: str
         Academic citation. Empty for the disable-toggle.
-    status : str
+    status: str
         ``"production"`` / ``"experimental"`` / ``"demo"`` / ``"deprecated"``.
-    short_doc : str
+    short_doc: str
         One-line description.
     """
 

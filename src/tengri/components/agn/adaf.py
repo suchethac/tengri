@@ -4,8 +4,8 @@ r"""Faithful analytic ADAF spectrum (Mahadevan 1997).
 Differentiable JAX implementation of the analytic scaling laws for an
 advection-dominated accretion flow (ADAF / RIAF), following Mahadevan (1997
 [1]_) equation-for-equation. The model gives the radio-to-X-ray spectrum of a
-low-luminosity AGN from three cooling processes — cyclo-synchrotron,
-bremsstrahlung, and inverse Compton — as closed-form functions of the black
+low-luminosity AGN from three cooling processes: cyclo-synchrotron,
+bremsstrahlung, and inverse Compton: as closed-form functions of the black
 hole mass, accretion rate, viscosity :math:`\alpha`, and plasma parameters
 :math:`\beta` (gas-to-total pressure) and :math:`\delta` (electron viscous
 heating fraction).
@@ -72,7 +72,7 @@ def _bessel_k0e_k1e(x: jnp.ndarray) -> tuple[jnp.ndarray, jnp.ndarray]:
 
     Parameters
     ----------
-    x : array_like
+    x: array_like
         Argument, ``x > 0``.
 
     Returns
@@ -150,7 +150,7 @@ def _bessel_k2e(x: jnp.ndarray) -> jnp.ndarray:
 
     Parameters
     ----------
-    x : array_like
+    x: array_like
         Argument, ``x > 0``.
 
     Returns
@@ -175,7 +175,7 @@ def _adaf_g_theta(t_e: jnp.ndarray) -> jnp.ndarray:
 
     Parameters
     ----------
-    t_e : array_like
+    t_e: array_like
         Electron temperature [K].
 
     Returns
@@ -229,11 +229,11 @@ def _adaf_ne_b_rmin(
 
     Parameters
     ----------
-    m : float
+    m: float
         Black hole mass ``M / M_sun``.
-    mdot : float
+    mdot: float
         Accretion rate in Eddington units.
-    alpha, beta : float
+    alpha, beta: float
         Viscosity and gas-to-total pressure ratio.
 
     Returns
@@ -262,9 +262,9 @@ def _adaf_tau_es(mdot: float, alpha: float) -> jnp.ndarray:
 
     Parameters
     ----------
-    mdot : float
+    mdot: float
         Accretion rate in Eddington units.
-    alpha : float
+    alpha: float
         Viscosity parameter.
 
     Returns
@@ -297,9 +297,9 @@ def _adaf_alpha_c(tau_es: jnp.ndarray, t_e: jnp.ndarray) -> jnp.ndarray:
 
     Parameters
     ----------
-    tau_es : array_like
+    tau_es: array_like
         Electron-scattering optical depth (Eq. 31).
-    t_e : array_like
+    t_e: array_like
         Electron temperature [K].
 
     Returns
@@ -334,9 +334,9 @@ def _adaf_x_m(t_e: jnp.ndarray, m: float, mdot: float, alpha: float, beta: float
 
     Parameters
     ----------
-    t_e : array_like
+    t_e: array_like
         Electron temperature [K] (sets :math:`\theta_e`).
-    m, mdot, alpha, beta : float
+    m, mdot, alpha, beta: float
         Mass, accretion rate, viscosity, gas-to-total pressure ratio.
 
     Returns
@@ -346,7 +346,7 @@ def _adaf_x_m(t_e: jnp.ndarray, m: float, mdot: float, alpha: float, beta: float
 
     Notes
     -----
-    **JIT/grad-safe**: yes — fixed 8-step unrolled Newton iteration.
+    **JIT/grad-safe**: yes, fixed 8-step unrolled Newton iteration.
     """
     n_e, b_field = _adaf_ne_b_rmin(m, mdot, alpha, beta)
     r_cm = _R_MIN * _R_SCHW_PER_M * m
@@ -386,7 +386,7 @@ def _adaf_electron_temperature(
     total cooling to the heating :math:`Q^{e+} = Q^-` fixes ``T_e``. The paper gives
     two analytic branches selected by the Compton slope :math:`\alpha_c`:
 
-    - :math:`\alpha_c > 1` (weak Compton, low ``mdot``) — Eq. 40:
+    - :math:`\alpha_c > 1` (weak Compton, low ``mdot``): Eq. 40:
 
       .. math::
 
@@ -394,7 +394,7 @@ def _adaf_electron_temperature(
                 (\alpha/0.3)^{3/14} ((1-\beta)/0.5)^{-1/14}
                 m^{1/14} \dot m^{-1/14}\ \mathrm{K}
 
-    - :math:`\alpha_c < 1` (strong Compton, high ``mdot``) — Eq. 43:
+    - :math:`\alpha_c < 1` (strong Compton, high ``mdot``): Eq. 43:
 
       .. math::
 
@@ -408,7 +408,7 @@ def _adaf_electron_temperature(
 
     Parameters
     ----------
-    m, mdot, alpha, beta, delta : float
+    m, mdot, alpha, beta, delta: float
         Mass, accretion rate, viscosity, gas-to-total pressure ratio, and electron
         viscous-heating fraction.
 
@@ -420,14 +420,14 @@ def _adaf_electron_temperature(
 
     Notes
     -----
-    **JIT/grad-safe**: yes — fixed 8-step unrolled fixed point; the Eq. 40 /
+    **JIT/grad-safe**: yes, fixed 8-step unrolled fixed point; the Eq. 40 /
     Eq. 43 regime choice is a branchless :func:`jnp.where` on the traced
     ``alpha_c``, so both branches are always evaluated (no data-dependent
     control flow).
 
     **Gradient kink**: ``T_e`` (and hence the whole spectrum) has a first-order
     kink at ``alpha_c = 1`` where the branch switches. Samplers crossing this
-    boundary see a discontinuous derivative — the same class as the
+    boundary see a discontinuous derivative, the same class as the
     ``agn_torus_frac`` / ``cos(theta_torus)`` discontinuity noted in the project
     gotchas. It is continuous in value (both branches meet at ``alpha_c = 1``),
     only the slope jumps.
@@ -474,7 +474,7 @@ def _adaf_F_theta(t_e: jnp.ndarray) -> jnp.ndarray:
 
     Parameters
     ----------
-    t_e : array_like
+    t_e: array_like
         Electron temperature [K].
 
     Returns
@@ -575,16 +575,16 @@ def _adaf_mdot_from_lbol(
     ``T_e(mdot)``, we iterate a short fixed point (``g`` varies slowly). Keeping
     ``agn_log_lbol`` as the canonical luminosity knob (deriving ``mdot`` rather
     than taking it as an independent input) is what makes the ADAF consistent
-    with the disc convention of #846 — ``agn_log_ledd`` is retired here.
+    with the disc convention of #846: ``agn_log_ledd`` is retired here.
 
     The result is clipped to ``(0, mdot_crit]`` with ``mdot_crit = 0.28 alpha^2``
     (Eq. 52): the ADAF solution does not exist above the critical rate.
 
     Parameters
     ----------
-    l_bol_erg : array_like
+    l_bol_erg: array_like
         ADAF bolometric (radiated) luminosity [erg/s].
-    m, alpha, beta, delta : float
+    m, alpha, beta, delta: float
         Mass, viscosity, gas-to-total pressure, electron-heating fraction.
 
     Returns
@@ -594,7 +594,7 @@ def _adaf_mdot_from_lbol(
 
     Notes
     -----
-    **JIT/grad-safe**: yes — fixed 3-step fixed point.
+    **JIT/grad-safe**: yes, fixed 3-step fixed point.
     """
     mdot_crit = 0.28 * alpha**2
     # Float32 (#1206): ``coeff`` ~3e46 and ``l_bol_erg`` ~1e44 erg/s both overflow,
@@ -640,27 +640,27 @@ def adaf_spectrum(
     rate ``mdot`` is derived from it (Eq. 49, :func:`_adaf_mdot_from_lbol`) and
     drives the whole spectrum. The three component *amplitudes* (Eqs. 23 & 30)
     set their relative weights (synchrotron/Compton join continuously at
-    :math:`\nu_p`), and the total is renormalized to ``L_bol`` — which both fixes
+    :math:`\nu_p`), and the total is renormalized to ``L_bol``, which both fixes
     the canonical scale and absorbs the ``T_e^7``-sensitivity of the absolute
     synchrotron power (see the module notes).
 
     Parameters
     ----------
-    wavelength : array_like, shape (n_wave,)
+    wavelength: array_like, shape (n_wave,)
         Rest-frame wavelength grid [Angstrom].
-    agn_log_lbol : float
+    agn_log_lbol: float
         log10 of the ADAF bolometric luminosity [log10(L_sun)].
-    agn_lum_ratio : float, optional
+    agn_lum_ratio: float, optional
         Fraction of the bolometric assigned to the ADAF. Default 1.0.
-    agn_log_mbh : float, optional
+    agn_log_mbh: float, optional
         Black hole mass [log10(M_sun)]. Default 8.0.
-    agn_adaf_alpha : float, optional
+    agn_adaf_alpha: float, optional
         Viscosity parameter :math:`\alpha`. Default 0.3.
-    agn_adaf_beta : float, optional
+    agn_adaf_beta: float, optional
         Gas-to-total pressure ratio :math:`\beta` (magnetic fraction is
         :math:`1-\beta`). Default 0.5.
-    agn_adaf_delta : float, optional
-        Fraction of viscous energy heating electrons directly :math:`\delta` —
+    agn_adaf_delta: float, optional
+        Fraction of viscous energy heating electrons directly :math:`\delta` :
         the single most consequential ADAF parameter (it sets the flow luminosity
         at fixed :math:`\dot m`). Default ``0.1`` **departs from Mahadevan 1997's
         own fiducial** :math:`\delta \sim m_e/m_i \sim 1/2000`; ``0.1`` follows the
@@ -675,7 +675,7 @@ def adaf_spectrum(
 
     Notes
     -----
-    **JIT-compatible**: yes — all-``jnp`` with fixed-count unrolled solves.
+    **JIT-compatible**: yes, all-``jnp`` with fixed-count unrolled solves.
     Retains the ``alpha_c=1`` gradient kink of the underlying ``T_e`` solve.
     Valid in the ADAF regime ``mdot < mdot_crit ~ 0.28 alpha^2``; the derived
     ``mdot`` is clipped there.
@@ -722,7 +722,7 @@ def adaf_spectrum(
     brems = l_brems0 * jnp.exp(-jnp.clip(_H_PLANCK * nu / (_K_BOLTZ * t_e), 0.0, 500.0))
 
     total = sc + brems
-    # Renormalize to the canonical L_bol (magnitude from agn_log_lbol — the
+    # Renormalize to the canonical L_bol (magnitude from agn_log_lbol: the
     # reference on the float32 path). nu descending -> reverse for trapezoid.
     if _f32:
         # ``l_bol_erg`` ~1e44 and the ~1e43 erg/s spectral integral overflow;
@@ -730,7 +730,7 @@ def adaf_spectrum(
         # range) and order 10**log_lbol / integral before the ~1e28 shape.
         integral = jnp.trapezoid((total / _LSUN_ERG)[::-1], nu[::-1])
         # ``representable_floor``, not the bare ``1e-100`` (#1492): float32's
-        # smallest subnormal is 1.4e-45, so the literal IS 0.0 there — in this,
+        # smallest subnormal is 1.4e-45, so the literal IS 0.0 there, in this,
         # the float32 branch, the divide-by-zero guard guarded nothing. Returns
         # ``1e-100`` unchanged under x64, so float64 is bit-identical.
         l_nu = (

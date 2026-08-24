@@ -6,7 +6,7 @@ registered block can run without missing keys (see
 :meth:`AGNSEDComponent.declared_parameters`). That superset is ~50 parameters,
 most of which belong to inactive blocks for any given configuration. A naive
 group wildcard ``agn={'*': FREE}`` would therefore free dozens of parameters
-that do not affect ``predict()`` for the selected blocks — unconstrained no-op
+that do not affect ``predict()`` for the selected blocks: unconstrained no-op
 nuisance dimensions in a fit.
 
 This module records, per block and per monolithic model, the parameters that
@@ -33,7 +33,7 @@ silently drift out of date.
 Blocks/models that require a data grid absent from CI (``cat3d_wind``,
 ``slone_netzer``, the GRAHSP line/feii blocks) are intentionally **omitted**:
 :func:`agn_active_param_set` falls back to the full superset for any unknown
-block, so the wildcard over-frees (never under-frees) for those — a safe,
+block, so the wildcard over-frees (never under-frees) for those, a safe,
 documented degradation rather than a silent exclusion.
 """
 
@@ -299,7 +299,7 @@ def agn_active_param_set(structural_kwargs: dict) -> frozenset[str]:
 
     Parameters
     ----------
-    structural_kwargs : dict
+    structural_kwargs: dict
         Resolved structural kwargs (post ``_translate_structural``), carrying
         ``agn_model`` and, for the composable model, the per-block selectors
         ``agn_{disc,torus,lines,feii,attenuation}_block``.
@@ -315,7 +315,7 @@ def agn_active_param_set(structural_kwargs: dict) -> frozenset[str]:
 
     Notes
     -----
-    **JIT-compatible**: no — pure-Python builder-time helper.
+    **JIT-compatible**: no, pure-Python builder-time helper.
     """
     model = structural_kwargs.get("agn_model")
     if not model:

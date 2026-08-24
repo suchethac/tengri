@@ -10,7 +10,7 @@ pipeline *before* feeding the photometry to ``Fitter``::
     flux_corr, noise_corr = apply_aperture_correction(flux_obs, noise, corrections)
     fitter = Fitter(model, flux_corr, noise_corr)
 
-This is a thin utility — purely a per-band multiplication. It exists so
+This is a thin utility, purely a per-band multiplication. It exists so
 the convention is documented and verified rather than reinvented per
 project.
 
@@ -40,21 +40,21 @@ def apply_aperture_correction(
 
     Parameters
     ----------
-    flux : array_like, shape (n_bands,)
+    flux: array_like, shape (n_bands,)
         Observed flux density per band, before correction.
         [erg/s/cm^2/Hz] or any consistent unit.
-    noise : array_like, shape (n_bands,)
+    noise: array_like, shape (n_bands,)
         1-sigma noise per band, before correction. Same units as
         ``flux``.
-    corrections : float or array_like, shape (n_bands,)
+    corrections: float or array_like, shape (n_bands,)
         Per-band multiplicative correction. Must be strictly positive.
         A scalar applies the same factor to all bands.
 
     Returns
     -------
-    flux_corr : ndarray, shape (n_bands,)
+    flux_corr: ndarray, shape (n_bands,)
         ``flux * corrections``. [same units as input ``flux``]
-    noise_corr : ndarray, shape (n_bands,)
+    noise_corr: ndarray, shape (n_bands,)
         ``noise * corrections``. [same units as input ``noise``]
 
     Raises
@@ -65,7 +65,7 @@ def apply_aperture_correction(
 
     Notes
     -----
-    **JIT-compatible**: yes — pure ``jnp`` arithmetic.
+    **JIT-compatible**: yes, pure ``jnp`` arithmetic.
 
     Because correction is multiplicative on the flux scale and applied
     identically to ``noise``, the per-band signal-to-noise ratio is
@@ -80,7 +80,7 @@ def apply_aperture_correction(
     derived stellar-mass / SFR posterior but does *not* change the
     relative information content. For surveys that report aperture
     corrections with their own uncertainty, fold that uncertainty into
-    the noise model upstream — the simple multiplicative form here
+    the noise model upstream, the simple multiplicative form here
     assumes the corrections are deterministic.
 
     Examples

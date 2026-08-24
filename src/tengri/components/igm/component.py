@@ -10,7 +10,7 @@ Design choices (mirrored in :mod:`tengri.components.radio.component`):
 - ``parameter_prefix = "igm_"`` for the patchy-reionization extras
   (``igm_x_HI``, ``igm_bubble_mpc``, ``igm_z_mid``, ``igm_dz``,
   ``igm_log_nhi``). The bare ``redshift`` is read via
-  :data:`tengri.protocols.component.BARE_NAME_ALLOWLIST` — IGM is the
+  :data:`tengri.protocols.component.BARE_NAME_ALLOWLIST`; IGM is the
   canonical reason that allowlist exists.
 - IGM is *transmissive*: it multiplies :attr:`ForwardState.sed_observed`
   in place. If ``sed_observed`` is ``None`` the component is a no-op
@@ -45,8 +45,8 @@ __all__ = ["IGMSEDComponent", "IGMSEDComponentConfig"]
 
 #: Floor on the number of redshift nodes for the IGM transmission tables.
 #:
-#: The IGM table is far cheaper per node than the SSP×filter ztable — a handful of
-#: numbers per redshift, against a full SSP block — so it has no business inheriting
+#: The IGM table is far cheaper per node than the SSP×filter ztable; a handful of
+#: numbers per redshift, against a full SSP block; so it has no business inheriting
 #: the SSP grid's ``n_z``. Linear-interpolation error falls as h², and the IGM factor
 #: is the steepest function of z in the model (the Lyman forest thickens rapidly),
 #: so the coarse default was the dominant interpolation error: 3.0e-3 in sdss_u at
@@ -66,21 +66,21 @@ class IGMSEDComponentConfig(SEDComponentConfig):
 
     Attributes
     ----------
-    name : str
+    name: str
         Diagnostic identifier. Default ``"igm"``.
-    igm_model : str
+    igm_model: str
         Mean-IGM transmission model resolved from the registry: ``"inoue"``
         (Inoue+2014, default), ``"madau"`` (Madau+1995), ``"meiksin06"``
         (Meiksin 2006), or ``"asada25"`` (Inoue + Asada+2025 CGM damping
         wing). Threaded from ``spec.igm_model`` so the observed-frame
         photometry and spectroscopy honor the configured model rather than
         always falling back to Inoue.
-    igm_patchy : bool
+    igm_patchy: bool
         Use the patchy-reionization damping-wing model instead of the mean
         IGM. Default ``False``.
-    use_dla : bool
+    use_dla: bool
         Multiply by a damped-Lyman-α absorber (params read at apply time),
-        so photometry/spectroscopy see the DLA — not only
+        so photometry/spectroscopy see the DLA: not only
         ``predict_obs_sed``. Default ``False``.
     """
 
@@ -96,13 +96,13 @@ class IGMSEDComponentState(SEDComponentState):
 
     Attributes
     ----------
-    band_zgrid : ndarray, shape (n_z,) or None
+    band_zgrid: ndarray, shape (n_z,) or None
         Redshift nodes at which ``band_table`` was evaluated. A single node
         for a fixed-redshift model (then the lookup is exact).
-    band_table : ndarray, shape (n_z, n_filters) or None
+    band_table: ndarray, shape (n_z, n_filters) or None
         Filter-averaged IGM transmission :math:`\langle T \rangle_f(z)`,
         dimensionless. ``None`` when the factors cannot be precomputed
-        (patchy reionization or a DLA — both carry free parameters, so the
+        (patchy reionization or a DLA: both carry free parameters, so the
         factor is not a function of redshift alone).
     """
 
@@ -119,12 +119,12 @@ class IGMSEDComponent(TemplateThreading):
 
     Parameters
     ----------
-    config : IGMSEDComponentConfig, optional
+    config: IGMSEDComponentConfig, optional
         Frozen structural settings. Default :class:`IGMSEDComponentConfig`.
 
     Notes
     -----
-    **JIT-compatible**: yes — :meth:`apply` is pure JAX.
+    **JIT-compatible**: yes, :meth:`apply` is pure JAX.
     **Transmissive**: writes ``sed_observed = sed_observed * T(λ)``.
     Components are no-ops when ``sed_observed is None``.
     """
@@ -143,7 +143,7 @@ class IGMSEDComponent(TemplateThreading):
         r"""Free parameters this component owns.
 
         Returns the canonical :data:`PARAMS` tuple from
-        ``tengri.components.igm._params`` — the CGM damping-wing
+        ``tengri.components.igm._params``: the CGM damping-wing
         knobs read by :func:`igm_transmission`. The bare ``redshift``
         parameter is read via :data:`BARE_NAME_ALLOWLIST` and not
         declared here.
@@ -184,7 +184,7 @@ class IGMSEDComponent(TemplateThreading):
 
         The WavePrecomp band factors are built by
         :meth:`precompute_band_factors`, which needs the filter *convention*
-        and padded curves — model-level knowledge this signature does not carry.
+        and padded curves: model-level knowledge this signature does not carry.
         """
         del ssp_data, wave_grid, approx, filters
         return IGMSEDComponentState(name=self.name)
@@ -201,7 +201,7 @@ class IGMSEDComponent(TemplateThreading):
         The LUT photometry path needs one number per filter,
         :math:`\langle T \rangle_f`, yet the runtime evaluated the full
         Inoue+2014 curve on the whole model grid every call and then averaged
-        it down — a 5994-point transmission to produce five numbers, which
+        it down; a 5994-point transmission to produce five numbers, which
         cost 12.1 MFLOPs and pinned the full-resolution grid alive, defeating
         the dead-code elimination that *is* the WavePrecomp speedup (#932).
 
@@ -216,7 +216,7 @@ class IGMSEDComponent(TemplateThreading):
         where :math:`T` is the IGM transmission [dimensionless], :math:`R_f`
         the filter response, and :math:`w` the convention weight (ADR-0017:
         :math:`1/\lambda` photon-counting, :math:`1/\lambda^2` energy). The SED
-        does *not* enter — the transmission is averaged alone — so the whole
+        does *not* enter: the transmission is averaged alone; so the whole
         table moves to build time.
 
         Evaluated with the same :func:`lnu_filter_integral_batch` quadrature
@@ -225,11 +225,11 @@ class IGMSEDComponent(TemplateThreading):
 
         Parameters
         ----------
-        wave_rest : array_like, shape (n_wave,)
+        wave_rest: array_like, shape (n_wave,)
             Rest-frame model wavelength grid [Angstrom].
-        photometry : Photometry
+        photometry: Photometry
             Supplies the padded filter curves and the convention.
-        redshift_spec : mapping or None
+        redshift_spec: mapping or None
             ``{'mode': 'fixed', 'value': z}`` or
             ``{'mode': 'free', 'z_min':, 'z_max':, 'n_z':}``.
 
@@ -241,7 +241,7 @@ class IGMSEDComponent(TemplateThreading):
 
         Notes
         -----
-        **JIT-compatible**: build-time only — call outside any trace.
+        **JIT-compatible**: build-time only: call outside any trace.
 
         **Not precomputable** when ``igm_patchy`` or ``use_dla`` is set: both
         read free parameters (``igm_x_HI``, ``dla_log_n_hi``, …), so
@@ -259,7 +259,7 @@ class IGMSEDComponent(TemplateThreading):
             return IGMSEDComponentState(name=self.name)
 
         # Pad exactly as the stellar component does when it publishes
-        # ``phot_filter_waves_padded`` — same arrays, same quadrature, so the
+        # ``phot_filter_waves_padded``: same arrays, same quadrature, so the
         # tabulated factor is bit-identical to the runtime band average.
         fws, fts = zip(*filters, strict=False)
         fw_pad, ft_pad, _ = pad_filters(
@@ -340,23 +340,23 @@ class IGMSEDComponent(TemplateThreading):
 
         Pixel *i* is sampled at its rest effective wavelength
         :math:`\lambda_{{\rm obs},i}/(1+z)` from a curve defined as
-        :math:`T(\lambda_{\rm rest}(1+z), z)` — the redshift cancels out of the
+        :math:`T(\lambda_{\rm rest}(1+z), z)`: the redshift cancels out of the
         *wavelength*, leaving the transmission at the **fixed observed instrument
         grid**. So the factor is a function of :math:`(z, i)` alone and moves to
         build time.
 
         Tabulates the *composed* operation (interp through the rest grid), not a
         direct evaluation at the pixels, so the result is **bit-identical** to the
-        runtime — a direct evaluation would be marginally more accurate, but that
+        runtime; a direct evaluation would be marginally more accurate, but that
         is still a behavior change, and this is meant to be a pure speedup.
 
         Parameters
         ----------
-        wave_rest : array_like, shape (n_wave,)
+        wave_rest: array_like, shape (n_wave,)
             Rest-frame model wavelength grid [Angstrom].
-        spec_wave_obs : array_like, shape (n_pix,)
+        spec_wave_obs: array_like, shape (n_pix,)
             Observed-frame spectrum pixel centers [Angstrom].
-        redshift_spec : mapping or None
+        redshift_spec: mapping or None
             ``{'mode': 'fixed', 'value': z}`` or ``{'mode': 'free', ...}``.
 
         Returns
@@ -367,7 +367,7 @@ class IGMSEDComponent(TemplateThreading):
         Notes
         -----
         **JIT-compatible**: build-time only. Patchy reionization and DLAs read
-        free parameters, so the factor is not a function of redshift alone —
+        free parameters, so the factor is not a function of redshift alone;
         those keep the exact full-grid path.
         """
         import numpy as np
@@ -417,7 +417,7 @@ class IGMSEDComponent(TemplateThreading):
 
         The photometry LUT integrates each filter as a K-point sub-band
         quadrature (#1122), and :meth:`precompute_band_factors` averages
-        :math:`T` *alone* over the bandpass — forming
+        :math:`T` *alone* over the bandpass: forming
         :math:`\langle S \rangle \langle T \rangle` where the flux needs
         :math:`\langle S T \rangle`. Across GALEX FUV at :math:`z \approx 0.8`
         the transmission runs from ~1 to ~0 *inside* the band, so that
@@ -436,7 +436,7 @@ class IGMSEDComponent(TemplateThreading):
         contracted. That is not incidental: the node published at runtime is a
         metallicity-weighted average whose weights move with the free parameter
         ``met_logzsol``, so :math:`T` at "the node" is a function of
-        :math:`(z, Z)` — not of :math:`z` alone. Across the SSP metallicity grid
+        :math:`(z, Z)`: not of :math:`z` alone. Across the SSP metallicity grid
         the node shifts by up to 68 % of a sub-band width and :math:`T` there by
         up to 1.3 % in GALEX FUV. Evaluating on the met axis and folding *before*
         the contraction is exact, and costs nothing at runtime: the product is a
@@ -444,13 +444,13 @@ class IGMSEDComponent(TemplateThreading):
 
         Parameters
         ----------
-        subband_waves_rest : array_like
+        subband_waves_rest: array_like
             Rest-frame quadrature nodes [Angstrom], shape
             ``(n_met, n_age, n_filters, n_subbands)`` for a fixed-redshift model
             or ``(n_z, n_met, n_age, n_filters, n_subbands)`` for the free-z
             z-table.
-        z_grid : array_like
-            The redshift(s) the nodes were tabulated at — a single value for a
+        z_grid: array_like
+            The redshift(s) the nodes were tabulated at; a single value for a
             fixed-redshift model, else the z-table's own grid, whose length must
             match the leading axis of ``subband_waves_rest``.
 
@@ -463,13 +463,13 @@ class IGMSEDComponent(TemplateThreading):
 
         Notes
         -----
-        **JIT-compatible**: build-time only — call outside any trace.
+        **JIT-compatible**: build-time only: call outside any trace.
 
         **Not precomputable** when ``igm_patchy`` or ``use_dla`` is set: both read
         free parameters (``igm_x_HI``, ``igm_bubble_mpc``, ``dla_log_n_hi``, …),
         so :math:`T` moves with the sampler and freezing it here would silently
         pin a live transmission. Those configs return ``None`` and keep the exact
-        full-grid path — the gate fails **safe**.
+        full-grid path: the gate fails **safe**.
         """
         import numpy as np
 
@@ -494,12 +494,12 @@ class IGMSEDComponent(TemplateThreading):
             return jnp.asarray(trans).reshape(waves.shape)
 
         if waves.ndim != 5 or waves.shape[0] != zs.shape[0]:
-            # Shapes disagree with the z-table contract — refuse rather than
+            # Shapes disagree with the z-table contract: refuse rather than
             # broadcast something plausible into the forward model.
             return None
 
         # The loop below is one `igm_absorption` call per redshift and is a
-        # build-time constant, so it is re-paid on every `SEDModel.build` —
+        # build-time constant, so it is re-paid on every `SEDModel.build`;
         # ~9 s on a free-redshift model, three identical builds in one process
         # each paying in full (#1453). Cache it on content, the way the
         # photometry z-table computed in the same call already is.
@@ -565,10 +565,10 @@ class IGMSEDComponent(TemplateThreading):
 
         Parameters
         ----------
-        state : ForwardState
+        state: ForwardState
             Must carry rest-frame ``wave`` (Å). If ``sed_observed`` is
             ``None`` this returns ``state`` unchanged.
-        params : mapping
+        params: mapping
             Receives ``igm_*`` keys plus the bare ``redshift`` from the
             allowlist.
 
@@ -590,7 +590,7 @@ class IGMSEDComponent(TemplateThreading):
 
         # Single flat dispatch honoring the configured mean-IGM model and DLA
         # (was hardcoded to Inoue with no DLA, so the observed-frame
-        # photometry/spectroscopy projection silently ignored both — #932).
+        # photometry/spectroscopy projection silently ignored both: #932).
         dla_z = params.get("dla_z", 0.0)
         T = igm_absorption(
             wave_obs,
@@ -608,7 +608,7 @@ class IGMSEDComponent(TemplateThreading):
 
         # The LUT photometry path consumes ``igm_phot_factor`` (n_filters,) rather
         # than band-averaging ``T`` (n_wave,) at runtime. Publishing the precomputed
-        # factor leaves the full-grid curve — and the SED it multiplies — as dead
+        # factor leaves the full-grid curve; and the SED it multiplies: as dead
         # code, which is what XLA must be able to eliminate for WavePrecomp to be
         # fast at all (#932 regressed this: 108 us -> 1764 us).
         band_factor = self._band_factor(z)
@@ -627,13 +627,13 @@ class IGMSEDComponent(TemplateThreading):
 
         The WavePrecomp photometry path integrates the stellar continuum as a
         K-point sub-band quadrature (#1122) and consumes
-        ``stellar_phot_lnu_per_age_subband_igm_precomp`` — the same tensor with
-        :math:`T` folded in at each node — so the projection captures
+        ``stellar_phot_lnu_per_age_subband_igm_precomp``: the same tensor with
+        :math:`T` folded in at each node; so the projection captures
         :math:`\langle S T \rangle` rather than :math:`\langle S \rangle
         \langle T \rangle`. For a mean-IGM model that tensor is a build-time
         constant (``tengri.forward.sed_model._fold_igm_into_subbands``,
         #1135). Patchy reionization and DLAs read free parameters, so it is not,
-        and the tensor is absent — leaving the projector to band-average
+        and the tensor is absent: leaving the projector to band-average
         :math:`\langle T \rangle` over the whole flux. Across a Lyman-break band
         at :math:`z = 7` that covariance gap reached +281 %.
 
@@ -651,10 +651,10 @@ class IGMSEDComponent(TemplateThreading):
         -----
         The node is metallicity-*contracted* (the flux-weighted centroid across
         the SSP metallicity grid), so folding here carries the ~1 % met-node
-        residual #1135 avoids by folding before the contraction — negligible next
+        residual #1135 avoids by folding before the contraction: negligible next
         to the +281 % it removes.
 
-        **JIT-compatible**: yes — pure array ops on published derived tensors.
+        **JIT-compatible**: yes, pure array ops on published derived tensors.
         """
         if derived.get("stellar_phot_lnu_per_age_subband_igm_precomp") is not None:
             return derived  # mean-IGM build-time fold already present (#1135)

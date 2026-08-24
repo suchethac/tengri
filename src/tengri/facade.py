@@ -42,25 +42,25 @@ class Galaxy:
     """User-facing facade around SEDModel + Parameters + Observation + Fitter.
 
     Bundles SSP data, observation, parameters, and model into a single object
-    for simplified one-liner SED fitting. Not a dataclass — it has mutable state
+    for simplified one-liner SED fitting. Not a dataclass: it has mutable state
     (result after fit) and methods. Construction is via classmethods, not
     __init__ directly.
 
     Attributes
     ----------
-    ssp : SSPData
+    ssp: SSPData
         Stellar population synthesis data (grid of stellar templates).
-    observation : Observation
+    observation: Observation
         Observation configuration (photometry, spectroscopy, noise).
-    parameters : Parameters
+    parameters: Parameters
         Parameter specification with priors.
-    model_config : SEDModelConfig
+    model_config: SEDModelConfig
         Model configuration (dust, nebular, AGN, etc.).
-    model : SEDModel or None
+    model: SEDModel or None
         Forward model (lazily constructed on first forward pass or before fit).
-    result : Posterior or None
+    result: Posterior or None
         Posterior/result after running fit().
-    preset_name : str or None
+    preset_name: str or None
         Name of the preset used (e.g. "starforming"), if any.
     """
 
@@ -78,17 +78,17 @@ class Galaxy:
 
         Parameters
         ----------
-        ssp : SSPData
+        ssp: SSPData
             Stellar population synthesis data.
-        observation : Observation
+        observation: Observation
             Observation configuration.
-        parameters : Parameters
+        parameters: Parameters
             Parameter specification with priors.
-        model_config : ModelConfig
+        model_config: ModelConfig
             Model configuration.
-        model : SEDModel or None
+        model: SEDModel or None
             Forward model (if pre-built).
-        preset_name : str or None
+        preset_name: str or None
             Name of preset used.
         """
         self.ssp = ssp
@@ -121,28 +121,28 @@ class Galaxy:
         flux_unit: str = "erg/s/cm2/Hz",
         model_config: SEDModelConfig | None = None,
     ) -> Galaxy:
-        """Build a Galaxy from plain arrays — the common entry point.
+        """Build a Galaxy from plain arrays: the common entry point.
 
         Parameters
         ----------
-        filters : list of str
+        filters: list of str
             Filter names (e.g., ["sdss_u", "sdss_g", "sdss_r", "sdss_i", "sdss_z"]).
-        flux : array_like, shape (n_filters,)
+        flux: array_like, shape (n_filters,)
             Observed fluxes [erg/s/cm²/Hz] by default.
-        flux_err : array_like, shape (n_filters,)
+        flux_err: array_like, shape (n_filters,)
             Flux uncertainties (same units as flux).
-        redshift : float or None
+        redshift: float or None
             Redshift. If None, must be specified in preset.
-        ssp_path : str or None
+        ssp_path: str or None
             Path to SSP HDF5 file. If None, ssp must be provided.
-        ssp : SSPData or None
+        ssp: SSPData or None
             Pre-loaded SSP data. If None, ssp_path must be provided.
-        preset : str
+        preset: str
             Preset name: "starforming", "quiescent", "high_z". Default: "starforming".
-        flux_unit : str
+        flux_unit: str
             Flux unit. One of "erg/s/cm2/Hz", "uJy", "mJy", "Jy", "nJy", "maggies".
             Default: "erg/s/cm2/Hz".
-        model_config : SEDModelConfig or None
+        model_config: SEDModelConfig or None
             Model configuration. If None, uses preset defaults.
 
         Returns
@@ -221,17 +221,17 @@ class Galaxy:
 
         Parameters
         ----------
-        observation : Observation
+        observation: Observation
             Pre-built Observation (photometry, spectroscopy, noise).
-        ssp : SSPData or None
+        ssp: SSPData or None
             Pre-loaded SSP data.
-        ssp_path : str or None
+        ssp_path: str or None
             Path to SSP HDF5 file.
-        preset : str
+        preset: str
             Preset name.
-        redshift : float or None
+        redshift: float or None
             Redshift (overrides any fixed redshift in preset).
-        model_config : SEDModelConfig or None
+        model_config: SEDModelConfig or None
             Model configuration.
 
         Returns
@@ -292,7 +292,7 @@ class Galaxy:
 
         Parameters
         ----------
-        params : Mapping
+        params: Mapping
             Free parameter values keyed by canonical name.
 
         Returns
@@ -302,7 +302,7 @@ class Galaxy:
 
         See Also
         --------
-        :meth:`Galaxy.predict` : Unified entry point with a ``backend``
+        :meth:`Galaxy.predict`: Unified entry point with a ``backend``
             switch between the legacy ``Prediction`` lazy view and the
             orchestrator's ``ForwardState`` (this method).
 
@@ -324,9 +324,9 @@ class Galaxy:
 
         Parameters
         ----------
-        params : Mapping
+        params: Mapping
             Free parameter values keyed by canonical name.
-        backend : {"legacy", "component"}, optional
+        backend: {"legacy", "component"}, optional
             ``"legacy"`` (default) returns the lazy :class:`Prediction`
             wrapper from :meth:`SEDModel.predict`, exposing the
             ``.sfh`` / ``.sed`` / ``.lines`` / ``.radio`` / ``.xray`` /
@@ -388,7 +388,7 @@ class Galaxy:
         .. note::
 
            Unlike :meth:`tengri.ForwardModel.fit`, which defaults to
-           ``"vi"``, this facade defaults to ``"map"`` — a point estimate with
+           ``"vi"``, this facade defaults to ``"map"``: a point estimate with
            **no uncertainties**. That difference is deliberate: ``Galaxy`` is
            the beginner-facing shortcut and ``"vi"`` costs ~100 s cold and
            ~20 GB RSS at D=6-7, which is not a reasonable thing to do by
@@ -398,9 +398,9 @@ class Galaxy:
 
         Parameters
         ----------
-        method : str, optional
+        method: str, optional
             Inference method. Default ``"map"``.
-            ``tengri.list_inference_methods()`` is the live list — "map",
+            ``tengri.list_inference_methods()`` is the live list; "map",
             "vi", "vi_linear", "mcmc_nuts", "mcmc_raytrace", "mcmc_hmc",
             "mcmc_dynamic_hmc", "mcmc_adjusted_mclmc", "mcmc_ess", "nss"
             among them.
@@ -409,13 +409,13 @@ class Galaxy:
             a registered name and raises ``KeyError``, alongside
             ``"mcmc_ghmc"`` and ``"mcmc_mclmc"``, now ``tier="broken"``
             (#1287).
-        backend : str, optional
+        backend: str, optional
             Deprecated alias for ``method``. Every other fit surface in the
             package spells this argument ``method``; ``backend`` here was the
             odd one out. Passing it emits a :class:`DeprecationWarning`.
-        verbose : bool
+        verbose: bool
             Print progress. Default: True.
-        approx : {"auto", None} or precompute config, default "auto"
+        approx: {"auto", None} or precompute config, default "auto"
             Fit-time approximation policy. "auto" routes the fit through the
             precompute LUT selected by data type; None forces the exact
             wave-grid path; an explicit config overrides. Model prediction
@@ -507,7 +507,7 @@ class Galaxy:
 
         Parameters
         ----------
-        figsize : tuple of int
+        figsize: tuple of int
             Figure size (width, height) in inches.
 
         Returns
@@ -589,7 +589,7 @@ class Galaxy:
         -----
         Base citations always include: "tengri", "dsps", "jax".
         Additional keys added based on model_config and inference backend.
-        Designed defensively — handles missing config fields gracefully.
+        Designed defensively: handles missing config fields gracefully.
         """
         # Base components
         citations = ["tengri", "dsps", "jax"]
@@ -622,7 +622,7 @@ class Galaxy:
 
         Parameters
         ----------
-        fmt : {"list", "short", "bibtex", "report", "bibliography"}
+        fmt: {"list", "short", "bibtex", "report", "bibliography"}
 
             - "list" (default): list of ``Citation`` records.
             - "short": newline-joined one-line forms.
@@ -687,7 +687,7 @@ class Galaxy:
 
         Parameters
         ----------
-        path : str
+        path: str
             Target HDF5 path.
 
         Raises
@@ -706,7 +706,7 @@ class Galaxy:
 
         from tengri.results import FitRecord, FitResult
 
-        # Citation keys for this run — mirror the logic in self._infer_citation_keys()
+        # Citation keys for this run: mirror the logic in self._infer_citation_keys()
         citation_keys = self._infer_citation_keys()
 
         fr = FitResult(
@@ -722,12 +722,12 @@ class Galaxy:
     def load_result(cls, path: str):
         """Load a FitResult previously saved by Galaxy.save.
 
-        Returns the FitResult directly (not a reconstructed Galaxy — the
+        Returns the FitResult directly (not a reconstructed Galaxy; the
         underlying SEDModel and Observation are not part of the HDF5 schema).
 
         Parameters
         ----------
-        path : str
+        path: str
             Path to HDF5 file.
 
         Returns

@@ -33,13 +33,13 @@ import numpy as np
 # key: (primary_name, secondary_name), value: flux ratio primary/secondary
 
 _DOUBLET_RATIOS: dict[tuple[str, str], float] = {
-    ("OIII_5007", "OIII_4959"): 2.98,  # [OIII] — fixed by transition probabilities
-    ("NII_6584", "NII_6548"): 2.94,  # [NII] — fixed by transition probabilities
-    ("NeV_3426", "NeV_3346"): 1.3,  # [NeV] — from transition probabilities
-    ("MgII_2803", "MgII_2796"): 1.0,  # MgII — optically thick limit
-    ("SIII_9532", "SIII_9069"): 2.47,  # [SIII] — fixed by transition probabilities
-    # [OII] 3726/3729 and [OII] 7320/7330 are electron-density diagnostics —
-    # their ratios are NOT fixed by atomic physics and must never be constrained.
+    ("OIII_5007", "OIII_4959"): 2.98,  # [OIII], fixed by transition probabilities
+    ("NII_6584", "NII_6548"): 2.94,  # [NII], fixed by transition probabilities
+    ("NeV_3426", "NeV_3346"): 1.3,  # [NeV], from transition probabilities
+    ("MgII_2803", "MgII_2796"): 1.0,  # MgII, optically thick limit
+    ("SIII_9532", "SIII_9069"): 2.47,  # [SIII], fixed by transition probabilities
+    # [OII] 3726/3729 and [OII] 7320/7330 are electron-density diagnostics,     # their ratios are
+    # NOT fixed by atomic physics and must never be constrained.
     # [SII] 6717/6731 is similarly density-sensitive and is also left unconstrained.
 }
 
@@ -124,11 +124,11 @@ class DoubletConstraint:
 
     Parameters
     ----------
-    primary_idx : int
+    primary_idx: int
         Index of the primary (brighter) line in the catalog.
-    secondary_idx : int
+    secondary_idx: int
         Index of the secondary (fainter) line in the catalog.
-    ratio : float
+    ratio: float
         Flux ratio primary/secondary, so flux_secondary = flux_primary / ratio.
 
     """
@@ -144,23 +144,23 @@ class LineList:
 
     Parameters
     ----------
-    names : tuple[str, ...]
+    names: tuple[str, ...]
         Line identifiers (e.g. ``"Halpha"``, ``"OIII_5007"``).
-    wavelengths : jnp.ndarray
+    wavelengths: jnp.ndarray
         Rest-frame vacuum wavelengths in Angstrom, shape ``(n_lines,)``.
-    species : tuple[str, ...]
+    species: tuple[str, ...]
         Chemical species codes matching CLOUDY convention (e.g. ``"H1"``,
         ``"O3"``, ``"N2"``).
-    doublets : tuple[DoubletConstraint, ...]
+    doublets: tuple[DoubletConstraint, ...]
         Doublet flux-ratio constraints between paired lines.
-    is_balmer : tuple[bool, ...]
+    is_balmer: tuple[bool, ...]
         True for hydrogen Balmer/Lyman series lines.
-    is_broad_candidate : tuple[bool, ...]
+    is_broad_candidate: tuple[bool, ...]
         True for lines that can carry a broad AGN component.
-    is_strong : tuple[bool, ...]
+    is_strong: tuple[bool, ...]
         True for lines reliably detected in DESI spectra. Matches the
         ``isstrong`` column in FastSpecFit ``emlines.ecsv`` [1]_.
-    plot_group : tuple[str, ...]
+    plot_group: tuple[str, ...]
         QA plot group label. Lines sharing a group are displayed together in
         diagnostic panels. Matches the ``plotgroup`` column in FastSpecFit
         ``emlines.ecsv`` [1]_ (e.g. ``"halpha_nii_6548_48"``,
@@ -173,21 +173,21 @@ class LineList:
 
     Attributes
     ----------
-    names : tuple[str, ...]
+    names: tuple[str, ...]
         Line identifiers.
-    wavelengths : ndarray, shape (n_lines,)
+    wavelengths: ndarray, shape (n_lines,)
         Rest-frame vacuum wavelengths [Angstrom].
-    species : tuple[str, ...]
+    species: tuple[str, ...]
         CLOUDY species codes.
-    doublets : tuple[DoubletConstraint, ...]
+    doublets: tuple[DoubletConstraint, ...]
         Doublet constraints.
-    is_balmer : tuple[bool, ...]
+    is_balmer: tuple[bool, ...]
         Balmer/Lyman series flags.
-    is_broad_candidate : tuple[bool, ...]
+    is_broad_candidate: tuple[bool, ...]
         Broad component candidate flags.
-    is_strong : tuple[bool, ...]
+    is_strong: tuple[bool, ...]
         Strong line detection flags (DESI context).
-    plot_group : tuple[str, ...]
+    plot_group: tuple[str, ...]
         QA plot group labels.
 
     Notes
@@ -358,7 +358,7 @@ class LineList:
 
         Parameters
         ----------
-        filepath : str
+        filepath: str
             Path to the CLOUDY HDF5 grid file containing ``lines/names`` and
             ``lines/wavelength`` datasets.
 
@@ -437,7 +437,7 @@ class LineList:
 
         Parameters
         ----------
-        names : sequence of str
+        names: sequence of str
             Line identifiers to select (e.g., ``["Halpha", "OIII_5007"]``).
 
         Returns
@@ -483,18 +483,18 @@ class LineList:
 
         Parameters
         ----------
-        wave_min : float, optional
+        wave_min: float, optional
             Minimum rest-frame wavelength [Angstrom] (inclusive). Default: 0.
-        wave_max : float, optional
+        wave_max: float, optional
             Maximum rest-frame wavelength [Angstrom] (inclusive).
             Default: infinity.
-        species : sequence of str, optional
+        species: sequence of str, optional
             If given, retain only lines whose species code is in this list.
             Default: ``None`` (no filtering).
-        names : sequence of str, optional
+        names: sequence of str, optional
             If given, retain only lines whose name exactly matches one in this list.
             Default: ``None`` (no filtering).
-        wavelengths : sequence of float, optional
+        wavelengths: sequence of float, optional
             If given, match each wavelength to the nearest line in the catalog
             within 5 Angstrom tolerance. Default: ``None`` (no filtering).
 
@@ -539,7 +539,7 @@ class LineList:
 
         """
         # Guard the positional numeric args. The primary discovery use of this
-        # method — pick lines by name — sits behind two positional wavelength
+        # method, pick lines by name, sits behind two positional wavelength
         # bounds, so ``select(["Halpha", "Hbeta"])`` (the natural analogy to
         # ``Photometry.from_names([...])``) silently binds the list to
         # ``wave_min`` and later crashes deep in ``wave_min <= w`` with an
@@ -624,7 +624,7 @@ class LineList:
         new_is_strong = tuple(self.is_strong[i] for i in kept_indices_list)
         new_plot_group = tuple(self.plot_group[i] for i in kept_indices_list)
 
-        # Rebuild doublets — keep only if both members survived the filter
+        # Rebuild doublets, keep only if both members survived the filter
         new_doublets: list[DoubletConstraint] = []
         for dc in self.doublets:
             if dc.primary_idx in old_to_new and dc.secondary_idx in old_to_new:
@@ -708,7 +708,7 @@ class LineList:
 
         Parameters
         ----------
-        lines : list[tuple]
+        lines: list[tuple]
             Each tuple: ``(name, wavelength [Angstrom], species, is_balmer,
             is_broad_candidate, is_strong, plot_group)``.
 
@@ -764,7 +764,7 @@ def _parse_cloudy_species(name: str) -> str:
 
     Parameters
     ----------
-    name : str
+    name: str
         CLOUDY line name string.
 
     Returns
@@ -853,10 +853,10 @@ def _detect_doublets_by_proximity(
 
     Parameters
     ----------
-    names : tuple of str
-    wavelengths : list of float
-    species : tuple of str
-    proximity_angstrom : float, optional
+    names: tuple of str
+    wavelengths: list of float
+    species: tuple of str
+    proximity_angstrom: float, optional
 
     Returns
     -------
@@ -896,4 +896,4 @@ def _detect_doublets_by_proximity(
     return tuple(doublets)
 
 
-# ── Deprecated alias — removed in tengri v1.0 ─────────────────────
+# ── Deprecated alias, removed in tengri v1.0 ─────────────────────

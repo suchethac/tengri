@@ -60,7 +60,7 @@ class AGNXRayCoronaSEDComponentConfig(SEDComponentConfig):
 
     Attributes
     ----------
-    name : str
+    name: str
         Diagnostic identifier. Default ``"agn_xray_corona"``.
     """
 
@@ -91,7 +91,7 @@ class AGNXRayCoronaSEDComponent(SEDModelComponent):
 
     The corona is evaluated at the Yang+2020 30° reference inclination
     (anisotropy factor exactly 1): this component has no inclination input,
-    so it stays at the anchor where the alpha_ox relation is defined —
+    so it stays at the anchor where the alpha_ox relation is defined :
     same policy as ``XRayAirdSEDComponent`` (#980).
     """
 
@@ -119,7 +119,7 @@ class AGNXRayCoronaSEDComponent(SEDModelComponent):
     parameter_prefix: str = "xray_"
 
     #: Publish into the shared ``xray`` domain rather than under the registry
-    #: key — ``DerivedState`` declares ``xray_*`` precompute fields, and keying
+    #: key: ``DerivedState`` declares ``xray_*`` precompute fields, and keying
     #: them off ``name`` would spill ``agn_xray_corona_*`` into ``_extras`` and
     #: trip the ADR-0007 guard. Only one X-ray component is ever built.
     publish_name: ClassVar[str] = "xray"
@@ -152,7 +152,7 @@ class AGNXRayCoronaSEDComponent(SEDModelComponent):
     # ``sed_xray`` and nothing else, matching XRayAirdSEDComponent. This
     # previously declared ``L_xray_agn``, which is not a DerivedState field, so
     # it spilled into ``_extras`` and tripped the ADR-0007 guard on every build.
-    # Nothing consumed it — the component was never built — and
+    # Nothing consumed it, the component was never built: and
     # ``state_to_xray_quantities`` derives ``l_x_agn`` independently.
     outputs: ClassVar[dict[str, str]] = {
         "sed_xray": "erg/s/Hz",
@@ -177,14 +177,14 @@ class AGNXRayCoronaSEDComponent(SEDModelComponent):
 
         Parameters
         ----------
-        p : mapping[str, ndarray]
+        p: mapping[str, ndarray]
             Parameters with the ``xray_`` prefix stripped: ``gamma_agn``,
             ``delta_alpha_ox``, ``E_cut``.
-        sed_in : ndarray
+        sed_in: ndarray
             Input SED (stellar + nebular + radio).
-        wave : ndarray
+        wave: ndarray
             Rest-frame wavelength grid in Angstrom.
-        **inputs : ndarray
+        **inputs: ndarray
             Opportunistic cross-component reads: L_agn_bol (with fallback
             to 0.0 if not present from AGN component).
 
@@ -197,10 +197,10 @@ class AGNXRayCoronaSEDComponent(SEDModelComponent):
 
         """
         # L_2500 anchor chain (matches the live ``xray/component.py``):
-        # 1. ``L_2500_intrinsic`` — the composable AGN runner's actual disc
+        # 1. ``L_2500_intrinsic``, the composable AGN runner's actual disc
         #    L_ν(2500 Å), published for *every* disc type (qsogen, richards2006,
         #    …), so the α_ox corona is anchored to the real disc luminosity.
-        # 2. ``L_2500_30deg`` — SKIRTOR's 30° reference value.
+        # 2. ``L_2500_30deg``; SKIRTOR's 30° reference value.
         # 3. ``L_agn_bol`` → L_2500 via the Hopkins+2007 BC_2500 as a last
         #    resort (only when no disc L_2500 is published).
         # Reading only ``L_2500_30deg`` (SKIRTOR-only) made this ~1.6× too bright
@@ -217,7 +217,7 @@ class AGNXRayCoronaSEDComponent(SEDModelComponent):
 
         # alpha_ox is derived from L_2500 via Just+2007 inside the corona;
         # the component knob is the delta offset around that empirical prior
-        # (default 0.0 — #981 fixed the absolute -1.4 being fed here).
+        # (default 0.0: #981 fixed the absolute -1.4 being fed here).
         L_xray = xray_agn_corona(
             wave,
             l_2500_30deg_erg_hz=L_2500,

@@ -19,14 +19,14 @@ def safe_corner(posterior, **kwargs):
 
     Parameters
     ----------
-    posterior : Posterior
+    posterior: Posterior
         Fitted posterior object with a ``plot_corner`` method.
     **kwargs
         Additional keyword arguments passed to ``posterior.plot_corner``.
 
     Returns
     -------
-    fig : matplotlib.figure.Figure or None
+    fig: matplotlib.figure.Figure or None
         Corner plot figure, or None if generation failed.
 
     Examples
@@ -51,20 +51,20 @@ def plot_corner_comparison(posteriors, labels, colors=None, truths=None, params=
 
     Parameters
     ----------
-    posteriors : list of Posterior
+    posteriors: list of Posterior
         Posterior objects to overlay.
-    labels : list of str
+    labels: list of str
         Legend labels for each posterior (e.g. ``["NUTS", "VI", "MAP"]``).
-    colors : list of str, optional
+    colors: list of str, optional
         Colors for each posterior. Defaults to sampler palette.
-    truths : dict, optional
+    truths: dict, optional
         True parameter values for recovery plots.
-    params : list of str, optional
+    params: list of str, optional
         Parameter names to include. Defaults to all free parameters.
 
     Returns
     -------
-    fig : matplotlib Figure or None
+    fig: matplotlib Figure or None
         Combined corner plot, or None if all posteriors failed.
 
     Examples

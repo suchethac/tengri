@@ -39,11 +39,11 @@ def agn_prior_energy_balance(
 
     Parameters
     ----------
-    l_gal_att : float
+    l_gal_att: float
         Log10 of galaxy attenuated luminosity [erg/s].
-    l_sb_emit : float
+    l_sb_emit: float
         Log10 of starburst IR emission luminosity [erg/s].
-    tolerance : str, optional
+    tolerance: str, optional
         Prior type: "flexible" or "restrictive".
 
         - "flexible": soft Gaussian around equality (σ=0.1).
@@ -82,7 +82,7 @@ def agn_prior_energy_balance(
        ``functions/PRIORS_AGNfitter.py``.
     .. [2] L. N. Martínez-Ramírez et al., "AGNFITTER-RX: Modeling the
        radio-to-X-ray spectral energy distributions of AGNs," A&A, 688, A46
-       (2024). arXiv:2405.12111. DOI:10.1051/0004-6361/202449329 — the
+       (2024). arXiv:2405.12111. DOI:10.1051/0004-6361/202449329; the
        extended AGNfitter-rX branch in which this prior is retained.
     """
     # Ensure JAX arrays
@@ -119,11 +119,11 @@ def agn_prior_agn_fraction_floor(
 
     Parameters
     ----------
-    l_agn : float
+    l_agn: float
         Log10 of AGN luminosity [erg/s] (e.g., hot torus or accretion disk).
-    l_galaxy : float
+    l_galaxy: float
         Log10 of galaxy (stellar+dust) luminosity [erg/s].
-    floor : float, optional
+    floor: float, optional
         Minimum AGN fraction (linear, not log). Default: 0.01 (1%).
 
     Returns
@@ -178,9 +178,9 @@ def agn_prior_midir_uv_tie(
 
     Parameters
     ----------
-    l_mir_torus : float
+    l_mir_torus: float
         Log10 of torus mid-IR emission at ~6 microns [erg/s].
-    l_uv_disc : float
+    l_uv_disc: float
         Log10 of accretion disc UV emission [erg/s].
 
     Returns

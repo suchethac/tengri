@@ -29,7 +29,7 @@ from tengri.utils.physics_constants import (
 
 # x = h*nu/(k_B*T) ceiling.  A plain constant, not a dtype-dependent one: the
 # denominator below is ``-expm1(-x)`` in (0, 1], so nothing here can overflow
-# at any x, and ``exp(-x)`` underflows to exactly 0.0 — the true Wien limit —
+# at any x, and ``exp(-x)`` underflows to exactly 0.0: the true Wien limit:
 # rather than needing to be clamped short of it (#1439).
 _X_MAX: float = 500.0
 
@@ -65,7 +65,7 @@ def modified_blackbody(
     ``(1 - exp(-(200 µm/λ)^β)) ν³ B``-factor, which peaks ~35% redder at
     T = 35 K (124 vs 91 µm) and carries ~3× more submm flux at fixed
     bolometric output (parity sweep vs pcigale 2025.1; #1006 tracks an
-    opt-in opacity toggle). Both forms are standard in the literature —
+    opt-in opacity toggle). Both forms are standard in the literature:
     for a general-opacity graybody today, use ``casey2012`` (its graybody
     term is exactly that form).
 
@@ -75,18 +75,18 @@ def modified_blackbody(
 
     Parameters
     ----------
-    wavelength_aa : array, shape (n_wave,)
+    wavelength_aa: array, shape (n_wave,)
         Wavelength grid in Angstrom (sorted ascending). [Å]
-    L_absorbed : float
+    L_absorbed: float
         Total absorbed luminosity.  Unit-agnostic: the output L_nu will be
         in the same units per Hz (e.g. pass erg/s → get erg/s/Hz; pass
         Lsun → get Lsun/Hz).  In ``sed_pipeline.py`` the pipeline passes
         erg/s (from a frequency-integrated trapezoid) and receives erg/s/Hz.
-    dust_T : float
+    dust_T: float
         Dust temperature in Kelvin.  Typical range: 20--60 K. [K]
-    dust_beta_ir : float
+    dust_beta_ir: float
         Emissivity index.  Typical range: 1.5--2.0. [dimensionless]
-    redshift : float
+    redshift: float
         Source redshift. When > 0, CMB heating correction is applied.
         Default 0 (no correction). [dimensionless]
 
@@ -97,9 +97,9 @@ def modified_blackbody(
 
     Notes
     -----
-    **JIT-compatible**: yes — all operations are ``jnp`` primitives.
+    **JIT-compatible**: yes, all operations are ``jnp`` primitives.
 
-    **Gradient-safe**: yes — differentiable everywhere.
+    **Gradient-safe**: yes, differentiable everywhere.
 
     References
     ----------
@@ -134,7 +134,7 @@ def modified_blackbody(
     integral = -jnp.trapezoid(shape, nu)
 
     # Guard against zero integral (e.g. wavelength grid entirely outside
-    # the thermal peak) — return zeros instead of NaN
+    # the thermal peak): return zeros instead of NaN
     norm = jnp.where(integral > 0.0, L_absorbed / integral, 0.0)
 
     result = norm * shape
@@ -158,7 +158,7 @@ _CASEY_LAMBDA0_CM = 200.0e-4  # 200 µm [cm]
 
 
 def _casey_lambda_c_cm(T_eff: float, dust_alpha_mir: float) -> jnp.ndarray:
-    """Power-law turnover wavelength λ_c [cm] — Casey (2012) Eqs. 11-12.
+    """Power-law turnover wavelength λ_c [cm]: Casey (2012) Eqs. 11-12.
 
     λ_c = (3/4)·λ_turnover, where the peak-wavelength fit is
     λ_turnover [nm] = 10³ / [(b1 + b2 α)⁻² + (b3 + b4 α) T].
@@ -179,7 +179,7 @@ def _casey_graybody_nu(
     dust_beta_ir: float,
     optically_thin: bool,
 ) -> jnp.ndarray:
-    r"""Graybody S_ν shape — the second term of Casey (2012) Eq. 1.
+    r"""Graybody S_ν shape: the second term of Casey (2012) Eq. 1.
 
     .. math::
 
@@ -193,7 +193,7 @@ def _casey_graybody_nu(
 
     Notes
     -----
-    **JIT-compatible**: yes — ``optically_thin`` is a static Python bool. Safe
+    **JIT-compatible**: yes, ``optically_thin`` is a static Python bool. Safe
     under ``grad`` and ``vmap`` in float32 as well as float64: both the exponent
     grouping and the ``1/expm1`` spelling below are chosen so that no squared
     denominator the reverse pass forms leaves the float32 range (#1439).
@@ -201,9 +201,9 @@ def _casey_graybody_nu(
     # Grouped as ``(h·c/k) / (lambda·T)``, NOT ``h·c / (lambda·k·T)`` (#1439).
     # Associativity holds for the value but not for the reverse pass: division's
     # derivative w.r.t. its denominator is ``-g·A/den**2``. Spelled with ``k``
-    # in the denominator that square is ``(lambda·k·T)**2`` — measured 2.3e-39
+    # in the denominator that square is ``(lambda·k·T)**2``; measured 2.3e-39
     # at the blue end of a UV-to-far-IR grid, *below* float32's smallest normal
-    # 1.18e-38 — so the reverse pass divided by zero and the gradient came back
+    # 1.18e-38: so the reverse pass divided by zero and the gradient came back
     # NaN while the forward value stayed correct to seven digits. Folding the
     # tiny ``k`` into the numerator makes the denominator ``lambda·T``, whose
     # square is ~1e-7 at the same point. Measured: gradient NaN -> 9.9896e+04,
@@ -218,10 +218,10 @@ def _casey_graybody_nu(
     # (the graybody and the power-law amplitude tied to it at lambda_c) pick up
     # the same factor. Largest intermediate becomes ~1e18 (#1206).
     #
-    # ``1/expm1(x)`` spelled ``exp(-x) / -expm1(-x)`` — the same number, but the
+    # ``1/expm1(x)`` spelled ``exp(-x) / -expm1(-x)``: the same number, but the
     # denominator now lives in (0, 1] and its *square* is bounded by 1 in every
     # dtype. The raw form needs ``expm1(x)**2``, which passes float32's 3.4e38
-    # at x ~ 44 — half the clamp that guarded ``expm1``'s own forward overflow,
+    # at x ~ 44: half the clamp that guarded ``expm1``'s own forward overflow,
     # so that clamp could never have covered it (#1439).
     return opacity * (1.0 / wavelength_cm) ** 3 * jnp.exp(-x) / -jnp.expm1(-x)
 
@@ -260,7 +260,7 @@ def casey2012(
     normalized to ``L_absorbed``.
 
     This matches CIGALE's ``casey2012`` module term by term (parity
-    verified against pcigale 2025.1; #1004 — the previous closure carried
+    verified against pcigale 2025.1; #1004: the previous closure carried
     a spurious Wien factor that annihilated the power law, an inverted
     power-law slope, and an optically-thin-only graybody).
 
@@ -270,23 +270,23 @@ def casey2012(
 
     Parameters
     ----------
-    wavelength_aa : array, shape (n_wave,)
+    wavelength_aa: array, shape (n_wave,)
         Wavelength grid in Angstrom (sorted ascending). [Å]
-    L_absorbed : float
+    L_absorbed: float
         Total absorbed luminosity (sets the normalization). Unit-agnostic:
         the output L_nu is in the same units per Hz.
-    dust_T : float
+    dust_T: float
         Dust temperature. Typical range: 20-60. [K]
-    dust_beta_ir : float
+    dust_beta_ir: float
         Dust emissivity index. Typical range: 1.5-2.0. [dimensionless]
-    dust_alpha_mir : float
+    dust_alpha_mir: float
         Mid-IR power-law slope. Typical range: 1.5-2.5. [dimensionless]
-    optically_thin : bool
+    optically_thin: bool
         If True, use the optically-thin graybody limit
         :math:`(\lambda_0/\lambda)^\beta \nu^3 / (e^{h\nu/kT}-1)`
         instead of the general form. The mid-IR power law is present in
         both variants. Default: False (Casey 2012 Eq. 1). [dimensionless]
-    redshift : float
+    redshift: float
         Source redshift; > 0 applies the CMB corrections. Default 0.
         [dimensionless]
 
@@ -297,10 +297,10 @@ def casey2012(
 
     Notes
     -----
-    **JIT-compatible**: yes — all operations are ``jnp`` primitives;
+    **JIT-compatible**: yes, all operations are ``jnp`` primitives;
     ``optically_thin`` is a static Python bool.
 
-    **Gradient-safe**: yes — differentiable everywhere.
+    **Gradient-safe**: yes, differentiable everywhere.
 
     References
     ----------
@@ -351,11 +351,11 @@ def _drude_profile(
 
     Parameters
     ----------
-    wavelength_aa : array_like, shape (n_wave,)
+    wavelength_aa: array_like, shape (n_wave,)
         Wavelength grid in Ångstrom.
-    lambda0_aa : float
+    lambda0_aa: float
         Center wavelength in Ångstrom.
-    fwhm_um : float
+    fwhm_um: float
         FWHM in micrometers.
 
     Returns
@@ -365,7 +365,7 @@ def _drude_profile(
 
     Notes
     -----
-    **JIT-compatible**: yes — all operations are ``jnp`` primitives.
+    **JIT-compatible**: yes, all operations are ``jnp`` primitives.
 
     The Drude profile is:
 
@@ -397,13 +397,13 @@ def pah_drude(
     redshift: float = 0.0,
     **_kwargs,
 ) -> jnp.ndarray:
-    """Smith et al. (2007) PAH Drude profiles — mid-IR PAH building block.
+    """Smith et al. (2007) PAH Drude profiles: mid-IR PAH building block.
 
     A sum of 18 PAH Drude profiles (normalized to Smith+2007 SINGS median
     strengths). This is a **PAH-only building block**, not a standalone
     energy-balanced dust emitter: it carries the aromatic-feature forest only
     (no thermal continuum), so its frequency integral is *not* renormalized to
-    ``L_absorbed`` — it is scaled by ``L_absorbed`` but deliberately leaves the
+    ``L_absorbed``: it is scaled by ``L_absorbed`` but deliberately leaves the
     bulk of the absorbed energy for a continuum component to carry. Select a
     full model (``dale2014``, ``draine_li2007/2014``, ``themis``,
     ``modified_blackbody``, ``casey2012``, ``schreiber2018``) for an
@@ -412,11 +412,11 @@ def pah_drude(
 
     Parameters
     ----------
-    wavelength_aa : array, shape (n_wave,)
+    wavelength_aa: array, shape (n_wave,)
         Wavelength grid in Angstrom (sorted ascending). [Å]
-    L_absorbed : float
+    L_absorbed: float
         Total absorbed luminosity. [Lsun or erg/s, as passed]
-    redshift : float
+    redshift: float
         Source redshift (unused for this model). [dimensionless]
 
     Returns
@@ -426,13 +426,13 @@ def pah_drude(
 
     Notes
     -----
-    **JIT-compatible**: yes — pure ``jnp`` primitives (a precomputed lookup in
+    **JIT-compatible**: yes, pure ``jnp`` primitives (a precomputed lookup in
     :mod:`~tengri.components.dust.dust_analytic_precompute` is preferred in the
     hybrid kernel; this is the direct full-wavelength evaluation).
 
     **Gradient-safe**: yes.
 
-    **Not energy-balanced standalone** — see the summary above; excluded from
+    **Not energy-balanced standalone**; see the summary above; excluded from
     the cross-model energy-balance contract test for this reason.
 
     The PAH template is a pure shape (no free axes). Runtime evaluation uses the
@@ -474,23 +474,23 @@ def schreiber2016(
     at standard wavelengths (not the full Schreiber+ mid-IR aromatic forest).
 
     For the CIGALE-faithful tabulated version with the real PAH feature forest,
-    select ``schreiber2018`` (``data/schreiber2018_templates.h5``) instead —
+    select ``schreiber2018`` (``data/schreiber2018_templates.h5``) instead:
     this analytic model is the lightweight, grid-free approximation.
 
     Parameters
     ----------
-    wavelength_aa : array_like, shape (n_wave,)
+    wavelength_aa: array_like, shape (n_wave,)
         Wavelength grid in Ångstrom (sorted ascending).
-    L_absorbed : float
+    L_absorbed: float
         Total absorbed luminosity. Unit-agnostic: the output L_nu will be
         in the same units per Hz.
-    dust_T : float
+    dust_T: float
         Dust continuum temperature in Kelvin.
         Typical range: 15--60 K. Default: 30.0.
-    dust_f_pah : float
+    dust_f_pah: float
         Fractional contribution from PAH emission in [0, 1].
         Default: 0.05.
-    redshift : float
+    redshift: float
         Source redshift. When > 0, CMB heating correction is applied.
         Default: 0.
 
@@ -501,7 +501,7 @@ def schreiber2016(
 
     Notes
     -----
-    **JIT-compatible**: yes — all operations are ``jnp`` primitives.
+    **JIT-compatible**: yes, all operations are ``jnp`` primitives.
 
     The model composition is:
 
@@ -600,27 +600,27 @@ def energy_balance_split(
 
     Parameters
     ----------
-    wavelength_aa : array_like, shape (n_wave,)
+    wavelength_aa: array_like, shape (n_wave,)
         Wavelength grid. [Å] Must be sorted ascending.
-    L_absorbed_stellar : float
+    L_absorbed_stellar: float
         Total absorbed stellar luminosity. [Lsun]
-    L_agn_ir : float
+    L_agn_ir: float
         Additional AGN-heated IR luminosity. [Lsun] Default: 0.0.
-    eta_balance : float
+    eta_balance: float
         Energy balance parameter: ratio of re-emitted to absorbed stellar luminosity.
         [dimensionless] Default: 1.0 (strict energy balance).
-    f_cold : float
+    f_cold: float
         Fraction of total IR luminosity in the cold component.
         [dimensionless, in [0, 1]] Default: 0.5.
-    dust_T_warm : float
+    dust_T_warm: float
         Warm dust temperature. [K] Default: 45.0.
-    dust_T_cold : float
+    dust_T_cold: float
         Cold dust temperature. [K] Default: 20.0.
-    dust_beta_warm : float
+    dust_beta_warm: float
         Warm component emissivity index. [dimensionless] Default: 1.5.
-    dust_beta_cold : float
+    dust_beta_cold: float
         Cold component emissivity index. [dimensionless] Default: 2.0.
-    redshift : float
+    redshift: float
         Source redshift. [dimensionless] When > 0, CMB heating correction is applied
         to both components. Default: 0.0.
 
@@ -631,7 +631,7 @@ def energy_balance_split(
 
     Notes
     -----
-    **JIT-compatible**: yes — all operations are ``jnp`` primitives.
+    **JIT-compatible**: yes, all operations are ``jnp`` primitives.
 
     The total IR luminosity budget is:
 

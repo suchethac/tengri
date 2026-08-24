@@ -13,14 +13,14 @@ resolution registries used throughout the observation layer:
 - Standard spectral-index definitions: ``STANDARD_INDICES``.
 - SSP-library nominal spectral resolution registry: ``SSP_LIBRARY_RESOLUTIONS``.
 
-The flat ``tengri.observation.X`` import path remains valid — this
+The flat ``tengri.observation.X`` import path remains valid, this
 module is an *additive* sub-namespace that gathers constants apart
 from the user-facing containers and physics primitives.
 
 See Also
 --------
-tengri.observation.containers : user-facing data classes
-tengri.observation.physics : transformation functions
+tengri.observation.containers: user-facing data classes
+tengri.observation.physics: transformation functions
 """
 
 from __future__ import annotations

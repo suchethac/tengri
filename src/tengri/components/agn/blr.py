@@ -183,12 +183,12 @@ def _fe2_pseudo_continuum(
 
     Parameters
     ----------
-    wavelength : array, shape (n_wave,)
+    wavelength: array, shape (n_wave,)
         Rest-frame wavelength [Angstrom].
-    fwhm_kms : float
+    fwhm_kms: float
         BLR velocity broadening FWHM [km/s]. Applied via Gaussian convolution
         in wavelength space.
-    fe2_strength : float
+    fe2_strength: float
         R_Fe = F(Fe II 4434-4684) / F(H-beta). Typical range 0.5-2.0.
         Set to 0.0 to disable Fe II emission.
 
@@ -289,11 +289,11 @@ def _blr_l_hbeta(
 
     Parameters
     ----------
-    l_disc_bol_erg : float
+    l_disc_bol_erg: float
         Bolometric disc luminosity [erg/s].
-    covering_fraction : float, optional
+    covering_fraction: float, optional
         BLR covering fraction (0 to 1). Default 0.1.
-    line_efficiency : float, optional
+    line_efficiency: float, optional
         Fraction of intercepted luminosity converted to line emission.
         Default 0.08.
 
@@ -342,18 +342,18 @@ def compute_blr_sed(
 
     Parameters
     ----------
-    wavelength : array, shape (n_wave,)
+    wavelength: array, shape (n_wave,)
         Rest-frame wavelength [Angstrom].
-    l_disc_bol_erg : float
+    l_disc_bol_erg: float
         Bolometric disc luminosity [erg s^-1].
-    covering_fraction : float
+    covering_fraction: float
         BLR covering fraction (0 to 1). Default 0.1.
-    fwhm_kms : float
+    fwhm_kms: float
         Line FWHM [km/s]. Default 5000.
-    agn_fe2_strength : float
+    agn_fe2_strength: float
         Fe II to H-beta flux ratio R_Fe = F(Fe II 4434-4684)/F(H-beta).
         Typical range 0.5-2.0. Default 0.0 (disabled).
-    line_efficiency : float
+    line_efficiency: float
         Fraction of intercepted luminosity converted to line emission.
         Default 0.08.
 
@@ -364,7 +364,7 @@ def compute_blr_sed(
 
     Notes
     -----
-    **JIT-compatible**: yes — uses ``jnp`` primitives and ``jax.vmap``.
+    **JIT-compatible**: yes, uses ``jnp`` primitives and ``jax.vmap``.
 
     The broad emission lines are modeled as Gaussian profiles at rest-frame
     wavelengths. The line list (≥25 lines) is calibrated to the Vanden Berk

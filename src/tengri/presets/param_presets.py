@@ -8,12 +8,12 @@ modeling or inference. It is the surface consumed by :class:`tengri.Galaxy`
 (``Galaxy.from_arrays(preset=...)``) via :func:`resolve_preset`.
 
 For new code prefer the nested-dict grammar recipes in :mod:`tengri.recipes`
-(``SEDModel.build(**recipes.high_z())``) — the ``high_z`` and ``photoz``
+(``SEDModel.build(**recipes.high_z())``): the ``high_z`` and ``photoz``
 recipes are grammar implementations of the presets here.
 
 .. note::
     Relocated from the former top-level ``tengri/presets.py`` module (2026-07),
-    which had been silently shadowed — and made unreachable — by this
+    which had been silently shadowed; and made unreachable: by this
     ``tengri.presets`` package since the package landed.
 
 Usage
@@ -84,18 +84,18 @@ def starforming(redshift: float | None = None) -> tuple[Parameters, SEDModelConf
 
     Parameters
     ----------
-    redshift : float or None, optional
+    redshift: float or None, optional
         Redshift of the galaxy. If None (default), redshift is a free parameter
         with Uniform(0.01, 6.0). If specified, redshift is fixed.
 
     Returns
     -------
     tuple[Parameters, SEDModelConfig]
-        (params, config) — fully configured Parameter spec and model settings.
+        (params, config); fully configured Parameter spec and model settings.
 
     Notes
     -----
-    **JIT-compatible**: no — returns configuration objects, not arrays.
+    **JIT-compatible**: no, returns configuration objects, not arrays.
 
     **Physics:**
 
@@ -167,18 +167,18 @@ def quiescent(redshift: float | None = None) -> tuple[Parameters, SEDModelConfig
 
     Parameters
     ----------
-    redshift : float or None, optional
+    redshift: float or None, optional
         Redshift of the galaxy. If None (default), redshift is a free parameter
         with Uniform(0.01, 3.0). If specified, redshift is fixed.
 
     Returns
     -------
     tuple[Parameters, SEDModelConfig]
-        (params, config) — fully configured Parameter spec and model settings.
+        (params, config); fully configured Parameter spec and model settings.
 
     Notes
     -----
-    **JIT-compatible**: no — returns configuration objects, not arrays.
+    **JIT-compatible**: no, returns configuration objects, not arrays.
 
     **Physics:**
 
@@ -247,18 +247,18 @@ def high_z(redshift: float | None = None) -> tuple[Parameters, SEDModelConfig]:
 
     Parameters
     ----------
-    redshift : float or None, optional
+    redshift: float or None, optional
         Redshift of the galaxy. If None (default), redshift is a free parameter
         with Uniform(3.5, 10.0). If specified, redshift is fixed.
 
     Returns
     -------
     tuple[Parameters, SEDModelConfig]
-        (params, config) — fully configured Parameter spec and model settings.
+        (params, config); fully configured Parameter spec and model settings.
 
     Notes
     -----
-    **JIT-compatible**: no — returns configuration objects, not arrays.
+    **JIT-compatible**: no, returns configuration objects, not arrays.
 
     **Physics:**
 
@@ -331,18 +331,18 @@ def photoz(redshift: float | None = None) -> tuple[Parameters, SEDModelConfig]:
 
     Parameters
     ----------
-    redshift : float or None, optional
+    redshift: float or None, optional
         Redshift of the galaxy. If None (default), redshift is a free parameter
         with Uniform(0.01, 12). If specified, redshift is fixed.
 
     Returns
     -------
     tuple[Parameters, SEDModelConfig]
-        (params, config) — fully configured Parameter spec and model settings.
+        (params, config); fully configured Parameter spec and model settings.
 
     Notes
     -----
-    **JIT-compatible**: no — returns configuration objects, not arrays.
+    **JIT-compatible**: no, returns configuration objects, not arrays.
 
     **Physics:**
 
@@ -410,7 +410,7 @@ def jwst_spec(redshift: float | None = None) -> tuple[Parameters, SEDModelConfig
 
     Parameters
     ----------
-    redshift : float or None, optional
+    redshift: float or None, optional
         Redshift of the galaxy. If None (default), redshift is a free parameter
         with Uniform(0.01, 15) to cover ground-based and space-based spectroscopy.
         If specified, redshift is fixed.
@@ -418,11 +418,11 @@ def jwst_spec(redshift: float | None = None) -> tuple[Parameters, SEDModelConfig
     Returns
     -------
     tuple[Parameters, SEDModelConfig]
-        (params, config) — fully configured Parameter spec and model settings.
+        (params, config); fully configured Parameter spec and model settings.
 
     Notes
     -----
-    **JIT-compatible**: no — returns configuration objects, not arrays.
+    **JIT-compatible**: no, returns configuration objects, not arrays.
 
     **Physics:**
 
@@ -499,18 +499,18 @@ def agn_host(redshift: float | None = None) -> tuple[Parameters, SEDModelConfig]
 
     Parameters
     ----------
-    redshift : float or None, optional
+    redshift: float or None, optional
         Redshift of the galaxy. If None (default), redshift is a free parameter
         with Uniform(0.01, 6.0). If specified, redshift is fixed.
 
     Returns
     -------
     tuple[Parameters, SEDModelConfig]
-        (params, config) — fully configured Parameter spec and model settings.
+        (params, config); fully configured Parameter spec and model settings.
 
     Notes
     -----
-    **JIT-compatible**: no — returns configuration objects, not arrays.
+    **JIT-compatible**: no, returns configuration objects, not arrays.
 
     **Physics:**
 
@@ -587,11 +587,11 @@ def resolve_preset(
 
     Parameters
     ----------
-    name : str
+    name: str
         Preset name, one of :func:`list_presets`.
-    redshift : float or None
+    redshift: float or None
         Redshift to pass through to the preset factory.
-    model_config : SEDModelConfig or None
+    model_config: SEDModelConfig or None
         Optional override for the returned SEDModelConfig. If provided, it is
         returned verbatim; the preset's own SEDModelConfig is discarded.
 
@@ -617,7 +617,7 @@ def describe(name: str) -> str:
 
     Parameters
     ----------
-    name : str
+    name: str
         Preset name, one of the keys of the package preset registry
         (:func:`tengri.presets.list_presets`).
 
@@ -633,7 +633,7 @@ def describe(name: str) -> str:
 
     Notes
     -----
-    **JIT-compatible**: no — returns formatted string.
+    **JIT-compatible**: no; returns formatted string.
 
     Lookup resolution uses the same path as :func:`tengri.describe` (issue #1611),
     so a name cannot resolve in one surface and not the other.

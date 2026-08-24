@@ -18,13 +18,13 @@ class MockData(NamedTuple):
 
     Parameters
     ----------
-    flux_true : ndarray, shape (n_filters,)
+    flux_true: ndarray, shape (n_filters,)
         Noiseless model photometry. [erg/s/cm²/Hz]
-    flux_obs : ndarray, shape (n_filters,)
+    flux_obs: ndarray, shape (n_filters,)
         Noisy photometry with Gaussian scatter added. [erg/s/cm²/Hz]
-    noise : ndarray, shape (n_filters,)
+    noise: ndarray, shape (n_filters,)
         1-sigma photometric uncertainties used to draw the noise. [erg/s/cm²/Hz]
-    params : dict
+    params: dict
         Input physical parameters used to generate the mock.
 
     Returns
@@ -34,18 +34,18 @@ class MockData(NamedTuple):
 
     Attributes
     ----------
-    flux_true : ndarray, shape (n_filters,)
+    flux_true: ndarray, shape (n_filters,)
         Noiseless model photometry. [erg/s/cm²/Hz]
-    flux_obs : ndarray, shape (n_filters,)
+    flux_obs: ndarray, shape (n_filters,)
         Noisy photometry with Gaussian scatter added. [erg/s/cm²/Hz]
-    noise : ndarray, shape (n_filters,)
+    noise: ndarray, shape (n_filters,)
         1-sigma photometric uncertainties used to draw the noise. [erg/s/cm²/Hz]
-    params : dict
+    params: dict
         Input physical parameters used to generate the mock.
 
     Notes
     -----
-    **JIT-compatible**: yes — NamedTuple is a JAX pytree.
+    **JIT-compatible**: yes, NamedTuple is a JAX pytree.
 
     **Immutable**: All fields are read-only by design. To create a modified
     version, use the ``_replace()`` method inherited from NamedTuple.
@@ -71,14 +71,14 @@ class MockData(NamedTuple):
     # MockData is the object returned by ``SEDModel.mock()``; the standalone
     # ``generate_mock()`` returns a mapping. Supporting both ``mock.flux_obs``
     # and ``mock["flux_obs"]`` here means notebook/user code written against
-    # either surface works against both — see ``src/tengri/analysis/mock.py``.
+    # either surface works against both, see ``src/tengri/analysis/mock.py``.
 
     def __getitem__(self, key):
         """Field access by name (``mock["flux_obs"]``) or position (``mock[0]``).
 
         Parameters
         ----------
-        key : str or int or slice
+        key: str or int or slice
             Field name for dict-style access, or an index/slice for the
             NamedTuple's positional access.
 
@@ -128,20 +128,20 @@ class MockData(NamedTuple):
 
         Parameters
         ----------
-        filter_names : list of str, optional
+        filter_names: list of str, optional
             Filter labels for the x-axis. Falls back to integer indices if None.
-        ax : matplotlib Axes, optional
+        ax: matplotlib Axes, optional
             Axes to plot on. Creates new figure if None.
 
         Returns
         -------
-        fig : matplotlib Figure
+        fig: matplotlib Figure
             Matplotlib figure with photometry plotted as error bars
             (observed with noise) and markers (true noiseless).
 
         Notes
         -----
-        **JIT-compatible**: no — uses matplotlib for visualization.
+        **JIT-compatible**: no, uses matplotlib for visualization.
         """
         import matplotlib.pyplot as plt
         import numpy as np
@@ -185,12 +185,12 @@ class PriorPredictive:
 
     Parameters
     ----------
-    flux : jnp.ndarray or None
+    flux: jnp.ndarray or None
         Predicted photometry draws [erg/s/cm²/Hz], shape ``(n, n_filters)``.
         None if the model has no filters.
-    sfh : jnp.ndarray
+    sfh: jnp.ndarray
         SFR on log-age grid [Msun/yr], shape ``(n, n_grid)``.
-    params : dict
+    params: dict
         Drawn parameter samples, each of shape ``(n,)``.
 
     Returns
@@ -200,14 +200,14 @@ class PriorPredictive:
 
     Attributes
     ----------
-    flux : jnp.ndarray or None
+    flux: jnp.ndarray or None
         Predicted photometry draws [erg/s/cm²/Hz], shape ``(n, n_filters)``.
         None if the model has no filters.
-    sfh : jnp.ndarray
+    sfh: jnp.ndarray
         SFR on log-age grid [Msun/yr], shape ``(n, n_grid)``.
-    params : dict
+    params: dict
         Drawn parameter samples, each of shape ``(n,)``.
-    _model : object
+    _model: object
         Back-reference to the parent model.
 
     Notes
@@ -240,7 +240,7 @@ class PriorPredictive:
 
         Parameters
         ----------
-        self : PriorPredictive
+        self: PriorPredictive
             The prior predictive result container.
 
         Returns
@@ -255,7 +255,7 @@ class PriorPredictive:
 
         Notes
         -----
-        **JIT-compatible**: no — uses Python-level checking and warnings.
+        **JIT-compatible**: no, uses Python-level checking and warnings.
         """
         import numpy as np
 

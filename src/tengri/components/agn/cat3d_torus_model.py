@@ -6,7 +6,7 @@ Implements the CAT3D-Wind torus model on the SEDModelComponent contract,
 enabling use of three-parameter clumpy torus templates in the model-building
 API.
 
-This is an opt-in adapter — the existing AGNSEDComponent continues to
+This is an opt-in adapter, the existing AGNSEDComponent continues to
 support CAT3D through the unified AGN registry.
 
 References
@@ -41,7 +41,7 @@ class CAT3DTorusConfig(SEDComponentConfig):
 
     Parameters
     ----------
-    grid_path : str or None
+    grid_path: str or None
         Path to CAT3D-Wind template grid (HDF5). If None, templates
         are not pre-loaded (deferred to first use in predict).
     """
@@ -55,9 +55,9 @@ class CAT3DTorusState(SEDComponentState):
 
     Attributes
     ----------
-    name : str
+    name: str
         Component identifier.
-    cat3d_fn : callable or None
+    cat3d_fn: callable or None
         Compiled interpolation function from create_cat3d_wind_from_grid,
         or None if templates are not available.
     """
@@ -76,36 +76,36 @@ class CAT3DTorus(SEDModelComponent):
 
     Attributes
     ----------
-    name : str
+    name: str
         Component registry key: ``"cat3d_wind"``.
-    parameter_prefix : str
+    parameter_prefix: str
         Parameter namespace: ``"agn_"``.
-    config : CAT3DTorusConfig
+    config: CAT3DTorusConfig
         Frozen configuration (grid path).
 
     Free parameters (class-level declarations, auto-discovered)
     -----------------------------------------------------------
-    log_lbol : Uniform
+    log_lbol: Uniform
         log₁₀(L_bol / L_sun). [dex, 8–14]
-    cos_inc : Uniform
+    cos_inc: Uniform
         Cosine of inclination (1 = face-on, 0 = edge-on). [dimensionless, 0–1]
-    a_cat3d : Uniform
+    a_cat3d: Uniform
         Radial power-law index of clump distribution. [dimensionless, -2.5–-0.5]
-    fwd_cat3d : Uniform
+    fwd_cat3d: Uniform
         Polar-wind mass fraction. [dimensionless, 0–1]
-    torus_frac : Uniform
+    torus_frac: Uniform
         Fraction of L_bol reprocessed by torus. [dimensionless, 0–1]
 
     Cross-component outputs
     -----------------------
-    L_agn_torus : erg/s
+    L_agn_torus: erg/s
         Bolometric luminosity contribution from torus emission.
 
     Notes
     -----
-    **JIT-compatible**: yes — predict() is pure JAX.
+    **JIT-compatible**: yes, predict() is pure JAX.
 
-    **Gradient-safe**: yes — triweight interpolation is fully differentiable
+    **Gradient-safe**: yes, triweight interpolation is fully differentiable
     across the three parameter axes.
 
     **Requires template grid**: The CAT3D-Wind template library must be
@@ -133,14 +133,14 @@ class CAT3DTorus(SEDModelComponent):
 
     See Also
     --------
-    tengri.components.agn.cat3d_wind : template loader and interpolation.
+    tengri.components.agn.cat3d_wind: template loader and interpolation.
     """
 
     name = "cat3d_wind"
     parameter_prefix = "agn_"
     config: CAT3DTorusConfig = field(default_factory=CAT3DTorusConfig)
 
-    # Free parameters — auto-discovered
+    # Free parameters: auto-discovered
     log_lbol = Uniform(
         8.0,
         14.0,
@@ -185,7 +185,7 @@ class CAT3DTorus(SEDModelComponent):
 
         Parameters
         ----------
-        wave : ndarray, optional
+        wave: ndarray, optional
             Rest-frame wavelength grid (not used by CAT3D; templates
             interpolate to any target grid).
 
@@ -201,7 +201,7 @@ class CAT3DTorus(SEDModelComponent):
         try:
             return create_cat3d_wind_from_grid(self.config.grid_path)
         except (FileNotFoundError, OSError, KeyError):
-            # Templates not available — predict will return zero emission
+            # Templates not available: predict will return zero emission
             return None
 
     def predict(
@@ -219,7 +219,7 @@ class CAT3DTorus(SEDModelComponent):
 
         Parameters
         ----------
-        p : mapping[str, ndarray]
+        p: mapping[str, ndarray]
             Parameters with prefix already stripped:
 
             - log_lbol: log₁₀(L_bol / L_sun)
@@ -228,11 +228,11 @@ class CAT3DTorus(SEDModelComponent):
             - fwd_cat3d: polar-wind mass fraction
             - torus_frac: torus luminosity fraction
 
-        sed_in : ndarray, shape (n_wave,)
+        sed_in: ndarray, shape (n_wave,)
             Input SED in erg/s/Hz.
-        wave : ndarray, shape (n_wave,)
+        wave: ndarray, shape (n_wave,)
             Rest-frame wavelength grid in Angstrom.
-        **inputs : ndarray
+        **inputs: ndarray
             Unused (AGN torus is self-contained).
 
         Returns

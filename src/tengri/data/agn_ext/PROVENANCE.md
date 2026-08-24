@@ -9,7 +9,7 @@ arXiv: [2109.04472](https://arxiv.org/abs/2109.04472).
 **What it is**: the empirically-derived *quasar* dust extinction curve used by
 the qsogen SED model (<https://github.com/MJTemple/qsogen>, file
 `pl_ext_comp_03.sph`). Temple+2021 §2.4 derive it from SDSS DR7 quasars at
-2.0 < z < 3.0 — i- and K-band photometry set the rest-frame optical
+2.0 < z < 3.0: i- and K-band photometry set the rest-frame optical
 (3000–6500 Å) reddening E(B−V), and composite spectra of samples binned by
 reddening define the ultraviolet (1100–2500 Å) shape. It is *not* the SMC
 Prevot law; the paper notes it is "somewhat similar to those presented by

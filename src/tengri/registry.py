@@ -1,5 +1,5 @@
 # SPDX-License-Identifier: BSD-3-Clause
-"""Public introspection façade — list and describe everything available in tengri.
+"""Public introspection façade: list and describe everything available in tengri.
 
 This is the first thing a new user should reach for. Open a notebook, run::
 
@@ -16,7 +16,7 @@ then narrow down with::
     tengri.describe("skirtor")  # full metadata for any name
 
 Returned values are normal Python lists, but they print as readable tables
-in a notebook or REPL — no need to wrap them in `pprint`.
+in a notebook or REPL; no need to wrap them in `pprint`.
 """
 
 from __future__ import annotations
@@ -28,14 +28,14 @@ from typing import Any
 from tengri._display import _display
 
 # ──────────────────────────────────────────────────────────────────
-# Pretty-printed return types (still real lists/dicts — just nicer repr)
+# Pretty-printed return types (still real lists/dicts: just nicer repr)
 # ──────────────────────────────────────────────────────────────────
 
 
 class _RegistryTable(list):
     """A `list[dict]` that prints as a column-aligned table.
 
-    Behaves identically to a list otherwise — indexing, iteration,
+    Behaves identically to a list otherwise: indexing, iteration,
     JSON serialization, etc. all work as usual.
     """
 
@@ -49,7 +49,7 @@ class _RegistryTable(list):
         "short_doc",
         "use",
     )
-    # ``fn`` holds a live callable (list_laws) — its str() is an address,
+    # ``fn`` holds a live callable (list_laws): its str() is an address,
     # so it is carried in the row but never rendered.
     _ALWAYS_HIDDEN = ("module", "requires", "params", "fn")  # surfaced via describe()
 
@@ -59,7 +59,7 @@ class _RegistryTable(list):
         - ``kind`` is shown only when results span more than one kind
           (e.g. cross-menu search) so single-menu tables stay narrow.
         - ``use`` (the call-site hint) is shown only on cross-menu /
-          search tables — single-menu tables expose it via describe()
+          search tables: single-menu tables expose it via describe()
           to keep the row width readable.
 
         """
@@ -92,8 +92,8 @@ class _RegistryTable(list):
         # Footer "kind" reads "mixed" for cross-menu (search) results.
         kinds = {d.get("kind", "entry") for d in self}
         kind_label = next(iter(kinds)) if len(kinds) == 1 else "mixed"
-        footer = f"\n[{len(self)} result{'s' if len(self) != 1 else ''} — {kind_label}]"
-        # Hint at how to actually use any row — only shown on single-kind
+        footer = f"\n[{len(self)} result{'s' if len(self) != 1 else ''}: {kind_label}]"
+        # Hint at how to actually use any row: only shown on single-kind
         # tables (where the `use` column is hidden) so search tables don't
         # repeat themselves.
         if len(kinds) == 1 and self and "use" in self[0]:
@@ -173,11 +173,11 @@ class _RegistryTable(list):
         return _RegistryTable(out)
 
     def names(self) -> list[str]:
-        """Just the list of names — convenient for ``Photometry.from_names``."""
+        """Just the list of names: convenient for ``Photometry.from_names``."""
         return [d["name"] for d in self]
 
     def to_dict(self, value: str = "short_doc") -> dict[str, Any]:
-        """Collapse to ``{name: value}`` — the shape some ``list_*`` once returned.
+        """Collapse to ``{name: value}``; the shape some ``list_*`` once returned.
 
         ``list_known_ssps`` and ``list_filter_conventions`` returned plain
         ``dict[str, str]`` while every other ``list_*`` returned a table
@@ -186,7 +186,7 @@ class _RegistryTable(list):
 
         Parameters
         ----------
-        value : str, optional
+        value: str, optional
             Which column becomes the dict value. Defaults to ``"short_doc"``.
 
         Returns
@@ -217,7 +217,7 @@ class _RegistryTable(list):
 
         Parameters
         ----------
-        title : str, optional
+        title: str, optional
             Optional title for the directive (appears as table caption).
 
         Returns
@@ -249,7 +249,7 @@ class _RegistryTable(list):
         hidden = set(self._ALWAYS_HIDDEN)
         if len(kinds) <= 1:
             hidden.add("kind")
-            # Do NOT add 'use' to hidden — keep it visible for RST output.
+            # Do NOT add 'use' to hidden: keep it visible for RST output.
         all_keys = list(self[0].keys())
         cols = [k for k in self._PREFERRED_COLS if k in all_keys and k not in hidden]
         cols += [k for k in all_keys if k not in cols and k not in hidden]
@@ -387,7 +387,7 @@ def _extract_params(entry: Any, kind: str) -> list[str]:
 
 def _usage_hint(name: str, kind: str) -> str:
     """Return a copy-pasteable one-liner showing how to actually use this
-    entry — the missing piece between "I found a thing called skirtor"
+    entry: the missing piece between "I found a thing called skirtor"
     and "now what?"
 
     Patterns are based on the canonical spec/filter/fitter call sites
@@ -457,11 +457,11 @@ def _usage_hint(name: str, kind: str) -> str:
 # Each SEDComponent maps to its real discovery menu(s). The menu names are
 # irregular (``list_sfh_models`` vs ``list_dust_laws`` vs
 # ``list_nebular_backends``), so this must be a lookup, not an
-# ``f"list_{name}_models"`` formula — the formula advertised
+# ``f"list_{name}_models"`` formula: the formula advertised
 # ``list_stellar_models`` / ``list_agn_laws`` and other functions that do not
 # exist, sending a fresh user into an ``AttributeError``. (``list_dust_models``
 # was another of that formula's phantoms; it is real now, but it names the
-# structural axis only — the formula still guesses wrong for every other group.)
+# structural axis only: the formula still guesses wrong for every other group.)
 _COMPONENT_MENUS: dict[str, str] = {
     "met": "list_metallicity_modes()",
     "dust": "list_dust_models() / list_dust_laws() / list_dust_emission_models()",
@@ -478,7 +478,7 @@ def _extract_param_details(entry: Any, kind: str) -> list[dict]:
     """Per-parameter details (default prior, description) when discoverable.
 
     Used by ``describe()`` to show *what range to put in your Uniform()*
-    for a model the user hasn't seen before — the most common new-user
+    for a model the user hasn't seen before; the most common new-user
     question after "what models are available?"
     """
     out: list[dict] = []
@@ -559,8 +559,8 @@ def _component_entry(name: str, *, kind: str) -> dict:
     ``_REGISTRY`` components carrying the matching prefix. The legacy entries
     are dataclasses with ``status`` / ``citation`` / ``short_doc`` attributes;
     the component classes carry none of those, so their summary is taken from
-    the first line of the class docstring. Deriving it here — rather than
-    listing these names in a metadata table — keeps the menu honest when a new
+    the first line of the class docstring. Deriving it here: rather than
+    listing these names in a metadata table; keeps the menu honest when a new
     component is registered: the row appears with whatever docstring it has,
     instead of the name silently going missing.
     """
@@ -584,7 +584,7 @@ def _component_entry(name: str, *, kind: str) -> dict:
 
 #: The word for "do not filter". Every menu accepts it, because it is what a
 #: reader types first and because ``status='all'`` used to return nothing at all
-#: — the worst possible answer to "show me everything".
+#:: the worst possible answer to "show me everything".
 ALL = "all"
 
 
@@ -615,7 +615,7 @@ def _filter_menu(rows: list[dict], column: str, value: str | None, *, listing: s
     ``status='all'`` (#1679).
 
     The distinction kept here is between a value that is not a ``column`` value
-    at all — a typo, which raises — and one that is real but absent from *this*
+    at all; a typo, which raises: and one that is real but absent from *this*
     menu, which is a legitimate empty answer: there simply are no unvalidated
     dust laws.
     """
@@ -625,13 +625,13 @@ def _filter_menu(rows: list[dict], column: str, value: str | None, *, listing: s
     # Union, not just the global set: a menu may surface rows that the default
     # listing hides, and those values are legitimate. `list_inference_methods`
     # passes `include_broken=(tier == "broken")`, so `tier='broken'` is a
-    # documented query whose rows exist only once it has been asked for — a
+    # documented query whose rows exist only once it has been asked for: a
     # vocabulary derived from default listings alone would reject it. That is
     # the same too-narrow-census mistake this helper exists to fix.
     vocabulary = sorted(set(_menu_vocabulary(column)) | set(here))
     if value not in vocabulary:
         raise ValueError(
-            f"{listing}({column}={value!r}) — {value!r} is not a {column} any menu "
+            f"{listing}({column}={value!r}): {value!r} is not a {column} any menu "
             f"uses. Valid values: {vocabulary}. This menu currently has: "
             f"{here}. Pass {column}={ALL!r} (or omit it) to list everything."
         )
@@ -644,14 +644,14 @@ def _resolve_category(value: str | None, accepted, *, listing: str) -> str | Non
     The category axis is validated where the rows are *built*, not after, so it
     cannot go through :func:`_filter_menu`. It gets the same contract anyway:
     ``list_agn_blocks`` already refused an unknown category while
-    ``list_radio_blocks`` silently returned zero of seven rows — one sibling
+    ``list_radio_blocks`` silently returned zero of seven rows; one sibling
     right, one wrong, which is the giveaway that nothing enforced the rule.
     """
     if value is None or str(value).lower() == ALL:
         return None
     if value not in accepted:
         raise ValueError(
-            f"{listing}(category={value!r}) — {value!r} is not a category this "
+            f"{listing}(category={value!r}); {value!r} is not a category this "
             f"menu has. Accepted: {sorted(accepted)}. Pass category={ALL!r} "
             f"(or omit it) to list everything."
         )
@@ -668,7 +668,7 @@ def list_agn_models(*, status: str | None = None) -> _RegistryTable:
 
     Parameters
     ----------
-    status : str, optional
+    status: str, optional
         Filter by ``"production"``, ``"experimental"``, ``"demo"``, or
         ``"deprecated"``.
 
@@ -693,17 +693,17 @@ def list_agn_blocks(*, category: str | None = None, status: str | None = None) -
     ``SEDModel.build(..., agn={"disc": {"type": "multicolor"},
     "nlr": {"type": "analytic"}})``.
 
-    This coexists with monolithic AGN models (:func:`list_agn_models`) —
-    blocks offer mix-and-match flexibility while monolithic models bundle
+    This coexists with monolithic AGN models (:func:`list_agn_models`): blocks offer mix-and-match
+    flexibility while monolithic models bundle
     a complete recipe.
 
     Parameters
     ----------
-    category : str, optional
+    category: str, optional
         Filter to a specific category: ``"disc"``, ``"nlr"``, ``"blr"``,
         ``"feii"``, ``"torus"``, or ``"attenuation"``. If ``None``, list
         all categories.
-    status : str, optional
+    status: str, optional
         Filter by ``"production"``, ``"experimental"``, ``"demo"``, or
         ``"deprecated"``.
 
@@ -728,7 +728,7 @@ def list_agn_blocks(*, category: str | None = None, status: str | None = None) -
 
     # Accept the grammar key as well as the registry label. Five of the six
     # slots have category == grammar key, so the mismatch showed up only for
-    # attenuation — and it was this function's own ``use:`` string that told
+    # attenuation: and it was this function's own ``use:`` string that told
     # users to type ``agn={'atten': ...}``, so ``list_agn_blocks('atten')``
     # returned an empty table for the exact name it had just advertised
     # (#1451). Normalize before filtering rather than at each comparison.
@@ -742,13 +742,13 @@ def list_agn_blocks(*, category: str | None = None, status: str | None = None) -
         # ...and fail loudly on anything else. The filter used to fall through
         # to "no category matched", so a typo, an empty string and a valid-but-
         # wrong key were indistinguishable from a category that genuinely has
-        # no blocks — a guard that fails open is the bug.
+        # no blocks: a guard that fails open is the bug.
         if category not in AGN_BLOCKS:
             accepted = sorted(set(AGN_BLOCKS) | set(group_key_to_category))
             raise ValueError(
                 f"Unknown AGN block category {category!r}. "
                 f"Accepted: {', '.join(repr(c) for c in accepted)}. "
-                "('atten' and 'attenuation' both work — the first is the "
+                "('atten' and 'attenuation' both work; the first is the "
                 "build-grammar key, the second the registry label.)"
             )
 
@@ -779,7 +779,7 @@ def list_agn_blocks(*, category: str | None = None, status: str | None = None) -
     return _RegistryTable(sorted(out, key=lambda m: (m["category"], m["name"])))
 
 
-# Dust *structural* models — the ``dust_attenuation={'type': ...}`` axis. Keyed by the
+# Dust *structural* models: the ``dust_attenuation={'type': ...}`` axis. Keyed by the
 # names in ``_VALID_DUST_TYPES``, which is what the build validator accepts;
 # the listing derives its names from that same set (see
 # :func:`list_dust_models`) so the menu and the validator cannot drift.
@@ -803,7 +803,7 @@ _DUST_MODEL_METADATA: dict[str, dict[str, str]] = {
 
 
 def list_dust_models(*, status: str | None = None) -> _RegistryTable:
-    """List the dust **structural** models — the ``dust_attenuation={'type': ...}`` choice.
+    """List the dust **structural** models: the ``dust_attenuation={'type': ...}`` choice.
 
     Dust is selected along three independent axes, and this is the first one:
     how the dust is *arranged* relative to the stars. The attenuation
@@ -813,8 +813,8 @@ def list_dust_models(*, status: str | None = None) -> _RegistryTable:
     (:func:`list_dust_emission_models`, via ``dust_emission={'type': ...}``).
 
     The other two axes had menus; this one did not, so the structural
-    names — including ``two_component``, the type the recipes themselves
-    build with — were absent from every discovery surface: no ``list_*``
+    names; including ``two_component``, the type the recipes themselves
+    build with: were absent from every discovery surface: no ``list_*``
     named them, ``describe('two_component')`` raised ``KeyError`` and
     ``search('two_component')`` returned nothing.
 
@@ -861,11 +861,11 @@ def list_dust_laws(*, status: str | None = None) -> _RegistryTable:
 # ``DUST_EMISSION_MODELS``. Each entry supplies citation/short_doc; the
 # accepted set of build-time names is derived from the live registry (see
 # :func:`list_dust_emission_models` below), so the validator and the
-# introspection helper can never drift apart (closes #495 — same pattern
+# introspection helper can never drift apart (closes #495: same pattern
 # as PR #489 for AGN blocks).
 _DUST_EMISSION_METADATA: dict[str, dict[str, str]] = {
-    # A name missing from this table still appears on the menu — the lookup
-    # below falls back to blank strings — so it shows up as a fully-formed row
+    # A name missing from this table still appears on the menu: the lookup
+    # below falls back to blank strings: so it shows up as a fully-formed row
     # describing nothing and citing nobody. Three real engines sat that way
     # (#1777); ``tests/contract/test_menu_rows_are_not_blank.py`` now refuses a
     # blank description on any advertised model.
@@ -877,7 +877,7 @@ _DUST_EMISSION_METADATA: dict[str, dict[str, str]] = {
     "dl07_tabulated": {
         "status": "deprecated",
         "citation": "Draine & Li 2007 (ApJ 657, 810)",
-        "short_doc": "Deprecated spelling of draine_li2007 — use that name instead",
+        "short_doc": "Deprecated spelling of draine_li2007: use that name instead",
     },
     "dh02_ce01": {
         "status": "production",
@@ -977,7 +977,7 @@ def list_dust_emission_models(*, status: str | None = None) -> _RegistryTable:
     Calls the ``SEDModel.build`` grammar validator itself
     (``tengri.parameters.groups._valid_dust_emission_types``) rather than
     re-deriving what it derives. The ``DUST_EMISSION_MODELS`` loader cache is
-    **not** consulted — it is load-only (closes #495).
+    **not** consulted; it is load-only (closes #495).
 
     The call matters. This menu used to re-implement the validator's
     derivation (``_REGISTRY`` components publishing ``sed_dust_ir``, union the
@@ -1032,10 +1032,10 @@ def list_sfh_models(*, status: str | None = None) -> _RegistryTable:
         if m["name"] in UNVALIDATED_SFH_TYPES:
             m["status"] = "unvalidated"
             if "not builder-available" not in m["short_doc"]:
-                suffix = " [not builder-available — registered, not yet DSPS-validated]"
+                suffix = " [not builder-available: registered, not yet DSPS-validated]"
                 m["short_doc"] = f"{m['short_doc']}{suffix}"
             # The status said "unvalidated" while ``use:`` still advertised
-            # ``SEDModel.build(..., sfh={'type': X})`` — a copy-pasteable call
+            # ``SEDModel.build(..., sfh={'type': X})``: a copy-pasteable call
             # that raises ValueError. That is the "advice that raises" class
             # (#1275) reappearing in the hint field: the sweep guarding it
             # checked that every ``use:`` *starts with* ``SEDModel.build(``,
@@ -1043,11 +1043,11 @@ def list_sfh_models(*, status: str | None = None) -> _RegistryTable:
             # Carry the reason and the next step instead of a call, so nothing
             # in the menu is copy-pasteable-and-broken.
             m["use"] = (
-                "not builder-available — SEDModel.build rejects it; "
+                "not builder-available: SEDModel.build rejects it; "
                 "browse the buildable set with list_sfh_models(status='production')"
             )
         # ``mixture`` (burst) and ``modulator`` (field) SFH components cannot
-        # stand alone — ``sfh={'type': 'burst'}`` raises "At least one additive
+        # stand alone: ``sfh={'type': 'burst'}`` raises "At least one additive
         # (smooth) SFH component required". Advertise the composed list form so
         # the ``use:`` hint is something the builder actually accepts.
         ctype = getattr(SFH_REGISTRY[m["name"]], "composition_type", "additive")
@@ -1063,7 +1063,7 @@ def list_nebular_backends(*, status: str | None = None) -> _RegistryTable:
     Reads :data:`tengri.components.nebular.NEBULAR_MODELS` so the
     listing stays in lock-step with what the grammar-layer validator
     will actually accept (#331). The names match the keys consumed by
-    ``SEDModel.build(..., neb={'type': ...})`` — ``'none'`` /
+    ``SEDModel.build(..., neb={'type': ...})``: ``'none'`` /
     ``'ssp'`` / ``'cue'`` / ``'cloudy'`` / ``'cb19'``.
     """
     from tengri.components.nebular import NEBULAR_MODELS
@@ -1073,8 +1073,8 @@ def list_nebular_backends(*, status: str | None = None) -> _RegistryTable:
         # The generic CLOUDY backend needs a user-supplied grid file:
         # ``neb={'type': 'cloudy'}`` raises "The CLOUDY nebular backend needs a
         # grid file." The key is ``grid``; this hint advertised ``gridfile``,
-        # so the line printed to fix one failure raised a different one —
-        # "Unknown key 'gridfile' in group 'neb'. Did you mean: grid?" — and
+        # so the line printed to fix one failure raised a different one: # "Unknown key 'gridfile'
+        # in group 'neb'. Did you mean: grid?"; and
         # nothing checked either. (``cb19`` ships its own grid and stands alone.)
         if m["name"] == "cloudy":
             m["use"] = "SEDModel.build(..., neb={'type': 'cloudy', 'grid': 'grid.h5'})"
@@ -1093,7 +1093,7 @@ def list_xray_models(*, status: str | None = None) -> _RegistryTable:
     Names come from the grammar validator itself
     (``tengri.parameters.groups._valid_xray_types``), which accepts the
     union of :data:`XRAY_MODELS` and the ``SEDModelComponent`` X-ray variants
-    in ``_REGISTRY``. Reading only ``XRAY_MODELS`` — as this menu did — hid
+    in ``_REGISTRY``. Reading only ``XRAY_MODELS``: as this menu did; hid
     ``xray_aird`` and ``agn_xray_corona`` from every discovery surface from the
     moment #1323 made them builder-reachable, while the validator's own
     docstring asserted the menu and builder "cannot drift".
@@ -1125,7 +1125,7 @@ def list_radio_models(*, status: str | None = None) -> _RegistryTable:
     Names come from the grammar validator itself
     (``tengri.parameters.groups._valid_radio_types``), which accepts the
     union of :data:`RADIO_MODELS` and the ``SEDModelComponent`` radio variants
-    in ``_REGISTRY`` — so ``radio_powerlaw`` and ``radio_dpl`` are listed here
+    in ``_REGISTRY``, so ``radio_powerlaw`` and ``radio_dpl`` are listed here
     rather than being builder-only. The legacy ``radio={'type': ...}`` form is
     retired (PR6); use ``radio={'sf'/'agn': ...}`` instead. This menu lists the
     retired names for reference; the composable form is the only accepted surface.
@@ -1146,7 +1146,7 @@ def list_radio_models(*, status: str | None = None) -> _RegistryTable:
     return _RegistryTable(sorted(out, key=lambda m: m["name"]))
 
 
-# Radio *sub-block* variants — the ``radio={'sf': ...}`` / ``radio={'agn': ...}``
+# Radio *sub-block* variants: the ``radio={'sf': ...}`` / ``radio={'agn': ...}``
 # axes, which are separate from the legacy ``radio={'type': ...}`` menu in
 # :func:`list_radio_models`. Keyed by ``(category, name)`` like AGN_BLOCK_META.
 # The names themselves are NOT listed here: they are derived from the tuples the
@@ -1182,7 +1182,7 @@ _RADIO_BLOCK_METADATA: dict[tuple[str, str], dict[str, str]] = {
 
 
 def list_radio_blocks(*, category: str | None = None, status: str | None = None) -> _RegistryTable:
-    """List the composable radio sub-block variants — ``sf`` and ``agn``.
+    """List the composable radio sub-block variants: ``sf`` and ``agn``.
 
     Radio is selected along two independent axes: the star-forming
     synchrotron model (``radio={'sf': {'type': ...}}``) and the AGN radio
@@ -1196,9 +1196,9 @@ def list_radio_blocks(*, category: str | None = None, status: str | None = None)
 
     Parameters
     ----------
-    category : str, optional
+    category: str, optional
         Filter to ``"sf"`` or ``"agn"``. If ``None``, list both.
-    status : str, optional
+    status: str, optional
         Filter by ``"production"``, ``"experimental"``, ``"demo"``, or
         ``"deprecated"``.
 
@@ -1241,7 +1241,7 @@ def list_radio_blocks(*, category: str | None = None, status: str | None = None)
     return _RegistryTable(sorted(out, key=lambda m: (m["category"], m["name"])))
 
 
-# Shock models — the ``shock={'type': ...}`` axis. Names derive from
+# Shock models: the ``shock={'type': ...}`` axis. Names derive from
 # ``_VALID_SHOCK_TYPES`` (see :func:`list_shock_models`).
 _SHOCK_MODEL_METADATA: dict[str, dict[str, str]] = {
     "none": {
@@ -1255,7 +1255,7 @@ _SHOCK_MODEL_METADATA: dict[str, dict[str, str]] = {
 
 
 def list_shock_models(*, status: str | None = None) -> _RegistryTable:
-    """List the shock emission models — the ``shock={'type': ...}`` choice.
+    """List the shock emission models: the ``shock={'type': ...}`` choice.
 
     The shock component is **additive**: it composes with whichever
     photoionized nebular backend is active rather than replacing it, so both
@@ -1263,7 +1263,7 @@ def list_shock_models(*, status: str | None = None) -> _RegistryTable:
 
     Parameters
     ----------
-    status : str, optional
+    status: str, optional
         Filter by ``"production"``, ``"experimental"``, ``"demo"``, or
         ``"deprecated"``.
 
@@ -1296,7 +1296,7 @@ def list_shock_models(*, status: str | None = None) -> _RegistryTable:
     return _RegistryTable(sorted(out, key=lambda m: m["name"]))
 
 
-# Metallicity modes — the ``met={'type': ...}`` axis (#1720, replacing the
+# Metallicity modes: the ``met={'type': ...}`` axis (#1720, replacing the
 # ``stellar={'met_mode': ...}`` spelling of #311). Names are NOT
 # listed here: :func:`list_metallicity_modes` derives them from ``MET_REGISTRY``
 # itself, the same dict ``_translate_met`` validates against, so a mode
@@ -1317,7 +1317,7 @@ _METALLICITY_MODE_METADATA: dict[str, dict[str, str]] = {
 
 
 def list_metallicity_modes(*, status: str | None = None) -> _RegistryTable:
-    """List the metallicity modes — the ``met={'type': ...}`` choice.
+    """List the metallicity modes: the ``met={'type': ...}`` choice.
 
     The metallicity axis is structural in the same sense as the SFH or dust
     axis: it decides whether a fit carries one metallicity, an evolving one, or
@@ -1332,7 +1332,7 @@ def list_metallicity_modes(*, status: str | None = None) -> _RegistryTable:
 
     Parameters
     ----------
-    status : str, optional
+    status: str, optional
         Filter by ``"production"``, ``"experimental"``, ``"demo"``, or
         ``"deprecated"``.
 
@@ -1372,7 +1372,7 @@ def list_igm_models(*, status: str | None = None) -> _RegistryTable:
 
     Optional sub-flags on the IGM group (``patchy=True``, ``dla=True``)
     layer extra free parameters on top of the chosen mean transmission
-    curve. Those are not separate models here — they apply to either
+    curve. Those are not separate models here; they apply to either
     ``'inoue14'`` or ``'madau'``.
 
     See also: :func:`list_xray_models`, :func:`list_radio_models`,
@@ -1387,18 +1387,18 @@ def list_igm_models(*, status: str | None = None) -> _RegistryTable:
 
 #: The SFH→SSP age-weight kernels, as a menu. Not a registry-backed dispatch
 #: (there are exactly two, hand-written in the stellar component), but a
-#: structural axis of ``SEDModel.build`` all the same — and a builder-accepted
+#: structural axis of ``SEDModel.build`` all the same: and a builder-accepted
 #: value named by no menu is undiscoverable by construction (#1446).
 _AGE_KERNELS: tuple[tuple[str, str, str], ...] = (
     (
         "cic",
         "production",
-        "Cloud-in-cell on a 16x dense integrand — the accuracy default (#964)",
+        "Cloud-in-cell on a 16x dense integrand: the accuracy default (#964)",
     ),
     (
         "dsps",
         "comparison",
-        "DSPS histogram kernel — cross-code parity only; biases optical CSP +1.2 %",
+        "DSPS histogram kernel; cross-code parity only; biases optical CSP +1.2 %",
     ),
 )
 
@@ -1413,8 +1413,8 @@ def list_age_kernels(*, status: str | None = None) -> _RegistryTable:
     which interpolates ``log10(M(<t))`` in ``log10(t)``.
 
     They are not interchangeable. The DSPS kernel annihilates the mass of any
-    table segment straddling the SFH's maximum age — the first SSP node older
-    than the SFH start keeps ~1e-5 of its share — which biases the optical CSP
+    table segment straddling the SFH's maximum age; the first SSP node older
+    than the SFH start keeps ~1e-5 of its share: which biases the optical CSP
     +1.2 % versus FSPS / bagpipes / a dense reference (#964). It is offered for
     comparison against DSPS-native pipelines, not for science.
 
@@ -1424,8 +1424,8 @@ def list_age_kernels(*, status: str | None = None) -> _RegistryTable:
 
     Parameters
     ----------
-    status : str, optional
-        Filter to one status — ``"production"`` or ``"comparison"``.
+    status: str, optional
+        Filter to one status; ``"production"`` or ``"comparison"``.
 
     Returns
     -------
@@ -1473,7 +1473,7 @@ _COMPONENT_DOCS: tuple[tuple[str, str, str], ...] = (
     (
         "nebular",
         "tengri.components.nebular.component",
-        "Emission lines + continuum — BakedIn / CUE / CloudyGrid / CB19",
+        "Emission lines + continuum: BakedIn / CUE / CloudyGrid / CB19",
     ),
     (
         "radio",
@@ -1507,13 +1507,13 @@ def _plot_call_hint(name: str) -> str:
 
     Parameters
     ----------
-    name : str
+    name: str
         Attribute name in :mod:`tengri.plot`.
 
     Returns
     -------
     str
-        ``tengri.plot.plot_sfh(model, posterior)`` — the required parameters,
+        ``tengri.plot.plot_sfh(model, posterior)``; the required parameters,
         read off the signature. Falls back to the bare name when the helper
         cannot be resolved or introspected.
 
@@ -1521,7 +1521,7 @@ def _plot_call_hint(name: str) -> str:
     -----
     Every row used to read ``tengri.plot.<name>(...)``, which is the ``name``
     column plus an ellipsis. Of the twenty menus that carry a ``use:`` column,
-    this was the only one whose hint contained no arguments at all — the others
+    this was the only one whose hint contained no arguments at all; the others
     give something runnable (``Photometry.from_names(["sdss_u"])``,
     ``fitter.run("laplace")``, ``SEDModel.build(..., dust_attenuation={'type': ...})``).
 
@@ -1562,7 +1562,7 @@ def _plot_call_hint(name: str) -> str:
 def list_plots() -> _RegistryTable:
     """List the plotting helpers in ``tengri.plot``.
 
-    These render directly with matplotlib — no separate plotting framework.
+    These render directly with matplotlib; no separate plotting framework.
     Each row carries the canonical call site so a notebook user can
     discover and copy without leaving the cell.
     """
@@ -1617,13 +1617,13 @@ def cite_components(obj=None) -> _RegistryTable:
     ``@register_dust_law`` / SFH ``_register`` / etc.
 
     Goes beyond :func:`tengri.collect_citations` (which uses a static
-    BibTeX-key association table) — every per-alternative citation is
+    BibTeX-key association table): every per-alternative citation is
     pulled live, so a contributor adding a new model with a fresh
     ``citation="Author+Year"`` immediately appears here.
 
     Parameters
     ----------
-    obj : Parameters or SEDModel or Posterior, optional
+    obj: Parameters or SEDModel or Posterior, optional
         Object whose structural choices to inspect.  If ``None``, returns
         the citations attached to the four core dependencies (tengri,
         JAX, DSPS) plus an empty per-component slate.
@@ -1642,7 +1642,7 @@ def cite_components(obj=None) -> _RegistryTable:
     ... )
     >>> tengri.cite_components(spec)
     >>>
-    >>> # Same call works on the SEDModel and Posterior — they expose .spec
+    >>> # Same call works on the SEDModel and Posterior; they expose .spec
     >>> tengri.cite_components(model)
     >>> tengri.cite_components(posterior)
     """
@@ -1652,7 +1652,7 @@ def cite_components(obj=None) -> _RegistryTable:
         if not name:
             return
         # Strip the suffix Parameters internally adds (e.g. "dl07_tabulated"
-        # vs the registered "dl07") — fall back to the raw name if exact.
+        # vs the registered "dl07"): fall back to the raw name if exact.
         candidates = [name]
         if name.endswith("_tabulated"):
             candidates.append(name[: -len("_tabulated")])
@@ -1682,7 +1682,7 @@ def cite_components(obj=None) -> _RegistryTable:
         return _RegistryTable(rows)
 
     # Resolve the spec through the delegation chain. A ``SEDModel`` exposes
-    # ``.spec`` directly, but a ``Posterior`` does not — it holds the fitted
+    # ``.spec`` directly, but a ``Posterior`` does not: it holds the fitted
     # model under ``_model``, which may itself be a ``ForwardModel`` wrapping
     # the SED. A bare ``getattr(obj, "spec", obj)`` fell back to the Posterior
     # itself, which has no structural fields, so citing a *fit result* emitted
@@ -1732,10 +1732,10 @@ def cite_components(obj=None) -> _RegistryTable:
         for sfh in sfh_types:
             _add("sfh", sfh, list_sfh_models)
 
-    # AGN — composable models fan out into their six block slots (disc, torus,
+    # AGN: composable models fan out into their six block slots (disc, torus,
     # nlr, blr, feii, attenuation), each carrying its own citation. Citing the
     # bare ``agn_model`` would report only the "composable" wrapper, whose entry
-    # has no paper — silently dropping every real AGN citation (Stalevski for
+    # has no paper: silently dropping every real AGN citation (Stalevski for
     # SKIRTOR, Fritz, Nenkova, Kubota & Done, …) that the model actually uses.
     # Block names are not unique across categories (``skirtor`` is both a disc
     # and a torus), so each slot is resolved within its own category.
@@ -1763,13 +1763,13 @@ def cite_components(obj=None) -> _RegistryTable:
     elif agn_model and agn_model != "composable":
         _add("agn", agn_model, list_agn_models)
 
-    # Dust model — the birth-cloud + diffuse *geometry*, a separate paper from
+    # Dust model: the birth-cloud + diffuse *geometry*, a separate paper from
     # the attenuation *curve* below (Charlot & Fall 2000 vs Calzetti et al.
     # 2000). ``two_component`` is the recommended default path, so leaving this
     # menu out of the walk dropped that citation from nearly every fit.
     _add("dust", getattr(spec, "dust_model", None), list_dust_models)
 
-    # Dust attenuation — bc + diff (skip plain "power_law" default if both equal it)
+    # Dust attenuation: bc + diff (skip plain "power_law" default if both equal it)
     for attr in ("dust_law_bc", "dust_law_diff", "dust_law"):
         _add("dust_attenuation", getattr(spec, attr, None), list_dust_laws)
 
@@ -1781,14 +1781,14 @@ def cite_components(obj=None) -> _RegistryTable:
     if nebular_mode and nebular_mode != "off":
         _add("nebular", nebular_mode, list_nebular_backends)
 
-    # Radio, shock, IGM and X-ray — four menus the walk never consulted, so a
+    # Radio, shock, IGM and X-ray: four menus the walk never consulted, so a
     # spec that explicitly requested them produced no row and no warning
     # (#1447). Each is gated on its own boolean, because the slot attributes
     # keep real defaults ("bell2003", "yang20") while the component is switched
     # off: an ungated walk would credit Bell 2003 and Yang+2020 to a plain
     # stellar+dust fit. Over-citing is as wrong as under-citing here.
 
-    # Radio — two independent slots. Block names are not unique across the
+    # Radio: two independent slots. Block names are not unique across the
     # categories ("none" is registered in both), so each is resolved inside its
     # own category, exactly as the composable AGN blocks are above.
     if getattr(spec, "radio", False):
@@ -1801,14 +1801,14 @@ def cite_components(obj=None) -> _RegistryTable:
                     lambda c=category: list_radio_blocks(category=c),
                 )
 
-    # Shock — the spec records only the on/off gate plus physics parameters,
+    # Shock: the spec records only the on/off gate plus physics parameters,
     # with no ``shock_model`` attribute, so an enabled gate implies the single
     # selectable entry. A contract test fails loudly if a second shock model is
     # ever registered and that inference stops holding.
     if getattr(spec, "shock", False):
         _add("shock", "mappings", list_shock_models)
 
-    # IGM — applied by default, so most fits genuinely ran Inoue+2014 (or the
+    # IGM: applied by default, so most fits genuinely ran Inoue+2014 (or the
     # chosen alternative) and have never cited it.
     if getattr(spec, "apply_igm", False):
         igm_model = getattr(spec, "igm_model", None)
@@ -1905,8 +1905,8 @@ def print_components_bibtex(obj=None) -> None:
                 continue
         if emitted:
             continue
-        # Fallback: free-form citation note. Say what is actually missing —
-        # a *mapping* from this component name to a key, not necessarily the
+        # Fallback: free-form citation note. Say what is actually missing: # a *mapping* from this
+        # component name to a key, not necessarily the
         # entry. Four references (Charlot & Fall 2000, Bell 2003, Inoue+2014,
         # Yang+2020) were in references.bib the whole time and still printed
         # "no bib entry", so readers pasted the output and silently lost them.
@@ -1914,7 +1914,7 @@ def print_components_bibtex(obj=None) -> None:
         if cit:
             _display(f"% [{comp}] {name}: {cit}")
             _display(
-                f"%   (no BibTeX key is mapped to {name!r} — add one to "
+                f"%   (no BibTeX key is mapped to {name!r}: add one to "
                 "tengri.citations.associations)"
             )
             _display("")
@@ -1928,7 +1928,7 @@ def list_filters(survey: str | None = None) -> _RegistryTable:
 
     Parameters
     ----------
-    survey : str, optional
+    survey: str, optional
         Narrow to one survey/instrument family (case-insensitive).  Smart
         about the SVO-vs-astronomer-speak mismatch: ``survey="SDSS"``
         finds the ``SLOAN_SDSS_*`` rows even though SDSS is technically
@@ -1941,20 +1941,20 @@ def list_filters(survey: str | None = None) -> _RegistryTable:
     -------
     _RegistryTable
         One row per filter, with columns ``name`` (file stem),
-        ``survey``, ``instrument``, ``band``, and ``alias`` — the short
+        ``survey``, ``instrument``, ``band``, and ``alias``; the short
         spelling the loaders also accept (``"sdss_r"`` for
         ``"SLOAN_SDSS_r"``), empty when the curve has no alias. Prints as
         a table, also renders as HTML in Jupyter.
 
     See Also
     --------
-    tengri.observation.filters.list_filter_aliases : the same curves keyed
+    tengri.observation.filters.list_filter_aliases: the same curves keyed
         by short alias. Both names were once ``list_filters`` (#1574).
 
     Notes
     -----
     Counts and groupings are computed from the live filesystem on each
-    call — no hardcoding. Add a ``Survey_Instrument_Band.dat`` file to
+    call; no hardcoding. Add a ``Survey_Instrument_Band.dat`` file to
     ``data/filters/`` and it appears here automatically.
 
     Examples
@@ -2020,8 +2020,8 @@ def list_filters(survey: str | None = None) -> _RegistryTable:
         def _match(entry: dict) -> bool:
             sv_lc = str(entry.get("survey", "")).lower()
             in_lc = str(entry.get("instrument", "")).lower()
-            # Match either field against either component of the alias —
-            # so "SDSS" hits SLOAN/SDSS rows and "SLOAN" still works too.
+            # Match either field against either component of the alias: # so "SDSS" hits
+            # SLOAN/SDSS rows and "SLOAN" still works too.
             return q in (sv_lc, in_lc) or target[0] == sv_lc or target[1] == in_lc
 
         out = [e for e in out if _match(e)]
@@ -2073,7 +2073,7 @@ def _inference_method_row(entry, target: object | None = None) -> dict:
         # Advice that raises is the bug, not the help (#1364). The plain
         # ``fitter.run("pathfinder")`` hint is refused by the tier gate, and
         # a broken backend only became visible here at all once describe
-        # stopped hiding it (#1560) — so ship the invocation that works.
+        # stopped hiding it (#1560): so ship the invocation that works.
         use = f'fitter.run("{entry.name}", allow_unvalidated=True)  # tier=broken'
     return {
         "name": entry.name,
@@ -2093,13 +2093,13 @@ def list_inference_methods(
 
     Parameters
     ----------
-    tier : str, optional
+    tier: str, optional
         Filter by ``"primary"`` (recommended for new users),
         ``"experimental"``, or ``"broken"``. Backends registered as
-        ``"broken"`` — those whose own ``short_doc`` reports wrong answers or
-        crashes — are **excluded from the default listing** (#1287); pass
+        ``"broken"``; those whose own ``short_doc`` reports wrong answers or
+        crashes: are **excluded from the default listing** (#1287); pass
         ``tier="broken"`` to see them.
-    target : Fitter | InferenceContext, optional
+    target: Fitter | InferenceContext, optional
         If supplied, each entry's ``status`` column reflects whether the
         backend's ``is_compatible`` predicate (if any) accepts the
         target. If ``None``, ``status`` reflects only whether the
@@ -2137,7 +2137,7 @@ def _menu_listers() -> tuple:
     tuple, so adding a new physics group (a new ``list_*`` menu) can't
     silently leave one of them behind. That drift is exactly what once made
     ``describe()`` and ``search()`` blind to the xray / radio / igm menus and
-    to the composable AGN blocks — the models auto-register into their own
+    to the composable AGN blocks: the models auto-register into their own
     registries, but these aggregators re-listed which registries to consult by
     hand and fell out of sync.
     """
@@ -2162,7 +2162,7 @@ def _menu_listers() -> tuple:
 
 #: Menus that are not a physics group but are still menus a user can look a
 #: name up in. ``describe`` and ``search`` used to append these by hand at each
-#: call site — a second and third hand-written enumeration of "every menu".
+#: call site: a second and third hand-written enumeration of "every menu".
 _EXTRA_MENU_LISTER_NAMES = (
     "list_components",
     "list_filters",
@@ -2185,12 +2185,12 @@ def _every_menu_lister() -> tuple:
     Notes
     -----
     :func:`_menu_listers` exists so ``describe``/``search``/``list_all`` cannot
-    fall out of sync when a physics group is added — its docstring says so, and
+    fall out of sync when a physics group is added; its docstring says so, and
     names that drift (#1120, #1446). It drifted again anyway, because the guard
     against a hand-written list *is itself a hand-written list*:
     ``list_instruments`` and ``list_known_ssps`` were never added, so
     ``describe('GALEX')`` answered ``Unknown name 'GALEX'`` for a name
-    ``list_instruments()`` advertises — 30 of 490 advertised names.
+    ``list_instruments()`` advertises; 30 of 490 advertised names.
 
     So the set is discovered: every public ``tengri.list_*`` returning rows
     with a ``name`` column is a menu. Adding a menu now costs nothing, and
@@ -2203,14 +2203,14 @@ def _every_menu_lister() -> tuple:
     public surface: it is curated down to ~30 obvious entry points on purpose
     ("not the 175-item kitchen sink of every public symbol",
     ``tengri.__init__``). Scanning it alone made the derivation inherit the
-    curation — ``list_parameters``, ``list_properties``,
+    curation; ``list_parameters``, ``list_properties``,
     ``list_filter_conventions`` and ``list_available_ssps`` are exported and
     not curated, so they stayed invisible and **410 further advertised names
     stayed refused**, 358 of them parameters. Unioning ``__all__`` is the rule
     #1608 established when the same blind spot made ``check_api_coverage.py``
     report 0 missing while 6 were. Measured at that widening: **+4 menus, 0
     lost, 490 -> 935 rows walked, 463 -> 887 names (+424), and 0 answers
-    changed** — the last of which is true only because of the scan order
+    changed**: the last of which is true only because of the scan order
     below, not for free.
 
     Cached because discovery *calls* each ``list_*`` to check its shape:
@@ -2229,7 +2229,7 @@ def _every_menu_lister() -> tuple:
     # ``describe`` reports ``matches[0]``, so a menu discovered earlier wins a
     # name that several menus print. Scanning the union in one sorted pass put
     # ``list_available_ssps`` ahead of ``list_known_ssps`` and moved all 21 SSP
-    # names onto the newly-found menu — 21 answers changed, for a change whose
+    # names onto the newly-found menu: 21 answers changed, for a change whose
     # whole claim is that it adds names without altering any.
     curated = sorted(dir(tengri))
     export_only = sorted(set(tengri.__all__) - set(dir(tengri)))
@@ -2238,8 +2238,8 @@ def _every_menu_lister() -> tuple:
             continue
         # Exclude the one meta-lister: list_all calls _every_menu_lister, so
         # discovering it as a menu lister recurses until the stack is nearly
-        # exhausted (measured depth 988 of 1000; #853). Every real menu —
-        # list_properties included — must stay in the sweep: describe() resolves
+        # exhausted (measured depth 988 of 1000; #853). Every real menu: # list_properties
+        # included; must stay in the sweep: describe() resolves
         # a name only if some swept menu advertises it.
         if attr == "list_all":
             continue
@@ -2260,7 +2260,7 @@ def _menu_name_aliases() -> dict[str, tuple[str, callable]]:
 
     Derived from :func:`_menu_listers` rather than hand-written, because a
     hand-written copy is a second source of truth that drifts the day a menu
-    is added — the failure this module has already had twice (#1120, #1446).
+    is added: the failure this module has already had twice (#1120, #1446).
     ``list_age_kernels`` becomes ``"age kernels"`` and ``"age kernel"``, so a
     new menu is searchable by its own name the moment it is registered.
 
@@ -2285,7 +2285,7 @@ def describe(name: str) -> _DescribeRecord:
 
     Parameters
     ----------
-    name : str
+    name: str
         Name of a model, method, or component.
 
     Returns
@@ -2298,15 +2298,15 @@ def describe(name: str) -> _DescribeRecord:
     KeyError
         If the name is not registered anywhere.
     """
-    # Core classes — ForwardModel, SEDModel, Parameters, Fitter, Posterior, Observation.
+    # Core classes: ForwardModel, SEDModel, Parameters, Fitter, Posterior, Observation.
     if name in _CORE_CLASSES:
         return _DescribeRecord(_CORE_CLASSES[name])
 
     matches = [entry for fn in _every_menu_lister() for entry in fn() if entry["name"] == name]
     if matches:
         record = dict(matches[0])
-        # Some names are registered in more than one menu or AGN category —
-        # e.g. 'skirtor' is both a disc and a torus, 'simple' is both a torus
+        # Some names are registered in more than one menu or AGN category: # e.g. 'skirtor' is
+        # both a disc and a torus, 'simple' is both a torus
         # block and an X-ray model, 'cue' is both an NLR block and a nebular
         # backend. Returning the first match silently would describe the wrong
         # component; disclose every place the name lives so the user can pick.
@@ -2332,7 +2332,7 @@ def describe(name: str) -> _DescribeRecord:
             others = "; ".join(_how(m) for m in matches[1:])
             record["also_registered_as"] = (
                 f"'{name}' is registered in {len(matches)} places "
-                f"[{'; '.join(_where(m) for m in matches)}] — showing the first "
+                f"[{'; '.join(_where(m) for m in matches)}]: showing the first "
                 f"({_how(matches[0])}). The others: {others}."
             )
         return _DescribeRecord(record)
@@ -2407,8 +2407,8 @@ def list_recipes() -> _RegistryTable:
         doc = inspect.getdoc(fn) or ""
         short_doc = doc.split("\n\n", 1)[0].strip().replace("\n", " ")
         ssp_req = _parse_ssp_requirement(doc)
-        # Calling the recipe is cheap — it returns a kwargs dict and builds
-        # nothing — so the table can report what each one actually needs
+        # Calling the recipe is cheap: it returns a kwargs dict and builds
+        # nothing: so the table can report what each one actually needs
         # rather than what its prose claims.
         try:
             data_status = _recipe_data_status(fn())
@@ -2439,8 +2439,8 @@ _EXTERNAL_GRID_BLOCKS: dict[str, str] = {
 def _recipe_data_status(kwargs: dict) -> str:
     """Report whether a recipe's non-SSP data is present on this machine.
 
-    ``list_recipes`` presented all ten recipes as equals while one of them —
-    ``unified_agn`` — cannot produce a number without a Synthesizer AGN grid
+    ``list_recipes`` presented all ten recipes as equals while one of them: ``unified_agn``;
+    cannot produce a number without a Synthesizer AGN grid
     that does not ship with tengri. A recipe is by definition the thing a new
     user is told to start from, so "this one needs a download" belongs in the
     table rather than in a traceback (#1462 §3).
@@ -2493,7 +2493,7 @@ def _parse_ssp_requirement(doc: str) -> str:
 
     The requirement is a *paragraph*, not a line. Numpydoc wraps it at the
     line limit, and every docstring puts the label first and the consequence
-    second — so a first-line-only read keeps ``bare-stellar (Cue nebular
+    second; so a first-line-only read keeps ``bare-stellar (Cue nebular
     backend; see`` and drops ``doing so raises CueWNESSPError``. Read to the
     paragraph break instead, matching how ``short_doc`` is derived just above.
     """
@@ -2529,7 +2529,7 @@ def describe_recipe(name: str) -> _DescribeRecord:
 
     Parameters
     ----------
-    name : str
+    name: str
         Recipe name (see :func:`list_recipes`).
 
     Returns
@@ -2577,7 +2577,7 @@ def describe_recipe(name: str) -> _DescribeRecord:
 
 
 def _describe_from_list(name: str, list_fn, kind_label: str, fn_label: str) -> _DescribeRecord:
-    """Common path for ``describe_*(name)`` — look up ``name`` in ``list_fn()``."""
+    """Common path for ``describe_*(name)``: look up ``name`` in ``list_fn()``."""
     for entry in list_fn():
         if entry["name"] == name:
             return _DescribeRecord(entry)
@@ -2611,9 +2611,9 @@ def describe_agn_block(
 
     Parameters
     ----------
-    name : str
+    name: str
         Block name (e.g., ``"grahsp"``, ``"multicolor"``, ``"analytic"``).
-    category : str, optional
+    category: str, optional
         Category to narrow the search: ``"disc"``, ``"nlr"``, ``"blr"``,
         ``"feii"``, ``"torus"``, or ``"attenuation"``. If ``None``, search
         all categories.
@@ -2689,21 +2689,21 @@ def describe_nebular_backend(name: str) -> _DescribeRecord:
 def describe_inference_method(name: str) -> _DescribeRecord:
     """Return the descriptor row for one inference backend (MAP / VI / NUTS / NSS / …).
 
-    Resolves any name the fitter dispatches: every tier — including
+    Resolves any name the fitter dispatches: every tier: including
     ``"broken"``, which :func:`list_inference_methods` hides by default
-    (#1287) — and every registered alias.
+    (#1287); and every registered alias.
 
     ``list`` and ``describe`` answer different questions. ``list`` asks
     "what should I pick?", so it curates. ``describe`` asks "what is this
     name?", so it must not: a name the fitter accepts is never "unknown".
     Deriving this lookup from the curated listing reported six dispatchable
-    names as unknown (#1560) — the five broken backends, plus
+    names as unknown (#1560); the five broken backends, plus
     ``"vi_nonlinear"``, a ``tier="primary"`` alias named in ``fit()``'s own
     docstring. A confidently wrong answer is worse than a warning (#1446).
 
     Parameters
     ----------
-    name : str
+    name: str
         A method name or alias, as passed to ``fit(method=...)``.
 
     Returns
@@ -2711,7 +2711,7 @@ def describe_inference_method(name: str) -> _DescribeRecord:
     _DescribeRecord
         Fields: ``{name, kind, tier, short_doc, requires, status, use}``,
         plus ``alias_of`` when ``name`` is an alias. Check ``tier`` before
-        acting on the result — ``"broken"`` backends resolve here but are
+        acting on the result; ``"broken"`` backends resolve here but are
         refused by ``Fitter.run`` without ``allow_unvalidated=True``.
 
     Raises
@@ -2761,13 +2761,13 @@ def suggest_parameters(
 ) -> _RegistryTable:
     """Print the full kwargs cheatsheet for a chosen Parameters() config.
 
-    ``Parameters`` accepts ``**kwargs`` — the legal parameter names are
+    ``Parameters`` accepts ``**kwargs``; the legal parameter names are
     determined dynamically by the structural choices (mean_sfh_type,
     agn_model, dust_law, dust_emission, nebular_backend, …).  This
     function answers the working question:
 
-        "I want a DPL SFH with SKIRTOR AGN and DL07 dust emission —
-        what kwargs can I pass to Parameters()?"
+        "I want a DPL SFH with SKIRTOR AGN and DL07 dust emission; what kwargs can I pass to
+        Parameters()?"
 
     by building the full param registry for that configuration and
     returning a printable table with every parameter, its default
@@ -2775,10 +2775,10 @@ def suggest_parameters(
 
     Parameters
     ----------
-    mean_sfh_type : str or list[str], default "dpl"
+    mean_sfh_type: str or list[str], default "dpl"
         SFH model name (or list including "field" for stochastic).  See
         ``tengri.list_sfh_models()`` for the menu.
-    agn_model : str, optional
+    agn_model: str, optional
         Name from ``tengri.list_agn_models()``.  ``None`` → AGN off.
     dust_law : str, optional
         Attenuation law name. For flat-kwarg Parameter() builds, defaults to
@@ -2787,13 +2787,13 @@ def suggest_parameters(
     dust_emission : str, optional
         IR emission template family from
         ``tengri.list_dust_emission_models()``.
-    nebular_backend : str, optional
+    nebular_backend: str, optional
         Nebular emission backend from ``tengri.list_nebular_backends()``:
         ``"ssp"`` (emission baked into the SSP grid), ``"cue"``,
         ``"cloudy"``, or ``"cb19"``.
-    radio, xray, shock, chem_evol, evolving_metallicity : bool
+    radio, xray, shock, chem_evol, evolving_metallicity: bool
         Toggle the corresponding physics module.
-    eline_mode : str, default "off"
+    eline_mode: str, default "off"
         ``"off"`` | ``"marginalize"`` | ``"sample"`` for emission lines.
 
     Returns
@@ -2870,14 +2870,14 @@ def suggest_parameters(
 def search(query: str) -> _RegistryTable:
     """Cross-menu fuzzy search by name, short_doc, citation, or status.
 
-    Walks every menu — components, inference methods, AGN models, dust
+    Walks every menu: components, inference methods, AGN models, dust
     attenuation laws, dust emission templates, SFH models, nebular
-    backends — and returns every entry whose name, short_doc, citation,
+    backends; and returns every entry whose name, short_doc, citation,
     or status (case-insensitively) contains ``query``.
 
     Parameters
     ----------
-    query : str
+    query: str
         Substring to match (case-insensitive).
 
     Returns
@@ -2917,14 +2917,14 @@ def search(query: str) -> _RegistryTable:
     }
     if q in _KIND_SHORTCUT:
         call, fn = _KIND_SHORTCUT[q]
-        _display(f"  '{query}' is a menu name — redirecting to tengri.{call}\n")
+        _display(f"  '{query}' is a menu name: redirecting to tengri.{call}\n")
         return fn()
 
     # Concept synonyms: natural-language terms a beginner types that do not
     # substring-match the terse model short_docs. "star formation" would
     # otherwise return only an AGN model whose citation title happens to
     # contain the phrase (and none of the 26 SFH models), and "dust emission"
-    # nothing at all — so point the user at the menu that actually holds those
+    # nothing at all: so point the user at the menu that actually holds those
     # models. Same replace-with-menu behavior as the kind-name shortcut above.
     _CONCEPT_ALIAS: dict[str, tuple[str, callable]] = {
         "star formation": ("list_sfh_models()", list_sfh_models),
@@ -2938,7 +2938,7 @@ def search(query: str) -> _RegistryTable:
         "emission line": ("list_nebular_backends()", list_nebular_backends),
         "emission lines": ("list_nebular_backends()", list_nebular_backends),
         # Without these, "metallicity" substring-matches only the modes whose
-        # terse short_doc happens to use the word — 5 of 10, silently omitting
+        # terse short_doc happens to use the word: 5 of 10, silently omitting
         # the gas-regulator and per-bin models.
         "metallicity": ("list_metallicity_modes()", list_metallicity_modes),
         "chemical evolution": ("list_metallicity_modes()", list_metallicity_modes),
@@ -2958,12 +2958,12 @@ def search(query: str) -> _RegistryTable:
                 _display(f"  '{query}' → tengri.{call} (the menu these models live in)\n")
                 return fn()
 
-    # ``kind`` and ``use`` are structural/internal — searching them gives
+    # ``kind`` and ``use`` are structural/internal: searching them gives
     # spurious 100%-of-table hits (e.g. "filter" matching every filter
     # row's kind, or "fitter" matching every inference method's "use"
     # which contains the literal word "fitter"). Match user-content
     # fields only: name, short_doc, citation, status, survey, instrument,
-    # band — i.e. everything except kind/use.
+    # band: i.e. everything except kind/use.
     _SKIP_FIELDS = {"kind", "use"}
     hits: list[dict] = []
     # The same derived set describe() walks. This call site listed four extra
@@ -2980,7 +2980,7 @@ def search(query: str) -> _RegistryTable:
 
 
 def list_all() -> dict[str, _RegistryTable]:
-    """Return every menu — the single notebook cell that shows the whole code.
+    """Return every menu: the single notebook cell that shows the whole code.
 
     Returns
     -------
@@ -2993,14 +2993,14 @@ def list_all() -> dict[str, _RegistryTable]:
     -----
     The keys are derived from the same census :func:`describe` and
     :func:`search` sweep, not listed here. :func:`_menu_listers` names this
-    function as one of the three that "all walk this one tuple" — it was the
+    function as one of the three that "all walk this one tuple"; it was the
     one that never walked it, returning a hand-written dict of nine literals
     while 25 menus existed. So it showed 9 of 25, and its own ``Returns``
     section named only six of the nine it did return, while
     ``tengri.__init__`` tells readers it "enumerates every registry live".
 
-    Deriving the keys preserves all nine that were there — every one is its
-    lister's name minus the prefix — and adds the sixteen that were missing,
+    Deriving the keys preserves all nine that were there: every one is its
+    lister's name minus the prefix: and adds the sixteen that were missing,
     so this widens the result without renaming anything: 9 -> 25 categories,
     921 rows.
     """
@@ -3016,7 +3016,7 @@ def list_properties(*, group: str | None = None) -> _RegistryTable:
 
     Parameters
     ----------
-    group : str, optional
+    group: str, optional
         Filter by property group (e.g., ``"sfh"`` for star-formation-history
         properties). If None, lists all properties across all groups.
 
@@ -3071,7 +3071,7 @@ def describe_property(name: str) -> _DescribeRecord:
 
     Parameters
     ----------
-    name : str
+    name: str
         Property name (e.g., ``"stellar_mass"``).
 
     Returns
@@ -3188,11 +3188,11 @@ def summary() -> None:
         ),
         (len(list_inference_methods()), "total inference methods", "list_inference_methods()"),
     ]
-    _display("\ntengri — what's available:\n")
+    _display("\ntengri: what's available:\n")
     _display("  Core classes (the four nouns inference talks to):")
     _display("    tengri.SEDModel         differentiable SED forward chain")
     _display(
-        "    tengri.ForwardModel     outer shell — owns SED + observation, "
+        "    tengri.ForwardModel     outer shell; owns SED + observation, "
         "exposes .predict / .predict_observables"
     )
     _display("    tengri.Parameters       priors + fixed values")
@@ -3231,7 +3231,7 @@ def help(topic: str | None = None) -> None:
 
     Parameters
     ----------
-    topic : str, optional
+    topic: str, optional
         If given, narrow the cheatsheet to one menu. Recognized topics:
         ``"agn"``, ``"dust"``, ``"sfh"``, ``"nebular"``, ``"components"``,
         ``"inference"``, ``"filters"``, ``"properties"``. Without a topic
@@ -3239,7 +3239,7 @@ def help(topic: str | None = None) -> None:
 
     Notes
     -----
-    Counts are read live from the registries — adding a new model or
+    Counts are read live from the registries: adding a new model or
     inference backend updates the cheatsheet immediately, no edit needed.
 
     This shadows :func:`builtins.help` only when accessed as ``tengri.help``;
@@ -3261,8 +3261,8 @@ def help(topic: str | None = None) -> None:
     n_neb = len(list_nebular_backends())
     n_inf = len(list_inference_methods(tier="primary"))
     n_recipes = len(list_recipes())
-    # The one default, read from the registry rather than written down here —
-    # the whole point of #1289 was that hard-coded defaults drifted apart.
+    # The one default, read from the registry rather than written down here: # the whole point of
+    # #1289 was that hard-coded defaults drifted apart.
     from tengri.inference._backend_registry import DEFAULT_METHOD as default_method
 
     try:
@@ -3273,7 +3273,7 @@ def help(topic: str | None = None) -> None:
         n_filt = "?"
 
     text = f"""
-tengri — differentiable galaxy SED fitting in JAX
+tengri; differentiable galaxy SED fitting in JAX
 
 ────────────────────────────────────────────────────────────────────
 1.  See what's available
@@ -3293,7 +3293,7 @@ tengri — differentiable galaxy SED fitting in JAX
     tengri.help("dust")                   topical cheatsheet for one menu
 
 ────────────────────────────────────────────────────────────────────
-2.  Learn the design — interactive tutorials
+2.  Learn the design; interactive tutorials
 ────────────────────────────────────────────────────────────────────
     tengri.tutorial()                     list every available recipe
     tengri.tutorial("philosophy")         layered architecture + IFT framework
@@ -3335,7 +3335,7 @@ tengri — differentiable galaxy SED fitting in JAX
 
     Pick a method:
       tengri.list_inference_methods(tier="primary")   # {n_inf} that are validated
-      "map" is a point estimate — fast, but no uncertainties.
+      "map" is a point estimate; fast, but no uncertainties.
       "{default_method}" and "mcmc_nuts" give you a posterior.
 
     Extract derived quantities:
@@ -3366,7 +3366,7 @@ tengri — differentiable galaxy SED fitting in JAX
 
 
 def _help_topic(topic: str) -> None:
-    """Topical help for one menu — used by ``help(topic=…)``."""
+    """Topical help for one menu; used by ``help(topic=…)``."""
     topic_l = topic.lower()
     if topic_l not in _TOPIC_HELP:
         valid = sorted(_TOPIC_HELP)
@@ -3378,7 +3378,7 @@ def _help_topic(topic: str) -> None:
     # "citations" / "cite" → narrative cheatsheet, not a list_*() table.
     if topic_l in ("citations", "cite"):
         text = """
-tengri.help('citations') — citation API
+tengri.help('citations'): citation API
 
 Acknowledging the right papers when you publish a fit:
 
@@ -3400,13 +3400,13 @@ Acknowledging the right papers when you publish a fit:
 
 The two paths coexist:
 
-  • cite_components()    — live, picks up every contributor model with a
+  • cite_components()   : live, picks up every contributor model with a
                            citation= string, returns a registry table.
-  • print_citations()    — formal, uses the static association table of
+  • print_citations()   : formal, uses the static association table of
                            well-known canonical alternatives → BibTeX
                            entries in references.bib.
 
-Use cite_components for "did I cite everything I'm using?" — it
+Use cite_components for "did I cite everything I'm using?"; it
 reflects whatever is in the registry RIGHT NOW.  Use print_citations
 for paste-ready BibTeX of the canonical pieces.
 """
@@ -3415,6 +3415,6 @@ for paste-ready BibTeX of the canonical pieces.
 
     label, fetch = _TOPIC_HELP[topic_l]
     entries = fetch()
-    _display(f"\ntengri.help('{topic_l}') — {label}: {len(entries)} available\n")
+    _display(f"\ntengri.help('{topic_l}'); {label}: {len(entries)} available\n")
     _display(str(entries))
     _display("")

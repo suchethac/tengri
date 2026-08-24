@@ -40,9 +40,9 @@ mirroring :mod:`tengri.components.agn.skirtor` and
 References
 ----------
 .. [1] M. Stalevski et al., "3D radiative transfer modeling of the dusty
-   torus around AGN — the influence of clumping," MNRAS, 420, 2756 (2012).
+   torus around AGN, the influence of clumping," MNRAS, 420, 2756 (2012).
    arXiv:1109.1286. https://doi.org/10.1111/j.1365-2966.2011.19775.x
-.. [2] M. Stalevski et al., "The dust covering factor in AGN — combining the
+.. [2] M. Stalevski et al., "The dust covering factor in AGN: combining the
    IR torus emission with polar dust component," MNRAS, 458, 2288 (2016).
    arXiv:1602.01954. https://doi.org/10.1093/mnras/stw444
 .. [3] L. N. Martinez-Ramirez, et al., "AGNFITTER-RX: Modeling the
@@ -72,7 +72,7 @@ def _load_skirtor_agnfitter_arrays(grid_path: str) -> dict:
 
     Parameters
     ----------
-    grid_path : str
+    grid_path: str
         Path to ``skirtor_mean3p_torus_grid.h5``.
 
     Returns
@@ -83,7 +83,7 @@ def _load_skirtor_agnfitter_arrays(grid_path: str) -> dict:
 
     Notes
     -----
-    **JIT-compatible**: no — performs HDF5 I/O at grid-load time.
+    **JIT-compatible**: no, performs HDF5 I/O at grid-load time.
 
     Templates may be stored as float32 or float64; they are cast to
     float64 for monotone-cubic interpolation.
@@ -109,7 +109,7 @@ def load_skirtor_agnfitter_grid(grid_path: str) -> TorusTemplateGrid:
 
     Parameters
     ----------
-    grid_path : str
+    grid_path: str
         Path to ``skirtor_mean3p_torus_grid.h5``.
 
     Returns
@@ -127,7 +127,7 @@ def load_skirtor_agnfitter_grid(grid_path: str) -> TorusTemplateGrid:
 
     Notes
     -----
-    **JIT-compatible**: no — performs HDF5 I/O. Call outside the trace and
+    **JIT-compatible**: no, performs HDF5 I/O. Call outside the trace and
     pass the result in as an argument.
     """
     raw = _load_skirtor_agnfitter_arrays(grid_path)
@@ -156,17 +156,17 @@ def skirtor_agnfitter_sed_from_grid(
 
     Parameters
     ----------
-    wavelength : array_like, shape (n_wave,)
+    wavelength: array_like, shape (n_wave,)
         Rest-frame wavelength grid. [Å]
-    agn_log_lbol : float, optional
+    agn_log_lbol: float, optional
         ``log10(L_bol / L_sun)``. Default 11.0.
-    agn_oa_skirtor : float, optional
+    agn_oa_skirtor: float, optional
         Half-opening angle [deg]. Default 40.0.
-    agn_incl_skirtor : float, optional
+    agn_incl_skirtor: float, optional
         Inclination angle [deg]. Default 30.0.
-    agn_tv_skirtor : float, optional
+    agn_tv_skirtor: float, optional
         Equatorial optical depth τ_9.7. Default 7.0.
-    agn_torus_frac : float, optional
+    agn_torus_frac: float, optional
         Fraction of L_bol reprocessed by the torus. Default 0.5.
 
     Returns
@@ -215,7 +215,7 @@ def create_skirtor_agnfitter_from_grid(grid_path: str) -> Callable:
 
     Parameters
     ----------
-    grid_path : str
+    grid_path: str
         Path to ``skirtor_mean3p_torus_grid.h5``.
 
     Returns
@@ -277,17 +277,17 @@ def skirtor_agnfitter_sed(
 
     Parameters
     ----------
-    wavelength : array_like, shape (n_wave,)
+    wavelength: array_like, shape (n_wave,)
         Rest-frame wavelength. [Å]
-    agn_log_lbol : float, optional
+    agn_log_lbol: float, optional
         ``log10(L_bol / L_sun)``. Default 11.0.
-    agn_oa_skirtor : float, optional
+    agn_oa_skirtor: float, optional
         Half-opening angle [deg]. Default 40.0.
-    agn_incl_skirtor : float, optional
+    agn_incl_skirtor: float, optional
         Inclination angle [deg]. Default 30.0.
-    agn_tv_skirtor : float, optional
+    agn_tv_skirtor: float, optional
         Equatorial optical depth τ_9.7. Default 7.0.
-    agn_torus_frac : float, optional
+    agn_torus_frac: float, optional
         Torus reprocessing fraction. Default 0.5.
     **kwargs
         Accepted and ignored for unified-dispatch compatibility.

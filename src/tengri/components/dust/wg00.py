@@ -1,11 +1,11 @@
 # SPDX-License-Identifier: BSD-3-Clause
-"""Witt & Gordon (2000) radiative-transfer attenuation — vendored-grid runtime.
+"""Witt & Gordon (2000) radiative-transfer attenuation: vendored-grid runtime.
 
 Loads the WG00 Monte-Carlo attenuation tables (vendored from FSPS into
 ``data/wg00_attenuation_grid.h5`` by ``scripts/build_wg00_grid.py``) and
 interpolates the effective attenuation optical depth :math:`A(\\lambda; \\tau_V)`
 with a pure-JAX triweight kernel in :math:`\\tau_V`, so ``τ_V`` is a fully
-differentiable, JIT/vmap-safe *fitted* parameter — matching the SKIRTOR /
+differentiable, JIT/vmap-safe *fitted* parameter: matching the SKIRTOR /
 Nenkova / Silva+04 paths.
 
 Unlike a fixed ``k(λ)`` law scaled by ``τ_V``, WG00's curve *shape* depends on
@@ -13,7 +13,7 @@ Unlike a fixed ``k(λ)`` law scaled by ``τ_V``, WG00's curve *shape* depends on
 full ``A(λ; τ_V)`` table is interpolated directly and applied as ``exp(-A)``.
 
 Data source: Witt & Gordon 2000 (ApJ 528, 799), as reformatted and distributed
-by FSPS (Conroy & Gunn 2010) in ``$SPS_HOME/dust/alldirty_{h,c}.dat`` — the same
+by FSPS (Conroy & Gunn 2010) in ``$SPS_HOME/dust/alldirty_{h,c}.dat``: the same
 tables FSPS reads for ``dust_type=3``.
 """
 
@@ -58,7 +58,7 @@ def _load_wg00_arrays(grid_path: str) -> dict:
 
     Parameters
     ----------
-    grid_path : str
+    grid_path: str
         Path to ``wg00_attenuation_grid.h5`` from ``scripts/build_wg00_grid.py``.
 
     Returns
@@ -69,7 +69,7 @@ def _load_wg00_arrays(grid_path: str) -> dict:
 
     Notes
     -----
-    **JIT-compatible**: no — performs HDF5 I/O at grid-load time.
+    **JIT-compatible**: no, performs HDF5 I/O at grid-load time.
     """
     import h5py
 
@@ -110,19 +110,19 @@ def create_wg00_from_grid(
 
     Parameters
     ----------
-    grid_path : str
+    grid_path: str
         Path to ``wg00_attenuation_grid.h5``.
-    dust_curve : {"mw", "smc"}
+    dust_curve: {"mw", "smc"}
         Underlying dust grain population.
-    geometry : {"dusty", "shell", "cloudy"}
+    geometry: {"dusty", "shell", "cloudy"}
         Large-scale star-dust geometry (Witt & Gordon 2000).
-    structure : {"homogeneous", "clumpy"}
+    structure: {"homogeneous", "clumpy"}
         Local density structure.
 
     Returns
     -------
     callable
-        ``fn(wavelength, tau_v) -> A(λ)`` — the effective attenuation optical
+        ``fn(wavelength, tau_v) -> A(λ)``: the effective attenuation optical
         depth (apply as ``exp(-A)``), interpolated in ``τ_V`` with a triweight
         kernel and onto the requested wavelength grid.
 
@@ -135,11 +135,11 @@ def create_wg00_from_grid(
 
     Notes
     -----
-    **JIT-compatible**: yes — the returned closure uses only ``jnp`` and a
+    **JIT-compatible**: yes, the returned closure uses only ``jnp`` and a
     triweight interpolation kernel; the structural selectors are resolved to
     static indices at closure-build time.
 
-    **Gradient-safe**: yes — the triweight kernel is C²-continuous in ``τ_V``.
+    **Gradient-safe**: yes, the triweight kernel is C²-continuous in ``τ_V``.
 
     **Wavelength range**: the WG00 tables span 1000–30001 Å. Below 1000 Å the
     FUV value ``A(1000 Å)`` is held (a conservative extrapolation; those photons
@@ -162,9 +162,9 @@ def create_wg00_from_grid(
 
         Parameters
         ----------
-        wavelength : array_like, shape (n_wave,)
+        wavelength: array_like, shape (n_wave,)
             Rest-frame wavelength grid. [Å]
-        tau_v : float
+        tau_v: float
             V-band optical depth. Interpolated over the tabulated range
             [0.25, 10.0]; clamped at the edges. [dimensionless]
 
@@ -214,15 +214,15 @@ def wg00_attenuation(
 
     Parameters
     ----------
-    wavelength : array_like, shape (n_wave,)
+    wavelength: array_like, shape (n_wave,)
         Rest-frame wavelength grid. [Å]
-    tau_v : float
+    tau_v: float
         V-band optical depth (tabulated range 0.25–10.0). [dimensionless]
-    dust_curve : {"mw", "smc"}, optional
+    dust_curve: {"mw", "smc"}, optional
         Dust grain population. Default ``"mw"``.
-    geometry : {"dusty", "shell", "cloudy"}, optional
+    geometry: {"dusty", "shell", "cloudy"}, optional
         Large-scale star-dust geometry. Default ``"shell"`` (foreground screen).
-    structure : {"homogeneous", "clumpy"}, optional
+    structure: {"homogeneous", "clumpy"}, optional
         Local density structure. Default ``"homogeneous"``.
 
     Returns
@@ -238,8 +238,8 @@ def wg00_attenuation(
 
     Notes
     -----
-    **JIT-compatible**: yes — loads the vendored grid once via a cached closure,
-    then interpolates with pure JAX. **Gradient-safe**: yes — ``τ_V`` is a
+    **JIT-compatible**: yes, loads the vendored grid once via a cached closure,
+    then interpolates with pure JAX. **Gradient-safe**: yes, ``τ_V`` is a
     differentiable, traceable parameter.
 
     References

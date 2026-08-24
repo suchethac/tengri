@@ -2,7 +2,7 @@
 """How much of a posterior is measurement, and how much is the prior talking back.
 
 A star-formation history with one free parameter per age bin can draw almost
-any history, so a fit always *returns* one — whether or not the data said
+any history, so a fit always *returns* one, whether or not the data said
 anything about it. The same is true of any flexible block: reading a posterior
 median without knowing which directions the data constrained is how a prior
 draw gets reported as a measurement.
@@ -29,7 +29,7 @@ orthogonal change of parameters.
 
 The practical reading: compare ``n_eff`` to the number of free parameters. A
 64-node field with ``n_eff`` near 4 has measured four things and drawn the rest
-from the prior — which makes the node count a *smoothness* choice, not a
+from the prior, which makes the node count a *smoothness* choice, not a
 resolution one.
 
 Notes
@@ -38,7 +38,7 @@ The metric is evaluated with ``floor=0.0``. The default
 :data:`~tengri.inference.preconditioning.PRIOR_METRIC_FLOOR` of 1.0 exists to
 keep the whitening transform positive definite, and it clips away exactly the
 prior-carried modes this module is counting. The clip to non-negative shrinkage
-therefore happens here instead — eigenvalues below 1 are the residual curvature
+therefore happens here instead, eigenvalues below 1 are the residual curvature
 term Gauss-Newton drops, not evidence.
 
 References
@@ -66,7 +66,7 @@ __all__ = [
 #: Remaining log-posterior improvement, in nats, still counted as "at the mode".
 #:
 #: Estimated by half the squared Newton decrement, :math:`\\tfrac12 g^T H^{-1} g`
-#: — scale-free, so it means the same thing whether a mass is carried in dex or
+#:, scale-free, so it means the same thing whether a mass is carried in dex or
 #: in log10. Half a nat is well inside the noise of any posterior worth
 #: summarizing, and far below the gap that matters: a MAP stopped early measured
 #: ``n_eff`` = 17.6 where the converged fit gives 6.3.
@@ -79,15 +79,15 @@ class ParameterInformation:
 
     Attributes
     ----------
-    names : tuple of str
+    names: tuple of str
         Free-parameter names, in the order of the precision matrix.
-    eigenvalues : ndarray, shape (n_free,)
+    eigenvalues: ndarray, shape (n_free,)
         Posterior precision per mode [dimensionless], ascending. The
         standardized prior contributes 1 to each.
-    shrinkage : ndarray, shape (n_free,)
+    shrinkage: ndarray, shape (n_free,)
         Fraction of each mode's precision supplied by the data
         [dimensionless], in ``[0, 1]``, aligned with ``eigenvalues``.
-    directions : ndarray, shape (n_free, n_free)
+    directions: ndarray, shape (n_free, n_free)
         Eigenvectors as **columns**, aligned with ``eigenvalues``.
     """
 
@@ -118,7 +118,7 @@ class ParameterInformation:
         Curvature is the posterior precision **only at a stationary point**.
         Evaluated part-way through an optimization it is just the local
         second derivative, and the resulting ``n_eff`` is meaningless while
-        looking entirely reasonable — measured at 17.6 against a converged 6.3
+        looking entirely reasonable, measured at 17.6 against a converged 6.3
         on the same model and data.
         """
         if not np.isfinite(self.newton_decrement):
@@ -136,7 +136,7 @@ class ParameterInformation:
         Returns
         -------
         ndarray, shape (n_free, n_free)
-            :math:`V \\Lambda V^T` [dimensionless]. Exact to floating point —
+            :math:`V \\Lambda V^T` [dimensionless]. Exact to floating point,
             the eigendecomposition of a symmetric matrix loses nothing.
         """
         return (self.directions * self.eigenvalues) @ self.directions.T
@@ -146,7 +146,7 @@ class ParameterInformation:
 
         Parameters
         ----------
-        prefix : str
+        prefix: str
             Name prefix selecting the block, e.g. ``"psd_xi"`` for the
             stochastic field or ``"dust_"`` for the attenuation parameters.
 
@@ -170,14 +170,14 @@ class ParameterInformation:
         * ``n_eff`` of the whole model counts every measured direction,
           including ones that mix the block with everything else;
         * ``restrict(...).n_eff`` counts what the data measured about this block
-          **with the rest of the model held fixed** — the conditional, not the
+          **with the rest of the model held fixed**, the conditional, not the
           marginal, so it is an upper bound on the block's own information.
 
         Comparing the two across papers without saying which was used is how
         "the SFH has 4 modes" and "the fit has 5 modes" turn into an argument.
         For the field the block is ``psd_xi``: components spell the same
-        quantity ``sfh_field_xi``, but the *latent* dict — which is what gets
-        raveled — keys it ``psd_xi`` (the #1271 two-spelling seam).
+        quantity ``sfh_field_xi``, but the *latent* dict, which is what gets
+        raveled, keys it ``psd_xi`` (the #1271 two-spelling seam).
 
         Examples
         --------
@@ -207,7 +207,7 @@ class ParameterInformation:
         -----
         Mode ``k`` is spread over parameters by its squared projection
         :math:`v_{ki}^2`. Because the eigenvectors are orthonormal, each mode's
-        projections sum to 1, so the shares sum to ``n_eff`` exactly — the
+        projections sum to 1, so the shares sum to ``n_eff`` exactly, the
         attribution redistributes the total rather than inventing any of it.
 
         A mode is a *combination* of parameters, so a large share means the data
@@ -236,7 +236,7 @@ class ParameterInformation:
         if not self.at_a_mode:
             lines.append(
                 f"  ** NOT AT A MODE ({0.5 * self.newton_decrement**2:.1f} nats "
-                f"unclaimed) — this number is not meaningful. **"
+                f"unclaimed), this number is not meaningful. **"
             )
         lines += [
             "",
@@ -260,13 +260,13 @@ def information_from_precision(
 
     Parameters
     ----------
-    precision : array_like, shape (n_free, n_free)
+    precision: array_like, shape (n_free, n_free)
         Posterior precision :math:`-\\nabla^2 \\log p` in the **standardized**
         latent space [dimensionless]. Symmetry is assumed; the symmetric part is
         used.
-    names : tuple of str
+    names: tuple of str
         Free-parameter names, one per row.
-    gradient : array_like, shape (n_free,), optional
+    gradient: array_like, shape (n_free,), optional
         Gradient of the **negative** log-posterior at the same point
         [dimensionless]. Supplied, it sets ``newton_decrement`` and so lets
         :attr:`ParameterInformation.at_a_mode` report whether the expansion
@@ -286,7 +286,7 @@ def information_from_precision(
     Notes
     -----
     Not JIT-compatible: eigendecomposition of a materialized matrix, called once
-    per fit rather than in any inner loop. Uses NumPy deliberately — the result
+    per fit rather than in any inner loop. Uses NumPy deliberately, the result
     is a diagnostic, never a term in a gradient.
 
     Shrinkage is clipped into ``[0, 1]``. The lower clip catches eigenvalues
@@ -300,7 +300,7 @@ def information_from_precision(
         n_bad = int((~np.isfinite(precision)).sum())
         raise ValueError(
             f"precision contains {n_bad} non-finite entries. A NaN or Inf Hessian "
-            "means the log-posterior is not twice-differentiable at this point — "
+            "means the log-posterior is not twice-differentiable at this point, "
             "usually a parameter railed against a bound, or a NaN in the forward "
             "model. Averaging over it would return a confident-looking n_eff for "
             "a posterior that has none."
@@ -345,13 +345,13 @@ def parameter_information(target, params=None, *, key=None) -> ParameterInformat
 
     Parameters
     ----------
-    target : Posterior or InferenceContext or Fitter
+    target: Posterior or InferenceContext or Fitter
         A completed fit, or a context to expand around ``params``.
-    params : dict of str to float, optional
+    params: dict of str to float, optional
         Point to expand the posterior around, in **physical** units. Default
         ``None`` uses the posterior's own point estimate, which is where the
         quadratic approximation is tightest.
-    key : jax.Array, optional
+    key: jax.Array, optional
         PRNG key, used only when ``target`` supplies no point estimate and an
         initial position must be drawn.
 
@@ -398,7 +398,7 @@ def parameter_information(target, params=None, *, key=None) -> ParameterInformat
             raise ValueError(
                 "This Posterior carries no fit context, so the log-posterior it came "
                 "from cannot be re-evaluated. Information content needs the data and "
-                "the noise model, not just the samples — pass the object returned "
+                "the noise model, not just the samples, pass the object returned "
                 "directly by model.fit(...)."
             )
 
@@ -409,8 +409,8 @@ def parameter_information(target, params=None, *, key=None) -> ParameterInformat
         # data there is no likelihood, and every shrinkage would be zero.
         raise TypeError(
             f"parameter_information() needs a fit, not a {type(target).__name__}. "
-            "Information content is a property of a posterior — how much the data "
-            "moved the prior — so there is nothing to measure before fitting. "
+            "Information content is a property of a posterior, how much the data "
+            "moved the prior, so there is nothing to measure before fitting. "
             "Pass the Posterior from model.fit(data, noise, ...)."
         )
 
@@ -448,7 +448,7 @@ def parameter_information(target, params=None, *, key=None) -> ParameterInformat
             f"unclaimed (tolerance {MODE_TOLERANCE_NATS}). Curvature away from a "
             f"stationary point is not the posterior precision, so n_eff = "
             f"{info.n_eff:.2f} is not meaningful. Re-run the fit to convergence "
-            f"— more restarts or more steps — or pass params= at a converged "
+            f", more restarts or more steps, or pass params= at a converged "
             f"point. Measured on one model: an under-converged MAP reported "
             f"n_eff 17.6 where the converged fit gives 6.3.",
             RuntimeWarning,
@@ -465,15 +465,15 @@ def latent_names(latent: dict) -> tuple[str, ...]:
 
     Parameters
     ----------
-    latent : dict
+    latent: dict
         The latent parameter pytree, as returned by
         ``InferenceContext.initial_params``.
 
     Returns
     -------
     tuple of str
-        One name per scalar degree of freedom. Vector-valued entries — the
-        stochastic field's ``psd_xi`` in particular — expand to indexed names
+        One name per scalar degree of freedom. Vector-valued entries, the
+        stochastic field's ``psd_xi`` in particular, expand to indexed names
         ``psd_xi[0] ... psd_xi[n-1]``.
 
     Notes

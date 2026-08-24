@@ -52,7 +52,7 @@ def _bucket_from_declarations(
 # It is read only by the Feltre NLR backend, and the ``neb`` group wildcard is
 # not backend-scoped the way ``dust.emission`` has been since #1482, so freeing
 # it under any other nebular backend would add an inert dimension. Its grid is
-# also three nodes — {0.1, 0.3, 0.5} — inside a validator interval of
+# also three nodes: {0.1, 0.3, 0.5}; inside a validator interval of
 # [0.05, 0.6], so the admissible interval and the tabulated one are not the same
 # object and a uniform over the former would spend most of its mass off-grid.
 #
@@ -216,7 +216,7 @@ SETTINGS_KEYS = frozenset(
         "lgmet_scatter",
         # Emission line fitting mode
         "eline_mode",  # "off", "fixed", "marginalized", "fitted"
-        "eline_broad",  # bool — enable broad AGN emission line component
+        "eline_broad",  # bool: enable broad AGN emission line component
     }
 )
 
@@ -248,28 +248,28 @@ def _build_param_registry(
 
     Parameters
     ----------
-    mean_sfh_type : list[str]
+    mean_sfh_type: list[str]
         SFH model components.
-    nebular : bool or str
+    nebular: bool or str
         Enable nebular parameters. True or "cloudy" adds neb_logU, neb_logZ_gas, neb_fesc.
-    dust_model : str
+    dust_model: str
         Dust geometry model: ``"two_component"`` (Charlot & Fall) or
         ``"single_component"`` (uniform screen).
-    dust_law_bc : str
+    dust_law_bc: str
         Birth cloud dust law name. Non-power-law laws may add extra parameters.
-    dust_law_diff : str or None
+    dust_law_diff: str or None
         Diffuse ISM dust law. None = same as bc.
-    evolving_metallicity : bool
+    evolving_metallicity: bool
         If True, replace met_logzsol with met_logzsol_0 and met_logzsol_final.
-    chem_evol : bool
+    chem_evol: bool
         If True, derive Z(t) from SFH via gas-regulator model. Replaces
         met_logzsol with chem_yield, chem_eta_outflow, etc.
 
     Returns
     -------
-    registry : dict
+    registry: dict
         param_name -> (description, bound_check, bound_error)
-    defaults : dict
+    defaults: dict
         param_name -> default Distribution
     """
     from tengri.components.stellar.sfh.met_registry import resolve_met
@@ -320,7 +320,7 @@ def _build_param_registry(
         registry[pname] = (pdef.description, pdef.bound_check, pdef.bound_error)
         defaults[pname] = pdef.default
 
-    # Nebular params (CLOUDY, Cue, or CB_19 — not BakedIn/ssp/off).
+    # Nebular params (CLOUDY, Cue, or CB_19; not BakedIn/ssp/off).
     if nebular in ("cloudy", "cue", "cb19"):
         nebular_bucket = _resolve_lazy_bucket("_NEBULAR_PARAMS")
         for pname, (desc, check, err, default) in nebular_bucket.items():

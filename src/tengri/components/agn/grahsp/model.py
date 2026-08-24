@@ -16,7 +16,7 @@ Two entry points are provided:
   intrinsic SED equals ``agn_log_lbol``.
 
 The galaxy energy-balance loop (Dale+ 2014 dust re-emission) is **not**
-included here — it is shared with the non-GRAHSP galaxy pipeline at
+included here: it is shared with the non-GRAHSP galaxy pipeline at
 :mod:`tengri.components.dust.emission`.
 
 References
@@ -90,7 +90,7 @@ _DEFAULT_A_BC: float = 0.0
 # Mor & Netzer 2012 template-torus parameters (used when torus_model="mn12").
 _DEFAULT_TOR_TEMP: float = 0.0
 _DEFAULT_TOR_CUTOFF_UM: float = 1.2
-# Structural (static) selectors — choose the GRAHSP sub-model variants.
+# Structural (static) selectors: choose the GRAHSP sub-model variants.
 _DEFAULT_TORUS_MODEL: str = "gaussian"  # "gaussian" (activategtorus) | "mn12" (activatetorus)
 _DEFAULT_FEII_TEMPLATE: str = "bruhweiler2008"  # | "veroncetty2004"
 _DEFAULT_DISC_MODEL: str | None = None  # None -> SBPL BBB; "netzer" -> Netzer disc grid
@@ -109,39 +109,39 @@ class GRAHSPParams:
 
     Attributes
     ----------
-    l5100 : float
+    l5100: float
         :math:`\lambda L_\lambda(5100\,\mathrm{\AA})` [erg/s].
         Upstream: ``lum5100A``; paper: :math:`L_\mathrm{AGN}^{5100\,\mathrm{\AA}}`.
-    uvslope : float
+    uvslope: float
         BBB UV power-law index :math:`\alpha_1`.
-    plslope : float
+    plslope: float
         BBB optical power-law index :math:`\alpha_2`.
-    plbendloc_nm : float
+    plbendloc_nm: float
         BBB bend wavelength :math:`\lambda_\mathrm{break}` [nm].
-    plbendwidth : float
+    plbendwidth: float
         BBB bend width :math:`\Lambda` [dex].
-    cutoff_nm : float
+    cutoff_nm: float
         IR cutoff [nm]; ``-1`` disables.
-    a_lines : float
+    a_lines: float
         Line-strength scale (paper ``Alines``).
-    a_feii : float
+    a_feii: float
         FeII forest amplitude relative to broad H-beta (paper ``AFeII``).
-    linewidth_kms : float
+    linewidth_kms: float
         FWHM of all lines [km/s] (paper ``Wline``).
-    agn_type : int
+    agn_type: int
         ``1`` (BL/QSO), ``2`` (Sy2), ``3`` (LINER).
-    fcov : float
+    fcov: float
         Torus covering factor (paper :math:`f_\mathrm{cov}`).
-    si : float
+    si: float
         Si feature strength (paper ``Si``).
-    cool_lam_um, cool_width : float
+    cool_lam_um, cool_width: float
         Cool dust component peak [um] and log-width [dex].
-    hot_lam_um, hot_width, hot_fcov : float
+    hot_lam_um, hot_width, hot_fcov: float
         Hot dust peak [um], log-width [dex], peak ratio
         (paper :math:`f_\mathrm{hot}`).
-    ebv : float
+    ebv: float
         Galaxy E(B-V) [mag].
-    ebv_agn : float
+    ebv_agn: float
         Additional AGN-only E(B-V) [mag].
     """
 
@@ -169,7 +169,7 @@ class GRAHSPParams:
     # Mor & Netzer 2012 template-torus knobs (active when torus_model == "mn12").
     tor_temp: float = _DEFAULT_TOR_TEMP
     tor_cutoff_um: float = _DEFAULT_TOR_CUTOFF_UM
-    # Structural (static) variant selectors — see module-level defaults.
+    # Structural (static) variant selectors: see module-level defaults.
     torus_model: str = _DEFAULT_TORUS_MODEL
     feii_template: str = _DEFAULT_FEII_TEMPLATE
     disc_model: str | None = _DEFAULT_DISC_MODEL
@@ -186,7 +186,7 @@ class GRAHSPSED(NamedTuple):
 
     Notes
     -----
-    ``bbb`` holds whichever big-blue-bump variant is active — the smooth
+    ``bbb`` holds whichever big-blue-bump variant is active, the smooth
     bending power-law (``disc_model=None``) or the Netzer disc grid
     (``disc_model="netzer"``). ``balmer`` is the Grandi 1982 Balmer
     continuum (zero unless ``a_bc > 0`` and ``agn_type == 1``). ``torus``
@@ -221,17 +221,17 @@ def evaluate_grahsp_agn(
 
     Parameters
     ----------
-    wave_nm : array_like, shape (n_wave,)
+    wave_nm: array_like, shape (n_wave,)
         Rest-frame wavelength grid [nm].
-    params : GRAHSPParams
+    params: GRAHSPParams
         Model parameters.
-    templates : GRAHSPTemplates, optional
+    templates: GRAHSPTemplates, optional
         Pre-loaded HDF5 template bundle. ``None`` triggers the default
         cached load via :func:`load_grahsp_templates`.
 
     Returns
     -------
-    sed : GRAHSPSED
+    sed: GRAHSPSED
         Per-component :math:`L_\lambda` plus bolometric scalars.
 
     Notes
@@ -412,7 +412,7 @@ def compute_grahsp_sed(
     templates: GRAHSPTemplates | None = None,
     **_kwargs,
 ) -> Array:
-    r"""GRAHSP AGN SED — registered tengri AGN model entry point.
+    r"""GRAHSP AGN SED: registered tengri AGN model entry point.
 
     Mirrors the signature contract of other registered AGN models
     (e.g. :func:`tengri.components.agn.qsogen`): takes Å wavelengths,
@@ -434,12 +434,12 @@ def compute_grahsp_sed(
 
     Parameters
     ----------
-    wavelength : array_like, shape (n_wave,)
+    wavelength: array_like, shape (n_wave,)
         Rest-frame wavelength grid [Å].
-    agn_log_lbol : float, optional
+    agn_log_lbol: float, optional
         :math:`\log_{10}(L_\mathrm{bol}/L_\odot)`. Defaults to the declared
         ``agn_log_lbol`` default.
-    agn_lum_ratio : float, optional
+    agn_lum_ratio: float, optional
         Fraction of bolometric luminosity carried by this AGN component.
         Default ``1.0``.
     agn_grahsp_uvslope, agn_grahsp_plslope, agn_grahsp_plbendloc_nm, \
@@ -455,10 +455,10 @@ agn_grahsp_hot_fcov
         :func:`si_feature`.
     agn_grahsp_ebv, agn_grahsp_ebv_agn
         Bi-attenuation; see :func:`attenuation_factors`.
-    agn_type : int, optional
-        ``1`` (BL/QSO, default), ``2`` (Sy2), ``3`` (LINER). **Static** —
+    agn_type: int, optional
+        ``1`` (BL/QSO, default), ``2`` (Sy2), ``3`` (LINER). **Static** :
         do not pass as a traced JAX value.
-    templates : GRAHSPTemplates, optional
+    templates: GRAHSPTemplates, optional
         Pre-loaded HDF5 template bundle.
     **_kwargs
         Ignored. Accepted for compatibility with the AGN_MODELS registry
@@ -466,7 +466,7 @@ agn_grahsp_hot_fcov
 
     Returns
     -------
-    L_nu : ndarray, shape (n_wave,)
+    L_nu: ndarray, shape (n_wave,)
         Specific luminosity :math:`L_\nu` [erg/s/Hz].
 
     Notes

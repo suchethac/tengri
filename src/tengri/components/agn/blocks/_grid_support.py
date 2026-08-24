@@ -36,14 +36,14 @@ def block_grid_support(category: str, name: str) -> dict[str, tuple[float, float
 
     Parameters
     ----------
-    category : str
+    category: str
         Pipeline stage, e.g. ``'disc'``.
-    name : str
+    name: str
         Block name, e.g. ``'slone_netzer'``.
 
     Returns
     -------
-    support : dict[str, tuple[float, float]]
+    support: dict[str, tuple[float, float]]
         ``{param_name: (lo, hi)}``. Empty when the block is not
         template-backed **or** when its grid is not installed.
 

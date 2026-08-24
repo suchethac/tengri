@@ -25,7 +25,7 @@ import jax.numpy as jnp
 import numpy as np
 
 from tengri.observation.eline_catalog import (
-    CLOUDY_LINE_NAMES,  # noqa: F401 — re-exported for convenience
+    CLOUDY_LINE_NAMES,  # noqa: F401, re-exported for convenience
     CLOUDY_LINE_WAVELENGTHS,
 )
 
@@ -55,18 +55,18 @@ _CLOUDY_SOLAR_LOGU3 = jnp.array(
 # Metal lines are weaker, Balmer ratios unchanged (Case B).
 _CLOUDY_SUBSOLAR_LOGU3 = jnp.array(
     [
-        0.52,  # [OII] 3726 — lower at low Z  (1.20 / 2.30)
-        0.68,  # [OII] 3729 — lower at low Z  (1.20 * 1.3 / 2.30)
+        0.52,  # [OII] 3726, lower at low Z  (1.20 / 2.30)
+        0.68,  # [OII] 3729, lower at low Z  (1.20 * 1.3 / 2.30)
         0.26,  # H-delta (Case B, Z-independent)
         0.47,  # H-gamma (Case B, Z-independent)
         1.00,  # H-beta
-        0.80,  # [OIII] 4959 — higher at low Z (less cooling)
-        2.40,  # [OIII] 5007 — higher at low Z
-        0.03,  # [NII] 6548 — much weaker at low Z
+        0.80,  # [OIII] 4959, higher at low Z (less cooling)
+        2.40,  # [OIII] 5007, higher at low Z
+        0.03,  # [NII] 6548, much weaker at low Z
         2.86,  # H-alpha (Case B)
-        0.09,  # [NII] 6583 — much weaker at low Z
-        0.10,  # [SII] 6716 — weaker at low Z
-        0.07,  # [SII] 6731 — weaker at low Z
+        0.09,  # [NII] 6583, much weaker at low Z
+        0.10,  # [SII] 6716, weaker at low Z
+        0.07,  # [SII] 6731, weaker at low Z
     ]
 )
 
@@ -74,18 +74,18 @@ _CLOUDY_SUBSOLAR_LOGU3 = jnp.array(
 # [OIII] is stronger, [NII]/[SII] weaker relative to logU=-3.
 _CLOUDY_SOLAR_LOGU2 = jnp.array(
     [
-        0.65,  # [OII] 3726 — lower at high U  (1.50 / 2.30)
-        0.85,  # [OII] 3729 — lower at high U  (1.50 * 1.3 / 2.30)
+        0.65,  # [OII] 3726, lower at high U  (1.50 / 2.30)
+        0.85,  # [OII] 3729, lower at high U  (1.50 * 1.3 / 2.30)
         0.26,  # H-delta (Case B)
         0.47,  # H-gamma (Case B)
         1.00,  # H-beta
-        1.10,  # [OIII] 4959 — much stronger at high U
-        3.30,  # [OIII] 5007 — much stronger at high U
-        0.08,  # [NII] 6548 — weaker at high U
+        1.10,  # [OIII] 4959, much stronger at high U
+        3.30,  # [OIII] 5007, much stronger at high U
+        0.08,  # [NII] 6548, weaker at high U
         2.86,  # H-alpha (Case B)
-        0.24,  # [NII] 6583 — weaker at high U
-        0.12,  # [SII] 6716 — weaker at high U
-        0.09,  # [SII] 6731 — weaker at high U
+        0.24,  # [NII] 6583, weaker at high U
+        0.12,  # [SII] 6716, weaker at high U
+        0.09,  # [SII] 6731, weaker at high U
     ]
 )
 
@@ -96,18 +96,18 @@ _CLOUDY_SOLAR_LOGU2 = jnp.array(
 # and low Z. Values derived from Byler+2017 CLOUDY trends.
 _CLOUDY_SUBSOLAR_LOGU2 = jnp.array(
     [
-        0.25,  # [OII] 3726 — strongly suppressed (low Z + high U)
-        0.32,  # [OII] 3729 — strongly suppressed (low Z + high U)
+        0.25,  # [OII] 3726, strongly suppressed (low Z + high U)
+        0.32,  # [OII] 3729, strongly suppressed (low Z + high U)
         0.26,  # H-delta (Case B, Z-independent)
         0.47,  # H-gamma (Case B, Z-independent)
         1.00,  # H-beta
-        1.80,  # [OIII] 4959 — enhanced (low Z + high U)
-        5.40,  # [OIII] 5007 — strongly enhanced (low Z + high U)
-        0.02,  # [NII] 6548 — very weak (low Z + high U)
+        1.80,  # [OIII] 4959, enhanced (low Z + high U)
+        5.40,  # [OIII] 5007, strongly enhanced (low Z + high U)
+        0.02,  # [NII] 6548, very weak (low Z + high U)
         2.86,  # H-alpha (Case B)
-        0.05,  # [NII] 6583 — very weak (low Z + high U)
-        0.05,  # [SII] 6716 — weak at low Z
-        0.04,  # [SII] 6731 — weak at low Z
+        0.05,  # [NII] 6583, very weak (low Z + high U)
+        0.05,  # [SII] 6716, weak at low Z
+        0.04,  # [SII] 6731, weak at low Z
     ]
 )
 
@@ -134,29 +134,29 @@ def cloudy_line_priors(
 
     Parameters
     ----------
-    log_z : float
+    log_z: float
         Gas-phase metallicity log10(Z/Zsun). Default 0.0 (solar).
-    neb_logU : float
+    neb_logU: float
         Ionization parameter log10(U). Default -3.0.
-    line_wavelengths : array (n_lines,) or None
+    line_wavelengths: array (n_lines,) or None
         Rest-frame wavelengths to return priors for. If None, returns
         priors for all CLOUDY reference lines.
-    prior_width_dex : float
+    prior_width_dex: float
         Gaussian prior width in dex (applied in log-space as fractional
         scatter). Default 0.3 dex to accommodate non-solar abundances,
         AGN contamination, etc.
 
     Returns
     -------
-    prior_means : array, shape (n_lines,)
+    prior_means: array, shape (n_lines,)
         Expected line luminosities relative to Hbeta [dimensionless].
-    prior_sigmas : array, shape (n_lines,)
+    prior_sigmas: array, shape (n_lines,)
         Prior standard deviations [dimensionless], linear-space scatter
         corresponding to ``prior_width_dex``.
 
     Notes
     -----
-    **JIT-compatible**: yes — uses only jnp primitives.
+    **JIT-compatible**: yes, uses only jnp primitives.
     Performs bilinear interpolation over a 2×2 grid in (Z, logU) space.
     For richer priors using a full CLOUDY grid, use ``cloudy_grid_line_priors()``.
 
@@ -208,32 +208,32 @@ def marginalize_emission_lines_cloudy(
 
     Parameters
     ----------
-    residual : array (n_pix,)
+    residual: array (n_pix,)
         Data minus continuum model: ``d - m``.
-    noise : array (n_pix,)
+    noise: array (n_pix,)
         Per-pixel noise standard deviation.
-    design_matrix : array (n_pix, n_lines)
+    design_matrix: array (n_pix, n_lines)
         Gaussian line profile design matrix.
-    log_z : float
+    log_z: float
         Gas-phase metallicity log10(Z/Zsun).
-    neb_logU : float
+    neb_logU: float
         Ionization parameter log10(U).
-    line_wavelengths : array (n_lines,) or None
+    line_wavelengths: array (n_lines,) or None
         Rest-frame wavelengths of the lines in the design matrix.
         Must match column order of ``design_matrix``.
-    prior_width_dex : float
+    prior_width_dex: float
         Prior scatter in dex. Default 0.3.
-    l_hbeta : float
+    l_hbeta: float
         Estimated Hbeta luminosity (or flux) to scale the CLOUDY
         ratios to absolute amplitudes. Default 1.0 (ratios only).
 
     Returns
     -------
-    ln_L_marg : scalar
+    ln_L_marg: scalar
         Marginalized log-likelihood [dimensionless].
-    a_hat : array, shape (n_lines,)
+    a_hat: array, shape (n_lines,)
         Posterior-mean line amplitudes (same units as ``residual``).
-    a_cov : array, shape (n_lines, n_lines)
+    a_cov: array, shape (n_lines, n_lines)
         Posterior covariance of line amplitudes (same units^2 as ``a_hat``).
 
     Notes
@@ -291,31 +291,31 @@ def cloudy_grid_line_priors(
 
     Parameters
     ----------
-    grid_data : CloudyGridData
+    grid_data: CloudyGridData
         Loaded CLOUDY grid (from ``load_cloudy_grid(path)`` in
         ``tengri.components.nebular``). Must have attributes:
         ``line_luminosity`` (n_met, n_age, n_logU, n_lines),
         ``line_log_met``, ``line_log_age``, ``line_log_U``,
         ``line_wavelengths``.
-    log_z : float
+    log_z: float
         Gas-phase metallicity log10(Z) (absolute, not Z/Zsun).
-    neb_logU : float
+    neb_logU: float
         Ionization parameter log10(U).
-    log_age_yr : float
+    log_age_yr: float
         log10(age / yr) for the dominant stellar population.
-        Default 7.0 (10 Myr — typical for HII regions).
-    prior_width_dex : float
+        Default 7.0 (10 Myr, typical for HII regions).
+    prior_width_dex: float
         Gaussian prior width in dex. Default 0.3.
-    target_wavelengths : array (n_target,) or None
+    target_wavelengths: array (n_target,) or None
         If provided, return priors only for these rest-frame wavelengths
         by matching each to the nearest grid line. If None, returns priors
         for all grid lines.
 
     Returns
     -------
-    prior_means : array, shape (n_lines_out,)
+    prior_means: array, shape (n_lines_out,)
         Line luminosities relative to Hbeta [dimensionless].
-    prior_sigmas : array, shape (n_lines_out,)
+    prior_sigmas: array, shape (n_lines_out,)
         Prior standard deviations [dimensionless].
 
     Notes
@@ -420,24 +420,24 @@ def balmer_decrement_prior(
 
     Parameters
     ----------
-    dust_tau_diff : float
+    dust_tau_diff: float
         Diffuse ISM optical depth at V-band (the ``dust_tau_diff``
         physical parameter in tengri).
-    R_V : float
+    R_V: float
         Total-to-selective extinction ratio. Default 4.05 (Calzetti+2000).
 
     Returns
     -------
-    wavelengths : array, shape (4,)
+    wavelengths: array, shape (4,)
         Balmer line rest-frame vacuum wavelengths [Hα, Hβ, Hγ, Hδ]
         [Angstrom].
-    predicted_ratios : array, shape (4,)
+    predicted_ratios: array, shape (4,)
         Predicted observed Balmer ratios relative to Hβ = 1.0 [dimensionless],
         after applying nebular dust attenuation.
 
     Notes
     -----
-    **JIT-compatible**: yes — uses only jnp primitives.
+    **JIT-compatible**: yes, uses only jnp primitives.
     The Calzetti nebular E(B-V) is related to the diffuse dust optical
     depth by:
 
@@ -455,8 +455,8 @@ def balmer_decrement_prior(
 
     References
     ----------
-    Calzetti, D. 2000, ApJ, 533, 682 — nebular attenuation law.
-    Osterbrock, D. E., & Ferland, G. J. 2006 — Case B ratios.
+    Calzetti, D. 2000, ApJ, 533, 682, nebular attenuation law.
+    Osterbrock, D. E., & Ferland, G. J. 2006, Case B ratios.
 
     """
     # Intrinsic Case B ratios (Hα, Hβ, Hγ, Hδ) relative to Hβ=1

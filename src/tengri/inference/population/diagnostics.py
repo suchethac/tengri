@@ -19,21 +19,21 @@ def interval_width_scaling(widths: np.ndarray, n_values: np.ndarray) -> dict[str
 
     Parameters
     ----------
-    widths : array_like, shape (M,)
+    widths: array_like, shape (M,)
         Credible interval widths [dimensionless].
-    n_values : array_like, shape (M,)
+    n_values: array_like, shape (M,)
         Sample sizes [dimensionless].
 
     Returns
     -------
-    scaling : dict
+    scaling: dict
         Dictionary with keys:
 
-        - ``"slope"`` : float
+        - ``"slope"``: float
             Slope of ``log(width)`` vs ``log(N)`` [dimensionless].
-        - ``"slope_err"`` : float
+        - ``"slope_err"``: float
             Standard error of the slope [dimensionless].
-        - ``"excludes_zero_3sigma"`` : bool
+        - ``"excludes_zero_3sigma"``: bool
             True if ``abs(slope) > 3 * slope_err``, i.e., the slope is
             significantly different from zero at the 3-sigma level. Flat
             widths return False.
@@ -73,7 +73,7 @@ def interval_width_scaling(widths: np.ndarray, n_values: np.ndarray) -> dict[str
     **The operative half of the criterion is excluding zero**, not matching
     -0.5. A previously published claim in this project said the shared-PSD
     credible intervals "shrink approximately as 1/sqrt(N)". Later measurements
-    found they did not shrink at all — the intervals stayed roughly constant
+    found they did not shrink at all, the intervals stayed roughly constant
     across an 8192-fold increase in data, which is the signature of a
     posterior dominated by its prior rather than by the likelihood. This
     function must be able to FAIL on flat widths, so a version that reports
@@ -129,28 +129,28 @@ def credible_interval(log_posterior: np.ndarray, grid: Any, level: float = 0.68)
 
     Parameters
     ----------
-    log_posterior : array_like, shape (A * B,)
+    log_posterior: array_like, shape (A * B,)
         Unnormalized log-posterior [nats] on the grid (C-ordered as node
         ``a*B + b`` is ``(sigma[a], tau_yr[b])``).
-    grid : SharedGrid
+    grid: SharedGrid
         Quadrature grid with attributes ``sigma`` (A,) and ``tau_yr`` (B,).
-    level : float, optional
+    level: float, optional
         Credible level (default 0.68 for 1-sigma intervals) [dimensionless].
 
     Returns
     -------
-    intervals : dict
+    intervals: dict
         Dictionary with keys:
 
-        - ``"sigma_lower"`` : float
+        - ``"sigma_lower"``: float
             Lower bound of sigma interval [dex].
-        - ``"sigma_upper"`` : float
+        - ``"sigma_upper"``: float
             Upper bound of sigma interval [dex].
-        - ``"tau_lower_yr"`` : float
+        - ``"tau_lower_yr"``: float
             Lower bound of tau interval [yr].
-        - ``"tau_upper_yr"`` : float
+        - ``"tau_upper_yr"``: float
             Upper bound of tau interval [yr].
-        - ``"credible_levels"`` : tuple of float
+        - ``"credible_levels"``: tuple of float
             Pair of (level, level) for the marginal probabilities [dimensionless].
     """
     log_posterior = np.asarray(log_posterior)
@@ -166,7 +166,7 @@ def credible_interval(log_posterior: np.ndarray, grid: Any, level: float = 0.68)
     # and sums one term per galaxy, so its magnitude grows with N: at N = 64 it
     # is routinely in the hundreds or thousands. ``np.exp`` of that underflows
     # every node to 0.0, and the normalization then divides 0 by 0 and returns
-    # NaN for the whole grid — silently, and only once the population is large
+    # NaN for the whole grid, silently, and only once the population is large
     # enough to matter.
     lp = log_posterior.reshape(n_sigma, n_tau)
     posterior_grid = np.exp(lp - np.max(lp))
@@ -175,7 +175,7 @@ def credible_interval(log_posterior: np.ndarray, grid: Any, level: float = 0.68)
         raise ValueError(
             "Posterior grid did not normalize: sum is "
             f"{total!r}. The log-posterior may contain NaN or -inf at every "
-            "node — check that the tau bounds do not reach the regime where "
+            "node, check that the tau bounds do not reach the regime where "
             "ou_logpdf underflows, and that the interim samples are finite."
         )
     posterior_grid = posterior_grid / total
@@ -197,7 +197,7 @@ def credible_interval(log_posterior: np.ndarray, grid: Any, level: float = 0.68)
     # ``searchsorted`` returns a grid INDEX, so the interval endpoints could only
     # ever be grid values and the WIDTH was quantized to whole cells. On a
     # 60-node sigma grid over (0.01, 1.0) the spacing is 0.01678, and two
-    # different population sizes both reported a width of exactly 0.117 — seven
+    # different population sizes both reported a width of exactly 0.117, seven
     # cells, twice. That is fatal for ``interval_width_scaling``, whose entire
     # job is to detect how the width changes: quantization both adds a
     # +/- one-cell error and floors the width at one cell, so a genuinely
@@ -223,24 +223,24 @@ def report(interim_result: dict[str, Any], shared_posterior: tuple[Any, Any]) ->
 
     Parameters
     ----------
-    interim_result : dict
+    interim_result: dict
         Result from a single-galaxy interim fit with keys like
         ``"n_divergent"``, etc.
-    shared_posterior : tuple
+    shared_posterior: tuple
         A 2-tuple from :func:`shared_log_posterior`, where the second
         element is an ESSSummary with ``.at_mode`` and ``.min_high_mass``.
 
     Returns
     -------
-    diagnostics : dict
+    diagnostics: dict
         Dictionary with keys:
 
-        - ``"ess_at_mode"`` : ndarray, shape (N,)
+        - ``"ess_at_mode"``: ndarray, shape (N,)
             ESS at the posterior mode [dimensionless]; primary diagnostic.
-        - ``"ess_min_high_mass"`` : ndarray, shape (N,)
+        - ``"ess_min_high_mass"``: ndarray, shape (N,)
             Minimum ESS over nodes carrying top 99% of posterior mass
             [dimensionless]; use to detect tail degeneracy.
-        - ``"zero_divergence_flag"`` : bool
+        - ``"zero_divergence_flag"``: bool
             True if the population reported zero divergences across all
             galaxies (a red flag, not a pass).
 
@@ -263,7 +263,7 @@ def report(interim_result: dict[str, Any], shared_posterior: tuple[Any, Any]) ->
             "for NUTS, where energy error is checked at every tree doubling and bad "
             "geometry diverges readily. For STATIC HMC the blackjax default "
             "divergence_threshold is 1000, so zero means the integrator never "
-            "exploded — NOT that the chain mixed. There, judge on R-hat and ESS. "
+            "exploded, NOT that the chain mixed. There, judge on R-hat and ESS. "
             "Where it does apply, it is a red flag, not "
             "a clean bill of health: a chain that traverses hard geometry reports "
             "it, while chains frozen in separate basins have nothing to report. "

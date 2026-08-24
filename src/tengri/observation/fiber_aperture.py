@@ -24,7 +24,7 @@ This module provides:
 
 All functions are pure JAX. The aperture-fraction integral uses a
 sigmoid-softened mask by default so the result is differentiable in
-the aperture radius — useful when the aperture is a calibration
+the aperture radius, useful when the aperture is a calibration
 parameter, or when the user wants to marginalize over fiber-placement
 uncertainty.
 
@@ -65,9 +65,9 @@ def arcsec_to_kpc(
 
     Parameters
     ----------
-    arcsec : float or ndarray
+    arcsec: float or ndarray
         Angular size in arcseconds.
-    z : float or ndarray
+    z: float or ndarray
         Source redshift.
 
     Returns
@@ -93,15 +93,15 @@ def circular_aperture_mask(
 
     Parameters
     ----------
-    grid_kpc : tuple of (ndarray, ndarray), each shape (ny, nx)
-        ``(x_grid, y_grid)`` — physical-coordinate grids from a
+    grid_kpc: tuple of (ndarray, ndarray), each shape (ny, nx)
+        ``(x_grid, y_grid)``, physical-coordinate grids from a
         :class:`SpatialModel`.
-    radius_kpc : float or ndarray
+    radius_kpc: float or ndarray
         Aperture radius in kpc.
-    center_kpc : tuple of (float, float), default (0.0, 0.0)
-        Aperture center in kpc — useful when the fiber is offset
+    center_kpc: tuple of (float, float), default (0.0, 0.0)
+        Aperture center in kpc, useful when the fiber is offset
         from the galaxy nucleus.
-    softness : float, default 0.01
+    softness: float, default 0.01
         Sigmoidal edge softening as a fraction of ``radius_kpc``.
         Set to ``0.0`` for a hard top-hat (non-differentiable at
         the edge).
@@ -146,16 +146,16 @@ def aperture_fraction(
 
     Parameters
     ----------
-    profile_2d : ndarray, shape (ny, nx)
+    profile_2d: ndarray, shape (ny, nx)
         Unnormalized surface-brightness profile (e.g.
         ``state.derived["spatial_profile_2d"]``).
-    grid_kpc : tuple of (ndarray, ndarray), each shape (ny, nx)
+    grid_kpc: tuple of (ndarray, ndarray), each shape (ny, nx)
         Physical-coordinate grids.
-    radius_kpc : float or ndarray
+    radius_kpc: float or ndarray
         Aperture radius in kpc.
-    center_kpc : tuple of (float, float), default (0.0, 0.0)
+    center_kpc: tuple of (float, float), default (0.0, 0.0)
         Aperture center.
-    softness : float, default 0.01
+    softness: float, default 0.01
         See :func:`circular_aperture_mask`.
 
     Returns

@@ -2,7 +2,7 @@
 """JAX-aware timing infrastructure for tengri.
 
 Provides tic/toc timing, a ``@profiled`` decorator, and an
-``OperationTimers`` accumulator — all aware of JAX's async dispatch
+``OperationTimers`` accumulator: all aware of JAX's async dispatch
 and JIT compilation model.
 
 Design notes
@@ -98,7 +98,7 @@ def tic(name: str) -> None:
 
     Parameters
     ----------
-    name : str
+    name: str
         Operation name (used as key in the global timers dict).
     """
     _timer_stack.append((name, time.perf_counter()))
@@ -109,9 +109,9 @@ def toc(name: str | None = None, result: Any = None) -> float:
 
     Parameters
     ----------
-    name : str, optional
+    name: str, optional
         Operation name. If None, pops the most recent ``tic``.
-    result : any, optional
+    result: any, optional
         JAX array or container to ``block_until_ready()`` before
         stopping the timer. Required for accurate JAX timing.
 
@@ -146,7 +146,7 @@ def toc(name: str | None = None, result: Any = None) -> float:
     with _lock:
         entry = _get_or_create(name)
         if not entry["compiled"]:
-            # First call — record as compilation time
+            # First call: record as compilation time
             entry["compile_time"] = elapsed
             entry["compiled"] = True
         else:
@@ -170,11 +170,11 @@ def profiled(
 
     Parameters
     ----------
-    name : str, optional
+    name: str, optional
         Operation name. Defaults to the function's qualified name.
-    source : str
-        "python" or "jit" — used for display/filtering.
-    skip_first : bool
+    source: str
+        "python" or "jit": used for display/filtering.
+    skip_first: bool
         If True, the first call is recorded as compilation time
         and excluded from the running average. Default True.
 
@@ -225,7 +225,7 @@ def profiled(
     return decorator
 
 
-# ── OperationTimers — dict-like access to accumulated data ────────
+# ── OperationTimers: dict-like access to accumulated data ────────
 
 
 class OperationTimers:
@@ -307,7 +307,7 @@ class OperationTimers:
 
         Parameters
         ----------
-        path : str
+        path: str
             Output file path.
         """
         import csv
@@ -348,7 +348,7 @@ class OperationTimers:
 
         Parameters
         ----------
-        top_n : int
+        top_n: int
             Maximum number of operations to show.
 
         Returns
@@ -385,7 +385,7 @@ class OperationTimers:
         return self.summary()
 
 
-# ── bench() utility — standalone timing for quick benchmarks ──────
+# ── bench() utility: standalone timing for quick benchmarks ──────
 
 
 def bench(
@@ -398,22 +398,22 @@ def bench(
 
     Parameters
     ----------
-    fn : callable
+    fn: callable
         Zero-argument callable to time.
-    n : int
+    n: int
         Number of timed iterations.
-    warmup : int
+    warmup: int
         Number of warmup iterations (JIT compilation).
-    return_compile_time : bool
+    return_compile_time: bool
         If True, return (mean_us, result, compile_us).
 
     Returns
     -------
-    mean_us : float
+    mean_us: float
         Mean execution time in microseconds.
-    result : any
+    result: any
         Return value of the last call.
-    compile_us : float
+    compile_us: float
         Only if ``return_compile_time=True``. Time of first warmup call.
     """
     # First warmup call = compilation

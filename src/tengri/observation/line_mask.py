@@ -24,19 +24,19 @@ def build_line_mask(
 
     Parameters
     ----------
-    wave_obs : array_like, shape (n_pix,)
+    wave_obs: array_like, shape (n_pix,)
         Observed-frame wavelength array [Angstrom].
-    line_rest_waves : array_like, shape (n_lines,)
+    line_rest_waves: array_like, shape (n_lines,)
         Rest-frame vacuum wavelengths of emission lines [Angstrom].
-    redshift : float
+    redshift: float
         Galaxy redshift [dimensionless].
-    line_sigmas_kms : array_like or float, optional
+    line_sigmas_kms: array_like or float, optional
         Intrinsic line widths [km/s].  Scalar is broadcast to all lines.
         Default is 150.0 km/s.
-    n_sigma : float, optional
+    n_sigma: float, optional
         Half-width of the mask in units of ``sigma_ang`` per line.
         Default is 2.5.
-    min_sigma_kms : float, optional
+    min_sigma_kms: float, optional
         Minimum velocity width [km/s] used to set the floor on the mask
         half-width, preventing zero-width windows.  Default is 50.0 km/s.
 

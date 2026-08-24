@@ -56,7 +56,7 @@ class ReadOnlyPropertyMapping:
 
         Parameters
         ----------
-        names : iterable of str, optional
+        names: iterable of str, optional
             Names to export. Defaults to every available property.
 
         Returns

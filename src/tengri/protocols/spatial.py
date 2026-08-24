@@ -3,8 +3,8 @@
 
 Mirror of :class:`tengri.protocols.component.SEDComponent` on the spatial
 side of the forward model. Each spatial component owns one piece of the
-2D surface-brightness profile — a Sérsic envelope, an exponential disk,
-a flat aperture, etc. — plus the parameters and precomputed tensors that
+2D surface-brightness profile: a Sérsic envelope, an exponential disk,
+a flat aperture, etc.: plus the parameters and precomputed tensors that
 go with it.
 
 See architecture spec ``docs/dev/archive/forward-model-architecture.md`` §3.2
