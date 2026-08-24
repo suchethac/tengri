@@ -407,7 +407,7 @@ class CatalogPosterior:
 
     Notes
     -----
-    ``percentile_levels`` is not bookkeeping, it is what makes the block
+    ``percentile_levels`` is not bookkeeping; it is what makes the block
     self-describing. Without it, both the median accessor and ``to_table``
     guessed from the array's *width*: the median was hardcoded to column 1 and
     labels were re-derived as ``[16, 50, 84]`` / ``[16, 84]`` / evenly-spaced.
@@ -718,7 +718,7 @@ class _CatalogFitterOriginal:
     Notes
     -----
     The ``signal_response`` (forward model) is built once from the first galaxy
-    and shared across all galaxies, it does not capture any galaxy-specific
+    and shared across all galaxies; it does not capture any galaxy-specific
     data. The per-galaxy ``data`` and ``noise`` vectors are runtime arguments
     to the catalog VI engines, enabling ``jax.vmap`` over the catalog batch.
 

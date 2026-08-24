@@ -499,7 +499,7 @@ class AGNSEDComponent(TemplateThreading):
         # round-off cannot mask a shape error: max relative deviation from a
         # direct evaluation at the true L_bol is 2.2e-16 (one ulp) at
         # log L_bol = 11-14. Without the shape hand-off the same comparison is
-        # off by 100% at log L_bol = 11 and 3685% at 14, that is what this
+        # off by 100% at log L_bol = 11 and 3685% at 14; that is what this
         # comment used to describe. In **float64** we evaluate at the true
         # ``agn_log_lbol`` and
         # publish the block outputs unchanged, the reference implementation,

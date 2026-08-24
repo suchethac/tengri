@@ -809,7 +809,7 @@ def _require_log_uniform_grid(wave, caller: str) -> None:
     """Raise unless ``wave`` is uniform in ``ln(lambda)`` (#1742).
 
     A no-op when ``wave`` is a tracer: a traced grid has no values to inspect at
-    trace time. That is a real gap rather than a safe default, it is narrow
+    trace time. That is a real gap rather than a safe default; it is narrow
     because a spectroscopic wavelength grid is normally a fixed instrument array
     closed over by the jitted function, not an argument traced through it.
 

@@ -1365,7 +1365,7 @@ def _xray_agn_corona_bolometric(
     r"""**DEPRECATED**: AGN corona from bolometric luminosity (with N_H absorption).
 
     Use :func:`xray_agn_corona_from_disc` (which takes ``L_2500_30deg``
-    directly) instead, that is the X-CIGALE-faithful path (Yang+2020
+    directly) instead; that is the X-CIGALE-faithful path (Yang+2020
     yang20.py:227). This function converts from ``L_bol`` via the
     Hopkins+2007 bolometric correction (BC_2500 ≈ 5.15), which is
     ambiguous and inconsistent with the disc UV model.

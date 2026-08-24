@@ -8,7 +8,7 @@ It mirrors the role ``KernelStrategy`` played on the forward-model side
 coupling to the orchestrator's private internals. That class has since been
 removed, so it is named here in plain markup rather than cross-referenced.
 
-Design rules, these are non-negotiable:
+Design rules; these are non-negotiable:
 
 1. **Python-level only.** ``InferenceContext`` must never be hashed into a
    JIT key, passed through ``jax.jit`` / ``jax.vmap`` / ``jax.lax.scan`` as a
@@ -118,7 +118,7 @@ class InferenceContext:
         The compiled callable has signature ``(params_u, data_args)``:
         parameters in **unbounded** space, and the data passed **as a traced
         argument**. It closes over the parameter spec only. This docstring
-        previously said it closed over ``data_args`` too, it does not
+        previously said it closed over ``data_args`` too; it does not
         (``fn(params_u)`` raises ``TypeError``), and the difference is
         load-bearing rather than cosmetic.
 
@@ -300,7 +300,7 @@ class InferenceContext:
     # only needs an ``InferenceContext`` and the data + noise arrays.
     #
     # Properties intentionally mirror the Fitter's attribute names without
-    # the leading underscore, they are read-only from the backend's
+    # the leading underscore; they are read-only from the backend's
     # perspective, but the storage stays on the Fitter (single source of
     # truth) until a separate refactor lifts the config into its own type.
 

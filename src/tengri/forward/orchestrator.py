@@ -334,7 +334,7 @@ def validate_pipeline(components: Iterable[SEDComponent]) -> None:
     2. **Missing producer.** A key declared in :meth:`inputs` has no
        upstream :meth:`outputs`. The error message includes a
        ``Did you mean: ...`` suggestion when a published key is within edit
-       distance 2, this is what catches the silent-rename hazard
+       distance 2; this is what catches the silent-rename hazard
        (``L_ir`` → ``L_dust_total`` produces a suggestion).
     3. **Out-of-order producer.** A required key is published by a
        component that appears *after* the consumer in the pipeline list.

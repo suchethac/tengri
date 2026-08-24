@@ -800,7 +800,7 @@ class PopulationFitter:
             # Everything the flat seam can drive. The hierarchical posterior is
             # already a flat unconstrained vector with an iid N(0,1) prior (see
             # _hierarchical_flat), so a sampler being "hierarchical" is a
-            # property of the problem, not of the sampler, there is nothing
+            # property of the problem, not of the sampler; there is nothing
             # left to special-case per backend.
             if method in FLAT_SAMPLERS:
                 return run_flat_sampler(
@@ -1657,7 +1657,7 @@ class PopulationFitter:
         # ── Build shared correlated field maker ───────────────
         # The CFM creates the generative model for the GP field.
         # PSD hyperparameters (fluctuations, slope) are SHARED across
-        # all galaxies, this is the hierarchical coupling.
+        # all galaxies; this is the hierarchical coupling.
         cfm = jft.CorrelatedFieldMaker("psd_")
         cfm.set_amplitude_total_offset(offset_mean=0.0, offset_std=(1e-3, 1e-4))
 

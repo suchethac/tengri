@@ -841,7 +841,7 @@ def build_jit_engine(fitter, pos_dict):
             r"""M(xi) @ v = (J/sigma)^T (J/sigma) v + v.
 
             Algebraically ``J^T N^{-1} J v + v``, but never forming
-            :math:`N^{-1} = 1/\sigma^2`, that is ~1e59 at a real photometric
+            :math:`N^{-1} = 1/\sigma^2`; that is ~1e59 at a real photometric
             sigma and simply does not exist in float32, so the shipped
             spelling returned ``inf``, or ``NaN`` wherever ``Jv`` was exactly
             zero. Whitening twice keeps every intermediate representable

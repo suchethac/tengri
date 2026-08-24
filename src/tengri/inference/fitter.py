@@ -637,7 +637,7 @@ def _has_line_adjacent_channel(model) -> bool:
     ``line_ratios`` needs the nebular backend's DISCRETE line catalog
     (``line_waves``/``line_lums``). The precise mechanism is narrower than
     594a60552 recorded: ``FeaturePrecomp`` *alone* publishes that catalog
-    fine, it is the ``WavePrecomp`` + ``FeaturePrecomp`` **pair** that drops
+    fine; it is the ``WavePrecomp`` + ``FeaturePrecomp`` **pair** that drops
     it, because the per-Q_H photometry channel only exists when WavePrecomp
     supplied filters, and that is what arms the fast grid branch.
 
@@ -1305,7 +1305,7 @@ class Fitter:
                         f"Parameter {key!r} is not a valid parameter name. "
                         f"Valid parameters: {all_params}"
                     )
-            # Merge the override INTO the fixed-values dict, this is the single
+            # Merge the override INTO the fixed-values dict; this is the single
             # source of truth the loss closure bakes at build time
             # (``loss_functions.build_loss_fn`` -> ``fitter._fixed_values``) and the
             # output conversion (``_to_physical``) reads. Merging only in
@@ -1322,7 +1322,7 @@ class Fitter:
         # baked value with ``data_args["redshift"]``) and keep it OUT of the
         # engine cache key, so distinct per-row redshifts share one compiled
         # program instead of recompiling per row. The merge into
-        # ``_fixed_values`` above still happens, it keeps reporting
+        # ``_fixed_values`` above still happens; it keeps reporting
         # (``_to_physical``) honest, and the baked value is dead weight in the
         # loss because the ``data_args`` injection always overrides it.
         # Invariant: the key omits redshift *iff* ``data_args`` carries it, so
@@ -1478,7 +1478,7 @@ class Fitter:
         (and only when) the loss would otherwise pay for the full-grid forward,
         so the two must not be able to disagree.
 
-        ``_data_args`` itself is not available here, it is built after the
+        ``_data_args`` itself is not available here; it is built after the
         approx policy resolves, so the channel is resolved directly.
         """
         return self._line_fluxes_for(model) is not None
@@ -2926,7 +2926,7 @@ class Fitter:
             return
         if n_chains is not None and n_chains > 1:
             warmup_kw["n_chains"] = n_chains
-            # Broad by design, this is a warmup, and any exception a real fit
+            # Broad by design; this is a warmup, and any exception a real fit
             # can raise can surface here too, so narrowing the type would just
             # let some failures escape and abort a run that was going to work.
             # What was wrong is that the failure left no trace: a warmup that

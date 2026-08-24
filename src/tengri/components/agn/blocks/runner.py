@@ -505,7 +505,7 @@ agn_torus_block, agn_attenuation_block : str
     # physical disc models used here (multicolor, kubota_done, richards2006,
     # ...), which already carry their own foreshortening. Comparing this
     # L_2500_intrinsic to CIGALE's ``intrin_Lnu_2500A_30deg`` therefore shows an
-    # ~eta(30 deg) (~27%) offset for a non-SKIRTOR disc, that is a convention
+    # ~eta(30 deg) (~27%) offset for a non-SKIRTOR disc; that is a convention
     # difference between disc models, not a bug. Do NOT blindly multiply by
     # eta(30 deg) here (it would double-count inclination for discs that model
     # their own, and be wrong for isotropic ones).

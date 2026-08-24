@@ -506,7 +506,7 @@ def _fetch_from_svo(svo_id: str, short_name: str | None = None) -> tuple[np.ndar
             "optional dependency.\n"
             "    pip install 'astro-tengri[filters]'\n"
             "Every filter tengri.list_filters() names ships as a cached curve "
-            "under data/filters/ and loads without it, this is only needed "
+            "under data/filters/ and loads without it; this is only needed "
             "to fetch a curve SVO has and tengri does not."
         ) from exc
 
@@ -624,7 +624,7 @@ def download_filter(
     and ``load_filter_set`` pass ``cache_dir`` down unchanged, so ``None``
     is resolved here once rather than in each of them.
 
-    An explicit *cache_dir* is honored exactly as given, it is a caller
+    An explicit *cache_dir* is honored exactly as given; it is a caller
     saying "use this one". Only the ``None`` default searches every cache via
     :func:`find_cached_filter`, so a partial cache nearer the working directory
     can no longer hide a complete one further up (see that function's Notes).

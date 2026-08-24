@@ -722,7 +722,7 @@ def measure_indices_from_window_lut(
     reddens the emission by birth-cloud + diffuse automatically, matching the
     exact forward's ``lnu_age * transmission`` (validated < 4e-4 on Hα-EW /
     Dn4000 / Balmer). (For an *additive* nebular backend the emitted SED must be
-    reddened at y=1 explicitly, that is the additive path, not this one.)
+    reddened at y=1 explicitly; that is the additive path, not this one.)
 
     Parameters
     ----------

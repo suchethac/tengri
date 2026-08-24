@@ -798,7 +798,7 @@ class Observation:
         # absent (structural no-op) when IGM is disabled, so low-z / IGM-off
         # models are bit-unchanged.
         #
-        # ``sed_atten`` feeds the spectroscopy block ONLY, that is an observed-frame
+        # ``sed_atten`` feeds the spectroscopy block ONLY; that is an observed-frame
         # channel, where the absorber belongs.
         #
         # The observed-photometry block does NOT use it: ``project_photometry`` reads
@@ -858,7 +858,7 @@ class Observation:
 
         # If observables_type is provided, populate and return the NamedTuple.
         # Line fluxes / line ratios / spectral indices are NOT projection
-        # observables, they are scalar measurables computed separately
+        # observables; they are scalar measurables computed separately
         # (predict_line_fluxes / predict_line_ratios / predict_spectral_indices)
         # and composed into the likelihood via the prediction dict, so their
         # presence on the Observation no longer blocks the projection here.
@@ -1402,7 +1402,7 @@ class Observation:
         if igm_factor is not None:
             if stellar_attenuated_igm is not None:
                 # Stellar already carries T evaluated AT the quadrature nodes
-                # (#1135), so the band factor must not touch it, that would apply
+                # (#1135), so the band factor must not touch it; that would apply
                 # the IGM twice. Everything the quadrature cannot reach (nebular
                 # lines, AGN, dust emission) keeps ⟨T⟩_f, which is what it had
                 # before; the stellar continuum dominates the broadband and is now

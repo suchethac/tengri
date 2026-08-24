@@ -6,7 +6,7 @@ the associated noise-floor and calibration defaults, so a notebook can say
 ``Instrument.JWST_NIRCam()`` instead of hand-rolling those pieces every time.
 
 This is a *thin convenience layer* over the existing :class:`Photometry`,
-:class:`Spectroscopy`, and :class:`NoiseModel` classes, it does not introduce
+:class:`Spectroscopy`, and :class:`NoiseModel` classes; it does not introduce
 new physics, and the underlying objects remain the source of truth.
 
 Examples

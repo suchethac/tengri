@@ -2747,7 +2747,7 @@ class Prediction:
         """Observed-frame F_nu, optionally resampled onto ``wave_obs`` [Angstrom].
 
         Refuses on a fast-nebular model for the same reason as
-        :meth:`_rest_sed_on`, this is the same SED, on a different axis (#1665).
+        :meth:`_rest_sed_on`; this is the same SED, on a different axis (#1665).
 
         ``wave_obs`` is OBSERVED-frame, matching this SED's own axis
         (:attr:`wave_obs`) and :meth:`spectrum`. The deprecated

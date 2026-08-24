@@ -876,7 +876,7 @@ def run_flat_sampler(
     # `logdensity_fn_2arg` is a STATIC argument, so a new lambda object per call
     # is a new compile key even when the code is identical; and capturing the
     # data bakes it in as a constant, making each catalog its own program.
-    # `data_args` must hold ARRAYS ONLY, it is traced. The callable goes in the
+    # `data_args` must hold ARRAYS ONLY; it is traced. The callable goes in the
     # static slot, and is built once per problem rather than once per call.
     ld2 = prob.log_prob_with_data
     data_args = prob.data_args
@@ -1095,7 +1095,7 @@ def run_flat_sampler(
         while True:
             loop_key, sk = jax.random.split(loop_key)
             live, dead_info = step(sk, live)
-            # Keep the dead particles, drop update_info immediately, it is
+            # Keep the dead particles, drop update_info immediately; it is
             # the replacement step's MCMC internals, 3-4x larger than the
             # particles and unused by sample/ess (same choice as run_nss).
             dead.append(dead_info._replace(update_info=None))

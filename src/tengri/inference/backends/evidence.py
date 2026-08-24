@@ -70,7 +70,7 @@ def _get_nss_fns(
     """Return (init_jit, step_jit) cached on the model.
 
     Both functions accept ``data_args`` as a *traced* JAX argument so that the
-    compiled XLA program is generic, it is reused for every galaxy that shares
+    compiled XLA program is generic; it is reused for every galaxy that shares
     the same model dimensionality and data shape, with zero recompilation.
 
     The functions are keyed by model configuration and stored in the model-level

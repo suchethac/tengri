@@ -159,7 +159,7 @@ def ingest_catalog(
     else:
         # No band-name check here, deliberately. This used to require every
         # entry to already BE a band name, which meant `flux_cols` could only
-        # ever be a permutation of its own default, it could not name a real
+        # ever be a permutation of its own default; it could not name a real
         # catalog column, the only reason the parameter exists (#1458). Column
         # existence is validated against the TABLE in step 2 below, which is
         # the right referent and already reports the actual column list.

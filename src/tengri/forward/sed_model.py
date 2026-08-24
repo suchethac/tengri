@@ -1398,12 +1398,12 @@ class SEDModel:
     # before the ``approx=`` flag was introduced (``_build_precomputed_data``
     # always computed ``igm_eff`` when ``_uses_igm`` and ``_z_fixed`` were set).
     # Structural switches only. The band-projection knobs are NOT written out
-    # here, they are read off a default-constructed :class:`WavePrecomp`, which
+    # here; they are read off a default-constructed :class:`WavePrecomp`, which
     # owns them.
     #
     # They used to be a second, hand-maintained copy, and the copy disagreed:
     # this dict said ``taylor_correction=True, n_subbands=0`` while WavePrecomp
-    # said ``False, 5``. That divergence is not cosmetic, it is a silent
+    # said ``False, 5``. That divergence is not cosmetic; it is a silent
     # accuracy change, and it shipped once. Before the ``or WavePrecomp()``
     # fallback below existed, ``approx=SpectrumPrecomp()`` on a joint
     # observation reached the projector with a live photometry LUT and picked
@@ -1544,7 +1544,7 @@ class SEDModel:
                 "since 2026-05-20 (#1433): it casts nothing, returns bit-identical "
                 "results to float64, and only costs an extra compile because it "
                 "still enters the model's cache key. For float32, run inside a "
-                "`with jax.enable_x64(False):` context, that is the mechanism the "
+                "`with jax.enable_x64(False):` context; that is the mechanism the "
                 "float32 range protections in components/ are written against.",
                 DeprecationWarning,
                 stacklevel=2,
@@ -7066,7 +7066,7 @@ class SEDModel:
         keys on it carry no stability guarantee and may change without
         notice.
 
-        It is **not** on the removal path either, it has production
+        It is **not** on the removal path either; it has production
         callers and is classified ``UNSANCTIONED`` rather than retired
         (``tests/contract/test_public_api_surface.py``). Do not describe
         it with the d-word: ``test_predict_surface_classification.py``
@@ -7410,7 +7410,7 @@ class SEDModel:
             # ``*_spec_lnu_precomp`` / ``*_phot_lnu_precomp`` family; collect
             # dicts and build the per-model Observables once so phot_fnu and
             # spec_fnu coexist. (Velocity dispersion / LSF are not applied on the
-            # per-pixel continuum LUT, that is SpectrumPrecomp's documented
+            # per-pixel continuum LUT; that is SpectrumPrecomp's documented
             # low-to-medium-R domain.)
             if spec_lut:
                 out: dict = {}
@@ -7614,7 +7614,7 @@ class SEDModel:
         #
         # Driven by the component's own ``accepts_threaded_templates`` flag
         # rather than a list of classes, so a template-backed component added
-        # later threads the day it lands, it does not have to be named here.
+        # later threads the day it lands; it does not have to be named here.
         # This walk used to be gated on ``isinstance(component, EmissionComponent)``,
         # which is why the shock grid went on baking after the whole dust
         # subsystem was fixed.
@@ -8911,7 +8911,7 @@ class SEDModel:
         #
         # PR #518 diagnosed exactly this and fixed it for the four keys in
         # ``_TOP_LEVEL_SETTINGS`` (``n_grid`` and friends), which this rule
-        # subsumes, they are not ``__init__`` parameters, so they route here.
+        # subsumes; they are not ``__init__`` parameters, so they route here.
         # Every other keyword kept the old behavior, which is how ``stellar=``
         # came to die this way in five reproduction notebooks after #1720
         # removed it (#1776-#1781).

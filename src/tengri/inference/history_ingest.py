@@ -437,7 +437,7 @@ def ingest_histories(
         lookup would silently clip.
     ssp_lgmet : array_like, shape (n_met,), optional
         The SSP library's absolute log10(Z) grid. When ``None`` the grid check is
-        skipped, there is nothing to check against.
+        skipped; there is nothing to check against.
 
     Returns
     -------

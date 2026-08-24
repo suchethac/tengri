@@ -25,7 +25,7 @@ from a flat set of keyword arguments without constructing each
 This is the **public-facing** orchestrator entry point for users who
 want the raw component chain without a :class:`tengri.SEDModel`.
 ``SEDModel`` itself routes every prediction through the same
-orchestrator internally, there is one forward path.
+orchestrator internally; there is one forward path.
 """
 
 from __future__ import annotations

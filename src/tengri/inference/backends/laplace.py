@@ -178,7 +178,7 @@ def _newton_decrement(grad_flat, eigenvalues, eigenvectors):
 
     Notes
     -----
-    The non-positive case is not a corner case to tidy away, it is the one
+    The non-positive case is not a corner case to tidy away; it is the one
     input that breaks the formula's own algebra. A negative eigenvalue makes
     the sum **negative**, so a naive ``d > tol`` test reads as "converged" at a
     saddle. Reachable whenever ``regularize=False`` leaves the spectrum

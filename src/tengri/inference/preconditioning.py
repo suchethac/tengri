@@ -477,7 +477,7 @@ def _preconditioner_with_conditioning(
 
 #: Largest ``D`` at which preconditioning has a measured cost profile. Above it the
 #: ``O(D^3)`` factorization is untested, so an explicit request is honored but the cost
-#: is the caller's to own. This is **advisory**, it does not enable anything.
+#: is the caller's to own. This is **advisory**; it does not enable anything.
 #:
 #: Measured on the field model (CPU, f64): the Hessian is **flat at ~2 s** from D=25 to
 #: D=521, ``jax.hessian`` is ``jacfwd(jacrev)``, which vectorizes rather than taking D
@@ -628,7 +628,7 @@ class PreconditionedProblem:
         """Map sampled draws back to the standardized latent space.
 
         Call this on the sampler's output before anything interprets it as
-        parameters. Safe to call unconditionally, it is the identity when
+        parameters. Safe to call unconditionally; it is the identity when
         preconditioning is off.
 
         Parameters
