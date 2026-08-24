@@ -42,6 +42,7 @@ from __future__ import annotations
 
 import ast
 import json
+import subprocess
 import sys
 import warnings
 from pathlib import Path
@@ -517,30 +518,56 @@ def format_violation(file_path: Path, lineno: int, vtype: str, details: dict) ->
     return messages.get(vtype, f"{rel}:{lineno}  {vtype}")
 
 
+#: Directories to skip when git is unavailable and the walk has to fall back
+#: to the filesystem. Every entry is something git ignores, which is the point:
+#: the list was an attempt to spell out "not source", by hand, one name at a
+#: time. It is kept only for the no-git fallback.
+_FALLBACK_SKIP_DIRS = (".git", ".venv", "node_modules", ".claude", "build", "dist")
+
+
+def candidate_files() -> list[Path]:
+    """Every file the guard should scan: the ones git tracks.
+
+    This used to be ``REPO_ROOT.rglob("*")`` minus a hand-written list of
+    directory names. That list can only ever name the generated trees someone
+    thought of: ``docs/_build`` was missing, so anyone who had built the docs
+    locally got hundreds of violations out of their own build output, none of
+    which exist in a CI checkout. Local and CI disagreed, and the local answer
+    was the wrong one.
+
+    Tracked files are the honest domain. It is what CI checks out, so the two
+    now agree by construction, and no future generated directory needs adding
+    to a list. A file that is not tracked is not yet part of the repository.
+
+    Falls back to the filesystem walk if git is not available, so the guard
+    still runs outside a checkout.
+    """
+    try:
+        out = subprocess.run(
+            ["git", "-C", str(REPO_ROOT), "ls-files", "-z"],
+            capture_output=True,
+            check=True,
+        ).stdout
+    except (OSError, subprocess.CalledProcessError):
+        skip = {REPO_ROOT / d for d in _FALLBACK_SKIP_DIRS}
+        return sorted(
+            p
+            for p in REPO_ROOT.rglob("*")
+            if p.is_file() and not any(str(p).startswith(str(s)) for s in skip)
+        )
+    names = [n for n in out.decode("utf-8", "surrogateescape").split("\0") if n]
+    # A tracked path can be absent from the working tree during a partial
+    # checkout or a sparse one; skip those rather than raising on open().
+    return sorted(p for p in (REPO_ROOT / n for n in names) if p.is_file())
+
+
 def main(list_only: bool = False) -> int:
     """Run the guard. Return 0 if valid, 1 if violations found."""
     violations = []
     seen_allowlist = set()
 
-    # Build paths to skip (in repo root)
-    skip_dirs = {
-        REPO_ROOT / ".git",
-        REPO_ROOT / ".venv",
-        REPO_ROOT / "node_modules",
-        REPO_ROOT / ".claude",
-        REPO_ROOT / "build",
-        REPO_ROOT / "dist",
-    }
-
-    # Walk all files in the repo
-    for path in sorted(REPO_ROOT.rglob("*")):
-        # Skip directories
-        if path.is_dir():
-            continue
-
-        # Skip files in excluded directories or in __pycache__
-        if any(str(path).startswith(str(skip_dir)) for skip_dir in skip_dirs):
-            continue
+    # Walk the files git tracks, which is exactly what CI checks out.
+    for path in candidate_files():
         if "__pycache__" in path.parts:
             continue
 
