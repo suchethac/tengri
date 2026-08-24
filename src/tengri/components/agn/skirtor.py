@@ -74,6 +74,58 @@ class SKIRTORComponents(NamedTuple):
 # ── Template grid interpolation ───────────────────────────────────
 
 
+def _ascending_axes(result: dict) -> dict:
+    """Return *result* with every descending parameter axis reversed.
+
+    The v3 templates store ``cos_inclination`` descending (1 → 0, because the
+    inclination nodes ascend in *angle*).  Every downstream interpolation
+    helper requires strictly ascending nodes: :func:`~tengri.utils.interpolation.edges_for_grid`
+    documents it, and ``compute_grid_weights`` relies on ``searchsorted``,
+    which is silently wrong on descending input rather than raising.  A
+    descending axis therefore produces a negative kernel bandwidth and
+    collapses to a nearest-node lookup — dead gradients on a fittable
+    parameter (#1911).
+
+    Normalizing here, at the single point where the file is read, is what
+    keeps the consumers consistent: the torus grid, the disk/dust components,
+    the disc-attenuation bundle and the photometry precompute all build their
+    axes from this dict.  Reversing in only some of them silently desynchronizes
+    the runtime and precompute paths.
+
+    Parameters
+    ----------
+    result : dict
+        Raw arrays as read from the grid file (``axes`` plus any of
+        ``total``, ``disk``, ``dust``).
+
+    Returns
+    -------
+    dict
+        A new dict with ascending axes and every cube flipped to match.
+        Returned unchanged when all axes already ascend.
+    """
+    import numpy as np
+
+    axes = [np.asarray(ax) for ax in result["axes"]]
+    descending = [i for i, ax in enumerate(axes) if ax.size > 1 and ax[0] > ax[-1]]
+    if not descending:
+        return result
+
+    out = dict(result)
+    for i in descending:
+        axes[i] = axes[i][::-1]
+    # The parameter axes are the leading dimensions of every cube (trailing
+    # dimension is wavelength), so axis index i is the same in both.
+    for key in ("total", "disk", "dust"):
+        if key in out:
+            cube = np.asarray(out[key])
+            for i in descending:
+                cube = np.flip(cube, axis=i)
+            out[key] = cube
+    out["axes"] = tuple(axes)
+    return out
+
+
 def _load_grid_arrays(grid_path: str):
     """Load raw numpy arrays from a SKIRTOR grid file.
 
@@ -85,8 +137,10 @@ def _load_grid_arrays(grid_path: str):
     Returns
     -------
     dict
-        Keys: ``wave``, ``total``, ``axes`` (tau, p, q, oa, cos_inc),
-        and optionally ``disk``, ``dust``.
+        Keys: ``wave``, ``total``, ``axes`` (tau, p, q, oa, cos_inc — plus
+        radius_ratio before cos_inc on v3 grids, see ``has_radius_ratio``),
+        and optionally ``disk``, ``dust``.  Axes are always strictly
+        ascending — see :func:`_ascending_axes`.
 
     Notes
     -----
@@ -151,7 +205,7 @@ def _load_grid_arrays(grid_path: str):
     # (6-axis: tau, p, q, oa, radius_ratio, cos_inc) or is a legacy 5-axis grid
     # (tau, p, q, oa, cos_inc). The interpolation helpers drop the R coordinate
     # from the query point for legacy grids — see ``_match_point_to_axes`` (#772).
-    return result
+    return _ascending_axes(result)
 
 
 def _match_point_to_axes(point: tuple, axes: tuple) -> tuple:
@@ -222,16 +276,20 @@ def _interpolate_and_normalize(
     **Citation**: matches CIGALE skirtor2016 processing (see
     ``scripts/download_skirtor_templates.py``).
 
-    **Non-uniform axis note**: The cos_inclination axis is non-uniform
-    (cos of uniform-in-angle nodes, spacing ratio ~11x) and exhibits the
-    #1851 degeneracy: nearest-neighbor-like behavior over ~67.5% of the range.
-    Re-baselining it to the corrected index-space path requires re-validating
-    silicate features, golden-sample photometry, and parity tests against
-    CIGALE — see #1911.
+    **Non-uniform axis note**: The cos_inclination axis is non-uniform (cosines
+    of uniform-in-angle nodes, spacing ratio 11.43) and is stored descending.
+    Both are handled (#1911): :func:`_ascending_axes` reverses it at load time,
+    and ``index_space_interp=True`` below puts it on the corrected index-space
+    path. Before that, a 40-point sweep through this function gave 23/40
+    distinct SEDs with 60% exactly-zero gradients; it now gives 40/40 and 0%.
     """
-    # Use default index_space_interp=None (physical-space path) for backward
-    # compatibility. The cos_inc axis carries the #1851 degeneracy — see note above.
-    template = interp_nd_triweight(grid_jax, axes, edges, _match_point_to_axes(point, axes))
+    # ``index_space_interp=True`` is applied per-axis by ``compute_grid_weights``
+    # and only takes effect on axes it measures as non-uniform. On this grid
+    # tau/p/q/oa/radius are uniform to floating-point, so the flag reaches only
+    # cos_inclination (spacing ratio 11.43) — see #1911.
+    template = interp_nd_triweight(
+        grid_jax, axes, edges, _match_point_to_axes(point, axes), index_space_interp=True
+    )
     # Bolometric integral on the *template* wavelength grid (full UV–FIR
     # coverage). Using the user wave grid would clip the FIR tail and
     # over-normalize on truncated grids; trapezoid in λ matches the
@@ -281,17 +339,21 @@ def _load_skirtor_grid_data(grid_path: str) -> SKIRTORGrid:
 
     Prefers the v3 dust-only template when present (avoids disc/dust
     double-counting); falls back to the v2 ``total`` cube.
+
+    ``_load_grid_arrays`` has already put every axis in ascending order
+    (#1911), so the axes reach ``edges_for_grid`` in the order it requires.
     """
     raw = _load_grid_arrays(grid_path)
+    grid = raw["dust"] if "dust" in raw else raw["total"]
+
     # ``ensure_compile_time_eval`` so the concrete arrays are captured even if
     # the first call happens inside a jit trace (mirrors the legacy closure).
     with jax.ensure_compile_time_eval():
-        _grid_key = "dust" if "dust" in raw else "total"
-        grid = jnp.array(raw[_grid_key])
+        grid_jax = jnp.array(grid)
         wave_grid = jnp.array(raw["wave"])
         axes = tuple(jnp.array(ax) for ax in raw["axes"])
         edges = tuple(edges_for_grid(ax) for ax in axes)
-    return SKIRTORGrid(grid=grid, wave_grid=wave_grid, axes=axes, edges=edges)
+    return SKIRTORGrid(grid=grid_jax, wave_grid=wave_grid, axes=axes, edges=edges)
 
 
 def _skirtor_grid_sed(
@@ -738,28 +800,19 @@ def _load_raw_disk_dust_grid():
     """Load raw (un-normalized) SKIRTOR disk/dust template grids for R.
 
     Returns ``(disk_jax, dust_jax, wave_grid, axes)`` or ``None`` if the v3
-    grid (separate disk/dust components) is unavailable. Any descending axis
-    (the grid stores ``cos_inclination`` 1→0) is reversed so the node-exact
-    PCHIP interpolant used for R sees strictly-ascending coordinates.
+    grid (separate disk/dust components) is unavailable. ``_load_grid_arrays``
+    has already reversed the descending ``cos_inclination`` axis (#1911), so
+    the node-exact PCHIP interpolant used for R sees strictly-ascending
+    coordinates.
     """
-    import numpy as _np
-
     raw = _load_grid_arrays(_find_skirtor_grid())
     if "disk" not in raw or "dust" not in raw:
         return None
-    disk = _np.asarray(raw["disk"])
-    dust = _np.asarray(raw["dust"])
-    axes_list = [_np.asarray(ax) for ax in raw["axes"]]
-    for i, ax in enumerate(axes_list):
-        if ax.size > 1 and ax[0] > ax[-1]:  # descending → reverse axis i
-            axes_list[i] = ax[::-1]
-            disk = _np.flip(disk, axis=i)
-            dust = _np.flip(dust, axis=i)
     with jax.ensure_compile_time_eval():
-        disk_jax = jnp.array(disk)
-        dust_jax = jnp.array(dust)
+        disk_jax = jnp.array(raw["disk"])
+        dust_jax = jnp.array(raw["dust"])
         wave_grid = jnp.array(raw["wave"])
-        axes = tuple(jnp.array(ax) for ax in axes_list)
+        axes = tuple(jnp.array(ax) for ax in raw["axes"])
     return disk_jax, dust_jax, wave_grid, axes
 
 
@@ -784,6 +837,29 @@ class SKIRTORBundle(NamedTuple):
 
     torus: SKIRTORGrid
     disc_dust: tuple | None
+
+
+def load_skirtor_grid(grid_path: str | None = None) -> SKIRTORGrid:
+    """Load a SKIRTOR grid file into a threadable SKIRTORGrid pytree.
+
+    Parameters
+    ----------
+    grid_path : str, optional
+        Path to a SKIRTOR grid file. If None, auto-discovers the best available.
+
+    Returns
+    -------
+    SKIRTORGrid
+        Threadable template arrays (grid, wave_grid, axes, edges).
+
+    Notes
+    -----
+    Public API for tests and research code. For production model loading,
+    use ``load_skirtor_bundle()`` which loads both torus and disc_dust grids.
+    """
+    if grid_path is None:
+        grid_path = _find_skirtor_grid()
+    return _load_skirtor_grid_data(grid_path)
 
 
 def load_skirtor_bundle() -> SKIRTORBundle:
@@ -1089,9 +1165,15 @@ agn_radius_ratio, agn_cos_inc : float, optional
         agn_radius_ratio,
         1.0,  # cos_inc = 1 = face-on
     )
-    disk_at_i = interp_nd_triweight(disk_grid, axes, edges, _match_point_to_axes(point_i, axes))
+    # Same non-uniform ``cos_inclination`` axis as the torus path, so the same
+    # index-space treatment (#1911). Both evaluations must use it: the returned
+    # quantity is the ratio disk(i)/disk(face-on), and mixing the two paths
+    # would put a different interpolant in the numerator and denominator.
+    disk_at_i = interp_nd_triweight(
+        disk_grid, axes, edges, _match_point_to_axes(point_i, axes), index_space_interp=True
+    )
     disk_at_face = interp_nd_triweight(
-        disk_grid, axes, edges, _match_point_to_axes(point_face, axes)
+        disk_grid, axes, edges, _match_point_to_axes(point_face, axes), index_space_interp=True
     )
     # Safe ratio: where face-on is zero (shouldn't be, but be safe),
     # return 0 attenuation (no contribution).

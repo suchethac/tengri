@@ -254,7 +254,12 @@ def build_skirtor_photometry_lookup(precomp: dict, grid_arrays_traced: tuple | N
                 agn_oa_skirtor,
                 agn_cos_inc,
             )
-            phot_per_lsun = interp_nd_triweight(grid_phot_traced, axes_traced, edges_traced, point)
+            # ``index_space_interp=True`` to match the runtime spectral path
+            # (#1911); leaving it off here would make precompute and runtime
+            # disagree on the non-uniform cos_inclination axis.
+            phot_per_lsun = interp_nd_triweight(
+                grid_phot_traced, axes_traced, edges_traced, point, index_space_interp=True
+            )
             return l_bol_lsun * agn_torus_frac * phot_per_lsun
 
         # Return wrapper that inserts traced arrays
@@ -306,7 +311,8 @@ def build_skirtor_photometry_lookup(precomp: dict, grid_arrays_traced: tuple | N
             agn_oa_skirtor,
             agn_cos_inc,
         )
-        phot_per_lsun = interp_nd_triweight(grid_phot, axes, edges, point)
+        # Matches the traced branch above and the runtime spectral path (#1911).
+        phot_per_lsun = interp_nd_triweight(grid_phot, axes, edges, point, index_space_interp=True)
         return l_bol_lsun * agn_torus_frac * phot_per_lsun
 
     return skirtor_phot
