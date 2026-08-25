@@ -247,8 +247,12 @@ _GRAD_AXES = [
 ]
 
 
-def _fd_step(idx, value, declared):
-    """FD step for one axis, relative for the B-field's seven-decade span."""
+def _fd_step(value, declared):
+    """FD step for one axis; relative when the table declares none.
+
+    The B-field axis spans seven decades, so a step in absolute μG that suits
+    b = 5 is meaningless at b = 0.0001. It takes ``None`` above and scales.
+    """
     return value * 1e-3 if declared is None else declared
 
 
@@ -294,7 +298,7 @@ class TestGradients:
         grad_auto = float(jax.grad(f)(jnp.array(base[idx])))
         np.testing.assert_allclose(
             grad_auto,
-            fd_grad(lambda x: float(f(x)), base[idx], eps=_fd_step(idx, base[idx], step)),
+            fd_grad(lambda x: float(f(x)), base[idx], eps=_fd_step(base[idx], step)),
             rtol=1e-3,
             err_msg=f"shock_line_ratios: FD check d/d{axis}",
         )
