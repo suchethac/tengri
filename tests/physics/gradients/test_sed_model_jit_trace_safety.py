@@ -12,8 +12,6 @@ that:
 
 from __future__ import annotations
 
-from pathlib import Path
-
 import chex
 import jax
 import jax.numpy as jnp
@@ -22,7 +20,8 @@ import pytest
 
 pytestmark = pytest.mark.gradient
 
-_DATA = Path(__file__).resolve().parents[4] / "data"
+from tests._data_skip import DATA_DIR as _DATA  # root computed once; see #1431
+
 _MAPPINGS_H5 = _DATA / "mappings_templates.h5"
 _CAT3D_H5 = _DATA / "cat3d_wind_torus_grid.h5"
 
@@ -154,54 +153,6 @@ class TestShockGridCacheWarming:
                     pytest.fail(f"Grid {key} is traced: {e}")
 
 
-class TestShockJITTraceSafety:
-    """Verify shock kernel JIT-tracing doesn't cause tracer leaks."""
-
-    @_SKIP_NO_MAPPINGS
-    def test_shock_jit_trace_no_tracer_leak(self, shock_spec_with_filters):
-        """Build SEDModels sequentially and JIT-trace each without tracer leaks."""
-        from tengri import SEDModel
-
-        spec, observation, ssp_data = shock_spec_with_filters
-
-        # Build first SEDModel (caches grids at init)
-        model1 = SEDModel(spec, ssp_data, observation=observation, precompute=False)
-
-        # JIT-compile and call kernel on model1
-        key1 = jax.random.PRNGKey(42)
-        params1 = spec.sample(key1)
-
-        def jit_predict_phot(model, params):
-            return model.predict_photometry(params)
-
-        jit_fn = jax.jit(jit_predict_phot, static_argnames=[])
-
-        # This should succeed without TracerArrayConversionError
-        sed1 = jit_fn(model1, params1)
-        chex.assert_tree_all_finite(sed1)
-        # Build a second SEDModel (cache already warm)
-        model2 = SEDModel(spec, ssp_data, observation=observation, precompute=False)
-
-        # JIT-compile and call kernel on model2
-        key2 = jax.random.PRNGKey(123)
-        params2 = spec.sample(key2)
-
-        # Create a new JIT-compiled function (different closure)
-        jit_fn2 = jax.jit(jit_predict_phot, static_argnames=[])
-
-        # This should also succeed without tracer leaks
-        sed2 = jit_fn2(model2, params2)
-        chex.assert_tree_all_finite(sed2)
-        # Build a third SEDModel to stress-test cache persistence
-        model3 = SEDModel(spec, ssp_data, observation=observation, precompute=False)
-        key3 = jax.random.PRNGKey(999)
-        params3 = spec.sample(key3)
-
-        jit_fn3 = jax.jit(jit_predict_phot, static_argnames=[])
-        sed3 = jit_fn3(model3, params3)
-        chex.assert_tree_all_finite(sed3)
-
-
 class TestCat3DGridCacheWarming:
     """Verify CAT3D-Wind grid caches are warmed to concrete arrays."""
 
@@ -225,36 +176,59 @@ class TestCat3DGridCacheWarming:
             pytest.fail(f"CAT3D-Wind callable failed: {e}")
 
 
-class TestCat3DJITTraceSafety:
-    """Verify CAT3D-Wind kernel JIT-tracing doesn't cause tracer leaks."""
+class TestRepeatedBuildsJITSafely:
+    """Building a model repeatedly must not leave tracers in a grid cache.
 
-    @_SKIP_NO_CAT3D
-    def test_cat3d_jit_trace_no_tracer_leak(self, cat3d_spec_with_filters):
-        """Build SEDModels with CAT3D and JIT-trace without tracer leaks."""
-        from tengri import SEDModel
+    Both halves of this — shock and CAT3D-Wind — were separate classes holding
+    the same test, and **neither had ever run**: the module's ``_DATA`` was
+    ``parents[4]`` where the repo root is ``parents[3]``, so both skip guards
+    were permanently true while the grids sat in ``data/``. See #1431.
 
-        spec, observation, ssp_data = cat3d_spec_with_filters
-
-        # Build first SEDModel with CAT3D (caches grids at init)
-        model1 = SEDModel(spec, ssp_data, observation=observation, precompute=False)
-
-        key1 = jax.random.PRNGKey(42)
-        params1 = spec.sample(key1)
+    Once they ran, both failed, for a defect in the tests rather than the
+    source. They wrote
 
         def jit_predict_phot(model, params):
             return model.predict_photometry(params)
 
         jit_fn = jax.jit(jit_predict_phot, static_argnames=[])
-
-        # This should succeed without TracerArrayConversionError
         sed1 = jit_fn(model1, params1)
-        chex.assert_tree_all_finite(sed1)
-        # Build a second SEDModel with CAT3D (cache already warm)
-        model2 = SEDModel(spec, ssp_data, observation=observation, precompute=False)
 
-        key2 = jax.random.PRNGKey(123)
-        params2 = spec.sample(key2)
+    with an **empty** ``static_argnames``, so ``SEDModel`` was passed as a
+    traced argument. It is deliberately not a pytree (NAMING_CONTRACT §4b), and
+    JAX refuses it:
 
-        jit_fn2 = jax.jit(jit_predict_phot, static_argnames=[])
-        sed2 = jit_fn2(model2, params2)
-        chex.assert_tree_all_finite(sed2)
+        TypeError: Error interpreting argument ... as an abstract array. The
+        problematic value is of type <class 'tengri.forward.sed_model.SEDModel'>
+
+    The model belongs in the closure, which is how ``predict_photometry`` is
+    meant to be used. The intent — a fresh JIT per build, over several builds,
+    so a cache warmed by an earlier model cannot leak into a later trace — is
+    unchanged, and now actually exercised.
+    """
+
+    @pytest.mark.parametrize(
+        "fixture_name",
+        [
+            pytest.param("shock_spec_with_filters", id="shock", marks=_SKIP_NO_MAPPINGS),
+            pytest.param("cat3d_spec_with_filters", id="cat3d_wind", marks=_SKIP_NO_CAT3D),
+        ],
+    )
+    def test_repeated_builds_jit_without_a_tracer_leak(self, request, fixture_name):
+        """Three sequential builds, each JIT-traced fresh, all finite and non-empty."""
+        from tengri import SEDModel
+
+        spec, observation, ssp_data = request.getfixturevalue(fixture_name)
+
+        for seed in (42, 123, 999):
+            model = SEDModel(spec, ssp_data, observation=observation, precompute=False)
+            params = spec.sample(jax.random.PRNGKey(seed))
+
+            # The model is captured, not traced. A default argument binds it
+            # per iteration rather than closing over the loop variable.
+            jit_predict = jax.jit(lambda p, _model=model: _model.predict_photometry(p))
+            phot = jit_predict(params)
+
+            chex.assert_tree_all_finite(phot)
+            assert np.any(np.asarray(phot) > 0.0), (
+                f"seed={seed}: photometry is identically zero, so 'finite' says nothing"
+            )
