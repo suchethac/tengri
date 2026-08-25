@@ -44,7 +44,7 @@ not something this file can answer. What matters here is that nothing asserted
 either convention, so a kernel that switched from one to the other would change
 its output by ~1e9 at a typical ``agn_log_lbol`` and every test would stay
 green. ``test_leading_argument_scaling`` pins the measured behavior per
-adapter. See the issue linked from that test.
+adapter. Tracked in #2067.
 """
 
 from __future__ import annotations
@@ -216,6 +216,7 @@ def test_leading_argument_scaling(
     This test does not claim which is correct -- that depends on what the
     forward pipeline hands these kernels, which is outside this file. It claims
     only that the behavior is what it is today, so a change is visible.
+    Tracked in #2067.
     """
     waves, trans = simple_agn_filters
     lookup = _build(module, pre_kwargs, build_kwargs, waves, trans)
