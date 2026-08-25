@@ -504,7 +504,17 @@ class TestDSPSIntegration:
 
 
 class TestLoadPrecedence:
-    """Verify the documented resolution order."""
+    """Verify the documented resolution order.
+
+    User-registered name, then ``TENGRI_FILTER_DIR``, then the built-in
+    registry, then SVO alias resolution on the display stem. The SVO step has
+    no test of its own: it is what the two below fall through to, so a
+    regression there fails them. A ``test_svo_alias_beats_synthetic`` used to
+    stand in for it with a ``pass`` body and the comment "This is implicitly
+    tested by other tests; documenting the hierarchy" -- an unskipped test
+    asserting nothing, which the pass count could not distinguish from
+    coverage.
+    """
 
     def test_user_registered_beats_builtin(self, clean_registry, sample_curve):
         """User-registered name takes precedence over FILTER_REGISTRY."""
@@ -539,11 +549,6 @@ class TestLoadPrecedence:
                 os.environ.pop("TENGRI_FILTER_DIR", None)
             else:
                 os.environ["TENGRI_FILTER_DIR"] = old_env
-
-    def test_svo_alias_beats_synthetic(self, clean_registry, sample_curve):
-        """SVO alias resolution (display stem) works after user/directory checks."""
-        # This is implicitly tested by other tests; documenting the hierarchy
-        pass
 
 
 # ── Tests: Integration with Photometry ─────────────────────────────

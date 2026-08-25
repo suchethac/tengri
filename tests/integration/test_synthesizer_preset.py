@@ -47,22 +47,16 @@ class TestPresetBuildsWithoutData:
         assert hasattr(params, "sample")
 
 
-@pytest.mark.skipif(True, reason="JIT tests require SSP data loaded in SEDModel")
-class TestPresetJITCompilation:
-    """Test that forward predictions JIT-compile (requires SSP data)."""
-
-    def test_jit_compiles_on_small_wavelength_grid(self):
-        """Build model and call forward pass inside jax.jit."""
-        pass
-
-
-@pytest.mark.skipif(True, reason="Gradient tests require SEDModel with SSP data")
-class TestPresetGradients:
-    """Test that gradients flow through the forward pass (requires SSP data)."""
-
-    def test_gradient_flows_through_forward(self):
-        """Verify jax.grad works on a loss function."""
-        pass
+# Two classes stood here -- TestPresetJITCompilation and TestPresetGradients --
+# each holding one test whose body was `pass`, under
+# `@pytest.mark.skipif(True, reason="... require SSP data ...")`. Doubly empty:
+# nothing to run, and skipped so it would not run anyway. Their names claimed
+# JIT and gradient coverage of this preset that has never existed in any form,
+# and `skipif(True)` is `skip` spelled so that it reads as conditional.
+#
+# Removed rather than filled in: writing them means loading an SSP grid, which
+# is new coverage and belongs in its own change. `tests/physics/gradients/` is
+# where the real JIT and gradient safety tests live.
 
 
 class TestPresetRegistry:
