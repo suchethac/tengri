@@ -205,10 +205,35 @@ def check_file(path: Path) -> list[str]:
 
 def main() -> int:
     violations: list[tuple[Path, list[str]]] = []
+
+    # The rebinding check runs over EVERY test module, not just the four
+    # taxonomy-enforced trees. It is a different rule: a second `pytestmark`
+    # assignment discards a `skipif` as readily as a taxonomy marker, and that
+    # hurts `tests/unit` and `tests/inference` just as much. Scoping it to
+    # ENFORCED_DIRS would make the guard's domain narrower than the rule it
+    # states -- the shape of both earlier holes in this file.
+    for path in sorted(TESTS_DIR.rglob("test_*.py")):
+        rebound = rebound_pytestmark_scopes(path.read_text(encoding="utf-8"))
+        if rebound:
+            violations.append(
+                (
+                    path.relative_to(REPO_ROOT),
+                    [
+                        f"{scope}: pytestmark assigned {len(lines)}x -- "
+                        f"{', '.join(f'L{n}' for n in lines[:-1])} discarded, "
+                        f"L{lines[-1]} wins. Use one assignment holding a list."
+                        for scope, lines in rebound
+                    ],
+                )
+            )
+
+    rebound_paths = {p for p, _ in violations}
     for enforced in ENFORCED_DIRS:
         if not enforced.exists():
             continue
         for path in sorted(enforced.rglob("test_*.py")):
+            if path.relative_to(REPO_ROOT) in rebound_paths:
+                continue  # already reported above; the marker read is unreliable
             offenders = check_file(path)
             if offenders:
                 violations.append((path.relative_to(REPO_ROOT), offenders))
