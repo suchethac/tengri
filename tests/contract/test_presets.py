@@ -102,12 +102,22 @@ class TestRedshiftPassthrough:
         ],
     )
     def test_redshift_fixed_when_provided(self, preset_func, redshift_val):
-        """When redshift is provided, it is fixed in the preset."""
+        """The redshift is fixed to the value passed, not merely fixed.
+
+        The table above gives every preset two redshifts precisely so the pair
+        can tell them apart -- but asserting only ``is_fixed`` made the two rows
+        identical in what they claimed, and a preset that ignored the argument
+        and pinned ``Fixed(0.0)`` passed both. A wrong-but-fixed redshift is a
+        silent 1e17 flux error (NAMING_CONTRACT §4b.2), so the value is the
+        part worth asserting.
+        """
         params, _ = preset_func(redshift=redshift_val)
-        # redshift should be Fixed in the preset
         z_dist = params._distributions.get("redshift")
         assert z_dist is not None
         assert z_dist.is_fixed, f"{preset_func.__name__} did not fix redshift"
+        assert z_dist.value == pytest.approx(redshift_val), (
+            f"{preset_func.__name__} fixed redshift to {z_dist.value}, not {redshift_val}"
+        )
 
     @pytest.mark.parametrize(
         "preset_func",
