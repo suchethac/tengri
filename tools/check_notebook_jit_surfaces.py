@@ -175,7 +175,14 @@ def _find_jax_transforms(text: str) -> list[tuple[int, int, str]]:
             paren_pos = match.end() - 1
             span = _extract_balanced_span(text, paren_pos)
             if span:
-                spans.append((match.start(), match.start() + len(span), span))
+                # Anchor the span at its open paren, not at the start of the
+                # transform name. ``span`` begins at ``paren_pos``, so this is
+                # the coordinate every consumer needs: ``main`` adds an offset
+                # *into span_text* to it to locate a violation, and the
+                # de-duplication below marks the covered range with it. Keying
+                # on ``match.start()`` broke both -- see the two tests named
+                # for those symptoms in tests/unit.
+                spans.append((paren_pos, paren_pos + len(span), span))
 
     # De-duplicate nested spans: keep only the outermost span at each position.
     # Sort by (start, -end) so longer spans at the same start come first.
