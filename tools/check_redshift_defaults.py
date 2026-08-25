@@ -26,13 +26,48 @@ So the default is unreachable — which makes it dangerous. A default that
 cannot be reached is not a safety net; it is a silencer for the one condition
 worth hearing about.
 
-Exception: some callsites legitimately carry a fallback. Two kinds:
+Why this parses instead of grepping
+-----------------------------------
+The previous version matched one regex against one line at a time::
 
-  1. ``ref_params.get("redshift", ...)`` — caller-supplied reference params,
-     not guaranteed to include Fixed values. Document the reference z choice.
-  2. ``fixed_values.get("redshift", ...)`` — reading from ``spec.get_fixed_values()``,
-     which omits a redshift parameter when it is FREE. Raising breaks every
+    r'\\.get\\s*\\(\\s*["\\']redshift["\\']\\s*,\\s*[0-9\\-\\.e]+'
+
+Measured, it could not see:
+
+* **Any call wrapped across lines.** ``params.get(\\n "redshift",\\n 0.0,\\n)``
+  matches on no single line. Ruff's formatter *produces* that wrapping at line
+  length 99, so a compliant long line escaped the guard automatically.
+* ``params.get("redshift", _DEFAULT_Z)`` — the default had to be a numeric
+  literal, so a named constant or attribute passed.
+* ``params.pop("redshift", 0.0)`` and ``params.setdefault("redshift", 0.0)``,
+  which carry the identical hazard.
+
+Parsing also removed three of the six allowlist entries. They existed only to
+suppress matches inside *docstrings* — the old ``_is_comment_or_docstring``
+heuristic tested whether a line contained ``\"\"\"``, which is true of the
+delimiter line and false of every line between the delimiters. An AST does not
+see docstring text at all.
+
+What counts as a hazardous default
+----------------------------------
+A numeric literal, or a bare name/attribute (``_DEFAULT_Z``, ``self._z0``) that
+could be one. A *computed* default is not flagged: ``float(redshift)`` sets an
+actual redshift rather than substituting for a missing one, and
+``fixed_values.get("redshift", ...)`` is a legitimate chain whose own inner
+call is judged on its own.
+
+Exception: two receivers legitimately carry a fallback, and are named rather
+than allowlisted by file.
+
+  1. ``ref_params`` — caller-supplied reference params, not guaranteed to
+     include Fixed values. The reference z is documented at the callsite.
+  2. ``fixed_values`` — read from ``spec.get_fixed_values()``, which omits a
+     redshift parameter when it is FREE. Raising would break every
      free-redshift model.
+
+Both are expressed as a rule about the receiver, not as a (file, substring)
+suppression, so a new callsite of the same legitimate kind needs no edit here
+and a new callsite of the dangerous kind cannot be smuggled in beside one.
 
 Usage
 -----
@@ -43,113 +78,80 @@ Exit code 0 if no unsafe patterns are found; 1 with violations listed otherwise.
 
 from __future__ import annotations
 
-import re
-import sys
+import ast
 from pathlib import Path
 
 ROOT = Path(__file__).parent.parent
-sys.path.insert(0, str(ROOT / "src"))
-
 SRC = ROOT / "src" / "tengri"
 
-#: Files and patterns that are deliberately safe. Each entry is:
-#: (file_path_relative, line_pattern_substring) → reason
-SAFE_PATTERNS: dict[tuple[str, str], str] = {
-    # Nebular precompute reads caller-supplied reference params, not guaranteed
-    # to include Fixed values. The reference z is documented in the function.
-    (
-        "components/nebular/line_precompute.py",
-        "ref_params.get",
-    ): "caller-supplied reference params; documented reference z",
-    (
-        "components/nebular/nebular_grid_precompute.py",
-        "ref_params.get",
-    ): "caller-supplied reference params; documented reference z",
-    # Likelihood correctly chains params → fixed_values → 0.0, with the
-    # fallback only reached when redshift is not in either place.
-    (
-        "inference/likelihood.py",
-        'params.get("redshift", fixed_values.get',
-    ): "correctly chains params → fixed_values before 0.0 fallback",
-    # Docstring illustrations and assertions, not live code paths
-    (
-        "presets/param_presets.py",
-        'params.get("redshift")',
-    ): "docstring assertion, not a live default path",
-    # Documentation and examples in resolve.py itself
-    ("parameters/resolve.py", 'params.get("redshift"'): "documentation, not a live code path",
-    # Documentation of the problematic pattern in prediction.py
-    (
-        "forward/prediction.py",
-        'params.get("redshift", 0.0)',
-    ): "docstring documentation of the problematic pattern in #1097/#1124/#1127",
-}
+#: Dict methods that take (key, default) and silently substitute the default.
+_HAZARDOUS_METHODS = frozenset({"get", "pop", "setdefault"})
+
+#: Receivers whose fallback is legitimate. See the module docstring.
+_EXEMPT_RECEIVERS = frozenset({"ref_params", "fixed_values"})
 
 
-def _is_comment_or_docstring(path: Path, lineno: int) -> bool:
-    """Check if a line is in a comment or docstring."""
-    text = path.read_text()
-    lines = text.splitlines()
-    if lineno > len(lines) or lineno < 1:
-        return False
-
-    line = lines[lineno - 1]
-    # Skip comment lines
-    if line.strip().startswith("#"):
-        return True
-
-    # Skip lines that contain docstring triple quotes
-    return '"""' in line or "'''" in line
+def _receiver_name(node: ast.expr) -> str:
+    """Best-effort name of the object a method is called on."""
+    if isinstance(node, ast.Name):
+        return node.id
+    if isinstance(node, ast.Attribute):
+        return node.attr
+    return ""
 
 
-def _is_redshift_get_pattern(code_line: str) -> bool:
-    """Check if a line contains a redshift .get() call with a numeric default."""
-    return bool(
-        re.search(
-            r'\.get\s*\(\s*["\']redshift["\']\s*,\s*[0-9\-\.e]+',
-            code_line,
-        )
-    )
+def _is_hazardous_default(node: ast.expr) -> bool:
+    """True for a default that could silently stand in for a real redshift.
+
+    A literal number, or a bare name/attribute that could hold one. A call is
+    not flagged: it computes a value from context rather than substituting a
+    constant, and if it is itself a hazardous lookup it is visited separately.
+    """
+    if isinstance(node, ast.Constant):
+        return isinstance(node.value, (int, float)) and not isinstance(node.value, bool)
+    if isinstance(node, ast.UnaryOp) and isinstance(node.op, (ast.USub, ast.UAdd)):
+        return _is_hazardous_default(node.operand)
+    return isinstance(node, (ast.Name, ast.Attribute))
 
 
-def _get_pattern_context(path: Path, lineno: int) -> str:
-    """Return the code line for context."""
+def find_violations(source: str) -> list[tuple[int, str]]:
+    """Return (lineno, rendered call) for every unsafe redshift default."""
     try:
-        lines = path.read_text().splitlines()
-        if 0 < lineno <= len(lines):
-            return lines[lineno - 1].strip()
-        return ""
-    except Exception:
-        return ""
+        tree = ast.parse(source)
+    except SyntaxError:
+        return []
+
+    found: list[tuple[int, str]] = []
+    for node in ast.walk(tree):
+        if not isinstance(node, ast.Call):
+            continue
+
+        fn = node.func
+        if not isinstance(fn, ast.Attribute) or fn.attr not in _HAZARDOUS_METHODS:
+            continue
+        if len(node.args) != 2:
+            continue
+
+        key = node.args[0]
+        if not (isinstance(key, ast.Constant) and key.value == "redshift"):
+            continue
+
+        if _receiver_name(fn.value) in _EXEMPT_RECEIVERS:
+            continue
+        if not _is_hazardous_default(node.args[1]):
+            continue
+
+        found.append((node.lineno, ast.unparse(node)))
+
+    return found
 
 
 def main() -> int:
-    violations = []
+    violations: list[tuple[str, int, str]] = []
     for path in sorted(SRC.rglob("*.py")):
-        text = path.read_text()
-        for lineno, line in enumerate(text.splitlines(), 1):
-            if not _is_redshift_get_pattern(line):
-                continue
-
-            # Skip comments and docstrings
-            if _is_comment_or_docstring(path, lineno):
-                continue
-
-            rel = path.relative_to(ROOT)
-            rel_str = str(rel)
-
-            # Check if this is a deliberately-safe pattern
-            is_safe = False
-            for (safe_file, safe_pattern), _reason in SAFE_PATTERNS.items():
-                if safe_file in rel_str and safe_pattern in line:
-                    is_safe = True
-                    break
-
-            if is_safe:
-                continue
-
-            context = _get_pattern_context(path, lineno)
-            violations.append((rel_str, lineno, context))
+        rel = str(path.relative_to(ROOT))
+        for lineno, rendered in find_violations(path.read_text(encoding="utf-8")):
+            violations.append((rel, lineno, rendered))
 
     if not violations:
         print("check_redshift_defaults: OK — no unsafe redshift defaults found.")
@@ -159,9 +161,9 @@ def main() -> int:
         f"check_redshift_defaults: {len(violations)} redshift default(s) "
         "should use require_redshift() instead\n"
     )
-    for rel, lineno, context in violations:
+    for rel, lineno, rendered in violations:
         print(f"  {rel}:{lineno}")
-        print(f"      {context}")
+        print(f"      {rendered}")
         print()
     print(
         "A redshift default in params.get() is unreachable in live code paths "
