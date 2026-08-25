@@ -20,6 +20,32 @@ Reference papers:
 - Storey & Zeippen 2000, MNRAS, 312, 813 (atomic transition probabilities)
 - Moustakas et al. 2023, ApJS, 264, 9 (FastSpecFit line catalog)
 - NIST Atomic Spectra Database (doublet ratios verification)
+
+A missing line is a failure, not a pass
+---------------------------------------
+
+Each of the five tests this file used to hold opened with
+
+    try:
+        idx = names.index("Halpha")
+    except ValueError:
+        return
+
+so a line disappearing from the catalog — the exact regression a file named for
+locking conventions exists to catch — made the test return early and report as
+passed. Every line is present today, so the handler was dead code; it was one
+rename away from being a silent pass. Absence is asserted now.
+
+Two of the three doublet tests also bound ``idx_4959``/``idx_5007`` and never
+used them: the constraint is looked up in ``_DOUBLET_RATIOS`` by name, so the
+index lookup existed only as the presence check that then swallowed itself.
+
+Coverage the table added
+------------------------
+
+``_DOUBLET_RATIOS`` holds **five** constraints. Three were tested. MgII
+2796/2803 and SIII 9069/9532 had none, and a constraint with no test is what
+the file exists to prevent.
 """
 
 from __future__ import annotations
@@ -30,183 +56,136 @@ pytestmark = pytest.mark.regression_paper
 
 from tengri.observation.line_list import _DOUBLET_RATIOS, LineList
 
+#: (strong, weak, expected ratio, tolerance, source).
+#:
+#: ``None`` for the expected ratio means "assert the constraint exists and is
+#: physically usable, but do not pin a number": the value in the table has no
+#: sourced reference here, and CLAUDE.md forbids writing a citation from
+#: memory. Both such rows are flagged below for someone who can source them.
+_DOUBLETS = [
+    ("OIII_5007", "OIII_4959", 2.98, 0.05, "Storey & Zeippen 2000, MNRAS 312, 813"),
+    ("NII_6584", "NII_6548", 2.94, 0.05, "Storey & Zeippen 2000, MNRAS 312, 813"),
+    ("NeV_3426", "NeV_3346", 1.30, 0.10, "NIST ASD + Storey & Zeippen 2000 (lower precision)"),
+    # Currently 1.0000 in the table. The optically-thin Mg II resonance doublet
+    # is 2:1 in favor of 2796 (statistical weights of the 2P3/2 and 2P1/2 upper
+    # levels), i.e. 2803/2796 ~ 0.5; 1:1 is the optically-thick limit. Which one
+    # this table means is not recorded, so the value is not pinned here.
+    ("MgII_2803", "MgII_2796", None, None, "reference not sourced — see the module docstring"),
+    # Currently 2.4700. That is the familiar [S III] 9532/9069 value, but this
+    # file has no citation for it, so it is not pinned either.
+    ("SIII_9532", "SIII_9069", None, None, "reference not sourced — see the module docstring"),
+]
 
-def test_doublet_ratio_oiii_enforced():
-    """[OIII] 4959/5007 flux ratio must be fixed at ~1/3 (atomic physics).
+#: (name, vacuum wavelength [Angstrom], tolerance, the air value it must NOT be).
+#: CLAUDE.md: emission line wavelengths are vacuum throughout.
+_VACUUM_WAVELENGTHS = [
+    ("Halpha", 6564.61, 0.5, 6562.79),
+    ("Lya", 1215.67, 0.05, None),
+]
 
-    Pitfall P-12: If the line list returns both [OIII] lines as independent entries
-    without a constraint, users could fit them as free parameters, violating atomic
-    physics. This test verifies that either:
-      (a) A doublet constraint exists linking 4959 → 5007, or
-      (b) The line list documents that the constraint is applied externally.
 
-    Storey & Zeippen 2000 give the transition probability ratio for forbidden lines:
-    [OIII] λ5007 / λ4959 luminosity ratio ≈ 2.98:1.
-    """
+@pytest.fixture(scope="module")
+def catalog():
+    """The default optical line list, and a name -> wavelength map."""
     line_list = LineList.default_optical()
     names = list(line_list.names)
-
-    # Locate the [OIII] doublet in the catalog
-    try:
-        idx_4959 = names.index("OIII_4959")
-        idx_5007 = names.index("OIII_5007")
-    except ValueError:
-        # Either line missing — not an error, but can't test the constraint
-        return
-
-    # Check that a constraint exists in _DOUBLET_RATIOS
-    constraint_key = ("OIII_5007", "OIII_4959")
-    assert constraint_key in _DOUBLET_RATIOS, (
-        "P-12 BUG: [OIII] doublet not listed in _DOUBLET_RATIOS. "
-        "Line catalog would allow independent fitting of both 4959 and 5007 Ångstrom."
-    )
-
-    # Verify the ratio matches Storey & Zeippen 2000
-    ratio = _DOUBLET_RATIOS[constraint_key]
-    expected_ratio = 2.98  # λ5007 / λ4959 flux ratio
-    rel_err = abs(ratio - expected_ratio) / expected_ratio
-    assert rel_err < 0.05, (
-        f"P-12 WARNING: [OIII] doublet ratio {ratio:.2f} "
-        f"differs from Storey & Zeippen 2000 {expected_ratio:.2f} by {100 * rel_err:.1f}%. "
-        "Check transition-probability source."
-    )
+    return line_list, names, {n: float(w) for n, w in zip(names, line_list.wavelengths)}
 
 
-def test_doublet_ratio_nii_enforced():
-    """[NII] 6548/6584 flux ratio must be fixed at ~1/3 (atomic physics).
+@pytest.mark.parametrize(
+    ("strong", "weak", "expected", "tol", "source"),
+    _DOUBLETS,
+    ids=[d[0].split("_")[0] for d in _DOUBLETS],
+)
+def test_doublet_ratio_enforced(catalog, strong, weak, expected, tol, source):
+    """Both lines are in the catalog and a ratio constraint links them.
 
-    Pitfall P-12: [NII] doublet constraints must match transition probabilities.
-    Storey & Zeippen 2000: [NII] λ6584 / λ6548 ≈ 2.94:1.
+    P-12: if a doublet is returned as two independent entries with no
+    constraint, a fit can vary them separately and violate atomic physics.
     """
-    line_list = LineList.default_optical()
-    names = list(line_list.names)
+    _line_list, names, _wav = catalog
 
-    # Locate the [NII] doublet
-    try:
-        idx_6548 = names.index("NII_6548")
-        idx_6584 = names.index("NII_6584")
-    except ValueError:
-        return
+    for name in (strong, weak):
+        assert name in names, (
+            f"P-12: {name} is not in default_optical(), so its doublet constraint "
+            f"cannot be checked. This used to `return` and report as passed."
+        )
 
-    constraint_key = ("NII_6584", "NII_6548")
-    assert constraint_key in _DOUBLET_RATIOS, (
-        "P-12 BUG: [NII] doublet not listed in _DOUBLET_RATIOS. "
-        "Line catalog would allow independent fitting of both 6548 and 6584 Ångstrom."
+    key = (strong, weak)
+    assert key in _DOUBLET_RATIOS, (
+        f"P-12 BUG: {strong}/{weak} not listed in _DOUBLET_RATIOS. "
+        f"Line catalog would allow independent fitting of both lines."
     )
 
-    ratio = _DOUBLET_RATIOS[constraint_key]
-    expected_ratio = 2.94
-    rel_err = abs(ratio - expected_ratio) / expected_ratio
-    assert rel_err < 0.05, (
-        f"P-12 WARNING: [NII] doublet ratio {ratio:.2f} "
-        f"differs from Storey & Zeippen 2000 {expected_ratio:.2f} by {100 * rel_err:.1f}%. "
-        "Check transition-probability source."
+    ratio = _DOUBLET_RATIOS[key]
+    assert ratio > 0.0, f"{strong}/{weak} ratio {ratio} is not positive"
+
+    if expected is None:
+        pytest.skip(f"{strong}/{weak}: {source}")
+
+    rel_err = abs(ratio - expected) / expected
+    assert rel_err < tol, (
+        f"P-12: {strong}/{weak} ratio {ratio:.2f} differs from {expected:.2f} "
+        f"({source}) by {100 * rel_err:.1f}%. Check the transition-probability source."
     )
 
 
-def test_nev_doublet_ratio_enforced():
-    """[Ne V] 3346/3426 flux ratio must be consistent with atomic physics.
+@pytest.mark.parametrize(
+    ("name", "vacuum", "tol", "air"),
+    _VACUUM_WAVELENGTHS,
+    ids=[w[0] for w in _VACUUM_WAVELENGTHS],
+)
+def test_wavelength_is_vacuum(catalog, name, vacuum, tol, air):
+    """The catalog wavelength is the vacuum value, and not the air one.
 
-    Pitfall P-12: [Ne V] is a high-ionization line; its doublet ratio comes from
-    transition probabilities. Verify catalog enforces this ratio.
-
-    NIST Atomic Spectra Database + Storey & Zeippen 2000: [Ne V] λ3426 / λ3346 ≈ 1.3.
+    CLAUDE.md mandates vacuum throughout. The air check is the half that
+    matters: a catalog rebuilt from an air-wavelength source lands 1.8 Å low on
+    H-alpha, which is inside no tolerance anyone would notice by eye.
     """
-    line_list = LineList.default_optical()
-    names = list(line_list.names)
+    _line_list, names, wav = catalog
 
-    try:
-        idx_3346 = names.index("NeV_3346")
-        idx_3426 = names.index("NeV_3426")
-    except ValueError:
-        return
-
-    constraint_key = ("NeV_3426", "NeV_3346")
-    assert constraint_key in _DOUBLET_RATIOS, (
-        "P-12 BUG: [Ne V] doublet not listed in _DOUBLET_RATIOS. "
-        "Line catalog would allow independent fitting of both 3346 and 3426 Ångstrom."
+    assert name in names, (
+        f"{name} is not in default_optical(), so the vacuum convention cannot be "
+        f"checked. This used to `return` and report as passed."
     )
 
-    ratio = _DOUBLET_RATIOS[constraint_key]
-    expected_ratio = 1.3
-    # Allow 10% tolerance on this transition (lower precision source)
-    rel_err = abs(ratio - expected_ratio) / expected_ratio
-    assert rel_err < 0.10, (
-        f"P-12 WARNING: [Ne V] doublet ratio {ratio:.2f} "
-        f"differs from expected {expected_ratio:.2f} by {100 * rel_err:.1f}%. "
-        "Verify against NIST Atomic Spectra Database."
-    )
-
-
-def test_halpha_wavelength_is_vacuum():
-    """H-alpha must be 6564.61 Å in vacuum, not 6562.79 Å in air.
-
-    Pitfall P-12 (wavelength convention): CLAUDEMD convention requires all
-    wavelengths in vacuum. H-alpha in air is 6562.79 Å; in vacuum, 6564.61 Å.
-    This test locks the convention against accidental change.
-
-    Reference: IAU 2015 standard; Byler et al. 2017.
-    """
-    line_list = LineList.default_optical()
-    names = list(line_list.names)
-
-    try:
-        idx = names.index("Halpha")
-    except ValueError:
-        return
-
-    halpha_vacuum_expected = 6564.61  # Angstrom, vacuum
-    halpha_air_wrong = 6562.79  # Angstrom, air (should NOT match)
-
-    wavelength = float(line_list.wavelengths[idx])
-
-    # Assert vacuum convention, not air
-    assert abs(wavelength - halpha_vacuum_expected) < 0.5, (
-        f"H-alpha wavelength {wavelength:.2f} Å is not vacuum "
-        f"{halpha_vacuum_expected:.2f} Å. "
+    wavelength = wav[name]
+    assert abs(wavelength - vacuum) < tol, (
+        f"{name} wavelength {wavelength:.2f} Å is not the vacuum value {vacuum:.2f} Å. "
         "CLAUDE.md mandate: all emission line wavelengths are vacuum."
     )
 
-    # Negative test: ensure it's NOT the air wavelength
-    assert abs(wavelength - halpha_air_wrong) > 1.0, (
-        f"H-alpha wavelength {wavelength:.2f} Å matches the air value {halpha_air_wrong:.2f} Å. "
-        "Violates CLAUDE.md vacuum convention."
-    )
+    if air is not None:
+        assert abs(wavelength - air) > 1.0, (
+            f"{name} wavelength {wavelength:.2f} Å matches the air value {air:.2f} Å. "
+            "Violates the CLAUDE.md vacuum convention."
+        )
 
 
-def test_lyman_alpha_wavelength_is_vacuum():
-    """Lyman-alpha must be 1215.67 Å (vacuum), not a different convention.
+def test_every_doublet_constraint_is_covered_here():
+    """Non-vacuity: the table above tests every constraint the catalog declares.
 
-    Pitfall P-12: UV lines are especially prone to convention confusion.
-    Verify Ly-alpha matches IAU standard (vacuum).
-
-    Reference: IAU 2015; NIST Atomic Spectra Database (transition 2P → 1S, n=2→1).
+    Two of the five entries in ``_DOUBLET_RATIOS`` had no test at all — MgII
+    and SIII were added by this table. A constraint the catalog enforces and no
+    test names is the gap this file exists to close, so the census is asserted
+    rather than left to be noticed.
     """
-    line_list = LineList.default_optical()
-    names = list(line_list.names)
+    tested = {(strong, weak) for strong, weak, *_ in _DOUBLETS}
+    declared = set(_DOUBLET_RATIOS)
 
-    try:
-        idx = names.index("Lya")
-    except ValueError:
-        return
-
-    lya_vacuum_expected = 1215.67  # Angstrom, vacuum
-    wavelength = float(line_list.wavelengths[idx])
-
-    assert abs(wavelength - lya_vacuum_expected) < 0.05, (
-        f"Lyman-alpha wavelength {wavelength:.2f} Å "
-        f"differs from IAU vacuum standard {lya_vacuum_expected:.2f} Å by > 0.05 Å. "
-        "CLAUDE.md: all wavelengths in vacuum."
+    assert declared == tested, (
+        f"untested constraints: {sorted(declared - tested)}; "
+        f"table rows with no constraint: {sorted(tested - declared)}"
     )
 
 
-def test_all_wavelengths_positive_and_reasonable():
-    """Every line in the catalog must have positive wavelength in physical range (1000 - 1e6 Å).
+def test_all_wavelengths_positive_and_reasonable(catalog):
+    """Every line in the catalog must have positive wavelength in physical range.
 
     Pitfall P-12 (implicit): guards against corrupted line list entries with negative
     or zero wavelengths, which would break interp + photometry pipelines.
     """
-    line_list = LineList.default_optical()
+    line_list, _names, _wav = catalog
 
     for i, (name, wav) in enumerate(zip(line_list.names, line_list.wavelengths)):
         wav_float = float(wav)
