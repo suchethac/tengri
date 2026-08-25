@@ -125,7 +125,9 @@ def test_gradient_transforms_are_not_scanned(text):
     ``jax.grad`` over the rich ``predict`` surface fails at trace time the same
     way ``jax.jit`` does, so this is a coverage gap and not a design choice --
     but it is the current behavior, and stating it here keeps the gap visible
-    rather than leaving it to be rediscovered.
+    rather than leaving it to be rediscovered. Tracked in #2063; widening the
+    patterns changes what the guard rejects on the live tree, so it is not a
+    drive-by.
     """
     assert _find_jax_transforms(text) == []
 
