@@ -145,35 +145,56 @@ def collect_function_violations(source: str) -> list[str]:
     return violations
 
 
-def rebound_pytestmark_lines(source: str) -> list[int]:
-    """Line numbers of module-level ``pytestmark`` assignments, if more than one.
+def _pytestmark_lines(body: list[ast.stmt]) -> list[int]:
+    """Line numbers of ``pytestmark`` assignments directly in this block."""
+    return [
+        node.lineno
+        for node in body
+        if isinstance(node, ast.Assign)
+        and any(isinstance(t, ast.Name) and t.id == "pytestmark" for t in node.targets)
+    ]
+
+
+def rebound_pytestmark_scopes(source: str) -> list[tuple[str, list[int]]]:
+    """Scopes assigning ``pytestmark`` more than once, as (scope name, lines).
 
     Reading only the last assignment (see ``_pytestmark_names``) reports the
     truth, but it still lets the pattern through: the file keeps a marker that
     looks declared and is not. Ten modules in this tree had it, eight of them
     losing their taxonomy marker outright. Refusing it outright is the fix that
-    does not need finding again -- a module wanting several markers writes one
+    does not need finding again -- a scope wanting several markers writes one
     assignment holding a list.
+
+    Class bodies are checked as well as the module body. pytest honours a
+    class-body ``pytestmark`` and Python rebinds the name there too, so the
+    identical defect can sit one level in. None do today; a checker whose
+    domain is narrower than the rule it enforces is how the previous two holes
+    in this file went unnoticed.
     """
-    lines = [
-        node.lineno
-        for node in ast.parse(source).body  # module level only
-        if isinstance(node, ast.Assign)
-        and any(isinstance(t, ast.Name) and t.id == "pytestmark" for t in node.targets)
-    ]
-    return lines if len(lines) > 1 else []
+    scopes: list[tuple[str, list[int]]] = []
+
+    def visit(body: list[ast.stmt], scope: str) -> None:
+        lines = _pytestmark_lines(body)
+        if len(lines) > 1:
+            scopes.append((scope, lines))
+        for node in body:
+            if isinstance(node, ast.ClassDef):
+                visit(node.body, f"{scope}::{node.name}" if scope != "<module>" else node.name)
+
+    visit(ast.parse(source).body, "<module>")
+    return scopes
 
 
 def check_file(path: Path) -> list[str]:
     source = path.read_text(encoding="utf-8")
 
-    rebound = rebound_pytestmark_lines(source)
+    rebound = rebound_pytestmark_scopes(source)
     if rebound:
-        kept, lost = rebound[-1], rebound[:-1]
-        dropped = ", ".join(f"L{n}" for n in lost)
         return [
-            f"<module>: pytestmark assigned {len(rebound)}x -- {dropped} discarded, "
-            f"L{kept} wins. Use one assignment holding a list."
+            f"{scope}: pytestmark assigned {len(lines)}x -- "
+            f"{', '.join(f'L{n}' for n in lines[:-1])} discarded, L{lines[-1]} wins. "
+            f"Use one assignment holding a list."
+            for scope, lines in rebound
         ]
 
     file_markers = collect_file_markers(source) & APPROVED_MARKERS
