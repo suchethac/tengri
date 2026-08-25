@@ -23,8 +23,6 @@ import jax
 import jax.numpy as jnp
 import pytest
 
-pytestmark = pytest.mark.bounds
-
 from tengri.forward.sed_model import SEDModel, WavePrecomp
 from tengri.parameters.parameters import Parameters
 from tengri.parameters.priors import Fixed, Uniform
@@ -35,14 +33,19 @@ _DATA_DIR = Path(__file__).resolve().parents[2] / "data"
 _SSP_FILE = _DATA_DIR / "bc03_pdva_stelib_chabrier.h5"
 _SSP_EXISTS = _SSP_FILE.is_file()
 
-pytestmark = pytest.mark.skipif(
-    not _SSP_EXISTS,
-    reason=(
-        "BC03 bare-stellar SSP not found — required for Cue diagnostics "
-        "(wNE SSPs raise CueWNESSPError). "
-        "Run `tengri.download_ssp('bc03_pdva_stelib_chabrier')`."
+# One assignment holding both. Assigning `pytestmark` twice rebinds the name,
+# which silently dropped the `bounds` taxonomy marker.
+pytestmark = [
+    pytest.mark.bounds,
+    pytest.mark.skipif(
+        not _SSP_EXISTS,
+        reason=(
+            "BC03 bare-stellar SSP not found — required for Cue diagnostics "
+            "(wNE SSPs raise CueWNESSPError). "
+            "Run `tengri.download_ssp('bc03_pdva_stelib_chabrier')`."
+        ),
     ),
-)
+]
 
 _FILTER_NAMES = ["sdss_u", "sdss_g", "sdss_r", "sdss_i", "sdss_z"]
 

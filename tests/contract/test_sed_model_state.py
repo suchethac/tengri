@@ -10,8 +10,6 @@ import jax
 import jax.numpy as jnp
 import pytest
 
-pytestmark = pytest.mark.contract
-
 from tengri.forward.sed_model import SEDModel
 from tengri.forward.sed_model_types import SEDModelState
 from tengri.parameters.parameters import Parameters
@@ -21,10 +19,15 @@ from tengri.parameters.priors import Fixed, Uniform
 _DATA_DIR = Path(__file__).resolve().parents[2] / "data"
 _SSP_EXISTS = len(list(_DATA_DIR.glob("ssp_*.h5"))) > 0
 
-pytestmark = pytest.mark.skipif(
-    not _SSP_EXISTS,
-    reason="SSP data file not found — tests require data/ssp_*.h5",
-)
+# One assignment holding both. Assigning `pytestmark` twice rebinds the name,
+# which silently dropped the `contract` taxonomy marker.
+pytestmark = [
+    pytest.mark.contract,
+    pytest.mark.skipif(
+        not _SSP_EXISTS,
+        reason="SSP data file not found — tests require data/ssp_*.h5",
+    ),
+]
 
 
 @pytest.fixture(scope="module")

@@ -9,8 +9,8 @@ from __future__ import annotations
 import numpy as np
 import pytest
 
-pytestmark = pytest.mark.bounds
-pytestmark = pytest.mark.conservation
+# One assignment, not two: the second rebinds the name and the first is lost.
+pytestmark = [pytest.mark.bounds, pytest.mark.conservation]
 
 _MAPPINGS_H5 = (
     __import__("pathlib").Path(__file__).resolve().parents[3] / "data" / "mappings_templates.h5"

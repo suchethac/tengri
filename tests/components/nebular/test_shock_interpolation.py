@@ -10,8 +10,6 @@ from __future__ import annotations
 import chex
 import pytest
 
-pytestmark = pytest.mark.bounds
-
 pytest.importorskip("h5py", reason="h5py required for MAPPINGS grid tests")
 
 import jax
@@ -32,10 +30,16 @@ from tengri.components.nebular.shock import (
     shock_line_ratios,
 )
 
-pytestmark = pytest.mark.skipif(
-    _load_mappings_grids() is None,
-    reason="MAPPINGS grid file not found; run scripts/download_mappings_templates.py",
-)
+# One assignment holding both. Assigning `pytestmark` twice rebinds the name,
+# which silently dropped the `bounds` taxonomy marker: `pytest -m bounds`
+# collected nothing from this module and the CI marker guard still passed.
+pytestmark = [
+    pytest.mark.bounds,
+    pytest.mark.skipif(
+        _load_mappings_grids() is None,
+        reason="MAPPINGS grid file not found; run scripts/download_mappings_templates.py",
+    ),
+]
 
 
 # ── Helpers ───────────────────────────────────────────────────────
