@@ -14,7 +14,7 @@ Usage::
 
     from tengri.components.agn import resolve_agn_model, unified_agn
 
-    # ``agn_log_lbol`` is log10(L_bol / L_sun) — see ``unified.py`` for the
+    # ``agn_log_lbol`` is log10(L_bol / L_sun): see ``unified.py`` for the
     # convention warning. agn_log_lbol = 11 corresponds to a bright Seyfert
     # (L_bol ~ 4e44 erg/s); 13 to a bright quasar.
 

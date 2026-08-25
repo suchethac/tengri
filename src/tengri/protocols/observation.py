@@ -4,7 +4,7 @@
 An :class:`ObservationModel` takes a :class:`ForwardState` (rest-frame
 SED + observer-frame F_nu produced by the chain of
 :class:`SEDComponent` objects) and produces *predicted observables* in the
-data's native format — broadband photometric points, spectroscopic flux
+data's native format: broadband photometric points, spectroscopic flux
 samples, emission-line equivalent widths, etc.
 
 Nothing in `tengri` consumes this protocol yet; the existing

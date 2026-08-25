@@ -82,7 +82,7 @@ PARAMS: tuple[ParamDeclaration, ...] = (
         "must be in [0, 26]",
         # The [0, 26] bound is what the absorption model tolerates, not a
         # sensible prior: it would put most of the mass on columns no galaxy
-        # has. Free over the range this declaration itself calls typical —
+        # has. Free over the range this declaration itself calls typical:
         # 20 (unobscured) to 24 (Compton-thick).
         free_prior=Uniform(
             20.0, 24.0, "Line-of-sight hydrogen column", units="log10(cm^-2)", default=20.0

@@ -98,9 +98,9 @@ def calzetti2000_extinction_curve(wavelength: jnp.ndarray) -> jnp.ndarray:
 
     where :math:`\\lambda_{\\rm nm}` is wavelength in nanometers.
 
-    **JIT-compatible**: yes — uses ``jnp`` primitives.
+    **JIT-compatible**: yes, uses ``jnp`` primitives.
 
-    **Gradient-safe**: yes — fully differentiable.
+    **Gradient-safe**: yes, fully differentiable.
 
     **Reference**: Implements CIGALE ``skirtor2016.py`` ``k_ext()``
     (Boquien et al. 2019 [2]_); validated against its output.
@@ -172,9 +172,9 @@ def gaskell2004_extinction_curve(wavelength: jnp.ndarray) -> jnp.ndarray:
     The result is then divided by :math:`A_B / A_V = 1.182` to convert from
     A(λ)/A_V to k(λ) = A(λ) / E(B-V).
 
-    **JIT-compatible**: yes — uses ``jnp`` primitives.
+    **JIT-compatible**: yes, uses ``jnp`` primitives.
 
-    **Gradient-safe**: yes — fully differentiable.
+    **Gradient-safe**: yes, fully differentiable.
 
     **Reference**: Implements CIGALE ``skirtor2016.py`` ``k_ext()``
     (Boquien et al. 2019 [2]_); validated against its output.
@@ -266,7 +266,7 @@ def polar_dust_extinction(
       attenuation; edge-on sightlines (Type 2) have the disc already screened
       by the equatorial torus (handled upstream), so ``l_nu_attenuated = l_nu``.
 
-    **JIT-compatible**: yes — uses ``jnp`` primitives and smooth sigmoid.
+    **JIT-compatible**: yes, uses ``jnp`` primitives and smooth sigmoid.
     """
     # Select extinction law
     if law == "smc":
@@ -341,9 +341,9 @@ def polar_dust_emission(
 
     Notes
     -----
-    **JIT-compatible**: yes — uses ``jnp`` primitives only.
+    **JIT-compatible**: yes, uses ``jnp`` primitives only.
 
-    **Gradient-safe**: yes — fully differentiable.
+    **Gradient-safe**: yes, fully differentiable.
     """
     # Graybody: L_nu proportional to (1 - exp(-(lambda_0/lambda)^beta)) * B_nu(T)
     opacity_factor = 1.0 - jnp.exp(-((lambda_0 / wavelength) ** beta))
@@ -404,7 +404,7 @@ def anisotropic_polar_luminosity(
 
     Notes
     -----
-    **JIT-compatible**: yes — uses ``jnp`` primitives only.
+    **JIT-compatible**: yes, uses ``jnp`` primitives only.
 
     The anisotropic geometry factor is derived from CIGALE's SKIRTOR module.
     For a given opening angle (related to the torus geometry), the average
@@ -432,7 +432,7 @@ def anisotropic_polar_luminosity(
     References
     ----------
     .. [1] M. Stalevski et al., "3D radiative transfer modeling of the dusty
-       torus around AGN — the influence of clumping," MNRAS, 420, 2756 (2012).
+       torus around AGN, the influence of clumping," MNRAS, 420, 2756 (2012).
        arXiv:1109.1286. https://doi.org/10.1111/j.1365-2966.2011.19775.x
     .. [2] M. Boquien et al., "CIGALE: a python Code Investigating GALaxy
        Emission," A&A, 622, A103 (2019). arXiv:1811.03094.

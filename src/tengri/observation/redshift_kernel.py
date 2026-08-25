@@ -15,7 +15,7 @@ Convention:
      \\times (1+z) / (4\\pi d_L^2)
 
 The ``(1+z)`` factor on F_ν is the bandwidth (frequency specific-
-intensity) correction — see Hogg 1999 (astro-ph/9905116) §4.
+intensity) correction, see Hogg 1999 (astro-ph/9905116) §4.
 
 For a redshift table (precompute path), use ``jax.vmap`` directly::
 
@@ -24,7 +24,7 @@ For a redshift table (precompute path), use ``jax.vmap`` directly::
     shift_grid = vmap(shift_to_obs_frame, in_axes=(None, None, None, 0, None))
     f_nu_table = shift_grid(wave_rest, L_nu_rest, wave_obs, z_table, cosmo)
 
-The migration is staged across multiple PRs — see
+The migration is staged across multiple PRs, see
 ``docs/dev/audits/2026-05-26-redshift-sites-audit.md`` for the full
 inventory and the per-component routing plan.
 """
@@ -87,6 +87,6 @@ def shift_to_obs_frame(
     """
     dl_cm = luminosity_distance(z, cosmo=cosmo)
     L_on_obs_grid = jnp.interp(wave_obs, wave_rest * (1.0 + z), L_nu_rest, left=0.0, right=0.0)
-    # (1+z)/(4π d_L²) as a log10 offset — never form d_L² (overflow) or
+    # (1+z)/(4π d_L²) as a log10 offset, never form d_L² (overflow) or
     # flux_scale (underflow) as standalone float32 values.
     return apply_log10_scale(L_on_obs_grid, log10_flux_scale(z, dl_cm))

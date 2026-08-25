@@ -63,7 +63,7 @@ class ZeropointEntry:
 
 ZEROPOINT_REGISTRY: list[ZeropointEntry] = [
     # JADES DR5 NIRCam broadband filters
-    # All values placeholder — verify against JADES DR5 photometry notes
+    # All values placeholder: verify against JADES DR5 photometry notes
     ZeropointEntry(
         survey="JADES",
         release="DR5",
@@ -289,7 +289,7 @@ def lookup_zeropoints(survey: str, release: str, filters: list[str]) -> list[Zer
 
     Notes
     -----
-    **JIT-compatible**: no — pure Python, uses dict lookups.
+    **JIT-compatible**: no, pure Python, uses dict lookups.
 
     Examples
     --------
@@ -351,7 +351,7 @@ def apply_zeropoints(
 
     Notes
     -----
-    **JIT-compatible**: no — operates on a list of dataclass entries.
+    **JIT-compatible**: no, operates on a list of dataclass entries.
 
     Examples
     --------

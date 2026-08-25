@@ -29,7 +29,7 @@ def _discover_sub_block_params(axis: str, representative_variant: str) -> list[s
 
     All variants within an axis activate the same param set per
     ``_AGN_PARTITION``, so introspecting one representative variant is
-    enough. We filter to ``_AGN_PARTITION[name] == f"agn.{axis}"`` —
+    enough. We filter to ``_AGN_PARTITION[name] == f"agn.{axis}"``;
     those are the parameters the parser routes into the sub-block dict.
     """
     target_path = f"agn.{axis}"

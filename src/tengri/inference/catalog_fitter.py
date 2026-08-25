@@ -64,13 +64,13 @@ def _sample_dict_for_summary(posterior, properties=None):
     -----
     Parameters alone are not enough. ``store="summary"`` exists so a catalog
     of N ~ 1e5 never materializes its sample cube, and the quantity such a
-    catalog is *for* is a derived one — ``stellar_mass``, ``sfr``. Summarizing
+    catalog is *for* is a derived one, ``stellar_mass``, ``sfr``. Summarizing
     only the sampled parameters left the spec's own worked example
     (``post.percentiles["stellar_mass"]``) raising ``KeyError`` (#1313).
 
     Property evaluation is the same work a ``store="full"`` user pays on first
     access; it is moved earlier so it can be chunk-reduced and dropped. If it
-    fails for any reason the parameter summaries are still returned — a
+    fails for any reason the parameter summaries are still returned, a
     catalog fit must not die because one derived quantity could not be
     computed.
     """
@@ -138,7 +138,7 @@ def _stack_summaries(posteriors, store, method, percentiles):
     ``effective_store`` is the honest answer, not the request. Asking for
     ``store="summary"`` from a method that produces no samples (MAP,
     ``laplace``) used to leave ``.percentiles`` and ``.summary`` at ``None``
-    while ``.store`` still read ``"summary"`` — a silent no-op that looks like
+    while ``.store`` still read ``"summary"``, a silent no-op that looks like
     a memory-bounded result and is not one. Now it warns and reports
     ``"full"`` (#1313).
     """
@@ -181,7 +181,7 @@ def _compute_summaries(samples, percentiles=None, reducers=None):
     ----------
     samples : dict
         Samples keyed by name, values are (n_samples,) arrays. Both sampled
-        parameters and derived properties belong here — see
+        parameters and derived properties belong here, see
         :func:`_sample_dict_for_summary`.
     percentiles : tuple, optional
         Percentile values to compute. Default (16, 50, 84).
@@ -192,7 +192,7 @@ def _compute_summaries(samples, percentiles=None, reducers=None):
     -------
     percentiles_dict : dict
         Keys are names, values are (n_pct,) arrays **in the order the levels
-        were requested** — the caller must record those levels alongside.
+        were requested**, the caller must record those levels alongside.
     summary_dict : dict
         Nested dict: {reducer_name: {name: scalar value}}.
     """
@@ -407,7 +407,7 @@ class CatalogPosterior:
 
     Notes
     -----
-    ``percentile_levels`` is not bookkeeping — it is what makes the block
+    ``percentile_levels`` is not bookkeeping; it is what makes the block
     self-describing. Without it, both the median accessor and ``to_table``
     guessed from the array's *width*: the median was hardcoded to column 1 and
     labels were re-derived as ``[16, 50, 84]`` / ``[16, 84]`` / evenly-spaced.
@@ -443,7 +443,7 @@ class CatalogPosterior:
         by hand). For those, the only block the code could have produced at
         width ``len(DEFAULT_PERCENTILES)`` is the documented default, and at
         width 1 it is the median alone. Any other width is genuinely unknown,
-        and unknown must stay unknown — inferring levels from a width is the
+        and unknown must stay unknown, inferring levels from a width is the
         bug this attribute exists to kill (#1313).
         """
         if self.percentile_levels is not None:
@@ -505,7 +505,7 @@ class CatalogPosterior:
 
             raise KeyError(missing_property_message(name, available=self.properties))
         vals = self.properties[name]
-        if isinstance(vals, list):  # ragged posteriors — per-galaxy medians
+        if isinstance(vals, list):  # ragged posteriors, per-galaxy medians
             return np.array(
                 [np.median(np.asarray(v)) if np.ndim(v) > 0 else float(v) for v in vals]
             )
@@ -522,7 +522,7 @@ class CatalogPosterior:
     def properties(self):
         """The property catalog over the galaxy axis.
 
-        Contract §1 — **same names, more axes**. The keys are the ones a single
+        Contract §1, **same names, more axes**. The keys are the ones a single
         :class:`~tengri.inference.posterior.Posterior` answers to; the leading
         axis is now the galaxy.
 
@@ -549,7 +549,7 @@ class CatalogPosterior:
         -------
         dict[str, np.ndarray]
             Dict mapping property names to (N,) arrays over galaxies. Percentile
-            columns are named from the levels actually computed — ``percentiles=
+            columns are named from the levels actually computed, ``percentiles=
             (2.5, 16, 50, 84, 97.5)`` gives ``stellar_mass_p2p5``,
             ``stellar_mass_p16``, ``stellar_mass_p50``, ``stellar_mass_p84``,
             ``stellar_mass_p97p5`` (``.`` is spelled ``p``, so the names stay
@@ -580,7 +580,7 @@ class CatalogPosterior:
                 raise ValueError(
                     f"summary block has {n_pct} percentile column(s) but its levels "
                     f"are {self.percentile_levels!r}. Refusing to export columns whose "
-                    "labels cannot be trusted — re-fit so percentile_levels is recorded."
+                    "labels cannot be trusted, re-fit so percentile_levels is recorded."
                 )
             pct_values = list(levels)
 
@@ -603,13 +603,13 @@ class CatalogPosterior:
                     # Get the per-galaxy values
                     vals = props[name]
                     if isinstance(vals, list):
-                        # Ragged posteriors — convert to array
+                        # Ragged posteriors, convert to array
                         medians = [np.median(np.asarray(v)) if np.ndim(v) > 0 else v for v in vals]
                         vals = np.array(medians)
                     else:
                         # Stacked posteriors
                         if vals.ndim > 1:
-                            # Has sample axis — take median along it
+                            # Has sample axis, take median along it
                             vals = np.median(vals, axis=1)
                     table[name] = vals
             except (RuntimeError, KeyError, AttributeError):
@@ -635,7 +635,7 @@ class CatalogProperties(ReadOnlyPropertyMapping):
     """The property catalog lifted over the galaxy axis of a :class:`CatalogPosterior`.
 
     A ``CatalogPosterior`` is a *list of independent* ``Posterior`` objects, not
-    a batched array — each galaxy was fit separately and may carry a different
+    a batched array, each galaxy was fit separately and may carry a different
     number of draws. So the lift here is a **stack over galaxies**, not a vmap:
     each galaxy's own (already chunk-vmapped) property array is gathered, and the
     results are stacked when their shapes agree and returned as a list when they
@@ -718,7 +718,7 @@ class _CatalogFitterOriginal:
     Notes
     -----
     The ``signal_response`` (forward model) is built once from the first galaxy
-    and shared across all galaxies — it does not capture any galaxy-specific
+    and shared across all galaxies; it does not capture any galaxy-specific
     data. The per-galaxy ``data`` and ``noise`` vectors are runtime arguments
     to the catalog VI engines, enabling ``jax.vmap`` over the catalog batch.
 
@@ -726,7 +726,7 @@ class _CatalogFitterOriginal:
     ``CatalogFitter`` delegates to sequential :class:`Fitter` instances.
     JAX's XLA persistent cache means only the first galaxy pays the compilation cost.
 
-    **Not JIT-compatible at the Python level** — ``CatalogFitter`` is a Python
+    **Not JIT-compatible at the Python level**, ``CatalogFitter`` is a Python
     orchestrator; the individual catalog VI engine callables it dispatches to are
     JIT-compiled and vmap-compatible.
 
@@ -864,7 +864,7 @@ class _CatalogFitterOriginal:
         # For the #1671 bias advisory in run(): the exact reference when
         # resolution produced a LUT clone. Deferred to run() so construction
         # stays cheap; priced once for the whole catalog (the probe caches on
-        # the clone — one exact forward, not one per galaxy).
+        # the clone, one exact forward, not one per galaxy).
         self._pre_approx_model = model if self.model is not model else None
         self._lut_bias_checked = False
         self.data_type = data_type
@@ -906,15 +906,15 @@ class _CatalogFitterOriginal:
             parallelism; every other method runs sequentially per galaxy.
 
             The default was ``native_vi_linear`` until 2026-07. That backend is
-            registered ``tier="broken"`` — it segfaults on DPL/dense_basis
-            photometry mocks (#231) — so the documented default could not be
+            registered ``tier="broken"``, it segfaults on DPL/dense_basis
+            photometry mocks (#231), so the documented default could not be
             run as written. It also raises ``NotImplementedError`` for
             per-galaxy redshift and for presence masks, which ``mcmc_nuts``
             supports. NUTS is ``tier="primary"``, keeps ``forward_chunk_size``
             and ``n_pad``, and is the only tier that honors ``devices``.
 
             Both ``native_vi_*`` backends now refuse to run at all without
-            ``allow_unvalidated=True`` — changing the default alone left them
+            ``allow_unvalidated=True``, changing the default alone left them
             one keystroke away, since this path never consulted the tier.
         key : jax.random.PRNGKey
             Base random key; per-galaxy keys are derived via ``jax.random.split``.
@@ -930,7 +930,7 @@ class _CatalogFitterOriginal:
             shape match a previously-cached compile so different catalog
             sizes share an artifact.
 
-            - ``None`` (default) — pad only to the next multiple of K
+            - ``None`` (default), pad only to the next multiple of K
               (existing behavior).
             - ``"auto"``: pad to the next power of 2.
             - ``int``: pad to exactly this many galaxies (must be
@@ -951,7 +951,7 @@ class _CatalogFitterOriginal:
             (e.g., {"mean": jnp.mean, "std": jnp.std}). With store="full", these
             are ignored.
         allow_unvalidated : bool, optional
-            Run a ``tier="broken"`` method anyway — for benchmarking or backend
+            Run a ``tier="broken"`` method anyway, for benchmarking or backend
             development, not for science. Default False.
         **kwargs
             Forwarded to the underlying inference method.
@@ -980,7 +980,7 @@ class _CatalogFitterOriginal:
         reduction. Dummy padded galaxies converge to their own (irrelevant)
         posteriors and are trimmed off the result. The same trick is
         **not** safe for :class:`PopulationFitter`, where the hierarchical
-        population field couples all galaxies — there, rely on
+        population field couples all galaxies, there, rely on
         :func:`tengri.enable_persistent_cache` instead.
         """
         from tengri.inference._backend_registry import refuse_if_broken
@@ -1042,8 +1042,8 @@ class _CatalogFitterOriginal:
         #
         # Pre-flight memory guard, shared with Fitter/PopulationFitter. D here is
         # the PER-GALAXY free-parameter count: the batched MCMC path vmaps N
-        # independent chains of that size, so the per-chain mass matrix — the
-        # term that goes O(D^2) — is set by the single-galaxy spec, not by N.
+        # independent chains of that size, so the per-chain mass matrix, the
+        # term that goes O(D^2), is set by the single-galaxy spec, not by N.
         _spec = getattr(self.model, "spec", None)
         _warn_if_nuts_high_dim(
             resolved, getattr(_spec, "n_free", None), surface="Catalog.fit / CatalogFitter.run"
@@ -1128,7 +1128,7 @@ class _CatalogFitterOriginal:
                 warnings.warn(
                     f"n_pad={n_pad!r} is ignored for method={method!r}. "
                     "Sequential per-galaxy fits don't benefit from "
-                    "shape-bucketing — each galaxy is its own jit.",
+                    "shape-bucketing, each galaxy is its own jit.",
                     UserWarning,
                     stacklevel=2,
                 )
@@ -1421,11 +1421,11 @@ class _CatalogFitterOriginal:
         single JIT'd program; K galaxies execute per ``lax.map`` step so the
         compiled graph stays O(1) in the catalog size while K chains run in
         parallel on the accelerator. Returns one :class:`Posterior` per galaxy,
-        each carrying posterior ``samples`` — the same public contract as the
+        each carrying posterior ``samples``, the same public contract as the
         sequential path, minus the N serial warmups.
 
         ``dense_mass_matrix=None`` (the default) resolves through the same
-        auto-policy as the single-galaxy samplers — dense below D = 8, diagonal
+        auto-policy as the single-galaxy samplers: dense below D = 8, diagonal
         at or above it (#319). Until PR #2031 this path hardcoded ``False`` and
         read it as ``bool(dense_mass_matrix)``, so a D=7 catalog silently got a
         diagonal mass where a single fit of the same model got a dense one, and
@@ -1435,19 +1435,19 @@ class _CatalogFitterOriginal:
         ``init_from`` mirrors the single-galaxy contract in
         ``_maybe_map_init`` (``tengri.inference._sample_utils``):
 
-        * ``None`` (default) — each galaxy gets its own ADAM MAP warm start,
+        * ``None`` (default): each galaxy gets its own ADAM MAP warm start,
           which is what a single fit has always done. Before PR #2031 this path had
           no MAP step and every galaxy started at ``0.1 * N(0, 1)`` about the
           prior center.
-        * ``"prior"`` — that former behavior, kept for reproducing older runs.
-        * an array of shape ``(n_gal, n_dim)`` — starting points in the flat
+        * ``"prior"``: that former behavior, kept for reproducing older runs.
+        * an array of shape ``(n_gal, n_dim)``: starting points in the flat
           unconstrained space, used as given.
         * a list of ``n_gal`` parameter dicts, or one dict broadcast to every
-          galaxy — physical values, converted for you. The medians of a previous
+          galaxy: physical values, converted for you. The medians of a previous
           :class:`CatalogPosterior` are the intended source.
 
         When ``devices`` is given (``"all"`` or a device list), the galaxy axis
-        is sharded across those devices via ``jax.shard_map`` — each device runs
+        is sharded across those devices via ``jax.shard_map``, each device runs
         ``lax.map`` on its own slice of the catalog with no cross-device
         reduction (galaxies are independent). Bit-parity with the single-device
         path holds up to float round-off.
@@ -1646,7 +1646,7 @@ class _CatalogFitterOriginal:
             best_params = _mean_params(samples_phys)
             n_div = int(jnp.sum(all_divergent[i]))
 
-            # Build the Posterior FIRST — summarizing derived properties needs
+            # Build the Posterior FIRST, summarizing derived properties needs
             # the model, which only the Posterior carries.
             post_i = Posterior(
                 samples=samples_phys,
@@ -1845,7 +1845,7 @@ class _CatalogFitterOriginal:
 
         Per-galaxy fits are independent, so this is pure data parallelism with
         no cross-device reduction: the leading (galaxy) axis of every input is
-        sharded over the devices and GSPMD distributes the vmapped program —
+        sharded over the devices and GSPMD distributes the vmapped program,
         each device samples its own slice of the catalog. GSPMD auto-partitioning
         is used rather than ``shard_map`` because BlackJAX's NUTS tree-builder
         contains ``lax.cond`` branches that trip ``shard_map``'s manual
@@ -1886,7 +1886,7 @@ class _CatalogFitterOriginal:
         # entries. For a same-shape catalog every galaxy hits the cache;
         # for a mixed-shape catalog the prior entry is dropped before
         # the next compile, bounding peak RAM. No persistent() wrap
-        # needed — the wrap was strictly worse for mixed-shape loops.
+        # needed, the wrap was strictly worse for mixed-shape loops.
         for i, galaxy in enumerate(self.galaxies):
             if verbose:
                 print(f"  Galaxy {i + 1}/{self.n_galaxies}...", end="\r", flush=True)
@@ -1934,7 +1934,7 @@ class _CatalogFitterOriginal:
 
 
 class CatalogFitter(_CatalogFitterOriginal):
-    """Deprecated public alias of the catalog engine — use :class:`tengri.Catalog`.
+    """Deprecated public alias of the catalog engine, use :class:`tengri.Catalog`.
 
     .. deprecated::
         ``Catalog`` is the one taught catalog noun (#1317, spec decision 6):
@@ -1945,15 +1945,15 @@ class CatalogFitter(_CatalogFitterOriginal):
     Notes
     -----
     ``Catalog`` itself constructs :class:`_CatalogFitterOriginal` directly, so
-    the internal path stays warning-free — only user-typed ``CatalogFitter``
+    the internal path stays warning-free, only user-typed ``CatalogFitter``
     warns. (A previous module ``__getattr__`` hook warned on direct module
     imports, but the ``tengri.CatalogFitter`` re-export bypassed it, so the
-    taught name never warned — #1369.)
+    taught name never warned, #1369.)
     """
 
     def __init__(self, model, galaxies, data_type="photometry", *, approx="auto"):
         warnings.warn(
-            "CatalogFitter is deprecated: use tengri.Catalog — "
+            "CatalogFitter is deprecated: use tengri.Catalog, "
             "Catalog(fwd, table, flux_unit=..., redshift_col=...).fit(method=..., "
             "key=...). CatalogFitter keeps working but is no longer taught. "
             "See #1369.",

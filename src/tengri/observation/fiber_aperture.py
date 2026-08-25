@@ -24,7 +24,7 @@ This module provides:
 
 All functions are pure JAX. The aperture-fraction integral uses a
 sigmoid-softened mask by default so the result is differentiable in
-the aperture radius — useful when the aperture is a calibration
+the aperture radius, useful when the aperture is a calibration
 parameter, or when the user wants to marginalize over fiber-placement
 uncertainty.
 
@@ -94,12 +94,12 @@ def circular_aperture_mask(
     Parameters
     ----------
     grid_kpc : tuple of (ndarray, ndarray), each shape (ny, nx)
-        ``(x_grid, y_grid)`` — physical-coordinate grids from a
+        ``(x_grid, y_grid)``, physical-coordinate grids from a
         :class:`SpatialModel`.
     radius_kpc : float or ndarray
         Aperture radius in kpc.
     center_kpc : tuple of (float, float), default (0.0, 0.0)
-        Aperture center in kpc — useful when the fiber is offset
+        Aperture center in kpc, useful when the fiber is offset
         from the galaxy nucleus.
     softness : float, default 0.01
         Sigmoidal edge softening as a fraction of ``radius_kpc``.

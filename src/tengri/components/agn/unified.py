@@ -80,7 +80,7 @@ Pre-registered configurations
 
 Convention for ``agn_log_lbol``
 --------------------------------
-``agn_log_lbol`` is :math:`\\log_{10}(L_{\\rm bol} / L_\\odot)` — the
+``agn_log_lbol`` is :math:`\\log_{10}(L_{\\rm bol} / L_\\odot)`: the
 bolometric luminosity expressed **in solar luminosities**, not erg/s.
 This matches the internal computation in ``components/agn/_phys.py``
 (``l_bol_erg = 10**agn_log_lbol * L_SUN``).
@@ -169,8 +169,8 @@ def _load_skirtor_fn():
 def _load_skirtor_raw_total_fn():
     """Load the faithful raw-Stalevski SKIRTOR total interpolator (cached).
 
-    Prefers the v4 grid (``scripts/build_skirtor_raw_grid.py``) — full
-    ``ta,p,q,oa,R,i`` axes with the published radiative-transfer total — and
+    Prefers the v4 grid (``scripts/build_skirtor_raw_grid.py``): full
+    ``ta,p,q,oa,R,i`` axes with the published radiative-transfer total: and
     returns ``(fn, has_radius_ratio=True)``. If the v4 grid is absent, falls
     back to the v3 component interpolator's reconstructed ``.total`` (no R axis),
     returning ``(fn, has_radius_ratio=False)``. Used by ``skirtor_stalevski``.
@@ -236,7 +236,7 @@ class AGNRegistryEntry:
 
     Notes
     -----
-    **JIT-compatible**: no — class for registry initialization.
+    **JIT-compatible**: no, class for registry initialization.
     """
 
     def __init__(
@@ -291,7 +291,7 @@ def register_agn_model(
 
     Notes
     -----
-    **JIT-compatible**: no — registers at module load time (not JIT-compilable).
+    **JIT-compatible**: no, registers at module load time (not JIT-compilable).
 
     The registered function must have signature::
 
@@ -385,7 +385,7 @@ def resolve_agn_model(name: str) -> Callable:
 
     Notes
     -----
-    **JIT-compatible**: no — performs dictionary lookup at initialization time.
+    **JIT-compatible**: no, performs dictionary lookup at initialization time.
     Old monolithic model names still work but emit DeprecationWarning.
     """
     if name == "composable":
@@ -395,10 +395,10 @@ def resolve_agn_model(name: str) -> Callable:
     # monolithic forward function *directly*, not a composable preset, because
     # it carries structural variant selectors that do not map to the composable
     # disc/torus/lines block grammar:
-    #   * skirtor_stalevski — the raw Stalevski (2016) SKIRTOR radiative-transfer
+    #   * skirtor_stalevski, the raw Stalevski (2016) SKIRTOR radiative-transfer
     #     *total* (disc + torus + scattering computed jointly), physically NOT a
     #     disc-block + torus-block sum (see test_skirtor_stalevski.py).
-    #   * grahsp — a self-contained parity implementation whose ``torus_model``
+    #   * grahsp, a self-contained parity implementation whose ``torus_model``
     #     / ``disc_model`` variant selectors are GrahspConfig structural choices,
     #     not forwardable block kwargs (see grahsp/test_parity_integration.py).
     # Routing them here preserves full param forwarding; the composable blocks
@@ -505,7 +505,7 @@ _AGN_PRESETS = {
         "agn_norm": "cigale_joint",
         "_description": "disc=powerlaw + torus=skirtor",
     },
-    # NOTE: ``skirtor_stalevski`` is intentionally absent — it is an
+    # NOTE: ``skirtor_stalevski`` is intentionally absent; it is an
     # un-composable raw radiative-transfer template routed directly to the
     # monolithic ``skirtor_stalevski_agn`` in ``resolve_agn_model``.
     "qsogen": {
@@ -520,7 +520,7 @@ _AGN_PRESETS = {
             "disc=qsogen + blr=qsogen + feii=qsogen_balmer + torus=qsogen + atten=qsogen_smc"
         ),
     },
-    # NOTE: ``grahsp`` is intentionally absent — it is a self-contained parity
+    # NOTE: ``grahsp`` is intentionally absent; it is a self-contained parity
     # model whose torus_model/disc_model variant selectors are not composable
     # kwargs, so it routes directly to the monolithic GRAHSP function in
     # ``resolve_agn_model`` (via ``_resolve_monolithic_model``). The block
@@ -651,7 +651,7 @@ def multicolor_agn(
     """Multicolor Shakura-Sunyaev disc + Silva+04 smooth AGN torus.
 
     Standard thin-disc SED with spin-dependent ISCO and Novikov-Thorne
-    radiative efficiency. This is the outer standard disc only — no warm
+    radiative efficiency. This is the outer standard disc only: no warm
     Comptonization or hot corona (for the full 3-zone model, see kubota_done_full).
     The torus uses the Silva+04 radiative-transfer solution for smooth dust geometry.
 
@@ -683,7 +683,7 @@ def multicolor_agn(
 
     Notes
     -----
-    **JIT-compatible**: yes — uses :func:`multicolor_disc` and :func:`silva04_sed`.
+    **JIT-compatible**: yes, uses :func:`multicolor_disc` and :func:`silva04_sed`.
 
     Also registered as "kubota_done" (deprecated alias).
 
@@ -708,7 +708,7 @@ def multicolor_agn(
     return l_nu * agn_lum_ratio
 
 
-# kubota_done alias removed — use composable blocks instead:
+# kubota_done alias removed; use composable blocks instead:
 # agn_model="composable", agn_disc_block="multicolor", agn_torus_block="silva04"
 
 
@@ -780,7 +780,7 @@ def kubota_done_full_agn(
 
     Notes
     -----
-    **JIT-compatible**: yes — uses :func:`kubota_done_disc` and :func:`silva04_sed`.
+    **JIT-compatible**: yes, uses :func:`kubota_done_disc` and :func:`silva04_sed`.
 
     References
     ----------
@@ -863,7 +863,7 @@ def skirtor_agn(
 
     Notes
     -----
-    **JIT-compatible**: no — requires SKIRTOR template interpolation (non-differentiable).
+    **JIT-compatible**: no, requires SKIRTOR template interpolation (non-differentiable).
     """
     # Disc gets (1 - covering_factor) of L_bol
     l_disc = powerlaw_disc(
@@ -901,7 +901,7 @@ def skirtor_stalevski_agn(
     agn_cos_inc: float = DEFAULT_AGN_COS_INC,
     **_kwargs,
 ) -> jnp.ndarray:
-    r"""Raw Stalevski (2016) SKIRTOR SED — the published radiative-transfer output.
+    r"""Raw Stalevski (2016) SKIRTOR SED, the published radiative-transfer output.
 
     Returns the SKIRTOR template's **total** SED (accretion disc + clumpy torus
     + scattered light) exactly as the Stalevski et al. (2016) radiative-transfer
@@ -909,14 +909,14 @@ def skirtor_stalevski_agn(
     bolometric luminosity. Unlike the ``skirtor`` model (power-law disc) and the
     composable ``disc.skirtor`` block (CIGALE's analytic disc + ``norm=1/∫dust``
     energy balance), this applies **no analytic-disc substitution and no
-    re-normalization** — it is the faithful SKIRTOR template, matching codes that
+    re-normalization**: it is the faithful SKIRTOR template, matching codes that
     read SKIRTOR directly (e.g. ProSpect's ``SKIRTOR_interp``) rather than CIGALE's
     reconstruction.
 
     Use this model to reproduce the raw SKIRTOR SED; use the composable
     ``disc.skirtor`` + ``torus.skirtor`` blocks (``norm='cigale_joint'``) to
     reproduce CIGALE's ``skirtor2016`` instead. The two answer different
-    questions — the raw template vs CIGALE's tunable-disc variant.
+    questions, the raw template vs CIGALE's tunable-disc variant.
 
     Parameters
     ----------
@@ -943,7 +943,7 @@ def skirtor_stalevski_agn(
 
     Notes
     -----
-    **JIT-compatible**: no — requires SKIRTOR grid interpolation.
+    **JIT-compatible**: no, requires SKIRTOR grid interpolation.
 
     **Grid caveat**: tengri ships the SKIRTOR v3 grid (tau in {3,5,7,9,11}); a
     requested ``agn_tau_skirtor`` outside that range is clamped. Bit-for-bit
@@ -1003,7 +1003,7 @@ def silva04_agn(
 
     Notes
     -----
-    **JIT-compatible**: yes — both the power-law disc and the Silva+04
+    **JIT-compatible**: yes, both the power-law disc and the Silva+04
     grid interpolation are pure JAX.
 
     Grid templates published with AGNfitter (Calistro Rivera et al. 2016);
@@ -1068,7 +1068,7 @@ def cat3d_wind_agn(
     **JIT-compatible**: yes.
 
     Grid templates published with AGNfitter-rX (Martínez-Ramírez
-    et al. 2024, A&A 688, A46, arXiv:2405.12111) — Hönig & Kishimoto 2017
+    et al. 2024, A&A 688, A46, arXiv:2405.12111), a Hönig & Kishimoto 2017
     CAT3D-Wind three-parameter projection. See
     :mod:`tengri.components.agn.cat3d_wind` and
     ``scripts/build_cat3d_wind_grid.py``.
@@ -1143,7 +1143,7 @@ def adaf_agn(
 
     Notes
     -----
-    **JIT-compatible**: yes — uses :func:`~tengri.components.agn.adaf.adaf_spectrum`
+    **JIT-compatible**: yes, uses :func:`~tengri.components.agn.adaf.adaf_spectrum`
     and :func:`silva04_sed`.
 
     References
@@ -1222,15 +1222,15 @@ def relagn_agn(
 
     Notes
     -----
-    **JIT-compatible**: yes — disc interpolation is pure JAX triweight kernel.
+    **JIT-compatible**: yes, disc interpolation is pure JAX triweight kernel.
 
-    **Gradient-safe**: yes — C²-continuous triweight kernel on all grid axes.
+    **Gradient-safe**: yes, C²-continuous triweight kernel on all grid axes.
 
     **Grid required**: ``data/relagn_disc_grid.h5`` built by
     ``scripts/build_relagn_disc_grid.py`` (requires HEASOFT/XSPEC + KYCONV).
 
     **Torus normalization**: derived by integrating the disc L_ν over the
-    output wavelength grid via ``jnp.trapezoid`` — no separate ``agn_log_lbol``
+    output wavelength grid via ``jnp.trapezoid``: no separate ``agn_log_lbol``
     parameter needed.
 
     References
@@ -1408,7 +1408,7 @@ def unified_nlr_blr(
        2001 for BLR; Groves et al. 2004 for NLR). Rationale: same as above.
 
     3. **Smooth sigmoid mask, not a hard binary**: Synthesizer zeros the disc
-       and BLR when ``inclination + theta_torus > 90°`` — a hard step
+       and BLR when ``inclination + theta_torus > 90°``, a hard step
        function. tengri replaces this with a smooth sigmoid (see
        ``_sigmoid_mask``) centered at the same critical angle with a ~2°
        transition width. Rationale: the hard mask has zero gradient with
@@ -1454,13 +1454,13 @@ def unified_nlr_blr(
     wavelength : array, shape (n_wave,)
         Rest-frame wavelength [Angstrom].
     agn_log_lbol : float
-        :math:`\\log_{10}(L_{\\rm bol} / L_\\odot)` — total AGN bolometric
+        :math:`\\log_{10}(L_{\\rm bol} / L_\\odot)`: total AGN bolometric
         luminosity expressed in **solar luminosities** (not erg/s).
         Convert from synthesizer's ``bolometric_luminosity`` [erg/s] via
         ``agn_log_lbol = log10(L_bol_erg) - log10(L_SUN_erg)``,
         i.e. subtract :math:`\\approx 33.58`. Typical bright Seyfert: 10.5;
         bright quasar: 12.5. The default ``44.0`` is a legacy test fixture
-        that is **not a physical AGN luminosity** — set this parameter
+        that is **not a physical AGN luminosity**: set this parameter
         explicitly. See module-level "Convention" note. Default 11.0.
     agn_cos_inc : float
         Cosine of inclination angle (0 = edge-on/Type 2,

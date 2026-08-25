@@ -16,7 +16,7 @@ import jax.numpy as jnp
 
 
 def compute_gradient_sed(forward_model, params, param_name):
-    """Compute ∂SED(λ)/∂θ — the gradient of the SED w.r.t. one parameter.
+    """Compute ∂SED(λ)/∂θ: the gradient of the SED w.r.t. one parameter.
 
     Parameters
     ----------
@@ -103,7 +103,7 @@ def compute_photometry_sensitivity(forward_model, params, param_names=None):
     """Compute ∂flux_band/∂θ for each filter and parameter.
 
     Returns a matrix showing how sensitive each photometric band
-    is to each parameter — useful for understanding degeneracies
+    is to each parameter: useful for understanding degeneracies
     and planning filter sets.
 
     Parameters

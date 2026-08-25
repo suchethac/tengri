@@ -107,14 +107,14 @@ class Draine2021PAHIRSEDComponent(SEDModelComponent):
     -----
     **Cross-component contract**:
 
-    - Reads: ``state.derived["L_ir"]`` (erg/s) — luminosity absorbed by dust.
-    - Publishes: ``{"L_ir_emission": erg/s}`` — bolometric IR from templates.
+    - Reads: ``state.derived["L_ir"]`` (erg/s), the luminosity absorbed by dust.
+    - Publishes: ``{"L_ir_emission": erg/s}``, the bolometric IR from templates.
 
     **Template loading**: Templates are loaded during :meth:`load` (precomputation)
     and stored on ``self.data``. If template files are unavailable, the component
     gracefully skips with a warning.
 
-    **JIT-compatible**: yes — all operations in :meth:`predict` are ``jnp``
+    **JIT-compatible**: yes, all operations in :meth:`predict` are ``jnp``
     primitives.
 
     **Parameter discovery**: Free parameters (``lgU``)
@@ -130,7 +130,7 @@ class Draine2021PAHIRSEDComponent(SEDModelComponent):
     parameter_prefix = "dust_"
     config: Draine2021PAHIRConfig = Draine2021PAHIRConfig()
 
-    # Free parameters — auto-discovered by base class
+    # Free parameters: auto-discovered by base class
     lgU = Uniform(0.0, 7.0, default=1.0, description="log10(U), starlight intensity", units="dex")
 
     # Cross-component contract
@@ -206,7 +206,7 @@ class Draine2021PAHIRSEDComponent(SEDModelComponent):
             if template_path is None:
                 # ``_find_data_file`` searches the ``_DATA_CANDIDATES`` dirs
                 # (each already ending in ``/data``) for a BARE filename, so
-                # pass the basename — the ``data/`` prefix in
+                # pass the basename: the ``data/`` prefix in
                 # ``DRAINE2021_PAH_DEFAULT_PATH`` (kept for the direct
                 # ``Path(...)`` fallback in ``draine2021_pah.py``) would
                 # otherwise produce a doubled ``data/data/…`` miss and the
@@ -292,7 +292,7 @@ class Draine2021PAHIRSEDComponent(SEDModelComponent):
         -----
         **JIT-compatible**: yes.
 
-        **Gradient-safe**: yes — linear interpolation is differentiable
+        **Gradient-safe**: yes, linear interpolation is differentiable
         everywhere except at grid boundaries (where clipping occurs).
         """
         L_ir = inputs["L_ir"]

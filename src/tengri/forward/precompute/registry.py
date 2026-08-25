@@ -12,7 +12,7 @@ Adding a new precompute-enabled component
    Protocol shape (see ``protocol.py``).
 2. Add one entry to ``_REGISTRY`` below.
 3. Ensure the component's main module imports cleanly even when template data
-   is missing (gracefully degrade — :func:`resolve` callers handle ``None``).
+   is missing (gracefully degrade, :func:`resolve` callers handle ``None``).
 
 That's the full extension surface. ``SEDModel`` does not need editing.
 """
@@ -35,7 +35,7 @@ _REGISTRY: dict[str, str] = {
     "mappings_v": "tengri.components.nebular.mappings_photo_precompute",
     # MAPPINGS shock
     "mappings_shock": "tengri.components.nebular.mappings_shock_precompute",
-    # Dust IR emission — template-based models
+    # Dust IR emission, template-based models
     "dl07": "tengri.components.dust.dust_emission_precompute",
     "draine_li2007": "tengri.components.dust.dust_emission_precompute",
     "dale2014": "tengri.components.dust.dust_emission_precompute",
@@ -43,7 +43,7 @@ _REGISTRY: dict[str, str] = {
     "astrodust": "tengri.components.dust.dust_emission_precompute",
     "bosa": "tengri.components.dust.dust_emission_precompute",
     "themis": "tengri.components.dust.dust_emission_precompute",
-    # Dust IR emission — analytic models
+    # Dust IR emission, analytic models
     "modified_blackbody": "tengri.components.dust.dust_analytic_precompute",
     "casey2012": "tengri.components.dust.dust_analytic_precompute",
     "pah_drude": "tengri.components.dust.dust_analytic_precompute",

@@ -207,7 +207,7 @@ def agn_ionspec_from_alpha_pl(alpha_pl: float) -> dict:
 
     Notes
     -----
-    **JIT-compatible**: yes — all operations use ``jnp`` primitives.
+    **JIT-compatible**: yes, all operations use ``jnp`` primitives.
 
     For a pure power law (single slope across all segments), the wavelength-space
     slope is ``-alpha_pl``. The log luminosity ratios between adjacent segments
@@ -307,7 +307,7 @@ def _log_qh_from_lacc(l_acc_erg: float, alpha_pl: float) -> float:
 
     Notes
     -----
-    **JIT-compatible**: yes — all operations use ``jnp`` primitives.
+    **JIT-compatible**: yes, all operations use ``jnp`` primitives.
 
     """
     # Frequency limits for ionizing radiation
@@ -415,9 +415,9 @@ def agn_nlr_cue(
 
     Notes
     -----
-    **JIT-compatible**: yes — all operations use ``jnp`` primitives.
+    **JIT-compatible**: yes, all operations use ``jnp`` primitives.
 
-    **Gradient-safe**: yes — differentiable w.r.t. all continuous parameters.
+    **Gradient-safe**: yes, differentiable w.r.t. all continuous parameters.
 
     The pipeline consists of:
     1. Compute ionizing spectrum parameters from power-law slope (via
@@ -452,7 +452,7 @@ def agn_nlr_cue(
     # Cue predicts the line luminosity for the full Q_H; the NLR
     # intercepts only a fraction of those ionizing photons.
     #
-    # Units: this function's contract is [Lsun] **IAU 2015** — the unit its
+    # Units: this function's contract is [Lsun] **IAU 2015**, the unit its
     # Feltre and Synthesizer siblings behind :func:`agn_nlr_emission` return,
     # and the one every consumer multiplies back out by. Cue's catalog is
     # [Lsun] in *Cue's own* convention (3.839e33, the value its network was
@@ -461,7 +461,7 @@ def agn_nlr_cue(
     #
     # Before #1559 this read ``* L_SUN_CUE`` inside the backend and
     # ``/ _LSUN_ERG`` here (#1073). Moving the first half to
-    # NebularSEDComponent left the second half looking spurious — deleting it
+    # NebularSEDComponent left the second half looking spurious: deleting it
     # silently biased every NLR line low by 0.287%, which the #1073 bound test
     # (lines cannot outshine the accretion luminosity) is far too loose to see.
     # Same grouping as before, so the value is unchanged.
@@ -580,7 +580,7 @@ def _load_synthesizer_nlr_grid(filepath: str | Path) -> SynthesizerGridData:
 
         # Convert to log10 where appropriate. The grid stores BH mass in kg; the
         # backend's API uses log10(M_sun) (and its defaults assume it), so convert
-        # here — otherwise the mass coordinate sits ~30 dex off the grid and is
+        # here: otherwise the mass coordinate sits ~30 dex off the grid and is
         # silently clamped to an edge. M_sun = 1.98841586e30 kg (the grid's own
         # convention: its mass[0] = 1.988e38 kg is exactly 1e8 M_sun).
         _M_SUN_KG = 1.98841586e30
@@ -602,7 +602,7 @@ def _load_synthesizer_nlr_grid(filepath: str | Path) -> SynthesizerGridData:
         log10_qh_specific = jnp.array(f["log10_specific_ionising_luminosity"]["HI"][:])
 
         # Load the reprocessed nebular spectrum (continuum + lines) on the grid's
-        # native wavelength axis — the array UnifiedAGN extracts for NLR/BLR.
+        # native wavelength axis: the array UnifiedAGN extracts for NLR/BLR.
         # Stored per unit bolometric luminosity (see SynthesizerGridData docstring).
         spectra_wav = None
         nebular_per_lbol = None
@@ -784,7 +784,7 @@ class SynthesizerNLRBackend:
 
         Notes
         -----
-        **JIT-compatible**: yes — all operations use ``jnp`` primitives.
+        **JIT-compatible**: yes, all operations use ``jnp`` primitives.
 
         Interpolation is performed on all 6 axes (mass, Eddington ratio,
         inclination, metallicity, ionU, nH) using C²-continuous triweight
@@ -851,8 +851,8 @@ class SynthesizerNLRBackend:
 
         This is the disc model's ionizing output baked into the grid (Q_H per unit
         bolometric luminosity, in photons/s per W). Recovering it lets a caller use
-        the grid's own :math:`Q_H` normalization — the value Synthesizer itself
-        uses — rather than assuming an ionizing-spectrum slope. The absolute
+        the grid's own :math:`Q_H` normalization: the value Synthesizer itself
+        uses: rather than assuming an ionizing-spectrum slope. The absolute
         :math:`\log_{10} Q_H` for a source of bolometric luminosity ``L_bol`` [erg/s]
         is ``interp_log_qh_specific(...) + log10(L_bol) - 7`` (the −7 converts
         erg/s to W).
@@ -920,9 +920,9 @@ class SynthesizerNLRBackend:
         r"""Reprocessed nebular :math:`L_\nu` reproducing Synthesizer's UnifiedAGN.
 
         Interpolates the grid's reprocessed ``/spectra/nebular`` array (continuum
-        + lines) at the requested grid point — with ``cosine_inclination`` fixed
+        + lines) at the requested grid point: with ``cosine_inclination`` fixed
         at the grid's isotropic node (0.5), exactly as Synthesizer's UnifiedAGN
-        extracts its NLR/BLR line-region emission — scales it to physical units,
+        extracts its NLR/BLR line-region emission: scales it to physical units,
         and resamples onto the caller's wavelength grid.
 
         Parameters
@@ -1009,10 +1009,10 @@ class SynthesizerNLRBackend:
 class SynthesizerBLRBackend(SynthesizerNLRBackend):
     """Synthesizer CLOUDY c23.01 AGN **broad**-line-region backend.
 
-    The Synthesizer BLR grid shares the NLR grid's structure exactly — the same
+    The Synthesizer BLR grid shares the NLR grid's structure exactly: the same
     six axes (BH mass, Eddington ratio, cosine inclination, metallicity,
     ionization parameter, hydrogen density) and the same per-:math:`Q_H` line
-    storage — differing only in the tabulated line luminosities (broad permitted
+    storage: differing only in the tabulated line luminosities (broad permitted
     lines from dense, high-ionization gas). So this backend reuses the NLR
     loader and interpolation wholesale; only the grid *file* and the line set
     differ. ``predict_agn_blr_lines`` is an alias of the inherited interpolation.
@@ -1157,7 +1157,7 @@ def _nearest_idx(axis: jnp.ndarray, value: float) -> jnp.ndarray:
     **JIT-compatible**: yes. This deliberately does **not** wrap the result in
     Python ``int()``: doing so raised ``ConcretizationTypeError`` whenever the
     caller's coordinate was traced, which made the whole Feltre NLR block
-    unusable under ``jax.jit`` (#1640). Traced integer indices are fine — JAX
+    unusable under ``jax.jit`` (#1640). Traced integer indices are fine: JAX
     lowers them to a gather.
 
     **Gradient**: nearest-neighbor snapping is piecewise-constant, so the
@@ -1184,7 +1184,7 @@ class FeltreNLRBackend:
     ----------------------
 
     - **Continuous axes** (log U_S, log Z, log n_H): C²-continuous triweight
-      interpolation via ``interp_nd_triweight`` — compatible with VI/MAP.
+      interpolation via ``interp_nd_triweight``: compatible with VI/MAP.
     - **Discrete axes** (α, ξ_d): nearest-neighbor index lookup.
 
     This backend has ``has_continuum = False``.
@@ -1281,7 +1281,7 @@ class FeltreNLRBackend:
 
         Notes
         -----
-        **JIT-compatible**: yes — all operations use ``jnp`` primitives.
+        **JIT-compatible**: yes, all operations use ``jnp`` primitives.
 
         Interpolation uses C²-continuous triweight on continuous axes
         (logU_S, logn, logZ) and nearest-neighbor on discrete axes
@@ -1423,9 +1423,9 @@ def agn_nlr_emission(
     -------
     tuple
 
-        - line_wavelengths : ndarray, shape (n_lines,) — emission line vacuum
+        - line_wavelengths : ndarray, shape (n_lines,). Emission line vacuum
           wavelengths [Angstrom]
-        - line_luminosities : ndarray, shape (n_lines,) — emission line
+        - line_luminosities : ndarray, shape (n_lines,). Emission line
           luminosities [L_sun]
 
     Raises
@@ -1448,7 +1448,7 @@ def agn_nlr_emission(
 
     Notes
     -----
-    **JIT-compatible**: yes — dispatcher routes to backend-specific methods
+    **JIT-compatible**: yes, dispatcher routes to backend-specific methods
     which are JIT-compatible. Gradient-safe for continuous parameters.
 
     """

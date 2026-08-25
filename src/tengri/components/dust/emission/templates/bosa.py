@@ -29,9 +29,9 @@ class BosaIRSEDComponent(EmissionComponent):
 
     Notes
     -----
-    **JIT-compatible**: yes — all operations are ``jnp`` primitives.
+    **JIT-compatible**: yes, all operations are ``jnp`` primitives.
 
-    **Gradient-safe**: yes — differentiable everywhere.
+    **Gradient-safe**: yes, differentiable everywhere.
 
     **Template auto-loading**: the closure lazy-loads HDF5 templates on
     first call (at trace time). After lazy loading, all subsequent calls
@@ -60,14 +60,14 @@ class BosaIRSEDComponent(EmissionComponent):
         Returns
         -------
         dict or None
-            Template arrays, already normalized — ``_normalize_bosa_grid`` is
+            Template arrays, already normalized: ``_normalize_bosa_grid`` is
             a preprocessing step that must not run on traced arrays. ``None``
             when unavailable; the backend then falls back to its module-level
             load, which bakes 4.45 MB (#1649).
 
         Notes
         -----
-        **JIT-compatible**: no, deliberately — runs at build time.
+        **JIT-compatible**: no, deliberately; runs at build time.
         """
         del wave
         from tengri._data_setup import find_data_str

@@ -4,11 +4,11 @@
 Implements :class:`~tengri.forward.precompute.protocol.PrecomputeModule` for the
 three radio components in :mod:`tengri.components.radio.radio`:
 
-1. **radio_synchrotron** — star-forming synchrotron via the Bell+2003 fixed-q
+1. **radio_synchrotron**: star-forming synchrotron via the Bell+2003 fixed-q
    far-IR/radio correlation.  One free axis: ``radio_alpha_sf`` (spectral index).
-2. **radio_freefree** — thermal bremsstrahlung from HII regions, Murphy+2011
+2. **radio_freefree**: thermal bremsstrahlung from HII regions, Murphy+2011
    calibration.  One free axis: ``radio_alpha_ff``.
-3. **radio_agn_jet** — radio-loudness scaled AGN jet power law.  One free
+3. **radio_agn_jet**: radio-loudness scaled AGN jet power law.  One free
    axis: ``radio_alpha_agn``.
 
 Each component has a multiplicative scalar runtime input (``L_ir`` for SF
@@ -73,7 +73,7 @@ AXIS_PARAMS: dict[str, tuple[str, ...]] = {
 # Reference luminosity used to build the grid; runtime ``scale`` factor
 # rescales linearly (all three models are L-linear in their respective
 # luminosity input).
-_L_REF = 1.0e44  # erg/s — convenient unit-luminosity reference
+_L_REF = 1.0e44  # erg/s: convenient unit-luminosity reference
 
 # Standard rest-frame wavelength grid covering radio (1 mm to 1 km) and
 # extending blueward enough that the suppression mask in radio.py
@@ -208,7 +208,7 @@ def precompute(
 
     Notes
     -----
-    **JIT-compatible**: no — build-time NumPy.
+    **JIT-compatible**: no, build-time NumPy.
     """
     if model not in _BUILDERS:
         raise ValueError(f"Unknown radio model: {model!r}. Expected one of {sorted(_BUILDERS)}.")

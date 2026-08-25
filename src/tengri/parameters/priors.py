@@ -41,12 +41,12 @@ class Distribution:
 
     Parameters
     ----------
-    (None — this is an abstract base class)
+    (None: this is an abstract base class)
 
     Attributes
     ----------
     bounds : tuple[float, float]
-        (lo, hi) — lower and upper bounds on the parameter value.
+        (lo, hi); lower and upper bounds on the parameter value.
     description : str
         Human-readable summary of the quantity, surfaced by
         ``describe_parameter`` and ``spec.summary()``. Empty when unset.
@@ -102,7 +102,7 @@ class Distribution:
     # Class-level defaults so that *every* distribution answers to
     # ``.description`` and ``.units``. Before these existed, four of the
     # seven subclasses raised AttributeError, which is why consumers read
-    # them as ``getattr(prior, "units", "")`` — a fail-open guard whose only
+    # them as ``getattr(prior, "units", "")``: a fail-open guard whose only
     # job was to paper over an incomplete base class. Subclasses that accept
     # the arguments shadow these with instance attributes.
     description: str = ""
@@ -129,7 +129,7 @@ class Distribution:
         if a registry entry is converted to ``Fixed`` via the ``'*': FIXED``
         wildcard but the distribution carries no default.
 
-        For ``Fixed(value)``, ``default`` is the value itself — see
+        For ``Fixed(value)``, ``default`` is the value itself: see
         ``Fixed.default``.
 
         Returns
@@ -220,7 +220,7 @@ class Distribution:
         """Map standardized latent ξ ~ N(0,1) → physical parameter.
 
         Must be JAX-differentiable. This is the core method for
-        standardized inference — it absorbs the prior into the
+        standardized inference: it absorbs the prior into the
         forward model so the loss is always ½χ² + ½ξᵀξ.
 
         The transform h(ξ) is chosen so that P(h(ξ)) |dh/dξ| = φ(ξ),
@@ -277,7 +277,7 @@ class Distribution:
         from ``self._lo``/``self._hi``) and they enter the graph as
         **constants**. Any cache whose key omits them will hand one prior's
         compiled transform to another prior, decoding the latent through the
-        wrong distribution — see
+        wrong distribution; see
         ``tests/regression/bug/test_prior_bounds_key_the_engine_cache.py``.
 
         The key is *exclusion*-based on purpose: every attribute a subclass
@@ -294,7 +294,7 @@ class Distribution:
         Returns
         -------
         tuple
-            ``(class_name, ((attr, value), ...))`` — immutable and hashable,
+            ``(class_name, ((attr, value), ...))``: immutable and hashable,
             suitable for use as a dict key. Floats are kept at full precision:
             rounding could collapse genuinely distinct constants (e.g.
             ``LogUniform(1e-30, 1e-20)``) into one key.
@@ -315,7 +315,7 @@ def hashable_baked_value(value) -> object:
     and the spec's fixed parameter values
     (``Fitter._fixed_value_key``). Both reach ``_primals_to_params``.
 
-    Arrays are reduced to ``(shape, dtype, bytes-hash)`` — ``StudentT`` caches
+    Arrays are reduced to ``(shape, dtype, bytes-hash)`` because ``StudentT`` caches
     an interpolation grid derived from its scalars, and any future family that
     tabulates its transform must key on it too.
 
@@ -373,7 +373,7 @@ class Uniform(Distribution):
 
     Notes
     -----
-    **JIT-compatible**: yes — all operations use ``jnp`` primitives.
+    **JIT-compatible**: yes, all operations use ``jnp`` primitives.
 
     **Standardization**: Maps ξ ~ N(0,1) to θ via the Gaussian CDF:
 
@@ -569,7 +569,7 @@ class Gaussian(Distribution):
 
     Notes
     -----
-    **JIT-compatible**: yes — all operations use ``jnp`` primitives.
+    **JIT-compatible**: yes, all operations use ``jnp`` primitives.
 
     **Standardization**: Unbounded case maps ξ ~ N(0,1) to θ = μ + σ·ξ.
     With finite bounds, uses the truncated-normal inverse CDF:
@@ -579,7 +579,7 @@ class Gaussian(Distribution):
         \\theta = \\mu + \\sigma \\cdot \\Phi^{-1}\\left[\\Phi(\\alpha) +
         \\Phi(\\xi)\\,(\\Phi(\\beta) - \\Phi(\\alpha))\\right]
 
-    with α = (lo−μ)/σ, β = (hi−μ)/σ — the exact inverse-CDF pushforward
+    with α = (lo−μ)/σ, β = (hi−μ)/σ; the exact inverse-CDF pushforward
     (Knollmüller & Enßlin 2019, arXiv:1901.11033, Eqs. 18–25). Clipping
     would instead censor: point-masses at the bounds and zero gradient
     outside them.
@@ -696,7 +696,7 @@ class Gaussian(Distribution):
         ndarray
             A single sample from N(mu, sigma²) truncated to [lo, hi].
         """
-        # Inverse-CDF sampling through the standardization pushforward —
+        # Inverse-CDF sampling through the standardization pushforward:
         # one source of truth with unstandardize(), exactly truncated
         # (no clip point-masses at the bounds).
         return self.unstandardize(jax.random.normal(key))
@@ -731,7 +731,7 @@ class Gaussian(Distribution):
 
         Unbounded case is the identity-affine map θ = μ + σξ. With finite
         bounds, uses the truncated-normal inverse CDF
-        θ = μ + σ·Φ⁻¹(Φ(α) + Φ(ξ)·(Φ(β) − Φ(α))) — a smooth bijection onto
+        θ = μ + σ·Φ⁻¹(Φ(α) + Φ(ξ)·(Φ(β) − Φ(α))): a smooth bijection onto
         (lo, hi), unlike clipping, which piles point-masses at the bounds
         and zeroes the gradient outside them.
 
@@ -825,7 +825,7 @@ class LogUniform(Distribution):
 
     Notes
     -----
-    **JIT-compatible**: yes — all operations use ``jnp`` primitives.
+    **JIT-compatible**: yes; all operations use ``jnp`` primitives.
 
     The probability density in linear space is:
 
@@ -847,7 +847,7 @@ class LogUniform(Distribution):
 
     where Φ(ξ) = 0.5 * (1 + erf(ξ / sqrt(2))) is the standard normal CDF.
     This ensures an N(0,1) latent yields a genuine log-uniform prior on
-    [lo, hi] — matching ``log_prob`` and ``sample`` — not a midpoint-peaked
+    [lo, hi] (matching ``log_prob`` and ``sample``) not a midpoint-peaked
     one. (A sigmoid map here would silently substitute a logit-normal
     prior in log space, biasing weakly-constrained scale parameters toward
     the geometric midpoint and compressing the tails.)
@@ -960,7 +960,7 @@ class LogUniform(Distribution):
         """ξ ~ N(0,1) → LogUniform(lo, hi) via Gaussian CDF in log space.
 
         Uses the standard normal CDF Φ(ξ) = 0.5 * (1 + erf(ξ / sqrt(2))) so
-        that an N(0,1) latent yields a genuine log-uniform prior — the exact
+        that an N(0,1) latent yields a genuine log-uniform prior; the exact
         inverse-CDF pushforward θ = F⁻¹(Φ(ξ)) required for the ½ξᵀξ prior
         term in the standardized information Hamiltonian.
 
@@ -1050,7 +1050,7 @@ class LogNormal(Distribution):
 
     Notes
     -----
-    **JIT-compatible**: yes — all operations use ``jnp`` primitives.
+    **JIT-compatible**: yes, all operations use ``jnp`` primitives.
 
     The probability density in linear space is:
 
@@ -1155,7 +1155,7 @@ class LogNormal(Distribution):
         ndarray
             A single sample from LogNormal(mu, sigma²) truncated to [lo, hi].
         """
-        # Inverse-CDF sampling through the standardization pushforward —
+        # Inverse-CDF sampling through the standardization pushforward:
         # one source of truth with unstandardize(), exactly truncated.
         return self.unstandardize(jax.random.normal(key))
 
@@ -1191,7 +1191,7 @@ class LogNormal(Distribution):
 
         Unbounded case is θ = exp(μ + σξ). With finite bounds, applies the
         truncated-normal inverse CDF in log space (see ``Gaussian`` for the
-        formula) — a smooth bijection onto (lo, hi) instead of clipping.
+        formula); a smooth bijection onto (lo, hi) instead of clipping.
 
         Parameters
         ----------
@@ -1292,7 +1292,7 @@ class StudentT(Distribution):
 
     Notes
     -----
-    **JIT-compatible**: yes — all operations use ``jnp`` primitives.
+    **JIT-compatible**: yes, all operations use ``jnp`` primitives.
 
     The probability density follows a Student's t distribution with the
     standard normalization. For finite df, it has heavier tails than a
@@ -1307,7 +1307,7 @@ class StudentT(Distribution):
     truncation bounds are applied in CDF space, giving a smooth bijection
     onto (lo, hi).
 
-    Heavy tails are preserved exactly — the previous variance-matched
+    Heavy tails are preserved exactly; the previous variance-matched
     Gaussian approximation silently discarded them, which matters for the
     Leja et al. (2019) [1]_ continuity-SFH log-SFR-ratio priors
     (StudentT(0, 0.3, df=2)) whose tails control burst flexibility.
@@ -1348,7 +1348,7 @@ class StudentT(Distribution):
         self.units = units
         # Quantile machinery: closed forms for df ∈ {1, 2}; otherwise a
         # monotone (F, z) table for interpolation, built once here (the
-        # NIFTy interpolation-operator pattern — no scipy dependency).
+        # NIFTy interpolation-operator pattern: no scipy dependency).
         if self._df not in (1.0, 2.0):
             self._cdf_grid, self._z_grid = self._build_cdf_table(self._df)
         else:
@@ -1399,7 +1399,7 @@ class StudentT(Distribution):
         """Standard-t quantile F⁻¹(p): closed form for df ∈ {1, 2}, else table.
 
         The df∉{1,2} branch is piecewise-linear (``jnp.interp``), so its
-        gradient is discontinuous at the 4097 knots — fine for MAP/NUTS in
+        gradient is discontinuous at the 4097 knots: fine for MAP/NUTS in
         practice, but the only df used in-repo are 1 and 2 (both closed-form
         above), so this branch is currently never exercised. Swap to a
         monotone-cubic interpolation if a fittable df∉{1,2} is introduced.
@@ -1434,7 +1434,7 @@ class StudentT(Distribution):
         ndarray
             A single sample from Student's t distribution truncated to [lo, hi].
         """
-        # Inverse-CDF sampling through the standardization pushforward —
+        # Inverse-CDF sampling through the standardization pushforward:
         # one source of truth with unstandardize(), exactly truncated.
         return self.unstandardize(jax.random.normal(key))
 
@@ -1451,7 +1451,7 @@ class StudentT(Distribution):
         float
             Log probability density at x.
         """
-        # Normalized (truncated) Student-t density — constants matter for
+        # Normalized (truncated) Student-t density: constants matter for
         # nested-sampling evidence.
         z = (x - self._mu) / self._sigma
         lp = -0.5 * (self._df + 1) * jnp.log(1 + z**2 / self._df) + self._log_norm
@@ -1532,7 +1532,7 @@ def _laplace_cdf_float(x: float, mu: float, b: float) -> float:
 
 
 class Laplace(Distribution):
-    r"""Laplace (double-exponential) prior — a sparsity/robustness prior.
+    r"""Laplace (double-exponential) prior: a sparsity/robustness prior.
 
     Heavier-tailed than a Gaussian and peaked at the location, the Laplace
     prior is the continuous analog of an L1 penalty (LASSO): it pulls weakly
@@ -1564,7 +1564,7 @@ class Laplace(Distribution):
 
     Notes
     -----
-    **JIT-compatible**: yes — all operations use ``jnp`` primitives.
+    **JIT-compatible**: yes; all operations use ``jnp`` primitives.
 
     The density is
 
@@ -1746,11 +1746,11 @@ class Fixed(Distribution):
     value : float or str
         The constant value returned by ``sample()`` and ``unstandardize()``.
     bounds : tuple[float, float]
-        Always ``(-inf, +inf)`` — Fixed parameters have no bounds.
+        Always ``(-inf, +inf)``: Fixed parameters have no bounds.
 
     Notes
     -----
-    **JIT-compatible**: yes — ``unstandardize()`` returns the constant value
+    **JIT-compatible**: yes; ``unstandardize()`` returns the constant value
     regardless of the latent variable ξ.
 
     **Inference**: Fixed parameters are excluded from the inference set.
@@ -1788,7 +1788,7 @@ class Fixed(Distribution):
 
     @property
     def is_fixed(self) -> bool:
-        """Return True — this is a fixed (non-free) parameter.
+        """Return True; this is a fixed (non-free) parameter.
 
         Returns
         -------
@@ -1799,7 +1799,7 @@ class Fixed(Distribution):
 
     @property
     def default(self) -> float | str:
-        """Return the fixed value — for ``Fixed``, value and default coincide.
+        """Return the fixed value; for ``Fixed``, value and default coincide.
 
         Returns
         -------

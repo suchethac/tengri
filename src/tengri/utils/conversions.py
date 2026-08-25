@@ -510,7 +510,7 @@ def logzsol_to_log_z_abs(logzsol: jnp.ndarray) -> jnp.ndarray:
     Returns
     -------
     ndarray
-        Absolute metallicity [dex, log10(Z)] — the SSP grid's own convention.
+        Absolute metallicity [dex, log10(Z)]: the SSP grid's own convention.
 
     Notes
     -----
@@ -542,7 +542,7 @@ def log_z_abs_to_logzsol(log_z_abs: jnp.ndarray) -> jnp.ndarray:
     Returns
     -------
     ndarray
-        Metallicity relative to solar [dex, log10(Z/Zsun)] — the convention
+        Metallicity relative to solar [dex, log10(Z/Zsun)]; the convention
         every user-facing metallicity uses, ``met_logzsol`` included.
 
     Notes
@@ -663,7 +663,7 @@ def air_to_vacuum(wavelength_aa: np.ndarray) -> np.ndarray:
         n = 1 + 6.4328e-5 + 2.94981e-2 / (146 - σ²) + 2.5540e-4 / (41 - σ²)
 
     and λ_vac = n · λ_air. This is the Edlén (1953) formula for standard air
-    (15 °C, 760 mmHg) — the same conversion used by IRAF/SDSS. The Edlén
+    (15 °C, 760 mmHg): the same conversion used by IRAF/SDSS. The Edlén
     (1966) revision differs negligibly for optical spectroscopy.
 
     Reference: Edlén, B. (1953), "The Dispersion of Standard Air",

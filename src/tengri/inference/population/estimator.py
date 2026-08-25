@@ -111,7 +111,7 @@ class SharedGrid:
 
     The grid spans ``(sigma, log tau)`` coordinates: sigma is uniform in
     amplitude [dex], and tau is sampled geometrically. The implied prior is
-    uniform in ``(sigma, log tau)`` space, i.e., **log-uniform in tau** — this
+    uniform in ``(sigma, log tau)`` space, i.e., **log-uniform in tau**, this
     is deliberate. Quadrature weights account for the differential volume
     element in log-tau space, so ``log_volume`` is a constant (the integral of
     ``log(d_sigma) + log(d_log_tau)`` over all nodes).

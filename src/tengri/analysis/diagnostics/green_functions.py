@@ -135,7 +135,7 @@ def compute_window_function_fourier(window_fn, ssp_ages_yr):
     Returns
     -------
     power_transfer : array, shape (n_freq,)
-        ``|W_tilde(omega)|^2`` — the PSD-to-observable transfer function.
+        ``|W_tilde(omega)|^2``: the PSD-to-observable transfer function.
     omega : array, shape (n_freq,)
         Angular frequencies (rad/yr).
     """

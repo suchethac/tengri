@@ -1,12 +1,12 @@
 # SPDX-License-Identifier: BSD-3-Clause
-r"""Adaptive-axis nebular line grid — variable ionization via precompute (#950).
+r"""Adaptive-axis nebular line grid: variable ionization via precompute (#950).
 
 Generalizes the fixed-ionization line-per-Q_H table (:mod:`line_precompute`,
 #955) to a grid over the ionization parameters that are **free** in a given
 model. Cue makes each nebular line luminosity exactly linear in the hydrogen-
 ionizing photon rate Q_H, and the per-Q_H factor depends only on the stellar
 metallicity (which sets the ionizing-spectrum shape) and the gas conditions
-(logU, gas-phase metallicity) — **not** on the star-formation-history shape
+(logU, gas-phase metallicity): **not** on the star-formation-history shape
 (#950, CV = 0 % across SFH draws). So
 
 .. math::
@@ -20,7 +20,7 @@ of ``met_logzsol`` / ``neb_logU`` / ``neb_logZ_gas`` are free. Fixed parameters
 are baked into the grid at their spec value, so a tighter setup gets a smaller,
 faster grid automatically:
 
-* all three fixed  → 0 axes (one template; pure Q_H scaling — the #955 case);
+* all three fixed  → 0 axes (one template; pure Q_H scaling: the #955 case);
 * ``neb_logU`` free → 1 axis;
 * ``neb_logU`` + ``neb_logZ_gas`` free → 2 axes; …
 
@@ -29,7 +29,7 @@ Interpolation is **node-exact** monotone-cubic PCHIP
 log10-luminosity space, so the reconstruction is exact at grid nodes,
 JIT/gradient-safe, and free of the smoothing bias a kernel smoother introduces on
 the steeply logU-varying lines. The ionizing-spectrum shape is
-**not** a grid axis — it is carried by the ``met_logzsol`` axis (SFH-independent
+**not** a grid axis: it is carried by the ``met_logzsol`` axis (SFH-independent
 to ~0.2 %; #1018). See issue #950.
 """
 
@@ -60,7 +60,7 @@ _CANDIDATE_AXES = ("met_logzsol", "neb_logU", "neb_logZ_gas")
 #: Fallback grid bounds used ONLY when a free axis's prior exposes no finite
 #: support (e.g. an unbounded Gaussian). Kept at least as wide as the standard
 #: priors (met_logzsol ~ Uniform(-2, 0.2/0.5)) so the fallback still spans the
-#: sampled region — the primary path reads the prior's actual bounds.
+#: sampled region: the primary path reads the prior's actual bounds.
 _DEFAULT_RANGE = {
     "met_logzsol": (-2.0, 0.5),
     "neb_logU": (-4.0, -1.0),
@@ -72,7 +72,7 @@ _DEFAULT_RANGE = {
 #: Applied **only** when the met axis cannot be snapped to the SSP metallicity
 #: nodes (``snap_met_to_ssp_nodes=False``, or a model exposing no SSP metallicity
 #: grid). A snapped axis puts knots on the kinks and interpolates linearly across
-#: them, which converges — blind densification of an unsnapped axis does not, so
+#: them, which converges: blind densification of an unsnapped axis does not, so
 #: it needs the extra points more (#1020).
 _MET_AXIS_DENSITY_FACTOR = 2
 
@@ -81,7 +81,7 @@ _MET_AXIS_DENSITY_FACTOR = 2
 #: snapping never creates a near-degenerate interpolation cell.
 _SNAP_MERGE_FRAC = 0.25
 
-#: Points used for an axis the caller did not resolve explicitly — both the
+#: Points used for an axis the caller did not resolve explicitly: both the
 #: scalar default and the per-axis fallback for a dict that omits an axis.
 _DEFAULT_N_GRID = 16
 
@@ -118,7 +118,7 @@ def validate_n_grid(n_grid):
     and again inside :func:`precompute_nebular_grid`, so a misspelled axis raises
     where it was written. Before #1311 an unrecognized key was silently dropped
     by the ``dict.get(name, default)`` lookup and the axis quietly took the
-    default resolution — the user got a grid they did not ask for, with no
+    default resolution: the user got a grid they did not ask for, with no
     warning.
     """
 
@@ -157,7 +157,7 @@ def validate_n_grid(n_grid):
 #: enough to OOM a 16 GB CI runner or an ordinary laptop (#1361).
 #:
 #: Chunking bounds that peak at ``chunk x per-node`` while evaluating exactly the
-#: same nodes — vmap applies no cross-node reduction, so the per-node result does
+#: same nodes: vmap applies no cross-node reduction, so the per-node result does
 #: not depend on who else is in the batch. Grids at or below this size take the
 #: single-call path unchanged, so the common one-axis grid is untouched.
 _BUILD_CHUNK_NODES = 64
@@ -177,14 +177,14 @@ class NebularGridTable:
     log_line_per_qh : ndarray, shape ``(*grid_dims, n_lines)``
         ``log10`` of the line **luminosity** per unit ``nion`` [erg/s per
         (photons/s)], distance-independent. Stored in log space because line
-        luminosities span decades across (met, logU, logZ_gas) — geometric
+        luminosities span decades across (met, logU, logZ_gas): geometric
         (log-space) interpolation is far more accurate than arithmetic there.
         ``grid_dims`` matches ``axes``; a 0-axis table is shape ``(n_lines,)``.
     wavelengths : ndarray, shape (n_lines,)
         Rest-frame vacuum line wavelengths [Angstrom].
     log_phot_per_qh : ndarray, shape ``(*grid_dims, n_filter)`` or None
         ``log10`` of the **intrinsic** (un-reddened) nebular filter-integrated
-        rest-frame ``L_nu`` per unit ``nion`` [erg/s/Hz per (photons/s)] — the
+        rest-frame ``L_nu`` per unit ``nion`` [erg/s/Hz per (photons/s)]: the
         broadband analog of ``log_line_per_qh``, one column per photometric
         filter. Reconstructs ``nebular_phot_lnu_precomp`` (the key
         :meth:`Observation.predict_via_precomp` consumes) without the per-eval
@@ -202,7 +202,7 @@ class NebularGridTable:
         band sits in the rest frame and samples the rest SED at its own pivot
         (#1148). Reconstructs ``nebular_restband_lnu_precomp``.
 
-        This channel exists because the two publishes are **twins** — the exact
+        This channel exists because the two publishes are **twins**: the exact
         path emits them together, so a grid carrying only the observed band
         makes every rest-frame consumer silently lose the nebular contribution.
         That was #1665: all 13 spectral indices moved, worst ``HgA`` by +1733%,
@@ -288,13 +288,13 @@ def _snap_axis_to_nodes(lo, hi, n, nodes):
 
 
 def _axis_range(spec, name):
-    """(lo, hi) grid bounds for a free axis — from its prior's finite support.
+    """(lo, hi) grid bounds for a free axis: from its prior's finite support.
 
-    Reads the bounded prior's support (``bounds`` tuple, else ``lo``/``hi`` — the
+    Reads the bounded prior's support (``bounds`` tuple, else ``lo``/``hi``: the
     attributes tengri's :class:`Uniform` / :class:`LogUniform` expose). Only when
     the prior has no finite support (e.g. an unbounded Gaussian used as an axis)
     does it fall back to :data:`_DEFAULT_RANGE`, and it warns rather than silently
-    ignoring the prior — a too-narrow grid would extrapolate and bias the fit.
+    ignoring the prior: a too-narrow grid would extrapolate and bias the fit.
     """
     dist = spec.get_distribution(name)
     candidates = []
@@ -327,7 +327,7 @@ def _nion_of_state(state) -> jnp.ndarray:
 def _refuse_tabulated_metallicity(model):
     """Refuse a tabulated metallicity, whose LUT axis cannot exist (#1718).
 
-    The axes are ``tuple(p for p in _CANDIDATE_AXES if p in free)`` — free
+    The axes are ``tuple(p for p in _CANDIDATE_AXES if p in free)``: free
     *parameters*. ``met_mode='table'`` declares none, so ``met_logzsol`` is not
     merely fixed, it is absent, and the metallicity axis disappears from the grid
     with nothing raised. The table is then built at a single reference
@@ -360,13 +360,13 @@ def _refuse_tabulated_metallicity(model):
     raise ValueError(
         "FeaturePrecomp cannot serve a tabulated metallicity. Its grid axes are "
         "the model's free parameters, and met={'type': 'table'} declares "
-        "none — so met_logzsol is absent, the metallicity axis silently drops, "
+        "none: so met_logzsol is absent, the metallicity axis silently drops, "
         "and the whole table would be built at one reference metallicity. "
         "Measured that way against the exact path, OIII_5007 came out 17.5% "
         "wrong and NII_6584 5.3%, which is precisely the line-ratio information "
         "a nebular fit exists to use. Either drop FeaturePrecomp and keep the "
         "exact line path (WavePrecomp alone is unaffected and still applies), or "
-        "use a parametric metallicity — a tabulated SFH with a free met_logzsol "
+        "use a parametric metallicity: a tabulated SFH with a free met_logzsol "
         "is supported and agrees with exact to 0.3% (#1718)."
     )
 
@@ -387,7 +387,7 @@ def precompute_nebular_grid(
     spec value. The per-Q_H factor is SFH-shape-independent only to ~0.2 % (#1018:
     the ionizing-spectrum shape is the Q_H-weighted age mix, so re-weighting the SFH
     shifts the forbidden-line emissivity slightly), so the reference SFH is nearly
-    but not exactly arbitrary — well inside the interpolation error.
+    but not exactly arbitrary: well inside the interpolation error.
 
     Parameters
     ----------
@@ -407,7 +407,7 @@ def precompute_nebular_grid(
         instead of silently selecting the default (#1311). Since build cost is the
         *product* over axes, per-axis resolution is the lever for a model whose
         axes differ in sensitivity. Validate any accuracy claim with a dense sweep
-        strictly inside the grid range, never with random draws — a narrow feature
+        strictly inside the grid range, never with random draws: a narrow feature
         hides from random draws, and an error that ignores ``n_grid`` is an
         unresolved kink, not interpolation error.
     ranges : dict, optional
@@ -432,8 +432,8 @@ def precompute_nebular_grid(
     Notes
     -----
     **Build cost**: ``n_grid ** n_free_axes`` forward evaluations, once at
-    construction. They are JIT'd and vmapped over the grid — one compile, not one
-    eager forward per node — and evaluated in batches of
+    construction. They are JIT'd and vmapped over the grid: one compile, not one
+    eager forward per node: and evaluated in batches of
     :data:`_BUILD_CHUNK_NODES` so peak memory is bounded by the chunk rather than
     by the node count (#1361). (This note previously described a build-time loop
     over concrete grid points; that was the pre-vmap implementation.)
@@ -489,7 +489,7 @@ def precompute_nebular_grid(
             f"grid of {_axis_n('met_logzsol')} points. The exact per-Q_H emissivity "
             f"has C0 kinks at the SSP metallicity nodes (the ionizing-spectrum "
             f"tables interpolate bilinearly in met), which a uniform axis straddles: "
-            f"the collisionally-excited lines then converge only as O(h) — a dense "
+            f"the collisionally-excited lines then converge only as O(h): a dense "
             f"sweep shows [OIII] worst-case ~1.3 % at n=32 versus ~0.5 % for a "
             f"node-snapped axis of 23 points. Balmer lines are shape-insensitive and "
             f"are less affected. Prefer snap_met_to_ssp_nodes=True (the default), "
@@ -506,7 +506,7 @@ def precompute_nebular_grid(
     # A tabulated SFH declares no parameters, so `spec.sample` cannot produce
     # its runtime arrays and the stellar component raises before the first row.
     # This table is per-Q_H and so independent of the SFH that built it (#1718),
-    # which is why a stand-in serves — and why one already has to, since the
+    # which is why a stand-in serves: and why one already has to, since the
     # whole grid is built at a single sampled SFH for parametric models too.
     ref_params = {**reference_history_params(model, redshift=ref_z), **ref_params}
     log10_ref_divisor = _log10_four_pi_dl2(ref_z)  # observed flux -> luminosity
@@ -526,7 +526,7 @@ def precompute_nebular_grid(
     axis_kinds = tuple(axis_kinds)
 
     def _row(point_values):
-        """(line, phot|None, restband|None) at one grid point — one eager Cue forward.
+        """(line, phot|None, restband|None) at one grid point: one eager Cue forward.
 
         Kept for the single reference evaluation below (photometry-channel probe +
         vmap sanity check); the full grid is built vmapped, not by looping this.
@@ -540,7 +540,7 @@ def precompute_nebular_grid(
 
         ``row`` is a ``(n_axes,)`` array so this vmaps: ``predict_state`` compiles
         once and runs batched over every node, instead of one eager forward per node
-        (the #950 build looped ``predict_state`` ~n_grid**n_axes times — 256 eager
+        (the #950 build looped ``predict_state`` ~n_grid**n_axes times: 256 eager
         forwards, ~11 min; vmapped it is one compile, ~seconds).
         """
         p = dict(ref_params)
@@ -581,7 +581,7 @@ def precompute_nebular_grid(
     if has_phot and ref_rest is None:
         # The exact path publishes the observed band and its rest-frame twin
         # together, so a reference model that emits one without the other is a
-        # contract break upstream, not a grid variant. Refuse at BUILD time —
+        # contract break upstream, not a grid variant. Refuse at BUILD time:
         # shipping the half-grid is what made #1665 silent for a whole release.
         raise RuntimeError(
             "nebular fast grid: the reference model published "
@@ -598,7 +598,7 @@ def precompute_nebular_grid(
 
         Each chunk is forced to completion before the next is dispatched. Without
         that, JAX's async dispatch queues every chunk and holds all their
-        intermediates live anyway — which is the very thing chunking is for.
+        intermediates live anyway: which is the very thing chunking is for.
         """
         n = pts.shape[0]
         if n <= _BUILD_CHUNK_NODES:
@@ -637,7 +637,7 @@ def precompute_nebular_grid(
     if not bool(jnp.allclose(line_all[0], ref_line, rtol=1e-5, atol=0.0)):
         raise RuntimeError(
             "nebular fast grid: vmapped build disagrees with the eager reference "
-            "forward at the first node — a tracer/vmap regression, not a rounding gap."
+            "forward at the first node: a tracer/vmap regression, not a rounding gap."
         )
 
     def _stack_log(arr) -> jnp.ndarray:
@@ -665,7 +665,7 @@ def _kinds(table):
 
 
 def reconstruct_nebular_lines(nion, params, redshift, table) -> jnp.ndarray:
-    r"""Reconstruct observed line fluxes from the grid — no Cue forward.
+    r"""Reconstruct observed line fluxes from the grid: no Cue forward.
 
     .. math::
 
@@ -677,10 +677,10 @@ def reconstruct_nebular_lines(nion, params, redshift, table) -> jnp.ndarray:
     nion : float
         Ionizing photon rate for this evaluation (stellar-published; == q_h).
     params : Mapping
-        Parameter dict — the free-axis values (``params[name]`` for ``name`` in
+        Parameter dict: the free-axis values (``params[name]`` for ``name`` in
         ``table.axis_names``) locate the query point.
     redshift : float
-        Evaluation redshift — the cosmology is applied here, not baked in.
+        Evaluation redshift: the cosmology is applied here, not baked in.
     table : NebularGridTable
         The grid from :func:`precompute_nebular_grid`.
 
@@ -691,7 +691,7 @@ def reconstruct_nebular_lines(nion, params, redshift, table) -> jnp.ndarray:
 
     Notes
     -----
-    **JIT-compatible / gradient-safe**: yes — node-exact PCHIP interpolation + a
+    **JIT-compatible / gradient-safe**: yes, node-exact PCHIP interpolation + a
     scalar multiply + the cosmology divisor.
     """
     return apply_log10_scale(
@@ -700,11 +700,11 @@ def reconstruct_nebular_lines(nion, params, redshift, table) -> jnp.ndarray:
 
 
 def reconstruct_nebular_line_lums(nion, params, table) -> jnp.ndarray:
-    r"""Intrinsic line **luminosities** [erg/s] from the grid — no Cue, no cosmology.
+    r"""Intrinsic line **luminosities** [erg/s] from the grid: no Cue, no cosmology.
 
     The distance-independent core of :func:`reconstruct_nebular_lines`. Returns
     the intrinsic (un-reddened) line luminosities so a caller can apply dust
-    attenuation at the line wavelengths and the cosmology dimming itself — the
+    attenuation at the line wavelengths and the cosmology dimming itself: the
     order :meth:`SEDModel.predict_line_fluxes` uses (redden the intrinsic
     catalog, then convert ``L / 4 pi d_L^2``).
 
@@ -713,7 +713,7 @@ def reconstruct_nebular_line_lums(nion, params, table) -> jnp.ndarray:
     nion : float
         Ionizing photon rate for this evaluation (stellar-published; == q_h).
     params : Mapping
-        Parameter dict — the free-axis values (``params[name]`` for ``name`` in
+        Parameter dict: the free-axis values (``params[name]`` for ``name`` in
         ``table.axis_names``) locate the query point. Use full public names
         (``met_logzsol`` / ``neb_logU`` / ``neb_logZ_gas``).
     table : NebularGridTable
@@ -733,7 +733,7 @@ def reconstruct_nebular_line_lums(nion, params, table) -> jnp.ndarray:
 
 
 def reconstruct_nebular_phot(log_nion, params, table) -> jnp.ndarray:
-    r"""Reconstruct the intrinsic nebular photometry precompute — no Cue forward.
+    r"""Reconstruct the intrinsic nebular photometry precompute: no Cue forward.
 
     The broadband analog of :func:`reconstruct_nebular_lines`. Returns the
     **rest-frame** filter-integrated ``L_nu`` (one column per filter) that the
@@ -743,7 +743,7 @@ def reconstruct_nebular_phot(log_nion, params, table) -> jnp.ndarray:
 
         L_\nu^{\rm neb}(b) = 10^{\log_{10} n_{\rm ion} + \log_{10}\ell_b}
 
-    **No cosmology or dust here** — unlike the line channel, this matches the
+    **No cosmology or dust here**: unlike the line channel, this matches the
     intrinsic precompute contract: :meth:`Observation.predict_via_precomp`
     applies the young-limit dust screen (at the filter level) and the
     ``(1+z)/(4 pi d_L^2)`` dimming downstream, exactly as it does for the exact
@@ -755,7 +755,7 @@ def reconstruct_nebular_phot(log_nion, params, table) -> jnp.ndarray:
         log10 ionizing photon rate for this evaluation [dex re photons/s]
         (stellar-published; == log10(q_h)).
     params : Mapping
-        Parameter dict — the free-axis values locate the query point.
+        Parameter dict: the free-axis values locate the query point.
     table : NebularGridTable
         The grid from :func:`precompute_nebular_grid`, built from a
         ``WavePrecomp`` model so ``log_phot_per_qh`` is populated.
@@ -769,11 +769,11 @@ def reconstruct_nebular_phot(log_nion, params, table) -> jnp.ndarray:
     ------
     ValueError
         If the table carries no photometry channel (``log_phot_per_qh is None``)
-        — rebuild from a ``WavePrecomp`` model with photometric filters.
+        rebuild from a ``WavePrecomp`` model with photometric filters.
 
     Notes
     -----
-    **JIT-compatible / gradient-safe**: yes — node-exact PCHIP + log-domain add.
+    **JIT-compatible / gradient-safe**: yes, node-exact PCHIP + log-domain add.
     The sibling :func:`reconstruct_nebular_line_lums` and
     :func:`reconstruct_nebular_lines` still take linear ``nion`` (their erg/s
     output is deferred to #1206 items 2/3).
@@ -785,7 +785,7 @@ def _reconstruct_band_channel(log_nion, params, table, field, label) -> jnp.ndar
     """Shared core of the two per-filter reconstructions (#1665).
 
     ``reconstruct_nebular_phot`` and :func:`reconstruct_nebular_restband` differ
-    only in which grid channel they read — same axes, same interpolation, same
+    only in which grid channel they read: same axes, same interpolation, same
     ``L_nu = 10^(log_nion + log_channel)`` closing step. One body so the twins
     cannot drift apart, which is the failure this issue was.
 
@@ -810,7 +810,7 @@ def _reconstruct_band_channel(log_nion, params, table, field, label) -> jnp.ndar
 
     Notes
     -----
-    **JIT-compatible / gradient-safe**: yes — node-exact PCHIP + log-domain add.
+    **JIT-compatible / gradient-safe**: yes, node-exact PCHIP + log-domain add.
     """
     log_channel = getattr(table, field, None)
     if log_channel is None:
@@ -828,7 +828,7 @@ def _reconstruct_band_channel(log_nion, params, table, field, label) -> jnp.ndar
 
 
 def reconstruct_nebular_restband(log_nion, params, table) -> jnp.ndarray:
-    r"""Intrinsic nebular **rest-band** ``L_nu`` from the grid — the twin of phot.
+    r"""Intrinsic nebular **rest-band** ``L_nu`` from the grid: the twin of phot.
 
     Same filters as :func:`reconstruct_nebular_phot`, integrated at
     ``redshift=0`` so the band sits in the rest frame (#1148). Reconstructs
@@ -841,7 +841,7 @@ def reconstruct_nebular_restband(log_nion, params, table) -> jnp.ndarray:
         log10 ionizing photon rate for this evaluation [dex re photons/s]
         (stellar-published; == log10(q_h)).
     params : Mapping
-        Parameter dict — the free-axis values locate the query point.
+        Parameter dict: the free-axis values locate the query point.
     table : NebularGridTable
         The grid from :func:`precompute_nebular_grid`, built from a
         ``WavePrecomp`` model so ``log_restband_per_qh`` is populated.
@@ -854,12 +854,12 @@ def reconstruct_nebular_restband(log_nion, params, table) -> jnp.ndarray:
     Raises
     ------
     ValueError
-        If the table predates #1665 and carries no rest-band channel — rebuild
+        If the table predates #1665 and carries no rest-band channel: rebuild
         the grid rather than serving the observed band in its place.
 
     Notes
     -----
-    **JIT-compatible / gradient-safe**: yes — node-exact PCHIP + log-domain add.
+    **JIT-compatible / gradient-safe**: yes, node-exact PCHIP + log-domain add.
 
     Omitting this publish on the fast path was #1665: all 13 spectral indices
     moved off the exact path, worst ``HgA`` by +1733%, silently.

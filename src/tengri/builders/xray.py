@@ -5,7 +5,7 @@
 
 Variants come from ``tengri.components.xray._models.XRAY_MODELS``
 (currently ``none`` and ``simple``). Like :mod:`tengri.builders.radio`,
-the free-parameter set is shared across variants — the variant string
+the free-parameter set is shared across variants: the variant string
 selects the physics model.
 
 .. note::
@@ -17,7 +17,7 @@ selects the physics model.
 
    The knob is ``delta_alpha_ox``, not ``alpha_ox``: it is an *offset* in
    dex from the L_2500-derived empirical alpha_ox, defaulting to
-   ``Fixed(0.0)``. A prior centered on zero is the meaningful one — a range
+   ``Fixed(0.0)``. A prior centered on zero is the meaningful one; a range
    like ``(-2.0, -1.0)`` would be the alpha_ox value itself, which this
    parameter is not.
 

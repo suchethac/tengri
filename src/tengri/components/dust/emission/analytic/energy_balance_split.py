@@ -62,7 +62,7 @@ class EnergyBalanceSplitIRSEDComponent(EmissionComponent):
     closure is called with ``eta_balance=1.0`` here (the incoming ``L_ir`` is
     already the scaled budget).
 
-    **JIT-compatible**: yes — all operations are ``jnp`` primitives.
+    **JIT-compatible**: yes, all operations are ``jnp`` primitives.
 
     References
     ----------
@@ -116,7 +116,7 @@ class EnergyBalanceSplitIRSEDComponent(EmissionComponent):
     citations = ("kokorev2021",)
 
     #: Affine, so it opts out of the generic ``apply``-level ``L_ir`` factoring
-    #: (which re-applies a single scale after evaluating at unit luminosity —
+    #: (which re-applies a single scale after evaluating at unit luminosity:
     #: valid only for a proportional model). Instead this component assembles its
     #: two-term budget in log space *inside* :meth:`predict` and does its own
     #: single rescale, so ``apply`` must leave the scale alone. See the
@@ -165,7 +165,7 @@ class EnergyBalanceSplitIRSEDComponent(EmissionComponent):
 
         Notes
         -----
-        **JIT-compatible**: yes — all operations are ``jnp`` primitives.
+        **JIT-compatible**: yes, all operations are ``jnp`` primitives.
 
         The IR budget is *affine*, not proportional:
 
@@ -184,7 +184,7 @@ class EnergyBalanceSplitIRSEDComponent(EmissionComponent):
         in float64 (to ~1e-14 relative, the log round-trip) and finite in float32
         whenever the *net* budget is representable (#1206).
 
-        The default ``dust_L_agn_ir = 0`` — strict stellar energy balance — is
+        The default ``dust_L_agn_ir = 0`` (strict stellar energy balance) is
         fully float32-clean. A nonzero AGN-IR luminosity is a linear erg/s
         parameter and must itself be float32-representable (:math:`\lesssim
         3\times10^{38}` erg/s); a larger value stays out of range until

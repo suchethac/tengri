@@ -1,11 +1,11 @@
 # SPDX-License-Identifier: BSD-3-Clause
-"""Witt & Gordon (2000) radiative-transfer attenuation — vendored-grid runtime.
+"""Witt & Gordon (2000) radiative-transfer attenuation: vendored-grid runtime.
 
 Loads the WG00 Monte-Carlo attenuation tables (vendored from FSPS into
 ``data/wg00_attenuation_grid.h5`` by ``scripts/build_wg00_grid.py``) and
 interpolates the effective attenuation optical depth :math:`A(\\lambda; \\tau_V)`
 with a pure-JAX triweight kernel in :math:`\\tau_V`, so ``τ_V`` is a fully
-differentiable, JIT/vmap-safe *fitted* parameter — matching the SKIRTOR /
+differentiable, JIT/vmap-safe *fitted* parameter: matching the SKIRTOR /
 Nenkova / Silva+04 paths.
 
 Unlike a fixed ``k(λ)`` law scaled by ``τ_V``, WG00's curve *shape* depends on
@@ -13,7 +13,7 @@ Unlike a fixed ``k(λ)`` law scaled by ``τ_V``, WG00's curve *shape* depends on
 full ``A(λ; τ_V)`` table is interpolated directly and applied as ``exp(-A)``.
 
 Data source: Witt & Gordon 2000 (ApJ 528, 799), as reformatted and distributed
-by FSPS (Conroy & Gunn 2010) in ``$SPS_HOME/dust/alldirty_{h,c}.dat`` — the same
+by FSPS (Conroy & Gunn 2010) in ``$SPS_HOME/dust/alldirty_{h,c}.dat``: the same
 tables FSPS reads for ``dust_type=3``.
 """
 
@@ -69,7 +69,7 @@ def _load_wg00_arrays(grid_path: str) -> dict:
 
     Notes
     -----
-    **JIT-compatible**: no — performs HDF5 I/O at grid-load time.
+    **JIT-compatible**: no, performs HDF5 I/O at grid-load time.
     """
     import h5py
 
@@ -122,7 +122,7 @@ def create_wg00_from_grid(
     Returns
     -------
     callable
-        ``fn(wavelength, tau_v) -> A(λ)`` — the effective attenuation optical
+        ``fn(wavelength, tau_v) -> A(λ)``: the effective attenuation optical
         depth (apply as ``exp(-A)``), interpolated in ``τ_V`` with a triweight
         kernel and onto the requested wavelength grid.
 
@@ -135,11 +135,11 @@ def create_wg00_from_grid(
 
     Notes
     -----
-    **JIT-compatible**: yes — the returned closure uses only ``jnp`` and a
+    **JIT-compatible**: yes, the returned closure uses only ``jnp`` and a
     triweight interpolation kernel; the structural selectors are resolved to
     static indices at closure-build time.
 
-    **Gradient-safe**: yes — the triweight kernel is C²-continuous in ``τ_V``.
+    **Gradient-safe**: yes, the triweight kernel is C²-continuous in ``τ_V``.
 
     **Wavelength range**: the WG00 tables span 1000–30001 Å. Below 1000 Å the
     FUV value ``A(1000 Å)`` is held (a conservative extrapolation; those photons
@@ -238,8 +238,8 @@ def wg00_attenuation(
 
     Notes
     -----
-    **JIT-compatible**: yes — loads the vendored grid once via a cached closure,
-    then interpolates with pure JAX. **Gradient-safe**: yes — ``τ_V`` is a
+    **JIT-compatible**: yes, loads the vendored grid once via a cached closure,
+    then interpolates with pure JAX. **Gradient-safe**: yes, ``τ_V`` is a
     differentiable, traceable parameter.
 
     References

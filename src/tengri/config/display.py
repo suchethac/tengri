@@ -148,7 +148,7 @@ def tree(model: SEDModel) -> str:
         lines.append(f"{last} Observation: Photometry [{n_filt} bands] at {z_info}")
         lines.append(f"    Fast path: {precomp_str}")
     else:
-        # Probe the observation itself — ``model._wave_obs`` is a cache slot
+        # Probe the observation itself: ``model._wave_obs`` is a cache slot
         # that is never populated, so it mislabeled every spectroscopy model
         # with the generic line (same fail-open class as #1222).
         spec_obs = getattr(getattr(model, "observation", None), "spectroscopy", None)

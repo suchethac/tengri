@@ -2,11 +2,17 @@
 """Integration test: verify cross-galaxy engine reuse in CatalogFitter.
 
 Tests that CatalogFitter with multiple galaxies reuses a single compiled
-engine across all galaxies when they share the same shape signature.
+engine across all galaxies when they share the same compile signature.
 
 The test instruments _build_jit_engine with a counter and verifies:
-1. Three fitters (with different SSP arrays of identical shape) reuse one compile
+1. Three fitters (with separately-constructed, identical-content SSP grids)
+   reuse one compiled engine
 2. Each fitter still produces correct numerical results (equivalence test)
+
+Since PR #1973, the compile signature includes a blake2b content digest of
+ssp_flux, so two SSP grids that differ in content produce different signatures
+and therefore different engines. The sharing contract is now: identical *content*
+(measured by the digest), not merely identical shape.
 """
 
 from __future__ import annotations
@@ -51,24 +57,70 @@ def spec_dpl():
     )
 
 
-def _mutate_ssp_flux(ssp_data, factor: float) -> SSPData:
-    """Return a new SSPData with scaled flux (to fake different SSP files)."""
-    return ssp_data._replace(ssp_flux=ssp_data.ssp_flux * factor)
+def _create_identical_ssp() -> SSPData:
+    """Return a fresh SSPData with the standard test arrays.
+
+    Each call creates an independent array object (different id), so each
+    call to get_ssp_content_hash is an id-cache miss. Because the digest is
+    content-based (blake2b of the bytes), separately-constructed arrays with
+    identical content produce equal digests, enabling signature equality and
+    engine reuse.
+    """
+    n_met, n_age, n_wave = 8, 15, 200
+    return SSPData(
+        ssp_wave=jnp.logspace(3, 4.5, n_wave),
+        ssp_flux=jnp.ones((n_met, n_age, n_wave), dtype=jnp.float64),
+        ssp_lg_age_gyr=jnp.linspace(6, 10.1, n_age),
+        ssp_lgmet=jnp.linspace(-2.0, 0.3, n_met),
+    )
 
 
 class TestCatalogEngineReuse:
     """Integration tests for cross-galaxy engine reuse."""
 
-    def test_three_fitters_one_compile(self, base_ssp_data, photometry, spec_dpl):
-        """Three fitters with identical shapes should compile once.
+    @pytest.fixture(autouse=True)
+    def _isolated_engine_cache(self):
+        """Isolate the process-global engine cache per test.
 
-        Creates 3 SEDModels with different SSP flux values (but same shape),
-        constructs 3 Fitters, and verifies only 1 call to build_jit_engine.
+        The compile_signature is keyed on content and shapes, not data values;
+        fitters from sibling tests in the same xdist worker collide in
+        _SHARED_ENGINE_CACHE because they use identical specs/SSPData/Observation.
+        Compile-count and engine-identity assertions are only meaningful when
+        each test controls its own cache state. Per-model write-through caches
+        (_model_cache_owner namespace) do not leak across tests because models
+        are per-test-local objects.
         """
-        # Create 3 SSPData instances with different flux values
-        ssp1 = base_ssp_data
-        ssp2 = _mutate_ssp_flux(base_ssp_data, 1.1)
-        ssp3 = _mutate_ssp_flux(base_ssp_data, 0.9)
+        from tengri.inference import jit_engine
+
+        with jit_engine._SHARED_ENGINE_CACHE_LOCK:
+            saved = dict(jit_engine._SHARED_ENGINE_CACHE)
+            jit_engine._SHARED_ENGINE_CACHE.clear()
+        try:
+            yield
+        finally:
+            with jit_engine._SHARED_ENGINE_CACHE_LOCK:
+                jit_engine._SHARED_ENGINE_CACHE.clear()
+                jit_engine._SHARED_ENGINE_CACHE.update(saved)
+
+    def test_three_fitters_one_compile(self, photometry, spec_dpl):
+        """Three fitters with identical-content SSP should compile once.
+
+        Creates 3 SEDModels by separately constructing SSPData instances with
+        identical numerical content (each call creates a new array object with
+        different id()), then constructs 3 Fitters and verifies only 1 call to
+        build_jit_engine.
+
+        Each call to get_ssp_content_hash() is an id-cache miss (keyed by
+        object identity), but equal content produces equal digests (content-based
+        blake2b). All three models have the same compile signature due to
+        identical digests, enabling them to reuse one compiled engine.
+        """
+        # Create 3 separately-constructed SSPData with identical content.
+        # Each call to _create_identical_ssp returns a fresh array object
+        # (different id()), but the arrays have identical numerical content.
+        ssp1 = _create_identical_ssp()
+        ssp2 = _create_identical_ssp()
+        ssp3 = _create_identical_ssp()
 
         # Create 3 models
         models = [
@@ -79,7 +131,9 @@ class TestCatalogEngineReuse:
 
         # Verify all have identical compile_signature
         sigs = [model.compile_signature() for model in models]
-        assert sigs[0] == sigs[1] == sigs[2], "Models should have identical signatures"
+        assert sigs[0] == sigs[1] == sigs[2], (
+            "Models with identical-content SSP should have identical signatures"
+        )
 
         # Create fitters with identical data config
         data = jnp.ones(3)
@@ -119,20 +173,21 @@ class TestCatalogEngineReuse:
             assert call_count == 1, f"Expected 1 compile, got {call_count}"
 
         # All three fitters should have received the SAME engine object
-        # (shared via WeakValueDictionary)
+        # (shared via module-level OrderedDict LRU under a lock)
         assert engines[0] is engines[1] is engines[2], (
             "All three fitters should reference the same compiled engine"
         )
 
-    def test_engine_reuse_produces_correct_results(self, base_ssp_data, photometry, spec_dpl):
+    def test_engine_reuse_produces_correct_results(self, photometry, spec_dpl):
         """Engines reused from cache should work for both fitters.
 
-        Verifies that using a cached engine vs. rebuilding it produces
-        valid results and the engines are actually shared.
+        Creates two models with separately-constructed, identical-content SSP
+        grids, verifies they share the same cached engine, and confirms both
+        engines produce valid results.
         """
-        # Create two models with different SSP flux (same shape)
-        ssp1 = base_ssp_data
-        ssp2 = _mutate_ssp_flux(base_ssp_data, 1.05)
+        # Create two separately-constructed SSPData with identical content
+        ssp1 = _create_identical_ssp()
+        ssp2 = _create_identical_ssp()
 
         model1 = SEDModel(spec_dpl, ssp1, observation=photometry)
         model2 = SEDModel(spec_dpl, ssp2, observation=photometry)
@@ -201,3 +256,80 @@ class TestCatalogEngineReuse:
 
         # Engines should be different objects (different signatures)
         assert engine1 is not engine2, "Different signatures should produce different engines"
+
+    def test_bug_2047_different_ssp_content_gets_own_engine(self, photometry, spec_dpl):
+        """Different SSP flux content must produce different engines (issue #2047).
+
+        Before PR #1973, the compile signature included only SSP shape and
+        metallicity grid, not the flux content. This allowed two SSP grids
+        with identical shape/lgmet but different flux to collide in the
+        compile_signature, causing silent engine reuse and systematic bias
+        (+0.9962 dex measured on log_total_mass).
+
+        This test pins the fix: two separately-constructed SSPData with
+        DIFFERENT flux content must produce DIFFERENT signatures and therefore
+        different (not shared) compiled engines.
+        """
+        # Create a second SSPData with content-different flux
+        ssp1 = _create_identical_ssp()
+
+        # Manually create ssp2 with the same shape but scaled flux
+        n_met, n_age, n_wave = 8, 15, 200
+        ssp2 = SSPData(
+            ssp_wave=jnp.logspace(3, 4.5, n_wave),
+            ssp_flux=jnp.ones((n_met, n_age, n_wave), dtype=jnp.float64) * 1.1,
+            ssp_lg_age_gyr=jnp.linspace(6, 10.1, n_age),
+            ssp_lgmet=jnp.linspace(-2.0, 0.3, n_met),
+        )  # Different content
+
+        # Create models
+        model1 = SEDModel(spec_dpl, ssp1, observation=photometry)
+        model2 = SEDModel(spec_dpl, ssp2, observation=photometry)
+
+        # Verify they have DIFFERENT compile signatures (different flux content)
+        sig1 = model1.compile_signature()
+        sig2 = model2.compile_signature()
+        assert sig1 != sig2, (
+            "SSP flux content difference must produce different compile signatures"
+        )
+
+        # Create fitters
+        data = jnp.ones(3) * 0.5
+        noise = jnp.ones(3) * 0.05
+
+        fitter1 = Fitter(model1, data, noise, data_type="photometry")
+        fitter2 = Fitter(model2, data, noise, data_type="photometry")
+
+        # Verify fitter signatures also differ
+        fitter_sig1 = fitter1.compile_signature()
+        fitter_sig2 = fitter2.compile_signature()
+        assert fitter_sig1 != fitter_sig2, "Fitter signatures should differ due to SSP content"
+
+        # Instrument build_jit_engine and verify we get TWO compiles, not one
+        call_count = 0
+        original_build = build_jit_engine
+
+        def counting_build(*args, **kwargs):
+            nonlocal call_count
+            call_count += 1
+            return original_build(*args, **kwargs)
+
+        with mock.patch(
+            "tengri.inference.jit_engine.build_jit_engine",
+            side_effect=counting_build,
+        ):
+            pos_dict1 = {name: jnp.array(0.0) for name in fitter1.spec.free_params}
+            pos_dict2 = {name: jnp.array(0.0) for name in fitter2.spec.free_params}
+
+            engine1 = fitter1._get_or_build_engine(pos_dict1)
+            engine2 = fitter2._get_or_build_engine(pos_dict2)
+
+            # Should have compiled exactly twice (once per engine)
+            assert call_count == 2, (
+                f"Expected 2 compiles for different SSP content, got {call_count}"
+            )
+
+        # Engines must be DIFFERENT objects (not shared)
+        assert engine1 is not engine2, (
+            "Different SSP flux content should produce non-identical engine objects"
+        )

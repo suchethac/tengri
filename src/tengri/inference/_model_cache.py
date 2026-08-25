@@ -6,7 +6,7 @@ Replaces the pattern of monkey-patching private dicts onto SEDModel at runtime
 
 Keyed on the SEDModel object identity. When ``precompute_spectroscopy`` /
 ``precompute_ztable`` later return a new SEDModel, the new instance
-gets a fresh cache and the JIT functions recompile on first use — an
+gets a fresh cache and the JIT functions recompile on first use, an
 acceptable cost since the cached artefacts can always be regenerated.
 
 Structural kernel cache: two SEDModel instances with identical compile_signature()

@@ -92,7 +92,7 @@ def precompute_cat3d_photometry(
 
     Notes
     -----
-    **JIT-compatible**: no — this is a build-time function using NumPy.
+    **JIT-compatible**: no, this is a build-time function using NumPy.
 
     **Build-time operation**: This function performs frequency-domain
     integration via NumPy. The precomputed photometry is grid-independent
@@ -199,10 +199,10 @@ def build_cat3d_photometry_lookup(precomp: dict):
 
     Notes
     -----
-    **JIT-compatible**: yes — the returned function uses ``jnp`` and
+    **JIT-compatible**: yes, the returned function uses ``jnp`` and
     monotone-cubic interpolation, which are JAX-native.
 
-    **Gradient-safe**: yes — node-exact PCHIP is C¹-differentiable.
+    **Gradient-safe**: yes, node-exact PCHIP is C¹-differentiable.
 
     **Interpolation kernel**: node-exact monotone cubic (PCHIP), matching the
     exact-wave-grid path (:mod:`tengri.components.agn.cat3d_wind`) so the
@@ -276,7 +276,7 @@ def precompute(
 
     Notes
     -----
-    **JIT-compatible**: no — this is a build-time function using NumPy.
+    **JIT-compatible**: no, this is a build-time function using NumPy.
     """
     result = precompute_cat3d_photometry(grid_path, filter_waves, filter_trans, redshift=redshift)
 
@@ -331,9 +331,9 @@ def build_lookup(preint: dict, *, free_param_names: tuple[str, ...] | None = Non
 
     Notes
     -----
-    **JIT-compatible**: yes — the returned function is fully JAX-native.
+    **JIT-compatible**: yes, the returned function is fully JAX-native.
 
-    **Gradient-safe**: yes — node-exact PCHIP is C¹-differentiable.
+    **Gradient-safe**: yes, node-exact PCHIP is C¹-differentiable.
     """
     if not preint.get("_collapsed_axes"):
         return build_cat3d_photometry_lookup(preint)

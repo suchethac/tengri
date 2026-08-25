@@ -9,7 +9,7 @@ three disc models:
 
 2. **disc_ss** (Shakura-Sunyaev): Multi-color thin disc with temperature
    gradient. Two free axes: ``agn_log_mbh``, ``agn_log_lbol`` (the post-#846
-   shape driver — the Eddington ratio, hence the disc temperature profile, is
+   shape driver, the Eddington ratio, hence the disc temperature profile, is
    derived from ``agn_log_lbol`` and ``agn_log_mbh``).
 
 3. **cigale_disc** (piecewise power-law from CIGALE): Empirical disc model
@@ -18,7 +18,7 @@ three disc models:
 
 Each model is preintegrated through filter curves at model-initialization time.
 Auto-collapses axes whose corresponding parameters are ``Fixed`` in the user's
-``Parameters`` — e.g., a user who pins ``agn_alpha`` gets a scalar template.
+``Parameters``: e.g., a user who pins ``agn_alpha`` gets a scalar template.
 
 References
 ----------
@@ -168,7 +168,7 @@ def _build_grid_ss(
     Templates are energy-normalized to unit bolometric luminosity so the grid
     captures pure shape variation; the absolute normalization is reintroduced by
     the runtime ``agn_log_lbol`` scaling in :func:`build_lookup`. Varying L_bol
-    here — rather than the now-ignored ``agn_log_ledd`` — fixes the silently
+    here (rather than the now-ignored ``agn_log_ledd``) fixes the silently
     degenerate second axis of #902.
 
     Parameters
@@ -330,7 +330,7 @@ def precompute(
         Grid for agn_log_mbh (ss_disc only). If None, uses [6, 7, 8, 9, 10].
     lbol_grid : ndarray, optional
         Grid for agn_log_lbol (ss_disc only) [log10(L_sun)]. If None, uses
-        [9, 10, 11, 12, 13] — faint-Seyfert through bright-quasar bolometric
+        [9, 10, 11, 12, 13]: faint-Seyfert through bright-quasar bolometric
         luminosities (sub-Eddington across the default M_bh grid; the disc peak
         sweeps from the optical into the EUV over this range).
 
@@ -350,7 +350,7 @@ def precompute(
 
     Notes
     -----
-    **JIT-compatible**: no — this is a build-time function using NumPy.
+    **JIT-compatible**: no, this is a build-time function using NumPy.
     """
     if model == "powerlaw_disc":
         if alpha_grid is None:
@@ -439,10 +439,10 @@ def build_lookup(
 
     Notes
     -----
-    **JIT-compatible**: yes — the returned function uses ``jnp`` and triweight
+    **JIT-compatible**: yes, the returned function uses ``jnp`` and triweight
     interpolation.
 
-    **Gradient-safe**: yes — triweight kernel is fully differentiable.
+    **Gradient-safe**: yes, triweight kernel is fully differentiable.
     """
     if not preint.get("_collapsed_axes"):
         # No axes collapsed: use template helper directly

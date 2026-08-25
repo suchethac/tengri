@@ -3,7 +3,7 @@
 
 Implements the ``activategtorus`` module from upstream
 ``JohannesBuchner/GRAHSP`` (CeCILL-v2). The infrared continuum is the sum of
-two log-quadratic ("log-Gaussian") components in :math:`L_\\lambda` —
+two log-quadratic ("log-Gaussian") components in :math:`L_\\lambda`:
 a cool dust peak at :math:`\\lambda_{\\rm COOL}` and a hot dust peak at
 :math:`\\lambda_{\\rm HOT}`, each with log-width :math:`W` (dex). The hot
 component is scaled by :math:`f_{\\rm hot}` (Eq. fhot in the paper) relative
@@ -177,7 +177,7 @@ si_abs_width_nm
     -------
     L_Si : ndarray, shape (n_wave,)
         Si feature contribution :math:`L_\lambda` [erg/s/nm]. May be
-        negative (absorption) — caller should clip the total torus
+        negative (absorption): caller should clip the total torus
         :math:`L_\lambda` to non-negative values, mirroring upstream's
         ``mask_negative`` behavior.
 
@@ -271,7 +271,7 @@ def torus_mn12_continuum(
 
     **Normalization convention (GRAHSP-faithful):** reproduced verbatim from
     upstream ``activatetorus``: ``l_torus = 2.5 * l5100 * fcov / 12.0 * 0.510``
-    and ``torus_spectrum = l_torus * (avg + dev) * cutoff`` — there is **no**
+    and ``torus_spectrum = l_torus * (avg + dev) * cutoff``: there is **no**
     division by 12000 nm. This differs from the empirical log-Gaussian path
     (:func:`torus_dust_continuum`, from ``activategtorus``), which uses
     ``l_torus = 2.5 * l5100 * fcov`` then ``/ 12000``. The two GRAHSP modules
@@ -309,7 +309,7 @@ def torus_mn12_continuum(
     # Normalization, verbatim from upstream ``activatetorus.process`` (line 83):
     #   l_torus = 2.5 * l_agn * fcov / 12.0 * 0.510
     # Upstream then forms ``torus_spectrum = l_torus * (avg + dev) * cutoff``
-    # directly — note there is NO division by 12000 nm here (unlike the
+    # directly: note there is NO division by 12000 nm here (unlike the
     # log-Gaussian ``activategtorus`` path), because the MN12 ``avg/lo/hi``
     # templates are already L_lambda-shaped and the /12.0*0.510 factor is
     # folded into l_torus. We reproduce GRAHSP's convention exactly so the
@@ -363,7 +363,7 @@ def torus_mn12_si(
     -------
     L_Si : ndarray, shape (n_wave,)
         Silicate feature contribution :math:`L_\lambda` [erg/s/nm], interpolated
-        onto ``wave_nm`` grid. May be negative (absorption) — caller should
+        onto ``wave_nm`` grid. May be negative (absorption): caller should
         ensure the total torus :math:`L_\lambda` (continuum + feature) is
         non-negative, mirroring upstream's ``mask_negative`` behavior.
 
@@ -384,7 +384,7 @@ def torus_mn12_si(
 
     # Verbatim from upstream ``activatetorus.process`` (line 96):
     #   si_spectrum = l_torus * self.si.lumin * Si
-    # Same l_torus as the continuum, and again NO /12000 — the silicate must
+    # Same l_torus as the continuum, and again NO /12000, the silicate must
     # follow the same normalization convention as its own continuum.
     l_torus = 2.5 * l5100 * fcov / 12.0 * 0.510
     spectrum_native = l_torus * si_lumin_arr * si

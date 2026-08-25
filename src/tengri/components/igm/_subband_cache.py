@@ -2,7 +2,7 @@
 """Content-hashed cache for the sub-band IGM transmission table.
 
 ``IGMSEDComponent.subband_node_transmission`` evaluates the IGM transmission at
-every sub-band quadrature node on the photometry z-grid — a Python loop over
+every sub-band quadrature node on the photometry z-grid; a Python loop over
 the z axis, one :func:`igm_absorption` call per redshift. It is a **build-time
 constant**, so neither the JAX compilation cache nor the photometry z-table
 cache covers it, and every ``SEDModel.build`` re-paid it in full: measured at
@@ -15,7 +15,7 @@ The z-table computed in the same call is content-hashed to
 Key completeness
 ----------------
 A cross-process cache whose key omits an input returns wrong physics silently
-and persistently — that is exactly how #1122 happened, and the z-table's own
+and persistently; that is exactly how #1122 happened, and the z-table's own
 key carries a comment about it. So the key here is derived from a closed
 reading of what the computation consumes rather than from what seemed likely.
 
@@ -47,7 +47,7 @@ __all__ = ["cache_dir", "cache_key", "clear_memo", "load", "memo_get", "memo_put
 
 #: Bump when the stored table's meaning changes (transmission formula, node
 #: layout, dtype convention). Entries keyed with an older version are ignored.
-_CACHE_VERSION = 1
+_CACHE_VERSION = 2
 
 #: In-process memo. The on-disk layer alone still costs an npz read per build,
 #: and #1453 measured repeat builds *within* one process re-paying in full.
@@ -70,6 +70,12 @@ def cache_dir() -> Path | None:
 def cache_key(waves_rest, z_grid, igm_model, *, igm_patchy=False, use_dla=False) -> str:
     """Content hash over everything the transmission table depends on.
 
+    Includes session precision (jax_enable_x64) and JAX backend since the
+    transmission values are computed through JAX and inherit session precision.
+    Contamination without these: float32 session writes an entry, float64
+    session reads it (~1e-7 relative error silently poisoning precision
+    benchmarks/parity tests that share a cache dir between arms). Issue #2024.
+
     Parameters
     ----------
     waves_rest : array_like
@@ -81,7 +87,7 @@ def cache_key(waves_rest, z_grid, igm_model, *, igm_patchy=False, use_dla=False)
     igm_model : str
         Transmission law name (``"inoue"``, ``"madau"``, ...).
     igm_patchy, use_dla : bool, optional
-        Included for the reason given in the module docstring — the current
+        Included for the reason given in the module docstring: the current
         gate makes them unreachable, and the key should not depend on that
         staying true.
 
@@ -90,6 +96,8 @@ def cache_key(waves_rest, z_grid, igm_model, *, igm_patchy=False, use_dla=False)
     str
         Hex digest.
     """
+    import jax
+
     h = hashlib.sha256()
     h.update(f"v{_CACHE_VERSION}".encode())
     for arr in (waves_rest, z_grid):
@@ -98,7 +106,17 @@ def cache_key(waves_rest, z_grid, igm_model, *, igm_patchy=False, use_dla=False)
         # different shape are a different table.
         h.update(repr((a.shape, a.dtype.str)).encode())
         h.update(a.tobytes())
-    h.update(repr((str(igm_model), bool(igm_patchy), bool(use_dla))).encode())
+    h.update(
+        repr(
+            (
+                str(igm_model),
+                bool(igm_patchy),
+                bool(use_dla),
+                bool(jax.config.jax_enable_x64),
+                jax.default_backend(),
+            )
+        ).encode()
+    )
     return h.hexdigest()
 
 
@@ -111,7 +129,13 @@ def band_factor_key(wave_rest, filter_waves, filter_trans, z_grid, igm_model, co
 
     ``precompute_band_factors`` integrates the transmission against each filter
     response, so its result depends on the filter curves and the convolution
-    convention as well — inputs the sub-band node table never sees.
+    convention as well: inputs the sub-band node table never sees.
+
+    Includes session precision (jax_enable_x64) and JAX backend since the
+    band factor values are computed through JAX and inherit session precision.
+    Contamination without these: float32 session writes an entry, float64
+    session reads it (~1e-7 relative error silently poisoning precision
+    benchmarks/parity tests that share a cache dir between arms). Issue #2024.
 
     Parameters
     ----------
@@ -133,6 +157,8 @@ def band_factor_key(wave_rest, filter_waves, filter_trans, z_grid, igm_model, co
     str
         Hex digest.
     """
+    import jax
+
     h = hashlib.sha256()
     h.update(f"bf-v{_CACHE_VERSION}".encode())
     for arr in (wave_rest, z_grid):
@@ -145,7 +171,16 @@ def band_factor_key(wave_rest, filter_waves, filter_trans, z_grid, igm_model, co
             a = np.ascontiguousarray(np.asarray(arr, dtype=np.float64))
             h.update(repr((a.shape, a.dtype.str)).encode())
             h.update(a.tobytes())
-    h.update(repr((str(igm_model), str(convention))).encode())
+    h.update(
+        repr(
+            (
+                str(igm_model),
+                str(convention),
+                bool(jax.config.jax_enable_x64),
+                jax.default_backend(),
+            )
+        ).encode()
+    )
     return h.hexdigest()
 
 
@@ -217,7 +252,7 @@ def store(key: str, table) -> None:
         # The temp name must itself end in ``.npz``: ``savez_compressed``
         # appends the extension when it is absent, so a name like
         # ``foo.npz.tmp123`` is written as ``foo.npz.tmp123.npz`` and the
-        # rename below silently finds nothing. That failure is invisible —
+        # rename below silently finds nothing. That failure is invisible;
         # every build recomputes and the cache simply never hits.
         tmp = directory / f"igm_subband_{key}.{os.getpid()}.tmp.npz"
         np.savez_compressed(tmp, table=np.asarray(table))

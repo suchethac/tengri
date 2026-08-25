@@ -47,7 +47,7 @@ class SpatialModelComponent:
     Subclasses declare:
 
       * ``name`` (str) and ``parameter_prefix`` (always ``"spatial_"``)
-      * Class-level :class:`Distribution` attributes — free parameters
+      * Class-level :class:`Distribution` attributes: free parameters
       * Optional ``reads`` (dict of name -> units) and ``publishes``
         (dict of name -> units) for the cross-component contract
       * A ``predict(p, profile_in, grid_kpc, **reads_kwargs)`` method
@@ -188,7 +188,7 @@ class SpatialModelComponent:
             Running 2D surface-brightness profile from upstream components,
             or zeros if this component is first.
         grid_kpc : tuple of (ndarray, ndarray), each shape (ny, nx)
-            ``(x_grid_kpc, y_grid_kpc)`` — the 2D spatial coordinate grids.
+            ``(x_grid_kpc, y_grid_kpc)``: the 2D spatial coordinate grids.
         **inputs : ndarray
             Cross-component reads keyed by names in :attr:`reads`.
 

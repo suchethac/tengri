@@ -32,7 +32,7 @@ References
 - Johnson+2021: Prospector implementation.
 - Tacchella et al. 2022, ApJ, 926, 134 (arXiv:2102.11954): Bursty continuity.
 - Wang et al. 2024 (arXiv:2401.12198): Prospector-β agebins scheme.
-- Synthesizer (ContinuityFlex upstream ref) — cite both: Lovell et al. 2025
+- Synthesizer (ContinuityFlex upstream ref); cite both: Lovell et al. 2025
   (OJA) + Roper et al. 2026 (JOSS).
 
 """
@@ -70,7 +70,7 @@ def _piecewise_constant_sfr(age_yr, bin_edges_yr, sfr_bins, n_bins):
 
     Notes
     -----
-    **JIT-compatible**: yes — ``jnp`` primitives only.
+    **JIT-compatible**: yes, ``jnp`` primitives only.
 
     Ages *below* the first edge are deliberately clamped into the youngest bin.
     ``psb_suess2022`` starts its edges at 0.3 Gyr and relies on that.
@@ -123,7 +123,7 @@ def continuity(
 
     Notes
     -----
-    **JIT-compatible**: yes — all operations use ``jnp`` primitives.
+    **JIT-compatible**: yes, all operations use ``jnp`` primitives.
 
     The SFH is piecewise-constant (step function) with N bins. Free parameters
     are log-ratios between adjacent bins. The oldest bin is the reference,
@@ -157,7 +157,7 @@ def continuity(
     mass_unnorm = jnp.sum(sfr_unnorm * bin_widths_yr)
     sfr_bins = sfr_unnorm * 10.0**log_total_mass / mass_unnorm
 
-    # Piecewise-constant (step function) — Leja+2019 ApJ 876 3 defines the continuity
+    # Piecewise-constant (step function); Leja+2019 ApJ 876 3 defines the continuity
     # SFH as step functions, not linearly interpolated.  Use bin EDGES (not centers)
     # for searchsorted so ages near boundaries are assigned to the correct bin.
     bin_edges_yr = bin_edges_gyr * 1e9
@@ -191,7 +191,7 @@ def continuity_prior_logp(
 
     Notes
     -----
-    **JIT-compatible**: yes — uses ``jax.scipy.stats`` for Student-t density.
+    **JIT-compatible**: yes, uses ``jax.scipy.stats`` for Student-t density.
     """
     from jax.scipy.stats import t as student_t
 
@@ -240,11 +240,11 @@ def bursty_continuity_prior_logp(
 
     Notes
     -----
-    **JIT-compatible**: yes — ``jnp.where`` selects the scale without branching.
+    **JIT-compatible**: yes, ``jnp.where`` selects the scale without branching.
     ``t_split_gyr``, ``scale_young``, ``scale_old``, and ``df`` must be
     concrete (non-traced) scalars.
 
-    **Gradient-safe**: yes — differentiable w.r.t. ``log_sfr_ratios`` everywhere.
+    **Gradient-safe**: yes, differentiable w.r.t. ``log_sfr_ratios`` everywhere.
 
     Ratio ``i`` is classified as *young* when ``bin_edges_gyr[i+1] < t_split_gyr``,
     i.e. its younger bin edge lies in the bursty regime. The per-ratio log-prob is:
@@ -349,7 +349,7 @@ def dirichlet(
 
     Notes
     -----
-    **JIT-compatible**: yes — all operations use ``jnp`` primitives.
+    **JIT-compatible**: yes, all operations use ``jnp`` primitives.
 
     The mass fractions are derived from auxiliary variables :math:`z_j \\sim \\mathrm{Beta}(1,1)`
     via stick-breaking:
@@ -398,7 +398,7 @@ def dirichlet(
     total_mass = 10.0**log_total_mass
     sfr_bins = mass_fracs * total_mass / bin_widths_yr
 
-    # Piecewise-constant (step function) — Leja+2019 ApJ 876 3; use bin EDGES
+    # Piecewise-constant (step function); Leja+2019 ApJ 876 3; use bin EDGES
     # (not centers) so ages near boundaries go to the correct bin.
     bin_edges_yr = bin_edges_gyr * 1e9
 
@@ -420,7 +420,7 @@ def make_agebins_from_zred(
     bins are fixed at 30 Myr and 100 Myr; interior bins are log-spaced to
     90% of the universe age; the oldest bin spans 90–100% of the universe age.
 
-    This is a **setup-time utility** — call it when building a
+    This is a **setup-time utility**: call it when building a
     :class:`~tengri.Parameters` object, not inside the forward
     model. The returned array is plain NumPy so it can be passed as the
     ``bin_edges_gyr`` argument to :func:`continuity` or
@@ -443,7 +443,7 @@ def make_agebins_from_zred(
 
     Notes
     -----
-    **Not JIT-compatible** — uses Python control flow and NumPy. Call once
+    **Not JIT-compatible**: uses Python control flow and NumPy. Call once
     at model-construction time, then pass the edges as a static array.
 
     Implements Prospector ``zred_to_agebins_pbeta`` (Johnson et al. 2021
@@ -531,7 +531,7 @@ def psb_continuity(
         Log-SFR ratios. Convention:
 
         - ``ratio_young``: youngest bin vs flex bin (large positive = burst).
-        - ``ratio_old_0``, ``ratio_old_1``, ... — ratios among old fixed bins.
+        - ``ratio_old_0``, ``ratio_old_1``, ...: ratios among old fixed bins.
 
     Returns
     -------
@@ -540,7 +540,7 @@ def psb_continuity(
 
     Notes
     -----
-    **JIT-compatible**: yes — uses ``jnp`` primitives; ``tlast_gyr`` and
+    **JIT-compatible**: yes, uses ``jnp`` primitives; ``tlast_gyr`` and
     ``tflex_gyr`` must be concrete scalars (not traced inside JIT).
 
     Implements the same calculation as Prospector ``psb_logsfr_ratios_to_agebins`` and
@@ -651,7 +651,7 @@ def continuity_flex(
 
     Notes
     -----
-    **JIT-compatible**: yes — all operations use ``jnp`` primitives.
+    **JIT-compatible**: yes, all operations use ``jnp`` primitives.
     Gradients flow through the SFR *amplitudes* (via ``ratio_young``,
     ``flex_*``, ``ratio_old`` and ``log_total_mass``). Flex bin *edge positions*
     depend on ``jnp.searchsorted`` and are not differentiable.
@@ -817,7 +817,7 @@ def sfh_bin_edges_yr(fn, sfh_kwargs: dict) -> jnp.ndarray | None:
     psb_continuity / continuity_flex) have sharp bin-edge transitions. When the
     SFH is sampled onto a log-spaced integrand grid for DSPS, those edges fall
     *between* grid points, so DSPS interpolates across each step and smears the
-    mass distribution — a resolution-insensitive 2-4.5 % optical residual vs
+    mass distribution; a resolution-insensitive 2-4.5 % optical residual vs
     Prospector (#765). Injecting these exact edges as knots makes the step
     representation exact at any resolution.
 
@@ -869,8 +869,8 @@ def continuity_flex_prior_logp(
 
     Notes
     -----
-    **JIT-compatible**: yes — uses ``jax.scipy.stats.t``.
-    **Gradient-safe**: yes — differentiable w.r.t. all ratio arguments.
+    **JIT-compatible**: yes, uses ``jax.scipy.stats.t``.
+    **Gradient-safe**: yes, differentiable w.r.t. all ratio arguments.
 
     .. math::
 

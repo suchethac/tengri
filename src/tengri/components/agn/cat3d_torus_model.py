@@ -6,7 +6,7 @@ Implements the CAT3D-Wind torus model on the SEDModelComponent contract,
 enabling use of three-parameter clumpy torus templates in the model-building
 API.
 
-This is an opt-in adapter — the existing AGNSEDComponent continues to
+This is an opt-in adapter, the existing AGNSEDComponent continues to
 support CAT3D through the unified AGN registry.
 
 References
@@ -103,9 +103,9 @@ class CAT3DTorus(SEDModelComponent):
 
     Notes
     -----
-    **JIT-compatible**: yes — predict() is pure JAX.
+    **JIT-compatible**: yes, predict() is pure JAX.
 
-    **Gradient-safe**: yes — triweight interpolation is fully differentiable
+    **Gradient-safe**: yes, triweight interpolation is fully differentiable
     across the three parameter axes.
 
     **Requires template grid**: The CAT3D-Wind template library must be
@@ -140,7 +140,7 @@ class CAT3DTorus(SEDModelComponent):
     parameter_prefix = "agn_"
     config: CAT3DTorusConfig = field(default_factory=CAT3DTorusConfig)
 
-    # Free parameters — auto-discovered
+    # Free parameters: auto-discovered
     log_lbol = Uniform(
         8.0,
         14.0,
@@ -201,7 +201,7 @@ class CAT3DTorus(SEDModelComponent):
         try:
             return create_cat3d_wind_from_grid(self.config.grid_path)
         except (FileNotFoundError, OSError, KeyError):
-            # Templates not available — predict will return zero emission
+            # Templates not available: predict will return zero emission
             return None
 
     def predict(

@@ -88,7 +88,7 @@ def compute_effective_noise(
 
     Notes
     -----
-    **JIT-compatible**: yes — uses only jnp primitives.
+    **JIT-compatible**: yes, uses only jnp primitives.
 
     The calibration term ``f_cal * |model|`` adds a flux-dependent
     floor to the noise budget, preventing zero-noise solutions when
@@ -116,7 +116,7 @@ def compute_effective_noise(
 
     cal_noise = f_cal * jnp.abs(model_flux)
     # hypot, not sqrt(a**2 + b**2): flux uncertainties are ~1e-30, so their
-    # squares (~1e-60) underflow float32 to zero — sigma_eff collapses to 0 and
+    # squares (~1e-60) underflow float32 to zero, sigma_eff collapses to 0 and
     # the likelihood residual (data - pred)/sigma_eff becomes NaN. hypot factors
     # out the larger term, keeping the intermediate O(1). Identical in float64
     # to the last bit (#1206).
@@ -149,7 +149,7 @@ def compute_std_inv(
 
     Notes
     -----
-    **JIT-compatible**: yes — delegates to :func:`compute_effective_noise`
+    **JIT-compatible**: yes, delegates to :func:`compute_effective_noise`
     which is pure JAX.
 
     Used in variable-covariance likelihoods where the noise is a traced
@@ -249,7 +249,7 @@ def get_noise_dof(spec) -> float | None:
     dist = spec.get_distribution("noise_dof")
     if isinstance(dist, Fixed):
         return dist.value
-    # noise_dof is free — return None to signal it's in the latent vector
+    # noise_dof is free, return None to signal it's in the latent vector
     return None
 
 
@@ -349,7 +349,7 @@ def censored_neg_log_likelihood(
 
     Notes
     -----
-    **JIT-compatible**: yes — uses ``jnp.where`` dispatch (no Python
+    **JIT-compatible**: yes, uses ``jnp.where`` dispatch (no Python
     control flow). Differentiable w.r.t. predicted fluxes and f_cal.
 
     **Censoring model**:
@@ -434,7 +434,7 @@ def variable_noise_hamiltonian(
 
     Notes
     -----
-    **JIT-compatible**: yes — uses only jnp primitives.
+    **JIT-compatible**: yes, uses only jnp primitives.
 
     The log-determinant term ``Σ log(σ_eff)`` is crucial: it prevents
     the trivial solution σ → ∞ and makes the likelihood fully specified.
@@ -507,9 +507,9 @@ def variable_noise_metric_vec(
 
     Notes
     -----
-    **JIT-compatible**: yes — uses only jax primitives (jax.jvp, jax.vjp).
+    **JIT-compatible**: yes, uses only jax primitives (jax.jvp, jax.vjp).
 
-    **Gradient-safe**: yes — differentiable w.r.t. data and model parameters.
+    **Gradient-safe**: yes, differentiable w.r.t. data and model parameters.
 
     Implements the metric-vector product for the Gauss-Newton approximation
     of the variational Hessian, used in information field theory inference.
@@ -522,11 +522,11 @@ def variable_noise_metric_vec(
     # Forward + JVP: get outputs and directional derivatives
     (f, tau), (Jv_f, Jv_tau) = jax.jvp(signal_noise_fn, (xi_d,), (v_d,))
 
-    # Hessian blocks of E(f, τ) — all diagonal in data space.
+    # Hessian blocks of E(f, τ), all diagonal in data space.
     #
     # Applied in factored form (#1617). Written directly, two of the four blocks
     # are destroyed in float32 at a real photometric sigma, in opposite
-    # directions — measured, not inferred:
+    # directions, measured, not inferred:
     #
     #     H_ff = tau**2               1.111e+59  ->  inf
     #     H_tt = r**2 + 1/tau**2      3.611e-56  ->  0.0   (both terms underflow)
@@ -539,8 +539,8 @@ def variable_noise_metric_vec(
     #     H_ff Jv_f    = tau**2 Jv_f          = (Jv_f/sigma)/sigma,  sigma = 1/tau
     #     H_tt Jv_tau  = ((r tau)**2 + 1) Jv_tau / tau**2
     #
-    # ``r_std = residual * tau`` is the standardized residual — O(1) by
-    # construction — so neither underflowing term is ever formed. ``whiten``
+    # ``r_std = residual * tau`` is the standardized residual, O(1) by
+    # construction, so neither underflowing term is ever formed. ``whiten``
     # carries the optimization_barrier that stops XLA re-associating the pairs
     # back into the overflowing square (#1535/#1588).
     residual = data - f
@@ -629,7 +629,7 @@ def matern32_kernel(
 ) -> jnp.ndarray:
     r"""Matérn 3/2 covariance kernel.
 
-    Once-differentiable GP kernel — smoother than the exponential kernel,
+    Once-differentiable GP kernel, smoother than the exponential kernel,
     rougher than squared-exponential. A good default for correlated spectral
     noise where the autocorrelation length is finite but the residuals are
     not infinitely smooth.
@@ -784,7 +784,7 @@ def apply_zp_floor(
 
     Notes
     -----
-    **JIT-compatible**: yes — pure ``jnp`` arithmetic.
+    **JIT-compatible**: yes, pure ``jnp`` arithmetic.
 
     Caps the achievable per-band SNR at :math:`1/f_{\rm floor}` (e.g.
     a 2% floor caps SNR at 50). Uses ``|F|`` so non-detections with
@@ -869,7 +869,7 @@ class PoissonNoiseLikelihood:
 
     Notes
     -----
-    **JIT-compatible**: yes — pure JAX, differentiable w.r.t. predicted flux.
+    **JIT-compatible**: yes, pure JAX, differentiable w.r.t. predicted flux.
 
     For source counts F (in detected photons), the effective Gaussian
     variance is:
@@ -916,7 +916,7 @@ class PoissonNoiseLikelihood:
 
         Notes
         -----
-        **JIT-compatible**: yes — pure ``jnp`` arithmetic.
+        **JIT-compatible**: yes, pure ``jnp`` arithmetic.
 
         Computes log(p(obs | pred)) under Gaussian approximation to Poisson.
         Avoids singularities by clamping predicted flux to ≥ eps internally.
@@ -978,7 +978,7 @@ class StudentTLikelihood:
 
     Notes
     -----
-    **JIT-compatible**: yes — uses ``jax.scipy.stats.t.logpdf``.
+    **JIT-compatible**: yes, uses ``jax.scipy.stats.t.logpdf``.
 
     The log-likelihood per data point is:
 
@@ -990,7 +990,7 @@ class StudentTLikelihood:
     where :math:`T_\nu` is the Student-t PDF with :math:`\nu` degrees of freedom.
 
     The residual scale σ should be supplied by the caller; this class does
-    not manage observational uncertainties — use a noise model (e.g.
+    not manage observational uncertainties, use a noise model (e.g.
     ``compute_effective_noise``) to construct σ from data.
 
     References
@@ -1030,7 +1030,7 @@ class StudentTLikelihood:
 
         Notes
         -----
-        **JIT-compatible**: yes — delegates to
+        **JIT-compatible**: yes, delegates to
         ``jax.scipy.stats.t.logpdf``.
 
         Avoids numerical instability by clamping σ to ≥ eps internally.

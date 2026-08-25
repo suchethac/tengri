@@ -29,14 +29,14 @@ Physical conventions
 References
 ----------
 
-- Balogh et al. 1999, ApJ, 527, 54 — Dn4000 definition
-- Wang et al. 2024, ApJ — modified Balmer break
-- Bell 2003, ApJ, 586, 794 — FIR-radio correlation
-- Murphy et al. 2011, ApJ, 737, 67 — radio-SFR calibration
-- Lehmer et al. 2010, ApJ, 724, 559 — XRB scaling relations
-- Lehmer et al. 2016, ApJ, 825, 7 — updated XRB scaling
-- Duras et al. 2020, A&A, 636, A73 — AGN bolometric corrections
-- Condon 1992, ARA&A, 30, 575 — thermal radio emission
+- Balogh et al. 1999, ApJ, 527, 54: Dn4000 definition
+- Wang et al. 2024, ApJ; modified Balmer break
+- Bell 2003, ApJ, 586, 794: FIR-radio correlation
+- Murphy et al. 2011, ApJ, 737, 67: radio-SFR calibration
+- Lehmer et al. 2010, ApJ, 724, 559: XRB scaling relations
+- Lehmer et al. 2016, ApJ, 825, 7: updated XRB scaling
+- Duras et al. 2020, A&A, 636, A73: AGN bolometric corrections
+- Condon 1992, ARA&A, 30, 575: thermal radio emission
 
 """
 
@@ -89,7 +89,7 @@ def _FLOOR() -> float:
     """The ``1e-50`` guard floor these quantities use, made representable (#1492).
 
     ``1e-50`` is below float32's smallest subnormal (1.4e-45), so every floor
-    in this module was **exactly 0.0** in float32 — ``log(0) = -inf``, and the
+    in this module was **exactly 0.0** in float32: ``log(0) = -inf``, and the
     UV-slope regression came back NaN where float64 returned a finite (wrong
     but survivable) number. ``representable_floor`` raises it to the working
     dtype's smallest normal; float64 keeps ``1e-50`` unchanged.
@@ -115,7 +115,7 @@ def compute_mass_weighted_age(weights: jnp.ndarray, ssp_ages_yr: jnp.ndarray) ->
     float
         Mass-weighted age in Gyr:
         ``Σ(w_i × age_i) / Σ(w_i) / 1e9``.
-        NaN when ``Σ(w_i) == 0`` — with no mass there is no mass-weighted age.
+        NaN when ``Σ(w_i) == 0``; with no mass there is no mass-weighted age.
 
     Notes
     -----
@@ -123,7 +123,7 @@ def compute_mass_weighted_age(weights: jnp.ndarray, ssp_ages_yr: jnp.ndarray) ->
 
     Degenerate input returns NaN rather than 0.0 (#1404). A clamped denominator
     alone would yield a finite ``0.0`` here, which reads as "every star just
-    formed" — a plausible-looking answer for a model with no stellar mass at all.
+    formed"; a plausible-looking answer for a model with no stellar mass at all.
     """
     # Select the denominator BEFORE dividing, not the quotient after. The outer
     # ``where`` picks NaN on the degenerate branch but does not protect the
@@ -190,7 +190,7 @@ def compute_mass_weighted_metallicity(
     z_linear = 10.0**log_z_per_bin
     total_w = jnp.sum(weights)
     # NaN, not 0.0, when there is no mass to weight by (#1404). Denominator
-    # selected before the divide — see compute_mass_weighted_age for why the
+    # selected before the divide: see compute_mass_weighted_age for why the
     # outer ``where`` alone leaves the reverse pass NaN in float32 (#1860).
     ok = total_w > 1e-20
     safe_total_w = jnp.where(ok, total_w, 1.0)
@@ -214,7 +214,7 @@ def derived_luminosity_lsun(
     erg/s (``L_ir``, ``L_absorbed``) alongside a ``log10`` companion
     (``log_L_ir``). For a :math:`10^{10}\,M_\odot` galaxy the linear key is
     ~3.6e43 and is ``inf`` in float32, while the companion is ~43.6 dex and
-    exact — and the attenuator computes the companion *first*
+    exact: and the attenuator computes the companion *first*
     (``L_ir = pow10(log_L_ir)``), so reading it is strictly closer to the
     source. Consumers that divided the linear key by :math:`L_\odot` returned
     ``inf`` for a ~9.5e9 :math:`L_\odot` answer that float32 holds easily
@@ -255,7 +255,7 @@ def derived_weights_peak_relative(
 
     For weights used only inside :math:`\sum x_i w_i / \sum w_i`, any factor
     common to every bin cancels exactly, so the absolute scale is free to
-    discard — and discarding it is what makes the mean computable in float32.
+    discard; and discarding it is what makes the mean computable in float32.
     ``L_age`` peaks at ~3.3e42 erg/s, so 85 of 93 bins are ``inf`` there and
     ``ssp_ages_yr * L_age`` overflows a second time on top (~1e10 x), while the
     weighted mean itself is of order 1 (issue #1837).
@@ -301,7 +301,7 @@ def _trapz_to_lsun(integrand: jnp.ndarray, nu: jnp.ndarray) -> jnp.ndarray:
     where :math:`L_\nu` is the integrand [erg/s/Hz] and :math:`\nu` the frequency
     grid [Hz]. Computing that literally forms the erg/s value first (~1e43 for a
     1e10 Msun galaxy), which exceeds the float32 ceiling of 3.4e38 and returns
-    ``inf`` — even though the :math:`L_\odot` answer (~1e9) is perfectly
+    ``inf``; even though the :math:`L_\odot` answer (~1e9) is perfectly
     representable. Factoring the integrand by its peak and folding
     :math:`1/L_\odot` into the same exponent keeps every intermediate in range
     (issue #1206).
@@ -442,7 +442,7 @@ def _mean_flux_in_band(sed, wave, lam_lo, lam_hi):
     num = jnp.trapezoid(sed_masked, wave)
     den = jnp.trapezoid(w, wave)
     # Return NaN if the band has no wavelength coverage (den ≈ 0). Denominator
-    # selected before the divide — see compute_mass_weighted_age (#1860).
+    # selected before the divide: see compute_mass_weighted_age (#1860).
     ok = den > 1e-20
     return jnp.where(ok, num / jnp.where(ok, den, 1.0), jnp.nan)
 
@@ -505,7 +505,7 @@ def compute_balmer_break(sed: jnp.ndarray, wave: jnp.ndarray) -> jnp.ndarray:
     """
     red = _mean_flux_in_band(sed, wave, 4000.0, 4100.0)
     blue = _mean_flux_in_band(sed, wave, 3620.0, 3720.0)
-    # Derivative-sized denominator floor — see compute_dn4000 (#1860).
+    # Derivative-sized denominator floor: see compute_dn4000 (#1860).
     return red / jnp.maximum(blue, representable_denominator(1e-30))
 
 
@@ -546,7 +546,7 @@ def compute_uv_slope_beta(sed: jnp.ndarray, wave: jnp.ndarray) -> jnp.ndarray:
     sxx = jnp.sum(w * log_wave**2)
     sxy = jnp.sum(w * log_wave * log_fnu)
 
-    # Three denominators, all previously floored at 1e-30 — derivative-unsafe in
+    # Three denominators, all previously floored at 1e-30: derivative-unsafe in
     # float32, where 1e-60 flushes to 0.0 and the quotient VJP divides by zero.
     # ``sw`` is selected before the divide (the trailing ``where`` guards the
     # value, not the reverse pass); ``denom`` can vanish on a genuinely
@@ -652,7 +652,7 @@ def compute_uv_luminosity_1600(sed: jnp.ndarray, wave: jnp.ndarray) -> jnp.ndarr
     return nu_1600 * l_nu_1600
 
 
-#: ``log10(c / 1600 A)`` [dex re Hz] — the 1600 A pivot frequency, kept in the
+#: ``log10(c / 1600 A)`` [dex re Hz]: the 1600 A pivot frequency, kept in the
 #: exponent so ``nu L_nu`` is never materialized (see
 #: :func:`compute_log_uv_luminosity_1600`).
 LOG10_NU_1600: float = float(np.log10(C_AA / 1600.0))
@@ -668,7 +668,7 @@ def compute_log_uv_luminosity_1600(sed: jnp.ndarray, wave: jnp.ndarray) -> jnp.n
     The range-safe companion to :func:`compute_uv_luminosity_1600`. That
     function returns :math:`\nu L_\nu` in erg/s, which is ~5e42 for a
     :math:`10^{10}\,M_\odot` galaxy and therefore **not representable in
-    float32** at all — its ``inf`` then propagated into ``irx`` as ``NaN``, even
+    float32** at all: its ``inf`` then propagated into ``irx`` as ``NaN``, even
     though IRX itself is a dex ratio of order unity (issue #1837).
 
     Parameters
@@ -716,7 +716,7 @@ def compute_irx(
     l_uv_erg : array_like, shape (), optional
         UV luminosity :math:`\nu L_\nu` [erg/s]. Mutually exclusive with
         ``log_l_uv_erg``. **Not float32-representable** for a normal galaxy
-        (~5e42 against a 3.4e38 ceiling) — prefer the log form there.
+        (~5e42 against a 3.4e38 ceiling); prefer the log form there.
     log_l_uv_erg : array_like, shape (), optional
         :math:`\log_{10}(\nu L_\nu / (\mathrm{erg/s}))` [dex], as returned by
         :func:`compute_log_uv_luminosity_1600`. The float32-safe route.
@@ -737,7 +737,7 @@ def compute_irx(
 
     Evaluated as a difference of logarithms rather than a ratio. The previous
     form materialized ``l_tir_lsun * L_SUN`` (~7e41 erg/s), which overflows
-    float32 on its own — so IRX was ``NaN`` there even when both inputs were
+    float32 on its own; so IRX was ``NaN`` there even when both inputs were
     finite, and even though IRX is a dex ratio of order unity (issue #1837).
     Clamping in the log domain is exactly equivalent to the previous linear
     clamp because ``log10`` is monotone:
@@ -807,7 +807,7 @@ def _emits_enough_to_weight_by(l_per_bin: jnp.ndarray, l_total: jnp.ndarray) -> 
     by the peak of ``ssp_flux_at_z`` and drops ``L_sun``, rescaling its output
     by ~3.8e18, so the threshold stopped being anchored to anything the moment
     the units moved under it. It kept passing because the live regime sits ~44
-    decades clear of it either way — the constant did not change, its meaning
+    decades clear of it either way: the constant did not change, its meaning
     did.
 
     Parameters
@@ -837,7 +837,7 @@ def _per_bin_luminosity_relative(
     """Per-age-bin bolometric luminosity up to one common positive factor.
 
     The erg/s spelling this replaces multiplied by ``L_sun`` *inside* the
-    vmapped body, forming ~1e41 per bin — above the float32 ceiling. Every
+    vmapped body, forming ~1e41 per bin; above the float32 ceiling. Every
     consumer forms a luminosity-weighted *average* (``sum(l * x) / sum(l)``),
     where any common positive factor cancels exactly, so that value is never
     needed. Dropping the ``L_sun`` conversion and the overall peak is therefore
@@ -855,7 +855,7 @@ def _per_bin_luminosity_relative(
     Returns
     -------
     ndarray, shape (n_age,)
-        Per-bin luminosity in arbitrary (shared) units — ratios only.
+        Per-bin luminosity in arbitrary (shared) units; ratios only.
 
     Notes
     -----
@@ -863,15 +863,15 @@ def _per_bin_luminosity_relative(
     """
     nu = C_AA / wave
     # stop_gradient: factorization constant (#1436). Unlike the other peak-factored
-    # reductions this one never multiplies the peak back — but both consumers
+    # reductions this one never multiplies the peak back: but both consumers
     # (luminosity-weighted age and metallicity, the only two, and this helper is
     # private) divide by ``sum(l_per_bin)``, so ``(sum L_i a_i / p) / (sum L_j / p)``
     # is exactly p-independent and the peak's derivative is analytically zero.
     # That is what the "ratios only" contract above buys.
     #
     # The one regime where p would survive is the degenerate branch in those callers
-    # (see ``_emits_enough_to_weight_by``). It cannot arise for a real galaxy — the
-    # sum runs many decades above the largest bin's rounding — and that branch returns
+    # (see ``_emits_enough_to_weight_by``). It cannot arise for a real galaxy: the
+    # sum runs many decades above the largest bin's rounding: and that branch returns
     # NaN, which has no meaningful derivative either way.
     peak = jax.lax.stop_gradient(jnp.max(jnp.abs(ssp_flux_at_z), initial=0.0))
     peak = jnp.where(peak > 0, peak, jnp.ones_like(peak))
@@ -1004,8 +1004,8 @@ def extract_line_luminosity(
     Notes
     -----
     This said "Lsun" on both sides until #1559, at which point the only caller
-    had been passing erg/s for some time. Nothing computed the wrong answer —
-    the function never converts — but the docstring was evidence for the belief
+    had been passing erg/s for some time. Nothing computed the wrong answer
+    (the function never converts), but the docstring was evidence for the belief
     that the published catalog was in Lsun, which is how three backends came to
     publish it that way.
     """
@@ -1031,7 +1031,7 @@ def extract_log_line_luminosity(
 
     The float32-safe companion. Line luminosities are ~1e40-1e42 erg/s, past
     float32's 3.4e38 ceiling, so the linear extraction is ``inf`` there and a
-    ``log10`` taken afterwards inherits it — a log companion computed *after* the
+    ``log10`` taken afterwards inherits it; a log companion computed *after* the
     overflow is a no-op (#1534). This reads the upstream ``log_line_lums`` instead
     and never leaves the log domain.
 
@@ -1054,7 +1054,7 @@ def extract_log_line_luminosity(
 
     Notes
     -----
-    **JIT-compatible**: yes. **Gradient-safe**: yes — ``logsumexp`` is smooth, and a
+    **JIT-compatible**: yes. **Gradient-safe**: yes; ``logsumexp`` is smooth, and a
     component that is exactly zero enters as ``-inf`` and drops out of the sum
     without producing NaN.
 
@@ -1065,7 +1065,7 @@ def extract_log_line_luminosity(
 
     **The sum is the whole difficulty.** Doublets ([OII] 3727+3730, and the
     ``key_lines`` entries that pair components) sum their matched entries, and a
-    sum is not a log-domain operation — taking the max, or adding the logs, would
+    sum is not a log-domain operation; taking the max, or adding the logs, would
     both be wrong. ``logsumexp`` is exact for it and is the same primitive
     ``_derive_cue_params_from_ssp`` uses for ``total_logqion``.
 
@@ -1134,7 +1134,7 @@ def compute_l_radio_thermal(q_h: jnp.ndarray) -> jnp.ndarray:
 def compute_l_radio_thermal_from_log_qh(log_q_h: jnp.ndarray) -> jnp.ndarray:
     r"""Thermal (free-free) radio luminosity at 1.4 GHz from :math:`\log_{10} Q_H`.
 
-    Log-domain form of :func:`compute_l_radio_thermal` — folds the ~1e56 Q_H into the
+    Log-domain form of :func:`compute_l_radio_thermal`: folds the ~1e56 Q_H into the
     exponent so no float32-overflowing intermediate is materialized (#1206).
 
     .. math::
@@ -1268,7 +1268,7 @@ def compute_l_x_xrb(sfr: jnp.ndarray, stellar_mass: jnp.ndarray) -> jnp.ndarray:
 
 #: ``log10`` of the Lehmer+ XRB coefficients, as Python floats. Kept pre-logged
 #: because ``2.6e39`` is past float32's ceiling: any expression that materializes it
-#: in the working dtype — including ``jnp.log10(2.6e39)`` — is ``inf`` before the log
+#: in the working dtype (including ``jnp.log10(2.6e39)``) is ``inf`` before the log
 #: is applied. Computed in numpy (float64) at import, read as a scalar thereafter.
 _LOG10_HMXB_COEFF: float = float(np.log10(2.6e39))
 _LOG10_LMXB_COEFF: float = float(np.log10(9.05e28))
@@ -1279,7 +1279,7 @@ def compute_log_l_x_xrb(sfr: jnp.ndarray, log_stellar_mass: jnp.ndarray) -> jnp.
 
     The float32-safe companion. The HMXB coefficient alone is
     :math:`2.6\times10^{39}`, past float32's 3.4e38 ceiling, so *the first term
-    overflows before it is even multiplied by the SFR* — the linear form cannot be
+    overflows before it is even multiplied by the SFR*: the linear form cannot be
     evaluated in float32 at any star formation rate, including zero.
 
     Parameters
@@ -1298,7 +1298,7 @@ def compute_log_l_x_xrb(sfr: jnp.ndarray, log_stellar_mass: jnp.ndarray) -> jnp.
 
     Notes
     -----
-    **JIT-compatible**: yes. **Gradient-safe**: yes — an exactly-zero SFR enters as
+    **JIT-compatible**: yes. **Gradient-safe**: yes; an exactly-zero SFR enters as
     ``-inf`` and drops out of the sum without producing NaN.
 
     .. math::
@@ -1309,7 +1309,7 @@ def compute_log_l_x_xrb(sfr: jnp.ndarray, log_stellar_mass: jnp.ndarray) -> jnp.
     evaluated as a base-10 ``logsumexp``. The two terms are the HMXB (SFR-tracking)
     and LMXB (mass-tracking) populations of Lehmer et al. (2010, 2016); they differ
     by ~10 decades, so the sum is dominated by one or the other and a naive
-    ``max`` would be close but not equal — ``logsumexp`` is exact.
+    ``max`` would be close but not equal; ``logsumexp`` is exact.
 
     References
     ----------
@@ -1319,7 +1319,7 @@ def compute_log_l_x_xrb(sfr: jnp.ndarray, log_stellar_mass: jnp.ndarray) -> jnp.
     """
     log_sfr = log10_magnitude(jnp.asarray(sfr))
     # The COEFFICIENTS are pre-logged as Python floats. Writing `jnp.log10(2.6e39)`
-    # instead puts 2.6e39 into a float32 array first, where it is already `inf` —
+    # instead puts 2.6e39 into a float32 array first, where it is already `inf`,
     # the log is taken of infinity and the whole companion returns `inf` on inputs
     # that are perfectly representable. Caught by this module's own float32 test.
     log_hmxb = _LOG10_HMXB_COEFF + log_sfr
@@ -1345,8 +1345,8 @@ def compute_log_l_x_agn(log_l_bol_agn_erg: jnp.ndarray) -> jnp.ndarray:
     -----
     **JIT-compatible**: yes.
 
-    The bolometric correction is *already* a function of the log luminosity —
-    ``k_bol = a[1 + (log10(L_bol/Lsun)/b)^c]`` — so the linear form takes a log,
+    The bolometric correction is *already* a function of the log luminosity:
+    ``k_bol = a[1 + (log10(L_bol/Lsun)/b)^c]``; so the linear form takes a log,
     applies the correction, and then divides in linear space. This one stays in
     log throughout:
 
@@ -1422,7 +1422,7 @@ def compute_ionizing_efficiency(q_h: jnp.ndarray, l_uv_erg: jnp.ndarray) -> jnp.
         Ionizing photon production rate (photons/s).
     l_uv_erg : float
         UV luminosity νL_ν at 1600 Å in erg/s, or L_ν in erg/s/Hz.
-        Convention varies — typically expressed as
+        Convention varies: typically expressed as
         ``log10(ξ_ion / Hz erg^-1)``.
 
     Returns

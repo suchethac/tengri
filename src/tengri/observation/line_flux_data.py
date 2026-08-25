@@ -78,7 +78,7 @@ class LineFluxData:
     **Upper limits**: The ``is_upper_limit`` field marks lines that are
     non-detections (typically <2-3σ); ``fluxes`` carries the limit value.
     In the fit these enter as censored data points:
-    ``ln L = ln Φ((F_lim − F_model)/σ)`` — zero penalty when the model sits
+    ``ln L = ln Φ((F_lim − F_model)/σ)``, zero penalty when the model sits
     safely below the limit, smoothly rising as it crosses.
 
     **Lower limits**: ``is_lower_limit`` mirrors this for saturated or
@@ -145,7 +145,7 @@ class LineFluxData:
             both = jnp.asarray(self.is_upper_limit) & jnp.asarray(self.is_lower_limit)
             if bool(jnp.any(both)):
                 bad = [nm for nm, b in zip(self.names, both) if bool(b)]
-                raise ValueError(f"lines marked as BOTH upper and lower limit: {bad} — pick one.")
+                raise ValueError(f"lines marked as BOTH upper and lower limit: {bad}, pick one.")
 
     @property
     def limit_mask(self) -> jnp.ndarray | None:
@@ -154,7 +154,7 @@ class LineFluxData:
         Returns
         -------
         ndarray, shape (n_lines,), or None
-            ``None`` when no line carries a limit flag (all detections) —
+            ``None`` when no line carries a limit flag (all detections);
             callers use this to select the plain Gaussian likelihood.
         """
         if self.is_upper_limit is None and self.is_lower_limit is None:
@@ -200,9 +200,9 @@ class LineFluxData:
 
         Notes
         -----
-        **JIT-compatible**: yes — uses only jnp primitives.
+        **JIT-compatible**: yes, uses only jnp primitives.
 
-        **Gradient-safe**: yes — differentiable w.r.t. ``model_fluxes``.
+        **Gradient-safe**: yes, differentiable w.r.t. ``model_fluxes``.
 
         Upper limit lines (where ``is_upper_limit`` is True) are excluded
         from the sum.
@@ -236,9 +236,9 @@ class LineFluxData:
 
         Notes
         -----
-        **JIT-compatible**: yes — uses only jnp primitives.
+        **JIT-compatible**: yes, uses only jnp primitives.
 
-        **Gradient-safe**: yes — differentiable w.r.t. ``model_fluxes``.
+        **Gradient-safe**: yes, differentiable w.r.t. ``model_fluxes``.
 
         Handles both detections and upper limits (marked via ``is_upper_limit``).
         Upper limit lines use the complementary error function (erfc) to
@@ -270,8 +270,8 @@ class LineFluxData:
         Parameters
         ----------
         line_data : dict[str, tuple]
-            Mapping from line name to ``(flux, error)`` — both
-            [erg/s/cm^2] — with an optional third element ``"upper"`` or
+            Mapping from line name to ``(flux, error)``, both
+            [erg/s/cm^2], with an optional third element ``"upper"`` or
             ``"lower"`` marking the flux as a censored limit rather than a
             detection. E.g.
             ``{"Halpha": (1.2e-16, 0.1e-16), "Hbeta": (3.5e-17, 0.5e-17, "upper")}``.

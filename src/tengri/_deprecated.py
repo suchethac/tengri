@@ -100,7 +100,7 @@ def resolve_renamed_flag(
 
     Notes
     -----
-    **JIT-compatible**: no — argument handling, runs at trace time.
+    **JIT-compatible**: no, argument handling runs at trace time.
 
     A contradiction is only detectable when the new keyword was given a
     non-default value; ``f(new=False, old=True)`` is indistinguishable from
@@ -120,7 +120,7 @@ def resolve_renamed_flag(
         raise TypeError(
             f"{caller}() got both `{new_name}={new_value!r}` and "
             f"`{old_name}={old_value!r}`, which contradict each other. "
-            f"`{old_name}` is the deprecated spelling of `{new_name}` — pass "
+            f"`{old_name}` is the deprecated spelling of `{new_name}`; pass "
             f"only `{new_name}=`."
         )
     return bool(old_value)

@@ -90,7 +90,7 @@ def register_emission_model(name: str) -> Callable:
 
     Notes
     -----
-    **JIT-compatible**: no — registration happens at factory time before JIT.
+    **JIT-compatible**: no, registration happens at factory time before JIT.
 
     Decorated functions must implement the ``DustEmissionTemplate`` protocol:
     accept a wavelength array, absorbed luminosity, and keyword arguments,
@@ -142,11 +142,11 @@ def preload_emission_model(name: str) -> Callable:
     Returns
     -------
     Callable
-        The loaded (real) emission function — NOT a lazy wrapper.
+        The loaded (real) emission function: NOT a lazy wrapper.
 
     Notes
     -----
-    **JIT-compatible**: no — template loading happens at factory time.
+    **JIT-compatible**: no, template loading happens at factory time.
 
     Safe to call at ``SEDModel.__init__`` time to prevent tracer leaks
     when models are first called inside a ``@jax.jit`` scope.
@@ -157,7 +157,7 @@ def preload_emission_model(name: str) -> Callable:
             f"Unknown emission model '{name}'. Available: {list(DUST_EMISSION_MODELS.keys())}"
         )
     if name not in _resolved:
-        # Trigger lazy loading with dummy inputs; ignore computation output —
+        # Trigger lazy loading with dummy inputs; ignore computation output:
         # we only want the side effect of loading templates into the registry.
         import numpy as _np
 
@@ -166,7 +166,7 @@ def preload_emission_model(name: str) -> Callable:
         # returned SED is discarded. Narrowed from `Exception`: a missing or
         # unreadable template file is the tolerable case, while a TypeError or
         # ValueError from calling the model means the dummy-input convention no
-        # longer matches its signature — a bug that would otherwise sit here
+        # longer matches its signature: a bug that would otherwise sit here
         # invisibly, with the only symptom being templates that never preload.
         with contextlib.suppress(OSError, KeyError):
             DUST_EMISSION_MODELS[name](_dummy_wave, 1.0)
@@ -195,7 +195,7 @@ from tengri.components.dust.emission.analytic._closures import (
 
 # Register the grammar-dispatchable analytic closures (defined in
 # analytic/_closures.py; #843). energy_balance_split is intentionally NOT
-# registered here — it dispatches via its _REGISTRY component only (single
+# registered here: it dispatches via its _REGISTRY component only (single
 # dispatch, #850).
 DUST_EMISSION_MODELS["modified_blackbody"] = modified_blackbody
 DUST_EMISSION_MODELS["casey2012"] = casey2012
@@ -206,7 +206,7 @@ DUST_EMISSION_MODELS["schreiber2016"] = schreiber2016
 
 
 def draine_li2007(*args, **kwargs):
-    """Draine & Li (2007) — dispatches to the registry (auto-loads templates).
+    """Draine & Li (2007): dispatches to the registry (auto-loads templates).
 
     Parameters
     ----------
@@ -235,7 +235,7 @@ def draine_li2007(*args, **kwargs):
 
 
 def dale2014(*args, **kwargs):
-    """Dale et al. (2014) — dispatches to the registry (auto-loads templates).
+    """Dale et al. (2014): dispatches to the registry (auto-loads templates).
 
     Parameters
     ----------
@@ -263,7 +263,7 @@ def dale2014(*args, **kwargs):
 
 
 def draine_li2014(*args, **kwargs):
-    """Draine & Li (2014) — dispatches to the registry (auto-loads templates).
+    """Draine & Li (2014): dispatches to the registry (auto-loads templates).
 
     Parameters
     ----------
@@ -293,7 +293,7 @@ def draine_li2014(*args, **kwargs):
 
 
 def astrodust(*args, **kwargs):
-    """Astrodust+PAH (Hensley & Draine 2023) — dispatches to the registry.
+    """Astrodust+PAH (Hensley & Draine 2023): dispatches to the registry.
 
     Parameters
     ----------
@@ -321,7 +321,7 @@ def astrodust(*args, **kwargs):
 
 
 def bosa(*args, **kwargs):
-    """BOSA (Boquien & Salim 2021) — dispatches to the registry.
+    """BOSA (Boquien & Salim 2021): dispatches to the registry.
 
     Parameters
     ----------
@@ -349,7 +349,7 @@ def bosa(*args, **kwargs):
 
 
 def themis(*args, **kwargs):
-    """THEMIS (Jones+2017) — dispatches to the registry.
+    """THEMIS (Jones+2017): dispatches to the registry.
 
     Parameters
     ----------
@@ -465,7 +465,7 @@ def _make_lazy_loader(
                     with jax.ensure_compile_time_eval():
                         tabulated = loader(path)
                 except (KeyError, ValueError) as exc:
-                    # Schema mismatch — file exists but doesn't match the
+                    # Schema mismatch: file exists but doesn't match the
                     # legacy (qpah, umin) layout this loader expects.  This
                     # happens for astrodust / bosa / themis after the
                     # synthetic placeholder was replaced with real published
@@ -489,11 +489,11 @@ def _make_lazy_loader(
                     f"or register manually via register_*_tabulated()."
                 )
         # Already resolved.  If the slot still holds *this* lazy wrapper the
-        # earlier resolution failed silently — fail loudly instead of
+        # earlier resolution failed silently: fail loudly instead of
         # recursing forever.
         if DUST_EMISSION_MODELS[name] is _lazy_wrapper:
             raise RuntimeError(
-                f"{name!r} lazy loader is in an inconsistent state — the "
+                f"{name!r} lazy loader is in an inconsistent state: the "
                 f"first resolution did not replace the registry entry. "
                 f"Check {template_filename} or use the modern SEDComponent path."
             )
@@ -508,7 +508,7 @@ def _make_lazy_loader(
 
 
 def _dl07_lazy_wrapper(*args, **kwargs):
-    """Draine & Li (2007) — auto-loads tabulated templates on first call."""
+    """Draine & Li (2007): auto-loads tabulated templates on first call."""
     if "draine_li2007" not in _resolved:
         _resolved.add("draine_li2007")
         path = find_data_str("dl07_templates_v2.h5", "dl07_templates.h5")
@@ -533,11 +533,11 @@ def _dl07_lazy_wrapper(*args, **kwargs):
                 "Run: python scripts/convert_dl07_templates.py"
             )
     # Already resolved. If the slot still holds *this* wrapper the first
-    # resolution failed (and its exception was swallowed upstream) — fail
+    # resolution failed (and its exception was swallowed upstream): fail
     # loudly instead of recursing forever, same guard as _make_lazy_loader.
     if DUST_EMISSION_MODELS["draine_li2007"] is _dl07_lazy_wrapper:
         raise RuntimeError(
-            "'draine_li2007' lazy loader is in an inconsistent state — the "
+            "'draine_li2007' lazy loader is in an inconsistent state: the "
             "first resolution did not replace the registry entry (template "
             "files missing?). Check data/dl07_templates_v2.h5 or use the "
             "modern SEDComponent path."
@@ -600,7 +600,7 @@ DUST_EMISSION_MODELS["dale2014_cigale"] = _make_lazy_loader(
     "create_dale2014_from_grid",
 )
 
-# Schreiber et al. (2018) "S17" cold-dust library — the tabulated, real-PAH
+# Schreiber et al. (2018) "S17" cold-dust library: the tabulated, real-PAH
 # counterpart of the analytic ``schreiber2016`` model. Same
 # (dust_T, dust_f_pah) interface; grid data published with AGNfitter-rX
 # (scripts/build_schreiber2018_grid.py).

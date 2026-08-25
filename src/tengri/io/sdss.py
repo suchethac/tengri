@@ -37,7 +37,7 @@ def read_sdss(path: str) -> SpectrumTuple:
 
     Notes
     -----
-    **JIT-compatible**: no — file I/O and astropy required.
+    **JIT-compatible**: no, file I/O and astropy required.
 
     The SDSS spec-lite format uses LOGLAM (log10 of vacuum wavelength)
     and FLUX (counts or normalized). IVAR is inverse variance (1/sigma^2).

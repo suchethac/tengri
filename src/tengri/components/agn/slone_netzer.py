@@ -99,9 +99,9 @@ def create_slone_netzer_from_grid(grid_path: str) -> Callable:
 
     Notes
     -----
-    **JIT-compatible**: yes — pure ``jnp`` and node-exact bilinear interpolation.
+    **JIT-compatible**: yes, pure ``jnp`` and node-exact bilinear interpolation.
 
-    **Gradient-safe**: yes — bilinear interpolation is piecewise-linear (C⁰)
+    **Gradient-safe**: yes, bilinear interpolation is piecewise-linear (C⁰)
     across both parameter axes with finite gradients inside every cell. Linear
     (rather than a smooth triweight kernel) is required for fidelity: the SN12
     templates' peak shifts strongly with accretion rate, and a smoothing kernel
@@ -150,7 +150,7 @@ def load_slone_netzer_grid(grid_path: str) -> SloneNetzerGrid:
 
     Notes
     -----
-    **JIT-compatible**: no — performs HDF5 I/O. Call outside the trace.
+    **JIT-compatible**: no, performs HDF5 I/O. Call outside the trace.
     """
     raw = _load_slone_netzer_arrays(grid_path)
     return SloneNetzerGrid(
@@ -250,13 +250,13 @@ def slone_netzer_sed_from_grid(
     if wavelength.dtype == jnp.float32:
         # Float32 (#1206). Two traps here, both silent:
         #   1. the template's own bolometric integral is ~1e45 erg/s (the SN12
-        #      L_nu ~1e30 over a ~1e15 Hz span) — it overflows float32, and
+        #      L_nu ~1e30 over a ~1e15 Hz span): it overflows float32, and
         #      ``l_scale * sed / inf`` then flushes the whole disc to ZERO;
         #   2. ``floor=1e-100`` is itself below the float32 minimum, so the
         #      zero-template guard silently becomes a no-op.
         # Peak-factor the integrand and regroup so only representable values
         # form: ``l_scale * sed / (peak * hat_int)`` is evaluated as
-        # ``(l_scale / hat_int) * (sed / peak)`` — algebraically identical.
+        # ``(l_scale / hat_int) * (sed / peak)``: algebraically identical.
         # stop_gradient: factorization constant; peak * hat_int == bolint(sed) (#1436).
         peak = jax.lax.stop_gradient(jnp.max(jnp.abs(sed)))
         peak = jnp.where(peak > 0.0, peak, 1.0)
@@ -296,11 +296,11 @@ def _load_default() -> Callable:
 def slone_netzer_grid_support() -> dict[str, tuple[float, float]]:
     r"""Parameter support of the shipped SN12 grid, read from its own axes.
 
-    A parameter declaration records one support — its prior. A block that
+    A parameter declaration records one support: its prior. A block that
     interpolates a template library carries a *second*, implicit one: the
     extent of the axes it interpolates over. The closure built by
     :func:`create_slone_netzer_from_grid` clips both parameters onto these
-    axes, so a value outside them collapses onto the edge node — the SED is
+    axes, so a value outside them collapses onto the edge node, the SED is
     bit-identical and the gradient is exactly zero, with no NaN, warning or
     error to reveal it (#1586).
 
@@ -311,7 +311,7 @@ def slone_netzer_grid_support() -> dict[str, tuple[float, float]]:
     Returns
     -------
     support : dict[str, tuple[float, float]]
-        ``{'agn_log_mbh': (lo, hi), 'agn_log_ledd': (lo, hi)}`` — inclusive
+        ``{'agn_log_mbh': (lo, hi), 'agn_log_ledd': (lo, hi)}``: inclusive
         bounds, both dimensionless. ``agn_log_mbh`` is
         :math:`\log_{10}(M_{\rm BH}/M_\odot)`, ``agn_log_ledd`` is
         :math:`\log_{10}(\dot m/\dot m_{\rm Edd})`.
@@ -323,7 +323,7 @@ def slone_netzer_grid_support() -> dict[str, tuple[float, float]]:
 
     Notes
     -----
-    **JIT-compatible**: not applicable — pure Python/NumPy, called at
+    **JIT-compatible**: not applicable; pure Python/NumPy, called at
     composition time only. Cached, so the grid is read once per process.
 
     The bounds are **read from the file**, and taken as ``axis[0]`` /
@@ -345,8 +345,8 @@ def slone_netzer_sed(*args, _template: SloneNetzerGrid | None = None, **kwargs) 
     ----------
     _template : SloneNetzerGrid, optional
         Pre-loaded grid, threaded in as a JIT argument by the forward model.
-        When ``None`` (default) the packaged grid is loaded from disk and —
-        if this call happens under trace — baked into the graph as constants.
+        When ``None`` (default) the packaged grid is loaded from disk and,
+        if this call happens under trace, baked into the graph as constants.
 
     Returns
     -------

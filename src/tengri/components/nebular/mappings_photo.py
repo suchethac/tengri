@@ -95,7 +95,7 @@ class IonizingSpectrumInconsistencyWarning(UserWarning):
 def _emit_mappings_agn_ionizing_warning(mode: str) -> None:
     """Emit warning about MappingsPhotoAGNBackend Q_H source requirement."""
     msg = (
-        "MappingsPhotoAGNBackend: Q_H must be supplied by the AGN disc model — "
+        "MappingsPhotoAGNBackend: Q_H must be supplied by the AGN disc model: "
         "it is not self-consistently derived from SSPs. Ensure you are passing "
         "log_l_ion_erg from an AGN disc model (e.g. kubota_done_full). "
         "The ionizing shape is a power law; for a composite starburst+AGN region, "
@@ -113,7 +113,7 @@ def _emit_mappings_stellar_ionizing_warning(model: str, mode: str) -> None:
         f"MappingsPhotoStellarBackend (model='{model}'): the ionizing radiation field "
         "used to compute nebular line predictions is from a "
         f"{'Starburst99' if model == 'sb99' else 'BPASS v2.2'} grid embedded in "
-        "MAPPINGS V — this is NOT derived from your DSPS SSPs. The stellar continuum "
+        "MAPPINGS V: this is NOT derived from your DSPS SSPs. The stellar continuum "
         "and the nebular lines are driven by DIFFERENT stellar population models. "
         "This inconsistency can bias predicted line ratios at ages < 20 Myr and for "
         "non-solar metallicity. For self-consistent nebular emission, use "
@@ -158,10 +158,10 @@ class MappingsStellarGridData(NamedTuple):
     sfh_idx_inst: int  # index for "inst" SFH
     sfh_idx_cont: int  # index for "cont" SFH
 
-    # Grid values — shape (N_z, N_a, N_s, N_u, N_n)
+    # Grid values: shape (N_z, N_a, N_s, N_u, N_n)
     logHB_per_logq: jnp.ndarray
 
-    # Line flux ratios relative to Hβ — shape (N_z, N_a, N_s, N_u, N_n, N_lines)
+    # Line flux ratios relative to Hβ: shape (N_z, N_a, N_s, N_u, N_n, N_lines)
     line_ratios: jnp.ndarray
 
 
@@ -501,7 +501,7 @@ class MappingsPhotoStellarBackend:
         ssp_wave = ssp_data.ssp_wave
         ssp_flux = ssp_data.ssp_flux  # (n_met, n_age, n_wave)
         qh_raw = _compute_qh_grid(ssp_wave, ssp_flux)
-        # Replace Inf/NaN with 0 — old SSP files with empty far-UV bins
+        # Replace Inf/NaN with 0: old SSP files with empty far-UV bins
         # produce non-finite Q_H values that would poison the interpolator.
         self._qh_table = sanitize_qh_table(qh_raw, backend_name="MappingsPhotoBackend")
         self._qh_log_met = ssp_data.ssp_lgmet
@@ -565,9 +565,9 @@ class MappingsPhotoStellarBackend:
 
         Notes
         -----
-        **JIT-compatible**: yes — all grid interpolations use ``jnp`` primitives.
+        **JIT-compatible**: yes, all grid interpolations use ``jnp`` primitives.
 
-        **SFH modes**: "inst" (instantaneous), "cont" (continuous) — determines
+        **SFH modes**: "inst" (instantaneous), "cont" (continuous), determines
         which MAPPINGS grid row is used for logHB_per_logq.
 
         **Metallicity**: Input neb_logZ_gas is absolute log10(Z); internally
@@ -659,7 +659,7 @@ class MappingsPhotoStellarBackend:
            logn axis to the caller-supplied default (HII region by default).
         2. Relabeling axis 0 from ζ_O (solar-relative) to absolute log10(Z) so
            the kernel's ``_gas_z`` lands on correct coordinates.
-        3. Filling ``_preint_continuum.phot`` with zeros — MAPPINGS V provides
+        3. Filling ``_preint_continuum.phot`` with zeros: MAPPINGS V provides
            only line emission, no nebular continuum.
 
         After the call the backend exposes the same surface as
@@ -689,11 +689,11 @@ class MappingsPhotoStellarBackend:
 
         Notes
         -----
-        **JIT-compatible**: no — build-time NumPy / one-time triweight
+        **JIT-compatible**: no, build-time NumPy / one-time triweight
         collapses. The resulting attributes are JAX arrays usable inside
         the JIT'd kernel body.
         """
-        del dl_cm  # MAPPINGS V: no continuum, lines via point-sampling — no F_nu scaling needed
+        del dl_cm  # MAPPINGS V: no continuum, lines via point-sampling, no F_nu scaling needed
         grid = self.grid
         sfh_idx = self._sfh_idx
 
@@ -807,7 +807,7 @@ class MappingsPhotoStellarBackend:
         """Compute nebular emission line SED on the SSP wavelength grid.
 
         Lines are added as Gaussians (if line_sigma_aa > 0) or delta functions
-        (nearest pixel). No nebular continuum — use CloudyGridBackend for that.
+        (nearest pixel). No nebular continuum: use CloudyGridBackend for that.
 
         Parameters
         ----------
@@ -839,7 +839,7 @@ class MappingsPhotoStellarBackend:
 
         Notes
         -----
-        **JIT-compatible**: yes — delegates to predict_nebular_line_luminosities
+        **JIT-compatible**: yes, delegates to predict_nebular_line_luminosities
         and place_line_profiles, both JIT-compatible.
 
         **Continuum**: This backend returns lines only; no nebular continuum.
@@ -883,7 +883,7 @@ class MappingsPhotoAGNBackend:
     Predicts NLR emission line luminosities by interpolating the OPTXAGNF
     MAPPINGS V grids over (ζ_O, log_MBH, log_Edd, logU, logn).
 
-    Unlike the stellar backend, Q_H is *not* derived from SSP spectra — the
+    Unlike the stellar backend, Q_H is *not* derived from SSP spectra: the
     AGN SED provides the ionizing photons. Call `predict_agn_line_luminosities`
     with an externally computed Q_H (photons/s) from the AGN disc model.
 
@@ -980,7 +980,7 @@ class MappingsPhotoAGNBackend:
 
         Notes
         -----
-        **JIT-compatible**: yes — all grid interpolations use ``jnp`` primitives.
+        **JIT-compatible**: yes, all grid interpolations use ``jnp`` primitives.
 
         **Ionizing source**: Q_H is supplied by the caller and derived from
         the AGN disc model (e.g., Accretion disk spectrum), NOT from SSP spectra.

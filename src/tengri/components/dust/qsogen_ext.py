@@ -2,7 +2,7 @@
 r"""Temple+2021 empirical quasar extinction curve (qsogen ``pl_ext_comp_03``).
 
 This is the reddening law the qsogen SED code (Temple, Hewett & Banerji 2021
-[1]_) applies to the quasar continuum — an *empirically-derived quasar*
+[1]_) applies to the quasar continuum: an *empirically-derived quasar*
 extinction curve, distinct from the SMC Prevot law AGNfitter uses for its
 ``EBVbbb``. It is stored and applied in qsogen's own convention:
 
@@ -75,14 +75,14 @@ def qsogen_quasar_extinction(wavelength: Array, R: float = QSOGEN_EXT_R) -> Arra
     -------
     ndarray, shape (n_wave,)
         :math:`A_\lambda/E(B-V) = E(\lambda-V)/E(B-V) + R` [mag/mag] inside the
-        tabulated domain (500–60000 Å), and ``0`` outside it — the curve is
+        tabulated domain (500–60000 Å), and ``0`` outside it: the curve is
         undefined there, so no extinction is applied (this protects a full
         radio-to-X-ray AGN grid from unphysical extrapolated attenuation;
         qsogen's own model grid stays within the domain).
 
     Notes
     -----
-    **JIT/grad/vmap-safe**: yes — ``jnp.interp`` plus a ``jnp.where`` mask.
+    **JIT/grad/vmap-safe**: yes, ``jnp.interp`` plus a ``jnp.where`` mask.
 
     The tabulated curve is :math:`E(\lambda-V)/E(B-V)` (qsogen's convention,
     zero at V), so ``R`` is added to obtain :math:`A_\lambda/E(B-V)`. Reddening

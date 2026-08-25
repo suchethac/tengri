@@ -130,7 +130,7 @@ def precompute(
 
     Notes
     -----
-    **JIT-compatible**: no — this is a build-time function using NumPy.
+    **JIT-compatible**: no, this is a build-time function using NumPy.
 
     **Fixed axes**: The CB19 grid has 7 axes. To avoid memory explosion,
     practical use fixes several (typically C/O, ΔN/O, HbFrac). Pass
@@ -247,9 +247,9 @@ def build_lookup(preint: dict, **kwargs: Any) -> dict:
 
     Notes
     -----
-    **JIT-compatible**: yes — the returned function is fully JAX-native.
+    **JIT-compatible**: yes, the returned function is fully JAX-native.
 
-    **Gradient-safe**: yes — triweight interpolation is fully differentiable.
+    **Gradient-safe**: yes, triweight interpolation is fully differentiable.
 
     """
     line_wavelengths = preint["line_wavelengths"]

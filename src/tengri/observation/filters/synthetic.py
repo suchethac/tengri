@@ -20,7 +20,7 @@ or when detector response shape matters, use real bandpass curves from SVO.
 
 **X-ray convention**: tengri's default photometric convention is photon-counting
 Bessell (w = 1/λ; ADR-0017). For X-ray work, the energy convention (w = 1/E)
-may be more appropriate — see Photometry.from_names(..., convention="energy").
+may be more appropriate; see Photometry.from_names(..., convention="energy").
 
 References
 ----------
@@ -483,7 +483,7 @@ def load_synthetic_band(name: str) -> FilterCurve:
 
     Notes
     -----
-    **JIT-compatible**: no — file I/O is required at load time.
+    **JIT-compatible**: no, file I/O is required at load time.
     Once loaded, the returned FilterCurve can be used in JIT functions.
 
     **Top-hat approximation**: The bandpass is a perfect rectangular function
@@ -569,7 +569,7 @@ def load_alma_band(band: int, name: str | None = None) -> FilterCurve:
     Notes
     -----
     Band definitions follow the ALMA Cycle 11 receiver specifications.
-    Wavelengths are in the *observed* frame — the filter should be applied
+    Wavelengths are in the *observed* frame; the filter should be applied
     at the observed frequency. For a source at redshift *z*, Band N probes
     rest-frame wavelength λ_rest = λ_obs / (1 + z).
 
@@ -616,7 +616,7 @@ def list_synthetic_bands(facility: str | None = None):
     Notes
     -----
     These bands are **rectangular approximations**, not measured detector
-    responses — see this module's docstring. They exist because ALMA, the X-ray
+    responses; see this module's docstring. They exist because ALMA, the X-ray
     observatories and most (sub)mm cameras publish spectral windows in GHz or
     keV rather than a transmission curve, so there is nothing on the SVO Filter
     Profile Service to cache.

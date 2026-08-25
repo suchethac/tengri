@@ -1,14 +1,14 @@
 # SPDX-License-Identifier: BSD-3-Clause
-"""AGN block protocol — the contract each pluggable AGN sub-component obeys.
+"""AGN block protocol, the contract each pluggable AGN sub-component obeys.
 
 Tengri's existing AGN registry (:data:`tengri.components.agn.AGN_MODELS`)
-holds *monolithic* models — qsogen, skirtor, kubota_done, GRAHSP — each one
+holds *monolithic* models (qsogen, skirtor, kubota_done, GRAHSP) each one
 a complete recipe (disc + lines + torus + attenuation) bundled into a single
 function. Picking ``agn_model="qsogen"`` means inheriting *all* of qsogen's
 pieces; users cannot mix QSOgen's BBB with SKIRTOR's torus without writing
 custom glue code.
 
-This module introduces a finer-grained registry for pluggable **blocks** —
+This module introduces a finer-grained registry for pluggable **blocks**,
 the natural spectral decomposition of an AGN SED::
 
     disc → nlr → blr → feii → torus → attenuation
@@ -28,17 +28,17 @@ Block signature
 Each block is a pure JAX function with one of three signatures, depending
 on its category::
 
-    # disc — produces the AGN UV/optical continuum.
+    # disc: produces the AGN UV/optical continuum.
     disc(wavelength, agn_log_lbol, **params) -> L_lambda  [erg/s/Å]
 
-    # nlr / blr / feii / torus — additive contributions, normalized to the
+    # nlr / blr / feii / torus: additive contributions, normalized to the
     # disc-side λL_λ(5100Å) already computed by the disc block.
     nlr (wavelength, agn_log_lbol, l5100_disc, **params) -> L_lambda or (L_maskable, L_isotropic)
     blr (wavelength, agn_log_lbol, l5100_disc, **params) -> L_lambda or (L_maskable, L_isotropic)
     feii(wavelength, agn_log_lbol, l5100_disc, **params) -> L_lambda
     torus(wavelength, agn_log_lbol, l5100_disc, **params) -> L_lambda
 
-    # attenuation — multiplicative wavelength factor in [0, 1].
+    # attenuation: multiplicative wavelength factor in [0, 1].
     attenuation(wavelength, **params) -> factor  [dimensionless]
 
 Why ``L_λ`` rather than ``L_ν``? Because every AGN piece in tengri's
@@ -65,7 +65,7 @@ from the first selector hit (``agn_disc_block="grahsp_sbpl"``,
 
 Notes
 -----
-**JIT-compatible**: yes — registry lookups happen at trace-time on Python
+**JIT-compatible**: yes, registry lookups happen at trace-time on Python
 strings (static); the dispatched callables are pure JAX.
 """
 
@@ -109,13 +109,13 @@ AGN_BLOCK_META: dict[tuple[str, str], dict[str, str]] = {}
 # because that is the only thing that tells the forward model which grids to
 # hoist out of the trace and hand to ``jax.jit`` as arguments. A block that
 # omits it and instead calls its module-level cached loader from inside the
-# trace freezes the entire library into the graph as ``Constant`` ops — 31 MB
+# trace freezes the entire library into the graph as ``Constant`` ops: 31 MB
 # for SKIRTOR, 17 MB for Fritz. See ``collect_block_templates``.
 AGN_BLOCK_TEMPLATE_LOADERS: dict[tuple[str, str], Callable[[], object]] = {}
 
 # Cross-block normalization policies (``agn_norm``). Single source of truth
 # shared by the runner (``compose_l_nu``) and the grammar validator
-# (``parameters/groups.py``) so the two can never drift — the repo's recurring
+# (``parameters/groups.py``) so the two can never drift, the repo's recurring
 # "wired in one layer but not the other" footgun. Each value is a one-line
 # description for the ``describe``/``list`` surfaces. ``name -> description``.
 AGN_NORM_POLICIES: dict[str, str] = {
@@ -233,7 +233,7 @@ def collect_block_templates(recipe: dict[str, str]) -> dict[str, object]:
 
     Notes
     -----
-    **JIT-compatible**: no, deliberately — this performs the HDF5 I/O that
+    **JIT-compatible**: no, deliberately; this performs the HDF5 I/O that
     must happen *before* tracing so the arrays can be passed in as
     arguments. Calling it inside a trace defeats its entire purpose.
 
@@ -288,7 +288,7 @@ def resolve_agn_block(category: BlockCategory, name: str) -> Callable:
 
 
 # ──────────────────────────────────────────────────────────────────────
-# Built-in "none" blocks — return zeros / identity factor. Useful as
+# Built-in "none" blocks: return zeros / identity factor. Useful as
 # defaults when the user wants to skip a stage.
 # ──────────────────────────────────────────────────────────────────────
 

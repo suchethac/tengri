@@ -63,10 +63,10 @@ def mock(model: SEDModel, params, snr=20.0, key=None) -> MockData:
 
     Notes
     -----
-    **JIT-compatible**: yes — all operations use ``jnp`` primitives.
+    **JIT-compatible**: yes, all operations use ``jnp`` primitives.
     """
     flux_true = model.predict_photometry(params)
-    # No abs() here (unlike mock_spectrum) — inherited difference kept bit-exact.
+    # No abs() here (unlike mock_spectrum), inherited difference kept bit-exact.
     return _assemble_mock(params, flux_true, flux_true / snr, key)
 
 
@@ -95,7 +95,7 @@ def mock_spectrum(model: SEDModel, params, wave_obs, snr=30.0, key=None) -> Mock
 
     Notes
     -----
-    **JIT-compatible**: yes — all operations use ``jnp`` primitives.
+    **JIT-compatible**: yes, all operations use ``jnp`` primitives.
     """
     flux_true = model.predict_spectrum(params, wave_obs)
     return _assemble_mock(params, flux_true, jnp.abs(flux_true) / snr, key)
@@ -124,7 +124,7 @@ def mock_batch(model: SEDModel, params_batch, snr=20.0, key=None) -> MockData:
 
     Notes
     -----
-    **JIT-compatible**: yes — all operations use ``jnp`` primitives.
+    **JIT-compatible**: yes, all operations use ``jnp`` primitives.
     """
     from tengri.forward.sed_model import MockData
 
@@ -158,7 +158,7 @@ def _threaded_batch(model, method_name, params_batch, ssp_data, template_data):
 
     ``jax.vmap(model.predict_photometry)`` closure-captures ``model``, so the SSP
     grid reaches the trace as a constant and a caller who wraps the batch helper
-    in their own ``jax.jit`` has no channel to pass it in — the #1753 gap, one
+    in their own ``jax.jit`` has no channel to pass it in, the #1753 gap, one
     level up (#1793). Making the grids *arguments* of the vmapped function, with
     ``in_axes=None`` so they are shared rather than mapped, puts them on the same
     threading footing as the scalar surfaces.
@@ -201,7 +201,7 @@ def predict_photometry_batch(model: SEDModel, params_batch, *, ssp_data=None, te
 
     Notes
     -----
-    **JIT-compatible**: yes — all operations use ``jnp`` primitives.
+    **JIT-compatible**: yes, all operations use ``jnp`` primitives.
     See :func:`jax.vmap` for vmap internals.
 
     The grids are broadcast with ``in_axes=None``: one shared table across the
@@ -222,7 +222,7 @@ def predict_spectrum_batch(model: SEDModel, params_batch, *, ssp_data=None, temp
     params_batch : dict of arrays
         Each value has shape (N, ...) with leading batch dimension.
     ssp_data, template_data : Any | None, keyword-only, optional
-        The JIT-threading channel — see :func:`predict_photometry_batch` (#1793).
+        The JIT-threading channel, see :func:`predict_photometry_batch` (#1793).
 
     Returns
     -------
@@ -231,7 +231,7 @@ def predict_spectrum_batch(model: SEDModel, params_batch, *, ssp_data=None, temp
 
     Notes
     -----
-    **JIT-compatible**: yes — all operations use ``jnp`` primitives.
+    **JIT-compatible**: yes, all operations use ``jnp`` primitives.
     See :func:`jax.vmap` for vmap internals.
     """
     return _threaded_batch(model, "predict_spectrum", params_batch, ssp_data, template_data)
@@ -260,13 +260,13 @@ def prior_predictive(model: SEDModel, n: int = 500, seed: int = 42) -> PriorPred
     PriorPredictive
         Object with attributes:
 
-        - ``flux``: ndarray, shape (n, n_filters) or None — photometry draws [erg/s/cm²/Hz]
-        - ``sfh``: ndarray, shape (n, n_grid) — SFR on internal time grid [Msun/yr]
-        - ``params``: dict of arrays, shape (n,) — parameter draws
+        - ``flux``: ndarray, shape (n, n_filters) or None, photometry draws [erg/s/cm²/Hz]
+        - ``sfh``: ndarray, shape (n, n_grid), SFR on internal time grid [Msun/yr]
+        - ``params``: dict of arrays, shape (n,), parameter draws
 
     Notes
     -----
-    **JIT-compatible**: no — uses Python-level for-loop to handle vmap failures gracefully.
+    **JIT-compatible**: no, uses Python-level for-loop to handle vmap failures gracefully.
     """
     from tengri.forward.sed_model import PriorPredictive
 
@@ -340,7 +340,7 @@ def fit_batch_map_vmap(
 
     Notes
     -----
-    **JIT-compatible**: no — uses Python-level vmap setup and optax integration.
+    **JIT-compatible**: no, uses Python-level vmap setup and optax integration.
     """
     import time
 
@@ -362,7 +362,7 @@ def fit_batch_map_vmap(
     n_gal = int(fluxes.shape[0])
 
     # Build a template Fitter on the first galaxy to derive the loss fn.
-    # Data baked into this fitter is ignored — loss_fn takes data_args explicitly.
+    # Data baked into this fitter is ignored, loss_fn takes data_args explicitly.
     template = Fitter(model, fluxes[0], noises[0])
     if template.data_type != "photometry":
         raise ValueError(
@@ -482,7 +482,7 @@ def fit_batch(
 
     Notes
     -----
-    **JIT-compatible**: no — uses Python-level loop and file I/O.
+    **JIT-compatible**: no, uses Python-level loop and file I/O.
     """
     import os
     import time
@@ -531,7 +531,7 @@ def fit_batch(
         )
 
     # ── Consolidation (#1336): unless per-galaxy checkpointing is requested,
-    # route the whole batch through Catalog — the one fitting code path. Catalog
+    # route the whole batch through Catalog, the one fitting code path. Catalog
     # owns ingestion, unit conversion, and per-galaxy redshift; we unwrap its
     # CatalogPosterior back to the legacy list-of-Posterior. The output_dir
     # checkpoint/resume path below keeps the per-row loop (Catalog has no
@@ -543,7 +543,7 @@ def fit_batch(
         fwd = ForwardModel.build(sed=model)
         # Forward an explicit approx= (the legacy loop passed it to every Fitter).
         # "auto" is the default and Catalog/Fitter already resolve it, so only a
-        # non-default value needs applying — dropping it would silently change the
+        # non-default value needs applying, dropping it would silently change the
         # fit's approximation policy.
         if approx != "auto":
             fwd = fwd.with_approx(approx)
@@ -554,7 +554,7 @@ def fit_batch(
                 f"({len(band_names)}); got {len(flux_cols)} flux, {len(err_cols)} err."
             )
         # fit_batch's flux_cols/err_cols are POSITIONAL (catalog column names,
-        # mapped to the model's bands in order) — the catalog columns need not be
+        # mapped to the model's bands in order), the catalog columns need not be
         # named after the bands. Rename them to the observation band names so
         # Catalog can name-match, preserving fit_batch's positional contract.
         table: dict = {}
@@ -606,7 +606,7 @@ def fit_batch(
                 results.append(result_i)
                 n_skipped += 1
                 if verbose and n_skipped <= 3:
-                    print(f"  [{i + 1}/{n_gal}] {gal_id} — loaded from checkpoint")
+                    print(f"  [{i + 1}/{n_gal}] {gal_id}, loaded from checkpoint")
                 elif verbose and n_skipped == 4:
                     print("  ... skipping remaining cached results")
                 continue
@@ -679,7 +679,7 @@ def catalog_summary(
 
     Notes
     -----
-    **JIT-compatible**: no — uses Python loops for aggregation.
+    **JIT-compatible**: no, uses Python loops for aggregation.
 
     Examples
     --------
@@ -823,7 +823,7 @@ def fit_population(
 
     Notes
     -----
-    **JIT-compatible**: no — uses PopulationFitter wrapper with internal state.
+    **JIT-compatible**: no, uses PopulationFitter wrapper with internal state.
     """
     from tengri.forward.sed_model import SEDModel as ModelClass
     from tengri.inference.hierarchical import PopulationFitter
@@ -936,7 +936,7 @@ def build_model_from_config(
 
     Notes
     -----
-    **JIT-compatible**: no — uses Python-level model construction.
+    **JIT-compatible**: no, uses Python-level model construction.
     """
     from tengri.parameters.defaults import get_from_config_defaults
     from tengri.parameters.translate import resolve_short_names
@@ -1090,7 +1090,7 @@ def fit_model(
 
     Notes
     -----
-    **JIT-compatible**: no — uses Fitter with inference internals.
+    **JIT-compatible**: no, uses Fitter with inference internals.
     """
     from tengri.inference.fitter import Fitter
     from tengri.parameters.defaults import get_inference_defaults
@@ -1181,7 +1181,7 @@ def fit_model(
 
     # ``params`` is the per-fit Fixed-value override (#1329); constructor-owned
     # kwargs (calibration_marginalize, likelihood, ...) go to Fitter(...) and
-    # the rest to run() — spec §7's fit-time flags (#1378).
+    # the rest to run(), spec §7's fit-time flags (#1378).
     params_override = kwargs.pop("params", None)
     ctor_kwargs, kwargs = split_fitter_kwargs(kwargs)
 

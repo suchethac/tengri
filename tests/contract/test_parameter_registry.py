@@ -200,7 +200,7 @@ class TestSharedParamsMigration:
             "redshift": "Source redshift",
             "met_logzsol": "log10(Z/Zsun)",
             "sigma_v_kms": (
-                "Stellar velocity dispersion sigma_v [km/s] — added in quadrature "
+                "Stellar velocity dispersion sigma_v [km/s], added in quadrature "
                 "to the instrumental LSF when computing spectra"
             ),
         }

@@ -4,7 +4,7 @@
 Implements the power-law accretion disc model on the SEDModelComponent
 contract for fast prototyping and simple AGN fits.
 
-This is an opt-in adapter — the existing AGNSEDComponent continues to
+This is an opt-in adapter, the existing AGNSEDComponent continues to
 support power-law discs through the unified AGN registry.
 
 Notes
@@ -70,7 +70,7 @@ class PowerLawDisc(SEDModelComponent):
 
     Notes
     -----
-    **JIT-compatible**: yes — predict() is pure JAX.
+    **JIT-compatible**: yes, predict() is pure JAX.
 
     **Approximation**: This model is a simplified phenomenological
     representation. It does not capture multi-zone temperature structure,
@@ -96,7 +96,7 @@ class PowerLawDisc(SEDModelComponent):
     parameter_prefix = "agn_"
     config: PowerLawDiscConfig = PowerLawDiscConfig()
 
-    # Free parameters — auto-discovered
+    # Free parameters: auto-discovered
     log_lbol = Uniform(
         8.0,
         14.0,

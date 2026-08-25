@@ -158,7 +158,7 @@ def plot_calibration(
         _, ax = plt.subplots(figsize=(6.5, 3.5))
 
     if posterior.samples is None:
-        raise ValueError("posterior has no samples — nothing to plot.")
+        raise ValueError("posterior has no samples: nothing to plot.")
 
     coeff_names = sorted(
         k for k in posterior.samples if k.startswith("cal_") and k[4:].lstrip("c").isdigit()

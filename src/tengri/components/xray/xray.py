@@ -154,11 +154,11 @@ def tbabs_transmission(E_keV: jnp.ndarray, log_nh: float) -> jnp.ndarray:
 
     Notes
     -----
-    **JIT-compatible**: yes — pure ``jnp`` primitives.
+    **JIT-compatible**: yes, pure ``jnp`` primitives.
 
     **Gradient**: smooth with respect to ``log_nh`` (single ``exp``);
     bin-edge selection uses ``searchsorted`` which has zero gradient
-    with respect to ``E_keV`` — adequate because ``E_keV`` is the
+    with respect to ``E_keV``: adequate because ``E_keV`` is the
     wavelength grid, not a free parameter.
 
     **Convention**: matches XSPEC ``wabs``. The newer ``tbabs`` model
@@ -221,7 +221,7 @@ def compton_scattering_transmission(log_nh: float) -> float:
 
     Notes
     -----
-    **JIT-compatible**: yes — single ``jnp.exp``.
+    **JIT-compatible**: yes, single ``jnp.exp``.
 
     **Why this matters**: the photoelectric edge alone (Morrison &
     McCammon ``wabs``) underestimates the suppression of hard-band
@@ -267,7 +267,7 @@ def pexrav_reflection(
     Computes the additive reflection component produced when the AGN
     corona's primary continuum reprocesses off the cold accretion disc.
     The spectral signature is the **Compton hump** peaking around
-    30 keV — the feature that lets hard-X-ray surveys (NuSTAR,
+    30 keV, the feature that lets hard-X-ray surveys (NuSTAR,
     Swift/BAT) confirm an AGN even when the soft band is
     photoelectrically extinguished (Compton-thick, log N_H ≳ 24).
 
@@ -303,7 +303,7 @@ def pexrav_reflection(
     wavelength : array, shape (n_wave,)
         Rest-frame wavelength grid. [Å]
     l_primary : array, shape (n_wave,)
-        Primary AGN corona spectrum L_ν(E) — the unabsorbed
+        Primary AGN corona spectrum L_ν(E), the unabsorbed
         ``xray_agn_corona`` output before line-of-sight obscuration.
         [erg/s/Hz]
     R : float, optional
@@ -325,7 +325,7 @@ def pexrav_reflection(
 
     Notes
     -----
-    **JIT-compatible**: yes — pure ``jnp`` primitives.
+    **JIT-compatible**: yes, pure ``jnp`` primitives.
 
     **Approximation scope**: closed-form multiplicative model, not the
     full Green's-function convolution of MZ95 / XSPEC ``pexrav``.
@@ -398,13 +398,13 @@ def pexrav_reflection(
     # cos_inc = 0.5, matching MZ95 Fig. 1's 60° normalization.
     mu_factor = (2.0 * cos_inc + 1.0) / 3.0
 
-    # n_h_disc is the cold disc surface column — currently absorbed
+    # n_h_disc is the cold disc surface column: currently absorbed
     # into the σ_phabs/σ_T branching ratio. Kept in the signature for
     # future calibration but does not affect the closed-form output;
     # log it so JAX trace-time use doesn't drop it as dead.
     _ = n_h_disc
 
-    # X-ray band mask — reflection vanishes outside the X-ray range.
+    # X-ray band mask: reflection vanishes outside the X-ray range.
     in_band = wavelength < 124.0
     return jnp.where(in_band, R * mu_factor * g_branching * g_kn * l_primary, 0.0)
 
@@ -423,8 +423,8 @@ def _cutoff_powerlaw_band_norm(
     e^{-E/E_{cut}}\,d\nu` on a uniform ``n_grid``-point energy grid.
 
     Single definition of the XRB / hot-gas normalization convention (#1119).
-    Three call sites previously carried this block inline — HMXB and LMXB over
-    2-10 keV, hot gas over 0.5-2 keV — differing only in band edges and
+    Three call sites previously carried this block inline; HMXB and LMXB over
+    2-10 keV, hot gas over 0.5-2 keV: differing only in band edges and
     constants. Sharing it keeps the convention in one place; the arithmetic and
     its order are unchanged, so results are bit-identical to the inline form.
 
@@ -469,14 +469,14 @@ def metallicity_from_history(log_z_history: Any) -> jnp.ndarray | float:
     Parameters
     ----------
     log_z_history : array_like, shape (n_grid,), or None, or scalar
-        ``state.derived["log_metallicity_history"]`` — absolute log10(Z) per SFH
+        ``state.derived["log_metallicity_history"]``: absolute log10(Z) per SFH
         bin, index 0 being the present day. [dex]
 
         Two shapes mean "absent", because the two component base classes signal
         it differently: the bare-Protocol path leaves the key out of the dict
         entirely (``None`` here), while :class:`SEDModelComponent` substitutes a
         0-d ``jnp.asarray(0.0)`` for any declared-but-unpublished optional input.
-        A real history is always 1-D, so rank alone separates them — and it must
+        A real history is always 1-D, so rank alone separates them, and it must
         be checked, since ``10**0.0`` is Z = 1, a metallicity 70x solar that the
         quartic would happily evaluate.
 
@@ -562,7 +562,7 @@ def xray_xrb_terms(
 
     Notes
     -----
-    **JIT-compatible**: yes — all operations use ``jnp`` primitives.
+    **JIT-compatible**: yes, all operations use ``jnp`` primitives.
 
     **Why separate terms**: Each binary population carries a distinct photon
     index (Γ_HMXB = 2.0, Γ_LMXB = 1.6), so their sum is **not** a single
@@ -583,14 +583,14 @@ def xray_xrb_terms(
                 40.28 - 62.12Z + 569.44Z^2 - 1833.80Z^3 + 1968.33Z^4
                 \quad [\mathrm{erg\,s^{-1}\,(M_\odot\,yr^{-1})^{-1}}]
 
-        At the ``metallicity_z`` default — ``Z_SUN`` = 0.0142, the project-wide
-        solar — this yields 3.22×10^39 erg/s per M_sun/yr SFR; at the older
+        At the ``metallicity_z`` default: ``Z_SUN`` = 0.0142, the project-wide
+        solar: this yields 3.22×10^39 erg/s per M_sun/yr SFR; at the older
         Z=0.02 convention it yields 1.78×10^39 (#1755). Both are pinned by
         ``test_xray_lehmer_hmxb_docstring_values``, so this number cannot
         drift from the equation above again.
 
-        The relation is steep in Z — an 18x spread across
-        ``met_logzsol`` ∈ [-1, +0.3] — so the value must track the galaxy, not
+        The relation is steep in Z, an 18x spread across
+        ``met_logzsol`` ∈ [-1, +0.3]: so the value must track the galaxy, not
         a constant. It does: the component passes the present-day metallicity
         published by the stellar component. Before #1755 the key it read
         (``metallicity_z``) was published by nothing, so this term was frozen
@@ -682,7 +682,7 @@ def xray_xrb_terms(
     # Float32 (#1206): the XRB normalizations ``10**40.28`` (HMXB) and
     # ``10**40.276`` (LMXB) already exceed the float32 maximum (3.4e38) before
     # SFR / M_star are applied, so ``L_*_ref`` is ``inf`` and ``inf * spec`` is
-    # ``nan`` wherever the spectrum underflows — although the result ~1e22
+    # ``nan`` wherever the spectrum underflows: although the result ~1e22
     # erg/s/Hz is representable. Fold the band integral into the exponent so no
     # out-of-range intermediate forms. Float64 keeps the literal expressions.
     if wavelength.dtype == jnp.float32:
@@ -766,7 +766,7 @@ def xray_xrb(
 
     Notes
     -----
-    **JIT-compatible**: yes — all operations use ``jnp`` primitives.
+    **JIT-compatible**: yes, all operations use ``jnp`` primitives.
 
     This function computes the sum of HMXB and LMXB contributions.
     Use :func:`xray_xrb_terms` to access the individual unsummed terms.
@@ -782,14 +782,14 @@ def xray_xrb(
                 40.28 - 62.12Z + 569.44Z^2 - 1833.80Z^3 + 1968.33Z^4
                 \quad [\mathrm{erg\,s^{-1}\,(M_\odot\,yr^{-1})^{-1}}]
 
-        At the ``metallicity_z`` default — ``Z_SUN`` = 0.0142, the project-wide
-        solar — this yields 3.22×10^39 erg/s per M_sun/yr SFR; at the older
+        At the ``metallicity_z`` default: ``Z_SUN`` = 0.0142, the project-wide
+        solar: this yields 3.22×10^39 erg/s per M_sun/yr SFR; at the older
         Z=0.02 convention it yields 1.78×10^39 (#1755). Both are pinned by
         ``test_xray_lehmer_hmxb_docstring_values``, so this number cannot
         drift from the equation above again.
 
-        The relation is steep in Z — an 18x spread across
-        ``met_logzsol`` ∈ [-1, +0.3] — so the value must track the galaxy, not
+        The relation is steep in Z, an 18x spread across
+        ``met_logzsol`` ∈ [-1, +0.3]: so the value must track the galaxy, not
         a constant. It does: the component passes the present-day metallicity
         published by the stellar component. Before #1755 the key it read
         (``metallicity_z``) was published by nothing, so this term was frozen
@@ -907,7 +907,7 @@ def alpha_ox_from_l2500(
 
     Notes
     -----
-    **JIT-compatible**: yes — pure JAX function. The string ``relation``
+    **JIT-compatible**: yes, pure JAX function. The string ``relation``
     argument is a Python-level dispatch (not traced); pass it statically.
 
     **Just+2007 [1]_ (Eq. 3):** derived from optically-bright AGN; valid for
@@ -938,12 +938,12 @@ def alpha_ox_from_l2500(
 
     **Calibration-range clamp (#861).** The relations are anti-correlations, so
     :math:`\alpha_{\mathrm{ox}}` rises without bound as :math:`L_{2500}` falls
-    and turns **positive** below :math:`\log_{10} L_{2500} \approx 19` — i.e.
+    and turns **positive** below :math:`\log_{10} L_{2500} \approx 19`: i.e.
     :math:`L_{2\,\mathrm{keV}} > L_{2500}`, an X-ray corona brighter than the
     disc that produced it, which pushes the total X-ray past :math:`L_{\rm bol}`.
     To avoid this unphysical extrapolation, :math:`\log_{10} L_{2500}` is clamped
     to each relation's fitted range (:data:`_ALPHA_OX_CALIB_RANGE`) before the
-    slope is applied — below the range the boundary (faintest-calibrated)
+    slope is applied: below the range the boundary (faintest-calibrated)
     :math:`\alpha_{\mathrm{ox}}` is held, matching pcigale, which never
     extrapolates the relation (it takes a fixed ``alpha_ox`` bounded by
     ``max_dev_alpha_ox``).
@@ -996,7 +996,7 @@ def xray_hotgas(
 
     Notes
     -----
-    **JIT-compatible**: yes — all operations use ``jnp`` primitives.
+    **JIT-compatible**: yes, all operations use ``jnp`` primitives.
 
     **Hot gas luminosity scaling** (Yang et al. 2020, MNRAS 491, 740;
     Yang et al. 2022, ApJ 927, 192; Mineo et al. 2012, ApJ 745, 181):
@@ -1053,7 +1053,7 @@ def xray_hotgas(
 
     # Float32 (#1206): ``10**38.919 = 8.3e38`` already exceeds the float32
     # maximum (3.4e38) BEFORE ``sfr`` is applied, so ``L_hotgas_ref`` is ``inf``
-    # and ``inf * spec`` is ``nan`` wherever the spectrum underflows to zero —
+    # and ``inf * spec`` is ``nan`` wherever the spectrum underflows to zero,
     # even though the result ``L_nu`` (~1e26 erg/s/Hz) is perfectly
     # representable. Divide the constant by the band integral in log space so no
     # out-of-range intermediate forms. Float64 keeps the literal expression.
@@ -1081,7 +1081,7 @@ def xray_anisotropy(
     ----------
     l_x : array_like, shape (n_wave,)
         Corona luminosity spectrum at the Yang+2020 30° reference
-        inclination — i.e. the α_ox-predicted spectrum. [erg/s/Hz]
+        inclination: i.e. the α_ox-predicted spectrum. [erg/s/Hz]
     cos_inc : float
         Cosine of inclination angle (1 = face-on, 0 = edge-on).
         [dimensionless]
@@ -1097,7 +1097,7 @@ def xray_anisotropy(
 
     Notes
     -----
-    **JIT-compatible**: yes — pure JAX function.
+    **JIT-compatible**: yes, pure JAX function.
 
     **Empirical correction** (Yang et al. 2022 [1]_): polynomial in
     :math:`\mu \equiv \cos\theta`, anchored at the 30° reference
@@ -1115,7 +1115,7 @@ def xray_anisotropy(
     (:math:`0.13397 = 1 - \cos 30^\circ`, :math:`0.25 = 1 - \cos^2 30^\circ`),
     so :math:`f(\cos 30^\circ) = 1`: the input spectrum is interpreted as the
     30° (α_ox-anchored) corona, matching CIGALE's ``*_30deg`` bookkeeping.
-    Face-on (:math:`\mu = 1`) is *brighter* than the anchor —
+    Face-on (:math:`\mu = 1`) is *brighter* than the anchor:
     :math:`f(1) \approx 1.072` at the default :math:`a_1 = 0.5,\, a_2 = 0`
     (the "intermediate" obscuration solution adopted in X-CIGALE). See #980
     for the parity audit that pinned this convention against CIGALE 2025.1.
@@ -1162,7 +1162,7 @@ def xray_agn_corona_from_disc(
         Monochromatic luminosity density at 2500 A [erg/s/Hz].
     cos_inc : float
         Cosine of inclination (1 = face-on, 0 = edge-on). Default
-        ``COS_INC_REF_30DEG`` — the Yang+2020 anchor where the anisotropy
+        ``COS_INC_REF_30DEG``, the Yang+2020 anchor where the anisotropy
         factor is exactly 1 (#980).
     delta_alpha_ox : float
         Additive offset to the Just+2007 alpha_ox. Default 0.0.
@@ -1184,7 +1184,7 @@ def xray_agn_corona_from_disc(
 
     Notes
     -----
-    **JIT-compatible**: yes — pure JAX function.
+    **JIT-compatible**: yes, pure JAX function.
     """
     # alpha_ox from disc UV luminosity via the selected empirical correlation.
     # NaN guard for the L_2500=0 fallback (no AGN upstream): log10(0)=-inf
@@ -1277,7 +1277,7 @@ def xray_agn_corona(
         Additive offset to the Just+2007 α_ox relation. Default: 0.0. [dex]
     cos_inc : float, optional
         Cosine of inclination angle (1 = face-on, 0 = edge-on). Default:
-        ``COS_INC_REF_30DEG`` — the Yang+2020 anchor, factor exactly 1 (#980). []
+        ``COS_INC_REF_30DEG``, the Yang+2020 anchor, factor exactly 1 (#980). []
     apply_anisotropy : bool, optional
         Whether to apply Yang+2022 viewing-angle correction. Default: True.
     a1 : float, optional
@@ -1292,7 +1292,7 @@ def xray_agn_corona(
 
     Notes
     -----
-    **JIT-compatible**: yes — pure JAX function.
+    **JIT-compatible**: yes, pure JAX function.
 
     **Physical basis** (Yang et al. 2020, MNRAS 491, 740, §2.2.1):
     The α_OX parameter (defined as the SED slope between 2500 Å and 2 keV)
@@ -1365,7 +1365,7 @@ def _xray_agn_corona_bolometric(
     r"""**DEPRECATED**: AGN corona from bolometric luminosity (with N_H absorption).
 
     Use :func:`xray_agn_corona_from_disc` (which takes ``L_2500_30deg``
-    directly) instead — that is the X-CIGALE-faithful path (Yang+2020
+    directly) instead; that is the X-CIGALE-faithful path (Yang+2020
     yang20.py:227). This function converts from ``L_bol`` via the
     Hopkins+2007 bolometric correction (BC_2500 ≈ 5.15), which is
     ambiguous and inconsistent with the disc UV model.
@@ -1441,7 +1441,7 @@ def _xray_agn_corona_bolometric(
     # Ricci+2017 / Matsumoto+2026 Eq. B6:
     #   primary = zphabs(N_H) × cabs(N_H) × intrinsic
     #   scattered = scattered_frac × intrinsic
-    # Applied to the AGN corona only — XRBs and hot gas are outside the
+    # Applied to the AGN corona only; XRBs and hot gas are outside the
     # torus line of sight and are unobscured by host N_H.
     T_phabs = tbabs_transmission(E_keV, log_nh)
     T_cabs = compton_scattering_transmission(log_nh)
@@ -1512,7 +1512,7 @@ def xray_total_terms(
         Additive offset to Just+2007 α_ox relation [dex]. Default: 0.0.
     cos_inc : float
         Cosine of inclination angle (1 = face-on, 0 = edge-on). Default:
-        ``COS_INC_REF_30DEG`` — the Yang+2020 anchor, factor exactly 1 (#980). []
+        ``COS_INC_REF_30DEG``, the Yang+2020 anchor, factor exactly 1 (#980). []
     apply_anisotropy : bool
         Whether to apply Yang+2022 viewing-angle correction. Default: True.
     a1 : float
@@ -1540,7 +1540,7 @@ def xray_total_terms(
 
     Notes
     -----
-    **JIT-compatible**: yes — pure JAX function.
+    **JIT-compatible**: yes, pure JAX function.
 
     **Why separate terms**: HMXB and LMXB carry distinct photon indices
     (Γ_HMXB = 2.0, Γ_LMXB = 1.6), so their sum is not a single
@@ -1660,7 +1660,7 @@ def xray_total(
         Additive offset to Just+2007 α_ox relation [dex]. Default: 0.0.
     cos_inc : float
         Cosine of inclination angle (1 = face-on, 0 = edge-on). Default:
-        ``COS_INC_REF_30DEG`` — the Yang+2020 anchor, factor exactly 1 (#980). []
+        ``COS_INC_REF_30DEG``, the Yang+2020 anchor, factor exactly 1 (#980). []
     apply_anisotropy : bool
         Whether to apply Yang+2022 viewing-angle correction. Default: True.
     a1 : float
@@ -1688,7 +1688,7 @@ def xray_total(
 
     Notes
     -----
-    **JIT-compatible**: yes — pure JAX function.
+    **JIT-compatible**: yes, pure JAX function.
 
     This function returns the sum of all four X-ray components. Use
     :func:`xray_total_terms` to access the individual unsummed terms for
@@ -1753,7 +1753,7 @@ def xray_bolometric_correction_duras(l_bol_erg: float) -> float:
 
     Notes
     -----
-    **JIT-compatible**: yes — uses ``jnp`` primitives.
+    **JIT-compatible**: yes, uses ``jnp`` primitives.
 
     The general form from Duras et al. (2020) is:
 
@@ -1842,7 +1842,7 @@ def xray_agn_corona_lopez24(
 
     Notes
     -----
-    **JIT-compatible**: yes — uses ``jnp`` primitives.
+    **JIT-compatible**: yes, uses ``jnp`` primitives.
 
     The α_IRX parameter connects the mid-IR and X-ray luminosities via
     the Asmus et al. (2015) / Gandhi et al. (2009) L_X–L_12μm relation:
@@ -1988,7 +1988,7 @@ def xray_total_lopez24_terms(
 
     Notes
     -----
-    **JIT-compatible**: yes — pure JAX function.
+    **JIT-compatible**: yes, pure JAX function.
 
     **Why separate terms**: HMXB and LMXB carry distinct photon indices,
     and the AGN component via α_IRX has independent parameter dependencies.
@@ -2096,7 +2096,7 @@ def xray_total_lopez24(
 
     Notes
     -----
-    **JIT-compatible**: yes — pure JAX function.
+    **JIT-compatible**: yes, pure JAX function.
 
     This function returns the sum of all X-ray components. Use
     :func:`xray_total_lopez24_terms` to access the individual unsummed terms

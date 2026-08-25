@@ -8,7 +8,7 @@ strengths from an observed mid-IR SED.
 
 References
 ----------
-Smith et al. 2007, ApJ 656, 770 — PAHFIT; Table 2 feature list.
+Smith et al. 2007, ApJ 656, 770: PAHFIT; Table 2 feature list.
 
 """
 
@@ -49,7 +49,7 @@ class PAHFeature(NamedTuple):
 
 # 18-entry table: 3.3 μm C-H stretch + 17 features from Smith+2007 Table 2.
 # Format: PAHFeature(center_um, fractional_gamma, relative_strength).
-# The 3.3 μm feature lies outside IRS coverage in Smith+2007 — parameters
+# The 3.3 μm feature lies outside IRS coverage in Smith+2007: parameters
 # from Tokunaga+1991 and Li & Draine 2001.
 SMITH2007_PAH_FEATURES: tuple[PAHFeature, ...] = (
     PAHFeature(3.30, 0.0152, 0.06),  # 3.3 μm C-H stretch
@@ -72,7 +72,7 @@ SMITH2007_PAH_FEATURES: tuple[PAHFeature, ...] = (
     PAHFeature(14.04, 0.016, 0.02),
 )
 
-# Number of features — convenience constant.
+# Number of features: convenience constant.
 N_PAH_FEATURES: int = len(SMITH2007_PAH_FEATURES)
 
 # Pre-packed JAX arrays (module-level, JIT-compatible).
@@ -185,7 +185,7 @@ def decompose_pah(
 
     where ``A`` is the ``(n_wave, 18)`` design matrix of peak-normalized
     Drude profiles.  The solution is computed via the normal equations and
-    is fully JAX-differentiable — pass the returned ``strengths`` directly
+    is fully JAX-differentiable: pass the returned ``strengths`` directly
     into the tengri fitter or use them as a warm-start for ``pah_template``.
 
     For non-negative strengths, use the returned ``strengths`` as free
@@ -204,11 +204,11 @@ def decompose_pah(
     Returns
     -------
     dict with keys:
-        ``"strengths"``   — ndarray, shape (18,), fitted feature amplitudes
+        ``"strengths"`` : ndarray, shape (18,), fitted feature amplitudes
             [dimensionless].
-        ``"fitted_pah"``  — ndarray, shape (n_wave,), reconstructed PAH profile
+        ``"fitted_pah"``: ndarray, shape (n_wave,), reconstructed PAH profile
             [same units as sed].
-        ``"residual"``    — ndarray, shape (n_wave,),
+        ``"residual"``  : ndarray, shape (n_wave,),
             (sed - continuum) - fitted_pah [same units as sed].
 
     References

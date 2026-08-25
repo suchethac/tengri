@@ -5,7 +5,7 @@ Implements :class:`~tengri.forward.precompute.protocol.PrecomputeModule` for
 SKIRTOR's 5D torus template grid: (tau, p, q, oa, cos_inc).
 
 Auto-collapses any axis whose corresponding parameter is
-:class:`~tengri.parameters.priors.Fixed` in the user's ``Parameters`` — e.g., a
+:class:`~tengri.parameters.priors.Fixed` in the user's ``Parameters``: e.g., a
 user who pins ``agn_tau_skirtor`` and ``agn_p_skirtor`` gets a 3D runtime grid
 instead of the full 5D one, for free.
 """
@@ -83,15 +83,15 @@ def precompute_skirtor_photometry(
     References
     ----------
     .. [1] M. Stalevski et al., "3D radiative transfer modeling of the dusty
-           torus around AGN — the influence of clumping," MNRAS, 420, 2756 (2012).
+           torus around AGN, the influence of clumping," MNRAS, 420, 2756 (2012).
            arXiv:1109.1286. https://doi.org/10.1111/j.1365-2966.2011.19775.x
-    .. [2] M. Stalevski et al., "The dust covering factor in AGN — combining the
+    .. [2] M. Stalevski et al., "The dust covering factor in AGN: combining the
            IR torus emission with polar dust component," MNRAS, 458, 2288 (2016).
            arXiv:1602.01954. https://doi.org/10.1093/mnras/stw444
 
     Notes
     -----
-    **JIT-compatible**: no — this is a build-time function using NumPy.
+    **JIT-compatible**: no, this is a build-time function using NumPy.
 
     **Build-time operation**: This function performs frequency-domain
     integration via NumPy. The precomputed photometry is grid-independent
@@ -127,7 +127,7 @@ def precompute_skirtor_photometry(
     # Convert raw L_λ-like templates to L_ν [erg/s/Hz per L_sun of L_bol].
     # SKIRTOR v3 templates are stored as L_λ-like (issue #459), so the
     # bolometric normalization must be taken in the *wavelength* variable and
-    # the result converted L_λ → L_ν = L_λ × λ²/c at the end — exactly as the
+    # the result converted L_λ → L_ν = L_λ × λ²/c at the end: exactly as the
     # runtime path in ``skirtor.py:_interpolate_and_normalize`` does. The
     # previous frequency-integral here treated the L_λ array as L_ν and left
     # the precomputed LUT with the wrong dimensionality (the WavePrecomp path
@@ -205,15 +205,15 @@ def build_skirtor_photometry_lookup(precomp: dict, grid_arrays_traced: tuple | N
     References
     ----------
     .. [1] M. Stalevski et al., "3D radiative transfer modeling of the dusty
-           torus around AGN — the influence of clumping," MNRAS, 420, 2756 (2012).
+           torus around AGN, the influence of clumping," MNRAS, 420, 2756 (2012).
            arXiv:1109.1286. https://doi.org/10.1111/j.1365-2966.2011.19775.x
 
     Notes
     -----
-    **JIT-compatible**: yes — the returned function uses ``jnp`` and
+    **JIT-compatible**: yes, the returned function uses ``jnp`` and
     triweight interpolation, which are JAX-native.
 
-    **Gradient-safe**: yes — triweight kernel is fully differentiable.
+    **Gradient-safe**: yes, triweight kernel is fully differentiable.
 
     **Interpolation kernel**: Triweight kernel provides C²-continuous
     gradients for autodiff, unlike nearest-neighbor or linear interpolation.
@@ -254,7 +254,12 @@ def build_skirtor_photometry_lookup(precomp: dict, grid_arrays_traced: tuple | N
                 agn_oa_skirtor,
                 agn_cos_inc,
             )
-            phot_per_lsun = interp_nd_triweight(grid_phot_traced, axes_traced, edges_traced, point)
+            # ``index_space_interp=True`` to match the runtime spectral path
+            # (#1911); leaving it off here would make precompute and runtime
+            # disagree on the non-uniform cos_inclination axis.
+            phot_per_lsun = interp_nd_triweight(
+                grid_phot_traced, axes_traced, edges_traced, point, index_space_interp=True
+            )
             return l_bol_lsun * agn_torus_frac * phot_per_lsun
 
         # Return wrapper that inserts traced arrays
@@ -306,7 +311,8 @@ def build_skirtor_photometry_lookup(precomp: dict, grid_arrays_traced: tuple | N
             agn_oa_skirtor,
             agn_cos_inc,
         )
-        phot_per_lsun = interp_nd_triweight(grid_phot, axes, edges, point)
+        # Matches the traced branch above and the runtime spectral path (#1911).
+        phot_per_lsun = interp_nd_triweight(grid_phot, axes, edges, point, index_space_interp=True)
         return l_bol_lsun * agn_torus_frac * phot_per_lsun
 
     return skirtor_phot
@@ -347,12 +353,12 @@ def precompute(
     References
     ----------
     .. [1] M. Stalevski et al., "3D radiative transfer modeling of the dusty
-           torus around AGN — the influence of clumping," MNRAS, 420, 2756 (2012).
+           torus around AGN, the influence of clumping," MNRAS, 420, 2756 (2012).
            arXiv:1109.1286. https://doi.org/10.1111/j.1365-2966.2011.19775.x
 
     Notes
     -----
-    **JIT-compatible**: no — this is a build-time function using NumPy.
+    **JIT-compatible**: no, this is a build-time function using NumPy.
     """
     result = precompute_skirtor_photometry(
         grid_path, filter_waves, filter_trans, redshift=redshift
@@ -409,14 +415,14 @@ def build_lookup(preint: dict, *, free_param_names: tuple[str, ...] | None = Non
     References
     ----------
     .. [1] M. Stalevski et al., "3D radiative transfer modeling of the dusty
-           torus around AGN — the influence of clumping," MNRAS, 420, 2756 (2012).
+           torus around AGN, the influence of clumping," MNRAS, 420, 2756 (2012).
            arXiv:1109.1286. https://doi.org/10.1111/j.1365-2966.2011.19775.x
 
     Notes
     -----
-    **JIT-compatible**: yes — the returned function is fully JAX-native.
+    **JIT-compatible**: yes, the returned function is fully JAX-native.
 
-    **Gradient-safe**: yes — triweight interpolation is fully differentiable.
+    **Gradient-safe**: yes, triweight interpolation is fully differentiable.
     """
     if not preint.get("_collapsed_axes"):
         return build_skirtor_photometry_lookup(preint)

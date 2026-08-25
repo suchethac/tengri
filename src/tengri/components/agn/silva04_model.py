@@ -6,7 +6,7 @@ Implements the Silva+04 torus model on the SEDModelComponent contract,
 enabling use of column-density-parameterized templates in the model-building
 API.
 
-This is an opt-in adapter — the existing AGNSEDComponent continues to
+This is an opt-in adapter, the existing AGNSEDComponent continues to
 support Silva+04 through the unified AGN registry.
 
 References
@@ -99,9 +99,9 @@ class Silva04Torus(SEDModelComponent):
 
     Notes
     -----
-    **JIT-compatible**: yes — predict() is pure JAX.
+    **JIT-compatible**: yes, predict() is pure JAX.
 
-    **Gradient-safe**: yes — triweight interpolation is fully differentiable.
+    **Gradient-safe**: yes, triweight interpolation is fully differentiable.
 
     **Requires template grid**: The Silva+04 template library must be
     downloaded separately and pointed to via ``grid_path`` in config.
@@ -136,7 +136,7 @@ class Silva04Torus(SEDModelComponent):
     parameter_prefix = "agn_"
     config: Silva04TorusConfig = field(default_factory=Silva04TorusConfig)
 
-    # Free parameters — auto-discovered
+    # Free parameters: auto-discovered
     log_lbol = Uniform(
         8.0,
         14.0,
@@ -183,7 +183,7 @@ class Silva04Torus(SEDModelComponent):
         try:
             return create_silva04_from_grid(self.config.grid_path)
         except (FileNotFoundError, OSError, KeyError):
-            # Templates not available — predict will return zero emission
+            # Templates not available: predict will return zero emission
             return None
 
     def predict(

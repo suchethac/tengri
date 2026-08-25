@@ -3,7 +3,7 @@
 
 This module is a namespace seed. Future additions: Milky Way extinction,
 photometry/spectroscopy cross-calibration, LSF attachment. Everything here
-is pure numpy — safe to import before JAX initialization.
+is pure numpy: safe to import before JAX initialization.
 """
 
 from tengri.preprocessing.error_floor import add_systematic_floor

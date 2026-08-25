@@ -50,7 +50,7 @@ _C_FF: float = 1.0 / 4.6e-28  # ≈ 2.174e27
 # Kennicutt+1998 IR-SFR calibration: L_IR [erg/s] → SFR [M☉/yr]
 _SFR_IR_KENNICUTT: float = 1.73e10 * _L_SUN  # ≈ 6.62e43 erg/s
 
-# log10 of the FIRRC / free-free divisors — used by the float32-safe branches
+# log10 of the FIRRC / free-free divisors: used by the float32-safe branches
 # (#1206) that form the (representable) radio luminosity directly from
 # ``log10(L_IR)`` so the ~1e43 erg/s linear ``L_IR`` never materializes (it
 # overflows float32 max, 3.4e38, poisoning ``inf / finite → inf``).
@@ -153,14 +153,14 @@ def radio_sfr_bell2003(
 
     Notes
     -----
-    **JIT-compatible**: yes — pure JAX function.
+    **JIT-compatible**: yes, pure JAX function.
     """
     nu = _C_AA / wavelength
     if log_L_ir is None:
         L_ref = L_ir / (3.75e12 * 10.0**q_ir)  # erg/s/Hz at nu_ref
     else:
         # float32-safe (#1206): the ~1e28 erg/s/Hz radio luminosity is fully
-        # representable — only the linear ``L_IR`` (~1e43) overflows. Form the
+        # representable: only the linear ``L_IR`` (~1e43) overflows. Form the
         # quotient straight from ``log10(L_IR)`` so ``L_IR`` never materializes.
         L_ref = _pow10(log_L_ir - _LOG10_FIRRC_CONST - q_ir)
     L_nu = L_ref * (nu / nu_ref) ** (-alpha_sf)
@@ -234,7 +234,7 @@ def radio_sfr_delvecchio2021(
 
     Notes
     -----
-    **JIT-compatible**: yes — pure JAX function.
+    **JIT-compatible**: yes, pure JAX function.
 
     q decreases with increasing M★ (radio-brighter per unit IR for massive
     galaxies), consistent with stronger magnetic fields and denser ISM.
@@ -327,7 +327,7 @@ def radio_sfr_mccheyne2022(
 
     Notes
     -----
-    **JIT-compatible**: yes — pure JAX function.
+    **JIT-compatible**: yes, pure JAX function.
 
     McCheyne+2022 reports a steeper mass dependence than Delvecchio+2021.
     The discrepancy is reconciled when using α = -0.59 instead of -0.7 for
@@ -397,7 +397,7 @@ def radio_freefree(
 
     Notes
     -----
-    **JIT-compatible**: yes — pure JAX function.
+    **JIT-compatible**: yes, pure JAX function.
 
     Calibration check: at 1.4 GHz, Te=1e4 K, L_IR=1e10 Lsun (SFR≈0.58 M☉/yr):
     L_ff ≈ 5.49e-7 × 0.58 ≈ 3.2e-7 Lsun/Hz (Murphy+2011 Table 1 consistent).
@@ -476,7 +476,7 @@ def _dispatch_sfr(
 
     Notes
     -----
-    **JIT-compatible**: yes — pure JAX function.
+    **JIT-compatible**: yes, pure JAX function.
     """
     if sfr_mode == "none":
         return jnp.zeros_like(wavelength)
@@ -572,7 +572,7 @@ def radio_agn(
 
     Notes
     -----
-    **JIT-compatible**: yes — pure JAX function.
+    **JIT-compatible**: yes, pure JAX function.
 
     The high-frequency rolloff is governed by the physical synchrotron-aging
     cutoff (``log_nu_cut``, default 10 THz), NOT by an arbitrary wavelength
@@ -681,7 +681,7 @@ def radio_agn_dpl(
     # (disc-derived), use it directly; else derive from L_bol bolometric correction.
     _NU_B = 6.818e14  # Hz
     _BC_B = 5.15  # Hopkins+2007
-    # float32-safe (#1206): see radio_agn — form the fallback from
+    # float32-safe (#1206): see radio_agn; form the fallback from
     # log10(L_agn_bol) so the ~1e46 linear L_agn_bol never materializes, and so
     # the dead ``jnp.where`` branch is finite (avoiding 0 * inf = nan in grad).
     if log_L_agn_bol is None:
@@ -808,13 +808,13 @@ def radio_total_terms(
     dict[str, ndarray]
         Dictionary with three keys:
 
-        - ``"sf"`` : array, shape (n_wave,) — star-forming synchrotron [erg/s/Hz]
-        - ``"ff"`` : array, shape (n_wave,) — thermal free-free [erg/s/Hz]
-        - ``"agn"`` : array, shape (n_wave,) — AGN radio [erg/s/Hz]
+        - ``"sf"`` : array, shape (n_wave,); star-forming synchrotron [erg/s/Hz]
+        - ``"ff"`` : array, shape (n_wave,); thermal free-free [erg/s/Hz]
+        - ``"agn"`` : array, shape (n_wave,); AGN radio [erg/s/Hz]
 
     Notes
     -----
-    **JIT-compatible**: yes — pure JAX function. **Grad/vmap compatible**: yes.
+    **JIT-compatible**: yes, pure JAX function. **Grad/vmap compatible**: yes.
 
     Each term is rank-1 in wavelength: a scalar amplitude times a fixed
     spectral shape (parameterized by fixed shape parameters like α or T_e).
@@ -933,7 +933,7 @@ def radio_total(
 
     Notes
     -----
-    **JIT-compatible**: yes — pure JAX function.
+    **JIT-compatible**: yes, pure JAX function.
     """
     t = radio_total_terms(
         wavelength,
@@ -1061,13 +1061,13 @@ def radio_total_dpl_terms(
     dict[str, ndarray]
         Dictionary with three keys:
 
-        - ``"sf"`` : array, shape (n_wave,) — star-forming synchrotron [erg/s/Hz]
-        - ``"ff"`` : array, shape (n_wave,) — thermal free-free [erg/s/Hz]
-        - ``"agn"`` : array, shape (n_wave,) — AGN double power-law [erg/s/Hz]
+        - ``"sf"`` : array, shape (n_wave,); star-forming synchrotron [erg/s/Hz]
+        - ``"ff"`` : array, shape (n_wave,); thermal free-free [erg/s/Hz]
+        - ``"agn"`` : array, shape (n_wave,); AGN double power-law [erg/s/Hz]
 
     Notes
     -----
-    **JIT-compatible**: yes — pure JAX function. **Grad/vmap compatible**: yes.
+    **JIT-compatible**: yes, pure JAX function. **Grad/vmap compatible**: yes.
 
     Each term is rank-1 in wavelength: a scalar amplitude times a fixed
     spectral shape (parameterized by fixed shape parameters). This enables
@@ -1193,7 +1193,7 @@ def radio_total_dpl(
 
     Notes
     -----
-    **JIT-compatible**: yes — pure JAX function.
+    **JIT-compatible**: yes, pure JAX function.
     """
     t = radio_total_dpl_terms(
         wavelength,
@@ -1283,14 +1283,14 @@ def compute_radio_components(
     Returns
     -------
     dict with keys:
-        ``"synchrotron"`` : array (n_wave,) — SFR synchrotron L_nu [erg/s/Hz]
-        ``"freefree"`` : array (n_wave,) — thermal free-free L_nu [erg/s/Hz]
-        ``"agn"`` : array (n_wave,) — AGN radio L_nu [erg/s/Hz]
-        ``"total"`` : array (n_wave,) — sum of above [erg/s/Hz]
+        ``"synchrotron"`` : array (n_wave,); SFR synchrotron L_nu [erg/s/Hz]
+        ``"freefree"`` : array (n_wave,): thermal free-free L_nu [erg/s/Hz]
+        ``"agn"`` : array (n_wave,); AGN radio L_nu [erg/s/Hz]
+        ``"total"`` : array (n_wave,): sum of above [erg/s/Hz]
 
     Notes
     -----
-    **JIT-compatible**: yes — pure JAX function.
+    **JIT-compatible**: yes, pure JAX function.
     """
     synchrotron = _dispatch_sfr(
         wavelength,

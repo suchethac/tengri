@@ -58,7 +58,7 @@ class KDPreintegratedData:
     """Preintegrated K&D 2018 disc components for photometric fast-path.
 
     All tables store filter-integrated spectral shapes per grid point.
-    At runtime, ring contributions are looked up and summed — no
+    At runtime, ring contributions are looked up and summed: no
     wavelength-level computation needed.
 
     Attributes
@@ -127,7 +127,7 @@ class KDPreintegratedData:
 # K&D uses a custom dataclass (KDPreintegratedData) with three non-uniform tables
 # (Planck per-T, nthcomp per-(gamma,kTe,kTbb), corona per-(Gamma,kT_hot)). These
 # correspond to internal K&D physics parameters, not user-facing priors. Auto-
-# collapse on user-Fixed parameters is not yet wired for K&D — tracked in
+# collapse on user-Fixed parameters is not yet wired for K&D: tracked in
 # docs/dev/optimization-architecture.md. The empty AXIS_PARAMS signals this.
 AXIS_PARAMS: tuple[str, ...] = ()
 
@@ -521,7 +521,7 @@ def preintegrate_kd_components(
 
     Notes
     -----
-    **JIT-compatible**: no — this function performs build-time integration
+    **JIT-compatible**: no, this function performs build-time integration
     via NumPy. The returned tables are JIT-compatible and can be used in
     traced functions.
 
@@ -613,7 +613,7 @@ def _lookup_planck_filter(
 
     Returns
     -------
-    (n_filters,) — filter-integrated B_nu at temperature T.
+    (n_filters,): filter-integrated B_nu at temperature T.
     """
     log_T = jnp.log10(jnp.maximum(T, 1.0))
     log_T_grid = jnp.log10(T_grid)
@@ -652,7 +652,7 @@ def _lookup_nthcomp_filter(
 
     Returns
     -------
-    (n_filters,) — filter-integrated nthcomp shape.
+    (n_filters,): filter-integrated nthcomp shape.
     """
 
     def _interp_axis(val, grid):
@@ -709,7 +709,7 @@ def _lookup_corona_filter(
 
     Returns
     -------
-    (n_filters,) — filter-integrated normalized corona shape.
+    (n_filters,): filter-integrated normalized corona shape.
     """
 
     def _interp_axis(val, grid):
@@ -789,7 +789,7 @@ def _compute_bh_and_radii(
     Returns
     -------
     tuple
-        (r_hot_cm, r_warm_cm, r_out_cm, t_in, eta) — hot zone radius, warm
+        (r_hot_cm, r_warm_cm, r_out_cm, t_in, eta): hot zone radius, warm
         zone radius, outer disc radius, inner disc temperature, accretion
         efficiency [all in CGS units].
     """
@@ -873,7 +873,7 @@ def _integrate_outer_zone(
     Returns
     -------
     tuple
-        (outer_phot, outer_bol) — filter-integrated photometry (n_filters,)
+        (outer_phot, outer_bol): filter-integrated photometry (n_filters,)
         and bolometric luminosity [erg/s] [scalar].
     """
     log_r_warm = jnp.log10(r_warm_cm)
@@ -951,7 +951,7 @@ def _integrate_warm_zone(
     Returns
     -------
     tuple
-        (warm_phot, warm_bol) — filter-integrated photometry (n_filters,)
+        (warm_phot, warm_bol): filter-integrated photometry (n_filters,)
         and bolometric luminosity [erg/s] [scalar].
     """
     log_r_hot = jnp.log10(r_hot_cm)
@@ -1026,7 +1026,7 @@ def kubota_done_disc_preintegrated(
     agn_self_consistent_gamma: bool = False,
     **_kwargs,
 ) -> jnp.ndarray:
-    """Preintegrated K&D (2018) 3-zone disc — filter-level radial integration.
+    """Preintegrated K&D (2018) 3-zone disc: filter-level radial integration.
 
     Same physics as ``kubota_done_disc()`` but operates on filter-level
     quantities (n_filters per ring) instead of wavelength-level (17k per ring).
@@ -1048,7 +1048,7 @@ def kubota_done_disc_preintegrated(
 
     Notes
     -----
-    **JIT-compatible**: yes — uses ``jnp`` primitives and ``jax.vmap``.
+    **JIT-compatible**: yes, uses ``jnp`` primitives and ``jax.vmap``.
 
     This is the photometric fast-path variant of ``kubota_done_disc()``. It
     replaces wavelength-level integration with filter-level lookup tables,
@@ -1202,7 +1202,7 @@ def precompute(filter_waves: list, filter_trans: list, redshift: float, paramete
     redshift : float
         Source redshift (fixed at init time). [dimensionless]
     parameters : Parameters | None, optional
-        Unused — K&D grid axes are internal physics coords, not user priors.
+        Unused: K&D grid axes are internal physics coords, not user priors.
     **kwargs
         Forwarded to :func:`preintegrate_kd_components` (e.g. ``n_T``,
         ``T_min``, ``T_max``, ``n_Gamma``, ``n_kT_corona``).
@@ -1221,7 +1221,7 @@ def precompute(filter_waves: list, filter_trans: list, redshift: float, paramete
 
     Notes
     -----
-    **JIT-compatible**: no — this is a build-time function using NumPy.
+    **JIT-compatible**: no, this is a build-time function using NumPy.
     The returned tables are JIT-compatible.
     """
     return preintegrate_kd_components(filter_waves, filter_trans, redshift, **kwargs)
@@ -1244,7 +1244,7 @@ def build_lookup(preint, **kwargs):
 
     Notes
     -----
-    **JIT-compatible**: not applicable — K&D integration happens at
+    **JIT-compatible**: not applicable; K&D integration happens at
     model initialization time, not at inference time.
     """
     return None

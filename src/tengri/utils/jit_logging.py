@@ -65,7 +65,7 @@ def logged_jit(fn: Callable, *, name: str | None = None, **jit_kwargs) -> Callab
     @jax.jit
     def _jitted(*args, **kwargs):
         """Traced JIT-compiled function with compile-time print statement."""
-        # Python print — runs during tracing (compile), skipped on cache hit.
+        # Python print: runs during tracing (compile), skipped on cache hit.
         print(f"[JIT COMPILE] {label}")
         _n_compiles[0] += 1
         return fn(*args, **kwargs)

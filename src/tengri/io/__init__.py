@@ -5,7 +5,7 @@ All readers return ``(wave_angstrom, flux, flux_err, meta)`` tuples with
 standard units (erg/s/cm^2/A for flux). ``meta`` carries redshift (when known),
 instrument name, original FITS header keywords of interest.
 
-Optional dependencies (astropy, specutils, requests) are imported lazily — a
+Optional dependencies (astropy, specutils, requests) are imported lazily: a
 missing dependency produces a clear ImportError with install guidance.
 """
 

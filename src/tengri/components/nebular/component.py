@@ -4,15 +4,15 @@
 A thin SEDComponent that dispatches to a chosen backend (BakedIn,
 CloudyGrid, or Cue). For ``BakedInBackend`` the nebular emission is
 already folded into the SSP grid at fixed ``logU`` and escape fraction
-— the component is then a no-op on the SED, and only publishes
+the component is then a no-op on the SED, and only publishes
 ``state.derived["nebular_backend"]`` so downstream observation models
 know whether emission lines need adding separately or are already
 present in the stellar templates.
 
 CueBackend and CloudyGridBackend become free-parameter components: they
-read the stellar-published ionizing rate — ``log_nion`` for the log-domain
+read the stellar-published ionizing rate: ``log_nion`` for the log-domain
 consumers (grid path and Cue fallback), ``nion`` for the deferred erg/s
-line paths — and add the resulting line + continuum SED to ``sed_intrinsic``.
+line paths: and add the resulting line + continuum SED to ``sed_intrinsic``.
 """
 
 from __future__ import annotations
@@ -76,11 +76,11 @@ def _backend_accepted_params(backend_cls: type) -> frozenset[str]:
 
     Notes
     -----
-    **JIT-compatible**: no — signature introspection, cached per class and
+    **JIT-compatible**: no, signature introspection, cached per class and
     evaluated at apply time before entering any JAX transform.
 
     Every backend's ``predict_nebular_sed`` ends in ``**kwargs``, so passing an
-    unmodeled parameter raises nothing — it is silently dropped, which is
+    unmodeled parameter raises nothing: it is silently dropped, which is
     indistinguishable from being read. The named parameters are therefore the
     only honest test of whether a backend models an axis.
 
@@ -88,7 +88,7 @@ def _backend_accepted_params(backend_cls: type) -> frozenset[str]:
     one shared kwargs dict that never contained ``neb_log_nH``, ``neb_co`` or
     ``neb_dno``, so the backend received its signature defaults on every call
     while the sampler was free to propose values. Sweeping each across its full
-    declared support moved the SED by exactly 0.0 — three free dimensions that
+    declared support moved the SED by exactly 0.0: three free dimensions that
     could not affect the fit, on a backend whose own docstring advertises being
     differentiable through them.
     """
@@ -114,7 +114,7 @@ class NebularSEDComponentConfig(SEDComponentConfig):
     name : str
         Diagnostic identifier. Default ``"nebular"``.
     backend : str
-        Nebular backend identifier — used for parameter declarations
+        Nebular backend identifier: used for parameter declarations
         and the :data:`state.derived["nebular_backend"]` marker.
         ``"baked_in"`` (zero-parameter no-op marker; emission is
         already in the SSP grid), ``"cloudy_grid"``
@@ -147,7 +147,7 @@ class NebularSEDComponentConfig(SEDComponentConfig):
 class NebularSEDComponentState(SEDComponentState):
     r"""State for the nebular component.
 
-    BakedIn has no precomputed tensors — the backend handle is held on
+    BakedIn has no precomputed tensors: the backend handle is held on
     the component itself. Non-BakedIn backends (Cue / CloudyGrid /
     Shock) optionally cache filter passbands when
     ``approx=WavePrecomp()`` is set on the parent SEDModel;
@@ -166,7 +166,7 @@ class NebularSEDComponent(TemplateThreading):
 
     Notes
     -----
-    **JIT-compatible**: yes — :meth:`apply` does no JAX work; it just
+    **JIT-compatible**: yes, :meth:`apply` does no JAX work; it just
     publishes a ``state.derived["nebular_backend"]`` flag.
     **No-op on SED**: ``state.sed_intrinsic`` is unchanged. Nebular
     emission for the BakedIn case is in the SSP grid already and was
@@ -174,7 +174,7 @@ class NebularSEDComponent(TemplateThreading):
 
     The zero-parameter edge case: :meth:`declared_parameters` returns
     ``[]``. The :func:`merge_declared_parameters` helper handles this
-    cleanly — an empty list contributes nothing to the merged prior
+    cleanly: an empty list contributes nothing to the merged prior
     dict.
     """
 
@@ -185,7 +185,7 @@ class NebularSEDComponent(TemplateThreading):
     #: Optional per-Q_H nebular grid (:class:`NebularGridTable`). When attached
     #: (via :meth:`SEDModel.enable_fast_nebular`) and it carries a photometry
     #: channel, :meth:`apply` reconstructs ``nebular_phot_lnu_precomp`` as
-    #: ``Q_H x interp(grid)`` instead of the per-eval filter integration — which
+    #: ``Q_H x interp(grid)`` instead of the per-eval filter integration: which
     #: makes the Cue forward dead for the photometry channel (XLA prunes it).
     #: Typed loosely to avoid an import cycle; it is a ``NebularGridTable``.
     grid_table: Any | None = None
@@ -193,13 +193,13 @@ class NebularSEDComponent(TemplateThreading):
     #: forbids the grid's photometry shortcut: serving photometry from the grid
     #: requires zeroing the continuum, and the dust energy balance needs it to
     #: size the absorbed budget. Set from the assembled chain by
-    #: :meth:`SEDModel.enable_fast_nebular` — derived, never asserted.
+    #: :meth:`SEDModel.enable_fast_nebular`: derived, never asserted.
     #:
     #: Named for what the component must *do*, not for the one key that drives
     #: it today: ``sed_shock`` has the same exposure and would share this gate.
     #:
     #: The census reads the component contract, so it cannot see a reader that
-    #: takes a published key off ``state.derived`` without declaring an input —
+    #: takes a published key off ``state.derived`` without declaring an input:
     #: ``state_to_sed_components`` and the accumulated ``state.sed_intrinsic``
     #: are both such readers. They ask :meth:`materialized` for a publishing
     #: variant instead of being enumerated here (#1673).
@@ -207,7 +207,7 @@ class NebularSEDComponent(TemplateThreading):
     # Tuple prefix so the MAPPINGS shock backend (``shock_*``) and the
     # photoionization backends (``neb_*``, ``ionspec_*``, ``gas_*``) all
     # flow through the standard prefix-stripping path. Backends silently
-    # ignore keys they don't consume — passing ``shock_*`` to Cue is
+    # ignore keys they don't consume: passing ``shock_*`` to Cue is
     # harmless, and vice versa.
     parameter_prefix: tuple[str, ...] = ("neb_", "shock_", "ionspec_", "gas_")
 
@@ -228,7 +228,7 @@ class NebularSEDComponent(TemplateThreading):
 
         Notes
         -----
-        **JIT-compatible**: not applicable — composition-time only.
+        **JIT-compatible**: not applicable; composition-time only.
         """
         if self.must_materialize_sed:
             return self
@@ -304,7 +304,7 @@ class NebularSEDComponent(TemplateThreading):
         if self.config.backend == "cue":
             # The 7 Cue ionizing-spectrum shape parameters (broken power-law
             # segments) + 3 gas-property knobs are declared ONCE in
-            # ``components/nebular/_params.py`` and consumed verbatim here —
+            # ``components/nebular/_params.py`` and consumed verbatim here:
             # the same tuples the flat-builder bucket derives from, so the two
             # construction paths cannot drift (#887). Their physical defaults
             # (1-Myr solar-Z BPASS fit; n_H=100, solar [N/O]/[C/O]) live there.
@@ -339,7 +339,7 @@ class NebularSEDComponent(TemplateThreading):
                 ParamDeclaration(
                     "shock_log_lhalpha",
                     Fixed(40.0),
-                    "log10(L_Halpha [erg/s]) — MAPPINGS shock luminosity "
+                    "log10(L_Halpha [erg/s]): MAPPINGS shock luminosity "
                     "normalization. If Fixed, sourced from "
                     "state.derived['shock_log_lhalpha'] when present, "
                     "otherwise the param's Fixed value.",
@@ -370,7 +370,7 @@ class NebularSEDComponent(TemplateThreading):
         # ``sed_shock`` is owned by this component ONLY on the mutually-exclusive
         # ``backend="shock"`` path. When a photoionized backend composes with a
         # separate additive :class:`ShockNebular` component (#851), that
-        # component owns ``sed_shock`` — declaring it here too would trip the
+        # component owns ``sed_shock``: declaring it here too would trip the
         # duplicate-publisher guard. Consumers read it via ``.get(..., zeros)``,
         # so leaving it undeclared for photoionized/baked-in backends is safe.
         if self.config.backend == "shock":
@@ -383,7 +383,7 @@ class NebularSEDComponent(TemplateThreading):
         Backend-dependent:
 
         - ``"baked_in"`` (Sanders+2024 grid) reads nothing from
-          ``state.derived`` — the backend operates on the SED in-place
+          ``state.derived``: the backend operates on the SED in-place
           and ignores stellar-age-resolved tensors. Returns ``()``.
         - All other photoionization backends (``"cue"``,
           ``"cloudy_grid"``) and the MAPPINGS shock backend
@@ -419,7 +419,7 @@ class NebularSEDComponent(TemplateThreading):
     ) -> NebularSEDComponentState:
         r"""Construct the backend handle and cache filters when wave_precomp on.
 
-        BakedIn nebular doesn't need filters — its emission is in the SSP
+        BakedIn nebular doesn't need filters: its emission is in the SSP
         grid and is covered by the stellar LUT. Non-BakedIn backends
         (Cue / CloudyGrid / Shock) cache the filter passbands so
         :meth:`apply` can publish ``nebular_phot_lnu_precomp`` for
@@ -464,7 +464,7 @@ class NebularSEDComponent(TemplateThreading):
         ``neb_logU`` / ``neb_logZ_gas`` are in the (prefix-sliced) ``params`` this
         component sees; ``met_logzsol`` is **not** (the stellar component owns it),
         so it is sourced from the stellar-published absolute metallicity history
-        and converted back to relative ``log10(Z/Zsun)`` — the units the grid axis
+        and converted back to relative ``log10(Z/Zsun)``: the units the grid axis
         was built in. Returns a dict keyed by ``grid.axis_names`` for
         :func:`reconstruct_nebular_phot`.
         """
@@ -508,7 +508,7 @@ class NebularSEDComponent(TemplateThreading):
             ``sed_intrinsic`` updated to include the active emission.
         """
         # NOTE: do not publish ``self.config.backend`` (a Python string)
-        # to ``state.derived`` — strings are not JAX leaves and break
+        # to ``state.derived``: strings are not JAX leaves and break
         # ``jax.jit`` traces. The backend identity is in
         # ``self.config.backend`` (eager-time inspection only).
 
@@ -620,25 +620,25 @@ class NebularSEDComponent(TemplateThreading):
         # That trade is only available when nothing downstream reads the
         # continuum. It used to be taken unconditionally, on the stated grounds
         # that the only live consumers were the exact spectrum / dust-continuum
-        # paths — but the dust energy balance reads ``sed_nebular`` to size the
+        # paths: but the dust energy balance reads ``sed_nebular`` to size the
         # absorbed budget, so a model with dust emission re-emitted the stellar
         # half alone: 11 % low in the far-IR, gradient up to 380 % wrong, in
         # float64 and silently. ``must_materialize_sed`` is derived from the
         # assembled chain, so a future consumer disables the shortcut by
-        # declaring the input, with nothing to keep in sync here — for
+        # declaring the input, with nothing to keep in sync here: for
         # consumers that go through the contract. A reader that takes the
         # published key without declaring it stays invisible here (#1673).
         #
         # The rest-band channel is part of the condition, not an extra: a table
         # that cannot serve BOTH publishes must not take the fast path at all.
-        # Grids built before #1665 therefore fall back to the exact path —
-        # slower, correct — instead of silently dropping the nebular
+        # Grids built before #1665 therefore fall back to the exact path:
+        # slower, correct: instead of silently dropping the nebular
         # contribution from every rest-frame band.
         #
         # ONE flag, read by every fast-path branch below (the zeroed continuum,
         # the skipped line catalog, and the publish block): two checks of the
         # same condition are free to drift apart, and #1665 and #1673 are each
-        # what that costs. The conditions compose — every one of them must hold.
+        # what that costs. The conditions compose: every one of them must hold.
         use_grid = (
             self.grid_table is not None
             and getattr(self.grid_table, "log_phot_per_qh", None) is not None
@@ -671,7 +671,7 @@ class NebularSEDComponent(TemplateThreading):
                     cue_extras[key] = jnp.asarray(params[key])
             # Prefer Cue's high-level path (``ssp_weights`` +
             # ``ssp_log_ages_yr``) so the ionizing-spectrum shape and
-            # Q_H are both SSP-derived — matches legacy
+            # Q_H are both SSP-derived: matches legacy
             # ``predict_line_fluxes`` parity. Fall back to the explicit
             # ``gas_logqion`` shortcut only if upstream did not publish
             # ``age_weights`` (e.g. a chain without StellarSEDComponent).
@@ -726,7 +726,7 @@ class NebularSEDComponent(TemplateThreading):
         # Publish the discrete line catalog (``line_waves`` /
         # ``line_lums``) when the backend supports it. This is what the
         # legacy ``state_to_emission_lines`` bridge consumes. Skipped on the
-        # fast grid path — predict_line_fluxes reconstructs lines from the grid,
+        # fast grid path: predict_line_fluxes reconstructs lines from the grid,
         # so the Cue line-catalog forward is not run.
         if not use_grid and hasattr(self.backend, "predict_nebular_line_luminosities"):
             try:
@@ -770,9 +770,9 @@ class NebularSEDComponent(TemplateThreading):
                 # CLAUDE.md contract: vacuum wavelengths throughout.
                 #
                 # Upstream Cue (yi-jia-li/cue) ships TWO disagreeing files:
-                # ``lineList_wav.npy`` (what the network is keyed against —
+                # ``lineList_wav.npy`` (what the network is keyed against:
                 # **air** in optical, CLOUDY-default convention) and
-                # ``cue_emlines_info.dat`` (newer parallel metadata —
+                # ``cue_emlines_info.dat`` (newer parallel metadata:
                 # vacuum, but in a *different ordering* that does not
                 # match the network indices). The Li+2024 paper §2 states
                 # vacuum intent but the .npy never got regenerated.
@@ -793,7 +793,7 @@ class NebularSEDComponent(TemplateThreading):
                     # (NUTS/HMC loss), ``line_waves`` arrives as a Tracer
                     # via the threaded ``template_data``, so numpy
                     # conversion / boolean indexing / Python branches
-                    # raise — and the guard below used to swallow that,
+                    # raise: and the guard below used to swallow that,
                     # silently dropping the line catalog from
                     # ``state.derived`` (joint phot+lines fits then fail
                     # with a misleading "backend did not publish" error).
@@ -834,7 +834,7 @@ class NebularSEDComponent(TemplateThreading):
                 #
                 # It used to live inside CueBackend and nowhere else, so Cue
                 # came out right and CloudyGrid / CB19 / MappingsPhoto came out
-                # a factor L_sun too faint — invisible to every per-backend
+                # a factor L_sun too faint: invisible to every per-backend
                 # test, because a global scale cancels in the line ratios and
                 # monotonicity checks they all use.
                 #
@@ -862,7 +862,7 @@ class NebularSEDComponent(TemplateThreading):
             except Exception as exc:
                 # Backend's line-luminosity path may fail (e.g. when
                 # ``cloudyfsps_only=True`` filters everything out).
-                # Don't let it block the SED forward pass — but never
+                # Don't let it block the SED forward pass: but never
                 # swallow silently: a dropped publish disables line-flux
                 # fitting downstream.
                 import warnings
@@ -895,7 +895,7 @@ class NebularSEDComponent(TemplateThreading):
             # FAST path (#950): reconstruct the intrinsic nebular photometry from
             # the per-Q_H grid, ``L_nu = 10^{log_nion + interp(grid)}``, instead of the
             # per-eval filter integration below. The downstream contract is
-            # identical — ``predict_via_precomp`` applies the young-limit dust
+            # identical: ``predict_via_precomp`` applies the young-limit dust
             # screen (at the filter level) and the cosmology dimming to this same
             # ``nebular_phot_lnu_precomp`` key, so only the intrinsic-L_nu source
             # changes. ``nebular_sed`` (the Cue continuum) is now unread by the
@@ -914,7 +914,7 @@ class NebularSEDComponent(TemplateThreading):
             # The rest-frame twin, from the same interpolation point (#1665).
             # The exact path emits these two together; emitting only the first
             # left every rest-frame consumer summing a band with the nebular
-            # emission missing — 13/13 spectral indices wrong, worst +1733 %.
+            # emission missing: 13/13 spectral indices wrong, worst +1733 %.
             derived_overrides["nebular_restband_lnu_precomp"] = reconstruct_nebular_restband(
                 log_nion, interp_point, grid
             )
@@ -944,7 +944,7 @@ class NebularSEDComponent(TemplateThreading):
             derived_overrides["nebular_phot_lnu_precomp"] = nebular_phot_lnu_precomp
             # The REST band (#1148). ``phot_rest_fnu`` is the SED reprojected at
             # z=0, so the filter sits in the REST frame and samples the rest SED at
-            # its own pivot — the SAME integral with redshift=0, not the observed-band
+            # its own pivot: the SAME integral with redshift=0, not the observed-band
             # value reused. Reusing it is what made the LUT report a different
             # physical quantity from the exact path (769 % in des_g at z=0.5).
             derived_overrides["nebular_restband_lnu_precomp"] = jnp.asarray(
@@ -977,7 +977,7 @@ class NebularSEDComponent(TemplateThreading):
         # fraction (1 - fesc) drives the nebular emission. The current
         # code already scales the nebular continuum (Cue cue.py:1656) and
         # lines (cue.py:1214) by (1 - fesc), but the stellar LyC below
-        # 912 Å was passed through untouched — overestimating the
+        # 912 Å was passed through untouched: overestimating the
         # observed ionizing continuum at fesc < 1 and breaking energy
         # balance against the nebular emission. Attenuate stellar LyC by
         # ``fesc`` here so the SED reflects "stellar LyC × fesc + nebular
@@ -985,8 +985,8 @@ class NebularSEDComponent(TemplateThreading):
         neb_fesc = jnp.asarray(params.get("neb_fesc", 0.0))
         lyc_mask = state.wave < 912.0
         # Publish the stellar-LyC survival fraction so the two-component dust
-        # component — which rebuilds the stellar SED from the *unmasked* per-age
-        # ``lnu_age`` cube — can apply the same fesc absorption. Masking only
+        # component: which rebuilds the stellar SED from the *unmasked* per-age
+        # ``lnu_age`` cube: can apply the same fesc absorption. Masking only
         # ``sed_intrinsic`` here is enough for the single-screen path (it
         # attenuates ``sed_intrinsic`` directly) but is bypassed by the
         # two-component path, which previously leaked / negated the LyC below
@@ -1017,7 +1017,7 @@ def _line_ratio_floor() -> float:
 
     ``1e-300`` is far below float32's smallest subnormal (1.4e-45), so in
     float32 every ``jnp.maximum(x, _line_ratio_floor())`` below was
-    ``jnp.maximum(x, 0.0)`` — the floor did not clamp, and a dark line divided
+    ``jnp.maximum(x, 0.0)``: the floor did not clamp, and a dark line divided
     by another dark line gave ``0/0 = NaN`` rather than the finite ratio the
     clamp exists to produce.
 
@@ -1038,8 +1038,8 @@ def _line_lums_for_ratios(derived):
     common to all lines cancels exactly. Rescaling by the brightest line is
     therefore free, and it is what makes the ratios computable in float32: the
     published ``line_lums`` are erg/s (~1e41-1e43) and 83% of the array is
-    ``inf`` there, which turned six finite diagnostics — BPT, R23, O32, the
-    Balmer decrement — into ``NaN`` (#1837).
+    ``inf`` there, which turned six finite diagnostics: BPT, R23, O32, the
+    Balmer decrement: into ``NaN`` (#1837).
 
     The scale is recovered from the ``log_line_lums`` companion, which is exact
     in float32, rather than from the overflowed linear array. Falls back to the
@@ -1054,7 +1054,7 @@ def _line_lums_for_ratios(derived):
     before and after, that number means "no emission", not a measurement.
 
     This deliberately does not serve :func:`_line_luminosity_helper`, which
-    returns *absolute* line luminosities in erg/s — those are genuinely outside
+    returns *absolute* line luminosities in erg/s: those are genuinely outside
     float32 range and need the breaking unit change tracked in #1206 §3.
     """
     from tengri.utils.scale import pow10
@@ -1080,7 +1080,7 @@ def _line_lums_for_ratios(derived):
 def _line_luminosity_helper(state, params, line_key):
     """Extract one line luminosity from the catalog, dust-reddened if available.
 
-    Prefers ``line_lums_attenuated`` — published by the dust component, which
+    Prefers ``line_lums_attenuated``: published by the dust component, which
     reddens the catalog with the same screen it applies to the nebular
     continuum (#1867). Falls back to the intrinsic ``line_lums`` when no dust
     component ran, which is the correct answer there.
@@ -1436,7 +1436,7 @@ def _make_log_line_fn(line_key):
 #: Log companions for every line property carried in erg/s, derived from the census
 #: rather than hand-listed: a line whose linear form overflows float32 and gains a
 #: companion later would otherwise be added here by memory. ``bpt_nii``, ``o32`` and
-#: the other ratio/diagnostic properties are deliberately excluded — they are already
+#: the other ratio/diagnostic properties are deliberately excluded: they are already
 #: dimensionless or in dex and are float32-representable as they stand.
 _LOG_LINE_PROPERTIES = {
     f"log_{name}": Property(

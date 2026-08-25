@@ -123,7 +123,7 @@ def run_ghmc(
     adapt_key = ("ghmc", tuning, True)
     cached = _get_cached_adaptation(fitter, adapt_key)
 
-    # Both branches must advance the key identically — cache presence is
+    # Both branches must advance the key identically, cache presence is
     # invisible to the caller and must not steer the RNG stream, or two
     # identical ``fit`` calls with one ``key`` return different chains. These
     # two splits used to live only in the ``else``; they are unused on the
@@ -148,7 +148,7 @@ def run_ghmc(
 
             def _init(p, init_key):
                 # Keyword args: blackjax reordered ghmc.init's (rng_key,
-                # logdensity_fn) between 1.3 and 1.6 — keywords work on both.
+                # logdensity_fn) between 1.3 and 1.6, keywords work on both.
                 return blackjax.mcmc.ghmc.init(position=p, logdensity_fn=ld_1arg, rng_key=init_key)
 
             def _scan(s, ks):

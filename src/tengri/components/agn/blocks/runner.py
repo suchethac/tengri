@@ -1,5 +1,5 @@
 # SPDX-License-Identifier: BSD-3-Clause
-"""Composable AGN runner — picks one block per pipeline stage and runs them.
+"""Composable AGN runner: picks one block per pipeline stage and runs them.
 
 Canonical execution order (paper §2.1.6 / upstream GRAHSP module ordering)::
 
@@ -78,7 +78,7 @@ from tengri.utils.physics_constants import L_SUN
 
 #: Torus selectors that do NOT receive the gray Type-1/2 visibility mask:
 #: ``none`` (no torus) and the self-contained empirical quasar templates
-#: (``qsogen``, ``grahsp``), which already encode an inclination-averaged SED —
+#: (``qsogen``, ``grahsp``), which already encode an inclination-averaged SED;
 #: masking them would be double-counting. The dusty-screen tori (skirtor/fritz)
 #: are handled by their own wavelength-dependent screen above.
 _SELF_CONTAINED_TORI: frozenset[str] = frozenset({"none", "qsogen", "grahsp"})
@@ -99,13 +99,13 @@ class RecipeWarning(AdvisoryWarning):
 
     Callers can still ``warnings.simplefilter("error", RecipeWarning)`` to turn
     recipe issues into hard errors during development without affecting other
-    warnings — :class:`~tengri.config.exceptions.AdvisoryWarning` derives from
+    warnings: :class:`~tengri.config.exceptions.AdvisoryWarning` derives from
     :class:`UserWarning`, so existing filters keep matching.
 
     It subclasses ``AdvisoryWarning`` because it is exactly that: a statement
     about a model the caller is *building*. The paths that construct a
-    throwaway ``Parameters`` — recipe introspection, and the structural spec
-    that only enumerates declared names — silence that category wholesale, so
+    throwaway ``Parameters``: recipe introspection, and the structural spec
+    that only enumerates declared names: silence that category wholesale, so
     these no longer fire on ``import tengri`` or describe a pre-narrowing range
     that has already been superseded (#1586).
     """
@@ -165,7 +165,7 @@ BLOCK_SELECTOR_KEYS: tuple[str, ...] = (
 )
 
 #: Default to a no-op pipeline so a bare ``agn_model="composable"`` doesn't
-#: silently emit garbage — users must opt in to each block by name.
+#: silently emit garbage: users must opt in to each block by name.
 DEFAULT_BLOCK_SELECTORS: dict[str, str] = {
     "agn_disc_block": "none",
     "agn_nlr_block": "none",
@@ -193,37 +193,37 @@ def validate_block_recipe(
     issue strings (so tests can introspect them deterministically).
 
     Validation runs at composition time (Python-side, not under JIT), so
-    cost is paid once per recipe construction — there is no inner-loop
+    cost is paid once per recipe construction: there is no inner-loop
     overhead.
 
     Rules implemented
     -----------------
-    1. **Unknown block name** — the selector points at a block that is not
+    1. **Unknown block name**, the selector points at a block that is not
        registered; raise ``ValueError`` rather than warn (typo == hard
        error so users notice immediately).
-    2. **All-none recipe** — every selector is ``"none"``; output will be
+    2. **All-none recipe**: every selector is ``"none"``; output will be
        identically zero. Almost certainly a misuse.
-    3. **No disc, active downstream** — disc is ``"none"`` but nlr / blr /
+    3. **No disc, active downstream**: disc is ``"none"`` but nlr / blr /
        feii / torus are not. The downstream blocks scale by the disc's
        :math:`\lambda L_\lambda(5100\,\mathrm{\AA})` (zero), so they emit
        zero too. Either the user forgot to pick a disc impl, or the recipe
        is genuinely degenerate.
-    4. **GRAHSP downstream + non-5100Å disc** — GRAHSP nlr / blr / feii / torus
+    4. **GRAHSP downstream + non-5100Å disc**; GRAHSP nlr / blr / feii / torus
        expect the disc to deliver a meaningful UV/optical continuum at
        5100Å. Pairing them with an exotic disc (e.g. pure ADAF) likely
        produces an unintended SED.
-    5. **GRAHSP biatten with no GRAHSP body** — the SMC-Prevot curve is
+    5. **GRAHSP biatten with no GRAHSP body**, the SMC-Prevot curve is
        generic, so this is technically valid; warn that the user might
        prefer the more clearly named ``"smc_prevot"`` block (when wrapped
        in a future PR).
-    6. **NLR / BLR without UV/optical disc** — these lines blocks convert
+    6. **NLR / BLR without UV/optical disc**: these lines blocks convert
        :math:`\lambda L_\lambda(5100\,\mathrm{\AA})` to a bolometric disc
        luminosity via the Krawczyk+ 2013 correction. A non-5100Å disc
        triggers the same warning as rule 4.
-    7. **Polar-dust block with E(B-V)=0** — the ``polar_dust`` attenuation
+    7. **Polar-dust block with E(B-V)=0**, the ``polar_dust`` attenuation
        block is a no-op when ``agn_polar_ebv = 0``; warn to surface unset
        params before the user wonders why the SED is unattenuated.
-    9. **Support wider than the block's template grid** — a template-backed
+    9. **Support wider than the block's template grid**, a template-backed
        block interpolates over fixed axes and *clips* outside them, so the
        excess is bit-identical to the edge node and its gradient is exactly
        zero. A prior wider than the grid therefore contains parameter space
@@ -241,7 +241,7 @@ agn_torus_block, agn_attenuation_block : str
         Concrete parameter values, used by Rule 7 to surface a no-op
         ``agn_polar_ebv``. Values may legitimately be absent or traced.
     param_support : dict[str, tuple[float, float]], optional
-        ``{param_name: (lo, hi)}`` — the range each parameter can actually
+        ``{param_name: (lo, hi)}``, the range each parameter can actually
         take, i.e. a prior's bounds or ``(v, v)`` for a fixed value. Consumed
         by Rule 9; when omitted, that rule is skipped.
 
@@ -280,7 +280,7 @@ agn_torus_block, agn_attenuation_block : str
     # Rule 2: all-none.
     if all(name == "none" for name in selectors.values()):
         _emit(
-            "Composable AGN: every block selector is 'none' — the AGN SED "
+            "Composable AGN: every block selector is 'none', the AGN SED "
             "will be identically zero. Pick at least a disc block to "
             "produce non-trivial output."
         )
@@ -297,7 +297,7 @@ agn_torus_block, agn_attenuation_block : str
             f"Composable AGN: agn_disc_block='none' but downstream "
             f"blocks are active ({', '.join(active)}). These blocks "
             f"normalize to lambda*L_lambda(5100A) of the disc, which "
-            f"is zero — the active blocks will emit zero. Pick a disc "
+            f"is zero, the active blocks will emit zero. Pick a disc "
             f"impl (e.g. 'grahsp_sbpl' or 'powerlaw')."
         )
 
@@ -319,8 +319,8 @@ agn_torus_block, agn_attenuation_block : str
 
     # Rule 7: polar dust selected but E(B-V) is 0 (no-op). The value is only
     # inspectable when concrete (build-time / a Fixed param); a traced (fitted)
-    # agn_polar_ebv raises on float() — ConcretizationTypeError is a TypeError
-    # subclass — and needs no no-op warning, since the user is explicitly
+    # agn_polar_ebv raises on float(): ConcretizationTypeError is a TypeError
+    # subclass, and needs no no-op warning, since the user is explicitly
     # fitting it. The concreteness guard keeps this public validator safe for
     # any caller even though the forward pass no longer invokes it.
     if selectors["attenuation"] == "polar_dust" and params is not None:
@@ -336,11 +336,11 @@ agn_torus_block, agn_attenuation_block : str
             )
 
     # (Rule 8, the adaf-deprecation steer, was removed once the faithful
-    # Mahadevan 1997 ADAF rewrite landed in #898 — the block is now production.)
+    # Mahadevan 1997 ADAF rewrite landed in #898, the block is now production.)
 
     # Rule 9: a template-backed block's grid axes are a SECOND support that no
     # parameter declaration records. Outside them jnp.clip is flat, so the SED
-    # is bit-identical and the gradient is exactly 0.0 — a fit gets no signal
+    # is bit-identical and the gradient is exactly 0.0, a fit gets no signal
     # and cannot move the parameter, with nothing raised or warned (#1586).
     # Checked per (block, param) because the same parameters are shared with
     # grid-free analytic discs that legitimately want the wider support.
@@ -358,7 +358,7 @@ agn_torus_block, agn_attenuation_block : str
                 extent = f"[{g_lo:g}, {g_hi:g}]"
                 _emit(
                     f"Composable AGN: {pname} with the {name!r} {category} "
-                    f"block — {detail}. The SED there is bit-identical to the "
+                    f"block: {detail}. The SED there is bit-identical to the "
                     "edge node and the gradient is exactly zero, so a fit "
                     f"cannot move it. Narrow {pname} to {extent}, or select a "
                     f"{category} block with no template grid."
@@ -406,7 +406,7 @@ agn_torus_block, agn_attenuation_block : str
         Pre-loaded template bundles keyed by family name (e.g.
         ``{"grahsp": GRAHSPTemplates}``). When supplied, each block reads
         templates from this dict instead of calling its own
-        ``load_*_templates()`` helper at trace time — keeps HDF5 / file
+        ``load_*_templates()`` helper at trace time: keeps HDF5 / file
         I/O out of the JIT trace boundary. ``None`` (default) falls back
         to the in-block lru_cache load.
     return_l2500 : bool, optional
@@ -452,7 +452,7 @@ agn_torus_block, agn_attenuation_block : str
     # every block family has its own library, so handing the same bundle to
     # all six stages (as this did until the threading fix) can only ever feed
     # one family and silently leaves the rest to load their own grid at trace
-    # time — which bakes it into the graph as constants.
+    # time, which bakes it into the graph as constants.
     #
     # Keys are ``"<category>/<name>"``, matching ``collect_block_templates``.
     # ``"grahsp"`` is still honored so callers holding the old flat bundle
@@ -478,7 +478,7 @@ agn_torus_block, agn_attenuation_block : str
         **params,
     )
     # Disc dust obscuration (agn_ebv_disc, Prévot SMC). Applied on the composable
-    # path so every disc block respects it — previously only the monolithic
+    # path so every disc block respects it: previously only the monolithic
     # forward models reddened, so composable-routed presets (adaf, kubota_done_full)
     # silently ignored agn_ebv_disc (#916). No-op at the default agn_ebv_disc=0.
     # The intrinsic L_2500/L_4400 below recompute from the un-reddened disc block,
@@ -488,7 +488,7 @@ agn_torus_block, agn_attenuation_block : str
     # Capture L_2500_intrinsic and L_4400_intrinsic: the un-reddened,
     # agn_log_lbol-normalized disc monochromatic luminosities [erg/s/Hz] that
     # drive X-ray alpha_ox and radio loudness. These follow CIGALE's
-    # ``intrin_Lnu_2500A_30deg`` convention — they are evaluated at a FIXED 30 deg
+    # ``intrin_Lnu_2500A_30deg`` convention: they are evaluated at a FIXED 30 deg
     # reference inclination, NOT the (free) viewing angle ``agn_cos_inc``. The
     # disc viewing inclination stays free and shapes the observed SED
     # (foreshortening, Type-1/2 mask), but the *intrinsic* accretion luminosity
@@ -505,7 +505,7 @@ agn_torus_block, agn_attenuation_block : str
     # physical disc models used here (multicolor, kubota_done, richards2006,
     # ...), which already carry their own foreshortening. Comparing this
     # L_2500_intrinsic to CIGALE's ``intrin_Lnu_2500A_30deg`` therefore shows an
-    # ~eta(30 deg) (~27%) offset for a non-SKIRTOR disc — that is a convention
+    # ~eta(30 deg) (~27%) offset for a non-SKIRTOR disc; that is a convention
     # difference between disc models, not a bug. Do NOT blindly multiply by
     # eta(30 deg) here (it would double-count inclination for discs that model
     # their own, and be wrong for isotropic ones).
@@ -523,7 +523,7 @@ agn_torus_block, agn_attenuation_block : str
     # (i <= 90 - oa, i.e. cos_inc >= sin(oa)) the line-of-sight disc is
     # reddened: ``disk *= ext_fac``. The energy the reddening removes is
     # routed to the polar graybody (the SKIRTOR torus block normalizes
-    # disc+torus+polar jointly to agn_power — see below). Gated on
+    # disc+torus+polar jointly to agn_power: see below). Gated on
     # ``agn_polar_ebv > 0`` → models without polar dust are untouched.
     _polar_ebv = jnp.asarray(params.get("agn_polar_ebv", 0.0))
     _cos_inc = jnp.asarray(params.get("agn_cos_inc", 0.86602540378443864))
@@ -550,7 +550,7 @@ agn_torus_block, agn_attenuation_block : str
     # polar to the single agn_power reference (only meaningful for the SKIRTOR
     # torus, whose template ratios define R, #556); "conserving" debits the disc
     # by the reprocessed fraction so disc(1-f)+torus(f) conserves L_bol for ALL
-    # tori (the energy-ledger debit below) — opt-in for now; it becomes the
+    # tori (the energy-ledger debit below): opt-in for now; it becomes the
     # default once the CIGALE reproduction + recipes pin cigale_joint explicitly
     # (Phase 2), so flipping it here would silently change the CIGALE §9 parity;
     # "independent" keeps the legacy per-component scaling. Static string
@@ -575,7 +575,7 @@ agn_torus_block, agn_attenuation_block : str
             agn_oa_skirtor=params.get("agn_oa_skirtor", 40.0),
             agn_cos_inc=_cos_inc,
         )
-        # #556 mechanism 3 — tie the polar ``l_ext`` to the SAME agn_power as
+        # #556 mechanism 3: tie the polar ``l_ext`` to the SAME agn_power as
         # the disc. The SKIRTOR torus block estimates the absorbed disc power
         # from a FACE-ON disc proxy; in fracAGN mode it must use the
         # agn_power-tied face-on disc ``agn_power·R/η`` (not the legacy
@@ -601,7 +601,7 @@ agn_torus_block, agn_attenuation_block : str
     L_lambda_disc = L_lambda_disc * _disc_ext
 
     # Compute lambda*L_lambda(5100Å) for downstream block (line/FeII/torus)
-    # normalizations. Convention: this is the LOS-reddened disc — taken *after*
+    # normalizations. Convention: this is the LOS-reddened disc, taken *after*
     # the polar/LOS disc extinction (``_disc_ext`` above) but *before* the
     # conserving debit below. With agn_polar_ebv=0 (the common case) it equals
     # the intrinsic disc; with Type-1 polar reddening it carries the extinction.
@@ -611,7 +611,7 @@ agn_torus_block, agn_attenuation_block : str
     # ── Energy ledger (energy-conserving policies) ───────────────────────
     # The disc carries the intrinsic L_bol; the torus reprocesses a fraction of
     # it. Debit the observed disc by (1 - agn_torus_frac) so that
-    # disc(1-f) + torus(f) conserves L_bol for every torus — reproducing the
+    # disc(1-f) + torus(f) conserves L_bol for every torus: reproducing the
     # monolithic models (e.g. silva04_agn passes agn_lum_ratio=1-agn_torus_frac to
     # the disc). The torus block already normalizes its output to
     # agn_torus_frac * L_bol, so only the disc side changes.
@@ -624,13 +624,13 @@ agn_torus_block, agn_attenuation_block : str
     # here so the guarantee becomes unconditional.
     #
     # Self-contained tori (``none``, ``qsogen``, ``grahsp``) bundle disc+torus
-    # in one self-normalized template and bypass the ledger — no debit. This
+    # in one self-normalized template and bypass the ledger: no debit. This
     # also covers the disc-only (``torus="none"``) case: with no reprocessor,
     # the disc keeps its full L_bol.
     #
     # Which policies debit: "conserving" always; "cigale_joint" too EXCEPT for
     # the SKIRTOR torus, which instead uses the agn_power×R template tie (Stage
-    # 4 below) — the CIGALE-faithful path. So cigale_joint is energy-conserving
+    # 4 below), the CIGALE-faithful path. So cigale_joint is energy-conserving
     # for *every* torus (R-tie for skirtor, agn_torus_frac split otherwise),
     # never the silent additive leak it used to be for non-skirtor tori.
     # "independent" never debits (each component on its own luminosity scale).
@@ -684,12 +684,12 @@ agn_torus_block, agn_attenuation_block : str
     # reprocessed disc photons, so under the *conserving* ledger they must be
     # debited from the disc, not stacked on a full-luminosity disc (which
     # inflates the total above L_bol). Subtract exactly the integrated line
-    # energy, shaped as the intrinsic disc — additive with the torus debit
+    # energy, shaped as the intrinsic disc: additive with the torus debit
     # (disc -> 1 - f_torus - f_lines), matching Synthesizer's covering-fraction
     # dimming. Scoped to "conserving": cigale_joint follows CIGALE (nebular added
     # separately, allocation-conserving) and independent keeps each component on
     # its own luminosity scale. Excludes only the self-normalized bundled
-    # templates (grahsp/qsogen carry disc+torus+lines in one template) — NOT
+    # templates (grahsp/qsogen carry disc+torus+lines in one template); NOT
     # ``torus="none"``, whose disc and lines are still real ledger emission.
     # E_disc guards a zero/near-zero disc (e.g. agn_disc_block="none") so the
     # ratio never blows up.
@@ -713,14 +713,14 @@ agn_torus_block, agn_attenuation_block : str
     # this budget). Two regimes, selected branchlessly by the *traced*
     # ``agn_ir_frac`` (so this cannot join the static _conserve_via_debit gate):
     #   * fracAGN > 0 (CIGALE-coupled): tie the disc to ``agn_power × R`` so
-    #     disc/torus/polar share one reference — *allocation*-conserving (the
+    #     disc/torus/polar share one reference: *allocation*-conserving (the
     #     components can't drift apart), CIGALE-faithful, inclination-correct via
     #     the η(i) baked into R. This is NOT *ledger* conservation: ∫total scales
     #     with ``agn_power = agn_torus_frac·L_bol``, so agn_torus_frac→0 drives
-    #     the whole AGN to zero — outside CIGALE's reachable domain, but a free
+    #     the whole AGN to zero: outside CIGALE's reachable domain, but a free
     #     agn_torus_frac sampler can reach that degenerate zero-AGN plateau.
     #   * fracAGN = 0 (default): no CIGALE coupling, so debit the disc by
-    #     (1 − agn_torus_frac) exactly like the ``conserving`` policy — *ledger*
+    #     (1 − agn_torus_frac) exactly like the ``conserving`` policy: *ledger*
     #     conservation (∫total = L_bol). This closes the leak that used to hit
     #     the DEFAULT skirtor config, where neither the R-tie nor the
     #     _conserve_via_debit gate (which excludes skirtor) fired.
@@ -741,8 +741,8 @@ agn_torus_block, agn_attenuation_block : str
     # visible at all inclinations. Each torus carries ONE obscuration model (no
     # double-counting): dusty-screen tori (fritz/skirtor, #294) apply a
     # wavelength-dependent screen; every other non-"none" torus applies the gray
-    # geometric visibility mask — the same one the monolithic ``unified_nlr_blr``
-    # uses — so a composable disc+torus+NLR+BLR reproduces its Type-1/2 geometry.
+    # geometric visibility mask, the same one the monolithic ``unified_nlr_blr``
+    # uses: so a composable disc+torus+NLR+BLR reproduces its Type-1/2 geometry.
     # Defaults (i=30, theta_torus=30 -> inc_crit=60 > i) give mask ~ 1, so
     # default-inclination models are unchanged. Static dispatch on the torus name
     # is JIT-safe.
@@ -808,7 +808,7 @@ def composable_agn_l_nu(
     return_l2500: bool = False,
     **params,
 ) -> Array | tuple[Array, float]:
-    r"""AGN_MODELS["composable"] entry point — :data:`L_ν` in erg/s/Hz.
+    r"""AGN_MODELS["composable"] entry point: :data:`L_ν` in erg/s/Hz.
 
     Thin wrapper around :func:`compose_l_nu` matching the AGN_MODELS
     registry signature::

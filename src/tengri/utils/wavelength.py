@@ -22,7 +22,7 @@ from tengri.utils.grid_interp import resample_template
 # old ~120 keV grid edge where the rollover has barely begun.
 XRAY_WAVE_MIN: float = 0.0413  # ~300 keV hard X-ray (matches corona E_cut)
 XRAY_WAVE_MAX: float = 100.0  # ~0.12 keV soft X-ray
-RADIO_WAVE_MIN: float = 1e5  # 10 μm — overlap with SSP IR tail
+RADIO_WAVE_MIN: float = 1e5  # 10 μm: overlap with SSP IR tail
 RADIO_WAVE_MAX: float = 3e11  # ~1 MHz radio
 
 

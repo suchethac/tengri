@@ -109,3 +109,13 @@ Constants
 .. autodata:: tengri.analysis.plotting.styles.SFH_YLABEL
 
 .. autodata:: tengri.analysis.plotting.styles.SPECTRAL_FEATURES
+
+.. autodata:: tengri.analysis.plotting.styles.SWEEP_CMAPS
+
+.. autodata:: tengri.analysis.plotting.styles.SAMPLER_STYLE
+
+.. autodata:: tengri.analysis.plotting.styles.REFERENCE_STYLE
+
+.. autodata:: tengri.analysis.plotting.styles.GALAXY_ANNOTATIONS
+
+.. autodata:: tengri.analysis.plotting.convergence.CONVERGENCE_THRESHOLDS

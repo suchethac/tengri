@@ -33,12 +33,12 @@ import numpy as np
 # key: (primary_name, secondary_name), value: flux ratio primary/secondary
 
 _DOUBLET_RATIOS: dict[tuple[str, str], float] = {
-    ("OIII_5007", "OIII_4959"): 2.98,  # [OIII] — fixed by transition probabilities
-    ("NII_6584", "NII_6548"): 2.94,  # [NII] — fixed by transition probabilities
-    ("NeV_3426", "NeV_3346"): 1.3,  # [NeV] — from transition probabilities
-    ("MgII_2803", "MgII_2796"): 1.0,  # MgII — optically thick limit
-    ("SIII_9532", "SIII_9069"): 2.47,  # [SIII] — fixed by transition probabilities
-    # [OII] 3726/3729 and [OII] 7320/7330 are electron-density diagnostics —
+    ("OIII_5007", "OIII_4959"): 2.98,  # [OIII], fixed by transition probabilities
+    ("NII_6584", "NII_6548"): 2.94,  # [NII], fixed by transition probabilities
+    ("NeV_3426", "NeV_3346"): 1.3,  # [NeV], from transition probabilities
+    ("MgII_2803", "MgII_2796"): 1.0,  # MgII, optically thick limit
+    ("SIII_9532", "SIII_9069"): 2.47,  # [SIII], fixed by transition probabilities
+    # [OII] 3726/3729 and [OII] 7320/7330 are electron-density diagnostics;
     # their ratios are NOT fixed by atomic physics and must never be constrained.
     # [SII] 6717/6731 is similarly density-sensitive and is also left unconstrained.
 }
@@ -539,7 +539,7 @@ class LineList:
 
         """
         # Guard the positional numeric args. The primary discovery use of this
-        # method — pick lines by name — sits behind two positional wavelength
+        # method (pick lines by name) sits behind two positional wavelength
         # bounds, so ``select(["Halpha", "Hbeta"])`` (the natural analogy to
         # ``Photometry.from_names([...])``) silently binds the list to
         # ``wave_min`` and later crashes deep in ``wave_min <= w`` with an
@@ -624,7 +624,7 @@ class LineList:
         new_is_strong = tuple(self.is_strong[i] for i in kept_indices_list)
         new_plot_group = tuple(self.plot_group[i] for i in kept_indices_list)
 
-        # Rebuild doublets — keep only if both members survived the filter
+        # Rebuild doublets, keep only if both members survived the filter
         new_doublets: list[DoubletConstraint] = []
         for dc in self.doublets:
             if dc.primary_idx in old_to_new and dc.secondary_idx in old_to_new:
@@ -896,4 +896,4 @@ def _detect_doublets_by_proximity(
     return tuple(doublets)
 
 
-# ── Deprecated alias — removed in tengri v1.0 ─────────────────────
+# ── Deprecated alias, removed in tengri v1.0 ─────────────────────

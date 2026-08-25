@@ -3,7 +3,7 @@
 
 ``Observation`` is the schema (instrument: filters, wave grid, noise
 character, which lines); ``Data`` is one record conforming to it.
-Validation happens in exactly one place — ``validate_against`` — so
+Validation happens in exactly one place (``validate_against``) so
 shape errors, boolean-censor traps, NaNs, and unknown line names all
 fail loudly with the offending channel named. See the API spec
 (2026-07-23) sections 3.2-3.3 and issue #1321.
@@ -24,7 +24,7 @@ def _bad_indices(values, predicate) -> np.ndarray:
 
 
 def _describe(bad: np.ndarray, names=None, limit: int = 5) -> str:
-    """Name the offending channels — band names when known, else indices."""
+    """Name the offending channels, band names when known, else indices."""
     if names is not None:
         labels = [str(names[i]) for i in bad[:limit]]
     else:
@@ -39,7 +39,7 @@ def _reject_nonfinite(values, channel: str, names=None) -> None:
     if bad.size:
         raise ValueError(
             f"NaN/inf {channel} at {_describe(bad, names)}: a single-galaxy "
-            "Data must be complete — drop the channel from the Observation "
+            "Data must be complete, drop the channel from the Observation "
             "instead of passing a placeholder (spec 3.3)."
         )
 
@@ -48,7 +48,7 @@ def _reject_nonpositive_sigma(values, channel: str, names=None) -> None:
     """Raise if any uncertainty is <= 0.
 
     A zero sigma divides by zero; a *negative* one is worse, because ``chi^2``
-    squares the sign away — the fit then runs to completion and reports a
+    squares the sign away, the fit then runs to completion and reports a
     confidently wrong answer with no warning anywhere.
     """
     bad = _bad_indices(values, lambda a: np.isfinite(a) & (a <= 0))
@@ -86,7 +86,7 @@ class Data:
         third element marks the flux as a censored limit rather than a
         detection, using the same vocabulary as
         :meth:`~tengri.observation.line_flux_data.LineFluxData.from_dict`.
-        Line limits belong here, not in ``censor`` — that field is
+        Line limits belong here, not in ``censor``, that field is
         per-photometric-band.
     censor : array_like or None
         Per-band censoring flags, shape ``(n_filters,)``: ``0`` =
@@ -122,7 +122,7 @@ class Data:
                 names = [phot_schema.names[i] for i in bad]
                 raise ValueError(
                     f"NaN/inf flux in bands {names}: a single-galaxy Data "
-                    "must be complete — drop the filter from the "
+                    "must be complete, drop the filter from the "
                     "Observation instead (spec 3.3)."
                 )
             # The uncertainties are half the record and were previously unchecked,
@@ -184,7 +184,7 @@ class Data:
             if unknown:
                 raise ValueError(
                     f"lines {sorted(unknown)} are not declared in the "
-                    "Observation's LineList — declare WHICH lines on the "
+                    "Observation's LineList, declare WHICH lines on the "
                     "schema; supply their VALUES here (spec 3.2)."
                 )
             # Line fluxes carry the same NaN / sign-flip exposure as the continuum,

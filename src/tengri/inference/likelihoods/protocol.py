@@ -5,7 +5,7 @@ Design rule
 -----------
 **One class per *math type*, parameterized by which prediction channel
 to read.** Don't duplicate the same Gaussian χ² for each observation
-type — pin a different ``channel`` string instead.
+type, pin a different ``channel`` string instead.
 
 This module ships four base adapters:
 
@@ -21,7 +21,7 @@ This module ships four base adapters:
 
 To add a new observation channel (e.g. ``"line_fluxes"``,
 ``"indices"``, ``"imaging_fnu_pixel"``, ``"fiber_spec_fnu"``), the
-user does NOT need a new class — they instantiate
+user does NOT need a new class, they instantiate
 ``GaussianLikelihood(channel="line_fluxes", obs=..., err=...)`` and
 compose with :class:`CompositeLikelihood`.
 
@@ -29,7 +29,7 @@ Why not factory functions?
 ~~~~~~~~~~~~~~~~~~~~~~~~~~
 The convenience names :class:`PhotometryLikelihood` and
 :class:`SpectroscopyLikelihood` (sister modules) are real subclasses,
-not factories — preserves :func:`isinstance` semantics, autocomplete
+not factories, preserves :func:`isinstance` semantics, autocomplete
 discoverability, and identifiable :func:`repr`. They each pin
 ``channel`` to the standard string and inherit :meth:`log_prob`
 unchanged.
@@ -62,7 +62,7 @@ def resolve_channel_data(baked, key, data_slice, data_args):
     The adapters store the arrays they were built with (``baked``), but a
     compiled loss function is shared across Fitters with the same model
     structure (``get_or_build_cached`` in ``jit_engine``). Baked arrays
-    become XLA constants — every galaxy after the first would silently be
+    become XLA constants, every galaxy after the first would silently be
     fit against the first galaxy's data. Reading through ``data_args``
     keeps the data a traced argument, so one compile serves the whole
     catalog with each galaxy's own data.
@@ -71,12 +71,12 @@ def resolve_channel_data(baked, key, data_slice, data_args):
     ----------
     baked : ndarray
         The array captured at adapter construction (fallback when the
-        caller supplies no ``data_args`` — e.g. user-facing ``log_prob``).
+        caller supplies no ``data_args``, e.g. user-facing ``log_prob``).
     key : str or None
         ``data_args`` entry to read (``"data"``, ``"noise"``,
         ``"line_flux_obs"``, ...). ``None`` → always use ``baked``.
     data_slice : tuple[int, int] or None
-        Optional ``(start, stop)`` slice into the ``data_args`` array —
+        Optional ``(start, stop)`` slice into the ``data_args`` array,
         used by joint phot+spec adapters that each own a segment of the
         concatenated data vector.
     data_args : Mapping or None
@@ -96,7 +96,7 @@ def resolve_channel_data(baked, key, data_slice, data_args):
 
 
 # ─────────────────────────────────────────────────────────────────────
-# 1. Diagonal Gaussian — the workhorse
+# 1. Diagonal Gaussian, the workhorse
 # ─────────────────────────────────────────────────────────────────────
 
 
@@ -121,7 +121,7 @@ class GaussianLikelihood:
 
     Notes
     -----
-    **JIT-compatible**: yes — pure JAX via
+    **JIT-compatible**: yes, pure JAX via
     :func:`diag_gaussian_log_prob`.
     """
 
@@ -164,7 +164,7 @@ class GaussianLikelihood:
 
 
 # ─────────────────────────────────────────────────────────────────────
-# 2. Student-t — heavy-tailed
+# 2. Student-t, heavy-tailed
 # ─────────────────────────────────────────────────────────────────────
 
 
@@ -190,7 +190,7 @@ class StudentTLikelihood:
 
     Notes
     -----
-    **JIT-compatible**: yes — wraps
+    **JIT-compatible**: yes, wraps
     :func:`tengri.observation.noise.variable_noise_hamiltonian`
     (sign-flipped: that function returns *energy*, this returns
     log-probability).
@@ -215,7 +215,7 @@ class StudentTLikelihood:
         data_args: Mapping[str, jnp.ndarray] | None = None,
     ) -> jnp.ndarray:
         # When ``f_cal_param`` is set, the calibration uncertainty is a
-        # free parameter the inference engine fits — read it from the
+        # free parameter the inference engine fits, read it from the
         # params dict each call. Otherwise fall back to the static
         # ``f_cal`` constant.
         if self.f_cal_param is not None and params is not None and self.f_cal_param in params:
@@ -235,7 +235,7 @@ class StudentTLikelihood:
 
 
 # ─────────────────────────────────────────────────────────────────────
-# 3. Censored — upper / lower limits
+# 3. Censored, upper / lower limits
 # ─────────────────────────────────────────────────────────────────────
 
 
@@ -260,7 +260,7 @@ class CensoredLikelihood:
 
     Notes
     -----
-    **JIT-compatible**: yes — wraps
+    **JIT-compatible**: yes, wraps
     :func:`tengri.observation.noise.censored_neg_log_likelihood`
     (sign-flipped).
     """
@@ -303,7 +303,7 @@ class CensoredLikelihood:
 
 
 # ─────────────────────────────────────────────────────────────────────
-# 4. Multivariate Gaussian — correlated noise
+# 4. Multivariate Gaussian, correlated noise
 # ─────────────────────────────────────────────────────────────────────
 
 
@@ -324,7 +324,7 @@ class MultivariateGaussianLikelihood:
 
     Notes
     -----
-    **JIT-compatible**: yes — pure JAX.
+    **JIT-compatible**: yes, pure JAX.
 
     Drops the normalization constant
     :math:`-\tfrac{1}{2}\log\det(2\pi\Sigma)`. Add it back if you need

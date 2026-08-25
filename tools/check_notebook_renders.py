@@ -16,8 +16,22 @@ that correspondence have both actually shipped:
 * **Figure loss.** Executing under ``MPLBACKEND=Agg`` makes ``plt.show()`` a
   no-op, so nothing is captured into the notebook and the page renders with no
   plots -- while ``figures/*.png`` on disk look perfectly correct.
+* **Error outputs and poison strings.** (#2042) Commits once carried 31 error
+  outputs and cells printing absolute temp-worktree paths. Danger signals:
+  - Any output with ``output_type == "error"`` (cell execution failed)
+  - String ``Traceback (most recent call last)`` in any output text (exception
+    caught and displayed)
+  - String ``.claude/worktrees`` in any output text (temp-worktree execution
+    leaked into published render)
 
-Two assertions, per published notebook:
+  A bare `site-packages` or `~/.claude/jobs` check would be a bug report against
+  itself: Python's warning formatter legitimately embeds the emitting file's
+  absolute path when a render deliberately displays a warning (see
+  04_building_models teaching #1796), and an allowlist entry that needs an
+  allowlist to survive is a design error. ``Traceback`` and ``.claude/worktrees``
+  have no legitimate appearance mode in a healthy render.
+
+Three assertions, per published notebook:
 
 1. **Code cells match.** Compared on code only: the sync script deliberately
    rewrites markdown (H1 to the sidebar title, sibling links retargeted), so
@@ -25,6 +39,9 @@ Two assertions, per published notebook:
    mismatch is real drift.
 2. **Figures survive.** If the source calls ``plt.show()`` or ``savefig``, the
    render must carry at least one ``image/png`` output.
+3. **No error outputs or poison strings.** Every cell output must have
+   ``output_type != "error"``, and no output text must contain ``Traceback``
+   or ``.claude/worktrees``.
 
 Stdlib only, on purpose: this runs in the ``lint`` job, which installs ruff and
 nothing else. The percent-format parser below is therefore hand-rolled; it is
@@ -102,6 +119,48 @@ def count_figures(nb: dict) -> int:
     )
 
 
+def check_outputs_for_poison(nb: dict, slug: str) -> list[str]:
+    """Check for error outputs and poison strings in cell outputs.
+
+    Returns a list of problems found, one line per issue. Each problem line is
+    formatted as: "<slug>: cell <index>: <issue description>"
+
+    Poison checks:
+    - output_type == "error" (cell raised an exception)
+    - "Traceback (most recent call last)" in output text
+    - ".claude/worktrees" in output text (temp-worktree execution leak)
+    """
+    problems: list[str] = []
+    for cell_idx, cell in enumerate(nb.get("cells", [])):
+        for out in cell.get("outputs") or []:
+            # Check for error output type
+            if out.get("output_type") == "error":
+                problems.append(f"{slug}: cell {cell_idx}: error output")
+                continue
+
+            # Check text outputs for poison strings
+            text = ""
+            if "text" in out:
+                t = out["text"]
+                text = "".join(t) if isinstance(t, list) else str(t)
+            if "traceback" in out:
+                text += "\n".join(out["traceback"])
+
+            # Also check data fields for text content
+            data = out.get("data") or {}
+            for key in ("text/plain", "text/html"):
+                if key in data:
+                    v = data[key]
+                    text += "".join(v) if isinstance(v, list) else str(v)
+
+            if "Traceback (most recent call last)" in text:
+                problems.append(f"{slug}: cell {cell_idx}: Traceback in output")
+            if ".claude/worktrees" in text:
+                problems.append(f"{slug}: cell {cell_idx}: .claude/worktrees path leak in output")
+
+    return problems
+
+
 def published() -> list[tuple[str, Path, Path]]:
     """``(slug, source .py, published .ipynb)`` for every published notebook."""
     nb_root = ROOT / "notebooks"
@@ -155,6 +214,10 @@ def main() -> int:
                 "Executing under MPLBACKEND=Agg does this -- unset it and re-run "
                 "python scripts/execute_notebooks.py."
             )
+
+        # Check for error outputs and poison strings
+        poison_problems = check_outputs_for_poison(nb, slug)
+        problems.extend(poison_problems)
 
     if args.list:
         return 0

@@ -1,11 +1,11 @@
 # SPDX-License-Identifier: BSD-3-Clause
-"""Metallicity-indexed L_line/Q_H table — the FeaturePrecomp line channel (#950).
+"""Metallicity-indexed L_line/Q_H table: the FeaturePrecomp line channel (#950).
 
 Cue's emulator makes each nebular line luminosity **exactly linear in the
 hydrogen-ionizing photon rate** Q_H (``L_line = Q_H \\cdot \\ell(\\theta)``; the
 per-Q_H factor ``\\ell`` is the network's ``Lsun/Q_H`` output, cue.py). The
 per-Q_H factor depends on the *shape* of the ionizing spectrum (set by stellar
-metallicity) and the fixed gas conditions (logU, logZ_gas, fesc) — **not on the
+metallicity) and the fixed gas conditions (logU, logZ_gas, fesc): **not on the
 star-formation-history shape**: the SFH enters lines only through the scalar
 Q_H (validated to CV = 0 % across SFH draws).
 
@@ -16,13 +16,13 @@ The reconstruction is
 where ``nion`` is the stellar-published ionizing rate (``nion == q_h``,
 independently verified). The stored ``ell`` is a **luminosity** per Q_H
 (distance-independent), so the cosmology is applied at evaluation with the
-**evaluation** redshift — the table is valid at any (per-galaxy or free)
+**evaluation** redshift: the table is valid at any (per-galaxy or free)
 redshift. The stellar metallicity enters Cue **nonlinearly** (via the
 ionizing-spectrum shape), so a coarse SSP-grid interpolation is not enough
 (1-60 % line errors); a dense grid (~40 points) with linear interpolation
 reaches < 4e-4 on the strong DESI lines.
 
-Requires FIXED nebular ionization (logU, logZ_gas, fesc) — guarded at build;
+Requires FIXED nebular ionization (logU, logZ_gas, fesc): guarded at build;
 ``met_logzsol`` may be free (it is the LUT axis). See issue #950.
 
 .. warning::
@@ -33,7 +33,7 @@ Requires FIXED nebular ionization (logU, logZ_gas, fesc) — guarded at build;
     genuinely JIT-compiled, the Cue line forward is ~0.5 ms (not the ~85 ms
     un-JIT'd figure #950 was scoped against), so ``reconstruct_line_lums`` is
     NOT faster than running Cue. The expensive joint-fit channel is spectral
-    **indices** (Dn4000 forces the full-grid SED), not lines — see the
+    **indices** (Dn4000 forces the full-grid SED), not lines; see the
     index-window LUT (#949) and the #950 benchmark comments.
 """
 
@@ -47,7 +47,7 @@ import jax.numpy as jnp
 from tengri.components.stellar.reference_history import reference_history_params
 from tengri.utils.scale import apply_log10_scale
 
-#: Nebular ionization parameters that MUST be fixed for the table to be valid —
+#: Nebular ionization parameters that MUST be fixed for the table to be valid:
 #: they change ``line_per_qh`` (line ratios), so a free one would make the
 #: single-metallicity-axis table wrong away from its baked reference value.
 _REQUIRED_FIXED = ("neb_logU", "neb_logZ_gas", "neb_fesc")
@@ -62,7 +62,7 @@ class LinePerQHTable:
     met_grid : ndarray, shape (n_met,)
         ``met_logzsol`` grid points [dex], ascending.
     line_per_qh : ndarray, shape (n_met, n_lines)
-        Line **luminosity** per unit ``nion`` at each grid metallicity —
+        Line **luminosity** per unit ``nion`` at each grid metallicity:
         ``L_line(ref) / nion(ref)`` [erg/s per (photons/s)]. **Distance-
         independent** (luminosity, not observed flux) so the table is valid at
         any redshift; :func:`reconstruct_line_lums` applies the cosmology at the
@@ -85,7 +85,7 @@ def _nion_of_state(state) -> jnp.ndarray:
 
 
 def _log10_four_pi_dl2(redshift) -> jnp.ndarray:
-    """log10(4 pi d_L(z)^2) [dex] — the line luminosity → observed flux divisor.
+    """log10(4 pi d_L(z)^2) [dex]: the line luminosity → observed flux divisor.
 
     Log, not linear: the divisor is ~1e57 and ``inf`` in float32 at every
     distance, so it is applied with :func:`~tengri.utils.scale.apply_log10_scale`
@@ -123,7 +123,7 @@ def precompute_line_per_qh(
     wavelengths : array_like, shape (n_lines,)
         Rest-frame vacuum target line wavelengths [Angstrom].
     met_lo, met_hi : float
-        Grid bounds in ``met_logzsol`` [dex] — cover the fit's metallicity prior.
+        Grid bounds in ``met_logzsol`` [dex]: cover the fit's metallicity prior.
     n_met : int, default 40
         Grid points. 40 gives < 4e-4 on strong DESI lines; raise for tighter.
     ref_params : dict, optional
@@ -162,7 +162,7 @@ def precompute_line_per_qh(
 
     # Same #1718 gap as the grid builder: `spec.sample` cannot produce the
     # runtime arrays of a tabulated SFH, which declares no parameters. Legitimate
-    # to stand in for, and for the reason this module already states below —
+    # to stand in for, and for the reason this module already states below:
     # the table is per-Q_H, a property of the gas, not of the reference SFH.
     ref_params = {
         **reference_history_params(model, redshift=ref_params.get("redshift", 0.0)),
@@ -181,7 +181,7 @@ def precompute_line_per_qh(
         p = dict(ref_params)
         p["met_logzsol"] = jnp.asarray(float(mz))
         # INTRINSIC line-per-Q_H (redden=False): the table is the nebular line
-        # luminosity per ionizing photon — a property of the gas, independent of
+        # luminosity per ionizing photon: a property of the gas, independent of
         # the reference SFH *and* the reference dust. Dust reddening (which now
         # defaults on in predict_line_fluxes) is applied downstream, not baked in.
         flux = model.predict_line_fluxes(p, target_wavelengths=wavelengths, redden=False)
@@ -191,7 +191,7 @@ def precompute_line_per_qh(
         rows.append(lum / jnp.maximum(nion, 1e-30))
     return LinePerQHTable(
         met_grid=met_grid,
-        line_per_qh=jnp.stack(rows),  # (n_met, n_lines) — luminosity per Q_H
+        line_per_qh=jnp.stack(rows),  # (n_met, n_lines): luminosity per Q_H
         wavelengths=wavelengths,
     )
 
@@ -210,7 +210,7 @@ def reconstruct_line_lums(
             \\mathrm{interp\\_met}(\\ell, Z_\\star)}{4\\pi\\,d_L(z)^2}
 
     where :math:`\\ell` is the stored luminosity-per-Q_H and :math:`d_L(z)` is
-    the luminosity distance at the **evaluation** redshift — so the same table
+    the luminosity distance at the **evaluation** redshift: so the same table
     is correct at any (per-galaxy or free) redshift.
 
     Parameters
@@ -220,7 +220,7 @@ def reconstruct_line_lums(
     met_logzsol : float
         Stellar metallicity for this evaluation [dex].
     redshift : float
-        Evaluation redshift — the cosmology is applied here, NOT baked into the
+        Evaluation redshift: the cosmology is applied here, NOT baked into the
         table (that was the redshift-lock bug).
     table : LinePerQHTable
         The dense-met table from :func:`precompute_line_per_qh`.
@@ -233,7 +233,7 @@ def reconstruct_line_lums(
 
     Notes
     -----
-    **JIT-compatible**: yes — ``jnp.interp`` + cosmology + a scalar multiply.
+    **JIT-compatible**: yes, ``jnp.interp`` + cosmology + a scalar multiply.
     """
     mz = jnp.asarray(met_logzsol)
     # per-line linear interpolation across the metallicity grid → L_line / nion

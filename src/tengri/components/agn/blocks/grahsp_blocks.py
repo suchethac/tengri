@@ -39,7 +39,7 @@ __all__: list[str] = []  # blocks are registered via decorators; no public API
 
 
 # ──────────────────────────────────────────────────────────────────────
-# GRAHSP disc block — smooth bending power-law BBB (Ryde 1999)
+# GRAHSP disc block: smooth bending power-law BBB (Ryde 1999)
 # ──────────────────────────────────────────────────────────────────────
 
 
@@ -122,7 +122,7 @@ agn_grahsp_plbendwidth, agn_grahsp_cutoff_nm
 
 
 # ──────────────────────────────────────────────────────────────────────
-# GRAHSP NLR block — Netzer 1990 narrow Gaussians
+# GRAHSP NLR block: Netzer 1990 narrow Gaussians
 # ──────────────────────────────────────────────────────────────────────
 
 
@@ -157,7 +157,7 @@ def grahsp_nlr_block(
     ``l5100_disc`` **by design**, to reproduce GRAHSP verbatim: upstream
     ``activatelines.py`` sets ``l_agn = agn.lum5100A / 510`` and
     ``l_broadlines = 0.02 * l_agn * Alines`` (narrow lines ``0.002 * l_agn``).
-    Changing it to isotropic ``L_bol`` would break GRAHSP parity — NLR
+    Changing it to isotropic ``L_bol`` would break GRAHSP parity; NLR
     normalization is legitimately per-block (see the composable-AGN physics
     audit and ADR-0018 §3 clarification).
 
@@ -167,7 +167,7 @@ def grahsp_nlr_block(
         Pre-loaded template bundle threaded in via the runner's
         ``template_state``. When ``None`` (default), the block falls back to
         the lru_cache-backed :func:`load_grahsp_templates` for backwards
-        compatibility — keeps the block usable as a standalone callable.
+        compatibility: keeps the block usable as a standalone callable.
     """
     wave_aa = jnp.asarray(wavelength)
     wave_nm = wave_aa * 0.1
@@ -189,7 +189,7 @@ def grahsp_nlr_block(
 
 
 # ──────────────────────────────────────────────────────────────────────
-# GRAHSP BLR block — Netzer 1990 broad Gaussians
+# GRAHSP BLR block: Netzer 1990 broad Gaussians
 # ──────────────────────────────────────────────────────────────────────
 
 
@@ -223,7 +223,7 @@ def grahsp_blr_block(
         Pre-loaded template bundle threaded in via the runner's
         ``template_state``. When ``None`` (default), the block falls back to
         the lru_cache-backed :func:`load_grahsp_templates` for backwards
-        compatibility — keeps the block usable as a standalone callable.
+        compatibility: keeps the block usable as a standalone callable.
     """
     wave_aa = jnp.asarray(wavelength)
     wave_nm = wave_aa * 0.1
@@ -244,7 +244,7 @@ def grahsp_blr_block(
 
 
 # ──────────────────────────────────────────────────────────────────────
-# GRAHSP FeII block — Bruhweiler+Verner 2008 forest
+# GRAHSP FeII block: Bruhweiler+Verner 2008 forest
 # ──────────────────────────────────────────────────────────────────────
 
 
@@ -288,7 +288,7 @@ def grahsp_feii_block(
 
 
 # ──────────────────────────────────────────────────────────────────────
-# GRAHSP torus block — cool + hot log-Gaussian + Si feature
+# GRAHSP torus block: cool + hot log-Gaussian + Si feature
 # ──────────────────────────────────────────────────────────────────────
 
 
@@ -342,7 +342,7 @@ def grahsp_torus_block(
 
 
 # ──────────────────────────────────────────────────────────────────────
-# GRAHSP attenuation block — SMC-like broken PL bi-attenuation
+# GRAHSP attenuation block; SMC-like broken PL bi-attenuation
 # ──────────────────────────────────────────────────────────────────────
 
 
@@ -363,7 +363,7 @@ def grahsp_biatten_block(
     r"""GRAHSP SMC-like bi-attenuation as an attenuation-stage block.
 
     Returns the AGN-side multiplicative factor only (galaxy-side
-    attenuation is the standard ``dust_*`` component's job — see the
+    attenuation is the standard ``dust_*`` component's job: see the
     energy-balance discussion in :mod:`tengri.components.agn.grahsp.component`).
     """
     wave_aa = jnp.asarray(wavelength)

@@ -21,11 +21,11 @@ Quick start::
 Two factory contracts coexist in the registry:
 
 - **Model presets** (e.g. ``synthesizer_default``) return ``(SEDModel,
-  Parameters)`` — ready to fit.
+  Parameters)``: ready to fit.
 - **Galaxy-type parameter presets** (``starforming``, ``quiescent``,
-  ``high_z``, ``photoz``, ``jwst_spec``, ``agn_host`` — in
+  ``high_z``, ``photoz``, ``jwst_spec``, ``agn_host``; in
   :mod:`~tengri.presets.param_presets`) return ``(Parameters,
-  SEDModelConfig)`` — the legacy expert surface consumed by
+  SEDModelConfig)``; the legacy expert surface consumed by
   :class:`tengri.Galaxy` via :func:`resolve_preset`. For new code prefer the
   grammar recipes in :mod:`tengri.recipes`.
 

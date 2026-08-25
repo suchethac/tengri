@@ -131,7 +131,7 @@ class RadioPowerLawSEDComponent(SEDModelComponent):
     T_e = Fixed(8000.0, description="Electron temperature (free-free)", units="K")
     alpha_ff = Fixed(-0.1, description="Free-free spectral index", units="dimensionless")
 
-    # No required cross-component inputs — radio reads opportunistically
+    # No required cross-component inputs: radio reads opportunistically
     # with documented fallbacks (zero for missing).
     inputs: ClassVar[dict[str, str]] = {}
     optional_inputs: ClassVar[dict[str, str]] = {

@@ -54,7 +54,7 @@ register_xray_model(
     short_doc="Alias of 'simple'; use this name for CIGALE pcigale.sed_modules.xray parity",
 )(xray_total)
 # ``lopez24`` ties the AGN corona to the nuclear 12 µm luminosity via the
-# α_IRX relation (Asmus+2015), instead of the disc L_2500 α_ox path — the
+# α_IRX relation (Asmus+2015), instead of the disc L_2500 α_ox path: the
 # physically appropriate normalization for obscured / IR-selected AGN. Shares
 # the Lehmer+2016 XRBs + hot gas with yang20. CIGALE pcigale.sed_modules.lopez24.
 register_xray_model(

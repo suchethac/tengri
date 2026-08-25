@@ -12,7 +12,7 @@ map                                  names  read by
 ===================================  =====  ==============================
 
 14 names were in the first and not the second, 7 the other way, and 23 lived in
-a hand-written map with no association table at all — so the two public
+a hand-written map with no association table at all: so the two public
 citation surfaces handed a reader different bibliographies for the same model.
 No name mapped to *conflicting* keys; every difference was a gap, which is why
 nothing ever looked wrong.
@@ -25,7 +25,7 @@ Notes
 -----
 The association tables stay the preferred home for new entries: they are what
 :func:`tengri.collect_citations` reads per subsystem, and they carry one name to
-*several* keys. :data:`NAME_TO_BIBKEY` is for the leftovers — names no
+*several* keys. :data:`NAME_TO_BIBKEY` is for the leftovers; names no
 subsystem table covers, such as the SFH types and the always-on frameworks.
 """
 
@@ -39,7 +39,7 @@ __all__ = ["NAME_TO_BIBKEY", "association_keys_for", "citation_keys_for"]
 #: and ``collect.py``. Where both had a name they agreed, so the merge is a
 #: union with no arbitration.
 NAME_TO_BIBKEY: dict[str, str] = {
-    # SFH lives in ``associations.SFH_CITATIONS`` — a name there can carry
+    # SFH lives in ``associations.SFH_CITATIONS``: a name there can carry
     # several keys, which ``delayed`` (CIGALE *and* Bagpipes) needs and this
     # one-key-per-name map cannot express.
     # ─ AGN ─
@@ -54,7 +54,7 @@ NAME_TO_BIBKEY: dict[str, str] = {
     "qsogen": "temple2021_qsogen",
     "qsogen_smc": "temple2021_qsogen",
     "qsogen_balmer": "temple2021_qsogen",
-    # AGN composable blocks — bibkeys verified against each block's registered
+    # AGN composable blocks: bibkeys verified against each block's registered
     # ``citation=`` string (never guessed). Blocks whose paper has no bundled
     # BibTeX (fritz, cat3d_wind, feltre, richards2006, boroson_green, …) fall
     # through to the free-form citation note.

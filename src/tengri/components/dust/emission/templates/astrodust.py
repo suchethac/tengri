@@ -11,7 +11,7 @@ balance).
 
 This is the sole ``astrodust`` model.  The earlier registry entry parameterized
 astrodust with the Draine & Li (2007) ``(umin, gamma, qpah)`` knob-set by
-translating the HD23 grid into a synthetic ``(umin, qpah)`` table — but that
+translating the HD23 grid into a synthetic ``(umin, qpah)`` table: but that
 grid has no ``qpah`` axis (``dust_qpah`` was a silent no-op) and no ``umin``
 axis (``umin`` was merely ``10**lgU``).  The faithful ``lgU`` parameterization
 below replaces it (see :ref:`the migration note <#871>`).
@@ -260,7 +260,7 @@ class AstrodustIRSEDComponent(EmissionComponent):
         ------
         FileNotFoundError
             When the resolved grid path does not exist on disk. Astrodust
-            carries no analytic fallback — the published templates are
+            carries no analytic fallback: the published templates are
             required for physically meaningful predictions.
         """
         if wave is None:
@@ -271,7 +271,7 @@ class AstrodustIRSEDComponent(EmissionComponent):
             )
             return None
 
-        # Missing grid raises loudly (no silent zeros — analytic fallbacks are
+        # Missing grid raises loudly (no silent zeros: analytic fallbacks are
         # not suitable for science). The raw grid is process-cached (concrete).
         templates = _cached_astrodust_grid(self.config.template_path)
 
@@ -333,7 +333,7 @@ class AstrodustIRSEDComponent(EmissionComponent):
         wave : ndarray, shape ``(n_wave,)``
             Rest-frame wavelength grid [Angstrom].
         **inputs : ndarray
-            ``L_ir`` — dust-absorbed luminosity [erg/s].
+            ``L_ir``: dust-absorbed luminosity [erg/s].
 
         Returns
         -------

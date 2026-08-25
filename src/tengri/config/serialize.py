@@ -300,7 +300,7 @@ def dict_to_distribution(d: dict[str, Any], *, path: list[str] | None = None) ->
         suggestions = difflib.get_close_matches(prior_name, dist_map.keys(), n=3, cutoff=0.6)
         msg = f"unknown prior '{prior_name}'"
         if suggestions:
-            msg += f" — did you mean {suggestions[0]!r}?"
+            msg += f". Did you mean {suggestions[0]!r}?"
         _raise_config_error(path, msg)
 
     dist_class = dist_map[prior_name]

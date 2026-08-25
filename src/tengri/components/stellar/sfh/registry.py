@@ -82,7 +82,7 @@ from tengri.components.stellar.sfh.psd_models import drw_variance
 from tengri.parameters.priors import Distribution, Fixed, StudentT, Uniform
 from tengri.utils.cosmology import age_at_z0
 
-# Age of the universe today [Gyr], from the default cosmology — never a
+# Age of the universe today [Gyr], from the default cosmology: never a
 # literal. Used as the prior upper bound and default for the dpl/lnorm
 # formation anchors ``sfh_*_age_gyr`` (cosmic time available for star
 # formation = lookback of formation at the Big Bang). Per-fit, users
@@ -110,7 +110,7 @@ class SFHRegistryEntry:
 
     Notes
     -----
-    **JIT-compatible**: no — dataclass for registry initialization.
+    **JIT-compatible**: no, dataclass for registry initialization.
 
     """
 
@@ -141,7 +141,7 @@ class ParamDef(NamedTuple):
     bound_error : str
         Error message when bound check fails.
     default : Distribution
-        Default prior distribution — what the parameter resolves to when
+        Default prior distribution: what the parameter resolves to when
         nothing asks for it to be free. Usually ``Fixed``.
     free_prior : Distribution or None, optional
         The admissible range ``all_params: FREE`` expands to. ``None`` means
@@ -157,7 +157,7 @@ class ParamDef(NamedTuple):
 
     Notes
     -----
-    **JIT-compatible**: no — Python dataclass for registry initialization.
+    **JIT-compatible**: no; Python dataclass for registry initialization.
 
     """
 
@@ -189,7 +189,7 @@ class SFHModelSpec(NamedTuple):
 
     Notes
     -----
-    **JIT-compatible**: no — Python dataclass for registry initialization.
+    **JIT-compatible**: no; Python dataclass for registry initialization.
 
     """
 
@@ -215,7 +215,7 @@ SFH_REGISTRY: dict[str, Any] = {}
 #: ``components/stellar/component.py``). The public grammar
 #: (``parameters.groups._valid_sfh_types``) and the auto-generated
 #: ``tengri.builders.sfh.*`` factories exclude these, so the advertised set
-#: matches what actually forward-models — otherwise ``SEDModel.build`` succeeds
+#: matches what actually forward-models: otherwise ``SEDModel.build`` succeeds
 #: and ``predict`` then raises ``NotImplementedError``. Promote a name out of
 #: this set once it is added to ``_SUPPORTED_SFH`` and crossvalidated.
 UNVALIDATED_SFH_TYPES: frozenset[str] = frozenset(
@@ -226,7 +226,7 @@ UNVALIDATED_SFH_TYPES: frozenset[str] = frozenset(
         "psb_wild2020",
         "top_hat",
         # Registered but absent from the stellar component's runtime
-        # _SUPPORTED_SFH allowlist (components/stellar/component.py) —
+        # _SUPPORTED_SFH allowlist (components/stellar/component.py);
         # without an entry here they build fine and then die at the first
         # predict with NotImplementedError. Keep the two gates in sync
         # until they share one source of truth.
@@ -275,7 +275,7 @@ def _register(
 
     Notes
     -----
-    **JIT-compatible**: no — mutates global registry dictionary during initialization.
+    **JIT-compatible**: no, mutates global registry dictionary during initialization.
 
     """
     entry = SFHRegistryEntry(
@@ -289,7 +289,7 @@ def _register(
 
 # ── Register smooth (additive) models ─────────────────────────────
 
-# --- tsnorm (truncated skew-normal) — canonical: truncated_skewnormal_sfh ---
+# --- tsnorm (truncated skew-normal), canonical: truncated_skewnormal_sfh ---
 _tsnorm_spec = SFHModelSpec(
     name="tsnorm",
     fn=tsnorm,
@@ -336,7 +336,7 @@ _register(
     short_doc="Truncated skew-normal SFH (Bellstedt+2020)",
 )
 
-# --- snorm (skew-normal) — canonical: skewnormal_sfh ---
+# --- snorm (skew-normal), canonical: skewnormal_sfh ---
 _snorm_spec = SFHModelSpec(
     name="snorm",
     fn=snorm,
@@ -773,14 +773,14 @@ _register(
 #
 # Registered as ``declining_exp``, NOT as ``tau`` (#1750). It was previously
 # registered as ``tau``, and #406 removed it because users read that name as
-# CIGALE's ``sfhdelayed`` — which is τ-*delayed* and rises from zero — giving a
+# CIGALE's ``sfhdelayed`` (which is τ-*delayed* and rises from zero) giving a
 # silent wavelength-dependent residual. Both models have a τ, so ``tau`` cannot
 # distinguish them and putting that name back would reinstate the defect. What
 # #406 actually established is that the *name* was wrong, not that the model
 # should be unreachable: leaving it importable-but-unselectable made
 # ``SEDModel.build`` unable to express FSPS ``sfh=1`` at all, and the
-# FSPS/Bagpipes tau-model parity comparison — the most directly meaningful
-# external check available for a parametric SFH — had no model to run against.
+# FSPS/Bagpipes tau-model parity comparison: the most directly meaningful
+# external check available for a parametric SFH: had no model to run against.
 #
 # ``declining_exp`` states the shape, matches the ``const_exp`` / ``sfh2exp``
 # naming already in this file, and gives ``sfh_declining_exp_tau_gyr`` rather
@@ -797,7 +797,7 @@ _register(
                 Uniform(7.0, 12.5, default=10.0),
             ),
             "sfh_declining_exp_tau_gyr": ParamDef(
-                "e-folding decline timescale (Gyr) — larger τ declines slower",
+                "e-folding decline timescale (Gyr): larger τ declines slower",
                 _lo_positive,
                 "must have lo > 0",
                 Uniform(0.1, 10.0, default=2.0),
@@ -824,7 +824,7 @@ _register(
 # --- delayed (τ-delayed, matches CIGALE sfh_delayed / Bagpipes 'delayed') ---
 # SFR(T) ∝ T · exp(-T/τ) with T = age - t_lb. Rises from 0 at formation,
 # peaks at cosmic-time τ-after-formation (lookback age − τ), declines to
-# present. Distinct from ``tau`` above — see #406 for the audit that
+# present. Distinct from ``tau`` above: see #406 for the audit that
 # surfaced the convention mismatch.
 _register(
     SFHModelSpec(
@@ -838,7 +838,7 @@ _register(
                 Uniform(7.0, 12.5, default=10.0),
             ),
             "sfh_delayed_tau_gyr": ParamDef(
-                "Timescale (Gyr) — cosmic-time location of SFR peak",
+                "Timescale (Gyr): cosmic-time location of SFR peak",
                 _lo_positive,
                 "must have lo > 0",
                 Uniform(0.1, 10.0, default=2.0),
@@ -862,7 +862,7 @@ _register(
     citation="Boquien et al. 2019 (CIGALE); Carnall et al. 2018 (Bagpipes)",
 )
 
-# --- const_exp (constant + exponential decline — "quenching at time T") ---
+# --- const_exp (constant + exponential decline: "quenching at time T") ---
 _register(
     SFHModelSpec(
         name="const_exp",
@@ -1261,7 +1261,7 @@ _register(
 
 
 def _table_sfh_placeholder(t_lookback, **kwargs):
-    """Placeholder — tabulated SFH is handled directly in the orchestrator path.
+    """Placeholder: tabulated SFH is handled directly in the orchestrator path.
 
     Parameters
     ----------
@@ -1277,7 +1277,7 @@ def _table_sfh_placeholder(t_lookback, **kwargs):
 
     Notes
     -----
-    **JIT-compatible**: yes — uses ``jnp.zeros_like``.
+    **JIT-compatible**: yes, uses ``jnp.zeros_like``.
 
     """
     return jnp.zeros_like(t_lookback)
@@ -1287,7 +1287,7 @@ _register(
     SFHModelSpec(
         name="table",
         fn=_table_sfh_placeholder,
-        params={},  # no fittable params — the table IS the SFH
+        params={},  # no fittable params: the table IS the SFH
         settings={},
         internal_param_map={},
         composition_type="additive",
@@ -1713,7 +1713,7 @@ _register(
 
 
 def _field_fn_placeholder(t_lookback, **kwargs):
-    """Placeholder — field modulation is applied in the composed closure.
+    """Placeholder: field modulation is applied in the composed closure.
 
     Parameters
     ----------
@@ -1730,11 +1730,11 @@ def _field_fn_placeholder(t_lookback, **kwargs):
     Raises
     ------
     RuntimeError
-        Always — field modulation happens in :func:`resolve_sfh`, not here.
+        Always: field modulation happens in :func:`resolve_sfh`, not here.
 
     Notes
     -----
-    **JIT-compatible**: no — raises at runtime.
+    **JIT-compatible**: no, raises at runtime.
 
     """
     raise RuntimeError("field fn should not be called directly; use resolve_sfh()")
@@ -1755,7 +1755,7 @@ _register(
             # choice stays visible.
             #
             # What a DRW is, in this literature's terms: its PSD is
-            # 1/(1 + (2 pi f tau)^2) — slope 2 above the break, flat below. That
+            # 1/(1 + (2 pi f tau)^2): slope 2 above the break, flat below. That
             # is exactly the alpha = 2 single-break case of Caplar & Tacchella
             # [1]_, so the model family matches their assumed form rather than
             # approximating it. It CANNOT represent the three-break PSD of
@@ -1763,14 +1763,14 @@ _register(
             # equilibrium timescale, molecular cloud lifetime); that needs a
             # flexible per-timescale PSD, not a single (sigma, tau).
             #
-            # tau — MEASURED VALUE, not what is set here. Caplar & Tacchella [1]_
+            # tau; MEASURED VALUE, not what is set here. Caplar & Tacchella [1]_
             # infer tau_break = 178 (+104, -66) Myr assuming alpha = 2, i.e.
             # galaxies lose memory of prior activity on ~200 Myr. The default of
             # 100 Myr below is LOW against that, and Uniform(10, 500) places most
             # of its mass above it. A measured-centered alternative would be a
             # lognormal about 178 Myr carrying the asymmetric +104/-66 spread.
             #
-            # sigma — no PSD amplitude in dex is quoted by either reference; the
+            # sigma; no PSD amplitude in dex is quoted by either reference; the
             # 0.3 dex default is consistent with the observed star-forming
             # main-sequence scatter (~0.2-0.4 dex) that [1]_ models.
             #
@@ -1839,7 +1839,7 @@ _COMPOSITORS: frozenset[str] = frozenset({"field", "burst"})
 def apply_compositor_swap(names: list[str]) -> list[str]:
     """Apply the ``dense_basis`` → ``dense_basis_pure`` auto-swap (#1074).
 
-    Every consumer that resolves an SFH name to a spec must apply this — the
+    Every consumer that resolves an SFH name to a spec must apply this: the
     swap renames the public parameters (``sfh_db_*`` → ``sfh_dbp_*``), so a
     consumer that skips it looks up the wrong spec, fails to find the user's
     parameters, and silently substitutes registry defaults. That is exactly how
@@ -1976,7 +1976,7 @@ def resolve_sfh(
 
     Notes
     -----
-    **JIT-compatible**: yes — returns a JIT-compatible closure (composed_fn).
+    **JIT-compatible**: yes, returns a JIT-compatible closure (composed_fn).
 
     Composition rules:
 
@@ -2024,7 +2024,7 @@ def resolve_sfh(
     if len(additive) == 0:
         raise ValueError("At least one additive (smooth) SFH component required")
 
-    # Merge params, param_map, settings — check for collisions
+    # Merge params, param_map, settings: check for collisions
     merged_params: dict[str, ParamDef] = {}
     merged_param_map: dict[str, tuple[str, float, float]] = {}
     merged_settings: dict[str, Any] = {}
@@ -2090,7 +2090,7 @@ def resolve_sfh(
     # Build the composed closure
     def composed_fn(t_lookback, **kw):
         """Evaluate the composed SFH: sum additive components, then apply burst and field."""
-        # 1. Sum additive components (per-spec public-name dispatch — no collision)
+        # 1. Sum additive components (per-spec public-name dispatch; no collision)
         smooth = jnp.zeros_like(t_lookback)
         for fn_i, pub_to_internal, internal_names in additive_info:
             kw_i = _build_component_kw(kw, pub_to_internal, internal_names)
@@ -2162,12 +2162,12 @@ def compute_field_gp(
     **JIT-compatible**: yes.
 
     ``field_model="drw"`` builds a damped random walk stationary in **linear
-    (physical) time** — the covariance ``(sigma ln10)^2 exp(-|t_i-t_j|/tau)`` at
+    (physical) time**: the covariance ``(sigma ln10)^2 exp(-|t_i-t_j|/tau)`` at
     physical times ``t_i = 10**u_i`` (#865). ``psd_sigma`` is then the modulation
     std in dex and ``psd_tau_yr`` the physical decorrelation timescale. It is
     realized via the exact OU state-space (innovations) recursion
     (:func:`~tengri.components.stellar.sfh.gp_sfh.drw_innovations_gp_from_xi`),
-    which for a Markov covariance *is* the Cholesky factor — the same ``xi -> SFH``
+    which for a Markov covariance *is* the Cholesky factor: the same ``xi -> SFH``
     map as a dense Cholesky, computed in ``O(n)`` instead of ``O(n^3)`` and without
     the positive-definiteness jitter, so the realized prior is the exact ``K``. The
     posterior geometry is unchanged by this (#1301 is not addressed by it). Other
@@ -2190,7 +2190,7 @@ def compute_field_gp(
         # Damped random walk stationary in LINEAR (physical) time: the DRW
         # covariance is built directly in cosmic time and sampled on the
         # log-age grid (#865). ``psd_sigma`` is the modulation std in dex and
-        # ``psd_tau_yr`` the physical decorrelation timescale — both mean exactly
+        # ``psd_tau_yr`` the physical decorrelation timescale: both mean exactly
         # what the ``field`` priors document (Caplar & Tacchella 2019 amplitude;
         # Iyer+2020 timescale). Replaces the former Fourier/log-age construction,
         # whose correlation length was fixed in dex (scale-free) and only matched
@@ -2198,7 +2198,7 @@ def compute_field_gp(
         #
         # Realized via the exact OU state-space (innovations) recursion rather
         # than a dense Cholesky. For a Markov covariance the recursion *is* the
-        # Cholesky factor (lower-triangular, positive diagonal, M M^T = K — and
+        # Cholesky factor (lower-triangular, positive diagonal, M M^T = K; and
         # that factor is unique), so the ``xi -> SFH`` map is numerically
         # identical: O(n) instead of O(n^3), and jitter-free, so the prior is the
         # exact K rather than K + 1e-6 var I. It does NOT change the posterior

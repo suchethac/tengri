@@ -45,15 +45,15 @@ class BakedInBackend:
     Attributes
     ----------
     has_continuum : bool
-        True — continuum is baked into the SSP.
+        True: continuum is baked into the SSP.
     has_free_params : bool
-        False — ionization parameter and escape fraction are fixed.
+        False: ionization parameter and escape fraction are fixed.
     name : str
         Identifier "baked_in".
 
     Notes
     -----
-    **JIT-compatible**: yes — predict_nebular_sed and
+    **JIT-compatible**: yes, predict_nebular_sed and
     predict_nebular_line_fluxes return zero arrays.
 
     To fit nebular properties, switch to CloudyGridBackend or CueBackend
@@ -82,7 +82,7 @@ class BakedInBackend:
                 "FIXED logU and FIXED escape fraction determined when the SSP grid "
                 "was generated (commonly logU = −3, but depends on the SSP file). "
                 "The ionization parameter and escape fraction are NOT free parameters "
-                "— varying neb_logU or neb_fesc in your Parameters will have no "
+                ": varying neb_logU or neb_fesc in your Parameters will have no "
                 "effect. Check your SSP file's nebular assumptions. Switch to "
                 "CloudyGridBackend or CueBackend to vary nebular properties. "
                 "To suppress when building via SEDModel.build: "
@@ -119,11 +119,11 @@ class BakedInBackend:
         Returns
         -------
         array, shape (n_wave,)
-            Zero array — nebular emission is baked into the SSP [erg/s/Hz].
+            Zero array: nebular emission is baked into the SSP [erg/s/Hz].
 
         Notes
         -----
-        **JIT-compatible**: yes — returns jnp.zeros_like.
+        **JIT-compatible**: yes, returns jnp.zeros_like.
 
         """
         return jnp.zeros_like(ssp_wave)
@@ -160,7 +160,7 @@ class BakedInBackend:
 
         Notes
         -----
-        **JIT-compatible**: yes — returns empty jnp arrays.
+        **JIT-compatible**: yes, returns empty jnp arrays.
 
         """
         return jnp.array([]), jnp.array([])

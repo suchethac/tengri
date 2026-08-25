@@ -116,7 +116,7 @@ def select_disc_model(
 
     Notes
     -----
-    Static (not JIT-traced). No interpolation between grid points — the
+    Static (not JIT-traced). No interpolation between grid points: the
     disc grid is too sparse. Model selection is a structural choice.
     """
     for idx, (m_i, a_i, mdot_i) in enumerate(zip(disc_m, disc_a, disc_mdot)):

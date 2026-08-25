@@ -48,9 +48,9 @@ class EmissionComponent(SEDModelComponent):
     -----
     **Registry**: Concrete subclasses (e.g., modified_blackbody, dale2014)
     register in _REGISTRY under their ``name``. EmissionComponent itself does NOT
-    register — it is abstract (name not in vars(cls) at class-definition time).
+    register: it is abstract (name not in vars(cls) at class-definition time).
 
-    **JIT-compatible**: yes — all orchestration is pure JAX.
+    **JIT-compatible**: yes, all orchestration is pure JAX.
     """
 
     # Shared class attributes for all emission components
@@ -62,7 +62,7 @@ class EmissionComponent(SEDModelComponent):
     #:
     #: The opt-in flag itself (:attr:`accepts_threaded_templates`), the lookup,
     #: and the eager loader live on
-    #: :class:`~tengri.components.template_threading.TemplateThreading` — dust
+    #: :class:`~tengri.components.template_threading.TemplateThreading`: dust
     #: emission was simply the first subsystem to need them (#1649, generalized
     #: to every registered component in #1694).
     template_namespace: ClassVar[str] = "dust_ir"
@@ -76,7 +76,7 @@ class EmissionComponent(SEDModelComponent):
 
     #: Whether ``apply`` may evaluate :meth:`predict` at ``L_ir = 1`` and
     #: re-apply the true scale in log space (#1206). Valid only for a model
-    #: whose emission is exactly *proportional* to ``L_ir`` — see
+    #: whose emission is exactly *proportional* to ``L_ir``: see
     #: ``tests/contract/test_dust_emission_l_ir_linearity.py``, which pins that
     #: property for every registered model. A model with an additive term is
     #: not proportional and must set this False, or factoring would return a
@@ -88,7 +88,7 @@ class EmissionComponent(SEDModelComponent):
     ) -> tuple[dict[str, Any], jnp.ndarray | None]:
         """Swap ``L_ir`` for unity, returning the log10 offset to re-apply.
 
-        Returns ``(input_kwargs, None)`` — leaving the inputs untouched — when
+        Returns ``(input_kwargs, None)`` (leaving the inputs untouched) when
         the component is not proportional to ``L_ir`` or when the producer has
         published no ``log_L_ir`` to factor with.
         """
@@ -103,8 +103,8 @@ class EmissionComponent(SEDModelComponent):
         """Units of every key this component can publish, keyed by name.
 
         ``outputs()`` covers the full-grid families. The precomp families are
-        declared here as well because they are *not* in ``outputs()`` — they
-        exist only on the LUT path — and a rescale policy that cannot see a
+        declared here as well because they are *not* in ``outputs()``: they
+        exist only on the LUT path: and a rescale policy that cannot see a
         key's units has to guess at it.
         """
         return {key.name: key.units for key in self.outputs()} | _PRECOMP_UNITS
@@ -114,7 +114,7 @@ class EmissionComponent(SEDModelComponent):
     ) -> dict[str, Any]:
         """Re-apply the factored-out luminosity scale to published quantities.
 
-        Only luminosity-valued outputs are rescaled — a dimensionless published
+        Only luminosity-valued outputs are rescaled: a dimensionless published
         quantity would be corrupted by the factor. A key with no declared units
         raises rather than defaulting either way: silently rescaling it corrupts
         a dimensionless quantity, and silently skipping it leaves a luminosity
@@ -162,12 +162,12 @@ class EmissionComponent(SEDModelComponent):
         """Apply dust IR emission with WavePrecomp support.
 
         Orchestrates three branches:
-        1. Photometry LUT (filter_eff_waves in state.derived) — project
+        1. Photometry LUT (filter_eff_waves in state.derived): project
            full-wave emission onto filters via integral (exact) or effective
            wavelength sample (approximate).
-        2. Spectrum LUT (spec_eff_waves in state.derived) — project onto
+        2. Spectrum LUT (spec_eff_waves in state.derived): project onto
            spectrum pixels.
-        3. Exact full-wave — compute full SED and add to state.sed_intrinsic.
+        3. Exact full-wave: compute full SED and add to state.sed_intrinsic.
 
         Parameters
         ----------
@@ -192,7 +192,7 @@ class EmissionComponent(SEDModelComponent):
             k[prefix_len:]: v for k, v in params.items() if k.startswith(self.parameter_prefix)
         }
 
-        # Bare-name allowlist (e.g. redshift) — pass through unstripped
+        # Bare-name allowlist (e.g. redshift): pass through unstripped
         for _bare in BARE_NAME_ALLOWLIST:
             if _bare in params:
                 p_sliced[_bare] = params[_bare]
@@ -230,11 +230,11 @@ class EmissionComponent(SEDModelComponent):
         if spec_eff_waves is not None or filter_eff_waves is not None:
             # ONE full-grid evaluation, shared by every consumer below. Each LUT branch
             # used to recompute it, which jit made free (CSE) but eager execution did not
-            # — and predict_state, Prediction, and most of the test suite run eager.
+            #: and predict_state, Prediction, and most of the test suite run eager.
             # Build a SEPARATE dict for predict. Mutating ``input_kwargs`` would
             # also inject ``templates`` into the two ``_apply_*_precomp`` helpers
             # below, which forward it with ``**input_kwargs`` and do not accept
-            # it — that leaked through to the nebular line-catalog path and broke
+            # it: that leaked through to the nebular line-catalog path and broke
             # tests/contract/test_line_ratio_data.py.
             predict_kwargs = dict(input_kwargs)
             if self.accepts_threaded_templates:
@@ -265,7 +265,7 @@ class EmissionComponent(SEDModelComponent):
                 )
 
             # One rescale for every L_nu-valued family produced above, through
-            # the same units-aware policy the full-grid families use — these
+            # the same units-aware policy the full-grid families use: these
             # keys happen to be L_nu-valued today, but nothing said so, and an
             # unconditional rescale would silently corrupt the first
             # dimensionless precomp family anyone adds.
@@ -277,8 +277,8 @@ class EmissionComponent(SEDModelComponent):
             # ...and STILL add to sed_intrinsic. This used to return without touching it,
             # which left the panchromatic model SED of every WavePrecomp model with NO
             # dust IR at all: ``Prediction.photometry()`` (exact by default, #1097) read
-            # 5.8x low in W3 and 6x low in W4 — bit-identical to a model built with no
-            # dust emission — while the likelihood, which reads the LUT families, was
+            # 5.8x low in W3 and 6x low in W4: bit-identical to a model built with no
+            # dust emission: while the likelihood, which reads the LUT families, was
             # correct. So fits were fine and every best-fit overlay, residual plot, and
             # mid-IR diagnostic drawn from one was silently missing the IR bump.
             #
@@ -287,14 +287,14 @@ class EmissionComponent(SEDModelComponent):
             # Writing an array nobody reads is still dead code. Radio and X-ray have
             # always added unconditionally and still compile to ~143 us.
             # An emission component is additive by contract, so sed_in + sed_ir is exactly
-            # what predict(p, sed_in, wave) returns — pinned by
+            # what predict(p, sed_in, wave) returns: pinned by
             # tests/regression/bug/test_precomp_sed_intrinsic_completeness.py, which
             # compares this against the exact path.
             new_derived = self._merge_published(state.derived, {**published_full, **published})
             return state.with_(sed_intrinsic=sed_in + sed_ir, derived=new_derived)
         else:
             # Exact full-wave path. Threads the IR library as a primal (#1649)
-            # AND factors L_ir (#1206) — the two arrived on this line from
+            # AND factors L_ir (#1206): the two arrived on this line from
             # different branches and are independent: threading decides how the
             # template reaches predict, factoring decides at what scale it is
             # evaluated. Keeping only one silently drops either 66 MB per
@@ -329,10 +329,10 @@ class EmissionComponent(SEDModelComponent):
 
         Recovers pre-slim DustSEDComponent.apply() photometry-LUT logic with
         four branches:
-        1. band_response (linear models like Dale2014) — exact, fast
-        2. fast_emission — effective-wavelength sample (approximate)
-        3. padded_curves — full filter integral (exact)
-        4. fallback — effective-wavelength sample (default)
+        1. band_response (linear models like Dale2014): exact, fast
+        2. fast_emission: effective-wavelength sample (approximate)
+        3. padded_curves: full filter integral (exact)
+        4. fallback: effective-wavelength sample (default)
 
         Parameters
         ----------
@@ -436,7 +436,7 @@ class EmissionComponent(SEDModelComponent):
         p : mapping[str, ndarray]
             Parameters with prefix stripped.
         sed_in : ndarray, shape (n_wave,)
-            Input SED (ignored for emission — typically zeros).
+            Input SED (ignored for emission: typically zeros).
         wave : ndarray, shape (n_wave,)
             Rest-frame wavelength grid in Angstrom.
         **inputs : ndarray

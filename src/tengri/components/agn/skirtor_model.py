@@ -4,15 +4,15 @@
 Implements the SKIRTOR clumpy torus model on the SEDModelComponent contract,
 enabling use of radiative-transfer templates in the model-building API.
 
-This is an opt-in adapter — the existing AGNSEDComponent continues to
+This is an opt-in adapter, the existing AGNSEDComponent continues to
 support SKIRTOR through the unified AGN registry.
 
 References
 ----------
 .. [1] M. Stalevski et al., "3D radiative transfer modeling of the dusty
-   torus around AGN — the influence of clumping," MNRAS, 420, 2756 (2012).
+   torus around AGN, the influence of clumping," MNRAS, 420, 2756 (2012).
    arXiv:1109.1286. https://doi.org/10.1111/j.1365-2966.2011.19775.x
-.. [2] M. Stalevski et al., "The dust covering factor in AGN — combining the
+.. [2] M. Stalevski et al., "The dust covering factor in AGN: combining the
    IR torus emission with polar dust component," MNRAS, 458, 2288 (2016).
    arXiv:1602.01954. https://doi.org/10.1093/mnras/stw444
 """
@@ -143,9 +143,9 @@ class SKIRTORTorus(SEDModelComponent):
 
     Notes
     -----
-    **JIT-compatible**: yes — predict() is pure JAX.
+    **JIT-compatible**: yes, predict() is pure JAX.
 
-    **Gradient-safe**: yes — triweight interpolation is fully differentiable.
+    **Gradient-safe**: yes, triweight interpolation is fully differentiable.
 
     **Requires template grid**: The SKIRTOR template library (~1 GB) must be
     downloaded separately and pointed to via ``grid_path`` in config. The
@@ -183,7 +183,7 @@ class SKIRTORTorus(SEDModelComponent):
     parameter_prefix = "agn_"
     config: SKIRTORTorusConfig = field(default_factory=SKIRTORTorusConfig)
 
-    # Free parameters — auto-discovered
+    # Free parameters: auto-discovered
     log_lbol = Uniform(
         8.0,
         14.0,
@@ -368,7 +368,7 @@ class SKIRTORTorus(SEDModelComponent):
 
         Notes
         -----
-        **JIT-compatible**: yes — uses static disk_type (not traced).
+        **JIT-compatible**: yes, uses static disk_type (not traced).
 
         **Disc selection**: config.disk_type selects the disc spectrum model:
 

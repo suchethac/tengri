@@ -566,7 +566,7 @@ def sample_hamiltonian(
     Returns
     -------
     tuple
-        (chain, log_likelihood, accept_prob) — see sample_raytrace.
+        (chain, log_likelihood, accept_prob), see sample_raytrace.
     """
     return sample_raytrace(
         key,
@@ -632,9 +632,9 @@ def sample_raytrace(
 
     Notes
     -----
-    **JIT-compatible**: no — wraps blackjax sampler with Python-level loop.
+    **JIT-compatible**: no, wraps blackjax sampler with Python-level loop.
 
-    **Gradient-safe**: no — MCMC sampler, not a differentiable operation.
+    **Gradient-safe**: no, MCMC sampler, not a differentiable operation.
 
     Examples
     --------
@@ -814,7 +814,7 @@ def run_raytrace(
         else:
             step_size = 0.01
         # Initializing from a point estimate (e.g. MAP) starts the chain at the
-        # posterior mode — the highest-curvature region. The standard step then
+        # posterior mode, the highest-curvature region. The standard step then
         # overshoots and every leapfrog trajectory diverges, collapsing the
         # acceptance rate to ~0. Take a smaller step when starting from the mode.
         if init_from is not None:

@@ -130,23 +130,23 @@ class PhotometricPrecomputation(NamedTuple):
         Filter integral restricted to each sub-band. Sums over the last axis
         to ``ssp_phot``. None unless ``n_subbands > 0``. [erg/s/Hz]
     ssp_subband_waves_rest : array or None, shape (n_met, n_age, n_filters, n_subbands)
-        Rest-frame quadrature node of each sub-band — the template's own
+        Rest-frame quadrature node of each sub-band: the template's own
         flux-weighted centroid there. None unless ``n_subbands > 0``. [Angstrom]
     ssp_subband_phot_igm : array or None, shape (n_met, n_age, n_filters, n_subbands)
         ``ssp_subband_phot`` with the IGM transmission at each node folded in
         (#1135): Φ_{majk} · T_IGM(λ*_{majk} · (1+z), z) [erg/s/Hz], where λ* is
         the sub-band's quadrature node. Injected by ``SEDModel.build`` when a
         mean-IGM model is present and precomputable; None otherwise. Folded here
-        — on the metallicity axis, before the SSP contraction — because the
+        (on the metallicity axis, before the SSP contraction) because the
         runtime node is a met-weighted average whose weights move with the free
         ``met_logzsol``.
         The REST-frame band lives in :class:`RestBandPrecomputation`, built once by
         :func:`precompute_restband_photometry` and carried on the stellar component's
-        state — one builder for the fixed-z and free-z paths alike (#1148).
+        state: one builder for the fixed-z and free-z paths alike (#1148).
 
     Notes
     -----
-    **JIT-compatible**: no — this is a data container produced by
+    **JIT-compatible**: no; this is a data container produced by
     :func:`precompute_photometry` at startup; data itself is immutable
     and suitable for use in JAX operations.
 
@@ -185,7 +185,7 @@ class SpectroscopicPrecomputation(NamedTuple):
 
     Notes
     -----
-    **JIT-compatible**: no — this is a data container produced by
+    **JIT-compatible**: no; this is a data container produced by
     :func:`precompute_spectroscopy` at startup; data itself is immutable
     and suitable for use in JAX operations.
 
@@ -264,7 +264,7 @@ def precompute_photometry(
 
     Notes
     -----
-    **JIT-compatible**: no — this is a data precomputation function that
+    **JIT-compatible**: no; this is a data precomputation function that
     runs once at startup, not inside the inference loop. Uses numpy and HDF5 I/O.
     **Gradient-safe**: not applicable (CPU preprocessing).
 
@@ -318,11 +318,11 @@ class RestBandPrecomputation(NamedTuple):
     ssp_restband_subband_waves : array or None, shape (n_met, n_age, n_filters, n_subbands)
         Quadrature nodes of the rest band [Angstrom].
     restband_eff_waves : array, shape (n_filters,)
-        The wavelength the rest band samples — the filter's own pivot [Angstrom].
+        The wavelength the rest band samples: the filter's own pivot [Angstrom].
 
     Notes
     -----
-    **JIT-compatible**: no — build-time data container.
+    **JIT-compatible**: no, build-time data container.
     """
 
     ssp_restband_phot: jnp.ndarray
@@ -341,7 +341,7 @@ def precompute_restband_photometry(
     r"""Preintegrate the SSP grid through each filter placed in the **rest** frame.
 
     ``phot_rest_fnu`` (and so ``Observables.mag_absolute``) is the SED reprojected
-    at :math:`z=0`, :math:`d_L=10\,{\rm pc}` — *the galaxy as it is*. The filter
+    at :math:`z=0`, :math:`d_L=10\,{\rm pc}`: *the galaxy as it is*. The filter
     therefore sits in the rest frame and samples the rest SED at its **own** pivot
     wavelength:
 
@@ -359,7 +359,7 @@ def precompute_restband_photometry(
     rest :math:`\lambda_{\rm eff}/(1+z)`. Conflating them is #1148: the LUT path
     reused the observed-band integral for ``phot_rest_fnu`` and disagreed with the
     exact path by 769 % in ``des_g`` at z=0.5, growing to orders of magnitude in the
-    blue — an *absolute* magnitude that depended on the source's redshift.
+    blue: an *absolute* magnitude that depended on the source's redshift.
 
     **Redshift does not appear.** At z=0 the filter always samples the same rest
     wavelengths, so this is one build-time constant that serves fixed-z *and* free-z
@@ -385,7 +385,7 @@ def precompute_restband_photometry(
 
     Notes
     -----
-    **JIT-compatible**: no — runs once at build time.
+    **JIT-compatible**: no, runs once at build time.
     """
     from tengri.utils.grid_interp import slice_fixed_axes
 
@@ -410,7 +410,7 @@ def precompute_restband_photometry(
         ssp_restband_phot=preint.phot,
         ssp_restband_subband_phot=preint.subband_phot,
         ssp_restband_subband_waves=preint.subband_waves_rest,
-        # At z=0 the rest and observed effective wavelengths coincide — this is the
+        # At z=0 the rest and observed effective wavelengths coincide; this is the
         # filter's own pivot, and it is what the rest band samples.
         restband_eff_waves=preint.effective_wavelengths_rest,
     )
@@ -442,7 +442,7 @@ def precompute_spectroscopy(
 
     Notes
     -----
-    **JIT-compatible**: no — data precomputation function with numpy I/O.
+    **JIT-compatible**: no, data precomputation function with numpy I/O.
     **Gradient-safe**: not applicable (CPU preprocessing).
 
     """
@@ -493,7 +493,7 @@ class SpectroscopicZTable(NamedTuple):
     ``ssp_on_pixels`` between z-grid nodes would be inaccurate near any
     spectral feature (filter integration hides this in the photometric
     case). Instead, the stellar component re-interpolates the SSP cube to
-    ``wave_obs / (1 + z)`` at runtime — exact and fully differentiable in z.
+    ``wave_obs / (1 + z)`` at runtime: exact and fully differentiable in z.
 
     Attributes
     ----------
@@ -505,7 +505,7 @@ class SpectroscopicZTable(NamedTuple):
 
     Notes
     -----
-    **JIT-compatible**: no — startup marker; leaves are immutable and safe
+    **JIT-compatible**: no, startup marker; leaves are immutable and safe
     inside JAX operations.
 
     """
@@ -551,7 +551,7 @@ def precompute_spectroscopy_ztable(
 
     Notes
     -----
-    **JIT-compatible**: no — startup marker.
+    **JIT-compatible**: no, startup marker.
     **Gradient-safe**: not applicable (CPU preprocessing).
 
     """
@@ -591,7 +591,7 @@ class PhotometricZTable(NamedTuple):
 
     Notes
     -----
-    **JIT-compatible**: no — this is a data container produced by
+    **JIT-compatible**: no; this is a data container produced by
     :func:`precompute_photometry_ztable` at startup; data itself is immutable
     and suitable for use in JAX operations.
 
@@ -621,9 +621,9 @@ class PhotometricZTable(NamedTuple):
     ssp_subband_phot_igm_table: jnp.ndarray | None = None
 
 
-# Bump when the quadrature or table layout changes — invalidates every
+# Bump when the quadrature or table layout changes: invalidates every
 # cached z-table built by an older algorithm.
-_ZTABLE_CACHE_VERSION = 1
+_ZTABLE_CACHE_VERSION = 2
 
 
 def _ztable_cache_dir():
@@ -652,8 +652,17 @@ def _ztable_cache_key(
     convention,
     n_subbands=0,
 ) -> str:
-    """Content hash over everything the table depends on."""
+    """Content hash over everything the table depends on.
+
+    Includes session precision (jax_enable_x64) and JAX backend since stored
+    values are computed through JAX and inherit session precision.
+    Contamination without these: float32 session writes an entry, float64
+    session reads it (~1e-7 relative error silently poisoning precision
+    benchmarks/parity tests that share a cache dir between arms).
+    """
     import hashlib
+
+    import jax
 
     h = hashlib.sha256()
     h.update(f"v{_ZTABLE_CACHE_VERSION}".encode())
@@ -681,7 +690,9 @@ def _ztable_cache_key(
                 bool(taylor_correction),
                 str(convention),
                 int(n_subbands),
-                "schema=2",
+                "schema=3",
+                bool(jax.config.jax_enable_x64),
+                jax.default_backend(),
             )
         ).encode()
     )
@@ -704,17 +715,17 @@ def precompute_photometry_ztable(
     """Pre-compute SSP broadband fluxes on a redshift grid, disk-cached.
 
     Thin caching wrapper around :func:`_compute_photometry_ztable` (same
-    signature — see it for parameter semantics). The table depends only on
+    signature: see it for parameter semantics). The table depends only on
     the SSP grid, the filter set, the z grid, and the quadrature flags, so
     it is content-hashed and persisted under ``~/.cache/tengri_precomp``:
     the first build of a given (SSP, filters, z-grid) combination pays the
-    quadrature; every later build — any process, any model — loads the npz
+    quadrature; every later build (any process, any model) loads the npz
     in well under a second. ``TENGRI_DISABLE_PRECOMP_CACHE=1`` opts out,
     ``TENGRI_PRECOMP_CACHE_DIR`` relocates the cache.
 
     Notes
     -----
-    **JIT-compatible**: no — data precomputation with file I/O.
+    **JIT-compatible**: no, data precomputation with file I/O.
     """
     if z_grid is None:
         z_grid = jnp.linspace(z_min, z_max, n_z)
@@ -821,7 +832,7 @@ def _compute_photometry_ztable(
     """Pre-compute SSP broadband fluxes on a redshift grid.
 
     Evaluates the full wavelength integral at each z in the grid.
-    At inference time, interpolate to the current z — same speedup
+    At inference time, interpolate to the current z: same speedup
     as fixed-z precomputation, but z is now a free parameter.
 
     Parameters
@@ -854,7 +865,7 @@ def _compute_photometry_ztable(
 
     Notes
     -----
-    **JIT-compatible**: no — data precomputation function with nested loops.
+    **JIT-compatible**: no, data precomputation function with nested loops.
     **Gradient-safe**: not applicable (CPU preprocessing).
 
     """
@@ -895,8 +906,8 @@ def _compute_photometry_ztable(
 
     # Filter effective wavelengths (z-independent pivot for the IGM lookup)
     # under the bandpass weight w(λ) (ADR-0017): λ_eff = ∫ λ T w dλ / ∫ T w dλ,
-    # evaluated on the filter's own nodes. The integral denominators — and the
-    # per-(z, filter) λ_eff the Taylor moment expands around — are computed on
+    # evaluated on the filter's own nodes. The integral denominators; and the
+    # per-(z, filter) λ_eff the Taylor moment expands around: are computed on
     # the union quadrature grid inside the z loop, matching
     # lnu_filter_integral (#960) so the LUT and exact paths agree.
     eff_waves_obs = []  # observed-frame effective wavelengths (z-independent)
@@ -922,7 +933,7 @@ def _compute_photometry_ztable(
             igm_trans_all[zi] = np.asarray(igm_transmission(jnp.asarray(eff_waves_obs), z_val))
 
         # Pre-integrate SSP through each filter (vectorized over met × age)
-        # on the union quadrature grid — SED nodes + filter nodes, with the
+        # on the union quadrature grid; SED nodes + filter nodes, with the
         # smooth transmission interpolated, never the SED point-sampled at
         # the filter table's nodes (#960). Matches lnu_filter_integral so
         # the LUT and exact paths agree.
@@ -942,7 +953,7 @@ def _compute_photometry_ztable(
             trans_on_grid = np.interp(grid, fw_np, ft_np, left=0.0, right=0.0)
             tw_np = trans_on_grid * _filter_weight_np(grid, convention)
             denom = _np_trapezoid(tw_np, grid)
-            # λ_eff on the SAME union grid — the Taylor moment must expand
+            # λ_eff on the SAME union grid: the Taylor moment must expand
             # around the weight's first moment under its own quadrature, so
             # that Ψ ≡ 0 for a flat template.
             eff_waves_rest_all[zi, f_idx] = (
@@ -966,7 +977,7 @@ def _compute_photometry_ztable(
                 moment_num = _np_trapezoid(moment_integrand, grid, axis=-1)
                 ssp_phot_moment_all[zi, :, :, f_idx] = moment_num / max(denom, 1e-30)
 
-            # Sub-band quadrature (#1122) — same helper the fixed-z precompute
+            # Sub-band quadrature (#1122): same helper the fixed-z precompute
             # uses, so the two paths cannot drift. Nodes come back observed-frame;
             # store them rest-frame, which is where the dust law is evaluated.
             if K > 0:
@@ -977,7 +988,7 @@ def _compute_photometry_ztable(
                 subband_waves_all[zi, :, :, f_idx, :] = nodes_obs / (1.0 + z_val)
 
         # Geometric flux scale, stored as a log10 offset. The build is eager
-        # float64 and the linear value is correct here — it is the *storage* that
+        # float64 and the linear value is correct here: it is the *storage* that
         # loses it: ~1e-57 casts to exactly 0.0 in a float32 array, so a linear
         # table is zeroed for every z above ~0 (#1859).
         dl_cm = float(luminosity_distance(z_val))
@@ -1014,7 +1025,7 @@ def fast_photometry(
 ) -> jnp.ndarray:
     """Compute photometry from pre-computed SSP broadband fluxes.
 
-    This is what runs at each MCMC step. No wavelength integrals —
+    This is what runs at each MCMC step. No wavelength integrals;
     just a weighted sum over the age dimension.
 
     c_gal(band) = 10**log10_flux_scale * sum_i weights_i * dust_i(band) * c_SSP_i(band)
@@ -1040,11 +1051,11 @@ def fast_photometry(
 
     Notes
     -----
-    **JIT-compatible**: yes — uses ``jnp.einsum`` for fast weighted sum.
+    **JIT-compatible**: yes, uses ``jnp.einsum`` for fast weighted sum.
     **Gradient-safe**: yes.
 
     The scale arrives as a ``log10`` offset because the linear factor is ~1e-57
-    and exactly ``0.0`` in float32 at every distance — so a float32 fit returned
+    and exactly ``0.0`` in float32 at every distance; so a float32 fit returned
     zero flux in every band, finite and silent (#1859). The applied product
     (~1e-29) is representable; only the factor was not.
     """
@@ -1084,7 +1095,7 @@ def fast_spectrum(
 
     Notes
     -----
-    **JIT-compatible**: yes — uses ``jnp.einsum`` for fast weighted sum.
+    **JIT-compatible**: yes, uses ``jnp.einsum`` for fast weighted sum.
     **Gradient-safe**: yes.
 
     The scale arrives as a ``log10`` offset for the reason given in
@@ -1116,8 +1127,8 @@ def interpolate_ssp_phot_metallicity(
 
     Notes
     -----
-    **JIT-compatible**: yes — all operations use ``jnp`` primitives.
-    **Gradient-safe**: yes — linear interpolation is differentiable.
+    **JIT-compatible**: yes, all operations use ``jnp`` primitives.
+    **Gradient-safe**: yes, linear interpolation is differentiable.
 
     """
     log_z_clamped = jnp.clip(log_z, ssp_lgmet[0], ssp_lgmet[-1])
@@ -1157,11 +1168,11 @@ def interpolate_ztable(ztable_ssp_phot, ztable_eff_rest, ztable_log10_flux_scale
 
     Notes
     -----
-    **JIT-compatible**: yes — all operations use ``jnp`` primitives.
-    **Gradient-safe**: yes — linear interpolation is differentiable.
+    **JIT-compatible**: yes, all operations use ``jnp`` primitives.
+    **Gradient-safe**: yes, linear interpolation is differentiable.
 
     The flux scale is stored and interpolated in ``log10`` because the linear
-    table is ~1e-57 and casts to exactly ``0.0`` in float32 — the table builds
+    table is ~1e-57 and casts to exactly ``0.0`` in float32: the table builds
     correctly in float64 and is zeroed on storage (#1859).
 
     **Still the arithmetic interpolation, not the geometric one.**
@@ -1218,7 +1229,7 @@ def interpolate_ztable_smooth(
         Target redshift (dimensionless).
     scatter : float
         Triweight kernel bandwidth (same units as z_grid).
-        Recommended: ``0.5 * dz`` where ``dz`` is the grid spacing —
+        Recommended: ``0.5 * dz`` where ``dz`` is the grid spacing;
         gives < 0.05% interpolation error with C²-continuous gradients.
         Larger values spread more weight to neighbors (smoother gradients,
         lower accuracy); smaller values concentrate on the nearest node.
@@ -1234,8 +1245,8 @@ def interpolate_ztable_smooth(
 
     Notes
     -----
-    **JIT-compatible**: yes — uses triweight kernel via :func:`compute_grid_weights`.
-    **Gradient-safe**: yes — C²-continuous gradients.
+    **JIT-compatible**: yes, uses triweight kernel via :func:`compute_grid_weights`.
+    **Gradient-safe**: yes; C²-continuous gradients.
 
     The kernel-weighted average of the flux scale is taken in ``log10`` for the
     reason given in :func:`interpolate_ztable`, and by the same primitive, so it
@@ -1271,8 +1282,8 @@ def interpolate_igm_ztable(igm_trans_table, z_grid, z):
 
     Notes
     -----
-    **JIT-compatible**: yes — all operations use ``jnp`` primitives.
-    **Gradient-safe**: yes — linear interpolation is differentiable.
+    **JIT-compatible**: yes, all operations use ``jnp`` primitives.
+    **Gradient-safe**: yes, linear interpolation is differentiable.
 
     """
     z_clamped = jnp.clip(z, z_grid[0], z_grid[-1])
@@ -1325,7 +1336,7 @@ def precompute(
 
     Notes
     -----
-    **JIT-compatible**: no — data precomputation with conditional collapsing.
+    **JIT-compatible**: no, data precomputation with conditional collapsing.
     **Gradient-safe**: not applicable (CPU preprocessing).
 
     """
@@ -1350,7 +1361,7 @@ def precompute(
 def build_lookup(preint, **kwargs):
     """Return SSP photometry lookup for the fused kernels.
 
-    SSP photometry is consumed directly by the fused kernels — no JIT
+    SSP photometry is consumed directly by the fused kernels; no JIT
     lookup is returned here. This is a Protocol placeholder.
 
     Parameters

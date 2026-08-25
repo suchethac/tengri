@@ -29,8 +29,8 @@ import jax
 import jax.numpy as jnp
 
 from tengri.observation.eline_catalog import (
-    DEFAULT_LINE_NAMES,  # noqa: F401 — re-exported for convenience
-    DEFAULT_LINE_WAVELENGTHS,  # noqa: F401 — re-exported for convenience
+    DEFAULT_LINE_NAMES,  # noqa: F401, re-exported for convenience
+    DEFAULT_LINE_WAVELENGTHS,  # noqa: F401, re-exported for convenience
 )
 from tengri.utils.scale import whiten
 
@@ -114,7 +114,7 @@ def build_eline_design_matrix(
 
     Notes
     -----
-    **JIT-compatible**: yes — delegates to ``_build_eline_design_matrix_jitted``
+    **JIT-compatible**: yes, delegates to ``_build_eline_design_matrix_jitted``
     which is JIT-decorated. Differentiable w.r.t. all parameters.
 
     Each profile is normalized to unit integral (``int G_j dlam = 1``) to
@@ -168,7 +168,7 @@ def build_broad_design_matrix(
 
     Notes
     -----
-    **JIT-compatible**: yes — delegates to :func:`build_eline_design_matrix`
+    **JIT-compatible**: yes, delegates to :func:`build_eline_design_matrix`
     and is itself JIT-decorated. Differentiable w.r.t. all parameters.
 
     Used for modeling broad AGN emission lines (e.g., broad H-alpha, H-beta)
@@ -215,7 +215,7 @@ def apply_doublet_constraints(
 
     Notes
     -----
-    **JIT-compatible**: yes — pure matrix multiplication via ``jnp.dot``.
+    **JIT-compatible**: yes, pure matrix multiplication via ``jnp.dot``.
 
     Examples
     --------
@@ -262,7 +262,7 @@ def expand_constrained_amplitudes(
 
     Notes
     -----
-    **JIT-compatible**: yes — matrix multiplications via ``jnp.dot``.
+    **JIT-compatible**: yes, matrix multiplications via ``jnp.dot``.
 
     Examples
     --------
@@ -312,9 +312,9 @@ def marginalize_emission_lines(
 
     Notes
     -----
-    **JIT-compatible**: yes — all operations via ``jnp`` primitives.
+    **JIT-compatible**: yes, all operations via ``jnp`` primitives.
 
-    **Gradient-safe**: yes — differentiable everywhere w.r.t. ``residual``,
+    **Gradient-safe**: yes, differentiable everywhere w.r.t. ``residual``,
     ``noise``, and ``design_matrix``, in float32 as well as float64.
 
     **Numerical stability (#1206)**: the normal equations are assembled from
@@ -332,8 +332,8 @@ def marginalize_emission_lines(
     with :math:`\tilde r = r/\sigma`. At a real spectroscopic
     :math:`\sigma \sim 3\times10^{-30}` the quantity :math:`1/\sigma^2` is
     ~1e59, outside the float32 ceiling of 3.4e38, so the previous spelling
-    made every one of ``ln_L_marg``, ``a_hat`` and ``a_cov`` — and the
-    gradient — ``NaN``, contradicting the promise above. Identical in float64.
+    made every one of ``ln_L_marg``, ``a_hat`` and ``a_cov``, and the
+    gradient, ``NaN``, contradicting the promise above. Identical in float64.
 
     """
     n_lines = design_matrix.shape[1]
@@ -393,9 +393,9 @@ def predict_with_marginalized_lines(
 
     Notes
     -----
-    **JIT-compatible**: yes — matrix multiplication via ``jnp.dot``.
+    **JIT-compatible**: yes, matrix multiplication via ``jnp.dot``.
 
-    **Gradient-safe**: yes — fully differentiable.
+    **Gradient-safe**: yes, fully differentiable.
 
     """
     return model_continuum + design_matrix @ a_hat
@@ -447,7 +447,7 @@ def build_line_design_matrix(
 
     Notes
     -----
-    **JIT-compatible**: yes — delegates to :func:`build_eline_design_matrix` and
+    **JIT-compatible**: yes, delegates to :func:`build_eline_design_matrix` and
     :func:`build_broad_design_matrix`, which are JIT-decorated.
 
     If ``broad_wavelengths`` is ``None``, returns only the narrow-line portion.

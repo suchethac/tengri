@@ -30,7 +30,7 @@ _N_LINES = 39
 
 # Rest-frame wavelengths of Lyman series lines (Angstrom), vacuum.
 # Values match Inoue+2014 Table 2 / eazy-py LAFcoeff.txt exactly. The first
-# line is vacuum Lyman-alpha = 1215.67 Å (NOT 1216.0 — a rounded value put the
+# line is vacuum Lyman-alpha = 1215.67 Å (NOT 1216.0; a rounded value put the
 # forest edge ~0.33 Å rest / ~2.6 Å observed at z=7 redward of every other
 # code; see tests/regression/paper/test_igm_inoue.py).
 _LAMBDA_LYMAN = jnp.array(
@@ -81,7 +81,7 @@ _LAMBDA_LYMAN = jnp.array(
 _LAMBDA_LIMIT = 911.8  # Angstrom
 
 # ── LAF coefficients: A_j^LAF for 3 regimes (Inoue+2014 Eq. 21) ───
-# Shape: (39, 3) — [A_j1, A_j2, A_j3]
+# Shape (39, 3): [A_j1, A_j2, A_j3]
 # From eazy-py LAFcoeff.txt
 _A_LAF = jnp.array(
     [
@@ -128,7 +128,7 @@ _A_LAF = jnp.array(
 )
 
 # ── DLA coefficients: A_j^DLA for 2 regimes (Inoue+2014 Eq. 22) ───
-# Shape: (39, 2) — [A_j^DLA1 (power 2, lambda_obs < 3 lambda_j),
+# Shape (39, 2): [A_j^DLA1 (power 2, lambda_obs < 3 lambda_j),
 #                   A_j^DLA2 (power 3, lambda_obs >= 3 lambda_j)].
 # Values are Inoue+2014 (MNRAS 442, 1805) Table 2 columns A_DLA_J_1 /
 # A_DLA_J_2 verbatim (the same table eazy-py, BAGPIPES and Synthesizer
@@ -295,7 +295,7 @@ def _tau_lc_laf(
         t_low,
         jnp.where(z_source < z2, t_mid, t_high),
     )
-    # Gate on z_source > 0 — the analytic fit is defined as an integral
+    # Gate on z_source > 0: the analytic fit is defined as an integral
     # over (0, z_S] and is only ≈ 0 (not exactly 0) at z_S = 0. Physically
     # the path length vanishes at z=0, so transmission must be 1.
     in_range = in_range & (z_source > 0.0)
@@ -324,12 +324,12 @@ def _tau_lc_dla(
     # Floor r away from zero so r**-0.3 stays finite under jnp.where (gradient safety).
     r_safe = jnp.maximum(r, 1e-3)
 
-    # ── z_S < 2 — single observed-wavelength regime ──
+    # ── z_S < 2: single observed-wavelength regime ──
     t_low = (
         0.2113 * one_plus_zs**2.0 - 0.07661 * one_plus_zs**2.3 * r_safe ** (-0.3) - 0.1347 * r**2.0
     )
 
-    # ── z_S ≥ 2 — two sub-regimes split at wave_obs = lamL*(1+z1) ──
+    # ── z_S ≥ 2: two sub-regimes split at wave_obs = lamL*(1+z1) ──
     above_z1 = wave_obs >= lam_L * (1.0 + z1)
     t_hi_above = (
         0.04696 * one_plus_zs**3.0
@@ -346,7 +346,7 @@ def _tau_lc_dla(
     t_high = jnp.where(above_z1, t_hi_above, t_hi_below)
 
     tau = jnp.where(z_source < z1, t_low, t_high)
-    # Gate on z_source > 0 — the analytic fit is defined as an integral
+    # Gate on z_source > 0: the analytic fit is defined as an integral
     # over (0, z_S] and is only ≈ 0 (not exactly 0) at z_S = 0. Physically
     # the path length vanishes at z=0, so transmission must be 1.
     in_range = in_range & (z_source > 0.0)
@@ -408,10 +408,10 @@ def _cgm_damping_wing_tau(
     :mod:`tengri.components.igm.dla`. The previous implementation used a flat
     Lorentzian with a numerical constant that was ~10⁹ too small.
 
-    **Upstream**: Asada et al. (2025), ApJL 983, L2 — column-density evolution;
-    Totani et al. (2006), PASJ 58, 485 — Lyα cross-section.
+    **Upstream**: Asada et al. (2025), ApJL 983, L2, column-density evolution;
+    Totani et al. (2006), PASJ 58, 485; Lyα cross-section.
     """
-    # Column-density evolution N_HI(z) — paper sigmoid by default; legacy form
+    # Column-density evolution N_HI(z): paper sigmoid by default; legacy form
     # if the user supplies any of the (z_mid, dz, log_nhi) knobs.
     if z_mid is not None or dz is not None or log_nhi is not None:
         z_mid_eff = 7.0 if z_mid is None else z_mid
@@ -494,9 +494,9 @@ def igm_transmission(
 
     Notes
     -----
-    **JIT-compatible**: yes — all operations are ``jnp`` primitives, fully vectorized over wavelength.
+    **JIT-compatible**: yes, all operations are ``jnp`` primitives, fully vectorized over wavelength.
 
-    **Gradient-safe**: yes — differentiable everywhere via :math:`\exp(-\tau)` (no discontinuities).
+    **Gradient-safe**: yes, differentiable everywhere via :math:`\exp(-\tau)` (no discontinuities).
 
     The total IGM optical depth is:
 
@@ -645,7 +645,7 @@ def _damping_wing_tau(
     # offset v_bubble = R_bubble * H(z), hence a wavelength offset
     # x_bubble = v_bubble / c.
     # H(z) = H_0 * sqrt(Omega_m * (1+z)^3) for matter-dominated era
-    # Use canonical PLANCK18 cosmology — sourced from tengri.cosmology
+    # Use canonical PLANCK18 cosmology: sourced from tengri.cosmology
     # (Planck 2020, A&A 641, A6: h = 0.6766, Om0 = 0.30966).
     h_z_kms_per_mpc = 100.0 * PLANCK18.h * jnp.sqrt(PLANCK18.Om0 * (1.0 + z) ** 3)
     v_bubble = R_bubble * h_z_kms_per_mpc  # km/s
@@ -834,7 +834,7 @@ def igm_transmission_madau(
 
     Notes
     -----
-    **JIT-compatible**: yes — pure ``jnp`` operations with ``jax.lax.scan``
+    **JIT-compatible**: yes, pure ``jnp`` operations with ``jax.lax.scan``
     for the line summation.
 
     **Line opacity formula**: The optical depth from each Lyman-series line is:
@@ -935,7 +935,7 @@ def igm_transmission_asada25(wave_obs: jnp.ndarray, z: float, **kwargs: object) 
 
     Notes
     -----
-    **JIT-compatible**: yes — delegates to :func:`igm_transmission`.
+    **JIT-compatible**: yes, delegates to :func:`igm_transmission`.
     """
     del kwargs
     return igm_transmission(wave_obs, z, add_cgm=True)
@@ -947,7 +947,7 @@ IGM_TRANSMISSION_MODELS: dict[str, object] = {
     # Added by #446 (CIGALE-matching IGM) but #343's refactor missed wiring
     # this into the canonical registry; the dict-grammar validator and
     # builder factory both accepted ``"meiksin06"`` while
-    # ``IGM_TRANSMISSION_MODELS`` and ``resolve_igm_model`` did not — exactly
+    # ``IGM_TRANSMISSION_MODELS`` and ``resolve_igm_model`` did not: exactly
     # the kind of drift the parity contract test was added to catch.
     "meiksin06": igm_transmission_meiksin06,
     # Inoue+2014 + Asada+2025 CGM damping wing, as its own model so new CGM
@@ -1004,7 +1004,7 @@ def igm_absorption(
     dla_temp: float = 1e4,
     dla_b_turb: float = 0.0,
 ) -> jnp.ndarray:
-    r"""Total observed-frame absorption — the single flat dispatch.
+    r"""Total observed-frame absorption: the single flat dispatch.
 
     Composes the observed-frame transmission from a *mean-IGM model* and
     optional *modifiers*, and is the ONE call every observed-frame consumer
@@ -1020,7 +1020,7 @@ def igm_absorption(
       see it rather than only ``predict_obs_sed``.
 
     New CGM prescriptions are added as new *registry models* (like
-    ``asada25``), not flags — keeping the per-model dispatch flat.
+    ``asada25``), not flags: keeping the per-model dispatch flat.
 
     Parameters
     ----------
@@ -1052,7 +1052,7 @@ def igm_absorption(
     **JIT-compatible**: yes. ``igm_patchy`` / ``use_dla`` are static structural
     flags, so their branches resolve at trace time. The absorber knobs
     (``igm_x_HI``, ``igm_bubble_mpc``, ``dla_*``) are runtime values that may be
-    traced free parameters — they must never gate a Python branch. At
+    traced free parameters: they must never gate a Python branch. At
     ``igm_x_HI = 0`` the patchy path reduces bit-for-bit to the mean-IGM model.
     """
     if igm_model in ("none", None):
@@ -1062,7 +1062,7 @@ def igm_absorption(
     elif igm_patchy:
         # ``igm_patchy`` is a static structural flag, so this branch resolves at
         # trace time. ``igm_x_HI`` is a (possibly free) param and therefore a
-        # tracer under jit — it must NOT gate the branch. Guarding on it with
+        # tracer under jit: it must NOT gate the branch. Guarding on it with
         # ``and igm_x_HI > 0.0`` raised TracerBoolConversionError on every path
         # (#1149). The guard was also redundant: the damping-wing optical depth
         # scales linearly with ``x_HI``, so ``igm_transmission_patchy`` reduces

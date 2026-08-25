@@ -88,7 +88,7 @@ def _build_grid_grahsp(
     Structural selectors (``torus_model``, ``feii_template``, ``disc_model``,
     ``disc_*``) and the non-axis continuous parameters (``a_bc``, ``tor_temp``,
     ``tor_cutoff_um``, ...) are held fixed at the supplied values for the whole
-    grid — exactly as the other non-axis GRAHSP parameters are. Pass them so a
+    grid: exactly as the other non-axis GRAHSP parameters are. Pass them so a
     ``WavePrecomp`` build of a non-default variant (e.g. ``torus_model="mn12"``)
     pre-integrates the *correct* SED rather than silently defaulting.
     """

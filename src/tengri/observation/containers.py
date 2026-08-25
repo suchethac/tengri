@@ -7,7 +7,7 @@ constraints, spectral-index measurements, noise models, the :class:`Instrument`
 bundle, and the top-level :class:`Observation` composite.
 
 The flat ``tengri.observation.X`` and top-level ``tengri.X`` import paths
-remain valid — this module is an *additive* sub-namespace that surfaces
+remain valid, this module is an *additive* sub-namespace that surfaces
 the same container objects under a focused, browseable name.
 
 Examples

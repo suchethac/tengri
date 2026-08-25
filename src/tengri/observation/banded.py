@@ -34,7 +34,7 @@ import jax
 import jax.numpy as jnp
 import numpy as np
 
-# Speed of light and Gaussian FWHM conversion — mirror observation/spectrum.py
+# Speed of light and Gaussian FWHM conversion, mirror observation/spectrum.py
 # so the banded Gaussian LSF matches apply_lsf exactly.
 _C_KM_S = 299792.458  # km/s
 _FWHM_TO_SIGMA = 2.354820045030949  # 2 * sqrt(2 * ln(2))
@@ -69,7 +69,7 @@ def banded_matvec(offsets: jnp.ndarray, data: jnp.ndarray, x: jnp.ndarray) -> jn
     Parameters
     ----------
     offsets : array_like, shape (K,)
-        Integer diagonal offsets (static — baked into the trace).
+        Integer diagonal offsets (static, baked into the trace).
     data : array_like, shape (K, n)
         Diagonal values.
     x : array_like, shape (n,)
@@ -82,7 +82,7 @@ def banded_matvec(offsets: jnp.ndarray, data: jnp.ndarray, x: jnp.ndarray) -> jn
 
     Notes
     -----
-    JIT-compatible: yes. Gradient-safe: yes — linear in ``x`` and in ``data``.
+    JIT-compatible: yes. Gradient-safe: yes, linear in ``x`` and in ``data``.
     Cost is ``O(n * K)`` via a gather, not the dense ``O(n^2)`` product.
     """
     n = x.shape[0]
@@ -116,7 +116,7 @@ def resolution_bands_from_desi(diag_data: jnp.ndarray, offsets: jnp.ndarray) -> 
 
     Notes
     -----
-    Build-time helper (offsets are static). No mutation of inputs — a rolled
+    Build-time helper (offsets are static). No mutation of inputs, a rolled
     copy is returned. See Bolton & Schlegel 2010 [1]_ for the resolution-matrix
     representation and Guy et al. 2023 [2]_ for the DESI per-camera (b/r/z)
     storage.
@@ -143,7 +143,7 @@ def block_diagonal_bands(blocks: Sequence[BandedMatrix]) -> BandedMatrix:
     Multi-arm spectrographs deliver one resolution operator per camera, each on
     its own pixel grid (DESI b/r/z; Guy et al. 2023 [2]_). Concatenating the
     camera grids in camera order gives a single pixel vector, and the resolution
-    operator over that vector is block diagonal — camera :math:`m` occupying rows
+    operator over that vector is block diagonal, camera :math:`m` occupying rows
     and columns :math:`[s_m, s_m + n_m)`:
 
     .. math::
@@ -177,7 +177,7 @@ def block_diagonal_bands(blocks: Sequence[BandedMatrix]) -> BandedMatrix:
     -----
     Build-time helper (NumPy; offsets are static). JIT-compatible: the returned
     operator is consumed by :func:`banded_matvec`, which is. Gradient-safe: yes
-    — the composition is a rearrangement of the block data.
+    the composition is a rearrangement of the block data.
 
     Zeroing the cross-boundary reach is done here rather than inherited from the
     blocks: :func:`resolution_bands_from_desi` already zeroes its own edges, but
@@ -223,7 +223,7 @@ def gaussian_resolution_bands(wave_obs: jnp.ndarray, resolution, n_diag: int = 1
     (:math:`\sigma_v = c / (\mathrm{FWHM} \cdot R)`,
     :math:`\sigma_{\mathrm{pix}} = (\sigma_v / c) / \Delta\ln\lambda`),
     truncated to ``n_diag`` diagonals. Provided so the banded operator can be
-    validated against — and can subsume — the Gaussian ``apply_lsf`` path, and
+    validated against (and can subsume) the Gaussian ``apply_lsf`` path, and
     as an explicit-matrix fallback for instruments that publish only a
     scalar/array ``R``.
 
@@ -262,7 +262,7 @@ def gaussian_resolution_bands(wave_obs: jnp.ndarray, resolution, n_diag: int = 1
     # An explicit banded operator can carry a position-dependent pixel scale, so
     # unlike the FFT path it is exact on a linearly-spaced grid without any
     # resampling; np.gradient reduces to the constant on a log-uniform one. A
-    # single global scale under-broadened by wave[0]/lambda — the #1791 defect,
+    # single global scale under-broadened by wave[0]/lambda, the #1791 defect,
     # which reached here as well.
     dlnwave = np.gradient(np.log(wave))  # (n,)
     sigma_pix = (_C_KM_S / (_FWHM_TO_SIGMA * R)) / _C_KM_S / dlnwave  # (n,)

@@ -3,22 +3,22 @@
 
 A `SEDModel` is a list of physics blocks (stellar, dust, nebular, AGN,
 radio, X-ray, IGM, …) evaluated in order. Each block reads and writes
-a typed bag of derived quantities — `ForwardState.derived`, a
-:class:`DerivedState` — so a stellar block can publish ``L_uv`` for a
+a typed bag of derived quantities: `ForwardState.derived`, a
+:class:`DerivedState`; so a stellar block can publish ``L_uv`` for a
 downstream dust block to read.
 
 The objects defined here are the small, stable surface that physics
 components target:
 
 - :class:`SEDComponent`: the protocol every physics block satisfies.
-- :class:`ForwardState`, :class:`DerivedState` — the typed bags that
+- :class:`ForwardState`, :class:`DerivedState`: the typed bags that
   flow between components.
-- :class:`DerivedKey`, :class:`ParamDeclaration` — the labels a
+- :class:`DerivedKey`, :class:`ParamDeclaration`: the labels a
   component uses to declare its inputs, outputs, and free parameters.
-- :class:`Likelihood`, :class:`ObservationModel` — analogous shapes
+- :class:`Likelihood`, :class:`ObservationModel`: analogous shapes
   for the observation layer.
 - :class:`ComponentIOError` (alias :data:`PipelineContractError`,
-  deprecated) — raised when one block's declared inputs disagree with
+  deprecated); raised when one block's declared inputs disagree with
   what an upstream block publishes.
 
 See ``docs/architecture/`` and the in-tree ADRs for the wider design.

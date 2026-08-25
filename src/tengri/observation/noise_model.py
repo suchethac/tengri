@@ -80,7 +80,7 @@ class NoiseModel:
                 if isinstance(elem, Distribution):
                     msg = (
                         "per-band free floor (array of Distributions) is out of scope "
-                        "— only scalar or array of numeric values are supported"
+                        "only scalar or array of numeric values are supported"
                     )
                     raise TypeError(msg)
 

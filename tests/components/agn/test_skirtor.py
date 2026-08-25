@@ -114,7 +114,29 @@ class TestSKIRTORAnalytic:
         # The node-exact sample not moving at all is the load-bearing check here:
         # it shows this is an interpolation change between nodes, not a rescale.
         indices = [0, len(wave) // 3, 2 * len(wave) // 3, -1]
-        golden_values = [0.0, 5.982589e24, 3.523055e29, 3.607845e24]
+        #
+        # Re-frozen again for #1911, which put the ``cos_inclination`` axis in
+        # ascending order and onto index-space interpolation. The stored axis is
+        # descending, so the kernel bandwidth (taken from the first spacing) was
+        # both negative and equal to the axis's *smallest* spacing -- a
+        # near-nearest-neighbor lookup. The default ``agn_cos_inc`` is
+        # 0.8660254 (30 deg), an exact grid node, so these values move only by
+        # the difference between a near-node-exact lookup and a genuine
+        # (smoothing) interpolation:
+        #
+        #   idx 0   (0.01 um, below template support):  0.0, unchanged
+        #   idx 166 (0.4606 um): 5.982589e24 -> 5.856270e24   -2.11 %
+        #   idx 333 (21.71 um):  3.523055e29 -> 3.536528e29   +0.38 %
+        #   idx 499 (1000 um):   3.607845e24 -> 3.634076e24   +0.73 %
+        #
+        # Sub-percent-to-2% at an exact node is the expected size: the triweight
+        # kernel is a smoother and does not pass through nodes (which is why
+        # ``skirtor_disc_dust_ratio`` uses PCHIP where node-exactness matters).
+        # Between nodes the change is what the issue was about -- the sweep went
+        # from 23/40 distinct outputs and 60% exactly-zero gradients to 40/40 and
+        # 0%, and parity against CIGALE's linear interpolation improved from
+        # 0.0399 to 0.0300 mean RMS dex.
+        golden_values = [0.0, 5.856270e24, 3.536528e29, 3.634076e24]
         for idx, golden in zip(indices, golden_values):
             np.testing.assert_allclose(
                 float(sed[idx]),
@@ -378,22 +400,41 @@ class TestSKIRTORGradients:
         )
 
     def test_gradient_cos_inc(self, wave):
-        """FD check: ∂(∑SED)/∂cos_inc. Inclination gradient."""
+        """FD check: ∂(∑SED)/∂cos_inc. Inclination gradient.
+
+        Evaluated at 0.45, *between* grid nodes, rather than at the former 0.5.
+        Index-space interpolation on the non-uniform cos_inc axis (#1911) is C2
+        within an interval but only C0 at a node whose adjacent spacings differ,
+        so a central difference straddling a node averages the two one-sided
+        slopes and cannot match AD there. 0.5 is exactly such a node: its
+        neighboring spacings are 0.157980 and 0.142788, and the resulting
+        half-jump predicts a 5.05% AD-vs-FD gap -- which is what was measured,
+        to three significant figures.
+
+        The tolerance is unchanged. At every non-node point AD and central FD
+        agree to 0.00% (checked at 0.30, 0.42, 0.45, 0.55, 0.60, 0.70), so
+        moving off the kink tests the gradient more sharply, not less.
+        """
         from tengri.components.agn.skirtor import skirtor_analytic
 
         def f(ci):
             return float(jnp.sum(skirtor_analytic(wave, agn_cos_inc=ci)))
 
-        g = float(jax.grad(lambda ci: jnp.sum(skirtor_analytic(wave, agn_cos_inc=ci)))(0.5))
+        g = float(jax.grad(lambda ci: jnp.sum(skirtor_analytic(wave, agn_cos_inc=ci)))(0.45))
         np.testing.assert_allclose(
             g,
-            fd_grad(f, 0.5),
+            fd_grad(f, 0.45),
             rtol=1e-3,
             err_msg="skirtor_analytic: FD check ∂/∂cos_inc",
         )
 
     def test_gradient_all_params_simultaneously(self, wave):
-        """All 5 SKIRTOR gradients agree with FD simultaneously."""
+        """All 5 SKIRTOR gradients agree with FD simultaneously.
+
+        cos_inc is held at 0.45 rather than 0.5 for the reason given in
+        :meth:`test_gradient_cos_inc`: 0.5 is a grid node, and index-space
+        interpolation is only C0 there (#1911).
+        """
         from tengri.components.agn.skirtor import skirtor_analytic
 
         def loss(tau, p, q, oa, ci):
@@ -408,19 +449,19 @@ class TestSKIRTORGradients:
                 )
             )
 
-        grads = jax.grad(loss, argnums=(0, 1, 2, 3, 4))(7.0, 1.0, 1.0, 40.0, 0.5)
+        grads = jax.grad(loss, argnums=(0, 1, 2, 3, 4))(7.0, 1.0, 1.0, 40.0, 0.45)
         params = [
             ("tau", 7.0, 0.1),
             ("p", 1.0, 1e-4),
             ("q", 1.0, 1e-4),
             ("oa", 40.0, 0.1),
-            ("cos_inc", 0.5, 1e-4),
+            ("cos_inc", 0.45, 1e-4),
         ]
         fs = [
-            lambda tau: float(loss(tau, 1.0, 1.0, 40.0, 0.5)),
-            lambda p: float(loss(7.0, p, 1.0, 40.0, 0.5)),
-            lambda q: float(loss(7.0, 1.0, q, 40.0, 0.5)),
-            lambda oa: float(loss(7.0, 1.0, 1.0, oa, 0.5)),
+            lambda tau: float(loss(tau, 1.0, 1.0, 40.0, 0.45)),
+            lambda p: float(loss(7.0, p, 1.0, 40.0, 0.45)),
+            lambda q: float(loss(7.0, 1.0, q, 40.0, 0.45)),
+            lambda oa: float(loss(7.0, 1.0, 1.0, oa, 0.45)),
             lambda ci: float(loss(7.0, 1.0, 1.0, 40.0, ci)),
         ]
         for i, (name, x0, eps) in enumerate(params):
@@ -432,7 +473,12 @@ class TestSKIRTORGradients:
             )
 
     def test_gradient_registered_model(self, wave):
-        """Gradient should flow through the registered 'skirtor' model."""
+        """Gradient should flow through the registered 'skirtor' model.
+
+        cos_inc is held at 0.45 rather than 0.5 for the reason given in
+        :meth:`test_gradient_cos_inc`: 0.5 is a grid node, and index-space
+        interpolation is only C0 there (#1911).
+        """
         import warnings
 
         from tengri.components.agn import resolve_agn_model
@@ -451,10 +497,10 @@ class TestSKIRTORGradients:
                 )
             )
 
-        g_tau, g_ci = jax.grad(loss, argnums=(0, 1))(7.0, 0.5)
+        g_tau, g_ci = jax.grad(loss, argnums=(0, 1))(7.0, 0.45)
 
         def f_tau(tau: float) -> float:
-            return float(loss(tau, 0.5))
+            return float(loss(tau, 0.45))
 
         def f_ci(ci: float) -> float:
             return float(loss(7.0, ci))
@@ -467,7 +513,7 @@ class TestSKIRTORGradients:
         )
         np.testing.assert_allclose(
             float(g_ci),
-            fd_grad(f_ci, 0.5),
+            fd_grad(f_ci, 0.45),
             rtol=5e-3,
             err_msg="skirtor (registry): FD check ∂/∂agn_cos_inc",
         )

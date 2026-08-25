@@ -11,7 +11,7 @@ Implements §2.1.4 of Buchner+ 2024 (arXiv:2405.19297):
   support.
 - ``ratioTORBBB``: ``lumBolTOR / lumBolBBB``.
 - ``fracAGNDale``: AGN luminosity fraction in the 5-20 um range relative to
-  the *total* (AGN + galaxy) luminosity in the same band — following
+  the *total* (AGN + galaxy) luminosity in the same band: following
   Dale+ 2014 ApJ 784, 83.
 - ``fracAGNTOR``: ``lumBolTOR / L_galaxy_bolometric``.
 
@@ -36,7 +36,7 @@ __all__ = [
 ]
 
 LYMAN_LIMIT_NM: float = 91.2
-"""Lyman limit at 91.2 nm — lower bound for ``lumBolBBB`` integration."""
+"""Lyman limit at 91.2 nm: lower bound for ``lumBolBBB`` integration."""
 
 
 def _trapz_above(
@@ -50,7 +50,7 @@ def _trapz_above(
     integrand = jnp.where(mask, L_lambda, 0.0)
     try:
         return jnp.trapezoid(integrand, wave_nm)
-    except AttributeError:  # pragma: no cover — older jax
+    except AttributeError:  # pragma: no cover: older jax
         return jnp.trapz(integrand, wave_nm)
 
 
@@ -75,7 +75,7 @@ def bolometric_luminosity_bbb(
     Notes
     -----
     JIT-compatible. The far-UV/X-ray contribution below 91.2 nm is
-    deliberately excluded — see paper §2.1.4: that band is rarely observed
+    deliberately excluded; see paper §2.1.4: that band is rarely observed
     and a model-dependent correction is left to the user.
     """
     return _trapz_above(jnp.asarray(wave_nm), jnp.asarray(L_lambda_bbb_total), LYMAN_LIMIT_NM)

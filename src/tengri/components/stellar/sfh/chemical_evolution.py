@@ -80,7 +80,7 @@ def closed_box_metallicity(
 
     Notes
     -----
-    **JIT-compatible**: yes — all operations use ``jnp`` primitives.
+    **JIT-compatible**: yes, all operations use ``jnp`` primitives.
 
     The closed-box and leaky-box chemical evolution models compute metallicity
     from the integrated SFR history:
@@ -214,7 +214,7 @@ def closed_box_metallicity_anchored(
 
     Notes
     -----
-    **JIT-compatible**: yes — uses ``jnp`` primitives throughout.
+    **JIT-compatible**: yes, uses ``jnp`` primitives throughout.
 
     The effective yield is computed from the target metallicity and the
     implied gas fraction at the final time step.
@@ -298,7 +298,7 @@ def chem_evol_metallicity_on_ssp_grid(
 
     Notes
     -----
-    **JIT-compatible**: yes — all operations use ``jnp`` primitives.
+    **JIT-compatible**: yes, all operations use ``jnp`` primitives.
     """
     # Convert log-age grid to linear years
     age_yr = 10.0**log_age_grid

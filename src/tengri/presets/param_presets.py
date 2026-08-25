@@ -8,12 +8,12 @@ modeling or inference. It is the surface consumed by :class:`tengri.Galaxy`
 (``Galaxy.from_arrays(preset=...)``) via :func:`resolve_preset`.
 
 For new code prefer the nested-dict grammar recipes in :mod:`tengri.recipes`
-(``SEDModel.build(**recipes.high_z())``) — the ``high_z`` and ``photoz``
+(``SEDModel.build(**recipes.high_z())``): the ``high_z`` and ``photoz``
 recipes are grammar implementations of the presets here.
 
 .. note::
     Relocated from the former top-level ``tengri/presets.py`` module (2026-07),
-    which had been silently shadowed — and made unreachable — by this
+    which had been silently shadowed (and made unreachable) by this
     ``tengri.presets`` package since the package landed.
 
 Usage
@@ -91,11 +91,11 @@ def starforming(redshift: float | None = None) -> tuple[Parameters, SEDModelConf
     Returns
     -------
     tuple[Parameters, SEDModelConfig]
-        (params, config) — fully configured Parameter spec and model settings.
+        (params, config); fully configured Parameter spec and model settings.
 
     Notes
     -----
-    **JIT-compatible**: no — returns configuration objects, not arrays.
+    **JIT-compatible**: no, returns configuration objects, not arrays.
 
     **Physics:**
 
@@ -174,11 +174,11 @@ def quiescent(redshift: float | None = None) -> tuple[Parameters, SEDModelConfig
     Returns
     -------
     tuple[Parameters, SEDModelConfig]
-        (params, config) — fully configured Parameter spec and model settings.
+        (params, config); fully configured Parameter spec and model settings.
 
     Notes
     -----
-    **JIT-compatible**: no — returns configuration objects, not arrays.
+    **JIT-compatible**: no, returns configuration objects, not arrays.
 
     **Physics:**
 
@@ -254,11 +254,11 @@ def high_z(redshift: float | None = None) -> tuple[Parameters, SEDModelConfig]:
     Returns
     -------
     tuple[Parameters, SEDModelConfig]
-        (params, config) — fully configured Parameter spec and model settings.
+        (params, config); fully configured Parameter spec and model settings.
 
     Notes
     -----
-    **JIT-compatible**: no — returns configuration objects, not arrays.
+    **JIT-compatible**: no, returns configuration objects, not arrays.
 
     **Physics:**
 
@@ -338,11 +338,11 @@ def photoz(redshift: float | None = None) -> tuple[Parameters, SEDModelConfig]:
     Returns
     -------
     tuple[Parameters, SEDModelConfig]
-        (params, config) — fully configured Parameter spec and model settings.
+        (params, config); fully configured Parameter spec and model settings.
 
     Notes
     -----
-    **JIT-compatible**: no — returns configuration objects, not arrays.
+    **JIT-compatible**: no, returns configuration objects, not arrays.
 
     **Physics:**
 
@@ -418,11 +418,11 @@ def jwst_spec(redshift: float | None = None) -> tuple[Parameters, SEDModelConfig
     Returns
     -------
     tuple[Parameters, SEDModelConfig]
-        (params, config) — fully configured Parameter spec and model settings.
+        (params, config); fully configured Parameter spec and model settings.
 
     Notes
     -----
-    **JIT-compatible**: no — returns configuration objects, not arrays.
+    **JIT-compatible**: no, returns configuration objects, not arrays.
 
     **Physics:**
 
@@ -506,11 +506,11 @@ def agn_host(redshift: float | None = None) -> tuple[Parameters, SEDModelConfig]
     Returns
     -------
     tuple[Parameters, SEDModelConfig]
-        (params, config) — fully configured Parameter spec and model settings.
+        (params, config); fully configured Parameter spec and model settings.
 
     Notes
     -----
-    **JIT-compatible**: no — returns configuration objects, not arrays.
+    **JIT-compatible**: no, returns configuration objects, not arrays.
 
     **Physics:**
 
@@ -633,7 +633,7 @@ def describe(name: str) -> str:
 
     Notes
     -----
-    **JIT-compatible**: no — returns formatted string.
+    **JIT-compatible**: no; returns formatted string.
 
     Lookup resolution uses the same path as :func:`tengri.describe` (issue #1611),
     so a name cannot resolve in one surface and not the other.

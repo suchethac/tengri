@@ -86,7 +86,7 @@ def collapse_fixed_axes(
     preint_out : PreintegratedGrid or PreintegratedLines
         The collapsed grid, or ``preint`` unchanged when nothing collapsed.
     remaining_axes : tuple
-        Axes surviving the collapse, in order — the axes a runtime lookup must
+        Axes surviving the collapse, in order, the axes a runtime lookup must
         still be queried at. Equal to ``preint_out.axes``.
     collapsed : dict[int, float]
         Axis index to the value it was collapsed at, empty when nothing
@@ -110,11 +110,11 @@ def collapse_fixed_axes(
         grid's array rank disagrees with its axis count, and a collapse was
         about to happen. Both make the positional axis index meaningless, and
         contracting the wrong axis is a silently wrong SED rather than a
-        crash — so this refuses instead of proceeding.
+        crash, so this refuses instead of proceeding.
 
     Notes
     -----
-    **JIT-compatible**: no — build-time orchestration over NumPy/host values.
+    **JIT-compatible**: no, build-time orchestration over NumPy/host values.
 
     This replaced a byte-identical block copied into eleven precompute modules
     (issue #1738). The duplication is why the mismatch checks above did not
@@ -176,7 +176,7 @@ def _check_axis_alignment(
     ``collapse_fixed_axes`` maps a name's position in ``axis_params`` straight
     onto an axis index, and :func:`slice_fixed_axes` contracts that axis. If the
     two disagree the contraction still succeeds whenever the shapes happen to
-    line up, and returns an SED built from the wrong axis — no exception, no NaN.
+    line up, and returns an SED built from the wrong axis, no exception, no NaN.
     """
     n_axes = len(preint.axes)
     if len(axis_params) != n_axes:
@@ -195,7 +195,7 @@ def _check_axis_alignment(
                 f"{origin}: the preintegrated grid carries {n_axes} axes "
                 f"{list(axis_params)} but its photometry array has "
                 f"{n_grid_dims} grid dimensions. Collapsing axis i would "
-                f"contract a different array dimension — for the last declared "
+                f"contract a different array dimension, for the last declared "
                 f"axis, the filter dimension itself (#1738)."
             )
 
@@ -292,7 +292,7 @@ def build_template_photometry_lookup(preint: PreintegratedGrid):
 
     Notes
     -----
-    **JIT-compatible**: yes — returned function uses triweight interpolation via
+    **JIT-compatible**: yes, returned function uses triweight interpolation via
     ``interp_nd_triweight``, providing C²-continuous gradients for inference.
     """
     phot = preint.phot
@@ -317,7 +317,7 @@ def build_template_photometry_lookup(preint: PreintegratedGrid):
 
         Notes
         -----
-        **JIT-compatible**: yes — uses ``jnp`` and ``interp_nd_triweight`` primitives.
+        **JIT-compatible**: yes, uses ``jnp`` and ``interp_nd_triweight`` primitives.
         """
         normed = interp_nd_triweight(phot, axes, edges, grid_params)
         return scale * normed

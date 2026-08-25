@@ -17,7 +17,7 @@ from typing import TYPE_CHECKING
 
 import jax.numpy as jnp
 
-if TYPE_CHECKING:  # annotation only — see the local import in list_laws (#843)
+if TYPE_CHECKING:  # annotation only; see the local import in list_laws (#843)
     from tengri.registry import _RegistryTable
 
 # ── Attenuation law catalog ─────────────────────────────────────
@@ -41,7 +41,7 @@ class DustLawRegistryEntry:
 
     Notes
     -----
-    **JIT-compatible**: no — dataclass for registry initialization.
+    **JIT-compatible**: no, dataclass for registry initialization.
 
     """
 
@@ -90,7 +90,7 @@ def register_dust_law(
 
     Notes
     -----
-    **JIT-compatible**: no — registration happens at factory time before JIT.
+    **JIT-compatible**: no, registration happens at factory time before JIT.
 
     Decorated functions must implement the ``DustAttenuationLaw`` protocol:
     accept a wavelength array and keyword arguments, returning an attenuation
@@ -146,7 +146,7 @@ def resolve_dust_law(name: str) -> Callable:
 
     Notes
     -----
-    **JIT-compatible**: no — registry lookup happens at factory time.
+    **JIT-compatible**: no, registry lookup happens at factory time.
 
     The returned function matches the ``DustAttenuationLaw`` protocol and can
     be called with wavelengths and law-specific parameters.
@@ -251,7 +251,7 @@ def _drude_profile(
 
     Notes
     -----
-    **JIT-compatible**: yes — all operations are ``jnp`` primitives.
+    **JIT-compatible**: yes, all operations are ``jnp`` primitives.
 
     The Drude profile is:
 
@@ -296,7 +296,7 @@ def _calzetti_l02_kprime(wavelength: jnp.ndarray) -> jnp.ndarray:
 
     Notes
     -----
-    **JIT-compatible**: yes — all operations are ``jnp`` primitives.
+    **JIT-compatible**: yes, all operations are ``jnp`` primitives.
 
     Uses piecewise polynomials following Leitherer et al. (2002) and Calzetti et al. (2000).
     The transition occurs at 0.18 μm (1800 Å), matching the standalone ``dust_attenuation.averages.L02`` model.
@@ -348,7 +348,7 @@ def _calzetti_kprime_unnormalized(wavelength: jnp.ndarray) -> jnp.ndarray:
 
     Notes
     -----
-    **JIT-compatible**: yes — all operations are ``jnp`` primitives.
+    **JIT-compatible**: yes, all operations are ``jnp`` primitives.
 
     Uses piecewise polynomials following Calzetti et al. (2000).
     This is a pure polynomial evaluation with no normalization applied.

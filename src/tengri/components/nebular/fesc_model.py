@@ -49,7 +49,7 @@ def compute_uv_slope(
 
     Notes
     -----
-    **JIT-compatible**: yes — uses ``jnp`` operations and masking (no Python
+    **JIT-compatible**: yes, uses ``jnp`` operations and masking (no Python
     conditionals on traced values).
 
     **Power law conversion** (Buat et al. 1989, Meurer et al. 1999):
@@ -149,7 +149,7 @@ def fesc_chisholm2022(
 
     Notes
     -----
-    **JIT-compatible**: yes — all operations use ``jnp`` primitives.
+    **JIT-compatible**: yes, all operations use ``jnp`` primitives.
 
     **Parametric form** (Chisholm et al. 2022, §4.2, Eq. 4):
 

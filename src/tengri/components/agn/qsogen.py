@@ -121,8 +121,8 @@ _LAMBDA_BB_ANCHOR = 20000.0  # 2 um in Angstrom
 # Short-wavelength floor of the disc continuum [Angstrom]. QSOgen is an
 # empirical template with no X-ray physics; its broken power law would
 # otherwise extrapolate unbounded into the X-ray and double-count with the
-# alpha_ox corona. 124 A = 0.1 keV is the corona's blue edge — the exact
-# ``wavelength < 124.0`` band used in components/xray/xray.py — so the disc
+# alpha_ox corona. 124 A = 0.1 keV is the corona's blue edge, the exact
+# ``wavelength < 124.0`` band used in components/xray/xray.py: so the disc
 # owns lambda >= 124 A (optical/UV/EUV) and the corona owns lambda < 124 A
 # (0.1-10 keV) with no overlap. See issue #1113.
 _XRAY_FLOOR_LAMBDA_AA = 124.0
@@ -423,7 +423,7 @@ def _balmer_continuum(
     b_nu_wav = wavelength ** (-3.0) / (jnp.exp(x_clip) - 1.0)
 
     # Optical depth: sigma_bf(nu) ~ nu^{-3} (Osterbrock & Ferland, AGN^2 Eq. 2.4), so
-    # tau(lambda) = tau_BE * (lambda_BE / lambda)^3 — tau INCREASES at shorter wavelengths
+    # tau(lambda) = tau_BE * (lambda_BE / lambda)^3: tau INCREASES at shorter wavelengths
     # (higher frequencies), reaching tau_BE at the Balmer edge and falling beyond.
     tau = taube * (wavbe / wavelength) ** 3
     tau_clip = jnp.clip(tau, 0.0, 50.0)
@@ -752,7 +752,7 @@ def compute_qsogen_sed(
 
     Notes
     -----
-    **JIT-compatible**: yes — uses ``jnp`` primitives and smooth sigmoid
+    **JIT-compatible**: yes, uses ``jnp`` primitives and smooth sigmoid
     transitions.
 
     The emission line template is loaded from disk at module import time
@@ -799,7 +799,7 @@ def qsogen(
     agn_bcnorm: float = 0.0,
     **_kwargs,
 ) -> jnp.ndarray:
-    """QSOgen quasar SED (Temple+2021) — registered model entry point.
+    """QSOgen quasar SED (Temple+2021): registered model entry point.
 
     Thin wrapper around ``compute_qsogen_sed`` matching the AGN_MODELS registry
     signature: ``fn(wavelength, agn_log_lbol, **kwargs) -> L_nu``.

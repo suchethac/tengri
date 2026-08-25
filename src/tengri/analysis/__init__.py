@@ -5,13 +5,13 @@
 import time. The attribute used to exist only as a side effect: ``tengri``'s own
 ``__init__`` did ``from tengri.analysis.plotting import (...)``, which binds the
 submodule on its parent package as a by-product of importing it. Making that
-import lazy — so ``import tengri`` no longer drags in matplotlib — removed the
+import lazy (so ``import tengri`` no longer drags in matplotlib) removed the
 side effect along with the cost, and ``tengri.analysis.plotting.setup_style()``
 began raising ``AttributeError``.
 
 That idiom is not incidental: ``examples/_STYLE.md`` prescribes it and 280 of
 the gallery scripts use it. The break was also **order-dependent**, which is
-why CI did not catch it — the gallery runner executes every example in one
+why CI did not catch it; the gallery runner executes every example in one
 process, so any earlier example that touched ``tengri.plot_sed_fit`` imported the
 submodule and bound the attribute for the rest of the run. Running the affected
 example alone is what surfaced it.
@@ -47,5 +47,5 @@ def __getattr__(name: str) -> ModuleType:
 # would also be wrong: ``_CURATED_DIR`` has to equal ``dir()`` exactly, so a
 # tuple naming ``plotting`` would *hide* the six real siblings beside it
 # (diagnostics, mock, simulate, sbc, feature_strengths, population_mocks).
-# Restoring the attribute never needed a completion menu — ``plotting`` simply
+# Restoring the attribute never needed a completion menu; ``plotting`` simply
 # appears in ``dir()`` once something has touched it, as for any lazy submodule.

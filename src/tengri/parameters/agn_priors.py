@@ -82,7 +82,7 @@ def agn_prior_energy_balance(
        ``functions/PRIORS_AGNfitter.py``.
     .. [2] L. N. Martínez-Ramírez et al., "AGNFITTER-RX: Modeling the
        radio-to-X-ray spectral energy distributions of AGNs," A&A, 688, A46
-       (2024). arXiv:2405.12111. DOI:10.1051/0004-6361/202449329 — the
+       (2024). arXiv:2405.12111. DOI:10.1051/0004-6361/202449329; the
        extended AGNfitter-rX branch in which this prior is retained.
     """
     # Ensure JAX arrays

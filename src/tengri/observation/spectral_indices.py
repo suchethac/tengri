@@ -44,7 +44,7 @@ class SpectralIndexDef:
         Human-readable name (e.g. ``"Dn4000"``).
     index_type : str
         ``"EW"`` (equivalent width), ``"break"`` (flux ratio), or
-        ``"slope"`` (power-law spectral slope β over a window — e.g. the
+        ``"slope"`` (power-law spectral slope β over a window, e.g. the
         UV continuum slope, Calzetti+1994).
     continuum : tuple of tuple
         Continuum/sideband windows as ``((lo1, hi1), (lo2, hi2), ...)``.
@@ -296,7 +296,7 @@ class CompositeIndexDef:
 #: for metallicity, ``HdA+HgA`` and ``HdF+HgF`` for the Balmer age
 #: diagnostics. Values are :class:`CompositeIndexDef` records.
 STANDARD_COMPOSITE_INDICES: dict[str, CompositeIndexDef] = {
-    # Thomas, Maraston & Bender 2003, MNRAS 339, 897 — [MgFe]' is the
+    # Thomas, Maraston & Bender 2003, MNRAS 339, 897, [MgFe]' is the
     # canonical [alpha/Fe]-insensitive [Fe/H] tracer.
     "[MgFe]'": CompositeIndexDef(
         name="[MgFe]'",
@@ -344,7 +344,7 @@ def measure_index_jax(
         Rest-frame wavelengths [Angstrom]. Must cover all windows defined
         in ``index_def``.
     flux : ndarray, shape (n_pix,)
-        Flux density (any consistent units — only ratios matter).
+        Flux density (any consistent units, only ratios matter).
     index_def : SpectralIndexDef or CompositeIndexDef
         Atomic index (EW or break) or a composite that combines several
         atomic measurements via a user-provided function.
@@ -357,10 +357,10 @@ def measure_index_jax(
 
     Notes
     -----
-    **JIT-compatible**: yes — uses soft sigmoid edges for differentiability
+    **JIT-compatible**: yes, uses soft sigmoid edges for differentiability
     rather than hard window boundaries.
 
-    **Gradient-safe**: yes — fully differentiable w.r.t. flux.
+    **Gradient-safe**: yes, fully differentiable w.r.t. flux.
 
     """
     if isinstance(index_def, CompositeIndexDef):
@@ -388,9 +388,9 @@ def _window_mean_flux(
 # ── Single-sourced index arithmetic ───────────────────────────────
 #
 # A break or EW index is a small piece of arithmetic on *window mean fluxes*.
-# There are two ways to get those means — integrate the reconstructed SED
+# There are two ways to get those means, integrate the reconstructed SED
 # (the exact path) or read the precomputed window LUT (the FeaturePrecomp fast
-# path) — but the arithmetic that turns means into an index value is identical.
+# path), but the arithmetic that turns means into an index value is identical.
 # These two helpers ARE that arithmetic, written once. Both the exact
 # ``_measure_*`` functions and the LUT ``measure_indices_from_windows`` call
 # them, so there is no hand-synced "mirror": one measurement, two window-mean
@@ -400,7 +400,7 @@ def _window_mean_flux(
 def _break_from_means(f_blue: jnp.ndarray, f_red: jnp.ndarray) -> jnp.ndarray:
     """Break ratio (red continuum mean flux / blue continuum mean flux).
 
-    The single break primitive — shared by :func:`_measure_break` (means from the
+    The single break primitive, shared by :func:`_measure_break` (means from the
     reconstructed SED) and :func:`measure_indices_from_windows` (means from the
     window LUT).
     """
@@ -414,7 +414,7 @@ def _ew_from_means(
 
     Averages the continuum-window means, forms the continuum-to-feature ratio
     scaled by the feature width, and (for ``units == "mag"``) converts to a
-    magnitude index. The single EW primitive — shared by :func:`_measure_ew`
+    magnitude index. The single EW primitive, shared by :func:`_measure_ew`
     and :func:`measure_indices_from_windows` so the EW arithmetic (and its
     ``mag`` variant) is single-sourced.
     """
@@ -447,7 +447,7 @@ def _measure_slope(wave: jnp.ndarray, flux: jnp.ndarray, idx: SpectralIndexDef) 
     """Power-law spectral slope β over the feature window (e.g. UV slope).
 
     Fits ``f_λ ∝ λ^β``. With the SED in f_ν units, β = d ln(f_ν)/d ln(λ) − 2
-    (Calzetti+1994 convention — matches
+    (Calzetti+1994 convention, matches
     :func:`tengri.utils.sed_quantities.compute_uv_slope_beta`). Uses a soft
     sigmoid window (differentiable) for the weights, then analytic weighted
     least squares in log-log space.
@@ -473,7 +473,7 @@ def _measure_slope(wave: jnp.ndarray, flux: jnp.ndarray, idx: SpectralIndexDef) 
 # The WavePrecomp-analog for spectral indices. A window mean flux is a linear
 # functional of the SED, and the SED is a weight-sum of SSP spectra, so a break
 # or EW index measured on ``SED = Σ_ij w_ij · SSP_ij`` can be evaluated from
-# per-window SSP integrals precomputed once at build time — a cheap SFH-weighted
+# per-window SSP integrals precomputed once at build time, a cheap SFH-weighted
 # sum instead of a full-resolution ``measure_index_jax`` on the reconstructed
 # SED. Parity is EXACT (up to floating point) when the SED carries no dust,
 # because the window mean commutes with the SFH weight sum:
@@ -483,7 +483,7 @@ def _measure_slope(wave: jnp.ndarray, flux: jnp.ndarray, idx: SpectralIndexDef) 
 #               = Σ_ij w_ij · ssp_window_integral_ij / window_norm .
 #
 # Slope indices are NOT expressible this way (they need the SED shape within the
-# window, not one integral) and are excluded — callers fall back to the exact
+# window, not one integral) and are excluded, callers fall back to the exact
 # ``measure_index_jax`` path for them.
 
 
@@ -499,17 +499,17 @@ class IndexWindowPrecomputation:
     Attributes
     ----------
     window_integrals : ndarray, shape (n_met, n_age, n_window)
-        :math:`\\sum_\\lambda \\mathrm{SSP}_{ij}(\\lambda)\\,W_w(\\lambda)` — the
+        :math:`\\sum_\\lambda \\mathrm{SSP}_{ij}(\\lambda)\\,W_w(\\lambda)`, the
         soft-window integral of each SSP spectrum, in the SSP flux units
         [erg/s/Hz/Msun · Å] summed on the SSP wave grid.
     window_norms : ndarray, shape (n_window,)
-        :math:`\\sum_\\lambda W_w(\\lambda)` — window normalization, so
+        :math:`\\sum_\\lambda W_w(\\lambda)`, window normalization, so
         ``mean = integral / norm`` matches :func:`_window_mean_flux`.
     window_centers : ndarray, shape (n_window,)
         Window mid-wavelength ``0.5*(lo+hi)`` [Å], for per-window dust.
     index_slots : tuple
         Per index, ``(kind, payload, meta)`` describing which window slots the
-        index consumes and how to combine them — see
+        index consumes and how to combine them, see
         :func:`measure_indices_from_windows`. ``kind`` is ``"break"``,
         ``"EW"``, or ``"slope"`` (the last carries ``payload=None`` and is a
         sentinel that the caller must measure exactly).
@@ -583,7 +583,7 @@ def precompute_index_windows(
         The indices to precompute. Slope indices are recorded as sentinels
         (no window integrals) so the caller falls back to the exact path.
     edge_width : float, default 1.0
-        Sigmoid edge width [Å] — MUST match :func:`_window_mean_flux` so the
+        Sigmoid edge width [Å], MUST match :func:`_window_mean_flux` so the
         LUT and exact paths agree.
 
     Returns
@@ -629,7 +629,7 @@ def precompute_index_windows(
             feat = _slot(*idx.feature)
             feat_width = idx.feature[1] - idx.feature[0]
             slots.append(("EW", (cont, feat), (feat_width, idx.units)))
-        else:  # slope — not expressible from a single window integral
+        else:  # slope, not expressible from a single window integral
             slots.append(("slope", None, None))
 
     if integrals:
@@ -665,13 +665,13 @@ def measure_indices_from_windows(
     Returns
     -------
     ndarray, shape (n_index,)
-        Index values in ``precomp.names`` order. Slope slots return ``nan`` —
+        Index values in ``precomp.names`` order. Slope slots return ``nan``;
         the caller must fill them from the exact path.
 
     Notes
     -----
     **JIT-compatible**: yes. Calls the same :func:`_break_from_means` /
-    :func:`_ew_from_means` primitives as the exact path — only the window-mean
+    :func:`_ew_from_means` primitives as the exact path, only the window-mean
     source differs (precomputed LUT here vs integrated SED there), so there is no
     duplicated index arithmetic to keep in sync.
     """
@@ -719,10 +719,10 @@ def measure_indices_from_window_lut(
     the youngest SSP age bins (age < ``t_birth``) the FULL birth-cloud + diffuse
     attenuation and older bins the diffuse screen only. For a baked-in SSP the
     nebular emission lives in those youngest bins, so applying :math:`T` per age
-    reddens the emission by birth-cloud + diffuse automatically — matching the
+    reddens the emission by birth-cloud + diffuse automatically, matching the
     exact forward's ``lnu_age * transmission`` (validated < 4e-4 on Hα-EW /
     Dn4000 / Balmer). (For an *additive* nebular backend the emitted SED must be
-    reddened at y=1 explicitly — that is the additive path, not this one.)
+    reddened at y=1 explicitly; that is the additive path, not this one.)
 
     Parameters
     ----------
@@ -746,12 +746,12 @@ def measure_indices_from_window_lut(
 
     Notes
     -----
-    **JIT-compatible**: yes — one ``einsum`` + a weighted age sum + the ratio
+    **JIT-compatible**: yes, one ``einsum`` + a weighted age sum + the ratio
     measurement. This is the per-evaluation hot path replacing the full-grid SED
     reconstruction + measurement. Measured (CPU, PRSC wNE grid, 4 indices):
     ~18 µs for this contraction alone and ~60 µs end-to-end including the
     SED-free weight extract (:meth:`StellarSEDComponent.compute_joint_weights`)
-    and the transmission evaluation, versus ~1.0 ms for the full-grid path — a
+    and the transmission evaluation, versus ~1.0 ms for the full-grid path, a
     ~17x per-evaluation win end-to-end (~58x for the measurement step in
     isolation).
     """
@@ -958,9 +958,9 @@ class SpectralIndexData:
 
         Notes
         -----
-        **JIT-compatible**: yes — uses only jnp primitives.
+        **JIT-compatible**: yes, uses only jnp primitives.
 
-        **Gradient-safe**: yes — differentiable w.r.t. ``model_values``.
+        **Gradient-safe**: yes, differentiable w.r.t. ``model_values``.
 
         """
         residual = (self.values - model_values) / self.errors
@@ -981,9 +981,9 @@ class SpectralIndexData:
 
         Notes
         -----
-        **JIT-compatible**: yes — uses only jnp primitives.
+        **JIT-compatible**: yes, uses only jnp primitives.
 
-        **Gradient-safe**: yes — differentiable w.r.t. ``model_values``.
+        **Gradient-safe**: yes, differentiable w.r.t. ``model_values``.
 
         Assumes Gaussian uncertainties on the observed indices.
 

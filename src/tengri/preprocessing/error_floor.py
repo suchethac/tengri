@@ -39,7 +39,7 @@ def add_systematic_floor(
 
     Notes
     -----
-    **JIT-compatible**: no — uses np.sqrt which may not be JIT-friendly
+    **JIT-compatible**: no, uses np.sqrt which may not be JIT-friendly
     in all contexts. Pure-JAX version would use jax.numpy.sqrt.
 
     Examples

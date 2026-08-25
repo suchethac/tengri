@@ -40,7 +40,7 @@ CORE_CITATIONS: list[str] = ["tengri", "jax", "dsps"]
 SFH_CITATIONS: dict[str, list[str]] = {
     "dpl": ["bagpipes"],
     # Boquien+2019 (A&A 622, A103) for the CIGALE form, Carnall+2018
-    # (MNRAS 480, 4379) for the Bagpipes one — the menu row names both.
+    # (MNRAS 480, 4379) for the Bagpipes one: the menu row names both.
     "delayed": ["cigale", "bagpipes"],
     "continuity": ["leja2019"],
     "continuity_flex": ["leja2019"],
@@ -148,7 +148,7 @@ SSP_CODE_CITATIONS: dict[str, list[str]] = {
     # FSPS (Conroy, Gunn & White 2009 + Conroy & Gunn 2010) generated via the
     # python-fsps interface (Foreman-Mackey et al. 2014). Aringer+2009 (carbon-star
     # library extending TP-AGB stars redward of K) and Villaume+2015 (circumstellar
-    # AGB dust, ``add_agb_dust_model`` — on by default) are baked into every
+    # AGB dust, ``add_agb_dust_model``: on by default) are baked into every
     # FSPS-generated grid, so they fire for any ``fsps_*`` source. See #560.
     "fsps": ["fsps2009", "fsps", "pythonfsps", "aringer2009", "villaume2015"],
     "bc03": ["bc03"],
@@ -171,7 +171,7 @@ SSP_ISOCHRONE_CITATIONS: dict[str, list[str]] = {
 }
 
 # Stellar spectral / atmosphere library (third filename token). ``c3k`` is the
-# FSPS theoretical (Kurucz ATLAS12/SYNTHE) library — the FSPS README directs
+# FSPS theoretical (Kurucz ATLAS12/SYNTHE) library: the FSPS README directs
 # users to cite the FSPS papers for it, so it maps to the FSPS code citations.
 SSP_LIBRARY_CITATIONS: dict[str, list[str]] = {
     "miles": ["miles"],
@@ -181,7 +181,7 @@ SSP_LIBRARY_CITATIONS: dict[str, list[str]] = {
 }
 
 
-# AGN components — keyed by AGNConfig.disc / torus / blr values.
+# AGN components: keyed by AGNConfig.disc / torus / blr values.
 AGN_DISC_CITATIONS: dict[str, list[str]] = {
     "powerlaw": [],
     "multicolor": ["shakura_sunyaev1973"],
@@ -200,7 +200,7 @@ AGN_TORUS_CITATIONS: dict[str, list[str]] = {
 }
 
 # Synthesizer (Lovell et al. 2025 + Roper et al. 2026). BOTH papers MUST be
-# cited whenever any Synthesizer-derived grid is used — the upstream authors'
+# cited whenever any Synthesizer-derived grid is used: the upstream authors'
 # citation policy is strict on this. Keep these two keys together everywhere.
 # https://synthesizer-project.github.io/synthesizer/#citation-acknowledgement
 SYNTHESIZER_CITATIONS: list[str] = ["synthesizer", "synthesizer_joss"]
@@ -279,9 +279,9 @@ SHOCK_CITATIONS: dict[str, list[str]] = {
 PHOTOMETRY_CONVENTION_CITATIONS: dict[str, list[str]] = {
     # Always relevant when broadband photometry is computed.
     "core": ["ab_system", "kcorrection", "fukugita1996", "bessell2012"],
-    # w = 1/lambda — photon-counting; matches FSPS / DSPS / sedpy.
+    # w = 1/lambda: photon-counting; matches FSPS / DSPS / sedpy.
     "bessell": ["fsps", "dsps", "kcorrection", "fukugita1996"],
-    # w = 1/lambda^2 — energy / flat-in-frequency; matches CIGALE / bagpipes.
+    # w = 1/lambda^2: energy / flat-in-frequency; matches CIGALE / bagpipes.
     "energy": ["cigale", "bagpipes"],
 }
 
@@ -315,7 +315,7 @@ def cites(*keys: str) -> Callable[[F], F]:
     """Decorator that records citations for a function or class.
 
     Use it to tie a scientific module to its upstream paper(s) at definition
-    time — the citation is then visible to :func:`tengri.collect_citations`
+    time: the citation is then visible to :func:`tengri.collect_citations`
     whenever that function is called on the object graph of a Galaxy.
 
     Parameters
@@ -331,7 +331,7 @@ def cites(*keys: str) -> Callable[[F], F]:
     ...     '''Calzetti et al. (2000) starburst attenuation law.'''
     ...     ...
 
-    The decorator is transparent — it returns ``func`` unchanged — and
+    The decorator is transparent (it returns ``func`` unchanged) and
     simply registers the function's fully-qualified name in
     ``FUNCTION_CITATIONS``.
     """

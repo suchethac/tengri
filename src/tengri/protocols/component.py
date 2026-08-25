@@ -1,8 +1,8 @@
 # SPDX-License-Identifier: BSD-3-Clause
 """SEDComponent protocol: the shape each physics block satisfies.
 
-A component owns one block of the forward model — stellar emission,
-dust attenuation+emission, nebular lines, AGN, IGM, radio, X-ray —
+A component owns one block of the forward model: stellar emission,
+dust attenuation+emission, nebular lines, AGN, IGM, radio and X-ray,
 plus the parameters and precomputed tensors that go with it. The
 :class:`tengri.SEDModel` orchestrator runs components in order, threading
 a :class:`ForwardState` through them. Each component declares the
@@ -32,7 +32,7 @@ import jax.numpy as jnp
 
 from tengri.protocols.derived_state import DerivedState
 
-# Deprecated alias kept on tengri.protocols.component for one release —
+# Deprecated alias kept on tengri.protocols.component for one release;
 # imports of ``DerivedBundle`` from this module continue to work via the
 # renamed canonical type ``DerivedState``. The walker in
 # ``tengri.citations.collect`` and a few legacy test fixtures still
@@ -66,7 +66,7 @@ class ComponentIOError(ValueError):
     """
 
 
-# Deprecated alias — old name kept for one release.
+# Deprecated alias: old name kept for one release.
 PipelineContractError = ComponentIOError
 
 
@@ -78,7 +78,7 @@ PipelineContractError = ComponentIOError
 #: Parameter names that the orchestrator passes to *every* component
 #: regardless of ``parameter_prefix``. Today this is just ``redshift``,
 #: which is read by IGM, radio, X-ray, and the observation model.
-#: Extend with care — every entry here weakens the prefix discipline
+#: Extend with care: every entry here weakens the prefix discipline
 #: enforced by ``tools/check_param_prefixes.py``.
 BARE_NAME_ALLOWLIST: tuple[str, ...] = ("redshift",)
 
@@ -119,11 +119,11 @@ class ParamDeclaration(NamedTuple):
         ``"Msun/yr"``, ``"dex"``). Used by translation and introspection
         code to document parameter semantics. Empty string means unitless
         or not-yet-documented. Placed last in the NamedTuple so positional
-        callsites — which historically use up to 5 args ending with
-        ``bound_error`` — remain backwards-compatible.
+        callsites: which historically use up to 5 args ending with
+        ``bound_error``; remain backwards-compatible.
     free_prior : Any, optional
         The distribution to use when the user asks for this parameter to be
-        **free** — i.e. ``all_params: FREE`` or a bare ``FREE`` sentinel.
+        **free**: i.e. ``all_params: FREE`` or a bare ``FREE`` sentinel.
 
         :attr:`prior` is the *registry default*: what you get when you do not
         mention the parameter, and for most parameters that is a ``Fixed``
@@ -132,7 +132,7 @@ class ParamDeclaration(NamedTuple):
         and the fit ran with that physics frozen (#1264).
 
         Declare ``free_prior`` whenever the parameter has a defensible
-        admissible range — normally the same range :attr:`bound_check`
+        admissible range; normally the same range :attr:`bound_check`
         enforces, so the two cannot disagree (a contract test asserts
         ``bound_check(free_prior.lo, free_prior.hi)`` holds). ``None`` means
         "no defensible range declared"; ``FREE`` then refuses loudly rather
@@ -157,8 +157,8 @@ def declared_default(params: Sequence[ParamDeclaration], name: str) -> float:
 
     instead of repeating the number as a literal. A literal is a second copy
     of a value the declaration already owns, and the two drift: nine AGN
-    entry points shipped ``agn_log_lbol=45.0`` — the ``log10(erg/s)``
-    magnitude — against a declaration reading ``log10(L/L_sun)``, so a bare
+    entry points shipped ``agn_log_lbol=45.0``; the ``log10(erg/s)``
+    magnitude; against a declaration reading ``log10(L/L_sun)``, so a bare
     call was ~1e33 too luminous and sat 31 dex outside the prior a fit can
     reach (#1200, #1560).
 
@@ -183,7 +183,7 @@ def declared_default(params: Sequence[ParamDeclaration], name: str) -> float:
 
     Notes
     -----
-    **JIT-compatible**: not applicable — import-time lookup over a static
+    **JIT-compatible**: not applicable; import-time lookup over a static
     tuple, never traced.
 
     Enforces the ADR-0011 rule that the prior object is a parameter's single
@@ -239,7 +239,7 @@ class DerivedKey(NamedTuple):
     will not convert ``"Lsun"`` to ``"erg/s"`` for the consumer. Each
     component is responsible for converting at its own boundary.
 
-    The strings are deliberately *not* :mod:`astropy.units` quantities —
+    The strings are deliberately *not* :mod:`astropy.units` quantities;
     that path is JIT-incompatible and would cost a 5–100× performance
     hit on the hot pipeline. Stringly-typed-with-a-canonical-table is
     enough to catch the realistic failure modes (`L_SUN` vs `L_SUN_CUE`
@@ -264,7 +264,7 @@ class SEDComponentConfig:
     knobs (e.g. ``DustSEDComponentConfig`` carries
     ``attenuation_law: str``, ``emission_model: str``, …).
 
-    Crucially, fields here are NOT JAX traced values — they configure
+    Crucially, fields here are NOT JAX traced values: they configure
     the *shape* of the computation, not its inputs.
     """
 
@@ -341,7 +341,7 @@ class ForwardState:
     def __post_init__(self) -> None:
         """Coerce dict-shaped ``derived`` input to a :class:`DerivedState`."""
         if not isinstance(self.derived, DerivedState):
-            # Frozen dataclass — bypass the guard with object.__setattr__.
+            # Frozen dataclass: bypass the guard with object.__setattr__.
             object.__setattr__(self, "derived", DerivedState.from_dict(dict(self.derived)))
 
     def with_(self, **overrides: Any) -> ForwardState:
@@ -407,7 +407,7 @@ class ForwardState:
 #
 # ``ForwardState`` and ``SEDComponentState`` are threaded through
 # JIT-compiled component pipelines, so they must be JAX pytrees. All
-# fields are dynamic (data, not static metadata) — even the ``Mapping``
+# fields are dynamic (data, not static metadata): even the ``Mapping``
 # fields ``lines`` and ``derived`` are dicts of arrays that JAX's
 # default dict-pytree handler unpacks recursively.
 #
@@ -464,7 +464,7 @@ class SEDComponent(Protocol):
         ``"stellar"``, ``"dust"``, ``"nebular"``, ``"agn"``, ``"igm"``.
 
     parameter_prefix : str
-        Domain prefix from NAMING_CONTRACT §3.2 — every parameter this
+        Domain prefix from NAMING_CONTRACT §3.2: every parameter this
         component reads must start with this prefix. Used by the
         orchestrator to slice the global ``params`` dict before
         :meth:`apply`. Examples: ``"sfh_"`` (stellar), ``"dust_"``,
@@ -489,7 +489,7 @@ class SEDComponent(Protocol):
         Run once at compile time. Reads SSP grids and other static
         inputs; returns the cached static tensors :meth:`apply` will
         need on every call. Eager (not JIT'd). May use file I/O.
-        Both arguments are optional — components that do not need an
+        Both arguments are optional; components that do not need an
         SSP grid (radio, IGM, X-ray) leave them defaulted.
 
     apply(state, params) -> ForwardState
@@ -505,7 +505,7 @@ class SEDComponent(Protocol):
     base.
 
     This is a Protocol, not an ABC. Components do not have to subclass
-    anything — duck-typing is enough. We provide
+    anything; duck-typing is enough. We provide
     :class:`SEDComponentConfig`/:class:`SEDComponentState` as
     convenience frozen dataclasses but components may use their own
     immutable types as long as the shape matches.
@@ -546,9 +546,9 @@ class SEDComponent(Protocol):
     #     def inputs(self) -> tuple[DerivedKey, ...]: ...
     #     def optional_inputs(self) -> tuple[DerivedKey, ...]: ...
     #
-    # ``inputs`` declares HARD dependencies — a missing producer is a
+    # ``inputs`` declares HARD dependencies: a missing producer is a
     # construction error. ``optional_inputs`` (Phase B of issue #21)
-    # declares opportunistic reads that have a documented fallback —
+    # declares opportunistic reads that have a documented fallback;
     # the validator still checks units on the optional read if an
     # upstream component outputs the key, but a missing producer is not
     # an error. See ``RadioSEDComponent`` and ``XRaySEDComponent`` for
@@ -579,7 +579,7 @@ class SEDComponent(Protocol):
         ``SEDModel._approx``). Each component reads the flags it owns
         (e.g. :class:`StellarSEDComponent` reads
         ``approx.get("wave_precomp")``) and ignores the rest. ``None``
-        is equivalent to no approximations — all exact paths.
+        is equivalent to no approximations: all exact paths.
 
         ``filters`` is a tuple of (filter_wave_obs, filter_trans) pairs,
         where each pair contains 1-D arrays. Used only by components that
@@ -655,7 +655,7 @@ class SEDComponent(Protocol):
         assembles a model's bibliography. Never inside a JAX trace.
 
         **Required, not optional.** Concrete components MUST implement
-        this — empty tuple is a valid return for boilerplate components
+        this; empty tuple is a valid return for boilerplate components
         with no physics paper, but the method itself is part of the
         contract. The earlier optional form (commit 8c06e142) silently
         dropped provenance from any component that forgot to annotate.

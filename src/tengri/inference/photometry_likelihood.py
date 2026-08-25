@@ -3,8 +3,8 @@
 
 Pinned to the ``"phot_fnu"`` prediction-dict key with the legacy
 ``fnu_obs`` / ``fnu_err`` constructor argument names. Identical
-math to :class:`tengri.inference.likelihoods.GaussianLikelihood`
-— this class exists for ergonomic discovery (autocomplete, docs,
+math to :class:`tengri.inference.likelihoods.GaussianLikelihood`;
+this class exists for ergonomic discovery (autocomplete, docs,
 :func:`isinstance`-style channel detection in
 :meth:`Fitter._maybe_build_default_likelihood`) and for the legacy
 constructor signature.
@@ -13,7 +13,7 @@ Equivalent to:
 
 >>> GaussianLikelihood(channel="phot_fnu", obs=fnu, err=err)
 
-Applies to broadband and narrowband photometry — the χ² math is
+Applies to broadband and narrowband photometry, the χ² math is
 identical regardless of filter bandwidth.
 """
 

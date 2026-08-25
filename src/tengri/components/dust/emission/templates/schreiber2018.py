@@ -27,9 +27,9 @@ class Schreiber2018IRSEDComponent(EmissionComponent):
 
     Notes
     -----
-    **JIT-compatible**: yes — all operations are ``jnp`` primitives.
+    **JIT-compatible**: yes, all operations are ``jnp`` primitives.
 
-    **Gradient-safe**: yes — differentiable everywhere.
+    **Gradient-safe**: yes, differentiable everywhere.
 
     **Template auto-loading**: the closure lazy-loads HDF5 templates on
     first call (at trace time). After lazy loading, all subsequent calls
@@ -63,12 +63,12 @@ class Schreiber2018IRSEDComponent(EmissionComponent):
         Returns
         -------
         dict or None
-            Template arrays, or ``None`` when unavailable — the backend then
+            Template arrays, or ``None`` when unavailable: the backend then
             falls back to its module-level load, which bakes 2.41 MB (#1649).
 
         Notes
         -----
-        **JIT-compatible**: no, deliberately — runs at build time.
+        **JIT-compatible**: no, deliberately; runs at build time.
         """
         del wave
         from tengri._data_setup import find_data_str
@@ -111,17 +111,17 @@ class Schreiber2018IRSEDComponent(EmissionComponent):
 
         """
         # schreiber2018 has no top-level closure wrapper (only a lazy-loader entry),
-        # so resolve it via the loader dict — same pattern as dale2014_cigale.
+        # so resolve it via the loader dict: same pattern as dale2014_cigale.
         from tengri.components.dust.emission.emission import DUST_EMISSION_MODELS
 
         schreiber_fn = DUST_EMISSION_MODELS["schreiber2018"]
-        # The loader's kwargs are ``dust_T`` / ``dust_f_pah`` — passing the old
+        # The loader's kwargs are ``dust_T`` / ``dust_f_pah``: passing the old
         # ``dust_tdust`` / ``dust_fpah`` names sent them into ``**_kwargs`` where
         # they were silently ignored (the component's temperature/PAH knobs had NO
         # effect). Fixed as part of the #849 name unification.
         kwargs = dict(dust_T=p["T"], dust_f_pah=p["f_pah"])
         if templates is not None:
-            # Closure over the THREADED arrays — capture of a tracer is fine;
+            # Closure over the THREADED arrays: capture of a tracer is fine;
             # capture of a concrete array is what bakes (#1649).
             from tengri.components.dust.emission_templates import (
                 create_schreiber2018_from_grid,

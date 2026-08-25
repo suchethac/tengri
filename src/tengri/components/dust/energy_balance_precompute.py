@@ -3,8 +3,8 @@ r"""Build-time LUT for the two-component dust energy balance (``L_ir``).
 
 Under ``approx=WavePrecomp()`` the photometry is projected from per-filter
 LUTs, so the full-wavelength stellar SED cube is normally dead-code-eliminated
-by XLA. Enabling dust IR re-emission, however, makes ``L_ir`` — the
-energy-balance absorbed luminosity — feed the output, and the exact
+by XLA. Enabling dust IR re-emission, however, makes ``L_ir``: the
+energy-balance absorbed luminosity: feed the output, and the exact
 :func:`L_absorbed` integral is taken over the full ``(n_met, n_age, n_wave)``
 stellar cube. That single dependency resurrects the cube and costs ~40× per
 evaluation (30 µs → 1.2 ms on a photometry-only fit).
@@ -30,7 +30,7 @@ where :math:`w_{m,a}` are the runtime DSPS joint (metallicity, age) weights and
 the fixed SSP grid, the (fixed-shape) attenuation curves, and the optical depths
 :math:`(\tau_{\rm bc}, \tau_{\rm diff})`. They are precomputed once on a small
 :math:`(\tau_{\rm bc}, \tau_{\rm diff})` grid; at runtime ``G`` is bilinearly
-interpolated and contracted with the weights — no full-wavelength cube.
+interpolated and contracted with the weights: no full-wavelength cube.
 
 The spectral integral is held at full SSP resolution (so #622's far-IR exactness
 is preserved); the only approximation is the smooth bilinear interpolation in
@@ -38,7 +38,7 @@ the two optical-depth axes, where :math:`\int \mathrm{SSP}\, e^{-\tau k}\, d\nu`
 is monotone and well behaved.
 
 This LUT is the precomputed factorization of the canonical energy-balance
-integral :func:`tengri.forward.energy_balance.bolometric_absorbed` — same
+integral :func:`tengri.forward.energy_balance.bolometric_absorbed`: same
 signed :math:`\int (L_\nu^{\rm intr} - L_\nu^{\rm att})\, d\nu` with the same
 912 Å Lyman-continuum mask (#922). The two must agree; the contract is pinned
 by ``tests/contract/test_energy_balance_lut.py``.
@@ -123,7 +123,7 @@ def build_energy_balance_lut(
         Passed verbatim to :func:`two_component_dust` for node-exact agreement.
     eb_include_lyc : bool, optional
         FSPS-parity toggle (#961): when True, the LyC (λ < 912 Å) is kept in
-        the absorbed-luminosity integrand — all absorbed energy heats dust —
+        the absorbed-luminosity integrand (all absorbed energy heats dust)
         instead of the canonical LyC mask (#922). Must match the runtime
         ``DustSEDComponent.config.eb_include_lyc``.
     tau_bc_grid, tau_diff_grid : ndarray
@@ -161,7 +161,7 @@ def build_energy_balance_lut(
 
     # Build-time Python loop over the (small) optical-depth grid. Eagerly,
     # the 576-node loop spends its time in per-op Python dispatch inside
-    # the attenuation law, not math — jit once and reuse. The SSP cube is
+    # the attenuation law, not math: jit once and reuse. The SSP cube is
     # threaded as an argument so it enters the graph as a runtime input,
     # not a constant to fold.
     g_at_compiled = jax.jit(g_at)
@@ -239,7 +239,7 @@ def _lut_contract(
 
     # Bilinear interpolation touches four nodes of ``G``, so slice those four
     # out before contracting. Contracting the whole optical-depth grid instead
-    # — which is what a dense weight vector forces — costs n_met x n_age x
+    # (which is what a dense weight vector forces) costs n_met x n_age x
     # n_bc x n_diff multiply-adds to use n_met x n_age x 4 of them: on a
     # (15, 93, 24, 24) LUT that is 803,520 versus 5,580, a 144x overshoot, and
     # it dominated the whole WavePrecomp forward pass.
@@ -301,7 +301,7 @@ def lut_l_absorbed_stellar_log10(
     only the nebular term on the configuration most fits actually use.
 
     ``positive = magnitude > 0`` is False for NaN, so before this the whole
-    stellar absorbed luminosity silently became ``-inf`` — i.e. exactly 0.0 —
+    stellar absorbed luminosity silently became ``-inf`` (i.e. exactly 0.0)
     on a corrupt contraction.
     """
     from tengri.utils.scale import _not_computable, log10_magnitude

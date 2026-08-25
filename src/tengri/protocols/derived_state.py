@@ -7,7 +7,7 @@ inter-component quantity (``L_ir``, ``lnu_age``, …). Writers go through
 ``TypeError`` at trace time instead of a silent missing key.
 
 Read sites keep using mapping syntax (``state.derived.get("L_ir", 0.0)``,
-``state.derived["lnu_age"]``, ``"L_ir" in state.derived``) — DerivedState
+``state.derived["lnu_age"]``, ``"L_ir" in state.derived``): DerivedState
 implements ``__getitem__``, ``.get()``, ``__contains__``, ``keys()``,
 ``items()``, ``values()``, ``__iter__``, and ``__len__``. A field whose
 value is ``None`` reads as "not present", so missing quantities behave
@@ -17,7 +17,7 @@ Unknown-key errors include a Levenshtein-2 ``Did you mean: ...`` hint.
 
 Adding a new derived key: add a field here, then add the same key to
 ``_CANONICAL_UNITS`` in :mod:`tengri.forward.orchestrator`. The field
-set is hand-maintained on purpose — same friction model as the
+set is hand-maintained on purpose; same friction model as the
 inputs/outputs declaration on each component (ADR-0009), and a
 deliberate guard against ``derived`` becoming a junk drawer.
 """
@@ -33,7 +33,7 @@ import jax.numpy as jnp
 __all__ = ["DerivedState"]
 
 
-_MISSING = object()  # sentinel for .get(name) without default — match dict.get
+_MISSING = object()  # sentinel for .get(name) without default; match dict.get
 
 
 @dataclass(frozen=True)
@@ -41,7 +41,7 @@ class DerivedState:
     r"""Typed container for cross-component derived data.
 
     Fields mirror ``tengri.forward.orchestrator._CANONICAL_UNITS``
-    one-for-one — every canonical derived key has a field with the same
+    one-for-one; every canonical derived key has a field with the same
     name. ``None`` means "not populated by any upstream component".
 
     Mutation via :meth:`with_` (the same pattern
@@ -69,13 +69,13 @@ class DerivedState:
     Registered with :func:`jax.tree_util.register_dataclass` so the
     bundle can ride through ``jax.lax.scan`` / ``jax.tree_map`` along
     with the rest of :class:`ForwardState`. Every field is a *data*
-    field — JAX traces each one. ``None`` defaults are static at trace
+    field: JAX traces each one. ``None`` defaults are static at trace
     time; switching which fields are populated invalidates the JIT
     cache, which is acceptable because a given :class:`tengri.SEDModel`
     pins its component list at construction and never reshuffles.
     """
 
-    # Stellar — formed/surviving mass + SFR variants
+    # Stellar: formed/surviving mass + SFR variants
     #
     # ``log_mstar`` falls back to the formed mass when the SSP grid carries no
     # mass-remaining table, because downstream normalization needs *a* mass.
@@ -89,7 +89,7 @@ class DerivedState:
     sfr_10myr: jnp.ndarray | None = None
     sfr_100myr: jnp.ndarray | None = None
 
-    # Stellar — age-resolved tensors and ionizing rate
+    # Stellar: age-resolved tensors and ionizing rate
     L_age: jnp.ndarray | None = None
     #: float32-safe companion to ``L_age`` (#1534). ``L_age`` is ~1e42-1e46
     #: erg/s and reads as ``inf`` in pure float32; ``-inf`` here means a bin
@@ -101,7 +101,7 @@ class DerivedState:
     # bolometric (tau_bc, tau_diff) LUT instead of the full stellar cube.
     joint_weights: jnp.ndarray | None = None
     stellar_mass_scale: jnp.ndarray | None = None
-    #: log10(total_mass x L_sun) [dex] — the float32-safe form of
+    #: log10(total_mass x L_sun) [dex]: the float32-safe form of
     #: ``stellar_mass_scale``, which is ~1e43 and so overflows float32 for
     #: any galaxy above ~9e4 Msun (#1206).
     log_stellar_mass_scale: jnp.ndarray | None = None
@@ -110,17 +110,17 @@ class DerivedState:
     nion: jnp.ndarray | None = None
     log_nion: jnp.ndarray | None = None
 
-    # Stellar — SFH grid + chemistry history (diagnostic)
+    # Stellar: SFH grid + chemistry history (diagnostic)
     sfh_grid_lbt_yr: jnp.ndarray | None = None
     sfr_history: jnp.ndarray | None = None
     log_metallicity_history: jnp.ndarray | None = None
 
-    # Stellar — photometry LUT (published only when
+    # Stellar: photometry LUT (published only when
     # ``approx=WavePrecomp()`` is set on SEDModel).
     # Rest-frame F_nu through the configured filters, in erg/s/Hz at
     # the source (no redshift / luminosity distance applied).
     stellar_phot_lnu_precomp: jnp.ndarray | None = None
-    # Stellar — Taylor moment for filter-level dust attenuation
+    # Stellar: Taylor moment for filter-level dust attenuation
     # (published alongside stellar_phot_lnu_precomp). First
     # spectral moment of the CSP within each filter:
     # Ψ_b = ∫ L_ν(λ) (λ - λ_eff_b) T_b(λ) λ dλ / ∫ T_b(λ) λ dλ.
@@ -128,7 +128,7 @@ class DerivedState:
     # f_b ≈ A(λ_eff)·Φ_b + A'(λ_eff)·Ψ_b (Zacharegkas+2025).
     # Units: erg/s/Hz × Å.
     stellar_phot_moment_precomp: jnp.ndarray | None = None
-    # Stellar — age-resolved per-filter LUT. Shape
+    # Stellar: age-resolved per-filter LUT. Shape
     # ``(n_age, n_filter)``, units erg/s/Hz. The age axis is NOT
     # marginalized. Sum over the age axis equals
     # ``stellar_phot_lnu_precomp``. Published only when
@@ -141,7 +141,7 @@ class DerivedState:
     # Sub-band quadrature for the multiplicative dust screen (#1122), shape
     # ``(n_age, n_filter, n_subbands)``. ``..._subband_precomp`` is the filter
     # integral restricted to each sub-band (sums over k to the per-age LUT);
-    # ``..._waves_rest_precomp`` is that sub-band's quadrature node — the
+    # ``..._waves_rest_precomp`` is that sub-band's quadrature node: the
     # template's own flux-weighted centroid, rest frame [Angstrom]. Both are
     # build-time constants, so the dust screen is EVALUATED at K points per band
     # rather than Taylor-extrapolated from one (which diverges in the rest-UV).
@@ -150,7 +150,7 @@ class DerivedState:
 
     #: The same sub-band tensor with the IGM transmission folded in at the
     #: quadrature nodes, shape ``(n_age, n_filter, n_subbands)`` [erg/s/Hz]
-    #: (#1135). Published only when a mean-IGM model is precomputable — patchy
+    #: (#1135). Published only when a mean-IGM model is precomputable: patchy
     #: reionization and DLAs read free parameters, so ``T`` is not a function of
     #: ``(λ, z)`` alone and those configs keep the live per-call path.
     #:
@@ -161,12 +161,12 @@ class DerivedState:
     #: weights captures it in the same contraction as the dust screen.
     #:
     #: Folded at BUILD time, into the ``(n_met, n_age, n_filter, n_subbands)``
-    #: SSP node tensor — where the nodes actually live. The node is a
+    #: SSP node tensor: where the nodes actually live. The node is a
     #: metallicity-weighted average whose weights move with the free
     #: ``met_logzsol``, so a table keyed on ``(z, age, filter, k)`` alone would be
     #: valid at one metallicity only (the node shifts by up to 68 % of a sub-band
     #: width across the SSP grid; ``T`` there by up to 1.3 % in GALEX FUV). Folding
-    #: before the met contraction handles that exactly, and for free — the runtime
+    #: before the met contraction handles that exactly, and for free: the runtime
     #: einsum is the same shape and cost as the IGM-free one.
     #:
     #: The IGM-free twin above is retained, not replaced: ``phot_rest_fnu`` is
@@ -175,14 +175,14 @@ class DerivedState:
 
     # ── The REST-frame band (#1148) ────────────────────────────────────────────
     # ``phot_rest_fnu`` (and ``Observables.mag_absolute``) is the SED reprojected at
-    # z=0, d_L=10 pc — *the galaxy as it is*. The filter therefore sits in the REST
+    # z=0, d_L=10 pc: *the galaxy as it is*. The filter therefore sits in the REST
     # frame and samples the rest SED at its OWN pivot wavelength. That is a
     # different integral from the ``*_phot_lnu_precomp`` family above, which places
     # the filter in the observed frame and so samples rest λ_eff/(1+z).
     #
     # The LUT used to reuse the observed-band tensors for the rest-frame flux. It
-    # therefore reported a *different physical quantity* from the exact path — 769 %
-    # apart in des_g at z=0.5, orders of magnitude in the blue — so an object's
+    # therefore reported a *different physical quantity* from the exact path: 769 %
+    # apart in des_g at z=0.5, orders of magnitude in the blue: so an object's
     # ABSOLUTE magnitude depended on its redshift, and on which `approx` you passed.
     #
     # Every emitter publishes ``<name>_restband_lnu_precomp``; the projector
@@ -200,16 +200,16 @@ class DerivedState:
     radio_restband_lnu_precomp: jnp.ndarray | None = None
     xray_restband_lnu_precomp: jnp.ndarray | None = None
     #: Per-age sub-band quadrature over the rest band, shape (n_age, n_filter, K),
-    #: and its nodes [Angstrom] — the #1122 machinery applied to the rest-frame
+    #: and its nodes [Angstrom]: the #1122 machinery applied to the rest-frame
     #: projection, so the dust screen is EVALUATED across the band rather than
     #: extrapolated from its pivot.
     stellar_restband_lnu_per_age_subband_precomp: jnp.ndarray | None = None
     stellar_restband_subband_waves_precomp: jnp.ndarray | None = None
-    #: The wavelength the rest band samples — the filter's own pivot, since the
+    #: The wavelength the rest band samples: the filter's own pivot, since the
     #: projection is at z=0 [Angstrom]. Contrast ``filter_eff_waves`` = pivot/(1+z),
     #: the rest wavelength the OBSERVED band samples.
     filter_restband_eff_waves: jnp.ndarray | None = None
-    #: The dust screen evaluated on the rest band — at its pivot, and at its
+    #: The dust screen evaluated on the rest band: at its pivot, and at its
     #: quadrature nodes. Separate from the observed-band screens because the two
     #: bands sample different rest wavelengths.
     dust_restband_attenuation_precomp: jnp.ndarray | None = None
@@ -222,7 +222,7 @@ class DerivedState:
     # Dust attenuation / emission
     L_ir: jnp.ndarray | None = None
     L_absorbed: jnp.ndarray | None = None
-    #: log10(L_ir / (erg/s)) [dex] — the float32-safe form of ``L_ir``, which
+    #: log10(L_ir / (erg/s)) [dex]: the float32-safe form of ``L_ir``, which
     #: is ~1e43 and therefore outside the float32 range entirely (#1206).
     log_L_ir: jnp.ndarray | None = None
     dust_attenuation_factor: jnp.ndarray | None = None
@@ -243,7 +243,7 @@ class DerivedState:
     # Two-component dust. Birth-cloud and diffuse
     # attenuation factors per filter pivot, plus their wavelength
     # slopes. Two-component dust factorizes as
-    # ``T(a, λ) = T_diff(λ) × T_bc(λ)^y(a)`` — the per-age dependence
+    # ``T(a, λ) = T_diff(λ) × T_bc(λ)^y(a)``: the per-age dependence
     # comes from the young indicator ``y(a)`` below. Used to apply
     # the per-age expansion in predict_via_precomp.
     dust_bc_attenuation_precomp: jnp.ndarray | None = None
@@ -253,14 +253,14 @@ class DerivedState:
     # The same two transmissions, evaluated at the sub-band quadrature nodes
     # (#1122), shape ``(n_age, n_filter, n_subbands)``. The law is evaluated live
     # on the node grid rather than tabulated, so its shape parameters (``n_slope``,
-    # bump) stay FREE — no gate, unlike a tau-axis LUT.
+    # bump) stay FREE: no gate, unlike a tau-axis LUT.
     dust_bc_attenuation_subband_precomp: jnp.ndarray | None = None
     dust_diff_attenuation_subband_precomp: jnp.ndarray | None = None
     #: Single-screen counterpart, shape ``(n_age, n_filter, n_subbands)``.
     dust_attenuation_subband_precomp: jnp.ndarray | None = None
     # Log-attenuation slopes d(ln A)/dλ = −τ·k'(λ_eff), per filter. Published so
     # the two-component first-order Taylor projection (#617) can be written
-    # T_a' = T_a·(logslope_diff + y·logslope_bc) — NaN-safe where A → 0 (avoids
+    # T_a' = T_a·(logslope_diff + y·logslope_bc): NaN-safe where A → 0 (avoids
     # the A_bc^(y−1) pole at X-ray/UV bands far off the dust curve).
     dust_bc_log_attenuation_slope_precomp: jnp.ndarray | None = None
     dust_diff_log_attenuation_slope_precomp: jnp.ndarray | None = None
@@ -278,7 +278,7 @@ class DerivedState:
     # Zero-padded observed-frame filter curves, published alongside
     # ``filter_eff_waves`` so additive, unattenuated emitters (dust IR, radio,
     # X-ray, AGN) can project their dense rest-frame SED through the *true*
-    # filter transmission via ``lnu_filter_integral_batch`` — bit-exact vs the
+    # filter transmission via ``lnu_filter_integral_batch``: bit-exact vs the
     # exact path, instead of sampling at the effective wavelength. Shapes
     # ``(n_filters, max_len)``; ``phot_filter_waves_padded`` units Å.
     phot_filter_waves_padded: jnp.ndarray | None = None
@@ -291,7 +291,7 @@ class DerivedState:
 
     # AGN (incl. GRAHSP alternates)
     L_agn_bol: jnp.ndarray | None = None
-    # log10(L_agn_bol / (erg/s)) — float32-safe companion to ``L_agn_bol``
+    # log10(L_agn_bol / (erg/s)): float32-safe companion to ``L_agn_bol``
     # (~1e46 erg/s overflows float32 max 3.4e38). Consumed by the radio jet
     # term (#1206) via ``apply_log10_scale`` so the AGN-driven radio emission
     # never materializes the out-of-range linear luminosity.
@@ -310,7 +310,7 @@ class DerivedState:
     agn_cos_inc: jnp.ndarray | None = None
     sed_agn: jnp.ndarray | None = None
     sed_grahsp: jnp.ndarray | None = None
-    # AGN — filter-integrated LUT. Rest-frame Lν of
+    # AGN: filter-integrated LUT. Rest-frame Lν of
     # the AGN contribution per filter, shape ``(n_filters,)``. Published
     # only when ``approx=WavePrecomp()`` is set and AGN is
     # configured. Consumed by ``predict_via_precomp`` via the multi-
@@ -328,7 +328,7 @@ class DerivedState:
     #: ``log_line_lums`` after the dust screen, published by whichever dust
     #: component ran, with the same law/params/clip it applies to the nebular
     #: continuum (#1867). ``None`` when no dust component ran, and
-    #: consumers then fall back to the intrinsic ``log_line_lums`` — the
+    #: consumers then fall back to the intrinsic ``log_line_lums``: the
     #: correct answer in that case.
     #:
     #: A typed field rather than an ``_extras`` entry deliberately: both public
@@ -341,17 +341,17 @@ class DerivedState:
     # published by photoionized backends so two-component dust can honor the
     # fesc absorption on the per-age lnu_age path (#824).
     lyc_transmission: jnp.ndarray | None = None
-    # Nebular — photometry LUT (published only when
+    # Nebular: photometry LUT (published only when
     # ``approx=WavePrecomp()`` is set on SEDModel and the nebular
     # backend supports filter-level precomputation (Cue / CloudyGrid).
-    # For BakedIn nebular this is None — the nebular emission is already
+    # For BakedIn nebular this is None: the nebular emission is already
     # baked into the SSP grid and therefore included in stellar_phot_lnu_precomp.
     nebular_phot_lnu_precomp: jnp.ndarray | None = None
     # The same bucket with the young-limit dust screen already integrated THROUGH
     # each band, published by the dust component from the reddened continuum it
     # computes anyway (#1738). ``predict_via_precomp`` prefers this over reddening
     # ``nebular_phot_lnu_precomp`` at λ_eff, which is only correct where the screen
-    # is flat across the filter — and nebular emission is line-dominated, so it is
+    # is flat across the filter: and nebular emission is line-dominated, so it is
     # not. Exact rather than the K-point form the stellar continuum uses (#1122),
     # because the reddened continuum is already on the full grid here. ``None`` when
     # no dust component runs, in which case there is no screen to integrate.
@@ -367,7 +367,7 @@ class DerivedState:
     # all: shipping only the observed one is #1665, which left every rest-frame
     # consumer on the λ_eff screen and moved 13/13 spectral indices silently.
     nebular_restband_lnu_attenuated_precomp: jnp.ndarray | None = None
-    # Shock (MAPPINGS V) per filter — rest-frame Lν, erg/s/Hz, intrinsic (no
+    # Shock (MAPPINGS V) per filter: rest-frame Lν, erg/s/Hz, intrinsic (no
     # dust, no cosmology), exactly like ``nebular_phot_lnu_precomp``. A separate
     # additive component from the photoionized backend (#851), so it carries its
     # own key. ``ShockNebular.apply`` publishes it by filter-integrating the
@@ -377,7 +377,7 @@ class DerivedState:
     # with the young-limit screen alongside the nebular bucket.
     shock_phot_lnu_precomp: jnp.ndarray | None = None
     # Dust IR re-emission per filter (rest-frame Lν, erg/s/Hz). Additive and
-    # unattenuated — summed by predict_via_precomp like the other families.
+    # unattenuated: summed by predict_via_precomp like the other families.
     # Published by the two-component dust component under WavePrecomp (#622).
     dust_emission_phot_lnu_precomp: jnp.ndarray | None = None
     # Radio (synchrotron + free-free) and X-ray per filter (rest-frame Lν,
@@ -386,7 +386,7 @@ class DerivedState:
     radio_phot_lnu_precomp: jnp.ndarray | None = None
     xray_phot_lnu_precomp: jnp.ndarray | None = None
     # Shock is an additive emitter like radio/xray, and SEDModelComponent
-    # publishes ``{name}_phot_lnu_precomp`` generically — but this field was
+    # publishes ``{name}_phot_lnu_precomp`` generically: but this field was
     # never added, so any model with a shock component raised ComponentIOError
     # ("_extras is non-empty") the moment the photometry LUT ran, i.e. on every
     # inference call. Typed here so the shock LUT rides the same contract.
@@ -414,11 +414,11 @@ class DerivedState:
     agn_spec_lnu_precomp: jnp.ndarray | None = None
     igm_spec_transmission_precomp: jnp.ndarray | None = None
     # Age-resolved per-pixel stellar LUT, shape ``(n_age, n_spec_pixel)``,
-    # erg/s/Hz — needed for two-component (Charlot & Fall) dust on the
+    # erg/s/Hz: needed for two-component (Charlot & Fall) dust on the
     # spectrum LUT path (sum over age == stellar_spec_lnu_precomp).
     stellar_spec_lnu_per_age_precomp: jnp.ndarray | None = None
     # Dust transmission at spectrum pixel centers (dimensionless, in [0, 1]).
-    # Unlike photometry, no Taylor moment is needed — a pixel is a single
+    # Unlike photometry, no Taylor moment is needed: a pixel is a single
     # wavelength, so A(λ_pix) is exact. ``dust_spec_transmission_precomp`` is
     # the single-component / diffuse transmission; the two-component split
     # publishes ``dust_spec_bc_transmission_precomp`` (birth cloud) and
@@ -434,13 +434,13 @@ class DerivedState:
     igm_transmission: jnp.ndarray | None = None
     # Filter-averaged IGM transmission <T>_f, shape (n_filters,), dimensionless.
     # The WavePrecomp twin of ``igm_transmission``: the LUT projector needs one
-    # number per band, and <T>_f depends only on (z, filter, convention) — the
-    # transmission is averaged alone, never weighted by the SED — so the IGM
+    # number per band, and <T>_f depends only on (z, filter, convention): the
+    # transmission is averaged alone, never weighted by the SED: so the IGM
     # component tabulates it against z at build time. Consuming the full-grid
     # curve here instead keeps the whole model grid live and defeats the
     # dead-code elimination that IS the WavePrecomp speedup (#932).
     igm_phot_factor: jnp.ndarray | None = None
-    # Per-pixel IGM transmission, shape (n_pix,), dimensionless — the
+    # Per-pixel IGM transmission, shape (n_pix,), dimensionless: the
     # SpectrumPrecomp twin of ``igm_phot_factor``. A pixel's rest effective
     # wavelength is wave_obs/(1+z) and the curve is T(wave_rest*(1+z), z), so
     # sampling one at the other collapses to T at the FIXED observed instrument
@@ -448,7 +448,7 @@ class DerivedState:
     igm_spec_factor: jnp.ndarray | None = None
     shock_log_lhalpha: jnp.ndarray | None = None
 
-    # Spatial — 2D surface-brightness profile and the (x, y) kpc grid that
+    # Spatial: 2D surface-brightness profile and the (x, y) kpc grid that
     # underlies it. Published by spatial components (Sersic, Exponential,
     # FlatSlab, …). Reserved B-path keys (``spatial_profile_per_age``,
     # ``spatial_profile_per_wave``) will be added when those components land.
@@ -486,7 +486,7 @@ class DerivedState:
 
         # Pre-check unknown keys to produce a friendly hint message.
         # ``_extras`` is the documented escape hatch for keys not yet
-        # promoted to typed fields — explicitly allow it.
+        # promoted to typed fields: explicitly allow it.
         known = set(self.field_names()) | {"_extras"}
         unknown = [k for k in overrides if k not in known]
         if unknown:
@@ -580,14 +580,14 @@ class DerivedState:
         if extras and not allow_extras:
             # Pick the first offender so the error message is short
             # and stable. The hint pinpoints likely typos at distance
-            # ≤ 2 — same UX as ``with_(unknown=…)``.
+            # ≤ 2: same UX as ``with_(unknown=…)``.
             offender = next(iter(extras))
             hint = _did_you_mean(offender, known)
             suffix = f" (Did you mean: {hint!r}?)" if hint else ""
             raise TypeError(
                 f"DerivedState.from_dict received {len(extras)} unknown "
                 f"key(s): first is {offender!r}.{suffix} The dict-style "
-                f"write path is closed as of ADR-0007 Phase 4 — use "
+                f"write path is closed as of ADR-0007 Phase 4; use "
                 f"``state.derived.with_(...)`` to set typed fields, or "
                 f"pass ``allow_extras=True`` to opt into the legacy "
                 f"spillover-to-_extras shim for migration / debugging."
@@ -595,7 +595,7 @@ class DerivedState:
         return cls(**typed, _extras=extras)
 
     def to_dict(self) -> dict[str, Any]:
-        """Return a plain dict — the inverse of :meth:`from_dict`.
+        """Return a plain dict; the inverse of :meth:`from_dict`.
 
         Non-None typed fields are included; ``_extras`` is merged in.
         Useful for serialization, debugging, and gradual migration.

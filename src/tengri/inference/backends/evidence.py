@@ -70,7 +70,7 @@ def _get_nss_fns(
     """Return (init_jit, step_jit) cached on the model.
 
     Both functions accept ``data_args`` as a *traced* JAX argument so that the
-    compiled XLA program is generic — it is reused for every galaxy that shares
+    compiled XLA program is generic; it is reused for every galaxy that shares
     the same model dimensionality and data shape, with zero recompilation.
 
     The functions are keyed by model configuration and stored in the model-level
@@ -191,7 +191,7 @@ def run_nss(
     max_shrinkage : int or None
         Maximum shrinking steps in slice sampling. Overrides preset if not None.
         Default behavior (when None + no preset override) is 20 to limit XLA
-        graph size — each shrinkage step is compiled into ``vmap(lax.while_loop)``
+        graph size, since each shrinkage step is compiled into ``vmap(lax.while_loop)``
         body, and ``max_shrinkage=100`` caused 20 GB+ JIT compilation memory.
     verbose : bool
         Print progress.
@@ -273,7 +273,7 @@ def run_nss(
     live = init_jit(particles, data_args)
 
     # Collect only dead particles, not the full NSInfo (update_info is MCMC internals
-    # of the replacement step — 3-4× larger than particles but unused by ns_sample/ns_ess).
+    # of the replacement step, 3-4× larger than particles but unused by ns_sample/ns_ess).
     dead_particles_list = []
     n_iter = 0
     t0 = time.time()

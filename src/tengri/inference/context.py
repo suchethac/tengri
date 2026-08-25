@@ -1,5 +1,5 @@
 # SPDX-License-Identifier: BSD-3-Clause
-"""Inference context — the Python-level seam between Fitter and backends.
+"""Inference context, the Python-level seam between Fitter and backends.
 
 This module defines :class:`InferenceContext`, the bundle of state that
 inference backends receive in lieu of the full :class:`~tengri.Fitter`.
@@ -8,7 +8,7 @@ It mirrors the role ``KernelStrategy`` played on the forward-model side
 coupling to the orchestrator's private internals. That class has since been
 removed, so it is named here in plain markup rather than cross-referenced.
 
-Design rules — these are non-negotiable:
+Design rules; these are non-negotiable:
 
 1. **Python-level only.** ``InferenceContext`` must never be hashed into a
    JIT key, passed through ``jax.jit`` / ``jax.vmap`` / ``jax.lax.scan`` as a
@@ -61,7 +61,7 @@ class InferenceContext:
 
     Notes
     -----
-    The accessors are intentionally thin properties — they exist so that
+    The accessors are intentionally thin properties, they exist so that
     a future PR can replace each one's implementation (e.g. promote
     ``loss_fn`` to a value held directly on the context) without touching
     backend code.
@@ -77,7 +77,7 @@ class InferenceContext:
         """Normalize ``target`` (Fitter or InferenceContext) to a context.
 
         Backends use this at their entry point during the multi-PR
-        migration window — ``Fitter.run`` may pass either an
+        migration window, ``Fitter.run`` may pass either an
         ``InferenceContext`` (migrated backends) or a raw ``Fitter``
         (legacy path). Returns ``target`` unchanged if it is already
         a context.
@@ -118,14 +118,14 @@ class InferenceContext:
         The compiled callable has signature ``(params_u, data_args)``:
         parameters in **unbounded** space, and the data passed **as a traced
         argument**. It closes over the parameter spec only. This docstring
-        previously said it closed over ``data_args`` too — it does not
+        previously said it closed over ``data_args`` too; it does not
         (``fn(params_u)`` raises ``TypeError``), and the difference is
         load-bearing rather than cosmetic.
 
         Wrapping it to close over the data is now safe, but was not always.
         Under ``jax.enable_x64(False)``, XLA used to constant-fold ``1/sigma**2``
         to ``inf`` whenever ``sigma`` was a compile-time constant, and the χ²
-        then evaluated ``0 * inf = NaN`` — defeating the ``r = (d - mu) / sigma``
+        then evaluated ``0 * inf = NaN``, defeating the ``r = (d - mu) / sigma``
         grouping that exists precisely to stay in range. Onset was ``sigma`` ~
         1e-19 against real photometric fluxes of ~1e-30, so every float32 fit
         written that way returned NaN. Fixed in #1535 by
@@ -180,7 +180,7 @@ class InferenceContext:
 
         The pure data term of the information Hamiltonian, with the
         prior contribution stripped off. Useful for inference methods
-        that consume likelihood and prior separately — most notably
+        that consume likelihood and prior separately, most notably
         Nested Sampling, which draws from the prior under a
         likelihood-threshold constraint.
 
@@ -205,7 +205,7 @@ class InferenceContext:
 
         In the standardized latent space (paper §2 'Standardized
         Inference'), the prior is :math:`\\mathcal{N}(0, I)` for every
-        free parameter — see ``_unstandardize_parameters`` in
+        free parameter, see ``_unstandardize_parameters`` in
         :mod:`tengri.inference.loss_functions`. The (unnormalized)
         log-prior is therefore:
 
@@ -247,7 +247,7 @@ class InferenceContext:
             docstring promised.
 
             At ``field_centering < 1`` the field term is no longer standardized
-            and depends on sigma, so the amplitude is read from the same dict —
+            and depends on sigma, so the amplitude is read from the same dict,
             see :func:`standardized_neg_log_prior` (#1355).
             """
             psd_sigma_dex = None
@@ -271,7 +271,7 @@ class InferenceContext:
 
     @property
     def memory_mode(self) -> str:
-        """ "fast" or "low" — controls jax.checkpoint wrapping inside CG."""
+        """ "fast" or "low", controls jax.checkpoint wrapping inside CG."""
         return getattr(self.fitter, "_memory_mode", "fast")
 
     @property
@@ -300,7 +300,7 @@ class InferenceContext:
     # only needs an ``InferenceContext`` and the data + noise arrays.
     #
     # Properties intentionally mirror the Fitter's attribute names without
-    # the leading underscore — they are read-only from the backend's
+    # the leading underscore; they are read-only from the backend's
     # perspective, but the storage stays on the Fitter (single source of
     # truth) until a separate refactor lifts the config into its own type.
 

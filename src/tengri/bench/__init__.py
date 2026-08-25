@@ -1,5 +1,5 @@
 # SPDX-License-Identifier: BSD-3-Clause
-"""``python -m tengri.bench`` — performance health check + benchmark dispatcher.
+"""``python -m tengri.bench``: performance health check + benchmark dispatcher.
 
 Two modes:
 
@@ -19,7 +19,7 @@ The health check is read-only (touches no caches, no files) and exits 0
 on success, 1 if no SSP grid is available. Dispatched scripts inherit
 their own exit codes.
 
-Mirrors the spirit of Synthesizer's ``check_openmp()`` — answers
+Mirrors the spirit of Synthesizer's ``check_openmp()``; answers
 "is my install fast?" in one command.
 """
 
@@ -265,7 +265,7 @@ def _health_check() -> int:
     ssp_path = _find_ssp()
     if ssp_path is None:
         _print_header("forward-model timing")
-        print("  (skipped — no SSP grid found under data/ or $TENGRI_DATA_DIR;")
+        print("  (skipped: no SSP grid found under data/ or $TENGRI_DATA_DIR;")
         print("   run `python -c 'import tengri; tengri.download_ssp()'` to fetch one.)")
         print()
         return 1
@@ -300,7 +300,7 @@ def _help_for(name: str) -> int:
     scripts_dir = _find_scripts_dir()
     if scripts_dir is None:
         print(
-            "scripts/ directory not found — install from a git checkout to use this.",
+            "scripts/ directory not found: install from a git checkout to use this.",
             file=sys.stderr,
         )
         return 2
@@ -330,7 +330,7 @@ def _dispatch(name: str, extra: list[str]) -> int:
     scripts_dir = _find_scripts_dir()
     if scripts_dir is None:
         print(
-            "scripts/ directory not found — install from a git checkout to dispatch benchmarks.",
+            "scripts/ directory not found: install from a git checkout to dispatch benchmarks.",
             file=sys.stderr,
         )
         return 2

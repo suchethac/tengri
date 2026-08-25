@@ -82,7 +82,7 @@ def richards2006_disc(
     ----------
     wavelength : array_like, shape (n_wave,)
         Rest-frame wavelength grid [Å]. Values outside the template's
-        coverage (30.5 Å — 3×10⁸ Å) yield 0.
+        coverage (30.5 Å to 3×10⁸ Å) yield 0.
     log_lbol : float, optional
         Bolometric luminosity in :math:`\log_{10}(L/L_\odot)`. Defaults to
         the declared ``agn_log_lbol`` default.
@@ -94,7 +94,7 @@ def richards2006_disc(
 
     Notes
     -----
-    **JIT-compatible**: yes — pure ``jnp.interp`` + linear scale.
+    **JIT-compatible**: yes, pure ``jnp.interp`` + linear scale.
 
     This is an empirical SDSS composite; it carries no free spectral-shape
     parameters. To vary the UV slope, prefer the GRAHSP bending power-law
@@ -130,7 +130,7 @@ def richards2006(
     agn_lum_ratio: float = DEFAULT_AGN_LUM_RATIO,
     **_kwargs,
 ) -> jnp.ndarray:
-    """Richards+2006 BBB composite — registered model entry point.
+    """Richards+2006 BBB composite: registered model entry point.
 
     Thin wrapper around :func:`richards2006_disc` matching the
     AGN_MODELS registry signature::
@@ -148,7 +148,7 @@ def richards2006(
         Fraction of bolometric luminosity emitted by this component.
         Default: 1.0.
     **_kwargs
-        Additional keyword arguments (ignored — Richards+2006 is a fixed
+        Additional keyword arguments (ignored: Richards+2006 is a fixed
         empirical template with no free shape parameters).
 
     Returns

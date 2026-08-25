@@ -156,7 +156,7 @@ def load_catalog(
         When a redshift column is detected:
 
         - ``"redshift"`` : ndarray of shape ``(n_rows,)``.
-        - ``"redshift_col"`` : str — name of the column used.
+        - ``"redshift_col"`` : str. Name of the column used.
 
     Raises
     ------
@@ -178,7 +178,7 @@ def load_catalog(
     - ``flux_<band>`` paired with ``<band>_err``
     - ``flux_<band>`` paired with ``flux_<band>_err``
 
-    Bands without a matching error column are silently dropped — this
+    Bands without a matching error column are silently dropped; this
     is by design, since SED fitting needs (flux, err) pairs. If a
     catalog uses a different convention, rename columns before
     calling.

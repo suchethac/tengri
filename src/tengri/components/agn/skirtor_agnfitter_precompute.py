@@ -11,9 +11,9 @@ Auto-collapses any axis whose corresponding parameter is
 References
 ----------
 .. [1] M. Stalevski et al., "3D radiative transfer modeling of the dusty
-   torus around AGN — the influence of clumping," MNRAS, 420, 2756 (2012).
+   torus around AGN, the influence of clumping," MNRAS, 420, 2756 (2012).
    arXiv:1109.1286. https://doi.org/10.1111/j.1365-2966.2011.19775.x
-.. [2] M. Stalevski et al., "The dust covering factor in AGN — combining the
+.. [2] M. Stalevski et al., "The dust covering factor in AGN: combining the
    IR torus emission with polar dust component," MNRAS, 458, 2288 (2016).
    arXiv:1602.01954. https://doi.org/10.1093/mnras/stw444
 .. [3] L. N. Martinez-Ramirez, et al., "AGNFITTER-RX: Modeling the
@@ -92,15 +92,15 @@ def precompute_skirtor_agnfitter_photometry(
     References
     ----------
     .. [1] M. Stalevski et al., "3D radiative transfer modeling of the dusty
-       torus around AGN — the influence of clumping," MNRAS, 420, 2756 (2012).
+       torus around AGN, the influence of clumping," MNRAS, 420, 2756 (2012).
        arXiv:1109.1286.
-    .. [2] M. Stalevski et al., "The dust covering factor in AGN — combining the
+    .. [2] M. Stalevski et al., "The dust covering factor in AGN: combining the
        IR torus emission with polar dust component," MNRAS, 458, 2288 (2016).
        arXiv:1602.01954.
 
     Notes
     -----
-    **JIT-compatible**: no — this is a build-time function using NumPy.
+    **JIT-compatible**: no, this is a build-time function using NumPy.
 
     **Build-time operation**: This function performs frequency-domain
     integration via NumPy. The precomputed photometry is grid-independent
@@ -184,7 +184,7 @@ def build_skirtor_agnfitter_photometry_lookup(precomp: dict):
 
     Notes
     -----
-    **JIT-compatible**: yes — pure JAX with no data I/O.
+    **JIT-compatible**: yes, pure JAX with no data I/O.
     """
     from tengri.utils.physics_constants import L_SUN as _LSUN_ERG
 
@@ -225,7 +225,7 @@ def build_skirtor_agnfitter_photometry_lookup(precomp: dict):
         -----
         **JIT-compatible**: yes.
 
-        **Gradient-safe**: yes — node-exact PCHIP is C¹ differentiable.
+        **Gradient-safe**: yes, node-exact PCHIP is C¹ differentiable.
 
         See Also
         --------
@@ -276,7 +276,7 @@ def precompute(
 
     Notes
     -----
-    **JIT-compatible**: no — this is a build-time function using NumPy.
+    **JIT-compatible**: no, this is a build-time function using NumPy.
     """
     result = precompute_skirtor_agnfitter_photometry(
         grid_path, filter_waves, filter_trans, redshift=redshift
@@ -320,9 +320,9 @@ def build_lookup(preint: dict, *, free_param_names: tuple[str, ...] | None = Non
 
     Notes
     -----
-    **JIT-compatible**: yes — the returned function is fully JAX-native.
+    **JIT-compatible**: yes, the returned function is fully JAX-native.
 
-    **Gradient-safe**: yes — node-exact PCHIP is C¹-differentiable.
+    **Gradient-safe**: yes, node-exact PCHIP is C¹-differentiable.
     """
     if not preint.get("_collapsed_axes"):
         return build_skirtor_agnfitter_photometry_lookup(preint)

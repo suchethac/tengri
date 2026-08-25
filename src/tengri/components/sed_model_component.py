@@ -28,7 +28,7 @@ A bare-minimum custom component::
         name = "my_model"
         parameter_prefix = "my_"
 
-        # Free parameters — auto-discovered
+        # Free parameters: auto-discovered
         T = Uniform(20.0, 80.0, description="Temperature", units="K")
 
         # Cross-component contract (optional)
@@ -233,9 +233,9 @@ class SEDModelComponent(TemplateThreading):
         falls back to :meth:`predict`; subclasses with direct photometric
         paths should override for specialized LUT generation.
 
-    Vocabulary: **precompute** (verb) names build-time work — the
+    Vocabulary: **precompute** (verb) names build-time work, the
     :meth:`precompute` hook and ``*_precompute.py`` modules. **precomp**
-    (noun) names the resulting LUT path and its artifacts —
+    (noun) names the resulting LUT path and its artifacts;
     ``predict_precomp`` / ``_apply_precomp``, the ``*_lnu_precomp`` keys,
     ``predict_via_precomp``. The two spellings are deliberate, not drift.
 
@@ -367,7 +367,7 @@ class SEDModelComponent(TemplateThreading):
     # The template-threading seam (``accepts_threaded_templates``,
     # ``template_namespace``, ``threaded_templates``, ``templates_for_threading``)
     # is inherited from :class:`TemplateThreading`, which the bare-Protocol
-    # component family inherits too — see that class for why it does not live
+    # component family inherits too: see that class for why it does not live
     # here.
 
     def __init_subclass__(cls, **kwargs: Any) -> None:
@@ -449,7 +449,7 @@ class SEDModelComponent(TemplateThreading):
         # ``_citations_tuple`` written directly in the class body is honored as
         # well. It has to be: the assignment below is unconditional, so a
         # subclass spelling it that way had its keys overwritten with ``()`` at
-        # class creation — silently, because the attribute it wrote is exactly
+        # class creation: silently, because the attribute it wrote is exactly
         # the one this line clobbers. THIRTEEN of the fifteen components that
         # declare citations used that spelling, so `component.citations()`
         # returned nothing for every dust emission backend in the library
@@ -482,7 +482,7 @@ class SEDModelComponent(TemplateThreading):
                 # ``delattr`` cannot raise.
                 delattr(cls, "properties")
 
-        # Register by name — ONLY concrete classes that define their OWN ``name``.
+        # Register by name; ONLY concrete classes that define their OWN ``name``.
         # Abstract authoring bases (e.g. EmissionComponent) inherit the default name and
         # must NOT register: they are scaffolds, not dispatchable components.
         if "name" in vars(cls):
@@ -491,7 +491,7 @@ class SEDModelComponent(TemplateThreading):
                 existing_cls = _REGISTRY[component_name]
                 raise ValueError(
                     f"Component name {component_name!r} already registered by "
-                    f"{existing_cls.__module__}.{existing_cls.__qualname__} — "
+                    f"{existing_cls.__module__}.{existing_cls.__qualname__}: "
                     f"collision with {cls.__module__}.{cls.__qualname__}"
                 )
             _REGISTRY[component_name] = cls
@@ -565,7 +565,7 @@ class SEDModelComponent(TemplateThreading):
         Returns
         -------
         tuple[DerivedKey, ...]
-            Derived keys this component reads *opportunistically* — if an
+            Derived keys this component reads *opportunistically*: if an
             upstream component publishes the key, its value is passed to
             :meth:`predict` as a keyword argument; if not, the framework
             substitutes ``jnp.asarray(0.0)``. This is how a downstream
@@ -665,7 +665,7 @@ class SEDModelComponent(TemplateThreading):
         (e.g. the additive-emitter band response) MUST call this rather than
         re-deriving it: a precompute that slices differently from ``apply`` builds
         its table from the *wrong* parameter values and returns confidently wrong
-        fluxes with no error — the failure mode this codebase keeps rediscovering.
+        fluxes with no error: the failure mode this codebase keeps rediscovering.
 
         Parameters
         ----------
@@ -680,7 +680,7 @@ class SEDModelComponent(TemplateThreading):
 
         Notes
         -----
-        **JIT-compatible**: yes — pure dict manipulation, no tracing.
+        **JIT-compatible**: yes, pure dict manipulation, no tracing.
         """
         prefix_len = len(self.parameter_prefix)
         p_sliced = {
@@ -747,14 +747,14 @@ class SEDModelComponent(TemplateThreading):
             if key_name in state.derived:
                 input_kwargs[key_name] = state.derived[key_name]
             else:
-                # Required input missing — fail loudly
+                # Required input missing: fail loudly
                 raise KeyError(
                     f"Component {self.name!r} declares required input {key_name!r} "
                     f"but it was not published by any upstream component. "
                     f"Available derived keys: {list(state.derived.keys())}"
                 )
 
-        # Look up optional inputs from derived — fallback to 0.0 when missing.
+        # Look up optional inputs from derived: fallback to 0.0 when missing.
         # This is the "documented-fallback" cross-component read pattern
         # used by radio (L_ir / L_agn_bol / log_mstar) and X-ray.
         for opt_key in self.optional_inputs():
@@ -775,7 +775,7 @@ class SEDModelComponent(TemplateThreading):
         # photometry- or spectroscopy-only models publish just one. Run every
         # LUT branch whose grid is present and UNION the published dicts, so a
         # single pass emits both ``*_spec_lnu_precomp`` and ``*_phot_lnu_precomp``
-        # families (Part A — joint precompute). The full-grid SED
+        # families (Part A: joint precompute). The full-grid SED
         # (``sed_intrinsic``) is intentionally NOT updated on any LUT path.
         spec_eff_waves = state.derived.get("spec_eff_waves")
         filter_eff_waves = state.derived.get("filter_eff_waves")
@@ -793,14 +793,14 @@ class SEDModelComponent(TemplateThreading):
             # ``predict_via_precomp`` consumes, but ``sed_intrinsic`` is the panchromatic
             # model SED that ``Prediction.photometry()`` / ``rest_sed`` / ``obs_sed`` and
             # every best-fit overlay project directly. Leaving this component out of it
-            # made a WavePrecomp model's "exact" photometry read ~6x low in W3/W4 —
-            # bit-identical to a model built with no dust emission at all — while the
+            # made a WavePrecomp model's "exact" photometry read ~6x low in W3/W4;
+            # bit-identical to a model built with no dust emission at all: while the
             # likelihood (which reads the LUT) was fine. Silent, and invisible to a fit.
             #
             # Free on the fit path: ``predict_via_precomp`` never READS ``sed_intrinsic``,
             # so XLA dead-code-eliminates the full-grid chain and the compiled kernel is
             # unchanged (358,180 FLOPs, ~130 us). It is NOT free in eager mode, which is
-            # what ``predict_state`` and the test suite run — hence the single shared
+            # what ``predict_state`` and the test suite run: hence the single shared
             # evaluation here rather than one per LUT branch.
             # Build a SEPARATE dict for predict. Mutating ``input_kwargs``
             # would also inject ``templates`` into the ``_apply_*precomp``
@@ -921,7 +921,7 @@ class SEDModelComponent(TemplateThreading):
         mapping[str, ndarray]
             ``{self.name}_spec_lnu_precomp`` (the per-pixel contribution)
             plus every key the component's :meth:`predict` published. The
-            published dict is preserved — **not discarded** — so grid-
+            published dict is preserved (**not discarded**) so grid-
             independent derived quantities survive the LUT path. This is
             what lets a line-publishing nebular backend (Cue, CloudyGrid)
             still surface ``line_waves`` / ``line_lums`` under

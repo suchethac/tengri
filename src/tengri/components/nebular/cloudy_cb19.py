@@ -105,7 +105,7 @@ Synthesizer (Lovell et al. 2025; Roper et al. 2026) ships stellar photoionizatio
 (``test_grid_sfzh-*.hdf5``) produced with CLOUDY c23.01, a decade newer
 than CB_19 (c17.01).  Their HDF5 schema stores ``lines/luminosity`` in W
 per bolometric luminosity, normalized to ``bolometric_luminosities`` weight
-variables — a different convention from CB_19's L_line/Q_H normalization.
+variables: a different convention from CB_19's L_line/Q_H normalization.
 
 Key comparison:
 
@@ -205,8 +205,8 @@ class CB19DegenerateGridWarning(UserWarning):
 
     Emitted at load time when every line ratio in the grid is identical (the
     flat placeholder ``cb19_templates.h5`` of #924). A degenerate grid gives all
-    emission lines the same luminosity — e.g. Halpha/Hbeta = 1.0 instead of the
-    Case B 2.87 — producing plausible-looking but silently wrong line physics.
+    emission lines the same luminosity: e.g. Halpha/Hbeta = 1.0 instead of the
+    Case B 2.87: producing plausible-looking but silently wrong line physics.
     """
 
 
@@ -229,7 +229,7 @@ def _warn_if_degenerate_line_ratios(ratios: np.ndarray, filepath: Path) -> None:
     if finite.size == 0 or float(finite.min()) == float(finite.max()):
         value = float(finite.min()) if finite.size else float("nan")
         warnings.warn(
-            f"CB19: the line-ratio grid loaded from {filepath} is DEGENERATE — "
+            f"CB19: the line-ratio grid loaded from {filepath} is DEGENERATE: "
             f"every line ratio is identical ({value:g}). This is the flat "
             "placeholder cb19_templates.h5 (#924), not a usable CLOUDY grid: all "
             "10 emission lines would receive the same luminosity (Halpha/Hbeta = "
@@ -266,7 +266,7 @@ def _emit_cb19_warnings(ionizing_source_warning: str, continuum_warning: str) ->
 
     if continuum_warning != "suppress":
         msg = (
-            "CB19Backend provides no nebular continuum — predict_nebular_continuum() "
+            "CB19Backend provides no nebular continuum: predict_nebular_continuum() "
             "returns zeros. For rest-frame UV continuum accuracy (e.g. z > 2 galaxies "
             "where nebular continuum contributes 10-40% of UV flux), combine with "
             "CloudyGridBackend or CueBackend for the continuum. "
@@ -361,7 +361,7 @@ def load_cb19_grid(
 
     Notes
     -----
-    **JIT-compatible**: no — HDF5 I/O is not JAX-compatible. Call once
+    **JIT-compatible**: no, HDF5 I/O is not JAX-compatible. Call once
     at model initialization and cache the result for repeated use.
 
     """
@@ -575,15 +575,15 @@ class CB19Backend:
     name = "cb19_grid"
     has_free_params = True
 
-    #: erg/s per [Lsun] for this backend's line catalog (#1559). IAU 2015 —
+    #: erg/s per [Lsun] for this backend's line catalog (#1559). IAU 2015:
     #: the CB_19 tabulation and ``_HB_PER_QH_LSUN`` above are both built on it.
     #: Cue overrides this with its own training convention; see CueBackend.
     lsun_erg: float = _LSUN_ERG
 
     #: log10 of the scalar ``_qh_table`` is normalized by (#1568). Declared on
     #: the class, not only in ``__init__``, so an instance built without the
-    #: normal constructor path — the mocked backends in the test suite do
-    #: exactly this — still has the identity value rather than an
+    #: normal constructor path: the mocked backends in the test suite do
+    #: exactly this: still has the identity value rather than an
     #: ``AttributeError``. 0.0 means "table already in photons/s".
     _log_qh_scale: float = 0.0
 
@@ -660,7 +660,7 @@ class CB19Backend:
         We bridge by:
 
         1. Adding ``log_hb_per_qh`` to ``log_line_ratios`` so the grid is in
-           log10(L_line/Q_H) [Lsun·s/photon] — the same units the kernel
+           log10(L_line/Q_H) [Lsun·s/photon]: the same units the kernel
            feeds through ``10**log_lum × Q_H``.
         2. Triweight-collapsing axes 3 (log_nH), 4 (log_CO), 5 (dNO) at the
            caller-supplied default values (defaults: HII region, near-solar
@@ -669,7 +669,7 @@ class CB19Backend:
            absolute log10(Z) by subtracting ``_LOG_OH_OFFSET`` so the
            kernel's ``_gas_z`` (absolute log10(Z)) lands on the correct
            coordinates.
-        4. Filling ``_preint_continuum.phot`` with zeros — CB19 has no
+        4. Filling ``_preint_continuum.phot`` with zeros: CB19 has no
            nebular continuum component, so the kernel's continuum age-sum
            contributes nothing.
 
@@ -705,11 +705,11 @@ class CB19Backend:
 
         Notes
         -----
-        **JIT-compatible**: no — build-time NumPy / one-time triweight
+        **JIT-compatible**: no, build-time NumPy / one-time triweight
         collapses. The resulting attributes are JAX arrays usable inside
         the JIT'd kernel body.
         """
-        del dl_cm  # CB19: no continuum, lines via point-sampling — no F_nu scaling needed
+        del dl_cm  # CB19: no continuum, lines via point-sampling, no F_nu scaling needed
         grid = self.grid
 
         # 1. Lift line ratios into log10(L_line/Q_H) [Lsun·s/photon].
@@ -804,14 +804,14 @@ class CB19Backend:
         # Build in the log domain and store the table *normalized* by its own
         # peak (#1568). Q_H reaches ~1e46 photons/s/Msun, which float32 cannot
         # hold: the linear build overflowed every entry to ``inf``, and
-        # ``sanitize_qh_table`` then rewrote the lot to 0.0 — every CB19 line
+        # ``sanitize_qh_table`` then rewrote the lot to 0.0: every CB19 line
         # silently zero in pure float32.
         #
         # Bilinear interpolation is a linear operator, so interpolating
         # ``table / scale`` is exactly interpolating ``table`` and dividing;
         # float64 values are unchanged. Storing ``log10(Q_H)`` and interpolating
-        # *that* would instead be a geometric interpolation — a different
-        # physical answer — which is why the scale is a scalar, not a log table.
+        # *that* would instead be a geometric interpolation: a different
+        # physical answer: which is why the scale is a scalar, not a log table.
         log_qh_raw = _compute_log_qh_grid(ssp_wave, ssp_flux)
         finite = jnp.isfinite(log_qh_raw)
         self._log_qh_scale = float(jnp.max(jnp.where(finite, log_qh_raw, -jnp.inf)))
@@ -836,7 +836,7 @@ class CB19Backend:
     def _lum_scale(self) -> float:
         r"""The one in-range constant the line chain needs [Lsun per unit ratio].
 
-        ``10**_log_hb_per_qh`` is 1.2e-46 and ``10**_log_qh_scale`` is ~1e46 —
+        ``10**_log_hb_per_qh`` is 1.2e-46 and ``10**_log_qh_scale`` is ~1e46:
         one below float32's smallest subnormal, the other above its ceiling.
         Their product is order unity, and evaluating it here in Python float64
         means neither ever exists as a float32 array (#1568).
@@ -850,7 +850,7 @@ class CB19Backend:
         that reconstructs photons/s is folded into :attr:`_lum_scale` rather
         than materialized, because it does not fit in float32 (#1568).
 
-        ``missing=1.0`` is the identity for a multiplicative Q_H — a CB19
+        ``missing=1.0`` is the identity for a multiplicative Q_H: a CB19
         backend without a table applies no Q_H scaling rather than zeroing
         the lines.
         """
@@ -945,9 +945,9 @@ class CB19Backend:
 
         Notes
         -----
-        **JIT-compatible**: yes — all operations use ``jnp`` primitives.
+        **JIT-compatible**: yes, all operations use ``jnp`` primitives.
 
-        **Gradient-safe**: yes — differentiable through neb_logU, neb_fesc,
+        **Gradient-safe**: yes, differentiable through neb_logU, neb_fesc,
         neb_fdust, neb_log_nH, neb_co, neb_dno parameters.
 
         References
@@ -966,7 +966,7 @@ class CB19Backend:
 
         # Prefer the threaded grid. ``SEDModel._template_data_for_jit`` has
         # published this backend's grid all along and ``NebularSEDComponent``
-        # has passed it here all along — but the signature ended in ``**_kwargs``,
+        # has passed it here all along: but the signature ended in ``**_kwargs``,
         # so ``template_data`` was accepted and discarded, and ``self.grid``
         # (a concrete array) was read under the trace instead. Every layer
         # looked wired; nothing was, and the 0.665 MB ``log_line_ratios`` cube
@@ -1016,7 +1016,7 @@ class CB19Backend:
             # ``qh_i`` is the peak-normalized Q_H in (0, 1], so every factor
             # below is order unity and nothing needs a dtype cast. The previous
             # spelling reached for ``.astype(jnp.float64)``, which is a no-op
-            # under ``jax.enable_x64(False)`` — inert in the mode it guarded.
+            # under ``jax.enable_x64(False)``: inert in the mode it guarded.
             lum_per_qh_ratio = 10.0**log_ratios_i
             return weight_i * qh_i * lum_per_qh_ratio * self._lum_scale * k_factor
 
@@ -1064,7 +1064,7 @@ class CB19Backend:
         wavelength : array, shape (1,)
             Dummy wavelength [Angstrom].
         luminosity : array, shape (1,)
-            Zero array [erg/s/Hz] — no continuum from CB_19.
+            Zero array [erg/s/Hz]: no continuum from CB_19.
 
         References
         ----------
@@ -1074,7 +1074,7 @@ class CB19Backend:
 
         Notes
         -----
-        **JIT-compatible**: yes — returns constant arrays.
+        **JIT-compatible**: yes, returns constant arrays.
 
         """
         return jnp.array([5000.0]), jnp.array([0.0])
@@ -1178,9 +1178,9 @@ class CB19Backend:
 
         Notes
         -----
-        **JIT-compatible**: yes — all operations use ``jnp`` primitives.
+        **JIT-compatible**: yes, all operations use ``jnp`` primitives.
 
-        **Gradient-safe**: yes — differentiable through neb_logU, neb_fesc,
+        **Gradient-safe**: yes, differentiable through neb_logU, neb_fesc,
         neb_fdust, neb_log_nH, neb_co, neb_dno parameters.
 
         """

@@ -15,7 +15,7 @@ components (modified blackbody, Casey 2012 single-T MBB, IGM transmission)
 contribute nothing because they evaluate exactly on whatever grid they're
 handed.
 
-Schemas vary across template files — wavelengths may live under
+Schemas vary across template files, wavelengths may live under
 ``wavelength_aa``, ``wavelength`` (assumed Å for SED templates), or
 ``wavelength_um`` (×1e4 to convert), and may be nested inside an HDF5 group
 matching the model name. The lookup helpers normalize all of this to
@@ -72,7 +72,7 @@ _DUST_EMISSION_TEMPLATES: dict[str, tuple[tuple[str, str, float], ...]] = {
     "themis": (("themis_templates.h5", "wavelength_aa", 1.0),),
 }
 
-# Analytic dust-emission models — no template file, but their emission still
+# Analytic dust-emission models, no template file, but their emission still
 # needs FIR/submm support on the master grid: without it the SED truncates at
 # the SSP edge (160 µm for BC03) and submm photometry is silently zero while
 # energy balance re-normalizes on the truncated grid (#1005). Same failure
@@ -88,7 +88,7 @@ _ANALYTIC_DUST_EMISSION = frozenset(
     }
 )
 _ANALYTIC_DUST_WAVE_AA = np.geomspace(1.0e4, 1.0e8, 512)
-# Bookkeeping pseudo-model with no emission of its own — stays grid-less.
+# Bookkeeping pseudo-model with no emission of its own, stays grid-less.
 _GRIDLESS_DUST_EMISSION = frozenset({"energy_balance_split"})
 
 # AGN torus templates --------------------------------------------------------
@@ -125,7 +125,7 @@ _NEBULAR_TEMPLATES: dict[str, tuple[tuple[str, str, float], ...]] = {
 
 
 _AGN_MODEL_TEMPLATES: dict[str, tuple[tuple[str, str, float], ...]] = {
-    # QSOgen / GRAHSP / Richards2006 are analytic — they evaluate on whatever
+    # QSOgen / GRAHSP / Richards2006 are analytic, they evaluate on whatever
     # wavelength grid they're handed. Nothing to declare here yet.
 }
 
@@ -258,7 +258,7 @@ def native_wave_agn_model(model: str | None) -> np.ndarray | None:
 
     Most AGN models (QSOgen, GRAHSP, Richards2006, the parametric
     ``multicolor_agn``) are analytic and evaluate on whatever wavelength
-    grid is supplied — they contribute nothing here. The dispatch table is
+    grid is supplied, they contribute nothing here. The dispatch table is
     kept for symmetry / future extensions.
     """
     if model is None:
@@ -281,7 +281,7 @@ def collect_native_wavelength_grids(
 
     Returns a list of sorted ``ndarray`` grids in Angstrom. Components that
     don't carry a native template (analytic, missing data files, unknown
-    name) contribute nothing — the returned list may be empty.
+    name) contribute nothing, the returned list may be empty.
     """
     grids: list[np.ndarray] = []
     for w in (

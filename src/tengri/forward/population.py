@@ -1,9 +1,9 @@
 # SPDX-License-Identifier: BSD-3-Clause
-"""Population — one (SED, spatial) pair inside a :class:`ForwardModel`.
+"""Population, one (SED, spatial) pair inside a :class:`ForwardModel`.
 
 A galaxy decomposition (AGN point source + Sérsic bulge + exponential
 disc) is expressed as multiple :class:`Population` objects. The population's
-``name`` is the outer namespace in parameter names — e.g.
+``name`` is the outer namespace in parameter names, e.g.
 ``disc.sfh_dpl_alpha`` for the disc population's stellar
 parameter. See architecture spec §6 + ADR-0012 for the full namespace
 contract.

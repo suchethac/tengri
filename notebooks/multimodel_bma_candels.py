@@ -80,9 +80,8 @@ from tengri.units import ab_mag_to_fnu
 # %%
 DATA_DIR = REPO_ROOT / "data"
 CANDELS_DIR = REPO_ROOT / "analysis" / "hst_proposal" / "data"
-print(f"Repo root : {REPO_ROOT}")
-print(f"SSP grids : {DATA_DIR}")
-print(f"CANDELS   : {CANDELS_DIR}")
+print(f"SSP grids : {DATA_DIR.exists()}")
+print(f"CANDELS   : {CANDELS_DIR.exists()}")
 
 # %% [markdown]
 # ## 1. Catalog: CANDELS GOODS-South

@@ -76,7 +76,7 @@ def diagnostics_table(results, names=None):
 def posterior_plot_sfh(result, truth_sfh=None, ax=None):
     """Plot SFH posterior with optional truth.
 
-    Convenience function for Posterior.plot_sfh() — shows posterior median
+    Convenience function for Posterior.plot_sfh(): shows posterior median
     and 68% credible band over lookback time.
 
     Parameters
@@ -154,8 +154,12 @@ def posterior_plot_sfh(result, truth_sfh=None, ax=None):
 # Convergence thresholds and checks
 # ═══════════════════════════════════════════════════════════════════
 
-# Thresholds following Vehtari et al. (2021) "Rank-normalization,
-# folding, and localization" and Stan/ArviZ conventions.
+#: Industry-standard convergence diagnostic thresholds, following Vehtari et al.
+#: (2021) and Stan/ArviZ conventions. Keys are threshold names
+#: (``'ess_bulk_min'``, ``'ess_total_target'``, ``'divergence_warn'``,
+#: ``'divergence_fail_pct'``, ``'accept_rt_lo'``, ``'accept_rt_hi'``,
+#: ``'accept_nuts_target'``); values are numeric thresholds. Used by
+#: :func:`convergence_check` and :func:`convergence_table`.
 CONVERGENCE_THRESHOLDS = {
     "ess_bulk_min": 100,  # minimum bulk ESS per parameter
     "ess_total_target": 400,  # target total ESS for reliable summaries
@@ -230,7 +234,7 @@ def convergence_check(result, method_name="", verbose=True):
             if ess_med < th["ess_total_target"]:
                 warnings.append(
                     f"Median ESS = {ess_med:.0f} < {th['ess_total_target']} "
-                    f"target — consider more samples"
+                    f"target: consider more samples"
                 )
 
         # Autocorrelation time check (Behroozi 2025 criterion: N > 5τ)
@@ -275,7 +279,7 @@ def convergence_check(result, method_name="", verbose=True):
             warnings.append(
                 f"FROZEN: {len(frozen_params)} parameter(s) never moved "
                 f"({', '.join(frozen_params[:3])}{'...' if len(frozen_params) > 3 else ''}) "
-                f"— R-hat cannot detect this (both variances ~0, ratio ~1)"
+                f": R-hat cannot detect this (both variances ~0, ratio ~1)"
             )
 
     # --- Divergences (NUTS) ---
@@ -291,13 +295,13 @@ def convergence_check(result, method_name="", verbose=True):
             info["all_samples_divergent"] = True
             warnings.append(
                 f"CRITICAL: {n_div}/{n_samples} divergent transitions (100%) "
-                f"— the sampler rejected every proposal. This is a dead fit, not a converged one."
+                f": the sampler rejected every proposal. This is a dead fit, not a converged one."
             )
         elif n_div > th["divergence_warn"]:
             severity = "SERIOUS" if div_pct > th["divergence_fail_pct"] else "WARNING"
             warnings.append(
                 f"{severity}: {n_div}/{n_samples} divergent transitions "
-                f"({div_pct:.1f}%) — posterior may be unreliable"
+                f"({div_pct:.1f}%); posterior may be unreliable"
             )
         else:
             info["all_samples_divergent"] = False
@@ -309,10 +313,10 @@ def convergence_check(result, method_name="", verbose=True):
     if accept is not None:
         info["acceptance_rate"] = accept
         if accept < th["accept_rt_lo"]:
-            warnings.append(f"RT acceptance {accept:.0%} too low — reduce step_size")
+            warnings.append(f"RT acceptance {accept:.0%} too low: reduce step_size")
         elif accept > th["accept_rt_hi"]:
             warnings.append(
-                f"RT acceptance {accept:.0%} too high — chain barely moving, increase step_size"
+                f"RT acceptance {accept:.0%} too high; chain barely moving, increase step_size"
             )
 
     # --- Acceptance rate (NUTS) ---

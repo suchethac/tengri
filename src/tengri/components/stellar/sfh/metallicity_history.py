@@ -8,7 +8,7 @@ ready for ``interp_metallicity_evolving`` or DSPS ``compute_dsps_met_table_weigh
 
 Unlike the gas-regulator model in ``chemical_evolution.py`` (which derives
 Z(t) self-consistently from the SFH), these modes let users prescribe Z(t)
-directly — useful when physical self-consistency is not required or when
+directly: useful when physical self-consistency is not required or when
 comparing to Bagpipes results.
 
 Modes
@@ -68,9 +68,9 @@ def two_step_metallicity(
 
     Notes
     -----
-    **JIT-compatible**: yes — uses ``jax.nn.sigmoid``.
+    **JIT-compatible**: yes, uses ``jax.nn.sigmoid``.
 
-    **Gradient-safe**: yes — sigmoid provides smooth gradients.
+    **Gradient-safe**: yes, sigmoid provides smooth gradients.
 
     The metallicity history is:
 
@@ -128,7 +128,7 @@ def psb_two_step_metallicity(
 
     Notes
     -----
-    **JIT-compatible**: yes — delegates to :func:`two_step_metallicity`.
+    **JIT-compatible**: yes, delegates to :func:`two_step_metallicity`.
     """
     return two_step_metallicity(ssp_lg_age_gyr, log_z_abs_old, log_z_abs_burst, burstage_gyr)
 
@@ -162,7 +162,7 @@ def metallicity_bins_on_ssp_grid(
 
     Notes
     -----
-    **JIT-compatible**: yes — uses ``jnp.searchsorted`` and ``jnp.clip``.
+    **JIT-compatible**: yes, uses ``jnp.searchsorted`` and ``jnp.clip``.
 
     Bin indexing follows lookback-time convention:
 
@@ -224,7 +224,7 @@ def metallicity_bins_continuity_on_ssp_grid(
 
     Notes
     -----
-    **JIT-compatible**: yes — uses ``jnp`` primitives and delegates to
+    **JIT-compatible**: yes, uses ``jnp`` primitives and delegates to
     :func:`metallicity_bins_on_ssp_grid` for final binning.
     """
     cumulative = jnp.concatenate([jnp.zeros(1), jnp.cumsum(d_log_z)])
@@ -265,7 +265,7 @@ def tabulated_metallicity_on_ssp_grid(
 
     Notes
     -----
-    **JIT-compatible**: yes — uses ``jnp.interp`` for linear interpolation.
+    **JIT-compatible**: yes, uses ``jnp.interp`` for linear interpolation.
     """
     ssp_log_yr = ssp_lg_age_gyr + 9.0
     return jnp.interp(ssp_log_yr, met_log_age_yr, met_log_z_abs)
@@ -306,9 +306,9 @@ def massmap_lin_metallicity(
 
     Notes
     -----
-    **JIT-compatible**: yes — uses JAX primitives for cumulative integration.
+    **JIT-compatible**: yes, uses JAX primitives for cumulative integration.
 
-    **Gradient-safe**: yes — all operations are differentiable.
+    **Gradient-safe**: yes, all operations are differentiable.
 
     **Physics:**
 
@@ -369,7 +369,7 @@ def massmap_lin_metallicity(
     cmf = jnp.clip(cmf, 0.0, 1.0)
 
     # Linear interpolation in *linear* Z (ProSpect convention, and the docstring
-    # Eq. above): Z(age) = Zstart + (Zfinal - Zstart) * cmf — NOT linear in
+    # Eq. above): Z(age) = Zstart + (Zfinal - Zstart) * cmf; NOT linear in
     # log Z (that would be a geometric map, ~2x off at the half-mass point).
     z_start = 10.0**log_z_abs_start
     z_final = 10.0**log_z_abs_final
@@ -416,9 +416,9 @@ def massmap_box_metallicity(
 
     Notes
     -----
-    **JIT-compatible**: yes — uses JAX primitives for cumulative integration and logarithm.
+    **JIT-compatible**: yes, uses JAX primitives for cumulative integration and logarithm.
 
-    **Gradient-safe**: yes — all operations are differentiable (uses jnp.log with safe clipping).
+    **Gradient-safe**: yes, all operations are differentiable (uses jnp.log with safe clipping).
 
     **Physics:**
 

@@ -8,18 +8,18 @@ goes through :func:`_peak_factored_trapezoid` here; the build-time LUT in
 factorization of the *same* integral and must agree with it.
 
 The two public spellings are **not** equally traveled. Measured 2026-08-04,
-every call site in ``src/`` — ``dust/two_component.py`` (twice),
-``dust/component.py``, ``dust/wg00_model.py`` — calls
+every call site in ``src/``, ``dust/two_component.py`` (twice),
+``dust/component.py``, ``dust/wg00_model.py``, calls
 :func:`bolometric_absorbed_log10`. :func:`bolometric_absorbed` has no live
 caller and is not re-exported; it survives as the linear statement of the
 contract the LUT is checked against, and is exercised only by tests. This
 paragraph used to say the opposite, naming the linear form as the path
 everything took, which is worth knowing when reading either function's guard
-semantics — see :func:`_peak_factored_trapezoid` and #1527.
+semantics, see :func:`_peak_factored_trapezoid` and #1527.
 
 Physics convention: Lyman-continuum photons (:math:`\lambda < 912` Å) ionize
-hydrogen — their energy re-emerges as nebular line and continuum emission,
-not as dust heating — so they are excluded from the energy-balance integral,
+hydrogen, their energy re-emerges as nebular line and continuum emission,
+not as dust heating, so they are excluded from the energy-balance integral,
 matching CIGALE [1]_.
 """
 
@@ -34,7 +34,7 @@ import jax.numpy as jnp
 def warn_if_corrupt(log_l_absorbed: jnp.ndarray, *, component: str) -> None:
     """Attribute a ``+inf`` energy balance to its component, on the eager path.
 
-    ``+inf`` is loud — it reaches ``L_ir`` and surfaces as a NaN fit — but on
+    ``+inf`` is loud (it reaches ``L_ir`` and surfaces as a NaN fit) but on
     its own it says nothing about *where* the corruption entered. This supplies
     that, so the user is not left bisecting a NaN.
 
@@ -49,7 +49,7 @@ def warn_if_corrupt(log_l_absorbed: jnp.ndarray, *, component: str) -> None:
     -----
     **Not JIT-compatible by design, and safe to call from JIT-compatible code.**
     ``float()`` raises ``ConcretizationTypeError`` under any ``jit``/``grad``/
-    ``vmap``, which is caught and treated as "nothing concrete to inspect" —
+    ``vmap``, which is caught and treated as "nothing concrete to inspect",
     the same discipline as ``SFHBeforeBigBangWarning`` in the stellar
     component. Inference explores corrupt draws routinely and a per-sample
     warning would be unusable, so the ``+inf`` travels unannounced there.
@@ -57,7 +57,7 @@ def warn_if_corrupt(log_l_absorbed: jnp.ndarray, *, component: str) -> None:
     try:
         value = float(log_l_absorbed)
     except (jax.errors.ConcretizationTypeError, TypeError):
-        return  # tracing — no concrete value to inspect
+        return  # tracing, no concrete value to inspect
     if value != float("inf"):
         return
     from tengri.config.exceptions import CorruptEnergyBalanceWarning
@@ -66,7 +66,7 @@ def warn_if_corrupt(log_l_absorbed: jnp.ndarray, *, component: str) -> None:
         f"The dust energy balance in {component!r} received a non-finite SED, so "
         "L_absorbed is +inf and every quantity derived from it (L_ir, the dust IR "
         "emission, the FIR-radio correlation) will be inf or NaN. The intrinsic or "
-        "attenuated SED reaching this component already contained Inf/NaN — check "
+        "attenuated SED reaching this component already contained Inf/NaN, check "
         "for an extreme metallicity driving an Inf*0 SSP flux, or an attenuation "
         "curve amplifying in the far UV. This is reported rather than silently "
         "clamped to zero absorption (#1527).",
@@ -94,7 +94,7 @@ def _peak_factored_trapezoid(
     """Integrate ``integrand/peak`` over ``nu``, returning the factored pieces.
 
     The absorbed luminosity is a product of two individually representable
-    factors — an integrand of ~1e28 erg/s/Hz and a frequency span of ~1e15 Hz —
+    factors (an integrand of ~1e28 erg/s/Hz and a frequency span of ~1e15 Hz)
     whose product (~1e43 erg/s) exceeds the float32 ceiling of 3.4e38. Dividing
     the integrand by its own peak makes the reduction O(1e15), so no
     intermediate leaves float32 range; the caller re-applies ``peak``, in log
@@ -103,12 +103,12 @@ def _peak_factored_trapezoid(
     Returns
     -------
     signed_norm : ndarray, shape ()
-        ``trapezoid(integrand / peak, nu)`` — signed, follows grid orientation.
+        ``trapezoid(integrand / peak, nu)``, signed, follows grid orientation.
     peak : ndarray, shape ()
         The factored-out scale (1.0 when the integrand is zero or non-finite).
     ok : ndarray, shape (), bool
         True when the integral is a usable finite number. False for *both* an
-        all-zero integrand and a corrupt one — use ``corrupt`` to tell which.
+        all-zero integrand and a corrupt one, use ``corrupt`` to tell which.
     corrupt : ndarray, shape (), bool
         True when the integrand contained ``Inf``/``NaN``, or when the reduction
         went non-finite despite a finite positive peak. Disjoint from the
@@ -117,17 +117,17 @@ def _peak_factored_trapezoid(
     Notes
     -----
     ``ok`` alone merges two situations that are *not* the same answer: an
-    all-zero integrand (nothing absorbed — a true zero) and a non-finite one
+    all-zero integrand (nothing absorbed, a true zero) and a non-finite one
     (something upstream produced Inf or NaN). ``corrupt`` separates them, and
     the two callers **deliberately answer it differently** (#1527):
 
     * :func:`bolometric_absorbed_log10`: the live form, on every production
-      path — reports ``+inf``, matching :func:`tengri.utils.scale.log10_add`,
+      path, reports ``+inf``, matching :func:`tengri.utils.scale.log10_add`,
       whose comment argues that folding a non-finite term into the zero
-      sentinel "would report an overflowed term as exactly zero — a fail-open
+      sentinel "would report an overflowed term as exactly zero, a fail-open
       on precisely the axis this module exists to close".
     * :func:`bolometric_absorbed`: the linear form, with no caller in ``src/``
-      — keeps clamping to ``0.0``. That clamp is inherited, not chosen: #922's
+      keeps clamping to ``0.0``. That clamp is inherited, not chosen: #922's
       table lists it as a property of the retired compositional kernel,
       preserved to avoid changing behavior for a real artifact class (Inf·0
       from extreme-metallicity SSP fluxes, BUG-NSS-02), and it is pinned by
@@ -165,7 +165,7 @@ def bolometric_absorbed_log10(
     wave: jnp.ndarray,
     lyman_cutoff_aa: float | None = 912.0,
 ) -> tuple[jnp.ndarray, jnp.ndarray]:
-    r"""log10 of the absorbed bolometric luminosity — the float32-safe contract.
+    r"""log10 of the absorbed bolometric luminosity, the float32-safe contract.
 
     .. math::
 
@@ -178,10 +178,10 @@ def bolometric_absorbed_log10(
     and :math:`\lambda_{\rm LyC}` the Lyman-continuum cutoff [Angstrom].
 
     Same integral, same LyC convention, and the same guard semantics as
-    :func:`bolometric_absorbed` — only the output representation differs.
+    :func:`bolometric_absorbed`, only the output representation differs.
     Magnitude and sign are returned separately because that *is* what a
     signed quantity looks like in log space; callers that only need the
-    energy (nearly all of them — the linear form's sign merely tracks grid
+    energy (nearly all of them, the linear form's sign merely tracks grid
     orientation) discard the sign, while callers combining two absorbed
     terms need it to reproduce ``|a + b|`` rather than ``|a| + |b|``.
 
@@ -204,26 +204,26 @@ def bolometric_absorbed_log10(
     log_magnitude : ndarray, shape ()
         :math:`\log_{10}(|L_{\rm abs}| / (\mathrm{erg/s}))` [dex]. ``-inf``
         when nothing is absorbed, which powers back to exactly 0.0. ``+inf``
-        when the inputs are non-finite — a corrupt integrand is *not* folded
+        when the inputs are non-finite, a corrupt integrand is *not* folded
         into the zero sentinel (#1527); see
         :class:`tengri.config.exceptions.CorruptEnergyBalanceWarning`.
     sign : ndarray, shape ()
         Sign of the signed integral, for combining terms via
         :func:`tengri.utils.scale.log10_add`. 0.0 when nothing is absorbed,
-        ``NaN`` when the integrand is corrupt — an uncomputable integral has no
+        ``NaN`` when the integrand is corrupt, an uncomputable integral has no
         sign, and 0.0 is already spoken for.
 
     Notes
     -----
-    **JIT-compatible**: yes — pure ``jnp``; ``lyman_cutoff_aa`` is a static
+    **JIT-compatible**: yes, pure ``jnp``; ``lyman_cutoff_aa`` is a static
     Python value. Safe under ``grad`` and ``vmap``: the zero case takes the
     where-dummy path, so no NaN reaches the backward pass.
 
     The ``peak`` factored out of the integrand cancels analytically between
     the two log terms, so the gradient is that of the unfactored integral.
 
-    Absorbed luminosities are ~1e43 erg/s — six decades past the float32
-    ceiling — so this log form, not :func:`bolometric_absorbed`, is what a
+    Absorbed luminosities are ~1e43 erg/s, six decades past the float32
+    ceiling, so this log form, not :func:`bolometric_absorbed`, is what a
     pure-float32 (JAX-Metal) forward pass must consume (#1206).
     """
     from tengri.utils.scale import log10_magnitude
@@ -234,7 +234,7 @@ def bolometric_absorbed_log10(
     # Corrupt beats the -inf sentinel: -inf powers back to exactly 0.0, so
     # reporting it here would say "nothing absorbed" about an input nobody can
     # integrate. +inf survives log10_add and reaches L_ir, where it is visible.
-    # The sign of an uncomputable integral is NaN, not 0.0 — 0.0 already means
+    # The sign of an uncomputable integral is NaN, not 0.0; 0.0 already means
     # "no absorption" in this contract.
     log_magnitude = jnp.where(corrupt, jnp.inf, log_norm + jnp.log10(peak))
     sign = jnp.where(ok, jnp.sign(signed_norm), 0.0)
@@ -269,7 +269,7 @@ def bolometric_absorbed(
         Dust-attenuated SED [erg/s/Hz].
     nu : array_like, shape (n_wave,)
         Frequency grid corresponding to ``wave`` [Hz]. Passed to
-        ``jnp.trapezoid`` as-is — no sorting is applied, so the sign of the
+        ``jnp.trapezoid`` as-is, no sorting is applied, so the sign of the
         result follows the grid orientation (descending ``nu`` for ascending
         ``wave`` gives a negative integral for net absorption).
     wave : array_like, shape (n_wave,)
@@ -287,12 +287,12 @@ def bolometric_absorbed(
         ``jnp.abs`` (sign robustness against grid orientation) and any
         energy-balance relaxation factor (``dust_eta_balance``) themselves.
         Non-finite *inputs* (e.g. Inf·0 artifacts from extreme-metallicity
-        SSP fluxes, BUG-NSS-02 era) are clamped to 0.0 — the guard the
+        SSP fluxes, BUG-NSS-02 era) are clamped to 0.0, the guard the
         retired compositional kernel carried; identity for finite inputs.
 
     Notes
     -----
-    **JIT-compatible**: yes — pure ``jnp``; ``lyman_cutoff_aa`` is a static
+    **JIT-compatible**: yes, pure ``jnp``; ``lyman_cutoff_aa`` is a static
     Python value, so the mask branch resolves at trace time. Safe under
     ``grad`` and ``vmap``.
 
@@ -311,7 +311,7 @@ def bolometric_absorbed(
     (contract test: ``tests/contract/test_energy_balance_lut.py``).
 
     Cross-code conventions: CIGALE zeroes its attenuation curves at
-    λ ≤ 91.2 nm and Bagpipes masks the ionizing continuum via ``fesc`` —
+    λ ≤ 91.2 nm and Bagpipes masks the ionizing continuum via ``fesc``;
     both exclude LyC from dust heating, as here. FSPS does *not* mask the
     LyC, so ``L_dust`` comparisons against FSPS/Prospector carry this
     convention difference. The mask also protects the integral from

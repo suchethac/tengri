@@ -16,7 +16,7 @@ Two entry points are provided:
   intrinsic SED equals ``agn_log_lbol``.
 
 The galaxy energy-balance loop (Dale+ 2014 dust re-emission) is **not**
-included here — it is shared with the non-GRAHSP galaxy pipeline at
+included here: it is shared with the non-GRAHSP galaxy pipeline at
 :mod:`tengri.components.dust.emission`.
 
 References
@@ -90,7 +90,7 @@ _DEFAULT_A_BC: float = 0.0
 # Mor & Netzer 2012 template-torus parameters (used when torus_model="mn12").
 _DEFAULT_TOR_TEMP: float = 0.0
 _DEFAULT_TOR_CUTOFF_UM: float = 1.2
-# Structural (static) selectors — choose the GRAHSP sub-model variants.
+# Structural (static) selectors: choose the GRAHSP sub-model variants.
 _DEFAULT_TORUS_MODEL: str = "gaussian"  # "gaussian" (activategtorus) | "mn12" (activatetorus)
 _DEFAULT_FEII_TEMPLATE: str = "bruhweiler2008"  # | "veroncetty2004"
 _DEFAULT_DISC_MODEL: str | None = None  # None -> SBPL BBB; "netzer" -> Netzer disc grid
@@ -169,7 +169,7 @@ class GRAHSPParams:
     # Mor & Netzer 2012 template-torus knobs (active when torus_model == "mn12").
     tor_temp: float = _DEFAULT_TOR_TEMP
     tor_cutoff_um: float = _DEFAULT_TOR_CUTOFF_UM
-    # Structural (static) variant selectors — see module-level defaults.
+    # Structural (static) variant selectors: see module-level defaults.
     torus_model: str = _DEFAULT_TORUS_MODEL
     feii_template: str = _DEFAULT_FEII_TEMPLATE
     disc_model: str | None = _DEFAULT_DISC_MODEL
@@ -186,7 +186,7 @@ class GRAHSPSED(NamedTuple):
 
     Notes
     -----
-    ``bbb`` holds whichever big-blue-bump variant is active — the smooth
+    ``bbb`` holds whichever big-blue-bump variant is active, the smooth
     bending power-law (``disc_model=None``) or the Netzer disc grid
     (``disc_model="netzer"``). ``balmer`` is the Grandi 1982 Balmer
     continuum (zero unless ``a_bc > 0`` and ``agn_type == 1``). ``torus``
@@ -412,7 +412,7 @@ def compute_grahsp_sed(
     templates: GRAHSPTemplates | None = None,
     **_kwargs,
 ) -> Array:
-    r"""GRAHSP AGN SED — registered tengri AGN model entry point.
+    r"""GRAHSP AGN SED: registered tengri AGN model entry point.
 
     Mirrors the signature contract of other registered AGN models
     (e.g. :func:`tengri.components.agn.qsogen`): takes Å wavelengths,
@@ -456,7 +456,7 @@ agn_grahsp_hot_fcov
     agn_grahsp_ebv, agn_grahsp_ebv_agn
         Bi-attenuation; see :func:`attenuation_factors`.
     agn_type : int, optional
-        ``1`` (BL/QSO, default), ``2`` (Sy2), ``3`` (LINER). **Static** —
+        ``1`` (BL/QSO, default), ``2`` (Sy2), ``3`` (LINER). **Static**;
         do not pass as a traced JAX value.
     templates : GRAHSPTemplates, optional
         Pre-loaded HDF5 template bundle.
