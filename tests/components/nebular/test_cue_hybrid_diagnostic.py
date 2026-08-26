@@ -29,7 +29,7 @@ from tengri.parameters.priors import Fixed, Uniform
 
 # ── Skip guards ───────────────────────────────────────────────────
 
-_DATA_DIR = Path(__file__).resolve().parents[2] / "data"
+_DATA_DIR = Path(__file__).resolve().parents[3] / "data"
 _SSP_FILE = _DATA_DIR / "bc03_pdva_stelib_chabrier.h5"
 _SSP_EXISTS = _SSP_FILE.is_file()
 

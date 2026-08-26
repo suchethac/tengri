@@ -90,7 +90,7 @@ class TestParameterValidation:
         import sys
         from pathlib import Path
 
-        sys.path.insert(0, str(Path(__file__).parent.parent.parent.parent / "src"))
+        sys.path.insert(0, str(Path(__file__).resolve().parents[2] / "src"))
         from check_param_prefixes import collect_registered_params
 
         import tengri.presets as presets

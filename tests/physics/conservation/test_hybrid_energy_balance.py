@@ -32,7 +32,7 @@ from tengri.parameters.priors import Fixed, Uniform
 
 # ── Skip guards — require SSP data ────────────────────────────────
 
-_DATA_DIR = Path(__file__).resolve().parents[2] / "data"
+_DATA_DIR = Path(__file__).resolve().parents[3] / "data"
 _SSP_FILE = _DATA_DIR / "ssp_prsc_miles_chabrier_wNE_logGasU-3.0_logGasZ0.0.h5"
 _DL07_FILE = _DATA_DIR / "dl07_templates_v2.h5"
 _DALE_FILE = _DATA_DIR / "dale2014_templates.h5"

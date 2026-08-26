@@ -1,23 +1,76 @@
 # SPDX-License-Identifier: BSD-3-Clause
 """Auto-collapse correctness tests for precompute adapters.
 
-Confirms that with each grid axis individually Fixed, the collapsed grid's
-lookup matches the un-collapsed lookup at that fixed value.
+With one grid axis pinned to a Fixed value, the collapsed lookup must return
+exactly what the un-collapsed lookup returns at that value. This guards the
+``slice_fixed_axes`` collapse machinery.
 
-This test guards against regressions in slice_fixed_axes triweight collapse
-machinery (e.g., Silva04, Cat3D, disc, cb19 previously used non-existent
-parameters.is_fixed() API; radio, xray, dust_analytic fixed in this session).
+Three tests here never ran, for three stacked reasons
+-----------------------------------------------------
 
-Strategy: Test adapters directly via get_fixed_values() logic without needing
-full Parameters objects (which have complex validation rules). Instead, we:
-1. Build FULL adapter with parameters=None.
-2. Call precompute() with a synthetic Parameters that has Fixed axes.
-3. Verify collapsed lookup matches un-collapsed lookup at fixed value.
+``_DATA`` was ``Path(__file__).parent.parent.parent.parent / "data"``. Four
+``.parent`` steps from ``tests/contract/`` land one level *above* the
+repository, so the guards resolved ``<repo>/../data`` and the skip messages
+printed that path without anyone reading them. Paths now come from
+:mod:`tests._data_skip`, which computes the root once.
+
+The filenames were wrong too, independently, so fixing the directory alone
+would have left them skipped:
+
+======= ================================= ==========================
+class   looked for                        actually shipped
+======= ================================= ==========================
+Silva04 ``silva04_wind_torus_grid.h5``    ``silva04_torus_grid.h5``
+CB19    ``cb19_grid.h5``                  ``cb19_templates.h5``
+======= ================================= ==========================
+
+``cb19_templates.h5`` is confirmed by ``cb19_precompute.precompute``'s own
+docstring, which documents ``filepath`` as defaulting to it.
+
+The Silva04 test then failed, with ``silva04_phot() missing 1 required
+positional argument: 'agn_torus_frac'``. That is not a defect in the adapter:
+``build_lookup`` returns a callable taking ``(agn_log_lbol, agn_log_nh_silva,
+agn_torus_frac)`` -- one grid axis plus one *runtime* parameter that is
+deliberately not a grid axis (CLAUDE.md: ``agn_torus_frac`` must not be
+auto-derived in the forward pass). The old caller passed positionally and
+assumed an arity of ``1 + len(axes)``. Supplying it makes the collapse
+bit-exact: ``max|diff| = 0.0`` at ``agn_torus_frac`` of 0.25, 0.5 and 0.9.
+
+The two lookups disagree on how it is passed -- the full one takes it
+positionally, the collapsed one keyword-only after ``*free_axis_values`` -- so
+``_call_lookup`` passes every non-axis argument by keyword.
+
+An all-zero comparison is not a match
+--------------------------------------
+
+``agn_torus_frac=0.0`` makes every Silva04 filter return exactly ``0.0``, and
+``assert_allclose`` of zeros against zeros passes against any collapse
+implementation. Every case now asserts the full lookup is non-zero somewhere
+before comparing.
+
+Three classes that looked like coverage and held no tests
+----------------------------------------------------------
+
+``TestDiscPrecomputeAxisCollapse``, ``TestQsogenPrecomputeAxisCollapse`` and
+``TestCat3DPrecomputeAxisCollapse`` had a docstring, in one case a skip
+fixture, and no test methods -- ``--collect-only`` showed nothing while a
+reader scanning the file saw three covered adapters. They are gone; the
+adapters they named are in ``_UNCOVERED``, which is asserted rather than
+implied.
+
+The reason those three recorded ("build_lookup requires runtime parameters not
+present in precompute grid axes") is the same one Silva04's failure looked
+like, and for Silva04 it was wrong. A signature-driven harness was tried on
+all of them: it revives Silva04 exactly, and the others still mismatch.
+Whether that is a real collapse defect or a harness calling them wrongly is
+not decidable from the test side, so they stay listed and unclaimed.
 """
 
 from __future__ import annotations
 
-from pathlib import Path
+import importlib
+import inspect
+import pkgutil
 from unittest.mock import MagicMock
 
 import jax
@@ -25,11 +78,25 @@ import jax.numpy as jnp
 import numpy as np
 import pytest
 
+from tests._data_skip import DATA_DIR, requires_cb19
+
 pytestmark = pytest.mark.contract
 
+_SILVA04_GRID = DATA_DIR / "silva04_torus_grid.h5"
+_CB19_GRID = DATA_DIR / "cb19_templates.h5"
+
+requires_silva04_torus = pytest.mark.skipif(
+    not _SILVA04_GRID.is_file(), reason=f"Silva04 torus grid not found at {_SILVA04_GRID}"
+)
+
 # Standard synthetic filter set (used across test adapters)
-_CENTERS = np.array([3e5, 1e7, 1e8, 1e10])  # FIR–radio Angstrom
+_CENTERS = np.array([3e5, 1e7, 1e8, 1e10])  # FIR-radio Angstrom
 _WIDTHS = np.array([1e5, 3e6, 3e7, 3e9])
+
+#: Values for lookup arguments that are runtime parameters, not grid axes.
+#: ``agn_torus_frac`` must be non-zero: at 0.0 the Silva04 lookup returns all
+#: zeros and the comparison below becomes vacuous.
+_RUNTIME_ARGS = {"agn_torus_frac": 0.5}
 
 
 @pytest.fixture(scope="module")
@@ -39,416 +106,251 @@ def filter_set_radio():
     trans: list[np.ndarray] = []
     for c, w in zip(_CENTERS, _WIDTHS):
         wv = np.linspace(c - 3 * w, c + 3 * w, 64)
-        tr = np.exp(-0.5 * ((wv - c) / w) ** 2)
         waves.append(wv)
-        trans.append(tr)
+        trans.append(np.exp(-0.5 * ((wv - c) / w) ** 2))
     return waves, trans
 
 
 @pytest.fixture(scope="module")
 def filter_set_xray():
-    """Synthetic 4-filter set for X-ray precompute (0.1–100 keV)."""
-    centers = np.array([1.0, 5.0, 50.0, 500.0])  # 0.1–100 keV in Angstrom
+    """Synthetic 4-filter set for X-ray precompute (0.1-100 keV)."""
+    centers = np.array([1.0, 5.0, 50.0, 500.0])  # 0.1-100 keV in Angstrom
     widths = np.array([0.3, 1.5, 15.0, 150.0])
     waves: list[np.ndarray] = []
     trans: list[np.ndarray] = []
     for c, w in zip(centers, widths):
         wv = np.linspace(max(c - 3 * w, 1e-2), c + 3 * w, 64)
-        tr = np.exp(-0.5 * ((wv - c) / w) ** 2)
         waves.append(wv)
-        trans.append(tr)
+        trans.append(np.exp(-0.5 * ((wv - c) / w) ** 2))
     return waves, trans
 
 
-def _make_mock_params(fixed_dict: dict[str, float]) -> MagicMock:
-    """Create a mock Parameters object with get_fixed_values() returning fixed_dict."""
+def _mock_params(fixed: dict[str, float]) -> MagicMock:
+    """A stand-in Parameters whose ``get_fixed_values()`` returns ``fixed``."""
     mock = MagicMock()
-    mock.get_fixed_values.return_value = fixed_dict
+    mock.get_fixed_values.return_value = fixed
     mock.free_params = []
     return mock
 
 
-# ── Radio precompute tests (1 axis each) ──────────────────────────────────
+def _call_lookup(lookup, scale, axis_values):
+    """Call a lookup with axis values positionally and everything else by name.
+
+    The full and collapsed lookups do not agree on how a runtime parameter is
+    passed -- Silva04's full lookup takes ``agn_torus_frac`` positionally, its
+    collapsed one keyword-only after ``*free_axis_values``. Keyword works for
+    both.
+    """
+    accepted = inspect.signature(lookup).parameters
+    kwargs = {k: v for k, v in _RUNTIME_ARGS.items() if k in accepted}
+    return np.asarray(jax.jit(lookup)(scale, *axis_values, **kwargs))
 
 
-class TestRadioPrecomputeAxisCollapse:
-    """Test axis collapse for radio models (radio_alpha_sf, radio_alpha_ff, radio_alpha_agn)."""
+def _axis_params(adapter, model: str | None) -> tuple[str, ...]:
+    """``AXIS_PARAMS``, resolved through the model key when it is a mapping."""
+    declared = adapter.AXIS_PARAMS
+    return tuple(declared[model] if isinstance(declared, dict) else declared)
 
-    @pytest.mark.parametrize(
-        "model,param_name",
-        [
-            ("radio_synchrotron", "radio_alpha_sf"),
-            ("radio_freefree", "radio_alpha_ff"),
-            ("radio_agn_jet", "radio_alpha_agn"),
-        ],
+
+def _assert_collapse_matches(adapter, filter_set, *, model, fix_idx, n_axes, kw=None):
+    """Pin axis ``fix_idx`` and require the collapsed lookup to reproduce the full one.
+
+    ``AXIS_PARAMS`` is read off the adapter rather than restated here: a copy in
+    the test cannot disagree with the declaration it copies, and the mock
+    answers to whatever name it is handed, so a drifted name still collapses and
+    still passes. Both X-ray coronae declared ``xray_gamma`` against a parameter
+    named ``xray_gamma_agn`` and this suite stayed green throughout (#1738).
+    """
+    waves, trans = filter_set
+    kw = dict(kw or {})
+    if model is not None:
+        kw["model"] = model
+    redshift = 0.5
+
+    full = adapter.precompute(waves, trans, redshift, parameters=None, **kw)
+    lookup_kw = {"model": model} if model is not None else {}
+    full_lookup = adapter.build_lookup(full, **lookup_kw)
+    assert len(full["axes"]) == n_axes, (
+        f"expected {n_axes} axes before collapse, got {len(full['axes'])}"
     )
-    def test_radio_collapse_axis(self, model, param_name, filter_set_radio):
-        from tengri.components.radio import radio_precompute as adapter
 
-        waves, trans = filter_set_radio
-        redshift = 0.5
+    axes = [np.asarray(a) for a in full["axes"]]
+    midpoints = [float(a[len(a) // 2]) for a in axes]
+    param_name = _axis_params(adapter, model)[fix_idx]
 
-        # Build FULL adapter (no Fixed params).
-        full = adapter.precompute(waves, trans, redshift, parameters=None, model=model)
-        full_lookup = adapter.build_lookup(full, model=model)
-        assert len(full["axes"]) == 1, f"{model} should have 1 axis"
+    coll = adapter.precompute(
+        waves, trans, redshift, parameters=_mock_params({param_name: midpoints[fix_idx]}), **kw
+    )
+    coll_lookup = adapter.build_lookup(coll, **lookup_kw)
+    assert len(coll["axes"]) == n_axes - 1, (
+        f"pinning {param_name} should leave {n_axes - 1} axes, got {len(coll['axes'])}"
+    )
 
-        # Pick the midpoint value from the axis.
-        ax = full["axes"][0]
-        midpoint_idx = len(ax) // 2
-        pinned_value = float(ax[midpoint_idx])
+    scale = jnp.float64(1.0)
+    full_result = _call_lookup(full_lookup, scale, midpoints)
+    coll_result = _call_lookup(
+        coll_lookup, scale, [m for i, m in enumerate(midpoints) if i != fix_idx]
+    )
 
-        # Build COLLAPSED adapter with mock Parameters.
-        spec = _make_mock_params({param_name: pinned_value})
-        coll = adapter.precompute(waves, trans, redshift, parameters=spec, model=model)
-        coll_lookup = adapter.build_lookup(coll, model=model)
-
-        # Collapsed lookup should have 0 grid axes (only scale).
-        n_axes = len(coll["axes"])
-        assert n_axes == 0, f"{model}: expected 0 axes after collapse, got {n_axes}"
-
-        scale = jnp.float64(1.0)
-        full_result = jax.jit(full_lookup)(scale, pinned_value)
-        coll_result = jax.jit(coll_lookup)(scale)
-
-        np.testing.assert_allclose(
-            coll_result,
-            full_result,
-            rtol=1e-10,
-            atol=0.0,
-            err_msg=f"{model}: collapsed lookup mismatch",
-        )
+    assert np.any(full_result != 0.0), (
+        f"every filter returned 0.0, so comparing the collapsed lookup against it "
+        f"would pass for any implementation. Pinned {param_name}={midpoints[fix_idx]}; "
+        f"check that the filter set overlaps this component's emission and that the "
+        f"runtime arguments in _RUNTIME_ARGS are not switching it off."
+    )
+    np.testing.assert_allclose(
+        coll_result,
+        full_result,
+        rtol=1e-10,
+        atol=0.0,
+        err_msg=f"pinning {param_name} changed the result",
+    )
 
 
-# ── X-ray precompute tests (2 axes each) ──────────────────────────────────
+# ── The covered adapters ──────────────────────────────────────────
+
+#: (id, package, module, model or None, axis index to pin, axis count, filter
+#: fixture suffix, extra precompute kwargs, marks).
+_CASES = [
+    ("radio_synchrotron", "radio", "radio_precompute", "radio_synchrotron", 0, 1, "radio", {}, ()),
+    ("radio_freefree", "radio", "radio_precompute", "radio_freefree", 0, 1, "radio", {}, ()),
+    ("radio_agn_jet", "radio", "radio_precompute", "radio_agn_jet", 0, 1, "radio", {}, ()),
+    ("xray_xrb_ax0", "xray", "xray_precompute", "xray_xrb", 0, 2, "xray", {}, ()),
+    ("xray_xrb_ax1", "xray", "xray_precompute", "xray_xrb", 1, 2, "xray", {}, ()),
+    ("xray_corona_ax0", "xray", "xray_precompute", "xray_corona", 0, 2, "xray", {}, ()),
+    ("xray_corona_ax1", "xray", "xray_precompute", "xray_corona", 1, 2, "xray", {}, ()),
+    ("xray_lopez24_ax0", "xray", "xray_precompute", "xray_corona_lopez24", 0, 2, "xray", {}, ()),
+    ("xray_lopez24_ax1", "xray", "xray_precompute", "xray_corona_lopez24", 1, 2, "xray", {}, ()),
+    ("dust_mbb", "dust", "dust_analytic_precompute", "modified_blackbody", 0, 2, "radio", {}, ()),
+    ("dust_casey", "dust", "dust_analytic_precompute", "casey2012", 0, 3, "radio", {}, ()),
+    (
+        "silva04",
+        "agn",
+        "silva04_precompute",
+        None,
+        0,
+        1,
+        "radio",
+        {"grid_path": str(_SILVA04_GRID)},
+        (requires_silva04_torus,),
+    ),
+]
 
 
-class TestXrayPrecomputeAxisCollapse:
-    """Test axis collapse for X-ray models (2 free axes each)."""
-
-    @pytest.mark.parametrize("model", ["xray_xrb", "xray_corona", "xray_corona_lopez24"])
-    @pytest.mark.parametrize("fixed_axis_idx", [0, 1])
-    def test_xray_collapse_axis(self, model, fixed_axis_idx, filter_set_xray):
-        from tengri.components.xray import xray_precompute as adapter
-
-        # Read the axis names off the adapter rather than restating them here.
-        # A copy in the test cannot disagree with the declaration it copies, so
-        # it cannot catch a name that drifted away from the live parameter — and
-        # the mock below answers to whatever name it is handed, so a wrong one
-        # still collapses and still passes. Both X-ray coronae declared
-        # ``xray_gamma`` against a parameter named ``xray_gamma_agn`` and this
-        # suite stayed green throughout (#1738).
-        params = adapter.AXIS_PARAMS[model]
-
-        waves, trans = filter_set_xray
-        redshift = 0.5
-
-        # Build FULL adapter.
-        full = adapter.precompute(waves, trans, redshift, parameters=None, model=model)
-        full_lookup = adapter.build_lookup(full, model=model)
-        assert len(full["axes"]) == 2, f"{model} should have 2 axes"
-
-        # Pick midpoint from the axis to collapse.
-        ax_to_fix = full["axes"][fixed_axis_idx]
-        midpoint_idx = len(ax_to_fix) // 2
-        pinned_value = float(ax_to_fix[midpoint_idx])
-
-        # Build COLLAPSED adapter with mock Parameters.
-        param_to_fix = params[fixed_axis_idx]
-        spec = _make_mock_params({param_to_fix: pinned_value})
-        coll = adapter.precompute(waves, trans, redshift, parameters=spec, model=model)
-        coll_lookup = adapter.build_lookup(coll, model=model)
-
-        # After collapse, should have 1 axis.
-        n_axes_coll = len(coll["axes"])
-        assert n_axes_coll == 1, f"{model}: expected 1 axis after collapse, got {n_axes_coll}"
-
-        # Sample other axis at midpoint.
-        other_axis_idx = 1 - fixed_axis_idx
-        other_ax = full["axes"][other_axis_idx]
-        other_midpoint_idx = len(other_ax) // 2
-        other_value = float(other_ax[other_midpoint_idx])
-
-        scale = jnp.float64(1.0)
-
-        if fixed_axis_idx == 0:
-            full_result = jax.jit(full_lookup)(scale, pinned_value, other_value)
-            coll_result = jax.jit(coll_lookup)(scale, other_value)
-        else:
-            full_result = jax.jit(full_lookup)(scale, other_value, pinned_value)
-            coll_result = jax.jit(coll_lookup)(scale, other_value)
-
-        np.testing.assert_allclose(
-            coll_result,
-            full_result,
-            rtol=1e-10,
-            atol=0.0,
-            err_msg=f"{model}: axis {fixed_axis_idx} collapse mismatch",
-        )
+@pytest.mark.parametrize(
+    ("package", "module", "model", "fix_idx", "n_axes", "filters", "kw"),
+    [pytest.param(*c[1:8], id=c[0], marks=c[8]) for c in _CASES],
+)
+def test_axis_collapse_matches_full_lookup(
+    request, package, module, model, fix_idx, n_axes, filters, kw
+):
+    """Pinning one axis reproduces the un-collapsed lookup exactly."""
+    adapter = importlib.import_module(f"tengri.components.{package}.{module}")
+    filter_set = request.getfixturevalue(f"filter_set_{filters}")
+    _assert_collapse_matches(
+        adapter, filter_set, model=model, fix_idx=fix_idx, n_axes=n_axes, kw=kw
+    )
 
 
-# ── AGN disc precompute tests ──────────────────────────────────────────────
-# NOTE: Disc, qsogen, and cat3d adapters have build_lookup() signatures that
-# require runtime parameters (agn_torus_frac, etc.) not present in the precompute
-# dict. These adapters are being refactored for Wilkinson phase; tests deferred.
-# See project_phase_ii3_progress.md for status.
+@requires_cb19
+def test_cb19_collapse_axis0(filter_set_radio):
+    """CB19's 7-axis grid collapses on log_OH_total.
 
-
-class TestDiscPrecomputeAxisCollapse:
-    """Test axis collapse for disc models (1–2 axes).
-
-    NOTE: disc build_lookup signature requires runtime parameters (agn_torus_frac, etc.)
-    not present in precompute grid axes. Tests deferred to Wilkinson phase refactor.
+    Kept out of the table because it takes ``filepath``, not ``grid_path``, and
+    declares no ``model``. The grid is not tracked in git and CI does not fetch
+    it, so this skips there.
     """
+    from tengri.components.nebular import cb19_precompute as adapter
+
+    waves, trans = filter_set_radio
+    full = adapter.precompute(waves, trans, 0.5, parameters=None, filepath=str(_CB19_GRID))
+    assert len(full["axes"]) == 7, f"CB19 should have 7 axes, got {len(full['axes'])}"
+
+    full_lookup = adapter.build_lookup(full)
+    axes = [np.asarray(a) for a in full["axes"]]
+    midpoints = [float(a[len(a) // 2]) for a in axes]
+
+    coll = adapter.precompute(
+        waves,
+        trans,
+        0.5,
+        parameters=_mock_params({adapter.AXIS_PARAMS[0]: midpoints[0]}),
+        filepath=str(_CB19_GRID),
+    )
+    coll_lookup = adapter.build_lookup(coll)
+    assert len(coll["axes"]) == 6, f"expected 6 axes after collapse, got {len(coll['axes'])}"
+
+    scale = jnp.float64(1.0)
+    full_result = _call_lookup(full_lookup, scale, midpoints)
+    coll_result = _call_lookup(coll_lookup, scale, midpoints[1:])
+
+    assert np.any(full_result != 0.0), "CB19 full lookup is all zeros; comparison would be vacuous"
+    np.testing.assert_allclose(coll_result, full_result, rtol=1e-10, atol=0.0)
 
 
-# ── QSOgen precompute tests (2 axes) ───────────────────────────────────────
-# NOTE: QSOgen's build_lookup() requires free_param_names kwarg reflecting the
-# collapsed axis set. The standard template lookup doesn't handle this;
-# deferred to Wilkinson phase refactor.
+# ── Which adapters this file actually covers ──────────────────────
+
+#: Adapters that declare a collapsible axis and have no test here. An entry is
+#: a decision, not a dismissal -- ``test_every_adapter_with_axes_is_listed``
+#: fails when a new adapter appears in neither this map nor ``_CASES``.
+_UNCOVERED: dict[str, str] = {
+    "cat3d_precompute": "signature-driven collapse mismatches; cause not decidable from here",
+    "disc_precompute": "signature-driven collapse mismatches; cause not decidable from here",
+    "qsogen_precompute": "signature-driven collapse mismatches; cause not decidable from here",
+    "nenkova_agnfitter_precompute": "signature-driven collapse mismatches; not diagnosed",
+    "skirtor_precompute": "5 axes; no collapse test written",
+    "skirtor_agnfitter_precompute": "3 axes; no collapse test written",
+    "cloudy_precompute": "3 axes; needs the untracked CLOUDY MIST grid",
+    "feltre_precompute": "4 axes; no collapse test written",
+    "mappings_photo_precompute": "4 axes; no collapse test written",
+    "mappings_shock_precompute": "3 axes; no collapse test written",
+    "dust_emission_precompute": "8 models with axes; no collapse test written",
+}
 
 
-class TestQsogenPrecomputeAxisCollapse:
-    """Test axis collapse for QSOgen (agn_plslp1, agn_ebv).
+def _adapters_declaring_axes() -> set[str]:
+    """Every ``*_precompute`` module declaring at least one collapsible axis."""
+    import tengri.components as components
 
-    NOTE: QSOgen's build_lookup() requires free_param_names kwarg reflecting the
-    collapsed axis set. Standard template lookup doesn't handle this; deferred to
-    Wilkinson phase refactor.
+    found: set[str] = set()
+    for pkg in (
+        components.agn,
+        components.nebular,
+        components.radio,
+        components.xray,
+        components.dust,
+    ):
+        for info in pkgutil.iter_modules(pkg.__path__):
+            if not info.name.endswith("_precompute"):
+                continue
+            mod = importlib.import_module(f"{pkg.__name__}.{info.name}")
+            declared = getattr(mod, "AXIS_PARAMS", None)
+            if isinstance(declared, dict):
+                declared = tuple(p for v in declared.values() for p in v)
+            if declared:
+                found.add(info.name)
+    return found
+
+
+def test_every_adapter_with_axes_is_listed():
+    """Every collapsible adapter is either tested here or listed as uncovered.
+
+    The file's docstring claims to guard ``slice_fixed_axes``. It guards five
+    of the sixteen adapters that have anything to collapse, and the gap was
+    invisible: three of the missing ones had an empty class standing in for a
+    test. A new adapter must now land in ``_CASES`` or ``_UNCOVERED``.
     """
+    live = _adapters_declaring_axes()
+    covered = {module for _id, _pkg, module, *_rest in _CASES} | {"cb19_precompute"}
 
+    missing = live - covered - set(_UNCOVERED)
+    assert not missing, (
+        f"precompute adapters declaring collapsible axes with neither a case in "
+        f"_CASES nor an entry in _UNCOVERED: {sorted(missing)}"
+    )
 
-# ── Silva04 precompute tests (1 axis) ──────────────────────────────────────
-
-
-class TestSilva04PrecomputeAxisCollapse:
-    """Test axis collapse for Silva04 (agn_log_nh_silva)."""
-
-    _DATA = Path(__file__).parent.parent.parent.parent / "data"
-
-    @pytest.fixture(autouse=True)
-    def _skip_if_no_silva04(self):
-        """Skip if Silva04 data file missing."""
-        grid_file = self._DATA / "silva04_wind_torus_grid.h5"
-        if not grid_file.exists():
-            pytest.skip(f"Silva04 grid file not found: {grid_file}")
-
-    def test_silva04_collapse_axis(self, filter_set_radio):
-        from tengri.components.agn import silva04_precompute as adapter
-
-        grid_file = self._DATA / "silva04_wind_torus_grid.h5"
-        if not grid_file.exists():
-            pytest.skip(f"Silva04 grid file not found: {grid_file}")
-
-        waves, trans = filter_set_radio
-        redshift = 0.5
-
-        # Build FULL adapter.
-        full = adapter.precompute(
-            waves, trans, redshift, parameters=None, grid_path=str(grid_file)
-        )
-        full_lookup = adapter.build_lookup(full)
-        assert len(full["axes"]) == 1, "silva04 should have 1 axis"
-
-        # Collapse the axis.
-        ax = full["axes"][0]
-        midpoint_idx = len(ax) // 2
-        pinned_value = float(ax[midpoint_idx])
-
-        # Read the name off the adapter, not a copy of it — see the note in
-        # TestXrayPrecomputeAxisCollapse (#1738).
-        spec = _make_mock_params({adapter.AXIS_PARAMS[0]: pinned_value})
-        coll = adapter.precompute(
-            waves, trans, redshift, parameters=spec, grid_path=str(grid_file)
-        )
-        coll_lookup = adapter.build_lookup(coll)
-
-        assert len(coll["axes"]) == 0, "silva04: expected 0 axes after collapse"
-
-        scale = jnp.float64(1.0)
-        full_result = jax.jit(full_lookup)(scale, pinned_value)
-        coll_result = jax.jit(coll_lookup)(scale)
-
-        np.testing.assert_allclose(
-            coll_result, full_result, rtol=1e-10, atol=0.0, err_msg="silva04: collapse mismatch"
-        )
-
-
-# ── Cat3D precompute tests (3 axes) ────────────────────────────────────────
-# NOTE: Cat3D's build_lookup() requires agn_torus_frac kwarg. Runtime parameter
-# signatures mismatch precompute grid axes; deferred to Wilkinson phase refactor.
-
-
-class TestCat3DPrecomputeAxisCollapse:
-    """Test axis collapse for Cat3D (3 axes).
-
-    NOTE: Cat3D's build_lookup() requires agn_torus_frac kwarg. Runtime parameter
-    signatures mismatch precompute grid axes; deferred to Wilkinson phase refactor.
-    """
-
-    _DATA = Path(__file__).parent.parent.parent.parent / "data"
-
-    @pytest.fixture(autouse=True)
-    def _skip_if_no_cat3d(self):
-        """Skip if CAT3D data file missing."""
-        grid_file = self._DATA / "cat3d_wind_torus_grid.h5"
-        if not grid_file.exists():
-            pytest.skip(f"CAT3D grid file not found: {grid_file}")
-
-
-# ── Dust analytic precompute tests ─────────────────────────────────────────
-
-
-class TestDustAnalyticPrecomputeAxisCollapse:
-    """Test axis collapse for dust analytic models."""
-
-    def test_dust_mbb_collapse(self, filter_set_radio):
-        """Test modified_blackbody (2 axes) collapse."""
-        from tengri.components.dust import dust_analytic_precompute as adapter
-
-        waves, trans = filter_set_radio
-        redshift = 0.5
-
-        # Build FULL adapter.
-        full = adapter.precompute(
-            waves, trans, redshift, parameters=None, model="modified_blackbody"
-        )
-        full_lookup = adapter.build_lookup(full, model="modified_blackbody")
-        assert len(full["axes"]) == 2, "modified_blackbody should have 2 axes"
-
-        # Collapse axis 0.
-        ax0 = full["axes"][0]
-        idx0 = len(ax0) // 2
-        val0 = float(ax0[idx0])
-
-        spec = _make_mock_params({"dust_T": val0})
-        coll = adapter.precompute(
-            waves, trans, redshift, parameters=spec, model="modified_blackbody"
-        )
-        coll_lookup = adapter.build_lookup(coll, model="modified_blackbody")
-
-        assert len(coll["axes"]) == 1, "modified_blackbody: expected 1 axis after collapse"
-
-        # Sample axis 1.
-        ax1 = full["axes"][1]
-        idx1 = len(ax1) // 2
-        val1 = float(ax1[idx1])
-
-        scale = jnp.float64(1.0)
-        full_result = jax.jit(full_lookup)(scale, val0, val1)
-        coll_result = jax.jit(coll_lookup)(scale, val1)
-
-        np.testing.assert_allclose(
-            coll_result,
-            full_result,
-            rtol=1e-10,
-            atol=0.0,
-            err_msg="modified_blackbody: collapse mismatch",
-        )
-
-    def test_dust_casey_collapse_axis0(self, filter_set_radio):
-        """Test casey2012 (3 axes) collapse axis 0."""
-        from tengri.components.dust import dust_analytic_precompute as adapter
-
-        waves, trans = filter_set_radio
-        redshift = 0.5
-
-        # Build FULL adapter.
-        full = adapter.precompute(waves, trans, redshift, parameters=None, model="casey2012")
-        full_lookup = adapter.build_lookup(full, model="casey2012")
-        assert len(full["axes"]) == 3, "casey2012 should have 3 axes"
-
-        # Collapse axis 0.
-        ax0 = full["axes"][0]
-        idx0 = len(ax0) // 2
-        val0 = float(ax0[idx0])
-
-        spec = _make_mock_params({"dust_T": val0})
-        coll = adapter.precompute(waves, trans, redshift, parameters=spec, model="casey2012")
-        coll_lookup = adapter.build_lookup(coll, model="casey2012")
-
-        assert len(coll["axes"]) == 2, "casey2012: expected 2 axes after collapse"
-
-        # Sample axes 1 and 2.
-        ax1 = full["axes"][1]
-        idx1 = len(ax1) // 2
-        val1 = float(ax1[idx1])
-        ax2 = full["axes"][2]
-        idx2 = len(ax2) // 2
-        val2 = float(ax2[idx2])
-
-        scale = jnp.float64(1.0)
-        full_result = jax.jit(full_lookup)(scale, val0, val1, val2)
-        coll_result = jax.jit(coll_lookup)(scale, val1, val2)
-
-        np.testing.assert_allclose(
-            coll_result,
-            full_result,
-            rtol=1e-10,
-            atol=0.0,
-            err_msg="casey2012 axis 0: collapse mismatch",
-        )
-
-
-# ── CB19 precompute tests (7 axes, conditional) ────────────────────────────
-
-
-class TestCB19PrecomputeAxisCollapse:
-    """Test axis collapse for CB19 nebular grid (7 axes)."""
-
-    _DATA = Path(__file__).parent.parent.parent.parent / "data"
-
-    @pytest.fixture(autouse=True)
-    def _skip_if_no_cb19(self):
-        """Skip if CB19 data file missing."""
-        default_path = self._DATA / "cb19_grid.h5"
-        if not default_path.exists():
-            pytest.skip(f"CB19 grid file not found: {default_path}")
-
-    def test_cb19_collapse_axis0(self, filter_set_radio):
-        from tengri.components.nebular import cb19_precompute as adapter
-
-        default_path = self._DATA / "cb19_grid.h5"
-        if not default_path.exists():
-            pytest.skip(f"CB19 grid file not found: {default_path}")
-
-        waves, trans = filter_set_radio
-        redshift = 0.5
-
-        # Build FULL adapter.
-        full = adapter.precompute(waves, trans, redshift, parameters=None)
-        full_lookup = adapter.build_lookup(full)
-
-        n_axes = len(full["axes"])
-        assert n_axes == 7, f"CB19 should have 7 axes, got {n_axes}"
-
-        # Collapse axis 0 (log_OH_total).
-        ax = full["axes"][0]
-        midpoint_idx = len(ax) // 2
-        pinned_value = float(ax[midpoint_idx])
-
-        spec = _make_mock_params({"log_OH_total": pinned_value})
-        coll = adapter.precompute(waves, trans, redshift, parameters=spec)
-        coll_lookup = adapter.build_lookup(coll)
-
-        assert len(coll["axes"]) == 6, (
-            f"CB19: expected 6 axes after collapsing axis 0, got {len(coll['axes'])}"
-        )
-
-        # Sample the remaining 6 axes at midpoints.
-        other_values = []
-        for i in range(1, 7):
-            other_ax = full["axes"][i]
-            other_midpoint_idx = len(other_ax) // 2
-            other_values.append(float(other_ax[other_midpoint_idx]))
-
-        scale = jnp.float64(1.0)
-        full_result = jax.jit(full_lookup)(scale, pinned_value, *other_values)
-        coll_result = jax.jit(coll_lookup)(scale, *other_values)
-
-        np.testing.assert_allclose(
-            coll_result,
-            full_result,
-            rtol=1e-10,
-            atol=0.0,
-            err_msg="CB19: axis 0 collapse mismatch",
-        )
+    stale = (covered | set(_UNCOVERED)) - live
+    assert not stale, (
+        f"listed here but no longer declaring collapsible axes (rename or removal?): "
+        f"{sorted(stale)}"
+    )

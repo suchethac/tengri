@@ -22,7 +22,7 @@ from tengri.components.nebular.agn_nebular import (
 from tengri.components.nebular.ionizing_spectrum import _CLIP_RANGES
 
 # ── Fixtures and skip conditions ──────────────────────────────────
-_DATA_DIR = Path(__file__).resolve().parent.parent.parent / "data"
+_DATA_DIR = Path(__file__).resolve().parents[3] / "data"
 _CUE_WEIGHTS_PATH = _DATA_DIR / "cue_weights.npz"
 CUE_AVAILABLE = _CUE_WEIGHTS_PATH.exists()
 requires_cue = pytest.mark.skipif(
