@@ -1,54 +1,99 @@
 # SPDX-License-Identifier: BSD-3-Clause
-"""Phase 4-D tests: complete template threading (nebular backends, dust IR, AGN SKIRTOR).
+"""Phase 4-D: nebular backend selection, dust IR builds, AGN SKIRTOR compilation.
 
-Tests for Category A (CB19/MAPPINGS wiring), Category B (dust IR template
-threading), and Category C (AGN SKIRTOR template threading).
+What this file covers: that a nebular backend named in the build grammar is
+actually reachable and predicts, that template-based dust models construct, and
+that the monolithic SKIRTOR model compiles under ``jit`` and agrees with eager.
 
-What this file actually covers: backend dispatch and smoke-level JIT
-compilation for the CB19 / MAPPINGS nebular backends, dust IR emission, and
-the monolithic SKIRTOR model.
+It does **not** verify that any template threads as a ``Parameter`` rather than
+baking in as a ``Constant``, though its tests were once named and docstring'd
+as if it did -- and stayed green while 31 MB of SKIRTOR grid baked into every
+graph (#1383, #1549). That invariant needs a jaxpr constant count taken on the
+surface where the template data is an argument; it lives in
+``test_agn_template_threading.py``. Do not re-add threading claims here without
+a measurement to back them.
 
-It does **not** verify that any template threads as a ``Parameter`` rather
-than baking in as a ``Constant``, though its tests were once named and
-docstring'd as if it did — and stayed green while 31 MB of SKIRTOR grid baked
-into every graph (#1383, #1549). That invariant needs a jaxpr constant count
-taken on the surface where the template data is an argument; it lives in
-``test_agn_template_threading.py``. Do not re-add threading claims here
-without a measurement to back them.
+Category A was six tests that could not fail
+--------------------------------------------
+
+Four of them took an ``ssp_bare`` fixture they never used. That fixture pointed
+at ``data/ssp_prsc_bc03_chabrier.h5``, which is gitignored, is not one of the
+two grids ``conftest.py`` generates, and is absent from CI -- so the four
+skipped on every machine, and what they would have done was never observed.
+
+What they would have done:
+
+* ``test_*_backend_config_declaration`` set ``NebularSEDComponentConfig(
+  backend="cb19")`` and asserted the field read back ``"cb19"``. That dataclass
+  accepts **any** string -- ``backend="bogus_backend"`` is equally fine -- so
+  the assertion was a dataclass echo. The ``SEDModel.build`` grammar *does*
+  validate, and rejects an unknown type with the menu of real ones; that is the
+  check those tests were reaching for, and it is asserted below.
+* ``test_*_backend_in_spec`` called ``Parameters(..., nebular_backend=...)``.
+  ``Parameters.__init__`` has no such keyword; it raises ``ValueError: Unknown
+  parameter 'nebular_backend'`` -- for ``"cb19"`` exactly as much as for
+  ``"mappings"``. Backend selection moved to ``neb={'type': ...}``.
+* ``test_*_backend_exposes_a_grid`` asserted ``hasattr(backend, "grid")`` and
+  ``backend.grid is not None``, wrapped in ``except Exception: pytest.skip(
+  f"...instantiation failed: {e}")`` commented "may skip if grid data
+  unavailable". For MAPPINGS that construction raises
+  ``IonizingSpectrumInconsistencyError`` -- a deliberate guard reporting that
+  the ionizing field comes from a Starburst99 grid rather than the user's DSPS
+  SSPs, and asking for ``ionizing_source_warning='warn'|'suppress'``. The
+  handler filed a design decision as missing data. #1615 in one line: ``except
+  Exception`` cannot tell "optional dependency absent" from "the code is
+  telling you something".
+
+And the wiring those six were named for does not exist: ``mappings`` is not a
+registered nebular type at all (#2070). ``neb={'type': 'mappings'}`` raises
+with the menu, and ``tengri``'s own listing advertises five backends without
+it, while ``mappings_photo.py`` and a four-axis ``mappings_photo_precompute.py``
+sit there complete and unreachable.
+
+The SSP fixture is the tracked one now
+--------------------------------------
+
+``ssp_data_fsps`` (``data/fsps_prsc_miles_chabrier.h5``) is tracked in git and
+present on every runner, and is bare-stellar, which is what Cue needs. Nothing
+here wanted BC03 specifically.
 """
 
 from __future__ import annotations
 
-import pathlib
 import warnings
 
 import chex
 import jax
 import jax.numpy as jnp
+import numpy as np
 import pytest
 
-from tengri import Parameters, SEDModel
+from tengri import FIXED, Fixed, Parameters, SEDModel
 from tengri.components.stellar.sps.dsps_wrapper import load_ssp_data
 from tengri.observation import Observation, Photometry
-from tengri.parameters.priors import Fixed, Uniform
+from tests._data_skip import DATA_DIR
 from tests._jit_parity import assert_jit_matches_eager
 
 pytestmark = pytest.mark.contract
 
-_SSP_BARE = pathlib.Path("data/ssp_prsc_bc03_chabrier.h5").resolve()
-_SSP_WNE = pathlib.Path("data/ssp_prsc_miles_chabrier_wNE_logGasU-3.0_logGasZ0.0.h5").resolve()
+_SSP_WNE = DATA_DIR / "ssp_prsc_miles_chabrier_wNE_logGasU-3.0_logGasZ0.0.h5"
 
+#: Nebular backends this file builds end to end.
+#:
+#: ``cloudy`` is registered too but needs ``data/cloudy_grid_mist.h5``, which is
+#: neither tracked nor fetched by CI. ``ssp`` and ``none`` have no backend
+#: object to exercise.
+_BUILDABLE_NEBULAR = ["cb19", "cue"]
 
-@pytest.fixture(scope="module")
-def ssp_bare():
-    if not _SSP_BARE.exists():
-        pytest.skip(f"bare-stellar SSP not available at {_SSP_BARE}")
-    return load_ssp_data(str(_SSP_BARE))
+#: What the grammar advertises. Pinned so that registering a sixth type -- or
+#: dropping one -- is a deliberate edit rather than a silent change. ``mappings``
+#: is deliberately absent: see #2070.
+_REGISTERED_NEBULAR = {"cb19", "cloudy", "cue", "none", "ssp"}
 
 
 @pytest.fixture(scope="module")
 def ssp_wne():
-    if not _SSP_WNE.exists():
+    if not _SSP_WNE.is_file():
         pytest.skip(f"wNE SSP not available at {_SSP_WNE}")
     return load_ssp_data(str(_SSP_WNE))
 
@@ -86,88 +131,146 @@ def _silent_build(spec, ssp, obs, **kwargs):
         return SEDModel(spec, ssp, observation=obs, **kwargs)
 
 
-# ── Category A: Nebular backend wiring (CB19 / MAPPINGS) ──────────────────────
+def _assert_predicts(model, obs, label):
+    """A built model must produce finite, non-zero fluxes of the right shape.
+
+    ``assert model is not None`` was the assertion at four of these call sites.
+    It is true of every value a constructor can return, so it cannot separate a
+    model that builds from one that builds and then predicts nothing.
+    """
+    phot = model.predict_photometry(model.spec.get_fixed_values())
+    chex.assert_tree_all_finite(phot)
+    assert phot.shape == (len(obs.photometry.filters),), (
+        f"{label}: photometry shape {phot.shape} does not match "
+        f"{len(obs.photometry.filters)} filters"
+    )
+    assert float(jnp.max(jnp.abs(phot))) > 0.0, f"{label}: every band is exactly zero"
+    return phot
 
 
-class TestCB19Wiring:
-    """CB19 backend wiring tests."""
+# ── Category A: nebular backend selection ─────────────────────────────────────
 
-    def test_cb19_backend_config_declaration(self):
-        """CB19 is available as a config backend choice."""
-        from tengri.components.nebular.component import NebularSEDComponentConfig
 
-        cfg = NebularSEDComponentConfig(backend="cb19")
-        assert cfg.backend == "cb19"
+class TestNebularBackendSelection:
+    """The grammar's nebular types are reachable, and unknown ones are refused."""
 
-    def test_cb19_backend_in_spec(self, ssp_bare, obs):
-        """CB19 backend string is accepted in Parameters."""
-        spec = _base_spec(
-            nebular_backend="cb19",
-            neb_logU=Uniform(-4.0, -2.0),
+    @pytest.mark.parametrize("backend", _BUILDABLE_NEBULAR)
+    def test_registered_backend_builds_and_predicts(self, backend, ssp_data_fsps, obs):
+        """``neb={'type': backend}`` yields a model that predicts finite fluxes."""
+        with warnings.catch_warnings():
+            warnings.simplefilter("ignore")
+            model = SEDModel.build(
+                ssp_data=ssp_data_fsps,
+                observation=obs,
+                sfh={"type": "dpl", "all_params": FIXED, "log_total_mass": Fixed(10.0)},
+                met={"logzsol": Fixed(-0.5)},
+                neb={"type": backend, "all_params": FIXED, "logU": Fixed(-3.0)},
+                redshift=Fixed(0.1),
+            )
+        _assert_predicts(model, obs, f"neb={backend}")
+
+    def test_unknown_nebular_type_is_rejected_with_the_menu(self, ssp_data_fsps, obs):
+        """An unknown backend raises, and the message names the real ones.
+
+        This is the check the two ``..._config_declaration`` tests were reaching
+        for. ``NebularSEDComponentConfig(backend=...)`` performs no validation at
+        all -- it accepts ``"bogus_backend"`` -- so asserting the field reads
+        back what was just assigned tested the dataclass, not the wiring.
+        """
+        with pytest.raises(ValueError, match="Unknown nebular type") as exc:
+            SEDModel.build(
+                ssp_data=ssp_data_fsps,
+                observation=obs,
+                sfh={"type": "dpl", "all_params": FIXED, "log_total_mass": Fixed(10.0)},
+                neb={"type": "bogus_backend", "all_params": FIXED},
+                redshift=Fixed(0.1),
+            )
+        message = str(exc.value)
+        for name in _REGISTERED_NEBULAR:
+            assert name in message, f"the error should list {name!r} as available: {message}"
+
+    def test_registered_nebular_types_are_pinned(self, ssp_data_fsps, obs):
+        """The advertised menu is exactly ``_REGISTERED_NEBULAR``.
+
+        Read off the error message rather than restated from a registry import,
+        because the message is the surface a user actually sees. ``mappings`` is
+        absent by design here: ``MappingsPhotoStellarBackend`` and its four-axis
+        precompute adapter exist and are complete, and no build grammar reaches
+        them (#2070). If that is fixed, this test fails and says so.
+        """
+        with pytest.raises(ValueError, match="Unknown nebular type") as exc:
+            SEDModel.build(
+                ssp_data=ssp_data_fsps,
+                observation=obs,
+                sfh={"type": "dpl", "all_params": FIXED, "log_total_mass": Fixed(10.0)},
+                neb={"type": "definitely_not_a_backend", "all_params": FIXED},
+                redshift=Fixed(0.1),
+            )
+        listed = {n.strip() for n in str(exc.value).split("Available:")[-1].strip(" .").split(",")}
+        assert listed == _REGISTERED_NEBULAR, (
+            f"registered nebular types changed: added {sorted(listed - _REGISTERED_NEBULAR)}, "
+            f"removed {sorted(_REGISTERED_NEBULAR - listed)}"
         )
 
-        # Verify that the spec accepts CB19 as a valid backend
-        assert spec.nebular_backend == "cb19"
 
-    def test_cb19_backend_exposes_a_grid(self, ssp_bare, obs):
-        """The CB19 backend carries a ``.grid`` attribute.
+class TestNebularBackendGrids:
+    """The grid a backend loads has axes an interpolator can use."""
 
-        Renamed from ``..._template_detected_in_jit_inputs``: the body never
-        called ``_template_data_for_jit()``, so the old name asserted a
-        threading property this test does not measure (#1549).
-        """
-        try:
-            from tengri.components.nebular.cloudy_cb19 import CB19Backend
+    @staticmethod
+    def _axis_is_usable(axis, label):
+        arr = np.asarray(axis)
+        assert arr.ndim == 1 and arr.shape[0] >= 2, (
+            f"{label}: axis has shape {arr.shape}; an interpolation axis needs at "
+            f"least two nodes, and a size-1 axis is what breaks edges_for_grid"
+        )
+        assert np.all(np.isfinite(arr)), f"{label}: axis holds non-finite nodes"
+        assert np.all(np.diff(arr) > 0.0), f"{label}: axis is not strictly increasing"
 
-            # Instantiate CB19 backend (may skip if grid data unavailable)
-            try:
-                backend = CB19Backend()
-            except Exception as e:
-                pytest.skip(f"CB19Backend instantiation failed: {e}")
+    def test_cb19_grid_axes_are_usable(self):
+        """CB19's grid exposes a strictly increasing, multi-node logU axis."""
+        from tengri.components.nebular.cloudy_cb19 import CB19Backend
 
-            # Check that it has a .grid attribute
-            assert hasattr(backend, "grid")
-            assert backend.grid is not None
-
-        except ImportError:
-            pytest.skip("CB19Backend not available")
-
-    def test_mappings_backend_config_declaration(self):
-        """MAPPINGS photoionization backend is available as a config choice."""
-        from tengri.components.nebular.component import NebularSEDComponentConfig
-
-        cfg = NebularSEDComponentConfig(backend="mappings")
-        assert cfg.backend == "mappings"
-
-    def test_mappings_backend_in_spec(self, ssp_bare, obs):
-        """MAPPINGS backend string is accepted in Parameters."""
-        spec = _base_spec(
-            nebular_backend="mappings",
-            neb_logU=Uniform(-4.0, -2.0),
+        grid = CB19Backend().grid
+        self._axis_is_usable(grid.log_U_grid, "CB19 log_U_grid")
+        wavelengths = np.asarray(grid.line_wavelengths)
+        assert wavelengths.size > 0 and np.all(wavelengths > 0.0), (
+            "CB19 line wavelengths must all be positive"
         )
 
-        assert spec.nebular_backend == "mappings"
+    def test_mappings_photo_grid_axes_are_usable(self):
+        """The MAPPINGS photoionization grid is loadable and its axes are sane.
 
-    def test_mappings_backend_exposes_a_grid(self, ssp_bare, obs):
-        """The MAPPINGS backend carries a ``.grid`` attribute.
+        ``ionizing_source_warning="suppress"`` is required, not incidental:
+        bare construction raises ``IonizingSpectrumInconsistencyError`` on
+        purpose, because the ionizing field is a Starburst99 grid embedded in
+        MAPPINGS V rather than the caller's DSPS SSPs. The predecessor of this
+        test swallowed that with ``except Exception: pytest.skip(...)`` and
+        reported it as missing grid data.
 
-        Renamed for the same reason as the CB19 case above (#1549).
+        The backend is not reachable from any build grammar (#2070); this
+        exercises the object directly, which is the only way there is.
         """
-        try:
-            from tengri.components.nebular.mappings_photo import MappingsPhotoStellarBackend
+        from tengri.components.nebular.mappings_photo import MappingsPhotoStellarBackend
 
-            # Instantiate MAPPINGS backend (may skip if grid data unavailable)
-            try:
-                backend = MappingsPhotoStellarBackend()
-            except Exception as e:
-                pytest.skip(f"MappingsPhotoStellarBackend instantiation failed: {e}")
+        grid = MappingsPhotoStellarBackend(ionizing_source_warning="suppress").grid
+        self._axis_is_usable(grid.logU_axis, "MAPPINGS logU_axis")
+        self._axis_is_usable(grid.log_age_yr_axis, "MAPPINGS log_age_yr_axis")
+        self._axis_is_usable(grid.logn_axis, "MAPPINGS logn_axis")
 
-            # Check that it has a .grid attribute
-            assert hasattr(backend, "grid")
-            assert backend.grid is not None
+    def test_bare_mappings_construction_refuses_loudly(self):
+        """Constructing without acknowledging the ionizing-source mismatch raises.
 
-        except ImportError:
-            pytest.skip("MappingsPhotoStellarBackend not available")
+        The guard is the point: a silent default here would fit a model whose
+        stellar continuum and nebular lines come from different stellar
+        population synthesis codes. Pinned so nobody softens it to a warning.
+        """
+        from tengri.components.nebular.mappings_photo import (
+            IonizingSpectrumInconsistencyError,
+            MappingsPhotoStellarBackend,
+        )
+
+        with pytest.raises(IonizingSpectrumInconsistencyError, match="Starburst99"):
+            MappingsPhotoStellarBackend()
 
 
 # ── Category B: Dust IR template threading ────────────────────────────────────
@@ -194,16 +297,20 @@ class TestDustIRTemplateThreading:
         "dust_emission",
         ["dale2014", "draine_li2007", "draine_li2014", "astrodust", "bosa"],
     )
-    def test_dust_template_models_build(self, ssp_wne, obs, dust_emission):
-        """Template-based dust models build successfully."""
-        spec = _base_spec(dust_emission=dust_emission)
+    def test_dust_template_models_build_and_predict(self, ssp_wne, obs, dust_emission):
+        """Template-based dust models build and produce finite fluxes.
 
+        The SDSS bands here do not sample dust *emission*, which is IR, so this
+        is a construction and finiteness check, not a check on the dust SED --
+        named accordingly. It replaces ``assert model is not None``, which is
+        true of any value a constructor returns.
+        """
         try:
-            model = _silent_build(spec, ssp_wne, obs)
-            # Model should be built (may skip if template data not available)
-            assert model is not None
+            model = _silent_build(_base_spec(dust_emission=dust_emission), ssp_wne, obs)
         except FileNotFoundError as e:
             pytest.skip(f"Template file not available for {dust_emission}: {e}")
+
+        _assert_predicts(model, obs, dust_emission)
 
     def test_dust_ir_jit_non_jit_agreement(self, ssp_wne, obs):
         """JIT and non-JIT dust IR SED paths agree to floating-point precision."""
@@ -227,38 +334,27 @@ class TestDustIRTemplateThreading:
         chex.assert_trees_all_close(phot_jit, phot_non_jit, rtol=1e-12, atol=0.0)
 
 
-# ── Category C: AGN SKIRTOR template threading ──────────────────────────────────
+# ── Category C: AGN SKIRTOR ───────────────────────────────────────────────────
 
 
 class TestAGNSKIRTORTemplateThreading:
-    """AGN SKIRTOR template threading tests."""
-
-    def test_skirtor_template_build(self, ssp_wne, obs):
-        """Model with SKIRTOR torus builds successfully."""
-        spec = _base_spec(
-            agn_model="skirtor",
-            agn_log_lbol=Fixed(11.42),
-            agn_cos_inc=Fixed(0.5),
-            agn_torus_frac=Fixed(0.5),
-        )
-
-        try:
-            model = _silent_build(spec, ssp_wne, obs)
-            assert model is not None
-        except (FileNotFoundError, ValueError) as e:
-            pytest.skip(f"SKIRTOR grid not available or config issue: {e}")
+    """AGN SKIRTOR compilation tests."""
 
     def test_skirtor_model_jit_compiles(self, ssp_wne, obs):
-        """The monolithic SKIRTOR model compiles under jit.
+        """The monolithic SKIRTOR model compiles under jit and matches eager.
 
         A smoke test, and named like one. It was previously called
         ``..._jit_compatibility`` and docstring'd "without baking templates
-        into HLO" while asserting only ``result is not None`` — a property
+        into HLO" while asserting only ``result is not None`` -- a property
         true of any model that compiles at all. It stayed green through the
         entire period in which 31 MB of SKIRTOR grid baked into every graph
         (#1383). The invariant its old name claimed is now measured, on the
         surface where it is falsifiable, in
         ``test_agn_template_threading.py``.
+
+        ``test_skirtor_template_build`` used to build this same spec and assert
+        ``model is not None``. Everything it covered is covered here, before a
+        strictly stronger assertion, so it is gone.
         """
         spec = _base_spec(
             agn_model="skirtor",
@@ -281,35 +377,19 @@ class TestAGNSKIRTORTemplateThreading:
         assert result.shape == (len(obs.photometry.filters),)
 
 
-# ── Regression tests: Phase 4-B and 4-C still pass ─────────────────────────────
+# ── Regression: Phase 4-B SSP threading ───────────────────────────────────────
 
 
 def test_phase4b_ssp_threading_regression(ssp_wne, obs):
-    """Phase 4-B (SSP threading) still passes after Phase 4-D changes."""
-    spec = _base_spec()
+    """A plain SSP-threaded model still builds and predicts.
 
-    model = _silent_build(spec, ssp_wne, obs)
-    assert model is not None
+    Was ``assert model is not None`` followed by ``assert model.ssp_data is not
+    None`` -- two properties that hold for any object a constructor returns and
+    any attribute it assigns.
+    """
+    model = _silent_build(_base_spec(), ssp_wne, obs)
 
-    # SSP data should be detectable
-    assert model.ssp_data is not None
-
-
-def test_phase4c_cue_threading_regression(ssp_bare, obs):
-    """Phase 4-C (Cue threading) still passes after Phase 4-D changes."""
-    try:
-        from tengri.components.nebular.cue import CueBackend  # noqa: F401
-
-        spec = _base_spec(
-            nebular_backend="cue",
-            neb_logU=Uniform(-4.0, -2.0),
-        )
-
-        try:
-            model = _silent_build(spec, ssp_bare, obs)
-            assert model is not None
-        except Exception as e:
-            pytest.skip(f"Cue instantiation or build failed: {e}")
-
-    except ImportError:
-        pytest.skip("Cue not available")
+    assert model.ssp_data.ssp_flux.shape[0] == np.asarray(ssp_wne.ssp_lgmet).shape[0], (
+        "the model's SSP grid should be the one it was handed"
+    )
+    _assert_predicts(model, obs, "phase4b SSP threading")

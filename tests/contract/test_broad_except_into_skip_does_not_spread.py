@@ -51,6 +51,16 @@ _BROAD = {"Exception", "BaseException"}
 #: whose grids are tracked in git run on every machine, and none of the seven
 #: calls raises. All seven handlers are gone.
 #:
+#: Three more went from ``test_phase4d_threading_complete.py``, and one of them
+#: is the sharpest illustration of the class in the tree. It wrapped
+#: ``MappingsPhotoStellarBackend()`` and skipped with "instantiation failed",
+#: commented "may skip if grid data unavailable". The backend raises
+#: ``IonizingSpectrumInconsistencyError`` on purpose -- it is telling the caller
+#: that the ionizing field comes from a Starburst99 grid rather than their DSPS
+#: SSPs, and asking for an explicit ``ionizing_source_warning``. The handler
+#: filed that design decision as missing data, and the skip line said so in CI
+#: for as long as anyone cared to read it.
+#:
 #: The lesson generalizes to the entries that remain. "Cannot be observed
 #: here" is a claim about the observer, and it is worth one attempt to make
 #: the observation before recording an exemption -- an unrunnable test looks
@@ -69,9 +79,6 @@ KNOWN: frozenset[tuple[str, str]] = frozenset(
         ),
         ("contract/test_nebular_fdust.py", "test_cb19_fdust_reduces_lines"),
         ("contract/test_nebular_fdust.py", "test_cloudy_grid_fdust_reduces_lines"),
-        ("contract/test_phase4d_threading_complete.py", "test_cb19_backend_exposes_a_grid"),
-        ("contract/test_phase4d_threading_complete.py", "test_mappings_backend_exposes_a_grid"),
-        ("contract/test_phase4d_threading_complete.py", "test_phase4c_cue_threading_regression"),
         ("contract/test_presets.py", "test_preset_can_sample"),
         ("crossval/test_full_sed_crossval.py", "test_tengri_nonparametric_color_trend"),
         ("crossval/test_full_sed_crossval.py", "test_tengri_vs_cigale_skirtor_shape"),
