@@ -6,6 +6,27 @@ Ensures that:
 - compile_modes="auto" inspects spec.stochastic and data_type to select defaults.
 - Explicit compile_modes=(...) queues those exact modes.
 - TENGRI_NO_BACKGROUND_COMPILE=1 disables thread regardless of compile_modes.
+
+Two stochastic tests were skipped for a defect that had been fixed
+---------------------------------------------------------------------
+
+``test_auto_stochastic_photometry`` and ``test_resolve_auto_stochastic`` carried
+an unconditional ``@pytest.mark.skip`` reading "Stochastic SFH path uses float()
+concretizations that broke after Phase 6 routed predict through JIT'd
+observables. Needs JIT-safe rework of stochastic SFH inner loop."
+
+Measured: both pass. The rework happened; the marker did not move, and nothing
+could have told anyone, because an unconditional ``skip`` never lifts however
+the code beneath it changes. A ``skipif`` self-heals the day its condition goes
+false, and an ``xfail(strict=True)`` goes *red* the day the test starts
+passing, handing the test back. Plain ``skip`` does neither, so it is the right
+marker for "this cannot run here" and the wrong one for "this is currently
+broken" -- which is what it was used for here.
+
+This file is also under ``tests/inference/``, auto-marked ``slow`` and
+deselected from the default run and the PR gate, so the skip reason surfaced
+only under ``-rs -m slow``: a defect recorded in the one place guaranteed not
+to be read.
 """
 
 from __future__ import annotations
@@ -151,13 +172,6 @@ class TestCompileModesAuto:
             f"Expected ('mcmc_nuts',) for parametric photometry, got {compile_calls[0]}"
         )
 
-    @pytest.mark.skip(
-        reason=(
-            "Stochastic SFH path uses float() concretizations that broke after "
-            "Phase 6 routed predict through JIT'd observables. Needs JIT-safe "
-            "rework of stochastic SFH inner loop."
-        )
-    )
     def test_auto_stochastic_photometry(self, model_and_data_stochastic, monkeypatch):
         """Stochastic should infer ('linear_resample', 'nonlinear_update')."""
         monkeypatch.delenv("TENGRI_NO_BACKGROUND_COMPILE", raising=False)
@@ -250,7 +264,6 @@ class TestCompileModesResolution:
         modes = fitter._resolve_compile_modes("auto")
         assert modes == ("mcmc_nuts",), f"Expected ('mcmc_nuts',), got {modes}"
 
-    @pytest.mark.skip(reason="Same stochastic SFH JIT-safety issue as above")
     def test_resolve_auto_stochastic(self, model_and_data_stochastic):
         model, mock = model_and_data_stochastic
         fitter = Fitter(model, mock.flux_obs, mock.noise, compile_modes=None)
