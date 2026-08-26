@@ -54,15 +54,20 @@ Every row asserts a log sensitivity ``|x * (dF/dx) / F| > _MIN_LOG_SENS``
 *before* comparing FD to AD, so a zeroed, detached or clamped gradient fails
 loudly instead of matching a zero FD.
 
-It also catches a degenerate grid, which is not hypothetical either. A
-``data/cb19_templates.h5`` built by something other than
-``scripts/download_cb19_templates.py`` can be a constant fill: one such file
-held 332,640 cells with 9 distinct values, varying *only* along the line axis
--- every physical axis, ``log_U`` included, was bit-flat, and its ``log_OH``
-and ``log_CO`` axes were evenly spaced where the real 3MdB grid's are not.
-Against that file the CB19 row fails here, naming the possibility, instead of
-passing 0 against 0. Neither this grid nor the CLOUDY one is tracked in git or
-fetched by CI, so both rows skip there.
+It also caught a degenerate grid, which is how the CB19 row came to be gated
+twice. ``tests/conftest.py::pytest_configure`` writes ``data/cb19_templates.h5``
+when the real download is absent, by broadcasting ten Case B Hbeta ratios across
+the full 7-D shape -- 332,640 cells holding 9 distinct values, varying *only*
+along the line axis. Every physical axis, ``log_U`` included, is bit-flat by
+construction, and the conftest says as much: "not production-grade, but enough
+to break the degeneracy in plumbing tests."
+
+Structural tests are fine on it; a gradient test cannot be. So the CB19 row
+carries ``requires_nondegenerate_cb19``, which reads the grid and asks whether
+there is a ``log_U`` signal to differentiate at all, rather than guessing
+whether the file on disk is the real download. That is the actual precondition,
+and it lifts by itself once someone runs
+``scripts/download_cb19_templates.py``.
 
 Seven ``except Exception: pytest.skip(...)`` handlers are gone
 --------------------------------------------------------------
@@ -101,6 +106,7 @@ from tests._data_skip import (
     requires_cloudy_grid,
     requires_cue_weights,
     requires_mappings,
+    requires_nondegenerate_cb19,
 )
 
 pytestmark = pytest.mark.gradient
@@ -215,7 +221,13 @@ _LOGU_ROWS = [
         id="cloudy_triweight_on_grid_node",
     ),
     pytest.param("cue_backend", -2.5, 1e-3, marks=requires_cue_weights, id="cue"),
-    pytest.param("cb19_backend", -2.25, 1e-3, marks=requires_cb19, id="cb19"),
+    pytest.param(
+        "cb19_backend",
+        -2.25,
+        1e-3,
+        marks=[requires_cb19, requires_nondegenerate_cb19],
+        id="cb19",
+    ),
 ]
 
 

@@ -94,6 +94,45 @@ requires_cb19 = pytest.mark.skipif(
 )
 
 
+def _cb19_log_u_axis_is_degenerate() -> bool:
+    """True when the CB19 grid does not vary along ``log_U``.
+
+    ``tests/conftest.py::pytest_configure`` writes a synthetic CB19 grid when
+    the real one is absent, built by broadcasting ten Case B Hbeta ratios across
+    the full 7-D shape. It is therefore *constant* along every physical axis by
+    construction -- its own comment says "not production-grade, but enough to
+    break the degeneracy in plumbing tests".
+
+    Structural tests are fine on it. A gradient test is not: d/d_logU of a
+    constant is zero, and comparing that zero against a finite-difference zero
+    passes for any implementation. This answers "is there a logU signal here to
+    differentiate", which is the actual precondition, rather than guessing
+    whether the file on disk is the real download.
+    """
+    if not CB19_TEMPLATES.is_file():
+        return True
+    try:
+        import h5py
+        import numpy as np
+
+        with h5py.File(CB19_TEMPLATES, "r") as f:
+            grid = f["grids/SSP/Kroupa01/mu100/line_ratios"]
+            # axes: (log_OH, log_age, log_U, log_nH, log_CO, dNO, HbFrac, line)
+            return bool(np.ptp(np.asarray(grid[()]), axis=2).max() == 0.0)
+    except (OSError, KeyError, ImportError):
+        return True
+
+
+requires_nondegenerate_cb19 = pytest.mark.skipif(
+    _cb19_log_u_axis_is_degenerate(),
+    reason=f"the CB_19 grid at {CB19_TEMPLATES} is constant along log_U, so a "
+    "gradient with respect to neb_logU is identically zero and cannot be "
+    "checked against a finite difference. This is the synthetic fixture "
+    "tests/conftest.py writes when the real grid is missing -- run "
+    "scripts/download_cb19_templates.py for a grid with a live log_U axis.",
+)
+
+
 def has_skirtor() -> bool:
     """True when either SKIRTOR template bundle is present."""
     return any((DATA_DIR / name).is_file() for name in SKIRTOR_TEMPLATES)
