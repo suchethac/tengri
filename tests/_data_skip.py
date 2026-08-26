@@ -15,11 +15,21 @@ itself had to get ``N`` right for its own depth, and five did not:
 * ``tests/contract/test_agn_precompute_kernel_consumer.py``,
   ``test_agn_torus_alt_precompute.py`` and ``test_nebular_shock_kernel_wiring.py``
   used ``parents[4]`` where the root is ``parents[2]`` -- two levels out
+* ``tests/physics/gradients/test_nebular_gradients.py`` used ``parents[2]``
+  where the root is ``parents[3]``, resolving to ``tests/data/`` -- a directory
+  that has never existed. All eight of its data-gated tests skipped on every
+  machine, CI included, and two of them (Cue, MAPPINGS) want grids that are
+  *tracked in git* and therefore present on every runner.
 
-Every one resolved above the repository, so ``not (_DATA / grid).exists()`` was
-permanently true and **19 tests never ran**, while the grids they wanted were
-present in ``data/`` all along. #1431 is the same bug in
-``test_agn_cat3d_wind.py``, which still carries the comment explaining it.
+Every one resolved to a directory with no grids in it, so
+``not (_DATA / grid).exists()`` was permanently true and **27 tests never ran**,
+while the grids they wanted were present in ``data/`` all along. #1431 is the
+same bug in ``test_agn_cat3d_wind.py``, which still carries the comment
+explaining it.
+
+The failure is silent in both directions: too shallow lands in ``tests/``, too
+deep lands above the repository, and neither raises. Only the skip count moves,
+and nothing reads it.
 
 A skip that can never be lifted is indistinguishable from a passing test in
 every report CI produces. Import a marker from here rather than recomputing a
@@ -58,6 +68,29 @@ requires_mappings = pytest.mark.skipif(
     not MAPPINGS_TEMPLATES.is_file(),
     reason=f"MAPPINGS V template grid not found at {MAPPINGS_TEMPLATES} "
     "(run scripts/download_mappings_templates.py)",
+)
+
+#: Photoionization grids and weights for the nebular backends.
+CLOUDY_GRID_MIST = DATA_DIR / "cloudy_grid_mist.h5"
+CUE_WEIGHTS = DATA_DIR / "cue_weights.npz"
+CB19_TEMPLATES = DATA_DIR / "cb19_templates.h5"
+
+requires_cloudy_grid = pytest.mark.skipif(
+    not CLOUDY_GRID_MIST.is_file(),
+    reason=f"CLOUDY MIST grid not found at {CLOUDY_GRID_MIST} "
+    "(run scripts/convert_fsps_cloudy_grid.py)",
+)
+
+requires_cue_weights = pytest.mark.skipif(
+    not CUE_WEIGHTS.is_file(),
+    reason=f"Cue NN weights not found at {CUE_WEIGHTS} (tracked in git -- a "
+    "missing file here means an incomplete checkout, not an optional bundle)",
+)
+
+requires_cb19 = pytest.mark.skipif(
+    not CB19_TEMPLATES.is_file(),
+    reason=f"CB_19 photoionization grid not found at {CB19_TEMPLATES} "
+    "(run scripts/download_cb19_templates.py)",
 )
 
 

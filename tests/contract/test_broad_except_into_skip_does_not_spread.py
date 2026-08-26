@@ -40,10 +40,21 @@ _BROAD = {"Exception", "BaseException"}
 #:
 #: Not an endorsement. #1615 counted 40 across 17 files; this is what survives
 #: after that issue's proven case was rewritten and this branch narrowed the
-#: handlers it could measure. The seven in ``test_nebular_gradients.py`` skip
-#: here on absent CLOUDY grids, so which exception they would raise on a
-#: machine that has the grids cannot be observed from here -- narrowing them
-#: blind would be a guess, which is why they are listed rather than changed.
+#: handlers it could measure.
+#:
+#: This list used to carry seven more, all in ``test_nebular_gradients.py``,
+#: excused on the reasoning that they "skip here on absent CLOUDY grids, so
+#: which exception they would raise on a machine that has the grids cannot be
+#: observed from here." That was true, but not for the stated reason: the file
+#: resolved its data directory to ``tests/data/`` and so skipped everywhere
+#: regardless of which grids were installed. With the path corrected, the two
+#: whose grids are tracked in git run on every machine, and none of the seven
+#: calls raises. All seven handlers are gone.
+#:
+#: The lesson generalizes to the entries that remain. "Cannot be observed
+#: here" is a claim about the observer, and it is worth one attempt to make
+#: the observation before recording an exemption -- an unrunnable test looks
+#: identical whether the cause is a missing grid or a bug in the test.
 KNOWN: frozenset[tuple[str, str]] = frozenset(
     {
         ("components/sfh/test_sfh_delayed.py", "test_delayed_buildable_via_sedmodel_build"),
@@ -67,17 +78,6 @@ KNOWN: frozenset[tuple[str, str]] = frozenset(
         ("crossval/test_geovi_crossval.py", "test_converged_hamiltonian_close"),
         ("crossval/test_geovi_crossval.py", "test_posterior_stds_agree"),
         ("physics/conservation/test_filter_convolution.py", "test_matches_ssp_precompute"),
-        # Seven CLOUDY/Cue/MAPPINGS gradient tests. See the note above.
-        ("physics/gradients/test_nebular_gradients.py", "test_cb19_grad_logu"),
-        ("physics/gradients/test_nebular_gradients.py", "test_cloudy_grid_grad_logu"),
-        (
-            "physics/gradients/test_nebular_gradients.py",
-            "test_cloudy_grid_triweight_grad_at_grid_node",
-        ),
-        ("physics/gradients/test_nebular_gradients.py", "test_cloudy_grid_triweight_runs"),
-        ("physics/gradients/test_nebular_gradients.py", "test_cue_grad_logu"),
-        ("physics/gradients/test_nebular_gradients.py", "test_logu_ordering"),
-        ("physics/gradients/test_nebular_gradients.py", "test_mappings_grad_velocity"),
         ("regression/agn/test_skirtor_jit_thread_arrays_1198.py", "<module>"),
         ("regression/agn/test_vs_cigale_skirtor.py", "skirtor_component"),
         ("regression/agn/test_vs_cigale_skirtor.py", "skirtor_components_fn"),
