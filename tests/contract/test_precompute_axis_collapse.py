@@ -253,12 +253,24 @@ def test_axis_collapse_matches_full_lookup(
 
 
 @requires_cb19
+@pytest.mark.xfail(
+    strict=True,
+    reason=(
+        "#2071: precompute() raises IndexError from edges_for_grid on a size-1 "
+        "axis it builds internally. Unconditional -- identical for 1, 4 and 8 "
+        "filters and for z=0, 0.5, 2.0 -- and not a short axis in the file: "
+        "every declared axis survives edges_for_grid alone, and widening "
+        "HbFrac to the real grid's 6 nodes does not change it. This never "
+        "reported because the test looked for data/cb19_grid.h5 while the "
+        "adapter documents cb19_templates.h5, so the guard was permanently "
+        "true. Strict, so it speaks up the moment the path works."
+    ),
+)
 def test_cb19_collapse_axis0(filter_set_radio):
     """CB19's 7-axis grid collapses on log_OH_total.
 
     Kept out of the table because it takes ``filepath``, not ``grid_path``, and
-    declares no ``model``. The grid is not tracked in git and CI does not fetch
-    it, so this skips there.
+    declares no ``model``.
     """
     from tengri.components.nebular import cb19_precompute as adapter
 
