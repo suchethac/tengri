@@ -54,6 +54,7 @@ pytestmark = pytest.mark.contract
 ALLOWED_REFUSALS = (
     "not yet validated against the DSPS forward path",
     "At least one additive (smooth) SFH component required",
+    "model protocol surface incomplete",  # MAPPINGS AGN backend (#2082)
 )
 
 #: Wordings that mark a ``ValueError`` as *absent data* rather than a refusal.
@@ -136,7 +137,11 @@ def _cases() -> list[tuple[str, str, dict]]:
         (
             "nebular backend",
             tengri.list_nebular_backends,
-            lambda n: {"neb": {"type": n, "all_params": FIXED}},
+            lambda n: (
+                {"neb": {"type": n, "all_params": FIXED, "ionizing_source_warning": "suppress"}}
+                if n in ("mappings", "mappings_agn")
+                else {"neb": {"type": n, "all_params": FIXED}}
+            ),
         ),
         (
             "metallicity mode",

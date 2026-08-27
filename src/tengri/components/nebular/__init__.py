@@ -152,12 +152,14 @@ register_nebular_model(
 register_nebular_model(
     "mappings",
     citation="Flury et al. 2024 (MAPPINGS V stellar grids, Zenodo 14140949)",
-    short_doc="4D MAPPINGS V stellar lines-only nebular grid (MappingsPhotoStellarBackend)",
+    status="experimental",
+    short_doc="Stellar: refuses until #2082 (grid 51% NaN)",
 )(MappingsPhotoStellarBackend)
 register_nebular_model(
     "mappings_agn",
     citation="Flury et al. 2024 (MAPPINGS V AGN grids, Zenodo 14140949)",
-    short_doc="5D MAPPINGS V AGN lines-only nebular grid (MappingsPhotoAGNBackend)",
+    status="experimental",
+    short_doc="AGN: refuses until #2082 (model protocol incomplete)",
 )(MappingsPhotoAGNBackend)
 
 

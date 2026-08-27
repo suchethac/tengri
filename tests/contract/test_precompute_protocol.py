@@ -146,6 +146,10 @@ class TestRegistryCompleteness:
             # AXIS_PARAMS / build_lookup). See ``nebular/nebular_grid_precompute.py``
             # and ``SEDModel.enable_fast_nebular``.
             "tengri.components.nebular.nebular_grid_precompute",
+            # mappings_photo_precompute: intentionally unregistered; the adapter
+            # passes str metadata (sfh_labels) into the JIT and AGN grid has 5 axes
+            # against 4-axis Stellar. Pending full implementation after #2082.
+            "tengri.components.nebular.mappings_photo_precompute",
         }
     )
 

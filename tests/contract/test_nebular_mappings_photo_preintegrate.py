@@ -53,9 +53,6 @@ def fake_stellar_grid_data(mappings_module):
     logU_axis = jnp.linspace(-4.0, -1.5, n_u)
     log_age_yr_axis = jnp.linspace(6.0, 8.0, n_a)
     logn_axis = jnp.linspace(0.5, 3.5, n_n)
-    sfh_labels = ["cont", "inst"]
-    sfh_idx_inst = 1
-    sfh_idx_cont = 0
 
     # Grid shapes: (N_z, N_a, N_s, N_u, N_n)
     logHB_per_logq = jnp.ones((n_z, n_a, n_s, n_u, n_n)) * (-12.0)  # log10(erg/photon)
@@ -70,9 +67,6 @@ def fake_stellar_grid_data(mappings_module):
         logU_axis=logU_axis,
         log_age_yr_axis=log_age_yr_axis,
         logn_axis=logn_axis,
-        sfh_labels=sfh_labels,
-        sfh_idx_inst=sfh_idx_inst,
-        sfh_idx_cont=sfh_idx_cont,
         logHB_per_logq=logHB_per_logq,
         line_ratios=line_ratios,
     )
@@ -97,7 +91,11 @@ class TestPreintegrateForPhotometry:
         backend.model = "sb99"
         backend.density = "cpr"
         backend.sfh_mode = "inst"
-        backend._sfh_idx = fake_stellar_grid_data.sfh_idx_inst
+        # SFH metadata (mirrors what _load_stellar_grid returns)
+        backend.sfh_labels = ["cont", "inst"]
+        backend.sfh_idx_inst = 1
+        backend.sfh_idx_cont = 0
+        backend._sfh_idx = backend.sfh_idx_inst
         backend.grid = fake_stellar_grid_data
         backend._qh_table = None
         backend._qh_log_met = None

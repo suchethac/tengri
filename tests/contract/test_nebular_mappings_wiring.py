@@ -14,6 +14,7 @@ import pytest
 
 from tengri import FIXED, Fixed, SEDModel
 from tengri.components.nebular import IonizingSpectrumInconsistencyError
+from tengri.config.exceptions import TengriIOError
 from tengri.observation import Observation, Photometry
 
 pytestmark = pytest.mark.contract
@@ -23,15 +24,16 @@ MAPPINGS_BACKENDS = ["mappings", "mappings_agn"]
 
 @pytest.mark.parametrize("backend_type", MAPPINGS_BACKENDS)
 def test_bare_backend_warns_or_raises(ssp_data_fsps, backend_type):
-    """Bare neb={'type': backend} raises or warns depending on default behavior.
+    """Bare neb={'type': backend} raises depending on backend type.
 
-    Stellar: default ionizing_source_warning='raise' → IonizingSpectrumInconsistencyError
-    AGN: default ionizing_source_warning='warn' → emits warning
+    Both backends refuse at build time with clear errors:
+    - Stellar: default ionizing_source_warning='raise' → IonizingSpectrumInconsistencyError
+    - AGN: ValueError (model protocol surface incomplete)
     """
     obs = Observation(photometry=Photometry.from_names(["sdss_g", "sdss_r"]))
 
     if backend_type == "mappings":
-        # Stellar raises by default
+        # Stellar raises by default (ionizing_source_warning='raise')
         with pytest.raises(IonizingSpectrumInconsistencyError):
             SEDModel.build(
                 ssp_data=ssp_data_fsps,
@@ -41,8 +43,8 @@ def test_bare_backend_warns_or_raises(ssp_data_fsps, backend_type):
                 neb={"type": backend_type},
             )
     elif backend_type == "mappings_agn":
-        # AGN warns by default
-        with pytest.warns(UserWarning, match="ionizing_source_warning"):
+        # AGN raises at build time due to protocol incompleteness
+        with pytest.raises(ValueError, match="predict_nebular_sed"):
             SEDModel.build(
                 ssp_data=ssp_data_fsps,
                 observation=obs,
@@ -56,15 +58,15 @@ def test_bare_backend_warns_or_raises(ssp_data_fsps, backend_type):
 def test_backend_builds_with_suppress(ssp_data_fsps, backend_type):
     """With ionizing_source_warning='suppress', building raises with a clear refusal message.
 
-    Both backends are registered but refuse loudly at initialization:
-    - 'mappings': grid data is incomplete (51.2% NaN in logHB_per_logq, 2656/5184 cells)
-    - 'mappings_agn': predict_nebular_sed requires AGN parameters from the full model context
+    Both backends are registered but refuse loudly at build time:
+    - 'mappings': TengriIOError (grid data is incomplete, 51.2% NaN, 2656/5184 cells)
+    - 'mappings_agn': ValueError (model protocol surface incomplete, missing predict_nebular_sed)
     """
     obs = Observation(photometry=Photometry.from_names(["sdss_g", "sdss_r"]))
 
     if backend_type == "mappings":
-        # Stellar backend refuses at initialization due to incomplete grid
-        with pytest.raises(NotImplementedError) as exc_info:
+        # Stellar backend refuses at build time due to incomplete grid
+        with pytest.raises(TengriIOError) as exc_info:
             SEDModel.build(
                 ssp_data=ssp_data_fsps,
                 observation=obs,
@@ -79,48 +81,38 @@ def test_backend_builds_with_suppress(ssp_data_fsps, backend_type):
         msg = str(exc_info.value)
         assert "2656" in msg, "NaN cell count not in error message"
         assert "grid data is incomplete" in msg, "Grid completeness status not in error"
-        assert "data/flury2024_grids.h5" in msg, "Grid path not in error message"
+        assert "#2082" in msg, "Issue reference not in error message"
 
     elif backend_type == "mappings_agn":
-        # AGN backend refuses when predict_nebular_sed is called
-        # (it will build, but refuse on prediction)
-        model = SEDModel.build(
-            ssp_data=ssp_data_fsps,
-            observation=obs,
-            sfh={"type": "dpl", "all_params": FIXED},
-            redshift=Fixed(0.1),
-            neb={
-                "type": backend_type,
-                "ionizing_source_warning": "suppress",
-            },
-        )
-        # Model should build successfully
-        assert model is not None
-        assert model._nebular_backend is not None
-        assert model._nebular_backend.__class__.__name__ == "MappingsPhotoAGNBackend"
-
-        # But calling predict should raise because AGN context is missing
-        from jax import random
-
-        params = model.spec.sample(random.PRNGKey(0))
-        with pytest.raises(NotImplementedError) as exc_info:
-            model.predict_photometry(params)
-        # Verify the error mentions AGN parameters
+        # AGN backend refuses at build time due to missing protocol surface
+        with pytest.raises(ValueError) as exc_info:
+            SEDModel.build(
+                ssp_data=ssp_data_fsps,
+                observation=obs,
+                sfh={"type": "dpl", "all_params": FIXED},
+                redshift=Fixed(0.1),
+                neb={
+                    "type": backend_type,
+                    "ionizing_source_warning": "suppress",
+                },
+            )
+        # Verify the error message names the missing protocol surface
         msg = str(exc_info.value)
-        assert "agn_log_lbol" in msg or "AGN" in msg, "AGN parameter not in error"
+        assert "predict_nebular_sed" in msg, "Protocol surface not in error message"
+        assert "#2082" in msg, "Issue reference not in error message"
 
 
 def test_mappings_ionization_response(ssp_data_fsps):
     """MappingsPhotoStellarBackend: building refuses with grid incompleteness guard.
 
     The backend's ionization parameter (neb_logU) is declared in the grammar,
-    but the backend refuses at initialization because the grid data is incomplete.
+    but the backend refuses at build time because the grid data is incomplete.
     (Issue #2082)
     """
     obs = Observation(photometry=Photometry.from_names(["sdss_g", "sdss_r"]))
 
-    # Stellar backend refuses at initialization due to grid incompleteness
-    with pytest.raises(NotImplementedError) as exc_info:
+    # Stellar backend refuses at build time due to grid incompleteness
+    with pytest.raises(TengriIOError) as exc_info:
         SEDModel.build(
             ssp_data=ssp_data_fsps,
             observation=obs,
@@ -199,8 +191,8 @@ def test_mappings_exact_path_predicts(ssp_data_fsps):
     """
     obs = Observation(photometry=Photometry.from_names(["sdss_g", "sdss_r"]))
 
-    # Building with the mappings backend should raise NotImplementedError
-    with pytest.raises(NotImplementedError) as exc_info:
+    # Building with the mappings backend should raise TengriIOError
+    with pytest.raises(TengriIOError) as exc_info:
         SEDModel.build(
             ssp_data=ssp_data_fsps,
             observation=obs,
@@ -217,7 +209,6 @@ def test_mappings_exact_path_predicts(ssp_data_fsps):
     assert "grid data is incomplete" in msg, "Grid status not in error message"
     assert "51.2%" in msg or "2656" in msg, "NaN count or percentage not in error"
     assert "5184" in msg, "Total cell count not in error message"
-    assert "data/flury2024_grids.h5" in msg, "Grid file path not in error"
     assert "scripts/build_flury2024_grids.py" in msg, "Resolution script not in error"
     assert "#2082" in msg, "Issue reference not in error message"
 
@@ -225,7 +216,7 @@ def test_mappings_exact_path_predicts(ssp_data_fsps):
 def test_mappings_ionization_response_varies(ssp_data_fsps):
     """MappingsPhotoStellarBackend: building refuses with any configuration.
 
-    The backend refuses at initialization due to grid incompleteness, regardless
+    The backend refuses at build time due to grid incompleteness, regardless
     of observation configuration or other parameters. (Issue #2082)
     """
     from tengri.observation.filters import load_tophat_filter
@@ -234,8 +225,8 @@ def test_mappings_ionization_response_varies(ssp_data_fsps):
     filt = load_tophat_filter(6200 - 250, 6700 + 250, name="hbeta_oiii_z03")
     obs = Observation(photometry=Photometry(filters=[filt]))
 
-    # The backend refuses at init regardless of observation or parameters
-    with pytest.raises(NotImplementedError) as exc_info:
+    # The backend refuses at build time regardless of observation or parameters
+    with pytest.raises(TengriIOError) as exc_info:
         SEDModel.build(
             ssp_data=ssp_data_fsps,
             observation=obs,

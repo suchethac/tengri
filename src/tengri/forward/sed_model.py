@@ -76,6 +76,7 @@ from tengri.config.exceptions import (
     DeadGradientParameterWarning,
     DegenerateParameterPairWarning,
     ParameterMapError,
+    TengriIOError,
     warn_measured,
 )
 from tengri.cosmology import age_at_z, luminosity_distance
@@ -2883,6 +2884,23 @@ class SEDModel:
                 kwargs["ionizing_source_warning"] = spec.nebular_mappings_ionizing_source_warning
 
             self._nebular_backend = MappingsPhotoStellarBackend(**kwargs)
+
+            # Validate grid completeness (issue #2082): the grid file contains 51.2%
+            # NaN in logHB_per_logq, making it unsuitable for predictions.
+            logHB = np.asarray(self._nebular_backend.grid.logHB_per_logq)
+            nan_count = np.sum(~np.isfinite(logHB))
+            total_count = logHB.size
+            nan_frac = float(nan_count / total_count)
+            if nan_frac > 0.01:  # More than 1% NaN indicates incomplete grid
+                grid_path = spec.nebular_mappings_grid_path or "data/flury2024_grids.h5"
+                raise TengriIOError(
+                    f"MAPPINGS V stellar grid data is incomplete. "
+                    f"The file {grid_path} contains {100 * nan_frac:.1f}% NaN values "
+                    f"in logHB_per_logq ({nan_count}/{total_count} cells). "
+                    f"This indicates the grid was not fully computed. The grid must be "
+                    f"regenerated using scripts/build_flury2024_grids.py before this "
+                    f"backend can emit valid predictions. See GitHub issue #2082."
+                )
         elif spec.nebular_mode == "mappings_agn":
             # MAPPINGS V AGN photoionization grid (Flury et al. 2024). AGN grids
             # use OPTXAGNF ionizing source, density structure and ionizing source
@@ -2901,6 +2919,18 @@ class SEDModel:
                 kwargs["ionizing_source_warning"] = warn_setting
 
             self._nebular_backend = MappingsPhotoAGNBackend(**kwargs)
+
+            # Model protocol refusal (issue #2082): MappingsPhotoAGNBackend does not
+            # implement predict_nebular_sed(), which the forward path calls. The AGN
+            # ionizing source parameters (agn_log_lbol, agn_logedd, agn_logmbh) are
+            # required to wire the interface.
+            raise ValueError(
+                "MappingsPhotoAGNBackend: model protocol surface incomplete. "
+                "The class lacks predict_nebular_sed(agn_log_lbol, agn_logedd, "
+                "agn_logmbh, ...) required by the forward path. The necessary "
+                "AGN ionizing source parameter declarations and protocol adapter "
+                "are pending. See GitHub issue #2082."
+            )
         else:
             from tengri.components.nebular import BakedInBackend
 

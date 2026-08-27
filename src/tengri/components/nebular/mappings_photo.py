@@ -475,22 +475,6 @@ class MappingsPhotoStellarBackend:
         )
         self.grid = grid_data
 
-        # Validate grid completeness (issue #2082): the grid file contains 51.2%
-        # NaN in logHB_per_logq, making it unsuitable for predictions.
-        logHB = np.asarray(self.grid.logHB_per_logq)
-        nan_count = np.sum(~np.isfinite(logHB))
-        total_count = logHB.size
-        nan_frac = float(nan_count / total_count)
-        if nan_frac > 0.01:  # More than 1% NaN indicates incomplete grid
-            raise NotImplementedError(
-                f"MappingsPhotoStellarBackend: grid data is incomplete. "
-                f"The file {grid_path} contains {100 * nan_frac:.1f}% NaN values "
-                f"in logHB_per_logq ({nan_count}/{total_count} cells). "
-                f"This indicates the grid was not fully computed. The grid must be "
-                f"regenerated using scripts/build_flury2024_grids.py before this "
-                f"backend can emit valid predictions. See GitHub issue #2082."
-            )
-
         # Store SFH metadata as plain Python attributes (not in the grid).
         # This keeps strings out of the JAX-traced pytree.
         self.sfh_labels = sfh_labels
