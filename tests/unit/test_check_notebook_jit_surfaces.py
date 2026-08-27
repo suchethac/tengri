@@ -106,30 +106,27 @@ def test_find_jax_transforms(text, expected):
     assert [span for _s, _e, span in _find_jax_transforms(text)] == expected
 
 
-_UNSCANNED_TRANSFORMS = [
-    ("jax_grad", "jax.grad(lambda p: m.predict(p))"),
-    ("jax_value_and_grad", "jax.value_and_grad(lambda p: m.predict(p))"),
-    ("bare_grad", "grad(m.predict)"),
+_GRADIENT_TRANSFORM_CASES = [
+    ("jax_grad", "jax.grad(lambda p: m.predict(p))", ["(lambda p: m.predict(p))"]),
+    (
+        "jax_value_and_grad",
+        "jax.value_and_grad(lambda p: m.predict(p))",
+        ["(lambda p: m.predict(p))"],
+    ),
+    ("bare_grad", "grad(m.predict)", ["(m.predict)"]),
+    ("bare_value_and_grad", "value_and_grad(m.predict)", ["(m.predict)"]),
 ]
 
 
-@pytest.mark.parametrize(("text",), **_ids(_UNSCANNED_TRANSFORMS))
-def test_gradient_transforms_are_not_scanned(text):
-    """``jax.grad`` and ``jax.value_and_grad`` are outside the guard's patterns.
+@pytest.mark.parametrize(("text", "expected"), **_ids(_GRADIENT_TRANSFORM_CASES))
+def test_gradient_transforms_are_scanned(text, expected):
+    """``jax.grad`` and ``jax.value_and_grad`` are now scanned by the guard's patterns.
 
-    Pinned because the guard's own failure message tells the reader to use the
-    safe surfaces "inside jax.jit / jax.vmap / jax.grad / jax.value_and_grad
-    spans" -- naming four transforms where the implementation matches two. The
-    module docstring is accurate; only the advice overreaches.
-
-    ``jax.grad`` over the rich ``predict`` surface fails at trace time the same
-    way ``jax.jit`` does, so this is a coverage gap and not a design choice --
-    but it is the current behavior, and stating it here keeps the gap visible
-    rather than leaving it to be rediscovered. Tracked in #2063; widening the
-    patterns changes what the guard rejects on the live tree, so it is not a
-    drive-by.
+    Tracked in #2063; widening the patterns to include gradient transforms ensures
+    the guard's advice matches its implementation, and catches unsafe surfaces
+    passed to all four JAX transform types.
     """
-    assert _find_jax_transforms(text) == []
+    assert [span for _s, _e, span in _find_jax_transforms(text)] == expected
 
 
 # ---------------------------------------------------------------------------
@@ -272,6 +269,15 @@ _FLAGGED_CASES = [
         {"notebooks/nb.py": "# %%\njit(model.predict(p))\n"},
         "notebooks/nb.py:2: .predict",
     ),
+    (
+        "grad_with_rich_surface",
+        {
+            "notebooks/nb.py": (
+                "# %%\njax.grad(lambda p: jnp.sum(model.predict(p).photometry()))(p)\n"
+            )
+        },
+        "notebooks/nb.py:2: .predict",
+    ),
     ("reproduction_is_in_scope", {"reproduction/run.py": _BUG}, "reproduction/run.py:2: .predict"),
 ]
 
@@ -285,6 +291,11 @@ _ACCEPTED_CASES = [
             "notebooks/nb.py": "# %%\njax.jit(\n"
             "    jax.grad(lambda p: jnp.sum(model.predict_photometry(p)))\n)\n"
         },
+        1,
+    ),
+    (
+        "grad_with_safe_surface",
+        {"notebooks/nb.py": "# %%\njax.grad(lambda p: jnp.sum(model.predict_photometry(p)))(p)\n"},
         1,
     ),
     (
