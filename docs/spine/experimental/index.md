@@ -47,6 +47,19 @@ template to copy. Each states its own caveats up front.
   fitting is not safe either. The sampler section carries its own warning: those numbers are
   a property of a fixture that turned out to be hard to sample, not of tengri.
 
+- **{doc}`custom_filters_7dt`**: supplying your own bandpasses, and the one
+  mistake in doing so that does not raise. Three registration routes all
+  resolve through `load_filter`, so a user curve works anywhere a built-in one
+  does and can shadow it; an instrument table in ADU with per-band zeropoints
+  goes through AB magnitudes to a fit. Wavelength units are where this bites. A
+  curve tabulated in nanometers is a valid array of numbers describing the
+  extreme UV — it registers, lands where the SED has no flux, and the fit
+  converges with plausible error bars and says nothing. tengri warns when a
+  curve sits wholly inside that gap, bounded by the bluest bandpass it ships,
+  but no range rule catches microns at all, so `wave_unit=` is the part that
+  actually settles it. Worked through the 7DT set: 20 medium bands on a 25 nm
+  grid plus g, r, i, which ship built in.
+
 ```{toctree}
 :maxdepth: 1
 
@@ -55,4 +68,5 @@ multimodel_bma_candels
 jwst_nonparametric_fits
 apple_mps
 nvidia_cuda
+custom_filters_7dt
 ```

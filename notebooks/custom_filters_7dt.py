@@ -14,17 +14,27 @@
 # ---
 
 # %% [markdown]
-# # Custom filter curves, and 7DT
+# # What goes wrong when you supply your own filter curves?
 #
 # > ⚠️ **Experimental.** A research demonstration using experimental APIs that may change between releases.
 #
-# Bringing your own bandpasses. Three registration routes, the one unit mistake
-# that does not raise, and an ADU-plus-zeropoint table taken through to a fit.
+# Every survey tengri does not already know about arrives as a directory of
+# transmission curves, in whatever format and whatever wavelength unit the
+# instrument team wrote them in. Three registration routes take them, and all
+# three resolve through `load_filter`, so a curve you supply works anywhere a
+# built-in one does and can shadow it by name.
 #
-# 7DT is the worked example throughout: 3 broad (`g`, `r`, `i`) plus 20 medium
-# bands on a 25 nm grid, `m400`-`m875`. Those 23 ship with tengri as `7dt_*` and
-# need no registration at all. Everything before the last two sections is about
-# what to do when your filters are *not* already built in.
+# The problem is that one of the ways this goes wrong does not raise. Tengri
+# wavelengths are Angstrom throughout, and a curve tabulated in nanometers is
+# still a perfectly valid array of numbers — it simply describes the extreme
+# ultraviolet, where the interstellar medium is opaque and no bandpass exists.
+# Nothing about it is malformed, so nothing complains. The filters land where
+# the model has no flux, the fit converges, and the error bars look ordinary.
+#
+# 7DT is the worked example: 3 broad (`g`, `r`, `i`) plus 20 medium bands on a
+# 25 nm grid, `m400`–`m875`. Those 23 ship with tengri as `7dt_*` and need no
+# registration, so the last two sections use them directly. Everything before
+# that is what to do when your filters are not already built in.
 
 # %%
 from _setup import effective_wavelengths_um, quiet
@@ -69,9 +79,10 @@ WORK = Path(tempfile.mkdtemp(prefix="tengri_filters_"))
 # %% [markdown]
 # ## What a delivered curve looks like
 #
-# Rarely two whitespace columns in Angstrom. The 7DT delivery is one CSV per
-# band, `lam,trans`, wavelength in **nanometers** on a 0.1 nm grid, zero-padded
-# to 300-1000 nm. We fabricate one here in exactly that shape.
+# Curves rarely arrive as two whitespace-separated columns in Angstrom. The 7DT
+# delivery is one CSV per band with a `lam,trans` header, wavelength in
+# **nanometers** on a uniform 0.1 nm grid, zero-padded out to 300–1000 nm. The
+# cell below fabricates one in exactly that shape.
 
 # %%
 lam_nm = np.arange(300.0, 1000.1, 0.1)
@@ -103,8 +114,8 @@ print(f"{fc.name}: {fc.wave.min():.0f}-{fc.wave.max():.0f} AA, peak T = {fc.tran
 # %% [markdown]
 # ## Route 2: in-memory, from a file
 #
-# Same registry, one less step. `wave_unit` is the whole reason this is safe;
-# see the next section.
+# The same registry, reading the file directly. Declaring `wave_unit` is what
+# makes this safe, for the reason the next section works through.
 
 # %%
 register_filter_from_file("demo_from_file", delivered, wave_unit="nm", overwrite=True)
@@ -113,13 +124,13 @@ print(np.allclose(load_filter("demo_from_file").wave, load_filter("demo_from_arr
 # %% [markdown]
 # ## Route 3: `$TENGRI_FILTER_DIR`
 #
-# A `:`-separated directory list, searched by file stem, no code call at all.
-# This is the route that survives being handed to someone else: a config naming
-# `m400` resolves on any machine that has the directory. The other two live and
-# die with the process.
+# A `:`-separated directory list, searched by file stem, with no code call at
+# all. This is the route that survives being handed to someone else: a config
+# naming `m400` resolves on any machine that has the directory, where the other
+# two live and die with the process.
 #
-# Note that it has no place to put `wave_unit` -- a bare directory of files
-# carries no metadata -- so **files dropped here must already be in Angstrom.**
+# It also has nowhere to record a unit, since a bare directory of files carries
+# no metadata, so **files dropped here must already be in Angstrom.**
 
 # %%
 import os
@@ -134,13 +145,10 @@ print(f"resolved by stem: {load_filter('m400_dir').wave.max():.0f} AA")
 # %% [markdown]
 # ## The mistake that does not raise
 #
-# Every other unit error in tengri fails loudly. This one does not, because
-# nanometers-read-as-Angstrom is a *valid* array of numbers -- it just describes
-# the extreme UV, where the ISM is opaque and no bandpass exists.
-#
-# Registering without saying the unit trips a heuristic: a curve lying wholly
-# between 100 Å and 1340 Å (the blue edge of GALEX FUV, the bluest filter
-# tengri ships) is almost certainly nanometers.
+# Registering without declaring the unit falls back to a heuristic. A curve
+# lying wholly between 100 Å and 1340 Å — the blue edge of GALEX FUV, the
+# bluest bandpass tengri ships — is almost certainly in nanometers, because
+# that window is empty for a physical reason rather than a statistical one.
 
 # %%
 with warnings.catch_warnings(record=True) as caught:
@@ -150,10 +158,10 @@ with warnings.catch_warnings(record=True) as caught:
 print(str(caught[0].message) if caught else "no warning")
 
 # %% [markdown]
-# What it costs if you miss it. The curve sits at 300-1000 Å, the SED has
-# essentially no flux there, and the predicted photometry is not wrong so much
-# as meaningless -- while every fit still converges and every error bar still
-# looks reasonable.
+# The cost of missing it. The curve sits at 300–1000 Å, where the SED carries
+# essentially no flux, so the predicted photometry is not so much wrong as
+# meaningless — and every fit still converges, with error bars that look
+# entirely reasonable.
 
 # %%
 wrong = load_filter("demo_unstated")
@@ -166,18 +174,18 @@ for name in ("demo_from_arrays", "demo_from_file", "demo_unstated"):
     unregister_filter(name)
 
 # %% [markdown]
-# The heuristic is a backstop, not a guarantee. It cannot catch microns at all
-# (an optical curve in microns lands at 0.5-0.7 Å, which is a real NuSTAR band),
-# and it cannot catch a nanometer set running past 1340 nm without also firing
-# on GALEX FUV. **State the unit.**
+# The heuristic is a backstop rather than a guarantee. It cannot catch microns
+# at all, since an optical curve in microns lands at 0.5–0.7 Å, which is a real
+# NuSTAR band; and it cannot catch a nanometer set running past 1340 nm without
+# also firing on GALEX FUV itself. **State the unit.**
 
 # %% [markdown]
 # ## The 23 bundled 7DT bands
 #
-# These need none of the above. They ship in the package as total system
-# response -- detector QE and optics folded in, which is what the photometry was
-# measured through -- and resolve by name like any SVO band. See
-# `tengri/data/filters_7dt/PROVENANCE.md`.
+# These need none of the above. They ship inside the package as total system
+# response — detector QE and optics folded in, which is what the photometry was
+# measured through — and resolve by name like any SVO band. Provenance and
+# per-file digests are in `tengri/data/filters_7dt/PROVENANCE.md`.
 
 # %%
 BANDS_BROAD = ["7dt_g", "7dt_r", "7dt_i"]
@@ -188,10 +196,12 @@ print(tengri.list_filters(survey="7dt")[:4])
 print(f"\n{len(FILTERS)} bands")
 
 # %% [markdown]
-# The peak transmission envelope is not flat across the medium bands: 0.34 at
-# `m400`, 0.66 near 500 nm, 0.07 at `m875`. That is the QE, and it is harmless
-# for AB photometry -- a constant scale on $T$ cancels in the ratio of the two
-# bandpass integrals, so only the shape matters.
+# The peak transmission is not flat across the medium bands: 0.34 at `m400`,
+# rising to 0.66 near 500 nm, falling to 0.07 at `m875`. Twenty separate
+# filters do not share one smooth envelope by accident — that is the detector
+# QE showing through. It is harmless for AB photometry, since a constant scale
+# on $T$ cancels in the ratio of the two bandpass integrals and only the shape
+# survives. It would matter if these were used to predict absolute count rates.
 
 # %%
 fig, ax = plt.subplots(figsize=(9.0, 3.4))
@@ -215,10 +225,12 @@ fig.tight_layout()
 # $$m_{\rm AB} = \mathrm{ZP}_b - 2.5\log_{10} f_{\rm ADU}, \qquad
 #   \sigma_m = 1.0857\,\sigma_f / f_{\rm ADU}.$$
 #
-# Then `flux_unit="ab_mag"`. There is no ADU option and there should not be: a
-# zeropoint is per-band calibration, not a unit.
+# Then `flux_unit="ab_mag"`. There is no ADU option, and there should not be:
+# a zeropoint is per-band calibration rather than a unit, and folding one into
+# a unit name would hide it.
 #
-# We synthesize the ADU here from a known model so the answer is checkable.
+# The ADU below is synthesized from a known model, so the recovered answer can
+# be checked against something.
 
 # %%
 ZP = dict.fromkeys(FILTERS, 23.89)  # the delivered zeropoints sit within 0.03 mag
@@ -262,7 +274,7 @@ print(f"ADU range: {adu.min():.1f} - {adu.max():.1f}")
 # `ingest_catalog` takes explicit `flux_cols` and `err_cols`, so a table with
 # `flux_<band>` / `err_<band>` columns needs no renaming. (The `read_catalog`
 # convenience reader hardcodes a `<band>_err` suffix *and* silently defaults a
-# missing redshift to 0.0 -- do not use it for this.)
+# missing redshift to 0.0, so do not use it for this.)
 
 # %%
 from tengri.inference.catalog_ingest import ingest_catalog
@@ -293,7 +305,7 @@ print(f"round-trip max |dF/F|: {np.abs(arrays.flux[0] / fnu - 1.0).max():.2e}")
 # uncertainty (7DT's does), pass it through and leave `NoiseModel`'s
 # `calibration_floor` at 0. Setting both counts the same term twice. Note that
 # no per-fit floor represents the *coherence* of a zeropoint error across bins
-# of one galaxy -- it is one shared offset, not independent noise. That matters
+# of one galaxy, since it is one shared offset, not independent noise. That matters
 # for joint or radial analyses, not for fitting bins one at a time.
 
 # %%
@@ -304,7 +316,7 @@ for pname in sed_model.spec.free_params:
 
 # %% [markdown]
 # Mass and SFH width come back tightly; metallicity and dust do not. That is
-# the age-metallicity-dust degeneracy, not a filter problem -- 23 optical bands
+# the age-metallicity-dust degeneracy, not a filter problem: 23 optical bands
 # with no UV and no NIR do not break it, and a MAP point estimate reports none
 # of the covariance that would show you so. Run `method="mcmc_nuts"` if you care
 # about the answer rather than the plumbing.
@@ -314,7 +326,7 @@ for pname in sed_model.spec.free_params:
 #
 # One MAP fit here. A Voronoi-binned program is ~300 bins per galaxy, and ~100
 # galaxies is ~30,000 SEDs. `Fitter.fit_batch` shares the XLA compile cache
-# across galaxies, so the first fit pays compilation and the rest do not --
+# across galaxies, so the first fit pays compilation and the rest do not, and
 # which makes the per-fit cost, not the compile cost, the thing to measure
 # before committing to a full run.
 
