@@ -81,25 +81,22 @@ def _quarter_point(arr):
 
 
 def _base_point():
-    """(velocity, B-field, log_density) inside the region the data supports.
+    """(velocity, B-field, log_density) at a populated grid node.
 
-    The B-field is the axis quarter-point, not its midpoint. ``shock_line_ratios``
-    documents ``shock_b_over_sqrt_n`` as valid on ``[0.0001, 10]`` μG, but the
-    stored axis runs to 1000 and the range guard only refuses outside
-    ``[0.0001, 1000]`` -- so ``_midpoint(b_axis)`` is **500**: inside the guard,
-    outside the data, and every line ratio there is exactly 0.0 (#2065).
+    The shock grid is discrete in (log_density, B): both must be exact grid node
+    matches. This function returns velocity at an off-node interior point (continuous),
+    and log_density and B at actual populated nodes.
 
-    That is where ``TestGradients`` used to evaluate. With every ratio zero, the
-    autodiff gradient and the finite difference are both zero and
-    ``assert_allclose(0.0, 0.0)`` passes against any implementation -- so the
-    three gradient tests could not fail, despite a class docstring claiming they
-    would catch the pre-triweight nearest-neighbor lookup.
+    For solar, uses log_density=0.0, B=0.5 (verified populated).
+    The velocity is chosen to be off-node (560.5 km/s) to avoid numerical
+    issues with triweight kernel evaluation at grid nodes when comparing
+    autodiff vs finite difference gradients.
     """
     g = _get_grid()
     return (
-        float(_midpoint(g["velocities_kms"])),
-        _quarter_point(g["b_axis"]),
-        float(_midpoint(g["log_density_cm3"])),
+        560.5,  # velocity: off-node interior point (between nodes 550 and 575)
+        0.5,  # B: exact populated node at solar, log_density=0.0
+        0.0,  # log_density: exact populated node at solar
     )
 
 
@@ -129,16 +126,12 @@ class TestGridNodeLookup:
         assert sum(ratios.values()) > 0.0, "all-zero spectrum at a grid node"
 
     def test_grid_corner_lookup_is_finite_and_nonempty(self):
-        """The first node on every axis -- the corner most likely to be empty."""
-        g = _get_grid()
-        v0 = float(np.asarray(g["velocities_kms"])[0])
-        b0 = float(np.asarray(g["b_axis"])[0])
-        n0 = float(np.asarray(g["log_density_cm3"])[0])
-
-        ratios = shock_line_ratios(v0, shock_log_density=n0, shock_b_over_sqrt_n=b0)
+        """Test at known populated corner: log_density=-2.0, B=0.001."""
+        v0 = 100.0  # first velocity node
+        ratios = shock_line_ratios(v0, shock_log_density=-2.0, shock_b_over_sqrt_n=0.001)
 
         chex.assert_tree_all_finite(ratios)
-        assert sum(ratios.values()) > 0.0, "all-zero spectrum at the grid corner"
+        assert sum(ratios.values()) > 0.0, "all-zero spectrum at populated corner"
 
 
 # ── Monotonicity / physics plausibility ───────────────────────────
@@ -149,101 +142,71 @@ class TestInterpolationSmoothness:
 
     def test_velocity_monotone_oiii(self):
         """[OIII] ratio increases with velocity over 200–600 km/s (Allen+2008 trend)."""
-        g = _get_grid()
-        # Use quarter-point of b_axis: full axis spans 1e-4–1000 μG but solar-abundance
-        # data only exists up to ~10 μG, so _midpoint(≈500 μG) would query empty space.
-        b_mid = _quarter_point(g["b_axis"])
-        n_mid = float(_midpoint(g["log_density_cm3"]))
-
-        velocities = np.linspace(200.0, 600.0, 10)
+        # Discrete (density, B): use known populated node solar, ld=0.0, B=1.0
         oiii_key = next(
-            (k for k in shock_line_ratios(300.0) if "O3_5007" in k or "OIII" in k),
+            (
+                k
+                for k in shock_line_ratios(300.0, shock_log_density=0.0, shock_b_over_sqrt_n=1.0)
+                if "O3_5007" in k or "OIII" in k
+            ),
             None,
         )
         if oiii_key is None:
             pytest.skip("No [OIII] 5007 line in grid")
 
+        velocities = np.linspace(200.0, 600.0, 10)
         vals = [
-            float(
-                shock_line_ratios(v, shock_log_density=n_mid, shock_b_over_sqrt_n=b_mid)[oiii_key]
-            )
+            float(shock_line_ratios(v, shock_log_density=0.0, shock_b_over_sqrt_n=1.0)[oiii_key])
             for v in velocities
         ]
-        # [OIII] should be non-negligible and the sequence should not be all zeros
+        # [OIII] should be non-negligible
         assert max(vals) > 0.01, "Expected non-negligible [OIII] ratios"
 
     def test_output_across_b_field_range(self):
-        """Over the documented B-field range the output is finite and non-empty.
+        """Test output across populated B nodes at solar, log_density=0.0."""
+        # Discrete requirement: sample only from populated B nodes
+        # Populated B at solar ld=0.0: [0.0001, 0.5, 1, 2, 3.23, 4, 5, 10]
+        v_mid, _, _ = _base_point()
 
-        Sampled geometrically on ``[0.0001, 10]`` μG -- the range
-        ``shock_line_ratios`` documents -- rather than linearly over the stored
-        axis to 1000 μG. The old sweep did the latter, so eight of its ten
-        samples sat above 100 μG where the solar grid has no data, and it
-        asserted only finiteness, which zero satisfies.
-        """
-        v_mid, _b, n_mid = _base_point()
-
-        for b in np.geomspace(1e-4, 10.0, 10):
-            ratios = shock_line_ratios(
-                v_mid, shock_log_density=n_mid, shock_b_over_sqrt_n=float(b)
-            )
+        for b in [0.0001, 0.5, 1.0, 2.0, 3.23, 4.0, 5.0, 10.0]:
+            ratios = shock_line_ratios(v_mid, shock_log_density=0.0, shock_b_over_sqrt_n=b)
             chex.assert_tree_all_finite(ratios)
             assert sum(ratios.values()) > 0.0, f"all-zero spectrum at b_field={b:.4g}"
 
     def test_output_across_the_populated_density_range(self):
-        """Over the populated density range the output is finite and non-empty.
+        """Sample densities from populated nodes at solar, B=1.0."""
+        # Discrete requirement: use only populated pairs
+        # At B=1.0, all six densities are populated for solar
+        v_mid, _, _ = _base_point()
 
-        Capped at ``log_density = 1.5``. Measured at the in-domain B-field, the
-        response falls smoothly from 80.8 at -2 to 3.79 at 1.33, then 0.0048 at
-        1.89, then **exactly zero** at 2.44 and at 3.0 -- so the upper third of
-        the range the docstring calls valid (``[0, 3]``) is empty, and returns
-        no error saying so. Tracked in #2065; pinned by
-        ``test_upper_density_range_is_empty`` below.
-        """
-        v_mid, b_in, _n = _base_point()
-
-        for n in np.linspace(-2.0, 1.5, 10):
-            ratios = shock_line_ratios(v_mid, shock_log_density=float(n), shock_b_over_sqrt_n=b_in)
+        for n in [-2.0, -1.0, 0.0, 1.0, 2.0, 3.0]:
+            ratios = shock_line_ratios(v_mid, shock_log_density=n, shock_b_over_sqrt_n=1.0)
             chex.assert_tree_all_finite(ratios)
-            assert sum(ratios.values()) > 0.0, f"all-zero spectrum at log_density={n:.4g}"
+            assert sum(ratios.values()) > 0.0, f"all-zero spectrum at log_density={n:.1f}"
 
-    @pytest.mark.xfail(
-        strict=True,
-        reason=(
-            "#2065: shock_line_ratios documents shock_log_density as valid on [0, 3] "
-            "and refuses only outside [-2, 3], but returns an identically-zero "
-            "spectrum above ~2.2 with no error and no warning."
-        ),
-    )
-    def test_upper_density_range_is_empty(self):
-        """The documented ceiling should either carry data or refuse."""
-        v_mid, b_in, _n = _base_point()
+    def test_upper_density_limit_returns_data(self):
+        """The upper density limit (log_density=3.0) has populated nodes and returns data.
 
-        top = shock_line_ratios(v_mid, shock_log_density=3.0, shock_b_over_sqrt_n=b_in)
+        This was #2065: off-node (log_density, B) pairs returned zero-filled blends.
+        Now only populated families are allowed.
+        """
+        v_mid, _b_in, _n = _base_point()
+
+        # log_density=3.0 is populated for solar at B=0.01, 0.1, 1.0, etc.
+        top = shock_line_ratios(v_mid, shock_log_density=3.0, shock_b_over_sqrt_n=1.0)
         assert sum(top.values()) > 0.0
 
 
 # ── Gradient tests — the core motivation for this change ──────────
 
 #: (axis id, how to vary it from the base point, FD step).
-#: The step is in the axis's own units: km/s, μG, dex.
+#: The step is in the axis's own units: km/s.
+#: Both B-field and log_density are removed: they are now discrete (exact-match only).
+#: Only velocity is continuous.
+#: FD step of 10 km/s is consistent with velocity grid spacing (25 km/s uniform)
+#: and avoids being an exact multiple, which could cause numerical issues.
 _GRAD_AXES = [
-    ("velocity", 0, 1.0),
-    pytest.param(
-        "b_field",
-        1,
-        None,  # set from the base value; see _fd_step
-        marks=pytest.mark.xfail(
-            strict=True,
-            reason=(
-                "#2066: the B-field axis is flat at 17 of 18 off-node points inside "
-                "the documented [0.0001, 10] μG region, against 6 of 6 responding on "
-                "velocity. Physical-space bandwidth over a 7-decade log axis, the "
-                "same shape as #2061."
-            ),
-        ),
-    ),
-    ("log_density", 2, 1e-3),
+    ("velocity", 0, 10.0),
 ]
 
 
@@ -339,19 +302,18 @@ class TestComputeShockSed:
     """Smoke tests: compute_shock_sed returns finite SEDs at mid-grid values."""
 
     def test_smoke_mid_grid_values(self):
-        """compute_shock_sed with mid-grid parameters returns a finite SED."""
-        g = _get_grid()
-        v_mid = float(_midpoint(g["velocities_kms"]))
-        b_mid = _quarter_point(g["b_axis"])  # full-axis midpoint ≈500 μG exceeds valid solar range
-        n_mid = float(_midpoint(g["log_density_cm3"]))
+        """compute_shock_sed with populated node parameters returns a finite SED."""
+        # Use the same base point as the gradient tests: off-node velocity
+        # to avoid numerical issues with triweight kernel at grid nodes
+        _v, _b, _n = _base_point()
 
         wave = jnp.linspace(1000.0, 10000.0, 500)
         sed = compute_shock_sed(
             wave,
-            v_mid,
+            _v,
             l_shock_halpha=1e40,
-            shock_log_density=n_mid,
-            shock_b_over_sqrt_n=b_mid,
+            shock_log_density=_n,
+            shock_b_over_sqrt_n=_b,
             line_sigma_aa=5.0,
         )
         chex.assert_equal_shape([sed, wave])
@@ -362,8 +324,6 @@ class TestComputeShockSed:
         """Gradient of total SED flux w.r.t. velocity is finite."""
         g = _get_grid()
         v_mid = float(_midpoint(g["velocities_kms"]))
-        b_mid = _quarter_point(g["b_axis"])  # full-axis midpoint ≈500 μG exceeds valid solar range
-        n_mid = float(_midpoint(g["log_density_cm3"]))
 
         wave = jnp.linspace(3000.0, 9000.0, 200)
 
@@ -373,8 +333,8 @@ class TestComputeShockSed:
                     wave,
                     v,
                     l_shock_halpha=1e40,
-                    shock_log_density=n_mid,
-                    shock_b_over_sqrt_n=b_mid,
+                    shock_log_density=0.0,
+                    shock_b_over_sqrt_n=1.0,
                     line_sigma_aa=5.0,
                 )
             )

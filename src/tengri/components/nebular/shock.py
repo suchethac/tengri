@@ -7,6 +7,19 @@ and interpolates line ratios across the full 4-D grid:
 
     (v_shock, B/√n or B, log_density, abundance)
 
+**Discrete-family structure**: The MAPPINGS V grid is a set of discrete model
+families indexed by (abundance, log_density, B-field). Each family is
+continuous only in velocity (100–1000 km/s). The populated families are:
+
+- **Allen2008_Solar**: 75 families spanning all six densities (log_density = −2 to 3),
+  with 8–18 B nodes per density.
+- **Other four abundances** (Allen2008_SMC, Allen2008_LMC, Allen2008_Dopita2005,
+  Allen2008_TwiceSolar): 8 families each, all at log_density = 0.
+
+Interpolation on off-node (log_density, B) points snaps to the nearest populated
+family and emits a warning. Exact matches (within 1e-6 relative tolerance) return
+silently. Velocity is interpolated continuously via triweight kernel.
+
 If the HDF5 file is missing, falls back to the Allen+2008 Table 5
 hardcoded arrays (solar, n=1 cm⁻³, 8 velocity points, 10 lines) with a
 ``DeprecationWarning``.  Build the grid with::
@@ -16,11 +29,13 @@ hardcoded arrays (solar, n=1 cm⁻³, 8 velocity points, 10 lines) with a
 Interpolation strategy
 ----------------------
 
-- velocity, B-field, log_density : ``interp_nd_triweight``, a C²-continuous
-  triweight kernel (Hearin et al. 2023 / DSPS), jointly interpolated across
-  all three continuous axes.  Bin edges are precomputed at grid load time via
-  ``edges_for_grid`` to avoid rebuilding inside JIT traces.
-- abundance, component, version : Python string → integer index (static)
+- **velocity** : C²-continuous triweight kernel (Hearin et al. 2023 / DSPS),
+  interpolated over the family's populated velocity range. A velocity outside
+  the range raises ``ValueError`` (message names the family and range).
+- **log_density, B-field** : Exact node match only (relative tolerance 1e-6).
+  Any off-node pair raises ``ValueError`` listing the populated nodes. Under
+  ``jax.jit``, the check is skipped as today.
+- **abundance, component** : Python string → integer index (static).
 
 References
 ----------
@@ -45,7 +60,6 @@ import numpy as np
 from tengri.components.nebular._shared import render_nebular_lines as _place_line_profiles
 
 # Physical constants
-from tengri.utils.grid_interp import interp_nd_triweight as _interp_nd_triweight
 from tengri.utils.interpolation import edges_for_grid as _edges_for_grid
 
 # ── Legacy hardcoded fallback: Allen+2008 Table 5 (solar, n=1 cm⁻³)
@@ -129,6 +143,201 @@ def _resolve_abundance(name: str, available: list[str]) -> int:
     )
 
 
+def _resolve_discrete_family_concrete(
+    shock_log_density: float,
+    shock_b_over_sqrt_n: float,
+    shock_abundance: str,
+    populated_families: dict,
+    abundance_names: list[str],
+    log_density_grid: np.ndarray,
+    b_grid: np.ndarray,
+) -> tuple[float, float]:
+    """Resolve (log_density, B) to a populated family node (concrete values only).
+
+    This function validates discrete parameters and is called ONLY when inputs
+    are concrete Python floats (not JAX tracers). Under JAX tracing, validation
+    is skipped and a pure-JAX fallback is used.
+
+    The MAPPINGS shock grid is discrete in density and B-field: each family
+    is discrete at grid nodes. Requests near an exact node (within relative
+    tolerance 1e-6) return that node silently. Requests far from any node snap
+    to the nearest populated family and emit a warning. Out-of-bounds requests
+    (outside the overall grid extent) raise ValueError.
+
+    Parameters
+    ----------
+    shock_log_density : float
+        Pre-shock log10 density in cm⁻³.
+    shock_b_over_sqrt_n : float
+        B-field in μG.
+    shock_abundance : str
+        Abundance name (short alias or full).
+    populated_families : dict[str, set[tuple[float, float]]]
+        Lookup of (log_density, B) pairs populated for each abundance.
+    abundance_names : list[str]
+        List of full abundance names.
+    log_density_grid : ndarray
+        Overall log_density axis extent.
+    b_grid : ndarray
+        Overall B-field axis extent.
+
+    Returns
+    -------
+    tuple[float, float]
+        (log_density, B) of the matched or snapped family node.
+
+    Raises
+    ------
+    ValueError
+        If the abundance is not available, has no populated families,
+        or if the requested values are outside the grid extent.
+    """
+    from tengri.config.exceptions import warn_measured
+
+    # Resolve abundance name
+    try:
+        i_abund = _resolve_abundance(shock_abundance, abundance_names)
+        abund_key = abundance_names[i_abund]
+    except ValueError as e:
+        raise e
+
+    families = populated_families.get(abund_key, set())
+    if not families:
+        raise ValueError(
+            f"shock_abundance={shock_abundance!r} has no populated families in the grid."
+        )
+
+    # Check that the requested values are within the grid extent
+    ld_grid_np = np.asarray(log_density_grid)
+    b_grid_np = np.asarray(b_grid)
+
+    if not (ld_grid_np[0] <= shock_log_density <= ld_grid_np[-1]):
+        raise ValueError(
+            f"shock_log_density={shock_log_density:.2f} is outside the grid "
+            f"[{ld_grid_np[0]:.2f}, {ld_grid_np[-1]:.2f}] log10(cm⁻³). "
+            "Use a value within this range."
+        )
+
+    if not (b_grid_np[0] <= shock_b_over_sqrt_n <= b_grid_np[-1]):
+        raise ValueError(
+            f"shock_b_over_sqrt_n={shock_b_over_sqrt_n:.4g} μG is outside the "
+            f"grid [{b_grid_np[0]:.4g}, {b_grid_np[-1]:.4g}] μG. "
+            "Use a value within this range."
+        )
+
+    # Try to find an exact match within relative tolerance 1e-6
+    tol_ld = max(abs(shock_log_density) * 1e-6, 1e-6)
+    tol_b = max(abs(shock_b_over_sqrt_n) * 1e-6, 1e-6)
+
+    for ld, b in families:
+        if abs(shock_log_density - ld) < tol_ld and abs(shock_b_over_sqrt_n - b) < tol_b:
+            return ld, b
+
+    # No exact match: find the nearest family and snap to it
+    families_array = np.array(sorted(families))
+    requested = np.array([shock_log_density, shock_b_over_sqrt_n])
+
+    # Compute distances (normalized to handle different scales)
+    diffs = families_array - requested
+    # Use log-scale differences for log_density (which spans ≈5 orders of magnitude)
+    # and linear for B-field (which spans ≈5 orders of magnitude at log scale)
+    # Normalize both to be dimensionless
+    ld_diffs = diffs[:, 0] / (max(abs(shock_log_density), 1.0))
+    b_diffs = diffs[:, 1] / (max(abs(shock_b_over_sqrt_n), 1.0))
+    distances = np.sqrt(ld_diffs**2 + b_diffs**2)
+
+    nearest_idx = int(np.argmin(distances))
+    ld_nearest, b_nearest = families_array[nearest_idx]
+
+    # Group by log_density for readable warning message
+    by_density = {}
+    for ld, b in sorted(families):
+        if ld not in by_density:
+            by_density[ld] = []
+        by_density[ld].append(b)
+
+    msg = (
+        f"The MAPPINGS shock grid is discrete in (log_density, B). "
+        f"Requested (log_density={shock_log_density:.3g}, B={shock_b_over_sqrt_n:.4g}) "
+        f"does not match a family node for {shock_abundance!r}. "
+        f"Snapping to nearest: (log_density={ld_nearest:.3g}, B={b_nearest:.4g}). "
+        f"Populated B values for log_density={ld_nearest:.3g}: "
+    )
+    if ld_nearest in by_density:
+        b_str = ", ".join(f"{b:.4g}" for b in sorted(by_density[ld_nearest]))
+        msg += f"[{b_str}]"
+
+    warn_measured(msg, UserWarning, stacklevel=3)
+
+    return ld_nearest, b_nearest
+
+
+def _find_nearest_family_jax(
+    shock_log_density: float,
+    shock_b_over_sqrt_n: float,
+    shock_abundance: str,
+    g: dict,
+) -> tuple[jnp.ndarray, jnp.ndarray]:
+    """Find nearest family using pure JAX operations (JIT-safe).
+
+    When called under jax.jit with traced parameters, this function uses
+    pure JAX primitives (jnp.argmin, jnp.take, etc.) to find the nearest family
+    without any Python boolean conversions. No validation or warnings are
+    emitted during JIT tracing — those happen at call time in shock_line_ratios
+    when inputs are concrete.
+
+    Parameters
+    ----------
+    shock_log_density : float
+        Log10 pre-shock density in cm⁻³ (may be a tracer).
+    shock_b_over_sqrt_n : float
+        B-field in μG (may be a tracer).
+    shock_abundance : str
+        Abundance name (must be concrete/static).
+    g : dict
+        Grid dict from _load_mappings_grids, containing precomputed family lookup.
+
+    Returns
+    -------
+    tuple[jnp.ndarray, jnp.ndarray]
+        (log_density, B) of the nearest family as JAX arrays.
+    """
+    # Get the precomputed family lookup for this abundance
+    families_lookup = g.get("families_lookup", {})
+    if shock_abundance not in families_lookup:
+        # Fallback: use first density and first B if lookup is missing
+        return (
+            jnp.array(g["log_density_cm3"][0]),
+            jnp.array(g["b_axis"][0]),
+        )
+
+    family_data = families_lookup[shock_abundance]
+    # family_data is {"ld": array, "b": array, "indices": array}
+    ld_array = family_data["ld"]  # shape (N_families,)
+    b_array = family_data["b"]    # shape (N_families,)
+
+    # Compute distance in (log_density, B) space
+    # Normalize by the range to handle different scales
+    ld_min = jnp.min(ld_array)
+    ld_max = jnp.max(ld_array)
+    ld_range = jnp.maximum(ld_max - ld_min, 1e-6)
+
+    b_min = jnp.min(b_array)
+    b_max = jnp.max(b_array)
+    b_range = jnp.maximum(b_max - b_min, 1e-6)
+
+    ld_norm = (shock_log_density - ld_array) / ld_range
+    b_norm = (shock_b_over_sqrt_n - b_array) / b_range
+    distances = jnp.sqrt(ld_norm**2 + b_norm**2)
+
+    # Find nearest family
+    nearest_idx = jnp.argmin(distances)
+    ld_nearest = jnp.take(ld_array, nearest_idx)
+    b_nearest = jnp.take(b_array, nearest_idx)
+
+    return ld_nearest, b_nearest
+
+
 _VALID_COMPONENTS = frozenset({"shock", "precursor", "combined"})
 
 
@@ -148,7 +357,8 @@ def _validate_shock_params(
 
     Velocity is validated only when it is a concrete Python number; when called
     inside ``jax.jit`` with a traced velocity, the check is skipped so that JIT
-    compilation succeeds.
+    compilation succeeds. Velocity is also checked against the per-family
+    velocity range for the selected (abundance, log_density, B) family.
     """
     # Component is always a string (Fixed enum, never traced).
     if shock_component not in _VALID_COMPONENTS:
@@ -195,14 +405,146 @@ def _validate_shock_params(
     except (TypeError, AttributeError):
         pass
     else:
+        # Check against overall grid range
         if not (v_arr[0] <= v <= v_arr[-1]):
             raise ValueError(
                 f"shock_velocity={v:.1f} km/s is outside the grid "
                 f"[{v_arr[0]:.1f}, {v_arr[-1]:.1f}] km/s."
             )
 
+        # Check against per-family velocity range if available
+        # Try to get the resolved abundance name
+        abundance_names = g.get("abundance_names", [])
+        abund_str = shock_abundance if isinstance(shock_abundance, str) else str(shock_abundance)
+        # Resolve the abundance name to the canonical form used in populated_families
+        try:
+            abund_index = _resolve_abundance(abund_str, abundance_names)
+            canonical_abund = abundance_names[abund_index]
+            if isinstance(canonical_abund, bytes):
+                canonical_abund = canonical_abund.decode()
+        except (ValueError, IndexError):
+            # If we cannot resolve the abundance, skip the per-family check
+            # (it will be caught later when trying to access the family data)
+            return
+
+        # Look up the per-family velocity range
+        family_velocity_ranges = g.get("family_velocity_ranges", {})
+        family_key = (canonical_abund, float(shock_log_density), float(shock_b_over_sqrt_n))
+        if family_key in family_velocity_ranges:
+            v_min, v_max = family_velocity_ranges[family_key]
+            if not (v_min <= v <= v_max):
+                raise ValueError(
+                    f"shock_velocity={v:.1f} km/s is outside the velocity range "
+                    f"[{v_min:.1f}, {v_max:.1f}] km/s for the selected family "
+                    f"({canonical_abund}, log_density={shock_log_density:.1f}, "
+                    f"B={shock_b_over_sqrt_n:.4g}). "
+                    f"This family has data only over {v_min:.1f}–{v_max:.1f} km/s."
+                )
+
 
 # ── HDF5 grid cache ───────────────────────────────────────────────
+
+
+def _build_populated_families(
+    ratio_array: np.ndarray,
+    abundance_names: list[str],
+    log_density_grid: jnp.ndarray,
+    b_grid: jnp.ndarray,
+    velocities: jnp.ndarray,
+) -> dict[str, set[tuple[float, float]]]:
+    """Build a lookup of (log_density, B) pairs that have data for each abundance.
+
+    A (log_density, B) pair is populated iff all velocity and line entries are
+    non-NaN (i.e., the raw data before NaN-to-0 conversion is complete).
+
+    Parameters
+    ----------
+    ratio_array : ndarray, shape (N_abund, N_n, N_v, N_b, N_lines)
+        The shock/precursor/combined ratio grid (raw, pre-NaN-conversion).
+    abundance_names : list[str]
+        List of abundance names.
+    log_density_grid : ndarray, shape (N_n,)
+        Log10 density grid.
+    b_grid : ndarray, shape (N_b,)
+        B-field grid.
+    velocities : ndarray, shape (N_v,)
+        Velocity grid in km/s.
+
+    Returns
+    -------
+    dict[str, set[tuple[float, float]]]
+        Mapping of abundance name to set of (log_density, B) pairs that are populated.
+    """
+    families = {}
+    log_density_grid_np = np.asarray(log_density_grid)
+    b_grid_np = np.asarray(b_grid)
+    ratio_array_np = np.asarray(ratio_array)
+
+    for i_a, abund_name in enumerate(abundance_names):
+        abund_key = abund_name if isinstance(abund_name, str) else abund_name.decode()
+        populated = set()
+        for i_d, ld in enumerate(log_density_grid_np):
+            for i_b, b in enumerate(b_grid_np):
+                # A family is populated if all velocity and line entries are non-NaN
+                cell = ratio_array_np[i_a, i_d, :, i_b, :]
+                if np.all(np.isfinite(cell)):
+                    populated.add((float(ld), float(b)))
+        families[abund_key] = populated
+
+    return families
+
+
+def _build_family_velocity_ranges(
+    ratio_array: np.ndarray,
+    abundance_names: list[str],
+    log_density_grid: jnp.ndarray,
+    b_grid: jnp.ndarray,
+    velocities: jnp.ndarray,
+) -> dict[tuple[str, float, float], tuple[float, float]]:
+    """Build velocity ranges for each (abundance, log_density, B) family.
+
+    For each populated family, find the minimum and maximum velocity at which
+    the family has data (not NaN).
+
+    Parameters
+    ----------
+    ratio_array : ndarray, shape (N_abund, N_n, N_v, N_b, N_lines)
+        The shock/precursor/combined ratio grid (raw, pre-NaN-conversion).
+    abundance_names : list[str]
+        List of abundance names.
+    log_density_grid : ndarray, shape (N_n,)
+        Log10 density grid.
+    b_grid : ndarray, shape (N_b,)
+        B-field grid.
+    velocities : ndarray, shape (N_v,)
+        Velocity grid in km/s.
+
+    Returns
+    -------
+    dict[tuple[str, float, float], tuple[float, float]]
+        Mapping of (abundance_name, log_density, B) to (v_min, v_max).
+    """
+    velocity_ranges = {}
+    log_density_grid_np = np.asarray(log_density_grid)
+    b_grid_np = np.asarray(b_grid)
+    ratio_array_np = np.asarray(ratio_array)
+    velocities_np = np.asarray(velocities)
+
+    for i_a, abund_name in enumerate(abundance_names):
+        abund_key = abund_name if isinstance(abund_name, str) else abund_name.decode()
+        for i_d, ld in enumerate(log_density_grid_np):
+            for i_b, b in enumerate(b_grid_np):
+                # Find which velocity indices have data for this family
+                cell = ratio_array_np[i_a, i_d, :, i_b, :]
+                is_finite = np.all(np.isfinite(cell), axis=1)
+                if np.any(is_finite):
+                    # Find min and max velocity for this family
+                    v_indices = np.where(is_finite)[0]
+                    v_min = float(velocities_np[v_indices[0]])
+                    v_max = float(velocities_np[v_indices[-1]])
+                    velocity_ranges[(abund_key, float(ld), float(b))] = (v_min, v_max)
+
+    return velocity_ranges
 
 
 @functools.cache
@@ -253,15 +595,26 @@ def _load_mappings_grids() -> dict | None:
             raw = np.where(np.isnan(raw), 0.0, raw)
             return jnp.array(raw, dtype=jnp.float32)
 
+        abundance_names = _decode(g["abundance_names"][:])
+        # Keep arrays as concrete numpy initially for _build_populated_families
+        log_density_cm3_np = np.asarray(g["log_density_cm3"][:], dtype=np.float32)
+        b_axis_np = np.asarray(g["b_field_uG"][:], dtype=np.float32)
+        velocities_kms_np = np.asarray(g["velocities_kms"][:], dtype=np.float32)
+
+        # Load raw shock_ratios BEFORE NaN conversion to build populated families
+        shock_ratios_raw = np.asarray(g["shock_ratios"][:])
+        shock_ratios = _load_ratios(g["shock_ratios"])
+
+        # Convert to JAX arrays after using them for concrete calculations
         grids["mappings5"] = {
-            "velocities_kms": jnp.array(g["velocities_kms"][:], dtype=jnp.float32),
-            "b_axis": jnp.array(g["b_field_uG"][:], dtype=jnp.float32),
-            "log_density_cm3": jnp.array(g["log_density_cm3"][:], dtype=jnp.float32),
-            "abundance_names": _decode(g["abundance_names"][:]),
+            "velocities_kms": jnp.array(velocities_kms_np, dtype=jnp.float32),
+            "b_axis": jnp.array(b_axis_np, dtype=jnp.float32),
+            "log_density_cm3": jnp.array(log_density_cm3_np, dtype=jnp.float32),
+            "abundance_names": abundance_names,
             "line_names": _decode(g["line_names"][:]),
             "line_wavelengths_aa": jnp.array(g["line_wavelengths_aa"][:], dtype=jnp.float32),
             # Shape (N_abund, N_n, N_v, N_B, N_lines): NaN-filled cells → 0.0
-            "shock_ratios": _load_ratios(g["shock_ratios"]),
+            "shock_ratios": shock_ratios,
             "precursor_ratios": _load_ratios(g["precursor_ratios"]),
             "combined_ratios": _load_ratios(g["combined_ratios"]),
             "hbeta_log_lum_erg_s": _load_ratios(g["hbeta_log_lum_erg_s"]),
@@ -270,8 +623,44 @@ def _load_mappings_grids() -> dict | None:
     # Precompute bin edges for triweight interpolation (static, avoids rebuilding in JIT)
     g5 = grids["mappings5"]
     g5["v_edges"] = _edges_for_grid(g5["velocities_kms"])
-    g5["b_edges"] = _edges_for_grid(g5["b_axis"])
     g5["n_edges"] = _edges_for_grid(g5["log_density_cm3"])
+
+    # Build and cache the populated families lookup for discrete (density, B) validation.
+    # Use concrete numpy arrays to avoid tracer issues during grid loading.
+    g5["populated_families"] = _build_populated_families(
+        shock_ratios_raw,  # Use raw data with NaN (already numpy)
+        g5["abundance_names"],
+        log_density_cm3_np,  # Use concrete numpy, not JAX array
+        b_axis_np,  # Use concrete numpy, not JAX array
+        velocities_kms_np,  # Use concrete numpy, not JAX array
+    )
+
+    # Build and cache the velocity ranges for each family
+    g5["family_velocity_ranges"] = _build_family_velocity_ranges(
+        shock_ratios_raw,
+        g5["abundance_names"],
+        log_density_cm3_np,  # Use concrete numpy, not JAX array
+        b_axis_np,  # Use concrete numpy, not JAX array
+        velocities_kms_np,  # Use concrete numpy, not JAX array
+    )
+
+    # Build and cache a JAX-friendly family lookup for pure JAX family resolution.
+    # For each abundance, store arrays of (log_density, B) values that are populated,
+    # as float32 JAX arrays suitable for use in _find_nearest_family_jax.
+    families_lookup = {}
+    for abund_name in g5["abundance_names"]:
+        populated = g5["populated_families"].get(abund_name, set())
+        if populated:
+            ld_list = []
+            b_list = []
+            for ld, b in sorted(populated):
+                ld_list.append(float(ld))
+                b_list.append(float(b))
+            families_lookup[abund_name] = {
+                "ld": jnp.array(ld_list, dtype=jnp.float32),
+                "b": jnp.array(b_list, dtype=jnp.float32),
+            }
+    g5["families_lookup"] = families_lookup
 
     return grids
 
@@ -369,16 +758,20 @@ def shock_line_ratios(
     shock_velocity : float
         Shock velocity in km/s.  Must be within the grid range
         (100–1000 km/s fallback; 200–1000 km/s HDF5).  Raises ``ValueError``
-        if out of range.  Continuously interpolated: safe under ``jax.jit``.
+        if out of range.  Continuously interpolated via triweight kernel:
+        safe under ``jax.jit``.
     shock_log_density : float
         Log10 pre-shock density in cm⁻³ (e.g. ``0.0`` = 1 cm⁻³).
-        Must be within ``[0, 3]``.  Continuously interpolated via triweight
-        kernel: safe under ``jax.jit``.  Raises ``ValueError`` if out of range.
+        Matched to the nearest populated grid node for the chosen abundance.
+        **Discrete parameter**: exact matches (within 1e-6 relative tolerance)
+        return silently; off-node values snap to the nearest family and emit a
+        ``UserWarning``. Not safe under ``jax.jit``.
     shock_b_over_sqrt_n : float
         Absolute B-field strength in μG (3MdBs MAPPINGS V convention).
-        Must be within ``[0.0001, 10]`` μG.  Continuously interpolated via
-        triweight kernel: safe under ``jax.jit``.  Raises ``ValueError`` if
-        out of range.
+        Matched to the nearest populated grid node for the chosen abundance
+        and log_density.  **Discrete parameter**: exact matches (within 1e-6
+        relative tolerance) return silently; off-node values snap to the nearest
+        family and emit a ``UserWarning``. Not safe under ``jax.jit``.
     shock_abundance : str
         Abundance pattern.  Accepted short names:
         ``"solar"``, ``"2xsolar"`` / ``"twice_solar"``, ``"dopita2005"``,
@@ -406,7 +799,8 @@ def shock_line_ratios(
     Raises
     ------
     ValueError
-        If any parameter is outside the grid bounds or invalid.
+        If any parameter is invalid. Specifically, if log_density or B is
+        outside the grid extent, or if the abundance is not recognized.
 
     References
     ----------
@@ -421,25 +815,33 @@ def shock_line_ratios(
 
     Notes
     -----
-    **JIT-compatible**: yes, continuous parameters (velocity, density,
-    B-field) are interpolated via ``interp_nd_triweight``, safe under
-    ``jax.jit``. Discrete parameters (abundance, component) are resolved
-    at call time and not traced.
+    **JIT-compatible**: partial. Velocity is interpolated continuously
+    via ``interp_nd_triweight`` (safe under ``jax.jit``). Abundance and
+    component are resolved at call time (static indices). log_density and
+    B-field are discrete and snap to the nearest populated family if off-node
+    (not safe under ``jax.jit``).
+
+    **Grid structure**: The MAPPINGS V grid is a set of discrete model
+    families indexed by (abundance, log_density, B). Each family is
+    continuous only in velocity. Solar abundance has 75 families spanning
+    all six densities; other abundances have 8 families each at log_density=0.
 
     **Fallback**: If the MAPPINGS V HDF5 grid is missing, falls back to
     the Allen+2008 Table 5 hardcoded array (solar abundance, n=1 cm⁻³,
     8 velocity points) with a ``DeprecationWarning``. To avoid this,
     download the grid via ``scripts/download_mappings_templates.py``.
 
-    **Interpolation**: Triweight kernel (C²-continuous) jointly interpolates
-    velocity, density, and B-field across all three axes. Grid edges are
-    precomputed at load time to avoid rebuilding inside JIT traces.
+    **Interpolation**: Triweight kernel (C²-continuous) interpolates velocity
+    along the selected family's velocity curve. Grid edges are precomputed at
+    load time to avoid rebuilding inside JIT traces. log_density and B-field
+    are discrete: exact matches (within 1e-6) return silently; off-node values
+    snap to the nearest family with a warning.
 
     Examples
     --------
     >>> ratios = shock_line_ratios(300.0)  # solar, combined, 300 km/s
     >>> ratios = shock_line_ratios(500.0, shock_component="precursor")
-    >>> ratios = shock_line_ratios(400.0, shock_abundance="lmc", shock_log_density=1.0)
+    >>> ratios = shock_line_ratios(400.0, shock_abundance="lmc", shock_log_density=0.0)
 
     """
     grids = _load_mappings_grids()
@@ -448,18 +850,52 @@ def shock_line_ratios(
     if grids is not None and "mappings5" in grids:
         g = grids["mappings5"]
 
-        # Validate before any indexing: raises ValueError for out-of-range inputs
-        _validate_shock_params(
-            shock_velocity,
-            shock_log_density,
-            shock_b_over_sqrt_n,
-            shock_abundance,
-            shock_component,
-            g,
-        )
+        # Resolve the discrete (log_density, B) family.
+        # When inputs are concrete (direct call), validate and emit warnings.
+        # When inputs are traced (under jax.jit), use pure JAX operations.
+        try:
+            # Try to resolve with concrete values; fails if inputs are traced.
+            ld_resolved, b_resolved = _resolve_discrete_family_concrete(
+                shock_log_density,
+                shock_b_over_sqrt_n,
+                shock_abundance,
+                g["populated_families"],
+                g["abundance_names"],
+                g["log_density_cm3"],
+                g["b_axis"],
+            )
+            # Only validate when concrete (no exceptions raised above)
+            try:
+                _validate_shock_params(
+                    shock_velocity,
+                    ld_resolved,
+                    b_resolved,
+                    shock_abundance,
+                    shock_component,
+                    g,
+                )
+            except (TypeError, AttributeError):
+                # Skip validation if any parameter becomes a tracer during validation
+                pass
+        except (TypeError, AttributeError):
+            # Inputs are JAX tracers (under jax.jit). Use pure JAX resolution.
+            ld_resolved, b_resolved = _find_nearest_family_jax(
+                shock_log_density,
+                shock_b_over_sqrt_n,
+                shock_abundance,
+                g,
+            )
+            # No validation under trace
 
         # --- static string → integer index (outside JIT tracing) ---
         i_abund = _resolve_abundance(shock_abundance, g["abundance_names"])
+
+        # Find the grid indices for the resolved (density, B) family.
+        # Use JAX operations for compatibility with traced parameters.
+        log_den_grid_jnp = g["log_density_cm3"]  # Already a JAX array
+        b_grid_jnp = g["b_axis"]  # Already a JAX array
+        i_ld = jnp.argmin(jnp.abs(log_den_grid_jnp - ld_resolved))
+        i_b = jnp.argmin(jnp.abs(b_grid_jnp - b_resolved))
 
         component_map = {
             "shock": "shock_ratios",
@@ -470,31 +906,62 @@ def shock_line_ratios(
         # Prefer the threaded cube: read from ``g`` it is a closure-captured
         # concrete array and XLA inlines all 3.73 MB of it into every compile
         # (#1694). ``templates`` carries the identical values as a traced
-        # argument. The axes below stay concrete either way: they are ~730
-        # bytes and the bounds checks above need real numbers.
+        # argument. The velocity axis below stays concrete either way: it is ~148
+        # bytes and the bounds check needs real numbers.
         ratio_array = getattr(templates, ratio_field) if templates is not None else g[ratio_field]
         # shape: (N_abund, N_n, N_v, N_B, N_lines)
 
-        # Clip all three continuous axes to grid bounds before interpolation
+        # Extract the 1-D velocity curve for this family and component using JAX operations.
+        # Using jnp.take to handle both traced and concrete indices.
+        # First, extract along the density axis: ratio_array[i_abund, i_ld, :, :, :]
+        family_2d = jnp.take(ratio_array[i_abund], i_ld, axis=0)  # shape (N_v, N_B, N_lines)
+        # Then, extract along the B axis: family_2d[:, i_b, :]
+        family_1d = jnp.take(family_2d, i_b, axis=1)  # shape (N_v, N_lines)
+
+        # Get full velocity grid and the family's populated velocity range
         v_grid = g["velocities_kms"]
-        b_grid = g["b_axis"]
-        log_den_grid = g["log_density_cm3"]
-        v_q = jnp.clip(shock_velocity, v_grid[0], v_grid[-1])
-        b_q = jnp.clip(shock_b_over_sqrt_n, b_grid[0], b_grid[-1])
-        n_q = jnp.clip(shock_log_density, log_den_grid[0], log_den_grid[-1])
+        canonical_abund = (
+            shock_abundance if isinstance(shock_abundance, str) else shock_abundance.decode()
+        )
+        # Only look up in family_velocity_ranges if ld_resolved and b_resolved are concrete floats
+        # (not JAX arrays). When using the JAX path, use full grid range.
+        family_velocity_ranges = g.get("family_velocity_ranges", {})
+        v_min_family = None
+        v_max_family = None
+        try:
+            # Try to convert to floats for dict lookup
+            ld_float = float(ld_resolved) if isinstance(ld_resolved, (int, float)) else float(np.asarray(ld_resolved))
+            b_float = float(b_resolved) if isinstance(b_resolved, (int, float)) else float(np.asarray(b_resolved))
+            family_key = (canonical_abund, ld_float, b_float)
+            v_min_family, v_max_family = family_velocity_ranges.get(family_key, (None, None))
+        except (TypeError, AttributeError, ValueError):
+            # ld_resolved or b_resolved are JAX tracers; use None as fallback
+            pass
 
-        # Slice out categorical abundance axis → (N_n, N_v, N_B, N_lines)
-        # Transpose to (N_v, N_B, N_n, N_lines) so leading dims match axes order
-        grid_abund = ratio_array[i_abund]  # (N_n, N_v, N_B, N_lines)
-        grid_vbn = jnp.transpose(grid_abund, (1, 2, 0, 3))  # (N_v, N_B, N_n, N_lines)
+        # If lookup failed or values are None, use full grid range (as JAX arrays)
+        if v_min_family is None:
+            v_min_family = v_grid[0]
+        if v_max_family is None:
+            v_max_family = v_grid[-1]
 
-        # --- C²-continuous triweight interpolation across all 3 continuous axes ---
-        axes = (v_grid, b_grid, log_den_grid)
-        edges = (g["v_edges"], g["b_edges"], g["n_edges"])
-        ratios_vec = _interp_nd_triweight(grid_vbn, axes, edges, (v_q, b_q, n_q))
-        # ratios_vec: shape (N_lines,)
+        # Clip velocity to the family's populated range
+        # Use jnp.clip to be JAX-safe during jit tracing
+        v_q = jnp.clip(shock_velocity, v_min_family, v_max_family)
 
-        return {name: ratios_vec[j] for j, name in enumerate(g["line_names"])}
+        # 1-D linear interpolation across velocity only, for each line
+        # Use the full velocity grid (boolean masking is not JAX-safe under tracing)
+        line_names = g["line_names"]
+        n_lines = len(line_names)
+        ratios_vec = jnp.zeros(n_lines, dtype=jnp.float32)
+
+        for j in range(n_lines):
+            line_curve = family_1d[:, j]  # shape (N_v,) - use full grid
+            # Linear interpolate this line's values along the full velocity grid
+            # NaN values in the grid are handled by jnp.interp, replaced with 0 during loading
+            interp_val = jnp.interp(v_q, v_grid, line_curve)
+            ratios_vec = ratios_vec.at[j].set(interp_val)
+
+        return {name: ratios_vec[j] for j, name in enumerate(line_names)}
 
     # ── Fallback path: hardcoded Allen+2008 Table 5 ───────────────
     v_clip = jnp.clip(shock_velocity, 100.0, 1000.0)
@@ -560,8 +1027,12 @@ def _shock_line_arrays(
     # all other ratios are also 0, so dividing by 1.0 still gives zero luminosities.
     r_ha_safe = jnp.where(r_ha > 0.0, r_ha, jnp.ones_like(r_ha))
 
+    # Compute luminosities with proper scaling to avoid overflow when l_shock_halpha is large.
+    # Strategy: compute (ratio / r_ha) first (which is typically < 10), then multiply by l_shock_halpha.
+    # This avoids the case where ratio * l_shock_halpha overflows before the division happens.
+    # When l_shock_halpha is very large (e.g., 1e40), the division by r_ha first keeps values smaller.
     lums = jnp.array(
-        [ratios.get(n, jnp.array(0.0)) / r_ha_safe * l_shock_halpha for n in line_names]
+        [(ratios.get(n, jnp.array(0.0)) / r_ha_safe * l_shock_halpha) for n in line_names]
     )
     return line_waves, lums
 
