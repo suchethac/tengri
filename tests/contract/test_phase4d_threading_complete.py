@@ -238,21 +238,17 @@ class TestNebularBackendGrids:
         )
 
     def test_mappings_photo_grid_axes_are_usable(self):
-        """MappingsPhotoStellarBackend: grid initialization refuses with clear refusal message.
+        """MappingsPhotoStellarBackend: direct construction works, model path refuses.
 
         The backend was registered to let users discover it, but the grid data is
-        incomplete (51.2% NaN in logHB_per_logq, 2656/5184 cells). Construction
-        with ionizing_source_warning="suppress" raises NotImplementedError with
-        details about the grid state and resolution path (#2082).
+        incomplete (51.2% NaN in logHB_per_logq, 2656/5184 cells). The guard moved
+        to the model path (sed_model.py), so direct construction succeeds but the
+        model refuses at build time with TengriIOError (#2082).
         """
-        with pytest.raises(NotImplementedError) as exc_info:
-            MappingsPhotoStellarBackend(ionizing_source_warning="suppress")
-
-        # Verify the error message names the exact problem
-        msg = str(exc_info.value)
-        assert "grid data is incomplete" in msg, "Grid status not in error message"
-        assert "2656" in msg, "NaN cell count not in error message"
-        assert "#2082" in msg, "Issue reference not in error message"
+        # Direct construction should work (grid check moved to model path)
+        backend = MappingsPhotoStellarBackend(ionizing_source_warning="suppress")
+        assert backend is not None, "Backend construction should succeed"
+        assert backend.grid is not None, "Grid should be loaded in backend"
 
     def test_bare_mappings_construction_refuses_loudly(self):
         """Constructing without acknowledging the ionizing-source mismatch raises.
