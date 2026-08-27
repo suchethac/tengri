@@ -3,18 +3,23 @@
 
 Implements :class:`~tengri.forward.precompute.protocol.PrecomputeModule` for
 the CB_19 3MdB_17 CLOUDY c17.01 photoionization grid (2,358,330 models),
-exposing a 7-axis line-luminosity grid:
+exposing a 6-axis line-luminosity grid:
 
-    (log_OH, log_age, log_U, log_nH, log_CO, dNO, HbFrac)
+    (log_OH, log_age, log_U, log_nH, log_CO, dNO)
+
+HbFrac (Hβ fraction; 1.0 = radiation-bounded) is a discrete load-time choice
+specified via the ``hbfrac`` keyword argument to :func:`precompute`. The nearest
+grid slice is selected at load time. HbFrac is not an interpolation axis and is
+not settable through Parameters.
 
 The dual (line_lum, continuum_phot) precompute follows the canonical CLOUDY
 pattern: emission lines are projected through filter curves via a precomputed
 ``(n_lines, n_filt)`` weight matrix, enabling fast filter-integrated line flux
 lookup at runtime.
 
-**Practical usage**: The full 7-axis grid is ~2.3M points. Memory is manageable
-when Fixed axes are collapsed via :func:`slice_fixed_axes` (e.g., fix C/O, ΔN/O,
-HbFrac to a nominal subset, leaving ~4 free axes). The ``precompute`` function
+**Practical usage**: The full 6-axis grid is ~2.3M points. Memory is manageable
+when Fixed axes are collapsed via :func:`slice_fixed_axes` (e.g., fix C/O, ΔN/O
+to a nominal subset, leaving ~4 free axes). The ``precompute`` function
 auto-detects Fixed axes in Parameters and collapses them before building the
 photometry tensor.
 
@@ -53,14 +58,16 @@ from tengri.utils.grid_interp import (
 )
 from tengri.utils.interpolation import edges_for_grid
 
-# Axis parameters: ordered tuple matching the CB19 grid axes.
+# Axis parameters: ordered tuple matching the CB19 grid axes (6 axes).
+# HbFrac is a load-time discrete choice via the hbfrac= parameter to precompute(),
+# not an interpolation axis.
+#
 # log_OH: absolute log10(O/H) on CLOUDY c17.01 scale
 # log_age: log10(age/yr)
 # log_U: log10(ionization parameter)
 # log_nH: log10(density / cm⁻³)
 # log_CO: log10(C/O)
 # dNO: ΔN/O abundance offset
-# HbFrac: Hβ fraction (matter-bounded; 1.0 = radiation-bounded)
 AXIS_PARAMS: tuple[str, ...] = (
     "log_OH_total",  # internal CB19 axis name
     "log_age_yr_ssp",  # internal axis name (depends on sed_type)
@@ -68,10 +75,9 @@ AXIS_PARAMS: tuple[str, ...] = (
     "log_nH",
     "log_CO",
     "dNO",
-    "HbFrac",
 )
 
-# All seven axes are internal grid-axis labels, not user-facing parameters.
+# All six axes are internal grid-axis labels, not user-facing parameters.
 # The real grid decision is blocked by #1737 (placeholder tokenization).
 # These are declared as internal to prevent spurious warnings when they
 # don't match valid parameter names. See issue #1827.
@@ -88,6 +94,7 @@ def precompute(
     sed_type: str = "SSP",
     imf: str = "Kroupa01",
     mup: float = 100.0,
+    hbfrac: float = 1.0,
 ) -> dict:
     """Build preintegrated CB19 grid, auto-collapsing Fixed axes.
 
@@ -115,6 +122,10 @@ def precompute(
         "Kroupa01" (default) or "x030".
     mup : float, keyword-only
         Upper stellar mass limit (100.0 or 300.0 M_sun).
+    hbfrac : float, keyword-only
+        HbFrac slice (1.0 = radiation-bounded, ~0.0 = matter-bounded). A discrete
+        load-time choice; the nearest grid node is selected. Not an interpolation
+        axis and not settable through Parameters. Default 1.0.
 
     Returns
     -------
@@ -150,7 +161,7 @@ def precompute(
         sed_type=sed_type,
         imf=imf,
         mup=mup,
-        hbfrac=1.0,  # Always load HbFrac=1 (radiation-bounded); collapse if needed
+        hbfrac=hbfrac,
     )
 
     # Build the (n_lines, n_filt) filter projection matrix
@@ -172,7 +183,7 @@ def precompute(
                 line_wave_obs, fw, ft, left=0.0, right=0.0
             )
 
-    # Build grid axes from CB19 data
+    # Build grid axes from CB19 data (6 axes; HbFrac is a load-time choice, not an axis)
     axes_np = (
         np.asarray(grid.log_OH_grid),
         np.asarray(grid.log_age_grid),
@@ -180,11 +191,10 @@ def precompute(
         np.asarray(grid.log_nH_grid),
         np.asarray(grid.log_CO_grid),
         np.asarray(grid.dNO_grid),
-        np.array([1.0]),  # HbFrac axis (fixed to 1.0 for now; extend if needed)
     )
 
-    # CB19 has no nebular continuum; use a dummy zero grid
-    continuum_grid = np.zeros((*[ax.shape[0] for ax in axes_np[:-1]], n_filt), dtype=np.float64)
+    # CB19 has no nebular continuum; use a dummy zero grid matching the 6 loaded axes
+    continuum_grid = np.zeros((*[ax.shape[0] for ax in axes_np], n_filt), dtype=np.float64)
 
     preint = PreintegratedGrid(
         phot=continuum_grid,  # Dummy continuum (zeros)

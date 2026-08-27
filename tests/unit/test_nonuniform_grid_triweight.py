@@ -260,6 +260,28 @@ class TestNonuniformTriweight:
         assert w.shape == (1,), f"Expected shape (1,), got {w.shape}"
         assert np.isfinite(w[0]), "Weight should be finite"
 
+    def test_single_node_axis_np_vs_jnp_identical(self):
+        """Length-1 axis gives identical edges and weights for np and jnp."""
+        from tengri.utils.interpolation import compute_grid_weights, edges_for_grid
+
+        # Length-1 axis: test that np and jnp produce identical results
+        single_axis_np = np.array([5.0])
+        single_axis_jnp = jnp.asarray([5.0])
+
+        # edges_for_grid should produce identical edges
+        edges_np = edges_for_grid(single_axis_np)
+        edges_jnp = edges_for_grid(single_axis_jnp)
+        np.testing.assert_allclose(edges_np, edges_jnp, rtol=1e-14)
+
+        # compute_grid_weights should produce identical weights
+        w_np = compute_grid_weights(5.0, single_axis_np, scatter=1.0, edges=edges_np)
+        w_jnp = compute_grid_weights(5.0, single_axis_jnp, scatter=1.0, edges=edges_jnp)
+        np.testing.assert_allclose(w_np, w_jnp, rtol=1e-14)
+
+        # Single node should take all weight
+        assert np.allclose(w_np[0], 1.0), f"Single node should take all weight, got {w_np[0]}"
+        assert np.allclose(w_jnp[0], 1.0), f"Single node should take all weight, got {w_jnp[0]}"
+
     def test_length_two_axis_uniform(self):
         """Length-2 axis should be treated as uniform (one spacing)."""
         from tengri.utils.interpolation import compute_grid_weights, edges_for_grid

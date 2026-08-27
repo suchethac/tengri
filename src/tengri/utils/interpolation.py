@@ -62,6 +62,46 @@ def tw_cuml_kern(x: float, m: float, h: float) -> float:
     return val
 
 
+def _check_axis_contract(name: str, grid: jnp.ndarray) -> None:
+    """Check axis contract for grid interpolation: empty/non-ascending rejection.
+
+    Parameters
+    ----------
+    name : str
+        Function name for error messages (e.g., "edges_for_grid").
+    grid : array, shape (n,)
+        Candidate grid node values.
+
+    Raises
+    ------
+    ValueError
+        If the grid is a concrete (non-traced) array that is empty (n == 0) or
+        non-strictly-ascending (n >= 2). Single-node axes (n == 1) are legal.
+        Traced arrays (JAX tracers) skip the check.
+    """
+    try:
+        g0 = np.asarray(grid)
+    except Exception:  # a JAX tracer cannot be converted, nothing to check
+        return
+    if g0.ndim != 1:
+        return
+    g = g0.astype(float) if np.issubdtype(g0.dtype, np.number) else g0
+    if not np.issubdtype(g.dtype, np.floating):
+        return
+    n = g.size
+    if n == 0:
+        raise ValueError(f"{name}: empty axis (size 0)")
+    if n >= 2:
+        # Check strictly ascending for n >= 2
+        d = np.diff(g)
+        if not np.all(d > 0.0):
+            raise ValueError(
+                f"{name}: axis is not strictly ascending "
+                f"(first={g[0]:.6g}, last={g[-1]:.6g}); "
+                "reverse the axis and the cube together"
+            )
+
+
 def edges_for_grid(grid: jnp.ndarray) -> jnp.ndarray:
     """Compute bin edges from grid midpoints for triweight interpolation.
 
@@ -81,7 +121,25 @@ def edges_for_grid(grid: jnp.ndarray) -> jnp.ndarray:
     -------
     array, shape (n + 1,)
         Bin edges.
+
+    Raises
+    ------
+    ValueError
+        If the grid is a concrete (non-traced) empty axis (size 0) or
+        non-strictly-ascending (n >= 2). Single-node axes (n == 1) are legal
+        and return [grid[0], grid[0]]. Traced arrays (JAX tracers from jax.jit,
+        jax.eval_shape, etc.) skip the check because their shapes are not
+        known at trace time.
     """
+    # Validate axis contract: reject empty and non-ascending axes
+    _check_axis_contract("edges_for_grid", grid)
+
+    # Handle n == 1 explicitly (single node takes all weight)
+    if jnp.asarray(grid).size == 1:
+        # Degenerate case: single node at grid[0], edges bracketing it at same point
+        return jnp.array([grid[0], grid[0]], dtype=grid.dtype)
+
+    # n >= 2: standard edge construction
     half_lo = (grid[1] - grid[0]) / 2.0
     half_hi = (grid[-1] - grid[-2]) / 2.0
     return jnp.concatenate([grid[:1] - half_lo, (grid[:-1] + grid[1:]) / 2.0, grid[-1:] + half_hi])
@@ -144,7 +202,8 @@ def compute_grid_weights(
     Returns
     -------
     array, shape (n,)
-        Non-negative weights summing to 1.
+        Non-negative weights summing to 1. For a single-node axis (n == 1),
+        returns [1.0] (all weight on the single node).
 
     Notes
     -----
@@ -168,6 +227,9 @@ def compute_grid_weights(
     grids (SKIRTOR, dust libraries, etc.) are static and meet this requirement; this
     property holds for all static data accessed in ``compute_grid_weights`` calls.
     """
+    # Validate axis contract: reject empty and non-ascending axes
+    _check_axis_contract("compute_grid_weights", grid)
+
     # Canonicalize to the dtype JAX is currently defaulting to. Template grids
     # (SKIRTOR, dust libraries) are built and cached at import, so their axes stay
     # float64 even inside ``jax.enable_x64(False)``; the ``jnp.argmin`` below then
@@ -179,6 +241,10 @@ def compute_grid_weights(
     grid = jnp.asarray(grid, dtype=dt)
 
     n = grid.shape[0]
+
+    # Handle n == 1: single node takes all weight
+    if n == 1:
+        return jnp.ones(1, dtype=dt)
 
     # Precompute bin edges (used by both paths)
     if edges is None:
@@ -508,6 +574,7 @@ def compute_grid_window(
     _check_uniform(grid)
 
     n = grid.shape[0]
+
     # Rounded before the ceil: the window size sets the returned shape and so
     # the compile-cache key, and 3*b + 0.5 lands on an integer only up to float
     # noise: without the snap an unlucky bandwidth silently widens the window.
