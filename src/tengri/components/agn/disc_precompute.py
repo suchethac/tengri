@@ -443,10 +443,26 @@ def build_lookup(
     interpolation.
 
     **Gradient-safe**: yes, triweight kernel is fully differentiable.
+
+    The leading argument is ``agn_log_lbol = log10(L_bol / L_sun)``. See
+    :mod:`~tengri.forward.precompute.protocol` for the unified AGN adapter
+    convention.
     """
     if not preint.get("_collapsed_axes"):
-        # No axes collapsed: use template helper directly
-        return build_template_photometry_lookup(preint["_preint"])
+        # No axes collapsed: wrap template helper to accept log10 luminosity
+        # instead of linear scale (see protocol docstring for convention).
+        template_lookup = build_template_photometry_lookup(preint["_preint"])
+
+        @jax.jit
+        def disc_phot_no_collapse(agn_log_lbol, *free_axis_values):
+            """Compute disc photometry from log10 bolometric luminosity.
+
+            Returns filter-integrated L_nu [erg/s/Hz] at runtime.
+            """
+            l_bol_lsun = 10.0**agn_log_lbol
+            return template_lookup(l_bol_lsun, *free_axis_values)
+
+        return disc_phot_no_collapse
 
     # Collapsed case: return a wrapped lookup that takes remaining free params
     grid_phot = preint["grid_phot"]

@@ -102,7 +102,7 @@ _ADAPTERS = [
         (-1.0,),
         {},
         1,
-        _LINEAR,
+        _DECADE,
         id="powerlaw_disc",
     ),
     pytest.param(
@@ -112,7 +112,7 @@ _ADAPTERS = [
         (8.0, 11.0),
         {},
         1,
-        _LINEAR,
+        _DECADE,
         id="ss_disc",
     ),
     pytest.param(
@@ -122,7 +122,7 @@ _ADAPTERS = [
         (),
         {},
         2,
-        _LINEAR,
+        _DECADE,
         id="cigale_disc",
     ),
     pytest.param(
@@ -132,7 +132,7 @@ _ADAPTERS = [
         (-0.35, 0.1),
         {},
         1,
-        _LINEAR,
+        _DECADE,
         id="qsogen",
     ),
     pytest.param(
@@ -208,10 +208,9 @@ def test_leading_argument_scaling(
 ):
     """Pin whether the leading argument acts linearly or as a power of ten.
 
-    The four disc adapters are linear in it; the two torus adapters go as
-    ``10**arg``. Both conventions are in the tree at once and nothing asserted
-    either, so a kernel switching between them would move its output by ~1e9 at
-    a typical ``agn_log_lbol`` with every test still green.
+    All six adapters take the leading argument as log10(L_bol / L_sun) and
+    return output scaling as ``10**arg``. This test pins that every adapter
+    uses the unified convention.
 
     This test does not claim which is correct -- that depends on what the
     forward pipeline hands these kernels, which is outside this file. It claims

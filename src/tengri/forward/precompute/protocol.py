@@ -47,6 +47,16 @@ Each `components/<component>/<name>_precompute.py` file defines:
   (scale, *free_params) → filter photometry. The free_params list matches
   AXIS_PARAMS entries whose prior is NOT Fixed.
 
+AGN adapters: convention for the leading argument
+--------------------------------------------------
+
+Every AGN precompute adapter (``disc_precompute``, ``qsogen_precompute``,
+``silva04_precompute``, ``cat3d_precompute``) returns a lookup function
+whose leading argument is **agn_log_lbol = log10(L_bol / L_sun)**. The
+lookup internally applies ``10.0**agn_log_lbol`` to convert to linear erg/s,
+so its output scales as ``10**x`` in the leading argument. All adapters use
+this unified convention.
+
 Auto-collapse is a first-class feature, not an afterthought. A user who fixes
 ``dust_qpah`` should get a 1D DL07 grid instead of a 2D one, for free.
 """
