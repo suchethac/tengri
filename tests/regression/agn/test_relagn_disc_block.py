@@ -240,3 +240,89 @@ class TestRelagnDiscBlockPhysics:
             f"Accretion-rate variation too small: mean relative diff = "
             f"{mean_diff:.2e}. Check that agn_log_mdot is actually used."
         )
+
+
+class TestRelagnIndexSpaceInterp:
+    """Golden values for relagn with index-space interpolation (#2061).
+
+    Grid: wavelength 100-100000 Angstrom (256 points, logspace). Parameters:
+    log_mbh=8.0, log_mdot=-0.5, agn_cos_inc=0.5.
+
+    A/B sweep (main vs fix): 40-point astar in [0, 0.998], max change 19% at
+    a*=0.998 (concentrates above a*~0.93). Physical-space (unfixed main) gave
+    1.88% error at a*=0.9675 and 3.86% at a*=0.998 due to non-uniform node
+    over-smoothing. Index-space correction (fix) reduces these to reference
+    values below.
+    """
+
+    def test_relagn_astar_golden_0p9675(self):
+        """Golden: sum(L_nu) at a*=0.9675 (#2061 index-space fix).
+
+        Notes
+        -----
+        **Marker:** regression_bug
+
+        Old (unfixed main, physical-space): 4.357619789700e+31
+        New (worktree, index-space):        4.275819488080e+31
+        Relative change:                   -1.88% (physical smooths over-much)
+        """
+        wavelength = jnp.logspace(2, 5, 256)
+
+        from tengri.components.agn.blocks.runner import composable_agn_l_nu
+
+        sed = composable_agn_l_nu(
+            wavelength,
+            agn_log_lbol=12.0,
+            agn_disc_block="relagn",
+            agn_nlr_block="none",
+            agn_blr_block="none",
+            agn_feii_block="none",
+            agn_torus_block="none",
+            agn_attenuation_block="none",
+            agn_log_mbh=8.0,
+            agn_log_mdot=-0.5,
+            agn_astar=0.9675,
+            agn_cos_inc=0.5,
+        )
+        obj = float(jnp.sum(sed))
+
+        assert jnp.isclose(obj, 4.275819488080e31, rtol=1e-6), (
+            f"a*=0.9675: expected 4.275819488080e+31, got {obj:.12e}. "
+            f"(FAILS on unfixed main with ~1.88% error)"
+        )
+
+    def test_relagn_astar_golden_0p998(self):
+        """Golden: sum(L_nu) at a*=0.998 (#2061 index-space fix).
+
+        Notes
+        -----
+        **Marker:** regression_bug
+
+        Old (unfixed main, physical-space): 4.303561013957e+31
+        New (worktree, index-space):        4.137520596764e+31
+        Relative change:                   -3.86% (physical severely smooths)
+        """
+        wavelength = jnp.logspace(2, 5, 256)
+
+        from tengri.components.agn.blocks.runner import composable_agn_l_nu
+
+        sed = composable_agn_l_nu(
+            wavelength,
+            agn_log_lbol=12.0,
+            agn_disc_block="relagn",
+            agn_nlr_block="none",
+            agn_blr_block="none",
+            agn_feii_block="none",
+            agn_torus_block="none",
+            agn_attenuation_block="none",
+            agn_log_mbh=8.0,
+            agn_log_mdot=-0.5,
+            agn_astar=0.998,
+            agn_cos_inc=0.5,
+        )
+        obj = float(jnp.sum(sed))
+
+        assert jnp.isclose(obj, 4.137520596764e31, rtol=1e-6), (
+            f"a*=0.998: expected 4.137520596764e+31, got {obj:.12e}. "
+            f"(FAILS on unfixed main with ~3.86% error)"
+        )
