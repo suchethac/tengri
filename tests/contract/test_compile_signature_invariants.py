@@ -94,9 +94,11 @@ class TestCompileSignatureInvariants:
         # ledger lives in that method's own comments. Pinned here so a field
         # cannot vanish silently — removing one is how #1973's collision
         # shipped. Was 64 before #1973 added ssp_flux_id (grid CONTENT, not
-        # just shape/lgmet).
-        assert len(model_sig) == 65, (
-            f"model_sig field count changed from 65 to {len(model_sig)}. "
+        # just shape/lgmet). Was 65 before #2068 added filter_wave_id and
+        # spec_wave_id (issue #2068: photometry/spectrum closures bake
+        # filter/spectroscopy wavelengths into their kernels).
+        assert len(model_sig) == 67, (
+            f"model_sig field count changed from 67 to {len(model_sig)}. "
             "If intentional, update this assertion and the ledger in "
             "SEDModel.compile_signature."
         )
@@ -316,3 +318,82 @@ class TestCompileSignatureInvariants:
         sig2 = fitter2.compile_signature()
 
         assert sig1 != sig2, "Different ssp_lgmet values must produce different signatures"
+
+    def test_spectroscopy_wave_content_changes_signature(self, mock_ssp_data, spec_dpl):
+        """Two SEDModels with spectroscopy observations of different wavelength grids.
+
+        Produce unequal signatures.
+
+        The spectrum projector closure bakes the spectroscopy wavelength array,
+        so two models with identical pixel count but different wave_obs grids
+        must have different signatures. Otherwise the second model silently
+        reuses the first's compiled spectrum which has baked the first model's
+        wavelengths, producing silent spectroscopy errors.
+        """
+        from tengri.observation.spectroscopy import Spectroscopy
+
+        data = jnp.ones(100)
+        noise = jnp.ones(100) * 0.01
+
+        # Two spectroscopy observations with same pixel count but different wavelength grids
+        wave_obs_1 = jnp.linspace(4000, 6000, 100)
+        wave_obs_2 = jnp.linspace(4500, 6500, 100)  # Shifted by 500 A
+
+        spectroscopy_1 = Spectroscopy(wave_obs=wave_obs_1, resolution=100.0)
+        spectroscopy_2 = Spectroscopy(wave_obs=wave_obs_2, resolution=100.0)
+
+        from tengri.observation.observation import Observation
+
+        obs_1 = Observation(spectroscopy=spectroscopy_1)
+        obs_2 = Observation(spectroscopy=spectroscopy_2)
+
+        model1 = SEDModel(spec_dpl, mock_ssp_data, observation=obs_1)
+        model2 = SEDModel(spec_dpl, mock_ssp_data, observation=obs_2)
+
+        data_1 = jnp.ones(100)
+        noise_1 = jnp.ones(100) * 0.01
+
+        fitter1 = Fitter(model1, data_1, noise_1, data_type="spectrum")
+        fitter2 = Fitter(model2, data_1, noise_1, data_type="spectrum")
+
+        # Signatures should differ
+        sig1 = fitter1.compile_signature()
+        sig2 = fitter2.compile_signature()
+
+        assert sig1 != sig2, (
+            "Different spectroscopy wavelength grids must produce different signatures"
+        )
+
+    def test_spectroscopy_identical_wave_produces_equal_signatures(self, mock_ssp_data, spec_dpl):
+        """Two SEDModels with identical spectroscopy wavelength grids produce equal signatures.
+
+        Control test: identical wavelength grids should produce identical signatures.
+        """
+        from tengri.observation.spectroscopy import Spectroscopy
+
+        wave_obs = jnp.linspace(4000, 6000, 100)
+
+        spectroscopy_1 = Spectroscopy(wave_obs=wave_obs, resolution=100.0)
+        spectroscopy_2 = Spectroscopy(wave_obs=wave_obs, resolution=100.0)
+
+        from tengri.observation.observation import Observation
+
+        obs_1 = Observation(spectroscopy=spectroscopy_1)
+        obs_2 = Observation(spectroscopy=spectroscopy_2)
+
+        model1 = SEDModel(spec_dpl, mock_ssp_data, observation=obs_1)
+        model2 = SEDModel(spec_dpl, mock_ssp_data, observation=obs_2)
+
+        data = jnp.ones(100)
+        noise = jnp.ones(100) * 0.01
+
+        fitter1 = Fitter(model1, data, noise, data_type="spectrum")
+        fitter2 = Fitter(model2, data, noise, data_type="spectrum")
+
+        # Signatures should be equal
+        sig1 = fitter1.compile_signature()
+        sig2 = fitter2.compile_signature()
+
+        assert sig1 == sig2, (
+            "Identical spectroscopy wavelength grids must produce equal signatures"
+        )
