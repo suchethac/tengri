@@ -180,6 +180,43 @@ First public preview release.
 
 ### Added
 
+- **The 23 7DT bands, bundled.** `7dt_g`, `7dt_r`, `7dt_i` and the 20
+  medium bands `7dt_m400` … `7dt_m875` load by name like any built-in, with no
+  network and no cache. They ship inside the package rather than being fetched,
+  because they are *total system response* — detector QE and optics folded in,
+  which is what 7DT photometry is measured through — and a filter-glass-only
+  curve would be a different quantity. New
+  `tengri.observation.filters.bundled` resolves them, after both user routes
+  and before the SVO registry, so a user curve still shadows them. They appear
+  in `tengri.list_filters(survey="7dt")`. Provenance, digests, and the
+  regeneration command are in `tengri/data/filters_7dt/PROVENANCE.md`;
+  `tools/build_7dt_filter_curves.py` rebuilds them from the delivery.
+- **`wave_unit=` on `register_filter` / `register_filter_from_file`.** Accepts
+  `"AA"` (default), `"nm"`, `"um"` and converts at the boundary. Stating the
+  unit skips the range heuristic, and is the *only* protection against micron
+  input, which no range rule can detect: an optical curve in microns lands at
+  0.5-0.7 Å, indistinguishable from a real NuSTAR band.
+
+### Fixed
+
+- **Custom filter files advertised `.csv` but could not parse one.**
+  `_load_filter_from_directory` listed `.dat`, `.txt`, `.csv` as accepted
+  while `_load_filter_file` called bare `np.loadtxt`, which dies on a
+  comma-separated file with a header (`could not convert string 'lam,trans' to
+  float64`). Curve files are now sniffed for delimiter and header row by parse
+  attempt rather than by extension, since a `.csv` of whitespace and a `.dat`
+  of commas both occur. Affected both `register_filter_from_file` and the
+  `$TENGRI_FILTER_DIR` route.
+- **The nanometer guard went silent on the most common nanometer grid.**
+  `_warn_implausible_wavelength_range` tested `wave_max < 1000.0`, so a curve
+  zero-padded to exactly 300-1000 nm — `wave_max == 1000.0` — did not warn.
+  The first user to bring their own curves hit it on all 23 files at once. The
+  bound is now the blue edge of GALEX FUV (1340 Å), the bluest bandpass tengri
+  ships, and the comparison is inclusive: the rule is "wholly inside the gap
+  where the ISM is opaque", which is a physical statement, not a round number.
+  This also catches nanometer sets running past 1000 nm. **Fails open, so it
+  produced confident nonsense rather than an error.**
+
 - **`tengri.PopulationSEDModel` — hierarchical SubModel.**
   Bundles one `SEDModel` template + a list of per-galaxy data dicts +
   the names of parameters tied across the population (default: the
