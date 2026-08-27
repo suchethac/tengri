@@ -26,7 +26,7 @@ def _real_silva04_grid_present() -> bool:
     """
     import h5py
 
-    grid = Path(__file__).resolve().parents[2] / "data" / "silva04_torus_grid.h5"
+    grid = Path(__file__).resolve().parents[3] / "data" / "silva04_torus_grid.h5"
     if not grid.is_file():
         return False
     try:

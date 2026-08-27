@@ -1,12 +1,30 @@
 # SPDX-License-Identifier: BSD-3-Clause
-"""Tests for massmap_lin and massmap_box metallicity modes.
+"""massmap_lin and massmap_box metallicity modes.
 
 Verifies:
-1. Monotonicity: Z(age) is monotonic from Zstart (oldest) to Zfinal (present)
-2. Boundary conditions: Z at oldest age ≈ Zstart, Z at present ≈ Zfinal
-3. Limiting cases: massmap_box → massmap_lin in small-enrichment limit
-4. Gradient safety: autodiff w.r.t. parameters is finite and matches FD
-5. Integration: models build and produce finite SEDs via SEDModel
+
+1. Shape and monotonicity: Z(age) runs from Zstart (oldest) to Zfinal (present)
+2. Boundary conditions: Z at the oldest age is Zstart, at present Zfinal
+3. Limiting cases: massmap_box -> massmap_lin in the small-enrichment limit,
+   and -- the other half of that claim -- the two are *not* the same model
+   outside it
+4. Gradient safety: autodiff w.r.t. parameters matches finite difference
+5. Integration: models build and produce a finite history via SEDModel
+
+The two modes had a class each, five tests apiece, differing only in which
+function they called. They share one table now, which also gave massmap_box
+the zero-SFR case only massmap_lin had.
+
+Two assertions were doing less than they read as:
+
+* ``test_finite_values`` (once per mode) asserted only ``jnp.all(isfinite)``.
+  It is subsumed: a non-finite entry makes ``dz <= tolerance`` false in the
+  monotonicity test and fails the ``assert_allclose`` in the boundary test, so
+  a NaN or inf cannot reach the end of this file unnoticed.
+* ``test_zero_sfr_safe`` asserted finiteness on an all-zero SFH. Measured, both
+  modes return exactly ``log_z_final`` at every age -- a claim worth making,
+  where "is finite" would also accept a garbage constant. In log space a
+  returned array of zeros means Z = 1, i.e. fifty times solar, and is finite.
 """
 
 import jax
@@ -30,6 +48,12 @@ def fd_grad(f, x: float, eps: float = 1e-5) -> float:
     return float((f(x + eps) - f(x - eps)) / (2.0 * eps))
 
 
+#: The two modes share a signature: (lg_age_gyr, ages_yr, sfr, log_z_start,
+#: log_z_final). massmap_box takes an optional trailing yield_rho.
+_MASSMAP_MODES = [("lin", massmap_lin_metallicity), ("box", massmap_box_metallicity)]
+_MODE_IDS = [name for name, _fn in _MASSMAP_MODES]
+
+
 # ── Fixtures ──────────────────────────────────────────────────────
 
 
@@ -48,11 +72,9 @@ def simple_sfh():
     """
     ssp_lg_age_gyr = jnp.linspace(-3.0, 1.114, 20)  # 1 Myr to ~13 Gyr
     ssp_ages_yr = 10.0 ** (ssp_lg_age_gyr + 9.0)
-    # Exponentially declining SFH: SFR ~ exp(-age / tau)
-    # Reversal to get lookback time, then normalize
     tau = 5.0e9  # 5 Gyr timescale
     sfr_on_ssp = jnp.exp(-ssp_ages_yr / tau)
-    sfr_on_ssp = sfr_on_ssp / jnp.sum(sfr_on_ssp)  # Normalize
+    sfr_on_ssp = sfr_on_ssp / jnp.sum(sfr_on_ssp)
     return ssp_ages_yr, sfr_on_ssp, ssp_lg_age_gyr
 
 
@@ -63,250 +85,197 @@ def log_z_abs_values():
     Returns
     -------
     log_z_start : float
-        log10(Z) at oldest age (e.g., 1e-4 in linear space).
+        log10(Z) at oldest age (1e-4 in linear space).
     log_z_final : float
-        log10(Z) at present day (e.g., 0.02 in linear space).
+        log10(Z) at present day (0.02 in linear space, roughly solar).
     """
-    # 1e-4 in linear space
+    return jnp.log10(1e-4), jnp.log10(0.02)
+
+
+# ── Shared by both modes ──────────────────────────────────────────
+
+
+@pytest.mark.parametrize(("mode", "metallicity_fn"), _MASSMAP_MODES, ids=_MODE_IDS)
+def test_output_shape(mode, metallicity_fn, simple_sfh, log_z_abs_values):
+    """Output shape matches the input SSP age grid."""
+    ssp_ages_yr, sfr_on_ssp, ssp_lg_age_gyr = simple_sfh
+    log_z_start, log_z_final = log_z_abs_values
+    result = metallicity_fn(ssp_lg_age_gyr, ssp_ages_yr, sfr_on_ssp, log_z_start, log_z_final)
+    assert result.shape == ssp_lg_age_gyr.shape
+
+
+@pytest.mark.parametrize(("mode", "metallicity_fn"), _MASSMAP_MODES, ids=_MODE_IDS)
+def test_monotonic_decreasing(mode, metallicity_fn, simple_sfh, log_z_abs_values):
+    """Z(age) decreases monotonically from youngest to oldest.
+
+    cmf runs from 1 (present) to 0 (oldest) and Z = Zstart + (Zfinal - Zstart)
+    * cmf, so Z must fall from Zfinal at the youngest age to Zstart at the
+    oldest.
+
+    This is also where a non-finite entry is caught: ``nan <= tolerance`` is
+    False, so NaN or inf anywhere in the history fails here.
+    """
+    ssp_ages_yr, sfr_on_ssp, ssp_lg_age_gyr = simple_sfh
+    log_z_start, log_z_final = log_z_abs_values
+    result = metallicity_fn(ssp_lg_age_gyr, ssp_ages_yr, sfr_on_ssp, log_z_start, log_z_final)
+
+    z_linear = 10.0**result
+    dz = jnp.diff(z_linear)
+    tolerance = 1e-14 * jnp.mean(z_linear)
+    assert jnp.all(dz <= tolerance), f"Non-monotonic: dz = {dz}, tolerance = {tolerance}"
+
+
+@pytest.mark.bounds
+@pytest.mark.parametrize(("mode", "metallicity_fn"), _MASSMAP_MODES, ids=_MODE_IDS)
+def test_boundary_conditions(mode, metallicity_fn, simple_sfh, log_z_abs_values):
+    """Z at the oldest age is Zstart, at present Zfinal."""
+    ssp_ages_yr, sfr_on_ssp, ssp_lg_age_gyr = simple_sfh
+    log_z_start, log_z_final = log_z_abs_values
+    result = metallicity_fn(ssp_lg_age_gyr, ssp_ages_yr, sfr_on_ssp, log_z_start, log_z_final)
+
+    # Oldest age is the last element in ascending lookback order.
+    assert_allclose(result[-1], log_z_start, atol=0.1)
+    assert_allclose(result[0], log_z_final, atol=0.1)
+
+
+@pytest.mark.parametrize(("mode", "metallicity_fn"), _MASSMAP_MODES, ids=_MODE_IDS)
+def test_gradient_wrt_zfinal(mode, metallicity_fn, simple_sfh, log_z_abs_values):
+    """d<Z>/dZfinal matches central finite difference.
+
+    Finiteness alone would not do here: the canonical safe-divide guard writes
+    exactly 0.0, and zero is finite.
+    """
+    ssp_ages_yr, sfr_on_ssp, ssp_lg_age_gyr = simple_sfh
+    log_z_start, log_z_final = log_z_abs_values
+
+    def fn(z_final):
+        return jnp.mean(
+            metallicity_fn(ssp_lg_age_gyr, ssp_ages_yr, sfr_on_ssp, log_z_start, z_final)
+        )
+
+    grad_auto = float(jax.grad(fn)(log_z_final))
+    assert_allclose(grad_auto, fd_grad(fn, log_z_final), rtol=1e-3)
+
+    # Non-vacuity: a detached gradient is 0.0, which no rtol comparison
+    # against an equally-zero difference quotient would catch.
+    assert abs(grad_auto) > 1e-3, f"{mode}: Zfinal has no effect on the mean, grad={grad_auto}"
+
+
+@pytest.mark.parametrize(("mode", "metallicity_fn"), _MASSMAP_MODES, ids=_MODE_IDS)
+def test_zero_sfr_pins_the_history_at_zfinal(mode, metallicity_fn, log_z_abs_values):
+    """With no star formation anywhere, every age carries Zfinal.
+
+    The division by total formed mass is guarded, and the guard's value is the
+    thing worth pinning. massmap_box had no zero-SFR case at all before this
+    was a table.
+    """
+    ssp_lg_age_gyr = jnp.linspace(-3.0, 1.114, 10)
+    ssp_ages_yr = 10.0 ** (ssp_lg_age_gyr + 9.0)
+    sfr_on_ssp = jnp.zeros_like(ssp_ages_yr)
+    log_z_start, log_z_final = log_z_abs_values
+
+    result = metallicity_fn(ssp_lg_age_gyr, ssp_ages_yr, sfr_on_ssp, log_z_start, log_z_final)
+
+    assert_allclose(result, jnp.full_like(result, log_z_final), rtol=1e-6)
+
+
+# ── massmap_box only ──────────────────────────────────────────────
+
+
+@pytest.mark.limit
+def test_small_enrichment_limit(simple_sfh):
+    """When (Zfinal - Zstart) << yield, the box model reduces to the linear one."""
+    ssp_ages_yr, sfr_on_ssp, ssp_lg_age_gyr = simple_sfh
     log_z_start = jnp.log10(1e-4)
-    # 0.02 in linear space (roughly solar)
-    log_z_final = jnp.log10(0.02)
-    return log_z_start, log_z_final
+    log_z_final = jnp.log10(1e-4 + 1e-5)  # only 10% enrichment
+    yield_rho = 0.03  # large relative to the enrichment
+
+    z_lin = 10.0 ** massmap_lin_metallicity(
+        ssp_lg_age_gyr, ssp_ages_yr, sfr_on_ssp, log_z_start, log_z_final
+    )
+    z_box = 10.0 ** massmap_box_metallicity(
+        ssp_lg_age_gyr, ssp_ages_yr, sfr_on_ssp, log_z_start, log_z_final, yield_rho
+    )
+
+    rel_err = jnp.abs(z_box - z_lin) / (z_lin + 1e-20)
+    assert jnp.all(rel_err < 0.1), f"Limit test failed: max rel_err = {jnp.max(rel_err)}"
 
 
-# ── Tests: massmap_lin ────────────────────────────────────────────
+@pytest.mark.limit
+def test_box_and_lin_are_not_the_same_model(simple_sfh, log_z_abs_values):
+    """Non-vacuity for the limit above: away from it the two must diverge.
+
+    ``test_small_enrichment_limit`` asserts the two agree where they should.
+    On its own that is satisfied by a massmap_box that quietly calls the linear
+    path -- the failure mode where a selector accepts a value and ignores it.
+    Measured at the fixture's enrichment (1e-4 to 0.02): the two differ by
+    0.115 dex, 23% in Z. The 0.05 dex floor here is well clear of that and far
+    above numerical noise.
+    """
+    ssp_ages_yr, sfr_on_ssp, ssp_lg_age_gyr = simple_sfh
+    log_z_start, log_z_final = log_z_abs_values
+
+    lin = massmap_lin_metallicity(
+        ssp_lg_age_gyr, ssp_ages_yr, sfr_on_ssp, log_z_start, log_z_final
+    )
+    box = massmap_box_metallicity(
+        ssp_lg_age_gyr, ssp_ages_yr, sfr_on_ssp, log_z_start, log_z_final
+    )
+
+    spread = float(jnp.max(jnp.abs(box - lin)))
+    assert spread > 0.05, f"massmap_box is indistinguishable from massmap_lin ({spread:.4f} dex)"
 
 
-class TestMassmapLinMetallicity:
-    """Tests for linear massmap metallicity evolution."""
+def test_yield_effect(simple_sfh, log_z_abs_values):
+    """A smaller yield slows metallicity growth (log-linear effect)."""
+    ssp_ages_yr, sfr_on_ssp, ssp_lg_age_gyr = simple_sfh
+    log_z_start, log_z_final = log_z_abs_values
 
-    def test_output_shape(self, simple_sfh, log_z_abs_values):
-        """Output shape matches input SSP age grid."""
-        ssp_ages_yr, sfr_on_ssp, ssp_lg_age_gyr = simple_sfh
-        log_z_start, log_z_final = log_z_abs_values
-        result = massmap_lin_metallicity(
-            ssp_lg_age_gyr, ssp_ages_yr, sfr_on_ssp, log_z_start, log_z_final
-        )
-        assert result.shape == ssp_lg_age_gyr.shape
+    z_large = 10.0 ** massmap_box_metallicity(
+        ssp_lg_age_gyr, ssp_ages_yr, sfr_on_ssp, log_z_start, log_z_final, yield_rho=0.05
+    )
+    z_small = 10.0 ** massmap_box_metallicity(
+        ssp_lg_age_gyr, ssp_ages_yr, sfr_on_ssp, log_z_start, log_z_final, yield_rho=0.01
+    )
 
-    def test_monotonic_decreasing(self, simple_sfh, log_z_abs_values):
-        """Z(age) is monotonically decreasing from youngest to oldest.
-
-        Since cmf goes from 1 (present) to 0 (oldest), and Z =
-        Zstart + (Zfinal - Zstart) * cmf, Z must decrease monotonically
-        from Zfinal (youngest) to Zstart (oldest).
-        """
-        ssp_ages_yr, sfr_on_ssp, ssp_lg_age_gyr = simple_sfh
-        log_z_start, log_z_final = log_z_abs_values
-        result = massmap_lin_metallicity(
-            ssp_lg_age_gyr, ssp_ages_yr, sfr_on_ssp, log_z_start, log_z_final
-        )
-        # Convert back to linear Z to check sign (should be monotonically decreasing)
-        z_linear = 10.0**result
-        dz = jnp.diff(z_linear)
-        # Allow for small numerical noise
-        tolerance = 1e-14 * jnp.mean(z_linear)
-        assert jnp.all(dz <= tolerance), f"Non-monotonic: dz = {dz}, tolerance = {tolerance}"
-
-    @pytest.mark.bounds
-    def test_boundary_conditions(self, simple_sfh, log_z_abs_values):
-        """Z at oldest age ≈ Zstart, at present ≈ Zfinal."""
-        ssp_ages_yr, sfr_on_ssp, ssp_lg_age_gyr = simple_sfh
-        log_z_start, log_z_final = log_z_abs_values
-        result = massmap_lin_metallicity(
-            ssp_lg_age_gyr, ssp_ages_yr, sfr_on_ssp, log_z_start, log_z_final
-        )
-        # Oldest age is last element in ascending lookback order
-        z_oldest = result[-1]
-        z_youngest = result[0]
-        # Should be close to boundaries (within a few dex due to rounding)
-        assert_allclose(z_oldest, log_z_start, atol=0.1)
-        assert_allclose(z_youngest, log_z_final, atol=0.1)
-
-    def test_finite_values(self, simple_sfh, log_z_abs_values):
-        """All output values are finite (no NaN or inf)."""
-        ssp_ages_yr, sfr_on_ssp, ssp_lg_age_gyr = simple_sfh
-        log_z_start, log_z_final = log_z_abs_values
-        result = massmap_lin_metallicity(
-            ssp_lg_age_gyr, ssp_ages_yr, sfr_on_ssp, log_z_start, log_z_final
-        )
-        assert jnp.all(jnp.isfinite(result)), f"Non-finite values: {result}"
-
-    def test_gradient_wrt_zfinal(self, simple_sfh, log_z_abs_values):
-        """Gradient w.r.t. Zfinal is finite and matches finite difference."""
-        ssp_ages_yr, sfr_on_ssp, ssp_lg_age_gyr = simple_sfh
-        log_z_start, log_z_final = log_z_abs_values
-
-        def fn(z_final):
-            result = massmap_lin_metallicity(
-                ssp_lg_age_gyr, ssp_ages_yr, sfr_on_ssp, log_z_start, z_final
-            )
-            return jnp.mean(result)
-
-        # Analytical gradient via autodiff
-        grad_auto = float(jax.grad(fn)(log_z_final))
-        # Finite difference
-        grad_fd = fd_grad(fn, log_z_final)
-        assert np.isfinite(grad_auto), f"Gradient is {grad_auto}"
-        assert_allclose(grad_auto, grad_fd, rtol=1e-3)
-
-    def test_zero_sfr_safe(self, log_z_abs_values):
-        """Zero SFR handled safely (no division by zero)."""
-        ssp_lg_age_gyr = jnp.linspace(-3.0, 1.114, 10)
-        ssp_ages_yr = 10.0 ** (ssp_lg_age_gyr + 9.0)
-        sfr_on_ssp = jnp.zeros_like(ssp_ages_yr)  # All zero
-        log_z_start, log_z_final = log_z_abs_values
-        result = massmap_lin_metallicity(
-            ssp_lg_age_gyr, ssp_ages_yr, sfr_on_ssp, log_z_start, log_z_final
-        )
-        assert jnp.all(jnp.isfinite(result))
+    mid_idx = len(ssp_lg_age_gyr) // 2
+    assert float(z_large[mid_idx]) > float(z_small[mid_idx])
 
 
-# ── Tests: massmap_box ────────────────────────────────────────────
-
-
-class TestMassmapBoxMetallicity:
-    """Tests for closed-box massmap metallicity evolution."""
-
-    def test_output_shape(self, simple_sfh, log_z_abs_values):
-        """Output shape matches input SSP age grid."""
-        ssp_ages_yr, sfr_on_ssp, ssp_lg_age_gyr = simple_sfh
-        log_z_start, log_z_final = log_z_abs_values
-        result = massmap_box_metallicity(
-            ssp_lg_age_gyr, ssp_ages_yr, sfr_on_ssp, log_z_start, log_z_final
-        )
-        assert result.shape == ssp_lg_age_gyr.shape
-
-    def test_monotonic_decreasing(self, simple_sfh, log_z_abs_values):
-        """Z(age) is monotonically decreasing from youngest to oldest (box model)."""
-        ssp_ages_yr, sfr_on_ssp, ssp_lg_age_gyr = simple_sfh
-        log_z_start, log_z_final = log_z_abs_values
-        result = massmap_box_metallicity(
-            ssp_lg_age_gyr, ssp_ages_yr, sfr_on_ssp, log_z_start, log_z_final
-        )
-        z_linear = 10.0**result
-        dz = jnp.diff(z_linear)
-        tolerance = 1e-14 * jnp.mean(z_linear)
-        assert jnp.all(dz <= tolerance), f"Non-monotonic: dz = {dz}, tolerance = {tolerance}"
-
-    @pytest.mark.bounds
-    def test_boundary_conditions(self, simple_sfh, log_z_abs_values):
-        """Z at oldest age ≈ Zstart, at present ≈ Zfinal."""
-        ssp_ages_yr, sfr_on_ssp, ssp_lg_age_gyr = simple_sfh
-        log_z_start, log_z_final = log_z_abs_values
-        result = massmap_box_metallicity(
-            ssp_lg_age_gyr, ssp_ages_yr, sfr_on_ssp, log_z_start, log_z_final
-        )
-        z_oldest = result[-1]
-        z_youngest = result[0]
-        assert_allclose(z_oldest, log_z_start, atol=0.1)
-        assert_allclose(z_youngest, log_z_final, atol=0.1)
-
-    def test_finite_values(self, simple_sfh, log_z_abs_values):
-        """All output values are finite."""
-        ssp_ages_yr, sfr_on_ssp, ssp_lg_age_gyr = simple_sfh
-        log_z_start, log_z_final = log_z_abs_values
-        result = massmap_box_metallicity(
-            ssp_lg_age_gyr, ssp_ages_yr, sfr_on_ssp, log_z_start, log_z_final
-        )
-        assert jnp.all(jnp.isfinite(result))
-
-    def test_gradient_wrt_zfinal(self, simple_sfh, log_z_abs_values):
-        """Gradient w.r.t. Zfinal is finite and matches FD."""
-        ssp_ages_yr, sfr_on_ssp, ssp_lg_age_gyr = simple_sfh
-        log_z_start, log_z_final = log_z_abs_values
-
-        def fn(z_final):
-            result = massmap_box_metallicity(
-                ssp_lg_age_gyr, ssp_ages_yr, sfr_on_ssp, log_z_start, z_final
-            )
-            return jnp.mean(result)
-
-        grad_auto = float(jax.grad(fn)(log_z_final))
-        grad_fd = fd_grad(fn, log_z_final)
-        assert np.isfinite(grad_auto)
-        assert_allclose(grad_auto, grad_fd, rtol=1e-3)
-
-    @pytest.mark.limit
-    def test_small_enrichment_limit(self, simple_sfh):
-        """In small-enrichment limit, massmap_box ≈ massmap_lin.
-
-        When (Zfinal - Zstart) << yield, the box model should
-        approximately reduce to the linear model.
-        """
-        ssp_ages_yr, sfr_on_ssp, ssp_lg_age_gyr = simple_sfh
-        # Small enrichment in linear space
-        z_start = 1e-4
-        z_final = 1e-4 + 1e-5  # Only 10% enrichment
-        log_z_start = jnp.log10(z_start)
-        log_z_final = jnp.log10(z_final)
-        yield_rho = 0.03  # Large relative to enrichment
-
-        result_lin = massmap_lin_metallicity(
-            ssp_lg_age_gyr, ssp_ages_yr, sfr_on_ssp, log_z_start, log_z_final
-        )
-        result_box = massmap_box_metallicity(
-            ssp_lg_age_gyr, ssp_ages_yr, sfr_on_ssp, log_z_start, log_z_final, yield_rho
-        )
-        # In the small-enrichment limit, they should be similar
-        # (within ~5% relative error in Z space)
-        z_lin = 10.0**result_lin
-        z_box = 10.0**result_box
-        rel_err = jnp.abs(z_box - z_lin) / (z_lin + 1e-20)
-        assert jnp.all(rel_err < 0.1), f"Limit test failed: max rel_err = {jnp.max(rel_err)}"
-
-    def test_yield_effect(self, simple_sfh, log_z_abs_values):
-        """Smaller yield slows metallicity growth (log-linear effect)."""
-        ssp_ages_yr, sfr_on_ssp, ssp_lg_age_gyr = simple_sfh
-        log_z_start, log_z_final = log_z_abs_values
-
-        result_large_yield = massmap_box_metallicity(
-            ssp_lg_age_gyr, ssp_ages_yr, sfr_on_ssp, log_z_start, log_z_final, yield_rho=0.05
-        )
-        result_small_yield = massmap_box_metallicity(
-            ssp_lg_age_gyr, ssp_ages_yr, sfr_on_ssp, log_z_start, log_z_final, yield_rho=0.01
-        )
-        # With smaller yield, metallicity grows more slowly
-        # At intermediate ages, large_yield should be higher
-        z_large = 10.0**result_large_yield
-        z_small = 10.0**result_small_yield
-        mid_idx = len(ssp_lg_age_gyr) // 2
-        assert float(z_large[mid_idx]) > float(z_small[mid_idx])
-
-
-# ── Tests: Integration via Parameters ──────────────────────────
+# ── Integration via Parameters ────────────────────────────────────
 
 
 class TestMassmapIntegration:
-    """Tests for massmap modes integrated into Parameters."""
+    """massmap modes integrated into Parameters."""
 
     @pytest.mark.contract
     def test_massmap_lin_explicit_mode(self):
-        """Explicitly setting met_mode='massmap_lin' builds correctly with free params."""
+        """met_mode='massmap_lin' builds with both endpoints free."""
         params = Parameters(
             met_mode="massmap_lin",
             met_logzsol_start=Uniform(-4.0, -2.0),
             met_logzsol_final=Uniform(-2.0, 0.0),
         )
         assert params.met_mode == "massmap_lin"
-        # Both params should be free with the uniform priors
+
         free_params = params.free_params
         assert any("met_logzsol_start" in p for p in free_params)
         assert any("met_logzsol_final" in p for p in free_params)
 
     @pytest.mark.contract
     def test_massmap_box_with_yield(self):
-        """Explicitly set massmap_box with yield parameter."""
-        # When combining start, final, and yield, explicitly set met_mode to avoid ambiguity
+        """met_mode='massmap_box' with an explicit yield.
+
+        met_mode is set explicitly because massmap_box's keys are a superset of
+        massmap_lin's, which is otherwise ambiguous.
+        """
         params = Parameters(
             met_mode="massmap_box",
             met_logzsol_start=Uniform(-4.0, -2.0),
             met_yield=Fixed(0.03),
         )
         assert params.met_mode == "massmap_box"
-        # met_logzsol_start should be free
-        free_params = params.free_params
-        assert any("met_logzsol_start" in p for p in free_params)
+        assert any("met_logzsol_start" in p for p in params.free_params)
 
 
 @pytest.mark.regression_bug
@@ -316,7 +285,7 @@ def test_massmap_lin_is_linear_in_Z_not_logZ():
     Regression for the log-vs-linear bug: the original code interpolated in
     log10(Z), giving a *geometric* map (~2x off vs ProSpect at the half-mass
     point). For a constant SFR on a uniform age grid, cmf is linear in age, so Z
-    at the mid-age must be the *arithmetic* midpoint (Zstart+Zfinal)/2 — not the
+    at the mid-age must be the *arithmetic* midpoint (Zstart+Zfinal)/2 -- not the
     geometric mean sqrt(Zstart*Zfinal).
     """
     n = 401
@@ -333,9 +302,15 @@ def test_massmap_lin_is_linear_in_Z_not_logZ():
     z_mid = float(z[n // 2])  # cmf ~ 0.5
     arithmetic = 0.5 * (z_start + z_final)
     geometric = float(np.sqrt(z_start * z_final))
-    (
-        assert_allclose(z_mid, arithmetic, rtol=0.02),
-        (
+
+    # The message used to sit in a tuple beside the call -- `(assert_allclose(...),
+    # f"...")` -- which builds a 2-tuple and discards it, so it could never be
+    # shown. err_msg is the parameter that reaches a failure report.
+    assert_allclose(
+        z_mid,
+        arithmetic,
+        rtol=0.02,
+        err_msg=(
             f"massmap_lin at half-mass Z={z_mid:.3e} should be the arithmetic midpoint "
             f"{arithmetic:.3e} (ProSpect linear map), not the geometric {geometric:.3e}"
         ),
@@ -350,7 +325,7 @@ def test_massmap_box_builds_via_group_dict_grammar(synthetic_ssp):
     """massmap_box is reachable through SEDModel.build's dict grammar.
 
     Regression for two coupled bugs: (1) ProSpect's ``yield`` param is a Python
-    keyword and could not be a builder group key — renamed to ``met_yield``;
+    keyword and could not be a builder group key -- renamed to ``met_yield``;
     (2) inference raised "ambiguous" (massmap_box's keys are a superset of
     massmap_lin's) even when ``met_mode`` was set explicitly. Either one made
     ``SEDModel.build(met={'type': 'massmap_box', ...})`` crash.
@@ -379,6 +354,7 @@ def test_massmap_box_builds_via_group_dict_grammar(synthetic_ssp):
     state = model.predict_state({})
     z_hist = np.asarray(state.derived["log_metallicity_history"])
     assert np.isfinite(z_hist).all()
+
     # Monotonic enrichment: present-day (youngest) >= oldest.
     age = np.asarray(state.derived["sfh_grid_lbt_yr"])
     assert z_hist[np.argmin(age)] >= z_hist[np.argmax(age)]

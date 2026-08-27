@@ -419,7 +419,7 @@ class TestQSOgenPrecomputeEquivalence:
         _assert_equivalent(phot_precomp, phot_runtime, "qsogen precompute↔runtime", rtol=1e-3)
 
 
-_REPO_DATA = __import__("pathlib").Path(__file__).resolve().parents[3] / "data"
+from tests._data_skip import DATA_DIR as _REPO_DATA  # root computed once; see #1431
 
 
 class TestSilva04PrecomputeEquivalence:

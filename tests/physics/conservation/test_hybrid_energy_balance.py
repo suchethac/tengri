@@ -26,15 +26,13 @@ import jax
 import jax.numpy as jnp
 import pytest
 
-pytestmark = pytest.mark.conservation
-
 from tengri.forward.sed_model import SEDModel, WavePrecomp
 from tengri.parameters.parameters import Parameters
 from tengri.parameters.priors import Fixed, Uniform
 
 # ── Skip guards — require SSP data ────────────────────────────────
 
-_DATA_DIR = Path(__file__).resolve().parents[2] / "data"
+_DATA_DIR = Path(__file__).resolve().parents[3] / "data"
 _SSP_FILE = _DATA_DIR / "ssp_prsc_miles_chabrier_wNE_logGasU-3.0_logGasZ0.0.h5"
 _DL07_FILE = _DATA_DIR / "dl07_templates_v2.h5"
 _DALE_FILE = _DATA_DIR / "dale2014_templates.h5"
@@ -42,10 +40,16 @@ _THEMIS_FILE = _DATA_DIR / "themis_templates.h5"
 
 _SSP_EXISTS = _SSP_FILE.is_file()
 
-pytestmark = pytest.mark.skipif(
-    not _SSP_EXISTS,
-    reason="SSP data file not found — integration test requires data/ssp_*.h5",
-)
+# One assignment holding both. Assigning `pytestmark` twice rebinds the name,
+# which silently dropped the `conservation` taxonomy marker and left the module
+# unselectable by `pytest -m conservation`.
+pytestmark = [
+    pytest.mark.conservation,
+    pytest.mark.skipif(
+        not _SSP_EXISTS,
+        reason="SSP data file not found — integration test requires data/ssp_*.h5",
+    ),
+]
 
 _FILTER_NAMES = ["sdss_u", "sdss_g", "sdss_r", "sdss_i", "sdss_z"]
 

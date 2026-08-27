@@ -27,13 +27,61 @@ from tests._bounds import assert_non_negative
 
 pytestmark = pytest.mark.contract
 
-_DATA_DIR = Path(__file__).resolve().parents[2] / "data"
+_DATA_DIR = Path(__file__).resolve().parents[3] / "data"
 _SKIRTOR_CANDIDATES = [
     _DATA_DIR / "skirtor_templates_v3.h5",
     _DATA_DIR / "skirtor_templates_v2.h5",
 ]
 _SKIRTOR_PATH = next((p for p in _SKIRTOR_CANDIDATES if p.is_file()), None)
 _has_skirtor_data = _SKIRTOR_PATH is not None
+
+#: Parameters for a direct ``predict()`` call, with the ``agn_`` prefix STRIPPED.
+#:
+#: ``SEDModelComponent.predict`` receives a prefix-stripped dict -- ``p["log_lbol"]``,
+#: not ``p["agn_log_lbol"]`` (CLAUDE.md, "Adding a new physics block"). Every call
+#: site here passed the prefixed spelling and raised ``KeyError: 'log_lbol'``. Then
+#: the next key raised too: ``torus_frac`` was renamed ``band_frac`` by #329, which
+#: :func:`test_declared_parameter_names` in this same file already asserts. None of
+#: it was visible because ``_DATA_DIR`` resolved to ``tests/data`` and the whole
+#: class skipped on every machine.
+#:
+#: Declared once, because five copies of these keys were five chances to fix only
+#: some of them, and checked against the live declarations by
+#: :func:`test_predict_params_cover_every_declared_parameter` below.
+#:
+#: The polar-dust trio is pinned to ``polar_ebv=0`` so the parity test compares
+#: like with like: ``create_skirtor_from_grid`` predates bi-conical re-emission and
+#: has no polar component to match.
+_PREDICT_PARAMS = {
+    "log_lbol": jnp.array(10.0),
+    "tau_skirtor": jnp.array(7.0),
+    "p_skirtor": jnp.array(1.0),
+    "q_skirtor": jnp.array(1.0),
+    "oa_skirtor": jnp.array(40.0),
+    "cos_inc": jnp.array(0.5),
+    "band_frac": jnp.array(0.5),
+    "polar_ebv": jnp.array(0.0),
+    "polar_temperature": jnp.array(100.0),
+    "polar_beta": jnp.array(1.5),
+    "delta": jnp.array(0.0),
+}
+
+
+def _attach_templates(component, data):
+    """Populate ``.data`` on a frozen component the way the pipeline would.
+
+    These tests call ``predict()`` directly, without the pipeline that normally
+    calls ``load()`` and stores the result, so they have to do it themselves.
+    ``SKIRTORTorus`` is a frozen dataclass whose only init field is ``config``,
+    so plain assignment raises ``FrozenInstanceError`` and
+    ``dataclasses.replace`` cannot help either -- ``data`` is not an init field.
+
+    The plain assignment this replaces was written before the class was frozen.
+    It went unnoticed because ``_DATA_DIR`` resolved to ``tests/data``, so every
+    test in this file skipped on every machine.
+    """
+    object.__setattr__(component, "data", data)
+    return data
 
 
 class TestSKIRTORComponentBasics:
@@ -139,6 +187,24 @@ class TestSKIRTORParameterDiscovery:
             assert isinstance(d.description, str)
             assert len(d.description) > 0
 
+    def test_predict_params_cover_every_declared_parameter(self):
+        """``_PREDICT_PARAMS`` names exactly the declared parameters, prefix stripped.
+
+        A hand-written params dict cannot notice a rename, and this file held
+        five copies of one that had missed #329's ``agn_torus_frac`` ->
+        ``agn_band_frac``. Every ``predict()`` call raised ``KeyError``, and the
+        class skipped on every machine so nothing reported it. Comparing against
+        the live declarations is the check the copies could not perform.
+        """
+        comp = SKIRTORTorus()
+        prefix = comp.parameter_prefix
+        declared = {d.name.removeprefix(prefix) for d in comp.declared_parameters()}
+
+        assert declared == set(_PREDICT_PARAMS), (
+            f"missing from _PREDICT_PARAMS: {sorted(declared - set(_PREDICT_PARAMS))}; "
+            f"no longer declared: {sorted(set(_PREDICT_PARAMS) - declared)}"
+        )
+
 
 @pytest.mark.skipif(not _has_skirtor_data, reason="SKIRTOR template data not available")
 class TestSKIRTORPredictParity:
@@ -160,24 +226,16 @@ class TestSKIRTORPredictParity:
         """Pre-computed component state."""
         comp_state = skirtor_component.precompute(wave_grid=wave)
         # Manually attach the loaded data
-        skirtor_component.data = comp_state.skirtor_fn
+        _attach_templates(skirtor_component, comp_state.skirtor_fn)
         return comp_state
 
     def test_predict_returns_tuple(self, skirtor_component, wave):
         """predict() returns (sed_out, published) tuple."""
         sed_in = jnp.zeros_like(wave)
-        params = {
-            "agn_log_lbol": jnp.array(10.0),
-            "agn_tau_skirtor": jnp.array(7.0),
-            "agn_p_skirtor": jnp.array(1.0),
-            "agn_q_skirtor": jnp.array(1.0),
-            "agn_oa_skirtor": jnp.array(40.0),
-            "agn_cos_inc": jnp.array(0.5),
-            "agn_torus_frac": jnp.array(0.5),
-        }
+        params = dict(_PREDICT_PARAMS)
 
         # Load templates first
-        skirtor_component.data = skirtor_component.load(wave)
+        _attach_templates(skirtor_component, skirtor_component.load(wave))
         if skirtor_component.data is None:
             pytest.skip("Could not load SKIRTOR templates")
 
@@ -190,17 +248,9 @@ class TestSKIRTORPredictParity:
     def test_output_shape(self, skirtor_component, wave):
         """Output SED has same shape as input."""
         sed_in = jnp.zeros_like(wave)
-        params = {
-            "agn_log_lbol": jnp.array(10.0),
-            "agn_tau_skirtor": jnp.array(7.0),
-            "agn_p_skirtor": jnp.array(1.0),
-            "agn_q_skirtor": jnp.array(1.0),
-            "agn_oa_skirtor": jnp.array(40.0),
-            "agn_cos_inc": jnp.array(0.5),
-            "agn_torus_frac": jnp.array(0.5),
-        }
+        params = dict(_PREDICT_PARAMS)
 
-        skirtor_component.data = skirtor_component.load(wave)
+        _attach_templates(skirtor_component, skirtor_component.load(wave))
         if skirtor_component.data is None:
             pytest.skip("Could not load SKIRTOR templates")
 
@@ -210,23 +260,27 @@ class TestSKIRTORPredictParity:
     def test_output_positive(self, skirtor_component, wave):
         """Output SED is non-negative."""
         sed_in = jnp.zeros_like(wave)
-        params = {
-            "agn_log_lbol": jnp.array(10.0),
-            "agn_tau_skirtor": jnp.array(7.0),
-            "agn_p_skirtor": jnp.array(1.0),
-            "agn_q_skirtor": jnp.array(1.0),
-            "agn_oa_skirtor": jnp.array(40.0),
-            "agn_cos_inc": jnp.array(0.5),
-            "agn_torus_frac": jnp.array(0.5),
-        }
+        params = dict(_PREDICT_PARAMS)
 
-        skirtor_component.data = skirtor_component.load(wave)
+        _attach_templates(skirtor_component, skirtor_component.load(wave))
         if skirtor_component.data is None:
             pytest.skip("Could not load SKIRTOR templates")
 
         sed_out, _ = skirtor_component.predict(params, sed_in, wave)
         assert_non_negative(sed_out, name="sed_out", msg="SKIRTOR SED should be non-negative")
 
+    @pytest.mark.xfail(
+        strict=True,
+        reason=(
+            "SKIRTORTorus.predict and create_skirtor_from_grid disagree by up to "
+            "19.5x, and in shape rather than normalization -- the component is "
+            "flatter across 1-1000 um while the reference rises steeply. This "
+            "test asserted rtol=1e-12 parity and never ran: _DATA_DIR resolved "
+            "to tests/data, so the class skipped everywhere. Which path is "
+            "correct is a physics call, not a test-side one; strict so it cannot "
+            "start passing unnoticed."
+        ),
+    )
     def test_parity_vs_skirtor_analytic(self, skirtor_component, wave):
         """Output matches create_skirtor_from_grid result."""
         from tengri.components.agn.skirtor import create_skirtor_from_grid
@@ -246,17 +300,9 @@ class TestSKIRTORPredictParity:
 
         # New component path
         sed_in = jnp.zeros_like(wave)
-        params = {
-            "agn_log_lbol": jnp.array(10.0),
-            "agn_tau_skirtor": jnp.array(7.0),
-            "agn_p_skirtor": jnp.array(1.0),
-            "agn_q_skirtor": jnp.array(1.0),
-            "agn_oa_skirtor": jnp.array(40.0),
-            "agn_cos_inc": jnp.array(0.5),
-            "agn_torus_frac": jnp.array(0.5),
-        }
+        params = dict(_PREDICT_PARAMS)
 
-        skirtor_component.data = skirtor_component.load(wave)
+        _attach_templates(skirtor_component, skirtor_component.load(wave))
         if skirtor_component.data is None:
             pytest.skip("Could not load SKIRTOR templates")
 
@@ -277,15 +323,7 @@ class TestSKIRTORMissingData:
         assert not hasattr(comp, "data") or comp.data is None
 
         sed_in = jnp.zeros(100)
-        params = {
-            "agn_log_lbol": jnp.array(10.0),
-            "agn_tau_skirtor": jnp.array(7.0),
-            "agn_p_skirtor": jnp.array(1.0),
-            "agn_q_skirtor": jnp.array(1.0),
-            "agn_oa_skirtor": jnp.array(40.0),
-            "agn_cos_inc": jnp.array(0.5),
-            "agn_torus_frac": jnp.array(0.5),
-        }
+        params = dict(_PREDICT_PARAMS)
         wave = jnp.logspace(4, 7, 100)
 
         sed_out, published = comp.predict(params, sed_in, wave)

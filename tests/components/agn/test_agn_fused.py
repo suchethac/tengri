@@ -21,7 +21,7 @@ import jax.numpy as jnp
 
 from tengri import Fixed, Parameters, SEDModel, Uniform
 
-_DATA_DIR = Path(__file__).resolve().parents[2] / "data"
+_DATA_DIR = Path(__file__).resolve().parents[3] / "data"
 _SKIRTOR_CANDIDATES = [
     _DATA_DIR / "skirtor_templates_v3.h5",
     _DATA_DIR / "skirtor_templates_v2.h5",
@@ -434,12 +434,28 @@ class TestSKIRTORPreintegration:
         )
 
     def test_preintegration_enabled(self, skirtor_spec, synthetic_ssp, simple_filters):
-        """SEDModel with SKIRTOR + fixed z loads skirtor_preintegrated into PrecomputedData."""
+        """A fixed-z SKIRTOR model with filters is fast-path eligible.
+
+        This asserted ``model._precomputed.skirtor_preintegrated is not None``
+        and raised ``AttributeError`` -- the ``PrecomputedData`` container was
+        retired by #620, and the LUT now lives in the component chain. The
+        public replacement its own docstring names is
+        ``has_fixedz_photometry_precompute``, which reproduces the retired
+        container's ``photometry is not None`` boolean.
+
+        There is no surviving public proxy for the SKIRTOR-specific slot, so
+        this checks the eligibility the property does expose; the substance is
+        in ``test_preintegrated_photometry_finite`` below.
+
+        It went unnoticed because ``_DATA_DIR`` resolved to ``tests/data``, so
+        the whole file skipped on every machine.
+        """
         with warnings.catch_warnings():
             warnings.simplefilter("ignore")
             model = SEDModel(skirtor_spec, synthetic_ssp, filters=simple_filters)
-        assert model._precomputed.skirtor_preintegrated is not None, (
-            "Expected skirtor_preintegrated to be populated for fixed-z SKIRTOR model"
+        assert model.has_fixedz_photometry_precompute, (
+            "fixed redshift and filters are configured, so this model should be "
+            "fixed-z photometry eligible"
         )
 
     def test_preintegrated_photometry_finite(self, skirtor_spec, synthetic_ssp, simple_filters):
@@ -455,16 +471,29 @@ class TestSKIRTORPreintegration:
 
     def test_preintegrated_matches_fullwave(self, skirtor_spec, synthetic_ssp, simple_filters):
         """Preintegrated SKIRTOR torus photometry agrees with full-wavelength within 1%.
+
         The preintegrated path (filter-level triweight lookup) must match the
         full-wavelength path within ~1% to confirm the frequency-space normalization
         is consistent between precompute_skirtor_photometry and skirtor.py.
         A normalization mismatch (e.g. energy_normalize=True vs freq-space) would
         produce systematic errors >> 1% across all bands.
+
+        Both models used to be constructed with identical arguments -- no
+        ``approx`` on either -- so this compared a model against itself and
+        ``max_rel_error`` was 0 by construction. The LUT path is opted into with
+        ``approx=WavePrecomp()``; ``approx=None`` is the exact wave-grid path
+        (CLAUDE.md, "Critical gotchas"). The models are told apart now.
         """
+        from tengri import WavePrecomp
+
         with warnings.catch_warnings():
             warnings.simplefilter("ignore")
-            model_hybrid = SEDModel(skirtor_spec, synthetic_ssp, filters=simple_filters)
-            model_exact = SEDModel(skirtor_spec, synthetic_ssp, filters=simple_filters)
+            model_hybrid = SEDModel(
+                skirtor_spec, synthetic_ssp, filters=simple_filters, approx=WavePrecomp()
+            )
+            model_exact = SEDModel(
+                skirtor_spec, synthetic_ssp, filters=simple_filters, approx=None
+            )
         key = jax.random.PRNGKey(7)
         params = skirtor_spec.sample(key)
         phot_hybrid = model_hybrid.predict_photometry(params)
@@ -473,6 +502,16 @@ class TestSKIRTORPreintegration:
         assert jnp.all(jnp.isfinite(phot_exact)), f"Non-finite exact photometry: {phot_exact}"
         rel_error = jnp.abs(phot_hybrid - phot_exact) / (jnp.abs(phot_exact) + 1e-40)
         max_rel_error = float(jnp.max(rel_error))
+
+        # Non-vacuity. A filter-level triweight lookup and an exact wave-grid
+        # integral carry different interpolation error, so agreeing to the last
+        # bit means the two paths were never distinguished -- which is what this
+        # test did for its whole life, and is also the signature of #2068 (the
+        # second SEDModel in a process returning the first one's photometry).
+        assert max_rel_error > 0.0, (
+            "the LUT and exact paths agree bit for bit, so this comparison is "
+            "measuring one path against itself -- see #2068"
+        )
         assert max_rel_error < 0.05, (
             f"SKIRTOR preintegrated vs full-wave max relative error = {max_rel_error:.2%}. "
             f"Preint: {phot_hybrid}, Full-wave: {phot_exact}. "
@@ -480,6 +519,18 @@ class TestSKIRTORPreintegration:
             "skirtor_precompute.py (frequency-space vs wavelength-space integral)."
         )
 
+    @pytest.mark.xfail(
+        strict=True,
+        reason=(
+            "#2069: moving agn_log_lbol across its entire declared prior "
+            "Uniform(9, 12) -- three decades of bolometric luminosity -- leaves "
+            "the photometry bit-identical. Either that is expected under "
+            "agn_norm='cigale_joint' (which ties everything to agn_power, so a "
+            "free agn_log_lbol is a flat likelihood direction), or the "
+            "normalization is not reaching the component. Deciding that is a "
+            "physics call. Never ran before: _DATA_DIR resolved to tests/data."
+        ),
+    )
     def test_lbol_sensitivity(self, skirtor_spec, synthetic_ssp, simple_filters):
         """Preintegrated SKIRTOR photometry scales monotonically with agn_log_lbol."""
         with warnings.catch_warnings():

@@ -297,6 +297,12 @@ jobs:
       # which is what happened to `tests/unit`. Stdlib-only by design: this job
       # installs ruff and nothing else.
       - run: python tools/check_test_paths_covered.py
+      # A `Path(__file__).parents[N]` counted wrong lands on a directory holding
+      # no grids, so the `if not (_DATA / grid).exists(): skip` built on it is
+      # permanently true and the tests are dark on every machine. Four separate
+      # miscounts across eight files kept 27 tests from ever running, including
+      # two whose grids are tracked in git. Stdlib-only, same as above.
+      - run: python tools/check_test_data_paths.py
       # `Fitter._build_data_args` reads its optional observation channels with
       # `getattr(obs, "line_ratios", None)` — correct against a real model,
       # unsatisfiable against a bare MagicMock, whose every attribute

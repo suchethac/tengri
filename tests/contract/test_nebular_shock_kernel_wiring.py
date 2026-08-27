@@ -9,8 +9,6 @@ Tests verify:
 
 from __future__ import annotations
 
-from pathlib import Path
-
 import chex
 import jax
 import numpy as np
@@ -20,7 +18,8 @@ from tests._bounds import assert_non_negative
 
 pytestmark = pytest.mark.contract
 
-_DATA = Path(__file__).resolve().parents[4] / "data"
+from tests._data_skip import DATA_DIR as _DATA  # root computed once; see #1431
+
 _MAPPINGS_H5 = _DATA / "mappings_templates.h5"
 
 # Skip marker for missing MAPPINGS grid (graceful degradation to fallback)

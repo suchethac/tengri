@@ -18,9 +18,9 @@ from tengri.analysis.diagnostics.autocorrelation import (
     split_rhat,
 )
 
-pytestmark = pytest.mark.bounds
-
-pytestmark = pytest.mark.unit
+# One assignment, not two: Python rebinds the name, so a second
+# `pytestmark = ...` silently discarded the taxonomy marker.
+pytestmark = [pytest.mark.bounds, pytest.mark.unit]
 
 
 # ── split_rhat (single chain) ────────────────────────────────────────

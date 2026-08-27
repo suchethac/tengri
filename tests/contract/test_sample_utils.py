@@ -1,14 +1,16 @@
 # SPDX-License-Identifier: BSD-3-Clause
-import pytest
+"""Tests for shared sampling utilities (_sample_utils.py).
 
-pytestmark = pytest.mark.contract
-"""Tests for shared sampling utilities (_sample_utils.py)."""
+This string was not the module docstring: an assignment preceded it, so it was
+a bare expression statement and ``test_sample_utils.__doc__`` was None.
+"""
 
 import jax.numpy as jnp
-
-pytestmark = pytest.mark.contract
+import pytest
 
 from tengri.inference._sample_utils import _mean_params, _vmap_samples_to_physical
+
+pytestmark = pytest.mark.contract
 
 
 def _dummy_unravel(flat_pos):

@@ -31,7 +31,7 @@ from tengri import Fixed
 pytestmark = pytest.mark.bounds
 
 # ── Fixtures ──────────────────────────────────────────────────────
-_CB19_H5 = Path(__file__).parents[2] / "data" / "cb19_templates.h5"
+_CB19_H5 = Path(__file__).resolve().parents[3] / "data" / "cb19_templates.h5"
 _SKIP_NO_H5 = pytest.mark.skipif(
     not _CB19_H5.exists(),
     reason="data/cb19_templates.h5 not found; run scripts/download_cb19_templates.py",
@@ -587,9 +587,9 @@ class TestMissingH5:
 
 # ── param_spec integration ────────────────────────────────────────
 class TestParamSpec:
-    _CLOUDY_GRID = Path(__file__).parents[2] / "data" / "cloudy_grid_bpss.h5"
+    _CLOUDY_GRID = Path(__file__).resolve().parents[3] / "data" / "cloudy_grid_bpss.h5"
     _SKIP_NO_GRID = pytest.mark.skipif(
-        not (Path(__file__).parents[2] / "data" / "cloudy_grid_bpss.h5").exists(),
+        not (Path(__file__).resolve().parents[3] / "data" / "cloudy_grid_bpss.h5").exists(),
         reason="cloudy_grid_bpss.h5 not found",
     )
 
@@ -701,7 +701,7 @@ class TestSEDModelInitNebularDispatch:
             sfh={
                 "type": "tsnorm",
                 "all_params": tengri.FIXED,
-                "log_peak_sfr": 1.0,
+                "log_total_mass": 10.0,
                 "peak_lbt_gyr": 2.0,
                 "width_gyr": 1.0,
                 "skew": 0.2,

@@ -16,14 +16,12 @@ underlying helper is shared by every other disc+torus registered model.
 
 from __future__ import annotations
 
-from pathlib import Path
-
 import jax.numpy as jnp
 import pytest
 
+from tests._data_skip import SILVA04_GRID as _GRID_PATH  # root computed once; see #1431
 from tests._grad_parity import assert_grad_matches_fd
 
-_GRID_PATH = Path(__file__).resolve().parents[4] / "data" / "silva04_torus_grid.h5"
 _has_grid = _GRID_PATH.is_file()
 
 pytestmark = [

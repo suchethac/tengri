@@ -6,8 +6,6 @@ Covers ``silva04`` and ``cat3d_wind`` — the SKIRTOR alternatives.
 
 from __future__ import annotations
 
-from pathlib import Path
-
 import chex
 import jax
 import jax.numpy as jnp
@@ -16,7 +14,8 @@ import pytest
 
 pytestmark = pytest.mark.contract
 
-_DATA = Path(__file__).resolve().parents[4] / "data"
+from tests._data_skip import DATA_DIR as _DATA  # root computed once; see #1431
+
 _SILVA04_GRID = _DATA / "silva04_torus_grid.h5"
 _CAT3D_GRID = _DATA / "cat3d_wind_torus_grid.h5"
 

@@ -11,8 +11,6 @@ the new parameter for inference.
 
 from __future__ import annotations
 
-from pathlib import Path
-
 import jax.numpy as jnp
 import pytest
 
@@ -20,7 +18,8 @@ from tests._grad_parity import assert_grad_matches_fd
 
 pytestmark = pytest.mark.bounds
 
-_DATA_DIR = Path(__file__).resolve().parents[4] / "data"
+from tests._data_skip import DATA_DIR as _DATA_DIR  # root computed once; see #1431
+
 _SILVA04 = _DATA_DIR / "silva04_torus_grid.h5"
 _CAT3D = _DATA_DIR / "cat3d_wind_torus_grid.h5"
 _SKIRTOR = any(

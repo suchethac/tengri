@@ -39,7 +39,7 @@ from tengri.analysis.simulate import photometry_from_sfh, sed_from_sfh
 # Allow skipping SED amplitude tests if SSP data is missing, but
 # mass-integral tests always run (they don't need SSP data).
 
-_DATA_DIR = Path(__file__).resolve().parent.parent.parent / "data"
+_DATA_DIR = Path(__file__).resolve().parents[3] / "data"
 _SSP_FILE_WNE = _DATA_DIR / "ssp_prsc_miles_chabrier_wNE_logGasU-3.0_logGasZ0.0.h5"
 _HAS_SSP = _SSP_FILE_WNE.is_file()
 

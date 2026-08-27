@@ -82,17 +82,35 @@ def _marker_names(nodes: list[ast.expr]) -> set[str]:
 
 
 def _pytestmark_names(body: list[ast.stmt]) -> set[str]:
-    """Markers assigned to ``pytestmark`` anywhere in this block's own body."""
-    found: set[str] = set()
+    """Markers in effect from ``pytestmark`` in this block's own body.
+
+    Only the **last** assignment counts. Python rebinds the name, so
+
+        pytestmark = pytest.mark.bounds
+        ...
+        pytestmark = pytest.mark.skipif(...)
+
+    leaves no taxonomy marker at collection time -- ``pytest -m bounds``
+    deselects the whole module. Unioning across assignments modelled
+    ``pytestmark`` as accumulating and let eight modules through, four of them
+    losing their taxonomy marker to a ``skipif`` and four to a ``unit`` marker
+    that is not in the taxonomy at all.
+
+    A module wanting both writes one assignment holding a list.
+    """
+    value: ast.expr | None = None
     for node in body:
         if not isinstance(node, ast.Assign):
             continue
         if not any(isinstance(t, ast.Name) and t.id == "pytestmark" for t in node.targets):
             continue
-        value = node.value
-        items = list(value.elts) if isinstance(value, (ast.List, ast.Tuple)) else [value]
-        found |= _marker_names(items)
-    return found
+        value = node.value  # a later assignment replaces an earlier one
+
+    if value is None:
+        return set()
+
+    items = list(value.elts) if isinstance(value, (ast.List, ast.Tuple)) else [value]
+    return _marker_names(items)
 
 
 def collect_file_markers(source: str) -> set[str]:
@@ -127,8 +145,58 @@ def collect_function_violations(source: str) -> list[str]:
     return violations
 
 
+def _pytestmark_lines(body: list[ast.stmt]) -> list[int]:
+    """Line numbers of ``pytestmark`` assignments directly in this block."""
+    return [
+        node.lineno
+        for node in body
+        if isinstance(node, ast.Assign)
+        and any(isinstance(t, ast.Name) and t.id == "pytestmark" for t in node.targets)
+    ]
+
+
+def rebound_pytestmark_scopes(source: str) -> list[tuple[str, list[int]]]:
+    """Scopes assigning ``pytestmark`` more than once, as (scope name, lines).
+
+    Reading only the last assignment (see ``_pytestmark_names``) reports the
+    truth, but it still lets the pattern through: the file keeps a marker that
+    looks declared and is not. Ten modules in this tree had it, eight of them
+    losing their taxonomy marker outright. Refusing it outright is the fix that
+    does not need finding again -- a scope wanting several markers writes one
+    assignment holding a list.
+
+    Class bodies are checked as well as the module body. pytest honours a
+    class-body ``pytestmark`` and Python rebinds the name there too, so the
+    identical defect can sit one level in. None do today; a checker whose
+    domain is narrower than the rule it enforces is how the previous two holes
+    in this file went unnoticed.
+    """
+    scopes: list[tuple[str, list[int]]] = []
+
+    def visit(body: list[ast.stmt], scope: str) -> None:
+        lines = _pytestmark_lines(body)
+        if len(lines) > 1:
+            scopes.append((scope, lines))
+        for node in body:
+            if isinstance(node, ast.ClassDef):
+                visit(node.body, f"{scope}::{node.name}" if scope != "<module>" else node.name)
+
+    visit(ast.parse(source).body, "<module>")
+    return scopes
+
+
 def check_file(path: Path) -> list[str]:
     source = path.read_text(encoding="utf-8")
+
+    rebound = rebound_pytestmark_scopes(source)
+    if rebound:
+        return [
+            f"{scope}: pytestmark assigned {len(lines)}x -- "
+            f"{', '.join(f'L{n}' for n in lines[:-1])} discarded, L{lines[-1]} wins. "
+            f"Use one assignment holding a list."
+            for scope, lines in rebound
+        ]
+
     file_markers = collect_file_markers(source) & APPROVED_MARKERS
     if file_markers:
         return []
@@ -137,10 +205,35 @@ def check_file(path: Path) -> list[str]:
 
 def main() -> int:
     violations: list[tuple[Path, list[str]]] = []
+
+    # The rebinding check runs over EVERY test module, not just the four
+    # taxonomy-enforced trees. It is a different rule: a second `pytestmark`
+    # assignment discards a `skipif` as readily as a taxonomy marker, and that
+    # hurts `tests/unit` and `tests/inference` just as much. Scoping it to
+    # ENFORCED_DIRS would make the guard's domain narrower than the rule it
+    # states -- the shape of both earlier holes in this file.
+    for path in sorted(TESTS_DIR.rglob("test_*.py")):
+        rebound = rebound_pytestmark_scopes(path.read_text(encoding="utf-8"))
+        if rebound:
+            violations.append(
+                (
+                    path.relative_to(REPO_ROOT),
+                    [
+                        f"{scope}: pytestmark assigned {len(lines)}x -- "
+                        f"{', '.join(f'L{n}' for n in lines[:-1])} discarded, "
+                        f"L{lines[-1]} wins. Use one assignment holding a list."
+                        for scope, lines in rebound
+                    ],
+                )
+            )
+
+    rebound_paths = {p for p, _ in violations}
     for enforced in ENFORCED_DIRS:
         if not enforced.exists():
             continue
         for path in sorted(enforced.rglob("test_*.py")):
+            if path.relative_to(REPO_ROOT) in rebound_paths:
+                continue  # already reported above; the marker read is unreliable
             offenders = check_file(path)
             if offenders:
                 violations.append((path.relative_to(REPO_ROOT), offenders))

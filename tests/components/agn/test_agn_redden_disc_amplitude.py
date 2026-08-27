@@ -18,11 +18,12 @@ import jax.numpy as jnp
 import numpy as np
 import pytest
 
-pytestmark = pytest.mark.bounds
-
 from tengri.components.agn.unified import _redden_disc
 
-pytestmark = pytest.mark.unit
+# One assignment, not two: Python rebinds the name, so a second
+# `pytestmark = ...` silently discarded the taxonomy marker and left this
+# module unselectable by `pytest -m bounds`.
+pytestmark = [pytest.mark.bounds, pytest.mark.unit]
 
 
 # Prevot+1984 SMC law: R_V = A(V)/E(B-V) = 2.72

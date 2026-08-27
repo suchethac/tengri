@@ -18,8 +18,6 @@ import pytest
 from tengri._data_setup import find_data
 from tests._jit_parity import assert_jit_matches_eager
 
-pytestmark = []
-
 # parents[4] is one level above the repo root from tests/components/agn/, so
 # this guard was permanently true and the tests below never ran (#1431).
 _GRID_PATH = find_data("cat3d_wind_torus_grid.h5")

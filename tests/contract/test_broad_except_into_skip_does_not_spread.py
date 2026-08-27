@@ -40,10 +40,31 @@ _BROAD = {"Exception", "BaseException"}
 #:
 #: Not an endorsement. #1615 counted 40 across 17 files; this is what survives
 #: after that issue's proven case was rewritten and this branch narrowed the
-#: handlers it could measure. The seven in ``test_nebular_gradients.py`` skip
-#: here on absent CLOUDY grids, so which exception they would raise on a
-#: machine that has the grids cannot be observed from here -- narrowing them
-#: blind would be a guess, which is why they are listed rather than changed.
+#: handlers it could measure.
+#:
+#: This list used to carry seven more, all in ``test_nebular_gradients.py``,
+#: excused on the reasoning that they "skip here on absent CLOUDY grids, so
+#: which exception they would raise on a machine that has the grids cannot be
+#: observed from here." That was true, but not for the stated reason: the file
+#: resolved its data directory to ``tests/data/`` and so skipped everywhere
+#: regardless of which grids were installed. With the path corrected, the two
+#: whose grids are tracked in git run on every machine, and none of the seven
+#: calls raises. All seven handlers are gone.
+#:
+#: Three more went from ``test_phase4d_threading_complete.py``, and one of them
+#: is the sharpest illustration of the class in the tree. It wrapped
+#: ``MappingsPhotoStellarBackend()`` and skipped with "instantiation failed",
+#: commented "may skip if grid data unavailable". The backend raises
+#: ``IonizingSpectrumInconsistencyError`` on purpose -- it is telling the caller
+#: that the ionizing field comes from a Starburst99 grid rather than their DSPS
+#: SSPs, and asking for an explicit ``ionizing_source_warning``. The handler
+#: filed that design decision as missing data, and the skip line said so in CI
+#: for as long as anyone cared to read it.
+#:
+#: The lesson generalizes to the entries that remain. "Cannot be observed
+#: here" is a claim about the observer, and it is worth one attempt to make
+#: the observation before recording an exemption -- an unrunnable test looks
+#: identical whether the cause is a missing grid or a bug in the test.
 KNOWN: frozenset[tuple[str, str]] = frozenset(
     {
         ("components/sfh/test_sfh_delayed.py", "test_delayed_buildable_via_sedmodel_build"),
@@ -58,26 +79,12 @@ KNOWN: frozenset[tuple[str, str]] = frozenset(
         ),
         ("contract/test_nebular_fdust.py", "test_cb19_fdust_reduces_lines"),
         ("contract/test_nebular_fdust.py", "test_cloudy_grid_fdust_reduces_lines"),
-        ("contract/test_phase4d_threading_complete.py", "test_cb19_backend_exposes_a_grid"),
-        ("contract/test_phase4d_threading_complete.py", "test_mappings_backend_exposes_a_grid"),
-        ("contract/test_phase4d_threading_complete.py", "test_phase4c_cue_threading_regression"),
         ("contract/test_presets.py", "test_preset_can_sample"),
         ("crossval/test_full_sed_crossval.py", "test_tengri_nonparametric_color_trend"),
         ("crossval/test_full_sed_crossval.py", "test_tengri_vs_cigale_skirtor_shape"),
         ("crossval/test_geovi_crossval.py", "test_converged_hamiltonian_close"),
         ("crossval/test_geovi_crossval.py", "test_posterior_stds_agree"),
         ("physics/conservation/test_filter_convolution.py", "test_matches_ssp_precompute"),
-        # Seven CLOUDY/Cue/MAPPINGS gradient tests. See the note above.
-        ("physics/gradients/test_nebular_gradients.py", "test_cb19_grad_logu"),
-        ("physics/gradients/test_nebular_gradients.py", "test_cloudy_grid_grad_logu"),
-        (
-            "physics/gradients/test_nebular_gradients.py",
-            "test_cloudy_grid_triweight_grad_at_grid_node",
-        ),
-        ("physics/gradients/test_nebular_gradients.py", "test_cloudy_grid_triweight_runs"),
-        ("physics/gradients/test_nebular_gradients.py", "test_cue_grad_logu"),
-        ("physics/gradients/test_nebular_gradients.py", "test_logu_ordering"),
-        ("physics/gradients/test_nebular_gradients.py", "test_mappings_grad_velocity"),
         ("regression/agn/test_skirtor_jit_thread_arrays_1198.py", "<module>"),
         ("regression/agn/test_vs_cigale_skirtor.py", "skirtor_component"),
         ("regression/agn/test_vs_cigale_skirtor.py", "skirtor_components_fn"),
