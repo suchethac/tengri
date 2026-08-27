@@ -85,10 +85,9 @@ _SSP_WNE = DATA_DIR / "ssp_prsc_miles_chabrier_wNE_logGasU-3.0_logGasZ0.0.h5"
 #: object to exercise.
 _BUILDABLE_NEBULAR = ["cb19", "cue"]
 
-#: What the grammar advertises. Pinned so that registering a sixth type -- or
-#: dropping one -- is a deliberate edit rather than a silent change. ``mappings``
-#: is deliberately absent: see #2070.
-_REGISTERED_NEBULAR = {"cb19", "cloudy", "cue", "none", "ssp"}
+#: What the grammar advertises. Pinned so that registering a type -- or
+#: dropping one -- is a deliberate edit rather than a silent change.
+_REGISTERED_NEBULAR = {"cb19", "cloudy", "cue", "mappings", "mappings_agn", "none", "ssp"}
 
 
 @pytest.fixture(scope="module")

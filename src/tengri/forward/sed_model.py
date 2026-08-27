@@ -2865,6 +2865,42 @@ class SEDModel:
             from tengri.components.nebular import CB19Backend
 
             self._nebular_backend = CB19Backend(ssp_data=ssp_data)
+        elif spec.nebular_mode == "mappings":
+            # MAPPINGS V photoionization grid (Flury et al. 2024). Stellar model,
+            # density structure, and ionizing source warning are configurable.
+            from tengri.components.nebular import MappingsPhotoStellarBackend
+
+            # Build kwargs from non-None user-supplied values only; constructor defaults
+            # are the single source of truth.
+            kwargs = {"ssp_data": ssp_data}
+            if spec.nebular_mappings_grid_path is not None:
+                kwargs["grid_path"] = spec.nebular_mappings_grid_path
+            if spec.nebular_mappings_model is not None:
+                kwargs["model"] = spec.nebular_mappings_model
+            if spec.nebular_mappings_density is not None:
+                kwargs["density"] = spec.nebular_mappings_density
+            if spec.nebular_mappings_ionizing_source_warning is not None:
+                kwargs["ionizing_source_warning"] = spec.nebular_mappings_ionizing_source_warning
+
+            self._nebular_backend = MappingsPhotoStellarBackend(**kwargs)
+        elif spec.nebular_mode == "mappings_agn":
+            # MAPPINGS V AGN photoionization grid (Flury et al. 2024). AGN grids
+            # use OPTXAGNF ionizing source, density structure and ionizing source
+            # warning are configurable.
+            from tengri.components.nebular import MappingsPhotoAGNBackend
+
+            # Build kwargs from non-None user-supplied values only; constructor defaults
+            # are the single source of truth.
+            kwargs = {}
+            if spec.nebular_mappings_agn_grid_path is not None:
+                kwargs["grid_path"] = spec.nebular_mappings_agn_grid_path
+            if spec.nebular_mappings_agn_density is not None:
+                kwargs["density"] = spec.nebular_mappings_agn_density
+            if spec.nebular_mappings_agn_ionizing_source_warning is not None:
+                warn_setting = spec.nebular_mappings_agn_ionizing_source_warning
+                kwargs["ionizing_source_warning"] = warn_setting
+
+            self._nebular_backend = MappingsPhotoAGNBackend(**kwargs)
         else:
             from tengri.components.nebular import BakedInBackend
 

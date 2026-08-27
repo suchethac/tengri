@@ -31,8 +31,6 @@ _REGISTRY: dict[str, str] = {
     "cloudy": "tengri.components.nebular.cloudy_precompute",
     # Feltre+2016 AGN NLR (CLOUDY c13.03)
     "feltre_nlr": "tengri.components.nebular.feltre_precompute",
-    # MAPPINGS V photoionization (stellar)
-    "mappings_v": "tengri.components.nebular.mappings_photo_precompute",
     # MAPPINGS shock
     "mappings_shock": "tengri.components.nebular.mappings_shock_precompute",
     # Dust IR emission, template-based models
@@ -72,6 +70,8 @@ _REGISTRY: dict[str, str] = {
     "xray_corona_lopez24": "tengri.components.xray.xray_precompute",
     # CB19 (3MdB_17) photoionization grid
     "cb19": "tengri.components.nebular.cb19_precompute",
+    # MAPPINGS V photoionization (stellar and AGN) grids evaluate at runtime only.
+    # Issue #2078: both backends have defective adapters that fail under JIT.
     # AGN BLR / NLR Gaussian-line composers (filter-projection precompute only)
     "blr": "tengri.components.agn.blr_precompute",
     "nlr_gaussian": "tengri.components.agn.nlr_gaussian_precompute",

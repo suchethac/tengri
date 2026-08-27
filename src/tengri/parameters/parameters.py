@@ -754,13 +754,34 @@ class Parameters:
         # read via ``pred.lines.get(wavelength)``. See #303.
         self.cue_full_catalog = kwargs.pop("cue_full_catalog", False)
         self.neb_ionization = kwargs.pop("neb_ionization", "ssp")
+        # MAPPINGS V photoionization stellar backend configuration
+        self.nebular_mappings_model = kwargs.pop("nebular_mappings_model", None)
+        self.nebular_mappings_density = kwargs.pop("nebular_mappings_density", None)
+        self.nebular_mappings_ionizing_source_warning = kwargs.pop(
+            "nebular_mappings_ionizing_source_warning", None
+        )
+        self.nebular_mappings_grid_path = kwargs.pop("nebular_mappings_grid_path", None)
+        # MAPPINGS V photoionization AGN backend configuration
+        self.nebular_mappings_agn_density = kwargs.pop("nebular_mappings_agn_density", None)
+        self.nebular_mappings_agn_ionizing_source_warning = kwargs.pop(
+            "nebular_mappings_agn_ionizing_source_warning", None
+        )
+        self.nebular_mappings_agn_grid_path = kwargs.pop("nebular_mappings_agn_grid_path", None)
 
         self._nebular_cb19 = False
+        self._nebular_mappings = False
+        self._nebular_mappings_agn = False
         if nebular == "cue":
             nebular_cue = True
             nebular = False
         elif nebular == "cb19":
             self._nebular_cb19 = True
+            nebular = False
+        elif nebular == "mappings":
+            self._nebular_mappings = True
+            nebular = False
+        elif nebular == "mappings_agn":
+            self._nebular_mappings_agn = True
             nebular = False
         elif nebular == "cloudy":
             nebular = True
@@ -774,10 +795,18 @@ class Parameters:
             nebular = True
 
         # Mutual exclusion
-        n_set = sum([bool(nebular_ssp), bool(nebular), bool(nebular_cue)])
+        n_set = sum(
+            [
+                bool(nebular_ssp),
+                bool(nebular),
+                bool(nebular_cue),
+                bool(self._nebular_mappings),
+                bool(self._nebular_mappings_agn),
+            ]
+        )
         if n_set > 1:
             raise ValueError(
-                "nebular_ssp, nebular (CLOUDY), and nebular_cue are "
+                "nebular_ssp, nebular (CLOUDY), nebular_cue, mappings, and mappings_agn are "
                 "mutually exclusive: choose one."
             )
 
@@ -790,6 +819,10 @@ class Parameters:
                 self.cue_weights_path = str(_DEFAULT_CUE_WEIGHTS_PATH)
         elif self._nebular_cb19:
             self.nebular_mode = "cb19"
+        elif self._nebular_mappings:
+            self.nebular_mode = "mappings"
+        elif self._nebular_mappings_agn:
+            self.nebular_mode = "mappings_agn"
         elif nebular:
             self.nebular_mode = "cloudy"
             if self.cloudy_grid_path is None:

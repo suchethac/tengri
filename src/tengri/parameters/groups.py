@@ -2927,6 +2927,30 @@ def _translate_neb(neb_dict: dict, result: dict) -> None:
             result["cloudy_grid_path"] = str(neb_dict["grid"])
     elif neb_type == "cb19":
         result["nebular"] = "cb19"
+    elif neb_type == "mappings":
+        result["nebular"] = "mappings"
+        # Pass only what the user explicitly wrote; constructor defaults are the
+        # single source of truth.
+        if "model" in neb_dict:
+            result["nebular_mappings_model"] = neb_dict["model"]
+        if "density" in neb_dict:
+            result["nebular_mappings_density"] = neb_dict["density"]
+        if "ionizing_source_warning" in neb_dict:
+            warn_key = "nebular_mappings_ionizing_source_warning"
+            result[warn_key] = neb_dict["ionizing_source_warning"]
+        if "grid" in neb_dict:
+            result["nebular_mappings_grid_path"] = str(neb_dict["grid"])
+    elif neb_type == "mappings_agn":
+        result["nebular"] = "mappings_agn"
+        # Pass only what the user explicitly wrote; constructor defaults are the
+        # single source of truth.
+        if "density" in neb_dict:
+            result["nebular_mappings_agn_density"] = neb_dict["density"]
+        if "ionizing_source_warning" in neb_dict:
+            warn_key = "nebular_mappings_agn_ionizing_source_warning"
+            result[warn_key] = neb_dict["ionizing_source_warning"]
+        if "grid" in neb_dict:
+            result["nebular_mappings_agn_grid_path"] = str(neb_dict["grid"])
 
 
 def _translate_shock(shock_dict: dict, result: dict) -> None:
@@ -3833,7 +3857,25 @@ def _validate_user_keys(
         if top_key == "neb" and top_val.get("type") == "cue":
             param_names = param_names | _OPTIONAL_NEB_PARAM_NAMES
 
-        _check_dict_keys(top_key, top_val, group_allowed | param_names, param_partition)
+        # Type-specific structural keys for MAPPINGS backends: different neb
+        # types accept different structural keys in the neb group. For
+        # "mappings" (stellar), allow {model, density, ionizing_source_warning,
+        # grid}. For "mappings_agn" (AGN), allow {density,
+        # ionizing_source_warning, grid} but NOT model (5D AGN grid has no
+        # model axis).
+        neb_type_specific_keys = frozenset()
+        if top_key == "neb":
+            neb_type = top_val.get("type")
+            if neb_type == "mappings":
+                neb_type_specific_keys = frozenset(
+                    {"model", "density", "ionizing_source_warning", "grid"}
+                )
+            elif neb_type == "mappings_agn":
+                neb_type_specific_keys = frozenset({"density", "ionizing_source_warning", "grid"})
+
+        _check_dict_keys(
+            top_key, top_val, group_allowed | param_names | neb_type_specific_keys, param_partition
+        )
 
         # Recurse into sub-block dicts.
         if top_key == "igm" and isinstance(top_val.get("dla"), dict):

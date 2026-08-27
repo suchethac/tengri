@@ -224,7 +224,7 @@ dust_emission={'type': 'dale2014', 'all_params': FIXED, 'eta_balance': Fixed(1.0
 ### Nebular emission: `neb`
 
 **Structural keys:**
-- `'type'` — Backend: `'cue'` (Cue, default), `'cloudy'` (CLOUDY, slower, higher fidelity), `'none'` (off). Menu: `tengri.list_nebular_backends()`.
+- `'type'` — Backend: `'cue'` (Cue, default), `'cloudy'` (CLOUDY, slower, higher fidelity), `'cb19'` (Charlot & Bruzual 2019), `'mappings'` (MAPPINGS V stellar), `'mappings_agn'` (MAPPINGS V AGN), or `'none'` (off). Menu: `tengri.list_nebular_backends()`.
 - `'all_params'` — Wildcard: set all parameters to FREE or FIXED. Only `all_params` spelling (not `'*'`).
 - `'full_catalog'` — Line catalog scope: bool, default backend-dependent.
 - `'grid'` — For CLOUDY: grid specification (dict with keys like `'logz'`, `'logU'`, etc.).
