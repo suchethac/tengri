@@ -4037,6 +4037,17 @@ class SEDModel:
         else:
             filter_trans_id = "none"
 
+        # Filter wavelength VALUES (not just shape). Issue #2068: the photometry closure
+        # bakes the filter wavelength arrays, so two models with same transmission and
+        # shape but different wavelength grids must have different signatures.
+        # Otherwise the second model silently reuses the first's compiled photometry
+        # which has baked the first model's wavelengths, producing silent photometry
+        # errors (measured: optical-vs-IR top-hats produce identical sigs; they should not).
+        if self.filter_waves is not None and self.filter_waves:
+            filter_wave_id = hash(tuple(np.asarray(w).tobytes() for w in self.filter_waves))
+        else:
+            filter_wave_id = "none"
+
         # Filter-convolution convention (ADR-0017). The photometry channel
         # closes over it, so models that differ only in convention must not
         # share a compiled observables closure.
@@ -4214,6 +4225,13 @@ class SEDModel:
         has_spectroscopy = self.observation is not None and self.observation.can_do_spectroscopy
         if has_spectroscopy:
             spec_wave_shape = tuple(self.observation.spectroscopy.wave_obs.shape)
+            # Spectroscopy wavelength VALUES (not just shape). Issue #2068: the
+            # spectrum projector closure bakes the spectroscopy wavelength array,
+            # so two models with same pixel count but different wavelength grids
+            # must have different signatures. Otherwise the second model silently
+            # reuses the first's compiled spectrum which has baked the first
+            # model's wavelengths, producing silent spectroscopy errors.
+            spec_wave_id = hash(np.asarray(self.observation.spectroscopy.wave_obs).tobytes())
             sigma_lib_kms = float(self._sigma_lib_kms)
             lsf_resolution = self._lsf_resolution
             # The calibration order is structural: the compiled kernel closes over
@@ -4248,6 +4266,7 @@ class SEDModel:
             )
         else:
             spec_wave_shape = ()
+            spec_wave_id = "none"
             sigma_lib_kms = 0.0
             lsf_resolution = None
             calibration_order = 0
@@ -4427,6 +4446,7 @@ class SEDModel:
             filter_wave_shape,
             filter_trans_dtype,
             filter_trans_id,
+            filter_wave_id,
             phot_convention,
             dust_model,
             dust_scheme,
@@ -4466,6 +4486,7 @@ class SEDModel:
             catalog_z_range,
             has_spectroscopy,
             spec_wave_shape,
+            spec_wave_id,
             sigma_lib_kms,
             lsf_resolution,
             calibration_order,
