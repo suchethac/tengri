@@ -2905,7 +2905,6 @@ class SEDModel:
         self._agn_luminosity_mode = False
 
         delta = {}
-        self._needs_agn_lbol_flat_check = False  # Flag for deferred measurement
         if self._agn_model:
             agn_dists = getattr(spec, "_distributions", {})
             agn_lbol_dist = agn_dists.get("agn_log_lbol")
@@ -3071,6 +3070,26 @@ class SEDModel:
         # "if the forward cannot be evaluated at build, raise -- do not fall back".
         sed_lo = self._predict_rest_sed(params_lo)
         sed_hi = self._predict_rest_sed(params_hi)
+
+        # F1: Check for non-finite values (NaN, Inf). If either SED contains non-finite
+        # values, the measurement cannot be made and the model must be fixed.
+        # (Without this check, NaN comparisons silently pass as "not flat".)
+        if not jnp.all(jnp.isfinite(sed_lo.sed)):
+            raise ConfigError(
+                f"Could not measure agn_log_lbol flatness at build time: "
+                f"_predict_rest_sed produced non-finite (NaN/Inf) values at "
+                f"agn_log_lbol={lo} with agn_ir_frac={frac_mid}. "
+                f"The forward model is not evaluable in this configuration. "
+                f"Fix the model and retry."
+            )
+        if not jnp.all(jnp.isfinite(sed_hi.sed)):
+            raise ConfigError(
+                f"Could not measure agn_log_lbol flatness at build time: "
+                f"_predict_rest_sed produced non-finite (NaN/Inf) values at "
+                f"agn_log_lbol={hi} with agn_ir_frac={frac_mid}. "
+                f"The forward model is not evaluable in this configuration. "
+                f"Fix the model and retry."
+            )
 
         # Check if SEDs are identical to within machine precision (1e-10 relative).
         # The direction is flat when all SED differences are within this tolerance.

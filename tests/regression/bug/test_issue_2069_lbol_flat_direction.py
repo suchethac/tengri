@@ -10,6 +10,8 @@ keep the direction live even under cigale_joint + skirtor.
 """
 
 import warnings
+from collections import namedtuple
+from unittest import mock
 
 import jax
 import jax.numpy as jnp
@@ -320,3 +322,28 @@ class TestLBolFlatDirectionRefusal:
         params = spec.sample(jax.random.PRNGKey(42))
         sed_result = model._predict_rest_sed(params)
         assert sed_result.sed is not None
+
+    def test_non_finite_sed_raises_non_finite_message(
+        self, issue_spec, synthetic_ssp_wide, simple_filters
+    ):
+        """Non-finite SED raises ConfigError with non-finite message (F1)."""
+        # Monkeypatch _predict_rest_sed to return NaN
+        SEDResult = namedtuple("SEDResult", ["sed"])
+        nan_sed = jnp.full((100,), jnp.nan)
+
+        with (
+            mock.patch.object(SEDModel, "_predict_rest_sed", return_value=SEDResult(sed=nan_sed)),
+            pytest.raises(ConfigError) as exc_info,
+            warnings.catch_warnings(),
+        ):
+            warnings.simplefilter("ignore")
+            SEDModel(issue_spec, synthetic_ssp_wide, filters=simple_filters)
+
+        error_msg = str(exc_info.value)
+        # Should report non-finite error, NOT the flat-direction error
+        assert "non-finite" in error_msg.lower(), (
+            f"Guard must report non-finite error, not flat-direction error. Got: {error_msg}"
+        )
+        assert "bit-identical" not in error_msg and "identical to within" not in error_msg, (
+            "Should not mention flat direction when SED is non-finite"
+        )
