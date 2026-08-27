@@ -25,8 +25,9 @@ from pathlib import Path
 import jax.numpy as jnp
 
 from tengri.observation.photometry import FilterCurve
+from tengri.registry import _RegistryTable
 
-__all__ = ["BUNDLED_FILTER_REGISTRY", "load_bundled_filter"]
+__all__ = ["BUNDLED_FILTER_REGISTRY", "list_bundled_filters", "load_bundled_filter"]
 
 # Package holding the .dat files, and the bands it provides.
 _SEVENDT_PACKAGE = "tengri.data.filters_7dt"
@@ -104,12 +105,41 @@ def load_bundled_filter(name: str) -> FilterCurve:
     return FilterCurve(wave=jnp.array(wave), trans=jnp.array(trans), name=name)
 
 
-def list_bundled_filters() -> tuple[str, ...]:
-    """Return every bundled filter name, sorted.
+def list_bundled_filters() -> _RegistryTable:
+    """List the measured curves that ship inside the package.
 
     Returns
     -------
-    tuple of str
-        Registered names, e.g. ``("7dt_g", "7dt_i", ...)``.
+    _RegistryTable
+        One row per curve, with columns ``name`` (the alias
+        :func:`tengri.load_filter` accepts), ``kind``, ``facility`` and
+        ``band``. Prints as a table, also renders as HTML in Jupyter; use
+        ``.names()`` for the bare names.
+
+    Notes
+    -----
+    These are measured total system response, not approximations, so unlike
+    :func:`list_synthetic_bands` they also appear in
+    :func:`tengri.list_filters` alongside the SVO curves. This menu answers the
+    narrower question of which curves travel with the package rather than being
+    fetched and cached.
+
+    Not JAX-compatible; a discovery helper, not a forward-model function.
+
+    Examples
+    --------
+    >>> list_bundled_filters().names()[:2]
+    ['7dt_g', '7dt_i']
     """
-    return tuple(sorted(BUNDLED_FILTER_REGISTRY))
+    rows = []
+    for name in sorted(BUNDLED_FILTER_REGISTRY):
+        facility, _, band = name.partition("_")
+        rows.append(
+            {
+                "name": name,
+                "kind": "bundled_filter",
+                "facility": facility.upper(),
+                "band": band,
+            }
+        )
+    return _RegistryTable(rows)

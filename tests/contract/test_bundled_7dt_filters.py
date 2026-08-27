@@ -54,7 +54,7 @@ def test_all_twenty_three_bands_are_registered():
     """The delivery is 3 broad plus 20 medium. All of it, or the set is wrong."""
     from tengri.observation.filters import list_bundled_filters
 
-    names = set(list_bundled_filters())
+    names = set(list_bundled_filters().names())
 
     assert len(names) == 23
     assert names == set(DELIVERED_LAM_CEN)
