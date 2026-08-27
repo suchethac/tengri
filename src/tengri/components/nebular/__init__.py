@@ -149,6 +149,18 @@ register_nebular_model(
     citation="Charlot & Bruzual 2019 / Martinez-Paredes+2023 (3MdB_17)",
     short_doc="6D CB19 lines-only nebular grid (CB19Backend)",
 )(CB19Backend)
+register_nebular_model(
+    "mappings",
+    citation="Flury et al. 2024 (MAPPINGS V stellar grids, Zenodo 14140949)",
+    status="experimental",
+    short_doc="Stellar: refuses until #2082 (grid 51% NaN)",
+)(MappingsPhotoStellarBackend)
+register_nebular_model(
+    "mappings_agn",
+    citation="Flury et al. 2024 (MAPPINGS V AGN grids, Zenodo 14140949)",
+    status="experimental",
+    short_doc="AGN: refuses until #2082 (model protocol incomplete)",
+)(MappingsPhotoAGNBackend)
 
 
 __all__ = [

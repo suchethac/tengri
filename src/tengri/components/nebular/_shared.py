@@ -719,14 +719,19 @@ def _interp_index_weight(
 
     Notes
     -----
-    **JIT-compatible**: yes, all operations use ``jnp`` primitives.
+    **JIT-compatible**: yes, all operations use ``jnp`` primitives, including
+    ``jnp.take`` for safe indexing with traced values (e.g., inside vmap).
 
     """
     x_clipped = jnp.clip(x, grid[0], grid[-1])
     idx = jnp.searchsorted(grid, x_clipped, side="right") - 1
     idx = jnp.clip(idx, 0, len(grid) - 2)
-    dx = grid[idx + 1] - grid[idx]
-    w = jnp.where(dx > 0, (x_clipped - grid[idx]) / dx, 0.0)
+    # Use jnp.take() for JAX-safe indexing with traced indices (e.g., inside vmap).
+    # Direct indexing grid[idx + 1] fails when idx is a traced value (CVE found while wiring #2070).
+    grid_at_idx = jnp.take(grid, idx)
+    grid_at_idx_plus_1 = jnp.take(grid, idx + 1)
+    dx = grid_at_idx_plus_1 - grid_at_idx
+    w = jnp.where(dx > 0, (x_clipped - grid_at_idx) / dx, 0.0)
     return idx, w
 
 

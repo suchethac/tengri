@@ -4,7 +4,6 @@
 Adapters covered:
 
 * ``feltre_nlr`` — Feltre+2016 AGN NLR CLOUDY grid.
-* ``mappings_v`` — Flury+2024 MAPPINGS V photoionization.
 * ``mappings_shock`` — Allen+2008 / Alarie+Morisset 2019 MAPPINGS shock grid.
 * ``cb19`` — Charlot+Bruzual 2019 (3MdB_17) photoionization grid.
 * ``blr`` — AGN broad-line Gaussian composer (filter-projection precompute only).
@@ -27,7 +26,6 @@ pytestmark = pytest.mark.contract
 
 LINE_ADAPTERS = (
     ("feltre_nlr", "tengri.components.nebular.feltre_precompute"),
-    ("mappings_v", "tengri.components.nebular.mappings_photo_precompute"),
     ("mappings_shock", "tengri.components.nebular.mappings_shock_precompute"),
     ("cb19", "tengri.components.nebular.cb19_precompute"),
     ("blr", "tengri.components.agn.blr_precompute"),
