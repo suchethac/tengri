@@ -1992,6 +1992,7 @@ def relagn_disc_from_grid(
         tuple(jnp.asarray(e) for e in grid["edges"]),
         point,
         scatters=grid["scatters"],
+        index_space_interp=True,
     )
     # Interpolate grid wavelength -> observation wavelength
     lnu_interp = resample_template(
