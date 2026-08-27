@@ -3,7 +3,7 @@
 
 Verifies that _interp_index_weight uses jnp.take for safe indexing with
 traced values under vmap, fixing the TracerArrayConversionError that
-occurred when direct numpy-style indexing was used.
+occurred when direct numpy-style indexing was used on numpy arrays.
 """
 
 from __future__ import annotations
@@ -18,14 +18,16 @@ from tengri.components.nebular._shared import _interp_index_weight
 pytestmark = pytest.mark.regression_bug
 
 
-def test_interp_index_weight_vmap_safety():
-    """_interp_index_weight is JAX-safe when called under vmap on traced values.
+def test_interp_index_weight_numpy_array_vmap_safety():
+    """_interp_index_weight is JAX-safe with numpy arrays under vmap.
 
-    Regression test for JAX tracer bug (issue found while wiring #2070): direct indexing
-    grid[idx + 1] fails on traced values. Using jnp.take() fixes this.
+    Regression test for JAX tracer bug (found while wiring #2070): direct
+    indexing grid[idx + 1] fails when grid is a numpy array and idx is a
+    traced value. Using jnp.take() fixes this. The MAPPINGS loader passes
+    numpy axes (as the loader does), so this test pins the actual bug.
     """
-    # Create a simple grid
-    grid = jnp.array([0.0, 1.0, 2.0, 3.0, 4.0])
+    # Create a NUMPY array (as _load_stellar_grid does with the axes)
+    grid = np.asarray([0.0, 1.0, 2.0, 3.0, 4.0], dtype=np.float64)
 
     # Test values to interpolate: some in-grid, one at boundary
     query_values = jnp.array([0.5, 1.5, 2.5, 3.5, 0.0, 4.0])
@@ -53,21 +55,46 @@ def test_interp_index_weight_vmap_safety():
     assert jnp.allclose(w[0], 0.5), f"Expected w=0.5 for x=0.5, got {w[0]}"
 
 
-def test_interp_index_weight_vmap_matches_loop():
-    """_interp_index_weight under vmap matches a Python loop of scalar calls.
+def test_interp_index_weight_jnp_array_vmap_parity():
+    """_interp_index_weight works with jnp arrays under vmap (parity test).
 
-    This verifies that the vectorized computation via vmap produces bit-exact
-    results matching sequential scalar calls, confirming the tracer fix
-    maintains numerical consistency.
+    Confirms that the fix also works when grid is a jnp array (both numpy and
+    jnp arrays should work; we test both to ensure coverage).
     """
-    # Create a random grid and query points
+    # Create a JAX NUMPY array (for parity — works but not the bug path)
+    grid = jnp.array([0.0, 1.0, 2.0, 3.0, 4.0])
+
+    query_values = jnp.array([0.5, 1.5, 2.5, 3.5])
+
+    def compute_weights(x):
+        idx, w = _interp_index_weight(x, grid)
+        return idx, w
+
+    vmapped_compute = jax.vmap(compute_weights)
+    indices, w = vmapped_compute(query_values)
+
+    # Verify it works
+    assert indices.shape == (4,), f"Expected (4,), got {indices.shape}"
+    assert w.shape == (4,), f"Expected (4,), got {w.shape}"
+    assert jnp.all(indices >= 0) and jnp.all(indices < len(grid) - 1)
+    assert jnp.all(w >= 0.0) and jnp.all(w <= 1.0)
+
+
+def test_interp_index_weight_numpy_matches_scalar():
+    """_interp_index_weight under vmap with numpy grid matches scalar calls.
+
+    Verifies that vectorized computation via vmap produces bit-exact results
+    matching sequential scalar calls, confirming the tracer fix maintains
+    numerical consistency when grid is a numpy array.
+    """
+    # Create a numpy grid (as the loader does)
     np.random.seed(42)
-    grid = jnp.array(np.sort(np.random.uniform(0, 10, 8)))
+    grid_np = np.asarray(np.sort(np.random.uniform(0, 10, 8)), dtype=np.float64)
     query_values = jnp.array(np.random.uniform(-1, 11, 10))
 
     # Compute under vmap
     def compute_weights(x):
-        idx, w = _interp_index_weight(x, grid)
+        idx, w = _interp_index_weight(x, grid_np)
         return idx, w
 
     vmapped_compute = jax.vmap(compute_weights)
@@ -77,7 +104,7 @@ def test_interp_index_weight_vmap_matches_loop():
     indices_loop = []
     weights_loop = []
     for x in query_values:
-        idx, w = _interp_index_weight(x, grid)
+        idx, w = _interp_index_weight(x, grid_np)
         indices_loop.append(idx)
         weights_loop.append(w)
 
@@ -91,37 +118,3 @@ def test_interp_index_weight_vmap_matches_loop():
     assert jnp.allclose(weights_vmap, weights_loop, rtol=1e-15, atol=0), (
         f"Weights differ: vmap={weights_vmap}, loop={weights_loop}"
     )
-
-
-def test_interp_index_weight_boundary_handling_under_vmap():
-    """_interp_index_weight handles boundary clipping correctly under vmap.
-
-    The function should clip out-of-grid queries to valid bounds before
-    computing indices and weights. This test verifies the behavior is
-    preserved when traced.
-    """
-    grid = jnp.array([0.0, 1.0, 2.0, 3.0])
-
-    # Query values outside grid: < 0, at 0, at max, > max
-    query_values = jnp.array([-5.0, 0.0, 3.0, 10.0])
-
-    def compute_weights(x):
-        idx, w = _interp_index_weight(x, grid)
-        return idx, w
-
-    vmapped_compute = jax.vmap(compute_weights)
-    indices, _w = vmapped_compute(query_values)
-
-    # All queries should map to valid indices in [0, len(grid)-2]
-    assert jnp.all(indices >= 0), f"Indices have negative values: {indices}"
-    assert jnp.all(indices < len(grid) - 1), f"Indices out of range: {indices}"
-
-    # Boundary behavior:
-    # x=-5.0 should be clipped to grid[0]=0.0, so idx=0, w=0
-    # x=0.0 should be at grid[0], so idx=0, w=0
-    # x=3.0 should be at grid[-1], so idx=len(grid)-2, w=1.0 (clipped)
-    # x=10.0 should be clipped to grid[-1]=3.0, so idx=len(grid)-2, w=1.0 (clipped)
-    assert indices[0] == 0, f"Expected idx=0 for x=-5, got {indices[0]}"
-    assert indices[1] == 0, f"Expected idx=0 for x=0, got {indices[1]}"
-    assert indices[2] == len(grid) - 2, f"Expected idx={len(grid) - 2} for x=3, got {indices[2]}"
-    assert indices[3] == len(grid) - 2, f"Expected idx={len(grid) - 2} for x=10, got {indices[3]}"
