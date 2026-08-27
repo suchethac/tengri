@@ -40,9 +40,9 @@ allowlist would be a third option that records neither.
 Implementation notes
 --------------------
 
-The guard finds balanced-parenthesis spans of jax.jit(, jax.vmap(, bare jit(, bare vmap(,
-dropping full-line comments (lines whose stripped form starts with #) first. Inside each
-span it flags:
+The guard finds balanced-parenthesis spans of jax.jit(, jax.vmap(, jax.grad(, jax.value_and_grad(,
+bare jit(, bare vmap(, bare grad(, bare value_and_grad(, dropping full-line comments (lines whose
+stripped form starts with #) first. Inside each span it flags:
 
 (a) any ``.predict`` not followed by an identifier character (i.e., bare rich accessor:
     ``.predict()``, ``.predict)``, ``.predict,``, etc.)
@@ -156,7 +156,11 @@ def _extract_balanced_span(text: str, start_pos: int) -> str:
 
 
 def _find_jax_transforms(text: str) -> list[tuple[int, int, str]]:
-    """Find all jax.jit, jax.vmap, bare jit, bare vmap spans.
+    """Find all jax.jit, jax.vmap, jax.grad, jax.value_and_grad, and bare forms.
+
+    Finds balanced-parenthesis spans of jax.jit(, jax.vmap(, jax.grad(,
+    jax.value_and_grad(, bare jit(, bare vmap(, bare grad(, and bare
+    value_and_grad( expressions.
 
     Returns list of (start_pos, end_pos, span_text) tuples for each transform.
     Handles multi-line spans and avoids duplicates from nested transforms.
@@ -165,8 +169,12 @@ def _find_jax_transforms(text: str) -> list[tuple[int, int, str]]:
     patterns = [
         r"\bjax\.jit\s*\(",
         r"\bjax\.vmap\s*\(",
+        r"\bjax\.grad\s*\(",
+        r"\bjax\.value_and_grad\s*\(",
         r"\bjit\s*\(",
         r"\bvmap\s*\(",
+        r"\bgrad\s*\(",
+        r"\bvalue_and_grad\s*\(",
     ]
 
     for pattern in patterns:
