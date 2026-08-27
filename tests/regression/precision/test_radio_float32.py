@@ -66,7 +66,7 @@ def _model(ssp, radio):
             "disc": {"type": "powerlaw", "all_params": FIXED},
             "torus": {"type": "skirtor", "all_params": FIXED},
             "norm": "cigale_joint",
-            "log_lbol": Uniform(9.0, 13.0),
+            "log_lbol": Fixed(11.0),  # #2069: pinned to break flat direction
             "fracAGN": 0.1,
         },
         radio=radio,
