@@ -82,7 +82,7 @@ def _build(ssp, obs):
             "disc": {"type": "multicolor", "all_params": FIXED},
             "torus": {"type": "skirtor", "all_params": FIXED},
             "norm": "cigale_joint",
-            "log_lbol": Uniform(9.0, 12.0),
+            "log_lbol": Fixed(10.5),  # #2069: pinned to break flat direction
             "fracAGN": 0.1,
         },
         redshift=Fixed(0.1),

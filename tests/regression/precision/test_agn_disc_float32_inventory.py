@@ -112,7 +112,7 @@ def _sed_agn(ssp, disc, dtype):
             "disc": {"type": disc, "all_params": FIXED},
             "torus": {"type": "skirtor", "all_params": FIXED},
             "norm": "cigale_joint",
-            "log_lbol": Uniform(9.0, 13.0),
+            "log_lbol": Fixed(11.0),  # #2069: pinned to break flat direction
             "fracAGN": 0.1,
         },
         redshift=Fixed(0.1),

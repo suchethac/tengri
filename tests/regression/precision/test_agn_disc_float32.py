@@ -182,7 +182,7 @@ def _composable_intrinsics(ssp, dtype):
             "disc": {"type": "multicolor", "all_params": FIXED},
             "torus": {"type": "skirtor", "all_params": FIXED},
             "norm": "cigale_joint",
-            "log_lbol": Uniform(9.0, 13.0),
+            "log_lbol": Fixed(11.0),  # #2069: pinned to break flat direction
             "fracAGN": 0.1,
         },
         redshift=Fixed(0.1),
@@ -264,7 +264,7 @@ def test_multicolor_disc_agn_fit_gradient_finite_in_float32(ssp_bare):
                 "disc": {"type": "multicolor", "all_params": FIXED},
                 "torus": {"type": "skirtor", "all_params": FIXED},
                 "norm": "cigale_joint",
-                "log_lbol": Uniform(9.0, 12.0),
+                "log_lbol": Fixed(11.0),  # #2069: pinned to break flat direction
                 "fracAGN": 0.1,
             },
             redshift=Fixed(0.1),

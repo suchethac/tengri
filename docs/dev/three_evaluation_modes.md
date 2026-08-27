@@ -156,6 +156,7 @@ spec = Parameters(
     agn_torus_block="skirtor",
     agn_attenuation_block="smc_prevot",
     agn_log_lbol=Uniform(9.42, 13.42),
+    agn_ir_frac=Fixed(0.0),  # #2069: cigale_joint ties amplitude to agn_ir_frac; fix at 0 to leave lbol free
     agn_axis_grids={
         "agn_grahsp_l5100": np.logspace(43, 46, 5),
     },

@@ -62,6 +62,7 @@ def _intrinsic_luminosities(ssp, disc, lbol):
                 "norm": "cigale_joint",
                 "log_lbol": Uniform(9.0, 13.0),
                 "fracAGN": 0.1,
+                "ir_frac": Fixed(0.0),  # #2069: break flat direction while preserving lbol freedom
             },
             redshift=Fixed(0.1),
         )
