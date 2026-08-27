@@ -355,3 +355,59 @@ class TestIssue2068FilterWaveSignature:
         assert not bool(jnp.all(opt_phot == shifted_phot)), (
             "Shifted filter wavelengths should produce different photometry"
         )
+
+    def test_only_last_filter_shifted_produces_different_signature(self, synthetic_ssp):
+        """Only the third filter's wavelength shifts; first two are identical.
+
+        Regression test for mutant: 'hash only the first filter's wavelength'.
+        The mutant hashes filter_waves[0] only, missing changes to other filters.
+
+        This test ensures every filter's wavelength content contributes to the
+        signature by shifting only the last filter, keeping the first two identical.
+
+        Before the fix: signatures identical (if mutant applied).
+        After the fix (full hash): signatures differ.
+        """
+        # Three filters, only the third one is shifted
+        wave_1 = jnp.linspace(4000, 5000, 50)
+        wave_2 = jnp.linspace(5500, 6500, 50)
+        wave_3_base = jnp.linspace(7000, 8000, 50)
+        wave_3_shifted = jnp.linspace(7500, 8500, 50)
+        trans = jnp.ones(50, dtype=jnp.float64) * 0.5
+
+        base_filters = [
+            FilterCurve(wave=wave_1, trans=trans, name="b1"),
+            FilterCurve(wave=wave_2, trans=trans, name="b2"),
+            FilterCurve(wave=wave_3_base, trans=trans, name="b3_base"),
+        ]
+
+        shifted_third_filters = [
+            FilterCurve(wave=wave_1, trans=trans, name="b1"),
+            FilterCurve(wave=wave_2, trans=trans, name="b2"),
+            FilterCurve(wave=wave_3_shifted, trans=trans, name="b3_shifted"),
+        ]
+
+        spec = Parameters(
+            redshift=0.3,
+            sfh_dpl_alpha=1.5,
+            sfh_dpl_beta=1.0,
+            sfh_dpl_tau_gyr=2.0,
+            sfh_dpl_age_gyr=2.0,
+            sfh_dpl_log_total_mass=10.5,
+            met_logzsol=0.0,
+            dust_tau_bc=0.1,
+            dust_tau_diff=0.2,
+        )
+
+        base_obs = Observation(photometry=Photometry(filters=base_filters))
+        base_model = SEDModel(spec, synthetic_ssp, observation=base_obs)
+        base_sig = base_model.compile_signature()
+
+        shifted_third_obs = Observation(photometry=Photometry(filters=shifted_third_filters))
+        shifted_third_model = SEDModel(spec, synthetic_ssp, observation=shifted_third_obs)
+        shifted_third_sig = shifted_third_model.compile_signature()
+
+        # Primary assertion: signatures must differ
+        assert base_sig != shifted_third_sig, (
+            "Shifting only the third filter's wavelength should change signature"
+        )
