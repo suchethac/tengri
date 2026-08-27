@@ -1880,6 +1880,13 @@ class SEDModel:
         # evaluation, so it is safe on every build.
         self._warn_if_wave_precomp_dust_blue_bias()
 
+        # #2069: Measure whether agn_log_lbol is flat under cigale_joint + skirtor.
+        # This check was deferred from _init_agn until after the model is fully
+        # constructed and predict_photometry is available. Run it before feature
+        # precomp so errors are reported at the top of the build flow.
+        if self._needs_agn_lbol_flat_check:
+            self._check_agn_lbol_flat_direction(self.spec)
+
         # The emission-line precompute, if the astronomer asked for one. Last,
         # because it needs the nebular backend (``_init_nebular``) and the
         # component chain both to exist.
@@ -2880,6 +2887,11 @@ class SEDModel:
         dict[str, tuple[str, float, float]]
             Parameter map deltas for AGN components.
         """
+        # #2069 (F3): Initialize AGN flat-check attributes explicitly before _init_agn
+        self._needs_agn_lbol_flat_check = False
+        self._agn_lbol_dist = None
+        self._agn_ir_frac_dist = None
+
         self._agn_model = getattr(spec, "agn_model", None)
         # Static block selectors for the "composable" AGN recipe; default to
         # "none" so non-composable models receive harmless no-op selectors.
@@ -2893,6 +2905,7 @@ class SEDModel:
         self._agn_luminosity_mode = False
 
         delta = {}
+        self._needs_agn_lbol_flat_check = False  # Flag for deferred measurement
         if self._agn_model:
             agn_dists = getattr(spec, "_distributions", {})
             agn_lbol_dist = agn_dists.get("agn_log_lbol")
@@ -2902,13 +2915,10 @@ class SEDModel:
             self._agn_luminosity_mode = lbol_is_free and not frac_is_free
 
             # #2069: Refuse free agn_log_lbol under cigale_joint + skirtor when
-            # agn_ir_frac can move above zero AND no other blocks consume
-            # agn_log_lbol (flat likelihood direction). The CIGALE coupling ties
-            # disc/torus/polar to a single agn_power reference via fixed SKIRTOR
-            # template ratios, so moving agn_log_lbol has no effect when agn_ir_frac > 0.
-            # But polar, NLR, BLR, FeII blocks all consume agn_log_lbol directly
-            # (runner.py lines ~582-598, ~650-680), so they keep the direction live.
-            # This is invisible to samplers when consumers are inactive; raise loudly.
+            # agn_ir_frac can move above zero. Check at build time by measuring
+            # whether the SED is identical at upper and lower bounds of agn_log_lbol.
+            # If identical, the direction is flat; raise loudly. The measurement is
+            # deferred until after the model is fully constructed (line ~1808 of __init__).
             torus_is_skirtor = self._agn_torus_block == "skirtor" or self._agn_model == "skirtor"
             agn_norm_is_cigale_joint = self._agn_norm == "cigale_joint"
             if torus_is_skirtor and agn_norm_is_cigale_joint and lbol_is_free:
@@ -2918,31 +2928,11 @@ class SEDModel:
                     and agn_ir_frac_dist.is_fixed
                     and float(agn_ir_frac_dist.value) == 0.0
                 )
-                # Check if any consumers of agn_log_lbol are active.
-                # Polar block consumes agn_log_lbol via the faceon proxy (runner.py ~582-598).
-                # It's inactive when agn_polar_ebv is Fixed at exactly 0.0.
-                agn_polar_ebv_dist = agn_dists.get("agn_polar_ebv")
-                polar_block_inactive = (
-                    agn_polar_ebv_dist is not None
-                    and agn_polar_ebv_dist.is_fixed
-                    and float(agn_polar_ebv_dist.value) == 0.0
-                )
-                nlr_inactive = self._agn_nlr_block == "none"
-                blr_inactive = self._agn_blr_block == "none"
-                feii_inactive = self._agn_feii_block == "none"
-                all_consumers_inactive = (
-                    polar_block_inactive and nlr_inactive and blr_inactive and feii_inactive
-                )
-                if not ir_frac_is_fixed_at_zero and all_consumers_inactive:
-                    from tengri.config.exceptions import ConfigError
-
-                    raise ConfigError(
-                        "agn_norm='cigale_joint' sets the AGN amplitude from agn_ir_frac "
-                        "(CIGALE fracAGN), with no polar, NLR, BLR or FeII block active, "
-                        "nothing else reads agn_log_lbol, so it cannot move the likelihood. "
-                        "Fix agn_log_lbol (any value; it cancels), fix agn_ir_frac=0.0 to disable "
-                        "the tie, or set agn_norm='independent' to fit the luminosity directly."
-                    )
+                if not ir_frac_is_fixed_at_zero:
+                    # Store info needed for deferred measurement
+                    self._agn_lbol_dist = agn_lbol_dist
+                    self._agn_ir_frac_dist = agn_ir_frac_dist
+                    self._needs_agn_lbol_flat_check = True
             # Identity entries for agn_* now come from registry auto-derive
             # in _build_param_map (Step B).
             if self._agn_model == "skirtor":
@@ -3015,6 +3005,90 @@ class SEDModel:
                         get_synthesizer_blr_backend(blr_grid)
 
         return delta
+
+    def _check_agn_lbol_flat_direction(self, spec):
+        """Measure whether agn_log_lbol is flat under cigale_joint + skirtor.
+
+        Builds a parameter dict with representative values, evaluates the model's
+        rest-frame SED at agn_log_lbol = lower and upper bounds, and checks if the
+        outputs are identical within machine precision. If so, raises ConfigError
+        with a measured message.
+
+        This is called after the model is fully constructed (line ~1888 of __init__)
+        so that _predict_rest_sed is available (the lowest-level forward entry
+        that needs no Observation; used by flagship contract test at
+        tests/contract/test_agn_block_consumes.py::test_agn_panchromatic_free_params_all_move_predict).
+
+        Parameters
+        ----------
+        spec : Parameters
+            The parameter specification.
+
+        Raises
+        ------
+        ConfigError
+            If the SED is identical to within machine precision at the bounds of
+            agn_log_lbol, indicating the parameter is flat and no sampler can move it.
+        """
+        from tengri.config.exceptions import ConfigError
+
+        # Get the prior bounds for agn_log_lbol
+        lo, hi = self._agn_lbol_dist.bounds
+
+        # Get the prior midpoint for agn_ir_frac. With precondition "agn_ir_frac
+        # not Fixed(0)", it MUST have bounds (either as a distribution or as a Fixed
+        # value > 0). If neither, raise.
+        if self._agn_ir_frac_dist is None:
+            # Not in distributions; this shouldn't happen given precondition
+            raise ConfigError(
+                "Internal error in #2069 guard: agn_ir_frac not in distributions "
+                "despite passing precondition check. Report issue #2069."
+            )
+        if self._agn_ir_frac_dist.is_fixed:
+            frac_mid = float(self._agn_ir_frac_dist.value)
+        else:
+            frac_lo, frac_hi = self._agn_ir_frac_dist.bounds
+            frac_mid = (frac_lo + frac_hi) / 2.0
+
+        # Validate frac_mid is strictly > 0 (required by brief)
+        if frac_mid <= 0.0:
+            raise ConfigError(
+                f"Internal error in #2069 guard: agn_ir_frac midpoint {frac_mid} "
+                f"is not > 0 despite precondition check. Report issue #2069."
+            )
+
+        # Build a parameter dict with representative values. Use spec.sample() with
+        # a deterministic key to get reasonable values for all free parameters.
+        params = spec.sample(jax.random.PRNGKey(0))
+
+        # Override with the specific values for measurement
+        params_lo = {**params, "agn_log_lbol": lo, "agn_ir_frac": frac_mid}
+        params_hi = {**params, "agn_log_lbol": hi, "agn_ir_frac": frac_mid}
+
+        # Evaluate the rest-frame SED at both bounds. Use _predict_rest_sed, which
+        # is the lowest-level forward entry that needs no Observation, so it works
+        # for filterless and spectroscopy-only builds alike. Per #2069 brief:
+        # "if the forward cannot be evaluated at build, raise -- do not fall back".
+        sed_lo = self._predict_rest_sed(params_lo)
+        sed_hi = self._predict_rest_sed(params_hi)
+
+        # Check if SEDs are identical to within machine precision (1e-10 relative).
+        # The direction is flat when all SED differences are within this tolerance.
+        norm = jnp.max(jnp.abs(sed_lo.sed)) + 1e-300
+        rel_diff = jnp.max(jnp.abs(sed_hi.sed - sed_lo.sed)) / norm
+        is_flat = rel_diff < 1e-10
+
+        if is_flat:
+            raise ConfigError(
+                f"agn_norm='cigale_joint' with skirtor and free agn_log_lbol: "
+                f"measured: the predicted SED is identical to within 1e-10 relative "
+                f"at agn_log_lbol={lo} and {hi} with agn_ir_frac={frac_mid} "
+                f"(rel_diff={rel_diff:.3e}). "
+                f"The CIGALE coupling ties amplitude to agn_ir_frac (fracAGN), so "
+                f"agn_log_lbol cannot move the likelihood. "
+                f"Fix agn_log_lbol (any value; it cancels), fix agn_ir_frac=0.0 to disable "
+                f"the tie, or set agn_norm='independent' to fit the luminosity directly."
+            )
 
     def _init_multiwavelength(self, spec, ssp_data):
         """Configure radio, X-ray, shock, and build wavelength grid.
