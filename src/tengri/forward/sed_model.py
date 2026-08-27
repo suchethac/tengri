@@ -2900,6 +2900,49 @@ class SEDModel:
             lbol_is_free = agn_lbol_dist is not None and not agn_lbol_dist.is_fixed
             frac_is_free = agn_frac_dist is not None and not agn_frac_dist.is_fixed
             self._agn_luminosity_mode = lbol_is_free and not frac_is_free
+
+            # #2069: Refuse free agn_log_lbol under cigale_joint + skirtor when
+            # agn_ir_frac can move above zero AND no other blocks consume
+            # agn_log_lbol (flat likelihood direction). The CIGALE coupling ties
+            # disc/torus/polar to a single agn_power reference via fixed SKIRTOR
+            # template ratios, so moving agn_log_lbol has no effect when agn_ir_frac > 0.
+            # But polar, NLR, BLR, FeII blocks all consume agn_log_lbol directly
+            # (runner.py lines ~582-598, ~650-680), so they keep the direction live.
+            # This is invisible to samplers when consumers are inactive; raise loudly.
+            torus_is_skirtor = self._agn_torus_block == "skirtor" or self._agn_model == "skirtor"
+            agn_norm_is_cigale_joint = self._agn_norm == "cigale_joint"
+            if torus_is_skirtor and agn_norm_is_cigale_joint and lbol_is_free:
+                agn_ir_frac_dist = agn_dists.get("agn_ir_frac")
+                ir_frac_is_fixed_at_zero = (
+                    agn_ir_frac_dist is not None
+                    and agn_ir_frac_dist.is_fixed
+                    and float(agn_ir_frac_dist.value) == 0.0
+                )
+                # Check if any consumers of agn_log_lbol are active.
+                # Polar block consumes agn_log_lbol via the faceon proxy (runner.py ~582-598).
+                # It's inactive when agn_polar_ebv is Fixed at exactly 0.0.
+                agn_polar_ebv_dist = agn_dists.get("agn_polar_ebv")
+                polar_block_inactive = (
+                    agn_polar_ebv_dist is not None
+                    and agn_polar_ebv_dist.is_fixed
+                    and float(agn_polar_ebv_dist.value) == 0.0
+                )
+                nlr_inactive = self._agn_nlr_block == "none"
+                blr_inactive = self._agn_blr_block == "none"
+                feii_inactive = self._agn_feii_block == "none"
+                all_consumers_inactive = (
+                    polar_block_inactive and nlr_inactive and blr_inactive and feii_inactive
+                )
+                if not ir_frac_is_fixed_at_zero and all_consumers_inactive:
+                    from tengri.config.exceptions import ConfigError
+
+                    raise ConfigError(
+                        "agn_norm='cigale_joint' sets the AGN amplitude from agn_ir_frac "
+                        "(CIGALE fracAGN), with no polar, NLR, BLR or FeII block active, "
+                        "nothing else reads agn_log_lbol, so it cannot move the likelihood. "
+                        "Fix agn_log_lbol (any value; it cancels), fix agn_ir_frac=0.0 to disable "
+                        "the tie, or set agn_norm='independent' to fit the luminosity directly."
+                    )
             # Identity entries for agn_* now come from registry auto-derive
             # in _build_param_map (Step B).
             if self._agn_model == "skirtor":

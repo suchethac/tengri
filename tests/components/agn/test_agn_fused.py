@@ -431,6 +431,7 @@ class TestSKIRTORPreintegration:
             agn_alpha=Fixed(-1.0),
             agn_polar_ebv=Fixed(0.0),
             agn_polar_oa=Fixed(60.0),
+            agn_ir_frac=Fixed(0.0),  # #2069: disable CIGALE coupling so lbol can move
         )
 
     def test_preintegration_enabled(self, skirtor_spec, synthetic_ssp, simple_filters):
@@ -519,20 +520,17 @@ class TestSKIRTORPreintegration:
             "skirtor_precompute.py (frequency-space vs wavelength-space integral)."
         )
 
-    @pytest.mark.xfail(
-        strict=True,
-        reason=(
-            "#2069: moving agn_log_lbol across its entire declared prior "
-            "Uniform(9, 12) -- three decades of bolometric luminosity -- leaves "
-            "the photometry bit-identical. Either that is expected under "
-            "agn_norm='cigale_joint' (which ties everything to agn_power, so a "
-            "free agn_log_lbol is a flat likelihood direction), or the "
-            "normalization is not reaching the component. Deciding that is a "
-            "physics call. Never ran before: _DATA_DIR resolved to tests/data."
-        ),
-    )
     def test_lbol_sensitivity(self, skirtor_spec, synthetic_ssp, simple_filters):
-        """Preintegrated SKIRTOR photometry scales monotonically with agn_log_lbol."""
+        """Preintegrated SKIRTOR photometry scales monotonically with agn_log_lbol.
+
+        #2069: with agn_ir_frac=Fixed(0.0) (cigale_joint coupling disabled), moving
+        agn_log_lbol across its declared prior Uniform(9, 12) should produce monotonic
+        brightness changes. Before #2069, this test would have failed (xfail strict)
+        because the flat likelihood direction at agn_ir_frac>0 tied the disc to agn_power,
+        making agn_log_lbol inert. The fix accepts any of three translations: fix
+        agn_log_lbol to a constant, fix agn_ir_frac=0.0 to disable coupling, or set
+        agn_norm='independent' to use per-component luminosity scales.
+        """
         with warnings.catch_warnings():
             warnings.simplefilter("ignore")
             model = SEDModel(skirtor_spec, synthetic_ssp, filters=simple_filters)
