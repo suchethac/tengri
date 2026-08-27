@@ -1923,8 +1923,11 @@ def print_components_bibtex(obj=None) -> None:
 def list_filters(survey: str | None = None) -> _RegistryTable:
     """List every filter curve bundled with tengri.
 
-    Filter files live in ``data/filters/`` (relative to the install root)
+    Most filter files live in ``data/filters/`` (relative to the install root)
     and follow the SVO naming convention ``Telescope_Instrument_Band.dat``.
+    Measured curves that SVO does not serve ship inside the package instead
+    (``7dt_*``, from :mod:`tengri.observation.filters.bundled`) and are listed
+    alongside them, since both load by name the same way.
 
     Parameters
     ----------
@@ -2009,6 +2012,25 @@ def list_filters(survey: str | None = None) -> _RegistryTable:
                 "band": band,
                 "alias": alias_by_stem.get(stem, ""),
                 "use": _usage_hint(stem, "filter"),
+            }
+        )
+
+    # Measured curves that ship inside the package rather than in the SVO
+    # cache. They are loadable by name, so leaving them out of the menu would
+    # make them undiscoverable: the unknown-filter error points here.
+    from tengri.observation.filters.bundled import BUNDLED_FILTER_REGISTRY
+
+    for name in sorted(BUNDLED_FILTER_REGISTRY):
+        facility, _, band = name.partition("_")
+        out.append(
+            {
+                "name": name,
+                "kind": "filter",
+                "survey": facility.upper(),
+                "instrument": facility.upper(),
+                "band": band,
+                "alias": name,
+                "use": _usage_hint(name, "filter"),
             }
         )
 

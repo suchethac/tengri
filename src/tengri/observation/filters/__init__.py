@@ -37,6 +37,19 @@ is the worked example: SVO serves measured 150 and 220 GHz bandpasses, so those
 are ordinary registry entries and only the 95 GHz band is synthetic. A name must
 never resolve to an approximation while real data for it exists.
 
+Bundled measured curves
+-----------------------
+A third case sits between the two: a real, measured curve that SVO does not
+serve in the form the data were taken in. Those ship inside the package and
+resolve by name like any other filter, from
+:mod:`tengri.observation.filters.bundled`.
+
+7DT is the worked example. Its 23 curves (``7dt_g``, ``7dt_r``, ``7dt_i``,
+``7dt_m400`` ... ``7dt_m875``) are *total system response*, detector QE and
+optics folded in, which is what the photometry was measured through; a
+filter-glass-only curve would be a different quantity. See
+``tengri/data/filters_7dt/PROVENANCE.md``.
+
 Real (sub)mm bandpasses already on SVO:
   Planck HFI   : 100-857 GHz        → planck_hfi_100 … planck_hfi_857
   Planck LFI   : 30-70 GHz          → planck_lfi_030 … planck_lfi_070
@@ -72,6 +85,11 @@ except ImportError:  # numpy < 1.26
     from numpy import trapz as _np_trapezoid  # type: ignore[no-redef]
 
 from tengri._deprecated import deprecated_alias
+from tengri.observation.filters.bundled import (
+    BUNDLED_FILTER_REGISTRY,
+    list_bundled_filters,
+    load_bundled_filter,
+)
 from tengri.observation.filters.synthetic import (
     _ALMA_BANDS_GHZ,
     SYNTHETIC_BAND_REGISTRY,
@@ -748,24 +766,28 @@ def load_filter(
     if fc_from_dir is not None:
         return fc_from_dir
 
-    # 3. Try exact FILTER_REGISTRY first
+    # 3. Measured curves bundled in the package (no SVO equivalent)
+    if name in BUNDLED_FILTER_REGISTRY:
+        return load_bundled_filter(name)
+
+    # 4. Try exact FILTER_REGISTRY first
     if name in FILTER_REGISTRY:
         svo_id = FILTER_REGISTRY[name]
         wave, trans = download_filter(svo_id, cache_dir=cache_dir, short_name=name)
         return FilterCurve(wave=jnp.array(wave), trans=jnp.array(trans), name=name)
 
-    # 4. Try SVO display-stem resolution (e.g., "SLOAN_SDSS_g" → "sdss_g")
+    # 5. Try SVO display-stem resolution (e.g., "SLOAN_SDSS_g" → "sdss_g")
     alias = _svo_name_to_key().get(name)
     if alias is not None:
         svo_id = FILTER_REGISTRY[alias]
         wave, trans = download_filter(svo_id, cache_dir=cache_dir, short_name=alias)
         return FilterCurve(wave=jnp.array(wave), trans=jnp.array(trans), name=alias)
 
-    # 5. Try synthetic band registry
+    # 6. Try synthetic band registry
     if name in SYNTHETIC_BAND_REGISTRY:
         return load_synthetic_band(name)
 
-    # 6. Not found anywhere
+    # 7. Not found anywhere
     raise KeyError(_unknown_filter_msg(name))
 
 
