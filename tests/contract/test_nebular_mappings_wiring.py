@@ -54,60 +54,89 @@ def test_bare_backend_warns_or_raises(ssp_data_fsps, backend_type):
 
 @pytest.mark.parametrize("backend_type", MAPPINGS_BACKENDS)
 def test_backend_builds_with_suppress(ssp_data_fsps, backend_type):
-    """With ionizing_source_warning='suppress', model builds without warning/error."""
-    obs = Observation(photometry=Photometry.from_names(["sdss_g", "sdss_r"]))
+    """With ionizing_source_warning='suppress', building raises with a clear refusal message.
 
-    model = SEDModel.build(
-        ssp_data=ssp_data_fsps,
-        observation=obs,
-        sfh={"type": "dpl", "all_params": FIXED},
-        redshift=Fixed(0.1),
-        neb={
-            "type": backend_type,
-            "ionizing_source_warning": "suppress",
-        },
-    )
-
-    assert model is not None
-    assert model._nebular_backend is not None
-    expected_class = (
-        "MappingsPhotoStellarBackend" if backend_type == "mappings" else "MappingsPhotoAGNBackend"
-    )
-    assert model._nebular_backend.__class__.__name__ == expected_class
-
-
-@pytest.mark.parametrize("backend_type", MAPPINGS_BACKENDS)
-def test_mappings_ionization_response(ssp_data_fsps, backend_type):
-    """Backend's ionization parameter is accessible and declared.
-
-    Verifies that models built with MAPPINGS backends expose the ionization
-    parameter (neb_logU) as a free or fixed parameter.
+    Both backends are registered but refuse loudly at initialization:
+    - 'mappings': grid data is incomplete (51.2% NaN in logHB_per_logq, 2656/5184 cells)
+    - 'mappings_agn': predict_nebular_sed requires AGN parameters from the full model context
     """
     obs = Observation(photometry=Photometry.from_names(["sdss_g", "sdss_r"]))
 
-    model = SEDModel.build(
-        ssp_data=ssp_data_fsps,
-        observation=obs,
-        sfh={"type": "dpl", "all_params": FIXED},
-        neb={
-            "type": backend_type,
-            "ionizing_source_warning": "suppress",
-        },
-        redshift=Fixed(0.1),
-    )
+    if backend_type == "mappings":
+        # Stellar backend refuses at initialization due to incomplete grid
+        with pytest.raises(NotImplementedError) as exc_info:
+            SEDModel.build(
+                ssp_data=ssp_data_fsps,
+                observation=obs,
+                sfh={"type": "dpl", "all_params": FIXED},
+                redshift=Fixed(0.1),
+                neb={
+                    "type": backend_type,
+                    "ionizing_source_warning": "suppress",
+                },
+            )
+        # Verify the error message names the exact problem
+        msg = str(exc_info.value)
+        assert "2656" in msg, "NaN cell count not in error message"
+        assert "grid data is incomplete" in msg, "Grid completeness status not in error"
+        assert "data/flury2024_grids.h5" in msg, "Grid path not in error message"
 
-    # Verify the backend is instantiated
-    assert model._nebular_backend is not None, f"{backend_type} backend not instantiated"
+    elif backend_type == "mappings_agn":
+        # AGN backend refuses when predict_nebular_sed is called
+        # (it will build, but refuse on prediction)
+        model = SEDModel.build(
+            ssp_data=ssp_data_fsps,
+            observation=obs,
+            sfh={"type": "dpl", "all_params": FIXED},
+            redshift=Fixed(0.1),
+            neb={
+                "type": backend_type,
+                "ionizing_source_warning": "suppress",
+            },
+        )
+        # Model should build successfully
+        assert model is not None
+        assert model._nebular_backend is not None
+        assert model._nebular_backend.__class__.__name__ == "MappingsPhotoAGNBackend"
 
-    # Verify it has the expected backend type
-    expected_class = (
-        "MappingsPhotoStellarBackend" if backend_type == "mappings" else "MappingsPhotoAGNBackend"
-    )
-    assert model._nebular_backend.__class__.__name__ == expected_class
+        # But calling predict should raise because AGN context is missing
+        from jax import random
 
-    # neb_logU drives the ionization response (may be free or fixed depending on
-    # the rest of the config; this test verifies the wiring, not the ionization
-    # param variation, so we just check backend is correctly instantiated above)
+        params = model.spec.sample(random.PRNGKey(0))
+        with pytest.raises(NotImplementedError) as exc_info:
+            model.predict_photometry(params)
+        # Verify the error mentions AGN parameters
+        msg = str(exc_info.value)
+        assert "agn_log_lbol" in msg or "AGN" in msg, "AGN parameter not in error"
+
+
+def test_mappings_ionization_response(ssp_data_fsps):
+    """MappingsPhotoStellarBackend: building refuses with grid incompleteness guard.
+
+    The backend's ionization parameter (neb_logU) is declared in the grammar,
+    but the backend refuses at initialization because the grid data is incomplete.
+    (Issue #2082)
+    """
+    obs = Observation(photometry=Photometry.from_names(["sdss_g", "sdss_r"]))
+
+    # Stellar backend refuses at initialization due to grid incompleteness
+    with pytest.raises(NotImplementedError) as exc_info:
+        SEDModel.build(
+            ssp_data=ssp_data_fsps,
+            observation=obs,
+            sfh={"type": "dpl", "all_params": FIXED},
+            neb={
+                "type": "mappings",
+                "ionizing_source_warning": "suppress",
+            },
+            redshift=Fixed(0.1),
+        )
+
+    # Verify the error message is clear about the grid issue
+    msg = str(exc_info.value)
+    assert "grid data is incomplete" in msg, "Grid status not in error message"
+    assert "2656" in msg, "NaN cell count not in error message"
+    assert "#2082" in msg, "Issue reference not in error message"
 
 
 def test_unknown_neb_key_refused(ssp_data_fsps):
@@ -161,35 +190,65 @@ def test_mappings_precompute_registry():
     assert "mappings_agn" not in components
 
 
-@pytest.mark.parametrize("backend_type", MAPPINGS_BACKENDS)
-def test_mappings_exact_path_predicts(ssp_data_fsps, backend_type):
-    """Grammar builds successfully with ionizing_source_warning='suppress'.
+def test_mappings_exact_path_predicts(ssp_data_fsps):
+    """MappingsPhotoStellarBackend: building refuses with clear grid incompleteness message.
 
-    Verifies that both MAPPINGS backends can be built through the full grammar
-    with ionizing_source_warning suppressed (the required setup for actual use).
+    The stellar backend is registered but refuses at initialization because the
+    grid file contains 51.2% NaN values in logHB_per_logq (2656/5184 cells),
+    making it unsuitable for predictions. (Issue #2082)
     """
     obs = Observation(photometry=Photometry.from_names(["sdss_g", "sdss_r"]))
 
-    model = SEDModel.build(
-        ssp_data=ssp_data_fsps,
-        observation=obs,
-        sfh={"type": "dpl", "all_params": FIXED},
-        neb={
-            "type": backend_type,
-            "ionizing_source_warning": "suppress",
-        },
-        redshift=Fixed(0.1),
-    )
+    # Building with the mappings backend should raise NotImplementedError
+    with pytest.raises(NotImplementedError) as exc_info:
+        SEDModel.build(
+            ssp_data=ssp_data_fsps,
+            observation=obs,
+            sfh={"type": "dpl", "all_params": FIXED},
+            neb={
+                "type": "mappings",
+                "ionizing_source_warning": "suppress",
+            },
+            redshift=Fixed(0.1),
+        )
 
-    # Verify model was built successfully
-    assert model is not None
-    assert model.spec is not None
-    assert model._nebular_backend is not None
+    # Verify the error message contains the exact problem details
+    msg = str(exc_info.value)
+    assert "grid data is incomplete" in msg, "Grid status not in error message"
+    assert "51.2%" in msg or "2656" in msg, "NaN count or percentage not in error"
+    assert "5184" in msg, "Total cell count not in error message"
+    assert "data/flury2024_grids.h5" in msg, "Grid file path not in error"
+    assert "scripts/build_flury2024_grids.py" in msg, "Resolution script not in error"
+    assert "#2082" in msg, "Issue reference not in error message"
 
-    # Verify the backend type matches the requested one
-    expected_class = (
-        "MappingsPhotoStellarBackend" if backend_type == "mappings" else "MappingsPhotoAGNBackend"
-    )
-    assert model._nebular_backend.__class__.__name__ == expected_class, (
-        f"Expected {expected_class}, got {model._nebular_backend.__class__.__name__}"
-    )
+
+def test_mappings_ionization_response_varies(ssp_data_fsps):
+    """MappingsPhotoStellarBackend: building refuses with any configuration.
+
+    The backend refuses at initialization due to grid incompleteness, regardless
+    of observation configuration or other parameters. (Issue #2082)
+    """
+    from tengri.observation.filters import load_tophat_filter
+
+    # Use a tophat filter that would capture ionization-sensitive lines (if it worked)
+    filt = load_tophat_filter(6200 - 250, 6700 + 250, name="hbeta_oiii_z03")
+    obs = Observation(photometry=Photometry(filters=[filt]))
+
+    # The backend refuses at init regardless of observation or parameters
+    with pytest.raises(NotImplementedError) as exc_info:
+        SEDModel.build(
+            ssp_data=ssp_data_fsps,
+            observation=obs,
+            sfh={"type": "dpl", "all_params": FIXED},
+            neb={
+                "type": "mappings",
+                "ionizing_source_warning": "suppress",
+            },
+            redshift=Fixed(0.3),
+        )
+
+    # Verify the error is about grid incompleteness
+    msg = str(exc_info.value)
+    assert "grid data is incomplete" in msg, "Grid status not in error"
+    assert "2656" in msg, "NaN cell count not in error"
+    assert "#2082" in msg, "Issue reference not in error"

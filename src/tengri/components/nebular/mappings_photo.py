@@ -142,6 +142,10 @@ class MappingsStellarGridData(NamedTuple):
     All arrays are JAX arrays for JIT-compatibility. Metallicity axis is ζ_O
     (solar-relative), interpolated continuously. SFH axis is discrete (inst
     or cont) and selected by index at runtime.
+
+    **Note**: SFH label strings and indices are NOT included here (they are
+    kept as plain Python attributes on MappingsPhotoStellarBackend to avoid
+    passing non-JAX types through jax.jit).
     """
 
     # Line wavelengths (vacuum Angstrom)
@@ -152,11 +156,6 @@ class MappingsStellarGridData(NamedTuple):
     logU_axis: jnp.ndarray  # (N_u,)   log10(U)
     log_age_yr_axis: jnp.ndarray  # (N_a,)   log10(age/yr), inst ages
     logn_axis: jnp.ndarray  # (N_n,)   log10(n_H / cm^-3)
-
-    # SFH axis (discrete string labels; matched by index)
-    sfh_labels: list  # (N_s,)  e.g. ["cont", "inst"]
-    sfh_idx_inst: int  # index for "inst" SFH
-    sfh_idx_cont: int  # index for "cont" SFH
 
     # Grid values: shape (N_z, N_a, N_s, N_u, N_n)
     logHB_per_logq: jnp.ndarray
@@ -186,8 +185,13 @@ class MappingsAGNGridData(NamedTuple):
 # ── HDF5 loaders ──────────────────────────────────────────────────
 
 
-def _load_stellar_grid(filepath: str | Path, model: str, density: str) -> MappingsStellarGridData:
+def _load_stellar_grid(
+    filepath: str | Path, model: str, density: str
+) -> tuple[MappingsStellarGridData, list[str], int, int]:
     """Load a stellar MAPPINGS V grid from the HDF5 file.
+
+    Returns the grid data (JAX-traceable arrays only) plus SFH metadata
+    (plain Python strings and ints, kept off the grid).
 
     Parameters
     ----------
@@ -197,6 +201,11 @@ def _load_stellar_grid(filepath: str | Path, model: str, density: str) -> Mappin
         Stellar model: "sb99" or "bpass".
     density : str
         Density structure: "cpr" (isobaric) or "cdn" (isochoric).
+
+    Returns
+    -------
+    tuple
+        (grid_data, sfh_labels, sfh_idx_inst, sfh_idx_cont)
 
     """
     with h5py.File(filepath, "r") as f:
@@ -226,18 +235,16 @@ def _load_stellar_grid(filepath: str | Path, model: str, density: str) -> Mappin
         # Wavelengths stored in the top-level group per model/density sub-group
         line_wavelengths = jnp.array(grp["line_wavelengths_aa"][:])
 
-    return MappingsStellarGridData(
+    grid_data = MappingsStellarGridData(
         line_wavelengths=line_wavelengths,
         zo_axis=zo_axis,
         logU_axis=logU_axis,
         log_age_yr_axis=log_age_yr_axis,
         logn_axis=logn_axis,
-        sfh_labels=sfh_labels,
-        sfh_idx_inst=sfh_idx_inst,
-        sfh_idx_cont=sfh_idx_cont,
         logHB_per_logq=logHB_per_logq,
         line_ratios=line_ratios,
     )
+    return grid_data, sfh_labels, sfh_idx_inst, sfh_idx_cont
 
 
 def _load_agn_grid(filepath: str | Path, density: str) -> MappingsAGNGridData:
@@ -463,13 +470,38 @@ class MappingsPhotoStellarBackend:
         self.model = model
         self.density = density
         self.sfh_mode = sfh_mode
-        self.grid = _load_stellar_grid(grid_path, model, density)
+        grid_data, sfh_labels, sfh_idx_inst, sfh_idx_cont = _load_stellar_grid(
+            grid_path, model, density
+        )
+        self.grid = grid_data
+
+        # Validate grid completeness (issue #2082): the grid file contains 51.2%
+        # NaN in logHB_per_logq, making it unsuitable for predictions.
+        logHB = np.asarray(self.grid.logHB_per_logq)
+        nan_count = np.sum(~np.isfinite(logHB))
+        total_count = logHB.size
+        nan_frac = float(nan_count / total_count)
+        if nan_frac > 0.01:  # More than 1% NaN indicates incomplete grid
+            raise NotImplementedError(
+                f"MappingsPhotoStellarBackend: grid data is incomplete. "
+                f"The file {grid_path} contains {100 * nan_frac:.1f}% NaN values "
+                f"in logHB_per_logq ({nan_count}/{total_count} cells). "
+                f"This indicates the grid was not fully computed. The grid must be "
+                f"regenerated using scripts/build_flury2024_grids.py before this "
+                f"backend can emit valid predictions. See GitHub issue #2082."
+            )
+
+        # Store SFH metadata as plain Python attributes (not in the grid).
+        # This keeps strings out of the JAX-traced pytree.
+        self.sfh_labels = sfh_labels
+        self.sfh_idx_inst = sfh_idx_inst
+        self.sfh_idx_cont = sfh_idx_cont
 
         # Select discrete SFH index
         try:
-            self._sfh_idx = self.grid.sfh_labels.index(sfh_mode)
+            self._sfh_idx = self.sfh_labels.index(sfh_mode)
         except ValueError:
-            self._sfh_idx = self.grid.sfh_idx_inst
+            self._sfh_idx = self.sfh_idx_inst
 
         self._qh_table = None
         self._qh_log_met = None
@@ -1028,3 +1060,97 @@ class MappingsPhotoAGNBackend:
         line_lum = ratios * l_hb_frac * l_ion_erg * (1.0 - neb_fesc)
 
         return grid.line_wavelengths, line_lum
+
+    def predict_nebular_sed(
+        self,
+        ssp_weights: jnp.ndarray,
+        ssp_wave: jnp.ndarray,
+        ssp_log_ages_yr: jnp.ndarray,
+        log_z: float,
+        neb_logU: float = -2.0,
+        neb_logZ_gas: float | None = None,
+        neb_logn: float = 3.0,
+        neb_fesc: float = 0.0,
+        neb_fesc_lya: float = 0.0,
+        line_sigma_aa: float = 0.0,
+        line_sigma_kms: float = 0.0,
+        **_kwargs,
+    ) -> jnp.ndarray:
+        """Compute AGN NLR nebular emission line SED on the SSP wavelength grid.
+
+        This is the adapter method implementing the nebular backend protocol.
+        It calls predict_agn_line_luminosities to get AGN NLR lines and
+        renders them onto the rest-frame wavelength grid.
+
+        **Note**: The AGN ionizing luminosity is NOT derived from the SSP
+        spectrum (see docstring in the class). The caller must supply it via
+        the AGN disc model in the full model pipeline. This adapter method
+        will raise NotImplementedError if called outside the SEDModel context
+        (where the AGN luminosity is properly threaded through).
+
+        Parameters
+        ----------
+        ssp_weights : array, shape (n_age,)
+            UNUSED: AGN does not use SSP weights.
+        ssp_wave : array, shape (n_wave,)
+            Rest-frame wavelength grid [Angstrom].
+        ssp_log_ages_yr : array, shape (n_age,)
+            UNUSED: AGN does not use SSP age information.
+        log_z : float
+            UNUSED: AGN metallicity is neb_logZ_gas.
+        neb_logU : float, optional
+            Ionization parameter [log10(U)]. Default: -2.0.
+        neb_logZ_gas : float or None, optional
+            Gas metallicity [log10(Z)]. None → raises.
+        neb_logn : float, optional
+            Hydrogen density [log10(n_H/cm^-3)]. Default: 3.0.
+        neb_fesc : float, optional
+            Ionizing photon escape fraction [0, 1]. Default: 0.0.
+        neb_fesc_lya : float, optional
+            UNUSED for AGN grids.
+        line_sigma_aa : float, optional
+            Gaussian line width [Angstrom]. Default: 0.0.
+        line_sigma_kms : float, optional
+            Gaussian line width [km/s]. Default: 0.0.
+
+        Returns
+        -------
+        array, shape (n_wave,)
+            Nebular emission line SED [erg/s/Hz] on the rest-frame wavelength
+            grid.
+
+        Raises
+        ------
+        NotImplementedError
+            This backend requires AGN ionizing luminosity from an AGN disc
+            model (typically as agn_log_lbol or agn_log_l_ion_erg in params),
+            which is only available in the full SEDModel context. Direct calls
+            to this method (outside predict_state / predict_observables) are
+            not supported: use predict_agn_line_luminosities instead.
+
+        Notes
+        -----
+        **JIT-compatible**: yes, delegates to predict_agn_line_luminosities
+        and render_nebular_lines.
+
+        **AGN context**: Called only from SEDModel when an AGN component
+        is present (to supply ionizing parameters) and this backend is
+        registered as the nebular type. In standalone usage, call
+        predict_agn_line_luminosities directly.
+
+        **Continuum**: This backend returns lines only; no nebular continuum.
+
+        References
+        ----------
+        .. [1] Flury et al. 2024, "MAPPINGS V photoionization grids for nebular
+            emission prediction", arXiv:2412.06763
+        """
+        raise NotImplementedError(
+            "MappingsPhotoAGNBackend.predict_nebular_sed requires AGN ionizing "
+            "luminosity parameters (agn_log_lbol, agn_logedd, agn_logmbh) from an AGN "
+            "component in the full SEDModel context. This method cannot be called "
+            "standalone: use predict_agn_line_luminosities with explicit "
+            "agn_log_l_ion_erg, agn_logmbh, agn_logedd instead. "
+            "See the class docstring for details on AGN/NLR wiring. "
+            "See GitHub issue #2082."
+        )

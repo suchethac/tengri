@@ -56,9 +56,6 @@ def _make_stellar_grid(n_z=3, n_a=4, n_s=2, n_u=4, n_n=2, n_lines=5) -> Mappings
         logU_axis=logU_axis,
         log_age_yr_axis=log_age_yr_axis,
         logn_axis=logn_axis,
-        sfh_labels=sfh_labels,
-        sfh_idx_inst=sfh_idx_inst,
-        sfh_idx_cont=sfh_idx_cont,
         logHB_per_logq=logHB_per_logq,
         line_ratios=line_ratios,
     )
