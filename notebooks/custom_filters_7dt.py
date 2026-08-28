@@ -95,10 +95,9 @@ delivered.write_text(
 print(delivered.read_text()[:64].replace("\n", " | "))
 
 # %% [markdown]
-# `load_filter` accepts comma- or whitespace-separated columns, with or without
-# a header row, and strips `#` comments. Detection is by parse attempt, not by
-# file extension, because a `.csv` full of whitespace and a `.dat` full of
-# commas both turn up.
+# Tengri reads this as it stands. Columns may be comma- or whitespace-separated,
+# with or without a header row, and `#` comment lines are ignored. The file
+# extension does not matter.
 
 # %% [markdown]
 # ## Route 1: in-memory, from arrays
@@ -145,10 +144,11 @@ print(f"resolved by stem: {load_filter('m400_dir').wave.max():.0f} AA")
 # %% [markdown]
 # ## The mistake that does not raise
 #
-# Registering without declaring the unit falls back to a heuristic. A curve
-# lying wholly between 100 Å and 1340 Å — the blue edge of GALEX FUV, the
-# bluest bandpass tengri ships — is almost certainly in nanometers, because
-# that window is empty for a physical reason rather than a statistical one.
+# If you register without declaring the unit, tengri checks whether the numbers
+# could plausibly be Angstrom and warns when they could not. No real bandpass
+# lies between 100 Å and 1340 Å, because the interstellar medium is opaque
+# there, so a curve sitting entirely inside that range is almost certainly in
+# nanometers.
 
 # %%
 with warnings.catch_warnings(record=True) as caught:
@@ -174,18 +174,17 @@ for name in ("demo_from_arrays", "demo_from_file", "demo_unstated"):
     unregister_filter(name)
 
 # %% [markdown]
-# The heuristic is a backstop rather than a guarantee. It cannot catch microns
-# at all, since an optical curve in microns lands at 0.5–0.7 Å, which is a real
-# NuSTAR band; and it cannot catch a nanometer set running past 1340 nm without
-# also firing on GALEX FUV itself. **State the unit.**
+# Treat that warning as a backstop, not a guarantee. It cannot catch microns at
+# all: an optical curve in microns lands at 0.5–0.7 Å, which is indistinguishable
+# from a real X-ray band. It also stays quiet on a nanometer set that runs past
+# 1340 nm. **State the unit and you never depend on it.**
 
 # %% [markdown]
 # ## The 23 bundled 7DT bands
 #
-# These need none of the above. They ship inside the package as total system
-# response — detector QE and optics folded in, which is what the photometry was
-# measured through — and resolve by name like any SVO band. Provenance and
-# per-file digests are in `tengri/data/filters_7dt/PROVENANCE.md`.
+# These need none of the above. They ship with tengri and load by name like any
+# other filter. They are total system response, with detector QE and optics
+# folded in, which is what 7DT photometry is measured through.
 
 # %%
 BANDS_BROAD = ["7dt_g", "7dt_r", "7dt_i"]
@@ -218,22 +217,21 @@ fig.tight_layout()
 # %% [markdown]
 # ## ADU and a zeropoint, taken to a fit
 #
-# Instrument tables rarely arrive in $F_\nu$. The 7DT photometry is mean surface
-# flux per pixel in ADU with a per-band AB zeropoint, which is one step from a
-# unit tengri ingests:
+# Instrument tables rarely arrive in $F_\nu$. Counts in ADU with a per-band AB
+# zeropoint are common, and they are one step away from a unit tengri ingests:
 #
 # $$m_{\rm AB} = \mathrm{ZP}_b - 2.5\log_{10} f_{\rm ADU}, \qquad
 #   \sigma_m = 1.0857\,\sigma_f / f_{\rm ADU}.$$
 #
-# Then `flux_unit="ab_mag"`. There is no ADU option, and there should not be:
-# a zeropoint is per-band calibration rather than a unit, and folding one into
-# a unit name would hide it.
+# Convert to AB magnitudes first, then pass `flux_unit="ab_mag"`. Tengri has no
+# ADU option, because a zeropoint is calibration specific to your data rather
+# than a unit it could know about.
 #
 # The ADU below is synthesized from a known model, so the recovered answer can
 # be checked against something.
 
 # %%
-ZP = dict.fromkeys(FILTERS, 23.89)  # the delivered zeropoints sit within 0.03 mag
+ZP = dict.fromkeys(FILTERS, 23.89)  # one per band in practice; near-identical here
 
 ssp = tengri.load_ssp("fsps_prsc_miles_chabrier", download=True)
 obs = Observation(photometry=Photometry.from_names(FILTERS))
@@ -249,7 +247,7 @@ sed_model = SEDModel.build(
     dust_emission=builders.dust.emission.modified_blackbody(all_params=FIXED),
     neb=builders.neb.none(),
     met={"logzsol": Uniform(-1.5, 0.3)},
-    redshift=Fixed(0.0062),  # NGC 1380, Fornax
+    redshift=Fixed(0.0062),  # a nearby galaxy
 )
 forward = ForwardModel.build(sed=sed_model)
 print(f"free parameters ({sed_model.spec.n_free}): {', '.join(sed_model.spec.free_params)}")
@@ -262,8 +260,8 @@ mock = generate_mock(sed_model, truth, key=key_mock, snr=30.0)
 fnu = np.asarray(mock["flux_obs"])
 sigma = np.asarray(mock["noise"])
 
-# Round-trip to the instrument's own units, then back, exactly as the delivered
-# table would have to be handled.
+# Push the model fluxes out into ADU so the cells below can bring them back the
+# way you would handle a real table.
 mag = -2.5 * np.log10(fnu) - 48.60
 adu = 10.0 ** (-0.4 * (mag - np.array([ZP[b] for b in FILTERS])))
 adu_err = adu * np.log(10.0) / 2.5 * (1.0857 * sigma / fnu)
@@ -271,10 +269,9 @@ adu_err = adu * np.log(10.0) / 2.5 * (1.0857 * sigma / fnu)
 print(f"ADU range: {adu.min():.1f} - {adu.max():.1f}")
 
 # %% [markdown]
-# `ingest_catalog` takes explicit `flux_cols` and `err_cols`, so a table with
-# `flux_<band>` / `err_<band>` columns needs no renaming. (The `read_catalog`
-# convenience reader hardcodes a `<band>_err` suffix *and* silently defaults a
-# missing redshift to 0.0, so do not use it for this.)
+# `ingest_catalog` takes explicit `flux_cols` and `err_cols`, so your column
+# names can be whatever the table already uses. Give it the redshift column
+# too: a redshift left unstated is not a safe default to accept.
 
 # %%
 from tengri.inference.catalog_ingest import ingest_catalog
@@ -301,12 +298,14 @@ print(f"round-trip max |dF/F|: {np.abs(arrays.flux[0] / fnu - 1.0).max():.2e}")
 # The round trip closes to machine precision, so the ADU-to-AB-to-$F_\nu$ chain
 # introduces nothing of its own.
 #
-# On errors: if the delivered `err` column already contains the zeropoint
-# uncertainty (7DT's does), pass it through and leave `NoiseModel`'s
-# `calibration_floor` at 0. Setting both counts the same term twice. Note that
-# no per-fit floor represents the *coherence* of a zeropoint error across bins
-# of one galaxy, since it is one shared offset, not independent noise. That matters
-# for joint or radial analyses, not for fitting bins one at a time.
+# On errors: check whether your uncertainties already include the zeropoint
+# term before adding `NoiseModel(calibration_floor=...)`. Many catalogs fold it
+# in, and setting both counts it twice.
+#
+# A zeropoint error is also shared across every source measured in that band
+# rather than drawn independently per source. No per-fit floor represents that,
+# which is worth knowing if you later fit sources jointly or read a trend across
+# them, and does not matter when fitting one at a time.
 
 # %%
 map_result = forward.fit(arrays.flux[0], arrays.noise[0], method="map", key=key_fit, n_steps=300)
@@ -315,20 +314,20 @@ for pname in sed_model.spec.free_params:
     print(f"  {pname:24} fit {float(map_result.params[pname]):+8.3f}   truth {float(truth[pname]):+8.3f}")
 
 # %% [markdown]
-# Mass and SFH width come back tightly; metallicity and dust do not. That is
-# the age-metallicity-dust degeneracy, not a filter problem: 23 optical bands
-# with no UV and no NIR do not break it, and a MAP point estimate reports none
-# of the covariance that would show you so. Run `method="mcmc_nuts"` if you care
-# about the answer rather than the plumbing.
+# Mass and SFH width come back tightly; metallicity and dust do not. That is the
+# age-metallicity-dust degeneracy rather than a filter problem: 23 optical bands
+# with no UV and no infrared do not break it. A MAP fit also returns a single
+# point, so it cannot show you the correlation that explains the offset. Use
+# `method="mcmc_nuts"` when you want the posterior rather than a quick check.
 
 # %% [markdown]
-# ## Scale
+# ## Scaling up
 #
-# One MAP fit here. A Voronoi-binned program is ~300 bins per galaxy, and ~100
-# galaxies is ~30,000 SEDs. `Fitter.fit_batch` shares the XLA compile cache
-# across galaxies, so the first fit pays compilation and the rest do not, and
-# which makes the per-fit cost, not the compile cost, the thing to measure
-# before committing to a full run.
+# This fits one source. For many, `Fitter.fit_batch` shares the compilation
+# cache across them, so the first fit pays for the compile and the rest do not.
+# That makes the per-fit cost the number to measure before starting a long run:
+# time a few dozen of your own sources and multiply, rather than extrapolating
+# from the first fit, which is mostly compilation.
 
 # %%
 del os.environ["TENGRI_FILTER_DIR"]
