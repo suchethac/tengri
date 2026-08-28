@@ -37,7 +37,7 @@
 # that is what to do when your filters are not already built in.
 
 # %%
-from _setup import effective_wavelengths_um, quiet
+from _setup import quiet
 
 quiet()
 
@@ -73,7 +73,7 @@ from tengri.observation.filters.custom import (
 
 plot.setup_style()
 
-C_DATA, C_MODEL, C_BAD = "#c3372a", "#3a76d9", "0.55"
+C_DATA, C_MODEL = "#c3372a", "#3a76d9"
 WORK = Path(tempfile.mkdtemp(prefix="tengri_filters_"))
 
 # %% [markdown]
