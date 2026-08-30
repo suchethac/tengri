@@ -437,10 +437,21 @@ class Posterior:
         parameter. The model's spec is the record of which names were free; a
         hand-built posterior without ``_model`` cannot tell and gets ``None``
         (#2087).
+
+        ``spec.free_params`` excludes the stochastic-SFH field latent by
+        design: it rides under the sampler's key ``psd_xi`` (republished as
+        ``sfh_field_xi`` by ``Fitter._to_physical``), not as a named
+        distribution (see ``Parameters.n_latent``). A frozen field is exactly
+        as dead as a frozen named parameter, so when the spec is stochastic
+        and ``psd_xi`` is present in ``samples``, it is appended here too.
         """
         if self._model is None:
             return None
-        return tuple(self._model.spec.free_params)
+        spec = self._model.spec
+        names = list(spec.free_params)
+        if getattr(spec, "stochastic", False) and self.samples and "psd_xi" in self.samples:
+            names.append("psd_xi")
+        return tuple(names)
 
     # ── Derived quantities ────────────────────────────────────────
 

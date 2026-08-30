@@ -14,6 +14,13 @@ Guard: ``Posterior.free_names`` reads the free names off the model's spec; the
 frozen check restricts itself to those. A posterior built without a model
 cannot tell and keeps checking every column.
 
+``Parameters.free_params`` excludes the stochastic-SFH field latent by design
+(it rides under the sampler's key ``psd_xi``, not as a named distribution —
+see ``Parameters.n_latent``), so ``free_names`` appends ``"psd_xi"`` itself
+when the spec is stochastic and the latent is present in ``samples`` (R12).
+Otherwise a frozen field latent would ride along as silently as a frozen
+``Fixed`` column once did.
+
 Mutation checks:
 1. ``test_fixed_parameters_do_not_trigger_the_frozen_warning`` and
    ``test_a_frozen_free_parameter_is_named_alone``: make the loop use
@@ -22,6 +29,9 @@ Mutation checks:
    ``tuple(self._model.spec.fixed_params)`` instead.
 3. ``test_without_a_model_every_column_is_checked``: make ``free_names``
    return ``()`` when ``_model`` is None.
+4. ``test_free_names_includes_the_stochastic_field_latent`` and
+   ``test_a_frozen_field_latent_is_flagged_dead``: revert ``free_names`` to
+   ``tuple(spec.free_params)`` (drop the ``psd_xi`` append).
 """
 
 import warnings
@@ -30,6 +40,7 @@ import jax
 import jax.numpy as jnp
 import pytest
 
+from tengri.components.nebular import BakedInNebularWarning
 from tengri.config.exceptions import DeadFitWarning
 from tengri.inference.posterior import Posterior
 
@@ -37,6 +48,7 @@ pytestmark = pytest.mark.regression_bug
 
 _N = 200
 _FREE = "sfh_dpl_log_total_mass"
+_N_GRID = 4
 
 
 @pytest.fixture
@@ -56,7 +68,40 @@ def model(synthetic_ssp, simple_observation):
         redshift=Fixed(0.1),
         mean_sfh_type="dpl",
     )
-    return SEDModel(spec, synthetic_ssp, observation=simple_observation)
+    with warnings.catch_warnings():
+        warnings.simplefilter("ignore", BakedInNebularWarning)
+        return SEDModel(spec, synthetic_ssp, observation=simple_observation)
+
+
+@pytest.fixture
+def stochastic_model(synthetic_ssp, simple_observation):
+    """Same one-free-parameter model, plus a stochastic-SFH field latent.
+
+    ``n_grid=4`` keeps the field small (build stays well under a second);
+    the two field GP hyperparameters are pinned so ``sfh_dpl_log_total_mass``
+    is still the only *named* free parameter — the field latent moves
+    through ``psd_xi``, not through a named distribution (#2087, R12).
+    """
+    from tengri import Fixed, Parameters, SEDModel, Uniform
+
+    spec = Parameters(
+        sfh_dpl_log_total_mass=Uniform(7.0, 12.5),
+        sfh_dpl_alpha=Fixed(2.0),
+        sfh_dpl_age_gyr=Fixed(5.0),
+        sfh_dpl_beta=Fixed(2.0),
+        sfh_dpl_tau_gyr=Fixed(3.0),
+        met_logzsol=Fixed(1.0),
+        dust_tau_bc=Fixed(0.3),
+        dust_tau_diff=Fixed(0.2),
+        redshift=Fixed(0.1),
+        sfh_field_psd_sigma=Fixed(0.3),
+        sfh_field_psd_tau_myr=Fixed(100.0),
+        mean_sfh_type=["dpl", "field"],
+        n_grid=_N_GRID,
+    )
+    with warnings.catch_warnings():
+        warnings.simplefilter("ignore", BakedInNebularWarning)
+        return SEDModel(spec, synthetic_ssp, observation=simple_observation)
 
 
 def _samples(model, free_draws):
@@ -67,6 +112,19 @@ def _samples(model, free_draws):
 def _posterior(model, free_draws):
     return Posterior(
         samples=_samples(model, free_draws),
+        params={_FREE: jnp.array(10.0)},
+        method="mcmc_nuts",
+        wall_time_s=1.0,
+        diagnostics={"n_divergent": 0, "n_samples": _N, "n_chains": 1},
+        _model=model,
+    )
+
+
+def _stochastic_posterior(model, free_draws, psd_xi_draws):
+    samples = _samples(model, free_draws)
+    samples["psd_xi"] = psd_xi_draws
+    return Posterior(
+        samples=samples,
         params={_FREE: jnp.array(10.0)},
         method="mcmc_nuts",
         wall_time_s=1.0,
@@ -106,3 +164,30 @@ def test_without_a_model_every_column_is_checked():
     with pytest.warns(DeadFitWarning, match=r"'pinned_looking'"):
         post = Posterior(samples={"pinned_looking": jnp.full((_N,), 3.0)}, **post_kwargs)
     assert post.free_names is None
+
+
+def test_free_names_includes_the_stochastic_field_latent(stochastic_model):
+    post = _stochastic_posterior(
+        stochastic_model,
+        10.0 + 0.1 * jax.random.normal(jax.random.PRNGKey(10), (_N,)),
+        jax.random.normal(jax.random.PRNGKey(11), (_N, _N_GRID)),
+    )
+    assert post.free_names == (_FREE, "psd_xi")
+
+
+def test_a_frozen_field_latent_is_flagged_dead(stochastic_model):
+    free_draws = 10.0 + 0.1 * jax.random.normal(jax.random.PRNGKey(12), (_N,))
+    frozen_xi = jnp.full((_N, _N_GRID), 5.0)
+    with pytest.warns(DeadFitWarning, match=r"dead fit") as record:
+        _stochastic_posterior(stochastic_model, free_draws, frozen_xi)
+    message = str(record[0].message)
+    assert "'psd_xi'" in message
+    assert f"'{_FREE}'" not in message
+
+
+def test_a_moving_field_latent_does_not_warn(stochastic_model):
+    free_draws = 10.0 + 0.1 * jax.random.normal(jax.random.PRNGKey(13), (_N,))
+    moving_xi = jax.random.normal(jax.random.PRNGKey(14), (_N, _N_GRID))
+    with warnings.catch_warnings():
+        warnings.simplefilter("error")
+        _stochastic_posterior(stochastic_model, free_draws, moving_xi)
