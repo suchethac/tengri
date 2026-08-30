@@ -296,13 +296,29 @@ register_backend(
     "mcmc_mclmc",
     tier="broken",
     short_doc=(
-        "[POOR MIXING] Microcanonical Langevin MC, fast warm call (~2s) "
-        "but R-hat ≈ 1.7 / 1.13 and ESS ≈ 1 on D=6-7 mocks at 4000 samples. "
-        "Do not use for science until tuning is investigated. "
+        "[POOR MIXING] Microcanonical Langevin MC. The earlier quarantine "
+        "reason -- 'R-hat ≈ 1.7 and ESS ≈ 1 at 4000 samples' -- was a units "
+        "error: an MCLMC draw is one integrator step (2 gradients), a NUTS draw "
+        "is a whole trajectory (~50-77 gradients measured here), so 4000 of each "
+        "is not the same budget. Tuned and re-measured 2026-08-30: at 40000 "
+        "draws it clears max split-R-hat < 1.01 on 6/6 seeds of D=8 nb05 where "
+        "shipped NUTS clears 1/6. Still quarantined for a different and real "
+        "reason: 2 of those 6 seeds finished at 300x and 170,000x their "
+        "energy-error variance target with R-hat still reading 1.0007, and this "
+        "sampler is unadjusted, so nothing rejects an over-large step -- the "
+        "chains mix to a displaced distribution and R-hat cannot see it. Do not "
+        "use for science until that is understood; read energy_var_per_dim, not "
+        "R-hat, and see bench/reports/2026-08-30_mclmc_tuning.md. "
         "Requires blackjax >= 1.6."
     ),
     requires=("blackjax",),
     legacy_fitter=False,
+    # NOT accepts_precondition, though run_mclmc does take `precondition=` and
+    # wires it to the same analytic-metric seam NUTS uses. The capability is
+    # declared when it has been measured and the tier allows a fit:
+    # test_preconditioning_roundtrip parametrises over every backend declaring
+    # it and runs a real fit through each, which a tier="broken" backend cannot
+    # do. Declaring it here was an unmeasured claim that broke that contract.
 )(_ctx_run_mclmc)
 
 # ── Experimental backends ────────────────────────────────────────────────

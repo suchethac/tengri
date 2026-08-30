@@ -41,7 +41,7 @@ here" becomes a mechanism or is ruled out.
 Usage::
 
     JAX_PLATFORMS=cpu .venv/bin/python \\
-        bench/scripts/diagnose_chees_trajectory_length.py --notebook ctl
+        bench/scripts/diagnose_chees_trajectory_length.py --notebook ctl-dpl
 """
 
 from __future__ import annotations
@@ -105,7 +105,7 @@ ARMS = (
 
 def main() -> None:
     parser = argparse.ArgumentParser(description=__doc__)
-    parser.add_argument("--notebook", choices=sorted(NOTEBOOKS), default="ctl")
+    parser.add_argument("--notebook", choices=sorted(NOTEBOOKS), default="ctl-dpl")
     parser.add_argument("--seed", type=int, default=None)
     parser.add_argument("--n-warmup", type=int, default=1000)
     parser.add_argument("--n-samples", type=int, default=600)
