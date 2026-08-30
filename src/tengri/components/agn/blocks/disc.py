@@ -678,11 +678,12 @@ def relagn_disc_block(
     References
     ----------
     .. [1] Dovciak, M., Karas, V., & Yaqoob, T. (2004). ApJS, 153, 205.
-       KYCONV: Emission from the accretion disk of a Kerr black hole.
+       An Extended Scheme for Fitting X-Ray Data with Accretion Disk Spectra
+       in the Strong Gravity Regime [KYCONV]
        https://doi.org/10.1086/421115
-    .. [2] Hagen, S. & Done, C. (2023). MNRAS, 521, 251. RELAGN: A relativistic
-       accretion disc model for high spin and high inclination. High-spin AGN.
-       https://doi.org/10.1093/mnras/stad478
+    .. [2] Hagen, S. & Done, C. (2023). MNRAS, 525, 3455-3467. Estimating black
+       hole spin from AGN SED fitting: the impact of general-relativistic ray
+       tracing [RELAGN disc] https://doi.org/10.1093/mnras/stad2499
     """
     from tengri.components.agn.disc import relagn_disc_from_grid
 

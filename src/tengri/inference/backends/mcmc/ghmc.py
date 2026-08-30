@@ -233,7 +233,10 @@ def run_ghmc(
 
     if verbose:
         logger.info(
-            "  GHMC complete in %.1fs. Divergences: %d/%d", wall_time, n_divergent, n_samples
+            "  GHMC complete in %.1fs. Divergences: %d/%d",
+            wall_time,
+            n_divergent,
+            n_samples * n_chains,
         )
 
     return Posterior(

@@ -6,6 +6,48 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 
 ## [Unreleased]
 
+### Fixed
+
+- The construction-time dead-fit guard (`DeadFitWarning`) and
+  `convergence_check` compared the divergence count, which is summed over
+  every chain, with the per-chain draw count, so the "every transition
+  diverged" branch never fired for a multi-chain run and the percentage
+  read 400% on four chains. `total_draws()` owns that arithmetic now, the
+  backends' completion lines print the total, and single-chain paths record
+  `n_chains` (#2087).
+- The frozen-parameter half of the same guard scanned every column of
+  `samples`, which carries `Fixed` parameters as constant arrays by design,
+  so any model with a pinned parameter warned "dead fit" and named the
+  pinned parameters. `Posterior.free_names` reads the free names off the
+  model's spec and the check restricts itself to them (#2087).
+- `convergence_check` scanned every column of `samples` for its FROZEN check
+  too, so the same fit was reported `converged=False` naming 41 pinned
+  parameters; it now reads the free names, and no longer skips `psd_xi` (a
+  frozen stochastic-SFH field latent is as dead as a frozen named parameter).
+  `Posterior.save()` writes the free names into the file and `Posterior.load()`
+  restores them, so a reload without `model=` no longer re-creates the false
+  positive; files written before this load unchanged (#2087).
+
+### Added
+
+- `DeadFitError`: NUTS, HMC and dynamic HMC keep the per-step divergence
+  flags of their own warmup and refuse to sample when the final 10% of
+  warmup (at least 10 steps) is 90% or more divergent, before the adaptation
+  is cached and before the sampling scan compiles. `warmup_divergence_frac`
+  joins `diagnostics` whenever warmup ran in that call, and is absent (not
+  `None`) when a cached adaptation is reused, so `Posterior.save()` never
+  warns about an entry it cannot write. The warmup log line prints the
+  fraction when there is one, and the NUTS completion line prints the
+  divergence percentage and the tree-depth summary (#2088). **Behavior
+  change:** these methods now raise where they previously returned a frozen
+  posterior with a warning, including on the `hmc_is` evidence path that BMA
+  runs, so a caller looping over galaxies should catch `DeadFitError` (an
+  `InferenceError`, and so a `RuntimeError`) and record that galaxy as a
+  failed fit. It is exported from the top level as `tengri.DeadFitError`. A
+  warmup shorter than the minimum window (10 steps) carries no verdict and is
+  never refused: BlackJAX opens dual averaging well above the stable step
+  size, so the opening steps of every warmup diverge whatever the posterior.
+
 ### Removed
 
 - The `stellar` build group (#1720). Metallicity is now configured through

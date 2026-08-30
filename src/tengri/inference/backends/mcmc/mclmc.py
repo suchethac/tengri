@@ -641,7 +641,7 @@ def run_adjusted_mclmc(
             "  Adjusted MCLMC complete in %.1fs. Divergences: %d/%d",
             wall_time,
             n_divergent,
-            n_samples,
+            n_samples * n_chains,
         )
 
     return Posterior(

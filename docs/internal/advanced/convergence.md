@@ -56,7 +56,9 @@ those regions.
 ```python
 result = fitter.run("mcmc_nuts", n_warmup=500, n_burnin=50)
 n_div = result.diagnostics.get("n_divergent", 0)
-n_total = result.diagnostics.get("n_samples", 1)
+# `n_samples` is the kept draws PER CHAIN, while `n_divergent` is summed over
+# every chain, so the denominator is the total: `n_samples * n_chains` (#2087).
+n_total = result.diagnostics.get("n_samples", 1) * result.diagnostics.get("n_chains", 1)
 print(f"Divergences: {n_div}/{n_total} ({100 * n_div / n_total:.1f}%)")
 ```
 

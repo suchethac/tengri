@@ -4640,6 +4640,7 @@ class Fitter:
                     "n_warmup": n_warmup,
                     "n_burnin": n_burnin,
                     "n_samples": n_samples,
+                    "n_chains": 1,
                     "n_divergent": n_div,
                     "step_size": float(step_size),
                     "batch_size": n_gal,

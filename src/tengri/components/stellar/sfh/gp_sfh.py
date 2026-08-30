@@ -114,9 +114,9 @@ def gp_from_xi(xi: jnp.ndarray, sqrt_power: jnp.ndarray, n_points: int) -> jnp.n
 
     References
     ----------
-    .. [1] Selig et al., "NIFTY - Numerical Information Field Theory in Python,"
-       A&A, 554, A26 (2013). arXiv:1301.4499.
-       https://doi.org/10.1051/0004-6361/201321236
+    .. [1] Selig et al., "NIFTY - Numerical Information Field Theory. A versatile
+       PYTHON library for signal inference," A&A, 554, A26 (2013).
+       arXiv:1301.4499. https://doi.org/10.1051/0004-6361/201321236
 
     Examples
     --------
