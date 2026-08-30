@@ -267,10 +267,18 @@ def convergence_check(result, method_name="", verbose=True):
     # The guard: detect parameters where n_unique == 1 and surface as a failure.
     frozen_params = []
     if result.samples is not None:
-        for param_name, samples in result.samples.items():
-            if param_name.startswith("psd_xi"):
-                continue
-            arr = np.asarray(samples)
+        # Only FREE parameters can be frozen. ``samples`` also carries every
+        # ``Fixed`` value broadcast to a constant column, so scanning it whole
+        # named 41 pinned parameters and no free one on the fit that filed
+        # #2087. The same policy as ``Posterior.__post_init__``: the free names
+        # when the posterior knows them (from its model, or from the file it
+        # was loaded from), every column when it does not. ``psd_xi`` is not
+        # skipped -- ``free_names`` includes the stochastic-SFH field latent,
+        # and a frozen field is exactly as dead as a frozen named parameter.
+        free = getattr(result, "free_names", None)
+        names = list(result.samples) if free is None else [n for n in free if n in result.samples]
+        for param_name in names:
+            arr = np.asarray(result.samples[param_name])
             if arr.ndim >= 1 and float(np.ptp(arr)) == 0.0:
                 frozen_params.append(param_name)
 
@@ -285,22 +293,27 @@ def convergence_check(result, method_name="", verbose=True):
     # --- Divergences (NUTS) ---
     n_div = result.diagnostics.get("n_divergent", None)
     if n_div is not None:
+        from tengri.inference.backends.mcmc._shared import total_draws
+
+        # ``n_samples`` is per chain; ``n_divergent`` counts every chain (#2087).
         n_samples = result.diagnostics.get("n_samples", 1)
-        div_pct = 100 * n_div / max(n_samples, 1)
+        n_total = total_draws(result.diagnostics, n_samples=n_samples)
+        div_pct = 100 * n_div / max(n_total, 1)
         info["n_divergent"] = n_div
+        info["n_draws_total"] = n_total
         info["divergence_pct"] = div_pct
 
-        # Explicit detection: all samples diverged (#1437)
-        if n_div == n_samples and n_samples > 0:
+        # Explicit detection: every kept draw diverged (#1437, #2087)
+        if n_div == n_total and n_total > 0:
             info["all_samples_divergent"] = True
             warnings.append(
-                f"CRITICAL: {n_div}/{n_samples} divergent transitions (100%) "
+                f"CRITICAL: {n_div}/{n_total} divergent transitions (100%) "
                 f": the sampler rejected every proposal. This is a dead fit, not a converged one."
             )
         elif n_div > th["divergence_warn"]:
             severity = "SERIOUS" if div_pct > th["divergence_fail_pct"] else "WARNING"
             warnings.append(
-                f"{severity}: {n_div}/{n_samples} divergent transitions "
+                f"{severity}: {n_div}/{n_total} divergent transitions "
                 f"({div_pct:.1f}%); posterior may be unreliable"
             )
         else:
@@ -344,10 +357,7 @@ def convergence_check(result, method_name="", verbose=True):
         if "acceptance_rate" in info:
             print(f"  Acceptance rate:    {info['acceptance_rate']:.1%}")
         if "n_divergent" in info:
-            print(
-                f"  Divergences:        {info['n_divergent']} / "
-                f"{result.diagnostics.get('n_samples', '?')}"
-            )
+            print(f"  Divergences:        {info['n_divergent']} / {info['n_draws_total']}")
         if warnings:
             for w in warnings:
                 print(f"  >> {w}")

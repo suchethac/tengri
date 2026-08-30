@@ -84,6 +84,7 @@ ALLOWED_TOP_LEVEL: frozenset[str] = frozenset(
         # ── Exceptions ──────────────────────────────────────────────
         "BackendError",
         "ConfigError",
+        "DeadFitError",
         "InferenceError",
         "ParameterError",
         "TengriError",

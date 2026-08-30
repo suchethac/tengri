@@ -90,9 +90,9 @@ def boroson_green_feii_block(
 
     References
     ----------
-    .. [1] Boroson, T. A., & Green, R. F. 1992, ApJS, 80, 109. The emission
-       line properties of low-redshift quasi-stellar objects. Published
-       1992 September 1. https://doi.org/10.1086/191679
+    .. [1] Boroson, T. A., & Green, R. F. 1992, ApJS, 80, 109. The
+       Emission-Line Properties of Low-Redshift Quasi-stellar Objects.
+       Published 1992 September 1. https://doi.org/10.1086/191679
     .. [2] Krawczyk, C. M., et al. 2013, ApJS, 206, 4. Mean Spectral Energy
        Distributions and Bolometric Corrections for Luminous Quasars.
        arXiv:1304.0227. https://doi.org/10.1088/0067-0049/206/1/4

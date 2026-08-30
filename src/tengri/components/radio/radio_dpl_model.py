@@ -57,9 +57,9 @@ class RadioDPL(SEDModelComponent):
 
     References
     ----------
-    .. [1] J. Martinez-Ramirez et al., "AGNfitter-rx: a radio-to-X-ray
-       spectral energy distribution fitting code," A&A, 692, A85 (2024).
-       https://doi.org/10.1051/0004-6361/202450447
+    .. [1] J. Martinez-Ramirez et al., "AGNfitter-rx: Modeling the
+       radio-to-X-ray spectral energy distributions of AGNs," A&A, 688,
+       A46 (2024). https://doi.org/10.1051/0004-6361/202449329
     """
 
     name = "radio_dpl"
