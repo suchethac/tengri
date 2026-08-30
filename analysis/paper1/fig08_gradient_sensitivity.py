@@ -202,6 +202,69 @@ def compute_fisher_matrix(J, flux, free_params, frac_uncertainty=0.05):
     return fisher, corr_matrix, forecast_sigmas, messages
 
 
+def plot_figures(log_J, J, flux, fisher, corr_matrix, forecast_sigmas, 
+                 used_filters, free_params, check_messages, fisher_messages):
+    """Plot figures from precomputed data (no recomputation)."""
+    n_bands = J.shape[0]
+    n_params = J.shape[1]
+
+    print("\n11. Creating final publication figure...")
+    fig_final = plt.figure(figsize=(7.0, 3.4), dpi=150)
+
+    # Use manual margins instead of constrained_layout
+    # Increase wspace significantly to prevent colorbar overlap
+    gs = fig_final.add_gridspec(
+        1, 2, width_ratios=[1.2, 1.0], wspace=0.75,
+        left=0.08, right=0.98, top=0.95, bottom=0.12
+    )
+    ax_a = fig_final.add_subplot(gs[0])
+    ax_b = fig_final.add_subplot(gs[1])
+
+    # Panel (a): Log-Jacobian
+    mat = log_J.T
+    vmax = np.max(np.abs(mat))
+    im_a = ax_a.imshow(mat, aspect="auto", cmap="RdBu_r", vmin=-vmax, vmax=vmax)
+    ax_a.set_xticks(range(n_bands))
+    ax_a.set_xticklabels(used_filters, rotation=45, ha="right", fontsize=9)
+    ax_a.set_yticks(range(n_params))
+    label_map = {
+        "sfh_dpl_alpha": r"$\alpha$",
+        "sfh_dpl_beta": r"$\beta$",
+        "sfh_dpl_tau_gyr": r"$\tau$ (Gyr)",
+        "sfh_dpl_age_gyr": "age (Gyr)",
+        "sfh_dpl_log_total_mass": r"$\log M_*$",
+        "met_logzsol": r"$\log Z$",
+        "dust_tau_bc": r"$\tau_{\rm bc}$",
+        "dust_tau_diff": r"$\tau_{\rm diff}$",
+    }
+    param_labels = [label_map.get(p, p) for p in free_params]
+    ax_a.set_yticklabels(param_labels, fontsize=10)
+    ax_a.set_title("(a) Jacobian", fontsize=10, fontweight="bold")
+    ax_a.set_xlabel("Filter", fontsize=10)
+    ax_a.set_ylabel("Parameter", fontsize=10)
+    ax_a.tick_params(axis='both', which='major', labelsize=9)
+    cbar_a = plt.colorbar(im_a, ax=ax_a, shrink=0.9)
+    cbar_a.set_label(r"∂$\log_{10}$ f / ∂θ", fontsize=10)
+    cbar_a.ax.tick_params(labelsize=9)
+
+    # Panel (b): Fisher correlation matrix
+    im_b = ax_b.imshow(corr_matrix, cmap="RdBu_r", vmin=-1, vmax=1, aspect="auto")
+    ax_b.set_xticks(range(n_params))
+    ax_b.set_yticks(range(n_params))
+    ax_b.set_xticklabels(param_labels, rotation=45, ha="right", fontsize=10)
+    ax_b.set_yticklabels(param_labels, fontsize=10)
+    ax_b.set_title("(b) Fisher correlation", fontsize=10, fontweight="bold")
+    ax_b.tick_params(axis='both', which='major', labelsize=9)
+    cbar_b = plt.colorbar(im_b, ax=ax_b, shrink=0.9)
+    cbar_b.set_label("Correlation", fontsize=10)
+    cbar_b.ax.tick_params(labelsize=9)
+
+    fig_final.savefig(OUTPUT_DIR / "fig08_gradient_sensitivity.pdf", dpi=150, bbox_inches="tight")
+    fig_final.savefig(OUTPUT_DIR / "fig08_gradient_sensitivity.png", dpi=150, bbox_inches="tight")
+    print(f"   ✓ Saved to {OUTPUT_DIR / 'fig08_gradient_sensitivity.pdf'}")
+    print(f"   ✓ Saved to {OUTPUT_DIR / 'fig08_gradient_sensitivity.png'}")
+
+
 def main():
     print("=" * 80)
     print("Figure 8: Gradient Sensitivity (Jacobian and Fisher Matrix)")
@@ -300,70 +363,16 @@ def main():
     print(f"   Jacobian median:     {t_jac_median:.6f} s")
     print(f"   Ratio (Jac/Forward): {t_jac_median / t_forward_median:.2f}x")
 
-    print("\n11. Creating final publication figure...")
-    fig_final = plt.figure(figsize=(7.0, 3.4), dpi=150)
-
-    # Use constrained_layout for better space management
-    gs = fig_final.add_gridspec(
-        1, 2, width_ratios=[1.2, 1.0], wspace=0.3,
-        left=0.08, right=0.98, top=0.95, bottom=0.12
-    )
-    ax_a = fig_final.add_subplot(gs[0])
-    ax_b = fig_final.add_subplot(gs[1])
-
-    n_bands = J.shape[0]
-    n_params = J.shape[1]
-
-    # Panel (a): Log-Jacobian
-    mat = log_J.T
-    vmax = np.max(np.abs(mat))
-    im_a = ax_a.imshow(mat, aspect="auto", cmap="RdBu_r", vmin=-vmax, vmax=vmax)
-    ax_a.set_xticks(range(n_bands))
-    ax_a.set_xticklabels(used_filters, rotation=45, ha="right", fontsize=9)
-    ax_a.set_yticks(range(n_params))
-    label_map = {
-        "sfh_dpl_alpha": r"$\alpha$",
-        "sfh_dpl_beta": r"$\beta$",
-        "sfh_dpl_tau_gyr": r"$\tau$ (Gyr)",
-        "sfh_dpl_age_gyr": "age (Gyr)",
-        "sfh_dpl_log_total_mass": r"$\log M_*$",
-        "met_logzsol": r"$\log Z$",
-        "dust_tau_bc": r"$\tau_{\rm bc}$",
-        "dust_tau_diff": r"$\tau_{\rm diff}$",
-    }
-    param_labels = [label_map.get(p, p) for p in free_params]
-    ax_a.set_yticklabels(param_labels, fontsize=10)
-    ax_a.set_title("(a) Jacobian", fontsize=10, fontweight="bold")
-    ax_a.set_xlabel("Filter", fontsize=10)
-    ax_a.set_ylabel("Parameter", fontsize=10)
-    ax_a.tick_params(axis='both', which='major', labelsize=9)
-    cbar_a = plt.colorbar(im_a, ax=ax_a, shrink=0.9)
-    cbar_a.set_label(r"∂$\log_{10}$ f / ∂θ", fontsize=10)
-    cbar_a.ax.tick_params(labelsize=9)
-
-    # Panel (b): Fisher correlation matrix
-    im_b = ax_b.imshow(corr_matrix, cmap="RdBu_r", vmin=-1, vmax=1, aspect="auto")
-    ax_b.set_xticks(range(n_params))
-    ax_b.set_yticks(range(n_params))
-    ax_b.set_xticklabels(param_labels, rotation=45, ha="right", fontsize=10)
-    ax_b.set_yticklabels(param_labels, fontsize=10)
-    ax_b.set_title("(b) Fisher correlation", fontsize=10, fontweight="bold")
-    ax_b.tick_params(axis='both', which='major', labelsize=9)
-    cbar_b = plt.colorbar(im_b, ax=ax_b, shrink=0.9)
-    cbar_b.set_label("Correlation", fontsize=10)
-    cbar_b.ax.tick_params(labelsize=9)
-
-    fig_final.savefig(OUTPUT_DIR / "fig08_gradient_sensitivity.pdf", dpi=150, bbox_inches="tight")
-    fig_final.savefig(OUTPUT_DIR / "fig08_gradient_sensitivity.png", dpi=150, bbox_inches="tight")
-    print(f"   ✓ Saved to {OUTPUT_DIR / 'fig08_gradient_sensitivity.pdf'}")
-    print(f"   ✓ Saved to {OUTPUT_DIR / 'fig08_gradient_sensitivity.png'}")
+    # Plot the figures
+    plot_figures(log_J, J, flux, fisher, corr_matrix, forecast_sigmas,
+                 used_filters, free_params, check_messages, fisher_messages)
 
     print("\n12. Saving results JSON...")
     results = {
         "configuration": "II",
         "redshift": z,
-        "n_bands": n_bands,
-        "n_free_params": n_params,
+        "n_bands": J.shape[0],
+        "n_free_params": J.shape[1],
         "filter_names": used_filters,
         "parameter_names": free_params,
         "evaluation_point": {
