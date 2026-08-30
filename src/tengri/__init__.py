@@ -338,6 +338,7 @@ from tengri.components.stellar.sps.mass_remaining import compute_mass_remaining_
 from tengri.config.exceptions import (
     BackendError,
     ConfigError,
+    DeadFitError,
     InferenceError,
     ParameterError,
     TengriError,
@@ -752,6 +753,7 @@ __all__ = [  # noqa: RUF022
     "ConfigError",
     "BackendError",
     "InferenceError",
+    "DeadFitError",
     "TengriIOError",
     # ========== Layer modules (optional imports, see docs) ==========
     "citations",

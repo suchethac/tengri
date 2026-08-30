@@ -1653,7 +1653,7 @@ class _CatalogFitterOriginal:
                 params=best_params,
                 method=f"CatalogFitter/{method_tag}",
                 wall_time_s=time.time() - t0,
-                diagnostics={"n_divergent": n_div, "n_samples": n_samples},
+                diagnostics={"n_divergent": n_div, "n_samples": n_samples, "n_chains": 1},
                 loss_history=None,
                 _model=self.model,
             )
