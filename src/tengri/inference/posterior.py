@@ -364,7 +364,8 @@ class Posterior:
         """Detect dead MCMC fits (100% divergent or frozen parameters) and warn.
 
         A dead fit is unambiguous when:
-        - ``n_divergent == n_samples * n_chains``: every kept draw across every chain diverged (all-divergent, #2087).
+        - ``n_divergent == n_samples * n_chains``: every kept draw across every
+          chain diverged (all-divergent, #2087).
         - Any free parameter has all identical draws (``np.ptp == 0``) over >= 100
           draws (frozen parameter). Small test posteriors (< 100 draws) are exempt.
 

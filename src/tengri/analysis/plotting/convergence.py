@@ -305,7 +305,7 @@ def convergence_check(result, method_name="", verbose=True):
         elif n_div > th["divergence_warn"]:
             severity = "SERIOUS" if div_pct > th["divergence_fail_pct"] else "WARNING"
             warnings.append(
-                f"{severity}: {n_div}/{n_samples} divergent transitions "
+                f"{severity}: {n_div}/{n_total} divergent transitions "
                 f"({div_pct:.1f}%); posterior may be unreliable"
             )
         else:

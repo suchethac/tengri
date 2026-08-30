@@ -22,7 +22,10 @@ Mutation checks (the one-line mutant each test must die under):
    the old condition TRUE for ``n_divergent == n_samples`` with two chains ->
    a false warning.
 4. ``test_convergence_check_two_chain_percentages``: revert convergence.py to
-   ``n_div / n_samples`` -> 200%.
+   ``n_div / n_samples`` -> 200%. Also covers the partial-divergence
+   ``elif n_div > th["divergence_warn"]`` branch: reverting its message
+   denominator to ``n_samples`` prints "200/200" instead of "200/400" for the
+   two-chain, half-divergent case.
 """
 
 import warnings
@@ -103,3 +106,6 @@ def test_convergence_check_two_chain_percentages():
     info = convergence_check(half, method_name="NUTS", verbose=False)
     assert info.get("all_samples_divergent") is not True
     assert info["divergence_pct"] == pytest.approx(50.0)
+    # Numerator over the SAME total-draws denominator, not the per-chain count
+    # (#2087): "200/400", not "200/200".
+    assert "200/400" in " ".join(info["warnings"])
