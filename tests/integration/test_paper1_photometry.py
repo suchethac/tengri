@@ -71,9 +71,9 @@ def registry_names():
 def test_ab_mag_to_fnu_matches_the_ab_definition():
     fnu, err = candels_io.ab_mag_to_fnu(21.342, 0.001)
     expected = 3.631e-20 * 10 ** (-21.342 / 2.5)
-    assert float(fnu) == pytest.approx(expected, rel=1e-3)
-    assert float(fnu) == pytest.approx(1.055e-28, rel=2e-3)
-    assert float(err) == pytest.approx(expected * np.log(10) / 2.5 * 0.001, rel=1e-3)
+    assert float(fnu) == pytest.approx(expected, rel=1e-3, abs=0)
+    assert float(fnu) == pytest.approx(1.055e-28, rel=2e-3, abs=0)
+    assert float(err) == pytest.approx(expected * np.log(10) / 2.5 * 0.001, rel=1e-3, abs=0)
 
 
 def test_ab_mag_to_fnu_is_elementwise():
@@ -125,13 +125,13 @@ def test_one_ks_band_isaac_first_hawki_only_as_fallback():
     names, fnu, _ = candels_io.photometry_for_row(header, row)
     assert names.count("vista_ks") == 1
     isaac_flux = float(candels_io.ab_mag_to_fnu(21.0, 0.01)[0])
-    assert fnu[names.index("vista_ks")] == pytest.approx(isaac_flux)
+    assert fnu[names.index("vista_ks")] == pytest.approx(isaac_flux, rel=1e-12, abs=0)
 
     header, row = _row_from({"ISAAC_KS": (98.992, -99.0), "HAWKI_KS": (22.0, 0.01)})
     names, fnu, _ = candels_io.photometry_for_row(header, row)
     assert names.count("vista_ks") == 1
     hawki_flux = float(candels_io.ab_mag_to_fnu(22.0, 0.01)[0])
-    assert fnu[names.index("vista_ks")] == pytest.approx(hawki_flux)
+    assert fnu[names.index("vista_ks")] == pytest.approx(hawki_flux, rel=1e-12, abs=0)
 
 
 def test_photometry_for_row_skips_sentinels_and_orders_by_the_map():
