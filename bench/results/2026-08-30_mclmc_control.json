@@ -1,0 +1,52 @@
+{
+  "fixture": {
+    "name": "jwst_nonparametric_fits (PR #2014 sampler page)",
+    "why": "the only non-tsnorm, non-degenerate fixture in the harness",
+    "sfh": "continuity (nonparametric, 7 bins / 6 ratios)",
+    "n_free_params": 9,
+    "n_bands": 19,
+    "bands": "JWST NIRCam, 7 broad + 12 medium",
+    "redshift": 1.5,
+    "snr": 20.0,
+    "ssp": "prsc_miles_chabrier_wNE",
+    "n_chains": 2,
+    "platform": "Linux x86_64, JAX_PLATFORMS=cpu, x64, box shared with two other agents (load 20-40); wall times indicative, R-hat/ESS/EEVPD deterministic given the seed"
+  },
+  "rows": [
+    {
+      "method": "mcmc_nuts",
+      "config": "n_warmup=1000, n_samples=400 (the page's own committed call)",
+      "seed": 4,
+      "wall_s": 162.9,
+      "max_split_rhat": 1.0136,
+      "divergences": 6,
+      "min_ess": 153.5,
+      "worst_param": "dust_tau_diff",
+      "sec_per_ess": 1.061,
+      "gradients_per_draw": 77.1,
+      "gradients_per_ess": 402,
+      "clears_bar": false
+    },
+    {
+      "method": "mcmc_mclmc",
+      "config": "n_warmup=5000, n_samples=20000 (a draw is one integrator step, not a trajectory)",
+      "seed": 4,
+      "wall_s": 45.0,
+      "max_split_rhat": 1.0054,
+      "divergences": null,
+      "divergences_note": "unadjusted sampler: no accept/reject step, so no divergence count exists; the energy-error variance per dimension is reported in its place",
+      "energy_var_per_dim": 0.00122,
+      "energy_var_per_dim_target": 0.0005,
+      "min_ess": 124.0,
+      "worst_param": "sfh_cont_log_total_mass",
+      "sec_per_ess": 0.363,
+      "gradients_per_draw": 2.0,
+      "gradients_per_ess": 645,
+      "clears_bar": true
+    }
+  ],
+  "headline": "On the healthy fixture MCLMC finishes a posterior in 45 s against NUTS's 163 s (3.6x), at 2.9x better seconds-per-effective-sample, and clears max split-R-hat < 1.01 where NUTS does not (1.0136 with 6 divergences). NUTS is nonetheless the more gradient-efficient sampler here: 402 gradients per effective sample against MCLMC's 645. The wall-clock win is cheap constant-cost steps, not fewer of them.",
+  "seeds_run": 1,
+  "seeds_planned": 3,
+  "status": "first seed; 3-seed sweep in progress"
+}

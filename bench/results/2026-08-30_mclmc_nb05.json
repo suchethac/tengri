@@ -1,0 +1,217 @@
+{
+  "notebook": "05",
+  "seeds": [
+    7,
+    8,
+    9,
+    10,
+    11,
+    12
+  ],
+  "rows": {
+    "nuts (shipped)": [
+      {
+        "wall": 382.17343495204113,
+        "rhat": 1.004338077882841,
+        "divergences": 4,
+        "eevpd": null,
+        "eevpd_target": null,
+        "nonfinite_steps": null,
+        "min_ess": 88.06729540645878,
+        "worst": "sfh_tsnorm_skew",
+        "sec_per_ess": 4.339561390958906
+      },
+      {
+        "wall": 448.282173207961,
+        "rhat": 1.0003418318262078,
+        "divergences": 13,
+        "eevpd": null,
+        "eevpd_target": null,
+        "nonfinite_steps": null,
+        "min_ess": 206.0187219610748,
+        "worst": "sfh_tsnorm_peak_lbt_gyr",
+        "sec_per_ess": 2.1759292987588745
+      },
+      {
+        "wall": 342.071151632932,
+        "rhat": 1.0621155620801013,
+        "divergences": 55,
+        "eevpd": null,
+        "eevpd_target": null,
+        "nonfinite_steps": null,
+        "min_ess": 19.463846470047475,
+        "worst": "met_logzsol",
+        "sec_per_ess": 17.57469430101283
+      },
+      {
+        "wall": 819.4429258060409,
+        "rhat": 1.0030525416809468,
+        "divergences": 0,
+        "eevpd": null,
+        "eevpd_target": null,
+        "nonfinite_steps": null,
+        "min_ess": 141.02984718177723,
+        "worst": "sfh_tsnorm_log_total_mass",
+        "sec_per_ess": 5.810421993507789
+      },
+      {
+        "wall": 380.80025052302517,
+        "rhat": 1.0131706595813814,
+        "divergences": 7,
+        "eevpd": null,
+        "eevpd_target": null,
+        "nonfinite_steps": null,
+        "min_ess": 126.94945122436006,
+        "worst": "sfh_tsnorm_peak_lbt_gyr",
+        "sec_per_ess": 2.9996210842221758
+      },
+      {
+        "wall": 104.99040653195698,
+        "rhat": NaN,
+        "divergences": 1200,
+        "eevpd": null,
+        "eevpd_target": null,
+        "nonfinite_steps": null,
+        "min_ess": 0.6948465547191662,
+        "worst": "dust_tau_diff",
+        "sec_per_ess": 151.09869340057475
+      }
+    ],
+    "mclmc": [
+      {
+        "wall": 88.28444361803122,
+        "rhat": 1.010499425200428,
+        "divergences": null,
+        "eevpd": 0.0033072798259744084,
+        "eevpd_target": 0.0005,
+        "nonfinite_steps": 0,
+        "min_ess": 97.68957317734832,
+        "worst": "sfh_tsnorm_skew",
+        "sec_per_ess": 0.9037243253971151
+      },
+      {
+        "wall": 88.1904886639677,
+        "rhat": 1.013895723385859,
+        "divergences": null,
+        "eevpd": 0.19659884619180187,
+        "eevpd_target": 0.0005,
+        "nonfinite_steps": 0,
+        "min_ess": 78.55911940121635,
+        "worst": "sfh_tsnorm_skew",
+        "sec_per_ess": 1.1226002701680262
+      },
+      {
+        "wall": 89.74933892604895,
+        "rhat": 1.0021468403346978,
+        "divergences": null,
+        "eevpd": 0.012347132830754049,
+        "eevpd_target": 0.0005,
+        "nonfinite_steps": 0,
+        "min_ess": 160.41594883744534,
+        "worst": "sfh_tsnorm_peak_lbt_gyr",
+        "sec_per_ess": 0.5594789020448013
+      },
+      {
+        "wall": 79.74744121206459,
+        "rhat": 1.0099364445304166,
+        "divergences": null,
+        "eevpd": 0.001810795792325354,
+        "eevpd_target": 0.0005,
+        "nonfinite_steps": 0,
+        "min_ess": 41.936151013739455,
+        "worst": "sfh_tsnorm_peak_lbt_gyr",
+        "sec_per_ess": 1.9016394991981285
+      },
+      {
+        "wall": 85.8275368839968,
+        "rhat": 1.010609834991776,
+        "divergences": null,
+        "eevpd": 0.002135776433535205,
+        "eevpd_target": 0.0005,
+        "nonfinite_steps": 0,
+        "min_ess": 124.65829990462662,
+        "worst": "sfh_tsnorm_peak_lbt_gyr",
+        "sec_per_ess": 0.688502385718894
+      },
+      {
+        "wall": 97.37866679194849,
+        "rhat": 1.0016932522938207,
+        "divergences": null,
+        "eevpd": 160.9653057784499,
+        "eevpd_target": 0.0005,
+        "nonfinite_steps": 0,
+        "min_ess": 99.2483354777142,
+        "worst": "sfh_tsnorm_log_total_mass",
+        "sec_per_ess": 0.9811617124179827
+      }
+    ],
+    "mclmc 2x": [
+      {
+        "wall": 274.4582750190748,
+        "rhat": 1.0023903260236298,
+        "divergences": null,
+        "eevpd": 0.006791459453334122,
+        "eevpd_target": 0.0005,
+        "nonfinite_steps": 0,
+        "min_ess": 247.5707834606023,
+        "worst": "sfh_tsnorm_skew",
+        "sec_per_ess": 1.1086052690977215
+      },
+      {
+        "wall": 325.96573347598314,
+        "rhat": 1.0083789236897311,
+        "divergences": null,
+        "eevpd": 0.14623616802505435,
+        "eevpd_target": 0.0005,
+        "nonfinite_steps": 0,
+        "min_ess": 204.6100375252031,
+        "worst": "sfh_tsnorm_skew",
+        "sec_per_ess": 1.5931072464410838
+      },
+      {
+        "wall": 360.4099293559557,
+        "rhat": 1.0007734137251012,
+        "divergences": null,
+        "eevpd": 0.012255347441301714,
+        "eevpd_target": 0.0005,
+        "nonfinite_steps": 0,
+        "min_ess": 462.74898939467533,
+        "worst": "sfh_tsnorm_peak_lbt_gyr",
+        "sec_per_ess": 0.7788454164479323
+      },
+      {
+        "wall": 259.79651264403947,
+        "rhat": 1.0038148632042212,
+        "divergences": null,
+        "eevpd": 0.009048139062338702,
+        "eevpd_target": 0.0005,
+        "nonfinite_steps": 0,
+        "min_ess": 122.14572303745257,
+        "worst": "sfh_tsnorm_log_total_mass",
+        "sec_per_ess": 2.126939087047527
+      },
+      {
+        "wall": 282.6707970300922,
+        "rhat": 1.0020986427319563,
+        "divergences": null,
+        "eevpd": 0.003343234122630123,
+        "eevpd_target": 0.0005,
+        "nonfinite_steps": 0,
+        "min_ess": 302.1349850577286,
+        "worst": "sfh_tsnorm_skew",
+        "sec_per_ess": 0.9355778410635981
+      },
+      {
+        "wall": 347.92641747603193,
+        "rhat": 1.0007277594928177,
+        "divergences": null,
+        "eevpd": 84.4044102921373,
+        "eevpd_target": 0.0005,
+        "nonfinite_steps": 0,
+        "min_ess": 213.65902782476607,
+        "worst": "sfh_tsnorm_log_total_mass",
+        "sec_per_ess": 1.628418986167934
+      }
+    ]
+  }
+}
