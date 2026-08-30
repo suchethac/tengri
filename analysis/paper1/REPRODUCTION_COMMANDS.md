@@ -157,3 +157,21 @@ PYTHONPATH=$PWD/src JAX_PLATFORMS=cpu python analysis/paper1/fig08_gradient_sens
 **Timings (CPU):**
 - Forward pass: ~0.18 ms median
 - Jacobian computation: ~2.1 ms median (~11.6× forward time)
+
+## Figure 3, panel (a): forward-model speed (re-measured 2026-08-30 on a quiet machine)
+
+Run the benchmark with no other JAX process on the machine (check `ps` for fit or sweep processes first),
+stamp the log, parse it, and regenerate the figure:
+
+```bash
+cd <path-to-your-tengri-checkout>
+log=analysis/paper1/results/fig03_bench_forward_$(date +%F).log
+{ echo "START $(date '+%F %T') host=$(hostname) commit=$(git rev-parse --short HEAD) jax=$(.venv/bin/python -c 'import jax;print(jax.__version__)')"
+  PYTHONPATH=$PWD/src JAX_PLATFORMS=cpu caffeinate -i .venv/bin/python bench/scripts/benchmark_forward_model.py
+  echo "EXIT=$? $(date '+%F %T')"; } > "$log" 2>&1
+.venv/bin/python analysis/paper1/parse_forward_benchmark.py --log "$log" --out analysis/paper1/results/fig03_bench_forward_$(date +%F).json
+PYTHONPATH=$PWD/src .venv/bin/python analysis/paper1/fig03_precompute.py --bench-json analysis/paper1/results/fig03_bench_forward_$(date +%F).json
+```
+
+The archived run is `results/fig03_bench_forward_2026-08-30.{log,json}` (Apple M4 Pro, JAX 0.11.1, float64,
+SDSS ugriz at z=0.1, 200 timed calls after 5 warmup calls, commit 996b72ccb, no other fit process running).
