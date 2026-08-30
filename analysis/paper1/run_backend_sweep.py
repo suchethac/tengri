@@ -1,12 +1,22 @@
 """Run backend sweep: test all inference methods on galaxy 13097, configuration II.
 
-Runs the paper's backend list: map, laplace, mcmc (automatic selector), mcmc_nuts, mcmc_hmc, mcmc_raytrace.
-Saves results to results/backend_sweep/<method>.npz + .json.
-Creates summary in results/backend_sweep/summary.json.
+Runs the paper's backend list: map, laplace, mcmc (automatic selector), mcmc_nuts,
+mcmc_hmc, mcmc_raytrace. Saves results to <out-dir>/<method>.npz + .json and a
+summary in <out-dir>/summary.json.
+
+CLI::
+
+    python run_backend_sweep.py [--methods map,laplace] [--out-dir DIR]
+
+``--methods`` is a comma-separated subset of ``SWEEP_METHODS``, run in the order
+given; the default is all six. ``--out-dir`` defaults to
+``results/backend_sweep``. Both exist so the two cheap rows can be smoke-tested
+into a scratch directory without touching the paper's results (#2089).
 """
 
 from __future__ import annotations
 
+import argparse
 import json
 import logging
 import sys
@@ -30,9 +40,22 @@ logger = logging.getLogger(__name__)
 #: selector, NUTS at this dimensionality) is in.
 SWEEP_METHODS = ("map", "laplace", "mcmc", "mcmc_nuts", "mcmc_hmc", "mcmc_raytrace")
 
+#: Default output directory, relative to this file.
+DEFAULT_OUT_DIR = Path(__file__).parent / "results" / "backend_sweep"
 
-def run_backend_sweep():
-    """Run all inference backends on galaxy 13097 with config II."""
+
+def run_backend_sweep(
+    methods: tuple[str, ...] = SWEEP_METHODS,
+    out_dir: Path | None = None,
+):
+    """Run the requested inference backends on galaxy 13097 with config II.
+
+    Args:
+        methods: Backend names to run, in order. Every name must be in
+            ``SWEEP_METHODS``.
+        out_dir: Directory for the per-method NPZ/JSON and ``summary.json``.
+            Defaults to ``DEFAULT_OUT_DIR``.
+    """
     gal_id = 13097
     config_key = "II"
 
@@ -57,13 +80,13 @@ def run_backend_sweep():
     data = Data(photometry=(fnu, sigma_floor))
 
     # Output directory
-    out_dir = Path(__file__).parent / "results" / "backend_sweep"
+    out_dir = Path(DEFAULT_OUT_DIR if out_dir is None else out_dir)
     out_dir.mkdir(parents=True, exist_ok=True)
 
     results = []
     key = jax.random.PRNGKey(42)
 
-    for method in SWEEP_METHODS:
+    for method in methods:
         logger.info(f"\n{'=' * 60}")
         logger.info(f"Testing method: {method}")
         logger.info(f"{'=' * 60}")
@@ -78,7 +101,9 @@ def run_backend_sweep():
                 t_warm = None
 
             elif method == "laplace":
-                posterior = forward.fit(data, key=key, method="laplace", approx="diagonal")
+                # No covariance-shape option here: ``ForwardModel.fit(approx=...)``
+                # is the precompute/approximation policy, not a Laplace knob (#2089).
+                posterior = forward.fit(data, key=key, method="laplace")
                 t_cold = time.perf_counter() - t_start
                 t_warm = None
 
@@ -157,13 +182,17 @@ def run_backend_sweep():
                 t_warm = time.perf_counter() - t_start_warm
 
             elif method == "mcmc_raytrace":
-                # Ray tracing with step_size tuning (D~8 needs smaller steps)
+                # Ray tracing with step_size tuning (D~8 needs smaller steps).
+                # ``run_raytrace(context, *, key, init_from=None, n_burnin=100,
+                # n_steps=500, n_chains=1, n_leapfrog_steps=10, step_size=None,
+                # refresh_rate=0.0, verbose=True)`` — it takes n_burnin/n_steps,
+                # not n_warmup/n_samples, and an unknown name is a TypeError.
                 posterior = forward.fit(
                     data,
                     key=key,
                     method="mcmc_raytrace",
-                    n_warmup=400,
-                    n_samples=400,
+                    n_burnin=400,
+                    n_steps=400,
                     n_chains=2,
                     step_size=0.05,  # Sharp viability cliff at ~0.06
                 )
@@ -175,8 +204,8 @@ def run_backend_sweep():
                     data,
                     key=jax.random.fold_in(key, 1),
                     method="mcmc_raytrace",
-                    n_warmup=400,
-                    n_samples=400,
+                    n_burnin=400,
+                    n_steps=400,
                     n_chains=2,
                     step_size=0.05,
                 )
@@ -196,9 +225,13 @@ def run_backend_sweep():
                 "n_params": sed_model.spec.n_free,
             }
 
-            # Add method-specific diagnostics
-            if hasattr(posterior, "ess"):
-                ess_dict = posterior.ess()
+            # Add sample-based diagnostics. Both ``effective_sample_size()`` and
+            # ``rhat()`` raise ValueError when there are no samples, so the guard
+            # is on the samples, not on the method name (#2089). A ``hasattr``
+            # guard told us nothing: True for a method that exists, False for a
+            # misspelled one, either way independent of the fit.
+            if posterior.samples is not None:
+                ess_dict = posterior.effective_sample_size()
                 ess_min = min(float(v) for v in ess_dict.values()) if ess_dict else None
                 results_dict["ess_min"] = ess_min
 
@@ -207,7 +240,6 @@ def run_backend_sweep():
                 if t_warm is not None and t_warm > 0 and ess_min is not None:
                     results_dict["s_per_ess_warm"] = t_warm / ess_min
 
-            if hasattr(posterior, "rhat"):
                 rhat_dict = posterior.rhat()
                 rhat_max = max(float(v) for v in rhat_dict.values()) if rhat_dict else None
                 results_dict["rhat_max"] = rhat_max
@@ -215,17 +247,11 @@ def run_backend_sweep():
             # Extract marginal samples for log M*, log SFR100, dust optical depth
             fixed_values = sed_model.spec.get_fixed_values()
 
-            # For point estimates (MAP, Laplace), use mean/median
+            # Point estimates (MAP, Laplace) live in ``posterior.params``; the
+            # old ``covariance``/``mean`` guards were both permanently False and
+            # fell through to an all-zeros parameter vector (#2089).
             if method in ("map", "laplace"):
-                if hasattr(posterior, "covariance"):
-                    # Gaussian approximation
-                    if hasattr(posterior, "mean"):
-                        params = posterior.mean
-                    else:
-                        params = {k: 0.0 for k in sed_model.spec.free_params}
-                else:
-                    params = {k: 0.0 for k in sed_model.spec.free_params}
-
+                params = dict(posterior.params)
                 params_full = {**fixed_values, **params}
                 pred = sed_model.predict(params_full)
                 props = pred.properties
@@ -263,7 +289,10 @@ def run_backend_sweep():
                 json.dump(results_dict, f, indent=2)
 
             results.append(results_dict)
-            logger.info(f"✓ {method}: cold={t_cold:.2f}s, warm={t_warm:.2f}s if t_warm else 'N/A'")
+            # Build the warm string outside the f-string: ``{t_warm:.2f}`` on the
+            # ``None`` that map/laplace produce is a TypeError (#2089).
+            warm_str = f"{t_warm:.2f}s" if t_warm is not None else "N/A"
+            logger.info(f"✓ {method}: cold={t_cold:.2f}s, warm={warm_str}")
 
         except Exception as e:
             logger.error(f"✗ {method} failed: {e}")
@@ -315,15 +344,48 @@ def run_backend_sweep():
     return 0
 
 
+def parse_methods(value: str) -> tuple[str, ...]:
+    """Parse a comma-separated ``--methods`` value into a validated tuple.
+
+    Raises:
+        argparse.ArgumentTypeError: if the list is empty or names a backend
+            outside ``SWEEP_METHODS``.
+    """
+    names = tuple(name.strip() for name in value.split(",") if name.strip())
+    if not names:
+        raise argparse.ArgumentTypeError("--methods needs at least one backend name")
+    unknown = [name for name in names if name not in SWEEP_METHODS]
+    if unknown:
+        raise argparse.ArgumentTypeError(
+            f"unknown backend(s) {unknown}; choose from {list(SWEEP_METHODS)}"
+        )
+    return names
+
+
 def main():
-    """Run backend sweep."""
+    """Parse arguments and run the backend sweep."""
+    parser = argparse.ArgumentParser(description="Run the paper's inference-backend sweep")
+    parser.add_argument(
+        "--methods",
+        type=parse_methods,
+        default=SWEEP_METHODS,
+        help=f"Comma-separated subset of {','.join(SWEEP_METHODS)} (default: all six)",
+    )
+    parser.add_argument(
+        "--out-dir",
+        type=Path,
+        default=DEFAULT_OUT_DIR,
+        help="Output directory (default: results/backend_sweep)",
+    )
+    args = parser.parse_args()
+
     logging.basicConfig(
         level=logging.INFO,
         format="%(asctime)s - %(name)s - %(levelname)s - %(message)s",
     )
 
     try:
-        return run_backend_sweep()
+        return run_backend_sweep(methods=args.methods, out_dir=args.out_dir)
     except Exception as e:
         logger.error(f"Backend sweep failed: {e}", exc_info=True)
         return 1

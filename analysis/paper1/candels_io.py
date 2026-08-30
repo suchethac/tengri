@@ -11,7 +11,7 @@ def load_candels_z1() -> dict:
     """Load CANDELS_GDSS_workshop_z1.dat catalog.
 
     Returns dict with keys:
-        id, z, photometry_bands, photometry_values, photometry_errors, flags,
+        id, z, flg1, flg2, bands, header,
         data (the full ``(n_galaxies, n_columns)`` float matrix)
 
     Notes:

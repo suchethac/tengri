@@ -43,10 +43,46 @@ def thin_samples(samples: dict, max_draws: int = MAX_SAVED_DRAWS) -> dict:
 
 
 def iter_draws(samples_thin: dict, fixed_values: dict, n_draws: int):
-    """Yield parameter dicts (fixed values merged) for the first ``n_draws`` thinned draws."""
+    """Yield parameter dicts (fixed values merged) for ``n_draws`` draws spanning the record.
+
+    The draws are strided with :func:`numpy.linspace` across the whole flattened
+    record rather than taken from its front. tengri concatenates the chains
+    chain-major, so the first ``n_draws`` entries are chain 0's earliest draws
+    alone -- every derived quantity computed from them would be a single-chain,
+    early-draw estimate (#2089). ``n_draws >= n_available`` yields every draw in
+    order.
+    """
     n_available = int(next(iter(samples_thin.values())).shape[0])
-    for i in range(min(n_draws, n_available)):
+    n_take = min(n_draws, n_available)
+    if n_take <= 0:
+        return
+    idx = np.linspace(0, n_available - 1, n_take).round().astype(int)
+    for i in idx:
         yield {**fixed_values, **{k: float(v[i]) for k, v in samples_thin.items()}}
+
+
+def write_diagnostics_json(
+    path: Path,
+    diagnostics: dict,
+    attempts: list[dict],
+    retune_history: list[dict],
+) -> dict:
+    """Write one attempt's diagnostics to the fit's JSON and return the payload.
+
+    Called after every attempt, so a per-cell timeout that kills the process
+    during a retune still leaves attempt 1's R-hat, ESS and wall time on disk;
+    until #2089 the file only appeared once an attempt passed the adoption bar,
+    and a killed retune erased the evidence for why it was retuning.
+
+    The payload keeps the final JSON's shape: every key ``run_candels_fits.py``
+    reads (``gal_id``, ``config``, ``n_free``, ``divergences``, ``rhat_max``,
+    ``ess_min``, ``wall_time_s``, ``adoption_pass``, ``retune_history``), plus
+    ``attempts`` — one entry per attempt so far, in order.
+    """
+    payload = {**diagnostics, "attempts": attempts, "retune_history": retune_history}
+    with open(path, "w") as f:
+        json.dump(payload, f, indent=2)
+    return payload
 
 
 def extract_photometry(
@@ -123,6 +159,8 @@ def run_fit(
     """
     out_dir = Path(out_dir)
     out_dir.mkdir(parents=True, exist_ok=True)
+    output_npz = out_dir / f"{gal_id}_{config_key}.npz"
+    output_json = out_dir / f"{gal_id}_{config_key}.json"
 
     # Load CANDELS catalog
     candels = load_candels_z1()
@@ -169,6 +207,7 @@ def run_fit(
     best_posterior = None
     best_diagnostics = None
     retune_history = []
+    attempts: list[dict] = []
     attempt = 0
 
     while attempt < retune_attempts:
@@ -185,7 +224,7 @@ def run_fit(
             # Extract diagnostics
             rhat_dict = posterior.rhat()
             rhat_max = max(float(v) for v in rhat_dict.values())
-            ess_dict = posterior.ess() if hasattr(posterior, "ess") else {}
+            ess_dict = posterior.effective_sample_size()
             ess_min = min(float(v) for v in ess_dict.values()) if ess_dict else None
             n_divergent = posterior.diagnostics.get("n_divergent", 0)
 
@@ -215,6 +254,7 @@ def run_fit(
             adoption_pass = n_divergent == 0 and rhat_max < 1.01
             diagnostics["adoption_pass"] = adoption_pass
             diagnostics["retune_attempt"] = attempt
+            attempts.append(dict(diagnostics))
 
             if adoption_pass:
                 logger.info(
@@ -229,7 +269,12 @@ def run_fit(
                     f"✗ Fit failed adoption bar: "
                     f"divergences={n_divergent}, rhat_max={rhat_max:.4f}"
                 )
-                retune_history.append(diagnostics)
+                retune_history.append(dict(diagnostics))
+
+                # Persist this attempt before the retune starts: the driver's
+                # per-cell timeout kills the process mid-retune, and attempt 1's
+                # evidence went with it (#2089).
+                write_diagnostics_json(output_json, diagnostics, attempts, retune_history)
 
                 # Retune: double warmup and toggle dense_mass_matrix for next attempt
                 if sed_model.spec.n_free >= 8:
@@ -249,10 +294,6 @@ def run_fit(
         raise RuntimeError(
             f"Fit failed all {retune_attempts} attempts for galaxy {gal_id} config {config_key}"
         )
-
-    # Save results to NPZ
-    output_npz = out_dir / f"{gal_id}_{config_key}.npz"
-    output_json = out_dir / f"{gal_id}_{config_key}.json"
 
     # Thin to at most MAX_SAVED_DRAWS flattened draws (#2089)
     samples_thin = thin_samples(best_posterior.samples)
@@ -333,10 +374,10 @@ def run_fit(
 
     logger.info(f"Saved results to {output_npz}")
 
-    # Save JSON with diagnostics
-    best_diagnostics["retune_history"] = retune_history
-    with open(output_json, "w") as f:
-        json.dump(best_diagnostics, f, indent=2)
+    # Save JSON with diagnostics (same shape as the per-attempt writes above)
+    best_diagnostics = write_diagnostics_json(
+        output_json, best_diagnostics, attempts, retune_history
+    )
     logger.info(f"Saved diagnostics to {output_json}")
 
     return best_diagnostics
@@ -381,7 +422,7 @@ def main():
         logger.info(f"✓ Fit complete for galaxy {args.galaxy} config {args.config}")
         return 0
     except Exception as e:
-        logger.error(f"✗ Fit failed: {e}")
+        logger.error(f"✗ Fit failed: {e}", exc_info=True)
         return 1
 
 

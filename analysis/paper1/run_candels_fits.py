@@ -31,12 +31,15 @@ CONFIG_DIMENSIONS = {"I": 5, "II": 8, "III": 11}
 # Galaxy labels for reporting
 GALAXY_LABELS = {13097: "blue", 15336: "red", 24497: "intermediate"}
 
-#: Per-cell subprocess timeout. 600 s killed the first retune of the grid (#2089);
-#: measured 2026-08-30, the simplest cell (configuration I, 5 free parameters) needs
-#: ~22 min for 600 warmup + 4x600 draws at mean tree depth ~6, configurations II/III
-#: are slower, and a retune doubles the warmup, so 7200 s; a dead fit finishes in ~10
-#: min, so the cap still catches a hang.
-DEFAULT_FIT_TIMEOUT_S = 7200
+#: Per-cell subprocess timeout. 600 s killed the first retune of the grid (#2089).
+#: Measured 2026-08-30, the simplest cell (configuration I, 5 free parameters) needs
+#: ~22 min for 600 warmup + 4x600 draws at mean tree depth ~6; a retune doubles the
+#: warmup, so configuration I with one retune is ~50 min, and configurations II/III
+#: cost 2-3x per draw, which puts them at 100-150 min. 7200 s can therefore still
+#: kill a healthy retune, so 14400 s. Raising the cap costs nothing in detection:
+#: a dead fit (step size above the stability limit, acceptance ~0) finishes in
+#: ~10 min rather than hanging, so a larger cap only delays a true hang's report.
+DEFAULT_FIT_TIMEOUT_S = 14400
 
 
 def run_fit_subprocess(

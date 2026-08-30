@@ -31,8 +31,8 @@ $python_exe analysis/paper1/fit_one.py --galaxy 24497 --config III --method mcmc
 ```
 
 **Outputs:**
-- `results/fits/<ID>_<config>.npz` — Parameter samples (thinned to ≤1000/chain), derived quantities (stellar mass, SFR, dust), SFH posterior grid
-- `results/fits/<ID>_<config>.json` — Diagnostics: divergences, max R̂, min ESS, wall time, s/ESS
+- `results/fits/<ID>_<config>.npz` — Parameter samples (thinned to ≤ 4000 flattened draws per parameter: tengri returns every chain's kept draws concatenated into one 1-D array, so the cap is on the whole record, not per chain), derived quantities (stellar mass, SFR, dust), SFH posterior grid. The derived quantities and the SFH percentiles are computed from draws strided across the whole record, so they span every chain rather than the front of chain 0.
+- `results/fits/<ID>_<config>.json` — Diagnostics: divergences, max R̂, min ESS, wall time, plus `attempts` (one entry per attempt, written before each retune begins so a killed retune still leaves attempt 1's evidence) and `retune_history` (the attempts that failed the adoption bar)
 
 ## Deliverable 2: 3×3 Grid (run_candels_fits.py)
 
@@ -63,29 +63,33 @@ $python_exe run_candels_fits.py
 **Command:**
 ```bash
 cd analysis/paper1
-$python_exe run_backend_sweep.py
+$python_exe run_backend_sweep.py [--methods map,laplace] [--out-dir DIR]
 ```
 
+**Options:**
+- `--methods` — Comma-separated subset of the six below, run in the order given. Default: all six. A name outside the list is rejected before any fit starts.
+- `--out-dir` — Output directory. Default: `results/backend_sweep`. Use a scratch directory to smoke-test the cheap rows without overwriting the paper's results.
+
 **Methods tested (in order):**
-1. `map` — Maximum a posteriori (ADAM optimization)
-2. `laplace` — Laplace approximation (diagonal covariance)
-3. `mcmc_nuts` — NUTS sampler (cold + warm compile)
-4. `mcmc_hmc` — Standard HMC (cold + warm compile)
-5. `mcmc_raytrace` — Ray tracing sampler (cold + warm compile)
-6. `vi` — NIFTy geoVI (cold + warm compile)
-7. `nss` — Nested sampling (experimental; may skip if >15 min or raises)
+1. `map` — Maximum a posteriori (ADAM optimization, 500 steps, 8 restarts)
+2. `laplace` — Laplace approximation (Gaussian from the Hessian at the MAP)
+3. `mcmc` — tengri's automatic sampler selector, which resolves to NUTS at this dimensionality (D ≤ 20); the row measures the selector, at the same settings as the explicit NUTS row
+4. `mcmc_nuts` — NUTS sampler (cold + warm compile)
+5. `mcmc_hmc` — Standard HMC (cold + warm compile)
+6. `mcmc_raytrace` — Ray tracing sampler (cold + warm compile); its runner takes `n_burnin`/`n_steps`, not `n_warmup`/`n_samples`
 
 **Behavior:**
-- One subprocess per method
-- Captures wall time (cold = first run including compile, warm = second run in same process)
-- Captures ESS and s/ESS for samplers
-- Captures point estimates (mean/median) for optimization and VI methods
+- One process, one method after another (never two JAX processes at once)
+- Captures wall time (cold = first run including compile, warm = second run in same process; `map` and `laplace` have no warm run and report `N/A`)
+- Captures ESS, s/ESS and max R̂ whenever the posterior carries samples
+- Point estimates for `map` and `laplace` come from `posterior.params`; the derived quantities are `sed_model.predict` at those parameters merged with the fixed values
+- Sampler rows take the median over draws strided across the whole flattened record
 - Prints summary table to stdout
 
 **Outputs:**
-- `results/backend_sweep/<method>.npz` — Method-specific results
-- `results/backend_sweep/<method>.json` — Method diagnostics
-- `results/backend_sweep/summary.json` — Aggregated backend comparison
+- `<out-dir>/<method>.npz` — Method-specific results
+- `<out-dir>/<method>.json` — Method diagnostics
+- `<out-dir>/summary.json` — Aggregated backend comparison
 
 ## NUTS Settings (Canonical from Quickstart)
 
@@ -126,8 +130,11 @@ sigma_floor = sqrt(sigma_measurement^2 + (0.05 * fnu)^2)
 - One Ks band per galaxy: ISAAC first, HAWK-I only when ISAAC is undetected.
 - A mapped column missing from the catalog header raises; nothing is dropped
   silently.
-- Driver timeout per cell: `DEFAULT_FIT_TIMEOUT_S = 7200` s (measured 2026-08-30: a
-  healthy 600-warmup + 4x600-draw cell takes ~22 min, and a retune doubles the warmup).
+- Driver timeout per cell: `DEFAULT_FIT_TIMEOUT_S = 14400` s (measured 2026-08-30: a
+  healthy 600-warmup + 4x600-draw configuration I cell takes ~22 min, a retune doubles
+  the warmup for ~50 min, and configurations II/III cost 2-3x per draw, reaching
+  100-150 min — 7200 s could still kill a healthy retune. A dead fit finishes in ~10
+  min rather than hanging, so the larger cap costs nothing in hang detection).
 
 ## Linting
 
@@ -136,13 +143,13 @@ All scripts pass ruff checks:
 $venv/bin/ruff check analysis/paper1/fit_one.py analysis/paper1/run_candels_fits.py analysis/paper1/run_backend_sweep.py
 ```
 
-## Expected Runtime (estimate)
+## Expected Runtime
 
-- Single fit (NUTS, D=5–11): 5–15 minutes per fit
-- 3×3 grid (9 fits sequential): ~90–150 minutes
-- Backend sweep (7 methods, one galaxy): ~30–60 minutes
+Measured 2026-08-30 on CPU, not estimated:
 
-Total: ~2–4 hours for all three deliverables
+- Single fit, configuration I (D=5), 600 warmup + 4×600 draws: ~22 minutes. Configurations II/III (D=8, D=11) cost 2–3× per draw; a retune doubles the warmup, so a retuned cell reaches ~50 minutes for I and 100–150 minutes for II/III.
+- 3×3 grid (9 fits sequential): several hours; the per-cell cap is `DEFAULT_FIT_TIMEOUT_S = 14400` s.
+- Backend sweep (6 methods, one galaxy): `map` and `laplace` are seconds to a couple of minutes each; the four sampler rows dominate and each runs cold + warm.
 
 ## Figure 8: Gradient Sensitivity (Jacobian & Fisher Matrix)
 

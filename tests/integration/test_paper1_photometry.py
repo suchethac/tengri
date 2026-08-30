@@ -36,6 +36,7 @@ import candels_io
 import fit_one
 
 import tengri
+from tengri.utils import physics_constants
 
 EXPECTED_MAP = {
     "ACS_F435W": "hst_f435w",
@@ -70,6 +71,9 @@ def registry_names():
 
 
 def test_ab_mag_to_fnu_matches_the_ab_definition():
+    # The script's private copy of the zero point is the library's, exactly.
+    assert candels_io.AB_ZERO_POINT_ERG == physics_constants.MAGGIES_ZP_CGS
+
     fnu, err = candels_io.ab_mag_to_fnu(21.342, 0.001)
     expected = 3.631e-20 * 10 ** (-21.342 / 2.5)
     assert float(fnu) == pytest.approx(expected, rel=1e-3, abs=0)
@@ -179,14 +183,45 @@ def test_thin_samples_and_iter_draws_use_flattened_draws():
     ]
 
 
+def test_iter_draws_strides_across_every_chain_not_the_first_draws():
+    # Flattened draws are chain-major, so the first ``n_draws`` of a 4-chain record
+    # are chain 0's warm-up-adjacent draws alone (#2089). ``iter_draws`` strides.
+    record = {"a": np.arange(9000.0), "b": np.arange(9000.0) * -1.0}
+    drawn = list(fit_one.iter_draws(record, {"fixed": 2.5}, 5))
+    assert [d["a"] for d in drawn] == [0.0, 2250.0, 4500.0, 6749.0, 8999.0]
+    assert [d["b"] for d in drawn] == [-0.0, -2250.0, -4500.0, -6749.0, -8999.0]
+    assert all(d["fixed"] == 2.5 for d in drawn)
+
+    # ``n_draws >= n_available``: every draw, in order, no repeats.
+    every = [d["a"] for d in fit_one.iter_draws({"a": np.arange(7.0)}, {}, 99)]
+    assert every == [0.0, 1.0, 2.0, 3.0, 4.0, 5.0, 6.0]
+
+
 def test_driver_timeout_covers_a_retune():
     import inspect
 
     import run_candels_fits
 
-    assert run_candels_fits.DEFAULT_FIT_TIMEOUT_S >= 7200
+    assert run_candels_fits.DEFAULT_FIT_TIMEOUT_S >= 14400
     default = inspect.signature(run_candels_fits.run_fit_subprocess).parameters["timeout"].default
     assert default == run_candels_fits.DEFAULT_FIT_TIMEOUT_S
+
+
+def test_posterior_api_names_used_by_the_scripts():
+    from tengri.inference.posterior import Posterior
+
+    # The names the scripts call.
+    assert hasattr(Posterior, "effective_sample_size")
+    assert hasattr(Posterior, "rhat")
+    # The names they used to guess at. ``Posterior.__getattr__`` raises for both,
+    # so a ``hasattr`` guard on them is permanently False and silently drops ESS.
+    assert not hasattr(Posterior, "ess")
+    assert not hasattr(Posterior, "covariance")
+
+    for script in ("fit_one.py", "run_backend_sweep.py"):
+        source = (PAPER1 / script).read_text()
+        assert "hasattr(posterior," not in source, script
+        assert "posterior.ess()" not in source, script
 
 
 def test_backend_sweep_shares_fit_one_photometry_and_runs_the_owner_list(catalog):
