@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """Generate placeholder PDFs for paper figures.
 
-Produces eight placeholder PDFs at specified dimensions with light-grey boxes
+Produces eight placeholder PDFs at specified dimensions with light-gray boxes
 and dashed borders, centered text indicating the figure content.
 
 Output: /Users/suchethacooray/writing-workspace/projects/tengri/figures/placeholder_fig*.pdf
@@ -68,7 +68,7 @@ def make_placeholder(width_in: float, height_in: float, content: str) -> plt.Fig
     ax.set_ylim(0, 1)
     ax.axis("off")
 
-    # Light-grey box with dashed border
+    # Light-gray box with dashed border
     rect = patches.Rectangle(
         (0.05, 0.05),
         0.9,
