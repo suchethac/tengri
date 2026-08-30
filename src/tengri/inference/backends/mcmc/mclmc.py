@@ -27,7 +27,6 @@ from tengri.inference.backends.mcmc._shared import (
     _set_cached_adaptation,
     _vmap_chains,
 )
-from tengri.inference.preconditioning import prepare_preconditioning
 
 logger = logging.getLogger(__name__)
 
@@ -63,10 +62,29 @@ _ADJUSTED_MCLMC_TUNE_FRACS = (0.25, 0.25)
 #: How far above its target the achieved EEVPD may sit before the run warns.
 #:
 #: Measured on ``05_fitting_photometry`` (D=8, 14 bands, six seeds): four seeds
-#: land at 3.6-6.6x the target and are ordinary, while two land at 394x and
-#: 322,000x — and **every one of those six seeds reports max split-R-hat below
+#: land at 3.6-6.6x the target and are ordinary, while two land at 292x and
+#: 168,809x — and **every one of those six seeds reports max split-R-hat below
 #: 1.01**. One order of magnitude separates the two populations cleanly.
 _ENERGY_VAR_WARN_RATIO = 10.0
+
+#: How many times the target RMS energy error a single step may reach before it
+#: counts as a tail event, in units of ``sqrt(D * desired_energy_var)``.
+#:
+#: EEVPD is a *variance*, so it sums two different pathologies into one number
+#: and cannot tell them apart. Measured on the same six seeds, both of the bad
+#: ones report a large EEVPD for opposite reasons:
+#:
+#: * seed 8, EEVPD 1.5e-01 (292x): max single-step ``|dE|`` 37.6 over 80000
+#:   steps, i.e. RMS ``|dE|`` ~1.1. The step size is **systematically** too
+#:   large. Lower ``desired_energy_var`` or raise ``n_warmup``.
+#: * seed 12, EEVPD 8.4e+01 (168,809x): max single-step ``|dE|`` 2.0e+03. A
+#:   handful of steps went somewhere the integrator could not follow while the
+#:   bulk were fine. That is a **tail** event, and tightening the step size for
+#:   the bulk is the wrong response to it.
+#:
+#: Reporting one number for two failure modes is the exact defect this module
+#: found in reading R-hat alone, so the guard reports both.
+_ENERGY_TAIL_WARN_RATIO = 100.0
 
 #: Default target energy-error variance per dimension (EEVPD).
 #:
@@ -151,34 +169,77 @@ class MCLMCEnergyErrorWarning(UserWarning):
 
 
 def _warn_if_energy_error_high(energy):
-    """Emit :class:`MCLMCEnergyErrorWarning` when the achieved EEVPD is far off target.
+    """Emit :class:`MCLMCEnergyErrorWarning`, naming which pathology fired.
 
-    Fires at :data:`_ENERGY_VAR_WARN_RATIO` times the target. Deliberately
-    unconditional on ``verbose``: this is a correctness signal about the
-    posterior that was just produced, not progress chatter, and a caller who
+    Two independent triggers, because EEVPD is a variance and a variance cannot
+    distinguish a step size that is systematically too large from a handful of
+    steps that left the manifold. The message says which one it is, because the
+    responses differ and are nearly opposite: tighten the step for the first,
+    look at where the trajectory went for the second.
+
+    Deliberately unconditional on ``verbose``: this is a correctness signal about
+    the posterior that was just produced, not progress chatter, and a caller who
     silenced logging still needs it.
     """
     achieved = energy["energy_var_per_dim"]
     target = energy["energy_var_per_dim_target"]
-    if not (achieved > _ENERGY_VAR_WARN_RATIO * target):
+    bulk_high = achieved > _ENERGY_VAR_WARN_RATIO * target
+    tail_high = energy["n_energy_tail_steps"] > 0
+    if not (bulk_high or tail_high):
         return
+
     import warnings
 
+    if bulk_high and tail_high:
+        pathology = (
+            f"BOTH: the bulk of steps is over-sized (EEVPD {achieved:.3g}, "
+            f"{achieved / target:.0f}x the {target:.1e} target) AND "
+            f"{energy['n_energy_tail_steps']} step(s) left the manifold "
+            f"entirely (largest |dE| {energy['max_abs_energy_change']:.3g}, "
+            f"p99 {energy['p99_abs_energy_change']:.3g}, against a target RMS "
+            f"of {energy['energy_target_rms']:.3g})"
+        )
+        advice = (
+            "Treat the tail first -- a few unfollowable steps are not fixed by "
+            "resizing the bulk -- then lower desired_energy_var."
+        )
+    elif bulk_high:
+        pathology = (
+            f"SYSTEMATIC: the step size is too large across the run "
+            f"(EEVPD {achieved:.3g}, {achieved / target:.0f}x the "
+            f"{target:.1e} target; p99 |dE| "
+            f"{energy['p99_abs_energy_change']:.3g} against a target RMS of "
+            f"{energy['energy_target_rms']:.3g})"
+        )
+        advice = (
+            "Raise n_warmup, so the step size is tuned from a chain that has "
+            "actually explored, or lower desired_energy_var directly."
+        )
+    else:
+        pathology = (
+            f"TAIL: the bulk is within target but "
+            f"{energy['n_energy_tail_steps']} step(s) left the manifold "
+            f"(largest |dE| {energy['max_abs_energy_change']:.3g}, p99 "
+            f"{energy['p99_abs_energy_change']:.3g}, against a target RMS of "
+            f"{energy['energy_target_rms']:.3g})"
+        )
+        advice = (
+            "Check where those steps went -- a boundary, or a region the "
+            "integrator cannot follow -- rather than shrinking the step size "
+            "for the whole run."
+        )
+
     warnings.warn(
-        f"MCLMC finished with energy-error variance per dimension "
-        f"{achieved:.3g}, {achieved / target:.0f}x the {target:.1e} it tuned "
-        f"for (largest single-step energy change "
-        f"{energy['max_abs_energy_change']:.3g}). MCLMC is unadjusted: there is "
-        f"no accept step to reject an over-large step, so this displaces the "
-        f"distribution being sampled rather than showing up as a rejection. "
-        f"split-R-hat cannot detect it -- chains mix perfectly well to a wrong "
-        f"target -- so do not read a good R-hat here as convergence. Raise "
-        f"n_warmup (currently tuning from a chain that may not have explored "
-        f"yet) or lower desired_energy_var, and re-check this number before "
-        f"using the posterior. Do NOT arm BlackJAX's "
-        f"desired_energy_var_max_ratio cutoff: it feeds the diagnostic back "
-        f"into the adaptation and drives the step size up instead of down "
-        f"(measured: step size 674, R-hat 1.33, ESS 0.8).",
+        f"MCLMC energy error out of tolerance -- {pathology}. MCLMC is "
+        f"unadjusted: there is no accept step to reject an over-large step, so "
+        f"this displaces the distribution being sampled rather than showing up "
+        f"as a rejection. split-R-hat cannot detect it -- chains mix perfectly "
+        f"well to a wrong target, and on the measured cases R-hat read 1.0084 "
+        f"and 1.0007 -- so do not read a good R-hat here as convergence. "
+        f"{advice} Do NOT arm BlackJAX's desired_energy_var_max_ratio cutoff: "
+        f"it feeds the diagnostic back into the adaptation and drives the step "
+        f"size up instead of down (measured: step size 674, R-hat 1.33, "
+        f"ESS 0.8).",
         MCLMCEnergyErrorWarning,
         stacklevel=3,
     )
@@ -193,10 +254,21 @@ def _energy_diagnostics(energy_change, nonans, n_dim, desired_energy_var):
     sees that key expects a Metropolis rejection count.
     """
     de = jnp.asarray(energy_change)
+    abs_de = jnp.abs(de)
+    # The scale the tuner aimed at: RMS energy error over the whole state.
+    target_rms = float(jnp.sqrt(n_dim * desired_energy_var))
+    tail_cut = _ENERGY_TAIL_WARN_RATIO * target_rms
     return {
         "energy_var_per_dim": float(jnp.var(de) / n_dim),
         "energy_var_per_dim_target": float(desired_energy_var),
-        "max_abs_energy_change": float(jnp.max(jnp.abs(de))),
+        # p99 rather than the max alone: a variance is dominated by its tail, so
+        # the bulk needs a statistic the tail cannot move. The two together say
+        # whether the step size is systematically large (both high) or whether a
+        # few steps left the manifold (max high, p99 near the bulk).
+        "p99_abs_energy_change": float(jnp.percentile(abs_de, 99.0)),
+        "max_abs_energy_change": float(jnp.max(abs_de)),
+        "energy_target_rms": target_rms,
+        "n_energy_tail_steps": int(jnp.sum(abs_de > tail_cut)),
         "n_nonfinite_steps": int(jnp.sum(~jnp.asarray(nonans))),
     }
 
@@ -210,7 +282,6 @@ def run_mclmc(
     n_samples=20000,
     n_chains=1,
     desired_energy_var=_DEFAULT_ENERGY_VAR,
-    precondition=None,
     verbose=True,
 ):
     """Microcanonical Langevin Monte Carlo (MCLMC) via BlackJAX.
@@ -250,16 +321,6 @@ def run_mclmc(
         unadjusted sampler's tuning target and it replaces, rather than
         renames, HMC's ``target_accept_rate``: there is no accept step whose
         rate could be targeted. Lower values buy a smaller step size.
-    precondition : bool, float or None, default None
-        tengri's **analytic** metric whitening
-        (:mod:`tengri.inference.preconditioning`, ``G = JᵀN⁻¹J + I``), off by
-        default. It stacks with BlackJAX's own diagonal preconditioner, which
-        this backend always leaves on: the analytic map removes the
-        off-diagonal correlation the diagonal one cannot see, and the diagonal
-        one then rescales whatever residual anisotropy the whitening left. They
-        are not redundant, but they are also not free — measure before turning
-        this on, and see ``bench/reports/2026-08-30_mclmc_tuning.md`` for what
-        the combination did on the photometry mocks.
     verbose : bool
         Print progress.
 
@@ -311,23 +372,6 @@ def run_mclmc(
         init_params,
     )
 
-    # Analytic metric whitening (#1301), the same seam NUTS uses. Off unless
-    # asked for; BlackJAX's diagonal preconditioner runs on top of whatever
-    # basis this leaves, so the two compose rather than compete — the analytic
-    # map is a full linear change of variables and the diagonal one is a
-    # per-coordinate rescale of the result.
-    problem = prepare_preconditioning(
-        log_posterior_flat_2arg, init_flat, data_args, precondition=precondition
-    )
-    log_posterior_flat_2arg, init_flat = problem.logdensity, problem.init_flat
-    if problem.enabled and verbose:
-        logger.info(
-            "MCLMC preconditioning: strength=%.2f, cond %.2e -> %.2e at the initial point",
-            problem.strength,
-            problem.metric_condition,
-            problem.whitened_condition,
-        )
-
     def ld_1arg(pos):
         """Closure binding log-posterior with data arguments."""
         return log_posterior_flat_2arg(pos, data_args)
@@ -346,9 +390,8 @@ def run_mclmc(
 
     # n_warmup belongs in the key: it *produces* the adaptation, so leaving it
     # out makes the knob silently inert on a model that already holds an entry.
-    # So does the EEVPD target, and so does the whitening basis — a step size
-    # and a mass matrix tuned in one basis are meaningless in another (#1442).
-    adapt_key = ("mclmc", int(n_warmup), float(desired_energy_var), problem.cache_key)
+    # So does the EEVPD target, for the same reason.
+    adapt_key = ("mclmc", int(n_warmup), float(desired_energy_var))
     cached = _get_cached_adaptation(fitter, adapt_key)
 
     # Both branches must advance the key identically, cache presence is
@@ -434,8 +477,6 @@ def run_mclmc(
 
     wall_time = time.time() - t0
 
-    # Draws leave the sampler in the whitened basis; identity when disabled.
-    positions = problem.restore(positions)
     samples_phys = _vmap_samples_to_physical(positions, unravel_fn, context.to_physical)
     best_params = _mean_params(samples_phys)
 
@@ -462,7 +503,6 @@ def run_mclmc(
             "L": float(params.L),
             "step_size": float(params.step_size),
             "steps_per_decoherence": float(params.L) / float(params.step_size),
-            "preconditioned": bool(problem.enabled),
             **energy,
         },
         loss_history=None,

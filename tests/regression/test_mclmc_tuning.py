@@ -220,7 +220,10 @@ def test_mclmc_reports_energy_error_and_never_a_divergence_count(tiny_fitter, n_
     for key in (
         "energy_var_per_dim",
         "energy_var_per_dim_target",
+        "p99_abs_energy_change",
         "max_abs_energy_change",
+        "energy_target_rms",
+        "n_energy_tail_steps",
         "n_nonfinite_steps",
         "steps_per_decoherence",
     ):
@@ -306,55 +309,117 @@ def test_the_adjusted_runner_uses_the_adjusted_tuner_with_its_acceptance_target(
 # ── The guard R-hat cannot provide ───────────────────────────────────────
 
 
-def test_the_energy_guard_fires_only_when_the_error_is_orders_off():
-    """Unit: one order of magnitude is the line, and it separates the measured populations.
+def test_the_energy_guard_separates_a_systematic_step_from_a_tail_event():
+    """EEVPD is a variance, so one number covers two pathologies with opposite fixes.
 
-    On ``05_fitting_photometry`` at six seeds, four runs landed at 3.6-6.6x the
-    target and two at 394x and 322,000x -- and all six reported max split-R-hat
-    below 1.01. A guard at 10x splits those two populations cleanly; a guard on
-    R-hat splits neither.
+    Both measured on ``05_fitting_photometry`` at 40000 draws, and both reported
+    max split-R-hat below 1.01:
+
+    * seed 8, EEVPD 1.5e-01 (292x target), max ``|dE|`` 37.6 -- RMS ``|dE|``
+      about 1.1 over 80000 steps, i.e. the step size is systematically large.
+    * seed 12, EEVPD 8.4e+01 (168,809x target), max ``|dE|`` 2.0e+03 -- a handful
+      of steps left the manifold while the bulk were fine.
+
+    Shrinking the step size is the right answer to the first and the wrong answer
+    to the second, so the guard must say which one it saw. Reporting one number
+    for two failure modes is the defect this module found in R-hat.
     """
     from tengri.inference.backends.mcmc.mclmc import (
+        _ENERGY_TAIL_WARN_RATIO,
         _ENERGY_VAR_WARN_RATIO,
         MCLMCEnergyErrorWarning,
         _warn_if_energy_error_high,
     )
 
-    def energy(achieved):
+    assert _ENERGY_VAR_WARN_RATIO == 10.0
+    assert _ENERGY_TAIL_WARN_RATIO == 100.0
+
+    def energy(achieved, *, tail_steps=0, max_de=1.0, p99=1.0):
         return {
             "energy_var_per_dim": achieved,
             "energy_var_per_dim_target": 5e-4,
-            "max_abs_energy_change": 1.0,
+            "p99_abs_energy_change": p99,
+            "max_abs_energy_change": max_de,
+            "energy_target_rms": 0.063,
+            "n_energy_tail_steps": tail_steps,
             "n_nonfinite_steps": 0,
         }
 
-    assert _ENERGY_VAR_WARN_RATIO == 10.0
+    # Healthy: the control fixture at 2.4x, and an ordinary nb05 seed at 6.6x.
     with warnings.catch_warnings():
         warnings.simplefilter("error")  # any warning at all becomes a failure
-        _warn_if_energy_error_high(energy(1.22e-3))  # 2.4x: the healthy control
-        _warn_if_energy_error_high(energy(3.31e-3))  # 6.6x: an ordinary nb05 seed
+        _warn_if_energy_error_high(energy(1.22e-3))
+        _warn_if_energy_error_high(energy(3.31e-3))
 
-    for achieved in (1.97e-1, 1.61e2):  # the two seeds R-hat called converged
-        with pytest.warns(MCLMCEnergyErrorWarning, match="unadjusted"):
-            _warn_if_energy_error_high(energy(achieved))
+    # Systematic only: bulk over target, nothing in the tail.
+    with pytest.warns(MCLMCEnergyErrorWarning, match="SYSTEMATIC") as rec:
+        _warn_if_energy_error_high(energy(1.46e-1, p99=2.0))
+    assert "Raise n_warmup" in str(rec[0].message)
+
+    # Tail only: bulk inside target, a few unfollowable steps.
+    with pytest.warns(MCLMCEnergyErrorWarning, match="TAIL") as rec:
+        _warn_if_energy_error_high(energy(1.0e-3, tail_steps=3, max_de=2.0e3))
+    assert "rather than shrinking the step size" in str(rec[0].message)
+
+    # Both, which is what seed 12 actually looked like.
+    with pytest.warns(MCLMCEnergyErrorWarning, match="BOTH"):
+        _warn_if_energy_error_high(energy(8.44e1, tail_steps=5, max_de=2.01e3))
+
+
+def test_the_energy_diagnostics_report_bulk_and_tail_separately():
+    """The tail statistic must be computable from the draws, not just asserted."""
+    import jax.numpy as jnp
+
+    from tengri.inference.backends.mcmc.mclmc import _energy_diagnostics
+
+    # 999 well-behaved steps and one that left the manifold. The variance is
+    # dominated by the single outlier; p99 is not, which is the whole point.
+    de = jnp.concatenate([jnp.full((999,), 0.01), jnp.array([2000.0])])
+    nonans = jnp.ones((1000,), dtype=bool)
+    out = _energy_diagnostics(de, nonans, n_dim=8, desired_energy_var=5e-4)
+
+    assert out["max_abs_energy_change"] == pytest.approx(2000.0)
+    assert out["p99_abs_energy_change"] < 1.0, (
+        "p99 must stay with the bulk; if the outlier moves it, the statistic "
+        "cannot distinguish a tail event from a systematically large step"
+    )
+    assert out["n_energy_tail_steps"] == 1
+    assert out["energy_target_rms"] == pytest.approx((8 * 5e-4) ** 0.5)
+    assert out["energy_var_per_dim"] > 100.0, "the variance IS tail-dominated"
 
 
 @requires_blackjax_16
-def test_a_real_run_reaches_the_energy_guard(tiny_fitter):
+def test_a_real_run_reaches_the_energy_guard(tiny_fitter, monkeypatch):
     """LOAD-BEARING. Neuter: drop the ``_warn_if_energy_error_high`` call in ``run_mclmc``.
 
-    A guard nothing calls is documentation. An unreachably small target forces
-    the condition from the production path rather than by calling the helper.
+    A guard nothing calls is documentation, so the trigger has to come from the
+    production path rather than from calling the helper directly.
+
+    The step size is inflated *after* tuning rather than by asking for an absurd
+    ``desired_energy_var``. Asking for 1e-30 does not produce large energy errors
+    -- the tuner answers it by driving the step towards zero, the chain freezes,
+    every ``dE`` is 0, and the guard correctly stays silent. Which is itself the
+    thing being avoided: a test that "passes" only because both the sampler and
+    the diagnostic died.
     """
+    import blackjax
+
     from tengri.inference.backends.mcmc.mclmc import MCLMCEnergyErrorWarning, run_mclmc
+
+    real = blackjax.mclmc_find_L_and_step_size
+
+    def oversized(**kwargs):
+        state, params, n_tuning = real(**kwargs)
+        return state, params._replace(step_size=params.step_size * 50.0), n_tuning
+
+    monkeypatch.setattr(blackjax, "mclmc_find_L_and_step_size", oversized)
 
     with pytest.warns(MCLMCEnergyErrorWarning, match="R-hat cannot detect it"):
         run_mclmc(
             tiny_fitter,
             key=jax.random.PRNGKey(5),
-            n_warmup=120,
-            n_samples=60,
-            desired_energy_var=1e-30,
+            n_warmup=200,
+            n_samples=200,
             verbose=False,
         )
 
@@ -378,8 +443,12 @@ def test_a_healthy_run_does_not_cry_wolf(tiny_fitter):
             verbose=False,
         )
     fired = [w for w in caught if issubclass(w.category, MCLMCEnergyErrorWarning)]
-    achieved = posterior.diagnostics["energy_var_per_dim"]
-    target = posterior.diagnostics["energy_var_per_dim_target"]
-    assert bool(fired) == (achieved > 10.0 * target), (
-        f"guard fired={bool(fired)} but achieved/target = {achieved / target:.1f}"
+    diag = posterior.diagnostics
+    expected = (diag["energy_var_per_dim"] > 10.0 * diag["energy_var_per_dim_target"]) or (
+        diag["n_energy_tail_steps"] > 0
+    )
+    assert bool(fired) == expected, (
+        f"guard fired={bool(fired)} but achieved/target = "
+        f"{diag['energy_var_per_dim'] / diag['energy_var_per_dim_target']:.1f} "
+        f"with {diag['n_energy_tail_steps']} tail steps"
     )

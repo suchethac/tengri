@@ -79,6 +79,7 @@ from tengri import (
     recipes,
 )
 from tengri.analysis.diagnostics.autocorrelation import effective_sample_size
+from tengri.config.exceptions import DeadFitError
 
 #: Each notebook's own convergence claim, and so the bar a replacement clears.
 MAX_RHAT = 1.01
@@ -434,6 +435,8 @@ def clears_bar(row: dict) -> bool:
     substitute for it and they are printed beside the row, not folded into a
     pass/fail.
     """
+    if row.get("dead_fit"):
+        return False
     if not (row["rhat"] < MAX_RHAT):
         return False
     return row["divergences"] is None or row["divergences"] <= MAX_DIVERGENCES
@@ -455,14 +458,41 @@ def run_one(nb: str, label: str, kwargs: dict, seed: int) -> dict:
         data, method="map", key=key_fit, n_restarts=8, n_steps=800, verbose=False
     )
     started = time.perf_counter()
-    posterior = forward.fit(
-        data, key=key_fit, init_from=map_seed, n_chains=cfg["n_chains"], verbose=False, **kwargs
-    )
+    try:
+        posterior = forward.fit(
+            data,
+            key=key_fit,
+            init_from=map_seed,
+            n_chains=cfg["n_chains"],
+            verbose=False,
+            **kwargs,
+        )
+    except DeadFitError as exc:
+        # A refusal is an outcome, not a missing value (#2090). Before that PR
+        # these seeds came back as a frozen posterior plus a warning, which
+        # scored as a row rather than as a failure; recording it as one keeps
+        # the seed in the denominator.
+        return {
+            "wall": time.perf_counter() - started,
+            "rhat": float("nan"),
+            "divergences": None,
+            "dead_fit": str(exc)[:300],
+            "eevpd": None,
+            "eevpd_target": None,
+            "nonfinite_steps": None,
+            "min_ess": 0.0,
+            "worst": "REFUSED (DeadFitError)",
+            "sec_per_ess": float("inf"),
+            "grad_per_draw": None,
+            "grad_per_ess": None,
+        }
     return score(posterior, time.perf_counter() - started)
 
 
 def format_row(label: str, row: dict) -> str:
     """One table line, with ``n/a`` where a column does not apply to the sampler."""
+    if row.get("dead_fit"):
+        return f"{label:<20}{row['wall']:>9.1f}{'REFUSED (DeadFitError)':>44}"
     div = "n/a" if row["divergences"] is None else str(row["divergences"])
     gpd = "" if row.get("grad_per_draw") is None else f"{row['grad_per_draw']:>8.1f}"
     gpe = "" if row.get("grad_per_ess") is None else f"{row['grad_per_ess']:>10.0f}"
@@ -523,13 +553,20 @@ def _sweep(args, configs: dict[str, dict]) -> None:
         if not rows:
             print(f"{label:<20}  no successful seeds")
             continue
-        worst = max(rows, key=lambda r: r["rhat"])
-        div_vals = [r["divergences"] for r in rows if r["divergences"] is not None]
+        dead = [r for r in rows if r.get("dead_fit")]
+        live = [r for r in rows if not r.get("dead_fit")]
+        if not live:
+            print(f"{label:<20}{len(rows):>6}  every seed REFUSED (DeadFitError)")
+            continue
+        worst = max(live, key=lambda r: r["rhat"])
+        div_vals = [r["divergences"] for r in live if r["divergences"] is not None]
         div = "n/a" if not div_vals else str(max(div_vals))
-        min_ess = min(r["min_ess"] for r in rows)
+        min_ess = min(r["min_ess"] for r in live)
         med_wall = float(np.median([r["wall"] for r in rows]))
         eevpd = [r["eevpd"] for r in rows if r.get("eevpd") is not None]
         tail = f"  max EEVPD {max(eevpd):.2e}" if eevpd else ""
+        if dead:
+            tail += f"  [{len(dead)}/{len(rows)} seeds REFUSED]"
         print(
             f"{label:<20}{len(rows):>6}{worst['rhat']:>10.4f}{div:>5}"
             f"{min_ess:>9.1f}{med_wall:>9.1f}  {worst['worst']}{tail}"

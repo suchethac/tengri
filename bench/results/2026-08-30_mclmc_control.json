@@ -10,43 +10,74 @@
     "snr": 20.0,
     "ssp": "prsc_miles_chabrier_wNE",
     "n_chains": 2,
-    "platform": "Linux x86_64, JAX_PLATFORMS=cpu, x64, box shared with two other agents (load 20-40); wall times indicative, R-hat/ESS/EEVPD deterministic given the seed"
+    "seeds": [4, 5, 6],
+    "platform": "Linux x86_64, JAX_PLATFORMS=cpu, x64, box shared with two other agents (load 20-40); wall times indicative, R-hat/ESS/EEVPD deterministic given the seed",
+    "code_version": "main @ fe6bda468 merged in (includes #2090 dead-fit guards)"
   },
-  "rows": [
-    {
-      "method": "mcmc_nuts",
-      "config": "n_warmup=1000, n_samples=400 (the page's own committed call)",
-      "seed": 4,
-      "wall_s": 162.9,
-      "max_split_rhat": 1.0136,
-      "divergences": 6,
-      "min_ess": 153.5,
-      "worst_param": "dust_tau_diff",
-      "sec_per_ess": 1.061,
-      "gradients_per_draw": 77.1,
-      "gradients_per_ess": 402,
-      "clears_bar": false
+
+  "headline": "On the healthy fixture MCLMC returns a converged posterior in 46 s against NUTS's 189 s COLD -- but 75% of the NUTS wall is XLA compilation, not sampling. Warm, the same two fits are 36.0 s and 46.8 s, a 1.3x gap, and seconds-per-effective-sample is a tie (0.29 vs 0.31). The user's 'minutes not seconds' is therefore mostly COMPILE on this fixture, and the compile asymmetry is the real structural result: NUTS spends 142.6 s compiling its ragged tree-doubling control flow where MCLMC spends 10.4 s on a fixed-length scan, a 14x difference that no amount of sampling changes.",
+
+  "cold_vs_warm": {
+    "method": "same process, same ForwardModel, same seed, fit called twice; the campaign builds a fresh model per row and so measures the cold number",
+    "notebook": "ctl",
+    "seed": 4,
+    "mcmc_nuts": {
+      "cold_s": 189.4,
+      "warm_s": 46.8,
+      "compile_share": 0.753,
+      "compile_s": 142.6,
+      "max_split_rhat": 1.0136
     },
-    {
-      "method": "mcmc_mclmc",
+    "mcmc_mclmc": {
+      "cold_s": 46.4,
+      "warm_s": 36.0,
+      "compile_share": 0.224,
+      "compile_s": 10.4,
+      "max_split_rhat": 1.0054
+    },
+    "wall_ratio_cold": 4.08,
+    "wall_ratio_warm": 1.30,
+    "caveat": "the 3.6x / 45-vs-163 figure first reported was a COLD comparison and overstates the sampling advantage; quote 1.3x for warm sampling and the 14x compile gap separately"
+  },
+
+  "three_seed_sweep": {
+    "protocol": "six-seeds protocol cut to 3 by instruction; one fit per subprocess, sequential, cold per row",
+    "mcmc_nuts": {
+      "config": "n_warmup=1000, n_samples=400 (the page's own committed call)",
+      "per_seed": [
+        {"seed": 4, "wall_s": 174.1, "max_split_rhat": 1.0136, "divergences": 6, "min_ess": 153.5, "worst_param": "dust_tau_diff", "sec_per_ess": 1.134, "gradients_per_draw": 77.1, "gradients_per_ess": 402},
+        {"seed": 5, "wall_s": 484.5, "max_split_rhat": 1.0071, "divergences": 9, "min_ess": 146.6, "worst_param": "met_logzsol", "sec_per_ess": 3.304, "gradients_per_draw": 231.5, "gradients_per_ess": 1263},
+        {"seed": 6, "wall_s": 173.8, "max_split_rhat": 1.0041, "divergences": 0, "min_ess": 117.4, "worst_param": "dust_tau_diff", "sec_per_ess": 1.480, "gradients_per_draw": 105.2, "gradients_per_ess": 717}
+      ],
+      "worst_rhat": 1.0136,
+      "max_divergences": 9,
+      "min_ess_over_seeds": 117.4,
+      "median_wall_s": 174.1,
+      "clears_bar": "1/3 seeds"
+    },
+    "mcmc_mclmc": {
       "config": "n_warmup=5000, n_samples=20000 (a draw is one integrator step, not a trajectory)",
-      "seed": 4,
-      "wall_s": 45.0,
-      "max_split_rhat": 1.0054,
-      "divergences": null,
-      "divergences_note": "unadjusted sampler: no accept/reject step, so no divergence count exists; the energy-error variance per dimension is reported in its place",
-      "energy_var_per_dim": 0.00122,
-      "energy_var_per_dim_target": 0.0005,
-      "min_ess": 124.0,
-      "worst_param": "sfh_cont_log_total_mass",
-      "sec_per_ess": 0.363,
-      "gradients_per_draw": 2.0,
-      "gradients_per_ess": 645,
-      "clears_bar": true
-    }
-  ],
-  "headline": "On the healthy fixture MCLMC finishes a posterior in 45 s against NUTS's 163 s (3.6x), at 2.9x better seconds-per-effective-sample, and clears max split-R-hat < 1.01 where NUTS does not (1.0136 with 6 divergences). NUTS is nonetheless the more gradient-efficient sampler here: 402 gradients per effective sample against MCLMC's 645. The wall-clock win is cheap constant-cost steps, not fewer of them.",
-  "seeds_run": 1,
-  "seeds_planned": 3,
-  "status": "first seed; 3-seed sweep in progress"
+      "per_seed": [
+        {"seed": 4, "wall_s": 56.8, "max_split_rhat": 1.0054, "divergences": null, "energy_var_per_dim": 0.00122, "min_ess": 124.0, "worst_param": "sfh_cont_log_total_mass", "sec_per_ess": 0.458, "gradients_per_draw": 2.0, "gradients_per_ess": 645},
+        {"seed": 5, "wall_s": 86.4, "max_split_rhat": 1.0161, "divergences": null, "energy_var_per_dim": 0.00181, "min_ess": 4.1, "worst_param": "met_logzsol", "sec_per_ess": 20.943, "gradients_per_draw": 2.0, "gradients_per_ess": 19398},
+        {"seed": 6, "wall_s": 82.9, "max_split_rhat": 1.0013, "divergences": null, "energy_var_per_dim": 0.0454, "min_ess": 371.9, "worst_param": "dust_tau_diff", "sec_per_ess": 0.223, "gradients_per_draw": 2.0, "gradients_per_ess": 215}
+      ],
+      "divergences_note": "unadjusted sampler: no accept/reject step, so no divergence count exists; energy_var_per_dim (EEVPD) is reported in its place against a 5e-4 target",
+      "worst_rhat": 1.0161,
+      "max_energy_var_per_dim": 0.0454,
+      "min_ess_over_seeds": 4.1,
+      "median_wall_s": 82.9,
+      "clears_bar": "2/3 seeds"
+    },
+    "verdict": "MCLMC clears the R-hat bar on 2/3 control seeds against NUTS's 1/3, at roughly half the median cold wall. Neither sampler clears it on all three. Seed 5 is the shared failure: NUTS pays 231.5 gradients per draw there and MCLMC collapses to min ESS 4.1, so that seed is a hard posterior for both rather than a sampler defect."
+  },
+
+  "gradients_per_draw": {
+    "note": "the load-independent half of the comparison, and the one that survives a shared box",
+    "mcmc_nuts_healthy": "77.1 - 231.5 across three seeds (2**tree_depth_mean)",
+    "mcmc_mclmc": "2.0, always -- one isokinetic McLachlan step per draw, no branch",
+    "interpretation": "MCLMC does NOT win by needing fewer gradients: on seed 4 it spends 645 gradients per effective sample against NUTS's 402. It wins on constant-cost, branch-free steps, which is also what makes it 14x cheaper to compile and what the vmapped catalog path wants."
+  },
+
+  "status": "control complete at 3 seeds; nb05 and nb00 next; tier NOT promoted pending the EEVPD anomaly"
 }

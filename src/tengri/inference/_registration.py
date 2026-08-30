@@ -307,7 +307,12 @@ register_backend(
     ),
     requires=("blackjax",),
     legacy_fitter=False,
-    accepts_precondition=True,
+    # NOT accepts_precondition, though run_mclmc does take `precondition=` and
+    # wires it to the same analytic-metric seam NUTS uses. The capability is
+    # declared when it has been measured and the tier allows a fit:
+    # test_preconditioning_roundtrip parametrises over every backend declaring
+    # it and runs a real fit through each, which a tier="broken" backend cannot
+    # do. Declaring it here was an unmeasured claim that broke that contract.
 )(_ctx_run_mclmc)
 
 # ── Experimental backends ────────────────────────────────────────────────
