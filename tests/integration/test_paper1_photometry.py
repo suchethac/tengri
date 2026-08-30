@@ -17,15 +17,23 @@ Mutation checks (each test names the mutant that kills it):
 - ``raise KeyError`` -> ``continue``:
   ``test_a_missing_mapped_column_raises_instead_of_dropping_the_band``.
 - drop the ``ks_taken`` rule: ``test_one_ks_band_isaac_first_hawki_only_as_fallback``.
+- the derived dust key back to ``"dust_tau_v"``, or ``filter_names`` back to
+  ``dtype=object``: ``test_save_fit_outputs_writes_a_consistent_npz_for_every_configuration``.
+- drop the collision guard in ``build_npz_payload``:
+  ``test_the_npz_payload_refuses_a_derived_key_that_shadows_a_parameter``.
 """
 
 from __future__ import annotations
 
+import json
 import sys
 from pathlib import Path
 
+import jax
 import numpy as np
 import pytest
+
+jax.config.update("jax_enable_x64", True)
 
 REPO = Path(__file__).resolve().parents[2]
 PAPER1 = REPO / "analysis" / "paper1"
@@ -264,3 +272,170 @@ def test_every_sweep_method_is_a_registered_backend_name():
             assert method in _CANONICAL_METHODS, method
         else:
             assert get_backend(method).name == method
+
+
+# The 13 bands galaxy 13097 is detected in (``WFC3_F098M`` is a sentinel for it, and
+# the two Ks columns share ``vista_ks``), mirroring ``test_paper1_configs.py``.
+CANDELS_13097_FILTERS = [
+    "hst_f435w",
+    "hst_f606w",
+    "hst_f775w",
+    "hst_f814w",
+    "hst_f850lp",
+    "hst_f105w",
+    "hst_f125w",
+    "hst_f160w",
+    "vista_ks",
+    "irac_36",
+    "irac_45",
+    "irac_58",
+    "irac_80",
+]
+CANDELS_13097_Z = 1.097
+#: Draws in the hand-built posterior of the save-path test. 120 was the brief's
+#: figure; every draw costs one ``predict`` plus one ``predict_state`` (~0.36 s
+#: for configuration I on this machine), which put configuration I alone near 45 s
+#: and configurations II/III past the 60 s per-configuration budget, so the record
+#: is 40 draws. The save path is indifferent to the count.
+SAVE_PATH_DRAWS = 40
+SAVE_PATH_SFH_GRID = 100  # ``np.logspace(6, 10.1, 100)`` in ``save_fit_outputs``
+
+
+def test_the_npz_payload_refuses_a_derived_key_that_shadows_a_parameter():
+    # Configuration I samples ``dust_tau_v``; the derived dust array used to be
+    # written under that same name, and ``np.savez(**samples, **derived)`` died
+    # with "got multiple values for keyword argument 'dust_tau_v'" (#2089) --
+    # after a 1463 s fit that had already passed the adoption bar.
+    samples = {"dust_tau_v": np.zeros(3), "met_logzsol": np.ones(3)}
+    payload = fit_one.build_npz_payload(samples, {"dust_tau": np.full(3, 0.5)})
+    assert sorted(payload) == ["dust_tau", "dust_tau_v", "met_logzsol"]
+
+    with pytest.raises(ValueError, match="dust_tau_v"):
+        fit_one.build_npz_payload(samples, {"dust_tau_v": np.full(3, 0.5)})
+    with pytest.raises(ValueError, match="met_logzsol"):
+        fit_one.build_npz_payload(samples, {"dust_tau": np.zeros(3)}, {"met_logzsol": np.zeros(3)})
+
+
+@pytest.mark.parametrize("config_key", ["I", "II", "III"])
+def test_save_fit_outputs_writes_a_consistent_npz_for_every_configuration(config_key, tmp_path):
+    """The save path runs to completion for I, II and III and writes one schema.
+
+    Exercises the block that killed the first real grid cell: the fit itself was
+    fine, the NPZ write was not, and only configuration I collided -- an unfixed
+    grid would have produced a mixed NPZ schema (#2089).
+    """
+    import configs
+
+    from tengri.inference.posterior import Posterior
+
+    try:
+        ssp = configs.load_ssp_for(config_key)
+    except FileNotFoundError:
+        pytest.skip(f"SSP grid for config {config_key} not found")
+
+    photometry = tengri.Photometry.from_names(CANDELS_13097_FILTERS)
+    observation = tengri.Observation(photometry=photometry)
+    sed_model = getattr(configs, f"config_{config_key}")(ssp, observation, CANDELS_13097_Z)
+    free_params = list(sed_model.spec.free_params)
+
+    # Prior draws: physically valid for ``predict`` by construction.
+    batch = sed_model.spec.sample_batch(jax.random.PRNGKey(0), SAVE_PATH_DRAWS)
+    samples = {k: np.asarray(batch[k], dtype=float) for k in free_params}
+    assert all(v.shape == (SAVE_PATH_DRAWS,) for v in samples.values())
+
+    posterior = Posterior(
+        samples=samples,
+        params={k: float(v[0]) for k, v in samples.items()},
+        method="mcmc_nuts",
+        wall_time_s=1.0,
+        diagnostics={"n_divergent": 0, "n_samples": SAVE_PATH_DRAWS, "n_chains": 1},
+        _model=sed_model,
+    )
+    diagnostics = {
+        "gal_id": 13097,
+        "config": config_key,
+        "n_free": len(free_params),
+        "divergences": 0,
+        "rhat_max": 1.0031,
+        "ess_min": 118.0,
+        "wall_time_s": 1.0,
+        "adoption_pass": True,
+    }
+    obs_fnu = np.full(len(CANDELS_13097_FILTERS), 1e-28)
+    obs_sigma = obs_fnu * 0.05
+
+    npz_path, json_path = fit_one.save_fit_outputs(
+        posterior,
+        diagnostics,
+        [dict(diagnostics)],
+        [],
+        sed_model,
+        config_key,
+        13097,
+        tmp_path,
+        obs_fnu=obs_fnu,
+        obs_sigma=obs_sigma,
+        filter_names=CANDELS_13097_FILTERS,
+    )
+    assert npz_path == tmp_path / f"13097_{config_key}.npz"
+    assert json_path == tmp_path / f"13097_{config_key}.json"
+
+    # allow_pickle=False, and every array actually read: an object array (the old
+    # ``filter_names``) raises here rather than at some later reader's expense.
+    with np.load(npz_path, allow_pickle=False) as npz:
+        arrays = {k: npz[k] for k in npz.files}
+
+    # Not one sampled parameter was overwritten by a derived quantity.
+    for name, draws in samples.items():
+        assert name in arrays, name
+        np.testing.assert_array_equal(arrays[name], draws)
+
+    expected_dust_param = "dust_tau_v" if config_key == "I" else "dust_tau_diff"
+    assert expected_dust_param in free_params
+    assert str(arrays["dust_tau_name"]) == expected_dust_param
+    # The derived dust array is that parameter's draws, strided over the record.
+    np.testing.assert_array_equal(arrays["dust_tau"], samples[expected_dust_param])
+
+    derived_keys = {"stellar_mass", "sfr_100myr", "sfr_10myr", "dust_tau", "dust_tau_name"}
+    # A real ``Posterior.samples`` carries EVERY parameter, not only the free ones
+    # (the real configuration II NPZ has 41 parameter arrays for 8 free parameters),
+    # so the derived and grid keys must miss the whole spec, not just ``free_params``.
+    all_params = set(free_params) | set(sed_model.spec.get_fixed_values())
+    assert len(all_params) > len(free_params)
+    grid_keys = {
+        "sfh_lookback_time_yr",
+        "sfh_sfr_median",
+        "sfh_sfr_p16",
+        "sfh_sfr_p84",
+        "model_photometry_median",
+        "obs_fnu",
+        "obs_sigma",
+        "filter_names",
+    }
+    assert not derived_keys & all_params, "a derived key shadows a model parameter"
+    assert not grid_keys & all_params, "a grid key shadows a model parameter"
+    for name in ("stellar_mass", "sfr_100myr", "sfr_10myr", "dust_tau"):
+        assert arrays[name].shape == (SAVE_PATH_DRAWS,), name
+        assert np.isfinite(arrays[name]).all(), name
+
+    for name in ("sfh_lookback_time_yr", "sfh_sfr_median", "sfh_sfr_p16", "sfh_sfr_p84"):
+        assert arrays[name].shape == (SAVE_PATH_SFH_GRID,), name
+        assert np.isfinite(arrays[name]).all(), name
+    assert (arrays["sfh_sfr_p16"] <= arrays["sfh_sfr_median"] + 1e-30).all()
+    assert (arrays["sfh_sfr_median"] <= arrays["sfh_sfr_p84"] + 1e-30).all()
+
+    n_bands = len(CANDELS_13097_FILTERS)
+    assert arrays["model_photometry_median"].shape == (n_bands,)
+    assert np.isfinite(arrays["model_photometry_median"]).all()
+    np.testing.assert_array_equal(arrays["obs_fnu"], obs_fnu)
+    np.testing.assert_array_equal(arrays["obs_sigma"], obs_sigma)
+    assert list(arrays["filter_names"]) == CANDELS_13097_FILTERS
+
+    # The NPZ holds nothing else: the schema is the same for every configuration.
+    assert set(arrays) == set(free_params) | derived_keys | grid_keys
+
+    payload = json.loads(json_path.read_text())
+    assert payload["attempts"] == [diagnostics]
+    assert payload["retune_history"] == []
+    for name, value in diagnostics.items():
+        assert payload[name] == value

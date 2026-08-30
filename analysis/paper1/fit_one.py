@@ -1,6 +1,10 @@
 """Fit a single galaxy with a specified SED model configuration via NUTS MCMC.
 
-CLI: python fit_one.py --galaxy ID --config {I,II,III} --method mcmc_nuts --out DIR [--seed N]
+CLI: python fit_one.py --galaxy ID --config {I,II,III} --method mcmc_nuts --out DIR
+     [--seed N] [--n-warmup N] [--n-samples N] [--n-chains N]
+
+``--n-warmup`` / ``--n-samples`` / ``--n-chains`` default to the paper's 600 / 600 / 4;
+they exist so the pipeline can be smoke-tested end to end at a tiny budget.
 
 Outputs to DIR/<ID>_<config>.npz (parameters, derived quantities, diagnostics) and
 DIR/<ID>_<config>.json (diagnostics summary).
@@ -28,6 +32,45 @@ logger = logging.getLogger(__name__)
 
 #: Draws kept per parameter in the saved NPZ (4 chains x 1000 draws).
 MAX_SAVED_DRAWS = 4000
+
+#: The paper's canonical NUTS budget (quickstart notebook). The CLI exposes all
+#: three so the save path can be exercised end to end at a tiny budget without
+#: editing this file; the defaults are the paper's and are what the grid runs.
+DEFAULT_N_WARMUP = 600
+DEFAULT_N_SAMPLES = 600
+DEFAULT_N_CHAINS = 4
+
+#: Keys the NPZ carries beside the sampled parameters, one array each.
+#: ``dust_tau`` is the configuration's dust optical depth whichever parameter
+#: carries it, and ``dust_tau_name`` names that parameter. They are deliberately
+#: NOT the parameter's own name: configuration I samples ``dust_tau_v``, so
+#: writing the derived array under that name made ``np.savez`` raise
+#: ``TypeError: got multiple values for keyword argument 'dust_tau_v'`` -- after
+#: a 1463 s fit that had already passed the adoption bar -- while II and III
+#: (which sample ``dust_tau_diff``) wrote a *different* schema silently (#2089).
+DERIVED_KEYS = ("stellar_mass", "sfr_100myr", "sfr_10myr", "dust_tau")
+
+
+def dust_parameter_name(config_key: str) -> str:
+    """Name of the free parameter carrying this configuration's dust optical depth."""
+    return "dust_tau_v" if config_key == "I" else "dust_tau_diff"
+
+
+def build_npz_payload(samples_thin: dict, *extras: dict) -> dict:
+    """Merge sampled draws and every derived array into one NPZ payload.
+
+    The single place the NPZ's keys are assembled, so a derived name can never
+    silently shadow -- or, under ``np.savez(**a, **b)``, collide with -- a
+    sampled parameter's name (#2089). A collision raises here, before any
+    expensive save work, and names the offending key.
+    """
+    payload = dict(samples_thin)
+    for extra in extras:
+        for key, value in extra.items():
+            if key in payload:
+                raise ValueError(f"derived quantity {key!r} collides with a sampled parameter")
+            payload[key] = value
+    return payload
 
 
 def thin_samples(samples: dict, max_draws: int = MAX_SAVED_DRAWS) -> dict:
@@ -61,6 +104,20 @@ def iter_draws(samples_thin: dict, fixed_values: dict, n_draws: int):
         yield {**fixed_values, **{k: float(v[i]) for k, v in samples_thin.items()}}
 
 
+def diagnostics_payload(
+    diagnostics: dict,
+    attempts: list[dict],
+    retune_history: list[dict],
+) -> dict:
+    """Build the fit's JSON payload: one attempt's diagnostics plus the history.
+
+    The single definition of the file's shape, so the payload
+    :func:`write_diagnostics_json` writes and the dict :func:`run_fit` returns
+    cannot drift apart.
+    """
+    return {**diagnostics, "attempts": attempts, "retune_history": retune_history}
+
+
 def write_diagnostics_json(
     path: Path,
     diagnostics: dict,
@@ -79,7 +136,7 @@ def write_diagnostics_json(
     ``ess_min``, ``wall_time_s``, ``adoption_pass``, ``retune_history``), plus
     ``attempts`` — one entry per attempt so far, in order.
     """
-    payload = {**diagnostics, "attempts": attempts, "retune_history": retune_history}
+    payload = diagnostics_payload(diagnostics, attempts, retune_history)
     with open(path, "w") as f:
         json.dump(payload, f, indent=2)
     return payload
@@ -136,6 +193,107 @@ def apply_systematic_error_floor(
     return np.sqrt(sigma**2 + sys_error**2)
 
 
+def save_fit_outputs(
+    best_posterior,
+    best_diagnostics: dict,
+    attempts: list[dict],
+    retune_history: list[dict],
+    sed_model,
+    config_key: str,
+    gal_id: int,
+    out_dir: Path,
+    obs_fnu: np.ndarray,
+    obs_sigma: np.ndarray,
+    filter_names: list[str],
+) -> tuple[Path, Path]:
+    """Write one fit's NPZ and JSON and return their paths.
+
+    Extracted from :func:`run_fit` so the save path can be exercised without a
+    real sampler run: the first real grid cell fit correctly and then died here
+    (#2089).
+    """
+    out_dir = Path(out_dir)
+    out_dir.mkdir(parents=True, exist_ok=True)
+    output_npz = out_dir / f"{gal_id}_{config_key}.npz"
+    output_json = out_dir / f"{gal_id}_{config_key}.json"
+
+    # Thin to at most MAX_SAVED_DRAWS flattened draws (#2089)
+    samples_thin = thin_samples(best_posterior.samples)
+
+    # Prepare derived quantities
+    fixed_values = sed_model.spec.get_fixed_values()
+
+    # Compute derived quantities (stellar mass, SFR, dust). The dust parameter's
+    # name varies by configuration; the NPZ key does not (#2089).
+    dust_param = dust_parameter_name(config_key)
+    derived_samples = {key: [] for key in DERIVED_KEYS}
+
+    for params in iter_draws(samples_thin, fixed_values, 500):
+        pred = sed_model.predict(params)
+        props = pred.properties
+
+        derived_samples["stellar_mass"].append(float(props.get("stellar_mass", np.nan)))
+        derived_samples["sfr_100myr"].append(float(props.get("sfr_100myr", np.nan)))
+        derived_samples["sfr_10myr"].append(float(props.get("sfr_10myr", np.nan)))
+        derived_samples["dust_tau"].append(float(params.get(dust_param, np.nan)))
+
+    # Compute SFH posteriors on a common grid
+    t_lbt_yr = np.logspace(6, 10.1, 100)  # 100 points, 1 Myr to ~13 Gyr
+    sfr_posterior = []
+
+    for params in iter_draws(samples_thin, fixed_values, 200):
+        state = sed_model.predict_state(params)
+        t_lbt_grid = np.asarray(state.derived["sfh_grid_lbt_yr"])
+        sfr_grid = np.asarray(state.derived["sfr_history"])
+
+        # Interpolate SFR onto common grid
+        sfr_interp = np.interp(t_lbt_yr, t_lbt_grid, sfr_grid)
+        sfr_posterior.append(sfr_interp)
+
+    sfr_posterior = np.stack(sfr_posterior)
+    sfr_median = np.median(sfr_posterior, axis=0)
+    sfr_p16 = np.percentile(sfr_posterior, 16, axis=0)
+    sfr_p84 = np.percentile(sfr_posterior, 84, axis=0)
+
+    derived = {key: np.array(derived_samples[key]) for key in DERIVED_KEYS}
+    # Which parameter ``dust_tau`` came from, so a reader never has to infer it
+    # from the configuration.
+    derived["dust_tau_name"] = np.array(dust_param)
+
+    grids = {
+        # SFH grid
+        "sfh_lookback_time_yr": t_lbt_yr,
+        "sfh_sfr_median": sfr_median,
+        "sfh_sfr_p16": sfr_p16,
+        "sfh_sfr_p84": sfr_p84,
+        # Model photometry at posterior median
+        "model_photometry_median": np.asarray(
+            sed_model.predict_photometry(
+                {
+                    **fixed_values,
+                    **{k: float(np.median(v)) for k, v in samples_thin.items()},
+                }
+            )
+        ),
+        # Observed photometry and errors
+        "obs_fnu": np.asarray(obs_fnu),
+        "obs_sigma": np.asarray(obs_sigma),
+        # A str_ array, not ``dtype=object``: an object array in an NPZ can only
+        # be read back with ``allow_pickle=True`` (#2089).
+        "filter_names": np.asarray(filter_names, dtype=np.str_),
+    }
+
+    # Every key the NPZ carries goes through the collision guard (#2089).
+    np.savez(output_npz, **build_npz_payload(samples_thin, derived, grids))
+    logger.info(f"Saved results to {output_npz}")
+
+    # Save JSON with diagnostics (same shape as the per-attempt writes)
+    write_diagnostics_json(output_json, best_diagnostics, attempts, retune_history)
+    logger.info(f"Saved diagnostics to {output_json}")
+
+    return output_npz, output_json
+
+
 def run_fit(
     gal_id: int,
     config_key: str,
@@ -143,6 +301,9 @@ def run_fit(
     out_dir: Path,
     seed: int = 42,
     retune_attempts: int = 2,
+    n_warmup: int = DEFAULT_N_WARMUP,
+    n_samples: int = DEFAULT_N_SAMPLES,
+    n_chains: int = DEFAULT_N_CHAINS,
 ) -> dict:
     """Run a single fit for a galaxy and configuration.
 
@@ -153,13 +314,18 @@ def run_fit(
         out_dir: Output directory for results
         seed: Random seed for reproducibility
         retune_attempts: Number of retune attempts if initial fit fails bar
+        n_warmup: NUTS warmup draws per chain (default: the paper's 600)
+        n_samples: NUTS kept draws per chain (default: the paper's 600)
+        n_chains: NUTS chains (default: the paper's 4)
 
     Returns:
         Dict with fit result and diagnostics
     """
     out_dir = Path(out_dir)
     out_dir.mkdir(parents=True, exist_ok=True)
-    output_npz = out_dir / f"{gal_id}_{config_key}.npz"
+    # The JSON path is needed before the loop: a failed attempt is persisted
+    # before the retune starts (#2089). ``save_fit_outputs`` derives the same
+    # two paths from ``out_dir`` for the final write.
     output_json = out_dir / f"{gal_id}_{config_key}.json"
 
     # Load CANDELS catalog
@@ -196,9 +362,9 @@ def run_fit(
     # NUTS settings (from quickstart notebook)
     nuts_kwargs = dict(
         method=method,
-        n_warmup=600,
-        n_samples=600,
-        n_chains=4,
+        n_warmup=n_warmup,
+        n_samples=n_samples,
+        n_chains=n_chains,
         n_burnin=0,
         dense_mass_matrix=False,
     )
@@ -295,92 +461,21 @@ def run_fit(
             f"Fit failed all {retune_attempts} attempts for galaxy {gal_id} config {config_key}"
         )
 
-    # Thin to at most MAX_SAVED_DRAWS flattened draws (#2089)
-    samples_thin = thin_samples(best_posterior.samples)
-
-    # Prepare derived quantities
-    fixed_values = sed_model.spec.get_fixed_values()
-
-    # Compute derived quantities (stellar mass, SFR, dust)
-    derived_samples = {
-        "stellar_mass": [],
-        "sfr_100myr": [],
-        "sfr_10myr": [],
-        "dust_tau_v": [],
-    }
-
-    for params in iter_draws(samples_thin, fixed_values, 500):
-        pred = sed_model.predict(params)
-        props = pred.properties
-
-        derived_samples["stellar_mass"].append(float(props.get("stellar_mass", np.nan)))
-        derived_samples["sfr_100myr"].append(float(props.get("sfr_100myr", np.nan)))
-        derived_samples["sfr_10myr"].append(float(props.get("sfr_10myr", np.nan)))
-
-        # Extract dust optical depth (varies by configuration)
-        if config_key == "I":
-            derived_samples["dust_tau_v"].append(float(params.get("dust_tau_v", np.nan)))
-        else:
-            # For configs II/III, use tau_diff
-            derived_samples["dust_tau_v"].append(float(params.get("dust_tau_diff", np.nan)))
-
-    # Compute SFH posteriors on a common grid
-    t_lbt_yr = np.logspace(6, 10.1, 100)  # 100 points, 1 Myr to ~13 Gyr
-    sfr_posterior = []
-
-    for params in iter_draws(samples_thin, fixed_values, 200):
-        state = sed_model.predict_state(params)
-        t_lbt_grid = np.asarray(state.derived["sfh_grid_lbt_yr"])
-        sfr_grid = np.asarray(state.derived["sfr_history"])
-
-        # Interpolate SFR onto common grid
-        sfr_interp = np.interp(t_lbt_yr, t_lbt_grid, sfr_grid)
-        sfr_posterior.append(sfr_interp)
-
-    sfr_posterior = np.stack(sfr_posterior)
-    sfr_median = np.median(sfr_posterior, axis=0)
-    sfr_p16 = np.percentile(sfr_posterior, 16, axis=0)
-    sfr_p84 = np.percentile(sfr_posterior, 84, axis=0)
-
-    # Save NPZ with all results
-    np.savez(
-        output_npz,
-        # Parameter samples
-        **samples_thin,
-        # Derived quantities
-        stellar_mass=np.array(derived_samples["stellar_mass"]),
-        sfr_100myr=np.array(derived_samples["sfr_100myr"]),
-        sfr_10myr=np.array(derived_samples["sfr_10myr"]),
-        dust_tau_v=np.array(derived_samples["dust_tau_v"]),
-        # SFH grid
-        sfh_lookback_time_yr=t_lbt_yr,
-        sfh_sfr_median=sfr_median,
-        sfh_sfr_p16=sfr_p16,
-        sfh_sfr_p84=sfr_p84,
-        # Model photometry at posterior median
-        model_photometry_median=np.asarray(
-            sed_model.predict_photometry(
-                {
-                    **fixed_values,
-                    **{k: float(np.median(v)) for k, v in samples_thin.items()},
-                }
-            )
-        ),
-        # Observed photometry and errors
+    save_fit_outputs(
+        best_posterior,
+        best_diagnostics,
+        attempts,
+        retune_history,
+        sed_model,
+        config_key,
+        gal_id,
+        out_dir,
         obs_fnu=fnu,
         obs_sigma=sigma_floor,
-        filter_names=np.array(filter_names, dtype=object),
+        filter_names=filter_names,
     )
 
-    logger.info(f"Saved results to {output_npz}")
-
-    # Save JSON with diagnostics (same shape as the per-attempt writes above)
-    best_diagnostics = write_diagnostics_json(
-        output_json, best_diagnostics, attempts, retune_history
-    )
-    logger.info(f"Saved diagnostics to {output_json}")
-
-    return best_diagnostics
+    return diagnostics_payload(best_diagnostics, attempts, retune_history)
 
 
 def main():
@@ -402,6 +497,24 @@ def main():
     )
     parser.add_argument("--out", type=Path, required=True, help="Output directory")
     parser.add_argument("--seed", type=int, default=42, help="Random seed (default: 42)")
+    parser.add_argument(
+        "--n-warmup",
+        type=int,
+        default=DEFAULT_N_WARMUP,
+        help=f"NUTS warmup draws per chain (default: {DEFAULT_N_WARMUP})",
+    )
+    parser.add_argument(
+        "--n-samples",
+        type=int,
+        default=DEFAULT_N_SAMPLES,
+        help=f"NUTS kept draws per chain (default: {DEFAULT_N_SAMPLES})",
+    )
+    parser.add_argument(
+        "--n-chains",
+        type=int,
+        default=DEFAULT_N_CHAINS,
+        help=f"NUTS chains (default: {DEFAULT_N_CHAINS})",
+    )
 
     args = parser.parse_args()
 
@@ -418,6 +531,9 @@ def main():
             method=args.method,
             out_dir=args.out,
             seed=args.seed,
+            n_warmup=args.n_warmup,
+            n_samples=args.n_samples,
+            n_chains=args.n_chains,
         )
         logger.info(f"✓ Fit complete for galaxy {args.galaxy} config {args.config}")
         return 0

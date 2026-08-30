@@ -20,8 +20,10 @@ checkout; set `TENGRI_CANDELS_CATALOG`, `ART_SEDFITTING_DIR`, or
 
 **Usage:**
 ```bash
-$python_exe analysis/paper1/fit_one.py --galaxy ID --config {I,II,III} --method mcmc_nuts --out DIR [--seed N]
+$python_exe analysis/paper1/fit_one.py --galaxy ID --config {I,II,III} --method mcmc_nuts --out DIR [--seed N] [--n-warmup N] [--n-samples N] [--n-chains N]
 ```
+
+`--n-warmup`, `--n-samples` and `--n-chains` default to the paper's 600, 600 and 4 (the settings below); the examples and the grid use those defaults. Pass small values to smoke-test the whole pipeline — fit, retune, NPZ and JSON — in a minute rather than half an hour (the adoption bar will fail at such a budget, which exercises the retune and the per-attempt JSON as well).
 
 **Examples:**
 ```bash
