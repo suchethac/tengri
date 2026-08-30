@@ -51,16 +51,43 @@ cd analysis/paper1
 $python_exe run_candels_fits.py
 ```
 
+**Second pass (only the cells that have not been adopted):**
+```bash
+cd analysis/paper1
+$python_exe run_candels_fits.py --only-missing
+```
+
+`--only-missing` skips a cell whose `results/fits/<ID>_<config>.json` already records
+`adoption_pass: true`, reusing that JSON for the summary table and `fit_summary.json`, and runs
+every other cell. Without the flag the driver runs all nine cells, as before.
+
+**Retune policy (per cell, in `fit_one.py`):** attempt 1 uses a diagonal mass matrix at
+`target_accept_rate` 0.85; attempt 2 keeps the same warmup and raises `target_accept_rate` to
+0.95; attempt 3 keeps 0.95 and doubles the warmup (each further attempt doubles it again). The
+mass matrix is never switched to dense by a retune — measured on cell 13097/II (600 warmup +
+4×600 draws, D = 8), attempt 1 on a diagonal mass matrix gave 3/2400 divergences at max R̂
+1.0014 and the old dense-mass retune gave 79/2400 at 1.023 — because divergences at the 0.1%
+level with R̂ ≈ 1.00 are a step-size problem, not a mass-matrix one. The default is 3 attempts.
+
+**Cells that never clear the adoption bar are still saved.** If no attempt reaches 0 divergences
+and max R̂ < 1.01, the best attempt (fewest divergences, then lowest max R̂) is written to the
+NPZ and the JSON with `adoption_pass: false` and `best_attempt: <n>`, and `fit_one.py` exits 0;
+only a cell in which every attempt raised is a failure. The summary table prints the adoption
+verdict per cell (`✓`, or `✗ best att <n>`), so a saved-but-not-adopted cell is never read as a
+pass, and `fit_summary.json` carries `adoption_pass` and `best_attempt` in each row plus an
+`adopted_fits` count in its metadata.
+
 **Behavior:**
 - Spawns one subprocess per fit (sequential; never two JAX processes at once)
 - Logs subprocess output to `results/fits/<ID>_<config>.log`
 - Aggregates diagnostics into `results/fit_summary.json`
-- Prints 3×3 summary table to stdout
+- Prints 3×3 summary table to stdout, with the adoption verdict per cell
 
 **Outputs:**
 - `results/fits/*.log` — Per-fit subprocess logs
-- `results/fits/*.npz` — Per-fit results (parameters, derived quantities, SFH)
-- `results/fits/*.json` — Per-fit diagnostics
+- `results/fits/*.npz` — Per-fit results (parameters, derived quantities, SFH), written for every
+  cell that produced a posterior, adopted or not
+- `results/fits/*.json` — Per-fit diagnostics, including `adoption_pass` and `best_attempt`
 - `results/fit_summary.json` — Aggregated summary table
 
 ## Deliverable 3: Backend Sweep (run_backend_sweep.py)

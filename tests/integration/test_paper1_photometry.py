@@ -21,6 +21,11 @@ Mutation checks (each test names the mutant that kills it):
   ``dtype=object``: ``test_save_fit_outputs_writes_a_consistent_npz_for_every_configuration``.
 - drop the collision guard in ``build_npz_payload``:
   ``test_the_npz_payload_refuses_a_derived_key_that_shadows_a_parameter``.
+- ``retune_settings`` toggles ``dense_mass_matrix`` on attempt 2:
+  ``test_retune_policy_raises_target_accept_then_lengthens_warmup_and_never_toggles_dense``.
+- ``select_best_attempt`` ranks by ``rhat_max`` alone, ignoring divergences:
+  ``test_run_fit_keeps_the_best_attempt_when_the_bar_is_missed``.
+- ``cell_is_adopted`` inverted: ``test_only_missing_skips_adopted_cells``.
 """
 
 from __future__ import annotations
@@ -439,3 +444,116 @@ def test_save_fit_outputs_writes_a_consistent_npz_for_every_configuration(config
     assert payload["retune_history"] == []
     for name, value in diagnostics.items():
         assert payload[name] == value
+
+
+def test_retune_policy_raises_target_accept_then_lengthens_warmup_and_never_toggles_dense():
+    """A retune moves the step size first, then the warmup -- never the mass matrix.
+
+    Measured on grid cell 13097/II (600 warmup + 4x600 draws, D = 8): attempt 1
+    with a diagonal mass matrix gave 3/2400 divergences at max R-hat 1.0014, and
+    the old retune's ``dense_mass_matrix=True`` turned that into 79/2400 at
+    1.023 (#2089). Divergences at the 0.1% level with R-hat ~1.00 are a step-size
+    problem, so attempt 2 raises ``target_accept_rate`` instead.
+    """
+    import inspect
+
+    base = {
+        "n_warmup": 600,
+        "n_samples": 600,
+        "n_chains": 4,
+        "dense_mass_matrix": False,
+        "target_accept_rate": 0.85,
+    }
+    frozen = dict(base)
+
+    assert fit_one.retune_settings(1, base) == base
+    assert fit_one.retune_settings(2, base) == {**base, "target_accept_rate": 0.95}
+    assert fit_one.retune_settings(3, base) == {
+        **base,
+        "target_accept_rate": 0.95,
+        "n_warmup": 1200,
+    }
+    assert fit_one.retune_settings(4, base) == {
+        **base,
+        "target_accept_rate": 0.95,
+        "n_warmup": 2400,
+    }
+
+    # The mass matrix is diagonal in every attempt, and ``base`` is never mutated:
+    # each call returns a new dict.
+    for attempt in (1, 2, 3, 4):
+        settings = fit_one.retune_settings(attempt, base)
+        assert settings["dense_mass_matrix"] is False, attempt
+        assert settings is not base
+    assert base == frozen
+
+    assert fit_one.DEFAULT_TARGET_ACCEPT == 0.85
+    assert fit_one.RETUNE_TARGET_ACCEPT == 0.95
+    assert fit_one.DEFAULT_RETUNE_ATTEMPTS == 3
+    assert (
+        inspect.signature(fit_one.run_fit).parameters["retune_attempts"].default
+        == fit_one.DEFAULT_RETUNE_ATTEMPTS
+    )
+    # The policy is the one the fit loop actually uses, not a parallel definition.
+    assert "retune_settings(" in inspect.getsource(fit_one.run_fit)
+
+
+def test_run_fit_keeps_the_best_attempt_when_the_bar_is_missed():
+    """The best attempt is the one with fewest divergences, then lowest max R-hat.
+
+    Cell 13097/II produced a near-passing attempt 1 (3 divergences, R-hat 1.0014)
+    and a much worse retune, and the two-attempt cap discarded both (#2089).
+    """
+    import inspect
+
+    attempts = [
+        {"divergences": 3, "rhat_max": 1.0014, "retune_attempt": 1},
+        {"divergences": 79, "rhat_max": 1.023, "retune_attempt": 2},
+        {"divergences": 3, "rhat_max": 1.0020, "retune_attempt": 3},
+    ]
+    assert fit_one.select_best_attempt(attempts) == 0
+    # Order-independent, and a tie on divergences is broken by R-hat.
+    assert fit_one.select_best_attempt(list(reversed(attempts))) == 2
+    assert fit_one.select_best_attempt([attempts[2], attempts[0]]) == 1
+    assert fit_one.select_best_attempt([attempts[1]]) == 0
+
+    # Divergences come first: an attempt that diverges 50 times does not win on
+    # R-hat alone. This is the case that separates the ruled key from ``rhat_max``.
+    diverging = [
+        {"divergences": 0, "rhat_max": 1.05, "retune_attempt": 1},
+        {"divergences": 50, "rhat_max": 1.001, "retune_attempt": 2},
+    ]
+    assert fit_one.select_best_attempt(diverging) == 0
+
+    with pytest.raises(ValueError, match="no attempts"):
+        fit_one.select_best_attempt([])
+
+    # The selection is the one the fit loop actually uses, not a parallel definition.
+    assert "select_best_attempt(" in inspect.getsource(fit_one.run_fit)
+
+
+def test_only_missing_skips_adopted_cells(tmp_path):
+    """``--only-missing`` skips a cell whose JSON says it cleared the adoption bar."""
+    import run_candels_fits
+
+    adopted = tmp_path / "13097_II.json"
+    adopted.write_text(json.dumps({"gal_id": 13097, "config": "II", "adoption_pass": True}))
+    missed = tmp_path / "15336_III.json"
+    missed.write_text(json.dumps({"gal_id": 15336, "config": "III", "adoption_pass": False}))
+
+    assert run_candels_fits.cell_is_adopted(adopted) is True
+    assert run_candels_fits.cell_is_adopted(missed) is False
+    # A cell that was never run has no JSON at all.
+    assert run_candels_fits.cell_is_adopted(tmp_path / "24497_I.json") is False
+    # A truncated JSON (a per-cell timeout killing the process mid-write) is not adopted.
+    broken = tmp_path / "13097_I.json"
+    broken.write_text('{"adoption_pass": true')
+    assert run_candels_fits.cell_is_adopted(broken) is False
+    # Neither is a JSON that predates the key.
+    legacy = tmp_path / "15336_I.json"
+    legacy.write_text(json.dumps({"gal_id": 15336, "config": "I"}))
+    assert run_candels_fits.cell_is_adopted(legacy) is False
+
+    # The flag is opt-in: without it the driver runs every cell, as today.
+    assert run_candels_fits.parse_args([]).only_missing is False
+    assert run_candels_fits.parse_args(["--only-missing"]).only_missing is True

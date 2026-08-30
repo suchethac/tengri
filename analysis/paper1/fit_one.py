@@ -4,9 +4,10 @@ CLI: python fit_one.py --galaxy ID --config {I,II,III} --method mcmc_nuts --out 
      [--seed N] [--n-warmup N] [--n-samples N] [--n-chains N]
 
 ``--n-warmup`` / ``--n-samples`` / ``--n-chains`` default to the paper's 600 / 600 / 4;
-they exist so the pipeline can be smoke-tested at a small budget. The NPZ is written
-only when an attempt clears the adoption bar, so a 20-draw run exercises the fit, the
-retune and the per-attempt JSON; reaching the NPZ needs a budget that converges.
+they exist so the pipeline can be smoke-tested at a small budget. Every run writes the
+NPZ and the JSON: an attempt that clears the adoption bar is adopted immediately, and
+otherwise the best of DEFAULT_RETUNE_ATTEMPTS attempts (fewest divergences, then lowest
+max R-hat) is saved with ``adoption_pass: false`` and the process still exits 0.
 
 Outputs to DIR/<ID>_<config>.npz (parameters, derived quantities, diagnostics) and
 DIR/<ID>_<config>.json (diagnostics summary).
@@ -42,6 +43,17 @@ DEFAULT_N_WARMUP = 600
 DEFAULT_N_SAMPLES = 600
 DEFAULT_N_CHAINS = 4
 
+#: NUTS step-size adaptation targets. A retune raises the target rather than
+#: switching to a dense mass matrix: measured on grid cell 13097/II (600 warmup
+#: + 4x600 draws, D = 8), attempt 1 on a diagonal mass matrix gave 3/2400
+#: divergences at max R-hat 1.0014, and the old dense-mass retune gave 79/2400
+#: at 1.023 (#2089). ``DEFAULT_TARGET_ACCEPT`` is ``run_nuts``'s own default.
+DEFAULT_TARGET_ACCEPT = 0.85
+RETUNE_TARGET_ACCEPT = 0.95
+
+#: Attempts the adoption loop makes before it keeps the best one it has.
+DEFAULT_RETUNE_ATTEMPTS = 3
+
 #: Keys the NPZ carries beside the sampled parameters, one array each.
 #: ``dust_tau`` is the configuration's dust optical depth whichever parameter
 #: carries it, and ``dust_tau_name`` names that parameter. They are deliberately
@@ -56,6 +68,44 @@ DERIVED_KEYS = ("stellar_mass", "sfr_100myr", "sfr_10myr", "dust_tau")
 def dust_parameter_name(config_key: str) -> str:
     """Name of the free parameter carrying this configuration's dust optical depth."""
     return "dust_tau_v" if config_key == "I" else "dust_tau_diff"
+
+
+def retune_settings(attempt: int, base: dict) -> dict:
+    """NUTS settings for attempt ``attempt`` (1-based) of the adoption loop.
+
+    Attempt 1 is ``base`` (diagonal mass, target 0.85). Attempt 2 raises
+    ``target_accept_rate`` to RETUNE_TARGET_ACCEPT with the same warmup --
+    divergences at the 0.1% level with R-hat ~1.00 are a step-size problem.
+    Attempt 3 keeps that target and doubles the warmup, and each further attempt
+    doubles it again. ``dense_mass_matrix`` is never toggled: measured on
+    13097/II it turned 3 divergences into 79.
+
+    A new dict every call; ``base`` is never mutated.
+    """
+    if attempt < 1:
+        raise ValueError(f"attempt is 1-based, got {attempt}")
+    if attempt == 1:
+        return dict(base)
+    settings = {**base, "target_accept_rate": RETUNE_TARGET_ACCEPT}
+    if attempt >= 3:
+        settings["n_warmup"] = base["n_warmup"] * 2 ** (attempt - 2)
+    return settings
+
+
+def select_best_attempt(attempts: list[dict]) -> int:
+    """Index of the best attempt in ``attempts``: fewest divergences, then lowest R-hat.
+
+    Divergences come first because they bias the posterior; ``rhat_max`` only
+    breaks ties. On cell 13097/II this picks attempt 1 (3 divergences, R-hat
+    1.0014) over the dense-mass retune (79, 1.023), which the old two-attempt
+    cap discarded along with everything else (#2089).
+    """
+    if not attempts:
+        raise ValueError("select_best_attempt needs at least one attempt, got no attempts")
+    return min(
+        range(len(attempts)),
+        key=lambda i: (attempts[i]["divergences"], attempts[i]["rhat_max"]),
+    )
 
 
 def build_npz_payload(samples_thin: dict, *extras: dict) -> dict:
@@ -302,7 +352,7 @@ def run_fit(
     method: str,
     out_dir: Path,
     seed: int = 42,
-    retune_attempts: int = 2,
+    retune_attempts: int = DEFAULT_RETUNE_ATTEMPTS,
     n_warmup: int = DEFAULT_N_WARMUP,
     n_samples: int = DEFAULT_N_SAMPLES,
     n_chains: int = DEFAULT_N_CHAINS,
@@ -315,7 +365,8 @@ def run_fit(
         method: Inference method (e.g. 'mcmc_nuts')
         out_dir: Output directory for results
         seed: Random seed for reproducibility
-        retune_attempts: Number of retune attempts if initial fit fails bar
+        retune_attempts: Attempts made before the best one is kept (see
+            :func:`retune_settings`; default: DEFAULT_RETUNE_ATTEMPTS)
         n_warmup: NUTS warmup draws per chain (default: the paper's 600)
         n_samples: NUTS kept draws per chain (default: the paper's 600)
         n_chains: NUTS chains (default: the paper's 4)
@@ -361,14 +412,16 @@ def run_fit(
     # Prepare data
     data = Data(photometry=(fnu, sigma_floor))
 
-    # NUTS settings (from quickstart notebook)
-    nuts_kwargs = dict(
+    # Attempt 1's NUTS settings (from quickstart notebook); ``retune_settings``
+    # derives every later attempt's settings from these (#2089).
+    base_kwargs = dict(
         method=method,
         n_warmup=n_warmup,
         n_samples=n_samples,
         n_chains=n_chains,
         n_burnin=0,
         dense_mass_matrix=False,
+        target_accept_rate=DEFAULT_TARGET_ACCEPT,
     )
 
     # Run fit with retune logic
@@ -376,11 +429,20 @@ def run_fit(
     best_diagnostics = None
     retune_history = []
     attempts: list[dict] = []
+    # Posteriors parallel to ``attempts`` -- index i of one is index i of the
+    # other -- so the best attempt's posterior can be saved when none passes.
+    posteriors: list = []
     attempt = 0
 
     while attempt < retune_attempts:
         attempt += 1
-        logger.info(f"Fit attempt {attempt}/{retune_attempts}")
+        nuts_kwargs = retune_settings(attempt, base_kwargs)
+        logger.info(
+            f"Attempt {attempt}/{retune_attempts}: "
+            f"target_accept {nuts_kwargs['target_accept_rate']}, "
+            f"warmup {nuts_kwargs['n_warmup']}, "
+            f"{'dense' if nuts_kwargs['dense_mass_matrix'] else 'diagonal'} mass"
+        )
 
         key = jax.random.PRNGKey(seed + attempt)
         t_start = time.perf_counter()
@@ -407,6 +469,7 @@ def run_fit(
                 "n_samples": nuts_kwargs["n_samples"],
                 "n_chains": nuts_kwargs["n_chains"],
                 "dense_mass_matrix": nuts_kwargs["dense_mass_matrix"],
+                "target_accept_rate": nuts_kwargs["target_accept_rate"],
                 "max_tree_depth": nuts_kwargs.get("max_tree_depth"),
                 "divergences": int(n_divergent),
                 "rhat_max": float(rhat_max),
@@ -423,6 +486,7 @@ def run_fit(
             diagnostics["adoption_pass"] = adoption_pass
             diagnostics["retune_attempt"] = attempt
             attempts.append(dict(diagnostics))
+            posteriors.append(posterior)
 
             if adoption_pass:
                 logger.info(
@@ -431,36 +495,46 @@ def run_fit(
                 )
                 best_posterior = posterior
                 best_diagnostics = diagnostics
+                best_diagnostics["best_attempt"] = attempt
                 break
-            else:
-                logger.warning(
-                    f"✗ Fit failed adoption bar: "
-                    f"divergences={n_divergent}, rhat_max={rhat_max:.4f}"
-                )
-                retune_history.append(dict(diagnostics))
 
-                # Persist this attempt before the retune starts: the driver's
-                # per-cell timeout kills the process mid-retune, and attempt 1's
-                # evidence went with it (#2089).
-                write_diagnostics_json(output_json, diagnostics, attempts, retune_history)
+            logger.warning(
+                f"✗ Fit failed adoption bar: divergences={n_divergent}, rhat_max={rhat_max:.4f}"
+            )
+            retune_history.append(dict(diagnostics))
 
-                # Retune: double warmup and toggle dense_mass_matrix for next attempt
-                if sed_model.spec.n_free >= 8:
-                    nuts_kwargs["dense_mass_matrix"] = not nuts_kwargs["dense_mass_matrix"]
-                    logger.info(
-                        f"Retune: toggled dense_mass_matrix to {nuts_kwargs['dense_mass_matrix']}"
-                    )
-                nuts_kwargs["n_warmup"] *= 2
-                logger.info(f"Retune: doubled warmup to {nuts_kwargs['n_warmup']}")
+            # Persist this attempt before the retune starts: the driver's
+            # per-cell timeout kills the process mid-retune, and attempt 1's
+            # evidence went with it (#2089).
+            write_diagnostics_json(output_json, diagnostics, attempts, retune_history)
 
         except Exception as e:
             logger.error(f"Fit attempt {attempt} failed: {e}", exc_info=True)
-            if attempt >= retune_attempts:
+            # Only a run in which EVERY attempt raised has no posterior to keep.
+            if attempt >= retune_attempts and not posteriors:
                 raise
 
     if best_posterior is None:
-        raise RuntimeError(
-            f"Fit failed all {retune_attempts} attempts for galaxy {gal_id} config {config_key}"
+        if not posteriors:
+            raise RuntimeError(
+                f"Fit failed all {retune_attempts} attempts for galaxy {gal_id} "
+                f"config {config_key}"
+            )
+
+        # No attempt cleared the adoption bar, so the best one is saved anyway
+        # with ``adoption_pass: false``. Discarding a near-passing posterior --
+        # 13097/II's attempt 1 was 3/2400 divergent at R-hat 1.0014 -- threw away
+        # hours of NUTS and left the cell with nothing but diagnostics (#2089).
+        best_index = select_best_attempt(attempts)
+        best_posterior = posteriors[best_index]
+        best_diagnostics = dict(attempts[best_index])
+        best_diagnostics["adoption_pass"] = False
+        best_diagnostics["best_attempt"] = best_diagnostics["retune_attempt"]
+        logger.warning(
+            f"No attempt cleared the adoption bar for galaxy {gal_id} config {config_key}; "
+            f"keeping attempt {best_diagnostics['best_attempt']} of {len(attempts)} "
+            f"(divergences={best_diagnostics['divergences']}, "
+            f"rhat_max={best_diagnostics['rhat_max']:.4f}) with adoption_pass=False"
         )
 
     save_fit_outputs(
