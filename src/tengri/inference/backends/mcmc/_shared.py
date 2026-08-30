@@ -38,6 +38,7 @@ import importlib.metadata
 
 import jax
 import jax.numpy as jnp
+import numpy as np
 from jax.flatten_util import ravel_pytree
 from packaging.requirements import Requirement
 
@@ -369,6 +370,76 @@ def total_draws(diagnostics: dict, n_samples: int | None = None) -> int:
     return int(n_samples) * int(diagnostics.get("n_chains", 1))
 
 
+#: Divergent fraction over the final window of warmup at which a
+#: window-adaptation backend refuses to sample (#2088). Healthy fits at
+#: target_accept 0.85 end warmup near 0; the heavy-tailed nonparametric-SFH
+#: fits measured up to ~0.2; a posterior the sampler cannot enter measured 1.0.
+DEAD_WARMUP_DIVERGENCE_FRAC = 0.9
+#: The final window is this fraction of ``n_warmup`` ...
+DEAD_WARMUP_WINDOW_FRAC = 0.1
+#: ... and never fewer than this many steps.
+DEAD_WARMUP_MIN_WINDOW = 10
+
+
+def _dead_warmup_window(n_flags: int, n_warmup: int) -> int:
+    return min(n_flags, max(DEAD_WARMUP_MIN_WINDOW, round(DEAD_WARMUP_WINDOW_FRAC * n_warmup)))
+
+
+def final_window_divergence_frac(warmup_divergent, n_warmup: int) -> float | None:
+    """Divergent fraction over the final window of the warmup record.
+
+    Parameters
+    ----------
+    warmup_divergent : array_like of bool, shape (n_warmup,), or None
+        Per-step ``is_divergent`` flags from window adaptation; ``None`` when
+        the backend has no record (cached adaptation).
+    n_warmup : int
+        Warmup length the window is sized from.
+
+    Returns
+    -------
+    float or None
+        ``None`` when there is no record.
+    """
+    if warmup_divergent is None:
+        return None
+    flags = np.asarray(warmup_divergent, dtype=bool)
+    if flags.size == 0:
+        return None
+    window = _dead_warmup_window(flags.size, n_warmup)
+    return float(flags[-window:].mean())
+
+
+def refuse_dead_warmup(
+    frac: float | None, *, sampler: str, step_size: float, n_warmup: int, n_samples: int
+) -> None:
+    """Raise :class:`DeadFitError` when the final warmup window is (nearly) all divergent.
+
+    The refusal seam of #2088: NUTS, HMC and dynamic HMC call it once warmup
+    has returned, before the adaptation is cached and before the sampling
+    scan compiles. A ``frac`` of ``None`` (a reused adaptation, so no record)
+    never refuses.
+    """
+    if frac is None or frac < DEAD_WARMUP_DIVERGENCE_FRAC:
+        return
+    from tengri.config.exceptions import DeadFitError
+
+    window = _dead_warmup_window(n_warmup, n_warmup)
+    raise DeadFitError(
+        f"{sampler} warmup ended dead: {frac:.0%} of its final {window} adaptation steps "
+        f"diverged at the adapted step size {step_size:.3g}, so the sampler rejects "
+        f"essentially every proposal and {n_samples} draws would only return a frozen "
+        f"posterior. Sampling was refused and the adaptation was not cached. This is a "
+        f"posterior problem, not a tuning one: the measured trigger was data 1000x too "
+        f"faint (a wrong AB zero point) that pushed the stellar mass to its prior edge, "
+        f"where the bounded transform runs to infinity. Check the data units and scale, "
+        f"the prior bounds against the MAP initialization, and that the initial log "
+        f"posterior is finite, before re-tuning.",
+        warmup_divergence_frac=frac,
+        step_size=step_size,
+    )
+
+
 @functools.partial(jax.jit, static_argnums=(3, 5, 6, 7, 8, 9))
 def _nuts_full_scan(
     init_flat,
@@ -504,17 +575,22 @@ def _nuts_warmup_only(
     -------
     step_size : scalar
     inv_mass_matrix : ndarray, shape (D,) or (D, D)
+    warmup_divergent : ndarray of bool, shape (n_warmup,)
+        Per-step ``is_divergent`` flags from the adaptation, for the
+        dead-warmup refusal (#2088). Both the window and the pathfinder
+        adaptation report it.
     """
     import blackjax
 
     def ld_1arg(pos):
         return logdensity_fn_2arg(pos, data_args)
 
-    # Discard per-step adaptation info; blackjax retains it all by default and
-    # warns about the memory cost when it goes unused (#1028).
+    # Keep only the per-step divergence flags (n_warmup bools) for the
+    # dead-warmup refusal (#2088); everything else blackjax would retain is the
+    # memory cost #1028 removed.
     from blackjax.adaptation.base import get_filter_adapt_info_fn
 
-    _drop_adapt_info = get_filter_adapt_info_fn()
+    _keep_divergence_flags = get_filter_adapt_info_fn(info_keys={"is_divergent"})
 
     if use_pathfinder_warmup:
         from blackjax.adaptation.pathfinder_adaptation import pathfinder_adaptation
@@ -523,21 +599,22 @@ def _nuts_warmup_only(
             blackjax.nuts,
             ld_1arg,
             target_acceptance_rate=target_accept_rate,
-            adaptation_info_fn=_drop_adapt_info,
+            adaptation_info_fn=_keep_divergence_flags,
         )
         with _bounded_pathfinder_elbo_draws():
-            (_, parameters), _ = warmup.run(warmup_key, init_flat, num_steps=n_warmup)
+            (_, parameters), info = warmup.run(warmup_key, init_flat, num_steps=n_warmup)
     else:
         warmup = blackjax.window_adaptation(
             blackjax.nuts,
             ld_1arg,
             is_mass_matrix_diagonal=not use_dense,
             target_acceptance_rate=target_accept_rate,
-            adaptation_info_fn=_drop_adapt_info,
+            adaptation_info_fn=_keep_divergence_flags,
         )
-        (_, parameters), _ = warmup.run(warmup_key, init_flat, num_steps=n_warmup)
+        (_, parameters), info = warmup.run(warmup_key, init_flat, num_steps=n_warmup)
 
-    return parameters["step_size"], parameters["inverse_mass_matrix"]
+    warmup_divergent = jnp.asarray(info.info.is_divergent)
+    return parameters["step_size"], parameters["inverse_mass_matrix"], warmup_divergent
 
 
 @functools.partial(jax.jit, static_argnums=(2, 6))
@@ -620,8 +697,12 @@ def _hmc_warmup_only(
     -------
     step_size : scalar
     inv_mass_matrix : ndarray, shape (D,) or (D, D)
+    warmup_divergent : ndarray of bool, shape (n_warmup,)
+        Per-step ``is_divergent`` flags from the adaptation, for the
+        dead-warmup refusal (#2088).
     """
     import blackjax
+    from blackjax.adaptation.base import get_filter_adapt_info_fn
 
     def ld_1arg(pos):
         return logdensity_fn_2arg(pos, data_args)
@@ -632,9 +713,11 @@ def _hmc_warmup_only(
         is_mass_matrix_diagonal=not use_dense,
         target_acceptance_rate=target_accept_rate,
         num_integration_steps=n_leapfrog,
+        adaptation_info_fn=get_filter_adapt_info_fn(info_keys={"is_divergent"}),
     )
-    (_, parameters), _ = warmup.run(warmup_key, init_flat, num_steps=n_warmup)
-    return parameters["step_size"], parameters["inverse_mass_matrix"]
+    (_, parameters), info = warmup.run(warmup_key, init_flat, num_steps=n_warmup)
+    warmup_divergent = jnp.asarray(info.info.is_divergent)
+    return parameters["step_size"], parameters["inverse_mass_matrix"], warmup_divergent
 
 
 @functools.partial(jax.jit, static_argnums=(3, 5, 6, 7, 8))

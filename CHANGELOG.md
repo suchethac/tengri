@@ -6,6 +6,30 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 
 ## [Unreleased]
 
+### Fixed
+
+- The construction-time dead-fit guard (`DeadFitWarning`) and
+  `convergence_check` compared the divergence count, which is summed over
+  every chain, with the per-chain draw count, so the "every transition
+  diverged" branch never fired for a multi-chain run and the percentage
+  read 400% on four chains. `total_draws()` owns that arithmetic now, the
+  backends' completion lines print the total, and single-chain paths record
+  `n_chains` (#2087).
+- The frozen-parameter half of the same guard scanned every column of
+  `samples`, which carries `Fixed` parameters as constant arrays by design,
+  so any model with a pinned parameter warned "dead fit" and named the
+  pinned parameters. `Posterior.free_names` reads the free names off the
+  model's spec and the check restricts itself to them (#2087).
+
+### Added
+
+- `DeadFitError`: NUTS, HMC and dynamic HMC keep the per-step divergence
+  flags of their own warmup and refuse to sample when the final 10% of
+  warmup (at least 10 steps) is 90% or more divergent, before the adaptation
+  is cached and before the sampling scan compiles. `warmup_divergence_frac`
+  joins `diagnostics`, the warmup log line prints it, and the NUTS completion
+  line prints the divergence percentage and the tree-depth summary (#2088).
+
 ### Removed
 
 - The `stellar` build group (#1720). Metallicity is now configured through

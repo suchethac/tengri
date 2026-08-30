@@ -20,6 +20,8 @@ from tengri.inference.backends.mcmc._shared import (
     _hmc_warmup_only,
     _set_cached_adaptation,
     _vmap_chains,
+    final_window_divergence_frac,
+    refuse_dead_warmup,
 )
 from tengri.inference.preconditioning import prepare_preconditioning
 
@@ -162,6 +164,7 @@ def run_dynamic_hmc(
     # integration-step count matches the one `_dynamic_hmc_full_scan` hardcodes.
     if cached is not None:
         parameters = cached
+        warmup_divergence_frac = None  # not re-measured when an adaptation is reused
         if verbose:
             logger.info(
                 "  Reusing cached warmup (%.1fs). Step size: %.4f",
@@ -169,7 +172,7 @@ def run_dynamic_hmc(
                 float(parameters["step_size"]),
             )
     else:
-        step_size, inv_mass_matrix = _hmc_warmup_only(
+        step_size, inv_mass_matrix, warmup_divergent = _hmc_warmup_only(
             init_flat,
             warmup_key,
             log_posterior_flat_2arg,
@@ -180,13 +183,24 @@ def run_dynamic_hmc(
             target_accept_rate,
         )
         jax.block_until_ready(step_size)
+        # Refuse before caching and before the sampling scan compiles (#2088).
+        warmup_divergence_frac = final_window_divergence_frac(warmup_divergent, n_warmup)
+        refuse_dead_warmup(
+            warmup_divergence_frac,
+            sampler="Dynamic HMC",
+            step_size=float(step_size),
+            n_warmup=n_warmup,
+            n_samples=n_samples,
+        )
         parameters = {"step_size": step_size, "inverse_mass_matrix": inv_mass_matrix}
         _set_cached_adaptation(fitter, adapt_key, parameters)
         if verbose:
             logger.info(
-                "  Warmup complete (%.1fs). Step size: %.4f",
+                "  Warmup complete (%.1fs). Step size: %.4f. "
+                "Divergent in the final warmup window: %.0f%%",
                 time.time() - t0,
                 float(step_size),
+                100.0 * warmup_divergence_frac,
             )
 
     # ── Sampling: one path, whether the adaptation was just tuned or reused. ──
@@ -263,6 +277,7 @@ def run_dynamic_hmc(
             "n_samples": n_samples,
             "n_chains": n_chains,
             "n_divergent": n_divergent,
+            "warmup_divergence_frac": warmup_divergence_frac,
             "step_size": float(parameters["step_size"]),
         },
         loss_history=None,

@@ -140,6 +140,38 @@ class InferenceError(TengriError, RuntimeError):
     """
 
 
+class DeadFitError(InferenceError):
+    """Warmup ended with essentially every transition divergent; sampling was refused (#2088).
+
+    A 4-chain NUTS fit whose every one of 2400 transitions diverged spent
+    227 s in warmup and another 237 s sampling before :class:`DeadFitWarning`
+    could name the failure. The warmup's own divergence record already held
+    the verdict, so the window-adaptation backends (NUTS, HMC, dynamic HMC)
+    now read the final window of that record and refuse to sample when the
+    divergent fraction reaches ``DEAD_WARMUP_DIVERGENCE_FRAC`` (0.9 over the
+    final 10% of warmup, never fewer than 10 steps). The adaptation is not
+    cached, so the next call re-tunes.
+
+    Raises rather than warns: there is nothing to return. A sampler that
+    rejects every proposal produces a frozen posterior, and the measured cause
+    was the data, not the tuning (fluxes 1000x too faint from a wrong AB zero
+    point pushed the stellar mass to its prior edge, where the bounded
+    transform runs to infinity).
+
+    Attributes
+    ----------
+    warmup_divergence_frac : float
+        Divergent fraction over the final warmup window.
+    step_size : float
+        The adapted step size at the end of warmup.
+    """
+
+    def __init__(self, message: str, *, warmup_divergence_frac: float, step_size: float):
+        super().__init__(message)
+        self.warmup_divergence_frac = float(warmup_divergence_frac)
+        self.step_size = float(step_size)
+
+
 class TengriIOError(TengriError, OSError):
     """File I/O, missing data files, format mismatch.
 
