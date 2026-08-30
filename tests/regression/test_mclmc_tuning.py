@@ -140,7 +140,7 @@ def test_the_unadjusted_runner_has_no_acceptance_rate_knob():
 
     The adjusted variant does, and keeps its knob. Pinning both halves is the
     point: the failure this guards is not "the argument is missing" but
-    "somebody reused HMC's knob on a sampler that cannot honour it".
+    "somebody reused HMC's knob on a sampler that cannot honor it".
     """
     from tengri.inference.backends.mcmc.mclmc import run_adjusted_mclmc, run_mclmc
 
@@ -187,7 +187,7 @@ def test_the_energy_target_reaches_the_tuner_and_moves_the_step_size(tiny_fitter
     assert tight.diagnostics["energy_var_per_dim_target"] == 5e-6
 
 
-# ── Diagnostics: the unadjusted analogue of a divergence count ───────────
+# ── Diagnostics: the unadjusted analog of a divergence count ─────────────
 
 
 @requires_blackjax_16

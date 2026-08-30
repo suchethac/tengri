@@ -142,7 +142,7 @@ class MCLMCEnergyErrorWarning(UserWarning):
     1.0007 respectively. On the seed at 8.4e+01 the largest single-step energy
     change was 2.0e+03.
 
-    This is the unadjusted analogue of the warning in
+    This is the unadjusted analog of the warning in
     ``bench/reports/2026-08-17_nb01_nb05_nuts_vs_hmc.md``, that zero divergences
     is not evidence of convergence for a fixed-trajectory sampler — and it is
     sharper here, because a fixed-trajectory HMC at least *has* an accept step
@@ -246,7 +246,7 @@ def _warn_if_energy_error_high(energy):
 
 
 def _energy_diagnostics(energy_change, nonans, n_dim, desired_energy_var):
-    """Summarize an MCLMC run's energy error — the unadjusted analogue of divergences.
+    """Summarize an MCLMC run's energy error — the unadjusted analog of divergences.
 
     ``n_nonfinite_steps`` counts steps the kernel had to revert because the
     proposal was not finite; it is the closest thing MCLMC has to a divergence,
