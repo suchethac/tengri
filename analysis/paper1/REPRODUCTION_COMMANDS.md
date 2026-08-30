@@ -23,7 +23,7 @@ checkout; set `TENGRI_CANDELS_CATALOG`, `ART_SEDFITTING_DIR`, or
 $python_exe analysis/paper1/fit_one.py --galaxy ID --config {I,II,III} --method mcmc_nuts --out DIR [--seed N] [--n-warmup N] [--n-samples N] [--n-chains N]
 ```
 
-`--n-warmup`, `--n-samples` and `--n-chains` default to the paper's 600, 600 and 4 (the settings below); the examples and the grid use those defaults. Pass small values to smoke-test the pipeline in a few minutes per configuration rather than half an hour: the fit, the retune and the per-attempt JSON always run, but the NPZ is written only when an attempt clears the adoption bar (0 divergences, max split-R̂ < 1.01), which a 20-draw budget usually does not (configuration II did at 20/20/1; I and III needed 200/200/4).
+`--n-warmup`, `--n-samples` and `--n-chains` default to the paper's 600, 600 and 4 (the settings below); the examples and the grid use those defaults. Pass small values to smoke-test the pipeline in a few minutes per configuration rather than half an hour: the fit, the retunes, the per-attempt JSON and the NPZ all run (the best attempt is saved even when no attempt clears the adoption bar of 0 divergences and max split-R̂ < 1.01, with `adoption_pass: false`); expect a 20-draw budget to miss the bar (configuration II cleared it at 20/20/1; I and III needed 200/200/4).
 
 **Examples:**
 ```bash
@@ -139,10 +139,9 @@ max_tree_depth=10
 
 **Adoption bar:** 0 divergences and max split-R̂ < 1.01
 
-**Retune logic (if fit fails bar):**
-1. On first failure: double warmup
-2. For D ≥ 8: toggle `dense_mass_matrix`
-3. Re-run up to 2 attempts
+**Retune logic (if fit fails bar):** see "Retune policy" under Deliverable 2 — attempt 2 raises
+`target_accept_rate` to 0.95 on the same diagonal mass matrix, attempt 3 doubles the warmup, the mass
+matrix is never switched to dense, 3 attempts by default, and the best attempt is saved either way.
 
 ## Error Floor
 
@@ -164,7 +163,7 @@ sigma_floor = sqrt(sigma_measurement^2 + (0.05 * fnu)^2)
 - One Ks band per galaxy: ISAAC first, HAWK-I only when ISAAC is undetected.
 - A mapped column missing from the catalog header raises; nothing is dropped
   silently.
-- Driver timeout per cell: `DEFAULT_FIT_TIMEOUT_S = 14400` s (measured 2026-08-30: a
+- Driver timeout per cell: `DEFAULT_FIT_TIMEOUT_S = 21600` s — three attempts at 0.95 target acceptance are ~1.5× the two-attempt cost model below, and a dead fit still ends in ~10 min (measured 2026-08-30: a
   healthy 600-warmup + 4x600-draw configuration I cell takes ~22 min, a retune doubles
   the warmup for ~50 min, and configurations II/III cost 2-3x per draw, reaching
   100-150 min — 7200 s could still kill a healthy retune. A dead fit finishes in ~10
@@ -182,7 +181,7 @@ $venv/bin/ruff check analysis/paper1/fit_one.py analysis/paper1/run_candels_fits
 Measured 2026-08-30 on CPU, not estimated:
 
 - Single fit, configuration I (D=5), 600 warmup + 4×600 draws: ~22 minutes. Configurations II/III (D=8, D=11) cost 2–3× per draw; a retune doubles the warmup, so a retuned cell reaches ~50 minutes for I and 100–150 minutes for II/III.
-- 3×3 grid (9 fits sequential): several hours; the per-cell cap is `DEFAULT_FIT_TIMEOUT_S = 14400` s.
+- 3×3 grid (9 fits sequential): several hours; the per-cell cap is `DEFAULT_FIT_TIMEOUT_S = 21600` s (three attempts).
 - Backend sweep (6 methods, one galaxy): `map` and `laplace` are seconds to a couple of minutes each; the four sampler rows dominate and each runs cold + warm.
 
 ## Figure 8: Gradient Sensitivity (Jacobian & Fisher Matrix)

@@ -43,10 +43,14 @@ GALAXY_LABELS = {13097: "blue", 15336: "red", 24497: "intermediate"}
 #: ~22 min for 600 warmup + 4x600 draws at mean tree depth ~6; a retune doubles the
 #: warmup, so configuration I with one retune is ~50 min, and configurations II/III
 #: cost 2-3x per draw, which puts them at 100-150 min. 7200 s can therefore still
-#: kill a healthy retune, so 14400 s. Raising the cap costs nothing in detection:
-#: a dead fit (step size above the stability limit, acceptance ~0) finishes in
-#: ~10 min rather than hanging, so a larger cap only delays a true hang's report.
-DEFAULT_FIT_TIMEOUT_S = 14400
+#: kill a healthy retune. With three attempts (600, 600 and 1200 warmup, each with
+#: 4x600 draws) the sequence is 1.45x the two-attempt one, and attempts 2-3 run at
+#: target_accept 0.95, which deepens the trees, so 14400 s left ~9% headroom for
+#: configuration III at the top of that range; hence 21600 s. Raising the cap costs
+#: nothing in detection: a dead fit (step size above the stability limit,
+#: acceptance ~0) finishes in ~10 min rather than hanging, so a larger cap only
+#: delays a true hang's report.
+DEFAULT_FIT_TIMEOUT_S = 21600
 
 
 def read_cell_json(json_path: Path) -> dict | None:
@@ -329,7 +333,11 @@ def main(argv: list[str] | None = None):
             logger.error(f"  - Galaxy {gal_id} Config {config_key}")
         return 1
 
-    logger.info(f"\n✓ All {len(all_diagnostics)} fits completed successfully")
+    n_adopted = sum(1 for d in all_diagnostics if d.get("adoption_pass"))
+    logger.info(
+        f"\n✓ All {len(all_diagnostics)} fits completed ({n_adopted} adopted; "
+        f"the table above carries the per-cell verdict)"
+    )
     return 0
 
 

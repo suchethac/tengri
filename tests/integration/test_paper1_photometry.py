@@ -216,7 +216,7 @@ def test_driver_timeout_covers_a_retune():
 
     import run_candels_fits
 
-    assert run_candels_fits.DEFAULT_FIT_TIMEOUT_S >= 14400
+    assert run_candels_fits.DEFAULT_FIT_TIMEOUT_S >= 21600
     default = inspect.signature(run_candels_fits.run_fit_subprocess).parameters["timeout"].default
     assert default == run_candels_fits.DEFAULT_FIT_TIMEOUT_S
 
