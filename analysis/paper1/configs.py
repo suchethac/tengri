@@ -1,4 +1,12 @@
-"""Three SED model configurations for Paper I analysis."""
+"""Three SED model configurations for Paper I analysis.
+
+Age priors of the parametric histories (Configurations I and II) run from 1 Gyr to the
+cosmic age at the galaxy redshift. The upper bound keeps the likelihood from going flat
+beyond the Big Bang mask; the lower bound is a deliberate restriction: below 1 Gyr the
+CANDELS photometry admits a second, young and dusty solution that the sampler cannot
+traverse together with the older one (187 divergences, R-hat 1.06 on galaxy 13097 with a
+0.1 Gyr bound, versus 1-3 edge divergences with 1 Gyr).
+"""
 
 from __future__ import annotations
 
@@ -30,7 +38,7 @@ def config_I(ssp_data: tengri.SSPData, observation, z: float) -> SEDModel:
             "type": "delayed",
             "all_params": FIXED,
             "tau_gyr": Uniform(0.1, 20.0),
-            "age_gyr": Uniform(0.1, age_at_z(z)),
+            "age_gyr": Uniform(1.0, age_at_z(z)),
             "log_total_mass": Uniform(8.0, 12.5),
             "met_logzsol": Uniform(-2.0, 0.3),
         },
@@ -59,7 +67,7 @@ def config_II(ssp_data: tengri.SSPData, observation, z: float) -> SEDModel:
             "alpha": Uniform(0.5, 5.0),
             "beta": Uniform(0.3, 3.0),
             "tau_gyr": Uniform(0.5, 13.0),
-            "age_gyr": Uniform(0.1, age_at_z(z)),
+            "age_gyr": Uniform(1.0, age_at_z(z)),
             "log_total_mass": Uniform(8.0, 12.5),
             "met_logzsol": Uniform(-2.0, 0.3),
         },
