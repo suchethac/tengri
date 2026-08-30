@@ -121,6 +121,40 @@ def _build_nb05(ssp):
     )
 
 
+def _build_ctl(ssp):
+    """Non-tsnorm control: the same 14 bands as nb05 over a **DPL** SFH. D=7.
+
+    Notebooks 00, 01 and 05 all run a ``tsnorm`` SFH, and
+    ``bench/reports/2026-08-20_cuda_device_matrix.md`` Finding 15 measured that
+    family's ``skew``/``trunc``/``width_gyr`` as strongly degenerate: ESS_min
+    stays 1.7-4.3 *even with 260 spectral pixels*, so 52x the data moves it only
+    1.7 to 4.3 and it is not a data-volume problem.
+
+    A sampler that misses the bar on all three notebooks is therefore
+    uninterpretable on its own: "this sampler is wrong" and "this posterior is
+    degenerate for everything" predict the same table. This row separates them.
+    Dual power law is the family ``recipes.star_forming_photometry`` ships and
+    the one the 2026-05-22 backend validation used, so a failure here is about
+    the sampler.
+    """
+    return SEDModel.build(
+        ssp_data=ssp,
+        observation=Observation(photometry=Photometry.from_names(list(_NB05_FILTERS))),
+        approx=WavePrecomp(),
+        sfh=builders.sfh.dpl(all_params=FREE),
+        dust_attenuation=builders.dust.two_component(
+            all_params=FIXED,
+            law="calzetti",
+            tau_bc=Uniform(0.0, 1.0),
+            tau_diff=Uniform(0.0, 1.0),
+        ),
+        dust_emission=builders.dust.emission.modified_blackbody(all_params=FIXED),
+        neb=builders.neb.none(),
+        met={"logzsol": Uniform(-1.5, 0.3)},
+        redshift=Fixed(0.05),
+    )
+
+
 def _build_nb01(ssp):
     """``01_why_jax``: the minimal mock-recovery recipe, six bands. D=7."""
     return SEDModel.build(
@@ -169,6 +203,23 @@ NOTEBOOKS = {
             "accordingly; 100 warmup is not meant to clear any bar."
         ),
     ),
+    "ctl": dict(
+        build=_build_ctl,
+        # nb05's seed, SNR and chain count exactly: this row is a CONTROL for
+        # the SFH family, so everything else must be held fixed or it controls
+        # for nothing.
+        seed=7,
+        snr=20.0,
+        n_chains=2,
+        shipped=dict(method="mcmc_nuts", n_warmup=600, n_samples=600),
+        note=(
+            "NOT a notebook. The non-tsnorm control: nb05's mock, bands, seed, "
+            "SNR and chain count over a DPL SFH instead of tsnorm. Exists so a "
+            "sampler failure on 00/01/05 can be told apart from the tsnorm "
+            "family's own degeneracy (2026-08-20_cuda_device_matrix.md, "
+            "Finding 15)."
+        ),
+    ),
     "05": dict(
         build=_build_nb05,
         seed=7,
@@ -185,7 +236,7 @@ NOTEBOOKS = {
 
 
 #: Sampler families a row can belong to. ``--methods`` selects a subset.
-FAMILIES = ("nuts", "hmc", "ghmc")
+FAMILIES = ("nuts", "hmc", "ghmc", "chees")
 
 
 def configurations(nb: str, quick: bool, dense: bool, families=FAMILIES) -> dict[str, dict]:
@@ -232,6 +283,35 @@ def configurations(nb: str, quick: bool, dense: bool, families=FAMILIES) -> dict
                 n_ensemble=ensemble,
                 allow_unvalidated=True,
             )
+    if "chees" in families:
+        # Two rows, and the pair IS the experiment. ChEES with
+        # `mass_matrix_estimation=None` has no metric of its own -- the geometry
+        # comes from tengri's analytic `J^T N^-1 J + I` or from nowhere -- so
+        # "did preconditioning help?" cannot be answered by one row.
+        #
+        # The draw budget matches the HMC rows rather than GHMC's x4: a ChEES
+        # step is a full L-leapfrog HMC proposal, not GHMC's single leapfrog, so
+        # equal draws is already roughly equal gradient budget.
+        # Three arms, and the third is not redundant with the second.
+        # ``precondition=True`` resolves to DEFAULT_WHITENING_STRENGTH = 0.5, so
+        # a metric of condition 1e6 is whitened only to 1e3. ``1.0`` is the full
+        # whitening that actually drives the condition number to 1 at the
+        # expansion point -- and the one #1442 warns amplifies a *misspecified*
+        # metric without bound. Which of those two effects dominates on these
+        # posteriors is a measurement, not a preference.
+        for label, precondition in (
+            ("chees", None),
+            ("chees+precond", True),
+            ("chees+full", 1.0),
+        ):
+            configs[label] = dict(
+                method="mcmc_chees",
+                n_warmup=warmup,
+                n_burnin=200 if quick else 500,
+                n_samples=draws,
+                n_ensemble=32,
+                precondition=precondition,
+            )
     return configs
 
 
@@ -250,7 +330,47 @@ def score(posterior, wall: float) -> dict:
         "min_ess": worst_ess,
         "worst": worst_name,
         "sec_per_ess": wall / max(worst_ess, 1e-9),
+        "unique_frac": _unique_draw_fraction(posterior),
+        # Leapfrog steps per proposal actually in effect. Deliberately NOT named
+        # "learned": mcmc_hmc reports its hand-set L under the same diagnostics
+        # key, and the whole point of the ChEES rows is that theirs was not set.
+        # Which it is comes from the config label; this column says what it was.
+        # None for samplers with no trajectory at all (NUTS reports a tree depth,
+        # not a length).
+        "n_leapfrog": posterior.diagnostics.get("n_leapfrog_steps"),
+        "step_size": posterior.diagnostics.get("step_size"),
+        # NUTS only. The gradient cost of a NUTS draw is ~2**tree_depth - 1
+        # leapfrog steps, so this is the column that says whether a slow fit is
+        # a slow sampler or a posterior forcing the tree deeper. A healthy
+        # geometry sits at depth 3-5 (7-31 leapfrogs); saturation at
+        # max_num_doublings means every draw paid the cap.
+        "tree_depth_mean": posterior.diagnostics.get("tree_depth_mean"),
+        "tree_depth_max": posterior.diagnostics.get("tree_depth_max"),
+        "frac_max_depth": posterior.diagnostics.get("frac_max_depth"),
+        "leapfrogs_per_draw": (
+            2.0 ** posterior.diagnostics["tree_depth_mean"] - 1.0
+            if posterior.diagnostics.get("tree_depth_mean") is not None
+            else posterior.diagnostics.get("n_leapfrog_steps")
+        ),
     }
+
+
+def _unique_draw_fraction(posterior) -> float:
+    """Fraction of the joint draws that are distinct positions.
+
+    Zero divergences is not evidence of health. ``mcmc_nuts`` returned a
+    *completely frozen* chain on 3.1% of galaxies with zero divergences reported
+    (#1999): every proposal rejected, R-hat near 1.0 because within- and
+    between-chain variance are both zero, and nothing in the divergence column
+    to see. Split R-hat cannot detect that and neither can ESS on its own, so
+    the count of distinct rows is carried as its own column. Healthy chains sit
+    near 1.0; anything far below it is a chain that stopped moving.
+    """
+    keys = sorted(posterior.samples)
+    if not keys:
+        return float("nan")
+    matrix = np.column_stack([np.asarray(posterior.samples[k]).ravel() for k in keys])
+    return float(len(np.unique(matrix, axis=0)) / matrix.shape[0])
 
 
 def _fmt_rhat(value: float) -> str:
@@ -311,7 +431,7 @@ def main() -> None:
 
     header = (
         f"{'config':<20}{'wall s':>9}{'maxRhat':>10}{'div':>5}"
-        f"{'minESS':>9}{'s/ESS':>9}  worst-mixing parameter"
+        f"{'minESS':>9}{'s/ESS':>9}{'uniq':>7}  worst-mixing parameter"
     )
     print(header)
     print("-" * len(header), flush=True)
@@ -337,7 +457,8 @@ def main() -> None:
         row = rows[label]
         print(
             f"{label:<20}{row['wall']:>9.1f}{_fmt_rhat(row['rhat'])}{row['divergences']:>5}"
-            f"{row['min_ess']:>9.1f}{row['sec_per_ess']:>9.3f}  {row['worst']}",
+            f"{row['min_ess']:>9.1f}{row['sec_per_ess']:>9.3f}{row['unique_frac']:>7.3f}"
+            f"  {row['worst']}",
             flush=True,
         )
         if args.json:

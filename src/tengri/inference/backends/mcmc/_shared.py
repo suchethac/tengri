@@ -38,6 +38,7 @@ import importlib.metadata
 
 import jax
 import jax.numpy as jnp
+import numpy as np
 from jax.flatten_util import ravel_pytree
 from packaging.requirements import Requirement
 
@@ -1284,6 +1285,480 @@ def _ghmc_meads_scan(
 
     positions, divergent = jax.vmap(_chain)(states, chain_keys)
     return positions, divergent, step_size, momentum_inv_scale, alpha, delta
+
+
+# ---------------------------------------------------------------------------
+# ChEES-HMC (cross-chain adapted trajectory length, lock-step preserved)
+# ---------------------------------------------------------------------------
+
+#: Default ChEES adaptation-ensemble width.
+#:
+#: ChEES's trajectory-length gradient is built from *cross-chain* centered
+#: positions (``p - p.mean(axis=0)`` inside ``chees_adaptation``'s
+#: ``compute_parameters``), so an ensemble of one centers to exactly zero and the
+#: adapted length never moves off its initial value -- adapted in name only, and
+#: silently. 32 matches :data:`_MEADS_DEFAULT_ENSEMBLE` so the two ensemble
+#: samplers cost the same per warmup step and their rows stay comparable; the
+#: ChEES paper itself runs hundreds.
+_CHEES_DEFAULT_ENSEMBLE = 32
+
+#: Smallest ensemble ChEES is allowed to run with.
+#:
+#: Below this the centered-position matrix is rank-deficient enough that the
+#: trajectory-length gradient is dominated by its own sampling noise. Refused
+#: rather than clamped, for the reason :func:`_resolve_meads_ensemble` states:
+#: an adapted value drawn from noise is indistinguishable from a hand-set one,
+#: and the whole claim of this backend is that the length is learned.
+_CHEES_MIN_ENSEMBLE = 4
+
+#: **Adaptation-ensemble** dispersion around the seed position [dimensionless].
+#:
+#: A criterion-estimation parameter, and nothing else. ChEES's criterion is the
+#: change in the *cross-chain* expected square, so a dispersed ensemble already
+#: carries a large expected square before the sampler moves anything: the
+#: criterion is then dominated by the initial spread rather than by what the
+#: trajectory achieved, and the optimizer settles on a shorter length. BlackJAX's
+#: own ``chees_adaptation`` docstring records the same effect from the other end
+#: ("dispersion inflates the cross-chain jump-distance criterion, driving the
+#: adapted trajectory length down"). **This dial wants to be tight.**
+#:
+#: It is deliberately NOT :data:`_MEADS_JITTER_SCALE`, whose job is the opposite:
+#: MEADS reads the ensemble spread *as* the posterior scale and needs an O(1)
+#: dispersion to have a scale at all.
+#:
+#: It is also deliberately not :data:`_CHEES_CHAIN_JITTER_SCALE`, which is the
+#: diagnostic dial. Collapsing the two is what makes "tight enough to adapt" and
+#: "wide enough for R-hat to mean something" look like a trade-off; they are two
+#: different chain sets and only one of them is measured by R-hat.
+_CHEES_JITTER_SCALE = 0.1
+
+#: **Sampling-chain** overdispersion around the seed position [dimensionless].
+#:
+#: A diagnostic parameter, and nothing else. Split R-hat only detects
+#: non-convergence when its chains start overdispersed relative to the posterior;
+#: chains started at one point can share a non-equilibrium basin and still score
+#: a clean R-hat, which is the failure BlackJAX's docstring warns about
+#: ("initializing all chains at a single point ... can produce clean R-hat that is
+#: structurally blind to same-basin non-equilibrium"). **This dial wants to be
+#: wide**, and it is free to be, because the sampling chains are not what the
+#: ChEES criterion is estimated from.
+#:
+#: ``None`` (the default) does not use this at all: the sampling chains are
+#: seeded from the adaptation ensemble's own warmed final states, which after
+#: warmup are distributed roughly *according to the posterior* -- dispersed, but
+#: not over-dispersed, and correlated with the ensemble that tuned them. A float
+#: instead seeds them independently around the seed position, which is what makes
+#: R-hat a real test rather than a consistency check.
+_CHEES_CHAIN_JITTER_SCALE = 0.5
+
+#: Adam learning rate on ChEES's ``log`` trajectory length [dimensionless].
+#:
+#: ``chees_adaptation.run`` takes an ``optax.GradientTransformation`` and has no
+#: default. 0.05 is the value the ChEES authors' own reference implementation
+#: uses (TFP's ``ChEESAdaptation`` examples); it is exposed as a parameter
+#: because a learning rate with no default in the library is a knob someone will
+#: eventually need to move, not a constant.
+_CHEES_LEARNING_RATE = 0.05
+
+#: Initial step size handed to ChEES's dual averaging [latent units].
+#:
+#: Only a starting point: ``chees_adaptation`` dual-averages it against
+#: ``target_acceptance_rate`` over the whole warmup, so this sets where the
+#: search starts, not where it lands. 0.1 is small enough not to divergence-storm
+#: a D <= 30 latent posterior on the first step and large enough that dual
+#: averaging is not still climbing when warmup ends.
+_CHEES_INIT_STEP_SIZE = 0.1
+
+
+def _resolve_chees_ensemble(n_ensemble, n_chains):
+    """Resolve the ChEES adaptation-ensemble size to a concrete, legal int.
+
+    Pure Python, evaluated before any trace, so the ensemble width stays a static
+    shape.
+
+    **The ensemble axis is chains-within-galaxy, not galaxies-within-batch.**
+    That is the load-bearing decision of this backend and it is deliberate: ChEES
+    adapts one trajectory length from the ensemble's pooled cross-chain
+    statistics, so an ensemble spanning *galaxies* would tune a single ``L``
+    against a mixture of different posteriors and -- worse -- would make each
+    galaxy's draws depend on which other galaxies happened to share its batch.
+    Per-galaxy posteriors must be independent of batch composition; only
+    chains-within-galaxy keeps that true. The cost is that the ensemble is an
+    inner vmap under any future outer galaxy vmap rather than a reuse of it.
+
+    Like :func:`_resolve_meads_ensemble`, the ensemble is a **superset** of the
+    sampling chains: ``n_ensemble`` chains adapt, and the first ``n_chains`` of
+    their warmed-up final states are the ones whose draws land in the returned
+    posterior. Nothing is run twice and no warmup is discarded. Keeping the two
+    axes separate is what lets ``n_chains=1`` -- the signature default, and what
+    every catalog fit uses -- still get a genuinely adapted trajectory length.
+
+    Parameters
+    ----------
+    n_ensemble : int or ``"auto"``
+        ``"auto"`` resolves to ``max(_CHEES_DEFAULT_ENSEMBLE, n_chains)``. An
+        explicit int is honored except that it is still raised to ``n_chains``.
+    n_chains : int
+        Sampling chains; the ensemble can never be smaller.
+
+    Returns
+    -------
+    int
+        Ensemble size.
+
+    Raises
+    ------
+    ValueError
+        If ``n_ensemble`` is a string other than ``"auto"``, or if an explicit
+        ``n_ensemble`` is below :data:`_CHEES_MIN_ENSEMBLE`.
+    """
+    n_chains = max(1, int(n_chains))
+    if isinstance(n_ensemble, str):
+        if n_ensemble != "auto":
+            raise ValueError(f"n_ensemble must be an int or 'auto', got {n_ensemble!r}")
+        return max(_CHEES_DEFAULT_ENSEMBLE, n_chains)
+
+    resolved = int(n_ensemble)
+    if resolved < _CHEES_MIN_ENSEMBLE:
+        raise ValueError(
+            f"n_ensemble={resolved} is below the floor of {_CHEES_MIN_ENSEMBLE}. ChEES "
+            "adapts the trajectory length from cross-chain centered positions, so a "
+            "one-chain ensemble centers to exactly zero and the length never moves off "
+            "its initial value -- adapted in name only, and silently. Pass n_ensemble "
+            f">= {_CHEES_MIN_ENSEMBLE} (the default 'auto' gives "
+            f"{_CHEES_DEFAULT_ENSEMBLE}). This is separate from n_chains, which stays "
+            "whatever you asked for."
+        )
+    return max(resolved, n_chains)
+
+
+@functools.partial(jax.jit, static_argnums=(3, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15))
+def _chees_scan(
+    init_flat,
+    warmup_key,
+    chain_keys,
+    logdensity_fn_2arg,
+    data_args,
+    n_warmup,
+    n_ensemble,
+    n_chains,
+    n_iter,
+    jitter_scale,
+    jitter_amount,
+    target_accept_rate,
+    max_leapfrog_steps,
+    learning_rate,
+    mass_matrix_estimation,
+    chain_jitter=None,
+):
+    """Outer JIT: ChEES cross-chain adaptation + dynamic-HMC sampling, one program.
+
+    ChEES-HMC [1]_ tunes the *trajectory length* by maximizing the Change in the
+    Estimator of the Expected Square across an ensemble of chains, then jitters
+    that one length per step with a quasi-random Halton sequence. Every chain
+    still integrates for a number of leapfrog steps drawn from the same
+    distribution at the same iteration, so the ensemble stays lock-step on an
+    accelerator -- which is the whole reason to prefer it to NUTS, whose vmapped
+    chains run at the speed of the deepest tree.
+
+    Underneath is an ordinary ``dynamic_hmc`` kernel: a full Metropolis accept
+    step and a dual-averaged step size. That matters, and it is the difference
+    between this and :func:`_ghmc_meads_scan`. MEADS derives its momentum metric
+    from the adapting ensemble's own per-fold standard deviation, which closes a
+    loop -- wider ensemble to larger momentum to longer excursions to wider
+    ensemble -- that acceptance cannot object to, because energy really is
+    conserved under the same inflated metric that produced the excursions
+    (measured: ``bench/reports/2026-08-30_ghmc_meads_adaptation.md``). ChEES with
+    ``mass_matrix_estimation=None`` has no counterpart: the metric is the
+    identity, fixed for the whole run, and the geometry comes from
+    :mod:`tengri.inference.preconditioning`'s analytic ``J^T N^-1 J + I`` instead
+    of from the ensemble. **Do not switch that default on lightly.**
+
+    The warmup ensemble's final states are reused as the sampling chains' initial
+    states rather than discarded, for the reason :func:`_ghmc_meads_scan` gives:
+    the adaptation has no separate warmup phase to throw away.
+
+    Parameters
+    ----------
+    init_flat : ndarray, shape (D,)
+        Seed position in unbounded latent space; the ensemble is dispersed around
+        it [dimensionless].
+    warmup_key : PRNGKey (traced)
+        Split into the ensemble-dispersion key and the ChEES adaptation key.
+    chain_keys : ndarray, shape (n_chains, n_iter, 2)
+        Pre-split per-chain sampling keys.
+    logdensity_fn_2arg : callable (static)
+        ``log_p(position, data_args)``, the galaxy-agnostic log-posterior.
+    data_args : pytree (traced)
+        Observed data tensors; changing these does NOT trigger recompilation.
+    n_warmup : int (static)
+        ChEES adaptation steps.
+    n_ensemble : int (static)
+        Adaptation-ensemble width; see :func:`_resolve_chees_ensemble`.
+    n_chains, n_iter : int (static)
+        Sampling chains and iterations per chain. Passed separately from
+        ``chain_keys.shape`` because they also size the Halton sequence's bit
+        budget, which is a Python-level ``np.log2`` and must be static.
+    jitter_scale : float (static)
+        **Adaptation-ensemble** dispersion; see :data:`_CHEES_JITTER_SCALE`
+        [dimensionless]. A criterion-estimation dial, and it wants to be tight.
+    jitter_amount : float (static)
+        Fraction of the adapted trajectory length that is jittered, in ``[0, 1]``
+        [dimensionless]. BlackJAX's default of 1.0 draws each step's length
+        uniformly from ``(0, L]``.
+    target_accept_rate : float (static)
+        Dual-averaging target [dimensionless]. ChEES's own default is **0.651**,
+        not NUTS's 0.8: the optimal acceptance rate for a *fixed*-length HMC
+        proposal, which is what each ChEES step is.
+    max_leapfrog_steps : int (static)
+        Hard cap on the leapfrog count per proposal. Bounds the worst case of a
+        warmup step, whose cost is ``n_ensemble * L`` gradients.
+    learning_rate : float (static)
+        Adam step on ``log`` trajectory length; see :data:`_CHEES_LEARNING_RATE`.
+    mass_matrix_estimation : str or None (static)
+        ``None`` (the default, and BlackJAX's) pins ``inverse_mass_matrix`` to
+        ones for the whole run. ``"diagonal"`` instead estimates it from the
+        ensemble -- see the warning in :func:`run_chees`.
+    chain_jitter : float or None (static)
+        **Sampling-chain** overdispersion; see
+        :data:`_CHEES_CHAIN_JITTER_SCALE` [dimensionless]. ``None`` seeds the
+        sampling chains from the adaptation ensemble's warmed final states. A
+        float instead seeds them independently around ``init_flat``, which
+        decouples the diagnostic dial from the criterion dial: the ensemble can
+        be tight enough to adapt a long trajectory while the chains R-hat
+        actually sees are overdispersed enough for R-hat to be a test rather
+        than a consistency check.
+
+    Returns
+    -------
+    positions : ndarray, shape (n_chains, n_iter, D)
+    divergent : ndarray, shape (n_chains, n_iter)
+        Caller trims ``[:, n_burnin:]`` and flattens, matching
+        :func:`_vmap_chains`.
+    step_size : ndarray, shape ()
+        Dual-averaged step size [latent units].
+    inverse_mass_matrix : ndarray, shape (D,)
+        Ones unless ``mass_matrix_estimation="diagonal"``.
+    n_leapfrog : ndarray, shape ()
+        The adapted trajectory length in leapfrog steps, before jitter. This is
+        the number the phase exists to learn.
+
+    Notes
+    -----
+    JIT: this *is* the jitted entry point. Not vmappable over galaxies as-is --
+    the batched catalog path is Phase 3's and still runs NUTS/HMC.
+
+    References
+    ----------
+    .. [1] M. D. Hoffman, A. Radul and P. Sountsov, "An Adaptive-MCMC Scheme for
+       Setting Trajectory Lengths in Hamiltonian Monte Carlo", Proceedings of the
+       24th International Conference on Artificial Intelligence and Statistics
+       (AISTATS), PMLR 130:3907-3915, 2021.
+       https://proceedings.mlr.press/v130/hoffman21a.html
+    """
+    import blackjax
+    import blackjax.mcmc.dynamic_hmc as _dynamic_hmc
+    import optax
+    from blackjax.adaptation.base import get_filter_adapt_info_fn
+
+    def ld_1arg(pos):
+        """Bind the traced data to the galaxy-agnostic log-posterior."""
+        return logdensity_fn_2arg(pos, data_args)
+
+    jitter_key, adapt_key = jax.random.split(warmup_key)
+    ensemble = init_flat[None, :] + jitter_scale * jax.random.normal(
+        jitter_key, (n_ensemble, init_flat.shape[0]), dtype=init_flat.dtype
+    )
+
+    # ``get_filter_adapt_info_fn()`` with no arguments keeps *nothing*, for the
+    # reason ``_ghmc_meads_scan`` states: the default stacks every ensemble state
+    # and every HMCInfo for every warmup step, which at 500 x 32 is far larger
+    # than the posterior being estimated and is pure overhead -- the adapted
+    # values come back in ``parameters``.
+    warmup = blackjax.chees_adaptation(
+        ld_1arg,
+        num_chains=n_ensemble,
+        jitter_amount=jitter_amount,
+        target_acceptance_rate=target_accept_rate,
+        max_leapfrog_steps=max_leapfrog_steps,
+        adaptation_info_fn=get_filter_adapt_info_fn(),
+        mass_matrix_estimation=mass_matrix_estimation,
+    )
+    (last_states, parameters), _ = warmup.run(
+        adapt_key,
+        ensemble,
+        _CHEES_INIT_STEP_SIZE,
+        optax.adam(learning_rate),
+        num_steps=n_warmup,
+        # The Halton jitter's bit budget is sized from ``num_steps +
+        # max_sampling_steps`` at trace time. Leaving this at BlackJAX's default
+        # 1000 while sampling more than that silently wraps the sequence, so the
+        # jitter stops being low-discrepancy exactly on the long runs where it
+        # matters most.
+        max_sampling_steps=n_iter,
+    )
+
+    step_size = parameters["step_size"]
+    inverse_mass_matrix = parameters["inverse_mass_matrix"]
+    (n_leapfrog,) = parameters["integration_steps_params"]
+
+    # The kernel must be rebuilt from the adaptation's OWN
+    # ``next_random_arg_fn`` / ``integration_steps_fn``: they carry the Halton
+    # counter and the jitter law that ``last_states.random_generator_arg`` is
+    # already partway through. Building a fresh default kernel here would reset
+    # the jitter to a different sequence than the one the states were adapted
+    # under.
+    kernel = _dynamic_hmc.build_kernel(
+        next_random_arg_fn=parameters["next_random_arg_fn"],
+        integration_steps_fn=parameters["integration_steps_fn"],
+    )
+
+    if chain_jitter is None:
+        # Reuse the ensemble's warmed final states. Nothing is discarded and the
+        # chains start in the typical set -- but they are also correlated with
+        # the very ensemble that tuned the sampler, so R-hat over them is closer
+        # to a consistency check than to an independent test.
+        states = jax.tree.map(lambda leaf: leaf[:n_chains], last_states)
+    else:
+        # Seed the sampling chains independently and OVERDISPERSED. Split R-hat
+        # only detects non-convergence when its chains start wider than the
+        # posterior, so this is what makes the diagnostic real. The cost is a
+        # cold start, which is what ``n_burnin`` pays for; the adaptation
+        # (step size, trajectory length) is kept either way, so no warmup is
+        # thrown away -- only the warmed positions are.
+        # Folded off the warmup key rather than split from a sampling key, so
+        # the chains' starting offsets are independent of their own first moves.
+        chain_init_key = jax.random.fold_in(warmup_key, 0xC4A15)
+        starts = init_flat[None, :] + chain_jitter * jax.random.normal(
+            chain_init_key, (n_chains, init_flat.shape[0]), dtype=init_flat.dtype
+        )
+        states = jax.vmap(lambda p: _dynamic_hmc.init(p, ld_1arg, n_warmup))(starts)
+
+    def _step(s, k):
+        """Advance dynamic HMC by one step, returning position and divergence."""
+        s, info = kernel(
+            k,
+            s,
+            ld_1arg,
+            step_size,
+            inverse_mass_matrix,
+            (n_leapfrog,),
+        )
+        return s, (s.position, info.is_divergent)
+
+    def _chain(state, keys):
+        """Run one chain's scan; vmapped over the sampling chains."""
+        return jax.lax.scan(_step, state, keys)[1]
+
+    positions, divergent = jax.vmap(_chain)(states, chain_keys)
+    return positions, divergent, step_size, inverse_mass_matrix, n_leapfrog
+
+
+@functools.partial(jax.jit, static_argnums=(2, 7, 8, 9))
+def _chees_cached_chain_scan(
+    init_flat,
+    chain_keys,
+    logdensity_fn_2arg,
+    data_args,
+    step_size,
+    inverse_mass_matrix,
+    n_leapfrog,
+    jitter_amount,
+    n_iter,
+    chain_jitter=None,
+):
+    """Sample dynamic HMC from a *cached* ChEES adaptation, chains started cold.
+
+    The cache stores three small arrays -- step size, diagonal metric, trajectory
+    length -- and deliberately not the warmed ensemble, which is ``n_ensemble x
+    D`` of live sampler state. So this path starts the chains from ``init_flat``
+    rather than from a warmed state, and ``n_burnin`` is what pays for that. It
+    is the reason a cached ChEES call is not bit-identical to the first one, and
+    :func:`~tengri.inference.backends.mcmc.chees.run_chees` says so in a comment
+    rather than leaving it to be discovered.
+
+    Parameters
+    ----------
+    init_flat : ndarray, shape (D,)
+        Seed position [dimensionless, latent units]; chains are jittered around
+        it by :func:`_vmap_chains`'s decorrelation scale, not the adaptation
+        ensemble's.
+    chain_keys : ndarray, shape (n_chains, n_iter, 2)
+        Pre-split per-chain keys.
+    logdensity_fn_2arg : callable (static)
+        ``log_p(position, data_args)``.
+    data_args : pytree (traced)
+        Observed data tensors.
+    step_size : ndarray, shape ()
+    inverse_mass_matrix : ndarray, shape (D,)
+    n_leapfrog : ndarray, shape ()
+        The three adapted quantities, from the cache.
+    jitter_amount : float (static)
+        Halton jitter fraction, matching the adaptation's.
+    n_iter : int (static)
+        Iterations per chain; also sizes the Halton bit budget.
+    chain_jitter : float or None (static)
+        Sampling-chain dispersion around ``init_flat`` [dimensionless]. ``None``
+        uses :func:`_vmap_chains`'s decorrelation scale of 1e-3, which is enough
+        to keep two chains from being the same chain and nowhere near enough for
+        split R-hat to be a real test. Pass
+        :data:`_CHEES_CHAIN_JITTER_SCALE` for that. The knob is threaded here as
+        well as into :func:`_chees_scan` because a parameter honored on the cold
+        path and silently dropped on the cached one is the failure
+        :func:`_adaptation_cache_key`'s docstring records.
+
+    Returns
+    -------
+    positions : ndarray, shape (n_chains, n_iter, D)
+    divergent : ndarray, shape (n_chains, n_iter)
+    """
+    import blackjax.mcmc.dynamic_hmc as _dynamic_hmc
+
+    def ld_1arg(pos):
+        """Bind the traced data to the galaxy-agnostic log-posterior."""
+        return logdensity_fn_2arg(pos, data_args)
+
+    n_chains = chain_keys.shape[0]
+    max_bits = int(np.ceil(np.log2(n_iter + 2)))
+
+    def _next_random_arg_fn(i):
+        return i + 1
+
+    def _jitter_gn(i):
+        return _dynamic_hmc.halton_sequence(i, max_bits) * jitter_amount + (1.0 - jitter_amount)
+
+    def _integration_steps_fn(random_generator_arg, num_leapfrog_steps):
+        return jnp.asarray(
+            jnp.ceil(_jitter_gn(random_generator_arg) * num_leapfrog_steps), dtype=int
+        )
+
+    kernel = _dynamic_hmc.build_kernel(
+        next_random_arg_fn=_next_random_arg_fn,
+        integration_steps_fn=_integration_steps_fn,
+    )
+
+    # Folded rather than split off ``chain_keys[0, 0]``: that key is also chain
+    # 0's first proposal key, so splitting it would correlate a chain's starting
+    # offset with its own first move. ``fold_in`` leaves the sampling stream
+    # untouched.
+    jitter_key = jax.random.fold_in(chain_keys[0, 0], 0xC4EE5)
+    scale = 1e-3 if chain_jitter is None else chain_jitter
+    jitter = scale * jax.random.normal(
+        jitter_key, (n_chains, init_flat.shape[0]), dtype=init_flat.dtype
+    )
+    positions0 = init_flat[None, :] + jitter
+    states = jax.vmap(lambda p: _dynamic_hmc.init(p, ld_1arg, 0))(positions0)
+
+    def _step(s, k):
+        """Advance dynamic HMC by one step, returning position and divergence."""
+        s, info = kernel(k, s, ld_1arg, step_size, inverse_mass_matrix, (n_leapfrog,))
+        return s, (s.position, info.is_divergent)
+
+    def _chain(state, keys):
+        """Run one chain's scan; vmapped over the sampling chains."""
+        return jax.lax.scan(_step, state, keys)[1]
+
+    return jax.vmap(_chain)(states, chain_keys)
 
 
 # ---------------------------------------------------------------------------

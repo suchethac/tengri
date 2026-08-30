@@ -1,0 +1,67 @@
+{
+  "_comment": "Non-tsnorm control for the ChEES-HMC gate (Phase 2). Written incrementally as rows land so the numbers survive a restart. WALL TIMES ARE NOT COMPARABLE WITHIN seed 0: the nuts row ran with five sibling fits competing for 24 cores, the chees+precond row with one. Seed 1 onward runs alone and is the clean measurement.",
+  "fixture": {
+    "name": "ctl",
+    "why": "Notebooks 00/01/05 all use a tsnorm SFH, measured pathologically degenerate in bench/reports/2026-08-20_cuda_device_matrix.md Finding 15 (ESS_min 1.7-4.3 even with 260 spectral pixels). This row swaps ONLY the SFH family so a sampler failure on the notebooks can be told apart from the fixture's own degeneracy.",
+    "sfh": "dpl (dual power law, all params free)",
+    "D": 7,
+    "free_params": [
+      "sfh_dpl_alpha",
+      "sfh_dpl_beta",
+      "sfh_dpl_tau_gyr",
+      "sfh_dpl_log_total_mass",
+      "dust_tau_bc",
+      "dust_tau_diff",
+      "met_logzsol"
+    ],
+    "n_bands": 14,
+    "filters": "galex_fuv..wise_w4 (identical to 05_fitting_photometry)",
+    "dust_attenuation": "two_component calzetti, tau_bc + tau_diff free",
+    "dust_emission": "modified_blackbody, fixed",
+    "nebular": "none",
+    "redshift": "Fixed(0.05)",
+    "snr": 20.0,
+    "n_chains": 2,
+    "approx": "WavePrecomp()",
+    "note": "Everything except the SFH family is held identical to 05_fitting_photometry, so the pair is a controlled comparison."
+  },
+  "sampler_settings": {
+    "nuts (shipped)": {"n_warmup": 600, "n_samples": 600, "n_chains": 2},
+    "chees": {
+      "n_warmup": 1000, "n_burnin": 500, "n_samples": 600, "n_chains": 2,
+      "n_ensemble": 32, "precondition": null,
+      "target_accept_rate": 0.651, "max_leapfrog_steps": 200
+    },
+    "chees+precond": {
+      "n_warmup": 1000, "n_burnin": 500, "n_samples": 600, "n_chains": 2,
+      "n_ensemble": 32, "precondition": true,
+      "_precondition_note": "precondition=True resolves to DEFAULT_WHITENING_STRENGTH = 0.5",
+      "target_accept_rate": 0.651, "max_leapfrog_steps": 200
+    }
+  },
+  "platform": "Linux, JAX_PLATFORMS=cpu, x64, blackjax 1.6.2, optax 0.2.8, 24-core shared box",
+  "gate": {"max_split_rhat": 1.01, "max_divergences": 0, "min_ess": ">= mcmc_nuts on the same mock and seed"},
+  "rows": [
+    {
+      "seed": 0, "config": "nuts (shipped)", "wall_s": 2450.7, "rhat": 1.0002,
+      "divergences": 17, "min_ess": 223.1, "sec_per_ess": 10.984,
+      "unique_frac": 1.000, "worst": "dust_tau_diff",
+      "clears_gate": false, "gate_miss": "17 divergences",
+      "wall_caveat": "measured with five sibling fits on 24 cores; inflated"
+    },
+    {
+      "seed": 0, "config": "chees", "wall_s": 1004.6, "rhat": 1.2634,
+      "divergences": 0, "min_ess": 1.2, "sec_per_ess": 803.790,
+      "unique_frac": 0.961, "worst": "sfh_dpl_beta",
+      "clears_gate": false, "gate_miss": "R-hat 1.2634",
+      "wall_caveat": "measured with sibling fits competing; inflated"
+    },
+    {
+      "seed": 0, "config": "chees+precond", "wall_s": 324.9, "rhat": 1.1416,
+      "divergences": 0, "min_ess": 2.2, "sec_per_ess": 147.665,
+      "unique_frac": 0.956, "worst": "sfh_dpl_tau_gyr",
+      "clears_gate": false, "gate_miss": "R-hat 1.1416",
+      "wall_caveat": "measured with one or two siblings; least inflated of the three"
+    }
+  ]
+}

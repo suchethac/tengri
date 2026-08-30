@@ -36,6 +36,7 @@ from tengri.inference.backends.map_dispatch import (
 )
 from tengri.inference.backends.mcmc import (
     run_adjusted_mclmc as _ctx_run_adjusted_mclmc,
+    run_chees as _ctx_run_chees,
     run_dynamic_hmc as _ctx_run_dynamic_hmc,
     run_ghmc as _ctx_run_ghmc,
     run_hmc as _ctx_run_hmc,
@@ -305,6 +306,23 @@ register_backend(
 )(_ctx_run_mclmc)
 
 # ── Experimental backends ────────────────────────────────────────────────
+register_backend(
+    "mcmc_chees",
+    tier="experimental",
+    short_doc=(
+        "ChEES-HMC: one trajectory length learned from cross-chain statistics, "
+        "so every chain still takes the same number of leapfrogs (lock-step "
+        "preserved) while L comes from the posterior rather than from a "
+        "hand-set constant. Metropolis-corrected dynamic HMC underneath, with "
+        "the metric supplied analytically (precondition=) rather than "
+        "estimated from the ensemble. Measured six seeds x four posteriors in "
+        "bench/reports/2026-08-30_chees_hmc.md."
+    ),
+    requires=("blackjax",),
+    legacy_fitter=False,
+    accepts_precondition=True,
+)(_ctx_run_chees)
+
 register_backend(
     "mcmc_adjusted_mclmc",
     tier="experimental",

@@ -63,7 +63,7 @@ def summarize(path: Path) -> None:
 
     print(
         f"{'nb':>4}  {'config':<22}{'n':>3}{'mean wall':>11}{'worst Rhat':>12}"
-        f"{'max div':>9}{'min ESS':>9}{'s/ESS':>9}  worst-mixing parameter"
+        f"{'max div':>9}{'min ESS':>9}{'s/ESS':>9}{'min uniq':>10}  worst-mixing parameter"
     )
     for (nb, config), records in sorted(rows.items()):
         if "returncode" in records[0]:
@@ -79,7 +79,13 @@ def summarize(path: Path) -> None:
             f"{rhat_cell}"
             f"{max(r['divergences'] for r in records):>9}"
             f"{min(r['min_ess'] for r in records):>9.1f}"
-            f"{max(r['sec_per_ess'] for r in records):>9.3f}  {worst['worst']}"
+            f"{max(r['sec_per_ess'] for r in records):>9.3f}"
+            # Zero divergences is not evidence of health (#1999): mcmc_nuts
+            # froze completely on 3.1% of galaxies with none reported, and split
+            # R-hat scores ~1.0 on a chain that never moved. The worst
+            # distinct-draw fraction across seeds is the column that sees it.
+            f"{min(r.get('unique_frac', float('nan')) for r in records):>10.3f}"
+            f"  {worst['worst']}"
         )
         per_seed = ", ".join(
             f"{r['seed']}: R{r['rhat']:.3f} E{r['min_ess']:.1f} D{r['divergences']}"
