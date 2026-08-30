@@ -72,7 +72,7 @@ Then update panel (a) with the new JSON via `--bench-json <path>`.
 To verify the accuracy measurements:
 
 ```bash
-cd /Users/suchethacooray/Projects/tengri/.claude/worktrees/paper1
+cd <path-to-your-tengri-checkout>
 PYTHONPATH=$PWD/src JAX_PLATFORMS=cpu python analysis/paper1/lut_accuracy_probe.py
 ```
 

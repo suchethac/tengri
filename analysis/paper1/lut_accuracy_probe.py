@@ -11,9 +11,11 @@ Usage:
 
 import os
 import sys
+from pathlib import Path
 
-os.chdir("/Users/suchethacooray/Projects/tengri/.claude/worktrees/paper1")
-sys.path.insert(0, "src")
+_REPO_ROOT = Path(__file__).resolve().parents[2]
+os.chdir(_REPO_ROOT)
+sys.path.insert(0, str(_REPO_ROOT / "src"))
 os.environ["JAX_PLATFORMS"] = "cpu"
 
 import warnings

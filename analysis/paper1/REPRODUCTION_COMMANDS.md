@@ -134,7 +134,7 @@ Total: ~2–4 hours for all three deliverables
 
 **Command:**
 ```bash
-cd /Users/suchethacooray/Projects/tengri/.claude/worktrees/paper1
+cd <path-to-your-tengri-checkout>
 PYTHONPATH=$PWD/src JAX_PLATFORMS=cpu python analysis/paper1/fig08_gradient_sensitivity.py
 ```
 
