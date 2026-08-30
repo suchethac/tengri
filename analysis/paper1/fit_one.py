@@ -9,6 +9,13 @@ NPZ and the JSON: an attempt that clears the adoption bar is adopted immediately
 otherwise the best of DEFAULT_RETUNE_ATTEMPTS attempts (fewest divergences, then lowest
 max R-hat) is saved with ``adoption_pass: false`` and the process still exits 0.
 
+The best attempt so far is written after every attempt that misses the bar, not only
+at the end, so a per-cell timeout during a retune cannot erase a completed attempt.
+The retune ladder raises ``target_accept_rate`` twice before it lengthens anything:
+attempt 2 at 0.95 and attempt 3 at 0.99, both on the base warmup, then attempt 4 and
+each further attempt double the warmup at 0.99. A retune never switches the mass
+matrix to dense.
+
 Outputs to DIR/<ID>_<config>.npz (parameters, derived quantities, diagnostics) and
 DIR/<ID>_<config>.json (diagnostics summary).
 """
@@ -48,8 +55,13 @@ DEFAULT_N_CHAINS = 4
 #: + 4x600 draws, D = 8), attempt 1 on a diagonal mass matrix gave 3/2400
 #: divergences at max R-hat 1.0014, and the old dense-mass retune gave 79/2400
 #: at 1.023 (#2089). ``DEFAULT_TARGET_ACCEPT`` is ``run_nuts``'s own default.
+#: The target is raised TWICE before any warmup grows: cell 13097/III (D = 11)
+#: still missed on 77/2400 divergences (max R-hat 1.012, min ESS 485) after
+#: 5741 s at 0.85, and percent-level divergences are a step-size problem, so
+#: 0.99 is tried at the base warmup -- one run -- before paying for two.
 DEFAULT_TARGET_ACCEPT = 0.85
-RETUNE_TARGET_ACCEPT = 0.95
+RETUNE_TARGET_ACCEPT_1 = 0.95
+RETUNE_TARGET_ACCEPT_2 = 0.99
 
 #: Attempts the adoption loop makes before it keeps the best one it has.
 DEFAULT_RETUNE_ATTEMPTS = 3
@@ -73,12 +85,14 @@ def dust_parameter_name(config_key: str) -> str:
 def retune_settings(attempt: int, base: dict) -> dict:
     """NUTS settings for attempt ``attempt`` (1-based) of the adoption loop.
 
-    Attempt 1 is ``base`` (diagonal mass, target 0.85). Attempt 2 raises
-    ``target_accept_rate`` to RETUNE_TARGET_ACCEPT with the same warmup --
-    divergences at the 0.1% level with R-hat ~1.00 are a step-size problem.
-    Attempt 3 keeps that target and doubles the warmup, and each further attempt
-    doubles it again. ``dense_mass_matrix`` is never toggled: measured on
-    13097/II it turned 3 divergences into 79.
+    Attempt 1 is ``base`` (diagonal mass, target 0.85). Attempts 2 and 3 raise
+    ``target_accept_rate`` -- to RETUNE_TARGET_ACCEPT_1, then to
+    RETUNE_TARGET_ACCEPT_2 -- both on the SAME warmup, because divergences with
+    R-hat near 1.00 are a step-size problem and a smaller step size is the
+    standard remedy (Stan's ``adapt_delta``). Only from attempt 4 does the
+    warmup double, and again per further attempt, since that is the expensive
+    knob. ``dense_mass_matrix`` is never toggled: measured on 13097/II it turned
+    3 divergences into 79.
 
     A new dict every call; ``base`` is never mutated.
     """
@@ -86,9 +100,11 @@ def retune_settings(attempt: int, base: dict) -> dict:
         raise ValueError(f"attempt is 1-based, got {attempt}")
     if attempt == 1:
         return dict(base)
-    settings = {**base, "target_accept_rate": RETUNE_TARGET_ACCEPT}
-    if attempt >= 3:
-        settings["n_warmup"] = base["n_warmup"] * 2 ** (attempt - 2)
+    if attempt == 2:
+        return {**base, "target_accept_rate": RETUNE_TARGET_ACCEPT_1}
+    settings = {**base, "target_accept_rate": RETUNE_TARGET_ACCEPT_2}
+    if attempt >= 4:
+        settings["n_warmup"] = base["n_warmup"] * 2 ** (attempt - 3)
     return settings
 
 
@@ -346,6 +362,54 @@ def save_fit_outputs(
     return output_npz, output_json
 
 
+def save_best_so_far(
+    posteriors: list,
+    attempts: list[dict],
+    retune_history: list[dict],
+    sed_model,
+    config_key: str,
+    gal_id: int,
+    out_dir: Path,
+    obs_fnu: np.ndarray,
+    obs_sigma: np.ndarray,
+    filter_names: list[str],
+) -> tuple[object, dict]:
+    """Write the best attempt so far to the fit's NPZ and JSON; return it and its diagnostics.
+
+    The single definition of the "no attempt passed, keep the best one" write, used
+    both after a missed attempt inside the retune loop and once more when the loop
+    ends without a pass. Every call overwrites the same two paths, and an adoption's
+    own ``save_fit_outputs`` overwrites them a final time.
+
+    Writing after every miss is what makes a killed cell survivable: cell 13097/III
+    spent 5741 s on attempt 1 and missed the bar on 77/2400 divergences, and until
+    #2089 the per-cell timeout could kill the process during a retune with nothing
+    on disk but the per-attempt JSON -- hours of NUTS and no draws.
+
+    ``posteriors`` and ``attempts`` run parallel (index i of one is index i of the
+    other). ``best_attempt`` is the 1-based attempt NUMBER, not the list index.
+    """
+    best_index = select_best_attempt(attempts)
+    best_posterior = posteriors[best_index]
+    best_diagnostics = dict(attempts[best_index])
+    best_diagnostics["adoption_pass"] = False
+    best_diagnostics["best_attempt"] = best_diagnostics["retune_attempt"]
+    save_fit_outputs(
+        best_posterior,
+        best_diagnostics,
+        attempts,
+        retune_history,
+        sed_model,
+        config_key,
+        gal_id,
+        out_dir,
+        obs_fnu=obs_fnu,
+        obs_sigma=obs_sigma,
+        filter_names=filter_names,
+    )
+    return best_posterior, best_diagnostics
+
+
 def run_fit(
     gal_id: int,
     config_key: str,
@@ -508,6 +572,29 @@ def run_fit(
             # evidence went with it (#2089).
             write_diagnostics_json(output_json, diagnostics, attempts, retune_history)
 
+            # And persist the DRAWS of the best attempt so far, after that JSON
+            # write so the JSON on disk carries the best attempt's diagnostics
+            # plus every attempt so far. The last attempt needs no interim write:
+            # the post-loop save follows it immediately (#2089).
+            if attempt < retune_attempts:
+                _, interim_diagnostics = save_best_so_far(
+                    posteriors,
+                    attempts,
+                    retune_history,
+                    sed_model,
+                    config_key,
+                    gal_id,
+                    out_dir,
+                    obs_fnu=fnu,
+                    obs_sigma=sigma_floor,
+                    filter_names=filter_names,
+                )
+                logger.info(
+                    f"Saved the best attempt so far (attempt "
+                    f"{interim_diagnostics['best_attempt']} of {len(attempts)}, "
+                    f"divergences={interim_diagnostics['divergences']}) before retuning"
+                )
+
         except Exception as e:
             logger.error(f"Fit attempt {attempt} failed: {e}", exc_info=True)
             # Only a run in which EVERY attempt raised has no posterior to keep.
@@ -525,31 +612,41 @@ def run_fit(
         # with ``adoption_pass: false``. Discarding a near-passing posterior --
         # 13097/II's attempt 1 was 3/2400 divergent at R-hat 1.0014 -- threw away
         # hours of NUTS and left the cell with nothing but diagnostics (#2089).
-        best_index = select_best_attempt(attempts)
-        best_posterior = posteriors[best_index]
-        best_diagnostics = dict(attempts[best_index])
-        best_diagnostics["adoption_pass"] = False
-        best_diagnostics["best_attempt"] = best_diagnostics["retune_attempt"]
+        # The same helper the loop's interim writes use, so the miss path has one
+        # definition; this call overwrites whatever the last interim write left.
+        best_posterior, best_diagnostics = save_best_so_far(
+            posteriors,
+            attempts,
+            retune_history,
+            sed_model,
+            config_key,
+            gal_id,
+            out_dir,
+            obs_fnu=fnu,
+            obs_sigma=sigma_floor,
+            filter_names=filter_names,
+        )
         logger.warning(
             f"No attempt cleared the adoption bar for galaxy {gal_id} config {config_key}; "
             f"keeping attempt {best_diagnostics['best_attempt']} of {len(attempts)} "
             f"(divergences={best_diagnostics['divergences']}, "
             f"rhat_max={best_diagnostics['rhat_max']:.4f}) with adoption_pass=False"
         )
-
-    save_fit_outputs(
-        best_posterior,
-        best_diagnostics,
-        attempts,
-        retune_history,
-        sed_model,
-        config_key,
-        gal_id,
-        out_dir,
-        obs_fnu=fnu,
-        obs_sigma=sigma_floor,
-        filter_names=filter_names,
-    )
+    else:
+        # An adopted attempt overwrites every interim write with its own draws.
+        save_fit_outputs(
+            best_posterior,
+            best_diagnostics,
+            attempts,
+            retune_history,
+            sed_model,
+            config_key,
+            gal_id,
+            out_dir,
+            obs_fnu=fnu,
+            obs_sigma=sigma_floor,
+            filter_names=filter_names,
+        )
 
     return diagnostics_payload(best_diagnostics, attempts, retune_history)
 

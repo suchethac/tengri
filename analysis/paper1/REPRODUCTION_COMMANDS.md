@@ -63,11 +63,21 @@ every other cell. Without the flag the driver runs all nine cells, as before.
 
 **Retune policy (per cell, in `fit_one.py`):** attempt 1 uses a diagonal mass matrix at
 `target_accept_rate` 0.85; attempt 2 keeps the same warmup and raises `target_accept_rate` to
-0.95; attempt 3 keeps 0.95 and doubles the warmup (each further attempt doubles it again). The
-mass matrix is never switched to dense by a retune — measured on cell 13097/II (600 warmup +
-4×600 draws, D = 8), attempt 1 on a diagonal mass matrix gave 3/2400 divergences at max R̂
-1.0014 and the old dense-mass retune gave 79/2400 at 1.023 — because divergences at the 0.1%
-level with R̂ ≈ 1.00 are a step-size problem, not a mass-matrix one. The default is 3 attempts.
+0.95; attempt 3 keeps the same warmup again and raises it to 0.99; attempt 4 and each further
+attempt keep 0.99 and double the warmup. The step size is therefore tuned twice, at the base
+warmup, before the expensive knob is touched — measured on cell 13097/III (600 warmup + 4×600
+draws, D = 11), attempt 1 at 0.85 missed the bar on 77/2400 divergences at max R̂ 1.012 after
+5741 s, and percent-level divergences are a step-size problem (the standard remedy is a higher
+`adapt_delta`). The mass matrix is never switched to dense by a retune — on cell 13097/II
+(D = 8), attempt 1 on a diagonal mass matrix gave 3/2400 divergences at max R̂ 1.0014 and the
+old dense-mass retune gave 79/2400 at 1.023. The default is 3 attempts.
+
+**Every missed attempt is saved before the next one starts.** Once an attempt returns a
+posterior that misses the bar, the best attempt so far is written to `results/fits/<ID>_<config>.npz`
+and `.json` (with `adoption_pass: false` and `best_attempt: <n>`) before the retune begins, and
+the final write — an adopted attempt, or the best one at the end of the loop — overwrites it. A
+per-cell timeout or a crash during a retune therefore leaves the last completed attempt's draws
+on disk instead of diagnostics alone.
 
 **Cells that never clear the adoption bar are still saved.** If no attempt reaches 0 divergences
 and max R̂ < 1.01, the best attempt (fewest divergences, then lowest max R̂) is written to the
@@ -140,8 +150,9 @@ max_tree_depth=10
 **Adoption bar:** 0 divergences and max split-R̂ < 1.01
 
 **Retune logic (if fit fails bar):** see "Retune policy" under Deliverable 2 — attempt 2 raises
-`target_accept_rate` to 0.95 on the same diagonal mass matrix, attempt 3 doubles the warmup, the mass
-matrix is never switched to dense, 3 attempts by default, and the best attempt is saved either way.
+`target_accept_rate` to 0.95 and attempt 3 to 0.99, both on the base warmup and the same diagonal
+mass matrix; attempt 4 onward doubles the warmup at 0.99. The mass matrix is never switched to
+dense, 3 attempts by default, and the best attempt so far is saved after every miss.
 
 ## Error Floor
 

@@ -21,10 +21,13 @@ Mutation checks (each test names the mutant that kills it):
   ``dtype=object``: ``test_save_fit_outputs_writes_a_consistent_npz_for_every_configuration``.
 - drop the collision guard in ``build_npz_payload``:
   ``test_the_npz_payload_refuses_a_derived_key_that_shadows_a_parameter``.
-- ``retune_settings`` toggles ``dense_mass_matrix`` on attempt 2:
+- ``retune_settings`` toggles ``dense_mass_matrix`` on attempt 2, or attempt 3
+  keeps 0.95 instead of raising the target to 0.99:
   ``test_retune_policy_raises_target_accept_then_lengthens_warmup_and_never_toggles_dense``.
 - ``select_best_attempt`` ranks by ``rhat_max`` alone, ignoring divergences:
   ``test_run_fit_keeps_the_best_attempt_when_the_bar_is_missed``.
+- the interim ``save_best_so_far`` call is dropped from ``run_fit``'s loop:
+  ``test_run_fit_writes_the_best_so_far_after_each_missed_attempt``.
 - ``cell_is_adopted`` inverted: ``test_only_missing_skips_adopted_cells``.
 """
 
@@ -447,13 +450,16 @@ def test_save_fit_outputs_writes_a_consistent_npz_for_every_configuration(config
 
 
 def test_retune_policy_raises_target_accept_then_lengthens_warmup_and_never_toggles_dense():
-    """A retune moves the step size first, then the warmup -- never the mass matrix.
+    """A retune moves the step size twice, then the warmup -- never the mass matrix.
 
     Measured on grid cell 13097/II (600 warmup + 4x600 draws, D = 8): attempt 1
     with a diagonal mass matrix gave 3/2400 divergences at max R-hat 1.0014, and
     the old retune's ``dense_mass_matrix=True`` turned that into 79/2400 at
-    1.023 (#2089). Divergences at the 0.1% level with R-hat ~1.00 are a step-size
-    problem, so attempt 2 raises ``target_accept_rate`` instead.
+    1.023 (#2089). Cell 13097/III (D = 11) then missed on 77/2400 divergences at
+    max R-hat 1.012 after 5741 s. Percent-level divergences are a step-size
+    problem, so the target rises to 0.95 and then to 0.99 -- both at the base
+    warmup, the cheap end of the ladder -- before any attempt pays for a longer
+    warmup.
     """
     import inspect
 
@@ -468,27 +474,31 @@ def test_retune_policy_raises_target_accept_then_lengthens_warmup_and_never_togg
 
     assert fit_one.retune_settings(1, base) == base
     assert fit_one.retune_settings(2, base) == {**base, "target_accept_rate": 0.95}
-    assert fit_one.retune_settings(3, base) == {
-        **base,
-        "target_accept_rate": 0.95,
-        "n_warmup": 1200,
-    }
+    # Attempt 3 raises the target again on the SAME warmup: a second step-size
+    # attempt costs one base-warmup run, a longer warmup costs two.
+    assert fit_one.retune_settings(3, base) == {**base, "target_accept_rate": 0.99}
     assert fit_one.retune_settings(4, base) == {
         **base,
-        "target_accept_rate": 0.95,
+        "target_accept_rate": 0.99,
+        "n_warmup": 1200,
+    }
+    assert fit_one.retune_settings(5, base) == {
+        **base,
+        "target_accept_rate": 0.99,
         "n_warmup": 2400,
     }
 
     # The mass matrix is diagonal in every attempt, and ``base`` is never mutated:
     # each call returns a new dict.
-    for attempt in (1, 2, 3, 4):
+    for attempt in (1, 2, 3, 4, 5):
         settings = fit_one.retune_settings(attempt, base)
         assert settings["dense_mass_matrix"] is False, attempt
         assert settings is not base
     assert base == frozen
 
     assert fit_one.DEFAULT_TARGET_ACCEPT == 0.85
-    assert fit_one.RETUNE_TARGET_ACCEPT == 0.95
+    assert fit_one.RETUNE_TARGET_ACCEPT_1 == 0.95
+    assert fit_one.RETUNE_TARGET_ACCEPT_2 == 0.99
     assert fit_one.DEFAULT_RETUNE_ATTEMPTS == 3
     assert (
         inspect.signature(fit_one.run_fit).parameters["retune_attempts"].default
@@ -528,8 +538,131 @@ def test_run_fit_keeps_the_best_attempt_when_the_bar_is_missed():
     with pytest.raises(ValueError, match="no attempts"):
         fit_one.select_best_attempt([])
 
-    # The selection is the one the fit loop actually uses, not a parallel definition.
-    assert "select_best_attempt(" in inspect.getsource(fit_one.run_fit)
+    # The selection is the one the fit loop actually uses, not a parallel
+    # definition: ``run_fit`` reaches it through the one save-the-best helper,
+    # which is also what writes the interim NPZ after every missed attempt.
+    assert "save_best_so_far(" in inspect.getsource(fit_one.run_fit)
+    assert "select_best_attempt(" in inspect.getsource(fit_one.save_best_so_far)
+
+
+#: Draws in each stubbed posterior of the save-after-every-attempt test. The real
+#: save path runs three times there and costs one ``predict`` plus one
+#: ``predict_state`` per draw (~0.36 s for configuration I), so the record is short;
+#: the save path is indifferent to the count.
+BEST_SO_FAR_DRAWS = 8
+#: Divergences of the three stubbed attempts. Attempt 2 is the best of the three,
+#: and it is neither the first nor the last -- so a saved NPZ that merely held the
+#: newest or the oldest posterior would be caught.
+BEST_SO_FAR_DIVERGENCES = (50, 20, 30)
+
+
+def test_run_fit_writes_the_best_so_far_after_each_missed_attempt(catalog, tmp_path, monkeypatch):
+    """A completed attempt is on disk before the next one starts (#2089).
+
+    ``save_fit_outputs`` used to run once, after the loop. Cell 13097/III spent
+    5741 s on attempt 1 and missed the bar on 77/2400 divergences; had the
+    per-cell timeout killed the process during a retune, those hours would have
+    left nothing but the per-attempt JSON. The sampler seam (``ForwardModel.fit``)
+    is stubbed, so no NUTS runs, while the model, the retune loop and the whole
+    save path are real.
+    """
+    import configs
+
+    from tengri.inference.posterior import Posterior
+
+    try:
+        ssp = configs.load_ssp_for("I")
+    except FileNotFoundError:
+        pytest.skip("SSP grid for config I not found")
+
+    photometry = tengri.Photometry.from_names(CANDELS_13097_FILTERS)
+    observation = tengri.Observation(photometry=photometry)
+    sed_model = configs.config_I(ssp, observation, CANDELS_13097_Z)
+    free_params = list(sed_model.spec.free_params)
+
+    # One set of prior draws per attempt, all different, so the NPZ on disk
+    # identifies WHICH attempt was saved.
+    draws = [
+        {
+            k: np.asarray(v, dtype=float)
+            for k, v in sed_model.spec.sample_batch(
+                jax.random.PRNGKey(100 + i), BEST_SO_FAR_DRAWS
+            ).items()
+            if k in free_params
+        }
+        for i in range(len(BEST_SO_FAR_DIVERGENCES))
+    ]
+
+    class _StubPosterior:
+        """The surface ``run_fit`` and ``save_fit_outputs`` read off a posterior."""
+
+        def __init__(self, samples, n_divergent):
+            self.samples = samples
+            self.diagnostics = {"n_divergent": n_divergent}
+
+        def rhat(self):
+            return {"dust_tau_v": 1.02}
+
+        def effective_sample_size(self):
+            return {"dust_tau_v": 120.0}
+
+    # ``samples`` and ``diagnostics`` are pinned against the real class by the
+    # save-path test, which builds a real ``Posterior``; the two methods here.
+    for name in ("rhat", "effective_sample_size"):
+        assert hasattr(Posterior, name), name
+
+    fit_kwargs: list[dict] = []
+
+    def stub_fit(self, data, **kwargs):
+        index = len(fit_kwargs)
+        fit_kwargs.append(dict(kwargs))
+        return _StubPosterior(draws[index], BEST_SO_FAR_DIVERGENCES[index])
+
+    monkeypatch.setattr(fit_one.ForwardModel, "fit", stub_fit)
+
+    # The wrapper records the attempt each save was handed and then calls the real
+    # save path, so the assertions below are about files that were really written.
+    real_save = fit_one.save_fit_outputs
+    saved_attempts: list[int] = []
+    on_disk_attempts: list[int] = []
+    npz_path = tmp_path / "13097_I.npz"
+    json_path = tmp_path / "13097_I.json"
+
+    def recording_save(posterior, diagnostics, attempts, retune_history, *args, **kwargs):
+        saved_attempts.append(diagnostics["best_attempt"])
+        result = real_save(posterior, diagnostics, attempts, retune_history, *args, **kwargs)
+        on_disk_attempts.append(json.loads(json_path.read_text())["best_attempt"])
+        return result
+
+    monkeypatch.setattr(fit_one, "save_fit_outputs", recording_save)
+
+    payload = fit_one.run_fit(
+        13097, "I", "mcmc_nuts", tmp_path, n_warmup=4, n_samples=4, n_chains=1
+    )
+
+    # THE POINT: attempt 1's posterior reached the NPZ before attempt 2 started,
+    # and attempt 2 replaced it. Without the interim save this is ``[2]``.
+    assert saved_attempts == [1, 2, 2]
+    assert on_disk_attempts == [1, 2, 2]
+
+    # The loop really climbed the ladder while doing it.
+    assert [c["target_accept_rate"] for c in fit_kwargs] == [0.85, 0.95, 0.99]
+    assert [c["n_warmup"] for c in fit_kwargs] == [4, 4, 4]
+    assert [c["dense_mass_matrix"] for c in fit_kwargs] == [False, False, False]
+
+    assert npz_path.exists()
+    final = json.loads(json_path.read_text())
+    assert final["best_attempt"] == 2
+    assert final["adoption_pass"] is False
+    assert len(final["attempts"]) == 3
+    assert [a["divergences"] for a in final["attempts"]] == list(BEST_SO_FAR_DIVERGENCES)
+    assert payload["best_attempt"] == 2
+    assert payload["adoption_pass"] is False
+
+    # The NPZ holds the BEST attempt's draws, not the newest ones.
+    with np.load(npz_path, allow_pickle=False) as npz:
+        for name, values in draws[1].items():
+            np.testing.assert_array_equal(npz[name], values)
 
 
 def test_only_missing_skips_adopted_cells(tmp_path):
