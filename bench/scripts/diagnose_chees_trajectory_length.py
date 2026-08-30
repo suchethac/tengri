@@ -117,6 +117,11 @@ def main() -> None:
         help="'none' or a whitening strength; the metric ChEES does NOT estimate itself",
     )
     parser.add_argument("--json", default=None, help="append one JSON row per arm")
+    parser.add_argument(
+        "--only-arm",
+        default=None,
+        help="run only arms whose label contains this substring (resume a partial sweep)",
+    )
     args = parser.parse_args()
 
     cfg = NOTEBOOKS[args.notebook]
@@ -140,7 +145,10 @@ def main() -> None:
     print(header)
     print("-" * len(header), flush=True)
 
-    for label, jitter, cap, chain_jitter in ARMS:
+    arms = ARMS if args.only_arm is None else [a for a in ARMS if args.only_arm in a[0]]
+    if not arms:
+        parser.error(f"--only-arm {args.only_arm!r} matched no arm of {[a[0] for a in ARMS]}")
+    for label, jitter, cap, chain_jitter in arms:
         # A fresh model per arm: adaptation caches key on the tuning tuple, and a
         # fresh build keeps the MAP seed identical across arms.
         forward = ForwardModel.build(sed=cfg["build"](ssp))

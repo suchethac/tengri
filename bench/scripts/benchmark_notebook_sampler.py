@@ -24,7 +24,8 @@ ESS, R-hat and the divergence count are deterministic given the seed.
 Usage::
 
     JAX_PLATFORMS=cpu .venv/bin/python bench/scripts/benchmark_notebook_sampler.py --notebook 05
-    JAX_PLATFORMS=cpu .venv/bin/python bench/scripts/benchmark_notebook_sampler.py --notebook 01 --quick
+    JAX_PLATFORMS=cpu .venv/bin/python bench/scripts/benchmark_notebook_sampler.py \\
+        --notebook 01 --quick
 """
 
 from __future__ import annotations
@@ -61,19 +62,67 @@ from tengri import (
     recipes,
 )
 from tengri.analysis.diagnostics.autocorrelation import effective_sample_size
+from tengri.config.exceptions import DeadFitError
+from tengri.inference.backends.mcmc._shared import total_draws
 
 #: Each notebook's own convergence claim, and so the bar a replacement clears.
+#:
+#: PRIMARY criterion. This is an *absolute self-assessment* -- what a shipped
+#: notebook fit asserts about itself -- and it is reported unchanged.
 MAX_RHAT = 1.01
 MAX_DIVERGENCES = 0
 
+#: SECONDARY, comparative criterion, applied identically to every sampler
+#: including the NUTS baseline.
+#:
+#: The primary bar was written by the notebooks to describe one fit, and it does
+#: not discriminate when it is borrowed as a *ranking* criterion between
+#: samplers: NUTS on the healthy DPL control is split-R-hat 1.0002 at min ESS
+#: 223 with **17 divergences**, a plainly good fit that "zero divergences" calls
+#: a miss, and ChEES rows miss on 1 to 3 divergences out of 1200 draws. A
+#: criterion that fails the incumbent and the challenger alike cannot separate
+#: them, which is the one job a comparative gate has.
+#:
+#: 0.5% of TOTAL draws is the replacement threshold for that clause alone. It is
+#: stated here rather than tuned: Stan and BlackJAX both treat a handful of
+#: divergences in a long chain as worth investigating rather than disqualifying,
+#: and 0.5% is comfortably below the 1.4% (17/1200) the NUTS control shows while
+#: being orders of magnitude below the 100% of a genuinely dead fit. The R-hat
+#: and ESS clauses are unchanged -- only the divergence clause moves, and it
+#: moves from a count to a rate because a count is not comparable across
+#: configurations with different draw budgets.
+MAX_DIVERGENCE_RATE = 0.005
+
 _NB05_FILTERS = (
-    "galex_fuv", "galex_nuv", "sdss_u", "sdss_g", "sdss_r", "sdss_i", "sdss_z",
-    "2mass_j", "2mass_h", "2mass_ks", "wise_w1", "wise_w2", "wise_w3", "wise_w4",
+    "galex_fuv",
+    "galex_nuv",
+    "sdss_u",
+    "sdss_g",
+    "sdss_r",
+    "sdss_i",
+    "sdss_z",
+    "2mass_j",
+    "2mass_h",
+    "2mass_ks",
+    "wise_w1",
+    "wise_w2",
+    "wise_w3",
+    "wise_w4",
 )
 _NB01_FILTERS = ("sdss_u", "sdss_g", "sdss_r", "sdss_i", "sdss_z", "wise_w1")
 _NB00_FILTERS = (
-    "galex_fuv", "galex_nuv", "sdss_u", "sdss_g", "sdss_r", "sdss_i", "sdss_z",
-    "2mass_j", "2mass_h", "2mass_ks", "wise_w1", "wise_w2",
+    "galex_fuv",
+    "galex_nuv",
+    "sdss_u",
+    "sdss_g",
+    "sdss_r",
+    "sdss_i",
+    "sdss_z",
+    "2mass_j",
+    "2mass_h",
+    "2mass_ks",
+    "wise_w1",
+    "wise_w2",
 )
 
 
@@ -111,6 +160,60 @@ def _build_nb05(ssp):
         dust_attenuation=builders.dust.two_component(
             all_params=FIXED,
             law="calzetti",
+            tau_bc=Uniform(0.0, 1.0),
+            tau_diff=Uniform(0.0, 1.0),
+        ),
+        dust_emission=builders.dust.emission.modified_blackbody(all_params=FIXED),
+        neb=builders.neb.none(),
+        met={"logzsol": Uniform(-1.5, 0.3)},
+        redshift=Fixed(0.05),
+    )
+
+
+def _build_nb05_prelaw(ssp):
+    """``05_fitting_photometry`` as it stood BEFORE PR #1989. D=8.
+
+    Identical to :func:`_build_nb05` in every parameter and prior, and different
+    in exactly one thing: the **diffuse** screen is a power law rather than
+    Calzetti. Both are real configurations of the same notebook, three days
+    apart, and the pair is the reason this function exists.
+
+    The history, from the notebook's own git log rather than from anyone's
+    reconstruction. Until 176f8fd9d ("fix(dust,api): attenuation laws are
+    explicit and required -- law, or law_bc+law_diff", #1989, 2026-08-20) nb05
+    read::
+
+        dust=builders.dust.two_component(defaults=FIXED, law_bc="calzetti", ...)
+
+    ``law_bc`` alone left the diffuse screen at its declared default of
+    ``power_law`` (``components/dust/two_component.py``, ``law_diff: str =
+    "power_law"``). #1989 rewrote it to ``law="calzetti"``, which sets **both**
+    screens. Presented and reviewed as an API-explicitness change, it moved the
+    physics.
+
+    The measured consequence, same seed, same shipped NUTS call, everything else
+    held::
+
+        law_bc=calzetti + law_diff=power_law   R-hat 1.0043    4 div   ESS 88.1
+        law=calzetti (both screens)            R-hat 1.1426  166 div   ESS  3.0
+
+    So ``bench/reports/2026-08-17_nb01_nb05_nuts_vs_hmc.md``'s published row
+    (R-hat 1.0033, 0 divergences, ESS 144.2) is a correct measurement of THIS
+    model, and the notebook's surviving convergence narrative is a claim about a
+    fixture it no longer builds. :func:`_build_nb05` is what a reader runs today
+    and is the primary gate fixture; this one exists so the published table stays
+    reproducible and so the dust-law sensitivity is measurable rather than
+    inferred.
+    """
+    return SEDModel.build(
+        ssp_data=ssp,
+        observation=Observation(photometry=Photometry.from_names(list(_NB05_FILTERS))),
+        approx=WavePrecomp(),
+        sfh=builders.sfh.tsnorm(all_params=FREE),
+        dust_attenuation=builders.dust.two_component(
+            all_params=FIXED,
+            law_bc="calzetti",
+            law_diff="power_law",
             tau_bc=Uniform(0.0, 1.0),
             tau_diff=Uniform(0.0, 1.0),
         ),
@@ -203,6 +306,22 @@ NOTEBOOKS = {
             "accordingly; 100 warmup is not meant to clear any bar."
         ),
     ),
+    "05pre": dict(
+        build=_build_nb05_prelaw,
+        # nb05's own seed, SNR and chain count exactly. This row differs from
+        # "05" in the diffuse dust law and in nothing else, so the pair
+        # isolates PR #1989's physics change.
+        seed=7,
+        snr=20.0,
+        n_chains=2,
+        shipped=dict(method="mcmc_nuts", n_warmup=600, n_samples=600),
+        note=(
+            "05_fitting_photometry as it stood BEFORE PR #1989 changed "
+            "law_bc='calzetti' to law='calzetti'. The model the published "
+            "2026-08-17 report measured, kept so that table stays reproducible. "
+            "NOT what the notebook builds today -- use '05' for that."
+        ),
+    ),
     "ctl": dict(
         build=_build_ctl,
         # nb05's seed, SNR and chain count exactly: this row is a CONTROL for
@@ -274,7 +393,7 @@ def configurations(nb: str, quick: bool, dense: bool, families=FAMILIES) -> dict
         # ``allow_unvalidated`` is required while mcmc_ghmc is tier="broken" --
         # which is exactly the claim these rows exist to settle. Remove it if
         # and only if the tier moves.
-        for ensemble in ((32,) if quick else (32, 64)):
+        for ensemble in (32,) if quick else (32, 64):
             configs[f"ghmc meads E={ensemble}"] = dict(
                 method="mcmc_ghmc",
                 n_warmup=warmup,
@@ -331,6 +450,13 @@ def score(posterior, wall: float) -> dict:
         "worst": worst_name,
         "sec_per_ess": wall / max(worst_ess, 1e-9),
         "unique_frac": _unique_draw_fraction(posterior),
+        # The denominator a divergence RATE needs, and the reason it is recorded
+        # rather than recomputed: every backend stores ``n_samples`` PER CHAIN
+        # while ``n_divergent`` is summed over the flattened
+        # ``(n_chains * n_samples,)`` record, so ``n_divergent / n_samples`` is
+        # n_chains times too large (#2087). ``total_draws`` is the shared helper
+        # that fixes it.
+        "n_draws_total": total_draws(posterior.diagnostics),
         # Leapfrog steps per proposal actually in effect. Deliberately NOT named
         # "learned": mcmc_hmc reports its hand-set L under the same diagnostics
         # key, and the whole point of the ChEES rows is that theirs was not set.
@@ -424,8 +550,10 @@ def main() -> None:
     mock = generate_mock(sed, sed.spec.sample(key_truth), key=key_mock, snr=cfg["snr"])
     data = Data(photometry=(np.asarray(mock["flux_obs"]), np.asarray(mock["noise"])))
 
-    print(f"notebook {args.notebook}: D = {len(sed.spec.free_params)} free parameters, "
-          f"{cfg['n_chains']} chains, seed {seed}")
+    print(
+        f"notebook {args.notebook}: D = {len(sed.spec.free_params)} free parameters, "
+        f"{cfg['n_chains']} chains, seed {seed}"
+    )
     print(f"adoption bar: max split R-hat < {MAX_RHAT} and {MAX_DIVERGENCES} divergences")
     print(f"note: {cfg['note']}\n")
 
@@ -445,14 +573,58 @@ def main() -> None:
             data, method="map", key=key_fit, n_restarts=8, n_steps=800, verbose=False
         )
         started = time.perf_counter()
-        posterior = forward.fit(
-            data,
-            key=key_fit,
-            init_from=map_seed,
-            n_chains=cfg["n_chains"],
-            verbose=False,
-            **kwargs,
-        )
+        try:
+            posterior = forward.fit(
+                data,
+                key=key_fit,
+                init_from=map_seed,
+                n_chains=cfg["n_chains"],
+                verbose=False,
+                **kwargs,
+            )
+        except DeadFitError as exc:
+            # A refusal is an OUTCOME, not a missing value and not a harness
+            # failure (#2088). Since PR #2090 the window-adaptation backends
+            # refuse to sample when >= 90% of the final warmup window diverged,
+            # where they previously returned a frozen posterior and a warning.
+            # Recording it as a row is what keeps the baseline column honest:
+            # "the library refused to hand this back" is a stronger statement
+            # about a sampler than any R-hat it could have printed, and folding
+            # it into a blank cell would quietly improve the baseline.
+            rows[label] = {
+                "wall": time.perf_counter() - started,
+                "rhat": float("inf"),
+                "divergences": -1,
+                "min_ess": 0.0,
+                "worst": "DEAD FIT (refused)",
+                "sec_per_ess": float("inf"),
+                "unique_frac": 0.0,
+                "dead_fit": True,
+                "dead_fit_reason": str(exc),
+                "warmup_divergence_frac": getattr(exc, "warmup_divergence_frac", None),
+                "n_leapfrog": None,
+                "step_size": getattr(exc, "step_size", None),
+                "tree_depth_mean": None,
+                "tree_depth_max": None,
+                "frac_max_depth": None,
+                "leapfrogs_per_draw": None,
+            }
+            row = rows[label]
+            print(
+                f"{label:<20}{row['wall']:>9.1f}{'REFUSED':>10}{'-':>5}"
+                f"{'-':>9}{'-':>9}{'-':>7}  DeadFitError: "
+                f"{row['warmup_divergence_frac']} of the final warmup window divergent",
+                flush=True,
+            )
+            if args.json:
+                with open(args.json, "a") as fh:
+                    fh.write(
+                        json.dumps(
+                            {"notebook": args.notebook, "seed": seed, "config": label, **row}
+                        )
+                        + "\n"
+                    )
+            continue
         rows[label] = score(posterior, time.perf_counter() - started)
         row = rows[label]
         print(
@@ -464,22 +636,36 @@ def main() -> None:
         if args.json:
             with open(args.json, "a") as fh:
                 fh.write(
-                    json.dumps(
-                        {"notebook": args.notebook, "seed": seed, "config": label, **row}
-                    )
+                    json.dumps({"notebook": args.notebook, "seed": seed, "config": label, **row})
                     + "\n"
                 )
 
     print("\nverdict (ranked on seconds per effective sample):")
+    print("  primary   = the notebooks' own bar: R-hat < 1.01, ZERO divergences, ESS >= nuts")
+    print("  secondary = comparative: R-hat < 1.01, divergence RATE < 0.5% of total draws,")
+    print("              ESS >= nuts -- applied identically to the nuts baseline row")
     baseline = rows.get("nuts (shipped)")
+    baseline_ess = baseline["min_ess"] if baseline and not baseline.get("dead_fit") else 0.0
     for label, row in sorted(rows.items(), key=lambda kv: kv[1]["sec_per_ess"]):
-        clears = row["rhat"] < MAX_RHAT and row["divergences"] <= MAX_DIVERGENCES
+        if row.get("dead_fit"):
+            # A refusal is never a pass under either criterion.
+            print(f"  {label:<20} {'REFUSED':<12}{'REFUSED':<12} DeadFitError, no posterior")
+            continue
+        ess_ok = row["min_ess"] >= baseline_ess
+        primary = row["rhat"] < MAX_RHAT and row["divergences"] <= MAX_DIVERGENCES and ess_ok
+        rate = row["divergences"] / max(row.get("n_draws_total") or 0, 1)
+        secondary = row["rhat"] < MAX_RHAT and rate < MAX_DIVERGENCE_RATE and ess_ok
         versus = (
             f"{baseline['sec_per_ess'] / max(row['sec_per_ess'], 1e-9):5.2f}x vs nuts"
             if baseline
             else ""
         )
-        print(f"  {label:<20} {'clears bar' if clears else 'MISSES bar':<11} {versus}")
+        print(
+            f"  {label:<20} {'clears' if primary else 'MISSES':<12}"
+            f"{'clears' if secondary else 'MISSES':<12}"
+            f"div {row['divergences']:>5}/{row.get('n_draws_total') or '?':<6}"
+            f"({100 * rate:5.2f}%)  {versus}"
+        )
 
 
 if __name__ == "__main__":
