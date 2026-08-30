@@ -87,7 +87,7 @@ def plot_panel_a(ax, bench_data=None):
     ax.set_xlabel("Time per call (µs)", fontsize=10)
     ax.set_yticks(x_pos)
     ax.set_yticklabels(config_labels, fontsize=9)
-    ax.legend(fontsize=9, loc="lower right")
+    ax.legend(loc="upper center", bbox_to_anchor=(0.5, -0.22), ncol=2, fontsize=9, frameon=False)
     ax.grid(True, alpha=0.3, which="both", axis="x")
     ax.set_xlim(10, 1e5)
 
@@ -108,20 +108,20 @@ def plot_panel_a(ax, bench_data=None):
     # Add provisional stamp if using default data
     if bench_data is None:
         ax.text(
-            0.98,
             0.02,
+            0.98,
             "timings: May 2026 run; to be re-measured",
             transform=ax.transAxes,
             fontsize=7,
-            ha="right",
-            va="bottom",
+            ha="left",
+            va="top",
             color="gray",
             style="italic",
         )
 
 
 def plot_panel_b(ax, accuracy_data):
-    """Plot LUT accuracy vs redshift (panel b)."""
+    """Plot LUT accuracy vs redshift (panel b) — all bands colored by effective wavelength."""
     measurements = accuracy_data.get("measurements", {})
     filters_list = accuracy_data.get("metadata", {}).get("filters", [])
 
@@ -135,6 +135,22 @@ def plot_panel_b(ax, accuracy_data):
             transform=ax.transAxes,
         )
         return
+
+    # Effective wavelengths (Angstrom) for each filter
+    wave_eff = {
+        "galex_fuv": 1528,
+        "galex_nuv": 2271,
+        "sdss_u": 3540,
+        "sdss_g": 4770,
+        "sdss_r": 6231,
+        "sdss_i": 7625,
+        "sdss_z": 9134,
+        "2mass_j": 12390,
+        "2mass_h": 16496,
+        "2mass_ks": 21666,
+        "wise_w1": 33526,
+        "wise_w2": 46028,
+    }
 
     # Extract z values and organize errors by band
     z_values = sorted([float(z) for z in measurements])
@@ -153,64 +169,81 @@ def plot_panel_b(ax, accuracy_data):
                 band_errors[band].append(z_meas[band].get("err_default_pct", np.nan))
                 band_errors_32[band].append(z_meas[band].get("err_n32_pct", np.nan))
 
+    # Create colormap from blue (FUV) to red (W2) based on wavelength
+    from matplotlib.colors import Normalize
+
+    wavelengths = np.array([wave_eff.get(band, 0) for band in filters_list])
+    norm = Normalize(vmin=wavelengths.min(), vmax=wavelengths.max())
+    cmap = plt.get_cmap("viridis")
+
     # Find worst flux-carrying band (galex_fuv has largest errors at high z)
     worst_band = "galex_fuv"
 
-    # Plot all bands as thin lines
+    # Plot all bands as thin lines, colored by wavelength
+    plot_handles = []
+    plot_labels = []
     for band in filters_list:
         if band in band_errors:
             errors = np.array(band_errors[band]) / 100.0  # Convert percent to fraction
+
+            # Get color from colormap based on wavelength
+            color = cmap(norm(wave_eff.get(band, 0)))
+
             if band == worst_band:
-                ax.plot(
+                # Thicker line for worst band
+                line, = ax.plot(
                     z_array,
                     errors,
-                    "o-",
-                    linewidth=2,
-                    markersize=5,
-                    alpha=0.9,
-                    label=worst_band,
-                    color="#2E86AB",
+                    "-",
+                    linewidth=2.5,
+                    alpha=0.85,
+                    color=color,
                 )
+                plot_handles.insert(0, line)
+                plot_labels.insert(0, band)
             else:
-                ax.plot(z_array, errors, "-", linewidth=0.5, alpha=0.15, color="gray")
+                # Thin lines for other bands
+                line, = ax.plot(
+                    z_array,
+                    errors,
+                    "-",
+                    linewidth=0.8,
+                    alpha=0.65,
+                    color=color,
+                )
+                plot_handles.append(line)
+                plot_labels.append(band)
 
-    # n_subbands=32 for worst band
+    # n_subbands=32 for worst band (dashed line, same color as default)
     if worst_band in band_errors_32:
         errors_32 = np.array(band_errors_32[worst_band]) / 100.0  # Convert percent to fraction
-        ax.plot(
+        worst_color = cmap(norm(wave_eff.get(worst_band, 0)))
+        line_32, = ax.plot(
             z_array,
             errors_32,
-            "s--",
+            "--",
             linewidth=1.5,
-            markersize=4,
-            alpha=0.9,
-            label=f"{worst_band} ($n_{{sub}}=32$)",
-            color="#A23B72",
+            alpha=0.7,
+            color=worst_color,
         )
+        plot_handles.insert(1, line_32)
+        plot_labels.insert(1, f"{worst_band}, K=32")
 
     # 1% reference line
-    ax.axhline(y=0.01, color="red", linestyle="--", linewidth=1, alpha=0.6, label="1% level")
+    ax.axhline(y=0.01, color="red", linestyle="--", linewidth=0.8, alpha=0.5)
 
     # Styling
     ax.set_yscale("log")
     ax.set_xlabel("Redshift", fontsize=10)
     ax.set_ylabel(r"Relative error $|F_{\text{LUT}}/F_{\text{exact}} - 1|$", fontsize=10)
     ax.set_xlim(-0.1, 3.2)
-    ax.set_ylim(1e-4, 1)
-    ax.legend(fontsize=8, loc="upper left", framealpha=0.95)
-    ax.grid(True, alpha=0.3, which="both")
+    ax.set_ylim(1e-5, 2)
 
-    # Annotation for dark bands
-    ax.text(
-        0.98,
-        0.05,
-        "band dark beyond z~2 (FUV flux < 1e-3 of optical)",
-        transform=ax.transAxes,
-        fontsize=7.5,
-        ha="right",
-        style="italic",
-        color="gray",
-    )
+    # Legend with all bands, outside plot area
+    ax.legend(plot_handles, plot_labels, fontsize=7.5, loc="center left", bbox_to_anchor=(1.02, 0.5),
+              framealpha=0.95, ncol=1, title="Band (K=default)", title_fontsize=7.5)
+
+    ax.grid(True, alpha=0.3, which="both")
 
 
 def create_figure(bench_data=None, accuracy_data=None):
@@ -276,7 +309,7 @@ for ext in ("pdf", "png"):
     fig_a.savefig(path, format=ext, bbox_inches="tight", dpi=300)
     print(f"Saved: {path}")
 
-fig_b, ax_b = plt.subplots(figsize=(3.5, 3.0), dpi=150)
+fig_b, ax_b = plt.subplots(figsize=(4.5, 3.0), dpi=150)
 plot_panel_b(ax_b, accuracy_data)
 for ext in ("pdf", "png"):
     path = os.path.join(figures_dir, f"figB1_lut_accuracy.{ext}")
