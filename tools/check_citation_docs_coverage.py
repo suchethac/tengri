@@ -82,6 +82,7 @@ _TEX_LIGATURES = {r"{\ss}": "ss", r"\&": "&"}
 
 #: ``{\'o}`` -> ``o``, ``{\'\i}`` -> ``i``, ``{\"u}`` -> ``u``. The optional
 #: backslash covers dotless-i, written ``\i`` inside the accent group.
+#: Háček format ``{\v{c}}`` is handled separately in :func:`expand_tex`.
 _TEX_ACCENT_RE = re.compile(r"""\{\\['`"^~=.]\\?([a-zA-Z])\}""")
 
 #: Splits a ``short`` field at the end of the first author's surname.
@@ -98,6 +99,9 @@ def expand_tex(text: str) -> str:
     """Expand the TeX escapes ``references.bib`` uses, then drop stray braces."""
     for tex, plain in _TEX_LIGATURES.items():
         text = text.replace(tex, plain)
+    # Handle {\v{c}} format (háček): replace with just the letter
+    text = re.sub(r"\{\\v\{([a-zA-Z])\}\}", r"\1", text)
+    # Handle standard format {\'o}, {\'\i}, etc.
     text = _TEX_ACCENT_RE.sub(r"\1", text)
     return text.replace("{", "").replace("}", "")
 

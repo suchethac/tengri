@@ -1888,7 +1888,7 @@ def create_relagn_disc_from_grid(grid_path: str) -> Callable:
        ApJS, 153, 205. doi:10.1086/421115
 
     .. [2] Hagen, S. & Done, C. (2023).
-       MNRAS, 521, 251. doi:10.1093/mnras/stad478
+       MNRAS, 525, 3455-3467. doi:10.1093/mnras/stad2499
     """
     if not __import__("pathlib").Path(grid_path).exists():
         raise FileNotFoundError(f"RELAGN disc grid not found: {grid_path}")

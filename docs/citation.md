@@ -53,6 +53,9 @@ the forward model, and listed oldest first within each group.
   Bradbury et al. (2018).
 - [optax](https://github.com/google-deepmind/optax) — gradient-based
   optimizers behind the MAP routes.
+- [NIFTy](https://github.com/NIFTy-PPL/NIFTy) — original NIFTy signal-inference
+  library, foundation for the correlated-field SFH prior. Selig et al. (2013),
+  [arXiv:1301.4499](https://arxiv.org/abs/1301.4499).
 - Information Field Theory — the theoretical foundation for tengri's
   correlated-field SFH priors. Enßlin (2019),
   [arXiv:1804.03350](https://arxiv.org/abs/1804.03350).
@@ -131,11 +134,19 @@ the forward model, and listed oldest first within each group.
 
 ### Star formation histories
 
+- Dense Basis non-parametric SFH reconstruction. Iyer & Gawiser (2017),
+  [arXiv:1702.04371](https://arxiv.org/abs/1702.04371).
+- Prospector model description; source of the continuity SFH prior. Leja et
+  al. (2017),
+  [doi:10.3847/1538-4357/aa5ffe](https://doi.org/10.3847/1538-4357/aa5ffe).
 - Non-parametric SFH priors — Dirichlet, continuity, and bursty continuity.
   Leja et al. (2019), [arXiv:1811.03637](https://arxiv.org/abs/1811.03637).
 - Stochastic SFH power-spectral-density model for main-sequence scatter.
   Caplar & Tacchella (2019),
   [arXiv:1901.07556](https://arxiv.org/abs/1901.07556).
+- Forensic SED reconstruction of cosmic star formation and metallicity
+  history, by galaxy type. Bellstedt et al. (2020),
+  [doi:10.1093/mnras/staa2620](https://doi.org/10.1093/mnras/staa2620).
 - PSD-governed SFH variability in cosmological simulations. Iyer et al.
   (2020), [arXiv:2007.07916](https://arxiv.org/abs/2007.07916).
 
@@ -226,11 +237,15 @@ the forward model, and listed oldest first within each group.
 - Standard thin accretion disc, multicolor blackbody. Shakura & Sunyaev
   (1973).
 - Balmer continuum and 3000 Å bump. Grandi (1982).
+- Empirical optical Fe II template from I Zw 1-like QSOs. Boroson & Green
+  (1992), [doi:10.1086/191679](https://doi.org/10.1086/191679).
 - ADAF scaling laws for low-luminosity AGN. Mahadevan (1997),
   [doi:10.1086/303727](https://doi.org/10.1086/303727).
 - SDSS composite quasar spectrum, the BLR template reference. Vanden Berk
   et al. (2001),
   [arXiv:astro-ph/0105231](https://arxiv.org/abs/astro-ph/0105231).
+- KYCONV relativistic convolution kernel for accretion disks. Dovciak et al.
+  (2004), [arXiv:astro-ph/0403541](https://arxiv.org/abs/astro-ph/0403541).
 - Optical Fe II empirical template from I Zw 1. Véron-Cetty, Joly & Véron
   (2004),
   [doi:10.1051/0004-6361:20035714](https://doi.org/10.1051/0004-6361:20035714).
@@ -252,6 +267,8 @@ the forward model, and listed oldest first within each group.
 - QSOgen — composite-quasar SED for BLR emission. Temple, Hewett & Banerji
   (2021),
   [doi:10.1093/mnras/stab2586](https://doi.org/10.1093/mnras/stab2586).
+- RELAGN relativistic accretion disc with general-relativistic ray tracing.
+  Hagen & Done (2023), [arXiv:2304.01253](https://arxiv.org/abs/2304.01253).
 - GRAHSP — composable AGN and host SED model. Buchner et al. (2024),
   [arXiv:2405.19297](https://arxiv.org/abs/2405.19297).
 
@@ -317,6 +334,9 @@ residual differences are expected.
   code. Boquien et al. (2019),
   [arXiv:1811.03094](https://arxiv.org/abs/1811.03094). See
   [Reproduction → CIGALE](reproduction/cigale).
+- [ProSpect](https://github.com/asgr/ProSpect) — SED generator with complex
+  star formation and metallicity histories. Robotham et al. (2020),
+  [arXiv:2002.06980](https://arxiv.org/abs/2002.06980).
 - [Prospector](https://github.com/bd-j/prospector) — Bayesian SED inference
   on FSPS. Johnson et al. (2021),
   [arXiv:2012.01426](https://arxiv.org/abs/2012.01426). See
