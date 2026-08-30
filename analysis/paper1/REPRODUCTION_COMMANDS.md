@@ -117,8 +117,8 @@ $python_exe run_backend_sweep.py [--methods map,laplace] [--out-dir DIR]
 **Methods tested (in order):**
 1. `map` — Maximum a posteriori (ADAM optimization, 500 steps, 8 restarts)
 2. `laplace` — Laplace approximation (Gaussian from the Hessian at the MAP)
-3. `mcmc` — tengri's automatic sampler selector, which resolves to NUTS at this dimensionality (D ≤ 20); the row measures the selector, at the same settings as the explicit NUTS row
-4. `mcmc_nuts` — NUTS sampler (cold + warm compile)
+3. `mcmc` — tengri's automatic sampler selector, which resolves to NUTS at this dimensionality (D ≤ 20); the row measures the selector, at the same settings as the explicit NUTS row (600 warmup + 4 × 600 draws)
+4. `mcmc_nuts` — NUTS sampler (cold + warm compile), 600 warmup + 4 × 600 draws: the grid cell's own budget, so this row is the paper's NUTS fit for 13097/II rather than a cheaper stand-in
 5. `mcmc_hmc` — Standard HMC (cold + warm compile)
 6. `mcmc_raytrace` — Ray tracing sampler (cold + warm compile); its runner takes `n_burnin`/`n_steps`, not `n_warmup`/`n_samples`
 
@@ -128,11 +128,12 @@ $python_exe run_backend_sweep.py [--methods map,laplace] [--out-dir DIR]
 - Captures ESS, s/ESS and max R̂ whenever the posterior carries samples
 - Point estimates for `map` and `laplace` come from `posterior.params`; the derived quantities are `sed_model.predict` at those parameters merged with the fixed values
 - Sampler rows take the median over draws strided across the whole flattened record
+- Every row records `dispatched_to`, the backend the fitter ran (e.g. `NUTS (BlackJAX)`) — the point of the `mcmc` row, which names a selector rather than a sampler
 - Prints summary table to stdout
 
 **Outputs:**
-- `<out-dir>/<method>.npz` — Method-specific results
-- `<out-dir>/<method>.json` — Method diagnostics
+- `<out-dir>/<method>.npz` — that method's thinned draws, one array per parameter under the parameter's own name (the schema `fit_one.py` writes, at the same `MAX_SAVED_DRAWS` cap), plus the diagnostics. `map` (and `laplace`, whose backend returns no draws) contributes its point estimate as length-1 arrays. Loads with `np.load(path, allow_pickle=False)`: a `None` diagnostic (the warm time of a row that has no warm run) is dropped and strings are stored as `np.str_` arrays, both of which the JSON keeps
+- `<out-dir>/<method>.json` — Method diagnostics, including the `None` warm times
 - `<out-dir>/summary.json` — Aggregated backend comparison
 
 ## NUTS Settings (Canonical from Quickstart)

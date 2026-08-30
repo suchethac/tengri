@@ -690,3 +690,155 @@ def test_only_missing_skips_adopted_cells(tmp_path):
     # The flag is opt-in: without it the driver runs every cell, as today.
     assert run_candels_fits.parse_args([]).only_missing is False
     assert run_candels_fits.parse_args(["--only-missing"]).only_missing is True
+
+
+def test_sweep_npz_payload_carries_samples_and_loads_without_pickle(tmp_path):
+    """Every sweep row's NPZ carries that method's draws, and loads without pickle.
+
+    Figure 7 overlays the marginal posteriors of every backend, so the sweep has
+    to save samples; it used to write ``np.savez(npz_file, **results_dict)`` --
+    the diagnostics dict alone -- so no method's draws ever reached disk, and the
+    ``None`` warm time of ``map`` and ``laplace`` went in as a pickled object
+    array that ``allow_pickle=False`` refuses to read (#2089).
+    """
+    from types import SimpleNamespace
+
+    import run_backend_sweep
+
+    from tengri.inference.posterior import Posterior
+
+    # The sweep thins with the grid's function at the grid's cap, so the two
+    # files' parameter arrays are built the same way.
+    assert run_backend_sweep.thin_samples is fit_one.thin_samples
+    assert run_backend_sweep.build_npz_payload is fit_one.build_npz_payload
+    assert run_backend_sweep.MAX_SAVED_DRAWS == fit_one.MAX_SAVED_DRAWS
+
+    free = ["dust_tau_diff", "met_logzsol", "sfh_delayed_tau_gyr"]
+    sed_model = SimpleNamespace(spec=SimpleNamespace(free_params=list(free)))
+    rng = np.random.default_rng(0)
+    samples = {name: rng.normal(size=50) for name in free}
+    diagnostics = {
+        "method": "mcmc",
+        "gal_id": 13097,
+        "wall_time_cold_s": 12.5,
+        "dispatched_to": "NUTS (BlackJAX)",
+        "wall_time_warm_s": None,
+    }
+    posterior = Posterior(
+        samples=samples,
+        params={k: float(v[0]) for k, v in samples.items()},
+        method="NUTS (BlackJAX)",
+        wall_time_s=1.0,
+        diagnostics={},
+    )
+
+    payload = run_backend_sweep.sweep_npz_payload(posterior, diagnostics, sed_model)
+
+    # Draws, one array per parameter, under the parameter's own name.
+    for name, draws in samples.items():
+        np.testing.assert_array_equal(payload[name], draws)
+    # The diagnostics ride along, minus the ``None`` -- which the JSON keeps.
+    assert payload["gal_id"] == 13097
+    assert payload["wall_time_cold_s"] == 12.5
+    assert "wall_time_warm_s" not in payload
+    assert set(payload) == set(free) | {
+        "method",
+        "gal_id",
+        "wall_time_cold_s",
+        "dispatched_to",
+    }
+    # Strings are ``np.str_`` arrays: ``dtype=object`` needs ``allow_pickle=True``.
+    assert np.asarray(payload["dispatched_to"]).dtype.kind == "U"
+    assert np.asarray(payload["method"]).dtype.kind == "U"
+
+    npz_path = tmp_path / "mcmc.npz"
+    np.savez(npz_path, **payload)
+    with np.load(npz_path, allow_pickle=False) as npz:
+        arrays = {k: npz[k] for k in npz.files}
+    for name, draws in samples.items():
+        np.testing.assert_array_equal(arrays[name], draws)
+    assert str(arrays["dispatched_to"]) == "NUTS (BlackJAX)"
+    assert str(arrays["method"]) == "mcmc"
+    assert int(arrays["gal_id"]) == 13097
+
+    # A point estimate (``map``, and ``laplace`` when its backend returns no
+    # draws) contributes ``params`` as length-1 arrays: one draw, same names.
+    point = Posterior(
+        samples=None,
+        params={name: float(i) + 0.5 for i, name in enumerate(free)},
+        method="map",
+        wall_time_s=1.0,
+        diagnostics={},
+    )
+    map_payload = run_backend_sweep.sweep_npz_payload(
+        point, {"method": "map", "wall_time_warm_s": None}, sed_model
+    )
+    assert set(map_payload) == set(free) | {"method"}
+    for i, name in enumerate(free):
+        assert map_payload[name].shape == (1,)
+        assert map_payload[name].dtype == np.float64
+        assert map_payload[name][0] == float(i) + 0.5
+    map_npz = tmp_path / "map.npz"
+    np.savez(map_npz, **map_payload)
+    with np.load(map_npz, allow_pickle=False) as npz:
+        assert npz["dust_tau_diff"].shape == (1,)
+
+    # A posterior missing a free parameter would silently cost Figure 7 that
+    # marginal, and a diagnostics key that shadows a parameter would overwrite
+    # its draws; both raise, naming the parameter.
+    with pytest.raises(ValueError, match="met_logzsol"):
+        run_backend_sweep.sweep_npz_payload(
+            Posterior(
+                samples=None,
+                params={"dust_tau_diff": 0.3, "sfh_delayed_tau_gyr": 1.0},
+                method="map",
+                wall_time_s=1.0,
+                diagnostics={},
+            ),
+            {"method": "map"},
+            sed_model,
+        )
+    with pytest.raises(ValueError, match="met_logzsol"):
+        run_backend_sweep.sweep_npz_payload(
+            posterior, {**diagnostics, "met_logzsol": 1.0}, sed_model
+        )
+
+
+def test_sweep_nuts_rows_match_the_grid_cell_budget():
+    """The ``mcmc`` and ``mcmc_nuts`` rows run the grid cell's NUTS budget.
+
+    Both rows are the paper's NUTS number for galaxy 13097 / configuration II,
+    so they have to be the same run as the grid cell: 600 warmup + 4 x 600
+    draws. They ran 2 chains, which is neither the grid's posterior nor
+    comparable with it (#2089). A source-text assertion, because no fit may run
+    inside the test suite.
+    """
+    import re
+
+    import run_backend_sweep
+
+    source = (PAPER1 / "run_backend_sweep.py").read_text()
+    # Split the dispatch into ``{method name: branch body}``.
+    parts = re.split(r'(?:el)?if method == "(\w+)":', source)
+    branches = dict(zip(parts[1::2], parts[2::2]))
+    assert set(branches) == set(run_backend_sweep.SWEEP_METHODS), sorted(branches)
+
+    # The grid's own defaults, so the two files cannot drift apart silently.
+    expected = (
+        f"n_warmup={fit_one.DEFAULT_N_WARMUP}",
+        f"n_samples={fit_one.DEFAULT_N_SAMPLES}",
+        f"n_chains={fit_one.DEFAULT_N_CHAINS}",
+    )
+    assert expected == ("n_warmup=600", "n_samples=600", "n_chains=4")
+
+    for name in ("mcmc", "mcmc_nuts"):
+        calls = re.findall(r"forward\.fit\(\n(.*?)\n\s*\)", branches[name], re.S)
+        # Cold and warm: both are the paper's number, not just the first one.
+        assert len(calls) == 2, f"{name}: expected a cold and a warm fit, got {len(calls)}"
+        for call in calls:
+            for argument in expected:
+                assert re.search(rf"\b{argument}\b", call), f"{name}: {argument} missing"
+
+    # The other rows keep their own settings.
+    assert "n_chains=4" in branches["mcmc_hmc"]
+    assert "n_chains=2" in branches["mcmc_raytrace"]

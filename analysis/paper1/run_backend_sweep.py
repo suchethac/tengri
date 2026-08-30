@@ -4,6 +4,16 @@ Runs the paper's backend list: map, laplace, mcmc (automatic selector), mcmc_nut
 mcmc_hmc, mcmc_raytrace. Saves results to <out-dir>/<method>.npz + .json and a
 summary in <out-dir>/summary.json.
 
+Every row's NPZ carries that method's thinned draws -- one array per parameter,
+the same schema ``fit_one.save_fit_outputs`` writes -- beside the diagnostics,
+so Figure 7 can overlay the backends' marginal posteriors; ``map`` (and
+``laplace`` when its backend returns no draws) contributes its point estimate as
+length-1 arrays. The file loads with ``allow_pickle=False``. Every row also
+records ``dispatched_to``, the backend the fitter actually ran, which is the
+point of the ``mcmc`` row: it is the automatic selector. The ``mcmc`` and
+``mcmc_nuts`` rows run the grid cell's NUTS budget (600 warmup + 4 x 600 draws),
+so they are the same run as this galaxy/configuration's grid fit (#2089).
+
 CLI::
 
     python run_backend_sweep.py [--methods map,laplace] [--out-dir DIR]
@@ -27,7 +37,14 @@ import jax
 import numpy as np
 from candels_io import load_candels_z1
 from configs import config_II, load_ssp_for
-from fit_one import apply_systematic_error_floor, extract_photometry, iter_draws
+from fit_one import (
+    MAX_SAVED_DRAWS,
+    apply_systematic_error_floor,
+    build_npz_payload,
+    extract_photometry,
+    iter_draws,
+    thin_samples,
+)
 
 from tengri import Data, ForwardModel, Observation, Photometry
 
@@ -42,6 +59,57 @@ SWEEP_METHODS = ("map", "laplace", "mcmc", "mcmc_nuts", "mcmc_hmc", "mcmc_raytra
 
 #: Default output directory, relative to this file.
 DEFAULT_OUT_DIR = Path(__file__).parent / "results" / "backend_sweep"
+
+
+def sweep_npz_payload(posterior, results_dict: dict, sed_model) -> dict:
+    """Build one row's NPZ payload: the posterior's draws plus the diagnostics.
+
+    Figure 7 overlays every backend's marginal posteriors, so the NPZ has to
+    carry samples; the sweep used to save ``**results_dict`` alone and no
+    method's draws ever reached disk (#2089). The draws are thinned by
+    :func:`fit_one.thin_samples` at the grid's ``MAX_SAVED_DRAWS`` cap and
+    stored under the parameters' own names -- the schema
+    :func:`fit_one.save_fit_outputs` writes, so a reader opens a sweep file and
+    a grid file the same way. A point estimate (``samples is None``: ``map``,
+    and ``laplace`` whenever its backend returns no draws) contributes
+    ``posterior.params`` as length-1 arrays: one draw, same names.
+
+    The diagnostics ride along as they do in the JSON, minus the two changes an
+    ``allow_pickle=False`` load needs: a ``None`` value (``map`` and ``laplace``
+    have no warm run) is dropped, since ``np.savez`` would store it as a pickled
+    object array, and a string is stored as a ``np.str_`` array rather than
+    ``dtype=object``. The JSON keeps both.
+
+    Args:
+        posterior: The fitted :class:`~tengri.inference.posterior.Posterior`.
+        results_dict: The row's diagnostics, exactly as the JSON records them.
+        sed_model: The fitted model, for the free-parameter names.
+
+    Returns:
+        The keyword arguments for ``np.savez``.
+
+    Raises:
+        ValueError: if the posterior carries no draws for a free parameter
+            (Figure 7 would silently lose that marginal), or if a diagnostics
+            key collides with a parameter name (from ``build_npz_payload``).
+    """
+    if posterior.samples is not None:
+        draws = thin_samples(posterior.samples, MAX_SAVED_DRAWS)
+    else:
+        draws = {
+            name: np.asarray([value], dtype=float) for name, value in posterior.params.items()
+        }
+
+    missing = [name for name in sed_model.spec.free_params if name not in draws]
+    if missing:
+        raise ValueError(f"the posterior carries no draws for free parameter(s) {missing}")
+
+    diagnostics = {
+        key: (np.asarray(value, dtype=np.str_) if isinstance(value, str) else value)
+        for key, value in results_dict.items()
+        if value is not None
+    }
+    return build_npz_payload(draws, diagnostics)
 
 
 def run_backend_sweep(
@@ -109,14 +177,17 @@ def run_backend_sweep(
 
             elif method == "mcmc":
                 # The automatic selector: NUTS at this dimensionality, so the same
-                # settings as the explicit NUTS row; the row measures the selector.
+                # settings as the explicit NUTS row; the row measures the selector,
+                # and ``dispatched_to`` records what it picked. The budget is the
+                # grid cell's (600 + 4 x 600), so the row IS the paper's NUTS fit
+                # for this galaxy and configuration, not a cheaper stand-in.
                 posterior = forward.fit(
                     data,
                     key=key,
                     method="mcmc",
                     n_warmup=600,
                     n_samples=600,
-                    n_chains=2,
+                    n_chains=4,
                 )
                 t_cold = time.perf_counter() - t_start
 
@@ -127,18 +198,20 @@ def run_backend_sweep(
                     method="mcmc",
                     n_warmup=600,
                     n_samples=600,
-                    n_chains=2,
+                    n_chains=4,
                 )
                 t_warm = time.perf_counter() - t_start_warm
 
             elif method == "mcmc_nuts":
+                # The paper's canonical NUTS budget, the grid cell's own
+                # (``fit_one``'s 600 warmup + 4 x 600 draws).
                 posterior = forward.fit(
                     data,
                     key=key,
                     method="mcmc_nuts",
                     n_warmup=600,
                     n_samples=600,
-                    n_chains=2,
+                    n_chains=4,
                 )
                 t_cold = time.perf_counter() - t_start
 
@@ -150,7 +223,7 @@ def run_backend_sweep(
                     method="mcmc_nuts",
                     n_warmup=600,
                     n_samples=600,
-                    n_chains=2,
+                    n_chains=4,
                 )
                 t_warm = time.perf_counter() - t_start_warm
 
@@ -218,6 +291,11 @@ def run_backend_sweep(
             # Extract diagnostics
             results_dict = {
                 "method": method,
+                # The backend the fitter dispatched to, in its own words (e.g.
+                # "NUTS (BlackJAX)"). ``method="mcmc"`` is the automatic
+                # selector, so without this its row does not say what ran; it is
+                # informative for every other row too (#2089).
+                "dispatched_to": posterior.method,
                 "gal_id": gal_id,
                 "config": config_key,
                 "wall_time_cold_s": t_cold,
@@ -278,9 +356,10 @@ def run_backend_sweep(
                 results_dict["log_sfr_100myr"] = float(np.median(sfr_samples))
                 results_dict["dust_tau"] = float(np.median(dust_samples))
 
-            # Save to NPZ
+            # Save to NPZ: the thinned draws (or the point estimate as one draw)
+            # plus the diagnostics, loadable with ``allow_pickle=False`` (#2089).
             npz_file = out_dir / f"{method}.npz"
-            np.savez(npz_file, **results_dict)
+            np.savez(npz_file, **sweep_npz_payload(posterior, results_dict, sed_model))
             logger.info(f"Saved {method} results to {npz_file}")
 
             # Save to JSON
