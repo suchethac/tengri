@@ -127,3 +127,33 @@ $venv/bin/ruff check analysis/paper1/fit_one.py analysis/paper1/run_candels_fits
 - Backend sweep (7 methods, one galaxy): ~30–60 minutes
 
 Total: ~2–4 hours for all three deliverables
+
+## Figure 8: Gradient Sensitivity (Jacobian & Fisher Matrix)
+
+**Purpose:** Compute and visualize the gradient sensitivity of photometric flux to model parameters, demonstrating end-to-end differentiability.
+
+**Command:**
+```bash
+cd /Users/suchethacooray/Projects/tengri/.claude/worktrees/paper1
+PYTHONPATH=$PWD/src JAX_PLATFORMS=cpu python analysis/paper1/fig08_gradient_sensitivity.py
+```
+
+**Configuration:**
+- Model: Configuration II (DPL SFH, two-component Calzetti dust, DL07 dust emission)
+- Redshift: z = 1.1
+- Filters: 13 bands (HST ACS F435W, F606W, F775W, F814W, F850LP; HST WFC3 F105W, F125W, F160W; VISTA Ks; Spitzer IRAC 3.6, 4.5, 5.8, 8.0 µm)
+- Free parameters: 8 (α, β, τ_peak, age, log M*, log Z, τ_bc, τ_diff)
+- Noise assumption: 5% fractional flux uncertainty
+
+**Panels:**
+- (a) Jacobian heatmap: ∂log₁₀ f_b / ∂θ_k with diverging colormap (RdBu_r) centered on zero
+- (b) Fisher information correlation matrix: derived from F = J^T N^{-1} J with forecast 1-sigma marginal uncertainties
+
+**Outputs:**
+- `figures/fig08_gradient_sensitivity.pdf` — Publication-ready figure (two panels side-by-side)
+- `figures/fig08_gradient_sensitivity.png` — Raster version
+- `results/fig08_gradient_sensitivity_data.json` — Jacobian matrix, correlation matrix, forecast sigmas, filter names, parameter names/values, timings, metadata
+
+**Timings (CPU):**
+- Forward pass: ~0.18 ms median
+- Jacobian computation: ~2.1 ms median (~11.6× forward time)
