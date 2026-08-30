@@ -132,7 +132,7 @@ $python_exe run_backend_sweep.py [--methods map,laplace] [--out-dir DIR]
 - Prints summary table to stdout
 
 **Outputs:**
-- `<out-dir>/<method>.npz` — that method's thinned draws, one array per parameter under the parameter's own name (the schema `fit_one.py` writes, at the same `MAX_SAVED_DRAWS` cap), plus the diagnostics. `map` (and `laplace`, whose backend returns no draws) contributes its point estimate as length-1 arrays. Loads with `np.load(path, allow_pickle=False)`: a `None` diagnostic (the warm time of a row that has no warm run) is dropped and strings are stored as `np.str_` arrays, both of which the JSON keeps
+- `<out-dir>/<method>.npz` — that method's thinned draws, one array per parameter under the parameter's own name (the schema `fit_one.py` writes, at the same `MAX_SAVED_DRAWS` cap), plus the diagnostics. `map` (and any method whose backend returns no draws; `laplace` returns 2000 draws by default and so is saved like the samplers) contributes its point estimate as length-1 arrays. Loads with `np.load(path, allow_pickle=False)`: a `None` diagnostic (the warm time of a row that has no warm run) is dropped and strings are stored as `np.str_` arrays, both of which the JSON keeps
 - `<out-dir>/<method>.json` — Method diagnostics, including the `None` warm times
 - `<out-dir>/summary.json` — Aggregated backend comparison
 
@@ -175,7 +175,7 @@ sigma_floor = sqrt(sigma_measurement^2 + (0.05 * fnu)^2)
 - One Ks band per galaxy: ISAAC first, HAWK-I only when ISAAC is undetected.
 - A mapped column missing from the catalog header raises; nothing is dropped
   silently.
-- Driver timeout per cell: `DEFAULT_FIT_TIMEOUT_S = 21600` s — three attempts at 0.95 target acceptance are ~1.5× the two-attempt cost model below, and a dead fit still ends in ~10 min (measured 2026-08-30: a
+- Driver timeout per cell: `DEFAULT_FIT_TIMEOUT_S = 21600` s — three attempts at the base warmup, but attempts 2 and 3 run at target acceptance 0.95 and 0.99, which shrink the step and deepen the trees, so the per-draw cost rises even though the draw count does not; a dead fit still ends in ~10 min (measured 2026-08-30: a
   healthy 600-warmup + 4x600-draw configuration I cell takes ~22 min, a retune doubles
   the warmup for ~50 min, and configurations II/III cost 2-3x per draw, reaching
   100-150 min — 7200 s could still kill a healthy retune. A dead fit finishes in ~10
@@ -192,7 +192,7 @@ $venv/bin/ruff check analysis/paper1/fit_one.py analysis/paper1/run_candels_fits
 
 Measured 2026-08-30 on CPU, not estimated:
 
-- Single fit, configuration I (D=5), 600 warmup + 4×600 draws: ~22 minutes. Configurations II/III (D=8, D=11) cost 2–3× per draw; a retune doubles the warmup, so a retuned cell reaches ~50 minutes for I and 100–150 minutes for II/III.
+- Single fit, configuration I (D=5), 600 warmup + 4×600 draws: ~22 minutes. Configurations II/III (D=8, D=11) cost 2–3× per draw; a retune keeps the warmup and raises the target acceptance (0.95, then 0.99), which deepens the NUTS trees, so a retuned attempt costs more than the first at the same draw count; configuration III's first attempt alone measured 96 minutes. Budget a few hours for a cell that needs all three attempts.
 - 3×3 grid (9 fits sequential): several hours; the per-cell cap is `DEFAULT_FIT_TIMEOUT_S = 21600` s (three attempts).
 - Backend sweep (6 methods, one galaxy): `map` and `laplace` are seconds to a couple of minutes each; the four sampler rows dominate and each runs cold + warm.
 

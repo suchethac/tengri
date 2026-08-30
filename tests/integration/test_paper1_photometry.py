@@ -842,3 +842,172 @@ def test_sweep_nuts_rows_match_the_grid_cell_budget():
     # The other rows keep their own settings.
     assert "n_chains=4" in branches["mcmc_hmc"]
     assert "n_chains=2" in branches["mcmc_raytrace"]
+
+
+def test_saves_are_atomic_no_tmp_left_and_content_complete(tmp_path):
+    """Both of a fit's writes land through a temporary sibling and ``os.replace``.
+
+    The best-so-far save now runs mid-run, so the driver's per-cell timeout can
+    land inside a write. ``np.savez`` and ``json.dump`` on the live path truncate
+    in place: the file that was complete a moment earlier -- the hours of NUTS the
+    interim save exists to protect -- is gone, and a partial NPZ is indistinguishable
+    from a short one until a reader trips over it (#2089).
+
+    Mutant: swap ``os.replace(tmp_path, path)`` for a second ``write(path)`` that
+    leaves the temporary behind -- the directory-contents assertions fail. Writing
+    straight to the final path instead fails the "previous file survives" check.
+    """
+    import inspect
+
+    # -- The JSON. Nothing but the finished file is left in the directory.
+    json_path = tmp_path / "13097_I.json"
+    diagnostics = {"gal_id": 13097, "config": "I", "divergences": 3, "adoption_pass": False}
+    payload = fit_one.write_diagnostics_json(json_path, diagnostics, [dict(diagnostics)], [])
+    assert json.loads(json_path.read_text()) == payload
+    assert payload["gal_id"] == 13097
+    assert sorted(p.name for p in tmp_path.iterdir()) == ["13097_I.json"]
+
+    # -- The NPZ. ``np.savez`` appends ``.npz`` to a path that lacks it, so the
+    # temporary name must carry the suffix or the payload lands beside the name
+    # it was handed and ``os.replace`` finds nothing to rename over the good file.
+    npz_path = tmp_path / "13097_I.npz"
+    arrays = {
+        "dust_tau_v": np.linspace(0.0, 1.0, 5),
+        "filter_names": np.asarray(["hst_f160w", "irac_36"], dtype=np.str_),
+    }
+    written = fit_one._atomic_replace_write(
+        npz_path, lambda tmp: np.savez(tmp, **arrays), tmp_suffix=".npz"
+    )
+    assert written == npz_path
+    with np.load(npz_path, allow_pickle=False) as npz:
+        assert set(npz.files) == set(arrays)
+        np.testing.assert_array_equal(npz["dust_tau_v"], arrays["dust_tau_v"])
+        assert list(npz["filter_names"]) == list(arrays["filter_names"])
+    assert sorted(p.name for p in tmp_path.iterdir()) == ["13097_I.json", "13097_I.npz"]
+
+    # -- THE POINT: a write that dies part-way leaves the previous complete file
+    # exactly as it was, and leaves no temporary behind either.
+    good = npz_path.read_bytes()
+
+    def dying_write(tmp: Path) -> None:
+        tmp.write_bytes(b"truncated")
+        raise RuntimeError("killed mid-write")
+
+    with pytest.raises(RuntimeError, match="killed mid-write"):
+        fit_one._atomic_replace_write(npz_path, dying_write, tmp_suffix=".npz")
+    assert npz_path.read_bytes() == good
+    assert sorted(p.name for p in tmp_path.iterdir()) == ["13097_I.json", "13097_I.npz"]
+
+    # Not a parallel definition: both of the file's writers go through the helper,
+    # so neither can quietly go back to writing the live path.
+    for function in (fit_one.write_diagnostics_json, fit_one.save_fit_outputs):
+        assert "_atomic_replace_write(" in inspect.getsource(function), function.__name__
+
+
+def test_an_interim_save_failure_is_labeled_as_such_and_the_loop_continues(
+    catalog, tmp_path, monkeypatch, caplog
+):
+    """A failing interim save is reported as a save failure, not as a fit failure.
+
+    The interim ``save_best_so_far`` call sits inside the attempt's ``try``, so a
+    raise there used to be logged ``Fit attempt N failed`` -- sending an operator
+    to the sampler when the sampler had just succeeded and the disk had not. The
+    attempt is already recorded when the save runs, so the loop carries on; the
+    post-loop save is outside the ``try`` and still propagates (#2089).
+
+    Mutant: remove the nested ``try``/``except`` around the interim call -- the
+    attempt's own handler catches it, ``Fit attempt 1 failed`` is logged instead,
+    and both log assertions below fail.
+    """
+    import logging
+
+    import configs
+
+    try:
+        ssp = configs.load_ssp_for("I")
+    except FileNotFoundError:
+        pytest.skip("SSP grid for config I not found")
+
+    photometry = tengri.Photometry.from_names(CANDELS_13097_FILTERS)
+    observation = tengri.Observation(photometry=photometry)
+    sed_model = configs.config_I(ssp, observation, CANDELS_13097_Z)
+    free_params = list(sed_model.spec.free_params)
+
+    # One set of prior draws per attempt, all different, so the NPZ on disk
+    # identifies WHICH attempt survived the failed save.
+    draws = [
+        {
+            k: np.asarray(v, dtype=float)
+            for k, v in sed_model.spec.sample_batch(
+                jax.random.PRNGKey(200 + i), BEST_SO_FAR_DRAWS
+            ).items()
+            if k in free_params
+        }
+        for i in range(len(BEST_SO_FAR_DIVERGENCES))
+    ]
+
+    class _StubPosterior:
+        """The surface ``run_fit`` and ``save_fit_outputs`` read off a posterior."""
+
+        def __init__(self, samples, n_divergent):
+            self.samples = samples
+            self.diagnostics = {"n_divergent": n_divergent}
+
+        def rhat(self):
+            return {"dust_tau_v": 1.02}
+
+        def effective_sample_size(self):
+            return {"dust_tau_v": 120.0}
+
+    fit_calls: list[dict] = []
+
+    def stub_fit(self, data, **kwargs):
+        index = len(fit_calls)
+        fit_calls.append(dict(kwargs))
+        return _StubPosterior(draws[index], BEST_SO_FAR_DIVERGENCES[index])
+
+    monkeypatch.setattr(fit_one.ForwardModel, "fit", stub_fit)
+
+    # The FIRST save raises; every later one is the real save path.
+    real_save_best = fit_one.save_best_so_far
+    save_calls: list[int] = []
+
+    def flaky_save_best(*args, **kwargs):
+        save_calls.append(len(save_calls) + 1)
+        if len(save_calls) == 1:
+            raise OSError("no space left on device")
+        return real_save_best(*args, **kwargs)
+
+    monkeypatch.setattr(fit_one, "save_best_so_far", flaky_save_best)
+
+    with caplog.at_level(logging.INFO, logger="fit_one"):
+        payload = fit_one.run_fit(
+            13097, "I", "mcmc_nuts", tmp_path, n_warmup=4, n_samples=4, n_chains=1
+        )
+
+    # THE POINT: the log names the interim save, and does not blame the fit.
+    assert "interim save after attempt 1 failed" in caplog.text
+    assert "Fit attempt 1 failed" not in caplog.text
+    assert "no space left on device" in caplog.text
+    interim = [r for r in caplog.records if "interim save after attempt" in r.getMessage()]
+    assert len(interim) == 1
+    assert interim[0].levelno == logging.WARNING
+    # ``exc_info=True``: the traceback is on the record, not only in the message.
+    assert interim[0].exc_info is not None
+
+    # ... and the run finished anyway: three attempts, three save calls (two
+    # interim, one post-loop), the best attempt's draws on disk.
+    assert len(fit_calls) == 3
+    assert save_calls == [1, 2, 3]
+    json_path = tmp_path / "13097_I.json"
+    npz_path = tmp_path / "13097_I.npz"
+    assert sorted(p.name for p in tmp_path.iterdir()) == ["13097_I.json", "13097_I.npz"]
+    final = json.loads(json_path.read_text())
+    assert final["best_attempt"] == 2
+    assert final["adoption_pass"] is False
+    assert len(final["attempts"]) == 3
+    assert payload["best_attempt"] == 2
+    assert payload["adoption_pass"] is False
+    with np.load(npz_path, allow_pickle=False) as npz:
+        for name, values in draws[1].items():
+            np.testing.assert_array_equal(npz[name], values)

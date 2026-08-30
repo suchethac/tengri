@@ -25,8 +25,10 @@ from __future__ import annotations
 import argparse
 import json
 import logging
+import os
 import sys
 import time
+from collections.abc import Callable
 from pathlib import Path
 
 import jax
@@ -186,6 +188,47 @@ def diagnostics_payload(
     return {**diagnostics, "attempts": attempts, "retune_history": retune_history}
 
 
+def _atomic_replace_write(
+    path: Path,
+    write: Callable[[Path], object],
+    *,
+    tmp_suffix: str = "",
+) -> Path:
+    """Write through a temporary sibling and ``os.replace`` it onto ``path``.
+
+    ``os.replace`` is atomic within one filesystem, so a reader -- or the next
+    process to look, after the driver's per-cell timeout killed this one -- sees
+    either the previous complete file or the new complete one, never a truncated
+    one. Writing in place gave no such guarantee: the best attempt so far is now
+    saved mid-run, and a timeout landing inside that write would destroy a file
+    that had been complete a moment earlier, which is precisely the hours of NUTS
+    the interim save exists to protect (#2089).
+
+    The temporary file is a sibling, so the rename never crosses filesystems, and
+    it is removed if ``write`` raises, leaving the directory as it was found.
+
+    Args:
+        path: Final path; only ever created by the rename.
+        write: Called with the temporary path; must write the whole payload there.
+        tmp_suffix: Appended to the temporary name for writers that insist on an
+            extension. ``np.savez`` appends ``.npz`` to any path lacking it, so
+            without ``tmp_suffix=".npz"`` the payload would land beside the name
+            it was handed and the rename would find nothing to move.
+
+    Returns:
+        ``path``.
+    """
+    path = Path(path)
+    tmp_path = path.with_name(f"{path.name}.tmp{tmp_suffix}")
+    try:
+        write(tmp_path)
+        os.replace(tmp_path, path)
+    except BaseException:
+        tmp_path.unlink(missing_ok=True)
+        raise
+    return path
+
+
 def write_diagnostics_json(
     path: Path,
     diagnostics: dict,
@@ -205,8 +248,14 @@ def write_diagnostics_json(
     ``attempts`` — one entry per attempt so far, in order.
     """
     payload = diagnostics_payload(diagnostics, attempts, retune_history)
-    with open(path, "w") as f:
-        json.dump(payload, f, indent=2)
+
+    def write_json(tmp_path: Path) -> None:
+        with open(tmp_path, "w") as f:
+            json.dump(payload, f, indent=2)
+
+    # Never opened on ``path`` itself: a kill mid-``dump`` would leave the file
+    # unparseable, and this one is rewritten after every attempt (#2089).
+    _atomic_replace_write(path, write_json)
     return payload
 
 
@@ -352,7 +401,11 @@ def save_fit_outputs(
     }
 
     # Every key the NPZ carries goes through the collision guard (#2089).
-    np.savez(output_npz, **build_npz_payload(samples_thin, derived, grids))
+    npz_payload = build_npz_payload(samples_thin, derived, grids)
+    # ``tmp_suffix=".npz"``: ``np.savez`` appends that suffix to a path without it.
+    _atomic_replace_write(
+        output_npz, lambda tmp_path: np.savez(tmp_path, **npz_payload), tmp_suffix=".npz"
+    )
     logger.info(f"Saved results to {output_npz}")
 
     # Save JSON with diagnostics (same shape as the per-attempt writes)
@@ -577,23 +630,35 @@ def run_fit(
             # plus every attempt so far. The last attempt needs no interim write:
             # the post-loop save follows it immediately (#2089).
             if attempt < retune_attempts:
-                _, interim_diagnostics = save_best_so_far(
-                    posteriors,
-                    attempts,
-                    retune_history,
-                    sed_model,
-                    config_key,
-                    gal_id,
-                    out_dir,
-                    obs_fnu=fnu,
-                    obs_sigma=sigma_floor,
-                    filter_names=filter_names,
-                )
-                logger.info(
-                    f"Saved the best attempt so far (attempt "
-                    f"{interim_diagnostics['best_attempt']} of {len(attempts)}, "
-                    f"divergences={interim_diagnostics['divergences']}) before retuning"
-                )
+                # Its own handler: this call sits inside the attempt's ``try``, so
+                # a raise here was logged "Fit attempt N failed" -- the wrong
+                # subject entirely, the fit had just succeeded and the save had
+                # not. A missed interim write costs nothing the next attempt does
+                # not redo, so the loop continues; the post-loop save is outside
+                # this ``try`` and still propagates if the problem persists.
+                try:
+                    _, interim_diagnostics = save_best_so_far(
+                        posteriors,
+                        attempts,
+                        retune_history,
+                        sed_model,
+                        config_key,
+                        gal_id,
+                        out_dir,
+                        obs_fnu=fnu,
+                        obs_sigma=sigma_floor,
+                        filter_names=filter_names,
+                    )
+                except Exception as exc:
+                    logger.warning(
+                        "interim save after attempt %d failed: %s", attempt, exc, exc_info=True
+                    )
+                else:
+                    logger.info(
+                        f"Saved the best attempt so far (attempt "
+                        f"{interim_diagnostics['best_attempt']} of {len(attempts)}, "
+                        f"divergences={interim_diagnostics['divergences']}) before retuning"
+                    )
 
         except Exception as e:
             logger.error(f"Fit attempt {attempt} failed: {e}", exc_info=True)
