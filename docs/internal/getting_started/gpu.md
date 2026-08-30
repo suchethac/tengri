@@ -100,47 +100,54 @@ and `bench/results/gpu_catalog_throughput.json`. `CatalogFitter.run("mcmc_hmc",
 forward_chunk_size=K)`, one chain per galaxy, 400 warmup + 500 draws, five SDSS
 bands, **D = 3**, SNR 20, the default `WavePrecomp` quadrature LUT.
 
-| device | dtype | N | K | wall | galaxies / minute | max split-R̂ | min ESS |
-|---|---|---:|---:|---:|---:|---:|---:|
-| GPU | float32 | 512 | 512 | 82.4 s | **373** | 1.129 | 2.4 |
-| GPU | float64 | 512 | 512 | 145.9 s | 211 | 1.073 | 2.5 |
-| GPU | float32 | 64 | 32 | 138.1 s | 28 | 1.054 | 2.5 |
-| GPU | float64 | 64 | 32 | 154.9 s | 25 | 1.099 | 2.0 |
-| CPU | float64 | 64 | 32 | 87.2 s | 44 | 1.076 | 2.7 |
+| device | dtype | N | K | wall | gal / min | **converged gal / min** | converged / N | max split-R̂ | min ESS |
+|---|---|---:|---:|---:|---:|---:|---:|---:|---:|
+| GPU | float32 | 512 | 512 | 101.0 s | **304** | **222** | 374/512 (73 %) | 1.142 | 2.6 |
+| GPU | float64 | 512 | 512 | 152.4 s | 202 | 138 | 350/512 (68 %) | 1.139 | 2.2 |
+| GPU | float32 | 64 | 32 | 168.8 s | 23 | 16 | 46/64 (72 %) | 1.124 | 3.0 |
+| GPU | float64 | 64 | 32 | 155.3 s | 25 | 16 | 42/64 (66 %) | 1.130 | 2.8 |
+| CPU | float64 | 64 | 32 | 105.3 s | 36 | 30 | 53/64 (83 %) | 1.076 | 2.8 |
 
 ```{warning}
-**Read the R̂ column.** *None* of these rows converged — the bar is max split-R̂
-< 1.01 and min ESS in the hundreds, and every row is far outside it with zero
-divergences to warn you. `mcmc_hmc` ships a fixed `n_leapfrog_steps=10`, which
-is not tuned for any particular posterior. These are throughput numbers for the
-*hardware*, not a statement that a catalog fit at these settings gives you
-posteriors you can use. Rank on seconds-per-effective-sample only among rows
-that clear the bar; here that set is empty.
+**Neither rate is a posterior rate — read the ESS column.** About 73 % of
+galaxies individually clear max split-R̂ < 1.01 with zero divergences, and the
+minimum ESS *among exactly those galaxies* is **2.6 of 500 draws**. R̂ passes and
+the chain has still taken about two independent steps: split-R̂ compares the
+variances of two chain halves, and both halves are equally badly mixed. So the
+count of usable posteriors per GPU-minute here is **zero**, not 222.
+`mcmc_hmc` ships a fixed `n_leapfrog_steps=10`, which is not tuned for any
+particular posterior, and the 2026-08-20 campaign found L = 150 the first setting
+to approach the bar on a different model. These are throughput numbers for the
+*hardware*. Rank on seconds-per-effective-sample only among rows that clear the
+whole bar; here that set is empty.
 ```
 
-Three practical rules fall out:
+Four practical rules fall out:
 
-- **`forward_chunk_size` is the biggest lever — worth 8.5x (float64) to 13.4x
+- **`forward_chunk_size` is the biggest lever — worth 8.1x (float64) to 13.2x
   (float32)** going from K = 32 to K = 512. Use the largest K your VRAM allows.
-- **float32 is worth 1.77x at K = 512 and ~1.1x at K = 32.** The posterior
-  gradient in isolation is 3.60x faster in float32 at batch 2048, 1.97x at 512,
-  and within noise of 1.0 below batch 128. **The "GeForce runs float64 at 1/64"
+- **float32 is worth ~1.5–1.8x at K = 512 and nothing at K = 32.** The posterior
+  gradient in isolation is 3.6x faster in float32 at batch 2048, 1.9x at 512, and
+  within noise of 1.0 below batch 128. **The "GeForce runs float64 at 1/64"
   figure does not transfer**: this workload is bandwidth- and dispatch-bound, not
   FP64-ALU-bound.
+- **The CPU still wins the narrow cell**, 1.48x at K = 32. The GPU only pays off
+  once K is large enough to leave the dispatch floor.
 - **VRAM is not the constraint; XLA's preallocation is.** The allocator
-  high-water mark across every cell above is 91–232 MB on a 12 GB card, but each
+  high-water mark across every cell above is 96–258 MB on a 12 GB card, but each
   process reserves ~75 % of the card up front, so a second concurrent tengri GPU
-  process OOMs. Run one at a time, or set
-  `XLA_PYTHON_CLIENT_MEM_FRACTION` explicitly.
+  process OOMs. Run one at a time, or set `XLA_PYTHON_CLIENT_PREALLOCATE=false`
+  (what these rows use) or `XLA_PYTHON_CLIENT_MEM_FRACTION` explicitly.
 
 ```{warning}
 **`mcmc_nuts` does not finish at catalog scale on this card.** Every NUTS cell in
 the 2026-08-30 campaign timed out — including one capped to at most *three*
 leapfrogs per step (`max_num_doublings=2`), against an HMC cell of the same
-shape and budget that finished in 30 s. The CPU fails the same way, so it is not
-a GPU artifact. For a catalog fit on an accelerator today, `mcmc_hmc` is the
-only one of the two vectorized backends that completes — with the convergence
-caveat above.
+shape and budget that finished in 30 s, and including the smallest cell the
+harness can express (8 galaxies, 50 warmup + 100 draws). The CPU fails the same
+way, so it is not a GPU artifact, and the tree-depth cap is not the driver. For a
+catalog fit on an accelerator today, `mcmc_hmc` is the only one of the two
+vectorized backends that completes — with the convergence caveat above.
 ```
 
 ## float32 on CUDA: set the matmul precision

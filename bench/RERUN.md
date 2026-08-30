@@ -86,16 +86,23 @@ When a benchmark is rerun:
 
   ```bash
   # the whole campaign is in the report's Reproduce section; the headline cell:
+  XLA_PYTHON_CLIENT_PREALLOCATE=false \
   python bench/scripts/benchmark_catalog_throughput.py \
-      --method mcmc_hmc --dtype f32 --n-gal 2048 --chunk 512 \
+      --method mcmc_hmc --dtype f32 --n-gal 512 --chunk 512 \
       --warmup 400 --burnin 0 --samples 500 \
-      --json bench/results/gpu_catalog_throughput.json
+      --json bench/results/gpu_catalog_throughput.json --tag rtx3060
   ```
+
+  The headline is **304 galaxies/GPU-minute raw, 222 of them clearing max
+  split-R-hat < 1.01, and none of them usable** (min ESS 2.6 of 500 draws among
+  exactly those). Every `mcmc_nuts` cell timed out. Measured on `main` at
+  `fe6bda468`, i.e. after #2090.
 
   **Re-run when** any of these move, because each one invalidates the table:
   the catalog MCMC engine (`inference/backends/mcmc/catalog.py`), the
-  `DEFAULT_MAP_INIT_STEPS = 300` warm start, `WavePrecomp`'s default
-  `band_integration`, or the blackjax version. Note the numbers are for the
+  `DEFAULT_MAP_INIT_STEPS = 300` warm start, `mcmc_hmc`'s default
+  `n_leapfrog_steps = 10`, `WavePrecomp`'s default `band_integration`, or the
+  blackjax version. Note the numbers are for the
   benchmark's own D = 3 dpl fixture at SNR 20 — they are a throughput
   characterization of the *machine*, not a convergence claim about tengri,
   and the report says so at length.

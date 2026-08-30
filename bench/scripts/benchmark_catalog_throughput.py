@@ -298,60 +298,135 @@ def device_peak_bytes():
 
 
 def _diagnostics(cp, max_gal):
-    """max split-R-hat / min ESS over the catalog, plus the dead-chain count.
+    """Per-catalog convergence, reported as three disjoint counts plus the extremes.
 
-    Reported over the first ``max_gal`` galaxies (all of them by default). A
-    galaxy whose chain never moved raises from ``Posterior.rhat`` by design
-    (#1438); those are counted, not silently dropped, because a frozen chain
-    scores R-hat ~1.0 and would otherwise read as a converged win.
+    Reported over the first ``max_gal`` galaxies (all of them by default). Every
+    galaxy in the catalog lands in exactly one of three buckets, and the point
+    of separating them is that two of the three are invisible in a wall clock:
+
+    * **converged** — max split-R-hat over its parameters is below
+      :data:`MAX_RHAT` and it reported no divergence.
+    * **frozen** — every draw of every parameter is identical, so
+      ``Posterior.rhat`` raises by design (#1438). Split R-hat cannot see this
+      (both variances are zero, so it reads ~1.0) and the divergence count is 0,
+      so a frozen galaxy would otherwise be counted as a converged win. PR #2027
+      Finding 14 measured 3.1 % of galaxies frozen with zero divergences.
+    * **unconverged** — everything else: it moved, and it did not mix.
+
+    Divergence rates use :func:`~tengri.inference.backends.mcmc._shared.total_draws`
+    rather than ``n_samples``. ``n_samples`` is recorded per chain while
+    ``n_divergent`` is summed over every chain, so dividing one by the other
+    over-reports by the chain count (#2087 measured 400 % on a 4-chain fit).
+    The catalog path runs one chain per galaxy, so the two agree *here* — the
+    helper is used anyway so this stays right if that ever changes.
     """
     from tengri.analysis.diagnostics.autocorrelation import effective_sample_size
+    from tengri.inference.backends.mcmc._shared import total_draws
 
     n_checked = min(len(cp.posteriors), max_gal)
     worst_rhat, worst_rhat_param = -np.inf, None
     least_ess, least_ess_param = np.inf, None
-    n_dead = 0
+    least_ess_conv = np.inf
+    n_frozen = n_converged = 0
+    n_div_total = n_draws_total = 0
     for i in range(n_checked):
         post = cp.posteriors[i]
+        diag = post.diagnostics or {}
+        n_div_i = int(diag.get("n_divergent", 0) or 0)
+        n_div_total += n_div_i
+        if "n_samples" in diag:
+            n_draws_total += total_draws(diag)
         try:
             rh = post.rhat()
         except ValueError:
-            n_dead += 1
+            n_frozen += 1
             continue
+        worst_i = -np.inf
         for name, val in rh.items():
-            if np.isfinite(val) and val > worst_rhat:
-                worst_rhat, worst_rhat_param = float(val), name
+            if np.isfinite(val) and val > worst_i:
+                worst_i = float(val)
+                if worst_i > worst_rhat:
+                    worst_rhat, worst_rhat_param = worst_i, name
+        converged_i = bool(np.isfinite(worst_i) and worst_i < MAX_RHAT and n_div_i == 0)
+        n_converged += converged_i
         ess = effective_sample_size({k: np.asarray(v) for k, v in post.samples.items()})
         for name, rec in ess.items():
             val = rec["ess"] if isinstance(rec, dict) else rec
-            if np.isfinite(val) and val < least_ess:
+            if not np.isfinite(val):
+                continue
+            if val < least_ess:
                 least_ess, least_ess_param = float(val), name
+            # The catalog-wide min ESS is set by the worst galaxy in the tail,
+            # which is by construction one of the galaxies that did NOT clear
+            # the R-hat bar. Quoting it beside a converged-galaxy rate would
+            # mismatch the two columns, so the converged subset gets its own.
+            if converged_i and val < least_ess_conv:
+                least_ess_conv = float(val)
     return {
         "n_gal_checked": n_checked,
-        "n_dead_chains": n_dead,
+        "n_gal_converged": n_converged,
+        "n_frozen_chains": n_frozen,
+        "n_gal_unconverged": n_checked - n_converged - n_frozen,
+        "frac_converged": (n_converged / n_checked) if n_checked else None,
+        "divergence_rate": (n_div_total / n_draws_total) if n_draws_total else None,
         "max_rhat": None if not np.isfinite(worst_rhat) else worst_rhat,
         "max_rhat_param": worst_rhat_param,
         "min_ess": None if not np.isfinite(least_ess) else least_ess,
         "min_ess_param": least_ess_param,
+        "min_ess_converged": None if not np.isfinite(least_ess_conv) else least_ess_conv,
     }
 
 
 def _run_and_time(cat, method, K, devices, key, run_kw):
-    """One ``CatalogFitter.run``, timed, with the LUT-bias warning captured."""
+    """One ``CatalogFitter.run``, timed, with the LUT-bias warning captured.
+
+    A :class:`~tengri.config.exceptions.DeadFitError` is caught and returned as
+    a refusal rather than allowed to abort the sweep. Since #2090 the
+    window-adaptation backends refuse to sample when the final warmup window is
+    >=90 % divergent, and the PR names this caller explicitly: *"Drivers that
+    loop over galaxies should catch it and record the galaxy as a failed fit."*
+    A benchmark that dies on one bad galaxy reports nothing; one that swallows
+    the refusal reports a throughput number over a catalog it silently shrank.
+    Neither is acceptable, so the refusal becomes a **column**.
+
+    Note the catalog-vectorized path cannot raise *per galaxy* — ``run_one`` is
+    inside ``lax.map``/``vmap``, where a Python raise is not expressible — so a
+    refusal here fails the whole cell. That is itself worth recording, and it is
+    why ``refused`` is a property of the row rather than a per-galaxy count.
+
+    Returns ``(wall, cp, bias, refusal)``; on a refusal ``cp`` is ``None`` and
+    ``refusal`` is a dict carrying the divergent fraction and the adapted step
+    size the sampler refused on.
+    """
+    from tengri.config.exceptions import DeadFitError
+
     with warnings.catch_warnings(record=True) as caught:
         warnings.simplefilter("always")
         t0 = time.perf_counter()
-        cp = cat.run(
-            method, key=key, forward_chunk_size=K, devices=devices, verbose=False, **run_kw
-        )
-        jax.block_until_ready(cp[0].samples)
+        try:
+            cp = cat.run(
+                method, key=key, forward_chunk_size=K, devices=devices, verbose=False, **run_kw
+            )
+            jax.block_until_ready(cp[0].samples)
+        except DeadFitError as exc:
+            return (
+                time.perf_counter() - t0,
+                None,
+                None,
+                {
+                    "reason": "DeadFitError",
+                    "warmup_divergence_frac": float(exc.warmup_divergence_frac),
+                    "step_size": float(exc.step_size),
+                    "message": str(exc)[:400],
+                },
+            )
         wall = time.perf_counter() - t0
     bias = None
     for w in caught:
         est = getattr(w.message, "gradient_error_estimate", None)
         if est is not None:
             bias = float(est)
-    return wall, cp, bias
+    return wall, cp, bias, None
 
 
 #: Fields stamped onto every row, not only into ``meta``. A campaign writes GPU
@@ -655,7 +730,8 @@ def main(argv=None):
     print(f"\n  forward_chunk_size (K) sweep  [warmup={args.warmup}, samples={args.samples}]")
     print(
         f"  {'method':<10} {'N':>6} {'K':>5} {'cold_s':>9} {'warm_s':>9} {'compile_s':>10} "
-        f"{'gal/s':>9} {'gal/GPUmin':>11} {'maxRhat':>9} {'minESS':>8} {'div':>5} {'peakGiB':>8}"
+        f"{'gal/GPUmin':>11} {'conv/min':>9} {'conv/N':>10} {'maxRhat':>9} {'minESS':>8} "
+        f"{'div':>5} {'peakGiB':>8}"
     )
     prev_peak = device_peak_bytes()
     for method in args.method:
@@ -666,8 +742,44 @@ def main(argv=None):
             for K in sorted(args.chunk):  # ascending: peak_bytes_in_use is monotone
                 if n_gal < K:
                     continue
-                cold, _, bias = _run_and_time(cat, method, K, None, key, run_kw)
-                warm, cp, _ = _run_and_time(cat, method, K, None, key, run_kw)
+                cold, _, bias, refused = _run_and_time(cat, method, K, None, key, run_kw)
+                if refused is None:
+                    warm, cp, _, refused = _run_and_time(cat, method, K, None, key, run_kw)
+                if refused is not None:
+                    # #2090: the sampler refused a dead warmup. Record the cell
+                    # as a failed fit and carry on -- a sweep that aborts on one
+                    # bad cell reports nothing, and one that swallows the
+                    # refusal reports a rate over a catalog it silently shrank.
+                    row = stamp(
+                        {
+                            "mode": "throughput",
+                            "method": method,
+                            "dtype": args.dtype,
+                            "dtype_flags": flags,
+                            "n_gal": n_gal,
+                            "chunk": K,
+                            "devices": 1,
+                            "n_warmup": args.warmup,
+                            "n_samples": args.samples,
+                            "max_num_doublings": args.max_doublings,
+                            "n_leapfrog": args.n_leapfrog,
+                            "refused": refused,
+                            "n_gal_converged": 0,
+                            "converged": False,
+                        },
+                        meta,
+                    )
+                    rows.append(row)
+                    if args.json:
+                        write_json(args.json, [row], meta)
+                    print(
+                        f"  {method:<10} {n_gal:>6} {K:>5}   REFUSED (DeadFitError, "
+                        f"warmup divergent fraction "
+                        f"{refused['warmup_divergence_frac']:.2f}) — recorded as a "
+                        f"failed cell, not dropped",
+                        flush=True,
+                    )
+                    continue
                 diag = _diagnostics(cp, args.diag_max_gal)
                 peak = device_peak_bytes()
                 dpeak = None if (peak is None or prev_peak is None) else peak - prev_peak
@@ -699,11 +811,20 @@ def main(argv=None):
                 if row["min_ess"]:
                     row["s_per_eff_sample"] = round(warm / (row["min_ess"] * n_gal), 6)
                     row["eff_samples_per_gpu_min"] = round(60.0 * row["min_ess"] * n_gal / warm, 1)
+                if row["frac_converged"] is not None:
+                    # The figure that is actually comparable to a published
+                    # "posteriors per GPU-minute": the rate counting only the
+                    # galaxies that cleared max split-R-hat < MAX_RHAT with no
+                    # divergence. A rate over the whole catalog counts chains
+                    # nobody can use.
+                    row["converged_gal_per_gpu_min"] = round(
+                        60.0 * n_gal * row["frac_converged"] / warm, 1
+                    )
                 row["converged"] = bool(
                     row["max_rhat"] is not None
                     and row["max_rhat"] < MAX_RHAT
                     and row["divergences"] == 0
-                    and row["n_dead_chains"] == 0
+                    and row["n_frozen_chains"] == 0
                 )
                 stamp(row, meta)
                 rows.append(row)
@@ -714,13 +835,15 @@ def main(argv=None):
                     write_json(args.json, [row], meta)
                 print(
                     f"  {method:<10} {n_gal:>6} {K:>5} {cold:>9.2f} {warm:>9.2f} "
-                    f"{cold - warm:>10.2f} {n_gal / warm:>9.1f} "
+                    f"{cold - warm:>10.2f} "
                     f"{60.0 * n_gal / warm:>11.0f} "
+                    f"{row.get('converged_gal_per_gpu_min', float('nan')):>9.0f} "
+                    f"{row['n_gal_converged']:>4}/{row['n_gal_checked']:<5} "
                     f"{(row['max_rhat'] if row['max_rhat'] is not None else float('nan')):>9.4f} "
                     f"{(row['min_ess'] if row['min_ess'] is not None else float('nan')):>8.1f} "
                     f"{row['divergences']:>5} "
                     f"{(peak / 2**30 if peak else float('nan')):>8.2f}"
-                    + ("" if row["converged"] else "   NON-CONVERGED"),
+                    + ("" if row["converged"] else "   CATALOG-MAX NON-CONVERGED"),
                     flush=True,
                 )
 
@@ -763,7 +886,7 @@ def main(argv=None):
                     "converged": bool(
                         dd["max_rhat"] is not None
                         and dd["max_rhat"] < MAX_RHAT
-                        and dd["n_dead_chains"] == 0
+                        and dd["n_frozen_chains"] == 0
                     ),
                 }
             )

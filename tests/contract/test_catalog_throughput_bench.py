@@ -117,10 +117,16 @@ def test_methods_match_catalog_fitter_vmappable(bench) -> None:
 
 
 class _FakePosterior:
-    def __init__(self, rhat, samples, dead=False):
+    def __init__(self, rhat, samples, dead=False, n_divergent=0, n_chains=1):
         self._rhat = rhat
         self.samples = samples
         self._dead = dead
+        n_draws = len(next(iter(samples.values()))) if samples else 0
+        self.diagnostics = {
+            "n_divergent": n_divergent,
+            "n_samples": n_draws,
+            "n_chains": n_chains,
+        }
 
     def rhat(self):
         if self._dead:
@@ -151,12 +157,21 @@ def test_diagnostics_takes_the_worst_rhat_over_the_catalog(bench) -> None:
     assert diag["max_rhat"] == pytest.approx(1.211)
     assert diag["max_rhat_param"] == "b"
     assert diag["n_gal_checked"] == 3
-    assert diag["n_dead_chains"] == 0
+    assert diag["n_frozen_chains"] == 0
     assert diag["min_ess"] is not None and diag["min_ess"] > 0
+    # Two galaxies below 1.01, one (R-hat 1.211) above.
+    assert diag["n_gal_converged"] == 2
+    assert diag["n_gal_unconverged"] == 1
+    assert diag["frac_converged"] == pytest.approx(2 / 3)
 
 
-def test_diagnostics_counts_dead_chains_rather_than_dropping_them(bench) -> None:
-    """A frozen chain scores R-hat ~1.0; it must not read as a converged win."""
+def test_diagnostics_counts_frozen_chains_rather_than_dropping_them(bench) -> None:
+    """A frozen chain scores R-hat ~1.0; it must not read as a converged win.
+
+    #2027 Finding 14 measured 3.1 % of galaxies frozen with zero divergences.
+    Frozen, converged and unconverged are three disjoint counts here precisely
+    so a frozen galaxy cannot be silently absorbed into either of the others.
+    """
     cp = _FakeCatalogPosterior(
         [
             _FakePosterior({"a": 1.001}, _chain(seed=1)),
@@ -164,8 +179,40 @@ def test_diagnostics_counts_dead_chains_rather_than_dropping_them(bench) -> None
         ]
     )
     diag = bench._diagnostics(cp, 10_000)
-    assert diag["n_dead_chains"] == 1
+    assert diag["n_frozen_chains"] == 1
+    assert diag["n_gal_converged"] == 1
+    assert diag["n_gal_unconverged"] == 0
+    assert (
+        diag["n_gal_converged"] + diag["n_gal_unconverged"] + diag["n_frozen_chains"]
+        == diag["n_gal_checked"]
+    )
     assert diag["max_rhat"] == pytest.approx(1.001)
+
+
+def test_a_galaxy_with_divergences_is_not_counted_converged(bench) -> None:
+    cp = _FakeCatalogPosterior(
+        [
+            _FakePosterior({"a": 1.001}, _chain(seed=1), n_divergent=3),
+            _FakePosterior({"a": 1.002}, _chain(seed=2)),
+        ]
+    )
+    diag = bench._diagnostics(cp, 10_000)
+    assert diag["n_gal_converged"] == 1
+    assert diag["n_gal_unconverged"] == 1
+
+
+def test_divergence_rate_uses_total_draws_not_n_samples(bench) -> None:
+    """#2087: ``n_samples`` is per chain, ``n_divergent`` is summed over chains.
+
+    Dividing one by the other over-reports by the chain count — it read 400 %
+    on a 4-chain fit. The rate must come out of ``total_draws``.
+    """
+    cp = _FakeCatalogPosterior(
+        [_FakePosterior({"a": 1.5}, _chain(n=100, seed=1), n_divergent=100, n_chains=4)]
+    )
+    diag = bench._diagnostics(cp, 10_000)
+    # 100 divergences against 4 chains x 100 draws = 25 %, not 100 %.
+    assert diag["divergence_rate"] == pytest.approx(0.25)
 
 
 def test_diag_max_gal_caps_the_inspection(bench) -> None:
@@ -178,6 +225,52 @@ def test_diag_max_gal_caps_the_inspection(bench) -> None:
 
 def test_max_rhat_bar_is_the_house_bar(bench) -> None:
     assert bench.MAX_RHAT == 1.01
+
+
+# ── 2b. the #2090 refusal ───────────────────────────────────────────
+
+
+class _RefusingCatalogFitter:
+    """Stands in for a ``CatalogFitter`` whose sampler refuses a dead warmup."""
+
+    def __init__(self):
+        self.calls = 0
+
+    def run(self, *args, **kwargs):
+        from tengri.config.exceptions import DeadFitError
+
+        self.calls += 1
+        raise DeadFitError(
+            "warmup ended >=90% divergent; refusing to sample",
+            warmup_divergence_frac=1.0,
+            step_size=1.2e-9,
+        )
+
+
+def test_dead_fit_error_becomes_a_row_not_a_crash(bench) -> None:
+    """#2090: a driver looping over galaxies must record the failure, not die.
+
+    The catalog-vectorized path cannot raise per galaxy (``run_one`` lives
+    inside ``lax.map``), so a refusal fails the whole cell. Either way a sweep
+    that propagates it reports nothing at all.
+    """
+    cat = _RefusingCatalogFitter()
+    wall, cp, bias, refused = bench._run_and_time(cat, "mcmc_nuts", 32, None, None, {})
+    assert cp is None
+    assert bias is None
+    assert wall >= 0.0
+    assert refused["reason"] == "DeadFitError"
+    assert refused["warmup_divergence_frac"] == pytest.approx(1.0)
+    assert refused["step_size"] == pytest.approx(1.2e-9)
+    assert cat.calls == 1
+
+
+def test_run_and_time_returns_four_values(bench) -> None:
+    """The refusal slot is part of the contract, so callers cannot ignore it."""
+    import inspect
+
+    src = inspect.getsource(bench._run_and_time)
+    assert "return wall, cp, bias, None" in src
 
 
 # ── 3. JSON bookkeeping ─────────────────────────────────────────────
