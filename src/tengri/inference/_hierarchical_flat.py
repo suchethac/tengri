@@ -755,13 +755,16 @@ def run_flat_sampler(
         distribution (#1537), so exceeding this raises rather than returning
         plausible wrong error bars.
     ghmc_alpha : float
-        GHMC momentum persistence, in [0, 1] [dimensionless]. Same default as
-        the single-galaxy ``run_ghmc``. The GHMC driver always uses a diagonal
-        mass matrix (momentum-generator constraint), regardless of
-        ``dense_mass_matrix``.
+        GHMC momentum persistence, in [0, 1] [dimensionless]. Hand-set here, and
+        no longer shared with the single-galaxy ``run_ghmc``: that path adapts
+        both this and ``ghmc_delta`` from a MEADS ensemble and defaults them to
+        ``None`` (see ``bench/reports/2026-08-30_ghmc_meads_adaptation.md``).
+        This driver still window-adapts, so it still needs a number. The GHMC
+        driver always uses a diagonal mass matrix (momentum-generator
+        constraint), regardless of ``dense_mass_matrix``.
     ghmc_delta : float
-        GHMC proposal step-size scaling [dimensionless]. Same default as the
-        single-galaxy ``run_ghmc``.
+        GHMC proposal step-size scaling [dimensionless]. Hand-set here; see
+        ``ghmc_alpha``.
     mclmc_target_accept_rate : float
         Metropolis acceptance target for the ``adjusted_mclmc`` driver's
         tuner [dimensionless]. Same default (0.65) as the single-galaxy

@@ -3159,7 +3159,8 @@ class Fitter:
             - ``"mcmc_hmc"``: Standard HMC (fixed trajectory length)
             - ``"mcmc_dynamic_hmc"``: Dynamic HMC (adaptive trajectory)
             - ``"mcmc_ghmc"``: Generalized HMC (**broken**: R-hat ~ 2.5-3.1,
-              ESS ~ 1 on D=6-7 mocks)
+              ESS ~ 1 on D=6-8 mocks; MEADS adaptation did not fix it, see
+              ``bench/reports/2026-08-30_ghmc_meads_adaptation.md``)
             - ``"mcmc_mclmc"``: MCLMC (**broken**: R-hat ~ 1.7, ESS ~ 1)
             - ``"mcmc_adjusted_mclmc"``: MCLMC + Metropolis correction
             - ``"mcmc_ess"``: Elliptical Slice Sampling (gradient-free)

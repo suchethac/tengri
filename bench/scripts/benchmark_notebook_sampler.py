@@ -30,6 +30,7 @@ Usage::
 from __future__ import annotations
 
 import argparse
+import json
 import os
 import time
 
@@ -70,6 +71,34 @@ _NB05_FILTERS = (
     "2mass_j", "2mass_h", "2mass_ks", "wise_w1", "wise_w2", "wise_w3", "wise_w4",
 )
 _NB01_FILTERS = ("sdss_u", "sdss_g", "sdss_r", "sdss_i", "sdss_z", "wise_w1")
+_NB00_FILTERS = (
+    "galex_fuv", "galex_nuv", "sdss_u", "sdss_g", "sdss_r", "sdss_i", "sdss_z",
+    "2mass_j", "2mass_h", "2mass_ks", "wise_w1", "wise_w2",
+)
+
+
+def _build_nb00(ssp):
+    """``00_quickstart``: tsnorm SFH, two-component Calzetti, fixed z. D=7, 12 bands.
+
+    Mirrors ``benchmark_quickstart_sampler.py``'s ``build_model`` so the rows here
+    stay comparable with ``bench/reports/2026-08-17_quickstart_nuts_vs_hmc.md``,
+    which is the whole point of measuring this configuration again.
+    """
+    return SEDModel.build(
+        ssp_data=ssp,
+        observation=Observation(photometry=Photometry.from_names(list(_NB00_FILTERS))),
+        approx=WavePrecomp(),
+        sfh=builders.sfh.tsnorm(all_params=FREE),
+        dust_attenuation=builders.dust.two_component(
+            all_params=FIXED, law="calzetti", tau_bc=Uniform(0.0, 1.0)
+        ),
+        neb=builders.neb.none(),
+        # Free metallicity is what makes this D=7 rather than D=6, and the
+        # 2026-08-17 report's L=160 row names ``met_logzsol`` as its
+        # worst-mixing parameter -- so it was free there too.
+        met={"logzsol": Uniform(-2.0, 0.2)},
+        redshift=Fixed(0.05),
+    )
 
 
 def _build_nb05(ssp):
@@ -79,13 +108,13 @@ def _build_nb05(ssp):
         observation=Observation(photometry=Photometry.from_names(list(_NB05_FILTERS))),
         approx=WavePrecomp(),
         sfh=builders.sfh.tsnorm(all_params=FREE),
-        dust=builders.dust.two_component(
+        dust_attenuation=builders.dust.two_component(
             all_params=FIXED,
-            law_bc="calzetti",
+            law="calzetti",
             tau_bc=Uniform(0.0, 1.0),
             tau_diff=Uniform(0.0, 1.0),
-            emission=builders.dust.emission.modified_blackbody(all_params=FIXED),
         ),
+        dust_emission=builders.dust.emission.modified_blackbody(all_params=FIXED),
         neb=builders.neb.none(),
         met={"logzsol": Uniform(-1.5, 0.3)},
         redshift=Fixed(0.05),
@@ -93,7 +122,7 @@ def _build_nb05(ssp):
 
 
 def _build_nb01(ssp):
-    """``01_why_jax``: the minimal mock-recovery recipe, six bands. D=5."""
+    """``01_why_jax``: the minimal mock-recovery recipe, six bands. D=7."""
     return SEDModel.build(
         ssp_data=ssp,
         observation=Observation(photometry=Photometry.from_names(list(_NB01_FILTERS))),
@@ -104,6 +133,29 @@ def _build_nb01(ssp):
 #: Per-notebook setup. ``shipped`` mirrors the notebook's committed fit call, so
 #: the baseline row is what a reader actually runs -- not a tuned stand-in.
 NOTEBOOKS = {
+    "00": dict(
+        build=_build_nb00,
+        # PRNGKey(9) at SNR 30, not this file's usual (1, 20): these are
+        # ``benchmark_quickstart_sampler.py``'s own values, and the whole reason
+        # to carry nb00 here is that its rows stay comparable with
+        # 2026-08-17_quickstart_nuts_vs_hmc.md. Changing them silently would
+        # produce a different mock and a baseline that looks like a regression.
+        seed=9,
+        snr=30.0,
+        n_chains=4,
+        shipped=dict(
+            method="mcmc_nuts",
+            n_warmup=1500,
+            n_samples=250,
+            n_burnin=0,
+            dense_mass_matrix=False,
+            target_accept_rate=0.9,
+        ),
+        note=(
+            "Mirrors benchmark_quickstart_sampler.py's own NUTS row so the table "
+            "stays comparable with 2026-08-17_quickstart_nuts_vs_hmc.md."
+        ),
+    ),
     "01": dict(
         build=_build_nb01,
         seed=1,
@@ -132,7 +184,11 @@ NOTEBOOKS = {
 }
 
 
-def configurations(nb: str, quick: bool, dense: bool) -> dict[str, dict]:
+#: Sampler families a row can belong to. ``--methods`` selects a subset.
+FAMILIES = ("nuts", "hmc", "ghmc")
+
+
+def configurations(nb: str, quick: bool, dense: bool, families=FAMILIES) -> dict[str, dict]:
     """Sampler recipes to compare, keyed by label."""
     cfg = NOTEBOOKS[nb]
     shipped = dict(cfg["shipped"])
@@ -140,20 +196,42 @@ def configurations(nb: str, quick: bool, dense: bool) -> dict[str, dict]:
         shipped["n_warmup"] = min(shipped["n_warmup"], 300)
         shipped["n_samples"] = min(shipped["n_samples"], 150)
 
-    configs = {"nuts (shipped)": shipped}
+    configs = {}
+    if "nuts" in families:
+        configs["nuts (shipped)"] = shipped
 
     draws = 150 if quick else max(600, shipped["n_samples"])
     warmup = 300 if quick else 1000
-    leapfrogs = (20, 40) if quick else (20, 40, 80, 160)
-    for leapfrog in leapfrogs:
-        configs[f"hmc L={leapfrog}"] = dict(
-            method="mcmc_hmc",
-            n_warmup=warmup,
-            n_samples=draws,
-            n_leapfrog_steps=leapfrog,
-            dense_mass_matrix=dense,
-            target_accept_rate=0.9,
-        )
+    if "hmc" in families:
+        leapfrogs = (20, 40) if quick else (20, 40, 80, 160)
+        for leapfrog in leapfrogs:
+            configs[f"hmc L={leapfrog}"] = dict(
+                method="mcmc_hmc",
+                n_warmup=warmup,
+                n_samples=draws,
+                n_leapfrog_steps=leapfrog,
+                dense_mass_matrix=dense,
+                target_accept_rate=0.9,
+            )
+    if "ghmc" in families:
+        # GHMC is one leapfrog per step, so a step is ~L times cheaper than an
+        # HMC row's and the draw budget is scaled up to match: comparing a
+        # 600-draw GHMC against a 600-draw L=160 HMC would be comparing samplers
+        # given 160x different gradient budgets. Warmup is the MEADS ensemble's,
+        # priced at n_warmup * n_ensemble gradients.
+        #
+        # ``allow_unvalidated`` is required while mcmc_ghmc is tier="broken" --
+        # which is exactly the claim these rows exist to settle. Remove it if
+        # and only if the tier moves.
+        for ensemble in ((32,) if quick else (32, 64)):
+            configs[f"ghmc meads E={ensemble}"] = dict(
+                method="mcmc_ghmc",
+                n_warmup=warmup,
+                n_burnin=200 if quick else 500,
+                n_samples=draws * 4,
+                n_ensemble=ensemble,
+                allow_unvalidated=True,
+            )
     return configs
 
 
@@ -175,6 +253,17 @@ def score(posterior, wall: float) -> dict:
     }
 
 
+def _fmt_rhat(value: float) -> str:
+    """Four decimals near the bar, scientific once a chain has actually diverged.
+
+    A fixed ``.4f`` was fine while every row was near 1.0. It is not: a NUTS row
+    on nb05's seed-0 mock reported R-hat 1.4e13, which printed 19 characters wide
+    and ran into the neighboring column, so the whole line became unreadable
+    exactly when it had the most to say.
+    """
+    return f"{value:>10.4f}" if abs(value) < 1e4 else f"{value:>10.3e}"
+
+
 def main() -> None:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--notebook", choices=sorted(NOTEBOOKS), required=True)
@@ -182,18 +271,41 @@ def main() -> None:
     parser.add_argument(
         "--dense", action="store_true", help="dense mass matrix on the HMC rows (memory-hungry)"
     )
+    parser.add_argument(
+        "--methods",
+        default=",".join(FAMILIES),
+        help=f"comma-separated subset of {FAMILIES}",
+    )
+    parser.add_argument(
+        "--seed",
+        type=int,
+        default=None,
+        help=(
+            "override the notebook's own seed. The campaign protocol is six seeds "
+            "per row, ONE FIT PER SUBPROCESS -- a shared process reuses the "
+            "adaptation cache and the compile cache across seeds, so the second "
+            "seed onward is not an independent measurement."
+        ),
+    )
+    parser.add_argument("--json", default=None, help="append one JSON row per config to this file")
     args = parser.parse_args()
 
+    families = tuple(m.strip() for m in args.methods.split(",") if m.strip())
+    unknown = set(families) - set(FAMILIES)
+    if unknown:
+        parser.error(f"unknown --methods entries {sorted(unknown)}; choose from {FAMILIES}")
+
     cfg = NOTEBOOKS[args.notebook]
+    seed = cfg["seed"] if args.seed is None else args.seed
     ssp = tengri.load_ssp("fsps_prsc_miles_chabrier", download=True)
     sed = cfg["build"](ssp)
 
-    key_truth, key_mock, key_fit = jax.random.split(jax.random.PRNGKey(cfg["seed"]), 3)
+    key_truth, key_mock, key_fit = jax.random.split(jax.random.PRNGKey(seed), 3)
     mock = generate_mock(sed, sed.spec.sample(key_truth), key=key_mock, snr=cfg["snr"])
     data = Data(photometry=(np.asarray(mock["flux_obs"]), np.asarray(mock["noise"])))
 
     print(f"notebook {args.notebook}: D = {len(sed.spec.free_params)} free parameters, "
-          f"{cfg['n_chains']} chains")
+          f"{cfg['n_chains']} chains, seed {seed}")
     print(f"adoption bar: max split R-hat < {MAX_RHAT} and {MAX_DIVERGENCES} divergences")
     print(f"note: {cfg['note']}\n")
 
@@ -205,24 +317,37 @@ def main() -> None:
     print("-" * len(header), flush=True)
 
     rows = {}
-    for label, kwargs in configurations(args.notebook, args.quick, args.dense).items():
+    for label, kwargs in configurations(args.notebook, args.quick, args.dense, families).items():
         # A fresh model per row: adaptation caches are keyed on tuning settings
         # (#1853), and a fresh build also keeps the MAP seed identical per row.
         forward = ForwardModel.build(sed=cfg["build"](ssp))
-        seed = forward.fit(
+        map_seed = forward.fit(
             data, method="map", key=key_fit, n_restarts=8, n_steps=800, verbose=False
         )
         started = time.perf_counter()
         posterior = forward.fit(
-            data, key=key_fit, init_from=seed, n_chains=cfg["n_chains"], verbose=False, **kwargs
+            data,
+            key=key_fit,
+            init_from=map_seed,
+            n_chains=cfg["n_chains"],
+            verbose=False,
+            **kwargs,
         )
         rows[label] = score(posterior, time.perf_counter() - started)
         row = rows[label]
         print(
-            f"{label:<20}{row['wall']:>9.1f}{row['rhat']:>10.4f}{row['divergences']:>5}"
+            f"{label:<20}{row['wall']:>9.1f}{_fmt_rhat(row['rhat'])}{row['divergences']:>5}"
             f"{row['min_ess']:>9.1f}{row['sec_per_ess']:>9.3f}  {row['worst']}",
             flush=True,
         )
+        if args.json:
+            with open(args.json, "a") as fh:
+                fh.write(
+                    json.dumps(
+                        {"notebook": args.notebook, "seed": seed, "config": label, **row}
+                    )
+                    + "\n"
+                )
 
     print("\nverdict (ranked on seconds per effective sample):")
     baseline = rows.get("nuts (shipped)")

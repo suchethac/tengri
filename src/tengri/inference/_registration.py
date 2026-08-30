@@ -277,9 +277,14 @@ register_backend(
     "mcmc_ghmc",
     tier="broken",
     short_doc=(
-        "[POOR MIXING] Generalized HMC, fast (cold ~17s) but R-hat ≈ "
-        "2.5-3.1 and ESS ≈ 1 on D=6-7 mocks even with 1000 warmup + 2000 "
-        "samples. Do not use for science until adapter is fixed; see "
+        "[POOR MIXING] Generalized HMC, fast (cold ~17s) but R-hat ≈ 2.5-3.1 "
+        "and ESS ≈ 1 on D=6-8 photometry mocks. The adapter was the suspect "
+        "and it has now been replaced: window adaptation → "
+        "blackjax.meads_adaptation, the adaptation purpose-built for this "
+        "kernel, and it does NOT fix the mixing on the tsnorm posteriors "
+        "(R-hat 1.8-14, ESS ≈ 1, and MEADS's step size collapses to ~1e-6). "
+        "Do not use for science. Measured six seeds x three notebook models in "
+        "bench/reports/2026-08-30_ghmc_meads_adaptation.md; earlier context in "
         "docs/dev/benchmarks/2026-05-22_inference_backend_validation.md."
     ),
     requires=("blackjax",),

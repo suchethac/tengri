@@ -1015,6 +1015,278 @@ def _ghmc_chain_scan(
 
 
 # ---------------------------------------------------------------------------
+# GHMC / MEADS -- the adaptation BlackJAX ships *for* generalized HMC
+# ---------------------------------------------------------------------------
+
+#: Default adaptation-ensemble size when the caller says ``"auto"``.
+#:
+#: MEADS (Hoffman & Sountsov 2022, Algorithm 3) derives the step size and the
+#: damping from **cross-chain** statistics: a maximum-eigenvalue estimate of the
+#: preconditioned gradient matrix and of the centered position matrix, taken over
+#: the chains in one fold. Both estimators are ratios of sums over the ensemble,
+#: so their variance is set by the *number of chains per fold*, not by the number
+#: of warmup steps. An ensemble of four chains split into four folds leaves one
+#: chain per fold, and both estimators are then undefined.
+#:
+#: 32 with the paper's ``num_folds=4`` gives eight chains per fold, the smallest
+#: size that estimates a D <= 8 covariance's leading eigenvalue at all. The paper
+#: itself runs 128. This is a floor chosen for a single-galaxy fit on a laptop,
+#: not an optimum: raise it when the posterior is wider than the ensemble can
+#: resolve.
+_MEADS_DEFAULT_ENSEMBLE = 32
+
+#: Smallest chains-per-fold MEADS is allowed to run with.
+#:
+#: Two is the absolute floor for ``meads_adaptation``'s ``maximum_eigenvalue``,
+#: whose unbiased ratio estimator divides by ``n * (n - 1)`` over the chains in a
+#: fold: ``n = 1`` is a division by zero and ``n = 2`` is a single off-diagonal
+#: term. Anything at or near that floor is refused rather than silently run,
+#: because the failure mode is not a crash. It is an adapted step size drawn from
+#: noise, which is indistinguishable from the hand-set constants MEADS replaced.
+_MEADS_MIN_CHAINS_PER_FOLD = 4
+
+#: Ensemble dispersion around the seed position [dimensionless, latent units].
+#:
+#: Deliberately ~500x :func:`_vmap_chains`'s ``jitter_scale=1e-3``, and the two
+#: are not interchangeable. ``_vmap_chains`` jitters only to decorrelate chains
+#: that already have a tuned step size; MEADS *reads the ensemble spread as the
+#: posterior scale*. Seeded from a 1e-3 ball, the per-fold ``position_sigma`` is
+#: 1e-3, the preconditioned gradients are 1e-3 of their true size, and MEADS's
+#: ``min(0.5 / sqrt(lambda_max), 1.0)`` saturates at the 1.0 cap on the first
+#: step: a step size chosen by the clamp rather than by the posterior. BlackJAX's
+#: own docstring makes the same point from the other end ("use a dispersed,
+#: full-rank initialization"; a rank-deficient one measured R-hat ~ 5). 0.5 is
+#: O(1) in a latent space whose priors are unit-scaled by construction.
+_MEADS_JITTER_SCALE = 0.5
+
+
+def _resolve_meads_ensemble(n_ensemble, n_chains, n_folds):
+    """Resolve the MEADS adaptation-ensemble size to a concrete, legal int.
+
+    Pure Python, evaluated before any trace, so the ensemble width stays a
+    static shape.
+
+    The ensemble is **not** the same axis as ``n_chains``. ``n_chains`` is how
+    many chains' draws land in the returned ``Posterior`` (the
+    :func:`_vmap_chains` axis); the ensemble is how many chains MEADS runs
+    *during warmup* to estimate the cross-chain statistics it adapts from. They
+    are reconciled rather than duplicated: the ensemble is always a superset, and
+    the sampling chains are seeded from the first ``n_chains`` of the ensemble's
+    warmed-up final states, so nothing is run twice and no warmup is discarded.
+
+    Keeping them separate is what lets ``n_chains=1`` -- the signature default,
+    and what every catalog fit uses -- still get a genuinely adapted step size.
+    Tying the ensemble to ``n_chains`` would have made the default configuration
+    the one case where MEADS degenerates to noise.
+
+    Parameters
+    ----------
+    n_ensemble : int or ``"auto"``
+        ``"auto"`` resolves to ``max(_MEADS_DEFAULT_ENSEMBLE, n_chains)``. An
+        explicit int is honored except that it is still raised to ``n_chains``
+        and rounded up to a multiple of ``n_folds``.
+    n_chains : int
+        Sampling chains; the ensemble can never be smaller.
+    n_folds : int
+        MEADS folds K. BlackJAX requires ``num_chains`` divisible by K, so the
+        resolved size is rounded up.
+
+    Returns
+    -------
+    int
+        Ensemble size, a multiple of ``n_folds``.
+
+    Raises
+    ------
+    ValueError
+        If ``n_folds < 1``, if ``n_ensemble`` is a string other than ``"auto"``,
+        or if an explicit ``n_ensemble`` is too small to give
+        :data:`_MEADS_MIN_CHAINS_PER_FOLD` chains per fold. Refused, not clamped:
+        silently growing an ensemble a caller pinned would hide the memory cost
+        of the second vmap axis they were trying to bound.
+    """
+    n_folds = int(n_folds)
+    if n_folds < 1:
+        raise ValueError(f"n_folds must be >= 1, got {n_folds}")
+    n_chains = max(1, int(n_chains))
+
+    if isinstance(n_ensemble, str):
+        if n_ensemble != "auto":
+            raise ValueError(f"n_ensemble must be an int or 'auto', got {n_ensemble!r}")
+        resolved = max(_MEADS_DEFAULT_ENSEMBLE, n_chains)
+    else:
+        resolved = int(n_ensemble)
+        floor = n_folds * _MEADS_MIN_CHAINS_PER_FOLD
+        if resolved < floor:
+            raise ValueError(
+                f"n_ensemble={resolved} gives {resolved / n_folds:.2g} chains per fold "
+                f"across n_folds={n_folds}. MEADS adapts the step size and the damping "
+                f"from cross-chain statistics within each fold, so fewer than "
+                f"{_MEADS_MIN_CHAINS_PER_FOLD} chains per fold does not estimate them, "
+                f"it fabricates them: BlackJAX's maximum-eigenvalue estimator divides "
+                f"by n*(n-1) over the chains in a fold. Pass n_ensemble >= {floor} (the "
+                f"default 'auto' gives {_MEADS_DEFAULT_ENSEMBLE}), or lower n_folds. "
+                "This is separate from n_chains, which stays whatever you asked for."
+            )
+        resolved = max(resolved, n_chains)
+
+    remainder = resolved % n_folds
+    if remainder:
+        resolved += n_folds - remainder
+    return resolved
+
+
+@functools.partial(jax.jit, static_argnums=(3, 5, 6, 7, 8, 9, 10, 11, 12))
+def _ghmc_meads_scan(
+    init_flat,
+    warmup_key,
+    chain_keys,
+    logdensity_fn_2arg,
+    data_args,
+    n_warmup,
+    n_ensemble,
+    n_folds,
+    alpha_override,
+    delta_override,
+    jitter_scale,
+    low_rank_rank,
+    low_rank_window_fraction,
+):
+    """Outer JIT: MEADS ensemble adaptation + GHMC sampling, one XLA program.
+
+    Replaces the ``blackjax.window_adaptation`` path GHMC used to borrow from
+    HMC. Window adaptation dual-averages a step size against a *target acceptance
+    rate* for a reversible Metropolis step; generalized HMC has no such step (it
+    uses a non-reversible slice update) and its mixing is governed by the damping
+    ``alpha``, which window adaptation cannot see and therefore left at a
+    hand-set constant. MEADS derives both from the ensemble.
+
+    The warmup ensemble's final states are *reused* as the sampling chains'
+    initial states rather than discarded and re-seeded from ``init_flat``. That
+    is why this is one function and not two: MEADS has no separate warmup phase
+    by construction, so throwing its ensemble away would mean paying for warmup
+    and then starting cold anyway.
+
+    Parameters
+    ----------
+    init_flat : ndarray, shape (D,)
+        Seed position in unbounded latent space; the ensemble is dispersed
+        around it [dimensionless].
+    warmup_key : PRNGKey (traced)
+        Split into the ensemble-dispersion key and the MEADS adaptation key.
+    chain_keys : ndarray, shape (n_chains, n_iter, 2)
+        Pre-split per-chain keys. ``n_chains`` is read off this array's leading
+        axis and must not exceed ``n_ensemble``; the caller guarantees that via
+        :func:`_resolve_meads_ensemble`.
+    logdensity_fn_2arg : callable (static)
+        ``log_p(position, data_args)``, the galaxy-agnostic log-posterior.
+    data_args : pytree (traced)
+        Observed data tensors; changing these does NOT trigger recompilation.
+    n_warmup : int (static)
+        MEADS adaptation steps. One leapfrog per step per ensemble chain, so the
+        gradient budget is exactly ``n_warmup * n_ensemble`` and flat -- unlike a
+        NUTS warmup, whose cost per step is posterior-dependent.
+    n_ensemble : int (static)
+        Adaptation-ensemble width; see :func:`_resolve_meads_ensemble`.
+    n_folds : int (static)
+        MEADS folds K.
+    alpha_override, delta_override : float or None (static)
+        ``None`` uses the adapted value [dimensionless]. A float pins it, which
+        is what the old ``alpha=0.8, delta=0.65`` defaults did unconditionally.
+    jitter_scale : float (static)
+        Ensemble dispersion; see :data:`_MEADS_JITTER_SCALE` [dimensionless].
+    low_rank_rank : int or None (static)
+        MEADS-LRD. ``None`` (the default, and BlackJAX's) adapts the *diagonal*
+        momentum metric from each fold. An int instead adapts a rank-``k``
+        ``LowRankInverseMassMatrix`` from the pooled ensemble, which is the
+        obvious thing to reach for given the 1e5-1e8 latent condition numbers
+        ``inference/preconditioning.py`` documents. **Measured, and it does not
+        help**: at ``rank = D`` (i.e. a full dense metric) nb05's best split-R-hat
+        is 1.81 and nb01's 1.46, against a bar of 1.01 -- see
+        ``bench/reports/2026-08-30_ghmc_meads_adaptation.md``. It is exposed so
+        the experiment can be re-run without editing source, and it is off by
+        default because a knob that does not help must not be a default.
+    low_rank_window_fraction : float (static)
+        Only read when ``low_rank_rank`` is set. Fraction of warmup, counted
+        from the end, over which the low-rank covariance accumulates.
+
+    Returns
+    -------
+    positions : ndarray, shape (n_chains, n_iter, D)
+    divergent : ndarray, shape (n_chains, n_iter)
+        Caller trims ``[:, n_burnin:]`` and flattens, matching
+        :func:`_vmap_chains`.
+    step_size : ndarray, shape ()
+    momentum_inv_scale : ndarray, shape (D,)
+        Adapted diagonal momentum scale. GHMC's momentum generator treats this as
+        a diagonal vector, which is why GHMC is always diagonal-metric regardless
+        of ``dense_mass_matrix``.
+    alpha, delta : ndarray, shape ()
+        The adapted (or overridden) damping and slice translation.
+
+    Notes
+    -----
+    JIT: this *is* the jitted entry point. Not vmappable over galaxies as-is --
+    the batched catalog path still uses :func:`_ghmc_full_scan`.
+
+    References
+    ----------
+    .. [1] M. D. Hoffman and P. Sountsov, "Tuning-Free Generalized Hamiltonian
+       Monte Carlo", Proceedings of the 25th International Conference on
+       Artificial Intelligence and Statistics (AISTATS), PMLR 151:7799-7813,
+       2022. https://proceedings.mlr.press/v151/hoffman22a.html
+    """
+    import blackjax
+    from blackjax.adaptation.base import get_filter_adapt_info_fn
+
+    def ld_1arg(pos):
+        """Bind the traced data to the galaxy-agnostic log-posterior."""
+        return logdensity_fn_2arg(pos, data_args)
+
+    jitter_key, adapt_key = jax.random.split(warmup_key)
+    ensemble = init_flat[None, :] + jitter_scale * jax.random.normal(
+        jitter_key, (n_ensemble, init_flat.shape[0]), dtype=init_flat.dtype
+    )
+
+    # ``get_filter_adapt_info_fn()`` with no arguments keeps *nothing*. The
+    # default, ``return_all_adapt_info``, stacks every ensemble state and every
+    # HMCInfo for every warmup step -- n_warmup * n_ensemble * D floats plus the
+    # momentum and the proposal, which at 300 x 32 is already larger than the
+    # posterior being estimated, and is pure overhead here: the adapted values
+    # come back in ``parameters``, not in the info.
+    warmup = blackjax.meads_adaptation(
+        ld_1arg,
+        num_chains=n_ensemble,
+        num_folds=n_folds,
+        adaptation_info_fn=get_filter_adapt_info_fn(),
+        low_rank_rank=low_rank_rank,
+        low_rank_window_fraction=low_rank_window_fraction,
+    )
+    (last_states, parameters), _ = warmup.run(adapt_key, ensemble, num_steps=n_warmup)
+
+    step_size = parameters["step_size"]
+    momentum_inv_scale = parameters["momentum_inverse_scale"]
+    alpha = parameters["alpha"] if alpha_override is None else jnp.asarray(alpha_override)
+    delta = parameters["delta"] if delta_override is None else jnp.asarray(delta_override)
+
+    n_chains = chain_keys.shape[0]
+    states = jax.tree.map(lambda leaf: leaf[:n_chains], last_states)
+    kernel = _get_ghmc_kernel()
+
+    def _step(s, k):
+        """Advance GHMC by one step, returning position and divergence flag."""
+        s, info = kernel(k, s, ld_1arg, step_size, momentum_inv_scale, alpha, delta)
+        return s, (s.position, info.is_divergent)
+
+    def _chain(state, keys):
+        """Run one chain's scan; vmapped over the sampling chains."""
+        return jax.lax.scan(_step, state, keys)[1]
+
+    positions, divergent = jax.vmap(_chain)(states, chain_keys)
+    return positions, divergent, step_size, momentum_inv_scale, alpha, delta
+
+
+# ---------------------------------------------------------------------------
 # Elliptical slice (no warmup: the exact-prior ellipse needs no tuning)
 # ---------------------------------------------------------------------------
 
