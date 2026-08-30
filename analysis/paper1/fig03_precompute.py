@@ -100,7 +100,7 @@ def plot_panel_a(ax, bench_data=None):
             ax.text(
                 exact_val * 1.3,
                 i - bar_width / 2,
-                (f"{speedup:.1f}×" if speedup < 3 else f"{speedup:.0f}×"),
+                (f"{speedup:.1f}×" if speedup < 5 else f"{speedup:.0f}×"),
                 va="center",
                 fontsize=8,
                 color="#F18F01",
