@@ -224,6 +224,9 @@ class Posterior:
         Emission line identifiers.
     eline_wavelengths : ndarray or None
         Rest-frame vacuum wavelengths [Angstrom].
+    _free_names : tuple of str, optional
+        Names of the parameters the sampler moved, for a posterior with no
+        ``_model``. Restored by :meth:`load` from the file :meth:`save` wrote.
 
     Returns
     -------
@@ -359,14 +362,22 @@ class Posterior:
     eline_flux_cov: jnp.ndarray | None = field(default=None, repr=False)
     eline_names: tuple | None = field(default=None, repr=False)
     eline_wavelengths: jnp.ndarray | None = field(default=None, repr=False)
+    #: Free names carried by a posterior with no ``_model``: written by
+    #: :meth:`save` and restored by :meth:`load`, so a reloaded fit judges the
+    #: same columns the live one did (#2087). Last field, so no positional
+    #: construction moves.
+    _free_names: tuple[str, ...] | None = field(default=None, repr=False)
 
     def __post_init__(self):
         """Detect dead MCMC fits (100% divergent or frozen parameters) and warn.
 
         A dead fit is unambiguous when:
-        - ``n_divergent == n_samples``: every transition diverged (all-divergent).
-        - Any free parameter has all identical draws (``np.ptp == 0``) over >= 100
-          draws (frozen parameter). Small test posteriors (< 100 draws) are exempt.
+        - ``n_divergent == n_samples * n_chains``: every kept draw across every
+          chain diverged (all-divergent, #2087).
+        - Any *free* parameter has all identical draws (``np.ptp == 0``) over >= 100
+          draws (frozen parameter). ``Fixed`` parameters are constant by
+          construction and are skipped when the model is known (#2087). Small
+          test posteriors (< 100 draws) are exempt.
 
         Raises no exception (only warns) so the result is still usable for
         inspection. The warning message states the failure signature and remedies
@@ -383,14 +394,25 @@ class Posterior:
         if not self.samples or "n_divergent" not in self.diagnostics:
             return
         from tengri.config.exceptions import DeadFitWarning
+        from tengri.inference.backends.mcmc._shared import total_draws
 
         n_divergent = self.diagnostics.get("n_divergent", 0)
-        n_samples = self.diagnostics.get("n_samples", len(next(iter(self.samples.values()))))
+        n_chains = max(int(self.diagnostics.get("n_chains", 1)), 1)
+        # ``n_samples`` is per chain; ``n_divergent`` is summed over every chain
+        # (#2087). The fallback reads the length of a sample column, which is the
+        # flattened ``(n_chains * n_samples,)`` axis and therefore already a
+        # total, so it is divided back down before ``total_draws`` multiplies it
+        # again -- otherwise a posterior carrying ``n_chains`` but no
+        # ``n_samples`` reports twice the draws it has.
+        n_samples = self.diagnostics.get(
+            "n_samples", len(next(iter(self.samples.values()))) // n_chains
+        )
+        n_total = total_draws(self.diagnostics, n_samples=n_samples)
 
-        # Check all-divergent: n_divergent == n_samples
-        if n_divergent == n_samples and n_samples > 0:
+        # Check all-divergent: every kept draw, across every chain, diverged.
+        if n_divergent == n_total and n_total > 0:
             msg = (
-                f"dead fit: {n_divergent}/{n_samples} divergent transitions. "
+                f"dead fit: {n_divergent}/{n_total} divergent transitions. "
                 f"R-hat cannot detect this: the chain moved nowhere. "
                 f"Remedies: shorter warmup, lower target_accept_rate, smaller step_size, "
                 f"or dense_mass_matrix=False (issue #1999)."
@@ -398,25 +420,64 @@ class Posterior:
             warnings.warn(msg, DeadFitWarning, stacklevel=3)
             return
 
-        # Check frozen parameters: any param with all identical draws (np.ptp == 0)
-        # over >= 100 draws (small test posteriors are exempt)
-        if n_samples >= 100:
-            frozen_params = []
-            for param_name, param_samples in self.samples.items():
-                param_array = np.asarray(param_samples)
-                # ptp = peak-to-peak (max - min)
-                if np.ptp(param_array) == 0:
-                    frozen_params.append(param_name)
+        # Check frozen parameters: a FREE parameter with all identical draws
+        # (np.ptp == 0) over >= 100 draws. Fixed parameters are constant by
+        # construction (#2087); without a model every column is checked.
+        # ``np.ptp`` runs over the flattened draw axis, so the gate and the
+        # message below count the same draws it does: the total, not the
+        # per-chain count (#2087).
+        if n_total >= 100:
+            free = self.free_names
+            candidates = (
+                list(self.samples) if free is None else [n for n in free if n in self.samples]
+            )
+            frozen_params = [
+                name for name in candidates if np.ptp(np.asarray(self.samples[name])) == 0
+            ]
 
             if frozen_params:
                 frozen_list = ", ".join(f"'{p}'" for p in frozen_params)
                 msg = (
-                    f"dead fit: parameter(s) {frozen_list} have 1 unique draw in {n_samples} "
+                    f"dead fit: parameter(s) {frozen_list} have 1 unique draw in {n_total} "
                     f"samples. R-hat cannot detect this. "
                     f"Remedies: shorter warmup, lower target_accept_rate, smaller step_size, "
                     f"or dense_mass_matrix=False (issue #1999)."
                 )
                 warnings.warn(msg, DeadFitWarning, stacklevel=3)
+
+    @property
+    def free_names(self) -> tuple[str, ...] | None:
+        """Parameters the sampler moved, or ``None`` when the posterior has no model.
+
+        ``samples`` holds every parameter the forward model consumes: the
+        ``Fixed`` ones ride along as constant arrays (``Fitter._to_physical``
+        broadcasts each pinned value across the draws), so a zero-variance
+        column is evidence of a dead sampler only when it belongs to a *free*
+        parameter. The model's spec is the record of which names were free; a
+        hand-built posterior without ``_model`` cannot tell and gets ``None``
+        (#2087).
+
+        ``spec.free_params`` excludes the stochastic-SFH field latent by
+        design: it rides under the sampler's key ``psd_xi`` (republished as
+        ``sfh_field_xi`` by ``Fitter._to_physical``), not as a named
+        distribution (see ``Parameters.n_latent``). A frozen field is exactly
+        as dead as a frozen named parameter, so when the spec is stochastic
+        and ``psd_xi`` is present in ``samples``, it is appended here too.
+
+        A posterior loaded from disk has no model, but :meth:`save` writes the
+        names into the file and :meth:`load` restores them into
+        ``_free_names``, so a reloaded real fit judges the same columns the
+        live one did instead of re-creating the #2087 false positive. A file
+        written before that attribute existed carries no names and still
+        loads, with every column checked as before.
+        """
+        if self._model is None:
+            return self._free_names
+        spec = self._model.spec
+        names = list(spec.free_params)
+        if getattr(spec, "stochastic", False) and self.samples and "psd_xi" in self.samples:
+            names.append("psd_xi")
+        return tuple(names)
 
     # ── Derived quantities ────────────────────────────────────────
 
@@ -2134,6 +2195,11 @@ class Posterior:
         - ``diagnostics``: method-specific convergence metrics
         - ``eline``: emission line fluxes, covariances, names, wavelengths
 
+        and root attributes ``method``, ``wall_time_s``, ``log_evidence`` (when
+        set) and ``free_names`` (when the posterior knows which parameters were
+        free), the last so a reload without ``model=`` still restricts the
+        dead-fit check to them (#2087).
+
         Use ``load()`` to restore the Posterior from disk.
 
         Examples
@@ -2148,6 +2214,15 @@ class Posterior:
             f.attrs["wall_time_s"] = self.wall_time_s
             if self.log_evidence is not None:
                 f.attrs["log_evidence"] = self.log_evidence
+            # The free names, so a reload without ``model=`` still knows which
+            # columns the sampler actually moved (#2087). Absent when the
+            # posterior never knew them; old files have no such attribute and
+            # load exactly as before.
+            free_names = self.free_names
+            if free_names is not None:
+                f.attrs["free_names"] = np.array(
+                    list(free_names), dtype=h5py.string_dtype(encoding="utf-8")
+                )
 
             if self.samples is not None:
                 grp = f.create_group("samples")
@@ -2292,6 +2367,11 @@ class Posterior:
             method = str(f.attrs["method"])
             wall_time_s = float(f.attrs["wall_time_s"])
             log_evidence = float(f.attrs["log_evidence"]) if "log_evidence" in f.attrs else None
+            free_names = None
+            if "free_names" in f.attrs:
+                free_names = tuple(
+                    n.decode() if isinstance(n, bytes) else str(n) for n in f.attrs["free_names"]
+                )
 
             def _read_ds(ds):
                 """Load an HDF5 dataset into a JAX array, handling both scalar and array shapes."""
@@ -2336,6 +2416,7 @@ class Posterior:
             eline_flux_cov=eline_flux_cov,
             eline_names=eline_names,
             eline_wavelengths=eline_wavelengths,
+            _free_names=free_names,
         )
 
     @staticmethod

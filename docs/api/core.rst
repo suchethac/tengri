@@ -285,6 +285,10 @@ that matches its failure mode — :class:`~tengri.ParameterError` is a
    :members:
    :show-inheritance:
 
+.. autoexception:: tengri.DeadFitError
+   :members:
+   :show-inheritance:
+
 .. autoexception:: tengri.TengriIOError
    :members:
    :show-inheritance:

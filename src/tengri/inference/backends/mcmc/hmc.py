@@ -23,6 +23,8 @@ from tengri.inference.backends.mcmc._shared import (
     _sequential_chains,
     _set_cached_adaptation,
     _vmap_chains,
+    final_window_divergence_frac,
+    refuse_dead_warmup,
 )
 from tengri.inference.preconditioning import prepare_preconditioning
 from tengri.utils.compile_log import compile_timer
@@ -227,6 +229,12 @@ def run_hmc(
 
     if cached is not None:
         parameters = cached
+        # A reused adaptation was tuned in an earlier call, so this fit measured no
+        # warmup divergences of its own. The diagnostics key is then ABSENT rather
+        # than None: Posterior.save() has no HDF5 representation for None and would
+        # warn about a skipped entry on every warm fit (#2088). Presence of the key
+        # means "measured in this call".
+        warmup_record: dict = {}
         if verbose:
             logger.info(
                 "  Reusing cached warmup (%.1fs). Step size: %.4f",
@@ -235,7 +243,7 @@ def run_hmc(
             )
     else:
         with compile_timer("hmc_warmup", fitter.compile_signature(), method="mcmc_hmc"):
-            step_size, inv_mass_matrix = _hmc_warmup_only(
+            step_size, inv_mass_matrix, warmup_divergent = _hmc_warmup_only(
                 init_flat,
                 warmup_key,
                 log_posterior_flat_2arg,
@@ -246,14 +254,37 @@ def run_hmc(
                 target_accept_rate,
             )
             jax.block_until_ready(step_size)
+        # Refuse before caching and before the sampling scan compiles (#2088).
+        warmup_divergence_frac = final_window_divergence_frac(warmup_divergent, n_warmup)
+        refuse_dead_warmup(
+            warmup_divergence_frac,
+            sampler="HMC",
+            step_size=float(step_size),
+            n_warmup=n_warmup,
+            n_samples=n_samples,
+        )
+        warmup_record = (
+            {}
+            if warmup_divergence_frac is None
+            else {"warmup_divergence_frac": warmup_divergence_frac}
+        )
         parameters = {"step_size": step_size, "inverse_mass_matrix": inv_mass_matrix}
         _set_cached_adaptation(fitter, adapt_key, parameters)
         if verbose:
-            logger.info(
-                "  Warmup complete (%.1fs). Step size: %.4f",
-                time.time() - t0,
-                float(parameters["step_size"]),
-            )
+            if warmup_divergence_frac is None:
+                logger.info(
+                    "  Warmup complete (%.1fs). Step size: %.4f",
+                    time.time() - t0,
+                    float(parameters["step_size"]),
+                )
+            else:
+                logger.info(
+                    "  Warmup complete (%.1fs). Step size: %.4f. "
+                    "Divergent in the final warmup window: %.0f%%",
+                    time.time() - t0,
+                    float(parameters["step_size"]),
+                    100.0 * warmup_divergence_frac,
+                )
 
     # ── Sampling: single- or multi-chain, honored on first AND cached calls. ──
     key, chain_key = jax.random.split(key)
@@ -319,7 +350,10 @@ def run_hmc(
 
     if verbose:
         logger.info(
-            "  HMC complete in %.1fs. Divergences: %d/%d", wall_time, n_divergent, n_samples
+            "  HMC complete in %.1fs. Divergences: %d/%d",
+            wall_time,
+            n_divergent,
+            n_samples * n_chains,
         )
 
     return Posterior(
@@ -334,6 +368,7 @@ def run_hmc(
             "n_chains": n_chains,
             "n_leapfrog_steps": n_leapfrog_steps,
             "n_divergent": n_divergent,
+            **warmup_record,
             "step_size": float(parameters["step_size"]),
         },
         loss_history=None,

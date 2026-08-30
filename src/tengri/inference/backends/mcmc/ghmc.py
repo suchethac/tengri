@@ -373,7 +373,12 @@ def run_ghmc(
             "  GHMC complete in %.1fs. Divergences: %d/%d",
             wall_time,
             n_divergent,
-            positions.shape[0],
+            # Same number either way (``positions`` is already burn-in trimmed
+            # and flattened); taking origin/main's spelling keeps this log on
+            # #2087's convention, where a divergence count is always compared
+            # against draws summed over every chain rather than against the
+            # per-chain ``n_samples``.
+            n_samples * n_chains,
         )
 
     return Posterior(

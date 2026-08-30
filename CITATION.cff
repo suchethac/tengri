@@ -18,10 +18,27 @@ preferred-citation:
     - family-names: Cooray
       given-names: Suchetha
       email: astro.tengri@gmail.com
-  title: "tengri: Differentiable SED Fitting with IFT Star Formation History Priors (Paper I)"
+  title: "tengri: Differentiable SED fitting with Information-Field-Theory star formation history priors. I. Framework and mock recovery"
   journal: "in preparation"
   year: 2026
   notes: "Methods and mock recovery paper. DOI will be updated on acceptance."
+references:
+  - type: article
+    authors:
+      - family-names: Cooray
+        given-names: Suchetha
+        email: astro.tengri@gmail.com
+    title: "tengri: Differentiable SED fitting with Information-Field-Theory star formation history priors. II. Stochastic SFHs and hierarchical population inference"
+    journal: "in preparation"
+    year: 2026
+  - type: article
+    authors:
+      - family-names: Cooray
+        given-names: Suchetha
+        email: astro.tengri@gmail.com
+    title: "tengri: Differentiable SED fitting with Information-Field-Theory star formation history priors. III. Application to deep JWST surveys"
+    journal: "in preparation"
+    year: 2026
 keywords:
   - galaxy
   - SED fitting
