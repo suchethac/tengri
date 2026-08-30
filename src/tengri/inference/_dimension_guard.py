@@ -54,6 +54,13 @@ NUTS_WARN_D: int = 30
 #: GHMC never allocates a dense mass matrix and never pays O(D^2). Adding it
 #: here would emit an advisory for a cost the method does not incur (#1454).
 #:
+#: ``"mcmc_chees"`` is absent for GHMC's reason, restated because it now reaches
+#: the batched catalog path where D is the per-galaxy count: the ChEES kernel's
+#: metric is a *diagonal* ``inverse_mass_matrix``, the identity under the default
+#: ``mass_matrix_estimation=None``, so it never allocates a dense mass matrix and
+#: never pays O(D^2). ``run_chees`` and the catalog path both refuse
+#: ``dense_mass_matrix=True`` by name rather than accepting an inert one.
+#:
 #: ``"mcmc_hmc"`` IS included: fixed-length HMC differs from NUTS in trajectory
 #: length, not in mass-matrix adaptation.
 NUTS_LIKE: frozenset[str] = frozenset({"mcmc_nuts", "mcmc_hmc"})

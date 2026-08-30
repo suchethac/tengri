@@ -524,6 +524,23 @@ def _nuts_full_scan(
 
     _drop_adapt_info = get_filter_adapt_info_fn()
 
+    # The cap belongs to the *whole* run, warmup included (#2093 / Phase 3).
+    #
+    # BlackJAX forwards ``**extra_parameters`` from the adaptation constructor
+    # straight into the kernel call (``staged_adaptation``), so omitting this
+    # left warmup on BlackJAX's own default of 10 while only the sampling scan
+    # honored the caller's number. That is silent and it is expensive in the one
+    # direction that matters: warmup is where the step size has not converged,
+    # so the trees are at their deepest, and a run "capped to at most three
+    # leapfrogs per step" still spent its adaptation at up to 1023. It is why
+    # ``bench/reports/2026-08-30_gpu_catalog_throughput.md`` Finding 3 concluded
+    # the tree-depth cap was not the cost driver -- measured at K = 1 on the same
+    # fixture, capping the sampling half alone took 50 draws from 19 s to 0.1 s
+    # and left the 50 warmup steps at 36 s untouched.
+    #
+    # ``DEFAULT_MAX_NUM_DOUBLINGS`` is 10, the same value BlackJAX defaults to,
+    # so this changes nothing for a caller who did not ask for a cap.
+    _cap = {"max_num_doublings": max_doublings}
     if use_pathfinder_warmup:
         from blackjax.adaptation.pathfinder_adaptation import pathfinder_adaptation
 
@@ -532,6 +549,7 @@ def _nuts_full_scan(
             ld_1arg,
             target_acceptance_rate=target_accept_rate,
             adaptation_info_fn=_drop_adapt_info,
+            **_cap,
         )
         with _bounded_pathfinder_elbo_draws():
             (state, parameters), _ = warmup.run(warmup_key, init_flat, num_steps=n_warmup)
@@ -542,6 +560,7 @@ def _nuts_full_scan(
             is_mass_matrix_diagonal=not use_dense,
             target_acceptance_rate=target_accept_rate,
             adaptation_info_fn=_drop_adapt_info,
+            **_cap,
         )
         (state, parameters), _ = warmup.run(warmup_key, init_flat, num_steps=n_warmup)
     step_size = parameters["step_size"]
@@ -558,7 +577,7 @@ def _nuts_full_scan(
     return positions, divergent, expansions, step_size, inv_mass_matrix
 
 
-@functools.partial(jax.jit, static_argnums=(2, 4, 5, 6, 7))
+@functools.partial(jax.jit, static_argnums=(2, 4, 5, 6, 7, 8))
 def _nuts_warmup_only(
     init_flat,
     warmup_key,
@@ -568,6 +587,7 @@ def _nuts_warmup_only(
     use_dense,
     target_accept_rate,
     use_pathfinder_warmup: bool = False,
+    max_doublings: int = DEFAULT_MAX_NUM_DOUBLINGS,
 ):
     """BlackJAX NUTS window adaptation only, returns tuned (step_size, inv_mass).
 
@@ -589,6 +609,16 @@ def _nuts_warmup_only(
         Per-step ``is_divergent`` flags from the adaptation, for the
         dead-warmup refusal (#2088). Both the window and the pathfinder
         adaptation report it.
+
+    Notes
+    -----
+    ``max_doublings`` is forwarded into the adaptation for the reason
+    :func:`_nuts_full_scan` records: BlackJAX's window adaptation runs its own
+    NUTS kernel, and a cap given only to the sampling scan leaves warmup on
+    BlackJAX's default 10 -- silently, and on the half where trees are deepest.
+    It is a **static** argument and part of the adaptation cache key in
+    ``run_nuts``, because a step size adapted under one cap is not the step size
+    another cap would have found.
     """
     import blackjax
 
@@ -610,6 +640,7 @@ def _nuts_warmup_only(
             ld_1arg,
             target_acceptance_rate=target_accept_rate,
             adaptation_info_fn=_keep_divergence_flags,
+            max_num_doublings=max_doublings,
         )
         with _bounded_pathfinder_elbo_draws():
             (_, parameters), info = warmup.run(warmup_key, init_flat, num_steps=n_warmup)
@@ -620,6 +651,7 @@ def _nuts_warmup_only(
             is_mass_matrix_diagonal=not use_dense,
             target_acceptance_rate=target_accept_rate,
             adaptation_info_fn=_keep_divergence_flags,
+            max_num_doublings=max_doublings,
         )
         (_, parameters), info = warmup.run(warmup_key, init_flat, num_steps=n_warmup)
 

@@ -3,9 +3,10 @@
 
 Unlike :class:`PopulationFitter`, galaxies share no parameters.
 :class:`CatalogFitter` supports every method :class:`Fitter` accepts; for
-``mcmc_nuts``, ``mcmc_hmc`` and the two ``tier="broken"`` ``native_vi_*``
-backends it vmaps K galaxies per ``lax.map`` step so the compiled XLA graph
-stays O(1) in N while K galaxies execute simultaneously on-device.
+``mcmc_nuts``, ``mcmc_hmc``, ``mcmc_chees`` and the two ``tier="broken"``
+``native_vi_*`` backends it vmaps K galaxies per ``lax.map`` step so the
+compiled XLA graph stays O(1) in N while K galaxies execute simultaneously
+on-device.
 """
 
 from __future__ import annotations
@@ -13,6 +14,7 @@ from __future__ import annotations
 import functools
 import math
 import time
+import types
 import warnings
 from dataclasses import dataclass, field
 
@@ -28,7 +30,7 @@ from tengri.inference._batching import AUTO, chunking_was_requested, resolve_for
 from tengri.inference._dimension_guard import warn_if_nuts_high_dim as _warn_if_nuts_high_dim
 from tengri.inference._sample_utils import _mean_params, _vmap_samples_to_physical
 from tengri.inference.backends.mcmc._shared import DEFAULT_MAX_NUM_DOUBLINGS
-from tengri.inference.backends.mcmc.catalog import DEFAULT_MAP_INIT_STEPS
+from tengri.inference.backends.mcmc.catalog import CATALOG_CHEES_ENSEMBLE, DEFAULT_MAP_INIT_STEPS
 
 DEFAULT_PERCENTILES: tuple[float, ...] = (16.0, 50.0, 84.0)
 """Percentile levels used when ``percentiles=`` is not given."""
@@ -396,6 +398,14 @@ class CatalogPosterior:
     percentile_levels : tuple of float or None
         The percentile levels the ``percentiles`` block holds, in column order
         (e.g. ``(16, 50, 84)``). ``None`` when no summary was computed.
+    refusals : dict
+        ``{catalog_index: reason}`` for galaxies a sampler **refused** before
+        sampling (:class:`~tengri.config.exceptions.DeadFitError`, #2088), and
+        which therefore have no entry in ``posteriors``. Empty for every engine
+        that cannot refuse per galaxy. It exists so that
+        ``len(posteriors) + len(refusals)`` closes against the input catalog
+        size: a result that quietly holds fewer galaxies than it was given is
+        the failure :meth:`convergence` exists to make countable.
 
     Raises
     ------
@@ -434,6 +444,54 @@ class CatalogPosterior:
     summary: dict | None = None
     store: str = "full"
     percentile_levels: tuple | None = None
+    #: Last field, so no positional construction moves (the reason
+    #: ``Posterior._free_names`` is last too).
+    refusals: dict = field(default_factory=dict)
+
+    def convergence(self, *, ess_floor=None, max_galaxies=None):
+        """Converged / unconverged / frozen / refused, as four disjoint counts.
+
+        Parameters
+        ----------
+        ess_floor : float, optional
+            Demote a galaxy from ``converged`` if its worst effective sample
+            size is below this. ``None`` (default) reports ESS without gating.
+        max_galaxies : int, optional
+            Judge only the first this many galaxies. ESS is the expensive term
+            at catalog scale.
+
+        Returns
+        -------
+        CatalogConvergence
+            Whose ``summary()`` never quotes a converged rate without the worst
+            ESS among the galaxies it counted.
+
+        Notes
+        -----
+        **R-hat alone is not a convergence count.** Phase 0 measured 73 % of
+        galaxies clearing max split-R-hat < 1.01 with zero divergences while
+        their worst ESS was 2.63 of 500 draws: split R-hat compares two halves
+        of one chain, and two equally badly-mixed halves agree. That is why
+        ``min_ess_converged`` is a field of the result rather than something a
+        caller has to remember to ask for separately.
+
+        See :mod:`tengri.inference.catalog_convergence` for the frozen
+        signatures and why the refusal trigger alone is insufficient (#2093).
+
+        Examples
+        --------
+        >>> cp = cat.run("mcmc_chees", key=key)  # doctest: +SKIP
+        >>> print(cp.convergence().summary())  # doctest: +SKIP
+        """
+        from tengri.inference.catalog_convergence import catalog_convergence
+
+        return catalog_convergence(
+            self.posteriors,
+            refusals=self.refusals,
+            n_galaxies=self.n_galaxies or None,
+            ess_floor=ess_floor,
+            max_galaxies=max_galaxies,
+        )
 
     def _effective_levels(self, n_pct: int) -> tuple | None:
         """The levels a block of width ``n_pct`` holds, or ``None`` if unknowable.
@@ -739,8 +797,21 @@ class _CatalogFitterOriginal:
 
     _NATIVE_VMAPPABLE: frozenset = frozenset({"native_vi_linear", "native_vi_nonlinear"})
     #: Sampling methods that honor ``forward_chunk_size`` by vmapping K galaxies'
-    #: NUTS/HMC chains per ``lax.map`` step (per-galaxy warmup, diagonal mass).
-    _MCMC_VMAPPABLE: frozenset = frozenset({"mcmc_nuts", "mcmc_hmc"})
+    #: chains per ``lax.map`` step, each galaxy adapting to its own posterior.
+    #:
+    #: Membership is not a quality claim and it is not the tier. It is one
+    #: structural property: the sampler's whole run -- adaptation included --
+    #: is expressible as a fixed-shape traced program, so K of them fit under
+    #: one ``vmap``. ``mcmc_chees`` qualifies and stays ``tier="experimental"``;
+    #: ``mcmc_ghmc`` and ``mcmc_mclmc`` are ``tier="broken"`` and are deliberately
+    #: absent, because a backend that reports wrong answers reports them faster
+    #: here (``tests/contract/test_broken_backends_quarantined.py``).
+    _MCMC_VMAPPABLE: frozenset = frozenset({"mcmc_nuts", "mcmc_hmc", "mcmc_chees"})
+
+    #: ``method`` -> the ``sampler`` tag ``build_catalog_mcmc_engine`` takes.
+    _MCMC_SAMPLER_TAG: types.MappingProxyType = types.MappingProxyType(
+        {"mcmc_nuts": "nuts", "mcmc_hmc": "hmc", "mcmc_chees": "chees"}
+    )
 
     def _engine_kind(self, resolved: str) -> str:
         """Which of the three engines ``resolved`` dispatches to."""
@@ -893,6 +964,8 @@ class _CatalogFitterOriginal:
         reducers: dict | None = None,
         properties: tuple | None = None,
         allow_unvalidated: bool = False,
+        fallback=None,
+        record_refusals: bool = False,
         **kwargs,
     ):
         """Fit all galaxies independently.
@@ -901,9 +974,39 @@ class _CatalogFitterOriginal:
         ----------
         method : str
             Any method accepted by :class:`~tengri.inference.fitter.Fitter`.
-            ``mcmc_nuts`` (default), ``mcmc_hmc`` and the two ``native_vi_*``
-            backends support ``forward_chunk_size``-based on-device
-            parallelism; every other method runs sequentially per galaxy.
+            ``mcmc_nuts`` (default), ``mcmc_hmc``, ``mcmc_chees`` and the two
+            ``native_vi_*`` backends support ``forward_chunk_size``-based
+            on-device parallelism; every other method runs sequentially per
+            galaxy.
+        fallback : str, dict or None
+            **Experimental, opt-in, and not the default.** A second method to
+            re-fit only the galaxies the first one failed on -- ``"mcmc_chees"``,
+            or a dict such as ``{"method": "mcmc_chees", "n_chains": 4}`` whose
+            remaining keys are passed to the fallback fit. ``None`` (default)
+            does nothing, which is deliberate: Phase 2 measured ChEES+precond
+            returning R-hat 1.0000/1.0012 with zero divergences at 15-268x
+            NUTS's min ESS on the fits where NUTS is broken, and that is a
+            reason to *measure* a fallback, not to ship one silently.
+
+            The trigger is ``DeadFitError`` **or** a post-hoc check, and the
+            "or" is load-bearing. #2090's guard inspects only the **warmup**
+            record, so #2093's fit -- 1200/1200 sampling draws divergent, split
+            R-hat 1.4e13, unique-draw fraction 0.002 -- returns *normally* and
+            the refusal never fires. The post-hoc arm is
+            :func:`~tengri.inference.catalog_convergence.galaxy_health`'s
+            ``"frozen"`` verdict, which both of #2093's signatures trip
+            independently. A galaxy that merely mixed badly is **not** re-fit:
+            it is reported as ``unconverged`` and left alone, because silently
+            re-rolling a marginal fit until it passes a diagnostic is how a
+            convergence rate stops meaning anything.
+        record_refusals : bool, default False
+            On the **sequential** engine, catch a per-galaxy
+            :class:`~tengri.config.exceptions.DeadFitError` and record it in
+            ``CatalogPosterior.refusals`` instead of aborting the catalog.
+            Default ``False`` keeps the raise, because a driver that has not
+            asked to handle refusals should not have them swallowed. Implied by
+            ``fallback=``. Has no effect on the batched engine, where a refusal
+            is not expressible per galaxy -- ``run_one`` is inside ``lax.map``.
 
             The default was ``native_vi_linear`` until 2026-07. That backend is
             registered ``tier="broken"``, it segfaults on DPL/dense_basis
@@ -985,6 +1088,23 @@ class _CatalogFitterOriginal:
         """
         from tengri.inference._backend_registry import refuse_if_broken
         from tengri.inference.fitter import resolve_method
+
+        if fallback is not None:
+            return self._run_with_fallback(
+                method,
+                fallback,
+                key=key,
+                forward_chunk_size=forward_chunk_size,
+                n_pad=n_pad,
+                devices=devices,
+                store=store,
+                percentiles=percentiles,
+                reducers=reducers,
+                properties=properties,
+                allow_unvalidated=allow_unvalidated,
+                record_refusals=True,
+                **kwargs,
+            )
 
         # #1671 made operational: this catalog fit runs on a resolved
         # precompute LUT, so price the LUT's forward bias against the whole
@@ -1139,8 +1259,162 @@ class _CatalogFitterOriginal:
                 percentiles=percentiles,
                 reducers=reducers,
                 properties=properties,
+                record_refusals=record_refusals,
                 **kwargs,
             )
+
+    # ------------------------------------------------------------------
+    # Internal: experimental opt-in fallback
+    # ------------------------------------------------------------------
+
+    def _run_with_fallback(self, method, fallback, *, key, record_refusals=True, **kwargs):
+        """Re-fit only the galaxies ``method`` failed on, with ``fallback``.
+
+        **Experimental and opt-in.** Reached only from an explicit
+        ``run(..., fallback=...)``; there is no default fallback and this method
+        is not on any other path.
+
+        Parameters
+        ----------
+        method : str
+            Primary method.
+        fallback : str or dict
+            Second method, optionally with its own kwargs. ``{"method": name,
+            **kw}``; the primary's kwargs are **not** inherited, because the two
+            samplers do not share a knob vocabulary (``max_num_doublings`` means
+            nothing to ChEES, ``max_leapfrog_steps`` nothing to NUTS) and
+            silently forwarding one sampler's tuning to another is how a
+            "fallback" becomes an untuned second failure.
+        key : PRNGKey
+            Split, never reused: the fallback fit gets its own stream, so a
+            galaxy that failed under one seed is not retried at the same one.
+
+        Returns
+        -------
+        CatalogPosterior
+            Carrying ``diagnostics["fallback"]`` with the galaxies re-fit, why
+            each was re-fit, and whether the re-fit actually helped. That last
+            column is the point: a fallback that swaps one frozen posterior for
+            another has to be visible, not just counted as "handled".
+
+        Notes
+        -----
+        Two triggers, and the second is why the first is not enough.
+
+        1. **Refusal.** A :class:`~tengri.config.exceptions.DeadFitError` from
+           the primary. On the sequential engine that is per galaxy; on the
+           batched engine ``run_one`` lives inside ``lax.map`` where a Python
+           raise is not expressible, so a refusal there fails the whole cell and
+           the whole catalog is re-fit. Both are recorded as what they are.
+        2. **Post-hoc.** ``galaxy_health(...).verdict == "frozen"``. #2093's fit
+           returns *normally* with 1200/1200 sampling draws divergent and a
+           unique-draw fraction of 0.002, because #2090's guard reads the warmup
+           record and cannot see draws it has not taken. Only the post-hoc arm
+           catches it.
+
+        A merely ``unconverged`` galaxy is left alone. Re-rolling marginal fits
+        until they pass is not a fallback, it is a filter on the diagnostic.
+        """
+        from tengri.config.exceptions import DeadFitError
+        from tengri.inference.catalog_convergence import galaxy_health
+
+        if isinstance(fallback, str):
+            fb_method, fb_kwargs = fallback, {}
+        else:
+            fb_kwargs = dict(fallback)
+            fb_method = fb_kwargs.pop("method")
+
+        key_primary, key_fb = jax.random.split(key)
+        record = {"method": method, "fallback_method": fb_method, "cell_refused": False}
+
+        try:
+            primary = self.run(method, key=key_primary, record_refusals=record_refusals, **kwargs)
+        except DeadFitError as exc:
+            # The batched engine cannot refuse one galaxy, so this is the whole
+            # cell. Re-fitting the whole catalog is the only honest response;
+            # pretending it was a per-galaxy event would invent a count.
+            record["cell_refused"] = True
+            record["cell_refusal_reason"] = str(exc)[:400]
+            result = self.run(fb_method, key=key_fb, **{**kwargs, **fb_kwargs})
+            result.diagnostics = {**(result.diagnostics or {}), "fallback": record}
+            return result
+
+        # A refused galaxy has NO entry in ``posteriors`` -- the sequential engine
+        # skips it -- so list position is not catalog index once anything was
+        # refused. Rebuild the correspondence explicitly rather than indexing the
+        # list by galaxy number, which silently rescues the wrong galaxy.
+        primary_refusals = dict(primary.refusals or {})
+        kept = [i for i in range(self.n_galaxies) if i not in primary_refusals]
+        by_index = dict(zip(kept, primary.posteriors, strict=False))
+
+        failed = [
+            (i, health.reason)
+            for i, post in by_index.items()
+            for health in (galaxy_health(post, index=i),)
+            if health.verdict == "frozen"
+        ]
+        failed += [(i, f"refused: {why}") for i, why in primary_refusals.items()]
+        failed.sort(key=lambda pair: pair[0])
+        record["n_retried"] = len(failed)
+        record["retried"] = {int(i): why for i, why in failed}
+
+        if not failed:
+            primary.diagnostics = {**(primary.diagnostics or {}), "fallback": record}
+            return primary
+
+        sub = self._sub_catalog([self.galaxies[i] for i, _ in failed])
+        sub_result = sub.run(fb_method, key=key_fb, **{**kwargs, **fb_kwargs})
+
+        healed = 0
+        for (i, _why), post in zip(failed, sub_result.posteriors, strict=False):
+            healed += galaxy_health(post, index=i).verdict != "frozen"
+            by_index[i] = post
+        posteriors = [by_index[i] for i in sorted(by_index)]
+        refusals = {i: why for i, why in primary_refusals.items() if i not in by_index}
+        # Reported, not assumed. A fallback that swaps one frozen posterior for
+        # another is a null result and must read as one.
+        record["n_still_frozen"] = len(failed) - healed
+        record["n_healed"] = healed
+
+        merged = CatalogPosterior(
+            posteriors=posteriors,
+            method=f"{method}+fallback:{fb_method}",
+            wall_time_s=primary.wall_time_s + sub_result.wall_time_s,
+            n_galaxies=self.n_galaxies,
+            diagnostics={**(primary.diagnostics or {}), "fallback": record},
+            store=primary.store,
+            refusals=refusals,
+        )
+        # Re-derive the stacked summary blocks over the MERGED posteriors: the
+        # primary's blocks still hold the frozen galaxies' rows.
+        cat_percentiles, cat_summary, cat_levels, store = _stack_summaries(
+            posteriors,
+            primary.store,
+            merged.method,
+            primary.percentile_levels or DEFAULT_PERCENTILES,
+        )
+        merged.percentiles = cat_percentiles
+        merged.summary = cat_summary
+        merged.percentile_levels = cat_levels
+        merged.store = store
+        return merged
+
+    def _sub_catalog(self, galaxies):
+        """A catalog over a subset of these galaxies, sharing model and cache.
+
+        Sharing ``self.model`` keeps the compile signature identical, so a
+        fallback pays no new *model* compile -- only the second sampler's own
+        graph, once. Sharing ``self.cache`` keeps both fits in one bounded
+        :class:`~tengri.inference.jit_engine.CompileCache` rather than in
+        competing ones, which is the same reason the per-galaxy sequential
+        Fitters share it.
+
+        A method rather than an inline constructor so the fallback's
+        orchestration is testable without a forward model.
+        """
+        sub = _CatalogFitterOriginal(self.model, galaxies, self.data_type, approx=self.approx)
+        sub.cache = self.cache
+        return sub
 
     # ------------------------------------------------------------------
     # Internal: native vmapped path
@@ -1409,20 +1683,60 @@ class _CatalogFitterOriginal:
         n_samples=1000,
         max_num_doublings=DEFAULT_MAX_NUM_DOUBLINGS,
         n_leapfrog_steps=10,
-        target_accept_rate=0.85,
+        target_accept_rate=AUTO,
         dense_mass_matrix=None,
         init_from=None,
         map_init_steps=DEFAULT_MAP_INIT_STEPS,
+        n_chains=1,
+        n_ensemble=CATALOG_CHEES_ENSEMBLE,
+        ensemble_jitter=None,
+        chain_jitter=None,
+        max_leapfrog_steps=200,
         verbose=True,
     ):
-        """Vectorized per-galaxy NUTS/HMC sampling via ``lax.map(batch_size=K)``.
+        """Vectorized per-galaxy NUTS/HMC/ChEES sampling via ``lax.map(batch_size=K)``.
 
-        Each galaxy runs its own BlackJAX window adaptation and chain inside a
+        Each galaxy runs its own BlackJAX adaptation and chain inside a
         single JIT'd program; K galaxies execute per ``lax.map`` step so the
         compiled graph stays O(1) in the catalog size while K chains run in
         parallel on the accelerator. Returns one :class:`Posterior` per galaxy,
         each carrying posterior ``samples``, the same public contract as the
         sequential path, minus the N serial warmups.
+
+        Adaptation convention, and why it is per galaxy
+        ----------------------------------------------
+        Every sampler on this path adapts **per galaxy, inside the vmap**. The
+        alternative in this codebase is ``Fitter._fit_batch_vmap_mcmc``, which
+        runs one adaptation on the first galaxy and reuses it for the rest; that
+        is rejected here because it makes each galaxy's step size a function of
+        whichever galaxy happened to be first, so a galaxy's posterior would
+        depend on batch composition. Independence across galaxies is the whole
+        contract of a catalog fit and it is not tradeable for warmup cost.
+
+        For ``mcmc_chees`` there is a **third** axis, and it does not replace the
+        first: ChEES adapts one trajectory length from cross-chain statistics,
+        and that ensemble is **chains-within-galaxy** -- an inner vmap under the
+        galaxy vmap. It is deliberately not galaxies-within-batch, which would
+        tune one ``L`` against a mixture of posteriors and reintroduce exactly
+        the batch-composition dependence the previous paragraph refuses. The
+        rule lives with the resolver that enforces it,
+        ``_shared._resolve_chees_ensemble``, and is pinned by
+        ``tests/contract/test_chees_backend.py``.
+
+        The cost of per-galaxy adaptation is different for the two kernel
+        families, and it is measured rather than assumed. NUTS's window
+        adaptation scans a data-dependent ``lax.while_loop`` tree doubling, so
+        the vmapped batch pays the deepest tree in the batch at every warmup
+        step; ChEES's adaptation is a fixed-length scan bounded statically by
+        ``max_leapfrog_steps``. See
+        ``bench/reports/2026-08-31_catalog_batched_samplers.md``.
+
+        ``target_accept_rate`` defaults to ``AUTO``, which resolves per sampler:
+        0.85 for NUTS/HMC and ChEES's own **0.651** (Beskos+2013's optimum for a
+        *fixed*-length proposal, which is what each ChEES step is). Carrying
+        NUTS's 0.8-ish number across is the obvious mistake and it would be
+        invisible -- the sampler still runs, just at a step size dual-averaged
+        for a different proposal.
 
         ``dense_mass_matrix=None`` (the default) resolves through the same
         auto-policy as the single-galaxy samplers: dense below D = 8, diagonal
@@ -1452,13 +1766,44 @@ class _CatalogFitterOriginal:
         reduction (galaxies are independent). Bit-parity with the single-device
         path holds up to float round-off.
         """
+        from tengri.inference.backends.mcmc._shared import _CHEES_JITTER_SCALE
         from tengri.inference.backends.mcmc.catalog import (
             build_catalog_mcmc_engine,
         )
+        from tengri.inference.backends.mcmc.chees import CHEES_TARGET_ACCEPT_RATE
         from tengri.inference.backends.mcmc.nuts import _resolve_dense_mass_matrix
         from tengri.inference.posterior import Posterior
 
-        sampler = "nuts" if method_tag == "mcmc_nuts" else "hmc"
+        sampler = self._MCMC_SAMPLER_TAG[method_tag]
+        is_chees = sampler == "chees"
+        if target_accept_rate is AUTO:
+            target_accept_rate = CHEES_TARGET_ACCEPT_RATE if is_chees else 0.85
+        if ensemble_jitter is None:
+            ensemble_jitter = _CHEES_JITTER_SCALE
+        n_chains = max(1, int(n_chains))
+        # Resolve 'auto' here as well as inside the engine, so the reported
+        # diagnostic is the ensemble width that actually ran rather than the
+        # string that was asked for.
+        if is_chees:
+            from tengri.inference.backends.mcmc._shared import _resolve_chees_ensemble
+
+            n_ensemble = _resolve_chees_ensemble(n_ensemble, n_chains)
+        # Refused here, before the MAP warm start spends anything, and refused by
+        # name rather than ignored. ChEES's kernel metric is a *diagonal*
+        # inverse_mass_matrix -- the identity under the default
+        # ``mass_matrix_estimation=None`` -- so there is no dense option to take.
+        # A caller who set it and silently got a diagonal would have no way to
+        # find out, which is the failure ``run_ghmc``'s ``target_accept_rate``
+        # records.
+        if is_chees and dense_mass_matrix:
+            raise ValueError(
+                "dense_mass_matrix=True is not available for method='mcmc_chees': "
+                "the ChEES kernel's metric is a diagonal inverse_mass_matrix, and "
+                "under the default mass_matrix_estimation=None it is the identity "
+                "for the whole run. A non-identity geometry comes from the analytic "
+                "J^T N^-1 J + I metric (precondition=), which the catalog path does "
+                "not yet thread; use method='mcmc_nuts'/'mcmc_hmc' for a dense mass."
+            )
         t0 = time.time()
         n_gal = self.n_galaxies
         # K galaxies per dispatch (#1189). AUTO by default: one galaxy per
@@ -1496,7 +1841,9 @@ class _CatalogFitterOriginal:
         _dummy_flat = ravel_pytree(fitter._initialize_unbounded(jax.random.PRNGKey(0)))[0]
         user_set_dense = dense_mass_matrix is not None
         use_dense = _resolve_dense_mass_matrix(dense_mass_matrix, int(_dummy_flat.shape[0]))
-        if verbose and not user_set_dense:
+        if is_chees:
+            use_dense = False
+        elif verbose and not user_set_dense:
             policy = "dense (D<8)" if use_dense else "diagonal (D>=8, #319)"
             print(f"CatalogFitter auto-mass-matrix: {policy}")
 
@@ -1512,16 +1859,22 @@ class _CatalogFitterOriginal:
             use_dense=use_dense,
             thread_redshift=per_galaxy_z,
             thread_line_fluxes=per_galaxy_lines,
+            n_chains=n_chains,
+            n_ensemble=n_ensemble,
+            ensemble_jitter=ensemble_jitter,
+            chain_jitter=chain_jitter,
+            max_leapfrog_steps=max_leapfrog_steps,
         )
 
         dummy_flat = ravel_pytree(fitter._initialize_unbounded(jax.random.PRNGKey(0)))[0]
         d_params = dummy_flat.shape[0]
 
         if verbose:
-            tag = "NUTS" if sampler == "nuts" else "HMC"
+            tag = {"nuts": "NUTS", "hmc": "HMC", "chees": "ChEES-HMC"}[sampler]
+            extra = f", ensemble={n_ensemble} x {n_chains} chains/galaxy" if is_chees else ""
             print(
                 f"CatalogFitter ({tag}): {n_gal} galaxies, K={K}, D={d_params}, "
-                f"{n_warmup} warmup + {n_samples} samples"
+                f"{n_warmup} warmup + {n_samples} samples{extra}"
             )
 
         # Stack per-galaxy data; pad with dummy galaxies (trimmed after).
@@ -1653,7 +2006,17 @@ class _CatalogFitterOriginal:
                 params=best_params,
                 method=f"CatalogFitter/{method_tag}",
                 wall_time_s=time.time() - t0,
-                diagnostics={"n_divergent": n_div, "n_samples": n_samples, "n_chains": 1},
+                # ``n_samples`` is PER CHAIN and ``n_divergent`` is summed over
+                # every chain; any rate that divides one by the other must go
+                # through ``total_draws`` (#2087). ChEES is the first catalog
+                # sampler that can run more than one chain per galaxy, so a
+                # hardcoded 1 here would have started under-reporting the
+                # denominator by exactly the chain count.
+                diagnostics={
+                    "n_divergent": n_div,
+                    "n_samples": n_samples,
+                    "n_chains": n_chains,
+                },
                 loss_history=None,
                 _model=self.model,
             )
@@ -1683,6 +2046,17 @@ class _CatalogFitterOriginal:
                 "n_divergent_total": int(jnp.sum(all_divergent)),
                 "n_warmup": n_warmup,
                 "n_samples": n_samples,
+                "n_chains": n_chains,
+                **(
+                    {
+                        "n_ensemble": n_ensemble,
+                        "ensemble_axis": "chains-within-galaxy",
+                        "max_leapfrog_steps": max_leapfrog_steps,
+                        "target_accept_rate": float(target_accept_rate),
+                    }
+                    if is_chees
+                    else {}
+                ),
             },
             percentiles=cat_percentiles,
             summary=cat_summary,
@@ -1873,13 +2247,20 @@ class _CatalogFitterOriginal:
         reducers: dict | None = None,
         properties: tuple | None = None,
         verbose=True,
+        record_refusals: bool = False,
         **kwargs,
     ):
+        from tengri.config.exceptions import DeadFitError
         from tengri.inference.fitter import Fitter
 
         t0 = time.time()
         keys = jax.random.split(key, self.n_galaxies)
         posteriors = []
+        # {catalog index -> why}. Populated only under ``record_refusals``; the
+        # default still lets a DeadFitError abort, because #2090's own PR note
+        # says drivers "should catch it and record the galaxy as a failed fit"
+        # -- a driver, not every caller by surprise.
+        refusals: dict = {}
 
         # Smart lean (Fitter.run default) keeps the L3 entry that matches
         # (compile_signature, method) across runs and drops only stale
@@ -1905,7 +2286,13 @@ class _CatalogFitterOriginal:
                 cache=self.cache,
                 params_override=override,
             )
-            post_i = fitter_i.run(method, key=keys[i], verbose=False, **kwargs)
+            try:
+                post_i = fitter_i.run(method, key=keys[i], verbose=False, **kwargs)
+            except DeadFitError as exc:
+                if not record_refusals:
+                    raise
+                refusals[i] = str(exc)[:400]
+                continue
 
             _attach_summaries(post_i, store, percentiles, reducers, properties)
             posteriors.append(post_i)
@@ -1930,6 +2317,7 @@ class _CatalogFitterOriginal:
             summary=cat_summary,
             store=store,
             percentile_levels=cat_levels,
+            refusals=refusals,
         )
 
 

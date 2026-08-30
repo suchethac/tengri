@@ -471,7 +471,13 @@ def run_nuts(
     # line because two tests read this statement as text -- the namespace guard
     # in test_preconditioning.py matches per line, and #1454 matches up to the
     # first ``)``.
-    tuning = (int(n_warmup), float(target_accept_rate))
+    # ``max_num_doublings`` is in the key because it now reaches the *warmup*
+    # kernel too (Phase 3): a step size dual-averaged under a cap of 2 is not the
+    # one a cap of 10 would have found, so reusing a cached adaptation across
+    # caps would silently sample at the wrong step size. Leaving a knob out of
+    # this tuple is what makes it inert rather than wrong -- see
+    # ``_adaptation_cache_key``.
+    tuning = (int(n_warmup), float(target_accept_rate), int(max_num_doublings))
     adapt_key = ("nuts", not use_dense, bool(pathfinder_warmstart), tuning, problem.cache_key)
     cached = _get_cached_adaptation(fitter, adapt_key)
 
@@ -518,6 +524,7 @@ def run_nuts(
                 use_dense,
                 target_accept_rate,
                 bool(pathfinder_warmstart),
+                int(max_num_doublings),
             )
             jax.block_until_ready(step_size)
         # Refuse before caching and before the sampling scan compiles (#2088).

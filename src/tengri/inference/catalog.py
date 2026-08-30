@@ -502,7 +502,11 @@ class Catalog:
             catalog since each name costs one property evaluation per galaxy.
         **kwargs
             Forwarded to the inference method (e.g., ``n_warmup``, ``n_samples``
-            for MCMC).
+            for MCMC). Also reaches
+            ``_CatalogFitterOriginal.run``
+            itself, which is how ``fallback="mcmc_chees"`` -- the experimental,
+            opt-in second sampler for galaxies the first one froze on -- is
+            spelled from here.
 
         Returns
         -------
