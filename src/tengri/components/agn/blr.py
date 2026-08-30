@@ -389,8 +389,8 @@ def compute_blr_sed(
        https://doi.org/10.1086/321167
     .. [2] H. Netzer, "Accretion Power in Astrophysics," Cambridge University
        Press (1990). Chapter 2: Broad-line region models.
-    .. [3] T. A. Boroson and R. F. Green, "The Emission Line Properties of
-       Low-Luminosity Seyfert 1 Galaxies," ApJS, 80, 109 (1992).
+    .. [3] T. A. Boroson and R. F. Green, "The Emission-Line Properties of
+       Low-Redshift Quasi-stellar Objects," ApJS, 80, 109 (1992).
        https://doi.org/10.1086/191679
     .. [4] Y. Tsuzuki et al., "Very Large Array Imaging of Submillimeter
        Galaxies," ApJ, 650, 57 (2006). https://doi.org/10.1086/506270

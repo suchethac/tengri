@@ -146,7 +146,6 @@ UNCURATED_DOIS = frozenset(
         "10.1046/j.1365-8711.2003.06224.x",  # xray.py +1
         "10.1051/0004-6361/200811368",  # xray.py
         "10.1051/0004-6361/200913298",  # xray_precompute.py
-        "10.1051/0004-6361/201321236",  # gp_sfh.py
         "10.1051/0004-6361/201322803",  # attenuation.py
         "10.1051/0004-6361/201323152",  # _shared.py
         "10.1051/0004-6361/201527923",  # _closures.py +1
@@ -155,7 +154,6 @@ UNCURATED_DOIS = frozenset(
         "10.1051/0004-6361/201731036",  # mean_sfh.py
         "10.1051/0004-6361/201936817",  # xray.py +1
         "10.1051/0004-6361/202449801",  # disc.py +2
-        "10.1051/0004-6361/202450447",  # radio_dpl_model.py
         "10.1051/0004-6361:20042363",  # disc.py +1
         "10.1051/0004-6361:20066130",  # fritz.py
         "10.1051/0004-6361:20078829",  # mean_sfh.py
@@ -168,7 +166,6 @@ UNCURATED_DOIS = frozenset(
         "10.1086/171637",  # attenuation.py
         "10.1086/174330",  # spectral.py
         "10.1086/174348",  # attenuation.py
-        "10.1086/191679",  # feii.py +1
         "10.1086/307523",  # fesc_model.py +1
         "10.1086/308056",  # spectral.py
         "10.1086/311810",  # disc.py
@@ -176,7 +173,6 @@ UNCURATED_DOIS = frozenset(
         "10.1086/320357",  # blr_precompute.py
         "10.1086/320360",  # blr.py
         "10.1086/342486",  # attenuation.py +1
-        "10.1086/421115",  # disc.py +2
         "10.1086/423885",  # polar_dust.py
         "10.1086/506270",  # blr.py
         "10.1086/506525",  # disc.py +1
@@ -197,20 +193,16 @@ UNCURATED_DOIS = frozenset(
         "10.1093/mnras/272.1.41",  # _shared.py
         "10.1093/mnras/273.3.837",  # xray.py
         "10.1093/mnras/283.1.193",  # _nthcomp.py
-        "10.1093/mnras/staa1116",  # mean_sfh.py
         "10.1093/mnras/staa1838",  # registry.py
-        "10.1093/mnras/staa2620",  # chemical_evolution.py +1
         "10.1093/mnras/stac818",  # dig.py
         "10.1093/mnras/stad1859",  # cb19_precompute.py
         "10.1093/mnras/stad3891",  # cloudy_cb19.py
-        "10.1093/mnras/stad478",  # disc.py +2
         "10.1093/mnras/stt2056",  # nlr.py +1
         "10.1093/mnras/stv1950",  # xray.py
         "10.1093/mnras/stv2794",  # nlr_cloudy.py +2
         "10.1093/mnras/stw044",  # feltre_precompute.py
         "10.1103/revmodphys.81.969",  # dig.py
         "10.1111/j.1365-2966.2004.07473.x",  # xray.py +1
-        "10.1111/j.1365-2966.2005.09663.x",  # meiksin06.py
         "10.1111/j.1365-2966.2007.12255.x",  # attenuation.py
         "10.1111/j.1365-2966.2008.13535.x",  # _closures.py
         "10.1111/j.1365-2966.2011.18906.x",  # _recombination_coeffs.py
@@ -225,10 +217,7 @@ UNCURATED_DOIS = frozenset(
         "10.22201/ia.01851101p.2019.55.02.21",  # shock_model.py
         "10.3390/e23070853",  # native.py +1
         "10.3847/1538-3881/acb212",  # desi.py +1
-        "10.3847/1538-4295/abef67",  # torus.py +2
         "10.3847/1538-4357/833/1/98",  # agn_priors.py
-        "10.3847/1538-4357/aa5ffe",  # nonparametric.py
-        "10.3847/1538-4357/aa63f0",  # dense_basis.py
         "10.3847/1538-4357/aab0a7",  # sed_model.py
         "10.3847/1538-4357/aad235",  # attenuation.py
         "10.3847/1538-4357/aae386",  # attenuation.py
@@ -242,7 +231,6 @@ UNCURATED_DOIS = frozenset(
         "10.3847/1538-4357/ac4867",  # dsps_wrapper.py
         "10.3847/1538-4357/ac4971",  # xray.py +1
         "10.3847/1538-4357/ac6959",  # _apply.py
-        "10.3847/1538-4357/acc370",  # astrodust.py
         "10.3847/1538-4365/aa6541",  # mappings_photo.py +3
         "10.3847/1538-4365/aa96ad",  # unified.py
         "10.3847/2041-8213/aa6838",  # cat3d_precompute.py

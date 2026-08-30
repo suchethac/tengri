@@ -273,6 +273,21 @@ jobs:
       # different paper ("The SDSS Quasar Catalog"), which a coverage-only check
       # would have shipped. Backlogs pinned and ratcheting. Stdlib-only.
       - run: python tools/check_citation_bib_coverage.py
+      # The two guards above police citations inside `src/`. Nothing policed the
+      # page that exists to credit the people whose work this runs on:
+      # references.bib held 105 entries and docs/citation.md acknowledged about
+      # 15, so every isochrone set, every stellar library, all three IMFs, all
+      # ten attenuation laws and thirteen of fourteen AGN papers were absent
+      # from the published acknowledgements. registry.py calls the bib "the
+      # single source of truth" and the docs were never bound to it, so the page
+      # also cited the Ray Tracing Sampler under an arXiv id the record
+      # contradicts. Requires the first author's surname AND the year within 120
+      # characters on the page — checking the two independently would pass a
+      # page that says "Conroy" in one section and "2009" in another, which is
+      # the vacuous census this repo has shipped before. Derives both halves
+      # from the bib's own short/year fields, so it has no list to rot.
+      # Stdlib-only.
+      - run: python tools/check_citation_docs_coverage.py
       # A warning that renders a computed number and discards it forces every
       # consumer to regex-parse prose for a value the format spec already
       # rounded: `{frac:.0%}` made "69%" mean anything in 0.685-0.695, and the
