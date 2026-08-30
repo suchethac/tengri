@@ -93,7 +93,7 @@ def config_III(ssp_data: tengri.SSPData, observation, z: float) -> SEDModel:
         "type": "continuity",
         "all_params": FIXED,
         "log_total_mass": Uniform(8.0, 12.5),
-        "met_logzsol": Uniform(-2.0, 0.3),
+        "met_logzsol": Uniform(-2.0, 0.5),
         "bin_edges_gyr": bin_edges_gyr,
     }
     for i in range(6):
