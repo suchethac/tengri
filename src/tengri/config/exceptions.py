@@ -214,8 +214,9 @@ class DeadFitWarning(UserWarning):
     """An MCMC fit returned a dead posterior: frozen or 100% divergent (#1999).
 
     Two unambiguous signatures trigger this at :class:`Posterior` construction:
-    every transition diverged (``n_divergent == n_samples``), or a free
-    parameter shows a single unique draw across 100+ kept samples. Both mean
+    every kept draw across every chain diverged
+    (``n_divergent == n_samples * n_chains``, #2087), or a free parameter
+    shows a single unique draw across 100+ kept samples. Both mean
     the sampler rejected essentially every proposal, typically an adapted
     step size past the model's stability limit (#1999 isolated the dense
     mass-matrix adaptation as one trigger).

@@ -591,7 +591,10 @@ def run_nuts(
 
     if verbose:
         logger.info(
-            "  NUTS complete in %.1fs. Divergences: %d/%d", wall_time, n_divergent, n_samples
+            "  NUTS complete in %.1fs. Divergences: %d/%d",
+            wall_time,
+            n_divergent,
+            n_samples * n_chains,
         )
 
     return Posterior(

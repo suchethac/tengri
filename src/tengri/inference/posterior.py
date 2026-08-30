@@ -364,7 +364,7 @@ class Posterior:
         """Detect dead MCMC fits (100% divergent or frozen parameters) and warn.
 
         A dead fit is unambiguous when:
-        - ``n_divergent == n_samples``: every transition diverged (all-divergent).
+        - ``n_divergent == n_samples * n_chains``: every kept draw across every chain diverged (all-divergent, #2087).
         - Any free parameter has all identical draws (``np.ptp == 0``) over >= 100
           draws (frozen parameter). Small test posteriors (< 100 draws) are exempt.
 
@@ -383,14 +383,17 @@ class Posterior:
         if not self.samples or "n_divergent" not in self.diagnostics:
             return
         from tengri.config.exceptions import DeadFitWarning
+        from tengri.inference.backends.mcmc._shared import total_draws
 
         n_divergent = self.diagnostics.get("n_divergent", 0)
         n_samples = self.diagnostics.get("n_samples", len(next(iter(self.samples.values()))))
+        # ``n_samples`` is per chain; ``n_divergent`` is summed over every chain (#2087).
+        n_total = total_draws(self.diagnostics, n_samples=n_samples)
 
-        # Check all-divergent: n_divergent == n_samples
-        if n_divergent == n_samples and n_samples > 0:
+        # Check all-divergent: every kept draw, across every chain, diverged.
+        if n_divergent == n_total and n_total > 0:
             msg = (
-                f"dead fit: {n_divergent}/{n_samples} divergent transitions. "
+                f"dead fit: {n_divergent}/{n_total} divergent transitions. "
                 f"R-hat cannot detect this: the chain moved nowhere. "
                 f"Remedies: shorter warmup, lower target_accept_rate, smaller step_size, "
                 f"or dense_mass_matrix=False (issue #1999)."

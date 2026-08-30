@@ -319,7 +319,10 @@ def run_hmc(
 
     if verbose:
         logger.info(
-            "  HMC complete in %.1fs. Divergences: %d/%d", wall_time, n_divergent, n_samples
+            "  HMC complete in %.1fs. Divergences: %d/%d",
+            wall_time,
+            n_divergent,
+            n_samples * n_chains,
         )
 
     return Posterior(

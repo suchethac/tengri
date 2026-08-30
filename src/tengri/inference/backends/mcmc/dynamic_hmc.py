@@ -249,7 +249,7 @@ def run_dynamic_hmc(
             "  Dynamic HMC complete in %.1fs. Divergences: %d/%d",
             wall_time,
             n_divergent,
-            n_samples,
+            n_samples * n_chains,
         )
 
     return Posterior(

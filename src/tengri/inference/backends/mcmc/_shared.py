@@ -344,6 +344,31 @@ def _bounded_pathfinder_elbo_draws(n_draws: int | None = None):
 DEFAULT_MAX_NUM_DOUBLINGS = 10
 
 
+def total_draws(diagnostics: dict, n_samples: int | None = None) -> int:
+    """Kept draws across every chain of an MCMC result.
+
+    Every backend records ``n_samples`` *per chain* and ``n_chains`` beside it,
+    while ``n_divergent`` is summed over the flattened
+    ``(n_chains * n_samples,)`` divergence record. Any comparison of a
+    divergence count with a draw count must compare against this total, not
+    ``n_samples``: the dead-fit guard's ``n_divergent == n_samples`` was false
+    for every multi-chain run (2400 != 600 on a 4-chain fit) and
+    ``convergence_check`` reported 400% divergences (#2087).
+
+    Parameters
+    ----------
+    diagnostics : dict
+        A ``Posterior.diagnostics`` mapping. ``n_chains`` defaults to 1 when
+        absent (single-chain paths and hand-built posteriors).
+    n_samples : int, optional
+        Per-chain draw count to use instead of ``diagnostics["n_samples"]``,
+        for callers that already resolved a fallback.
+    """
+    if n_samples is None:
+        n_samples = diagnostics["n_samples"]
+    return int(n_samples) * int(diagnostics.get("n_chains", 1))
+
+
 @functools.partial(jax.jit, static_argnums=(3, 5, 6, 7, 8, 9))
 def _nuts_full_scan(
     init_flat,

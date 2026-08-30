@@ -285,16 +285,21 @@ def convergence_check(result, method_name="", verbose=True):
     # --- Divergences (NUTS) ---
     n_div = result.diagnostics.get("n_divergent", None)
     if n_div is not None:
+        from tengri.inference.backends.mcmc._shared import total_draws
+
+        # ``n_samples`` is per chain; ``n_divergent`` counts every chain (#2087).
         n_samples = result.diagnostics.get("n_samples", 1)
-        div_pct = 100 * n_div / max(n_samples, 1)
+        n_total = total_draws(result.diagnostics, n_samples=n_samples)
+        div_pct = 100 * n_div / max(n_total, 1)
         info["n_divergent"] = n_div
+        info["n_draws_total"] = n_total
         info["divergence_pct"] = div_pct
 
-        # Explicit detection: all samples diverged (#1437)
-        if n_div == n_samples and n_samples > 0:
+        # Explicit detection: every kept draw diverged (#1437, #2087)
+        if n_div == n_total and n_total > 0:
             info["all_samples_divergent"] = True
             warnings.append(
-                f"CRITICAL: {n_div}/{n_samples} divergent transitions (100%) "
+                f"CRITICAL: {n_div}/{n_total} divergent transitions (100%) "
                 f": the sampler rejected every proposal. This is a dead fit, not a converged one."
             )
         elif n_div > th["divergence_warn"]:
@@ -344,10 +349,7 @@ def convergence_check(result, method_name="", verbose=True):
         if "acceptance_rate" in info:
             print(f"  Acceptance rate:    {info['acceptance_rate']:.1%}")
         if "n_divergent" in info:
-            print(
-                f"  Divergences:        {info['n_divergent']} / "
-                f"{result.diagnostics.get('n_samples', '?')}"
-            )
+            print(f"  Divergences:        {info['n_divergent']} / {info['n_draws_total']}")
         if warnings:
             for w in warnings:
                 print(f"  >> {w}")
