@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: BSD-3-Clause
 """Integration tests for the CANDELS photometry pipeline of the framework paper (#2089).
 
 Bug: ``fit_one.extract_photometry`` carried a private AB zero point of
