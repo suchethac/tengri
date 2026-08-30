@@ -239,3 +239,42 @@ PYTHONPATH=$PWD/../../src:$PWD/../.. JAX_PLATFORMS=cpu $python_exe fig06_code_ov
 - Figure panels are fixed to x ∈ [9.5, 11.8], y ∈ [-1.0, 3.5] for direct comparison
 - Published codes use distinct grayscale levels and marker styles (see legend)
 - tengri configurations use distinct colors: I = blue (#0072B2), II = orange (#E69F00), III = green (#009E73)
+
+## Figure 7: Backend Comparison
+
+**Purpose:** Compare all inference backends (MAP, Laplace, NUTS, HMC, Ray Tracing) on one galaxy
+(13097) with one configuration (II), showing marginal posterior distributions and timing analysis.
+
+**Prerequisites:** Backend sweep results from `run_backend_sweep.py` (reads JSON and NPZ files).
+
+**Command (from paper1 worktree root):**
+```bash
+cd <path-to-your-tengri-checkout>
+PYTHONPATH=$PWD/src JAX_PLATFORMS=cpu python analysis/paper1/fig07_backends.py \
+  --sweep-dir <sweep-dir> \
+  --out-dir analysis/paper1
+```
+
+**Arguments:**
+- `--sweep-dir`: Path to backend sweep results directory (default: `analysis/paper1/results/backend_sweep`)
+- `--out-dir`: Output directory for figures and sidecar (default: `analysis/paper1`)
+
+**Outputs:**
+- `figures/fig07_backends.pdf` — Publication-ready two-column figure
+- `figures/fig07_backends.png` — High-resolution raster version
+- `results/fig07_backends_data.json` — Complete diagnostics sidecar including per-backend budgets, wall times, ESS metrics, and agreement statistics
+
+**Figure panels:**
+- **Left (3 columns):** Marginal posterior distributions for log M*, log SFR/100Myr, and tau_diff
+  - MAP: vertical black line
+  - Laplace: gray Gaussian approximation (from ESS-derived width)
+  - Samplers (NUTS, HMC, Ray Tracing): dashed colored lines at medians (Okabe-Ito palette)
+- **Right:** Timing comparison (log-scale wall time bars) with per-sampler efficiency (s/ESS annotations)
+  - Rows ordered: MAP, Laplace, Auto (MCMC dispatcher), NUTS, HMC, Ray Tracing
+  - Budgets annotated in italic text to the left of each row
+
+**Noted limitations:**
+- Sampler budgets from run_backend_sweep.py (lines 99–210): MAP (500 steps + 8 restarts); Laplace (Gaussian);
+  MCMC/Auto (600+600x2); NUTS (600+600x2); HMC (200+300x4, L=50); Ray Tracing (400+400x2, step=0.05)
+- The sweep script saves JSON diagnostics only; full posterior samples are not persisted to NPZ files
+- Agreement summary (sidecar) computed only when all samplers present (requires full sweep, not smoke subset)
