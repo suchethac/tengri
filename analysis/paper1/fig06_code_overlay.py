@@ -76,17 +76,21 @@ def load_fit_results(
     npz_path = results_dir / f"{gal_id}_{config}.npz"
     json_path = results_dir / f"{gal_id}_{config}.json"
 
-    if not npz_path.exists():
+    if not (npz_path.exists() and json_path.exists()):
         return None
 
-    # Load metadata
+    # Load metadata; a best-so-far NPZ is written after every attempt, so only an
+    # adopted cell (adoption_pass true) is used for the figure
     with open(json_path) as f:
         meta = json.load(f)
+    if meta.get("adoption_pass") is not True:
+        logger.info(f"Skipping {gal_id}_{config} (did not pass the adoption bar)")
+        return None
     z = meta["z"]
 
-    # Load NPZ
-    npz = np.load(npz_path, allow_pickle=True)
-    n_params_full = 2400  # 4 chains × 600 samples
+    # Load NPZ; the number of saved draws is whatever the driver thinned to
+    npz = np.load(npz_path, allow_pickle=False)
+    n_params_full = int(npz["redshift"].shape[0])
 
     # Subsample from the full 2400 using the same indices for all quantities
     idx = np.round(np.linspace(0, n_params_full - 1, max_samples)).astype(int)

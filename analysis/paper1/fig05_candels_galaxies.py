@@ -81,10 +81,17 @@ class FitResultManager:
         self.results_dir = Path(results_dir)
 
     def has_fit(self, gal_id: int, config_key: str) -> bool:
-        """Check if both JSON and NPZ exist."""
+        """True only for an adopted cell: JSON and NPZ exist and adoption_pass is true.
+
+        The driver writes a best-so-far NPZ after every attempt, so file presence
+        alone does not mean the cell passed the adoption bar.
+        """
         json_path = self.results_dir / f"{gal_id}_{config_key}.json"
         npz_path = self.results_dir / f"{gal_id}_{config_key}.npz"
-        return json_path.exists() and npz_path.exists()
+        if not (json_path.exists() and npz_path.exists()):
+            return False
+        diagnostics = self.load_json(gal_id, config_key) or {}
+        return diagnostics.get("adoption_pass") is True
 
     def has_json(self, gal_id: int, config_key: str) -> bool:
         """Check if JSON exists (may indicate failed adoption)."""
