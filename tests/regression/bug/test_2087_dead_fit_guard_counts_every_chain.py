@@ -21,7 +21,13 @@ Mutation checks (the one-line mutant each test must die under):
 3. ``test_half_divergent_two_chain_fit_does_not_warn``: the same mutant makes
    the old condition TRUE for ``n_divergent == n_samples`` with two chains ->
    a false warning.
-4. ``test_convergence_check_two_chain_percentages``: revert convergence.py to
+4. ``test_a_chain_count_without_a_sample_count_is_not_double_counted``: drop
+   the ``// n_chains`` from the ``n_samples`` fallback in posterior.py -- the
+   message then reads "400/800".
+5. ``test_the_frozen_gate_counts_every_chain_too``: revert the frozen gate in
+   posterior.py to ``if n_samples >= 100`` -- 60 draws per chain over two
+   chains then slips under it and the frozen column goes unreported.
+6. ``test_convergence_check_two_chain_percentages``: revert convergence.py to
    ``n_div / n_samples`` -> 200%. Also covers the partial-divergence
    ``elif n_div > th["divergence_warn"]`` branch: reverting its message
    denominator to ``n_samples`` prints "200/200" instead of "200/400" for the
@@ -109,3 +115,45 @@ def test_convergence_check_two_chain_percentages():
     # Numerator over the SAME total-draws denominator, not the per-chain count
     # (#2087): "200/400", not "200/200".
     assert "200/400" in " ".join(info["warnings"])
+
+
+def test_a_chain_count_without_a_sample_count_is_not_double_counted():
+    """The ``n_samples`` fallback is already a total, so it must not be multiplied again.
+
+    A hand-built posterior carrying ``n_chains`` but no ``n_samples`` fell back
+    to ``len(draws)`` -- the flattened ``(n_chains * n_samples,)`` length, a
+    total already -- and ``total_draws`` then multiplied it by ``n_chains``
+    again, so 400 draws over two chains were reported as 800 (#2087, M9).
+    """
+    with pytest.warns(DeadFitWarning, match=r"dead fit: 400/400 divergent"):
+        Posterior(
+            samples=_two_chain_samples(),
+            params={"x": jnp.array(5.0)},
+            method="mcmc_nuts",
+            wall_time_s=1.0,
+            diagnostics={"n_divergent": _N_TOTAL, "n_chains": _N_CHAINS},
+        )
+
+
+def test_the_frozen_gate_counts_every_chain_too():
+    """``np.ptp`` sees the flattened draws, so the 100-draw exemption must too.
+
+    A short-chain exemption keyed on the PER-CHAIN count let a genuinely frozen
+    column through whenever the chains were individually short: 60 draws per
+    chain over two chains is 120 flattened draws, which ``np.ptp`` reads in
+    full, but the gate saw 60 and stayed quiet (#2087, M8).
+    """
+    n_per_chain, n_chains = 60, 2
+    n_total = n_per_chain * n_chains
+    samples = {
+        "x": jax.random.normal(jax.random.PRNGKey(3), (n_total,)),
+        "frozen": jnp.full((n_total,), 4.0),
+    }
+    with pytest.warns(DeadFitWarning, match=r"'frozen'.*1 unique draw in 120 samples"):
+        Posterior(
+            samples=samples,
+            params={"x": jnp.array(0.0)},
+            method="mcmc_nuts",
+            wall_time_s=1.0,
+            diagnostics={"n_divergent": 0, "n_samples": n_per_chain, "n_chains": n_chains},
+        )

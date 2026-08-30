@@ -32,6 +32,11 @@ Mutation checks:
 4. ``test_free_names_includes_the_stochastic_field_latent`` and
    ``test_a_frozen_field_latent_is_flagged_dead``: revert ``free_names`` to
    ``tuple(spec.free_params)`` (drop the ``psd_xi`` append).
+5. ``test_convergence_check_ignores_fixed_parameters``: revert
+   ``convergence_check``'s frozen loop to ``result.samples.items()``.
+6. ``test_a_saved_posterior_reloads_without_a_false_dead_fit_warning``: make
+   ``Posterior.load()`` stop passing ``_free_names`` (or ``save()`` stop
+   writing the attribute).
 """
 
 import warnings
@@ -191,3 +196,44 @@ def test_a_moving_field_latent_does_not_warn(stochastic_model):
     with warnings.catch_warnings():
         warnings.simplefilter("error")
         _stochastic_posterior(stochastic_model, free_draws, moving_xi)
+
+
+def test_convergence_check_ignores_fixed_parameters(model):
+    """The report reads the same free names the construction guard does (#2087, R18)."""
+    from tengri.analysis.plotting.convergence import convergence_check
+
+    post = _posterior(model, 10.0 + 0.1 * jax.random.normal(jax.random.PRNGKey(20), (_N,)))
+    info = convergence_check(post, verbose=False)
+    assert "frozen_params" not in info, info.get("frozen_params")
+    assert not [w for w in info["warnings"] if "FROZEN" in w], info["warnings"]
+
+
+def test_convergence_check_names_only_the_frozen_free_parameter(model):
+    from tengri.analysis.plotting.convergence import convergence_check
+
+    with pytest.warns(DeadFitWarning):
+        post = _posterior(model, jnp.full((_N,), 10.0))
+    info = convergence_check(post, verbose=False)
+    assert info["frozen_params"] == [_FREE]
+    frozen_warning = " ".join(w for w in info["warnings"] if "FROZEN" in w)
+    assert _FREE in frozen_warning
+    for pinned in model.spec.fixed_params:
+        assert pinned not in frozen_warning, pinned
+
+
+def test_a_saved_posterior_reloads_without_a_false_dead_fit_warning(model, tmp_path):
+    """The free names ride in the file, so a model-less reload judges the same columns.
+
+    ``Posterior.load(path)`` with no ``model=`` used to leave ``free_names``
+    ``None``, which put every ``Fixed`` column back under the frozen check --
+    the #2087 false positive, re-created on every reload of a saved real fit.
+    """
+    post = _posterior(model, 10.0 + 0.1 * jax.random.normal(jax.random.PRNGKey(21), (_N,)))
+    path = tmp_path / "post.h5"
+    post.save(str(path))
+
+    with warnings.catch_warnings():
+        warnings.simplefilter("error")
+        loaded = Posterior.load(str(path))
+    assert loaded.free_names == (_FREE,)
+    assert loaded._model is None

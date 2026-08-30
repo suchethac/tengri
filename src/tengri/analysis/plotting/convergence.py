@@ -267,10 +267,18 @@ def convergence_check(result, method_name="", verbose=True):
     # The guard: detect parameters where n_unique == 1 and surface as a failure.
     frozen_params = []
     if result.samples is not None:
-        for param_name, samples in result.samples.items():
-            if param_name.startswith("psd_xi"):
-                continue
-            arr = np.asarray(samples)
+        # Only FREE parameters can be frozen. ``samples`` also carries every
+        # ``Fixed`` value broadcast to a constant column, so scanning it whole
+        # named 41 pinned parameters and no free one on the fit that filed
+        # #2087. The same policy as ``Posterior.__post_init__``: the free names
+        # when the posterior knows them (from its model, or from the file it
+        # was loaded from), every column when it does not. ``psd_xi`` is not
+        # skipped -- ``free_names`` includes the stochastic-SFH field latent,
+        # and a frozen field is exactly as dead as a frozen named parameter.
+        free = getattr(result, "free_names", None)
+        names = list(result.samples) if free is None else [n for n in free if n in result.samples]
+        for param_name in names:
+            arr = np.asarray(result.samples[param_name])
             if arr.ndim >= 1 and float(np.ptp(arr)) == 0.0:
                 frozen_params.append(param_name)
 

@@ -42,7 +42,7 @@ import numpy as np
 from jax.flatten_util import ravel_pytree
 from packaging.requirements import Requirement
 
-from tengri.config.exceptions import BackendError
+from tengri.config.exceptions import BackendError, DeadFitError
 from tengri.inference._model_cache import _default_owner as _model_cache_owner
 
 # ---------------------------------------------------------------------------
@@ -399,15 +399,22 @@ def final_window_divergence_frac(warmup_divergent, n_warmup: int) -> float | Non
     Returns
     -------
     float or None
-        ``None`` when there is nothing to measure: no flags, or an empty
-        record (a warmup that ran no steps). Callers must treat that as
-        "not measured" rather than as a fraction of zero — the backends omit
-        the ``warmup_divergence_frac`` diagnostic entirely in that case.
+        ``None`` when there is nothing to measure: no flags, an empty record
+        (a warmup that ran no steps), or fewer steps than
+        ``DEAD_WARMUP_MIN_WINDOW`` — a record that short cannot fill the
+        minimum window and carries no verdict. BlackJAX opens dual averaging
+        at ``mu = log(10 * step_size)``, so the first proposals are made at
+        roughly twice the initial step size whatever the posterior and take
+        five or six rejections to collapse; a sub-window record is that
+        opening burst and nothing else, on a healthy posterior as much as on
+        a dead one (#2088). Callers must treat ``None`` as "not measured"
+        rather than as a fraction of zero — the backends omit the
+        ``warmup_divergence_frac`` diagnostic entirely in that case.
     """
     if warmup_divergent is None:
         return None
     flags = np.asarray(warmup_divergent, dtype=bool)
-    if flags.size == 0:
+    if flags.size < DEAD_WARMUP_MIN_WINDOW:
         return None
     window = _dead_warmup_window(flags.size, n_warmup)
     return float(flags[-window:].mean())
@@ -426,7 +433,6 @@ def refuse_dead_warmup(
     """
     if frac is None or frac < DEAD_WARMUP_DIVERGENCE_FRAC:
         return
-    from tengri.config.exceptions import DeadFitError
 
     window = _dead_warmup_window(n_warmup, n_warmup)
     raise DeadFitError(

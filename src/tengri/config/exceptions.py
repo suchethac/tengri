@@ -166,7 +166,19 @@ class DeadFitError(InferenceError):
         The adapted step size at the end of warmup.
     """
 
-    def __init__(self, message: str, *, warmup_divergence_frac: float, step_size: float):
+    def __init__(
+        self,
+        message: str,
+        *,
+        warmup_divergence_frac: float = float("nan"),
+        step_size: float = float("nan"),
+    ):
+        # Both measurements default so the exception survives ``pickle`` and
+        # ``copy``: ``BaseException.__reduce__`` re-invokes the constructor
+        # with ``self.args`` alone (the message) and restores ``__dict__``
+        # afterwards, so a required keyword argument would make every
+        # round-trip raise ``TypeError`` -- which is what a multiprocessing
+        # driver would surface in place of the refusal message.
         super().__init__(message)
         self.warmup_divergence_frac = float(warmup_divergence_frac)
         self.step_size = float(step_size)

@@ -17,6 +17,11 @@ Mutation checks:
    log line to ``n_samples``.
 4. ``test_a_reused_adaptation_carries_no_warmup_record``: put
    ``"warmup_divergence_frac": None`` back on the cached branch of nuts.py.
+5. ``test_hmc_refuses_a_dead_warmup_before_sampling``: remove the
+   ``refuse_dead_warmup`` call in hmc.py / dynamic_hmc.py.
+6. ``test_a_two_step_hmc_warmup_is_not_judged``: remove the
+   ``flags.size < DEAD_WARMUP_MIN_WINDOW`` guard in
+   ``final_window_divergence_frac`` -- the fit then raises.
 """
 
 import logging
@@ -27,7 +32,11 @@ import jax.numpy as jnp
 import pytest
 
 from tengri.config.exceptions import DeadFitError, DeadFitWarning
-from tengri.inference.backends.mcmc import nuts as nuts_backend
+from tengri.inference.backends.mcmc import (
+    dynamic_hmc as dynamic_hmc_backend,
+    hmc as hmc_backend,
+    nuts as nuts_backend,
+)
 from tengri.inference.backends.mcmc._shared import DEAD_WARMUP_DIVERGENCE_FRAC
 
 # The synthetic SSP bakes its nebular emission in, and both ``SEDModel(...)``
@@ -161,3 +170,55 @@ def test_a_reused_adaptation_carries_no_warmup_record(synthetic_ssp, simple_obse
 
     assert "warmup_divergence_frac" in first.diagnostics
     assert "warmup_divergence_frac" not in second.diagnostics
+
+
+# Both HMC backends import ``_hmc_warmup_only`` into their own namespace and
+# call it positionally, so ``args[4]`` is ``n_warmup`` in each and one stub
+# serves both seams.
+@pytest.mark.parametrize(
+    ("method", "backend", "sampler"),
+    [
+        ("mcmc_hmc", hmc_backend, "HMC"),
+        ("mcmc_dynamic_hmc", dynamic_hmc_backend, "Dynamic HMC"),
+    ],
+)
+def test_hmc_refuses_a_dead_warmup_before_sampling(
+    synthetic_ssp, simple_observation, monkeypatch, method, backend, sampler
+):
+    forward, flux_obs, noise = _forward_and_data(synthetic_ssp, simple_observation)
+    monkeypatch.setattr(backend, "_hmc_warmup_only", _dead_warmup)
+    with pytest.raises(DeadFitError) as excinfo:
+        _fit(forward, flux_obs, noise, method=method)
+    assert excinfo.value.warmup_divergence_frac == pytest.approx(1.0)
+    assert sampler in str(excinfo.value)
+
+
+def test_a_two_step_hmc_warmup_is_not_judged(synthetic_ssp, simple_observation):
+    """A warmup too short to fill the minimum window carries no verdict (#2088, R15).
+
+    BlackJAX opens dual averaging at ``mu = log(10 * step_size)``, so the first
+    proposals are made at roughly twice the initial step size whatever the
+    posterior and take five or six rejections to collapse. A two-step record is
+    that opening burst and nothing else, on a healthy posterior as much as on a
+    dead one, so it must not refuse the fit -- and must not report a fraction
+    either.
+
+    Both kept draws do diverge at that un-collapsed step size, which is exactly
+    the point: the construction-time guard still says so, and it is the only
+    guard entitled to, because it judges the draws rather than the opening of
+    an adaptation that never got to finish.
+    """
+    forward, flux_obs, noise = _forward_and_data(synthetic_ssp, simple_observation)
+    with pytest.warns(DeadFitWarning, match=r"2/2 divergent"):
+        post = _fit(
+            forward,
+            flux_obs,
+            noise,
+            method="mcmc_hmc",
+            n_warmup=2,
+            n_burnin=0,
+            n_samples=2,
+            n_chains=1,
+        )
+    assert post.samples
+    assert "warmup_divergence_frac" not in post.diagnostics
