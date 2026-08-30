@@ -4,11 +4,12 @@
     "name": "ctl",
     "why": "Notebooks 00/01/05 all use a tsnorm SFH, measured pathologically degenerate in bench/reports/2026-08-20_cuda_device_matrix.md Finding 15 (ESS_min 1.7-4.3 even with 260 spectral pixels). This row swaps ONLY the SFH family so a sampler failure on the notebooks can be told apart from the fixture's own degeneracy.",
     "sfh": "dpl (dual power law, all params free)",
-    "D": 7,
+    "D": 8,
     "free_params": [
       "sfh_dpl_alpha",
       "sfh_dpl_beta",
       "sfh_dpl_tau_gyr",
+      "sfh_dpl_age_gyr",
       "sfh_dpl_log_total_mass",
       "dust_tau_bc",
       "dust_tau_diff",

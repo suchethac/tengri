@@ -331,10 +331,11 @@ def _build_ctl_jwst(ssp):
 def _build_ctl_dpl(ssp):
     """Non-tsnorm control: the same 14 bands as nb05 over a **DPL** SFH. D=8.
 
-    (``bench/reports/2026-08-30_chees_hmc.md`` tabulates this fixture as D=7.
-    Measured on this HEAD it is D=8 -- the same count as nb05, which is what
-    "otherwise identical to nb05" should give. The report's column is wrong;
-    the fixture is unchanged.)
+    (``bench/reports/2026-08-30_chees_hmc.md`` tabulated this fixture as D=7 and
+    ``bench/results/2026-08-30_chees_control.json`` recorded a seven-item
+    ``free_params`` list; both omitted ``sfh_dpl_age_gyr``, and both have been
+    corrected to D=8 -- the same count as nb05, which is what "otherwise
+    identical to nb05" should give. The fixture is unchanged.)
 
     Notebooks 00, 01 and 05 all run a ``tsnorm`` SFH, and
     ``bench/reports/2026-08-20_cuda_device_matrix.md`` Finding 15 measured that
