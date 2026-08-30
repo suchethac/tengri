@@ -3,11 +3,16 @@
 ## Environment Setup (from worktree root)
 
 ```bash
-cd /Users/suchethacooray/Projects/tengri/.claude/worktrees/paper1
+cd <path-to-your-tengri-checkout>
 export PYTHONPATH=$PWD/src
 export JAX_PLATFORMS=cpu
 python_exe=/opt/anaconda3/bin/python3
 ```
+
+The scripts under `analysis/paper1/` default to paths resolved relative to the
+checkout; set `TENGRI_CANDELS_CATALOG`, `ART_SEDFITTING_DIR`, or
+`TENGRI_PAPER_FIGURES_DIR` to override the CANDELS catalog, the
+`art_sedfitting` checkout, or the figures output directory respectively.
 
 ## Deliverable 1: Single Fit (fit_one.py)
 

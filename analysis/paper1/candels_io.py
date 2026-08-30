@@ -2,9 +2,21 @@
 
 from __future__ import annotations
 
+import os
 from pathlib import Path
 
 import numpy as np
+
+#: Default catalog location, resolved relative to this file (analysis/paper1/
+#: candels_io.py -> paper1 -> analysis -> repository root). Override with the
+#: ``TENGRI_CANDELS_CATALOG`` environment variable.
+CANDELS_CATALOG = (
+    Path(__file__).resolve().parents[2]
+    / "analysis"
+    / "hst_proposal"
+    / "data"
+    / "CANDELS_GDSS_workshop_z1.dat"
+)
 
 
 def load_candels_z1() -> dict:
@@ -15,17 +27,19 @@ def load_candels_z1() -> dict:
         data (the full ``(n_galaxies, n_columns)`` float matrix)
 
     Notes:
-        Data path: /Users/suchethacooray/Projects/tengri/analysis/hst_proposal/data/CANDELS_GDSS_workshop_z1.dat
+        Data path: resolved relative to this file as ``CANDELS_CATALOG`` (repo
+        root / analysis/hst_proposal/data/CANDELS_GDSS_workshop_z1.dat),
+        overridable via the ``TENGRI_CANDELS_CATALOG`` environment variable.
         Missing data indicated by 98.999 or negative errors
         flg1: data quality flag (0 = good, 1 = issues)
     """
-    data_path = Path(
-        "/Users/suchethacooray/Projects/tengri/"
-        "analysis/hst_proposal/data/CANDELS_GDSS_workshop_z1.dat"
-    )
+    data_path = Path(os.environ.get("TENGRI_CANDELS_CATALOG", CANDELS_CATALOG))
 
     if not data_path.exists():
-        raise FileNotFoundError(f"CANDELS data not found at {data_path}")
+        raise FileNotFoundError(
+            f"CANDELS data not found at {data_path} (resolved from CANDELS_CATALOG="
+            f"{CANDELS_CATALOG}; override with the TENGRI_CANDELS_CATALOG environment variable)"
+        )
 
     with open(data_path) as f:
         header = f.readline().strip("#").strip().split()

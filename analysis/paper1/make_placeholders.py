@@ -4,18 +4,21 @@
 Produces eight placeholder PDFs at specified dimensions with light-grey boxes
 and dashed borders, centered text indicating the figure content.
 
-Output: /Users/suchethacooray/writing-workspace/projects/tengri/figures/placeholder_fig*.pdf
+Output: the writing-workspace figures directory, which is machine-specific and
+resolved from the ``TENGRI_PAPER_FIGURES_DIR`` environment variable when set,
+falling back to a ``figures`` directory next to this script.
 """
 
+import os
 from pathlib import Path
 
-from matplotlib.backends.backend_pdf import PdfPages
-import matplotlib.pyplot as plt
 import matplotlib.patches as patches
-import numpy as np
+import matplotlib.pyplot as plt
 
 # Output directory
-OUTPUT_DIR = Path("/Users/suchethacooray/writing-workspace/projects/tengri/figures")
+OUTPUT_DIR = Path(
+    os.environ.get("TENGRI_PAPER_FIGURES_DIR", Path(__file__).resolve().parent / "figures")
+)
 OUTPUT_DIR.mkdir(parents=True, exist_ok=True)
 
 # Placeholder specifications: (fig_num, width_in, height_in, content)
