@@ -1,9 +1,9 @@
 #!/usr/bin/env python
 """
-Figure 3: Precomputation speed and accuracy.
+Figure 3 (speed, main text) and Figure B1 (accuracy, appendix).
 
-Panel (a): Forward-model cost (provisional from May 2026 benchmark).
-Panel (b): LUT accuracy vs redshift (from results/fig03_precompute_data.json).
+fig03_precompute.pdf: forward-model cost, exact vs WavePrecomp (provisional from May 2026 benchmark until re-run).
+figB1_lut_accuracy.pdf: LUT accuracy vs redshift (from results/fig03_precompute_data.json).
 
 Usage:
   python fig03_precompute.py
@@ -260,20 +260,30 @@ if args.accuracy_json and os.path.exists(args.accuracy_json):
 else:
     print(f"Note: Accuracy data not found at {args.accuracy_json}", flush=True)
 
-fig = create_figure(bench_data, accuracy_data)
-
 figures_dir = "analysis/paper1/figures"
 os.makedirs(figures_dir, exist_ok=True)
 
-pdf_path = os.path.join(figures_dir, "fig03_precompute.pdf")
-png_path = os.path.join(figures_dir, "fig03_precompute.png")
+# The paper uses the two panels as separate single-column figures: the speed
+# panel in the main text (fig03) and the accuracy panel in the appendix (figB1).
+plt.rcParams["font.family"] = "sans-serif"
+plt.rcParams["font.size"] = 10
+plt.rcParams["axes.linewidth"] = 0.8
 
-fig.savefig(pdf_path, format="pdf", bbox_inches="tight", dpi=300)
-fig.savefig(png_path, format="png", bbox_inches="tight", dpi=300)
+fig_a, ax_a = plt.subplots(figsize=(3.5, 3.0), dpi=150)
+plot_panel_a(ax_a, bench_data)
+for ext in ("pdf", "png"):
+    path = os.path.join(figures_dir, f"fig03_precompute.{ext}")
+    fig_a.savefig(path, format=ext, bbox_inches="tight", dpi=300)
+    print(f"Saved: {path}")
 
-print(f"Saved: {pdf_path}")
-print(f"Saved: {png_path}")
+fig_b, ax_b = plt.subplots(figsize=(3.5, 3.0), dpi=150)
+plot_panel_b(ax_b, accuracy_data)
+for ext in ("pdf", "png"):
+    path = os.path.join(figures_dir, f"figB1_lut_accuracy.{ext}")
+    fig_b.savefig(path, format=ext, bbox_inches="tight", dpi=300)
+    print(f"Saved: {path}")
 
-plt.close(fig)
-
-print("Done.")
+# Combined two-panel version kept for reference.
+fig = create_figure(bench_data, accuracy_data)
+fig.savefig(os.path.join(figures_dir, "fig03_precompute_combined.pdf"), format="pdf", bbox_inches="tight", dpi=300)
+print("Saved: combined")
