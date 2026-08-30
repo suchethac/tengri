@@ -176,9 +176,10 @@ sigma_floor = sqrt(sigma_measurement^2 + (0.05 * fnu)^2)
 - A mapped column missing from the catalog header raises; nothing is dropped
   silently.
 - Driver timeout per cell: `DEFAULT_FIT_TIMEOUT_S = 21600` s — three attempts at the base warmup, but attempts 2 and 3 run at target acceptance 0.95 and 0.99, which shrink the step and deepen the trees, so the per-draw cost rises even though the draw count does not; a dead fit still ends in ~10 min (measured 2026-08-30: a
-  healthy 600-warmup + 4x600-draw configuration I cell takes ~22 min, a retune doubles
-  the warmup for ~50 min, and configurations II/III cost 2-3x per draw, reaching
-  100-150 min — 7200 s could still kill a healthy retune. A dead fit finishes in ~10
+  healthy 600-warmup + 4x600-draw configuration I cell takes ~22 min, configurations II/III
+  cost 2-3x per draw, and each retune at a higher target acceptance costs more than the first
+  attempt at the same draw count — configuration III's first attempt alone measured 96 min, so
+  three attempts on III can approach the cap. A dead fit finishes in ~10
   min rather than hanging, so the larger cap costs nothing in hang detection).
 
 ## Linting
