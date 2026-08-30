@@ -31,9 +31,18 @@ CONFIG_DIMENSIONS = {"I": 5, "II": 8, "III": 11}
 # Galaxy labels for reporting
 GALAXY_LABELS = {13097: "blue", 15336: "red", 24497: "intermediate"}
 
+#: Per-cell subprocess timeout. One retune attempt doubles the 600-step warmup,
+#: and 600 s killed the first retune of the grid (#2089); a healthy fit of these
+#: models takes seconds to a couple of minutes, so 1800 s still catches pathology.
+DEFAULT_FIT_TIMEOUT_S = 1800
+
 
 def run_fit_subprocess(
-    gal_id: int, config_key: str, out_dir: Path, seed: int = 42, timeout: int = 600
+    gal_id: int,
+    config_key: str,
+    out_dir: Path,
+    seed: int = 42,
+    timeout: int = DEFAULT_FIT_TIMEOUT_S,
 ) -> dict | None:
     """Spawn fit_one.py in subprocess and collect results.
 

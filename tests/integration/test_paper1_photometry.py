@@ -177,3 +177,13 @@ def test_thin_samples_and_iter_draws_use_flattened_draws():
         {"a": 1.0},
         {"a": 2.0},
     ]
+
+
+def test_driver_timeout_covers_a_retune():
+    import inspect
+
+    import run_candels_fits
+
+    assert run_candels_fits.DEFAULT_FIT_TIMEOUT_S >= 1800
+    default = inspect.signature(run_candels_fits.run_fit_subprocess).parameters["timeout"].default
+    assert default == run_candels_fits.DEFAULT_FIT_TIMEOUT_S

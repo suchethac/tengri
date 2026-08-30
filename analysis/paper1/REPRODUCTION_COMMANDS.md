@@ -113,6 +113,22 @@ All fits apply a 5% systematic flux-error floor in quadrature:
 sigma_floor = sqrt(sigma_measurement^2 + (0.05 * fnu)^2)
 ```
 
+## Photometry (candels_io.py)
+
+- AB zero point: `AB_ZERO_POINT_ERG = 3.631e-20` erg s⁻¹ cm⁻² Hz⁻¹ (3631 Jy).
+  The first grid ran with 3.63e-23 (1000× too faint) and every NUTS
+  transition diverged (#2089).
+- Column map `CANDELS_TO_TENGRI`: ACS F435W/F606W/F775W/F814W/F850LP,
+  WFC3 F098M/F105W/F125W/F160W and IRAC 3.6/4.5/5.8/8.0 use their own
+  tengri curves. **Stand-ins:** ISAAC Ks and HAWK-I Ks both use `vista_ks`
+  (no ISAAC or broadband HAWK-I curve in the registry). **Unmapped:**
+  CTIO U and VIMOS U (no CTIO or VIMOS U curve in the registry).
+- One Ks band per galaxy: ISAAC first, HAWK-I only when ISAAC is undetected.
+- A mapped column missing from the catalog header raises; nothing is dropped
+  silently.
+- Driver timeout per cell: `DEFAULT_FIT_TIMEOUT_S = 1800` s (one retune doubles
+  the warmup; 600 s was shorter than that).
+
 ## Linting
 
 All scripts pass ruff checks:
