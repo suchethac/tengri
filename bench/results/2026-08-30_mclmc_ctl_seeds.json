@@ -1,0 +1,92 @@
+{
+  "notebook": "ctl",
+  "seeds": [
+    4,
+    5,
+    6
+  ],
+  "rows": {
+    "nuts (shipped)": [
+      {
+        "wall": 174.12344469700474,
+        "rhat": 1.013644581071954,
+        "divergences": 6,
+        "eevpd": null,
+        "eevpd_target": null,
+        "nonfinite_steps": null,
+        "min_ess": 153.48868344046502,
+        "worst": "dust_tau_diff",
+        "sec_per_ess": 1.1344383233604547,
+        "grad_per_draw": 77.10486574685993,
+        "grad_per_ess": 401.87909111497333
+      },
+      {
+        "wall": 484.49343790404964,
+        "rhat": 1.0071479203473828,
+        "divergences": 9,
+        "eevpd": null,
+        "eevpd_target": null,
+        "nonfinite_steps": null,
+        "min_ess": 146.6379377201195,
+        "worst": "met_logzsol",
+        "sec_per_ess": 3.3040115364195723,
+        "grad_per_draw": 231.5211206556386,
+        "grad_per_ess": 1263.0898893165363
+      },
+      {
+        "wall": 173.7914858389413,
+        "rhat": 1.0041433323869637,
+        "divergences": 0,
+        "eevpd": null,
+        "eevpd_target": null,
+        "nonfinite_steps": null,
+        "min_ess": 117.40957730270439,
+        "worst": "dust_tau_diff",
+        "sec_per_ess": 1.4802155823359584,
+        "grad_per_draw": 105.23713006428108,
+        "grad_per_ess": 717.059936553282
+      }
+    ],
+    "mclmc": [
+      {
+        "wall": 56.811383557040244,
+        "rhat": 1.0053577412286698,
+        "divergences": null,
+        "eevpd": 0.0012164970302698198,
+        "eevpd_target": 0.0005,
+        "nonfinite_steps": 0,
+        "min_ess": 123.95007597536593,
+        "worst": "sfh_cont_log_total_mass",
+        "sec_per_ess": 0.45834085304095373,
+        "grad_per_draw": 2.0,
+        "grad_per_ess": 645.4211453319266
+      },
+      {
+        "wall": 86.3722961700987,
+        "rhat": 1.0161385033602743,
+        "divergences": null,
+        "eevpd": 0.0018077707002352396,
+        "eevpd_target": 0.0005,
+        "nonfinite_steps": 0,
+        "min_ess": 4.12418680346441,
+        "worst": "met_logzsol",
+        "sec_per_ess": 20.94286711201928,
+        "grad_per_draw": 2.0,
+        "grad_per_ess": 19397.76344097658
+      },
+      {
+        "wall": 82.92998592695221,
+        "rhat": 1.0012618480782514,
+        "divergences": null,
+        "eevpd": 0.04535521774984152,
+        "eevpd_target": 0.0005,
+        "nonfinite_steps": 0,
+        "min_ess": 371.8814845609588,
+        "worst": "dust_tau_diff",
+        "sec_per_ess": 0.22300111559697275,
+        "grad_per_draw": 2.0,
+        "grad_per_ess": 215.12229923048616
+      }
+    ]
+  }
+}

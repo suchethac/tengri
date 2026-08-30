@@ -96,6 +96,7 @@ _MANY_EVAL_SAMPLERS = frozenset(
         "mcmc_nuts",
         "mcmc_hmc",
         "mcmc_dynamic_hmc",
+        "mcmc_chees",
         "mcmc_ess",
         "mcmc_ghmc",
         "mcmc_mclmc",
@@ -179,6 +180,7 @@ _CANONICAL_METHODS = {
     "mcmc_nuts",
     "mcmc_hmc",
     "mcmc_dynamic_hmc",
+    "mcmc_chees",
     "mcmc_ghmc",
     "mcmc_mclmc",
     "mcmc_adjusted_mclmc",
@@ -3158,8 +3160,12 @@ class Fitter:
             - ``"mcmc"``: Auto: NUTS (D≤20) or Ray Tracing (D>20)
             - ``"mcmc_hmc"``: Standard HMC (fixed trajectory length)
             - ``"mcmc_dynamic_hmc"``: Dynamic HMC (adaptive trajectory)
+            - ``"mcmc_chees"``: ChEES-HMC, one trajectory length learned from
+              cross-chain statistics so the chains stay lock-step (experimental;
+              measured in ``bench/reports/2026-08-30_chees_hmc.md``)
             - ``"mcmc_ghmc"``: Generalized HMC (**broken**: R-hat ~ 2.5-3.1,
-              ESS ~ 1 on D=6-7 mocks)
+              ESS ~ 1 on D=6-8 mocks; MEADS adaptation did not fix it, see
+              ``bench/reports/2026-08-30_ghmc_meads_adaptation.md``)
             - ``"mcmc_mclmc"``: MCLMC (**broken**: R-hat ~ 1.7, ESS ~ 1)
             - ``"mcmc_adjusted_mclmc"``: MCLMC + Metropolis correction
             - ``"mcmc_ess"``: Elliptical Slice Sampling (gradient-free)
@@ -3695,7 +3701,7 @@ class Fitter:
         lines.append(
             "  Methods:     vi, vi_linear, vi_nonlinear_fast, vi_linear_fast, "
             "vi_native, vi_native_linear, mcmc, mcmc_raytrace, mcmc_nuts, "
-            "mcmc_hmc, mcmc_dynamic_hmc, mcmc_ghmc, mcmc_mclmc, "
+            "mcmc_hmc, mcmc_dynamic_hmc, mcmc_chees, mcmc_ghmc, mcmc_mclmc, "
             "mcmc_adjusted_mclmc, mcmc_ess, map, laplace, pathfinder, nss, auto"
         )
 

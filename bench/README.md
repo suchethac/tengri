@@ -28,6 +28,7 @@ conventions.
 | `benchmark_vi_native_vs_nifty.py` | geoVI: pure-JAX `native_vi_nonlinear` vs the NIFTy.re reference path |
 | `benchmark_vi_xlarge.py` | VI scaling on stochastic-SFH problems with D >> 100 |
 | `benchmark_population_native.py` | Hierarchical PopulationFitter: per-iteration cost vs N galaxies |
+| `benchmark_catalog_throughput.py` | Catalog MCMC: galaxies/s vs `forward_chunk_size`, sampler, precision and devices — with R-hat / ESS on every row |
 | `benchmark_adam_vs_lbfgs.py` | MAP optimizers head-to-head |
 | `benchmark_cue.py` | Cue (Li+2025) nebular emulator timing in isolation |
 | `benchmark_loss_timing.py` | Per-call loss / negative-log-posterior timing |

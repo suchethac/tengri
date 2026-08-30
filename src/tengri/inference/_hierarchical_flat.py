@@ -122,6 +122,17 @@ FLAT_SAMPLERS: dict[str, str] = {
 #: Listed so ``PopulationFitter`` can raise a specific error instead of a generic
 #: "unknown method", and so the reason survives longer than a commit message.
 FLAT_UNSUPPORTED: dict[str, str] = {
+    "mcmc_chees": (
+        "ChEES adapts one trajectory length from an ensemble of chains held in "
+        "memory at once, and hierarchical D grows with the catalog -- a 32-chain "
+        "ensemble is 32 simultaneous copies of a problem whose single-chain NUTS "
+        "warmup already peaks in the gigabytes. The single-galaxy backend is "
+        "measured (bench/reports/2026-08-30_chees_hmc.md); nothing here has "
+        "measured the ensemble's memory at hierarchical width, and a driver "
+        "wired on the strength of the single-galaxy rows would be exactly the "
+        "extrapolation this seam's docstring refuses. Run mcmc_nuts or mcmc_hmc "
+        "for the hierarchical posterior."
+    ),
     "hmc_is": (
         "importance-sampled evidence needs a proposal that covers the posterior; "
         "hierarchical D grows with the catalog, and a single Student-t fitted to "
@@ -755,13 +766,16 @@ def run_flat_sampler(
         distribution (#1537), so exceeding this raises rather than returning
         plausible wrong error bars.
     ghmc_alpha : float
-        GHMC momentum persistence, in [0, 1] [dimensionless]. Same default as
-        the single-galaxy ``run_ghmc``. The GHMC driver always uses a diagonal
-        mass matrix (momentum-generator constraint), regardless of
-        ``dense_mass_matrix``.
+        GHMC momentum persistence, in [0, 1] [dimensionless]. Hand-set here, and
+        no longer shared with the single-galaxy ``run_ghmc``: that path adapts
+        both this and ``ghmc_delta`` from a MEADS ensemble and defaults them to
+        ``None`` (see ``bench/reports/2026-08-30_ghmc_meads_adaptation.md``).
+        This driver still window-adapts, so it still needs a number. The GHMC
+        driver always uses a diagonal mass matrix (momentum-generator
+        constraint), regardless of ``dense_mass_matrix``.
     ghmc_delta : float
-        GHMC proposal step-size scaling [dimensionless]. Same default as the
-        single-galaxy ``run_ghmc``.
+        GHMC proposal step-size scaling [dimensionless]. Hand-set here; see
+        ``ghmc_alpha``.
     mclmc_target_accept_rate : float
         Metropolis acceptance target for the ``adjusted_mclmc`` driver's
         tuner [dimensionless]. Same default (0.65) as the single-galaxy
