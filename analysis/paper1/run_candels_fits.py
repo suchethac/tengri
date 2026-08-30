@@ -31,10 +31,12 @@ CONFIG_DIMENSIONS = {"I": 5, "II": 8, "III": 11}
 # Galaxy labels for reporting
 GALAXY_LABELS = {13097: "blue", 15336: "red", 24497: "intermediate"}
 
-#: Per-cell subprocess timeout. One retune attempt doubles the 600-step warmup,
-#: and 600 s killed the first retune of the grid (#2089); a healthy fit of these
-#: models takes seconds to a couple of minutes, so 1800 s still catches pathology.
-DEFAULT_FIT_TIMEOUT_S = 1800
+#: Per-cell subprocess timeout. 600 s killed the first retune of the grid (#2089);
+#: measured 2026-08-30, the simplest cell (configuration I, 5 free parameters) needs
+#: ~22 min for 600 warmup + 4x600 draws at mean tree depth ~6, configurations II/III
+#: are slower, and a retune doubles the warmup, so 7200 s; a dead fit finishes in ~10
+#: min, so the cap still catches a hang.
+DEFAULT_FIT_TIMEOUT_S = 7200
 
 
 def run_fit_subprocess(

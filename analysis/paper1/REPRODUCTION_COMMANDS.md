@@ -126,8 +126,8 @@ sigma_floor = sqrt(sigma_measurement^2 + (0.05 * fnu)^2)
 - One Ks band per galaxy: ISAAC first, HAWK-I only when ISAAC is undetected.
 - A mapped column missing from the catalog header raises; nothing is dropped
   silently.
-- Driver timeout per cell: `DEFAULT_FIT_TIMEOUT_S = 1800` s (one retune doubles
-  the warmup; 600 s was shorter than that).
+- Driver timeout per cell: `DEFAULT_FIT_TIMEOUT_S = 7200` s (measured 2026-08-30: a
+  healthy 600-warmup + 4x600-draw cell takes ~22 min, and a retune doubles the warmup).
 
 ## Linting
 
