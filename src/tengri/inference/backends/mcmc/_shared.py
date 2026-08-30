@@ -391,15 +391,18 @@ def final_window_divergence_frac(warmup_divergent, n_warmup: int) -> float | Non
     Parameters
     ----------
     warmup_divergent : array_like of bool, shape (n_warmup,), or None
-        Per-step ``is_divergent`` flags from window adaptation; ``None`` when
-        the backend has no record (cached adaptation).
+        Per-step ``is_divergent`` flags from window adaptation, or ``None``
+        for a caller holding no record at all.
     n_warmup : int
         Warmup length the window is sized from.
 
     Returns
     -------
     float or None
-        ``None`` when there is no record.
+        ``None`` when there is nothing to measure: no flags, or an empty
+        record (a warmup that ran no steps). Callers must treat that as
+        "not measured" rather than as a fraction of zero — the backends omit
+        the ``warmup_divergence_frac`` diagnostic entirely in that case.
     """
     if warmup_divergent is None:
         return None
@@ -417,8 +420,9 @@ def refuse_dead_warmup(
 
     The refusal seam of #2088: NUTS, HMC and dynamic HMC call it once warmup
     has returned, before the adaptation is cached and before the sampling
-    scan compiles. A ``frac`` of ``None`` (a reused adaptation, so no record)
-    never refuses.
+    scan compiles. A ``frac`` of ``None`` means nothing was measured, so
+    there is nothing to refuse on, and it returns quietly. The backends do
+    not call this at all when they reuse a cached adaptation.
     """
     if frac is None or frac < DEAD_WARMUP_DIVERGENCE_FRAC:
         return

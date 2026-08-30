@@ -15,6 +15,8 @@ Mutation checks:
 3. ``test_refusal_threshold_is_inclusive_at_the_constant``: ``<`` -> ``<=``
    in the early return.
 4. ``test_no_record_means_no_refusal``: drop the ``None`` guard.
+5. ``test_an_empty_record_measures_nothing``: drop the ``flags.size == 0``
+   early return (an empty mean is NaN, not a fraction).
 """
 
 import numpy as np
@@ -63,6 +65,13 @@ def test_fraction_is_measured_over_the_final_window_only():
 def test_no_record_means_no_refusal():
     assert final_window_divergence_frac(None, 100) is None
     refuse_dead_warmup(None, sampler="NUTS", step_size=0.1, n_warmup=100, n_samples=50)
+
+
+def test_an_empty_record_measures_nothing():
+    # n_warmup=0 leaves a (0,) record. The mean of nothing is NaN, which would
+    # sail past the >= threshold and then crash the log line's `100.0 * frac`;
+    # "not measured" is the honest answer, and the backends omit the key.
+    assert final_window_divergence_frac(np.zeros(0, dtype=bool), 0) is None
 
 
 def test_refusal_threshold_is_inclusive_at_the_constant():

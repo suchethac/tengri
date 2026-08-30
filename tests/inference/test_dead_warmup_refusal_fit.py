@@ -15,6 +15,8 @@ Mutation checks:
 3. ``test_healthy_two_chain_fit_reports_the_record_and_counts_every_chain``:
    drop ``warmup_divergence_frac`` from the diagnostics dict, or revert the
    log line to ``n_samples``.
+4. ``test_a_reused_adaptation_carries_no_warmup_record``: put
+   ``"warmup_divergence_frac": None`` back on the cached branch of nuts.py.
 """
 
 import logging
@@ -138,3 +140,24 @@ def test_healthy_two_chain_fit_reports_the_record_and_counts_every_chain(
     assert "Tree depth: mean" in completion[0]
     warmup_lines = [r.getMessage() for r in caplog.records if "Warmup complete" in r.getMessage()]
     assert warmup_lines and "final warmup window" in warmup_lines[0]
+
+
+def test_a_reused_adaptation_carries_no_warmup_record(synthetic_ssp, simple_observation, caplog):
+    """A warm fit measured no warmup, so it reports no fraction -- not ``None``.
+
+    ``Posterior.save()`` has no HDF5 representation for ``None`` and warns
+    about every entry it has to skip, so a key that is only sometimes
+    meaningful must be absent rather than null on the other branch (#2088).
+    """
+    forward, flux_obs, noise = _forward_and_data(synthetic_ssp, simple_observation)
+    caplog.set_level(logging.INFO, logger="tengri")
+    first = _fit(forward, flux_obs, noise)
+    caplog.clear()
+    second = _fit(forward, flux_obs, noise)
+
+    # The second call must actually have taken the cached-adaptation branch,
+    # or the assertion below would pass for the wrong reason.
+    assert any("Reusing cached warmup" in r.getMessage() for r in caplog.records), caplog.records
+
+    assert "warmup_divergence_frac" in first.diagnostics
+    assert "warmup_divergence_frac" not in second.diagnostics

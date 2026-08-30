@@ -27,8 +27,11 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
   flags of their own warmup and refuse to sample when the final 10% of
   warmup (at least 10 steps) is 90% or more divergent, before the adaptation
   is cached and before the sampling scan compiles. `warmup_divergence_frac`
-  joins `diagnostics`, the warmup log line prints it, and the NUTS completion
-  line prints the divergence percentage and the tree-depth summary (#2088).
+  joins `diagnostics` whenever warmup ran in that call, and is absent (not
+  `None`) when a cached adaptation is reused, so `Posterior.save()` never
+  warns about an entry it cannot write. The warmup log line prints the
+  fraction when there is one, and the NUTS completion line prints the
+  divergence percentage and the tree-depth summary (#2088).
 
 ### Removed
 
