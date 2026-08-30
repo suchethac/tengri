@@ -45,12 +45,12 @@ MAX_DIVERGENCE_RATE = 0.005
 
 #: Sampling chains per fixture, for reconstructing the divergence denominator on
 #: rows measured before ``n_draws_total`` was recorded. Mirrors ``NOTEBOOKS``.
-_CHAINS = {"00": 4, "01": 4, "05": 2, "ctl": 2}
+_CHAINS = {"00": 4, "01": 4, "05": 2, "05pre": 2, "ctl": 2}
 
 #: Per-chain draws per configuration, same purpose. The ChEES and non-shipped
 #: rows all take the harness's ``draws`` budget; the shipped NUTS row takes the
 #: notebook's own committed ``n_samples``.
-_SHIPPED_SAMPLES = {"00": 600, "01": 600, "05": 600, "ctl": 600}
+_SHIPPED_SAMPLES = {"00": 600, "01": 600, "05": 600, "05pre": 600, "ctl": 600}
 
 
 def _total_draws(row: dict) -> int:
