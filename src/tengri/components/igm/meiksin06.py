@@ -15,7 +15,7 @@ Issue #440 §12.
 References
 ----------
 .. [1] Meiksin, A. 2006, MNRAS, 365, 807.
-       https://doi.org/10.1111/j.1365-2966.2005.09663.x
+       https://doi.org/10.1111/j.1365-2966.2005.09756.x
 .. [2] Boquien, M., et al. 2019, A&A, 622, A103 (CIGALE).
        https://doi.org/10.1051/0004-6361/201834156
 """
@@ -114,8 +114,8 @@ def igm_transmission_meiksin06(
     References
     ----------
     .. [1] A. Meiksin, "Color corrections for high-redshift objects
-       due to intergalactic absorption," MNRAS, 365, 807 (2006).
-       https://doi.org/10.1111/j.1365-2966.2005.09663.x
+       due to intergalactic attenuation," MNRAS, 365, 807 (2006).
+       https://doi.org/10.1111/j.1365-2966.2005.09756.x
     """
     wave_obs = jnp.asarray(wave_obs, dtype=jnp.float64)
     # Work in nm internally to mirror the CIGALE source line-for-line.

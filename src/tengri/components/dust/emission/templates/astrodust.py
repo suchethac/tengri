@@ -21,7 +21,7 @@ References
 .. [1] Hensley, B. S. & Draine, B. T. 2023, "The Astrodust+PAH Model: A Unified
    Description of the Extinction, Emission, and Polarization from Dust in the
    Diffuse Interstellar Medium", ApJ, 948, 55.  arXiv:2208.12365.
-   doi:10.3847/1538-4357/acc370.
+   doi:10.3847/1538-4357/acc4c2.
 """
 
 from __future__ import annotations
