@@ -131,7 +131,7 @@ def run_chees(
         gradient is built from centered positions *across* chains, so an
         ensemble of one centers to exactly zero and never adapts. That
         constraint binds ``n_ensemble``, not this argument -- see
-        :func:`~tengri.inference.backends.mcmc._shared._resolve_chees_ensemble`,
+        ``tengri.inference.backends.mcmc._shared._resolve_chees_ensemble``,
         which also records why the ensemble axis is chains-within-galaxy and
         never galaxies-within-batch.
     n_ensemble : int or ``"auto"``
@@ -143,7 +143,7 @@ def run_chees(
         criterion-estimation dial: ChEES maximizes the change in the cross-chain
         expected square, so a dispersed ensemble carries a large expected square
         before the sampler moves anything and the optimizer settles on a shorter
-        trajectory. See :data:`~tengri.inference.backends.mcmc._shared._CHEES_JITTER_SCALE`.
+        trajectory. See ``tengri.inference.backends.mcmc._shared._CHEES_JITTER_SCALE``.
     chain_jitter : float, optional
         Gaussian overdispersion of the **sampling chains** around the seed
         position [dimensionless]. A diagnostic dial, and a different chain set
@@ -158,7 +158,7 @@ def run_chees(
         real test -- R-hat only detects non-convergence when its chains start
         overdispersed relative to the posterior, and chains started at one point
         can share a non-equilibrium basin and still score clean.
-        :data:`~tengri.inference.backends.mcmc._shared._CHEES_CHAIN_JITTER_SCALE`
+        ``tengri.inference.backends.mcmc._shared._CHEES_CHAIN_JITTER_SCALE``
         is the suggested width.
     jitter_amount : float
         Fraction of the adapted trajectory length that is jittered, in
