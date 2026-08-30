@@ -76,4 +76,26 @@ When a benchmark is rerun:
 
 ## Done
 
-(empty — no reruns since the consolidation)
+- [x] **`catalog_throughput`** — first GPU run, 2026-08-30, RTX 3060 12 GB
+  (GA106) against a Ryzen 9 5900X control. The script had never been run on
+  an accelerator and had no committed result; it now has
+  [`bench/reports/2026-08-30_gpu_catalog_throughput.md`](reports/2026-08-30_gpu_catalog_throughput.md)
+  and `bench/results/gpu_catalog_throughput.json`. The run added a
+  `--dtype f32|f64` axis, a `--method` axis, a `--max-doublings` axis, and
+  R-hat / ESS / divergence columns on every row.
+
+  ```bash
+  # the whole campaign is in the report's Reproduce section; the headline cell:
+  python bench/scripts/benchmark_catalog_throughput.py \
+      --method mcmc_hmc --dtype f32 --n-gal 2048 --chunk 512 \
+      --warmup 400 --burnin 0 --samples 500 \
+      --json bench/results/gpu_catalog_throughput.json
+  ```
+
+  **Re-run when** any of these move, because each one invalidates the table:
+  the catalog MCMC engine (`inference/backends/mcmc/catalog.py`), the
+  `DEFAULT_MAP_INIT_STEPS = 300` warm start, `WavePrecomp`'s default
+  `band_integration`, or the blackjax version. Note the numbers are for the
+  benchmark's own D = 3 dpl fixture at SNR 20 — they are a throughput
+  characterization of the *machine*, not a convergence claim about tengri,
+  and the report says so at length.
