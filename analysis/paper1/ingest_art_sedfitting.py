@@ -60,7 +60,11 @@ def parse_prospector_z1() -> list[dict]:
 
 
 def parse_bagpipes_z1() -> list[dict]:
-    """Parse BAGPIPES results."""
+    """Parse BAGPIPES results.
+
+    BAGPIPES stellar_mass values are in log10 units; sfr values are linear
+    Msun/yr and must be converted to log10.
+    """
     filepath = CODE_OUTPUTS / "bagpipes_11_3_19_z1_noir.cat"
     if not filepath.exists():
         print(f"Skipping BAGPIPES: {filepath} not found")
@@ -84,13 +88,13 @@ def parse_bagpipes_z1() -> list[dict]:
         result.append(
             {
                 "id": int(row[id_idx]),
-                "logmstar": np.log10(row[mstar_50_idx]),
-                "logmstar_lo": np.log10(row[mstar_16_idx]),
-                "logmstar_hi": np.log10(row[mstar_84_idx]),
+                "logmstar": row[mstar_50_idx],
+                "logmstar_lo": row[mstar_16_idx],
+                "logmstar_hi": row[mstar_84_idx],
                 "logsfr": np.log10(row[sfr_50_idx]),
                 "logsfr_lo": np.log10(row[sfr_16_idx]),
                 "logsfr_hi": np.log10(row[sfr_84_idx]),
-                "mass_definition_note": "formed stellar mass",
+                "mass_definition_note": "survived stellar mass",
                 "sfr_timescale_note": "instantaneous",
             }
         )
@@ -187,7 +191,9 @@ def parse_dense_basis_z1() -> list[dict]:
     0: ID, 1: z_fit, 2: useflag, 3: logM_gal, 4: logM*, 5: logM*_84,
     6: logM*_16, 7: log_SFR_inst, 8-9: errors, 10: log_SFR_100
 
-    Filter to CANDELS z~1 sample IDs only.
+    Filter to CANDELS z~1 sample IDs only. Uncertainty floor of 0.1 dex
+    is applied (matching art_sedfitting/notebooks/import_scripts/
+    import_dense_basis_fits.py lines 33-34).
     """
     filepath = CODE_OUTPUTS / "Dense_Basis_GOODS-S_v1.2.dat"
     if not filepath.exists():
@@ -214,6 +220,13 @@ def parse_dense_basis_z1() -> list[dict]:
         logmstar = row[4]  # logM* median
         logmstar_lo = row[6]  # logM*_16
         logmstar_hi = row[5]  # logM*_84
+
+        # Apply uncertainty floor of 0.1 dex (matching official notebook)
+        if logmstar - logmstar_lo < 0.1:
+            logmstar_lo = logmstar - 0.1
+        if logmstar_hi - logmstar < 0.1:
+            logmstar_hi = logmstar + 0.1
+
         logsfr = row[10]  # log_SFR_100
 
         result.append(
