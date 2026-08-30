@@ -1,0 +1,42 @@
+{
+  "selected_galaxies": [
+    {
+      "id": 4171,
+      "z": 1.032,
+      "n_detected": 10,
+      "median_snr": 1.0,
+      "color_proxy": -78.002,
+      "type_label": "blue_star_forming",
+      "reason": "Selected as blue_star_forming representative"
+    },
+    {
+      "id": 15336,
+      "z": 1.036,
+      "n_detected": 10,
+      "median_snr": 1.0,
+      "color_proxy": 1.0079999999999991,
+      "type_label": "red_quiescent",
+      "reason": "Selected as red_quiescent representative"
+    },
+    {
+      "id": 5568,
+      "z": 1.036,
+      "n_detected": 10,
+      "median_snr": 1.0,
+      "color_proxy": 0.2339999999999982,
+      "type_label": "intermediate_dusty",
+      "reason": "Selected as intermediate_dusty representative"
+    }
+  ],
+  "selection_criteria": {
+    "clean_flags": "flg1 == 0",
+    "min_detected_bands": 10,
+    "present_in_all_codes": true,
+    "codes": [
+      "BAGPIPES",
+      "BEAGLE",
+      "CIGALE",
+      "Prospector"
+    ]
+  }
+}

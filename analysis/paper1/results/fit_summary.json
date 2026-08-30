@@ -1,0 +1,63 @@
+{
+  "metadata": {
+    "n_galaxies": 3,
+    "n_configs": 3,
+    "total_fits": 9,
+    "successful_fits": 0,
+    "failed_fits": 9
+  },
+  "galaxy_list": [
+    13097,
+    15336,
+    24497
+  ],
+  "config_list": [
+    "I",
+    "II",
+    "III"
+  ],
+  "config_dimensions": {
+    "I": 5,
+    "II": 8,
+    "III": 11
+  },
+  "fits": [],
+  "failed": [
+    {
+      "gal_id": 13097,
+      "config": "I"
+    },
+    {
+      "gal_id": 13097,
+      "config": "II"
+    },
+    {
+      "gal_id": 13097,
+      "config": "III"
+    },
+    {
+      "gal_id": 15336,
+      "config": "I"
+    },
+    {
+      "gal_id": 15336,
+      "config": "II"
+    },
+    {
+      "gal_id": 15336,
+      "config": "III"
+    },
+    {
+      "gal_id": 24497,
+      "config": "I"
+    },
+    {
+      "gal_id": 24497,
+      "config": "II"
+    },
+    {
+      "gal_id": 24497,
+      "config": "III"
+    }
+  ]
+}

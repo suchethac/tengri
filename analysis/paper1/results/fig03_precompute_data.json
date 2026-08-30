@@ -1,0 +1,144 @@
+{
+  "parameters": {
+    "dust_Rv": 3.1,
+    "dust_bump_strength": 0.0,
+    "dust_delta": 0.0,
+    "dust_f_obscuration": 0.0,
+    "dust_slope": -0.7,
+    "dust_tau_bc": 1.0,
+    "dust_tau_diff": 0.75,
+    "met_alpha_fe": 0.0,
+    "met_logzsol": 0.0,
+    "met_logzsol_scatter": 0.1,
+    "noise_dof": 0.0,
+    "noise_frac_cal": 0.0,
+    "redshift": 1.5999579169655729,
+    "sfh_tsnorm_log_total_mass": 10.0,
+    "sfh_tsnorm_peak_lbt_gyr": 1.0,
+    "sfh_tsnorm_skew": 0.0,
+    "sfh_tsnorm_trunc": 1.0,
+    "sfh_tsnorm_width_gyr": 0.5,
+    "sigma_v_kms": 0.0
+  },
+  "measurements": {
+    "0.5": {
+      "galex_fuv": {
+        "f_exact": 4.2075165330075e-31,
+        "f_lut_default": 4.20634042796677e-31,
+        "f_lut_n32": 4.205306709086146e-31,
+        "err_default_pct": 0.027952475801419727,
+        "err_n32_pct": 0.05252086127334375,
+        "f_ratio_to_g": 0.0293106932725757
+      },
+      "sdss_g": {
+        "f_exact": 1.435488575408152e-29,
+        "f_lut_default": 1.4356302777178958e-29,
+        "f_lut_n32": 1.4356758892912057e-29,
+        "err_default_pct": 0.009871364507614354,
+        "err_n32_pct": 0.013048789538454519,
+        "f_ratio_to_g": 1.0
+      }
+    },
+    "1.0": {
+      "galex_fuv": {
+        "f_exact": 3.567056221043653e-36,
+        "f_lut_default": 3.620406830478941e-36,
+        "f_lut_n32": 3.679995431392663e-36,
+        "err_default_pct": 1.495648123529686,
+        "err_n32_pct": 3.1661741040898486,
+        "f_ratio_to_g": 1.9899876216562717e-06
+      },
+      "sdss_g": {
+        "f_exact": 1.7925017131889408e-30,
+        "f_lut_default": 1.792477761763376e-30,
+        "f_lut_n32": 1.7925668265811403e-30,
+        "err_default_pct": 0.0013362009859546455,
+        "err_n32_pct": 0.00363254281546343,
+        "f_ratio_to_g": 1.0
+      }
+    },
+    "1.5": {
+      "galex_fuv": {
+        "f_exact": 4.084502490789372e-39,
+        "f_lut_default": 3.3722986692877907e-39,
+        "f_lut_n32": 3.981449634019563e-39,
+        "err_default_pct": 17.436733680726455,
+        "err_n32_pct": 2.5230210289305846,
+        "f_ratio_to_g": 6.770586162572224e-09
+      },
+      "sdss_g": {
+        "f_exact": 6.0327162120297455e-31,
+        "f_lut_default": 6.0328980719635145e-31,
+        "f_lut_n32": 6.032563396412504e-31,
+        "err_default_pct": 0.0030145613912085107,
+        "err_n32_pct": 0.0025331146347786966,
+        "f_ratio_to_g": 1.0
+      }
+    },
+    "2.0": {
+      "galex_fuv": {
+        "f_exact": 5.605362779031716e-43,
+        "f_lut_default": 2.5895441743255175e-43,
+        "f_lut_n32": 4.932090544798303e-43,
+        "err_default_pct": 53.8023803916427,
+        "err_n32_pct": 12.011216058164125,
+        "f_ratio_to_g": 2.3336170242825075e-12
+      },
+      "sdss_g": {
+        "f_exact": 2.40200629353702e-31,
+        "f_lut_default": 2.4029699833551567e-31,
+        "f_lut_n32": 2.402268508494198e-31,
+        "err_default_pct": 0.040120203711779566,
+        "err_n32_pct": 0.010916497508094128,
+        "f_ratio_to_g": 1.0
+      }
+    },
+    "3.0": {
+      "galex_fuv": {
+        "f_exact": 1.7100409360095614e-57,
+        "f_lut_default": 4.620038437207302e-59,
+        "f_lut_n32": 5.1062075226306475e-58,
+        "err_default_pct": 97.298287812929,
+        "err_n32_pct": 70.13985212221787,
+        "f_ratio_to_g": 4.106849800835117e-26
+      },
+      "sdss_g": {
+        "f_exact": 4.1638750354635055e-32,
+        "f_lut_default": 4.1814342163091224e-32,
+        "f_lut_n32": 4.180213567041498e-32,
+        "err_default_pct": 0.42170287763360303,
+        "err_n32_pct": 0.39238765426046357,
+        "f_ratio_to_g": 1.0
+      }
+    }
+  },
+  "metadata": {
+    "date": "2026-08-30",
+    "git_sha": "6f52fb3",
+    "jax_version": "0.11.1",
+    "platform": "macOS CPU (JAX_PLATFORMS=cpu)",
+    "ssp": "prsc_miles_chabrier_wNE",
+    "filters": [
+      "galex_fuv",
+      "galex_nuv",
+      "sdss_u",
+      "sdss_g",
+      "sdss_r",
+      "sdss_i",
+      "sdss_z",
+      "2mass_j",
+      "2mass_h",
+      "2mass_ks",
+      "wise_w1",
+      "wise_w2"
+    ],
+    "sfh": "tsnorm",
+    "dust": "two_component Calzetti",
+    "nebular": "OFF",
+    "redshift": "FREE Uniform(0.01, 3.0)",
+    "waveprecomp": "n_z=250, z_min=0.01, z_max=3.0",
+    "control": "pred.photometry() [exact]",
+    "test": "model.predict_photometry() [LUT]",
+    "nan_cells": 0
+  }
+}

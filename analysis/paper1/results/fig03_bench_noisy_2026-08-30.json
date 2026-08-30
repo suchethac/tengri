@@ -1,0 +1,25 @@
+{
+  "metadata": {
+    "date": "2026-08-30",
+    "git_sha": "6f52fb3",
+    "jax_version": "0.11.1",
+    "platform": "macOS CPU (JAX_PLATFORMS=cpu)",
+    "note": "LOADED MACHINE: Three other agents running JAX jobs; benchmarks subject to variance. DO NOT USE FOR FIGURES. For reproducibility, rerun on quiet machine and pass via --bench-json CLI option.",
+    "ssp": "prsc_miles_chabrier_wNE",
+    "filters": "SDSS ugriz (5)",
+    "redshift_fixed": 0.1,
+    "runs_per_config": 200,
+    "warmup_calls": 5
+  },
+  "forward": {
+    "dpl": [
+      { "label": "Stellar only", "exact_us": 6638, "precomp_us": 407 },
+      { "label": "+ nebular (baked-in SSP)", "exact_us": 7020, "precomp_us": 399 },
+      { "label": "+ dust IR (Dale 2014)", "exact_us": 8141, "precomp_us": 444 },
+      { "label": "+ radio (SF + AGN)", "exact_us": 6643, "precomp_us": 432 },
+      { "label": "+ X-ray (XRB + corona)", "exact_us": 6537, "precomp_us": 1796 },
+      { "label": "Kitchen sink (all components)", "exact_us": 12459, "precomp_us": 8967 }
+    ]
+  },
+  "metadata_note": "Full dataset available if needed; showing sample configs here"
+}

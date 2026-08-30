@@ -63,6 +63,12 @@ warnings.filterwarnings("ignore")
 
 # ── tengri imports ────────────────────────────────────────────────────────────
 from tengri import Fixed, Parameters, SEDModel, Uniform, load_ssp_data
+from tengri.models.agn.polar_dust import polar_dust_total
+from tengri.models.agn.unified import kubota_done_full_agn
+from tengri.models.dust.emission import draine_li2007
+from tengri.models.nebular.shock import compute_shock_sed
+from tengri.models.radio import radio_total
+from tengri.models.xray import xray_total
 
 # ════════════════════════════════════════════════════════════════════════════
 # 0. Style — presentation mode (matches v1 exactly)
@@ -159,7 +165,7 @@ AGN_COS_INC = 0.7  # forwarded to kubota_done_full_agn + polar_dust_total
 # ════════════════════════════════════════════════════════════════════════════
 
 _DATA = _REPO / "data"
-_SSP_FILE = str(_DATA / "fsps_prsc_miles_chabrier.h5")
+_SSP_FILE = str(_DATA / "ssp_prsc_miles_chabrier_wNE_logGasU-3.0_logGasZ0.0.h5")
 
 print("Loading SSP data …", flush=True)
 ssp = load_ssp_data(_SSP_FILE)
@@ -176,7 +182,7 @@ spec = Parameters(
     sfh_dpl_alpha=Fixed(1.0),
     sfh_dpl_beta=Fixed(1.0),
     sfh_dpl_tau_gyr=Fixed(3.0),
-    sfh_dpl_log_total_mass=Fixed(11.0),
+    sfh_dpl_log_peak_sfr=Fixed(1.0),
     met_logzsol=Fixed(LOG_Z),
     dust_tau_bc=Fixed(TAU_BC),
     dust_tau_diff=Fixed(TAU_ISM),
@@ -237,29 +243,197 @@ params: dict = {
 }
 
 # ════════════════════════════════════════════════════════════════════════════
-# 5. All components via _compute_sed_components (single pipeline call)
-#    Every component comes from the same internal state — guaranteed consistent.
-#    All SED quantities in erg/s/Hz (CGS).
+# 5. Stellar SED via sed_from_sfh (public API)
+#    All SED quantities in erg/s/Hz (CGS) — convert to νLν [Lsun] only
+#    at the plotting stage.
 # ════════════════════════════════════════════════════════════════════════════
 
-print("Computing all SED components via pipeline …", flush=True)
-comp = model._compute_sed_components(
-    params, need_intrinsic=True, rest_wavelength=jnp.array(WAVE_AA)
+from tengri.simulate import sed_from_sfh
+
+print("Computing stellar SED (sed_from_sfh) …", flush=True)
+result_atten_v2 = sed_from_sfh(
+    t_gyr,
+    sfr,
+    ssp,
+    log_z=LOG_Z,
+    dust_tau_bc=TAU_BC,
+    dust_tau_diff=TAU_ISM,
+    t_obs_gyr=T_OBS_GYR,
+)
+result_intrinsic_v2 = sed_from_sfh(
+    t_gyr,
+    sfr,
+    ssp,
+    log_z=LOG_Z,
+    dust_tau_bc=0.0,
+    dust_tau_diff=0.0,
+    t_obs_gyr=T_OBS_GYR,
+)
+ssp_wave_v2 = np.array(result_atten_v2["wavelength"])
+stellar_ergs_ssp = np.array(result_atten_v2["sed"])  # erg/s/Hz on SSP grid
+stellar_intrinsic_ergs_ssp = np.array(result_intrinsic_v2["sed"])  # erg/s/Hz
+
+# Interpolate onto master wavelength grid
+stellar_ergs = np.interp(WAVE_AA, ssp_wave_v2, stellar_ergs_ssp, left=0.0, right=0.0)
+stellar_intrinsic_ergs = np.interp(
+    WAVE_AA, ssp_wave_v2, stellar_intrinsic_ergs_ssp, left=0.0, right=0.0
 )
 
-total_ergs_new = np.array(comp["sed_total"])
-stellar_ergs = np.array(comp["sed_attenuated"])
-stellar_intrinsic_ergs = np.array(comp["sed_intrinsic"])
-nebular_ergs = np.array(comp["sed_nebular"])
-dust_ergs = np.array(comp["sed_dust_ir"])
-agn_ergs = np.array(comp["sed_agn"])
-radio_ergs = np.array(comp["sed_radio"])
-xray_ergs = np.array(comp["sed_xray"])
-mstar = float(comp["mstar_surviving"])
-agn_bol_erg = float(comp["agn_bol_erg"])
+# Surviving stellar mass (from SSP mass-remaining tables)
+if ssp.ssp_mass_remaining is not None:
+    from tengri.models.sps.dsps_wrapper import (
+        compute_surviving_mass,
+        interpolate_mass_remaining,
+    )
 
-print(f"  AGN bolometric:  {agn_bol_erg / LSUN:.2e} Lsun", flush=True)
-print(f"  M* (surviving):  {mstar:.2e} Msun", flush=True)
+    _mr = interpolate_mass_remaining(ssp.ssp_mass_remaining, ssp.ssp_lgmet, LOG_Z)
+    mstar = float(compute_surviving_mass(result_atten_v2["weights"], _mr))
+else:
+    mstar = float(result_atten_v2["stellar_mass"])
+agn_bol_erg = 10.0**AGN_LOG_LBOL * LSUN  # erg/s
+
+# ── Absorbed luminosity (native SSP grid for best accuracy) ──────────────────
+nu_ssp = _C_AA / ssp_wave_v2
+L_absorbed_ergs = float(-np.trapz(stellar_intrinsic_ergs_ssp - stellar_ergs_ssp, nu_ssp))
+print(f"  Absorbed luminosity: {L_absorbed_ergs / LSUN:.2e} Lsun", flush=True)
+print(f"  AGN bolometric:       {agn_bol_erg / LSUN:.2e} Lsun", flush=True)
+print(f"  M* (surviving):       {mstar:.2e} Msun", flush=True)
+
+# Retain CSP weights for Cue nebular backend (internal, needed for ionspec shape)
+_weights_v2 = result_atten_v2["weights"]
+
+# ════════════════════════════════════════════════════════════════════════════
+# 6. Individual physics components (low-level calls, all in erg/s/Hz)
+# ════════════════════════════════════════════════════════════════════════════
+
+# ── Dust IR emission ─────────────────────────────────────────────────────────
+# draine_li2007 is unit-agnostic: output units match input L_absorbed units.
+# Pass erg/s → output erg/s/Hz.
+print("Computing dust IR emission (DL07 templates) …", flush=True)
+dust_ergs = np.array(
+    draine_li2007(
+        jnp.array(WAVE_AA),
+        L_absorbed_ergs,
+        dust_umin=DUST_UMIN,
+        dust_gamma_dl=DUST_GAMMA_DL,
+        dust_qpah=DUST_QPAH,
+    )
+)  # erg/s/Hz
+
+# ── AGN (full K&D 2018 3-zone disc + polar dust, matching pipeline) ───────────
+# kubota_done_full_agn returns erg/s/Hz; polar_dust_total is unit-agnostic
+# (applies multiplicative attenuation + energy-conserving reemission).
+print("Computing AGN (K&D 2018 full physics + polar dust) …", flush=True)
+_agn_raw_ergs = np.array(
+    kubota_done_full_agn(
+        jnp.array(WAVE_AA),
+        agn_log_lbol=AGN_LOG_LBOL,
+        agn_frac=1.0,
+        agn_log_mbh=AGN_LOG_MBH,
+        agn_log_ledd=AGN_LOG_LEDD,
+        agn_tau_torus=5.0,
+        agn_torus_frac=0.5,
+        agn_a_spin=0.7,
+        agn_cos_inc=AGN_COS_INC,
+    )
+)  # erg/s/Hz — bare disc before polar dust
+_agn_att, _agn_reemit = polar_dust_total(
+    jnp.array(_agn_raw_ergs),
+    jnp.array(WAVE_AA),
+    cos_inc=AGN_COS_INC,
+    opening_angle_deg=45.0,
+    ebv=0.20,
+)
+agn_ergs = np.array(_agn_att + _agn_reemit)  # erg/s/Hz (att + re-emitted)
+
+# ── Radio emission ────────────────────────────────────────────────────────────
+# radio_total: L_ir and L_agn_bol in erg/s; returns erg/s/Hz.
+print("Computing radio emission …", flush=True)
+radio_ergs = np.array(
+    radio_total(
+        jnp.array(WAVE_AA),
+        L_ir=L_absorbed_ergs,
+        L_agn_bol=agn_bol_erg,
+        q_ir=2.64,
+        alpha_sf=0.8,
+        radio_loudness=1.5,
+        alpha_agn=0.7,
+        sfr_mode="bell2003",
+        log_mstar=float(np.log10(max(mstar, 1e4))),
+        redshift=0.0,
+        include_freefree=True,
+        T_e=1e4,
+        alpha_ff=-0.1,
+    )
+)  # erg/s/Hz
+
+# ── X-ray emission (XRBs + AGN corona) ───────────────────────────────────────
+# xray_total: L_agn_bol in erg/s; returns erg/s/Hz.
+# Includes both XRBs (HMXB+LMXB) AND AGN corona.
+print("Computing X-ray (XRBs + AGN corona) …", flush=True)
+xray_ergs = np.array(
+    xray_total(
+        jnp.array(WAVE_AA),
+        sfr=SFR_NOW,
+        stellar_mass=mstar,
+        L_agn_bol=agn_bol_erg,
+        gamma_agn=1.8,
+        alpha_ox=-1.4,
+        gamma_hmxb=2.0,
+        gamma_lmxb=1.6,
+        E_cut=300.0,
+    )
+)  # erg/s/Hz
+
+# ── Nebular emission (Cue low-level mode with SFR-based Q_H) ────────────────
+# The wNE SSP has ionizing photons pre-absorbed, so SSP-derived Q_H ≈ 0
+# AND the ionizing spectrum shape from wNE weights is wrong.
+# Use Cue in low-level mode (no ssp_weights) with explicit Q_H from SFR
+# and default ionizing spectrum shape (typical young stellar population).
+print("Computing nebular emission (Cue low-level + SFR-based Q_H) …", flush=True)
+Q_H = _QH_PER_SFR * SFR_NOW  # photon/s
+gas_logqion = float(np.log10(Q_H))
+print(f"  SFR-based Q_H = {Q_H:.2e} phot/s  (log Q_H = {gas_logqion:.2f})", flush=True)
+nebular_ergs = np.array(
+    model._nebular_backend.predict_nebular_sed(
+        ssp_wave=jnp.array(WAVE_AA),
+        log_z=LOG_Z_ABS,
+        neb_logU=-3.0,
+        gas_logqion=gas_logqion,
+        line_sigma_aa=0.0,
+    )
+)  # erg/s/Hz (Cue predict_nebular_sed returns erg/s/Hz)
+
+# ── Shock emission (MAPPINGS V) ─────────────────────────────────────────────
+# Matching pipeline logic: L_Halpha ≈ 1e-3 × L_bol, shock_frac = 0.02.
+print("Computing shock emission (MAPPINGS V) …", flush=True)
+_l_bol_stellar = float(-np.trapz(stellar_ergs, NU_HZ))  # erg/s
+_l_halpha_approx = max(_l_bol_stellar * 1e-3, 1e-30)  # erg/s
+_l_shock_halpha = 0.02 * _l_halpha_approx  # erg/s (shock_frac=0.02)
+shock_ergs = np.array(
+    compute_shock_sed(
+        jnp.array(WAVE_AA),
+        shock_velocity=200.0,
+        l_shock_halpha=_l_shock_halpha,
+        shock_log_density=1.0,
+        shock_b_over_sqrt_n=1.0,
+        shock_abundance="solar",
+        shock_component="combined",
+        line_sigma_aa=0.0,
+    )
+)  # erg/s/Hz
+
+# ── Total SED = sum of all components ────────────────────────────────────────
+total_ergs_new = (
+    stellar_ergs + nebular_ergs + shock_ergs + dust_ergs + agn_ergs + radio_ergs + xray_ergs
+)
+
+# ── Pipeline total via predict_rest_sed (reference) ──────────────────────────
+# This uses the SEDModel pipeline, which has the wNE Q_H ≈ 0 bug for nebular.
+# Included as a thin grey line for comparison against the component sum.
+print("Computing pipeline total (predict_rest_sed — reference) …", flush=True)
+sed_result = model.predict_rest_sed(params, wave=jnp.array(WAVE_AA))
+pipeline_total_ergs = np.array(sed_result.sed)  # erg/s/Hz
 
 # ════════════════════════════════════════════════════════════════════════════
 # 7. νLν conversion (erg/s/Hz → νLν [Lsun] for plotting)
@@ -273,6 +447,7 @@ def nulnu(lnu_ergs: np.ndarray, nu: np.ndarray = NU_HZ) -> np.ndarray:
 
 nl = {
     "total_new": nulnu(total_ergs_new),
+    "pipeline": nulnu(pipeline_total_ergs),
     "stellar": nulnu(stellar_ergs),
     "stellar_intrinsic": nulnu(stellar_intrinsic_ergs),
     "nebular": nulnu(nebular_ergs),
@@ -288,7 +463,7 @@ nl = {
 
 print("Plotting …", flush=True)
 
-fig, ax = plt.subplots(1, 1, figsize=(13, 10))
+fig, ax = plt.subplots(1, 1, figsize=(7.0, 5.6))
 
 Y_LOG_MIN, Y_LOG_MAX = 4.0, 13.0
 XLIM_UM = (1e-4, 1e6)
@@ -357,7 +532,7 @@ _safe_plot(
     nl["nebular"],
     color=C["nebular"],
     lw=1.5,
-    label="Nebular + shock (residual)",
+    label="Nebular (Cue + SFR-based $Q_H$)",
     zorder=4,
 )
 
@@ -424,13 +599,18 @@ _safe_plot(
 )
 
 _safe_plot(
+    ax, WAVE_UM, nl["total_new"], color=C["total"], lw=3.0, label="Total (component sum)", zorder=6
+)
+_safe_plot(
     ax,
     WAVE_UM,
-    nl["total_new"],
-    color=C["total"],
-    lw=3.0,
-    label="Total (predict\\_rest\\_sed)",
-    zorder=6,
+    nl["pipeline"],
+    color="#aaaaaa",
+    lw=1.5,
+    ls=":",
+    label="Pipeline total (predict\\_rest\\_sed, wNE Q$_H$ bug)",
+    alpha=0.7,
+    zorder=5,
 )
 
 # ── Axis formatting (top panel) ───────────────────────────────────────────────
@@ -466,14 +646,18 @@ ax_top.set_xlabel(r"Rest-frame frequency $\nu$ [Hz]", fontsize=FONT_SIZE - 1, la
 ax.yaxis.set_minor_locator(ticker.LogLocator(subs=np.arange(2, 10)))
 ax.yaxis.set_minor_formatter(ticker.NullFormatter())
 
-ax.legend(
-    loc="upper center",
-    bbox_to_anchor=(0.5, -0.02),
-    ncol=2,
-    fontsize=10,
-    framealpha=0.9,
+# Place legend below, outside axes
+handles, labels = ax.get_legend_handles_labels()
+fig.legend(
+    handles, labels,
+    loc="lower center",
+    bbox_to_anchor=(0.5, -0.08),
+    ncol=4,
+    fontsize=8.5,
+    framealpha=0.92,
     edgecolor="#888888",
 )
+fig.subplots_adjust(bottom=0.25)
 
 # Spectral break markers
 _LY_UM = 912e-4

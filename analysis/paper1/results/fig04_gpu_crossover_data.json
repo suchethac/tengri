@@ -1,0 +1,128 @@
+{
+  "figure": "Figure 4: GPU vs CPU cost per galaxy as a function of batch size",
+  "source": {
+    "report_path": "bench/reports/2026-08-20_cuda_device_matrix.md",
+    "date": "2026-08-20",
+    "findings": "1-3",
+    "platform": "RTX 3060 12 GB vs AMD Ryzen 9 5900X",
+    "jax_version": "0.11.0"
+  },
+  "hardware_note": "RTX 3060 vs R9 5900X, JAX 0.11",
+  "finding_1_single_galaxy_microseconds": {
+    "forward": {
+      "cpu_f64": 227.0,
+      "cpu_f32": 162.3,
+      "gpu_f64": 7422.0,
+      "gpu_f32": 7308.2
+    },
+    "gradient": {
+      "cpu_f64": 587.0,
+      "cpu_f32": 479.9,
+      "gpu_f64": 7755.3,
+      "gpu_f32": 7398.8
+    }
+  },
+  "forward_pass_per_galaxy_microseconds": {
+    "batches": [
+      1,
+      8,
+      32,
+      128,
+      512,
+      2048
+    ],
+    "cpu_f64": [
+      234.0,
+      113.5,
+      55.3,
+      27.6,
+      45.7,
+      48.3
+    ],
+    "cpu_f32": [
+      142.6,
+      95.9,
+      53.1,
+      26.1,
+      16.7,
+      20.0
+    ],
+    "gpu_f64": [
+      7344.4,
+      927.3,
+      238.1,
+      65.7,
+      22.0,
+      11.2
+    ],
+    "gpu_f32": [
+      7361.7,
+      899.3,
+      226.9,
+      56.8,
+      15.2,
+      4.5
+    ],
+    "description": "predict_photometry_batch, warm steady state"
+  },
+  "gradient_per_galaxy_microseconds": {
+    "batches": [
+      1,
+      8,
+      32,
+      128,
+      512,
+      2048
+    ],
+    "cpu_f64": [
+      499.4,
+      299.8,
+      131.2,
+      211.8,
+      206.6,
+      172.2
+    ],
+    "cpu_f32": [
+      435.6,
+      164.0,
+      93.6,
+      43.7,
+      67.4,
+      80.7
+    ],
+    "gpu_f64": [
+      7584.7,
+      977.0,
+      250.8,
+      77.9,
+      31.5,
+      19.8
+    ],
+    "gpu_f32": [
+      7473.8,
+      933.1,
+      233.2,
+      58.5,
+      16.3,
+      5.5
+    ],
+    "description": "vmap(grad(sum(predict_photometry))), warm steady state"
+  },
+  "finding_3_map_fit_warm_seconds": {
+    "cpu_f64_warm_s": 0.27,
+    "cpu_f32_warm_s": 0.23,
+    "gpu_f64_warm_s": 2.38,
+    "gpu_f32_warm_s": 2.22
+  },
+  "gpu_advantage_at_batch_2048": {
+    "forward_f64_ratio": 4.3125,
+    "forward_f32_ratio": 4.444444444444445,
+    "gradient_f64_ratio": 8.696969696969695,
+    "gradient_f32_ratio": 14.672727272727274
+  },
+  "crossover_batch_ranges": {
+    "forward_approximate_range": "128-512",
+    "gradient_approximate_range": "64-256 (f64 at 128), 128-512 (f32)",
+    "note": "Extracted from the report; exact crossover batch depends on precision and operation"
+  }
+}

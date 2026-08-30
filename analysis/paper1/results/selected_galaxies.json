@@ -1,0 +1,47 @@
+{
+  "selected_galaxies": [
+    {
+      "id": 13097,
+      "z": 1.097,
+      "n_detected": 16,
+      "median_snr": 244.29967426710095,
+      "color_proxy": 0.3769999999999989,
+      "color_proxy_note": "F160W-Ks",
+      "type_label": "blue_star_forming",
+      "reason": "Highest S/N in blue_star_forming class"
+    },
+    {
+      "id": 15336,
+      "z": 1.036,
+      "n_detected": 15,
+      "median_snr": 155.11090429657204,
+      "color_proxy": 1.0079999999999991,
+      "color_proxy_note": "F160W-Ks",
+      "type_label": "red_quiescent",
+      "reason": "Highest S/N in red_quiescent class"
+    },
+    {
+      "id": 24497,
+      "z": 1.031,
+      "n_detected": 13,
+      "median_snr": 542.8881650380022,
+      "color_proxy": 0.45200000000000173,
+      "color_proxy_note": "F160W-Ks",
+      "type_label": "intermediate_dusty",
+      "reason": "Highest S/N in intermediate_dusty class"
+    }
+  ],
+  "selection_criteria": {
+    "clean_flags": "flg1 == 0",
+    "min_detected_bands": 10,
+    "present_in_all_codes": true,
+    "ranked_by": "median_SNR_within_color_class",
+    "codes": [
+      "BAGPIPES",
+      "BEAGLE",
+      "CIGALE",
+      "Dense_Basis",
+      "Prospector"
+    ]
+  }
+}

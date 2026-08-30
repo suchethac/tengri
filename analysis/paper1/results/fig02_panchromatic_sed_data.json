@@ -1,0 +1,22 @@
+{
+  "redshift": 0.1,
+  "log_mstar": 10.2640159887529,
+  "sfr": 5.655578955174762,
+  "agn_log_lbol": 10.5,
+  "nu_lnu_lsun": {
+    "1 keV (12.4 \u00c5)": 843863907.4517912,
+    "0.5 \u00b5m (5000 \u00c5)": 22959028637.365032,
+    "100 \u00b5m (1e6 \u00c5)": 28723291954.35623,
+    "1.4 GHz (2.14e8 \u00c5)": 104808.47953253317
+  },
+  "legend_labels": [
+    "Stellar (intrinsic)",
+    "Stellar (attenuated)",
+    "Nebular (Cue)",
+    "Dust emission (Dale 2014)",
+    "AGN (disc + torus + NLR)",
+    "X-ray (corona + XRB)",
+    "Radio (SF + AGN)",
+    "Total"
+  ]
+}
