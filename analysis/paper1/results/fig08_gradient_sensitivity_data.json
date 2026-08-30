@@ -524,9 +524,9 @@
     ]
   },
   "timings": {
-    "forward_pass_median_s": 0.0001785755157470703,
-    "jacobian_median_s": 0.0023649930953979492,
-    "jacobian_to_forward_ratio": 13.243658210947931
+    "forward_pass_median_s": 0.00018262863159179688,
+    "jacobian_median_s": 0.0025919675827026367,
+    "jacobian_to_forward_ratio": 14.192558746736292
   },
   "metadata": {
     "date": "2026-08-30",

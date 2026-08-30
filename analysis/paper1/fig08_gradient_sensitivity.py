@@ -202,89 +202,6 @@ def compute_fisher_matrix(J, flux, free_params, frac_uncertainty=0.05):
     return fisher, corr_matrix, forecast_sigmas, messages
 
 
-def plot_jacobian_heatmap(log_J, free_params, filter_names):
-    """Plot Jacobian heatmap (panel a, log10 flux units)."""
-    n_bands = log_J.shape[0]
-    n_params = log_J.shape[1]
-
-    mat = log_J.T  # Transpose: rows = params, cols = bands
-    vmax = np.max(np.abs(mat))
-
-    fig, ax = plt.subplots(figsize=(9, 4), dpi=150)
-
-    im = ax.imshow(mat, aspect="auto", cmap="RdBu_r", vmin=-vmax, vmax=vmax)
-
-    ax.set_xticks(range(n_bands))
-    ax.set_xticklabels(filter_names, rotation=45, ha="right", fontsize=8)
-    ax.set_yticks(range(n_params))
-
-    label_map = {
-        "sfh_dpl_alpha": r"$\alpha$",
-        "sfh_dpl_beta": r"$\beta$",
-        "sfh_dpl_tau_gyr": r"$\tau$ (Gyr)",
-        "sfh_dpl_age_gyr": "age (Gyr)",
-        "sfh_dpl_log_total_mass": r"$\log M_*$",
-        "met_logzsol": r"$\log Z/Z_\odot$",
-        "dust_tau_bc": r"$\tau_{\rm bc}$",
-        "dust_tau_diff": r"$\tau_{\rm diff}$",
-    }
-
-    param_labels = [label_map.get(p, p) for p in free_params]
-    ax.set_yticklabels(param_labels, fontsize=9)
-
-    ax.set_title("(a) Jacobian: ∂ log₁₀ f / ∂θ", fontsize=10, fontweight="bold", pad=10)
-    ax.set_xlabel("Filter", fontsize=9)
-    ax.set_ylabel("Parameter", fontsize=9)
-
-    cbar = plt.colorbar(im, ax=ax, shrink=0.8)
-    cbar.set_label(r"∂$\log_{10}$ f / ∂θ", fontsize=8)
-
-    plt.tight_layout()
-    return fig, ax
-
-
-def plot_fisher_correlation(corr_matrix, free_params):
-    """Plot Fisher correlation matrix (panel b)."""
-    n_params = len(free_params)
-
-    fig, ax = plt.subplots(figsize=(7, 6.5), dpi=150)
-
-    im = ax.imshow(corr_matrix, cmap="RdBu_r", vmin=-1, vmax=1, aspect="auto")
-
-    ax.set_xticks(range(n_params))
-    ax.set_yticks(range(n_params))
-
-    label_map = {
-        "sfh_dpl_alpha": r"$\alpha$",
-        "sfh_dpl_beta": r"$\beta$",
-        "sfh_dpl_tau_gyr": r"$\tau$ (Gyr)",
-        "sfh_dpl_age_gyr": "age (Gyr)",
-        "sfh_dpl_log_total_mass": r"$\log M_*$",
-        "met_logzsol": r"$\log Z/Z_\odot$",
-        "dust_tau_bc": r"$\tau_{\rm bc}$",
-        "dust_tau_diff": r"$\tau_{\rm diff}$",
-    }
-
-    param_labels = [label_map.get(p, p) for p in free_params]
-    ax.set_xticklabels(param_labels, rotation=45, ha="right", fontsize=9)
-    ax.set_yticklabels(param_labels, fontsize=9)
-
-    ax.set_title("(b) Fisher correlation matrix", fontsize=10, fontweight="bold", pad=10)
-
-    cbar = plt.colorbar(im, ax=ax, shrink=0.8)
-    cbar.set_label("Correlation", fontsize=8)
-
-    for i in range(n_params):
-        for j in range(n_params):
-            if i != j and np.abs(corr_matrix[i, j]) > 0.5:
-                ax.text(j, i, f"{corr_matrix[i, j]:.2f}",
-                        ha="center", va="center", fontsize=7,
-                        color="white" if np.abs(corr_matrix[i, j]) > 0.7 else "black")
-
-    plt.tight_layout()
-    return fig, ax
-
-
 def main():
     print("=" * 80)
     print("Figure 8: Gradient Sensitivity (Jacobian and Fisher Matrix)")
@@ -384,9 +301,13 @@ def main():
     print(f"   Ratio (Jac/Forward): {t_jac_median / t_forward_median:.2f}x")
 
     print("\n11. Creating final publication figure...")
-    fig_final = plt.figure(figsize=(14, 5.5), dpi=150)
+    fig_final = plt.figure(figsize=(7.0, 3.4), dpi=150)
 
-    gs = fig_final.add_gridspec(1, 2, width_ratios=[1.2, 1.0], wspace=0.35)
+    # Use constrained_layout for better space management
+    gs = fig_final.add_gridspec(
+        1, 2, width_ratios=[1.2, 1.0], wspace=0.3,
+        left=0.08, right=0.98, top=0.95, bottom=0.12
+    )
     ax_a = fig_final.add_subplot(gs[0])
     ax_b = fig_final.add_subplot(gs[1])
 
@@ -398,7 +319,7 @@ def main():
     vmax = np.max(np.abs(mat))
     im_a = ax_a.imshow(mat, aspect="auto", cmap="RdBu_r", vmin=-vmax, vmax=vmax)
     ax_a.set_xticks(range(n_bands))
-    ax_a.set_xticklabels(used_filters, rotation=45, ha="right", fontsize=7)
+    ax_a.set_xticklabels(used_filters, rotation=45, ha="right", fontsize=9)
     ax_a.set_yticks(range(n_params))
     label_map = {
         "sfh_dpl_alpha": r"$\alpha$",
@@ -411,24 +332,27 @@ def main():
         "dust_tau_diff": r"$\tau_{\rm diff}$",
     }
     param_labels = [label_map.get(p, p) for p in free_params]
-    ax_a.set_yticklabels(param_labels, fontsize=9)
+    ax_a.set_yticklabels(param_labels, fontsize=10)
     ax_a.set_title("(a) Jacobian", fontsize=10, fontweight="bold")
-    ax_a.set_xlabel("Filter", fontsize=9)
-    ax_a.set_ylabel("Parameter", fontsize=9)
+    ax_a.set_xlabel("Filter", fontsize=10)
+    ax_a.set_ylabel("Parameter", fontsize=10)
+    ax_a.tick_params(axis='both', which='major', labelsize=9)
     cbar_a = plt.colorbar(im_a, ax=ax_a, shrink=0.9)
-    cbar_a.set_label(r"∂$\log_{10}$ f / ∂θ", fontsize=8)
+    cbar_a.set_label(r"∂$\log_{10}$ f / ∂θ", fontsize=10)
+    cbar_a.ax.tick_params(labelsize=9)
 
     # Panel (b): Fisher correlation matrix
     im_b = ax_b.imshow(corr_matrix, cmap="RdBu_r", vmin=-1, vmax=1, aspect="auto")
     ax_b.set_xticks(range(n_params))
     ax_b.set_yticks(range(n_params))
-    ax_b.set_xticklabels(param_labels, rotation=45, ha="right", fontsize=9)
-    ax_b.set_yticklabels(param_labels, fontsize=9)
+    ax_b.set_xticklabels(param_labels, rotation=45, ha="right", fontsize=10)
+    ax_b.set_yticklabels(param_labels, fontsize=10)
     ax_b.set_title("(b) Fisher correlation", fontsize=10, fontweight="bold")
+    ax_b.tick_params(axis='both', which='major', labelsize=9)
     cbar_b = plt.colorbar(im_b, ax=ax_b, shrink=0.9)
-    cbar_b.set_label("Correlation", fontsize=8)
+    cbar_b.set_label("Correlation", fontsize=10)
+    cbar_b.ax.tick_params(labelsize=9)
 
-    plt.tight_layout()
     fig_final.savefig(OUTPUT_DIR / "fig08_gradient_sensitivity.pdf", dpi=150, bbox_inches="tight")
     fig_final.savefig(OUTPUT_DIR / "fig08_gradient_sensitivity.png", dpi=150, bbox_inches="tight")
     print(f"   ✓ Saved to {OUTPUT_DIR / 'fig08_gradient_sensitivity.pdf'}")
