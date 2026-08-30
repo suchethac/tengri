@@ -1,0 +1,29 @@
+2026-08-30 15:39:46,436 - __main__ - INFO - Applied 5.0% systematic error floor in quadrature. Mean floor contribution: 7.419e-33 erg/s/cm2/Hz
+/Users/suchethacooray/Projects/tengri/.claude/worktrees/paper1/src/tengri/components/stellar/sps/dsps_wrapper.py:354: UserWarning: 'ssp_prsc_miles_chabrier_wNE_logGasU-3.0_logGasZ0.0.h5' is a wNE (with-Nebular-Emission) SSP: nebular continuum and lines are already baked into the templates at fixed logU/logZ_gas. Pair it with the default baked-in nebular backend only: adding neb={'type': 'cue'} or a CLOUDY grid on top double-counts nebular emission.
+  return load_ssp_data(str(candidate))
+/Users/suchethacooray/Projects/tengri/.claude/worktrees/paper1/src/tengri/forward/sed_model.py:2944: BakedInNebularWarning: BakedInBackend: nebular emission is baked into the SSP file at a FIXED logU and FIXED escape fraction determined when the SSP grid was generated (commonly logU = −3, but depends on the SSP file). The ionization parameter and escape fraction are NOT free parameters : varying neb_logU or neb_fesc in your Parameters will have no effect. Check your SSP file's nebular assumptions. Switch to CloudyGridBackend or CueBackend to vary nebular properties. To suppress when building via SEDModel.build: warnings.filterwarnings('ignore', message='BakedInBackend: nebular emission is baked'). (ionizing_source_warning='suppress' also works, but it is a BakedInBackend(...) constructor argument and the build grammar does not forward it.)
+  self._nebular_backend = BakedInBackend()
+2026-08-30 15:39:53,130 - __main__ - INFO - Galaxy 13097 (z=1.097): 8 detected bands
+2026-08-30 15:39:53,130 - __main__ - INFO - Config II: 8 free parameters
+2026-08-30 15:39:53,130 - __main__ - INFO - Fit attempt 1/2
+2026-08-30 15:40:00,554 - tengri.inference.backends.mcmc.nuts - INFO - NUTS: 8 parameters, 600 warmup, 600 samples, target_accept=0.85
+2026-08-30 15:40:23,848 - tengri.inference.backends.mcmc.nuts - INFO -   Warmup complete (23.3s). Step size: 0.0387
+2026-08-30 15:40:26,570 - tengri.inference.backends.mcmc.nuts - INFO -   NUTS complete in 25.9s. Divergences: 2400/600
+/Users/suchethacooray/Projects/tengri/.claude/worktrees/paper1/src/tengri/inference/backends/mcmc/nuts.py:597: DeadFitWarning: dead fit: parameter(s) 'dust_L_agn_ir', 'dust_Rv', 'dust_T', 'dust_T_cold', 'dust_T_warm', 'dust_alpha', 'dust_alpha_dale', 'dust_alpha_dl14', 'dust_alpha_mir', 'dust_beta_cold', 'dust_beta_ir', 'dust_beta_warm', 'dust_bump_strength', 'dust_delta', 'dust_epsilon_mbb', 'dust_eta_balance', 'dust_f_cold', 'dust_f_obscuration', 'dust_f_pah', 'dust_frac_agn', 'dust_gamma_dl', 'dust_lgU', 'dust_log_ssfr', 'dust_qhac', 'dust_qpah', 'dust_slope', 'dust_umin', 'met_alpha_fe', 'met_logzsol_scatter', 'noise_dof', 'noise_frac_cal', 'redshift', 'sigma_v_kms' have 1 unique draw in 600 samples. R-hat cannot detect this. Remedies: shorter warmup, lower target_accept_rate, smaller step_size, or dense_mass_matrix=False (issue #1999).
+  return Posterior(
+2026-08-30 15:40:26,574 - __main__ - WARNING - ✗ Fit failed adoption bar: divergences=2400, rhat_max=3.1484
+2026-08-30 15:40:26,574 - __main__ - INFO - Retune: toggled dense_mass_matrix to True
+2026-08-30 15:40:26,574 - __main__ - INFO - Retune: doubled warmup to 1200
+2026-08-30 15:40:26,574 - __main__ - INFO - Fit attempt 2/2
+/Users/suchethacooray/Projects/tengri/.claude/worktrees/paper1/src/tengri/inference/fitter.py:3625: UserWarning: NUTS warmup with dense_mass_matrix=True at D=8 can peak at 20+ GB of RAM. If you're on a 32 GB machine and the fit is OOM-ing, pass `dense_mass_matrix=False` (diagonal mass matrix; small convergence cost) or switch to `method='mcmc_hmc'` (fixed-length trajectory; lighter warmup). See issue #319.
+  result = entry.runner(target, key=key, init_from=init_from, **kwargs)
+2026-08-30 15:40:26,654 - tengri.inference.backends.mcmc.nuts - INFO - NUTS: 8 parameters, 1200 warmup, 600 samples, target_accept=0.85
+2026-08-30 15:40:58,589 - tengri.inference.backends.mcmc.nuts - INFO -   Warmup complete (31.9s). Step size: 0.0370
+2026-08-30 15:41:00,092 - tengri.inference.backends.mcmc.nuts - INFO -   NUTS complete in 33.4s. Divergences: 2400/600
+2026-08-30 15:41:00,093 - __main__ - WARNING - ✗ Fit failed adoption bar: divergences=2400, rhat_max=2.2578
+2026-08-30 15:41:00,093 - __main__ - INFO - Retune: toggled dense_mass_matrix to False
+2026-08-30 15:41:00,093 - __main__ - INFO - Retune: doubled warmup to 2400
+2026-08-30 15:41:00,093 - __main__ - ERROR - ✗ Fit failed: Fit failed all 2 attempts for galaxy 13097 config II
+  MAP initialization (1000 steps)...
+  MAP init done (loss=149.02)
+  MAP initialization: reusing cached MAP point

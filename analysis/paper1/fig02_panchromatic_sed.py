@@ -101,7 +101,7 @@ def nu_lnu(lnu):
 
 # Plot
 print("Plotting...")
-fig, ax = plt.subplots(figsize=(7.0, 5.0), dpi=150)
+fig, ax = plt.subplots(figsize=(7.0, 3.4), dpi=150)
 ax.set_xscale("log")
 ax.set_yscale("log")
 ax.set_xlabel(r"rest wavelength $\lambda$ [$\mu$m]", fontsize=10)
@@ -168,10 +168,10 @@ ax.text(0.98, 0.98, summary_text, transform=ax.transAxes, fontsize=8,
         bbox=dict(boxstyle="round,pad=0.4", facecolor="white", edgecolor="gray", linewidth=0.5),
         family="monospace")
 
-# FIX #3: Place legend below with proper spacing
-fig.legend(loc="lower center", ncol=4, fontsize=8, frameon=True,
-           bbox_to_anchor=(0.5, 0.02), handlelength=1.2)
-fig.subplots_adjust(bottom=0.28)
+# Legend inside axes, lower left, two columns
+ax.legend(loc="lower left", ncol=2, fontsize=7, frameon=True, framealpha=0.9,
+          handlelength=1.0, labelspacing=0.3)
+fig.subplots_adjust(bottom=0.14)
 
 fig.savefig(OUTPUT_DIR / "fig02_panchromatic_sed.pdf", dpi=150, bbox_inches="tight")
 fig.savefig(OUTPUT_DIR / "fig02_panchromatic_sed.png", dpi=150, bbox_inches="tight")

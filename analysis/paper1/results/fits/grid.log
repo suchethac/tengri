@@ -1,83 +1,20 @@
-2026-08-30 15:19:16,340 - __main__ - INFO - 
+2026-08-30 15:29:44,170 - __main__ - INFO - 
 ============================================================
-2026-08-30 15:19:16,340 - __main__ - INFO - Fitting galaxy 13097 with config I
-2026-08-30 15:19:16,340 - __main__ - INFO - ============================================================
-2026-08-30 15:19:16,340 - __main__ - INFO - Running: /Users/suchethacooray/Projects/tengri/.claude/worktrees/paper1/.venv/bin/python fit_one.py --galaxy 13097 --config I --method mcmc_nuts --out /Users/suchethacooray/Projects/tengri/.claude/worktrees/paper1/analysis/paper1/results/fits --seed 42
-2026-08-30 15:19:16,342 - __main__ - ERROR - Error running fit_one.py: [Errno 2] No such file or directory: '/Users/suchethacooray/Projects/tengri/.claude/worktrees/paper1/.venv/bin/python'
-2026-08-30 15:19:16,342 - __main__ - ERROR - ✗ FAILED: galaxy 13097 config I
-2026-08-30 15:19:16,342 - __main__ - INFO - 
+2026-08-30 15:29:44,170 - __main__ - INFO - Fitting galaxy 13097 with config I
+2026-08-30 15:29:44,170 - __main__ - INFO - ============================================================
+2026-08-30 15:29:44,170 - __main__ - INFO - Running: /Users/suchethacooray/Projects/tengri/.venv/bin/python fit_one.py --galaxy 13097 --config I --method mcmc_nuts --out /Users/suchethacooray/Projects/tengri/.claude/worktrees/paper1/analysis/paper1/results/fits --seed 42
+2026-08-30 15:39:44,280 - __main__ - ERROR - Timeout (600s) for galaxy 13097 config I
+2026-08-30 15:39:44,280 - __main__ - ERROR - ✗ FAILED: galaxy 13097 config I
+2026-08-30 15:39:44,280 - __main__ - INFO - 
 ============================================================
-2026-08-30 15:19:16,342 - __main__ - INFO - Fitting galaxy 13097 with config II
-2026-08-30 15:19:16,342 - __main__ - INFO - ============================================================
-2026-08-30 15:19:16,342 - __main__ - INFO - Running: /Users/suchethacooray/Projects/tengri/.claude/worktrees/paper1/.venv/bin/python fit_one.py --galaxy 13097 --config II --method mcmc_nuts --out /Users/suchethacooray/Projects/tengri/.claude/worktrees/paper1/analysis/paper1/results/fits --seed 42
-2026-08-30 15:19:16,343 - __main__ - ERROR - Error running fit_one.py: [Errno 2] No such file or directory: '/Users/suchethacooray/Projects/tengri/.claude/worktrees/paper1/.venv/bin/python'
-2026-08-30 15:19:16,343 - __main__ - ERROR - ✗ FAILED: galaxy 13097 config II
-2026-08-30 15:19:16,343 - __main__ - INFO - 
+2026-08-30 15:39:44,280 - __main__ - INFO - Fitting galaxy 13097 with config II
+2026-08-30 15:39:44,280 - __main__ - INFO - ============================================================
+2026-08-30 15:39:44,281 - __main__ - INFO - Running: /Users/suchethacooray/Projects/tengri/.venv/bin/python fit_one.py --galaxy 13097 --config II --method mcmc_nuts --out /Users/suchethacooray/Projects/tengri/.claude/worktrees/paper1/analysis/paper1/results/fits --seed 42
+2026-08-30 15:41:00,413 - __main__ - ERROR - fit_one.py exited with code 1 for 13097_II
+2026-08-30 15:41:00,413 - __main__ - ERROR - See log: /Users/suchethacooray/Projects/tengri/.claude/worktrees/paper1/analysis/paper1/results/fits/13097_II.log
+2026-08-30 15:41:00,414 - __main__ - ERROR - ✗ FAILED: galaxy 13097 config II
+2026-08-30 15:41:00,414 - __main__ - INFO - 
 ============================================================
-2026-08-30 15:19:16,343 - __main__ - INFO - Fitting galaxy 13097 with config III
-2026-08-30 15:19:16,343 - __main__ - INFO - ============================================================
-2026-08-30 15:19:16,343 - __main__ - INFO - Running: /Users/suchethacooray/Projects/tengri/.claude/worktrees/paper1/.venv/bin/python fit_one.py --galaxy 13097 --config III --method mcmc_nuts --out /Users/suchethacooray/Projects/tengri/.claude/worktrees/paper1/analysis/paper1/results/fits --seed 42
-2026-08-30 15:19:16,344 - __main__ - ERROR - Error running fit_one.py: [Errno 2] No such file or directory: '/Users/suchethacooray/Projects/tengri/.claude/worktrees/paper1/.venv/bin/python'
-2026-08-30 15:19:16,344 - __main__ - ERROR - ✗ FAILED: galaxy 13097 config III
-2026-08-30 15:19:16,344 - __main__ - INFO - 
-============================================================
-2026-08-30 15:19:16,344 - __main__ - INFO - Fitting galaxy 15336 with config I
-2026-08-30 15:19:16,344 - __main__ - INFO - ============================================================
-2026-08-30 15:19:16,345 - __main__ - INFO - Running: /Users/suchethacooray/Projects/tengri/.claude/worktrees/paper1/.venv/bin/python fit_one.py --galaxy 15336 --config I --method mcmc_nuts --out /Users/suchethacooray/Projects/tengri/.claude/worktrees/paper1/analysis/paper1/results/fits --seed 42
-2026-08-30 15:19:16,346 - __main__ - ERROR - Error running fit_one.py: [Errno 2] No such file or directory: '/Users/suchethacooray/Projects/tengri/.claude/worktrees/paper1/.venv/bin/python'
-2026-08-30 15:19:16,346 - __main__ - ERROR - ✗ FAILED: galaxy 15336 config I
-2026-08-30 15:19:16,346 - __main__ - INFO - 
-============================================================
-2026-08-30 15:19:16,346 - __main__ - INFO - Fitting galaxy 15336 with config II
-2026-08-30 15:19:16,346 - __main__ - INFO - ============================================================
-2026-08-30 15:19:16,346 - __main__ - INFO - Running: /Users/suchethacooray/Projects/tengri/.claude/worktrees/paper1/.venv/bin/python fit_one.py --galaxy 15336 --config II --method mcmc_nuts --out /Users/suchethacooray/Projects/tengri/.claude/worktrees/paper1/analysis/paper1/results/fits --seed 42
-2026-08-30 15:19:16,347 - __main__ - ERROR - Error running fit_one.py: [Errno 2] No such file or directory: '/Users/suchethacooray/Projects/tengri/.claude/worktrees/paper1/.venv/bin/python'
-2026-08-30 15:19:16,347 - __main__ - ERROR - ✗ FAILED: galaxy 15336 config II
-2026-08-30 15:19:16,347 - __main__ - INFO - 
-============================================================
-2026-08-30 15:19:16,347 - __main__ - INFO - Fitting galaxy 15336 with config III
-2026-08-30 15:19:16,347 - __main__ - INFO - ============================================================
-2026-08-30 15:19:16,347 - __main__ - INFO - Running: /Users/suchethacooray/Projects/tengri/.claude/worktrees/paper1/.venv/bin/python fit_one.py --galaxy 15336 --config III --method mcmc_nuts --out /Users/suchethacooray/Projects/tengri/.claude/worktrees/paper1/analysis/paper1/results/fits --seed 42
-2026-08-30 15:19:16,348 - __main__ - ERROR - Error running fit_one.py: [Errno 2] No such file or directory: '/Users/suchethacooray/Projects/tengri/.claude/worktrees/paper1/.venv/bin/python'
-2026-08-30 15:19:16,348 - __main__ - ERROR - ✗ FAILED: galaxy 15336 config III
-2026-08-30 15:19:16,348 - __main__ - INFO - 
-============================================================
-2026-08-30 15:19:16,348 - __main__ - INFO - Fitting galaxy 24497 with config I
-2026-08-30 15:19:16,348 - __main__ - INFO - ============================================================
-2026-08-30 15:19:16,348 - __main__ - INFO - Running: /Users/suchethacooray/Projects/tengri/.claude/worktrees/paper1/.venv/bin/python fit_one.py --galaxy 24497 --config I --method mcmc_nuts --out /Users/suchethacooray/Projects/tengri/.claude/worktrees/paper1/analysis/paper1/results/fits --seed 42
-2026-08-30 15:19:16,349 - __main__ - ERROR - Error running fit_one.py: [Errno 2] No such file or directory: '/Users/suchethacooray/Projects/tengri/.claude/worktrees/paper1/.venv/bin/python'
-2026-08-30 15:19:16,349 - __main__ - ERROR - ✗ FAILED: galaxy 24497 config I
-2026-08-30 15:19:16,350 - __main__ - INFO - 
-============================================================
-2026-08-30 15:19:16,350 - __main__ - INFO - Fitting galaxy 24497 with config II
-2026-08-30 15:19:16,350 - __main__ - INFO - ============================================================
-2026-08-30 15:19:16,350 - __main__ - INFO - Running: /Users/suchethacooray/Projects/tengri/.claude/worktrees/paper1/.venv/bin/python fit_one.py --galaxy 24497 --config II --method mcmc_nuts --out /Users/suchethacooray/Projects/tengri/.claude/worktrees/paper1/analysis/paper1/results/fits --seed 42
-2026-08-30 15:19:16,351 - __main__ - ERROR - Error running fit_one.py: [Errno 2] No such file or directory: '/Users/suchethacooray/Projects/tengri/.claude/worktrees/paper1/.venv/bin/python'
-2026-08-30 15:19:16,351 - __main__ - ERROR - ✗ FAILED: galaxy 24497 config II
-2026-08-30 15:19:16,351 - __main__ - INFO - 
-============================================================
-2026-08-30 15:19:16,351 - __main__ - INFO - Fitting galaxy 24497 with config III
-2026-08-30 15:19:16,351 - __main__ - INFO - ============================================================
-2026-08-30 15:19:16,351 - __main__ - INFO - Running: /Users/suchethacooray/Projects/tengri/.claude/worktrees/paper1/.venv/bin/python fit_one.py --galaxy 24497 --config III --method mcmc_nuts --out /Users/suchethacooray/Projects/tengri/.claude/worktrees/paper1/analysis/paper1/results/fits --seed 42
-2026-08-30 15:19:16,352 - __main__ - ERROR - Error running fit_one.py: [Errno 2] No such file or directory: '/Users/suchethacooray/Projects/tengri/.claude/worktrees/paper1/.venv/bin/python'
-2026-08-30 15:19:16,353 - __main__ - ERROR - ✗ FAILED: galaxy 24497 config III
-2026-08-30 15:19:16,353 - __main__ - INFO - 
-Summary saved to /Users/suchethacooray/Projects/tengri/.claude/worktrees/paper1/analysis/paper1/results/fit_summary.json
-2026-08-30 15:19:16,353 - __main__ - ERROR - 
-9 FITS FAILED:
-2026-08-30 15:19:16,353 - __main__ - ERROR -   - Galaxy 13097 Config I
-2026-08-30 15:19:16,353 - __main__ - ERROR -   - Galaxy 13097 Config II
-2026-08-30 15:19:16,353 - __main__ - ERROR -   - Galaxy 13097 Config III
-2026-08-30 15:19:16,353 - __main__ - ERROR -   - Galaxy 15336 Config I
-2026-08-30 15:19:16,353 - __main__ - ERROR -   - Galaxy 15336 Config II
-2026-08-30 15:19:16,353 - __main__ - ERROR -   - Galaxy 15336 Config III
-2026-08-30 15:19:16,353 - __main__ - ERROR -   - Galaxy 24497 Config I
-2026-08-30 15:19:16,353 - __main__ - ERROR -   - Galaxy 24497 Config II
-2026-08-30 15:19:16,353 - __main__ - ERROR -   - Galaxy 24497 Config III
-
-============================================================================================================================================
-3×3 CANDELS FITS SUMMARY
-============================================================================================================================================
-Galaxy     Cfg D   Div  Rhat_max   ESS_min   Wall(s)   s/ESS    Pass  log M* (50)  log SFR (50)
---------------------------------------------------------------------------------------------------------------------------------------------
-============================================================================================================================================
+2026-08-30 15:41:00,414 - __main__ - INFO - Fitting galaxy 13097 with config III
+2026-08-30 15:41:00,414 - __main__ - INFO - ============================================================
+2026-08-30 15:41:00,414 - __main__ - INFO - Running: /Users/suchethacooray/Projects/tengri/.venv/bin/python fit_one.py --galaxy 13097 --config III --method mcmc_nuts --out /Users/suchethacooray/Projects/tengri/.claude/worktrees/paper1/analysis/paper1/results/fits --seed 42

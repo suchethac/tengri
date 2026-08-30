@@ -1,0 +1,13 @@
+2026-08-30 15:29:46,101 - __main__ - INFO - Applied 5.0% systematic error floor in quadrature. Mean floor contribution: 7.419e-33 erg/s/cm2/Hz
+2026-08-30 15:29:48,524 - __main__ - INFO - Galaxy 13097 (z=1.097): 8 detected bands
+2026-08-30 15:29:48,525 - __main__ - INFO - Config I: 5 free parameters
+2026-08-30 15:29:48,525 - __main__ - INFO - Fit attempt 1/2
+2026-08-30 15:30:11,494 - tengri.inference.backends.mcmc.nuts - INFO - NUTS: 5 parameters, 600 warmup, 600 samples, target_accept=0.85
+2026-08-30 15:33:58,530 - tengri.inference.backends.mcmc.nuts - INFO -   Warmup complete (227.0s). Step size: 0.0438
+2026-08-30 15:34:09,059 - tengri.inference.backends.mcmc.nuts - INFO -   NUTS complete in 237.5s. Divergences: 2400/600
+/Users/suchethacooray/Projects/tengri/.claude/worktrees/paper1/src/tengri/inference/backends/mcmc/nuts.py:597: DeadFitWarning: dead fit: parameter(s) 'dust_L_agn_ir', 'dust_Rv', 'dust_T', 'dust_T_cold', 'dust_T_warm', 'dust_alpha', 'dust_alpha_dale', 'dust_alpha_dl14', 'dust_alpha_mir', 'dust_beta_cold', 'dust_beta_ir', 'dust_beta_warm', 'dust_bump_strength', 'dust_delta', 'dust_epsilon_mbb', 'dust_eta_balance', 'dust_f_cold', 'dust_f_obscuration', 'dust_f_pah', 'dust_frac_agn', 'dust_gamma_dl', 'dust_lgU', 'dust_log_ssfr', 'dust_qhac', 'dust_qpah', 'dust_slope', 'dust_umin', 'met_alpha_fe', 'met_logzsol_scatter', 'neb_dig_delta_logU', 'neb_dig_frac', 'neb_eline_sigma_kms', 'neb_fdust', 'neb_fesc', 'neb_fesc_lya', 'neb_logU', 'neb_logZ_gas', 'noise_dof', 'noise_frac_cal', 'redshift', 'sigma_v_kms' have 1 unique draw in 600 samples. R-hat cannot detect this. Remedies: shorter warmup, lower target_accept_rate, smaller step_size, or dense_mass_matrix=False (issue #1999).
+  return Posterior(
+2026-08-30 15:34:09,064 - __main__ - WARNING - ✗ Fit failed adoption bar: divergences=2400, rhat_max=2.9481
+2026-08-30 15:34:09,064 - __main__ - INFO - Retune: doubled warmup to 1200
+2026-08-30 15:34:09,064 - __main__ - INFO - Fit attempt 2/2
+2026-08-30 15:34:09,285 - tengri.inference.backends.mcmc.nuts - INFO - NUTS: 5 parameters, 1200 warmup, 600 samples, target_accept=0.85
