@@ -4,7 +4,9 @@ CLI: python fit_one.py --galaxy ID --config {I,II,III} --method mcmc_nuts --out 
      [--seed N] [--n-warmup N] [--n-samples N] [--n-chains N]
 
 ``--n-warmup`` / ``--n-samples`` / ``--n-chains`` default to the paper's 600 / 600 / 4;
-they exist so the pipeline can be smoke-tested end to end at a tiny budget.
+they exist so the pipeline can be smoke-tested at a small budget. The NPZ is written
+only when an attempt clears the adoption bar, so a 20-draw run exercises the fit, the
+retune and the per-attempt JSON; reaching the NPZ needs a budget that converges.
 
 Outputs to DIR/<ID>_<config>.npz (parameters, derived quantities, diagnostics) and
 DIR/<ID>_<config>.json (diagnostics summary).
