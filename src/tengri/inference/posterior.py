@@ -366,8 +366,10 @@ class Posterior:
         A dead fit is unambiguous when:
         - ``n_divergent == n_samples * n_chains``: every kept draw across every
           chain diverged (all-divergent, #2087).
-        - Any free parameter has all identical draws (``np.ptp == 0``) over >= 100
-          draws (frozen parameter). Small test posteriors (< 100 draws) are exempt.
+        - Any *free* parameter has all identical draws (``np.ptp == 0``) over >= 100
+          draws (frozen parameter). ``Fixed`` parameters are constant by
+          construction and are skipped when the model is known (#2087). Small
+          test posteriors (< 100 draws) are exempt.
 
         Raises no exception (only warns) so the result is still usable for
         inspection. The warning message states the failure signature and remedies
@@ -402,15 +404,17 @@ class Posterior:
             warnings.warn(msg, DeadFitWarning, stacklevel=3)
             return
 
-        # Check frozen parameters: any param with all identical draws (np.ptp == 0)
-        # over >= 100 draws (small test posteriors are exempt)
+        # Check frozen parameters: a FREE parameter with all identical draws
+        # (np.ptp == 0) over >= 100 draws. Fixed parameters are constant by
+        # construction (#2087); without a model every column is checked.
         if n_samples >= 100:
-            frozen_params = []
-            for param_name, param_samples in self.samples.items():
-                param_array = np.asarray(param_samples)
-                # ptp = peak-to-peak (max - min)
-                if np.ptp(param_array) == 0:
-                    frozen_params.append(param_name)
+            free = self.free_names
+            candidates = (
+                list(self.samples) if free is None else [n for n in free if n in self.samples]
+            )
+            frozen_params = [
+                name for name in candidates if np.ptp(np.asarray(self.samples[name])) == 0
+            ]
 
             if frozen_params:
                 frozen_list = ", ".join(f"'{p}'" for p in frozen_params)
@@ -421,6 +425,22 @@ class Posterior:
                     f"or dense_mass_matrix=False (issue #1999)."
                 )
                 warnings.warn(msg, DeadFitWarning, stacklevel=3)
+
+    @property
+    def free_names(self) -> tuple[str, ...] | None:
+        """Parameters the sampler moved, or ``None`` when the posterior has no model.
+
+        ``samples`` holds every parameter the forward model consumes: the
+        ``Fixed`` ones ride along as constant arrays (``Fitter._to_physical``
+        broadcasts each pinned value across the draws), so a zero-variance
+        column is evidence of a dead sampler only when it belongs to a *free*
+        parameter. The model's spec is the record of which names were free; a
+        hand-built posterior without ``_model`` cannot tell and gets ``None``
+        (#2087).
+        """
+        if self._model is None:
+            return None
+        return tuple(self._model.spec.free_params)
 
     # ── Derived quantities ────────────────────────────────────────
 
