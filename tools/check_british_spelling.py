@@ -104,6 +104,10 @@ EXCLUDE_FILES = frozenset(
 # External data-contract tokens that must keep British spelling (bytes on disk).
 ALLOWED_TOKENS = frozenset(
     {
+        # External data-contract filename from the CANDELS SED-fitting workshop
+        # repository (camipacifici/art_sedfitting: BEAGLE_summary_catalogue_z1.fits),
+        # read by analysis/paper1/ingest_art_sedfitting.py; upstream spelling kept.
+        "BEAGLE_summary_catalogue_z1",
         "ionisation_parameter",  # Synthesizer grid HDF5 axis key
         "log10_specific_ionising_luminosity",  # Synthesizer grid HDF5 dataset key
         "Modelling",  # verbatim paper title — Temple, Hewett & Banerji 2021, MNRAS 508, 737

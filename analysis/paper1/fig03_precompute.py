@@ -2,7 +2,8 @@
 """
 Figure 3 (speed, main text) and Figure B1 (accuracy, appendix).
 
-fig03_precompute.pdf: forward-model cost, exact vs WavePrecomp (provisional from May 2026 benchmark until re-run).
+fig03_precompute.pdf: forward-model cost, exact vs WavePrecomp, from results/fig03_bench_forward_2026-08-30.json
+  (bench/scripts/benchmark_forward_model.py parsed by parse_forward_benchmark.py; see REPRODUCTION_COMMANDS.md).
 figB1_lut_accuracy.pdf: LUT accuracy vs redshift (from results/fig03_precompute_data.json).
 
 Usage:
@@ -24,8 +25,8 @@ parser = argparse.ArgumentParser(
 parser.add_argument(
     "--bench-json",
     type=str,
-    default=None,
-    help="Path to benchmark results JSON (for fresh run, otherwise uses May 2026 data)",
+    default="analysis/paper1/results/fig03_bench_forward_2026-08-30.json",
+    help="Path to the parsed benchmark JSON (parse_forward_benchmark.py output); the May 2026 constants are only a fallback",
 )
 parser.add_argument(
     "--accuracy-json",
@@ -99,7 +100,7 @@ def plot_panel_a(ax, bench_data=None):
             ax.text(
                 exact_val * 1.3,
                 i - bar_width / 2,
-                f"{speedup:.0f}×",
+                (f"{speedup:.1f}×" if speedup < 5 else f"{speedup:.0f}×"),
                 va="center",
                 fontsize=8,
                 color="#F18F01",
@@ -280,6 +281,8 @@ if args.bench_json:
     try:
         with open(args.bench_json) as f:
             bench_data = json.load(f)
+        if isinstance(bench_data, dict):
+            bench_data = bench_data["panel_a"]
     except Exception as e:
         print(f"Warning: Could not load benchmark JSON: {e}", flush=True)
 
