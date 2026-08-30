@@ -33,6 +33,7 @@ if str(PAPER1) not in sys.path:
     sys.path.insert(0, str(PAPER1))
 
 import candels_io
+import fit_one
 
 import tengri
 
@@ -141,3 +142,38 @@ def test_photometry_for_row_skips_sentinels_and_orders_by_the_map():
     assert names[:5] == ["hst_f435w", "hst_f606w", "hst_f775w", "hst_f814w", "hst_f850lp"]
     assert len(names) == len(fnu) == len(err) == 13
     assert np.all(err > 0)
+
+
+def test_extract_photometry_13097_returns_every_usable_band(catalog, registry_names):
+    z = float(catalog["z"][np.where(catalog["id"] == 13097)[0][0]])
+    gal_id, z_out, names, fnu, err = fit_one.extract_photometry(13097, catalog, z)
+    assert gal_id == 13097 and z_out == z
+    # Every usable band: 15 map keys -> 14 distinct filters (both Ks columns share
+    # ``vista_ks``) minus ``WFC3_F098M``, a sentinel for this galaxy. The buggy
+    # private map returned 8 (the five ACS bands were spelled ``WFC3_*``).
+    assert len(names) == 13
+    assert "hst_f435w" in names
+    assert "hst_f098m" not in names  # sentinel in the catalog for this galaxy
+    assert names.count("vista_ks") == 1
+    assert set(names) <= registry_names
+    assert np.all((fnu > 5e-30) & (fnu < 5e-28)), fnu
+    assert np.all(err > 0) and np.all(err < fnu)
+
+
+def test_thin_samples_and_iter_draws_use_flattened_draws():
+    rng = np.random.default_rng(0)
+    samples = {"a": rng.normal(size=9000), "b": rng.normal(size=9000)}
+    thin = fit_one.thin_samples(samples)
+    assert thin["a"].ndim == 1
+    assert 0 < thin["a"].shape[0] <= fit_one.MAX_SAVED_DRAWS
+    assert thin["a"][1] == samples["a"][3]  # 9000 draws -> every third one
+    assert fit_one.thin_samples({"a": np.arange(2400.0)})["a"].shape == (2400,)
+
+    draws = list(fit_one.iter_draws(thin, {"fixed": 1.5}, 5))
+    assert len(draws) == 5
+    assert draws[0] == {"fixed": 1.5, "a": float(thin["a"][0]), "b": float(thin["b"][0])}
+    assert list(fit_one.iter_draws({"a": np.arange(3.0)}, {}, 10)) == [
+        {"a": 0.0},
+        {"a": 1.0},
+        {"a": 2.0},
+    ]

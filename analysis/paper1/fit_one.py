@@ -17,7 +17,7 @@ from pathlib import Path
 
 import jax
 import numpy as np
-from candels_io import is_detected, load_candels_z1
+from candels_io import load_candels_z1, photometry_for_row
 from configs import config_I, config_II, config_III, load_ssp_for
 
 from tengri import Data, ForwardModel, Observation, Photometry
@@ -25,6 +25,28 @@ from tengri import Data, ForwardModel, Observation, Photometry
 jax.config.update("jax_enable_x64", True)
 
 logger = logging.getLogger(__name__)
+
+#: Draws kept per parameter in the saved NPZ (4 chains x 1000 draws).
+MAX_SAVED_DRAWS = 4000
+
+
+def thin_samples(samples: dict, max_draws: int = MAX_SAVED_DRAWS) -> dict:
+    """Thin flattened ``(n_chains * n_samples,)`` draws to at most ``max_draws``.
+
+    tengri returns every chain's kept draws concatenated into one 1-D array per
+    parameter; the previous save path indexed them as ``(n_chains, n_samples)``
+    and raised ``IndexError`` (#2089).
+    """
+    n_total = int(next(iter(samples.values())).shape[0])
+    step = max(1, -(-n_total // max_draws))  # ceiling division: result <= max_draws
+    return {k: np.asarray(v)[::step] for k, v in samples.items()}
+
+
+def iter_draws(samples_thin: dict, fixed_values: dict, n_draws: int):
+    """Yield parameter dicts (fixed values merged) for the first ``n_draws`` thinned draws."""
+    n_available = int(next(iter(samples_thin.values())).shape[0])
+    for i in range(min(n_draws, n_available)):
+        yield {**fixed_values, **{k: float(v[i]) for k, v in samples_thin.items()}}
 
 
 def extract_photometry(
@@ -38,6 +60,7 @@ def extract_photometry(
     Args:
         gal_idx: Galaxy ID (used to find row in catalog)
         candels_data: Dict from load_candels_z1() with 'id', 'z', 'bands', 'header'
+            and 'data' (the full float matrix)
         z: Redshift (may override catalog)
         ssp_grid_name: SSP grid name for filter availability check (optional)
 
@@ -49,78 +72,15 @@ def extract_photometry(
     idx = np.where(id_array == gal_idx)[0]
     if len(idx) == 0:
         raise ValueError(f"Galaxy {gal_idx} not found in CANDELS catalog")
-    row_idx = idx[0]
+    row = candels_data["data"][idx[0]]
 
-    # Load full CANDELS data to get photometry values
-    candels_file = Path(
-        "/Users/suchethacooray/Projects/tengri/"
-        "analysis/hst_proposal/data/CANDELS_GDSS_workshop_z1.dat"
-    )
-    if not candels_file.exists():
-        raise FileNotFoundError(f"CANDELS data not found at {candels_file}")
-
-    data = np.genfromtxt(candels_file, skip_header=1)
-    with open(candels_file) as f:
-        header_line = f.readline()
-    header = header_line.strip("#").strip().split()
-
-    # Build filter list by finding columns that correspond to bands in catalog
-    detected_filters = []
-    detected_fnu = []
-    detected_errors = []
-
-    # Map CANDELS column names to tengri filter names
-    candels_to_tengri_map = {
-        "WFC3_F435W": "hst_f435w",
-        "WFC3_F606W": "hst_f606w",
-        "WFC3_F775W": "hst_f775w",
-        "WFC3_F814W": "hst_f814w",
-        "WFC3_F850LP": "hst_f850lp",
-        "WFC3_F105W": "hst_f105w",
-        "WFC3_F125W": "hst_f125w",
-        "WFC3_F160W": "hst_f160w",
-        "ISAAC_KS": "vista_ks",
-        "HAWKI_KS": "vista_ks",  # Use same filter name
-        "IRAC_CH1": "irac_36",
-        "IRAC_CH2": "irac_45",
-        "IRAC_CH3": "irac_58",
-        "IRAC_CH4": "irac_80",
-    }
-
-    for candels_name, tengri_name in candels_to_tengri_map.items():
-        if candels_name not in header:
-            continue
-        if f"e{candels_name}" not in header:
-            continue
-
-        mag_idx = header.index(candels_name)
-        err_idx = header.index(f"e{candels_name}")
-
-        mag = data[row_idx, mag_idx]
-        mag_err = data[row_idx, err_idx]
-
-        if is_detected(mag, mag_err):
-            # Convert magnitude to F_nu (erg/s/cm2/Hz)
-            # AB mag: F_nu = F_0 * 10^(-mag/2.5)
-            # where F_0 = 3.63e-23 erg/s/cm2/Hz
-            F0_erg = 3.63e-23
-            fnu_erg = F0_erg * 10.0 ** (-mag / 2.5)
-
-            # Error propagation: d(F_nu) / F_nu = ln(10) / 2.5 * d(mag)
-            fnu_err = fnu_erg * np.log(10.0) / 2.5 * mag_err
-
-            # Avoid duplicate HAWKI_KS (skip if ISAAC_KS already present)
-            if tengri_name == "vista_ks" and "vista_ks" in detected_filters:
-                continue
-
-            detected_filters.append(tengri_name)
-            detected_fnu.append(fnu_erg)
-            detected_errors.append(fnu_err)
-
+    # AB zero point, column map, sentinel handling and the one-Ks rule all live
+    # in candels_io (#2089): this function only selects the row.
+    detected_filters, fnu, fnu_err = photometry_for_row(candels_data["header"], row)
     if len(detected_filters) == 0:
         raise ValueError(f"Galaxy {gal_idx} has no detected filters")
 
-    return gal_idx, z, detected_filters, np.array(detected_fnu), np.array(detected_errors)
+    return gal_idx, z, detected_filters, fnu, fnu_err
 
 
 def apply_systematic_error_floor(
@@ -294,30 +254,11 @@ def run_fit(
     output_npz = out_dir / f"{gal_id}_{config_key}.npz"
     output_json = out_dir / f"{gal_id}_{config_key}.json"
 
-    # Thin samples to ≤1000 per chain
-    n_total_samples = (
-        best_posterior.samples["sfh_dpl_alpha"].shape[0]
-        * best_posterior.samples["sfh_dpl_alpha"].shape[1]
-    )
-    if n_total_samples > 4000:  # 4 chains * 1000 draws
-        thin_factor = max(1, n_total_samples // 4000)
-        samples_thin = {k: v[:, ::thin_factor] for k, v in best_posterior.samples.items()}
-    else:
-        samples_thin = best_posterior.samples
+    # Thin to at most MAX_SAVED_DRAWS flattened draws (#2089)
+    samples_thin = thin_samples(best_posterior.samples)
 
     # Prepare derived quantities
     fixed_values = sed_model.spec.get_fixed_values()
-
-    # Generate draw iterator for derived properties
-    def draw_dicts(n_draws: int = 500):
-        """Yield parameter dicts for posterior samples (thinned)."""
-        for i in range(min(n_draws, samples_thin[next(iter(samples_thin.keys()))].size)):
-            chain_idx = i // samples_thin[next(iter(samples_thin.keys()))].shape[1]
-            sample_idx = i % samples_thin[next(iter(samples_thin.keys()))].shape[1]
-            yield {
-                **fixed_values,
-                **{k: float(v[chain_idx, sample_idx]) for k, v in samples_thin.items()},
-            }
 
     # Compute derived quantities (stellar mass, SFR, dust)
     derived_samples = {
@@ -327,7 +268,7 @@ def run_fit(
         "dust_tau_v": [],
     }
 
-    for params in draw_dicts(min(500, len(next(iter(samples_thin.values())).flat))):
+    for params in iter_draws(samples_thin, fixed_values, 500):
         pred = sed_model.predict(params)
         props = pred.properties
 
@@ -346,7 +287,7 @@ def run_fit(
     t_lbt_yr = np.logspace(6, 10.1, 100)  # 100 points, 1 Myr to ~13 Gyr
     sfr_posterior = []
 
-    for params in draw_dicts(min(200, len(next(iter(samples_thin.values())).flat))):
+    for params in iter_draws(samples_thin, fixed_values, 200):
         state = sed_model.predict_state(params)
         t_lbt_grid = np.asarray(state.derived["sfh_grid_lbt_yr"])
         sfr_grid = np.asarray(state.derived["sfr_history"])
