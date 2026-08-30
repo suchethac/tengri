@@ -10,7 +10,9 @@ Usage:
 """
 
 import argparse
+import os
 import re
+import shutil
 import subprocess
 import sys
 from dataclasses import dataclass, field
@@ -580,15 +582,23 @@ def main():
     parser.add_argument(
         "--catalog",
         type=str,
-        default="/Users/suchethacooray/writing-workspace/projects/tengri_model_catalog",
-        help="Path to catalog directory",
+        default=os.environ.get("TENGRI_MODEL_CATALOG_DIR"),
+        help=(
+            "Path to the Model Catalog LaTeX directory (default: the "
+            "TENGRI_MODEL_CATALOG_DIR environment variable)"
+        ),
     )
     parser.add_argument("--out", type=str, default="docs/model_reference", help="Output directory")
     parser.add_argument(
-        "--pandoc", type=str, default="/opt/homebrew/bin/pandoc", help="Path to pandoc executable"
+        "--pandoc",
+        type=str,
+        default=shutil.which("pandoc") or "pandoc",
+        help="Path to the pandoc executable (default: the one on PATH)",
     )
 
     args = parser.parse_args()
+    if not args.catalog:
+        parser.error("--catalog is required (or set TENGRI_MODEL_CATALOG_DIR)")
 
     port_catalog(Path(args.catalog), Path(args.out), args.pandoc)
 
