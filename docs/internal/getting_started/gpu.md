@@ -4,11 +4,16 @@ Tengri's forward model is pure JAX, so the same code that runs on CPU
 runs on GPU and TPU without modification. This page shows how to verify
 your install picks up the GPU and what to expect once it does.
 
-```{warning}
-Benchmark numbers in [Performance](../performance/index.md) are CPU only.
-GPU performance is functionally tested but not characterized with
-published wall-clocks. To contribute benchmarks on A100 / H100 / 4090,
-see [`bench/RERUN.md`](https://github.com/suchethac/tengri/blob/main/bench/RERUN.md).
+```{note}
+Benchmark numbers in [Performance](../performance/index.md) are CPU only, but
+the GPU is no longer uncharacterized. Two campaigns on an RTX 3060 publish
+wall-clocks: the forward model and gradients in
+[`bench/reports/2026-08-20_cuda_device_matrix.md`](https://github.com/suchethac/tengri/blob/main/bench/reports/2026-08-20_cuda_device_matrix.md),
+and **catalog inference** — galaxies per GPU-minute, with R-hat and ESS
+attached — in
+[`bench/reports/2026-08-30_gpu_catalog_throughput.md`](https://github.com/suchethac/tengri/blob/main/bench/reports/2026-08-30_gpu_catalog_throughput.md).
+Both are consumer-Ampere numbers. To contribute benchmarks on A100 / H100 /
+4090, see [`bench/RERUN.md`](https://github.com/suchethac/tengri/blob/main/bench/RERUN.md).
 ```
 
 ## Install JAX with CUDA
@@ -87,6 +92,64 @@ and dispatch; GPU wall clock is nearly flat in batch size (2048x the work for 1.
 the time). Note that consumer GeForce cards run float64 at 1/64 rate, which puts a
 3060 *below* a 5900X on dense float64 arithmetic; datacenter cards are ~1/2.
 
+## Catalog inference: galaxies per GPU-minute (measured)
+
+Benchmarked 2026-08-30 on the same RTX 3060, same CPU control — see
+[`bench/reports/2026-08-30_gpu_catalog_throughput.md`](https://github.com/suchethac/tengri/blob/main/bench/reports/2026-08-30_gpu_catalog_throughput.md)
+and `bench/results/gpu_catalog_throughput.json`. `CatalogFitter.run("mcmc_hmc",
+forward_chunk_size=K)`, one chain per galaxy, 400 warmup + 500 draws, five SDSS
+bands, **D = 3**, SNR 20, the default `WavePrecomp` quadrature LUT.
+
+| device | dtype | N | K | wall | gal / min | **converged gal / min** | converged / N | max split-R̂ | min ESS |
+|---|---|---:|---:|---:|---:|---:|---:|---:|---:|
+| GPU | float32 | 512 | 512 | 101.0 s | **304** | **222** | 374/512 (73 %) | 1.142 | 2.6 |
+| GPU | float64 | 512 | 512 | 152.4 s | 202 | 138 | 350/512 (68 %) | 1.139 | 2.2 |
+| GPU | float32 | 64 | 32 | 168.8 s | 23 | 16 | 46/64 (72 %) | 1.124 | 3.0 |
+| GPU | float64 | 64 | 32 | 155.3 s | 25 | 16 | 42/64 (66 %) | 1.130 | 2.8 |
+| CPU | float64 | 64 | 32 | 105.3 s | 36 | 30 | 53/64 (83 %) | 1.076 | 2.8 |
+
+```{warning}
+**Neither rate is a posterior rate — read the ESS column.** About 73 % of
+galaxies individually clear max split-R̂ < 1.01 with zero divergences, and the
+minimum ESS *among exactly those galaxies* is **2.6 of 500 draws**. R̂ passes and
+the chain has still taken about two independent steps: split-R̂ compares the
+variances of two chain halves, and both halves are equally badly mixed. So the
+count of usable posteriors per GPU-minute here is **zero**, not 222.
+`mcmc_hmc` ships a fixed `n_leapfrog_steps=10`, which is not tuned for any
+particular posterior, and the 2026-08-20 campaign found L = 150 the first setting
+to approach the bar on a different model. These are throughput numbers for the
+*hardware*. Rank on seconds-per-effective-sample only among rows that clear the
+whole bar; here that set is empty.
+```
+
+Four practical rules fall out:
+
+- **`forward_chunk_size` is the biggest lever — worth 8.1x (float64) to 13.2x
+  (float32)** going from K = 32 to K = 512. Use the largest K your VRAM allows.
+- **float32 is worth ~1.5–1.8x at K = 512 and nothing at K = 32.** The posterior
+  gradient in isolation is 3.6x faster in float32 at batch 2048, 1.9x at 512, and
+  within noise of 1.0 below batch 128. **The "GeForce runs float64 at 1/64"
+  figure does not transfer**: this workload is bandwidth- and dispatch-bound, not
+  FP64-ALU-bound.
+- **The CPU still wins the narrow cell**, 1.48x at K = 32. The GPU only pays off
+  once K is large enough to leave the dispatch floor.
+- **VRAM is not the constraint; XLA's preallocation is.** The allocator
+  high-water mark across every cell above is 96–258 MB on a 12 GB card, but each
+  process reserves ~75 % of the card up front, so a second concurrent tengri GPU
+  process OOMs. Run one at a time, or set `XLA_PYTHON_CLIENT_PREALLOCATE=false`
+  (what these rows use) or `XLA_PYTHON_CLIENT_MEM_FRACTION` explicitly.
+
+```{warning}
+**`mcmc_nuts` does not finish at catalog scale on this card.** Every NUTS cell in
+the 2026-08-30 campaign timed out — including one capped to at most *three*
+leapfrogs per step (`max_num_doublings=2`), against an HMC cell of the same
+shape and budget that finished in 30 s, and including the smallest cell the
+harness can express (8 galaxies, 50 warmup + 100 draws). The CPU fails the same
+way, so it is not a GPU artifact, and the tree-depth cap is not the driver. For a
+catalog fit on an accelerator today, `mcmc_hmc` is the only one of the two
+vectorized backends that completes — with the convergence caveat above.
+```
+
 ## float32 on CUDA: set the matmul precision
 
 If you run with `JAX_ENABLE_X64=0`, also set:
@@ -145,6 +208,18 @@ do; for those, use one process per device over catalog slices.
 `shard_map` specifically is not used: BlackJAX's NUTS carries a `lax.cond`
 that trips manual varying-axis tracking, so the seam is `jax.jit(jax.vmap(...))`
 over a sharded axis instead.
+
+Measured 2026-08-30 on four emulated CPU devices (no multi-GPU box was
+available): `mcmc_hmc`, N = 32, K = 8 — **2.41x on 4 devices**, and the max
+split-R̂ agrees with the single-device run to six decimal places, so the shard
+returns the same posterior rather than merely a faster one. Reproduce with:
+
+```bash
+XLA_FLAGS=--xla_force_host_platform_device_count=4 JAX_PLATFORMS=cpu \
+    python bench/scripts/benchmark_catalog_throughput.py \
+    --method mcmc_hmc --n-gal 32 --chunk 8 --shard \
+    --warmup 50 --burnin 0 --samples 100
+```
 
 ## See also
 
