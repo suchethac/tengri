@@ -187,3 +187,44 @@ def test_driver_timeout_covers_a_retune():
     assert run_candels_fits.DEFAULT_FIT_TIMEOUT_S >= 1800
     default = inspect.signature(run_candels_fits.run_fit_subprocess).parameters["timeout"].default
     assert default == run_candels_fits.DEFAULT_FIT_TIMEOUT_S
+
+
+def test_backend_sweep_shares_fit_one_photometry_and_runs_the_owner_list(catalog):
+    import run_backend_sweep
+
+    assert run_backend_sweep.extract_photometry is fit_one.extract_photometry
+    assert run_backend_sweep.apply_systematic_error_floor is fit_one.apply_systematic_error_floor
+    assert run_backend_sweep.SWEEP_METHODS == (
+        "map",
+        "laplace",
+        "mcmc",
+        "mcmc_nuts",
+        "mcmc_hmc",
+        "mcmc_raytrace",
+    )
+
+    z = float(catalog["z"][np.where(catalog["id"] == 13097)[0][0]])
+    a = fit_one.extract_photometry(13097, catalog, z)
+    b = run_backend_sweep.extract_photometry(13097, catalog, z)
+    assert a[2] == b[2]
+    np.testing.assert_array_equal(a[3], b[3])
+    np.testing.assert_array_equal(a[4], b[4])
+
+
+def test_every_sweep_method_is_a_registered_backend_name():
+    import run_backend_sweep
+
+    from tengri.inference._backend_registry import get_backend
+    from tengri.inference.fitter import _CANONICAL_METHODS
+
+    # ``get_backend`` is the registry's own lookup (single source of truth for
+    # fitter.run dispatch); ``"mcmc"`` is checked against the fitter's accepted
+    # canonical-method-name set instead, since the brief calls it "resolved in
+    # Fitter.run, not the registry" (in fact it is registered too, as the auto
+    # NUTS/raytrace dispatcher, but the canonical-name check is the one the
+    # brief pins down and it is also correct).
+    for method in run_backend_sweep.SWEEP_METHODS:
+        if method == "mcmc":
+            assert method in _CANONICAL_METHODS, method
+        else:
+            assert get_backend(method).name == method
