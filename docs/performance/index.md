@@ -4,36 +4,45 @@ The forward model is pure JAX, so every backend (MAP, NUTS, geoVI, …)
 runs against the same compiled graph. "How fast is tengri?" therefore
 reduces to a small set of numbers that travel together.
 
-Headline numbers (last full run May 2026) and how to reproduce them.
+Headline numbers (last full run August 2026) and how to reproduce them.
 Scripts live under
 [`bench/scripts/benchmark_*.py`](https://github.com/suchethac/tengri/tree/main/bench/scripts);
 the single entry point is [Health check & dispatcher](#health-check-and-dispatcher).
 
 ```{warning}
-Numbers below were measured April–May 2026 on JAX 0.9 / Apple M-series and may predate recent changes. Re-run the relevant script before citing in papers or PRs. Dates and full results: [`bench/reports/`](https://github.com/suchethac/tengri/tree/main/bench/reports).
+Numbers below were measured August 2026 on JAX 0.11 / Apple M-series and may predate recent changes. Re-run the relevant script before citing in papers or PRs. Dates and full results: [`bench/reports/`](https://github.com/suchethac/tengri/tree/main/bench/reports).
 ```
 
-## Headline numbers (Apple M-series CPU, x64, JAX 0.9, last run May 2026)
+## Headline numbers (Apple M-series CPU, x64, JAX 0.11, last run August 2026)
 
 Forward photometric prediction on SDSS *ugriz* at z = 0.1, 5 bands,
-running on a single CPU core:
+running on a single CPU core (DPL parametric SFH, D=6):
 
-| Configuration | Exact | Compositional | Hybrid (precomputed) |
+| Configuration | Exact | WavePrecomp (precomputed) | Speedup |
 |---|---:|---:|---:|
-| Stellar only | 23.9 ms | 1.5 ms | **59 µs** (408×) |
-| + nebular (BakedIn) | 24.7 ms | 1.5 ms | 58 µs (424×) |
-| + nebular (Cue emulator) | 61.6 ms | 2.4 ms | 567 µs (109×) |
-| + dust IR (THEMIS) | 27.3 ms | 2.0 ms | 158 µs (173×) |
-| + radio + X-ray + AGN | 76.4 ms | 4.6 ms | 2.44 ms (31×) |
-| Kitchen sink (all emitters) | **76.1 ms** | **4.6 ms** | **2.45 ms** (31×) |
+| Stellar only | 9.8 ms | 719 µs | 13.6× |
+| + nebular (baked-in SSP) | 11.1 ms | 731 µs | 15.2× |
+| + dust IR (THEMIS) | 11.4 ms | 794 µs | 14.3× |
+| + radio + X-ray | 10.7 ms + 10.7 ms | (integrated) | 3.1–13.4× |
+| **Typical: neb+THEMIS+radio+xray** | **12.6 ms** | **3.4 ms** | **3.7×** |
+| **Kitchen sink (all emitters)** | **19.1 ms** | **12.5 ms** | **1.5×** |
 
-The columns show three internal forward strategies (selected at build time):
-**Exact** (`approx=None`, default), **Hybrid (precomputed)**
-(`approx=WavePrecomp()`, SSP×filter LUT), and **Compositional** (default
-fused JIT kernel when no `approx=`). The strategy is fixed at `SEDModel`
-construction.
+The forward path is fixed at `SEDModel` construction:
+**Exact** (`approx=None`, default) does full-wavelength SED + filter integration.
+**WavePrecomp** (`approx=WavePrecomp()`) uses a precomputed SSP×filter LUT.
 
-— *full table at [`bench/reports/2026-05-06_forward_model_speedup.md`](https://github.com/suchethac/tengri/blob/main/bench/reports/2026-05-06_forward_model_speedup.md)*
+— *full table at [`bench/reports/2026-08-31_forward_model_speedup.md`](https://github.com/suchethac/tengri/blob/main/bench/reports/2026-08-31_forward_model_speedup.md)*
+
+### AGN dense integrators: where precompute does not help
+
+WavePrecomp delivers no speedup (K&D 3-zone: **1.0×**, SKIRTOR torus: **0.9×**)
+because these AGN components require dense integration of the full-resolution SED
+per call. They do not take the band-projection fast branch in
+`observation/_band_projection.py` (#1022) — instead, every band integral is computed
+by dense quadrature on the full wavelength grid, and the precompute LUT lookup
+cost drowns any savings. When AGN-dominated models are slow, the precompute does
+not help. Use exact mode, or trim the AGN complexity to composable (disc+torus)
+or analytic (QSOgen) variants, which do benefit from precompute (2–2.1×).
 
 Inference backends on a 7-parameter mock fit (compile + sample wall):
 
@@ -103,7 +112,7 @@ Available benchmarks (`bench list`):
 
 | Name | What it measures |
 |---|---|
-| `forward_model` | Forward photometry: exact / compositional / hybrid across all emitters |
+| `forward_model` | Forward photometry: exact vs WavePrecomp across all emitters |
 | `components` | Per-component (stellar, dust, nebular, AGN, ...) wall-clock timing |
 | `jit_compile` | Population-scale JIT compile time vs N galaxies |
 | `jit_real_path` | Compile time on the production forward-model path |
