@@ -8,6 +8,22 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 
 ### Fixed
 
+- `multicolor_disc`'s pure-float32 bolometric renormalization returned
+  `l_nu_intrinsic * scale`, and transposing that product makes JAX form
+  `sum(g * l_nu_intrinsic)`. With the raw disc SED (~1e28) and the cotangent
+  the AGN reference offset hands back (~10^34.6) that inner product is ~1e64
+  — `inf` in float32 — while its partner `d scale/d arr` ~1e-64 flushes to
+  zero, and `inf * 0` is NaN. So `d(sum rest_sed)/d(agn_log_lbol)` was **NaN
+  in pure float32** while the forward pass and `jacfwd` were both exact. The
+  renormalization now returns the L1-normalized SED against a correspondingly
+  inflated scale — algebraically the same number, both factors in range — and
+  the gradient matches float64 to 1.000002 across the whole declared
+  `agn_log_lbol` prior. Float64 is untouched: the change is inside the
+  `wavelength.dtype == jnp.float32` branch. `kubota_done` is a *different*
+  defect at the same call site (wrong by -0.034x with an O(1) cotangent, and
+  cured by `agn_f_hard=0`, so it is the hot-corona zone) and stays open
+  (#1439, #1388).
+
 - The construction-time dead-fit guard (`DeadFitWarning`) and
   `convergence_check` compared the divergence count, which is summed over
   every chain, with the per-chain draw count, so the "every transition
@@ -29,6 +45,24 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
   positive; files written before this load unchanged (#2087).
 
 ### Added
+
+- `tengri.utils.scale.loss_scaled_grad` — `jax.grad` with the cotangent chain
+  lifted into float32's normal range (multiply the scalar by `2**100`, divide
+  the gradient back; exact for a power of two, so float64 gradients are
+  bit-identical). It recovers the pure-float32 photometry gradient, which
+  `jax.grad` returns as **exactly zero** because reverse mode has to store
+  `d(F_nu)/d(L_nu) = 10**(-58)` at the flux projection and float32's smallest
+  subnormal is 1.4e-45. Measured against float64 on three scale seams
+  (stellar+dust, dust IR +44.5 dex, AGN +34.6 dex): ~1e-06, where the
+  unboosted call is `0.0` on all three. The default was sized by sweeping it
+  and not by the arithmetic, which says `2**70` should suffice and is wrong by
+  0.7--18% on CPU (the cotangent picks up further O(1e-3) factors downstream
+  and lands back among the subnormals, which XLA's CPU backend flushes; the
+  same boost measures 1e-06 on CUDA). A *fit* never needed this — a
+  likelihood's `1/sigma**2` is the same lift arriving for free, and
+  `grad(neg_log_posterior_fn)` tracks float64 to ≤5.3e-04 in pure float32 on
+  every measured seam. The underlying seam is unchanged and still needs
+  #1388's scaled-SED contract (#1415).
 
 - `DeadFitError`: NUTS, HMC and dynamic HMC keep the per-step divergence
   flags of their own warmup and refuse to sample when the final 10% of

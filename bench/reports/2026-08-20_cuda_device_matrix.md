@@ -186,6 +186,17 @@ gradient-unsafe above ~1e38).
 gradient **finite** — and zero is finite, so existing coverage could not have
 caught the bare-observable case either.
 
+> **Correction (2026-08-31): "float32 fitting is not safe" was already stale when
+> this was written.** #1415's "~2x on stellar mass" is real but was fixed by the
+> commit that diagnosed it (`eb7bfae24`, `stop_gradient` on `apply_log10_scale`'s
+> peak). Re-measured: `grad(neg_log_posterior_fn)` tracks float64 to ≤5.3e-04 in
+> pure float32 on stellar+dust, dust IR, AGN and the panchromatic model. What
+> survives is exactly the **bare-observable** case this Finding measures — the
+> `sum(predict_photometry)` gradient is still identically zero — and
+> `utils.scale.loss_scaled_grad` recovers it to ~1e-6. Details, with the seams
+> that remain uncovered, in `docs/dev/float32-tier-b-boundary.md`,
+> "Reverse-mode gradients in pure float32 — status by seam".
+
 ## Finding 6 — catalog NUTS crosses between 64 and 256 galaxies, but converts little of the batch advantage
 
 `CatalogFitter.run("mcmc_nuts", forward_chunk_size=K)`, `K = n_gal`, 10 warmup +
