@@ -1047,13 +1047,8 @@ the sampler's own variability.
   fail on them. The measurement that would separate "slow" from "impossible" is a
   much longer run at a much finer ladder, and it was not made — the same
   unfinished item `bench/reports/2026-08-30_chees_hmc.md` left open.
-* **Truth recovery.** Whether the SMC posterior on seed 0 actually contains the
-  injected truth was not checked. R-hat 1.029 says the two populations agree; it
-  does not say they agree on the right thing, and on a mock the right thing is
-  knowable. This is still the single most valuable next measurement on this
-  branch — and it is now *more* valuable, because the closing-rung defect was
-  precisely a case of two populations agreeing about the wrong distribution
-  while every diagnostic on the page read clean.
+* **Truth recovery on nb05 seed 0 — the named next measurement, and the one this
+  report's strongest number is waiting on.** See the section below.
 * **Everything the cross-check stopped short of.** Enumerated in "What was
   stopped, and is therefore not measured" above rather than repeated here; the
   first item, `nogain` on nb05, is what decides whether Finding 8 generalizes.
@@ -1149,6 +1144,56 @@ kept because the report's earlier tables are measurements of it (both are
 append-only, latest wins per `(notebook, config, seed)`). Also `2026-08-31_smc_clean_wallclock.jsonl`,
 `2026-08-31_smc_compile_cpu.json`, `2026-08-31_smc_width_cpu.json`,
 `2026-08-31_smc_width_gpu.json`.
+
+## The next measurement, named: truth recovery on nb05 seed 0
+
+**R-hat 1.0290 is this report's strongest number and it has an unrun check behind
+it.** A split R-hat over two independent particle populations says the two
+populations *agree*. It does not say they agree on the right thing. On a mock the
+right thing is knowable — the injected truth is in hand — and it was never
+compared against.
+
+That gap is not hypothetical here, and this report is the reason to take it
+seriously. **The weighted-particle defect was exactly this failure**: two
+independent populations, sharing no state, no step size and no adaptation,
+agreeing to R-hat 1.0017 on an analytic Gaussian — about a distribution that was
+not the posterior. Every column the campaign was watching read clean. What caught
+it was a comparison against a *known* answer, and the only reason a known answer
+was available is that the target was analytic.
+
+nb05 seed 0 is a mock, so a known answer is available there too. Nothing has used
+it.
+
+**The measurement.** One fit, `05` seed 0, `smc+precond cheap`, the arm already
+measured at R-hat 1.0290. Compare the per-parameter posterior mean and standard
+deviation against `sed.spec.sample(key_truth)` — the same draw
+`benchmark_notebook_sampler.py:run_one` already builds to generate the mock — and
+report the z-score per free parameter. `bench/scripts/inspect_nb05_seed_mocks.py`
+already reaches the truth for this fixture and is the natural place for it. Cost:
+one fit, roughly four minutes on an idle box, no new harness.
+
+**What each outcome would mean, stated before it is run rather than after:**
+
+* **Truths inside the credible intervals.** The seed-0 result is what it appears
+  to be: a sampler reaching a posterior that four other sampler families cannot,
+  short of the 1.01 bar but pointed at the right place. That is the case for
+  keeping `mcmc_smc` at `experimental`.
+* **Truths outside, coherently.** Two populations agreeing about the wrong
+  distribution — the closing-rung failure again, from some other cause — and
+  R-hat 1.0290 means nothing. The seed-0 headline would have to be withdrawn, and
+  with it the only positive result in this report.
+* **Truths outside, incoherently** (some parameters badly recovered, others
+  fine). The likely reading is the tsnorm degeneracy
+  `bench/reports/2026-08-20_cuda_device_matrix.md` Finding 15 measured, in which
+  case the interesting question moves from the sampler to the fixture — and
+  `2026-08-30_chees_hmc.md`'s unfinished item 4, *"nb05 seeds 0 and 1 were not
+  shown to be unsamplable"*, becomes the thing to answer.
+
+**A reviewer deciding whether `mcmc_smc` earns `experimental` should know that
+the number arguing for it has not had this check.** It is cheap, it is
+enumerated rather than estimated, and it was deliberately not run here: the box
+was left to another agent's measurement.
+
 
 ## What this means for the plan
 
