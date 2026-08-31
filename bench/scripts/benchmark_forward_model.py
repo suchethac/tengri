@@ -83,15 +83,76 @@ _COMPLETED_SECTIONS: set[str] = set()
 # f"{label}_grad_{sfh_type}" for gradient configs. The stochastic field (sfh_type="field")
 # is the expensive D~137 regime the benchmark watches.
 _REQUIRED_SECTIONS = {
-    "Stellar only_field",  # Forward: stochastic field, stellar-only
-    "Stellar only_grad_field",  # Gradient: stochastic field, stellar-only
+    # Forward sections: 45 total (15 per SFH × 3 SFH models)
+    # DPL
+    "Stellar only_dpl",
+    "+ nebular (baked-in SSP)_dpl",
+    "+ dust IR (MBB)_dpl",
+    "+ dust IR (THEMIS)_dpl",
+    "+ dust IR (DL07)_dpl",
+    "+ dust IR (Dale 2014)_dpl",
+    "+ AGN (composable disc+torus)_dpl",
+    "+ AGN (K&D 3-zone full)_dpl",
+    "+ AGN (QSOgen)_dpl",
+    "+ AGN (SKIRTOR torus)_dpl",
+    "+ radio (SF + AGN)_dpl",
+    "+ X-ray (XRB + corona)_dpl",
+    "Typical: neb+THEMIS+radio+xray_dpl",
+    "AGN host: neb+THEMIS+KD+radio+xray_dpl",
+    "Kitchen sink (all components)_dpl",
+    # Dense Basis
+    "Stellar only_dense_basis",
+    "+ nebular (baked-in SSP)_dense_basis",
+    "+ dust IR (MBB)_dense_basis",
+    "+ dust IR (THEMIS)_dense_basis",
+    "+ dust IR (DL07)_dense_basis",
+    "+ dust IR (Dale 2014)_dense_basis",
+    "+ AGN (composable disc+torus)_dense_basis",
+    "+ AGN (K&D 3-zone full)_dense_basis",
+    "+ AGN (QSOgen)_dense_basis",
+    "+ AGN (SKIRTOR torus)_dense_basis",
+    "+ radio (SF + AGN)_dense_basis",
+    "+ X-ray (XRB + corona)_dense_basis",
+    "Typical: neb+THEMIS+radio+xray_dense_basis",
+    "AGN host: neb+THEMIS+KD+radio+xray_dense_basis",
+    "Kitchen sink (all components)_dense_basis",
+    # Stochastic Field
+    "Stellar only_field",
+    "+ nebular (baked-in SSP)_field",
+    "+ dust IR (MBB)_field",
+    "+ dust IR (THEMIS)_field",
+    "+ dust IR (DL07)_field",
+    "+ dust IR (Dale 2014)_field",
+    "+ AGN (composable disc+torus)_field",
+    "+ AGN (K&D 3-zone full)_field",
+    "+ AGN (QSOgen)_field",
+    "+ AGN (SKIRTOR torus)_field",
+    "+ radio (SF + AGN)_field",
+    "+ X-ray (XRB + corona)_field",
+    "Typical: neb+THEMIS+radio+xray_field",
+    "AGN host: neb+THEMIS+KD+radio+xray_field",
+    "Kitchen sink (all components)_field",
+    # Gradient sections: 3 total (stellar-only for each SFH)
+    "Stellar only_grad_dpl",
+    "Stellar only_grad_dense_basis",
+    "Stellar only_grad_field",
 }
 
 # Bare-SSP sections: required only when BARE_SSP_PATH is available.
 # These are sections that need the bare-stellar (no nebular emission) SSP grid.
 _BARE_SSP_SECTIONS = {
+    "+ nebular (CLOUDY grid)_dpl",
+    "+ nebular (Cue emulator)_dpl",
+    "Cue+DL07+composable AGN_dpl",
+    "+ nebular (CLOUDY grid)_dense_basis",
+    "+ nebular (Cue emulator)_dense_basis",
+    "Cue+DL07+composable AGN_dense_basis",
+    "+ nebular (CLOUDY grid)_field",
+    "+ nebular (Cue emulator)_field",
     "Cue+DL07+composable AGN_field",
 }
+
+# Kitchen sink gradient rows excluded: ConcretizationTypeError, pending issue (see #2092).
 
 
 def bench_one(fn, n_warmup=N_WARMUP, n_runs=N_RUNS):
