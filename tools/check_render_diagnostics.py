@@ -20,8 +20,9 @@ A notebook cell output fails the guard if it contains:
 2. **Catastrophic R-hat values**: Printed R-hat values in the range (2.0, ∞) or
    non-finite (NaN/Inf) indicate divergent or frozen sampling. The threshold is
    deliberately high (2.0, not 1.01) to catch only the frozen regime (~1e13–1e14
-   on collapsed fits); the honest comparison arm in nb06 prints R-hat 1.271 which
-   passes. Patterns matched:
+   on collapsed fits). Post-#2110, divergent-dead fails at execution time; frozen-dead
+   still renders (tracked as #2112 for per-chain spread detection). Honest comparison
+   arm in nb06 prints R-hat 1.271 which passes. Patterns matched:
    - ``max R̂ = <float>``
    - ``R̂ = <float>``
    - ``max R-hat <float>``
@@ -47,14 +48,31 @@ number.
 .. code-block:: python
 
     KNOWN_BAD_LEDGER = {
+        # Dead fits (seed 7 marginal-to-dead at both code endpoints): #2095
         "notebooks/05_fitting_photometry.ipynb": "#2095",
         "docs/spine/05_fitting_photometry.ipynb": "#2095",
+        # Vacuous DeadFitWarnings on Fixed parameters (pre-#2090 bug): #2113
+        "notebooks/00_quickstart.ipynb": "#2113",
+        "notebooks/01_why_jax.ipynb": "#2113",
+        "notebooks/06_fitting_spectroscopy.ipynb": "#2113",
+        "notebooks/07_joint_photo_spec.ipynb": "#2113",
+        "notebooks/11_catalog_fits.ipynb": "#2113",
+        "docs/spine/00_quickstart.ipynb": "#2113",
+        "docs/spine/01_why_jax.ipynb": "#2113",
+        "docs/spine/06_fitting_spectroscopy.ipynb": "#2113",
+        "docs/spine/07_joint_photo_spec.ipynb": "#2113",
+        "docs/spine/11_catalog_fits.ipynb": "#2113",
+        "docs/spine/experimental/jwst_nonparametric_fits.ipynb": "#2113",
+        "docs/spine/experimental/stochastic_sfh_recovery.ipynb": "#2113",
     }
 
-The notebook ``05_fitting_photometry.ipynb`` cannot be re-rendered healthy
-right now (seed 7 is marginal-to-dead at both code endpoints in the current
-environment), so a separate decision gates its re-render on #2095. Until then,
-the guard knows it is bad and reports it as such instead of failing the build.
+**#2095** — ``05_fitting_photometry.ipynb`` cannot be re-rendered healthy right
+now (seed 7 is marginal-to-dead at both code endpoints); a separate decision
+gates its re-render.
+
+**#2113** — The other eleven notebooks carry vacuous DeadFitWarnings that fired
+on Fixed parameters with healthy fits (pre-#2090 bug in the warning logic).
+Re-rendering will remove these warnings automatically.
 
 Usage
 -----
@@ -79,8 +97,22 @@ ROOT = Path(__file__).resolve().parents[1]
 # Known bad notebooks cited to specific issues. Ledger entries are bug reports;
 # removing the entry implies fixing the issue.
 KNOWN_BAD_LEDGER = {
+    # Dead fits (seed 7 marginal-to-dead at both code endpoints): #2095
     "notebooks/05_fitting_photometry.ipynb": "#2095",
     "docs/spine/05_fitting_photometry.ipynb": "#2095",
+    # Vacuous DeadFitWarnings on Fixed parameters (pre-#2090 bug): #2113
+    "notebooks/00_quickstart.ipynb": "#2113",
+    "notebooks/01_why_jax.ipynb": "#2113",
+    "notebooks/06_fitting_spectroscopy.ipynb": "#2113",
+    "notebooks/07_joint_photo_spec.ipynb": "#2113",
+    "notebooks/11_catalog_fits.ipynb": "#2113",
+    "docs/spine/00_quickstart.ipynb": "#2113",
+    "docs/spine/01_why_jax.ipynb": "#2113",
+    "docs/spine/06_fitting_spectroscopy.ipynb": "#2113",
+    "docs/spine/07_joint_photo_spec.ipynb": "#2113",
+    "docs/spine/11_catalog_fits.ipynb": "#2113",
+    "docs/spine/experimental/jwst_nonparametric_fits.ipynb": "#2113",
+    "docs/spine/experimental/stochastic_sfh_recovery.ipynb": "#2113",
 }
 
 
@@ -258,7 +290,9 @@ def main(argv: Sequence[str] | None = None) -> int:
     notebooks = _collect_notebook_paths()
     real_problems: list[str] = []  # Real failures (not in ledger)
     known_bad: list[str] = []  # Known-bad entries (tracked issues)
+    stale_entries: list[str] = []  # Ledgered files with zero failures (must be removed)
     warnings: list[str] = []
+    checked_ledger_entries = set()
 
     for path in notebooks:
         rel_path = _get_relative_path(path)
@@ -270,9 +304,14 @@ def main(argv: Sequence[str] | None = None) -> int:
 
         # Check if this notebook is in the known-bad ledger
         if rel_path in KNOWN_BAD_LEDGER:
+            checked_ledger_entries.add(rel_path)
             if failures:
                 issue = KNOWN_BAD_LEDGER[rel_path]
                 known_bad.append(f"{rel_path}: KNOWN-BAD ({issue})")
+            else:
+                # Ledgered file has zero failures: the bug is fixed, remove the entry
+                issue = KNOWN_BAD_LEDGER[rel_path]
+                stale_entries.append(f"{rel_path}: stale ledger entry — remove it (cites {issue})")
             continue
 
         # Report real failures (not in ledger)
@@ -286,13 +325,13 @@ def main(argv: Sequence[str] | None = None) -> int:
     if args.list:
         return 0
 
-    # Report results: only fail if there are real problems (not just known-bad)
-    all_issues = known_bad + real_problems
-    if real_problems:
-        # There are actual failures not in the ledger
-        print(
-            f"FAIL: {len(real_problems)} notebook(s) have diagnostic failures:\n", file=sys.stderr
-        )
+    # Report results: fail if there are real problems or stale ledger entries
+    all_issues = stale_entries + known_bad + real_problems
+
+    if stale_entries or real_problems:
+        # There are actual failures or stale ledger entries
+        num_issues = len(stale_entries) + len(real_problems)
+        print(f"FAIL: {num_issues} notebook(s) have issues:\n", file=sys.stderr)
         for p in all_issues:
             print(f"  {p}", file=sys.stderr)
         return 1

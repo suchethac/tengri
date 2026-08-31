@@ -437,24 +437,54 @@ def test_weakening_rhat_threshold_breaks_synthetic_test(tmp_path):
 # ---------------------------------------------------------------------------
 
 
-def test_live_tree_ledger_identifies_known_bad():
-    """The guard identifies nb05 as known-bad on the real repository.
-
-    This verifies that the guard correctly detects nb05's issues and reports
-    them as KNOWN-BAD via the ledger.
-    """
-    proc = subprocess.run(
-        [sys.executable, str(REPO_ROOT / "tools" / "check_render_diagnostics.py")],
-        cwd=REPO_ROOT,
-        capture_output=True,
-        text=True,
+def test_stale_ledger_entry_clean_notebook_fails(tmp_path):
+    """A ledgered notebook with zero failures must fail (stale entry)."""
+    clean_nb = json.dumps(_make_notebook([_code_cell("print('ok')", [_text_output("ok\n")])]))
+    proc = _run_guard(
+        _make_repo(
+            tmp_path,
+            {
+                "notebooks/05_fitting_photometry.ipynb": clean_nb,
+            },
+        )
     )
-    output = proc.stdout + proc.stderr
+    # Should fail because the ledger entry is stale (notebook is now clean)
+    assert proc.returncode == 1, proc.stdout + proc.stderr
+    assert "stale ledger entry" in proc.stdout + proc.stderr
 
-    # Should mention nb05 as KNOWN-BAD
-    assert "05_fitting_photometry.ipynb: KNOWN-BAD (#2095)" in output
 
-    # If there are no other failures besides known-bad, it should exit 0
-    # Otherwise it should exit 1 (other notebooks have issues)
-    # This test just verifies the guard runs and identifies nb05 properly
-    assert "05_fitting_photometry.ipynb" in output
+def test_ledgered_notebook_with_failures_passes(tmp_path):
+    """A ledgered notebook with failures is reported as KNOWN-BAD and passes."""
+    bad_nb = json.dumps(
+        _make_notebook(
+            [
+                _code_cell(
+                    "fit()",
+                    [_text_output("max R̂ = 1e14\nDeadFitWarning: dead fit\n")],
+                ),
+            ]
+        )
+    )
+    proc = _run_guard(
+        _make_repo(
+            tmp_path,
+            {
+                "notebooks/05_fitting_photometry.ipynb": bad_nb,
+                "notebooks/other.ipynb": json.dumps(
+                    _make_notebook([_code_cell("print('ok')", [_text_output("ok\n")])])
+                ),
+            },
+        )
+    )
+    # Should pass (exit 0) because the ledger entry has failures
+    assert proc.returncode == 0, proc.stdout + proc.stderr
+    assert "KNOWN-BAD" in proc.stdout + proc.stderr
+
+
+def test_live_tree_passes_with_full_ledger():
+    """The guard passes on the real repository with the full ledger present."""
+    from check_render_diagnostics import main
+
+    # Run with argv=None to use actual sys.argv behavior
+    exit_code = main([])
+    assert exit_code == 0, "Guard should pass with the full ledger present"
