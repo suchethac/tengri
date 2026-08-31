@@ -112,6 +112,8 @@ Usage::
     python tools/check_harness_parity.py --list     # provenance table, no builds
 
 Building a model is all this needs; no fit is ever run.
+
+CI: not wired — guard for benchmark fixtures; not part of the fast CI tier (#2050).
 """
 
 from __future__ import annotations

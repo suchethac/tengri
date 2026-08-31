@@ -368,6 +368,19 @@ jobs:
       # same as the guard above.
       - run: python tools/check_zero_hiding_clamps.py
       - run: python tools/check_representable_floors.py
+      # Drift-proof ledger (#2050): keyed on (file, pattern), not line numbers,
+      # so edits above a violation do not invalidate the ledger. Detects subnormal-
+      # risk floors and clip-then-power patterns in src/tengri. Ledger regenerated
+      # with each new site; new sites (live count > ledger count) fail the check.
+      - run: python tools/check_numeric_guards.py
+      # Ensure figure placement in published notebooks is correct.
+      - run: python tools/check_figure_placement.py
+      # Verify that all published notebooks have every code cell executed.
+      - run: python tools/check_notebooks_executed.py
+      # Validate that all reproduction notebooks have valid status assertions.
+      - run: python tools/check_repro_status.py
+      # Census: verify every check_*.py is wired or explicitly declared not wired (#2050).
+      - run: python tools/check_guard_wiring.py
       # The same hazard one directory over: a gallery example that catches
       # `Exception` per iteration and drops it. Per iteration that is correct;
       # when EVERY iteration fails the example carries on with nothing and
@@ -640,6 +653,8 @@ jobs:
           cache: pip
           cache-dependency-path: pyproject.toml
       - run: pip install -e ".[dev]"
+      # Validate that all grammar blocks in documentation are complete and consistent.
+      - run: python tools/check_doc_grammar_keys.py
       - run: python tools/check_param_prefixes.py
       - run: python tools/check_param_defaults.py
       # The redshift-specific instance of the same rule: a numeric default on

@@ -1,311 +1,131 @@
-# Allowlist of safe numeric guard patterns (auto-generated)
-# Format: path:line -> pattern description
-src/tengri/analysis/diagnostics/lines.py:258 -> jnp.clip with floor 0.0 < 1e-20
-src/tengri/analysis/diagnostics/lines.py:265 -> jnp.clip with floor 0.0 < 1e-20
-src/tengri/analysis/diagnostics/spectral.py:120 -> jnp.maximum with floor 1e-40 < 1e-20
-src/tengri/analysis/diagnostics/spectral.py:236 -> jnp.maximum with floor 1e-40 < 1e-20
-src/tengri/analysis/diagnostics/spectral.py:237 -> jnp.maximum with floor 1e-40 < 1e-20
-src/tengri/analysis/diagnostics/spectral.py:455 -> jnp.maximum with floor 1e-40 < 1e-20
-src/tengri/analysis/diagnostics/spectral.py:456 -> jnp.maximum with floor 1e-40 < 1e-20
-src/tengri/components/agn/_nthcomp.py:132 -> jnp.clip with floor 0.0 < 1e-20
-src/tengri/components/agn/_nthcomp.py:139 -> jnp.clip with floor 0.0 < 1e-20
-src/tengri/components/agn/_nthcomp.py:271 -> jnp.maximum with floor 0.0 < 1e-20
-src/tengri/components/agn/adaf.py:451 -> jnp.maximum with floor 0.0 < 1e-20
-src/tengri/components/agn/adaf.py:718 -> jnp.clip with floor 0.0 < 1e-20
-src/tengri/components/agn/adaf.py:722 -> jnp.clip with floor 0.0 < 1e-20
-src/tengri/components/agn/adaf.py:93 -> jnp.clip with floor 1e-300 < 1e-20
-src/tengri/components/agn/blocks/feii.py:119 -> jnp.maximum with floor 0.0 < 1e-20
-src/tengri/components/agn/blocks/masking.py:100 -> jnp.clip with floor 0.0 < 1e-20
-src/tengri/components/agn/blocks/masking.py:99 -> jnp.clip with floor 0.0 < 1e-20
-src/tengri/components/agn/blocks/runner.py:562 -> jnp.clip with floor 0.0 < 1e-20
-src/tengri/components/agn/blocks/runner.py:598 -> jnp.maximum with floor 1e-30 < 1e-20
-src/tengri/components/agn/blocks/runner.py:698 -> jnp.maximum with floor 1e-30 < 1e-20
-src/tengri/components/agn/blocks/runner.py:734 -> jnp.maximum with floor 1e-30 < 1e-20
-src/tengri/components/agn/blocks/torus.py:506 -> jnp.maximum with floor 1e-30 < 1e-20
-src/tengri/components/agn/blocks/torus.py:534 -> jnp.maximum with floor 1e-30 < 1e-20
-src/tengri/components/agn/blocks/torus_screen.py:101 -> jnp.maximum with floor 1e-30 < 1e-20
-src/tengri/components/agn/blocks/torus_screen.py:102 -> jnp.clip with floor 0.0 < 1e-20
-src/tengri/components/agn/blr.py:272 -> jnp.maximum with floor 1e-30 < 1e-20
-src/tengri/components/agn/blr.py:320 -> jnp.maximum with floor 1e-30 < 1e-20
-src/tengri/components/agn/blr.py:416 -> jnp.maximum with floor 1e-30 < 1e-20
-src/tengri/components/agn/component.py:392 -> jnp.maximum with floor 1e-30 < 1e-20
-src/tengri/components/agn/component.py:398 -> jnp.maximum with floor 1e-30 < 1e-20
-src/tengri/components/agn/disc.py:1233 -> jnp.maximum with floor 1e-30 < 1e-20
-src/tengri/components/agn/disc.py:1259 -> jnp.maximum with floor 1e-30 < 1e-20
-src/tengri/components/agn/disc.py:1314 -> jnp.clip with floor 0.0 < 1e-20
-src/tengri/components/agn/disc.py:1368 -> jnp.maximum with floor 1e-100 < 1e-20
-src/tengri/components/agn/disc.py:1422 -> jnp.maximum with floor 1e-30 < 1e-20
-src/tengri/components/agn/disc.py:195 -> jnp.clip with floor 0.0 < 1e-20
-src/tengri/components/agn/disc.py:202 -> jnp.maximum with floor 1e-100 < 1e-20
-src/tengri/components/agn/disc.py:236 -> jnp.clip with floor 0.0 < 1e-20
-src/tengri/components/agn/disc.py:286 -> jnp.maximum with floor 0.0 < 1e-20
-src/tengri/components/agn/disc.py:316 -> jnp.clip with floor 1e-100 < 1e-20
-src/tengri/components/agn/disc.py:391 -> jnp.maximum with floor 1e-30 < 1e-20
-src/tengri/components/agn/disc.py:414 -> jnp.maximum with floor 1e-100 < 1e-20
-src/tengri/components/agn/disc.py:540 -> jnp.maximum with floor 1e-100 < 1e-20
-src/tengri/components/agn/disc.py:757 -> jnp.maximum with floor 1e-30 < 1e-20
-src/tengri/components/agn/disc.py:954 -> jnp.maximum with floor 1e-30 < 1e-20
-src/tengri/components/agn/disc.py:962 -> jnp.maximum with floor 1e-30 < 1e-20
-src/tengri/components/agn/disc.py:963 -> jnp.clip with floor 0.0 < 1e-20
-src/tengri/components/agn/disc.py:964 -> jnp.clip with floor 0.0 < 1e-20
-src/tengri/components/agn/disc.py:971 -> jnp.maximum with floor 1e-100 < 1e-20
-src/tengri/components/agn/disc_cigale.py:105 -> jnp.maximum with floor 1e-30 < 1e-20
-src/tengri/components/agn/disc_cigale.py:128 -> jnp.maximum with floor 1e-100 < 1e-20
-src/tengri/components/agn/disc_cigale.py:274 -> jnp.clip with floor 0.0 < 1e-20
-src/tengri/components/agn/disc_cigale.py:300 -> jnp.clip with floor 0.0 < 1e-20
-src/tengri/components/agn/disc_cigale.py:80 -> jnp.clip with floor 0.0 < 1e-20
-src/tengri/components/agn/fracagn.py:121 -> jnp.maximum with floor 1e-100 < 1e-20
-src/tengri/components/agn/fracagn.py:123 -> jnp.clip with floor 0.0 < 1e-20
-src/tengri/components/agn/fracagn.py:80 -> jnp.clip with floor 0.0 < 1e-20
-src/tengri/components/agn/kd_precompute.py:1150 -> jnp.maximum with floor 1e-30 < 1e-20
-src/tengri/components/agn/kd_precompute.py:1153 -> jnp.clip with floor 0.0 < 1e-20
-src/tengri/components/agn/kd_precompute.py:1177 -> jnp.maximum with floor 1e-100 < 1e-20
-src/tengri/components/agn/kd_precompute.py:623 -> jnp.clip with floor 0.0 < 1e-20
-src/tengri/components/agn/kd_precompute.py:628 -> jnp.clip with floor 0.0 < 1e-20
-src/tengri/components/agn/kd_precompute.py:662 -> jnp.clip with floor 0.0 < 1e-20
-src/tengri/components/agn/kd_precompute.py:666 -> jnp.clip with floor 0.0 < 1e-20
-src/tengri/components/agn/kd_precompute.py:719 -> jnp.clip with floor 0.0 < 1e-20
-src/tengri/components/agn/kd_precompute.py:723 -> jnp.clip with floor 0.0 < 1e-20
-src/tengri/components/agn/kd_precompute.py:885 -> jnp.maximum with floor 1e-30 < 1e-20
-src/tengri/components/agn/kd_precompute.py:962 -> jnp.maximum with floor 1e-30 < 1e-20
-src/tengri/components/agn/nlr.py:280 -> jnp.maximum with floor 1e-30 < 1e-20
-src/tengri/components/agn/nlr_gaussian_precompute.py:143 -> jnp.maximum with floor 1e-30 < 1e-20
-src/tengri/components/agn/polar_dust.py:207 -> jnp.maximum with floor 0.0 < 1e-20
-src/tengri/components/agn/polar_dust.py:295 -> jnp.maximum with floor 0.0 < 1e-20
-src/tengri/components/agn/polar_dust.py:461 -> jnp.maximum with floor 0.0 < 1e-20
-src/tengri/components/agn/qsogen.py:302 -> jnp.clip with floor 0.0 < 1e-20
-src/tengri/components/agn/qsogen.py:310 -> jnp.clip with floor 0.0 < 1e-20
-src/tengri/components/agn/qsogen.py:326 -> jnp.maximum with floor 1e-30 < 1e-20
-src/tengri/components/agn/qsogen.py:364 -> jnp.clip with floor 0.0 < 1e-20
-src/tengri/components/agn/qsogen.py:371 -> jnp.clip with floor 0.0 < 1e-20
-src/tengri/components/agn/qsogen.py:376 -> jnp.maximum with floor 1e-60 < 1e-20
-src/tengri/components/agn/qsogen.py:422 -> jnp.clip with floor 0.0 < 1e-20
-src/tengri/components/agn/qsogen.py:429 -> jnp.clip with floor 0.0 < 1e-20
-src/tengri/components/agn/qsogen.py:439 -> jnp.maximum with floor 1e-30 < 1e-20
-src/tengri/components/agn/qsogen.py:444 -> jnp.clip with floor 0.0 < 1e-20
-src/tengri/components/agn/qsogen.py:447 -> jnp.clip with floor 0.0 < 1e-20
-src/tengri/components/agn/qsogen.py:448 -> jnp.maximum with floor 1e-60 < 1e-20
-src/tengri/components/agn/qsogen.py:520 -> jnp.clip with floor 0.0 < 1e-20
-src/tengri/components/agn/qsogen.py:521 -> jnp.clip with floor 0.0 < 1e-20
-src/tengri/components/agn/qsogen.py:532 -> jnp.maximum with floor 0.0 < 1e-20
-src/tengri/components/agn/qsogen.py:539 -> jnp.maximum with floor 1e-30 < 1e-20
-src/tengri/components/agn/skirtor.py:1100 -> jnp.maximum with floor 1e-30 < 1e-20
-src/tengri/components/agn/skirtor.py:1107 -> jnp.clip with floor 0.0 < 1e-20
-src/tengri/components/agn/skirtor.py:246 -> jnp.maximum with floor 1e-100 < 1e-20
-src/tengri/components/agn/skirtor.py:712 -> jnp.maximum with floor 1e-30 < 1e-20
-src/tengri/components/agn/skirtor.py:718 -> jnp.maximum with floor 1e-30 < 1e-20
-src/tengri/components/agn/skirtor.py:909 -> jnp.clip with floor 0.0 < 1e-20
-src/tengri/components/agn/skirtor.py:921 -> jnp.maximum with floor 1e-100 < 1e-20
-src/tengri/components/agn/skirtor_model.py:462 -> jnp.maximum with floor 1e-100 < 1e-20
-src/tengri/components/agn/slone_netzer.py:237 -> jnp.clip with floor 0.0 < 1e-20
-src/tengri/components/agn/slone_netzer.py:238 -> jnp.clip with floor 0.0 < 1e-20
-src/tengri/components/agn/unified.py:1605 -> jnp.clip with floor 0.0 < 1e-20
-src/tengri/components/dust/attenuation.py:1036 -> jnp.clip with floor 0.0 < 1e-20
-src/tengri/components/dust/attenuation.py:1127 -> jnp.clip with floor 0.0 < 1e-20
-src/tengri/components/dust/attenuation.py:1215 -> jnp.clip with floor 0.0 < 1e-20
-src/tengri/components/dust/attenuation.py:1396 -> jnp.clip with floor 0.0 < 1e-20
-src/tengri/components/dust/attenuation.py:1745 -> jnp.maximum with floor 0.0 < 1e-20
-src/tengri/components/dust/attenuation.py:292 -> jnp.clip with floor 0.0 < 1e-20
-src/tengri/components/dust/attenuation.py:365 -> jnp.clip with floor 0.0 < 1e-20
-src/tengri/components/dust/attenuation.py:456 -> jnp.clip with floor 0.0 < 1e-20
-src/tengri/components/dust/attenuation.py:531 -> jnp.clip with floor 0.0 < 1e-20
-src/tengri/components/dust/attenuation.py:701 -> jnp.maximum with floor 0.0 < 1e-20
-src/tengri/components/dust/attenuation.py:819 -> jnp.clip with floor 0.0 < 1e-20
-src/tengri/components/dust/attenuation.py:908 -> jnp.clip with floor 0.0 < 1e-20
-src/tengri/components/dust/dust_emission_precompute.py:776 -> jnp.clip with floor 0.0 < 1e-20
-src/tengri/components/dust/dust_emission_precompute.py:891 -> jnp.maximum with floor 1e-30 < 1e-20
-src/tengri/components/dust/emission/_physics.py:160 -> jnp.maximum with floor 0.0 < 1e-20
-src/tengri/components/dust/emission/_physics.py:212 -> jnp.clip with floor 0.0 < 1e-20
-src/tengri/components/dust/emission/_physics.py:213 -> jnp.clip with floor 0.0 < 1e-20
-src/tengri/components/dust/emission/_physics.py:229 -> jnp.clip with floor -100.0 < 1e-20
-src/tengri/components/dust/emission/_physics.py:231 -> jnp.clip with floor 0.0 < 1e-20
-src/tengri/components/dust/emission/analytic/_closures.py:114 -> jnp.clip with floor 0.0 < 1e-20
-src/tengri/components/dust/emission/analytic/_closures.py:563 -> jnp.clip with floor 0.0 < 1e-20
-src/tengri/components/dust/emission_templates.py:1052 -> jnp.clip with floor 0.0 < 1e-20
-src/tengri/components/dust/emission_templates.py:1066 -> jnp.clip with floor 0.0 < 1e-20
-src/tengri/components/dust/emission_templates.py:1534 -> jnp.clip with floor 0.0 < 1e-20
-src/tengri/components/dust/emission_templates.py:1741 -> jnp.clip with floor 0.0 < 1e-20
-src/tengri/components/dust/emission_templates.py:1746 -> jnp.clip with floor 0.0 < 1e-20
-src/tengri/components/dust/emission_templates.py:1986 -> jnp.clip with floor 1e-30 < 1e-20
-src/tengri/components/dust/emission_templates.py:1995 -> jnp.clip with floor 0.0 < 1e-20
-src/tengri/components/dust/emission_templates.py:2000 -> jnp.clip with floor 0.0 < 1e-20
-src/tengri/components/dust/emission_templates.py:202 -> jnp.clip with floor 0.0 < 1e-20
-src/tengri/components/dust/emission_templates.py:203 -> jnp.clip with floor 0.0 < 1e-20
-src/tengri/components/dust/emission_templates.py:2460 -> jnp.clip with floor 0.0 < 1e-20
-src/tengri/components/dust/emission_templates.py:2465 -> jnp.clip with floor 0.0 < 1e-20
-src/tengri/components/dust/emission_templates.py:2487 -> jnp.clip with floor 0.0 < 1e-20
-src/tengri/components/dust/emission_templates.py:416 -> jnp.clip with floor 0.0 < 1e-20
-src/tengri/components/dust/emission_templates.py:417 -> jnp.clip with floor 0.0 < 1e-20
-src/tengri/components/dust/emission_templates.py:418 -> jnp.clip with floor 0.0 < 1e-20
-src/tengri/components/dust/emission_templates.py:467 -> jnp.maximum with floor 1e-100 < 1e-20
-src/tengri/components/dust/emission_templates.py:671 -> jnp.clip with floor 0.0 < 1e-20
-src/tengri/components/dust/emission_templates.py:680 -> jnp.clip with floor 0.0 < 1e-20
-src/tengri/components/dust/energy_balance_precompute.py:218 -> jnp.clip with floor 0.0 < 1e-20
-src/tengri/components/dust/energy_balance_precompute.py:220 -> jnp.clip with floor 0.0 < 1e-20
-src/tengri/components/dust/schreiber2016_ir.py:253 -> jnp.clip with floor 0.0 < 1e-20
-src/tengri/components/dust/schreiber2016_ir.py:256 -> jnp.clip with floor 0.0 < 1e-20
-src/tengri/components/igm/igm.py:910 -> jnp.clip with floor 0.0 < 1e-20
-src/tengri/components/igm/meiksin06.py:184 -> jnp.maximum with floor 1e-30 < 1e-20
-src/tengri/components/nebular/_recombination_coeffs.py:121 -> jnp.clip with floor 0.0 < 1e-20
-src/tengri/components/nebular/_shared.py:1033 -> jnp.maximum with floor 1e-40 < 1e-20
-src/tengri/components/nebular/_shared.py:1039 -> jnp.maximum with floor 1e-30 < 1e-20
-src/tengri/components/nebular/_shared.py:727 -> jnp.clip with floor 0.0 < 1e-20
-src/tengri/components/nebular/_shared.py:806 -> jnp.maximum with floor 0.0 < 1e-20
-src/tengri/components/nebular/agn_nebular.py:632 -> jnp.maximum with floor 1e-99 < 1e-20
-src/tengri/components/nebular/agn_nebular.py:647 -> jnp.maximum with floor 1e-99 < 1e-20
-src/tengri/components/nebular/cloudy_cb19.py:449 -> jnp.clip with floor 0.0 < 1e-20
-src/tengri/components/nebular/component.py:688 -> jnp.maximum with floor 0.0 < 1e-20
-src/tengri/components/nebular/fesc_model.py:190 -> jnp.clip with floor 0.0 < 1e-20
-src/tengri/components/nebular/fesc_model.py:93 -> jnp.maximum with floor 1e-50 < 1e-20
-src/tengri/components/nebular/ionizing_spectrum.py:824 -> jnp.clip with floor 0.0 < 1e-20
-src/tengri/components/nebular/ionizing_spectrum.py:825 -> jnp.clip with floor 0.0 < 1e-20
-src/tengri/components/nebular/ionizing_spectrum.py:889 -> jnp.clip with floor 0.0 < 1e-20
-src/tengri/components/nebular/ionizing_spectrum.py:890 -> jnp.clip with floor 0.0 < 1e-20
-src/tengri/components/nebular/line_precompute.py:191 -> jnp.maximum with floor 1e-30 < 1e-20
-src/tengri/components/nebular/nebular_grid_precompute.py:550 -> jnp.maximum with floor 1e-30 < 1e-20
-src/tengri/components/nebular/nebular_grid_precompute.py:645 -> jnp.maximum with floor 1e-300 < 1e-20
-src/tengri/components/nebular/shock_model.py:281 -> jnp.maximum with floor 1e-30 < 1e-20
-src/tengri/components/nebular/shock_model.py:283 -> jnp.maximum with floor 1e-30 < 1e-20
-src/tengri/components/nebular/shock_model.py:288 -> jnp.maximum with floor 1e-30 < 1e-20
-src/tengri/components/stellar/component.py:1101 -> jnp.maximum with floor 1e-30 < 1e-20
-src/tengri/components/stellar/component.py:1102 -> jnp.maximum with floor 1e-30 < 1e-20
-src/tengri/components/stellar/component.py:1114 -> jnp.maximum with floor 1e-300 < 1e-20
-src/tengri/components/stellar/component.py:1171 -> jnp.maximum with floor 0.0 < 1e-20
-src/tengri/components/stellar/component.py:1350 -> jnp.maximum with floor 0.0 < 1e-20
-src/tengri/components/stellar/component.py:1352 -> jnp.maximum with floor 0.0 < 1e-20
-src/tengri/components/stellar/component.py:2725 -> jnp.maximum with floor 1e-300 < 1e-20
-src/tengri/components/stellar/component.py:2792 -> jnp.maximum with floor 1e-30 < 1e-20
-src/tengri/components/stellar/component.py:2798 -> jnp.maximum with floor 1e-30 < 1e-20
-src/tengri/components/stellar/component.py:3446 -> jnp.maximum with floor 1e-300 < 1e-20
-src/tengri/components/stellar/component.py:3482 -> jnp.maximum with floor 1e-300 < 1e-20
-src/tengri/components/stellar/component.py:3751 -> jnp.maximum with floor 0.0 < 1e-20
-src/tengri/components/stellar/component.py:880 -> jnp.maximum with floor 1e-300 < 1e-20
-src/tengri/components/stellar/component.py:906 -> jnp.maximum with floor 1e-30 < 1e-20
-src/tengri/components/stellar/component.py:907 -> jnp.maximum with floor 1e-30 < 1e-20
-src/tengri/components/stellar/component.py:908 -> jnp.clip with floor 0.0 < 1e-20
-src/tengri/components/stellar/component.py:911 -> jnp.maximum with floor 1e-30 < 1e-20
-src/tengri/components/stellar/component.py:913 -> jnp.maximum with floor 0.0 < 1e-20
-src/tengri/components/stellar/sfh/chemical_evolution.py:176 -> jnp.clip with floor -4.0 < 1e-20
-src/tengri/components/stellar/sfh/chemical_evolution.py:259 -> jnp.clip with floor -4.0 < 1e-20
-src/tengri/components/stellar/sfh/dense_basis.py:347 -> jnp.clip with floor 0.0 < 1e-20
-src/tengri/components/stellar/sfh/dense_basis.py:505 -> jnp.maximum with floor 0.0 < 1e-20
-src/tengri/components/stellar/sfh/dense_basis.py:526 -> jnp.maximum with floor 0.0 < 1e-20
-src/tengri/components/stellar/sfh/dense_basis.py:527 -> jnp.maximum with floor 1e-30 < 1e-20
-src/tengri/components/stellar/sfh/dense_basis.py:554 -> jnp.maximum with floor 0.0 < 1e-20
-src/tengri/components/stellar/sfh/dense_basis.py:687 -> jnp.clip with floor 0.0 < 1e-20
-src/tengri/components/stellar/sfh/dense_basis.py:693 -> jnp.maximum with floor 0.0 < 1e-20
-src/tengri/components/stellar/sfh/dense_basis.py:703 -> jnp.maximum with floor 0.0 < 1e-20
-src/tengri/components/stellar/sfh/gp_sfh.py:326 -> jnp.clip with floor 0.0 < 1e-20
-src/tengri/components/stellar/sfh/gp_sfh.py:392 -> jnp.clip with floor 0.0 < 1e-20
-src/tengri/components/stellar/sfh/mean_sfh.py:1033 -> jnp.maximum with floor 0.0 < 1e-20
-src/tengri/components/stellar/sfh/mean_sfh.py:1104 -> jnp.maximum with floor 0.0 < 1e-20
-src/tengri/components/stellar/sfh/mean_sfh.py:1196 -> jnp.maximum with floor 0.0 < 1e-20
-src/tengri/components/stellar/sfh/mean_sfh.py:1217 -> jnp.maximum with floor 0.0 < 1e-20
-src/tengri/components/stellar/sfh/mean_sfh.py:1333 -> jnp.maximum with floor 0.0 < 1e-20
-src/tengri/components/stellar/sfh/mean_sfh.py:1429 -> jnp.maximum with floor 0.0 < 1e-20
-src/tengri/components/stellar/sfh/mean_sfh.py:1533 -> jnp.maximum with floor 0.0 < 1e-20
-src/tengri/components/stellar/sfh/mean_sfh.py:1537 -> jnp.maximum with floor 0.0 < 1e-20
-src/tengri/components/stellar/sfh/mean_sfh.py:1544 -> jnp.maximum with floor 1e-300 < 1e-20
-src/tengri/components/stellar/sfh/mean_sfh.py:1545 -> jnp.maximum with floor 1e-300 < 1e-20
-src/tengri/components/stellar/sfh/mean_sfh.py:1547 -> jnp.maximum with floor 0.0 < 1e-20
-src/tengri/components/stellar/sfh/mean_sfh.py:1632 -> jnp.maximum with floor 0.0 < 1e-20
-src/tengri/components/stellar/sfh/mean_sfh.py:1731 -> jnp.maximum with floor 0.0 < 1e-20
-src/tengri/components/stellar/sfh/mean_sfh.py:175 -> jnp.clip with floor 0.0 < 1e-20
-src/tengri/components/stellar/sfh/mean_sfh.py:179 -> jnp.clip with floor 0.0 < 1e-20
-src/tengri/components/stellar/sfh/mean_sfh.py:1813 -> jnp.maximum with floor 0.0 < 1e-20
-src/tengri/components/stellar/sfh/mean_sfh.py:1818 -> jnp.maximum with floor 0.0 < 1e-20
-src/tengri/components/stellar/sfh/mean_sfh.py:1916 -> jnp.maximum with floor 0.0 < 1e-20
-src/tengri/components/stellar/sfh/mean_sfh.py:1921 -> jnp.maximum with floor 0.0 < 1e-20
-src/tengri/components/stellar/sfh/mean_sfh.py:2001 -> jnp.maximum with floor 0.0 < 1e-20
-src/tengri/components/stellar/sfh/mean_sfh.py:2071 -> jnp.maximum with floor 0.0 < 1e-20
-src/tengri/components/stellar/sfh/mean_sfh.py:339 -> jnp.maximum with floor 0.0 < 1e-20
-src/tengri/components/stellar/sfh/mean_sfh.py:392 -> jnp.maximum with floor 0.0 < 1e-20
-src/tengri/components/stellar/sfh/mean_sfh.py:548 -> jnp.maximum with floor 0.0 < 1e-20
-src/tengri/components/stellar/sfh/mean_sfh.py:709 -> jnp.maximum with floor 0.0 < 1e-20
-src/tengri/components/stellar/sfh/mean_sfh.py:808 -> jnp.maximum with floor 0.0 < 1e-20
-src/tengri/components/stellar/sfh/mean_sfh.py:853 -> jnp.maximum with floor 0.0 < 1e-20
-src/tengri/components/stellar/sfh/mean_sfh.py:856 -> jnp.maximum with floor 0.0 < 1e-20
-src/tengri/components/stellar/sfh/mean_sfh.py:91 -> jnp.maximum with floor 1e-30 < 1e-20
-src/tengri/components/stellar/sfh/mean_sfh.py:936 -> jnp.maximum with floor 0.0 < 1e-20
-src/tengri/components/stellar/sfh/mean_sfh.py:986 -> jnp.maximum with floor 0.0 < 1e-20
-src/tengri/components/stellar/sfh/metallicity_history.py:182 -> jnp.clip with floor 0.0 < 1e-20
-src/tengri/components/stellar/sfh/metallicity_history.py:361 -> jnp.maximum with floor 1e-30 < 1e-20
-src/tengri/components/stellar/sfh/metallicity_history.py:369 -> jnp.clip with floor 0.0 < 1e-20
-src/tengri/components/stellar/sfh/metallicity_history.py:377 -> jnp.maximum with floor 1e-30 < 1e-20
-src/tengri/components/stellar/sfh/metallicity_history.py:471 -> jnp.maximum with floor 1e-30 < 1e-20
-src/tengri/components/stellar/sfh/metallicity_history.py:474 -> jnp.clip with floor 0.0 < 1e-20
-src/tengri/components/stellar/sfh/nonparametric.py:87 -> jnp.clip with floor 0.0 < 1e-20
-src/tengri/components/stellar/sfh/nonparametric.py:89 -> jnp.maximum with floor 0.0 < 1e-20
-src/tengri/components/stellar/sfh/psd_models.py:193 -> jnp.maximum with floor 1e-30 < 1e-20
-src/tengri/components/stellar/sps/dsps_wrapper.py:1102 -> jnp.maximum with floor 0.0 < 1e-20
-src/tengri/components/stellar/sps/dsps_wrapper.py:1110 -> jnp.maximum with floor 1e-30 < 1e-20
-src/tengri/components/stellar/sps/dsps_wrapper.py:1199 -> jnp.maximum with floor 0.0 < 1e-20
-src/tengri/components/stellar/sps/dsps_wrapper.py:1305 -> jnp.maximum with floor 0.0 < 1e-20
-src/tengri/components/stellar/sps/dsps_wrapper.py:1308 -> jnp.maximum with floor 1e-30 < 1e-20
-src/tengri/components/stellar/sps/dsps_wrapper.py:1592 -> jnp.clip with floor 0.0 < 1e-20
-src/tengri/components/stellar/sps/dsps_wrapper.py:1640 -> jnp.clip with floor 0.0 < 1e-20
-src/tengri/components/stellar/sps/dsps_wrapper.py:1645 -> jnp.clip with floor 0.0 < 1e-20
-src/tengri/components/stellar/sps/dsps_wrapper.py:1700 -> jnp.clip with floor 0.0 < 1e-20
-src/tengri/components/stellar/sps/dsps_wrapper.py:1704 -> jnp.clip with floor 0.0 < 1e-20
-src/tengri/components/stellar/sps/dsps_wrapper.py:1761 -> jnp.clip with floor 0.0 < 1e-20
-src/tengri/components/stellar/sps/dsps_wrapper.py:1857 -> jnp.clip with floor 0.0 < 1e-20
-src/tengri/components/stellar/sps/dsps_wrapper.py:2111 -> jnp.clip with floor 0.0 < 1e-20
-src/tengri/components/stellar/sps/dsps_wrapper.py:2157 -> jnp.clip with floor 0.0 < 1e-20
-src/tengri/components/stellar/sps/dsps_wrapper.py:2213 -> jnp.clip with floor 0.0 < 1e-20
-src/tengri/components/stellar/sps/dsps_wrapper.py:2245 -> jnp.clip with floor 0.0 < 1e-20
-src/tengri/components/stellar/sps/dsps_wrapper.py:2373 -> jnp.clip with floor 0.0 < 1e-20
-src/tengri/components/stellar/sps/mass_remaining.py:329 -> jnp.maximum with floor 1e-30 < 1e-20
-src/tengri/components/stellar/sps/precompute.py:1124 -> jnp.clip with floor 0.0 < 1e-20
-src/tengri/components/stellar/sps/precompute.py:1174 -> jnp.clip with floor 0.0 < 1e-20
-src/tengri/components/stellar/sps/precompute.py:1279 -> jnp.clip with floor 0.0 < 1e-20
-src/tengri/components/xray/component.py:386 -> jnp.maximum with floor 1e-30 < 1e-20
-src/tengri/components/xray/xray.py:1194 -> jnp.maximum with floor 1e-300 < 1e-20
-src/tengri/components/xray/xray.py:1784 -> jnp.maximum with floor 1e-100 < 1e-20
-src/tengri/components/xray/xray.py:186 -> jnp.clip with floor 0.0 < 1e-20
-src/tengri/components/xray/xray.py:1904 -> jnp.maximum with floor 1e-60 < 1e-20
-src/tengri/components/xray/xray.py:191 -> jnp.maximum with floor 1e-30 < 1e-20
-src/tengri/components/xray/xray.py:194 -> jnp.maximum with floor 0.0 < 1e-20
-src/tengri/components/xray/xray.py:242 -> jnp.maximum with floor 0.0 < 1e-20
-src/tengri/components/xray/xray.py:385 -> jnp.maximum with floor 1e-300 < 1e-20
-src/tengri/components/xray/xray.py:394 -> jnp.maximum with floor 0.0 < 1e-20
-src/tengri/components/xray/xray.py:458 -> jnp.maximum with floor 1e-60 < 1e-20
-src/tengri/forward/component_factory.py:832 -> jnp.maximum with floor 0.0 < 1e-20
-src/tengri/forward/emission_helpers.py:162 -> jnp.maximum with floor 1e-30 < 1e-20
-src/tengri/forward/prediction.py:2118 -> jnp.maximum with floor 1e-30 < 1e-20
-src/tengri/inference/backends/nested/utils.py:77 -> jnp.maximum with floor 0.0 < 1e-20
-src/tengri/inference/posterior.py:617 -> jnp.maximum with floor 1e-30 < 1e-20
-src/tengri/inference/posterior.py:622 -> jnp.maximum with floor 1e-30 < 1e-20
-src/tengri/inference/posterior.py:901 -> jnp.maximum with floor 1e-300 < 1e-20
-src/tengri/observation/banded.py:136 -> jnp.clip with floor 0.0 < 1e-20
-src/tengri/observation/banded.py:91 -> jnp.clip with floor 0.0 < 1e-20
-src/tengri/observation/calibration.py:290 -> jnp.maximum with floor 0.0 < 1e-20
-src/tengri/observation/eline_priors.py:167 -> jnp.clip with floor 0.0 < 1e-20
-src/tengri/observation/eline_priors.py:168 -> jnp.clip with floor 0.0 < 1e-20
-src/tengri/observation/eline_priors.py:475 -> jnp.maximum with floor 0.0 < 1e-20
-src/tengri/observation/line_flux_data.py:255 -> jnp.maximum with floor 1e-30 < 1e-20
-src/tengri/observation/line_ratio_data.py:135 -> jnp.maximum with floor 1e-30 < 1e-20
-src/tengri/observation/spectral_indices.py:308 -> jnp.maximum with floor 0.0 < 1e-20
-src/tengri/observation/spectral_indices.py:407 -> jnp.maximum with floor 1e-30 < 1e-20
-src/tengri/observation/spectral_indices.py:422 -> jnp.maximum with floor 1e-30 < 1e-20
-src/tengri/observation/spectral_indices.py:424 -> jnp.maximum with floor 1e-30 < 1e-20
-src/tengri/observation/spectral_indices.py:459 -> jnp.maximum with floor 1e-50 < 1e-20
-src/tengri/observation/spectral_indices.py:466 -> jnp.maximum with floor 1e-30 < 1e-20
-src/tengri/observation/spectral_indices.py:467 -> jnp.maximum with floor 1e-30 < 1e-20
-src/tengri/observation/spectrum.py:301 -> jnp.maximum with floor 1e-30 < 1e-20
-src/tengri/observation/spectrum.py:439 -> jnp.maximum with floor 0.0 < 1e-20
-src/tengri/observation/spectrum.py:453 -> jnp.maximum with floor 0.0 < 1e-20
-src/tengri/parameters/priors.py:1152 -> jnp.maximum with floor 1e-30 < 1e-20
-src/tengri/utils/grid_interp.py:1059 -> jnp.clip with floor 0.0 < 1e-20
-src/tengri/utils/grid_interp.py:1064 -> jnp.clip with floor 0.0 < 1e-20
-src/tengri/utils/grid_interp.py:804 -> jnp.clip with floor 0.0 < 1e-20
-src/tengri/utils/grid_interp.py:829 -> jnp.clip with floor 0.0 < 1e-20
-src/tengri/utils/interpolation.py:268 -> jnp.clip with floor 0.0 < 1e-20
-src/tengri/utils/interpolation.py:528 -> jnp.clip with floor 0.0 < 1e-20
-src/tengri/utils/interpolation.py:529 -> jnp.clip with floor 0.0 < 1e-20
-src/tengri/utils/magnitudes.py:205 -> jnp.maximum with floor 0.0 < 1e-20
-src/tengri/utils/magnitudes.py:539 -> jnp.maximum with floor 1e-300 < 1e-20
-src/tengri/utils/magnitudes.py:565 -> jnp.maximum with floor 1e-300 < 1e-20
-src/tengri/utils/sed_quantities.py:198 -> jnp.maximum with floor 1e-30 < 1e-20
-src/tengri/utils/sed_quantities.py:382 -> jnp.maximum with floor 0.0 < 1e-20
-src/tengri/utils/sed_quantities.py:415 -> jnp.maximum with floor 0.0 < 1e-20
-src/tengri/utils/sed_quantities.py:971 -> jnp.maximum with floor 1e-30 < 1e-20
+# Ledger of safe numeric guard patterns (auto-generated)
+# Format: path | pattern -> count
+# Keyed on (file path, pattern description) for drift-proofness (#2050).
+# Blind spot: same-bucket swap (remove + add in one commit) ships unadjudicated; code review catches it.
+src/tengri/analysis/diagnostics/lines.py | jnp.clip with floor 0.0 < 1e-20 -> 2
+src/tengri/analysis/diagnostics/spectral.py | jnp.maximum with floor 1e-40 < 1e-20 -> 5
+src/tengri/components/agn/_nthcomp.py | jnp.clip with floor 0.0 < 1e-20 -> 2
+src/tengri/components/agn/_nthcomp.py | jnp.maximum with floor 0.0 < 1e-20 -> 1
+src/tengri/components/agn/adaf.py | jnp.clip with floor 0.0 < 1e-20 -> 2
+src/tengri/components/agn/adaf.py | jnp.clip with floor 1e-300 < 1e-20 -> 1
+src/tengri/components/agn/adaf.py | jnp.maximum with floor 0.0 < 1e-20 -> 1
+src/tengri/components/agn/blocks/feii.py | jnp.maximum with floor 0.0 < 1e-20 -> 1
+src/tengri/components/agn/blocks/masking.py | jnp.clip with floor 0.0 < 1e-20 -> 2
+src/tengri/components/agn/blocks/runner.py | jnp.clip with floor 0.0 < 1e-20 -> 1
+src/tengri/components/agn/blocks/runner.py | jnp.maximum with floor 1e-30 < 1e-20 -> 3
+src/tengri/components/agn/blocks/torus.py | jnp.maximum with floor 1e-30 < 1e-20 -> 2
+src/tengri/components/agn/blocks/torus_screen.py | jnp.clip with floor 0.0 < 1e-20 -> 1
+src/tengri/components/agn/blocks/torus_screen.py | jnp.maximum with floor 0.0 < 1e-20 -> 1
+src/tengri/components/agn/blocks/torus_screen.py | jnp.maximum with floor 1e-30 < 1e-20 -> 1
+src/tengri/components/agn/blr.py | jnp.maximum with floor 1e-30 < 1e-20 -> 3
+src/tengri/components/agn/component.py | jnp.maximum with floor 1e-30 < 1e-20 -> 2
+src/tengri/components/agn/disc.py | jnp.clip with floor 0.0 < 1e-20 -> 5
+src/tengri/components/agn/disc.py | jnp.clip with floor 1e-100 < 1e-20 -> 1
+src/tengri/components/agn/disc.py | jnp.maximum with floor 0.0 < 1e-20 -> 1
+src/tengri/components/agn/disc.py | jnp.maximum with floor 1e-100 < 1e-20 -> 5
+src/tengri/components/agn/disc.py | jnp.maximum with floor 1e-30 < 1e-20 -> 7
+src/tengri/components/agn/disc_cigale.py | jnp.clip with floor 0.0 < 1e-20 -> 3
+src/tengri/components/agn/disc_cigale.py | jnp.maximum with floor 1e-100 < 1e-20 -> 1
+src/tengri/components/agn/disc_cigale.py | jnp.maximum with floor 1e-30 < 1e-20 -> 1
+src/tengri/components/agn/fracagn.py | jnp.clip with floor 0.0 < 1e-20 -> 2
+src/tengri/components/agn/fracagn.py | jnp.maximum with floor 1e-100 < 1e-20 -> 1
+src/tengri/components/agn/kd_precompute.py | jnp.clip with floor 0.0 < 1e-20 -> 7
+src/tengri/components/agn/kd_precompute.py | jnp.maximum with floor 1e-100 < 1e-20 -> 1
+src/tengri/components/agn/kd_precompute.py | jnp.maximum with floor 1e-30 < 1e-20 -> 3
+src/tengri/components/agn/nlr.py | jnp.maximum with floor 1e-30 < 1e-20 -> 1
+src/tengri/components/agn/nlr_gaussian_precompute.py | jnp.maximum with floor 1e-30 < 1e-20 -> 1
+src/tengri/components/agn/polar_dust.py | jnp.maximum with floor 0.0 < 1e-20 -> 3
+src/tengri/components/agn/qsogen.py | jnp.clip with floor 0.0 < 1e-20 -> 10
+src/tengri/components/agn/qsogen.py | jnp.maximum with floor 0.0 < 1e-20 -> 1
+src/tengri/components/agn/qsogen.py | jnp.maximum with floor 1e-30 < 1e-20 -> 3
+src/tengri/components/agn/qsogen.py | jnp.maximum with floor 1e-60 < 1e-20 -> 3
+src/tengri/components/agn/skirtor.py | jnp.clip with floor 0.0 < 1e-20 -> 2
+src/tengri/components/agn/skirtor.py | jnp.maximum with floor 1e-100 < 1e-20 -> 2
+src/tengri/components/agn/skirtor.py | jnp.maximum with floor 1e-30 < 1e-20 -> 3
+src/tengri/components/agn/skirtor_model.py | jnp.maximum with floor 1e-100 < 1e-20 -> 1
+src/tengri/components/agn/slone_netzer.py | jnp.clip with floor 0.0 < 1e-20 -> 2
+src/tengri/components/agn/unified.py | jnp.clip with floor 0.0 < 1e-20 -> 1
+src/tengri/components/dust/attenuation.py | jnp.clip with floor 0.0 < 1e-20 -> 10
+src/tengri/components/dust/attenuation.py | jnp.maximum with floor 0.0 < 1e-20 -> 2
+src/tengri/components/dust/dust_emission_precompute.py | jnp.clip with floor 0.0 < 1e-20 -> 1
+src/tengri/components/dust/dust_emission_precompute.py | jnp.maximum with floor 1e-30 < 1e-20 -> 1
+src/tengri/components/dust/emission/_physics.py | jnp.clip with floor -100.0 < 1e-20 -> 1
+src/tengri/components/dust/emission/_physics.py | jnp.clip with floor 0.0 < 1e-20 -> 3
+src/tengri/components/dust/emission/_physics.py | jnp.maximum with floor 0.0 < 1e-20 -> 1
+src/tengri/components/dust/emission/analytic/_closures.py | jnp.clip with floor 0.0 < 1e-20 -> 2
+src/tengri/components/dust/emission_templates.py | jnp.clip with floor 0.0 < 1e-20 -> 17
+src/tengri/components/dust/emission_templates.py | jnp.clip with floor 1e-30 < 1e-20 -> 1
+src/tengri/components/dust/emission_templates.py | jnp.maximum with floor 1e-100 < 1e-20 -> 1
+src/tengri/components/dust/energy_balance_precompute.py | jnp.clip with floor 0.0 < 1e-20 -> 2
+src/tengri/components/dust/schreiber2016_ir.py | jnp.clip with floor 0.0 < 1e-20 -> 2
+src/tengri/components/igm/igm.py | jnp.clip with floor 0.0 < 1e-20 -> 1
+src/tengri/components/igm/meiksin06.py | jnp.maximum with floor 1e-30 < 1e-20 -> 1
+src/tengri/components/nebular/_recombination_coeffs.py | jnp.clip with floor 0.0 < 1e-20 -> 1
+src/tengri/components/nebular/_shared.py | jnp.clip with floor 0.0 < 1e-20 -> 1
+src/tengri/components/nebular/_shared.py | jnp.maximum with floor 0.0 < 1e-20 -> 1
+src/tengri/components/nebular/_shared.py | jnp.maximum with floor 1e-30 < 1e-20 -> 1
+src/tengri/components/nebular/_shared.py | jnp.maximum with floor 1e-40 < 1e-20 -> 1
+src/tengri/components/nebular/agn_nebular.py | jnp.maximum with floor 1e-99 < 1e-20 -> 2
+src/tengri/components/nebular/cloudy_cb19.py | jnp.clip with floor 0.0 < 1e-20 -> 1
+src/tengri/components/nebular/component.py | jnp.maximum with floor 0.0 < 1e-20 -> 1
+src/tengri/components/nebular/fesc_model.py | jnp.clip with floor 0.0 < 1e-20 -> 1
+src/tengri/components/nebular/fesc_model.py | jnp.maximum with floor 1e-50 < 1e-20 -> 1
+src/tengri/components/nebular/ionizing_spectrum.py | jnp.clip with floor 0.0 < 1e-20 -> 4
+src/tengri/components/nebular/line_precompute.py | jnp.maximum with floor 1e-30 < 1e-20 -> 1
+src/tengri/components/nebular/nebular_grid_precompute.py | jnp.maximum with floor 1e-30 < 1e-20 -> 1
+src/tengri/components/nebular/nebular_grid_precompute.py | jnp.maximum with floor 1e-300 < 1e-20 -> 1
+src/tengri/components/nebular/shock_model.py | jnp.maximum with floor 1e-30 < 1e-20 -> 3
+src/tengri/components/stellar/component.py | jnp.clip with floor 0.0 < 1e-20 -> 1
+src/tengri/components/stellar/component.py | jnp.maximum with floor 0.0 < 1e-20 -> 5
+src/tengri/components/stellar/component.py | jnp.maximum with floor 1e-30 < 1e-20 -> 7
+src/tengri/components/stellar/component.py | jnp.maximum with floor 1e-300 < 1e-20 -> 5
+src/tengri/components/stellar/sfh/chemical_evolution.py | jnp.clip with floor -4.0 < 1e-20 -> 2
+src/tengri/components/stellar/sfh/dense_basis.py | jnp.clip with floor 0.0 < 1e-20 -> 2
+src/tengri/components/stellar/sfh/dense_basis.py | jnp.maximum with floor 0.0 < 1e-20 -> 5
+src/tengri/components/stellar/sfh/dense_basis.py | jnp.maximum with floor 1e-30 < 1e-20 -> 1
+src/tengri/components/stellar/sfh/gp_sfh.py | jnp.clip with floor 0.0 < 1e-20 -> 2
+src/tengri/components/stellar/sfh/mean_sfh.py | jnp.clip with floor 0.0 < 1e-20 -> 2
+src/tengri/components/stellar/sfh/mean_sfh.py | jnp.maximum with floor 0.0 < 1e-20 -> 26
+src/tengri/components/stellar/sfh/mean_sfh.py | jnp.maximum with floor 1e-30 < 1e-20 -> 1
+src/tengri/components/stellar/sfh/mean_sfh.py | jnp.maximum with floor 1e-300 < 1e-20 -> 2
+src/tengri/components/stellar/sfh/metallicity_history.py | jnp.clip with floor 0.0 < 1e-20 -> 3
+src/tengri/components/stellar/sfh/metallicity_history.py | jnp.maximum with floor 1e-30 < 1e-20 -> 3
+src/tengri/components/stellar/sfh/nonparametric.py | jnp.clip with floor 0.0 < 1e-20 -> 1
+src/tengri/components/stellar/sfh/nonparametric.py | jnp.maximum with floor 0.0 < 1e-20 -> 1
+src/tengri/components/stellar/sfh/psd_models.py | jnp.maximum with floor 1e-30 < 1e-20 -> 1
+src/tengri/components/stellar/sps/dsps_wrapper.py | jnp.clip with floor 0.0 < 1e-20 -> 12
+src/tengri/components/stellar/sps/dsps_wrapper.py | jnp.maximum with floor 0.0 < 1e-20 -> 3
+src/tengri/components/stellar/sps/dsps_wrapper.py | jnp.maximum with floor 1e-30 < 1e-20 -> 2
+src/tengri/components/stellar/sps/mass_remaining.py | jnp.maximum with floor 1e-30 < 1e-20 -> 1
+src/tengri/components/stellar/sps/precompute.py | jnp.clip with floor 0.0 < 1e-20 -> 3
+src/tengri/components/xray/component.py | jnp.maximum with floor 1e-30 < 1e-20 -> 1
+src/tengri/components/xray/xray.py | jnp.clip with floor 0.0 < 1e-20 -> 1
+src/tengri/components/xray/xray.py | jnp.maximum with floor 0.0 < 1e-20 -> 3
+src/tengri/components/xray/xray.py | jnp.maximum with floor 1e-100 < 1e-20 -> 1
+src/tengri/components/xray/xray.py | jnp.maximum with floor 1e-30 < 1e-20 -> 1
+src/tengri/components/xray/xray.py | jnp.maximum with floor 1e-300 < 1e-20 -> 2
+src/tengri/components/xray/xray.py | jnp.maximum with floor 1e-60 < 1e-20 -> 2
+src/tengri/forward/component_factory.py | jnp.maximum with floor 0.0 < 1e-20 -> 1
+src/tengri/forward/emission_helpers.py | jnp.maximum with floor 1e-30 < 1e-20 -> 1
+src/tengri/forward/prediction.py | jnp.maximum with floor 1e-30 < 1e-20 -> 1
+src/tengri/inference/backends/nested/utils.py | jnp.maximum with floor 0.0 < 1e-20 -> 1
+src/tengri/inference/posterior.py | jnp.maximum with floor 1e-30 < 1e-20 -> 4
+src/tengri/inference/posterior.py | jnp.maximum with floor 1e-300 < 1e-20 -> 1
+src/tengri/observation/banded.py | jnp.clip with floor 0.0 < 1e-20 -> 2
+src/tengri/observation/calibration.py | jnp.maximum with floor 0.0 < 1e-20 -> 1
+src/tengri/observation/eline_priors.py | jnp.clip with floor 0.0 < 1e-20 -> 2
+src/tengri/observation/eline_priors.py | jnp.maximum with floor 0.0 < 1e-20 -> 1
+src/tengri/observation/line_flux_data.py | jnp.maximum with floor 1e-30 < 1e-20 -> 1
+src/tengri/observation/line_ratio_data.py | jnp.maximum with floor 1e-30 < 1e-20 -> 1
+src/tengri/observation/spectral_indices.py | jnp.maximum with floor 0.0 < 1e-20 -> 1
+src/tengri/observation/spectral_indices.py | jnp.maximum with floor 1e-30 < 1e-20 -> 6
+src/tengri/observation/spectral_indices.py | jnp.maximum with floor 1e-50 < 1e-20 -> 1
+src/tengri/observation/spectrum.py | jnp.maximum with floor 0.0 < 1e-20 -> 2
+src/tengri/observation/spectrum.py | jnp.maximum with floor 1e-30 < 1e-20 -> 1
+src/tengri/parameters/priors.py | jnp.maximum with floor 1e-30 < 1e-20 -> 1
+src/tengri/utils/grid_interp.py | jnp.clip with floor 0.0 < 1e-20 -> 4
+src/tengri/utils/interpolation.py | jnp.clip with floor 0.0 < 1e-20 -> 3
+src/tengri/utils/magnitudes.py | jnp.maximum with floor 0.0 < 1e-20 -> 1
+src/tengri/utils/magnitudes.py | jnp.maximum with floor 1e-300 < 1e-20 -> 2
+src/tengri/utils/sed_quantities.py | jnp.maximum with floor 0.0 < 1e-20 -> 2
+src/tengri/utils/sed_quantities.py | jnp.maximum with floor 1e-30 < 1e-20 -> 2
