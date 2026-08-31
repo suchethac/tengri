@@ -1,0 +1,54 @@
+{
+  "notebook": "ctl-dpl",
+  "seeds": [
+    7,
+    8
+  ],
+  "rows": {
+    "nuts wcap=5": [
+      {
+        "wall": 319.8928732399945,
+        "rhat": 1.0017080365217523,
+        "divergences": 20,
+        "eevpd": null,
+        "eevpd_target": null,
+        "nonfinite_steps": null,
+        "min_ess": 257.25662475545613,
+        "worst": "dust_tau_diff",
+        "sec_per_ess": 1.2434776890355277,
+        "unique_frac": 0.9975,
+        "n_draws_total": 1200,
+        "n_leapfrog": null,
+        "step_size": 0.03143466142478906,
+        "tree_depth_mean": 6.815833333333334,
+        "tree_depth_max": 8,
+        "frac_max_depth": 0.0,
+        "grad_per_draw": 112.6601379747782,
+        "grad_per_ess": 525.5148072406114,
+        "leapfrogs_per_draw": 111.6601379747782
+      },
+      {
+        "wall": 1197.5392660869984,
+        "rhat": 1.0004682759501342,
+        "divergences": 15,
+        "eevpd": null,
+        "eevpd_target": null,
+        "nonfinite_steps": null,
+        "min_ess": 264.7586057571029,
+        "worst": "met_logzsol",
+        "sec_per_ess": 4.5231363213388995,
+        "unique_frac": 1.0,
+        "n_draws_total": 1200,
+        "n_leapfrog": null,
+        "step_size": 0.013058753742550763,
+        "tree_depth_mean": 8.098333333333334,
+        "tree_depth_max": 10,
+        "frac_max_depth": 0.010833333246409893,
+        "grad_per_draw": 274.05722014584154,
+        "grad_per_ess": 1242.1453241702116,
+        "leapfrogs_per_draw": 273.05722014584154
+      }
+    ],
+    "nuts wcap=3": []
+  }
+}
