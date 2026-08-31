@@ -23,13 +23,16 @@ running on a single CPU core (DPL parametric SFH, D=6):
 | Stellar only | 9.8 ms | 719 µs | 13.6× |
 | + nebular (baked-in SSP) | 11.1 ms | 731 µs | 15.2× |
 | + dust IR (THEMIS) | 11.4 ms | 794 µs | 14.3× |
-| + radio + X-ray | 10.7 ms + 10.7 ms | (integrated) | 3.1–13.4× |
+| + radio (SF + AGN) | 10.9 ms | 809 µs | 13.4× |
+| + X-ray (XRB + corona) | 10.7 ms | 3.4 ms | 3.1× |
 | **Typical: neb+THEMIS+radio+xray** | **12.6 ms** | **3.4 ms** | **3.7×** |
 | **Kitchen sink (all emitters)** | **19.1 ms** | **12.5 ms** | **1.5×** |
 
 The forward path is fixed at `SEDModel` construction:
 **Exact** (`approx=None`, default) does full-wavelength SED + filter integration.
 **WavePrecomp** (`approx=WavePrecomp()`) uses a precomputed SSP×filter LUT.
+
+Construction defaults to exact, but since 2026-08-10 every fit surface (`Fitter`, `PopulationFitter`, `CatalogFitter`) resolves `approx="auto"` to the LUT at fit time — pass `approx=None` to a fitter to force the exact path.
 
 — *full table at [`bench/reports/2026-08-31_forward_model_speedup.md`](https://github.com/suchethac/tengri/blob/main/bench/reports/2026-08-31_forward_model_speedup.md)*
 
@@ -38,7 +41,7 @@ The forward path is fixed at `SEDModel` construction:
 WavePrecomp delivers no speedup (K&D 3-zone: **1.0×**, SKIRTOR torus: **0.9×**)
 because these AGN components require dense integration of the full-resolution SED
 per call. They do not take the band-projection fast branch in
-`observation/_band_projection.py` (#1022) — instead, every band integral is computed
+`components/_band_projection.py` (#1022) — instead, every band integral is computed
 by dense quadrature on the full wavelength grid, and the precompute LUT lookup
 cost drowns any savings. When AGN-dominated models are slow, the precompute does
 not help. Use exact mode, or trim the AGN complexity to composable (disc+torus)
@@ -52,16 +55,16 @@ Inference backends on a 7-parameter mock fit (compile + sample wall):
 | Laplace | ~5 s | < 1 s |
 | Pathfinder | ~10 s | ~2 s |
 | NUTS (1k samples) | ~30 s | ~5 s |
-| `vi_nonlinear_fast` (geoVI, JAX-native) | ~10 s | **2.3 s** |
+| `vi_nonlinear_fast` (geoVI, NIFTy fast path) | ~10 s | **2.3 s** |
 | `vi` (NIFTy.re) | ~75 s | 43.7 s |
 
 — *full breakdowns: [`2026-04-17_native_vs_nifty.md`](https://github.com/suchethac/tengri/blob/main/bench/reports/2026-04-17_native_vs_nifty.md), [`2026-04-22_pathfinder_vs_window_nuts.md`](https://github.com/suchethac/tengri/blob/main/bench/reports/2026-04-22_pathfinder_vs_window_nuts.md), [`2026-05-06_compile_vs_sampling_breakdown.md`](https://github.com/suchethac/tengri/blob/main/bench/reports/2026-05-06_compile_vs_sampling_breakdown.md)*
 
-`vi_nonlinear_fast` is **19–25× faster** than the NIFTy path on
+`vi_nonlinear_fast` is **19–25× faster** than the full NIFTy path on
 smooth-SFH fits on some problems but may show differences in posterior geometry
-on stochastic fits. The native backends (`vi_nonlinear_fast`, `vi_linear_fast`)
-are optimized JAX implementations — validate per problem before swapping to ensure
-posterior equivalence on your science case.
+on stochastic fits. These backends (`vi_nonlinear_fast`, `vi_linear_fast`)
+are the NIFTy geoVI/MGVI paths with Python-level logging overhead removed — validate per
+problem before swapping to ensure posterior equivalence on your science case.
 
 ## Persistent compile cache
 
@@ -173,4 +176,4 @@ If `python -m tengri.bench` shows slower 1-galaxy timing than the table:
 3. Check cache size. If in the GB range, try `tengri.clear_cache()` after JAX upgrade.
 4. The default SSP grid is the first `data/ssp_*.h5` found. Multi-Z,
    full-α/Fe grids are slower than `prsc_miles`. The relative numbers (vmap
-   speedup, exact-vs-hybrid ratio) matter most.
+   speedup, exact-vs-precomp ratio) matter most.

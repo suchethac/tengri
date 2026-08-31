@@ -69,10 +69,10 @@ Note: kitchen-sink gradient rows fail with ConcretizationTypeError (issue #2114)
   + Taylor approximation of Zacharegkas+2025 — this is the one true approximation,
   and it's where the speedup comes from).
 - Dust IR, radio, X-ray: exact — integrated through the true filter transmission, not sampled at the effective wavelength.
-- **AGN (disc, torus, QSOgen)**: NOT integrated through filter transmission. These
-  components use dense-grid integration of the full-resolution SED per call and never
-  take the band-projection fast branch. K&D 3-zone and SKIRTOR deliver 0.8–1.1× speedup
-  because the precompute LUT overhead cancels any savings (see #1022, `observation/_band_projection.py`).
+- **AGN components** are integrated through the true transmission by dense quadrature per call
+  and never take the precomputed band-response branch. The lighter variants (composable disc+torus,
+  QSOgen) still gain 1.8–2.2× speedup because the stellar chain dominates their model, while
+  template-heavy tori (K&D 3-zone full, SKIRTOR) measure 0.8–1.1× (see #1022, `components/_band_projection.py`).
 - Nebular (CLOUDY, baked-in): 0% (rides along in the stellar precompute).
 - Typical (neb+dust+radio+xray): <1%; kitchen-sink with AGN: 0.009%.
 
@@ -94,7 +94,7 @@ Full breakdown by emitter family, gradient timings across SFH types, and the cov
 
 K&D 3-zone and SKIRTOR torus models require dense integration of the full-resolution
 SED per photometric call because they do not support the band-projection fast branch
-(see #1022, `observation/_band_projection.py`). As a result, WavePrecomp delivers
+(see #1022, `components/_band_projection.py`). As a result, WavePrecomp delivers
 **~1× "speedup"** (no speedup) on these components — the precompute LUT lookup cost
 drowns any savings from caching. If your model is dominated by K&D or SKIRTOR AGN
 and inference is slow, consider:
