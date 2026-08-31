@@ -417,8 +417,11 @@ So that half of #1859 moves no number today and is preventive: it converts dead-
 into dead-but-right storage, ahead of the first consumer that reads it back.
 
 Separately — *not* a range problem, so item 3 will not close it — reverse-mode **gradient accuracy**
-through the projection seam remains open under #1388; see "Not fixed here: float32 AGN gradient
-*accuracy*".
+through the projection seam remains open under #1388, but only for **unweighted** observables: the
+gradient a fit descends is accurate to ≤5.3e-04 in pure float32 on every measured seam, and
+`utils.scale.loss_scaled_grad` recovers the unweighted one. See "Reverse-mode gradients in pure
+float32 — status by seam" at the end of this document, which supersedes "Not fixed here: float32 AGN
+gradient *accuracy*".
 
 **Two more threads that item 3 will not close either**, both found by sweeping rather than by
 reading, and both open:
@@ -966,6 +969,21 @@ to tell poisoning apart from a genuine float32 defect.
 
 ### Not fixed here: float32 AGN gradient *accuracy*
 
+> **Superseded (2026-08-31) — the ~53% is gone, and the diagnosis below was wrong.**
+> The error was **not** the AGN reference offset's `10^34.6` Jacobian. It was the
+> differentiable peaks of the bolometric factorizations (#1436): eight sites factored
+> an integrand by its own peak and multiplied it back, leaving two autodiff paths that
+> cancel analytically but not in float32. With those peaks under `stop_gradient` the
+> same comparison is **1.1e-03** for the AGN seam and **1.3e-03** for the panchromatic
+> model, re-measured green today by
+> `test_float32_grad_bolometric_seams.py`. Two independent measurements had already
+> refuted the offset story before this section was corrected: re-centering
+> `_AGN_LBOL_REF` made the error slightly *worse* and then non-finite, and bare
+> stellar — which applies no AGN offset at all — showed the same class of error.
+> Read the section below as the historical record of a superseded hypothesis; the
+> current per-seam status is in **"Reverse-mode gradients in pure float32"** at the
+> end of this document.
+
 With the kernel cache fixed, the pure-float32 AGN gradient is finite and
 order-independent, but it is **not** accurate: against float64 on identical mock
 data it is off by ~53% in norm (per-element 4%, 12%, 75%) for
@@ -977,3 +995,184 @@ This is the same wall as #1388 (`apply_log10_scale` is gradient-unsafe above ~38
 dex) and needs the SED carried in scaled form; the regression test therefore
 compares float32 against **float32-with-a-cleared-cache** — both sides the same
 precision, exact equality, no tolerance to choose — rather than against float64.
+
+---
+
+## Reverse-mode gradients in pure float32 — status by seam (2026-08-31)
+
+Written against **#1415** and **#1388** after re-measuring both. Of the three distinct
+defects those issues describe, **two are closed and one is not — and the one that is not
+cannot be closed at the seam it lives on.** Every number below is pure float32
+(`jax.enable_x64(False)`) on CPU, against float64 autodiff or against central finite
+differences taken at the *same* precision, with the same model built once per precision.
+
+### Is float32 *fitting* safe? Yes, on the four seams that have been measured
+
+The gradient a fit descends — `grad(neg_log_posterior_fn)` — tracks float64 to
+**≤ 5.3e-04** on stellar+dust, dust IR (+44.5 dex), AGN (+34.6 dex) and the panchromatic
+kitchen sink (dust IR + Cue + AGN + radio + X-ray + shock), measured at two points in
+standardized space (the origin and 0.5 sigma; away from the origin the agreement improves
+to ~1e-05, the origin being where the residuals are smallest and the cancellation worst).
+Float64 autodiff reproduces float64 central differences to ≤2e-04 at the same points, so
+the reference is sound. Pinned by `test_float32_grad_bolometric_seams.py` (all four seams)
+and `test_float32_gradient_accuracy.py::test_likelihood_gradient_is_accurate_in_float32`.
+
+Same-precision finite differences are **not** a usable arbiter for this objective, and it
+is worth saying why since they are the arbiter everywhere else in this section: chi-squared
+is ~1e4 here, so a central difference in float32 subtracts two nearly equal ~1e4 numbers
+and its own noise floor reaches 17% on the weakest component — larger than the error being
+looked for. The instrument has to be chosen per objective, not per project.
+
+That is a **correction** to #1415's headline and to Finding 5 of
+`bench/reports/2026-08-20_cuda_device_matrix.md`. Both conclude that float32 fitting is
+*not* safe, on the strength of a likelihood gradient "wrong by structured factors — ~2x
+on stellar mass". The measurement was real; it was also **fixed by the commit that
+diagnosed it** (`eb7bfae24`). `apply_log10_scale` left its peak differentiable, so `arr`
+reached the output by two paths whose derivative contributions cancel analytically but
+not in float32, and what survived was an uncancelled term the size of the main one —
+gradients exactly 2x too large. `stop_gradient` on the peak leaves the one correct path.
+The function's docstring has recorded that since; the issue title and the bench report
+were never updated, which is how the stale statement is still being read as current.
+
+Safe means *these seams, this objective*. It does not extend to:
+
+* the **linear published properties** — `nion`, `line_lums`, `L_age`, the 15 erg/s
+  emission-line and AGN keys — which overflow float32 by their units, whatever the
+  gradient does. That is item 3 above plus #1534, and it needs the breaking unit change.
+  A #1388 comment reports the Cue nebular path going non-finite in pure float32 in the
+  **forward** direction on a kitchen-sink model swept to ±3-±10 sigma; that does **not**
+  reproduce on the panchromatic configuration measured here, at the two points measured
+  here, where forward and gradient are both finite and accurate. Neither result refutes
+  the other — they are different points — and the wide-corner sweep was not re-run;
+* the `kubota_done` AGN disc (below);
+* any seam not in the table — the rule from #1436 stands: *a float32 result established
+  on one model configuration says nothing about a configuration with a different scale
+  seam.*
+
+### Still open: the flux projection, for *unweighted* observables
+
+`jax.grad(lambda p: jnp.sum(model.predict_photometry(p)))` returns **exactly zero** in
+pure float32. Measured on all three seams — this is not a stellar+dust peculiarity, and
+it could not be, because the projection is on every model's photometry path:
+
+| seam | float64 autodiff | float32 `jax.grad` | float32 `loss_scaled_grad` |
+|---|---|---|---|
+| stellar+dust | `-1.49419e-27, 7.68007e-27` | `0.0, 0.0` | rel 1.0e-06 / 3.6e-06 |
+| + dust IR | `8.51802e-26, 1.61877e-25` | `0.0, 0.0` | rel 3.0e-06 / 3.0e-06 |
+| + AGN | `-9.23868e-28, 8.69469e-27` | `0.0, 0.0` | rel 4.1e-06 / 2.2e-06 |
+
+(components are `d/d dust_tau_diff`, `d/d sfh_delayed_log_total_mass`; relative errors
+are against the float64 column; CPU backend.) Float32 **central differences** reproduce
+the float64 column to better than 1e-2 on every seam — that is the measurement that says
+float32 can represent this gradient perfectly well and the reverse pass is what loses it,
+and it is asserted per seam rather than quoted here.
+
+**Why no rule at the seam can fix it.** Reverse mode stores, at every node, the
+derivative of the output with respect to *that* node. With the rest-frame `L_nu` (~1e30
+erg/s/Hz) as a node and the observed flux (~1e-28 erg/s/cm²/Hz) as the output, the value
+stored at that node is `10**(-58)`, thirteen orders below float32's smallest subnormal
+(1.4e-45). That is the true derivative, so every implementation must produce it: #1388
+measured a peak-factored cotangent, a `custom_jvp` regrouping and an
+`optimization_barrier`, and all three return the same `0.0`. Grouping changes which
+intermediates form; it cannot conjure a number the dtype does not have. Forward mode
+(`jax.jacfwd`) carries `d(L_nu)/d(param)` ~1e30 instead and never forms the ratio, which
+is why it is correct to ~1e-6 where reverse mode returns zero.
+
+Closing it properly still means **#1388's scaled-SED contract** — carrying the SED in a
+rescaled unit (an exact power of two, so float64 stays bit-identical) so that no step
+ever relates a 1e30 quantity to a 1e-28 one. That is a change to what every component
+returns and to every threshold expressed in absolute erg/s/Hz; it was **not** attempted
+here.
+
+**What does work, and is shipped: change the cotangent that arrives.**
+`tengri.utils.scale.loss_scaled_grad` multiplies the scalar by `2**100` before
+differentiating and divides the gradient back afterwards — mixed-precision loss scaling,
+exact for a power of two, so float64 gradients are bit-identical (asserted with
+`array_equal`, not a tolerance). It recovers the correct float32 gradient on all three
+seams, to ~1e-06.
+
+The boost was sized by sweeping it, not by the arithmetic, and the sweep is worth keeping
+because the arithmetic gives the wrong answer. Naively `2**70` should do: the projection's
+`10**(-58)` needs only ~1e20 to clear float32's smallest normal. Measured on CPU, `2**40`
+and `2**60` still return **exactly zero**, `2**70` recovers the gradient but wrong by
+**0.7% to 18%**, `2**80` is right to 5e-06, `2**90` through `2**120` are identical at
+~1e-06, and `2**130` is NaN. The percent-level row is the cotangent picking up further
+O(1e-3) factors downstream (filter weights, band quadrature) that put it back among the
+subnormals, where XLA's CPU backend flushes. The same `2**70` row measures 1e-06 on
+**CUDA** — so this is one more place where a float32 result validated on one backend is
+not validated, alongside the TF32 caveat below.
+
+This is also the reason **fitting is unaffected**: a Gaussian likelihood multiplies the
+residual by `1/sigma**2` ~ 1e32, which is the same lift arriving for free. The broken
+case is differentiating a raw flux, a color or a band ratio with an O(1) cotangent.
+
+Pinned by `tests/regression/precision/test_float32_photometry_grad_seams.py` — six
+assertions per seam, including a pin that the *unboosted* gradient is still identically
+zero (so the residual cannot change state unnoticed), a float64 `array_equal` check, and
+a **`jit` arm**: multiplying by a constant and dividing the gradient by the same constant
+is exactly the shape a compiler may fold away, and #1535 above is this repository's own
+record of XLA re-associating a range-safety grouping out of existence. Measured identical
+to the eager result, but it is measured rather than assumed. Also pinned by the strict
+`xfail` in `test_float32_gradient_accuracy.py`.
+
+### Fixed here: `multicolor_disc`'s float32 renormalization (#1439)
+
+`d(sum rest_sed)/d(agn_log_lbol)` was **NaN** in pure float32 for the `multicolor` disc,
+while the forward pass and `jacfwd` were both exact — recorded in #1439 as a
+reverse-mode cancellation of the #1388 class, needing the scaled-SED contract. It was
+not. It was the **grouping** of the disc's float32 renormalization:
+
+```python
+return l_nu_intrinsic * scale          # before
+```
+
+Transposing `arr * scale` makes JAX form `sum(g * arr)`. With the raw disc SED (~1e28)
+and the cotangent the AGN reference offset hands back (~`10**34.6`), that inner product
+is ~1e64 — `inf` in float32 — while its partner `d scale/d arr` ~1e-64 flushes to `0`,
+and `inf * 0` is NaN. Returning the **L1-normalized** SED against a correspondingly
+inflated scale is algebraically the same number with both factors in range. L1 rather
+than peak normalization on purpose: `sum(g * arr)` is bounded by `max|g| * sum|arr|`, so
+unit L1 caps it at the incoming cotangent itself, where unit peak leaves a factor of
+`n_wave` (~3.5 decades) on top — the difference between working and overflowing at the
+top of the declared `agn_log_lbol` prior.
+
+Measured after the fix: **1.000002 relative to float64** at log L_bol 9, 11 and 12
+(model path) and at 9 through 13 (function level, both modes). Float64 is untouched by
+construction — the change is inside `if wavelength.dtype == jnp.float32:`. Pinned by
+`test_float32_grad_sed_path.py::test_multicolor_agn_sed_gradient_is_accurate_in_float32`,
+which sweeps the prior rather than measuring one point, because the defect varied
+smoothly with luminosity before it became NaN.
+
+### Not fixed: `kubota_done`, and it is a different defect
+
+The other shape-class disc is still NaN, and the regrouping above does **not** close it —
+that was written, measured and reverted rather than shipped unverified. It is not a range
+problem at all: with an O(1) cotangent, where nothing can overflow,
+`d(sum L_nu)/d(agn_log_lbol)` in pure float32 is **-0.034x** float64 — sign flipped — and
+it only becomes NaN once the cotangent passes ~1e10. Setting `agn_f_hard=0.0` (no hot
+corona) restores float32/float64 agreement to 3e-04, and every nonzero `agn_f_hard`
+reproduces the -0.034x exactly, so the defect is in the **hot-corona zone**
+(`_hot_corona_lnu` / the nthcomp `custom_jvp` of #1822), not in the disc renormalization.
+Pinned by the strict `xfail`
+`test_float32_grad_sed_path.py::test_kubota_done_agn_sed_gradient_is_accurate_in_float32`.
+
+### Seams and paths deliberately NOT covered
+
+Stated so the next person does not read the table above as wider than it is:
+
+* **Spectroscopy.** `predict_spectrum` applies the same projection at
+  `observation/observation.py`; nothing here measures its gradient.
+* **Emission-line fluxes.** `line_measurement.py` applies its own combined
+  `log10_conv - log10_four_pi_dl2` offset — same primitive, unmeasured here.
+* **Free redshift.** Every measurement above fixes `redshift=Fixed(0.1)`, so the
+  gradient with respect to `z` (which passes through `log10_flux_scale` itself, not only
+  through the array argument) is untested.
+* **`WavePrecomp`.** The photometry measurements are on the exact path. #1415 reports the
+  zero gradient on both, and the fix is `approx`-independent by construction, but the
+  boosted numbers were not re-taken under the LUT.
+* **CUDA.** Every number here is CPU, except the one CUDA row called out in the boost
+  sweep — and that row is the whole reason to say so. Float32 on Ampere silently
+  lowers matmuls to TF32 unless `JAX_DEFAULT_MATMUL_PRECISION=highest` (#2022), which is worth 4.5% on parameter
+  error bars and would sit inside some of the tolerances above.
+* **The other discs, radio, X-ray, shock, IGM** — each is its own seam; see §8's
+  inventory for what the *forward* path guarantees, which is not the same claim.
