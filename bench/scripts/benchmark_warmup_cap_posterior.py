@@ -137,12 +137,19 @@ def run(notebook: str, seed: int, warmup_cap, target_accepts=()) -> dict:
         )
         wall = time.perf_counter() - t0
         d = dict(post.diagnostics)
+        # ONE call over the whole samples dict, which is what the helper takes
+        # (name -> array); it returns name -> {'ess': ..., 'tau_*': ...} and
+        # silently drops parameters that never moved or are not 1-D. Calling it
+        # per array raises, because an ndarray has no .items().
+        ess_all = effective_sample_size({k: np.asarray(v) for k, v in post.samples.items()})
         stats = {}
         for name, draws in post.samples.items():
             arr = np.asarray(draws).ravel()
             if arr.size == 0 or not np.all(np.isfinite(arr)):
                 continue
-            ess = float(effective_sample_size(np.asarray(draws)))
+            if name not in ess_all:
+                continue
+            ess = float(ess_all[name]["ess"])
             sd = float(np.std(arr, ddof=1))
             stats[name] = {
                 "mean": float(np.mean(arr)),
@@ -174,7 +181,15 @@ def run(notebook: str, seed: int, warmup_cap, target_accepts=()) -> dict:
     ctrl = out["control"]["params"]
     comparison = {}
     for label in [k for k in out if k != "control"]:
-        comparison[label] = _compare(ctrl, out[label]["params"])
+        # Never let a bug in the comparison destroy the arms. Each arm above is
+        # a full NUTS fit costing minutes to hours; the comparison is
+        # arithmetic. An earlier revision lost two completed fits to an
+        # AttributeError raised after both had run, which is the expensive way
+        # to find a one-line mistake.
+        try:
+            comparison[label] = _compare(ctrl, out[label]["params"])
+        except Exception as exc:  # the arms matter; this arithmetic does not
+            comparison[label] = {"error": f"{type(exc).__name__}: {exc}"}
 
     return {
         "probe": "warmup_cap_posterior",
@@ -245,6 +260,8 @@ def main(argv=None) -> int:
         None if args.warmup_cap is not None and args.warmup_cap < 0 else args.warmup_cap,
         tuple(args.target_accept),
     )
+    # Write BEFORE printing: a formatting error in the table below must not lose
+    # hours of sampling either.
     if args.json:
         with open(args.json, "w") as fh:
             json.dump(row, fh, indent=2)
