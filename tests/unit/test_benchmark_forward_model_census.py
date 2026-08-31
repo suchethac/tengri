@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: BSD-3-Clause
 """Tests for benchmark_forward_model.py census and configuration consistency.
 
 These tests verify:
