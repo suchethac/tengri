@@ -1,25 +1,23 @@
 # SPDX-License-Identifier: BSD-3-Clause
 """Sentinel objects for nested-dict model builder API.
 
-Provides three module-level singleton sentinels:
+Provides two module-level singleton sentinels:
 
 - ``FREE``: marks a parameter to use the registry's default prior
-- ``FIXED``: marks a parameter to pin to the registry's default value
 - ``DEFAULT``: legal only as ``Fixed(DEFAULT)``, an explicit spelling of
-  "pin at the registry default" for one named parameter (equivalent to what
-  wildcard ``FIXED`` would have picked for it)
+  "pin at the registry default" for one named parameter
 
-All three sentinels preserve singleton identity across copy, pickle, and deepcopy operations.
+Both sentinels preserve singleton identity across copy, pickle, and deepcopy operations.
 
 Examples
 --------
->>> from tengri import FREE, FIXED
->>> config = {"sfh_field_psd_sigma": FREE, "dust_slope": FIXED}
+>>> from tengri import FREE, DEFAULT
+>>> config = {"sfh_field_psd_sigma": FREE, "dust_slope": DEFAULT}
 >>> import copy
 >>> copied = copy.deepcopy(config)
 >>> copied["sfh_field_psd_sigma"] is FREE
 True
->>> copied["dust_slope"] is FIXED
+>>> copied["dust_slope"] is DEFAULT
 True
 """
 
@@ -126,13 +124,13 @@ Place it inside a group dict passed to :meth:`tengri.SEDModel.build`, either
 against one parameter or against the ``'all_params'`` wildcard, to defer the
 choice of prior to the registry::
 
-    from tengri import SEDModel, FREE, FIXED, Uniform
+    from tengri import SEDModel, FREE, Fixed, DEFAULT, Uniform
 
     model = SEDModel.build(
         ssp_data=ssp,
         observation=obs,
         sfh={"type": "dpl", "all_params": FREE, "beta": Uniform(1.0, 3.0)},
-        dust={"type": "two_component", "all_params": FIXED},
+        dust={"type": "two_component", "all_params": Fixed(DEFAULT)},
     )
 
 Here the double-power-law SFH parameters become free on their registry
@@ -146,38 +144,6 @@ Notes
 default prior. Groups whose parameters default to :class:`tengri.Fixed`
 values (radio and shock) are unaffected by the wildcard; give those an
 explicit prior instead (e.g. ``shock={"frac": Uniform(0.0, 1.0)}``).
-"""
-
-FIXED = _Sentinel("FIXED")
-"""Sentinel marking a parameter to pin to the registry's default value.
-
-Place it inside a group dict passed to :meth:`tengri.SEDModel.build`. Its
-most common use is the ``'all_params'`` wildcard, which pins every parameter
-in the group that is not named explicitly::
-
-    from tengri import SEDModel, FREE, FIXED
-
-    model = SEDModel.build(
-        ssp_data=ssp,
-        observation=obs,
-        sfh={"type": "dpl", "all_params": FIXED, "log_total_mass": FREE},
-    )
-
-Here the double-power-law shape parameters are held at their default values
-and ``sfh_dpl_log_total_mass`` is the one SFH parameter left free.
-``'all_params': FIXED`` is also what a group gets when it sets no wildcard at
-all, so naming it is a way to be explicit rather than a change in behavior.
-
-Identity is preserved across pickle, copy, and deepcopy operations.
-
-Notes
------
-The wildcard reaches only the group it appears in. Groups you do not mention
-are still built from their own defaults and may contribute free parameters of
-their own; the spec above leaves ``dust_tau_bc`` and ``dust_tau_diff`` free,
-because no ``dust`` group was given. Read
-:meth:`tengri.Parameters.summary` on the built spec rather than assuming the
-wildcard fixed everything.
 """
 
 DEFAULT = _Sentinel("DEFAULT")
@@ -196,8 +162,8 @@ inside a group dict passed to :meth:`tengri.SEDModel.build` /
     )
 
 ``Fixed(0.3)`` pins the parameter at your own value, ``0.3``; ``Fixed(DEFAULT)``
-pins it at the registry default instead -- the same value ``'all_params':
-FIXED`` (the wildcard-FIXED sentinel) would have used for that parameter. It
+pins it at the registry default instead -- the same value the ``'all_params'``
+wildcard set to ``Fixed(DEFAULT)`` would have used for that parameter. It
 resolves through the identical canonical-default resolver, never a second
 path.
 
@@ -208,8 +174,8 @@ pointing at the ``Fixed(DEFAULT)`` spelling.
 Identity is preserved across pickle, copy, and deepcopy operations.
 """
 
-#: Internal wildcard key in the nested-dict grammar. Sets ``FREE``/``FIXED``
-#: for every parameter in a group. The normalizer rewrites user-facing
+#: Internal wildcard key in the nested-dict grammar. Sets ``FREE`` or
+#: ``Fixed(DEFAULT)`` for every parameter in a group. The normalizer rewrites user-facing
 #: ``WILDCARD_ALIAS`` ('all_params') or its synonym ``WILDCARD_ALIAS_OTHER``
 #: ('other_params') to this key internally. '*' is NOT a user input synonym;
 #: it is the internal representation after normalization.
@@ -239,10 +205,10 @@ WILDCARD_ALIAS = "all_params"
 #: ``other_params`` reads best written LAST, after explicit per-parameter
 #: entries, where it means "the others"::
 #:
-#:     sfh={'type': 'dpl', 'alpha': Uniform(0.5, 3.0), 'other_params': FIXED}
+#:     sfh={'type': 'dpl', 'alpha': Uniform(0.5, 3.0), 'other_params': Fixed(DEFAULT)}
 #:
 #: Pick whichever reads better at the call site; the parser and every
 #: downstream consumer treat them identically.
 WILDCARD_ALIAS_OTHER = "other_params"
 
-__all__ = ["DEFAULT", "FIXED", "FREE", "WILDCARD_ALIAS", "WILDCARD_ALIAS_OTHER", "WILDCARD_KEY"]
+__all__ = ["DEFAULT", "FREE", "WILDCARD_ALIAS", "WILDCARD_ALIAS_OTHER", "WILDCARD_KEY"]

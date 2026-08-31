@@ -89,11 +89,12 @@ class MissingParameterError(ParameterError):
 
 
 class ParameterDefaultMissingError(ParameterError):
-    """A parameter was marked FIXED without a physically-motivated default.
+    """A parameter was pinned at its registry default with no physically-motivated value to pin at.
 
     Raised by :func:`tengri.parameters.groups.parse_groups` when the
-    ``'all_params': FIXED`` wildcard (or an explicit short-form ``FIXED``) is applied
-    to a registry entry whose ``Distribution`` carries no ``default=``. Prior
+    ``'all_params': Fixed(DEFAULT)`` wildcard (or an explicit per-parameter
+    ``Fixed(DEFAULT)``) is applied to a registry entry whose ``Distribution``
+    carries no ``default=``. Prior
     behavior silently fell back to the midpoint of the prior support, which
     was an implicit and often physically wrong choice (e.g. ``Uniform(0, 5)``
     for ``log10(n_H/cm^-3)`` collapsed to 2.5 (316 cm^-3) when the
@@ -449,14 +450,14 @@ class DefaultFixedParametersWarning(AdvisoryWarning):
     emitted, so a user could believe they had configured an SFH when they had
     actually pinned it entirely.
 
-    Pass ``'all_params': FREE`` to fit the parameters, or ``'all_params': FIXED``
+    Pass ``'all_params': FREE`` to fit the parameters, or ``'all_params': Fixed(DEFAULT)``
     to state the intent explicitly and silence this warning. See
     :func:`~tengri.parameters.groups.parse_groups` for the grammar.
 
-    Warns rather than raising: explicitly stating ``'all_params': FIXED`` is a
+    Warns rather than raising: explicitly stating ``'all_params': Fixed(DEFAULT)`` is a
     legitimate and common pattern (e.g. when fitting only redshift). This warns
     to catch the accidental case where the user forgot to state a disposition.
-    Filter this category if the silent FIXED is deliberate.
+    Filter this category if the silent pin-at-default is deliberate.
     """
 
 

@@ -231,7 +231,7 @@ ELINE_BROAD_PARAMS: tuple[ParamDeclaration, ...] = (
 # re-declared them inline with the same bounds but a separate default, and the
 # bucket carried ``None``, so the two could drift (that was the #887 target).
 # Defaults = a fiducial young-starburst ionizing spectrum: the 1-Myr solar-Z
-# BPASS SSP fit with ``fit_ionizing_spectrum`` (#845), so ``'*': FIXED`` yields a
+# BPASS SSP fit with ``fit_ionizing_spectrum`` (#845), so ``'*': Fixed(DEFAULT)`` yields a
 # physical ionizing SED instead of the prior midpoint (which, for these
 # correlated slopes, would be unphysical: #477 / #478).
 #

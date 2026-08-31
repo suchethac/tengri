@@ -1,21 +1,20 @@
 # SPDX-License-Identifier: BSD-3-Clause
 """Contract tests for the ``Fixed(DEFAULT)`` build-grammar token.
 
-``DEFAULT`` (added alongside ``FREE``/``FIXED`` in
-``tengri.parameters.sentinels``) is legal only as the argument of
-``Fixed(...)``. ``Fixed(DEFAULT)`` is a fully-supported, ADDITIVE spelling of
-"pin this one parameter at the registry default" -- the per-parameter
-equivalent of what the ``'all_params': FIXED`` wildcard already does for
-every unaddressed parameter in a group. It resolves through the exact same
-canonical-table resolver (``_default_fixed_value`` in ``groups.py``, the
-#412 fix) as wildcard-FIXED, never a second path.
+``DEFAULT`` (in ``tengri.parameters.sentinels``, alongside ``FREE``) is legal
+only as the argument of ``Fixed(...)``. ``Fixed(DEFAULT)`` spells "pin this
+one parameter at the registry default" -- the per-parameter equivalent of
+what the ``'all_params': Fixed(DEFAULT)`` wildcard does for every unaddressed
+parameter in a group. It resolves through the exact same canonical-table
+resolver (``_default_fixed_value`` in ``groups.py``, the #412 fix) the
+wildcard uses, never a second path.
 
-This wave is additive: bare ``FIXED`` keeps working everywhere, unchanged. A
-later wave retires it in favor of ``Fixed(DEFAULT)``; until then this file
-deliberately builds both spellings side by side so a reviewer can see they
-agree. Those FIXED-side comparisons are marked ``# TEMPORARY dual-window
-test`` and should be deleted (not just left to bit-rot) once FIXED is
-retired.
+Pre-1.0 clean break: the bare ``FIXED`` sentinel this file originally
+compared ``Fixed(DEFAULT)`` against side by side has been REMOVED from the
+library; its replacement everywhere is ``Fixed(DEFAULT)``. The dual-window
+tests that once built both spellings to prove they agreed (formerly marked
+``# TEMPORARY dual-window test``) now assert ``Fixed(DEFAULT)``'s resolved
+values directly against the registry.
 """
 
 from __future__ import annotations
@@ -25,82 +24,54 @@ import pickle
 
 import pytest
 
-from tengri import DEFAULT, FIXED, Fixed, ParameterError, builders, parse_groups
+from tengri import DEFAULT, Fixed, ParameterError, builders, parse_groups
+from tengri.config.exceptions import ConfigError
 from tengri.config.serialize import deserialize_config, serialize_config
 from tengri.parameters.groups import _CANONICAL_FIXED_DEFAULTS
 
 pytestmark = pytest.mark.contract
 
 
-# ── (a) Equivalence with FIXED, at every grammar site ──────────────────────
+# ── (a) Fixed(DEFAULT) pins the registry default, at every grammar site ────
 
 
-class TestEquivalenceWithFixed:
-    """Fixed(DEFAULT) must resolve identically to FIXED, everywhere FIXED works."""
+class TestFixedDefaultPinsTheRegistryDefault:
+    """Fixed(DEFAULT) pins a parameter at its registry default, wherever the
+    grammar accepts it: per-parameter, the group wildcard, and top-level."""
 
     def test_per_param_sfh_dpl(self):
-        """A per-parameter Fixed(DEFAULT) pins the same value FIXED would."""
-        default_spec = parse_groups(
-            sfh={"type": "dpl", "all_params": FIXED, "alpha": Fixed(DEFAULT)},
+        """A per-parameter Fixed(DEFAULT) pins at the declared ``default=``,
+        not the prior midpoint (``sfh_dpl_alpha``'s Uniform(0.1, 5.0) midpoint
+        is 2.55; its curated ``default=`` is 1.5)."""
+        spec = parse_groups(
+            sfh={"type": "dpl", "all_params": Fixed(DEFAULT), "alpha": Fixed(DEFAULT)},
             redshift=Fixed(0.1),
         )
-        # TEMPORARY dual-window test: rewrite against Fixed(DEFAULT)-only in the removal wave
-        fixed_spec = parse_groups(
-            sfh={"type": "dpl", "all_params": FIXED, "alpha": FIXED},
-            redshift=Fixed(0.1),
-        )
-        assert (
-            default_spec.get_distribution("sfh_dpl_alpha").value
-            == fixed_spec.get_distribution("sfh_dpl_alpha").value
-        )
-        assert (
-            default_spec._group_provenance["sfh_dpl_alpha"]
-            == fixed_spec._group_provenance["sfh_dpl_alpha"]
-            == "user_fixed"
-        )
+        assert spec.get_distribution("sfh_dpl_alpha").value == 1.5
+        assert spec._group_provenance["sfh_dpl_alpha"] == "user_fixed"
 
     def test_per_param_met_delta(self):
-        """The #412 met_logzsol pin, spelled Fixed(DEFAULT) instead of FIXED."""
-        default_spec = parse_groups(
-            met={"type": "delta", "logzsol": Fixed(DEFAULT)}, redshift=Fixed(0.1)
-        )
-        # TEMPORARY dual-window test: rewrite against Fixed(DEFAULT)-only in the removal wave
-        fixed_spec = parse_groups(met={"type": "delta", "logzsol": FIXED}, redshift=Fixed(0.1))
-        assert (
-            default_spec.get_distribution("met_logzsol").value
-            == fixed_spec.get_distribution("met_logzsol").value
-        )
+        """The #412 met_logzsol pin: Fixed(DEFAULT) resolves to 0.0 (solar)."""
+        spec = parse_groups(met={"type": "delta", "logzsol": Fixed(DEFAULT)}, redshift=Fixed(0.1))
+        assert spec.get_distribution("met_logzsol").value == 0.0
 
     def test_wildcard_met_delta(self):
-        """'all_params': Fixed(DEFAULT) collapses a group exactly like 'all_params': FIXED."""
-        default_spec = parse_groups(
+        """'all_params': Fixed(DEFAULT) pins every declared param at its registry default."""
+        spec = parse_groups(
             met={"type": "delta", "all_params": Fixed(DEFAULT)}, redshift=Fixed(0.1)
         )
-        # TEMPORARY dual-window test: rewrite against Fixed(DEFAULT)-only in the removal wave
-        fixed_spec = parse_groups(met={"type": "delta", "all_params": FIXED}, redshift=Fixed(0.1))
-        for name in ("met_logzsol", "met_alpha_fe", "met_logzsol_scatter"):
-            assert (
-                default_spec.get_distribution(name).value
-                == fixed_spec.get_distribution(name).value
-            ), name
-            assert default_spec._group_provenance[name] == fixed_spec._group_provenance[name], name
+        expected = {"met_logzsol": 0.0, "met_alpha_fe": 0.0, "met_logzsol_scatter": 0.1}
+        for name, value in expected.items():
+            assert spec.get_distribution(name).value == value, name
+            assert spec._group_provenance[name] == "wildcard_fixed", name
 
     def test_top_level_redshift(self):
-        """redshift=Fixed(DEFAULT) pins the same value redshift=FIXED would."""
-        default_spec = parse_groups(
-            sfh={"type": "dpl", "all_params": FIXED}, redshift=Fixed(DEFAULT)
+        """redshift=Fixed(DEFAULT) pins at the registry default for redshift."""
+        spec = parse_groups(
+            sfh={"type": "dpl", "all_params": Fixed(DEFAULT)}, redshift=Fixed(DEFAULT)
         )
-        # TEMPORARY dual-window test: rewrite against Fixed(DEFAULT)-only in the removal wave
-        fixed_spec = parse_groups(sfh={"type": "dpl", "all_params": FIXED}, redshift=FIXED)
-        assert (
-            default_spec.get_distribution("redshift").value
-            == fixed_spec.get_distribution("redshift").value
-        )
-        assert (
-            default_spec._group_provenance["redshift"]
-            == fixed_spec._group_provenance["redshift"]
-            == "user_fixed"
-        )
+        assert spec.get_distribution("redshift").value == 0.1
+        assert spec._group_provenance["redshift"] == "user_fixed"
 
 
 # ── (b) The #412 pin: canonical table, not the prior midpoint ──────────────
@@ -185,7 +156,7 @@ class TestBareDefaultRaises:
 
     def test_top_level_redshift(self):
         with pytest.raises(ParameterError, match="Fixed\\(DEFAULT\\)"):
-            parse_groups(sfh={"type": "dpl", "all_params": FIXED}, redshift=DEFAULT)
+            parse_groups(sfh={"type": "dpl", "all_params": Fixed(DEFAULT)}, redshift=DEFAULT)
 
 
 # ── (e) Serialization ───────────────────────────────────────────────────────
@@ -212,44 +183,50 @@ class TestSerialization:
         assert isinstance(restored, Fixed)
         assert restored._value is DEFAULT
 
-        # And it resolves through parse_groups exactly like the original.
+        # And it resolves through parse_groups to the registry default (the
+        # declared ``default=`` for sfh_dpl_log_total_mass is 10.0).
         default_spec = parse_groups(**deserialized)
-        fixed_spec = parse_groups(
-            sfh={"type": "dpl", "log_total_mass": FIXED}, redshift=Fixed(0.1)
-        )
-        assert (
-            default_spec.get_distribution("sfh_dpl_log_total_mass").value
-            == fixed_spec.get_distribution("sfh_dpl_log_total_mass").value
-        )
+        assert default_spec.get_distribution("sfh_dpl_log_total_mass").value == 10.0
 
-    def test_legacy_fixed_string_still_deserializes(self):
-        """The pre-existing "FIXED" string arm is untouched this wave."""
-        deserialized = deserialize_config({"sfh": {"all_params": "FIXED"}})
-        assert deserialized["sfh"]["all_params"] is FIXED
+    def test_legacy_fixed_string_now_raises_config_error(self):
+        """The removed FIXED sentinel's wire form ("FIXED") is a loud error.
+
+        Pre-1.0 clean break: a config serialized by an older tengri that wrote
+        the bare string "FIXED" must not silently resolve to something else --
+        it must name the replacement, ``Fixed(DEFAULT)``.
+        """
+        with pytest.raises(ConfigError, match="the FIXED sentinel was removed"):
+            deserialize_config({"sfh": {"all_params": "FIXED"}})
 
 
 # ── (f) Builders ─────────────────────────────────────────────────────────
 
 
 class TestBuilders:
-    """builders.*(all_params=...) accepts Fixed(DEFAULT) alongside FIXED."""
+    """builders.*(all_params=...) accepts Fixed(DEFAULT); it is the factory default."""
 
-    def test_all_params_fixed_default_equivalent_to_fixed(self):
+    def test_all_params_fixed_default_is_the_factory_default(self):
+        """The wildcard emits verbatim, and pins every declared param at its
+        registry default when parsed (matching the declared ``default=`` for
+        each, not the prior midpoint)."""
         default_dict = builders.sfh.dpl(all_params=Fixed(DEFAULT))
-        # TEMPORARY dual-window test: rewrite against Fixed(DEFAULT)-only in the removal wave
-        fixed_dict = builders.sfh.dpl(all_params=FIXED)
+        assert default_dict == {"type": "dpl", "all_params": Fixed(DEFAULT)}
+        # The signature default (no all_params= given at all) is the same token.
+        assert builders.sfh.dpl() == default_dict
 
-        default_spec = parse_groups(sfh=default_dict, redshift=Fixed(0.1))
-        fixed_spec = parse_groups(sfh=fixed_dict, redshift=Fixed(0.1))
-        for name in ("sfh_dpl_alpha", "sfh_dpl_beta", "sfh_dpl_tau_gyr", "sfh_dpl_log_total_mass"):
-            assert (
-                default_spec.get_distribution(name).value
-                == fixed_spec.get_distribution(name).value
-            ), name
+        spec = parse_groups(sfh=default_dict, redshift=Fixed(0.1))
+        expected = {
+            "sfh_dpl_alpha": 1.5,
+            "sfh_dpl_beta": 1.0,
+            "sfh_dpl_tau_gyr": 3.0,
+            "sfh_dpl_log_total_mass": 10.0,
+        }
+        for name, value in expected.items():
+            assert spec.get_distribution(name).value == value, name
 
     def test_concrete_fixed_value_still_rejected(self):
-        """Fixed(1.5) is not a valid wildcard value -- only FREE/FIXED/Fixed(DEFAULT)."""
-        with pytest.raises(ValueError, match="expected FREE or FIXED"):
+        """Fixed(1.5) is not a valid wildcard value -- only FREE/Fixed(DEFAULT)."""
+        with pytest.raises(ValueError, match=r"expected FREE or Fixed\(DEFAULT\)"):
             builders.sfh.dpl(all_params=Fixed(1.5))
 
     def test_bare_default_rejected_with_fixed_default_pointer(self):

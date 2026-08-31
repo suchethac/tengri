@@ -6,7 +6,7 @@ sentinels, and distributions) to/from JSON and YAML format, enabling
 version-controlled, diffable model specifications.
 
 The serialization format encodes:
-- Sentinels (FREE, FIXED) as strings: "FREE", "FIXED"
+- Sentinels (FREE) as strings: "FREE"
 - Fixed values as: {"__fixed__": value}  or bare scalars
 - An unresolved Fixed(DEFAULT) build-grammar token as: {"__fixed_default__": true}
   (kept distinct from {"__fixed__": "DEFAULT"}, which is the legal categorical
@@ -23,15 +23,19 @@ Non-portable values (e.g., absolute file paths) are handled by:
 
 Examples
 --------
->>> from tengri import SEDModel, FREE, FIXED, Uniform, Fixed, load_ssp_data
+>>> from tengri import SEDModel, FREE, Fixed, DEFAULT, Uniform, load_ssp_data
 >>> ssp = load_ssp_data("data/ssp.h5")
 >>>
 >>> # Create a model
 >>> model = SEDModel.build(
 ...     ssp_data=ssp,
 ...     sfh={"type": "dpl", "all_params": FREE, "beta": Uniform(1, 3)},
-...     dust_attenuation={"type": "two_component", "law": "calzetti", "all_params": FIXED},
-...     dust_emission={"type": "dale2014", "all_params": FIXED},
+...     dust_attenuation={
+...         "type": "two_component",
+...         "law": "calzetti",
+...         "all_params": Fixed(DEFAULT),
+...     },
+...     dust_emission={"type": "dale2014", "all_params": Fixed(DEFAULT)},
 ...     redshift=Fixed(0.1),
 ... )
 >>>
@@ -57,7 +61,7 @@ except ImportError:
 
 from tengri.config.exceptions import ConfigError
 from tengri.parameters.priors import Distribution, _is_default_fixed
-from tengri.parameters.sentinels import FIXED, FREE, _Sentinel
+from tengri.parameters.sentinels import DEFAULT, FREE, _Sentinel
 
 __all__ = [
     "deserialize_config",
@@ -77,7 +81,7 @@ def serialize_config(config: ConfigDict) -> ConfigDict:
     """Recursively serialize a model config for JSON/YAML output.
 
     Converts:
-    - Sentinel objects (FREE, FIXED) → strings "FREE", "FIXED"
+    - Sentinel objects (FREE) → strings "FREE"
     - Fixed(value) → {"__fixed__": value} or bare scalar
     - Distribution(...) → {"__prior__": "ClassName", ...}
     - Other dicts/lists → recursed
@@ -103,8 +107,23 @@ def serialize_config(config: ConfigDict) -> ConfigDict:
 
 def _serialize_recursive(obj: Any, path: list[str]) -> Any:
     """Recursively serialize an object."""
+    if obj is DEFAULT:
+        # Bare DEFAULT is only legal as the argument of Fixed(...); an
+        # unresolved Fixed(DEFAULT) token is a Distribution and is handled by
+        # the branch below (which wire-forms it as {"__fixed_default__":
+        # true}), never reaching here. A resolved ``model.config``
+        # (``parameters_to_groups``'s output) never carries a bare DEFAULT
+        # either, so reaching this branch means a caller handed
+        # ``serialize_config`` a hand-built dict with the bare sentinel in
+        # it. Refuse rather than silently emit the string "DEFAULT", which
+        # would deserialize back as a plain string, not the sentinel.
+        _raise_config_error(
+            path,
+            "bare DEFAULT is not serializable; it is only legal as the "
+            "argument of Fixed(...) (write Fixed(DEFAULT))",
+        )
     if isinstance(obj, _Sentinel):
-        return obj.name  # "FREE" or "FIXED"
+        return obj.name  # "FREE" -- the only other sentinel, DEFAULT, is handled above
     elif isinstance(obj, Distribution):
         return distribution_to_dict(obj)
     elif isinstance(obj, dict):
@@ -187,7 +206,10 @@ def deserialize_config(config: ConfigDict) -> ConfigDict:
     """Recursively deserialize a model config from JSON/YAML input.
 
     Converts:
-    - Strings "FREE", "FIXED" (case-insensitive) → Sentinel objects
+    - String "FREE" (case-insensitive) → Sentinel object; the retired
+      wildcard-pin sentinel's string form raises
+      :class:`~tengri.config.exceptions.ConfigError` naming
+      ``Fixed(DEFAULT)`` / ``{"__fixed_default__": true}`` as the replacement
     - Dicts with "__fixed__" key → Fixed(value)
     - Dicts with "__prior__" key → Distribution instance
     - Other dicts/lists → recursed
@@ -224,7 +246,11 @@ def _deserialize_recursive(obj: Any, path: list[str]) -> Any:
         if upper == "FREE":
             return FREE
         elif upper == "FIXED":
-            return FIXED
+            _raise_config_error(
+                path,
+                "the FIXED sentinel was removed; write Fixed(DEFAULT), wire form "
+                '{"__fixed_default__": true}',
+            )
         else:
             return obj  # Regular string
     elif isinstance(obj, dict):

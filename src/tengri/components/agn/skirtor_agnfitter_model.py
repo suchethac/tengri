@@ -131,7 +131,7 @@ class SKIRTORAgnfitterTorus(SEDModelComponent):
     --------
     Minimal model with SKIRTOR_mean_3p torus::
 
-        from tengri import SEDModel, Fixed, FIXED, Uniform, builders
+        from tengri import SEDModel, Fixed, DEFAULT, Uniform, builders
         from tengri.components.agn.skirtor_agnfitter_model import (
             SKIRTORAgnfitterTorus,
             SKIRTORAgnfitterTorusConfig,
@@ -141,7 +141,7 @@ class SKIRTORAgnfitterTorus(SEDModelComponent):
             ssp_data=ssp,
             observation=obs,
             sfh=builders.sfh.dpl(alpha=Fixed(1.5), beta=Fixed(1.0)),
-            dust_attenuation={"type": "two_component", "all_params": FIXED},
+            dust_attenuation={"type": "two_component", "all_params": Fixed(DEFAULT)},
             agn=SKIRTORAgnfitterTorus(
                 config=SKIRTORAgnfitterTorusConfig(grid_path="path/to/grid.h5")
             ),

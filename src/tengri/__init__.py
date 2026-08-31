@@ -51,8 +51,8 @@ What is in the package
 ======================
 
 **Model construction:** ``SEDModel``, ``ForwardModel``, ``recipes``,
-``builders``, ``Parameters``, ``parse_groups``, and the ``FREE``/``FIXED``/
-``DEFAULT`` sentinels (``DEFAULT`` legal only as ``Fixed(DEFAULT)``) with the
+``builders``, ``Parameters``, ``parse_groups``, and the ``FREE``/``DEFAULT``
+sentinels (``DEFAULT`` legal only as ``Fixed(DEFAULT)``) with the
 seven distributions (``Uniform``, ``Gaussian``, ``Fixed``, ``LogUniform``,
 ``LogNormal``, ``StudentT``, ``Laplace``).
 
@@ -452,7 +452,7 @@ from tengri.parameters.registry import (
     list_parameters,
     recipe_parameters,
 )
-from tengri.parameters.sentinels import DEFAULT, FIXED, FREE
+from tengri.parameters.sentinels import DEFAULT, FREE
 from tengri.protocols import ComponentIOError, DerivedKey, DerivedState, ForwardState
 from tengri.utils import jit_logging
 from tengri.utils.batching import vmap_chunked
@@ -591,7 +591,6 @@ from tengri.registry import (
 __all__ = [  # noqa: RUF022
     # ========== Tier 1: CORE (user-facing classes for a first fit) ==========
     # Sentinels & distributions
-    "FIXED",
     "FREE",
     "DEFAULT",
     "Fixed",
@@ -883,9 +882,8 @@ _CURATED_DIR = (
     "LineList",
     "Instrument",
     "list_instruments",
-    # 3.  Priors / distributions (+ the FREE/FIXED/DEFAULT build sentinels)
+    # 3.  Priors / distributions (+ the FREE/DEFAULT build sentinels)
     "FREE",
-    "FIXED",
     "DEFAULT",
     "Uniform",
     "Gaussian",

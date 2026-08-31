@@ -12,7 +12,7 @@ import tempfile
 import pytest
 
 from tengri import (
-    FIXED,
+    DEFAULT,
     FREE,
     Fixed,
     Uniform,
@@ -21,6 +21,7 @@ from tengri import (
 )
 from tengri.config.serialize import (
     deserialize_config,
+    serialize_config,
 )
 from tengri.forward.sed_model import SEDModel
 
@@ -54,12 +55,12 @@ class TestRoundTripInvariant:
         """
         model1 = SEDModel.build(
             ssp_data=ssp_data,
-            sfh={"type": "dpl", "all_params": FIXED},
+            sfh={"type": "dpl", "all_params": Fixed(DEFAULT)},
             dust_attenuation={
                 "type": "two_component",
                 "law_bc": "calzetti",
                 "law_diff": "power_law",
-                "all_params": FIXED,
+                "all_params": Fixed(DEFAULT),
             },
             filters=filters,
             redshift=Fixed(0.1),
@@ -83,12 +84,16 @@ class TestRoundTripInvariant:
         """
         model1 = SEDModel.build(
             ssp_data=ssp_data,
-            sfh={"type": "dpl", "all_params": FIXED},
-            dust_attenuation={"type": "single_component", "law": "calzetti", "all_params": FIXED},
+            sfh={"type": "dpl", "all_params": Fixed(DEFAULT)},
+            dust_attenuation={
+                "type": "single_component",
+                "law": "calzetti",
+                "all_params": Fixed(DEFAULT),
+            },
             dust_emission={
                 "type": "dale2014",
                 "eta_balance": Uniform(0.3, 0.7),
-                "all_params": FIXED,
+                "all_params": Fixed(DEFAULT),
             },
             filters=filters,
             redshift=Fixed(0.1),
@@ -112,9 +117,13 @@ class TestRoundTripInvariant:
         """
         model1 = SEDModel.build(
             ssp_data=ssp_data,
-            sfh={"type": "dpl", "all_params": FIXED},
-            dust_attenuation={"type": "single_component", "law": "calzetti", "all_params": FIXED},
-            dust_emission={"type": "dale2014", "all_params": FIXED},
+            sfh={"type": "dpl", "all_params": Fixed(DEFAULT)},
+            dust_attenuation={
+                "type": "single_component",
+                "law": "calzetti",
+                "all_params": Fixed(DEFAULT),
+            },
+            dust_emission={"type": "dale2014", "all_params": Fixed(DEFAULT)},
             filters=filters,
             redshift=Fixed(0.1),
         )
@@ -158,12 +167,12 @@ class TestRoundTripInvariant:
         """
         model1 = SEDModel.build(
             ssp_data=ssp_data,
-            sfh={"type": "dpl", "all_params": FIXED},
+            sfh={"type": "dpl", "all_params": Fixed(DEFAULT)},
             agn={
                 "type": "composable",
-                "disc": {"type": "powerlaw", "all_params": FIXED},
-                "torus": {"type": "skirtor", "all_params": FIXED},
-                "all_params": FIXED,
+                "disc": {"type": "powerlaw", "all_params": Fixed(DEFAULT)},
+                "torus": {"type": "skirtor", "all_params": Fixed(DEFAULT)},
+                "all_params": Fixed(DEFAULT),
             },
             filters=filters,
             redshift=Fixed(0.1),
@@ -232,6 +241,40 @@ class TestSerializationErrorHandling:
                 ssp_data=ssp_data,
             )
 
+    @pytest.mark.parametrize("legacy", ["FIXED", "fixed", "Fixed"])
+    def test_legacy_fixed_string_raises_config_error(self, legacy):
+        """The retired FIXED sentinel's wire form (any case) is a loud error.
+
+        The FIXED sentinel was removed pre-1.0; a config written by an older
+        tengri that serialized it as the bare string "FIXED" must not
+        silently resolve to something else -- it must name the replacement.
+        """
+        from tengri.config.exceptions import ConfigError
+
+        with pytest.raises(ConfigError, match="the FIXED sentinel was removed"):
+            deserialize_config({"redshift": legacy})
+
+
+class TestFixedDefaultWireForm:
+    """``Fixed(DEFAULT)``'s wire form, ``{"__fixed_default__": true}``, round-trips."""
+
+    def test_fixed_default_serializes_to_wire_form(self):
+        assert serialize_config({"x": Fixed(DEFAULT)}) == {"x": {"__fixed_default__": True}}
+
+    def test_wire_form_deserializes_to_fixed_default(self):
+        restored = deserialize_config({"x": {"__fixed_default__": True}})
+        assert restored["x"] == Fixed(DEFAULT)
+
+    def test_fixed_default_round_trips_through_serialize_deserialize(self):
+        config = {"sfh": {"type": "dpl", "all_params": Fixed(DEFAULT)}}
+        restored = deserialize_config(serialize_config(config))
+        assert restored == config
+
+    def test_free_still_round_trips_as_the_string_free(self):
+        """FREE's wire form is unchanged by the FIXED sentinel's removal."""
+        assert serialize_config({"x": FREE}) == {"x": "FREE"}
+        assert deserialize_config({"x": "FREE"})["x"] is FREE
+
 
 class TestFileIOFormats:
     """Test file I/O for different formats."""
@@ -240,7 +283,7 @@ class TestFileIOFormats:
         """Test saving and loading YAML config file."""
         model1 = SEDModel.build(
             ssp_data=ssp_data,
-            sfh={"type": "dpl", "all_params": FIXED},
+            sfh={"type": "dpl", "all_params": Fixed(DEFAULT)},
             filters=filters,
             redshift=Fixed(0.1),
         )
@@ -257,7 +300,7 @@ class TestFileIOFormats:
         """Test saving and loading JSON config file."""
         model1 = SEDModel.build(
             ssp_data=ssp_data,
-            sfh={"type": "dpl", "all_params": FIXED},
+            sfh={"type": "dpl", "all_params": Fixed(DEFAULT)},
             filters=filters,
             redshift=Fixed(0.1),
         )

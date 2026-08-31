@@ -42,7 +42,7 @@ def test_baked_in_warns_by_default():
 
 def test_baked_in_raises_when_requested():
     """BakedInBackend raises ValueError in 'raise' mode."""
-    with pytest.raises(ValueError, match="FIXED logU"):
+    with pytest.raises(ValueError, match="fixed logU"):
         BakedInBackend(ionizing_source_warning="raise")
 
 

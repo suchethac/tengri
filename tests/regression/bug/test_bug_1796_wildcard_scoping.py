@@ -12,7 +12,7 @@ import warnings
 
 import pytest
 
-from tengri import FIXED, FREE, Fixed, Uniform
+from tengri import DEFAULT, FREE, Fixed, Uniform
 from tengri.config.exceptions import WildcardPartialFreeWarning
 from tengri.parameters import parse_groups
 
@@ -26,7 +26,7 @@ class TestSFHWildcardMustNotFreeMet:
         """sfh={'all_params': FREE} with no met block should NOT free met_logzsol (#1796).
 
         When there is no explicit met block, met_* parameters should be pinned
-        at their Fixed defaults (as if met={'all_params': FIXED} was implicit).
+        at their Fixed defaults (as if met={'all_params': Fixed(DEFAULT)} was implicit).
         """
         spec = parse_groups(
             sfh={"type": "dpl", "all_params": FREE},
@@ -36,27 +36,27 @@ class TestSFHWildcardMustNotFreeMet:
             redshift=0.1,
         )
 
-        # met_logzsol should NOT be free (no met block means implicit FIXED)
+        # met_logzsol should NOT be free (no met block means implicit fixed)
         assert "met_logzsol" not in spec.free_params, (
             "met_logzsol should be Fixed when no met block is provided"
         )
 
     def test_sfh_fixed_fixes_met_params(self):
-        """sfh={'all_params': FIXED} should also fix met_* parameters."""
+        """sfh={'all_params': Fixed(DEFAULT)} should also fix met_* parameters."""
         spec = parse_groups(
-            sfh={"type": "dpl", "all_params": FIXED},
+            sfh={"type": "dpl", "all_params": Fixed(DEFAULT)},
             dust_attenuation={"type": "none"},
             neb={"type": "none"},
             agn={"type": "none"},
             redshift=0.1,
         )
 
-        # met_logzsol should be fixed when sfh wildcard is FIXED
+        # met_logzsol should be fixed when sfh wildcard is Fixed(DEFAULT)
         assert "met_logzsol" not in spec.free_params
 
     def test_met_block_prevents_sfh_from_freeing_met_params(self):
         """With explicit met block, sfh wildcard never touches met_* params."""
-        # met_logzsol in a met block with FIXED default
+        # met_logzsol in a met block with a fixed default
         spec = parse_groups(
             sfh={"type": "dpl", "all_params": FREE},
             met={"type": "table"},  # Default behavior
@@ -125,12 +125,12 @@ class TestSFHWildcardMustNotFreeMet:
             )
 
     def test_no_warning_for_sfh_fixed_no_met_block(self):
-        """sfh={'all_params': FIXED} with no met block should NOT emit warning."""
+        """sfh={'all_params': Fixed(DEFAULT)} with no met block should NOT emit warning."""
         with warnings.catch_warnings():
             warnings.simplefilter("error", WildcardPartialFreeWarning)
             # Should not raise because the warning should not fire
             parse_groups(
-                sfh={"type": "dpl", "all_params": FIXED},
+                sfh={"type": "dpl", "all_params": Fixed(DEFAULT)},
                 dust_attenuation={"type": "none"},
                 neb={"type": "none"},
                 agn={"type": "none"},

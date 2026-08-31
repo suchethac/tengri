@@ -123,12 +123,12 @@ class Distribution:
 
     @property
     def default(self) -> float | str | None:
-        """Physically-motivated default value when this knob is marked FIXED
-        without an explicit user-supplied value.
+        """Physically-motivated default value when this knob is pinned at its
+        registry default without an explicit user-supplied value.
 
         Returns None if no default was registered at construction. Downstream
         code (``parameters/groups.py``) raises ``ParameterDefaultMissingError``
-        if a registry entry is converted to ``Fixed`` via the ``'*': FIXED``
+        if a registry entry is converted to ``Fixed`` via the ``'*': Fixed(DEFAULT)``
         wildcard but the distribution carries no default.
 
         For ``Fixed(value)``, ``default`` is the value itself: see
@@ -173,7 +173,7 @@ class Distribution:
             raise ValueError(
                 f"{type(self).__name__}: default={default} is outside bounds "
                 f"[{lo}, {hi}]. Defaults must lie within the prior support so "
-                f"the FIXED-fallback value is consistent with the prior."
+                f"the fixed-fallback value is consistent with the prior."
             )
         self._default = float(default)
 
@@ -268,7 +268,7 @@ class Distribution:
 
     #: Attributes that never reach the compiled graph, so they must not key it.
     #: Metadata for ``describe_parameter``/``spec.summary()`` plus the
-    #: FIXED-fallback default, none of which ``unstandardize`` reads.
+    #: fixed-fallback default, none of which ``unstandardize`` reads.
     _JIT_IRRELEVANT_ATTRS: frozenset[str] = frozenset({"description", "units", "_default"})
 
     def jit_cache_key(self) -> tuple:

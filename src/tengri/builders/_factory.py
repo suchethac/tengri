@@ -19,21 +19,26 @@ import inspect
 from collections.abc import Callable
 from typing import Any
 
-from tengri.parameters.priors import _is_default_fixed
-from tengri.parameters.sentinels import DEFAULT, FIXED, FREE, WILDCARD_ALIAS
+from tengri.parameters.priors import Fixed, _is_default_fixed
+from tengri.parameters.sentinels import DEFAULT, FREE, WILDCARD_ALIAS
 
 # Sentinel marking a parameter that was not specified at call time. We
 # can't use ``None`` because ``None`` is a legitimate dict value users
-# might want to pass through; can't use ``FREE`` / ``FIXED`` because those
-# carry semantic meaning.
+# might want to pass through; can't use ``FREE`` / ``Fixed(DEFAULT)`` because
+# those carry semantic meaning.
 UNSET = object()
+
+#: The wildcard's default value: every factory signature (and ``_pop_wildcard``'s
+#: fallback) shares this one instance rather than constructing a fresh
+#: ``Fixed(DEFAULT)`` per call/signature.
+_DEFAULT_WILDCARD = Fixed(DEFAULT)
 
 
 def _validate_wildcard(label: str, wildcard: Any) -> None:
     """Validate a builder factory's ``all_params=`` / ``other_params=`` value.
 
-    Accepts ``FREE``, ``FIXED``, or an unresolved ``Fixed(DEFAULT)`` token
-    (the per-parameter "pin at the registry default" spelling, also legal in
+    Accepts ``FREE`` or an unresolved ``Fixed(DEFAULT)`` token (the
+    per-parameter "pin at the registry default" spelling, also legal in
     the wildcard slot). Rejects everything else, including a concrete
     ``Fixed(v)`` and a bare ``DEFAULT`` sentinel -- the latter gets its own
     message pointing at ``Fixed(DEFAULT)``.
@@ -53,9 +58,9 @@ def _validate_wildcard(label: str, wildcard: Any) -> None:
     Raises
     ------
     ValueError
-        If ``wildcard`` is not ``FREE``, ``FIXED``, or ``Fixed(DEFAULT)``.
+        If ``wildcard`` is not ``FREE`` or ``Fixed(DEFAULT)``.
     """
-    if wildcard is FREE or wildcard is FIXED or _is_default_fixed(wildcard):
+    if wildcard is FREE or _is_default_fixed(wildcard):
         return
     if wildcard is DEFAULT:
         raise ValueError(
@@ -63,9 +68,16 @@ def _validate_wildcard(label: str, wildcard: Any) -> None:
             f"DEFAULT is only legal as the argument of Fixed(...); did you mean "
             f"all_params=Fixed(DEFAULT)?"
         )
+    if isinstance(wildcard, Fixed):
+        raise ValueError(
+            f"{label}(all_params=...): expected FREE or Fixed(DEFAULT), got "
+            f"{wildcard!r}. A concrete Fixed(v) cannot be the wildcard value: one "
+            f"literal value cannot apply across different parameters -- give this "
+            f"parameter its own keyword instead."
+        )
     raise ValueError(
-        f"{label}(all_params=...): expected FREE or FIXED, got "
-        f"{wildcard!r}. Use tengri.FREE or tengri.FIXED."
+        f"{label}(all_params=...): expected FREE or Fixed(DEFAULT), got "
+        f"{wildcard!r}. Use tengri.FREE or tengri.Fixed(tengri.DEFAULT)."
     )
 
 
@@ -116,8 +128,8 @@ def make_factory(
             raise TypeError(
                 f"{variant}() got unexpected keyword arguments: {unknown}. "
                 f"Valid: {valid_kwargs}. "
-                f"(Pass ``all_params=FREE`` or ``all_params=FIXED`` -- or the synonym "
-                f"``other_params=`` -- to set the policy.)"
+                f"(Pass ``all_params=FREE`` or ``all_params=Fixed(DEFAULT)`` -- or the "
+                f"synonym ``other_params=`` -- to set the policy.)"
             )
 
         # Auto-enable flag when a flag-conditional param was given.
@@ -138,7 +150,7 @@ def make_factory(
         inspect.Parameter(
             "all_params",
             inspect.Parameter.KEYWORD_ONLY,
-            default=FIXED,
+            default=_DEFAULT_WILDCARD,
             annotation=Any,
         ),
         inspect.Parameter(
@@ -179,10 +191,10 @@ def make_factory(
         lines.append("")
     lines.append("Parameters")
     lines.append("----------")
-    lines.append("all_params : sentinel, optional")
+    lines.append("all_params : sentinel or Fixed, optional")
     lines.append(
         "    Wildcard policy for parameters not explicitly named. ``FREE`` "
-        "makes them fit; ``FIXED`` (default) pins them to their registry "
+        "makes them fit; ``Fixed(DEFAULT)`` (default) pins them to their registry "
         "center. Matches the ``'all_params'`` key in the dict grammar."
     )
     lines.append("other_params : sentinel, optional")
@@ -259,7 +271,7 @@ def _pop_wildcard(variant: str, kwargs: dict[str, Any]) -> Any:
         return kwargs.pop("all_params")
     if has_other:
         return kwargs.pop("other_params")
-    return FIXED
+    return _DEFAULT_WILDCARD
 
 
 def short_form(full_name: str, *, prefixes: tuple[str, ...]) -> str:

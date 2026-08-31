@@ -15,7 +15,7 @@ pytestmark = pytest.mark.contract
 from tengri import parse_groups, recipes
 from tengri.parameters.priors import Fixed, Uniform
 from tengri.parameters.registry import ParameterRecord, recipe_parameters
-from tengri.parameters.sentinels import FIXED, FREE
+from tengri.parameters.sentinels import DEFAULT, FREE
 
 
 class TestRecipeParametersStructure:
@@ -107,10 +107,14 @@ class TestRecipeParametersManualRecipes:
     """Test with manually constructed recipe dicts."""
 
     def test_minimal_recipe_returns_records(self):
-        """Minimal recipe with FREE/FIXED sentinels works correctly."""
+        """Minimal recipe with FREE/Fixed(DEFAULT) sentinels works correctly."""
         recipe = {
             "sfh": {"type": "dpl", "all_params": FREE},
-            "dust_attenuation": {"law": "power_law", "type": "two_component", "all_params": FIXED},
+            "dust_attenuation": {
+                "law": "power_law",
+                "type": "two_component",
+                "all_params": Fixed(DEFAULT),
+            },
             "neb": {"type": "none"},
             "redshift": Fixed(0.05),
         }
@@ -131,7 +135,7 @@ class TestRecipeParametersManualRecipes:
                 "all_params": FREE,
                 "tau_bc": Uniform(0, 1),
             },
-            "neb": {"type": "cue", "all_params": FIXED},
+            "neb": {"type": "cue", "all_params": Fixed(DEFAULT)},
             "redshift": Uniform(0.01, 6.0),
         }
         params = recipe_parameters(recipe, free_only=True)

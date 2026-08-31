@@ -26,8 +26,8 @@ factories give per-variant signatures generated from the registry, so:
 
 Examples
 --------
->>> from tengri import SEDModel, builders, FREE, FIXED, Uniform, Fixed
->>> # Equivalent to {'type': 'dpl', 'all_params': FIXED, 'beta': Uniform(1, 3)}
+>>> from tengri import SEDModel, builders, FREE, DEFAULT, Uniform, Fixed
+>>> # Equivalent to {'type': 'dpl', 'all_params': Fixed(DEFAULT), 'beta': Uniform(1, 3)}
 >>> sfh_config = builders.sfh.dpl(beta=Uniform(1, 3))
 >>> # All params free unless overridden:
 >>> sfh_config = builders.sfh.dpl(all_params=FREE)
@@ -46,14 +46,14 @@ from collections.abc import Callable
 from typing import Any
 
 from tengri._completion import curated_dir
-from tengri.builders._factory import _pop_wildcard, _validate_wildcard
+from tengri.builders._factory import _DEFAULT_WILDCARD, _pop_wildcard, _validate_wildcard
 from tengri.components.stellar.sfh.registry import SFH_REGISTRY
-from tengri.parameters.sentinels import FIXED, WILDCARD_ALIAS
+from tengri.parameters.sentinels import WILDCARD_ALIAS
 
 # Sentinel marking a parameter that was not specified at call time. We
 # can't use ``None`` because ``None`` is a legitimate dict value users
-# might want to pass through; can't use ``FREE`` / ``FIXED`` because those
-# carry semantic meaning. A bare ``object()`` does the job.
+# might want to pass through; can't use ``FREE`` / ``Fixed(DEFAULT)`` because
+# those carry semantic meaning. A bare ``object()`` does the job.
 _UNSET = object()
 
 
@@ -87,10 +87,10 @@ def _build_docstring(variant: str, spec, param_records: list[tuple[str, Any]]) -
         lines.append("")
     lines.append("Parameters")
     lines.append("----------")
-    lines.append("all_params : sentinel, optional")
+    lines.append("all_params : sentinel or Fixed, optional")
     lines.append(
         "    Wildcard policy for parameters not explicitly named in this call. "
-        "``FREE`` makes them fit; ``FIXED`` (default) pins them to their "
+        "``FREE`` makes them fit; ``Fixed(DEFAULT)`` (default) pins them to their "
         "registry-default center. Matches the ``'all_params'`` key in the dict grammar."
     )
     lines.append("other_params : sentinel, optional")
@@ -145,8 +145,8 @@ def _make_factory(variant: str, spec) -> Callable[..., dict]:
             raise TypeError(
                 f"{variant}() got unexpected keyword arguments: {unknown}. "
                 f"Valid parameter names for {variant!r}: {short_names}. "
-                f"(Pass ``all_params=FREE`` or ``all_params=FIXED`` -- or the synonym "
-                f"``other_params=`` -- to set the policy.)"
+                f"(Pass ``all_params=FREE`` or ``all_params=Fixed(DEFAULT)`` -- or the "
+                f"synonym ``other_params=`` -- to set the policy.)"
             )
         for short in short_names:
             if short in kwargs and kwargs[short] is not _UNSET:
@@ -158,7 +158,7 @@ def _make_factory(variant: str, spec) -> Callable[..., dict]:
         inspect.Parameter(
             "all_params",
             inspect.Parameter.KEYWORD_ONLY,
-            default=FIXED,
+            default=_DEFAULT_WILDCARD,
             annotation=Any,
         ),
         inspect.Parameter(

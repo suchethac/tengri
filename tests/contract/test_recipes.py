@@ -25,7 +25,7 @@ import jax
 import jax.numpy as jnp
 import pytest
 
-from tengri import Fixed, SEDModel, parse_groups, recipes
+from tengri import DEFAULT, Fixed, SEDModel, parse_groups, recipes
 
 pytestmark = pytest.mark.contract
 
@@ -394,7 +394,7 @@ class TestRecipeStructure:
         assert r["agn"]["disc"]["type"] == "kubota_done"
         assert r["agn"]["torus"]["type"] == "simple"
         assert r["sfh"]["type"] == "delayed"
-        assert r["sfh"]["all_params"] == recipes.FIXED
+        assert r["sfh"]["all_params"] == Fixed(DEFAULT)
         assert r["dust_attenuation"]["tau_bc"] == 0.0
         assert r["dust_attenuation"]["tau_diff"] == 0.0
         assert r["redshift"] == recipes.Fixed(0.0)

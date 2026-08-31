@@ -22,7 +22,7 @@ ionizing-spectrum shape), so a coarse SSP-grid interpolation is not enough
 (1-60 % line errors); a dense grid (~40 points) with linear interpolation
 reaches < 4e-4 on the strong DESI lines.
 
-Requires FIXED nebular ionization (logU, logZ_gas, fesc): guarded at build;
+Requires fixed nebular ionization (logU, logZ_gas, fesc): guarded at build;
 ``met_logzsol`` may be free (it is the LUT axis). See issue #950.
 
 .. warning::
@@ -118,7 +118,7 @@ def precompute_line_per_qh(
     Parameters
     ----------
     model : SEDModel
-        A model with a Cue (or other Q_H-linear) nebular backend and FIXED
+        A model with a Cue (or other Q_H-linear) nebular backend and fixed
         ``neb_logU`` / ``neb_logZ_gas`` / ``neb_fesc``.
     wavelengths : array_like, shape (n_lines,)
         Rest-frame vacuum target line wavelengths [Angstrom].
@@ -147,7 +147,7 @@ def precompute_line_per_qh(
     free_ion = [p for p in _REQUIRED_FIXED if p in set(model.spec.free_params)]
     if free_ion:
         raise ValueError(
-            f"precompute_line_per_qh requires FIXED nebular ionization, but "
+            f"precompute_line_per_qh requires fixed nebular ionization, but "
             f"{free_ion} are free. The table has a single metallicity axis; a "
             f"free ionization parameter changes line ratios and would make "
             f"reconstruction wrong away from its reference value. Fix these "

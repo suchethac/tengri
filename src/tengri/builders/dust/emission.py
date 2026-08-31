@@ -7,7 +7,7 @@ The grammar now separates dust attenuation and IR emission into two peer
 top-level groups:
 
 >>> dust_attenuation = {"type": "two_component", "law": "calzetti"}
->>> dust_emission = {"type": "dale2014", "all_params": FIXED, "alpha_dale": Fixed(2.0)}
+>>> dust_emission = {"type": "dale2014", "all_params": Fixed(DEFAULT), "alpha_dale": Fixed(2.0)}
 
 Each emission variant returned by
 ``tengri.parameters.groups._valid_dust_emission_types`` gets a
@@ -21,9 +21,11 @@ signature; the variant string selects the physics.
 
 Examples
 --------
->>> from tengri import builders, FIXED, Fixed
->>> builders.dust.emission.dale2014(all_params=FIXED, alpha_dale=Fixed(2.0))  # doctest: +SKIP
-{'type': 'dale2014', 'all_params': FIXED, 'alpha_dale': Fixed(2.0)}
+>>> from tengri import builders, Fixed, DEFAULT
+>>> builders.dust.emission.dale2014(
+...     all_params=Fixed(DEFAULT), alpha_dale=Fixed(2.0)
+... )  # doctest: +SKIP
+{'type': 'dale2014', 'all_params': Fixed(DEFAULT), 'alpha_dale': Fixed(2.0)}
 """
 
 from __future__ import annotations
@@ -136,7 +138,7 @@ def relaxed_energy_balance(model: str = "dale2014", *, sigma: float = 0.2) -> di
     Returns
     -------
     dict
-        A ``dust_emission`` group dict, e.g. ``{'type': 'dale2014', 'all_params': FIXED,
+        A ``dust_emission`` group dict, e.g. ``{'type': 'dale2014', 'all_params': Fixed(DEFAULT),
         'eta_balance': LogNormal(mu=0.0, sigma=0.2)}``.
 
     Examples
@@ -145,16 +147,24 @@ def relaxed_energy_balance(model: str = "dale2014", *, sigma: float = 0.2) -> di
     >>> model = SEDModel.build(  # doctest: +SKIP
     ...     ssp_data=ssp,
     ...     observation=obs,
-    ...     dust_attenuation={"type": "two_component", "law": "calzetti", "all_params": FIXED},
+    ...     dust_attenuation={
+    ...         "type": "two_component",
+    ...         "law": "calzetti",
+    ...         "all_params": Fixed(DEFAULT),
+    ...     },
     ...     dust_emission=builders.dust.emission.relaxed_energy_balance(),
     ... )
     """
-    from tengri.parameters.priors import LogNormal
-    from tengri.parameters.sentinels import FIXED
+    from tengri.parameters.priors import Fixed, LogNormal
+    from tengri.parameters.sentinels import DEFAULT
 
     if model not in _FACTORIES:
         raise ValueError(f"Unknown dust emission model {model!r}. Available: {available()}")
-    return {"type": model, WILDCARD_ALIAS: FIXED, "eta_balance": LogNormal(mu=0.0, sigma=sigma)}
+    return {
+        "type": model,
+        WILDCARD_ALIAS: Fixed(DEFAULT),
+        "eta_balance": LogNormal(mu=0.0, sigma=sigma),
+    }
 
 
 __all__ = ["available", "relaxed_energy_balance", *sorted(_FACTORIES)]

@@ -12,25 +12,25 @@ AGN composition has five orthogonal sub-block axes (``disc``,
 ...     "all_params": FREE,
 ...     "log_lbol": Uniform(9.42, 13.42),
 ...     "disc": {"type": "multicolor", "all_params": FREE},
-...     "torus": {"type": "skirtor", "all_params": FIXED},
+...     "torus": {"type": "skirtor", "all_params": Fixed(DEFAULT)},
 ...     "nlr": {"type": "analytic"},
 ...     "blr": {"type": "analytic"},
 ...     "feii": {"type": "none"},
-...     "atten": {"law": "prevot_smc", "all_params": FIXED},
+...     "atten": {"law": "prevot_smc", "all_params": Fixed(DEFAULT)},
 ... }
 
 The factory mirror:
 
->>> from tengri import builders, FREE, FIXED, Uniform
+>>> from tengri import builders, FREE, Fixed, DEFAULT, Uniform
 >>> agn = builders.agn.composable(
 ...     all_params=FREE,
 ...     log_lbol=Uniform(9.42, 13.42),
 ...     disc=builders.agn.disc.multicolor(all_params=FREE),
-...     torus=builders.agn.torus.skirtor(all_params=FIXED),
+...     torus=builders.agn.torus.skirtor(all_params=Fixed(DEFAULT)),
 ...     nlr=builders.agn.nlr.analytic(),
 ...     blr=builders.agn.blr.analytic(),
 ...     feii=builders.agn.feii.none(),
-...     atten=builders.agn.atten.smc_prevot(all_params=FIXED),
+...     atten=builders.agn.atten.smc_prevot(all_params=Fixed(DEFAULT)),
 ... )
 
 All 14 top-level AGN models are exposed as factories:
@@ -65,6 +65,7 @@ from typing import Any
 
 from tengri._completion import curated_dir
 from tengri.builders._factory import (
+    _DEFAULT_WILDCARD,
     UNSET,
     _pop_wildcard,
     _validate_wildcard,
@@ -74,7 +75,7 @@ from tengri.builders._factory import (
 from tengri.builders.agn import atten, blr, disc, feii, nlr, torus
 from tengri.parameters.groups import _AGN_PARTITION
 from tengri.parameters.registry import recipe_parameters
-from tengri.parameters.sentinels import FIXED, FREE, WILDCARD_ALIAS
+from tengri.parameters.sentinels import FREE, WILDCARD_ALIAS
 
 _AXIS_MODULES = {
     "disc": disc,
@@ -139,8 +140,8 @@ def composable(**kwargs: Any) -> dict:
             f"agn.composable() got unexpected keyword arguments: {unknown}. "
             f"Valid sub-blocks: {list(_AXIS_MODULES)}. "
             f"Valid shared params: {_SHARED_SHORT_PARAMS}. "
-            f"(Pass ``all_params=FREE`` or ``all_params=FIXED`` -- or the synonym "
-            f"``other_params=`` -- to set the policy.)"
+            f"(Pass ``all_params=FREE`` or ``all_params=Fixed(DEFAULT)`` -- or the "
+            f"synonym ``other_params=`` -- to set the policy.)"
         )
     out: dict[str, Any] = {"type": "composable", WILDCARD_ALIAS: wildcard}
     for short in _SHARED_SHORT_PARAMS:
@@ -154,7 +155,9 @@ def composable(**kwargs: Any) -> dict:
 
 # Attach a real signature so IDEs see the sub-block + shared-param kwargs.
 _sig_params = [
-    inspect.Parameter("all_params", inspect.Parameter.KEYWORD_ONLY, default=FIXED, annotation=Any),
+    inspect.Parameter(
+        "all_params", inspect.Parameter.KEYWORD_ONLY, default=_DEFAULT_WILDCARD, annotation=Any
+    ),
     inspect.Parameter(
         "other_params", inspect.Parameter.KEYWORD_ONLY, default=UNSET, annotation=Any
     ),

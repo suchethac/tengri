@@ -9,14 +9,12 @@ Key classes:
 Sentinels for nested-dict builder API:
 
 - ``FREE``: use registry's default prior for a parameter
-- ``FIXED``: pin parameter to registry's default value
 - ``DEFAULT``: legal only as ``Fixed(DEFAULT)``, an explicit per-parameter
-  spelling of "pin at the registry default" (equivalent to what wildcard
-  ``FIXED`` would pick for that parameter)
+  spelling of "pin at the registry default"
 
 Usage::
 
-    from tengri.parameters import Uniform, Gaussian, Fixed, FREE, FIXED, DEFAULT
+    from tengri.parameters import Uniform, Gaussian, Fixed, FREE, DEFAULT
     from tengri import Parameters  # canonical import path for Parameters
 
 Where parameter declarations live
@@ -41,11 +39,10 @@ view via ``tengri.list_parameters()`` and ``tengri.describe_parameter()``.
 
 from tengri.parameters.groups import parse_groups
 from tengri.parameters.priors import Fixed, Gaussian, LogNormal, LogUniform, StudentT, Uniform
-from tengri.parameters.sentinels import DEFAULT, FIXED, FREE
+from tengri.parameters.sentinels import DEFAULT, FREE
 
 __all__ = [
     "DEFAULT",
-    "FIXED",
     "FREE",
     "Fixed",
     "Gaussian",

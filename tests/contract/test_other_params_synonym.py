@@ -28,7 +28,7 @@ import warnings
 
 import pytest
 
-from tengri import FIXED, FREE, Fixed, builders
+from tengri import DEFAULT, FREE, Fixed, builders
 from tengri.parameters.groups import parse_groups
 
 pytestmark = pytest.mark.contract
@@ -97,13 +97,13 @@ def _top_level_kwargs(group: str, spec: dict, key: str, wildcard) -> dict:
     if group == "sfh":
         kwargs["sfh"] = target
     else:
-        kwargs["sfh"] = {"type": "dpl", "all_params": FIXED}
+        kwargs["sfh"] = {"type": "dpl", "all_params": Fixed(DEFAULT)}
         kwargs[group] = target
     return kwargs
 
 
 @pytest.mark.parametrize("group,spec", TOP_LEVEL_GROUPS, ids=[g for g, _ in TOP_LEVEL_GROUPS])
-@pytest.mark.parametrize("wildcard", [FREE, FIXED], ids=["free", "fixed"])
+@pytest.mark.parametrize("wildcard", [FREE, Fixed(DEFAULT)], ids=["free", "fixed"])
 def test_top_level_group_other_params_matches_all_params(group, spec, wildcard):
     """``other_params`` sets the identical wildcard policy as ``all_params``, every group."""
     all_kwargs = _top_level_kwargs(group, spec, "all_params", wildcard)
@@ -127,11 +127,11 @@ def test_sfh_field_subblock_other_params_matches_all_params():
     """
     all_kwargs = {
         "redshift": Fixed(0.1),
-        "sfh": {"type": "dpl", "all_params": FIXED, "field": {"all_params": FREE}},
+        "sfh": {"type": "dpl", "all_params": Fixed(DEFAULT), "field": {"all_params": FREE}},
     }
     other_kwargs = {
         "redshift": Fixed(0.1),
-        "sfh": {"type": "dpl", "all_params": FIXED, "field": {"other_params": FREE}},
+        "sfh": {"type": "dpl", "all_params": Fixed(DEFAULT), "field": {"other_params": FREE}},
     }
     result = _equivalent(all_kwargs, other_kwargs)
     assert "sfh_field_psd_sigma" in result.free_params
@@ -142,13 +142,13 @@ def test_igm_dla_subblock_other_params_matches_all_params():
     """``other_params`` inside the nested ``igm={'dla': {...}}`` sub-block."""
     all_kwargs = {
         "redshift": Fixed(2.0),
-        "sfh": {"type": "dpl", "all_params": FIXED},
-        "igm": {"type": "inoue14", "all_params": FIXED, "dla": {"all_params": FREE}},
+        "sfh": {"type": "dpl", "all_params": Fixed(DEFAULT)},
+        "igm": {"type": "inoue14", "all_params": Fixed(DEFAULT), "dla": {"all_params": FREE}},
     }
     other_kwargs = {
         "redshift": Fixed(2.0),
-        "sfh": {"type": "dpl", "all_params": FIXED},
-        "igm": {"type": "inoue14", "all_params": FIXED, "dla": {"other_params": FREE}},
+        "sfh": {"type": "dpl", "all_params": Fixed(DEFAULT)},
+        "igm": {"type": "inoue14", "all_params": Fixed(DEFAULT), "dla": {"other_params": FREE}},
     }
     result = _equivalent(all_kwargs, other_kwargs)
     assert "dla_log_n_hi" in result.free_params
@@ -158,12 +158,12 @@ def test_radio_sf_subblock_other_params_matches_all_params():
     """``other_params`` inside the nested ``radio={'sf': {...}}`` sub-block."""
     all_kwargs = {
         "redshift": Fixed(0.1),
-        "sfh": {"type": "dpl", "all_params": FIXED},
+        "sfh": {"type": "dpl", "all_params": Fixed(DEFAULT)},
         "radio": {"sf": {"type": "delvecchio2021", "all_params": FREE}},
     }
     other_kwargs = {
         "redshift": Fixed(0.1),
-        "sfh": {"type": "dpl", "all_params": FIXED},
+        "sfh": {"type": "dpl", "all_params": Fixed(DEFAULT)},
         "radio": {"sf": {"type": "delvecchio2021", "other_params": FREE}},
     }
     result = _equivalent(all_kwargs, other_kwargs)
@@ -174,12 +174,12 @@ def test_radio_agn_subblock_other_params_matches_all_params():
     """``other_params`` inside the nested ``radio={'agn': {...}}`` sub-block."""
     all_kwargs = {
         "redshift": Fixed(0.1),
-        "sfh": {"type": "dpl", "all_params": FIXED},
+        "sfh": {"type": "dpl", "all_params": Fixed(DEFAULT)},
         "radio": {"agn": {"type": "dpl", "all_params": FREE}},
     }
     other_kwargs = {
         "redshift": Fixed(0.1),
-        "sfh": {"type": "dpl", "all_params": FIXED},
+        "sfh": {"type": "dpl", "all_params": Fixed(DEFAULT)},
         "radio": {"agn": {"type": "dpl", "other_params": FREE}},
     }
     result = _equivalent(all_kwargs, other_kwargs)
@@ -190,19 +190,19 @@ def test_agn_torus_subblock_other_params_matches_all_params():
     """``other_params`` inside the nested ``agn={'torus': {...}}`` sub-block."""
     all_kwargs = {
         "redshift": Fixed(0.1),
-        "sfh": {"type": "dpl", "all_params": FIXED},
+        "sfh": {"type": "dpl", "all_params": Fixed(DEFAULT)},
         "agn": {
             "type": "composable",
-            "all_params": FIXED,
+            "all_params": Fixed(DEFAULT),
             "torus": {"type": "skirtor", "all_params": FREE},
         },
     }
     other_kwargs = {
         "redshift": Fixed(0.1),
-        "sfh": {"type": "dpl", "all_params": FIXED},
+        "sfh": {"type": "dpl", "all_params": Fixed(DEFAULT)},
         "agn": {
             "type": "composable",
-            "all_params": FIXED,
+            "all_params": Fixed(DEFAULT),
             "torus": {"type": "skirtor", "other_params": FREE},
         },
     }
@@ -218,7 +218,7 @@ def test_both_wildcard_keys_in_one_dict_raises_top_level():
     with pytest.raises(ValueError, match=r"synonyms"):
         parse_groups(
             redshift=Fixed(0.1),
-            sfh={"type": "dpl", "all_params": FREE, "other_params": FIXED},
+            sfh={"type": "dpl", "all_params": FREE, "other_params": Fixed(DEFAULT)},
         )
 
 
@@ -228,7 +228,7 @@ def test_both_wildcard_keys_in_one_dict_raises_nested_subblock():
         parse_groups(
             redshift=Fixed(2.0),
             sfh={"type": "dpl"},
-            igm={"type": "inoue14", "dla": {"all_params": FREE, "other_params": FIXED}},
+            igm={"type": "inoue14", "dla": {"all_params": FREE, "other_params": Fixed(DEFAULT)}},
         )
 
 
@@ -258,14 +258,16 @@ def test_builder_other_params_matches_all_params(label, factory):
 def test_sfh_dpl_other_params_matches_all_params_fixed_too():
     """The explicit case the plan calls out: ``builders.sfh.dpl``, both wildcard values."""
     assert builders.sfh.dpl(other_params=FREE) == builders.sfh.dpl(all_params=FREE)
-    assert builders.sfh.dpl(other_params=FIXED) == builders.sfh.dpl(all_params=FIXED)
+    assert builders.sfh.dpl(other_params=Fixed(DEFAULT)) == builders.sfh.dpl(
+        all_params=Fixed(DEFAULT)
+    )
 
 
 @pytest.mark.parametrize(("label", "factory"), _BUILDER_FACTORIES.items())
 def test_builder_both_wildcard_kwargs_raises(label, factory):
     """Passing both ``all_params=`` and ``other_params=`` to a builder raises."""
     with pytest.raises(ValueError, match=r"synonyms"):
-        factory(all_params=FREE, other_params=FIXED)
+        factory(all_params=FREE, other_params=Fixed(DEFAULT))
 
 
 # ── (e) A user-written '*' still raises ─────────────────────────────────────
@@ -282,5 +284,5 @@ def test_star_still_raises_even_with_other_params_present():
     with pytest.raises(ValueError, match=r"retired"):
         parse_groups(
             redshift=Fixed(0.1),
-            sfh={"type": "dpl", "*": FREE, "other_params": FIXED},
+            sfh={"type": "dpl", "*": FREE, "other_params": Fixed(DEFAULT)},
         )

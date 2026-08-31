@@ -39,6 +39,7 @@ import pytest
 
 from tengri.parameters.groups import parse_groups
 from tengri.parameters.priors import Fixed
+from tengri.parameters.sentinels import DEFAULT
 
 pytestmark = [pytest.mark.contract, pytest.mark.regression_bug]
 
@@ -64,10 +65,12 @@ def _parse_snippet(name: str, value) -> None:
 
 
 def _literal_eval_with_sentinels(expr: str) -> dict:
-    """Parse a dict literal that may contain FIXED and FREE sentinels.
+    """Parse a dict literal that may contain DEFAULT/FREE sentinels or Fixed(...) calls.
 
-    Parses an expression using ast, resolving bare names FIXED and FREE to
-    the real tengri sentinels. All other bare names are rejected (strict
+    Parses an expression using ast, resolving bare names DEFAULT and FREE to
+    the real tengri sentinels, and ``Fixed(...)`` calls to real ``Fixed``
+    instances (the argument itself resolved the same way, so ``Fixed(DEFAULT)``
+    and ``Fixed(0.5)`` both work). All other bare names are rejected (strict
     literal eval). Everything else (numbers, strings, nested dicts) must be
     valid Python literals.
     """
@@ -85,17 +88,30 @@ def _literal_eval_with_sentinels(expr: str) -> dict:
             values = [resolve_names(v) for v in node.values]
             return dict(zip(keys, values))
         elif isinstance(node, ast.Name):
-            if node.id == "FIXED":
-                from tengri import FIXED
+            if node.id == "DEFAULT":
+                from tengri import DEFAULT
 
-                return FIXED
+                return DEFAULT
             elif node.id == "FREE":
                 from tengri import FREE
 
                 return FREE
             else:
-                msg = f"Unknown bare name: {node.id!r}. Only FIXED and FREE are allowed."
+                msg = f"Unknown bare name: {node.id!r}. Only DEFAULT and FREE are allowed."
                 raise ValueError(msg)
+        elif isinstance(node, ast.Call):
+            is_fixed_call = (
+                isinstance(node.func, ast.Name)
+                and node.func.id == "Fixed"
+                and len(node.args) == 1
+                and not node.keywords
+            )
+            if not is_fixed_call:
+                msg = f"Unsupported call: {ast.dump(node)}. Only Fixed(...) is allowed."
+                raise ValueError(msg)
+            from tengri import Fixed
+
+            return Fixed(resolve_names(node.args[0]))
         elif isinstance(node, ast.Constant):
             return node.value
         elif isinstance(node, ast.List):
@@ -121,7 +137,8 @@ def _dict_snippets(message: str) -> list[tuple[str, dict]]:
     first inner ``}``, silently checking a truncated snippet that happens to
     parse — a guard that passes for the wrong reason.
 
-    Handles sentinels FIXED and FREE via _literal_eval_with_sentinels.
+    Handles sentinels DEFAULT and FREE, and Fixed(...) calls, via
+    _literal_eval_with_sentinels.
     Filters out snippets that are shown for removal/replacement (e.g., "Replace
     dust={...} with dust_attenuation={...}" only suggests the dust_attenuation part).
     """
@@ -164,15 +181,13 @@ def _dict_snippets(message: str) -> list[tuple[str, dict]]:
 
 
 # Each entry provokes a grammar error that offers recovery advice.
-from tengri import FIXED
-
 TRIGGERS = [
     pytest.param({"radio": True}, id="radio-bool-gate-form"),
     pytest.param({"xray": True}, id="xray-bool-gate-form"),
     pytest.param({"shock": True}, id="shock-bool-gate-form"),
     # Dust retirement: old unified dust= form, lawless (README shape from #2015)
     pytest.param(
-        {"dust": {"type": "two_component", "all_params": FIXED}},
+        {"dust": {"type": "two_component", "all_params": Fixed(DEFAULT)}},
         id="dust-two-component-lawless",
     ),
     # Dust retirement: with explicit law

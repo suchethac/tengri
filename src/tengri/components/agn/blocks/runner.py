@@ -488,7 +488,7 @@ agn_torus_block, agn_attenuation_block : str
     # Capture L_2500_intrinsic and L_4400_intrinsic: the un-reddened,
     # agn_log_lbol-normalized disc monochromatic luminosities [erg/s/Hz] that
     # drive X-ray alpha_ox and radio loudness. These follow CIGALE's
-    # ``intrin_Lnu_2500A_30deg`` convention: they are evaluated at a FIXED 30 deg
+    # ``intrin_Lnu_2500A_30deg`` convention: they are evaluated at a fixed 30 deg
     # reference inclination, NOT the (free) viewing angle ``agn_cos_inc``. The
     # disc viewing inclination stays free and shapes the observed SED
     # (foreshortening, Type-1/2 mask), but the *intrinsic* accretion luminosity

@@ -1404,7 +1404,7 @@ class Parameters:
         **Provenance-aware collapsing**: If this Parameters was built via
         ``parse_groups``, provenance tags are used to collapse parameters that
         shared the same wildcard marker (``'all_params': FREE`` or
-        ``'all_params': FIXED``) back into that wildcard, with explicit
+        ``'all_params': Fixed(DEFAULT)``) back into that wildcard, with explicit
         overrides listed separately.
 
         **Flat-built fallback**: If this Parameters was built via flat-kwarg
@@ -1424,7 +1424,7 @@ class Parameters:
 
         Examples
         --------
-        >>> from tengri import parse_groups, FREE, FIXED, Uniform, Fixed
+        >>> from tengri import parse_groups, FREE, Uniform, Fixed
         >>> spec = parse_groups(
         ...     sfh={"type": "dpl", "all_params": FREE, "beta": Uniform(1, 3)},
         ...     redshift=Fixed(0.05),
@@ -2060,7 +2060,12 @@ class Parameters:
             "user_fixed": "[user]",
             "user_free": "[user FREE]",
             "wildcard_free": f"[{WILDCARD_ALIAS} FREE]",
-            "wildcard_fixed": f"[{WILDCARD_ALIAS} FIXED]",
+            "wildcard_fixed": f"[{WILDCARD_ALIAS} Fixed(DEFAULT)]",
+            # Block-scoped wildcard (e.g. AGN sub-block not selected by the
+            # active variant): the param stays declared-but-Fixed rather than
+            # being freed by the group's wildcard. See _resolve_value's
+            # wildcard_active=False branch in parameters/groups.py.
+            "wildcard_fixed_inactive": f"[{WILDCARD_ALIAS} Fixed(DEFAULT) -> inactive]",
             "registry_default": "[default]",
             # The "_grid" suffix marks a declared free prior that was
             # intersected with the selected component's template grid, whose

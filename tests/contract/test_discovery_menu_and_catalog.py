@@ -181,7 +181,7 @@ def test_tab_completion_includes_grammar_essentials():
     completable = set(dir(tengri))
     essentials = {
         "FREE",
-        "FIXED",  # nested-dict grammar sentinels (sfh={'all_params': FREE})
+        "DEFAULT",  # nested-dict grammar sentinels (sfh={'all_params': FREE}, Fixed(DEFAULT))
         "recipes",
         "builders",  # recommended build entry points
         "load_ssp_data",

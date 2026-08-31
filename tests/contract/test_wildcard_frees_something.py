@@ -40,7 +40,7 @@ import warnings
 import pytest
 
 import tengri
-from tengri import FIXED, FREE, Fixed, Uniform
+from tengri import DEFAULT, FREE, Fixed, Uniform
 from tengri.config.exceptions import ParameterError, WildcardPartialFreeWarning
 
 pytestmark = pytest.mark.contract
@@ -138,7 +138,7 @@ def test_dla_wildcard_raises_once_every_freeable_param_is_overridden():
     """
     with pytest.raises(ParameterError, match=r"'igm\.dla'"):
         tengri.parse_groups(
-            sfh={"type": "dpl", "all_params": FIXED},
+            sfh={"type": "dpl", "all_params": Fixed(DEFAULT)},
             igm={
                 "type": "inoue14",
                 "dla": {
@@ -155,7 +155,7 @@ def test_dla_wildcard_raises_once_every_freeable_param_is_overridden():
 def test_dla_bare_wildcard_is_allowed_because_it_frees_one():
     """The guard is about outcome, not intent: freeing 1 of 4 is still freeing."""
     freed = _free(
-        sfh={"type": "dpl", "all_params": FIXED},
+        sfh={"type": "dpl", "all_params": Fixed(DEFAULT)},
         igm={"type": "inoue14", "dla": {"all_params": FREE}},
         redshift=tengri.Fixed(2.0),
     )
@@ -172,14 +172,6 @@ def test_error_names_the_group_and_the_stuck_params():
     assert "'neb'" in msg
     assert "neb_logU" in msg
     assert "Uniform(lo, hi)" in msg
-
-
-def test_star_synonym_resolves_identically_to_all_params():
-    """``'*'`` is a synonym: it must reach the same resolution, not a bypass."""
-    star = _free(sfh={"type": "dpl"}, neb={"type": "cue", "all_params": FREE})
-    alias = _free(sfh={"type": "dpl"}, neb={"type": "cue", "all_params": FREE})
-    assert star == alias
-    assert any(p.startswith("neb_") for p in star)
 
 
 def test_builders_path_resolves_identically_to_the_dict_form():
@@ -316,8 +308,8 @@ def test_agn_wildcard_still_frees():
 
 
 def test_fixed_wildcard_never_raises():
-    """FIXED is imperative and always honourable — it must never trip the guard."""
-    freed = _free(sfh={"type": "dpl"}, neb={"type": "cue", "all_params": FIXED})
+    """Fixed(DEFAULT) is imperative and always honourable — it must never trip the guard."""
+    freed = _free(sfh={"type": "dpl"}, neb={"type": "cue", "all_params": Fixed(DEFAULT)})
     assert not any(p.startswith("neb_") for p in freed)
 
 

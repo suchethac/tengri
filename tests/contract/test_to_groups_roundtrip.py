@@ -10,7 +10,7 @@ from __future__ import annotations
 import pytest
 
 pytestmark = pytest.mark.contract
-from tengri.parameters import FIXED, FREE, Fixed, Uniform, parse_groups
+from tengri.parameters import DEFAULT, FREE, Fixed, Uniform, parse_groups
 from tengri.parameters.parameters import Parameters
 
 
@@ -22,7 +22,7 @@ def test_roundtrip_with_nebular_off():
     round-trip would error: ``Unknown nebular type 'off'``.
     """
     orig = parse_groups(
-        sfh={"type": "dpl", "all_params": FIXED},
+        sfh={"type": "dpl", "all_params": Fixed(DEFAULT)},
         redshift=Fixed(0.1),
     )
     assert orig.nebular_mode == "off"
@@ -79,13 +79,13 @@ class TestToGroupsBasic:
     def test_to_groups_dust_nested_structure(self):
         """to_groups() preserves nested dust.emission subgroup structure."""
         spec = parse_groups(
-            sfh={"type": "dpl", "all_params": FIXED},
+            sfh={"type": "dpl", "all_params": Fixed(DEFAULT)},
             dust_attenuation={
                 "type": "two_component",
                 "law": "calzetti",
-                "all_params": FIXED,
+                "all_params": Fixed(DEFAULT),
             },
-            dust_emission={"type": "dale2014", "all_params": FIXED},
+            dust_emission={"type": "dale2014", "all_params": Fixed(DEFAULT)},
             redshift=Fixed(0.1),
         )
         result = spec.to_groups()
@@ -140,16 +140,16 @@ class TestToGroupsRoundtrip:
     def test_round_trip_with_dust_emission(self):
         """Nested dust.emission sub-block roundtrips."""
         original = parse_groups(
-            sfh={"type": "dpl", "all_params": FIXED},
+            sfh={"type": "dpl", "all_params": Fixed(DEFAULT)},
             dust_attenuation={
                 "type": "two_component",
                 "law": "calzetti",
-                "all_params": FIXED,
+                "all_params": Fixed(DEFAULT),
                 "tau_bc": 0.5,
-                # FIXED, not FREE: FREE frees nothing on dale2014 and is now
+                # Fixed(DEFAULT), not FREE: FREE frees nothing on dale2014 and is now
                 # refused. The round-trip property under test is unaffected.
             },
-            dust_emission={"type": "dale2014", "all_params": FIXED},
+            dust_emission={"type": "dale2014", "all_params": Fixed(DEFAULT)},
             redshift=Fixed(0.1),
         )
         roundtripped = parse_groups(**original.to_groups())
@@ -167,11 +167,15 @@ class TestToGroupsRoundtrip:
         pytest.importorskip("grahsp", minversion=None)  # Skip if not available
 
         original = parse_groups(
-            sfh={"type": "dpl", "all_params": FIXED},
-            dust_attenuation={"law": "power_law", "type": "two_component", "all_params": FIXED},
+            sfh={"type": "dpl", "all_params": Fixed(DEFAULT)},
+            dust_attenuation={
+                "law": "power_law",
+                "type": "two_component",
+                "all_params": Fixed(DEFAULT),
+            },
             agn={
                 "disc": {"type": "powerlaw", "all_params": FREE},
-                "torus": {"type": "simple", "all_params": FIXED},
+                "torus": {"type": "simple", "all_params": Fixed(DEFAULT)},
                 "nlr": {"type": "analytic"},
                 "blr": {"type": "none"},
             },
@@ -203,7 +207,7 @@ class TestToGroupsRoundtrip:
             dust_attenuation={
                 "type": "two_component",
                 "law": "calzetti",
-                "all_params": FIXED,
+                "all_params": Fixed(DEFAULT),
                 "tau_bc": Uniform(0, 1),
             },
             redshift=FREE,
@@ -225,7 +229,7 @@ class TestToGroupsWildcardCollapse:
     def test_to_groups_omits_wildcard_expanded_params(self):
         """When 'all_params': FREE was used, those params should NOT appear explicitly (#1796).
 
-        However, met_* params get implicit FIXED (no met block), creating a mix of
+        However, met_* params are implicitly Fixed (no met block), creating a mix of
         wildcard_free and wildcard_fixed provenances that prevents full wildcard
         collapsing. This is the correct behavior: the roundtrip shows that met_*
         are Fixed while sfh_* are Free.
@@ -348,12 +352,12 @@ class TestToGroupsStructuralSettings:
     def test_to_groups_preserves_dust_law(self):
         """Differing per-screen laws are preserved as the law_bc/law_diff pair."""
         original = parse_groups(
-            sfh={"type": "dpl", "all_params": FIXED},
+            sfh={"type": "dpl", "all_params": Fixed(DEFAULT)},
             dust_attenuation={
                 "type": "two_component",
                 "law_bc": "kriek_conroy",
                 "law_diff": "smc",
-                "all_params": FIXED,
+                "all_params": Fixed(DEFAULT),
             },
             redshift=Fixed(0.1),
         )
@@ -365,8 +369,12 @@ class TestToGroupsStructuralSettings:
     def test_to_groups_collapses_shared_dust_law(self):
         """Equal per-screen laws round-trip as the shared 'law' key."""
         original = parse_groups(
-            sfh={"type": "dpl", "all_params": FIXED},
-            dust_attenuation={"type": "two_component", "law": "kriek_conroy", "all_params": FIXED},
+            sfh={"type": "dpl", "all_params": Fixed(DEFAULT)},
+            dust_attenuation={
+                "type": "two_component",
+                "law": "kriek_conroy",
+                "all_params": Fixed(DEFAULT),
+            },
             redshift=Fixed(0.1),
         )
         result = original.to_groups()
@@ -377,13 +385,13 @@ class TestToGroupsStructuralSettings:
     def test_to_groups_preserves_dust_emission_type(self):
         """dust_emission type is preserved."""
         original = parse_groups(
-            sfh={"type": "dpl", "all_params": FIXED},
+            sfh={"type": "dpl", "all_params": Fixed(DEFAULT)},
             dust_attenuation={
                 "law": "power_law",
                 "type": "two_component",
-                "all_params": FIXED,
+                "all_params": Fixed(DEFAULT),
             },
-            dust_emission={"type": "dale2014", "all_params": FIXED},
+            dust_emission={"type": "dale2014", "all_params": Fixed(DEFAULT)},
             redshift=Fixed(0.1),
         )
         result = original.to_groups()
@@ -393,8 +401,8 @@ class TestToGroupsStructuralSettings:
     def test_to_groups_preserves_nebular_type(self):
         """nebular type is preserved."""
         original = parse_groups(
-            sfh={"type": "dpl", "all_params": FIXED},
-            neb={"type": "cue", "all_params": FIXED},
+            sfh={"type": "dpl", "all_params": Fixed(DEFAULT)},
+            neb={"type": "cue", "all_params": Fixed(DEFAULT)},
             redshift=Fixed(0.1),
         )
         result = original.to_groups()
@@ -413,7 +421,7 @@ class TestToGroupsStructuralSettings:
         same thing.
         """
         original = parse_groups(
-            sfh={"type": "dpl", "all_params": FIXED},
+            sfh={"type": "dpl", "all_params": Fixed(DEFAULT)},
             redshift=Fixed(0.1),
             igm={"type": "none"},
         )
@@ -425,7 +433,7 @@ class TestToGroupsStructuralSettings:
     def test_to_groups_preserves_sfh_composition(self):
         """SFH composition list is preserved."""
         original = parse_groups(
-            sfh={"type": ["dpl", "field"], "all_params": FIXED},
+            sfh={"type": ["dpl", "field"], "all_params": Fixed(DEFAULT)},
             redshift=Fixed(0.1),
         )
         result = original.to_groups()
@@ -439,7 +447,7 @@ class TestToGroupsEdgeCases:
     def test_to_groups_with_none_nebular(self):
         """to_groups works with nebular disabled (type='none')."""
         original = parse_groups(
-            sfh={"type": "dpl", "all_params": FIXED},
+            sfh={"type": "dpl", "all_params": Fixed(DEFAULT)},
             neb={"type": "none"},
             redshift=Fixed(0.1),
         )
