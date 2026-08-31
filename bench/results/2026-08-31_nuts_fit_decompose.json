@@ -1,0 +1,24 @@
+[
+  {
+    "probe": "fit_decompose",
+    "notebook": "ctl-jwst",
+    "seed": 7,
+    "kwargs": {
+      "method": "mcmc_nuts",
+      "n_warmup": 1000,
+      "n_samples": 400,
+      "dense_mass_matrix": false,
+      "max_num_doublings": 10
+    },
+    "device": "cpu",
+    "t1_cold_a_s": 486.87,
+    "t2_warm_a_s": 350.1,
+    "t3_warm_b_s": 591.11,
+    "t2_warm_b_s": 167.71,
+    "sampling_s": 350.1,
+    "warmup_s": 423.4,
+    "compile_s": -104.24,
+    "compile_share_of_cold": -0.214,
+    "warmup_share_of_cold": 0.87
+  }
+]
