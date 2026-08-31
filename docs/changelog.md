@@ -28,6 +28,7 @@ Physics-model audit, new models, and cross-validation.
 - [OIII] 5007/4959 ratio fixed to 2.98 (Storey & Zeippen 2000)
 - AGN disc ring area: 4π²r·dr → 2πr·dr
 - Radio/X-ray: fixed dimensional inconsistency in bolometric corrections (Hopkins+2007)
+- **Notebook 05 re-rendered with measured sampler configuration (#2095)**: `notebooks/05_fitting_photometry.ipynb` posterior was knife-edge for diagonal NUTS (max split-R̂ 1.56e14 at seed 7). Replaced with ChEES-HMC + analytic preconditioner at 4× budget (n_warmup/n_samples: 600→2400 each), measured to converge robustly (max split-R̂ 1.0010, ~702 s wall). Retiring the #2095 ledger entries as the notebook now renders cleanly.
 - CueBackend: neb_fesc now applied to nebular continuum (was silently dropped)
 - SFR time-averaging: trapezoidal integration instead of biased grid-point counting
 - Pipeline: radio/X-ray models now use computed L_ir, SFR, M* (were hardcoded defaults)
