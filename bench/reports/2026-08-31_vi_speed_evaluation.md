@@ -402,9 +402,11 @@ MAP seed is only approximate (8 restarts of 800 Adam steps), so `beta` was
 presumably not exactly empty in the SED fits — but it was not checked, and it
 should have been.
 
-**Mechanism 2 is the one upstream documents** — and it has since been tested and
-**refuted on the real fixture**; see *Finding 4c*. Mechanism 1 survives as the
-remaining candidate, not as a proven cause.
+**Both mechanisms were subsequently tested and both are wrong.** Mechanism 2 was
+refuted on the real fixture (*Finding 4c*) and mechanism 1 was refuted by reading
+`beta` directly (*Finding 4e*). The demonstrated cause is neither. This subsection
+is kept because it is what the source read suggested, and being wrong twice in the
+same direction is the thing worth recording.
 
 Which brings us to:
 
@@ -500,10 +502,68 @@ Three conclusions, in decreasing strength:
    advice on an SED posterior will make their error bars worse, by 3× in the
    median.**
 
-What this does **not** establish: that mechanism 1 is correct. It is now the
-surviving candidate, not a demonstrated cause. The clean way to close it is to
-read `beta`'s effective rank out of a real SED fit's `PathfinderState` — a
-diagnostic worth adding, and not added here.
+What this does **not** establish: that mechanism 1 is correct. Elimination is not
+demonstration, so `beta` was then read directly — *Finding 4e*, which refutes
+mechanism 1 too.
+
+---
+
+## Finding 4e — `beta` is full rank, and the cause is the *accuracy* of the curvature estimate
+
+Both candidate mechanisms in Finding 4b were about the **rank** of the low-rank
+correction — one said it was too small, the other that it was empty. Read
+directly out of a real MAP-seeded fit on `ctl-dpl` seed 7, exactly as tengri runs
+it, **neither is true**:
+
+| quantity | value |
+|---|---|
+| `beta` shape | `(8, 20)` — D=8, `2 * maxcor` = 20 |
+| `beta` singular values | 3.38e-01, 1.13e-01, 2.70e-02, 1.28e-02, 8.00e-03, 3.21e-03, 2.35e-03, 4.04e-05 |
+| **`beta` effective rank** | **8 of 8** (`min(D, 2·maxcor)`) — *full* |
+| non-zero columns | 20 of 20 |
+| low-rank share of ‖Σ‖_F | **0.643** |
+| off-diagonal share of ‖Σ‖_F | **0.578** |
+
+So the correction is **full rank**, it carries most of the covariance's mass, and
+the resulting Gaussian is genuinely correlated — 58 % of its Frobenius norm is
+off-diagonal. It is not rank-starved and it is not effectively diagonal. **Both
+mechanisms are refuted, and they were not two severities of one failure; they were
+both simply wrong.**
+
+What *is* wrong is the curvature estimate's accuracy. On the same fixture, seed
+and expansion point:
+
+| curvature at the MAP | condition number |
+|---|---:|
+| analytic `JᵀN⁻¹J + I` (`preconditioning.py`, recorded in this campaign's own `metric_condition`) | **3.53e4** |
+| Pathfinder's L-BFGS Σ (`diag(alpha) + beta γ betaᵀ`) | **8.70e3** |
+
+Pathfinder's estimate is **4.1× less anisotropic than the truth at the same
+point** — it under-resolves the stiffness spread, and the directions it loses are
+the soft ones, which is where the widths collapse.
+
+**The clinching comparison is already in this report.** `laplace` fits the *same*
+family — one Gaussian, at the MAP — differing only in that it uses the exact
+Hessian instead of a quasi-Newton estimate:
+
+| | curvature | median sd ratio | range |
+|---|---|---:|---|
+| `laplace` | exact Hessian at the MAP | **1.01** | 0.94–1.05 |
+| `pathfinder` | L-BFGS estimate, 30 iterations | **0.48** | 0.11–1.07 |
+
+Same family, same expansion point, same fixture, same seed. So **neither the
+Gaussian family nor the choice of expansion point is responsible** — the entire
+gap is the quality of the curvature estimate. That is a demonstration rather than
+an elimination, and it is the cause the tier note now states.
+
+It also explains why `precondition=True` only half-helps: whitening improves the
+problem L-BFGS is handed, but 30 quasi-Newton iterations still produce an estimate,
+and an estimate is what fails. The fix that would actually work is more L-BFGS
+iterations or the exact Hessian — at which point one has written `laplace`.
+
+**Two mechanism claims, both wrong, before a direct measurement settled it.** The
+lesson generalizes past Pathfinder: reading the state took one fit and less time
+than either round of reasoning about it.
 
 ---
 
@@ -527,8 +587,17 @@ where `effective_n_paths = n_paths if n_paths is not None else num_chains`:
 
 **tengri's two call sites pass neither `num_chains` nor `n_paths`**
 (`_shared.py:548` and `:639`), so both take PATH A and the guard has always
-covered them. The result worth recording is that it covered them by luck of the
-call shape, and PATH C evaded it **twice over**:
+covered them in practice.
+
+**It covered them by coincidence, not by construction.** `n_paths` defaults to
+`num_chains`, so *any* call with `num_chains >= 2` takes PATH C — and `ctl-dpl`
+and nb05 both run `n_chains=2`, so passing the chain count through to the warm-up
+is the obvious next edit to those very lines. A guard that holds only because
+every current call site happens to leave one keyword unset is not a guard; it is a
+coincidence with a docstring explaining why it is safe.
+
+PATH C evaded it **twice over**, and the two causes are independent — either alone
+defeats the cap:
 
 1. `blackjax/vi/multipathfinder.py:22` does
    `from blackjax.vi.pathfinder import ... approximate ...` at **import** time, so
@@ -540,15 +609,42 @@ call shape, and PATH C evaded it **twice over**:
 
 Both are fixed: every module holding an import-time binding is now rebound, and
 the cap is `min(requested, draws)` rather than a default, so an explicit 200 is
-clamped. Pinned by `test_the_cap_survives_the_multipath_bypass`, which asserts
-through the real function rather than through its source. Verified end-to-end
-that PATH A still runs and is clamped (a 3-D toy: draws reaching blackjax `[9]`
-under `_bounded_pathfinder_elbo_draws(9)`, finite step size out).
+clamped. Verified end-to-end that PATH A still runs and is clamped (a 3-D toy:
+draws reaching blackjax `[9]` under `_bounded_pathfinder_elbo_draws(9)`, finite
+step size out). The wired-but-unrun warm-start rows would have been the first
+thing to hit this.
 
-This mattered because **one `num_chains=` on either call site would have been
-enough to trigger it** — and the natural next change to those sites is exactly
-that, since `ctl-dpl` and nb05 both run `n_chains=2`. The wired-but-unrun
-warm-start rows would have been the first thing to hit it.
+**Pinned by two tests, one per cause, deliberately not one.** A single test
+asserting the final draw count passes if *either* cause is fixed — which is the
+same shape as the bug itself, a check that succeeds for two reasons. So
+`test_the_cap_reaches_the_multipathfinder_namespace` asserts only that the
+import-time binding is rebound (and restored), and
+`test_the_cap_clamps_a_positional_num_samples` asserts only that a positional
+`200` is clamped while a smaller request is honored. Confirmed by mutation:
+reintroducing the default-instead-of-clamp fails the second and *passes* the
+first; dropping `multipathfinder` from the patch list fails the first and
+*passes* the second.
+
+### The design question this raises, which is bigger than Pathfinder
+
+**A monkeypatch-based cap cannot be made reliable against a library that takes
+import-time bindings.** That is a fact about how blackjax is structured, not about
+Pathfinder: any module doing `from blackjax.vi.pathfinder import approximate` gets
+a private reference our `contextlib` patch cannot see, and each blackjax release
+may add another. This thread has now hit that class of failure **twice** — once in
+`multipathfinder`, and once while writing Finding 4e, where a probe patching
+`blackjax.vi.pathfinder.approximate` silently captured nothing because
+`run_pathfinder` resolves `blackjax.pathfinder.approximate`, a different attribute
+holding the same function object.
+
+So the fix in this PR is a patch on a patch. The durable alternative is to stop
+rebinding and **pass `num_samples` explicitly at every call site** — trivial for
+`run_pathfinder`, which already owns its call, and blocked for the warm-start path
+only because `pathfinder_adaptation` forwards `**extra_parameters` to the sampler
+rather than to `approximate`. That would make it an upstream feature request
+(`pathfinder_adaptation(..., num_samples=)`) rather than a monkeypatch tengri
+maintains across version bumps. Out of scope here; recorded because the current
+approach is fragile against *any* blackjax upgrade, not just this one.
 
 ---
 
@@ -586,9 +682,24 @@ against the current page**; this was read on 2026-08-31.
 > run), would help.
 >
 > Related: the page suggests a deliberately "bad" initialization to lengthen the
-> L-BFGS path. We tested that on our posterior and it made the widths **worse**
-> (median ratio 0.48 → 0.16), because at `maxiter=30` a cold start has not reached
-> the mode. That advice may be worth qualifying with a note about `maxiter`.
+> L-BFGS path. We tested that on our posterior and it made the widths **worse on 8
+> of 8 parameters** (median ratio 0.48 → 0.16), because at `maxiter=30` a cold
+> start has not reached the mode, so Pathfinder fits a tight Gaussian around a
+> point that is not the optimum. The advice is sound in the abstract and simply
+> loses to that competing effect at the default `maxiter`; tying it to `maxiter`
+> would make it safe to follow.
+>
+> **3. A structural note for anyone capping `num_samples` from outside.**
+> `blackjax/vi/multipathfinder.py` does `from blackjax.vi.pathfinder import
+> approximate` at import time, and `blackjax.pathfinder.approximate` is a third
+> attribute holding the same object. A caller who wraps one of these to bound the
+> ELBO draws silently misses the others, and `multi_approximate` forwards
+> `num_samples` positionally so a wrapper's default is overridden too. We hit both.
+> We can pass `num_samples` explicitly for direct calls, but not through
+> `pathfinder_adaptation` — its `**extra_parameters` go to the sampler, not to
+> `approximate`. **Would you accept a `num_samples=` / `num_samples_per_path=`
+> passthrough on `pathfinder_adaptation`?** That removes the need for any
+> monkeypatching, which cannot be made reliable against import-time bindings.
 
 ### Precision — upstream is blunter than this report was
 

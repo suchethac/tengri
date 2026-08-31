@@ -151,22 +151,47 @@ def test_the_warmstart_path_caps_the_same_draws():
     )
 
 
-def test_the_cap_survives_the_multipath_bypass():
-    """The cap must hold on the multi-path route too, which evades it two ways.
+def test_the_cap_reaches_the_multipathfinder_namespace():
+    """CAUSE 1 alone: the import-time binding must be rebound.
 
-    blackjax 1.6.2's ``pathfinder_adaptation`` dispatches to
-    ``multipathfinder.multi_approximate`` whenever ``effective_n_paths >= 2``, and
-    that route defeats a naive cap twice: ``multipathfinder`` binds ``approximate``
-    into its own module globals at import time, and ``multi_approximate`` forwards
-    ``num_samples`` **positionally** so a parameter *default* is overridden.
+    ``blackjax/vi/multipathfinder.py`` does ``from blackjax.vi.pathfinder import
+    ... approximate ...`` at *import* time, so it holds its own module-global
+    binding and ``multi_approximate`` calls that bare name. A cap that rebinds
+    only ``vi.pathfinder.approximate`` never reaches it.
 
-    tengri's own call sites pass neither ``num_chains`` nor ``n_paths``, so they
-    take PATH A and were never exposed -- but one ``num_chains=`` away is
-    ``n_paths x 200`` ELBO draws, where 200 alone measured 25.65 GB and a SIGKILL.
-    This asserts the cap through the real function rather than through its source.
+    Deliberately split from the clamp test below. A single test asserting the
+    final draw count would pass if *either* cause were fixed, and "one check that
+    passes for two reasons" is the exact shape of the bug this file is about.
     """
     pytest.importorskip("blackjax")
     multipathfinder = pytest.importorskip("blackjax.vi.multipathfinder")
+
+    from tengri.inference.backends.mcmc._shared import _bounded_pathfinder_elbo_draws
+
+    before = multipathfinder.approximate
+    with _bounded_pathfinder_elbo_draws(7):
+        during = multipathfinder.approximate
+    after = multipathfinder.approximate
+
+    assert during is not before, (
+        "blackjax.vi.multipathfinder.approximate was NOT rebound inside the cap. "
+        "It holds an import-time binding, so patching vi.pathfinder alone leaves "
+        "the multi-path route (effective_n_paths >= 2) running at 200 ELBO draws "
+        "per path."
+    )
+    assert after is before, "the cap must restore every namespace it patched"
+
+
+def test_the_cap_clamps_a_positional_num_samples():
+    """CAUSE 2 alone: a positional 200 must be clamped, not merely defaulted past.
+
+    ``multi_approximate`` forwards ``num_samples`` as the 4th POSITIONAL argument,
+    so a cap expressed as a parameter default is overridden even in the right
+    namespace. Asserted through the real wrapper, on one namespace only, so this
+    fails if and only if the clamp regresses.
+    """
+    pytest.importorskip("blackjax")
+    import blackjax.vi.pathfinder as pathfinder_module
 
     from tengri.inference.backends.mcmc._shared import _bounded_pathfinder_elbo_draws
 
@@ -176,24 +201,17 @@ def test_the_cap_survives_the_multipath_bypass():
         seen.append(num_samples)
         return "state", "info"
 
-    original_pf = multipathfinder.approximate
-    import blackjax.vi.pathfinder as pathfinder_module
-
-    original_target = pathfinder_module.approximate
+    original = pathfinder_module.approximate
     pathfinder_module.approximate = _spy
-    multipathfinder.approximate = _spy
     try:
         with _bounded_pathfinder_elbo_draws(7):
-            # exactly how multi_approximate calls it: positional, and 200
-            multipathfinder.approximate(None, None, None, 200)
-            # and how PATH A calls it: no num_samples at all
-            multipathfinder.approximate(None, None, None)
+            pathfinder_module.approximate(None, None, None, 200)  # positional, as upstream
+            pathfinder_module.approximate(None, None, None)  # PATH A, no num_samples
+            pathfinder_module.approximate(None, None, None, 3)  # caller wants fewer
     finally:
-        multipathfinder.approximate = original_pf
-        pathfinder_module.approximate = original_target
+        pathfinder_module.approximate = original
 
-    assert seen == [7, 7], (
-        f"ELBO draws reaching blackjax were {seen}, expected [7, 7]. A positional "
-        "200 must be clamped, not merely defaulted past, and the multipathfinder "
-        "namespace must be patched alongside vi.pathfinder."
+    assert seen == [7, 7, 3], (
+        f"ELBO draws reaching blackjax were {seen}, expected [7, 7, 3]: an explicit "
+        "200 clamped down, an absent value capped, and a smaller request honored."
     )
