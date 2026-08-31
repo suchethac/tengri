@@ -266,6 +266,37 @@ def run_nuts(
         reducing divergences in the SED degeneracy banana. Range
         0.7-0.95; higher = smaller steps = fewer divergences but
         slower mixing.
+    warmup_max_num_doublings : int or None, default None
+        Tree-depth cap for the **window adaptation only**, leaving the sampling
+        phase on ``max_num_doublings``. ``None`` keeps the two equal, which is
+        what every caller gets unless they ask otherwise.
+
+        **Measured and NOT recommended.** The idea is sound and the mechanism is
+        real: a capped adaptation cannot complete the deep trajectories a small
+        step size implies, so dual averaging settles on a larger step size and
+        the sampling phase then runs shallower trees. Measured on ``ctl-dpl``
+        (D=8, 600 warmup + 600 draws, sampling cap 10) that produced **6.16x
+        fewer gradient evaluations per draw at seed 7** — and **0.69x, i.e. 45 %
+        MORE, at seed 8**. The effect does not merely shrink on a second seed,
+        it reverses sign, so on the one fixture it has been tried on it is not a
+        reliable win (``bench/reports/2026-08-31_fast_nuts.md`` Finding 9).
+
+        Combining it with ``precondition`` is worse still: both knobs enlarge the
+        adapted step size and composing them enlarges it too far — max split-R-hat
+        1.0228, min ESS 50.4, the only measured configuration that fails the
+        R-hat clause outright.
+
+        What DID replicate on that fixture is ``precondition=0.5`` at full
+        warmup: 8.16x and 2.34x fewer gradients per draw on the two seeds, and a
+        per-seed cost stable to 5 % where the unpreconditioned control swings
+        3.65x. Reach for that first.
+
+        Kept because it is a correct implementation of a real degree of freedom
+        and because a knob measured and found wanting is more useful documented
+        than deleted. Any use of it must carry its R-hat and min-ESS columns:
+        ``bench/reports/2026-04-22_pathfinder_vs_window_nuts.md`` records an 18x
+        regression from an under-adapted step size, which is the failure this
+        knob courts by construction.
     max_num_doublings : int, default DEFAULT_MAX_NUM_DOUBLINGS (10)
         Maximum tree depth for NUTS trajectory (up to 2^max_num_doublings - 1
         leapfrog steps per sample). Default 10 follows the BlackJAX/Stan
