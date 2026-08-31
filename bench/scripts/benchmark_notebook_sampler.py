@@ -929,7 +929,26 @@ NOTEBOOKS = {
 #: "preconditioned HMC" is the incumbent any new sampler has to beat, and a
 #: campaign must be able to select it without dragging in four unpreconditioned
 #: fixed-L rows it is not comparing against.
-FAMILIES = ("nuts", "hmc", "hmcp", "ghmc", "chees", "mclmc", "smc")
+#:
+#: ``nutswarm`` and ``nutscap`` are not samplers but **budget** families: the
+#: same ``mcmc_nuts`` at several warmup lengths, and at a warmup tree-depth cap
+#: shallower than the sampling one. Both exist to test whether warmup -- 2.52x
+#: the cost of sampling, per ``bench/reports/2026-08-31_fast_nuts.md`` Finding 2
+#: -- can be shortened or bounded. The answer measured there was no on both
+#: counts, and the families are kept so that result stays reproducible.
+FAMILIES = ("nuts", "nutswarm", "nutscap", "hmc", "hmcp", "ghmc", "chees", "mclmc", "smc")
+
+#: Warmup lengths swept by the ``nutswarm`` family, longest first.
+#:
+#: The longest is the fixtures' own shipped 600. 200 and 60 are not a geometric
+#: series for its own sake: BlackJAX's window adaptation spends its budget on
+#: three stages (a fast initial window, a growing sequence of slow windows that
+#: estimate the mass matrix, and a final fast window that re-tunes the step
+#: size), and its default first/last windows are 75 and 50 steps. At 60 there is
+#: essentially no slow window left, so that row is "step size only, mass matrix
+#: barely estimated" -- which is precisely the configuration an analytic metric
+#: is supposed to make survivable.
+NUTS_WARMUP_SWEEP = (600, 200, 100, 60)
 
 
 def shipped_family(cfg: dict) -> str:
@@ -966,6 +985,44 @@ def configurations(nb: str, quick: bool, dense: bool, families=FAMILIES) -> dict
 
     draws = 150 if quick else max(600, shipped["n_samples"])
     warmup = 300 if quick else 1000
+    if "nutscap" in families:
+        # A SHALLOWER cap for warmup than for sampling. The two halves are not
+        # symmetric: during warmup the step size has not converged, so trees are
+        # at their deepest exactly where they are least informative.
+        # ``bench/reports/2026-08-31_fast_nuts.md`` Finding 7 measured one
+        # vmapped 100-step adaptation over 64 lanes at D = 3 costing 1272 s
+        # (~12.7 s per adaptation step for a three-parameter model) and Finding 2
+        # measured warmup at 2.52x the cost of sampling on one galaxy.
+        #
+        # The control is the ``nutswarm`` row at the same warmup length, which is
+        # the same fit with the caps equal. The failure mode has a name and a
+        # number: an adaptation that cannot finish a trajectory returns a step
+        # size tuned for a truncated one, and
+        # ``bench/reports/2026-04-22_pathfinder_vs_window_nuts.md`` records an 18x
+        # regression from exactly that. So these rows are only readable beside
+        # their R-hat and ESS columns.
+        for cap in (5, 3):
+            configs[f"nuts wcap={cap}"] = dict(
+                method="mcmc_nuts",
+                n_warmup=shipped["n_warmup"],
+                n_samples=shipped["n_samples"],
+                warmup_max_num_doublings=cap,
+            )
+
+    if "nutswarm" in families:
+        # The pair at each budget IS the experiment: an unpreconditioned arm and
+        # a preconditioned one at the SAME warmup length, so "shortening warmup
+        # cost convergence" and "shortening warmup cost convergence *only
+        # without the metric*" are distinguishable. Draws are held at the
+        # fixture's own shipped count throughout -- vary one thing.
+        for n_warm in (300, 60) if quick else NUTS_WARMUP_SWEEP:
+            for label, precondition in (("", None), ("+precond", 0.5)):
+                configs[f"nuts w={n_warm}{label}"] = dict(
+                    method="mcmc_nuts",
+                    n_warmup=n_warm,
+                    n_samples=shipped["n_samples"],
+                    precondition=precondition,
+                )
     if "hmc" in families:
         leapfrogs = (20, 40) if quick else (20, 40, 80, 160)
         for leapfrog in leapfrogs:

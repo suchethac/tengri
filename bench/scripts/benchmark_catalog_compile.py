@@ -225,6 +225,128 @@ def measure_cell(
     }
 
 
+def adaptation_spread(
+    n_gal: int,
+    *,
+    n_warmup: int,
+    max_doublings: int,
+    use_dense: bool,
+    target_accept_rate: float,
+    precondition: float | None,
+) -> dict:
+    """What per-galaxy window adaptation actually discovers, across a catalog.
+
+    ``CatalogFitter._run_native_mcmc`` adapts **per galaxy** inside the vmap
+    (convention 1 of ``backends/mcmc/catalog.py``'s module docstring) while
+    ``Fitter._fit_batch_vmap_mcmc`` adapts **once on the first galaxy** and
+    reuses it (convention 2). The second is cheaper by a factor of N in warmup
+    and the first is the statistically defensible one, and nothing had measured
+    the gap.
+
+    This measures the thing the gap is made of: run the same window adaptation
+    that ``run_one`` runs, on every galaxy, and report the spread of the step
+    size and of the diagonal mass matrix it returns. A spread of a few percent
+    means convention 2 costs almost nothing; a spread of 10x means it hands
+    most of the catalog a step size tuned for a posterior that is not theirs.
+
+    It is a **necessary, not sufficient** measurement: a small spread cannot
+    prove convention 2 is safe (two galaxies can share a step size and still
+    want different mass matrices, which is why the mass column is here too),
+    but a large spread is enough to rule it out.
+    """
+    import jax
+    import jax.numpy as jnp
+    from jax.flatten_util import ravel_pytree
+
+    from tengri.inference.backends.mcmc._shared import _get_flat_logdensity, _nuts_warmup_only
+    from tengri.inference.backends.mcmc.catalog import (
+        _make_substitute,
+        _preconditioned_logdensity,
+    )
+    from tengri.inference.catalog_fitter import CatalogFitter
+    from tengri.inference.preconditioning import (
+        _resolve_whitening_strength,
+        traced_preconditioner,
+    )
+
+    model, _one, ssp_tag = _fixture()
+    galaxies = make_catalog_n(model, n_gal)
+    cat = CatalogFitter(model, galaxies)
+    fitter = cat._get_dummy_fitter()
+
+    init_params = fitter._initialize_unbounded(jax.random.PRNGKey(0))
+    ld, _unravel, init_flat, template = _get_flat_logdensity(fitter, init_params)
+    substitute = _make_substitute(template, False, False)
+    n_dim = int(init_flat.shape[0])
+    strength = _resolve_whitening_strength(precondition, n_dim)
+    sample_ld = ld if strength is None else _preconditioned_logdensity(ld, strength)
+
+    def warmup_one(gal_key, data, noise, presence):
+        data_args = substitute(data, noise, presence, jnp.zeros(()), jnp.zeros((0,)), jnp.zeros((0,)))
+        if strength is None:
+            sample_args, sample_init = data_args, init_flat
+        else:
+            precond, _ok = traced_preconditioner(ld, init_flat, data_args, strength=strength)
+            sample_args = (precond.matrix, data_args)
+            sample_init = precond.to_latent(init_flat)
+        step_size, inv_mass, _div = _nuts_warmup_only(
+            sample_init,
+            gal_key,
+            sample_ld,
+            sample_args,
+            n_warmup,
+            use_dense,
+            target_accept_rate,
+            False,
+            int(max_doublings),
+        )
+        return step_size, inv_mass
+
+    n_data = len(galaxies[0]["flux_obs"])
+    data = jnp.stack([jnp.asarray(g["flux_obs"]) for g in galaxies])
+    noise = jnp.stack([jnp.asarray(g["noise"]) for g in galaxies])
+    presence = jnp.ones((n_gal, n_data))
+    keys = jax.random.split(jax.random.PRNGKey(0), n_gal)
+
+    t0 = time.perf_counter()
+    step, inv_mass = jax.jit(jax.vmap(warmup_one))(keys, data, noise, presence)
+    jax.block_until_ready(step)
+    wall = time.perf_counter() - t0
+
+    step = jnp.asarray(step)
+    inv_mass = jnp.asarray(inv_mass)
+    # The mass matrix is per galaxy and per dimension. Spread it dimension-wise
+    # and take the worst dimension: one badly-shared direction is enough to
+    # mistune a chain, and averaging over D would hide exactly that.
+    mass_ratio = float(jnp.max(jnp.max(inv_mass, axis=0) / jnp.min(inv_mass, axis=0)))
+    d_params = int(ravel_pytree(init_params)[0].shape[0])
+    return {
+        "probe": "adaptation_spread",
+        "n_gal": int(n_gal),
+        "n_warmup": int(n_warmup),
+        "max_doublings": int(max_doublings),
+        "precondition": precondition,
+        "use_dense": bool(use_dense),
+        "d_params": d_params,
+        "ssp": ssp_tag,
+        "device": str(jax.devices()[0].platform),
+        "wall_s": round(wall, 2),
+        "step_size_min": float(jnp.min(step)),
+        "step_size_median": float(jnp.median(step)),
+        "step_size_max": float(jnp.max(step)),
+        "step_size_ratio": float(jnp.max(step) / jnp.min(step)),
+        "inv_mass_ratio_worst_dim": mass_ratio,
+    }
+
+
+def make_catalog_n(model, n_gal: int):
+    """``n_gal`` mock galaxies from the throughput harness's own generator."""
+    import jax
+    from benchmark_catalog_throughput import make_catalog
+
+    return make_catalog(model, n_gal, jax.random.PRNGKey(0))
+
+
 def main(argv=None) -> int:
     ap = argparse.ArgumentParser(description=__doc__)
     ap.add_argument("--method", nargs="+", default=["mcmc_hmc", "mcmc_nuts"])
@@ -255,6 +377,15 @@ def main(argv=None) -> int:
     ap.add_argument("--samples", type=int, default=50)
     ap.add_argument("--max-doublings", type=int, default=10, help="NUTS tree-depth cap")
     ap.add_argument("--dense", action="store_true", help="dense mass matrix")
+    ap.add_argument(
+        "--adapt-spread",
+        type=int,
+        default=None,
+        metavar="N",
+        help="instead of the compile sweep, window-adapt every one of N galaxies "
+        "and report the spread of the step size and mass matrix -- what "
+        "per-galaxy adaptation discovers that a shared one would not.",
+    )
     ap.add_argument("--timeout", type=int, default=900, help="per-cell subprocess timeout [s]")
     ap.add_argument("--json", default=None)
     ap.add_argument(
@@ -265,6 +396,21 @@ def main(argv=None) -> int:
         help="run one cell in-process and print its JSON (the subprocess entry point)",
     )
     args = ap.parse_args(argv)
+
+    if args.adapt_spread is not None:
+        row = adaptation_spread(
+            args.adapt_spread,
+            n_warmup=args.warmup,
+            max_doublings=args.max_doublings,
+            use_dense=args.dense,
+            target_accept_rate=0.85,
+            precondition=args.precondition,
+        )
+        print(json.dumps(row, indent=2))
+        if args.json:
+            with open(args.json, "w") as fh:
+                json.dump([row], fh, indent=2)
+        return 0
 
     if args.cell is not None:
         row = measure_cell(
