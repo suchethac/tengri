@@ -205,6 +205,7 @@ from __future__ import annotations
 
 import argparse
 import json
+import math
 import os
 import subprocess
 import sys
@@ -1218,9 +1219,10 @@ def run_one(nb: str, label: str, kwargs: dict, seed: int) -> dict:
         )
     except DeadFitError as exc:
         # A refusal is an OUTCOME, not a missing value and not a harness
-        # failure (#2088). Since PR #2090 the window-adaptation backends refuse
-        # to sample when >= 90% of the final warmup window diverged, where they
-        # previously returned a frozen posterior and a warning. Recording it as
+        # failure (#2088, #2093). Since PR #2090 the window-adaptation backends refuse
+        # to sample when >= 90% of the final warmup window diverged (#2088), and the
+        # post-hoc check raises when >= 90% of sampling draws diverged (#2093), where
+        # they previously returned a frozen posterior and a warning. Recording it as
         # a row is what keeps the baseline column honest: "the library refused
         # to hand this back" is a stronger statement about a sampler than any
         # R-hat it could have printed, and folding it into a blank cell would
@@ -1233,6 +1235,7 @@ def run_one(nb: str, label: str, kwargs: dict, seed: int) -> dict:
             "dead_fit": True,
             "dead_fit_reason": str(exc)[:300],
             "warmup_divergence_frac": getattr(exc, "warmup_divergence_frac", None),
+            "sampling_divergence_frac": getattr(exc, "sampling_divergence_frac", None),
             "eevpd": None,
             "eevpd_target": None,
             "nonfinite_steps": None,
@@ -1256,8 +1259,15 @@ def run_one(nb: str, label: str, kwargs: dict, seed: int) -> dict:
 def format_row(label: str, row: dict) -> str:
     """One table line, with ``n/a`` where a column does not apply to the sampler."""
     if row.get("dead_fit"):
-        frac = row.get("warmup_divergence_frac")
-        tail = "" if frac is None else f" ({frac} of the final warmup window divergent)"
+        sampling_frac = row.get("sampling_divergence_frac")
+        warmup_frac = row.get("warmup_divergence_frac")
+        # Check post-hoc sampling divergence first, then pre-hoc warmup divergence
+        if sampling_frac is not None and not math.isnan(sampling_frac):
+            tail = f" ({sampling_frac:.0%} of post-burnin draws divergent)"
+        elif warmup_frac is not None and not math.isnan(warmup_frac):
+            tail = f" ({warmup_frac:.0%} of final warmup window divergent)"
+        else:
+            tail = ""
         return f"{label:<20}{row['wall']:>9.1f}{'REFUSED (DeadFitError)':>44}{tail}"
     div = "n/a" if row["divergences"] is None else str(row["divergences"])
     gpd = "" if row.get("grad_per_draw") is None else f"{row['grad_per_draw']:>8.1f}"

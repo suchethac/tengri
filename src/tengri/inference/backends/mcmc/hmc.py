@@ -24,7 +24,9 @@ from tengri.inference.backends.mcmc._shared import (
     _set_cached_adaptation,
     _vmap_chains,
     final_window_divergence_frac,
+    refuse_dead_sampling,
     refuse_dead_warmup,
+    sampling_diagnostics,
 )
 from tengri.inference.preconditioning import prepare_preconditioning
 from tengri.utils.compile_log import compile_timer
@@ -340,6 +342,19 @@ def run_hmc(
         divergent = divergent[n_burnin:]
     n_divergent = int(jnp.sum(divergent))
 
+    # Post-hoc dead-fit detection: any chain's draws mostly divergent (#2093).
+    # Complements the pre-hoc warmup check for fits that collapse after warmup.
+    # On failure, evict the cached adaptation so the next fit re-tunes.
+    refuse_dead_sampling(
+        divergent,
+        sampler="HMC",
+        n_samples=n_samples,
+        n_chains=n_chains,
+        step_size=float(parameters["step_size"]),
+        fitter=fitter,
+        method_key=adapt_key,
+    )
+
     wall_time = time.time() - t0
 
     # Leave the whitened coordinates before the draws are read as parameters.
@@ -347,6 +362,9 @@ def run_hmc(
 
     samples_phys = _vmap_samples_to_physical(positions, unravel_fn, context.to_physical)
     best_params = _mean_params(samples_phys)
+
+    # Compute sampling diagnostics (divergence fraction and unique draw count).
+    diag = sampling_diagnostics(positions, divergent)
 
     if verbose:
         logger.info(
@@ -370,6 +388,7 @@ def run_hmc(
             "n_divergent": n_divergent,
             **warmup_record,
             "step_size": float(parameters["step_size"]),
+            **diag,
         },
         loss_history=None,
         _model=context.model,

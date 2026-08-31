@@ -381,6 +381,18 @@ DEAD_WARMUP_WINDOW_FRAC = 0.1
 #: ... and never fewer than this many steps.
 DEAD_WARMUP_MIN_WINDOW = 10
 
+#: Divergent fraction over all post-burnin draws at which a fit is rejected
+#: as dead after sampling completes (#2093). Healthy fits measure <0.5%
+#: divergences; the defect fit measured 100% divergent draws with a unique-row
+#: fraction of 0.002 (1200 draws, 2 unique), unmeasured by pre-hoc guards.
+DEAD_SAMPLING_DIVERGENCE_FRAC = 0.9
+#: Minimum number of post-burnin draws required to judge a fit as dead.
+#: A record shorter than this (e.g. 2 draws from a 2-step HMC warmup) is the
+#: dual-averaging opening burst and carries no verdict — the construction-time
+#: DeadFitWarning ("2/2 divergent") is "the only guard entitled to" judge it
+#: (#2088 R15). The #2093 reproducer has 1200 draws, far above this floor.
+DEAD_SAMPLING_MIN_DRAWS = 10
+
 
 def _dead_warmup_window(n_flags: int, n_warmup: int) -> int:
     return min(n_flags, max(DEAD_WARMUP_MIN_WINDOW, round(DEAD_WARMUP_WINDOW_FRAC * n_warmup)))
@@ -447,6 +459,142 @@ def refuse_dead_warmup(
         f"the prior bounds against the MAP initialization, and that the initial log "
         f"posterior is finite, before re-tuning.",
         warmup_divergence_frac=frac,
+        step_size=step_size,
+    )
+
+
+def sampling_diagnostics(positions, divergent) -> dict:
+    """Compute sampling-phase diagnostics: divergence and unique draw fractions.
+
+    Called post-burnin to measure fit quality before Posterior assembly. Both
+    measurements are Python-side (not jitted) since they operate over the full
+    draw matrix, not per-step or per-chain.
+
+    Parameters
+    ----------
+    positions : array_like, shape (n_draws, n_dim), or None
+        Sample positions (already burnin-discarded).
+    divergent : array_like of bool, shape (n_draws,), or None
+        Per-draw divergence flags (already burnin-discarded), or None.
+
+    Returns
+    -------
+    dict
+        With keys ``sampling_divergence_frac`` and ``unique_draw_frac``.
+        Fractions range [0, 1]. NaN on None inputs (to match pre-hoc convention).
+    """
+    if divergent is None or positions is None:
+        return {
+            "sampling_divergence_frac": float("nan"),
+            "unique_draw_frac": float("nan"),
+        }
+
+    sampling_divergence_frac = float(np.mean(np.asarray(divergent, dtype=bool)))
+    unique_positions, _ = np.unique(np.asarray(positions), axis=0, return_counts=True)
+    unique_draw_frac = float(unique_positions.shape[0]) / max(np.asarray(positions).shape[0], 1)
+    return {
+        "sampling_divergence_frac": sampling_divergence_frac,
+        "unique_draw_frac": unique_draw_frac,
+    }
+
+
+def refuse_dead_sampling(
+    divergent,
+    *,
+    sampler: str,
+    n_samples: int,
+    n_chains: int,
+    step_size: float,
+    fitter=None,
+    method_key=None,
+) -> None:
+    """Raise :class:`DeadFitError` when any chain's post-burnin draws are mostly divergent (#2093).
+
+    Sampling completed but one or more chains have returned a frozen posterior:
+    the divergent fraction **per chain** reaches ``DEAD_SAMPLING_DIVERGENCE_FRAC``
+    (0.9). This is a post-hoc guard complementing the pre-hoc warmup check:
+    a fit can survive warmup tuning on all chains and still return garbage if
+    one chain collapses during sampling while others mix (issue #2093, reproduced
+    on the nb05 model with seed 0: all 1200 draws from all chains divergent,
+    unique-row fraction 0.002, no pre-hoc warning — an aggregate check would have
+    missed a 1-dead-1-healthy case). A single frozen chain makes split-R-hat
+    astronomical and the posterior is garbage either way.
+
+    Unlike ``refuse_dead_warmup``, this incurs the full sampling cost; the
+    message says "sampling completed" to reflect that. On failure, the cached
+    adaptation (step size, mass matrix) is evicted so the next fit re-tunes.
+
+    A ``divergent`` of ``None`` or empty means nothing was measured, so there is
+    nothing to refuse on, and it returns quietly (mirrors the pre-hoc semantics).
+
+    Parameters
+    ----------
+    divergent : array_like of bool, shape (n_chain * n_samples,), or None
+        Per-draw ``is_divergent`` flags (flattened chain-major after burnin discard),
+        or ``None``. Shape is ``(n_chains * n_samples,)`` where chains come first.
+    sampler : str
+        Sampler name for the error message (e.g., "NUTS").
+    n_samples : int
+        Draws per chain (after burnin discard).
+    n_chains : int
+        Number of chains.
+    step_size : float
+        The adapted step size, for diagnostics.
+    fitter : Fitter, optional
+        The model context; if provided (along with ``method_key``), the cached
+        adaptation will be evicted on failure so the next fit re-tunes.
+    method_key : tuple, optional
+        The sampler method key; must match what was passed to
+        ``_set_cached_adaptation``. Ignored if ``fitter`` is None.
+
+    Raises
+    ------
+    DeadFitError
+        When any chain's divergent fraction reaches the threshold.
+    """
+    if divergent is None:
+        return
+
+    flags = np.asarray(divergent, dtype=bool)
+    if flags.size == 0:
+        return
+
+    # Check per-chain: A single record per chain shorter than DEAD_SAMPLING_MIN_DRAWS
+    # carries no verdict; the construction-time DeadFitWarning is the only guard
+    # entitled to judge it (#2088 R15).
+    per_chain_draws = flags.size // n_chains
+    if per_chain_draws < DEAD_SAMPLING_MIN_DRAWS:
+        return
+
+    # Reshape to (n_chains, n_samples) and compute per-chain divergence fraction.
+    frac_by_chain = flags.reshape(n_chains, -1).mean(axis=1)
+    max_frac = float(frac_by_chain.max())
+
+    if max_frac < DEAD_SAMPLING_DIVERGENCE_FRAC:
+        return
+
+    # At least one chain is dead; evict the cache and raise.
+    if fitter is not None and method_key is not None:
+        _evict_cached_adaptation(fitter, method_key)
+
+    # Report which chains died and all per-chain fractions for diagnostics.
+    dead_chains = np.where(frac_by_chain >= DEAD_SAMPLING_DIVERGENCE_FRAC)[0]
+    frac_str = ", ".join(f"chain {i}: {f:.0%}" for i, f in enumerate(frac_by_chain))
+    n_total = n_samples * n_chains
+
+    raise DeadFitError(
+        f"{sampler} sampling completed dead: {max_frac:.0%} max (chains "
+        f"{', '.join(str(i) for i in dead_chains)}) of {n_total} post-burnin draws diverged "
+        f"at step size {step_size:.3g}. Per-chain fractions: {frac_str}. The sampler has cost "
+        f"seconds of computation and returned a frozen posterior. A fit that survived "
+        f"warmup but collapsed during sampling suggests a sampler or tuning issue "
+        f"specific to this model or seed. Try: (1) a different sampler "
+        f"(e.g. HMC with fewer leapfrog steps, or preconditioning; issue #2093 "
+        f"measured ChEES succeeding on the same galaxy at R-hat 1.239 with zero "
+        f"divergences), (2) a different random seed, or (3) verify the data units, "
+        f"prior bounds, and initial log-posterior are finite before re-tuning. "
+        f"Issue #2093.",
+        sampling_divergence_frac=max_frac,
         step_size=step_size,
     )
 
@@ -2159,6 +2307,31 @@ def _set_cached_adaptation(fitter, method_key, params):
     """Store adaptation parameters on the Model for cross-fitter reuse."""
     cache = _model_cache_owner.get_or_compile_model(fitter.model).setdefault("adaptation", {})
     cache[_adaptation_cache_key(fitter, method_key)] = params
+
+
+def _evict_cached_adaptation(fitter, method_key):
+    """Remove cached adaptation when a fit fails, forcing re-tuning on the next attempt.
+
+    A fit that completes warmup and caches tuning (step size, mass matrix) but
+    then collapses during sampling should not poison the next fit with the dead
+    adaptation. This is called from ``refuse_dead_sampling`` when the post-hoc
+    divergence guard raises: the next call will re-tune (unless it is a warmup
+    replay of the same fit, which catches the divergence pre-hoc and also evicts,
+    so re-tuning is guaranteed).
+
+    Parameters
+    ----------
+    fitter : Fitter
+        The model context; its cache key will be evicted.
+    method_key : tuple
+        The sampler method identifying key; must match what was passed to
+        ``_set_cached_adaptation``.
+    """
+    mc = _model_cache_owner.get_or_compile_model(fitter.model)
+    cache = mc.get("adaptation")
+    if cache is None:
+        return
+    cache.pop(_adaptation_cache_key(fitter, method_key), None)
 
 
 def _vmap_chains(
