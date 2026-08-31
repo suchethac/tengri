@@ -44,7 +44,7 @@ Reference: Conroy 2013 (stellar), Silva et al. 1998 (dust emission).
 
  .. code-block:: none
 
-    /tengri/src/tengri/forward/orchestrator.py:951: SFHBeforeBigBangWarning: Star formation history forms 43% of its stellar mass before the Big Bang at z=0.20 (cosmic age 11.30 Gyr). That mass is truncated, so the prediction does not reflect the requested SFH — bound the SFH age parameter or the redshift to keep star formation within cosmic time.
+    /tengri/src/tengri/forward/orchestrator.py:951: SFHBeforeBigBangWarning: Star formation history forms 43% of its stellar mass before the Big Bang at z=0.20 (cosmic age 11.30 Gyr). That mass is truncated, so the prediction does not reflect the requested SFH: bound the SFH age parameter or the redshift to keep star formation within cosmic time.
       state = component.apply(state, sliced, ssp_data=ssp_data, template_data=template_data)
 
 
@@ -80,7 +80,7 @@ Reference: Conroy 2013 (stellar), Silva et al. 1998 (dust emission).
         ssp,
         sfh={
             "type": "dpl",
-            "all_params": tengri.FIXED,
+            "all_params": tengri.Fixed(tengri.DEFAULT),
             "alpha": 2.0,
             "beta": 2.5,
             "tau_gyr": 1.0,
@@ -89,13 +89,13 @@ Reference: Conroy 2013 (stellar), Silva et al. 1998 (dust emission).
         dust_attenuation={
             "law": "power_law",
             "type": "two_component",
-            "all_params": tengri.FIXED,
+            "all_params": tengri.Fixed(tengri.DEFAULT),
             "tau_bc": 1.0,
             "tau_diff": 0.5,
         },
         dust_emission={
             "type": "modified_blackbody",
-            "all_params": tengri.FIXED,
+            "all_params": tengri.Fixed(tengri.DEFAULT),
             "T": 30.0,
             "beta_ir": 1.8,
         },
@@ -129,11 +129,6 @@ Reference: Conroy 2013 (stellar), Silva et al. 1998 (dust emission).
 
     fig.tight_layout()
     plt.savefig("plot_logzsol_panchromatic.png", dpi=150, bbox_inches="tight")
-
-
-.. rst-class:: sphx-glr-timing
-
-   **Total running time of the script:** (0 minutes 3.791 seconds)
 
 
 .. _sphx_glr_download_auto_examples_metallicity_plot_logzsol_panchromatic.py:

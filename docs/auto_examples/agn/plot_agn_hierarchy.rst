@@ -33,7 +33,7 @@ Reference: Kubota & Done 2018, MNRAS, 480, 1247 (multicolor disc);
 Stalevski et al. 2016, MNRAS, 458, 2288 (SKIRTOR);
 Temple, Hewett & Banerji 2021, MNRAS, 508, 737 (QSOgen).
 
-.. GENERATED FROM PYTHON SOURCE LINES 17-96
+.. GENERATED FROM PYTHON SOURCE LINES 17-101
 
 
 
@@ -67,11 +67,11 @@ Temple, Hewett & Banerji 2021, MNRAS, 508, 737 (QSOgen).
 
     C_AA_PER_S = 2.998e18
     LOG_LBOL = 12.5
-    SFH = {"type": "const", "all_params": tengri.FIXED, "log_total_mass": -10.0}
+    SFH = {"type": "const", "all_params": tengri.Fixed(tengri.DEFAULT), "log_total_mass": -10.0}
     DUST = {
         "law": "power_law",
         "type": "two_component",
-        "all_params": tengri.FIXED,
+        "all_params": tengri.Fixed(tengri.DEFAULT),
         "tau_diff": 0.0,
         "tau_bc": 0.0,
     }
@@ -81,34 +81,39 @@ Temple, Hewett & Banerji 2021, MNRAS, 508, 737 (QSOgen).
     TIERS = [
         (
             "bare multicolor disc",
-            {"disc": {"type": "multicolor", "all_params": tengri.FIXED}},
+            {"disc": {"type": "multicolor", "all_params": tengri.Fixed(tengri.DEFAULT)}},
         ),
         (
             "disc + SKIRTOR torus",
             {
-                "disc": {"type": "multicolor", "all_params": tengri.FIXED},
-                "torus": {"type": "skirtor", "all_params": tengri.FIXED},
+                "disc": {"type": "multicolor", "all_params": tengri.Fixed(tengri.DEFAULT)},
+                "torus": {"type": "skirtor", "all_params": tengri.Fixed(tengri.DEFAULT)},
             },
         ),
         (
             "disc + torus + NLR lines",
             {
-                "disc": {"type": "multicolor", "all_params": tengri.FIXED},
-                "torus": {"type": "skirtor", "all_params": tengri.FIXED},
-                "nlr": {"type": "analytic", "all_params": tengri.FIXED},
-                "blr": {"type": "none", "all_params": tengri.FIXED},
+                "disc": {"type": "multicolor", "all_params": tengri.Fixed(tengri.DEFAULT)},
+                "torus": {"type": "skirtor", "all_params": tengri.Fixed(tengri.DEFAULT)},
+                "nlr": {"type": "analytic", "all_params": tengri.Fixed(tengri.DEFAULT)},
+                "blr": {"type": "none", "all_params": tengri.Fixed(tengri.DEFAULT)},
             },
         ),
         (
             "empirical QSOgen template",
-            {"disc": {"type": "qsogen", "all_params": tengri.FIXED}},
+            {"disc": {"type": "qsogen", "all_params": tengri.Fixed(tengri.DEFAULT)}},
         ),
     ]
     colors = plt.cm.viridis(np.linspace(0.05, 0.9, len(TIERS)))
 
     fig, ax = plt.subplots(figsize=(7.5, 4.8))
     for (label, blocks), color in zip(TIERS, colors):
-        agn = {"all_params": tengri.FIXED, "log_lbol": LOG_LBOL, "lum_ratio": 1.0, **blocks}
+        agn = {
+            "all_params": tengri.Fixed(tengri.DEFAULT),
+            "log_lbol": LOG_LBOL,
+            "lum_ratio": 1.0,
+            **blocks,
+        }
         model = tengri.SEDModel.build(
             ssp, sfh=SFH, dust_attenuation=DUST, agn=agn, redshift=tengri.Fixed(0.0)
         )
@@ -131,7 +136,7 @@ Temple, Hewett & Banerji 2021, MNRAS, 508, 737 (QSOgen).
 
 .. rst-class:: sphx-glr-timing
 
-   **Total running time of the script:** (0 minutes 7.428 seconds)
+   **Total running time of the script:** (0 minutes 5.494 seconds)
 
 
 .. _sphx_glr_download_auto_examples_agn_plot_agn_hierarchy.py:

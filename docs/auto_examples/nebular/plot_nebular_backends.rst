@@ -37,7 +37,7 @@ References:
 - Li, Leja & Speagle 2023, ApJ, 956, 23 (Cue neural emulator)
 - Byler et al. 2017, ApJ, 840, 44 (BakedIn SSP-embedded lines)
 
-.. GENERATED FROM PYTHON SOURCE LINES 22-138
+.. GENERATED FROM PYTHON SOURCE LINES 22-142
 
 
 
@@ -77,7 +77,7 @@ References:
     common_config = {
         "sfh": {
             "type": "dpl",
-            "all_params": tengri.FIXED,
+            "all_params": tengri.Fixed(tengri.DEFAULT),
             "alpha": 1.0,
             "beta": 2.5,
             "tau_gyr": 0.5,
@@ -86,7 +86,7 @@ References:
         "dust_attenuation": {
             "law": "power_law",
             "type": "two_component",
-            "all_params": tengri.FIXED,
+            "all_params": tengri.Fixed(tengri.DEFAULT),
             "tau_diff": 0.0,
             "tau_bc": 0.0,
         },
@@ -96,14 +96,18 @@ References:
     # Build Cue (bare-stellar SSP)
     model_cue = tengri.SEDModel.build(
         ssp_bare,
-        neb={"type": "cue", "all_params": tengri.FIXED, "neb_logU": tengri.Fixed(-3.0)},
+        neb={
+            "type": "cue",
+            "all_params": tengri.Fixed(tengri.DEFAULT),
+            "neb_logU": tengri.Fixed(-3.0),
+        },
         **common_config,
     )
 
     # Build BakedIn (wNE SSP with nebular lines embedded)
     model_baked = tengri.SEDModel.build(
         ssp_wne,
-        neb={"type": "ssp", "all_params": tengri.FIXED},
+        neb={"type": "ssp", "all_params": tengri.Fixed(tengri.DEFAULT)},
         **common_config,
     )
 

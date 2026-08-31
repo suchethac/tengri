@@ -45,7 +45,7 @@ References:
 - Whitaker et al. 2014, ApJ, 795, 104 (z~2 main sequence, sSFR evolution)
 - Schreiber et al. 2015, A&A, 575, A74 (universal MS parameters)
 
-.. GENERATED FROM PYTHON SOURCE LINES 30-286
+.. GENERATED FROM PYTHON SOURCE LINES 30-287
 
 
 
@@ -180,15 +180,16 @@ References:
     # Use dpl (double-power-law) SFH with free log_total_mass (normalization)
     model = tengri.SEDModel.build(
         ssp,
-        sfh={"type": "dpl", "all_params": tengri.FIXED, "log_total_mass": 10.0},
+        sfh={"type": "dpl", "all_params": tengri.Fixed(tengri.DEFAULT), "log_total_mass": 10.0},
         dust_attenuation={
             "law": "power_law",
             "type": "two_component",
-            "all_params": tengri.FIXED,
+            "all_params": tengri.Fixed(tengri.DEFAULT),
             "tau_diff": 0.0,
             "tau_bc": 0.0,
         },
-        neb={"type": "cue", "all_params": tengri.FIXED}, redshift=Fixed(0.1),
+        neb={"type": "cue", "all_params": tengri.Fixed(tengri.DEFAULT)},
+        redshift=Fixed(0.1),
     )
 
     # Sample baseline parameters (all fixed except log_total_mass)

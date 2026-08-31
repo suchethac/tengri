@@ -33,8 +33,12 @@ log_total_mass_vals = [10.0, 11.0, 12.0]  # three representative galaxy masses
 ssp = tengri.load_ssp("fsps_prsc_miles_chabrier")
 model = tengri.SEDModel.build(
     ssp,
-    sfh={"type": "dpl", "all_params": tengri.FIXED},
-    dust_attenuation={"law": "power_law", "type": "two_component", "all_params": tengri.FIXED},
+    sfh={"type": "dpl", "all_params": tengri.Fixed(tengri.DEFAULT)},
+    dust_attenuation={
+        "law": "power_law",
+        "type": "two_component",
+        "all_params": tengri.Fixed(tengri.DEFAULT),
+    },
     redshift=tengri.Fixed(0.0),
 )
 

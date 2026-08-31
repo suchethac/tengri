@@ -84,7 +84,7 @@ References:
         ssp,
         sfh={
             "type": "tsnorm",
-            "all_params": tengri.FIXED,
+            "all_params": tengri.Fixed(tengri.DEFAULT),
             "peak_lbt_gyr": tengri.Uniform(0.1, 13.0),
             "width_gyr": tengri.Uniform(0.1, 5.0),
             "log_total_mass": 10.0,
@@ -94,7 +94,7 @@ References:
         dust_attenuation={
             "law": "power_law",
             "type": "two_component",
-            "all_params": tengri.FIXED,
+            "all_params": tengri.Fixed(tengri.DEFAULT),
             "tau_diff": tengri.Uniform(0.0, 2.0),
             "tau_bc": 0.3,
             "slope": -0.7,
@@ -133,11 +133,6 @@ References:
 
     fig.tight_layout()
     plt.savefig("plot_usecase_hubble_sequence.png", dpi=150, bbox_inches="tight")
-
-
-.. rst-class:: sphx-glr-timing
-
-   **Total running time of the script:** (0 minutes 3.685 seconds)
 
 
 .. _sphx_glr_download_auto_examples_usecases_plot_usecase_hubble_sequence.py:

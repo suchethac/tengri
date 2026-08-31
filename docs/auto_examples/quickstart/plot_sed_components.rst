@@ -63,7 +63,7 @@ Dust attenuation across the SED: intrinsic, attenuated, and absorbed
         observation=obs,
         sfh={
             "type": "tsnorm",
-            "all_params": tengri.FIXED,
+            "all_params": tengri.Fixed(tengri.DEFAULT),
             "log_total_mass": 10.0,
             "peak_lbt_gyr": 5.0,
             "width_gyr": 2.0,
@@ -73,7 +73,7 @@ Dust attenuation across the SED: intrinsic, attenuated, and absorbed
         dust_attenuation={
             "type": "two_component",
             "law": "calzetti",
-            "all_params": tengri.FIXED,
+            "all_params": tengri.Fixed(tengri.DEFAULT),
             "tau_bc": 1.0,
             "tau_diff": 0.5,
             "slope": -0.7,
@@ -118,7 +118,7 @@ Dust attenuation across the SED: intrinsic, attenuated, and absorbed
 
 .. rst-class:: sphx-glr-timing
 
-   **Total running time of the script:** (0 minutes 4.046 seconds)
+   **Total running time of the script:** (0 minutes 3.207 seconds)
 
 
 .. _sphx_glr_download_auto_examples_quickstart_plot_sed_components.py:

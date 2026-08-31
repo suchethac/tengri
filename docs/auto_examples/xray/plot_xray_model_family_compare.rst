@@ -81,19 +81,19 @@ Reference: Yang+2020 (alpha_ox corona); Lopez+2024, Asmus+2015 (alpha_IRX).
     warnings.filterwarnings("ignore", message=".*experimental.*")
 
     # One host galaxy for every model: only the xray block below changes.
-    SFH = {"type": "const", "all_params": tengri.FIXED, "log_total_mass": 10.5}
+    SFH = {"type": "const", "all_params": tengri.Fixed(tengri.DEFAULT), "log_total_mass": 10.5}
     DUST = {
         "law": "power_law",
         "type": "two_component",
-        "all_params": tengri.FIXED,
+        "all_params": tengri.Fixed(tengri.DEFAULT),
         "tau_diff": 0.4,
         "tau_bc": 0.5,
     }
     AGN = {
         "type": "composable",
-        "all_params": tengri.FIXED,
-        "disc": {"type": "qsogen", "all_params": tengri.FIXED},
-        "torus": {"type": "skirtor", "all_params": tengri.FIXED},
+        "all_params": tengri.Fixed(tengri.DEFAULT),
+        "disc": {"type": "qsogen", "all_params": tengri.Fixed(tengri.DEFAULT)},
+        "torus": {"type": "skirtor", "all_params": tengri.Fixed(tengri.DEFAULT)},
         "log_lbol": 11.5,  # log10(L_bol / L_sun) at API level, never erg/s
     }
     KEV_TO_AA = C_AA * 4.135667696e-18  # h [keV s] * c [A/s] -> A at 1 keV
@@ -110,7 +110,7 @@ Reference: Yang+2020 (alpha_ox corona); Lopez+2024, Asmus+2015 (alpha_IRX).
             sfh=SFH,
             dust_attenuation=DUST,
             agn=AGN,
-            xray={"type": name, "all_params": tengri.FIXED},
+            xray={"type": name, "all_params": tengri.Fixed(tengri.DEFAULT)},
             redshift=tengri.Fixed(0.05),
         )
         # Nothing is free, so the draw is the declared values and the host is
@@ -153,7 +153,7 @@ Reference: Yang+2020 (alpha_ox corona); Lopez+2024, Asmus+2015 (alpha_IRX).
 
 .. rst-class:: sphx-glr-timing
 
-   **Total running time of the script:** (0 minutes 8.697 seconds)
+   **Total running time of the script:** (0 minutes 7.958 seconds)
 
 
 .. _sphx_glr_download_auto_examples_xray_plot_xray_model_family_compare.py:

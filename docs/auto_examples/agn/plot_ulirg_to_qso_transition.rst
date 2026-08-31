@@ -40,7 +40,7 @@ the FIR dust-emission bump shrinks while the UV continuum brightens.
 
 - Veilleux et al. (2009) ARA&A 47, 63: ULIRG/QSO transition review
 
-.. GENERATED FROM PYTHON SOURCE LINES 25-176
+.. GENERATED FROM PYTHON SOURCE LINES 25-180
 
 
 
@@ -139,24 +139,28 @@ the FIR dust-emission bump shrinks while the UV continuum brightens.
             "type": "composable",
             "log_lbol": log_lbol,
             "lum_ratio": agn_lum_ratio,
-            "disc": {"type": "multicolor", "all_params": tengri.FIXED},
-            "torus": {"type": "skirtor", "all_params": tengri.FIXED},
-            "nlr": {"type": "analytic", "all_params": tengri.FIXED},
-            "blr": {"type": "none", "all_params": tengri.FIXED},
-            "all_params": tengri.FIXED,
+            "disc": {"type": "multicolor", "all_params": tengri.Fixed(tengri.DEFAULT)},
+            "torus": {"type": "skirtor", "all_params": tengri.Fixed(tengri.DEFAULT)},
+            "nlr": {"type": "analytic", "all_params": tengri.Fixed(tengri.DEFAULT)},
+            "blr": {"type": "none", "all_params": tengri.Fixed(tengri.DEFAULT)},
+            "all_params": tengri.Fixed(tengri.DEFAULT),
         }
 
         model = tengri.SEDModel.build(
             ssp,
-            sfh={"type": "const", "all_params": tengri.FIXED, "log_total_mass": log_total_mass},
+            sfh={
+                "type": "const",
+                "all_params": tengri.Fixed(tengri.DEFAULT),
+                "log_total_mass": log_total_mass,
+            },
             dust_attenuation={
                 "law": "power_law",
                 "type": "two_component",
-                "all_params": tengri.FIXED,
+                "all_params": tengri.Fixed(tengri.DEFAULT),
                 "tau_bc": tau_bc,
                 "tau_diff": tau_diff,
             },
-            dust_emission={"type": "dale2014", "all_params": tengri.FIXED},
+            dust_emission={"type": "dale2014", "all_params": tengri.Fixed(tengri.DEFAULT)},
             agn=agn_dict,
             redshift=tengri.Fixed(0.0),
         )
@@ -210,7 +214,7 @@ the FIR dust-emission bump shrinks while the UV continuum brightens.
 
 .. rst-class:: sphx-glr-timing
 
-   **Total running time of the script:** (0 minutes 4.233 seconds)
+   **Total running time of the script:** (0 minutes 3.073 seconds)
 
 
 .. _sphx_glr_download_auto_examples_agn_plot_ulirg_to_qso_transition.py:

@@ -38,15 +38,19 @@ ssp = tengri.load_ssp()
 
 model = tengri.SEDModel.build(
     ssp,
-    sfh={"type": "const", "all_params": tengri.FIXED, "log_total_mass": 11.0},
+    sfh={"type": "const", "all_params": tengri.Fixed(tengri.DEFAULT), "log_total_mass": 11.0},
     dust_attenuation={
         "law": "power_law",
         "type": "two_component",
-        "all_params": tengri.FIXED,
+        "all_params": tengri.Fixed(tengri.DEFAULT),
         "tau_diff": 1.0,
         "tau_bc": 0.3,
     },
-    dust_emission={"type": "themis", "all_params": tengri.FIXED, "dust_gamma_dl": 0.1},
+    dust_emission={
+        "type": "themis",
+        "all_params": tengri.Fixed(tengri.DEFAULT),
+        "dust_gamma_dl": 0.1,
+    },
     redshift=tengri.Fixed(0.05),
 )
 p0 = dict(model.spec.sample(jax.random.PRNGKey(0)))

@@ -52,7 +52,7 @@ for i, beta in enumerate(betas):
             ssp,
             sfh={
                 "type": "dpl",
-                "all_params": tengri.FIXED,
+                "all_params": tengri.Fixed(tengri.DEFAULT),
                 "alpha": alpha,
                 "beta": beta,
                 "tau_gyr": baseline["tau_gyr"],
@@ -61,7 +61,7 @@ for i, beta in enumerate(betas):
             dust_attenuation={
                 "law": "power_law",
                 "type": "two_component",
-                "all_params": tengri.FIXED,
+                "all_params": tengri.Fixed(tengri.DEFAULT),
                 "tau_diff": 0.2,
                 "tau_bc": 0.3,
             },
@@ -124,7 +124,7 @@ model_alpha = tengri.SEDModel.build(
     ssp,
     sfh={
         "type": "dpl",
-        "all_params": tengri.FIXED,
+        "all_params": tengri.Fixed(tengri.DEFAULT),
         "alpha": tengri.Uniform(0.3, 6.0),
         "beta": 2.5,
         "tau_gyr": 1.5,
@@ -133,7 +133,7 @@ model_alpha = tengri.SEDModel.build(
     dust_attenuation={
         "law": "power_law",
         "type": "two_component",
-        "all_params": tengri.FIXED,
+        "all_params": tengri.Fixed(tengri.DEFAULT),
         "tau_diff": 0.2,
         "tau_bc": 0.3,
     },
@@ -171,7 +171,7 @@ model_beta = tengri.SEDModel.build(
     ssp,
     sfh={
         "type": "dpl",
-        "all_params": tengri.FIXED,
+        "all_params": tengri.Fixed(tengri.DEFAULT),
         "beta": tengri.Uniform(0.3, 10.0),
         "alpha": 1.5,
         "tau_gyr": 3.0,
@@ -180,7 +180,7 @@ model_beta = tengri.SEDModel.build(
     dust_attenuation={
         "law": "power_law",
         "type": "two_component",
-        "all_params": tengri.FIXED,
+        "all_params": tengri.Fixed(tengri.DEFAULT),
         "tau_diff": 0.2,
         "tau_bc": 0.3,
     },

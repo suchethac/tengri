@@ -59,7 +59,7 @@ model_ancient = tengri.SEDModel.build(
     ssp_data=ssp,
     sfh={
         "type": "tsnorm",
-        "all_params": tengri.FIXED,
+        "all_params": tengri.Fixed(tengri.DEFAULT),
         "log_total_mass": 10.0,
         "peak_lbt_gyr": 10.0,
         "width_gyr": 0.5,
@@ -69,11 +69,11 @@ model_ancient = tengri.SEDModel.build(
     dust_attenuation={
         "law": "power_law",
         "type": "two_component",
-        "all_params": tengri.FIXED,
+        "all_params": tengri.Fixed(tengri.DEFAULT),
         "tau_diff": 0.0,
         "tau_bc": 0.0,
     },
-    neb={"type": "cue", "all_params": tengri.FIXED},
+    neb={"type": "cue", "all_params": tengri.Fixed(tengri.DEFAULT)},
     redshift=tengri.Fixed(z),
 )
 
@@ -93,7 +93,7 @@ model_young = tengri.SEDModel.build(
     ssp_data=ssp,
     sfh={
         "type": "tsnorm",
-        "all_params": tengri.FIXED,
+        "all_params": tengri.Fixed(tengri.DEFAULT),
         "log_total_mass": 10.0,
         "peak_lbt_gyr": 0.3,
         "width_gyr": 0.1,
@@ -103,11 +103,11 @@ model_young = tengri.SEDModel.build(
     dust_attenuation={
         "law": "power_law",
         "type": "two_component",
-        "all_params": tengri.FIXED,
+        "all_params": tengri.Fixed(tengri.DEFAULT),
         "tau_diff": 0.0,
         "tau_bc": 0.0,
     },
-    neb={"type": "cue", "all_params": tengri.FIXED},
+    neb={"type": "cue", "all_params": tengri.Fixed(tengri.DEFAULT)},
     redshift=tengri.Fixed(z),
 )
 
@@ -145,7 +145,7 @@ model_combined_ancient = tengri.SEDModel.build(
     ssp_data=ssp,
     sfh={
         "type": "tsnorm",
-        "all_params": tengri.FIXED,
+        "all_params": tengri.Fixed(tengri.DEFAULT),
         "log_total_mass": 10.0,
         "peak_lbt_gyr": 10.0,
         "width_gyr": 0.5,
@@ -155,11 +155,11 @@ model_combined_ancient = tengri.SEDModel.build(
     dust_attenuation={
         "law": "power_law",
         "type": "two_component",
-        "all_params": tengri.FIXED,
+        "all_params": tengri.Fixed(tengri.DEFAULT),
         "tau_diff": 0.0,
         "tau_bc": 0.0,
     },
-    neb={"type": "cue", "all_params": tengri.FIXED},
+    neb={"type": "cue", "all_params": tengri.Fixed(tengri.DEFAULT)},
     redshift=tengri.Fixed(z),
 )
 
@@ -167,7 +167,7 @@ model_combined_young = tengri.SEDModel.build(
     ssp_data=ssp,
     sfh={
         "type": "tsnorm",
-        "all_params": tengri.FIXED,
+        "all_params": tengri.Fixed(tengri.DEFAULT),
         "log_total_mass": 10.0,
         "peak_lbt_gyr": 0.3,
         "width_gyr": 0.1,
@@ -177,11 +177,11 @@ model_combined_young = tengri.SEDModel.build(
     dust_attenuation={
         "law": "power_law",
         "type": "two_component",
-        "all_params": tengri.FIXED,
+        "all_params": tengri.Fixed(tengri.DEFAULT),
         "tau_diff": 0.0,
         "tau_bc": 0.0,
     },
-    neb={"type": "cue", "all_params": tengri.FIXED},
+    neb={"type": "cue", "all_params": tengri.Fixed(tengri.DEFAULT)},
     redshift=tengri.Fixed(z),
 )
 

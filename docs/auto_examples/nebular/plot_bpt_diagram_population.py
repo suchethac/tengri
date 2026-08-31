@@ -62,7 +62,7 @@ for logu in logu_array:
             ssp,
             sfh={
                 "type": "dpl",
-                "all_params": tengri.FIXED,
+                "all_params": tengri.Fixed(tengri.DEFAULT),
                 "alpha": 1.0,
                 "beta": 2.5,
                 "tau_gyr": 0.1,
@@ -71,13 +71,13 @@ for logu in logu_array:
             dust_attenuation={
                 "law": "power_law",
                 "type": "two_component",
-                "all_params": tengri.FIXED,
+                "all_params": tengri.Fixed(tengri.DEFAULT),
                 "tau_diff": 0.05,
                 "tau_bc": 0.1,
             },
             neb={
                 "type": "cue",
-                "all_params": tengri.FIXED,
+                "all_params": tengri.Fixed(tengri.DEFAULT),
                 "logU": tengri.Fixed(logu),
                 "logZ_gas": tengri.Fixed(logz),
             },
@@ -123,7 +123,7 @@ for config in agn_configs:
         ssp,
         sfh={
             "type": "dpl",
-            "all_params": tengri.FIXED,
+            "all_params": tengri.Fixed(tengri.DEFAULT),
             "alpha": 1.0,
             "beta": 2.0,
             "tau_gyr": 0.15,
@@ -132,13 +132,13 @@ for config in agn_configs:
         dust_attenuation={
             "law": "power_law",
             "type": "two_component",
-            "all_params": tengri.FIXED,
+            "all_params": tengri.Fixed(tengri.DEFAULT),
             "tau_diff": 0.1,
             "tau_bc": 0.2,
         },
         neb={
             "type": "cue",
-            "all_params": tengri.FIXED,
+            "all_params": tengri.Fixed(tengri.DEFAULT),
             "logU": tengri.Fixed(config["logu"]),
             "logZ_gas": tengri.Fixed(config["logz"]),
         },

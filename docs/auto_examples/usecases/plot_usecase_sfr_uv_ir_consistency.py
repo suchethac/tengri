@@ -38,7 +38,7 @@ import jax
 import matplotlib.pyplot as plt
 import numpy as np
 
-from tengri import FIXED, Fixed, SEDModel, load_ssp
+from tengri import DEFAULT, Fixed, SEDModel, load_ssp
 from tengri.plot import setup_style
 
 # Suppress JAX and matplotlib warnings
@@ -117,8 +117,8 @@ for i, tau_v in enumerate(tau_v_values):
             "tau_bc": Fixed(tau_bc),
             "tau_diff": Fixed(tau_diff),
         },
-        "dust_emission": {"type": "dale2014", "all_params": FIXED},
-        "neb": {"type": "cue", "all_params": FIXED},
+        "dust_emission": {"type": "dale2014", "all_params": Fixed(DEFAULT)},
+        "neb": {"type": "cue", "all_params": Fixed(DEFAULT)},
         "redshift": Fixed(0.01),
         "igm": {"type": "none"},
     }

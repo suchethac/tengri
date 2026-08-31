@@ -35,7 +35,7 @@ log L_bol = 12.0, all built via the public nested-dict grammar:
 
 Reference: Buchner et al. 2024 (GRAHSP recipe).
 
-.. GENERATED FROM PYTHON SOURCE LINES 19-120
+.. GENERATED FROM PYTHON SOURCE LINES 19-125
 
 
 
@@ -68,11 +68,11 @@ Reference: Buchner et al. 2024 (GRAHSP recipe).
     warnings.filterwarnings("ignore", message=".*BakedInBackend.*")
 
     C_AA_PER_S = 2.998e18
-    SFH = {"type": "const", "all_params": tengri.FIXED, "log_total_mass": -10.0}
+    SFH = {"type": "const", "all_params": tengri.Fixed(tengri.DEFAULT), "log_total_mass": -10.0}
     DUST = {
         "law": "power_law",
         "type": "two_component",
-        "all_params": tengri.FIXED,
+        "all_params": tengri.Fixed(tengri.DEFAULT),
         "tau_diff": 0.0,
         "tau_bc": 0.0,
     }
@@ -80,50 +80,55 @@ Reference: Buchner et al. 2024 (GRAHSP recipe).
     ssp = tengri.load_ssp()
 
     BLOCK_PROGRESSION = [
-        ("disc only", {"disc": {"type": "grahsp_sbpl", "all_params": tengri.FIXED}}),
+        ("disc only", {"disc": {"type": "grahsp_sbpl", "all_params": tengri.Fixed(tengri.DEFAULT)}}),
         (
             "+ lines",
             {
-                "disc": {"type": "grahsp_sbpl", "all_params": tengri.FIXED},
-                "nlr": {"type": "grahsp", "all_params": tengri.FIXED},
-                "blr": {"type": "grahsp", "all_params": tengri.FIXED},
+                "disc": {"type": "grahsp_sbpl", "all_params": tengri.Fixed(tengri.DEFAULT)},
+                "nlr": {"type": "grahsp", "all_params": tengri.Fixed(tengri.DEFAULT)},
+                "blr": {"type": "grahsp", "all_params": tengri.Fixed(tengri.DEFAULT)},
             },
         ),
         (
             "+ Fe II",
             {
-                "disc": {"type": "grahsp_sbpl", "all_params": tengri.FIXED},
-                "nlr": {"type": "grahsp", "all_params": tengri.FIXED},
-                "blr": {"type": "grahsp", "all_params": tengri.FIXED},
-                "feii": {"type": "grahsp", "all_params": tengri.FIXED},
+                "disc": {"type": "grahsp_sbpl", "all_params": tengri.Fixed(tengri.DEFAULT)},
+                "nlr": {"type": "grahsp", "all_params": tengri.Fixed(tengri.DEFAULT)},
+                "blr": {"type": "grahsp", "all_params": tengri.Fixed(tengri.DEFAULT)},
+                "feii": {"type": "grahsp", "all_params": tengri.Fixed(tengri.DEFAULT)},
             },
         ),
         (
             "+ torus",
             {
-                "disc": {"type": "grahsp_sbpl", "all_params": tengri.FIXED},
-                "nlr": {"type": "grahsp", "all_params": tengri.FIXED},
-                "blr": {"type": "grahsp", "all_params": tengri.FIXED},
-                "feii": {"type": "grahsp", "all_params": tengri.FIXED},
-                "torus": {"type": "grahsp", "all_params": tengri.FIXED},
+                "disc": {"type": "grahsp_sbpl", "all_params": tengri.Fixed(tengri.DEFAULT)},
+                "nlr": {"type": "grahsp", "all_params": tengri.Fixed(tengri.DEFAULT)},
+                "blr": {"type": "grahsp", "all_params": tengri.Fixed(tengri.DEFAULT)},
+                "feii": {"type": "grahsp", "all_params": tengri.Fixed(tengri.DEFAULT)},
+                "torus": {"type": "grahsp", "all_params": tengri.Fixed(tengri.DEFAULT)},
             },
         ),
         (
             "+ attenuation (full)",
             {
-                "disc": {"type": "grahsp_sbpl", "all_params": tengri.FIXED},
-                "nlr": {"type": "grahsp", "all_params": tengri.FIXED},
-                "blr": {"type": "grahsp", "all_params": tengri.FIXED},
-                "feii": {"type": "grahsp", "all_params": tengri.FIXED},
-                "torus": {"type": "grahsp", "all_params": tengri.FIXED},
-                "atten": {"type": "grahsp_biatten", "all_params": tengri.FIXED},
+                "disc": {"type": "grahsp_sbpl", "all_params": tengri.Fixed(tengri.DEFAULT)},
+                "nlr": {"type": "grahsp", "all_params": tengri.Fixed(tengri.DEFAULT)},
+                "blr": {"type": "grahsp", "all_params": tengri.Fixed(tengri.DEFAULT)},
+                "feii": {"type": "grahsp", "all_params": tengri.Fixed(tengri.DEFAULT)},
+                "torus": {"type": "grahsp", "all_params": tengri.Fixed(tengri.DEFAULT)},
+                "atten": {"type": "grahsp_biatten", "all_params": tengri.Fixed(tengri.DEFAULT)},
             },
         ),
     ]
 
 
     def predict_nu_lnu(blocks):
-        agn = {"all_params": tengri.FIXED, "log_lbol": 12.0, "lum_ratio": 1.0, **blocks}
+        agn = {
+            "all_params": tengri.Fixed(tengri.DEFAULT),
+            "log_lbol": 12.0,
+            "lum_ratio": 1.0,
+            **blocks,
+        }
         model = tengri.SEDModel.build(
             ssp, sfh=SFH, dust_attenuation=DUST, agn=agn, redshift=tengri.Fixed(0.0)
         )
@@ -151,11 +156,6 @@ Reference: Buchner et al. 2024 (GRAHSP recipe).
     axes[0].set_ylabel(r"$\nu L_\nu$  [erg s$^{-1}$]")
     fig.tight_layout()
     plt.savefig("plot_composable_block_toggles.png", dpi=150, bbox_inches="tight")
-
-
-.. rst-class:: sphx-glr-timing
-
-   **Total running time of the script:** (0 minutes 2.228 seconds)
 
 
 .. _sphx_glr_download_auto_examples_agn_plot_composable_block_toggles.py:

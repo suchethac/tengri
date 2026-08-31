@@ -29,7 +29,7 @@ lines added at the source), then dust (UV attenuated, reprocessed
 into the FIR), then AGN (disc + torus + NLR), then radio, then X-ray.
 The color at each wavelength tells you which block matters most.
 
-.. GENERATED FROM PYTHON SOURCE LINES 13-140
+.. GENERATED FROM PYTHON SOURCE LINES 13-143
 
 
 
@@ -66,7 +66,7 @@ The color at each wavelength tells you which block matters most.
     HOST = dict(
         sfh={
             "type": "dpl",
-            "all_params": tengri.FIXED,
+            "all_params": tengri.Fixed(tengri.DEFAULT),
             "tau_gyr": 1.5,
             "log_total_mass": 10.0,
             "alpha": 2.5,
@@ -77,7 +77,7 @@ The color at each wavelength tells you which block matters most.
     DUST_ON = {
         "law": "power_law",
         "type": "two_component",
-        "all_params": tengri.FIXED,
+        "all_params": tengri.Fixed(tengri.DEFAULT),
         "tau_diff": 0.4,
         "tau_bc": 0.6,
     }
@@ -86,11 +86,11 @@ The color at each wavelength tells you which block matters most.
     # the pair is refused at build as a double-count (#1970). The stripped
     # template also keeps the "+ dust" curve honest in the radio band: dust
     # alone contributes nothing there.
-    DUST_EMISSION = {"type": "dale2014_cigale", "all_params": tengri.FIXED}
+    DUST_EMISSION = {"type": "dale2014_cigale", "all_params": tengri.Fixed(tengri.DEFAULT)}
     DUST_OFF = {
         "law": "power_law",
         "type": "two_component",
-        "all_params": tengri.FIXED,
+        "all_params": tengri.Fixed(tengri.DEFAULT),
         "tau_diff": 0.0,
         "tau_bc": 0.0,
     }
@@ -109,7 +109,10 @@ The color at each wavelength tells you which block matters most.
         (
             "+ nebular",
             "#33aa55",
-            dict(dust_attenuation=DUST_OFF, neb={"type": "cue", "all_params": tengri.FIXED}),
+            dict(
+                dust_attenuation=DUST_OFF,
+                neb={"type": "cue", "all_params": tengri.Fixed(tengri.DEFAULT)},
+            ),
         ),
         ("+ dust", "#cc6633", dict(dust_attenuation=DUST_ON, dust_emission=DUST_EMISSION)),
         (
@@ -119,11 +122,11 @@ The color at each wavelength tells you which block matters most.
                 dust_attenuation=DUST_ON,
                 dust_emission=DUST_EMISSION,
                 agn={
-                    "disc": {"type": "multicolor", "all_params": tengri.FIXED},
-                    "torus": {"type": "skirtor", "all_params": tengri.FIXED},
-                    "nlr": {"type": "analytic", "all_params": tengri.FIXED},
-                    "blr": {"type": "none", "all_params": tengri.FIXED},
-                    "all_params": tengri.FIXED,
+                    "disc": {"type": "multicolor", "all_params": tengri.Fixed(tengri.DEFAULT)},
+                    "torus": {"type": "skirtor", "all_params": tengri.Fixed(tengri.DEFAULT)},
+                    "nlr": {"type": "analytic", "all_params": tengri.Fixed(tengri.DEFAULT)},
+                    "blr": {"type": "none", "all_params": tengri.Fixed(tengri.DEFAULT)},
+                    "all_params": tengri.Fixed(tengri.DEFAULT),
                     "log_lbol": 11.5,
                     "lum_ratio": 0.5,
                 },
@@ -138,7 +141,7 @@ The color at each wavelength tells you which block matters most.
                 radio={
                     "sf": {"type": "bell2003"},
                     "agn": {"type": "powerlaw"},
-                    "all_params": tengri.FIXED,
+                    "all_params": tengri.Fixed(tengri.DEFAULT),
                 },
             ),
         ),
@@ -148,7 +151,7 @@ The color at each wavelength tells you which block matters most.
             dict(
                 dust_attenuation=DUST_ON,
                 dust_emission=DUST_EMISSION,
-                xray={"type": "simple", "all_params": tengri.FIXED},
+                xray={"type": "simple", "all_params": tengri.Fixed(tengri.DEFAULT)},
             ),
         ),
     ]
@@ -175,7 +178,7 @@ The color at each wavelength tells you which block matters most.
 
 .. rst-class:: sphx-glr-timing
 
-   **Total running time of the script:** (0 minutes 17.321 seconds)
+   **Total running time of the script:** (0 minutes 14.593 seconds)
 
 
 .. _sphx_glr_download_auto_examples_quickstart_plot_components_isolated.py:

@@ -42,7 +42,7 @@ photo-z classification.
 
  .. code-block:: none
 
-    /tengri/src/tengri/forward/sed_model.py:1714: SFHBurstAliasingWarning: SFH burst width sfh_tsnorm_width_gyr=1 Gyr is narrower than the SSP grid spacing 1.37 Gyr at peak sfh_tsnorm_peak_lbt_gyr=10.5 Gyr. Predictions will show a non-physical staircase as the burst peak crosses SSP grid boundaries (#299). Widen the burst to at least width_gyr ≳ 1.37 for smooth behavior.
+    /tengri/src/tengri/forward/sed_model.py:1716: SFHBurstAliasingWarning: SFH burst width sfh_tsnorm_width_gyr=1 Gyr is narrower than the SSP grid spacing 1.37 Gyr at peak sfh_tsnorm_peak_lbt_gyr=10.5 Gyr. Predictions will show a non-physical staircase as the burst peak crosses SSP grid boundaries (#299). Widen the burst to at least width_gyr ≳ 1.37 for smooth behavior.
       param_map_deltas.append(self._init_sfh(spec))
 
 
@@ -78,14 +78,14 @@ photo-z classification.
             observation=obs,
             sfh={
                 "type": "tsnorm",
-                "all_params": tengri.FIXED,
+                "all_params": tengri.Fixed(tengri.DEFAULT),
                 "peak_lbt_gyr": peak_lbt,
                 "width_gyr": width,
             },
             dust_attenuation={
                 "law": "power_law",
                 "type": "two_component",
-                "all_params": tengri.FIXED,
+                "all_params": tengri.Fixed(tengri.DEFAULT),
                 "tau_diff": tau_diff,
                 "tau_bc": 0.3,
             },
@@ -162,6 +162,11 @@ photo-z classification.
 
     fig.tight_layout()
     plt.savefig("plot_photoz_color_degeneracy_grid.png", dpi=150, bbox_inches="tight")
+
+
+.. rst-class:: sphx-glr-timing
+
+   **Total running time of the script:** (0 minutes 2.450 seconds)
 
 
 .. _sphx_glr_download_auto_examples_photometry_plot_photoz_color_degeneracy_grid.py:

@@ -39,7 +39,7 @@ reference. The dispersion of each family is the visual prior — wide
 clouds mean the form is permissive, narrow clouds mean the form is
 restrictive.
 
-.. GENERATED FROM PYTHON SOURCE LINES 23-98
+.. GENERATED FROM PYTHON SOURCE LINES 23-100
 
 
 
@@ -53,7 +53,7 @@ restrictive.
 
  .. code-block:: none
 
-    /tengri/src/tengri/forward/sed_model.py:8666: WildcardPartialFreeWarning: sfh={'all_params': FREE} no longer frees metallicity parameters when there is no explicit met block. Before this change, met_logzsol (and other met_* params) were freed by the sfh wildcard.
+    /tengri/src/tengri/forward/sed_model.py:9156: WildcardPartialFreeWarning: sfh={'all_params': FREE} no longer frees metallicity parameters when there is no explicit met block. Before this change, met_logzsol (and other met_* params) were freed by the sfh wildcard.
 
     To free metallicity parameters explicitly, pass either:
       met={'all_params': FREE}
@@ -62,7 +62,7 @@ restrictive.
 
     Issue #1796
       spec = parse_groups(**groups)
-    /tengri/src/tengri/forward/sed_model.py:8666: WildcardPartialFreeWarning: sfh={'all_params': FREE} no longer frees metallicity parameters when there is no explicit met block. Before this change, met_logzsol (and other met_* params) were freed by the sfh wildcard.
+    /tengri/src/tengri/forward/sed_model.py:9156: WildcardPartialFreeWarning: sfh={'all_params': FREE} no longer frees metallicity parameters when there is no explicit met block. Before this change, met_logzsol (and other met_* params) were freed by the sfh wildcard.
 
     To free metallicity parameters explicitly, pass either:
       met={'all_params': FREE}
@@ -71,7 +71,7 @@ restrictive.
 
     Issue #1796
       spec = parse_groups(**groups)
-    /tengri/src/tengri/forward/sed_model.py:8666: WildcardPartialFreeWarning: sfh={'all_params': FREE} no longer frees metallicity parameters when there is no explicit met block. Before this change, met_logzsol (and other met_* params) were freed by the sfh wildcard.
+    /tengri/src/tengri/forward/sed_model.py:9156: WildcardPartialFreeWarning: sfh={'all_params': FREE} no longer frees metallicity parameters when there is no explicit met block. Before this change, met_logzsol (and other met_* params) were freed by the sfh wildcard.
 
     To free metallicity parameters explicitly, pass either:
       met={'all_params': FREE}
@@ -120,7 +120,9 @@ restrictive.
     )
 
     ref = tengri.SEDModel.build(
-        ssp, sfh={"type": "dpl", "all_params": tengri.FIXED}, redshift=tengri.Fixed(0.0)
+        ssp,
+        sfh={"type": "dpl", "all_params": tengri.Fixed(tengri.DEFAULT)},
+        redshift=tengri.Fixed(0.0),
     )
     p_ref = dict(ref.spec.sample(jax.random.PRNGKey(99)))
     sfh_ref = ref.predict_sfh(p_ref)
@@ -165,11 +167,6 @@ restrictive.
     axes[0].legend(frameon=False, fontsize=8, loc="lower left")
 
     plt.savefig("plot_sfh_nonparametric_compare.png", dpi=150, bbox_inches="tight")
-
-
-.. rst-class:: sphx-glr-timing
-
-   **Total running time of the script:** (0 minutes 2.671 seconds)
 
 
 .. _sphx_glr_download_auto_examples_sfh_plot_sfh_nonparametric_compare.py:

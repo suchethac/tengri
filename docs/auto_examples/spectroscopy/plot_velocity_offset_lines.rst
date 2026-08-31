@@ -77,7 +77,7 @@ km/s — above that the two lines merge into the wing of Hα.
         observation=obs,
         sfh={
             "type": "dpl",
-            "all_params": tengri.FIXED,
+            "all_params": tengri.Fixed(tengri.DEFAULT),
             "alpha": 3.0,
             "beta": 0.3,
             "tau_gyr": 0.03,
@@ -86,13 +86,13 @@ km/s — above that the two lines merge into the wing of Hα.
         dust_attenuation={
             "law": "power_law",
             "type": "two_component",
-            "all_params": tengri.FIXED,
+            "all_params": tengri.Fixed(tengri.DEFAULT),
             "tau_bc": 0.0,
             "tau_diff": 0.05,
         },
         neb={
             "type": "cue",
-            "all_params": tengri.FIXED,
+            "all_params": tengri.Fixed(tengri.DEFAULT),
             "logU": tengri.Fixed(-2.5),
             "fesc": tengri.Fixed(0.0),
         },
@@ -138,7 +138,7 @@ km/s — above that the two lines merge into the wing of Hα.
 
 .. rst-class:: sphx-glr-timing
 
-   **Total running time of the script:** (0 minutes 5.653 seconds)
+   **Total running time of the script:** (0 minutes 4.337 seconds)
 
 
 .. _sphx_glr_download_auto_examples_spectroscopy_plot_velocity_offset_lines.py:

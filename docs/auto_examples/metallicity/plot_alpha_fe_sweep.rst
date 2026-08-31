@@ -69,7 +69,7 @@ Reference: Thomas et al. 2003, MNRAS, 339, 897 (alpha-element effects).
         ssp,
         sfh={
             "type": "dpl",
-            "all_params": tengri.FIXED,
+            "all_params": tengri.Fixed(tengri.DEFAULT),
             "alpha": 2.0,
             "beta": 2.5,
             "tau_gyr": 8.0,
@@ -78,7 +78,7 @@ Reference: Thomas et al. 2003, MNRAS, 339, 897 (alpha-element effects).
         dust_attenuation={
             "law": "power_law",
             "type": "two_component",
-            "all_params": tengri.FIXED,
+            "all_params": tengri.Fixed(tengri.DEFAULT),
             "tau_bc": 0.0,
             "tau_diff": 0.1,
         },
@@ -117,7 +117,7 @@ Reference: Thomas et al. 2003, MNRAS, 339, 897 (alpha-element effects).
 
 .. rst-class:: sphx-glr-timing
 
-   **Total running time of the script:** (0 minutes 5.296 seconds)
+   **Total running time of the script:** (0 minutes 3.031 seconds)
 
 
 .. _sphx_glr_download_auto_examples_metallicity_plot_alpha_fe_sweep.py:

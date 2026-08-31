@@ -79,7 +79,7 @@ def build_model(peak_lbt, width, tau_diff, tau_bc):
         observation=obs,
         sfh={
             "type": "tsnorm",
-            "all_params": tengri.FIXED,
+            "all_params": tengri.Fixed(tengri.DEFAULT),
             "peak_lbt_gyr": peak_lbt,
             "width_gyr": width,
             "log_total_mass": 10.0,  # stellar mass knob
@@ -89,7 +89,7 @@ def build_model(peak_lbt, width, tau_diff, tau_bc):
         dust_attenuation={
             "law": "power_law",
             "type": "two_component",
-            "all_params": tengri.FIXED,
+            "all_params": tengri.Fixed(tengri.DEFAULT),
             "tau_diff": tau_diff,
             "tau_bc": tau_bc,
             "slope": -0.7,

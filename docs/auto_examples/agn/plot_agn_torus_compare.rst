@@ -83,11 +83,11 @@ near 9.7 and 18 μm.
     COLORS = plt.cm.tab10(np.linspace(0, 1, 10))[: len(TORI)]
 
     C_AA_PER_S = 2.998e18
-    SFH = {"type": "const", "all_params": tengri.FIXED, "log_total_mass": -10.0}
+    SFH = {"type": "const", "all_params": tengri.Fixed(tengri.DEFAULT), "log_total_mass": -10.0}
     DUST = {
         "law": "power_law",
         "type": "two_component",
-        "all_params": tengri.FIXED,
+        "all_params": tengri.Fixed(tengri.DEFAULT),
         "tau_diff": 0.0,
         "tau_bc": 0.0,
     }
@@ -107,9 +107,9 @@ near 9.7 and 18 μm.
             sfh=SFH,
             dust_attenuation=DUST,
             agn={
-                "disc": {"type": "multicolor", "all_params": tengri.FIXED},
-                "torus": {"type": torus, "all_params": tengri.FIXED},
-                "all_params": tengri.FIXED,
+                "disc": {"type": "multicolor", "all_params": tengri.Fixed(tengri.DEFAULT)},
+                "torus": {"type": torus, "all_params": tengri.Fixed(tengri.DEFAULT)},
+                "all_params": tengri.Fixed(tengri.DEFAULT),
                 "log_lbol": 12.5,
                 "lum_ratio": 1.0,
             },
@@ -138,7 +138,7 @@ near 9.7 and 18 μm.
 
 .. rst-class:: sphx-glr-timing
 
-   **Total running time of the script:** (0 minutes 18.761 seconds)
+   **Total running time of the script:** (0 minutes 4.591 seconds)
 
 
 .. _sphx_glr_download_auto_examples_agn_plot_agn_torus_compare.py:

@@ -46,11 +46,11 @@ LINE_BACKBONES = [
 COLORS = plt.cm.tab10(np.linspace(0, 1, 10))[: len(LINE_BACKBONES)]
 
 C_AA_PER_S = 2.998e18
-SFH = {"type": "const", "all_params": tengri.FIXED, "log_total_mass": -10.0}
+SFH = {"type": "const", "all_params": tengri.Fixed(tengri.DEFAULT), "log_total_mass": -10.0}
 DUST = {
     "law": "power_law",
     "type": "two_component",
-    "all_params": tengri.FIXED,
+    "all_params": tengri.Fixed(tengri.DEFAULT),
     "tau_diff": 0.0,
     "tau_bc": 0.0,
 }
@@ -64,10 +64,10 @@ for (region, kind, label), color in zip(LINE_BACKBONES, COLORS):
         sfh=SFH,
         dust_attenuation=DUST,
         agn={
-            "disc": {"type": "multicolor", "all_params": tengri.FIXED},
-            "torus": {"type": "skirtor", "all_params": tengri.FIXED},
-            region: {"type": kind, "all_params": tengri.FIXED},
-            "all_params": tengri.FIXED,
+            "disc": {"type": "multicolor", "all_params": tengri.Fixed(tengri.DEFAULT)},
+            "torus": {"type": "skirtor", "all_params": tengri.Fixed(tengri.DEFAULT)},
+            region: {"type": kind, "all_params": tengri.Fixed(tengri.DEFAULT)},
+            "all_params": tengri.Fixed(tengri.DEFAULT),
             "log_lbol": 12.5,
             "lum_ratio": 1.0,
         },
