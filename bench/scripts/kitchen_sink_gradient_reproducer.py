@@ -57,17 +57,28 @@ spec = Parameters(**base_kwargs)
 model = SEDModel(spec, ssp_data, observation=obs, approx=None)
 params = spec.sample(jax.random.PRNGKey(42))
 
-print("Built kitchen-sink model. Attempting gradient over full params dict...")
+print("Built kitchen-sink model. Attempting gradient over free-parameter vector...")
 print(f"Model: {type(model).__name__}")
 print(f"Params keys: {list(params.keys())}")
+print(f"Free params: {list(spec.free_params)}")
 
-# Now attempt the gradient: differentiate loss over full params dict
-def loss_fn(p):
-    return jnp.sum(model.predict_photometry(p))
+# Split params into free and fixed
+free_param_names = set(spec.free_params)
+free_params = {k: v for k, v in params.items() if k in free_param_names}
+fixed_params = {k: v for k, v in params.items() if k not in free_param_names}
+
+print(f"Free params subdict: {list(free_params.keys())}")
+print(f"Fixed params subdict: {list(fixed_params.keys())}")
+
+# Attempt the gradient: differentiate loss over free params only
+def loss_fn(p_free):
+    # Merge free params with fixed params for full prediction
+    p_full = {**fixed_params, **p_free}
+    return jnp.sum(model.predict_photometry(p_full))
 
 try:
     grad_fn = jax.jit(jax.grad(loss_fn))
-    result = grad_fn(params)
+    result = grad_fn(free_params)
     print("Gradient succeeded!")
     print(f"Result type: {type(result)}")
 except Exception as exc:
