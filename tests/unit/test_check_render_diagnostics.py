@@ -326,7 +326,7 @@ def test_ledgered_path_converts_fail_to_known_bad(tmp_path):
         _make_repo(
             tmp_path,
             {
-                "notebooks/05_fitting_photometry.ipynb": bad_nb,
+                "notebooks/00_quickstart.ipynb": bad_nb,
                 "notebooks/other.ipynb": json.dumps(
                     _make_notebook([_code_cell("print('ok')", [_text_output("ok\n")])])
                 ),
@@ -357,14 +357,14 @@ def test_removing_ledger_entry_fails_the_run(tmp_path):
     script = (REPO_ROOT / "tools" / "check_render_diagnostics.py").read_text(encoding="utf-8")
     # Remove the ledger entry
     script = script.replace(
-        '"notebooks/05_fitting_photometry.ipynb": "#2095",\n',
+        '"notebooks/00_quickstart.ipynb": "#2113",\n',
         "",
     )
     root = tmp_path / "repo"
     root.mkdir()
     subprocess.run(["git", "init", "-q"], cwd=root, check=True)
     files = {
-        "notebooks/05_fitting_photometry.ipynb": bad_nb,
+        "notebooks/00_quickstart.ipynb": bad_nb,
     }
     for rel, content in files.items():
         path = root / rel
@@ -444,7 +444,7 @@ def test_stale_ledger_entry_clean_notebook_fails(tmp_path):
         _make_repo(
             tmp_path,
             {
-                "notebooks/05_fitting_photometry.ipynb": clean_nb,
+                "notebooks/00_quickstart.ipynb": clean_nb,
             },
         )
     )
@@ -469,7 +469,7 @@ def test_ledgered_notebook_with_failures_passes(tmp_path):
         _make_repo(
             tmp_path,
             {
-                "notebooks/05_fitting_photometry.ipynb": bad_nb,
+                "notebooks/00_quickstart.ipynb": bad_nb,
                 "notebooks/other.ipynb": json.dumps(
                     _make_notebook([_code_cell("print('ok')", [_text_output("ok\n")])])
                 ),

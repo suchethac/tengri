@@ -46,9 +46,6 @@ number.
 .. code-block:: python
 
     KNOWN_BAD_LEDGER = {
-        # Dead fits (seed 7 marginal-to-dead at both code endpoints): #2095
-        "notebooks/05_fitting_photometry.ipynb": "#2095",
-        "docs/spine/05_fitting_photometry.ipynb": "#2095",
         # Vacuous DeadFitWarnings on Fixed parameters (pre-#2090 bug): #2113
         "notebooks/00_quickstart.ipynb": "#2113",
         "notebooks/01_why_jax.ipynb": "#2113",
@@ -64,11 +61,7 @@ number.
         "docs/spine/experimental/stochastic_sfh_recovery.ipynb": "#2113",
     }
 
-**#2095** — ``05_fitting_photometry.ipynb`` cannot be re-rendered healthy right
-now (seed 7 is marginal-to-dead at both code endpoints); a separate decision
-gates its re-render.
-
-**#2113** — The other eleven notebooks carry vacuous DeadFitWarnings that fired
+**#2113** — These twelve notebooks carry vacuous DeadFitWarnings that fired
 on Fixed parameters with healthy fits (pre-#2090 bug in the warning logic).
 Re-rendering will remove these warnings automatically.
 
@@ -97,9 +90,6 @@ ROOT = Path(__file__).resolve().parents[1]
 # on disk are silently skipped (a deleted notebook should not fail the guard).
 # Removing a notebook from the repository also requires manual removal of its entry.
 KNOWN_BAD_LEDGER = {
-    # Dead fits (seed 7 marginal-to-dead at both code endpoints): #2095
-    "notebooks/05_fitting_photometry.ipynb": "#2095",
-    "docs/spine/05_fitting_photometry.ipynb": "#2095",
     # Vacuous DeadFitWarnings on Fixed parameters (pre-#2090 bug): #2113
     "notebooks/00_quickstart.ipynb": "#2113",
     "notebooks/01_why_jax.ipynb": "#2113",
