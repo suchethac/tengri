@@ -424,6 +424,14 @@ jobs:
       # healthy single-line cell (90) and the shortest damaged one (148).
       # Stdlib-only.
       - run: python tools/check_notebook_cells.py
+      # A committed render can print a dead fit and still pass every notebook
+      # guard above: check_notebook_renders reads source/render agreement and
+      # tracebacks, never printed diagnostics, which is how docs/spine/05 shipped
+      # max R-hat 1.6e14 beside a printed DeadFitWarning as "verified" (#2095).
+      # This one parses printed R-hat/divergence/NaN lines and the DeadFit
+      # warning text, with a known-bad ledger whose entries cite open issues
+      # (#2095, #2113) and expire loudly when their render heals. Stdlib-only.
+      - run: python tools/check_render_diagnostics.py
       # A paired notebook declares in its own metadata that its .ipynb and .py
       # are one document. Nothing enforced that, and three drifted for months:
       # 01_quickstart.ipynb kept teaching `Fitter(...)` after #1341 migrated the
