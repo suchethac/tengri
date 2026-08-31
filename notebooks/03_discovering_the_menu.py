@@ -38,7 +38,7 @@ import warnings
 # reader to meet it for the first time alone, in their own code.
 warnings.filterwarnings("ignore", message=".*BakedInBackend.*")
 warnings.filterwarnings("ignore", message=".*WavePrecomp.*")
-warnings.filterwarnings("ignore", message=".*was marked FIXED.*")
+warnings.filterwarnings("ignore", message=".*states no 'all_params' disposition.*")
 warnings.filterwarnings("ignore", message=".*Composable AGN.*")
 warnings.filterwarnings("ignore", message=".*before the Big Bang.*")
 warnings.filterwarnings("ignore", category=RuntimeWarning)
@@ -327,7 +327,7 @@ tengri.list_recipes()
 #
 # Two introspection surfaces close the loop:
 # `model.spec.summary()` tags every parameter with where its value came
-# from (`[user]` / `[all_params FREE]` / `[all_params FIXED]` / `[default]`).
+# from (`[user]` / `[all_params FREE]` / `[all_params Fixed(DEFAULT)]` / `[default]`).
 # `citations.collect_citations(model)` returns the bibliography of every
 # physics ingredient.
 

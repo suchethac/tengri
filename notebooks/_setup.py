@@ -80,7 +80,7 @@ def quiet():
     for message in (
         ".*BakedInBackend.*",
         ".*WavePrecomp.*",
-        ".*was marked FIXED.*",
+        ".*states no 'all_params' disposition.*",
         ".*Composable AGN.*",
         ".*before the Big Bang.*",
     ):

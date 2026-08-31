@@ -701,7 +701,7 @@ print(f"\n  agreement with float64: median {np.median(dmag):.0e} mag, worst {dma
 #
 # ```python
 # import numpy as np, tengri
-# from tengri import (Catalog, Fixed, FIXED, ForwardModel, Observation,
+# from tengri import (Catalog, DEFAULT, Fixed, ForwardModel, Observation,
 #                     Photometry, SEDModel, WavePrecomp)
 #
 # ssp = tengri.load_ssp("prsc_miles_chabrier_wNE", download=True)
@@ -711,7 +711,7 @@ print(f"\n  agreement with float64: median {np.median(dmag):.0e} mag, worst {dma
 #     ssp_data=ssp, observation=obs, redshift=Fixed(0.1),
 #     sfh={"type": "table"}, met={"type": "table"},
 #     dust_attenuation={"type": "two_component", "law": "calzetti",
-#                       "all_params": FIXED},
+#                       "all_params": Fixed(DEFAULT)},
 #     neb={"type": "ssp"}, approx=WavePrecomp(),
 # ))
 #

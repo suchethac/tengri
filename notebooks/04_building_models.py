@@ -58,7 +58,7 @@ import warnings
 # calls are fixed in the code, not hidden.
 warnings.filterwarnings("ignore", message=".*BakedInBackend.*")
 warnings.filterwarnings("ignore", message=".*WavePrecomp.*")
-warnings.filterwarnings("ignore", message=".*was marked FIXED.*")
+warnings.filterwarnings("ignore", message=".*states no 'all_params' disposition.*")
 warnings.filterwarnings("ignore", message=".*Composable AGN.*")
 warnings.filterwarnings("ignore", message=".*before the Big Bang.*")
 warnings.filterwarnings("ignore", category=RuntimeWarning)
@@ -346,13 +346,13 @@ print()
 #
 # - `[user]` — explicitly specified in your nested dict
 # - `[all_params FREE]` — matched by wildcard directive
-# - `[all_params FIXED]` — matched by wildcard directive
+# - `[all_params Fixed(DEFAULT)]` — matched by wildcard directive
 # - `[default]` — registry default (usually fixed at median)
 #
 # The `neb` group below deliberately states no disposition so the summary can
 # show `[default]` tags — and the `DefaultFixedParametersWarning` it triggers
 # is the grammar flagging exactly that: a group you engaged that yielded
-# nothing free. Stating `all_params: FIXED` is how you say it was intentional.
+# nothing free. Stating `{'all_params': Fixed(DEFAULT)}` is how you say it was intentional.
 
 # %%
 # Build a model with mixed provenance
@@ -365,7 +365,7 @@ base_groups = {
     "dust_attenuation": {
         "type": "two_component",
         "law": "calzetti",
-        "all_params": Fixed(DEFAULT),  # All dust params are [all_params FIXED]
+        "all_params": Fixed(DEFAULT),  # All dust params are [all_params Fixed(DEFAULT)]
         "tau_bc": 0.5,  # Override to explicit value (still fixed)
     },
     "neb": {"type": "cue"},  # No wildcard → all use [default]

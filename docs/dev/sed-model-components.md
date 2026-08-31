@@ -187,7 +187,7 @@ override per-fit:
 model = SEDModel.build(
     ssp_data=ssp, observation=obs,
     dust_attenuation={
-        'type': 'two_component', 'law': 'calzetti', 'all_params': FIXED,
+        'type': 'two_component', 'law': 'calzetti', 'all_params': Fixed(DEFAULT),
     },
     dust_emission={
         'type':    'modified_blackbody',

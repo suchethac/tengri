@@ -48,7 +48,7 @@ The end state should look like:
 model = SEDModel.build(
     ssp_data=ssp,
     observation=obs,
-    sfh={"type": "dpl", "*": Uniform},
+    sfh={"type": "dpl", "all_params": FREE},
     redshift=Fixed(),       # placeholder — value comes from the catalog row
     approx=WavePrecomp(),   # the ztable is automatic
 )
@@ -63,6 +63,20 @@ for row in catalog:
 `Fixed()` with no value would be a sentinel meaning "this parameter
 is fixed per-call, supply it via `params=`". `params["redshift"]`
 threads through the existing ztable path.
+
+> **2026-09 status note:** `Fixed(DEFAULT)` (the sentinel `DEFAULT`, legal
+> only as the argument of `Fixed(...)`) has since shipped and occupies
+> the "argument-carrying `Fixed` with a deferred value" space sketched
+> above — but it defers to the *registry* default, resolved at parse time,
+> not to a per-call runtime value. Bare `Fixed()` (no argument at all, as
+> sketched here) remains reserved and unimplemented; it is not
+> `Fixed(DEFAULT)` and solves a different problem. Approach B below should
+> target the runtime-override mechanism that shipped in the meantime —
+> `Fitter(..., params_override={...})` in
+> `src/tengri/inference/fitter.py`, which already validates that overridden
+> keys are fixed (not free) parameters and threads a `redshift` override
+> through the ztable path — rather than building the `overridable=` sketch
+> from scratch.
 
 Alternatively, keep `Fixed(z)` (an explicit per-fit value) and let
 the model accept an override at call time:

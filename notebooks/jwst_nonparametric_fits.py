@@ -142,7 +142,7 @@ model = SEDModel.build(
     observation=Observation(photometry=phot),
     redshift=Fixed(Z_GAL),
     sfh={"type": "continuity", "all_params": FREE, "bin_edges_gyr": BIN_EDGES},
-    # 'all_params': FIXED states what the group already does by default. It is
+    # 'all_params': Fixed(DEFAULT) states what the group already does by default. It is
     # here because the disposition is otherwise unstated, which warns: the two
     # remaining metallicity parameters are nuisance knobs this page does not
     # vary, and saying so is what keeps them out of the rendered output.

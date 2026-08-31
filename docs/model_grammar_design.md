@@ -116,28 +116,47 @@ model = SEDModel.build(ssp_data=ssp, observation=obs, sfh={'type': 'dpl'})
 
 All three are `Distribution` instances under the hood. The grammar accepts them uniformly.
 
-### All_params: the only wildcard
+### All_params / other_params: the only wildcard, spelled two ways
 
-The grammar has **one** wildcard: `'all_params'`. The retired `'*'` raises with a clear message:
+The grammar has **one** wildcard: `'all_params'` and `'other_params'` are exact synonyms for it. The retired `'*'` raises with a clear message:
 
 ```text
 sfh={'*': FREE}
 # ValueError: The wildcard key '*' has been retired; the wildcard is spelled
-# 'all_params'. Write {'all_params': FREE} instead of {'*': FREE}.
+# 'all_params' (or its synonym 'other_params'). Write {'all_params': FREE}
+# instead of {'*': FREE}.
 ```
 
-**Why one?** Fewer names = fewer mental models. A reader sees `'all_params'` once and knows what it is. One name, one mental model: the retired `'*'` spelling bought nothing but a second way to write the same thing.
+**Why two spellings, not one?** They read differently depending on the shape of the dict. `'all_params'` reads best when the wildcard is the group's only directive — the everything-free (or everything-fixed) case. `'other_params'` reads best written **last**, after explicit per-parameter entries, where it means "the others":
+
+```python
+sfh={'type': 'dpl', 'all_params': FREE}                                          # sole directive
+sfh={'type': 'dpl', 'alpha': Uniform(0.5, 3.0), 'other_params': Fixed(DEFAULT)}   # mixed, wildcard last
+```
+
+Normalization rewrites both spellings to the same internal key before any other logic runs, so `to_groups()`, `summary()`, and the round-trip stay single-valued regardless of which one a user wrote. Giving both in one dict raises — they'd set the same policy twice.
+
+**Why the wildcard only takes `FREE` or `Fixed(DEFAULT)`.** A single parameter's disposition is one of four things — fixed or free, crossed with an explicit value or the registry default:
+
+| | explicit value | registry default |
+|---|---|---|
+| **fixed** | `Fixed(v)` | `Fixed(DEFAULT)` |
+| **free** | any `Distribution` (e.g. `Uniform(1, 3)`) | `FREE` |
+
+A per-parameter entry can be any of the four. The wildcard can't: it applies to *every* parameter in the group at once, and only the registry-default column resolves sensibly across parameters of different physical meaning and scale — `FREE` defers each parameter to its own registered prior, `Fixed(DEFAULT)` defers each parameter to its own registered default value. The explicit column doesn't generalize: one literal number, or one distribution, can't be smeared across `tau_bc` and `tau_diff` and `Rv` at once. So a concrete `'all_params': Fixed(1.5)` raises — the wildcard only ever takes `FREE` or `Fixed(DEFAULT)`.
+
+**Why two names bought nothing extra?** Fewer names = fewer mental models. A reader sees `'all_params'`/`'other_params'` and knows: this is the wildcard, and it always means one of the same two things. The retired `'*'` spelling bought nothing but a second way to write the same thing — no readability payoff, since `'all_params'`/`'other_params'` were already picked for how they read at each call site.
 
 ### No nested wildcard shortcuts
 
-The grammar does **not** support shorthands like `'all_params': {'sfh': FREE, 'neb': FIXED}`. Every group is its own dict:
+The grammar does **not** support shorthands like `'all_params': {'sfh': FREE, 'neb': Fixed(DEFAULT)}`. Every group is its own dict:
 
 ```python
 # NOT supported:
-model = SEDModel.build(ssp_data=ssp, observation=obs, sfh={'type': 'dpl', 'all_params': FREE}, neb={'type': 'cue', 'all_params': FIXED})
+model = SEDModel.build(ssp_data=ssp, observation=obs, sfh={'type': 'dpl', 'all_params': FREE}, neb={'type': 'cue', 'all_params': Fixed(DEFAULT)})
 
 # DO this:
-model = SEDModel.build(ssp_data=ssp, observation=obs, sfh={'all_params': FREE, ...}, neb={'all_params': FIXED, ...}, redshift=Fixed(0.1))
+model = SEDModel.build(ssp_data=ssp, observation=obs, sfh={'all_params': FREE, ...}, neb={'all_params': Fixed(DEFAULT), ...}, redshift=Fixed(0.1))
 ```
 
 **Why?** Nesting wildcards invites ambiguity: does `'all_params': FREE` apply to all params in all groups? Just the explicit ones? Keeping wildcards local — inside each group — makes scope crystal clear.
@@ -147,7 +166,7 @@ model = SEDModel.build(ssp_data=ssp, observation=obs, sfh={'all_params': FREE, .
 Dust attenuation requires you to name the law. No "default law" mode:
 
 ```text
-dust_attenuation={'type': 'two_component', 'all_params': FIXED}
+dust_attenuation={'type': 'two_component', 'all_params': Fixed(DEFAULT)}
 # ParameterError: dust_attenuation type 'two_component' requires 'law' or ('law_bc' and 'law_diff').
 # See tengri.list_dust_laws() for options.
 ```
@@ -174,11 +193,11 @@ model = SEDModel.build(ssp_data=ssp, observation=obs, **recipes.star_forming_pho
 # Without (hypothetically)
 model = SEDModel.build(
     ssp_data=ssp, observation=obs,
-    sfh={'type': 'dpl', 'all_params': FIXED, 'alpha': ..., 'tau_gyr': ..., ...},
+    sfh={'type': 'dpl', 'alpha': ..., 'tau_gyr': ..., 'other_params': Fixed(DEFAULT), ...},
     met={'type': 'table'},
-    dust_attenuation={'type': 'two_component', 'law': 'calzetti', 'all_params': FIXED, ...},
-    dust_emission={'type': 'dale2014', 'all_params': FIXED, ...},
-    neb={'type': 'cue', 'all_params': FIXED, ...},
+    dust_attenuation={'type': 'two_component', 'law': 'calzetti', 'all_params': Fixed(DEFAULT), ...},
+    dust_emission={'type': 'dale2014', 'all_params': Fixed(DEFAULT), ...},
+    neb={'type': 'cue', 'all_params': Fixed(DEFAULT), ...},
     ...
 )
 ```

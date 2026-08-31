@@ -220,7 +220,7 @@ print(f"4 SSP libraries loaded in {time.time() - t0:.1f}s")
 # %% [markdown]
 # ## 4. Model configurations
 #
-# Each config: nested-dict grammar, `all_params=FIXED` except those with explicit `Uniform` priors; `approx=WavePrecomp()` for speed.
+# Each config: nested-dict grammar, `all_params=Fixed(DEFAULT)` except those with explicit `Uniform` priors; `approx=WavePrecomp()` for speed.
 
 # %%
 # Shared priors. Configs A and B use the two standard non-parametric SFHs —

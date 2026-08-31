@@ -74,9 +74,10 @@ registry** to resolve them, avoiding hand-curated type-name lists that drift.
 
 **Registry-based resolution**: inside a dict the tool has identified as an
 ``agn=`` block, for each key whose value is a prior Call: skip structural keys
-(type, *, all_params, sub-block names), then resolve the key as ``agn_<key>``
-against the registry and check the prior for overlap against its declared
-support. New AGN block types are covered without updating the tool.
+(type, *, all_params, other_params, sub-block names), then resolve the key
+as ``agn_<key>`` against the registry and check the prior for overlap
+against its declared support. New AGN block types are covered without
+updating the tool.
 
 **Why resolution is scoped**: it did not used to be -- the walk tried
 ``agn_<key>`` on every dict literal in the file. So
@@ -329,11 +330,16 @@ def _agn_prior_sites(tree: ast.AST):
     compared against the AGN declaration can pass.
     """
     scoped = _agn_scoped_dicts(tree)
-    # Structural keys that are never parameters, regardless of context
+    # Structural keys that are never parameters, regardless of context. '*'
+    # is the retired internal spelling (parse_groups refuses it as user
+    # input, but illustrative doc examples may still show it literally);
+    # 'all_params' / 'other_params' are the two accepted user-facing
+    # wildcard spellings, kept symmetric here.
     _STRUCTURAL_KEYS = {
         "type",
         "*",
         "all_params",
+        "other_params",
         "norm",  # Grammar structural keys
         "disc",
         "torus",
