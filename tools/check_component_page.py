@@ -43,6 +43,7 @@ from __future__ import annotations
 import argparse
 import importlib.util
 import sys
+from collections.abc import Sequence
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[1]
@@ -61,10 +62,10 @@ def _load_conf():
     return module
 
 
-def main() -> int:
+def main(argv: Sequence[str] | None = None) -> int:
     ap = argparse.ArgumentParser(description=__doc__.split("\n")[0])
     ap.add_argument("--list", action="store_true", help="print each registry and its entry count")
-    args = ap.parse_args()
+    args = ap.parse_args(argv)
 
     import tengri
 

@@ -51,6 +51,7 @@ import re
 import sys
 import unicodedata
 from collections import defaultdict
+from collections.abc import Sequence
 from dataclasses import dataclass
 from pathlib import Path
 
@@ -893,14 +894,14 @@ def _compute_metrics(corpus: list[Path], constants: dict[str, float]) -> dict:
     return metrics
 
 
-def main() -> int:
+def main(argv: Sequence[str] | None = None) -> int:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--strict", action="store_true", help="Fail on any violation (exit 1)")
     parser.add_argument("--report", action="store_true", help="Metrics only (no gated checks)")
     parser.add_argument("--all", action="store_true", help="Print all violations (not just first 20)")
     parser.add_argument("--fix", action="store_true", help="Rewrite notation_canon + unicode_norm in place")
     parser.add_argument("--dry-run", action="store_true", help="Preview fixes without writing (requires --fix)")
-    args = parser.parse_args()
+    args = parser.parse_args(argv)
 
     constants = _extract_constants_from_physics()
 

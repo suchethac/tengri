@@ -36,6 +36,7 @@ import argparse
 import ast
 import pathlib
 import sys
+from collections.abc import Sequence
 
 REPO_ROOT = pathlib.Path(__file__).resolve().parent.parent
 TOOLS_DIR = REPO_ROOT / "tools"
@@ -71,12 +72,12 @@ def _resolves(module: str) -> bool:
     return base.with_suffix(".py").is_file() or (base / "__init__.py").is_file()
 
 
-def main() -> int:
+def main(argv: Sequence[str] | None = None) -> int:
     parser = argparse.ArgumentParser(description="Check tools/ imports resolve.")
     parser.add_argument(
         "--list", action="store_true", help="print every tengri import the tools declare"
     )
-    args = parser.parse_args()
+    args = parser.parse_args(argv)
 
     this_file = pathlib.Path(__file__).name
     tools = sorted(p for p in TOOLS_DIR.glob("*.py") if p.name != this_file)

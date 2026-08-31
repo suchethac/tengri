@@ -36,6 +36,7 @@ import ast
 import subprocess
 import sys
 from collections import defaultdict
+from collections.abc import Sequence
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parent.parent
@@ -254,7 +255,7 @@ def bucket_violations_by_pattern(
     return dict(buckets)
 
 
-def main(argv: list[str] | None = None) -> int:
+def main(argv: Sequence[str] | None = None) -> int:
     """Check numeric guards against ledger. See module docstring for usage."""
     parser = argparse.ArgumentParser(__doc__)
     parser.add_argument("--regen", action="store_true", help="Regenerate the ledger")

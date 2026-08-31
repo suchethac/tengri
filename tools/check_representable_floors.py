@@ -26,6 +26,7 @@ import argparse
 import ast
 import pathlib
 import sys
+from collections.abc import Sequence
 
 # float32 smallest subnormal. A literal at or below this is 0.0 in float32.
 _F32_SMALLEST_SUBNORMAL = 1.4e-45
@@ -144,10 +145,10 @@ def _derivative_unsafe_denominators(tree: ast.AST) -> list[tuple[int, float]]:
     return found
 
 
-def main() -> int:
+def main(argv: Sequence[str] | None = None) -> int:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--list", action="store_true", help="print the inventory")
-    args = parser.parse_args()
+    args = parser.parse_args(argv)
 
     hits: list[tuple[str, int, float]] = []
     denominators: list[tuple[str, int, float]] = []
