@@ -311,8 +311,8 @@ fig.tight_layout()
 plt.show()
 
 # %% [markdown]
-# The right-hand panel is the point. MPS goes from 46.7 ms to 94.4 ms while doing
-# 512x more work; CPU goes from 0.8 ms to 158 ms. The GPU is not getting faster
+# The right-hand panel is the point. MPS goes from 46.7 ms to 385 ms while doing
+# 4096x more work; CPU goes from 0.8 ms to 1.23 s. The GPU is not getting faster
 # as N grows — it is finally being given enough work to be worth waking up.
 
 # %% [markdown]
@@ -343,7 +343,6 @@ fitter = Fitter(
 )
 print("resolved approx:", fitter.model.approx)  # expect wave_precomp=True, ztable=True
 
-# Run three times: the first includes XLA compilation, the rest do not.
 # Confirms a fit runs on the GPU. Timings are in the table below, measured
 # outside a notebook.
 posterior = fitter.run("map", n_steps=100, verbose=False)
