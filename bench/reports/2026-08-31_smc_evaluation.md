@@ -205,8 +205,8 @@ Four things fall out, and the first is the verdict.
 **1. SMC is 2.5-2.8x the wall clock and 4.1-5.6x the total gradients.** The
 wall-clock ratio is stable across three fixtures taken under the same load —
 364/135 = 2.7, 420/151 = 2.8, 261/97 = 2.7 — and it holds at **2.53x** when the
-box empties and the pair is re-run sequentially (see below). The gradient ratio is exact and load-independent: SMC's
-276 480-378 880 against HMC's 68 000.
+box empties and the pair is re-run sequentially (see below). The gradient ratio
+is exact and load-independent: SMC's 276 480-378 880 against HMC's 68 000.
 
 **The `grads / draw` column is not that ratio, and reading it as one overstates
 SMC's cost by about a factor of three.** It is what each backend reports for its
@@ -241,7 +241,7 @@ ChEES showed and it is now worth naming as a pattern rather than a coincidence:
 **on these posteriors every sampler that beats the incumbent where the incumbent
 is broken loses to it where the incumbent works.**
 
-**4. Where nothing works, SMC is 20x cheaper per effective sample.** nb05 seed 0,
+**4. Where nothing works, SMC is far cheaper per effective sample.** nb05 seed 0,
 gradients per effective sample. Preconditioned HMC spends 68 000 gradients for a
 worst-parameter ESS of 1.6, i.e. **42 500** per effective sample. SMC spends
 368 640 for an ancestor ESS of 252 per population, i.e. **731**. That is a 58x
