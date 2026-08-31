@@ -27,7 +27,7 @@ import numpy as np
 logger = logging.getLogger(__name__)
 
 # Three representative galaxies
-GALAXIES = [13097, 15336, 24497]  # blue, red, intermediate
+GALAXIES = [13097, 15336, 16049]  # blue, red, intermediate
 
 # Three model configurations
 CONFIGS = ["I", "II", "III"]
@@ -36,7 +36,7 @@ CONFIGS = ["I", "II", "III"]
 CONFIG_DIMENSIONS = {"I": 5, "II": 8, "III": 11}
 
 # Galaxy labels for reporting
-GALAXY_LABELS = {13097: "blue", 15336: "red", 24497: "intermediate"}
+GALAXY_LABELS = {13097: "blue", 15336: "red", 16049: "intermediate"}
 
 #: Per-cell subprocess timeout. 600 s killed the first retune of the grid (#2089).
 #: Measured 2026-08-30, the simplest cell (configuration I, 5 free parameters) needs

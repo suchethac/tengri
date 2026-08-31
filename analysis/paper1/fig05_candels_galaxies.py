@@ -43,7 +43,7 @@ FIGURE_WIDTH = 7.0
 FIGURE_HEIGHT = 7.5
 NROWS = 3
 NCOLS = 3
-GALAXY_IDS = [13097, 15336, 24497]
+GALAXY_IDS = [13097, 15336, 16049]
 CONFIG_KEYS = ["I", "II", "III"]
 CONFIG_LABELS = {"I": "Configuration I", "II": "Configuration II", "III": "Configuration III"}
 CONFIG_COLORS = {"I": "#0072B2", "II": "#E69F00", "III": "#009E73"}
@@ -57,7 +57,7 @@ def load_galaxy_metadata() -> dict:
         return {
             13097: {"z": 1.097, "class": "blue star-forming"},
             15336: {"z": 1.036, "class": "red quiescent"},
-            24497: {"z": 1.031, "class": "intermediate dusty"},
+            16049: {"z": 1.047, "class": "intermediate dusty"},
         }
     with open(galaxy_file) as f:
         data = json.load(f)

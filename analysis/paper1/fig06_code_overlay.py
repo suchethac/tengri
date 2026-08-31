@@ -401,7 +401,7 @@ def main(
         "inter_code_ranges": {},
     }
 
-    for gal_id in [13097, 15336, 24497]:
+    for gal_id in [13097, 15336, 16049]:
         if gal_id not in galaxies:
             continue
 
@@ -528,7 +528,7 @@ def main(
         sharex=True,
     )
 
-    for idx, gal_id in enumerate([13097, 15336, 24497]):
+    for idx, gal_id in enumerate([13097, 15336, 16049]):
         ax = axes[idx]
 
         # Set axis labels (y-axis only; x-axis is shared and labeled at the bottom)

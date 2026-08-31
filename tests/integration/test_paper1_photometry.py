@@ -32,6 +32,8 @@ Mutation checks (each test names the mutant that kills it):
 - the interim ``save_best_so_far`` call is dropped from ``run_fit``'s loop:
   ``test_run_fit_writes_the_best_so_far_after_each_missed_attempt``.
 - ``cell_is_adopted`` inverted: ``test_only_missing_skips_adopted_cells``.
+- ``has_rising_irac_colors`` comparison sign flipped (``>`` -> ``<``):
+  ``test_agn_screen_excludes_rising_irac_candidates``.
 """
 
 from __future__ import annotations
@@ -1280,3 +1282,34 @@ def test_summary_only_runs_no_fits(tmp_path, monkeypatch):
     assert summary["metadata"]["summary_only"] is True
     assert len(summary["fits"]) == 1
     assert summary["fits"][0]["gal_id"] == 13097
+
+
+def test_agn_screen_excludes_rising_irac_candidates(monkeypatch):
+    """``select_galaxies.has_rising_irac_colors`` screens rising IRAC colors.
+
+    A rest 2-4 um power law (owner ruling, #2089 R64) is a signature no
+    stellar configuration fits, and shows up as a POSITIVE
+    ``m_CH1 - m_CHn`` AB-mag difference (brighter, i.e. lower mag, at the
+    longer wavelength). Galaxy 24497 was screened out for exactly this
+    (catalog values CH1-CH3=+0.84, CH1-CH4=+1.23); its replacement, galaxy
+    16049, has the ordinary stellar sign (CH1-CH3=-0.46, CH1-CH4=-0.38).
+    The synthetic values below exercise the predicate directly, including
+    the missing-band exemptions that mirror ``compute_color_safe``.
+
+    Mutant: flip the comparison sign (``>`` -> ``<``) in
+    ``has_rising_irac_colors`` -> the excluded case (+1.0, +1.23) passes the
+    screen instead of failing it; recorded.
+    """
+    # Import-time only: ingest_art_sedfitting.py just needs the env var set,
+    # it does no file I/O until its parse_* functions are called.
+    monkeypatch.setenv("ART_SEDFITTING_DIR", str(REPO))
+    import select_galaxies
+
+    # Both arms rise: excluded.
+    assert select_galaxies.has_rising_irac_colors(1.0, 1.23) is True
+    # Stellar-like (galaxy 16049's actual sign): kept.
+    assert select_galaxies.has_rising_irac_colors(-0.4, -0.38) is False
+    # CH3 missing, but the CH4 arm alone still excludes.
+    assert select_galaxies.has_rising_irac_colors(None, 1.23) is True
+    # Both arms missing: exempt from the screen, kept.
+    assert select_galaxies.has_rising_irac_colors(None, None) is False

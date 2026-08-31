@@ -33,8 +33,8 @@ $python_exe analysis/paper1/fit_one.py --galaxy 13097 --config I --method mcmc_n
 # Fit galaxy 15336 with config II
 $python_exe analysis/paper1/fit_one.py --galaxy 15336 --config II --method mcmc_nuts --out analysis/paper1/results/fits --seed 42
 
-# Fit galaxy 24497 with config III
-$python_exe analysis/paper1/fit_one.py --galaxy 24497 --config III --method mcmc_nuts --out analysis/paper1/results/fits --seed 42
+# Fit galaxy 16049 with config III
+$python_exe analysis/paper1/fit_one.py --galaxy 16049 --config III --method mcmc_nuts --out analysis/paper1/results/fits --seed 42
 ```
 
 **Outputs:**
@@ -253,10 +253,14 @@ SDSS ugriz at z=0.1, 200 timed calls after 5 warmup calls, commit 996b72ccb, no 
 ## Figure 5: CANDELS Galaxies × Configurations
 
 **Purpose:** Generate a 3 rows (galaxies) × 3 columns (panels) figure showing three CANDELS galaxies 
-(IDs 13097, 15336, 24497) across three model configurations (I, II, III), with panels showing:
+(IDs 13097, 15336, 16049) across three model configurations (I, II, III), with panels showing:
 - (a) Observed photometry and posterior-predictive photometry bands
 - (b) Star formation history with 16-84% confidence band
 - (c) Joint posterior contours of log M* and log SFR(100 Myr)
+
+The trio is selected by `select_galaxies.py`, whose criteria include an AGN screen that
+excludes candidates with rising IRAC colors (m_CH1 - m_CH3 > 0.3 or m_CH1 - m_CH4 > 0.5 AB
+mag) — the reason galaxy 24497 was replaced by 16049 (#2089).
 
 **Command:**
 ```bash

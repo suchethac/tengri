@@ -21,11 +21,11 @@
       "reason": "Highest S/N in red_quiescent class"
     },
     {
-      "id": 24497,
-      "z": 1.031,
-      "n_detected": 13,
-      "median_snr": 542.8881650380022,
-      "color_proxy": 0.45200000000000173,
+      "id": 16049,
+      "z": 1.047,
+      "n_detected": 16,
+      "median_snr": 244.29967426710095,
+      "color_proxy": 0.4569999999999972,
       "color_proxy_note": "F160W-Ks",
       "type_label": "intermediate_dusty",
       "reason": "Highest S/N in intermediate_dusty class"
@@ -35,6 +35,44 @@
     "clean_flags": "flg1 == 0",
     "min_detected_bands": 10,
     "present_in_all_codes": true,
+    "agn_screen": "exclude rising IRAC colors (m_CH1 - m_CH3 > 0.3 or m_CH1 - m_CH4 > 0.5 AB mag), a rest 2-4 um power law no stellar configuration fits",
+    "agn_screened": [
+      {
+        "id": 1826,
+        "ch1_ch3": 0.6129999999999995,
+        "ch1_ch4": 0.47900000000000276
+      },
+      {
+        "id": 3412,
+        "ch1_ch3": 0.37099999999999866,
+        "ch1_ch4": -3.024000000000001
+      },
+      {
+        "id": 4056,
+        "ch1_ch3": 0.43299999999999983,
+        "ch1_ch4": 0.11400000000000077
+      },
+      {
+        "id": 5845,
+        "ch1_ch3": 0.6039999999999992,
+        "ch1_ch4": -0.3810000000000002
+      },
+      {
+        "id": 24497,
+        "ch1_ch3": 0.8399999999999999,
+        "ch1_ch4": 1.225999999999999
+      },
+      {
+        "id": 24786,
+        "ch1_ch3": 0.5330000000000013,
+        "ch1_ch4": 1.3290000000000006
+      },
+      {
+        "id": 26600,
+        "ch1_ch3": 1.3500000000000014,
+        "ch1_ch4": 0.22300000000000253
+      }
+    ],
     "ranked_by": "median_SNR_within_color_class",
     "codes": [
       "BAGPIPES",
