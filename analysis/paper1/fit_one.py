@@ -68,6 +68,17 @@ RETUNE_TARGET_ACCEPT_2 = 0.99
 #: Attempts the adoption loop makes before it keeps the best one it has.
 DEFAULT_RETUNE_ATTEMPTS = 3
 
+#: Per-configuration override of ``DEFAULT_RETUNE_ATTEMPTS`` (ruling R60).
+#: Config III's ``met_logzsol`` ceiling (+0.5) sits at the SSP grid extent --
+#: an immovable edge, unlike Config II's movable prior edge. Edge-mass
+#: diagnostics on the best-so-far draws showed grid-edge pile-up (frac_hi
+#: 0.107 on 13097/III, 0.149 on 15336/III, both at max R-hat ~1.002): the
+#: divergences are well-mixed, irreducible edge geometry, not a step-size
+#: problem. Raising ``target_accept_rate`` to 0.99 cannot clear a structural
+#: edge and cost 13097/III its entire 21600 s cell timeout for nothing, so
+#: III's ladder caps at the 0.95 rung (2 attempts) (#2089).
+RETUNE_ATTEMPTS_BY_CONFIG = {"III": 2}
+
 #: Keys the NPZ carries beside the sampled parameters, one array each.
 #: ``dust_tau`` is the configuration's dust optical depth whichever parameter
 #: carries it, and ``dust_tau_name`` names that parameter. They are deliberately
@@ -513,7 +524,9 @@ def run_fit(
         out_dir: Output directory for results
         seed: Random seed for reproducibility
         retune_attempts: Attempts made before the best one is kept (see
-            :func:`retune_settings`; default: DEFAULT_RETUNE_ATTEMPTS)
+            :func:`retune_settings`; default: DEFAULT_RETUNE_ATTEMPTS, unless
+            ``config_key`` has an override in RETUNE_ATTEMPTS_BY_CONFIG). An
+            explicitly passed value always wins over the per-config default.
         n_warmup: NUTS warmup draws per chain (default: the paper's 600)
         n_samples: NUTS kept draws per chain (default: the paper's 600)
         n_chains: NUTS chains (default: the paper's 4)
@@ -521,6 +534,12 @@ def run_fit(
     Returns:
         Dict with fit result and diagnostics
     """
+    # An explicit caller override (a value other than the module default) wins;
+    # otherwise the per-config table applies (RETUNE_ATTEMPTS_BY_CONFIG) --
+    # e.g. Config III caps at 2 (#2089, ruling R60).
+    if retune_attempts == DEFAULT_RETUNE_ATTEMPTS:
+        retune_attempts = RETUNE_ATTEMPTS_BY_CONFIG.get(config_key, DEFAULT_RETUNE_ATTEMPTS)
+
     out_dir = Path(out_dir)
     out_dir.mkdir(parents=True, exist_ok=True)
     # The JSON path is needed before the loop: a failed attempt is persisted

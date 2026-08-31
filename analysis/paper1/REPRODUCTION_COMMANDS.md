@@ -70,7 +70,9 @@ draws, D = 11), attempt 1 at 0.85 missed the bar on 77/2400 divergences at max R
 5741 s, and percent-level divergences are a step-size problem (the standard remedy is a higher
 `adapt_delta`). The mass matrix is never switched to dense by a retune — on cell 13097/II
 (D = 8), attempt 1 on a diagonal mass matrix gave 3/2400 divergences at max R̂ 1.0014 and the
-old dense-mass retune gave 79/2400 at 1.023. The default is 3 attempts.
+old dense-mass retune gave 79/2400 at 1.023. The default is 3 attempts. Config III stops
+at the 0.95 rung (2 attempts) because its met ceiling is the SSP grid extent and the
+residual edge divergences are structural.
 
 **Every missed attempt is saved before the next one starts.** Once an attempt returns a
 posterior that misses the bar, the best attempt so far is written to `results/fits/<ID>_<config>.npz`

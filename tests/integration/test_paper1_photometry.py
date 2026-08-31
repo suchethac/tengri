@@ -1060,6 +1060,110 @@ def test_an_interim_save_failure_is_labeled_as_such_and_the_loop_continues(
             np.testing.assert_array_equal(npz[name], values)
 
 
+def test_config_iii_retune_ladder_caps_at_two_attempts():
+    """``RETUNE_ATTEMPTS_BY_CONFIG`` caps III at 2 attempts; I and II keep 3.
+
+    Config III's ``met_logzsol`` ceiling (+0.5) sits at the SSP grid extent --
+    an immovable edge, unlike Config II's movable prior edge. Edge-mass
+    diagnostics on the best-so-far draws showed grid-edge pile-up (frac_hi
+    0.107 on 13097/III, 0.149 on 15336/III, both at max R-hat ~1.002): the
+    divergences are well-mixed, irreducible edge geometry, and raising
+    ``target_accept_rate`` to 0.99 cannot clear a structural edge -- it cost
+    13097/III its entire 21600 s cell timeout for nothing (#2089, ruling R60).
+
+    Mutation: delete the "III" entry from ``RETUNE_ATTEMPTS_BY_CONFIG`` ->
+    "III" resolves to ``DEFAULT_RETUNE_ATTEMPTS`` (3) and this test fails.
+    """
+    for config_key in ("I", "II"):
+        assert (
+            fit_one.RETUNE_ATTEMPTS_BY_CONFIG.get(config_key, fit_one.DEFAULT_RETUNE_ATTEMPTS)
+            == fit_one.DEFAULT_RETUNE_ATTEMPTS
+        )
+    assert fit_one.RETUNE_ATTEMPTS_BY_CONFIG.get("III", fit_one.DEFAULT_RETUNE_ATTEMPTS) == 2
+
+
+def test_run_fit_stops_after_the_capped_attempt_for_config_iii(catalog, tmp_path, monkeypatch):
+    """Config III's retune loop stops after attempt 2 (0.95); I still gets all 3.
+
+    The sampler seam (``ForwardModel.fit``) is stubbed to always miss the
+    adoption bar (rhat_max 1.02 >= the 1.01 bar), so the loop runs for exactly
+    as many attempts as the resolved budget allows -- the same
+    stubbed-``ForwardModel.fit`` pattern as
+    ``test_run_fit_writes_the_best_so_far_after_each_missed_attempt`` (#2089,
+    ruling R60).
+
+    Mutation: bypass the cap (resolve every config to
+    ``DEFAULT_RETUNE_ATTEMPTS``) -> the config III assertions below fail (3
+    attempts on disk instead of 2).
+    """
+    import configs
+
+    class _StubPosterior:
+        """The surface ``run_fit`` and ``save_fit_outputs`` read off a posterior."""
+
+        def __init__(self, samples, n_divergent, dust_param):
+            self.samples = samples
+            self.diagnostics = {"n_divergent": n_divergent}
+            self._dust_param = dust_param
+
+        def rhat(self):
+            return {self._dust_param: 1.02}
+
+        def effective_sample_size(self):
+            return {self._dust_param: 120.0}
+
+    def run_stub(config_key, n_attempts_expected):
+        try:
+            ssp = configs.load_ssp_for(config_key)
+        except FileNotFoundError:
+            pytest.skip(f"SSP grid for config {config_key} not found")
+
+        photometry = tengri.Photometry.from_names(CANDELS_13097_FILTERS)
+        observation = tengri.Observation(photometry=photometry)
+        sed_model = getattr(configs, f"config_{config_key}")(ssp, observation, CANDELS_13097_Z)
+        free_params = list(sed_model.spec.free_params)
+        dust_param = fit_one.dust_parameter_name(config_key)
+
+        draws = [
+            {
+                k: np.asarray(v, dtype=float)
+                for k, v in sed_model.spec.sample_batch(
+                    jax.random.PRNGKey(300 + i), BEST_SO_FAR_DRAWS
+                ).items()
+                if k in free_params
+            }
+            for i in range(n_attempts_expected)
+        ]
+
+        fit_calls: list[dict] = []
+
+        def stub_fit(self, data, **kwargs):
+            index = len(fit_calls)
+            fit_calls.append(dict(kwargs))
+            return _StubPosterior(draws[index], 20 + index, dust_param)
+
+        monkeypatch.setattr(fit_one.ForwardModel, "fit", stub_fit)
+
+        payload = fit_one.run_fit(
+            13097, config_key, "mcmc_nuts", tmp_path, n_warmup=4, n_samples=4, n_chains=1
+        )
+        json_path = tmp_path / f"13097_{config_key}.json"
+        final = json.loads(json_path.read_text())
+        return payload, final, fit_calls
+
+    payload_iii, final_iii, calls_iii = run_stub("III", 2)
+    assert len(calls_iii) == 2
+    assert len(final_iii["attempts"]) == 2
+    assert payload_iii["adoption_pass"] is False
+    assert final_iii["best_attempt"] in {a["retune_attempt"] for a in final_iii["attempts"]}
+
+    # A config I stub run still records 3: the cap is per-config, not global.
+    payload_i, final_i, calls_i = run_stub("I", 3)
+    assert len(calls_i) == 3
+    assert len(final_i["attempts"]) == 3
+    assert payload_i["best_attempt"] in {a["retune_attempt"] for a in final_i["attempts"]}
+
+
 def test_aggregate_summary_reads_disk_and_counts_adoption(tmp_path):
     """Read cell JSONs from disk and count adoption status.
 
