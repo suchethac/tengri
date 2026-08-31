@@ -84,7 +84,10 @@ import warnings
 
 import numpy as np
 
-METHODS = ("mcmc_nuts", "mcmc_hmc")
+#: Kept identical to ``CatalogFitter._MCMC_VMAPPABLE`` by a contract test
+#: (``tests/contract/test_catalog_throughput_bench.py``), so a sampler that
+#: reaches the batched path cannot go unmeasured here.
+METHODS = ("mcmc_nuts", "mcmc_hmc", "mcmc_chees")
 DTYPES = ("f64", "f32")
 
 
@@ -131,7 +134,13 @@ import jax.numpy as jnp
 
 #: The adoption bar this benchmark publishes against. Vehtari+2021, and the bar
 #: already used by ``bench/reports/2026-08-17_*`` and the spine notebooks.
-MAX_RHAT = 1.01
+#:
+#: **Imported, not restated.** It was a literal 1.01 here and a literal 1.01 in
+#: the library, which is two places for one number to drift; the per-galaxy
+#: buckets this harness reports now come from the library too, so the row-level
+#: bar has to be the same object as the galaxy-level one or a row can pass a bar
+#: its own galaxies failed.
+from tengri.inference.catalog_convergence import CATALOG_MAX_RHAT as MAX_RHAT
 
 
 def set_precision(dtype: str) -> dict:
@@ -298,82 +307,64 @@ def device_peak_bytes():
 
 
 def _diagnostics(cp, max_gal):
-    """Per-catalog convergence, reported as three disjoint counts plus the extremes.
+    """Per-catalog convergence, as four disjoint counts plus the extremes.
 
-    Reported over the first ``max_gal`` galaxies (all of them by default). Every
-    galaxy in the catalog lands in exactly one of three buckets, and the point
-    of separating them is that two of the three are invisible in a wall clock:
+    Delegates to :func:`tengri.inference.catalog_convergence.catalog_convergence`
+    rather than re-deriving the buckets here. That is deliberate: this harness
+    had its own copy of the rule, and a benchmark whose convergence definition
+    can drift from the library's is a benchmark that will eventually publish a
+    rate the library disagrees with. The library owns the definition; this
+    function owns the column names.
 
-    * **converged** — max split-R-hat over its parameters is below
-      :data:`MAX_RHAT` and it reported no divergence.
-    * **frozen** — every draw of every parameter is identical, so
-      ``Posterior.rhat`` raises by design (#1438). Split R-hat cannot see this
-      (both variances are zero, so it reads ~1.0) and the divergence count is 0,
-      so a frozen galaxy would otherwise be counted as a converged win. PR #2027
-      Finding 14 measured 3.1 % of galaxies frozen with zero divergences.
-    * **unconverged** — everything else: it moved, and it did not mix.
+    The four buckets, and why none can be folded into another:
 
-    Divergence rates use :func:`~tengri.inference.backends.mcmc._shared.total_draws`
-    rather than ``n_samples``. ``n_samples`` is recorded per chain while
-    ``n_divergent`` is summed over every chain, so dividing one by the other
-    over-reports by the chain count (#2087 measured 400 % on a 4-chain fit).
-    The catalog path runs one chain per galaxy, so the two agree *here* — the
-    helper is used anyway so this stays right if that ever changes.
+    * **converged** -- max split-R-hat below
+      :data:`~tengri.inference.catalog_convergence.CATALOG_MAX_RHAT` with no
+      divergence.
+    * **frozen** -- every kept draw diverged, or a free parameter took
+      essentially no distinct values, or R-hat is undefined because a free
+      parameter has zero variance. Split R-hat cannot see this (both halves have
+      zero variance, so it reads ~1.0) and the divergence count may be 0, so a
+      frozen galaxy would otherwise be counted as a converged win.
+    * **refused** -- the sampler raised ``DeadFitError`` before sampling and the
+      galaxy has no posterior at all. Only ever non-zero on the sequential
+      engine: the batched engine's ``run_one`` is inside ``lax.map``, where a
+      Python raise is not expressible, so a refusal there fails the whole cell
+      and is recorded as ``row["refused"]`` instead.
+    * **unconverged** -- it moved, and it did not mix.
+
+    ``min_ess_converged`` is reported beside ``frac_converged`` and the two must
+    be quoted together: Phase 0 measured 73 % of galaxies clearing R-hat < 1.01
+    with zero divergences at a worst ESS of **2.63 of 500 draws**.
     """
-    from tengri.analysis.diagnostics.autocorrelation import effective_sample_size
-    from tengri.inference.backends.mcmc._shared import total_draws
+    from tengri.inference.catalog_convergence import catalog_convergence
 
-    n_checked = min(len(cp.posteriors), max_gal)
-    worst_rhat, worst_rhat_param = -np.inf, None
-    least_ess, least_ess_param = np.inf, None
-    least_ess_conv = np.inf
-    n_frozen = n_converged = 0
-    n_div_total = n_draws_total = 0
-    for i in range(n_checked):
-        post = cp.posteriors[i]
-        diag = post.diagnostics or {}
-        n_div_i = int(diag.get("n_divergent", 0) or 0)
-        n_div_total += n_div_i
-        if "n_samples" in diag:
-            n_draws_total += total_draws(diag)
-        try:
-            rh = post.rhat()
-        except ValueError:
-            n_frozen += 1
-            continue
-        worst_i = -np.inf
-        for name, val in rh.items():
-            if np.isfinite(val) and val > worst_i:
-                worst_i = float(val)
-                if worst_i > worst_rhat:
-                    worst_rhat, worst_rhat_param = worst_i, name
-        converged_i = bool(np.isfinite(worst_i) and worst_i < MAX_RHAT and n_div_i == 0)
-        n_converged += converged_i
-        ess = effective_sample_size({k: np.asarray(v) for k, v in post.samples.items()})
-        for name, rec in ess.items():
-            val = rec["ess"] if isinstance(rec, dict) else rec
-            if not np.isfinite(val):
-                continue
-            if val < least_ess:
-                least_ess, least_ess_param = float(val), name
-            # The catalog-wide min ESS is set by the worst galaxy in the tail,
-            # which is by construction one of the galaxies that did NOT clear
-            # the R-hat bar. Quoting it beside a converged-galaxy rate would
-            # mismatch the two columns, so the converged subset gets its own.
-            if converged_i and val < least_ess_conv:
-                least_ess_conv = float(val)
+    report = catalog_convergence(
+        cp.posteriors, refusals=getattr(cp, "refusals", None), max_galaxies=max_gal
+    )
+    worst_rhat_param = min_ess_param = None
+    worst, least = -np.inf, np.inf
+    for row in report.per_galaxy:
+        if row.max_rhat is not None and row.max_rhat > worst:
+            worst = row.max_rhat
+            worst_rhat_param = row.max_rhat_param
+        if row.min_ess is not None and row.min_ess < least:
+            least = row.min_ess
+            min_ess_param = row.min_ess_param
     return {
-        "n_gal_checked": n_checked,
-        "n_gal_converged": n_converged,
-        "n_frozen_chains": n_frozen,
-        "n_gal_unconverged": n_checked - n_converged - n_frozen,
-        "frac_converged": (n_converged / n_checked) if n_checked else None,
-        "divergence_rate": (n_div_total / n_draws_total) if n_draws_total else None,
-        "max_rhat": None if not np.isfinite(worst_rhat) else worst_rhat,
+        "n_gal_checked": report.n_galaxies,
+        "n_gal_converged": report.n_converged,
+        "n_frozen_chains": report.n_frozen,
+        "n_gal_refused": report.n_refused,
+        "n_gal_unconverged": report.n_unconverged,
+        "frac_converged": report.frac_converged,
+        "divergence_rate": report.divergence_rate,
+        "max_rhat": report.max_rhat,
         "max_rhat_param": worst_rhat_param,
-        "min_ess": None if not np.isfinite(least_ess) else least_ess,
-        "min_ess_param": least_ess_param,
-        "min_ess_converged": None if not np.isfinite(least_ess_conv) else least_ess_conv,
+        "min_ess": report.min_ess,
+        "min_ess_param": min_ess_param,
+        "min_ess_converged": report.min_ess_converged,
+        "convergence_summary": report.summary(),
     }
 
 
@@ -633,6 +624,27 @@ def main(argv=None):
         default=10_000,
         help="cap on how many galaxies the R-hat/ESS pass inspects",
     )
+    ap.add_argument(
+        "--n-ensemble",
+        type=int,
+        default=None,
+        help="mcmc_chees: adaptation-ensemble width WITHIN each galaxy (default "
+        "CATALOG_CHEES_ENSEMBLE=8). VRAM scales with K * n_ensemble.",
+    )
+    ap.add_argument(
+        "--n-chains",
+        type=int,
+        default=None,
+        help="mcmc_chees: sampling chains per galaxy. >1 gives a per-galaxy split "
+        "R-hat over genuinely separate chains rather than two halves of one.",
+    )
+    ap.add_argument(
+        "--max-leapfrog-steps",
+        type=int,
+        default=None,
+        help="mcmc_chees: hard cap on the adapted trajectory length. This is what "
+        "bounds a vmapped ChEES batch -- lanes batch to the widest adapted L.",
+    )
     ap.add_argument("--reps", type=int, default=4, help="--mode grad: timing repetitions")
     ap.add_argument("--runs", type=int, default=20, help="--mode grad: calls per repetition")
     ap.add_argument("--shard", action="store_true", help="also time devices='all' scaling")
@@ -721,11 +733,25 @@ def main(argv=None):
         run_kw["max_num_doublings"] = args.max_doublings
     if args.n_leapfrog is not None:
         run_kw["n_leapfrog_steps"] = args.n_leapfrog
+    # ChEES knobs. Passed only to ChEES cells: ``max_num_doublings`` means nothing
+    # to it and ``n_ensemble`` means nothing to NUTS/HMC, and the catalog engine
+    # refuses n_chains > 1 for the window-adaptation samplers by name rather than
+    # ignoring it.
+    chees_kw = {}
+    if args.n_ensemble is not None:
+        chees_kw["n_ensemble"] = args.n_ensemble
+    if args.n_chains is not None:
+        chees_kw["n_chains"] = args.n_chains
+    if args.max_leapfrog_steps is not None:
+        chees_kw["max_leapfrog_steps"] = args.max_leapfrog_steps
     meta["n_warmup"] = args.warmup
     meta["n_burnin"] = args.burnin
     meta["n_samples"] = args.samples
     meta["max_num_doublings"] = args.max_doublings
     meta["n_leapfrog"] = args.n_leapfrog
+    meta["n_ensemble"] = args.n_ensemble
+    meta["n_chains"] = args.n_chains
+    meta["max_leapfrog_steps"] = args.max_leapfrog_steps
 
     print(f"\n  forward_chunk_size (K) sweep  [warmup={args.warmup}, samples={args.samples}]")
     print(
@@ -742,9 +768,13 @@ def main(argv=None):
             for K in sorted(args.chunk):  # ascending: peak_bytes_in_use is monotone
                 if n_gal < K:
                     continue
-                cold, _, bias, refused = _run_and_time(cat, method, K, None, key, run_kw)
+                cell_kw = {**run_kw, **(chees_kw if method == "mcmc_chees" else {})}
+                if method == "mcmc_chees":
+                    cell_kw.pop("max_num_doublings", None)
+                    cell_kw.pop("n_leapfrog_steps", None)
+                cold, _, bias, refused = _run_and_time(cat, method, K, None, key, cell_kw)
                 if refused is None:
-                    warm, cp, _, refused = _run_and_time(cat, method, K, None, key, run_kw)
+                    warm, cp, _, refused = _run_and_time(cat, method, K, None, key, cell_kw)
                 if refused is not None:
                     # #2090: the sampler refused a dead warmup. Record the cell
                     # as a failed fit and carry on -- a sweep that aborts on one

@@ -20,6 +20,33 @@ Unlike :func:`tengri.inference.backends.mcmc.nuts.run_nuts`, warmup is run
 **per galaxy** (each galaxy adapts its own step size and mass matrix), which is
 the statistically correct choice for a catalog of galaxies with different SEDs
 and therefore different posterior geometries.
+
+Three adaptation conventions exist in this codebase, and they must not be
+conflated
+--------------------------------------------------------------------------
+1. **Per-galaxy adaptation inside the vmap** — what this module does, for all
+   three samplers it carries. Each lane adapts to its own posterior.
+2. **One adaptation on the first galaxy, reused for all** —
+   ``Fitter._fit_batch_vmap_mcmc``. Cheaper, and *wrong for a catalog*: every
+   galaxy's step size would then be a function of whichever galaxy happened to
+   be first, so its posterior would depend on batch composition.
+3. **Adaptation across a chain ensemble** — ChEES (and MEADS). This is a third
+   axis, not a replacement for the first: the ensemble is
+   **chains-within-galaxy**, so convention 1 still holds and the ensemble sits
+   *inside* each lane. See
+   ``_shared._resolve_chees_ensemble`` for
+   why an ensemble spanning galaxies is refused.
+
+Convention 1 is a real lock-step hazard for NUTS and is **not** one for ChEES,
+and the difference is structural rather than a matter of degree. NUTS's window
+adaptation scans a kernel whose per-step cost is a data-dependent
+``lax.while_loop`` tree doubling, so a vmapped batch pays the deepest tree any
+lane asks for, at every step, throughout warmup. ChEES's adaptation is a
+fixed-length scan of ``n_warmup`` steps, each bounded statically by
+``max_leapfrog_steps``; lanes may differ in their adapted ``L``, so the batch
+still runs to the widest lane, but that width is a compile-time constant rather
+than ``2**depth``. ``bench/reports/2026-08-31_catalog_batched_samplers.md``
+measures both.
 """
 
 from __future__ import annotations
@@ -28,14 +55,36 @@ import jax
 import jax.numpy as jnp
 
 from tengri.inference.backends.mcmc._shared import (
+    _CHEES_JITTER_SCALE,
+    _CHEES_LEARNING_RATE,
     DEFAULT_MAX_NUM_DOUBLINGS,
+    _chees_scan,
     _get_flat_logdensity,
     _hmc_full_scan,
     _nuts_full_scan,
+    _resolve_chees_ensemble,
 )
 from tengri.inference.likelihoods.gaussian import inv_noise_std
 
-_SAMPLERS = ("nuts", "hmc")
+_SAMPLERS = ("nuts", "hmc", "chees")
+
+#: Adaptation-ensemble width for a *catalog* ChEES fit.
+#:
+#: Deliberately below the single-fit
+#: ``_shared._CHEES_DEFAULT_ENSEMBLE`` of 32,
+#: and the reason is arithmetic rather than taste. The ensemble is
+#: chains-within-galaxy, so it is an *inner* axis under the galaxy vmap: a
+#: catalog cell at ``forward_chunk_size=K`` carries ``K * n_ensemble`` live
+#: chains through every adaptation step. At K = 128 an ensemble of 32 is 4096
+#: concurrent chains for adaptation alone, which is a VRAM question before it is
+#: a statistics one. 8 is the smallest power of two comfortably above
+#: ``_shared._CHEES_MIN_ENSEMBLE`` (4), the
+#: floor below which the cross-chain centered positions ChEES differentiates
+#: collapse toward zero and the trajectory length stops adapting.
+#:
+#: This is a **default, not a cap**: pass ``n_ensemble=`` to ``run`` to raise it,
+#: and expect the VRAM to scale with ``K * n_ensemble``.
+CATALOG_CHEES_ENSEMBLE = 8
 
 #: ADAM steps for the per-galaxy MAP warm start. 300 matches the single-fit
 #: default in :func:`~tengri.inference.backends.map_dispatch.run_map`.
@@ -183,8 +232,15 @@ def build_catalog_mcmc_engine(
     use_dense: bool = False,
     thread_redshift: bool = False,
     thread_line_fluxes: bool = False,
+    n_chains: int = 1,
+    n_ensemble: int | str = CATALOG_CHEES_ENSEMBLE,
+    ensemble_jitter: float = _CHEES_JITTER_SCALE,
+    chain_jitter: float | None = None,
+    max_leapfrog_steps: int = 200,
+    chees_learning_rate: float = _CHEES_LEARNING_RATE,
+    mass_matrix_estimation=None,
 ):
-    """Build a vmap-safe per-galaxy NUTS/HMC sampling callable.
+    """Build a vmap-safe per-galaxy NUTS/HMC/ChEES sampling callable.
 
     Parameters
     ----------
@@ -193,10 +249,12 @@ def build_catalog_mcmc_engine(
         model. Only its structure is used, its log-posterior and the shared
         ``_jit_inputs`` are captured; per-galaxy ``data``/``noise`` are supplied
         at call time so the compiled program is reused across galaxies.
-    sampler : {"nuts", "hmc"}
+    sampler : {"nuts", "hmc", "chees"}
         Which BlackJAX sampler to vectorize.
     n_warmup : int
-        Window-adaptation steps, run per galaxy.
+        Adaptation steps, run per galaxy. Window adaptation for ``"nuts"`` /
+        ``"hmc"``; ChEES adaptation over this galaxy's own chain ensemble for
+        ``"chees"``.
     n_burnin : int
         Post-warmup samples discarded (sliced inside the traced call, static).
     n_samples : int
@@ -219,13 +277,38 @@ def build_catalog_mcmc_engine(
         When False, line fluxes are not used and the compiled program is
         unchanged. When True, per-galaxy line_flux_obs and line_flux_err arrays
         are substituted into data_args.
+    n_chains : int, default 1
+        Sampling chains **per galaxy**, concatenated into that galaxy's draws.
+        ``"nuts"`` and ``"hmc"`` accept only 1 here; ChEES accepts more, which is
+        what lets a catalog fit carry a split R-hat over genuinely separate
+        chains rather than over two halves of one.
+    n_ensemble : int or "auto", default :data:`CATALOG_CHEES_ENSEMBLE`
+        ChEES adaptation-ensemble width, **within each galaxy**. Ignored by
+        ``"nuts"`` / ``"hmc"``.
+    ensemble_jitter : float
+        Dispersion of that ensemble around the galaxy's seed position.
+    chain_jitter : float or None, default None
+        ``None`` seeds the sampling chains from the ensemble's warmed final
+        states. A float seeds them independently and overdispersed, which is
+        what makes a per-galaxy split R-hat a real test rather than a
+        consistency check.
+    max_leapfrog_steps : int, default 200
+        Hard cap on ChEES's adapted trajectory length. **This is the parameter
+        that keeps a vmapped ChEES batch bounded**: lanes with different adapted
+        ``L`` batch to the widest one, and this is how wide that can get.
+    chees_learning_rate : float
+        Adam step on ChEES's ``log`` trajectory length.
+    mass_matrix_estimation : None or "diagonal"
+        ``None`` (default) leaves ChEES's metric at the identity. See
+        :func:`~tengri.inference.backends.mcmc.chees.run_chees`.
 
     Returns
     -------
     run_one : callable
         ``(init_flat, key, data, noise, presence, redshift, line_flux_obs,
         line_flux_err) -> (positions, divergent)`` with ``positions`` shape
-        ``(n_samples, D)`` and ``divergent`` shape ``(n_samples,)``. When
+        ``(n_chains * n_samples, D)`` and ``divergent`` shape
+        ``(n_chains * n_samples,)``. When
         ``thread_line_fluxes=False``, line_flux_obs and line_flux_err are ignored.
         Safe to wrap with ``jax.vmap`` / ``jax.lax.map``.
     unravel_fn : callable
@@ -244,6 +327,17 @@ def build_catalog_mcmc_engine(
     if sampler not in _SAMPLERS:
         raise ValueError(f"sampler must be one of {_SAMPLERS}, got {sampler!r}")
 
+    n_chains = max(1, int(n_chains))
+    if sampler != "chees" and n_chains != 1:
+        raise ValueError(
+            f"sampler={sampler!r} runs exactly one chain per galaxy in the catalog "
+            f"path, got n_chains={n_chains}. Window adaptation is per galaxy here, so "
+            "a second chain would have to re-run it; only the ChEES path adapts once "
+            "over an ensemble and can then sample several chains from it. Use "
+            "method='mcmc_chees' for a per-galaxy multi-chain R-hat."
+        )
+    ensemble_size = _resolve_chees_ensemble(n_ensemble, n_chains) if sampler == "chees" else 0
+
     init_params = fitter._initialize_unbounded(jax.random.PRNGKey(0))
     log_posterior_flat_2arg, unravel_fn, _init_flat, template_data_args = _get_flat_logdensity(
         fitter, init_params
@@ -257,6 +351,44 @@ def build_catalog_mcmc_engine(
 
         warmup_key, chain_key = jax.random.split(gal_key)
         chain_keys = jax.random.split(chain_key, n_chain)
+
+        if sampler == "chees":
+            # This galaxy's OWN ChEES adaptation, over an ensemble of
+            # ``ensemble_size`` chains that all target THIS galaxy's posterior.
+            # Convention 1 + convention 3 of the module docstring: per-galaxy
+            # adaptation, ensemble on the inner axis. Nothing here is shared with
+            # any other lane, so a galaxy's draws do not depend on which galaxies
+            # it was batched with -- the property that would be lost if the
+            # ensemble were reused as the galaxy axis.
+            #
+            # ``chain_keys`` is reshaped to the (n_chains, n_iter, 2) layout
+            # ``_chees_scan`` wants. Splitting per chain here rather than inside
+            # keeps the key stream identical in shape to the NUTS/HMC lanes.
+            ck = jax.random.split(chain_key, n_chains * n_chain).reshape(n_chains, n_chain, 2)
+            positions, divergent, _step_size, _inv_mass, _n_leapfrog = _chees_scan(
+                init_flat,
+                warmup_key,
+                ck,
+                log_posterior_flat_2arg,
+                data_args,
+                n_warmup,
+                ensemble_size,
+                n_chains,
+                n_chain,
+                float(ensemble_jitter),
+                1.0,  # jitter_amount: BlackJAX's full Halton jitter
+                target_accept_rate,
+                max_leapfrog_steps,
+                float(chees_learning_rate),
+                mass_matrix_estimation,
+                None if chain_jitter is None else float(chain_jitter),
+            )
+            # Burn-in is per chain (the ``_vmap_chains`` contract), so it is
+            # sliced BEFORE the chains are flattened together. Slicing after
+            # would drop the head of chain 0 and nothing from the rest.
+            positions = positions[:, n_burnin:]
+            divergent = divergent[:, n_burnin:]
+            return positions.reshape(-1, positions.shape[-1]), divergent.reshape(-1)
 
         if sampler == "nuts":
             positions, divergent, _expansions, _step_size, _inv_mass = _nuts_full_scan(

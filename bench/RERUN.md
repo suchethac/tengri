@@ -106,3 +106,40 @@ When a benchmark is rerun:
   benchmark's own D = 3 dpl fixture at SNR 20 — they are a throughput
   characterization of the *machine*, not a convergence claim about tengri,
   and the report says so at length.
+
+- **`bench/reports/2026-08-31_catalog_batched_samplers.md`** — `mcmc_chees` on
+  the batched catalog path, and why catalog `mcmc_nuts` timed out.
+
+  ```bash
+  # the cost-structure measurement Phase 0 named and did not take:
+  JAX_DEFAULT_MATMUL_PRECISION=highest TENGRI_DISABLE_JAX_CACHE=1 \
+  python bench/scripts/benchmark_catalog_compile.py \
+      --method mcmc_hmc mcmc_nuts --chunk 1 8 \
+      --warmup 50 --samples 50 --max-doublings 10 --timeout 900
+
+  # the throughput/convergence sweep:
+  JAX_DEFAULT_MATMUL_PRECISION=highest \
+  python bench/scripts/benchmark_catalog_throughput.py \
+      --method mcmc_hmc mcmc_chees --dtype f64 \
+      --n-gal 64 --chunk 8 32 64 --warmup 100 --burnin 0 --samples 200 \
+      --n-ensemble 8 --max-leapfrog-steps 64 \
+      --json bench/results/catalog_batched_samplers.json --tag rtx3060
+  ```
+
+  Two headlines. **Catalog NUTS never timed out for the reason the 2026-08-30
+  report inferred**: compile is 4.4-4.6 s (1.6x HMC, flat in K), the cost is
+  sampling, and `max_num_doublings` was never forwarded to
+  `blackjax.window_adaptation`, so every "capped" cell ran its warmup at depth
+  10. With the cap forwarded the K = 1 cell drops 54.9 s -> 2.1 s. And
+  **`mcmc_chees` on the batched path is 2.5x slower than `mcmc_hmc` and
+  converges on 4 of 64 galaxies against 15** — a negative result whose named
+  cause is that the catalog engine cannot thread `precondition=`, so ChEES runs
+  with an identity metric while Phase 2 measured ChEES *plus* the analytic one.
+
+  **Re-run when** any of these move: `_nuts_full_scan` / `_nuts_warmup_only`
+  (the cap forwarding), `build_catalog_mcmc_engine`,
+  `CATALOG_CHEES_ENSEMBLE = 8`, `DEFAULT_MAX_NUM_DOUBLINGS = 10`, the blackjax
+  version, or — the one that would make Finding 4 obsolete rather than merely
+  stale — the day the catalog engine threads the analytic metric. D = 3 dpl at
+  SNR 20 under `band_integration="quadrature"`; nothing here transfers to a
+  different SNR.
