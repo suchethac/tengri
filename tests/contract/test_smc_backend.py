@@ -290,7 +290,7 @@ class TestItActuallySamplesTheRightDistribution:
     def test_it_recovers_a_tilted_gaussian(self, fixed_ladder):
         dim = 4
         logprior, loglik, post_mean, post_sd = _tilted_gaussian(dim)
-        particles, log_z, n_temp, final_lambda, step_size, n_div, accept, anc = _smc_scan(
+        particles, log_z, n_temp, ladder_lambda, step_size, n_div, accept, anc = _smc_scan(
             jnp.eye(dim),
             jax.random.split(jax.random.PRNGKey(0), 2),
             (),
@@ -308,12 +308,40 @@ class TestItActuallySamplesTheRightDistribution:
         )
         draws = np.asarray(particles).reshape(-1, dim)
         assert np.all(np.isfinite(draws))
-        assert np.all(np.asarray(final_lambda) >= 1.0), "the schedule did not finish"
+        assert np.all(np.asarray(ladder_lambda) >= 1.0), "the schedule did not finish"
+        # Gross per-dimension sanity, then the tight test that matters.
         assert np.allclose(draws.mean(axis=0), post_mean, atol=0.05), (
             f"mean {draws.mean(axis=0)} vs analytic {post_mean}"
         )
-        assert np.allclose(draws.std(axis=0), post_sd, rtol=0.15), (
-            f"sd {draws.std(axis=0)} vs analytic {post_sd}"
+
+        # THE TIGHT ONE, and it is deliberately a statistic POOLED OVER
+        # DIMENSIONS rather than a per-dimension bound.
+        #
+        # Residual tempering biases every coordinate the SAME way -- all of them
+        # shrink toward the prior mean and all of them widen -- while Monte Carlo
+        # error is independent across coordinates. Pooling therefore suppresses
+        # the noise (per-dimension standard error ~0.013 here) and keeps the
+        # defect, which is what makes a bound of 0.006 possible at all. A
+        # per-dimension bound cannot separate the two at this particle count.
+        #
+        # These were atol 0.05 / rtol 0.15 and passed a backend that returned
+        # draws from a *tempered* posterior: BlackJAX's SMC step moves particles
+        # under the OLD temperature and reweights toward the new one, so the
+        # weights left at lambda = 1 were being discarded. Measured over six
+        # seeds at exactly these settings -- with the closing rung the pooled
+        # mean error spans -0.0019..+0.0029 and the pooled sd ratio 0.982..1.023;
+        # without it, -0.0042..-0.0183 (negative on every seed) and 1.022..1.080
+        # (above one on every seed).
+        mean_err = float(draws.mean() - post_mean)
+        sd_ratio = float(draws.std(axis=0).mean() / post_sd)
+        assert abs(mean_err) < 0.006, (
+            f"pooled mean error {mean_err:+.4f}; a mean pulled toward the prior is "
+            "residual tempering, not noise (the closing rung at lambda = 1 is what "
+            "removes it)"
+        )
+        assert abs(sd_ratio - 1.0) < 0.05, (
+            f"pooled sd ratio {sd_ratio:.4f}; an sd above analytic is residual "
+            "tempering, not noise"
         )
         assert np.all(np.asarray(n_temp) > 0)
         assert np.all(np.asarray(accept) > 0.1)
@@ -321,6 +349,44 @@ class TestItActuallySamplesTheRightDistribution:
         assert np.all(np.asarray(step_size) > 0.0)
         assert np.all(np.asarray(n_div) >= 0)
         assert np.all(np.isfinite(np.asarray(log_z)))
+
+    def test_the_closing_rung_is_run_and_counted(self):
+        """LOAD-BEARING. Neuter: drop the closing rung, or stop counting it.
+
+        ``blackjax.smc.base.step`` resamples, then MOVES the particles under the
+        OLD temperature, then reweights toward the NEW one. A ladder that exits
+        at ``lambda = 1`` therefore leaves a **weighted** sample, and this
+        backend returns ``state.particles`` without ``state.weights``. One more
+        rung pinned at ``lambda = 1`` consumes those weights in its resample and
+        rejuvenates under the true posterior.
+
+        A fixed ladder makes the count exact and the check deterministic: ``K``
+        ladder rungs plus one closing rung. The reference page
+        (https://blackjax-devs.github.io/sampling-book/algorithms/temperedsmc)
+        does **not** do this -- it histograms the raw particles, where the bias
+        is invisible; it is not invisible in a posterior mean.
+        """
+        dim, ladder = 3, 12
+        logprior, loglik, _, _ = _tilted_gaussian(dim)
+        _p, _lz, n_temp, *_rest = _smc_scan(
+            jnp.eye(dim),
+            jax.random.split(jax.random.PRNGKey(5), 2),
+            (),
+            logprior,
+            loglik,
+            256,
+            2,
+            16,
+            0.5,
+            0.3,
+            _SMC_STEP_SIZE_GAIN,
+            SMC_TARGET_ACCEPT_RATE,
+            _SMC_MAX_TEMPERATURES,
+            ladder,
+        )
+        assert list(np.asarray(n_temp)) == [ladder + 1, ladder + 1], (
+            f"expected {ladder} ladder rungs plus the closing rung, got {n_temp}"
+        )
 
     def test_the_log_evidence_matches_the_analytic_value(self):
         """log Z comes free with the weights, so it must be right or not reported.

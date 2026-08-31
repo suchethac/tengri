@@ -148,8 +148,19 @@ def run_smc(
         Acceptance the controller drives toward. Defaults to
         :data:`SMC_TARGET_ACCEPT_RATE` (0.651), not NUTS's 0.8.
     max_temperatures : int
-        Rung cap. A run that hits it did **not** reach the posterior and says so
-        through ``diagnostics["reached_target"]``.
+        Cap on the *ladder's* rungs. A run that hits it did not reach the
+        posterior on its own and says so through
+        ``diagnostics["reached_target"]``; the closing rung then covers the
+        remaining gap in one importance step, which is not a substitute.
+
+        **The closing rung is always run and is counted in
+        ``n_temperatures``.** BlackJAX's SMC step resamples, moves the particles
+        under the *old* temperature, then reweights toward the new one, so a
+        ladder that exits at ``lambda = 1`` leaves a **weighted** sample whose
+        weights this backend would otherwise discard. One further rung pinned at
+        ``lambda = 1`` consumes those weights in its resample and rejuvenates
+        under the true posterior. Its ``delta`` is zero, so it adds exactly
+        nothing to ``log_evidence``.
     fixed_ladder : int, optional
         ``None`` (default) runs the adaptive schedule, whose rung count is
         data-dependent and therefore a ``lax.while_loop``. An int runs a uniform
@@ -284,7 +295,7 @@ def run_smc(
             particles,
             log_z,
             n_temperatures,
-            final_lambda,
+            ladder_lambda,
             final_step_size,
             n_divergent,
             accept_sum,
@@ -309,14 +320,15 @@ def run_smc(
     wall_time = time.time() - t0
 
     n_temperatures = [int(v) for v in n_temperatures]
-    final_lambda = [float(v) for v in final_lambda]
-    reached_target = all(v >= 1.0 for v in final_lambda)
+    ladder_lambda = [float(v) for v in ladder_lambda]
+    reached_target = all(v >= 1.0 for v in ladder_lambda)
     if not reached_target:
         logger.warning(
-            "Tempered SMC stopped at lambda = %s after %s rungs (cap %d): these draws are "
-            "from a TEMPERED distribution, not the posterior. Raise max_temperatures, "
+            "Tempered SMC's ladder stopped at lambda = %s after %s rungs (cap %d), so the "
+            "closing rung had to cover the rest in a single importance step. These draws "
+            "are nominally at lambda = 1 and are NOT trustworthy. Raise max_temperatures, "
             "raise n_mcmc_steps, or lower target_ess.",
-            final_lambda,
+            ladder_lambda,
             n_temperatures,
             int(max_temperatures),
         )
@@ -372,7 +384,10 @@ def run_smc(
             "n_mcmc_steps": int(n_mcmc_steps),
             "n_leapfrog_steps": int(n_leapfrog_steps),
             "n_temperatures": n_temperatures,
-            "final_lambda": final_lambda,
+            # The temperature the LADDER reached, before the closing rung
+            # pinned it to 1. ``reached_target`` is built from this, so it still
+            # answers "did the schedule get there on its own".
+            "ladder_lambda": ladder_lambda,
             "reached_target": reached_target,
             "fixed_ladder": None if fixed_ladder is None else int(fixed_ladder),
             "target_ess": float(target_ess),

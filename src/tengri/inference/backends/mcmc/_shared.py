@@ -2150,9 +2150,14 @@ def _smc_scan(
         ``log Z`` estimate, the sum of the per-rung log-likelihood increments.
         Free: a by-product of weights the algorithm already computes.
     n_temperatures : ndarray, shape (n_runs,)
-    final_lambda : ndarray, shape (n_runs,)
-        The tempering parameter reached. Below 1.0 means the run hit
-        ``max_temperatures``, and its particles are **not** posterior draws.
+        Rungs taken, **including the closing rung at lambda = 1**, so it is the
+        multiplier in the cost product.
+    ladder_lambda : ndarray, shape (n_runs,)
+        The tempering parameter the *ladder* reached, recorded before the closing
+        rung pins it to 1. Below 1.0 means the schedule hit ``max_temperatures``
+        and the closing rung had to cover the remaining gap in a single
+        importance step, so those particles are **not** trustworthy posterior
+        draws even though they are now nominally at lambda = 1.
     step_size : ndarray, shape (n_runs,)
     n_divergent : ndarray, shape (n_runs,)
         Divergent inner-HMC transitions, summed over particles, rungs and moves.
@@ -2196,25 +2201,33 @@ def _smc_scan(
             resampling.systematic,
             target_ess,
         )
-    else:
-        smc_kernel = tempered.build_kernel(
-            logprior_1arg,
-            loglik_1arg,
-            mcmc_step_fn,
-            _hmc.init,
-            resampling.systematic,
-        )
+    # Built in both branches. The adaptive schedule needs it for the closing rung
+    # below, where the temperature is pinned rather than solved for.
+    plain_kernel = tempered.build_kernel(
+        logprior_1arg,
+        loglik_1arg,
+        mcmc_step_fn,
+        _hmc.init,
+        resampling.systematic,
+    )
+    if fixed_ladder is not None:
+        smc_kernel = plain_kernel
 
     def _rung(state, step_size, rng_key, lam=None):
-        """One tempering rung: reweight, resample, then move every particle."""
+        """One tempering rung: reweight, resample, then move every particle.
+
+        ``lam`` names the temperature explicitly and routes to the non-adaptive
+        kernel; ``None`` lets the adaptive solver choose it. The closing rung
+        uses the first form with ``lam=1``.
+        """
         params = {
             "step_size": step_size[None],
             "inverse_mass_matrix": inverse_mass_matrix[None, :],
         }
-        if fixed_ladder is None:
+        if lam is None:
             new_state, info = smc_kernel(rng_key, state, n_mcmc_steps, params)
         else:
-            new_state, info = smc_kernel(rng_key, state, n_mcmc_steps, lam, params)
+            new_state, info = plain_kernel(rng_key, state, n_mcmc_steps, lam, params)
         accept = jnp.mean(info.update_info.acceptance_rate).astype(dtype)
         divergent = jnp.sum(info.update_info.is_divergent).astype(jnp.int32)
         new_step_size = step_size * jnp.exp(step_size_gain * (accept - target_accept_rate))
@@ -2245,6 +2258,7 @@ def _smc_scan(
         )
         step_size = jnp.asarray(init_step_size, dtype=dtype)
         zero = jnp.asarray(0.0, dtype=dtype)
+        ladder_lambda = zero
 
         if fixed_ladder is None:
 
@@ -2269,7 +2283,7 @@ def _smc_scan(
                     key,
                 )
 
-            state, step_size, log_z, n_temp, acc_sum, n_div, min_ess, _ = jax.lax.while_loop(
+            state, step_size, log_z, n_temp, acc_sum, n_div, min_ess, key = jax.lax.while_loop(
                 cond,
                 body,
                 (
@@ -2283,6 +2297,10 @@ def _smc_scan(
                     loop_key,
                 ),
             )
+            # Recorded BEFORE the closing rung pins the temperature to 1, so
+            # ``reached_target`` still answers "did the schedule get there on its
+            # own" rather than "was it told to".
+            ladder_lambda = state.tempering_param
         else:
             ladder = jnp.linspace(0.0, 1.0, fixed_ladder + 1, dtype=dtype)[1:]
 
@@ -2302,12 +2320,49 @@ def _smc_scan(
             acc_sum = jnp.sum(a)
             n_div = jnp.sum(d)
             min_ess = jnp.min(anc)
+            key = jax.random.fold_in(loop_key, fixed_ladder)
+            ladder_lambda = state.tempering_param
+
+        # THE CLOSING RUNG, and it is not optional.
+        #
+        # ``blackjax.smc.base.step`` resamples, then MOVES the particles under
+        # the OLD temperature, then reweights toward the NEW one. So when the
+        # ladder exits at lambda = 1 the particles were last rejuvenated under
+        # ``pi_{lambda_{K-1}}`` and carry non-uniform weights that take them the
+        # rest of the way -- they are a WEIGHTED sample from the posterior, not
+        # an unweighted one. Reading ``state.particles`` without ``state.weights``
+        # therefore returns draws from a slightly *tempered* posterior:
+        # shrunk toward the prior mean and over-dispersed. Measured on an
+        # analytic tilted Gaussian, the raw particles come back with the mean
+        # biased -0.016 and the standard deviation +0.014 (+5% of sigma), in the
+        # same direction on every dimension; after this rung both biases are
+        # +0.002 and -0.000. The reference page
+        # (https://blackjax-devs.github.io/sampling-book/algorithms/temperedsmc)
+        # histograms the raw particles and so carries the same bias; it is
+        # invisible in a plot and not in a posterior mean.
+        #
+        # One more rung pinned at lambda = 1 fixes it exactly and is the
+        # algorithm's own machinery rather than a correction bolted on: it
+        # resamples using those final weights (which is what consumes them) and
+        # then rejuvenates under the true posterior. ``delta`` is zero, so the
+        # returned weights are uniform and the log-Z increment is exactly
+        # ``logsumexp(zeros) - log N == 0`` -- the evidence estimate is
+        # untouched. It costs one rung, 5-7% of a 14-19 rung ladder.
+        key, close_key = jax.random.split(key)
+        state, step_size, inc, a, d, anc = _rung(
+            state, step_size, close_key, jnp.asarray(1.0, dtype=dtype)
+        )
+        log_z = log_z + inc
+        acc_sum = acc_sum + a
+        n_div = n_div + d
+        min_ess = jnp.minimum(min_ess, anc)
+        n_temp = n_temp + 1
 
         return (
             state.particles,
             log_z,
             n_temp,
-            state.tempering_param,
+            ladder_lambda,
             step_size,
             n_div,
             # The acceptance SUM, not its mean. Dividing here would need a
