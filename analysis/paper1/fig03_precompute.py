@@ -192,7 +192,7 @@ def plot_panel_b(ax, accuracy_data):
 
             if band == worst_band:
                 # Thicker line for worst band
-                line, = ax.plot(
+                (line,) = ax.plot(
                     z_array,
                     errors,
                     "-",
@@ -204,7 +204,7 @@ def plot_panel_b(ax, accuracy_data):
                 plot_labels.insert(0, band)
             else:
                 # Thin lines for other bands
-                line, = ax.plot(
+                (line,) = ax.plot(
                     z_array,
                     errors,
                     "-",
@@ -219,7 +219,7 @@ def plot_panel_b(ax, accuracy_data):
     if worst_band in band_errors_32:
         errors_32 = np.array(band_errors_32[worst_band]) / 100.0  # Convert percent to fraction
         worst_color = cmap(norm(wave_eff.get(worst_band, 0)))
-        line_32, = ax.plot(
+        (line_32,) = ax.plot(
             z_array,
             errors_32,
             "--",
@@ -241,8 +241,17 @@ def plot_panel_b(ax, accuracy_data):
     ax.set_ylim(1e-5, 2)
 
     # Legend with all bands, outside plot area
-    ax.legend(plot_handles, plot_labels, fontsize=7.5, loc="center left", bbox_to_anchor=(1.02, 0.5),
-              framealpha=0.95, ncol=1, title="Band (K=default)", title_fontsize=7.5)
+    ax.legend(
+        plot_handles,
+        plot_labels,
+        fontsize=7.5,
+        loc="center left",
+        bbox_to_anchor=(1.02, 0.5),
+        framealpha=0.95,
+        ncol=1,
+        title="Band (K=default)",
+        title_fontsize=7.5,
+    )
 
     ax.grid(True, alpha=0.3, which="both")
 
@@ -321,5 +330,10 @@ for ext in ("pdf", "png"):
 
 # Combined two-panel version kept for reference.
 fig = create_figure(bench_data, accuracy_data)
-fig.savefig(os.path.join(figures_dir, "fig03_precompute_combined.pdf"), format="pdf", bbox_inches="tight", dpi=300)
+fig.savefig(
+    os.path.join(figures_dir, "fig03_precompute_combined.pdf"),
+    format="pdf",
+    bbox_inches="tight",
+    dpi=300,
+)
 print("Saved: combined")

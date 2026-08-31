@@ -3,28 +3,22 @@
 
 import json
 import os
-import sys
 import time
 from pathlib import Path
 
 import jax
-import jax.numpy as jnp
 import matplotlib.pyplot as plt
 import numpy as np
 
 os.environ["JAX_PLATFORMS"] = "cpu"
 os.environ["TF_CPP_MIN_LOG_LEVEL"] = "2"
 
+from configs import config_II, load_ssp_for
+
 import tengri
 from tengri import (
-    FIXED,
-    Fixed,
-    Observation,
     Photometry,
-    Uniform,
 )
-
-from configs import config_II, load_ssp_for
 
 jax.config.update("jax_enable_x64", True)
 
@@ -168,7 +162,7 @@ def compute_fisher_matrix(J, flux, free_params, frac_uncertainty=0.05):
     messages = []
 
     sigma = frac_uncertainty * flux
-    N_inv = np.diag(1.0 / (sigma ** 2))
+    N_inv = np.diag(1.0 / (sigma**2))
     fisher = J.T @ N_inv @ J
 
     print("\n--- CHECK 3: Fisher matrix condition number ---")
@@ -179,8 +173,10 @@ def compute_fisher_matrix(J, flux, free_params, frac_uncertainty=0.05):
         print(msg)
 
         if cond_F > 1e12:
-            print(f"WARNING: Condition number > 1e12; adding unit prior regularization (standardized coordinates)")
-            msg_reg = f"Regularized with unit prior (I) in standardized coordinates"
+            print(
+                "WARNING: Condition number > 1e12; adding unit prior regularization (standardized coordinates)"
+            )
+            msg_reg = "Regularized with unit prior (I) in standardized coordinates"
             messages.append(msg_reg)
             fisher_reg = fisher + np.eye(n_params)
             fisher_inv = np.linalg.inv(fisher_reg)
@@ -202,8 +198,18 @@ def compute_fisher_matrix(J, flux, free_params, frac_uncertainty=0.05):
     return fisher, corr_matrix, forecast_sigmas, messages
 
 
-def plot_figures(log_J, J, flux, fisher, corr_matrix, forecast_sigmas, 
-                 used_filters, free_params, check_messages, fisher_messages):
+def plot_figures(
+    log_J,
+    J,
+    flux,
+    fisher,
+    corr_matrix,
+    forecast_sigmas,
+    used_filters,
+    free_params,
+    check_messages,
+    fisher_messages,
+):
     """Plot figures from precomputed data (no recomputation)."""
     n_bands = J.shape[0]
     n_params = J.shape[1]
@@ -214,8 +220,7 @@ def plot_figures(log_J, J, flux, fisher, corr_matrix, forecast_sigmas,
     # Use manual margins instead of constrained_layout
     # Increase wspace significantly to prevent colorbar overlap
     gs = fig_final.add_gridspec(
-        1, 2, width_ratios=[1.2, 1.0], wspace=0.75,
-        left=0.08, right=0.98, top=0.95, bottom=0.12
+        1, 2, width_ratios=[1.2, 1.0], wspace=0.75, left=0.08, right=0.98, top=0.95, bottom=0.12
     )
     ax_a = fig_final.add_subplot(gs[0])
     ax_b = fig_final.add_subplot(gs[1])
@@ -242,7 +247,7 @@ def plot_figures(log_J, J, flux, fisher, corr_matrix, forecast_sigmas,
     ax_a.set_title("(a) Jacobian", fontsize=10, fontweight="bold")
     ax_a.set_xlabel("Filter", fontsize=10)
     ax_a.set_ylabel("Parameter", fontsize=10)
-    ax_a.tick_params(axis='both', which='major', labelsize=9)
+    ax_a.tick_params(axis="both", which="major", labelsize=9)
     cbar_a = plt.colorbar(im_a, ax=ax_a, shrink=0.9)
     cbar_a.set_label(r"∂$\log_{10}$ f / ∂θ", fontsize=10)
     cbar_a.ax.tick_params(labelsize=9)
@@ -254,7 +259,7 @@ def plot_figures(log_J, J, flux, fisher, corr_matrix, forecast_sigmas,
     ax_b.set_xticklabels(param_labels, rotation=45, ha="right", fontsize=10)
     ax_b.set_yticklabels(param_labels, fontsize=10)
     ax_b.set_title("(b) Fisher correlation", fontsize=10, fontweight="bold")
-    ax_b.tick_params(axis='both', which='major', labelsize=9)
+    ax_b.tick_params(axis="both", which="major", labelsize=9)
     cbar_b = plt.colorbar(im_b, ax=ax_b, shrink=0.9)
     cbar_b.set_label("Correlation", fontsize=10)
     cbar_b.ax.tick_params(labelsize=9)
@@ -292,20 +297,20 @@ def main():
 
     print("\n2. Loading SSP grid...")
     ssp = load_ssp_for("II")
-    print(f"   SSP grid loaded")
+    print("   SSP grid loaded")
 
     print("\n3. Building observation...")
     obs = tengri.Observation(photometry=Photometry.from_names(used_filters))
     print(f"   Observation: {len(used_filters)} bands")
 
-    print("\n4. Building model (Config II, z={})...".format(z))
+    print(f"\n4. Building model (Config II, z={z})...")
     model = config_II(ssp, obs, z)
     print(f"   Model built with {len(model.spec.free_params)} free parameters")
     print(f"   Free params: {model.spec.free_params}")
 
     print("\n5. Setting evaluation point (fixed, physically realistic)...")
     params_at_eval = dict(eval_point)
-    print(f"\n   Evaluation point:")
+    print("\n   Evaluation point:")
     for param_name in sorted(params_at_eval.keys()):
         print(f"     {param_name:30s} = {params_at_eval[param_name]:.6f}")
 
@@ -316,7 +321,7 @@ def main():
 
     print("\n7. Computing log-Jacobian (∂log10(f)/∂θ)...")
     log_J = compute_log_jacobian(J, flux)
-    print(f"   Log-Jacobian computed")
+    print("   Log-Jacobian computed")
 
     print("\n8. Running Jacobian checks (on log-Jacobian)...")
     checks_passed, check_messages = check_jacobian(log_J, free_params)
@@ -350,6 +355,7 @@ def main():
 
     def compute_jac():
         _, _, _ = compute_jacobian_linear_flux(model, params_at_eval)
+
     for _ in range(3):
         compute_jac()
     t_jac = []
@@ -364,8 +370,18 @@ def main():
     print(f"   Ratio (Jac/Forward): {t_jac_median / t_forward_median:.2f}x")
 
     # Plot the figures
-    plot_figures(log_J, J, flux, fisher, corr_matrix, forecast_sigmas,
-                 used_filters, free_params, check_messages, fisher_messages)
+    plot_figures(
+        log_J,
+        J,
+        flux,
+        fisher,
+        corr_matrix,
+        forecast_sigmas,
+        used_filters,
+        free_params,
+        check_messages,
+        fisher_messages,
+    )
 
     print("\n12. Saving results JSON...")
     results = {
@@ -386,8 +402,7 @@ def main():
         "correlation_matrix": corr_matrix.tolist(),
         "forecast_sigmas": forecast_sigmas.tolist(),
         "forecast_sigma_by_param": {
-            param_name: float(forecast_sigmas[i])
-            for i, param_name in enumerate(free_params)
+            param_name: float(forecast_sigmas[i]) for i, param_name in enumerate(free_params)
         },
         "noise_model": {
             "type": "fractional",
@@ -418,7 +433,9 @@ def main():
     print("\n" + "=" * 80)
     print("COMPLETE")
     print("=" * 80)
-    print(f"\nFigures:\n  {OUTPUT_DIR / 'fig08_gradient_sensitivity.pdf'}\n  {OUTPUT_DIR / 'fig08_gradient_sensitivity.png'}")
+    print(
+        f"\nFigures:\n  {OUTPUT_DIR / 'fig08_gradient_sensitivity.pdf'}\n  {OUTPUT_DIR / 'fig08_gradient_sensitivity.png'}"
+    )
     print(f"\nResults:\n  {json_path}")
 
     return results

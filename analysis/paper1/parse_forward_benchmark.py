@@ -8,6 +8,7 @@ The log must start with a line ``START <date> <time> host=<h> commit=<sha> jax=<
 with ``EXIT=0 <date> <time>`` (see REPRODUCTION_COMMANDS.md, Figure 3). Panel (a) rows are the
 forward configurations of the double-power-law section; every section is kept under "all_sections".
 """
+
 import argparse
 import json
 import pathlib
@@ -36,7 +37,9 @@ HEAD_RE = re.compile(r"^\s+(Forward|Gradient): (.+)$")
 
 def _sysctl(key: str) -> str:
     try:
-        return subprocess.run(["sysctl", "-n", key], capture_output=True, text=True, check=True).stdout.strip()
+        return subprocess.run(
+            ["sysctl", "-n", key], capture_output=True, text=True, check=True
+        ).stdout.strip()
     except (OSError, subprocess.CalledProcessError):
         return "unknown"
 
@@ -64,7 +67,9 @@ def parse(log_text: str) -> dict:
             continue
         skip = SKIP_RE.match(line)
         if skip and current is not None:
-            sections[current].append({"label": skip.group(1).strip(), "skipped": skip.group(2).rstrip(")")})
+            sections[current].append(
+                {"label": skip.group(1).strip(), "skipped": skip.group(2).rstrip(")")}
+            )
     if PANEL_SECTION not in sections:
         raise SystemExit(f"section {PANEL_SECTION!r} not found in log")
     forward = {e["label"]: e for e in sections[PANEL_SECTION] if "exact_us" in e}
@@ -72,14 +77,22 @@ def parse(log_text: str) -> dict:
     if missing:
         raise SystemExit(f"panel rows missing from the log: {missing}")
     panel = [
-        {"label": label, "source_label": src, **{k: forward[src][k] for k in ("exact_us", "precomp_us", "speedup")}}
+        {
+            "label": label,
+            "source_label": src,
+            **{k: forward[src][k] for k in ("exact_us", "precomp_us", "speedup")},
+        }
         for label, src in PANEL_ROWS
     ]
-    header = dict(re.findall(r"^\s{2}(Platform|Precision|Filters|Redshift|Runs|SSP): (.+)$", log_text, re.M))
+    header = dict(
+        re.findall(r"^\s{2}(Platform|Precision|Filters|Redshift|Runs|SSP): (.+)$", log_text, re.M)
+    )
     start = re.search(r"^START (\S+ \S+) host=(\S+) commit=(\S+) jax=(\S+)", log_text, re.M)
     end = re.search(r"^EXIT=0 (\S+ \S+)", log_text, re.M)
     if start is None or end is None:
-        raise SystemExit("log lacks the START/EXIT=0 stamp lines; the run is not a complete, successful run")
+        raise SystemExit(
+            "log lacks the START/EXIT=0 stamp lines; the run is not a complete, successful run"
+        )
     other = re.search(r"^fit_procs_at_(?:start|end)=(\d+)", log_text, re.M)
     metadata = {
         "script": "bench/scripts/benchmark_forward_model.py",
@@ -113,7 +126,9 @@ def main() -> None:
     result["metadata"]["log"] = str(args.log)
     args.out.write_text(json.dumps(result, indent=1) + "\n")
     for row in result["panel_a"]:
-        print(f"{row['label']:<46} exact={row['exact_us']:>6} µs  precomp={row['precomp_us']:>6} µs  {row['speedup']}x")
+        print(
+            f"{row['label']:<46} exact={row['exact_us']:>6} µs  precomp={row['precomp_us']:>6} µs  {row['speedup']}x"
+        )
     print("wrote", args.out)
 
 
