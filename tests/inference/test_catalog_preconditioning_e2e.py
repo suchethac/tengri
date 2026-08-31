@@ -44,6 +44,39 @@ _MASS_LO, _MASS_HI = 7.0, 12.5
 _MASSES = (9.0, 10.0, 11.0)
 
 
+def _declared_prior(name):
+    """The registry's own prior for ``name``, rather than a literal copy of it.
+
+    The first version of this file wrote ``Uniform(0.4, 1.8)`` for
+    ``met_logzsol`` and ``tools/check_param_ranges.py`` rejected it: the declared
+    support is ``[-2, 0.2]`` in log10(Z/Zsun), so that range shares **no point**
+    with it -- 2.5x to 63x solar, a prior from which no draw is a value the
+    parameter admits.
+
+    The number was not invented, which is the part worth recording. It came from
+    a comment in ``test_catalog_mcmc_vmap.py`` reading "in-grid for synthetic_ssp
+    (logzsol range [0.348, 1.848])", i.e. a **grid axis range** used as a
+    **prior** range. That comment is also stale: ``synthetic_ssp``'s current
+    ``lgmet`` is ``[-4.0, -2.65, -1.3]`` absolute, which at
+    ``LOG10_ZSUN = -1.848`` is logzsol ``[-2.15, 0.55]`` -- neither the range the
+    comment claims nor one that contains 1.848.
+
+    Reading the declaration is the fix the guard itself suggests, and it is the
+    only version that cannot drift: a corrected literal is still a literal.
+    """
+    from tengri.parameters.registry import registry
+
+    return registry()[name].prior
+
+
+#: Metallicity truth: the midpoint of the declared support, so it is in-prior by
+#: construction and in-grid too (the declared ``[-2, 0.2]`` sits entirely inside
+#: ``synthetic_ssp``'s ``[-2.15, 0.55]``). Derived, never written down.
+def _met_truth():
+    prior = _declared_prior("met_logzsol")
+    return 0.5 * (prior.lo + prior.hi)
+
+
 def _build_model(synthetic_ssp, simple_observation):
     """A dpl-SFH photometry model with mass and metallicity free (D = 2).
 
@@ -57,7 +90,8 @@ def _build_model(synthetic_ssp, simple_observation):
 
     spec = Parameters(
         sfh_dpl_log_total_mass=Uniform(_MASS_LO, _MASS_HI),
-        met_logzsol=Uniform(0.4, 1.8),  # in-grid for synthetic_ssp
+        # Read from the registry, not written out: see _declared_prior.
+        met_logzsol=_declared_prior("met_logzsol"),
         sfh_dpl_alpha=Fixed(2.0),
         sfh_dpl_age_gyr=Fixed(5.0),
         sfh_dpl_beta=Fixed(2.0),
@@ -83,7 +117,7 @@ def _catalog(model, key, noise_frac=0.02):
         k = jax.random.fold_in(key, i)
         params = dict(model.spec.sample(k))
         params["sfh_dpl_log_total_mass"] = jnp.array(mass)
-        params["met_logzsol"] = jnp.array(1.0)
+        params["met_logzsol"] = jnp.array(_met_truth())
         flux = model.predict_photometry(params)
         noise = jnp.abs(flux) * noise_frac
         obs = flux + noise * jax.random.normal(jax.random.fold_in(k, 1), shape=flux.shape)

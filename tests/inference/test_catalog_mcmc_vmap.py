@@ -64,7 +64,20 @@ def _build_model(synthetic_ssp, simple_observation):
         sfh_dpl_age_gyr=Fixed(5.0),
         sfh_dpl_beta=Fixed(2.0),
         sfh_dpl_tau_gyr=Fixed(3.0),
-        met_logzsol=Fixed(1.0),  # in-grid for synthetic_ssp (logzsol range [0.348, 1.848])
+        # NOTE: this comment used to read "in-grid for synthetic_ssp (logzsol
+        # range [0.348, 1.848])" and both halves were wrong. ``synthetic_ssp``'s
+        # ``lgmet`` is [-4.0, -2.65, -1.3] *absolute*, which at
+        # LOG10_ZSUN = -1.848 is logzsol [-2.15, 0.55] -- so 1.0 is ABOVE the
+        # grid and clamps to its top node, and the quoted range matches neither
+        # the grid nor the declared support [-2, 0.2]. The value is left alone
+        # rather than corrected here: this suite pins batch routing through mass,
+        # metallicity is Fixed and inert to it, and changing the fixture would
+        # move numbers this PR has no measurement for. It is recorded because the
+        # stale range was copied verbatim into a *prior* in
+        # test_catalog_preconditioning_e2e.py and CI caught it there
+        # (tools/check_param_ranges.py) -- a Fixed value is not a prior, so no
+        # guard sees this one.
+        met_logzsol=Fixed(1.0),
         dust_tau_bc=Fixed(0.3),
         dust_tau_diff=Fixed(0.2),
         redshift=Fixed(0.1),
