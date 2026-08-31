@@ -2899,7 +2899,6 @@ class Fitter:
             Optional seed. Default uses a fixed key, the pre-warm run
             is throwaway and its randomness does not affect the
             subsequent real fit.
-
         Returns
         -------
         None
@@ -4286,7 +4285,16 @@ class Fitter:
         elif method == "mcmc_dynamic_hmc":
             _adapt_algo, _adapt_kwargs = blackjax.hmc, {"num_integration_steps": 10}
         else:  # mcmc_nuts, mcmc_ghmc, both tune with the NUTS window
-            _adapt_algo, _adapt_kwargs = blackjax.nuts, {}
+            # ``max_num_doublings`` must reach the *adaptation* kernel, not only the
+            # sampling one below. ``window_adaptation`` runs its own NUTS and
+            # forwards ``**extra_parameters`` into it, so leaving it out ran warmup
+            # at BlackJAX's default of 10 -- up to 1023 leapfrogs per step -- for
+            # every caller who asked for a cap. That is the expensive half: during
+            # warmup the step size has not converged, so trees are at their deepest.
+            # ``bench/reports/2026-08-31_catalog_batched_samplers.md`` Finding 2
+            # measured the same omission on the single-galaxy path at 54.88 s -> 2.14 s
+            # for one 50 + 50 cell, and fixed it there; this entry point was missed.
+            _adapt_algo, _adapt_kwargs = blackjax.nuts, {"max_num_doublings": max_num_doublings}
 
         def _run_window_adaptation(adapt_key, init_flat, data_args_first):
             """Window-adapt step size / mass matrix on the first galaxy.
@@ -4317,6 +4325,11 @@ class Fitter:
             bool(use_dense),
             float(target_accept_rate),
             int(n_leapfrog_steps),
+            # In the key because it now reaches the warmup kernel: a step size
+            # dual-averaged under one cap is not the one another cap would find,
+            # so a cached adaptation reused across caps would sample at the wrong
+            # step size and nothing would say so.
+            int(max_num_doublings),
             int(n_dim),
         )
         _run_adapt = self._memo_batch_kernel(
