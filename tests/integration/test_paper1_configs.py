@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: BSD-3-Clause
 """Integration tests for Paper I SED model configurations."""
 
 from __future__ import annotations

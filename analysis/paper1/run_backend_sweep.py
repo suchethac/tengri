@@ -1,12 +1,32 @@
 """Run backend sweep: test all inference methods on galaxy 13097, configuration II.
 
-Tests: map, laplace, mcmc_nuts, mcmc_hmc, mcmc_raytrace, vi (NIFTy geoVI), nss.
-Saves results to results/backend_sweep/<method>.npz + .json.
-Creates summary in results/backend_sweep/summary.json.
+Runs the paper's backend list: map, laplace, mcmc (automatic selector), mcmc_nuts,
+mcmc_hmc, mcmc_raytrace. Saves results to <out-dir>/<method>.npz + .json and a
+summary in <out-dir>/summary.json.
+
+Every row's NPZ carries that method's thinned draws -- one array per parameter,
+the same schema ``fit_one.save_fit_outputs`` writes -- beside the diagnostics,
+so Figure 7 can overlay the backends' marginal posteriors; ``map`` (and
+``laplace`` when its backend returns no draws) contributes its point estimate as
+length-1 arrays. The file loads with ``allow_pickle=False``. Every row also
+records ``dispatched_to``, the backend the fitter actually ran, which is the
+point of the ``mcmc`` row: it is the automatic selector. The ``mcmc`` and
+``mcmc_nuts`` rows run the grid cell's NUTS budget (600 warmup + 4 x 600 draws),
+so they are the same run as this galaxy/configuration's grid fit (#2089).
+
+CLI::
+
+    python run_backend_sweep.py [--methods map,laplace] [--out-dir DIR]
+
+``--methods`` is a comma-separated subset of ``SWEEP_METHODS``, run in the order
+given; the default is all six. ``--out-dir`` defaults to
+``results/backend_sweep``. Both exist so the two cheap rows can be smoke-tested
+into a scratch directory without touching the paper's results (#2089).
 """
 
 from __future__ import annotations
 
+import argparse
 import json
 import logging
 import sys
@@ -15,8 +35,16 @@ from pathlib import Path
 
 import jax
 import numpy as np
-from candels_io import is_detected, load_candels_z1
+from candels_io import load_candels_z1
 from configs import config_II, load_ssp_for
+from fit_one import (
+    MAX_SAVED_DRAWS,
+    apply_systematic_error_floor,
+    build_npz_payload,
+    extract_photometry,
+    iter_draws,
+    thin_samples,
+)
 
 from tengri import Data, ForwardModel, Observation, Photometry
 
@@ -24,91 +52,78 @@ jax.config.update("jax_enable_x64", True)
 
 logger = logging.getLogger(__name__)
 
+#: The paper's backend list (owner decision 2026-08-30, #2089): variational
+#: inference and nested sampling are out of scope, and ``mcmc`` (the automatic
+#: selector, NUTS at this dimensionality) is in.
+SWEEP_METHODS = ("map", "laplace", "mcmc", "mcmc_nuts", "mcmc_hmc", "mcmc_raytrace")
 
-def extract_photometry(
-    gal_idx: int,
-    candels_data: dict,
-    z: float,
-) -> tuple[int, float, list[str], np.ndarray, np.ndarray]:
-    """Extract detected photometry for a galaxy from CANDELS catalog."""
-    # Find galaxy in catalog
-    id_array = candels_data["id"]
-    idx = np.where(id_array == gal_idx)[0]
-    if len(idx) == 0:
-        raise ValueError(f"Galaxy {gal_idx} not found in CANDELS catalog")
-    row_idx = idx[0]
+#: Default output directory, relative to this file.
+DEFAULT_OUT_DIR = Path(__file__).parent / "results" / "backend_sweep"
 
-    # Load full CANDELS data
-    candels_file = Path(
-        "/Users/suchethacooray/Projects/tengri/"
-        "analysis/hst_proposal/data/CANDELS_GDSS_workshop_z1.dat"
-    )
-    if not candels_file.exists():
-        raise FileNotFoundError(f"CANDELS data not found at {candels_file}")
 
-    data = np.genfromtxt(candels_file, skip_header=1)
-    with open(candels_file) as f:
-        header_line = f.readline()
-    header = header_line.strip("#").strip().split()
+def sweep_npz_payload(posterior, results_dict: dict, sed_model) -> dict:
+    """Build one row's NPZ payload: the posterior's draws plus the diagnostics.
 
-    detected_filters = []
-    detected_fnu = []
-    detected_errors = []
+    Figure 7 overlays every backend's marginal posteriors, so the NPZ has to
+    carry samples; the sweep used to save ``**results_dict`` alone and no
+    method's draws ever reached disk (#2089). The draws are thinned by
+    :func:`fit_one.thin_samples` at the grid's ``MAX_SAVED_DRAWS`` cap and
+    stored under the parameters' own names -- the schema
+    :func:`fit_one.save_fit_outputs` writes, so a reader opens a sweep file and
+    a grid file the same way. A point estimate (``samples is None``: ``map``,
+    and ``laplace`` whenever its backend returns no draws) contributes
+    ``posterior.params`` as length-1 arrays: one draw, same names.
 
-    candels_to_tengri_map = {
-        "WFC3_F435W": "hst_f435w",
-        "WFC3_F606W": "hst_f606w",
-        "WFC3_F775W": "hst_f775w",
-        "WFC3_F814W": "hst_f814w",
-        "WFC3_F850LP": "hst_f850lp",
-        "WFC3_F105W": "hst_f105w",
-        "WFC3_F125W": "hst_f125w",
-        "WFC3_F160W": "hst_f160w",
-        "ISAAC_KS": "vista_ks",
-        "HAWKI_KS": "vista_ks",
-        "IRAC_CH1": "irac_36",
-        "IRAC_CH2": "irac_45",
-        "IRAC_CH3": "irac_58",
-        "IRAC_CH4": "irac_80",
+    The diagnostics ride along as they do in the JSON, minus the two changes an
+    ``allow_pickle=False`` load needs: a ``None`` value (``map`` and ``laplace``
+    have no warm run) is dropped, since ``np.savez`` would store it as a pickled
+    object array, and a string is stored as a ``np.str_`` array rather than
+    ``dtype=object``. The JSON keeps both.
+
+    Args:
+        posterior: The fitted :class:`~tengri.inference.posterior.Posterior`.
+        results_dict: The row's diagnostics, exactly as the JSON records them.
+        sed_model: The fitted model, for the free-parameter names.
+
+    Returns:
+        The keyword arguments for ``np.savez``.
+
+    Raises:
+        ValueError: if the posterior carries no draws for a free parameter
+            (Figure 7 would silently lose that marginal), or if a diagnostics
+            key collides with a parameter name (from ``build_npz_payload``).
+    """
+    if posterior.samples is not None:
+        draws = thin_samples(posterior.samples, MAX_SAVED_DRAWS)
+    else:
+        draws = {
+            name: np.asarray([value], dtype=float) for name, value in posterior.params.items()
+        }
+
+    missing = [name for name in sed_model.spec.free_params if name not in draws]
+    if missing:
+        raise ValueError(f"the posterior carries no draws for free parameter(s) {missing}")
+
+    diagnostics = {
+        key: (np.asarray(value, dtype=np.str_) if isinstance(value, str) else value)
+        for key, value in results_dict.items()
+        if value is not None
     }
-
-    for candels_name, tengri_name in candels_to_tengri_map.items():
-        if candels_name not in header or f"e{candels_name}" not in header:
-            continue
-
-        mag_idx = header.index(candels_name)
-        err_idx = header.index(f"e{candels_name}")
-        mag = data[row_idx, mag_idx]
-        mag_err = data[row_idx, err_idx]
-
-        if is_detected(mag, mag_err):
-            F0_erg = 3.63e-23
-            fnu_erg = F0_erg * 10.0 ** (-mag / 2.5)
-            fnu_err = fnu_erg * np.log(10.0) / 2.5 * mag_err
-
-            if tengri_name == "vista_ks" and "vista_ks" in detected_filters:
-                continue
-
-            detected_filters.append(tengri_name)
-            detected_fnu.append(fnu_erg)
-            detected_errors.append(fnu_err)
-
-    if len(detected_filters) == 0:
-        raise ValueError(f"Galaxy {gal_idx} has no detected filters")
-
-    return gal_idx, z, detected_filters, np.array(detected_fnu), np.array(detected_errors)
+    return build_npz_payload(draws, diagnostics)
 
 
-def apply_systematic_error_floor(
-    sigma: np.ndarray, fnu: np.ndarray, floor_frac: float = 0.05
-) -> np.ndarray:
-    """Apply a fractional systematic error floor in quadrature."""
-    sys_error = floor_frac * fnu
-    return np.sqrt(sigma**2 + sys_error**2)
+def run_backend_sweep(
+    methods: tuple[str, ...] = SWEEP_METHODS,
+    out_dir: Path | None = None,
+):
+    """Run the requested inference backends on galaxy 13097 with config II.
 
-
-def run_backend_sweep():
-    """Run all inference backends on galaxy 13097 with config II."""
+    Args:
+        methods: Backend names to run, in order. Every name must be in
+            ``SWEEP_METHODS``.
+        out_dir: Directory for the per-method NPZ/JSON and ``summary.json``.
+            Defaults to ``DEFAULT_OUT_DIR``.
+    """
     gal_id = 13097
     config_key = "II"
 
@@ -133,11 +148,8 @@ def run_backend_sweep():
     data = Data(photometry=(fnu, sigma_floor))
 
     # Output directory
-    out_dir = Path(__file__).parent / "results" / "backend_sweep"
+    out_dir = Path(DEFAULT_OUT_DIR if out_dir is None else out_dir)
     out_dir.mkdir(parents=True, exist_ok=True)
-
-    # List of methods to test (in order)
-    methods = ["map", "laplace", "mcmc_nuts", "mcmc_hmc", "mcmc_raytrace", "vi", "nss"]
 
     results = []
     key = jax.random.PRNGKey(42)
@@ -157,18 +169,49 @@ def run_backend_sweep():
                 t_warm = None
 
             elif method == "laplace":
-                posterior = forward.fit(data, key=key, method="laplace", approx="diagonal")
+                # No covariance-shape option here: ``ForwardModel.fit(approx=...)``
+                # is the precompute/approximation policy, not a Laplace knob (#2089).
+                posterior = forward.fit(data, key=key, method="laplace")
                 t_cold = time.perf_counter() - t_start
                 t_warm = None
 
+            elif method == "mcmc":
+                # The automatic selector: NUTS at this dimensionality, so the same
+                # settings as the explicit NUTS row; the row measures the selector,
+                # and ``dispatched_to`` records what it picked. The budget is the
+                # grid cell's (600 + 4 x 600), so the row IS the paper's NUTS fit
+                # for this galaxy and configuration, not a cheaper stand-in.
+                posterior = forward.fit(
+                    data,
+                    key=key,
+                    method="mcmc",
+                    n_warmup=600,
+                    n_samples=600,
+                    n_chains=4,
+                )
+                t_cold = time.perf_counter() - t_start
+
+                t_start_warm = time.perf_counter()
+                posterior_warm = forward.fit(
+                    data,
+                    key=jax.random.fold_in(key, 1),
+                    method="mcmc",
+                    n_warmup=600,
+                    n_samples=600,
+                    n_chains=4,
+                )
+                t_warm = time.perf_counter() - t_start_warm
+
             elif method == "mcmc_nuts":
+                # The paper's canonical NUTS budget, the grid cell's own
+                # (``fit_one``'s 600 warmup + 4 x 600 draws).
                 posterior = forward.fit(
                     data,
                     key=key,
                     method="mcmc_nuts",
                     n_warmup=600,
                     n_samples=600,
-                    n_chains=2,
+                    n_chains=4,
                 )
                 t_cold = time.perf_counter() - t_start
 
@@ -180,7 +223,7 @@ def run_backend_sweep():
                     method="mcmc_nuts",
                     n_warmup=600,
                     n_samples=600,
-                    n_chains=2,
+                    n_chains=4,
                 )
                 t_warm = time.perf_counter() - t_start_warm
 
@@ -212,13 +255,17 @@ def run_backend_sweep():
                 t_warm = time.perf_counter() - t_start_warm
 
             elif method == "mcmc_raytrace":
-                # Ray tracing with step_size tuning (D~8 needs smaller steps)
+                # Ray tracing with step_size tuning (D~8 needs smaller steps).
+                # ``run_raytrace(context, *, key, init_from=None, n_burnin=100,
+                # n_steps=500, n_chains=1, n_leapfrog_steps=10, step_size=None,
+                # refresh_rate=0.0, verbose=True)`` — it takes n_burnin/n_steps,
+                # not n_warmup/n_samples, and an unknown name is a TypeError.
                 posterior = forward.fit(
                     data,
                     key=key,
                     method="mcmc_raytrace",
-                    n_warmup=400,
-                    n_samples=400,
+                    n_burnin=400,
+                    n_steps=400,
                     n_chains=2,
                     step_size=0.05,  # Sharp viability cliff at ~0.06
                 )
@@ -230,57 +277,12 @@ def run_backend_sweep():
                     data,
                     key=jax.random.fold_in(key, 1),
                     method="mcmc_raytrace",
-                    n_warmup=400,
-                    n_samples=400,
+                    n_burnin=400,
+                    n_steps=400,
                     n_chains=2,
                     step_size=0.05,
                 )
                 t_warm = time.perf_counter() - t_start_warm
-
-            elif method == "vi":
-                # NIFTy geoVI with 4-12 samples (not 80)
-                posterior = forward.fit(
-                    data,
-                    key=key,
-                    method="vi",
-                    n_samples=8,  # Effective: 16 via mirror_samples
-                    n_iterations=1000,
-                )
-                t_cold = time.perf_counter() - t_start
-
-                # Warm run
-                t_start_warm = time.perf_counter()
-                posterior_warm = forward.fit(
-                    data,
-                    key=jax.random.fold_in(key, 1),
-                    method="vi",
-                    n_samples=8,
-                    n_iterations=1000,
-                )
-                t_warm = time.perf_counter() - t_start_warm
-
-            elif method == "nss":
-                # NSS (experimental tier; may fail or exceed 15 min)
-                try:
-                    posterior = forward.fit(
-                        data, key=key, method="nss", n_live_points=500, max_iter=5000
-                    )
-                    t_cold = time.perf_counter() - t_start
-
-                    # Warm run
-                    t_start_warm = time.perf_counter()
-                    posterior_warm = forward.fit(
-                        data,
-                        key=jax.random.fold_in(key, 1),
-                        method="nss",
-                        n_live_points=500,
-                        max_iter=5000,
-                    )
-                    t_warm = time.perf_counter() - t_start_warm
-
-                except (NotImplementedError, RuntimeError) as e:
-                    logger.warning(f"NSS skipped: {e}")
-                    continue
 
             else:
                 logger.error(f"Unknown method: {method}")
@@ -289,6 +291,11 @@ def run_backend_sweep():
             # Extract diagnostics
             results_dict = {
                 "method": method,
+                # The backend the fitter dispatched to, in its own words (e.g.
+                # "NUTS (BlackJAX)"). ``method="mcmc"`` is the automatic
+                # selector, so without this its row does not say what ran; it is
+                # informative for every other row too (#2089).
+                "dispatched_to": posterior.method,
                 "gal_id": gal_id,
                 "config": config_key,
                 "wall_time_cold_s": t_cold,
@@ -296,9 +303,13 @@ def run_backend_sweep():
                 "n_params": sed_model.spec.n_free,
             }
 
-            # Add method-specific diagnostics
-            if hasattr(posterior, "ess"):
-                ess_dict = posterior.ess()
+            # Add sample-based diagnostics. Both ``effective_sample_size()`` and
+            # ``rhat()`` raise ValueError when there are no samples, so the guard
+            # is on the samples, not on the method name (#2089). A ``hasattr``
+            # guard told us nothing: True for a method that exists, False for a
+            # misspelled one, either way independent of the fit.
+            if posterior.samples is not None:
+                ess_dict = posterior.effective_sample_size()
                 ess_min = min(float(v) for v in ess_dict.values()) if ess_dict else None
                 results_dict["ess_min"] = ess_min
 
@@ -307,7 +318,6 @@ def run_backend_sweep():
                 if t_warm is not None and t_warm > 0 and ess_min is not None:
                     results_dict["s_per_ess_warm"] = t_warm / ess_min
 
-            if hasattr(posterior, "rhat"):
                 rhat_dict = posterior.rhat()
                 rhat_max = max(float(v) for v in rhat_dict.values()) if rhat_dict else None
                 results_dict["rhat_max"] = rhat_max
@@ -315,17 +325,11 @@ def run_backend_sweep():
             # Extract marginal samples for log M*, log SFR100, dust optical depth
             fixed_values = sed_model.spec.get_fixed_values()
 
-            # For point estimates (MAP, Laplace, VI), use mean/median
-            if method in ["map", "laplace", "vi"]:
-                if hasattr(posterior, "covariance"):
-                    # Gaussian approximation
-                    if hasattr(posterior, "mean"):
-                        params = posterior.mean
-                    else:
-                        params = {k: 0.0 for k in sed_model.spec.free_params}
-                else:
-                    params = {k: 0.0 for k in sed_model.spec.free_params}
-
+            # Point estimates (MAP, Laplace) live in ``posterior.params``; the
+            # old ``covariance``/``mean`` guards were both permanently False and
+            # fell through to an all-zeros parameter vector (#2089).
+            if method in ("map", "laplace"):
+                params = dict(posterior.params)
                 params_full = {**fixed_values, **params}
                 pred = sed_model.predict(params_full)
                 props = pred.properties
@@ -334,32 +338,13 @@ def run_backend_sweep():
                 results_dict["log_sfr_100myr"] = float(np.log10(props.get("sfr_100myr", 1.0)))
                 results_dict["dust_tau"] = float(params.get("dust_tau_diff", 0.0))
 
-            elif method in ["mcmc_nuts", "mcmc_hmc", "mcmc_raytrace"]:
-                # Sample-based methods
-                n_samples_to_use = min(
-                    200, posterior.samples[next(iter(posterior.samples.keys()))].size
-                )
-
+            elif method in ("mcmc", "mcmc_nuts", "mcmc_hmc", "mcmc_raytrace"):
+                # Sample-based methods: tengri returns flattened (n_chains * n_samples,) draws.
                 m_star_samples = []
                 sfr_samples = []
                 dust_samples = []
 
-                for i in range(n_samples_to_use):
-                    chain_idx = (
-                        i // posterior.samples[next(iter(posterior.samples.keys()))].shape[1]
-                    )
-                    sample_idx = (
-                        i % posterior.samples[next(iter(posterior.samples.keys()))].shape[1]
-                    )
-
-                    params = {
-                        **fixed_values,
-                        **{
-                            k: float(v[chain_idx, sample_idx])
-                            for k, v in posterior.samples.items()
-                        },
-                    }
-
+                for params in iter_draws(posterior.samples, fixed_values, 200):
                     pred = sed_model.predict(params)
                     props = pred.properties
 
@@ -371,9 +356,10 @@ def run_backend_sweep():
                 results_dict["log_sfr_100myr"] = float(np.median(sfr_samples))
                 results_dict["dust_tau"] = float(np.median(dust_samples))
 
-            # Save to NPZ
+            # Save to NPZ: the thinned draws (or the point estimate as one draw)
+            # plus the diagnostics, loadable with ``allow_pickle=False`` (#2089).
             npz_file = out_dir / f"{method}.npz"
-            np.savez(npz_file, **results_dict)
+            np.savez(npz_file, **sweep_npz_payload(posterior, results_dict, sed_model))
             logger.info(f"Saved {method} results to {npz_file}")
 
             # Save to JSON
@@ -382,18 +368,18 @@ def run_backend_sweep():
                 json.dump(results_dict, f, indent=2)
 
             results.append(results_dict)
-            logger.info(f"✓ {method}: cold={t_cold:.2f}s, warm={t_warm:.2f}s if t_warm else 'N/A'")
+            # Build the warm string outside the f-string: ``{t_warm:.2f}`` on the
+            # ``None`` that map/laplace produce is a TypeError (#2089).
+            warm_str = f"{t_warm:.2f}s" if t_warm is not None else "N/A"
+            logger.info(f"✓ {method}: cold={t_cold:.2f}s, warm={warm_str}")
 
         except Exception as e:
             logger.error(f"✗ {method} failed: {e}")
-            if method == "nss":
-                logger.warning("NSS is experimental; skipping")
-            else:
-                raise
+            raise
 
     # Print summary table
     print("\n" + "=" * 120)
-    print("BACKEND SWEEP SUMMARY — Galaxy 13097, Config II (D=8)")
+    print(f"BACKEND SWEEP SUMMARY — Galaxy 13097, Config II (D={sed_model.spec.n_free})")
     print("=" * 120)
     print(
         f"{'Method':<15} {'Wall(s) cold':<15} {'Wall(s) warm':<15} "
@@ -437,15 +423,48 @@ def run_backend_sweep():
     return 0
 
 
+def parse_methods(value: str) -> tuple[str, ...]:
+    """Parse a comma-separated ``--methods`` value into a validated tuple.
+
+    Raises:
+        argparse.ArgumentTypeError: if the list is empty or names a backend
+            outside ``SWEEP_METHODS``.
+    """
+    names = tuple(name.strip() for name in value.split(",") if name.strip())
+    if not names:
+        raise argparse.ArgumentTypeError("--methods needs at least one backend name")
+    unknown = [name for name in names if name not in SWEEP_METHODS]
+    if unknown:
+        raise argparse.ArgumentTypeError(
+            f"unknown backend(s) {unknown}; choose from {list(SWEEP_METHODS)}"
+        )
+    return names
+
+
 def main():
-    """Run backend sweep."""
+    """Parse arguments and run the backend sweep."""
+    parser = argparse.ArgumentParser(description="Run the paper's inference-backend sweep")
+    parser.add_argument(
+        "--methods",
+        type=parse_methods,
+        default=SWEEP_METHODS,
+        help=f"Comma-separated subset of {','.join(SWEEP_METHODS)} (default: all six)",
+    )
+    parser.add_argument(
+        "--out-dir",
+        type=Path,
+        default=DEFAULT_OUT_DIR,
+        help="Output directory (default: results/backend_sweep)",
+    )
+    args = parser.parse_args()
+
     logging.basicConfig(
         level=logging.INFO,
         format="%(asctime)s - %(name)s - %(levelname)s - %(message)s",
     )
 
     try:
-        return run_backend_sweep()
+        return run_backend_sweep(methods=args.methods, out_dir=args.out_dir)
     except Exception as e:
         logger.error(f"Backend sweep failed: {e}", exc_info=True)
         return 1

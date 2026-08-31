@@ -7,18 +7,21 @@ import os
 from pathlib import Path
 
 import numpy as np
+from candels_io import CANDELS_CATALOG
 
-ART_SEDFITTING_DIR = Path(
-    os.environ.get(
-        "ART_SEDFITTING_DIR",
-        "/Users/suchethacooray/Projects/art_sedfitting",
+# ART_SEDFITTING_DIR must be set to the local checkout of the art_sedfitting
+# repository (a sibling checkout next to this repository, on the machine
+# running the ingest). There is no default: it is external to this repo.
+_art_sedfitting_dir = os.environ.get("ART_SEDFITTING_DIR")
+if _art_sedfitting_dir is None:
+    raise OSError(
+        "ART_SEDFITTING_DIR is not set. Point it at your local checkout of the "
+        "art_sedfitting repository before running ingest_art_sedfitting.py."
     )
-)
+ART_SEDFITTING_DIR = Path(_art_sedfitting_dir)
 
 CODE_OUTPUTS = ART_SEDFITTING_DIR / "code_outputs"
-CANDELS_PATH = Path(
-    "/Users/suchethacooray/Projects/tengri/analysis/hst_proposal/data/CANDELS_GDSS_workshop_z1.dat"
-)
+CANDELS_PATH = CANDELS_CATALOG
 
 
 def get_candels_ids() -> set[int]:

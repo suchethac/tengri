@@ -15,6 +15,7 @@ from pathlib import Path
 
 import numpy as np
 from candels_io import (
+    CANDELS_CATALOG,
     compute_snr_from_error,
     is_detected,
     load_candels_z1,
@@ -78,10 +79,7 @@ def select_z1_galaxies() -> dict:
     print(f"Good galaxies in all codes: {len(selected_ids)}")
 
     # Load CANDELS data for color and S/N computation
-    candels_file = Path(
-        "/Users/suchethacooray/Projects/tengri/"
-        "analysis/hst_proposal/data/CANDELS_GDSS_workshop_z1.dat"
-    )
+    candels_file = CANDELS_CATALOG
     data = np.genfromtxt(candels_file, skip_header=1)
     with open(candels_file) as f:
         header_line = f.readline()
@@ -283,10 +281,8 @@ def select_z1_galaxies() -> dict:
 if __name__ == "__main__":
     result = select_z1_galaxies()
 
-    output_path = Path(
-        "/Users/suchethacooray/Projects/tengri/.claude/worktrees/paper1"
-        "/analysis/paper1/results/selected_galaxies.json"
-    )
+    repo_root = Path(__file__).resolve().parents[2]
+    output_path = repo_root / "analysis" / "paper1" / "results" / "selected_galaxies.json"
     output_path.parent.mkdir(parents=True, exist_ok=True)
 
     with open(output_path, "w") as f:

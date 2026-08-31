@@ -1,5 +1,11 @@
 """Run 3×3 grid of NUTS fits: 3 galaxies × 3 SED configurations.
 
+CLI: python run_candels_fits.py [--only-missing]
+
+``--only-missing`` is the second pass: it skips a cell whose JSON already records
+``adoption_pass: true`` and reuses that JSON for the summary. Without it every cell
+runs, as before.
+
 Spawns one subprocess per fit (sequential; never two JAX processes at once).
 Logs output to results/fits/<ID>_<config>.log.
 Aggregates diagnostics into results/fit_summary.json.
@@ -8,6 +14,7 @@ Prints summary table.
 
 from __future__ import annotations
 
+import argparse
 import json
 import logging
 import os
@@ -31,9 +38,58 @@ CONFIG_DIMENSIONS = {"I": 5, "II": 8, "III": 11}
 # Galaxy labels for reporting
 GALAXY_LABELS = {13097: "blue", 15336: "red", 24497: "intermediate"}
 
+#: Per-cell subprocess timeout. 600 s killed the first retune of the grid (#2089).
+#: Measured 2026-08-30, the simplest cell (configuration I, 5 free parameters) needs
+#: ~22 min for 600 warmup + 4x600 draws at mean tree depth ~6; a retune doubles the
+#: warmup, so configuration I with one retune is ~50 min, and configurations II/III
+#: cost 2-3x per draw, which puts them at 100-150 min. 7200 s can therefore still
+#: kill a healthy retune. With three attempts (600, 600 and 1200 warmup, each with
+#: 4x600 draws) the sequence is 1.45x the two-attempt one, and attempts 2-3 run at
+#: target_accept 0.95, which deepens the trees, so 14400 s left ~9% headroom for
+#: configuration III at the top of that range; hence 21600 s. Raising the cap costs
+#: nothing in detection: a dead fit (step size above the stability limit,
+#: acceptance ~0) finishes in ~10 min rather than hanging, so a larger cap only
+#: delays a true hang's report.
+DEFAULT_FIT_TIMEOUT_S = 21600
+
+
+def read_cell_json(json_path: Path) -> dict | None:
+    """Return one cell's diagnostics JSON, or None if it is missing or unreadable.
+
+    A per-cell timeout can kill ``fit_one.py`` mid-write, so a truncated file is
+    an expected state, not an error: it reads as "this cell has no result yet".
+    """
+    try:
+        with open(json_path) as f:
+            payload = json.load(f)
+    except FileNotFoundError:
+        return None
+    except (OSError, json.JSONDecodeError) as exc:
+        logger.warning(f"Ignoring unreadable diagnostics file {json_path}: {exc}")
+        return None
+    if not isinstance(payload, dict):
+        logger.warning(f"Ignoring diagnostics file {json_path}: not a JSON object")
+        return None
+    return payload
+
+
+def cell_is_adopted(json_path: Path) -> bool:
+    """True only when this cell's JSON exists and records a fit that cleared the bar.
+
+    The ``--only-missing`` predicate. A missing file, an unreadable one, a JSON
+    without ``adoption_pass`` and ``adoption_pass: false`` are all "not adopted",
+    so the second pass re-runs the cell (#2089).
+    """
+    payload = read_cell_json(json_path)
+    return bool(payload is not None and payload.get("adoption_pass"))
+
 
 def run_fit_subprocess(
-    gal_id: int, config_key: str, out_dir: Path, seed: int = 42, timeout: int = 600
+    gal_id: int,
+    config_key: str,
+    out_dir: Path,
+    seed: int = 42,
+    timeout: int = DEFAULT_FIT_TIMEOUT_S,
 ) -> dict | None:
     """Spawn fit_one.py in subprocess and collect results.
 
@@ -136,7 +192,7 @@ def print_summary_table(summary_data: list[dict]) -> None:
     ]
     print(
         f"{'Galaxy':<10} {'Cfg':<3} {'D':<3} {'Div':<4} {'Rhat_max':<10} {'ESS_min':<9} "
-        f"{'Wall(s)':<9} {'s/ESS':<8} {'Pass':<5} "
+        f"{'Wall(s)':<9} {'s/ESS':<8} {'Adopted':<14} "
         f"{'log M* (50)':<12} {'log SFR (50)':<12}"
     )
     print("-" * 140)
@@ -150,7 +206,13 @@ def print_summary_table(summary_data: list[dict]) -> None:
         ess_min = row["ess_min"] if row["ess_min"] is not None else 0
         wall_time = row["wall_time_s"]
         s_per_ess = wall_time / ess_min if ess_min > 0 else np.inf
-        adoption_pass = "✓" if row["adoption_pass"] else "✗"
+        # The adoption verdict per cell: a cell that missed the bar on every
+        # attempt still has a saved posterior, and the table says which attempt
+        # it kept rather than implying the cell succeeded (#2089).
+        if row.get("adoption_pass"):
+            adoption_pass = "✓"
+        else:
+            adoption_pass = f"✗ best att {row.get('best_attempt', '?')}"
 
         # Extract derived properties from individual fit results
         # For now, use -999 as placeholder (would be filled from actual posterior)
@@ -159,7 +221,8 @@ def print_summary_table(summary_data: list[dict]) -> None:
 
         print(
             f"{galaxy_label:<10} {config:<3} {D:<3} {divergences:<4} "
-            f"{rhat_max:<10.4f} {ess_min:<9.0f} {wall_time:<9.1f} {s_per_ess:<8.2f} {adoption_pass:<5} "
+            f"{rhat_max:<10.4f} {ess_min:<9.0f} {wall_time:<9.1f} {s_per_ess:<8.2f} "
+            f"{adoption_pass:<14} "
             f"{m_star:<12.3f} {sfr:<12.3f}"
         )
 
@@ -174,8 +237,28 @@ def print_summary_table(summary_data: list[dict]) -> None:
     print("=" * 140)
 
 
-def main():
+def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
+    """Parse the driver's command line.
+
+    ``--only-missing`` is opt-in: without it the driver runs every cell, exactly
+    as it always has.
+    """
+    parser = argparse.ArgumentParser(description="Run the 3x3 grid of CANDELS NUTS fits")
+    parser.add_argument(
+        "--only-missing",
+        action="store_true",
+        help=(
+            "Second pass: skip a cell whose JSON already records adoption_pass true "
+            "and reuse that JSON for the summary; run every other cell"
+        ),
+    )
+    return parser.parse_args(argv)
+
+
+def main(argv: list[str] | None = None):
     """Run 3×3 grid of fits and aggregate results."""
+    args = parse_args(argv)
+
     logging.basicConfig(
         level=logging.INFO,
         format="%(asctime)s - %(name)s - %(levelname)s - %(message)s",
@@ -187,9 +270,19 @@ def main():
     # Run all fits
     all_diagnostics = []
     failed_fits = []
+    skipped_fits = []
 
     for gal_id in GALAXIES:
         for config_key in CONFIGS:
+            cell_json = results_dir / f"{gal_id}_{config_key}.json"
+            previous = read_cell_json(cell_json) if args.only_missing else None
+            if previous is not None and cell_is_adopted(cell_json):
+                # The adopted cell's own diagnostics stand in for a re-run.
+                logger.info(f"skipping {gal_id}/{config_key}: adopted")
+                skipped_fits.append((gal_id, config_key))
+                all_diagnostics.append(previous)
+                continue
+
             logger.info(f"\n{'=' * 60}")
             logger.info(f"Fitting galaxy {gal_id} with config {config_key}")
             logger.info(f"{'=' * 60}")
@@ -214,6 +307,11 @@ def main():
             "total_fits": len(GALAXIES) * len(CONFIGS),
             "successful_fits": len(all_diagnostics),
             "failed_fits": len(failed_fits),
+            # A cell can finish (exit 0, NPZ and JSON written) without clearing
+            # the adoption bar, so "successful" is not "adopted" (#2089).
+            "adopted_fits": sum(1 for row in all_diagnostics if row.get("adoption_pass")),
+            "skipped_adopted_fits": len(skipped_fits),
+            "only_missing": args.only_missing,
         },
         "galaxy_list": GALAXIES,
         "config_list": CONFIGS,
@@ -235,7 +333,11 @@ def main():
             logger.error(f"  - Galaxy {gal_id} Config {config_key}")
         return 1
 
-    logger.info(f"\n✓ All {len(all_diagnostics)} fits completed successfully")
+    n_adopted = sum(1 for d in all_diagnostics if d.get("adoption_pass"))
+    logger.info(
+        f"\n✓ All {len(all_diagnostics)} fits completed ({n_adopted} adopted; "
+        f"the table above carries the per-cell verdict)"
+    )
     return 0
 
 

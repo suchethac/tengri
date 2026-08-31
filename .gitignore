@@ -272,3 +272,6 @@ run[0-9].log
 
 # Component tables rendered from the live registries each build (docs/conf.py)
 docs/_generated/
+
+# Paper I fit-run logs carry the invoking machine's worktree path (#2089)
+analysis/paper1/results/fits/*.log
