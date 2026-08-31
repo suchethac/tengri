@@ -121,6 +121,7 @@ import functools
 import importlib.util
 import os
 import sys
+from collections.abc import Sequence
 from pathlib import Path
 from typing import Any
 
@@ -480,11 +481,11 @@ def check_all(names: list[str] | None = None) -> list[tuple[str, str]]:
     return [(name, check_fixture(name, fixtures, models)) for name in targets]
 
 
-def main() -> int:
+def main(argv: Sequence[str] | None = None) -> int:
     parser = argparse.ArgumentParser(description=__doc__.splitlines()[0])
     parser.add_argument("--fixture", action="append", help="check only this fixture (repeatable)")
     parser.add_argument("--list", action="store_true", help="print provenance only, build nothing")
-    args = parser.parse_args()
+    args = parser.parse_args(argv)
 
     fixtures = registry()
     if args.list:

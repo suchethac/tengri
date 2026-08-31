@@ -64,6 +64,7 @@ import argparse
 import math
 import subprocess
 import sys
+from collections.abc import Sequence
 from pathlib import Path
 
 REPO_ROOT = Path(__file__).resolve().parent.parent
@@ -119,10 +120,10 @@ def _limit(rel: str) -> float:
     return DATA_LIMIT_MIB if rel.startswith(DATA_PREFIXES) else LIMIT_MIB
 
 
-def main() -> int:
+def main(argv: Sequence[str] | None = None) -> int:
     parser = argparse.ArgumentParser()
     parser.add_argument("--list", action="store_true", help="print files over their limit")
-    args = parser.parse_args()
+    args = parser.parse_args(argv)
 
     unrecorded: list[tuple[str, float, float]] = []
     grown: list[tuple[str, float, float]] = []
