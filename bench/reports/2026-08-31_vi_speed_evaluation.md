@@ -402,7 +402,11 @@ MAP seed is only approximate (8 restarts of 800 Adam steps), so `beta` was
 presumably not exactly empty in the SED fits — but it was not checked, and it
 should have been.
 
-**Mechanism 2 is the one upstream documents**, which brings us to:
+**Mechanism 2 is the one upstream documents** — and it has since been tested and
+**refuted on the real fixture**; see *Finding 4c*. Mechanism 1 survives as the
+remaining candidate, not as a proven cause.
+
+Which brings us to:
 
 ### Initialization — the page says the opposite of what tengri does
 
@@ -415,18 +419,17 @@ This report previously cited the page second-hand. Exact quote:
 **tengri MAP-seeds every Pathfinder fit by default** (`_maybe_map_init`, and this
 harness passes `init_from=map_seed` on every row) — precisely the configuration
 the page advises against, for precisely the reason that would produce the widths
-measured here. The unrun `pathfinder cold-init` row is therefore not a
-nice-to-have; it is **the discriminator between the two mechanisms and the top
-follow-up from this report**.
+measured here. That made `pathfinder cold-init` the discriminator, and it has now
+been run: **Finding 4c**.
 
-One conflict to write down rather than smooth over: on the toy above, the page's
-advice did **not** help — a bad init gave median width ratio 0.03 against truth,
-worse than the mode start. But a cond-1e6 quadratic is not a fair test of that
-claim, because L-BFGS at `maxiter=30` has not converged from far away, so the
-Gaussian is fitted around a point that is not the mode. **The toy neither
-corroborates nor refutes the page; it establishes only that a mode start empties
-`beta`.** Anyone reading the page's initialization advice and applying it to a
-tengri fit should treat it as untested here.
+One conflict, recorded before that run and now superseded by it: on the toy
+above, the page's advice did **not** help — a bad init gave median width ratio
+0.03 against truth, worse than the mode start. **A cond-1e6 quadratic is not a
+fair test of the page's claim**, because L-BFGS at `maxiter=30` has not converged
+from far away, so the Gaussian is fitted around a point that is not the mode. Read
+alone, the toy neither corroborates nor refutes the page; it establishes only that
+a mode start empties `beta`. That caveat must stay attached to the 0.03 wherever
+it is quoted. What has changed is that the real fixture now agrees with the toy.
 
 ### `pathfinder_adaptation` as a NUTS warm start
 
@@ -449,6 +452,143 @@ and `imm_estimator` — a multi-path Pathfinder with PSIS. `_shared.py`'s
 `blackjax.vi.pathfinder.approximate`, which still works, but **whether
 `num_samples_per_path` now bypasses that cap was not checked** and should be
 before anyone runs the warm-start rows.
+
+---
+
+## Finding 4c — the MAP-seed mechanism is refuted, and tengri's default is the better one
+
+The two mechanisms made **opposite** predictions under a cold start. If the
+collapse were the empty-`beta` artifact, removing the MAP seed gives L-BFGS a
+path to record and the widths recover. If it were the conditioning, the cold
+start changes little or makes things worse.
+
+One cell, seed 7, `ctl-dpl`, against the same reference, `map_seed=False` the only
+difference:
+
+| parameter | reference sd | MAP-seeded ratio | **cold-init ratio** |
+|---|---:|---:|---:|
+| `met_logzsol` | 0.119 | 1.07 | **0.65** |
+| `dust_tau_diff` | 0.082 | 0.91 | **0.54** |
+| `sfh_dpl_log_total_mass` | 0.036 | 0.85 | **0.52** |
+| `dust_tau_bc` | 0.197 | 0.79 | **0.15** |
+| `sfh_dpl_age_gyr` | 1.805 | 0.18 | **0.16** |
+| `sfh_dpl_tau_gyr` | 3.050 | 0.16 | **0.09** |
+| `sfh_dpl_alpha` | 1.423 | 0.12 | **0.05** |
+| `sfh_dpl_beta` | 0.824 | 0.11 | **0.05** |
+| **median** | | **0.48** | **0.16** |
+| **worst \|z\|** | | 10.6 | **39.8** |
+
+**Cold-init is worse on every one of the eight parameters**, median width ratio
+0.48 → 0.16, and the means move further off too (worst |z| 10.6 → 39.8). The
+previously-healthy well-constrained directions are the ones that degrade most —
+`dust_tau_bc` from 0.79 to 0.15.
+
+Three conclusions, in decreasing strength:
+
+1. **The empty-`beta` / MAP-starvation mechanism is refuted as the explanation of
+   the collapse.** It predicted recovery; the measurement is the opposite
+   direction on 8 of 8 parameters.
+2. **tengri's default is the better of the two, so this is not a default bug.**
+   That is worth stating plainly because it was the actionable outcome we were
+   watching for: the fix is *not* "stop MAP-seeding". Keep `_maybe_map_init`.
+3. **blackjax's initialization advice does not transfer to this posterior.** The
+   page's rationale — more L-BFGS steps means more datapoints for the inverse
+   Hessian — is sound in the abstract and simply loses to a competing effect
+   here: at `maxiter=30` a cold L-BFGS has not reached the mode, so Pathfinder
+   fits a tight Gaussian around a point that is not the optimum. The toy showed
+   that shape and the real fixture now confirms it. **A reader following that
+   advice on an SED posterior will make their error bars worse, by 3× in the
+   median.**
+
+What this does **not** establish: that mechanism 1 is correct. It is now the
+surviving candidate, not a demonstrated cause. The clean way to close it is to
+read `beta`'s effective rank out of a real SED fit's `PathfinderState` — a
+diagnostic worth adding, and not added here.
+
+---
+
+## Finding 4d — the ELBO cap did not cover blackjax 1.6.2's multi-path route
+
+Settled by reading the call path, not by running it — and the answer is that the
+guard held **only** because of how tengri happens to call it.
+
+`pathfinder_adaptation` in 1.6.2 dispatches on `(num_chains, effective_n_paths)`,
+where `effective_n_paths = n_paths if n_paths is not None else num_chains`:
+
+- **PATH A** (`num_chains == 1 and effective_n_paths == 1`) calls
+  `vi.pathfinder.approximate(init_key, logdensity_fn, position)` with no
+  `num_samples` → the library default of 200 → **and that is the binding
+  `_bounded_pathfinder_elbo_draws` rebinds.** Covered.
+- **PATH C** (`effective_n_paths >= 2`) calls
+  `multipathfinder.multi_approximate(..., num_samples=num_samples_per_path)`,
+  default **200**, which `jax.vmap`s `approximate` across every path — so the
+  exposure is `n_paths × 200` ELBO draws, where 200 alone measured 25.65 GB and a
+  SIGKILL.
+
+**tengri's two call sites pass neither `num_chains` nor `n_paths`**
+(`_shared.py:548` and `:639`), so both take PATH A and the guard has always
+covered them. The result worth recording is that it covered them by luck of the
+call shape, and PATH C evaded it **twice over**:
+
+1. `blackjax/vi/multipathfinder.py:22` does
+   `from blackjax.vi.pathfinder import ... approximate ...` at **import** time, so
+   it holds its own module-global binding. Rebinding `vi.pathfinder.approximate`
+   never reached it. Verified: `'approximate' in vars(multipathfinder)` → `True`.
+2. `multi_approximate` forwards `num_samples` **positionally** (4th argument), so
+   the cap — written as a parameter *default* — would have been overridden even
+   if the right namespace had been patched.
+
+Both are fixed: every module holding an import-time binding is now rebound, and
+the cap is `min(requested, draws)` rather than a default, so an explicit 200 is
+clamped. Pinned by `test_the_cap_survives_the_multipath_bypass`, which asserts
+through the real function rather than through its source. Verified end-to-end
+that PATH A still runs and is clamped (a 3-D toy: draws reaching blackjax `[9]`
+under `_bounded_pathfinder_elbo_draws(9)`, finite step size out).
+
+This mattered because **one `num_chains=` on either call site would have been
+enough to trigger it** — and the natural next change to those sites is exactly
+that, since `ctl-dpl` and nb05 both run `n_chains=2`. The wired-but-unrun
+warm-start rows would have been the first thing to hit it.
+
+---
+
+## Draft: an upstream documentation issue (not filed)
+
+Two gaps on
+<https://blackjax-devs.github.io/sampling-book/algorithms/pathfinder/>, offered
+here as text to file if someone wants to. **Do not file without re-checking
+against the current page**; this was read on 2026-08-31.
+
+> **Title:** Pathfinder page: `num_samples` memory cost is unstated, and there is
+> no guidance on when the L-BFGS covariance is untrustworthy
+>
+> Two things bit us adopting Pathfinder for an astrophysical SED posterior
+> (D = 8, condition number 1e5–1e8).
+>
+> **1. `num_samples` defaults to 200 and every snippet on the page inherits it.**
+> The page tunes `ftol` but never passes `num_samples`, so a reader copying either
+> the module-level or the instance example runs 200 ELBO draws. Each draw is a
+> full forward-model evaluation and they are vmapped across L-BFGS iterates, so
+> for us that was ~26 GB and an OOM kill, against ~2 GB at Stan's default of 25.
+> A one-line note that `num_samples` is the ELBO-draw count, that it is a memory
+> knob rather than an accuracy knob, and that Stan uses 25, would have saved this.
+>
+> **2. No statement of when the covariance is unreliable.** The covariance is
+> `diag(alpha) + beta @ gamma @ beta.T`, whose correction has rank at most
+> `2 * maxcor` and in practice however many L-BFGS steps ran. On a posterior with
+> a strongly correlated, poorly-constrained subspace we measured marginal widths
+> **0.11–0.21×** a converged NUTS reference on the degenerate directions while the
+> well-constrained directions came back at 0.79–1.07× — i.e. the error bars are
+> wrong exactly where they matter, and nothing in the returned state flags it. The
+> page discusses no conditioning range, no failure mode beyond L-BFGS
+> non-convergence, and no diagnostic. Even a sentence naming the rank bound, or a
+> suggested check (effective rank of `beta`, or comparing against a short NUTS
+> run), would help.
+>
+> Related: the page suggests a deliberately "bad" initialization to lengthen the
+> L-BFGS path. We tested that on our posterior and it made the widths **worse**
+> (median ratio 0.48 → 0.16), because at `maxiter=30` a cold start has not reached
+> the mode. That advice may be worth qualifying with a note about `maxiter`.
 
 ### Precision — upstream is blunter than this report was
 
@@ -547,16 +687,11 @@ otherwise:
   `ctl-dpl` was reached. `05`'s shipped NUTS clears max R-hat < 1.01 on 0 of 3
   seeds (`2026-08-30_mclmc_tuning.md`), so it would have needed its own long
   preconditioned reference before any fidelity column meant anything.
-- **`pathfinder cold-init` — now the single most valuable unrun row in this
-  report.** Wired (`map_seed=False`), not run. Finding 4b promoted it from a
-  curiosity to *the discriminator*: blackjax builds the covariance as
-  `diag(alpha) + beta @ gamma @ beta.T`, a MAP seed can empty `beta` outright
-  (0 of 20 columns on a toy started at an exact mode), and every Pathfinder row
-  here was MAP-seeded — which is exactly what blackjax's own page advises
-  against. If the collapse is the empty-`beta` mechanism rather than the
-  ill-conditioning one, this row fixes it and the tier note's explanation needs
-  rewriting; if it does not, the ill-conditioning reading stands. One row, one
-  seed, and it settles which.
+- ~~`pathfinder cold-init`~~ — **run; see Finding 4c.** It refuted the
+  empty-`beta` mechanism and confirmed tengri's MAP-seed default is the better
+  one. What remains unrun is the *direct* check: reading `beta`'s effective rank
+  out of a real SED fit's `PathfinderState`, which is what would positively
+  confirm mechanism 1 rather than leaving it as the surviving candidate.
 - **`svgd` and `schrodinger_follmer`** — dropped from scope by the coordinator.
 - **StableHLO line counts** — dropped; `cold − warm` is the operational number and
   another agent is measuring NUTS compile anatomy directly.

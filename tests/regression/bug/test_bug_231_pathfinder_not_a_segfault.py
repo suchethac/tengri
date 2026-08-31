@@ -149,3 +149,51 @@ def test_the_warmstart_path_caps_the_same_draws():
         "the ELBO cap must rebind blackjax.vi.pathfinder.approximate -- the MODULE "
         "attribute pathfinder_adaptation resolves at call time."
     )
+
+
+def test_the_cap_survives_the_multipath_bypass():
+    """The cap must hold on the multi-path route too, which evades it two ways.
+
+    blackjax 1.6.2's ``pathfinder_adaptation`` dispatches to
+    ``multipathfinder.multi_approximate`` whenever ``effective_n_paths >= 2``, and
+    that route defeats a naive cap twice: ``multipathfinder`` binds ``approximate``
+    into its own module globals at import time, and ``multi_approximate`` forwards
+    ``num_samples`` **positionally** so a parameter *default* is overridden.
+
+    tengri's own call sites pass neither ``num_chains`` nor ``n_paths``, so they
+    take PATH A and were never exposed -- but one ``num_chains=`` away is
+    ``n_paths x 200`` ELBO draws, where 200 alone measured 25.65 GB and a SIGKILL.
+    This asserts the cap through the real function rather than through its source.
+    """
+    pytest.importorskip("blackjax")
+    multipathfinder = pytest.importorskip("blackjax.vi.multipathfinder")
+
+    from tengri.inference.backends.mcmc._shared import _bounded_pathfinder_elbo_draws
+
+    seen = []
+
+    def _spy(rng_key, logdensity_fn, initial_position, num_samples=200, **kwargs):
+        seen.append(num_samples)
+        return "state", "info"
+
+    original_pf = multipathfinder.approximate
+    import blackjax.vi.pathfinder as pathfinder_module
+
+    original_target = pathfinder_module.approximate
+    pathfinder_module.approximate = _spy
+    multipathfinder.approximate = _spy
+    try:
+        with _bounded_pathfinder_elbo_draws(7):
+            # exactly how multi_approximate calls it: positional, and 200
+            multipathfinder.approximate(None, None, None, 200)
+            # and how PATH A calls it: no num_samples at all
+            multipathfinder.approximate(None, None, None)
+    finally:
+        multipathfinder.approximate = original_pf
+        pathfinder_module.approximate = original_target
+
+    assert seen == [7, 7], (
+        f"ELBO draws reaching blackjax were {seen}, expected [7, 7]. A positional "
+        "200 must be clamped, not merely defaulted past, and the multipathfinder "
+        "namespace must be patched alongside vi.pathfinder."
+    )
