@@ -35,6 +35,7 @@ from __future__ import annotations
 import contextlib
 import functools
 import importlib.metadata
+import warnings
 
 import jax
 import jax.numpy as jnp
@@ -1623,6 +1624,16 @@ def _chees_scan(
     :mod:`tengri.inference.preconditioning`'s analytic ``J^T N^-1 J + I`` instead
     of from the ensemble. **Do not switch that default on lightly.**
 
+    That last sentence is a claim about how this function is *called*, and it was
+    only half true until 2026-08-31: the batched catalog path could not thread
+    ``precondition=``, so a catalog ChEES fit sampled with no geometry at all and
+    the identity default was doing all the work. It now can
+    (:func:`~tengri.inference.backends.mcmc.catalog.build_catalog_mcmc_engine`),
+    per galaxy. A caller who leaves both off is still sampling an unwhitened
+    posterior with an identity mass matrix, which for these targets is the
+    configuration ``bench/reports/2026-08-30_chees_hmc.md`` measured as clearing
+    nothing.
+
     The warmup ensemble's final states are reused as the sampling chains' initial
     states rather than discarded, for the reason :func:`_ghmc_meads_scan` gives:
     the adaptation has no separate warmup phase to throw away.
@@ -1694,8 +1705,13 @@ def _chees_scan(
 
     Notes
     -----
-    JIT: this *is* the jitted entry point. Not vmappable over galaxies as-is --
-    the batched catalog path is Phase 3's and still runs NUTS/HMC.
+    JIT: this *is* the jitted entry point, and it **is** vmapped over galaxies
+    by :func:`~tengri.inference.backends.mcmc.catalog.build_catalog_mcmc_engine`
+    -- one lane per galaxy, the ensemble on an inner axis. That works because
+    ``data_args`` is opaque here: it is only ever forwarded to
+    ``logdensity_fn_2arg``, never inspected. The catalog engine uses exactly that
+    to thread the per-galaxy analytic metric, passing ``(A, data_args)`` where a
+    single fit passes ``data_args``. Keep it opaque.
 
     References
     ----------
@@ -1713,6 +1729,22 @@ def _chees_scan(
     def ld_1arg(pos):
         """Bind the traced data to the galaxy-agnostic log-posterior."""
         return logdensity_fn_2arg(pos, data_args)
+
+    if mass_matrix_estimation is not None:
+        warnings.warn(
+            f"mass_matrix_estimation={mass_matrix_estimation!r} disables ChEES's "
+            "trajectory-length floor. "
+            "BlackJAX 1.6.2 enables the floor exactly when a mass matrix is being "
+            "estimated, and that code path calls float() on a traced step size, so "
+            "the pair cannot be traced at all -- and every tengri ChEES entry point "
+            "is jitted. The floor is therefore turned off for you, which means the "
+            "adapted trajectory length is no longer clipped away from zero and a "
+            "run under this setting is NOT the same sampler as the default. It is "
+            "an ablation, not a configuration: prefer the analytic metric "
+            "(precondition=).",
+            UserWarning,
+            stacklevel=2,
+        )
 
     jitter_key, adapt_key = jax.random.split(warmup_key)
     ensemble = init_flat[None, :] + jitter_scale * jax.random.normal(
@@ -1732,6 +1764,16 @@ def _chees_scan(
         max_leapfrog_steps=max_leapfrog_steps,
         adaptation_info_fn=get_filter_adapt_info_fn(),
         mass_matrix_estimation=mass_matrix_estimation,
+        # BlackJAX 1.6.2 cannot trace its own length floor. ``enable_length_floor``
+        # is on exactly when ``mass_matrix_estimation`` is not None and
+        # ``_length_floor`` is True, and that branch calls ``float(step_size_ma)``
+        # on a traced array (``chees_adaptation.py`` ~line 990), so the pair raises
+        # ``ConcretizationTypeError`` under *any* jit -- single fit as much as
+        # catalog vmap. tengri's whole ChEES surface is jitted, so the ensemble
+        # mass-matrix ablation is unreachable unless the floor is off. Disabling it
+        # is the only way to make the option work at all; doing so silently is not
+        # acceptable, so it warns.
+        _length_floor=mass_matrix_estimation is None,
     )
     (last_states, parameters), _ = warmup.run(
         adapt_key,

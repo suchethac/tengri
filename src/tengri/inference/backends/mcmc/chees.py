@@ -192,6 +192,17 @@ def run_chees(
         the loop weaker here, not absent. Exposed so the ablation is re-runnable
         from a call rather than an edit; off by default because a metric this
         codebase can compute analytically should not be guessed from 32 chains.
+
+        **It is an ablation, not a configuration, and setting it changes the
+        sampler in a second way.** BlackJAX 1.6.2 turns its trajectory-length
+        floor on exactly when a mass matrix is being estimated, and that branch
+        calls ``float()`` on a traced step size (``chees_adaptation.py`` ~line
+        990), so the pair raises ``ConcretizationTypeError`` under *any* ``jit``
+        -- single fit as much as catalog vmap, and independently of tengri.
+        Every tengri ChEES entry point is jitted, so the only way this option can
+        run at all is with the floor off, which ``_chees_scan`` does for you and
+        warns about. Measured in
+        ``bench/reports/2026-08-31_catalog_preconditioning.md``.
     dense_mass_matrix : bool
         Must be ``False``. ChEES's kernel metric is a *diagonal*
         ``inverse_mass_matrix`` -- identity under the default

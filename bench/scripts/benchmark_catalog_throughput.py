@@ -435,6 +435,18 @@ _STAMP_FIELDS = (
     "approx_repr",
     "ssp",
     "jax_persistent_cache",
+    # Both change the *result*, not merely the provenance, and neither can be
+    # reconstructed from a merged file. ``precondition`` is the whole subject of
+    # bench/reports/2026-08-31_catalog_preconditioning.md and ``chain_jitter``
+    # decides whether a ChEES row's R-hat is an independent test or a
+    # consistency check (PR #2097).
+    "precondition",
+    "chain_jitter",
+    "dense_mass",
+    "chees_mass_matrix",
+    # Rows carried n_warmup and n_samples but not the burn-in, so two cells that
+    # differed only in how much of the chain they threw away were the same row.
+    "n_burnin",
 )
 
 
@@ -459,6 +471,15 @@ def _row_key(row):
         row.get("n_leapfrog"),
         row.get("n_warmup"),
         row.get("n_samples"),
+        # Part of the key, not just of the row. A preconditioned cell and an
+        # identity cell of the same (method, N, K) are different measurements;
+        # leaving these out let the second silently overwrite the first, and a
+        # merged file would then show one row where two were run.
+        row.get("precondition"),
+        row.get("chain_jitter"),
+        row.get("n_burnin"),
+        row.get("dense_mass"),
+        row.get("chees_mass_matrix"),
         row.get("platform"),
         row.get("tag"),
     )
@@ -645,6 +666,45 @@ def main(argv=None):
         help="mcmc_chees: hard cap on the adapted trajectory length. This is what "
         "bounds a vmapped ChEES batch -- lanes batch to the widest adapted L.",
     )
+    ap.add_argument(
+        "--chain-jitter",
+        type=float,
+        default=None,
+        help="mcmc_chees: overdispersion of the SAMPLING chains around the warm "
+        "start. The default None seeds them from the adaptation ensemble's own "
+        "final states, so their split R-hat is a consistency check rather than an "
+        "independent test (PR #2097). 0.5 is the suggested width.",
+    )
+    ap.add_argument(
+        "--precondition",
+        type=float,
+        default=None,
+        metavar="ALPHA",
+        help="analytic J^T N^-1 J + I metric, per galaxy, at whitening strength "
+        "ALPHA in [0, 1]. Omit for off (the default). 0.5 is "
+        "DEFAULT_WHITENING_STRENGTH; 1.0 is full whitening, which #1442 measured "
+        "as worse whenever the modal Hessian misstates the bulk curvature. "
+        "Applies to every sampler on the batched path.",
+    )
+    ap.add_argument(
+        "--dense-mass",
+        default=None,
+        choices=("true", "false"),
+        help="NUTS/HMC mass matrix. Default (unset) is tengri's auto-policy: dense "
+        "below D=8, diagonal at or above it (#319). THE CONTROL KNOB for the "
+        "HMC-vs-ChEES comparison: on this path window adaptation always estimates "
+        "SOMETHING, so the arms differ by a mass matrix as well as by trajectory "
+        "length, and 'false' brackets that (dense -> diagonal) rather than removing it.",
+    )
+    ap.add_argument(
+        "--chees-mass-matrix",
+        default=None,
+        choices=("none", "diagonal"),
+        help="mcmc_chees inverse_mass_matrix. Default None pins it to ones and takes "
+        "the geometry from --precondition. 'diagonal' estimates it from the ensemble, "
+        "giving ChEES the second adaptation NUTS/HMC already have -- the other half "
+        "of the same control. See run_chees's warning before reading a win from it.",
+    )
     ap.add_argument("--reps", type=int, default=4, help="--mode grad: timing repetitions")
     ap.add_argument("--runs", type=int, default=20, help="--mode grad: calls per repetition")
     ap.add_argument("--shard", action="store_true", help="also time devices='all' scaling")
@@ -744,6 +804,27 @@ def main(argv=None):
         chees_kw["n_chains"] = args.n_chains
     if args.max_leapfrog_steps is not None:
         chees_kw["max_leapfrog_steps"] = args.max_leapfrog_steps
+    if args.chain_jitter is not None:
+        chees_kw["chain_jitter"] = args.chain_jitter
+    if args.chees_mass_matrix is not None:
+        chees_kw["mass_matrix_estimation"] = (
+            None if args.chees_mass_matrix == "none" else args.chees_mass_matrix
+        )
+    # NUTS/HMC only: mcmc_chees refuses dense_mass_matrix=True by name and has no
+    # dense option to take, so this must not reach a ChEES cell.
+    if args.dense_mass is not None:
+        run_kw["dense_mass_matrix"] = args.dense_mass == "true"
+    # Preconditioning is NOT a ChEES knob: the analytic metric threads through
+    # every sampler on the batched path, so it goes in the shared kwargs. Keeping
+    # it out of ``chees_kw`` is what lets an HMC row be measured with the same
+    # metric, which is the only way to tell "ChEES needs the metric" apart from
+    # "this posterior needs the metric".
+    if args.precondition is not None:
+        run_kw["precondition"] = args.precondition
+    meta["precondition"] = args.precondition
+    meta["chain_jitter"] = args.chain_jitter
+    meta["dense_mass"] = args.dense_mass
+    meta["chees_mass_matrix"] = args.chees_mass_matrix
     meta["n_warmup"] = args.warmup
     meta["n_burnin"] = args.burnin
     meta["n_samples"] = args.samples
@@ -772,6 +853,7 @@ def main(argv=None):
                 if method == "mcmc_chees":
                     cell_kw.pop("max_num_doublings", None)
                     cell_kw.pop("n_leapfrog_steps", None)
+                    cell_kw.pop("dense_mass_matrix", None)
                 cold, _, bias, refused = _run_and_time(cat, method, K, None, key, cell_kw)
                 if refused is None:
                     warm, cp, _, refused = _run_and_time(cat, method, K, None, key, cell_kw)
@@ -838,6 +920,16 @@ def main(argv=None):
                     "lut_grad_error_est": bias,
                     **diag,
                 }
+                # What the metric bought, read off the fit rather than assumed.
+                # ``preconditioned_gal`` is a COUNT, not a flag: a lane whose
+                # metric could not be factorized falls back to the identity on
+                # its own, so a row can be partly whitened and has to say so.
+                if cp.diagnostics.get("whitening_strength") is not None:
+                    row["preconditioned_gal"] = cp.diagnostics.get("preconditioned")
+                    row["metric_cond_median"] = cp.diagnostics.get("metric_condition_median")
+                    row["whitened_cond_median"] = cp.diagnostics.get("whitened_condition_median")
+                    row["metric_cond_max"] = cp.diagnostics.get("metric_condition_max")
+                    row["whitened_cond_max"] = cp.diagnostics.get("whitened_condition_max")
                 if row["min_ess"]:
                     row["s_per_eff_sample"] = round(warm / (row["min_ess"] * n_gal), 6)
                     row["eff_samples_per_gpu_min"] = round(60.0 * row["min_ess"] * n_gal / warm, 1)

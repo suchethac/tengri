@@ -1057,7 +1057,13 @@ class _CatalogFitterOriginal:
             Run a ``tier="broken"`` method anyway, for benchmarking or backend
             development, not for science. Default False.
         **kwargs
-            Forwarded to the underlying inference method.
+            Forwarded to the underlying inference method. Notably
+            ``precondition=True`` on ``mcmc_nuts`` / ``mcmc_hmc`` /
+            ``mcmc_chees``, which whitens each galaxy with its **own** analytic
+            ``J^T N^-1 J + I`` metric inside the batched path (off by default;
+            see :meth:`_run_native_mcmc`). It is silently ignored by the
+            sequential engine's methods that do not accept it, so check the
+            backend's ``accepts_precondition`` before assuming it applied.
 
         Returns
         -------
@@ -1685,6 +1691,7 @@ class _CatalogFitterOriginal:
         n_leapfrog_steps=10,
         target_accept_rate=AUTO,
         dense_mass_matrix=None,
+        mass_matrix_estimation=None,
         init_from=None,
         map_init_steps=DEFAULT_MAP_INIT_STEPS,
         n_chains=1,
@@ -1692,6 +1699,7 @@ class _CatalogFitterOriginal:
         ensemble_jitter=None,
         chain_jitter=None,
         max_leapfrog_steps=200,
+        precondition=None,
         verbose=True,
     ):
         """Vectorized per-galaxy NUTS/HMC/ChEES sampling via ``lax.map(batch_size=K)``.
@@ -1760,6 +1768,46 @@ class _CatalogFitterOriginal:
           galaxy: physical values, converted for you. The medians of a previous
           :class:`CatalogPosterior` are the intended source.
 
+        ``mass_matrix_estimation`` is ChEES-only and is **off by default**. It
+        exists so the mass-matrix ablation is re-runnable from a call rather than
+        an edit (``run_chees``'s own reason for exposing it), and Phase 3b needed
+        exactly that: on this path ``mcmc_nuts``/``mcmc_hmc`` always get a
+        warmup-estimated mass matrix from ``window_adaptation`` while ChEES's
+        ``inverse_mass_matrix`` stays at ones, so a head-to-head between them
+        compares *two* differences, not one. Setting it to ``"diagonal"`` gives
+        ChEES the second adaptation the other two already had. Prefer the
+        analytic metric: see the warning in
+        :func:`~tengri.inference.backends.mcmc.chees.run_chees`.
+
+        ``precondition`` threads the analytic ``J^T N^-1 J + I`` metric
+        (:mod:`tengri.inference.preconditioning`) through this path, **per
+        galaxy**. ``None`` (the default) is off, matching the single-fit
+        auto-policy; ``True`` whitens at
+        :data:`~tengri.inference.preconditioning.DEFAULT_WHITENING_STRENGTH`.
+
+        The metric is per galaxy by construction -- ``J`` is the Jacobian at
+        that galaxy's MAP warm start and ``N`` is that galaxy's noise -- so it
+        has a galaxy axis and rides the same ``lax.map`` batching as the data
+        rather than being a closure-captured constant. That is precisely why
+        :func:`~tengri.inference.preconditioning.prepare_preconditioning`, whose
+        output is a Python closure over one concrete matrix, cannot serve here;
+        :func:`~tengri.inference.preconditioning.traced_preconditioner` is its
+        traced counterpart and the seam is
+        :func:`~tengri.inference.backends.mcmc.catalog.build_catalog_mcmc_engine`.
+
+        Two consequences worth stating rather than discovering:
+
+        * **Memory.** A dense ``(D, D)`` transform and its ``(D, D)`` Hessian
+          live per lane, so a chunk holds ``O(K * D^2)`` beyond the chains. At
+          catalog D this is small; ``K`` and ``D`` still trade against each
+          other.
+        * **``chain_jitter`` changes units.** It disperses the sampling chains
+          around the starting point in the coordinates being *sampled*, which
+          under preconditioning are the whitened ones. A jitter of 0.5 is then
+          roughly half a posterior standard deviation rather than half a
+          standardized-prior unit -- arguably what one wants, but not the same
+          number.
+
         When ``devices`` is given (``"all"`` or a device list), the galaxy axis
         is sharded across those devices via ``jax.shard_map``, each device runs
         ``lax.map`` on its own slice of the catalog with no cross-device
@@ -1769,10 +1817,12 @@ class _CatalogFitterOriginal:
         from tengri.inference.backends.mcmc._shared import _CHEES_JITTER_SCALE
         from tengri.inference.backends.mcmc.catalog import (
             build_catalog_mcmc_engine,
+            build_catalog_metric_diagnostics,
         )
         from tengri.inference.backends.mcmc.chees import CHEES_TARGET_ACCEPT_RATE
         from tengri.inference.backends.mcmc.nuts import _resolve_dense_mass_matrix
         from tengri.inference.posterior import Posterior
+        from tengri.inference.preconditioning import _resolve_whitening_strength
 
         sampler = self._MCMC_SAMPLER_TAG[method_tag]
         is_chees = sampler == "chees"
@@ -1800,9 +1850,11 @@ class _CatalogFitterOriginal:
                 "dense_mass_matrix=True is not available for method='mcmc_chees': "
                 "the ChEES kernel's metric is a diagonal inverse_mass_matrix, and "
                 "under the default mass_matrix_estimation=None it is the identity "
-                "for the whole run. A non-identity geometry comes from the analytic "
-                "J^T N^-1 J + I metric (precondition=), which the catalog path does "
-                "not yet thread; use method='mcmc_nuts'/'mcmc_hmc' for a dense mass."
+                "for the whole run. The non-identity geometry ChEES is designed to "
+                "use is the analytic J^T N^-1 J + I metric: pass precondition=True, "
+                "which this path threads per galaxy. Use "
+                "method='mcmc_nuts'/'mcmc_hmc' if you specifically want a dense "
+                "mass matrix estimated from warmup instead."
             )
         t0 = time.time()
         n_gal = self.n_galaxies
@@ -1864,17 +1916,26 @@ class _CatalogFitterOriginal:
             ensemble_jitter=ensemble_jitter,
             chain_jitter=chain_jitter,
             max_leapfrog_steps=max_leapfrog_steps,
+            precondition=precondition,
+            mass_matrix_estimation=mass_matrix_estimation,
         )
 
         dummy_flat = ravel_pytree(fitter._initialize_unbounded(jax.random.PRNGKey(0)))[0]
         d_params = dummy_flat.shape[0]
 
+        # Resolved here as well as inside the engine, so what is *reported* is
+        # the strength that actually ran rather than the argument that was
+        # asked for -- ``precondition=0.0`` and ``precondition=False`` are the
+        # same run and must not be reported as two different ones (#1442).
+        precond_strength = _resolve_whitening_strength(precondition, d_params)
+
         if verbose:
             tag = {"nuts": "NUTS", "hmc": "HMC", "chees": "ChEES-HMC"}[sampler]
             extra = f", ensemble={n_ensemble} x {n_chains} chains/galaxy" if is_chees else ""
+            whiten = "" if precond_strength is None else f", precondition={precond_strength}"
             print(
                 f"CatalogFitter ({tag}): {n_gal} galaxies, K={K}, D={d_params}, "
-                f"{n_warmup} warmup + {n_samples} samples{extra}"
+                f"{n_warmup} warmup + {n_samples} samples{extra}{whiten}"
             )
 
         # Stack per-galaxy data; pad with dummy galaxies (trimmed after).
@@ -1991,6 +2052,46 @@ class _CatalogFitterOriginal:
         all_divergent = all_divergent[:n_gal]
         jax.block_until_ready(all_positions)
 
+        # What the metric actually bought, per galaxy. A run that whitened but
+        # cannot say how much it whitened is not reportable: the analytic
+        # metric's entire claim is that it takes condition numbers of 1e5-1e8 to
+        # ~1 at the expansion point, and only a measurement can say whether it
+        # did so here. Deliberately a separate pass, outside the sampler's
+        # compiled program -- see build_catalog_metric_diagnostics.
+        precond_cond = precond_whitened = precond_ok = None
+        n_precond_fallback = 0
+        if precond_strength is not None:
+            diag_one = build_catalog_metric_diagnostics(
+                fitter,
+                strength=precond_strength,
+                thread_redshift=per_galaxy_z,
+                thread_line_fluxes=per_galaxy_lines,
+            )
+            raw_c, white_c, ok_c = jax.lax.map(
+                lambda a: diag_one(*a),
+                (
+                    all_init[:n_gal],
+                    all_data_orig,
+                    all_noise_orig,
+                    all_presence_orig,
+                    all_redshift_orig,
+                    all_line_flux_orig,
+                    all_line_err_orig,
+                ),
+                batch_size=K,
+            )
+            precond_cond = np.asarray(raw_c)
+            precond_whitened = np.asarray(white_c)
+            precond_ok = np.asarray(ok_c)
+            n_precond_fallback = int(np.sum(~precond_ok))
+            if verbose:
+                print(
+                    f"  precondition: strength={precond_strength}, metric cond "
+                    f"{np.median(precond_cond):.3g} (median) -> whitened "
+                    f"{np.median(precond_whitened):.3g}, "
+                    f"{n_precond_fallback} of {n_gal} fell back to identity"
+                )
+
         posteriors = []
         for i in range(n_gal):
             samples_phys = _vmap_samples_to_physical(
@@ -2016,6 +2117,21 @@ class _CatalogFitterOriginal:
                     "n_divergent": n_div,
                     "n_samples": n_samples,
                     "n_chains": n_chains,
+                    # Same three keys ``run_chees`` records for a single fit, so
+                    # a catalog galaxy and a single fit of it report their
+                    # geometry the same way. ``metric_condition`` is 1.0 with
+                    # ``preconditioned`` False on a galaxy whose metric could not
+                    # be factorized -- read the flag first.
+                    **(
+                        {}
+                        if precond_strength is None
+                        else {
+                            "preconditioned": bool(precond_ok[i]),
+                            "whitening_strength": precond_strength,
+                            "metric_condition": float(precond_cond[i]),
+                            "whitened_condition": float(precond_whitened[i]),
+                        }
+                    ),
                 },
                 loss_history=None,
                 _model=self.model,
@@ -2047,6 +2163,25 @@ class _CatalogFitterOriginal:
                 "n_warmup": n_warmup,
                 "n_samples": n_samples,
                 "n_chains": n_chains,
+                # ``preconditioned`` is the count of galaxies actually whitened,
+                # not a boolean: a lane whose metric could not be factorized
+                # falls back to the identity for that galaxy alone, and a
+                # catalog that quietly sampled some galaxies in one basis and
+                # some in another has to say so.
+                "preconditioned": (
+                    None if precond_strength is None else int(n_gal - n_precond_fallback)
+                ),
+                "whitening_strength": precond_strength,
+                **(
+                    {}
+                    if precond_strength is None
+                    else {
+                        "metric_condition_median": float(np.median(precond_cond)),
+                        "whitened_condition_median": float(np.median(precond_whitened)),
+                        "metric_condition_max": float(np.max(precond_cond)),
+                        "whitened_condition_max": float(np.max(precond_whitened)),
+                    }
+                ),
                 **(
                     {
                         "n_ensemble": n_ensemble,
