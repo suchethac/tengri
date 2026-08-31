@@ -268,7 +268,7 @@ def bench_config(label, sfh_type, cfg_kwargs, ssp_data_wne, ssp_data_bare=None):
 
 
 def bench_gradient(label, sfh_type, cfg_kwargs, ssp_data_wne, ssp_data_bare=None):
-    """Time grad-of-loss for exact vs WavePrecomp over full free-parameter vector."""
+    """Time grad-of-loss for exact vs WavePrecomp over the free-parameter vector."""
     section_name = f"{label}_grad_{sfh_type}"
 
     # Check if config needs bare-stellar SSP grid
@@ -282,24 +282,30 @@ def bench_gradient(label, sfh_type, cfg_kwargs, ssp_data_wne, ssp_data_bare=None
 
     ssp_data_to_use = ssp_data_bare if needs_bare_ssp else ssp_data_wne
 
-    def _grad_us(model, params):
-        """Time gradient of loss over all free parameters (as dict PyTree)."""
-        def _loss(p):
-            # p is the params dict; differentiate over all entries
-            return jnp.sum(model.predict_photometry(p))
+    def _grad_us(model, params, spec):
+        """Time gradient of loss over free-parameter vector (as dict PyTree)."""
+        # Split params into free and fixed subdicts
+        free_param_names = set(spec.free_params)
+        free_params = {k: v for k, v in params.items() if k in free_param_names}
+        fixed_params = {k: v for k, v in params.items() if k not in free_param_names}
 
-        # jax.grad works with PyTrees; params dict is a PyTree
+        def _loss(p_free):
+            # Merge free params with fixed params for full prediction
+            p_full = {**fixed_params, **p_free}
+            return jnp.sum(model.predict_photometry(p_full))
+
+        # jax.grad works with PyTrees; free_params dict is a PyTree
         grad_fn = jax.jit(jax.grad(_loss))
 
-        # Warmup (grad returns a dict with same structure as params)
+        # Warmup (grad returns a dict with same structure as free_params)
         for _ in range(N_WARMUP):
-            result = grad_fn(params)
+            result = grad_fn(free_params)
             # Use jax.block_until_ready on the pytree result
             jax.block_until_ready(result)
 
         t0 = time.perf_counter()
         for _ in range(N_RUNS):
-            result = grad_fn(params)
+            result = grad_fn(free_params)
             jax.block_until_ready(result)
         return (time.perf_counter() - t0) / N_RUNS * 1e6
 
@@ -308,10 +314,10 @@ def bench_gradient(label, sfh_type, cfg_kwargs, ssp_data_wne, ssp_data_bare=None
 
     # Exact (non-precomp) gradient
     try:
-        model_e, params_e, _ = build_model(
+        model_e, params_e, spec_e = build_model(
             sfh_type, cfg_kwargs, approx=None, ssp_data=ssp_data_to_use
         )
-        us_e = _grad_us(model_e, params_e)
+        us_e = _grad_us(model_e, params_e, spec_e)
     except Exception as exc:
         print(
             f"  {label:<40} exact=  FAILED ({type(exc).__name__}: {exc!s:.60s})"
@@ -321,10 +327,10 @@ def bench_gradient(label, sfh_type, cfg_kwargs, ssp_data_wne, ssp_data_bare=None
 
     # WavePrecomp gradient
     try:
-        model_p, params_p, _ = build_model(
+        model_p, params_p, spec_p = build_model(
             sfh_type, cfg_kwargs, approx=WavePrecomp(), ssp_data=ssp_data_to_use
         )
-        us_p = _grad_us(model_p, params_p)
+        us_p = _grad_us(model_p, params_p, spec_p)
     except Exception as exc:
         print(
             f"  {label:<40} exact={us_e:>8.0f} µs  "
@@ -345,15 +351,13 @@ def print_header(title):
     print("=" * 110)
 
 
-def census_verdict(completed, skipped, required, bare_sections, bare_available):
+def census_verdict(completed, required, bare_sections, bare_available):
     """Check census: all required + bare-SSP sections (if grid available) must complete.
 
     Parameters
     ----------
     completed : set[str]
         Section names that completed successfully.
-    skipped : list[tuple[str, str]]
-        (section_name, reason) tuples for skipped sections.
     required : set[str]
         Section names that must complete on shipped wNE data.
     bare_sections : set[str]
@@ -553,7 +557,7 @@ if __name__ == "__main__":
     # Check census: required + bare-SSP (if grid available) sections must complete
     bare_available = bool(BARE_SSP_PATH)
     ok, missing = census_verdict(
-        _COMPLETED_SECTIONS, _SKIPPED_SECTIONS, _REQUIRED_SECTIONS,
+        _COMPLETED_SECTIONS, _REQUIRED_SECTIONS,
         _BARE_SSP_SECTIONS, bare_available
     )
 

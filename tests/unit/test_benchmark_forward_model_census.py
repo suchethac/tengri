@@ -151,11 +151,10 @@ class TestBenchmarkConfigConsistency:
         """census_verdict returns False when required sections are missing."""
         _, bench = get_benchmark_configs()
         completed = {"Section A", "Section B"}
-        skipped = [("Section C", "error")]
         required = {"Section A", "Section D"}  # D is missing
         bare = set()
 
-        ok, missing = bench.census_verdict(completed, skipped, required, bare, False)
+        ok, missing = bench.census_verdict(completed, required, bare, False)
         assert not ok
         assert missing == {"Section D"}
 
@@ -163,11 +162,10 @@ class TestBenchmarkConfigConsistency:
         """census_verdict returns True when all required sections complete."""
         _, bench = get_benchmark_configs()
         completed = {"Section A", "Section B"}
-        skipped = [("Section C", "error")]
         required = {"Section A", "Section B"}
         bare = set()
 
-        ok, missing = bench.census_verdict(completed, skipped, required, bare, False)
+        ok, missing = bench.census_verdict(completed, required, bare, False)
         assert ok
         assert missing == set()
 
@@ -175,11 +173,10 @@ class TestBenchmarkConfigConsistency:
         """census_verdict returns False when bare-SSP sections missing and grid available."""
         _, bench = get_benchmark_configs()
         completed = {"Section A"}
-        skipped = []
         required = {"Section A"}
         bare = {"Section B"}  # Bare section missing
 
-        ok, missing = bench.census_verdict(completed, skipped, required, bare, True)
+        ok, missing = bench.census_verdict(completed, required, bare, True)
         assert not ok
         assert missing == {"Section B"}
 
@@ -187,11 +184,10 @@ class TestBenchmarkConfigConsistency:
         """census_verdict ignores bare-SSP sections when grid unavailable."""
         _, bench = get_benchmark_configs()
         completed = {"Section A"}
-        skipped = []
         required = {"Section A"}
         bare = {"Section B"}  # Missing, but grid unavailable so ignored
 
-        ok, missing = bench.census_verdict(completed, skipped, required, bare, False)
+        ok, missing = bench.census_verdict(completed, required, bare, False)
         assert ok
         assert missing == set()
 
