@@ -79,7 +79,7 @@ def _machine_load() -> dict:
     return {"load1": float(a), "load5": float(b), "load15": float(c), "n_cpu": os.cpu_count()}
 
 
-def run(notebook: str, seed: int, warmup_cap, target_accepts=()) -> dict:
+def run(notebook: str, seed: int, warmup_cap, target_accepts=(), preconditions=()) -> dict:
     """Fit one galaxy under several adaptations, changing one thing each time.
 
     The ``target_accepts`` arms exist to rule out an alternative explanation for
@@ -116,6 +116,18 @@ def run(notebook: str, seed: int, warmup_cap, target_accepts=()) -> dict:
         arms[f"wcap={warmup_cap}"] = dict(shipped, warmup_max_num_doublings=int(warmup_cap))
     for t in target_accepts:
         arms[f"target={t:g}"] = dict(shipped, target_accept_rate=float(t))
+    # The recommended arm, and the one whose marginals had never been checked.
+    # Every OTHER fast configuration measured on this fixture displaces
+    # `sfh_dpl_beta` by the same amount -- wcap=5 at -0.230 sd / -3.08 MCSE and
+    # target_accept_rate=0.65 at -0.225 sd / -3.07 MCSE, two mechanistically
+    # distinct routes to a larger adapted step size agreeing to three
+    # significant figures. That is a strong prior that ANY configuration
+    # reaching a larger step will move it, and `precondition=0.5` reaches the
+    # largest step of all (0.0387 against the control's 0.0050, ~7.7x). So the
+    # honest expectation is a shift, and a report recommending this arm has to
+    # say which way it fell.
+    for a in preconditions:
+        arms[f"precond={a:g}"] = dict(shipped, precondition=float(a))
 
     out: dict = {}
     for label, kwargs in arms.items():
@@ -197,6 +209,7 @@ def run(notebook: str, seed: int, warmup_cap, target_accepts=()) -> dict:
         "seed": seed,
         "warmup_cap": warmup_cap,
         "target_accepts": list(target_accepts),
+        "preconditions": list(preconditions),
         "device": str(jax.devices()[0].platform),
         **_machine_load(),
         "arms": out,
@@ -241,6 +254,16 @@ def main(argv=None) -> int:
         help="warmup tree-depth cap arm; pass -1 to omit the arm entirely",
     )
     ap.add_argument(
+        "--precondition",
+        type=float,
+        nargs="*",
+        default=[],
+        metavar="ALPHA",
+        help="add an analytic-metric arm per whitening strength. This is the "
+        "configuration the report recommends, so its marginals must be checked "
+        "against the control like any other fast arm.",
+    )
+    ap.add_argument(
         "--target-accept",
         type=float,
         nargs="*",
@@ -259,6 +282,7 @@ def main(argv=None) -> int:
         args.seed,
         None if args.warmup_cap is not None and args.warmup_cap < 0 else args.warmup_cap,
         tuple(args.target_accept),
+        tuple(args.precondition),
     )
     # Write BEFORE printing: a formatting error in the table below must not lose
     # hours of sampling either.
