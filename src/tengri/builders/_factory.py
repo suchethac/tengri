@@ -20,7 +20,7 @@ from collections.abc import Callable
 from typing import Any
 
 from tengri.parameters.priors import Fixed, _is_default_fixed
-from tengri.parameters.sentinels import DEFAULT, FREE, WILDCARD_ALIAS
+from tengri.parameters.sentinels import DEFAULT, FREE, WILDCARD_ALIAS, WILDCARD_ALIAS_OTHER
 
 # Sentinel marking a parameter that was not specified at call time. We
 # can't use ``None`` because ``None`` is a legitimate dict value users
@@ -137,13 +137,24 @@ def make_factory(
             if short in kwargs and kwargs[short] is not UNSET:
                 flag_values[flag] = True
 
-        out: dict[str, Any] = {"type": variant, WILDCARD_ALIAS: wildcard}
+        out: dict[str, Any] = {"type": variant}
         for flag, value in flag_values.items():
             if value:
                 out[flag] = True
-        for short in short_params:
-            if short in kwargs and kwargs[short] is not UNSET:
-                out[short] = kwargs[short]
+        # Per-parameter entries before the wildcard: bool flags and the
+        # 'type' selector above are structural, not parameter overrides, so
+        # they don't count toward the all_params/other_params choice below.
+        param_entries: dict[str, Any] = {
+            short: kwargs[short]
+            for short in short_params
+            if short in kwargs and kwargs[short] is not UNSET
+        }
+        out.update(param_entries)
+        # Wildcard LAST: 'all_params' when it is the only parameter
+        # directive, 'other_params' when explicit per-param entries precede
+        # it.
+        wildcard_key = WILDCARD_ALIAS if not param_entries else WILDCARD_ALIAS_OTHER
+        out[wildcard_key] = wildcard
         return out
 
     sig_params = [

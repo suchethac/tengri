@@ -7,9 +7,12 @@ preserving all parameter distributions and structural choices.
 
 from __future__ import annotations
 
+import warnings
+
 import pytest
 
 pytestmark = pytest.mark.contract
+from tengri import builders
 from tengri.parameters import DEFAULT, FREE, Fixed, Uniform, parse_groups
 from tengri.parameters.parameters import Parameters
 
@@ -457,3 +460,125 @@ class TestToGroupsEdgeCases:
         roundtripped = parse_groups(**result)
         assert roundtripped.nebular_mode == "off"
         assert original.nebular_mode == roundtripped.nebular_mode
+
+
+class TestWildcardEmissionIdempotence:
+    """to_groups()'s output survives a full re-parse, across a spec that mixes
+    wildcard-free, wildcard-fixed, and explicit-override groups.
+
+    Exercises every top-level group the emitter touches (sfh, met,
+    dust_attenuation, dust_emission, neb, igm, agn) in one spec, so a
+    per-group wildcard-spelling regression (wrong key, wrong position) would
+    show up as a free/fixed-set or distribution mismatch here.
+    """
+
+    def _build_mixed_spec(self):
+        with warnings.catch_warnings():
+            warnings.simplefilter("ignore")
+            return parse_groups(
+                sfh={"type": "dpl", "all_params": FREE, "beta": Uniform(1, 3)},
+                met={"type": "delta", "all_params": Fixed(DEFAULT), "logzsol": Uniform(-2, 0.2)},
+                dust_attenuation={
+                    "type": "two_component",
+                    "law": "calzetti",
+                    "all_params": FREE,
+                },
+                dust_emission={"type": "dale2014", "all_params": Fixed(DEFAULT)},
+                neb={"type": "cue", "all_params": FREE},
+                igm={"type": "inoue14", "all_params": Fixed(DEFAULT)},
+                agn={"type": "simple", "all_params": Fixed(DEFAULT), "log_lbol": Uniform(9, 13)},
+                redshift=Fixed(0.5),
+            )
+
+    def test_idempotent_roundtrip_reproduces_free_and_fixed(self):
+        """``parse_groups(**to_groups())`` reproduces identical free/fixed sets
+        and identical resolved distributions for every declared parameter."""
+        original = self._build_mixed_spec()
+        groups = original.to_groups()
+        idem_kwargs = {g: (dict(v) if isinstance(v, dict) else v) for g, v in groups.items()}
+
+        with warnings.catch_warnings():
+            warnings.simplefilter("ignore")
+            roundtripped = parse_groups(**idem_kwargs)
+
+        assert roundtripped.free_params == original.free_params
+        assert roundtripped.fixed_params == original.fixed_params
+        for name in original.all_params:
+            orig_dist = original.get_distribution(name)
+            round_dist = roundtripped.get_distribution(name)
+            assert orig_dist == round_dist, f"Mismatch for {name}: {orig_dist} vs {round_dist}"
+
+    def test_idempotent_roundtrip_is_stable_under_a_second_pass(self):
+        """Re-emitting and re-parsing a second time changes nothing further."""
+        original = self._build_mixed_spec()
+        groups = original.to_groups()
+        idem_kwargs = {g: (dict(v) if isinstance(v, dict) else v) for g, v in groups.items()}
+
+        with warnings.catch_warnings():
+            warnings.simplefilter("ignore")
+            once = parse_groups(**idem_kwargs)
+            groups_again = once.to_groups()
+            idem_kwargs_again = {
+                g: (dict(v) if isinstance(v, dict) else v) for g, v in groups_again.items()
+            }
+            twice = parse_groups(**idem_kwargs_again)
+
+        assert once.free_params == twice.free_params
+        assert once.fixed_params == twice.fixed_params
+        assert groups_again == groups
+
+
+class TestWildcardSpellingConvention:
+    """Pins the grammar's emission convention itself (not just one emitter).
+
+    ``'all_params'`` when the wildcard is a group's only parameter directive
+    (nothing else survived collapsing); ``'other_params'``, placed LAST,
+    when explicit per-param entries coexist beside it. Both keys stay exact
+    synonyms on input -- this convention governs only what emitters produce.
+    """
+
+    def test_collapsed_sole_directive_emits_all_params(self):
+        """A group with nothing to collapse around genuinely reduces to the
+        sole-directive spelling: 'type' + 'all_params', nothing else."""
+        with warnings.catch_warnings():
+            warnings.simplefilter("ignore")
+            spec = parse_groups(
+                sfh={"type": "dpl", "all_params": Fixed(DEFAULT)},
+                redshift=Fixed(0.1),
+            )
+        result = spec.to_groups()
+        assert result["sfh"] == {"type": "dpl", "all_params": Fixed(DEFAULT)}
+
+    def test_explicit_overrides_emit_other_params_last(self):
+        """A group whose wildcard coexists with explicit per-param overrides
+        spells the wildcard 'other_params' and emits it as the LAST key."""
+        with warnings.catch_warnings():
+            warnings.simplefilter("ignore")
+            spec = parse_groups(
+                sfh={"type": "dpl", "all_params": Fixed(DEFAULT)},
+                redshift=Fixed(0.05),
+                dust_attenuation={
+                    "type": "two_component",
+                    "law": "calzetti",
+                    "all_params": FREE,
+                },
+            )
+        result = spec.to_groups()
+        dust_dict = result["dust_attenuation"]
+        assert list(dust_dict.keys())[-1] == "other_params"
+        assert dust_dict["other_params"] is FREE
+        assert "all_params" not in dust_dict
+        # At least one genuine per-param entry precedes the wildcard.
+        assert set(dust_dict) - {"type", "law", "other_params"}
+
+    def test_builder_sole_directive_emits_all_params(self):
+        """``builders.sfh.dpl()`` with no per-param overrides: sole-directive
+        'all_params'."""
+        assert builders.sfh.dpl() == {"type": "dpl", "all_params": Fixed(DEFAULT)}
+
+    def test_builder_with_override_emits_other_params_last(self):
+        """``builders.sfh.dpl(beta=...)``: the per-param entry comes first,
+        'other_params' last."""
+        result = builders.sfh.dpl(beta=Uniform(1, 3))
+        assert result == {"type": "dpl", "beta": Uniform(1, 3), "other_params": Fixed(DEFAULT)}
+        assert list(result.keys()) == ["type", "beta", "other_params"]

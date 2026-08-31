@@ -75,7 +75,7 @@ def _equivalent(all_kwargs: dict, other_kwargs: dict):
 # param silently, per test_dust_emission_wildcard.py), neb 'cue' (neb_logU),
 # shock/xray/radio/agn at their defaults (shock_*, xray_gamma_agn, the bare
 # 'radio' params radio_q_ir/alpha_sf/T_e, agn_* shared params), igm 'inoue14'
-# (igm_z_mid/dz/log_nhi, all three declare free_prior).
+# with patchy: True (igm_bubble_mpc, igm_x_HI, freed by the wildcard).
 TOP_LEVEL_GROUPS = [
     ("sfh", {"type": "dpl"}),
     ("met", {"type": "delta"}),
@@ -83,7 +83,7 @@ TOP_LEVEL_GROUPS = [
     ("dust_emission", {"type": "astrodust"}),
     ("neb", {"type": "cue"}),
     ("shock", {}),
-    ("igm", {"type": "inoue14"}),
+    ("igm", {"type": "inoue14", "patchy": True}),
     ("radio", {}),
     ("xray", {"type": "simple"}),
     ("agn", {"type": "composable"}),

@@ -112,15 +112,19 @@ def test_wildcard_free() -> None:
 
 
 def test_per_param_override_is_preserved() -> None:
+    """A per-param override means the wildcard is spelled 'other_params', LAST."""
     prior = Uniform(1.0, 3.0)
     out = builders.sfh.dpl(beta=prior)
-    assert out == {"type": "dpl", "all_params": Fixed(DEFAULT), "beta": prior}
+    assert out == {"type": "dpl", "beta": prior, "other_params": Fixed(DEFAULT)}
+    assert list(out.keys()) == ["type", "beta", "other_params"]
 
 
 def test_wildcard_plus_explicit_override() -> None:
+    """Same convention with all_params=FREE: still 'other_params', LAST."""
     pin = Fixed(1.0)
     out = builders.sfh.dpl(all_params=FREE, log_total_mass=pin)
-    assert out == {"type": "dpl", "all_params": FREE, "log_total_mass": pin}
+    assert out == {"type": "dpl", "log_total_mass": pin, "other_params": FREE}
+    assert list(out.keys()) == ["type", "log_total_mass", "other_params"]
 
 
 # ── Validation: typos and bad sentinels ───────────────────────────

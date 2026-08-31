@@ -130,7 +130,11 @@ def test_full_composition_produces_grammar_shape() -> None:
         atten=builders.agn.atten.smc_prevot(),
     )
     assert out["type"] == "composable"
-    assert out["all_params"] is FREE
+    # log_lbol is a genuine per-param override (sub-blocks are structural
+    # selectors, not parameter entries), so the wildcard is spelled
+    # 'other_params' and emitted LAST.
+    assert out["other_params"] is FREE
+    assert list(out.keys())[-1] == "other_params"
     assert out["disc"] == {"type": "multicolor", "all_params": FREE}
     assert out["torus"] == {"type": "skirtor", "all_params": Fixed(DEFAULT)}
     assert out["log_lbol"] == Uniform(9.42, 13.42)

@@ -71,7 +71,7 @@ from tengri.builders._factory import (
 from tengri.builders.dust import emission  # nested factory namespace
 from tengri.components.dust.attenuation import DUST_LAWS
 from tengri.parameters.registry import recipe_parameters
-from tengri.parameters.sentinels import FREE, WILDCARD_ALIAS
+from tengri.parameters.sentinels import FREE, WILDCARD_ALIAS, WILDCARD_ALIAS_OTHER
 
 # Param shortlists per dust_model: discovered at import time so adding a
 # new attenuation knob in the registry surfaces here automatically.
@@ -226,10 +226,17 @@ def _make_dust_factory(
                 f"{unknown}. Valid: {valid_kwargs}."
             )
 
-        out: dict[str, Any] = {"type": dust_model, WILDCARD_ALIAS: wildcard, **settings}
-        for short in short_params:
-            if short in kwargs and kwargs[short] is not UNSET:
-                out[short] = kwargs[short]
+        out: dict[str, Any] = {"type": dust_model, **settings}
+        param_entries: dict[str, Any] = {
+            short: kwargs[short]
+            for short in short_params
+            if short in kwargs and kwargs[short] is not UNSET
+        }
+        out.update(param_entries)
+        # Wildcard LAST: 'all_params' when it is the only parameter
+        # directive, 'other_params' when explicit per-param entries precede it.
+        wildcard_key = WILDCARD_ALIAS if not param_entries else WILDCARD_ALIAS_OTHER
+        out[wildcard_key] = wildcard
         return out
 
     sig_params = [

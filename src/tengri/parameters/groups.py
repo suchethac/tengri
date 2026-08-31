@@ -4903,8 +4903,16 @@ def parameters_to_groups(spec: Parameters) -> dict:
     -----
     **Provenance-aware collapsing**: If spec has _group_provenance metadata,
     parameters sharing the same wildcard tag ('wildcard_free' or 'wildcard_fixed')
-    are collapsed into a single 'all_params': FREE or 'all_params': Fixed(DEFAULT) entry,
-    with explicit overrides listed separately.
+    are collapsed into a single wildcard entry (FREE or Fixed(DEFAULT)), with
+    explicit overrides listed separately.
+
+    **Wildcard emission convention**: per-parameter entries are emitted
+    first, then the wildcard LAST. The wildcard is spelled 'all_params' when
+    it is the group's only parameter directive (nothing survived collapsing
+    as an explicit override), and 'other_params' when explicit per-param
+    entries coexist beside it -- reading as "the others" after the named
+    overrides. Both spellings are exact synonyms on input; this only governs
+    which spelling and position the emitter produces.
 
     **Flat-built fallback**: If spec was built via flat-kwarg Parameters(...),
     all parameters are listed explicitly (no wildcard).
@@ -4944,12 +4952,20 @@ def parameters_to_groups(spec: Parameters) -> dict:
 
     Examples
     --------
+    A bare ``'all_params': Fixed(DEFAULT)`` genuinely collapses to the
+    sole-directive spelling. (``'all_params': FREE`` on a bare ``sfh`` group
+    would NOT collapse this cleanly: its met_* parameters -- pinned via a
+    special case when no ``met`` block is given -- carry a wildcard tag that
+    mismatches the rest of the group's, so ``groups["sfh"]`` would list them
+    explicitly instead; see ``_analyze_wildcard_intent``.)
+
     >>> spec = parse_groups(
-    ...     sfh={"type": "dpl", "all_params": FREE, "beta": Uniform(1, 3)},
+    ...     sfh={"type": "dpl", "all_params": Fixed(DEFAULT)},
     ...     redshift=Fixed(0.05),
     ... )
     >>> groups = spec.to_groups()
-    >>> assert "all_params" in groups["sfh"]  # preferred spelling on output
+    >>> groups["sfh"] == {"type": "dpl", "all_params": Fixed(DEFAULT)}  # sole directive
+    True
     >>> roundtripped = parse_groups(**groups)
     >>> spec.free_params == roundtripped.free_params
     True
@@ -5018,8 +5034,6 @@ def parameters_to_groups(spec: Parameters) -> dict:
         wildcard_intent = _analyze_wildcard_intent(param_names, spec, provenance)
 
         if wildcard_intent is not None:
-            # Emit the preferred wildcard spelling for collapsed params.
-            group_output[WILDCARD_ALIAS] = wildcard_intent
             explicit_params = _get_explicit_overrides(
                 param_names, spec, provenance, wildcard_intent
             )
@@ -5027,10 +5041,21 @@ def parameters_to_groups(spec: Parameters) -> dict:
             # No wildcard; list all params explicitly
             explicit_params = {p: spec.get_distribution(p) for p in param_names}
 
-        # Add explicit params to the group dict
+        # Add explicit per-param entries to the group dict FIRST.
         for full_name, distribution in explicit_params.items():
             short_name = _extract_short_name(full_name, {})
             group_output[short_name] = distribution
+
+        # Emit the wildcard LAST, after any per-param entries. Spelled
+        # ``all_params`` when it is the group's only parameter directive
+        # (no explicit overrides survived collapsing), ``other_params`` when
+        # explicit per-param entries coexist beside it -- reading as "the
+        # others" after the named overrides. The two keys are exact synonyms
+        # on input (:data:`WILDCARD_ALIAS` / :data:`WILDCARD_ALIAS_OTHER`);
+        # this only decides which spelling and position the emitter uses.
+        if wildcard_intent is not None:
+            wildcard_key = WILDCARD_ALIAS if not explicit_params else WILDCARD_ALIAS_OTHER
+            group_output[wildcard_key] = wildcard_intent
 
     # Also add groups that have no params but have a configured type (e.g., neb='none')
     for group_name in sorted(_TOP_LEVEL_TYPED_GROUPS):

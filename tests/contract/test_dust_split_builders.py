@@ -320,8 +320,8 @@ class TestExplicitAllParamsPreserved:
 
         Both groups carry explicit per-param entries alongside the wildcard,
         so the recipe spells it ``other_params`` (placed last) rather than
-        ``all_params`` -- see ``TestWildcardSpellingConvention`` below for the
-        pinned convention itself.
+        ``all_params`` -- see ``TestWildcardSpellingConvention`` in
+        ``test_to_groups_roundtrip.py`` for the pinned convention itself.
         """
         recipe_dict = recipes.high_z()
         assert recipe_dict["sfh"]["other_params"] == Fixed(DEFAULT)
@@ -350,11 +350,20 @@ class TestExplicitAllParamsPreserved:
         assert list(recipe_dict["dust_attenuation"].keys())[-1] == "other_params"
         assert recipe_dict["dust_attenuation"]["other_params"] == Fixed(DEFAULT)
 
-    def test_dust_demo_all_params_fixed(self):
-        """dust_demo has all_params: Fixed(DEFAULT) on sfh and dust_attenuation."""
+    def test_dust_demo_other_params_fixed(self):
+        """dust_demo has other_params: Fixed(DEFAULT), LAST, on sfh and dust_attenuation.
+
+        Both builder calls (``builders.sfh.tsnorm``, ``builders.dust.two_component``)
+        are given explicit per-param kwargs, so the emitted wildcard is spelled
+        ``other_params`` rather than ``all_params`` -- see
+        ``TestWildcardSpellingConvention`` in ``test_to_groups_roundtrip.py`` for
+        the pinned convention itself.
+        """
         recipe_dict = recipes.dust_demo()
-        assert recipe_dict["sfh"]["all_params"] == Fixed(DEFAULT)
-        assert recipe_dict["dust_attenuation"]["all_params"] == Fixed(DEFAULT)
+        assert recipe_dict["sfh"]["other_params"] == Fixed(DEFAULT)
+        assert recipe_dict["dust_attenuation"]["other_params"] == Fixed(DEFAULT)
+        assert list(recipe_dict["sfh"].keys())[-1] == "other_params"
+        assert list(recipe_dict["dust_attenuation"].keys())[-1] == "other_params"
 
 
 class TestBuildersSurfaceContract:

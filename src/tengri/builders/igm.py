@@ -27,7 +27,7 @@ Examples
 {'type': 'inoue14', 'all_params': Fixed(DEFAULT)}
 >>> # Toggle patchy reionization, override the bubble size prior
 >>> builders.igm.inoue14(all_params=FREE, patchy=True, bubble_mpc=Uniform(5, 50))  # doctest: +SKIP
-{'type': 'inoue14', 'all_params': FREE, 'patchy': True, 'bubble_mpc': Uniform(...)}
+{'type': 'inoue14', 'patchy': True, 'bubble_mpc': Uniform(...), 'other_params': FREE}
 """
 
 from __future__ import annotations

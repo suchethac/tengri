@@ -27,11 +27,12 @@ factories give per-variant signatures generated from the registry, so:
 Examples
 --------
 >>> from tengri import SEDModel, builders, FREE, DEFAULT, Uniform, Fixed
->>> # Equivalent to {'type': 'dpl', 'all_params': Fixed(DEFAULT), 'beta': Uniform(1, 3)}
+>>> # Equivalent to {'type': 'dpl', 'beta': Uniform(1, 3), 'other_params': Fixed(DEFAULT)}
 >>> sfh_config = builders.sfh.dpl(beta=Uniform(1, 3))
 >>> # All params free unless overridden:
 >>> sfh_config = builders.sfh.dpl(all_params=FREE)
 >>> # Mix wildcard policy with explicit overrides:
+>>> # (emits {'type': 'dpl', 'log_total_mass': Fixed(10.0), 'other_params': FREE})
 >>> sfh_config = builders.sfh.dpl(all_params=FREE, log_total_mass=Fixed(10.0))
 
 The output is interchangeable with the dict form:
@@ -48,7 +49,7 @@ from typing import Any
 from tengri._completion import curated_dir
 from tengri.builders._factory import _DEFAULT_WILDCARD, _pop_wildcard, _validate_wildcard
 from tengri.components.stellar.sfh.registry import SFH_REGISTRY
-from tengri.parameters.sentinels import WILDCARD_ALIAS
+from tengri.parameters.sentinels import WILDCARD_ALIAS, WILDCARD_ALIAS_OTHER
 
 # Sentinel marking a parameter that was not specified at call time. We
 # can't use ``None`` because ``None`` is a legitimate dict value users
@@ -139,7 +140,6 @@ def _make_factory(variant: str, spec) -> Callable[..., dict]:
     def factory(**kwargs: Any) -> dict:
         wildcard = _pop_wildcard(variant, kwargs)
         _validate_wildcard(variant, wildcard)
-        out: dict[str, Any] = {"type": variant, WILDCARD_ALIAS: wildcard}
         unknown = [k for k in kwargs if k not in short_names]
         if unknown:
             raise TypeError(
@@ -148,9 +148,18 @@ def _make_factory(variant: str, spec) -> Callable[..., dict]:
                 f"(Pass ``all_params=FREE`` or ``all_params=Fixed(DEFAULT)`` -- or the "
                 f"synonym ``other_params=`` -- to set the policy.)"
             )
-        for short in short_names:
-            if short in kwargs and kwargs[short] is not _UNSET:
-                out[short] = kwargs[short]
+        out: dict[str, Any] = {"type": variant}
+        # Per-parameter entries before the wildcard.
+        param_entries: dict[str, Any] = {
+            short: kwargs[short]
+            for short in short_names
+            if short in kwargs and kwargs[short] is not _UNSET
+        }
+        out.update(param_entries)
+        # Wildcard LAST: 'all_params' when it is the only parameter
+        # directive, 'other_params' when explicit per-param entries precede it.
+        wildcard_key = WILDCARD_ALIAS if not param_entries else WILDCARD_ALIAS_OTHER
+        out[wildcard_key] = wildcard
         return out
 
     # Real signature so IDEs see per-parameter kwargs.

@@ -25,7 +25,7 @@ Examples
 >>> builders.dust.emission.dale2014(
 ...     all_params=Fixed(DEFAULT), alpha_dale=Fixed(2.0)
 ... )  # doctest: +SKIP
-{'type': 'dale2014', 'all_params': Fixed(DEFAULT), 'alpha_dale': Fixed(2.0)}
+{'type': 'dale2014', 'alpha_dale': Fixed(2.0), 'other_params': Fixed(DEFAULT)}
 """
 
 from __future__ import annotations
@@ -35,7 +35,7 @@ from collections.abc import Callable
 from tengri.builders._factory import make_factory, short_form
 from tengri.parameters.groups import _valid_dust_emission_types
 from tengri.parameters.registry import recipe_parameters
-from tengri.parameters.sentinels import FREE, WILDCARD_ALIAS
+from tengri.parameters.sentinels import FREE, WILDCARD_ALIAS, WILDCARD_ALIAS_OTHER
 
 _PREFIXES = ("dust_",)
 # Param names that belong to dust *emission* rather than attenuation.
@@ -138,8 +138,8 @@ def relaxed_energy_balance(model: str = "dale2014", *, sigma: float = 0.2) -> di
     Returns
     -------
     dict
-        A ``dust_emission`` group dict, e.g. ``{'type': 'dale2014', 'all_params': Fixed(DEFAULT),
-        'eta_balance': LogNormal(mu=0.0, sigma=0.2)}``.
+        A ``dust_emission`` group dict, e.g. ``{'type': 'dale2014',
+        'eta_balance': LogNormal(mu=0.0, sigma=0.2), 'other_params': Fixed(DEFAULT)}``.
 
     Examples
     --------
@@ -162,8 +162,10 @@ def relaxed_energy_balance(model: str = "dale2014", *, sigma: float = 0.2) -> di
         raise ValueError(f"Unknown dust emission model {model!r}. Available: {available()}")
     return {
         "type": model,
-        WILDCARD_ALIAS: Fixed(DEFAULT),
         "eta_balance": LogNormal(mu=0.0, sigma=sigma),
+        # Per-param entry above means this wildcard is spelled/positioned as
+        # 'other_params', LAST (the emission convention).
+        WILDCARD_ALIAS_OTHER: Fixed(DEFAULT),
     }
 
 

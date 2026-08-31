@@ -75,7 +75,7 @@ from tengri.builders._factory import (
 from tengri.builders.agn import atten, blr, disc, feii, nlr, torus
 from tengri.parameters.groups import _AGN_PARTITION
 from tengri.parameters.registry import recipe_parameters
-from tengri.parameters.sentinels import FREE, WILDCARD_ALIAS
+from tengri.parameters.sentinels import FREE, WILDCARD_ALIAS, WILDCARD_ALIAS_OTHER
 
 _AXIS_MODULES = {
     "disc": disc,
@@ -143,13 +143,23 @@ def composable(**kwargs: Any) -> dict:
             f"(Pass ``all_params=FREE`` or ``all_params=Fixed(DEFAULT)`` -- or the "
             f"synonym ``other_params=`` -- to set the policy.)"
         )
-    out: dict[str, Any] = {"type": "composable", WILDCARD_ALIAS: wildcard}
-    for short in _SHARED_SHORT_PARAMS:
-        if short in kwargs and kwargs[short] is not UNSET:
-            out[short] = kwargs[short]
+    out: dict[str, Any] = {"type": "composable"}
+    # Sub-block dicts are structural selectors, not per-parameter overrides
+    # (per the emission convention), so they're placed among the settings.
     for axis, value in sub_blocks.items():
         if value is not None:
             out[axis] = value
+    param_entries: dict[str, Any] = {
+        short: kwargs[short]
+        for short in _SHARED_SHORT_PARAMS
+        if short in kwargs and kwargs[short] is not UNSET
+    }
+    out.update(param_entries)
+    # Wildcard LAST: 'all_params' when it is the only parameter directive
+    # (sub-blocks don't count), 'other_params' when shared per-param
+    # overrides precede it.
+    wildcard_key = WILDCARD_ALIAS if not param_entries else WILDCARD_ALIAS_OTHER
+    out[wildcard_key] = wildcard
     return out
 
 

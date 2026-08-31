@@ -56,11 +56,18 @@ class TestBuilderAllParams:
         assert sfh_dict["all_params"] is FREE
 
     def test_builder_all_params_with_override(self):
-        """Builder with all_params= and per-param overrides."""
+        """Builder with all_params= and per-param overrides.
+
+        A per-param override alongside the wildcard means the emitted dict
+        spells the wildcard ``other_params`` (placed last), not
+        ``all_params``: the emission convention, not an input restriction --
+        ``all_params=`` is still accepted on the call.
+        """
         sfh_dict = builders.sfh.dpl(all_params=Fixed(DEFAULT), alpha=Uniform(0.5, 3.0))
         assert sfh_dict["type"] == "dpl"
-        assert sfh_dict["all_params"] == Fixed(DEFAULT)
+        assert sfh_dict["other_params"] == Fixed(DEFAULT)
         assert sfh_dict["alpha"] == Uniform(0.5, 3.0)
+        assert list(sfh_dict.keys())[-1] == "other_params"
 
     def test_builder_defaults_retired_raises(self):
         """Builder rejects retired defaults= with TypeError."""
