@@ -6,13 +6,15 @@ Full traceback lands at a concrete-value check in JAX tracing.
 """
 
 import os
+
 os.environ.setdefault("JAX_PLATFORMS", "cpu")
 
 import jax
 import jax.numpy as jnp
+
 jax.config.update("jax_enable_x64", True)
 
-from tengri import Fixed, Observation, Parameters, Photometry, SEDModel, Uniform, WavePrecomp
+from tengri import Fixed, Observation, Parameters, Photometry, SEDModel, Uniform
 from tengri.sps.dsps_wrapper import load_ssp_data
 
 # Load SSP data
@@ -70,11 +72,13 @@ fixed_params = {k: v for k, v in params.items() if k not in free_param_names}
 print(f"Free params subdict: {list(free_params.keys())}")
 print(f"Fixed params subdict: {list(fixed_params.keys())}")
 
+
 # Attempt the gradient: differentiate loss over free params only
 def loss_fn(p_free):
     # Merge free params with fixed params for full prediction
     p_full = {**fixed_params, **p_free}
     return jnp.sum(model.predict_photometry(p_full))
+
 
 try:
     grad_fn = jax.jit(jax.grad(loss_fn))
@@ -85,4 +89,5 @@ except Exception as exc:
     print(f"\nGradient FAILED with {type(exc).__name__}:")
     print(f"{exc}")
     import traceback
+
     traceback.print_exc()
