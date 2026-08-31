@@ -251,6 +251,22 @@ pythonpath = ["src"]
 # tests while 157 files declared it. Registered below; the flag keeps the class
 # from recurring.
 addopts = "--tb=short --strict-markers -m 'not crossval and not slow and not benchmark' -n auto --dist=loadfile"
+# `xfail_strict` is the `--strict-markers` argument one level down. Pytest's
+# default is False, which means a test marked `xfail` that *starts passing*
+# reports XPASS -- and XPASS counts as a pass. The run stays green and nobody
+# is told the bug was fixed, so the marker sits there and the test never comes
+# back. That is the same failure that left two `@pytest.mark.skip` tests dead
+# after their defect was repaired (#2064): a marker whose removal nothing
+# prompts.
+#
+# Setting it changes nothing today, deliberately. All 32 xfail markers in the
+# tree are explicit -- 16 `strict=True`, 16 `strict=False` -- and an explicit
+# `strict=False` still wins. The 16 are the #1728 physics-adjudication set in
+# tests/crossval/, where a number may legitimately drift back across the pin
+# and XPASS is the wanted behaviour. What this catches is the *next* bare
+# `@pytest.mark.xfail`, which would otherwise be inert from the day the code
+# beneath it was fixed.
+xfail_strict = true
 markers = [
     "slow: heavy end-to-end tests (inference/integration trees); excluded from the default run",
     "network: test genuinely exercises a network path; exempt from the conftest network guard (#1546)",
