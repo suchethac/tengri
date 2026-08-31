@@ -485,8 +485,16 @@ def _toy_fitter():
 
     try:
         ssp = tengri.load_ssp("fsps_prsc_miles_chabrier", download=False)
-    except Exception as exc:  # pragma: no cover - environment dependent
-        pytest.skip(f"SSP grid unavailable: {exc}")
+    except FileNotFoundError as exc:
+        # FileNotFoundError and nothing wider. `load_ssp` documents this as the
+        # exception for "the grid is in none of the data dirs and download is
+        # off", which is the one environment condition worth skipping over. A
+        # bare `except Exception` here would swallow a genuine defect inside
+        # `load_ssp` and report it as an absent optional dependency, which is
+        # #1615 exactly -- and is what
+        # tests/contract/test_broad_except_into_skip_does_not_spread.py exists
+        # to stop spreading.
+        pytest.skip(f"SSP grid not present locally: {exc}")
 
     obs = Observation(photometry=Photometry.from_names(["sdss_g", "sdss_r", "sdss_i"]))
     model = tengri.SEDModel.build(
