@@ -893,6 +893,55 @@ def test_sweep_nuts_rows_match_the_grid_cell_budget():
     assert "n_chains=2" in branches["mcmc_raytrace"]
 
 
+def test_sweep_raytrace_uses_backend_default_step():
+    """Ray tracing uses the backend's mode-aware step size, not a constant override.
+
+    The 0.05 constant from the D~137 benchmark disabled the backend's 0.03*sqrt(D)*0.3
+    correction for MAP initialization, causing 0% acceptance on D=8 (#2089). Both cold
+    and warm fit calls must omit step_size so the default engages.
+
+    Mutant: reintroduce ``step_size=0.05`` in either fit call -> fails; recorded.
+    """
+    import re
+
+    source = (PAPER1 / "run_backend_sweep.py").read_text()
+    # Split the dispatch into ``{method name: branch body}``.
+    parts = re.split(r'(?:el)?if method == "(\w+)":', source)
+    branches = dict(zip(parts[1::2], parts[2::2]))
+
+    raytrace_branch = branches["mcmc_raytrace"]
+    # Extract the two forward.fit calls (cold and warm).
+    calls = re.findall(r"forward\.fit\(\n(.*?)\n\s*\)", raytrace_branch, re.S)
+    assert len(calls) == 2, "expected a cold and a warm fit"
+    for i, call in enumerate(calls):
+        # Ensure NO step_size argument is present in either call.
+        assert not re.search(r"step_size\s*=", call), f"call {i}: step_size should not be set"
+
+
+def test_sweep_hmc_runs_preconditioned():
+    """HMC runs with preconditioned mass matrix for ~10x ESS/s gain (#2089).
+
+    The 2026-08 benchmark measured preconditioned L=50 near 10× faster per ESS
+    than unpreconditioned. Both cold and warm fit calls must pass precondition=True.
+
+    Mutant: drop ``precondition=True`` from either fit call -> fails; recorded.
+    """
+    import re
+
+    source = (PAPER1 / "run_backend_sweep.py").read_text()
+    # Split the dispatch into ``{method name: branch body}``.
+    parts = re.split(r'(?:el)?if method == "(\w+)":', source)
+    branches = dict(zip(parts[1::2], parts[2::2]))
+
+    hmc_branch = branches["mcmc_hmc"]
+    # Extract the two forward.fit calls (cold and warm).
+    calls = re.findall(r"forward\.fit\(\n(.*?)\n\s*\)", hmc_branch, re.S)
+    assert len(calls) == 2, "expected a cold and a warm fit"
+    for i, call in enumerate(calls):
+        # Ensure precondition=True is present in both calls.
+        assert re.search(r"precondition\s*=\s*True", call), f"call {i}: precondition=True required"
+
+
 def test_saves_are_atomic_no_tmp_left_and_content_complete(tmp_path):
     """Both of a fit's writes land through a temporary sibling and ``os.replace``.
 

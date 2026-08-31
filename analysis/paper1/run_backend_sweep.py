@@ -237,6 +237,7 @@ def run_backend_sweep(
                     n_chains=4,
                     n_leapfrog_steps=50,
                     dense_mass_matrix=False,
+                    precondition=True,  # 2026-08 benchmark: preconditioned L=50 ~10x ESS/s gain
                 )
                 t_cold = time.perf_counter() - t_start
 
@@ -251,15 +252,17 @@ def run_backend_sweep(
                     n_chains=4,
                     n_leapfrog_steps=50,
                     dense_mass_matrix=False,
+                    precondition=True,  # 2026-08 benchmark: preconditioned L=50 ~10x ESS/s gain
                 )
                 t_warm = time.perf_counter() - t_start_warm
 
             elif method == "mcmc_raytrace":
-                # Ray tracing with step_size tuning (D~8 needs smaller steps).
-                # ``run_raytrace(context, *, key, init_from=None, n_burnin=100,
-                # n_steps=500, n_chains=1, n_leapfrog_steps=10, step_size=None,
-                # refresh_rate=0.0, verbose=True)`` — it takes n_burnin/n_steps,
-                # not n_warmup/n_samples, and an unknown name is a TypeError.
+                # Ray tracing: use the backend's mode-aware step size. The 0.05
+                # constant came from the D~137 benchmark; the backend defaults to
+                # 0.03*sqrt(D) (D<=10) times 0.3 when starting from a MAP point
+                # estimate, correcting for the high-curvature mode that would
+                # otherwise collapse acceptance to ~0%. Passing the constant
+                # disabled this correction and caused 0.0% acceptance.
                 posterior = forward.fit(
                     data,
                     key=key,
@@ -267,7 +270,6 @@ def run_backend_sweep(
                     n_burnin=400,
                     n_steps=400,
                     n_chains=2,
-                    step_size=0.05,  # Sharp viability cliff at ~0.06
                 )
                 t_cold = time.perf_counter() - t_start
 
@@ -280,7 +282,6 @@ def run_backend_sweep(
                     n_burnin=400,
                     n_steps=400,
                     n_chains=2,
-                    step_size=0.05,
                 )
                 t_warm = time.perf_counter() - t_start_warm
 
@@ -321,6 +322,14 @@ def run_backend_sweep(
                 rhat_dict = posterior.rhat()
                 rhat_max = max(float(v) for v in rhat_dict.values()) if rhat_dict else None
                 results_dict["rhat_max"] = rhat_max
+
+            # Add backend-specific diagnostics: raytrace exposes acceptance rate
+            # and resolved step size (#2089).
+            if method == "mcmc_raytrace" and posterior.diagnostics is not None:
+                if "accept_rate" in posterior.diagnostics:
+                    results_dict["acceptance"] = posterior.diagnostics["accept_rate"]
+                if "step_size" in posterior.diagnostics:
+                    results_dict["step_size"] = posterior.diagnostics["step_size"]
 
             # Extract marginal samples for log M*, log SFR100, dust optical depth
             fixed_values = sed_model.spec.get_fixed_values()

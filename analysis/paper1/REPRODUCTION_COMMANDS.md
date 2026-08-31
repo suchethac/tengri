@@ -353,6 +353,6 @@ PYTHONPATH=$PWD/src JAX_PLATFORMS=cpu python analysis/paper1/fig07_backends.py \
 
 **Noted limitations:**
 - Sampler budgets from run_backend_sweep.py (lines 99–210): MAP (500 steps + 8 restarts); Laplace (Gaussian);
-  MCMC/Auto (600+600x2); NUTS (600+600x2); HMC (200+300x4, L=50); Ray Tracing (400+400x2, step=0.05)
+  MCMC/Auto (600+600x2); NUTS (600+600x2); HMC (200+300x4, L=50, preconditioned); Ray Tracing (400+400x2, backend's mode-aware default step)
 - The sweep script saves JSON diagnostics only; full posterior samples are not persisted to NPZ files
 - Agreement summary (sidecar) computed only when all samplers present (requires full sweep, not smoke subset)
