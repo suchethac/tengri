@@ -188,6 +188,9 @@ _CANONICAL_METHODS = {
     "mcmc_dynamic_hmc",
     "mcmc_chees",
     "mcmc_smc",  # tempered Sequential Monte Carlo (prior -> posterior)
+    "mcmc_barker",  # Barker proposal: 1 gradient/draw, branch-free
+    "mcmc_mala",  # MALA: the control that isolates Barker's proposal
+    "mcmc_hmc_lowrank",  # fixed-L HMC, rank-k mass matrix from warmup
     "mcmc_ghmc",
     "mcmc_mclmc",
     "mcmc_adjusted_mclmc",

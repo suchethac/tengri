@@ -183,6 +183,52 @@ FLAT_UNSUPPORTED: dict[str, str] = {
         "the structure rather than pending a measurement. Run mcmc_nuts or "
         "mcmc_hmc for the hierarchical posterior."
     ),
+    "mcmc_barker": (
+        "a first-order proposal's optimal step size scales as D^(-1/3) against "
+        "HMC's D^(-1/4), so the gap widens with dimension -- and hierarchical D "
+        "grows with the catalog (this seam's own two-galaxy fixture is D=516). "
+        "The one measurement that exists runs the wrong way already: at "
+        "single-galaxy D=8 on 05_fitting_photometry, Barker spent 52,466 "
+        "gradients per effective sample against NUTS's 21,604 on the same mock "
+        "and seed, 2.4x worse, at split R-hat 2.96 and a distinct-draw fraction "
+        "of 0.544 -- 46% of its draws were repeats "
+        "(bench/reports/2026-08-31_blackjax_sampler_survey.md, Finding 2). "
+        "Nothing has measured it at hierarchical width, and wiring a driver on "
+        "the strength of a single unfavorable D=8 row is exactly the "
+        "extrapolation this module's docstring refuses. Run mcmc_nuts or "
+        "mcmc_hmc for the hierarchical posterior."
+    ),
+    "mcmc_mala": (
+        "the same D^(-1/3) scaling as mcmc_barker, and worse: MALA's Gaussian "
+        "proposal must shrink to the STIFFEST direction, where Barker's "
+        "skew-symmetric one need not. Measured on one D=8 posterior at an equal "
+        "0.574 acceptance target, MALA's adapted step size was 4.6e-05 against "
+        "Barker's 1.27e-02, a factor of 275 "
+        "(bench/reports/2026-08-31_blackjax_sampler_survey.md). A hierarchical "
+        "posterior is defined by a tilt across galaxy latents and population "
+        "hyperparameters, i.e. by exactly the heterogeneous scales that "
+        "penalty measures. It also exists as mcmc_barker's CONTROL, so driving "
+        "it hierarchically while its subject is refused would invert the "
+        "comparison it was built for. Run mcmc_nuts or mcmc_hmc for the "
+        "hierarchical posterior."
+    ),
+    "mcmc_hmc_lowrank": (
+        "the mass matrix is a rank-k correction to a diagonal with k fixed at "
+        "max_rank (default 10), and the rank the geometry actually needs grows "
+        "with the catalog. Measured on the D=74 stoch-field fixture, ONE "
+        "galaxy's likelihood puts 7 of 74 metric eigenvalues above twice the "
+        "median, with lambda_20/lambda_min = 1.005 -- a diagonal floor plus "
+        "about seven stiff directions "
+        "(bench/reports/2026-08-31_blackjax_sampler_survey.md, Finding 5). N "
+        "galaxies contribute their own such directions, so a two-galaxy fit "
+        "already wants ~14 and rank 10 is short before the catalog is "
+        "interesting. The failure is silent rather than loud: an "
+        "under-ranked correction is still a valid positive-definite mass "
+        "matrix, it is merely the wrong one, so the fit returns draws and no "
+        "diagnostic reports the truncation. Choosing max_rank at hierarchical "
+        "width is unmeasured. Run mcmc_nuts or mcmc_hmc for the hierarchical "
+        "posterior."
+    ),
 }
 
 

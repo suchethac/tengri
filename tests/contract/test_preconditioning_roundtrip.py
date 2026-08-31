@@ -152,6 +152,31 @@ _FIT_KWARGS: dict[str, dict] = {
     "pathfinder": dict(n_samples=250, maxiter=30),
     "vi_fullrank": dict(n_steps=3000, n_samples=250),
     "vi_meanfield": dict(n_steps=3000, n_samples=250),
+    # The three below are samplers, so they take the Hamiltonian budget --
+    # minus ``dense_mass_matrix``, which they do not have and must not be
+    # handed. That is the same rule as the ELBO backends above, arriving from
+    # the other direction: those omit a knob because they are not samplers,
+    # these because their mass matrix is not a dense-or-diagonal choice.
+    #
+    # ``mcmc_barker`` and ``mcmc_mala`` run at an IDENTITY mass matrix on
+    # purpose, and it is load-bearing rather than incidental: MALA's BlackJAX
+    # kernel takes no mass matrix at all, so the pair share one adaptation and
+    # differ only in the proposal, which is the only way Barker's robustness
+    # claim is testable (bench/reports/2026-08-31_blackjax_sampler_survey.md).
+    # Their geometry comes from ``precondition=`` -- exactly what this file
+    # tests -- and from nowhere else.
+    #
+    # ``mcmc_hmc_lowrank``'s mass matrix is a rank-k correction to a diagonal
+    # from ``blackjax.window_adaptation_low_rank``; ``dense_mass_matrix`` names
+    # a choice its warmup does not offer.
+    #
+    # The draw budget is raised for the two first-order samplers because their
+    # draws are single gradient steps rather than trajectories -- the units
+    # error 2026-08-30_mclmc_tuning.md is a whole report about. 1000 of them is
+    # still cheaper than the 250 NUTS trajectories above.
+    "mcmc_barker": dict(n_warmup=250, n_samples=1000, n_chains=1),
+    "mcmc_mala": dict(n_warmup=250, n_samples=1000, n_chains=1),
+    "mcmc_hmc_lowrank": dict(n_warmup=250, n_samples=250, n_chains=1),
 }
 
 

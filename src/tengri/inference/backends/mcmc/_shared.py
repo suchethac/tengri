@@ -3130,3 +3130,357 @@ def _sequential_chains(
     if isinstance(stacked, tuple):
         return tuple(_flatten(a) for a in stacked)
     return _flatten(stacked)
+
+
+# ---------------------------------------------------------------------------
+# First-order samplers: Barker and MALA
+# ---------------------------------------------------------------------------
+#
+# One gradient per step, one scalar knob, and -- the property that motivates
+# them here -- no ragged control flow anywhere. NUTS compiles a tree-doubling
+# ``lax.while_loop`` and pays 75% of a cold fit in XLA
+# (``bench/reports/2026-08-30_mclmc_tuning.md``: 189.4 s cold against 46.8 s
+# warm); these compile a fixed-length ``lax.scan`` of a straight-line kernel.
+#
+# The pair is deliberate and the MALA arm is a CONTROL, not a second offering.
+# Barker's claim [1]_ is that its skew-symmetric proposal degrades gracefully
+# when one direction's scale is wrong for the global step size -- which is
+# tengri's 1e5-1e8 conditioning. That claim is only testable against a sampler
+# identical except for the proposal.
+# ``bench/reports/2026-08-31_catalog_preconditioning.md`` Finding 5 is what
+# happens without such a control: 40% of a measured "ChEES loses" turned out to
+# be a mass matrix one arm had and the other did not.
+#
+# Both arms therefore share ONE adaptation -- step size only, by dual
+# averaging, at an identity mass matrix -- so the only difference between them
+# is the proposal. Geometry comes from ``preconditioning.py``'s analytic
+# ``J^T N^-1 J + I`` through the caller's change of variables, never from an
+# estimated mass matrix, so neither arm can win by carrying a metric the other
+# lacks.
+#
+# .. [1] S. Livingstone and G. Zanella, "The Barker proposal: combining
+#    robustness and efficiency in gradient-based MCMC", J. R. Stat. Soc. B,
+#    84, 496 (2022). arXiv:1908.11812. DOI: 10.1111/rssb.12482
+
+#: Optimal acceptance rate for both Barker and MALA in the high-dimensional
+#: limit [dimensionless].
+#:
+#: Not HMC's 0.8 and not ChEES's 0.651: a first-order Langevin-type proposal
+#: has its own scaling limit, and 0.574 is the classical MALA value (Roberts &
+#: Rosenthal 1998), which Livingstone & Zanella 2022 show Barker shares.
+#: Carrying the NUTS value across would tune both arms to the wrong place --
+#: the same class of error as ``run_ghmc`` dual-averaging a step size against
+#: an acceptance rate its kernel does not have
+#: (``bench/reports/2026-08-30_ghmc_meads_adaptation.md``).
+FIRST_ORDER_TARGET_ACCEPT_RATE: float = 0.574
+
+#: Dual-averaging starting step size for the first-order samplers
+#: [dimensionless].
+#:
+#: 0.1 rather than BlackJAX's 1.0: these posteriors are whitened to condition
+#: ~1 only at the expansion point, and a first-order proposal at step 1.0
+#: rejects essentially every draw on the way in, which leaves dual averaging
+#: climbing out of a flat region instead of adapting.
+FIRST_ORDER_INITIAL_STEP_SIZE: float = 0.1
+
+
+def _get_first_order_kernel(proposal: str):
+    """Return the BlackJAX kernel for ``"barker"`` or ``"mala"``.
+
+    Both are wrapped to one signature ``kernel(key, state, logdensity_fn,
+    step_size)`` so the warmup and the sampling scan below are literally the
+    same code for both arms. MALA's BlackJAX kernel takes no
+    ``inverse_mass_matrix`` at all; Barker's takes an optional one, and it is
+    left at ``None`` (identity) on purpose -- see the module comment above.
+
+    Parameters
+    ----------
+    proposal : str
+        ``"barker"`` or ``"mala"``.
+
+    Returns
+    -------
+    callable
+        ``kernel(rng_key, state, logdensity_fn, step_size)``.
+
+    Raises
+    ------
+    ValueError
+        If ``proposal`` is neither name.
+    """
+    import blackjax
+
+    if proposal == "barker":
+        base = blackjax.mcmc.barker.build_kernel()
+
+        def kernel(key, state, logdensity_fn, step_size):
+            return base(key, state, logdensity_fn, step_size, None)
+
+        return kernel
+    if proposal == "mala":
+        base = blackjax.mcmc.mala.build_kernel()
+
+        def kernel(key, state, logdensity_fn, step_size):
+            return base(key, state, logdensity_fn, step_size)
+
+        return kernel
+    raise ValueError(f"proposal must be 'barker' or 'mala', got {proposal!r}")
+
+
+def _first_order_init(proposal: str, position, logdensity_fn):
+    """Initial state for a Barker or MALA chain (both carry the same 3-tuple)."""
+    import blackjax
+
+    module = blackjax.mcmc.barker if proposal == "barker" else blackjax.mcmc.mala
+    return module.init(position, logdensity_fn)
+
+
+@functools.partial(jax.jit, static_argnums=(3, 5, 6, 7))
+def _first_order_full_scan(
+    init_flat,
+    warmup_key,
+    chain_keys,
+    logdensity_fn_2arg,
+    data_args,
+    n_warmup,
+    proposal,
+    target_accept_rate,
+):
+    """Outer JIT: dual-averaging step-size warmup plus a fixed-length scan.
+
+    One ``lax.scan`` for warmup and one for sampling, both of statically known
+    length, with a branch-free kernel body. There is no ``while_loop`` in this
+    program at all, which is the reason it is here.
+
+    The warmup adapts **only** the step size. Barker's kernel would accept an
+    ``inverse_mass_matrix`` and ``blackjax.window_adaptation`` would supply
+    one, but that is deliberately not done: MALA's kernel cannot take one, so
+    using it would make the two arms differ in two ways and the control would
+    stop controlling.
+
+    Parameters
+    ----------
+    init_flat : ndarray, shape (D,)
+        Initial position in the sampled (possibly whitened) latent space
+        [dimensionless].
+    warmup_key : PRNGKey
+        Key for the warmup scan.
+    chain_keys : ndarray, shape (n_chain, 2)
+        Pre-split keys; ``n_chain = n_burnin + n_samples``.
+    logdensity_fn_2arg : callable (static)
+        ``log_p(position, data_args)`` [nats].
+    data_args : pytree (traced)
+        Observed-data tensors. Opaque here: only ever forwarded.
+    n_warmup : int (static)
+        Dual-averaging steps.
+    proposal : str (static)
+        ``"barker"`` or ``"mala"``.
+    target_accept_rate : float (static)
+        Dual-averaging target [dimensionless].
+
+    Returns
+    -------
+    positions : ndarray, shape (n_chain, D)
+        Draws in the sampled latent space.
+    accept : ndarray, shape (n_chain,)
+        Per-draw Metropolis acceptance probability [dimensionless].
+    step_size : ndarray, shape ()
+        The dual-averaging final (averaged) step size [dimensionless].
+
+    Notes
+    -----
+    **JIT-compatible**: yes, and deliberately branch-free -- the whole program
+    is two ``lax.scan`` calls of statically known length.
+    """
+    from blackjax.adaptation.step_size import dual_averaging_adaptation
+
+    def ld_1arg(pos):
+        return logdensity_fn_2arg(pos, data_args)
+
+    kernel = _get_first_order_kernel(proposal)
+    da_init, da_update, da_final = dual_averaging_adaptation(target_accept_rate)
+
+    state = _first_order_init(proposal, init_flat, ld_1arg)
+    warmup_keys = jax.random.split(warmup_key, n_warmup)
+
+    def _warmup_step(carry, k):
+        """Advance one kernel step and feed its acceptance to dual averaging."""
+        s, da = carry
+        step_size = jnp.exp(da.log_step_size)
+        s, info = kernel(k, s, ld_1arg, step_size)
+        da = da_update(da, info.acceptance_rate)
+        return (s, da), info.acceptance_rate
+
+    (state, da_state), _ = jax.lax.scan(
+        _warmup_step,
+        (state, da_init(FIRST_ORDER_INITIAL_STEP_SIZE)),
+        warmup_keys,
+    )
+    step_size = da_final(da_state)
+
+    def _step(s, k):
+        """Advance the sampler by one step, returning position and acceptance."""
+        s, info = kernel(k, s, ld_1arg, step_size)
+        return s, (s.position, info.acceptance_rate)
+
+    _, (positions, accept) = jax.lax.scan(_step, state, chain_keys)
+    return positions, accept, step_size
+
+
+@functools.partial(jax.jit, static_argnums=(3, 5))
+def _first_order_chain_scan(
+    init_flat,
+    chain_keys,
+    step_size,
+    logdensity_fn_2arg,
+    data_args,
+    proposal,
+):
+    """Outer JIT: sampling only, with a step size from a cached adaptation.
+
+    Parameters
+    ----------
+    init_flat : ndarray, shape (D,)
+        Chain start [dimensionless].
+    chain_keys : ndarray, shape (n_chain, 2)
+        Pre-split keys.
+    step_size : ndarray, shape () (traced)
+        From a previous :func:`_first_order_full_scan` [dimensionless].
+    logdensity_fn_2arg : callable (static)
+        ``log_p(position, data_args)`` [nats].
+    data_args : pytree (traced)
+        Observed-data tensors.
+    proposal : str (static)
+        ``"barker"`` or ``"mala"``.
+
+    Returns
+    -------
+    positions : ndarray, shape (n_chain, D)
+        Draws in the sampled latent space.
+    accept : ndarray, shape (n_chain,)
+        Per-draw Metropolis acceptance probability [dimensionless].
+
+    Notes
+    -----
+    **JIT-compatible**: yes.
+    """
+
+    def ld_1arg(pos):
+        return logdensity_fn_2arg(pos, data_args)
+
+    kernel = _get_first_order_kernel(proposal)
+    state = _first_order_init(proposal, init_flat, ld_1arg)
+
+    def _step(s, k):
+        """Advance the sampler by one step, returning position and acceptance."""
+        s, info = kernel(k, s, ld_1arg, step_size)
+        return s, (s.position, info.acceptance_rate)
+
+    _, (positions, accept) = jax.lax.scan(_step, state, chain_keys)
+    return positions, accept
+
+
+# ---------------------------------------------------------------------------
+# Low-rank mass matrix window adaptation
+# ---------------------------------------------------------------------------
+#
+# ``preconditioning.py``'s own module docstring names the gap this fills:
+#
+#     "cond ~ 1e5 at the MAP. A diagonal mass matrix cannot cover that, and a
+#     dense one estimated from warmup draws is both noisy and memory-hungry."
+#
+# ``blackjax.window_adaptation_low_rank`` is the middle term -- a rank-k
+# correction to a diagonal, fitted by minimizing a Fisher divergence over the
+# warmup draws AND their gradients rather than by Welford covariance. It
+# returns a ``LowRankInverseMassMatrix(sigma, U, lam)`` pytree, which is
+# ``vmap``-transportable by construction (a built ``Metric`` is a bundle of
+# closures and is not).
+#
+# It is a FIXED metric, adapted once from warmup, so it does not address the
+# position-dependence that ``preconditioning.py``'s closing paragraph names. It
+# changes no control flow in the sampling scan at all: the kernel is
+# ``blackjax.hmc``, unchanged, so the sampling program -- and its compile cost
+# -- is the fixed-length leapfrog scan it already was.
+
+
+@functools.partial(jax.jit, static_argnums=(3, 5, 6, 7, 8))
+def _hmc_low_rank_full_scan(
+    init_flat,
+    warmup_key,
+    chain_keys,
+    logdensity_fn_2arg,
+    data_args,
+    n_warmup,
+    n_leapfrog,
+    max_rank,
+    target_accept_rate,
+):
+    """Outer JIT: low-rank window adaptation plus a fixed-length HMC scan.
+
+    Identical to :func:`_hmc_full_scan` except that the warmup is
+    ``blackjax.window_adaptation_low_rank`` rather than
+    ``blackjax.window_adaptation``, so the adapted inverse mass matrix is a
+    ``LowRankInverseMassMatrix`` pytree rather than a ``(D,)`` or ``(D, D)``
+    array.
+
+    Parameters
+    ----------
+    init_flat : ndarray, shape (D,)
+        Initial position in the sampled latent space [dimensionless].
+    warmup_key : PRNGKey
+        Key for warmup.
+    chain_keys : ndarray, shape (n_chain, 2)
+        Pre-split keys; ``n_chain = n_burnin + n_samples``.
+    logdensity_fn_2arg : callable (static)
+        ``log_p(position, data_args)`` [nats].
+    data_args : pytree (traced)
+        Observed-data tensors.
+    n_warmup : int (static)
+        Window adaptation steps.
+    n_leapfrog : int (static)
+        Leapfrog steps per proposal.
+    max_rank : int (static)
+        Rank of the correction to the diagonal.
+    target_accept_rate : float (static)
+        Dual-averaging target [dimensionless].
+
+    Returns
+    -------
+    positions : ndarray, shape (n_chain, D)
+        Draws in the sampled latent space.
+    divergent : ndarray, shape (n_chain,)
+        Per-draw divergence flag.
+    step_size : ndarray, shape ()
+        Adapted step size [dimensionless].
+    inv_mass_matrix : LowRankInverseMassMatrix
+        A pytree, not an array -- callers must not call ``float()`` on it.
+
+    Notes
+    -----
+    **JIT-compatible**: yes.
+    """
+    import blackjax
+
+    def ld_1arg(pos):
+        return logdensity_fn_2arg(pos, data_args)
+
+    warmup = blackjax.window_adaptation_low_rank(
+        blackjax.hmc,
+        ld_1arg,
+        max_rank=max_rank,
+        target_acceptance_rate=target_accept_rate,
+        num_integration_steps=n_leapfrog,
+    )
+    (state, parameters), _ = warmup.run(warmup_key, init_flat, num_steps=n_warmup)
+    step_size = parameters["step_size"]
+    inv_mass_matrix = parameters["inverse_mass_matrix"]
+
+    kernel = _get_hmc_kernel()
+
+    def _step(s, k):
+        """Advance HMC by one step, returning position and divergence flag."""
+        s, info = kernel(k, s, ld_1arg, step_size, inv_mass_matrix, n_leapfrog)
+        return s, (s.position, info.is_divergent)
+
+    _, (positions, divergent) = jax.lax.scan(_step, state, chain_keys)
+    return positions, divergent, step_size, inv_mass_matrix

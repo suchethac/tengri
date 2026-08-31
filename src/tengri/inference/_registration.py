@@ -36,11 +36,14 @@ from tengri.inference.backends.map_dispatch import (
 )
 from tengri.inference.backends.mcmc import (
     run_adjusted_mclmc as _ctx_run_adjusted_mclmc,
+    run_barker as _ctx_run_barker,
     run_chees as _ctx_run_chees,
     run_dynamic_hmc as _ctx_run_dynamic_hmc,
     run_ghmc as _ctx_run_ghmc,
     run_hmc as _ctx_run_hmc,
     run_hmc_is as _ctx_run_hmc_is,
+    run_hmc_low_rank as _ctx_run_hmc_low_rank,
+    run_mala as _ctx_run_mala,
     run_mclmc as _ctx_run_mclmc,
     run_nuts as _ctx_run_nuts,
     run_raytrace as _ctx_run_raytrace,
@@ -387,6 +390,53 @@ register_backend(
     legacy_fitter=False,
     accepts_precondition=True,
 )(_ctx_run_smc)
+
+register_backend(
+    "mcmc_barker",
+    tier="experimental",
+    short_doc=(
+        "Barker-proposal MCMC: one gradient per step, no trajectory, no tree, "
+        "and no branch anywhere in the compiled program -- two fixed-length "
+        "lax.scan calls. Its published claim is robustness to a step size that "
+        "is wrong for one direction's scale, which is this posterior's shape. "
+        "Metric from precondition=, never estimated. Measured against its own "
+        "MALA control in bench/reports/2026-08-31_blackjax_sampler_survey.md."
+    ),
+    requires=("blackjax",),
+    legacy_fitter=False,
+    accepts_precondition=True,
+)(_ctx_run_barker)
+
+register_backend(
+    "mcmc_mala",
+    tier="experimental",
+    short_doc=(
+        "MALA. Exists as the CONTROL for mcmc_barker -- same code path, same "
+        "step-size-only dual averaging, same identity mass matrix, differing "
+        "in the proposal alone -- so Barker's robustness claim is testable "
+        "rather than asserted. Registered rather than hidden behind an edit "
+        "because an ablation reachable only from source is one nobody re-runs."
+    ),
+    requires=("blackjax",),
+    legacy_fitter=False,
+    accepts_precondition=True,
+)(_ctx_run_mala)
+
+register_backend(
+    "mcmc_hmc_lowrank",
+    tier="experimental",
+    short_doc=(
+        "Fixed-L HMC whose mass matrix is a rank-k correction to a diagonal, "
+        "fitted from warmup draws AND gradients by Fisher divergence. The "
+        "middle term preconditioning.py's docstring says is missing between a "
+        "diagonal that cannot cover cond 1e5 and a dense one that is noisy and "
+        "memory-hungry. Sampling kernel and compile cost identical to mcmc_hmc, "
+        "so a head-to-head isolates the mass matrix."
+    ),
+    requires=("blackjax",),
+    legacy_fitter=False,
+    accepts_precondition=True,
+)(_ctx_run_hmc_low_rank)
 
 register_backend(
     "mcmc_adjusted_mclmc",
