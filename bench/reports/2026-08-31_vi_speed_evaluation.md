@@ -625,6 +625,11 @@ reintroducing the default-instead-of-clamp fails the second and *passes* the
 first; dropping `multipathfinder` from the patch list fails the first and
 *passes* the second.
 
+**The fix and its two tests ship separately, in PR #2119**, off `main` rather than
+off this branch: it repairs shipped code against an OOM kill and should not wait
+on the review of an evaluation report. This report describes it because this is
+where it was found.
+
 ### The design question this raises, which is bigger than Pathfinder
 
 **A monkeypatch-based cap cannot be made reliable against a library that takes
