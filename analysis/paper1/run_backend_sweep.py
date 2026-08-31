@@ -112,6 +112,45 @@ def sweep_npz_payload(posterior, results_dict: dict, sed_model) -> dict:
     return build_npz_payload(draws, diagnostics)
 
 
+def aggregate_sweep_summary(out_dir: Path, methods: tuple[str, ...] = SWEEP_METHODS) -> list[dict]:
+    """Aggregate every method's row from its ``{method}.json`` on disk, in ``methods`` order.
+
+    The single seam ``run_backend_sweep``'s summary write goes through, so a
+    ``--methods`` subset run cannot silently drop the other rows. Before this
+    (#2089), the summary was built from ``results`` -- the in-memory rows of
+    ONLY the methods just run -- so ``--methods mcmc_hmc,mcmc_raytrace``
+    overwrote a six-row ``summary.json`` with two rows; the other four JSONs
+    were still on disk, just no longer aggregated.
+
+    Reads from disk uniformly, including the methods just run: each method's
+    JSON is written mid-loop, before the summary is ever built, so by the time
+    this runs every just-run method's JSON already reflects the current run --
+    reading it back is equivalent to using the in-memory row and keeps one
+    source of truth for the summary's shape instead of two ways to reach it.
+
+    Args:
+        out_dir: Directory holding the per-method JSON files.
+        methods: Names to look for, in order (default: the full ``SWEEP_METHODS``,
+            not whatever subset a given run was invoked with -- the point is to
+            aggregate every method's file that exists on disk, not just this
+            run's).
+
+    Returns:
+        One dict per method whose ``{method}.json`` exists in ``out_dir``, in
+        ``methods`` order. A method with no file on disk is simply absent --
+        not an error -- so a fresh ``out_dir`` with only some methods run still
+        aggregates cleanly.
+    """
+    rows = []
+    for method in methods:
+        json_path = Path(out_dir) / f"{method}.json"
+        if not json_path.exists():
+            continue
+        with open(json_path) as f:
+            rows.append(json.load(f))
+    return rows
+
+
 def run_backend_sweep(
     methods: tuple[str, ...] = SWEEP_METHODS,
     out_dir: Path | None = None,
@@ -417,13 +456,15 @@ def run_backend_sweep(
 
     print("=" * 120)
 
-    # Save summary JSON
+    # Save summary JSON. Aggregated from every method's JSON on disk (#2089),
+    # not just ``results`` (this run's methods): a ``--methods`` subset run must
+    # refresh its own rows without truncating the other methods' rows away.
     summary_file = out_dir / "summary.json"
     summary_dict = {
         "gal_id": gal_id,
         "config": config_key,
         "n_params": sed_model.spec.n_free,
-        "backends": results,
+        "backends": aggregate_sweep_summary(out_dir),
     }
     with open(summary_file, "w") as f:
         json.dump(summary_dict, f, indent=2)

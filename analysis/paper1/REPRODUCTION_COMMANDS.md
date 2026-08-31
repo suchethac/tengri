@@ -105,6 +105,40 @@ pass, and `fit_summary.json` carries `adoption_pass` and `best_attempt` in each 
 - `results/fits/*.json` — Per-fit diagnostics, including `adoption_pass` and `best_attempt`
 - `results/fit_summary.json` — Aggregated summary table
 
+## Posterior-Predictive Photometry Post-Processing (postprocess_ppd.py)
+
+**Purpose:** No-refit recomputation of `model_photometry_median`/`_p16`/`_p84` for grid
+NPZs written before the posterior-predictive fix (#2089): the previous median was
+`predict_photometry` at the componentwise-median parameter vector, which for skewed,
+correlated posteriors (Config III's continuity ratios) sits off the posterior ridge
+(measured stored chi2/n of 8.88 and 12.38 against a true posterior-predictive 0.26 and
+0.18 on two cells). This script rebuilds each cell's model from its own JSON
+(`configs.config_I/II/III` + `configs.load_ssp_for` + `Observation`/`Photometry.from_names`),
+subsamples the ALREADY-SAVED draws in its NPZ, and rewrites just the three keys —
+every other key, and the fit itself, is untouched.
+
+**Command:**
+```bash
+cd analysis/paper1
+$python_exe postprocess_ppd.py [--cells 13097_III,16049_III] [--n-draws 200] [--out-dir DIR]
+```
+
+**Options:**
+- `--cells` — Comma-separated `{gal_id}_{config}` cells (default: every cell of
+  `run_candels_fits.GALAXIES` × `run_candels_fits.CONFIGS`). A cell with no NPZ on
+  disk is skipped with a warning, not an error.
+- `--n-draws` — Draws pushed through `predict_photometry` per cell (default: 200,
+  `fit_one.PPD_N_DRAWS`).
+- `--out-dir` — Directory holding the grid's NPZ/JSON files (default: `results/fits`).
+  Never descends into archive subdirectories (`agn_24497/`, `stale_met_ceiling_p03/`).
+
+**Outputs:** Rewrites `model_photometry_median`, `model_photometry_p16` and
+`model_photometry_p84` in each cell's existing `results/fits/<ID>_<config>.npz`
+(atomic tmp-sibling + `os.replace`, the same pattern `fit_one.py` uses); every other
+array in the NPZ is preserved unchanged. Logs the recomputed chi2/n per cell, read
+from the NPZ's own `obs_fnu`/`obs_sigma` (the cell's JSON carries diagnostics only,
+no per-band flux arrays, so there is no JSON fallback to read from in practice).
+
 ## Deliverable 3: Backend Sweep (run_backend_sweep.py)
 
 **Purpose:** Test all inference backends on one galaxy (13097) with one configuration (II).
@@ -139,7 +173,10 @@ $python_exe run_backend_sweep.py [--methods map,laplace] [--out-dir DIR]
 **Outputs:**
 - `<out-dir>/<method>.npz` — that method's thinned draws, one array per parameter under the parameter's own name (the schema `fit_one.py` writes, at the same `MAX_SAVED_DRAWS` cap), plus the diagnostics. `map` (and any method whose backend returns no draws; `laplace` returns 2000 draws by default and so is saved like the samplers) contributes its point estimate as length-1 arrays. Loads with `np.load(path, allow_pickle=False)`: a `None` diagnostic (the warm time of a row that has no warm run) is dropped and strings are stored as `np.str_` arrays, both of which the JSON keeps
 - `<out-dir>/<method>.json` — Method diagnostics, including the `None` warm times
-- `<out-dir>/summary.json` — Aggregated backend comparison
+- `<out-dir>/summary.json` — Aggregated backend comparison. Rebuilt by reading every
+  `SWEEP_METHODS` name's `{method}.json` off disk (`aggregate_sweep_summary`, #2089),
+  not just the methods this run just executed — a `--methods` subset run refreshes
+  its own rows without truncating `summary.json` down to that subset.
 
 ## NUTS Settings (Canonical from Quickstart)
 

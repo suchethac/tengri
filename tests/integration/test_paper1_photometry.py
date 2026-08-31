@@ -41,6 +41,7 @@ from __future__ import annotations
 import json
 import sys
 from pathlib import Path
+from typing import ClassVar
 
 import jax
 import numpy as np
@@ -420,7 +421,12 @@ def test_save_fit_outputs_writes_a_consistent_npz_for_every_configuration(config
         "sfh_sfr_median",
         "sfh_sfr_p16",
         "sfh_sfr_p84",
+        # Posterior-predictive photometry (#2089): median over PPD_N_DRAWS
+        # draws through predict_photometry, plus its p16/p84 -- not a single
+        # at-median-params point, which carried only the median key.
         "model_photometry_median",
+        "model_photometry_p16",
+        "model_photometry_p84",
         "obs_fnu",
         "obs_sigma",
         "filter_names",
@@ -438,8 +444,11 @@ def test_save_fit_outputs_writes_a_consistent_npz_for_every_configuration(config
     assert (arrays["sfh_sfr_median"] <= arrays["sfh_sfr_p84"] + 1e-30).all()
 
     n_bands = len(CANDELS_13097_FILTERS)
-    assert arrays["model_photometry_median"].shape == (n_bands,)
-    assert np.isfinite(arrays["model_photometry_median"]).all()
+    for name in ("model_photometry_median", "model_photometry_p16", "model_photometry_p84"):
+        assert arrays[name].shape == (n_bands,), name
+        assert np.isfinite(arrays[name]).all(), name
+    assert (arrays["model_photometry_p16"] <= arrays["model_photometry_median"] + 1e-30).all()
+    assert (arrays["model_photometry_median"] <= arrays["model_photometry_p84"] + 1e-30).all()
     np.testing.assert_array_equal(arrays["obs_fnu"], obs_fnu)
     np.testing.assert_array_equal(arrays["obs_sigma"], obs_sigma)
     assert list(arrays["filter_names"]) == CANDELS_13097_FILTERS
@@ -1362,3 +1371,202 @@ def test_agn_screen_excludes_rising_irac_candidates(monkeypatch):
     assert select_galaxies.has_rising_irac_colors(None, 1.23) is True
     # Both arms missing: exempt from the screen, kept.
     assert select_galaxies.has_rising_irac_colors(None, None) is False
+
+
+def test_model_photometry_is_posterior_predictive_not_at_median_params(tmp_path):
+    """The stored median is the median OF ``predict_photometry`` over draws, not
+    ``predict_photometry`` AT the componentwise-median parameter vector (#2089).
+
+    Peer verification (2026-09-01): for skewed, correlated posteriors (Config
+    III's continuity ratios) the at-median-params point sits off the posterior
+    ridge -- stored chi2/n read 8.88 (13097/III) and 12.38 (16049/III) against
+    a true posterior-predictive chi2/n of 0.26 and 0.18 from 200 draws pushed
+    through ``predict_photometry``; the stored model would draw ~15% below
+    every photometric point in Figure 5.
+
+    This stub reproduces the mechanism with a model whose ``predict_photometry``
+    is the nonlinear ``exp(a) + exp(b)`` of two ANTI-CORRELATED parameters. A
+    single parameter would not do: for any monotonic transform, the median
+    commutes with the transform (``median(f(x)) == f(median(x))``), so a
+    one-parameter ``exp`` could never show the gap regardless of skew. The bug
+    needs a joint, non-comonotonic pair of parameters -- exactly the
+    "correlated posterior" shape of the real defect -- and this pair is
+    deliberately anti-correlated (as ``a`` rises ``b`` falls) so no draw sits
+    at both parameters' marginal medians together.
+
+    Mutant: recompute at the componentwise-median parameter vector
+    (``{**fixed_values, **{k: float(np.median(v)) for k, v in samples_thin.items()}}``)
+    instead of taking the median over per-draw ``predict_photometry`` calls --
+    the assertion below (3.0862 vs 2.0) fails; recorded.
+    """
+    from types import SimpleNamespace
+
+    class _StubSpec:
+        def get_fixed_values(self):
+            return {}
+
+    class _StubModel:
+        spec = _StubSpec()
+
+        def predict(self, params):
+            return SimpleNamespace(
+                properties={"stellar_mass": 1e10, "sfr_100myr": 1.0, "sfr_10myr": 1.0}
+            )
+
+        def predict_state(self, params):
+            t = np.logspace(6.0, 10.0, 20)
+            return SimpleNamespace(derived={"sfh_grid_lbt_yr": t, "sfr_history": np.ones_like(t)})
+
+        def predict_photometry(self, params):
+            return np.array([np.exp(params["a"]) + np.exp(params["b"])])
+
+    # Anti-correlated (not comonotonic) draws: as ``a`` rises ``b`` falls.
+    a = np.array([-2.0, -1.0, 0.0, 1.0, 2.0])
+    b = np.array([2.0, 1.0, 0.0, -1.0, -2.0])
+    posterior = SimpleNamespace(samples={"a": a, "b": b})
+
+    npz_path, _json_path = fit_one.save_fit_outputs(
+        posterior,
+        {"gal_id": 1, "config": "I"},
+        [{"gal_id": 1, "config": "I"}],
+        [],
+        _StubModel(),
+        "I",
+        1,
+        tmp_path,
+        obs_fnu=np.array([1.0]),
+        obs_sigma=np.array([0.1]),
+        filter_names=["hst_f160w"],
+    )
+
+    with np.load(npz_path, allow_pickle=False) as npz:
+        median = float(npz["model_photometry_median"][0])
+        p16 = float(npz["model_photometry_p16"][0])
+        p84 = float(npz["model_photometry_p84"][0])
+
+    per_draw = np.exp(a) + np.exp(b)
+    expected_median = float(np.median(per_draw))
+    at_median_params_point = float(np.exp(np.median(a)) + np.exp(np.median(b)))
+    assert at_median_params_point == pytest.approx(2.0, rel=1e-9, abs=0)
+
+    # THE POINT: the stored value is the median OF the per-draw predictions...
+    assert median == pytest.approx(expected_median, rel=1e-9, abs=0)
+    # ... measurably different from predict_photometry AT the median params.
+    assert median > at_median_params_point * 1.2
+
+    assert p16 <= median <= p84
+    assert p16 == pytest.approx(float(np.percentile(per_draw, 16)), rel=1e-9, abs=0)
+    assert p84 == pytest.approx(float(np.percentile(per_draw, 84)), rel=1e-9, abs=0)
+
+
+def test_postprocess_ppd_updates_npz_preserving_keys(tmp_path, monkeypatch):
+    """The no-refit pass writes the three PPD keys and preserves everything else.
+
+    ``rebuild_model`` is monkeypatched to a stub model (no SSP grid or CANDELS
+    catalog needed): the target of this test is the read-modify-atomic-write
+    path over an existing NPZ, not model construction (covered by
+    ``rebuild_model`` reading a real cell's JSON, exercised implicitly by every
+    other test in this module that builds a real ``configs.config_*`` model).
+
+    Mutant: write only the new keys (``np.savez(tmp, **quantiles)`` instead of
+    ``{**npz_payload, **quantiles}``) -- the sentinel and ``p`` assertions below
+    fail with a ``KeyError``; recorded.
+    """
+    import postprocess_ppd
+
+    class _StubSpec:
+        free_params: ClassVar[list[str]] = ["p"]
+
+        def get_fixed_values(self):
+            return {}
+
+    class _StubModel:
+        spec = _StubSpec()
+
+        def predict_photometry(self, params):
+            return np.array([params["p"] ** 2 + 1.0])
+
+    monkeypatch.setattr(
+        postprocess_ppd,
+        "rebuild_model",
+        lambda gal_id, config_key, out_dir: (_StubModel(), ["hst_f160w"], 1.0),
+    )
+
+    npz_path = tmp_path / "13097_I.npz"
+    draws = np.linspace(-2.0, 2.0, 9)
+    sentinel = np.array([1234.5, 6789.0])
+    np.savez(npz_path, p=draws, sentinel_extra_key=sentinel)
+
+    # No obs_fnu/obs_sigma in this NPZ: chi2/n cannot be computed, and the
+    # function says so rather than raising or guessing.
+    chi2_n = postprocess_ppd.postprocess_cell(13097, "I", tmp_path, n_draws=9)
+    assert chi2_n is None
+
+    with np.load(npz_path, allow_pickle=False) as npz:
+        arrays = {k: npz[k] for k in npz.files}
+
+    for key in ("model_photometry_median", "model_photometry_p16", "model_photometry_p84"):
+        assert key in arrays, key
+        assert arrays[key].shape == (1,)
+        assert np.isfinite(arrays[key]).all()
+
+    expected = np.median(draws**2 + 1.0)
+    assert float(arrays["model_photometry_median"][0]) == pytest.approx(expected, rel=1e-9, abs=0)
+
+    # THE POINT: every pre-existing key survives the write, sentinel included.
+    np.testing.assert_array_equal(arrays["sentinel_extra_key"], sentinel)
+    np.testing.assert_array_equal(arrays["p"], draws)
+
+    # Atomic write: nothing but the finished file is left behind.
+    assert sorted(p.name for p in tmp_path.iterdir()) == ["13097_I.npz"]
+
+
+def test_sweep_summary_aggregates_all_method_files_on_disk(tmp_path):
+    """The summary write reads every method's JSON off disk, not just this run's rows.
+
+    Before this (#2089), ``summary.json`` was rebuilt from ``results`` -- the
+    in-memory rows of only the methods just run -- so ``--methods
+    mcmc_hmc,mcmc_raytrace`` overwrote a six-row summary with two rows; the
+    other four JSONs stayed on disk, simply no longer aggregated.
+
+    Mutant: aggregate only the run's own in-memory rows instead of reading
+    every ``{method}.json`` off disk -- the three-row assertion below fails
+    (only whatever subset was "just run" would appear); recorded.
+    """
+    import inspect
+
+    import run_backend_sweep
+
+    for method, payload in [
+        ("map", {"method": "map", "gal_id": 13097, "wall_time_cold_s": 1.0}),
+        ("laplace", {"method": "laplace", "gal_id": 13097, "wall_time_cold_s": 2.0}),
+        ("mcmc_hmc", {"method": "mcmc_hmc", "gal_id": 13097, "wall_time_cold_s": 3.0}),
+    ]:
+        (tmp_path / f"{method}.json").write_text(json.dumps(payload))
+
+    # THE POINT: three method JSONs on disk, all three aggregate, in
+    # SWEEP_METHODS order (not insertion order, not alphabetical).
+    rows = run_backend_sweep.aggregate_sweep_summary(tmp_path)
+    assert [r["method"] for r in rows] == ["map", "laplace", "mcmc_hmc"]
+
+    # A subsequent subset run refreshes ITS method's file and leaves the
+    # others' files untouched; the same default-args call the production
+    # summary write actually makes picks up the refresh AND keeps the rest.
+    (tmp_path / "mcmc_hmc.json").write_text(
+        json.dumps({"method": "mcmc_hmc", "gal_id": 13097, "wall_time_cold_s": 99.0})
+    )
+    refreshed = run_backend_sweep.aggregate_sweep_summary(tmp_path)
+    assert len(refreshed) == 3
+    by_method = {r["method"]: r for r in refreshed}
+    assert by_method["mcmc_hmc"]["wall_time_cold_s"] == 99.0
+    assert by_method["map"]["wall_time_cold_s"] == 1.0
+    assert by_method["laplace"]["wall_time_cold_s"] == 2.0
+
+    # A method with no JSON on disk is absent, not an error.
+    assert "mcmc_raytrace" not in by_method
+
+    # Not a parallel definition: the production summary write actually calls
+    # this seam (default methods=SWEEP_METHODS), never the run's own rows.
+    source = inspect.getsource(run_backend_sweep.run_backend_sweep)
+    assert "aggregate_sweep_summary(out_dir)" in source
+    assert '"backends": results' not in source
