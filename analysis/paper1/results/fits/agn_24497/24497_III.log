@@ -1,0 +1,6 @@
+2026-08-31 18:11:56,589 - __main__ - INFO - Applied 5.0% systematic error floor in quadrature. Mean floor contribution: 7.362e-29 erg/s/cm2/Hz
+2026-08-31 18:12:06,202 - __main__ - INFO - Galaxy 24497 (z=1.031): 12 detected bands
+2026-08-31 18:12:06,202 - __main__ - INFO - Config III: 11 free parameters
+2026-08-31 18:12:06,202 - __main__ - INFO - Attempt 1/2: target_accept 0.85, warmup 600, diagonal mass
+2026-08-31 18:12:58,274 - tengri.inference.backends.mcmc.nuts - INFO - NUTS: 11 parameters, 600 warmup, 600 samples, target_accept=0.85
+2026-08-31 18:19:18,354 - tengri.inference.backends.mcmc.nuts - INFO -   Warmup complete (380.1s). Step size: 0.1236

@@ -1,0 +1,1 @@
+Galaxy 24497 removed from the grid 2026-08-31 (owner decision): rising IRAC colors (CH1-CH4 = +1.23 AB) mark it as an AGN; its adopted I/II cells are corner-pinned misfits (chi2/n 61 and 45; met at the -2.0 floor, tau_bc at the 3.0 ceiling on II) that the divergence/R-hat adoption bar cannot detect. Records kept as evidence. Replaced by 16049.

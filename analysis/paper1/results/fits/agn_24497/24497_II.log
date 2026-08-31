@@ -1,0 +1,19 @@
+2026-08-31 18:10:50,744 - __main__ - INFO - Applied 5.0% systematic error floor in quadrature. Mean floor contribution: 7.362e-29 erg/s/cm2/Hz
+/Users/suchethacooray/Projects/tengri/.claude/worktrees/fix-2089-candels/src/tengri/components/stellar/sps/dsps_wrapper.py:354: UserWarning: 'ssp_prsc_miles_chabrier_wNE_logGasU-3.0_logGasZ0.0.h5' is a wNE (with-Nebular-Emission) SSP: nebular continuum and lines are already baked into the templates at fixed logU/logZ_gas. Pair it with the default baked-in nebular backend only: adding neb={'type': 'cue'} or a CLOUDY grid on top double-counts nebular emission.
+  return load_ssp_data(str(candidate))
+/Users/suchethacooray/Projects/tengri/.claude/worktrees/fix-2089-candels/src/tengri/forward/sed_model.py:2944: BakedInNebularWarning: BakedInBackend: nebular emission is baked into the SSP file at a FIXED logU and FIXED escape fraction determined when the SSP grid was generated (commonly logU = −3, but depends on the SSP file). The ionization parameter and escape fraction are NOT free parameters : varying neb_logU or neb_fesc in your Parameters will have no effect. Check your SSP file's nebular assumptions. Switch to CloudyGridBackend or CueBackend to vary nebular properties. To suppress when building via SEDModel.build: warnings.filterwarnings('ignore', message='BakedInBackend: nebular emission is baked'). (ionizing_source_warning='suppress' also works, but it is a BakedInBackend(...) constructor argument and the build grammar does not forward it.)
+  self._nebular_backend = BakedInBackend()
+2026-08-31 18:10:58,136 - __main__ - INFO - Galaxy 24497 (z=1.031): 12 detected bands
+2026-08-31 18:10:58,136 - __main__ - INFO - Config II: 8 free parameters
+2026-08-31 18:10:58,136 - __main__ - INFO - Attempt 1/3: target_accept 0.85, warmup 600, diagonal mass
+2026-08-31 18:11:02,899 - tengri.inference.backends.mcmc.nuts - INFO - NUTS: 8 parameters, 600 warmup, 600 samples, target_accept=0.85
+2026-08-31 18:11:17,735 - tengri.inference.backends.mcmc.nuts - INFO -   Warmup complete (14.8s). Step size: 0.2149
+2026-08-31 18:11:30,066 - tengri.inference.backends.mcmc.nuts - INFO -   NUTS complete in 27.1s. Divergences: 0/600
+/Users/suchethacooray/Projects/tengri/.claude/worktrees/fix-2089-candels/src/tengri/inference/backends/mcmc/nuts.py:597: DeadFitWarning: dead fit: parameter(s) 'dust_L_agn_ir', 'dust_Rv', 'dust_T', 'dust_T_cold', 'dust_T_warm', 'dust_alpha', 'dust_alpha_dale', 'dust_alpha_dl14', 'dust_alpha_mir', 'dust_beta_cold', 'dust_beta_ir', 'dust_beta_warm', 'dust_bump_strength', 'dust_delta', 'dust_epsilon_mbb', 'dust_eta_balance', 'dust_f_cold', 'dust_f_obscuration', 'dust_f_pah', 'dust_frac_agn', 'dust_gamma_dl', 'dust_lgU', 'dust_log_ssfr', 'dust_qhac', 'dust_qpah', 'dust_slope', 'dust_umin', 'met_alpha_fe', 'met_logzsol_scatter', 'noise_dof', 'noise_frac_cal', 'redshift', 'sigma_v_kms' have 1 unique draw in 600 samples. R-hat cannot detect this. Remedies: shorter warmup, lower target_accept_rate, smaller step_size, or dense_mass_matrix=False (issue #1999).
+  return Posterior(
+2026-08-31 18:11:30,073 - __main__ - INFO - ✓ Fit passed adoption bar: divergences=0, rhat_max=1.0003
+2026-08-31 18:11:54,377 - __main__ - INFO - Saved results to /Users/suchethacooray/Projects/tengri/.claude/worktrees/fix-2089-candels/analysis/paper1/results/fits/24497_II.npz
+2026-08-31 18:11:54,377 - __main__ - INFO - Saved diagnostics to /Users/suchethacooray/Projects/tengri/.claude/worktrees/fix-2089-candels/analysis/paper1/results/fits/24497_II.json
+2026-08-31 18:11:54,378 - __main__ - INFO - ✓ Fit complete for galaxy 24497 config II
+  MAP initialization (1000 steps)...
+  MAP init done (loss=286.23)
