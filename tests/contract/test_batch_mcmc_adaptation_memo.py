@@ -123,3 +123,68 @@ def test_adaptation_memo_preserves_samples(fitter):
     s1 = np.asarray(res1[0].samples["sfh_dpl_log_total_mass"])
     s2 = np.asarray(res2[0].samples["sfh_dpl_log_total_mass"])
     assert np.array_equal(s1, s2), "reused warmup kernel must give identical samples"
+
+
+# --------------------------------------------------------------------------
+# The tree-depth cap has to reach the batch path's adaptation too
+# --------------------------------------------------------------------------
+#
+# ``window_adaptation`` runs its OWN NUTS kernel and forwards
+# ``**extra_parameters`` into it, so a caller's ``max_num_doublings`` is honored
+# by warmup only if it is passed there. PR #2101 fixed that for the
+# single-galaxy and catalog entry points (``_nuts_full_scan`` /
+# ``_nuts_warmup_only``) and measured one 50 + 50 catalog cell going from
+# 54.88 s to 2.14 s. ``_fit_batch_vmap_mcmc`` is the third entry point and was
+# missed: it forwarded the cap to the sampling kernel and nothing else, so every
+# ``fit_batch(vmap=True)`` warmup ran at BlackJAX's default of 10 -- up to 1023
+# leapfrogs per step -- on the half where trees are deepest.
+#
+# Both tests below are behavioral rather than source greps: one reads what the
+# adaptation was actually called with, the other reads how many kernels two
+# different caps produce.
+
+
+def _run_nuts(fitter, batch, **overrides):
+    kw = {**_MCMC_KW, **overrides}
+    return fitter.fit_batch(batch, method="mcmc_nuts", key=jax.random.PRNGKey(0), **kw)
+
+
+def test_the_tree_depth_cap_reaches_the_batch_window_adaptation(fitter, monkeypatch):
+    """The cap the caller asked for is the cap warmup adapts under."""
+    import blackjax
+
+    f, batch = fitter
+    f.__dict__.pop("_batch_adapt_kernel_cache", None)
+    seen: list[dict] = []
+    real = blackjax.window_adaptation
+
+    def spy(*args, **kwargs):
+        seen.append(dict(kwargs))
+        return real(*args, **kwargs)
+
+    monkeypatch.setattr(blackjax, "window_adaptation", spy)
+    _run_nuts(f, batch, max_num_doublings=3)
+
+    assert seen, "the batch NUTS path must build a window adaptation"
+    assert all(k.get("max_num_doublings") == 3 for k in seen), (
+        "the caller's tree-depth cap must reach blackjax.window_adaptation, not "
+        "only the sampling kernel: warmup is the half where trees are deepest, "
+        f"and it silently ran at BlackJAX's default of 10. Saw {seen}"
+    )
+
+
+def test_distinct_tree_caps_key_distinct_batch_warmup_kernels(fitter):
+    """A step size adapted under one cap is not the one another cap would find.
+
+    Sharing a memo entry across caps would reuse the first cap's step size on
+    the second call and return a finite, plausible, wrong posterior.
+    """
+    f, batch = fitter
+    f.__dict__.pop("_batch_adapt_kernel_cache", None)
+
+    _run_nuts(f, batch, max_num_doublings=3)
+    _run_nuts(f, batch, max_num_doublings=6)
+    cache = getattr(f, "_batch_adapt_kernel_cache", {})
+    assert len(cache) == 2, (
+        "distinct max_num_doublings must key distinct warmup kernels, not collide"
+    )
