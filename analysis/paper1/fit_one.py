@@ -110,19 +110,49 @@ def retune_settings(attempt: int, base: dict) -> dict:
     return settings
 
 
-def select_best_attempt(attempts: list[dict]) -> int:
-    """Index of the best attempt in ``attempts``: fewest divergences, then lowest R-hat.
+#: Max R-hat below which an attempt counts as mixed for ranking purposes. An
+#: attempt at or above it is unmixed and loses to every mixed one, however few
+#: divergences it has: measured on cell 15336/I (D = 5), attempt 2 (target 0.95)
+#: gave 0/2400 divergences at max R-hat 1.041 and min ESS 48 -- chains that never
+#: explored the same region, so nothing diverged -- while attempt 1 (0.85) gave
+#: 59/2400 at max R-hat 1.008 and min ESS 264 (#2089). Deliberately looser than
+#: the adoption bar's own 1.01, which is unchanged: this only orders attempts
+#: that have ALREADY missed that bar.
+BEST_ATTEMPT_RHAT_GATE = 1.02
 
-    Divergences come first because they bias the posterior; ``rhat_max`` only
-    breaks ties. On cell 13097/II this picks attempt 1 (3 divergences, R-hat
-    1.0014) over the dense-mass retune (79, 1.023), which the old two-attempt
-    cap discarded along with everything else (#2089).
+
+def select_best_attempt(attempts: list[dict]) -> int:
+    """Index of the best attempt: mixed first, then fewest divergences, then lowest R-hat.
+
+    An attempt is mixed when ``rhat_max < BEST_ATTEMPT_RHAT_GATE``; every mixed
+    attempt outranks every unmixed one. Mixing gates the rest because divergence
+    counts are only comparable between chains that sampled the same
+    distribution: on cell 15336/I attempt 2 was divergence-free at max R-hat
+    1.041 (min ESS 48) purely because its chains never reached the funnel, and
+    ranking on divergences alone kept it over attempt 1's 59 divergences at
+    R-hat 1.008 (min ESS 264) -- the better posterior by any standard.
+
+    Within a class, divergences come first because they bias the posterior and
+    ``rhat_max`` only breaks ties. On cell 13097/II both rules agree and either
+    would pick attempt 1 (3 divergences, R-hat 1.0014) over the dense-mass
+    retune (79, 1.023) -- which the old two-attempt cap discarded along with
+    everything else (#2089) -- since at 1.023 that retune is unmixed as well as
+    the more divergent. The divergence term is what separates two attempts that
+    both mix, and ``rhat_max`` only breaks a tie on it.
+
+    When no attempt is mixed the gate separates nothing and the rule falls back
+    to fewest divergences, so a fully unmixed list still yields the least bad
+    index rather than an arbitrary one. The adoption bar is unaffected.
     """
     if not attempts:
         raise ValueError("select_best_attempt needs at least one attempt, got no attempts")
     return min(
         range(len(attempts)),
-        key=lambda i: (attempts[i]["divergences"], attempts[i]["rhat_max"]),
+        key=lambda i: (
+            attempts[i]["rhat_max"] >= BEST_ATTEMPT_RHAT_GATE,
+            attempts[i]["divergences"],
+            attempts[i]["rhat_max"],
+        ),
     )
 
 

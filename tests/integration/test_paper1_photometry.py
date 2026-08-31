@@ -26,6 +26,9 @@ Mutation checks (each test names the mutant that kills it):
   ``test_retune_policy_raises_target_accept_then_lengthens_warmup_and_never_toggles_dense``.
 - ``select_best_attempt`` ranks by ``rhat_max`` alone, ignoring divergences:
   ``test_run_fit_keeps_the_best_attempt_when_the_bar_is_missed``.
+- the mixing gate dropped from ``select_best_attempt``'s key, or its boundary
+  loosened from ``>=`` to ``>``:
+  ``test_the_best_attempt_must_mix_before_it_can_win_on_divergences``.
 - the interim ``save_best_so_far`` call is dropped from ``run_fit``'s loop:
   ``test_run_fit_writes_the_best_so_far_after_each_missed_attempt``.
 - ``cell_is_adopted`` inverted: ``test_only_missing_skips_adopted_cells``.
@@ -509,7 +512,7 @@ def test_retune_policy_raises_target_accept_then_lengthens_warmup_and_never_togg
 
 
 def test_run_fit_keeps_the_best_attempt_when_the_bar_is_missed():
-    """The best attempt is the one with fewest divergences, then lowest max R-hat.
+    """The best attempt mixes first (max R-hat < 1.02), then has fewest divergences.
 
     Cell 13097/II produced a near-passing attempt 1 (3 divergences, R-hat 1.0014)
     and a much worse retune, and the two-attempt cap discarded both (#2089).
@@ -527,10 +530,10 @@ def test_run_fit_keeps_the_best_attempt_when_the_bar_is_missed():
     assert fit_one.select_best_attempt([attempts[2], attempts[0]]) == 1
     assert fit_one.select_best_attempt([attempts[1]]) == 0
 
-    # Divergences come first: an attempt that diverges 50 times does not win on
-    # R-hat alone. This is the case that separates the ruled key from ``rhat_max``.
+    # Among MIXED attempts, divergences come first: an attempt that diverges 50
+    # times does not win on R-hat alone. Both of these clear the mixing gate.
     diverging = [
-        {"divergences": 0, "rhat_max": 1.05, "retune_attempt": 1},
+        {"divergences": 0, "rhat_max": 1.005, "retune_attempt": 1},
         {"divergences": 50, "rhat_max": 1.001, "retune_attempt": 2},
     ]
     assert fit_one.select_best_attempt(diverging) == 0
@@ -543,6 +546,50 @@ def test_run_fit_keeps_the_best_attempt_when_the_bar_is_missed():
     # which is also what writes the interim NPZ after every missed attempt.
     assert "save_best_so_far(" in inspect.getsource(fit_one.run_fit)
     assert "select_best_attempt(" in inspect.getsource(fit_one.save_best_so_far)
+
+
+def test_the_best_attempt_must_mix_before_it_can_win_on_divergences():
+    """A mixed posterior beats an unmixed one however few divergences the latter has.
+
+    Measured on cell 15336/I (D = 5): attempt 1 (target 0.85) gave 59/2400
+    divergences at max R-hat 1.008 and min ESS 264 -- mixed, with divergences at
+    the edge of the funnel -- while attempt 2 (0.95) gave 0/2400 divergences at
+    max R-hat 1.041 and min ESS 48: divergence-free chains that never explored
+    the same region. Ranking on divergences alone kept attempt 2, the worse
+    posterior by any standard (#2089).
+    """
+    assert fit_one.BEST_ATTEMPT_RHAT_GATE == 1.02
+
+    # (a) The 15336/I measurement itself: the mixed attempt wins on 59 vs 0.
+    measured_15336_I = [
+        {"divergences": 59, "rhat_max": 1.008, "retune_attempt": 1},
+        {"divergences": 0, "rhat_max": 1.041, "retune_attempt": 2},
+    ]
+    assert fit_one.select_best_attempt(measured_15336_I) == 0
+    assert fit_one.select_best_attempt(list(reversed(measured_15336_I))) == 1
+
+    # (b) Both mixed: the gate is satisfied by each, so fewest divergences decides.
+    both_mixed = [
+        {"divergences": 3, "rhat_max": 1.0014, "retune_attempt": 1},
+        {"divergences": 9, "rhat_max": 1.0020, "retune_attempt": 2},
+    ]
+    assert fit_one.select_best_attempt(both_mixed) == 0
+
+    # (c) None mixed: the gate cannot separate them, so the rule falls back to
+    # fewest divergences and still returns a usable index rather than raising.
+    none_mixed = [
+        {"divergences": 46, "rhat_max": 1.034, "retune_attempt": 1},
+        {"divergences": 187, "rhat_max": 1.059, "retune_attempt": 2},
+    ]
+    assert fit_one.select_best_attempt(none_mixed) == 0
+
+    # (d) The gate boundary is exclusive: R-hat exactly 1.02 is UNMIXED, so the
+    # divergent-but-mixed attempt beats it. With ``>`` here index 0 would win.
+    at_the_boundary = [
+        {"divergences": 0, "rhat_max": fit_one.BEST_ATTEMPT_RHAT_GATE, "retune_attempt": 1},
+        {"divergences": 5, "rhat_max": 1.019, "retune_attempt": 2},
+    ]
+    assert fit_one.select_best_attempt(at_the_boundary) == 1
 
 
 #: Draws in each stubbed posterior of the save-after-every-attempt test. The real

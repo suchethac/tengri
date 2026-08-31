@@ -80,9 +80,12 @@ per-cell timeout or a crash during a retune therefore leaves the last completed 
 on disk instead of diagnostics alone.
 
 **Cells that never clear the adoption bar are still saved.** If no attempt reaches 0 divergences
-and max R̂ < 1.01, the best attempt (fewest divergences, then lowest max R̂) is written to the
-NPZ and the JSON with `adoption_pass: false` and `best_attempt: <n>`, and `fit_one.py` exits 0;
-only a cell in which every attempt raised is a failure. The summary table prints the adoption
+and max R̂ < 1.01, the best attempt is written to the NPZ and the JSON with
+`adoption_pass: false` and `best_attempt: <n>`, and `fit_one.py` exits 0. The best attempt has to
+mix first — every attempt with max R̂ < 1.02 outranks every attempt at or above it, and only
+within those classes does the fewest-divergences rule (then lowest max R̂) decide, because
+divergence counts only compare between chains that sampled the same distribution.
+Only a cell in which every attempt raised is a failure. The summary table prints the adoption
 verdict per cell (`✓`, or `✗ best att <n>`), so a saved-but-not-adopted cell is never read as a
 pass, and `fit_summary.json` carries `adoption_pass` and `best_attempt` in each row plus an
 `adopted_fits` count in its metadata.
