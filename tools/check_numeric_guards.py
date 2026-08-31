@@ -28,6 +28,7 @@ import ast
 import subprocess
 import sys
 from collections import defaultdict
+from collections.abc import Sequence
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parent.parent
@@ -208,10 +209,10 @@ def save_ledger(ledger: dict[str, str]) -> None:
     LEDGER_FILE.write_text("\n".join(lines) + "\n")
 
 
-def main():
+def main(argv: Sequence[str] | None = None) -> int:
     parser = argparse.ArgumentParser(__doc__)
     parser.add_argument("--regen", action="store_true", help="Regenerate the ledger")
-    args = parser.parse_args()
+    args = parser.parse_args(argv)
 
     files = _tracked_python_files_in_src()
     violations_by_file: dict[str, list[tuple[int, str]]] = defaultdict(list)

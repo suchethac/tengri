@@ -38,6 +38,7 @@ import pathlib
 import pkgutil
 import sys
 import warnings
+from collections.abc import Sequence
 
 import numpy as np
 
@@ -130,10 +131,10 @@ def _scan() -> list[tuple[str, float]]:
     return sorted(set(hits))
 
 
-def main() -> int:
+def main(argv: Sequence[str] | None = None) -> int:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--list", action="store_true", help="print the inventory and exit")
-    args = parser.parse_args()
+    args = parser.parse_args(argv)
 
     hits = _scan()
     if args.list:
