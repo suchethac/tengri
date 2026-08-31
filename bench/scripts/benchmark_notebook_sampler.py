@@ -39,8 +39,10 @@ This file could not build its own nb05 model on ``main``: it passed the retired
 and named ``law_bc`` without ``law_diff``, which now raises. Every row raised
 ``ValueError`` at model build, so **neither this file nor
 ``bench/scripts/benchmark_quickstart_sampler.py`` could be rerun at all** until
-it was repaired. ``benchmark_quickstart_sampler.py`` still carries the retired
-spelling and still cannot run; repairing it is not this file's job.
+it was repaired. ``benchmark_quickstart_sampler.py`` has since been repaired too
+(#2096) by deleting its model and importing :data:`NOTEBOOKS` from here, so the
+registry below is now the single definition every consumer shares --
+``diagnose_ghmc_meads.py`` already worked this way.
 
 Repairing it forces a choice that is **physics, not spelling**, and the two
 repairs that look identical are not:
@@ -76,11 +78,21 @@ neither is the "real" one:
 ``05pre``    the **pre-#1989** model (``law_bc="calzetti", law_diff="power_law"``).
              Kept so the published 2026-08-17 table stays reproducible and so
              the dust-law sensitivity is measurable rather than inferred.
+``00now``    what ``notebooks/00_quickstart.py`` ships **today** (``dpl`` SFH,
+             ONE Calzetti screen, nebular baked into the wNE grid, D=6). The
+             live nb00 fixture, added in #2096. See below.
 ``00``       the pre-#2044 quickstart, ``law="calzetti"``. See below.
 ``00pre``    the same fixture in the pre-#1989 dust spelling, which is what
-             ``benchmark_quickstart_sampler.build_model`` still literally
-             contains. See below.
+             ``benchmark_quickstart_sampler.build_model`` used to literally
+             contain. See below.
 ===========  ==================================================================
+
+The ``00`` family's names are historically inverted with respect to the ``05``
+family's: ``05`` is today's notebook and ``05pre`` is the old one, whereas
+``00`` is an OLD one and ``00now`` is today's. That is not a preference. ``00``
+and ``00pre`` name rows already published in three 2026-08 reports, and
+reassigning either name would silently repoint those tables at a different
+model -- the exact failure this file exists to prevent.
 
 **A reader comparing against ``bench/reports/2026-08-17_nb01_nb05_nuts_vs_hmc.md``
 wants ``05pre``, not ``05``.** The 2026-08-17 report predates #1989.
@@ -93,15 +105,23 @@ two-component dust, free metallicity, D=7, 12 bands -- because that is the model
 ``bench/reports/2026-08-17_quickstart_nuts_vs_hmc.md`` measured and the only
 reason to carry nb00 in this harness is to stay comparable with it.
 ``notebooks/00_quickstart.py`` **today** ships a ``dpl`` SFH with
-``single_component`` dust at D=6, which is a different model. Do not read the
-``00``/``00pre`` rows as measuring today's quickstart; they do not, and
-realigning them is deliberately out of scope here.
+``single_component`` dust at D=6 against the nebular-baked ``prsc_miles_chabrier_wNE``
+grid, which is a different model. Do not read the ``00``/``00pre`` rows as
+measuring today's quickstart; they do not. ``00now`` (:func:`_build_nb00_today`)
+does, and exists because before #2096 **nothing in the tree tracked the live
+quickstart at all** -- which is how #2044 moved it on 2026-08-23 with no row
+noticing. Note the SSP grid: #2096 enumerated four differences between
+``_build_nb00`` and today's quickstart (SFH family, dust component count,
+nebular treatment, dimension) and the grid is a fifth. Fifteen spec keys differ
+in total; ``tools/check_harness_parity.py --fixture 00`` prints them.
 
-``benchmark_quickstart_sampler.build_model`` itself builds **D = 6** -- it has no
+``benchmark_quickstart_sampler.build_model`` itself built **D = 6** -- it had no
 ``met`` group -- while its own published table states **D = 7** and names
-``met_logzsol`` as the worst-mixing parameter of its HMC L=160 row, so it can no
-longer reproduce its own table. The free metallicity is restored in both nb00
-fixtures here. They differ in the two things the two independent repairs of this
+``met_logzsol`` as the worst-mixing parameter of its HMC L=160 row, so it could
+not reproduce its own table. The report's numbers are a correct measurement of a
+D = 7 model and stand unchanged; it was the committed builder that drifted away
+from them. The free metallicity is restored in both nb00 fixtures here. They
+differ in the two things the two independent repairs of this
 file disagreed on, and the pair is kept for the same reason ``05``/``05pre`` is:
 
 * ``00`` uses ``law="calzetti"`` on ``00_quickstart``'s own ``met`` range
@@ -112,7 +132,7 @@ file disagreed on, and the pair is kept for the same reason ``05``/``05pre`` is:
   against 231.5).
 * ``00pre`` uses ``law_bc="calzetti", law_diff="power_law"`` on
   ``05_fitting_photometry``'s ``met`` range ``U(-1.5, 0.3)`` -- the literal
-  restoration of what ``benchmark_quickstart_sampler.build_model`` still spells,
+  restoration of what ``benchmark_quickstart_sampler.build_model`` used to spell,
   nb05 being described as this model plus ``met_logzsol`` and ``dust_tau_diff``.
   Its rows appear in ``bench/reports/2026-08-30_mclmc_tuning.md``.
 
@@ -127,6 +147,33 @@ SFH -- which is what turns a 4% flux change into two orders of magnitude of ESS.
 The sampling consequence on nb00 has **not** been measured here; only its
 forward-model consequence has. It is a real difference either way, not a
 spelling one.
+
+HOW A FIXTURE IS HELD TO ITS NOTEBOOK (#2096)
+=============================================
+
+Every entry in :data:`NOTEBOOKS` carries a ``parity=`` block naming what it is a
+copy of, and ``tools/check_harness_parity.py`` -- gated by
+``tests/contract/test_harness_notebook_parity.py`` -- holds it to that claim by
+building the notebook's own model and comparing both the canonical parameter
+spec and the predicted photometry at a fixed parameter vector. Adding a fixture
+without a ``parity=`` block fails the test.
+
+The block also says which fixtures are old **on purpose**. ``05pre``, ``00`` and
+``00pre`` are ``kind="historical"``: not checked against today's notebook,
+because they are not supposed to match it, but anchored to a live sibling and
+required to differ from it in exactly the spec keys they declare. So
+``05pre`` -> ``05`` -> ``05_fitting_photometry.py`` and
+``00pre`` -> ``00`` -> ``00now`` -> ``00_quickstart.py`` both end at a real
+notebook, and "historical" cannot be used to opt out. ``bench/README.md`` has
+the failure playbook; the short version is that the harness follows the notebook
+and a published measurement is never edited to make a fixture agree with it.
+
+Current state of every fixture, measured rather than asserted: ``05``, ``01``,
+``00now`` and ``ctl-jwst`` each match their notebook with a maximum relative
+difference of **0.0** in predicted photometry. **nb01 was the last fixture of
+unknown status and it is clean** -- and structurally so, since the notebook and
+:func:`_build_nb01` both say ``**recipes.mock_recovery_minimal()`` rather than
+each spelling a model out. Duplication is what drifts.
 
 THE CONTROLS
 ============
@@ -440,6 +487,49 @@ def _build_nb00_prelaw(ssp):
     )
 
 
+def _build_nb00_today(ssp):
+    """``00_quickstart`` **as shipped today**: dpl SFH, ONE Calzetti screen, nebular on. D=6.
+
+    The live nb00 fixture, added in #2096 so the quickstart has something that
+    tracks it. ``00`` and ``00pre`` are both pre-#2044 models kept for published
+    rows; before this function existed, *nothing in the tree checked
+    ``notebooks/00_quickstart.py`` at all*, which is how #2044 moved the
+    quickstart on 2026-08-23 without a single row noticing.
+
+    Note the SSP grid: ``prsc_miles_chabrier_wNE``, not the bare-stellar
+    ``fsps_prsc_miles_chabrier`` the ``00``/``00pre`` fixtures use. #2096
+    enumerated four differences between ``_build_nb00`` and today's quickstart
+    (SFH family, dust component count, nebular treatment, dimension); the grid
+    is a fifth, and it is the one that makes ``neb={"type": "ssp"}`` mean
+    anything -- the nebular contribution is baked into this file at logU = -3.0.
+
+    Requires ``ssp="prsc_miles_chabrier_wNE"`` in its :data:`NOTEBOOKS` entry;
+    building it against the bare-stellar grid would silently drop the nebular
+    emission and is what ``tools/check_harness_parity.py`` would catch.
+
+    The mock differs from the notebook's on purpose: ``run_one`` draws its truth
+    from the prior at a named seed, while the notebook hand-picks a truth
+    (alpha 0.5, beta 2.0, tau 5.8 Gyr, logM 10.0, tau_v 0.3, logzsol -0.3)
+    chosen to sit on a star-forming plateau. Parity is a claim about the
+    *model*, not about which galaxy is fed to it; a harness that copied the
+    hand-picked truth could not run the seed sweeps this file exists for.
+    """
+    return SEDModel.build(
+        ssp_data=ssp,
+        observation=Observation(photometry=Photometry.from_names(list(_NB00_FILTERS))),
+        approx=WavePrecomp(),
+        sfh={"type": "dpl", "all_params": FREE, "age_gyr": 13.1},
+        dust_attenuation={
+            "type": "single_component",
+            "law": "calzetti",
+            "tau_v": Uniform(0.0, 4.0),
+        },
+        neb={"type": "ssp"},
+        met={"logzsol": Uniform(-2.0, 0.2)},
+        redshift=Fixed(0.05),
+    )
+
+
 def _build_nb05(ssp):
     """``05_fitting_photometry`` **as shipped today**: quickstart + logzsol + tau_diff. D=8.
 
@@ -534,8 +624,25 @@ def _build_nb01(ssp):
 
     Dimensionality is whatever ``recipes.mock_recovery_minimal`` currently
     declares -- the recipe owns it, this file does not restate it -- and the
-    header line prints the measured count per run. The recipe has **not** been
-    verified line-by-line against the notebook.
+    header line prints the measured count per run.
+
+    **Settled (#2096): this fixture matches the notebook, and structurally
+    cannot drift from it.** ``tools/check_harness_parity.py`` measures the two
+    models as spec-identical with a maximum relative difference of 0.0 in
+    predicted photometry across all six bands. That is not luck: nb05 and nb00
+    drifted because each *spelled its model out* in two places, whereas
+    ``01_why_jax.py`` and this function both say
+    ``**recipes.mock_recovery_minimal()`` -- one definition, in ``src/``, that
+    changes for both at once. The six filters are the only thing duplicated, and
+    ``notebooks/01_why_jax.py``'s ``SEDModel.build`` line has not changed since
+    ``27ffb8d0d`` ("docs(nb01): rewrite why-JAX for astronomers") apart from
+    formatting and the ``load_ssp`` path resolver (#1486). #2096 listed nb01 as
+    "unchecked", which was accurate, and as the last fixture of unknown status,
+    which it no longer is.
+
+    The mock differs from the notebook's: the notebook draws its truth at
+    ``PRNGKey(0)`` and its noise at ``PRNGKey(1)``, while ``run_one`` splits one
+    seed three ways. Parity is a claim about the model, not the galaxy.
     """
     return SEDModel.build(
         ssp_data=ssp,
@@ -550,9 +657,55 @@ def _build_nb01(ssp):
 #: There is deliberately no ``"ctl"`` key. Two campaigns used that name for two
 #: different models (``ctl-dpl`` and ``ctl-jwst``), so a stale ``--notebook ctl``
 #: must fail loudly rather than silently measure the other campaign's fixture.
+#:
+#: **Every entry must carry a ``parity=`` block** (#2096). It declares what the
+#: fixture is a copy of, and ``tools/check_harness_parity.py`` --- run by
+#: ``tests/contract/test_harness_notebook_parity.py`` --- holds it to that claim:
+#:
+#: * ``kind="mirrors"`` with ``notebook=`` --- must build the same model as that
+#:   notebook, checked against the notebook's own executed code.
+#: * ``kind="historical"`` with ``anchor=``, ``differs_in=`` and
+#:   ``superseded_by=`` --- reproduces a superseded model on purpose, so it must
+#:   differ from its anchor in exactly the declared spec keys and no others. The
+#:   anchor chain must end at a ``mirrors`` fixture, which is what keeps
+#:   "historical" from becoming an exemption.
+#: * ``kind="standalone"`` with ``why=`` --- not a copy of anything.
+#:
+#: There is no default. A fixture added without a ``parity=`` block fails the
+#: contract test, because a fixture that never said what it mirrors is exactly
+#: the defect #2096 reports.
 NOTEBOOKS = {
     "00": dict(
         build=_build_nb00,
+        parity=dict(
+            kind="historical",
+            anchor="00now",
+            superseded_by="#2044 (36d7189cf, 2026-08-23)",
+            differs_in=(
+                "dust_attenuation.Rv",
+                "dust_attenuation.all_params",
+                "dust_attenuation.bump_strength",
+                "dust_attenuation.delta",
+                "dust_attenuation.f_obscuration",
+                "dust_attenuation.slope",
+                "dust_attenuation.tau_bc",
+                "dust_attenuation.tau_v",
+                "dust_attenuation.type",
+                "free_params",
+                "neb.type",
+                "sfh.age_gyr",
+                "sfh.type",
+                "ssp.file",
+                "ssp.nebular",
+            ),
+            why=(
+                "The pre-#2044 quickstart. Fifteen spec keys differ from today's "
+                "because #2044 replaced the SFH family, the dust component, the "
+                "nebular treatment, the SSP grid and the dimension in one commit. "
+                "Kept because 2026-08-17_quickstart_nuts_vs_hmc.md and the two "
+                "2026-08-30 reports measured THIS model."
+            ),
+        ),
         # PRNGKey(9) at SNR 30, not this file's usual (1, 20): these are
         # ``benchmark_quickstart_sampler.py``'s own values, and the whole reason
         # to carry nb00 here is that its rows stay comparable with
@@ -577,8 +730,56 @@ NOTEBOOKS = {
             "the table stays comparable with 2026-08-17_quickstart_nuts_vs_hmc.md."
         ),
     ),
+    "00now": dict(
+        build=_build_nb00_today,
+        parity=dict(kind="mirrors", notebook="notebooks/00_quickstart.py"),
+        ssp="prsc_miles_chabrier_wNE",
+        # The notebook's own PRNGKey(6), SNR and 4 chains. Its truth is
+        # hand-picked rather than a prior draw (see the builder's docstring), so
+        # this row's mock is the harness's, not the notebook's.
+        seed=6,
+        snr=30.0,
+        n_chains=4,
+        shipped=dict(
+            method="mcmc_hmc",
+            n_warmup=200,
+            n_samples=300,
+            n_burnin=0,
+            n_leapfrog_steps=50,
+            dense_mass_matrix=False,
+            target_accept_rate=0.85,
+            precondition=True,
+        ),
+        note=(
+            "00_quickstart AS SHIPPED TODAY (dpl SFH, single_component "
+            "Calzetti, nebular baked into the wNE grid, D=6). The only fixture "
+            "here that tracks the live quickstart; '00' and '00pre' are both "
+            "pre-#2044 and do NOT. No published row measures this fixture yet "
+            "-- it exists so #2044 cannot happen again unnoticed. Its shipped "
+            "row is fixed-length HMC, not NUTS, because that is the notebook's "
+            "committed fit."
+        ),
+    ),
     "00pre": dict(
         build=_build_nb00_prelaw,
+        parity=dict(
+            kind="historical",
+            anchor="00",
+            superseded_by="#1989 (176f8fd9d, 2026-08-20)",
+            differs_in=(
+                "dust_attenuation.law",
+                "dust_attenuation.law_bc",
+                "dust_attenuation.law_diff",
+                "sfh.logzsol",
+            ),
+            why=(
+                "The pre-#1989 dust spelling of the pre-#2044 quickstart, on "
+                "05_fitting_photometry's met range. Anchored to '00' rather than "
+                "to '00now' because the one change it isolates is the dust law; "
+                "the chain 00pre -> 00 -> 00now -> 00_quickstart.py is what "
+                "grounds it in a live notebook."
+            ),
+        ),
         # nb00's seed, SNR and chain count exactly: this row differs from "00"
         # in the diffuse dust law and the met range and in nothing else.
         seed=9,
@@ -602,6 +803,7 @@ NOTEBOOKS = {
     ),
     "01": dict(
         build=_build_nb01,
+        parity=dict(kind="mirrors", notebook="notebooks/01_why_jax.py"),
         seed=1,
         snr=20.0,
         n_chains=4,
@@ -615,6 +817,7 @@ NOTEBOOKS = {
     ),
     "05": dict(
         build=_build_nb05,
+        parity=dict(kind="mirrors", notebook="notebooks/05_fitting_photometry.py"),
         seed=7,
         snr=20.0,
         n_chains=2,
@@ -630,6 +833,22 @@ NOTEBOOKS = {
     ),
     "05pre": dict(
         build=_build_nb05_prelaw,
+        parity=dict(
+            kind="historical",
+            anchor="05",
+            superseded_by="#1989 (176f8fd9d, 2026-08-20)",
+            differs_in=(
+                "dust_attenuation.law",
+                "dust_attenuation.law_bc",
+                "dust_attenuation.law_diff",
+            ),
+            why=(
+                "nb05 before #1989 rewrote law_bc='calzetti' to law='calzetti'. "
+                "Exactly one physical change -- the diffuse screen -- and the "
+                "three keys are the two spellings of it. Kept so "
+                "2026-08-17_nb01_nb05_nuts_vs_hmc.md stays reproducible."
+            ),
+        ),
         # nb05's own seed, SNR and chain count exactly. This row differs from
         # "05" in the diffuse dust law and in nothing else, so the pair
         # isolates PR #1989's physics change.
@@ -646,6 +865,14 @@ NOTEBOOKS = {
     ),
     "ctl-dpl": dict(
         build=_build_ctl_dpl,
+        parity=dict(
+            kind="standalone",
+            why=(
+                "not a notebook: nb05's bands, mock and dust over a DPL SFH, so "
+                "an SFH-family effect can be told apart from a sampler effect. "
+                "Nothing upstream to mirror."
+            ),
+        ),
         # nb05's seed, SNR and chain count exactly: this row is a CONTROL for
         # the SFH family, so everything else must be held fixed or it controls
         # for nothing.
@@ -663,6 +890,10 @@ NOTEBOOKS = {
     ),
     "ctl-jwst": dict(
         build=_build_ctl_jwst,
+        # Its docstring claims to mirror the page "exactly"; kind="mirrors"
+        # turns that sentence into something a test can fail on. It does mirror
+        # it: spec-identical, max relative flux difference 0.0.
+        parity=dict(kind="mirrors", notebook="notebooks/jwst_nonparametric_fits.py"),
         ssp="prsc_miles_chabrier_wNE",
         seed=4,
         snr=20.0,
@@ -688,6 +919,26 @@ NOTEBOOKS = {
 FAMILIES = ("nuts", "hmc", "ghmc", "chees", "mclmc")
 
 
+def shipped_family(cfg: dict) -> str:
+    """The sampler family a fixture's committed notebook fit belongs to.
+
+    Every fixture here used to ship NUTS, so the baseline row could be labelled
+    ``"nuts (shipped)"`` unconditionally. ``00now`` does not -- today's
+    ``00_quickstart`` commits fixed-length HMC at L=50 with the analytic
+    preconditioner -- and a row labelled ``nuts`` that ran HMC is the same class
+    of quiet mislabeling as a fixture named for a notebook it no longer
+    mirrors. Derived rather than stored, so it cannot disagree with ``shipped``.
+    """
+    return {"mcmc_nuts": "nuts", "mcmc_hmc": "hmc", "mcmc_chees": "chees"}.get(
+        cfg["shipped"]["method"], cfg["shipped"]["method"].removeprefix("mcmc_")
+    )
+
+
+def shipped_label(cfg: dict) -> str:
+    """The baseline row's label, e.g. ``"nuts (shipped)"`` or ``"hmc (shipped)"``."""
+    return f"{shipped_family(cfg)} (shipped)"
+
+
 def configurations(nb: str, quick: bool, dense: bool, families=FAMILIES) -> dict[str, dict]:
     """Sampler recipes to compare, keyed by label."""
     cfg = NOTEBOOKS[nb]
@@ -697,8 +948,8 @@ def configurations(nb: str, quick: bool, dense: bool, families=FAMILIES) -> dict
         shipped["n_samples"] = min(shipped["n_samples"], 150)
 
     configs = {}
-    if "nuts" in families:
-        configs["nuts (shipped)"] = shipped
+    if shipped_family(cfg) in families:
+        configs[shipped_label(cfg)] = shipped
 
     draws = 150 if quick else max(600, shipped["n_samples"])
     warmup = 300 if quick else 1000
@@ -1229,10 +1480,11 @@ def main() -> None:
     print("\nverdict (ranked on seconds per effective sample):")
     print("  primary   = the notebooks' own bar: R-hat < 1.01, ZERO divergences, ESS >= nuts")
     print("  secondary = comparative: R-hat < 1.01, divergence RATE < 0.5% of total draws,")
-    print("              ESS >= nuts -- applied identically to the nuts baseline row")
+    baseline_name = shipped_label(NOTEBOOKS[args.notebook])
+    print(f"              ESS >= {baseline_name} -- applied identically to that baseline row")
     print("  an unadjusted sampler has no divergences to count: that clause reads n/a,")
     print("              and is vacuous rather than satisfied. Read EEVPD instead.")
-    baseline = rows.get("nuts (shipped)")
+    baseline = rows.get(baseline_name)
     baseline_ess = baseline["min_ess"] if baseline and not baseline.get("dead_fit") else 0.0
     for label, row in sorted(rows.items(), key=lambda kv: kv[1]["sec_per_ess"]):
         if row.get("dead_fit"):
@@ -1249,7 +1501,8 @@ def main() -> None:
             f"({100 * rate:5.2f}%)"
         )
         versus = (
-            f"{baseline['sec_per_ess'] / max(row['sec_per_ess'], 1e-9):5.2f}x vs nuts"
+            f"{baseline['sec_per_ess'] / max(row['sec_per_ess'], 1e-9):5.2f}x"
+            f" vs {baseline_name.split()[0]}"
             if baseline
             else ""
         )

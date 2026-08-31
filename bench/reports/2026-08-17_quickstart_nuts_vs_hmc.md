@@ -24,6 +24,28 @@ skew-normal SFH, two-component Calzetti dust, nebular off, *z* fixed at 0.05,
 point (`n_restarts=8, n_steps=800`). Adoption bar is the notebook's own claim:
 **0 divergences and max split-R̂ < 1.01.**
 
+> **Correction to this description, 2026-08-31 (#2096). The measurements below
+> are unchanged and remain correct for the model they measured.** Two things
+> about the paragraph above have stopped being true, and neither touches a
+> number.
+>
+> 1. **This is no longer `00_quickstart`'s model.** #2044 (`36d7189cf`,
+>    2026-08-23) rewrote the quickstart to a DPL SFH with a *single* Calzetti
+>    screen, nebular on via the wNE grid, at **D = 6**. Read every row here as
+>    the **pre-#2044** quickstart. It is the fixture now named `00` in
+>    `bench/scripts/benchmark_notebook_sampler.py`; `00now` is today's.
+> 2. **The script that produced this table had stopped building this model.**
+>    `benchmark_quickstart_sampler.build_model` as committed had no `met` group,
+>    so it built D = 6 — while the D = 7 stated here, and the `met_logzsol` named
+>    as the L=160 row's worst-mixing parameter, both require free metallicity. A
+>    parameter cannot be worst-mixing in a table produced by a model without it,
+>    so the *builder* is what drifted after this report, not the table. Free
+>    metallicity is restored in the `00` fixture and this table is reachable
+>    again. The published numbers are not restated or adjusted.
+>
+> `tools/check_harness_parity.py` now fails when a fixture stops matching the
+> notebook it names, so a third instance of this cannot pass unnoticed.
+
 ## Result
 
 | config | wall s | max split-R̂ | divergences | min ESS | gradients / ESS | worst-mixing parameter |

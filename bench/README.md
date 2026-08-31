@@ -58,6 +58,67 @@ The dispatcher catalogue lives in
 scripts must be added there too — one line per script — or the
 dispatcher won't find them.
 
+## Notebook fixtures, and the parity check that keeps them honest
+
+`bench/scripts/benchmark_notebook_sampler.py` holds `NOTEBOOKS`, the **one**
+registry of notebook-shaped model fixtures. `benchmark_quickstart_sampler.py`
+and `diagnose_ghmc_meads.py` import from it; none of them keeps its own copy of
+a model. That is deliberate — see #2096: when the model was spelled out in two
+places, two independent repairs of the same script in two working trees chose
+two different dust laws and produced two contradictory NUTS baselines for one
+notebook and one seed before anyone traced the cause.
+
+Each fixture declares a `parity=` block saying what it is a copy of:
+
+| kind | means | checked by |
+|---|---|---|
+| `mirrors` | a copy of a published notebook's model | building the notebook's *own* model and requiring the same spec **and** the same predicted photometry at a fixed parameter vector |
+| `historical` | reproduces a **superseded** model on purpose, so a published report stays reproducible | requiring it to differ from its `anchor` fixture in exactly the spec keys it declares, and no others |
+| `standalone` | not a copy of anything (the two controls) | requiring it to say `why` |
+
+The `historical` kind is what separates *deliberately* old fixtures — `05pre`
+(nb05 before #1989), `00`/`00pre` (the quickstart before #2044) — from
+*accidentally* stale ones. A historical fixture is not exempt: it is defined
+relative to a live sibling, and the chain `00pre → 00 → 00now →
+notebooks/00_quickstart.py` has to terminate at a fixture that mirrors a real
+notebook. Repair one into a duplicate of its anchor, or let it drift in a way
+its `differs_in` does not admit to, and the check fails.
+
+Run it:
+
+```bash
+python tools/check_harness_parity.py              # every fixture
+python tools/check_harness_parity.py --fixture 05
+python tools/check_harness_parity.py --list       # provenance only, builds nothing
+```
+
+It builds models and never fits, so it costs ~100 s and ~2 GB, and
+`tests/contract/test_harness_notebook_parity.py` runs it in the PR-gating tier.
+
+**When it fails.** The message names the fixture and the exact spec keys that
+differ. Then:
+
+- A `mirrors` fixture failed → **the harness follows the notebook.** Update the
+  fixture's builder. Never edit the notebook to match the fixture, and never
+  change a measured number in `bench/reports/` or `bench/results/` to make a
+  row agree — if a report's *description* of a fixture is now wrong, fix the
+  description and say so.
+- The old model still needs measuring, because a published report reproduces
+  only under it → keep it as a **new** `historical` fixture anchored to the
+  repaired one, the way `05pre` is anchored to `05`.
+- A `historical` fixture "no longer differs from its anchor" → someone repaired
+  it into a duplicate. Revert that, or delete it and record in the report that
+  its rows are now the anchor's.
+- A `historical` fixture has an **undeclared** difference → it drifted behind
+  the word "historical". Widen `differs_in` only if the new difference is
+  intended and documented.
+
+Adding a fixture without a `parity=` block fails the contract test. That is the
+point: `_build_nb00` never said which quickstart it mirrored, so when #2044
+moved the quickstart on 2026-08-23 there was nothing to contradict, and every
+nb00 row kept the notebook's name while measuring a model it had stopped
+shipping.
+
 ## reports/
 
 Markdown write-ups, one file per benchmark *event*. File names are
