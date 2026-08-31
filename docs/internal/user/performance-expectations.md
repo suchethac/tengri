@@ -41,34 +41,40 @@ in milliseconds. Recompilation only happens if:
 ## Forward model (per-call timing)
 
 Build with `approx=WavePrecomp()` to enable the precomputed SSP × filter
-lookup-table path (internally the "hybrid" kernel). Once compiled, a single
-`predict_photometry()` call then runs in **microseconds**, ~30–400× faster than
-the default exact path (`approx=None`), with sub-1% approximation error in
-typical configurations. Every gradient step in MCMC/VI/NSS pays this cost, so
-the constant matters.
+lookup-table path. Once compiled, a single `predict_photometry()` call then runs
+in **microseconds**, 1.5–17× faster than the default exact path (`approx=None`),
+with sub-1% approximation error in typical configurations. Components that
+require dense SED integration (K&D 3-zone AGN, SKIRTOR torus) see minimal
+speedup (~1×) because they bypass the band-projection fast branch; see
+[AGN dense integrators](#agn-dense-integrators) below. Every gradient step in
+MCMC/VI/NSS pays this cost, so the constant matters.
 
 Selected median wall-clock from `bench/scripts/benchmark_forward_model.py`
-(CPU, x64, SDSS *ugriz*, z=0.1, DPL SFH):
+(CPU, x64, SDSS *ugriz*, z=0.1, DPL SFH, measured August 2026):
 
 | Configuration | `approx=None` (exact) | `approx=WavePrecomp()` | speedup |
 |---|---:|---:|---:|
-| Stellar only | 23.9 ms | 59 µs | **408×** |
-| Stellar + nebular + dust IR (THEMIS) + radio + X-ray | 27.3 ms | 472 µs | 58× |
-| Kitchen sink (all emitters) | 76.1 ms | 2.45 ms | 31× |
+| Stellar only | 9.8 ms | 719 µs | **13.6×** |
+| Stellar + nebular (baked-in) + dust (THEMIS) + radio + X-ray | 12.6 ms | 3.4 ms | 3.7× |
+| Kitchen sink (all emitters) | 19.1 ms | 12.5 ms | 1.5× |
 
-Gradient calls (`jax.grad(predict_photometry)`) are 9–19× faster with
-`approx=WavePrecomp()` than the exact path across all SFH dimensionalities
-(D=6 parametric to D=137 stochastic field).
+Gradient calls over the **full FREE-parameter-vector dict** (`jax.grad(predict_photometry)`,
+stellar-only configurations) are 6.5–9.4× faster with `approx=WavePrecomp()` than
+the exact path across all SFH dimensionalities (D=6 parametric to D=137 stochastic field).
+Note: kitchen-sink gradient rows fail with ConcretizationTypeError (issue #2114).
 
 **Approximation error budget**:
 - Stellar continuum: machine-exact (the SSP×filter integral is precomputed).
 - Stellar dust *attenuation*: ~0.3–0.5% on real filters (the effective-wavelength
   + Taylor approximation of Zacharegkas+2025 — this is the one true approximation,
   and it's where the speedup comes from).
-- Dust IR, radio, X-ray, AGN (additive emitters): exact — integrated through the
-  true filter transmission, not sampled at the effective wavelength.
+- Dust IR, radio, X-ray: exact — integrated through the true filter transmission, not sampled at the effective wavelength.
+- **AGN (disc, torus, QSOgen)**: NOT integrated through filter transmission. These
+  components use dense-grid integration of the full-resolution SED per call and never
+  take the band-projection fast branch. K&D 3-zone and SKIRTOR deliver 0.8–1.1× speedup
+  because the precompute LUT overhead cancels any savings (see #1022, `observation/_band_projection.py`).
 - Nebular (CLOUDY, baked-in): 0% (rides along in the stellar precompute).
-- Typical / kitchen-sink: <1%.
+- Typical (neb+dust+radio+xray): <1%; kitchen-sink with AGN: 0.009%.
 
 **The error budget has an SNR ceiling, not just a percentage** (#1671). The
 LUT's forward bias is *constant in SNR* — no forward check can see it — but it
@@ -82,7 +88,22 @@ price this automatically at run time: one exact-vs-LUT forward estimates
 fires with the number when it is material. For final inference at high SNR,
 rerun with `approx=None` or compare the two posteriors.
 
-Full breakdown by emitter family, gradient timings across SFH types, and the coverage matrix are in [`bench/reports/2026-05-06_forward_model_speedup.md`](https://github.com/suchethac/tengri/blob/main/bench/reports/2026-05-06_forward_model_speedup.md).
+Full breakdown by emitter family, gradient timings across SFH types, and the coverage matrix are in [`bench/reports/2026-08-31_forward_model_speedup.md`](https://github.com/suchethac/tengri/blob/main/bench/reports/2026-08-31_forward_model_speedup.md).
+
+### AGN dense integrators
+
+K&D 3-zone and SKIRTOR torus models require dense integration of the full-resolution
+SED per photometric call because they do not support the band-projection fast branch
+(see #1022, `observation/_band_projection.py`). As a result, WavePrecomp delivers
+**~1× "speedup"** (no speedup) on these components — the precompute LUT lookup cost
+drowns any savings from caching. If your model is dominated by K&D or SKIRTOR AGN
+and inference is slow, consider:
+
+1. Using composable disc + torus (`agn_type='composable'`, `agn.torus='composable'`)
+   instead: **2.0–2.2× speedup**.
+2. Using QSOgen (`agn_type='qsogen'`): **1.8–2.0× speedup**.
+3. Running with `approx=None` (exact path) instead of `approx=WavePrecomp()`:
+   the precompute cost already dominates.
 
 ## MAP Optimization
 
