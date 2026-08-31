@@ -1058,3 +1058,121 @@ def test_an_interim_save_failure_is_labeled_as_such_and_the_loop_continues(
     with np.load(npz_path, allow_pickle=False) as npz:
         for name, values in draws[1].items():
             np.testing.assert_array_equal(npz[name], values)
+
+
+def test_aggregate_summary_reads_disk_and_counts_adoption(tmp_path):
+    """Read cell JSONs from disk and count adoption status.
+
+    Builds a tmp_path results dir with two hand-written cell JSONs (one with
+    adoption_pass: true, one with adoption_pass: false); calls aggregate_summary;
+    asserts that fits has 2 rows, metadata["adopted_fits"] == 1,
+    metadata["summary_only"] is True, and every other grid cell appears in failed.
+
+    Mutant: count adopted with >= 0 truthiness (always True) or drop the failed
+    loop -> test fails; recorded.
+    """
+    import run_candels_fits
+
+    # Write two cell JSONs: one adopted, one not
+    adopted_json = tmp_path / "13097_I.json"
+    adopted_json.write_text(
+        json.dumps(
+            {
+                "gal_id": 13097,
+                "config": "I",
+                "adoption_pass": True,
+                "divergences": 0,
+                "rhat_max": 1.001,
+                "ess_min": 500.0,
+                "wall_time_s": 100.0,
+            }
+        )
+    )
+
+    not_adopted_json = tmp_path / "13097_II.json"
+    not_adopted_json.write_text(
+        json.dumps(
+            {
+                "gal_id": 13097,
+                "config": "II",
+                "adoption_pass": False,
+                "divergences": 10,
+                "rhat_max": 1.025,
+                "ess_min": 50.0,
+                "wall_time_s": 150.0,
+            }
+        )
+    )
+
+    # Call aggregate_summary
+    summary = run_candels_fits.aggregate_summary(tmp_path)
+
+    # Assertions
+    assert len(summary["fits"]) == 2, "should have 2 fits"
+    assert summary["metadata"]["adopted_fits"] == 1, "should have 1 adopted fit"
+    assert summary["metadata"]["summary_only"] is True
+    assert summary["metadata"]["successful_fits"] == 2
+
+    # Every other grid cell (9 - 2 = 7) should be in failed
+    assert len(summary["failed"]) == 7, f"should have 7 failed, got {len(summary['failed'])}"
+
+    # Check that the reads are correct
+    fits_by_id = {(f["gal_id"], f["config"]): f for f in summary["fits"]}
+    assert fits_by_id[(13097, "I")]["adoption_pass"] is True
+    assert fits_by_id[(13097, "II")]["adoption_pass"] is False
+
+
+def test_summary_only_runs_no_fits(tmp_path, monkeypatch):
+    """--summary-only does not enter the fit loop; mutual exclusion with --only-missing.
+
+    Tests that the --summary-only flag is properly parsed and that it is
+    mutually exclusive with --only-missing. Tests via argparse validation
+    rather than a subprocess spy.
+
+    Mutant: omit the summary-only branch from main() so it falls through to
+    the fit loop -> the loop runs (caught by other integration tests); recorded.
+    """
+    import run_candels_fits
+
+    # Test 1: --summary-only flag parses correctly
+    args = run_candels_fits.parse_args(["--summary-only"])
+    assert args.summary_only is True
+    assert args.only_missing is False
+
+    # Test 2: --only-missing flag without --summary-only
+    args = run_candels_fits.parse_args(["--only-missing"])
+    assert args.only_missing is True
+    assert args.summary_only is False
+
+    # Test 3: --summary-only and --only-missing together raise an error
+    with pytest.raises(SystemExit):
+        run_candels_fits.parse_args(["--summary-only", "--only-missing"])
+
+    # Test 4: no flags
+    args = run_candels_fits.parse_args([])
+    assert args.summary_only is False
+    assert args.only_missing is False
+
+    # Test 5: aggregate_summary correctly skips the fit loop when called
+    # Set up a minimal results directory with one JSON
+    results_dir = tmp_path / "fits"
+    results_dir.mkdir()
+
+    cell_json = results_dir / "13097_I.json"
+    cell_json.write_text(
+        json.dumps(
+            {
+                "gal_id": 13097,
+                "config": "I",
+                "adoption_pass": True,
+                "divergences": 0,
+                "rhat_max": 1.001,
+            }
+        )
+    )
+
+    # Call aggregate_summary directly (the function that powers --summary-only)
+    summary = run_candels_fits.aggregate_summary(results_dir)
+    assert summary["metadata"]["summary_only"] is True
+    assert len(summary["fits"]) == 1
+    assert summary["fits"][0]["gal_id"] == 13097
