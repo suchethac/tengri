@@ -10,25 +10,38 @@ lifts the worst ESS among converged galaxies from **0.83 — a collapsed
 autocorrelation estimate — to 1.82**. Phase 3 predicted all of that and it is
 what happened.
 
-**And ChEES still loses.** With the metric it converges on **8-10 galaxies of
-64**, against bare HMC's **11-16** and **preconditioned HMC's 26-38**, in 43.9 s
-against 30.0 s and 32.2 s. On converged galaxies per GPU-minute the order is
-preconditioned HMC **~50-70**, bare HMC **~32**, preconditioned ChEES **~11**,
-bare ChEES **~1.6**.
+**And ChEES still loses — by less than it first appeared.** The first cut of
+this comparison had a confound in it, and running the control changed the size of
+the answer without changing its sign. On the batched path `mcmc_nuts`/`mcmc_hmc`
+always get a warmup-estimated mass matrix from `window_adaptation` while ChEES's
+`inverse_mass_matrix` stays at ones, so the head-to-head was comparing **two**
+differences: the trajectory length, and a second adaptation only one arm had.
+Giving ChEES a comparable mass matrix roughly **doubles** it, 9 converged
+galaxies of 64 to 16 (medians of five processes, non-overlapping ranges 8-10 and
+15-18). It does not close the gap: preconditioned HMC with the *same* diagonal
+mass converges 22-27. So the conclusion holds — a learned trajectory length is a
+net negative here against a fixed `L = 10` — but the honest gap is **~1.4x, not
+the ~3x the uncontrolled table implied**, and roughly 40 % of what looked like
+"ChEES loses" was "ChEES had no mass matrix". Finding 5.
 
-So **Phase 2's result does not transfer**, and the reason is more interesting
-than "ChEES is bad here". Phase 2 measured *ChEES + metric* against *NUTS* and
-attributed the win to the pair. At catalog scale the two separate cleanly and
-**the metric is carrying it**: preconditioning roughly doubles bare HMC's
-converged count and quadruples bare ChEES's, while ChEES's own contribution — a
-trajectory length learned from the ensemble — is a **net negative** against a
-fixed `L = 10` at every K. The thing worth carrying forward from Phases 2 and 3
-is the **preconditioner**, not the sampler.
+**Preconditioning is what carries all of it.** It roughly doubles bare HMC
+(11-16 -> 25-28) and quadruples bare ChEES (2-4 -> 8-10). Phase 2 measured
+*ChEES + metric* against *NUTS* and credited the pair; at catalog scale the two
+separate cleanly and **the metric is the part that transfers**. The thing worth
+carrying forward from Phases 2 and 3 is the **preconditioner**, not the sampler.
 
-**No configuration measured here is usable.** The best row converges 38 of 64
-galaxies and its worst ESS *among those 38* is **1.91 of 200 draws**. An ESS of 2
-is not a posterior. Everything below is a comparison between broken things, and
-is reported as one.
+**No configuration measured here is usable.** The best arm converges 25-28 of 64
+and its worst ESS *among those* is **1.90 of 200 draws**. An ESS of 2 is not a
+posterior. Everything below is a comparison between broken things, and is
+reported as one.
+
+**Counts in this report are ranges, not point estimates, and that is a finding
+rather than a formatting choice.** The converged count is a step function of a
+continuous diagnostic and is **noisier the better the row is**, because
+preconditioning moves the bulk of the catalog toward the R-hat bar where more
+galaxies sit within noise of it. Identity HMC repeats 11/15/16/16/16 across
+independent processes at the same seed; preconditioned HMC repeats 26/28/30/33/38.
+Finding 7 says which of this report's comparisons survive that and which do not.
 
 `mcmc_chees` stays `tier="experimental"`; `mcmc_ghmc` and `mcmc_mclmc` stay
 `tier="broken"` and off the batched path. Nothing was promoted or demoted.
@@ -63,9 +76,10 @@ cell. **No number here may be quoted at a different SNR or a different
 `band_integration` without re-measuring.**
 
 **Wall clocks** are the warm (second) call. The box was idle for the sweeps that
-Findings 2-6 quote. The repeatability arms of Finding 7 ran while another
-worktree held the GPU, so **their wall clocks are contended and only their
-convergence counts are used**; that is stated again where they appear.
+Findings 2-6 quote and for Finding 5's control. Part of Finding 7's repeatability
+arms ran while another worktree held the GPU, so **those wall clocks are contended
+and only their convergence counts are used**; that is stated again where they
+appear.
 
 ## Why this was measured
 
@@ -255,7 +269,7 @@ is omitted, so the four columns are `conv + unconv + frozen = 64`. `min ESS
 draws out of 200. Divergence rates go through `total_draws()` — 200 draws x 1
 chain x 64 galaxies = 12 800 — never through `n_samples` (#2087): 418/12 800 is
 **3.27 %**. **Every converged count in this table carries the run-to-run spread
-Finding 7 measures**: +/-5 of 64 on the identity arms, +/-12 on the preconditioned
+Finding 8 measures**: +/-5 of 64 on the identity arms, +/-12 on the preconditioned
 HMC arm. Read the columns, not the digits.
 
 Six things fall out.
@@ -286,14 +300,13 @@ which is a larger *ratio* off a base so low that it is mostly a statement about
 how broken the identity-metric configuration was. In absolute converged galaxies
 the preconditioned HMC row is the best cell in this report by a factor of ~4.
 
-**5. So ChEES's own contribution is negative here.** Hold the metric fixed and
-the only difference between the two preconditioned arms is what sets the
-trajectory length: a fixed `L = 10` for HMC against ChEES's cross-chain adaptive
-`L` capped at 64. Adaptive loses, at 1.4x the wall clock and 8x the chains.
-Phase 2 measured ChEES+precond beating **NUTS** on the fits where NUTS is worst;
-it did not measure ChEES+precond against **HMC+precond**, and on this fixture
-that is the comparison that decides. (Caveat 3 names an alternative explanation
-that this report does not exclude.)
+**5. ChEES's own contribution is negative here — but the first version of this
+sentence was confounded.** Hold the metric fixed and the two preconditioned arms
+still differ in *two* ways, not one: fixed `L = 10` against ChEES's cross-chain
+adaptive `L`, **and** a warmup-estimated mass matrix that only HMC has.
+`window_adaptation` always estimates one; ChEES's stays at ones under
+`mass_matrix_estimation=None`. Finding 5 is the control, and it moves the answer
+a long way without flipping it.
 
 **6. Nothing here is usable, and the ESS column is why.** The best row's worst
 ESS among its own 38 converged galaxies is **1.91 of 200 draws**. This reproduces
@@ -303,7 +316,95 @@ Split R-hat compares two equally badly-mixed halves of one chain and reads 1.00;
 it cannot see this. That is why `min_ess_converged` is a separate reported field
 and why no galaxies-per-GPU-minute headline appears in this report's verdict.
 
-## Finding 5 — `chain_jitter` improves R-hat and exposes a stuck fifth of the catalog
+## Finding 5 — the control: about 40 % of the gap was a mass matrix ChEES did not have
+
+Finding 4's item 5 is the report's load-bearing sampler claim, and as first
+measured it had a confound in it. On the batched path `window_adaptation` hands
+`mcmc_nuts`/`mcmc_hmc` a mass matrix estimated from warmup — dense below D = 8 by
+the #319 auto-policy, so **dense** here — while ChEES's `inverse_mass_matrix`
+stays pinned at ones. A head-to-head between them therefore compares the
+trajectory length *and* a second adaptation, and a reader cannot see which is
+doing the work.
+
+The control is a 2x2, not one extra row, because neither knob alone isolates it.
+`dense_mass_matrix=False` on HMC does **not** give HMC an identity mass — window
+adaptation still estimates a diagonal one — so it brackets the effect rather than
+removing it. The other half, giving ChEES a comparable estimated mass via
+`mass_matrix_estimation="diagonal"`, is the half that actually tests the
+hypothesis. Both are now reachable from `CatalogFitter.run`; neither was before,
+which is why this was unmeasurable rather than merely unmeasured.
+
+Five independent processes per cell, K = 64, N = 64, `precondition=0.5`,
+burn-in 0, `chain_jitter=None`. Counts are given as all five values because
+Finding 8 shows a point estimate cannot separate these:
+
+| trajectory length | mass matrix | converged counts | median | range | warm (s) | max R-hat | min ESS (conv) | div |
+|---|---|---|---:|---:|---:|---|---:|---:|
+| fixed `L = 10` | **dense** (the default here) | 25, 27, 27, 27, 28 | **27** | 25-28 | 30.3 | 1.206-1.287 | 1.90 | 0 |
+| fixed `L = 10` | **diagonal** | 22, 22, 23, 24, 27 | **23** | 22-27 | 30.6 | 1.349-1.707 | 1.73 | 0 |
+| ChEES, learned | **identity** (the default) | 8, 9, 9, 10, 10 | **9** | 8-10 | 46.5 | 2.538 | 1.56 | 0 |
+| ChEES, learned | **diagonal**\* | 15, 16, 16, 17, 18 | **16** | 15-18 | 48.0 | 2.268 | 1.46 | 0 |
+
+\*with BlackJAX's trajectory-length floor forcibly disabled — see the obstruction
+below. That arm is the best available approximation to a like-for-like
+comparison, not a clean one.
+
+**The confound was real, and it is worth about 7 galaxies of 64.** Giving ChEES
+an estimated mass matrix takes it from 9 to 16 converged, ranges 8-10 and 15-18,
+**non-overlapping**, and drops its max R-hat from 2.538 to 2.268. That is a
+larger effect than anything else this report measured about ChEES apart from the
+metric itself, and the uncontrolled table in Finding 4 was silently crediting it
+to trajectory length.
+
+**And it does not close the gap.** ChEES with a mass matrix converges 15-18
+against HMC-with-the-same-diagonal-mass's 22-27 — again non-overlapping — at
+**48.0 s against 30.6 s**, and against dense-mass HMC's 25-28. So the direction
+of Finding 4's item 5 survives the control: at D = 3, a trajectory length learned
+from the ensemble is worse than a fixed `L = 10`, on both convergence and wall
+clock, with the mass matrix held equal.
+
+**What changes is the magnitude, and it changes a lot.** The uncontrolled
+comparison was 9 against 27, a factor of 3. The controlled one is 16 against 23,
+a factor of 1.4. **Roughly 40 % of the apparent ChEES deficit was the missing
+mass matrix, not the sampler.** Any downstream claim about how far ChEES is
+behind should quote the second number.
+
+**The dense-vs-diagonal half is a much smaller effect.** HMC goes 27 to 23 median
+with overlapping ranges (25-28 against 22-27), so HMC's advantage does not depend
+on being handed the richer mass matrix; a diagonal one is nearly as good at
+D = 3, which is what one would expect when the analytic metric has already
+whitened the coordinates. It is reported because it is the arm that was asked for
+and because a null control is still a control.
+
+### The obstruction: BlackJAX cannot trace ChEES's mass matrix at all
+
+The ChEES-with-a-mass-matrix arm did not run at first, and the reason is upstream
+and worth recording precisely. BlackJAX 1.6.2 enables its trajectory-length floor
+**exactly when** a mass matrix is being estimated (`enable_length_floor` is
+`mass_matrix_estimation is not None and _length_floor`), and that branch calls
+`float(step_size_ma)` on a traced array — `blackjax/adaptation/chees_adaptation.py`,
+in `run`, around line 990. So the pair raises `ConcretizationTypeError` under
+**any** `jit`: not just a catalog `vmap`, but a single fit too, and independently
+of tengri — it reproduces on a bare 3-D Gaussian with no tengri model in the
+trace.
+
+Every tengri ChEES entry point is jitted (`_chees_scan` carries the
+`jax.jit`), so `mass_matrix_estimation="diagonal"` was **unreachable in
+practice** — and `run_chees`'s docstring said it was "exposed so the ablation is
+re-runnable from a call rather than an edit", which was therefore not true. Both
+the docstring and the behavior are corrected: `_chees_scan` now passes
+`_length_floor=(mass_matrix_estimation is None)`, which is the only way the
+option can run at all, and **warns** that it has done so, because turning off
+half of an algorithm silently is worse than a slow ablation. The consequence is
+stated in the warning and repeated here: **the ChEES-diagonal row above is not
+the same sampler as the ChEES-identity row** in two ways, not one, and its 15-18
+should be read as an upper-ish bound on what the mass matrix alone buys.
+
+`tests/regression/bug/test_chees_mass_matrix_length_floor.py` pins the upstream
+failure against BlackJAX directly, so a fixed release makes the test fail and the
+workaround gets deleted rather than carried forever.
+
+## Finding 6 — `chain_jitter` improves R-hat and exposes a stuck fifth of the catalog
 
 Phase 3's rows used the default `chain_jitter=None`, which seeds the sampling
 chains from the adaptation ensemble's own warmed final states — so they are
@@ -350,7 +451,7 @@ preconditioning — the identity arm has more of them, not fewer. But it means
 `chain_jitter` is not a free diagnostic upgrade: it buys a real R-hat at the cost
 of writing off ~20 % of the catalog, and both halves have to be reported.
 
-## Finding 6 — full whitening is faster and worse, even where the metric is exact
+## Finding 7 — full whitening is faster and worse, even where the metric is exact
 
 Finding 3 measured `gamma = 1` here: the metric is not misspecified, so #1442's
 mechanism for preferring `alpha = 0.5` — full whitening amplifying a wrong metric
@@ -370,7 +471,7 @@ K = 64, N = 64, burn-in 0, `chain_jitter=None`:
 Full whitening is **1.1x faster for HMC and 2.0x faster for ChEES** — a
 perfectly-conditioned target lets the step size grow and, for ChEES, lets the
 adapted trajectory length collapse. The converged counts move by less than
-Finding 7's noise in both cases.
+Finding 8's noise in both cases.
 
 **Every quality column gets worse.** Max R-hat rises for both (1.245 -> 1.537,
 2.538 -> 3.678), divergences reappear where there were none (0 -> 7 and 0 -> 200),
@@ -378,15 +479,42 @@ ChEES freezes a galaxy it had not frozen, and its min ESS among converged
 galaxies falls 1.82 -> 1.24 — meaning the extra "converged" galaxies at
 `alpha = 1.0` are worse posteriors than the ones at 0.5.
 
-So **half whitening beats full here too**, agreeing with Phase 2's 7 of 7 and
-with #1442 — but **not for #1442's reason**, which is absent by measurement. The
-mechanism must be something else: in fully whitened coordinates the sampler takes
-the largest step the *modal* curvature permits, and this posterior is not Gaussian
-away from the mode, so it overshoots into the tails. Conditioning at the
-expansion point is not the objective; it is a proxy, and this is a fixture where
-optimizing the proxy exactly makes the answer worse.
+**Half whitening beats full here too — and the usual explanation for why is
+measurably not the reason.** The prescription agrees with Phase 2's 7 of 7 and
+with #1442. The *mechanism* does not, and the two should not be conflated:
 
-## Finding 7 — the converged count is a step function, and it is noisy in proportion to how good the row is
+* **#1442's mechanism** is misspecification. For a metric `G = H^gamma`, whitening
+  gives `kappa(H) ** |1 - alpha*gamma|`, which *exceeds* `kappa(H)` — worse than
+  doing nothing — exactly when `gamma > 2/alpha`. Full whitening tolerates only
+  `gamma <= 2`; past that it amplifies as `kappa^(gamma-1)`, unbounded. Half
+  whitening doubles the tolerated misspecification to `gamma <= 4`. **This
+  mechanism requires `gamma != 1`, and Finding 3 measured `gamma = 1` on this
+  fixture to the last digit the diagnostic carries.** It is not what is happening
+  here. `alpha = 1.0` really does deliver a perfectly conditioned target: whitened
+  condition exactly 1.000, on every galaxy.
+* **What is happening here** is that conditioning **at the expansion point** is a
+  proxy for the geometry a chain actually traverses, and the two come apart on a
+  posterior that is not Gaussian away from its mode. In fully whitened
+  coordinates the sampler takes the largest step the *modal* curvature permits,
+  and then overshoots into tails whose curvature the mode never described. The
+  signature is exactly what the table shows: faster (bigger steps), more nominal
+  "conversions", and simultaneously worse R-hat, worse ESS among those
+  conversions, and divergences appearing from nothing.
+
+`preconditioning.py` already records the second effect without connecting it to
+`alpha`: one posterior standard deviation from the MAP, the whitened stiffness
+runs 3.7e2 to 1.7e5 rather than the 1.0 held *at* the expansion point. This
+report is the first measurement that the gap has a cost a whitening exponent can
+trade against, and that trading it away is a bad deal even when the metric is
+perfect.
+
+Same prescription, different reason, and the difference matters for where the
+default should hold: #1442's argument says half whitening is insurance against a
+metric you cannot trust, which would suggest raising `alpha` once you can measure
+`gamma = 1`. This finding says **do not** — the residual is non-Gaussianity, and
+measuring the metric to be exact at the mode does not license full whitening.
+
+## Finding 8 — the converged count is a step function, and it is noisy in proportion to how good the row is
 
 Arm A re-ran Phase 3's exact cells. The wall clocks reproduced to within 1 %
 (HMC K = 8: 200.95 s here against 200.9 s published) while the **converged counts
@@ -411,28 +539,86 @@ diagnostic, and preconditioning moves the *bulk* of the catalog toward the 1.01
 bar, so far more galaxies end up sitting within noise of it. The identity arms
 are stable because most of their galaxies are nowhere near passing.
 
-Two consequences, both binding on how this report is read:
+Which of this report's comparisons survive that, stated explicitly rather than
+left to the reader:
 
-* **Differences of a few galaxies in 64 are not evidence.** The differences this
-  report rests on are not of that size — 8-10 against 26-38, 418 divergences
-  against 0, 4-6x on converged throughput — and the ranges above do not overlap
-  for any comparison it makes.
-* **`mcmc_chees` + metric is the most *reproducible* row in the study.** Its max
-  R-hat is 2.538 to four decimals in four independent processes, and its
-  converged count moves by 2. That is not a virtue if the number it reproduces is
-  8 of 64, but it does mean the negative result is not a sampling accident.
+| comparison | ranges | survives? |
+|---|---|---|
+| ChEES identity -> ChEES + metric (converged) | 2-4 vs 8-10 | **yes**, disjoint |
+| ChEES identity -> ChEES + metric (divergences) | 406-431 vs **0** | **yes**, and it is not a count of galaxies at all |
+| HMC identity -> HMC + metric | 11-16 vs 25-28 | **yes**, disjoint |
+| ChEES + metric vs HMC + metric (uncontrolled) | 8-10 vs 25-28 | **yes**, disjoint |
+| ChEES + metric + mass vs HMC + metric + mass (Finding 5) | 15-18 vs 22-27 | **yes**, disjoint |
+| ChEES identity-mass -> ChEES diagonal-mass (Finding 5) | 8-10 vs 15-18 | **yes**, disjoint |
+| HMC dense-mass vs HMC diagonal-mass (Finding 5) | 25-28 vs 22-27 | **no**, overlapping — reported as a null |
+| alpha = 0.5 vs alpha = 1.0 converged count (Finding 7) | 38 vs 30, one process each | **no** — which is why Finding 7 rests on R-hat, ESS and divergences instead |
+| K = 8 vs K = 32 vs K = 64 within any arm | e.g. 21/17/16 | **no** — chunk width is a performance axis, and the count differences across K are noise, not a K effect |
+
+Two further consequences:
 
 The repeatability arms ran while another worktree held the GPU, so their wall
 clocks (50-79 s where the clean sweep measured 30-73 s) are contended and are not
 used anywhere. Only their counts are.
+
+## Finding 9 — a benchmark-correctness bug that could have silently merged distinct cells
+
+Found while running this sweep, and it is not specific to it.
+`bench/scripts/benchmark_catalog_throughput.py` merges rows into a JSON keyed on
+configuration, newest wins. That key omitted **`precondition`**, **`chain_jitter`**
+*and* **`n_burnin`**. So any two cells differing only in one of those axes were
+**the same row**, and the second silently overwrote the first: a merged file would
+show one row where two measurements had been made, with no error, no warning, and
+a plausible-looking number.
+
+It fired twice during this work, and both times the surviving row was the *wrong*
+one for the label it carried:
+
+* The burn-in-100 arms overwrote the burn-in-0 arms for four K = 64 cells, so
+  `mcmc_hmc` + `precondition 0.5` briefly read 38 s / 32 converged (a 300-draw
+  chain) under a row that a reader would take for the 200-draw one.
+* Before that, the preconditioned rows would have overwritten the identity rows
+  outright had the key not been fixed first, which would have made the report's
+  central comparison compare a configuration against itself.
+
+**What it could have affected.** Any published comparison keyed on those axes and
+merged into one JSON. `precondition` and `chain_jitter` are new here, so no prior
+report used them — but **`n_burnin` is not new**, and any earlier sweep that
+varied burn-in at fixed `(method, N, K, warmup, samples)` and merged into a shared
+results file has the same exposure. The Phase 3 rows in
+`bench/reports/2026-08-31_catalog_batched_samplers.md` were all taken at
+`--burnin 0` and each `--json` target was written by a single command, so they are
+not affected; that was checked rather than assumed. The class of bug is worth
+naming anyway, because the failure mode is a *plausible number*, not a crash.
+
+All three fields are now in `_row_key` and in `_STAMP_FIELDS`, so they are both
+part of the key and carried in each row rather than only in the file-level `meta`
+(which the merge overwrites wholesale). The four ambiguous rows were dropped and
+re-measured under explicit keys, and `dense_mass` / `chees_mass_matrix` were added
+to the key when Finding 5's control introduced them — before running it, not
+after.
+
+The general lesson matches #2087's: **a benchmark's identity function is part of
+its correctness.** A row key that does not include every axis the sweep varies
+does not merely lose data, it invents agreement between measurements that were
+never made under the same conditions.
 
 ## What this means for the plan
 
 Phase 2's claim was *"preconditioning is the entire ChEES effect"*. This report
 sharpens it and, in sharpening it, removes ChEES from the sentence:
 **preconditioning is the effect.** It is worth carrying forward on the catalog
-path, and it now can be. The learned trajectory length is not — at least not at
-D = 3 against a fixed `L = 10` with a whitened metric already in hand.
+path, and it now can be.
+
+The learned trajectory length is not — at D = 3, against a fixed `L = 10`, with a
+whitened metric already in hand, and now with the mass matrix held equal
+(Finding 5). But the control also gives ChEES a **concrete next step** that this
+report did not have before it was run: ChEES's largest single deficit on the
+catalog path, after the metric, is that it carries no mass matrix while the
+window-adaptation samplers always do, and closing that is worth ~7 galaxies of 64
+here. The obstacle is upstream and specific — BlackJAX 1.6.2 cannot trace its own
+length floor when a mass matrix is being estimated — so the version of ChEES that
+would actually be worth re-measuring is one with **both**, and it does not exist
+yet in a traceable form.
 
 Two things follow that this report deliberately does **not** do:
 
@@ -464,16 +650,21 @@ curvature. The **mechanism** in Finding 1 is structural and D-independent; the
 answered.** 38 of 64 at a worst converged ESS of 1.91 is not a usable catalog
 fit. A sampler 4x better at producing unusable posteriors is 4x better at that.
 
-**Caveat 3 — HMC's mass matrix is dense here, and it composes with the metric.**
-D = 3 is below the D < 8 threshold, so `_resolve_dense_mass_matrix` selects a
-dense mass matrix estimated from warmup, **in the whitened coordinates**. The
-preconditioned HMC rows are therefore analytic whitening *followed by* an
-estimated dense mass, and this report has not separated the two. ChEES has no
-such composition — its `inverse_mass_matrix` stays the identity under
-`mass_matrix_estimation=None` — so part of the HMC-vs-ChEES gap in Finding 4's
-item 5 may be the second adaptation rather than the trajectory length. **That is
-a live alternative explanation and it is not excluded.** The measurement that
-settles it is the same HMC arm at `dense_mass_matrix=False`, and it was not run.
+**Caveat 3 — the like-for-like sampler comparison is bracketed, not clean.**
+Finding 5 controls the mass-matrix confound and finds it worth ~7 galaxies of 64,
+with HMC still ahead 22-27 to 15-18 at equal mass. Two residuals remain and
+neither is closable with this BlackJAX:
+
+* Even `dense_mass_matrix=False` leaves HMC a **warmup-estimated diagonal** mass,
+  not an identity one; `window_adaptation` always estimates something. So the
+  "equal mass" row is equal in *shape*, not in provenance — HMC's diagonal comes
+  from its own warmup, ChEES's from its ensemble.
+* The ChEES-diagonal arm runs with BlackJAX's trajectory-length floor forcibly
+  disabled, because the alternative is that it does not run at all. It is
+  therefore not the same sampler as the ChEES-identity arm in two ways.
+
+The comparison is honest about its direction and should not be quoted to two
+significant figures.
 
 **Caveat 4 — one chain per galaxy.** Both samplers ran `n_chains=1`, so every
 per-galaxy R-hat is a split R-hat over halves of one chain, with the blindness
@@ -507,12 +698,19 @@ how much is not reportable.
   and a NUTS arm would have cost more than the rest of the sweep together.
   Whether whitening shrinks NUTS's trees — the mechanism by which it *should*
   help NUTS most — is unmeasured and is the best next question.
-* **The `dense_mass_matrix=False` HMC control** that would close Caveat 3. This
-  is the measurement most likely to change Finding 4's item 5, and it is cheap.
+* **A true identity-mass HMC arm.** `window_adaptation` always estimates a mass
+  matrix, so the fully-isolated trajectory-length comparison would need a
+  fixed-`L` kernel run with `inverse_mass_matrix` pinned to ones, which is not
+  reachable through the adaptation this path uses.
+* **ChEES with an ensemble mass matrix AND its length floor**, which BlackJAX
+  1.6.2 cannot trace (Finding 5). Fixing the upstream `float()` call, or
+  reimplementing the floor traceably, would make Finding 5's fourth row a clean
+  measurement instead of a bracketed one.
 * **Whether ChEES ever beats preconditioned HMC.** Phase 2's fixtures, where
-  NUTS fails outright, were never run with a preconditioned **HMC** arm. Given
-  Finding 4's item 5, that comparison may well revise Phase 2's conclusion too.
-  This report does not guess at it.
+  NUTS fails outright, were never run with a preconditioned **HMC** arm — nor
+  with ChEES given a mass matrix. Given Finding 5, that comparison may well
+  revise Phase 2's conclusion too, and it is now runnable from a call. This
+  report does not guess at it.
 * **Multi-device.** The metric is built per lane inside `run_one`, so it rides
   `_sharded_vmap` unchanged, but that was not re-measured.
 * **Larger D.** The `O(K * D^2)` memory claim in Finding 2 is arithmetic, not a
@@ -553,7 +751,7 @@ python bench/scripts/benchmark_catalog_throughput.py \
     --precondition 0.5 \
     --json bench/results/catalog_preconditioning.json --tag rtx3060
 
-# 3. Finding 5 - chain_jitter, at burn-in 0 and burn-in 100. The burn-in pair is
+# 3. Finding 6 - chain_jitter, at burn-in 0 and burn-in 100. The burn-in pair is
 #    the measurement: identical divergence and frozen counts either way is what
 #    rules out "cold-start transient" as the explanation.
 for BURN in 0 100; do
@@ -567,7 +765,25 @@ for BURN in 0 100; do
   done
 done
 
-# 4. Finding 6 - full whitening, where Finding 3 measured the metric as exact.
+# 4. Finding 5 - the 2x2 mass-matrix control. Five processes per cell, because a
+#    point estimate cannot separate 23 from 16 given the spread Finding 8 measures.
+#    --dense-mass is NUTS/HMC only; --chees-mass-matrix is ChEES only and warns
+#    that it disables BlackJAX's untraceable length floor.
+for i in 1 2 3 4 5; do
+  B="--dtype f64 --n-gal 64 --chunk 64 --warmup 100 --burnin 0 --samples 200 \
+     --n-ensemble 8 --max-leapfrog-steps 64 --precondition 0.5"
+  J=bench/results/catalog_mass_control_$i.json
+  JAX_DEFAULT_MATMUL_PRECISION=highest python bench/scripts/benchmark_catalog_throughput.py \
+      --method mcmc_hmc   $B --dense-mass true            --json $J --tag "mc$i"
+  JAX_DEFAULT_MATMUL_PRECISION=highest python bench/scripts/benchmark_catalog_throughput.py \
+      --method mcmc_hmc   $B --dense-mass false           --json $J --tag "mc$i"
+  JAX_DEFAULT_MATMUL_PRECISION=highest python bench/scripts/benchmark_catalog_throughput.py \
+      --method mcmc_chees $B --chees-mass-matrix none     --json $J --tag "mc$i"
+  JAX_DEFAULT_MATMUL_PRECISION=highest python bench/scripts/benchmark_catalog_throughput.py \
+      --method mcmc_chees $B --chees-mass-matrix diagonal --json $J --tag "mc$i"
+done
+
+# 5. Finding 7 - full whitening, where Finding 3 measured the metric as exact.
 JAX_DEFAULT_MATMUL_PRECISION=highest \
 python bench/scripts/benchmark_catalog_throughput.py \
     --method mcmc_hmc mcmc_chees --dtype f64 --n-gal 64 --chunk 64 \
@@ -575,7 +791,7 @@ python bench/scripts/benchmark_catalog_throughput.py \
     --precondition 1.0 \
     --json bench/results/catalog_preconditioning.json --tag rtx3060
 
-# 5. Finding 7 - run-to-run spread in the converged count. Separate JSON per
+# 6. Finding 8 - run-to-run spread in the converged count. Separate JSON per
 #    process, because the merged file keys on configuration and a repeat is the
 #    same configuration by construction.
 for i in 1 2 3; do
@@ -594,7 +810,7 @@ for i in 4 5 6; do
       --json bench/results/catalog_precondition_repeat_$i.json --tag "rtx3060-precond-rep$i"
 done
 
-# 6. The gates. The quarantine must stay honest and no tier moved.
+# 7. The gates. The quarantine must stay honest and no tier moved.
 python -m pytest tests/contract/test_catalog_preconditioning.py \
     tests/unit/inference/test_preconditioning_traced.py \
     tests/unit/inference/test_preconditioning.py \
@@ -603,9 +819,10 @@ python -m pytest tests/contract/test_catalog_preconditioning.py \
     tests/contract/test_broken_backends_quarantined.py \
     tests/contract/test_chees_backend.py \
     tests/contract/test_catalog_batched_samplers.py \
-    tests/contract/test_catalog_throughput_bench.py -q
+    tests/contract/test_catalog_throughput_bench.py \
+    tests/regression/bug/test_chees_mass_matrix_length_floor.py -q
 
-# 7. The end-to-end check that the draws come back in the standardized latent
+# 8. The end-to-end check that the draws come back in the standardized latent
 #    basis, and that each galaxy gets its own metric. Under tests/inference, so
 #    it is auto-marked slow and deselected from the default run.
 python -m pytest tests/inference/test_catalog_preconditioning_e2e.py -q -m slow

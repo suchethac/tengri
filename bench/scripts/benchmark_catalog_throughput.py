@@ -442,6 +442,8 @@ _STAMP_FIELDS = (
     # consistency check (PR #2097).
     "precondition",
     "chain_jitter",
+    "dense_mass",
+    "chees_mass_matrix",
     # Rows carried n_warmup and n_samples but not the burn-in, so two cells that
     # differed only in how much of the chain they threw away were the same row.
     "n_burnin",
@@ -476,6 +478,8 @@ def _row_key(row):
         row.get("precondition"),
         row.get("chain_jitter"),
         row.get("n_burnin"),
+        row.get("dense_mass"),
+        row.get("chees_mass_matrix"),
         row.get("platform"),
         row.get("tag"),
     )
@@ -682,6 +686,25 @@ def main(argv=None):
         "as worse whenever the modal Hessian misstates the bulk curvature. "
         "Applies to every sampler on the batched path.",
     )
+    ap.add_argument(
+        "--dense-mass",
+        default=None,
+        choices=("true", "false"),
+        help="NUTS/HMC mass matrix. Default (unset) is tengri's auto-policy: dense "
+        "below D=8, diagonal at or above it (#319). THE CONTROL KNOB for the "
+        "HMC-vs-ChEES comparison: on this path window adaptation always estimates "
+        "SOMETHING, so the arms differ by a mass matrix as well as by trajectory "
+        "length, and 'false' brackets that (dense -> diagonal) rather than removing it.",
+    )
+    ap.add_argument(
+        "--chees-mass-matrix",
+        default=None,
+        choices=("none", "diagonal"),
+        help="mcmc_chees inverse_mass_matrix. Default None pins it to ones and takes "
+        "the geometry from --precondition. 'diagonal' estimates it from the ensemble, "
+        "giving ChEES the second adaptation NUTS/HMC already have -- the other half "
+        "of the same control. See run_chees's warning before reading a win from it.",
+    )
     ap.add_argument("--reps", type=int, default=4, help="--mode grad: timing repetitions")
     ap.add_argument("--runs", type=int, default=20, help="--mode grad: calls per repetition")
     ap.add_argument("--shard", action="store_true", help="also time devices='all' scaling")
@@ -783,6 +806,14 @@ def main(argv=None):
         chees_kw["max_leapfrog_steps"] = args.max_leapfrog_steps
     if args.chain_jitter is not None:
         chees_kw["chain_jitter"] = args.chain_jitter
+    if args.chees_mass_matrix is not None:
+        chees_kw["mass_matrix_estimation"] = (
+            None if args.chees_mass_matrix == "none" else args.chees_mass_matrix
+        )
+    # NUTS/HMC only: mcmc_chees refuses dense_mass_matrix=True by name and has no
+    # dense option to take, so this must not reach a ChEES cell.
+    if args.dense_mass is not None:
+        run_kw["dense_mass_matrix"] = args.dense_mass == "true"
     # Preconditioning is NOT a ChEES knob: the analytic metric threads through
     # every sampler on the batched path, so it goes in the shared kwargs. Keeping
     # it out of ``chees_kw`` is what lets an HMC row be measured with the same
@@ -792,6 +823,8 @@ def main(argv=None):
         run_kw["precondition"] = args.precondition
     meta["precondition"] = args.precondition
     meta["chain_jitter"] = args.chain_jitter
+    meta["dense_mass"] = args.dense_mass
+    meta["chees_mass_matrix"] = args.chees_mass_matrix
     meta["n_warmup"] = args.warmup
     meta["n_burnin"] = args.burnin
     meta["n_samples"] = args.samples
@@ -820,6 +853,7 @@ def main(argv=None):
                 if method == "mcmc_chees":
                     cell_kw.pop("max_num_doublings", None)
                     cell_kw.pop("n_leapfrog_steps", None)
+                    cell_kw.pop("dense_mass_matrix", None)
                 cold, _, bias, refused = _run_and_time(cat, method, K, None, key, cell_kw)
                 if refused is None:
                     warm, cp, _, refused = _run_and_time(cat, method, K, None, key, cell_kw)

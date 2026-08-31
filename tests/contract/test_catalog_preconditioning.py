@@ -184,6 +184,44 @@ class TestTheRefusalNowPointsSomewhere:
         assert "does not yet thread" not in str(exc.value)
 
 
+class TestTheMassMatrixControlIsReachable:
+    """Both arms of the HMC-vs-ChEES confound must be settable from a call.
+
+    The batched path always gives ``mcmc_nuts``/``mcmc_hmc`` a warmup-estimated
+    mass matrix while ChEES's ``inverse_mass_matrix`` stays at ones, so a
+    head-to-head between them compares **two** differences: the trajectory
+    length, and a second adaptation only one arm has. Neither knob was reachable
+    from ``CatalogFitter.run`` before, which made the confound unmeasurable
+    rather than merely unmeasured.
+    """
+
+    def test_the_catalog_sampler_accepts_chees_mass_matrix_estimation(self):
+        from tengri.inference.catalog_fitter import _CatalogFitterOriginal
+
+        sig = inspect.signature(_CatalogFitterOriginal._run_native_mcmc)
+        assert "mass_matrix_estimation" in sig.parameters
+        assert sig.parameters["mass_matrix_estimation"].default is None, (
+            "the analytic metric stays the default geometry; the ensemble "
+            "estimate is an ablation (run_chees's own warning)"
+        )
+
+    def test_it_is_forwarded_rather_than_swallowed(self):
+        import tengri.inference.catalog_fitter as cf
+
+        src = inspect.getsource(cf._CatalogFitterOriginal._run_native_mcmc)
+        assert "mass_matrix_estimation=mass_matrix_estimation" in src
+
+    def test_dense_mass_matrix_is_still_refused_for_chees(self):
+        """The new knob must not have opened a door the old refusal closed."""
+        from tengri.inference.catalog_fitter import _CatalogFitterOriginal
+
+        cat = _CatalogFitterOriginal.__new__(_CatalogFitterOriginal)
+        with pytest.raises(ValueError, match="dense_mass_matrix"):
+            _CatalogFitterOriginal._run_native_mcmc(
+                cat, "mcmc_chees", key=None, dense_mass_matrix=True
+            )
+
+
 class TestNoTierMoved:
     def test_chees_is_still_experimental(self):
         from tengri.inference._backend_registry import get_backend

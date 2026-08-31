@@ -1691,6 +1691,7 @@ class _CatalogFitterOriginal:
         n_leapfrog_steps=10,
         target_accept_rate=AUTO,
         dense_mass_matrix=None,
+        mass_matrix_estimation=None,
         init_from=None,
         map_init_steps=DEFAULT_MAP_INIT_STEPS,
         n_chains=1,
@@ -1766,6 +1767,17 @@ class _CatalogFitterOriginal:
         * a list of ``n_gal`` parameter dicts, or one dict broadcast to every
           galaxy: physical values, converted for you. The medians of a previous
           :class:`CatalogPosterior` are the intended source.
+
+        ``mass_matrix_estimation`` is ChEES-only and is **off by default**. It
+        exists so the mass-matrix ablation is re-runnable from a call rather than
+        an edit (``run_chees``'s own reason for exposing it), and Phase 3b needed
+        exactly that: on this path ``mcmc_nuts``/``mcmc_hmc`` always get a
+        warmup-estimated mass matrix from ``window_adaptation`` while ChEES's
+        ``inverse_mass_matrix`` stays at ones, so a head-to-head between them
+        compares *two* differences, not one. Setting it to ``"diagonal"`` gives
+        ChEES the second adaptation the other two already had. Prefer the
+        analytic metric: see the warning in
+        :func:`~tengri.inference.backends.mcmc.chees.run_chees`.
 
         ``precondition`` threads the analytic ``J^T N^-1 J + I`` metric
         (:mod:`tengri.inference.preconditioning`) through this path, **per
@@ -1905,6 +1917,7 @@ class _CatalogFitterOriginal:
             chain_jitter=chain_jitter,
             max_leapfrog_steps=max_leapfrog_steps,
             precondition=precondition,
+            mass_matrix_estimation=mass_matrix_estimation,
         )
 
         dummy_flat = ravel_pytree(fitter._initialize_unbounded(jax.random.PRNGKey(0)))[0]
