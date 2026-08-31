@@ -442,6 +442,9 @@ _STAMP_FIELDS = (
     # consistency check (PR #2097).
     "precondition",
     "chain_jitter",
+    # Rows carried n_warmup and n_samples but not the burn-in, so two cells that
+    # differed only in how much of the chain they threw away were the same row.
+    "n_burnin",
 )
 
 
@@ -472,6 +475,7 @@ def _row_key(row):
         # merged file would then show one row where two were run.
         row.get("precondition"),
         row.get("chain_jitter"),
+        row.get("n_burnin"),
         row.get("platform"),
         row.get("tag"),
     )
