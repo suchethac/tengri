@@ -19,13 +19,54 @@ import inspect
 from collections.abc import Callable
 from typing import Any
 
-from tengri.parameters.sentinels import FIXED, FREE, WILDCARD_ALIAS
+from tengri.parameters.priors import _is_default_fixed
+from tengri.parameters.sentinels import DEFAULT, FIXED, FREE, WILDCARD_ALIAS
 
 # Sentinel marking a parameter that was not specified at call time. We
 # can't use ``None`` because ``None`` is a legitimate dict value users
 # might want to pass through; can't use ``FREE`` / ``FIXED`` because those
 # carry semantic meaning.
 UNSET = object()
+
+
+def _validate_wildcard(label: str, wildcard: Any) -> None:
+    """Validate a builder factory's ``all_params=`` / ``other_params=`` value.
+
+    Accepts ``FREE``, ``FIXED``, or an unresolved ``Fixed(DEFAULT)`` token
+    (the per-parameter "pin at the registry default" spelling, also legal in
+    the wildcard slot). Rejects everything else, including a concrete
+    ``Fixed(v)`` and a bare ``DEFAULT`` sentinel -- the latter gets its own
+    message pointing at ``Fixed(DEFAULT)``.
+
+    Shared by every ``tengri.builders.*`` factory (``_factory.py``'s
+    ``make_factory``, and the SFH/AGN/dust modules' own inline factories) so
+    the four near-identical copies of this check stay in exact sync.
+
+    Parameters
+    ----------
+    label : str
+        The factory call site as it should read in the error, e.g.
+        ``"sfh.dpl"`` or ``"agn.composable"``.
+    wildcard : object
+        The value popped from ``all_params=`` / ``other_params=``.
+
+    Raises
+    ------
+    ValueError
+        If ``wildcard`` is not ``FREE``, ``FIXED``, or ``Fixed(DEFAULT)``.
+    """
+    if wildcard is FREE or wildcard is FIXED or _is_default_fixed(wildcard):
+        return
+    if wildcard is DEFAULT:
+        raise ValueError(
+            f"{label}(all_params=...): bare DEFAULT is not a valid wildcard value. "
+            f"DEFAULT is only legal as the argument of Fixed(...); did you mean "
+            f"all_params=Fixed(DEFAULT)?"
+        )
+    raise ValueError(
+        f"{label}(all_params=...): expected FREE or FIXED, got "
+        f"{wildcard!r}. Use tengri.FREE or tengri.FIXED."
+    )
 
 
 def make_factory(
@@ -67,11 +108,7 @@ def make_factory(
 
     def factory(**kwargs: Any) -> dict:
         wildcard = _pop_wildcard(variant, kwargs)
-        if wildcard not in (FREE, FIXED):
-            raise ValueError(
-                f"{variant}(all_params=...): expected FREE or FIXED, got "
-                f"{wildcard!r}. Use tengri.FREE or tengri.FIXED."
-            )
+        _validate_wildcard(variant, wildcard)
         flag_values: dict[str, bool] = {f: bool(kwargs.pop(f, False)) for f in bool_flags}
         unknown = [k for k in kwargs if k not in short_params]
         if unknown:

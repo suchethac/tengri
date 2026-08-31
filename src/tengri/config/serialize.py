@@ -8,6 +8,9 @@ version-controlled, diffable model specifications.
 The serialization format encodes:
 - Sentinels (FREE, FIXED) as strings: "FREE", "FIXED"
 - Fixed values as: {"__fixed__": value}  or bare scalars
+- An unresolved Fixed(DEFAULT) build-grammar token as: {"__fixed_default__": true}
+  (kept distinct from {"__fixed__": "DEFAULT"}, which is the legal categorical
+  Fixed("DEFAULT"))
 - Distributions as: {"__prior__": "ClassName", "param1": value, ...}
 - Structural strings (type names, law names) pass through unchanged
 
@@ -53,7 +56,7 @@ except ImportError:
     yaml = None  # type: ignore
 
 from tengri.config.exceptions import ConfigError
-from tengri.parameters.priors import Distribution
+from tengri.parameters.priors import Distribution, _is_default_fixed
 from tengri.parameters.sentinels import FIXED, FREE, _Sentinel
 
 __all__ = [
@@ -136,6 +139,13 @@ def distribution_to_dict(dist: Distribution) -> dict[str, Any]:
     >>> distribution_to_dict(Fixed(0.5))
     {'__fixed__': 0.5}
     """
+    if _is_default_fixed(dist):
+        # Unresolved Fixed(DEFAULT) build-grammar token: dist.value raises
+        # (it is only valid inside a group dict passed to parse_groups /
+        # SEDModel.build). Checked BEFORE dist.is_fixed reads dist.value
+        # below. Distinct wire form from {"__fixed__": "DEFAULT"}, which is
+        # the legal categorical Fixed("DEFAULT").
+        return {"__fixed_default__": True}
     if dist.is_fixed:
         # Fixed distributions serialize as a single value or tagged dict
         value = dist.value
@@ -218,8 +228,18 @@ def _deserialize_recursive(obj: Any, path: list[str]) -> Any:
         else:
             return obj  # Regular string
     elif isinstance(obj, dict):
-        # Check for special dicts (__fixed__, __prior__)
-        if "__fixed__" in obj:
+        # Check for special dicts (__fixed_default__, __fixed__, __prior__)
+        if "__fixed_default__" in obj:
+            if len(obj) != 1:
+                _raise_config_error(
+                    path, f"__fixed_default__ dict must have exactly one key, got {len(obj)}"
+                )
+            # Import here to avoid circular import
+            from tengri.parameters.priors import Fixed
+            from tengri.parameters.sentinels import DEFAULT
+
+            return Fixed(DEFAULT)
+        elif "__fixed__" in obj:
             if len(obj) != 1:
                 _raise_config_error(
                     path, f"__fixed__ dict must have exactly one key, got {len(obj)}"

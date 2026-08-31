@@ -64,7 +64,13 @@ from collections.abc import Callable
 from typing import Any
 
 from tengri._completion import curated_dir
-from tengri.builders._factory import UNSET, _pop_wildcard, make_factory, short_form
+from tengri.builders._factory import (
+    UNSET,
+    _pop_wildcard,
+    _validate_wildcard,
+    make_factory,
+    short_form,
+)
 from tengri.builders.agn import atten, blr, disc, feii, nlr, torus
 from tengri.parameters.groups import _AGN_PARTITION
 from tengri.parameters.registry import recipe_parameters
@@ -116,11 +122,7 @@ _SHARED_SHORT_PARAMS = _discover_shared_params()
 def composable(**kwargs: Any) -> dict:
     """Build a ``composable`` AGN config dict with six sub-block selectors."""
     wildcard = _pop_wildcard("agn.composable", kwargs)
-    if wildcard not in (FREE, FIXED):
-        raise ValueError(
-            f"agn.composable(all_params=...): expected FREE or FIXED, got "
-            f"{wildcard!r}. Use tengri.FREE or tengri.FIXED."
-        )
+    _validate_wildcard("agn.composable", wildcard)
     sub_blocks = {axis: kwargs.pop(axis, None) for axis in _AXIS_MODULES}
     for axis, value in sub_blocks.items():
         if value is None:

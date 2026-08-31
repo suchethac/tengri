@@ -46,9 +46,9 @@ from collections.abc import Callable
 from typing import Any
 
 from tengri._completion import curated_dir
-from tengri.builders._factory import _pop_wildcard
+from tengri.builders._factory import _pop_wildcard, _validate_wildcard
 from tengri.components.stellar.sfh.registry import SFH_REGISTRY
-from tengri.parameters.sentinels import FIXED, FREE, WILDCARD_ALIAS
+from tengri.parameters.sentinels import FIXED, WILDCARD_ALIAS
 
 # Sentinel marking a parameter that was not specified at call time. We
 # can't use ``None`` because ``None`` is a legitimate dict value users
@@ -138,11 +138,7 @@ def _make_factory(variant: str, spec) -> Callable[..., dict]:
 
     def factory(**kwargs: Any) -> dict:
         wildcard = _pop_wildcard(variant, kwargs)
-        if wildcard not in (FREE, FIXED):
-            raise ValueError(
-                f"{variant}(all_params=...): expected FREE or FIXED, got "
-                f"{wildcard!r}. Use tengri.FREE or tengri.FIXED."
-            )
+        _validate_wildcard(variant, wildcard)
         out: dict[str, Any] = {"type": variant, WILDCARD_ALIAS: wildcard}
         unknown = [k for k in kwargs if k not in short_names]
         if unknown:

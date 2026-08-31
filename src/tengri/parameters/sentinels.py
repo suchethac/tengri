@@ -1,12 +1,15 @@
 # SPDX-License-Identifier: BSD-3-Clause
 """Sentinel objects for nested-dict model builder API.
 
-Provides two module-level singleton sentinels:
+Provides three module-level singleton sentinels:
 
 - ``FREE``: marks a parameter to use the registry's default prior
 - ``FIXED``: marks a parameter to pin to the registry's default value
+- ``DEFAULT``: legal only as ``Fixed(DEFAULT)``, an explicit spelling of
+  "pin at the registry default" for one named parameter (equivalent to what
+  wildcard ``FIXED`` would have picked for it)
 
-Both sentinels preserve singleton identity across copy, pickle, and deepcopy operations.
+All three sentinels preserve singleton identity across copy, pickle, and deepcopy operations.
 
 Examples
 --------
@@ -177,6 +180,34 @@ because no ``dust`` group was given. Read
 wildcard fixed everything.
 """
 
+DEFAULT = _Sentinel("DEFAULT")
+"""Sentinel marking the registry default as the value of a ``Fixed(...)`` pin.
+
+Only legal as the argument of :class:`tengri.Fixed`, e.g. ``Fixed(DEFAULT)``,
+inside a group dict passed to :meth:`tengri.SEDModel.build` /
+:func:`tengri.parameters.parse_groups`::
+
+    from tengri import SEDModel, Fixed, DEFAULT
+
+    model = SEDModel.build(
+        ssp_data=ssp,
+        observation=obs,
+        met={"type": "delta", "logzsol": Fixed(DEFAULT)},
+    )
+
+``Fixed(0.3)`` pins the parameter at your own value, ``0.3``; ``Fixed(DEFAULT)``
+pins it at the registry default instead -- the same value ``'all_params':
+FIXED`` (the wildcard-FIXED sentinel) would have used for that parameter. It
+resolves through the identical canonical-default resolver, never a second
+path.
+
+Bare ``DEFAULT`` (not wrapped in ``Fixed(...)``) is not a legal value
+anywhere in a group dict; it raises :class:`tengri.config.exceptions.ParameterError`
+pointing at the ``Fixed(DEFAULT)`` spelling.
+
+Identity is preserved across pickle, copy, and deepcopy operations.
+"""
+
 #: Internal wildcard key in the nested-dict grammar. Sets ``FREE``/``FIXED``
 #: for every parameter in a group. The normalizer rewrites user-facing
 #: ``WILDCARD_ALIAS`` ('all_params') or its synonym ``WILDCARD_ALIAS_OTHER``
@@ -214,4 +245,4 @@ WILDCARD_ALIAS = "all_params"
 #: downstream consumer treat them identically.
 WILDCARD_ALIAS_OTHER = "other_params"
 
-__all__ = ["FIXED", "FREE", "WILDCARD_ALIAS", "WILDCARD_ALIAS_OTHER", "WILDCARD_KEY"]
+__all__ = ["DEFAULT", "FIXED", "FREE", "WILDCARD_ALIAS", "WILDCARD_ALIAS_OTHER", "WILDCARD_KEY"]

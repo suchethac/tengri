@@ -108,8 +108,9 @@ from tengri.config.exceptions import (
 )
 from tengri.parameters._builders import _resolve_lazy_bucket
 from tengri.parameters.parameters import Parameters
-from tengri.parameters.priors import Distribution, Fixed
+from tengri.parameters.priors import Distribution, Fixed, _is_default_fixed
 from tengri.parameters.sentinels import (
+    DEFAULT,
     FIXED,
     FREE,
     WILDCARD_ALIAS,
@@ -229,6 +230,37 @@ def _default_fixed_value(param_name: str, registry_default: Distribution) -> flo
         prior_midpoint=float(registry_default.unstandardize(0.0)),
     )
     return float(registry_default.unstandardize(0.0))
+
+
+def _bare_default_error(param_name: str) -> ParameterError:
+    """Build the error for a bare ``DEFAULT`` sentinel used as a parameter value.
+
+    ``DEFAULT`` is only legal as the argument of ``Fixed(...)``. Used bare in
+    a group dict (e.g. ``{"logzsol": DEFAULT}``, or as the ``'all_params'``
+    wildcard, or as a top-level setting like ``redshift=DEFAULT``) it raises
+    here rather than silently wrapping into ``Fixed(DEFAULT)`` on the
+    caller's behalf: unlike ``FREE``/``FIXED``, ``DEFAULT`` alone is not a
+    grammar directive.
+
+    One message, reused everywhere a bare ``DEFAULT`` can appear, rather than
+    several near-duplicate strings.
+    """
+    return ParameterError(
+        f"{param_name!r}: bare DEFAULT is not a valid parameter value. "
+        f"DEFAULT is only legal as the argument of Fixed(...); did you mean "
+        f"Fixed(DEFAULT) (pin at the registry default)?"
+    )
+
+
+def _is_wildcard_disposition(x: object) -> bool:
+    """Return True if ``x`` is a legal ``'all_params'``/``'*'`` disposition.
+
+    True for ``FREE``, ``FIXED``, or an unresolved ``Fixed(DEFAULT)`` token.
+    Always an explicit identity/type check, never ``x in (FREE, FIXED)``:
+    ``Fixed`` is unhashable (no set membership), and tuple-``in`` falls back
+    to ``==``, which is unnecessary to lean on when identity suffices.
+    """
+    return x is FREE or x is FIXED or _is_default_fixed(x)
 
 
 # Ensure SEDModelComponent subclasses are imported and registered.
@@ -931,7 +963,10 @@ def parse_groups(**kwargs) -> Parameters:
                 if val is FREE:
                     resolved_kwargs[param_name] = structural_params.get_distribution(param_name)
                     provenance[param_name] = "user_free"
-                elif val is FIXED:
+                elif val is FIXED or _is_default_fixed(val):
+                    # Wildcard-FIXED and Fixed(DEFAULT) both resolve through
+                    # the same canonical-table path (#412) -- never a second
+                    # one.
                     registry_default = structural_params.get_distribution(param_name)
                     if registry_default.is_fixed:
                         resolved_kwargs[param_name] = registry_default
@@ -940,6 +975,8 @@ def parse_groups(**kwargs) -> Parameters:
                             _default_fixed_value(param_name, registry_default)
                         )
                     provenance[param_name] = "user_fixed"
+                elif val is DEFAULT:
+                    raise _bare_default_error(param_name)
                 else:
                     if isinstance(val, Distribution):
                         resolved_kwargs[param_name] = val
@@ -1076,17 +1113,24 @@ def parse_groups(**kwargs) -> Parameters:
             if pname not in neb_group:
                 continue
             val = neb_group[pname]
-            if isinstance(val, Distribution):
-                resolved_kwargs[pname] = val
-                provenance[pname] = "user_prior"
-            elif val is FREE or val is FIXED:
+            # Sentinel/token checks MUST come before the isinstance(Distribution)
+            # check: Fixed(DEFAULT) (like every Fixed) *is* a Distribution, but
+            # these knobs carry no registry default to resolve it against, so
+            # it must hit the "needs an explicit prior or value" error below
+            # rather than being accepted as a plain user-supplied Fixed.
+            if val is DEFAULT:
+                raise _bare_default_error(pname)
+            elif val is FREE or val is FIXED or _is_default_fixed(val):
                 raise ValueError(
                     f"neb[{pname!r}] needs an explicit prior or value "
                     f"(e.g. Uniform(lo, hi) or a number); the 'all_params' wildcard "
                     f"(also '*') and "
-                    f"bare FREE/FIXED are unsupported for optional Cue knobs "
-                    f"because they carry no registry default."
+                    f"bare FREE/FIXED/Fixed(DEFAULT) are unsupported for optional Cue "
+                    f"knobs because they carry no registry default."
                 )
+            elif isinstance(val, Distribution):
+                resolved_kwargs[pname] = val
+                provenance[pname] = "user_prior"
             else:
                 resolved_kwargs[pname] = Fixed(val)
                 provenance[pname] = "user_fixed"
@@ -1682,10 +1726,10 @@ def _warn_silently_fixed_parameters(
             # Group was provided but not as a dict, so skip
             continue
 
-        # Check if user stated a disposition in their provided dict
+        # Check if user stated a disposition in their provided dict.
         has_explicit_disposition = (
-            "all_params" in group_dict and group_dict["all_params"] in (FREE, FIXED)
-        ) or ("*" in group_dict and group_dict["*"] in (FREE, FIXED))
+            "all_params" in group_dict and _is_wildcard_disposition(group_dict["all_params"])
+        ) or ("*" in group_dict and _is_wildcard_disposition(group_dict["*"]))
 
         if has_explicit_disposition:
             # User explicitly stated a disposition, so don't warn
@@ -2110,12 +2154,20 @@ def _translate_structural(groups: dict) -> dict:
         elif group_name == "agn":
             _translate_agn(group_dict, result)
 
-    # Top-level settings win over group-derived ones; sentinels (FREE/FIXED)
-    # are resolved later in _resolve_value, not here.
+    # Top-level settings win over group-derived ones; sentinels (FREE/FIXED,
+    # Fixed(DEFAULT), and bare DEFAULT) are resolved (or, for bare DEFAULT,
+    # rejected) later in the "_toplevel" branch of the resolve loop, not
+    # here. Passing one of them through to this structural pre-pass's
+    # ``Parameters(**structural_kwargs)`` call would crash there instead:
+    # ``Fixed(DEFAULT)`` because its readers raise until resolved, bare
+    # ``DEFAULT`` because it is not a Distribution/scalar/tuple at all.
     for key in list(groups.keys()):
         if key in _TOP_LEVEL_SETTINGS:
             val = groups[key]
-            if val is not FREE and val is not FIXED:
+            is_sentinel_or_token = (
+                val is FREE or val is FIXED or val is DEFAULT or _is_default_fixed(val)
+            )
+            if not is_sentinel_or_token:
                 result[key] = val
 
     return result
@@ -4618,10 +4670,14 @@ def _resolve_value(
             # These are structural keys, not parameters
             return registry_default, "registry_default"
 
+        if val is DEFAULT:
+            raise _bare_default_error(param_name)
         if val is FREE:
             return _expand_free(param_name, registry_default), "user_free"
-        elif val is FIXED:
-            # FIXED: convert registry default to Fixed at its center
+        elif val is FIXED or _is_default_fixed(val):
+            # FIXED and Fixed(DEFAULT) both convert the registry default to
+            # Fixed at its canonical-table value (#412) -- same resolver,
+            # never a second path.
             if registry_default.is_fixed:
                 return registry_default, "user_fixed"
             else:
@@ -4654,7 +4710,7 @@ def _resolve_value(
                 Fixed(_default_fixed_value(param_name, registry_default)),
                 "wildcard_fixed_inactive",
             )
-        elif wildcard is FIXED:
+        elif wildcard is FIXED or _is_default_fixed(wildcard):
             if registry_default.is_fixed:
                 return registry_default, "wildcard_fixed"
             else:
@@ -4662,6 +4718,8 @@ def _resolve_value(
                     Fixed(_default_fixed_value(param_name, registry_default)),
                     "wildcard_fixed",
                 )
+        elif wildcard is DEFAULT:
+            raise _bare_default_error(param_name)
         else:
             # Bad wildcard value: only FREE or FIXED are accepted in the
             # wildcard slot ('all_params', or its synonym '*').

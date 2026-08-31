@@ -61,7 +61,7 @@ from collections.abc import Callable
 from typing import Any
 
 from tengri._completion import curated_dir
-from tengri.builders._factory import UNSET, _pop_wildcard, short_form
+from tengri.builders._factory import UNSET, _pop_wildcard, _validate_wildcard, short_form
 from tengri.builders.dust import emission  # nested factory namespace
 from tengri.components.dust.attenuation import DUST_LAWS
 from tengri.parameters.registry import recipe_parameters
@@ -126,11 +126,7 @@ def _make_dust_factory(
 
     def factory(**kwargs: Any) -> dict:
         wildcard = _pop_wildcard(f"dust.{dust_model}", kwargs)
-        if wildcard not in (FREE, FIXED):
-            raise ValueError(
-                f"dust.{dust_model}(all_params=...): expected FREE or FIXED, got "
-                f"{wildcard!r}. Use tengri.FREE or tengri.FIXED."
-            )
+        _validate_wildcard(f"dust.{dust_model}", wildcard)
         # String settings (e.g. law, law_bc, law_diff). No defaults are applied;
         # grammar requires explicit specification. Flat-kwarg builds get power_law
         # defaults in Parameters.
