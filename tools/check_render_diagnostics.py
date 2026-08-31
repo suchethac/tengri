@@ -2,8 +2,6 @@
 # SPDX-License-Identifier: BSD-3-Clause
 """Guard notebook renders against dead fits and diagnostic failures.
 
-CI: not wired — wiring lands separately after #2111's tests.yml rework (#2095).
-
 A committed notebook render that shows a dead fit or divergent inference must
 fail this guard. The rendered output carries printed diagnostics — R-hat values,
 NaN parameters, log_evidence warnings — that indicate the fit is unreliable.
