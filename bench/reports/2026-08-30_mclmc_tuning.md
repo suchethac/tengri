@@ -281,7 +281,10 @@ measurement.
 - `bench/scripts/benchmark_notebook_sampler.py` **could not build any of its
   models**: `dust=` and a lone `law_bc=` have both been retired, so every row
   raised `ValueError`. `benchmark_quickstart_sampler.py` has the same defect and
-  is still broken. Repairing it requires a choice, and the choice matters: the
+  is still broken. *(Update 2026-08-31, #2096: it has since been repaired — by
+  deleting its model and importing the shared `NOTEBOOKS` registry, so the
+  choice below is made once rather than per working tree.)* Repairing it
+  requires a choice, and the choice matters: the
   retired `law_bc="calzetti"` resolved to `law_diff="power_law"`
   (`TwoComponentDustConfig.law_diff`'s own default). Writing `law="calzetti"`
   instead — both screens Calzetti — looks identical and **moves nb05 seed 7 from
@@ -289,7 +292,9 @@ measurement.
   far more sensitive to the dust law than to the sampler.
 - `benchmark_quickstart_sampler.build_model` builds **D = 6**; its own published
   table says D = 7 and names `met_logzsol` as a worst-mixing parameter. The `ctl`
-  and `00` builders here restore it.
+  and `00` builders here restore it. *(Update 2026-08-31, #2096: recorded as a
+  correction in `2026-08-17_quickstart_nuts_vs_hmc.md` itself. The published
+  numbers stand; it was the committed builder that drifted away from them.)*
 - nb00 was measured on two seeds before being stopped for the posterior-agreement
   work. Seed 10's NUTS row is worth keeping: **R̂ 12.0069, 1000 divergences out of
   1000 draws, 2.0 gradients per draw** — tree depth 1, every trajectory aborting
