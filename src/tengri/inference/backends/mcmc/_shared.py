@@ -290,6 +290,34 @@ def _bounded_pathfinder_elbo_draws(n_draws: int | None = None):
     ``GeneratePathfinderAPI`` instance holding the same function object; patching that
     one instead would be a silent no-op here.
 
+    **Two namespaces, and a clamp rather than a default (2026-08-31).** blackjax
+    1.6.2 grew a multi-path Pathfinder, and `pathfinder_adaptation` now dispatches
+    on ``(num_chains, effective_n_paths)``:
+
+    * ``num_chains == 1 and effective_n_paths == 1`` (PATH A) calls
+      ``vi.pathfinder.approximate(key, logdensity_fn, position)`` with no
+      ``num_samples`` -- the case this guard was written for, and the only case
+      tengri's two call sites reach today, since neither passes ``num_chains``
+      or ``n_paths``.
+    * ``effective_n_paths >= 2`` (PATH C) instead calls
+      ``blackjax.vi.multipathfinder.multi_approximate(..., num_samples=num_samples_per_path)``,
+      which defaults to **200** and vmaps ``approximate`` over every path, so the
+      exposure is ``n_paths x 200`` ELBO draws where 200 alone measured 25.65 GB
+      and a SIGKILL (#1028/#1029).
+
+    That second path bypassed this guard **twice over**, and one ``num_chains=``
+    on either call site would have been enough to hit it:
+
+    1. ``multipathfinder`` does ``from blackjax.vi.pathfinder import approximate``
+       at *import* time, so it holds its own module-global binding. Rebinding
+       ``vi.pathfinder.approximate`` never reached it.
+    2. ``multi_approximate`` passes ``num_samples`` **positionally**, so a cap
+       expressed as a parameter *default* would have been overridden anyway.
+
+    Both namespaces are now rebound, and the cap is ``min(requested, draws)``
+    rather than a default -- an explicit 200 is clamped, while a caller asking for
+    fewer than ``draws`` keeps their smaller number.
+
     ``n_draws=None`` reads :data:`_PATHFINDER_ELBO_DRAWS` **at call time**, not at import,
     so a test may lower it by patching the module attribute.
 
@@ -302,13 +330,30 @@ def _bounded_pathfinder_elbo_draws(n_draws: int | None = None):
 
     @functools.wraps(original)
     def _capped(rng_key, logdensity_fn, initial_position, num_samples=draws, **kwargs):
-        return original(rng_key, logdensity_fn, initial_position, num_samples, **kwargs)
+        # min(), not a default: multi_approximate forwards num_samples positionally.
+        return original(
+            rng_key, logdensity_fn, initial_position, min(num_samples, draws), **kwargs
+        )
 
-    vi.pathfinder.approximate = _capped
+    # Every module holding an import-time binding of ``approximate``. A name missing
+    # on an older blackjax is skipped, not an error -- the floor check owns version
+    # policy, this only has to avoid patching something that is not there.
+    targets = [vi.pathfinder]
+    try:
+        from blackjax.vi import multipathfinder
+
+        targets.append(multipathfinder)
+    except ImportError:  # pragma: no cover - blackjax < 1.6 has no multipathfinder
+        pass
+    patched = [m for m in targets if getattr(m, "approximate", None) is original]
+
+    for module in patched:
+        module.approximate = _capped
     try:
         yield
     finally:
-        vi.pathfinder.approximate = original
+        for module in patched:
+            module.approximate = original
 
 
 # ---------------------------------------------------------------------------
