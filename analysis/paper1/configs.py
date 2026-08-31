@@ -69,7 +69,7 @@ def config_II(ssp_data: tengri.SSPData, observation, z: float) -> SEDModel:
             "tau_gyr": Uniform(0.5, 13.0),
             "age_gyr": Uniform(1.0, age_at_z(z)),
             "log_total_mass": Uniform(8.0, 12.5),
-            "met_logzsol": Uniform(-2.0, 0.3),
+            "met_logzsol": Uniform(-2.0, 0.5),
         },
         dust_attenuation={
             "type": "two_component",
