@@ -1017,6 +1017,16 @@ Float64 autodiff reproduces float64 central differences to ≤2e-04 at the same 
 the reference is sound. Pinned by `test_float32_grad_bolometric_seams.py` (all four seams)
 and `test_float32_gradient_accuracy.py::test_likelihood_gradient_is_accurate_in_float32`.
 
+> **Correction (2026-08-31): those rows were measured under `WavePrecomp`, not on the
+> exact projector.** Both tests construct `Fitter(model, flux, noise)` with the default
+> `approx="auto"`, which **re-resolves the build-time knob** — so a model built with
+> `approx=None` is *fitted* under the LUT (`ApproxState(wave_precomp=True,
+> n_subbands=5)`, verified off `fitter.model.approx`). The numbers stand and are the more
+> useful ones, because the LUT is what a fit runs; what the "NOT covered" list below used
+> to say about `WavePrecomp` was backwards. Both projectors, both redshift dispositions
+> and both backends are now measured — see
+> **"Extended to the fitting path (2026-08-31)"** at the end of this document.
+
 Same-precision finite differences are **not** a usable arbiter for this objective, and it
 is worth saying why since they are the arbiter everywhere else in this section: chi-squared
 is ~1e4 here, so a central difference in float32 subtracts two nearly equal ~1e4 numbers
@@ -1164,15 +1174,167 @@ Stated so the next person does not read the table above as wider than it is:
   `observation/observation.py`; nothing here measures its gradient.
 * **Emission-line fluxes.** `line_measurement.py` applies its own combined
   `log10_conv - log10_four_pi_dl2` offset — same primitive, unmeasured here.
-* **Free redshift.** Every measurement above fixes `redshift=Fixed(0.1)`, so the
-  gradient with respect to `z` (which passes through `log10_flux_scale` itself, not only
-  through the array argument) is untested.
-* **`WavePrecomp`.** The photometry measurements are on the exact path. #1415 reports the
-  zero gradient on both, and the fix is `approx`-independent by construction, but the
-  boosted numbers were not re-taken under the LUT.
-* **CUDA.** Every number here is CPU, except the one CUDA row called out in the boost
-  sweep — and that row is the whole reason to say so. Float32 on Ampere silently
-  lowers matmuls to TF32 unless `JAX_DEFAULT_MATMUL_PRECISION=highest` (#2022), which is worth 4.5% on parameter
-  error bars and would sit inside some of the tolerances above.
+* **Free redshift** — *covered for the posterior gradient since 2026-08-31*, on both
+  projectors and both backends; see the section below. Still uncovered for the
+  **unweighted-observable** gradient (`sum(predict_photometry)` and `loss_scaled_grad`),
+  which is what the boost sweep above measures.
+* **`WavePrecomp`** — *covered for the posterior gradient since 2026-08-31* at
+  `band_integration="quadrature"` with `n_subbands` 5 and 8, fixed and free *z*. The
+  statement this bullet used to make was backwards: the **posterior-gradient**
+  measurements were already under the LUT (`Fitter`'s default `approx="auto"`
+  re-resolves the build-time knob), and it was the *exact* projector that was untested.
+  The `predict_photometry` / `loss_scaled_grad` numbers in the boost sweep above are
+  genuinely exact-path-only and have still not been re-taken under the LUT.
+* **CUDA** — *covered for the posterior gradient since 2026-08-31*: 24 seam cells, with
+  `JAX_DEFAULT_MATMUL_PRECISION=highest` set, agreeing with CPU to ≤1.0e-04 in float32
+  and 5.8e-15–1.9e-07 in float64. Float32 on Ampere silently lowers matmuls to TF32
+  unless that variable is set (#2022), which is worth 4.5% on parameter error bars and
+  would sit inside some of the tolerances above, so it is not optional. The
+  **unweighted-observable** boost sweep remains CPU-only bar its one deliberate CUDA row.
 * **The other discs, radio, X-ray, shock, IGM** — each is its own seam; see §8's
   inventory for what the *forward* path guarantees, which is not the same claim.
+
+---
+
+## Extended to the fitting path (2026-08-31): WavePrecomp, free redshift, CUDA
+
+Full measurement, tables and reproduction in
+`bench/reports/2026-08-31_float32_fitting_path.md`; pinned by
+`tests/regression/precision/test_float32_fitting_path_seams.py` (thirteen seams, five
+assertions each, plus the projector pin, the LUT-bias ordering and the SNR pair). **No
+`src/` change was made** — this section is coverage, not behavior.
+
+### The projector a fit runs is not the one it was built with
+
+`Fitter`'s default `approx="auto"` **re-resolves** the build-time knob. Measured on the
+stellar+dust model:
+
+| construction | `fitter.model.approx` |
+|---|---|
+| `SEDModel.build(approx=None)` | `ApproxState(n_subbands=5)` |
+| `Fitter(model, flux, noise)` | `ApproxState(wave_precomp=True, n_subbands=5)` |
+| `Fitter(model, flux, noise, approx=None)` | `ApproxState(n_subbands=5)` |
+
+So an arm labeled "exact" must pass `approx=None` to the **Fitter**, not only to
+`SEDModel.build`. This is what the correction above turns on.
+
+### What is now covered, and to what
+
+Pure float32 `grad(neg_log_posterior_fn)` against float64 autodiff, relative in the
+**2-norm** (componentwise relative error is unbounded on a direction whose float64
+gradient crosses zero, and this inventory has such directions). Four model seams ×
+{exact, LUT at `n_subbands` 5, LUT at `n_subbands` 8} × {fixed *z*, free *z*}, at the
+standardized origin and 0.5 sigma, SNR 30, on **CPU and CUDA** — 48 cells:
+
+| axis | worst cell | value |
+|---|---|---|
+| float32 vs float64, all 48 cells | `panchromatic` / LUT K=8 / free *z* | **1.4e-03** |
+| float64 autodiff vs float64 central differences | `panchromatic` / free *z* | 9.7e-04 |
+| float64 CPU vs float64 CUDA | `panchromatic` (Cue matmuls) | 1.9e-07 |
+| float32 CPU vs float32 CUDA | `panchromatic` / exact / free *z* | 1.0e-04 |
+
+The exact projector is the *cleanest* float32 arm on every model, and the largest
+float32 numbers are all on free-redshift rows, in the `d/d redshift` direction
+specifically (worst single component 1.30e-02, on `panchromatic` / LUT K=8 / free *z*).
+
+**No backend split in the float32 answer.** The `2**70` cotangent-boost split recorded
+in the sweep above (0.7–18 % wrong on CPU, 1e-06 on CUDA) does not appear here, and
+could not: it is a subnormal-flush effect on an O(1) cotangent, and a Gaussian
+likelihood's `1/sigma**2` ~1e32 keeps the fitting path's cotangent chain in normal range
+on both backends.
+
+### But "float64 is bit-identical under the boost" is a **CPU** statement
+
+`loss_scaled_grad` leaves the float64 posterior gradient exactly unchanged on CPU, on
+all thirteen seams (`np.array_equal`, no tolerance). **On CUDA it moves 9 of the 13
+seams, by up to 1.4e-14 relative** (118 ulp on the worst component), on stellar+dust /
+LUT / free *z* at 0.5 sigma. The boost is exact by construction; the *graph* is not the same graph, so XLA
+fuses and reduces differently and GPU reductions are order-dependent. It is not stable
+within the backend either: a script that takes only the two gradients reproduces exact
+equality on a seam that fails inside the test module, which takes finite differences in
+between — a compile-time choice, not arithmetic.
+
+**Nothing shipped moves**: no fitting path applies `loss_scaled_grad` (a likelihood
+supplies the same lift for free), so this is a statement about the helper's contract,
+not about any float64 posterior. It is recorded because #1206's no-behavioral-change bar
+is stated as bit-identity, and that bar is now known to be backend-specific for this
+helper. `test_the_cotangent_boost_does_not_move_the_float64_gradient` asserts exact
+equality on CPU and a 1e-12 relative budget on any backend.
+
+### The error that limits a default fit is the LUT's, not float32's
+
+On `approx="auto"` with a free redshift, at SNR 30, the **float64** gradient already
+differs from the exact projector's by, in the `d/d redshift` component:
+
+| model | `d/d z` exact f64 | `d/d z` LUT f64 | LUT bias | float32 error on the same component |
+|---|---|---|---|---|
+| stellar+dust | −18.579 | −17.368 | **6.5e-02** | 2.9e-04 |
+| dust IR | −15.550 | −14.406 | **7.4e-02** | 2.8e-03 |
+| panchromatic | −5.544 | −4.524 | **1.8e-01** | 6.6e-03 |
+
+Reaching for float64 to fix that buys nothing — the bias survives at full precision.
+`approx=None`, or a finer `n_z`, is the fix.
+
+### float32 does not amplify #1671; it *is* #1671, three orders down
+
+The float32 error is **linear in SNR**, by the same mechanism as #1671 — a constant
+*relative* forward error reaching the gradient multiplied by `1/sigma`.
+`WavePrecomp`'s coefficient is its LUT bias (~1e-3); float32's is its forward rounding
+(~1e-6), so the ratio between them is fixed. Norm-relative, stellar+dust,
+`approx="auto"`, fixed *z*:
+
+| SNR | float32 vs float64 | LUT float64 vs exact float64 | ratio |
+|---|---|---|---|
+| 30 | 5.2e-04 | 8.0e-03 | 15x |
+| 100 | 1.8e-03 | 2.7e-02 | 15x |
+| 300 | 5.6e-03 | 8.3e-02 | 15x |
+| 1000 | 2.3e-02 | 2.8e-01 | 12x |
+
+Across all 24 SNR rows the LUT term leads by **5x to 240x**. The one configuration where
+the ratio moves is panchromatic at *free* redshift (24x at SNR 30 down to ~5x at SNR
+1000), and it moves because the **LUT** term stops being linear there: the ztable's
+interpolation error along *z* has an SNR-independent floor, so it starts high and grows
+more slowly than SNR. The margin narrows; it does not reverse.
+
+Two things follow. **float32 has an SNR ceiling**: the 1e-2 bar is crossed between SNR
+300 and 1000 on three of the six configurations swept — stellar+dust on both projectors
+(1.4e-02 exact, 2.3e-02 LUT at SNR 1000) and panchromatic at free *z* (2.5e-02); the
+other three reach only 1.1e-03 to 5.7e-03, so the ceiling is model-dependent. Below
+SNR ~300 nothing measured comes close; at SNR 1000 per band, measure your own model
+first. And the runtime
+advisory `_warn_if_lut_bias_amplified` **under-predicts on free redshift by up to 8x**
+(0.0025 estimated against 2.0e-02 measured, stellar+dust at SNR 30) because it probes a
+scalar forward bias at one point and the free-*z* error lives in the ztable
+interpolation *along z* — a direction one forward probe cannot see. At SNR 30 it is
+silent on every configuration here while the panchromatic free-*z* redshift gradient is
+already 18 % wrong.
+
+### What float32 is worth on the fitting path
+
+Not a faster clock — PR #2097 measured the forward model at ~0.12 FLOP/byte — but
+halved memory traffic, i.e. a higher batch ceiling. **Measure it at a batch large enough
+that the per-galaxy term dominates**, or the intercept (SSP tables, filter LUT, program
+constants — ~96 MiB, flat from batch 1 to 128) swallows the answer:
+
+| batch | peak f32 | peak f64 | gal/GiB f32 | gal/GiB f64 | ratio |
+|---|---|---|---|---|---|
+| 2048 | 324.8 MiB | 406.5 MiB | 6,459 | 5,161 | 1.25x |
+| **8192** | **581.5 MiB** | **1,176.7 MiB** | **14,425** | **7,129** | **2.02x** |
+
+Marginal cost over 128 → 8192: 61.7 vs 132.9 kiB/galaxy, i.e. **2.15x**. So float32 does
+buy the textbook 2x on the fitting path's gradient; PR #2097 stopped at batch 2048,
+where the same measurement reads 1.25x. Extrapolated to 11 GiB of usable VRAM: ~187,000
+galaxies float32 against ~87,000 float64. The wall-clock penalty for float64 replicates
+PR #2097 (3.59x at 2048 against their 3.6x; 1.91x at 512 against 1.87x; ~1.1x below 128)
+and reaches **6.60x at batch 8192**.
+
+The float32 catalog posterior matches the float64 one on the same mock to **max |z| =
+2.25 over 384 galaxy-parameter pairs**, 0.8 % beyond 2 MC sigma where 4.6 % is expected,
+posterior widths 0.99–1.01. Both arms miss the convergence bar (max R-hat 1.047 / 1.077,
+**min ESS 2.9 / 2.6** of 500 draws, 94 / 86 of 128 galaxies clearing R-hat < 1.01), so
+the comparison resolves ~0.13 sigma and no better.
+
+**Both arms must fit the same mock.** `jax.random.normal` in float32 and float64 are
+different numbers, not rounded versions of each other; the first attempt gave median SNR
+19.8 against 20.0 — two datasets — and any z-score between them measures the noise
+realization. `compare_float32_catalog_posteriors.py --catalog` writes it once.

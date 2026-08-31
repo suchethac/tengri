@@ -1,0 +1,1703 @@
+{
+  "meta": {
+    "platform": "cpu",
+    "devices": [
+      "cpu:0"
+    ],
+    "jax": "0.11.0",
+    "env": {
+      "JAX_PLATFORMS": "cpu",
+      "JAX_ENABLE_X64": null,
+      "JAX_DEFAULT_MATMUL_PRECISION": null,
+      "NVIDIA_TF32_OVERRIDE": null,
+      "XLA_PYTHON_CLIENT_PREALLOCATE": null
+    },
+    "n_z": 64,
+    "points": {
+      "origin": 0.0,
+      "half_sigma": 0.5
+    }
+  },
+  "rows": [
+    {
+      "model": "agn",
+      "path": "exact_fixedz",
+      "snr": 30.0,
+      "names": [
+        "sfh_delayed_log_total_mass"
+      ],
+      "approx_state_f64": "ApproxState(n_subbands=5)",
+      "approx_state_f32": "ApproxState(n_subbands=5)",
+      "truth": {
+        "sfh_delayed_log_total_mass": 10.0
+      },
+      "seconds": 7.49,
+      "points": {
+        "origin": {
+          "grad_f64": [
+            -55.850209479441695
+          ],
+          "grad_f32": [
+            -55.85313415527344
+          ],
+          "grad_exact_f64": [
+            -55.850209479441695
+          ],
+          "dtype_f64": [
+            "float64"
+          ],
+          "dtype_f32": [
+            "float32"
+          ],
+          "f64_vs_fd64": 1.9945972526176794e-06,
+          "f32_vs_f64": 5.236642546200803e-05,
+          "lut_f64_vs_exact_f64": 0.0,
+          "f32_vs_exact_f64": 5.236642546200803e-05,
+          "f32_finite": true
+        },
+        "half_sigma": {
+          "grad_f64": [
+            19827.94032928552
+          ],
+          "grad_f32": [
+            19828.052734375
+          ],
+          "grad_exact_f64": [
+            19827.94032928552
+          ],
+          "dtype_f64": [
+            "float64"
+          ],
+          "dtype_f32": [
+            "float32"
+          ],
+          "f64_vs_fd64": 1.4690662210509749e-08,
+          "f32_vs_f64": 5.669025002741193e-06,
+          "lut_f64_vs_exact_f64": 0.0,
+          "f32_vs_exact_f64": 5.669025002741193e-06,
+          "f32_finite": true
+        }
+      }
+    },
+    {
+      "model": "agn",
+      "path": "auto_fixedz",
+      "snr": 30.0,
+      "names": [
+        "sfh_delayed_log_total_mass"
+      ],
+      "approx_state_f64": "ApproxState(wave_precomp=True, n_subbands=5)",
+      "approx_state_f32": "ApproxState(wave_precomp=True, n_subbands=5)",
+      "truth": {
+        "sfh_delayed_log_total_mass": 10.0
+      },
+      "seconds": 14.94,
+      "points": {
+        "origin": {
+          "grad_f64": [
+            -55.604440666343926
+          ],
+          "grad_f32": [
+            -55.5878791809082
+          ],
+          "grad_exact_f64": [
+            -55.850209479441695
+          ],
+          "dtype_f64": [
+            "float64"
+          ],
+          "dtype_f32": [
+            "float32"
+          ],
+          "f64_vs_fd64": 2.003575731199184e-06,
+          "f32_vs_f64": 0.0002978446548019551,
+          "lut_f64_vs_exact_f64": 0.004400499396304601,
+          "f32_vs_exact_f64": 0.004697033385882907,
+          "f32_finite": true
+        },
+        "half_sigma": {
+          "grad_f64": [
+            19829.979575541664
+          ],
+          "grad_f32": [
+            19829.978515625
+          ],
+          "grad_exact_f64": [
+            19827.94032928552
+          ],
+          "dtype_f64": [
+            "float64"
+          ],
+          "dtype_f32": [
+            "float32"
+          ],
+          "f64_vs_fd64": 1.4672272005801772e-08,
+          "f32_vs_f64": 5.345021458392063e-08,
+          "lut_f64_vs_exact_f64": 0.00010284710475606771,
+          "f32_vs_exact_f64": 0.00010279364904428397,
+          "f32_finite": true
+        }
+      }
+    },
+    {
+      "model": "agn",
+      "path": "quad8_fixedz",
+      "snr": 30.0,
+      "names": [
+        "sfh_delayed_log_total_mass"
+      ],
+      "approx_state_f64": "ApproxState(wave_precomp=True, n_subbands=8)",
+      "approx_state_f32": "ApproxState(wave_precomp=True, n_subbands=8)",
+      "truth": {
+        "sfh_delayed_log_total_mass": 10.0
+      },
+      "seconds": 13.83,
+      "points": {
+        "origin": {
+          "grad_f64": [
+            -55.77554748708932
+          ],
+          "grad_f32": [
+            -55.742950439453125
+          ],
+          "grad_exact_f64": [
+            -55.850209479441695
+          ],
+          "dtype_f64": [
+            "float64"
+          ],
+          "dtype_f32": [
+            "float32"
+          ],
+          "f64_vs_fd64": 1.997346969099942e-06,
+          "f32_vs_f64": 0.0005844325892765096,
+          "lut_f64_vs_exact_f64": 0.001336825645745485,
+          "f32_vs_exact_f64": 0.0019204769505484403,
+          "f32_finite": true
+        },
+        "half_sigma": {
+          "grad_f64": [
+            19828.550613507734
+          ],
+          "grad_f32": [
+            19828.689453125
+          ],
+          "grad_exact_f64": [
+            19827.94032928552
+          ],
+          "dtype_f64": [
+            "float64"
+          ],
+          "dtype_f32": [
+            "float32"
+          ],
+          "f64_vs_fd64": 1.4694633013763649e-08,
+          "f32_vs_f64": 7.002005339284684e-06,
+          "lut_f64_vs_exact_f64": 3.077900236123584e-05,
+          "f32_vs_exact_f64": 3.778122321525939e-05,
+          "f32_finite": true
+        }
+      }
+    },
+    {
+      "model": "agn",
+      "path": "exact_freez",
+      "snr": 30.0,
+      "names": [
+        "redshift",
+        "sfh_delayed_log_total_mass"
+      ],
+      "approx_state_f64": "ApproxState(n_subbands=5)",
+      "approx_state_f32": "ApproxState(n_subbands=5)",
+      "truth": {
+        "redshift": 0.525,
+        "sfh_delayed_log_total_mass": 10.0
+      },
+      "seconds": 14.23,
+      "points": {
+        "origin": {
+          "grad_f64": [
+            -13.229767939825766,
+            -55.85020947944143
+          ],
+          "grad_f32": [
+            -13.225997924804688,
+            -55.854164123535156
+          ],
+          "grad_exact_f64": [
+            -13.229767939825766,
+            -55.85020947944143
+          ],
+          "dtype_f64": [
+            "float64"
+          ],
+          "dtype_f32": [
+            "float32"
+          ],
+          "f64_vs_fd64": 0.0007389801410599785,
+          "f32_vs_f64": 0.0002849645616027734,
+          "lut_f64_vs_exact_f64": 0.0,
+          "f32_vs_exact_f64": 0.0002849645616027734,
+          "f32_finite": true
+        },
+        "half_sigma": {
+          "grad_f64": [
+            -866.3802463379385,
+            2464.4624410753227
+          ],
+          "grad_f32": [
+            -866.3441162109375,
+            2464.387939453125
+          ],
+          "grad_exact_f64": [
+            -866.3802463379385,
+            2464.4624410753227
+          ],
+          "dtype_f64": [
+            "float64"
+          ],
+          "dtype_f32": [
+            "float32"
+          ],
+          "f64_vs_fd64": 1.3188751017579146e-05,
+          "f32_vs_f64": 4.170239009224694e-05,
+          "lut_f64_vs_exact_f64": 0.0,
+          "f32_vs_exact_f64": 4.170239009224694e-05,
+          "f32_finite": true
+        }
+      }
+    },
+    {
+      "model": "agn",
+      "path": "auto_freez",
+      "snr": 30.0,
+      "names": [
+        "redshift",
+        "sfh_delayed_log_total_mass"
+      ],
+      "approx_state_f64": "ApproxState(wave_precomp=True, ztable=True, n_subbands=5)",
+      "approx_state_f32": "ApproxState(wave_precomp=True, ztable=True, n_subbands=5)",
+      "truth": {
+        "redshift": 0.525,
+        "sfh_delayed_log_total_mass": 10.0
+      },
+      "seconds": 43.9,
+      "points": {
+        "origin": {
+          "grad_f64": [
+            -12.17468806541774,
+            -55.67668401828289
+          ],
+          "grad_f32": [
+            -12.190434455871582,
+            -55.6601448059082
+          ],
+          "grad_exact_f64": [
+            -13.229767939825766,
+            -55.85020947944143
+          ],
+          "dtype_f64": [
+            "float64"
+          ],
+          "dtype_f32": [
+            "float32"
+          ],
+          "f64_vs_fd64": 0.0006923959141762293,
+          "f32_vs_f64": 0.001293371162302666,
+          "lut_f64_vs_exact_f64": 0.07975044454346802,
+          "f32_vs_exact_f64": 0.0785602203063187,
+          "f32_finite": true
+        },
+        "half_sigma": {
+          "grad_f64": [
+            -865.9952973526455,
+            2464.7349732307503
+          ],
+          "grad_f32": [
+            -865.9701538085938,
+            2464.6162109375
+          ],
+          "grad_exact_f64": [
+            -866.3802463379385,
+            2464.4624410753227
+          ],
+          "dtype_f64": [
+            "float64"
+          ],
+          "dtype_f32": [
+            "float32"
+          ],
+          "f64_vs_fd64": 9.52399089628324e-06,
+          "f32_vs_f64": 4.8184609923631625e-05,
+          "lut_f64_vs_exact_f64": 0.00044431874678600356,
+          "f32_vs_exact_f64": 0.0004733401195123646,
+          "f32_finite": true
+        }
+      }
+    },
+    {
+      "model": "agn",
+      "path": "quad8_freez",
+      "snr": 30.0,
+      "names": [
+        "redshift",
+        "sfh_delayed_log_total_mass"
+      ],
+      "approx_state_f64": "ApproxState(wave_precomp=True, ztable=True, n_subbands=8)",
+      "approx_state_f32": "ApproxState(wave_precomp=True, ztable=True, n_subbands=8)",
+      "truth": {
+        "redshift": 0.525,
+        "sfh_delayed_log_total_mass": 10.0
+      },
+      "seconds": 42.41,
+      "points": {
+        "origin": {
+          "grad_f64": [
+            -12.921331031611883,
+            -55.08301323721036
+          ],
+          "grad_f32": [
+            -12.949860572814941,
+            -55.052886962890625
+          ],
+          "grad_exact_f64": [
+            -13.229767939825766,
+            -55.85020947944143
+          ],
+          "dtype_f64": [
+            "float64"
+          ],
+          "dtype_f32": [
+            "float32"
+          ],
+          "f64_vs_fd64": 0.0006075671954529631,
+          "f32_vs_f64": 0.002207941359389446,
+          "lut_f64_vs_exact_f64": 0.023313856268437707,
+          "f32_vs_exact_f64": 0.021157390536550205,
+          "f32_finite": true
+        },
+        "half_sigma": {
+          "grad_f64": [
+            -869.2379278310382,
+            2465.281735077918
+          ],
+          "grad_f32": [
+            -869.2606201171875,
+            2465.308349609375
+          ],
+          "grad_exact_f64": [
+            -866.3802463379385,
+            2464.4624410753227
+          ],
+          "dtype_f64": [
+            "float64"
+          ],
+          "dtype_f32": [
+            "float32"
+          ],
+          "f64_vs_fd64": 9.305579053347059e-06,
+          "f32_vs_f64": 2.610595490919844e-05,
+          "lut_f64_vs_exact_f64": 0.0032984148763532807,
+          "f32_vs_exact_f64": 0.003324606939532513,
+          "f32_finite": true
+        }
+      }
+    },
+    {
+      "model": "dust_ir",
+      "path": "exact_fixedz",
+      "snr": 30.0,
+      "names": [
+        "dust_tau_diff",
+        "sfh_delayed_log_total_mass"
+      ],
+      "approx_state_f64": "ApproxState(n_subbands=5)",
+      "approx_state_f32": "ApproxState(n_subbands=5)",
+      "truth": {
+        "dust_tau_diff": 0.75,
+        "sfh_delayed_log_total_mass": 10.0
+      },
+      "seconds": 9.22,
+      "points": {
+        "origin": {
+          "grad_f64": [
+            -21.80399982431983,
+            -55.85020947941819
+          ],
+          "grad_f32": [
+            -21.803640365600586,
+            -55.83060073852539
+          ],
+          "grad_exact_f64": [
+            -21.80399982431983,
+            -55.85020947941819
+          ],
+          "dtype_f64": [
+            "float64"
+          ],
+          "dtype_f32": [
+            "float32"
+          ],
+          "f64_vs_fd64": 1.994596652887229e-06,
+          "f32_vs_f64": 0.0003510952076200462,
+          "lut_f64_vs_exact_f64": 0.0,
+          "f32_vs_exact_f64": 0.0003510952076200462,
+          "f32_finite": true
+        },
+        "half_sigma": {
+          "grad_f64": [
+            -266.35885112622634,
+            16469.38827558923
+          ],
+          "grad_f32": [
+            -266.36663818359375,
+            16469.513671875
+          ],
+          "grad_exact_f64": [
+            -266.35885112622634,
+            16469.38827558923
+          ],
+          "dtype_f64": [
+            "float64"
+          ],
+          "dtype_f32": [
+            "float32"
+          ],
+          "f64_vs_fd64": 4.594496749327451e-08,
+          "f32_vs_f64": 2.923521157447394e-05,
+          "lut_f64_vs_exact_f64": 0.0,
+          "f32_vs_exact_f64": 2.923521157447394e-05,
+          "f32_finite": true
+        }
+      }
+    },
+    {
+      "model": "dust_ir",
+      "path": "auto_fixedz",
+      "snr": 30.0,
+      "names": [
+        "dust_tau_diff",
+        "sfh_delayed_log_total_mass"
+      ],
+      "approx_state_f64": "ApproxState(wave_precomp=True, n_subbands=5)",
+      "approx_state_f32": "ApproxState(wave_precomp=True, n_subbands=5)",
+      "truth": {
+        "dust_tau_diff": 0.75,
+        "sfh_delayed_log_total_mass": 10.0
+      },
+      "seconds": 9.47,
+      "points": {
+        "origin": {
+          "grad_f64": [
+            -21.869526799967563,
+            -55.39986772836369
+          ],
+          "grad_f32": [
+            -21.872350692749023,
+            -55.3702392578125
+          ],
+          "grad_exact_f64": [
+            -21.80399982431983,
+            -55.85020947941819
+          ],
+          "dtype_f64": [
+            "float64"
+          ],
+          "dtype_f32": [
+            "float32"
+          ],
+          "f64_vs_fd64": 2.0111486109717484e-06,
+          "f32_vs_f64": 0.0005348112146487812,
+          "lut_f64_vs_exact_f64": 0.008063385173523138,
+          "f32_vs_exact_f64": 0.008593883999353086,
+          "f32_finite": true
+        },
+        "half_sigma": {
+          "grad_f64": [
+            -266.24414176766874,
+            16473.076343085148
+          ],
+          "grad_f32": [
+            -266.2440185546875,
+            16473.201171875
+          ],
+          "grad_exact_f64": [
+            -266.35885112622634,
+            16469.38827558923
+          ],
+          "dtype_f64": [
+            "float64"
+          ],
+          "dtype_f32": [
+            "float32"
+          ],
+          "f64_vs_fd64": 4.5814624527750875e-08,
+          "f32_vs_f64": 7.577746090205625e-06,
+          "lut_f64_vs_exact_f64": 0.0004306572057680342,
+          "f32_vs_exact_f64": 0.00043111978841064416,
+          "f32_finite": true
+        }
+      }
+    },
+    {
+      "model": "dust_ir",
+      "path": "quad8_fixedz",
+      "snr": 30.0,
+      "names": [
+        "dust_tau_diff",
+        "sfh_delayed_log_total_mass"
+      ],
+      "approx_state_f64": "ApproxState(wave_precomp=True, n_subbands=8)",
+      "approx_state_f32": "ApproxState(wave_precomp=True, n_subbands=8)",
+      "truth": {
+        "dust_tau_diff": 0.75,
+        "sfh_delayed_log_total_mass": 10.0
+      },
+      "seconds": 13.62,
+      "points": {
+        "origin": {
+          "grad_f64": [
+            -22.020651036125393,
+            -56.55427681188538
+          ],
+          "grad_f32": [
+            -22.019935607910156,
+            -56.51089859008789
+          ],
+          "grad_exact_f64": [
+            -21.80399982431983,
+            -55.85020947941819
+          ],
+          "dtype_f64": [
+            "float64"
+          ],
+          "dtype_f32": [
+            "float32"
+          ],
+          "f64_vs_fd64": 1.969292032791408e-06,
+          "f32_vs_f64": 0.0007670192997388499,
+          "lut_f64_vs_exact_f64": 0.012606350791336807,
+          "f32_vs_exact_f64": 0.011829662177241724,
+          "f32_finite": true
+        },
+        "half_sigma": {
+          "grad_f64": [
+            -234.1585535676234,
+            16468.206891852144
+          ],
+          "grad_f32": [
+            -234.1397705078125,
+            16468.5703125
+          ],
+          "grad_exact_f64": [
+            -266.35885112622634,
+            16469.38827558923
+          ],
+          "dtype_f64": [
+            "float64"
+          ],
+          "dtype_f32": [
+            "float32"
+          ],
+          "f64_vs_fd64": 5.8471936514838194e-08,
+          "f32_vs_f64": 8.021513425287535e-05,
+          "lut_f64_vs_exact_f64": 0.12089066093524847,
+          "f32_vs_exact_f64": 0.12096117880890452,
+          "f32_finite": true
+        }
+      }
+    },
+    {
+      "model": "dust_ir",
+      "path": "exact_freez",
+      "snr": 30.0,
+      "names": [
+        "dust_tau_diff",
+        "redshift",
+        "sfh_delayed_log_total_mass"
+      ],
+      "approx_state_f64": "ApproxState(n_subbands=5)",
+      "approx_state_f32": "ApproxState(n_subbands=5)",
+      "truth": {
+        "dust_tau_diff": 0.75,
+        "redshift": 0.525,
+        "sfh_delayed_log_total_mass": 10.0
+      },
+      "seconds": 10.24,
+      "points": {
+        "origin": {
+          "grad_f64": [
+            -24.475079067525577,
+            -15.550068695817162,
+            -55.850209479429864
+          ],
+          "grad_f32": [
+            -24.481348037719727,
+            -15.58078670501709,
+            -55.82289123535156
+          ],
+          "grad_exact_f64": [
+            -24.475079067525577,
+            -15.550068695817162,
+            -55.850209479429864
+          ],
+          "dtype_f64": [
+            "float64"
+          ],
+          "dtype_f32": [
+            "float32"
+          ],
+          "f64_vs_fd64": 0.0003574582704313831,
+          "f32_vs_f64": 0.0019754259483233706,
+          "lut_f64_vs_exact_f64": 0.0,
+          "f32_vs_exact_f64": 0.0019754259483233706,
+          "f32_finite": true
+        },
+        "half_sigma": {
+          "grad_f64": [
+            587.8232134845687,
+            -550.7199094048109,
+            1824.1730097372658
+          ],
+          "grad_f32": [
+            587.8258666992188,
+            -550.7210083007812,
+            1824.1759033203125
+          ],
+          "grad_exact_f64": [
+            587.8232134845687,
+            -550.7199094048109,
+            1824.1730097372658
+          ],
+          "dtype_f64": [
+            "float64"
+          ],
+          "dtype_f32": [
+            "float32"
+          ],
+          "f64_vs_fd64": 9.893094011221684e-06,
+          "f32_vs_f64": 4.5136268681075706e-06,
+          "lut_f64_vs_exact_f64": 0.0,
+          "f32_vs_exact_f64": 4.5136268681075706e-06,
+          "f32_finite": true
+        }
+      }
+    },
+    {
+      "model": "dust_ir",
+      "path": "auto_freez",
+      "snr": 30.0,
+      "names": [
+        "dust_tau_diff",
+        "redshift",
+        "sfh_delayed_log_total_mass"
+      ],
+      "approx_state_f64": "ApproxState(wave_precomp=True, ztable=True, n_subbands=5)",
+      "approx_state_f32": "ApproxState(wave_precomp=True, ztable=True, n_subbands=5)",
+      "truth": {
+        "dust_tau_diff": 0.75,
+        "redshift": 0.525,
+        "sfh_delayed_log_total_mass": 10.0
+      },
+      "seconds": 39.29,
+      "points": {
+        "origin": {
+          "grad_f64": [
+            -24.52085485627872,
+            -14.405498059329688,
+            -55.641612343100014
+          ],
+          "grad_f32": [
+            -24.527873992919922,
+            -14.445119857788086,
+            -55.60356521606445
+          ],
+          "grad_exact_f64": [
+            -24.475079067525577,
+            -15.550068695817162,
+            -55.850209479429864
+          ],
+          "dtype_f64": [
+            "float64"
+          ],
+          "dtype_f32": [
+            "float32"
+          ],
+          "f64_vs_fd64": 0.0002992234590236178,
+          "f32_vs_f64": 0.002750463628207388,
+          "lut_f64_vs_exact_f64": 0.0736055035432322,
+          "f32_vs_exact_f64": 0.07105748917535636,
+          "f32_finite": true
+        },
+        "half_sigma": {
+          "grad_f64": [
+            587.8878236954449,
+            -550.6506648725843,
+            1824.650554361508
+          ],
+          "grad_f32": [
+            587.8842163085938,
+            -550.6279296875,
+            1824.5953369140625
+          ],
+          "grad_exact_f64": [
+            587.8232134845687,
+            -550.7199094048109,
+            1824.1730097372658
+          ],
+          "dtype_f64": [
+            "float64"
+          ],
+          "dtype_f32": [
+            "float32"
+          ],
+          "f64_vs_fd64": 3.500548900166107e-06,
+          "f32_vs_f64": 4.1287855503823056e-05,
+          "lut_f64_vs_exact_f64": 0.0002617869147789924,
+          "f32_vs_exact_f64": 0.0002315170625496198,
+          "f32_finite": true
+        }
+      }
+    },
+    {
+      "model": "dust_ir",
+      "path": "quad8_freez",
+      "snr": 30.0,
+      "names": [
+        "dust_tau_diff",
+        "redshift",
+        "sfh_delayed_log_total_mass"
+      ],
+      "approx_state_f64": "ApproxState(wave_precomp=True, ztable=True, n_subbands=8)",
+      "approx_state_f32": "ApproxState(wave_precomp=True, ztable=True, n_subbands=8)",
+      "truth": {
+        "dust_tau_diff": 0.75,
+        "redshift": 0.525,
+        "sfh_delayed_log_total_mass": 10.0
+      },
+      "seconds": 23.7,
+      "points": {
+        "origin": {
+          "grad_f64": [
+            -25.131354603626644,
+            -14.80254751272675,
+            -55.75965194397836
+          ],
+          "grad_f32": [
+            -25.13538360595703,
+            -14.850225448608398,
+            -55.70680618286133
+          ],
+          "grad_exact_f64": [
+            -24.475079067525577,
+            -15.550068695817162,
+            -55.850209479429864
+          ],
+          "dtype_f64": [
+            "float64"
+          ],
+          "dtype_f32": [
+            "float32"
+          ],
+          "f64_vs_fd64": 0.00026739318264926875,
+          "f32_vs_f64": 0.003220927738327202,
+          "lut_f64_vs_exact_f64": 0.04807188943747162,
+          "f32_vs_exact_f64": 0.04500579778126737,
+          "f32_finite": true
+        },
+        "half_sigma": {
+          "grad_f64": [
+            594.7971461896232,
+            -556.1945988599655,
+            1823.8223668724722
+          ],
+          "grad_f32": [
+            594.8030395507812,
+            -556.2029418945312,
+            1823.873046875
+          ],
+          "grad_exact_f64": [
+            587.8232134845687,
+            -550.7199094048109,
+            1824.1730097372658
+          ],
+          "dtype_f64": [
+            "float64"
+          ],
+          "dtype_f32": [
+            "float32"
+          ],
+          "f64_vs_fd64": 2.690471505922186e-06,
+          "f32_vs_f64": 2.778779526356886e-05,
+          "lut_f64_vs_exact_f64": 0.011863996768201077,
+          "f32_vs_exact_f64": 0.011874022505570568,
+          "f32_finite": true
+        }
+      }
+    },
+    {
+      "model": "panchromatic",
+      "path": "exact_fixedz",
+      "snr": 30.0,
+      "names": [
+        "dust_tau_diff",
+        "sfh_delayed_log_total_mass"
+      ],
+      "approx_state_f64": "ApproxState(n_subbands=5)",
+      "approx_state_f32": "ApproxState(n_subbands=5)",
+      "truth": {
+        "dust_tau_diff": 0.75,
+        "sfh_delayed_log_total_mass": 10.0
+      },
+      "seconds": 34.42,
+      "points": {
+        "origin": {
+          "grad_f64": [
+            -23.48298823927868,
+            -55.84945537863005
+          ],
+          "grad_f32": [
+            -23.48274040222168,
+            -55.84434127807617
+          ],
+          "grad_exact_f64": [
+            -23.48298823927868,
+            -55.84945537863005
+          ],
+          "dtype_f64": [
+            "float64"
+          ],
+          "dtype_f32": [
+            "float32"
+          ],
+          "f64_vs_fd64": 8.381472633388172e-05,
+          "f32_vs_f64": 9.156938987505549e-05,
+          "lut_f64_vs_exact_f64": 0.0,
+          "f32_vs_exact_f64": 9.156938987505549e-05,
+          "f32_finite": true
+        },
+        "half_sigma": {
+          "grad_f64": [
+            -188.025889009002,
+            16998.552869398205
+          ],
+          "grad_f32": [
+            -188.0392608642578,
+            16998.44921875
+          ],
+          "grad_exact_f64": [
+            -188.025889009002,
+            16998.552869398205
+          ],
+          "dtype_f64": [
+            "float64"
+          ],
+          "dtype_f32": [
+            "float32"
+          ],
+          "f64_vs_fd64": 7.630273828418265e-05,
+          "f32_vs_f64": 7.111709630148968e-05,
+          "lut_f64_vs_exact_f64": 0.0,
+          "f32_vs_exact_f64": 7.111709630148968e-05,
+          "f32_finite": true
+        }
+      }
+    },
+    {
+      "model": "panchromatic",
+      "path": "auto_fixedz",
+      "snr": 30.0,
+      "names": [
+        "dust_tau_diff",
+        "sfh_delayed_log_total_mass"
+      ],
+      "approx_state_f64": "ApproxState(wave_precomp=True, n_subbands=5)",
+      "approx_state_f32": "ApproxState(wave_precomp=True, n_subbands=5)",
+      "truth": {
+        "dust_tau_diff": 0.75,
+        "sfh_delayed_log_total_mass": 10.0
+      },
+      "seconds": 31.78,
+      "points": {
+        "origin": {
+          "grad_f64": [
+            -23.532879020685648,
+            -55.44570796548162
+          ],
+          "grad_f32": [
+            -23.53462028503418,
+            -55.43772888183594
+          ],
+          "grad_exact_f64": [
+            -23.48298823927868,
+            -55.84945537863005
+          ],
+          "dtype_f64": [
+            "float64"
+          ],
+          "dtype_f32": [
+            "float32"
+          ],
+          "f64_vs_fd64": 8.392484799915923e-05,
+          "f32_vs_f64": 0.00014390804876451257,
+          "lut_f64_vs_exact_f64": 0.00722920949562058,
+          "f32_vs_exact_f64": 0.007372077202952468,
+          "f32_finite": true
+        },
+        "half_sigma": {
+          "grad_f64": [
+            -187.90196728996415,
+            17001.885177574783
+          ],
+          "grad_f32": [
+            -187.91404724121094,
+            17001.767578125
+          ],
+          "grad_exact_f64": [
+            -188.025889009002,
+            16998.552869398205
+          ],
+          "dtype_f64": [
+            "float64"
+          ],
+          "dtype_f32": [
+            "float32"
+          ],
+          "f64_vs_fd64": 7.629156084874339e-05,
+          "f32_vs_f64": 6.428858314265731e-05,
+          "lut_f64_vs_exact_f64": 0.0006590673214788279,
+          "f32_vs_exact_f64": 0.0005948211088404641,
+          "f32_finite": true
+        }
+      }
+    },
+    {
+      "model": "panchromatic",
+      "path": "quad8_fixedz",
+      "snr": 30.0,
+      "names": [
+        "dust_tau_diff",
+        "sfh_delayed_log_total_mass"
+      ],
+      "approx_state_f64": "ApproxState(wave_precomp=True, n_subbands=8)",
+      "approx_state_f32": "ApproxState(wave_precomp=True, n_subbands=8)",
+      "truth": {
+        "dust_tau_diff": 0.75,
+        "sfh_delayed_log_total_mass": 10.0
+      },
+      "seconds": 60.38,
+      "points": {
+        "origin": {
+          "grad_f64": [
+            -23.66572611660453,
+            -56.65524266009494
+          ],
+          "grad_f32": [
+            -23.662586212158203,
+            -56.62784194946289
+          ],
+          "grad_exact_f64": [
+            -23.48298823927868,
+            -55.84945537863005
+          ],
+          "dtype_f64": [
+            "float64"
+          ],
+          "dtype_f32": [
+            "float32"
+          ],
+          "f64_vs_fd64": 8.574682980670557e-05,
+          "f32_vs_f64": 0.00048363945410034815,
+          "lut_f64_vs_exact_f64": 0.014427844927082618,
+          "f32_vs_exact_f64": 0.01393722759793789,
+          "f32_finite": true
+        },
+        "half_sigma": {
+          "grad_f64": [
+            -154.16904134638494,
+            16997.200930347713
+          ],
+          "grad_f32": [
+            -154.154541015625,
+            16997.41015625
+          ],
+          "grad_exact_f64": [
+            -188.025889009002,
+            16998.552869398205
+          ],
+          "dtype_f64": [
+            "float64"
+          ],
+          "dtype_f32": [
+            "float32"
+          ],
+          "f64_vs_fd64": 7.630195686649674e-05,
+          "f32_vs_f64": 9.405475076779317e-05,
+          "lut_f64_vs_exact_f64": 0.18006481895158652,
+          "f32_vs_exact_f64": 0.18014193775068577,
+          "f32_finite": true
+        }
+      }
+    },
+    {
+      "model": "panchromatic",
+      "path": "exact_freez",
+      "snr": 30.0,
+      "names": [
+        "dust_tau_diff",
+        "redshift",
+        "sfh_delayed_log_total_mass"
+      ],
+      "approx_state_f64": "ApproxState(n_subbands=5)",
+      "approx_state_f32": "ApproxState(n_subbands=5)",
+      "truth": {
+        "dust_tau_diff": 0.75,
+        "redshift": 0.525,
+        "sfh_delayed_log_total_mass": 10.0
+      },
+      "seconds": 36.59,
+      "points": {
+        "origin": {
+          "grad_f64": [
+            -22.271112698696793,
+            -5.544043166976604,
+            -55.84985836519344
+          ],
+          "grad_f32": [
+            -22.27362632751465,
+            -5.5581583976745605,
+            -55.83823776245117
+          ],
+          "grad_exact_f64": [
+            -22.271112698696793,
+            -5.544043166976604,
+            -55.84985836519344
+          ],
+          "dtype_f64": [
+            "float64"
+          ],
+          "dtype_f32": [
+            "float32"
+          ],
+          "f64_vs_fd64": 0.0009729791723109202,
+          "f32_vs_f64": 0.0025460174592496524,
+          "lut_f64_vs_exact_f64": 0.0,
+          "f32_vs_exact_f64": 0.0025460174592496524,
+          "f32_finite": true
+        },
+        "half_sigma": {
+          "grad_f64": [
+            418.9511354951874,
+            -723.6653228963618,
+            1860.381146659517
+          ],
+          "grad_f32": [
+            418.9395446777344,
+            -723.6097412109375,
+            1860.2763671875
+          ],
+          "grad_exact_f64": [
+            418.9511354951874,
+            -723.6653228963618,
+            1860.381146659517
+          ],
+          "dtype_f64": [
+            "float64"
+          ],
+          "dtype_f32": [
+            "float32"
+          ],
+          "f64_vs_fd64": 6.17423223989792e-05,
+          "f32_vs_f64": 7.680578807039524e-05,
+          "lut_f64_vs_exact_f64": 0.0,
+          "f32_vs_exact_f64": 7.680578807039524e-05,
+          "f32_finite": true
+        }
+      }
+    },
+    {
+      "model": "panchromatic",
+      "path": "auto_freez",
+      "snr": 30.0,
+      "names": [
+        "dust_tau_diff",
+        "redshift",
+        "sfh_delayed_log_total_mass"
+      ],
+      "approx_state_f64": "ApproxState(wave_precomp=True, ztable=True, n_subbands=5)",
+      "approx_state_f32": "ApproxState(wave_precomp=True, ztable=True, n_subbands=5)",
+      "truth": {
+        "dust_tau_diff": 0.75,
+        "redshift": 0.525,
+        "sfh_delayed_log_total_mass": 10.0
+      },
+      "seconds": 84.02,
+      "points": {
+        "origin": {
+          "grad_f64": [
+            -22.30631754387439,
+            -4.52415257506831,
+            -55.66022866051564
+          ],
+          "grad_f32": [
+            -22.30909538269043,
+            -4.554066181182861,
+            -55.63032913208008
+          ],
+          "grad_exact_f64": [
+            -22.271112698696793,
+            -5.544043166976604,
+            -55.84985836519344
+          ],
+          "dtype_f64": [
+            "float64"
+          ],
+          "dtype_f32": [
+            "float32"
+          ],
+          "f64_vs_fd64": 0.0009506641600218146,
+          "f32_vs_f64": 0.0066119799494382455,
+          "lut_f64_vs_exact_f64": 0.1839615171078263,
+          "f32_vs_exact_f64": 0.17856588702097326,
+          "f32_finite": true
+        },
+        "half_sigma": {
+          "grad_f64": [
+            418.9888162973528,
+            -723.4707304581515,
+            1860.7923393213357
+          ],
+          "grad_f32": [
+            418.98455810546875,
+            -723.4186401367188,
+            1860.7186279296875
+          ],
+          "grad_exact_f64": [
+            418.9511354951874,
+            -723.6653228963618,
+            1860.381146659517
+          ],
+          "dtype_f64": [
+            "float64"
+          ],
+          "dtype_f32": [
+            "float32"
+          ],
+          "f64_vs_fd64": 6.17285808832009e-05,
+          "f32_vs_f64": 7.200059275340951e-05,
+          "lut_f64_vs_exact_f64": 0.0002688983872150541,
+          "f32_vs_exact_f64": 0.0003408796191251937,
+          "f32_finite": true
+        }
+      }
+    },
+    {
+      "model": "panchromatic",
+      "path": "quad8_freez",
+      "snr": 30.0,
+      "names": [
+        "dust_tau_diff",
+        "redshift",
+        "sfh_delayed_log_total_mass"
+      ],
+      "approx_state_f64": "ApproxState(wave_precomp=True, ztable=True, n_subbands=8)",
+      "approx_state_f32": "ApproxState(wave_precomp=True, ztable=True, n_subbands=8)",
+      "truth": {
+        "dust_tau_diff": 0.75,
+        "redshift": 0.525,
+        "sfh_delayed_log_total_mass": 10.0
+      },
+      "seconds": 68.32,
+      "points": {
+        "origin": {
+          "grad_f64": [
+            -22.71538840181232,
+            -4.4488386914390565,
+            -56.082861386268824
+          ],
+          "grad_f32": [
+            -22.721004486083984,
+            -4.5064520835876465,
+            -56.0196647644043
+          ],
+          "grad_exact_f64": [
+            -22.271112698696793,
+            -5.544043166976604,
+            -55.84985836519344
+          ],
+          "dtype_f64": [
+            "float64"
+          ],
+          "dtype_f32": [
+            "float32"
+          ],
+          "f64_vs_fd64": 0.0008990766666023005,
+          "f32_vs_f64": 0.012950209289326666,
+          "lut_f64_vs_exact_f64": 0.19754616667871439,
+          "f32_vs_exact_f64": 0.18715422159218129,
+          "f32_finite": true
+        },
+        "half_sigma": {
+          "grad_f64": [
+            424.9519786390344,
+            -726.7355838700851,
+            1860.157859102755
+          ],
+          "grad_f32": [
+            424.9593811035156,
+            -726.760986328125,
+            1860.214111328125
+          ],
+          "grad_exact_f64": [
+            418.9511354951874,
+            -723.6653228963618,
+            1860.381146659517
+          ],
+          "dtype_f64": [
+            "float64"
+          ],
+          "dtype_f32": [
+            "float32"
+          ],
+          "f64_vs_fd64": 6.176922194308618e-05,
+          "f32_vs_f64": 3.4954196001603305e-05,
+          "lut_f64_vs_exact_f64": 0.014323491776085554,
+          "f32_vs_exact_f64": 0.014341160816348404,
+          "f32_finite": true
+        }
+      }
+    },
+    {
+      "model": "stellar_dust",
+      "path": "exact_fixedz",
+      "snr": 30.0,
+      "names": [
+        "dust_tau_diff",
+        "sfh_delayed_log_total_mass"
+      ],
+      "approx_state_f64": "ApproxState(n_subbands=5)",
+      "approx_state_f32": "ApproxState(n_subbands=5)",
+      "truth": {
+        "dust_tau_diff": 0.75,
+        "sfh_delayed_log_total_mass": 10.0
+      },
+      "seconds": 2.72,
+      "points": {
+        "origin": {
+          "grad_f64": [
+            -18.047816655508406,
+            -55.85020947944199
+          ],
+          "grad_f32": [
+            -18.05402374267578,
+            -55.82696533203125
+          ],
+          "grad_exact_f64": [
+            -18.047816655508406,
+            -55.85020947944199
+          ],
+          "dtype_f64": [
+            "float64"
+          ],
+          "dtype_f32": [
+            "float32"
+          ],
+          "f64_vs_fd64": 1.994557679512613e-06,
+          "f32_vs_f64": 0.0004161872914603694,
+          "lut_f64_vs_exact_f64": 0.0,
+          "f32_vs_exact_f64": 0.0004161872914603694,
+          "f32_finite": true
+        },
+        "half_sigma": {
+          "grad_f64": [
+            -1428.1542604828746,
+            13662.260205906814
+          ],
+          "grad_f32": [
+            -1428.1566162109375,
+            13662.2705078125
+          ],
+          "grad_exact_f64": [
+            -1428.1542604828746,
+            13662.260205906814
+          ],
+          "dtype_f64": [
+            "float64"
+          ],
+          "dtype_f32": [
+            "float32"
+          ],
+          "f64_vs_fd64": 1.6345837238520842e-08,
+          "f32_vs_f64": 1.6494913246066633e-06,
+          "lut_f64_vs_exact_f64": 0.0,
+          "f32_vs_exact_f64": 1.6494913246066633e-06,
+          "f32_finite": true
+        }
+      }
+    },
+    {
+      "model": "stellar_dust",
+      "path": "auto_fixedz",
+      "snr": 30.0,
+      "names": [
+        "dust_tau_diff",
+        "sfh_delayed_log_total_mass"
+      ],
+      "approx_state_f64": "ApproxState(wave_precomp=True, n_subbands=5)",
+      "approx_state_f32": "ApproxState(wave_precomp=True, n_subbands=5)",
+      "truth": {
+        "dust_tau_diff": 0.75,
+        "sfh_delayed_log_total_mass": 10.0
+      },
+      "seconds": 5.06,
+      "points": {
+        "origin": {
+          "grad_f64": [
+            -18.11754081998168,
+            -55.38423374485215
+          ],
+          "grad_f32": [
+            -18.123035430908203,
+            -55.35462951660156
+          ],
+          "grad_exact_f64": [
+            -18.047816655508406,
+            -55.85020947944199
+          ],
+          "dtype_f64": [
+            "float64"
+          ],
+          "dtype_f32": [
+            "float32"
+          ],
+          "f64_vs_fd64": 2.0116935238347074e-06,
+          "f32_vs_f64": 0.0005345244711152565,
+          "lut_f64_vs_exact_f64": 0.008343312208369813,
+          "f32_vs_exact_f64": 0.008873376974939541,
+          "f32_finite": true
+        },
+        "half_sigma": {
+          "grad_f64": [
+            -1428.0448861310379,
+            13666.094471710174
+          ],
+          "grad_f32": [
+            -1428.054443359375,
+            13666.171875
+          ],
+          "grad_exact_f64": [
+            -1428.1542604828746,
+            13662.260205906814
+          ],
+          "dtype_f64": [
+            "float64"
+          ],
+          "dtype_f32": [
+            "float32"
+          ],
+          "f64_vs_fd64": 1.634326243298141e-08,
+          "f32_vs_f64": 6.692526565489849e-06,
+          "lut_f64_vs_exact_f64": 0.00028064652155447063,
+          "f32_vs_exact_f64": 0.00028631200359474933,
+          "f32_finite": true
+        }
+      }
+    },
+    {
+      "model": "stellar_dust",
+      "path": "quad8_fixedz",
+      "snr": 30.0,
+      "names": [
+        "dust_tau_diff",
+        "sfh_delayed_log_total_mass"
+      ],
+      "approx_state_f64": "ApproxState(wave_precomp=True, n_subbands=8)",
+      "approx_state_f32": "ApproxState(wave_precomp=True, n_subbands=8)",
+      "truth": {
+        "dust_tau_diff": 0.75,
+        "sfh_delayed_log_total_mass": 10.0
+      },
+      "seconds": 4.5,
+      "points": {
+        "origin": {
+          "grad_f64": [
+            -18.07700202285734,
+            -55.733976628260244
+          ],
+          "grad_f32": [
+            -18.074644088745117,
+            -55.7462158203125
+          ],
+          "grad_exact_f64": [
+            -18.047816655508406,
+            -55.85020947944199
+          ],
+          "dtype_f64": [
+            "float64"
+          ],
+          "dtype_f32": [
+            "float32"
+          ],
+          "f64_vs_fd64": 1.9988423025782213e-06,
+          "f32_vs_f64": 0.00021960019350297054,
+          "lut_f64_vs_exact_f64": 0.00208115336119793,
+          "f32_vs_exact_f64": 0.001862010189375788,
+          "f32_finite": true
+        },
+        "half_sigma": {
+          "grad_f64": [
+            -1428.234402742241,
+            13662.878308858513
+          ],
+          "grad_f32": [
+            -1428.2257080078125,
+            13662.80078125
+          ],
+          "grad_exact_f64": [
+            -1428.1542604828746,
+            13662.260205906814
+          ],
+          "dtype_f64": [
+            "float64"
+          ],
+          "dtype_f32": [
+            "float32"
+          ],
+          "f64_vs_fd64": 1.6320797134279924e-08,
+          "f32_vs_f64": 6.087750310279107e-06,
+          "lut_f64_vs_exact_f64": 5.61159684103137e-05,
+          "f32_vs_exact_f64": 5.0027876480030495e-05,
+          "f32_finite": true
+        }
+      }
+    },
+    {
+      "model": "stellar_dust",
+      "path": "exact_freez",
+      "snr": 30.0,
+      "names": [
+        "dust_tau_diff",
+        "redshift",
+        "sfh_delayed_log_total_mass"
+      ],
+      "approx_state_f64": "ApproxState(n_subbands=5)",
+      "approx_state_f32": "ApproxState(n_subbands=5)",
+      "truth": {
+        "dust_tau_diff": 0.75,
+        "redshift": 0.525,
+        "sfh_delayed_log_total_mass": 10.0
+      },
+      "seconds": 3.78,
+      "points": {
+        "origin": {
+          "grad_f64": [
+            -21.852141259391892,
+            -18.578630378847837,
+            -55.85020947944155
+          ],
+          "grad_f32": [
+            -21.859033584594727,
+            -18.59485626220703,
+            -55.83586502075195
+          ],
+          "grad_exact_f64": [
+            -21.852141259391892,
+            -18.578630378847837,
+            -55.85020947944155
+          ],
+          "dtype_f64": [
+            "float64"
+          ],
+          "dtype_f32": [
+            "float32"
+          ],
+          "f64_vs_fd64": 0.0006924196726818591,
+          "f32_vs_f64": 0.0008733627306385126,
+          "lut_f64_vs_exact_f64": 0.0,
+          "f32_vs_exact_f64": 0.0008733627306385126,
+          "f32_finite": true
+        },
+        "half_sigma": {
+          "grad_f64": [
+            336.82015190076874,
+            -227.36502963107475,
+            2183.8562912012844
+          ],
+          "grad_f32": [
+            336.8203125,
+            -227.3660888671875,
+            2183.857666015625
+          ],
+          "grad_exact_f64": [
+            336.82015190076874,
+            -227.36502963107475,
+            2183.8562912012844
+          ],
+          "dtype_f64": [
+            "float64"
+          ],
+          "dtype_f32": [
+            "float32"
+          ],
+          "f64_vs_fd64": 7.593532893987975e-05,
+          "f32_vs_f64": 4.658746837501305e-06,
+          "lut_f64_vs_exact_f64": 0.0,
+          "f32_vs_exact_f64": 4.658746837501305e-06,
+          "f32_finite": true
+        }
+      }
+    },
+    {
+      "model": "stellar_dust",
+      "path": "auto_freez",
+      "snr": 30.0,
+      "names": [
+        "dust_tau_diff",
+        "redshift",
+        "sfh_delayed_log_total_mass"
+      ],
+      "approx_state_f64": "ApproxState(wave_precomp=True, ztable=True, n_subbands=5)",
+      "approx_state_f32": "ApproxState(wave_precomp=True, ztable=True, n_subbands=5)",
+      "truth": {
+        "dust_tau_diff": 0.75,
+        "redshift": 0.525,
+        "sfh_delayed_log_total_mass": 10.0
+      },
+      "seconds": 10.56,
+      "points": {
+        "origin": {
+          "grad_f64": [
+            -21.897236216424183,
+            -17.368047154854377,
+            -55.63885835999081
+          ],
+          "grad_f32": [
+            -21.89706802368164,
+            -17.363069534301758,
+            -55.64021301269531
+          ],
+          "grad_exact_f64": [
+            -21.852141259391892,
+            -18.578630378847837,
+            -55.85020947944155
+          ],
+          "dtype_f64": [
+            "float64"
+          ],
+          "dtype_f32": [
+            "float32"
+          ],
+          "f64_vs_fd64": 5.133444533544565e-05,
+          "f32_vs_f64": 0.0002865964439316974,
+          "lut_f64_vs_exact_f64": 0.06515998215733569,
+          "f32_vs_exact_f64": 0.06542790398209444,
+          "f32_finite": true
+        },
+        "half_sigma": {
+          "grad_f64": [
+            336.8850287405657,
+            -227.25991086197595,
+            2184.4876636567146
+          ],
+          "grad_f32": [
+            336.88519287109375,
+            -227.22256469726562,
+            2184.479248046875
+          ],
+          "grad_exact_f64": [
+            336.82015190076874,
+            -227.36502963107475,
+            2183.8562912012844
+          ],
+          "dtype_f64": [
+            "float64"
+          ],
+          "dtype_f32": [
+            "float32"
+          ],
+          "f64_vs_fd64": 9.302691341781076e-06,
+          "f32_vs_f64": 0.00016433239179174978,
+          "lut_f64_vs_exact_f64": 0.0004623348158217711,
+          "f32_vs_exact_f64": 0.0006265912310274283,
+          "f32_finite": true
+        }
+      }
+    },
+    {
+      "model": "stellar_dust",
+      "path": "quad8_freez",
+      "snr": 30.0,
+      "names": [
+        "dust_tau_diff",
+        "redshift",
+        "sfh_delayed_log_total_mass"
+      ],
+      "approx_state_f64": "ApproxState(wave_precomp=True, ztable=True, n_subbands=8)",
+      "approx_state_f32": "ApproxState(wave_precomp=True, ztable=True, n_subbands=8)",
+      "truth": {
+        "dust_tau_diff": 0.75,
+        "redshift": 0.525,
+        "sfh_delayed_log_total_mass": 10.0
+      },
+      "seconds": 6.85,
+      "points": {
+        "origin": {
+          "grad_f64": [
+            -22.320643541410917,
+            -18.319709152207988,
+            -54.925379023124975
+          ],
+          "grad_f32": [
+            -22.3194580078125,
+            -18.316606521606445,
+            -54.9310188293457
+          ],
+          "grad_exact_f64": [
+            -21.852141259391892,
+            -18.578630378847837,
+            -55.85020947944155
+          ],
+          "dtype_f64": [
+            "float64"
+          ],
+          "dtype_f32": [
+            "float32"
+          ],
+          "f64_vs_fd64": 1.2891885816095647e-05,
+          "f32_vs_f64": 0.00016936025434490887,
+          "lut_f64_vs_exact_f64": 0.021439650991532246,
+          "f32_vs_exact_f64": 0.02138539847758664,
+          "f32_finite": true
+        },
+        "half_sigma": {
+          "grad_f64": [
+            336.84836203352825,
+            -245.7125236211165,
+            2184.087950272755
+          ],
+          "grad_f32": [
+            336.8486633300781,
+            -245.72743225097656,
+            2184.0751953125
+          ],
+          "grad_exact_f64": [
+            336.82015190076874,
+            -227.36502963107475,
+            2183.8562912012844
+          ],
+          "dtype_f64": [
+            "float64"
+          ],
+          "dtype_f32": [
+            "float32"
+          ],
+          "f64_vs_fd64": 2.289869876557396e-06,
+          "f32_vs_f64": 6.0675091527073136e-05,
+          "lut_f64_vs_exact_f64": 0.08069620037792365,
+          "f32_vs_exact_f64": 0.08076177171879453,
+          "f32_finite": true
+        }
+      }
+    }
+  ]
+}
