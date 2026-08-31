@@ -234,10 +234,9 @@ class Parameters:
 
     agn_model : str or None
         AGN SED model.  Default: ``None`` (disabled).
-        Options: ``"simple"`` (3 params), ``"standard"`` (SS73 disc + 2T torus),
-        ``"kubota_done"`` (physical disc), ``"unified_nlr_blr"`` (NLR/BLR with
-        geometric masking), ``"qsogen"`` (empirical quasar, Temple+2021),
-        ``"skirtor"`` (clumpy torus RT templates, Stalevski+2016).
+        Options: ``"composable"`` (modular blocks), or deprecated monolithic names
+        like ``"kubota_done_full"`` (physical disc), ``"qsogen"`` (empirical quasar),
+        ``"skirtor"`` (clumpy torus templates).
 
     **Multi-wavelength Settings**
 

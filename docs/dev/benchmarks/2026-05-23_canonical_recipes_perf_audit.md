@@ -129,6 +129,9 @@ times. The headline numbers in
 speedup) are therefore historical, not currently reproducible from the
 canonical bench script.
 
+**Status (2026-08-31):** `2026-05-06_forward_model_speedup.md` marked superseded (#2092);
+the bench script now compares `approx=None` vs `approx=WavePrecomp()` with honest gradient harness.
+
 **Fix.** Rewrite the bench to compare `approx=None` vs
 `approx=WavePrecomp()` across the same configs, dropping the `mode=`
 loop. The benchmark added in this audit
