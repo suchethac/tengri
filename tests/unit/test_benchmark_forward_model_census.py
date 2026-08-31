@@ -147,25 +147,53 @@ class TestBenchmarkConfigConsistency:
                 f"Replace with 'composable'."
             )
 
-    def test_cloudy_grid_requires_bare_ssp(self):
-        """Configs using nebular='cloudy' should be in _BARE_SSP_SECTIONS (conceptual check)."""
-        all_configs, _bench = get_benchmark_configs()
+    def test_census_verdict_missing_required(self):
+        """census_verdict returns False when required sections are missing."""
+        _, bench = get_benchmark_configs()
+        completed = {"Section A", "Section B"}
+        skipped = [("Section C", "error")]
+        required = {"Section A", "Section D"}  # D is missing
+        bare = set()
 
-        for _label, cfg_kwargs in all_configs:
-            if cfg_kwargs.get("nebular") == "cloudy":
-                # These should ideally be in _BARE_SSP_SECTIONS, but since we
-                # don't have a bare SSP grid in CI, they're just noted here
-                pass
+        ok, missing = bench.census_verdict(completed, skipped, required, bare, False)
+        assert not ok
+        assert missing == {"Section D"}
 
-    def test_cue_emulator_requires_bare_ssp(self):
-        """Configs using nebular_cue=True should be in _BARE_SSP_SECTIONS (conceptual check)."""
-        all_configs, _bench = get_benchmark_configs()
+    def test_census_verdict_all_required_complete(self):
+        """census_verdict returns True when all required sections complete."""
+        _, bench = get_benchmark_configs()
+        completed = {"Section A", "Section B"}
+        skipped = [("Section C", "error")]
+        required = {"Section A", "Section B"}
+        bare = set()
 
-        for _label, cfg_kwargs in all_configs:
-            if cfg_kwargs.get("nebular_cue"):
-                # These should ideally be in _BARE_SSP_SECTIONS, but since we
-                # don't have a bare SSP grid in CI, they're just noted here
-                pass
+        ok, missing = bench.census_verdict(completed, skipped, required, bare, False)
+        assert ok
+        assert missing == set()
+
+    def test_census_verdict_bare_missing_when_available(self):
+        """census_verdict returns False when bare-SSP sections missing and grid available."""
+        _, bench = get_benchmark_configs()
+        completed = {"Section A"}
+        skipped = []
+        required = {"Section A"}
+        bare = {"Section B"}  # Bare section missing
+
+        ok, missing = bench.census_verdict(completed, skipped, required, bare, True)
+        assert not ok
+        assert missing == {"Section B"}
+
+    def test_census_verdict_bare_ignored_when_unavailable(self):
+        """census_verdict ignores bare-SSP sections when grid unavailable."""
+        _, bench = get_benchmark_configs()
+        completed = {"Section A"}
+        skipped = []
+        required = {"Section A"}
+        bare = {"Section B"}  # Missing, but grid unavailable so ignored
+
+        ok, missing = bench.census_verdict(completed, skipped, required, bare, False)
+        assert ok
+        assert missing == set()
 
 
 class TestRecipePerformanceWiring:

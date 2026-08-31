@@ -233,13 +233,13 @@ def bench_gradient(label, sfh_type, cfg_kwargs, ssp_data_wne, ssp_data_bare=None
         # Warmup (grad returns a dict with same structure as params)
         for _ in range(N_WARMUP):
             result = grad_fn(params)
-            # Block on a scalar from the PyTree result
-            jnp.sum(jax.tree_util.tree_leaves(result)[0] * 0).block_until_ready()
+            # Use jax.block_until_ready on the pytree result
+            jax.block_until_ready(result)
 
         t0 = time.perf_counter()
         for _ in range(N_RUNS):
             result = grad_fn(params)
-            jnp.sum(jax.tree_util.tree_leaves(result)[0] * 0).block_until_ready()
+            jax.block_until_ready(result)
         return (time.perf_counter() - t0) / N_RUNS * 1e6
 
     us_e = None
@@ -282,6 +282,42 @@ def print_header(title):
     print("=" * 110)
     print(f"  {title}")
     print("=" * 110)
+
+
+def census_verdict(completed, skipped, required, bare_sections, bare_available):
+    """Check census: all required + bare-SSP sections (if grid available) must complete.
+
+    Parameters
+    ----------
+    completed : set[str]
+        Section names that completed successfully.
+    skipped : list[tuple[str, str]]
+        (section_name, reason) tuples for skipped sections.
+    required : set[str]
+        Section names that must complete on shipped wNE data.
+    bare_sections : set[str]
+        Section names that require bare-stellar SSP grid.
+    bare_available : bool
+        Whether bare-stellar SSP grid is available.
+
+    Returns
+    -------
+    tuple[bool, set[str]]
+        (success, missing_sections) — success=True if all required
+        sections completed, False if any are missing. missing_sections
+        lists the required sections that did not complete.
+    """
+    required_missing = required - completed
+    if required_missing:
+        return False, required_missing
+
+    # Check bare-SSP sections only if grid is available
+    if bare_available:
+        bare_missing = bare_sections - completed
+        if bare_missing:
+            return False, bare_missing
+
+    return True, set()
 
 
 # ============================================================
@@ -453,35 +489,29 @@ if __name__ == "__main__":
         print(msg)
         print()
 
-    # Check: all required sections must have completed successfully.
-    # Catches removals, renames, and errors (silent-loss detection per #925).
-    required_missing = _REQUIRED_SECTIONS - _COMPLETED_SECTIONS
-    if required_missing:
+    # Check census: required + bare-SSP (if grid available) sections must complete
+    bare_available = bool(BARE_SSP_PATH)
+    ok, missing = census_verdict(
+        _COMPLETED_SECTIONS, _SKIPPED_SECTIONS, _REQUIRED_SECTIONS,
+        _BARE_SSP_SECTIONS, bare_available
+    )
+
+    if not ok:
         print("  ERROR: Required sections did not complete:")
-        for section_name in sorted(required_missing):
+        for section_name in sorted(missing):
             print(f"    - {section_name}")
         print()
         print("=" * 110)
         raise SystemExit(1)
 
-    # Check: bare-SSP sections must complete IF a bare SSP grid is available
-    bare_ssp_required = _BARE_SSP_SECTIONS if BARE_SSP_PATH else set()
-    bare_ssp_missing = bare_ssp_required - _COMPLETED_SECTIONS
-    if bare_ssp_missing:
-        print("  WARNING: Bare-SSP sections did not complete (but grid is available):")
-        for section_name in sorted(bare_ssp_missing):
-            print(f"    - {section_name}")
-        print()
-        print("=" * 110)
-        raise SystemExit(1)
+    # Success case
+    if _SKIPPED_SECTIONS:
+        n_skipped = len(_SKIPPED_SECTIONS)
+        msg = f"All required sections completed. ({n_skipped} optional sections skipped"
+        if bare_ssp_skip_count > 0:
+            msg += f", {bare_ssp_skip_count} skipped for missing bare-stellar SSP"
+        msg += ")"
+        print("  " + msg)
     else:
-        if _SKIPPED_SECTIONS:
-            n_skipped = len(_SKIPPED_SECTIONS)
-            msg = f"All required sections completed. ({n_skipped} optional sections skipped"
-            if bare_ssp_skip_count > 0:
-                msg += f", {bare_ssp_skip_count} skipped for missing bare-stellar SSP"
-            msg += ")"
-            print("  " + msg)
-        else:
-            print("  Done. (All sections completed successfully)")
-        print("=" * 110)
+        print("  Done. (All sections completed successfully)")
+    print("=" * 110)
