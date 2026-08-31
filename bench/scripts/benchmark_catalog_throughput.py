@@ -435,6 +435,13 @@ _STAMP_FIELDS = (
     "approx_repr",
     "ssp",
     "jax_persistent_cache",
+    # Both change the *result*, not merely the provenance, and neither can be
+    # reconstructed from a merged file. ``precondition`` is the whole subject of
+    # bench/reports/2026-08-31_catalog_preconditioning.md and ``chain_jitter``
+    # decides whether a ChEES row's R-hat is an independent test or a
+    # consistency check (PR #2097).
+    "precondition",
+    "chain_jitter",
 )
 
 
@@ -459,6 +466,12 @@ def _row_key(row):
         row.get("n_leapfrog"),
         row.get("n_warmup"),
         row.get("n_samples"),
+        # Part of the key, not just of the row. A preconditioned cell and an
+        # identity cell of the same (method, N, K) are different measurements;
+        # leaving these out let the second silently overwrite the first, and a
+        # merged file would then show one row where two were run.
+        row.get("precondition"),
+        row.get("chain_jitter"),
         row.get("platform"),
         row.get("tag"),
     )

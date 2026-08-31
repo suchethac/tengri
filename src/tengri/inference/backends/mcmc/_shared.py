@@ -1623,6 +1623,16 @@ def _chees_scan(
     :mod:`tengri.inference.preconditioning`'s analytic ``J^T N^-1 J + I`` instead
     of from the ensemble. **Do not switch that default on lightly.**
 
+    That last sentence is a claim about how this function is *called*, and it was
+    only half true until 2026-08-31: the batched catalog path could not thread
+    ``precondition=``, so a catalog ChEES fit sampled with no geometry at all and
+    the identity default was doing all the work. It now can
+    (:func:`~tengri.inference.backends.mcmc.catalog.build_catalog_mcmc_engine`),
+    per galaxy. A caller who leaves both off is still sampling an unwhitened
+    posterior with an identity mass matrix, which for these targets is the
+    configuration ``bench/reports/2026-08-30_chees_hmc.md`` measured as clearing
+    nothing.
+
     The warmup ensemble's final states are reused as the sampling chains' initial
     states rather than discarded, for the reason :func:`_ghmc_meads_scan` gives:
     the adaptation has no separate warmup phase to throw away.
@@ -1694,8 +1704,13 @@ def _chees_scan(
 
     Notes
     -----
-    JIT: this *is* the jitted entry point. Not vmappable over galaxies as-is --
-    the batched catalog path is Phase 3's and still runs NUTS/HMC.
+    JIT: this *is* the jitted entry point, and it **is** vmapped over galaxies
+    by :func:`~tengri.inference.backends.mcmc.catalog.build_catalog_mcmc_engine`
+    -- one lane per galaxy, the ensemble on an inner axis. That works because
+    ``data_args`` is opaque here: it is only ever forwarded to
+    ``logdensity_fn_2arg``, never inspected. The catalog engine uses exactly that
+    to thread the per-galaxy analytic metric, passing ``(A, data_args)`` where a
+    single fit passes ``data_args``. Keep it opaque.
 
     References
     ----------
