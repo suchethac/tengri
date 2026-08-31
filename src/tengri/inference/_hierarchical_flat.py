@@ -133,6 +133,22 @@ FLAT_UNSUPPORTED: dict[str, str] = {
         "extrapolation this seam's docstring refuses. Run mcmc_nuts or mcmc_hmc "
         "for the hierarchical posterior."
     ),
+    "mcmc_smc": (
+        "tempered SMC carries n_particles simultaneous copies of the whole "
+        "parameter vector -- 512 by default, each with its own HMC integrator "
+        "state -- at every rung, and hierarchical D grows with the catalog. "
+        "That is the ChEES entry's problem an order of magnitude worse: 512 "
+        "copies rather than 32. Worse, the width is the point: "
+        "bench/reports/2026-08-31_smc_evaluation.md Finding 3 measures the "
+        "particle axis as genuine accelerator width (CPU throughput flat across "
+        "a 64x particle sweep while the GPU rises 6.6x), which is exactly why "
+        "it cannot also be spent on a galaxy axis -- the accelerator has one "
+        "width. Nothing has measured the memory product of the particle axis "
+        "nested under the hierarchical one, and wiring a driver on the strength "
+        "of the single-galaxy rows would be the extrapolation this seam's "
+        "docstring refuses. Run mcmc_nuts or mcmc_hmc for the hierarchical "
+        "posterior."
+    ),
     "hmc_is": (
         "importance-sampled evidence needs a proposal that covers the posterior; "
         "hierarchical D grows with the catalog, and a single Student-t fitted to "

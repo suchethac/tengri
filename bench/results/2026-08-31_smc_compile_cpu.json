@@ -1,0 +1,46 @@
+[
+  {
+    "method": "mcmc_smc",
+    "notebook": "ctl-dpl",
+    "seed": 7,
+    "d_params": 8,
+    "n_particles": 512,
+    "n_chains": 2,
+    "n_mcmc_steps": 2,
+    "n_leapfrog_steps": 10,
+    "fixed_ladder": null,
+    "precondition": 0.5,
+    "schedule": "adaptive",
+    "trace_lower_s": 3.744,
+    "compile_s": 5.986,
+    "first_run_s": 167.955,
+    "warm_run_s": 178.852,
+    "stablehlo_lines": 13333,
+    "n_temperatures": [
+      14,
+      14
+    ]
+  },
+  {
+    "method": "mcmc_smc",
+    "notebook": "ctl-dpl",
+    "seed": 7,
+    "d_params": 8,
+    "n_particles": 512,
+    "n_chains": 2,
+    "n_mcmc_steps": 2,
+    "n_leapfrog_steps": 10,
+    "fixed_ladder": 16,
+    "precondition": 0.5,
+    "schedule": "fixed",
+    "trace_lower_s": 1.412,
+    "compile_s": 8.846,
+    "first_run_s": 268.876,
+    "warm_run_s": 229.827,
+    "stablehlo_lines": 9699,
+    "n_temperatures": [
+      16,
+      16
+    ]
+  }
+]

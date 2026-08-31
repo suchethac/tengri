@@ -2146,6 +2146,488 @@ def _chees_cached_chain_scan(
 
 
 # ---------------------------------------------------------------------------
+# Sequential Monte Carlo (tempered; lock-step within a rung by construction)
+# ---------------------------------------------------------------------------
+
+#: Particles carried through the temperature ladder.
+#:
+#: The particle axis is SMC's whole cost structure and its whole parallelism at
+#: once: every particle takes the same number of inner-MCMC moves at the same
+#: temperature, so a rung is a single ``vmap`` with no ragged control flow --
+#: the property NUTS does not have (``bench/reports/2026-08-31_catalog_batched_samplers.md``
+#: measured NUTS at 2.1x the wall clock for 8x the batch width, purely from its
+#: batched ``while_loop``). 512 is chosen so the adaptive tempering solver has
+#: enough weight ESS to bisect on at D <= 10. It is a *width*, not a chain
+#: length: doubling it does not buy a longer chain.
+_SMC_DEFAULT_PARTICLES = 512
+
+#: Weight-ESS the adaptive tempering schedule targets, as a fraction of the
+#: particle count [dimensionless].
+#:
+#: ``adaptive_tempered_smc`` bisects for the temperature increment that lands the
+#: incremental-weight ESS on this value, so it sets how many rungs the ladder
+#: has: the rung count is an *output* of the run, not an input to it. 0.5 is the
+#: standard choice (Del Moral, Doucet & Jasra 2012).
+_SMC_TARGET_ESS = 0.5
+
+#: Initial inner-kernel step size [latent units].
+#:
+#: Matches :data:`_CHEES_INIT_STEP_SIZE` so the two backends' step-size searches
+#: start from the same place and a difference between them is not a difference
+#: in where they began.
+_SMC_INIT_STEP_SIZE = 0.1
+
+#: Multiplicative gain of the inner-kernel step-size controller [dimensionless].
+#:
+#: **0.0 -- the controller is OFF by default, and that is a correction.** After
+#: each rung the step size would be multiplied by ``exp(gain * (mean_acceptance
+#: - target))``. BlackJAX's own tempered-SMC page hand-sets a step size and never
+#: adapts it between rungs; this backend added the controller, and the departure
+#: went unmeasured until the reference cross-check forced the ablation.
+#:
+#: Measured on ``ctl-dpl`` seed 7, everything else held fixed
+#: (``bench/reports/2026-08-31_smc_evaluation.md`` Finding 8): with the
+#: controller, split R-hat 1.0294, min ESS 51.2, 2 555 divergences, 0.72 of the
+#: draws distinct; without it, **1.0047**, **388.9**, **768**, **0.89**, and 17%
+#: less wall clock.
+#:
+#: **The controller was not broken -- it worked.** It drove mean acceptance from
+#: 0.84 onto its 0.651 target, which is what it was asked to do. The *target* was
+#: the mistake: 0.651 is optimal for a fixed-length HMC proposal used as a Markov
+#: chain that must decorrelate, and an inner SMC move is a two-step rejuvenation
+#: burst on particles already approximately in place, where a rejected proposal
+#: leaves a **duplicate**. Moves need to land, not to be optimally long.
+#:
+#: So this is not "adaptation is wrong" -- a controller aimed at a materially
+#: higher acceptance might beat both arms, and is untested. It is an unmeasured
+#: departure from the reference being withdrawn, on one fixture's decisive
+#: evidence. Set a positive gain to re-run the arm.
+_SMC_STEP_SIZE_GAIN = 0.0
+
+#: Hard cap on temperature rungs under the adaptive schedule.
+#:
+#: The tempering loop is a ``lax.while_loop`` on ``tempering_param < 1``, and a
+#: posterior the inner kernel cannot move in shrinks the increment without bound
+#: rather than failing: the loop then does not terminate, with no divergence, no
+#: NaN and no error to see. The cap turns that into a reportable outcome --
+#: ``diagnostics["reached_target"]`` is ``False`` and the draws are from a
+#: *tempered* distribution rather than the posterior -- which is the only honest
+#: way to hand back particles that never reached lambda = 1.
+_SMC_MAX_TEMPERATURES = 300
+
+
+def _smc_ancestor_ess(ancestors, n_particles, dtype):
+    """Effective number of distinct particles surviving one resample.
+
+    Parameters
+    ----------
+    ancestors : ndarray, shape (n_particles,)
+        Indices the resampling step drew, from ``SMCInfo.ancestors``.
+    n_particles : int (static)
+        Population size.
+    dtype : dtype
+        Float dtype to return in, so a ``while_loop`` carry stays type-stable.
+
+    Returns
+    -------
+    ndarray, shape ()
+        ``N^2 / sum(c_i^2)`` for ancestor multiplicities ``c_i``
+        [dimensionless]: ``N`` when every particle survives exactly once, 1 when
+        one particle was copied ``N`` times.
+
+    Notes
+    -----
+    This is the diagnostic that does not share split R-hat's failure mode, and
+    it is emphatically **not** an autocorrelation ESS. Split R-hat and the
+    autocorrelation estimator both read draws as a *time series*; a resampled
+    particle population is exchangeable, so the autocorrelation estimator sees
+    no correlation and reports roughly the particle count however degenerate the
+    population is. The multiplicity spectrum is what actually collapses, and it
+    collapses visibly.
+    """
+    counts = jnp.bincount(ancestors, length=n_particles).astype(dtype)
+    return jnp.asarray(n_particles, dtype) ** 2 / jnp.sum(counts**2)
+
+
+@functools.partial(jax.jit, static_argnums=(3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13))
+def _smc_scan(
+    prior_draw_matrix,
+    run_keys,
+    data_args,
+    logprior_fn_2arg,
+    loglikelihood_fn_2arg,
+    n_particles,
+    n_mcmc_steps,
+    n_leapfrog_steps,
+    target_ess,
+    init_step_size,
+    step_size_gain,
+    target_accept_rate,
+    max_temperatures,
+    fixed_ladder,
+):
+    """Outer JIT: ``n_runs`` independent tempered-SMC populations, one program.
+
+    Anneals from the standardized ``N(0, I)`` prior to the posterior by raising
+    the likelihood to a sequence of powers ``0 = lambda_0 < ... < lambda_K = 1``.
+    Two properties of this codebase make that unusually clean, and both are why
+    SMC is cheap to wire here at all:
+
+    * **The lambda = 0 target is exact.** In the standardized latent space the
+      prior is exactly ``N(0, I)`` (``InferenceContext.log_prior_fn``), so the
+      initial particles are i.i.d. draws rather than the output of yet another
+      sampler. There is no warmup, no burn-in and no MAP seed: **SMC never
+      starts at the MAP and cannot inherit a MAP's basin.**
+    * **The prior/likelihood split already exists.** ``build_loss_fn`` is
+      literally ``data term + standardized_neg_log_prior``, so the two halves
+      tempering needs are the two halves the objective is already built from.
+
+    Lock-step, and where the raggedness went
+    ----------------------------------------
+    Every particle takes exactly ``n_mcmc_steps`` inner-HMC moves of exactly
+    ``n_leapfrog_steps`` leapfrogs at every rung, so a rung is one ``vmap`` in
+    which every lane does identical work. **The raggedness is the ladder, not
+    the trajectory, and it did not vanish -- it moved outward.** Under an
+    adaptive schedule the *number of rungs* is data-dependent,
+    so this is a ``lax.while_loop`` and ``n_runs`` vmapped populations all run to
+    the slowest one's rung count. That is NUTS's batched-``while_loop`` shape one
+    level up, with a far smaller ragged factor (rung counts differ by a few;
+    NUTS tree depths differ by up to 2**10). ``fixed_ladder`` removes it entirely
+    and is the honest lock-step arm.
+
+    Parameters
+    ----------
+    prior_draw_matrix : ndarray, shape (D, D) (traced)
+        Maps standard-normal draws to the sampled coordinates. The identity when
+        preconditioning is off; ``A^-1`` when it is on, because the prior is
+        ``N(0, I)`` in ``xi`` while the sampler works in ``zeta = A^-1 xi``.
+        Also carries the dtype and ``D`` for the whole program.
+    run_keys : ndarray, shape (n_runs, 2) (traced)
+        One key per independent population. **These runs are the "chains" whose
+        split R-hat is reported**, and they share nothing -- not a warmed state,
+        not an adaptation, not a step size. That makes their R-hat an independent
+        test rather than the consistency check
+        ``bench/reports/2026-08-30_chees_hmc.md`` had to re-measure its headline
+        against.
+    data_args : pytree (traced)
+        Observed-data tensors; changing them does not recompile.
+    logprior_fn_2arg, loglikelihood_fn_2arg : callable (static)
+        ``log p(zeta)`` and ``log p(d | zeta)``, both taking
+        ``(position, data_args)``. Their sum must be the log-posterior every
+        other backend samples; ``tests/unit/inference/test_smc_backend.py`` pins
+        that against ``_get_flat_logdensity``.
+    n_particles : int (static)
+        Population size per run.
+    n_mcmc_steps : int (static)
+        Inner-HMC moves applied to every particle at every rung.
+    n_leapfrog_steps : int (static)
+        Leapfrogs per inner-HMC move. BlackJAX would equally accept it as a
+        traced ``mcmc_parameters`` entry -- which is what the reference page
+        does, via ``extend_params`` -- and the two are **measurably the same
+        program**: bit-identical draws, the same 12 ``stablehlo.while`` ops,
+        1 609 HLO lines against 1 602. Static here for a different reason: a
+        compile-time constant makes the gradient count *exact*, so a rung costs
+        exactly ``n_particles * n_mcmc_steps * n_leapfrog_steps`` gradients and
+        the fit costs that times the rung count -- a number this function
+        returns rather than leaves to be reconstructed from a wall clock.
+    target_ess : float (static)
+        Weight-ESS fraction the adaptive schedule bisects for. Unused when
+        ``fixed_ladder`` is set.
+    init_step_size : float (static)
+        Inner-kernel step size at the first rung [latent units].
+    step_size_gain : float (static)
+        Gain of the acceptance-driven step-size controller; ``0.0`` pins the step
+        size. See :data:`_SMC_STEP_SIZE_GAIN`.
+    target_accept_rate : float (static)
+        Acceptance the controller drives toward [dimensionless].
+    max_temperatures : int (static)
+        Rung cap; see :data:`_SMC_MAX_TEMPERATURES`.
+    fixed_ladder : int or None (static)
+        ``None`` runs the adaptive schedule (a ``while_loop``). An int runs a
+        uniform ``lambda_k = k / K`` ladder of exactly that many rungs as a
+        ``lax.scan``: fully lock-step, fixed-length, and a different sampler. A
+        report must say which of the two it quotes.
+
+    Returns
+    -------
+    particles : ndarray, shape (n_runs, n_particles, D)
+    log_z : ndarray, shape (n_runs,)
+        ``log Z`` estimate, the sum of the per-rung log-likelihood increments.
+        Free: a by-product of weights the algorithm already computes.
+    n_temperatures : ndarray, shape (n_runs,)
+        Rungs taken, **including the closing rung at lambda = 1**, so it is the
+        multiplier in the cost product.
+    ladder_lambda : ndarray, shape (n_runs,)
+        The tempering parameter the *ladder* reached, recorded before the closing
+        rung pins it to 1. Below 1.0 means the schedule hit ``max_temperatures``
+        and the closing rung had to cover the remaining gap in a single
+        importance step, so those particles are **not** trustworthy posterior
+        draws even though they are now nominally at lambda = 1.
+    step_size : ndarray, shape (n_runs,)
+    n_divergent : ndarray, shape (n_runs,)
+        Divergent inner-HMC transitions, summed over particles, rungs and moves.
+    accept_sum : ndarray, shape (n_runs,)
+        Inner-kernel acceptance **summed** over the rungs, not averaged. The
+        caller divides by ``n_temperatures``, where it can see whether that
+        count is zero; a clamped division here would turn a zero-rung run into a
+        plausible finite acceptance rate (#1404).
+    min_ancestor_ess : ndarray, shape (n_runs,)
+        Worst :func:`_smc_ancestor_ess` over the rungs.
+    """
+    import blackjax.mcmc.hmc as _hmc
+    from blackjax.smc import adaptive_tempered, resampling, tempered
+
+    def logprior_1arg(pos):
+        """Bind the traced data (unused by the prior) for BlackJAX's 1-arg API."""
+        return logprior_fn_2arg(pos, data_args)
+
+    def loglik_1arg(pos):
+        """Bind the traced data to the pure data term."""
+        return loglikelihood_fn_2arg(pos, data_args)
+
+    hmc_kernel = _hmc.build_kernel()
+
+    def mcmc_step_fn(rng_key, state, logdensity_fn, step_size, inverse_mass_matrix):
+        """Fixed-length HMC, with the leapfrog count bound statically."""
+        return hmc_kernel(
+            rng_key, state, logdensity_fn, step_size, inverse_mass_matrix, n_leapfrog_steps
+        )
+
+    dtype = prior_draw_matrix.dtype
+    n_dim = prior_draw_matrix.shape[0]
+    inverse_mass_matrix = jnp.ones(n_dim, dtype=dtype)
+
+    if fixed_ladder is None:
+        smc_kernel = adaptive_tempered.build_kernel(
+            logprior_1arg,
+            loglik_1arg,
+            mcmc_step_fn,
+            _hmc.init,
+            resampling.systematic,
+            target_ess,
+        )
+    # Built in both branches. The adaptive schedule needs it for the closing rung
+    # below, where the temperature is pinned rather than solved for.
+    plain_kernel = tempered.build_kernel(
+        logprior_1arg,
+        loglik_1arg,
+        mcmc_step_fn,
+        _hmc.init,
+        resampling.systematic,
+    )
+    if fixed_ladder is not None:
+        smc_kernel = plain_kernel
+
+    def _rung(state, step_size, rng_key, lam=None):
+        """One tempering rung: reweight, resample, then move every particle.
+
+        ``lam`` names the temperature explicitly and routes to the non-adaptive
+        kernel; ``None`` lets the adaptive solver choose it. The closing rung
+        uses the first form with ``lam=1``.
+        """
+        params = {
+            "step_size": step_size[None],
+            "inverse_mass_matrix": inverse_mass_matrix[None, :],
+        }
+        if lam is None:
+            new_state, info = smc_kernel(rng_key, state, n_mcmc_steps, params)
+        else:
+            new_state, info = plain_kernel(rng_key, state, n_mcmc_steps, lam, params)
+        accept = jnp.mean(info.update_info.acceptance_rate).astype(dtype)
+        divergent = jnp.sum(info.update_info.is_divergent).astype(jnp.int32)
+        new_step_size = step_size * jnp.exp(step_size_gain * (accept - target_accept_rate))
+        return (
+            new_state,
+            new_step_size.astype(dtype),
+            info.log_likelihood_increment.astype(dtype),
+            accept,
+            divergent,
+            _smc_ancestor_ess(info.ancestors, n_particles, dtype),
+        )
+
+    def one_run(rng_key):
+        """One independent population, prior to posterior."""
+        init_key, loop_key = jax.random.split(rng_key)
+        xi = jax.random.normal(init_key, (n_particles, n_dim), dtype=dtype)
+        # zeta = A^-1 xi, row-wise. The prior is N(0, I) in xi by construction of
+        # the standardized latent space, so this draw is EXACT -- no sampler.
+        particles = xi @ prior_draw_matrix.T
+        # Built explicitly rather than via ``tempered.init`` so every carry leaf
+        # has a concrete dtype: a Python 0.0 for the tempering parameter is a
+        # weak-typed float and a ``while_loop`` carry that changes weak type
+        # between the init and the body is a trace error, not a wrong answer.
+        state = tempered.TemperedSMCState(
+            particles,
+            jnp.full((n_particles,), 1.0 / n_particles, dtype=dtype),
+            jnp.asarray(0.0, dtype=dtype),
+        )
+        step_size = jnp.asarray(init_step_size, dtype=dtype)
+        zero = jnp.asarray(0.0, dtype=dtype)
+        ladder_lambda = zero
+
+        if fixed_ladder is None:
+
+            def cond(carry):
+                """Stop at lambda = 1, or at the rung cap; see _SMC_MAX_TEMPERATURES."""
+                state, _ss, _lz, i, _acc, _div, _mess, _k = carry
+                return (state.tempering_param < 1.0) & (i < max_temperatures)
+
+            def body(carry):
+                """One rung, accumulating log Z, acceptance, divergences, worst ancestor ESS."""
+                state, ss, log_z, i, acc, div, min_ess, key = carry
+                key, sub = jax.random.split(key)
+                state, ss, inc, a, d, anc = _rung(state, ss, sub)
+                return (
+                    state,
+                    ss,
+                    log_z + inc,
+                    i + 1,
+                    acc + a,
+                    div + d,
+                    jnp.minimum(min_ess, anc),
+                    key,
+                )
+
+            state, step_size, log_z, n_temp, acc_sum, n_div, min_ess, key = jax.lax.while_loop(
+                cond,
+                body,
+                (
+                    state,
+                    step_size,
+                    zero,
+                    jnp.asarray(0, dtype=jnp.int32),
+                    zero,
+                    jnp.asarray(0, dtype=jnp.int32),
+                    jnp.asarray(n_particles, dtype=dtype),
+                    loop_key,
+                ),
+            )
+            # Recorded BEFORE the closing rung pins the temperature to 1, so
+            # ``reached_target`` still answers "did the schedule get there on its
+            # own" rather than "was it told to".
+            ladder_lambda = state.tempering_param
+        else:
+            ladder = jnp.linspace(0.0, 1.0, fixed_ladder + 1, dtype=dtype)[1:]
+
+            def body(carry, xs):
+                """One rung of the fixed ladder; a scan, so the program is fixed-length."""
+                state, ss = carry
+                lam, sub = xs
+                state, ss, inc, a, d, anc = _rung(state, ss, sub, lam)
+                return (state, ss), (inc, a, d, anc)
+
+            keys = jax.random.split(loop_key, fixed_ladder)
+            (state, step_size), (inc, a, d, anc) = jax.lax.scan(
+                body, (state, step_size), (ladder, keys)
+            )
+            log_z = jnp.sum(inc)
+            n_temp = jnp.asarray(fixed_ladder, dtype=jnp.int32)
+            acc_sum = jnp.sum(a)
+            n_div = jnp.sum(d)
+            min_ess = jnp.min(anc)
+            key = jax.random.fold_in(loop_key, fixed_ladder)
+            ladder_lambda = state.tempering_param
+
+        # THE CLOSING RUNG, and it is not optional.
+        #
+        # ``blackjax.smc.base.step`` resamples, then MOVES the particles under
+        # the OLD temperature, then reweights toward the NEW one. So when the
+        # ladder exits at lambda = 1 the particles were last rejuvenated under
+        # ``pi_{lambda_{K-1}}`` and carry non-uniform weights that take them the
+        # rest of the way -- they are a WEIGHTED sample from the posterior, not
+        # an unweighted one. Reading ``state.particles`` without ``state.weights``
+        # therefore returns draws from a slightly *tempered* posterior:
+        # shrunk toward the prior mean and over-dispersed. Measured on an
+        # analytic tilted Gaussian, the raw particles come back with the mean
+        # biased -0.016 and the standard deviation +0.014 (+5% of sigma), in the
+        # same direction on every dimension; after this rung both biases are
+        # +0.002 and -0.000. The reference page
+        # (https://blackjax-devs.github.io/sampling-book/algorithms/temperedsmc)
+        # histograms the raw particles and so carries the same bias; it is
+        # invisible in a plot and not in a posterior mean.
+        #
+        # One more rung pinned at lambda = 1 fixes it exactly and is the
+        # algorithm's own machinery rather than a correction bolted on: it
+        # resamples using those final weights (which is what consumes them) and
+        # then rejuvenates under the true posterior. ``delta`` is zero, so the
+        # returned weights are uniform and the log-Z increment is exactly
+        # ``logsumexp(zeros) - log N == 0`` -- the evidence estimate is
+        # untouched. It costs one rung, 5-7% of a 14-19 rung ladder.
+        key, close_key = jax.random.split(key)
+        state, step_size, inc, a, d, anc = _rung(
+            state, step_size, close_key, jnp.asarray(1.0, dtype=dtype)
+        )
+        log_z = log_z + inc
+        acc_sum = acc_sum + a
+        n_div = n_div + d
+        min_ess = jnp.minimum(min_ess, anc)
+        n_temp = n_temp + 1
+
+        return (
+            state.particles,
+            log_z,
+            n_temp,
+            ladder_lambda,
+            step_size,
+            n_div,
+            # The acceptance SUM, not its mean. Dividing here would need a
+            # clamped denominator (``max_temperatures=0`` makes the rung count
+            # legitimately zero), and a clamped division is how a degenerate
+            # input returns a plausible finite number instead of announcing
+            # itself (#1404). The rung count is returned beside it, so the
+            # caller divides where it can see whether the divisor is zero.
+            acc_sum,
+            min_ess,
+        )
+
+    return jax.vmap(one_run)(run_keys)
+
+
+def _get_flat_prior_and_likelihood(fitter, init_params):
+    """Return ``(logprior_flat_2arg, loglik_flat_2arg)`` in the latent basis.
+
+    The tempering split, and it is a *split of the existing objective* rather
+    than a second implementation of it: ``build_loss_fn`` is literally the data
+    term plus ``standardized_neg_log_prior``, and these two are those two terms
+    reached through :class:`~tengri.inference.context.InferenceContext`. Their
+    sum is :func:`_get_flat_logdensity`'s log-posterior by construction;
+    ``tests/unit/inference/test_smc_backend.py`` pins it numerically anyway,
+    because "by construction" is exactly the kind of claim that stops being true
+    in a refactor and stays silent when it does.
+
+    Cached on the Model beside the log-posterior, keyed the same way, so a
+    second fit on the same model shape reuses the compiled program.
+
+    ``logprior_flat_2arg`` ignores ``data_args`` and takes it anyway, so both
+    functions have one signature and the scan core needs no branch.
+    """
+    from tengri.inference.context import InferenceContext
+
+    cache_key = fitter._engine_cache_key()
+    model = fitter.model
+    cache = _model_cache_owner.get_or_compile_model(model).setdefault("flat_prior_lik", {})
+
+    if cache_key not in cache:
+        _, unravel_fn = ravel_pytree(init_params)
+        context = InferenceContext.from_target(fitter)
+        log_prior = context.log_prior_fn
+        log_lik = context.log_likelihood_fn
+
+        def logprior_flat_2arg(position, data_args):
+            """log p(xi) = -0.5 xi^T xi, the standardized prior. ``data_args`` unused."""
+            del data_args
+            return log_prior(unravel_fn(position))
+
+        def loglik_flat_2arg(position, data_args):
+            """log p(d | xi), the pure data term."""
+            return log_lik(unravel_fn(position), data_args)
+
+        cache[cache_key] = (logprior_flat_2arg, loglik_flat_2arg)
+
+    return cache[cache_key]
+
+
+# ---------------------------------------------------------------------------
 # Elliptical slice (no warmup: the exact-prior ellipse needs no tuning)
 # ---------------------------------------------------------------------------
 

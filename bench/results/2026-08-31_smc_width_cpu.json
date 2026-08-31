@@ -1,0 +1,94 @@
+[
+  {
+    "method": "mcmc_smc",
+    "notebook": "ctl-dpl",
+    "seed": 7,
+    "d_params": 8,
+    "n_particles": 32,
+    "n_chains": 1,
+    "n_mcmc_steps": 2,
+    "n_leapfrog_steps": 10,
+    "fixed_ladder": 16,
+    "precondition": 0.5,
+    "schedule": "fixed",
+    "trace_lower_s": 3.918,
+    "compile_s": 6.09,
+    "first_run_s": 7.392,
+    "warm_run_s": 7.385,
+    "stablehlo_lines": 9690,
+    "n_temperatures": [
+      16
+    ],
+    "gradients": 10240,
+    "gradients_per_s": 1386.6
+  },
+  {
+    "method": "mcmc_smc",
+    "notebook": "ctl-dpl",
+    "seed": 7,
+    "d_params": 8,
+    "n_particles": 128,
+    "n_chains": 1,
+    "n_mcmc_steps": 2,
+    "n_leapfrog_steps": 10,
+    "fixed_ladder": 16,
+    "precondition": 0.5,
+    "schedule": "fixed",
+    "trace_lower_s": 3.696,
+    "compile_s": 7.811,
+    "first_run_s": 30.294,
+    "warm_run_s": 32.022,
+    "stablehlo_lines": 9690,
+    "n_temperatures": [
+      16
+    ],
+    "gradients": 40960,
+    "gradients_per_s": 1279.1
+  },
+  {
+    "method": "mcmc_smc",
+    "notebook": "ctl-dpl",
+    "seed": 7,
+    "d_params": 8,
+    "n_particles": 512,
+    "n_chains": 1,
+    "n_mcmc_steps": 2,
+    "n_leapfrog_steps": 10,
+    "fixed_ladder": 16,
+    "precondition": 0.5,
+    "schedule": "fixed",
+    "trace_lower_s": 3.2,
+    "compile_s": 6.324,
+    "first_run_s": 115.673,
+    "warm_run_s": 118.379,
+    "stablehlo_lines": 9690,
+    "n_temperatures": [
+      16
+    ],
+    "gradients": 163840,
+    "gradients_per_s": 1384.0
+  },
+  {
+    "method": "mcmc_smc",
+    "notebook": "ctl-dpl",
+    "seed": 7,
+    "d_params": 8,
+    "n_particles": 2048,
+    "n_chains": 1,
+    "n_mcmc_steps": 2,
+    "n_leapfrog_steps": 10,
+    "fixed_ladder": 16,
+    "precondition": 0.5,
+    "schedule": "fixed",
+    "trace_lower_s": 2.612,
+    "compile_s": 7.825,
+    "first_run_s": 428.129,
+    "warm_run_s": 389.77,
+    "stablehlo_lines": 9690,
+    "n_temperatures": [
+      16
+    ],
+    "gradients": 655360,
+    "gradients_per_s": 1681.4
+  }
+]

@@ -44,6 +44,7 @@ from tengri.inference.backends.mcmc import (
     run_mclmc as _ctx_run_mclmc,
     run_nuts as _ctx_run_nuts,
     run_raytrace as _ctx_run_raytrace,
+    run_smc as _ctx_run_smc,
 )
 from tengri.inference.backends.mcmc.elliptical_slice import (
     run_elliptical_slice_fitter as _ctx_run_elliptical_slice,
@@ -338,6 +339,28 @@ register_backend(
     legacy_fitter=False,
     accepts_precondition=True,
 )(_ctx_run_chees)
+
+register_backend(
+    "mcmc_smc",
+    tier="experimental",
+    short_doc=(
+        "Tempered Sequential Monte Carlo: a particle population annealed from "
+        "the exact standardized N(0, I) prior to the posterior, so it never "
+        "starts at the MAP and cannot inherit its basin. Every particle takes "
+        "the same fixed-length inner-HMC moves at every rung, so a rung is "
+        "lock-step with no ragged control flow -- but under the adaptive "
+        "schedule the RUNG COUNT is data-dependent, so the raggedness moves out "
+        "to the tempering while_loop rather than disappearing (pass "
+        "fixed_ladder= for the fully lock-step arm). log Z comes free with the "
+        "weights. NOTE: a resampled particle population is exchangeable, so the "
+        "autocorrelation ESS is not a convergence count for this backend -- "
+        "read min_ancestor_ess and the split R-hat across independent "
+        "populations. Measured in bench/reports/2026-08-31_smc_evaluation.md."
+    ),
+    requires=("blackjax",),
+    legacy_fitter=False,
+    accepts_precondition=True,
+)(_ctx_run_smc)
 
 register_backend(
     "mcmc_adjusted_mclmc",
