@@ -37,6 +37,9 @@ Usage
     python tools/check_docs_voice.py --report   # metrics only, no gated checks
     python tools/check_docs_voice.py --fix      # rewrite notation_canon + unicode_norm in place
     python tools/check_docs_voice.py --fix --dry-run  # preview fixes without writing
+
+CI: not wired — warn-only until the backlog it reports is cleared (#2050).
+
 """
 
 from __future__ import annotations
