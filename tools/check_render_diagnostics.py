@@ -24,7 +24,7 @@ A notebook cell output fails the guard if it contains:
    still renders (tracked as #2112 for per-chain spread detection). Honest comparison
    arm in nb06 prints R-hat 1.271 which passes. Patterns matched:
    - ``max R̂ = <float>``
-   - ``R̂ = <float>``
+   - ``R̂ = <float>`` (also matches ``max split-R̂ = <float>``, measured in quickstart cell 11)
    - ``max R-hat <float>``
    - ``R-hat <float>``
 
@@ -95,7 +95,9 @@ from pathlib import Path
 ROOT = Path(__file__).resolve().parents[1]
 
 # Known bad notebooks cited to specific issues. Ledger entries are bug reports;
-# removing the entry implies fixing the issue.
+# removing the entry implies fixing the issue. Entries whose files no longer exist
+# on disk are silently skipped (a deleted notebook should not fail the guard).
+# Removing a notebook from the repository also requires manual removal of its entry.
 KNOWN_BAD_LEDGER = {
     # Dead fits (seed 7 marginal-to-dead at both code endpoints): #2095
     "notebooks/05_fitting_photometry.ipynb": "#2095",
