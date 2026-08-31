@@ -61,6 +61,7 @@ if bare_ssp_override:
 else:
     # Scan data/ for an ssp_*.h5 whose name lacks "_wNE_"
     import glob
+
     candidates = glob.glob("data/ssp_*.h5")
     for path in candidates:
         basename = os.path.basename(path)
@@ -152,7 +153,7 @@ _BARE_SSP_SECTIONS = {
     "Cue+DL07+composable AGN_field",
 }
 
-# Kitchen sink gradient rows excluded: ConcretizationTypeError, pending issue (see #2092).
+# Kitchen sink gradient rows excluded: ConcretizationTypeError (issue #2114).
 
 
 def bench_one(fn, n_warmup=N_WARMUP, n_runs=N_RUNS):
@@ -274,9 +275,7 @@ def bench_gradient(label, sfh_type, cfg_kwargs, ssp_data_wne, ssp_data_bare=None
     # Check if config needs bare-stellar SSP grid
     needs_bare_ssp = cfg_kwargs.get("nebular") == "cloudy" or cfg_kwargs.get("nebular_cue")
     if needs_bare_ssp and ssp_data_bare is None:
-        print(
-            f"  {label:<40} SKIPPED (needs bare-stellar SSP grid)"
-        )
+        print(f"  {label:<40} SKIPPED (needs bare-stellar SSP grid)")
         _SKIPPED_SECTIONS.append((section_name, "bare-stellar SSP grid unavailable"))
         return
 
@@ -319,9 +318,7 @@ def bench_gradient(label, sfh_type, cfg_kwargs, ssp_data_wne, ssp_data_bare=None
         )
         us_e = _grad_us(model_e, params_e, spec_e)
     except Exception as exc:
-        print(
-            f"  {label:<40} exact=  FAILED ({type(exc).__name__}: {exc!s:.60s})"
-        )
+        print(f"  {label:<40} exact=  FAILED ({type(exc).__name__}: {exc!s:.60s})")
         _SKIPPED_SECTIONS.append((section_name, f"exact gradient: {str(exc)[:60]}"))
         return
 
@@ -518,8 +515,7 @@ if __name__ == "__main__":
     # Select grad configs by label (not position)
     grad_config_labels = {"Stellar only", "Kitchen sink (all components)"}
     grad_configs = [
-        (label, kwargs) for label, kwargs in all_configs
-        if label in grad_config_labels
+        (label, kwargs) for label, kwargs in all_configs if label in grad_config_labels
     ]
 
     for sfh_label, sfh_type in sfh_types:
@@ -533,8 +529,7 @@ if __name__ == "__main__":
 
     # Count skipped for bare-SSP unavailable
     bare_ssp_skip_count = sum(
-        1 for _, msg in _SKIPPED_SECTIONS
-        if "bare-stellar SSP grid unavailable" in msg
+        1 for _, msg in _SKIPPED_SECTIONS if "bare-stellar SSP grid unavailable" in msg
     )
 
     # First, report skipped sections (whether required or not)
@@ -557,8 +552,7 @@ if __name__ == "__main__":
     # Check census: required + bare-SSP (if grid available) sections must complete
     bare_available = bool(BARE_SSP_PATH)
     ok, missing = census_verdict(
-        _COMPLETED_SECTIONS, _REQUIRED_SECTIONS,
-        _BARE_SSP_SECTIONS, bare_available
+        _COMPLETED_SECTIONS, _REQUIRED_SECTIONS, _BARE_SSP_SECTIONS, bare_available
     )
 
     if not ok:

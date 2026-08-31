@@ -1,5 +1,5 @@
 #!/usr/bin/env python
-"""Minimal reproducer for kitchen-sink gradient ConcretizationTypeError.
+"""Minimal reproducer for kitchen-sink gradient ConcretizationTypeError (issue #2114).
 
 Reproduces the error from benchmark_forward_model.py:
 Full traceback lands at a concrete-value check in JAX tracing.
