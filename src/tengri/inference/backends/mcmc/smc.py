@@ -165,7 +165,7 @@ def run_smc(
         Log progress.
     **_ignored_budget
         Swallows ``n_warmup`` / ``n_burnin`` / ``n_samples``, which SMC has no
-        analogue of: there is no warmup to run, nothing to burn in, and the draw
+        analog of: there is no warmup to run, nothing to burn in, and the draw
         count is ``n_particles``. Accepted rather than rejected so a caller can
         sweep this backend beside the chain samplers without a special case, and
         recorded in ``diagnostics["ignored_kwargs"]`` so a row that thought it
@@ -256,7 +256,7 @@ def run_smc(
         # exchangeable particle set against the second half of the same set,
         # which is ~1.0 by construction whatever the fit did. That is the
         # contamination pattern this project has now hit five times, and the only
-        # defence is to say so at the call site.
+        # defense is to say so at the call site.
         logger.warning(
             "mcmc_smc with n_chains=1: split R-hat over ONE particle population "
             "compares two halves of an exchangeable set and reads ~1.0 whatever "

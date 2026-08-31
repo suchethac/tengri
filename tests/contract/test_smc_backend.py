@@ -67,7 +67,7 @@ def _tilted_gaussian(dim, scale=0.3, shift=1.5):
         return -0.5 * jnp.sum(position**2)
 
     def loglik(position, data_args):
-        """A Gaussian data term centred away from the prior, so tempering has work."""
+        """A Gaussian data term centered away from the prior, so tempering has work."""
         del data_args
         return -0.5 * jnp.sum(((position - mean) / scale) ** 2)
 
@@ -362,7 +362,7 @@ class TestTheDefaults:
         )
 
     def test_chain_budget_kwargs_are_swallowed_and_recorded(self):
-        """``n_warmup``/``n_samples`` have no analogue here and must not be silent.
+        """``n_warmup``/``n_samples`` have no analog here and must not be silent.
 
         A caller sweeping this backend beside the chain samplers will pass them.
         Rejecting would force a special case at every call site; accepting
