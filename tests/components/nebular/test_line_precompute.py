@@ -138,10 +138,11 @@ def test_free_ionization_is_rejected_at_build(ssp_data_fsps):
     single-metallicity-axis table would be silently wrong away from its baked
     reference value. The precondition must be a guard, not a docstring.
     """
-    from tengri import FIXED, Uniform
+    from tengri import DEFAULT, Fixed, Uniform
 
     m, lw = _model(
-        ssp_data_fsps, neb={"type": "cue", "logU": Uniform(-3.5, -1.5), "all_params": FIXED}
+        ssp_data_fsps,
+        neb={"type": "cue", "logU": Uniform(-3.5, -1.5), "all_params": Fixed(DEFAULT)},
     )
     assert "neb_logU" in set(m.spec.free_params)
     with pytest.raises(ValueError, match="requires FIXED nebular ionization"):

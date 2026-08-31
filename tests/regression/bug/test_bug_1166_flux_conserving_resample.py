@@ -29,7 +29,7 @@ import numpy as np
 import pytest
 
 import tengri
-from tengri import FIXED, FREE, Fixed, Observation, Photometry, SEDModel, Spectroscopy, Uniform
+from tengri import DEFAULT, FREE, Fixed, Observation, Photometry, SEDModel, Spectroscopy, Uniform
 from tengri.observation.spectrum import compute_spectrum, compute_spectrum_conserving
 from tengri.units import lnu_to_fnu
 
@@ -57,7 +57,7 @@ def rest_sed(ssp):
         dust_attenuation={
             "law": "power_law",
             "type": "two_component",
-            "all_params": FIXED,
+            "all_params": Fixed(DEFAULT),
             "tau_diff": 0.3,
         },
         redshift=Fixed(0.1),
@@ -189,7 +189,7 @@ def _model(ssp, resample, wave_obs, z=0.1, free_z=False):
         dust_attenuation={
             "law": "power_law",
             "type": "two_component",
-            "all_params": FIXED,
+            "all_params": Fixed(DEFAULT),
             "tau_diff": 0.3,
         },
         redshift=(Uniform(0.05, 0.5) if free_z else Fixed(z)),
@@ -251,7 +251,7 @@ def test_spectrum_precomp_warns_that_it_ignores_conserving(ssp):
             dust_attenuation={
                 "law": "power_law",
                 "type": "two_component",
-                "all_params": FIXED,
+                "all_params": Fixed(DEFAULT),
                 "tau_diff": 0.3,
             },
             redshift=Fixed(0.1),

@@ -83,7 +83,7 @@ _GRID_HI = -1.3 - LOG10_ZSUN
 
 def _build(ssp, obs, *, met_mode=None, met_logzsol=None, approx=None, neb="none", gas_free=False):
     """A 5-band table-SFH ForwardModel, optionally with a tabulated metallicity."""
-    from tengri import FIXED, ForwardModel, SEDModel
+    from tengri import DEFAULT, ForwardModel, SEDModel
     from tengri.parameters.priors import Fixed, Uniform
 
     met_group = {}
@@ -94,7 +94,7 @@ def _build(ssp, obs, *, met_mode=None, met_logzsol=None, approx=None, neb="none"
 
     neb_group = {"type": neb} if isinstance(neb, str) else dict(neb)
     if neb_group["type"] != "none":
-        neb_group["all_params"] = FIXED
+        neb_group["all_params"] = Fixed(DEFAULT)
         if gas_free:
             neb_group["logZ_gas"] = Uniform(-1.5, 0.3)
 
@@ -107,7 +107,7 @@ def _build(ssp, obs, *, met_mode=None, met_logzsol=None, approx=None, neb="none"
             dust_attenuation={
                 "law": "power_law",
                 "type": "two_component",
-                "all_params": FIXED,
+                "all_params": Fixed(DEFAULT),
                 "tau_bc": 0.5,
                 "tau_diff": Uniform(0.0, 2.0),
             },

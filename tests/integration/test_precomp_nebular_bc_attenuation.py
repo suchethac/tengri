@@ -24,7 +24,7 @@ import jax.numpy as jnp
 import numpy as np
 import pytest
 
-from tengri import FIXED, Fixed, Observation, Photometry, SEDModel, SpectrumPrecomp, WavePrecomp
+from tengri import DEFAULT, Fixed, Observation, Photometry, SEDModel, SpectrumPrecomp, WavePrecomp
 from tengri.components.stellar.sps.dsps_wrapper import load_ssp_data
 from tengri.observation.photometry import FilterCurve
 from tengri.observation.spectroscopy import Spectroscopy
@@ -50,13 +50,17 @@ def _sfh_dust_neb():
     return dict(
         sfh={
             "type": "tsnorm",
-            "all_params": FIXED,
+            "all_params": Fixed(DEFAULT),
             "log_total_mass": Fixed(10.0),
             "peak_lbt_gyr": Fixed(0.1),
             "width_gyr": Fixed(0.3),
         },
-        dust_attenuation={"type": "two_component", "law": "calzetti", "all_params": FIXED},
-        neb={"type": "cue", "all_params": FIXED},
+        dust_attenuation={
+            "type": "two_component",
+            "law": "calzetti",
+            "all_params": Fixed(DEFAULT),
+        },
+        neb={"type": "cue", "all_params": Fixed(DEFAULT)},
     )
 
 

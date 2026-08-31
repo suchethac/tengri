@@ -24,7 +24,7 @@ missing, whichever kernel was built first won for the rest of the process.
 import numpy as np
 import pytest
 
-from tengri import FIXED, Fixed, SEDModel
+from tengri import DEFAULT, Fixed, SEDModel
 
 pytestmark = pytest.mark.contract
 
@@ -34,7 +34,7 @@ SFH_DELAYED = {
     "tau_gyr": Fixed(1.0),
     "age_gyr": Fixed(5.0),
     "log_total_mass": Fixed(10.0),
-    "all_params": FIXED,
+    "all_params": Fixed(DEFAULT),
 }
 
 
@@ -45,14 +45,14 @@ def _build(ssp, obs=None, **sfh_extra):
         kwargs["observation"] = obs
     return SEDModel.build(
         ssp_data=ssp,
-        met={"logzsol": Fixed(0.0), "all_params": FIXED},
+        met={"logzsol": Fixed(0.0), "all_params": Fixed(DEFAULT)},
         sfh=dict(SFH_DELAYED, **sfh_extra),
         dust_attenuation={
             "law": "power_law",
             "type": "two_component",
             "tau_bc": Fixed(0.0),
             "tau_diff": Fixed(0.0),
-            "all_params": FIXED,
+            "all_params": Fixed(DEFAULT),
         },
         redshift=Fixed(0.05),
         **kwargs,
@@ -181,11 +181,11 @@ class TestAgeKernelRejectsBadInput:
     def test_cic_with_field_raises_rather_than_silently_using_dsps(self, synthetic_ssp_wide):
         """An explicit request the implementation cannot serve must not no-op."""
         with pytest.raises(NotImplementedError, match=r"age_kernel='cic'.*GP-field"):
-            _build(synthetic_ssp_wide, age_kernel="cic", field={"all_params": FIXED})
+            _build(synthetic_ssp_wide, age_kernel="cic", field={"all_params": Fixed(DEFAULT)})
 
     def test_field_default_still_builds(self, synthetic_ssp_wide):
         """Auto-select on the field path keeps resolving to DSPS silently."""
-        w = _age_marginal(_build(synthetic_ssp_wide, field={"all_params": FIXED}))
+        w = _age_marginal(_build(synthetic_ssp_wide, field={"all_params": Fixed(DEFAULT)}))
         assert np.all(np.isfinite(w))
 
 
@@ -225,19 +225,19 @@ class TestNonFieldDspsRouteIsSound:
         """A binned family (continuity) must not crash or go non-finite."""
         model = SEDModel.build(
             ssp_data=synthetic_ssp_wide,
-            met={"logzsol": Fixed(0.0), "all_params": FIXED},
+            met={"logzsol": Fixed(0.0), "all_params": Fixed(DEFAULT)},
             sfh={
                 "type": "continuity",
                 "log_total_mass": Fixed(10.0),
                 "age_kernel": kernel,
-                "all_params": FIXED,
+                "all_params": Fixed(DEFAULT),
             },
             dust_attenuation={
                 "law": "power_law",
                 "type": "two_component",
                 "tau_bc": Fixed(0.0),
                 "tau_diff": Fixed(0.0),
-                "all_params": FIXED,
+                "all_params": Fixed(DEFAULT),
             },
             redshift=Fixed(0.05),
         )

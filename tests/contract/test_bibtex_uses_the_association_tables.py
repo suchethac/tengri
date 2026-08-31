@@ -56,7 +56,7 @@ from contextlib import redirect_stdout
 import pytest
 
 import tengri
-from tengri import FIXED, Fixed, Observation, Photometry, SEDModel
+from tengri import DEFAULT, Fixed, Observation, Photometry, SEDModel
 from tengri.citations import cite
 from tengri.citations.resolve import (
     NAME_TO_BIBKEY,
@@ -106,11 +106,11 @@ def bibtex_text(ssp_data_fsps):
     model = SEDModel.build(
         ssp_data=ssp_data_fsps,
         observation=obs,
-        sfh={"type": "dpl", "all_params": FIXED},
+        sfh={"type": "dpl", "all_params": Fixed(DEFAULT)},
         dust_attenuation={
             "type": "two_component",
             "law": "calzetti",
-            "all_params": FIXED,
+            "all_params": Fixed(DEFAULT),
         },
         neb={"type": "none"},
         igm={"type": "inoue"},
@@ -242,11 +242,11 @@ class TestTheTwoSurfacesAgree:
         model = SEDModel.build(
             ssp_data=ssp_data_fsps,
             observation=obs,
-            sfh={"type": "delayed", "all_params": FIXED},
+            sfh={"type": "delayed", "all_params": Fixed(DEFAULT)},
             dust_attenuation={
                 "type": "two_component",
                 "law": "calzetti",
-                "all_params": FIXED,
+                "all_params": Fixed(DEFAULT),
             },
             neb={"type": "none"},
             redshift=Fixed(0.1),

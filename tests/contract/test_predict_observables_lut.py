@@ -17,7 +17,7 @@ import chex
 import jax
 import pytest
 
-from tengri import FIXED, Fixed, ForwardModel, SEDModel, Uniform, WavePrecomp
+from tengri import DEFAULT, Fixed, ForwardModel, SEDModel, Uniform, WavePrecomp
 
 pytestmark = pytest.mark.contract
 
@@ -26,11 +26,11 @@ def _model(ssp, obs, approx=None):
     return SEDModel.build(
         ssp,
         observation=obs,
-        sfh={"type": "delayed", "all_params": FIXED},
+        sfh={"type": "delayed", "all_params": Fixed(DEFAULT)},
         dust_attenuation={
             "law": "power_law",
             "type": "two_component",
-            "all_params": FIXED,
+            "all_params": Fixed(DEFAULT),
             "tau_diff": Uniform(0.0, 1.5),
         },
         dust_emission=None,

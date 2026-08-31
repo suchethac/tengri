@@ -86,11 +86,11 @@ def ssp(synthetic_ssp_wide):
 def test_meiksin06_builds_through_grammar(ssp):
     m = tengri.SEDModel.build(
         ssp,
-        sfh={"type": "tsnorm", "all_params": tengri.FIXED},
+        sfh={"type": "tsnorm", "all_params": tengri.Fixed(tengri.DEFAULT)},
         dust_attenuation={
             "law": "power_law",
             "type": "two_component",
-            "all_params": tengri.FIXED,
+            "all_params": tengri.Fixed(tengri.DEFAULT),
             "tau_diff": 0.0,
             "tau_bc": 0.0,
         },
@@ -107,11 +107,11 @@ def test_yang20_alias_builds(ssp):
     """``xray={'type': 'yang20'}`` resolves identically to ``'simple'``."""
     m = tengri.SEDModel.build(
         ssp,
-        sfh={"type": "tsnorm", "all_params": tengri.FIXED},
+        sfh={"type": "tsnorm", "all_params": tengri.Fixed(tengri.DEFAULT)},
         dust_attenuation={
             "law": "power_law",
             "type": "two_component",
-            "all_params": tengri.FIXED,
+            "all_params": tengri.Fixed(tengri.DEFAULT),
             "tau_diff": 0.0,
             "tau_bc": 0.0,
         },

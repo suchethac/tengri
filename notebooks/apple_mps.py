@@ -141,7 +141,7 @@ print("dtype  :", jnp.zeros(1).dtype)
 # Nothing about the model API changes. Build and predict exactly as on CPU.
 
 # %%
-from tengri import FIXED, FREE, SEDModel, Uniform, load_ssp
+from tengri import DEFAULT, Fixed, FREE, load_ssp, SEDModel, Uniform
 from tengri.observation import Observation, Photometry
 
 # load_ssp resolves a short alias and walks parent dirs for data/, so this works
@@ -159,7 +159,7 @@ model = SEDModel.build(
     ssp_data=ssp,
     observation=obs,
     sfh={"type": "dpl", "all_params": FREE},
-    dust_attenuation={"law": "power_law", "type": "two_component", "all_params": FIXED},
+    dust_attenuation={"law": "power_law", "type": "two_component", "all_params": Fixed(DEFAULT)},
     redshift=Uniform(0.01, 2.0, "redshift"),
     approx=tengri.WavePrecomp(),  # the path fits use; also the cheaper one here
 )

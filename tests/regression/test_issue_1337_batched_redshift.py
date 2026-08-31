@@ -34,14 +34,18 @@ class TestBatchedRedshift:
 
     @staticmethod
     def _model(ssp_data_wne, synthetic_tophat_obs, *, z_range):
-        from tengri import FIXED, FREE, Fixed, SEDModel, WavePrecomp
+        from tengri import DEFAULT, FREE, Fixed, SEDModel, WavePrecomp
 
         approx = WavePrecomp(catalog_z_range=z_range, n_z=50) if z_range else None
         return SEDModel.build(
             ssp_data=ssp_data_wne,
             observation=synthetic_tophat_obs,
             sfh={"type": "dpl", "all_params": FREE},
-            dust_attenuation={"law": "power_law", "type": "two_component", "all_params": FIXED},
+            dust_attenuation={
+                "law": "power_law",
+                "type": "two_component",
+                "all_params": Fixed(DEFAULT),
+            },
             redshift=Fixed(0.1),
             approx=approx,
         )

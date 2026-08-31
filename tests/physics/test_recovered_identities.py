@@ -132,7 +132,7 @@ def test_kennicutt_1998_halpha_sfr_chabrier(ssp_fsps_chabrier):
         ssp_fsps_chabrier,
         sfh={
             "type": "const",
-            "all_params": tengri.FIXED,
+            "all_params": tengri.Fixed(tengri.DEFAULT),
             "start_gyr": 0.01,  # constant SFR over last 10 Myr (what Hα traces)
             "end_gyr": 0.0,
             "log_total_mass": tengri.FREE,
@@ -140,13 +140,13 @@ def test_kennicutt_1998_halpha_sfr_chabrier(ssp_fsps_chabrier):
         dust_attenuation={
             "law": "power_law",
             "type": "two_component",
-            "all_params": tengri.FIXED,
+            "all_params": tengri.Fixed(tengri.DEFAULT),
             "tau_diff": 0.0,
             "tau_bc": 0.0,
         },
         neb={
             "type": "cue",
-            "all_params": tengri.FIXED,
+            "all_params": tengri.Fixed(tengri.DEFAULT),
             "neb_logU": -2.5,
             "neb_fesc": 0.0,
             "neb_fesc_lya": 0.0,
@@ -277,12 +277,12 @@ def test_sed_additivity():
 
     dust_attenuation_cfg = {
         "type": "two_component",
-        "all_params": tengri.FIXED,
+        "all_params": tengri.Fixed(tengri.DEFAULT),
         "tau_diff": 0.5,
         "law_bc": "calzetti",
         "law_diff": "calzetti",
     }
-    dust_emission_cfg = {"type": "dale2014", "all_params": tengri.FIXED}
+    dust_emission_cfg = {"type": "dale2014", "all_params": tengri.Fixed(tengri.DEFAULT)}
     sfh_cfg = {"type": "tsnorm", "all_params": tengri.FREE}
 
     # Full model: stellar + dust attenuation + dust emission + nebular
@@ -292,7 +292,7 @@ def test_sed_additivity():
         sfh=sfh_cfg,
         dust_attenuation=dust_attenuation_cfg,
         dust_emission=dust_emission_cfg,
-        neb={"type": "cue", "all_params": tengri.FIXED},
+        neb={"type": "cue", "all_params": tengri.Fixed(tengri.DEFAULT)},
         redshift=tengri.Fixed(0.05),
     )
 

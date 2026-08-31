@@ -16,7 +16,7 @@ import jax.numpy as jnp
 import pytest
 
 from tengri import (
-    FIXED,
+    DEFAULT,
     Fixed,
     Observation,
     Photometry,
@@ -50,8 +50,12 @@ def _build(joint_obs, ssp, approx):
     return SEDModel.build(
         ssp_data=ssp,
         observation=joint_obs,
-        sfh={"type": "dpl", "all_params": FIXED, "log_total_mass": Uniform(8, 12)},
-        dust_attenuation={"type": "two_component", "law": "calzetti", "all_params": FIXED},
+        sfh={"type": "dpl", "all_params": Fixed(DEFAULT), "log_total_mass": Uniform(8, 12)},
+        dust_attenuation={
+            "type": "two_component",
+            "law": "calzetti",
+            "all_params": Fixed(DEFAULT),
+        },
         neb={"type": "none"},
         redshift=Fixed(0.3),
         approx=approx,

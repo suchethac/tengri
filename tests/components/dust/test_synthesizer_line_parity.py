@@ -174,7 +174,7 @@ def test_grid_backed_lines_selectable_via_builder(monkeypatch):
     assert "synthesizer" in AGN_BLOCKS["blr"]
 
     monkeypatch.setenv("TENGRI_SYNTHESIZER_AGN_GRID_DIR", str(_DATA))
-    from tengri import FIXED, Fixed, SEDModel, load_ssp_data
+    from tengri import DEFAULT, Fixed, SEDModel, load_ssp_data
 
     ssp = load_ssp_data(str(_SSP_GRID))
     model = SEDModel.build(
@@ -184,14 +184,14 @@ def test_grid_backed_lines_selectable_via_builder(monkeypatch):
             "tau_gyr": Fixed(1.0),
             "age_gyr": Fixed(5.0),
             "log_total_mass": Fixed(10.0),
-            "all_params": FIXED,
+            "all_params": Fixed(DEFAULT),
         },
         dust_attenuation={
             "law": "power_law",
             "type": "two_component",
             "tau_bc": Fixed(0.0),
             "tau_diff": Fixed(0.0),
-            "all_params": FIXED,
+            "all_params": Fixed(DEFAULT),
         },
         agn={
             "type": "composable",
@@ -199,7 +199,7 @@ def test_grid_backed_lines_selectable_via_builder(monkeypatch):
             "torus": {"type": "nenkova"},
             "nlr": {"type": "synthesizer"},
             "agn_log_lbol": Fixed(12.0),
-            "all_params": FIXED,
+            "all_params": Fixed(DEFAULT),
         },
         redshift=Fixed(0.0),
     )
@@ -234,7 +234,7 @@ def test_synth_lines_photometry_under_jit_and_precompute(
 
     import jax.numpy as jnp
 
-    from tengri import FIXED, Fixed, SEDModel, load_ssp_data
+    from tengri import DEFAULT, Fixed, SEDModel, load_ssp_data
     from tengri.forward.sed_model import WavePrecomp
     from tengri.observation import Observation, Photometry
     from tengri.observation.photometry import FilterCurve
@@ -262,14 +262,14 @@ def test_synth_lines_photometry_under_jit_and_precompute(
                 "tau_gyr": Fixed(1.0),
                 "age_gyr": Fixed(5.0),
                 "log_total_mass": Fixed(0.0),
-                "all_params": FIXED,
+                "all_params": Fixed(DEFAULT),
             },
             dust_attenuation={
                 "law": "power_law",
                 "type": "two_component",
                 "tau_bc": Fixed(0.0),
                 "tau_diff": Fixed(0.0),
-                "all_params": FIXED,
+                "all_params": Fixed(DEFAULT),
             },
             agn={
                 "type": "composable",
@@ -278,7 +278,7 @@ def test_synth_lines_photometry_under_jit_and_precompute(
                 "nlr": {"type": nlr_block_type},
                 "blr": {"type": blr_block_type},
                 "agn_log_lbol": Fixed(12.0),
-                "all_params": FIXED,
+                "all_params": Fixed(DEFAULT),
             },
             redshift=Fixed(0.01),
             approx=approx,

@@ -20,7 +20,7 @@ import jax
 import numpy as np
 import pytest
 
-from tengri import FIXED, Fixed, SEDModel
+from tengri import DEFAULT, Fixed, SEDModel
 
 pytestmark = pytest.mark.contract
 
@@ -36,15 +36,15 @@ def test_lazy_dust_templates_survive_cross_model_use(synthetic_ssp_wide, synthet
                 ssp_data=synthetic_ssp_wide,
                 observation=synthetic_tophat_obs,
                 redshift=Fixed(0.1),
-                sfh={"type": "delayed", "all_params": FIXED},
+                sfh={"type": "delayed", "all_params": Fixed(DEFAULT)},
                 dust_attenuation={
                     "law": "power_law",
                     "type": "two_component",
                     "tau_bc": Fixed(0.5),
                     "tau_diff": Fixed(0.3),
-                    "all_params": FIXED,
+                    "all_params": Fixed(DEFAULT),
                 },
-                dust_emission={"type": emission, "all_params": FIXED},
+                dust_emission={"type": emission, "all_params": Fixed(DEFAULT)},
             )
             params = model.spec.sample(jax.random.PRNGKey(1))
             return np.asarray(model.predict_photometry(params))
@@ -59,7 +59,7 @@ def test_runtime_unsupported_sfh_types_fail_at_build(sfh_type):
     from tengri.parameters.groups import parse_groups
 
     with pytest.raises(ValueError, match="not yet validated"):
-        parse_groups(sfh={"type": sfh_type, "all_params": FIXED}, redshift=Fixed(0.1))
+        parse_groups(sfh={"type": sfh_type, "all_params": Fixed(DEFAULT)}, redshift=Fixed(0.1))
 
 
 def test_shipped_filter_curves_are_sanitized():
@@ -97,7 +97,7 @@ def test_cloudy_grammar_accepts_grid_key():
     from tengri.parameters.groups import parse_groups
 
     params = parse_groups(
-        neb={"type": "cloudy", "all_params": FIXED, "grid": "data/cloudy_grid_mist.h5"},
+        neb={"type": "cloudy", "all_params": Fixed(DEFAULT), "grid": "data/cloudy_grid_mist.h5"},
         redshift=Fixed(0.1),
     )
     assert params.cloudy_grid_path == "data/cloudy_grid_mist.h5"
@@ -110,4 +110,4 @@ def test_cloudy_missing_grid_error_names_the_grammar_key(monkeypatch):
 
     monkeypatch.setattr(Parameters, "_default_cloudy_grid", staticmethod(lambda: None))
     with pytest.raises(ValueError, match=r"neb=\{'type': 'cloudy', 'grid'"):
-        parse_groups(neb={"type": "cloudy", "all_params": FIXED}, redshift=Fixed(0.1))
+        parse_groups(neb={"type": "cloudy", "all_params": Fixed(DEFAULT)}, redshift=Fixed(0.1))

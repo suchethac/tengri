@@ -149,7 +149,7 @@ def test_model_structure_keys_the_signal_response_cache(ssp, obs):
             observation=obs,
             sfh={
                 "type": "dpl",
-                "all_params": tengri.FIXED,
+                "all_params": tengri.Fixed(tengri.DEFAULT),
                 # Short form, so it must be a name that resolves unambiguously:
                 # tools/check_param_ranges.py reads a bare ``alpha`` as
                 # ``agn_alpha`` (declared support [-2, 0]) rather than
@@ -158,7 +158,7 @@ def test_model_structure_keys_the_signal_response_cache(ssp, obs):
             },
             dust_attenuation={
                 "type": "two_component",
-                "all_params": tengri.FIXED,
+                "all_params": tengri.Fixed(tengri.DEFAULT),
                 # #1989: laws are explicit — law_bc VARIES between the two
                 # models (that is the structural difference under test);
                 # law_diff is held fixed so only one thing changes.
@@ -187,7 +187,7 @@ def test_same_model_still_shares_one_closure(ssp, obs):
             observation=obs,
             sfh={
                 "type": "dpl",
-                "all_params": tengri.FIXED,
+                "all_params": tengri.Fixed(tengri.DEFAULT),
                 # Short form, so it must be a name that resolves unambiguously:
                 # tools/check_param_ranges.py reads a bare ``alpha`` as
                 # ``agn_alpha`` (declared support [-2, 0]) rather than
@@ -196,7 +196,7 @@ def test_same_model_still_shares_one_closure(ssp, obs):
             },
             dust_attenuation={
                 "type": "two_component",
-                "all_params": tengri.FIXED,
+                "all_params": tengri.Fixed(tengri.DEFAULT),
                 # #1989: laws are explicit — both laws pinned so the two
                 # builds in this test are structurally identical.
                 "law_bc": "calzetti",

@@ -18,7 +18,7 @@ pytestmark = pytest.mark.contract
 @lru_cache(maxsize=1)
 def _build_shock_dust_model():
     """Build shock+two_component model once, reuse to avoid SSP download overhead."""
-    from tengri import FIXED, Fixed, Observation, Photometry, SEDModel, WavePrecomp
+    from tengri import DEFAULT, Fixed, Observation, Photometry, SEDModel, WavePrecomp
     from tengri.components.stellar.sps.dsps_wrapper import load_ssp_data
     from tengri.data import download_ssp
 
@@ -30,19 +30,19 @@ def _build_shock_dust_model():
         observation=Observation(photometry=Photometry.from_names(["sdss_g", "sdss_r", "sdss_i"])),
         sfh={
             "type": "delayed",
-            "all_params": FIXED,
+            "all_params": Fixed(DEFAULT),
             "tau_gyr": 1.0,
             "log_total_mass": 10.0,
         },
         dust_attenuation={
             "law": "power_law",
             "type": "two_component",
-            "all_params": FIXED,
+            "all_params": Fixed(DEFAULT),
             "tau_bc": 2.0,
             "tau_diff": 1.0,
         },
         neb={"type": "none"},
-        shock={"frac": 1.0, "all_params": FIXED},
+        shock={"frac": 1.0, "all_params": Fixed(DEFAULT)},
         redshift=Fixed(0.5),
         approx=WavePrecomp(),
     )
@@ -66,7 +66,7 @@ class TestShockAttenuationPhysics:
         publishing the attenuated form (silently returns zeros, or
         returns unattenuated form).
         """
-        from tengri import FIXED, Fixed, Observation, Photometry, SEDModel, WavePrecomp
+        from tengri import DEFAULT, Fixed, Observation, Photometry, SEDModel, WavePrecomp
         from tengri.components.stellar.sps.dsps_wrapper import load_ssp_data
         from tengri.data import download_ssp
 
@@ -80,19 +80,19 @@ class TestShockAttenuationPhysics:
             ),
             sfh={
                 "type": "delayed",
-                "all_params": FIXED,
+                "all_params": Fixed(DEFAULT),
                 "tau_gyr": 1.0,
                 "log_total_mass": 10.0,
             },
             dust_attenuation={
                 "law": "power_law",
                 "type": "two_component",
-                "all_params": FIXED,
+                "all_params": Fixed(DEFAULT),
                 "tau_bc": 2.0,
                 "tau_diff": 1.0,
             },
             neb={"type": "none"},
-            shock={"frac": 1.0, "all_params": FIXED},
+            shock={"frac": 1.0, "all_params": Fixed(DEFAULT)},
             redshift=Fixed(0.5),
             approx=WavePrecomp(),
         )
@@ -137,7 +137,7 @@ class TestShockAttenuationPhysics:
 
         Post-fix: r_b must satisfy r_g < r_r < r_i and minimum spread > 5%.
         """
-        from tengri import FIXED, Fixed, Observation, Photometry, SEDModel
+        from tengri import DEFAULT, Fixed, Observation, Photometry, SEDModel
         from tengri.components.stellar.sps.dsps_wrapper import load_ssp_data
         from tengri.data import download_ssp
 
@@ -152,19 +152,19 @@ class TestShockAttenuationPhysics:
             ),
             sfh={
                 "type": "delayed",
-                "all_params": FIXED,
+                "all_params": Fixed(DEFAULT),
                 "tau_gyr": 1.0,
                 "log_total_mass": 10.0,
             },
             dust_attenuation={
                 "law": "power_law",
                 "type": "two_component",
-                "all_params": FIXED,
+                "all_params": Fixed(DEFAULT),
                 "tau_bc": 0.0,
                 "tau_diff": 0.0,
             },
             neb={"type": "none"},
-            shock={"frac": 1.0, "all_params": FIXED},
+            shock={"frac": 1.0, "all_params": Fixed(DEFAULT)},
             redshift=Fixed(0.05),
         )
 
@@ -175,19 +175,19 @@ class TestShockAttenuationPhysics:
             ),
             sfh={
                 "type": "delayed",
-                "all_params": FIXED,
+                "all_params": Fixed(DEFAULT),
                 "tau_gyr": 1.0,
                 "log_total_mass": 10.0,
             },
             dust_attenuation={
                 "law": "power_law",
                 "type": "two_component",
-                "all_params": FIXED,
+                "all_params": Fixed(DEFAULT),
                 "tau_bc": 2.0,
                 "tau_diff": 1.0,
             },
             neb={"type": "none"},
-            shock={"frac": 1.0, "all_params": FIXED},
+            shock={"frac": 1.0, "all_params": Fixed(DEFAULT)},
             redshift=Fixed(0.05),
         )
 
@@ -300,7 +300,7 @@ class TestShockAttenuationPhysics:
         Assertion: precomp shock delta is nonzero and scales roughly with exact
         (within 3x measured λ_eff vs exact band-integration overhead).
         """
-        from tengri import FIXED, Fixed, Observation, Photometry, SEDModel, WavePrecomp
+        from tengri import DEFAULT, Fixed, Observation, Photometry, SEDModel, WavePrecomp
         from tengri.components.stellar.sps.dsps_wrapper import load_ssp_data
         from tengri.data import download_ssp
 
@@ -315,18 +315,18 @@ class TestShockAttenuationPhysics:
             ),
             sfh={
                 "type": "delayed",
-                "all_params": FIXED,
+                "all_params": Fixed(DEFAULT),
                 "tau_gyr": 1.0,
                 "log_total_mass": 10.0,
             },
             dust_attenuation={
                 "law": "power_law",
                 "type": "single_component",
-                "all_params": FIXED,
+                "all_params": Fixed(DEFAULT),
                 "tau_v": 1.0,
             },
             neb={"type": "none"},
-            shock={"frac": 1.0, "all_params": FIXED},
+            shock={"frac": 1.0, "all_params": Fixed(DEFAULT)},
             redshift=Fixed(0.5),
             approx=None,
         )
@@ -338,18 +338,18 @@ class TestShockAttenuationPhysics:
             ),
             sfh={
                 "type": "delayed",
-                "all_params": FIXED,
+                "all_params": Fixed(DEFAULT),
                 "tau_gyr": 1.0,
                 "log_total_mass": 10.0,
             },
             dust_attenuation={
                 "law": "power_law",
                 "type": "single_component",
-                "all_params": FIXED,
+                "all_params": Fixed(DEFAULT),
                 "tau_v": 1.0,
             },
             neb={"type": "none"},
-            shock={"frac": 1.0, "all_params": FIXED},
+            shock={"frac": 1.0, "all_params": Fixed(DEFAULT)},
             redshift=Fixed(0.5),
             approx=WavePrecomp(),
         )

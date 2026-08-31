@@ -76,7 +76,7 @@ def truncating_ssp():
 
 
 def _build(ssp, obs, sfh):
-    from tengri import FIXED, ForwardModel, SEDModel
+    from tengri import DEFAULT, ForwardModel, SEDModel
     from tengri.parameters.priors import Fixed
 
     with warnings.catch_warnings():
@@ -88,7 +88,7 @@ def _build(ssp, obs, sfh):
             dust_attenuation={
                 "law": "power_law",
                 "type": "two_component",
-                "all_params": FIXED,
+                "all_params": Fixed(DEFAULT),
                 "tau_bc": 0.0,
                 "tau_diff": 0.0,
             },
@@ -100,11 +100,11 @@ def _build(ssp, obs, sfh):
 
 def _parametric_sfh():
     """The same delayed-tau SFH the table below is sampled from, all params fixed."""
-    from tengri import FIXED
+    from tengri import DEFAULT, Fixed
 
     return {
         "type": "delayed",
-        "all_params": FIXED,
+        "all_params": Fixed(DEFAULT),
         "log_total_mass": _LOG_MASS,
         "tau_gyr": _TAU_GYR,
         "age_gyr": _AGE_GYR,

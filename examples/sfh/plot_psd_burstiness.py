@@ -96,10 +96,10 @@ ssp = tengri.load_ssp()
 model_sigma = tengri.SEDModel.build(
     ssp,
     sfh=[
-        {"type": "const", "all_params": tengri.FIXED, "log_total_mass": 10.5},
+        {"type": "const", "all_params": tengri.Fixed(tengri.DEFAULT), "log_total_mass": 10.5},
         {
             "type": "field",
-            "all_params": tengri.FIXED,
+            "all_params": tengri.Fixed(tengri.DEFAULT),
             "psd_sigma": tengri.Uniform(0.1, 3.5),
             "psd_tau_myr": 100.0,
         },
@@ -107,7 +107,7 @@ model_sigma = tengri.SEDModel.build(
     dust_attenuation={
         "law": "power_law",
         "type": "two_component",
-        "all_params": tengri.FIXED,
+        "all_params": tengri.Fixed(tengri.DEFAULT),
         "tau_diff": 0.2,
         "tau_bc": 0.3,
     },
@@ -147,10 +147,10 @@ cbar_sigma.set_label(r"PSD amplitude $\sigma$")
 model_tau = tengri.SEDModel.build(
     ssp,
     sfh=[
-        {"type": "const", "all_params": tengri.FIXED, "log_total_mass": 10.5},
+        {"type": "const", "all_params": tengri.Fixed(tengri.DEFAULT), "log_total_mass": 10.5},
         {
             "type": "field",
-            "all_params": tengri.FIXED,
+            "all_params": tengri.Fixed(tengri.DEFAULT),
             "psd_sigma": 1.0,
             "psd_tau_myr": tengri.Uniform(30, 3000),
         },
@@ -158,7 +158,7 @@ model_tau = tengri.SEDModel.build(
     dust_attenuation={
         "law": "power_law",
         "type": "two_component",
-        "all_params": tengri.FIXED,
+        "all_params": tengri.Fixed(tengri.DEFAULT),
         "tau_diff": 0.2,
         "tau_bc": 0.3,
     },

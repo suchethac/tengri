@@ -23,7 +23,7 @@ import jax
 import numpy as np
 import pytest
 
-from tengri import FIXED, SEDModel, Uniform
+from tengri import DEFAULT, Fixed, SEDModel, Uniform
 from tengri.forward.forward_model import ForwardModel
 from tengri.inference.fitter import Fitter
 
@@ -35,14 +35,14 @@ def model(synthetic_ssp_wide, synthetic_tophat_obs):
     return SEDModel.build(
         ssp_data=synthetic_ssp_wide,
         observation=synthetic_tophat_obs,
-        sfh={"type": "dpl", "all_params": FIXED, "log_total_mass": Uniform(9.0, 11.0)},
+        sfh={"type": "dpl", "all_params": Fixed(DEFAULT), "log_total_mass": Uniform(9.0, 11.0)},
         dust_attenuation={
             "type": "two_component",
             "law": "calzetti",
-            "all_params": FIXED,
+            "all_params": Fixed(DEFAULT),
         },
         neb={"type": "none"},
-        redshift=FIXED,
+        redshift=Fixed(DEFAULT),
     )
 
 

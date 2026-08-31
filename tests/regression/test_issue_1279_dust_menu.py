@@ -92,7 +92,7 @@ def test_every_advertised_dust_emission_type_runs_on_both_channels(
     name, synthetic_ssp, infrared_observation
 ):
     """Advertised, therefore usable — on the exploration *and* inference paths."""
-    from tengri import FIXED, SEDModel
+    from tengri import DEFAULT, SEDModel
 
     model = SEDModel.build(
         ssp_data=synthetic_ssp,
@@ -101,9 +101,9 @@ def test_every_advertised_dust_emission_type_runs_on_both_channels(
         dust_attenuation={
             "law": "power_law",
             "type": "two_component",
-            "all_params": FIXED,
+            "all_params": Fixed(DEFAULT),
         },
-        dust_emission={"type": name, "all_params": FIXED},
+        dust_emission={"type": name, "all_params": Fixed(DEFAULT)},
         redshift=Fixed(0.1),
     )
     params = {k: jnp.array(0.0) for k in model.spec.free_params}
@@ -138,7 +138,7 @@ def test_predict_alone_would_compute_nothing(synthetic_ssp, infrared_observation
     sweep above could then be simplified — but until it does, calling an
     accessor is load-bearing, not decoration.
     """
-    from tengri import FIXED, SEDModel
+    from tengri import DEFAULT, SEDModel
 
     model = SEDModel.build(
         ssp_data=synthetic_ssp,
@@ -147,9 +147,9 @@ def test_predict_alone_would_compute_nothing(synthetic_ssp, infrared_observation
         dust_attenuation={
             "law": "power_law",
             "type": "two_component",
-            "all_params": FIXED,
+            "all_params": Fixed(DEFAULT),
         },
-        dust_emission={"type": "dale2014", "all_params": FIXED},
+        dust_emission={"type": "dale2014", "all_params": Fixed(DEFAULT)},
         redshift=Fixed(0.1),
     )
     params = {k: jnp.array(0.0) for k in model.spec.free_params}

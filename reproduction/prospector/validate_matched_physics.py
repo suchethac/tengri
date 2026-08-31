@@ -121,7 +121,7 @@ from reproduction._validation import (
 )
 from reproduction.prospector._drivers import prospector_driver as P, units as U
 
-from tengri import FIXED, Fixed, SEDModel
+from tengri import DEFAULT, Fixed, SEDModel
 from tengri.components.stellar.sps.dsps_wrapper import load_ssp_data
 
 L_SUN = 3.828e33
@@ -189,7 +189,7 @@ def tengri_stellar_dust(ssp, tau_bc, *, include_lyc=False):
         "law_diff": "calzetti",
         "tau_bc": Fixed(tau_bc),
         "tau_diff": Fixed(TAU_DIFF),
-        "*": FIXED,
+        "all_params": Fixed(DEFAULT),
     }
     # A peer group now, not a sub-block of the attenuation dict.
     dust_emission = {
@@ -197,19 +197,19 @@ def tengri_stellar_dust(ssp, tau_bc, *, include_lyc=False):
         "qpah": Fixed(Q_PAH),
         "umin": Fixed(U_MIN),
         "gamma_dl": Fixed(GAMMA),
-        "*": FIXED,
+        "all_params": Fixed(DEFAULT),
     }
     if include_lyc:
         dust["eb_include_lyc"] = True
     m = SEDModel.build(
         ssp_data=ssp,
-        met={"logzsol": Fixed(MET_LOGZSOL), "*": FIXED},
+        met={"logzsol": Fixed(MET_LOGZSOL), "all_params": Fixed(DEFAULT)},
         sfh={
             "type": "delayed",
             "tau_gyr": Fixed(TAU_GYR),
             "age_gyr": Fixed(AGE_GYR),
             "log_total_mass": Fixed(0.0),
-            "*": FIXED,
+            "all_params": Fixed(DEFAULT),
         },
         dust_attenuation=dust,
         dust_emission=dust_emission,
@@ -275,20 +275,26 @@ def nebular_only():
     ssp = load_ssp_data(str(HERE / "_drivers" / "data" / "fsps_mist_miles_chabrier.h5"))
     m = SEDModel.build(
         ssp_data=ssp,
-        met={"logzsol": Fixed(MET_LOGZSOL), "*": FIXED},
+        met={"logzsol": Fixed(MET_LOGZSOL), "all_params": Fixed(DEFAULT)},
         sfh={
             "type": "const",
             "start_gyr": Fixed(NEB_AGE),
             "end_gyr": Fixed(0.0),
             "log_total_mass": Fixed(NEB_LOGMASS),
-            "*": FIXED,
+            "all_params": Fixed(DEFAULT),
         },
-        dust_attenuation={"law": "power_law", "type": "two_component", "tau_bc": Fixed(0.0), "tau_diff": Fixed(0.0), "*": FIXED},
+        dust_attenuation={
+            "law": "power_law",
+            "type": "two_component",
+            "tau_bc": Fixed(0.0),
+            "tau_diff": Fixed(0.0),
+            "all_params": Fixed(DEFAULT),
+        },
         neb={
             "type": "cue",
             "neb_logU": Fixed(NEB_LOGU),
             "neb_logZ_gas": Fixed(NEB_LOGZ),
-            "*": FIXED,
+            "all_params": Fixed(DEFAULT),
         },
         redshift=Fixed(0.0),
     )

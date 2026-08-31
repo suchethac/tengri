@@ -52,14 +52,14 @@ def test_sedmodel_preloads_dale2014_at_construction():
     try:
         _ = tengri.SEDModel.build(
             ssp_data=ssp,
-            sfh={"type": "dpl", "all_params": tengri.FIXED},
+            sfh={"type": "dpl", "all_params": tengri.Fixed(tengri.DEFAULT)},
             dust_attenuation={
                 "type": "single_component",
                 "law": "calzetti",
-                "all_params": tengri.FIXED,
+                "all_params": tengri.Fixed(tengri.DEFAULT),
             },
-            dust_emission={"type": "dale2014", "all_params": tengri.FIXED},
-            neb={"type": "ssp", "all_params": tengri.FIXED},
+            dust_emission={"type": "dale2014", "all_params": tengri.Fixed(tengri.DEFAULT)},
+            neb={"type": "ssp", "all_params": tengri.Fixed(tengri.DEFAULT)},
             redshift=tengri.Fixed(0.05),
         )
     except Exception as exc:

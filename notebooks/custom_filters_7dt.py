@@ -41,18 +41,18 @@ import numpy as np
 
 import tengri
 from tengri import (
-    FIXED,
-    FREE,
+    builders,
+    DEFAULT,
     Fixed,
     ForwardModel,
+    FREE,
+    generate_mock,
     Observation,
     Photometry,
+    plot,
     SEDModel,
     Uniform,
     WavePrecomp,
-    builders,
-    generate_mock,
-    plot,
 )
 from tengri.observation.filters import load_filter
 from tengri.observation.filters.custom import (
@@ -232,9 +232,9 @@ sed_model = SEDModel.build(
     approx=WavePrecomp(),
     sfh=builders.sfh.tsnorm(all_params=FREE),
     dust_attenuation=builders.dust.two_component(
-        all_params=FIXED, law="calzetti", tau_diff=Uniform(0.0, 1.0)
+        all_params=Fixed(DEFAULT), law="calzetti", tau_diff=Uniform(0.0, 1.0)
     ),
-    dust_emission=builders.dust.emission.modified_blackbody(all_params=FIXED),
+    dust_emission=builders.dust.emission.modified_blackbody(all_params=Fixed(DEFAULT)),
     neb=builders.neb.none(),
     met={"logzsol": Uniform(-1.5, 0.3)},
     redshift=Fixed(0.0062),  # NGC 1380, Fornax
@@ -300,7 +300,9 @@ print(f"round-trip max |dF/F|: {np.abs(arrays.flux[0] / fnu - 1.0).max():.2e}")
 map_result = forward.fit(arrays.flux[0], arrays.noise[0], method="map", key=key_fit, n_steps=300)
 
 for pname in sed_model.spec.free_params:
-    print(f"  {pname:24} fit {float(map_result.params[pname]):+8.3f}   truth {float(truth[pname]):+8.3f}")
+    print(
+        f"  {pname:24} fit {float(map_result.params[pname]):+8.3f}   truth {float(truth[pname]):+8.3f}"
+    )
 
 # %% [markdown]
 # Mass and SFH width come back tightly; metallicity and dust do not. That is

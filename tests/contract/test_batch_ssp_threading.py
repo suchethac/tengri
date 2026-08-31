@@ -30,7 +30,7 @@ import jax.numpy as jnp
 import numpy as np
 import pytest
 
-from tengri import FIXED, Fixed, SEDModel, Uniform
+from tengri import DEFAULT, Fixed, SEDModel, Uniform
 
 from ._jaxpr_consts import baked_bytes
 
@@ -48,11 +48,11 @@ def _model(ssp, observation):
     return SEDModel.build(
         ssp_data=ssp,
         observation=observation,
-        sfh={"type": "dpl", "all_params": FIXED, "log_total_mass": Uniform(8, 12)},
+        sfh={"type": "dpl", "all_params": Fixed(DEFAULT), "log_total_mass": Uniform(8, 12)},
         dust_attenuation={
             "type": "two_component",
             "law": "calzetti",
-            "all_params": FIXED,
+            "all_params": Fixed(DEFAULT),
         },
         neb={"type": "none"},
         redshift=Fixed(0.5),

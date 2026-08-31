@@ -59,7 +59,7 @@ def test_newly_reachable_components_build_with_fixed_defaults(
     use synthetic_ssp_wide + synthetic_tophat_obs (session fixtures) which
     span 100 Angstrom – 1 mm.
     """
-    from tengri import FIXED, SEDModel
+    from tengri import DEFAULT, Fixed, SEDModel
 
     for comp_name, _ in expected:
         # #1980: the radio menu's {'type': name} spelling is retired — a menu
@@ -71,10 +71,10 @@ def test_newly_reachable_components_build_with_fixed_defaults(
             cfg = {
                 "sf": {"type": sf_variant},
                 "agn": {"type": agn_variant},
-                "all_params": FIXED,
+                "all_params": Fixed(DEFAULT),
             }
         else:
-            cfg = {"type": comp_name, "all_params": FIXED}
+            cfg = {"type": comp_name, "all_params": Fixed(DEFAULT)}
         try:
             model = SEDModel.build(
                 ssp_data=synthetic_ssp_wide,

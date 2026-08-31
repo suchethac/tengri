@@ -13,7 +13,7 @@ import numpy as np
 import pytest
 
 import tengri  # noqa: F401  (enables float64)
-from tengri import FIXED, Fixed, Observation, SEDModel, Spectroscopy
+from tengri import DEFAULT, Fixed, Observation, SEDModel, Spectroscopy
 from tengri.observation.banded import banded_matvec, gaussian_resolution_bands
 from tengri.observation.spectrum import compute_spectrum_conserving, project_spectrum
 
@@ -95,7 +95,7 @@ def _spec_model(ssp, wave, *, matrix):
     return SEDModel.build(
         ssp_data=ssp,
         observation=obs,
-        sfh={"type": "dpl", "all_params": FIXED},
+        sfh={"type": "dpl", "all_params": Fixed(DEFAULT)},
         redshift=Fixed(0.05),
     )
 

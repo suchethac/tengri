@@ -56,19 +56,19 @@ def test_dust_ir_in_waveprecomp_photometry(emission):
     features, which the effective-wavelength sampling missed by ~8%."""
     import warnings
 
-    from tengri import FIXED, Fixed, SEDModel, WavePrecomp
+    from tengri import DEFAULT, Fixed, SEDModel, WavePrecomp
 
     ssp = _ssp_or_skip()
     obs = _ir_obs()
     groups = dict(
-        sfh={"type": "dpl", "all_params": FIXED},
+        sfh={"type": "dpl", "all_params": Fixed(DEFAULT)},
         dust_attenuation={
             "type": "two_component",
             "law": "calzetti",
-            "all_params": FIXED,
+            "all_params": Fixed(DEFAULT),
             "tau_diff": 0.5,  # real attenuation → real L_ir to re-emit
         },
-        dust_emission={"type": emission, "all_params": FIXED},
+        dust_emission={"type": emission, "all_params": Fixed(DEFAULT)},
         neb={"type": "none"},
     )
     with warnings.catch_warnings():
@@ -125,19 +125,19 @@ def test_dust_ir_optical_reddest_band_not_inflated(filters):
     """
     import warnings
 
-    from tengri import FIXED, Fixed, Observation, Photometry, SEDModel, WavePrecomp
+    from tengri import DEFAULT, Fixed, Observation, Photometry, SEDModel, WavePrecomp
 
     ssp = _ssp_or_skip()
     obs = Observation(photometry=Photometry.from_names(filters))
     groups = dict(
-        sfh={"type": "dpl", "all_params": FIXED},
+        sfh={"type": "dpl", "all_params": Fixed(DEFAULT)},
         dust_attenuation={
             "type": "two_component",
             "law": "calzetti",
-            "all_params": FIXED,
+            "all_params": Fixed(DEFAULT),
             "tau_diff": 0.5,  # real attenuation → real L_ir to (not) re-emit in the optical
         },
-        dust_emission={"type": "modified_blackbody", "all_params": FIXED},
+        dust_emission={"type": "modified_blackbody", "all_params": Fixed(DEFAULT)},
         neb={"type": "none"},
     )
     with warnings.catch_warnings():

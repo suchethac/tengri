@@ -15,7 +15,7 @@ import jax.numpy as jnp
 import numpy as np
 import pytest
 
-from tengri import FIXED, SEDModel, Uniform, WavePrecomp
+from tengri import DEFAULT, Fixed, SEDModel, Uniform, WavePrecomp
 from tengri.forward.forward_model import ForwardModel
 
 pytestmark = pytest.mark.regression_bug
@@ -25,14 +25,14 @@ def _build_sed(ssp, obs, approx=None):
     return SEDModel.build(
         ssp_data=ssp,
         observation=obs,
-        sfh={"type": "dpl", "all_params": FIXED, "log_total_mass": Uniform(9.0, 11.0)},
+        sfh={"type": "dpl", "all_params": Fixed(DEFAULT), "log_total_mass": Uniform(9.0, 11.0)},
         dust_attenuation={
             "type": "two_component",
             "law": "calzetti",
-            "all_params": FIXED,
+            "all_params": Fixed(DEFAULT),
         },
         neb={"type": "none"},
-        redshift=FIXED,
+        redshift=Fixed(DEFAULT),
         approx=approx,
     )
 

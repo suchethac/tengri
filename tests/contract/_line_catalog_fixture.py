@@ -15,7 +15,7 @@ from __future__ import annotations
 import jax
 import numpy as np
 
-from tengri import FIXED, FREE, Fixed, Observation, SEDModel
+from tengri import DEFAULT, FREE, Fixed, Observation, SEDModel
 from tengri.inference.catalog import Catalog
 from tengri.observation.line_flux_data import LineFluxData
 from tengri.observation.line_measurement import default_line_defs
@@ -70,7 +70,11 @@ def build_two_galaxy_catalog(
         ssp_data=ssp,
         observation=obs_base,
         sfh={"type": "dpl", "all_params": FREE},
-        dust_attenuation={"type": "two_component", "law": "calzetti", "all_params": FIXED},
+        dust_attenuation={
+            "type": "two_component",
+            "law": "calzetti",
+            "all_params": Fixed(DEFAULT),
+        },
         neb={"type": "none"},
         redshift=Fixed(z),
     )
@@ -135,7 +139,11 @@ def build_two_galaxy_catalog(
         ssp_data=ssp,
         observation=obs,
         sfh={"type": "dpl", "all_params": FREE},
-        dust_attenuation={"type": "two_component", "law": "calzetti", "all_params": FIXED},
+        dust_attenuation={
+            "type": "two_component",
+            "law": "calzetti",
+            "all_params": Fixed(DEFAULT),
+        },
         neb={"type": "none"},
         redshift=Fixed(z),
     )

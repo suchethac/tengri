@@ -60,17 +60,17 @@ logging.getLogger("jax").setLevel(logging.ERROR)
 from _setup import FIG_DIR
 import tengri
 from tengri import (
-    FIXED,
-    FREE,
-    Fixed,
-    Observation,
-    Photometry,
-    SEDModel,
-    Uniform,
     builders,
     citations,
+    DEFAULT,
+    Fixed,
+    FREE,
+    Observation,
+    Photometry,
     plot,
     recipes,
+    SEDModel,
+    Uniform,
 )
 from tengri.units import erg_per_s_to_lsun, lnu_to_llambda
 
@@ -131,7 +131,7 @@ obs = Observation(photometry=Photometry.from_names(filters))
 kitchen_sink = dict(
     sfh={
         "type": "dpl",
-        "all_params": FIXED,
+        "all_params": Fixed(DEFAULT),
         "log_total_mass": 10.5,
         "alpha": 2.2,
         "beta": 1.4,
@@ -140,7 +140,7 @@ kitchen_sink = dict(
     dust_attenuation={
         "type": "two_component",
         "law": "calzetti",
-        "all_params": FIXED,
+        "all_params": Fixed(DEFAULT),
         "tau_bc": 0.8,
         "tau_diff": 0.3,
         "slope": -0.4,
@@ -150,17 +150,23 @@ kitchen_sink = dict(
         # the radio continuum (~2x between ~1.34 and ~10 GHz), which #1983 made a
         # ConfigError. The _cigale variant has that tail stripped, per CIGALE
         # convention — the remedy that error itself prescribes.
-    }, dust_emission={"type": "dale2014_cigale", "all_params": FIXED, "alpha_dale": 2.2},
-    neb={"type": "cue", "all_params": FIXED},
-    agn={
-        "all_params": FIXED,  # every AGN block here is deliberately fixed (#1995)
-        "disc": {"type": "multicolor", "all_params": FIXED, "log_lbol": 10.5},
-        "torus": {"type": "skirtor", "all_params": FIXED, "tau_skirtor": 5.0, "torus_frac": 0.5},
-        "nlr": {"type": "analytic", "all_params": FIXED},
-        "blr": {"type": "none", "all_params": FIXED},
     },
-    radio={"sf": {"type": "bell2003"}, "agn": {"type": "powerlaw"}, "all_params": FIXED},
-    xray={"type": "simple", "all_params": FIXED},
+    dust_emission={"type": "dale2014_cigale", "all_params": Fixed(DEFAULT), "alpha_dale": 2.2},
+    neb={"type": "cue", "all_params": Fixed(DEFAULT)},
+    agn={
+        "all_params": Fixed(DEFAULT),  # every AGN block here is deliberately fixed (#1995)
+        "disc": {"type": "multicolor", "all_params": Fixed(DEFAULT), "log_lbol": 10.5},
+        "torus": {
+            "type": "skirtor",
+            "all_params": Fixed(DEFAULT),
+            "tau_skirtor": 5.0,
+            "torus_frac": 0.5,
+        },
+        "nlr": {"type": "analytic", "all_params": Fixed(DEFAULT)},
+        "blr": {"type": "none", "all_params": Fixed(DEFAULT)},
+    },
+    radio={"sf": {"type": "bell2003"}, "agn": {"type": "powerlaw"}, "all_params": Fixed(DEFAULT)},
+    xray={"type": "simple", "all_params": Fixed(DEFAULT)},
     redshift=Fixed(2.0),
     igm={"type": "inoue"},
 )
@@ -296,9 +302,9 @@ fig.savefig(FIG_DIR / "02_anatomy_panchromatic.png", dpi=300, bbox_inches="tight
 # %%
 base = recipes.star_forming_photometry()
 # Pin the model down to defaults, then sweep one parameter at a time.
-base["sfh"]["all_params"] = FIXED
-base["dust_attenuation"]["all_params"] = FIXED
-base["dust_emission"]["all_params"] = FIXED
+base["sfh"]["all_params"] = Fixed(DEFAULT)
+base["dust_attenuation"]["all_params"] = Fixed(DEFAULT)
+base["dust_emission"]["all_params"] = Fixed(DEFAULT)
 base["redshift"] = Fixed(0.5)
 
 
@@ -313,9 +319,9 @@ fig, axes = plt.subplots(2, 2, figsize=(11, 7.4), constrained_layout=True)
 # (a) SFH shape — three canonical SFHs, mass-normalized
 ax = axes[0, 0]
 for label, sfh_dict, color in [
-    ("exponential", builders.sfh.exp(all_params=FIXED), "#d97a3a"),
-    ("delayed-exp", builders.sfh.dexp(all_params=FIXED), "#c8377d"),
-    ("DPL", builders.sfh.dpl(all_params=FIXED), "#3a76d9"),
+    ("exponential", builders.sfh.exp(all_params=Fixed(DEFAULT)), "#d97a3a"),
+    ("delayed-exp", builders.sfh.dexp(all_params=Fixed(DEFAULT)), "#c8377d"),
+    ("DPL", builders.sfh.dpl(all_params=Fixed(DEFAULT)), "#3a76d9"),
 ]:
     cfg = deepcopy(base)
     cfg["sfh"] = sfh_dict
@@ -361,9 +367,11 @@ log_lbol_grid = [9.5, 10.0, 10.5, 11.0, 11.5]
 cmap = plt.colormaps["plasma"]
 cfg = deepcopy(base)
 cfg["agn"] = {
-    "all_params": FIXED,  # unprovided sub-blocks (nlr/blr/feii/atten) stay fixed by intent
-    "disc": {"type": "multicolor", "all_params": FIXED, "log_lbol": Uniform(9.0, 12.0)},
-    "torus": {"type": "nenkova", "all_params": FIXED},
+    "all_params": Fixed(
+        DEFAULT
+    ),  # unprovided sub-blocks (nlr/blr/feii/atten) stay fixed by intent
+    "disc": {"type": "multicolor", "all_params": Fixed(DEFAULT), "log_lbol": Uniform(9.0, 12.0)},
+    "torus": {"type": "nenkova", "all_params": Fixed(DEFAULT)},
 }
 m = SEDModel.build(ssp_data=ssp, observation=obs, **cfg)
 p = m.spec.sample(jax.random.PRNGKey(0))
@@ -455,7 +463,7 @@ money_shot = dict(
     # the current SFR is near peak (elevated, dusty main-sequence galaxy).
     sfh={
         "type": "dpl",
-        "all_params": FIXED,
+        "all_params": Fixed(DEFAULT),
         "log_total_mass": 10.72,
         "alpha": 0.9,
         "beta": 2.7,
@@ -464,7 +472,7 @@ money_shot = dict(
     dust_attenuation={
         "type": "two_component",
         "law": "calzetti",
-        "all_params": FIXED,
+        "all_params": Fixed(DEFAULT),
         "tau_bc": 0.8,
         "tau_diff": 0.3,
         "slope": -0.4,
@@ -474,17 +482,23 @@ money_shot = dict(
         # the radio continuum (~2x between ~1.34 and ~10 GHz), which #1983 made a
         # ConfigError. The _cigale variant has that tail stripped, per CIGALE
         # convention — the remedy that error itself prescribes.
-    }, dust_emission={"type": "dale2014_cigale", "all_params": FIXED, "alpha_dale": 2.2},
-    neb={"type": "cue", "all_params": FIXED},
-    agn={
-        "all_params": FIXED,  # every AGN block here is deliberately fixed (#1995)
-        "disc": {"type": "multicolor", "all_params": FIXED, "log_lbol": 10.5},
-        "torus": {"type": "skirtor", "all_params": FIXED, "tau_skirtor": 5.0, "torus_frac": 0.5},
-        "nlr": {"type": "analytic", "all_params": FIXED},
-        "blr": {"type": "none", "all_params": FIXED},
     },
-    radio={"sf": {"type": "bell2003"}, "agn": {"type": "powerlaw"}, "all_params": FIXED},
-    xray={"type": "simple", "all_params": FIXED},
+    dust_emission={"type": "dale2014_cigale", "all_params": Fixed(DEFAULT), "alpha_dale": 2.2},
+    neb={"type": "cue", "all_params": Fixed(DEFAULT)},
+    agn={
+        "all_params": Fixed(DEFAULT),  # every AGN block here is deliberately fixed (#1995)
+        "disc": {"type": "multicolor", "all_params": Fixed(DEFAULT), "log_lbol": 10.5},
+        "torus": {
+            "type": "skirtor",
+            "all_params": Fixed(DEFAULT),
+            "tau_skirtor": 5.0,
+            "torus_frac": 0.5,
+        },
+        "nlr": {"type": "analytic", "all_params": Fixed(DEFAULT)},
+        "blr": {"type": "none", "all_params": Fixed(DEFAULT)},
+    },
+    radio={"sf": {"type": "bell2003"}, "agn": {"type": "powerlaw"}, "all_params": Fixed(DEFAULT)},
+    xray={"type": "simple", "all_params": Fixed(DEFAULT)},
     redshift=Fixed(0.1),
 )
 

@@ -26,7 +26,7 @@ import jax
 import jax.numpy as jnp
 import pytest
 
-from tengri import FIXED, FREE, Fixed, Observation, SEDModel
+from tengri import DEFAULT, FREE, Fixed, Observation, SEDModel
 from tengri.forward.forward_model import ForwardModel
 from tengri.forward.population_sed_model import PopulationSEDModel
 from tengri.observation.spectroscopy import Spectroscopy
@@ -51,7 +51,11 @@ def template(synthetic_ssp_wide, spec_obs):
         ssp_data=synthetic_ssp_wide,
         observation=spec_obs,
         sfh={"type": ["tsnorm", "field"], "all_params": FREE},
-        dust_attenuation={"type": "two_component", "law": "calzetti", "all_params": FIXED},
+        dust_attenuation={
+            "type": "two_component",
+            "law": "calzetti",
+            "all_params": Fixed(DEFAULT),
+        },
         neb={"type": "none"},
         redshift=Fixed(_Z),
         n_grid=_N_GRID,

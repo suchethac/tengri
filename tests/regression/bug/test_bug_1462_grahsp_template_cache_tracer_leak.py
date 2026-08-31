@@ -71,7 +71,7 @@ def test_both_public_predict_surfaces_work_on_one_model(synthetic_ssp_wide, synt
 
     import jax
 
-    from tengri import FIXED, Fixed, SEDModel
+    from tengri import DEFAULT, Fixed, SEDModel
     from tengri.components.agn.grahsp.templates import load_grahsp_templates
 
     # Clear the cache first, or this test is a fair-weather guard. The leak
@@ -87,13 +87,13 @@ def test_both_public_predict_surfaces_work_on_one_model(synthetic_ssp_wide, synt
         model = SEDModel.build(
             ssp_data=synthetic_ssp_wide,
             observation=synthetic_tophat_obs,
-            sfh={"type": "dpl", "all_params": FIXED},
+            sfh={"type": "dpl", "all_params": Fixed(DEFAULT)},
             neb={"type": "none"},
             agn={
                 "type": "composable",
                 "disc": {"type": "powerlaw"},
                 "blr": {"type": "grahsp"},
-                "all_params": FIXED,
+                "all_params": Fixed(DEFAULT),
             },
             redshift=Fixed(2.0),
         )

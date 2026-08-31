@@ -86,7 +86,7 @@ from reproduction._validation import (
 )
 from reproduction.prospect_r._drivers import prospect_driver as P, units as U
 
-from tengri import FIXED, Fixed, SEDModel
+from tengri import DEFAULT, Fixed, SEDModel
 from tengri.components.stellar.sps.dsps_wrapper import load_ssp_data
 
 L_SUN = 3.828e33
@@ -148,14 +148,14 @@ def tengri_stellar_dust(ssp, log_mass, *, collapse_screen=False):
     tau_diff = (TAU_BIRTH + TAU_SCREEN) if collapse_screen else TAU_SCREEN
     m = SEDModel.build(
         ssp_data=ssp,
-        met={"logzsol": Fixed(MET_LOGZSOL), "*": FIXED},
+        met={"logzsol": Fixed(MET_LOGZSOL), "all_params": Fixed(DEFAULT)},
         sfh={
             "type": "snorm",
             "peak_lbt_gyr": Fixed(SFH_PARS["mpeak"]),
             "width_gyr": Fixed(SFH_PARS["mperiod"]),
             "skew": Fixed(SFH_PARS["mskew"]),
             "log_total_mass": Fixed(log_mass),
-            "*": FIXED,
+            "all_params": Fixed(DEFAULT),
         },
         dust_attenuation={
             "type": "two_component",
@@ -165,7 +165,7 @@ def tengri_stellar_dust(ssp, log_mass, *, collapse_screen=False):
             "slope_diff": POW_SLOPE,
             "tau_bc": Fixed(tau_bc),
             "tau_diff": Fixed(tau_diff),
-            "*": FIXED,
+            "all_params": Fixed(DEFAULT),
         },
         redshift=Fixed(0.0),
     )

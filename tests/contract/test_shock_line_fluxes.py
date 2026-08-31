@@ -45,7 +45,7 @@ class TestShockLineFluxes:
         Assertion 3: Precondition—shock Hα contribution > noise floor
         (non-vacuity: verifies shock emits and reaches the line catalog).
         """
-        from tengri import FIXED, Fixed, Observation, Photometry, SEDModel
+        from tengri import DEFAULT, Fixed, Observation, Photometry, SEDModel
         from tengri.components.stellar.sps.dsps_wrapper import load_ssp_data
         from tengri.data import download_ssp
 
@@ -61,13 +61,17 @@ class TestShockLineFluxes:
             ),
             sfh={
                 "type": "delayed",
-                "all_params": FIXED,
+                "all_params": Fixed(DEFAULT),
                 "tau_gyr": 1.0,
                 "log_total_mass": 10.0,
             },
-            dust_attenuation={"law": "power_law", "type": "two_component", "all_params": FIXED},
-            neb={"type": "cue", "all_params": FIXED},  # Discrete line backend
-            shock={"frac": 1.0, "all_params": FIXED},  # Start with max shock
+            dust_attenuation={
+                "law": "power_law",
+                "type": "two_component",
+                "all_params": Fixed(DEFAULT),
+            },
+            neb={"type": "cue", "all_params": Fixed(DEFAULT)},  # Discrete line backend
+            shock={"frac": 1.0, "all_params": Fixed(DEFAULT)},  # Start with max shock
             redshift=Fixed(0.1),
         )
 
@@ -122,7 +126,7 @@ class TestShockLineFluxes:
         """Warning fires when shock is active with Cue backend (#927)."""
         import warnings
 
-        from tengri import FIXED, Fixed, Observation, Photometry, SEDModel
+        from tengri import DEFAULT, Fixed, Observation, Photometry, SEDModel
         from tengri.components.stellar.sps.dsps_wrapper import load_ssp_data
         from tengri.config.exceptions import ShockPhotoionizedMixedWarning
         from tengri.data import download_ssp
@@ -133,10 +137,19 @@ class TestShockLineFluxes:
         model = SEDModel.build(
             ssp_data=ssp,
             observation=Observation(photometry=Photometry.from_names(["sdss_g", "sdss_r"])),
-            sfh={"type": "delayed", "all_params": FIXED, "tau_gyr": 1.0, "log_total_mass": 10.0},
-            dust_attenuation={"law": "power_law", "type": "two_component", "all_params": FIXED},
-            neb={"type": "cue", "all_params": FIXED},
-            shock={"frac": 0.5, "all_params": FIXED},
+            sfh={
+                "type": "delayed",
+                "all_params": Fixed(DEFAULT),
+                "tau_gyr": 1.0,
+                "log_total_mass": 10.0,
+            },
+            dust_attenuation={
+                "law": "power_law",
+                "type": "two_component",
+                "all_params": Fixed(DEFAULT),
+            },
+            neb={"type": "cue", "all_params": Fixed(DEFAULT)},
+            shock={"frac": 0.5, "all_params": Fixed(DEFAULT)},
             redshift=Fixed(0.1),
         )
 
@@ -163,7 +176,7 @@ class TestShockLineFluxes:
         but does not change the discrete line catalog, proving shock lines are
         excluded from the catalog predict_line_fluxes reads.
         """
-        from tengri import FIXED, Fixed, Observation, Photometry, SEDModel
+        from tengri import DEFAULT, Fixed, Observation, Photometry, SEDModel
         from tengri.components.stellar.sps.dsps_wrapper import load_ssp_data
         from tengri.data import download_ssp
 
@@ -173,10 +186,22 @@ class TestShockLineFluxes:
         model = SEDModel.build(
             ssp_data=ssp,
             observation=Observation(photometry=Photometry.from_names(["sdss_g", "sdss_r"])),
-            sfh={"type": "delayed", "all_params": FIXED, "tau_gyr": 1.0, "log_total_mass": 10.0},
-            dust_attenuation={"law": "power_law", "type": "two_component", "all_params": FIXED},
-            neb={"type": "cue", "all_params": FIXED},
-            shock={"frac": 1.0, "all_params": FIXED},  # Shock is active (but frac can be varied)
+            sfh={
+                "type": "delayed",
+                "all_params": Fixed(DEFAULT),
+                "tau_gyr": 1.0,
+                "log_total_mass": 10.0,
+            },
+            dust_attenuation={
+                "law": "power_law",
+                "type": "two_component",
+                "all_params": Fixed(DEFAULT),
+            },
+            neb={"type": "cue", "all_params": Fixed(DEFAULT)},
+            shock={
+                "frac": 1.0,
+                "all_params": Fixed(DEFAULT),
+            },  # Shock is active (but frac can be varied)
             redshift=Fixed(0.1),
         )
 
@@ -204,7 +229,7 @@ class TestShockLineFluxes:
         """No warning when shock is disabled (#927)."""
         import warnings
 
-        from tengri import FIXED, Fixed, Observation, Photometry, SEDModel
+        from tengri import DEFAULT, Fixed, Observation, Photometry, SEDModel
         from tengri.components.stellar.sps.dsps_wrapper import load_ssp_data
         from tengri.config.exceptions import ShockPhotoionizedMixedWarning
         from tengri.data import download_ssp
@@ -216,9 +241,18 @@ class TestShockLineFluxes:
         model = SEDModel.build(
             ssp_data=ssp,
             observation=Observation(photometry=Photometry.from_names(["sdss_g", "sdss_r"])),
-            sfh={"type": "delayed", "all_params": FIXED, "tau_gyr": 1.0, "log_total_mass": 10.0},
-            dust_attenuation={"law": "power_law", "type": "two_component", "all_params": FIXED},
-            neb={"type": "cue", "all_params": FIXED},
+            sfh={
+                "type": "delayed",
+                "all_params": Fixed(DEFAULT),
+                "tau_gyr": 1.0,
+                "log_total_mass": 10.0,
+            },
+            dust_attenuation={
+                "law": "power_law",
+                "type": "two_component",
+                "all_params": Fixed(DEFAULT),
+            },
+            neb={"type": "cue", "all_params": Fixed(DEFAULT)},
             shock={"type": "none"},  # Shock explicitly disabled
             redshift=Fixed(0.1),
         )

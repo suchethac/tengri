@@ -38,7 +38,7 @@ import numpy as np
 import pytest
 
 from tengri import (
-    FIXED,
+    DEFAULT,
     FREE,
     FeaturePrecomp,
     Fitter,
@@ -67,7 +67,7 @@ def _model(ssp, obs, approx):
             dust_attenuation={
                 "type": "two_component",
                 "law": "calzetti",
-                "all_params": FIXED,
+                "all_params": Fixed(DEFAULT),
                 "tau_diff": Uniform(0.0, 2.0),
             },
             neb={"type": "none"},

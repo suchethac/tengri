@@ -10,7 +10,7 @@ import pytest
 @pytest.fixture
 def fwd_3band(synthetic_ssp_wide, simple_observation):
     """Synthetic 3-band ForwardModel for testing."""
-    from tengri import FIXED, FREE, ForwardModel, SEDModel, WavePrecomp
+    from tengri import DEFAULT, FREE, Fixed, ForwardModel, SEDModel, WavePrecomp
 
     sed = SEDModel.build(
         ssp_data=synthetic_ssp_wide,
@@ -19,11 +19,11 @@ def fwd_3band(synthetic_ssp_wide, simple_observation):
         dust_attenuation={
             "law": "power_law",
             "type": "two_component",
-            "all_params": FIXED,
+            "all_params": Fixed(DEFAULT),
             "tau_bc": 0.5,
         },
         neb={"type": "none"},
-        redshift=FIXED,
+        redshift=Fixed(DEFAULT),
         approx=WavePrecomp(catalog_z_range=(0.01, 2.0)),
     )
     fwd = ForwardModel.build(sed=sed, observation=simple_observation)
@@ -33,7 +33,7 @@ def fwd_3band(synthetic_ssp_wide, simple_observation):
 @pytest.fixture
 def fwd_3band_no_zrange(synthetic_ssp_wide, simple_observation):
     """3-band ForwardModel WITHOUT a catalog_z_range — no runtime-z LUT."""
-    from tengri import FIXED, FREE, ForwardModel, SEDModel
+    from tengri import DEFAULT, FREE, Fixed, ForwardModel, SEDModel
 
     sed = SEDModel.build(
         ssp_data=synthetic_ssp_wide,
@@ -42,11 +42,11 @@ def fwd_3band_no_zrange(synthetic_ssp_wide, simple_observation):
         dust_attenuation={
             "law": "power_law",
             "type": "two_component",
-            "all_params": FIXED,
+            "all_params": Fixed(DEFAULT),
             "tau_bc": 0.5,
         },
         neb={"type": "none"},
-        redshift=FIXED,
+        redshift=Fixed(DEFAULT),
     )
     return ForwardModel.build(sed=sed, observation=simple_observation)
 
@@ -54,7 +54,7 @@ def fwd_3band_no_zrange(synthetic_ssp_wide, simple_observation):
 @pytest.fixture
 def fwd_3band_zrange(synthetic_ssp_wide, simple_observation):
     """3-band ForwardModel with WavePrecomp catalog_z_range."""
-    from tengri import FIXED, FREE, ForwardModel, SEDModel, WavePrecomp
+    from tengri import DEFAULT, FREE, Fixed, ForwardModel, SEDModel, WavePrecomp
 
     sed = SEDModel.build(
         ssp_data=synthetic_ssp_wide,
@@ -63,11 +63,11 @@ def fwd_3band_zrange(synthetic_ssp_wide, simple_observation):
         dust_attenuation={
             "law": "power_law",
             "type": "two_component",
-            "all_params": FIXED,
+            "all_params": Fixed(DEFAULT),
             "tau_bc": 0.5,
         },
         neb={"type": "none"},
-        redshift=FIXED,
+        redshift=Fixed(DEFAULT),
         approx=WavePrecomp(catalog_z_range=(0.05, 1.5)),
     )
     fwd = ForwardModel.build(sed=sed, observation=simple_observation)

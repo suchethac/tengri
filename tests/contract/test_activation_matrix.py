@@ -9,7 +9,7 @@ from __future__ import annotations
 
 import pytest
 
-from tengri.parameters import FIXED, Fixed, parse_groups
+from tengri.parameters import DEFAULT, Fixed, parse_groups
 
 pytestmark = [pytest.mark.contract]
 
@@ -18,11 +18,11 @@ def test_dust_attenuation_omitted_equals_none():
     """Omitting dust_attenuation produces identical free_params as {'type': 'none'}."""
     params_omitted = parse_groups(
         redshift=Fixed(0.1),
-        sfh={"type": "dpl", "all_params": FIXED},
+        sfh={"type": "dpl", "all_params": Fixed(DEFAULT)},
     )
     params_none = parse_groups(
         redshift=Fixed(0.1),
-        sfh={"type": "dpl", "all_params": FIXED},
+        sfh={"type": "dpl", "all_params": Fixed(DEFAULT)},
         dust_attenuation={"type": "none"},
     )
     # Both should have identical free params (no dust params).
@@ -36,11 +36,11 @@ def test_dust_emission_omitted_equals_none():
     """Omitting dust_emission produces identical free_params as {'type': 'none'}."""
     params_omitted = parse_groups(
         redshift=Fixed(0.1),
-        sfh={"type": "dpl", "all_params": FIXED},
+        sfh={"type": "dpl", "all_params": Fixed(DEFAULT)},
     )
     params_none = parse_groups(
         redshift=Fixed(0.1),
-        sfh={"type": "dpl", "all_params": FIXED},
+        sfh={"type": "dpl", "all_params": Fixed(DEFAULT)},
         dust_emission={"type": "none"},
     )
     # Both should have identical free params (no dust_emission params).
@@ -51,11 +51,11 @@ def test_neb_omitted_equals_none():
     """Omitting neb produces identical free_params as {'type': 'none'}."""
     params_omitted = parse_groups(
         redshift=Fixed(0.1),
-        sfh={"type": "dpl", "all_params": FIXED},
+        sfh={"type": "dpl", "all_params": Fixed(DEFAULT)},
     )
     params_none = parse_groups(
         redshift=Fixed(0.1),
-        sfh={"type": "dpl", "all_params": FIXED},
+        sfh={"type": "dpl", "all_params": Fixed(DEFAULT)},
         neb={"type": "none"},
     )
     # Both should have identical free params (no neb params).
@@ -66,11 +66,11 @@ def test_shock_omitted_equals_none():
     """Omitting shock produces identical free_params as {'type': 'none'}."""
     params_omitted = parse_groups(
         redshift=Fixed(0.1),
-        sfh={"type": "dpl", "all_params": FIXED},
+        sfh={"type": "dpl", "all_params": Fixed(DEFAULT)},
     )
     params_none = parse_groups(
         redshift=Fixed(0.1),
-        sfh={"type": "dpl", "all_params": FIXED},
+        sfh={"type": "dpl", "all_params": Fixed(DEFAULT)},
         shock={"type": "none"},
     )
     # Both should have identical free params (no shock params).
@@ -81,11 +81,11 @@ def test_agn_omitted_equals_none():
     """Omitting agn produces identical free_params as {'type': 'none'}."""
     params_omitted = parse_groups(
         redshift=Fixed(0.1),
-        sfh={"type": "dpl", "all_params": FIXED},
+        sfh={"type": "dpl", "all_params": Fixed(DEFAULT)},
     )
     params_none = parse_groups(
         redshift=Fixed(0.1),
-        sfh={"type": "dpl", "all_params": FIXED},
+        sfh={"type": "dpl", "all_params": Fixed(DEFAULT)},
         agn={"type": "none"},
     )
     # Both should have identical free params (no agn params).
@@ -96,11 +96,11 @@ def test_igm_omitted_equals_none():
     """Omitting igm produces identical free_params as {'type': 'none'}."""
     params_omitted = parse_groups(
         redshift=Fixed(0.1),
-        sfh={"type": "dpl", "all_params": FIXED},
+        sfh={"type": "dpl", "all_params": Fixed(DEFAULT)},
     )
     params_none = parse_groups(
         redshift=Fixed(0.1),
-        sfh={"type": "dpl", "all_params": FIXED},
+        sfh={"type": "dpl", "all_params": Fixed(DEFAULT)},
         igm={"type": "none"},
     )
     # Both should have identical free params (no igm params).
@@ -111,11 +111,11 @@ def test_xray_omitted_equals_none():
     """Omitting xray produces identical free_params as {'type': 'none'}."""
     params_omitted = parse_groups(
         redshift=Fixed(0.1),
-        sfh={"type": "dpl", "all_params": FIXED},
+        sfh={"type": "dpl", "all_params": Fixed(DEFAULT)},
     )
     params_none = parse_groups(
         redshift=Fixed(0.1),
-        sfh={"type": "dpl", "all_params": FIXED},
+        sfh={"type": "dpl", "all_params": Fixed(DEFAULT)},
         xray={"type": "none"},
     )
     # Both should have identical free params (no xray params).
@@ -126,11 +126,11 @@ def test_radio_omitted_equals_none():
     """Omitting radio produces identical free_params as {'type': 'none'} (composable form)."""
     params_omitted = parse_groups(
         redshift=Fixed(0.1),
-        sfh={"type": "dpl", "all_params": FIXED},
+        sfh={"type": "dpl", "all_params": Fixed(DEFAULT)},
     )
     params_none = parse_groups(
         redshift=Fixed(0.1),
-        sfh={"type": "dpl", "all_params": FIXED},
+        sfh={"type": "dpl", "all_params": Fixed(DEFAULT)},
         radio={"sf": {"type": "none"}, "agn": {"type": "none"}},
     )
     # Both should have identical free params (no radio params).
@@ -150,7 +150,7 @@ def test_dust_attenuation_none_without_wildcard_does_not_warn():
         warnings.simplefilter("always")
         params = parse_groups(
             redshift=Fixed(0.1),
-            sfh={"type": "dpl", "all_params": FIXED},
+            sfh={"type": "dpl", "all_params": Fixed(DEFAULT)},
             dust_attenuation={"type": "none"},  # No all_params disposition
         )
         # Should not warn about dust_attenuation since it has no parameters
@@ -174,7 +174,7 @@ def test_foreground_omitted():
     """
     params_omitted = parse_groups(
         redshift=Fixed(0.1),
-        sfh={"type": "dpl", "all_params": FIXED},
+        sfh={"type": "dpl", "all_params": Fixed(DEFAULT)},
     )
     # Verify that foreground is omitted by checking it's not in the result
     # (no way to explicitly pass None to a forward-only group, so we just check omitted)
@@ -186,7 +186,7 @@ def test_dust_model_explicit_off_when_dust_attenuation_omitted():
     """When dust_attenuation is omitted, dust_model is explicitly 'off'."""
     params = parse_groups(
         redshift=Fixed(0.1),
-        sfh={"type": "dpl", "all_params": FIXED},
+        sfh={"type": "dpl", "all_params": Fixed(DEFAULT)},
     )
     # dust_model should be 'off', not the historical default 'two_component'
     assert params.dust_model == "off"

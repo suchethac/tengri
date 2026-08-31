@@ -89,30 +89,30 @@ def assert_precompute_matches_exact(
         Construction or evaluation failures are NOT caught — they fail the test,
         as intended for #1660 guard.
     """
-    from tengri import FIXED, Fixed, Observation, Photometry, SEDModel, WavePrecomp
+    from tengri import DEFAULT, Fixed, Observation, Photometry, SEDModel, WavePrecomp
 
     # Extract dust_attenuation and dust_emission from dust_config
     if dust_config is None:
         dust_attenuation = {
             "type": "two_component",
             "law": "calzetti",
-            "all_params": FIXED,
+            "all_params": Fixed(DEFAULT),
             "tau_diff": 0.5,
         }
-        dust_emission = {"type": emission_type, "all_params": FIXED}
+        dust_emission = {"type": emission_type, "all_params": Fixed(DEFAULT)}
     else:
         # Split dust_config into attenuation and emission parts
         dust_attenuation = {k: v for k, v in dust_config.items() if k != "emission"}
         if "emission" in dust_config:
             dust_emission = dust_config["emission"]
         else:
-            dust_emission = {"type": emission_type, "all_params": FIXED}
+            dust_emission = {"type": emission_type, "all_params": Fixed(DEFAULT)}
 
     if redshift_dist is None:
         redshift_dist = Fixed(0.05)
 
     obs = Observation(photometry=Photometry(filters=tuple(filters)))
-    groups = dict(sfh={"type": "dpl", "all_params": FIXED}, neb={"type": "none"})
+    groups = dict(sfh={"type": "dpl", "all_params": Fixed(DEFAULT)}, neb={"type": "none"})
 
     # Build 1: exact path (approx=None)
     exact_model = SEDModel.build(
@@ -236,7 +236,7 @@ def test_dale2014_precompute_matches_exact(synthetic_ssp, dust_ir_filters):
     Tolerance: 0.5% (0.13-0.26% LUT residual + 0.2% dust-attenuation
     effective-wavelength approximation).
     """
-    from tengri import FIXED
+    from tengri import DEFAULT, Fixed
 
     with warnings.catch_warnings():
         warnings.simplefilter("ignore")
@@ -247,9 +247,9 @@ def test_dale2014_precompute_matches_exact(synthetic_ssp, dust_ir_filters):
             dust_config={
                 "type": "two_component",
                 "law": "calzetti",
-                "all_params": FIXED,
+                "all_params": Fixed(DEFAULT),
                 "tau_diff": 0.5,
-                "emission": {"type": "dale2014", "all_params": FIXED},
+                "emission": {"type": "dale2014", "all_params": Fixed(DEFAULT)},
             },
             tolerance=0.005,
         )

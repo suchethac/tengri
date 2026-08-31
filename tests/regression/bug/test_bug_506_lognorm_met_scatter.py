@@ -31,7 +31,7 @@ import jax.numpy as jnp
 import numpy as np
 import pytest
 
-from tengri import FIXED, Fixed, SEDModel, Uniform
+from tengri import DEFAULT, Fixed, SEDModel, Uniform
 from tengri.components.stellar.sps.dsps_wrapper import SSPData
 
 pytestmark = pytest.mark.regression_bug
@@ -72,15 +72,15 @@ def _model(scatter_dist):
             "tau_gyr": Fixed(1.0),
             "age_gyr": Fixed(3.0),
             "log_total_mass": Fixed(10.0),
-            "all_params": FIXED,
+            "all_params": Fixed(DEFAULT),
         },
-        met={"logzsol": Fixed(0.0), "logzsol_scatter": scatter_dist, "all_params": FIXED},
+        met={"logzsol": Fixed(0.0), "logzsol_scatter": scatter_dist, "all_params": Fixed(DEFAULT)},
         dust_attenuation={
             "law": "power_law",
             "type": "two_component",
             "tau_bc": Fixed(0.0),
             "tau_diff": Fixed(0.0),
-            "all_params": FIXED,
+            "all_params": Fixed(DEFAULT),
         },
         redshift=Fixed(0.1),
     )
@@ -127,15 +127,15 @@ def test_fixed_default_is_byte_identical_to_historical():
             "tau_gyr": Fixed(1.0),
             "age_gyr": Fixed(3.0),
             "log_total_mass": Fixed(10.0),
-            "all_params": FIXED,
+            "all_params": Fixed(DEFAULT),
         },
-        met={"logzsol": Fixed(0.0), "all_params": FIXED},
+        met={"logzsol": Fixed(0.0), "all_params": Fixed(DEFAULT)},
         dust_attenuation={
             "law": "power_law",
             "type": "two_component",
             "tau_bc": Fixed(0.0),
             "tau_diff": Fixed(0.0),
-            "all_params": FIXED,
+            "all_params": Fixed(DEFAULT),
         },
         redshift=Fixed(0.1),
     )

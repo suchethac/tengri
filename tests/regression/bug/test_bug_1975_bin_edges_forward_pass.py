@@ -17,7 +17,7 @@ import numpy as np
 import pytest
 
 import tengri
-from tengri import FIXED, FREE, Fixed, Observation, Photometry, SEDModel, Uniform
+from tengri import DEFAULT, FREE, Fixed, Observation, Photometry, SEDModel, Uniform
 
 pytestmark = pytest.mark.regression_bug
 
@@ -35,7 +35,7 @@ def _build(ssp, sfh_dict):
         dust_attenuation={
             "law": "power_law",
             "type": "two_component",
-            "all_params": FIXED,
+            "all_params": Fixed(DEFAULT),
             "tau_diff": Uniform(0.0, 2.0),
         },
     )

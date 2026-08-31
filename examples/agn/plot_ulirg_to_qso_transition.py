@@ -106,24 +106,28 @@ def build_ulirg_qso_model(tau_v, agn_lum_ratio):
         "type": "composable",
         "log_lbol": log_lbol,
         "lum_ratio": agn_lum_ratio,
-        "disc": {"type": "multicolor", "all_params": tengri.FIXED},
-        "torus": {"type": "skirtor", "all_params": tengri.FIXED},
-        "nlr": {"type": "analytic", "all_params": tengri.FIXED},
-        "blr": {"type": "none", "all_params": tengri.FIXED},
-        "all_params": tengri.FIXED,
+        "disc": {"type": "multicolor", "all_params": tengri.Fixed(tengri.DEFAULT)},
+        "torus": {"type": "skirtor", "all_params": tengri.Fixed(tengri.DEFAULT)},
+        "nlr": {"type": "analytic", "all_params": tengri.Fixed(tengri.DEFAULT)},
+        "blr": {"type": "none", "all_params": tengri.Fixed(tengri.DEFAULT)},
+        "all_params": tengri.Fixed(tengri.DEFAULT),
     }
 
     model = tengri.SEDModel.build(
         ssp,
-        sfh={"type": "const", "all_params": tengri.FIXED, "log_total_mass": log_total_mass},
+        sfh={
+            "type": "const",
+            "all_params": tengri.Fixed(tengri.DEFAULT),
+            "log_total_mass": log_total_mass,
+        },
         dust_attenuation={
             "law": "power_law",
             "type": "two_component",
-            "all_params": tengri.FIXED,
+            "all_params": tengri.Fixed(tengri.DEFAULT),
             "tau_bc": tau_bc,
             "tau_diff": tau_diff,
         },
-        dust_emission={"type": "dale2014", "all_params": tengri.FIXED},
+        dust_emission={"type": "dale2014", "all_params": tengri.Fixed(tengri.DEFAULT)},
         agn=agn_dict,
         redshift=tengri.Fixed(0.0),
     )

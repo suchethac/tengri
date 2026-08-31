@@ -33,7 +33,7 @@ import jax.numpy as jnp
 import numpy as np
 import pytest
 
-from tengri import FIXED, Fixed, Observation, SEDModel, WavePrecomp
+from tengri import DEFAULT, Fixed, Observation, SEDModel, WavePrecomp
 from tengri.observation.photometry_config import Photometry
 
 # w4 (22 um) is where the IR template actually lands at z=0.1.
@@ -75,17 +75,17 @@ MAX_FLOPS = 1_000_000
 
 
 def _model(emission_type, shape, *, approx):
-    emission = {"type": emission_type, "all_params": FIXED}
+    emission = {"type": emission_type, "all_params": Fixed(DEFAULT)}
     emission.update({k: Fixed(v) for k, v in shape.items()})
     return SEDModel.build(
         ssp_data=pytest.importorskip("tengri").load_ssp(),
         observation=Observation(photometry=Photometry.from_names(FILTERS)),
         redshift=Fixed(0.1),
-        sfh={"type": "dpl", "all_params": FIXED},
+        sfh={"type": "dpl", "all_params": Fixed(DEFAULT)},
         dust_attenuation={
             "type": "two_component",
             "law": "calzetti",
-            "all_params": FIXED,
+            "all_params": Fixed(DEFAULT),
         },
         dust_emission=emission,
         approx=approx,

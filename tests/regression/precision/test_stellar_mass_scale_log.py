@@ -20,7 +20,7 @@ import numpy as np
 import pytest
 from numpy.testing import assert_allclose
 
-from tengri import FIXED, Fixed, SEDModel
+from tengri import DEFAULT, Fixed, SEDModel
 
 pytestmark = pytest.mark.regression_bug
 
@@ -37,20 +37,20 @@ def _model(ssp, log_mass=10.0):
     """
     return SEDModel.build(
         ssp_data=ssp,
-        met={"logzsol": Fixed(0.0), "all_params": FIXED},
+        met={"logzsol": Fixed(0.0), "all_params": Fixed(DEFAULT)},
         sfh={
             "type": "delayed",
             "tau_gyr": Fixed(1.0),
             "age_gyr": Fixed(5.0),
             "log_total_mass": Fixed(log_mass),
-            "all_params": FIXED,
+            "all_params": Fixed(DEFAULT),
         },
         dust_attenuation={
             "law": "power_law",
             "type": "two_component",
             "tau_bc": Fixed(0.0),
             "tau_diff": Fixed(0.0),
-            "all_params": FIXED,
+            "all_params": Fixed(DEFAULT),
         },
         redshift=Fixed(0.0),
     )
@@ -121,13 +121,13 @@ def test_dust_energy_balance_uses_the_published_log_scale(synthetic_ssp_wide):
     """
     model = SEDModel.build(
         ssp_data=synthetic_ssp_wide,
-        met={"logzsol": Fixed(0.0), "all_params": FIXED},
+        met={"logzsol": Fixed(0.0), "all_params": Fixed(DEFAULT)},
         sfh={
             "type": "delayed",
             "tau_gyr": Fixed(1.0),
             "age_gyr": Fixed(5.0),
             "log_total_mass": Fixed(10.0),
-            "all_params": FIXED,
+            "all_params": Fixed(DEFAULT),
         },
         dust_attenuation={
             "type": "two_component",
@@ -135,9 +135,9 @@ def test_dust_energy_balance_uses_the_published_log_scale(synthetic_ssp_wide):
             "law_diff": "calzetti",
             "tau_bc": Fixed(1.0),
             "tau_diff": Fixed(0.7),
-            "all_params": FIXED,
+            "all_params": Fixed(DEFAULT),
         },
-        dust_emission={"type": "dale2014", "all_params": FIXED},
+        dust_emission={"type": "dale2014", "all_params": Fixed(DEFAULT)},
         redshift=Fixed(0.0),
     )
     derived = model.predict_state({}).derived

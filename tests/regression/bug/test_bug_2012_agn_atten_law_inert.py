@@ -31,7 +31,7 @@ import numpy as np
 import pytest
 
 import tengri
-from tengri import FIXED, Fixed, Observation, Photometry, SEDModel
+from tengri import DEFAULT, Fixed, Observation, Photometry, SEDModel
 
 pytestmark = [pytest.mark.regression_bug, pytest.mark.contract]
 
@@ -54,11 +54,11 @@ def _build(ssp, obs, law: str, ebv: float = 0.4):
         return SEDModel.build(
             ssp_data=ssp,
             observation=obs,
-            sfh={"type": "dpl", "all_params": FIXED},
+            sfh={"type": "dpl", "all_params": Fixed(DEFAULT)},
             agn={
                 "type": "composable",
-                "all_params": FIXED,
-                "disc": {"type": "powerlaw", "all_params": FIXED},
+                "all_params": Fixed(DEFAULT),
+                "disc": {"type": "powerlaw", "all_params": Fixed(DEFAULT)},
                 "atten": {"law": law, "attenuation_ebv": ebv},
             },
             redshift=Fixed(1.0),
@@ -147,10 +147,10 @@ def test_the_retired_type_spelling_does_not_advertise_laws_it_ignores(ssp, obs):
         SEDModel.build(
             ssp_data=ssp,
             observation=obs,
-            sfh={"type": "dpl", "all_params": FIXED},
+            sfh={"type": "dpl", "all_params": Fixed(DEFAULT)},
             agn={
                 "type": "composable",
-                "all_params": FIXED,
+                "all_params": Fixed(DEFAULT),
                 "atten": {"type": "smc_prevot"},
             },
             redshift=Fixed(1.0),

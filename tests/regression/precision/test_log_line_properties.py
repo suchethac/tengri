@@ -35,14 +35,14 @@ _DOUBLETS = ("oii",)
 
 
 def _model(ssp):
-    from tengri import FIXED, Fixed, Observation, Photometry, SEDModel, Uniform
+    from tengri import DEFAULT, Fixed, Observation, Photometry, SEDModel, Uniform
 
     return SEDModel.build(
         ssp_data=ssp,
         observation=Observation(photometry=Photometry.from_names(["sdss_r", "wise_w1"])),
         sfh={
             "type": "delayed",
-            "all_params": FIXED,
+            "all_params": Fixed(DEFAULT),
             "log_total_mass": Uniform(9.0, 11.0),
             "tau_gyr": 1.0,
             "age_gyr": 5.0,
@@ -50,16 +50,16 @@ def _model(ssp):
         dust_attenuation={
             "type": "two_component",
             "law": "calzetti",
-            "all_params": FIXED,
+            "all_params": Fixed(DEFAULT),
             "tau_diff": Uniform(0.0, 1.5),
             "tau_bc": 0.0,
         },
-        neb={"type": "cue", "all_params": FIXED},
+        neb={"type": "cue", "all_params": Fixed(DEFAULT)},
         # The X-ray block is here so the pair sweep actually covers `l_x_*`. Without
         # it those properties are not published and every assertion below would pass
         # while saying nothing about them -- the same fixture gap that let
         # `log_line_lums` ship broken (#1534).
-        xray={"type": "yang20", "all_params": FIXED},
+        xray={"type": "yang20", "all_params": Fixed(DEFAULT)},
         redshift=Fixed(0.1),
         approx=None,
     )

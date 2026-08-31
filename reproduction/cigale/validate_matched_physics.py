@@ -65,7 +65,7 @@ from reproduction._validation import (
 )
 from reproduction.cigale._drivers import cigale_driver as C, units as U
 
-from tengri import FIXED, Fixed, SEDModel
+from tengri import DEFAULT, Fixed, SEDModel
 from tengri.components.dust.emission_templates import register_dale2014_tabulated
 from tengri.components.stellar.sps.dsps_wrapper import load_ssp_data
 
@@ -109,13 +109,13 @@ def cigale_stellar_dust():
 def tengri_stellar_dust(ssp, tau_bc):
     m = SEDModel.build(
         ssp_data=ssp,
-        met={"logzsol": Fixed(MET_LOGZSOL), "*": FIXED},
+        met={"logzsol": Fixed(MET_LOGZSOL), "all_params": Fixed(DEFAULT)},
         sfh={
             "type": "delayed",
             "tau_gyr": Fixed(TAU_GYR),
             "age_gyr": Fixed(AGE_GYR),
             "log_total_mass": Fixed(0.0),
-            "*": FIXED,
+            "all_params": Fixed(DEFAULT),
         },
         dust_attenuation={
             "type": "two_component",
@@ -124,8 +124,9 @@ def tengri_stellar_dust(ssp, tau_bc):
             "tau_bc": Fixed(tau_bc),
             "tau_diff": Fixed(TAU_DIFF),
             "lyman_cutoff": True,
-            "*": FIXED,
-        }, dust_emission={"type": "dale2014", "alpha_dale": Fixed(2.0), "*": FIXED},
+            "all_params": Fixed(DEFAULT),
+        },
+        dust_emission={"type": "dale2014", "alpha_dale": Fixed(2.0), "all_params": Fixed(DEFAULT)},
         redshift=Fixed(0.0),
     )
     s = m.predict_state({})
@@ -192,17 +193,32 @@ def xray_seds(ssp):
                 (
                     "skirtor2016",
                     dict(
-                        t=7, pl=1.0, q=1.0, oa=40, R=20, Mcl=0.97, i=INCL_DEG,
-                        disk_type=1, delta=-0.36, fracAGN=0.3, law=0, EBV=0.0,
-                        temperature=100, emissivity=1.6,
+                        t=7,
+                        pl=1.0,
+                        q=1.0,
+                        oa=40,
+                        R=20,
+                        Mcl=0.97,
+                        i=INCL_DEG,
+                        disk_type=1,
+                        delta=-0.36,
+                        fracAGN=0.3,
+                        law=0,
+                        EBV=0.0,
+                        temperature=100,
+                        emissivity=1.6,
                     ),
                 ),
                 (
                     "yang20",
                     dict(
-                        gam=1.8, E_cut=300.0, alpha_ox=ALPHA_OX,
-                        max_dev_alpha_ox=0.2, angle_coef="0.5 & 0",
-                        det_lmxb=0.0, det_hmxb=0.0,
+                        gam=1.8,
+                        E_cut=300.0,
+                        alpha_ox=ALPHA_OX,
+                        max_dev_alpha_ox=0.2,
+                        angle_coef="0.5 & 0",
+                        det_lmxb=0.0,
+                        det_hmxb=0.0,
                     ),
                 ),
             ]
@@ -223,36 +239,35 @@ def xray_seds(ssp):
     def _tengri(log_lbol):
         return SEDModel.build(
             ssp_data=ssp,
-            met={"logzsol": Fixed(MET_LOGZSOL), "*": FIXED},
+            met={"logzsol": Fixed(MET_LOGZSOL), "all_params": Fixed(DEFAULT)},
             sfh={
                 "type": "delayed",
                 "tau_gyr": Fixed(TAU_GYR),
                 "age_gyr": Fixed(AGE_GYR),
                 "log_total_mass": Fixed(0.0),
-                "*": FIXED,
+                "all_params": Fixed(DEFAULT),
             },
-            dust_attenuation={"law": "power_law", 
+            dust_attenuation={
+                "law": "power_law",
                 "type": "two_component",
                 "tau_bc": Fixed(0.0),
                 "tau_diff": Fixed(TAU_DIFF),
-                "*": FIXED,
+                "all_params": Fixed(DEFAULT),
             },
             agn={
                 "type": "composable",
-                "disc": {"type": "schartmann2005", "*": FIXED},
-                "torus": {"type": "skirtor", "*": FIXED},
+                "disc": {"type": "schartmann2005", "all_params": Fixed(DEFAULT)},
+                "torus": {"type": "skirtor", "all_params": Fixed(DEFAULT)},
                 "agn_log_lbol": Fixed(log_lbol),
                 "agn_cos_inc": Fixed(cos_inc),
-                "*": FIXED,
+                "all_params": Fixed(DEFAULT),
             },
-            xray={"type": "yang20", "log_nh": Fixed(0.0), "*": FIXED},
+            xray={"type": "yang20", "log_nh": Fixed(0.0), "all_params": Fixed(DEFAULT)},
             redshift=Fixed(0.0),
         ).predict_state({})
 
     st = _tengri(11.5)
-    log_lbol = 11.5 + float(
-        np.log10(l2500_c / float(np.asarray(st.derived["L_2500_intrinsic"])))
-    )
+    log_lbol = 11.5 + float(np.log10(l2500_c / float(np.asarray(st.derived["L_2500_intrinsic"]))))
     st = _tengri(log_lbol)
     l2500_t = float(np.asarray(st.derived["L_2500_intrinsic"]))
     return (
@@ -315,13 +330,13 @@ def radio_seds(ssp):
 
     m = SEDModel.build(
         ssp_data=ssp,
-        met={"logzsol": Fixed(MET_LOGZSOL), "*": FIXED},
+        met={"logzsol": Fixed(MET_LOGZSOL), "all_params": Fixed(DEFAULT)},
         sfh={
             "type": "delayed",
             "tau_gyr": Fixed(TAU_GYR),
             "age_gyr": Fixed(AGE_GYR),
             "log_total_mass": Fixed(0.0),
-            "*": FIXED,
+            "all_params": Fixed(DEFAULT),
         },
         dust_attenuation={
             "type": "two_component",
@@ -330,13 +345,14 @@ def radio_seds(ssp):
             "tau_bc": Fixed(0.0),
             "tau_diff": Fixed(TAU_DIFF),
             "lyman_cutoff": True,
-            "*": FIXED,
-        }, dust_emission={"type": "dale2014", "alpha_dale": Fixed(2.0), "*": FIXED},
+            "all_params": Fixed(DEFAULT),
+        },
+        dust_emission={"type": "dale2014", "alpha_dale": Fixed(2.0), "all_params": Fixed(DEFAULT)},
         radio={
             "type": "condon92",
             "radio_q_ir": Fixed(Q_IR),
             "radio_alpha_sf": Fixed(ALPHA_SF),
-            "*": FIXED,
+            "all_params": Fixed(DEFAULT),
         },
         redshift=Fixed(0.0),
     )

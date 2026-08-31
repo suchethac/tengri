@@ -16,7 +16,7 @@ from __future__ import annotations
 import numpy as np
 import pytest
 
-from tengri import FIXED, Fixed, SEDModel
+from tengri import DEFAULT, Fixed, SEDModel
 from tengri.components.xray.xray import xray_total
 
 pytestmark = [pytest.mark.regression_bug]
@@ -31,23 +31,23 @@ def _mass_weighted_age_gyr(derived) -> float:
 def test_lmxb_uses_mass_weighted_age(synthetic_ssp_wide) -> None:
     model = SEDModel.build(
         ssp_data=synthetic_ssp_wide,
-        met={"all_params": FIXED},
+        met={"all_params": Fixed(DEFAULT)},
         sfh={
             "type": "delayed",
             "tau_gyr": Fixed(1.0),
             "age_gyr": Fixed(8.0),
             "log_total_mass": Fixed(10.0),
-            "all_params": FIXED,
+            "all_params": Fixed(DEFAULT),
         },
         dust_attenuation={
             "law": "power_law",
             "type": "two_component",
             "tau_bc": Fixed(0.0),
             "tau_diff": Fixed(0.3),
-            "all_params": FIXED,
+            "all_params": Fixed(DEFAULT),
         },
-        dust_emission={"type": "dale2014", "all_params": FIXED},
-        xray={"type": "yang20", "all_params": FIXED},
+        dust_emission={"type": "dale2014", "all_params": Fixed(DEFAULT)},
+        xray={"type": "yang20", "all_params": Fixed(DEFAULT)},
         redshift=Fixed(0.0),
     )
     state = model.predict_state({})

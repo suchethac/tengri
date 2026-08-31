@@ -22,13 +22,13 @@ import jax.numpy as jnp
 import numpy as np
 import pytest
 
-from tengri import FIXED, Fixed, Observation, Photometry, SEDModel, Uniform
+from tengri import DEFAULT, Fixed, Observation, Photometry, SEDModel, Uniform
 
 pytestmark = pytest.mark.regression_bug
 
 _SFH = {
     "type": "delayed",
-    "all_params": FIXED,
+    "all_params": Fixed(DEFAULT),
     "log_total_mass": Uniform(9.0, 11.0),
     "tau_gyr": 1.0,
     "age_gyr": 5.0,
@@ -36,7 +36,7 @@ _SFH = {
 _DUST = {
     "type": "two_component",
     "law": "calzetti",
-    "all_params": FIXED,
+    "all_params": Fixed(DEFAULT),
     "tau_diff": 0.3,
     "tau_bc": 0.0,
 }
@@ -156,8 +156,8 @@ def test_agn_sed_gradient_is_finite_in_float32(ssp_bare, obs):
         dust_attenuation=_DUST,
         agn={
             "type": "composable",
-            "all_params": FIXED,
-            "disc": {"type": "multicolor", "all_params": FIXED},
+            "all_params": Fixed(DEFAULT),
+            "disc": {"type": "multicolor", "all_params": Fixed(DEFAULT)},
             "log_lbol": Uniform(9.0, 12.0),
             "fracAGN": 0.1,
         },
@@ -185,8 +185,8 @@ def _agn_groups(disc):
         dust_attenuation=_DUST,
         agn={
             "type": "composable",
-            "all_params": FIXED,
-            "disc": {"type": disc, "all_params": FIXED},
+            "all_params": Fixed(DEFAULT),
+            "disc": {"type": disc, "all_params": Fixed(DEFAULT)},
             "log_lbol": Uniform(9.0, 12.0),
             "fracAGN": 0.1,
         },

@@ -35,7 +35,7 @@ def _flat_histories(sfrs):
 @pytest.fixture
 def fwd_for_chain_test(synthetic_ssp_wide, synthetic_tophat_obs):
     """ForwardModel with table SFH for testing component chain memoization."""
-    from tengri import FIXED, ForwardModel, SEDModel
+    from tengri import DEFAULT, ForwardModel, SEDModel
     from tengri.parameters.priors import Fixed, Uniform
 
     with warnings.catch_warnings():
@@ -47,7 +47,7 @@ def fwd_for_chain_test(synthetic_ssp_wide, synthetic_tophat_obs):
             dust_attenuation={
                 "law": "power_law",
                 "type": "two_component",
-                "all_params": FIXED,
+                "all_params": Fixed(DEFAULT),
                 "tau_bc": 0.5,
                 "tau_diff": Uniform(0.0, 2.0),
             },

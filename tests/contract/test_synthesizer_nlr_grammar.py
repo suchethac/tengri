@@ -14,7 +14,7 @@ data-gated and not shipped); runs in grid-equipped environments.
 import numpy as np
 import pytest
 
-from tengri import FIXED, Fixed, SEDModel
+from tengri import DEFAULT, Fixed, SEDModel
 
 
 def _synth_grid_available() -> bool:
@@ -43,21 +43,21 @@ def _build(ssp, block, logU):
             "tau_gyr": Fixed(1.0),
             "age_gyr": Fixed(5.0),
             "log_total_mass": Fixed(0.0),
-            "all_params": FIXED,
+            "all_params": Fixed(DEFAULT),
         },
         dust_attenuation={
             "law": "power_law",
             "type": "two_component",
             "tau_bc": Fixed(0.0),
             "tau_diff": Fixed(0.0),
-            "all_params": FIXED,
+            "all_params": Fixed(DEFAULT),
         },
         agn={
             "type": "composable",
-            "all_params": FIXED,
+            "all_params": Fixed(DEFAULT),
             "log_lbol": 13.0,
-            "disc": {"type": "multicolor", "all_params": FIXED},
-            "nlr": {"type": block, "nlr_logU": Fixed(logU), "all_params": FIXED},
+            "disc": {"type": "multicolor", "all_params": Fixed(DEFAULT)},
+            "nlr": {"type": block, "nlr_logU": Fixed(logU), "all_params": Fixed(DEFAULT)},
         },
         redshift=Fixed(0.0),
     )

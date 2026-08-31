@@ -36,7 +36,7 @@ import jax.numpy as jnp
 import numpy as np
 import pytest
 
-from tengri import FIXED, Fixed, Observation, Photometry, SEDModel, Uniform
+from tengri import DEFAULT, Fixed, Observation, Photometry, SEDModel, Uniform
 from tengri.utils.scale import log10_magnitude
 
 pytestmark = pytest.mark.regression_bug
@@ -89,13 +89,17 @@ def _model(ssp):
         redshift=Fixed(0.1),
         sfh={
             "type": "delayed",
-            "all_params": FIXED,
+            "all_params": Fixed(DEFAULT),
             "log_total_mass": Uniform(9.0, 11.0),
             "tau_gyr": Uniform(0.5, 3.0),
             "age_gyr": Fixed(5.0),
         },
-        dust_attenuation={"law": "power_law", "type": "two_component", "all_params": FIXED},
-        neb={"type": "cue", "all_params": FIXED},
+        dust_attenuation={
+            "law": "power_law",
+            "type": "two_component",
+            "all_params": Fixed(DEFAULT),
+        },
+        neb={"type": "cue", "all_params": Fixed(DEFAULT)},
     )
 
 

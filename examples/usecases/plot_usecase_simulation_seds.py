@@ -67,7 +67,7 @@ model_zt = tengri.SEDModel.build(
     dust_attenuation={
         "law": "power_law",
         "type": "two_component",
-        "all_params": tengri.FIXED,
+        "all_params": tengri.Fixed(tengri.DEFAULT),
         "tau_bc": 0.4,
     },
     redshift=tengri.Fixed(Z_OBS),
@@ -92,7 +92,7 @@ model_mean = tengri.SEDModel.build(
     dust_attenuation={
         "law": "power_law",
         "type": "two_component",
-        "all_params": tengri.FIXED,
+        "all_params": tengri.Fixed(tengri.DEFAULT),
         "tau_bc": 0.4,
     },
     redshift=tengri.Fixed(Z_OBS),

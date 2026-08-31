@@ -56,7 +56,7 @@ import numpy as np
 from reproduction.agnfitter._drivers import agnfitter_driver as A, units as U
 
 import tengri
-from tengri import FIXED, Fixed, SEDModel, load_ssp_data
+from tengri import DEFAULT, Fixed, SEDModel, load_ssp_data
 
 # Force the inline backend so figures embed on (re-)render regardless of the
 # ambient MPLBACKEND. A non-inline backend (e.g. Agg) drops the save_fig()
@@ -95,9 +95,11 @@ print(
 # data/, so this runs on a clean checkout with no AGNfitter clone;
 # require_available() says what to regenerate if a grid is missing.
 A.require_available()
-print(f"AGNFITTER-RX reference grids: {len(A.list_disks())} disks, "
-      f"{len(A.list_tori())} tori, {len(A.list_cold_dust())} cold-dust "
-      f"(committed under data/)")
+print(
+    f"AGNFITTER-RX reference grids: {len(A.list_disks())} disks, "
+    f"{len(A.list_tori())} tori, {len(A.list_cold_dust())} cold-dust "
+    f"(committed under data/)"
+)
 
 
 def norm_at(wave, L, lam_aa):
@@ -150,9 +152,15 @@ SFH_FIDUCIAL = {
     "tau_gyr": Fixed(TAU_GYR),
     "age_gyr": Fixed(AGE_GYR),
     "log_total_mass": Fixed(LOG_MASS),
-    "all_params": FIXED,
+    "all_params": Fixed(DEFAULT),
 }
-NO_DUST = {"law": "power_law", "type": "two_component", "tau_bc": Fixed(0.0), "tau_diff": Fixed(0.0), "all_params": FIXED}
+NO_DUST = {
+    "law": "power_law",
+    "type": "two_component",
+    "tau_bc": Fixed(0.0),
+    "tau_diff": Fixed(0.0),
+    "all_params": Fixed(DEFAULT),
+}
 
 
 # %% [markdown]
@@ -177,7 +185,7 @@ def tengri_disc(disc_type, *, log_lbol=11.0, ebv_disc=None, **disc_params):
     ``ebv_disc`` sets the shared disc obscuration ``agn_ebv_disc`` (the
     AGNFITTER-RX ``EBVbbb`` analog) at the top level of the agn group.
     """
-    disc = {"type": disc_type, "all_params": FIXED}
+    disc = {"type": disc_type, "all_params": Fixed(DEFAULT)}
     disc.update({k: Fixed(v) for k, v in disc_params.items()})
     agn = {
         "type": "composable",
@@ -186,7 +194,7 @@ def tengri_disc(disc_type, *, log_lbol=11.0, ebv_disc=None, **disc_params):
         "lines": {"type": "none"},
         "agn_log_lbol": Fixed(log_lbol),
         "agn_polar_ebv": Fixed(0.0),  # AGNFITTER-RX templates carry no polar screen
-        "all_params": FIXED,
+        "all_params": Fixed(DEFAULT),
     }
     if ebv_disc is not None:
         agn["agn_ebv_disc"] = Fixed(ebv_disc)
@@ -211,7 +219,7 @@ def tengri_disc_model(model_type, *, log_lbol=11.0):
             "type": model_type,
             "agn_log_lbol": Fixed(log_lbol),
             "agn_polar_ebv": Fixed(0.0),  # AGNFITTER-RX templates carry no polar screen
-            "all_params": FIXED,
+            "all_params": Fixed(DEFAULT),
         },
         redshift=Fixed(0.0),
     )
@@ -230,13 +238,13 @@ def tengri_qsogen_full(*, log_lbol=11.0):
         dust_attenuation=NO_DUST,
         agn={
             "type": "composable",
-            "disc": {"type": "qsogen", "all_params": FIXED},
+            "disc": {"type": "qsogen", "all_params": Fixed(DEFAULT)},
             "torus": {"type": "none"},
-            "lines": {"type": "qsogen", "all_params": FIXED},
-            "feii": {"type": "qsogen_balmer", "all_params": FIXED},
+            "lines": {"type": "qsogen", "all_params": Fixed(DEFAULT)},
+            "feii": {"type": "qsogen_balmer", "all_params": Fixed(DEFAULT)},
             "agn_log_lbol": Fixed(log_lbol),
             "agn_polar_ebv": Fixed(0.0),  # AGNFITTER-RX templates carry no polar screen
-            "all_params": FIXED,
+            "all_params": Fixed(DEFAULT),
         },
         redshift=Fixed(0.0),
     )
@@ -246,7 +254,7 @@ def tengri_qsogen_full(*, log_lbol=11.0):
 
 def tengri_torus(torus_type, *, log_lbol=11.0, **torus_params):
     """Isolated tengri torus SED. Returns (wave_aa, L_nu)."""
-    torus = {"type": torus_type, "all_params": FIXED}
+    torus = {"type": torus_type, "all_params": Fixed(DEFAULT)}
     torus.update({k: Fixed(v) for k, v in torus_params.items()})
     m = SEDModel.build(
         ssp_data=ssp,
@@ -259,7 +267,7 @@ def tengri_torus(torus_type, *, log_lbol=11.0, **torus_params):
             "lines": {"type": "none"},
             "agn_log_lbol": Fixed(log_lbol),
             "agn_polar_ebv": Fixed(0.0),  # AGNFITTER-RX templates carry no polar screen
-            "all_params": FIXED,
+            "all_params": Fixed(DEFAULT),
         },
         redshift=Fixed(0.0),
     )
@@ -285,7 +293,7 @@ for age, c in [(0.1, "C0"), (5.0, "C3")]:
             "tau_gyr": Fixed(0.1),
             "age_gyr": Fixed(age),
             "log_total_mass": Fixed(0.0),
-            "all_params": FIXED,
+            "all_params": Fixed(DEFAULT),
         },
         dust_attenuation=NO_DUST,
         redshift=Fixed(0.0),
@@ -445,12 +453,29 @@ msk_a = (w_thb > 8e2) & (w_thb < 3e4)
 # convention-matched E(B-V)/1.102 as a thin line on top — they lie exactly on
 # each other, so the *law* is identical. The raw same-E(B-V) tengri curve is
 # shown faint underneath purely to mark the +10.2% E(B-V) reparametrization.
-axr.semilogx(w_thb[msk_a], -2.5 * np.log10(ratio_af[msk_a]), "C0-", lw=3.5, alpha=0.35,
-             solid_capstyle="round", label="AGNFITTER-RX  BBBred_Prevot")
-axr.semilogx(w_t0[msk_t], -2.5 * np.log10(ratio_tengri_rescaled[msk_t]), "C1-", lw=1.4,
-             label=r"tengri  agn_ebv_disc at $E(B{-}V)/1.102$ (convention-matched)")
-axr.semilogx(w_t0[msk_t], -2.5 * np.log10(ratio_tengri[msk_t]), "C3:", lw=1.4,
-             label=r"tengri at same $E(B{-}V)$ (raw — $+10.2\%$ convention offset)")
+axr.semilogx(
+    w_thb[msk_a],
+    -2.5 * np.log10(ratio_af[msk_a]),
+    "C0-",
+    lw=3.5,
+    alpha=0.35,
+    solid_capstyle="round",
+    label="AGNFITTER-RX  BBBred_Prevot",
+)
+axr.semilogx(
+    w_t0[msk_t],
+    -2.5 * np.log10(ratio_tengri_rescaled[msk_t]),
+    "C1-",
+    lw=1.4,
+    label=r"tengri  agn_ebv_disc at $E(B{-}V)/1.102$ (convention-matched)",
+)
+axr.semilogx(
+    w_t0[msk_t],
+    -2.5 * np.log10(ratio_tengri[msk_t]),
+    "C3:",
+    lw=1.4,
+    label=r"tengri at same $E(B{-}V)$ (raw — $+10.2\%$ convention offset)",
+)
 axr.set_xlabel(r"$\lambda$ [Å]")
 axr.set_ylabel(r"$A_\lambda$ [mag] at $E(B{-}V)=0.3$")
 axr.set_title("Disc attenuation, end-to-end — identical law once convention-matched")
@@ -504,8 +529,14 @@ _k_qsogen_ext = np.asarray(qsogen_quasar_extinction(_wl_ext))  # qsogen: curve +
 fig, ax = plt.subplots(figsize=(8.2, 5.0))
 ax.plot(_wl_ext, _k_raw_ext, "C0-", lw=1.6, label=r"AGNFITTER-RX  Prevot SMC ($R_V\approx2.468$)")
 ax.plot(_wl_ext, _k_tengri_ext, "C1--", lw=1.6, label=r"tengri  Prevot SMC ($R_V=2.72$)")
-ax.plot(_wl_ext, _k_qsogen_ext, "C3-", lw=2.2, alpha=0.8,
-        label=r"qsogen  empirical quasar curve ($R=3.1$)")
+ax.plot(
+    _wl_ext,
+    _k_qsogen_ext,
+    "C3-",
+    lw=2.2,
+    alpha=0.8,
+    label=r"qsogen  empirical quasar curve ($R=3.1$)",
+)
 ax.axvline(5500, color="0.8", ls=":", lw=1, label="V (5500 Å)")
 ax.set_xscale("log")
 ax.set_xlabel(r"$\lambda$ [Å]")
@@ -591,19 +622,40 @@ _rd = np.abs(_dh02n[_bd] - _dhn[_bd])
 # on top); RIGHT = the two differentiable alternatives, which are *not* node
 # matched, against a faint S17 reference for context.
 fig, (axL, axR) = plt.subplots(1, 2, figsize=(13, 5.0), sharey=True)
-axL.loglog(w_s17, norm_peak(L_s17), "C0-", lw=4.0, alpha=0.35, solid_capstyle="round",
-           label="AGNFITTER-RX  S17 (Schreiber+18)")
+axL.loglog(
+    w_s17,
+    norm_peak(L_s17),
+    "C0-",
+    lw=4.0,
+    alpha=0.35,
+    solid_capstyle="round",
+    label="AGNFITTER-RX  S17 (Schreiber+18)",
+)
 axL.loglog(wave_ir, norm_peak(L_s18), "C0-", lw=1.4, label="tengri  schreiber2018 (S17 tables)")
-axL.loglog(w_dh, norm_peak(L_dh), "C2-", lw=4.0, alpha=0.35, solid_capstyle="round",
-           label=f"AGNFITTER-RX  DH02_CE01 (log L$_{{IR}}$={_DH_LIR:g})")
+axL.loglog(
+    w_dh,
+    norm_peak(L_dh),
+    "C2-",
+    lw=4.0,
+    alpha=0.35,
+    solid_capstyle="round",
+    label=f"AGNFITTER-RX  DH02_CE01 (log L$_{{IR}}$={_DH_LIR:g})",
+)
 axL.loglog(wave_ir, norm_peak(L_dh02), "C2-", lw=1.4, label="tengri  dh02_ce01 (matched)")
 axL.set_title("Node-exact matches — tengri reproduces both AGNFITTER-RX libraries")
-axL.text(0.03, 0.97,
-         "shape residual (median |Δ|/peak)\n"
-         f"S17 pair       : {np.median(_resid) * 100:.3f}%\n"
-         f"DH02_CE01 pair : {np.median(_rd) * 100:.3f}%",
-         transform=axL.transAxes, va="top", ha="left", fontsize=7, family="monospace",
-         bbox=dict(boxstyle="round", fc="white", ec="0.6", alpha=0.85))
+axL.text(
+    0.03,
+    0.97,
+    "shape residual (median |Δ|/peak)\n"
+    f"S17 pair       : {np.median(_resid) * 100:.3f}%\n"
+    f"DH02_CE01 pair : {np.median(_rd) * 100:.3f}%",
+    transform=axL.transAxes,
+    va="top",
+    ha="left",
+    fontsize=7,
+    family="monospace",
+    bbox=dict(boxstyle="round", fc="white", ec="0.6", alpha=0.85),
+)
 axR.loglog(w_s17, norm_peak(L_s17), "0.6", lw=2.0, alpha=0.6, label="AGNFITTER-RX  S17 (ref)")
 axR.loglog(wave_ir, norm_peak(L_s16), "C1-", lw=1.5, label="tengri  schreiber2016 (analytic)")
 axR.loglog(wave_ir, norm_peak(L_d14), "C4-", lw=1.5, label=r"tengri  dale2014 ($\alpha=1.5$)")
@@ -733,13 +785,13 @@ disk_pairs = [
     (
         "KD18",
         dict(log_mbh=8.0, log_edd=-1.0),
-        lambda: tengri_disc(
-            "kubota_done", log_lbol=kd18_log_lbol(8.0, -1.0), agn_log_mbh=8.0
-        ),
+        lambda: tengri_disc("kubota_done", log_lbol=kd18_log_lbol(8.0, -1.0), agn_log_mbh=8.0),
         "kubota_done (3-zone, matched L_bol)",
     ),
     ("THB21", {}, tengri_qsogen_full, "qsogen + lines + FeII"),
 ]
+
+
 def _val_at(w, L, lam):
     """Interpolated value of L at wavelength ``lam`` (sorts w first)."""
     o = np.argsort(np.asarray(w))
@@ -747,7 +799,11 @@ def _val_at(w, L, lam):
 
 
 _ANNOT = dict(
-    transform=None, va="top", ha="left", fontsize=7, family="monospace",
+    transform=None,
+    va="top",
+    ha="left",
+    fontsize=7,
+    family="monospace",
     bbox=dict(boxstyle="round", fc="white", ec="0.6", alpha=0.85),
 )
 
@@ -766,8 +822,15 @@ for ax, (af_name, af_kw, tengri_fn, tengri_label) in zip(axes.ravel(), disk_pair
     msk_a = (w_a > 5e2) & (w_a < 5e4)
     # AGNFITTER-RX as a thick, semi-transparent band; tengri as a thin line on
     # top — the two stay legible even where they lie exactly on one another.
-    ax.loglog(w_a[msk_a], a_norm[msk_a], "C0-", lw=4.0, alpha=0.35,
-              solid_capstyle="round", label=f"AGNFITTER  {af_name}")
+    ax.loglog(
+        w_a[msk_a],
+        a_norm[msk_a],
+        "C0-",
+        lw=4.0,
+        alpha=0.35,
+        solid_capstyle="round",
+        label=f"AGNFITTER  {af_name}",
+    )
     # tengri at NATIVE resolution — qsogen's lines are what a real fit uses,
     # so the THB21 panel now shows the full line rather than a downsampled one.
     w_t, L_t = tengri_fn()
@@ -782,12 +845,14 @@ for ax, (af_name, af_kw, tengri_fn, tengri_label) in zip(axes.ravel(), disk_pair
         # ~104 Å undersampling), and AGNFITTER's weaker stored template.
         _ot = np.argsort(np.asarray(w_t))
         _t_on_af = np.interp(np.asarray(w_a), np.asarray(w_t)[_ot], np.asarray(t_norm)[_ot])
-        _lad = ("tall lines = tengri resolving native\n"
-                "qsogen (a feature; AF grid downsamples)\n"
-                "Hα/2500 Å\n"
-                f"tengri native : {_val_at(w_t, t_norm, 6563):.2f}\n"
-                f" on AF grid   : {_val_at(w_a, _t_on_af, 6563):.2f}\n"
-                f"AGNFITTER     : {_val_at(w_a, a_norm, 6563):.2f}")
+        _lad = (
+            "tall lines = tengri resolving native\n"
+            "qsogen (a feature; AF grid downsamples)\n"
+            "Hα/2500 Å\n"
+            f"tengri native : {_val_at(w_t, t_norm, 6563):.2f}\n"
+            f" on AF grid   : {_val_at(w_a, _t_on_af, 6563):.2f}\n"
+            f"AGNFITTER     : {_val_at(w_a, a_norm, 6563):.2f}"
+        )
         ax.text(0.03, 0.97, _lad, **{**_ANNOT, "transform": ax.transAxes})
 
     if af_name == "KD18":
@@ -805,10 +870,12 @@ for ax, (af_name, af_kw, tengri_fn, tengri_label) in zip(axes.ravel(), disk_pair
         m = (w_a_s >= 1.2e3) & (w_a_s <= 1e4) & (a_norm[oa_] > 0)
         _t_on = np.interp(w_a_s[m], np.asarray(w_t)[ot_], t_norm[ot_])
         _lr = np.abs(np.log10(_t_on / a_norm[oa_][m]))
-        _res = ("disc window 1200 Å–1 µm\n"
-                f"median : {np.median(_lr):.3f} dex\n"
-                f"max    : {_lr.max():.2f} dex\n"
-                "shaded wings: model-dependent\n(tengri → physical self-gravity R_out)")
+        _res = (
+            "disc window 1200 Å–1 µm\n"
+            f"median : {np.median(_lr):.3f} dex\n"
+            f"max    : {_lr.max():.2f} dex\n"
+            "shaded wings: model-dependent\n(tengri → physical self-gravity R_out)"
+        )
         ax.text(0.03, 0.97, _res, **{**_ANNOT, "transform": ax.transAxes})
 
     ax.set_xlim(5e2, 5e4)
@@ -919,31 +986,41 @@ print("§9b  A(1500 Å) per E(B-V) [mag]:")
 for ebv, c in [(0.1, "C2"), (0.3, "C1"), (0.5, "C3")]:
     L_red = A.apply_bbb_reddening(w_thb, L_thb, ebv)
     ratio_af = np.divide(L_red, L_thb, out=np.ones_like(L_red), where=L_thb > 0)
-    ax.loglog(w_thb[msk], ratio_af[msk], c, ls="-", lw=1.4,
-              label=f"AGNFITTER  E(B−V) = {ebv:g}")
+    ax.loglog(w_thb[msk], ratio_af[msk], c, ls="-", lw=1.4, label=f"AGNFITTER  E(B−V) = {ebv:g}")
     w_te, L_te = tengri_disc("qsogen", ebv_disc=ebv)
     ratio_te = np.divide(L_te, L_te0, out=np.ones_like(L_te), where=L_te0 > 0)
     msk_te = (w_te > 8e2) & (w_te < 1e4)
-    ax.loglog(w_te[msk_te], ratio_te[msk_te], c, ls="--", lw=1.4,
-              label=f"tengri  E(B−V) = {ebv:g}")
+    ax.loglog(
+        w_te[msk_te], ratio_te[msk_te], c, ls="--", lw=1.4, label=f"tengri  E(B−V) = {ebv:g}"
+    )
     a_af = -2.5 * np.log10(np.interp(1500.0, w_thb, ratio_af))
     a_te = -2.5 * np.log10(np.interp(1500.0, w_te, ratio_te))
-    print(f"  E(B-V)={ebv:g}:  AGNFITTER = {a_af:.2f}   tengri = {a_te:.2f}   "
-          f"(ratio {a_te / a_af:.3f}, convention 1.102)")
+    print(
+        f"  E(B-V)={ebv:g}:  AGNFITTER = {a_af:.2f}   tengri = {a_te:.2f}   "
+        f"(ratio {a_te / a_af:.3f}, convention 1.102)"
+    )
 # Convention-matched demonstration: tengri at E(B−V) = 0.3/1.102 = 0.272 lands
 # exactly on AGNFITTER-RX's 0.3 solid — identical LAW SHAPE, the offset is a
 # pure R_V normalization (2.72 vs 2.468), fully resolved by rescaling E(B−V).
 w_tm, L_tm = tengri_disc("qsogen", ebv_disc=0.3 / 1.102)
 ratio_tm = np.divide(L_tm, L_te0, out=np.ones_like(L_tm), where=L_te0 > 0)
 msk_tm = (w_tm > 8e2) & (w_tm < 1e4)
-ax.loglog(w_tm[msk_tm], ratio_tm[msk_tm], "k:", lw=1.8,
-          label="tengri E(B−V)=0.3/1.102 → on AF 0.3")
-ax.text(0.03, 0.60,
-        "convention resolved (§4):\n"
-        "E(B−V)_tengri = E(B−V)_AF / 1.102\n"
-        "R_V 2.72 (physical) vs 2.468 — same shape",
-        transform=ax.transAxes, va="top", ha="left", fontsize=7, family="monospace",
-        bbox=dict(boxstyle="round", fc="white", ec="0.6", alpha=0.85))
+ax.loglog(
+    w_tm[msk_tm], ratio_tm[msk_tm], "k:", lw=1.8, label="tengri E(B−V)=0.3/1.102 → on AF 0.3"
+)
+ax.text(
+    0.03,
+    0.60,
+    "convention resolved (§4):\n"
+    "E(B−V)_tengri = E(B−V)_AF / 1.102\n"
+    "R_V 2.72 (physical) vs 2.468 — same shape",
+    transform=ax.transAxes,
+    va="top",
+    ha="left",
+    fontsize=7,
+    family="monospace",
+    bbox=dict(boxstyle="round", fc="white", ec="0.6", alpha=0.85),
+)
 ax.set_xlabel(r"$\lambda$ [Å]")
 ax.set_ylabel(r"$L(E(B{-}V))\ /\ L(0)$")
 ax.set_title("Disk reddening sweep (Prevot SMC) — both codes, template-free")
@@ -1024,8 +1101,15 @@ for ax, (af_name, title, tengri_fn, tengri_label, af_kw) in zip(axes.ravel(), to
     msk_a = (w_a > 5e3) & (w_a < 1e7)
     # AGNFITTER-RX as a thick, semi-transparent band; tengri as a thin line on
     # top — the two stay legible even where they lie exactly on one another.
-    ax.loglog(w_a[msk_a], norm_peak(L_a)[msk_a], "C0-", lw=4.0, alpha=0.35,
-              solid_capstyle="round", label=f"AGNFITTER  {af_name}")
+    ax.loglog(
+        w_a[msk_a],
+        norm_peak(L_a)[msk_a],
+        "C0-",
+        lw=4.0,
+        alpha=0.35,
+        solid_capstyle="round",
+        label=f"AGNFITTER  {af_name}",
+    )
     w_t, L_t = tengri_fn()
     msk_t = (w_t > 5e3) & (w_t < 1e7)
     ax.loglog(w_t[msk_t], norm_peak(L_t)[msk_t], "C1-", lw=1.4, label=f"tengri  {tengri_label}")
@@ -1158,15 +1242,15 @@ for fwd, c in [(1.0, "C0"), (1.75, "C1"), (2.25, "C3")]:
     msk_a = (w_a > 5e3) & (w_a < 1e7)
     msk_t = (w_t > 5e3) & (w_t < 1e7)
     ax.loglog(w_a[msk_a], norm_peak(L_a)[msk_a], c, ls="--", lw=1.2)
-    ax.loglog(
-        w_t[msk_t], norm_peak(L_t)[msk_t], c, ls="-", lw=1.5, label=f"$f_{{wd}}$ = {fwd:g}"
-    )
+    ax.loglog(w_t[msk_t], norm_peak(L_t)[msk_t], c, ls="-", lw=1.5, label=f"$f_{{wd}}$ = {fwd:g}")
     a_on = np.interp(np.log10(_fwd_grid), np.log10(w_a), norm_peak(L_a))
     t_on = np.interp(np.log10(_fwd_grid), np.log10(w_t), norm_peak(L_t))
     ok = a_on > 1e-3
     _res = np.abs(t_on[ok] / a_on[ok] - 1.0)
-    print(f"  f_wd = {fwd:4g}:  median |ratio-1| = {np.median(_res) * 100:.2f}%   "
-          f"max = {_res.max() * 100:.2f}%")
+    print(
+        f"  f_wd = {fwd:4g}:  median |ratio-1| = {np.median(_res) * 100:.2f}%   "
+        f"max = {_res.max() * 100:.2f}%"
+    )
 ax.axvspan(1.5e4, 5e4, color="0.92", zorder=0)  # the 1.5-5 µm near-IR excess band
 ax.set_xlim(8e3, 3e6)
 ax.set_ylim(1e-3, 3)
@@ -1210,20 +1294,20 @@ _m9 = SEDModel.build(
     dust_attenuation=NO_DUST,
     agn={
         "type": "composable",
-        "disc": {"type": "qsogen", "all_params": FIXED},
-        "lines": {"type": "qsogen", "all_params": FIXED},
-        "feii": {"type": "qsogen_balmer", "all_params": FIXED},
+        "disc": {"type": "qsogen", "all_params": Fixed(DEFAULT)},
+        "lines": {"type": "qsogen", "all_params": Fixed(DEFAULT)},
+        "feii": {"type": "qsogen_balmer", "all_params": Fixed(DEFAULT)},
         "torus": {
             "type": "cat3d_wind",
             "cos_inc": Fixed(1.0),
             "a_cat3d": Fixed(-2.0),
             "fwd_cat3d": Fixed(1.75),
-            "all_params": FIXED,
+            "all_params": Fixed(DEFAULT),
         },
         "agn_log_lbol": Fixed(12.0),
         "agn_ebv_disc": Fixed(0.0),
         "agn_polar_ebv": Fixed(0.0),
-        "all_params": FIXED,
+        "all_params": Fixed(DEFAULT),
     },
     xray={"type": "yang20"},
     radio={"sf": {"type": "bell2003"}, "agn": {"type": "dpl"}},
@@ -1276,9 +1360,7 @@ af_disc = af_disc * np.clip(  # X-ray from the extension only (same 91→30 Å r
 )
 w_tor, L_tor = A.torus_template("CAT3D", **_CAT3D_NODE)
 af_tor = U.regrid(w_tor, np.clip(L_tor, 0, None), lam9)
-af_tor = (
-    af_tor / np.max(af_tor) * (_te_ir_peak * _L2500_9) if np.max(af_tor) > 0 else af_tor
-)
+af_tor = af_tor / np.max(af_tor) * (_te_ir_peak * _L2500_9) if np.max(af_tor) > 0 else af_tor
 _L_disc_phys = norm_at(w_disc, L_disc, 2500.0) * _L2500_9
 xw, xL = A.disk_xray_extension(w_disc, _L_disc_phys, scatter=0.0)
 af_xray = U.regrid(xw, np.clip(xL, 0, None), lam9)
@@ -1287,8 +1369,15 @@ af_sed9 = af_disc + af_tor + af_xray + af_radio
 af_tot9 = np.where(af_sed9 > 0, nu9 * af_sed9, np.nan)
 
 fig, ax = plt.subplots(figsize=(9.5, 5))
-ax.loglog(nu9, af_tot9, "C0-", lw=4.0, alpha=0.35, solid_capstyle="round",
-          label="AGNFITTER-RX  THB21 + CAT3D + a_ox + DPL")
+ax.loglog(
+    nu9,
+    af_tot9,
+    "C0-",
+    lw=4.0,
+    alpha=0.35,
+    solid_capstyle="round",
+    label="AGNFITTER-RX  THB21 + CAT3D + a_ox + DPL",
+)
 ax.loglog(nu9, te_tot9, "C1-", lw=1.6, label="tengri  total (one build)")
 # tengri component decomposition (thin lines) — what makes up the winning model.
 ax.loglog(nu9, te_agn9, "C3-", lw=1.0, alpha=0.75, label="   disc + torus")
@@ -1296,8 +1385,17 @@ ax.loglog(nu9, te_xray9, "C4-", lw=1.0, alpha=0.75, label="   α_ox corona")
 ax.loglog(nu9, te_radio9, "C2-", lw=1.0, alpha=0.75, label="   DPL jet")
 for nu_band, name in [(1.4e9, "radio"), (3e13, "IR"), (6e14, "opt"), (4.8e17, "2 keV")]:
     ax.axvline(nu_band, color="0.85", ls=":", lw=1)
-    ax.text(nu_band, 0.98, f" {name}", transform=ax.get_xaxis_transform(),
-            rotation=90, va="top", ha="left", fontsize=7, color="0.5")
+    ax.text(
+        nu_band,
+        0.98,
+        f" {name}",
+        transform=ax.get_xaxis_transform(),
+        rotation=90,
+        va="top",
+        ha="left",
+        fontsize=7,
+        color="0.5",
+    )
 # Same EUV / soft-X-ray model-dependent band as the capstone.
 ax.axvspan(3.3e15, 4.8e16, color="0.8", alpha=0.30, zorder=0)
 ax.set_xlim(1e8, 1e20)
@@ -1437,14 +1535,26 @@ def _norm5(freq_hz, F):
 
 
 fig, ax = plt.subplots(figsize=(7.5, 4.8))
-ax.loglog(freq / 1e9, _norm5(freq, F_spl_af), "C0-", lw=2.2, alpha=0.45,
-          label=r"AGNFITTER-RX  SPL ($\alpha=-0.75$)")
-ax.loglog(freq / 1e9, norm_at(wave_radio, L_spl, _nu5), "C0--", lw=1.5,
-          label="tengri  radio_agn")
-ax.loglog(freq / 1e9, _norm5(freq, F_dpl_af), "C1-", lw=2.2, alpha=0.45,
-          label="AGNFITTER-RX  DPL (Eq. 9–10)")
-ax.loglog(freq / 1e9, norm_at(wave_radio, L_dpl, _nu5), "C1--", lw=1.5,
-          label="tengri  radio_agn_dpl")
+ax.loglog(
+    freq / 1e9,
+    _norm5(freq, F_spl_af),
+    "C0-",
+    lw=2.2,
+    alpha=0.45,
+    label=r"AGNFITTER-RX  SPL ($\alpha=-0.75$)",
+)
+ax.loglog(freq / 1e9, norm_at(wave_radio, L_spl, _nu5), "C0--", lw=1.5, label="tengri  radio_agn")
+ax.loglog(
+    freq / 1e9,
+    _norm5(freq, F_dpl_af),
+    "C1-",
+    lw=2.2,
+    alpha=0.45,
+    label="AGNFITTER-RX  DPL (Eq. 9–10)",
+)
+ax.loglog(
+    freq / 1e9, norm_at(wave_radio, L_dpl, _nu5), "C1--", lw=1.5, label="tengri  radio_agn_dpl"
+)
 ax.set_xlabel(r"$\nu$ [GHz]")
 ax.set_ylabel(r"$L_\nu$ (norm. at 5 GHz)")
 ax.set_title("AGN core/jet radio — tengri on AGNFITTER-RX's own SPL/DPL")
@@ -1471,11 +1581,13 @@ ratio_dpl = np.where(_band & (t_dpl > 0), t_dpl / _norm5(freq, F_dpl_af), np.nan
 fig, (ax, axr) = plt.subplots(
     2, 1, figsize=(8, 5.5), sharex=True, gridspec_kw={"height_ratios": [3, 1]}
 )
-ax.loglog(freq / 1e9, np.where(t_spl > 0, t_spl, np.nan), "C0-", lw=1.6,
-          label="tengri  radio_agn (SPL)")
+ax.loglog(
+    freq / 1e9, np.where(t_spl > 0, t_spl, np.nan), "C0-", lw=1.6, label="tengri  radio_agn (SPL)"
+)
 ax.loglog(freq / 1e9, _norm5(freq, F_spl_af), "C0:", lw=1.4, label="AGNFITTER-RX  SPL")
-ax.loglog(freq / 1e9, np.where(t_dpl > 0, t_dpl, np.nan), "C1-", lw=1.6,
-          label="tengri  radio_agn_dpl")
+ax.loglog(
+    freq / 1e9, np.where(t_dpl > 0, t_dpl, np.nan), "C1-", lw=1.6, label="tengri  radio_agn_dpl"
+)
 ax.loglog(freq / 1e9, _norm5(freq, F_dpl_af), "C1:", lw=1.4, label="AGNFITTER-RX  DPL")
 ax.set_ylabel(r"$L_\nu$ (norm. at 5 GHz)")
 ax.set_title("Radio parity (0.1–300 GHz band)")
@@ -1491,8 +1603,10 @@ axr.legend(fontsize=8)
 axr.grid(True, alpha=0.3)
 _spl_dmax = float(np.nanmax(np.abs(ratio_spl - 1.0)))
 _dpl_dmax = float(np.nanmax(np.abs(ratio_dpl - 1.0)))
-print(f"§11 radio parity (0.1-300 GHz): SPL max |ratio − 1| = {_spl_dmax:.2e}   "
-      f"DPL max |ratio − 1| = {_dpl_dmax:.2e}")
+print(
+    f"§11 radio parity (0.1-300 GHz): SPL max |ratio − 1| = {_spl_dmax:.2e}   "
+    f"DPL max |ratio − 1| = {_dpl_dmax:.2e}"
+)
 fig.tight_layout()
 save_fig("agnfitter_11c_radio_spl_residual.png")
 plt.show()
@@ -1547,8 +1661,7 @@ L_xrb = np.asarray(xray_xrb(jnp.asarray(wave_x), sfr=5.0, stellar_mass=1e10))
 
 fig, (axl, axr) = plt.subplots(1, 2, figsize=(12.5, 4.8))
 axl.loglog(xw_af, xL_af, "C0-", lw=1.5, label="AGNFITTER-RX  disk X-ray extension")
-axl.loglog(wave_x, L_corona_bare, "C1--", lw=1.5,
-           label="tengri  corona (anisotropy off)")
+axl.loglog(wave_x, L_corona_bare, "C1--", lw=1.5, label="tengri  corona (anisotropy off)")
 axl.loglog(wave_x, L_xrb, "C2:", lw=1.4, label="tengri  xray_xrb (host floor, Mineo+14)")
 axl.set_xlim(2e-2, 1.3e2)
 axl.set_ylim(L_corona_bare.max() * 1e-6, L_corona_bare.max() * 5)
@@ -1562,8 +1675,9 @@ _af_on_wave = np.interp(wave_x, xw_af, xL_af, left=np.nan, right=np.nan)
 _ratio_bare = L_corona_bare / _af_on_wave
 _ratio_default = L_corona_default / _af_on_wave
 axr.semilogx(wave_x, _ratio_bare, "C1-", lw=1.5, label="bare (anisotropy off)")
-axr.semilogx(wave_x, _ratio_default, "C3-", lw=1.5,
-             label="tengri defaults (Yang+22 anisotropy, face-on)")
+axr.semilogx(
+    wave_x, _ratio_default, "C3-", lw=1.5, label="tengri defaults (Yang+22 anisotropy, face-on)"
+)
 axr.axhline(1.0, color="0.5", lw=0.8)
 axr.set_xlim(1e-2, 1e2)
 axr.set_ylim(0.8, 1.3)
@@ -1630,11 +1744,22 @@ L_te_total = L_dust + L_radio
 
 fig, ax = plt.subplots(figsize=(8.2, 4.8))
 msk_af = (w_afr > 1e4) & (w_afr < 3e9)
-ax.loglog(w_afr[msk_af], L_afr[msk_af] / np.max(L_afr[msk_af]), "C0-", lw=2.2, alpha=0.5,
-          label="AGNFITTER-RX  S17_radio (dust + Bell 03 radio)")
+ax.loglog(
+    w_afr[msk_af],
+    L_afr[msk_af] / np.max(L_afr[msk_af]),
+    "C0-",
+    lw=2.2,
+    alpha=0.5,
+    label="AGNFITTER-RX  S17_radio (dust + Bell 03 radio)",
+)
 _peak_te = float(np.max(np.where((wave_all > 1e4), L_te_total, 0.0)))
-ax.loglog(wave_all, L_te_total / _peak_te, "C1--", lw=1.5,
-          label="tengri  schreiber2018 + radio_sfr_bell2003")
+ax.loglog(
+    wave_all,
+    L_te_total / _peak_te,
+    "C1--",
+    lw=1.5,
+    label="tengri  schreiber2018 + radio_sfr_bell2003",
+)
 ax.axvline(U.C_ANGSTROM_PER_S / 1.4e9, color="0.7", ls=":", lw=1, label="1.4 GHz")
 ax.set_xlim(8e3, 3e9)
 ax.set_ylim(1e-6, 3)
@@ -1661,9 +1786,7 @@ _nu_afr = U.C_ANGSTROM_PER_S / w_afr
 _o_afr = np.argsort(_nu_afr)
 _ir_afr = (w_afr > 8e4) & (w_afr < 1e7)
 _L_IR_self = np.trapezoid(np.where(_ir_afr, L_afr, 0.0)[_o_afr], _nu_afr[_o_afr])
-_L14_abs = 10 ** np.interp(
-    np.log10(_lam_14), np.log10(w_afr), np.log10(np.maximum(L_afr, 1e-300))
-)
+_L14_abs = 10 ** np.interp(np.log10(_lam_14), np.log10(w_afr), np.log10(np.maximum(L_afr, 1e-300)))
 _q_upstream = np.log10((_L_IR_self / 3.75e12) / _L14_abs)
 _lam_10g = U.C_ANGSTROM_PER_S / 1.0e10
 _af_10 = np.interp(np.log10(_lam_10g), np.log10(w_afr), L_afr / np.max(L_afr[msk_af]))
@@ -1728,20 +1851,20 @@ m_cap = SEDModel.build(
     dust_attenuation=NO_DUST,
     agn={
         "type": "composable",
-        "disc": {"type": "qsogen", "all_params": FIXED},
-        "lines": {"type": "qsogen", "all_params": FIXED},
-        "feii": {"type": "qsogen_balmer", "all_params": FIXED},
+        "disc": {"type": "qsogen", "all_params": Fixed(DEFAULT)},
+        "lines": {"type": "qsogen", "all_params": Fixed(DEFAULT)},
+        "feii": {"type": "qsogen_balmer", "all_params": Fixed(DEFAULT)},
         "torus": {
             "type": "cat3d_wind",
             "cos_inc": Fixed(1.0),
             "a_cat3d": Fixed(-2.0),
             "fwd_cat3d": Fixed(1.75),
-            "all_params": FIXED,
+            "all_params": Fixed(DEFAULT),
         },
         "agn_log_lbol": Fixed(12.0),
         "agn_ebv_disc": Fixed(0.0),
         "agn_polar_ebv": Fixed(0.0),
-        "all_params": FIXED,
+        "all_params": Fixed(DEFAULT),
     },
     xray={"type": "yang20"},
     radio={"sf": {"type": "bell2003"}, "agn": {"type": "dpl"}},
@@ -1758,9 +1881,7 @@ L2500 = float(np.interp(2500.0, w_te[_owt], _agn_te[_owt]))  # disc anchor
 # default adds the ×1.072 Yang+22 term). Masked to λ < 100 Å (its physical
 # domain) so it does not extrapolate into the disc's UV.
 _xray_raw = np.asarray(
-    xray_agn_corona_from_disc(
-        jnp.asarray(w_te), L2500, delta_alpha_ox=0.0, apply_anisotropy=False
-    )
+    xray_agn_corona_from_disc(jnp.asarray(w_te), L2500, delta_alpha_ox=0.0, apply_anisotropy=False)
 )
 _xray_raw_masked = np.where(w_te < 100.0, _xray_raw, 0.0)
 _xray_te = _xray_raw_masked
@@ -1822,25 +1943,46 @@ af_plot = np.where(af_sed > 0, nu_grid * af_sed, np.nan)
 te_plot = np.where(te_sed > 0, nu_grid * te_sed, np.nan)
 
 fig, ax = plt.subplots(figsize=(9.5, 5))
-ax.loglog(nu_grid, af_plot, "C0-", lw=4.0, alpha=0.35, solid_capstyle="round",
-          label="AGNFITTER-RX  THB21 + CAT3D + a_ox X-ray + DPL")
-ax.loglog(nu_grid, te_plot, "C1-", lw=1.4,
-          label="tengri  one SEDModel.build (disc+torus+corona+jet)")
+ax.loglog(
+    nu_grid,
+    af_plot,
+    "C0-",
+    lw=4.0,
+    alpha=0.35,
+    solid_capstyle="round",
+    label="AGNFITTER-RX  THB21 + CAT3D + a_ox X-ray + DPL",
+)
+ax.loglog(
+    nu_grid, te_plot, "C1-", lw=1.4, label="tengri  one SEDModel.build (disc+torus+corona+jet)"
+)
 for nu_band, name in [(1.4e9, "radio"), (3e13, "IR"), (6e14, "opt"), (4.8e17, "2 keV")]:
     ax.axvline(nu_band, color="0.85", ls=":", lw=1)
-    ax.text(nu_band, ax.get_ylim()[1], f" {name}", rotation=90, va="top", ha="left",
-            fontsize=7, color="0.5")
+    ax.text(
+        nu_band,
+        ax.get_ylim()[1],
+        f" {name}",
+        rotation=90,
+        va="top",
+        ha="left",
+        fontsize=7,
+        color="0.5",
+    )
 # Make the energy balance legible: the torus reprocesses a covering fraction
 # f_cov of the AGN output into the IR, and the disc is debited by (1 - f_cov),
 # so disc + torus conserve L_bol. The mid-IR bump therefore out-peaks the
 # (debited) big blue bump in nu*L_nu by spectral concentration, not because the
 # torus is over-normalized (f_cov < 1).
 ax.text(
-    0.015, 0.97,
+    0.015,
+    0.97,
     f"torus covering  f = L_IR/L_AGN ~ {_f_cov:.2f}\n"
     "disc debited x(1 - f); disc + torus = L_bol\n"
     "(energy balance, not a display fraction)",
-    transform=ax.transAxes, va="top", ha="left", fontsize=7, family="monospace",
+    transform=ax.transAxes,
+    va="top",
+    ha="left",
+    fontsize=7,
+    family="monospace",
     bbox=dict(boxstyle="round", fc="white", ec="0.6", alpha=0.85),
 )
 # Shade the EUV / soft-X-ray bridge (13.6 eV – 0.2 keV): here BOTH codes
@@ -1851,9 +1993,16 @@ ax.text(
 # here (that lives in tengri's kubota_done disc, §9a). Disc/torus/radio and the
 # 2 keV anchor all overlay — the divergence is confined to this shaded band.
 ax.axvspan(3.3e15, 4.8e16, color="0.8", alpha=0.30, zorder=0)
-ax.text(1.26e16, 0.055, "EUV / soft-X\nmodel-dependent\n(unobservable)",
-        transform=ax.get_xaxis_transform(), fontsize=6.5, color="0.45",
-        ha="center", va="bottom")
+ax.text(
+    1.26e16,
+    0.055,
+    "EUV / soft-X\nmodel-dependent\n(unobservable)",
+    transform=ax.get_xaxis_transform(),
+    fontsize=6.5,
+    color="0.45",
+    ha="center",
+    va="bottom",
+)
 ax.set_xlim(1e8, 1e20)
 _te_fin = te_plot[np.isfinite(te_plot)]
 ax.set_ylim(_te_fin.max() * 1e-9, _te_fin.max() * 5)

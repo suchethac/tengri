@@ -27,7 +27,7 @@ import jax
 import pytest
 
 import tengri
-from tengri import FIXED, Fixed, SEDModel
+from tengri import DEFAULT, Fixed, SEDModel
 from tengri.components.stellar.sfh.registry import UNVALIDATED_SFH_TYPES
 
 pytestmark = [pytest.mark.contract, pytest.mark.regression_bug]
@@ -584,7 +584,7 @@ def test_property_catalog_get(synthetic_ssp_wide, synthetic_tophat_obs):
     model = SEDModel.build(
         ssp_data=synthetic_ssp_wide,
         observation=synthetic_tophat_obs,
-        sfh={"type": "dpl", "all_params": FIXED},
+        sfh={"type": "dpl", "all_params": Fixed(DEFAULT)},
         redshift=Fixed(0.1),
     )
     pred = model.predict(model.spec.sample(jax.random.PRNGKey(0)))

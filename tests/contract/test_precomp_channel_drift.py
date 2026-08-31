@@ -69,22 +69,22 @@ _SHOCK_BOUND = 2e-3
 
 
 def _build(ssp, approx, *, tau_diff, tau_bc, z, neb, shock, dust_type="two_component"):
-    from tengri import FIXED, Fixed, Observation, Photometry, SEDModel
+    from tengri import DEFAULT, Fixed, Observation, Photometry, SEDModel
 
-    shock_group = {"frac": 1.0, "all_params": FIXED} if shock else {"type": "none"}
+    shock_group = {"frac": 1.0, "all_params": Fixed(DEFAULT)} if shock else {"type": "none"}
     if dust_type == "single_component":
         # One screen over all stars; tau_v is its depth. tau_bc has no analog here.
         dust_group = {
             "type": "single_component",
             "law": "calzetti",
-            "all_params": FIXED,
+            "all_params": Fixed(DEFAULT),
             "tau_v": tau_diff,
         }
     else:
         dust_group = {
             "type": "two_component",
             "law": "calzetti",
-            "all_params": FIXED,
+            "all_params": Fixed(DEFAULT),
             "tau_diff": tau_diff,
             "tau_bc": tau_bc,
         }
@@ -93,13 +93,13 @@ def _build(ssp, approx, *, tau_diff, tau_bc, z, neb, shock, dust_type="two_compo
         observation=Observation(photometry=Photometry.from_names(["sdss_g", "sdss_r", "sdss_i"])),
         sfh={
             "type": "delayed",
-            "all_params": FIXED,
+            "all_params": Fixed(DEFAULT),
             "log_total_mass": 10.0,
             "tau_gyr": 1.0,
             "age_gyr": 5.0,
         },
         dust_attenuation=dust_group,
-        neb={"type": neb, "all_params": FIXED},
+        neb={"type": neb, "all_params": Fixed(DEFAULT)},
         shock=shock_group,
         redshift=Fixed(z),
         approx=approx,

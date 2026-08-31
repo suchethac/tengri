@@ -51,14 +51,14 @@ import jax.numpy as jnp
 import numpy as np
 import pytest
 
-from tengri import FIXED, Fixed, Observation, Photometry, SEDModel, Uniform
+from tengri import DEFAULT, Fixed, Observation, Photometry, SEDModel, Uniform
 from tengri.config.exceptions import DeadGradientParameterWarning
 
 pytestmark = pytest.mark.regression_bug
 
 _SFH = {
     "type": "delayed",
-    "all_params": FIXED,
+    "all_params": Fixed(DEFAULT),
     "log_total_mass": Uniform(9.0, 11.0),
     "tau_gyr": 1.0,
     "age_gyr": 5.0,
@@ -67,7 +67,7 @@ _SFH = {
 
 def _build(ssp, *, free_kt_warm):
     """A KD18-disc AGN model, with ``kt_warm`` freed or pinned."""
-    disc = {"type": "kubota_done", "all_params": FIXED}
+    disc = {"type": "kubota_done", "all_params": Fixed(DEFAULT)}
     disc["kt_warm"] = Uniform(0.1, 0.5) if free_kt_warm else Fixed(0.2)
     return SEDModel.build(
         ssp_data=ssp,
@@ -76,7 +76,7 @@ def _build(ssp, *, free_kt_warm):
         sfh=_SFH,
         agn={
             "type": "composable",
-            "all_params": FIXED,
+            "all_params": Fixed(DEFAULT),
             "disc": disc,
             "log_lbol": Uniform(9.0, 12.0),
         },

@@ -46,7 +46,7 @@ def base_model():
         tengri.load_ssp_data(str(_SSP_PATH)),
         sfh={
             "type": "dpl",
-            "all_params": tengri.FIXED,
+            "all_params": tengri.Fixed(tengri.DEFAULT),
             "tau_gyr": 0.3,
             "log_total_mass": 1.5,
             "alpha": 1.0,
@@ -55,13 +55,13 @@ def base_model():
         dust_attenuation={
             "law": "power_law",
             "type": "two_component",
-            "all_params": tengri.FIXED,
+            "all_params": tengri.Fixed(tengri.DEFAULT),
             "tau_diff": 0.0,
             "tau_bc": 0.0,
         },
         neb={
             "type": "cue",
-            "all_params": tengri.FIXED,
+            "all_params": tengri.Fixed(tengri.DEFAULT),
             "dig_frac": Uniform(0.0, 1.0),
             "dig_delta_logU": Uniform(-3.0, -0.1),
         },

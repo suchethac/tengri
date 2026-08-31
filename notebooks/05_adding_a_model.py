@@ -60,14 +60,7 @@ import numpy as np
 import matplotlib.pyplot as plt
 
 import tengri
-from tengri import (
-    FIXED,
-    Fixed,
-    Observation,
-    Photometry,
-    SEDModel,
-    Uniform,
-)
+from tengri import DEFAULT, Fixed, Observation, Photometry, SEDModel, Uniform
 from tengri.components.sed_model_component import SEDModelComponent
 from tengri.parameters.priors import Distribution
 
@@ -197,6 +190,7 @@ for d in MyModifiedBlackbody().declared_parameters():
 # hand-rolled input/output names — the shape that looks right and isn't.
 # It registers. It is still unusable.
 
+
 # %%
 class _BrokenMBB(SEDModelComponent):
     """Registers fine. `build()` will never accept it."""
@@ -253,12 +247,13 @@ if ssp is not None:
     model = SEDModel.build(
         ssp_data=ssp,
         observation=obs,
-        sfh={"type": "dpl", "all_params": FIXED},
+        sfh={"type": "dpl", "all_params": Fixed(DEFAULT)},
         dust_attenuation={
             "type": "single_component",
             "law": "calzetti",
             "tau_v": Fixed(0.4),
-        }, dust_emission={"type": "my_modified_blackbody", "T": Fixed(35.0), "beta_ir": Fixed(1.8)},
+        },
+        dust_emission={"type": "my_modified_blackbody", "T": Fixed(35.0), "beta_ir": Fixed(1.8)},
         redshift=Fixed(0.05),
     )
     model.spec.summary()

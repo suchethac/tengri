@@ -33,7 +33,7 @@ import jax.numpy as jnp
 import numpy as np
 import pytest
 
-from tengri import FIXED, Fitter, Fixed, Observation, Photometry, SEDModel, Uniform
+from tengri import DEFAULT, Fitter, Fixed, Observation, Photometry, SEDModel, Uniform
 from tengri.inference.context import InferenceContext
 
 pytestmark = pytest.mark.regression_bug
@@ -61,7 +61,7 @@ def _build(ssp, obs):
         observation=obs,
         sfh={
             "type": "delayed",
-            "all_params": FIXED,
+            "all_params": Fixed(DEFAULT),
             "log_total_mass": Uniform(9.0, 11.0),
             "tau_gyr": 1.0,
             "age_gyr": 5.0,
@@ -72,15 +72,15 @@ def _build(ssp, obs):
         dust_attenuation={
             "type": "two_component",
             "law": "calzetti",
-            "all_params": FIXED,
+            "all_params": Fixed(DEFAULT),
             "tau_diff": 0.3,
             "tau_bc": 0.0,
         },
         agn={
             "type": "composable",
-            "all_params": FIXED,
-            "disc": {"type": "multicolor", "all_params": FIXED},
-            "torus": {"type": "skirtor", "all_params": FIXED},
+            "all_params": Fixed(DEFAULT),
+            "disc": {"type": "multicolor", "all_params": Fixed(DEFAULT)},
+            "torus": {"type": "skirtor", "all_params": Fixed(DEFAULT)},
             "norm": "cigale_joint",
             "log_lbol": Fixed(10.5),  # #2069: pinned to break flat direction
             "fracAGN": 0.1,

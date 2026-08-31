@@ -127,7 +127,7 @@ class TestBlock:
 def test_end_to_end_through_build(ssp_data_bc03):
     """agn_attenuation_ebv with atten='qsogen' reddens the AGN SED through
     SEDModel.build (not a silent no-op), matching 10^(-0.4*(curve+R)*ebv)."""
-    from tengri import FIXED, Fixed, SEDModel
+    from tengri import DEFAULT, Fixed, SEDModel
 
     def build(ebv):
         return SEDModel.build(
@@ -137,25 +137,25 @@ def test_end_to_end_through_build(ssp_data_bc03):
                 "tau_gyr": Fixed(1.0),
                 "age_gyr": Fixed(5.0),
                 "log_total_mass": Fixed(10.0),
-                "all_params": FIXED,
+                "all_params": Fixed(DEFAULT),
             },
             dust_attenuation={
                 "law": "power_law",
                 "type": "two_component",
                 "tau_bc": Fixed(0.0),
                 "tau_diff": Fixed(0.0),
-                "all_params": FIXED,
+                "all_params": Fixed(DEFAULT),
             },
             agn={
                 "type": "composable",
-                "disc": {"type": "qsogen", "all_params": FIXED},
+                "disc": {"type": "qsogen", "all_params": Fixed(DEFAULT)},
                 "torus": {"type": "none"},
                 "lines": {"type": "none"},
                 "feii": {"type": "none"},
                 "atten": {"type": "qsogen", "agn_attenuation_ebv": Fixed(ebv)},
                 "agn_log_lbol": Fixed(11.0),
                 "agn_polar_ebv": Fixed(0.0),
-                "all_params": FIXED,
+                "all_params": Fixed(DEFAULT),
             },
             redshift=Fixed(0.0),
         )

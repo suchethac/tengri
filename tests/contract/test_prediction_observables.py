@@ -34,7 +34,7 @@ import numpy as np
 import pytest
 
 import tengri
-from tengri import FIXED, Fixed, Observation, SEDModel, Spectroscopy, WavePrecomp
+from tengri import DEFAULT, Fixed, Observation, SEDModel, Spectroscopy, WavePrecomp
 from tengri.observation.photometry_config import Photometry
 from tengri.utils.magnitudes import fnu_to_ab_mag
 
@@ -46,8 +46,8 @@ _EXTRA = "jwst_f356w"
 # (3562 A) sits inside the forest and is heavily absorbed. The JWST bands above do
 # NOT: they sample rest-frame >3700 A, where IGM transmission is ~1.
 _FOREST_FILTERS = ["sdss_u", "sdss_g"]
-_SFH = {"type": "dpl", "all_params": FIXED}
-_DUST = {"type": "single_component", "law": "calzetti", "all_params": FIXED}
+_SFH = {"type": "dpl", "all_params": Fixed(DEFAULT)}
+_DUST = {"type": "single_component", "law": "calzetti", "all_params": Fixed(DEFAULT)}
 # z=3 keeps the IGM transmission live: at low z it is ~1 and would mask a
 # projection path that drops it entirely.
 _Z = 3.0

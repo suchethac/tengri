@@ -11,7 +11,7 @@ from pathlib import Path
 import numpy as np
 import pytest
 
-from tengri import FIXED, FREE, Fixed, Parameters, SEDModel, Uniform, parse_groups
+from tengri import DEFAULT, FREE, Fixed, Parameters, SEDModel, Uniform, parse_groups
 from tengri.components.stellar.sps.dsps_wrapper import load_ssp_data
 
 # ── SSP fixture ───────────────────────────────────────────────────
@@ -40,7 +40,7 @@ class TestFromGroupsConstruction:
         """Smallest possible config builds without error."""
         model = SEDModel.build(
             ssp_data=ssp,
-            sfh={"type": "dpl", "all_params": FIXED},
+            sfh={"type": "dpl", "all_params": Fixed(DEFAULT)},
             redshift=Fixed(0.1),
         )
         assert isinstance(model, SEDModel)
@@ -53,7 +53,7 @@ class TestFromGroupsConstruction:
             dust_attenuation={
                 "type": "two_component",
                 "law": "calzetti",
-                "all_params": FIXED,
+                "all_params": Fixed(DEFAULT),
                 "tau_bc": 0.5,
             },
             redshift=Fixed(0.05),
@@ -68,7 +68,7 @@ class TestFromGroupsConstruction:
         """Passing None for an optional group is a no-op."""
         model = SEDModel.build(
             ssp_data=ssp,
-            sfh={"type": "dpl", "all_params": FIXED},
+            sfh={"type": "dpl", "all_params": Fixed(DEFAULT)},
             dust_attenuation=None,
             neb=None,
             redshift=Fixed(0.1),
@@ -186,8 +186,8 @@ class TestValidation:
         """AGN group activates composable AGN model (was deferred until PR4)."""
         model = SEDModel.build(
             ssp_data=ssp,
-            sfh={"type": "dpl", "all_params": FIXED},
-            agn={"disc": {"type": "powerlaw", "all_params": FIXED}},
+            sfh={"type": "dpl", "all_params": Fixed(DEFAULT)},
+            agn={"disc": {"type": "powerlaw", "all_params": Fixed(DEFAULT)}},
             redshift=Fixed(0.1),
         )
         assert model.spec.agn_model == "composable"
@@ -197,6 +197,6 @@ class TestValidation:
         with pytest.raises(ValueError):
             SEDModel.build(
                 ssp_data=ssp,
-                sfh={"type": "banana", "all_params": FIXED},
+                sfh={"type": "banana", "all_params": Fixed(DEFAULT)},
                 redshift=Fixed(0.1),
             )

@@ -74,14 +74,18 @@ def _bind(forward, data):
 
 @pytest.fixture
 def forward_with_lines(synthetic_ssp, synthetic_tophat_obs):
-    from tengri import FIXED, Fixed, ForwardModel, SEDModel
+    from tengri import DEFAULT, Fixed, ForwardModel, SEDModel
 
     obs = _line_obs(synthetic_tophat_obs, declared_limit=False)
     sed = SEDModel.build(
         ssp_data=synthetic_ssp,
         observation=obs,
-        sfh={"type": "dpl", "all_params": FIXED},
-        dust_attenuation={"type": "two_component", "law": "calzetti", "all_params": FIXED},
+        sfh={"type": "dpl", "all_params": Fixed(DEFAULT)},
+        dust_attenuation={
+            "type": "two_component",
+            "law": "calzetti",
+            "all_params": Fixed(DEFAULT),
+        },
         redshift=Fixed(0.1),
     )
     return ForwardModel.build(sed=sed, observation=obs)
@@ -174,14 +178,18 @@ def test_schema_declared_limits_are_not_silently_discarded(
     ``Data(lines=...)``; before #1460 that migration dropped their flags with
     no warning. Either the flags survive or the user is told — never silence.
     """
-    from tengri import FIXED, Data, Fixed, ForwardModel, SEDModel
+    from tengri import DEFAULT, Data, Fixed, ForwardModel, SEDModel
 
     obs = _line_obs(synthetic_tophat_obs, declared_limit=True)
     sed = SEDModel.build(
         ssp_data=synthetic_ssp,
         observation=obs,
-        sfh={"type": "dpl", "all_params": FIXED},
-        dust_attenuation={"type": "two_component", "law": "calzetti", "all_params": FIXED},
+        sfh={"type": "dpl", "all_params": Fixed(DEFAULT)},
+        dust_attenuation={
+            "type": "two_component",
+            "law": "calzetti",
+            "all_params": Fixed(DEFAULT),
+        },
         redshift=Fixed(0.1),
     )
     forward = ForwardModel.build(sed=sed, observation=obs)

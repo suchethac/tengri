@@ -147,15 +147,16 @@ ssp = tengri.load_ssp_data(str(repo_root / "data" / "fsps_prsc_miles_chabrier.h5
 # Use dpl (double-power-law) SFH with free log_total_mass (normalization)
 model = tengri.SEDModel.build(
     ssp,
-    sfh={"type": "dpl", "all_params": tengri.FIXED, "log_total_mass": 10.0},
+    sfh={"type": "dpl", "all_params": tengri.Fixed(tengri.DEFAULT), "log_total_mass": 10.0},
     dust_attenuation={
         "law": "power_law",
         "type": "two_component",
-        "all_params": tengri.FIXED,
+        "all_params": tengri.Fixed(tengri.DEFAULT),
         "tau_diff": 0.0,
         "tau_bc": 0.0,
     },
-    neb={"type": "cue", "all_params": tengri.FIXED}, redshift=Fixed(0.1),
+    neb={"type": "cue", "all_params": tengri.Fixed(tengri.DEFAULT)},
+    redshift=Fixed(0.1),
 )
 
 # Sample baseline parameters (all fixed except log_total_mass)

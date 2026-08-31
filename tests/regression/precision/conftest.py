@@ -50,15 +50,15 @@ def build_minimal_cue_model(ssp, forward_dtype):
     Used to isolate the ionizing-SED float32 safety check without AGN
     SKIRTOR interpolation failures that affect pure-f32 tests.
     """
-    from tengri import FIXED, Fixed, SEDModel
+    from tengri import DEFAULT, Fixed, SEDModel
     from tengri.observation import Observation, Photometry
 
     obs = Observation(photometry=Photometry.from_names(["sdss_r", "sdss_i"]))
     return SEDModel.build(
         ssp_data=ssp,
         observation=obs,
-        sfh={"type": "dpl", "all_params": FIXED},
-        neb={"type": "cue", "all_params": FIXED},
+        sfh={"type": "dpl", "all_params": Fixed(DEFAULT)},
+        neb={"type": "cue", "all_params": Fixed(DEFAULT)},
         redshift=Fixed(1.0),
         approx=None,
         forward_dtype=forward_dtype,

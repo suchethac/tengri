@@ -53,14 +53,15 @@ import numpy as np
 from _setup import FIG_DIR
 import tengri
 from tengri import (
-    FIXED,
-    Observation,
-    Photometry,
-    SEDModel,
     builders,
     citations,
+    DEFAULT,
+    Fixed,
+    Observation,
+    Photometry,
     plot,
     recipes,
+    SEDModel,
 )
 
 plot.setup_style()
@@ -110,8 +111,12 @@ def _build_sfh(sfh_factory):
     return SEDModel.build(
         ssp_data=ssp,
         observation=obs,
-        sfh=sfh_factory(all_params=FIXED),
-        dust_attenuation={"type": "two_component", "law": "calzetti", "all_params": FIXED},
+        sfh=sfh_factory(all_params=Fixed(DEFAULT)),
+        dust_attenuation={
+            "type": "two_component",
+            "law": "calzetti",
+            "all_params": Fixed(DEFAULT),
+        },
         neb={"type": "none"},
         redshift=0.05,
     )

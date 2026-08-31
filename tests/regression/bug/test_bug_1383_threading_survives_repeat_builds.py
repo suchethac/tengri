@@ -23,7 +23,7 @@ import warnings
 import jax
 import pytest
 
-from tengri import FIXED, SEDModel
+from tengri import DEFAULT, SEDModel
 from tengri.components.stellar.sps.dsps_wrapper import load_ssp_data
 from tengri.observation import Observation, Photometry
 from tengri.parameters.priors import Fixed
@@ -41,12 +41,16 @@ def _build(ssp, obs):
         return SEDModel.build(
             ssp_data=ssp,
             observation=obs,
-            sfh={"type": "dpl", "all_params": FIXED},
-            dust_attenuation={"law": "power_law", "type": "two_component", "all_params": FIXED},
+            sfh={"type": "dpl", "all_params": Fixed(DEFAULT)},
+            dust_attenuation={
+                "law": "power_law",
+                "type": "two_component",
+                "all_params": Fixed(DEFAULT),
+            },
             redshift=Fixed(0.1),
             agn={
                 "type": "composable",
-                "all_params": FIXED,
+                "all_params": Fixed(DEFAULT),
                 "disc": {"type": "multicolor"},
                 "torus": {"type": "skirtor"},
             },

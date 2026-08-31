@@ -15,7 +15,7 @@ import pytest
 
 pytestmark = pytest.mark.contract
 
-from tengri.parameters import FIXED, Fixed
+from tengri.parameters import DEFAULT, Fixed
 
 
 def _build(ssp, obs, **kw):
@@ -25,7 +25,7 @@ def _build(ssp, obs, **kw):
     return SEDModel.build(
         ssp_data=ssp,
         observation=obs,
-        sfh={"type": ["const", "field"], "all_params": FIXED},
+        sfh={"type": ["const", "field"], "all_params": Fixed(DEFAULT)},
         redshift=Fixed(0.1),
         **kw,
     )

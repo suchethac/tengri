@@ -93,7 +93,7 @@ def _approx_arms():
 def _build(approx, index_data):
     import warnings
 
-    from tengri import FIXED, Fixed, Observation, Photometry, SEDModel, load_ssp_data
+    from tengri import DEFAULT, Fixed, Observation, Photometry, SEDModel, load_ssp_data
 
     ssp = load_ssp_data(_requirements())
     obs = Observation(
@@ -105,13 +105,13 @@ def _build(approx, index_data):
         return SEDModel.build(
             ssp_data=ssp,
             observation=obs,
-            sfh={"type": "dpl", "all_params": FIXED},
+            sfh={"type": "dpl", "all_params": Fixed(DEFAULT)},
             dust_attenuation={
                 "type": "two_component",
                 "law": "calzetti",
-                "all_params": FIXED,
+                "all_params": Fixed(DEFAULT),
             },
-            neb={"type": "cue", "all_params": FIXED},
+            neb={"type": "cue", "all_params": Fixed(DEFAULT)},
             redshift=Fixed(0.05),
             approx=approx,
         )

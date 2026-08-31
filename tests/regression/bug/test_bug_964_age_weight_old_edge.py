@@ -22,7 +22,7 @@ import jax.numpy as jnp
 import numpy as np
 import pytest
 
-from tengri import FIXED, Fixed, SEDModel
+from tengri import DEFAULT, Fixed, SEDModel
 
 pytestmark = pytest.mark.regression_bug
 
@@ -49,14 +49,14 @@ def _reference_weights(sfr_fn, lg_age_gyr, n=1_000_000):
 def _age_marginal(ssp, sfh):
     m = SEDModel.build(
         ssp_data=ssp,
-        met={"logzsol": Fixed(0.0), "all_params": FIXED},
+        met={"logzsol": Fixed(0.0), "all_params": Fixed(DEFAULT)},
         sfh=sfh,
         dust_attenuation={
             "law": "power_law",
             "type": "two_component",
             "tau_bc": Fixed(0.0),
             "tau_diff": Fixed(0.0),
-            "all_params": FIXED,
+            "all_params": Fixed(DEFAULT),
         },
         redshift=Fixed(0.0),
     )
@@ -84,7 +84,7 @@ class TestAgeWeightOldEdge:
                 "tau_gyr": Fixed(1.0),
                 "age_gyr": Fixed(5.0),
                 "log_total_mass": Fixed(10.0),
-                "all_params": FIXED,
+                "all_params": Fixed(DEFAULT),
             },
         )
         w_r = _reference_weights(sfr_delayed, lg_age)
@@ -111,7 +111,7 @@ class TestAgeWeightOldEdge:
 
         mf = np.full(7, 1e-9)
         mf[0] = 1.0 - 6e-9
-        sfh = {"type": "dirichlet", "log_total_mass": Fixed(10.0), "all_params": FIXED}
+        sfh = {"type": "dirichlet", "log_total_mass": Fixed(10.0), "all_params": Fixed(DEFAULT)}
         sfh.update({f"z_{i}": Fixed(float(z)) for i, z in enumerate(z_from_mf(mf))})
         w_t, _ = _age_marginal(ssp, sfh)
 
@@ -130,7 +130,7 @@ class TestAgeWeightOldEdge:
                 "tau_gyr": Fixed(1.0),
                 "age_gyr": Fixed(5.0),
                 "log_total_mass": Fixed(10.0),
-                "all_params": FIXED,
+                "all_params": Fixed(DEFAULT),
             },
         )
         total = float(jnp.sum(jnp.asarray(s.derived["age_weights"])))

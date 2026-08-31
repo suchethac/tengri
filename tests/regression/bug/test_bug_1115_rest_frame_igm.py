@@ -31,7 +31,7 @@ import jax.numpy as jnp
 import numpy as np
 import pytest
 
-from tengri import FIXED, Fixed, Observation, Photometry, SEDModel, Uniform, WavePrecomp
+from tengri import DEFAULT, Fixed, Observation, Photometry, SEDModel, Uniform, WavePrecomp
 from tengri.components.igm.igm import igm_absorption
 from tengri.observation.photometry import FilterCurve
 
@@ -74,11 +74,11 @@ def _build(ssp, z: float, approx, *, igm: bool = True, obs=None) -> SEDModel:
     return SEDModel.build(
         ssp_data=ssp,
         observation=obs if obs is not None else _obs(),
-        sfh={"type": "tsnorm", "all_params": FIXED, "log_total_mass": Uniform(9.0, 11.0)},
+        sfh={"type": "tsnorm", "all_params": Fixed(DEFAULT), "log_total_mass": Uniform(9.0, 11.0)},
         dust_attenuation={
             "law": "power_law",
             "type": "two_component",
-            "all_params": FIXED,
+            "all_params": Fixed(DEFAULT),
             "tau_diff": 0.3,
             "tau_bc": 0.5,
         },

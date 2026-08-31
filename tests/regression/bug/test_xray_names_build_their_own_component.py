@@ -35,7 +35,7 @@ import jax.numpy as jnp
 import numpy as np
 import pytest
 
-from tengri import FIXED, Fixed, Observation, Photometry, SEDModel, SSPData
+from tengri import DEFAULT, Fixed, Observation, Photometry, SEDModel, SSPData
 from tengri.observation.photometry import FilterCurve
 
 pytestmark = pytest.mark.regression_bug
@@ -87,7 +87,7 @@ def _rest_sed(xray_ssp, xray_obs, name: str) -> np.ndarray:
         model = SEDModel.build(
             ssp_data=xray_ssp,
             observation=xray_obs,
-            sfh={"type": "dpl", "all_params": FIXED},
+            sfh={"type": "dpl", "all_params": Fixed(DEFAULT)},
             agn=_LUMINOUS_AGN,
             xray={"type": name},
             redshift=Fixed(0.5),
@@ -140,7 +140,7 @@ def test_every_corona_actually_emits(name, xray_ssp, xray_obs):
         model = SEDModel.build(
             ssp_data=xray_ssp,
             observation=xray_obs,
-            sfh={"type": "dpl", "all_params": FIXED},
+            sfh={"type": "dpl", "all_params": Fixed(DEFAULT)},
             agn=_LUMINOUS_AGN,
             xray={"type": name},
             redshift=Fixed(0.5),

@@ -45,7 +45,7 @@ import warnings
 
 import pytest
 
-from tengri import FIXED, FREE, Fixed, ForwardModel, SEDModel, Uniform
+from tengri import DEFAULT, FREE, Fixed, ForwardModel, SEDModel, Uniform
 from tengri.inference.fitter import fast_nebular_can_engage
 
 pytestmark = pytest.mark.regression_bug
@@ -56,7 +56,7 @@ def _sed(ssp, obs, *, dust_attenuation: bool):
         {
             "type": "two_component",
             "law": "calzetti",
-            "all_params": FIXED,
+            "all_params": Fixed(DEFAULT),
             "tau_diff": Uniform(0.0, 2.0),
         }
         if dust_attenuation

@@ -14,7 +14,7 @@ import jax.numpy as jnp
 import numpy as np
 import pytest
 
-from tengri import FIXED, Fixed, SEDModel
+from tengri import DEFAULT, Fixed, SEDModel
 from tengri.components.agn.blocks.runner import composable_agn_l_nu, compose_l_nu
 from tengri.components.radio.radio import radio_agn, radio_agn_dpl
 
@@ -32,7 +32,7 @@ def _composable_agn(disc, *, torus="none"):
         "torus": {"type": torus},
         "atten": {"type": "none"},
         "agn_log_lbol": Fixed(11.42),
-        "all_params": FIXED,
+        "all_params": Fixed(DEFAULT),
     }
 
 
@@ -93,13 +93,13 @@ class TestEndToEndPublish:
         """SEDModel.build with composable AGN publishes L_4400_intrinsic > 0."""
         model = SEDModel.build(
             ssp_data=synthetic_ssp_wide,
-            sfh={"type": "delayed", "all_params": FIXED},
+            sfh={"type": "delayed", "all_params": Fixed(DEFAULT)},
             dust_attenuation={
                 "law": "power_law",
                 "type": "two_component",
                 "tau_bc": Fixed(0.0),
                 "tau_diff": Fixed(0.0),
-                "all_params": FIXED,
+                "all_params": Fixed(DEFAULT),
             },
             agn=_composable_agn("multicolor", torus="skirtor"),
             redshift=Fixed(0.05),
@@ -112,13 +112,13 @@ class TestEndToEndPublish:
         """When disc='none', L_4400_intrinsic = 0.0."""
         model = SEDModel.build(
             ssp_data=synthetic_ssp_wide,
-            sfh={"type": "delayed", "all_params": FIXED},
+            sfh={"type": "delayed", "all_params": Fixed(DEFAULT)},
             dust_attenuation={
                 "law": "power_law",
                 "type": "two_component",
                 "tau_bc": Fixed(0.0),
                 "tau_diff": Fixed(0.0),
-                "all_params": FIXED,
+                "all_params": Fixed(DEFAULT),
             },
             agn=_composable_agn("none"),
             redshift=Fixed(0.05),
@@ -131,13 +131,13 @@ class TestEndToEndPublish:
 
         model = SEDModel.build(
             ssp_data=synthetic_ssp_wide,
-            sfh={"type": "delayed", "all_params": FIXED},
+            sfh={"type": "delayed", "all_params": Fixed(DEFAULT)},
             dust_attenuation={
                 "law": "power_law",
                 "type": "two_component",
                 "tau_bc": Fixed(0.0),
                 "tau_diff": Fixed(0.0),
-                "all_params": FIXED,
+                "all_params": Fixed(DEFAULT),
             },
             agn=_composable_agn("multicolor"),
             redshift=Fixed(0.05),
@@ -209,13 +209,13 @@ class TestEndToEndRadioDiscCoupling:
         # Model 1: multicolor disc
         model_mc = SEDModel.build(
             ssp_data=synthetic_ssp_wide,
-            sfh={"type": "delayed", "all_params": FIXED},
+            sfh={"type": "delayed", "all_params": Fixed(DEFAULT)},
             dust_attenuation={
                 "law": "power_law",
                 "type": "two_component",
                 "tau_bc": Fixed(0.0),
                 "tau_diff": Fixed(0.0),
-                "all_params": FIXED,
+                "all_params": Fixed(DEFAULT),
             },
             agn=_composable_agn("multicolor"),
             radio={"sf": {"type": "bell2003"}, "agn": {"type": "powerlaw"}},
@@ -224,13 +224,13 @@ class TestEndToEndRadioDiscCoupling:
         # Model 2: richards2006 disc
         model_r6 = SEDModel.build(
             ssp_data=synthetic_ssp_wide,
-            sfh={"type": "delayed", "all_params": FIXED},
+            sfh={"type": "delayed", "all_params": Fixed(DEFAULT)},
             dust_attenuation={
                 "law": "power_law",
                 "type": "two_component",
                 "tau_bc": Fixed(0.0),
                 "tau_diff": Fixed(0.0),
-                "all_params": FIXED,
+                "all_params": Fixed(DEFAULT),
             },
             agn=_composable_agn("richards2006"),
             radio={"sf": {"type": "bell2003"}, "agn": {"type": "powerlaw"}},
@@ -267,13 +267,13 @@ class TestEndToEndRadioDiscCoupling:
         for disc in ("multicolor", "none"):
             model = SEDModel.build(
                 ssp_data=synthetic_ssp_wide,
-                sfh={"type": "delayed", "all_params": FIXED},
+                sfh={"type": "delayed", "all_params": Fixed(DEFAULT)},
                 dust_attenuation={
                     "law": "power_law",
                     "type": "two_component",
                     "tau_bc": Fixed(0.0),
                     "tau_diff": Fixed(0.0),
-                    "all_params": FIXED,
+                    "all_params": Fixed(DEFAULT),
                 },
                 agn=_composable_agn(disc),
                 radio={"sf": {"type": "bell2003"}, "agn": {"type": "powerlaw"}},

@@ -264,7 +264,7 @@ def test_cue_forward_is_finite_when_the_ssp_itself_is_float32():
     is fed float64 and the defect is invisible. Here the load happens inside
     ``enable_x64(False)``, which is what a ``JAX_ENABLE_X64=0`` process does.
     """
-    from tengri import FIXED, Fixed, Observation, Photometry, SEDModel, Uniform
+    from tengri import DEFAULT, Fixed, Observation, Photometry, SEDModel, Uniform
     from tengri.components.stellar.sps.dsps_wrapper import load_ssp_data
 
     params = {"sfh_delayed_log_total_mass": 10.0, "dust_tau_diff": 0.5}
@@ -281,7 +281,7 @@ def test_cue_forward_is_finite_when_the_ssp_itself_is_float32():
             observation=Observation(photometry=Photometry.from_names(["sdss_g", "sdss_r"])),
             sfh={
                 "type": "delayed",
-                "all_params": FIXED,
+                "all_params": Fixed(DEFAULT),
                 "log_total_mass": Uniform(9.0, 11.0),
                 "tau_gyr": 1.0,
                 "age_gyr": 5.0,
@@ -289,11 +289,11 @@ def test_cue_forward_is_finite_when_the_ssp_itself_is_float32():
             dust_attenuation={
                 "type": "two_component",
                 "law": "calzetti",
-                "all_params": FIXED,
+                "all_params": Fixed(DEFAULT),
                 "tau_diff": Uniform(0.0, 1.5),
                 "tau_bc": 0.0,
             },
-            neb={"type": "cue", "all_params": FIXED},
+            neb={"type": "cue", "all_params": Fixed(DEFAULT)},
             redshift=Fixed(0.1),
             approx=None,
         )

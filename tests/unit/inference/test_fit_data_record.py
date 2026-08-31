@@ -5,7 +5,7 @@ import jax
 import jax.numpy as jnp
 import pytest
 
-from tengri import FIXED, Data, Fixed, ForwardModel, SEDModel
+from tengri import DEFAULT, Data, Fixed, ForwardModel, SEDModel
 from tengri.inference import fitter as fitter_mod
 
 
@@ -15,8 +15,12 @@ def mock_flux(synthetic_ssp_wide, synthetic_tophat_obs):
     sed = SEDModel.build(
         ssp_data=synthetic_ssp_wide,
         observation=synthetic_tophat_obs,
-        sfh={"type": "dpl", "all_params": FIXED},
-        dust_attenuation={"law": "power_law", "type": "two_component", "all_params": FIXED},
+        sfh={"type": "dpl", "all_params": Fixed(DEFAULT)},
+        dust_attenuation={
+            "law": "power_law",
+            "type": "two_component",
+            "all_params": Fixed(DEFAULT),
+        },
         neb={"type": "none"},
         redshift=Fixed(0.1),
     )
@@ -33,7 +37,11 @@ def test_bare_arrays_and_data_record_agree(synthetic_ssp_wide, synthetic_tophat_
         ssp_data=synthetic_ssp_wide,
         observation=synthetic_tophat_obs,
         sfh={"type": "dpl"},
-        dust_attenuation={"law": "power_law", "type": "two_component", "all_params": FIXED},
+        dust_attenuation={
+            "law": "power_law",
+            "type": "two_component",
+            "all_params": Fixed(DEFAULT),
+        },
         neb={"type": "none"},
         redshift=Fixed(0.1),
     )
@@ -63,7 +71,11 @@ def test_data_censor_reaches_data_mask(
         ssp_data=synthetic_ssp_wide,
         observation=synthetic_tophat_obs,
         sfh={"type": "dpl"},
-        dust_attenuation={"law": "power_law", "type": "two_component", "all_params": FIXED},
+        dust_attenuation={
+            "law": "power_law",
+            "type": "two_component",
+            "all_params": Fixed(DEFAULT),
+        },
         neb={"type": "none"},
         redshift=Fixed(0.1),
     )
@@ -83,7 +95,11 @@ def test_data_plus_noise_kwarg_is_an_error(synthetic_ssp_wide, synthetic_tophat_
         ssp_data=synthetic_ssp_wide,
         observation=synthetic_tophat_obs,
         sfh={"type": "dpl"},
-        dust_attenuation={"law": "power_law", "type": "two_component", "all_params": FIXED},
+        dust_attenuation={
+            "law": "power_law",
+            "type": "two_component",
+            "all_params": Fixed(DEFAULT),
+        },
         neb={"type": "none"},
         redshift=Fixed(0.1),
     )

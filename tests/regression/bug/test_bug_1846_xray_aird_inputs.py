@@ -31,7 +31,7 @@ References
 import numpy as np
 import pytest
 
-from tengri import FIXED, Fixed, SEDModel
+from tengri import DEFAULT, Fixed, SEDModel
 from tengri.utils.physics_constants import Z_SUN
 
 pytestmark = pytest.mark.regression_bug
@@ -66,15 +66,15 @@ def _build_xray_model(ssp, obs, *, sfr_100myr=None, agn_model=None, xray_model="
     config = {
         "ssp_data": ssp,
         "observation": obs,
-        "sfh": {"type": "delayed", "all_params": FIXED},
-        "dust_attenuation": {"law": "power_law", "all_params": FIXED},
+        "sfh": {"type": "delayed", "all_params": Fixed(DEFAULT)},
+        "dust_attenuation": {"law": "power_law", "all_params": Fixed(DEFAULT)},
         "met": {"logzsol": Fixed(Z_SUN if Z_SUN > 0 else 0.0)},
-        "xray": {"type": xray_model, "all_params": FIXED},
+        "xray": {"type": xray_model, "all_params": Fixed(DEFAULT)},
         "redshift": Fixed(0.05),
     }
 
     if agn_model:
-        config["agn"] = {"type": agn_model, "all_params": FIXED}
+        config["agn"] = {"type": agn_model, "all_params": Fixed(DEFAULT)}
 
     return SEDModel.build(**config)
 

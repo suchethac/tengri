@@ -42,14 +42,18 @@ class TestBatchedPresenceMasking:
         """
         from jax.flatten_util import ravel_pytree
 
-        from tengri import FIXED, FREE, SEDModel
+        from tengri import DEFAULT, FREE, Fixed, SEDModel
 
         # Minimal model: all SFH free, everything else fixed.
         model = SEDModel.build(
             ssp_data=ssp_data_wne,
             observation=synthetic_tophat_obs,
             sfh={"type": "dpl", "all_params": FREE},
-            dust_attenuation={"law": "power_law", "type": "two_component", "all_params": FIXED},
+            dust_attenuation={
+                "law": "power_law",
+                "type": "two_component",
+                "all_params": Fixed(DEFAULT),
+            },
             redshift=0.05,
         )
 
@@ -130,13 +134,17 @@ class TestBatchedPresenceMasking:
         A catalog fit with presence=all-ones on every galaxy must produce
         bit-identical posterior samples to the same fit run with no presence key.
         """
-        from tengri import FIXED, FREE, SEDModel
+        from tengri import DEFAULT, FREE, Fixed, SEDModel
 
         model = SEDModel.build(
             ssp_data=ssp_data_wne,
             observation=synthetic_tophat_obs,
             sfh={"type": "dpl", "all_params": FREE},
-            dust_attenuation={"law": "power_law", "type": "two_component", "all_params": FIXED},
+            dust_attenuation={
+                "law": "power_law",
+                "type": "two_component",
+                "all_params": Fixed(DEFAULT),
+            },
             redshift=0.05,
         )
 
@@ -226,13 +234,17 @@ class TestBatchedPresenceMasking:
            corrupted data must diverge (the mask removed band ``k``'s large
            residual). Under the neuter both collapse to all-ones → identical.
         """
-        from tengri import FIXED, FREE, SEDModel
+        from tengri import DEFAULT, FREE, Fixed, SEDModel
 
         model = SEDModel.build(
             ssp_data=ssp_data_wne,
             observation=synthetic_tophat_obs,
             sfh={"type": "dpl", "all_params": FREE},
-            dust_attenuation={"law": "power_law", "type": "two_component", "all_params": FIXED},
+            dust_attenuation={
+                "law": "power_law",
+                "type": "two_component",
+                "all_params": Fixed(DEFAULT),
+            },
             redshift=0.05,
         )
 

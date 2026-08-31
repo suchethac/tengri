@@ -27,7 +27,7 @@ from __future__ import annotations
 
 import pytest
 
-from tengri import FIXED, Fixed, Gaussian, LogUniform, Uniform
+from tengri import DEFAULT, Fixed, Gaussian, LogUniform, Uniform
 from tengri.parameters.groups import parse_groups
 from tengri.parameters.parameters import Parameters
 
@@ -145,7 +145,9 @@ class TestIgmActivationFollowsTheGroup:
 
     def test_a_typeless_igm_group_is_still_on(self):
         """Presence activates; ``type`` only selects which model."""
-        spec = parse_groups(sfh={"type": "dpl"}, igm={"all_params": FIXED}, redshift=Fixed(3.0))
+        spec = parse_groups(
+            sfh={"type": "dpl"}, igm={"all_params": Fixed(DEFAULT)}, redshift=Fixed(3.0)
+        )
         assert spec.apply_igm is True
 
 
@@ -160,7 +162,7 @@ class TestTheTwoEntryPointsAgreeOnTheDefaultModel:
         today's choice.
         """
         from_grammar = parse_groups(
-            sfh={"type": "dpl"}, igm={"all_params": FIXED}, redshift=Fixed(3.0)
+            sfh={"type": "dpl"}, igm={"all_params": Fixed(DEFAULT)}, redshift=Fixed(3.0)
         )
         from_flat = Parameters(redshift=Fixed(3.0), apply_igm=True)
         assert from_grammar.igm_model == from_flat.igm_model

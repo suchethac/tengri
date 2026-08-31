@@ -51,21 +51,21 @@ import numpy as np
 
 import tengri
 from tengri import (
-    FIXED,
-    FREE,
+    cosmology,
     Data,
+    DEFAULT,
     FeaturePrecomp,
     Fitter,
     Fixed,
     ForwardModel,
+    FREE,
     LineList,
     Observation,
     Photometry,
+    plot,
     SEDModel,
     Uniform,
     WavePrecomp,
-    cosmology,
-    plot,
 )
 from tengri.observation import LineFluxData
 from tengri.utils.conversions import lnu_to_fnu
@@ -149,13 +149,13 @@ def build(line_data, approx):
         dust_attenuation={
             "type": "two_component",
             "law": "calzetti",
-            "all_params": FIXED,
+            "all_params": Fixed(DEFAULT),
             "tau_bc": Uniform(0.0, 4.0),
             "tau_diff": Uniform(0.0, 3.0),
         },
         neb={
             "type": "cue",
-            "all_params": FIXED,
+            "all_params": Fixed(DEFAULT),
             "logU": Uniform(-4.0, -1.0),
             "logZ_gas": Uniform(-1.5, 0.3),
         },
@@ -407,7 +407,7 @@ posterior = ForwardModel.build(sed=model_fast).fit(
 )
 elapsed = time.perf_counter() - t0
 rmax = max(float(v) for v in posterior.rhat().values())
-n_divergent = posterior.diagnostics.get('n_divergent', 0)
+n_divergent = posterior.diagnostics.get("n_divergent", 0)
 
 # R-hat cannot see a chain that never moved — it scores ~1.0 on one — so check the
 # draws directly, across every free parameter (#1734). Only the free ones: a Fixed
@@ -504,6 +504,7 @@ w_full_um = WAVE_FULL / 1e4
 # attaches a per-Q_H nebular grid that disables exact rest_sed(); WavePrecomp()
 # alone is exact for rest_sed() while remaining LUT-fast for photometry.
 model_sed = build(line_data, approx=WavePrecomp())
+
 
 def _sed_fnu(p):
     lnu = np.interp(

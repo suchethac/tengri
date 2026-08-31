@@ -63,7 +63,7 @@ model = tengri.SEDModel.build(
     ssp,
     sfh={
         "type": "dpl",
-        "all_params": tengri.FIXED,
+        "all_params": tengri.Fixed(tengri.DEFAULT),
         "alpha": 1.0,
         "beta": 2.5,
         "tau_gyr": 0.1,
@@ -72,13 +72,13 @@ model = tengri.SEDModel.build(
     dust_attenuation={
         "law": "power_law",
         "type": "two_component",
-        "all_params": tengri.FIXED,
+        "all_params": tengri.Fixed(tengri.DEFAULT),
         "tau_diff": 0.05,
         "tau_bc": 0.1,
     },
     neb={
         "type": "cue",
-        "all_params": tengri.FIXED,
+        "all_params": tengri.Fixed(tengri.DEFAULT),
         "logU": tengri.Fixed(-2.8),
         "logZ_gas": tengri.Fixed(-0.3),
     },
@@ -86,7 +86,7 @@ model = tengri.SEDModel.build(
     shock={
         "type": "mappings",
         "norm": "frac",
-        "all_params": tengri.FIXED,
+        "all_params": tengri.Fixed(tengri.DEFAULT),
         "frac": tengri.Uniform(0.0, 0.5),
         "velocity": tengri.Fixed(300.0),
         "log_density": tengri.Fixed(0.0),

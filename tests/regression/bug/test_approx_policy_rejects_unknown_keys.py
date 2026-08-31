@@ -170,18 +170,18 @@ def test_every_policy_field_reaches_the_compile_signature():
     import dataclasses
 
     import tengri
-    from tengri import FIXED, Fixed, Observation, Photometry, SEDModel, WavePrecomp
+    from tengri import DEFAULT, Fixed, Observation, Photometry, SEDModel, WavePrecomp
 
     # Committed grid, resolved without a working directory (#1486). This test
     # compares compile signatures, so the grid is immaterial to what it pins.
     ssp = tengri.load_ssp()
     obs = Observation(photometry=Photometry.from_names(["galex_fuv", "sdss_r"]))
     common = dict(
-        sfh={"type": "dpl", "all_params": FIXED, "log_total_mass": 10.0},
+        sfh={"type": "dpl", "all_params": Fixed(DEFAULT), "log_total_mass": 10.0},
         dust_attenuation={
             "type": "two_component",
             "law": "calzetti",
-            "all_params": FIXED,
+            "all_params": Fixed(DEFAULT),
         },
         neb={"type": "none"},
         redshift=Fixed(0.05),

@@ -68,7 +68,7 @@ import jax.numpy as jnp
 import numpy as np
 import pytest
 
-from tengri import FIXED, Fixed, Parameters, SEDModel
+from tengri import DEFAULT, Fixed, Parameters, SEDModel
 from tengri.components.nebular.mappings_photo import MappingsPhotoStellarBackend
 from tengri.components.stellar.sps.dsps_wrapper import load_ssp_data
 from tengri.observation import Observation, Photometry
@@ -162,9 +162,9 @@ class TestNebularBackendSelection:
             model = SEDModel.build(
                 ssp_data=ssp_data_fsps,
                 observation=obs,
-                sfh={"type": "dpl", "all_params": FIXED, "log_total_mass": Fixed(10.0)},
+                sfh={"type": "dpl", "all_params": Fixed(DEFAULT), "log_total_mass": Fixed(10.0)},
                 met={"logzsol": Fixed(-0.5)},
-                neb={"type": backend, "all_params": FIXED, "logU": Fixed(-3.0)},
+                neb={"type": backend, "all_params": Fixed(DEFAULT), "logU": Fixed(-3.0)},
                 redshift=Fixed(0.1),
             )
         _assert_predicts(model, obs, f"neb={backend}")
@@ -181,8 +181,8 @@ class TestNebularBackendSelection:
             SEDModel.build(
                 ssp_data=ssp_data_fsps,
                 observation=obs,
-                sfh={"type": "dpl", "all_params": FIXED, "log_total_mass": Fixed(10.0)},
-                neb={"type": "bogus_backend", "all_params": FIXED},
+                sfh={"type": "dpl", "all_params": Fixed(DEFAULT), "log_total_mass": Fixed(10.0)},
+                neb={"type": "bogus_backend", "all_params": Fixed(DEFAULT)},
                 redshift=Fixed(0.1),
             )
         message = str(exc.value)
@@ -202,8 +202,8 @@ class TestNebularBackendSelection:
             SEDModel.build(
                 ssp_data=ssp_data_fsps,
                 observation=obs,
-                sfh={"type": "dpl", "all_params": FIXED, "log_total_mass": Fixed(10.0)},
-                neb={"type": "definitely_not_a_backend", "all_params": FIXED},
+                sfh={"type": "dpl", "all_params": Fixed(DEFAULT), "log_total_mass": Fixed(10.0)},
+                neb={"type": "definitely_not_a_backend", "all_params": Fixed(DEFAULT)},
                 redshift=Fixed(0.1),
             )
         listed = {n.strip() for n in str(exc.value).split("Available:")[-1].strip(" .").split(",")}

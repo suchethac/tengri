@@ -16,7 +16,7 @@ from __future__ import annotations
 import jax.numpy as jnp
 import pytest
 
-from tengri import FIXED, Fixed, Observation, Photometry, SEDModel, Uniform, WavePrecomp
+from tengri import DEFAULT, Fixed, Observation, Photometry, SEDModel, Uniform, WavePrecomp
 from tengri.observation.photometry import FilterCurve
 
 pytestmark = pytest.mark.contract
@@ -51,7 +51,7 @@ def _build(ssp, obs, approx, tau, z: float = 1.0) -> SEDModel:
     dust: dict = {
         "type": "two_component",
         "law": "calzetti",
-        "all_params": FIXED,
+        "all_params": Fixed(DEFAULT),
     }
     if tau == "free":
         dust["tau_diff"] = Uniform(0.0, 1.0)
@@ -62,7 +62,7 @@ def _build(ssp, obs, approx, tau, z: float = 1.0) -> SEDModel:
         ssp_data=ssp,
         observation=obs,
         approx=approx,
-        sfh={"type": "tsnorm", "all_params": FIXED, "log_total_mass": Uniform(8.0, 12.0)},
+        sfh={"type": "tsnorm", "all_params": Fixed(DEFAULT), "log_total_mass": Uniform(8.0, 12.0)},
         dust_attenuation=dust,
         neb={"type": "none"},
         redshift=Fixed(z),

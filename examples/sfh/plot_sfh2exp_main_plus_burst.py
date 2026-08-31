@@ -38,7 +38,7 @@ def build(f_burst):
         ssp,
         sfh={
             "type": "sfh2exp",
-            "all_params": tengri.FIXED,
+            "all_params": tengri.Fixed(tengri.DEFAULT),
             "log_total_mass": 10.5,
             "tau_main_gyr": 4.0,
             "tau_burst_gyr": 0.1,
@@ -49,7 +49,7 @@ def build(f_burst):
         dust_attenuation={
             "law": "power_law",
             "type": "two_component",
-            "all_params": tengri.FIXED,
+            "all_params": tengri.Fixed(tengri.DEFAULT),
             "tau_diff": 0.2,
             "tau_bc": 0.2,
         },

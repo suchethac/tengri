@@ -27,7 +27,7 @@ def ssp_data_for_accuracy(ssp_data_wne):
 
 def test_ztable_matches_exact_below_1pct(ssp_data_for_accuracy):
     """Test that WavePrecomp LUT photometry agrees with exact path to < 1%."""
-    from tengri import FIXED, SEDModel, Uniform, WavePrecomp
+    from tengri import DEFAULT, Fixed, SEDModel, Uniform, WavePrecomp
     from tengri.observation import Observation, Photometry
 
     obs = Observation(photometry=Photometry.from_names(BANDS))
@@ -40,7 +40,7 @@ def test_ztable_matches_exact_below_1pct(ssp_data_for_accuracy):
             "law": "power_law",
             "tau_bc": Uniform(0.0, 4.0),
             "tau_diff": Uniform(0.0, 3.0),
-            "all_params": FIXED,
+            "all_params": Fixed(DEFAULT),
         },
         redshift=Uniform(0.01, 2.0),
         igm={"type": "inoue"},
@@ -69,7 +69,7 @@ def test_ztable_matches_exact_below_1pct(ssp_data_for_accuracy):
 
 def measure_ztable_error_and_cost(n_z_value, ssp_data_for_accuracy):
     """Measure worst error and build time for a given n_z."""
-    from tengri import FIXED, SEDModel, Uniform, WavePrecomp
+    from tengri import DEFAULT, Fixed, SEDModel, Uniform, WavePrecomp
     from tengri.observation import Observation, Photometry
 
     obs = Observation(photometry=Photometry.from_names(BANDS))
@@ -82,7 +82,7 @@ def measure_ztable_error_and_cost(n_z_value, ssp_data_for_accuracy):
             "law": "power_law",
             "tau_bc": Uniform(0.0, 4.0),
             "tau_diff": Uniform(0.0, 3.0),
-            "all_params": FIXED,
+            "all_params": Fixed(DEFAULT),
         },
         redshift=Uniform(0.01, 2.0),
         igm={"type": "inoue"},

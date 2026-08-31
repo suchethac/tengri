@@ -19,13 +19,17 @@ from tests._grad_parity import assert_grad_matches_fd
 @pytest.fixture
 def sed_model_minimal(synthetic_ssp, simple_observation):
     """Minimal SED model for JIT testing."""
-    from tengri import FIXED, SEDModel
+    from tengri import DEFAULT, SEDModel
 
     return SEDModel.build(
         ssp_data=synthetic_ssp,
         observation=simple_observation,
-        sfh={"type": "dpl", "all_params": FIXED},
-        dust_attenuation={"type": "two_component", "law": "calzetti", "all_params": FIXED},
+        sfh={"type": "dpl", "all_params": Fixed(DEFAULT)},
+        dust_attenuation={
+            "type": "two_component",
+            "law": "calzetti",
+            "all_params": Fixed(DEFAULT),
+        },
         neb={"type": "none"},
         redshift=Fixed(0.1),
     )
