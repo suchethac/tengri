@@ -163,7 +163,7 @@ _register(
                 # Default pinned to the historical fixed ``config.lgmet_scatter``
                 # (0.1) so delta models that do not free it are byte-unchanged;
                 # the wildcard-FIXED resolver reads this default from
-                # ``_WILDCARD_FIXED_DEFAULTS`` in ``parameters/groups.py``. Free
+                # ``_CANONICAL_FIXED_DEFAULTS`` in ``parameters/groups.py``. Free
                 # it (e.g. ``Uniform(0.0, 0.5)``) to fit the MDF width like
                 # Bagpipes' ``lognorm`` chemical-enrichment mode.
                 Fixed(0.1),

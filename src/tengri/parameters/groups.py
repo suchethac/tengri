@@ -2155,7 +2155,7 @@ def _normalize_sfh_field(kwargs: dict) -> dict:
     else:
         raise ValueError(
             "sfh 'field' must be a dict of field/PSD priors (e.g. "
-            "sfh={'type': 'dpl', 'field': {'*': FREE}}), or True to enable it "
+            "sfh={'type': 'dpl', 'field': {'all_params': FREE}}), or True to enable it "
             "with defaults."
         )
 

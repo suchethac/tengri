@@ -80,14 +80,14 @@ class PowerLawDisc(SEDModelComponent):
     --------
     Minimal model with power-law disc::
 
-        from tengri import SEDModel, Fixed, Uniform, builders
+        from tengri import SEDModel, Fixed, FIXED, Uniform, builders
         from tengri.components.agn.powerlaw_disc_model import PowerLawDisc
 
         model = SEDModel.build(
             ssp_data=ssp,
             observation=obs,
-            sfh=builders.sfh.dpl(_=Fixed(1.5), beta=Fixed(1.0)),
-            dust_attenuation={"type": "two_component", "all_params": Fixed},
+            sfh=builders.sfh.dpl(alpha=Fixed(1.5), beta=Fixed(1.0)),
+            dust_attenuation={"type": "two_component", "all_params": FIXED},
             agn=PowerLawDisc(),
         )
     """

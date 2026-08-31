@@ -27,7 +27,8 @@ Examples
 >>> model = SEDModel.build(
 ...     ssp_data=ssp,
 ...     sfh={"type": "dpl", "all_params": FREE, "beta": Uniform(1, 3)},
-...     dust={"type": "two_component", "law_bc": "calzetti", "all_params": FIXED},
+...     dust_attenuation={"type": "two_component", "law": "calzetti", "all_params": FIXED},
+...     dust_emission={"type": "dale2014", "all_params": FIXED},
 ...     redshift=Fixed(0.1),
 ... )
 >>>

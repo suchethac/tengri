@@ -162,15 +162,15 @@ class SKIRTORTorus(SEDModelComponent):
     --------
     Minimal model with SKIRTOR torus::
 
-        from tengri import SEDModel, Fixed, Uniform, builders
+        from tengri import SEDModel, Fixed, FIXED, Uniform, builders
         from tengri.components.agn.skirtor_model import SKIRTORTorus
 
         # Register and use
         model = SEDModel.build(
             ssp_data=ssp,
             observation=obs,
-            sfh=builders.sfh.dpl(_=Fixed(1.5), beta=Fixed(1.0)),
-            dust_attenuation={"type": "two_component", "all_params": Fixed},
+            sfh=builders.sfh.dpl(alpha=Fixed(1.5), beta=Fixed(1.0)),
+            dust_attenuation={"type": "two_component", "all_params": FIXED},
             agn=SKIRTORTorus(config=SKIRTORTorusConfig(grid_path="path/to/grid.h5")),
         )
 

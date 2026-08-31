@@ -122,8 +122,8 @@ The grammar has **one** wildcard: `'all_params'`. The retired `'*'` raises with 
 
 ```text
 sfh={'*': FREE}
-# TypeError: The '*' wildcard is retired. Use 'all_params' instead.
-# sfh={'all_params': FREE, ...}
+# ValueError: The wildcard key '*' has been retired; the wildcard is spelled
+# 'all_params'. Write {'all_params': FREE} instead of {'*': FREE}.
 ```
 
 **Why one?** Fewer names = fewer mental models. A reader sees `'all_params'` once and knows what it is. One name, one mental model: the retired `'*'` spelling bought nothing but a second way to write the same thing.

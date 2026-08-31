@@ -116,14 +116,14 @@ class KD18Disc(SEDModelComponent):
     --------
     Minimal model with K&D18 disc::
 
-        from tengri import SEDModel, Fixed, Uniform, builders
+        from tengri import SEDModel, Fixed, FIXED, Uniform, builders
         from tengri.components.agn.kd18_disc_model import KD18Disc, KD18DiscConfig
 
         model = SEDModel.build(
             ssp_data=ssp,
             observation=obs,
-            sfh=builders.sfh.dpl(_=Fixed(1.5), beta=Fixed(1.0)),
-            dust_attenuation={"type": "two_component", "all_params": Fixed},
+            sfh=builders.sfh.dpl(alpha=Fixed(1.5), beta=Fixed(1.0)),
+            dust_attenuation={"type": "two_component", "all_params": FIXED},
             agn=KD18Disc(config=KD18DiscConfig(self_consistent_gamma=True)),
         )
 

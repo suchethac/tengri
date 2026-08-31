@@ -120,14 +120,14 @@ class CAT3DTorus(SEDModelComponent):
     --------
     Minimal model with CAT3D-Wind torus::
 
-        from tengri import SEDModel, Fixed, Uniform, builders
+        from tengri import SEDModel, Fixed, FIXED, Uniform, builders
         from tengri.components.agn.cat3d_torus_model import CAT3DTorus, CAT3DTorusConfig
 
         model = SEDModel.build(
             ssp_data=ssp,
             observation=obs,
-            sfh=builders.sfh.dpl(_=Fixed(1.5), beta=Fixed(1.0)),
-            dust_attenuation={"type": "two_component", "all_params": Fixed},
+            sfh=builders.sfh.dpl(alpha=Fixed(1.5), beta=Fixed(1.0)),
+            dust_attenuation={"type": "two_component", "all_params": FIXED},
             agn=CAT3DTorus(config=CAT3DTorusConfig(grid_path="path/to/grid.h5")),
         )
 
