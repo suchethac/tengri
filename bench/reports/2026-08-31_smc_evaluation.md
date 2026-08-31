@@ -15,9 +15,9 @@ way.
 
 It buys one thing, and the thing is real: on `05_fitting_photometry` **seed 0** —
 the mock where `mcmc_nuts` returns split R-hat **1.428e13**, `mcmc_chees` **1.24**
-and preconditioned HMC **1.23** — tempered SMC returns **1.018**, the closest any
-sampler in this project has come. On **seed 1** it returns **1.248** against
-ChEES's 1.06. So the headline question — *does annealing from the prior fit the
+and preconditioned HMC **1.23** — tempered SMC returns **1.029** (**1.018** before
+the corrections below), the closest any sampler in this project has come. On
+**seed 1** it returns **1.222** against ChEES's 1.06. So the headline question — *does annealing from the prior fit the
 two nb05 mocks nothing else fits?* — answers **no, with the best approach yet on
 one of the two and a regression on the other.**
 
@@ -65,6 +65,17 @@ clock, R-hat 1.049 against 1.039. On nb05 seed 0 it takes R-hat from **1.018 to
 1.267**, i.e. the entire seed-0 finding. The cost ratios quoted above are for the
 2-move arm because it is the cheapest arm that reproduces anything; the 1-move
 arm is 2.1-2.8x the gradients and 1.2-1.5x the wall clock, and does not.
+
+**TWO DEFECTS WERE FOUND AFTER THE TABLES BELOW WERE MEASURED**, by cross-checking
+against BlackJAX's own tempered-SMC page, and both are corrected in the code:
+the returned particles were a **weighted** sample being read as an unweighted one
+(so every SMC row reported a slightly *tempered* posterior), and the inner
+step-size controller — a departure from that page that this campaign never
+measured — was **actively harmful**, costing 7.6x in min ESS on the control.
+Every table before the cross-check section is therefore **pre-fix**. The
+load-bearing rows were re-measured and are given there, with what changed and
+what was left un-rerun. **Read the cross-check section before quoting any number
+from this report.**
 
 `mcmc_ghmc` and `mcmc_mclmc` stay `tier="broken"`. Nothing was promoted or
 demoted. `mcmc_smc` is not on the batched catalog path and `_MCMC_VMAPPABLE` is
@@ -618,22 +629,320 @@ flow. **A rung is lock-step. The ladder is not**, and the distinction is the
 whole compile story.
 
 * Every particle takes exactly `n_mcmc_steps` inner-HMC moves of exactly
-  `n_leapfrog_steps` leapfrogs. `n_leapfrog_steps` is a **static** argument of
-  `_smc_scan` deliberately: BlackJAX would happily accept it as a traced
-  `mcmc_parameters` entry, the sampler would still run, and the inner trajectory
-  would become a dynamic `fori_loop` — handing back exactly the raggedness the
-  backend exists to avoid, and making the gradient count unknowable. A contract
-  test pins it static.
+  `n_leapfrog_steps` leapfrogs, so every lane of the rung's `vmap` does
+  identical work. `n_leapfrog_steps` is a **static** argument of `_smc_scan`,
+  which makes the gradient count a compile-time constant — **and that is the
+  only thing it buys.** An earlier revision of this report claimed a traced
+  leapfrog count would reintroduce ragged control flow; the cross-check below
+  measured that it does not (bit-identical draws, the same 12 `stablehlo.while`
+  ops), and the claim is withdrawn.
 * The **number of rungs** under the adaptive schedule is chosen by the tempering
   solver from the particle weights, so the outer loop is a `lax.while_loop`, and
-  `n_chains` vmapped populations all run to the slowest one's rung count.
+  `n_chains` vmapped populations all run to the slowest one's rung count. **This
+  is the only ragged thing in the sampler.**
 
-The second is real, and small here. Measured rung counts across every adaptive
-row: `[18, 18]`, `[19, 18]`, `[14, 15]`, `[14, 13]`, `[13, 14]` — the two
-populations differ by **at most one rung in 13-19**, so the lock-step penalty is
-under 8%, against NUTS's batched `while_loop` running to tree depths that differ
-by up to `2**10`. `fixed_ladder=` removes it outright by running a `lax.scan` of
-fixed length, and that is the arm a compile claim may quote.
+It is real, and small here. Measured rung counts across every adaptive row
+(post-fix, so each includes the closing rung): `[19, 19]`, `[20, 19]`,
+`[15, 16]`, `[15, 14]` — the two populations differ by **at most one rung in
+14-20**, so the lock-step penalty is under 7%, against NUTS's batched
+`while_loop` running to tree depths that differ by up to `2**10`. `fixed_ladder=`
+removes it outright by running a `lax.scan` of fixed length, and that is the arm
+a compile claim may quote.
+
+## Cross-check against BlackJAX's own tempered-SMC page
+
+The reference is
+`https://blackjax-devs.github.io/sampling-book/algorithms/temperedsmc`, source at
+`blackjax-devs/sampling-book:book/algorithms/TemperedSMC.md`. Everything below is
+grounded in that file's code or in the installed BlackJAX 1.6.2 source, never in
+a remembered signature. **It found one real defect**, which is fixed here and
+which changes numbers in this report; it also withdrew one overstated claim of my
+own.
+
+### What matches
+
+| | the page | this backend |
+|---|---|---|
+| inner kernel | `blackjax.hmc.build_kernel()` + `blackjax.hmc.init` | same |
+| shared parameters | `extend_params(hmc_parameters)` | hand-rolled `step_size[None]`, `imm[None, :]` |
+| resampling | `resampling.systematic` | `resampling.systematic` |
+| target ESS | `0.5` (bimodal), `0.75` (Rastrigin) | default `0.5` |
+| schedule | `adaptive_tempered_smc`, ladder grown until `lambda` crosses 1 | same |
+| loop | `lax.while_loop` on `state.tempering_param < 1` | same |
+| initial particles | drawn from the prior | drawn from the **exact** `N(0, I)` prior |
+
+`extend_params` is `jax.tree.map(lambda x: jnp.asarray(x)[None, ...], params)`
+(`blackjax/smc/base.py:179`), producing shapes `(1,)` and `(1, D)` — verified by
+running it, and byte-for-byte what this backend builds by hand. Those shapes are
+what `from_mcmc.unshared_parameters_and_step_fn` reads to decide a parameter is
+*shared across particles* rather than per-particle, so getting them wrong would
+have silently given every particle its own step size.
+
+### The defect: the returned particles were a *weighted* sample
+
+`blackjax.smc.base.step` resamples, then **moves the particles under the OLD
+temperature**, then reweights toward the new one (`base.py:160-176`; the tempered
+kernel builds `tempered_logposterior_fn` from `state.tempering_param`, the
+pre-update value, and `log_weights_fn` from `delta`). So a ladder that exits at
+`lambda = 1` leaves particles last rejuvenated under `pi_{lambda_{K-1}}`, carrying
+non-uniform weights that take them the rest of the way. **This backend read
+`state.particles` and discarded `state.weights`.**
+
+Measured on an analytic tilted Gaussian at 4 096 particles, where the posterior
+mean and standard deviation are known in closed form:
+
+| | mean | sd |
+|---|---|---|
+| analytic | **1.3761** | **0.2873** |
+| as returned (the defect) | 1.3546-1.3664 | 0.2965-0.3056 |
+| the same particles, **weighted by `state.weights`** | 1.3696-1.3791 | — |
+| after one closing rung at `lambda = 1` | 1.3762-1.3809 | 0.2866-0.2885 |
+
+Bias as returned: mean **-0.0164**, sd **+0.0142** (+5% of sigma). After the
+closing rung: **+0.0024** and **-0.0000**. That the *weighted* mean lands on the
+analytic value is the direct evidence that the discarded weights were the
+correction.
+
+**The bias has the same sign on every coordinate**, which is what distinguishes
+it from Monte Carlo error and is exactly why it survived: this report's own
+Gaussian check printed sd 0.2996-0.3171 against an analytic 0.2873 and called it
+agreement. A coherent 5% shrinkage toward the prior read as noise. The contract
+test's `rtol=0.15` was loose enough to admit it.
+
+**The reference page has the same bias.** It histograms
+`smc_samples.particles` directly, where a 5%-of-sigma shift is invisible against a
+density curve. It is not invisible in a posterior mean, an R-hat, or a credible
+interval — so this is recorded here rather than fixed silently, because a reader
+who follows the page and gets a different answer needs to be able to find out
+why.
+
+**The fix is the algorithm's own machinery**, not a correction bolted on: one
+further rung pinned at `lambda = 1` resamples using those final weights — which
+is what *consumes* them — and rejuvenates under the true posterior. Its `delta`
+is zero, so the returned weights are uniform and its log-Z increment is exactly
+`logsumexp(zeros) - log N = 0`; **the evidence estimate is untouched**. Checked
+rather than reasoned about: handing the kernel a state already at `lambda = 1`
+with deliberately non-uniform weights (ESS 378.5 of 512) returns a log-Z
+increment of exactly `0.000e+00`, uniform outgoing weights, and
+`tempering_param` still 1.0. It costs
+one rung, 5-7% of a 14-19 rung ladder. Pinned by
+`test_the_closing_rung_is_run_and_counted` (a fixed `K`-rung ladder must report
+`K + 1`) and by moment bounds tightened from `atol 0.05 / rtol 0.15` to a
+**pooled-over-dimensions** `0.006 / 5%`. Pooled, because the defect biases every
+coordinate the same way while Monte Carlo error does not, so pooling suppresses
+the noise and keeps the signal; a per-dimension bound cannot separate them at
+this particle count. Verified by neutering: both moment tests fail at pooled mean
+errors of -0.0182 and -0.0156, and the rung-count pin fails at `[12 12]` against
+13.
+
+### A claim of my own that the cross-check withdrew
+
+The page passes `num_integration_steps` **traced**, inside `extend_params`; this
+backend binds it as a Python `int`. Two docstrings and a contract test said the
+traced form "reintroduces the ragged control flow this backend exists to avoid".
+**Measured, it does not.** Same target, same key, both constructions:
+
+| | draws | StableHLO lines | `stablehlo.while` ops |
+|---|---|---:|---:|
+| static `int` (this backend) | — | 1 609 | 12 |
+| traced via `extend_params` (the page) | **bit-identical** | 1 602 | 12 |
+
+XLA lowers a concrete-trip `fori_loop` to a `while` anyway at `L = 16`, so the
+two are the same program to within seven lines of HLO. The claim is withdrawn in
+the source and in the test. What the static binding *actually* buys is that the
+gradient count is a **compile-time constant**, so `gradients_per_draw` is exact
+rather than something a reader reconstructs from a wall clock — which is this
+backend's entire cost argument and is reason enough on its own. **The raggedness
+in this sampler is the ladder, never the trajectory.**
+
+### Departures, and whether each was measured
+
+| | the page | here | measured? |
+|---|---|---|---|
+| `num_mcmc_steps` | **1** in both examples | default 5; arms at 1, 2, 5 | **yes**, and it conflicts — see below |
+| step size between rungs | hand-set, never adapted | scalar acceptance controller | **yes**, the `nogain` arm below |
+| leapfrog count | traced | static | yes — bit-identical |
+| rung cap | none | `max_temperatures=300` | not a numerical choice: an inner kernel that cannot move shrinks the increment without bound, and a non-terminating `while_loop` has no divergence, no NaN and no error to see |
+| `log Z` | not computed; `info` discarded | summed `log_likelihood_increment` | yes — 0.02 nats against analytic |
+| closing rung | none | one, at `lambda = 1` | yes — the defect above |
+| `inverse_mass_matrix` | `jnp.eye(1)`, dense | `jnp.ones(D)`, diagonal | the two coincide at the page's `D = 1`; the geometry here comes from `precondition=`, not from this argument |
+| prior normalization | `multivariate_normal.logpdf`, normalized | `-0.5 xi^T xi`, unnormalized | irrelevant, and checked: an additive constant in the log-prior cancels in the tempered target and never enters `log_weights_fn`, which uses the likelihood alone |
+| fixed ladder | not shown | `fixed_ladder=` | the page offers **no** guidance here, so Finding 2's measurement stands on its own rather than contradicting anything |
+
+### The one place the page's guidance and a measurement disagree
+
+**The page uses `num_mcmc_steps=1` in both of its examples.** On the healthy
+control that is the right advice and this report confirms it: half the gradients,
+half the wall clock, R-hat 1.049 against 1.039. **On `05_fitting_photometry`
+seed 0 it destroys the result** — R-hat 1.267 against 1.029, with the
+distinct-draw fraction falling 0.78 to 0.53, because at one move per rung the
+population is resampled about as fast as it can de-duplicate itself.
+
+The measurement wins and the conflict is written down rather than resolved
+silently: a reader who takes `num_mcmc_steps=1` from the reference page onto a
+badly conditioned photometry posterior will get a materially worse answer than
+this report's, and the reason is the fixture, not the page.
+
+## Finding 8 — the step-size controller was mine, it was a departure from the page, and it was wrong
+
+The reference page hand-sets an inner step size and never adapts it between
+rungs. This backend added a scalar controller —
+`step_size *= exp(0.5 * (mean_acceptance - 0.651))` after each rung — and that
+was the one departure this campaign never measured. The cross-check forced the
+ablation, and it inverts the arm the report was built on.
+
+`ctl-dpl` seed 7, post-fix, 512 particles x 2 populations, 2 inner moves of
+`L=10`, `precondition=True`. **The only difference is `step_size_gain`.**
+
+| arm | step size at exit | mean acceptance | wall s | total grads | max split R-hat | min ESS | div | div rate | ancestor ESS | distinct draws |
+|---|---:|---:|---:|---:|---:|---:|---:|---:|---:|---:|
+| `step_size_gain=0.5`, target 0.651 | 0.0882 | 0.633, 0.635 | 207 | 296 960 | 1.0294 | 51.2 | 2 555 | 8.60% | 224 of 512 | 0.722 |
+| **`step_size_gain=0.0`** (the page) | **0.1000** | **0.844, 0.838** | **171** | 307 200 | **1.0047** | **388.9** | **768** | **2.50%** | 224 of 512 | **0.894** |
+
+**Better on every quality column and faster**: split R-hat 1.029 to **1.005**,
+min ESS 51.2 to **388.9** (7.6x), divergences down 3.3x, distinct draws 0.72 to
+0.89, at 17% less wall clock for 3% more gradients.
+
+**And the controller was not broken — it worked.** It drove mean acceptance from
+0.84 onto its 0.651 target, which is exactly what it was asked to do. The target
+was the mistake.
+
+0.651 is the asymptotically optimal acceptance rate for a fixed-length HMC
+proposal *used as a Markov chain that has to decorrelate from its starting
+point*. **An inner SMC move is not that.** It is a short rejuvenation burst —
+two moves — applied to particles that are already approximately where they
+belong, and a rejected proposal there does not merely waste a step, it leaves a
+**duplicate** in the population. What matters is that moves *land*, not that
+they are optimally long. The two columns that read this directly agree: the
+higher-acceptance arm keeps 0.894 of its draws distinct against 0.722, and
+diverges 3.3x less often because its steps are smaller relative to the
+curvature.
+
+So the correction is not "do not adapt". It is that **the acceptance target
+carried across from fixed-length HMC does not belong to this sampler**, and a
+controller aimed at a materially higher target might beat both arms here. That
+was not tested, and is named in "What was NOT measured" rather than guessed at.
+
+`_SMC_STEP_SIZE_GAIN` now defaults to **0.0**, which is the reference page's
+behavior. The controller stays reachable, because it is the arm that would have
+to be re-run against a corrected target.
+
+**This is the second time in this cross-check that a number carried across from
+another sampler's theory was the defect.** The first was reading BlackJAX's
+weighted particles as an unweighted sample. Both were invisible in every column
+the campaign was watching, and both were found by comparing against a reference
+rather than by any internal consistency check.
+
+### What the two defects cost, row by row
+
+Every SMC row above the cross-check section was measured with the residual
+tempering defect in it, and with the step-size controller on. Both are corrected
+now. **The load-bearing rows were re-measured; the rest were not, and are
+labelled `pre-fix` where they appear.** The re-run stopped short of a full
+campaign because the box was needed for another agent's decisive measurement —
+what is missing is enumerated at the end of this section rather than estimated.
+
+`smc+precond cheap` — 512 particles x 2 populations, 2 inner moves of `L=10`,
+`precondition=True`, step-size controller **on** in both columns, so this pair
+isolates the closing rung alone:
+
+| fixture | seed | max split R-hat, **pre-fix** | max split R-hat, **corrected** | shift | distinct draws, pre -> post |
+|---|---:|---:|---:|---:|---|
+| nb05 | 0 | 1.0177 | **1.0290** | +0.011 | 0.770 -> 0.780 |
+| nb05 | 1 | 1.2483 | **1.2215** | -0.027 | 0.548 -> 0.910 |
+| nb05 | 2 | 1.1321 | **1.3560** | **+0.224** | 0.479 -> 0.519 |
+| nb05 | 7 | 1.1030 | **1.1197** | +0.017 | 0.577 -> 0.737 |
+| ctl-dpl | 7 | 1.0391 | **1.0294** | -0.010 | 0.592 -> 0.722 |
+
+**The shift has no consistent sign and is not small** — nb05 seed 2 moves by
+0.224 — so nothing about a pre-fix row can be extrapolated to its corrected
+value, and any un-rerun row is simply a measurement of a different target.
+
+The direction is not noise, and the interpretation matters: **an R-hat computed
+on the tempered target was measuring agreement about a smoother, broader
+distribution than the posterior.** Two populations find it easier to agree on
+`pi_{lambda_{K-1}}` than on `pi_1`, which is why three of the five rows got worse
+once the target became honest. The distinct-draw fraction moved the other way on
+every row, because the closing rung rejuvenates.
+
+### The corrected rows
+
+Generated by `score_smc_campaign.py --markdown` rather than transcribed. **These
+wall clocks were taken at load 12-21 and the `hmc+precond` rows earlier in this
+report at load 44-53, so the two are NOT comparable and no ratio between them is
+quoted here** — the comparator re-run was one of the things stopped.
+
+| fixture | seed | config | wall s | total grads | max split R-hat | div | div rate | min ESS | ancestor ESS | rungs | distinct draws |
+|---|---:|---|---:|---:|---:|---:|---:|---:|---:|---:|---:|
+| 05 | 0 | `smc+precond cheap` | 235 | 389 120 | **1.0290** | 3 047 | 7.83% | 2.6 | 252 | 19, 19 | 0.780 |
+| 05 | 1 | `smc+precond cheap` | 264 | 399 360 | 1.2215 | 2 814 | 7.05% | 2.3 | 245 | 20, 19 | 0.910 |
+| 05 | 2 | `smc+precond cheap` | 212 | 317 440 | 1.3560 | 4 519 | 14.24% | 3.6 | 242 | 15, 16 | 0.519 |
+| 05 | 7 | `smc+precond cheap` | 199 | 348 160 | 1.1197 | 2 357 | 6.77% | 3.5 | 250 | 17, 17 | 0.737 |
+| ctl-dpl | 7 | `smc+precond cheap` | 207 | 296 960 | 1.0294 | 2 555 | 8.60% | 51.2 | 224 | 15, 14 | 0.722 |
+| ctl-dpl | 7 | **`smc+precond nogain`** | **171** | 307 200 | **1.0047** | **768** | **2.50%** | **388.9** | 224 | 15, 15 | **0.894** |
+
+Gradient totals against the incumbent's **68 000** (`2 chains x (1000 warmup +
+100 burn-in + 600 draws) x 20`, unchanged by any of this): **4.4x to 5.9x**,
+against 4.1-5.6x before the closing rung was added. The cost verdict does not
+move.
+
+### What this does to the conclusions
+
+**The seed-0 headline survives in shape and loses its number.** nb05 seed 0 reads
+**1.0290**, not 1.0177. It remains far and away the best any sampler in this
+project has produced on that mock — against 1.2257 for preconditioned HMC,
+1.2388 for ChEES and 1.428e13 for the shipped NUTS call — and it remains a
+between-run R-hat over populations that share nothing. **It misses the 1.01 bar
+by more than it did**, and the answer to the brief's highest-value question is
+unchanged: **no.**
+
+**"SMC is not the speed answer" still holds, and it holds for the same reason.**
+The closing rung *adds* 5-7% to the cost; the gradient ratio against
+preconditioned HMC goes 4.1-5.6x to 4.4-5.9x. Nothing found here makes SMC
+cheaper.
+
+**But one corrected row is the best SMC row of the campaign and it is not on the
+fixture the report is about.** `smc+precond nogain` on the healthy control
+reaches split R-hat **1.0047** at min ESS **388.9** — clearing the R-hat clause
+outright, missing only on divergences (768, a 2.50% rate) — where preconditioned
+HMC on the same fixture reads 1.0161 at min ESS 31.7. On gradients per effective
+sample that is 307 200 / 389 = **790** against HMC's 68 000 / 31.7 = **2 145**.
+**On this one fixture, corrected SMC beats the incumbent per effective sample by
+2.7x.** Whether that survives onto nb05 is exactly the measurement that was
+stopped, and it is the single most valuable thing to run next after the
+truth-recovery check.
+
+So the verdict's shape is intact and one of its clauses is now provisional: *not
+the speed answer* stands on the gradient count, which got worse; *loses where the
+incumbent works* stood on the pre-fix control row and **the corrected control row
+inverts it**. One fixture, one seed, one configuration — stated, not resolved.
+
+### What was stopped, and is therefore not measured
+
+Named rather than estimated. Each was queued and killed when the box was needed
+elsewhere; none is blocked by anything but time.
+
+* **`nogain` on nb05** (seeds 0, 1, 2, 7). The step-size finding rests on **one
+  fixture**. This is the measurement that decides whether Finding 8 is a general
+  correction or a control-fixture result, and whether the inverted clause above
+  generalizes.
+* **The `hmc+precond` comparator rows at matched load.** Without them no
+  post-fix wall-clock ratio against the incumbent is quotable, only gradient
+  counts and the (pre-fix) clean sequential pair.
+* **The metric ablation at equal inner work** (`smc cheap`, 2 moves of `L=10`,
+  no metric). Finding 4's pair confounds the metric with a 5x budget and is
+  pre-fix on both arms; the equal-work version is the one a preconditioning claim
+  should quote.
+* **The post-fix compile cells.** The closing rung adds a second kernel body to
+  the graph, so Finding 2's 5.99 s / 13 333 lines are **pre-fix**. Its
+  conclusions — compile is a few percent of an SMC fit, the uniform fixed ladder
+  compiles slower — survive one extra rung body, but the numbers are stale.
+* **`smc+precond n1`, `smc`, `smc+precond fixed16`.** All pre-fix. The n1 arm's
+  finding (halves the cost, loses seed 0) compares two pre-fix rows and so is a
+  valid comparison of a sampler nobody should now run.
+* **A controller aimed at a higher acceptance target.** Finding 8 shows 0.651 is
+  the wrong target and that pinning the step beats chasing it; it does not show
+  that no controller helps.
 
 ## What was built
 
@@ -739,9 +1048,15 @@ the sampler's own variability.
   much longer run at a much finer ladder, and it was not made — the same
   unfinished item `bench/reports/2026-08-30_chees_hmc.md` left open.
 * **Truth recovery.** Whether the SMC posterior on seed 0 actually contains the
-  injected truth was not checked. R-hat 1.018 says the two populations agree; it
+  injected truth was not checked. R-hat 1.029 says the two populations agree; it
   does not say they agree on the right thing, and on a mock the right thing is
-  knowable. This is the single most valuable next measurement on this branch.
+  knowable. This is still the single most valuable next measurement on this
+  branch — and it is now *more* valuable, because the closing-rung defect was
+  precisely a case of two populations agreeing about the wrong distribution
+  while every diagnostic on the page read clean.
+* **Everything the cross-check stopped short of.** Enumerated in "What was
+  stopped, and is therefore not measured" above rather than repeated here; the
+  first item, `nogain` on nb05, is what decides whether Finding 8 generalizes.
 * **float32.** Everything is float64. SMC's inner kernel is Metropolis-corrected,
   so it differences two large log-densities and inherits the classic f32 failure
   point (#1415/#1388); it is not a candidate for the f32 path.
@@ -802,15 +1117,36 @@ JAX_DEFAULT_MATMUL_PRECISION=highest TENGRI_DISABLE_JAX_CACHE=1 .venv/bin/python
 #    that changes nothing about the sample is the control.
 JAX_PLATFORMS=cpu .venv/bin/python bench/scripts/diagnose_smc_particle_ess.py
 
-# 8. The gates. The quarantine must stay honest and no tier moved.
+# 8. THE CORRECTED ROWS. Every SMC arm pins `step_size_gain` explicitly,
+#    because the default moved from 0.5 to 0.0 when the ablation showed the
+#    controller was harmful -- an arm inheriting it would silently stop being
+#    the arm that was measured.
+for SEED in 0 1 2 7; do
+  JAX_PLATFORMS=cpu .venv/bin/python bench/scripts/benchmark_notebook_sampler.py \
+      --notebook 05 --seed $SEED --methods smc,hmcp --only "smc+precond cheap" \
+      --json bench/results/2026-08-31_smc_campaign_v2.jsonl
+done
+# The step-size ablation of Finding 8. `nogain` is the reference page's
+# behavior and is now the default.
+for CFG in "smc+precond cheap" "smc+precond nogain"; do
+  JAX_PLATFORMS=cpu .venv/bin/python bench/scripts/benchmark_notebook_sampler.py \
+      --notebook ctl-dpl --seed 7 --methods smc,hmcp --only "$CFG" \
+      --json bench/results/2026-08-31_smc_campaign_v2.jsonl
+done
+.venv/bin/python bench/scripts/score_smc_campaign.py --markdown \
+    bench/results/2026-08-31_smc_campaign_v2.jsonl
+
+# 9. The gates. The quarantine must stay honest and no tier moved.
 .venv/bin/python -m pytest tests/contract/test_smc_backend.py \
     tests/contract/test_broken_backends_quarantined.py \
     tests/contract/test_preconditioning_capability.py \
     tests/contract/test_harness_notebook_parity.py -q -n 0
 ```
 
-Raw rows: `bench/results/2026-08-31_smc_campaign.jsonl` (append-only, latest wins
-per `(notebook, config, seed)`), `2026-08-31_smc_clean_wallclock.jsonl`,
+Raw rows: **`bench/results/2026-08-31_smc_campaign_v2.jsonl` is the corrected
+campaign**; `bench/results/2026-08-31_smc_campaign.jsonl` is the pre-fix one,
+kept because the report's earlier tables are measurements of it (both are
+append-only, latest wins per `(notebook, config, seed)`). Also `2026-08-31_smc_clean_wallclock.jsonl`,
 `2026-08-31_smc_compile_cpu.json`, `2026-08-31_smc_width_cpu.json`,
 `2026-08-31_smc_width_gpu.json`.
 
@@ -835,4 +1171,15 @@ What it leaves is one measurement worth acting on and one worth finishing:
   has now found the metric outranking the sampler; this one found it outranking a
   5x compute increase on the same sampler. If there is a general lesson in the
   2026-08 campaign it is that one, and it is now supported on five independent
-  algorithm choices.
+  algorithm choices. (Caveat: that pair is pre-fix on both arms and confounds the
+  metric with the budget; the equal-work version was queued and stopped.)
+* **And a third lesson, from the cross-check.** Both defects it found were
+  numbers carried across from somewhere else and never re-derived here: reading
+  BlackJAX's weighted particles as an unweighted sample, and aiming a step-size
+  controller at fixed-length HMC's 0.651 acceptance. Neither was visible in any
+  column this campaign was watching — the first produced a *coherent* 5% bias
+  that read as noise, the second produced an on-target acceptance that read as
+  success. **The campaign's own diagnostics could not have found either.** A
+  reference implementation could, and did, in an afternoon. That is a cheap check
+  this project has not been running, and every backend in `backends/mcmc/` wraps
+  a library that ships one.

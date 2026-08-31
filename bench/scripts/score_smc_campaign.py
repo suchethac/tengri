@@ -42,6 +42,7 @@ from pathlib import Path
 #: rather than guessing a denominator, which is the whole failure being avoided.
 _INNER_MOVES = {
     "smc": (5, 512),
+    "smc cheap": (2, 512),
     "smc+precond": (5, 512),
     "smc+precond cheap": (2, 512),
     "smc+precond n1": (1, 512),
@@ -104,9 +105,72 @@ def _fmt(value, spec="", dash="-"):
     return dash if value is None else format(value, spec)
 
 
+#: Total gradient evaluations per fit for the window-adaptation comparator.
+#:
+#: NOT its ``grad/draw`` column, and the difference is a factor of three. That
+#: column is what each backend reports for its own SAMPLING phase, and
+#: ``hmc+precond L=20`` has a phase SMC does not: ``2 chains x (1000 warmup +
+#: 100 burn-in + 600 draws) x 20`` = 68 000 gradients, of which 40 000 is warmup
+#: the per-draw column never shows. SMC has no warmup at all -- the lambda = 0
+#: target is the exact prior -- so its total is
+#: ``n_particles x sum(rungs) x n_mcmc_steps x n_leapfrog_steps``. Comparing the
+#: two per-draw columns compares SMC's total against HMC's sampling.
+_HMC_TOTAL_GRADS = {"hmc+precond L=20": 2 * (1000 + 100 + 600) * 20}
+
+
+def _total_grads(row: dict) -> int | None:
+    """Gradient evaluations for the whole fit, warmup included."""
+    config = row.get("config", "")
+    if config in _HMC_TOTAL_GRADS:
+        return _HMC_TOTAL_GRADS[config]
+    rungs = row.get("n_temperatures")
+    arm = _INNER_MOVES.get(config)
+    leapfrog = row.get("n_leapfrog")
+    if rungs is None or arm is None or leapfrog is None:
+        return None
+    moves, particles = arm
+    return int(sum(rungs)) * particles * moves * int(leapfrog)
+
+
+def _markdown(latest: dict) -> None:
+    """Emit the report's rows table, so no number is hand-transcribed."""
+    print(
+        "| fixture | seed | config | wall s | total grads | max split R-hat | "
+        "div | div rate | min ESS | ancestor ESS | rungs | distinct draws |"
+    )
+    print("|---|---:|---|---:|---:|---:|---:|---:|---:|---:|---:|---:|")
+    for (nb, config, seed), row in sorted(latest.items(), key=lambda kv: (kv[0][0], kv[0][2])):
+        if row.get("dead_fit"):
+            continue
+        rate = _rate(row)
+        rungs = row.get("n_temperatures")
+        total = _total_grads(row)
+        anc = row.get("min_ancestor_ess")
+        cells = [
+            nb,
+            str(seed),
+            f"`{config}`",
+            f"{row['wall']:.0f}",
+            "-" if total is None else f"{total:,}",
+            f"{row['rhat']:.4f}",
+            str(row["divergences"]),
+            "-" if rate is None else f"{100 * rate:.2f}%",
+            f"{row['min_ess']:.1f}",
+            "-" if anc is None else f"{anc:.0f}",
+            "-" if rungs is None else ", ".join(str(v) for v in rungs),
+            f"{row.get('unique_frac', float('nan')):.3f}",
+        ]
+        print("| " + " | ".join(cells) + " |")
+
+
 def main(argv=None) -> int:
     ap = argparse.ArgumentParser(description=__doc__)
     ap.add_argument("jsonl", nargs="+", type=Path)
+    ap.add_argument(
+        "--markdown",
+        action="store_true",
+        help="emit the report's rows table instead of the console one",
+    )
     args = ap.parse_args(argv)
 
     latest: dict[tuple, dict] = {}
@@ -115,6 +179,10 @@ def main(argv=None) -> int:
             if line.strip():
                 record = json.loads(line)
                 latest[(record["notebook"], record["config"], record["seed"])] = record
+
+    if args.markdown:
+        _markdown(latest)
+        return 0
 
     header = (
         f"{'nb':<8}{'seed':>5}  {'config':<22}{'wall s':>8}{'maxRhat':>10}"

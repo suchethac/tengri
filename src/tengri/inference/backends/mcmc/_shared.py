@@ -1986,21 +1986,30 @@ _SMC_INIT_STEP_SIZE = 0.1
 
 #: Multiplicative gain of the inner-kernel step-size controller [dimensionless].
 #:
-#: After each rung the step size is multiplied by ``exp(gain * (mean_acceptance
-#: - target))``. This is a *scalar* controller driven by the population's mean
-#: Metropolis acceptance, and that is the whole reason it is allowed to exist in
-#: a codebase that refuses ensemble-estimated metrics. The failure
-#: ``bench/reports/2026-08-30_ghmc_meads_adaptation.md`` records is a feedback
-#: loop in which the ensemble's own *spread* becomes the momentum metric, so a
-#: wider ensemble inflates the metric that widened it, and acceptance cannot
-#: object because energy really is conserved under the inflated metric. A step
-#: size driven by acceptance closes no such loop: acceptance *falls* when the
-#: step grows, so the sign is restoring rather than reinforcing. The geometry
-#: still comes from ``precondition=``, never from the particles.
+#: **0.0 -- the controller is OFF by default, and that is a correction.** After
+#: each rung the step size would be multiplied by ``exp(gain * (mean_acceptance
+#: - target))``. BlackJAX's own tempered-SMC page hand-sets a step size and never
+#: adapts it between rungs; this backend added the controller, and the departure
+#: went unmeasured until the reference cross-check forced the ablation.
 #:
-#: ``0.0`` disables the controller and pins the step size for the whole run,
-#: which is the ablation arm.
-_SMC_STEP_SIZE_GAIN = 0.5
+#: Measured on ``ctl-dpl`` seed 7, everything else held fixed
+#: (``bench/reports/2026-08-31_smc_evaluation.md`` Finding 8): with the
+#: controller, split R-hat 1.0294, min ESS 51.2, 2 555 divergences, 0.72 of the
+#: draws distinct; without it, **1.0047**, **388.9**, **768**, **0.89**, and 17%
+#: less wall clock.
+#:
+#: **The controller was not broken -- it worked.** It drove mean acceptance from
+#: 0.84 onto its 0.651 target, which is what it was asked to do. The *target* was
+#: the mistake: 0.651 is optimal for a fixed-length HMC proposal used as a Markov
+#: chain that must decorrelate, and an inner SMC move is a two-step rejuvenation
+#: burst on particles already approximately in place, where a rejected proposal
+#: leaves a **duplicate**. Moves need to land, not to be optimally long.
+#:
+#: So this is not "adaptation is wrong" -- a controller aimed at a materially
+#: higher acceptance might beat both arms, and is untested. It is an unmeasured
+#: departure from the reference being withdrawn, on one fixture's decisive
+#: evidence. Set a positive gain to re-run the arm.
+_SMC_STEP_SIZE_GAIN = 0.0
 
 #: Hard cap on temperature rungs under the adaptive schedule.
 #:

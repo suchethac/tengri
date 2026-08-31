@@ -1052,23 +1052,41 @@ def configurations(nb: str, quick: bool, dense: bool, families=FAMILIES) -> dict
         # wall-clock/quality trade-off is on the page rather than asserted.
         particles = 256 if quick else 512
         smc_arms = {
-            "smc": dict(n_mcmc_steps=5, n_leapfrog_steps=20, precondition=None),
+            "smc": dict(
+                n_mcmc_steps=5, n_leapfrog_steps=20, precondition=None, step_size_gain=0.5
+            ),
+            # The metric ablation at EQUAL inner work. The `smc` arm above does
+            # five times the work of `smc+precond cheap`, so the pair confounds
+            # the metric with the budget; this one does not, and it is the arm a
+            # claim about preconditioning should quote.
+            "smc cheap": dict(
+                n_mcmc_steps=2, n_leapfrog_steps=10, precondition=None, step_size_gain=0.5
+            ),
             "smc+precond": dict(n_mcmc_steps=5, n_leapfrog_steps=20, precondition=True),
-            "smc+precond cheap": dict(n_mcmc_steps=2, n_leapfrog_steps=10, precondition=True),
+            # `step_size_gain` is pinned on BOTH arms, not left to the default.
+            # The default moved from 0.5 to 0.0 when the ablation showed the
+            # controller was harmful, and an arm that inherited it would quietly
+            # stop being the arm this report measured -- the exact shape of the
+            # fixture-drift defect 2026-08-30_chees_hmc.md spends a section on.
+            "smc+precond cheap": dict(
+                n_mcmc_steps=2, n_leapfrog_steps=10, precondition=True, step_size_gain=0.5
+            ),
             # BlackJAX's own sampling-book page recommends num_mcmc_steps=1:
             # one inner move per rung, so resampling happens as often as
             # possible and a particle that is stuck can be replaced rather than
             # walked out. It is also the cheapest arm in the table by
             # construction, which under a speed-first reading makes it the one
             # to beat rather than a curiosity.
-            "smc+precond n1": dict(n_mcmc_steps=1, n_leapfrog_steps=10, precondition=True),
-            # The step-size ablation, and it is the one departure from BlackJAX's
-            # own reference page that was never measured. That page hand-sets a
-            # step size and never adapts it between rungs; this backend adds a
-            # scalar acceptance controller. `step_size_gain=0.0` pins the step
-            # size at its initial value for the whole run, which is the page's
-            # behavior, so the pair says whether the controller is load-bearing
-            # or a liability.
+            "smc+precond n1": dict(
+                n_mcmc_steps=1, n_leapfrog_steps=10, precondition=True, step_size_gain=0.5
+            ),
+            # `step_size_gain=0.0` -- the reference page's behavior, and since
+            # the ablation this is also the backend's DEFAULT. The page hand-sets
+            # a step size and never adapts it; this backend used to add a scalar
+            # acceptance controller, and the pair measured that the controller
+            # was a liability: split R-hat 1.0294 -> 1.0047 and min ESS 51.2 ->
+            # 388.9 on ctl-dpl seed 7 with it off. Kept as a named arm rather
+            # than folded into `cheap` so the pair stays runnable.
             "smc+precond nogain": dict(
                 n_mcmc_steps=2, n_leapfrog_steps=10, precondition=True, step_size_gain=0.0
             ),
@@ -1077,7 +1095,11 @@ def configurations(nb: str, quick: bool, dense: bool, families=FAMILIES) -> dict
             # populations run to the slowest one's rung count; a fixed ladder is
             # a fixed-length scan, and is the arm a compile-cost claim may quote.
             "smc+precond fixed16": dict(
-                n_mcmc_steps=5, n_leapfrog_steps=20, precondition=True, fixed_ladder=16
+                n_mcmc_steps=5,
+                n_leapfrog_steps=20,
+                precondition=True,
+                fixed_ladder=16,
+                step_size_gain=0.5,
             ),
         }
         for label, arm in smc_arms.items():
