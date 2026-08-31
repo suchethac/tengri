@@ -916,7 +916,16 @@ NOTEBOOKS = {
 
 
 #: Sampler families a row can belong to. ``--methods`` selects a subset.
-FAMILIES = ("nuts", "hmc", "ghmc", "chees", "mclmc")
+#:
+#: ``hmcp`` is preconditioned fixed-length HMC. It is a separate family from
+#: ``hmc`` rather than an extra row inside it because
+#: ``bench/reports/2026-08-31_catalog_preconditioning.md`` measured the analytic
+#: metric -- not the sampler -- as the largest effect anywhere on this path
+#: (bare HMC 11-16 converged galaxies of 64, preconditioned 26-38), so
+#: "preconditioned HMC" is the incumbent any new sampler has to beat, and a
+#: campaign must be able to select it without dragging in four unpreconditioned
+#: fixed-L rows it is not comparing against.
+FAMILIES = ("nuts", "hmc", "hmcp", "ghmc", "chees", "mclmc", "smc")
 
 
 def shipped_family(cfg: dict) -> str:
@@ -1012,6 +1021,57 @@ def configurations(nb: str, quick: bool, dense: bool, families=FAMILIES) -> dict
                 n_ensemble=32,
                 precondition=precondition,
             )
+    if "hmcp" in families:
+        # The incumbent. ``2026-08-31_catalog_preconditioning.md`` Finding 4: the
+        # metric roughly doubles HMC's converged count for 7% wall clock, and
+        # Finding 7, that HALF whitening beats full even where the metric is
+        # measurably exact. L=20 is the shortest row the 2026-08-17 reports
+        # measured; L=80 brackets it upward without paying L=160's 125 s.
+        for leapfrog in (20,) if quick else (20, 80):
+            configs[f"hmc+precond L={leapfrog}"] = dict(
+                method="mcmc_hmc",
+                n_warmup=warmup,
+                n_samples=draws,
+                n_leapfrog_steps=leapfrog,
+                dense_mass_matrix=dense or cfg.get("dense_hmc", False),
+                target_accept_rate=0.9,
+                precondition=True,
+            )
+    if "smc" in families:
+        # Four arms, and the first pair is the experiment the brief names: the
+        # analytic metric is expected to matter more than the algorithm, so an
+        # SMC row without its ablation says nothing.
+        #
+        # The draw budget is NOT the chain samplers'. An SMC draw is a particle
+        # and the particle count is a WIDTH -- doubling it does not lengthen
+        # anything. What has to be held comparable is the GRADIENT budget,
+        # n_particles * n_temperatures * n_mcmc_steps * n_leapfrog_steps, and it
+        # is only knowable after the run because the rung count is the
+        # posterior's answer rather than the caller's. Hence the ``cheap`` arm:
+        # the same sampler at a quarter of the inner work, so the
+        # wall-clock/quality trade-off is on the page rather than asserted.
+        particles = 256 if quick else 512
+        smc_arms = {
+            "smc": dict(n_mcmc_steps=5, n_leapfrog_steps=20, precondition=None),
+            "smc+precond": dict(n_mcmc_steps=5, n_leapfrog_steps=20, precondition=True),
+            "smc+precond cheap": dict(n_mcmc_steps=2, n_leapfrog_steps=10, precondition=True),
+            # BlackJAX's own sampling-book page recommends num_mcmc_steps=1:
+            # one inner move per rung, so resampling happens as often as
+            # possible and a particle that is stuck can be replaced rather than
+            # walked out. It is also the cheapest arm in the table by
+            # construction, which under a speed-first reading makes it the one
+            # to beat rather than a curiosity.
+            "smc+precond n1": dict(n_mcmc_steps=1, n_leapfrog_steps=10, precondition=True),
+            # The fully lock-step arm. The adaptive schedule's rung count is
+            # data-dependent, so it compiles to a while_loop and vmapped
+            # populations run to the slowest one's rung count; a fixed ladder is
+            # a fixed-length scan, and is the arm a compile-cost claim may quote.
+            "smc+precond fixed16": dict(
+                n_mcmc_steps=5, n_leapfrog_steps=20, precondition=True, fixed_ladder=16
+            ),
+        }
+        for label, arm in smc_arms.items():
+            configs[label] = dict(method="mcmc_smc", n_particles=particles, **arm)
     if "mclmc" in families:
         # MCLMC draws are single integrator steps, not trajectories, so its
         # n_samples is an order of magnitude larger than NUTS's *by construction*
@@ -1043,6 +1103,11 @@ def _gradients_per_draw(diag: dict) -> float | None:
     always -- so this column is the whole structural difference between them in
     one number.
     """
+    if diag.get("gradients_per_draw") is not None:
+        # SMC states it outright: n_temperatures * n_mcmc_steps * n_leapfrog_steps.
+        # Nothing else in this column can be reconstructed from a trajectory
+        # length, because an SMC draw is a particle rather than a step.
+        return float(diag["gradients_per_draw"])
     if "tree_depth_mean" in diag:
         return float(2.0 ** diag["tree_depth_mean"])
     if "energy_var_per_dim" in diag:  # MCLMC: one isokinetic McLachlan step
@@ -1119,6 +1184,14 @@ def score(posterior, wall: float) -> dict:
         # n_chains times too large (#2087). ``total_draws`` is the shared helper
         # that fixes it.
         "n_draws_total": total_draws(diag),
+        # The denominator a divergence RATE needs when a sampler makes more than
+        # one Metropolis transition per kept draw. A chain sampler makes exactly
+        # one, so kept draws and transitions coincide and this is None. Tempered
+        # SMC makes n_temperatures * n_mcmc_steps of them per particle and keeps
+        # one draw from each, so a rate against total_draws overshoots by that
+        # factor -- 205 % on the first row measured. Same arithmetic as #2087,
+        # one sampler further out.
+        "n_transitions_total": diag.get("n_inner_transitions"),
         # Leapfrog steps per proposal actually in effect. Deliberately NOT named
         # "learned": mcmc_hmc reports its hand-set L under the same diagnostics
         # key, and the whole point of the ChEES rows is that theirs was not set.
@@ -1146,6 +1219,28 @@ def score(posterior, wall: float) -> dict:
             if diag.get("tree_depth_mean") is not None
             else diag.get("n_leapfrog_steps")
         ),
+        # --- SMC only, and None everywhere else -------------------------------
+        # ``min_ess`` above is an AUTOCORRELATION ESS, and a resampled particle
+        # population is exchangeable: the estimator reads draws as a time series
+        # and cannot see a population that collapsed onto a handful of ancestors.
+        # ``min_ancestor_ess`` is the diagnostic that can, so an SMC row is only
+        # readable with both columns. Carried here rather than left in the
+        # backend's diagnostics because a JSONL a scorer consumes is where a
+        # column has to be for anyone to plot it.
+        "min_ancestor_ess": diag.get("min_ancestor_ess"),
+        # The rung count is the POSTERIOR's answer, not the caller's, and it is
+        # the multiplier in the cost product. A row without it cannot be priced.
+        "n_temperatures": diag.get("n_temperatures"),
+        # False means the schedule hit its cap and these draws are from a
+        # TEMPERED distribution, not the posterior. Every other column on such a
+        # row is a description of the wrong target.
+        "reached_target": diag.get("reached_target"),
+        "log_evidence": diag.get("log_evidence"),
+        "log_evidence_spread": diag.get("log_evidence_spread"),
+        "accept_rate": diag.get("accept_rate"),
+        "preconditioned": diag.get("preconditioned"),
+        "metric_condition": diag.get("metric_condition"),
+        "whitened_condition": diag.get("whitened_condition"),
     }
 
 
@@ -1157,7 +1252,11 @@ def divergence_rate(row: dict) -> float | None:
     """
     if row.get("divergences") is None:
         return None
-    return row["divergences"] / max(row.get("n_draws_total") or 0, 1)
+    # ``n_transitions_total`` when the sampler published one (tempered SMC makes
+    # many inner Metropolis transitions per kept draw), otherwise kept draws,
+    # which is the same number for every chain sampler here.
+    denominator = row.get("n_transitions_total") or row.get("n_draws_total") or 0
+    return row["divergences"] / max(denominator, 1)
 
 
 def clears_bar(row: dict) -> bool:
@@ -1249,6 +1348,16 @@ def run_one(nb: str, label: str, kwargs: dict, seed: int) -> dict:
             "grad_per_draw": None,
             "grad_per_ess": None,
             "leapfrogs_per_draw": None,
+            "n_transitions_total": None,
+            "min_ancestor_ess": None,
+            "n_temperatures": None,
+            "reached_target": None,
+            "log_evidence": None,
+            "log_evidence_spread": None,
+            "accept_rate": None,
+            "preconditioned": None,
+            "metric_condition": None,
+            "whitened_condition": None,
         }
     return score(posterior, time.perf_counter() - started)
 
@@ -1263,6 +1372,15 @@ def format_row(label: str, row: dict) -> str:
     gpd = "" if row.get("grad_per_draw") is None else f"{row['grad_per_draw']:>8.1f}"
     gpe = "" if row.get("grad_per_ess") is None else f"{row['grad_per_ess']:>10.0f}"
     eevpd = "" if row.get("eevpd") is None else f"  EEVPD {row['eevpd']:.2e}"
+    if row.get("min_ancestor_ess") is not None:
+        # Printed BESIDE min_ess, never instead of it: the autocorrelation column
+        # is meaningless for a particle population and the ancestor column is
+        # meaningless for a chain, so a row that showed only one of the two would
+        # be unreadable in exactly one of the two directions.
+        rungs = row.get("n_temperatures")
+        eevpd += f"  ancESS {row['min_ancestor_ess']:.1f}  rungs {rungs}"
+        if row.get("reached_target") is False:
+            eevpd += "  !! TEMPERED, lambda < 1"
     return (
         f"{label:<20}{row['wall']:>9.1f}{_fmt_rhat(row['rhat'])}{div:>5}"
         f"{row['min_ess']:>9.1f}{row['sec_per_ess']:>9.3f}{row['unique_frac']:>7.3f}"
