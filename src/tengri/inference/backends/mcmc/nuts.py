@@ -202,6 +202,7 @@ def run_nuts(
     n_chains=1,
     target_accept_rate=0.85,
     max_num_doublings=DEFAULT_MAX_NUM_DOUBLINGS,
+    warmup_max_num_doublings: int | None = None,
     dense_mass_matrix: bool | None = None,
     pathfinder_warmstart=False,
     precondition: bool | float | None = None,
@@ -479,7 +480,31 @@ def run_nuts(
     # caps would silently sample at the wrong step size. Leaving a knob out of
     # this tuple is what makes it inert rather than wrong -- see
     # ``_adaptation_cache_key``.
-    tuning = (int(n_warmup), float(target_accept_rate), int(max_num_doublings))
+    # Warmup may run under a SHALLOWER cap than sampling. The two halves are not
+    # symmetric: during warmup the step size has not converged, so trees are at
+    # their deepest and most heterogeneous exactly where they are least
+    # informative -- one vmapped 100-step adaptation over 64 lanes at D = 3 cost
+    # 1272 s, ~12.7 s per step, for a three-parameter model
+    # (bench/reports/2026-08-31_fast_nuts.md Finding 7). Capping the adaptation
+    # harder than the sampling is therefore a knob that did not exist: #2101 made
+    # ``max_num_doublings`` reach warmup at all, and it reaches it with the
+    # sampling value. ``None`` keeps them equal, so this is a no-op unless asked
+    # for.
+    #
+    # It is not free, and the failure mode has a name: an adaptation that cannot
+    # complete a trajectory returns a step size tuned for a truncated one.
+    # ``bench/reports/2026-04-22_pathfinder_vs_window_nuts.md`` records an 18x
+    # regression from an under-adapted step size, so any use of this must carry
+    # its R-hat and ESS columns.
+    warmup_max_doublings = int(
+        max_num_doublings if warmup_max_num_doublings is None else warmup_max_num_doublings
+    )
+    tuning = (
+        int(n_warmup),
+        float(target_accept_rate),
+        int(max_num_doublings),
+        warmup_max_doublings,
+    )
     adapt_key = ("nuts", not use_dense, bool(pathfinder_warmstart), tuning, problem.cache_key)
     cached = _get_cached_adaptation(fitter, adapt_key)
 
@@ -526,7 +551,7 @@ def run_nuts(
                 use_dense,
                 target_accept_rate,
                 bool(pathfinder_warmstart),
-                int(max_num_doublings),
+                warmup_max_doublings,
             )
             jax.block_until_ready(step_size)
         # Refuse before caching and before the sampling scan compiles (#2088).
@@ -674,6 +699,7 @@ def run_nuts(
             "step_size": float(parameters["step_size"]),
             "warmup": "pathfinder" if pathfinder_warmstart else "window",
             **diag,
+            "warmup_max_num_doublings": warmup_max_doublings,
             **depth_stats,
         },
         loss_history=None,
