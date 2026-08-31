@@ -272,8 +272,11 @@ The proposed explanation was that this is an ill-conditioning failure —
 Pathfinder builds its covariance from a **low-rank** inverse Hessian read off the
 L-BFGS history (`lbfgs_inverse_hessian_formula_1`), tengri's posteriors run
 cond 10⁵–10⁸, and a low-rank estimate of curvature that stiff comes back
-near-singular. **The mechanism is real and measured. It does not produce a
-crash; it produces a silently wrong error bar.**
+near-singular. **The failure is real and measured. It does not produce a
+crash; it produces a silently wrong error bar.** The *mechanism* below is stated
+more confidently than the evidence supports — see **Finding 4b**, which reads
+blackjax's source and finds a second mechanism that predicts the same table and
+that upstream actually documents.
 
 | parameter | reference sd | `pathfinder` sd | ratio | + `precondition=True` | ratio |
 |---|---:|---:|---:|---:|---:|
@@ -287,9 +290,11 @@ crash; it produces a silently wrong error bar.**
 | `sfh_dpl_beta` | 0.824 | 0.091 | **0.11** | 0.191 | 0.23 |
 
 The split is exactly along the conditioning: the four well-constrained directions
-come back at 0.79–1.07×, the four degenerate ones at 0.11–0.18×. That is the
-low-rank estimate failing to see the soft directions, which is the predicted
-mechanism.
+come back at 0.79–1.07×, the four degenerate ones at 0.11–0.18×. That is
+consistent with the low-rank estimate failing to see the soft directions — and
+equally consistent with the estimate having no low-rank part at all, because
+every row here was MAP-seeded. Finding 4b separates the claims; this table does
+not.
 
 **Preconditioning was wired and tested, and it halves the collapse without
 curing it** (worst 0.11 → 0.21, median 0.48 → 0.46; the *means* improve markedly,
@@ -304,11 +309,158 @@ preconditioning contracts permit only because the tier now allows a real fit —
 `test_preconditioning_roundtrip` parametrises over every declaring backend and
 runs one through each.
 
-**Not tested, and worth a line:** blackjax's own documentation says Pathfinder
-"prefers double precision; float32 requires careful tuning of `ftol`, `gtol`, or
-initialization." Everything here is x64. Do not assume Pathfinder inherits the
+---
+
+## Finding 4b — cross-check against blackjax's own Pathfinder page
+
+Added after the fact, against
+<https://blackjax-devs.github.io/sampling-book/algorithms/pathfinder/>, with
+every API statement verified by introspection on the installed **blackjax
+1.6.2** rather than taken from the page's prose. It moves one of this report's
+conclusions and corrects one of its claims.
+
+### The API — tengri matches the page, and "the instance form is dead" was wrong
+
+The page shows **two** styles, and both work on 1.6.2:
+
+```python
+# module-level -- what tengri calls
+_, info = blackjax.vi.pathfinder.approximate(infer_key, logdensity_fn, w0, ftol=1e-6)
+sample_state, _ = blackjax.vi.pathfinder.sample(rng_key, state, 10_000)
+
+# instance -- also alive
+pf = blackjax.pathfinder(logdensity_fn)
+state, _ = pf.init(approx_key, w0, ftol=1e-4)
+samples, _ = pf.sample(sample_key, state, 5_000)
+```
+
+Verified: `blackjax.pathfinder.approximate is blackjax.vi.pathfinder.approximate`
+→ **True**, so tengri's call site is the page's primary style, the same function
+object. And `VIAlgorithm` exposes `init`, `step`, `sample` — **no
+`approximate`**.
+
+So the 2026-05 defect was narrower than Finding 4 says. The instance API was not
+removed; **`.approximate` was renamed to `.init`**. `c8eaa76fd` called
+`blackjax.pathfinder(f).approximate(...)`, which is one rename from working, and
+it raised `AttributeError`. That strengthens rather than weakens the segfault
+conclusion — an `AttributeError` is even less like a segfault than an OOM — but
+the report and the regression test both said "the instance form has no
+`.approximate`" in a way that implied the style was dead. Corrected in
+`test_bug_231_pathfinder_not_a_segfault.py`, which now also pins the namespace
+identity `_shared.py`'s warm-start cap depends on.
+
+### `num_samples` — the page is a live footgun for a tengri user
+
+Read off the installed signature, not remembered:
+
+```
+approximate(rng_key, logdensity_fn, initial_position, num_samples: int = 200,
+            *, maxiter=30, maxcor=10, maxls=1000, gtol=1e-08, ftol=1e-05, ...)
+VIAlgorithm.init(rng_key, position, num_samples: int = 200, **lbfgs_parameters)
+```
+
+**200 confirmed**, on both entry points. The page **never passes
+`num_samples`** in either style — it tunes `ftol` instead — so every snippet on
+it runs at 200 ELBO draws, which is exactly the configuration #1029 measured at
+**25.65 GB and an OOM kill**. tengri's `n_elbo_draws=25` is Stan's value and is
+consistent with nothing on the page, because the page offers no guidance on this
+parameter at all. Recorded in `run_pathfinder`'s docstring: do not port a snippet
+from that page without setting it.
+
+### The low-rank inverse Hessian — upstream does not state the limitation, and the mechanism I claimed is not established
+
+**The page contains no discussion of rank, conditioning, degenerate posteriors,
+or any diagnostic for a bad covariance.** Its only failure-mode sentence is about
+optimizer convergence: *"L-BFGS can occasionally fail to converge from a bad
+initialization; retry until the ELBO path is finite."* There is no upstream
+statement of the limitation this report measures, so Finding 4's width table is
+**not** corroborated by upstream — it stands on our measurement alone. That is a
+candidate for an upstream documentation issue.
+
+Worse for this report, reading the source moves the diagnosis. blackjax builds
+the covariance as
+
+```python
+def lbfgs_inverse_hessian_formula_1(alpha, beta, gamma):
+    return jnp.diag(alpha) + beta @ gamma @ beta.T
+```
+
+— a **diagonal plus a correction whose rank is however many L-BFGS steps
+actually ran**. So there are two mechanisms that predict the same collapsed
+table, and this report separated neither:
+
+1. the low-rank correction is too small to cover a posterior at cond 1e5–1e8
+   (what Finding 4 asserted); or
+2. the correction is **empty**, because tengri seeds Pathfinder from the MAP and
+   L-BFGS started at an optimum has no path to record.
+
+On an 8-D tilted Gaussian at cond 1e6 (a toy — no SED model), started at the
+exact mode, `beta` came back with **0 of 20 usable columns**: the covariance
+degenerates to `diag(alpha)`, a strictly diagonal Gaussian with no correlation
+structure at all. Every Pathfinder row in this report was MAP-seeded. The real
+MAP seed is only approximate (8 restarts of 800 Adam steps), so `beta` was
+presumably not exactly empty in the SED fits — but it was not checked, and it
+should have been.
+
+**Mechanism 2 is the one upstream documents**, which brings us to:
+
+### Initialization — the page says the opposite of what tengri does
+
+This report previously cited the page second-hand. Exact quote:
+
+> "It may make sense to start pathfinder with a 'bad' initialization point, in
+> order to make the L-BFGS algorithm run longer and have more datapoints to
+> estimate the inverse hessian matrix."
+
+**tengri MAP-seeds every Pathfinder fit by default** (`_maybe_map_init`, and this
+harness passes `init_from=map_seed` on every row) — precisely the configuration
+the page advises against, for precisely the reason that would produce the widths
+measured here. The unrun `pathfinder cold-init` row is therefore not a
+nice-to-have; it is **the discriminator between the two mechanisms and the top
+follow-up from this report**.
+
+One conflict to write down rather than smooth over: on the toy above, the page's
+advice did **not** help — a bad init gave median width ratio 0.03 against truth,
+worse than the mode start. But a cond-1e6 quadratic is not a fair test of that
+claim, because L-BFGS at `maxiter=30` has not converged from far away, so the
+Gaussian is fitted around a point that is not the mode. **The toy neither
+corroborates nor refutes the page; it establishes only that a mode start empties
+`beta`.** Anyone reading the page's initialization advice and applying it to a
+tengri fit should treat it as untested here.
+
+### `pathfinder_adaptation` as a NUTS warm start
+
+The page does use it, and its call shape matches 1.6.2:
+
+```python
+adapt = blackjax.pathfinder_adaptation(blackjax.nuts, logdensity_fn)
+(state, parameters), info = adapt.run(sample_key, w0, 400)
+```
+
+**400** adaptation steps, with no guidance on choosing that number — so the page
+offers no support for or against `2026-04-22_pathfinder_vs_window_nuts.md`'s
+finding that cutting `n_warmup` to 50 cost an 18× silent slowdown. It does
+confirm 400 is a reasonable order of magnitude, and it is well above 50.
+
+Also verified: 1.6.2's `pathfinder_adaptation` signature has grown
+`num_samples_per_path: int = 200`, `psis_imm_n_samples: int = 2000`, `n_paths`
+and `imm_estimator` — a multi-path Pathfinder with PSIS. `_shared.py`'s
+`_bounded_pathfinder_elbo_draws` caps the draws by rebinding
+`blackjax.vi.pathfinder.approximate`, which still works, but **whether
+`num_samples_per_path` now bypasses that cap was not checked** and should be
+before anyone runs the warm-start rows.
+
+### Precision — upstream is blunter than this report was
+
+> "L-BFGS algorithm struggles with float32s and log-likelihood functions; it's
+> suggested to use double precision numbers."
+
+Everything measured here is x64. Do **not** assume Pathfinder inherits the
 float32 safety `2026-08-31_float32_fitting_path.md` established for the sampling
-path.
+path. The page's suggested levers when float32 must be used — `ftol`, `gtol`,
+initialization — are **not reachable through tengri's `fit()`**: `run_pathfinder`
+exposes `maxiter` and `maxcor` but not `ftol`, `gtol` or `maxls`. A one-line
+passthrough, deliberately not added in the PR that measured this.
 
 ---
 
@@ -395,10 +547,16 @@ otherwise:
   `ctl-dpl` was reached. `05`'s shipped NUTS clears max R-hat < 1.01 on 0 of 3
   seeds (`2026-08-30_mclmc_tuning.md`), so it would have needed its own long
   preconditioned reference before any fidelity column meant anything.
-- **`pathfinder cold-init`**, the row testing blackjax's claim that "bad
-  initialization points may improve L-BFGS convergence and Hessian estimation".
-  Wired (`map_seed=False`), not run. Given Finding 4 it is worth running: the
-  collapse is in the Hessian estimate, which is what that claim is about.
+- **`pathfinder cold-init` — now the single most valuable unrun row in this
+  report.** Wired (`map_seed=False`), not run. Finding 4b promoted it from a
+  curiosity to *the discriminator*: blackjax builds the covariance as
+  `diag(alpha) + beta @ gamma @ beta.T`, a MAP seed can empty `beta` outright
+  (0 of 20 columns on a toy started at an exact mode), and every Pathfinder row
+  here was MAP-seeded — which is exactly what blackjax's own page advises
+  against. If the collapse is the empty-`beta` mechanism rather than the
+  ill-conditioning one, this row fixes it and the tier note's explanation needs
+  rewriting; if it does not, the ill-conditioning reading stands. One row, one
+  seed, and it settles which.
 - **`svgd` and `schrodinger_follmer`** — dropped from scope by the coordinator.
 - **StableHLO line counts** — dropped; `cold − warm` is the operational number and
   another agent is measuring NUTS compile anatomy directly.

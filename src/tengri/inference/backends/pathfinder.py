@@ -65,7 +65,15 @@ def run_pathfinder(
         accuracy knob:** the draws are vmapped through the full forward model, so
         peak memory scales as ``n_elbo_draws * maxiter * <cost of one SED>``.
         BlackJAX's own default is 200, which drove a 7-parameter photometry fit to
-        26 GB and OOM-killed the slow test tier.
+        26 GB and OOM-killed the slow test tier. Verified against blackjax 1.6.2
+        rather than remembered: ``blackjax.vi.pathfinder.approximate`` declares
+        ``num_samples: int = 200`` and so does ``VIAlgorithm.init``.
+
+        **A reader copying blackjax's own Pathfinder page will hit that
+        default.** That page never passes ``num_samples`` in either of the two
+        styles it shows, tuning ``ftol`` instead, so its examples run at 200 ELBO
+        draws -- exactly the configuration #1029 measured at 25.65 GB. Do not
+        port a snippet from it without setting this.
     restore_fn : callable, optional
         Maps draws out of preconditioned coordinates, i.e.
         ``PreconditionedProblem.restore``. Identity when omitted.
@@ -91,6 +99,21 @@ def run_pathfinder(
 
     Notes
     -----
+    **Not exposed, and upstream's recommended lever:** ``approximate`` also takes
+    ``ftol`` (default 1e-5), ``gtol`` (1e-8) and ``maxls`` (1000), and blackjax's
+    Pathfinder page tunes ``ftol`` as its answer to L-BFGS trouble -- "L-BFGS can
+    occasionally fail to converge from a bad initialization; retry until the ELBO
+    path is finite." None of the three is reachable through ``fit()`` today, so a
+    user following that advice cannot apply it here. Adding them is a one-line
+    passthrough and is deliberately not done in the PR that measured this.
+
+    **Precision.** Everything measured for this backend is x64. blackjax's page
+    states plainly that "L-BFGS algorithm struggles with float32s and
+    log-likelihood functions; it's suggested to use double precision numbers",
+    so do NOT assume Pathfinder inherits the float32 safety that
+    ``bench/reports/2026-08-31_float32_fitting_path.md`` established for the
+    sampling path.
+
     ``n_samples`` (posterior draws, cheap -- one Gaussian sample each) and
     ``n_elbo_draws`` (path-selection draws, expensive -- one forward model each)
     are different quantities. Raising ``n_samples`` costs almost nothing; raising

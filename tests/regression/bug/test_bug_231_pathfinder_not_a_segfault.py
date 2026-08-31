@@ -26,7 +26,7 @@ segfault**:
    was ``blackjax.pathfinder(logdensity).approximate(...)``; blackjax made
    ``blackjax.pathfinder(...)`` return a ``VIAlgorithm`` that has no
    ``.approximate``. That is an ``AttributeError`` -- caught by
-   :func:`test_the_instance_form_has_no_approximate` below, which is why the
+   :func:`test_the_instance_form_renamed_approximate_to_init` below, which is why the
    backend calls the module-level functions.
 2. **Uncapped ELBO draws** (#1028, fixed in ``8807c838d``, 2026-07-10). blackjax
    defaults ``num_samples`` -- its *ELBO*-draw count, one full forward model
@@ -50,11 +50,22 @@ import pytest
 pytestmark = pytest.mark.regression_bug
 
 
-def test_the_instance_form_has_no_approximate():
-    """Defect 1: ``blackjax.pathfinder(f).approximate`` does not exist.
+def test_the_instance_form_renamed_approximate_to_init():
+    """Defect 1: the instance method was **renamed**, not removed.
 
-    If this ever starts passing, the instance form became viable again -- which
-    is information, not permission. The module-level call works on both.
+    Worth stating precisely, because the imprecise version ("the instance form
+    is dead") is wrong and would mislead the next person. blackjax's own
+    Pathfinder page still shows the instance style and it still works on 1.6.2 --
+    under a different name::
+
+        pf = blackjax.pathfinder(logdensity_fn)
+        state, _ = pf.init(approx_key, w0, ftol=1e-4)  # was .approximate(...)
+        samples, _ = pf.sample(sample_key, state, 5_000)
+
+    So the 2026-05 call site was one rename away from working, and it raised
+    ``AttributeError`` rather than crashing. The backend uses the module-level
+    functions anyway: they take ``logdensity_fn`` explicitly and kept a stable
+    signature across 1.3 -> 1.6.
     """
     blackjax = pytest.importorskip("blackjax")
 
@@ -62,11 +73,39 @@ def test_the_instance_form_has_no_approximate():
     assert not hasattr(algorithm, "approximate"), (
         "blackjax.pathfinder(logdensity) grew back an .approximate attribute. "
         "The backend deliberately uses the module-level blackjax.pathfinder."
-        "approximate / .sample because those kept a stable signature across the "
-        "1.3 -> 1.6 window; re-check 4c1002ae7 before changing it."
+        "approximate / .sample; re-check 4c1002ae7 before changing it."
     )
+    assert hasattr(algorithm, "init"), "the instance form's replacement for .approximate"
     assert hasattr(blackjax.pathfinder, "approximate")
     assert hasattr(blackjax.pathfinder, "sample")
+
+
+def test_the_two_namespaces_are_the_same_function():
+    """``blackjax.pathfinder.approximate`` IS ``blackjax.vi.pathfinder.approximate``.
+
+    ``_shared.py`` relies on the converse for the warm-start cap -- the two names
+    are distinct *namespaces* holding one function object, so patching the API
+    instance would not affect what ``pathfinder_adaptation`` resolves. This pins
+    the identity that makes both halves of that sentence true, and it is also
+    what makes tengri's call site the same entry point blackjax's own page uses
+    in its module-level example.
+    """
+    blackjax = pytest.importorskip("blackjax")
+    import blackjax.vi.pathfinder as module
+
+    assert blackjax.pathfinder.approximate is module.approximate
+
+
+def test_blackjax_still_defaults_the_elbo_draws_to_200():
+    """The number the OOM diagnosis rests on, read off the installed signature.
+
+    If upstream ever lowers this, the cap below stops being load-bearing and the
+    story in #1029 needs re-reading rather than re-citing.
+    """
+    blackjax = pytest.importorskip("blackjax")
+    import blackjax.vi.pathfinder as module
+
+    assert inspect.signature(module.approximate).parameters["num_samples"].default == 200
 
 
 def test_the_elbo_draw_count_is_passed_explicitly():
