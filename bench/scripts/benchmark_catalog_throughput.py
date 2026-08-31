@@ -645,6 +645,26 @@ def main(argv=None):
         help="mcmc_chees: hard cap on the adapted trajectory length. This is what "
         "bounds a vmapped ChEES batch -- lanes batch to the widest adapted L.",
     )
+    ap.add_argument(
+        "--chain-jitter",
+        type=float,
+        default=None,
+        help="mcmc_chees: overdispersion of the SAMPLING chains around the warm "
+        "start. The default None seeds them from the adaptation ensemble's own "
+        "final states, so their split R-hat is a consistency check rather than an "
+        "independent test (PR #2097). 0.5 is the suggested width.",
+    )
+    ap.add_argument(
+        "--precondition",
+        type=float,
+        default=None,
+        metavar="ALPHA",
+        help="analytic J^T N^-1 J + I metric, per galaxy, at whitening strength "
+        "ALPHA in [0, 1]. Omit for off (the default). 0.5 is "
+        "DEFAULT_WHITENING_STRENGTH; 1.0 is full whitening, which #1442 measured "
+        "as worse whenever the modal Hessian misstates the bulk curvature. "
+        "Applies to every sampler on the batched path.",
+    )
     ap.add_argument("--reps", type=int, default=4, help="--mode grad: timing repetitions")
     ap.add_argument("--runs", type=int, default=20, help="--mode grad: calls per repetition")
     ap.add_argument("--shard", action="store_true", help="also time devices='all' scaling")
@@ -744,6 +764,17 @@ def main(argv=None):
         chees_kw["n_chains"] = args.n_chains
     if args.max_leapfrog_steps is not None:
         chees_kw["max_leapfrog_steps"] = args.max_leapfrog_steps
+    if args.chain_jitter is not None:
+        chees_kw["chain_jitter"] = args.chain_jitter
+    # Preconditioning is NOT a ChEES knob: the analytic metric threads through
+    # every sampler on the batched path, so it goes in the shared kwargs. Keeping
+    # it out of ``chees_kw`` is what lets an HMC row be measured with the same
+    # metric, which is the only way to tell "ChEES needs the metric" apart from
+    # "this posterior needs the metric".
+    if args.precondition is not None:
+        run_kw["precondition"] = args.precondition
+    meta["precondition"] = args.precondition
+    meta["chain_jitter"] = args.chain_jitter
     meta["n_warmup"] = args.warmup
     meta["n_burnin"] = args.burnin
     meta["n_samples"] = args.samples
@@ -838,6 +869,16 @@ def main(argv=None):
                     "lut_grad_error_est": bias,
                     **diag,
                 }
+                # What the metric bought, read off the fit rather than assumed.
+                # ``preconditioned_gal`` is a COUNT, not a flag: a lane whose
+                # metric could not be factorized falls back to the identity on
+                # its own, so a row can be partly whitened and has to say so.
+                if cp.diagnostics.get("whitening_strength") is not None:
+                    row["preconditioned_gal"] = cp.diagnostics.get("preconditioned")
+                    row["metric_cond_median"] = cp.diagnostics.get("metric_condition_median")
+                    row["whitened_cond_median"] = cp.diagnostics.get("whitened_condition_median")
+                    row["metric_cond_max"] = cp.diagnostics.get("metric_condition_max")
+                    row["whitened_cond_max"] = cp.diagnostics.get("whitened_condition_max")
                 if row["min_ess"]:
                     row["s_per_eff_sample"] = round(warm / (row["min_ess"] * n_gal), 6)
                     row["eff_samples_per_gpu_min"] = round(60.0 * row["min_ess"] * n_gal / warm, 1)

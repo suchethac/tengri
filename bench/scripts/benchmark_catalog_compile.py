@@ -83,6 +83,7 @@ def measure_cell(
     n_gal: int | None = None,
     n_ensemble: int = 8,
     max_leapfrog_steps: int = 64,
+    precondition: float | None = None,
 ) -> dict:
     """Trace/lower, compile and run one catalog engine at batch width ``chunk``.
 
@@ -113,6 +114,12 @@ def measure_cell(
     n_ensemble, max_leapfrog_steps : int
         ChEES only. The ensemble is chains-*within*-galaxy, so a cell carries
         ``chunk * n_ensemble`` live chains through every adaptation step.
+    precondition : float or None
+        Whitening strength for the per-galaxy analytic metric, or ``None`` for
+        off. **The point of the sweep when it is set**: the metric is built,
+        factorized and applied inside the ``lax.map``, so it enlarges the graph
+        once. If it enlarged it per galaxy the StableHLO line count would grow
+        with ``n_gal`` and the O(1)-in-N contract would be broken.
 
     Returns
     -------
@@ -149,6 +156,7 @@ def measure_cell(
         use_dense=use_dense,
         n_ensemble=n_ensemble,
         max_leapfrog_steps=max_leapfrog_steps,
+        precondition=precondition,
     )
 
     d_params = ravel_pytree(fitter._initialize_unbounded(jax.random.PRNGKey(0)))[0].shape[0]
@@ -203,6 +211,7 @@ def measure_cell(
         "n_warmup": n_warmup,
         "n_samples": n_samples,
         "max_doublings": int(max_doublings),
+        "precondition": precondition,
         "use_dense": bool(use_dense),
         "d_params": int(d_params),
         "n_data": int(n_data),
@@ -230,6 +239,15 @@ def main(argv=None) -> int:
         "rows -- the axis the O(1)-in-N compile contract is about.",
     )
     ap.add_argument("--n-ensemble", type=int, default=8, help="mcmc_chees ensemble width")
+    ap.add_argument(
+        "--precondition",
+        type=float,
+        default=None,
+        metavar="ALPHA",
+        help="per-galaxy analytic J^T N^-1 J + I metric at whitening strength "
+        "ALPHA. Omit for off. Sweep --n-gal with it set to check the metric did "
+        "not break compile O(1) in N.",
+    )
     ap.add_argument(
         "--max-leapfrog-steps", type=int, default=64, help="mcmc_chees trajectory-length cap"
     )
@@ -259,6 +277,7 @@ def main(argv=None) -> int:
             n_gal=None if args.n_gal[0] in (None, 0) else int(args.n_gal[0]),
             n_ensemble=args.n_ensemble,
             max_leapfrog_steps=args.max_leapfrog_steps,
+            precondition=args.precondition,
         )
         print("__ROW__" + json.dumps(row))
         return 0
@@ -286,6 +305,8 @@ def main(argv=None) -> int:
                 ]
                 if n_gal is not None:
                     cmd += ["--n-gal", str(n_gal)]
+                if args.precondition is not None:
+                    cmd += ["--precondition", str(args.precondition)]
                 if args.dense:
                     cmd.append("--dense")
                 label = f"K={chunk}" + ("" if n_gal is None else f" N={n_gal}")

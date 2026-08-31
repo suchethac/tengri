@@ -65,8 +65,28 @@ from tengri.inference.backends.mcmc._shared import (
     _resolve_chees_ensemble,
 )
 from tengri.inference.likelihoods.gaussian import inv_noise_std
+from tengri.inference.preconditioning import (
+    MAX_METRIC_CONDITION,
+    PRECONDITION_MAX_DIM,
+    PRIOR_METRIC_FLOOR,
+    _resolve_whitening_strength,
+    traced_metric_conditioning,
+    traced_preconditioner,
+)
 
 _SAMPLERS = ("nuts", "hmc", "chees")
+
+#: Cache of preconditioned log-densities, keyed by ``(base_fn, strength)``.
+#:
+#: Not an optimization -- a correctness requirement for the warm path. The scan
+#: cores in ``_shared`` take ``logdensity_fn_2arg`` as a **static** argument, so
+#: JAX keys their compilation on function *identity*. ``_get_flat_logdensity``
+#: caches the base function on the Model for exactly that reason; a wrapper built
+#: fresh inside every ``build_catalog_mcmc_engine`` call would be a new object
+#: every time and would re-trace the whole sampler on every catalog fit, turning
+#: the "warm" call back into a cold one. The key's first element is already
+#: model-cached, so this cannot grow without bound.
+_PRECOND_LOGDENSITY_CACHE: dict = {}
 
 #: Adaptation-ensemble width for a *catalog* ChEES fit.
 #:
@@ -138,6 +158,111 @@ def _make_substitute(template_data_args, thread_redshift: bool, thread_line_flux
         return data_args
 
     return substitute
+
+
+def _preconditioned_logdensity(log_posterior_flat_2arg, strength):
+    """Return a cached ``log_p(zeta, (A, data_args))`` for one whitening strength.
+
+    The transform ``A`` arrives as the first element of the ``data_args`` pytree
+    rather than as a Python closure, and that is the change that lets the metric
+    cross the catalog seam at all.
+
+    ``A`` is **per galaxy** -- it is the Cholesky factor of ``J^T N^-1 J + I``
+    built at *that* galaxy's MAP from *that* galaxy's noise -- so it has a galaxy
+    axis and has to ride the same ``lax.map`` batching as ``data`` and ``noise``.
+    A closure-captured ``A``, which is what :meth:`LinearPreconditioner.wrap` and
+    therefore :func:`prepare_preconditioning` produce, is a *static* value from
+    JAX's point of view: one matrix shared by every lane. There is no shape for
+    that to take. The only per-galaxy matrix is a traced one, and the traced
+    arguments the scan cores in ``_shared`` accept are exactly ``init_flat``,
+    the keys, and ``data_args``.
+
+    Tupling it onto ``data_args`` rather than adding a dict key is deliberate:
+    every function in ``_shared`` treats ``data_args`` as opaque and only ever
+    forwards it to ``logdensity_fn_2arg``, so a tuple passes through untouched,
+    whereas an extra dict key would reach the model's own jitted log-density and
+    change the pytree it was built for.
+
+    Parameters
+    ----------
+    log_posterior_flat_2arg : callable
+        ``log_p(xi, data_args)``, the model-cached flat log-posterior.
+    strength : float
+        Whitening exponent, static. Part of the cache key: a density wrapped at
+        one strength is not the one another strength would give, and the failure
+        would be silent (#1442).
+
+    Returns
+    -------
+    callable
+        ``log_p(zeta, (A, data_args)) -> scalar``, stable across calls.
+    """
+    key = (log_posterior_flat_2arg, float(strength))
+    cached = _PRECOND_LOGDENSITY_CACHE.get(key)
+    if cached is None:
+
+        def log_posterior_precond_2arg(zeta, precond_args):
+            """Log posterior in whitened coordinates: ``log p(A @ zeta)``.
+
+            The constant ``log|det A|`` is dropped, as in
+            :meth:`LinearPreconditioner.wrap`: the map is linear, so it shifts
+            the log-density by a constant and leaves the sampled distribution
+            untouched.
+            """
+            matrix, data_args = precond_args
+            return log_posterior_flat_2arg(matrix @ zeta, data_args)
+
+        cached = log_posterior_precond_2arg
+        _PRECOND_LOGDENSITY_CACHE[key] = cached
+    return cached
+
+
+def build_catalog_metric_diagnostics(
+    fitter,
+    *,
+    strength: float,
+    floor: float = PRIOR_METRIC_FLOOR,
+    max_condition: float = MAX_METRIC_CONDITION,
+    thread_redshift: bool = False,
+    thread_line_fluxes: bool = False,
+):
+    """Build a vmap-safe per-galaxy report of what the metric bought.
+
+    A catalog fit that whitened but cannot say *how much* it whitened is not
+    reportable: the analytic metric's whole claim is that it takes condition
+    numbers of 1e5-1e8 to ~1 at the expansion point, and only a measurement can
+    say whether it did so on this catalog.
+
+    Deliberately a **separate pass** from the sampler rather than extra outputs
+    on ``run_one``. It costs two further ``(D, D)`` eigendecompositions per
+    galaxy, which are worth paying once outside the sampler and not worth
+    carrying inside its compiled program for the whole run.
+
+    Returns
+    -------
+    callable
+        ``diag_one(init_flat, data, noise, presence, redshift, line_flux_obs,
+        line_flux_err) -> (metric_condition, whitened_condition, ok)``, all
+        scalars. ``ok`` is False for a galaxy that fell back to the identity.
+    """
+    init_params = fitter._initialize_unbounded(jax.random.PRNGKey(0))
+    log_posterior_flat_2arg, _unravel_fn, _init_flat, template_data_args = _get_flat_logdensity(
+        fitter, init_params
+    )
+    substitute = _make_substitute(template_data_args, thread_redshift, thread_line_fluxes)
+
+    def diag_one(init_flat, data, noise, presence, redshift, line_flux_obs, line_flux_err):
+        data_args = substitute(data, noise, presence, redshift, line_flux_obs, line_flux_err)
+        return traced_metric_conditioning(
+            log_posterior_flat_2arg,
+            init_flat,
+            data_args,
+            strength=strength,
+            floor=floor,
+            max_condition=max_condition,
+        )
+
+    return diag_one
 
 
 def build_catalog_map_init(
@@ -239,6 +364,9 @@ def build_catalog_mcmc_engine(
     max_leapfrog_steps: int = 200,
     chees_learning_rate: float = _CHEES_LEARNING_RATE,
     mass_matrix_estimation=None,
+    precondition: bool | float | None = None,
+    precondition_floor: float = PRIOR_METRIC_FLOOR,
+    precondition_max_condition: float = MAX_METRIC_CONDITION,
 ):
     """Build a vmap-safe per-galaxy NUTS/HMC/ChEES sampling callable.
 
@@ -301,6 +429,24 @@ def build_catalog_mcmc_engine(
     mass_matrix_estimation : None or "diagonal"
         ``None`` (default) leaves ChEES's metric at the identity. See
         :func:`~tengri.inference.backends.mcmc.chees.run_chees`.
+    precondition : bool, float or None, default None
+        Analytic metric preconditioning, **per galaxy**. ``None``/``False`` is
+        off and is the default (#1397: whitening is opt-in). ``True`` whitens at
+        :data:`~tengri.inference.preconditioning.DEFAULT_WHITENING_STRENGTH`
+        (0.5, not 1.0 -- see #1442); a float in ``[0, 1]`` names the exponent.
+
+        Each lane builds its **own** ``J^T N^-1 J + I`` at its **own** MAP warm
+        start, factorizes it, samples in the whitened coordinates and maps the
+        draws back, all inside the ``lax.map``. The metric is not, and cannot be,
+        a shared constant: ``J`` is the Jacobian at that galaxy's MAP and ``N``
+        is that galaxy's noise.
+
+        A lane whose metric is non-finite or not factorizable falls back to the
+        identity for that galaxy alone rather than aborting the catalog; see
+        :func:`~tengri.inference.preconditioning.traced_preconditioner`.
+    precondition_floor, precondition_max_condition : float, optional
+        Eigenvalue floor and condition-number cap on the metric, as for
+        :func:`~tengri.inference.preconditioning.prepare_preconditioning`.
 
     Returns
     -------
@@ -346,11 +492,63 @@ def build_catalog_mcmc_engine(
 
     substitute = _make_substitute(template_data_args, thread_redshift, thread_line_fluxes)
 
+    # Resolved ONCE, at build time, from a concrete Python value: the whitening
+    # strength is static, so ``strength is None`` below is a trace-time branch and
+    # the unpreconditioned program is byte-for-byte the one this module compiled
+    # before preconditioning existed.
+    n_dim = int(_init_flat.shape[0])
+    strength = _resolve_whitening_strength(precondition, n_dim)
+    if strength is not None and n_dim > PRECONDITION_MAX_DIM:
+        import warnings
+
+        warnings.warn(
+            f"precondition={precondition!r} at D={n_dim} exceeds PRECONDITION_MAX_DIM "
+            f"({PRECONDITION_MAX_DIM}), above which the O(D^3) factorization has no "
+            f"measured cost profile. On the catalog path the metric is dense and "
+            f"per galaxy, so a chunk of K galaxies holds O(K * D^2) on top of that; "
+            f"lower forward_chunk_size if memory binds. Honoring the request.",
+            UserWarning,
+            stacklevel=2,
+        )
+    sample_logdensity = (
+        log_posterior_flat_2arg
+        if strength is None
+        else _preconditioned_logdensity(log_posterior_flat_2arg, strength)
+    )
+
     def run_one(init_flat, gal_key, data, noise, presence, redshift, line_flux_obs, line_flux_err):
         data_args = substitute(data, noise, presence, redshift, line_flux_obs, line_flux_err)
 
+        if strength is None:
+            sample_args, sample_init, precond = data_args, init_flat, None
+        else:
+            # THIS lane's metric, built inside the vmap at THIS lane's MAP warm
+            # start from THIS lane's noise, and carried as a traced leaf of the
+            # pytree the scan cores forward to the log-density -- so it batches
+            # with the data instead of being a constant shared by every galaxy.
+            precond, _ok = traced_preconditioner(
+                log_posterior_flat_2arg,
+                init_flat,
+                data_args,
+                strength=strength,
+                floor=precondition_floor,
+                max_condition=precondition_max_condition,
+            )
+            sample_args = (precond.matrix, data_args)
+            sample_init = precond.to_latent(init_flat)
+
         warmup_key, chain_key = jax.random.split(gal_key)
         chain_keys = jax.random.split(chain_key, n_chain)
+
+        def restore(positions):
+            """Map draws out of the whitened coordinates. Identity when off.
+
+            ``positions @ A.T`` is row-wise ``A @ v``, so one expression covers
+            both the ``(n_iter, D)`` NUTS/HMC stack and the ChEES
+            ``(n_chains, n_iter, D)`` one. Called on every return path: draws
+            left in the sampled basis are finite, correctly shaped and wrong.
+            """
+            return positions if precond is None else positions @ precond.matrix.T
 
         if sampler == "chees":
             # This galaxy's OWN ChEES adaptation, over an ensemble of
@@ -366,11 +564,11 @@ def build_catalog_mcmc_engine(
             # keeps the key stream identical in shape to the NUTS/HMC lanes.
             ck = jax.random.split(chain_key, n_chains * n_chain).reshape(n_chains, n_chain, 2)
             positions, divergent, _step_size, _inv_mass, _n_leapfrog = _chees_scan(
-                init_flat,
+                sample_init,
                 warmup_key,
                 ck,
-                log_posterior_flat_2arg,
-                data_args,
+                sample_logdensity,
+                sample_args,
                 n_warmup,
                 ensemble_size,
                 n_chains,
@@ -386,17 +584,17 @@ def build_catalog_mcmc_engine(
             # Burn-in is per chain (the ``_vmap_chains`` contract), so it is
             # sliced BEFORE the chains are flattened together. Slicing after
             # would drop the head of chain 0 and nothing from the rest.
-            positions = positions[:, n_burnin:]
+            positions = restore(positions[:, n_burnin:])
             divergent = divergent[:, n_burnin:]
             return positions.reshape(-1, positions.shape[-1]), divergent.reshape(-1)
 
         if sampler == "nuts":
             positions, divergent, _expansions, _step_size, _inv_mass = _nuts_full_scan(
-                init_flat,
+                sample_init,
                 warmup_key,
                 chain_keys,
-                log_posterior_flat_2arg,
-                data_args,
+                sample_logdensity,
+                sample_args,
                 n_warmup,
                 max_num_doublings,
                 use_dense,
@@ -405,18 +603,18 @@ def build_catalog_mcmc_engine(
             )
         else:  # "hmc"
             positions, divergent, _step_size, _inv_mass = _hmc_full_scan(
-                init_flat,
+                sample_init,
                 warmup_key,
                 chain_keys,
-                log_posterior_flat_2arg,
-                data_args,
+                sample_logdensity,
+                sample_args,
                 n_warmup,
                 n_leapfrog,
                 use_dense,
                 target_accept_rate,
             )
 
-        # Discard per-galaxy burn-in (n_burnin is static → uniform shape).
-        return positions[n_burnin:], divergent[n_burnin:]
+        # Discard per-galaxy burn-in (n_burnin is static -> uniform shape).
+        return restore(positions[n_burnin:]), divergent[n_burnin:]
 
     return run_one, unravel_fn
