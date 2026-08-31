@@ -16,8 +16,7 @@ from tengri import list_agn_models
 def load_benchmark_module():
     """Import benchmark_forward_model.py as a module (it's a script)."""
     script_path = (
-        Path(__file__).parent.parent.parent / "bench" / "scripts" /
-        "benchmark_forward_model.py"
+        Path(__file__).parent.parent.parent / "bench" / "scripts" / "benchmark_forward_model.py"
     )
     # Read and parse the script without executing the __main__ block
     with open(script_path) as f:
@@ -25,7 +24,7 @@ def load_benchmark_module():
 
     # Remove the __main__ block to prevent execution
     # Find the "if __name__ == '__main__':" line
-    lines = content.split('\n')
+    lines = content.split("\n")
     main_idx = None
     for i, line in enumerate(lines):
         if "if __name__ == '__main__':" in line:
@@ -34,12 +33,12 @@ def load_benchmark_module():
 
     if main_idx is not None:
         # Truncate at the __main__ block
-        content = '\n'.join(lines[:main_idx])
+        content = "\n".join(lines[:main_idx])
 
     # Create and execute the module
     spec = importlib.util.spec_from_file_location("benchmark_forward_model", script_path)
     module = importlib.util.module_from_spec(spec)
-    exec(compile(content, script_path, 'exec'), module.__dict__)
+    exec(compile(content, script_path, "exec"), module.__dict__)
     return module
 
 
@@ -94,9 +93,7 @@ class TestBenchmarkCensusConsistency:
         # Check that _BARE_SSP_SECTIONS is a subset of forward sections
         # (bare sections are only for forward configs, not gradients)
         bare_missing = bench._BARE_SSP_SECTIONS - all_forward_sections
-        assert not bare_missing, (
-            f"_BARE_SSP_SECTIONS names undefined sections: {bare_missing}"
-        )
+        assert not bare_missing, f"_BARE_SSP_SECTIONS names undefined sections: {bare_missing}"
 
     def test_grad_config_labels_exist(self):
         """Gradient config selection must use labels that exist in all_configs."""
@@ -119,9 +116,20 @@ class TestAGNModelValidity:
         """All agn_model values must be accepted by list_agn_models() or be deprecated."""
         all_configs, _ = get_benchmark_configs()
         valid_models = set(list_agn_models().names())
-        deprecated_models = {"kubota_done_full", "kubota_done", "silva04", "cat3d_wind",
-                             "adaf", "relagn", "skirtor", "qsogen", "multicolor_agn",
-                             "richards2006", "skirtor_stalevski", "grahsp"}
+        deprecated_models = {
+            "kubota_done_full",
+            "kubota_done",
+            "silva04",
+            "cat3d_wind",
+            "adaf",
+            "relagn",
+            "skirtor",
+            "qsogen",
+            "multicolor_agn",
+            "richards2006",
+            "skirtor_stalevski",
+            "grahsp",
+        }
 
         for label, cfg_kwargs in all_configs:
             agn_model = cfg_kwargs.get("agn_model")
