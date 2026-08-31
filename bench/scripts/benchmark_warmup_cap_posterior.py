@@ -79,8 +79,22 @@ def _machine_load() -> dict:
     return {"load1": float(a), "load5": float(b), "load15": float(c), "n_cpu": os.cpu_count()}
 
 
-def run(notebook: str, seed: int, warmup_cap: int) -> dict:
-    """Fit the same galaxy twice, differing only in the warmup tree cap."""
+def run(notebook: str, seed: int, warmup_cap, target_accepts=()) -> dict:
+    """Fit one galaxy under several adaptations, changing one thing each time.
+
+    The ``target_accepts`` arms exist to rule out an alternative explanation for
+    the whole of Finding 9. The depth cap works by making warmup conclude a
+    LARGER step size -- but "adapt to a larger step size, run shallower trees,
+    accept more divergences" is precisely what ``target_accept_rate`` does, and
+    ``run_nuts`` has taken that parameter all along. If lowering the target
+    reproduces the cap's step size, tree depth, speed and divergence count, then
+    ``warmup_max_num_doublings`` is an indirect re-parameterization of a knob
+    that already ships, and the honest finding is that nobody had tuned
+    ``target_accept_rate``.
+
+    0.65 and 0.6 are the natural points: 0.651 is ChEES's own default -- and
+    deliberately not NUTS's 0.8 -- and 0.6 is the classic NUTS floor.
+    """
     import jax
     import numpy as np
     from benchmark_notebook_sampler import NOTEBOOKS
@@ -97,10 +111,11 @@ def run(notebook: str, seed: int, warmup_cap: int) -> dict:
     data = Data(photometry=(np.asarray(mock["flux_obs"]), np.asarray(mock["noise"])))
 
     shipped = dict(cfg["shipped"])
-    arms = {
-        "control": dict(shipped),
-        f"wcap={warmup_cap}": dict(shipped, warmup_max_num_doublings=int(warmup_cap)),
-    }
+    arms = {"control": dict(shipped)}
+    if warmup_cap is not None:
+        arms[f"wcap={warmup_cap}"] = dict(shipped, warmup_max_num_doublings=int(warmup_cap))
+    for t in target_accepts:
+        arms[f"target={t:g}"] = dict(shipped, target_accept_rate=float(t))
 
     out: dict = {}
     for label, kwargs in arms.items():
@@ -153,15 +168,38 @@ def run(notebook: str, seed: int, warmup_cap: int) -> dict:
             "params": stats,
         }
 
-    ctrl_label, cap_label = "control", f"wcap={warmup_cap}"
-    ctrl, cap = out[ctrl_label]["params"], out[cap_label]["params"]
+    # Every non-control arm is compared against the control, so one process can
+    # answer "is the cap a re-parameterization of the target" and "does either
+    # move the posterior" with the same instrument.
+    ctrl = out["control"]["params"]
     comparison = {}
-    for name in sorted(set(ctrl) & set(cap)):
-        c, w = ctrl[name], cap[name]
+    for label in [k for k in out if k != "control"]:
+        comparison[label] = _compare(ctrl, out[label]["params"])
+
+    return {
+        "probe": "warmup_cap_posterior",
+        "notebook": notebook,
+        "seed": seed,
+        "warmup_cap": warmup_cap,
+        "target_accepts": list(target_accepts),
+        "device": str(jax.devices()[0].platform),
+        **_machine_load(),
+        "arms": out,
+        "comparison": comparison,
+    }
+
+
+def _compare(ctrl: dict, other: dict) -> dict:
+    """Per-parameter marginal agreement of ``other`` against ``ctrl``."""
+    import numpy as np
+
+    result = {}
+    for name in sorted(set(ctrl) & set(other)):
+        c, w = ctrl[name], other[name]
         # Combined MC error of the DIFFERENCE of two means. If |shift| exceeds a
         # few of these the two runs are not sampling the same distribution.
         joint = float(np.sqrt(c["mcse"] ** 2 + w["mcse"] ** 2))
-        comparison[name] = {
+        result[name] = {
             "control_mean": c["mean"],
             "cap_mean": w["mean"],
             "control_sd": c["sd"],
@@ -172,17 +210,7 @@ def run(notebook: str, seed: int, warmup_cap: int) -> dict:
             "control_ess": c["ess"],
             "cap_ess": w["ess"],
         }
-
-    return {
-        "probe": "warmup_cap_posterior",
-        "notebook": notebook,
-        "seed": seed,
-        "warmup_cap": int(warmup_cap),
-        "device": str(jax.devices()[0].platform),
-        **_machine_load(),
-        "arms": out,
-        "comparison": comparison,
-    }
+    return result
 
 
 def main(argv=None) -> int:
@@ -191,31 +219,61 @@ def main(argv=None) -> int:
     ap = argparse.ArgumentParser(description=__doc__)
     ap.add_argument("--notebook", default="ctl-dpl", choices=sorted(NOTEBOOKS))
     ap.add_argument("--seed", type=int, default=7)
-    ap.add_argument("--warmup-cap", type=int, default=5)
+    ap.add_argument(
+        "--warmup-cap",
+        type=int,
+        default=5,
+        help="warmup tree-depth cap arm; pass -1 to omit the arm entirely",
+    )
+    ap.add_argument(
+        "--target-accept",
+        type=float,
+        nargs="*",
+        default=[],
+        metavar="RATE",
+        help="add a lowered target_accept_rate arm per value. This is the control "
+        "for Finding 9's mechanism: if lowering the target reproduces the depth "
+        "cap's step size, depth, speed and divergences, the cap is an indirect "
+        "re-parameterization of a knob that already ships.",
+    )
     ap.add_argument("--json", default=None)
     args = ap.parse_args(argv)
 
-    row = run(args.notebook, args.seed, args.warmup_cap)
+    row = run(
+        args.notebook,
+        args.seed,
+        None if args.warmup_cap is not None and args.warmup_cap < 0 else args.warmup_cap,
+        tuple(args.target_accept),
+    )
     if args.json:
         with open(args.json, "w") as fh:
             json.dump(row, fh, indent=2)
 
-    print(f"\n{args.notebook} seed {args.seed}: control vs warmup cap {args.warmup_cap}")
-    for label, arm in row["arms"].items():
-        print(
-            f"  {label:<10} wall {arm['wall_s']:>8.1f}s  step {arm['step_size']:.5f}  "
-            f"depth {arm['tree_depth_mean']:.2f}  "
-            f"div(sampling) {arm['n_divergent_sampling']}  "
-            f"div(final warmup window) {arm['warmup_divergence_frac_final_window']}"
-        )
-    hdr = f"\n{'parameter':<28}{'shift/sd':>10}{'sd ratio':>10}{'shift/MCSE':>12}"
+    print(f"\n{args.notebook} seed {args.seed}")
+    # The adapted step size is the quantity the mechanism is about, and unlike
+    # every wall clock here it is contention-immune. It leads the table.
+    hdr = (
+        f"{'arm':<14}{'step size':>12}{'depth':>8}{'grad/draw':>11}"
+        f"{'div(samp)':>11}{'div(warm)':>11}{'wall s':>10}"
+    )
     print(hdr)
     print("-" * len(hdr))
-    for name, c in row["comparison"].items():
+    for label, arm in row["arms"].items():
+        wf = arm["warmup_divergence_frac_final_window"]
         print(
-            f"{name:<28}{c['shift_in_control_sd']:>10.3f}"
-            f"{c['sd_ratio_cap_over_control']:>10.3f}{c['shift_in_joint_mcse']:>12.2f}"
+            f"{label:<14}{arm['step_size']:>12.5f}{arm['tree_depth_mean']:>8.2f}"
+            f"{2 ** arm['tree_depth_mean']:>11.1f}{arm['n_divergent_sampling']:>11}"
+            f"{('n/a' if wf is None else format(wf, '.3f')):>11}{arm['wall_s']:>10.1f}"
         )
+    for label, comp in row["comparison"].items():
+        cols = f"{'parameter':<26}{'shift/sd':>10}{'sd ratio':>10}{'shift/MCSE':>12}"
+        hdr2 = f"\n{label} vs control:  {cols}"
+        print(hdr2)
+        for name, c in comp.items():
+            print(
+                f"{'':<{len(label) + 16}}{name:<26}{c['shift_in_control_sd']:>10.3f}"
+                f"{c['sd_ratio_cap_over_control']:>10.3f}{c['shift_in_joint_mcse']:>12.2f}"
+            )
     return 0
 
 
