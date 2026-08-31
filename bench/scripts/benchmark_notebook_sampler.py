@@ -1008,6 +1008,22 @@ def configurations(nb: str, quick: bool, dense: bool, families=FAMILIES) -> dict
                 n_samples=shipped["n_samples"],
                 warmup_max_num_doublings=cap,
             )
+        # The combination, which is the point. The depth cap's ONLY liability is
+        # divergences (20 and 15 against the control's 1), and divergences are
+        # the one diagnostic that indicates the sampler is exploring the wrong
+        # distribution rather than exploring it slowly. Preconditioning's
+        # measured effect on this same fixture is divergences 28 -> 6 at
+        # essentially unchanged gradients per draw (121.9 -> 118.9) -- it costs
+        # almost nothing in work and removes most of the divergences, which is
+        # exactly the currency the cap spends. Neither arm alone tests whether
+        # the cap's speedup survives with its bias risk bought back.
+        configs["nuts wcap=5+precond"] = dict(
+            method="mcmc_nuts",
+            n_warmup=shipped["n_warmup"],
+            n_samples=shipped["n_samples"],
+            warmup_max_num_doublings=5,
+            precondition=0.5,
+        )
 
     if "nutswarm" in families:
         # The pair at each budget IS the experiment: an unpreconditioned arm and
