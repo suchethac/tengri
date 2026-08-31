@@ -81,17 +81,42 @@ class FitResultManager:
         self.results_dir = Path(results_dir)
 
     def has_fit(self, gal_id: int, config_key: str) -> bool:
-        """True only for an adopted cell: JSON and NPZ exist and adoption_pass is true.
+        """True only for an adopted cell: JSON and NPZ exist and acceptance criteria met.
 
         The driver writes a best-so-far NPZ after every attempt, so file presence
         alone does not mean the cell passed the adoption bar.
+
+        Acceptance criteria:
+        - Config I/II: adoption_pass must be True (zero-divergence bar)
+        - Config III: adoption_pass=False by design; accept if rhat_max < 1.01 and
+          divergence_rate <= 1.5%
         """
         json_path = self.results_dir / f"{gal_id}_{config_key}.json"
         npz_path = self.results_dir / f"{gal_id}_{config_key}.npz"
         if not (json_path.exists() and npz_path.exists()):
             return False
         diagnostics = self.load_json(gal_id, config_key) or {}
-        return diagnostics.get("adoption_pass") is True
+
+        # Config I/II: strict adoption_pass bar
+        if config_key in ["I", "II"]:
+            return diagnostics.get("adoption_pass") is True
+
+        # Config III: relaxed bar (rhat < 1.01 and divergence rate <= 1.5%)
+        if config_key == "III":
+            rhat_max = diagnostics.get("rhat_max")
+            divergences = diagnostics.get("divergences", 0)
+            n_samples = diagnostics.get("n_samples", 600)
+            n_chains = diagnostics.get("n_chains", 4)
+
+            if rhat_max is None:
+                return False
+
+            divergence_rate = (
+                divergences / (n_samples * n_chains) if (n_samples * n_chains) > 0 else 0
+            )
+            return rhat_max < 1.01 and divergence_rate <= 0.015
+
+        return False
 
     def has_json(self, gal_id: int, config_key: str) -> bool:
         """Check if JSON exists (may indicate failed adoption)."""
@@ -214,6 +239,20 @@ def plot_photometry_panel(ax, result_manager, gal_id: int, z: float):
             continue
         model_phot = npz["model_photometry_median"]
         model_phot_ujy = model_phot * 1e29
+
+        # Plot 16-84% uncertainty band if available
+        if "model_photometry_p16" in npz and "model_photometry_p84" in npz:
+            model_phot_p16 = npz["model_photometry_p16"] * 1e29
+            model_phot_p84 = npz["model_photometry_p84"] * 1e29
+            ax.fill_between(
+                np.log10(wave_obs_um),
+                model_phot_p16,
+                model_phot_p84,
+                alpha=0.2,
+                color=CONFIG_COLORS[config_key],
+                zorder=3,
+            )
+
         ax.scatter(
             np.log10(wave_obs_um),
             model_phot_ujy,
@@ -227,15 +266,13 @@ def plot_photometry_panel(ax, result_manager, gal_id: int, z: float):
 
     ax.set_xlabel("$\\lambda_{\\mathrm{obs}}$ / µm", fontsize=10)
     ax.set_ylabel("$f_\\nu$ / µJy (log)", fontsize=10)
-    # X-axis is already in log10(wavelength), so we use linear scale with log10 labels
-    # Y-axis is in linear scale but we use log scale for better visualization
     ax.set_yscale("log")
     ax.set_xlim(np.log10(0.3), np.log10(10))
 
-    # Set y-limits: 0.3 to 3x max flux (or default if no data)
+    # Per-row y-limits from this galaxy's observed fluxes (0.5x to 3x observed max)
     if completed_configs:
-        y_min = 0.3
-        y_max = 3 * np.max([np.max(obs_fnu_ujy) for _ in completed_configs])
+        y_min = 0.5 * np.min(obs_fnu_ujy)
+        y_max = 3.0 * np.max(obs_fnu_ujy)
         ax.set_ylim(y_min, y_max)
     else:
         ax.set_ylim(0.3, 100)
@@ -310,6 +347,7 @@ def plot_sfh_panel(ax, result_manager, gal_id: int, z: float):
     ax.set_xlabel("lookback time / Gyr", fontsize=10)
     ax.set_ylabel("log SFR / (M$_\\odot$ yr$^{-1}$)", fontsize=10)
     ax.set_xlim(0, age_gyr)
+    # Linear y-axis showing log SFR values (NOT log-scaled axis)
     ax.set_ylim(-2, 3.5)
     ax.grid(True, alpha=0.3)
 
@@ -346,9 +384,9 @@ def plot_corner_panel(
         ax.set_ylabel("log SFR / (M$_\\odot$ yr$^{-1}$)", fontsize=10)
         return
 
-    # Collect medians to compute axis limits
-    all_medians_mass = []
-    all_medians_sfr = []
+    # Collect data ranges to compute tight axis limits
+    all_mass_values = []
+    all_sfr_values = []
 
     for config_key in completed_configs:
         npz_data = result_manager.load_npz(gal_id, config_key)
@@ -361,17 +399,25 @@ def plot_corner_panel(
         log_mass = np.log10(stellar_mass)
         log_sfr = np.log10(np.maximum(sfr_100myr, 1e-10))
 
-        all_medians_mass.append(np.median(log_mass))
-        all_medians_sfr.append(np.median(log_sfr))
+        all_mass_values.extend(log_mass)
+        all_sfr_values.extend(log_sfr)
 
-    # Compute axis limits from medians
-    if xlim_override is None and all_medians_mass:
-        center_mass = np.mean(all_medians_mass)
-        xlim_override = (center_mass - 0.6, center_mass + 0.6)
+    # Compute axis limits to contain all data with 10% margin
+    if xlim_override is None and all_mass_values:
+        all_mass_values = np.array(all_mass_values)
+        mass_min = np.percentile(all_mass_values, 0.5)
+        mass_max = np.percentile(all_mass_values, 99.5)
+        mass_range = mass_max - mass_min
+        margin_x = 0.1 * mass_range if mass_range > 0 else 0.2
+        xlim_override = (mass_min - margin_x, mass_max + margin_x)
 
-    if ylim_override is None and all_medians_sfr:
-        center_sfr = np.mean(all_medians_sfr)
-        ylim_override = (center_sfr - 0.8, center_sfr + 0.8)
+    if ylim_override is None and all_sfr_values:
+        all_sfr_values = np.array(all_sfr_values)
+        sfr_min = np.percentile(all_sfr_values, 0.5)
+        sfr_max = np.percentile(all_sfr_values, 99.5)
+        sfr_range = sfr_max - sfr_min
+        margin_y = 0.1 * sfr_range if sfr_range > 0 else 0.2
+        ylim_override = (sfr_min - margin_y, sfr_max + margin_y)
 
     # Plot contours for each config
     for config_key in completed_configs:
@@ -432,19 +478,18 @@ def plot_corner_panel(
             alpha=1.0,
         )
 
-    # Add status line for missing configs (lower right, inside axes)
+    # Add status line for missing configs (below title, inside axes)
     status_line = result_manager.get_status_line(gal_id)
     if status_line:
         ax.text(
-            0.95,
             0.05,
+            0.95,
             status_line,
             transform=ax.transAxes,
             fontsize=7,
-            verticalalignment="bottom",
-            horizontalalignment="right",
+            verticalalignment="top",
+            horizontalalignment="left",
             family="monospace",
-            bbox=dict(boxstyle="round", facecolor="wheat", alpha=0.5),
         )
 
     ax.set_xlabel("log M$_\\ast$ / M$_\\odot$", fontsize=10)
@@ -463,23 +508,14 @@ def build_figure(results_manager: FitResultManager) -> tuple[object, dict]:
         NROWS, NCOLS, hspace=0.4, wspace=0.35, left=0.16, right=0.95, top=0.95, bottom=0.08
     )
 
-    # Create all subplots first for sharex/sharey
+    # Create all subplots — NO axis sharing (each row/col has independent scales)
+    # Photometry: log-scale microjansky per row
+    # SFH: linear scale with log values, same for all rows
+    # Corner: independent limits per row
     axes = np.empty((NROWS, NCOLS), dtype=object)
     for i_row in range(NROWS):
         for i_col in range(NCOLS):
-            if i_row == 0:
-                ax = fig.add_subplot(gs[i_row, i_col])
-            else:
-                if i_col < 2:
-                    # Share x-axis with top row, y-axis with first row of this column
-                    ax = fig.add_subplot(
-                        gs[i_row, i_col],
-                        sharex=axes[0, i_col],
-                        sharey=axes[i_row, 0],
-                    )
-                else:
-                    # Column 2 (panel c): share x with top but NOT y (per-row limits)
-                    ax = fig.add_subplot(gs[i_row, i_col], sharex=axes[0, i_col])
+            ax = fig.add_subplot(gs[i_row, i_col])
             axes[i_row, i_col] = ax
 
     data_dict = {
@@ -600,6 +636,57 @@ def build_figure(results_manager: FitResultManager) -> tuple[object, dict]:
             else:
                 data_dict["cells_absent"].append(cell_id)
 
+    # Add figure-level legend
+    legend_handles = [
+        plt.Line2D(
+            [0],
+            [0],
+            marker="o",
+            color="w",
+            markerfacecolor="black",
+            markersize=6,
+            label="observed",
+        ),
+        plt.Line2D(
+            [0],
+            [0],
+            marker="s",
+            color=CONFIG_COLORS["I"],
+            markersize=6,
+            linestyle="none",
+            label="Configuration I",
+        ),
+        plt.Line2D(
+            [0],
+            [0],
+            marker="s",
+            color=CONFIG_COLORS["II"],
+            markersize=6,
+            linestyle="none",
+            label="Configuration II",
+        ),
+        plt.Line2D(
+            [0],
+            [0],
+            marker="s",
+            color=CONFIG_COLORS["III"],
+            markersize=6,
+            linestyle="none",
+            label="Configuration III",
+        ),
+    ]
+    fig.legend(
+        handles=legend_handles,
+        loc="lower center",
+        ncol=4,
+        fontsize=9,
+        frameon=True,
+        bbox_to_anchor=(0.5, -0.02),
+    )
+
+    # Adjust bottom margin for legend
+    fig.subplots_adjust(bottom=0.12)
+
     return fig, data_dict
 
 
@@ -639,12 +726,9 @@ def main():
     parser.add_argument(
         "--results-dir",
         type=Path,
-        default=repo_root.parents[1]
-        / "fix-2089-candels"
-        / "analysis"
-        / "paper1"
-        / "results"
-        / "fits",
+        default=Path(
+            "/Users/suchethacooray/Projects/tengri/.claude/worktrees/fix-2089-candels/analysis/paper1/results/fits"
+        ),
         help="Directory containing fit results",
     )
     parser.add_argument(

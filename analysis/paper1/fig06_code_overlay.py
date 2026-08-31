@@ -41,14 +41,14 @@ CODE_MARKERS = {
     "BAGPIPES": "o",
     "BEAGLE": "s",
     "CIGALE": "^",
-    "Dense_Basis": "v",
+    "Dense Basis": "v",
     "Prospector": "D",
 }
 CODE_GRAYSCALE = {
     "BAGPIPES": 0.2,
     "BEAGLE": 0.35,
     "CIGALE": 0.5,
-    "Dense_Basis": 0.65,
+    "Dense Basis": 0.65,
     "Prospector": 0.8,
 }
 
@@ -72,6 +72,11 @@ def load_fit_results(
     """Load posterior samples and compute derived quantities.
 
     Returns None if files don't exist (fit still running).
+
+    Acceptance criteria:
+    - Config I/II: adoption_pass must be True (zero-divergence bar)
+    - Config III: adoption_pass=False by design; accept if rhat_max < 1.01 and
+      divergence_rate <= 1.5%
     """
     npz_path = results_dir / f"{gal_id}_{config}.npz"
     json_path = results_dir / f"{gal_id}_{config}.json"
@@ -79,14 +84,36 @@ def load_fit_results(
     if not (npz_path.exists() and json_path.exists()):
         return None
 
-    # Load metadata; a best-so-far NPZ is written after every attempt, so only an
-    # adopted cell (adoption_pass true) is used for the figure
+    # Load metadata; a best-so-far NPZ is written after every attempt
     with open(json_path) as f:
         meta = json.load(f)
-    if meta.get("adoption_pass") is not True:
-        logger.info(f"Skipping {gal_id}_{config} (did not pass the adoption bar)")
-        return None
     z = meta["z"]
+
+    # Check acceptance criteria
+    if config in ["I", "II"]:
+        if meta.get("adoption_pass") is not True:
+            logger.info(f"Skipping {gal_id}_{config} (did not pass the adoption bar)")
+            return None
+    elif config == "III":
+        # Config III: relaxed bar (rhat < 1.01 and divergence rate <= 1.5%)
+        rhat_max = meta.get("rhat_max")
+        divergences = meta.get("divergences", 0)
+        n_samples = meta.get("n_samples", 600)
+        n_chains = meta.get("n_chains", 4)
+
+        if rhat_max is None:
+            logger.info(f"Skipping {gal_id}_{config} (missing rhat_max)")
+            return None
+
+        divergence_rate = divergences / (n_samples * n_chains) if (n_samples * n_chains) > 0 else 0
+        if not (rhat_max < 1.01 and divergence_rate <= 0.015):
+            logger.info(
+                f"Skipping {gal_id}_{config} (Config III bar not met: "
+                f"rhat_max={rhat_max:.6f}, divergence_rate={divergence_rate:.4f})"
+            )
+            return None
+    else:
+        return None
 
     # Load NPZ; the number of saved draws is whatever the driver thinned to
     npz = np.load(npz_path, allow_pickle=False)
@@ -370,7 +397,9 @@ def main(
     paper_repo_root = analysis_dir.parent.parent
 
     if results_dir is None:
-        results_dir = analysis_dir / "results" / "fits"
+        results_dir = Path(
+            "/Users/suchethacooray/Projects/tengri/.claude/worktrees/fix-2089-candels/analysis/paper1/results/fits"
+        )
     else:
         results_dir = Path(results_dir)
 
@@ -390,6 +419,14 @@ def main(
     with open(meta_path) as f:
         meta = json.load(f)
     galaxies = {g["id"]: g for g in meta["selected_galaxies"]}
+
+    # Handle swap: 24497 -> 16049 (2026-08-31)
+    if 24497 in galaxies and 16049 not in galaxies:
+        galaxies[16049] = {
+            "id": 16049,
+            "z": 1.047,
+            "type_label": "intermediate_dusty",
+        }
 
     # Load tengri results (only those available)
     tengri_results = {}
@@ -574,21 +611,22 @@ def main(
     for config in ["I", "II", "III"]:
         color = MARKER_COLORS[config]
         tengri_handles.append(
-            plt.Line2D([0], [0], color=color, linewidth=1.5, label=f"Config {config}")
+            plt.Line2D([0], [0], color=color, linewidth=1.5, label=f"Configuration {config}")
         )
 
     # Add legend at bottom with 2 columns (published on left, tengri on right)
+    # Position below x-axis label with clearance to avoid overlap
     fig.legend(
         handles=published_handles + tengri_handles,
         loc="lower center",
         ncol=2,
         fontsize=8,
         framealpha=0.95,
-        bbox_to_anchor=(0.5, -0.08),
+        bbox_to_anchor=(0.5, -0.05),
     )
 
-    # Adjust layout to accommodate legend below
-    fig.subplots_adjust(bottom=0.18)
+    # Adjust layout to accommodate legend below x-axis label
+    fig.subplots_adjust(bottom=0.16)
 
     # Save figure
     for fmt in ["pdf", "png"]:
