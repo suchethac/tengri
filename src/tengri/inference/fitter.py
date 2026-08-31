@@ -97,6 +97,7 @@ _MANY_EVAL_SAMPLERS = frozenset(
         "mcmc_hmc",
         "mcmc_dynamic_hmc",
         "mcmc_chees",
+        "mcmc_smc",
         "mcmc_ess",
         "mcmc_ghmc",
         "mcmc_mclmc",
@@ -181,6 +182,7 @@ _CANONICAL_METHODS = {
     "mcmc_hmc",
     "mcmc_dynamic_hmc",
     "mcmc_chees",
+    "mcmc_smc",  # tempered Sequential Monte Carlo (prior -> posterior)
     "mcmc_ghmc",
     "mcmc_mclmc",
     "mcmc_adjusted_mclmc",
@@ -3163,6 +3165,10 @@ class Fitter:
             - ``"mcmc_chees"``: ChEES-HMC, one trajectory length learned from
               cross-chain statistics so the chains stay lock-step (experimental;
               measured in ``bench/reports/2026-08-30_chees_hmc.md``)
+            - ``"mcmc_smc"``: Tempered Sequential Monte Carlo -- a particle
+              population annealed from the exact standardized ``N(0, I)`` prior
+              to the posterior, so it never starts at the MAP (experimental;
+              measured in ``bench/reports/2026-08-31_smc_evaluation.md``)
             - ``"mcmc_ghmc"``: Generalized HMC (**broken**: R-hat ~ 2.5-3.1,
               ESS ~ 1 on D=6-8 mocks; MEADS adaptation did not fix it, see
               ``bench/reports/2026-08-30_ghmc_meads_adaptation.md``)

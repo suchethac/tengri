@@ -10,6 +10,7 @@ from tengri.inference.backends.mcmc.hmc_is import run_hmc_is
 from tengri.inference.backends.mcmc.mclmc import run_adjusted_mclmc, run_mclmc
 from tengri.inference.backends.mcmc.nuts import run_nuts
 from tengri.inference.backends.mcmc.raytrace import run_raytrace, sample_raytrace
+from tengri.inference.backends.mcmc.smc import run_smc
 
 __all__ = [
     "run_adjusted_mclmc",
@@ -22,5 +23,6 @@ __all__ = [
     "run_mclmc",
     "run_nuts",
     "run_raytrace",
+    "run_smc",
     "sample_raytrace",
 ]
