@@ -115,13 +115,44 @@ def _mock(model):
 def _capable_backends() -> list[str]:
     """Every backend the registry says can whiten its metric.
 
-    Read at collection time so a newly registered Hamiltonian sampler is covered
-    without editing this file — the point of making the capability a declaration.
+    Read at collection time so a newly registered backend is covered without
+    editing this file — the point of making the capability a declaration. Not only
+    samplers: ``pathfinder`` and the Gaussian VI backends whiten the same way and
+    owe the same guarantee, and they take different budget kwargs, which is what
+    :data:`_FIT_KWARGS` is for.
     """
     import tengri  # noqa: F401  (registers the backends)
     from tengri.inference._backend_registry import all_backends
 
     return sorted(e.name for e in all_backends() if e.accepts_precondition)
+
+
+#: Budget kwargs per backend family. The default is the Hamiltonian one every
+#: sampler here takes; a backend that is not a sampler needs its own, and must not
+#: be handed one it would have to ignore.
+#:
+#: This table exists because the capability is a *declaration*, not a family: any
+#: backend that whitens its coordinates and maps the draws back must honor this
+#: contract, and three of them are now optimizers rather than samplers. Passing
+#: ``n_warmup`` to a fixed-length ELBO scan is meaningless, and having the backend
+#: silently swallow it would be worse than the ``TypeError`` -- a user who writes
+#: ``fit(method="vi_fullrank", n_warmup=1000)`` should be told the knob does not
+#: exist, not have it accepted and dropped.
+#:
+#: Budgets are the smallest that pass, not round numbers. The samplers manage on
+#: 250 draws; the two ELBO backends need **3000 steps and fail at 250** -- measured,
+#: at 342x and 38x the deficit gate respectively. That is not a transform bug (the
+#: same code passes at 3000) but the optimizer not yet having placed the Gaussian,
+#: and it is worth leaving in a comment because the failure *looks* exactly like a
+#: forgotten ``restore()``: draws that do not explain the data. An ELBO backend
+#: given a sampler's budget will fail this file for a reason that has nothing to do
+#: with what this file tests. Both still run in ~36 s together.
+_SAMPLER_KWARGS = dict(n_warmup=250, n_samples=250, n_chains=1, dense_mass_matrix=False)
+_FIT_KWARGS: dict[str, dict] = {
+    "pathfinder": dict(n_samples=250, maxiter=30),
+    "vi_fullrank": dict(n_steps=3000, n_samples=250),
+    "vi_meanfield": dict(n_steps=3000, n_samples=250),
+}
 
 
 def _fit(model, data, noise, *, precondition, method="mcmc_nuts"):
@@ -130,12 +161,9 @@ def _fit(model, data, noise, *, precondition, method="mcmc_nuts"):
         noise,
         method=method,
         key=jax.random.PRNGKey(7),
-        n_warmup=250,
-        n_samples=250,
-        n_chains=1,
-        dense_mass_matrix=False,
         precondition=precondition,
         verbose=False,
+        **_FIT_KWARGS.get(method, _SAMPLER_KWARGS),
     )
 
 
@@ -271,8 +299,10 @@ def test_preconditioned_samples_respect_the_prior_support(method, objective):
     * **bounds** — catches a missing *standardization*, i.e. raw ``xi`` returned as
       though it were physical. ``xi`` is an unconstrained real, so it does overflow.
 
-    Parametrized over the live registry so all four Hamiltonian backends carry the
-    same guarantee, rather than only the one this file happened to name.
+    Parametrized over the live registry so every backend declaring the capability
+    carries the same guarantee, rather than only the one this file happened to
+    name — samplers and optimizers alike, since ``restore()`` can be forgotten in
+    either.
     """
     model = objective.model
     result = _fit(model, objective.data, objective.noise, precondition=True, method=method)
