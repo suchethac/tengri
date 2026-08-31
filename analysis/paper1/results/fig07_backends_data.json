@@ -1,0 +1,116 @@
+{
+  "figure": "Figure 7: Backend comparison",
+  "galaxy_id": 13097,
+  "config": "II",
+  "n_params": 8,
+  "backends": [
+    {
+      "method": "MAP",
+      "budget": "500 steps + 8 restarts",
+      "wall_time_cold_s": 2.36417404198437,
+      "wall_time_warm_s": null,
+      "n_params": 8,
+      "log_stellar_mass_median": 10.512615793427269,
+      "log_sfr_100myr_median": 1.3862507567620839,
+      "dust_tau_diff_median": 0.6532857311480245
+    },
+    {
+      "method": "Laplace",
+      "budget": "Gaussian",
+      "wall_time_cold_s": 1.1693590420181863,
+      "wall_time_warm_s": null,
+      "n_params": 8,
+      "ess_min": 1455.3126242976452,
+      "s_per_ess_cold": 0.0008035105464590715,
+      "s_per_ess_warm": null,
+      "rhat_max": 1.0003715203253005,
+      "log_stellar_mass_median": 10.52732324916218,
+      "log_sfr_100myr_median": 1.3872864472852584,
+      "dust_tau_diff_median": 0.6439041431804053
+    },
+    {
+      "method": "Auto",
+      "budget": "600+600x2",
+      "wall_time_cold_s": 245.27419266701327,
+      "wall_time_warm_s": 187.5457620419911,
+      "n_params": 8,
+      "ess_min": 245.15028015038123,
+      "s_per_ess_cold": 1.0005054553335857,
+      "s_per_ess_warm": 0.7650236496851887,
+      "rhat_max": 1.0014704689587388,
+      "log_stellar_mass_median": 10.560847550371125,
+      "log_sfr_100myr_median": 1.3847297294938223,
+      "dust_tau_diff_median": 0.620897193006166
+    },
+    {
+      "method": "NUTS",
+      "budget": "600+600x2",
+      "wall_time_cold_s": 195.73918379101087,
+      "wall_time_warm_s": 192.5052886249905,
+      "n_params": 8,
+      "ess_min": 245.15028015038123,
+      "s_per_ess_cold": 0.7984456867474906,
+      "s_per_ess_warm": 0.785254206142057,
+      "rhat_max": 1.0014704689587388,
+      "log_stellar_mass_median": 10.560847550371125,
+      "log_sfr_100myr_median": 1.3847297294938223,
+      "dust_tau_diff_median": 0.620897193006166
+    },
+    {
+      "method": "HMC",
+      "budget": "200+300x4, L=50",
+      "wall_time_cold_s": 22.505280999990646,
+      "wall_time_warm_s": 18.02090387500357,
+      "n_params": 8,
+      "ess_min": 153.60757145833804,
+      "s_per_ess_cold": 0.14651153446622,
+      "s_per_ess_warm": 0.11731780994852366,
+      "rhat_max": 1.011017816798261,
+      "log_stellar_mass_median": 10.563788432387863,
+      "log_sfr_100myr_median": 1.385846821120058,
+      "dust_tau_diff_median": 0.5999572661946595
+    },
+    {
+      "method": "Ray Tracing",
+      "budget": "400+400x2, step=0.05",
+      "wall_time_cold_s": 6.2007527090027,
+      "wall_time_warm_s": 5.848565250023967,
+      "n_params": 8,
+      "ess_min": 0.8339588024351597,
+      "s_per_ess_cold": 7.435322573365137,
+      "s_per_ess_warm": 7.0130145913037385,
+      "rhat_max": 11804477734145.207,
+      "log_stellar_mass_median": 10.286371489811273,
+      "log_sfr_100myr_median": 1.164885096629697,
+      "dust_tau_diff_median": 1.0507294607187527
+    }
+  ],
+  "agreement_summary": {
+    "log M*": {
+      "spread": 0.2774169425765898,
+      "spread_in_NUTS_sigma": 127.25279470781712,
+      "n_samplers": 4
+    },
+    "log SFR": {
+      "spread": 0.220961724490361,
+      "spread_in_NUTS_sigma": 266.8334085914923,
+      "n_samplers": 4
+    },
+    "tau_diff": {
+      "spread": 0.45077219452409323,
+      "spread_in_NUTS_sigma": 29.0398192833633,
+      "n_samplers": 4
+    }
+  },
+  "pending_methods": [],
+  "quantities": {
+    "log_stellar_mass": "Log10(stellar mass / Msun); formed mass from SFH + SSP + nebular contribution",
+    "log_sfr_100myr": "Log10(SFR over 100 Myr / Msun/yr); mass returned to ISM over last 100 Myr",
+    "dust_tau": "Dust optical depth (diffuse component, tau_diff)"
+  },
+  "provenance": {
+    "sweep_dir": "/Users/suchethacooray/Projects/tengri/.claude/worktrees/fix-2089-candels/analysis/paper1/results/backend_sweep",
+    "script": "analysis/paper1/run_backend_sweep.py",
+    "timestamp": "2026-08-31T16:17:45"
+  }
+}
