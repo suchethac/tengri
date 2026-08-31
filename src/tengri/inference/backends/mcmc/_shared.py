@@ -2083,9 +2083,10 @@ def _smc_scan(
     Lock-step, and where the raggedness went
     ----------------------------------------
     Every particle takes exactly ``n_mcmc_steps`` inner-HMC moves of exactly
-    ``n_leapfrog_steps`` leapfrogs at every rung, so a rung is one ``vmap`` with
-    no ragged control flow at all. **The raggedness moved outward, it did not
-    vanish.** Under an adaptive schedule the *number of rungs* is data-dependent,
+    ``n_leapfrog_steps`` leapfrogs at every rung, so a rung is one ``vmap`` in
+    which every lane does identical work. **The raggedness is the ladder, not
+    the trajectory, and it did not vanish -- it moved outward.** Under an
+    adaptive schedule the *number of rungs* is data-dependent,
     so this is a ``lax.while_loop`` and ``n_runs`` vmapped populations all run to
     the slowest one's rung count. That is NUTS's batched-``while_loop`` shape one
     level up, with a far smaller ragged factor (rung counts differ by a few;
@@ -2118,13 +2119,15 @@ def _smc_scan(
     n_mcmc_steps : int (static)
         Inner-HMC moves applied to every particle at every rung.
     n_leapfrog_steps : int (static)
-        Leapfrogs per inner-HMC move. Static on purpose: BlackJAX would accept it
-        as a traced ``mcmc_parameters`` entry, which would make the inner
-        trajectory a dynamic ``fori_loop`` and hand back exactly the ragged
-        control flow this backend exists to avoid. Because it is fixed, a rung
-        costs exactly ``n_particles * n_mcmc_steps * n_leapfrog_steps``
-        gradients and the fit costs that times the rung count -- a number this
-        function returns rather than leaves to be estimated.
+        Leapfrogs per inner-HMC move. BlackJAX would equally accept it as a
+        traced ``mcmc_parameters`` entry -- which is what the reference page
+        does, via ``extend_params`` -- and the two are **measurably the same
+        program**: bit-identical draws, the same 12 ``stablehlo.while`` ops,
+        1 609 HLO lines against 1 602. Static here for a different reason: a
+        compile-time constant makes the gradient count *exact*, so a rung costs
+        exactly ``n_particles * n_mcmc_steps * n_leapfrog_steps`` gradients and
+        the fit costs that times the rung count -- a number this function
+        returns rather than leaves to be reconstructed from a wall clock.
     target_ess : float (static)
         Weight-ESS fraction the adaptive schedule bisects for. Unused when
         ``fixed_ladder`` is set.

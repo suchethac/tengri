@@ -1062,6 +1062,16 @@ def configurations(nb: str, quick: bool, dense: bool, families=FAMILIES) -> dict
             # construction, which under a speed-first reading makes it the one
             # to beat rather than a curiosity.
             "smc+precond n1": dict(n_mcmc_steps=1, n_leapfrog_steps=10, precondition=True),
+            # The step-size ablation, and it is the one departure from BlackJAX's
+            # own reference page that was never measured. That page hand-sets a
+            # step size and never adapts it between rungs; this backend adds a
+            # scalar acceptance controller. `step_size_gain=0.0` pins the step
+            # size at its initial value for the whole run, which is the page's
+            # behavior, so the pair says whether the controller is load-bearing
+            # or a liability.
+            "smc+precond nogain": dict(
+                n_mcmc_steps=2, n_leapfrog_steps=10, precondition=True, step_size_gain=0.0
+            ),
             # The fully lock-step arm. The adaptive schedule's rung count is
             # data-dependent, so it compiles to a while_loop and vmapped
             # populations run to the slowest one's rung count; a fixed ladder is

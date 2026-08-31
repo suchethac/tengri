@@ -45,6 +45,7 @@ _INNER_MOVES = {
     "smc+precond": (5, 512),
     "smc+precond cheap": (2, 512),
     "smc+precond n1": (1, 512),
+    "smc+precond nogain": (2, 512),
     "smc+precond fixed16": (5, 512),
 }
 

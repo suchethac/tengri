@@ -165,13 +165,23 @@ class TestTheCostIsReportedRatherThanReconstructed:
     def test_the_leapfrog_count_is_static_so_a_rung_has_a_fixed_price(self):
         """LOAD-BEARING. Neuter: drop ``n_leapfrog_steps`` from ``static_argnums``.
 
-        Traced, it would flow into BlackJAX as an ordinary ``mcmc_parameters``
-        entry, the sampler would still run, and the inner trajectory would become
-        a dynamic ``fori_loop`` -- reintroducing the ragged control flow that is
-        the whole reason to prefer SMC's inner kernel to NUTS's, and making the
-        gradient count unknowable. The schedule shape (``fixed_ladder``) has to
-        be static for the same reason: it decides whether the program is a
-        ``while_loop`` or a fixed-length ``scan``.
+        The reference page passes it *traced*, inside ``extend_params``. **That
+        is not a correctness difference and it is not a control-flow
+        difference** -- measured, the two constructions give bit-identical draws
+        and compile to the same 12 ``stablehlo.while`` ops with 1 609 against
+        1 602 HLO lines, because XLA lowers a concrete-trip ``fori_loop`` to a
+        ``while`` anyway at L = 16. An earlier revision of this docstring claimed
+        the traced form "reintroduces ragged control flow"; it does not, and the
+        claim is withdrawn.
+
+        What the static binding actually buys is that the gradient count is a
+        **compile-time constant**, so ``diagnostics["gradients_per_draw"]`` is
+        exact rather than something a caller has to reconstruct from a clock --
+        which is the whole cost argument of this backend and is reason enough.
+        ``fixed_ladder`` must be static for a real control-flow reason: it
+        decides whether the program is a ``while_loop`` or a fixed-length
+        ``scan``. The raggedness in this sampler is the *ladder*, never the
+        trajectory.
         """
         names = list(inspect.signature(_smc_scan.__wrapped__).parameters)
         static = set(_smc_scan._jit_info.static_argnums)
