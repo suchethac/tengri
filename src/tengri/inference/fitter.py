@@ -176,6 +176,11 @@ _CANONICAL_METHODS = {
     "native_vi_linear",  # Pure-JAX MGVI (lax.while_loop, fastest)
     # "vi" kept as canonical synonym for vi_nonlinear (backward compat)
     "vi",
+    # Gaussian VI on BlackJAX: one Gaussian fitted by SGD on the ELBO.
+    # `vi_fullrank` carries a Cholesky factor and can represent the age/dust/met
+    # tilt; `vi_meanfield` is diagonal and structurally cannot.
+    "vi_fullrank",
+    "vi_meanfield",
     "mcmc",  # auto: NUTS (D≤20) or Ray Tracing (D>20)
     "mcmc_raytrace",
     "mcmc_nuts",

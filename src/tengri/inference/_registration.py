@@ -49,6 +49,9 @@ from tengri.inference.backends.mcmc import (
 from tengri.inference.backends.mcmc.elliptical_slice import (
     run_elliptical_slice_fitter as _ctx_run_elliptical_slice,
 )
+from tengri.inference.backends.vi.gaussian import (
+    run_gaussian_vi_fitter as _ctx_run_gaussian_vi,
+)
 from tengri.inference.backends.vi.native import run_native_vi as _ctx_run_native_vi
 from tengri.inference.backends.vi.nifty import (
     run_nifty_fast_vi as _ctx_run_nifty_fast_vi,
@@ -85,6 +88,29 @@ def _mcmc_auto_pick(context, *, key, init_from=None, precondition=None, **kw):
     if selected.accepts_precondition:
         kw["precondition"] = precondition
     return _ctx_run_raytrace(context, key=key, init_from=init_from, **kw)
+
+
+def _run_fullrank_vi(context, *, key, init_from=None, precondition=None, **kw):
+    """``vi_fullrank``: Gaussian VI with a Cholesky covariance factor.
+
+    ``precondition`` is named here rather than left in ``**kw`` because
+    ``test_preconditioning_capability`` reads the *registered* runner's signature:
+    a backend declaring ``accepts_precondition`` whose entry point swallows the
+    kwarg in ``**kwargs`` would forward it to something that raises.
+    """
+    return _ctx_run_gaussian_vi(
+        context, key=key, init_from=init_from, precondition=precondition, family="fullrank", **kw
+    )
+
+
+def _run_meanfield_vi(context, *, key, init_from=None, precondition=None, **kw):
+    """``vi_meanfield``: Gaussian VI with a diagonal covariance.
+
+    See :func:`_run_fullrank_vi` for why ``precondition`` is spelled out.
+    """
+    return _ctx_run_gaussian_vi(
+        context, key=key, init_from=init_from, precondition=precondition, family="meanfield", **kw
+    )
 
 
 # ── Primary backends ─────────────────────────────────────────────────────
@@ -385,6 +411,48 @@ register_backend(
 )(_ctx_run_elliptical_slice)
 
 register_backend(
+    "vi_fullrank",
+    tier="experimental",
+    short_doc=(
+        "Full-rank Gaussian VI (BlackJAX fullrank_vi): SGD on the ELBO over a "
+        "Cholesky factor, so the fitted Gaussian CAN carry the age/dust/met "
+        "tilt that mean-field cannot. A fixed-length scan, no ragged control "
+        "flow, so the graph is small. It does not under-disperse -- at 2000 "
+        "steps on D=8 DPL photometry it went UNSTABLE, returning "
+        "sfh_dpl_log_total_mass as 10.37 +- 1.61 against a converged NUTS "
+        "reference's 11.96 +- 0.036: the stellar mass wrong by 1.6 dex with an "
+        "error bar 45x too wide, and no diagnostic in the family can report it. "
+        "precondition=True is what makes it behave (worst width ratio 45x -> "
+        "1.67x) and is effectively required. Check elbo_history and the width "
+        "ratios in bench/reports/2026-08-31_vi_speed_evaluation.md before "
+        "quoting anything from it."
+    ),
+    requires=("blackjax", "optax"),
+    legacy_fitter=False,
+    accepts_precondition=True,
+)(_run_fullrank_vi)
+
+register_backend(
+    "vi_meanfield",
+    tier="experimental",
+    short_doc=(
+        "Mean-field Gaussian VI (BlackJAX meanfield_vi): a DIAGONAL Gaussian, "
+        "which on a posterior whose defining feature is a tilted degeneracy "
+        "(cond 1e5-1e8) reports conditional widths rather than marginal ones. "
+        "Measured against a converged NUTS reference on D=8 DPL photometry, its "
+        "marginals are 0.07-0.62x the reference's, median 0.24x -- error bars 4x "
+        "too narrow typically and 14x at worst. That is structural, not a tuning "
+        "failure, and preconditioning does not fix it (median 0.21x). The "
+        "cheapest member of the family and the least able to be right about an "
+        "uncertainty; 'laplace' costs about the same and recovers widths to "
+        "within 6%. See bench/reports/2026-08-31_vi_speed_evaluation.md."
+    ),
+    requires=("blackjax", "optax"),
+    legacy_fitter=False,
+    accepts_precondition=True,
+)(_run_meanfield_vi)
+
+register_backend(
     "nss",
     tier="experimental",
     short_doc=(
@@ -396,11 +464,29 @@ register_backend(
 
 register_backend(
     "pathfinder",
-    tier="broken",
+    tier="experimental",
     short_doc=(
-        "[UNSTABLE] Pathfinder VI, segfaults on DPL/dense_basis photometry "
-        "mocks (validated 2026-05-22, issue #231); use 'laplace' or 'vi' instead"
+        "Pathfinder: an L-BFGS path plus the best Gaussian along it. Quarantined "
+        "2026-05-22 as 'segfaults on DPL/dense_basis photometry mocks' (#231) -- "
+        "a label the harness inferred from 'child died without writing JSON' "
+        "without ever reading the return code. Re-measured 2026-08-31 on that "
+        "same model family and it completes, every run, including at the "
+        "uncapped 200 ELBO draws that were the pre-2026-07 default. Both real "
+        "defects on this path were fixed weeks after the quarantine, in PRs "
+        "about other things, and neither revisited the tier (blackjax >= 1.4 API "
+        "drift, 4c1002ae7; uncapped ELBO draws at 26 GB, 8807c838d). "
+        "Experimental, not primary, and the reason is a WIDTH failure rather "
+        "than a crash: the Gaussian comes from a low-rank inverse Hessian read "
+        "off the L-BFGS history, and against a converged NUTS reference on D=8 "
+        "DPL photometry its marginals are 0.79-1.07x on the four well-constrained "
+        "parameters and 0.11-0.21x on the four degenerate SFH-shape ones -- error "
+        "bars up to 9x too narrow, silently, on exactly the directions that are "
+        "hard. precondition=True roughly halves that collapse (worst 0.11 -> "
+        "0.21) and does not cure it. It also carries no R-hat and no divergence "
+        "count, and the hierarchical seam OOM-kills it at D=18. See "
+        "bench/reports/2026-08-31_vi_speed_evaluation.md."
     ),
     requires=("blackjax",),
     legacy_fitter=False,
+    accepts_precondition=True,
 )(_ctx_run_pathfinder)

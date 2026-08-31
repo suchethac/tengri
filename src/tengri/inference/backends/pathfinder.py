@@ -31,6 +31,8 @@ def run_pathfinder(
     maxiter=30,
     maxcor=10,
     n_elbo_draws=25,
+    restore_fn=None,
+    precondition_diagnostics=None,
     verbose=True,
 ):
     """Run BlackJAX Pathfinder for fast approximate posterior.
@@ -64,6 +66,21 @@ def run_pathfinder(
         peak memory scales as ``n_elbo_draws * maxiter * <cost of one SED>``.
         BlackJAX's own default is 200, which drove a 7-parameter photometry fit to
         26 GB and OOM-killed the slow test tier.
+    restore_fn : callable, optional
+        Maps draws out of preconditioned coordinates, i.e.
+        ``PreconditionedProblem.restore``. Identity when omitted.
+
+        Pathfinder builds its Gaussian from a **low-rank** inverse Hessian read
+        off the L-BFGS history
+        (``blackjax.optimizers.lbfgs.lbfgs_inverse_hessian_formula_1``), and
+        :mod:`tengri.inference.preconditioning` measures this posterior's raw
+        metric at condition 8.5e4 to 3.1e8. A low-rank estimate of a curvature
+        that stiff is the natural place for the covariance to come back
+        near-singular, so whitening first is the one geometric lever available
+        here. Measured in ``bench/reports/2026-08-31_vi_speed_evaluation.md``.
+    precondition_diagnostics : dict, optional
+        Recorded verbatim into ``diagnostics``. Two fits whitened at different
+        strengths are not comparable (#1442).
     verbose : bool
         Print progress.
 
@@ -131,6 +148,9 @@ def run_pathfinder(
     if verbose:
         print(f"  Drew {n_samples} samples (mean log q = {float(jnp.mean(log_q)):.2f})")
 
+    if restore_fn is not None:
+        samples_flat = restore_fn(samples_flat)
+
     samples_phys = _vmap_samples_to_physical(samples_flat, unravel_fn, to_physical_fn)
     best_params = _mean_params(samples_phys)
 
@@ -138,17 +158,27 @@ def run_pathfinder(
     if verbose:
         print(f"  Pathfinder complete in {wall_time:.1f}s")
 
+    diagnostics = {
+        "n_samples": n_samples,
+        "maxiter": maxiter,
+        "maxcor": maxcor,
+        "n_elbo_draws": n_elbo_draws,
+        "mean_log_q": float(jnp.mean(log_q)),
+        # Draws that came back non-finite. The L-BFGS inverse-Hessian estimate can
+        # be near-singular on a stiff posterior, and a Gaussian sampled from a
+        # near-singular covariance returns finite-looking garbage or NaN without
+        # any accept step to reject it, so the count is not optional.
+        "n_nonfinite_draws": int(jnp.sum(~jnp.isfinite(samples_flat).all(axis=-1))),
+    }
+    if precondition_diagnostics:
+        diagnostics.update(precondition_diagnostics)
+
     return Posterior(
         samples=samples_phys,
         params=best_params,
         method="Pathfinder (BlackJAX)",
         wall_time_s=wall_time,
-        diagnostics={
-            "n_samples": n_samples,
-            "maxiter": maxiter,
-            "maxcor": maxcor,
-            "mean_log_q": float(jnp.mean(log_q)),
-        },
+        diagnostics=diagnostics,
         loss_history=None,
         _model=model,
     )
