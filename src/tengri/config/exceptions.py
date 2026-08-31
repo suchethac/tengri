@@ -141,29 +141,42 @@ class InferenceError(TengriError, RuntimeError):
 
 
 class DeadFitError(InferenceError):
-    """Warmup ended with essentially every transition divergent; sampling was refused (#2088).
+    """MCMC fit divergence detected; sampling halted (#2088, #2093).
 
-    A 4-chain NUTS fit whose every one of 2400 transitions diverged spent
-    227 s in warmup and another 237 s sampling before :class:`DeadFitWarning`
-    could name the failure. The warmup's own divergence record already held
-    the verdict, so the window-adaptation backends (NUTS, HMC, dynamic HMC)
-    now read the final window of that record and refuse to sample when the
-    divergent fraction reaches ``DEAD_WARMUP_DIVERGENCE_FRAC`` (0.9 over the
-    final 10% of warmup, never fewer than 10 steps). The adaptation is not
-    cached, so the next call re-tunes.
+    Raised at two points in the MCMC pipeline:
+
+    1. **Pre-hoc (warmup-time, #2088)**: The final window of warmup ends with
+       essentially every transition divergent (``DEAD_WARMUP_DIVERGENCE_FRAC``
+       threshold, 0.9). A 4-chain NUTS fit whose every one of 2400 transitions
+       diverged spent 227 s in warmup and another 237 s sampling before
+       :class:`DeadFitWarning` could name the failure. The warmup's own
+       divergence record already held the verdict, so window-adaptation backends
+       (NUTS, HMC, dynamic HMC) now read the final window of that record and
+       refuse to sample. The adaptation is not cached, so the next call re-tunes.
+
+    2. **Post-hoc (sampling-time, #2093)**: Sampling completed but every
+       kept draw diverged (``DEAD_SAMPLING_DIVERGENCE_FRAC`` threshold, 0.9).
+       A fit that survived warmup but sampled a frozen posterior is logged
+       explicitly instead of silently: the cost was paid, but the result is
+       uninformative.
 
     Raises rather than warns: there is nothing to return. A sampler that
     rejects every proposal produces a frozen posterior, and the measured cause
-    was the data, not the tuning (fluxes 1000x too faint from a wrong AB zero
+    is the data, not the tuning (fluxes 1000x too faint from a wrong AB zero
     point pushed the stellar mass to its prior edge, where the bounded
     transform runs to infinity).
 
     Attributes
     ----------
     warmup_divergence_frac : float
-        Divergent fraction over the final warmup window.
+        Divergent fraction over the final warmup window (pre-hoc trigger).
+        NaN if triggered post-hoc.
+    sampling_divergence_frac : float
+        Divergent fraction over all post-burnin draws (post-hoc trigger).
+        NaN if triggered pre-hoc.
     step_size : float
-        The adapted step size at the end of warmup.
+        The adapted step size at the end of warmup (pre-hoc) or sampling
+        (post-hoc).
     """
 
     def __init__(
@@ -171,9 +184,10 @@ class DeadFitError(InferenceError):
         message: str,
         *,
         warmup_divergence_frac: float = float("nan"),
+        sampling_divergence_frac: float = float("nan"),
         step_size: float = float("nan"),
     ):
-        # Both measurements default so the exception survives ``pickle`` and
+        # All measurements default so the exception survives ``pickle`` and
         # ``copy``: ``BaseException.__reduce__`` re-invokes the constructor
         # with ``self.args`` alone (the message) and restores ``__dict__``
         # afterwards, so a required keyword argument would make every
@@ -181,6 +195,7 @@ class DeadFitError(InferenceError):
         # driver would surface in place of the refusal message.
         super().__init__(message)
         self.warmup_divergence_frac = float(warmup_divergence_frac)
+        self.sampling_divergence_frac = float(sampling_divergence_frac)
         self.step_size = float(step_size)
 
 
