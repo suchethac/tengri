@@ -46,6 +46,45 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 
 ### Added
 
+- `mcmc_smc` — tempered Sequential Monte Carlo via BlackJAX, at
+  `tier="experimental"`. A particle population annealed from the exact
+  standardized `N(0, I)` prior to the posterior, so it is the first sampler here
+  that does not start at the MAP: the MAP is used only to build the
+  preconditioning metric. The tempering split is a split of the objective
+  `build_loss_fn` already composes (data term + `standardized_neg_log_prior`),
+  not a second implementation of it, and a contract test pins the sum against
+  `_get_flat_logdensity` numerically. `n_chains` runs **independent** particle
+  populations that share no state, so their split R-hat is a between-run test.
+  `log_evidence` comes free with the weights and is validated against an
+  analytic Gaussian evidence to 0.02 nats. **Not** on the batched catalog path;
+  `_MCMC_VMAPPABLE` is unchanged.
+
+  Two things a caller has to know, both of which cost this campaign a
+  measurement. `diagnostics["min_ancestor_ess"]`, **not** the autocorrelation
+  ESS, is the mixing diagnostic: a resampled particle population is
+  exchangeable, and a within-population permutation that changes nothing about
+  the sample moves the autocorrelation estimate by 1.4-2.1x. And the divergence
+  denominator is `diagnostics["n_inner_transitions"]`, not `total_draws()` —
+  SMC makes `n_temperatures * n_mcmc_steps` Metropolis transitions per particle
+  and keeps one draw from each, so the usual ratio read 205% on the first row
+  measured (the #2087 arithmetic, one sampler further out).
+
+  Two defects were found in this backend before it merged, by cross-checking
+  against BlackJAX's own tempered-SMC page, and both were in code that has never
+  shipped. `blackjax.smc.base.step` resamples, moves the particles under the
+  *old* temperature, then reweights toward the new one, so a ladder exiting at
+  `lambda = 1` leaves a **weighted** sample; reading `state.particles` without
+  `state.weights` returned draws from a slightly tempered posterior, biased
+  -0.0164 in the mean and +0.0142 in the sd of an analytic Gaussian, with the
+  same sign on every coordinate. A closing rung pinned at `lambda = 1` consumes
+  those weights and rejuvenates under the true posterior; its `delta` is zero,
+  so the log-Z increment is exactly `0.000e+00` and the evidence is untouched.
+  Separately, an inner step-size controller aimed at fixed-length HMC's 0.651
+  acceptance was actively harmful — an SMC inner move is a rejuvenation burst
+  where a rejection leaves a duplicate, not a chain step that must decorrelate —
+  and `step_size_gain` now defaults to `0.0`, matching the reference page.
+  Measured in `bench/reports/2026-08-31_smc_evaluation.md`.
+
 - `tengri.utils.scale.loss_scaled_grad` — `jax.grad` with the cotangent chain
   lifted into float32's normal range (multiply the scalar by `2**100`, divide
   the gradient back; exact for a power of two, so float64 gradients are
