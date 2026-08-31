@@ -453,8 +453,8 @@ def build_components(
         ``mappings`` / ``cue`` / ``shock`` (which need HDF5 / weights
         paths). Required for those backends.
     agn_model : str | None
-        AGN model registry key (``"simple"``, ``"standard"``, …) or
-        ``None`` to omit AGN.
+        AGN model registry key (``"composable"`` or deprecated monolithic names
+        like ``"kubota_done_full"``, …) or ``None`` to omit AGN.
     dust_law_bc, dust_law_diff : str
         Birth-cloud / diffuse-ISM attenuation-law registry keys.
     dust_law_neb : str or None

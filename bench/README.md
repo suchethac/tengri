@@ -130,7 +130,7 @@ Markdown write-ups, one file per benchmark *event*. File names are
 | `2026-04-22_pathfinder_vs_window_nuts.md` | Pathfinder warm-start for NUTS | 2026-04-22 | likely stale |
 | `2026-04-24_population_native_vs_nifty.md` | Hierarchical fits, native vs NIFTy | 2026-04-24 | likely stale |
 | `2026-05-06_compile_vs_sampling_breakdown.md` | Compile time vs sample time across backends | 2026-05-06 | recent — probably current |
-| `2026-05-06_forward_model_speedup.md` | Hybrid path: 30-400× over exact across all emitters | 2026-05-06 | recent — source of headline tables in `docs/performance/index.md` |
+| `2026-05-06_forward_model_speedup.md` | Hybrid path: 30-400× over exact across all emitters | 2026-05-06 | SUPERSEDED (#2092): kernel adapters deleted in PR #135; archived path measurements only |
 | `2026-05-06_notebook_renewal.md` | Spine-notebook compile and run wall-clock survey | 2026-05-06 | recent — but post-dates this round's notebook prose edits, so SFH-fan and 2-D grid timings need a re-run |
 
 Anything older than ~2 weeks should be assumed stale until re-verified;

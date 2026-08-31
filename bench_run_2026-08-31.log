@@ -1,0 +1,82 @@
+  + dust IR (THEMIS)                       exact=   12391 µs  precomp=     979 µs  speedup= 12.7×  err=  0.009%
+  + dust IR (DL07)                         exact=   12355 µs  precomp=     859 µs  speedup= 14.4×  err=  0.009%
+  + dust IR (Dale 2014)                    exact=   12091 µs  precomp=     966 µs  speedup= 12.5×  err=  0.009%
+  + AGN (composable disc+torus)            exact=    9808 µs  precomp=    5185 µs  speedup=  1.9×  err=  0.009%
+  + AGN (K&D 3-zone full)                  exact=   15854 µs  precomp=   15496 µs  speedup=  1.0×  err=  0.009%
+  + AGN (QSOgen)                           exact=   10833 µs  precomp=    6215 µs  speedup=  1.7×  err=  0.009%
+  + AGN (SKIRTOR torus)                    exact=   14028 µs  precomp=   15968 µs  speedup=  0.9×  err=  0.009%
+  + radio (SF + AGN)                       exact=    8770 µs  precomp=     669 µs  speedup= 13.1×  err=  0.009%
+  + X-ray (XRB + corona)                   exact=    8316 µs  precomp=    2967 µs  speedup=  2.8×  err=  0.009%
+  Typical: neb+THEMIS+radio+xray           exact=   10112 µs  precomp=    2766 µs  speedup=  3.7×  err=  0.009%
+  AGN host: neb+THEMIS+KD+radio+xray       exact=   16017 µs  precomp=    9404 µs  speedup=  1.7×  err=  0.009%
+  Cue+DL07+composable AGN                  SKIPPED (needs bare-stellar SSP grid: see tengri.io or docs for download; set TENGRI_BENCH_BARE_SSP to path)
+  Kitchen sink (all components)            exact=   15712 µs  precomp=   16416 µs  speedup=  1.0×  err=  0.009%
+
+==============================================================================================================
+  Forward: Stochastic Field (D~137)
+==============================================================================================================
+  Stellar only                             exact=    7991 µs  precomp=     555 µs  speedup= 14.4×  err=  0.009%
+  + nebular (baked-in SSP)                 exact=    7874 µs  precomp=     554 µs  speedup= 14.2×  err=  0.009%
+  + nebular (CLOUDY grid)                  SKIPPED (needs bare-stellar SSP grid: see tengri.io or docs for download; set TENGRI_BENCH_BARE_SSP to path)
+  + nebular (Cue emulator)                 SKIPPED (needs bare-stellar SSP grid: see tengri.io or docs for download; set TENGRI_BENCH_BARE_SSP to path)
+  + dust IR (MBB)                          exact=    9152 µs  precomp=     681 µs  speedup= 13.4×  err=  0.009%
+  + dust IR (THEMIS)                       exact=   10510 µs  precomp=    1509 µs  speedup=  7.0×  err=  0.009%
+  + dust IR (DL07)                         exact=   10507 µs  precomp=     765 µs  speedup= 13.7×  err=  0.009%
+  + dust IR (Dale 2014)                    exact=   10132 µs  precomp=     767 µs  speedup= 13.2×  err=  0.009%
+  + AGN (composable disc+torus)            exact=    8508 µs  precomp=    4119 µs  speedup=  2.1×  err=  0.009%
+  + AGN (K&D 3-zone full)                  exact=   13255 µs  precomp=   13253 µs  speedup=  1.0×  err=  0.009%
+  + AGN (QSOgen)                           exact=    8574 µs  precomp=    4429 µs  speedup=  1.9×  err=  0.009%
+  + AGN (SKIRTOR torus)                    exact=   11333 µs  precomp=   12969 µs  speedup=  0.9×  err=  0.009%
+  + radio (SF + AGN)                       exact=    9653 µs  precomp=    1572 µs  speedup=  6.1×  err=  0.009%
+  + X-ray (XRB + corona)                   exact=   11532 µs  precomp=    2386 µs  speedup=  4.8×  err=  0.009%
+  Typical: neb+THEMIS+radio+xray           exact=    8832 µs  precomp=    2534 µs  speedup=  3.5×  err=  0.009%
+  AGN host: neb+THEMIS+KD+radio+xray       exact=   14837 µs  precomp=    9587 µs  speedup=  1.5×  err=  0.009%
+  Cue+DL07+composable AGN                  SKIPPED (needs bare-stellar SSP grid: see tengri.io or docs for download; set TENGRI_BENCH_BARE_SSP to path)
+  Kitchen sink (all components)            exact=   13896 µs  precomp=   15748 µs  speedup=  0.9×  err=  0.009%
+
+==============================================================================================================
+  Gradient: DPL (parametric, D=6)
+==============================================================================================================
+  Stellar only                             exact=  FAILED (AttributeError: 'dict' object has no attribute 'block_until_ready')
+  Kitchen sink (all components)            exact=  FAILED (ConcretizationTypeError: Abstract tracer value encountered where concrete value is ex)
+
+==============================================================================================================
+  Gradient: Dense Basis (D=8)
+==============================================================================================================
+  Stellar only                             exact=  FAILED (AttributeError: 'dict' object has no attribute 'block_until_ready')
+  Kitchen sink (all components)            exact=  FAILED (ConcretizationTypeError: Abstract tracer value encountered where concrete value is ex)
+
+==============================================================================================================
+  Gradient: Stochastic Field (D~137)
+==============================================================================================================
+  Stellar only                             exact=  FAILED (AttributeError: 'dict' object has no attribute 'block_until_ready')
+  Kitchen sink (all components)            exact=  FAILED (ConcretizationTypeError: Abstract tracer value encountered where concrete value is ex)
+
+==============================================================================================================
+  SKIPPED SECTIONS (total: 15)
+==============================================================================================================
+  + nebular (CLOUDY grid)_dpl: bare-stellar SSP grid unavailable
+  + nebular (Cue emulator)_dpl: bare-stellar SSP grid unavailable
+  Cue+DL07+composable AGN_dpl: bare-stellar SSP grid unavailable
+  + nebular (CLOUDY grid)_dense_basis: bare-stellar SSP grid unavailable
+  + nebular (Cue emulator)_dense_basis: bare-stellar SSP grid unavailable
+  Cue+DL07+composable AGN_dense_basis: bare-stellar SSP grid unavailable
+  + nebular (CLOUDY grid)_field: bare-stellar SSP grid unavailable
+  + nebular (Cue emulator)_field: bare-stellar SSP grid unavailable
+  Cue+DL07+composable AGN_field: bare-stellar SSP grid unavailable
+  Stellar only_grad_dpl: exact gradient: 'dict' object has no attribute 'block_until_ready'
+  Kitchen sink (all components)_grad_dpl: exact gradient: Abstract tracer value encountered where concrete value
+  Stellar only_grad_dense_basis: exact gradient: 'dict' object has no attribute 'block_until_ready'
+  Kitchen sink (all components)_grad_dense_basis: exact gradient: Abstract tracer value encountered where concrete value
+  Stellar only_grad_field: exact gradient: 'dict' object has no attribute 'block_until_ready'
+  Kitchen sink (all components)_grad_field: exact gradient: Abstract tracer value encountered where concrete value
+
+  SKIPPED FOR BARE-STELLAR SSP (total: 9)
+  To run these sections, obtain a bare-stellar SSP grid and set TENGRI_BENCH_BARE_SSP=<path>
+
+  ERROR: Required sections did not complete:
+    - Stellar only_grad_field
+
+==============================================================================================================
+
+[exited with code 0]
