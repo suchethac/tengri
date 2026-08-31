@@ -720,6 +720,62 @@ passthrough, deliberately not added in the PR that measured this.
 
 ---
 
+## Finding 4f — Gaussian VI needs ~3000 ELBO steps before its own round-trip is faithful
+
+Found by a contract test rather than by the benchmark, which is why it is a
+separate finding: `tests/contract/test_preconditioning_roundtrip.py` parametrises
+over every backend declaring `accepts_precondition` and **runs a real fit through
+each**, then asks whether the draws, mapped back out of the whitened
+coordinates, still explain the photometry. Its deficit statistic is the median
+shortfall of a draw's log-posterior below the mode, in units of the `D/2` a
+correct sampler produces by construction, and the gate is **20× D/2**.
+
+Same fixture, same gate, same `precondition=True`, varying only the budget:
+
+| backend | budget | deficit vs the 20× D/2 gate |
+|---|---|---|
+| the four Hamiltonian samplers | 250 draws | pass |
+| `vi_meanfield` | 250 ELBO steps | **38× — fail** |
+| `vi_fullrank` | 250 ELBO steps | **342× — fail** |
+| `vi_meanfield` | 3000 ELBO steps | pass |
+| `vi_fullrank` | 3000 ELBO steps | pass |
+
+**A deficit of 38× or 342× is not an under-dispersed Gaussian — it is a
+misplaced one.** A too-narrow Gaussian puts its draws *closer* to the mode than
+they should be, which drives the deficit down, not up. These draws are far out in
+the tails of the true posterior, i.e. the variational mean has not arrived. That
+is the same failure Finding 1 measures at 2000 unpreconditioned steps, where
+`vi_fullrank` returned the stellar mass 1.6 dex from the reference; here it is
+visible at a budget an order of magnitude smaller and against an absolute
+criterion rather than against another posterior.
+
+Two things follow, and the second is the practically important one.
+
+1. **It is not a transform bug.** The same code passes at the larger budget, so
+   `restore()` is correct and the whitened coordinates are being undone properly.
+   Worth stating because the failure is *indistinguishable by eye* from a
+   forgotten `restore()` — both produce draws that do not explain the data, which
+   is exactly what that contract exists to catch. The next person to see it will
+   reach for the transform first.
+2. **There is a draw budget below which these backends are simply wrong, and it is
+   ~12× the samplers'.** 250 ELBO steps is not a small-but-noisy answer; it is a
+   confidently reported Gaussian in the wrong place. Since the entire case for
+   this family is speed, and `n_steps` is the only knob that buys forward
+   evaluations (`n_steps × n_mc_samples` — Finding 5), the honest statement is
+   that **the speed is quoted at a budget where the answer is not yet usable.**
+   The 2000-step rows in Finding 1 are already near this floor.
+
+This also prices the family against `laplace` one more time. Both VI backends need
+3000 × 5 = **15,000 log-density-and-gradient evaluations** to place a Gaussian
+that `laplace` obtains from one Hessian at the MAP — and `laplace` recovers the
+widths to 0.94–1.05× where these do not.
+
+**Recorded here as a finding and left as a comment in the test as well.** The test
+needs it because the symptom is a false lead; the report needs it because it is a
+number a caller must know before choosing this family.
+
+---
+
 ## Finding 5 — compile dominates, more than it does for NUTS
 
 Predicted, and confirmed for the cheap methods. Timings **contended**, load
@@ -832,6 +888,15 @@ otherwise:
 
 Neither half of that sentence names a VI method. That is the finding.
 
+**And if you reach for one anyway, know the floor.** `vi_meanfield` and
+`vi_fullrank` are wrong below roughly **3000 ELBO steps** — not noisy, wrong:
+at 250 they fail an absolute round-trip criterion by 38× and 342× (*Finding 4f*),
+which is a Gaussian placed somewhere the data does not support. Since the only
+knob that buys forward evaluations is `n_steps × n_mc_samples`, that floor is
+12× the samplers' draw budget and it is the number that has to be quoted
+alongside any speed claim for this family. `vi_fullrank` additionally needs
+`precondition=True` to be stable at all (*Finding 3*).
+
 ---
 
 ## Which predictions in the brief were wrong
@@ -914,3 +979,38 @@ Results: `bench/results/2026-08-31_vi_speed_ctl-dpl.json`,
 
 **Run these on an idle box.** Every wall clock above was taken at load average
 12–49 on 24 threads and none of them should be quoted.
+
+### The CI gate list: extract it from the branch under test, every time
+
+Stated as a rule because this campaign paid for it three times, and it is the
+most transferable thing in this report.
+
+```bash
+# every step CI runs, read off the workflow in the checkout you are about to push
+sed -n '/^  lint:/,/^  [a-z-]*:$/p'  .github/workflows/tests.yml | grep -oE '^      - run: .*' | sed 's/^      - run: //'
+sed -n '/^  smoke:/,/^  [a-z-]*:$/p' .github/workflows/tests.yml | grep -oE '^      - run: .*' | sed 's/^      - run: //'
+```
+
+**Never transcribe the list, never reuse yesterday's, never glob
+`tools/check_*.py`.** The three failures, in order of how convincing each looked
+at the time:
+
+1. A `tools/check_*.py` glob **misses two steps that are not bare script
+   invocations** — `add_spdx_headers.py --check` and `gen_property_table.py
+   --check`. The PR template says so in as many words, and both have reddened PRs
+   that looked green locally.
+2. A list read by hand from the workflow **omitted 15 of 41 lint steps** on the
+   first pass here, because the `lint:` job is long and the eye stops early.
+3. A list extracted correctly, on a Tuesday, was **missing seven steps by
+   Wednesday** — `check_render_diagnostics` (wired into `lint` by #2117 *the same
+   day* this branch was verified), plus `check_numeric_guards`,
+   `check_figure_placement`, `check_notebooks_executed`, `check_repro_status`,
+   `check_guard_wiring` and `check_doc_grammar_keys`. #2118's own PR body records
+   six of those seven arriving between *its* two runs.
+
+Failure 3 is the one worth internalizing: **a correctly extracted list has a
+shelf life measured in hours**, because `main` gains guards continuously and each
+new one is a step your branch has never run. Extraction is not a one-off
+setup task, it is part of the push. Both branches in this work were verified at
+**37 lint + 18 smoke steps, 0 failures**, extracted after the final rebase onto
+the `main` they target.
