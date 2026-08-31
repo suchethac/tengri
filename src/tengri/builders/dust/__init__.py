@@ -216,7 +216,7 @@ def _make_dust_factory(
                 f"IR emission are now separate top-level groups. Use "
                 f"dust_emission=builders.dust.emission.<variant>(...) instead."
             )
-        valid_kwargs = ["all_params", *setting_names, *short_params]
+        valid_kwargs = ["all_params", "other_params", *setting_names, *short_params]
         unknown = [k for k in kwargs if k not in short_params]
         if unknown:
             raise TypeError(
@@ -233,6 +233,9 @@ def _make_dust_factory(
     sig_params = [
         inspect.Parameter(
             "all_params", inspect.Parameter.KEYWORD_ONLY, default=FIXED, annotation=Any
+        ),
+        inspect.Parameter(
+            "other_params", inspect.Parameter.KEYWORD_ONLY, default=UNSET, annotation=Any
         ),
     ]
     for s in setting_names:
@@ -288,6 +291,11 @@ def _make_dust_factory(
     doc_lines.append(
         "    Wildcard policy. ``FREE`` makes unspecified attenuation params "
         "fit; ``FIXED`` (default) pins them to registry defaults."
+    )
+    doc_lines.append("other_params : sentinel, optional")
+    doc_lines.append(
+        "    Exact synonym of ``all_params``; give only one. Reads best written "
+        'last, after explicit per-parameter overrides, as "the others".'
     )
     if dust_model == "two_component":
         doc_lines.append("law : str, optional")

@@ -136,7 +136,9 @@ def composable(**kwargs: Any) -> dict:
         raise TypeError(
             f"agn.composable() got unexpected keyword arguments: {unknown}. "
             f"Valid sub-blocks: {list(_AXIS_MODULES)}. "
-            f"Valid shared params: {_SHARED_SHORT_PARAMS}."
+            f"Valid shared params: {_SHARED_SHORT_PARAMS}. "
+            f"(Pass ``all_params=FREE`` or ``all_params=FIXED`` -- or the synonym "
+            f"``other_params=`` -- to set the policy.)"
         )
     out: dict[str, Any] = {"type": "composable", WILDCARD_ALIAS: wildcard}
     for short in _SHARED_SHORT_PARAMS:
@@ -151,6 +153,9 @@ def composable(**kwargs: Any) -> dict:
 # Attach a real signature so IDEs see the sub-block + shared-param kwargs.
 _sig_params = [
     inspect.Parameter("all_params", inspect.Parameter.KEYWORD_ONLY, default=FIXED, annotation=Any),
+    inspect.Parameter(
+        "other_params", inspect.Parameter.KEYWORD_ONLY, default=UNSET, annotation=Any
+    ),
 ]
 for axis in _AXIS_MODULES:
     _sig_params.append(

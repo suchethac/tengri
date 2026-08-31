@@ -79,7 +79,8 @@ def make_factory(
             raise TypeError(
                 f"{variant}() got unexpected keyword arguments: {unknown}. "
                 f"Valid: {valid_kwargs}. "
-                f"(Pass ``all_params=FREE`` or ``all_params=FIXED`` to set the policy.)"
+                f"(Pass ``all_params=FREE`` or ``all_params=FIXED`` -- or the synonym "
+                f"``other_params=`` -- to set the policy.)"
             )
 
         # Auto-enable flag when a flag-conditional param was given.
@@ -101,6 +102,12 @@ def make_factory(
             "all_params",
             inspect.Parameter.KEYWORD_ONLY,
             default=FIXED,
+            annotation=Any,
+        ),
+        inspect.Parameter(
+            "other_params",
+            inspect.Parameter.KEYWORD_ONLY,
+            default=UNSET,
             annotation=Any,
         ),
     ]
@@ -141,6 +148,12 @@ def make_factory(
         "makes them fit; ``FIXED`` (default) pins them to their registry "
         "center. Matches the ``'all_params'`` key in the dict grammar."
     )
+    lines.append("other_params : sentinel, optional")
+    lines.append(
+        "    Exact synonym of ``all_params``; give only one. Reads best written "
+        'last, after explicit per-parameter overrides, as "the others". Matches '
+        "the ``'other_params'`` key in the dict grammar."
+    )
     for flag in bool_flags:
         lines.append(f"{flag} : bool, optional")
         lines.append(
@@ -166,16 +179,21 @@ def make_factory(
 
 
 def _pop_wildcard(variant: str, kwargs: dict[str, Any]) -> Any:
-    """Pop the wildcard kwarg, supporting ``all_params=`` only.
+    """Pop the wildcard kwarg, supporting ``all_params=`` and its exact synonym
+    ``other_params=``.
 
     The canonical builder name for the wildcard policy is ``all_params=``,
-    mirroring the dict grammar's ``'all_params'`` key. The retired aliases
-    ``defaults=`` and ``_=`` raise ``TypeError`` naming ``all_params=`` as
-    the required spelling.
+    mirroring the dict grammar's ``'all_params'`` key; ``other_params=`` is an
+    exact synonym, mirroring the grammar's ``'other_params'`` key (see
+    ``tengri.parameters.sentinels.WILDCARD_ALIAS_OTHER``). Only one of the two
+    may be given. The retired aliases ``defaults=`` and ``_=`` raise
+    ``TypeError`` naming ``all_params=`` as the required spelling.
 
-    Raises ``TypeError`` if ``defaults=`` or ``_=`` are passed.
+    Raises ``TypeError`` if ``defaults=`` or ``_=`` are passed. Raises
+    ``ValueError`` if both ``all_params=`` and ``other_params=`` are passed.
     """
     has_canonical = "all_params" in kwargs
+    has_other = "other_params" in kwargs
     has_deprecated = "defaults" in kwargs
     has_legacy = "_" in kwargs
 
@@ -190,10 +208,20 @@ def _pop_wildcard(variant: str, kwargs: dict[str, Any]) -> Any:
             "The `_=` alias has been retired; the wildcard parameter is "
             "`all_params=`. Write all_params=FREE instead of _=FREE."
         )
+    # The two spellings set the same policy; giving both is a contradiction,
+    # not a redundancy to silently resolve.
+    if has_canonical and has_other:
+        raise ValueError(
+            "`all_params=` and `other_params=` are synonyms for the same wildcard "
+            "parameter; give only one. Write all_params=FREE or other_params=FREE, "
+            "not both."
+        )
 
-    # Pop the canonical form or return default
+    # Pop the canonical form (or its synonym) or return default
     if has_canonical:
         return kwargs.pop("all_params")
+    if has_other:
+        return kwargs.pop("other_params")
     return FIXED
 
 

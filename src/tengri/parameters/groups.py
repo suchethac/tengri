@@ -109,7 +109,13 @@ from tengri.config.exceptions import (
 from tengri.parameters._builders import _resolve_lazy_bucket
 from tengri.parameters.parameters import Parameters
 from tengri.parameters.priors import Distribution, Fixed
-from tengri.parameters.sentinels import FIXED, FREE, WILDCARD_ALIAS, WILDCARD_KEY
+from tengri.parameters.sentinels import (
+    FIXED,
+    FREE,
+    WILDCARD_ALIAS,
+    WILDCARD_ALIAS_OTHER,
+    WILDCARD_KEY,
+)
 
 __all__ = ["parameters_to_groups", "parse_groups"]
 
@@ -645,18 +651,19 @@ _SEDMODEL_PASSTHROUGH = {
 
 
 def _normalize_wildcard_keys(group: object) -> object:
-    """Rewrite the user-facing ``all_params`` wildcard key to internal ``'*'``.
+    """Rewrite the user-facing wildcard key spelling to internal ``'*'``.
 
-    ``all_params`` is the one spelling the grammar accepts; ``'*'`` is an
-    internal detail and is refused on input. This normalizer rewrites the
-    user's key to the internal one once at the parser boundary, so every
-    downstream site keeps operating on the single ``'*'`` invariant without
-    that invariant ever being something a user has to know. Anything printing
-    a normalized dict back to a user must undo this with
-    :func:`_wildcard_keys_for_display`. Recurses through nested sub-block dicts
-    (``dust.emission``, the ``agn.*`` selectors, ``igm.dla``, ``radio.sf`` /
-    ``radio.agn``, …); per-parameter values are never dicts, so recursing into
-    every dict-valued entry is safe.
+    ``all_params`` (:data:`WILDCARD_ALIAS`) and its exact synonym
+    ``other_params`` (:data:`WILDCARD_ALIAS_OTHER`) are the two spellings the
+    grammar accepts; ``'*'`` is an internal detail and is refused on input.
+    This normalizer rewrites whichever spelling the user wrote to the internal
+    one once at the parser boundary, so every downstream site keeps operating
+    on the single ``'*'`` invariant without that invariant ever being
+    something a user has to know. Anything printing a normalized dict back to
+    a user must undo this with :func:`_wildcard_keys_for_display`. Recurses
+    through nested sub-block dicts (``dust.emission``, the ``agn.*``
+    selectors, ``igm.dla``, ``radio.sf`` / ``radio.agn``, …); per-parameter
+    values are never dicts, so recursing into every dict-valued entry is safe.
 
     Parameters
     ----------
@@ -666,14 +673,17 @@ def _normalize_wildcard_keys(group: object) -> object:
     Returns
     -------
     object
-        A new dict with ``all_params`` keys rewritten to ``'*'`` (the input is
-        never mutated), or the original value if it is not a dict.
+        A new dict with ``all_params`` / ``other_params`` keys rewritten to
+        ``'*'`` (the input is never mutated), or the original value if it is
+        not a dict.
 
     Raises
     ------
     ValueError
         If a dict carries ``'*'`` at all -- the key is retired, whether or not
-        ``all_params`` is present beside it.
+        ``all_params`` / ``other_params`` is present beside it. Also raised if
+        a dict carries BOTH ``all_params`` and ``other_params`` -- they are
+        synonyms for the same wildcard, so only one may be given.
 
     Notes
     -----
@@ -681,19 +691,27 @@ def _normalize_wildcard_keys(group: object) -> object:
     """
     if not isinstance(group, dict):
         return group
-    # One rule, whether or not the dict also carries the preferred spelling:
+    # One rule, whether or not the dict also carries a preferred spelling:
     # the advice for both cases is to drop the star. Keeping a separate
     # "you set both" branch would have to name ``'*'`` as an option to explain
     # itself, which is a retirement error teaching the retired form.
     if WILDCARD_KEY in group:
         raise ValueError(
             f"The wildcard key {WILDCARD_KEY!r} has been retired; the wildcard "
-            f"is spelled {WILDCARD_ALIAS!r}. Write "
-            f"{{{WILDCARD_ALIAS!r}: FREE}} instead of {{{WILDCARD_KEY!r}: FREE}}."
+            f"is spelled {WILDCARD_ALIAS!r} (or its synonym {WILDCARD_ALIAS_OTHER!r}). "
+            f"Write {{{WILDCARD_ALIAS!r}: FREE}} instead of {{{WILDCARD_KEY!r}: FREE}}."
+        )
+    # The two spellings set the same policy; giving both is a contradiction
+    # in the making (which one wins?), not a redundancy to silently resolve.
+    if WILDCARD_ALIAS in group and WILDCARD_ALIAS_OTHER in group:
+        raise ValueError(
+            f"{WILDCARD_ALIAS!r} and {WILDCARD_ALIAS_OTHER!r} are synonyms for the same "
+            f"wildcard; give only one. Write {{{WILDCARD_ALIAS!r}: FREE}} or "
+            f"{{{WILDCARD_ALIAS_OTHER!r}: FREE}}, not both."
         )
     normalized: dict[object, object] = {}
     for key, value in group.items():
-        canonical_key = WILDCARD_KEY if key == WILDCARD_ALIAS else key
+        canonical_key = WILDCARD_KEY if key in (WILDCARD_ALIAS, WILDCARD_ALIAS_OTHER) else key
         normalized[canonical_key] = _normalize_wildcard_keys(value)
     return normalized
 
@@ -3422,11 +3440,12 @@ _AGN_SUBBLOCK_KEYS = frozenset({"disc", "torus", "nlr", "blr", "feii", "atten", 
 #: Keys nested in a sub-block (e.g. ``dust.emission``) appear separately.
 # Do NOT remove entries from _GROUP_STRUCTURAL_KEYS. The '*' key (WILDCARD_KEY)
 # is required for post-normalization acceptance; validation runs after
-# _normalize_wildcard_keys converts user-facing 'all_params' to '*', and the
-# acceptance set must contain '*' for the converted dict to pass validation.
-# The 'all_params' key is required as user-facing vocabulary for typo
-# suggestions and displayed key lists in error messages. Removing either breaks
-# a different consumer.
+# _normalize_wildcard_keys converts user-facing 'all_params' / 'other_params' to
+# '*', and the acceptance set must contain '*' for the converted dict to pass
+# validation. The 'all_params' key is required as user-facing vocabulary for
+# typo suggestions and displayed key lists in error messages; 'other_params'
+# (added below, not in the literal table) serves the same two purposes for its
+# exact synonym. Removing any of the three breaks a different consumer.
 _GROUP_STRUCTURAL_KEYS: dict[str, frozenset[str]] = {
     "sfh": frozenset(
         {"type", "*", "all_params", "bin_edges_gyr", "age_kernel", "field_centering"}
@@ -3496,6 +3515,20 @@ _GROUP_STRUCTURAL_KEYS: dict[str, frozenset[str]] = {
     # Deprecated: agn.lines is expanded to (agn.nlr, agn.blr) via expand_lines_alias
     "agn.lines": frozenset({"type", "*", "all_params"}),
     "foreground": frozenset({"ebmv_mw", "law", "rv"}),
+}
+
+# other_params (WILDCARD_ALIAS_OTHER) is an exact synonym of all_params
+# (WILDCARD_ALIAS) -- see sentinels.py. Every group above that lists
+# 'all_params' must also list 'other_params', for the same two reasons the
+# comment above gives for 'all_params' itself (typo-suggestion pools and
+# displayed-key lists in error messages); validation runs post-normalization,
+# so this union does not change what keys are actually *accepted* -- both
+# spellings are already rewritten to '*' by then. A one-line union keeps the
+# literal table above single-spelling and readable rather than doubling every
+# entry.
+_GROUP_STRUCTURAL_KEYS = {
+    group: (keys | {WILDCARD_ALIAS_OTHER} if WILDCARD_ALIAS in keys else keys)
+    for group, keys in _GROUP_STRUCTURAL_KEYS.items()
 }
 
 
@@ -3937,9 +3970,11 @@ def _check_dict_keys(
         # Special case: user wrote 'defaults' instead of 'all_params'
         if key == "defaults":
             raise ValueError(
-                f"Unknown key 'defaults' in group {group!r}. Did you mean 'all_params'? "
-                f"The nested-dict grammar uses ``'all_params': FREE`` / ``FIXED`` to set the "
-                f"wildcard policy (matching the builder factories' ``all_params=`` parameter)."
+                f"Unknown key 'defaults' in group {group!r}. Did you mean 'all_params' "
+                f"(or its exact synonym 'other_params')? "
+                f"The nested-dict grammar uses ``'all_params': FREE`` / ``FIXED`` (or "
+                f"``'other_params'``) to set the wildcard policy (matching the builder "
+                f"factories' ``all_params=`` / ``other_params=`` parameter)."
             )
 
         # Suggestion pool: same group's allowed keys + every short name

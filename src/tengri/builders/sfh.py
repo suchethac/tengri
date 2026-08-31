@@ -93,6 +93,12 @@ def _build_docstring(variant: str, spec, param_records: list[tuple[str, Any]]) -
         "``FREE`` makes them fit; ``FIXED`` (default) pins them to their "
         "registry-default center. Matches the ``'all_params'`` key in the dict grammar."
     )
+    lines.append("other_params : sentinel, optional")
+    lines.append(
+        "    Exact synonym of ``all_params``; give only one. Reads best written "
+        'last, after explicit per-parameter overrides, as "the others". Matches '
+        "the ``'other_params'`` key in the dict grammar."
+    )
     for short, pdef in param_records:
         default_repr = repr(pdef.default) if pdef.default is not None else "registry default"
         lines.append(f"{short} : Distribution, sentinel, or scalar, optional")
@@ -143,7 +149,8 @@ def _make_factory(variant: str, spec) -> Callable[..., dict]:
             raise TypeError(
                 f"{variant}() got unexpected keyword arguments: {unknown}. "
                 f"Valid parameter names for {variant!r}: {short_names}. "
-                f"(Pass ``all_params=FREE`` or ``all_params=FIXED`` to set the policy.)"
+                f"(Pass ``all_params=FREE`` or ``all_params=FIXED`` -- or the synonym "
+                f"``other_params=`` -- to set the policy.)"
             )
         for short in short_names:
             if short in kwargs and kwargs[short] is not _UNSET:
@@ -156,6 +163,12 @@ def _make_factory(variant: str, spec) -> Callable[..., dict]:
             "all_params",
             inspect.Parameter.KEYWORD_ONLY,
             default=FIXED,
+            annotation=Any,
+        ),
+        inspect.Parameter(
+            "other_params",
+            inspect.Parameter.KEYWORD_ONLY,
+            default=_UNSET,
             annotation=Any,
         ),
     ]

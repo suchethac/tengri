@@ -179,13 +179,39 @@ wildcard fixed everything.
 
 #: Internal wildcard key in the nested-dict grammar. Sets ``FREE``/``FIXED``
 #: for every parameter in a group. The normalizer rewrites user-facing
-#: ``WILDCARD_ALIAS`` ('all_params') to this key internally. '*' is NOT a
-#: user input synonym; it is the internal representation after normalization.
+#: ``WILDCARD_ALIAS`` ('all_params') or its synonym ``WILDCARD_ALIAS_OTHER``
+#: ('other_params') to this key internally. '*' is NOT a user input synonym;
+#: it is the internal representation after normalization.
 WILDCARD_KEY = "*"
 
 #: Preferred, self-explanatory spelling of the wildcard key. Equivalent to
 #: ``WILDCARD_KEY`` in every group dict (e.g. ``sfh={'all_params': FREE}``).
 #: Emitted by :meth:`Parameters.to_groups` and shown in ``summary()`` tags.
+#: ``WILDCARD_ALIAS_OTHER`` ('other_params') is an exact synonym -- see its
+#: docstring for when each spelling reads best. Only one of the two may
+#: appear in a given group dict.
 WILDCARD_ALIAS = "all_params"
 
-__all__ = ["FIXED", "FREE", "WILDCARD_ALIAS", "WILDCARD_KEY"]
+#: Exact synonym of :data:`WILDCARD_ALIAS`. Both spellings normalize to the
+#: same internal :data:`WILDCARD_KEY` ('*') and are otherwise fully
+#: interchangeable everywhere the grammar accepts a wildcard -- top-level
+#: groups, nested sub-blocks, and the builder factories' ``all_params=`` /
+#: ``other_params=`` keyword. A dict (or factory call) carrying both raises,
+#: since they set the same policy twice.
+#:
+#: The two spellings exist for the two shapes a group dict takes. ``all_params``
+#: reads best when the wildcard is the group's only directive -- the
+#: everything-free (or everything-fixed) case::
+#:
+#:     sfh={'type': 'dpl', 'all_params': FREE}
+#:
+#: ``other_params`` reads best written LAST, after explicit per-parameter
+#: entries, where it means "the others"::
+#:
+#:     sfh={'type': 'dpl', 'alpha': Uniform(0.5, 3.0), 'other_params': FIXED}
+#:
+#: Pick whichever reads better at the call site; the parser and every
+#: downstream consumer treat them identically.
+WILDCARD_ALIAS_OTHER = "other_params"
+
+__all__ = ["FIXED", "FREE", "WILDCARD_ALIAS", "WILDCARD_ALIAS_OTHER", "WILDCARD_KEY"]
