@@ -229,9 +229,9 @@ model = SEDModel.build(
   'velocity'/...: prior}`. `'frac'` (default) scales the galaxy Hα (bit-exact
   with the legacy `shock_emission`); `'lhalpha'` sets an absolute
   `shock_log_lhalpha` (decoupled from the SFR — for AGN NLR/outflow shocks).
-  `shock={'type':'none'}` disables. Like radio, `'all_params':FREE` is a no-op for the
-  Fixed-default shock bucket — use explicit priors (`shock={'frac':
-  Uniform(0,1)}`). Canonical component: `ShockNebular` (`_REGISTRY['shock']`).
+  `shock={'type':'none'}` disables. `'all_params':FREE` frees only the params
+  with declared priors and warns about the Fixed-only rest; explicit priors
+  (`shock={'frac': Uniform(0, 1)}`) are the precise spelling. Canonical component: `ShockNebular` (`_REGISTRY['shock']`).
   `'mappings'` is the shock group's default `type` and selects `ShockNebular`;
   the older standalone `mappings` component is gone, not merely superseded.
 - AGN cross-block normalisation policy: `agn={'type': 'composable', ...,

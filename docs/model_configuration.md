@@ -43,6 +43,23 @@ dust_attenuation={'type': 'two_component', 'dust_tau_bc': 0.5}  # full prefixed 
 dust_attenuation={'type': 'two_component', 'tau_bc': 0.5}       # short name (preferred)
 ```
 
+### Free vs fixed: one-minute table
+
+Every parameter in a group dict is either **free** (sampled during inference) or **fixed** (pinned at a single value). And each is either using the **registry default** or a **value/prior you provide**:
+
+|            | registry default | your choice |
+|------------|------------------|-------------|
+| **free**   | `FREE` — sampled with the registry's default prior | any `Distribution`, e.g. `Uniform(1, 3)` |
+| **fixed**  | `Fixed(DEFAULT)` — pinned at the registry's default value | `Fixed(0.3)` — pinned at your value |
+
+**`FREE`** means "free to vary, using the registry's default prior." **`Fixed(DEFAULT)`** means "pinned at the registry's default value." The `'all_params'` wildcard applies one disposition to all parameters in the group; after explicit per-parameter entries, spell the remainder `'other_params'`:
+
+```python
+sfh={'type': 'dpl', 'all_params': FREE}                               # everything free
+sfh={'type': 'dpl', 'beta': Uniform(1, 3), 'other_params': Fixed(DEFAULT)}  # beta free, rest pinned
+dust_attenuation={'type': 'two_component', 'law': 'calzetti', 'tau_bc': 0.4, 'other_params': Fixed(DEFAULT)}  # tau_bc overridden, rest at defaults
+```
+
 ### Prefixing and name resolution
 
 Inside each group, parameter names are auto-prefixed with the group's canonical prefix:

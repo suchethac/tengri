@@ -63,9 +63,11 @@ groups = model.spec.to_groups()   # round-trip back to the grammar for editing
     `Fixed(DEFAULT)`). Its exact synonym `'other_params'` is preferred once the
     group also has explicit per-parameter entries (`'other_params'` written
     last, meaning "the others"); giving both spellings in one dict raises. The
-    wildcard cascades over the group's parameters. For groups whose bucket
-    params default to `Fixed` (e.g. `radio`, `shock`), `'all_params': FREE` is
-    a no-op — use explicit priors instead (`shock={'frac': Uniform(0, 1)}`).
+    wildcard cascades over the group's parameters. A wildcard `FREE` that
+    frees only part of a group warns about the remainder; one that frees
+    nothing at all (e.g. `igm={'type': 'inoue14'}` declares no parameters)
+    warns that it had no effect — use explicit priors
+    (`shock={'frac': Uniform(0, 1)}`) when you mean specific parameters.
   - **Per-parameter short-forms** — a bare parameter name inside the group
     resolves to the full prefixed name (`'beta'` in the `sfh` group →
     `sfh_dpl_beta`; `'frac'` in `shock` → `shock_frac`). The full prefixed
