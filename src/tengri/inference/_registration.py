@@ -36,6 +36,7 @@ from tengri.inference.backends.map_dispatch import (
 )
 from tengri.inference.backends.mcmc import (
     run_adjusted_mclmc as _ctx_run_adjusted_mclmc,
+    run_chees as _ctx_run_chees,
     run_dynamic_hmc as _ctx_run_dynamic_hmc,
     run_ghmc as _ctx_run_ghmc,
     run_hmc as _ctx_run_hmc,
@@ -43,6 +44,7 @@ from tengri.inference.backends.mcmc import (
     run_mclmc as _ctx_run_mclmc,
     run_nuts as _ctx_run_nuts,
     run_raytrace as _ctx_run_raytrace,
+    run_smc as _ctx_run_smc,
 )
 from tengri.inference.backends.mcmc.elliptical_slice import (
     run_elliptical_slice_fitter as _ctx_run_elliptical_slice,
@@ -277,9 +279,14 @@ register_backend(
     "mcmc_ghmc",
     tier="broken",
     short_doc=(
-        "[POOR MIXING] Generalized HMC, fast (cold ~17s) but R-hat ≈ "
-        "2.5-3.1 and ESS ≈ 1 on D=6-7 mocks even with 1000 warmup + 2000 "
-        "samples. Do not use for science until adapter is fixed; see "
+        "[POOR MIXING] Generalized HMC, fast (cold ~17s) but R-hat ≈ 2.5-3.1 "
+        "and ESS ≈ 1 on D=6-8 photometry mocks. The adapter was the suspect "
+        "and it has now been replaced: window adaptation → "
+        "blackjax.meads_adaptation, the adaptation purpose-built for this "
+        "kernel, and it does NOT fix the mixing on the tsnorm posteriors "
+        "(R-hat 1.8-14, ESS ≈ 1, and MEADS's step size collapses to ~1e-6). "
+        "Do not use for science. Measured six seeds x three notebook models in "
+        "bench/reports/2026-08-30_ghmc_meads_adaptation.md; earlier context in "
         "docs/dev/benchmarks/2026-05-22_inference_backend_validation.md."
     ),
     requires=("blackjax",),
@@ -290,16 +297,71 @@ register_backend(
     "mcmc_mclmc",
     tier="broken",
     short_doc=(
-        "[POOR MIXING] Microcanonical Langevin MC, fast warm call (~2s) "
-        "but R-hat ≈ 1.7 / 1.13 and ESS ≈ 1 on D=6-7 mocks at 4000 samples. "
-        "Do not use for science until tuning is investigated. "
+        "[POOR MIXING] Microcanonical Langevin MC. The earlier quarantine "
+        "reason -- 'R-hat ≈ 1.7 and ESS ≈ 1 at 4000 samples' -- was a units "
+        "error: an MCLMC draw is one integrator step (2 gradients), a NUTS draw "
+        "is a whole trajectory (~50-77 gradients measured here), so 4000 of each "
+        "is not the same budget. Tuned and re-measured 2026-08-30: at 40000 "
+        "draws it clears max split-R-hat < 1.01 on 6/6 seeds of D=8 nb05 where "
+        "shipped NUTS clears 1/6. Still quarantined for a different and real "
+        "reason: 2 of those 6 seeds finished at 300x and 170,000x their "
+        "energy-error variance target with R-hat still reading 1.0007, and this "
+        "sampler is unadjusted, so nothing rejects an over-large step -- the "
+        "chains mix to a displaced distribution and R-hat cannot see it. Do not "
+        "use for science until that is understood; read energy_var_per_dim, not "
+        "R-hat, and see bench/reports/2026-08-30_mclmc_tuning.md. "
         "Requires blackjax >= 1.6."
     ),
     requires=("blackjax",),
     legacy_fitter=False,
+    # NOT accepts_precondition, though run_mclmc does take `precondition=` and
+    # wires it to the same analytic-metric seam NUTS uses. The capability is
+    # declared when it has been measured and the tier allows a fit:
+    # test_preconditioning_roundtrip parametrises over every backend declaring
+    # it and runs a real fit through each, which a tier="broken" backend cannot
+    # do. Declaring it here was an unmeasured claim that broke that contract.
 )(_ctx_run_mclmc)
 
 # ── Experimental backends ────────────────────────────────────────────────
+register_backend(
+    "mcmc_chees",
+    tier="experimental",
+    short_doc=(
+        "ChEES-HMC: one trajectory length learned from cross-chain statistics, "
+        "so every chain still takes the same number of leapfrogs (lock-step "
+        "preserved) while L comes from the posterior rather than from a "
+        "hand-set constant. Metropolis-corrected dynamic HMC underneath, with "
+        "the metric supplied analytically (precondition=) rather than "
+        "estimated from the ensemble. Measured six seeds x four posteriors in "
+        "bench/reports/2026-08-30_chees_hmc.md."
+    ),
+    requires=("blackjax",),
+    legacy_fitter=False,
+    accepts_precondition=True,
+)(_ctx_run_chees)
+
+register_backend(
+    "mcmc_smc",
+    tier="experimental",
+    short_doc=(
+        "Tempered Sequential Monte Carlo: a particle population annealed from "
+        "the exact standardized N(0, I) prior to the posterior, so it never "
+        "starts at the MAP and cannot inherit its basin. Every particle takes "
+        "the same fixed-length inner-HMC moves at every rung, so a rung is "
+        "lock-step with no ragged control flow -- but under the adaptive "
+        "schedule the RUNG COUNT is data-dependent, so the raggedness moves out "
+        "to the tempering while_loop rather than disappearing (pass "
+        "fixed_ladder= for the fully lock-step arm). log Z comes free with the "
+        "weights. NOTE: a resampled particle population is exchangeable, so the "
+        "autocorrelation ESS is not a convergence count for this backend -- "
+        "read min_ancestor_ess and the split R-hat across independent "
+        "populations. Measured in bench/reports/2026-08-31_smc_evaluation.md."
+    ),
+    requires=("blackjax",),
+    legacy_fitter=False,
+    accepts_precondition=True,
+)(_ctx_run_smc)
+
 register_backend(
     "mcmc_adjusted_mclmc",
     tier="experimental",

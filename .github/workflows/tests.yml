@@ -273,6 +273,21 @@ jobs:
       # different paper ("The SDSS Quasar Catalog"), which a coverage-only check
       # would have shipped. Backlogs pinned and ratcheting. Stdlib-only.
       - run: python tools/check_citation_bib_coverage.py
+      # The two guards above police citations inside `src/`. Nothing policed the
+      # page that exists to credit the people whose work this runs on:
+      # references.bib held 105 entries and docs/citation.md acknowledged about
+      # 15, so every isochrone set, every stellar library, all three IMFs, all
+      # ten attenuation laws and thirteen of fourteen AGN papers were absent
+      # from the published acknowledgements. registry.py calls the bib "the
+      # single source of truth" and the docs were never bound to it, so the page
+      # also cited the Ray Tracing Sampler under an arXiv id the record
+      # contradicts. Requires the first author's surname AND the year within 120
+      # characters on the page — checking the two independently would pass a
+      # page that says "Conroy" in one section and "2009" in another, which is
+      # the vacuous census this repo has shipped before. Derives both halves
+      # from the bib's own short/year fields, so it has no list to rot.
+      # Stdlib-only.
+      - run: python tools/check_citation_docs_coverage.py
       # A warning that renders a computed number and discards it forces every
       # consumer to regex-parse prose for a value the format spec already
       # rounded: `{frac:.0%}` made "69%" mean anything in 0.685-0.695, and the
@@ -353,6 +368,19 @@ jobs:
       # same as the guard above.
       - run: python tools/check_zero_hiding_clamps.py
       - run: python tools/check_representable_floors.py
+      # Drift-proof ledger (#2050): keyed on (file, pattern), not line numbers,
+      # so edits above a violation do not invalidate the ledger. Detects subnormal-
+      # risk floors and clip-then-power patterns in src/tengri. Ledger regenerated
+      # with each new site; new sites (live count > ledger count) fail the check.
+      - run: python tools/check_numeric_guards.py
+      # Ensure figure placement in published notebooks is correct.
+      - run: python tools/check_figure_placement.py
+      # Verify that all published notebooks have every code cell executed.
+      - run: python tools/check_notebooks_executed.py
+      # Validate that all reproduction notebooks have valid status assertions.
+      - run: python tools/check_repro_status.py
+      # Census: verify every check_*.py is wired or explicitly declared not wired (#2050).
+      - run: python tools/check_guard_wiring.py
       # The same hazard one directory over: a gallery example that catches
       # `Exception` per iteration and drops it. Per iteration that is correct;
       # when EVERY iteration fails the example carries on with nothing and
@@ -396,6 +424,14 @@ jobs:
       # healthy single-line cell (90) and the shortest damaged one (148).
       # Stdlib-only.
       - run: python tools/check_notebook_cells.py
+      # A committed render can print a dead fit and still pass every notebook
+      # guard above: check_notebook_renders reads source/render agreement and
+      # tracebacks, never printed diagnostics, which is how docs/spine/05 shipped
+      # max R-hat 1.6e14 beside a printed DeadFitWarning as "verified" (#2095).
+      # This one parses printed R-hat/divergence/NaN lines and the DeadFit
+      # warning text, with a known-bad ledger whose entries cite open issues
+      # (#2095, #2113) and expire loudly when their render heals. Stdlib-only.
+      - run: python tools/check_render_diagnostics.py
       # A paired notebook declares in its own metadata that its .ipynb and .py
       # are one document. Nothing enforced that, and three drifted for months:
       # 01_quickstart.ipynb kept teaching `Fitter(...)` after #1341 migrated the
@@ -625,6 +661,8 @@ jobs:
           cache: pip
           cache-dependency-path: pyproject.toml
       - run: pip install -e ".[dev]"
+      # Validate that all grammar blocks in documentation are complete and consistent.
+      - run: python tools/check_doc_grammar_keys.py
       - run: python tools/check_param_prefixes.py
       - run: python tools/check_param_defaults.py
       # The redshift-specific instance of the same rule: a numeric default on

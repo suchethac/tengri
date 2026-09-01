@@ -40,7 +40,7 @@ class TestCIUnexecutableDict:
 
 
 class TestListWithoutCI:
-    """Subprocess --list (baseline, includes all 17 slugs)."""
+    """Subprocess --list (baseline, every published slug)."""
 
     def _run_list(self, *flags) -> list[str]:
         """Run --list with optional flags, return stdout lines."""
@@ -60,9 +60,9 @@ class TestListWithoutCI:
         return proc.stdout.strip().split("\n")
 
     def test_list_baseline(self):
-        """--list returns all 17 slugs."""
+        """--list returns every published slug, unfiltered."""
         slugs = self._run_list()
-        assert len(slugs) == 18
+        assert len(slugs) == len(ALL_SLUGS)
         assert "apple_mps" in slugs
 
     def test_list_matches_module_constant(self):
@@ -99,9 +99,9 @@ class TestListWithCI:
             assert excluded_slug not in slugs
 
     def test_list_ci_count(self):
-        """--list --ci returns 14 slugs (18 total minus 4 exclusions)."""
+        """--list --ci drops exactly the exclusions, and names which ones."""
         slugs = self._run_list_ci()
-        assert len(slugs) == 14
+        assert len(slugs) == len(ALL_SLUGS) - len(CI_UNEXECUTABLE)
         assert "apple_mps" not in slugs
         assert "nvidia_cuda" not in slugs
         assert "multimodel_bma_candels" not in slugs
@@ -160,7 +160,7 @@ class TestListCIJSON:
         assert "nvidia_cuda" not in slugs
         assert "multimodel_bma_candels" not in slugs
         assert "12_simulation_populations" not in slugs
-        assert len(slugs) == 14
+        assert len(slugs) == len(ALL_SLUGS) - len(CI_UNEXECUTABLE)
 
 
 class TestMutationValidation:
@@ -187,11 +187,11 @@ class TestMutationValidation:
         )
         if proc.returncode != 0:
             pytest.skip(f"Script failed to run: {proc.stderr}")
-        # The broken version would return 17 slugs (all of them)
-        # instead of 14, so the test would catch it
+        # With filtering neutered the broken script returns every slug rather
+        # than ALL_SLUGS minus the exclusions, which is what catches it.
         lines = [l for l in proc.stdout.strip().split("\n") if l]
         msg = f"Mutation test: --ci should filter but doesn't. Got {len(lines)} lines"
-        assert len(lines) == 18, msg
+        assert len(lines) == len(ALL_SLUGS), msg
         assert "apple_mps" in lines
         assert "multimodel_bma_candels" in lines
         assert "12_simulation_populations" in lines

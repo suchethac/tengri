@@ -56,7 +56,14 @@ def test_ghmc_runs_and_returns_finite_samples():
     fitter = Fitter(
         sed, np.asarray(mock["flux_obs"]), np.asarray(mock["noise"]), data_type="photometry"
     )
-    post = fitter.run("mcmc_ghmc", key=key, n_samples=60)  # must not raise
+    # ``allow_unvalidated`` because mcmc_ghmc is tier="broken" (#1287 quarantined
+    # it after this test was written, so it had been red on every HEAD since).
+    # The quarantine is about *mixing*; this test is about argument order, and it
+    # is precisely the "benchmarking and backend development must remain
+    # possible" case the escape hatch exists for.
+    post = fitter.run(
+        "mcmc_ghmc", key=key, n_samples=60, n_warmup=60, allow_unvalidated=True
+    )  # must not raise
     samples = post.samples
     assert samples, "GHMC returned no samples"
     for name, arr in samples.items():

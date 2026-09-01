@@ -453,7 +453,7 @@ def make_agebins_from_zred(
     References
     ----------
     .. [1] B. D. Johnson et al., "Stellar Population Inference," ApJS, 254,
-       22 (2021). arXiv:2012.01426. https://doi.org/10.3847/1538-4295/abef67
+       22 (2021). arXiv:2012.01426. https://doi.org/10.3847/1538-4365/abef67
     .. [2] S. Wang et al., "Prospector-β," arXiv:2401.12198 (2024).
 
     Examples
@@ -550,7 +550,7 @@ def psb_continuity(
     References
     ----------
     .. [1] B. D. Johnson et al., "Stellar Population Inference," ApJS, 254,
-       22 (2021). arXiv:2012.01426. https://doi.org/10.3847/1538-4295/abef67
+       22 (2021). arXiv:2012.01426. https://doi.org/10.3847/1538-4365/abef67
     .. [2] K. A. Suess et al., "Half-mass Radii for ~7000 Galaxies," ApJ,
        915, 87 (2021). arXiv:2101.03177.
        https://doi.org/10.3847/1538-4357/ac062c
@@ -693,7 +693,7 @@ def continuity_flex(
        https://doi.org/10.3847/1538-4357/ab133c
     .. [2] B. D. Johnson et al., "Stellar Population Inference from the
        Spectral Energy Distributions of Billions of Galaxies," ApJS, 254, 22
-       (2021). arXiv:2012.01426. https://doi.org/10.3847/1538-4295/abef67
+       (2021). arXiv:2012.01426. https://doi.org/10.3847/1538-4365/abef67
     .. [3] C. C. Lovell et al. 2025, Open J. Astrophys. 8,
        "Synthesizer: a Software Package for Synthetic Astronomical Observables,"
        doi:10.33232/001c.145766; W. J. Roper et al. 2026, JOSS 11, 9436,

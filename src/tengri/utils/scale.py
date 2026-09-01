@@ -559,6 +559,128 @@ def apply_log10_scale(arr, log10_scale):
     return (arr / safe_peak) * pow10(net)
 
 
+#: Default cotangent boost for :func:`loss_scaled_grad` [dimensionless].
+#:
+#: An exact power of two, so multiplying by it and dividing back is exact in
+#: both precisions and cannot perturb a float64 result. Sized by measurement
+#: rather than by the arithmetic, on the pure-float32 photometry gradient of
+#: three seams (stellar+dust, dust IR, AGN), CPU backend, against float64:
+#:
+#: =========  =========================================================
+#: boost      relative error
+#: =========  =========================================================
+#: ``2**40``  1.0 — the gradient is still exactly ``0.0``
+#: ``2**60``  1.0 — still exactly ``0.0``
+#: ``2**70``  7e-03 -- 1.8e-01 — recovered, but wrong by percents
+#: ``2**80``  1.5e-06 -- 5.6e-06
+#: ``2**90``  1.0e-06 -- 4.1e-06  (flat from here to ``2**120``)
+#: ``2**130`` NaN — the boosted cotangent overflows
+#: =========  =========================================================
+#:
+#: ``2**100`` sits at the middle of that plateau, ten doublings above the last
+#: value that is merely *nearly* right and twenty below the first that
+#: overflows. Naive arithmetic says ``2**70`` should do — the projection's
+#: ``10**(-58)`` needs only ~1e20 to clear float32's smallest normal — and the
+#: percent-level errors in that row are what it costs to be right at the
+#: boundary rather than inside it: the cotangent picks up further O(1e-3)
+#: factors downstream (filter weights, band quadrature) that push it back into
+#: the subnormal range, where XLA's CPU backend flushes. The same row measures
+#: 1e-06 on CUDA, so a boost validated on one backend is not validated.
+DEFAULT_COTANGENT_BOOST = 2.0**100
+
+
+def loss_scaled_grad(fun, argnums=0, *, boost=DEFAULT_COTANGENT_BOOST, has_aux=False):
+    """``jax.grad`` with the cotangent chain lifted into float32's normal range.
+
+    Parameters
+    ----------
+    fun : callable
+        Scalar-valued function to differentiate, as for :func:`jax.grad`.
+    argnums : int or tuple of int, optional
+        Which positional argument(s) to differentiate with respect to.
+        Default: 0.
+    boost : float, optional
+        Factor applied to ``fun``'s value before differentiating and divided
+        out of the gradient afterwards [dimensionless]. Use an exact power of
+        two. Default: :data:`DEFAULT_COTANGENT_BOOST`.
+    has_aux : bool, optional
+        As for :func:`jax.grad`: ``fun`` returns ``(value, aux)``.
+        Default: False.
+
+    Returns
+    -------
+    callable
+        Same signature and return convention as ``jax.grad(fun, argnums)``.
+
+    Notes
+    -----
+    **JIT/vmap-safe**; the wrapper is ordinary JAX.
+
+    Reverse mode has to store, at every node of the graph, the derivative of
+    the output with respect to *that node*. Differentiating a raw observed flux
+    puts a node in that chain whose cotangent is ~``10**(-58)`` -- the
+    cosmological dimming, applied at ``observation/redshift_kernel.py`` -- and
+    float32's smallest subnormal is 1.4e-45, so it flushes to **exactly zero**
+    and takes everything upstream with it. The answer it was heading for
+    (~1e-27) is perfectly representable; only the intermediate is not, which is
+    why forward mode (``jax.jacfwd``) gets it right and reverse mode does not
+    (#1415, root cause #1388).
+
+    Multiplying the scalar by ``boost`` multiplies every cotangent in the chain
+    by the same constant, so the underflowing intermediate lands back in the
+    normal range; dividing the gradient by ``boost`` restores the answer. The
+    Jacobian is unchanged -- this is the mixed-precision "loss scaling" of ML
+    training, and it is exact for a power-of-two ``boost``, which shifts the
+    binary exponent and leaves every mantissa bit alone.
+
+    **A fit does not need this.** A likelihood already multiplies the residual
+    by ``1/sigma**2`` (~1e32 for photometry), which supplies the same lift for
+    free; ``neg_log_posterior_fn`` gradients track float64 to ~1e-3 in pure
+    float32 on every measured seam. Reach for this when differentiating an
+    *unweighted* observable -- ``sum(predict_photometry(p))``, a color, a
+    band ratio -- where the incoming cotangent is O(1).
+
+    ``boost`` trades underflow headroom for overflow headroom, so it is not a
+    universal setting: ``boost * |cotangent|`` must stay below 3.4e38 at every
+    node, and at the default that is reached at ``2**130``. The measured working
+    window for flux-scale observables is ``2**80`` -- ``2**120``; a function
+    whose gradients are already large needs a smaller boost, and one at a deeper
+    seam a larger. **Zero and NaN are the two ways it fails, and both are
+    loud** — unlike the defect it exists for.
+
+    In float64 the boost is unnecessary and harmless -- the chain never leaves
+    range, and multiplying then dividing by a power of two is bit-exact.
+
+    Examples
+    --------
+    >>> import jax.numpy as jnp
+    >>> from tengri.utils.scale import loss_scaled_grad
+    >>> grad_fn = loss_scaled_grad(lambda p: jnp.sum(model.predict_photometry(p)))
+    >>> grad_fn(params)  # doctest: +SKIP
+    {'sfh_delayed_log_total_mass': Array(7.68e-27, dtype=float32), ...}
+    """
+    if has_aux:
+
+        def scaled(*args, **kwargs):
+            value, aux = fun(*args, **kwargs)
+            return value * boost, aux
+    else:
+
+        def scaled(*args, **kwargs):
+            return fun(*args, **kwargs) * boost
+
+    inner = jax.grad(scaled, argnums=argnums, has_aux=has_aux)
+
+    def unboosted(*args, **kwargs):
+        out = inner(*args, **kwargs)
+        if has_aux:
+            grads, aux = out
+            return jax.tree.map(lambda g: g / boost, grads), aux
+        return jax.tree.map(lambda g: g / boost, out)
+
+    return unboosted
+
+
 def log10_add(log_a, log_b, *, sign_a=1.0, sign_b=1.0):
     """Return ``log10|s_a·10**log_a + s_b·10**log_b|`` without leaving log space.
 

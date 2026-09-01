@@ -94,6 +94,7 @@ EXPERIMENTAL_SLUGS = [
     # environment (jax[cuda12] on the pinned JAX), so its render is produced by
     # running scripts/execute_notebooks.py on a CUDA box.
     "nvidia_cuda",
+    "custom_filters_7dt",
 ]
 EXPERIMENTAL_SUBDIR = "experimental"
 

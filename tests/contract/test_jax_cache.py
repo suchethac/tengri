@@ -250,3 +250,64 @@ def test_filelock_is_a_declared_dependency():
     text = (Path(__file__).resolve().parents[2] / "pyproject.toml").read_text()
     deps = re.search(r"^dependencies = \[(.*?)^\]", text, re.S | re.M).group(1)
     assert re.search(r'"filelock[><=]', deps), "filelock must be a runtime dependency"
+
+
+# --------------------------------------------------------------------------
+# cache_stats: is the cap binding, and on WHAT
+# --------------------------------------------------------------------------
+#
+# ``cache_size_bytes`` answers "how big" and cannot answer "and would a higher
+# min_compile_time_secs help", because a cache at 8.5 GB looks identical
+# whether a hundred compiled samplers or ten thousand per-filter micro-kernels
+# put it there -- and only the first is worth raising a cap for. Measured on a
+# real cache at 99.0 % of its cap (bench/reports/2026-08-31_fast_nuts.md
+# Finding 5): 1585 of 2284 entries were under 64 KB and held 0.11 % of the
+# bytes, while the largest 100 held 79.2 %.
+
+
+def test_cache_stats_counts_artifacts_not_atimes(tmp_path):
+    """Only ``*-cache`` files are entries; the 8-byte ``*-atime`` siblings are not.
+
+    Counting both would double every entry count and add nothing to the bytes,
+    which is exactly the kind of quietly-wrong denominator this file exists to
+    keep out.
+    """
+    (tmp_path / "k1-cache").write_bytes(b"x" * 4096)
+    (tmp_path / "k1-atime").write_bytes(b"\x00" * 8)
+    (tmp_path / "k2-cache").write_bytes(b"y" * 8192)
+    (tmp_path / "k2-atime").write_bytes(b"\x00" * 8)
+
+    stats = jax_cache.cache_stats(tmp_path)
+    assert stats["n_entries"] == 2
+    assert stats["total_bytes"] == 4096 + 8192
+
+
+def test_cache_stats_separates_the_small_entries_from_the_bytes(tmp_path):
+    """The whole point: many small entries, almost none of the size."""
+    for i in range(20):
+        (tmp_path / f"small{i}-cache").write_bytes(b"x" * 1024)
+    (tmp_path / "big-cache").write_bytes(b"y" * (4 * 1024 * 1024))
+
+    stats = jax_cache.cache_stats(tmp_path)
+    assert stats["n_entries"] == 21
+    assert stats["n_entries_under_64kb"] == 20
+    assert stats["bytes_under_64kb"] == 20 * 1024
+    assert stats["largest_bytes"] == 4 * 1024 * 1024
+    # One entry of 21 holds 99.5 % of the bytes: raising min_compile_time_secs
+    # would evict the other twenty and free half a percent.
+    assert stats["top10_bytes"] / stats["total_bytes"] > 0.99
+
+
+def test_cache_stats_reports_the_fraction_of_the_configured_cap(tmp_path):
+    jax_cache.enable_persistent_cache(tmp_path, max_size_bytes=1024)
+    (tmp_path / "k-cache").write_bytes(b"x" * 512)
+    stats = jax_cache.cache_stats(tmp_path)
+    assert stats["max_bytes"] == 1024
+    assert stats["fraction_of_cap"] == pytest.approx(0.5)
+
+
+def test_cache_stats_missing_dir(tmp_path):
+    stats = jax_cache.cache_stats(tmp_path / "does_not_exist")
+    assert stats["n_entries"] == 0
+    assert stats["total_bytes"] == 0
+    assert stats["largest_bytes"] == 0

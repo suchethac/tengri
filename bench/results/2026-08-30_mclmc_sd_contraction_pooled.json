@@ -1,0 +1,201 @@
+{
+  "question": "is MCLMC's marginal contraction vs NUTS real, and how large?",
+  "notebook": "05",
+  "seeds_used": [
+    7,
+    8,
+    9
+  ],
+  "seeds_excluded": [
+    {
+      "seed": 12,
+      "nuts_divergences": 1200,
+      "nuts_median_sd": 0.0003030799948180868,
+      "reason": "frozen reference chain"
+    }
+  ],
+  "n_pairs": 24,
+  "sd_ratios_below_one": 15,
+  "sign_test_p": 0.30745625495910645,
+  "mean_log_sd_ratio": -0.019419786763120655,
+  "se_log_sd_ratio": 0.01175526853108448,
+  "t_stat": -1.6520070734044803,
+  "t_p": 0.11212164047524069,
+  "percent_width_change": -1.9232437425638405,
+  "percent_ci95": [
+    -4.157130647671048,
+    0.3627101628171481
+  ],
+  "worst_abs_z_mean": 2.1646529098893756,
+  "worst_ks": 0.11868333333333334,
+  "pairs": [
+    {
+      "seed": 7,
+      "parameter": "dust_tau_bc",
+      "sd_ratio": 1.023566786666215,
+      "z_mean": -1.0331422900964897,
+      "ks": 0.07297083333333332
+    },
+    {
+      "seed": 7,
+      "parameter": "dust_tau_diff",
+      "sd_ratio": 0.9930207049053444,
+      "z_mean": 1.382643890696184,
+      "ks": 0.08656666666666668
+    },
+    {
+      "seed": 7,
+      "parameter": "met_logzsol",
+      "sd_ratio": 0.9878176736911722,
+      "z_mean": -1.07850975148286,
+      "ks": 0.053016666666666656
+    },
+    {
+      "seed": 7,
+      "parameter": "sfh_tsnorm_log_total_mass",
+      "sd_ratio": 1.0711603018242088,
+      "z_mean": -1.0285503879541706,
+      "ks": 0.05006249999999998
+    },
+    {
+      "seed": 7,
+      "parameter": "sfh_tsnorm_peak_lbt_gyr",
+      "sd_ratio": 0.9699377257577227,
+      "z_mean": -0.6585584020678549,
+      "ks": 0.061808333333333354
+    },
+    {
+      "seed": 7,
+      "parameter": "sfh_tsnorm_skew",
+      "sd_ratio": 0.9274214540347226,
+      "z_mean": -0.11850098370292893,
+      "ks": 0.05352916666666663
+    },
+    {
+      "seed": 7,
+      "parameter": "sfh_tsnorm_trunc",
+      "sd_ratio": 1.0142521683390757,
+      "z_mean": -0.04887511437523507,
+      "ks": 0.021324999999999983
+    },
+    {
+      "seed": 7,
+      "parameter": "sfh_tsnorm_width_gyr",
+      "sd_ratio": 0.9943693966499584,
+      "z_mean": -0.625716588718378,
+      "ks": 0.02929583333333341
+    },
+    {
+      "seed": 8,
+      "parameter": "dust_tau_bc",
+      "sd_ratio": 0.9355297252009436,
+      "z_mean": 0.40870617538064963,
+      "ks": 0.0216875
+    },
+    {
+      "seed": 8,
+      "parameter": "dust_tau_diff",
+      "sd_ratio": 0.9507819056012842,
+      "z_mean": 1.1390045700589273,
+      "ks": 0.04662499999999997
+    },
+    {
+      "seed": 8,
+      "parameter": "met_logzsol",
+      "sd_ratio": 1.0144241794319633,
+      "z_mean": -0.7692325230225995,
+      "ks": 0.03344999999999998
+    },
+    {
+      "seed": 8,
+      "parameter": "sfh_tsnorm_log_total_mass",
+      "sd_ratio": 0.9514572098086711,
+      "z_mean": 1.8414567723770625,
+      "ks": 0.054408333333333336
+    },
+    {
+      "seed": 8,
+      "parameter": "sfh_tsnorm_peak_lbt_gyr",
+      "sd_ratio": 1.0073523848955923,
+      "z_mean": 0.638329736570468,
+      "ks": 0.047616666666666696
+    },
+    {
+      "seed": 8,
+      "parameter": "sfh_tsnorm_skew",
+      "sd_ratio": 0.9784365663886463,
+      "z_mean": 0.951674942629677,
+      "ks": 0.08562083333333331
+    },
+    {
+      "seed": 8,
+      "parameter": "sfh_tsnorm_trunc",
+      "sd_ratio": 0.9609711837052204,
+      "z_mean": 2.1646529098893756,
+      "ks": 0.0908666666666667
+    },
+    {
+      "seed": 8,
+      "parameter": "sfh_tsnorm_width_gyr",
+      "sd_ratio": 0.9520805848644726,
+      "z_mean": 1.0383089169641915,
+      "ks": 0.05168333333333336
+    },
+    {
+      "seed": 9,
+      "parameter": "dust_tau_bc",
+      "sd_ratio": 0.992076272378727,
+      "z_mean": 1.1174598896729513,
+      "ks": 0.10230833333333336
+    },
+    {
+      "seed": 9,
+      "parameter": "dust_tau_diff",
+      "sd_ratio": 0.8891031893147745,
+      "z_mean": -1.115640675982076,
+      "ks": 0.11090833333333339
+    },
+    {
+      "seed": 9,
+      "parameter": "met_logzsol",
+      "sd_ratio": 0.837467375782521,
+      "z_mean": 1.1635679373459455,
+      "ks": 0.11019583333333333
+    },
+    {
+      "seed": 9,
+      "parameter": "sfh_tsnorm_log_total_mass",
+      "sd_ratio": 1.0040062955711482,
+      "z_mean": 0.7080183452586553,
+      "ks": 0.08632916666666668
+    },
+    {
+      "seed": 9,
+      "parameter": "sfh_tsnorm_peak_lbt_gyr",
+      "sd_ratio": 1.0313662140602522,
+      "z_mean": -0.5178427396798868,
+      "ks": 0.05183333333333334
+    },
+    {
+      "seed": 9,
+      "parameter": "sfh_tsnorm_skew",
+      "sd_ratio": 1.08889768262699,
+      "z_mean": -0.6621832645503313,
+      "ks": 0.05690833333333334
+    },
+    {
+      "seed": 9,
+      "parameter": "sfh_tsnorm_trunc",
+      "sd_ratio": 1.0511874359150344,
+      "z_mean": 0.32106066316656773,
+      "ks": 0.0541625
+    },
+    {
+      "seed": 9,
+      "parameter": "sfh_tsnorm_width_gyr",
+      "sd_ratio": 0.948721178101415,
+      "z_mean": 1.4247125013823199,
+      "ks": 0.11868333333333334
+    }
+  ]
+}

@@ -39,6 +39,7 @@ from __future__ import annotations
 import argparse
 import json
 import sys
+from collections.abc import Sequence
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[1]
@@ -80,10 +81,10 @@ def unexecuted(nb: dict) -> list[int]:
     return out
 
 
-def main() -> int:
+def main(argv: Sequence[str] | None = None) -> int:
     ap = argparse.ArgumentParser(description=__doc__.split("\n")[0])
     ap.add_argument("--list", action="store_true", help="print every notebook checked")
-    args = ap.parse_args()
+    args = ap.parse_args(argv)
 
     problems: list[str] = []
     checked = 0

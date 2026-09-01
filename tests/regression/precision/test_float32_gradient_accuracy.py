@@ -58,6 +58,16 @@ representable, float32 can reach it, and no local change to ``apply_log10_scale`
 fix reverse mode — the ratio follows from the magnitudes being related, which is what
 #1388 changes. Pinned by
 :func:`test_photometry_gradient_is_accurate_in_float32_forward_mode`.
+
+**Reverse mode is recoverable without #1388, by lifting the incoming cotangent.**
+:func:`tengri.utils.scale.loss_scaled_grad` multiplies the scalar by ``2**100`` before
+differentiating and divides the gradient back — exact for a power of two, so float64
+is bit-identical — and returns the float64 answer to ~1e-6. That is the same lift a
+likelihood's ``1/sigma**2`` supplies for free, which is why fitting was never affected
+by this. The seam-by-seam measurement lives in
+``test_float32_photometry_grad_seams.py``; this module keeps the *bare* ``jax.grad``
+pinned, because that is the call a user makes first and the one that silently returns
+zero.
 """
 
 import jax
@@ -233,7 +243,12 @@ def test_likelihood_gradient_is_accurate_in_float32(ssp_bare, obs):
     "change to apply_log10_scale can help: that ratio is a property of the magnitudes "
     "being related (L_nu ~1e30 -> F_nu ~1e-28), not of how the scale is applied. It "
     "needs #1388's scaled-SED contract — carry the SED already scaled, so no step ever "
-    "relates a ~1e30 quantity to a ~1e-28 one.",
+    "relates a ~1e30 quantity to a ~1e-28 one. What DOES recover this gradient without "
+    "that contract is changing the cotangent that arrives: "
+    "tengri.utils.scale.loss_scaled_grad boosts the scalar by 2**100 and divides back, "
+    "and returns the float64 answer to ~1e-6 on this and every other seam — measured "
+    "per seam in test_float32_photometry_grad_seams.py. This xfail is about the bare "
+    "jax.grad, which is what a caller reaches for first and what silently returns zero.",
     strict=True,
 )
 def test_photometry_gradient_is_accurate_in_float32(ssp_bare, obs):

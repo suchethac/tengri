@@ -432,6 +432,82 @@ def cache_size_bytes(cache_dir: str | os.PathLike[str] | None = None) -> int:
     return total
 
 
+def cache_stats(cache_dir: str | os.PathLike[str] | None = None) -> dict:
+    """Report whether the cache cap binds, and on what.
+
+    :func:`cache_size_bytes` answers "how big"; this answers "and is that a
+    problem, and would a smaller ``min_compile_time_secs`` help". The two
+    questions come apart, which is why this exists as its own call.
+
+    Parameters
+    ----------
+    cache_dir : str or PathLike or None
+        Directory to measure. Defaults to the currently enabled cache, falling
+        back to :func:`_default_cache_dir`.
+
+    Returns
+    -------
+    dict
+        ``n_entries`` (compiled artifacts, i.e. ``*-cache`` files),
+        ``total_bytes``, ``max_bytes`` (the configured cap, or
+        :data:`UNBOUNDED_CACHE`), ``fraction_of_cap``, ``largest_bytes``,
+        ``n_entries_under_64kb``, ``bytes_under_64kb`` and
+        ``top10_bytes`` / ``top100_bytes`` -- the share held by the largest few.
+
+    Notes
+    -----
+    **Not JIT-compatible** -- it walks the filesystem.
+
+    Measured on a shared four-worktree box on 2026-08-31 (see
+    ``bench/reports/2026-08-31_fast_nuts.md`` Finding 5): 2 200 entries filling
+    7.91 GB of an 8 GiB cap, of which **1 506 entries were under 64 KB and held
+    about 1.2 % of the bytes** while the **largest 100 held 79.6 %**. The cap is
+    reached by a few dozen compiled samplers, not by the per-filter micro-kernels
+    ``min_compile_time_secs = 0.05`` deliberately persists -- so raising that
+    threshold frees essentially nothing, and ``TENGRI_JAX_CACHE_MAX_GB`` is the
+    knob that does. Reading ``top100_bytes`` against ``max_bytes`` is how a
+    caller tells those two apart for their own workload.
+
+    Examples
+    --------
+    >>> from tengri.utils.jax_cache import cache_stats
+    >>> s = cache_stats()  # doctest: +SKIP
+    >>> s["top100_bytes"] / s["total_bytes"]  # doctest: +SKIP
+    0.796
+    """
+    target = _resolve_dir(cache_dir)
+    sizes: list[int] = []
+    if target.exists():
+        for root, _dirs, files in os.walk(target):
+            for f in files:
+                if not f.endswith(_CACHE_SUFFIX):
+                    continue
+                try:
+                    sizes.append(os.path.getsize(os.path.join(root, f)))
+                except OSError:
+                    # Race with eviction, broken symlink, etc.: skip.
+                    continue
+    sizes.sort(reverse=True)
+    total = sum(sizes)
+    small = [s for s in sizes if s < 65536]
+    try:
+        cap = int(jax.config.jax_compilation_cache_max_size)
+    except Exception:
+        cap = UNBOUNDED_CACHE
+    return {
+        "cache_dir": str(target),
+        "n_entries": len(sizes),
+        "total_bytes": total,
+        "max_bytes": cap,
+        "fraction_of_cap": (total / cap) if cap > 0 else None,
+        "largest_bytes": sizes[0] if sizes else 0,
+        "n_entries_under_64kb": len(small),
+        "bytes_under_64kb": sum(small),
+        "top10_bytes": sum(sizes[:10]),
+        "top100_bytes": sum(sizes[:100]),
+    }
+
+
 def clear_cache(cache_dir: str | os.PathLike[str] | None = None) -> int:
     """Remove all entries from the persistent cache directory.
 

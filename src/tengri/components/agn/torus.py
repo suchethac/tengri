@@ -315,7 +315,7 @@ def create_nenkova_from_grid(grid_path: str) -> Callable:
     .. [1] M. Nenkova et al., "AGN Dusty Tori. I. Handling of Clumpy Media,"
        ApJ, 685, 147 (2008). https://doi.org/10.1086/590482
     .. [2] B. D. Johnson et al., "Stellar Population Inference," ApJS, 254,
-       22 (2021). arXiv:2012.01426. https://doi.org/10.3847/1538-4295/abef67
+       22 (2021). arXiv:2012.01426. https://doi.org/10.3847/1538-4365/abef67
     """
     raw = _load_nenkova_arrays(grid_path)
 
@@ -450,7 +450,7 @@ def nenkova_torus(*args, **kwargs) -> jnp.ndarray:
     .. [1] M. Nenkova et al., "AGN Dusty Tori. I. Handling of Clumpy Media,"
        ApJ, 685, 147 (2008). https://doi.org/10.1086/590482
     .. [2] B. D. Johnson et al., "Stellar Population Inference," ApJS, 254,
-       22 (2021). arXiv:2012.01426. https://doi.org/10.3847/1538-4295/abef67
+       22 (2021). arXiv:2012.01426. https://doi.org/10.3847/1538-4365/abef67
 
     Examples
     --------

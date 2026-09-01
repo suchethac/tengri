@@ -40,6 +40,7 @@ import argparse
 import ast
 import pathlib
 import sys
+from collections.abc import Sequence
 
 #: Total number of ``x / jnp.maximum(d, floor)`` sites in ``src/tengri``.
 #:
@@ -201,10 +202,10 @@ def collect() -> list[tuple[str, int, object, str]]:
     return found
 
 
-def main() -> int:
+def main(argv: Sequence[str] | None = None) -> int:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--list", action="store_true", help="print the inventory")
-    args = parser.parse_args()
+    args = parser.parse_args(argv)
 
     sites = collect()
 

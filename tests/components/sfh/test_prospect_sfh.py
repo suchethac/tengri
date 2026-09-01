@@ -38,6 +38,63 @@ _NODE_AGES_4 = np.array([1e5, 2e9, 9e9, 13e9])  # 4-node default (massfunc_p4)
 _NODE_AGES_6 = np.array([1e5, 1e8, 1e9, 5e9, 9e9, 13e9])  # 6-node (massfunc_p6)
 
 
+def assert_burst_is_local(sfh_fn, kwargs):
+    """Beyond its edge, a burst may rescale the SFH but must not reshape it.
+
+    Both burst SFHs asserted this with
+    ``assert_allclose(with_burst[old], without[old], rtol=0.3)``, which is the
+    wrong shape for the claim in both directions.
+
+    Too loose for the failure that matters: the bug is a burst whose influence
+    leaks past ``burst_age``, and a leak is *age-dependent*.  A 30% tolerance on
+    the raw values cannot separate that from the benign uniform rescale, so any
+    leak under 30% passed.
+
+    Too tight for benign change: the rescale is real and large.  Measured, the
+    raw difference is 15.1% (``snorm_burst``) and 20.3% (``snorm_trunc_burst``),
+    so ``rtol=0.3`` sat within a factor of two of failing on parameters nobody
+    would think twice about editing.
+
+    The renormalization to fixed ``log_total_mass`` is a single scalar, so the
+    sharp statement is that the *ratio* is constant.  Measured, it is constant
+    to 2.6e-16 -- machine precision -- at 0.8486 and 0.7969 respectively.  That
+    is roughly fourteen orders of magnitude tighter than the old assertion
+    while being *less* sensitive to a parameter edit, because the ratio stays
+    constant however large the renormalization becomes.
+    """
+    with_burst = np.asarray(sfh_fn(_T, **kwargs))
+    without_burst = np.asarray(sfh_fn(_T, **{**kwargs, "burst_sfr": 0.0}))
+
+    # Skip the ONE cell straddling ``burst_age``. The SFH array is a quadrature
+    # integrand (the forward model turns it into mass parcels via
+    # ``trapezoid``), so the cell containing the burst edge carries the burst
+    # mass formed in its covered fraction -- it is not "outside" the burst
+    # (#1374). Beyond that cell the two must agree in shape. The one-cell step
+    # is derived from the grid, not hard-coded, so this survives editing ``_T``.
+    cell_factor = float(_T[1] / _T[0])  # _T is log-spaced
+    old_mask = np.asarray(kwargs["burst_age"] * cell_factor < _T)
+    assert int(old_mask.sum()) > 10, "probe setup failed: too few nodes past the burst edge"
+
+    ratio = with_burst[old_mask] / without_burst[old_mask]
+    assert_allclose(
+        ratio,
+        ratio[0],
+        rtol=1e-12,
+        err_msg=(
+            "the burst changes the SHAPE of the SFH beyond burst_age, not just its "
+            "normalization — it is leaking past its own edge"
+        ),
+    )
+
+    # Non-vacuity, both ways. A ratio of exactly 1.0 would mean the burst added
+    # no mass and the test compared a curve with itself; a ratio above 1 would
+    # mean adding a burst at fixed total mass somehow raised the old-age SFR.
+    assert 0.0 < ratio[0] < 1.0, (
+        f"renormalization factor {ratio[0]} is not a strict reduction — adding burst "
+        "mass at fixed log_total_mass must lower the SFR everywhere outside the burst"
+    )
+
+
 # ── PCHIP helpers ────────────────────────────────────────────────────
 
 
@@ -176,28 +233,15 @@ class TestSnormBurstSfh:
         assert jnp.all(sfr_with_burst[young_mask] >= sfr_no_burst[young_mask])
 
     def test_no_burst_outside_burst_age(self):
-        """SFR at ages >= burst_age is approximately equal to no-burst version.
+        """Beyond ``burst_age`` the burst only rescales the SFH; it must not reshape it.
 
         Burst is inactive (indicator function) at t >= burst_age, so the
-        composite shape is identical in the old-age regime. Renormalization
-        to log_total_mass affects the absolute scaling but not the relative
-        pattern at old ages.
+        composite shape is identical in the old-age regime and the only
+        difference is the renormalization to ``log_total_mass``. See
+        :func:`assert_burst_is_local` for why that is asserted as a constant
+        ratio rather than a tolerance on the values.
         """
-        sfr_with_burst = snorm_burst(_T, **self._KWARGS)
-        no_burst_kwargs = {**self._KWARGS, "burst_sfr": 0.0}
-        sfr_no_burst = snorm_burst(_T, **no_burst_kwargs)
-
-        # Skip the ONE cell straddling ``burst_age``. The SFH array is a
-        # quadrature integrand (the forward model turns it into mass parcels via
-        # ``trapezoid``), so the cell containing the burst edge carries the burst
-        # mass formed in its covered fraction -- it is not "outside" the burst
-        # (#1374). Beyond that cell the two must agree. The one-cell step is
-        # derived from the grid, not hard-coded, so this survives editing ``_T``.
-        cell_factor = float(_T[1] / _T[0])  # _T is log-spaced
-        old_mask = self._KWARGS["burst_age"] * cell_factor < _T
-        assert int(old_mask.sum()) > 10, "probe setup failed: too few nodes past the burst edge"
-        # Renormalization can redistribute mass, so use moderate tolerance
-        assert_allclose(sfr_with_burst[old_mask], sfr_no_burst[old_mask], rtol=0.3)
+        assert_burst_is_local(snorm_burst, self._KWARGS)
 
     def test_total_mass_integral_golden(self):
         """Total mass integral matches golden value from current implementation.
@@ -253,25 +297,13 @@ class TestSnormTruncBurstSfh:
         assert jnp.all(sfr_with_burst[young_mask] >= sfr_no_burst[young_mask])
 
     def test_no_burst_outside_burst_age(self):
-        """SFR at ages >= burst_age is approximately equal to no-burst version.
+        """Beyond ``burst_age`` the burst only rescales the SFH; it must not reshape it.
 
-        Burst is inactive at t >= burst_age. Renormalization can affect
-        absolute scaling but not the relative suppression at old ages.
+        Same claim as the ``snorm_burst`` case, on the truncated kernel; the
+        truncation factor is age-dependent but burst-independent, so it divides
+        out of the ratio exactly as the renormalization does.
         """
-        sfr_with_burst = snorm_trunc_burst(_T, **self._KWARGS)
-        no_burst_kwargs = {**self._KWARGS, "burst_sfr": 0.0}
-        sfr_no_burst = snorm_trunc_burst(_T, **no_burst_kwargs)
-
-        # Skip the ONE cell straddling ``burst_age``. The SFH array is a
-        # quadrature integrand (the forward model turns it into mass parcels via
-        # ``trapezoid``), so the cell containing the burst edge carries the burst
-        # mass formed in its covered fraction -- it is not "outside" the burst
-        # (#1374). Beyond that cell the two must agree. The one-cell step is
-        # derived from the grid, not hard-coded, so this survives editing ``_T``.
-        cell_factor = float(_T[1] / _T[0])  # _T is log-spaced
-        old_mask = self._KWARGS["burst_age"] * cell_factor < _T
-        assert int(old_mask.sum()) > 10, "probe setup failed: too few nodes past the burst edge"
-        assert_allclose(sfr_with_burst[old_mask], sfr_no_burst[old_mask], rtol=0.3)
+        assert_burst_is_local(snorm_trunc_burst, self._KWARGS)
 
     def test_truncation_reduces_old_sfr_vs_snorm_burst(self):
         """Truncation suppresses SFR at ages older than peak.

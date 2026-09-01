@@ -788,28 +788,59 @@ def multicolor_disc(
     if wavelength.dtype == jnp.float32:
         # Log-space renorm: ``l_bol_requested`` ~1e44 and the integral
         # ``l_nu_total`` (l_nu_intrinsic ~1e28 over ~1e15 Hz → ~1e43) both
-        # overflow float32; only their ratio (``scale`` ~1e-33 when normalizing
-        # a true-shape disc to a 1e10 erg/s reference) is needed. Peak-factor the
-        # integrand so the trapezoid stays in range, and carry the peak in log10.
+        # overflow float32; only their ratio (~1e-33 when normalizing a
+        # true-shape disc to a 1e10 erg/s reference) is needed. Normalize the
+        # integrand so the trapezoid stays in range, and take the exponent
+        # against the normalized integral, so neither side is ever formed.
         _log_l_bol_req = agn_log_lbol + _LOG10_LSUN_ERG + jnp.log10(agn_lum_ratio)
-        # stop_gradient: factorization constant, added back as log10(_peak) (#1436).
+        # stop_gradient: factorization constant, canceled by the peak the
+        # returned ``_l_hat`` is divided by (#1436).
         _peak = jax.lax.stop_gradient(jnp.max(jnp.abs(l_nu_intrinsic)))
         _peak = jnp.where(_peak > 0.0, _peak, 1.0)
-        _hat_total = jnp.trapezoid(l_nu_intrinsic[_sort_idx] / _peak, _nu[_sort_idx])
+        # The RETURNED array is the peak-normalized one, and the peak is left
+        # out of the exponent to match (#1439). Algebraically
+        # ``(l/p) * 10**(req - log h) == l * 10**(req - log p - log h)``, but the
+        # two differ in *reverse* mode: renormalizing makes ``sum(g * arr)`` a
+        # cotangent of the returned array, and JAX forms exactly that inner
+        # product when transposing ``arr * scale``. With the raw ``l`` (~1e28)
+        # and the cotangent the AGN reference offset hands back (~10**34.6), that
+        # sum is ~1e64 -> ``inf`` in float32, while its partner
+        # ``d scale/d l ~ 1e-64`` flushes to 0, and ``inf * 0`` is the NaN #1439
+        # reported. On the O(1) ``_l_hat`` both factors are in range. Forward
+        # mode never forms the product and was correct either way, which is why
+        # this presented as a mode asymmetry.
+        #
+        # Normalized to unit L1, not to unit peak: ``sum(g * arr)`` is bounded by
+        # ``max|g| * sum|arr|``, so unit L1 caps it at the incoming cotangent
+        # itself, while unit peak leaves a factor of n_wave (~3e3, 3.5 decades)
+        # on top. That factor is the difference between working and overflowing
+        # at the top of the declared ``agn_log_lbol`` prior: at log L_bol = 12 the
+        # AGN reference offset hands back ~10**35.6, and 3e3 * 10**35.6 is past
+        # float32's 3.4e38 ceiling. Both divisors are stop_gradient constants, so
+        # they cancel analytically and leave the single correct derivative path.
+        _over_peak = l_nu_intrinsic / _peak
+        _norm = jax.lax.stop_gradient(jnp.sum(jnp.abs(_over_peak)))
+        _norm = jnp.where(_norm > 0.0, _norm, 1.0)
+        _l_hat = _over_peak / _norm
+        _hat_total = jnp.trapezoid(_l_hat[_sort_idx], _nu[_sort_idx])
         # ``representable_floor``, not the bare ``1e-100`` (#1492): float32's
         # smallest subnormal is 1.4e-45, so the literal IS 0.0 there and this
         # branch (the float32 one) was the guard providing nothing. A zero
         # integral would take log10 to -inf and the scale to inf. Returns
         # ``1e-100`` unchanged under x64, so float64 is bit-identical.
-        _log_l_nu_total = jnp.log10(_peak) + jnp.log10(
-            jnp.maximum(jnp.abs(_hat_total), _representable_floor(1e-100))
-        )
-        scale = _pow10(_log_l_bol_req - _log_l_nu_total)
-    else:
-        l_bol_requested = 10.0**agn_log_lbol * _LSUN_ERG * agn_lum_ratio
-        l_nu_total = jnp.trapezoid(l_nu_intrinsic[_sort_idx], _nu[_sort_idx])
-        l_nu_total_safe = jnp.maximum(jnp.abs(l_nu_total), _representable_floor(1e-100))
-        scale = l_bol_requested / l_nu_total_safe
+        _log_hat_total = jnp.log10(jnp.maximum(jnp.abs(_hat_total), _representable_floor(1e-100)))
+        # The result's own peak, so it is in range whenever the output is.
+        _scale_hat = _pow10(_log_l_bol_req - _log_hat_total)
+        # optimization_barrier: without it XLA is free to re-associate
+        # ``(l/p) * s`` back into ``l * (s/p)``, which reinstates the ~1e64
+        # inner product this factorization exists to avoid (the same reason the
+        # stellar component's barriers are load-bearing, #1436).
+        return jax.lax.optimization_barrier(_l_hat) * _scale_hat
+
+    l_bol_requested = 10.0**agn_log_lbol * _LSUN_ERG * agn_lum_ratio
+    l_nu_total = jnp.trapezoid(l_nu_intrinsic[_sort_idx], _nu[_sort_idx])
+    l_nu_total_safe = jnp.maximum(jnp.abs(l_nu_total), _representable_floor(1e-100))
+    scale = l_bol_requested / l_nu_total_safe
 
     return l_nu_intrinsic * scale
 
@@ -1734,6 +1765,14 @@ def kubota_done_disc(
         nthcomp_table=_template,
     )
 
+    # NOT peak-factored like ``multicolor_disc``'s renorm (#1439). The same
+    # regrouping was written here and measured: it does not close this disc,
+    # because kubota_done's float32 reverse pass is wrong *before* any range
+    # question arises — with an O(1) cotangent, ``d(sum L_nu)/d(agn_log_lbol)``
+    # is -0.034x float64 (sign flipped), and setting ``agn_f_hard=0`` restores
+    # agreement to 3e-04. The defect is in the hot-corona zone, not in this
+    # normalization, so a factorization here would be an unverified change to a
+    # path that is already wrong. Tracked in #1439.
     return l_nu_total * scale
 
 
@@ -1888,7 +1927,7 @@ def create_relagn_disc_from_grid(grid_path: str) -> Callable:
        ApJS, 153, 205. doi:10.1086/421115
 
     .. [2] Hagen, S. & Done, C. (2023).
-       MNRAS, 521, 251. doi:10.1093/mnras/stad478
+       MNRAS, 525, 3455-3467. doi:10.1093/mnras/stad2499
     """
     if not __import__("pathlib").Path(grid_path).exists():
         raise FileNotFoundError(f"RELAGN disc grid not found: {grid_path}")

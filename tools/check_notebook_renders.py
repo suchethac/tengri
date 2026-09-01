@@ -59,6 +59,7 @@ import argparse
 import json
 import re
 import sys
+from collections.abc import Sequence
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[1]
@@ -173,10 +174,10 @@ def published() -> list[tuple[str, Path, Path]]:
     return items
 
 
-def main() -> int:
+def main(argv: Sequence[str] | None = None) -> int:
     ap = argparse.ArgumentParser(description=__doc__.split("\n")[0])
     ap.add_argument("--list", action="store_true", help="print what is checked")
-    args = ap.parse_args()
+    args = ap.parse_args(argv)
 
     problems: list[str] = []
     for slug, py_path, ipynb_path in published():

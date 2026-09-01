@@ -170,6 +170,7 @@ EXPECTED_ALL = frozenset(
         # Exceptions
         "BackendError",
         "ConfigError",
+        "DeadFitError",
         "InferenceError",
         "ParameterError",
         "TengriError",

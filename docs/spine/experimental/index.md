@@ -47,6 +47,18 @@ template to copy. Each states its own caveats up front.
   fitting is not safe either. The sampler section carries its own warning: those numbers are
   a property of a fixture that turned out to be hard to sample, not of tengri.
 
+- **{doc}`custom_filters_7dt`**: an instrument tengri does not carry, taken
+  from delivered transmission curves through prediction to a fit. Three
+  registration routes all resolve through `load_filter`, so a user curve works
+  anywhere a built-in one does and can shadow it, and counts in ADU with
+  per-band zeropoints reach an ingestible unit through AB magnitudes.
+  Wavelength units are the part that does not announce itself: a curve
+  tabulated in nanometers registers as a valid description of the extreme UV,
+  lands where the SED has no flux, and the fit converges and says nothing — the
+  range check covers that gap and cannot see microns, which is what
+  `wave_unit=` settles. Worked through the 7DT set: 20 medium bands on a 25 nm
+  grid plus g, r, i, which ship built in.
+
 ```{toctree}
 :maxdepth: 1
 
@@ -55,4 +67,5 @@ multimodel_bma_candels
 jwst_nonparametric_fits
 apple_mps
 nvidia_cuda
+custom_filters_7dt
 ```
