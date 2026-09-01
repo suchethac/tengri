@@ -166,7 +166,7 @@ jobs:
       # line "FAILED (1 cell errors)", not the traceback — this artifact is the only
       # place a CI-only error exists (e.g. 12_simulation_populations passed locally
       # but failed on CI). Uploading makes every red diagnosable from the Actions UI.
-      - uses: actions/upload-artifact@v4
+      - uses: actions/upload-artifact@v7
         if: failure()
         with:
           name: failed-render-${{ matrix.slug }}
