@@ -45,7 +45,7 @@ import jax.numpy as jnp
 import numpy as np
 import pytest
 
-from tengri import FIXED, Fixed, Observation, Photometry, SEDModel, SSPData, Uniform
+from tengri import DEFAULT, Fixed, Observation, Photometry, SEDModel, SSPData, Uniform
 from tengri.observation.photometry import FilterCurve
 
 pytestmark = pytest.mark.regression_bug
@@ -88,7 +88,7 @@ def _build(uv_ssp, uv_obs, dust: dict):
         return SEDModel.build(
             ssp_data=uv_ssp,
             observation=uv_obs,
-            sfh={"type": "dpl", "all_params": FIXED},
+            sfh={"type": "dpl", "all_params": Fixed(DEFAULT)},
             dust_attenuation=dust,
             redshift=Fixed(0.5),
         )

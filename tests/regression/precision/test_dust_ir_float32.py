@@ -18,7 +18,7 @@ import jax.numpy as jnp
 import numpy as np
 import pytest
 
-from tengri import FIXED, Fixed, SEDModel
+from tengri import DEFAULT, Fixed, SEDModel
 from tengri.utils.physics_constants import C_AA
 
 pytestmark = pytest.mark.regression_bug
@@ -97,13 +97,13 @@ def _physical_ssp(ssp):
 def _model(ssp, emission_type):
     return SEDModel.build(
         ssp_data=ssp,
-        met={"logzsol": Fixed(0.0), "all_params": FIXED},
+        met={"logzsol": Fixed(0.0), "all_params": Fixed(DEFAULT)},
         sfh={
             "type": "delayed",
             "tau_gyr": Fixed(1.0),
             "age_gyr": Fixed(5.0),
             "log_total_mass": Fixed(10.0),
-            "all_params": FIXED,
+            "all_params": Fixed(DEFAULT),
         },
         dust_attenuation={
             "type": "two_component",
@@ -111,9 +111,9 @@ def _model(ssp, emission_type):
             "law_diff": "calzetti",
             "tau_bc": Fixed(1.0),
             "tau_diff": Fixed(0.7),
-            "all_params": FIXED,
+            "all_params": Fixed(DEFAULT),
         },
-        dust_emission={"type": emission_type, "all_params": FIXED},
+        dust_emission={"type": emission_type, "all_params": Fixed(DEFAULT)},
         redshift=Fixed(0.5),
     )
 

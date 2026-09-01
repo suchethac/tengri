@@ -172,7 +172,7 @@ def test_gradient_identity_with_total_mass():
     The stellar component's compute_log_nion should have gradient=1.0 w.r.t.
     sfh_dpl_log_total_mass because the CSP weights exclude total mass.
     """
-    from tengri import FIXED, Fixed, SEDModel
+    from tengri import DEFAULT, Fixed, SEDModel
     from tengri.components.stellar.component import StellarSEDComponent
     from tengri.components.stellar.sps.dsps_wrapper import load_ssp_data
     from tengri.observation import Observation, Photometry
@@ -186,8 +186,8 @@ def test_gradient_identity_with_total_mass():
     model = SEDModel.build(
         ssp_data=ssp,
         observation=obs,
-        sfh={"type": "dpl", "all_params": FIXED},
-        neb={"type": "cue", "all_params": FIXED},
+        sfh={"type": "dpl", "all_params": Fixed(DEFAULT)},
+        neb={"type": "cue", "all_params": Fixed(DEFAULT)},
         redshift=Fixed(1.0),
         approx=None,
         forward_dtype="float64",
@@ -218,15 +218,15 @@ def test_published_keys_in_derived():
 
     ssp = load_ssp_data("data/fsps_prsc_miles_chabrier.h5")
 
-    from tengri import FIXED, Fixed, SEDModel
+    from tengri import DEFAULT, Fixed, SEDModel
     from tengri.observation import Observation, Photometry
 
     obs = Observation(photometry=Photometry.from_names(["sdss_r", "sdss_i"]))
     model = SEDModel.build(
         ssp_data=ssp,
         observation=obs,
-        sfh={"type": "dpl", "all_params": FIXED},
-        neb={"type": "cue", "all_params": FIXED},
+        sfh={"type": "dpl", "all_params": Fixed(DEFAULT)},
+        neb={"type": "cue", "all_params": Fixed(DEFAULT)},
         redshift=Fixed(1.0),
         approx=None,
         forward_dtype="float64",

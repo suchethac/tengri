@@ -436,7 +436,7 @@ def test_agn_ebv_disc_settable_via_sedbuild(synthetic_ssp_wide, synthetic_tophat
     entry, so the recommended SEDModel.build path could not redden the disc at
     all. It now lowers like any other shared agn-group parameter.
     """
-    from tengri import FIXED, Fixed, SEDModel
+    from tengri import DEFAULT, Fixed, SEDModel
 
     obs = synthetic_tophat_obs
     ssp = synthetic_ssp_wide
@@ -451,20 +451,24 @@ def test_agn_ebv_disc_settable_via_sedbuild(synthetic_ssp_wide, synthetic_tophat
             "tau_gyr": Fixed(1.0),
             "age_gyr": Fixed(5.0),
             "log_total_mass": Fixed(0.0),
-            "all_params": FIXED,
+            "all_params": Fixed(DEFAULT),
         },
-        dust_attenuation={"law": "power_law", "type": "two_component", "all_params": FIXED},
-        neb={"type": "none", "all_params": FIXED},
+        dust_attenuation={
+            "law": "power_law",
+            "type": "two_component",
+            "all_params": Fixed(DEFAULT),
+        },
+        neb={"type": "none", "all_params": Fixed(DEFAULT)},
         redshift=Fixed(0.0),
         agn={
             "type": "composable",
-            "disc": {"type": "qsogen", "all_params": FIXED},
+            "disc": {"type": "qsogen", "all_params": Fixed(DEFAULT)},
             "torus": {"type": "none"},
             "nlr": {"type": "none"},
             "blr": {"type": "none"},
             "agn_log_lbol": Fixed(11.0),
             "agn_ebv_disc": Fixed(0.0),
-            "all_params": FIXED,
+            "all_params": Fixed(DEFAULT),
         },
     )
 
@@ -476,20 +480,24 @@ def test_agn_ebv_disc_settable_via_sedbuild(synthetic_ssp_wide, synthetic_tophat
             "tau_gyr": Fixed(1.0),
             "age_gyr": Fixed(5.0),
             "log_total_mass": Fixed(0.0),
-            "all_params": FIXED,
+            "all_params": Fixed(DEFAULT),
         },
-        dust_attenuation={"law": "power_law", "type": "two_component", "all_params": FIXED},
-        neb={"type": "none", "all_params": FIXED},
+        dust_attenuation={
+            "law": "power_law",
+            "type": "two_component",
+            "all_params": Fixed(DEFAULT),
+        },
+        neb={"type": "none", "all_params": Fixed(DEFAULT)},
         redshift=Fixed(0.0),
         agn={
             "type": "composable",
-            "disc": {"type": "qsogen", "all_params": FIXED},
+            "disc": {"type": "qsogen", "all_params": Fixed(DEFAULT)},
             "torus": {"type": "none"},
             "nlr": {"type": "none"},
             "blr": {"type": "none"},
             "agn_log_lbol": Fixed(11.0),
             "agn_ebv_disc": Fixed(0.5),
-            "all_params": FIXED,
+            "all_params": Fixed(DEFAULT),
         },
     )
 
@@ -521,7 +529,7 @@ def test_agn_attenuation_ebv_settable_via_sedbuild(synthetic_ssp_wide, synthetic
     E(B−V)=0 — a silent no-op. It now lowers via the agn.atten sub-block.
     Updated to use law='prevot_smc' syntax (new form).
     """
-    from tengri import FIXED, Fixed, SEDModel
+    from tengri import DEFAULT, Fixed, SEDModel
 
     obs = synthetic_tophat_obs
     ssp = synthetic_ssp_wide
@@ -536,20 +544,28 @@ def test_agn_attenuation_ebv_settable_via_sedbuild(synthetic_ssp_wide, synthetic
             "tau_gyr": Fixed(1.0),
             "age_gyr": Fixed(5.0),
             "log_total_mass": Fixed(0.0),
-            "all_params": FIXED,
+            "all_params": Fixed(DEFAULT),
         },
-        dust_attenuation={"law": "power_law", "type": "two_component", "all_params": FIXED},
-        neb={"type": "none", "all_params": FIXED},
+        dust_attenuation={
+            "law": "power_law",
+            "type": "two_component",
+            "all_params": Fixed(DEFAULT),
+        },
+        neb={"type": "none", "all_params": Fixed(DEFAULT)},
         redshift=Fixed(0.0),
         agn={
             "type": "composable",
-            "disc": {"type": "qsogen", "all_params": FIXED},
+            "disc": {"type": "qsogen", "all_params": Fixed(DEFAULT)},
             "torus": {"type": "none"},
             "nlr": {"type": "none"},
             "blr": {"type": "none"},
-            "atten": {"law": "prevot_smc", "attenuation_ebv": Fixed(0.0), "all_params": FIXED},
+            "atten": {
+                "law": "prevot_smc",
+                "attenuation_ebv": Fixed(0.0),
+                "all_params": Fixed(DEFAULT),
+            },
             "agn_log_lbol": Fixed(11.0),
-            "all_params": FIXED,
+            "all_params": Fixed(DEFAULT),
         },
     )
 
@@ -561,20 +577,28 @@ def test_agn_attenuation_ebv_settable_via_sedbuild(synthetic_ssp_wide, synthetic
             "tau_gyr": Fixed(1.0),
             "age_gyr": Fixed(5.0),
             "log_total_mass": Fixed(0.0),
-            "all_params": FIXED,
+            "all_params": Fixed(DEFAULT),
         },
-        dust_attenuation={"law": "power_law", "type": "two_component", "all_params": FIXED},
-        neb={"type": "none", "all_params": FIXED},
+        dust_attenuation={
+            "law": "power_law",
+            "type": "two_component",
+            "all_params": Fixed(DEFAULT),
+        },
+        neb={"type": "none", "all_params": Fixed(DEFAULT)},
         redshift=Fixed(0.0),
         agn={
             "type": "composable",
-            "disc": {"type": "qsogen", "all_params": FIXED},
+            "disc": {"type": "qsogen", "all_params": Fixed(DEFAULT)},
             "torus": {"type": "none"},
             "nlr": {"type": "none"},
             "blr": {"type": "none"},
-            "atten": {"law": "prevot_smc", "attenuation_ebv": Fixed(0.5), "all_params": FIXED},
+            "atten": {
+                "law": "prevot_smc",
+                "attenuation_ebv": Fixed(0.5),
+                "all_params": Fixed(DEFAULT),
+            },
             "agn_log_lbol": Fixed(11.0),
-            "all_params": FIXED,
+            "all_params": Fixed(DEFAULT),
         },
     )
 

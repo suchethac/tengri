@@ -14,7 +14,7 @@ import numpy as np
 import pytest
 
 import tengri  # noqa: F401
-from tengri import FIXED, Fixed, Observation, SEDModel, Spectroscopy
+from tengri import DEFAULT, Fixed, Observation, SEDModel, Spectroscopy
 from tengri.observation.banded import gaussian_resolution_bands
 
 pytestmark = pytest.mark.regression_bug
@@ -29,7 +29,7 @@ def _model(ssp, with_matrix):
     return SEDModel.build(
         ssp_data=ssp,
         observation=obs,
-        sfh={"type": "dpl", "all_params": FIXED},
+        sfh={"type": "dpl", "all_params": Fixed(DEFAULT)},
         redshift=Fixed(0.05),
     )
 

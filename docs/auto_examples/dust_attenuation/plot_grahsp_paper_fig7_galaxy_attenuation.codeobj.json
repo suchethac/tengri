@@ -8,7 +8,7 @@
    "name": "float"
   }
  ],
- "FIXED": [
+ "DEFAULT": [
   {
    "is_class": false,
    "is_explicit": false,
@@ -35,7 +35,7 @@
    "is_explicit": false,
    "module": "tengri",
    "module_short": "tengri",
-   "name": "FIXED"
+   "name": "DEFAULT"
   }
  ],
  "Fixed": [
@@ -876,6 +876,27 @@
    "module": "matplotlib",
    "module_short": "matplotlib",
    "name": "Normalize"
+  },
+  {
+   "is_class": true,
+   "is_explicit": false,
+   "module": "matplotlib.colors",
+   "module_short": "matplotlib.colors",
+   "name": "Norm"
+  },
+  {
+   "is_class": true,
+   "is_explicit": false,
+   "module": "matplotlib",
+   "module_short": "matplotlib",
+   "name": "Norm"
+  },
+  {
+   "is_class": true,
+   "is_explicit": false,
+   "module": "abc",
+   "module_short": "abc",
+   "name": "ABC"
   },
   {
    "is_class": false,

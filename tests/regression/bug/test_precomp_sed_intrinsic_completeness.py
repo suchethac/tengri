@@ -31,7 +31,7 @@ import jax.numpy as jnp
 import numpy as np
 import pytest
 
-from tengri import FIXED, Fixed, Observation, SEDModel, WavePrecomp
+from tengri import DEFAULT, Fixed, Observation, SEDModel, WavePrecomp
 from tengri.observation.photometry_config import Photometry
 
 pytestmark = pytest.mark.regression_bug
@@ -46,18 +46,18 @@ MAX_LUT_FLOPS = 1_000_000
 
 
 def _model(approx, *, emission=True):
-    dust = {"type": "two_component", "law": "calzetti", "all_params": FIXED}
+    dust = {"type": "two_component", "law": "calzetti", "all_params": Fixed(DEFAULT)}
     groups = {}
     if emission:
         # A peer group now, not a sub-block. The emission=False arm omits it
         # entirely, which is what "a model with the dust emission removed" means
         # and what the vacuous-equality test below depends on.
-        groups["dust_emission"] = {"type": "dale2014", "all_params": FIXED}
+        groups["dust_emission"] = {"type": "dale2014", "all_params": Fixed(DEFAULT)}
     return SEDModel.build(
         ssp_data=pytest.importorskip("tengri").load_ssp(),
         observation=Observation(photometry=Photometry.from_names(BANDS)),
         redshift=Fixed(0.1),
-        sfh={"type": "dpl", "all_params": FIXED},
+        sfh={"type": "dpl", "all_params": Fixed(DEFAULT)},
         dust_attenuation=dust,
         approx=approx,
         **groups,

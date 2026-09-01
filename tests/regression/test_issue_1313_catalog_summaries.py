@@ -104,7 +104,7 @@ def test_to_table_omits_the_bare_column_without_a_median():
 
 @pytest.fixture
 def fwd_catalog(synthetic_ssp_wide, simple_observation):
-    from tengri import FIXED, FREE, ForwardModel, SEDModel, WavePrecomp
+    from tengri import DEFAULT, FREE, Fixed, ForwardModel, SEDModel, WavePrecomp
 
     sed = SEDModel.build(
         ssp_data=synthetic_ssp_wide,
@@ -113,11 +113,11 @@ def fwd_catalog(synthetic_ssp_wide, simple_observation):
         dust_attenuation={
             "law": "power_law",
             "type": "two_component",
-            "all_params": FIXED,
+            "all_params": Fixed(DEFAULT),
             "tau_bc": 0.5,
         },
         neb={"type": "none"},
-        redshift=FIXED,
+        redshift=Fixed(DEFAULT),
         approx=WavePrecomp(catalog_z_range=(0.05, 1.5), n_z=60),
     )
     return ForwardModel.build(sed=sed, observation=simple_observation)

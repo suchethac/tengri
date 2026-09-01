@@ -116,14 +116,14 @@ class Silva04Torus(SEDModelComponent):
     --------
     Minimal model with Silva+04 torus::
 
-        from tengri import SEDModel, Fixed, Uniform, builders
+        from tengri import SEDModel, Fixed, DEFAULT, Uniform, builders
         from tengri.components.agn.silva04_model import Silva04Torus, Silva04TorusConfig
 
         model = SEDModel.build(
             ssp_data=ssp,
             observation=obs,
-            sfh=builders.sfh.dpl(_=Fixed(1.5), beta=Fixed(1.0)),
-            dust_attenuation={"type": "two_component", "all_params": Fixed},
+            sfh=builders.sfh.dpl(alpha=Fixed(1.5), beta=Fixed(1.0)),
+            dust_attenuation={"type": "two_component", "all_params": Fixed(DEFAULT)},
             agn=Silva04Torus(config=Silva04TorusConfig(grid_path="path/to/grid.h5")),
         )
 

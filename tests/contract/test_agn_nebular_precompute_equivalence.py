@@ -262,7 +262,7 @@ class TestAGNNebularPrecomputeEquivalence:
         Tolerance derivation: Measured stellar-only LUT error ~0.3%.
         Measured BLR delta LUT error ~0.5%. Allow 3× = 1.5%.
         """
-        from tengri import FIXED, Fixed, Observation, Photometry, SEDModel, WavePrecomp
+        from tengri import DEFAULT, Fixed, Observation, Photometry, SEDModel, WavePrecomp
 
         obs = Observation(photometry=Photometry(filters=tuple(narrow_ha_hb_filters)))
         key = jax.random.PRNGKey(42)
@@ -273,13 +273,13 @@ class TestAGNNebularPrecomputeEquivalence:
             observation=obs,
             redshift=Fixed(Z),
             approx=None,
-            sfh={"type": "tsnorm", "all_params": FIXED, "log_total_mass": 6.0},
+            sfh={"type": "tsnorm", "all_params": Fixed(DEFAULT), "log_total_mass": 6.0},
             dust_attenuation={"type": "none"},
             agn={
                 "type": "composable",
-                "disc": {"type": "powerlaw", "all_params": FIXED},
-                "torus": {"type": "simple", "all_params": FIXED},
-                "blr": {"type": "analytic", "all_params": FIXED, "agn_log_lbol": 13.0},
+                "disc": {"type": "powerlaw", "all_params": Fixed(DEFAULT)},
+                "torus": {"type": "simple", "all_params": Fixed(DEFAULT)},
+                "blr": {"type": "analytic", "all_params": Fixed(DEFAULT), "agn_log_lbol": 13.0},
                 "nlr": {"type": "none"},
                 "feii": {"type": "none"},
                 "atten": {"type": "none"},
@@ -291,13 +291,13 @@ class TestAGNNebularPrecomputeEquivalence:
             observation=obs,
             redshift=Fixed(Z),
             approx=WavePrecomp(),
-            sfh={"type": "tsnorm", "all_params": FIXED, "log_total_mass": 6.0},
+            sfh={"type": "tsnorm", "all_params": Fixed(DEFAULT), "log_total_mass": 6.0},
             dust_attenuation={"type": "none"},
             agn={
                 "type": "composable",
-                "disc": {"type": "powerlaw", "all_params": FIXED},
-                "torus": {"type": "simple", "all_params": FIXED},
-                "blr": {"type": "analytic", "all_params": FIXED, "agn_log_lbol": 13.0},
+                "disc": {"type": "powerlaw", "all_params": Fixed(DEFAULT)},
+                "torus": {"type": "simple", "all_params": Fixed(DEFAULT)},
+                "blr": {"type": "analytic", "all_params": Fixed(DEFAULT), "agn_log_lbol": 13.0},
                 "nlr": {"type": "none"},
                 "feii": {"type": "none"},
                 "atten": {"type": "none"},
@@ -310,13 +310,13 @@ class TestAGNNebularPrecomputeEquivalence:
             observation=obs,
             redshift=Fixed(Z),
             approx=None,
-            sfh={"type": "tsnorm", "all_params": FIXED, "log_total_mass": 6.0},
+            sfh={"type": "tsnorm", "all_params": Fixed(DEFAULT), "log_total_mass": 6.0},
             dust_attenuation={"type": "none"},
             agn={
                 "type": "composable",
-                "disc": {"type": "powerlaw", "all_params": FIXED},
-                "torus": {"type": "simple", "all_params": FIXED},
-                "blr": {"type": "analytic", "all_params": FIXED, "agn_log_lbol": 11.0},
+                "disc": {"type": "powerlaw", "all_params": Fixed(DEFAULT)},
+                "torus": {"type": "simple", "all_params": Fixed(DEFAULT)},
+                "blr": {"type": "analytic", "all_params": Fixed(DEFAULT), "agn_log_lbol": 11.0},
                 "nlr": {"type": "none"},
                 "feii": {"type": "none"},
                 "atten": {"type": "none"},
@@ -329,12 +329,12 @@ class TestAGNNebularPrecomputeEquivalence:
             observation=obs,
             redshift=Fixed(Z),
             approx=None,
-            sfh={"type": "tsnorm", "all_params": FIXED, "log_total_mass": 6.0},
+            sfh={"type": "tsnorm", "all_params": Fixed(DEFAULT), "log_total_mass": 6.0},
             dust_attenuation={"type": "none"},
             agn={
                 "type": "composable",
-                "disc": {"type": "powerlaw", "all_params": FIXED, "agn_log_lbol": 13.0},
-                "torus": {"type": "simple", "all_params": FIXED},
+                "disc": {"type": "powerlaw", "all_params": Fixed(DEFAULT), "agn_log_lbol": 13.0},
+                "torus": {"type": "simple", "all_params": Fixed(DEFAULT)},
                 "blr": {"type": "none"},
                 "nlr": {"type": "none"},
                 "feii": {"type": "none"},
@@ -347,12 +347,12 @@ class TestAGNNebularPrecomputeEquivalence:
             observation=obs,
             redshift=Fixed(Z),
             approx=None,
-            sfh={"type": "tsnorm", "all_params": FIXED, "log_total_mass": 6.0},
+            sfh={"type": "tsnorm", "all_params": Fixed(DEFAULT), "log_total_mass": 6.0},
             dust_attenuation={"type": "none"},
             agn={
                 "type": "composable",
-                "disc": {"type": "powerlaw", "all_params": FIXED, "agn_log_lbol": 11.0},
-                "torus": {"type": "simple", "all_params": FIXED},
+                "disc": {"type": "powerlaw", "all_params": Fixed(DEFAULT), "agn_log_lbol": 11.0},
+                "torus": {"type": "simple", "all_params": Fixed(DEFAULT)},
                 "blr": {"type": "none"},
                 "nlr": {"type": "none"},
                 "feii": {"type": "none"},
@@ -381,7 +381,7 @@ class TestAGNNebularPrecomputeEquivalence:
 
         Same difference-based approach as BLR test. Tolerance: 1.5%.
         """
-        from tengri import FIXED, Fixed, Observation, Photometry, SEDModel, WavePrecomp
+        from tengri import DEFAULT, Fixed, Observation, Photometry, SEDModel, WavePrecomp
 
         obs = Observation(photometry=Photometry(filters=tuple(narrow_ha_hb_filters)))
         key = jax.random.PRNGKey(43)
@@ -392,14 +392,14 @@ class TestAGNNebularPrecomputeEquivalence:
             observation=obs,
             redshift=Fixed(Z),
             approx=None,
-            sfh={"type": "tsnorm", "all_params": FIXED, "log_total_mass": 6.0},
+            sfh={"type": "tsnorm", "all_params": Fixed(DEFAULT), "log_total_mass": 6.0},
             dust_attenuation={"type": "none"},
             agn={
                 "type": "composable",
-                "disc": {"type": "powerlaw", "all_params": FIXED},
-                "torus": {"type": "simple", "all_params": FIXED},
+                "disc": {"type": "powerlaw", "all_params": Fixed(DEFAULT)},
+                "torus": {"type": "simple", "all_params": Fixed(DEFAULT)},
                 "blr": {"type": "none"},
-                "nlr": {"type": "analytic", "all_params": FIXED, "agn_log_lbol": 12.5},
+                "nlr": {"type": "analytic", "all_params": Fixed(DEFAULT), "agn_log_lbol": 12.5},
                 "feii": {"type": "none"},
                 "atten": {"type": "none"},
             },
@@ -410,14 +410,14 @@ class TestAGNNebularPrecomputeEquivalence:
             observation=obs,
             redshift=Fixed(Z),
             approx=WavePrecomp(),
-            sfh={"type": "tsnorm", "all_params": FIXED, "log_total_mass": 6.0},
+            sfh={"type": "tsnorm", "all_params": Fixed(DEFAULT), "log_total_mass": 6.0},
             dust_attenuation={"type": "none"},
             agn={
                 "type": "composable",
-                "disc": {"type": "powerlaw", "all_params": FIXED},
-                "torus": {"type": "simple", "all_params": FIXED},
+                "disc": {"type": "powerlaw", "all_params": Fixed(DEFAULT)},
+                "torus": {"type": "simple", "all_params": Fixed(DEFAULT)},
                 "blr": {"type": "none"},
-                "nlr": {"type": "analytic", "all_params": FIXED, "agn_log_lbol": 12.5},
+                "nlr": {"type": "analytic", "all_params": Fixed(DEFAULT), "agn_log_lbol": 12.5},
                 "feii": {"type": "none"},
                 "atten": {"type": "none"},
             },
@@ -429,14 +429,14 @@ class TestAGNNebularPrecomputeEquivalence:
             observation=obs,
             redshift=Fixed(Z),
             approx=None,
-            sfh={"type": "tsnorm", "all_params": FIXED, "log_total_mass": 6.0},
+            sfh={"type": "tsnorm", "all_params": Fixed(DEFAULT), "log_total_mass": 6.0},
             dust_attenuation={"type": "none"},
             agn={
                 "type": "composable",
-                "disc": {"type": "powerlaw", "all_params": FIXED},
-                "torus": {"type": "simple", "all_params": FIXED},
+                "disc": {"type": "powerlaw", "all_params": Fixed(DEFAULT)},
+                "torus": {"type": "simple", "all_params": Fixed(DEFAULT)},
                 "blr": {"type": "none"},
-                "nlr": {"type": "analytic", "all_params": FIXED, "agn_log_lbol": 11.0},
+                "nlr": {"type": "analytic", "all_params": Fixed(DEFAULT), "agn_log_lbol": 11.0},
                 "feii": {"type": "none"},
                 "atten": {"type": "none"},
             },
@@ -448,12 +448,12 @@ class TestAGNNebularPrecomputeEquivalence:
             observation=obs,
             redshift=Fixed(Z),
             approx=None,
-            sfh={"type": "tsnorm", "all_params": FIXED, "log_total_mass": 6.0},
+            sfh={"type": "tsnorm", "all_params": Fixed(DEFAULT), "log_total_mass": 6.0},
             dust_attenuation={"type": "none"},
             agn={
                 "type": "composable",
-                "disc": {"type": "powerlaw", "all_params": FIXED, "agn_log_lbol": 12.5},
-                "torus": {"type": "simple", "all_params": FIXED},
+                "disc": {"type": "powerlaw", "all_params": Fixed(DEFAULT), "agn_log_lbol": 12.5},
+                "torus": {"type": "simple", "all_params": Fixed(DEFAULT)},
                 "blr": {"type": "none"},
                 "nlr": {"type": "none"},
                 "feii": {"type": "none"},
@@ -466,12 +466,12 @@ class TestAGNNebularPrecomputeEquivalence:
             observation=obs,
             redshift=Fixed(Z),
             approx=None,
-            sfh={"type": "tsnorm", "all_params": FIXED, "log_total_mass": 6.0},
+            sfh={"type": "tsnorm", "all_params": Fixed(DEFAULT), "log_total_mass": 6.0},
             dust_attenuation={"type": "none"},
             agn={
                 "type": "composable",
-                "disc": {"type": "powerlaw", "all_params": FIXED, "agn_log_lbol": 11.0},
-                "torus": {"type": "simple", "all_params": FIXED},
+                "disc": {"type": "powerlaw", "all_params": Fixed(DEFAULT), "agn_log_lbol": 11.0},
+                "torus": {"type": "simple", "all_params": Fixed(DEFAULT)},
                 "blr": {"type": "none"},
                 "nlr": {"type": "none"},
                 "feii": {"type": "none"},
@@ -502,7 +502,7 @@ class TestAGNNebularPrecomputeEquivalence:
         FAIL loudly. This proves the precondition works and can't be silently
         bypassed as its predecessor was.
         """
-        from tengri import FIXED, Fixed, Observation, Photometry, SEDModel, WavePrecomp
+        from tengri import DEFAULT, Fixed, Observation, Photometry, SEDModel, WavePrecomp
 
         obs = Observation(photometry=Photometry(filters=tuple(narrow_ha_hb_filters)))
         key = jax.random.PRNGKey(42)
@@ -513,12 +513,12 @@ class TestAGNNebularPrecomputeEquivalence:
             observation=obs,
             redshift=Fixed(Z),
             approx=None,
-            sfh={"type": "tsnorm", "all_params": FIXED, "log_total_mass": 6.0},
+            sfh={"type": "tsnorm", "all_params": Fixed(DEFAULT), "log_total_mass": 6.0},
             dust_attenuation={"type": "none"},
             agn={
                 "type": "composable",
-                "disc": {"type": "powerlaw", "all_params": FIXED},
-                "torus": {"type": "simple", "all_params": FIXED},
+                "disc": {"type": "powerlaw", "all_params": Fixed(DEFAULT)},
+                "torus": {"type": "simple", "all_params": Fixed(DEFAULT)},
                 "blr": {"type": "none"},
                 "nlr": {"type": "none"},
                 "feii": {"type": "none"},
@@ -531,12 +531,12 @@ class TestAGNNebularPrecomputeEquivalence:
             observation=obs,
             redshift=Fixed(Z),
             approx=WavePrecomp(),
-            sfh={"type": "tsnorm", "all_params": FIXED, "log_total_mass": 6.0},
+            sfh={"type": "tsnorm", "all_params": Fixed(DEFAULT), "log_total_mass": 6.0},
             dust_attenuation={"type": "none"},
             agn={
                 "type": "composable",
-                "disc": {"type": "powerlaw", "all_params": FIXED},
-                "torus": {"type": "simple", "all_params": FIXED},
+                "disc": {"type": "powerlaw", "all_params": Fixed(DEFAULT)},
+                "torus": {"type": "simple", "all_params": Fixed(DEFAULT)},
                 "blr": {"type": "none"},
                 "nlr": {"type": "none"},
                 "feii": {"type": "none"},

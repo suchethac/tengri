@@ -21,7 +21,7 @@ import jax.numpy as jnp
 import numpy as np
 import pytest
 
-from tengri import FIXED, Fixed, SEDModel
+from tengri import DEFAULT, Fixed, SEDModel
 from tengri.components.stellar.component import (
     _build_dsps_sfh_table,
     _refine_sfh_table_ages,
@@ -56,8 +56,8 @@ def test_build_dsps_sfh_table_conserves_trapezoidal_mass():
 @pytest.mark.parametrize(
     "sfh",
     [
-        {"type": "continuity", "log_total_mass": Fixed(10.0), "all_params": FIXED},
-        {"type": "dirichlet", "log_total_mass": Fixed(10.0), "all_params": FIXED},
+        {"type": "continuity", "log_total_mass": Fixed(10.0), "all_params": Fixed(DEFAULT)},
+        {"type": "dirichlet", "log_total_mass": Fixed(10.0), "all_params": Fixed(DEFAULT)},
     ],
 )
 def test_nonparametric_sfh_conserves_formed_mass(synthetic_ssp_wide, sfh):
@@ -70,7 +70,7 @@ def test_nonparametric_sfh_conserves_formed_mass(synthetic_ssp_wide, sfh):
             "type": "two_component",
             "tau_bc": Fixed(0.0),
             "tau_diff": Fixed(0.0),
-            "all_params": FIXED,
+            "all_params": Fixed(DEFAULT),
         },
         redshift=Fixed(0.0),
     )
@@ -89,13 +89,13 @@ def test_nonparametric_sfh_is_jit_safe(synthetic_ssp_wide):
     """The dense-integrand path stays jittable (no Python branch on traced values)."""
     model = SEDModel.build(
         ssp_data=synthetic_ssp_wide,
-        sfh={"type": "continuity", "log_total_mass": Fixed(10.0), "all_params": FIXED},
+        sfh={"type": "continuity", "log_total_mass": Fixed(10.0), "all_params": Fixed(DEFAULT)},
         dust_attenuation={
             "law": "power_law",
             "type": "two_component",
             "tau_bc": Fixed(0.0),
             "tau_diff": Fixed(0.0),
-            "all_params": FIXED,
+            "all_params": Fixed(DEFAULT),
         },
         redshift=Fixed(0.0),
     )

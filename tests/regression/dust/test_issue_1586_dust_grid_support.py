@@ -283,10 +283,17 @@ def test_an_explicit_user_prior_is_warned_about_not_overridden():
 def test_a_narrowed_prior_still_round_trips_through_to_groups():
     """The narrowing marker must not cost the parameter its wildcard intent.
 
-    ``to_groups`` collapses a group back to ``all_params: FREE`` by comparing
-    provenance tags exactly. Tagging the narrowed parameter
-    ``wildcard_free_grid`` would have failed that comparison, emitting
-    ``lgU`` as an explicit override and quietly changing the emitted grammar.
+    ``to_groups`` collapses the narrowed parameter back into the wildcard by
+    comparing provenance tags exactly. Tagging it ``wildcard_free_grid``
+    would have failed that comparison, emitting ``lgU`` as an explicit
+    override and quietly changing the emitted grammar.
+
+    Astrodust also carries several block-scoped-inactive Fixed params (they
+    stay declared-but-Fixed, a different provenance tag than the wildcard),
+    so those DO surface as explicit entries -- which is why the wildcard here
+    is spelled ``other_params`` rather than ``all_params`` (the emission
+    convention: sole directive -> ``all_params``, explicit entries alongside
+    it -> ``other_params``, last).
     """
     if not grid_support("dust.emission", "astrodust"):
         pytest.skip("astrodust grid not installed")
@@ -299,7 +306,8 @@ def test_a_narrowed_prior_still_round_trips_through_to_groups():
     )
     # After the split, dust_emission is now a separate top-level group
     emitted = spec.to_groups()["dust_emission"]
-    assert emitted["all_params"] is FREE
+    assert emitted["other_params"] is FREE
+    assert list(emitted.keys())[-1] == "other_params"
     assert "lgU" not in emitted, "narrowed param must collapse into the wildcard"
 
     with warnings.catch_warnings():

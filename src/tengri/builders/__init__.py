@@ -20,7 +20,7 @@ callables on top that:
 
 Examples
 --------
->>> from tengri import SEDModel, builders, FREE, FIXED, Uniform, Fixed
+>>> from tengri import SEDModel, builders, FREE, DEFAULT, Uniform, Fixed
 >>> model = SEDModel.build(
 ...     ssp_data=ssp,
 ...     observation=obs,

@@ -42,26 +42,31 @@ def _halpha_contrast(model) -> float:
 
 
 def _build(ssp, log_lbol):
-    from tengri import FIXED, Fixed, SEDModel
+    from tengri import DEFAULT, Fixed, SEDModel
 
     return SEDModel.build(
         ssp_data=ssp,
-        sfh={"type": "delayed", "tau_gyr": Fixed(1.0), "age_gyr": Fixed(5.0), "all_params": FIXED},
+        sfh={
+            "type": "delayed",
+            "tau_gyr": Fixed(1.0),
+            "age_gyr": Fixed(5.0),
+            "all_params": Fixed(DEFAULT),
+        },
         dust_attenuation={
             "law": "power_law",
             "type": "two_component",
             "tau_bc": Fixed(0.0),
             "tau_diff": Fixed(0.0),
-            "all_params": FIXED,
+            "all_params": Fixed(DEFAULT),
         },
         agn={
             "type": "composable",
-            "disc": {"type": "qsogen", "all_params": FIXED},
+            "disc": {"type": "qsogen", "all_params": Fixed(DEFAULT)},
             "torus": {"type": "none"},
-            "lines": {"type": "qsogen", "all_params": FIXED},
-            "feii": {"type": "qsogen_balmer", "all_params": FIXED},
+            "lines": {"type": "qsogen", "all_params": Fixed(DEFAULT)},
+            "feii": {"type": "qsogen_balmer", "all_params": Fixed(DEFAULT)},
             "agn_log_lbol": Fixed(log_lbol),
-            "all_params": FIXED,
+            "all_params": Fixed(DEFAULT),
         },
         redshift=Fixed(0.0),
     )

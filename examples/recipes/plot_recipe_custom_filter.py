@@ -51,7 +51,7 @@ model = tengri.SEDModel.build(
     observation=obs,
     sfh={
         "type": "tsnorm",
-        "all_params": tengri.FIXED,
+        "all_params": tengri.Fixed(tengri.DEFAULT),
         "log_total_mass": 10.0,
         "peak_lbt_gyr": 2.0,
         "width_gyr": 1.5,
@@ -61,7 +61,7 @@ model = tengri.SEDModel.build(
     dust_attenuation={
         "law": "power_law",
         "type": "two_component",
-        "all_params": tengri.FIXED,
+        "all_params": tengri.Fixed(tengri.DEFAULT),
         "tau_bc": 0.1,
         "tau_diff": 0.2,
         "slope": -0.7,

@@ -28,14 +28,7 @@ import pytest
 
 pytestmark = pytest.mark.contract
 
-from tengri import (
-    FIXED,
-    Fixed,
-    Observation,
-    Photometry,
-    SEDModel,
-    load_ssp_data,
-)
+from tengri import DEFAULT, Fixed, Observation, Photometry, SEDModel, load_ssp_data
 from tengri.components.sed_model_component import _REGISTRY
 
 # Filter set for all the cases below — cheap (5 filters) and physically
@@ -125,8 +118,8 @@ def test_dust_attenuation_e2e(ssp, obs, law):
     model = _silent_build(
         ssp_data=ssp,
         observation=obs,
-        sfh={"type": "dpl", "all_params": FIXED},
-        dust_attenuation={"type": "two_component", "law": law, "all_params": FIXED},
+        sfh={"type": "dpl", "all_params": Fixed(DEFAULT)},
+        dust_attenuation={"type": "two_component", "law": law, "all_params": Fixed(DEFAULT)},
         redshift=Fixed(0.05),
     )
     _assert_phot_ok(model.predict_photometry({}))
@@ -160,13 +153,13 @@ def test_dust_ir_emission_e2e(ssp, obs, emission_type):
         model = _silent_build(
             ssp_data=ssp,
             observation=obs,
-            sfh={"type": "dpl", "all_params": FIXED},
+            sfh={"type": "dpl", "all_params": Fixed(DEFAULT)},
             dust_attenuation={
                 "type": "two_component",
                 "law": "calzetti",
-                "all_params": FIXED,
+                "all_params": Fixed(DEFAULT),
             },
-            dust_emission={"type": emission_type, "all_params": FIXED},
+            dust_emission={"type": emission_type, "all_params": Fixed(DEFAULT)},
             redshift=Fixed(0.05),
         )
     except (FileNotFoundError, OSError) as exc:
@@ -191,7 +184,7 @@ def _fixed_dust() -> dict:
     return {
         "type": "two_component",
         "law": "power_law",
-        "all_params": FIXED,
+        "all_params": Fixed(DEFAULT),
         "tau_bc": Fixed(0.3),
         "tau_diff": Fixed(0.2),
     }
@@ -204,15 +197,19 @@ def _fixed_dust() -> dict:
 # kubota_done, powerlaw_disc → powerlaw). Each case maps an id to its canonical
 # agn spec.
 _AGN_E2E_CASES = {
-    "skirtor": {"type": "skirtor", "all_params": FIXED},
-    "silva04": {"type": "silva04", "all_params": FIXED},
-    "cat3d_wind": {"type": "cat3d_wind", "all_params": FIXED},
+    "skirtor": {"type": "skirtor", "all_params": Fixed(DEFAULT)},
+    "silva04": {"type": "silva04", "all_params": Fixed(DEFAULT)},
+    "cat3d_wind": {"type": "cat3d_wind", "all_params": Fixed(DEFAULT)},
     "kubota_done_disc": {
         "type": "composable",
         "disc": {"type": "kubota_done"},
-        "all_params": FIXED,
+        "all_params": Fixed(DEFAULT),
     },
-    "powerlaw_disc": {"type": "composable", "disc": {"type": "powerlaw"}, "all_params": FIXED},
+    "powerlaw_disc": {
+        "type": "composable",
+        "disc": {"type": "powerlaw"},
+        "all_params": Fixed(DEFAULT),
+    },
 }
 
 
@@ -224,7 +221,7 @@ def test_agn_e2e(ssp, obs, agn_id):
         model = _silent_build(
             ssp_data=ssp,
             observation=obs,
-            sfh={"type": "dpl", "all_params": FIXED},
+            sfh={"type": "dpl", "all_params": Fixed(DEFAULT)},
             agn=_AGN_E2E_CASES[agn_id],
             dust_attenuation=_fixed_dust(),
             redshift=Fixed(0.05),
@@ -260,8 +257,8 @@ def test_nebular_e2e(bare_ssp, obs, neb_type):
         model = _silent_build(
             ssp_data=bare_ssp,
             observation=obs,
-            sfh={"type": "dpl", "all_params": FIXED},
-            neb={"type": neb_type, "all_params": FIXED},
+            sfh={"type": "dpl", "all_params": Fixed(DEFAULT)},
+            neb={"type": neb_type, "all_params": Fixed(DEFAULT)},
             dust_attenuation=_fixed_dust(),
             redshift=Fixed(0.05),
         )
@@ -305,8 +302,8 @@ def test_radio_e2e(ssp, obs, radio_agn):
         model = _silent_build(
             ssp_data=ssp,
             observation=obs,
-            sfh={"type": "dpl", "all_params": FIXED},
-            radio={"agn": {"type": radio_agn}, "all_params": FIXED},
+            sfh={"type": "dpl", "all_params": Fixed(DEFAULT)},
+            radio={"agn": {"type": radio_agn}, "all_params": Fixed(DEFAULT)},
             dust_attenuation=_fixed_dust(),
             redshift=Fixed(0.05),
         )
@@ -324,8 +321,8 @@ def test_xray_e2e(ssp, obs, xray_type):
         model = _silent_build(
             ssp_data=ssp,
             observation=obs,
-            sfh={"type": "dpl", "all_params": FIXED},
-            xray={"type": xray_type, "all_params": FIXED},
+            sfh={"type": "dpl", "all_params": Fixed(DEFAULT)},
+            xray={"type": xray_type, "all_params": Fixed(DEFAULT)},
             dust_attenuation=_fixed_dust(),
             redshift=Fixed(0.05),
         )
@@ -449,7 +446,7 @@ def test_dust_law_surface_applies_law_not_silent_noop(ssp, obs):
         _silent_build(
             ssp_data=ssp,
             observation=obs,
-            sfh={"type": "dpl", "all_params": FIXED},
+            sfh={"type": "dpl", "all_params": Fixed(DEFAULT)},
             dust_attenuation={"type": "calzetti"},
             redshift=Fixed(0.05),
         )
@@ -458,8 +455,12 @@ def test_dust_law_surface_applies_law_not_silent_noop(ssp, obs):
     model = _silent_build(
         ssp_data=ssp,
         observation=obs,
-        sfh={"type": "dpl", "all_params": FIXED},
-        dust_attenuation={"type": "two_component", "law": "calzetti", "all_params": FIXED},
+        sfh={"type": "dpl", "all_params": Fixed(DEFAULT)},
+        dust_attenuation={
+            "type": "two_component",
+            "law": "calzetti",
+            "all_params": Fixed(DEFAULT),
+        },
         redshift=Fixed(0.05),
     )
     assert model._dust_law_bc == "calzetti", (
@@ -471,11 +472,11 @@ def test_dust_law_surface_applies_law_not_silent_noop(ssp, obs):
     model_smc = _silent_build(
         ssp_data=ssp,
         observation=obs,
-        sfh={"type": "dpl", "all_params": FIXED},
+        sfh={"type": "dpl", "all_params": Fixed(DEFAULT)},
         dust_attenuation={
             "type": "two_component",
             "law": "smc",
-            "all_params": FIXED,
+            "all_params": Fixed(DEFAULT),
             "tau_bc": 1.0,
             "tau_diff": 0.5,
         },
@@ -484,11 +485,11 @@ def test_dust_law_surface_applies_law_not_silent_noop(ssp, obs):
     model_cal = _silent_build(
         ssp_data=ssp,
         observation=obs,
-        sfh={"type": "dpl", "all_params": FIXED},
+        sfh={"type": "dpl", "all_params": Fixed(DEFAULT)},
         dust_attenuation={
             "type": "two_component",
             "law": "calzetti",
-            "all_params": FIXED,
+            "all_params": Fixed(DEFAULT),
             "tau_bc": 1.0,
             "tau_diff": 0.5,
         },
@@ -592,7 +593,7 @@ def test_catalog_z_range_end_to_end(real_ssp_only, ssp, obs):
         return _silent_build(
             ssp_data=ssp,
             observation=obs,
-            sfh={"type": "dpl", "all_params": FIXED},
+            sfh={"type": "dpl", "all_params": Fixed(DEFAULT)},
             dust_attenuation={"type": "single_component", "law": "calzetti", "tau_v": Fixed(0.3)},
             redshift=Fixed(z),
             approx=cz,
@@ -638,7 +639,7 @@ def test_waveprecomp_agreement_with_exact(ssp, obs):
         return _silent_build(
             ssp_data=ssp,
             observation=obs,
-            sfh={"type": "dpl", "all_params": FIXED},
+            sfh={"type": "dpl", "all_params": Fixed(DEFAULT)},
             dust_attenuation={"type": "single_component", "law": "calzetti", "tau_v": Fixed(0.4)},
             redshift=Fixed(0.1),
             approx=approx,

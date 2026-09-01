@@ -31,7 +31,7 @@ jax.config.update("jax_enable_x64", True)
 jax.config.update("jax_platforms", "cpu")
 
 from tengri import (
-    FIXED,
+    DEFAULT,
     FREE,
     Fitter,
     Fixed,
@@ -76,7 +76,7 @@ def model_dpl_calzetti():
         sfh=builders.sfh.dpl(all_params=FREE),
         dust_attenuation={
             "type": "two_component",
-            "all_params": FIXED,
+            "all_params": Fixed(DEFAULT),
             "law": "calzetti",
             "tau_bc": Uniform(0.0, 1.0),
         },
@@ -89,7 +89,7 @@ def model_dense_basis_calzetti():
         sfh=builders.sfh.dense_basis(all_params=FREE),
         dust_attenuation={
             "type": "two_component",
-            "all_params": FIXED,
+            "all_params": Fixed(DEFAULT),
             "law": "calzetti",
             "tau_bc": Uniform(0.0, 1.0),
         },
@@ -102,7 +102,7 @@ def model_tsnorm_calzetti():
         sfh=builders.sfh.tsnorm(all_params=FREE),
         dust_attenuation={
             "type": "two_component",
-            "all_params": FIXED,
+            "all_params": Fixed(DEFAULT),
             "law": "calzetti",
             "tau_bc": Uniform(0.0, 1.0),
         },
@@ -113,7 +113,12 @@ def model_tsnorm_calzetti():
 def model_dpl_smc():
     return dict(
         sfh=builders.sfh.dpl(all_params=FREE),
-        dust_attenuation={"type": "two_component", "all_params": FIXED, "law": "smc", "tau_bc": Uniform(0.0, 1.0)},
+        dust_attenuation={
+            "type": "two_component",
+            "all_params": Fixed(DEFAULT),
+            "law": "smc",
+            "tau_bc": Uniform(0.0, 1.0),
+        },
         neb={"type": "none"},
     )
 
@@ -123,7 +128,7 @@ def model_dexp_calzetti():
         sfh=builders.sfh.dexp(all_params=FREE),
         dust_attenuation={
             "type": "two_component",
-            "all_params": FIXED,
+            "all_params": Fixed(DEFAULT),
             "law": "calzetti",
             "tau_bc": Uniform(0.0, 1.0),
         },

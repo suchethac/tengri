@@ -26,7 +26,7 @@ Examples
 --------
 >>> from tengri import builders, FREE, Uniform
 >>> builders.neb.cue(all_params=FREE, fesc=Uniform(0.0, 0.5))  # doctest: +SKIP
-{'type': 'cue', 'all_params': FREE, 'fesc': Uniform(...)}
+{'type': 'cue', 'fesc': Uniform(...), 'other_params': FREE}
 """
 
 from __future__ import annotations

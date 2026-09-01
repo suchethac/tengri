@@ -57,25 +57,25 @@ class TestCoronaSeesInclination:
 
     @pytest.fixture(scope="class")
     def build_state(self, synthetic_ssp_wide):
-        from tengri import FIXED, Fixed, SEDModel
+        from tengri import DEFAULT, Fixed, SEDModel
 
         def _build(cos_inc: float):
             model = SEDModel.build(
                 ssp_data=synthetic_ssp_wide,
-                sfh={"type": "delayed", "all_params": FIXED},
+                sfh={"type": "delayed", "all_params": Fixed(DEFAULT)},
                 dust_attenuation={
                     "law": "power_law",
                     "type": "two_component",
-                    "all_params": FIXED,
+                    "all_params": Fixed(DEFAULT),
                 },
                 agn={
                     "type": "composable",
-                    "disc": {"type": "schartmann2005", "all_params": FIXED},
+                    "disc": {"type": "schartmann2005", "all_params": Fixed(DEFAULT)},
                     "agn_log_lbol": Fixed(11.5),
                     "agn_cos_inc": Fixed(cos_inc),
-                    "all_params": FIXED,
+                    "all_params": Fixed(DEFAULT),
                 },
-                xray={"type": "yang20", "all_params": FIXED},
+                xray={"type": "yang20", "all_params": Fixed(DEFAULT)},
                 redshift=Fixed(0.0),
             )
             return model.predict_state({})

@@ -82,7 +82,7 @@ toward older ages.
                 ssp,
                 sfh={
                     "type": "const",
-                    "all_params": tengri.FIXED,
+                    "all_params": tengri.Fixed(tengri.DEFAULT),
                     "log_total_mass": log_total_mass_true,
                     "start_gyr": age_myr / 1e3,
                     "end_gyr": 0.0,
@@ -90,11 +90,11 @@ toward older ages.
                 dust_attenuation={
                     "law": "power_law",
                     "type": "two_component",
-                    "all_params": tengri.FIXED,
+                    "all_params": tengri.Fixed(tengri.DEFAULT),
                     "tau_diff": 0.0,
                     "tau_bc": 0.0,
                 },
-                neb={"type": "cue", "all_params": tengri.FIXED, "logZ_gas": met},
+                neb={"type": "cue", "all_params": tengri.Fixed(tengri.DEFAULT), "logZ_gas": met},
                 redshift=tengri.Fixed(0.0),
             )
             params = dict(model.spec.sample(jax.random.PRNGKey(0)))
@@ -122,7 +122,7 @@ toward older ages.
 
 .. rst-class:: sphx-glr-timing
 
-   **Total running time of the script:** (0 minutes 3.923 seconds)
+   **Total running time of the script:** (0 minutes 3.140 seconds)
 
 
 .. _sphx_glr_download_auto_examples_nebular_plot_halpha_sfr_calibration_age.py:

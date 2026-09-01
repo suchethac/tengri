@@ -20,11 +20,11 @@ def _build(ssp, obs, **dust_extra):
     return tengri.SEDModel.build(
         ssp,
         observation=obs,
-        sfh={"type": "delayed", "all_params": tengri.FIXED},
+        sfh={"type": "delayed", "all_params": tengri.Fixed(tengri.DEFAULT)},
         dust_attenuation={
             "law": "power_law",
             "type": "two_component",
-            "all_params": tengri.FIXED,
+            "all_params": tengri.Fixed(tengri.DEFAULT),
             **dust_extra,
         },
         dust_emission={"type": "none"},

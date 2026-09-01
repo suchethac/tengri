@@ -38,7 +38,7 @@ from __future__ import annotations
 
 import pytest
 
-from tengri import FIXED, Fixed, Parameters
+from tengri import DEFAULT, Fixed, Parameters
 from tengri.parameters.groups import (
     _AGN_BLOCK_TO_KWARG,
     _TOP_LEVEL_TYPED_GROUPS,
@@ -75,7 +75,7 @@ _AGN_CASES = sorted(
     (block, t) for block, types in _AGN_TYPES.items() for t in types if t != "none"
 )
 
-_BASE = dict(sfh={"type": "dpl", "all_params": FIXED}, redshift=Fixed(0.1))
+_BASE = dict(sfh={"type": "dpl", "all_params": Fixed(DEFAULT)}, redshift=Fixed(0.1))
 
 #: Groups that are legitimately absent from a default spec, so ``None`` there is
 #: the correct answer rather than a gap in ``_extract_group_type``. Measured:
@@ -87,7 +87,7 @@ _OFF_BY_DEFAULT: frozenset[str] = frozenset({"radio", "agn", "dust_emission"})
 #: single ``type`` and are covered by their own suites, so only the groups whose
 #: type IS a single structural string appear here.
 _OFF_BY_DEFAULT_SELECTIONS: dict[str, dict] = {
-    "dust_emission": {"type": "dale2014", "all_params": FIXED},
+    "dust_emission": {"type": "dale2014", "all_params": Fixed(DEFAULT)},
 }
 
 
@@ -110,7 +110,7 @@ class TestTheAGNFamily:
             sub_block_spec = {"type": agn_type}
         spec0, spec1, groups = _roundtrip(
             **_BASE,
-            agn={"type": "composable", "all_params": FIXED, block: sub_block_spec},
+            agn={"type": "composable", "all_params": Fixed(DEFAULT), block: sub_block_spec},
         )
         assert getattr(spec1, attr) == getattr(spec0, attr), (
             f"agn['{block}']['type']={agn_type!r} did not survive to_groups(): "
@@ -131,7 +131,7 @@ class TestTheAGNFamily:
         agn_type = next(t for t in sorted(_AGN_TYPES[block]) if t != "none")
         _, spec1, _ = _roundtrip(
             **_BASE,
-            agn={"type": "composable", "all_params": FIXED, block: {"type": agn_type}},
+            agn={"type": "composable", "all_params": Fixed(DEFAULT), block: {"type": agn_type}},
         )
         others = {
             other: getattr(spec1, attr)
@@ -145,7 +145,9 @@ class TestTheAGNFamily:
     )
     def test_a_monolithic_model_survives(self, model):
         """The other AGN surface: ``agn={'type': X}`` with no sub-blocks."""
-        spec0, spec1, groups = _roundtrip(**_BASE, agn={"type": model, "all_params": FIXED})
+        spec0, spec1, groups = _roundtrip(
+            **_BASE, agn={"type": model, "all_params": Fixed(DEFAULT)}
+        )
         assert spec0.agn_model == model  # guards the fixture, not the fix
         assert spec1.agn_model == model, (
             f"agn={{'type': {model!r}}} rebuilt as agn_model="
@@ -161,7 +163,9 @@ class TestTheAGNFamily:
         nested form the composable path uses would turn a silent loss into a
         hard failure. The parameters move to flat keys instead.
         """
-        _, _, groups = _roundtrip(**_BASE, agn={"type": "richards2006", "all_params": FIXED})
+        _, _, groups = _roundtrip(
+            **_BASE, agn={"type": "richards2006", "all_params": Fixed(DEFAULT)}
+        )
         nested = sorted(k for k in groups.get("agn", {}) if k in _AGN_BLOCK_TO_KWARG)
         assert not nested, (
             f"a monolithic agn spec emitted sub-blocks {nested}; parse_groups "

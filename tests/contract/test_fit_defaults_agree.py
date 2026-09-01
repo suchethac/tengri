@@ -228,13 +228,17 @@ def test_sedmodel_fit_emits_no_deprecation_warning(ssp_data_wne, simple_observat
     Regression for #1322 Wave 3: SEDModel.fit was un-deprecated as the
     Bagpipes one-liner. Verify it emits NO DeprecationWarning on actual use.
     """
-    from tengri import FIXED
+    from tengri import DEFAULT
 
     sed = tengri.SEDModel.build(
         ssp_data=ssp_data_wne,
         observation=simple_observation,
-        sfh={"type": "dpl", "all_params": FIXED},
-        dust_attenuation={"type": "two_component", "law": "calzetti", "all_params": FIXED},
+        sfh={"type": "dpl", "all_params": Fixed(DEFAULT)},
+        dust_attenuation={
+            "type": "two_component",
+            "law": "calzetti",
+            "all_params": Fixed(DEFAULT),
+        },
         neb={"type": "none"},
         redshift=Fixed(0.1),
     )

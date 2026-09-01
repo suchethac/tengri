@@ -72,7 +72,7 @@ necessarily draws mass away from the old population.
             ssp,
             sfh={
                 "type": "sfh2exp",
-                "all_params": tengri.FIXED,
+                "all_params": tengri.Fixed(tengri.DEFAULT),
                 "log_total_mass": 10.5,
                 "tau_main_gyr": 4.0,
                 "tau_burst_gyr": 0.1,
@@ -83,7 +83,7 @@ necessarily draws mass away from the old population.
             dust_attenuation={
                 "law": "power_law",
                 "type": "two_component",
-                "all_params": tengri.FIXED,
+                "all_params": tengri.Fixed(tengri.DEFAULT),
                 "tau_diff": 0.2,
                 "tau_bc": 0.2,
             },

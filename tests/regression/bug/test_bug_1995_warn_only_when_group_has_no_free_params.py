@@ -20,7 +20,7 @@ import warnings
 
 import pytest
 
-from tengri import FIXED, FREE, Fixed, Uniform
+from tengri import DEFAULT, FREE, Fixed, Uniform
 from tengri.config.exceptions import DefaultFixedParametersWarning
 from tengri.parameters import parse_groups
 
@@ -123,7 +123,7 @@ class TestExistingBehaviorPreserved:
     """#1982's contract that is not being changed."""
 
     def test_explicit_fixed_is_silent(self):
-        _, msgs = _warnings_for(sfh={"type": "dpl", "all_params": FIXED}, redshift=0.5)
+        _, msgs = _warnings_for(sfh={"type": "dpl", "all_params": Fixed(DEFAULT)}, redshift=0.5)
         assert msgs == []
 
     def test_explicit_free_is_silent(self):
@@ -134,7 +134,7 @@ class TestExistingBehaviorPreserved:
         """Warning-only change: the resolved model must be identical."""
         quiet, _ = _warnings_for(met={"logzsol": Uniform(-1.5, 0.3)}, redshift=0.5)
         stated, _ = _warnings_for(
-            met={"logzsol": Uniform(-1.5, 0.3), "all_params": FIXED}, redshift=0.5
+            met={"logzsol": Uniform(-1.5, 0.3), "all_params": Fixed(DEFAULT)}, redshift=0.5
         )
 
         assert quiet.n_free == stated.n_free

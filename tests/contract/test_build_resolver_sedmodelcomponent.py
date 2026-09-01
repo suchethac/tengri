@@ -4,7 +4,7 @@ components."""
 
 import pytest
 
-from tengri import FIXED, Fixed, SEDModel
+from tengri import DEFAULT, Fixed, SEDModel
 from tengri.components.sed_model_component import _REGISTRY
 
 pytestmark = pytest.mark.contract
@@ -42,7 +42,7 @@ class TestBuildResolverDustAttenuation:
         builds and threads the chosen law through to the engine (not dropped)."""
         model = SEDModel.build(
             ssp_data=ssp_data_bc03,
-            dust_attenuation={"type": "two_component", "law": law, "all_params": FIXED},
+            dust_attenuation={"type": "two_component", "law": law, "all_params": Fixed(DEFAULT)},
             redshift=Fixed(0.1),
         )
         assert model is not None

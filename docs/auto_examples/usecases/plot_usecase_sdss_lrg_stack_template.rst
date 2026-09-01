@@ -56,7 +56,7 @@ References:
 
  .. code-block:: none
 
-    /tengri/src/tengri/forward/sed_model.py:1714: SFHBurstAliasingWarning: SFH burst width sfh_tsnorm_width_gyr=0.1 Gyr is narrower than the SSP grid spacing 1.09 Gyr at peak sfh_tsnorm_peak_lbt_gyr=8.5 Gyr. Predictions will show a non-physical staircase as the burst peak crosses SSP grid boundaries (#299). Widen the burst to at least width_gyr ≳ 1.09 for smooth behavior.
+    /tengri/src/tengri/forward/sed_model.py:1716: SFHBurstAliasingWarning: SFH burst width sfh_tsnorm_width_gyr=0.1 Gyr is narrower than the SSP grid spacing 1.09 Gyr at peak sfh_tsnorm_peak_lbt_gyr=8.5 Gyr. Predictions will show a non-physical staircase as the burst peak crosses SSP grid boundaries (#299). Widen the burst to at least width_gyr ≳ 1.09 for smooth behavior.
       param_map_deltas.append(self._init_sfh(spec))
     Predicting 200 quiescent spectra (ages 6.0–11.0 Gyr)...
       Batch shape: (200, 2400)
@@ -118,7 +118,7 @@ References:
         # time → approximates a single-age stellar population
         sfh={
             "type": "tsnorm",
-            "all_params": tengri.FIXED,
+            "all_params": tengri.Fixed(tengri.DEFAULT),
             "peak_lbt_gyr": tengri.Uniform(AGE_GYR_MIN, AGE_GYR_MAX),
             "width_gyr": 0.10,  # 50 Myr / sqrt(2.355) = narrow burst
             "skew": 0.0,
@@ -128,7 +128,7 @@ References:
         dust_attenuation={
             "law": "power_law",
             "type": "two_component",
-            "all_params": tengri.FIXED,
+            "all_params": tengri.Fixed(tengri.DEFAULT),
             "tau_diff": 0.0,
             "tau_bc": 0.0,
         },
@@ -208,7 +208,7 @@ References:
 
 .. rst-class:: sphx-glr-timing
 
-   **Total running time of the script:** (0 minutes 4.609 seconds)
+   **Total running time of the script:** (0 minutes 3.547 seconds)
 
 
 .. _sphx_glr_download_auto_examples_usecases_plot_usecase_sdss_lrg_stack_template.py:

@@ -40,7 +40,7 @@ Pick a form by matching the data you have: ``tau`` for a single color,
 non-parametric forms (``continuity``, ``dirichlet``, ``dense_basis``)
 when the data resolve > 5 SFR-bins.
 
-.. GENERATED FROM PYTHON SOURCE LINES 24-84
+.. GENERATED FROM PYTHON SOURCE LINES 24-88
 
 
 
@@ -91,8 +91,12 @@ when the data resolve > 5 SFR-bins.
     for (form, label), color in zip(FORMS, COLORS):
         model = tengri.SEDModel.build(
             ssp,
-            sfh={"type": form, "all_params": tengri.FIXED},
-            dust_attenuation={"law": "power_law", "type": "two_component", "all_params": tengri.FIXED},
+            sfh={"type": form, "all_params": tengri.Fixed(tengri.DEFAULT)},
+            dust_attenuation={
+                "law": "power_law",
+                "type": "two_component",
+                "all_params": tengri.Fixed(tengri.DEFAULT),
+            },
             redshift=tengri.Fixed(0.0),
         )
         p = dict(model.spec.sample(jax.random.PRNGKey(0)))

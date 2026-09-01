@@ -1016,7 +1016,7 @@
    "name": "ndarray"
   }
  ],
- "tengri.FIXED": [
+ "tengri.DEFAULT": [
   {
    "is_class": false,
    "is_explicit": false,
@@ -1043,7 +1043,7 @@
    "is_explicit": false,
    "module": "tengri",
    "module_short": "tengri",
-   "name": "FIXED"
+   "name": "DEFAULT"
   }
  ],
  "tengri.Fixed": [

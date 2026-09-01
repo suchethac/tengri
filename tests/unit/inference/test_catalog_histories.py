@@ -49,7 +49,7 @@ _T_GYR = np.concatenate([np.array([0.0]), np.linspace(1.0, 13.0, 39)])
 @pytest.fixture
 def fwd_table_sfh(synthetic_ssp_wide, synthetic_tophat_obs):
     """3-band ForwardModel whose SFH is tabulated at runtime (#996)."""
-    from tengri import FIXED, ForwardModel, SEDModel
+    from tengri import DEFAULT, ForwardModel, SEDModel
     from tengri.parameters.priors import Fixed, Uniform
 
     with warnings.catch_warnings():
@@ -61,7 +61,7 @@ def fwd_table_sfh(synthetic_ssp_wide, synthetic_tophat_obs):
             dust_attenuation={
                 "law": "power_law",
                 "type": "two_component",
-                "all_params": FIXED,
+                "all_params": Fixed(DEFAULT),
                 "tau_bc": 0.5,
                 "tau_diff": Uniform(0.0, 2.0),
             },
@@ -226,7 +226,7 @@ def test_predict_rejects_ragged_leading_axis(fwd_table_sfh):
 
 def test_scalar_only_catalog_still_predicts(synthetic_ssp_wide, synthetic_tophat_obs):
     """Regression guard: the ordinary all-scalar catalog path is unaffected."""
-    from tengri import FIXED, FREE, Catalog, ForwardModel, SEDModel
+    from tengri import DEFAULT, FREE, Catalog, ForwardModel, SEDModel
     from tengri.parameters.priors import Fixed
 
     with warnings.catch_warnings():
@@ -238,7 +238,7 @@ def test_scalar_only_catalog_still_predicts(synthetic_ssp_wide, synthetic_tophat
             dust_attenuation={
                 "law": "power_law",
                 "type": "two_component",
-                "all_params": FIXED,
+                "all_params": Fixed(DEFAULT),
                 "tau_bc": 0.5,
             },
             neb={"type": "none"},
@@ -310,7 +310,7 @@ def test_from_histories_equals_explicit_columns(fwd_table_sfh):
 
 def test_from_histories_rejects_a_non_table_model(synthetic_ssp_wide, synthetic_tophat_obs):
     """A parametric-SFH model cannot consume histories — say so, and name the fix."""
-    from tengri import FIXED, FREE, Catalog, ForwardModel, SEDModel
+    from tengri import DEFAULT, FREE, Catalog, ForwardModel, SEDModel
     from tengri.parameters.priors import Fixed
 
     with warnings.catch_warnings():
@@ -322,7 +322,7 @@ def test_from_histories_rejects_a_non_table_model(synthetic_ssp_wide, synthetic_
             dust_attenuation={
                 "law": "power_law",
                 "type": "two_component",
-                "all_params": FIXED,
+                "all_params": Fixed(DEFAULT),
                 "tau_bc": 0.5,
             },
             neb={"type": "none"},
@@ -607,7 +607,7 @@ def roundtrip_arms(age_reddening_ssp, synthetic_tophat_obs):
     Same SSP, same filters, same redshift, same dust (off) — the SFH
     *representation* is the only difference between them.
     """
-    from tengri import FIXED, ForwardModel, SEDModel
+    from tengri import DEFAULT, ForwardModel, SEDModel
     from tengri.cosmology import age_at_z
     from tengri.parameters.priors import Fixed
 
@@ -621,7 +621,7 @@ def roundtrip_arms(age_reddening_ssp, synthetic_tophat_obs):
                 dust_attenuation={
                     "law": "power_law",
                     "type": "two_component",
-                    "all_params": FIXED,
+                    "all_params": Fixed(DEFAULT),
                     "tau_bc": 0.0,
                     "tau_diff": 0.0,
                 },
@@ -633,7 +633,7 @@ def roundtrip_arms(age_reddening_ssp, synthetic_tophat_obs):
     par_fwd, par_sed = _build(
         {
             "type": "delayed",
-            "all_params": FIXED,
+            "all_params": Fixed(DEFAULT),
             "log_total_mass": _RT_LOG_MASS,
             "tau_gyr": _RT_TAU_GYR,
             "age_gyr": _RT_AGE_GYR,

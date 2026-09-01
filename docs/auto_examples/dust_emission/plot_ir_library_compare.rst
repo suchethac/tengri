@@ -100,7 +100,7 @@ implications.
     COLORS = plt.cm.viridis(np.linspace(0.05, 0.92, len(LIBS)))
 
     C_AA_PER_S = 2.998e18
-    SFH = {"type": "const", "all_params": tengri.FIXED, "log_total_mass": 11.0}
+    SFH = {"type": "const", "all_params": tengri.Fixed(tengri.DEFAULT), "log_total_mass": 11.0}
 
     ssp = tengri.load_ssp()
 
@@ -191,11 +191,11 @@ implications.
                 dust_attenuation={
                     "law": "power_law",
                     "type": "two_component",
-                    "all_params": tengri.FIXED,
+                    "all_params": tengri.Fixed(tengri.DEFAULT),
                     "tau_diff": 1.0,
                     "tau_bc": 1.5,
                 },
-                dust_emission={"type": lib, "all_params": tengri.FIXED},
+                dust_emission={"type": lib, "all_params": tengri.Fixed(tengri.DEFAULT)},
                 redshift=tengri.Fixed(0.05),
             )
         except Exception as e:
@@ -248,7 +248,7 @@ implications.
 
 .. rst-class:: sphx-glr-timing
 
-   **Total running time of the script:** (0 minutes 11.365 seconds)
+   **Total running time of the script:** (0 minutes 5.507 seconds)
 
 
 .. _sphx_glr_download_auto_examples_dust_emission_plot_ir_library_compare.py:

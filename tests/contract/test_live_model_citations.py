@@ -15,7 +15,7 @@ from __future__ import annotations
 
 import pytest
 
-from tengri import FIXED, FREE, Fixed, Observation, Photometry, SEDModel, builders
+from tengri import DEFAULT, FREE, Fixed, Observation, Photometry, SEDModel, builders
 from tengri.citations import collect_citations
 
 pytestmark = pytest.mark.contract
@@ -31,7 +31,11 @@ def _build(ssp, **extra):
         ssp_data=ssp,
         observation=obs,
         sfh={"type": "dpl", "all_params": FREE},
-        dust_attenuation={"type": "two_component", "law": "calzetti", "all_params": FIXED},
+        dust_attenuation={
+            "type": "two_component",
+            "law": "calzetti",
+            "all_params": Fixed(DEFAULT),
+        },
         redshift=Fixed(0.1),
     )
     kwargs.update(extra)
@@ -41,7 +45,7 @@ def _build(ssp, **extra):
 @pytest.mark.parametrize(
     "extra, expected",
     [
-        ({"neb": {"type": "cue", "all_params": FIXED}}, "cue"),
+        ({"neb": {"type": "cue", "all_params": Fixed(DEFAULT)}}, "cue"),
         (
             {
                 "neb": {"type": "none"},

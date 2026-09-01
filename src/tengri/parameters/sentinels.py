@@ -4,19 +4,20 @@
 Provides two module-level singleton sentinels:
 
 - ``FREE``: marks a parameter to use the registry's default prior
-- ``FIXED``: marks a parameter to pin to the registry's default value
+- ``DEFAULT``: legal only as ``Fixed(DEFAULT)``, an explicit spelling of
+  "pin at the registry default" for one named parameter
 
 Both sentinels preserve singleton identity across copy, pickle, and deepcopy operations.
 
 Examples
 --------
->>> from tengri import FREE, FIXED
->>> config = {"sfh_field_psd_sigma": FREE, "dust_slope": FIXED}
+>>> from tengri import FREE, DEFAULT
+>>> config = {"sfh_field_psd_sigma": FREE, "dust_slope": DEFAULT}
 >>> import copy
 >>> copied = copy.deepcopy(config)
 >>> copied["sfh_field_psd_sigma"] is FREE
 True
->>> copied["dust_slope"] is FIXED
+>>> copied["dust_slope"] is DEFAULT
 True
 """
 
@@ -123,13 +124,13 @@ Place it inside a group dict passed to :meth:`tengri.SEDModel.build`, either
 against one parameter or against the ``'all_params'`` wildcard, to defer the
 choice of prior to the registry::
 
-    from tengri import SEDModel, FREE, FIXED, Uniform
+    from tengri import SEDModel, FREE, Fixed, DEFAULT, Uniform
 
     model = SEDModel.build(
         ssp_data=ssp,
         observation=obs,
         sfh={"type": "dpl", "all_params": FREE, "beta": Uniform(1.0, 3.0)},
-        dust={"type": "two_component", "all_params": FIXED},
+        dust={"type": "two_component", "all_params": Fixed(DEFAULT)},
     )
 
 Here the double-power-law SFH parameters become free on their registry
@@ -145,47 +146,69 @@ values (radio and shock) are unaffected by the wildcard; give those an
 explicit prior instead (e.g. ``shock={"frac": Uniform(0.0, 1.0)}``).
 """
 
-FIXED = _Sentinel("FIXED")
-"""Sentinel marking a parameter to pin to the registry's default value.
+DEFAULT = _Sentinel("DEFAULT")
+"""Sentinel marking the registry default as the value of a ``Fixed(...)`` pin.
 
-Place it inside a group dict passed to :meth:`tengri.SEDModel.build`. Its
-most common use is the ``'all_params'`` wildcard, which pins every parameter
-in the group that is not named explicitly::
+Only legal as the argument of :class:`tengri.Fixed`, e.g. ``Fixed(DEFAULT)``,
+inside a group dict passed to :meth:`tengri.SEDModel.build` /
+:func:`tengri.parameters.parse_groups`::
 
-    from tengri import SEDModel, FREE, FIXED
+    from tengri import SEDModel, Fixed, DEFAULT
 
     model = SEDModel.build(
         ssp_data=ssp,
         observation=obs,
-        sfh={"type": "dpl", "all_params": FIXED, "log_total_mass": FREE},
+        met={"type": "delta", "logzsol": Fixed(DEFAULT)},
     )
 
-Here the double-power-law shape parameters are held at their default values
-and ``sfh_dpl_log_total_mass`` is the one SFH parameter left free.
-``'all_params': FIXED`` is also what a group gets when it sets no wildcard at
-all, so naming it is a way to be explicit rather than a change in behavior.
+``Fixed(0.3)`` pins the parameter at your own value, ``0.3``; ``Fixed(DEFAULT)``
+pins it at the registry default instead -- the same value the ``'all_params'``
+wildcard set to ``Fixed(DEFAULT)`` would have used for that parameter. It
+resolves through the identical canonical-default resolver, never a second
+path.
+
+Bare ``DEFAULT`` (not wrapped in ``Fixed(...)``) is not a legal value
+anywhere in a group dict; it raises :class:`tengri.config.exceptions.ParameterError`
+pointing at the ``Fixed(DEFAULT)`` spelling.
 
 Identity is preserved across pickle, copy, and deepcopy operations.
-
-Notes
------
-The wildcard reaches only the group it appears in. Groups you do not mention
-are still built from their own defaults and may contribute free parameters of
-their own; the spec above leaves ``dust_tau_bc`` and ``dust_tau_diff`` free,
-because no ``dust`` group was given. Read
-:meth:`tengri.Parameters.summary` on the built spec rather than assuming the
-wildcard fixed everything.
 """
 
-#: Internal wildcard key in the nested-dict grammar. Sets ``FREE``/``FIXED``
-#: for every parameter in a group. The normalizer rewrites user-facing
-#: ``WILDCARD_ALIAS`` ('all_params') to this key internally. '*' is NOT a
-#: user input synonym; it is the internal representation after normalization.
+#: Internal wildcard key in the nested-dict grammar. Sets ``FREE`` or
+#: ``Fixed(DEFAULT)`` for every parameter in a group. The normalizer rewrites user-facing
+#: ``WILDCARD_ALIAS`` ('all_params') or its synonym ``WILDCARD_ALIAS_OTHER``
+#: ('other_params') to this key internally. '*' is NOT a user input synonym;
+#: it is the internal representation after normalization.
 WILDCARD_KEY = "*"
 
 #: Preferred, self-explanatory spelling of the wildcard key. Equivalent to
 #: ``WILDCARD_KEY`` in every group dict (e.g. ``sfh={'all_params': FREE}``).
 #: Emitted by :meth:`Parameters.to_groups` and shown in ``summary()`` tags.
+#: ``WILDCARD_ALIAS_OTHER`` ('other_params') is an exact synonym -- see its
+#: docstring for when each spelling reads best. Only one of the two may
+#: appear in a given group dict.
 WILDCARD_ALIAS = "all_params"
 
-__all__ = ["FIXED", "FREE", "WILDCARD_ALIAS", "WILDCARD_KEY"]
+#: Exact synonym of :data:`WILDCARD_ALIAS`. Both spellings normalize to the
+#: same internal :data:`WILDCARD_KEY` ('*') and are otherwise fully
+#: interchangeable everywhere the grammar accepts a wildcard -- top-level
+#: groups, nested sub-blocks, and the builder factories' ``all_params=`` /
+#: ``other_params=`` keyword. A dict (or factory call) carrying both raises,
+#: since they set the same policy twice.
+#:
+#: The two spellings exist for the two shapes a group dict takes. ``all_params``
+#: reads best when the wildcard is the group's only directive -- the
+#: everything-free (or everything-fixed) case::
+#:
+#:     sfh={'type': 'dpl', 'all_params': FREE}
+#:
+#: ``other_params`` reads best written LAST, after explicit per-parameter
+#: entries, where it means "the others"::
+#:
+#:     sfh={'type': 'dpl', 'alpha': Uniform(0.5, 3.0), 'other_params': Fixed(DEFAULT)}
+#:
+#: Pick whichever reads better at the call site; the parser and every
+#: downstream consumer treat them identically.
+WILDCARD_ALIAS_OTHER = "other_params"
+
+__all__ = ["DEFAULT", "FREE", "WILDCARD_ALIAS", "WILDCARD_ALIAS_OTHER", "WILDCARD_KEY"]

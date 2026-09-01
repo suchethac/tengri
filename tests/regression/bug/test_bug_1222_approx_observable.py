@@ -20,7 +20,7 @@ import warnings
 import numpy as np
 import pytest
 
-from tengri import FIXED, Fitter, Fixed, ForwardModel, SEDModel, Uniform, WavePrecomp
+from tengri import DEFAULT, Fitter, Fixed, ForwardModel, SEDModel, Uniform, WavePrecomp
 from tengri.forward.sed_model import ApproxState
 from tengri.inference.fitter import _warn_if_exact_forward_path
 
@@ -32,11 +32,11 @@ def _sed(ssp, obs, approx=None):
     return SEDModel.build(
         ssp,
         observation=obs,
-        sfh={"type": "delayed", "all_params": FIXED},
+        sfh={"type": "delayed", "all_params": Fixed(DEFAULT)},
         dust_attenuation={
             "law": "power_law",
             "type": "two_component",
-            "all_params": FIXED,
+            "all_params": Fixed(DEFAULT),
             "tau_diff": Uniform(0.0, 1.5),
             "tau_bc": Uniform(0.0, 1.0),
         },

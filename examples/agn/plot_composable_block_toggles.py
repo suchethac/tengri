@@ -34,11 +34,11 @@ setup_style()
 warnings.filterwarnings("ignore", message=".*BakedInBackend.*")
 
 C_AA_PER_S = 2.998e18
-SFH = {"type": "const", "all_params": tengri.FIXED, "log_total_mass": -10.0}
+SFH = {"type": "const", "all_params": tengri.Fixed(tengri.DEFAULT), "log_total_mass": -10.0}
 DUST = {
     "law": "power_law",
     "type": "two_component",
-    "all_params": tengri.FIXED,
+    "all_params": tengri.Fixed(tengri.DEFAULT),
     "tau_diff": 0.0,
     "tau_bc": 0.0,
 }
@@ -46,50 +46,55 @@ DUST = {
 ssp = tengri.load_ssp()
 
 BLOCK_PROGRESSION = [
-    ("disc only", {"disc": {"type": "grahsp_sbpl", "all_params": tengri.FIXED}}),
+    ("disc only", {"disc": {"type": "grahsp_sbpl", "all_params": tengri.Fixed(tengri.DEFAULT)}}),
     (
         "+ lines",
         {
-            "disc": {"type": "grahsp_sbpl", "all_params": tengri.FIXED},
-            "nlr": {"type": "grahsp", "all_params": tengri.FIXED},
-            "blr": {"type": "grahsp", "all_params": tengri.FIXED},
+            "disc": {"type": "grahsp_sbpl", "all_params": tengri.Fixed(tengri.DEFAULT)},
+            "nlr": {"type": "grahsp", "all_params": tengri.Fixed(tengri.DEFAULT)},
+            "blr": {"type": "grahsp", "all_params": tengri.Fixed(tengri.DEFAULT)},
         },
     ),
     (
         "+ Fe II",
         {
-            "disc": {"type": "grahsp_sbpl", "all_params": tengri.FIXED},
-            "nlr": {"type": "grahsp", "all_params": tengri.FIXED},
-            "blr": {"type": "grahsp", "all_params": tengri.FIXED},
-            "feii": {"type": "grahsp", "all_params": tengri.FIXED},
+            "disc": {"type": "grahsp_sbpl", "all_params": tengri.Fixed(tengri.DEFAULT)},
+            "nlr": {"type": "grahsp", "all_params": tengri.Fixed(tengri.DEFAULT)},
+            "blr": {"type": "grahsp", "all_params": tengri.Fixed(tengri.DEFAULT)},
+            "feii": {"type": "grahsp", "all_params": tengri.Fixed(tengri.DEFAULT)},
         },
     ),
     (
         "+ torus",
         {
-            "disc": {"type": "grahsp_sbpl", "all_params": tengri.FIXED},
-            "nlr": {"type": "grahsp", "all_params": tengri.FIXED},
-            "blr": {"type": "grahsp", "all_params": tengri.FIXED},
-            "feii": {"type": "grahsp", "all_params": tengri.FIXED},
-            "torus": {"type": "grahsp", "all_params": tengri.FIXED},
+            "disc": {"type": "grahsp_sbpl", "all_params": tengri.Fixed(tengri.DEFAULT)},
+            "nlr": {"type": "grahsp", "all_params": tengri.Fixed(tengri.DEFAULT)},
+            "blr": {"type": "grahsp", "all_params": tengri.Fixed(tengri.DEFAULT)},
+            "feii": {"type": "grahsp", "all_params": tengri.Fixed(tengri.DEFAULT)},
+            "torus": {"type": "grahsp", "all_params": tengri.Fixed(tengri.DEFAULT)},
         },
     ),
     (
         "+ attenuation (full)",
         {
-            "disc": {"type": "grahsp_sbpl", "all_params": tengri.FIXED},
-            "nlr": {"type": "grahsp", "all_params": tengri.FIXED},
-            "blr": {"type": "grahsp", "all_params": tengri.FIXED},
-            "feii": {"type": "grahsp", "all_params": tengri.FIXED},
-            "torus": {"type": "grahsp", "all_params": tengri.FIXED},
-            "atten": {"type": "grahsp_biatten", "all_params": tengri.FIXED},
+            "disc": {"type": "grahsp_sbpl", "all_params": tengri.Fixed(tengri.DEFAULT)},
+            "nlr": {"type": "grahsp", "all_params": tengri.Fixed(tengri.DEFAULT)},
+            "blr": {"type": "grahsp", "all_params": tengri.Fixed(tengri.DEFAULT)},
+            "feii": {"type": "grahsp", "all_params": tengri.Fixed(tengri.DEFAULT)},
+            "torus": {"type": "grahsp", "all_params": tengri.Fixed(tengri.DEFAULT)},
+            "atten": {"type": "grahsp_biatten", "all_params": tengri.Fixed(tengri.DEFAULT)},
         },
     ),
 ]
 
 
 def predict_nu_lnu(blocks):
-    agn = {"all_params": tengri.FIXED, "log_lbol": 12.0, "lum_ratio": 1.0, **blocks}
+    agn = {
+        "all_params": tengri.Fixed(tengri.DEFAULT),
+        "log_lbol": 12.0,
+        "lum_ratio": 1.0,
+        **blocks,
+    }
     model = tengri.SEDModel.build(
         ssp, sfh=SFH, dust_attenuation=DUST, agn=agn, redshift=tengri.Fixed(0.0)
     )

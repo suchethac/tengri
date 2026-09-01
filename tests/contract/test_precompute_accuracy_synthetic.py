@@ -92,7 +92,7 @@ def _build(
     """
     import warnings
 
-    from tengri import FIXED, Fixed, Observation, Photometry, SEDModel
+    from tengri import DEFAULT, Fixed, Observation, Photometry, SEDModel
 
     if redshift is None:
         redshift = Fixed(0.05)
@@ -100,25 +100,25 @@ def _build(
     dust_atten = {
         "type": "two_component",
         "law": "calzetti",
-        "all_params": FIXED,
+        "all_params": Fixed(DEFAULT),
         "tau_diff": 0.5,  # real attenuation → real L_ir to (re-)emit
     }
     groups = dict(
-        sfh={"type": "dpl", "all_params": FIXED},
+        sfh={"type": "dpl", "all_params": Fixed(DEFAULT)},
         dust_attenuation=dust_atten,
         neb={"type": "none"},
     )
     if emission is not None:
-        groups["dust_emission"] = {"type": emission, "all_params": FIXED}
+        groups["dust_emission"] = {"type": emission, "all_params": Fixed(DEFAULT)}
     if with_radio:
         # #1980: condon92's retired spelling, in its composable resolution.
         groups["radio"] = {
             "sf": {"type": "bell2003"},
             "agn": {"type": "powerlaw"},
-            "all_params": FIXED,
+            "all_params": Fixed(DEFAULT),
         }
     if with_xray:
-        groups["xray"] = {"type": "simple", "all_params": FIXED}
+        groups["xray"] = {"type": "simple", "all_params": Fixed(DEFAULT)}
     with warnings.catch_warnings():
         warnings.simplefilter("ignore")
         return SEDModel.build(
@@ -236,7 +236,7 @@ def test_taylor_correction_toggle_two_component(synthetic_ssp):
     """
     import warnings
 
-    from tengri import FIXED, Fixed, Observation, Photometry, SEDModel, WavePrecomp
+    from tengri import DEFAULT, Fixed, Observation, Photometry, SEDModel, WavePrecomp
 
     filters = [_tophat(c) for c in (3500.0, 4800.0, 6200.0, 8000.0)]
     obs = Observation(photometry=Photometry(filters=tuple(filters)))
@@ -245,12 +245,14 @@ def test_taylor_correction_toggle_two_component(synthetic_ssp):
     dust = {
         "type": "two_component",
         "law": "calzetti",
-        "all_params": FIXED,
+        "all_params": Fixed(DEFAULT),
         "tau_bc": 0.8,
         "tau_diff": 0.4,
     }
     groups = dict(
-        sfh={"type": "dpl", "all_params": FIXED}, dust_attenuation=dust, neb={"type": "none"}
+        sfh={"type": "dpl", "all_params": Fixed(DEFAULT)},
+        dust_attenuation=dust,
+        neb={"type": "none"},
     )
 
     def build(approx):

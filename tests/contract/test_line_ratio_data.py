@@ -63,7 +63,7 @@ class TestLineRatioPrediction:
     def _build(self, approx):
         import warnings
 
-        from tengri import FIXED, Fixed, Observation, SEDModel, Spectroscopy, load_ssp_data
+        from tengri import DEFAULT, Fixed, Observation, SEDModel, Spectroscopy, load_ssp_data
 
         bare = _bare_ssp_path()
         if bare is None or not Path("data/cue_weights.npz").is_file():
@@ -81,13 +81,13 @@ class TestLineRatioPrediction:
             m = SEDModel.build(
                 ssp_data=ssp,
                 observation=obs,
-                sfh={"type": "dpl", "all_params": FIXED},
+                sfh={"type": "dpl", "all_params": Fixed(DEFAULT)},
                 dust_attenuation={
                     "type": "two_component",
                     "law": "calzetti",
-                    "all_params": FIXED,
+                    "all_params": Fixed(DEFAULT),
                 },
-                neb={"type": "cue", "all_params": FIXED},
+                neb={"type": "cue", "all_params": Fixed(DEFAULT)},
                 redshift=Fixed(0.05),
                 approx=approx,
             )
@@ -109,7 +109,7 @@ class TestLineRatioLikelihood:
     def _loss(self, obs_ratio):
         import warnings
 
-        from tengri import FIXED, Fitter, Fixed, Observation, Photometry, SEDModel, load_ssp_data
+        from tengri import DEFAULT, Fitter, Fixed, Observation, Photometry, SEDModel, load_ssp_data
         from tengri.inference.loss_functions import build_loglikelihood_fn
 
         bare = _bare_ssp_path()
@@ -125,13 +125,13 @@ class TestLineRatioLikelihood:
             m = SEDModel.build(
                 ssp_data=ssp,
                 observation=obs,
-                sfh={"type": "dpl", "all_params": FIXED},
+                sfh={"type": "dpl", "all_params": Fixed(DEFAULT)},
                 dust_attenuation={
                     "type": "two_component",
                     "law": "calzetti",
-                    "all_params": FIXED,
+                    "all_params": Fixed(DEFAULT),
                 },
-                neb={"type": "cue", "all_params": FIXED},
+                neb={"type": "cue", "all_params": Fixed(DEFAULT)},
                 redshift=Fixed(0.05),
             )
             fitter = Fitter(

@@ -73,7 +73,7 @@ import jax.numpy as jnp
 import numpy as np
 import pytest
 
-from tengri import FIXED, FREE, Fixed, SEDModel
+from tengri import DEFAULT, FREE, Fixed, SEDModel
 from tengri.config.exceptions import ParameterError
 from tengri.observation import Observation, Photometry
 from tengri.observation.photometry import FilterCurve
@@ -224,11 +224,11 @@ def _build(ssp, obs, emission_type, wildcard=FREE):
     return SEDModel.build(
         ssp_data=ssp,
         observation=obs,
-        sfh={"type": "dpl", "all_params": FIXED},
+        sfh={"type": "dpl", "all_params": Fixed(DEFAULT)},
         dust_attenuation={
             "type": "two_component",
             "law": "calzetti",
-            "all_params": FIXED,
+            "all_params": Fixed(DEFAULT),
             "tau_bc": _TAU_BC,
             "tau_diff": _TAU_DIFF,
         },
@@ -367,8 +367,8 @@ def test_dale2014_reads_alpha_dale_not_alpha(synthetic_ssp_wide, panchromatic_ob
     Without this, a fix could satisfy the sweep above by freeing *any* live
     parameter while leaving Dale+2014's slope unreachable.
     """
-    # Built with the wildcard FIXED, since 'all_params': FREE now correctly refuses here.
-    model = _build(synthetic_ssp_wide, panchromatic_obs, "dale2014", wildcard=FIXED)
+    # Built with the wildcard Fixed(DEFAULT), since 'all_params': FREE now correctly refuses here.
+    model = _build(synthetic_ssp_wide, panchromatic_obs, "dale2014", wildcard=Fixed(DEFAULT))
     params = dict(model.spec.sample(jax.random.PRNGKey(0)))
 
     def photometry_at(name, value):
@@ -403,11 +403,11 @@ def test_an_explicit_prior_reaches_the_parameter_the_wildcard_cannot(
     model = SEDModel.build(
         ssp_data=synthetic_ssp_wide,
         observation=panchromatic_obs,
-        sfh={"type": "dpl", "all_params": FIXED},
+        sfh={"type": "dpl", "all_params": Fixed(DEFAULT)},
         dust_attenuation={
             "type": "two_component",
             "law": "calzetti",
-            "all_params": FIXED,
+            "all_params": Fixed(DEFAULT),
             "tau_bc": _TAU_BC,
             "tau_diff": _TAU_DIFF,
         },
@@ -429,15 +429,17 @@ def test_dust_emission_actually_contributes(synthetic_ssp_wide, panchromatic_obs
     The sweeps above would then pass or fail for reasons unrelated to the
     wildcard. Pin that the far-IR bands are genuinely emission-dominated.
     """
-    with_emission = _build(synthetic_ssp_wide, panchromatic_obs, "dale2014", wildcard=FIXED)
+    with_emission = _build(
+        synthetic_ssp_wide, panchromatic_obs, "dale2014", wildcard=Fixed(DEFAULT)
+    )
     without = SEDModel.build(
         ssp_data=synthetic_ssp_wide,
         observation=panchromatic_obs,
-        sfh={"type": "dpl", "all_params": FIXED},
+        sfh={"type": "dpl", "all_params": Fixed(DEFAULT)},
         dust_attenuation={
             "type": "two_component",
             "law": "calzetti",
-            "all_params": FIXED,
+            "all_params": Fixed(DEFAULT),
             "tau_bc": _TAU_BC,
             "tau_diff": _TAU_DIFF,
         },

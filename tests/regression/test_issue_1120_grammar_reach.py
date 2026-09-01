@@ -43,15 +43,15 @@ def test_registered_components_reachable_from_grammar(axis, expected):
 @pytest.mark.parametrize(
     "axis,expected",
     [
-        ("xray", [("xray_aird", "FIXED"), ("agn_xray_corona", "FIXED")]),
-        ("radio", [("radio_powerlaw", "FIXED"), ("radio_dpl", "FIXED")]),
+        ("xray", [("xray_aird", "Fixed(DEFAULT)"), ("agn_xray_corona", "Fixed(DEFAULT)")]),
+        ("radio", [("radio_powerlaw", "Fixed(DEFAULT)"), ("radio_dpl", "Fixed(DEFAULT)")]),
     ],
 )
 def test_newly_reachable_components_build_with_fixed_defaults(
     axis, expected, synthetic_ssp_wide, synthetic_tophat_obs
 ):
     """Each newly reachable component must actually construct with default
-    parameters ('all_params': FIXED).
+    parameters ('all_params': Fixed(DEFAULT)).
 
     A name appearing in a menu but failing to build would be the #1279
     (T5) mirror image — moving the lie, not fixing it. These components
@@ -59,7 +59,7 @@ def test_newly_reachable_components_build_with_fixed_defaults(
     use synthetic_ssp_wide + synthetic_tophat_obs (session fixtures) which
     span 100 Angstrom – 1 mm.
     """
-    from tengri import FIXED, SEDModel
+    from tengri import DEFAULT, Fixed, SEDModel
 
     for comp_name, _ in expected:
         # #1980: the radio menu's {'type': name} spelling is retired — a menu
@@ -71,10 +71,10 @@ def test_newly_reachable_components_build_with_fixed_defaults(
             cfg = {
                 "sf": {"type": sf_variant},
                 "agn": {"type": agn_variant},
-                "all_params": FIXED,
+                "all_params": Fixed(DEFAULT),
             }
         else:
-            cfg = {"type": comp_name, "all_params": FIXED}
+            cfg = {"type": comp_name, "all_params": Fixed(DEFAULT)}
         try:
             model = SEDModel.build(
                 ssp_data=synthetic_ssp_wide,

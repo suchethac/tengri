@@ -27,7 +27,7 @@ import jax.numpy as jnp
 import numpy as np
 import pytest
 
-from tengri import FIXED, Fixed, Observation, Photometry, SEDModel, Uniform
+from tengri import DEFAULT, Fixed, Observation, Photometry, SEDModel, Uniform
 from tengri.inference.fitter import Fitter
 from tengri.observation.photometry import FilterCurve
 
@@ -48,11 +48,11 @@ def fitter(synthetic_ssp_wide):
     model = SEDModel.build(
         ssp_data=synthetic_ssp_wide,
         observation=obs,
-        sfh={"type": "dpl", "all_params": FIXED, "log_total_mass": Uniform(8.0, 12.0)},
+        sfh={"type": "dpl", "all_params": Fixed(DEFAULT), "log_total_mass": Uniform(8.0, 12.0)},
         dust_attenuation={
             "type": "two_component",
             "law": "calzetti",
-            "all_params": FIXED,
+            "all_params": Fixed(DEFAULT),
             "tau_bc": Uniform(0.0, 1.0),
         },
         neb={"type": "none"},

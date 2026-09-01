@@ -68,7 +68,7 @@ import jax.numpy as jnp
 import numpy as np
 import pytest
 
-from tengri import FIXED, FREE, Fixed, Observation, Photometry, SEDModel, SSPData
+from tengri import DEFAULT, FREE, Fixed, Observation, Photometry, SEDModel, SSPData
 from tengri.observation.photometry import FilterCurve
 
 pytestmark = pytest.mark.regression_bug
@@ -114,7 +114,7 @@ def _build(ir_ssp, ir_obs, engine: str):
         return SEDModel.build(
             ssp_data=ir_ssp,
             observation=ir_obs,
-            sfh={"type": "dpl", "all_params": FIXED},
+            sfh={"type": "dpl", "all_params": Fixed(DEFAULT)},
             dust_attenuation={
                 "type": "two_component",
                 "law": "calzetti",

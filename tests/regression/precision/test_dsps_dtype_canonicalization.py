@@ -35,7 +35,7 @@ import jax.numpy as jnp
 import numpy as np
 import pytest
 
-from tengri import FIXED
+from tengri import DEFAULT, Fixed
 
 pytestmark = pytest.mark.regression_bug
 
@@ -50,9 +50,13 @@ def _build(ssp, sfh):
 
 _SFH_CASES = {
     # tengri CIC age weights + DSPS lognormal-MDF metallicity weights
-    "parametric": {"type": "dpl", "all_params": FIXED},
+    "parametric": {"type": "dpl", "all_params": Fixed(DEFAULT)},
     # DSPS calc_rest_sed_sfh_table_* — the core SSP integration
-    "field": {"type": "dpl", "field": {"all_params": FIXED}, "all_params": FIXED},
+    "field": {
+        "type": "dpl",
+        "field": {"all_params": Fixed(DEFAULT)},
+        "all_params": Fixed(DEFAULT),
+    },
 }
 
 

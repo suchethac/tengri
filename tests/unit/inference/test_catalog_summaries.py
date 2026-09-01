@@ -17,7 +17,16 @@ pytestmark = pytest.mark.contract
 
 def _fwd_free_z():
     """3-band model with a FREE redshift (so MCMC needs no per-galaxy redshift)."""
-    from tengri import FIXED, FREE, ForwardModel, Observation, Photometry, SEDModel, Uniform
+    from tengri import (
+        DEFAULT,
+        FREE,
+        Fixed,
+        ForwardModel,
+        Observation,
+        Photometry,
+        SEDModel,
+        Uniform,
+    )
     from tengri.components.stellar.sps.dsps_wrapper import SSPData
     from tengri.observation.photometry import FilterCurve
 
@@ -42,7 +51,7 @@ def _fwd_free_z():
         dust_attenuation={
             "law": "power_law",
             "type": "two_component",
-            "all_params": FIXED,
+            "all_params": Fixed(DEFAULT),
             "tau_bc": 0.5,
         },
         neb={"type": "none"},

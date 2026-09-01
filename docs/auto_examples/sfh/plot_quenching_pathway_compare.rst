@@ -70,7 +70,7 @@ how quenching timescale imprints on observable photometry and spectroscopy.
             "name": "Star-forming (no quench)",
             "sfh": {
                 "type": "const",
-                "all_params": tengri.FIXED,
+                "all_params": tengri.Fixed(tengri.DEFAULT),
                 "log_total_mass": 10.64,
                 # start_gyr is lookback time to SF onset (larger number);
                 # end_gyr is lookback time to SF cessation (smaller number).
@@ -84,7 +84,7 @@ how quenching timescale imprints on observable photometry and spectroscopy.
             "name": "Slow quench (τ=4 Gyr)",
             "sfh": {
                 "type": "dexp",
-                "all_params": tengri.FIXED,
+                "all_params": tengri.Fixed(tengri.DEFAULT),
                 "tau_gyr": 4.0,
                 "log_total_mass": 10.0,
             },
@@ -94,7 +94,7 @@ how quenching timescale imprints on observable photometry and spectroscopy.
             "name": "Fast post-starburst (t_sb=2 Gyr)",
             "sfh": {
                 "type": "tsnorm",
-                "all_params": tengri.FIXED,
+                "all_params": tengri.Fixed(tengri.DEFAULT),
                 "log_total_mass": 10.0,
                 "peak_lbt_gyr": 2.0,
                 "width_gyr": 0.3,
@@ -115,7 +115,7 @@ how quenching timescale imprints on observable photometry and spectroscopy.
             dust_attenuation={
                 "law": "power_law",
                 "type": "two_component",
-                "all_params": tengri.FIXED,
+                "all_params": tengri.Fixed(tengri.DEFAULT),
                 "tau_diff": 0.15,
                 "tau_bc": 0.3,
             },

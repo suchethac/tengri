@@ -59,19 +59,19 @@ class TestSpectrumPrecompDataclass:
 def _build(ssp, obs, approx, redshift, dust_attenuation=None):
     import warnings
 
-    from tengri import FIXED, SEDModel
+    from tengri import DEFAULT, Fixed, SEDModel
 
     dust_attenuation = dust_attenuation or {
         "type": "two_component",
         "law": "calzetti",
-        "all_params": FIXED,
+        "all_params": Fixed(DEFAULT),
     }
     with warnings.catch_warnings():
         warnings.simplefilter("ignore")
         return SEDModel.build(
             ssp_data=ssp,
             observation=obs,
-            sfh={"type": "dpl", "all_params": FIXED},
+            sfh={"type": "dpl", "all_params": Fixed(DEFAULT)},
             dust_attenuation=dust_attenuation,
             neb={"type": "none"},
             redshift=redshift,
@@ -110,12 +110,12 @@ class TestSpectrumLUTAccuracy:
         # 3-6% low-z error. The two-component BIRTH-CLOUD LUT carries a separate
         # ~0.8-1.5% separable-approximation residual (issue #617), deliberately
         # excluded here so this test isolates the normalization contract.
-        from tengri import FIXED as _FIXED
+        from tengri import DEFAULT
 
         diffuse_dust = {
             "type": "two_component",
             "law": "calzetti",
-            "all_params": _FIXED,
+            "all_params": Fixed(DEFAULT),
             "tau_bc": 0.0,
         }
         m_exact = _build(ssp, obs, None, Fixed(0.05), dust_attenuation=diffuse_dust)
@@ -145,12 +145,12 @@ class TestSpectrumLUTAccuracy:
         # Diffuse-only dust — see fixed-z note: isolates the normalization
         # contract (#616) from the birth-cloud LUT residual (#617). z=0.05 is
         # the critical low-z case that the mstar_obs normalization broke.
-        from tengri import FIXED as _FIXED
+        from tengri import DEFAULT, Fixed
 
         diffuse_dust = {
             "type": "two_component",
             "law": "calzetti",
-            "all_params": _FIXED,
+            "all_params": Fixed(DEFAULT),
             "tau_bc": 0.0,
         }
         m_exact = _build(
@@ -199,7 +199,7 @@ class TestSpectrumLUTGuards:
             pytest.skip("No SSP grid available under data/.")
         import warnings
 
-        from tengri import FIXED, Fixed, Observation, SEDModel, Spectroscopy, load_ssp_data
+        from tengri import DEFAULT, Fixed, Observation, SEDModel, Spectroscopy, load_ssp_data
 
         ssp = load_ssp_data(ssp_path)
         wave_obs = jnp.asarray(np.linspace(4500.0, 7500.0, 64))
@@ -209,11 +209,11 @@ class TestSpectrumLUTGuards:
             m = SEDModel.build(
                 ssp_data=ssp,
                 observation=obs,
-                sfh={"type": "dpl", "all_params": FIXED},
+                sfh={"type": "dpl", "all_params": Fixed(DEFAULT)},
                 dust_attenuation={
                     "type": "two_component",
                     "law": "calzetti",
-                    "all_params": FIXED,
+                    "all_params": Fixed(DEFAULT),
                 },
                 neb={"type": "none"},
                 redshift=Fixed(0.05),
@@ -234,7 +234,7 @@ class TestSpectrumLUTGuards:
 
         import warnings
 
-        from tengri import FIXED, SEDModel
+        from tengri import DEFAULT, SEDModel
 
         with warnings.catch_warnings():
             warnings.simplefilter("ignore")
@@ -244,12 +244,12 @@ class TestSpectrumLUTGuards:
                 sfh={
                     "type": "dpl",
                     "alpha": Uniform(0.1, 5.0, "sfh_dpl_alpha"),
-                    "all_params": FIXED,
+                    "all_params": Fixed(DEFAULT),
                 },
                 dust_attenuation={
                     "type": "two_component",
                     "law": "calzetti",
-                    "all_params": FIXED,
+                    "all_params": Fixed(DEFAULT),
                 },
                 neb={"type": "none"},
                 redshift=Fixed(0.05),
@@ -275,20 +275,20 @@ class TestSpectrumLUTLines:
     def _build_cue(self, ssp, obs, approx):
         import warnings
 
-        from tengri import FIXED, Fixed, SEDModel
+        from tengri import DEFAULT, Fixed, SEDModel
 
         with warnings.catch_warnings():
             warnings.simplefilter("ignore")
             return SEDModel.build(
                 ssp_data=ssp,
                 observation=obs,
-                sfh={"type": "dpl", "all_params": FIXED},
+                sfh={"type": "dpl", "all_params": Fixed(DEFAULT)},
                 dust_attenuation={
                     "type": "two_component",
                     "law": "calzetti",
-                    "all_params": FIXED,
+                    "all_params": Fixed(DEFAULT),
                 },
-                neb={"type": "cue", "all_params": FIXED},
+                neb={"type": "cue", "all_params": Fixed(DEFAULT)},
                 redshift=Fixed(0.05),
                 approx=approx,
             )
@@ -367,14 +367,14 @@ class TestJointPrecomp:
     def _build_joint(ssp, obs, approx, redshift):
         import warnings
 
-        from tengri import FIXED, SEDModel
+        from tengri import DEFAULT, Fixed, SEDModel
 
         # Diffuse-only dust isolates the normalization contract from the
         # birth-cloud LUT residual (#617).
         dust = {
             "type": "two_component",
             "law": "calzetti",
-            "all_params": FIXED,
+            "all_params": Fixed(DEFAULT),
             "tau_bc": 0.0,
         }
         with warnings.catch_warnings():
@@ -382,7 +382,7 @@ class TestJointPrecomp:
             return SEDModel.build(
                 ssp_data=ssp,
                 observation=obs,
-                sfh={"type": "dpl", "all_params": FIXED},
+                sfh={"type": "dpl", "all_params": Fixed(DEFAULT)},
                 dust_attenuation=dust,
                 neb={"type": "none"},
                 redshift=redshift,

@@ -30,7 +30,7 @@ the mass integration kernel.
 
 Reference: Mass conservation identity: M_formed = ∫ SFR(t) dt.
 
-.. GENERATED FROM PYTHON SOURCE LINES 14-127
+.. GENERATED FROM PYTHON SOURCE LINES 14-131
 
 
 
@@ -67,8 +67,12 @@ Reference: Mass conservation identity: M_formed = ∫ SFR(t) dt.
     ssp = tengri.load_ssp("fsps_prsc_miles_chabrier")
     model = tengri.SEDModel.build(
         ssp,
-        sfh={"type": "dpl", "all_params": tengri.FIXED},
-        dust_attenuation={"law": "power_law", "type": "two_component", "all_params": tengri.FIXED},
+        sfh={"type": "dpl", "all_params": tengri.Fixed(tengri.DEFAULT)},
+        dust_attenuation={
+            "law": "power_law",
+            "type": "two_component",
+            "all_params": tengri.Fixed(tengri.DEFAULT),
+        },
         redshift=tengri.Fixed(0.0),
     )
 

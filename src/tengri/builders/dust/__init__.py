@@ -26,11 +26,11 @@ The grammar (two-component example):
 ...     "tau_bc": Uniform(0, 2),
 ...     "tau_diff": Uniform(0, 4),
 ... }
->>> dust_emission = {"type": "dale2014", "all_params": FIXED}
+>>> dust_emission = {"type": "dale2014", "all_params": Fixed(DEFAULT)}
 
 The factory mirror (single-component):
 
->>> from tengri import builders, FREE, Uniform, FIXED
+>>> from tengri import builders, FREE, Uniform, Fixed, DEFAULT
 >>> dust_attenuation = builders.dust.single_component(
 ...     law="calzetti",  # Required
 ...     all_params=FREE,
@@ -45,7 +45,7 @@ The factory mirror (two-component):
 ...     tau_bc=Uniform(0, 2),
 ...     tau_diff=Uniform(0, 4),
 ... )
->>> dust_emission = builders.dust.emission.dale2014(all_params=FIXED)
+>>> dust_emission = builders.dust.emission.dale2014(all_params=Fixed(DEFAULT))
 
 The ``law`` / ``law_bc`` / ``law_diff`` kwargs accept any key registered in
 :data:`tengri.components.dust.attenuation.DUST_LAWS`. Single-component requires
@@ -61,11 +61,17 @@ from collections.abc import Callable
 from typing import Any
 
 from tengri._completion import curated_dir
-from tengri.builders._factory import UNSET, _pop_wildcard, short_form
+from tengri.builders._factory import (
+    _DEFAULT_WILDCARD,
+    UNSET,
+    _pop_wildcard,
+    _validate_wildcard,
+    short_form,
+)
 from tengri.builders.dust import emission  # nested factory namespace
 from tengri.components.dust.attenuation import DUST_LAWS
 from tengri.parameters.registry import recipe_parameters
-from tengri.parameters.sentinels import FIXED, FREE, WILDCARD_ALIAS
+from tengri.parameters.sentinels import FREE, WILDCARD_ALIAS, WILDCARD_ALIAS_OTHER
 
 # Param shortlists per dust_model: discovered at import time so adding a
 # new attenuation knob in the registry surfaces here automatically.
@@ -126,11 +132,7 @@ def _make_dust_factory(
 
     def factory(**kwargs: Any) -> dict:
         wildcard = _pop_wildcard(f"dust.{dust_model}", kwargs)
-        if wildcard not in (FREE, FIXED):
-            raise ValueError(
-                f"dust.{dust_model}(all_params=...): expected FREE or FIXED, got "
-                f"{wildcard!r}. Use tengri.FREE or tengri.FIXED."
-            )
+        _validate_wildcard(f"dust.{dust_model}", wildcard)
         # String settings (e.g. law, law_bc, law_diff). No defaults are applied;
         # grammar requires explicit specification. Flat-kwarg builds get power_law
         # defaults in Parameters.
@@ -216,7 +218,7 @@ def _make_dust_factory(
                 f"IR emission are now separate top-level groups. Use "
                 f"dust_emission=builders.dust.emission.<variant>(...) instead."
             )
-        valid_kwargs = ["all_params", *setting_names, *short_params]
+        valid_kwargs = ["all_params", "other_params", *setting_names, *short_params]
         unknown = [k for k in kwargs if k not in short_params]
         if unknown:
             raise TypeError(
@@ -224,15 +226,25 @@ def _make_dust_factory(
                 f"{unknown}. Valid: {valid_kwargs}."
             )
 
-        out: dict[str, Any] = {"type": dust_model, WILDCARD_ALIAS: wildcard, **settings}
-        for short in short_params:
-            if short in kwargs and kwargs[short] is not UNSET:
-                out[short] = kwargs[short]
+        out: dict[str, Any] = {"type": dust_model, **settings}
+        param_entries: dict[str, Any] = {
+            short: kwargs[short]
+            for short in short_params
+            if short in kwargs and kwargs[short] is not UNSET
+        }
+        out.update(param_entries)
+        # Wildcard LAST: 'all_params' when it is the only parameter
+        # directive, 'other_params' when explicit per-param entries precede it.
+        wildcard_key = WILDCARD_ALIAS if not param_entries else WILDCARD_ALIAS_OTHER
+        out[wildcard_key] = wildcard
         return out
 
     sig_params = [
         inspect.Parameter(
-            "all_params", inspect.Parameter.KEYWORD_ONLY, default=FIXED, annotation=Any
+            "all_params", inspect.Parameter.KEYWORD_ONLY, default=_DEFAULT_WILDCARD, annotation=Any
+        ),
+        inspect.Parameter(
+            "other_params", inspect.Parameter.KEYWORD_ONLY, default=UNSET, annotation=Any
         ),
     ]
     for s in setting_names:
@@ -284,10 +296,15 @@ def _make_dust_factory(
     doc_lines.append("")
     doc_lines.append("Parameters")
     doc_lines.append("----------")
-    doc_lines.append("all_params : sentinel, optional")
+    doc_lines.append("all_params : sentinel or Fixed, optional")
     doc_lines.append(
         "    Wildcard policy. ``FREE`` makes unspecified attenuation params "
-        "fit; ``FIXED`` (default) pins them to registry defaults."
+        "fit; ``Fixed(DEFAULT)`` (default) pins them to registry defaults."
+    )
+    doc_lines.append("other_params : sentinel, optional")
+    doc_lines.append(
+        "    Exact synonym of ``all_params``; give only one. Reads best written "
+        'last, after explicit per-parameter overrides, as "the others".'
     )
     if dust_model == "two_component":
         doc_lines.append("law : str, optional")

@@ -62,11 +62,11 @@ from blackjax.diagnostics import effective_sample_size
 
 import tengri
 from tengri import (
-    FIXED,
-    FREE,
     Catalog,
+    DEFAULT,
     Fixed,
     ForwardModel,
+    FREE,
     Observation,
     Photometry,
     SEDModel,
@@ -142,15 +142,15 @@ model = SEDModel.build(
     observation=Observation(photometry=phot),
     redshift=Fixed(Z_GAL),
     sfh={"type": "continuity", "all_params": FREE, "bin_edges_gyr": BIN_EDGES},
-    # 'all_params': FIXED states what the group already does by default. It is
+    # 'all_params': Fixed(DEFAULT) states what the group already does by default. It is
     # here because the disposition is otherwise unstated, which warns: the two
     # remaining metallicity parameters are nuisance knobs this page does not
     # vary, and saying so is what keeps them out of the rendered output.
-    met={"logzsol": Uniform(-1.5, 0.3), "all_params": FIXED},
+    met={"logzsol": Uniform(-1.5, 0.3), "all_params": Fixed(DEFAULT)},
     dust_attenuation={
         "type": "two_component",
         "law": "calzetti",
-        "all_params": FIXED,
+        "all_params": Fixed(DEFAULT),
         # Diffuse screen only, stated rather than inherited. Leaving tau_bc out
         # gave it its declared default of 1.0 -- a frozen magnitude of extra
         # attenuation on every young population, which trades against recent SFR

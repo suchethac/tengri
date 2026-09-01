@@ -123,11 +123,11 @@ References
     # Negligible host SFH: total mass ~1e-10 Msun, completely subdominant
     # to the AGN luminosity below. ``log_sfr`` was the legacy kwarg; current
     # ``const`` SFH parametrizes by total mass over [start_gyr, end_gyr].
-    SFH = {"type": "const", "all_params": tengri.FIXED, "log_total_mass": -10.0}
+    SFH = {"type": "const", "all_params": tengri.Fixed(tengri.DEFAULT), "log_total_mass": -10.0}
     DUST = {
         "law": "power_law",
         "type": "two_component",
-        "all_params": tengri.FIXED,
+        "all_params": tengri.Fixed(tengri.DEFAULT),
         "tau_diff": 0.0,
         "tau_bc": 0.0,
     }
@@ -139,11 +139,11 @@ References
         sfh=SFH,
         dust_attenuation=DUST,
         agn={
-            "all_params": tengri.FIXED,
+            "all_params": tengri.Fixed(tengri.DEFAULT),
             "log_lbol": LOG_LBOL,
             "lum_ratio": 1.0,
-            "disc": {"type": "multicolor", "all_params": tengri.FIXED},
-            "torus": {"type": "skirtor", "all_params": tengri.FIXED},
+            "disc": {"type": "multicolor", "all_params": tengri.Fixed(tengri.DEFAULT)},
+            "torus": {"type": "skirtor", "all_params": tengri.Fixed(tengri.DEFAULT)},
         },
         redshift=tengri.Fixed(0.0),
     )

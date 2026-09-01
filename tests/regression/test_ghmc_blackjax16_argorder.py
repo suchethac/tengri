@@ -18,7 +18,7 @@ import numpy as np
 import pytest
 
 from tengri import (
-    FIXED,
+    DEFAULT,
     FREE,
     Fitter,
     Fixed,
@@ -45,7 +45,11 @@ def test_ghmc_runs_and_returns_finite_samples():
         observation=obs,
         redshift=Fixed(0.05),
         sfh={"type": "dpl", "all_params": FREE},
-        dust_attenuation={"law": "power_law", "type": "two_component", "all_params": FIXED},
+        dust_attenuation={
+            "law": "power_law",
+            "type": "two_component",
+            "all_params": Fixed(DEFAULT),
+        },
         approx=WavePrecomp(),
     )
     mock = generate_mock(sed, sed.spec.sample(key), key=key, snr=30.0)

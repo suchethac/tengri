@@ -34,7 +34,7 @@ import jax.numpy as jnp
 import numpy as np
 import pytest
 
-from tengri import FIXED, FREE, Fixed, Observation, Photometry, SEDModel, Uniform, load_ssp_data
+from tengri import DEFAULT, FREE, Fixed, Observation, Photometry, SEDModel, Uniform, load_ssp_data
 from tengri.components.dust._apply import two_component_dust
 from tengri.observation.line_flux_data import LineFluxData
 from tengri.observation.spectral_indices import (
@@ -105,7 +105,7 @@ def test_window_lut_reproduces_wne_reconstruction_bitexact():
             dust_attenuation={
                 "type": "two_component",
                 "law": "calzetti",
-                "all_params": FIXED,
+                "all_params": Fixed(DEFAULT),
                 "tau_diff": Fixed(0.0),
                 "tau_bc": Fixed(0.0),
             },
@@ -194,7 +194,7 @@ def _dust_model():
             dust_attenuation={
                 "type": "two_component",
                 "law": "calzetti",
-                "all_params": FIXED,
+                "all_params": Fixed(DEFAULT),
                 "tau_diff": Uniform(0.0, 2.0),
                 "tau_bc": Uniform(0.0, 2.0),
             },
@@ -562,7 +562,7 @@ def test_predict_spectral_indices_fast_raises_on_additive_nebular():
             observation=obs,
             sfh={"type": "dpl", "all_params": FREE},
             dust_attenuation=None,
-            neb={"type": "cue", "all_params": FIXED},
+            neb={"type": "cue", "all_params": Fixed(DEFAULT)},
             redshift=Fixed(0.05),
         )
     p = dict(m.spec.sample(jax.random.PRNGKey(0)))

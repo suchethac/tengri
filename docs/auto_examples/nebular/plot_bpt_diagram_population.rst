@@ -96,7 +96,7 @@ Allen et al. 2008, ApJS, 178, 20 (MAPPINGS V shocks).
                 ssp,
                 sfh={
                     "type": "dpl",
-                    "all_params": tengri.FIXED,
+                    "all_params": tengri.Fixed(tengri.DEFAULT),
                     "alpha": 1.0,
                     "beta": 2.5,
                     "tau_gyr": 0.1,
@@ -105,13 +105,13 @@ Allen et al. 2008, ApJS, 178, 20 (MAPPINGS V shocks).
                 dust_attenuation={
                     "law": "power_law",
                     "type": "two_component",
-                    "all_params": tengri.FIXED,
+                    "all_params": tengri.Fixed(tengri.DEFAULT),
                     "tau_diff": 0.05,
                     "tau_bc": 0.1,
                 },
                 neb={
                     "type": "cue",
-                    "all_params": tengri.FIXED,
+                    "all_params": tengri.Fixed(tengri.DEFAULT),
                     "logU": tengri.Fixed(logu),
                     "logZ_gas": tengri.Fixed(logz),
                 },
@@ -157,7 +157,7 @@ Allen et al. 2008, ApJS, 178, 20 (MAPPINGS V shocks).
             ssp,
             sfh={
                 "type": "dpl",
-                "all_params": tengri.FIXED,
+                "all_params": tengri.Fixed(tengri.DEFAULT),
                 "alpha": 1.0,
                 "beta": 2.0,
                 "tau_gyr": 0.15,
@@ -166,13 +166,13 @@ Allen et al. 2008, ApJS, 178, 20 (MAPPINGS V shocks).
             dust_attenuation={
                 "law": "power_law",
                 "type": "two_component",
-                "all_params": tengri.FIXED,
+                "all_params": tengri.Fixed(tengri.DEFAULT),
                 "tau_diff": 0.1,
                 "tau_bc": 0.2,
             },
             neb={
                 "type": "cue",
-                "all_params": tengri.FIXED,
+                "all_params": tengri.Fixed(tengri.DEFAULT),
                 "logU": tengri.Fixed(config["logu"]),
                 "logZ_gas": tengri.Fixed(config["logz"]),
             },
@@ -308,7 +308,7 @@ Allen et al. 2008, ApJS, 178, 20 (MAPPINGS V shocks).
 
 .. rst-class:: sphx-glr-timing
 
-   **Total running time of the script:** (0 minutes 16.771 seconds)
+   **Total running time of the script:** (0 minutes 9.422 seconds)
 
 
 .. _sphx_glr_download_auto_examples_nebular_plot_bpt_diagram_population.py:

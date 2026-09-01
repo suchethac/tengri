@@ -58,7 +58,7 @@ from reproduction.synthesizer._drivers import (
 
 import tengri
 from tengri import (
-    FIXED,
+    DEFAULT,
     FREE,
     Fixed,
     Observation,
@@ -225,9 +225,15 @@ _m_sfh = SEDModel.build(
         "tau_gyr": Fixed(TAU_GYR_FIDUCIAL),
         "age_gyr": Fixed(AGE_GYR_FIDUCIAL),
         "log_total_mass": Fixed(0.0),
-        "all_params": FIXED,
+        "all_params": Fixed(DEFAULT),
     },
-    dust_attenuation={"law": "power_law", "type": "two_component", "tau_bc": Fixed(0.0), "tau_diff": Fixed(0.0), "all_params": FIXED},
+    dust_attenuation={
+        "law": "power_law",
+        "type": "two_component",
+        "tau_bc": Fixed(0.0),
+        "tau_diff": Fixed(0.0),
+        "all_params": Fixed(DEFAULT),
+    },
     redshift=Fixed(0.0),
 )
 _state_sfh = _m_sfh.predict_state({})
@@ -288,9 +294,15 @@ m_stellar = SEDModel.build(
         "tau_gyr": Fixed(TAU_GYR_FIDUCIAL),
         "age_gyr": Fixed(AGE_GYR_FIDUCIAL),
         "log_total_mass": Fixed(LOG_MASS_FIDUCIAL),
-        "all_params": FIXED,
+        "all_params": Fixed(DEFAULT),
     },
-    dust_attenuation={"law": "power_law", "type": "two_component", "tau_bc": Fixed(0.0), "tau_diff": Fixed(0.0), "all_params": FIXED},
+    dust_attenuation={
+        "law": "power_law",
+        "type": "two_component",
+        "tau_bc": Fixed(0.0),
+        "tau_diff": Fixed(0.0),
+        "all_params": Fixed(DEFAULT),
+    },
     redshift=Fixed(0.0),
 )
 s_stellar = m_stellar.predict_state({})
@@ -340,7 +352,7 @@ print(
 # %%
 from tengri.dust import list_laws
 
-_tengri_laws = list_laws(headline=False).to_dict('fn')
+_tengri_laws = list_laws(headline=False).to_dict("fn")
 wave_law = np.logspace(np.log10(1000.0), np.log10(30000.0), 2000)
 
 
@@ -401,7 +413,7 @@ m_d = SEDModel.build(
         "tau_gyr": Fixed(TAU_GYR_FIDUCIAL),
         "age_gyr": Fixed(AGE_GYR_FIDUCIAL),
         "log_total_mass": Fixed(LOG_MASS_FIDUCIAL),
-        "all_params": FIXED,
+        "all_params": Fixed(DEFAULT),
     },
     dust_attenuation={
         "type": "two_component",
@@ -409,7 +421,7 @@ m_d = SEDModel.build(
         "law_diff": "calzetti",
         "tau_bc": Fixed(0.0),
         "tau_diff": Fixed(TAU_DIFF),
-        "all_params": FIXED,
+        "all_params": Fixed(DEFAULT),
     },
     redshift=Fixed(0.0),
 )
@@ -467,7 +479,7 @@ m_ir = SEDModel.build(
         "tau_gyr": Fixed(TAU_GYR_FIDUCIAL),
         "age_gyr": Fixed(AGE_GYR_FIDUCIAL),
         "log_total_mass": Fixed(LOG_MASS_FIDUCIAL),
-        "all_params": FIXED,
+        "all_params": Fixed(DEFAULT),
     },
     dust_attenuation={
         "type": "two_component",
@@ -475,14 +487,15 @@ m_ir = SEDModel.build(
         "law_diff": "calzetti",
         "tau_bc": Fixed(0.0),
         "tau_diff": Fixed(AV_FIDUCIAL / 1.086),
-        "all_params": FIXED,
-    }, dust_emission={
-            "type": "draine_li2007",
-            "qpah": Fixed(2.5),
-            "umin": Fixed(UMIN),
-            "gamma_dl": Fixed(0.05),
-            "all_params": FIXED,
-        },
+        "all_params": Fixed(DEFAULT),
+    },
+    dust_emission={
+        "type": "draine_li2007",
+        "qpah": Fixed(2.5),
+        "umin": Fixed(UMIN),
+        "gamma_dl": Fixed(0.05),
+        "all_params": Fixed(DEFAULT),
+    },
     redshift=Fixed(0.0),
 )
 s_ir = m_ir.predict_state({})
@@ -535,7 +548,7 @@ m_full = SEDModel.build(
         "tau_gyr": Fixed(TAU_GYR_FIDUCIAL),
         "age_gyr": Fixed(AGE_GYR_FIDUCIAL),
         "log_total_mass": Fixed(LOG_MASS_FIDUCIAL),
-        "all_params": FIXED,
+        "all_params": Fixed(DEFAULT),
     },
     dust_attenuation={
         "type": "two_component",
@@ -543,15 +556,21 @@ m_full = SEDModel.build(
         "law_diff": "calzetti",
         "tau_bc": Fixed(0.0),
         "tau_diff": Fixed(AV_FIDUCIAL / 1.086),
-        "all_params": FIXED,
-    }, dust_emission={
-            "type": "draine_li2007",
-            "qpah": Fixed(2.5),
-            "umin": Fixed(UMIN),
-            "gamma_dl": Fixed(0.05),
-            "all_params": FIXED,
-        },
-    neb={"type": "cue", "neb_logU": Fixed(-2.0), "neb_logZ_gas": Fixed(0.0), "all_params": FIXED},
+        "all_params": Fixed(DEFAULT),
+    },
+    dust_emission={
+        "type": "draine_li2007",
+        "qpah": Fixed(2.5),
+        "umin": Fixed(UMIN),
+        "gamma_dl": Fixed(0.05),
+        "all_params": Fixed(DEFAULT),
+    },
+    neb={
+        "type": "cue",
+        "neb_logU": Fixed(-2.0),
+        "neb_logZ_gas": Fixed(0.0),
+        "all_params": Fixed(DEFAULT),
+    },
     redshift=Fixed(0.0),
 )
 s_full = m_full.predict_state({})
@@ -598,10 +617,21 @@ m_neb = SEDModel.build(
         "start_gyr": Fixed(NEB_AGE),
         "end_gyr": Fixed(0.0),
         "log_total_mass": Fixed(NEB_LOGMASS),
-        "all_params": FIXED,
+        "all_params": Fixed(DEFAULT),
     },
-    dust_attenuation={"law": "power_law", "type": "two_component", "tau_bc": Fixed(0.0), "tau_diff": Fixed(0.0), "all_params": FIXED},
-    neb={"type": "cue", "neb_logU": Fixed(-2.0), "neb_logZ_gas": Fixed(0.0), "all_params": FIXED},
+    dust_attenuation={
+        "law": "power_law",
+        "type": "two_component",
+        "tau_bc": Fixed(0.0),
+        "tau_diff": Fixed(0.0),
+        "all_params": Fixed(DEFAULT),
+    },
+    neb={
+        "type": "cue",
+        "neb_logU": Fixed(-2.0),
+        "neb_logZ_gas": Fixed(0.0),
+        "all_params": Fixed(DEFAULT),
+    },
     redshift=Fixed(0.0),
 )
 s_neb = m_neb.predict_state({})
@@ -734,9 +764,15 @@ def _agn_grammar(disc="kubota_done", torus="simple", nlr="none", blr="none", cos
             "tau_gyr": Fixed(1.0),
             "age_gyr": Fixed(5.0),
             "log_total_mass": Fixed(0.0),
-            "all_params": FIXED,
+            "all_params": Fixed(DEFAULT),
         },
-        dust_attenuation={"law": "power_law", "type": "two_component", "tau_bc": Fixed(0.0), "tau_diff": Fixed(0.0), "all_params": FIXED},
+        dust_attenuation={
+            "law": "power_law",
+            "type": "two_component",
+            "tau_bc": Fixed(0.0),
+            "tau_diff": Fixed(0.0),
+            "all_params": Fixed(DEFAULT),
+        },
         agn={
             "type": "composable",
             "disc": {"type": disc},
@@ -754,7 +790,7 @@ def _agn_grammar(disc="kubota_done", torus="simple", nlr="none", blr="none", cos
             "agn_cos_inc": Fixed(cos_inc),
             "agn_theta_torus": Fixed(THETA_TORUS),
             "agn_torus_frac": Fixed(_TORUS_FRAC),
-            "all_params": FIXED,
+            "all_params": Fixed(DEFAULT),
         },
         redshift=Fixed(0.0),
     )
@@ -788,9 +824,15 @@ for disc_type, _ in _disc_models:
             "tau_gyr": Fixed(1.0),
             "age_gyr": Fixed(5.0),
             "log_total_mass": Fixed(0.0),
-            "all_params": FIXED,
+            "all_params": Fixed(DEFAULT),
         },
-        dust_attenuation={"law": "power_law", "type": "two_component", "tau_bc": Fixed(0.0), "tau_diff": Fixed(0.0), "all_params": FIXED},
+        dust_attenuation={
+            "law": "power_law",
+            "type": "two_component",
+            "tau_bc": Fixed(0.0),
+            "tau_diff": Fixed(0.0),
+            "all_params": Fixed(DEFAULT),
+        },
         agn={
             "type": "composable",
             "disc": {"type": disc_type},
@@ -802,7 +844,7 @@ for disc_type, _ in _disc_models:
             # disc runs at tengri's default 1e7 M⊙ — hotter and ~0.75x in peak.
             "agn_log_mbh": Fixed(float(np.log10(BH_MASS))),
             "agn_log_ledd": Fixed(float(np.log10(BH_EDD))),
-            "all_params": FIXED,
+            "all_params": Fixed(DEFAULT),
         },
         redshift=Fixed(0.0),
     )
@@ -994,16 +1036,22 @@ for torus_type in ("nenkova", "two_temperature"):
             "tau_gyr": Fixed(1.0),
             "age_gyr": Fixed(5.0),
             "log_total_mass": Fixed(0.0),
-            "all_params": FIXED,
+            "all_params": Fixed(DEFAULT),
         },
-        dust_attenuation={"law": "power_law", "type": "two_component", "tau_bc": Fixed(0.0), "tau_diff": Fixed(0.0), "all_params": FIXED},
+        dust_attenuation={
+            "law": "power_law",
+            "type": "two_component",
+            "tau_bc": Fixed(0.0),
+            "tau_diff": Fixed(0.0),
+            "all_params": Fixed(DEFAULT),
+        },
         agn={
             "type": "composable",
             "disc": {"type": "none"},
             "torus": {"type": torus_type},
             "lines": {"type": "none"},
             "agn_log_lbol": Fixed(agn_log_lbol),
-            "all_params": FIXED,
+            "all_params": Fixed(DEFAULT),
         },
         redshift=Fixed(0.0),
     )
@@ -1161,9 +1209,15 @@ _m_vis = SEDModel.build(
         "tau_gyr": Fixed(1.0),
         "age_gyr": Fixed(5.0),
         "log_total_mass": Fixed(0.0),
-        "all_params": FIXED,
+        "all_params": Fixed(DEFAULT),
     },
-    dust_attenuation={"law": "power_law", "type": "two_component", "tau_bc": Fixed(0.0), "tau_diff": Fixed(0.0), "all_params": FIXED},
+    dust_attenuation={
+        "law": "power_law",
+        "type": "two_component",
+        "tau_bc": Fixed(0.0),
+        "tau_diff": Fixed(0.0),
+        "all_params": Fixed(DEFAULT),
+    },
     agn={
         "type": "composable",
         "disc": {"type": "kubota_done"},
@@ -1171,7 +1225,7 @@ _m_vis = SEDModel.build(
         "agn_log_lbol": Fixed(agn_log_lbol),
         "agn_cos_inc": Uniform(0.0, 1.0),
         "agn_theta_torus": Fixed(THETA_TORUS),
-        "all_params": FIXED,
+        "all_params": Fixed(DEFAULT),
     },
     redshift=Fixed(0.0),
 )
@@ -1245,9 +1299,15 @@ def _unified_phot(approx):
             "tau_gyr": Fixed(1.0),
             "age_gyr": Fixed(5.0),
             "log_total_mass": Fixed(0.0),
-            "all_params": FIXED,
+            "all_params": Fixed(DEFAULT),
         },
-        dust_attenuation={"law": "power_law", "type": "two_component", "tau_bc": Fixed(0.0), "tau_diff": Fixed(0.0), "all_params": FIXED},
+        dust_attenuation={
+            "law": "power_law",
+            "type": "two_component",
+            "tau_bc": Fixed(0.0),
+            "tau_diff": Fixed(0.0),
+            "all_params": Fixed(DEFAULT),
+        },
         agn={
             "type": "composable",
             "disc": {"type": "kubota_done"},
@@ -1260,7 +1320,7 @@ def _unified_phot(approx):
             "agn_cos_inc": Fixed(BH_COS_INC),
             "agn_theta_torus": Fixed(THETA_TORUS),
             "agn_torus_frac": Fixed(_TORUS_FRAC),
-            "all_params": FIXED,
+            "all_params": Fixed(DEFAULT),
         },
         redshift=Fixed(0.05),
     )
@@ -1300,9 +1360,15 @@ _m_free = SEDModel.build(
         "tau_gyr": Fixed(1.0),
         "age_gyr": Fixed(5.0),
         "log_total_mass": Fixed(0.0),
-        "all_params": FIXED,
+        "all_params": Fixed(DEFAULT),
     },
-    dust_attenuation={"law": "power_law", "type": "two_component", "tau_bc": Fixed(0.0), "tau_diff": Fixed(0.0), "all_params": FIXED},
+    dust_attenuation={
+        "law": "power_law",
+        "type": "two_component",
+        "tau_bc": Fixed(0.0),
+        "tau_diff": Fixed(0.0),
+        "all_params": Fixed(DEFAULT),
+    },
     agn={
         "type": "composable",
         "disc": {"type": "kubota_done"},

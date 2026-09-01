@@ -131,7 +131,7 @@ def _cache_size(cached):
 
 @pytest.fixture
 def fwd_table(synthetic_ssp_wide, synthetic_tophat_obs):
-    from tengri import FIXED, ForwardModel, SEDModel
+    from tengri import DEFAULT, ForwardModel, SEDModel
     from tengri.parameters.priors import Fixed, Uniform
 
     with warnings.catch_warnings():
@@ -143,7 +143,7 @@ def fwd_table(synthetic_ssp_wide, synthetic_tophat_obs):
             dust_attenuation={
                 "law": "power_law",
                 "type": "two_component",
-                "all_params": FIXED,
+                "all_params": Fixed(DEFAULT),
                 "tau_bc": 0.5,
                 "tau_diff": Uniform(0.0, 2.0),
             },
@@ -167,7 +167,7 @@ def fwd_table_other(synthetic_ssp_wide, synthetic_tophat_obs):
     produces on this tabulated history — a discriminator that close leaves the
     control resting on the tolerance rather than on the physics.
     """
-    from tengri import FIXED, ForwardModel, SEDModel
+    from tengri import DEFAULT, ForwardModel, SEDModel
     from tengri.parameters.priors import Fixed, Uniform
 
     with warnings.catch_warnings():
@@ -179,7 +179,7 @@ def fwd_table_other(synthetic_ssp_wide, synthetic_tophat_obs):
             dust_attenuation={
                 "law": "power_law",
                 "type": "two_component",
-                "all_params": FIXED,
+                "all_params": Fixed(DEFAULT),
                 "tau_bc": 2.5,  # vs 0.5
                 "tau_diff": Uniform(0.0, 2.0),
             },

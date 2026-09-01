@@ -36,7 +36,7 @@ def test_three_sfh_variants_fit_in_one_process():
     mock_model = tengri.SEDModel.build(
         ssp,
         observation=obs,
-        sfh={"type": "tsnorm", "all_params": tengri.FIXED, "log_total_mass": 10.0},
+        sfh={"type": "tsnorm", "all_params": tengri.Fixed(tengri.DEFAULT), "log_total_mass": 10.0},
         redshift=tengri.Fixed(0.05),
         approx=tengri.WavePrecomp(n_z=20),
     )

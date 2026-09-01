@@ -28,7 +28,7 @@ wiring rather than poking a component's internals.
 import numpy as np
 import pytest
 
-from tengri import FIXED, Fixed, SEDModel
+from tengri import DEFAULT, Fixed, SEDModel
 from tengri.builders.dust import emission as emission_builders
 
 pytestmark = pytest.mark.contract
@@ -43,17 +43,17 @@ AFFINE_MODELS = {
 
 def _model(ssp, model_name, eta, **emission_extra):
     """Two-component dust with one emission model at a given eta_balance."""
-    emission = {"type": model_name, "all_params": FIXED, "eta_balance": Fixed(eta)}
+    emission = {"type": model_name, "all_params": Fixed(DEFAULT), "eta_balance": Fixed(eta)}
     emission.update(emission_extra)
     return SEDModel.build(
         ssp_data=ssp,
-        met={"logzsol": Fixed(0.0), "all_params": FIXED},
+        met={"logzsol": Fixed(0.0), "all_params": Fixed(DEFAULT)},
         sfh={
             "type": "delayed",
             "tau_gyr": Fixed(1.0),
             "age_gyr": Fixed(5.0),
             "log_total_mass": Fixed(10.0),
-            "all_params": FIXED,
+            "all_params": Fixed(DEFAULT),
         },
         dust_attenuation={
             "type": "two_component",
@@ -61,7 +61,7 @@ def _model(ssp, model_name, eta, **emission_extra):
             "law_diff": "calzetti",
             "tau_bc": Fixed(1.0),
             "tau_diff": Fixed(0.7),
-            "all_params": FIXED,
+            "all_params": Fixed(DEFAULT),
         },
         dust_emission=emission,
         redshift=Fixed(0.0),

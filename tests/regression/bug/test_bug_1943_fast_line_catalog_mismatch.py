@@ -69,13 +69,13 @@ def ssp():
 
 def _build(ssp, approx, obs, *, dust_attenuation: bool):
     """A dusty (or not) Cue model over ``obs``."""
-    from tengri import FIXED, FREE, Fixed, SEDModel
+    from tengri import DEFAULT, FREE, Fixed, SEDModel
 
     dust_block = (
         {
             "type": "two_component",
             "law": "calzetti",
-            "all_params": FIXED,
+            "all_params": Fixed(DEFAULT),
         }
         if dust_attenuation
         else {"type": "none"}
@@ -87,7 +87,7 @@ def _build(ssp, approx, obs, *, dust_attenuation: bool):
             observation=obs,
             sfh={"type": "dpl", "all_params": FREE},
             dust_attenuation=dust_block,
-            neb={"type": "cue", "all_params": FIXED},
+            neb={"type": "cue", "all_params": Fixed(DEFAULT)},
             redshift=Fixed(0.1),
             approx=approx,
         )

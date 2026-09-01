@@ -92,11 +92,11 @@ for fname, filters in FILTER_SETS.items():
         mdl = tengri.SEDModel.build(
             ssp,
             observation=obs,
-            sfh={"type": "tsnorm", "all_params": tengri.FIXED},
+            sfh={"type": "tsnorm", "all_params": tengri.Fixed(tengri.DEFAULT)},
             dust_attenuation={
                 "law": "power_law",
                 "type": "two_component",
-                "all_params": tengri.FIXED,
+                "all_params": tengri.Fixed(tengri.DEFAULT),
             },
             redshift=tengri.Fixed(0.1),
         )

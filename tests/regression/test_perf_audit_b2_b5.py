@@ -25,7 +25,7 @@ import pytest
 
 import tengri
 from tengri import (
-    FIXED,
+    DEFAULT,
     FREE,
     Fixed,
     ForwardModel,
@@ -72,9 +72,9 @@ def test_forward_predict_under_jit_with_dust_ir(emission_label):
     ssp = load_ssp_data(_ssp_path_or_skip())
     obs = Observation(photometry=Photometry.from_names(["sdss_r", "wise_w4"]))
     if emission_label == "dale2014":
-        emission = builders.dust.emission.dale2014(all_params=FIXED)
+        emission = builders.dust.emission.dale2014(all_params=Fixed(DEFAULT))
     else:
-        emission = builders.dust.emission.modified_blackbody(all_params=FIXED)
+        emission = builders.dust.emission.modified_blackbody(all_params=Fixed(DEFAULT))
 
     model = SEDModel.build(
         ssp_data=ssp,
@@ -82,7 +82,7 @@ def test_forward_predict_under_jit_with_dust_ir(emission_label):
         approx=WavePrecomp(),
         sfh=builders.sfh.tsnorm(all_params=FREE),
         dust_attenuation=builders.dust.two_component(
-            all_params=FIXED,
+            all_params=Fixed(DEFAULT),
             law="calzetti",
             tau_bc=Uniform(0, 1),
         ),

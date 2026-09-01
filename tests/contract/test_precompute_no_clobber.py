@@ -82,19 +82,19 @@ def _build_with_wave_precomp(ssp_data, filters):
     SEDModel
         A built model whose stellar component should carry a populated LUT.
     """
-    from tengri import FIXED, Fixed, Observation, Photometry, SEDModel, WavePrecomp
+    from tengri import DEFAULT, Fixed, Observation, Photometry, SEDModel, WavePrecomp
 
     return SEDModel.build(
         ssp_data=ssp_data,
         observation=Observation(photometry=Photometry(filters=tuple(filters))),
         redshift=Fixed(0.05),
         approx=WavePrecomp(),
-        sfh={"type": "dpl", "all_params": FIXED},
+        sfh={"type": "dpl", "all_params": Fixed(DEFAULT)},
         neb={"type": "none"},
         dust_attenuation={
             "type": "two_component",
             "law": "calzetti",
-            "all_params": FIXED,
+            "all_params": Fixed(DEFAULT),
             "tau_diff": 0.5,
         },
     )
@@ -134,19 +134,19 @@ def test_unconditional_pass_still_resolves_without_approx(synthetic_ssp, tophat_
     implemented by skipping resolution altogether, which would reinstate the
     #1278 defect where a component's ``load()`` never ran on a default build.
     """
-    from tengri import FIXED, Fixed, Observation, Photometry, SEDModel
+    from tengri import DEFAULT, Fixed, Observation, Photometry, SEDModel
 
     model = SEDModel.build(
         ssp_data=synthetic_ssp,
         observation=Observation(photometry=Photometry(filters=tuple(tophat_filters))),
         redshift=Fixed(0.05),
         approx=None,
-        sfh={"type": "dpl", "all_params": FIXED},
+        sfh={"type": "dpl", "all_params": Fixed(DEFAULT)},
         neb={"type": "none"},
         dust_attenuation={
             "type": "two_component",
             "law": "calzetti",
-            "all_params": FIXED,
+            "all_params": Fixed(DEFAULT),
             "tau_diff": 0.5,
         },
     )

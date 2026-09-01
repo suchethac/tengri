@@ -31,17 +31,17 @@ import tengri
 
 pytestmark = pytest.mark.regression_bug
 
-_SFH = {"type": "const", "all_params": tengri.FIXED, "log_total_mass": -10.0}
+_SFH = {"type": "const", "all_params": tengri.Fixed(tengri.DEFAULT), "log_total_mass": -10.0}
 _DUST = {
     "law": "power_law",
     "type": "two_component",
-    "all_params": tengri.FIXED,
+    "all_params": tengri.Fixed(tengri.DEFAULT),
     "tau_diff": 0.0,
     "tau_bc": 0.0,
 }
 _DISC = {
-    "disc": {"type": "multicolor", "all_params": tengri.FIXED},
-    "all_params": tengri.FIXED,
+    "disc": {"type": "multicolor", "all_params": tengri.Fixed(tengri.DEFAULT)},
+    "all_params": tengri.Fixed(tengri.DEFAULT),
     "log_lbol": 12.0,
     "frac": 1.0,
 }
@@ -84,8 +84,8 @@ def _sed(ssp, torus: dict) -> np.ndarray:
 )
 def test_torus_param_is_not_a_noop(ssp, torus_type, key, v1, v2):
     """Setting a torus shape param via SEDModel.build must change predict()."""
-    s1 = _sed(ssp, {"type": torus_type, "all_params": tengri.FIXED, key: v1})
-    s2 = _sed(ssp, {"type": torus_type, "all_params": tengri.FIXED, key: v2})
+    s1 = _sed(ssp, {"type": torus_type, "all_params": tengri.Fixed(tengri.DEFAULT), key: v1})
+    s2 = _sed(ssp, {"type": torus_type, "all_params": tengri.Fixed(tengri.DEFAULT), key: v2})
     rel = float(np.abs(s1 - s2).max() / max(np.abs(s1).max(), 1e-99))
     assert rel > 1e-3, (
         f"{torus_type}.{key} is a no-op via the builder (rel diff {rel:.2e}); "
@@ -104,8 +104,8 @@ def test_skirtor_agnfitter_emits_physical_magnitude(ssp):
         sfh=_SFH,
         dust_attenuation=_DUST,
         agn={
-            "disc": {"type": "multicolor", "all_params": tengri.FIXED},
-            "all_params": tengri.FIXED,
+            "disc": {"type": "multicolor", "all_params": tengri.Fixed(tengri.DEFAULT)},
+            "all_params": tengri.Fixed(tengri.DEFAULT),
             "log_lbol": 12.0,
             "frac": 1.0,
         },
@@ -113,7 +113,7 @@ def test_skirtor_agnfitter_emits_physical_magnitude(ssp):
     )
     p = dict(base.spec.sample(jax.random.PRNGKey(0)))
     disc = np.asarray(base.predict_rest_sed(p).sed)
-    total = _sed(ssp, {"type": "skirtor_agnfitter", "all_params": tengri.FIXED})
+    total = _sed(ssp, {"type": "skirtor_agnfitter", "all_params": tengri.Fixed(tengri.DEFAULT)})
     # Interpolate disc onto total's grid if needed, then require the torus adds
     # a contribution of order the disc luminosity (not ~1e-18).
     disc_max = float(np.abs(disc).max())

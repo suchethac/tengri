@@ -163,23 +163,22 @@ For real data, pass your own `(flux, noise)` to `Fitter`. The full
 walkthrough is in [`notebooks/00_quickstart.py`](notebooks/00_quickstart.py).
 
 If you want more control than a recipe gives you, build the model with
-the nested-dict grammar. Import the sentinels and priors it uses first
-(`FREE`/`FIXED` are singletons, distinct from the `Fixed(...)` prior
-above):
+the nested-dict grammar. Import the sentinel it uses first (`FREE` is a
+singleton, distinct from the `Fixed(...)` prior above):
 
 ```python
-from tengri import FREE, FIXED, Uniform
+from tengri import DEFAULT, Fixed, FREE, Uniform
 
 sed = SEDModel.build(
     ssp_data=ssp, observation=obs,
     sfh={'type': 'dpl', 'all_params': FREE, 'beta': Uniform(1, 3)},
-    dust_attenuation={'type': 'two_component', 'law': 'calzetti', 'all_params': FIXED},
-    neb={'type': 'cue', 'all_params': FIXED},
+    dust_attenuation={'type': 'two_component', 'law': 'calzetti', 'all_params': Fixed(DEFAULT)},
+    neb={'type': 'cue', 'all_params': Fixed(DEFAULT)},
 )
 ```
 
-`all_params` sets every parameter in the group at once; per-parameter keys
-(like `beta` above) override it.
+`all_params` sets every parameter in the group at once (default: fixed at
+the registry default); per-parameter keys (like `beta` above) override it.
 
 See [`notebooks/04_building_models.py`](notebooks/04_building_models.py)
 for the grammar; `tengri.recipes` shows the curated starting points.

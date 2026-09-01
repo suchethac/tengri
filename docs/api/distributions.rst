@@ -57,20 +57,21 @@ Laplace
 Sentinels
 ---------
 
-``FREE`` and ``FIXED`` are not distributions. They are singleton markers used
-in the nested-dict grammar of :meth:`tengri.SEDModel.build` to say *"take the
-registry's default"* — a default prior for ``FREE``, a default value for
-``FIXED``.
+``FREE`` and ``DEFAULT`` are not distributions. ``FREE`` is a singleton marker
+used in the nested-dict grammar of :meth:`tengri.SEDModel.build` to say *"take
+the registry's default prior"* for a parameter. ``DEFAULT`` is legal only as
+the argument of :class:`tengri.Fixed`, e.g. ``Fixed(DEFAULT)``, and says
+*"take the registry's default value"* instead.
 
 Note the deliberate spelling difference from :class:`tengri.Fixed` above:
-``Fixed(0.05)`` is a distribution that pins a parameter to the value **you**
-give it, whereas ``FIXED`` pins it to the value the **registry** already
-carries. They are different objects and are not interchangeable.
+``Fixed(0.05)`` pins a parameter to the value **you** give it, whereas
+``Fixed(DEFAULT)`` pins it to the value the **registry** already carries.
+They are different objects and are not interchangeable.
 
 .. autodata:: tengri.parameters.sentinels.FREE
    :annotation:
    :noindex:
 
-.. autodata:: tengri.parameters.sentinels.FIXED
+.. autodata:: tengri.parameters.sentinels.DEFAULT
    :annotation:
    :noindex:

@@ -40,7 +40,7 @@ References:
 - Marino et al. 2013, ApJ, 768, 171 (N2 metallicity diagnostic)
 - Pettini & Pagel 2004, MNRAS, 348, L59 (O3N2 diagnostic)
 
-.. GENERATED FROM PYTHON SOURCE LINES 25-128
+.. GENERATED FROM PYTHON SOURCE LINES 25-132
 
 
 
@@ -78,7 +78,7 @@ References:
         SSP,
         sfh={
             "type": "dpl",
-            "all_params": tengri.FIXED,
+            "all_params": tengri.Fixed(tengri.DEFAULT),
             "tau_gyr": 0.05,
             "log_total_mass": 10.0,
             "alpha": 4.0,
@@ -87,11 +87,15 @@ References:
         dust_attenuation={
             "law": "power_law",
             "type": "two_component",
-            "all_params": tengri.FIXED,
+            "all_params": tengri.Fixed(tengri.DEFAULT),
             "tau_diff": 0.0,
             "tau_bc": 0.0,
         },
-        neb={"type": "cue", "all_params": tengri.FIXED, "logZ_gas": tengri.Uniform(-2.0, 0.5)},
+        neb={
+            "type": "cue",
+            "all_params": tengri.Fixed(tengri.DEFAULT),
+            "logZ_gas": tengri.Uniform(-2.0, 0.5),
+        },
         redshift=tengri.Fixed(0.0),
     )
     baseline = dict(model.spec.sample(jax.random.PRNGKey(0)))
@@ -158,11 +162,6 @@ References:
         ax.set_xlabel(r"$12 + \log(\mathrm{O/H})$")
 
     plt.savefig("plot_strong_line_metallicity_diagnostics.png", dpi=150, bbox_inches="tight")
-
-
-.. rst-class:: sphx-glr-timing
-
-   **Total running time of the script:** (0 minutes 2.374 seconds)
 
 
 .. _sphx_glr_download_auto_examples_nebular_plot_strong_line_metallicity_diagnostics.py:

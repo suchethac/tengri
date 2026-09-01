@@ -44,13 +44,17 @@ class TestFitKeepsWarmCaches:
 
     @staticmethod
     def _model_and_data(ssp_data_wne, synthetic_tophat_obs):
-        from tengri import FIXED, FREE, SEDModel
+        from tengri import DEFAULT, FREE, Fixed, SEDModel
 
         model = SEDModel.build(
             ssp_data=ssp_data_wne,
             observation=synthetic_tophat_obs,
             sfh={"type": "dpl", "all_params": FREE},
-            dust_attenuation={"law": "power_law", "type": "two_component", "all_params": FIXED},
+            dust_attenuation={
+                "law": "power_law",
+                "type": "two_component",
+                "all_params": Fixed(DEFAULT),
+            },
             redshift=0.05,
         )
         key = jax.random.PRNGKey(0)

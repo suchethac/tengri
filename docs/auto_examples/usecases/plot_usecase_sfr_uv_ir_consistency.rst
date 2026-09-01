@@ -65,7 +65,7 @@ References
     To fit them, pass 'all_params': FREE:
       dust_attenuation={'all_params': FREE, ...}
     To keep them fixed and silence this warning, say so explicitly:
-      dust_attenuation={'all_params': FIXED, ...}
+      dust_attenuation={'all_params': Fixed(DEFAULT), ...}
       model = SEDModel.build(ssp_data=ssp, observation=None, **model_dict)
     /tengri/examples/usecases/plot_usecase_sfr_uv_ir_consistency.py:127: DefaultFixedParametersWarning: Group 'sfh' states no 'all_params' disposition, so its remaining parameter was fixed at declared defaults:
       sfh_dpl_age_gyr=13.81
@@ -73,7 +73,7 @@ References
     To fit them, pass 'all_params': FREE:
       sfh={'all_params': FREE, ...}
     To keep them fixed and silence this warning, say so explicitly:
-      sfh={'all_params': FIXED, ...}
+      sfh={'all_params': Fixed(DEFAULT), ...}
       model = SEDModel.build(ssp_data=ssp, observation=None, **model_dict)
     /tengri/examples/usecases/plot_usecase_sfr_uv_ir_consistency.py:127: DefaultFixedParametersWarning: Group 'dust_attenuation' states no 'all_params' disposition, so its remaining 5 parameters were fixed at declared defaults:
       dust_Rv=3.1, dust_bump_strength=0, dust_delta=0, dust_f_obscuration=0, dust_slope=-0.7
@@ -81,7 +81,7 @@ References
     To fit them, pass 'all_params': FREE:
       dust_attenuation={'all_params': FREE, ...}
     To keep them fixed and silence this warning, say so explicitly:
-      dust_attenuation={'all_params': FIXED, ...}
+      dust_attenuation={'all_params': Fixed(DEFAULT), ...}
       model = SEDModel.build(ssp_data=ssp, observation=None, **model_dict)
     /tengri/examples/usecases/plot_usecase_sfr_uv_ir_consistency.py:127: DefaultFixedParametersWarning: Group 'sfh' states no 'all_params' disposition, so its remaining parameter was fixed at declared defaults:
       sfh_dpl_age_gyr=13.81
@@ -89,7 +89,7 @@ References
     To fit them, pass 'all_params': FREE:
       sfh={'all_params': FREE, ...}
     To keep them fixed and silence this warning, say so explicitly:
-      sfh={'all_params': FIXED, ...}
+      sfh={'all_params': Fixed(DEFAULT), ...}
       model = SEDModel.build(ssp_data=ssp, observation=None, **model_dict)
     /tengri/examples/usecases/plot_usecase_sfr_uv_ir_consistency.py:127: DefaultFixedParametersWarning: Group 'dust_attenuation' states no 'all_params' disposition, so its remaining 5 parameters were fixed at declared defaults:
       dust_Rv=3.1, dust_bump_strength=0, dust_delta=0, dust_f_obscuration=0, dust_slope=-0.7
@@ -97,7 +97,7 @@ References
     To fit them, pass 'all_params': FREE:
       dust_attenuation={'all_params': FREE, ...}
     To keep them fixed and silence this warning, say so explicitly:
-      dust_attenuation={'all_params': FIXED, ...}
+      dust_attenuation={'all_params': Fixed(DEFAULT), ...}
       model = SEDModel.build(ssp_data=ssp, observation=None, **model_dict)
     /tengri/examples/usecases/plot_usecase_sfr_uv_ir_consistency.py:127: DefaultFixedParametersWarning: Group 'sfh' states no 'all_params' disposition, so its remaining parameter was fixed at declared defaults:
       sfh_dpl_age_gyr=13.81
@@ -105,7 +105,7 @@ References
     To fit them, pass 'all_params': FREE:
       sfh={'all_params': FREE, ...}
     To keep them fixed and silence this warning, say so explicitly:
-      sfh={'all_params': FIXED, ...}
+      sfh={'all_params': Fixed(DEFAULT), ...}
       model = SEDModel.build(ssp_data=ssp, observation=None, **model_dict)
     /tengri/examples/usecases/plot_usecase_sfr_uv_ir_consistency.py:127: DefaultFixedParametersWarning: Group 'dust_attenuation' states no 'all_params' disposition, so its remaining 5 parameters were fixed at declared defaults:
       dust_Rv=3.1, dust_bump_strength=0, dust_delta=0, dust_f_obscuration=0, dust_slope=-0.7
@@ -113,7 +113,7 @@ References
     To fit them, pass 'all_params': FREE:
       dust_attenuation={'all_params': FREE, ...}
     To keep them fixed and silence this warning, say so explicitly:
-      dust_attenuation={'all_params': FIXED, ...}
+      dust_attenuation={'all_params': Fixed(DEFAULT), ...}
       model = SEDModel.build(ssp_data=ssp, observation=None, **model_dict)
     /tengri/examples/usecases/plot_usecase_sfr_uv_ir_consistency.py:127: DefaultFixedParametersWarning: Group 'sfh' states no 'all_params' disposition, so its remaining parameter was fixed at declared defaults:
       sfh_dpl_age_gyr=13.81
@@ -121,7 +121,7 @@ References
     To fit them, pass 'all_params': FREE:
       sfh={'all_params': FREE, ...}
     To keep them fixed and silence this warning, say so explicitly:
-      sfh={'all_params': FIXED, ...}
+      sfh={'all_params': Fixed(DEFAULT), ...}
       model = SEDModel.build(ssp_data=ssp, observation=None, **model_dict)
     /tengri/examples/usecases/plot_usecase_sfr_uv_ir_consistency.py:127: DefaultFixedParametersWarning: Group 'dust_attenuation' states no 'all_params' disposition, so its remaining 5 parameters were fixed at declared defaults:
       dust_Rv=3.1, dust_bump_strength=0, dust_delta=0, dust_f_obscuration=0, dust_slope=-0.7
@@ -129,7 +129,7 @@ References
     To fit them, pass 'all_params': FREE:
       dust_attenuation={'all_params': FREE, ...}
     To keep them fixed and silence this warning, say so explicitly:
-      dust_attenuation={'all_params': FIXED, ...}
+      dust_attenuation={'all_params': Fixed(DEFAULT), ...}
       model = SEDModel.build(ssp_data=ssp, observation=None, **model_dict)
     /tengri/examples/usecases/plot_usecase_sfr_uv_ir_consistency.py:127: DefaultFixedParametersWarning: Group 'sfh' states no 'all_params' disposition, so its remaining parameter was fixed at declared defaults:
       sfh_dpl_age_gyr=13.81
@@ -137,7 +137,7 @@ References
     To fit them, pass 'all_params': FREE:
       sfh={'all_params': FREE, ...}
     To keep them fixed and silence this warning, say so explicitly:
-      sfh={'all_params': FIXED, ...}
+      sfh={'all_params': Fixed(DEFAULT), ...}
       model = SEDModel.build(ssp_data=ssp, observation=None, **model_dict)
     /tengri/examples/usecases/plot_usecase_sfr_uv_ir_consistency.py:127: DefaultFixedParametersWarning: Group 'dust_attenuation' states no 'all_params' disposition, so its remaining 5 parameters were fixed at declared defaults:
       dust_Rv=3.1, dust_bump_strength=0, dust_delta=0, dust_f_obscuration=0, dust_slope=-0.7
@@ -145,7 +145,7 @@ References
     To fit them, pass 'all_params': FREE:
       dust_attenuation={'all_params': FREE, ...}
     To keep them fixed and silence this warning, say so explicitly:
-      dust_attenuation={'all_params': FIXED, ...}
+      dust_attenuation={'all_params': Fixed(DEFAULT), ...}
       model = SEDModel.build(ssp_data=ssp, observation=None, **model_dict)
     /tengri/examples/usecases/plot_usecase_sfr_uv_ir_consistency.py:127: DefaultFixedParametersWarning: Group 'sfh' states no 'all_params' disposition, so its remaining parameter was fixed at declared defaults:
       sfh_dpl_age_gyr=13.81
@@ -153,7 +153,7 @@ References
     To fit them, pass 'all_params': FREE:
       sfh={'all_params': FREE, ...}
     To keep them fixed and silence this warning, say so explicitly:
-      sfh={'all_params': FIXED, ...}
+      sfh={'all_params': Fixed(DEFAULT), ...}
       model = SEDModel.build(ssp_data=ssp, observation=None, **model_dict)
     /tengri/examples/usecases/plot_usecase_sfr_uv_ir_consistency.py:127: DefaultFixedParametersWarning: Group 'dust_attenuation' states no 'all_params' disposition, so its remaining 5 parameters were fixed at declared defaults:
       dust_Rv=3.1, dust_bump_strength=0, dust_delta=0, dust_f_obscuration=0, dust_slope=-0.7
@@ -161,7 +161,7 @@ References
     To fit them, pass 'all_params': FREE:
       dust_attenuation={'all_params': FREE, ...}
     To keep them fixed and silence this warning, say so explicitly:
-      dust_attenuation={'all_params': FIXED, ...}
+      dust_attenuation={'all_params': Fixed(DEFAULT), ...}
       model = SEDModel.build(ssp_data=ssp, observation=None, **model_dict)
     /tengri/examples/usecases/plot_usecase_sfr_uv_ir_consistency.py:127: DefaultFixedParametersWarning: Group 'sfh' states no 'all_params' disposition, so its remaining parameter was fixed at declared defaults:
       sfh_dpl_age_gyr=13.81
@@ -169,7 +169,7 @@ References
     To fit them, pass 'all_params': FREE:
       sfh={'all_params': FREE, ...}
     To keep them fixed and silence this warning, say so explicitly:
-      sfh={'all_params': FIXED, ...}
+      sfh={'all_params': Fixed(DEFAULT), ...}
       model = SEDModel.build(ssp_data=ssp, observation=None, **model_dict)
     /tengri/examples/usecases/plot_usecase_sfr_uv_ir_consistency.py:127: DefaultFixedParametersWarning: Group 'dust_attenuation' states no 'all_params' disposition, so its remaining 5 parameters were fixed at declared defaults:
       dust_Rv=3.1, dust_bump_strength=0, dust_delta=0, dust_f_obscuration=0, dust_slope=-0.7
@@ -177,7 +177,7 @@ References
     To fit them, pass 'all_params': FREE:
       dust_attenuation={'all_params': FREE, ...}
     To keep them fixed and silence this warning, say so explicitly:
-      dust_attenuation={'all_params': FIXED, ...}
+      dust_attenuation={'all_params': Fixed(DEFAULT), ...}
       model = SEDModel.build(ssp_data=ssp, observation=None, **model_dict)
     /tengri/examples/usecases/plot_usecase_sfr_uv_ir_consistency.py:127: DefaultFixedParametersWarning: Group 'sfh' states no 'all_params' disposition, so its remaining parameter was fixed at declared defaults:
       sfh_dpl_age_gyr=13.81
@@ -185,7 +185,7 @@ References
     To fit them, pass 'all_params': FREE:
       sfh={'all_params': FREE, ...}
     To keep them fixed and silence this warning, say so explicitly:
-      sfh={'all_params': FIXED, ...}
+      sfh={'all_params': Fixed(DEFAULT), ...}
       model = SEDModel.build(ssp_data=ssp, observation=None, **model_dict)
     /tengri/examples/usecases/plot_usecase_sfr_uv_ir_consistency.py:127: DefaultFixedParametersWarning: Group 'dust_attenuation' states no 'all_params' disposition, so its remaining 5 parameters were fixed at declared defaults:
       dust_Rv=3.1, dust_bump_strength=0, dust_delta=0, dust_f_obscuration=0, dust_slope=-0.7
@@ -193,7 +193,7 @@ References
     To fit them, pass 'all_params': FREE:
       dust_attenuation={'all_params': FREE, ...}
     To keep them fixed and silence this warning, say so explicitly:
-      dust_attenuation={'all_params': FIXED, ...}
+      dust_attenuation={'all_params': Fixed(DEFAULT), ...}
       model = SEDModel.build(ssp_data=ssp, observation=None, **model_dict)
     /tengri/examples/usecases/plot_usecase_sfr_uv_ir_consistency.py:127: DefaultFixedParametersWarning: Group 'sfh' states no 'all_params' disposition, so its remaining parameter was fixed at declared defaults:
       sfh_dpl_age_gyr=13.81
@@ -201,7 +201,7 @@ References
     To fit them, pass 'all_params': FREE:
       sfh={'all_params': FREE, ...}
     To keep them fixed and silence this warning, say so explicitly:
-      sfh={'all_params': FIXED, ...}
+      sfh={'all_params': Fixed(DEFAULT), ...}
       model = SEDModel.build(ssp_data=ssp, observation=None, **model_dict)
     /tengri/examples/usecases/plot_usecase_sfr_uv_ir_consistency.py:127: DefaultFixedParametersWarning: Group 'dust_attenuation' states no 'all_params' disposition, so its remaining 5 parameters were fixed at declared defaults:
       dust_Rv=3.1, dust_bump_strength=0, dust_delta=0, dust_f_obscuration=0, dust_slope=-0.7
@@ -209,7 +209,7 @@ References
     To fit them, pass 'all_params': FREE:
       dust_attenuation={'all_params': FREE, ...}
     To keep them fixed and silence this warning, say so explicitly:
-      dust_attenuation={'all_params': FIXED, ...}
+      dust_attenuation={'all_params': Fixed(DEFAULT), ...}
       model = SEDModel.build(ssp_data=ssp, observation=None, **model_dict)
     /tengri/examples/usecases/plot_usecase_sfr_uv_ir_consistency.py:127: DefaultFixedParametersWarning: Group 'sfh' states no 'all_params' disposition, so its remaining parameter was fixed at declared defaults:
       sfh_dpl_age_gyr=13.81
@@ -217,7 +217,7 @@ References
     To fit them, pass 'all_params': FREE:
       sfh={'all_params': FREE, ...}
     To keep them fixed and silence this warning, say so explicitly:
-      sfh={'all_params': FIXED, ...}
+      sfh={'all_params': Fixed(DEFAULT), ...}
       model = SEDModel.build(ssp_data=ssp, observation=None, **model_dict)
     /tengri/examples/usecases/plot_usecase_sfr_uv_ir_consistency.py:127: DefaultFixedParametersWarning: Group 'dust_attenuation' states no 'all_params' disposition, so its remaining 5 parameters were fixed at declared defaults:
       dust_Rv=3.1, dust_bump_strength=0, dust_delta=0, dust_f_obscuration=0, dust_slope=-0.7
@@ -225,7 +225,7 @@ References
     To fit them, pass 'all_params': FREE:
       dust_attenuation={'all_params': FREE, ...}
     To keep them fixed and silence this warning, say so explicitly:
-      dust_attenuation={'all_params': FIXED, ...}
+      dust_attenuation={'all_params': Fixed(DEFAULT), ...}
       model = SEDModel.build(ssp_data=ssp, observation=None, **model_dict)
     /tengri/examples/usecases/plot_usecase_sfr_uv_ir_consistency.py:127: DefaultFixedParametersWarning: Group 'sfh' states no 'all_params' disposition, so its remaining parameter was fixed at declared defaults:
       sfh_dpl_age_gyr=13.81
@@ -233,7 +233,7 @@ References
     To fit them, pass 'all_params': FREE:
       sfh={'all_params': FREE, ...}
     To keep them fixed and silence this warning, say so explicitly:
-      sfh={'all_params': FIXED, ...}
+      sfh={'all_params': Fixed(DEFAULT), ...}
       model = SEDModel.build(ssp_data=ssp, observation=None, **model_dict)
     /tengri/examples/usecases/plot_usecase_sfr_uv_ir_consistency.py:127: DefaultFixedParametersWarning: Group 'dust_attenuation' states no 'all_params' disposition, so its remaining 5 parameters were fixed at declared defaults:
       dust_Rv=3.1, dust_bump_strength=0, dust_delta=0, dust_f_obscuration=0, dust_slope=-0.7
@@ -241,7 +241,7 @@ References
     To fit them, pass 'all_params': FREE:
       dust_attenuation={'all_params': FREE, ...}
     To keep them fixed and silence this warning, say so explicitly:
-      dust_attenuation={'all_params': FIXED, ...}
+      dust_attenuation={'all_params': Fixed(DEFAULT), ...}
       model = SEDModel.build(ssp_data=ssp, observation=None, **model_dict)
     /tengri/examples/usecases/plot_usecase_sfr_uv_ir_consistency.py:127: DefaultFixedParametersWarning: Group 'sfh' states no 'all_params' disposition, so its remaining parameter was fixed at declared defaults:
       sfh_dpl_age_gyr=13.81
@@ -249,7 +249,7 @@ References
     To fit them, pass 'all_params': FREE:
       sfh={'all_params': FREE, ...}
     To keep them fixed and silence this warning, say so explicitly:
-      sfh={'all_params': FIXED, ...}
+      sfh={'all_params': Fixed(DEFAULT), ...}
       model = SEDModel.build(ssp_data=ssp, observation=None, **model_dict)
 
 
@@ -272,7 +272,7 @@ References
     import matplotlib.pyplot as plt
     import numpy as np
 
-    from tengri import FIXED, Fixed, SEDModel, load_ssp
+    from tengri import DEFAULT, Fixed, SEDModel, load_ssp
     from tengri.plot import setup_style
 
     # Suppress JAX and matplotlib warnings
@@ -351,8 +351,8 @@ References
                 "tau_bc": Fixed(tau_bc),
                 "tau_diff": Fixed(tau_diff),
             },
-            "dust_emission": {"type": "dale2014", "all_params": FIXED},
-            "neb": {"type": "cue", "all_params": FIXED},
+            "dust_emission": {"type": "dale2014", "all_params": Fixed(DEFAULT)},
+            "neb": {"type": "cue", "all_params": Fixed(DEFAULT)},
             "redshift": Fixed(0.01),
             "igm": {"type": "none"},
         }
@@ -465,7 +465,7 @@ References
 
 .. rst-class:: sphx-glr-timing
 
-   **Total running time of the script:** (0 minutes 10.274 seconds)
+   **Total running time of the script:** (0 minutes 2.856 seconds)
 
 
 .. _sphx_glr_download_auto_examples_usecases_plot_usecase_sfr_uv_ir_consistency.py:

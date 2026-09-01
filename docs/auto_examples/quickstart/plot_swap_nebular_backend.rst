@@ -63,7 +63,7 @@ Reference: Li+2025 (Cue emulator; arXiv:2405.04598).
     # A young starburst: peak ~30 Myr ago, still ionizing
     sfh = {
         "type": "dpl",
-        "all_params": tengri.FIXED,
+        "all_params": tengri.Fixed(tengri.DEFAULT),
         "alpha": 3.0,
         "beta": 0.3,
         "tau_gyr": 0.03,
@@ -72,7 +72,7 @@ Reference: Li+2025 (Cue emulator; arXiv:2405.04598).
     dust = {
         "law": "power_law",
         "type": "two_component",
-        "all_params": tengri.FIXED,
+        "all_params": tengri.Fixed(tengri.DEFAULT),
         "tau_diff": 0.05,
         "tau_bc": 0.0,
     }
@@ -83,7 +83,7 @@ Reference: Li+2025 (Cue emulator; arXiv:2405.04598).
         dust_attenuation=dust,
         neb={
             "type": "cue",
-            "all_params": tengri.FIXED,
+            "all_params": tengri.Fixed(tengri.DEFAULT),
             "neb_logU": tengri.Fixed(-2.5),
             "neb_logZ_gas": tengri.Fixed(-0.3),
             "neb_fesc": tengri.Fixed(0.0),
@@ -96,7 +96,7 @@ Reference: Li+2025 (Cue emulator; arXiv:2405.04598).
         ssp,
         sfh=sfh,
         dust_attenuation=dust,
-        neb={"type": "none", "all_params": tengri.FIXED},
+        neb={"type": "none", "all_params": tengri.Fixed(tengri.DEFAULT)},
         redshift=tengri.Fixed(0.01),
     )
 
@@ -135,7 +135,7 @@ Reference: Li+2025 (Cue emulator; arXiv:2405.04598).
 
 .. rst-class:: sphx-glr-timing
 
-   **Total running time of the script:** (0 minutes 8.656 seconds)
+   **Total running time of the script:** (0 minutes 6.709 seconds)
 
 
 .. _sphx_glr_download_auto_examples_quickstart_plot_swap_nebular_backend.py:

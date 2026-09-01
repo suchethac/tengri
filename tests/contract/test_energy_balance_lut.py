@@ -25,7 +25,7 @@ import numpy as np
 import pytest
 
 from tengri import (
-    FIXED,
+    DEFAULT,
     Fixed,
     Observation,
     Photometry,
@@ -62,13 +62,13 @@ def _build(ssp, approx):
         ssp_data=ssp,
         observation=_obs(),
         approx=approx,
-        sfh=builders.sfh.tsnorm(all_params=FIXED),
+        sfh=builders.sfh.tsnorm(all_params=Fixed(DEFAULT)),
         dust_attenuation=builders.dust.two_component(
-            all_params=FIXED,
+            all_params=Fixed(DEFAULT),
             law="calzetti",
             tau_bc=Uniform(0.0, 1.0),
         ),
-        dust_emission=builders.dust.emission.modified_blackbody(all_params=FIXED),
+        dust_emission=builders.dust.emission.modified_blackbody(all_params=Fixed(DEFAULT)),
         neb=builders.neb.none(),
         redshift=Fixed(0.05),
     )

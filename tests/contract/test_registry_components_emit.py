@@ -499,7 +499,7 @@ def _agn_census_context():
     import numpy as np
 
     import tengri
-    from tengri import FIXED, Fixed, Observation, Photometry
+    from tengri import DEFAULT, Fixed, Observation, Photometry
     from tengri.observation.filters import load_filter_set
 
     ssp = tengri.load_ssp()
@@ -508,8 +508,8 @@ def _agn_census_context():
     def build(category=None, name=None, knobs=None):
         agn = {
             "type": "composable",
-            "all_params": FIXED,
-            "disc": {"type": "powerlaw", "all_params": FIXED},
+            "all_params": Fixed(DEFAULT),
+            "disc": {"type": "powerlaw", "all_params": Fixed(DEFAULT)},
             "torus": {"type": "none"},
             "nlr": {"type": "none"},
             "blr": {"type": "none"},
@@ -517,7 +517,7 @@ def _agn_census_context():
             "atten": {"type": "none"},
         }
         if category is not None:
-            agn[category] = {"type": name, "all_params": FIXED}
+            agn[category] = {"type": name, "all_params": Fixed(DEFAULT)}
             if knobs:
                 agn[category].update(knobs)
         return SEDModel.build(
@@ -525,7 +525,7 @@ def _agn_census_context():
             observation=obs,
             redshift=Fixed(0.1),
             approx=None,
-            sfh={"type": "tsnorm", "all_params": FIXED, "log_total_mass": 6.0},
+            sfh={"type": "tsnorm", "all_params": Fixed(DEFAULT), "log_total_mass": 6.0},
             dust_attenuation={"type": "none"},
             agn=agn,
         )

@@ -37,7 +37,7 @@ class TestShockAttenuationEquivalence:
         Precondition: shock contribution > noise floor (non-vacuity check—
         verifies shock is resolved and contributes measurably to photometry).
         """
-        from tengri import FIXED, Fixed, Observation, Photometry, SEDModel
+        from tengri import DEFAULT, Fixed, Observation, Photometry, SEDModel
         from tengri.components.stellar.sps.dsps_wrapper import load_ssp_data
         from tengri.data import download_ssp
 
@@ -52,16 +52,21 @@ class TestShockAttenuationEquivalence:
             observation=Observation(
                 photometry=Photometry.from_names(["sdss_g", "sdss_r", "sdss_i"])
             ),
-            sfh={"type": "delayed", "all_params": FIXED, "tau_gyr": 1.0, "log_total_mass": 10.0},
+            sfh={
+                "type": "delayed",
+                "all_params": Fixed(DEFAULT),
+                "tau_gyr": 1.0,
+                "log_total_mass": 10.0,
+            },
             dust_attenuation={
                 "type": "two_component",
                 "law": "calzetti",
-                "all_params": FIXED,
+                "all_params": Fixed(DEFAULT),
                 "tau_bc": 2.0,
                 "tau_diff": 1.0,
             },
             neb={"type": "none"},
-            shock={"frac": 1.0, "all_params": FIXED},
+            shock={"frac": 1.0, "all_params": Fixed(DEFAULT)},
             redshift=Fixed(0.5),
         )
 
@@ -73,16 +78,21 @@ class TestShockAttenuationEquivalence:
             observation=Observation(
                 photometry=Photometry.from_names(["sdss_g", "sdss_r", "sdss_i"])
             ),
-            sfh={"type": "delayed", "all_params": FIXED, "tau_gyr": 1.0, "log_total_mass": 10.0},
+            sfh={
+                "type": "delayed",
+                "all_params": Fixed(DEFAULT),
+                "tau_gyr": 1.0,
+                "log_total_mass": 10.0,
+            },
             dust_attenuation={
                 "type": "two_component",
                 "law": "calzetti",
-                "all_params": FIXED,
+                "all_params": Fixed(DEFAULT),
                 "tau_bc": 2.0,
                 "tau_diff": 1.0,
             },
             neb={"type": "none"},
-            shock={"frac": 1.0, "all_params": FIXED},
+            shock={"frac": 1.0, "all_params": Fixed(DEFAULT)},
             redshift=Fixed(0.5),
             approx=WavePrecomp(),  # Enables WavePrecomp for photometry
         )

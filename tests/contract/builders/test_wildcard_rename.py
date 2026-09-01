@@ -20,7 +20,8 @@ import pytest
 pytestmark = pytest.mark.contract
 
 import tengri.builders as builders
-from tengri.parameters.sentinels import FIXED, FREE
+from tengri.parameters.priors import Fixed
+from tengri.parameters.sentinels import DEFAULT, FREE
 
 # One factory per wrapper implementation, exercising all three code paths.
 # dust.two_component requires an explicit attenuation law (no default) — a
@@ -51,9 +52,9 @@ def test_all_params_canonical_emits_no_warning(label, factory):
 
 @pytest.mark.parametrize(("label", "factory"), _FACTORIES.items())
 def test_all_params_fixed_is_default(label, factory):
-    """Calling with no kwargs gives ``all_params: FIXED``."""
+    """Calling with no kwargs gives ``all_params: Fixed(DEFAULT)``."""
     result = factory()
-    assert result["all_params"] is FIXED, label
+    assert result["all_params"] == Fixed(DEFAULT), label
 
 
 # ── Retired defaults= alias: raises TypeError ───────────────────────

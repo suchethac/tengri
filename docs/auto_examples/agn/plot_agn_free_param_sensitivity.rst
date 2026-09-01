@@ -66,11 +66,11 @@ disc); Feltre et al. 2016 (NLR grid).
 
     C_AA_PER_S = 2.998e18
 
-    SFH = {"type": "const", "all_params": tengri.FIXED, "log_total_mass": -10.0}
+    SFH = {"type": "const", "all_params": tengri.Fixed(tengri.DEFAULT), "log_total_mass": -10.0}
     DUST = {
         "law": "power_law",
         "type": "two_component",
-        "all_params": tengri.FIXED,
+        "all_params": tengri.Fixed(tengri.DEFAULT),
         "tau_diff": 0.0,
         "tau_bc": 0.0,
     }
@@ -130,11 +130,16 @@ Sweep three consumed parameters across their priors. We build the model once
 with the AGN sector held fixed at its defaults, then override one parameter at
 a time in the prediction dict — a clean, deterministic parameter sweep.
 
-.. GENERATED FROM PYTHON SOURCE LINES 82-120
+.. GENERATED FROM PYTHON SOURCE LINES 82-125
 
 .. code-block:: Python
 
-    agn_fixed = {"all_params": tengri.FIXED, "log_lbol": 12.0, "lum_ratio": 1.0, **BLOCKS}
+    agn_fixed = {
+        "all_params": tengri.Fixed(tengri.DEFAULT),
+        "log_lbol": 12.0,
+        "lum_ratio": 1.0,
+        **BLOCKS,
+    }
     model = tengri.SEDModel.build(
         ssp, sfh=SFH, dust_attenuation=DUST, agn=agn_fixed, redshift=tengri.Fixed(0.0)
     )

@@ -16,7 +16,7 @@ import jax
 import numpy as np
 import pytest
 
-from tengri import FIXED, FREE, Fixed, SEDModel, Uniform
+from tengri import DEFAULT, FREE, Fixed, SEDModel, Uniform
 
 pytestmark = [pytest.mark.contract, pytest.mark.regression_bug]
 
@@ -49,7 +49,7 @@ def test_field_wildcard_scoped_to_field_params(synthetic_ssp_wide, synthetic_top
     model = _build(
         synthetic_ssp_wide,
         synthetic_tophat_obs,
-        {"type": "dpl", "all_params": FIXED, "field": {"all_params": FREE}},
+        {"type": "dpl", "all_params": Fixed(DEFAULT), "field": {"all_params": FREE}},
     )
     free = _free(model)
     assert free >= _FIELD
@@ -82,7 +82,7 @@ def test_field_model_predicts_finite(synthetic_ssp_wide, synthetic_tophat_obs):
     model = _build(
         synthetic_ssp_wide,
         synthetic_tophat_obs,
-        {"type": "dpl", "all_params": FIXED, "field": {"all_params": FIXED}},
+        {"type": "dpl", "all_params": Fixed(DEFAULT), "field": {"all_params": Fixed(DEFAULT)}},
     )
     phot = np.asarray(model.predict_photometry(model.spec.sample(jax.random.PRNGKey(0))))
     assert np.all(np.isfinite(phot))

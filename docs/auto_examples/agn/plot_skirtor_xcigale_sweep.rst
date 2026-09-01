@@ -89,11 +89,11 @@ References
 
     ssp = tengri.load_ssp()
 
-    SFH = {"type": "const", "all_params": tengri.FIXED, "log_total_mass": -10.0}
+    SFH = {"type": "const", "all_params": tengri.Fixed(tengri.DEFAULT), "log_total_mass": -10.0}
     DUST = {
         "law": "power_law",
         "type": "two_component",
-        "all_params": tengri.FIXED,
+        "all_params": tengri.Fixed(tengri.DEFAULT),
         "tau_diff": 0.0,
         "tau_bc": 0.0,
     }
@@ -106,8 +106,8 @@ References
     TAU_REF = 7.0
 
     BASE_AGN = {
-        "disc": {"type": "multicolor", "all_params": tengri.FIXED},
-        "all_params": tengri.FIXED,
+        "disc": {"type": "multicolor", "all_params": tengri.Fixed(tengri.DEFAULT)},
+        "all_params": tengri.Fixed(tengri.DEFAULT),
         "log_lbol": 12.0,
         "lum_ratio": 1.0,
     }
@@ -133,7 +133,7 @@ References
         wave, total = _build_sed(
             {
                 "type": "skirtor",
-                "all_params": tengri.FIXED,
+                "all_params": tengri.Fixed(tengri.DEFAULT),
                 "oa_skirtor": oa,
                 "cos_inc": cos_inc,
                 "tau_skirtor": tau,
@@ -185,7 +185,7 @@ References
 
 .. rst-class:: sphx-glr-timing
 
-   **Total running time of the script:** (0 minutes 10.033 seconds)
+   **Total running time of the script:** (0 minutes 8.713 seconds)
 
 
 .. _sphx_glr_download_auto_examples_agn_plot_skirtor_xcigale_sweep.py:

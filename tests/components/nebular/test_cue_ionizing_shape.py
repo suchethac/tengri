@@ -30,7 +30,7 @@ import jax.numpy as jnp
 import numpy as np
 import pytest
 
-from tengri import FIXED, FREE, Fixed, Observation, Photometry, SEDModel, load_ssp_data
+from tengri import DEFAULT, FREE, Fixed, Observation, Photometry, SEDModel, load_ssp_data
 from tengri.observation.line_flux_data import LineFluxData
 
 pytestmark = pytest.mark.contract
@@ -56,7 +56,7 @@ def _model():
             observation=obs,
             sfh={"type": "dpl", "all_params": FREE},
             dust_attenuation=None,
-            neb={"type": "cue", "all_params": FIXED},
+            neb={"type": "cue", "all_params": Fixed(DEFAULT)},
             redshift=Fixed(0.15),
         )
     return m, ld.wavelengths, ssp

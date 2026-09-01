@@ -65,7 +65,7 @@ class TestIssue1317UnionPresence:
         from pathlib import Path
 
         from tengri import (
-            FIXED,
+            DEFAULT,
             Fixed,
             ForwardModel,
             Observation,
@@ -96,7 +96,7 @@ class TestIssue1317UnionPresence:
             sed_2band = SEDModel.build(
                 ssp_data=ssp,
                 observation=obs_2band,
-                sfh={"type": "dpl", "all_params": FIXED, "tau_gyr": Fixed(10.0)},
+                sfh={"type": "dpl", "all_params": Fixed(DEFAULT), "tau_gyr": Fixed(10.0)},
                 dust_attenuation={
                     "type": "single_component",
                     "law": "calzetti",
@@ -142,7 +142,7 @@ class TestIssue1317UnionPresence:
             sed_3band = SEDModel.build(
                 ssp_data=ssp,
                 observation=obs_3band,
-                sfh={"type": "dpl", "all_params": FIXED, "tau_gyr": Fixed(10.0)},
+                sfh={"type": "dpl", "all_params": Fixed(DEFAULT), "tau_gyr": Fixed(10.0)},
                 dust_attenuation={
                     "type": "single_component",
                     "law": "calzetti",
@@ -293,8 +293,9 @@ class TestIssue1317UnionPresence:
         (synthetic SSP), no data files.
         """
         from tengri import (
-            FIXED,
+            DEFAULT,
             FREE,
+            Fixed,
             ForwardModel,
             Observation,
             Photometry,
@@ -324,7 +325,7 @@ class TestIssue1317UnionPresence:
             dust_attenuation={
                 "law": "power_law",
                 "type": "two_component",
-                "all_params": FIXED,
+                "all_params": Fixed(DEFAULT),
                 "tau_bc": 0.5,
             },
             neb={"type": "none"},

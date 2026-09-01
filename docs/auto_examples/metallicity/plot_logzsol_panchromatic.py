@@ -35,7 +35,7 @@ model = tengri.SEDModel.build(
     ssp,
     sfh={
         "type": "dpl",
-        "all_params": tengri.FIXED,
+        "all_params": tengri.Fixed(tengri.DEFAULT),
         "alpha": 2.0,
         "beta": 2.5,
         "tau_gyr": 1.0,
@@ -44,13 +44,13 @@ model = tengri.SEDModel.build(
     dust_attenuation={
         "law": "power_law",
         "type": "two_component",
-        "all_params": tengri.FIXED,
+        "all_params": tengri.Fixed(tengri.DEFAULT),
         "tau_bc": 1.0,
         "tau_diff": 0.5,
     },
     dust_emission={
         "type": "modified_blackbody",
-        "all_params": tengri.FIXED,
+        "all_params": tengri.Fixed(tengri.DEFAULT),
         "T": 30.0,
         "beta_ir": 1.8,
     },

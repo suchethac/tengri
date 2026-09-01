@@ -40,7 +40,7 @@ import jax.numpy as jnp
 import numpy as np
 import pytest
 
-from tengri import FIXED, Fixed, Observation, Photometry, SEDModel, Uniform
+from tengri import DEFAULT, Fixed, Observation, Photometry, SEDModel, Uniform
 from tengri.components.nebular.component import NebularSEDComponent
 from tengri.forward.component_factory import state_to_sed_components
 from tengri.forward.sed_model import FeaturePrecomp, WavePrecomp
@@ -50,7 +50,7 @@ pytestmark = pytest.mark.regression_bug
 _BASE = dict(
     sfh={
         "type": "delayed",
-        "all_params": FIXED,
+        "all_params": Fixed(DEFAULT),
         "log_total_mass": Uniform(9.0, 11.0),
         "tau_gyr": 1.0,
         "age_gyr": 5.0,
@@ -58,19 +58,19 @@ _BASE = dict(
     redshift=Fixed(0.1),
 )
 
-_CUE = {"type": "cue", "all_params": FIXED}
+_CUE = {"type": "cue", "all_params": Fixed(DEFAULT)}
 
 _DUST_EMIT = {
     "type": "two_component",
     "law": "calzetti",
-    "all_params": FIXED,
+    "all_params": Fixed(DEFAULT),
     "tau_diff": Uniform(0.0, 1.5),
     "tau_bc": 0.0,
 }
 
 #: A peer group now. Only the ``dust_emitting`` row gets it -- the ``dust_free_*``
 #: rows must stay emission-free, since that is what enables the shortcut they test.
-_DUST_EMISSION = {"type": "dale2014", "all_params": FIXED}
+_DUST_EMISSION = {"type": "dale2014", "all_params": Fixed(DEFAULT)}
 
 #: ``dust_free_*`` are the exposed rows: with nothing declaring ``sed_nebular``
 #: the shortcut is (correctly) enabled, which is what makes the state wrong.

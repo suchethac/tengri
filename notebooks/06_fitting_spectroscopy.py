@@ -44,18 +44,18 @@ import numpy as np
 
 import tengri
 from tengri import (
-    FIXED,
-    FREE,
+    builders,
     Data,
+    DEFAULT,
     Fixed,
     ForwardModel,
+    FREE,
     Observation,
+    plot,
     SEDModel,
     Spectroscopy,
     SpectrumPrecomp,
     Uniform,
-    builders,
-    plot,
 )
 
 plot.setup_style()
@@ -97,10 +97,10 @@ sed_model = SEDModel.build(
     observation=obs,
     approx=SpectrumPrecomp(),
     sfh=builders.sfh.tsnorm(
-        all_params=FIXED, log_total_mass=FREE, peak_lbt_gyr=FREE, width_gyr=FREE
+        all_params=Fixed(DEFAULT), log_total_mass=FREE, peak_lbt_gyr=FREE, width_gyr=FREE
     ),
     dust_attenuation=builders.dust.two_component(
-        all_params=FIXED,
+        all_params=Fixed(DEFAULT),
         law="calzetti",
         tau_bc=Uniform(0.0, 1.0),
         tau_diff=Uniform(0.0, 1.0),
@@ -155,18 +155,19 @@ t0 = time.perf_counter()
 # notebook only — HMC_VALIDATED itself keeps dense_mass_matrix=True because
 # dense mass is load-bearing on the correlated nonparametric-SFH posteriors.
 posterior = forward.fit(
-    Data(spectrum=(flux, noise)), key=jax.random.PRNGKey(1),
-    precondition=False, **{**HMC_VALIDATED, "dense_mass_matrix": False}
+    Data(spectrum=(flux, noise)),
+    key=jax.random.PRNGKey(1),
+    precondition=False,
+    **{**HMC_VALIDATED, "dense_mass_matrix": False},
 )
 rhat = posterior.rhat()
 
 # Regression detector: if chain froze again (as in #1734), raise loudly.
 # Counts unique values across all free parameters; any showing near-zero
 # variance signals a return of the frozen-chain bug.
-n_div = posterior.diagnostics.get('n_divergent', 0)
+n_div = posterior.diagnostics.get("n_divergent", 0)
 unique_per_param = [
-    len(np.unique(np.asarray(posterior.samples[p])))
-    for p in sed_model.spec.free_params
+    len(np.unique(np.asarray(posterior.samples[p]))) for p in sed_model.spec.free_params
 ]
 min_unique = min(unique_per_param)
 n_samples = len(np.asarray(posterior.samples[sed_model.spec.free_params[0]]))

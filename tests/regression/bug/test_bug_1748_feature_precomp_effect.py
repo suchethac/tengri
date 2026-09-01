@@ -34,13 +34,13 @@ _PARAMS_BASE = {"sfh_delayed_log_total_mass": 10.0}
 
 
 def _build(ssp, approx, *, dust_attenuation: bool):
-    from tengri import FIXED, Fixed, Observation, Photometry, SEDModel, Uniform
+    from tengri import DEFAULT, Fixed, Observation, Photometry, SEDModel, Uniform
 
     dust_group = (
         {
             "type": "two_component",
             "law": "calzetti",
-            "all_params": FIXED,
+            "all_params": Fixed(DEFAULT),
             "tau_diff": Uniform(0.0, 1.5),
             "tau_bc": 0.0,
         }
@@ -54,13 +54,13 @@ def _build(ssp, approx, *, dust_attenuation: bool):
         observation=Observation(photometry=Photometry.from_names(["sdss_g", "sdss_r", "sdss_i"])),
         sfh={
             "type": "delayed",
-            "all_params": FIXED,
+            "all_params": Fixed(DEFAULT),
             "log_total_mass": Uniform(9.0, 11.0),
             "tau_gyr": 1.0,
             "age_gyr": 5.0,
         },
         dust_attenuation=dust_group,
-        neb={"type": "cue", "all_params": FIXED},
+        neb={"type": "cue", "all_params": Fixed(DEFAULT)},
         redshift=Fixed(0.1),
         approx=approx,
     )

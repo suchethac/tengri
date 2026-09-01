@@ -30,7 +30,7 @@ from __future__ import annotations
 import jax.numpy as jnp
 import pytest
 
-from tengri import FIXED, Fixed, Observation, SEDModel, SpectrumPrecomp
+from tengri import DEFAULT, Fixed, Observation, SEDModel, SpectrumPrecomp
 from tengri.observation.spectroscopy import Spectroscopy
 from tests._grad_parity import assert_grad_matches_fd
 
@@ -49,8 +49,12 @@ def _build(ssp_data, wave_obs, order, approx=None):
     return SEDModel.build(
         ssp_data=ssp_data,
         observation=obs,
-        sfh={"type": "dexp", "all_params": FIXED, "log_total_mass": 10.0, "tau_gyr": 1.0},
-        dust_attenuation={"type": "two_component", "law": "calzetti", "all_params": FIXED},
+        sfh={"type": "dexp", "all_params": Fixed(DEFAULT), "log_total_mass": 10.0, "tau_gyr": 1.0},
+        dust_attenuation={
+            "type": "two_component",
+            "law": "calzetti",
+            "all_params": Fixed(DEFAULT),
+        },
         neb={"type": "none"},
         redshift=Fixed(0.1),
         approx=approx,

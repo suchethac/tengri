@@ -33,14 +33,14 @@ def _build_template(peak_lbt, width, tau_diff):
         observation=obs,
         sfh={
             "type": "tsnorm",
-            "all_params": tengri.FIXED,
+            "all_params": tengri.Fixed(tengri.DEFAULT),
             "peak_lbt_gyr": peak_lbt,
             "width_gyr": width,
         },
         dust_attenuation={
             "law": "power_law",
             "type": "two_component",
-            "all_params": tengri.FIXED,
+            "all_params": tengri.Fixed(tengri.DEFAULT),
             "tau_diff": tau_diff,
             "tau_bc": 0.3,
         },

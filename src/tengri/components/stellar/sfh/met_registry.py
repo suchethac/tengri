@@ -140,7 +140,7 @@ _register(
                 _always_true,
                 "",
                 # Flat-in-log prior across the SSP template range. The
-                # wildcard-FIXED resolver special-cases ``met_logzsol`` to
+                # wildcard-Fixed(DEFAULT) resolver special-cases ``met_logzsol`` to
                 # pin the default at **solar** (0.0) rather than the prior
                 # midpoint: matching FSPS (``logzsol=0.0``) and Bagpipes
                 # (``metallicity=1.0 Z⊙``). The previous default (midpoint
@@ -162,8 +162,8 @@ _register(
                 "",
                 # Default pinned to the historical fixed ``config.lgmet_scatter``
                 # (0.1) so delta models that do not free it are byte-unchanged;
-                # the wildcard-FIXED resolver reads this default from
-                # ``_WILDCARD_FIXED_DEFAULTS`` in ``parameters/groups.py``. Free
+                # the wildcard-Fixed(DEFAULT) resolver reads this default from
+                # ``_CANONICAL_FIXED_DEFAULTS`` in ``parameters/groups.py``. Free
                 # it (e.g. ``Uniform(0.0, 0.5)``) to fit the MDF width like
                 # Bagpipes' ``lognorm`` chemical-enrichment mode.
                 Fixed(0.1),

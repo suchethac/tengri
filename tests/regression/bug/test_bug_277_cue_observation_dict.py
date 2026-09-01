@@ -37,7 +37,7 @@ def test_cue_predict_paths_with_observation_attached():
             observation=obs,
             sfh={
                 "type": "dpl",
-                "all_params": tengri.FIXED,
+                "all_params": tengri.Fixed(tengri.DEFAULT),
                 "tau_gyr": 0.1,
                 "log_total_mass": 1.5,
                 "alpha": 4,
@@ -46,11 +46,11 @@ def test_cue_predict_paths_with_observation_attached():
             dust_attenuation={
                 "law": "power_law",
                 "type": "two_component",
-                "all_params": tengri.FIXED,
+                "all_params": tengri.Fixed(tengri.DEFAULT),
                 "tau_diff": 0.05,
                 "tau_bc": 0.1,
             },
-            neb={"type": "cue", "all_params": tengri.FIXED},
+            neb={"type": "cue", "all_params": tengri.Fixed(tengri.DEFAULT)},
             redshift=tengri.Fixed(3.0),
         )
 

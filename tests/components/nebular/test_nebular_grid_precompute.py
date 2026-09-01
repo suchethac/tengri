@@ -22,7 +22,7 @@ import numpy as np
 import pytest
 
 from tengri import (
-    FIXED,
+    DEFAULT,
     FREE,
     Fixed,
     Observation,
@@ -106,7 +106,7 @@ def _wave_model(neb, sfh_wild=FREE, met=None):
             dust_attenuation={
                 "type": "two_component",
                 "law": "calzetti",
-                "all_params": FIXED,
+                "all_params": Fixed(DEFAULT),
                 "tau_diff": Fixed(0.0),
                 "tau_bc": Fixed(0.0),
             },
@@ -123,7 +123,7 @@ def test_axes_adapt_to_free_ionization():
     """The grid axes are exactly the free {met, logU, logZ_gas}, in order."""
     # both gas params fixed, SFH free -> met-only axis
     t0 = precompute_nebular_grid(
-        _model({"type": "cue", "all_params": FIXED}, met={"logzsol": FREE}), _LW, n_grid=3
+        _model({"type": "cue", "all_params": Fixed(DEFAULT)}, met={"logzsol": FREE}), _LW, n_grid=3
     )
     assert t0.axis_names == ("met_logzsol",), t0.axis_names
     # met + logU + logZ_gas all free -> 3 axes. The gas axes sit at exactly n_grid;
@@ -133,7 +133,7 @@ def test_axes_adapt_to_free_ionization():
     m3 = _model(
         {
             "type": "cue",
-            "all_params": FIXED,
+            "all_params": Fixed(DEFAULT),
             "logU": Uniform(-4.0, -1.0),
             "logZ_gas": Uniform(-1.0, 0.4),
         },
@@ -157,11 +157,11 @@ def test_axes_adapt_to_free_ionization():
     m2 = _model(
         {
             "type": "cue",
-            "all_params": FIXED,
+            "all_params": Fixed(DEFAULT),
             "logU": Uniform(-4.0, -1.0),
             "logZ_gas": Uniform(-1.0, 0.4),
         },
-        sfh_wild=FIXED,
+        sfh_wild=Fixed(DEFAULT),
     )
     t2 = precompute_nebular_grid(m2, _LW, n_grid=3)
     assert t2.axis_names == ("neb_logU", "neb_logZ_gas"), t2.axis_names
@@ -176,11 +176,11 @@ def test_reconstruct_matches_exact_variable_ionization():
     m = _model(
         {
             "type": "cue",
-            "all_params": FIXED,
+            "all_params": Fixed(DEFAULT),
             "logU": Uniform(-4.0, -1.0),
             "logZ_gas": Uniform(-1.0, 0.4),
         },
-        sfh_wild=FIXED,
+        sfh_wild=Fixed(DEFAULT),
     )
     table = precompute_nebular_grid(m, _LW, n_grid=14)
     assert table.axis_names == ("neb_logU", "neb_logZ_gas")
@@ -197,7 +197,10 @@ def test_reconstruct_matches_exact_variable_ionization():
 
 def test_reconstruct_is_jittable_and_gradient_safe():
     """reconstruct is JIT + grad safe in logU (the fit-path requirement)."""
-    m = _model({"type": "cue", "all_params": FIXED, "logU": Uniform(-4.0, -1.0)}, sfh_wild=FIXED)
+    m = _model(
+        {"type": "cue", "all_params": Fixed(DEFAULT), "logU": Uniform(-4.0, -1.0)},
+        sfh_wild=Fixed(DEFAULT),
+    )
     table = precompute_nebular_grid(m, _LW, n_grid=8)
     assert table.axis_names == ("neb_logU",)
     p = dict(m.spec.sample(jax.random.PRNGKey(0)))
@@ -219,7 +222,10 @@ def test_axis_range_reads_prior_not_default():
     prior' claim was dead. A prior WIDER than the default (logU here) must widen
     the axis; the old bug would clamp it to the default (-4, -1).
     """
-    m = _model({"type": "cue", "all_params": FIXED, "logU": Uniform(-5.0, 0.0)}, sfh_wild=FIXED)
+    m = _model(
+        {"type": "cue", "all_params": Fixed(DEFAULT), "logU": Uniform(-5.0, 0.0)},
+        sfh_wild=Fixed(DEFAULT),
+    )
     table = precompute_nebular_grid(m, _LW, n_grid=4)
     ax = np.asarray(table.axes[table.axis_names.index("neb_logU")])
     assert ax.min() == pytest.approx(-5.0, abs=1e-6), f"axis min {ax.min()} != prior -5.0"
@@ -239,7 +245,8 @@ def test_phot_channel_reconstructs_nebular_precomp():
     over the smooth gas axis, so the intrinsic-channel error stays tight.
     """
     m = _wave_model(
-        {"type": "cue", "all_params": FIXED, "logU": Uniform(-4.0, -1.0)}, sfh_wild=FIXED
+        {"type": "cue", "all_params": Fixed(DEFAULT), "logU": Uniform(-4.0, -1.0)},
+        sfh_wild=Fixed(DEFAULT),
     )
     table = precompute_nebular_grid(m, _LW, n_grid=14)
     assert table.axis_names == ("neb_logU",), table.axis_names
@@ -262,7 +269,10 @@ def test_phot_channel_reconstructs_nebular_precomp():
 def test_phot_channel_absent_without_wave_precomp():
     """A line-only grid (no WavePrecomp filters) has no photometry channel, and
     reconstruct_nebular_phot raises loudly rather than silently returning garbage."""
-    m = _model({"type": "cue", "all_params": FIXED, "logU": Uniform(-4.0, -1.0)}, sfh_wild=FIXED)
+    m = _model(
+        {"type": "cue", "all_params": Fixed(DEFAULT), "logU": Uniform(-4.0, -1.0)},
+        sfh_wild=Fixed(DEFAULT),
+    )
     table = precompute_nebular_grid(m, _LW, n_grid=4)
     assert table.log_phot_per_qh is None
     p = dict(m.spec.sample(jax.random.PRNGKey(0)))
@@ -281,7 +291,7 @@ def test_unsnapped_met_axis_warns_and_snapped_one_does_not():
     import warnings as _w
 
     m = _model(
-        {"type": "cue", "all_params": FIXED, "logU": Uniform(-4.0, -1.0)},
+        {"type": "cue", "all_params": Fixed(DEFAULT), "logU": Uniform(-4.0, -1.0)},
         sfh_wild=FREE,
         met={"logzsol": FREE},
     )
@@ -313,7 +323,7 @@ def test_met_axis_snaps_to_ssp_nodes_and_interpolates_linearly():
     from tengri.components.nebular.nebular_grid_precompute import _ssp_met_nodes
 
     m = _model(
-        {"type": "cue", "all_params": FIXED, "logU": Uniform(-4.0, -1.0)},
+        {"type": "cue", "all_params": Fixed(DEFAULT), "logU": Uniform(-4.0, -1.0)},
         sfh_wild=FREE,
         met={"logzsol": FREE},
     )
@@ -338,11 +348,11 @@ def test_gas_only_axes_do_not_warn():
     m = _model(
         {
             "type": "cue",
-            "all_params": FIXED,
+            "all_params": Fixed(DEFAULT),
             "logU": Uniform(-4.0, -1.0),
             "logZ_gas": Uniform(-1.0, 0.4),
         },
-        sfh_wild=FIXED,
+        sfh_wild=Fixed(DEFAULT),
     )
     with _w.catch_warnings(record=True) as rec:
         _w.simplefilter("always")
@@ -364,7 +374,7 @@ def test_snapped_met_axis_beats_uniform_on_a_dense_sweep():
     sensitive [OIII] line **while using no more grid points** — the snapped axis
     resolves the SSP-node kinks, so the cubic's cross-kink tangent error is gone.
     """
-    m = _model({"type": "cue", "all_params": FIXED}, sfh_wild=FREE)
+    m = _model({"type": "cue", "all_params": Fixed(DEFAULT)}, sfh_wild=FREE)
     assert "met_logzsol" in m.spec.free_params
     lo, hi = -1.8, 0.2
     rng = {"met_logzsol": (lo, hi)}

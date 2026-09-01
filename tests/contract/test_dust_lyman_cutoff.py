@@ -39,7 +39,7 @@ def _build(ssp, obs, **dust_extra):
     dust = {
         "type": "two_component",
         "law": "calzetti",
-        "all_params": tengri.FIXED,
+        "all_params": tengri.Fixed(tengri.DEFAULT),
         "tau_bc": 0.0,
         "tau_diff": 0.5,
     }
@@ -47,7 +47,7 @@ def _build(ssp, obs, **dust_extra):
     return tengri.SEDModel.build(
         ssp,
         observation=obs,
-        sfh={"type": "tsnorm", "all_params": tengri.FIXED},
+        sfh={"type": "tsnorm", "all_params": tengri.Fixed(tengri.DEFAULT)},
         dust_attenuation=dust,
         dust_emission={"type": "none"},
         neb={"type": "none"},

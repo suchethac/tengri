@@ -90,7 +90,7 @@ for _i in range(50):
         dust_attenuation={
             "law": "power_law",
             "type": "two_component",
-            "all_params": tengri.FIXED,
+            "all_params": tengri.Fixed(tengri.DEFAULT),
             "tau_bc": 0.05,
             "tau_diff": 0.02,
             "slope": -0.7,

@@ -36,7 +36,7 @@ import pytest
 pytestmark = pytest.mark.regression_bug
 
 import tengri
-from tengri import FIXED, Fixed
+from tengri import DEFAULT, Fixed
 from tengri.forward.prediction import EmissionLines
 
 
@@ -123,20 +123,20 @@ def test_balmer_decrement_rises_under_dust_sweep(ssp_bare):
             ssp_bare,
             sfh={
                 "type": "const",
-                "all_params": FIXED,
+                "all_params": Fixed(DEFAULT),
                 "log_total_mass": 10.0,
                 "start_gyr": 10.0,
                 "end_gyr": 0.0,
             },
             dust_attenuation={
                 "type": "two_component",
-                "all_params": FIXED,
+                "all_params": Fixed(DEFAULT),
                 "law": "calzetti",
                 "tau_diff": tau_diff,
                 "tau_bc": 0.0,
                 "slope": -0.7,
             },
-            neb={"type": "cue", "all_params": FIXED},
+            neb={"type": "cue", "all_params": Fixed(DEFAULT)},
             redshift=Fixed(0.05),
         )
         p = dict(m.spec.sample(jax.random.PRNGKey(0)))
@@ -157,7 +157,7 @@ def test_cue_exposes_more_than_thirteen_species(ssp_bare):
         ssp_bare,
         sfh={
             "type": "const",
-            "all_params": FIXED,
+            "all_params": Fixed(DEFAULT),
             "log_total_mass": 10.0,
             "start_gyr": 10.0,
             "end_gyr": 0.0,
@@ -165,11 +165,11 @@ def test_cue_exposes_more_than_thirteen_species(ssp_bare):
         dust_attenuation={
             "law": "power_law",
             "type": "two_component",
-            "all_params": FIXED,
+            "all_params": Fixed(DEFAULT),
             "tau_diff": 0.0,
             "tau_bc": 0.0,
         },
-        neb={"type": "cue", "all_params": FIXED},
+        neb={"type": "cue", "all_params": Fixed(DEFAULT)},
         redshift=Fixed(0.05),
     )
     p = dict(m.spec.sample(jax.random.PRNGKey(0)))
@@ -190,16 +190,16 @@ def test_stellar_lyc_attenuated_by_fesc(ssp_bare):
             ssp_bare,
             sfh={
                 "type": "const",
-                "all_params": FIXED,
+                "all_params": Fixed(DEFAULT),
                 "log_total_mass": 10.0,
                 "start_gyr": 10.0,
                 "end_gyr": 0.0,
             },
-            neb={"type": "cue", "all_params": FIXED, "fesc": fesc},
+            neb={"type": "cue", "all_params": Fixed(DEFAULT), "fesc": fesc},
             dust_attenuation={
                 "law": "power_law",
                 "type": "two_component",
-                "all_params": FIXED,
+                "all_params": Fixed(DEFAULT),
                 "tau_diff": 0.0,
                 "tau_bc": 0.0,
             },
@@ -229,12 +229,16 @@ def test_bakedin_predict_lines_still_raises(ssp_bare):
         ssp,
         sfh={
             "type": "const",
-            "all_params": FIXED,
+            "all_params": Fixed(DEFAULT),
             "log_total_mass": 10.0,
             "start_gyr": 10.0,
             "end_gyr": 0.0,
         },
-        dust_attenuation={"law": "power_law", "type": "two_component", "all_params": FIXED},
+        dust_attenuation={
+            "law": "power_law",
+            "type": "two_component",
+            "all_params": Fixed(DEFAULT),
+        },
         redshift=Fixed(0.1),
     )
     p = dict(m.spec.sample(jax.random.PRNGKey(0)))

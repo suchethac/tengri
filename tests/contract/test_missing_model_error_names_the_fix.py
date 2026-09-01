@@ -36,7 +36,7 @@ from __future__ import annotations
 import numpy as np
 import pytest
 
-from tengri import FIXED, Fitter, Fixed, Observation, Photometry, SEDModel, Uniform
+from tengri import DEFAULT, Fitter, Fixed, Observation, Photometry, SEDModel, Uniform
 from tengri.inference.posterior import Posterior
 
 pytestmark = [pytest.mark.contract, pytest.mark.regression_bug]
@@ -48,11 +48,15 @@ def fitted(ssp_data_fsps, tmp_path_factory):
     model = SEDModel.build(
         ssp_data=ssp_data_fsps,
         observation=obs,
-        sfh={"type": "delayed", "all_params": FIXED, "log_total_mass": Uniform(9.0, 11.0)},
+        sfh={
+            "type": "delayed",
+            "all_params": Fixed(DEFAULT),
+            "log_total_mass": Uniform(9.0, 11.0),
+        },
         dust_attenuation={
             "type": "two_component",
             "law": "calzetti",
-            "all_params": FIXED,
+            "all_params": Fixed(DEFAULT),
             "tau_diff": Uniform(0.0, 2.0),
         },
         neb={"type": "none"},

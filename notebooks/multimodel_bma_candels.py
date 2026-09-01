@@ -60,16 +60,7 @@ warnings.filterwarnings("ignore")
 
 import tengri
 from _setup import FIG_DIR, REPO_ROOT
-from tengri import (
-    FIXED,
-    FREE,
-    Fixed,
-    Observation,
-    Photometry,
-    SEDModel,
-    Uniform,
-    WavePrecomp,
-)
+from tengri import DEFAULT, Fixed, FREE, Observation, Photometry, SEDModel, Uniform, WavePrecomp
 from tengri.units import ab_mag_to_fnu
 
 
@@ -229,7 +220,7 @@ print(f"4 SSP libraries loaded in {time.time() - t0:.1f}s")
 # %% [markdown]
 # ## 4. Model configurations
 #
-# Each config: nested-dict grammar, `all_params=FIXED` except those with explicit `Uniform` priors; `approx=WavePrecomp()` for speed.
+# Each config: nested-dict grammar, `all_params=Fixed(DEFAULT)` except those with explicit `Uniform` priors; `approx=WavePrecomp()` for speed.
 
 # %%
 # Shared priors. Configs A and B use the two standard non-parametric SFHs —
@@ -282,11 +273,16 @@ def build_configs(z, obs):
         ssp_data=SSP["mist"],
         sfh={
             "type": "continuity",
-            "all_params": FIXED,
+            "all_params": Fixed(DEFAULT),
             "met_logzsol": Uniform(-2.0, 0.3),
             **CONT_SFH,
         },
-        dust_attenuation={"type": "two_component", "law": "salim_sbl18", "all_params": FIXED, **DUST},
+        dust_attenuation={
+            "type": "two_component",
+            "law": "salim_sbl18",
+            "all_params": Fixed(DEFAULT),
+            **DUST,
+        },
         neb={"type": "ssp"},
         **common,
     )
@@ -294,11 +290,16 @@ def build_configs(z, obs):
         ssp_data=SSP["padova"],
         sfh={
             "type": "dirichlet",
-            "all_params": FIXED,
+            "all_params": Fixed(DEFAULT),
             "met_logzsol": Uniform(-2.0, 0.3),
             **DIR_SFH,
         },
-        dust_attenuation={"type": "two_component", "law": "calzetti", "all_params": FIXED, **DUST},
+        dust_attenuation={
+            "type": "two_component",
+            "law": "calzetti",
+            "all_params": Fixed(DEFAULT),
+            **DUST,
+        },
         neb={"type": "ssp"},
         **common,
     )
@@ -306,7 +307,7 @@ def build_configs(z, obs):
         ssp_data=SSP["pdva"],
         sfh={
             "type": "tsnorm",
-            "all_params": FIXED,
+            "all_params": Fixed(DEFAULT),
             "met_logzsol": Uniform(-2.0, 0.3),
             "log_total_mass": Uniform(8.0, 12.0),
             "peak_lbt_gyr": Uniform(0.5, 12.0),
@@ -314,7 +315,12 @@ def build_configs(z, obs):
             "skew": Uniform(-1.0, 1.0),
             "trunc": Uniform(1.0, 10.0),
         },
-        dust_attenuation={"type": "two_component", "law": "kriek_conroy", "all_params": FIXED, **DUST},
+        dust_attenuation={
+            "type": "two_component",
+            "law": "kriek_conroy",
+            "all_params": Fixed(DEFAULT),
+            **DUST,
+        },
         neb={"type": "ssp"},
         **common,
     )
@@ -322,14 +328,19 @@ def build_configs(z, obs):
         ssp_data=SSP["basti"],
         sfh={
             "type": "dpl",
-            "all_params": FIXED,
+            "all_params": Fixed(DEFAULT),
             "met_logzsol": Fixed(-0.3),
             "alpha": Uniform(0.5, 5.0),
             "beta": Uniform(0.3, 3.0),
             "tau_gyr": Uniform(0.5, 13.0),
             "log_total_mass": Uniform(8.0, 12.0),
         },
-        dust_attenuation={"type": "two_component", "law": "power_law", "all_params": FIXED, **DUST},
+        dust_attenuation={
+            "type": "two_component",
+            "law": "power_law",
+            "all_params": Fixed(DEFAULT),
+            **DUST,
+        },
         neb={"type": "ssp"},
         **common,
     )

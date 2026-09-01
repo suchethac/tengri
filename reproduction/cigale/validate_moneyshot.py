@@ -46,7 +46,7 @@ warnings.filterwarnings("ignore")
 
 from reproduction.cigale._drivers import cigale_driver as C, units as U
 
-from tengri import FIXED, Fixed, SEDModel
+from tengri import DEFAULT, Fixed, SEDModel
 from tengri.agn import compute_l2500, multicolor_disc
 from tengri.components.stellar.sps.dsps_wrapper import load_ssp_data
 from tengri.xray import xray_total
@@ -67,7 +67,7 @@ def tengri_moneyshot(ssp):
         ssp_data=ssp,
         sfh={
             "type": "dpl",
-            "*": FIXED,
+            "all_params": Fixed(DEFAULT),
             "log_total_mass": 10.72,
             "alpha": 0.9,
             "beta": 2.7,
@@ -76,19 +76,29 @@ def tengri_moneyshot(ssp):
         dust_attenuation={
             "type": "two_component",
             "law": "calzetti",
-            "*": FIXED,
+            "all_params": Fixed(DEFAULT),
             "tau_bc": 0.8,
             "tau_diff": 0.3,
             "slope": -0.4,
-        }, dust_emission={"type": "dale2014", "*": FIXED, "alpha_dale": 2.2},
-        neb={"type": "cue", "*": FIXED},
-        agn={
-            "disc": {"type": "multicolor", "*": FIXED, "log_lbol": 10.5},
-            "torus": {"type": "skirtor", "*": FIXED, "tau_skirtor": 5.0, "torus_frac": 0.5},
-            "lines": {"type": "nlr", "*": FIXED},
         },
-        radio={"sf": {"type": "bell2003"}, "agn": {"type": "powerlaw"}, "*": FIXED},
-        xray={"type": "simple", "*": FIXED},
+        dust_emission={"type": "dale2014", "all_params": Fixed(DEFAULT), "alpha_dale": 2.2},
+        neb={"type": "cue", "all_params": Fixed(DEFAULT)},
+        agn={
+            "disc": {"type": "multicolor", "all_params": Fixed(DEFAULT), "log_lbol": 10.5},
+            "torus": {
+                "type": "skirtor",
+                "all_params": Fixed(DEFAULT),
+                "tau_skirtor": 5.0,
+                "torus_frac": 0.5,
+            },
+            "lines": {"type": "nlr", "all_params": Fixed(DEFAULT)},
+        },
+        radio={
+            "sf": {"type": "bell2003"},
+            "agn": {"type": "powerlaw"},
+            "all_params": Fixed(DEFAULT),
+        },
+        xray={"type": "simple", "all_params": Fixed(DEFAULT)},
         redshift=Fixed(Z),
     )
     import jax

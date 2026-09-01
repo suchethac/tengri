@@ -28,7 +28,7 @@ import numpy as np
 import pytest
 
 from tengri import (
-    FIXED,
+    DEFAULT,
     FREE,
     FeaturePrecomp,
     Fixed,
@@ -86,7 +86,7 @@ def _build(ssp, *, cue, approx, line_data=None, emission=True, dust=True):
     if cue:
         kw["neb"] = {
             "type": "cue",
-            "all_params": FIXED,
+            "all_params": Fixed(DEFAULT),
             "logU": Uniform(-4.0, -1.0),
             "logZ_gas": Uniform(-1.5, 0.3),
         }
@@ -94,13 +94,13 @@ def _build(ssp, *, cue, approx, line_data=None, emission=True, dust=True):
         d = {
             "type": "two_component",
             "law": "calzetti",
-            "all_params": FIXED,
+            "all_params": Fixed(DEFAULT),
             "tau_bc": Uniform(0.0, 4.0),
             "tau_diff": Uniform(0.0, 3.0),
         }
         kw["dust_attenuation"] = d
         if emission:
-            kw["dust_emission"] = {"type": "dale2014", "all_params": FIXED}
+            kw["dust_emission"] = {"type": "dale2014", "all_params": Fixed(DEFAULT)}
         else:
             kw["dust_emission"] = {"type": "none"}
     return SEDModel.build(

@@ -47,7 +47,7 @@ import jax.numpy as jnp
 import numpy as np
 import pytest
 
-from tengri import FIXED, FREE, Fixed, Observation, Photometry, SEDModel, SSPData
+from tengri import DEFAULT, FREE, Fixed, Observation, Photometry, SEDModel, SSPData
 from tengri.observation.photometry import FilterCurve
 
 pytestmark = pytest.mark.regression_bug
@@ -114,11 +114,11 @@ def _build(ssp: SSPData, obs: Observation) -> SEDModel:
         return SEDModel.build(
             ssp_data=ssp,
             observation=obs,
-            sfh={"type": "dpl", "all_params": FIXED},
+            sfh={"type": "dpl", "all_params": Fixed(DEFAULT)},
             dust_attenuation={
                 "type": "two_component",
                 "law": "calzetti",
-                "all_params": FIXED,
+                "all_params": Fixed(DEFAULT),
                 "tau_bc": 2.0,
                 "tau_diff": 1.5,
             },
@@ -237,13 +237,13 @@ def test_narrowing_does_not_orphan_eta_balance(panchromatic_ssp, panchromatic_ob
         group_wildcard = SEDModel.build(
             ssp_data=panchromatic_ssp,
             observation=panchromatic_obs,
-            sfh={"type": "dpl", "all_params": FIXED},
+            sfh={"type": "dpl", "all_params": Fixed(DEFAULT)},
             dust_attenuation={
                 "type": "two_component",
                 "law": "calzetti",
                 "all_params": FREE,
             },
-            dust_emission={"type": "energy_balance_split", "all_params": FIXED},
+            dust_emission={"type": "energy_balance_split", "all_params": Fixed(DEFAULT)},
             neb={"type": "none"},
             redshift=Fixed(0.5),
         )

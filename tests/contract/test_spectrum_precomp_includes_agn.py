@@ -18,7 +18,7 @@ import jax.numpy as jnp
 import numpy as np
 import pytest
 
-from tengri import FIXED, Fixed, Observation, SEDModel, SpectrumPrecomp
+from tengri import DEFAULT, Fixed, Observation, SEDModel, SpectrumPrecomp
 from tengri.observation.spectroscopy import Spectroscopy
 
 pytestmark = pytest.mark.contract
@@ -33,13 +33,17 @@ def _build(ssp, approx):
         approx=approx,
         redshift=Fixed(0.5),
         igm={"type": "none"},
-        sfh={"type": "tsnorm", "all_params": FIXED, "log_total_mass": Fixed(10.0)},
-        dust_attenuation={"type": "two_component", "law": "calzetti", "all_params": FIXED},
+        sfh={"type": "tsnorm", "all_params": Fixed(DEFAULT), "log_total_mass": Fixed(10.0)},
+        dust_attenuation={
+            "type": "two_component",
+            "law": "calzetti",
+            "all_params": Fixed(DEFAULT),
+        },
         neb={"type": "none"},
         agn={
             "type": "composable",
-            "all_params": FIXED,
-            "disc": {"type": "multicolor", "all_params": FIXED},
+            "all_params": Fixed(DEFAULT),
+            "disc": {"type": "multicolor", "all_params": Fixed(DEFAULT)},
             "log_lbol": Fixed(12.0),
         },
     )

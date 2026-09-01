@@ -1,9 +1,12 @@
 import os
+
 os.environ["TF_CPP_MIN_LOG_LEVEL"] = "2"
 
 import warnings
+
 import jax
 import numpy as np
+
 import tengri
 
 warnings.filterwarnings("ignore", message=".*BakedInBackend.*")
@@ -20,13 +23,19 @@ model1 = tengri.SEDModel.build(
     ssp,
     sfh={
         "type": "dpl",
-        "all_params": tengri.FIXED,
+        "all_params": tengri.Fixed(tengri.DEFAULT),
         "alpha": 0.1,
         "beta": 0.1,
         "tau_gyr": 3.0,
         "log_total_mass": 10.0,
     },
-    dust_attenuation={"law": "power_law", "type": "two_component", "all_params": tengri.FIXED, "tau_diff": 0.2, "tau_bc": 0.3},
+    dust_attenuation={
+        "law": "power_law",
+        "type": "two_component",
+        "all_params": tengri.Fixed(tengri.DEFAULT),
+        "tau_diff": 0.2,
+        "tau_bc": 0.3,
+    },
     redshift=tengri.Fixed(0.1),
 )
 baseline1 = dict(model1.spec.sample(jax.random.PRNGKey(0)))
@@ -40,13 +49,19 @@ model2 = tengri.SEDModel.build(
     ssp,
     sfh={
         "type": "dpl",
-        "all_params": tengri.FIXED,
+        "all_params": tengri.Fixed(tengri.DEFAULT),
         "alpha": 1.0,
         "beta": 2.0,
         "tau_gyr": 2.0,
         "log_total_mass": 10.0,
     },
-    dust_attenuation={"law": "power_law", "type": "two_component", "all_params": tengri.FIXED, "tau_diff": 0.2, "tau_bc": 0.3},
+    dust_attenuation={
+        "law": "power_law",
+        "type": "two_component",
+        "all_params": tengri.Fixed(tengri.DEFAULT),
+        "tau_diff": 0.2,
+        "tau_bc": 0.3,
+    },
     redshift=tengri.Fixed(0.1),
 )
 baseline2 = dict(model2.spec.sample(jax.random.PRNGKey(1)))
@@ -60,13 +75,19 @@ model3 = tengri.SEDModel.build(
     ssp,
     sfh={
         "type": "dpl",
-        "all_params": tengri.FIXED,
+        "all_params": tengri.Fixed(tengri.DEFAULT),
         "alpha": 3.0,
         "beta": 3.0,
         "tau_gyr": 1.5,
         "log_total_mass": 10.0,
     },
-    dust_attenuation={"law": "power_law", "type": "two_component", "all_params": tengri.FIXED, "tau_diff": 0.2, "tau_bc": 0.3},
+    dust_attenuation={
+        "law": "power_law",
+        "type": "two_component",
+        "all_params": tengri.Fixed(tengri.DEFAULT),
+        "tau_diff": 0.2,
+        "tau_bc": 0.3,
+    },
     redshift=tengri.Fixed(0.1),
 )
 baseline3 = dict(model3.spec.sample(jax.random.PRNGKey(2)))
@@ -80,14 +101,20 @@ model4 = tengri.SEDModel.build(
     ssp,
     sfh={
         "type": "tsnorm",
-        "all_params": tengri.FIXED,
+        "all_params": tengri.Fixed(tengri.DEFAULT),
         "log_total_mass": 10.0,
         "peak_lbt_gyr": 0.2,
         "width_gyr": 0.5,
         "skew": 0.3,
         "trunc": 2.0,
     },
-    dust_attenuation={"law": "power_law", "type": "two_component", "all_params": tengri.FIXED, "tau_diff": 0.2, "tau_bc": 0.3},
+    dust_attenuation={
+        "law": "power_law",
+        "type": "two_component",
+        "all_params": tengri.Fixed(tengri.DEFAULT),
+        "tau_diff": 0.2,
+        "tau_bc": 0.3,
+    },
     redshift=tengri.Fixed(0.1),
 )
 baseline4 = dict(model4.spec.sample(jax.random.PRNGKey(3)))

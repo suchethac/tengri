@@ -48,7 +48,7 @@ for met in met_logzsol:
             ssp,
             sfh={
                 "type": "const",
-                "all_params": tengri.FIXED,
+                "all_params": tengri.Fixed(tengri.DEFAULT),
                 "log_total_mass": log_total_mass_true,
                 "start_gyr": age_myr / 1e3,
                 "end_gyr": 0.0,
@@ -56,11 +56,11 @@ for met in met_logzsol:
             dust_attenuation={
                 "law": "power_law",
                 "type": "two_component",
-                "all_params": tengri.FIXED,
+                "all_params": tengri.Fixed(tengri.DEFAULT),
                 "tau_diff": 0.0,
                 "tau_bc": 0.0,
             },
-            neb={"type": "cue", "all_params": tengri.FIXED, "logZ_gas": met},
+            neb={"type": "cue", "all_params": tengri.Fixed(tengri.DEFAULT), "logZ_gas": met},
             redshift=tengri.Fixed(0.0),
         )
         params = dict(model.spec.sample(jax.random.PRNGKey(0)))

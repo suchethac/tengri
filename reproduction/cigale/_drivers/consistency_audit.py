@@ -26,7 +26,7 @@ from pathlib import Path
 import numpy as np
 from reproduction.cigale._drivers import cigale_driver as C, units as U
 
-from tengri import FIXED, Fixed, SEDModel
+from tengri import DEFAULT, Fixed, SEDModel
 
 # Use the CIGALE-sourced Dale2014 templates for the audit (CIGALE-faithful
 # comparison). The shipped ``dale2014_templates.h5`` is the Wyoming-source
@@ -150,9 +150,9 @@ def fiducial_kwargs(
             "tau_gyr": Fixed(1.0),
             "age_gyr": Fixed(5.0),
             "log_total_mass": Fixed(LOG_TOTAL_MASS_FIDUCIAL),
-            "*": FIXED,
+            "all_params": Fixed(DEFAULT),
         },
-        "stellar": {"logzsol": Fixed(MET_LOGZSOL_FIDUCIAL), "*": FIXED},
+        "stellar": {"logzsol": Fixed(MET_LOGZSOL_FIDUCIAL), "all_params": Fixed(DEFAULT)},
         "redshift": Fixed(0.0),
     }
     if with_dust or with_ir:
@@ -162,21 +162,22 @@ def fiducial_kwargs(
             "law_diff": "leitherer02",
             "tau_bc": Fixed(DUST_TAU_FIDUCIAL["tau_bc"] if with_dust else 0.0),
             "tau_diff": Fixed(DUST_TAU_FIDUCIAL["tau_diff"] if with_dust else 0.0),
-            "*": FIXED,
+            "all_params": Fixed(DEFAULT),
         }
         # A peer group now, so it is added when wanted rather than set to None
         # and deleted again.
         if with_ir:
-            kw["dust_emission"] = {"type": "dale2014", "*": FIXED}
+            kw["dust_emission"] = {"type": "dale2014", "all_params": Fixed(DEFAULT)}
     else:
-        kw["dust_attenuation"] = {"law": "power_law", 
+        kw["dust_attenuation"] = {
+            "law": "power_law",
             "type": "two_component",
             "tau_bc": Fixed(0.0),
             "tau_diff": Fixed(0.0),
-            "*": FIXED,
+            "all_params": Fixed(DEFAULT),
         }
     if with_neb:
-        kw["neb"] = {"type": "cue", "*": FIXED}
+        kw["neb"] = {"type": "cue", "all_params": Fixed(DEFAULT)}
     if with_agn:
         # Mirror reproduction §9 / §10. All tengri AGN library defaults
         # match CIGALE skirtor2016 defaults (oa=40, tau=7, p=q=1, i=30,
@@ -199,11 +200,11 @@ def fiducial_kwargs(
         #    ``agn_torus_frac=0.71`` workaround from earlier audits.
         kw["agn"] = {
             "type": "composable",
-            "disc": {"type": "schartmann2005", "*": FIXED},
-            "torus": {"type": "skirtor", "*": FIXED},
+            "disc": {"type": "schartmann2005", "all_params": Fixed(DEFAULT)},
+            "torus": {"type": "skirtor", "all_params": Fixed(DEFAULT)},
             "agn_log_lbol": Fixed(-0.42),
             "agn_fracAGN": Fixed(0.3),
-            "*": FIXED,
+            "all_params": Fixed(DEFAULT),
         }
     return kw
 

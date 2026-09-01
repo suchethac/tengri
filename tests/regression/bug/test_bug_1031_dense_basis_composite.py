@@ -47,7 +47,7 @@ import jax
 import jax.numpy as jnp
 import pytest
 
-from tengri import FIXED, FREE, Fixed, SEDModel
+from tengri import DEFAULT, FREE, Fixed, SEDModel
 
 pytestmark = pytest.mark.regression_bug
 
@@ -59,7 +59,11 @@ def _build(ssp_data, observation, sfh_type):
         ssp_data=ssp_data,
         observation=observation,
         sfh={"type": sfh_type, "all_params": FREE},
-        dust_attenuation={"type": "two_component", "law": "calzetti", "all_params": FIXED},
+        dust_attenuation={
+            "type": "two_component",
+            "law": "calzetti",
+            "all_params": Fixed(DEFAULT),
+        },
         neb={"type": "none"},
         redshift=Fixed(0.5),
     )

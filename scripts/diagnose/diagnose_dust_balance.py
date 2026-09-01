@@ -1,10 +1,13 @@
 import os
+
 os.environ["TF_CPP_MIN_LOG_LEVEL"] = "2"
 
 import warnings
+
 import jax
 import jax.numpy as jnp
 import numpy as np
+
 import tengri
 
 warnings.filterwarnings("ignore", message=".*BakedInBackend.*")
@@ -14,18 +17,20 @@ model = tengri.SEDModel.build(
     ssp,
     sfh={
         "type": "dpl",
-        "all_params": tengri.FIXED,
+        "all_params": tengri.Fixed(tengri.DEFAULT),
         "alpha": 2.0,
         "beta": 2.5,
         "tau_gyr": 1.0,
         "log_total_mass": 10.0,
     },
-    dust_attenuation={"law": "power_law", 
+    dust_attenuation={
+        "law": "power_law",
         "type": "two_component",
-        "all_params": tengri.FIXED,
+        "all_params": tengri.Fixed(tengri.DEFAULT),
         "tau_bc": 0.5,
         "tau_diff": tengri.Uniform(0.0, 3.0),
-    }, dust_emission={"type": "dale2014", "all_params": tengri.FIXED},
+    },
+    dust_emission={"type": "dale2014", "all_params": tengri.Fixed(tengri.DEFAULT)},
     redshift=tengri.Fixed(0.05),
 )
 

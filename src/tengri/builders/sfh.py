@@ -26,12 +26,13 @@ factories give per-variant signatures generated from the registry, so:
 
 Examples
 --------
->>> from tengri import SEDModel, builders, FREE, FIXED, Uniform, Fixed
->>> # Equivalent to {'type': 'dpl', 'all_params': FIXED, 'beta': Uniform(1, 3)}
+>>> from tengri import SEDModel, builders, FREE, DEFAULT, Uniform, Fixed
+>>> # Equivalent to {'type': 'dpl', 'beta': Uniform(1, 3), 'other_params': Fixed(DEFAULT)}
 >>> sfh_config = builders.sfh.dpl(beta=Uniform(1, 3))
 >>> # All params free unless overridden:
 >>> sfh_config = builders.sfh.dpl(all_params=FREE)
 >>> # Mix wildcard policy with explicit overrides:
+>>> # (emits {'type': 'dpl', 'log_total_mass': Fixed(10.0), 'other_params': FREE})
 >>> sfh_config = builders.sfh.dpl(all_params=FREE, log_total_mass=Fixed(10.0))
 
 The output is interchangeable with the dict form:
@@ -46,14 +47,14 @@ from collections.abc import Callable
 from typing import Any
 
 from tengri._completion import curated_dir
-from tengri.builders._factory import _pop_wildcard
+from tengri.builders._factory import _DEFAULT_WILDCARD, _pop_wildcard, _validate_wildcard
 from tengri.components.stellar.sfh.registry import SFH_REGISTRY
-from tengri.parameters.sentinels import FIXED, FREE, WILDCARD_ALIAS
+from tengri.parameters.sentinels import WILDCARD_ALIAS, WILDCARD_ALIAS_OTHER
 
 # Sentinel marking a parameter that was not specified at call time. We
 # can't use ``None`` because ``None`` is a legitimate dict value users
-# might want to pass through; can't use ``FREE`` / ``FIXED`` because those
-# carry semantic meaning. A bare ``object()`` does the job.
+# might want to pass through; can't use ``FREE`` / ``Fixed(DEFAULT)`` because
+# those carry semantic meaning. A bare ``object()`` does the job.
 _UNSET = object()
 
 
@@ -87,11 +88,17 @@ def _build_docstring(variant: str, spec, param_records: list[tuple[str, Any]]) -
         lines.append("")
     lines.append("Parameters")
     lines.append("----------")
-    lines.append("all_params : sentinel, optional")
+    lines.append("all_params : sentinel or Fixed, optional")
     lines.append(
         "    Wildcard policy for parameters not explicitly named in this call. "
-        "``FREE`` makes them fit; ``FIXED`` (default) pins them to their "
+        "``FREE`` makes them fit; ``Fixed(DEFAULT)`` (default) pins them to their "
         "registry-default center. Matches the ``'all_params'`` key in the dict grammar."
+    )
+    lines.append("other_params : sentinel, optional")
+    lines.append(
+        "    Exact synonym of ``all_params``; give only one. Reads best written "
+        'last, after explicit per-parameter overrides, as "the others". Matches '
+        "the ``'other_params'`` key in the dict grammar."
     )
     for short, pdef in param_records:
         default_repr = repr(pdef.default) if pdef.default is not None else "registry default"
@@ -132,22 +139,27 @@ def _make_factory(variant: str, spec) -> Callable[..., dict]:
 
     def factory(**kwargs: Any) -> dict:
         wildcard = _pop_wildcard(variant, kwargs)
-        if wildcard not in (FREE, FIXED):
-            raise ValueError(
-                f"{variant}(all_params=...): expected FREE or FIXED, got "
-                f"{wildcard!r}. Use tengri.FREE or tengri.FIXED."
-            )
-        out: dict[str, Any] = {"type": variant, WILDCARD_ALIAS: wildcard}
+        _validate_wildcard(variant, wildcard)
         unknown = [k for k in kwargs if k not in short_names]
         if unknown:
             raise TypeError(
                 f"{variant}() got unexpected keyword arguments: {unknown}. "
                 f"Valid parameter names for {variant!r}: {short_names}. "
-                f"(Pass ``all_params=FREE`` or ``all_params=FIXED`` to set the policy.)"
+                f"(Pass ``all_params=FREE`` or ``all_params=Fixed(DEFAULT)`` -- or the "
+                f"synonym ``other_params=`` -- to set the policy.)"
             )
-        for short in short_names:
-            if short in kwargs and kwargs[short] is not _UNSET:
-                out[short] = kwargs[short]
+        out: dict[str, Any] = {"type": variant}
+        # Per-parameter entries before the wildcard.
+        param_entries: dict[str, Any] = {
+            short: kwargs[short]
+            for short in short_names
+            if short in kwargs and kwargs[short] is not _UNSET
+        }
+        out.update(param_entries)
+        # Wildcard LAST: 'all_params' when it is the only parameter
+        # directive, 'other_params' when explicit per-param entries precede it.
+        wildcard_key = WILDCARD_ALIAS if not param_entries else WILDCARD_ALIAS_OTHER
+        out[wildcard_key] = wildcard
         return out
 
     # Real signature so IDEs see per-parameter kwargs.
@@ -155,7 +167,13 @@ def _make_factory(variant: str, spec) -> Callable[..., dict]:
         inspect.Parameter(
             "all_params",
             inspect.Parameter.KEYWORD_ONLY,
-            default=FIXED,
+            default=_DEFAULT_WILDCARD,
+            annotation=Any,
+        ),
+        inspect.Parameter(
+            "other_params",
+            inspect.Parameter.KEYWORD_ONLY,
+            default=_UNSET,
             annotation=Any,
         ),
     ]

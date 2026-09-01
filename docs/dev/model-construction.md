@@ -29,7 +29,7 @@ structural `type`, an `'all_params'` free/fixed wildcard, and per-parameter
 overrides.
 
 ```python
-from tengri import SEDModel, FREE, FIXED, Fixed, Uniform, recipes
+from tengri import SEDModel, FREE, Fixed, DEFAULT, Uniform, recipes
 
 # From a curated recipe (each recipe's docstring states its SSP requirement):
 model = SEDModel.build(ssp_data=ssp, observation=obs,
@@ -39,15 +39,15 @@ model = SEDModel.build(ssp_data=ssp, observation=obs,
 model = SEDModel.build(
     ssp_data=ssp, observation=obs,
     sfh={'type': 'dpl', 'all_params': FREE, 'beta': Uniform(1, 3)},
-    dust_attenuation={'type': 'two_component', 'law': 'calzetti', 'all_params': FIXED,
-                      'tau_bc': 0.5},
-    dust_emission={'type': 'dale2014', 'all_params': FIXED},
-    neb={'type': 'cue', 'all_params': FIXED},
+    dust_attenuation={'type': 'two_component', 'law': 'calzetti',
+                      'tau_bc': 0.5, 'other_params': Fixed(DEFAULT)},
+    dust_emission={'type': 'dale2014', 'all_params': Fixed(DEFAULT)},
+    neb={'type': 'cue', 'all_params': Fixed(DEFAULT)},
     shock={'norm': 'frac', 'frac': Uniform(0, 1)},   # composes with neb
     redshift=Fixed(0.05),
 )
 
-model.spec.summary()          # provenance-tagged: [user]/[all_params FREE]/[all_params FIXED]/[default]
+model.spec.summary()          # provenance-tagged: [user]/[all_params FREE]/[all_params Fixed(DEFAULT)]/[default]
 groups = model.spec.to_groups()   # round-trip back to the grammar for editing
 ```
 
@@ -59,10 +59,15 @@ groups = model.spec.to_groups()   # round-trip back to the grammar for editing
 - Each group dict accepts:
   - `'type'` — the structural choice (which variant), validated against the
     domain's registered names.
-  - `'all_params'` — the wildcard: `FREE` or `FIXED` (default `FIXED`). It
-    cascades over the group's parameters. For groups whose bucket params default
-    to `Fixed` (e.g. `radio`, `shock`), `'all_params': FREE` is a no-op — use
-    explicit priors instead (`shock={'frac': Uniform(0, 1)}`).
+  - `'all_params'` — the wildcard: `FREE` or `Fixed(DEFAULT)` (default
+    `Fixed(DEFAULT)`). Its exact synonym `'other_params'` is preferred once the
+    group also has explicit per-parameter entries (`'other_params'` written
+    last, meaning "the others"); giving both spellings in one dict raises. The
+    wildcard cascades over the group's parameters. A wildcard `FREE` that
+    frees only part of a group warns about the remainder; one that frees
+    nothing at all (e.g. `igm={'type': 'inoue14'}` declares no parameters)
+    warns that it had no effect — use explicit priors
+    (`shock={'frac': Uniform(0, 1)}`) when you mean specific parameters.
   - **Per-parameter short-forms** — a bare parameter name inside the group
     resolves to the full prefixed name (`'beta'` in the `sfh` group →
     `sfh_dpl_beta`; `'frac'` in `shock` → `shock_frac`). The full prefixed
@@ -114,7 +119,12 @@ groups = model.spec.to_groups()   # round-trip back to the grammar for editing
   `agn.torus`, `agn.nlr`, `agn.blr`, `agn.feii`, `agn.atten` (the deprecated
   `agn.lines` alias expands to an `nlr`/`blr` pair)
   ([ADR-0018](../adr/0018-composable-agn-grammar.md)).
-- **Sentinels** `FREE` / `FIXED` are singletons exported from `tengri`.
+- **Sentinels** `FREE` / `DEFAULT` are singletons exported from `tengri`.
+  `FREE` defers a parameter to the registry's default prior; `DEFAULT` is
+  legal only as `Fixed(DEFAULT)`, pinning a parameter at the registry default
+  value. The old `FIXED` sentinel is removed (pre-1.0 break, no shim); pin a
+  parameter with `Fixed(v)` for your own value or `Fixed(DEFAULT)` for the
+  registry default.
 - **Recipes** (`tengri.recipes.*`) are five curated starting points —
   `star_forming_photometry`, `quiescent_z0`, `agn_panchromatic`,
   `stochastic_sfh_jwst`, `mock_recovery_minimal`.

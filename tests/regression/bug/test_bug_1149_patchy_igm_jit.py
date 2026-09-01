@@ -50,7 +50,7 @@ import numpy as np
 import pytest
 
 import tengri
-from tengri import FIXED, FREE, Fixed, Observation, Photometry, SEDModel, Uniform, WavePrecomp
+from tengri import DEFAULT, FREE, Fixed, Observation, Photometry, SEDModel, Uniform, WavePrecomp
 
 pytestmark = pytest.mark.regression_bug
 
@@ -89,7 +89,7 @@ def _build(ssp, *, z, approx, bands=BANDS, patchy=True, x_HI=None):
         dust_attenuation={
             "law": "power_law",
             "type": "two_component",
-            "all_params": FIXED,
+            "all_params": Fixed(DEFAULT),
             "tau_diff": 0.3,
         },
         redshift=Fixed(z),

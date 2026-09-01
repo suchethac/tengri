@@ -50,11 +50,11 @@ def intrinsic_sed():
         pytest.skip(f"SSP data not on disk (CI runner): {exc}")
     m = tengri.SEDModel.build(
         ssp,
-        sfh={"type": "tsnorm", "all_params": tengri.FIXED},
+        sfh={"type": "tsnorm", "all_params": tengri.Fixed(tengri.DEFAULT)},
         dust_attenuation={
             "law": "power_law",
             "type": "two_component",
-            "all_params": tengri.FIXED,
+            "all_params": tengri.Fixed(tengri.DEFAULT),
             "tau_diff": 0.0,
             "tau_bc": 0.0,
         },
@@ -76,15 +76,15 @@ def test_dust_energy_balance(intrinsic_sed, emission_type, tau):
     sed_intr, wave, ssp = intrinsic_sed
     m = tengri.SEDModel.build(
         ssp,
-        sfh={"type": "tsnorm", "all_params": tengri.FIXED},
+        sfh={"type": "tsnorm", "all_params": tengri.Fixed(tengri.DEFAULT)},
         dust_attenuation={
             "law": "power_law",
             "type": "two_component",
-            "all_params": tengri.FIXED,
+            "all_params": tengri.Fixed(tengri.DEFAULT),
             "tau_diff": tau,
             "tau_bc": tau,
         },
-        dust_emission={"type": emission_type, "all_params": tengri.FIXED},
+        dust_emission={"type": emission_type, "all_params": tengri.Fixed(tengri.DEFAULT)},
         redshift=tengri.Fixed(0.05),
     )
     p = dict(m.spec.sample(jax.random.PRNGKey(0)))
@@ -145,11 +145,11 @@ def _pure_dust_ir_energy(m, p):
 def _build_emission(ssp, emission, tau=0.6):
     return tengri.SEDModel.build(
         ssp,
-        sfh={"type": "tsnorm", "all_params": tengri.FIXED},
+        sfh={"type": "tsnorm", "all_params": tengri.Fixed(tengri.DEFAULT)},
         dust_attenuation={
             "law": "power_law",
             "type": "two_component",
-            "all_params": tengri.FIXED,
+            "all_params": tengri.Fixed(tengri.DEFAULT),
             "tau_diff": tau,
             "tau_bc": tau,
         },
@@ -164,7 +164,9 @@ def test_energy_balance_all_models(intrinsic_sed, emission_type):
     """All full-SED dust emitters conserve absorbed -> emitted energy at eta=1."""
     sed_intr, wave, ssp = intrinsic_sed
     try:
-        m = _build_emission(ssp, {"type": emission_type, "all_params": tengri.FIXED})
+        m = _build_emission(
+            ssp, {"type": emission_type, "all_params": tengri.Fixed(tengri.DEFAULT)}
+        )
         out = m.predict_rest_sed(dict(m.spec.sample(jax.random.PRNGKey(0))))
     except FileNotFoundError as exc:
         pytest.skip(f"{emission_type} template grid not on disk: {exc}")
@@ -206,7 +208,9 @@ def test_eta_balance_scales_ir_linearly(intrinsic_sed):
 def test_eta_balance_fixed_by_default(intrinsic_sed):
     """With no eta override the model is strict energy balance (eta not free)."""
     _, _, ssp = intrinsic_sed
-    m = _build_emission(ssp, {"type": "modified_blackbody", "all_params": tengri.FIXED})
+    m = _build_emission(
+        ssp, {"type": "modified_blackbody", "all_params": tengri.Fixed(tengri.DEFAULT)}
+    )
     assert "dust_eta_balance" not in m.spec.free_params
 
 
@@ -234,7 +238,7 @@ def test_energy_balance_split_f_cold_conserves_total(intrinsic_sed):
             {
                 "type": "energy_balance_split",
                 "f_cold": tengri.Fixed(0.2),
-                "all_params": tengri.FIXED,
+                "all_params": tengri.Fixed(tengri.DEFAULT),
             },
         ),
         {},
@@ -245,7 +249,7 @@ def test_energy_balance_split_f_cold_conserves_total(intrinsic_sed):
             {
                 "type": "energy_balance_split",
                 "f_cold": tengri.Fixed(0.8),
-                "all_params": tengri.FIXED,
+                "all_params": tengri.Fixed(tengri.DEFAULT),
             },
         ),
         {},
@@ -262,7 +266,10 @@ def test_energy_balance_split_l_agn_ir_adds(intrinsic_sed):
     # base ~ the absorbed (= re-emitted) energy in erg/s; feed it back as the
     # AGN-IR term so the IR budget should roughly double.
     base = _dust_ir_energy(
-        _build_emission(ssp, {"type": "energy_balance_split", "all_params": tengri.FIXED}), {}
+        _build_emission(
+            ssp, {"type": "energy_balance_split", "all_params": tengri.Fixed(tengri.DEFAULT)}
+        ),
+        {},
     )
     boosted = _dust_ir_energy(
         _build_emission(
@@ -270,7 +277,7 @@ def test_energy_balance_split_l_agn_ir_adds(intrinsic_sed):
             {
                 "type": "energy_balance_split",
                 "L_agn_ir": tengri.Fixed(base),
-                "all_params": tengri.FIXED,
+                "all_params": tengri.Fixed(tengri.DEFAULT),
             },
         ),
         {},

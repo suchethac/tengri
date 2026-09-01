@@ -29,7 +29,7 @@ import jax.numpy as jnp
 import numpy as np
 import pytest
 
-from tengri import FIXED, Fixed, Observation, Photometry, SEDModel, Uniform
+from tengri import DEFAULT, Fixed, Observation, Photometry, SEDModel, Uniform
 
 pytestmark = pytest.mark.regression_bug
 
@@ -164,7 +164,7 @@ def _composable_intrinsics(ssp, dtype):
         observation=obs,
         sfh={
             "type": "delayed",
-            "all_params": FIXED,
+            "all_params": Fixed(DEFAULT),
             "log_total_mass": Uniform(9.0, 11.0),
             "tau_gyr": 1.0,
             "age_gyr": 5.0,
@@ -172,15 +172,15 @@ def _composable_intrinsics(ssp, dtype):
         dust_attenuation={
             "type": "two_component",
             "law": "calzetti",
-            "all_params": FIXED,
+            "all_params": Fixed(DEFAULT),
             "tau_diff": 0.3,
             "tau_bc": 0.0,
         },
         agn={
             "type": "composable",
-            "all_params": FIXED,
-            "disc": {"type": "multicolor", "all_params": FIXED},
-            "torus": {"type": "skirtor", "all_params": FIXED},
+            "all_params": Fixed(DEFAULT),
+            "disc": {"type": "multicolor", "all_params": Fixed(DEFAULT)},
+            "torus": {"type": "skirtor", "all_params": Fixed(DEFAULT)},
             "norm": "cigale_joint",
             "log_lbol": Fixed(11.0),  # #2069: pinned to break flat direction
             "fracAGN": 0.1,
@@ -245,7 +245,7 @@ def test_multicolor_disc_agn_fit_gradient_finite_in_float32(ssp_bare):
             observation=obs,
             sfh={
                 "type": "delayed",
-                "all_params": FIXED,
+                "all_params": Fixed(DEFAULT),
                 "log_total_mass": Uniform(9.0, 11.0),
                 "tau_gyr": 1.0,
                 "age_gyr": 5.0,
@@ -253,16 +253,16 @@ def test_multicolor_disc_agn_fit_gradient_finite_in_float32(ssp_bare):
             dust_attenuation={
                 "type": "two_component",
                 "law": "calzetti",
-                "all_params": FIXED,
+                "all_params": Fixed(DEFAULT),
                 "tau_diff": 0.5,
                 "tau_bc": 0.0,
             },
-            dust_emission={"type": "dale2014", "all_params": FIXED},
+            dust_emission={"type": "dale2014", "all_params": Fixed(DEFAULT)},
             agn={
                 "type": "composable",
-                "all_params": FIXED,
-                "disc": {"type": "multicolor", "all_params": FIXED},
-                "torus": {"type": "skirtor", "all_params": FIXED},
+                "all_params": Fixed(DEFAULT),
+                "disc": {"type": "multicolor", "all_params": Fixed(DEFAULT)},
+                "torus": {"type": "skirtor", "all_params": Fixed(DEFAULT)},
                 "norm": "cigale_joint",
                 "log_lbol": Fixed(11.0),  # #2069: pinned to break flat direction
                 "fracAGN": 0.1,

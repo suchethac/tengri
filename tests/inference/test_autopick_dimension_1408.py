@@ -75,7 +75,7 @@ def test_n_latent_exceeds_n_free_for_field_sfh(ssp_data_fsps):
     vector must make ``n_latent`` strictly larger. Uses a real build so the
     ``eval_shape``-based property is exercised on an actual sampling path.
     """
-    from tengri import FIXED, Fixed, Observation, Photometry, SEDModel, Uniform
+    from tengri import DEFAULT, Fixed, Observation, Photometry, SEDModel, Uniform
 
     obs = Observation(photometry=Photometry.from_names(["sdss_g", "sdss_r"]))
     model = SEDModel.build(
@@ -83,7 +83,7 @@ def test_n_latent_exceeds_n_free_for_field_sfh(ssp_data_fsps):
         observation=obs,
         sfh={
             "type": ["dpl", "field"],
-            "all_params": FIXED,
+            "all_params": Fixed(DEFAULT),
             "log_total_mass": Uniform(9.0, 11.0),
             "psd_sigma": Fixed(1.0),
             "psd_tau_myr": Uniform(100, 500),
@@ -91,7 +91,7 @@ def test_n_latent_exceeds_n_free_for_field_sfh(ssp_data_fsps):
         dust_attenuation={
             "type": "two_component",
             "law": "calzetti",
-            "all_params": FIXED,
+            "all_params": Fixed(DEFAULT),
         },
         neb={"type": "none"},
         redshift=Fixed(0.05),

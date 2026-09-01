@@ -85,7 +85,7 @@ References
     # Build an intrinsic (no-dust) model at z=0.05
     SFH = {
         "type": "dpl",
-        "all_params": tengri.FIXED,
+        "all_params": tengri.Fixed(tengri.DEFAULT),
         "alpha": 1.0,
         "beta": 2.0,
         "tau_gyr": 4.0,
@@ -99,7 +99,7 @@ References
         dust_attenuation={
             "law": "power_law",
             "type": "two_component",
-            "all_params": tengri.FIXED,
+            "all_params": tengri.Fixed(tengri.DEFAULT),
             "tau_bc": 0.0,
             "tau_diff": 0.0,
         },

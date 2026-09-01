@@ -35,7 +35,7 @@ import jax
 import numpy as np
 import pytest
 
-from tengri import FIXED, SEDModel, WavePrecomp
+from tengri import DEFAULT, SEDModel, WavePrecomp
 from tengri.components.sed_model_component import _REGISTRY
 from tengri.components.stellar.sps.dsps_wrapper import load_ssp_data
 from tengri.components.template_threading import TemplateThreading
@@ -76,7 +76,7 @@ def _build(ssp, obs, groups, approx=None):
         return SEDModel.build(
             ssp_data=ssp,
             observation=obs,
-            sfh={"type": "dpl", "all_params": FIXED},
+            sfh={"type": "dpl", "all_params": Fixed(DEFAULT)},
             redshift=Fixed(0.1),
             approx=approx,
             **groups,
@@ -118,7 +118,7 @@ _CASES = {
     "shock_lhalpha": {
         "shock": {"type": "mappings", "norm": "lhalpha", "log_lhalpha": Fixed(41.0)}
     },
-    "cb19": {"neb": {"type": "cb19", "all_params": FIXED}},
+    "cb19": {"neb": {"type": "cb19", "all_params": Fixed(DEFAULT)}},
 }
 
 

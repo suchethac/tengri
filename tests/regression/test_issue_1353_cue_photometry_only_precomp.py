@@ -22,7 +22,7 @@ import jax
 import numpy as np
 import pytest
 
-from tengri import FIXED, FREE, FeaturePrecomp, SEDModel, WavePrecomp
+from tengri import DEFAULT, FREE, FeaturePrecomp, Fixed, SEDModel, WavePrecomp
 
 
 def _cue_model(ssp, obs, approx):
@@ -32,7 +32,7 @@ def _cue_model(ssp, obs, approx):
         sfh={"type": "dpl", "all_params": FREE},
         dust_attenuation={"type": "none"},
         redshift=0.05,
-        neb={"type": "cue", "all_params": FIXED},
+        neb={"type": "cue", "all_params": Fixed(DEFAULT)},
         approx=approx,
     )
 

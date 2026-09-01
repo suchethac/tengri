@@ -21,7 +21,7 @@ import jax
 import numpy as np
 import pytest
 
-from tengri import FIXED, Fixed, SEDModel, Uniform, WavePrecomp
+from tengri import DEFAULT, Fixed, SEDModel, Uniform, WavePrecomp
 from tengri.inference.fitter import Fitter
 
 pytestmark = pytest.mark.regression_bug
@@ -31,11 +31,11 @@ def _build(ssp, obs, approx):
     return SEDModel.build(
         ssp_data=ssp,
         observation=obs,
-        sfh={"type": "dpl", "all_params": FIXED, "log_total_mass": Uniform(9.0, 11.0)},
+        sfh={"type": "dpl", "all_params": Fixed(DEFAULT), "log_total_mass": Uniform(9.0, 11.0)},
         dust_attenuation={
             "type": "two_component",
             "law": "calzetti",
-            "all_params": FIXED,
+            "all_params": Fixed(DEFAULT),
         },
         neb={"type": "none"},
         redshift=Fixed(0.3),

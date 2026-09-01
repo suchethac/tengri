@@ -50,7 +50,7 @@ import jax.numpy as jnp
 import numpy as np
 import pytest
 
-from tengri import FIXED, Fitter, Fixed, Observation, Photometry, SEDModel, Uniform, WavePrecomp
+from tengri import DEFAULT, Fitter, Fixed, Observation, Photometry, SEDModel, Uniform, WavePrecomp
 from tengri.inference.context import InferenceContext
 from tengri.utils.scale import DEFAULT_COTANGENT_BOOST, loss_scaled_grad
 
@@ -67,7 +67,7 @@ pytestmark = pytest.mark.regression_bug
 _DUST_FREE = {
     "type": "two_component",
     "law": "calzetti",
-    "all_params": FIXED,
+    "all_params": Fixed(DEFAULT),
     "tau_diff": Uniform(0.0, 1.5),
     "tau_bc": 0.0,
 }
@@ -75,9 +75,9 @@ _DUST_FIXED = dict(_DUST_FREE, tau_diff=0.3)
 
 _AGN = {
     "type": "composable",
-    "all_params": FIXED,
-    "disc": {"type": "multicolor", "all_params": FIXED},
-    "torus": {"type": "skirtor", "all_params": FIXED},
+    "all_params": Fixed(DEFAULT),
+    "disc": {"type": "multicolor", "all_params": Fixed(DEFAULT)},
+    "torus": {"type": "skirtor", "all_params": Fixed(DEFAULT)},
     "norm": "cigale_joint",
     "log_lbol": Fixed(10.5),  # #2069: pinned to break the flat direction
     "fracAGN": 0.1,
@@ -87,13 +87,13 @@ _MODELS = {
     "stellar_dust": dict(dust_attenuation=_DUST_FREE),
     "dust_ir": dict(
         dust_attenuation=_DUST_FREE,
-        dust_emission={"type": "dale2014", "all_params": FIXED},
+        dust_emission={"type": "dale2014", "all_params": Fixed(DEFAULT)},
     ),
     "agn": dict(dust_attenuation=_DUST_FIXED, agn=_AGN),
     "panchromatic": dict(
         dust_attenuation=_DUST_FREE,
-        dust_emission={"type": "dale2014_cigale", "all_params": FIXED},
-        neb={"type": "cue", "all_params": FIXED},
+        dust_emission={"type": "dale2014_cigale", "all_params": Fixed(DEFAULT)},
+        neb={"type": "cue", "all_params": Fixed(DEFAULT)},
         agn=_AGN,
         radio={"sf": {"type": "bell2003"}, "agn": {"type": "powerlaw"}},
         xray={"type": "simple"},
@@ -168,7 +168,7 @@ def _base(zspec):
     return dict(
         sfh={
             "type": "delayed",
-            "all_params": FIXED,
+            "all_params": Fixed(DEFAULT),
             "log_total_mass": Uniform(9.0, 11.0),
             "tau_gyr": 1.0,
             "age_gyr": 5.0,

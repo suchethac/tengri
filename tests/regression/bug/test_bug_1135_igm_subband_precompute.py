@@ -23,7 +23,7 @@ import numpy as np
 import pytest
 
 import tengri
-from tengri import FIXED, FREE, Fixed, Observation, Photometry, SEDModel, Uniform, WavePrecomp
+from tengri import DEFAULT, FREE, Fixed, Observation, Photometry, SEDModel, Uniform, WavePrecomp
 from tengri.components.igm.component import IGMSEDComponent, IGMSEDComponentConfig
 
 pytestmark = pytest.mark.regression_bug
@@ -50,7 +50,7 @@ def _build(ssp, approx, *, z=0.8, tau_diff=0.0, tau_bc=0.0, igm=True, **kw):
         dust_attenuation={
             "law": "power_law",
             "type": "two_component",
-            "all_params": FIXED,
+            "all_params": Fixed(DEFAULT),
             "tau_diff": tau_diff,
             "tau_bc": tau_bc,
         },
@@ -283,7 +283,7 @@ def test_free_redshift_folds_on_the_ztable_grid(ssp):
         dust_attenuation={
             "law": "power_law",
             "type": "two_component",
-            "all_params": FIXED,
+            "all_params": Fixed(DEFAULT),
             "tau_diff": 0.7,
             "tau_bc": 1.0,
         },
@@ -304,7 +304,7 @@ def test_free_redshift_folds_on_the_ztable_grid(ssp):
         dust_attenuation={
             "law": "power_law",
             "type": "two_component",
-            "all_params": FIXED,
+            "all_params": Fixed(DEFAULT),
             "tau_diff": 0.7,
             "tau_bc": 1.0,
         },

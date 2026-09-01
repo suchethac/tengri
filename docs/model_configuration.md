@@ -21,11 +21,17 @@ Every group dict contains three kinds of keys:
 sfh={'type': 'dpl', 'age_kernel': 'cic'}
 ```
 
-**2. The wildcard key `'all_params'`** — sets the free/fixed status for all parameters in the group that are not explicitly overridden. Accepts `FREE`, `FIXED`, or any `Distribution` instance. Default is `FIXED`. This is the **only wildcard spelling**; the retired `'*'` synonym raises `ValueError` when building a model.
+**2. The wildcard keys `'all_params'` and `'other_params'`** — exact synonyms that set the free/fixed status for every parameter in the group not explicitly overridden. Each accepts `FREE` (defer to the registry's default prior) or `Fixed(DEFAULT)` (pin at the registry default value) — never a concrete `Fixed(v)` (one literal value cannot apply across every parameter in the group) and never an arbitrary `Distribution`. Giving both spellings in the same dict raises. The retired `'*'` synonym still raises `ValueError` naming both accepted spellings.
+
+Pick the spelling that reads best for the shape of the dict: `'all_params'` when the wildcard is the group's only directive, `'other_params'` written **last**, after explicit per-parameter entries, where it reads as "the others." `to_groups()` and the builder factories always emit by this convention:
 
 ```python
-# All SFH params free, except beta which is fixed at 1.5
-sfh={'type': 'dpl', 'all_params': FREE, 'beta': 1.5}
+# Sole directive: 'all_params' reads best
+dust_attenuation={'type': 'two_component', 'law': 'calzetti', 'all_params': Fixed(DEFAULT)}
+
+# Mixed: explicit overrides first, 'other_params' last
+dust_attenuation={'type': 'two_component', 'law': 'calzetti', 'tau_bc': 0.5, 'other_params': Fixed(DEFAULT)}
+# NOT (legal, but not the taught style): {..., 'all_params': Fixed(DEFAULT), 'tau_bc': 0.5}
 ```
 
 **3. Parameter keys** — bare parameter names or full prefixed names that override the wildcard or default. Short names are auto-prefixed by the group context.
@@ -35,6 +41,23 @@ sfh={'type': 'dpl', 'all_params': FREE, 'beta': 1.5}
 dust_attenuation={'type': 'two_component', 'tau_bc': 0.5}
 dust_attenuation={'type': 'two_component', 'dust_tau_bc': 0.5}  # full prefixed name
 dust_attenuation={'type': 'two_component', 'tau_bc': 0.5}       # short name (preferred)
+```
+
+### Free vs fixed: one-minute table
+
+Every parameter in a group dict is either **free** (sampled during inference) or **fixed** (pinned at a single value). And each is either using the **registry default** or a **value/prior you provide**:
+
+|            | registry default | your choice |
+|------------|------------------|-------------|
+| **free**   | `FREE` — sampled with the registry's default prior | any `Distribution`, e.g. `Uniform(1, 3)` |
+| **fixed**  | `Fixed(DEFAULT)` — pinned at the registry's default value | `Fixed(0.3)` — pinned at your value |
+
+**`FREE`** means "free to vary, using the registry's default prior." **`Fixed(DEFAULT)`** means "pinned at the registry's default value." The `'all_params'` wildcard applies one disposition to all parameters in the group; after explicit per-parameter entries, spell the remainder `'other_params'`:
+
+```python
+sfh={'type': 'dpl', 'all_params': FREE}                               # everything free
+sfh={'type': 'dpl', 'beta': Uniform(1, 3), 'other_params': Fixed(DEFAULT)}  # beta free, rest pinned
+dust_attenuation={'type': 'two_component', 'law': 'calzetti', 'tau_bc': 0.4, 'other_params': Fixed(DEFAULT)}  # tau_bc overridden, rest at defaults
 ```
 
 ### Prefixing and name resolution
@@ -86,7 +109,7 @@ An optional group with no `'type'` but with other keys raises `ParameterError` w
 
 ### Wildcard rules and no-op detection
 
-`'all_params': FREE` on a group whose parameters default to `FIXED` is valid and cascades. However, on a group where **all** parameters are inherently fixed (e.g., `radio` without sub-blocks configured to use a free model, or `shock` with only fixed components), `'all_params': FREE` **raises an error** with an example of how to set explicit priors instead:
+`'all_params': FREE` on a group whose parameters default to `Fixed(DEFAULT)` is valid and cascades. However, on a group where **all** parameters are inherently fixed (e.g., `radio` without sub-blocks configured to use a free model, or `shock` with only fixed components), `'all_params': FREE` **raises an error** with an example of how to set explicit priors instead:
 
 ```python
 # WRONG: radio is free-param free
@@ -123,7 +146,7 @@ Generated per-domain parameter references are shown above. For per-type paramete
 
 **Structural keys:**
 - `'type'` — SFH model (`'dpl'`, `'delayed_tau'`, `'lognorm'`, `'field'`, etc.). Menu: `tengri.list_sfh_models()`.
-- `'all_params'` — Wildcard: set all parameters to FREE or FIXED. Only `all_params` spelling (not `'*'`).
+- `'all_params'` — Wildcard: sets every parameter in the group to `FREE` or `Fixed(DEFAULT)`. Exact synonym: `'other_params'` (reads best written last, after explicit per-param entries). Not `'*'` (retired).
 - `'age_kernel'` — Integration method: `'cic'` (default, cloud-in-cell) or `'dsps'` (histogram). See the model grammar design guide for performance details.
 - `'bin_edges_gyr'` — Non-parametric bin edges (Gyr). Only for `type='histogram'` or similar.
 - `'field_centering'` — Field draw centering ('none' or 'mean'). Only for `type='field'`.
@@ -143,11 +166,11 @@ sfh={'type': 'dpl', 'all_params': FREE, 'beta': Uniform(1, 3), 'age_kernel': 'ci
 
 **Structural keys:**
 - `'type'` — Metallicity model (`'table'` for per-age SSP indexing, `'ramp'` for a linear Z(t) history, etc.). Menu: `tengri.list_metallicity_modes()`.
-- `'all_params'` — Wildcard: set all parameters to FREE or FIXED. Only `all_params` spelling (not `'*'`).
+- `'all_params'` — Wildcard: sets every parameter in the group to `FREE` or `Fixed(DEFAULT)`. Exact synonym: `'other_params'` (reads best written last, after explicit per-param entries). Not `'*'` (retired).
 
 **Minimal example:**
 ```python
-met={'type': 'table'}  # all_params defaults to FIXED
+met={'type': 'table'}  # all_params defaults to Fixed(DEFAULT)
 met={'type': 'ramp', 'logzsol_0': Fixed(-0.3), 'logzsol_1': Free}  # two-knot ramp
 ```
 
@@ -161,7 +184,7 @@ met={'type': 'ramp', 'logzsol_0': Fixed(-0.3), 'logzsol_1': Free}  # two-knot ra
 
 **Structural keys:**
 - `'type'` — Architecture: `'single_component'` (one dust screen) or `'two_component'` (birth-cloud + diffuse). Default varies by law.
-- `'all_params'` — Wildcard: set all parameters to FREE or FIXED. Only `all_params` spelling (not `'*'`).
+- `'all_params'` — Wildcard: sets every parameter in the group to `FREE` or `Fixed(DEFAULT)`. Exact synonym: `'other_params'` (reads best written last, after explicit per-param entries). Not `'*'` (retired).
 - `'law'` — Attenuation law: `'calzetti'`, `'ccm89'`, `'mw_rv31'`, `'kext00'`, etc. Menu: `tengri.list_dust_laws()`.
   - On `'single_component'`: one law for the entire dust.
   - On `'two_component'`: `'law'` applies to both screens. Override per-screen with `'law_bc'` and `'law_diff'`.
@@ -183,10 +206,10 @@ met={'type': 'ramp', 'logzsol_0': Fixed(-0.3), 'logzsol_1': Free}  # two-knot ra
 **Minimal example:**
 ```python
 # Single component
-dust_attenuation={'type': 'single_component', 'law': 'calzetti', 'all_params': FIXED, 'tau': 0.5}
+dust_attenuation={'type': 'single_component', 'law': 'calzetti', 'tau': 0.5, 'other_params': Fixed(DEFAULT)}
 
 # Two component (one law)
-dust_attenuation={'type': 'two_component', 'law': 'calzetti', 'all_params': FIXED, 'tau_bc': 0.4, 'tau_diff': 0.2}
+dust_attenuation={'type': 'two_component', 'law': 'calzetti', 'tau_bc': 0.4, 'tau_diff': 0.2, 'other_params': Fixed(DEFAULT)}
 
 # Two component (per-screen laws)
 dust_attenuation={'type': 'two_component', 'law_bc': 'ccm89', 'law_diff': 'calzetti', 'tau_bc': 0.4, 'tau_diff': 0.2}
@@ -206,14 +229,14 @@ dust_attenuation={'type': 'wg00', 'dust_curve': 'mw_rv31', 'geometry': 'slab', '
 
 **Structural keys:**
 - `'type'` — Emission model: `'dale2014'`, `'draine2016'`, etc. Menu: `tengri.list_dust_emission_models()`.
-- `'all_params'` — Wildcard: set all parameters to FREE or FIXED. Only `all_params` spelling (not `'*'`).
+- `'all_params'` — Wildcard: sets every parameter in the group to `FREE` or `Fixed(DEFAULT)`. Exact synonym: `'other_params'` (reads best written last, after explicit per-param entries). Not `'*'` (retired).
 - `'spinning_dust'` — Include small spinning dust grains (default: auto from type).
 - `'f_cnm'` — Cold neutral medium fraction (parametrization-dependent).
 - `'eta_balance'` — Energy-balance coupling: `Fixed(1.0)` (default, strict balance `L_IR = eta * L_absorbed`), or `Uniform(...)` to leave it free.
 
 **Minimal example:**
 ```python
-dust_emission={'type': 'dale2014', 'all_params': FIXED, 'eta_balance': Fixed(1.0)}
+dust_emission={'type': 'dale2014', 'eta_balance': Fixed(1.0), 'other_params': Fixed(DEFAULT)}
 ```
 
 **Gotchas:**
@@ -225,13 +248,13 @@ dust_emission={'type': 'dale2014', 'all_params': FIXED, 'eta_balance': Fixed(1.0
 
 **Structural keys:**
 - `'type'` — Backend: `'cue'` (Cue, default), `'cloudy'` (CLOUDY, slower, higher fidelity), `'cb19'` (Charlot & Bruzual 2019), `'mappings'` or `'mappings_agn'` (MAPPINGS V stellar and AGN; **both backends are registered as experimental; both refuse loudly pending data rehabilitation** (#2082): stellar grid is 51.2% NaN, AGN backend lacks protocol surface), or `'none'` (off). Menu: `tengri.list_nebular_backends()`.
-- `'all_params'` — Wildcard: set all parameters to FREE or FIXED. Only `all_params` spelling (not `'*'`).
+- `'all_params'` — Wildcard: sets every parameter in the group to `FREE` or `Fixed(DEFAULT)`. Exact synonym: `'other_params'` (reads best written last, after explicit per-param entries). Not `'*'` (retired).
 - `'full_catalog'` — Line catalog scope: bool, default backend-dependent.
 - `'grid'` — For CLOUDY: grid specification (dict with keys like `'logz'`, `'logU'`, etc.).
 
 **Minimal example:**
 ```python
-neb={'type': 'cue', 'all_params': FIXED, 'logZ_gas': -0.3}
+neb={'type': 'cue', 'logZ_gas': -0.3, 'other_params': Fixed(DEFAULT)}
 neb={'type': 'cloudy', 'grid': {'logz': [-2, -1, 0], 'logU': [-3, -2, -1]}}
 ```
 
@@ -245,7 +268,7 @@ neb={'type': 'cloudy', 'grid': {'logz': [-2, -1, 0], 'logU': [-3, -2, -1]}}
 
 **Structural keys:**
 - `'type'` — Shock backend: `'mappings'` (MAPPINGS V, default) or `'none'` (off).
-- `'all_params'` — Wildcard: set all parameters to FREE or FIXED. Only `all_params` spelling (not `'*'`).
+- `'all_params'` — Wildcard: sets every parameter in the group to `FREE` or `Fixed(DEFAULT)`. Exact synonym: `'other_params'` (reads best written last, after explicit per-param entries). Not `'*'` (retired).
 - `'norm'` — Normalization: `'frac'` (scales the galaxy Hα), `'lhalpha'` (absolute Hα luminosity, decoupled from SFR), or `'component'` (explicit component label).
 - `'abundance'` — Abundance mode: `'solar'`, `'lmc'`, etc.
 - `'component'` — Component label for compartmentalization (advanced).
@@ -266,7 +289,7 @@ shock={'type': 'mappings', 'norm': 'lhalpha', 'lhalpha': 10**42}  # erg/s
 
 **Structural keys:**
 - `'type'` — IGM model: `'inoue'` (Inoue+2014, default), `'madau'` (Madau+1995), `'meiksin06'` (Meiksin 2006), `'none'` (off).
-- `'all_params'` — Wildcard: set all parameters to FREE or FIXED. Only `all_params` spelling (not `'*'`).
+- `'all_params'` — Wildcard: sets every parameter in the group to `FREE` or `Fixed(DEFAULT)`. Exact synonym: `'other_params'` (reads best written last, after explicit per-param entries). Not `'*'` (retired).
 - `'patchy'` — Picket-fence vs smooth IGM: bool, model-dependent default.
 - `'dla'` — Damped Lyman alpha: omit for no DLA, or provide `{'type': ...}` for DLA models (e.g., `{'type': 'dla_lookback'}` to evolve DLA properties with redshift).
 
@@ -287,7 +310,7 @@ igm={'type': 'inoue', 'dla': {'type': 'dla_lookback'}}  # With evolving DLA
 
 **Structural keys:**
 - `'type'` — Radio model: `'sfonly'` (star-formation only, default), `'agn'` (AGN only), `'sf_agn'` (both), `'none'` (off).
-- `'all_params'` — Wildcard: set all parameters to FREE or FIXED. Only `all_params` spelling (not `'*'`).
+- `'all_params'` — Wildcard: sets every parameter in the group to `FREE` or `Fixed(DEFAULT)`. Exact synonym: `'other_params'` (reads best written last, after explicit per-param entries). Not `'*'` (retired).
 - `'sf'` — Star-formation radio sub-block: `{'type': ...}` to customize.
 - `'agn'` — AGN radio sub-block: `{'type': ...}` to customize.
 
@@ -307,11 +330,11 @@ radio={'type': 'sf_agn', 'sf': {'type': 'condon'}, 'agn': {'type': 'nandra'}}
 
 **Structural keys:**
 - `'type'` — X-ray model: `'yang22'` (Yang+2022), `'lehmer'` (Lehmer+2022), `'none'` (off).
-- `'all_params'` — Wildcard: set all parameters to FREE or FIXED. Only `all_params` spelling (not `'*'`).
+- `'all_params'` — Wildcard: sets every parameter in the group to `FREE` or `Fixed(DEFAULT)`. Exact synonym: `'other_params'` (reads best written last, after explicit per-param entries). Not `'*'` (retired).
 
 **Minimal example:**
 ```python
-xray={'type': 'yang22', 'all_params': FIXED}
+xray={'type': 'yang22', 'all_params': Fixed(DEFAULT)}
 xray={'type': 'lehmer', 'log_nH': 21.0}  # Hydrogen column density, log10(cm^-2)
 ```
 
@@ -325,7 +348,7 @@ xray={'type': 'lehmer', 'log_nH': 21.0}  # Hydrogen column density, log10(cm^-2)
 
 **Structural keys:**
 - `'type'` — AGN mode: `'composable'` (six independent emitters), `'legacy'` (single monolithic AGN), or `'none'` (off).
-- `'all_params'` — Wildcard: set all parameters to FREE or FIXED. Only `all_params` spelling (not `'*'`).
+- `'all_params'` — Wildcard: sets every parameter in the group to `FREE` or `Fixed(DEFAULT)`. Exact synonym: `'other_params'` (reads best written last, after explicit per-param entries). Not `'*'` (retired).
 - `'norm'` — Across-component normalization: `'cigale_joint'` (default, CIGALE-style energy conservation across disc/torus/polar) or `'independent'` (each component on its own scale).
 - `'disc'` — AGN accretion disk sub-block (with `'type'`, `'all_params'`, parameters).
 - `'torus'` — Infrared-obscured torus sub-block (with `'type'`, `'all_params'`, parameters).
@@ -339,14 +362,14 @@ xray={'type': 'lehmer', 'log_nH': 21.0}  # Hydrogen column density, log10(cm^-2)
 ```python
 agn={
     'type': 'composable',
-    'disc': {'type': 'analytic_disk', 'all_params': FIXED},
+    'disc': {'type': 'analytic_disk', 'all_params': Fixed(DEFAULT)},
     'torus': {'type': 'skirtor', 'all_params': FREE},
-    'nlr': {'type': 'cue', 'all_params': FIXED},
+    'nlr': {'type': 'cue', 'all_params': Fixed(DEFAULT)},
     'norm': 'cigale_joint',
 }
 
 # Or the legacy form (one-block AGN):
-agn={'type': 'legacy', 'all_params': FIXED}
+agn={'type': 'legacy', 'all_params': Fixed(DEFAULT)}
 ```
 
 **Gotchas:**
@@ -442,23 +465,29 @@ with open("config.yaml", "w") as f:
 
 ### Round-trip semantics
 
-`to_groups()` expands wildcards into explicit per-parameter entries:
+`to_groups()` never expands a wildcard into individual per-parameter priors. A mixed group (explicit overrides plus a wildcard) round-trips with the overrides first and the wildcard collapsed to `'other_params'` last — the same convention the grammar teaches for hand-written dicts:
 
 ```python
 # Input
-model = SEDModel.build(ssp_data=ssp, observation=obs, sfh={'type': 'dpl', 'all_params': FREE, 'beta': Uniform(1, 3)}, redshift=Fixed(0.1))
+model = SEDModel.build(ssp_data=ssp, observation=obs, sfh={'type': 'dpl', 'all_params': FREE, 'beta': Uniform(1, 3)}, met={'type': 'table'}, redshift=Fixed(0.1))
 
 # Output of model.spec.to_groups()
 {
     'sfh': {
         'type': 'dpl',
-        'alpha': Uniform(0.1, 3.0),  # default prior for alpha
-        'tau_gyr': Uniform(0.1, 14),  # expanded from wildcard
-        'beta': Uniform(1, 3),  # user override
-        'log_total_mass': Uniform(...)  # expanded from wildcard
+        'beta': Uniform(1.0, 3.0),  # user override, kept explicit
+        'other_params': FREE,       # everything else in the group, collapsed
     },
     # ... other groups ...
 }
+```
+
+A sole-directive wildcard (no explicit per-parameter overrides) round-trips unchanged:
+
+```python
+model = SEDModel.build(ssp_data=ssp, observation=obs, sfh={'type': 'dpl', 'all_params': FREE}, met={'type': 'table'}, redshift=Fixed(0.1))
+model.spec.to_groups()['sfh']
+# {'type': 'dpl', 'all_params': FREE}
 ```
 
 Unknown keys in a saved config file are detected on re-parse and raise with suggestions.
@@ -498,8 +527,8 @@ Free everything except a few things:
 ```python
 model = SEDModel.build(
     ssp_data=ssp, observation=obs,
-    sfh={'type': 'dpl', 'all_params': FREE, 'beta': Fixed(2.0)},  # beta pinned
-    dust_attenuation={'type': 'two_component', 'all_params': FIXED, 'tau_bc': Uniform(0, 1)},  # only tau_bc free
+    sfh={'type': 'dpl', 'beta': Fixed(2.0), 'other_params': FREE},  # beta pinned, the rest free
+    dust_attenuation={'type': 'two_component', 'tau_bc': Uniform(0, 1), 'other_params': Fixed(DEFAULT)},  # only tau_bc free
     redshift=Fixed(0.1),
     ...
 )
@@ -510,9 +539,9 @@ model = SEDModel.build(
 ```python
 agn = {
     'type': 'composable',
-    'disc': {'type': 'analytic_disk', 'all_params': FIXED},
+    'disc': {'type': 'analytic_disk', 'all_params': Fixed(DEFAULT)},
     'torus': {'type': 'skirtor', 'all_params': FREE},
-    'nlr': {'type': 'cue', 'all_params': FIXED},  # single fixed value
+    'nlr': {'type': 'cue', 'all_params': Fixed(DEFAULT)},  # fixed at registry defaults
     'blr': {'type': 'cue'},  # uses defaults
     # feii and atten omitted (OFF)
 }
@@ -538,7 +567,7 @@ model = SEDModel.build(ssp_data=ssp, observation=obs, sfh={'type': 'dpl'})
 ### Missing structural key (when required)
 
 ```text
-model = SEDModel.build(ssp_data=ssp, observation=obs, dust_attenuation={'type': 'two_component', 'all_params': FIXED}, redshift=Fixed(0.1))
+model = SEDModel.build(ssp_data=ssp, observation=obs, dust_attenuation={'type': 'two_component', 'all_params': Fixed(DEFAULT)}, redshift=Fixed(0.1))
 # ParameterError: dust_attenuation type 'two_component' requires 'law' or ('law_bc' and 'law_diff').
 # See tengri.list_dust_laws() for options.
 ```
@@ -571,8 +600,9 @@ stellar={'type': 'chabrier'}
 
 ```text
 sfh={'type': 'dpl', '*': FREE}
-# ValueError: The '*' wildcard is retired. Use 'all_params' instead.
-# sfh={'type': 'dpl', 'all_params': FREE, ...}
+# ValueError: The wildcard key '*' has been retired; the wildcard is spelled
+# 'all_params' (or its synonym 'other_params'). Write {'all_params': FREE}
+# instead of {'*': FREE}.
 ```
 
 ### No-op wildcard

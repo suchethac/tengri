@@ -102,13 +102,17 @@ def test_end_to_end_through_the_fit_surface(synthetic_ssp_wide, synthetic_tophat
     import jax
     import numpy as np
 
-    from tengri import FIXED, FREE, Fixed, SEDModel
+    from tengri import DEFAULT, FREE, Fixed, SEDModel
 
     model = SEDModel.build(
         ssp_data=synthetic_ssp_wide,
         observation=synthetic_tophat_obs,
         sfh={"type": "dpl", "all_params": FREE},
-        dust_attenuation={"type": "two_component", "law": "calzetti", "all_params": FIXED},
+        dust_attenuation={
+            "type": "two_component",
+            "law": "calzetti",
+            "all_params": Fixed(DEFAULT),
+        },
         neb={"type": "none"},
         redshift=Fixed(0.0),
     )

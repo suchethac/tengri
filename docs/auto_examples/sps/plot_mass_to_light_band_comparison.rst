@@ -58,7 +58,7 @@ References
 
  .. code-block:: none
 
-    /tengri/src/tengri/forward/sed_model.py:1714: SFHBurstAliasingWarning: SFH burst width sfh_tsnorm_width_gyr=0.05 Gyr is narrower than the SSP grid spacing 0.864 Gyr at peak sfh_tsnorm_peak_lbt_gyr=6.53 Gyr. Predictions will show a non-physical staircase as the burst peak crosses SSP grid boundaries (#299). Widen the burst to at least width_gyr ≳ 0.864 for smooth behavior.
+    /tengri/src/tengri/forward/sed_model.py:1716: SFHBurstAliasingWarning: SFH burst width sfh_tsnorm_width_gyr=0.05 Gyr is narrower than the SSP grid spacing 0.864 Gyr at peak sfh_tsnorm_peak_lbt_gyr=6.53 Gyr. Predictions will show a non-physical staircase as the burst peak crosses SSP grid boundaries (#299). Widen the burst to at least width_gyr ≳ 0.864 for smooth behavior.
       param_map_deltas.append(self._init_sfh(spec))
 
 
@@ -112,7 +112,7 @@ References
         observation=obs,
         sfh={
             "type": "tsnorm",
-            "all_params": tengri.FIXED,
+            "all_params": tengri.Fixed(tengri.DEFAULT),
             "peak_lbt_gyr": tengri.Uniform(0.05, 13.0),
             "width_gyr": 0.05,
             "log_total_mass": 10.0,
@@ -122,7 +122,7 @@ References
         dust_attenuation={
             "law": "power_law",
             "type": "two_component",
-            "all_params": tengri.FIXED,
+            "all_params": tengri.Fixed(tengri.DEFAULT),
             "tau_diff": 0.0,
             "tau_bc": 0.0,
         },

@@ -115,11 +115,11 @@ References
 
     # Shared model components (minimal star formation, no dust).
     COMMON = dict(
-        sfh={"type": "const", "all_params": tengri.FIXED, "log_total_mass": -10.0},
+        sfh={"type": "const", "all_params": tengri.Fixed(tengri.DEFAULT), "log_total_mass": -10.0},
         dust_attenuation={
             "law": "power_law",
             "type": "two_component",
-            "all_params": tengri.FIXED,
+            "all_params": tengri.Fixed(tengri.DEFAULT),
             "tau_diff": 0.0,
             "tau_bc": 0.0,
         },
@@ -128,9 +128,9 @@ References
 
     # Base AGN: multicolor disc + SKIRTOR torus (common to both Type 1 and 2).
     BASE_AGN = {
-        "disc": {"type": "multicolor", "all_params": tengri.FIXED},
-        "torus": {"type": "skirtor", "all_params": tengri.FIXED, "tau_skirtor": 7.0},
-        "all_params": tengri.FIXED,
+        "disc": {"type": "multicolor", "all_params": tengri.Fixed(tengri.DEFAULT)},
+        "torus": {"type": "skirtor", "all_params": tengri.Fixed(tengri.DEFAULT), "tau_skirtor": 7.0},
+        "all_params": tengri.Fixed(tengri.DEFAULT),
         "log_lbol": 12.0,
         "lum_ratio": 1.0,
     }
@@ -139,8 +139,8 @@ References
     print("Building Type 1 (face-on, BLR) model...")
     agn_type1 = {
         **BASE_AGN,
-        "nlr": {"type": "none", "all_params": tengri.FIXED},
-        "blr": {"type": "analytic", "all_params": tengri.FIXED},
+        "nlr": {"type": "none", "all_params": tengri.Fixed(tengri.DEFAULT)},
+        "blr": {"type": "analytic", "all_params": tengri.Fixed(tengri.DEFAULT)},
     }
     model_type1 = tengri.SEDModel.build(ssp, agn=agn_type1, **COMMON)
     params_type1 = dict(model_type1.spec.sample(jax.random.PRNGKey(42)))
@@ -154,8 +154,8 @@ References
     print("Building Type 2 (edge-on, NLR) model...")
     agn_type2 = {
         **BASE_AGN,
-        "nlr": {"type": "analytic", "all_params": tengri.FIXED},
-        "blr": {"type": "none", "all_params": tengri.FIXED},
+        "nlr": {"type": "analytic", "all_params": tengri.Fixed(tengri.DEFAULT)},
+        "blr": {"type": "none", "all_params": tengri.Fixed(tengri.DEFAULT)},
     }
     model_type2 = tengri.SEDModel.build(ssp, agn=agn_type2, **COMMON)
     params_type2 = dict(model_type2.spec.sample(jax.random.PRNGKey(42)))
@@ -216,11 +216,11 @@ References
         ("Intermediate (45°)", 0.50, "#ff7f0e"),
         ("Type 2 (edge-on)", 0.10, "#d62728"),
     )
-    SFH_TRANS = {"type": "const", "all_params": tengri.FIXED, "log_total_mass": -10.0}
+    SFH_TRANS = {"type": "const", "all_params": tengri.Fixed(tengri.DEFAULT), "log_total_mass": -10.0}
     DUST_TRANS = {
         "law": "power_law",
         "type": "two_component",
-        "all_params": tengri.FIXED,
+        "all_params": tengri.Fixed(tengri.DEFAULT),
         "tau_diff": 0.0,
         "tau_bc": 0.0,
     }
@@ -234,14 +234,14 @@ References
             sfh=SFH_TRANS,
             dust_attenuation=DUST_TRANS,
             agn={
-                "all_params": tengri.FIXED,
+                "all_params": tengri.Fixed(tengri.DEFAULT),
                 "log_lbol": 12.5,
                 "lum_ratio": 1.0,
                 "cos_inc": cos_inc,
-                "disc": {"type": "multicolor", "all_params": tengri.FIXED},
-                "torus": {"type": "skirtor", "all_params": tengri.FIXED},
-                "nlr": {"type": "none", "all_params": tengri.FIXED},
-                "blr": {"type": "analytic", "all_params": tengri.FIXED},
+                "disc": {"type": "multicolor", "all_params": tengri.Fixed(tengri.DEFAULT)},
+                "torus": {"type": "skirtor", "all_params": tengri.Fixed(tengri.DEFAULT)},
+                "nlr": {"type": "none", "all_params": tengri.Fixed(tengri.DEFAULT)},
+                "blr": {"type": "analytic", "all_params": tengri.Fixed(tengri.DEFAULT)},
             },
             redshift=tengri.Fixed(0.0),
         )
@@ -291,7 +291,7 @@ References
 
 .. rst-class:: sphx-glr-timing
 
-   **Total running time of the script:** (0 minutes 9.305 seconds)
+   **Total running time of the script:** (0 minutes 2.586 seconds)
 
 
 .. _sphx_glr_download_auto_examples_agn_plot_type1_type2_unified_model.py:

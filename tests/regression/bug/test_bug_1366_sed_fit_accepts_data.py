@@ -32,7 +32,7 @@ import numpy as np
 import pytest
 
 from tengri import (
-    FIXED,
+    DEFAULT,
     Data,
     Fixed,
     ForwardModel,
@@ -57,7 +57,7 @@ def sed_and_mock(ssp_data_fsps):
     sed = SEDModel.build(
         ssp_data=ssp_data_fsps,
         observation=obs,
-        sfh={"type": "dpl", "all_params": FIXED},
+        sfh={"type": "dpl", "all_params": Fixed(DEFAULT)},
         dust_attenuation={"type": "none"},
         redshift=Fixed(0.05),
     )

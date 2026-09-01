@@ -29,7 +29,7 @@ import jax
 import jax.numpy as jnp
 import pytest
 
-from tengri import FIXED, SEDModel
+from tengri import DEFAULT, SEDModel
 from tengri.components.agn.blocks._protocol import AGN_BLOCKS
 from tengri.components.stellar.sps.dsps_wrapper import load_ssp_data
 from tengri.config.exceptions import TengriIOError
@@ -89,8 +89,12 @@ def _build(ssp, obs, **groups):
         return SEDModel.build(
             ssp_data=ssp,
             observation=obs,
-            sfh={"type": "dpl", "all_params": FIXED},
-            dust_attenuation={"law": "power_law", "type": "two_component", "all_params": FIXED},
+            sfh={"type": "dpl", "all_params": Fixed(DEFAULT)},
+            dust_attenuation={
+                "law": "power_law",
+                "type": "two_component",
+                "all_params": Fixed(DEFAULT),
+            },
             redshift=Fixed(0.1),
             **groups,
         )
@@ -174,7 +178,7 @@ def test_block_template_threads_as_argument(ssp, obs, category, block):
     happened to be measured, so a block that starts loading a library later
     — or a newly registered one — is caught the day it lands.
     """
-    group = {"type": "composable", "all_params": FIXED, "disc": {"type": "multicolor"}}
+    group = {"type": "composable", "all_params": Fixed(DEFAULT), "disc": {"type": "multicolor"}}
     # Special handling for atten/smc_prevot: use law key instead of type
     if category == "attenuation" and block == "smc_prevot":
         group[_GROUP_KEY[category]] = {"law": "prevot_smc"}

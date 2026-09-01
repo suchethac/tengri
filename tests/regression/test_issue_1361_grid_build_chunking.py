@@ -26,7 +26,7 @@ A memory-regression test that is itself a memory hog defeats its own fix.
 import numpy as np
 import pytest
 
-from tengri import FIXED, FREE, SEDModel, Uniform, WavePrecomp
+from tengri import DEFAULT, FREE, Fixed, SEDModel, Uniform, WavePrecomp
 from tengri.components.nebular import nebular_grid_precompute as ngp
 
 pytestmark = pytest.mark.regression_bug
@@ -64,7 +64,7 @@ def _cue_model(ssp, obs, **extra):
         dust_attenuation={"type": "none"},
         met={"logzsol": FREE},
         redshift=0.05,
-        neb={"type": "cue", "all_params": FIXED, "logU": Uniform(-3.5, -1.5)},
+        neb={"type": "cue", "all_params": Fixed(DEFAULT), "logU": Uniform(-3.5, -1.5)},
         **extra,
     )
 

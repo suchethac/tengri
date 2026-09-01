@@ -15,7 +15,7 @@ import numpy as np
 import pytest
 
 import tengri
-from tengri import FIXED, FREE, Fixed, Observation, Photometry, SEDModel, WavePrecomp
+from tengri import DEFAULT, FREE, Fixed, Observation, Photometry, SEDModel, WavePrecomp
 from tests._grad_parity import assert_grad_matches_fd
 
 pytestmark = pytest.mark.regression_bug
@@ -37,7 +37,7 @@ def _build(ssp, approx, tau_diff=0.5, tau_bc=1.0, z=0.2):
         dust_attenuation={
             "law": "power_law",
             "type": "two_component",
-            "all_params": FIXED,
+            "all_params": Fixed(DEFAULT),
             "tau_diff": tau_diff,
             "tau_bc": tau_bc,
         },
@@ -211,7 +211,7 @@ def test_free_z_path_publishes_the_subband_tensors(ssp):
         dust_attenuation={
             "law": "power_law",
             "type": "two_component",
-            "all_params": FIXED,
+            "all_params": Fixed(DEFAULT),
             "tau_diff": 0.5,
             "tau_bc": 1.0,
         },

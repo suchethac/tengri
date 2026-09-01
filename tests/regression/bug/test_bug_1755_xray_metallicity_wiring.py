@@ -36,7 +36,7 @@ import jax.numpy as jnp
 import numpy as np
 import pytest
 
-from tengri import FIXED, Fixed, SEDModel
+from tengri import DEFAULT, Fixed, SEDModel
 from tengri.components.xray.xray import (
     metallicity_from_history,
     xray_total_lopez24_terms,
@@ -149,10 +149,10 @@ def _sed_xray(ssp, obs, logzsol, xray_type):
     model = SEDModel.build(
         ssp_data=ssp,
         observation=obs,
-        sfh={"type": "delayed", "all_params": FIXED},
-        dust_attenuation={"law": "power_law", "all_params": FIXED},
+        sfh={"type": "delayed", "all_params": Fixed(DEFAULT)},
+        dust_attenuation={"law": "power_law", "all_params": Fixed(DEFAULT)},
         met={"logzsol": Fixed(logzsol)},
-        xray={"type": xray_type, "all_params": FIXED},
+        xray={"type": xray_type, "all_params": Fixed(DEFAULT)},
         redshift=Fixed(0.05),
     )
     return np.asarray(model.predict_state({}).derived["sed_xray"])

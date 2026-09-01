@@ -48,16 +48,7 @@ import matplotlib.pyplot as plt
 import numpy as np
 
 import tengri
-from tengri import (
-    FIXED,
-    Fixed,
-    Observation,
-    Photometry,
-    SEDModel,
-    Uniform,
-    WavePrecomp,
-    plot,
-)
+from tengri import DEFAULT, Fixed, Observation, Photometry, plot, SEDModel, Uniform, WavePrecomp
 from tengri import Catalog, ForwardModel
 
 plot.setup_style()
@@ -130,13 +121,13 @@ def build_model():
         ssp_data=ssp,
         observation=obs,
         redshift=Uniform(*Z_PRIOR),  # <-- free redshift: a photo-z fit
-        sfh={"type": "dpl", "all_params": FIXED, "log_total_mass": Uniform(8.0, 12.0)},
-        met={"logzsol": Fixed(0.0), "all_params": FIXED},
+        sfh={"type": "dpl", "all_params": Fixed(DEFAULT), "log_total_mass": Uniform(8.0, 12.0)},
+        met={"logzsol": Fixed(0.0), "all_params": Fixed(DEFAULT)},
         # Free diffuse dust optical depth: marginalize the dust-redshift degeneracy.
         dust_attenuation={
             "type": "two_component",
             "law": "calzetti",
-            "all_params": FIXED,
+            "all_params": Fixed(DEFAULT),
             "tau_diff": Uniform(0.0, 2.0),
         },
         neb={"type": "ssp"},  # nebular emission is baked into the wNE SSP (fixed logU/fesc)

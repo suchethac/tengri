@@ -96,7 +96,7 @@ class TestXrayLogNh:
         """
         import jax
 
-        from tengri import FIXED, Fixed, SEDModel
+        from tengri import DEFAULT, Fixed, SEDModel
 
         def _soft_xray_luminosity(log_nh: float) -> float:
             # Cool, sub-Eddington disc (log_lbol=10.5, log10 L_sun) so the disc's
@@ -108,9 +108,13 @@ class TestXrayLogNh:
             # so N_H attenuation reads cleanly.)
             model = SEDModel.build(
                 ssp_data=synthetic_ssp_wide,
-                sfh={"type": "delayed", "all_params": FIXED, "log_total_mass": 10.0},
-                agn={"type": "multicolor_agn", "all_params": FIXED, "log_lbol": Fixed(10.5)},
-                xray={"type": "yang20", "all_params": FIXED, "log_nh": Fixed(log_nh)},
+                sfh={"type": "delayed", "all_params": Fixed(DEFAULT), "log_total_mass": 10.0},
+                agn={
+                    "type": "multicolor_agn",
+                    "all_params": Fixed(DEFAULT),
+                    "log_lbol": Fixed(10.5),
+                },
+                xray={"type": "yang20", "all_params": Fixed(DEFAULT), "log_nh": Fixed(log_nh)},
                 redshift=Fixed(0.05),
             )
             params = dict(model.spec.sample(jax.random.PRNGKey(0)))

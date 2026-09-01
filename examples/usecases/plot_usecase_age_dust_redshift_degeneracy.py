@@ -55,19 +55,19 @@ model_a = SEDModel.build(
     observation=observation,
     sfh={
         "type": "dexp",
-        "all_params": tengri.FIXED,
+        "all_params": tengri.Fixed(tengri.DEFAULT),
         "tau_gyr": 0.3,
         "log_total_mass": 10.0,  # Will be tuned for magnitude match
     },
     dust_attenuation={
         "type": "two_component",
         "law": "calzetti",
-        "all_params": tengri.FIXED,
+        "all_params": tengri.Fixed(tengri.DEFAULT),
         "tau_bc": 2.0,
         "tau_diff": 0.8,
         "slope": -0.7,
     },
-    neb={"type": "cue", "all_params": tengri.FIXED},
+    neb={"type": "cue", "all_params": tengri.Fixed(tengri.DEFAULT)},
     redshift=tengri.Fixed(0.5),
     igm={"type": "inoue"},
 )
@@ -84,19 +84,19 @@ model_b = SEDModel.build(
     observation=observation,
     sfh={
         "type": "dexp",
-        "all_params": tengri.FIXED,
+        "all_params": tengri.Fixed(tengri.DEFAULT),
         "tau_gyr": 8.0,
         "log_total_mass": 10.0,  # Will be tuned
     },
     dust_attenuation={
         "type": "two_component",
         "law": "calzetti",
-        "all_params": tengri.FIXED,
+        "all_params": tengri.Fixed(tengri.DEFAULT),
         "tau_bc": 0.1,
         "tau_diff": 0.05,
         "slope": -0.7,
     },
-    neb={"type": "cue", "all_params": tengri.FIXED},
+    neb={"type": "cue", "all_params": tengri.Fixed(tengri.DEFAULT)},
     redshift=tengri.Fixed(1.0),
     igm={"type": "inoue"},
 )
@@ -113,7 +113,7 @@ model_c = SEDModel.build(
     observation=observation,
     sfh={
         "type": "lnorm",
-        "all_params": tengri.FIXED,
+        "all_params": tengri.Fixed(tengri.DEFAULT),
         "peak_gyr": 1.0,
         "width_gyr": 0.5,
         "log_total_mass": 10.0,  # Will be tuned
@@ -121,12 +121,12 @@ model_c = SEDModel.build(
     dust_attenuation={
         "type": "two_component",
         "law": "calzetti",
-        "all_params": tengri.FIXED,
+        "all_params": tengri.Fixed(tengri.DEFAULT),
         "tau_bc": 0.7,
         "tau_diff": 0.3,
         "slope": -0.7,
     },
-    neb={"type": "cue", "all_params": tengri.FIXED},
+    neb={"type": "cue", "all_params": tengri.Fixed(tengri.DEFAULT)},
     redshift=tengri.Fixed(1.5),
     igm={"type": "inoue"},
 )

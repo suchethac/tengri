@@ -38,7 +38,7 @@ model = tengri.SEDModel.build(
     dust_attenuation={
         "type": "two_component",
         "law": "calzetti",
-        "all_params": tengri.FIXED,
+        "all_params": tengri.Fixed(tengri.DEFAULT),
         "tau_bc": 0.5,  # [user] override on a FIXED wildcard
     },
     neb={"type": "cue"},  # All defaults

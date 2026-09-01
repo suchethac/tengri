@@ -15,6 +15,8 @@ import jax
 import jax.numpy as jnp
 import numpy as np
 
+from tengri.parameters.sentinels import DEFAULT
+
 
 def _norm_cdf_float(x: float) -> float:
     """Standard normal CDF Φ(x) for a Python float; handles ±inf exactly."""
@@ -121,12 +123,12 @@ class Distribution:
 
     @property
     def default(self) -> float | str | None:
-        """Physically-motivated default value when this knob is marked FIXED
-        without an explicit user-supplied value.
+        """Physically-motivated default value when this knob is pinned at its
+        registry default without an explicit user-supplied value.
 
         Returns None if no default was registered at construction. Downstream
         code (``parameters/groups.py``) raises ``ParameterDefaultMissingError``
-        if a registry entry is converted to ``Fixed`` via the ``'*': FIXED``
+        if a registry entry is converted to ``Fixed`` via the ``'*': Fixed(DEFAULT)``
         wildcard but the distribution carries no default.
 
         For ``Fixed(value)``, ``default`` is the value itself: see
@@ -171,7 +173,7 @@ class Distribution:
             raise ValueError(
                 f"{type(self).__name__}: default={default} is outside bounds "
                 f"[{lo}, {hi}]. Defaults must lie within the prior support so "
-                f"the FIXED-fallback value is consistent with the prior."
+                f"the fixed-fallback value is consistent with the prior."
             )
         self._default = float(default)
 
@@ -266,7 +268,7 @@ class Distribution:
 
     #: Attributes that never reach the compiled graph, so they must not key it.
     #: Metadata for ``describe_parameter``/``spec.summary()`` plus the
-    #: FIXED-fallback default, none of which ``unstandardize`` reads.
+    #: fixed-fallback default, none of which ``unstandardize`` reads.
     _JIT_IRRELEVANT_ATTRS: frozenset[str] = frozenset({"description", "units", "_default"})
 
     def jit_cache_key(self) -> tuple:
@@ -1723,6 +1725,40 @@ class Laplace(Distribution):
         )
 
 
+#: Raised by :class:`Fixed`'s readers when an unresolved ``Fixed(DEFAULT)``
+#: token escapes the build grammar and is used as a distribution directly.
+#: One message, reused by every guarded reader below (``value``, ``default``,
+#: ``bounds``, ``sample``, ``unstandardize``) rather than five near-duplicate
+#: strings.
+_FIXED_DEFAULT_UNRESOLVED_MSG = (
+    "Fixed(DEFAULT) is a build-grammar token; it is only valid inside a "
+    "group dict passed to parse_groups/SEDModel.build, where it resolves "
+    "to the registry default. It cannot be used as a distribution directly."
+)
+
+
+def _raise_if_unresolved_default(value: object) -> None:
+    """Raise if ``value`` is the unresolved ``DEFAULT`` sentinel.
+
+    Parameters
+    ----------
+    value : object
+        A ``Fixed._value`` to check (never the guarded ``.value`` property).
+
+    Raises
+    ------
+    ValueError
+        If ``value is DEFAULT``.
+    """
+    if value is DEFAULT:
+        raise ValueError(_FIXED_DEFAULT_UNRESOLVED_MSG)
+
+
+def _is_default_fixed(x: object) -> bool:
+    """Return True if ``x`` is an unresolved ``Fixed(DEFAULT)`` token."""
+    return isinstance(x, Fixed) and x._value is DEFAULT
+
+
 class Fixed(Distribution):
     """Fixed (non-free) parameter with a constant value.
 
@@ -1771,7 +1807,16 @@ class Fixed(Distribution):
     """
 
     def __init__(self, value: float | str, description: str = "", *, units: str = ""):
-        self._value = value if isinstance(value, str) else float(value)
+        if value is DEFAULT:
+            # Build-grammar token: stored raw, no float() coercion. Only
+            # legal inside a group dict; every reader below raises if this
+            # instance is used as a distribution directly (see
+            # _raise_if_unresolved_default).
+            self._value = value
+        elif isinstance(value, str):
+            self._value = value
+        else:
+            self._value = float(value)
         self.description = description
         self.units = units
 
@@ -1783,7 +1828,13 @@ class Fixed(Distribution):
         -------
         float or str
             The constant fixed value.
+
+        Raises
+        ------
+        ValueError
+            If this is an unresolved ``Fixed(DEFAULT)`` token.
         """
+        _raise_if_unresolved_default(self._value)
         return self._value
 
     @property
@@ -1805,7 +1856,13 @@ class Fixed(Distribution):
         -------
         float or str
             The fixed value.
+
+        Raises
+        ------
+        ValueError
+            If this is an unresolved ``Fixed(DEFAULT)`` token.
         """
+        _raise_if_unresolved_default(self._value)
         return self._value
 
     @property
@@ -1816,7 +1873,13 @@ class Fixed(Distribution):
         -------
         tuple[float, float] or tuple[None, None]
             For numeric values: (value, value); for string values: (None, None).
+
+        Raises
+        ------
+        ValueError
+            If this is an unresolved ``Fixed(DEFAULT)`` token.
         """
+        _raise_if_unresolved_default(self._value)
         if isinstance(self._value, str):
             return (None, None)
         return (self._value, self._value)
@@ -1833,7 +1896,13 @@ class Fixed(Distribution):
         -------
         float, int, or str
             The constant fixed value.
+
+        Raises
+        ------
+        ValueError
+            If this is an unresolved ``Fixed(DEFAULT)`` token.
         """
+        _raise_if_unresolved_default(self._value)
         if isinstance(self._value, str):
             return self._value
         return jnp.array(self._value)
@@ -1865,7 +1934,13 @@ class Fixed(Distribution):
         -------
         float, int, or str
             The constant fixed value.
+
+        Raises
+        ------
+        ValueError
+            If this is an unresolved ``Fixed(DEFAULT)`` token.
         """
+        _raise_if_unresolved_default(self._value)
         if isinstance(self._value, str):
             return self._value
         return jnp.array(self._value)

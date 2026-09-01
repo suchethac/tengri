@@ -103,7 +103,7 @@ _CASES = [
 
 
 def _build(ssp, approx, *, tau_diff, tau_bc, z, neb="cue", free_mass=False):
-    from tengri import FIXED, Fixed, Observation, Photometry, SEDModel, Uniform
+    from tengri import DEFAULT, Fixed, Observation, Photometry, SEDModel, Uniform
 
     return SEDModel.build(
         ssp_data=ssp,
@@ -112,7 +112,7 @@ def _build(ssp, approx, *, tau_diff, tau_bc, z, neb="cue", free_mass=False):
         ),
         sfh={
             "type": "delayed",
-            "all_params": FIXED,
+            "all_params": Fixed(DEFAULT),
             "log_total_mass": Uniform(9.0, 11.0) if free_mass else 10.0,
             "tau_gyr": 1.0,
             "age_gyr": 5.0,
@@ -120,11 +120,11 @@ def _build(ssp, approx, *, tau_diff, tau_bc, z, neb="cue", free_mass=False):
         dust_attenuation={
             "type": "two_component",
             "law": "calzetti",
-            "all_params": FIXED,
+            "all_params": Fixed(DEFAULT),
             "tau_diff": tau_diff,
             "tau_bc": tau_bc,
         },
-        neb={"type": neb, "all_params": FIXED},
+        neb={"type": neb, "all_params": Fixed(DEFAULT)},
         redshift=Fixed(z),
         approx=approx,
     )

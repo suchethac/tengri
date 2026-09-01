@@ -397,13 +397,13 @@ previously, so the move is purely additive — no shim is required.
 The **nested-dict model builder** is the recommended entry point for
 constructing galaxy SED models. It provides a Bagpipes-style hierarchical
 interface that groups parameters by physics (sfh, dust, neb, agn, etc.)
-and uses sentinels (`FREE`, `FIXED`) plus wildcard directives to specify
+and uses sentinels (`FREE`, `DEFAULT`) plus wildcard directives to specify
 parameter freedom.
 
 ### Three equivalent construction paths
 
 ```python
-from tengri import SEDModel, FREE, FIXED, Uniform, recipes, Parameters
+from tengri import SEDModel, FREE, Fixed, DEFAULT, Uniform, recipes, Parameters
 
 # Path 1: Recipe (curated template)
 model = SEDModel.build(
@@ -422,8 +422,8 @@ model = SEDModel.build(
         'law': 'calzetti',
         'all_params': FREE,
     },
-    dust_emission={'type': 'dale2014', 'all_params': FIXED},
-    neb={'type': 'cue', 'all_params': FIXED},
+    dust_emission={'type': 'dale2014', 'all_params': Fixed(DEFAULT)},
+    neb={'type': 'cue', 'all_params': Fixed(DEFAULT)},
     redshift=Uniform(0.01, 6.0),
     apply_igm=True,
 )
@@ -441,39 +441,44 @@ Every parameter is tagged with its source:
 ```python
 spec.summary_str()
 
-# Output shows [user], [all_params FREE], [all_params FIXED], or [default]
-# indicating whether the value came from explicit specification,
+# Output shows [user], [all_params FREE], [all_params Fixed(DEFAULT)], or
+# [default], indicating whether the value came from explicit specification,
 # wildcard matching, or registry defaults.
 ```
 
 ### Wildcard semantics
 
-The `'all_params'` key in a sub-dict sets a default (`FREE` or `FIXED`) for all
-parameters in that group not explicitly overridden.
+The `'all_params'` key in a sub-dict (exact synonym: `'other_params'`) sets a
+default (`FREE` or `Fixed(DEFAULT)`) for every parameter in that group not
+explicitly overridden. `'other_params'` reads best written **last**, after
+explicit per-parameter entries, meaning "the others":
 
 ```python
 dust_attenuation={
     'type': 'two_component',
     'law': 'calzetti',
-    'all_params': FIXED,  # All dust attenuation params are [all_params FIXED]
-    'tau_bc': Uniform(0, 1),  # Override: explicitly free
+    'tau_bc': Uniform(0, 1),          # Override: explicitly free
+    'other_params': Fixed(DEFAULT),   # Everything else is [all_params Fixed(DEFAULT)]
 }
 ```
 
 ### Sentinels and roundtrip
 
-`FREE` and `FIXED` are singleton sentinels that preserve identity across
-copy and pickle operations. They work in both dictionaries and as explicit
-values:
+`FREE` and `DEFAULT` are singleton sentinels that preserve identity across
+copy and pickle operations. `FREE` defers a parameter to the registry's
+default prior; `DEFAULT` is legal only as the argument of `Fixed(...)` —
+`Fixed(DEFAULT)` pins a parameter at the registry default value, a bare
+`DEFAULT` raises. The old `FIXED` sentinel is removed (pre-1.0 break, no
+shim); pin at your own value with `Fixed(v)`.
 
 ```python
-from tengri.parameters.sentinels import FREE, FIXED
+from tengri.parameters.sentinels import FREE, DEFAULT
 
 # In group dicts
 groups = {'sfh': {'type': 'dpl', 'all_params': FREE}}
 
 # As explicit values
-groups = {'redshift': FIXED, 'met': {'logzsol': FREE}}
+groups = {'met': {'logzsol': Fixed(DEFAULT)}}
 
 # Via Prior classes
 groups = {'redshift': Fixed(0.05), 'met': {'logzsol': Uniform(-1, 0)}}
@@ -586,10 +591,11 @@ flux = model.predict_photometry(model.spec.sample(key))
 
 **4. Bad wildcard sentinel values now raise instead of falling through.**
 
-As of fe2e69f, the `'all_params'` slot (or its `'*'` synonym) must be the
-``FREE`` or ``FIXED`` sentinel — strings, ``None``, and bools all raise
-``ValueError`` with a clear hint. Previously these silently fell through to
-"fixed at registry default" with no warning.
+As of fe2e69f, the `'all_params'` slot (or its `'other_params'` synonym) must
+be the ``FREE`` sentinel or ``Fixed(DEFAULT)`` — strings (including the
+retired ``'FIXED'``), ``None``, bools, and a concrete ``Fixed(v)`` all raise
+``ValueError`` with a clear hint. Previously bad values silently fell through
+to "fixed at registry default" with no warning.
 
 ```python
 # Wrong: silently misbehaved before fe2e69f; raises now
@@ -1126,6 +1132,61 @@ samples. The log Z values for each model may come from any of the three evidence
 routes (`"nss"`, `"laplace"`, or `"hmc_is"`). Only parameters present in all
 models are retained (intersection semantics), enabling comparison of structurally
 different models.
+
+---
+
+## Parameter freedom is Fixed(DEFAULT) + other_params (2026-09)
+
+**Breaking — no shim.** The `FIXED` sentinel is removed. Pinning a parameter
+at the registry default is now spelled `Fixed(DEFAULT)` — the same `Fixed(...)`
+prior used to pin at your own value, with the new `DEFAULT` sentinel as its
+argument. The wildcard key gained an exact synonym, `'other_params'`, for the
+mixed case (explicit per-parameter entries plus a wildcard for the rest).
+
+| old (removed)                                          | new                                                    |
+| -------------------------------------------------------- | ------------------------------------------------------- |
+| `from tengri import FIXED`                                | `from tengri import Fixed, DEFAULT`                      |
+| `met={'logzsol': FIXED}`                                  | `met={'logzsol': Fixed(DEFAULT)}`                        |
+| `sfh={'all_params': FIXED}`                                | `sfh={'all_params': Fixed(DEFAULT)}`                     |
+| `sfh={'all_params': FREE, 'beta': Uniform(1, 3)}` (wildcard first) | `sfh={'beta': Uniform(1, 3), 'other_params': FREE}` (wildcard last) |
+| `sfh={'all_params': 'FIXED'}` (legacy serialized string)  | raises `ValueError`; write `sfh={'all_params': Fixed(DEFAULT)}` |
+| `builders.sfh.dpl(all_params=FIXED)`                       | `builders.sfh.dpl(all_params=Fixed(DEFAULT))`            |
+
+`tengri.list_metallicity_modes()`-style discovery does not apply here; the
+change is grammar-wide, not per-domain. A bare `DEFAULT` (not wrapped in
+`Fixed(...)`) raises, as does a concrete `Fixed(v)` given as the wildcard
+value (`'all_params': Fixed(1.5)` — one literal value cannot apply across
+every parameter in the group) and a dict carrying both `'all_params'` and
+`'other_params'` at once.
+
+**Why no `deprecated_alias` shim**, and why this isn't the dual-grammar
+problem the metallicity migration above warned against. That precedent's
+objection to accepting two spellings was specific: a build-group key is
+parsed, not imported, so accepting both the old and the new spelling would
+mean carrying two grammars through `parse_groups`, `to_groups()`, the
+provenance tags, and every wildcard sweep, indefinitely. `'all_params'` and
+`'other_params'` don't reintroduce that problem, because they aren't two
+grammars — they're one wildcard normalized through a single choke point.
+`_normalize_wildcard_keys` rewrites either spelling to the same internal
+`'*'` key before any other parsing logic runs, so nothing downstream (parsing,
+provenance tagging, wildcard sweeps) ever sees two forms to reconcile. On the
+way back out, the spelling `to_groups()` emits is a deterministic function of
+the group's content — `'all_params'` when the wildcard is the group's only
+directive, `'other_params'` when explicit per-parameter entries precede it —
+so a round-trip is single-valued in both directions: parse either spelling in,
+emit exactly one spelling out. That determinism is what the old `FIXED`
+sentinel and a hypothetical dual-spelling shim would both have lacked: two
+*independent* ways to say "pin at the default" or "this is the wildcard,"
+with no rule for which one a re-serialization should prefer.
+
+The old `FIXED` sentinel itself got no such synonym treatment. Whatever
+overlap existed between it and `Fixed(DEFAULT)` was a development-time
+convenience inside this branch, never exposed on a released surface — by the
+time this lands, the shipped grammar accepts exactly one spelling for "pinned
+at the registry default" (`Fixed(DEFAULT)`) and exactly one sentinel for
+"deferred to the registry's default prior" (`FREE`). There is no
+`deprecated_alias` for `FIXED` because there was never a released alias to
+deprecate.
 
 ---
 

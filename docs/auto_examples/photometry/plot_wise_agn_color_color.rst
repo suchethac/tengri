@@ -123,7 +123,7 @@ References
         # Build model with variable dust and age, fixed SFH shape
         sfh_config = {
             "type": "dpl",
-            "all_params": tengri.FIXED,
+            "all_params": tengri.Fixed(tengri.DEFAULT),
             "log_total_mass": 10.0,
             "alpha": 1.0,  # Fixed power-law slope (rising)
             "beta": 1.0,  # Fixed power-law slope (declining)
@@ -132,7 +132,7 @@ References
 
         dust_config = {
             "type": "two_component",
-            "all_params": tengri.FIXED,
+            "all_params": tengri.Fixed(tengri.DEFAULT),
             "law": "calzetti",
             "tau_diff": tau_diff_samples[i],
             "tau_bc": tau_bc_samples[i],
@@ -140,7 +140,7 @@ References
         }
         dust_emission = {
             "type": "modified_blackbody",
-            "all_params": tengri.FIXED,
+            "all_params": tengri.Fixed(tengri.DEFAULT),
             "T": 35.0,  # Fixed dust temperature (reasonable for star-forming)
             "beta_ir": 1.8,  # Fixed emissivity index
         }
@@ -206,7 +206,7 @@ References
         # Mimics AGN-heated torus without explicit AGN component
         sfh_config = {
             "type": "dpl",
-            "all_params": tengri.FIXED,
+            "all_params": tengri.Fixed(tengri.DEFAULT),
             "log_total_mass": 10.0,  # Very suppressed SFR (~0.01 M_sun/yr; minimal stellar)
             "alpha": 1.0,
             "beta": 1.0,
@@ -215,7 +215,7 @@ References
 
         dust_config = {
             "type": "two_component",
-            "all_params": tengri.FIXED,
+            "all_params": tengri.Fixed(tengri.DEFAULT),
             "law": "calzetti",
             "tau_diff": 0.5 + 0.1 * i,  # Variable dust opacity (AGN-heated)
             "tau_bc": 0.3 + 0.05 * i,
@@ -223,7 +223,7 @@ References
         }
         dust_emission = {
             "type": "modified_blackbody",
-            "all_params": tengri.FIXED,
+            "all_params": tengri.Fixed(tengri.DEFAULT),
             "T": 60.0 + 5.0 * i,  # Higher temperatures for AGN (60-100 K, hotter than SF)
             "beta_ir": 1.8,
         }

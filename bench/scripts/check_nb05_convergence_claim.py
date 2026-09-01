@@ -43,7 +43,7 @@ import numpy as np
 
 import tengri
 from tengri import (
-    FIXED,
+    DEFAULT,
     FREE,
     Fixed,
     ForwardModel,
@@ -58,8 +58,20 @@ from tengri import (
 from tengri.analysis.diagnostics.autocorrelation import effective_sample_size
 
 FILTERS = (
-    "galex_fuv", "galex_nuv", "sdss_u", "sdss_g", "sdss_r", "sdss_i", "sdss_z",
-    "2mass_j", "2mass_h", "2mass_ks", "wise_w1", "wise_w2", "wise_w3", "wise_w4",
+    "galex_fuv",
+    "galex_nuv",
+    "sdss_u",
+    "sdss_g",
+    "sdss_r",
+    "sdss_i",
+    "sdss_z",
+    "2mass_j",
+    "2mass_h",
+    "2mass_ks",
+    "wise_w1",
+    "wise_w2",
+    "wise_w3",
+    "wise_w4",
 )
 
 ssp = tengri.load_ssp("fsps_prsc_miles_chabrier", download=True)
@@ -70,9 +82,12 @@ sed_model = SEDModel.build(
     approx=WavePrecomp(),
     sfh=builders.sfh.tsnorm(all_params=FREE),
     dust_attenuation=builders.dust.two_component(
-        all_params=FIXED, law="calzetti", tau_bc=Uniform(0.0, 1.0), tau_diff=Uniform(0.0, 1.0)
+        all_params=Fixed(DEFAULT),
+        law="calzetti",
+        tau_bc=Uniform(0.0, 1.0),
+        tau_diff=Uniform(0.0, 1.0),
     ),
-    dust_emission=builders.dust.emission.modified_blackbody(all_params=FIXED),
+    dust_emission=builders.dust.emission.modified_blackbody(all_params=Fixed(DEFAULT)),
     neb=builders.neb.none(),
     met={"logzsol": Uniform(-1.5, 0.3)},
     redshift=Fixed(0.05),
@@ -103,6 +118,8 @@ rh = posterior.rhat()
 ess = effective_sample_size({k: np.asarray(v) for k, v in posterior.samples.items()})
 fin = [(k, v["ess"]) for k, v in ess.items() if np.isfinite(v["ess"])]
 worst = min(fin, key=lambda p: p[1])
-print(f"notebook-05-as-committed: wall {wall:.1f}s  maxRhat {max(rh.values()):.4f}  "
-      f"div {posterior.diagnostics.get('n_divergent')}  minESS {worst[1]:.1f} ({worst[0]})")
+print(
+    f"notebook-05-as-committed: wall {wall:.1f}s  maxRhat {max(rh.values()):.4f}  "
+    f"div {posterior.diagnostics.get('n_divergent')}  minESS {worst[1]:.1f} ({worst[0]})"
+)
 print("per-parameter R-hat:", {k: round(float(v), 4) for k, v in rh.items()})

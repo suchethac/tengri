@@ -19,7 +19,7 @@ import jax.numpy as jnp
 import numpy as np
 import pytest
 
-from tengri import FIXED, Fixed, Observation, Photometry, SEDModel, Uniform, WavePrecomp
+from tengri import DEFAULT, Fixed, Observation, Photometry, SEDModel, Uniform, WavePrecomp
 from tengri.observation.photometry import FilterCurve
 from tengri.utils.physics_constants import C_AA
 
@@ -33,19 +33,19 @@ def _build(ssp, include_lyc: bool, *, tau_diff: float = 1.0):
         "law_diff": "calzetti",
         "tau_bc": Fixed(0.0),
         "tau_diff": Fixed(tau_diff),
-        "all_params": FIXED,
+        "all_params": Fixed(DEFAULT),
     }
     if include_lyc:
         dust["eb_include_lyc"] = True
     return SEDModel.build(
         ssp_data=ssp,
-        met={"logzsol": Fixed(0.0), "all_params": FIXED},
+        met={"logzsol": Fixed(0.0), "all_params": Fixed(DEFAULT)},
         sfh={
             "type": "delayed",
             "tau_gyr": Fixed(1.0),
             "age_gyr": Fixed(5.0),
             "log_total_mass": Fixed(10.0),
-            "all_params": FIXED,
+            "all_params": Fixed(DEFAULT),
         },
         dust_attenuation=dust,
         redshift=Fixed(0.0),
@@ -119,7 +119,7 @@ def _build_emitting(ssp, include_lyc: bool, approx):
         "law_diff": "calzetti",
         "tau_bc": Uniform(0.0, 1.0),
         "tau_diff": Fixed(0.3),
-        "all_params": FIXED,
+        "all_params": Fixed(DEFAULT),
     }
     if include_lyc:
         dust["eb_include_lyc"] = True
@@ -129,16 +129,16 @@ def _build_emitting(ssp, include_lyc: bool, approx):
         ssp_data=ssp,
         observation=obs,
         approx=approx,
-        met={"logzsol": Fixed(0.0), "all_params": FIXED},
+        met={"logzsol": Fixed(0.0), "all_params": Fixed(DEFAULT)},
         sfh={
             "type": "delayed",
             "tau_gyr": Fixed(1.0),
             "age_gyr": Fixed(5.0),
             "log_total_mass": Fixed(10.0),
-            "all_params": FIXED,
+            "all_params": Fixed(DEFAULT),
         },
         dust_attenuation=dust,
-        dust_emission={"type": "modified_blackbody", "all_params": FIXED},
+        dust_emission={"type": "modified_blackbody", "all_params": Fixed(DEFAULT)},
         neb={"type": "none"},
         redshift=Fixed(0.05),
     )

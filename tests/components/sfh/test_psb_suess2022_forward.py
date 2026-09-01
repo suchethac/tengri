@@ -13,7 +13,7 @@ continuity_flex) already clears.
 import numpy as np
 import pytest
 
-from tengri import FIXED, Fixed, SEDModel
+from tengri import DEFAULT, Fixed, SEDModel
 
 pytestmark = pytest.mark.conservation
 
@@ -23,7 +23,7 @@ _DUST_OFF = {
     "type": "two_component",
     "tau_bc": Fixed(0.0),
     "tau_diff": Fixed(0.0),
-    "all_params": FIXED,
+    "all_params": Fixed(DEFAULT),
 }
 
 
@@ -31,7 +31,7 @@ def _build_psb(ssp, log_total_mass=10.0):
     """A dust-free, solar-metallicity psb_suess2022 model at z = 0."""
     return SEDModel.build(
         ssp_data=ssp,
-        met={"logzsol": Fixed(0.0), "all_params": FIXED},
+        met={"logzsol": Fixed(0.0), "all_params": Fixed(DEFAULT)},
         sfh={
             "type": "psb_suess2022",
             "log_total_mass": Fixed(log_total_mass),
@@ -41,7 +41,7 @@ def _build_psb(ssp, log_total_mass=10.0):
             "ratio_old_0": Fixed(0.2),
             "ratio_old_1": Fixed(-0.3),
             "ratio_old_2": Fixed(0.0),
-            "all_params": FIXED,
+            "all_params": Fixed(DEFAULT),
         },
         dust_attenuation=_DUST_OFF,
         redshift=Fixed(0.0),

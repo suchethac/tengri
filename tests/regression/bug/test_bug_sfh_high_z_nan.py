@@ -23,7 +23,7 @@ import numpy as np
 import pytest
 
 import tengri
-from tengri import FIXED, Fixed
+from tengri import DEFAULT, Fixed
 from tengri.components.stellar.component import SFHBeforeBigBangWarning
 from tengri.components.stellar.sps.dsps_wrapper import enforce_increasing_cosmic_time
 
@@ -49,7 +49,7 @@ def test_enforce_increasing_fixes_non_monotone_table():
 def _high_z_model(ssp, redshift, age_gyr=3.0, free_mass=False):
     sfh = {
         "type": "dpl",
-        "all_params": FIXED,
+        "all_params": Fixed(DEFAULT),
         "age_gyr": age_gyr,
         "tau_gyr": 5.0,
         "alpha": 2.0,
@@ -62,7 +62,7 @@ def _high_z_model(ssp, redshift, age_gyr=3.0, free_mass=False):
         dust_attenuation={
             "law": "power_law",
             "type": "two_component",
-            "all_params": FIXED,
+            "all_params": Fixed(DEFAULT),
             "tau_diff": 0.0,
             "tau_bc": 0.0,
         },

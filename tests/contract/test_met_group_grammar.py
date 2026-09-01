@@ -110,11 +110,22 @@ def test_met_mode_inside_the_met_group_is_refused_with_the_right_form():
 
 
 def test_there_is_exactly_one_spelling_left():
-    """The point of the change: no second form to keep working, test, or teach."""
+    """The point of the change: no second *structural* form to keep working, test, or teach.
+
+    ``'other_params'`` is not that second form -- it is an exact synonym of
+    ``'all_params'`` (write one or the other, never both), and every group's
+    normalizer rewrites either spelling to the single internal ``'*'`` at one
+    choke point before this census is read. The census stays an exact
+    equality on purpose: it is what refuses a new ad-hoc key (e.g. the
+    retired ``stellar={'met_mode': ...}``) rather than merely tolerating one.
+    """
     assert "stellar" not in _GROUP_STRUCTURAL_KEYS
-    assert _GROUP_STRUCTURAL_KEYS["met"] == frozenset({"type", "*", "all_params"}), (
-        "the met group selects with 'type' and takes the wildcard "
-        "('all_params', plus the internal '*' the normalizer rewrites it to), nothing else"
+    assert _GROUP_STRUCTURAL_KEYS["met"] == frozenset(
+        {"type", "*", "all_params", "other_params"}
+    ), (
+        "the met group selects with 'type' and takes the wildcard -- "
+        "'all_params' and its exact synonym 'other_params', both normalized "
+        "to the internal '*' -- nothing else"
     )
 
 

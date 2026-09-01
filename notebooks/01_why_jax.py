@@ -36,7 +36,7 @@ import warnings
 # calls are fixed in the code, not hidden.
 warnings.filterwarnings("ignore", message=".*BakedInBackend.*")
 warnings.filterwarnings("ignore", message=".*WavePrecomp.*")
-warnings.filterwarnings("ignore", message=".*was marked FIXED.*")
+warnings.filterwarnings("ignore", message=".*states no 'all_params' disposition.*")
 warnings.filterwarnings("ignore", message=".*Composable AGN.*")
 warnings.filterwarnings("ignore", message=".*before the Big Bang.*")
 warnings.filterwarnings("ignore", category=RuntimeWarning)
@@ -231,7 +231,8 @@ t0 = perf_counter()
 # not hours. Seven is also the emcee comparison's dimensionality, so the two
 # bars below are like-for-like rather than tengri solving a smaller problem.
 posterior = ForwardModel.build(sed=model).fit(
-    flux_obs, noise,
+    flux_obs,
+    noise,
     method="mcmc_nuts",
     key=jax.random.PRNGKey(2),
     n_warmup=100,

@@ -48,16 +48,8 @@ Reference: Conroy+2013.
     To fit them, pass 'all_params': FREE:
       met={'all_params': FREE, ...}
     To keep them fixed and silence this warning, say so explicitly:
-      met={'all_params': FIXED, ...}
+      met={'all_params': Fixed(DEFAULT), ...}
       model_zt = tengri.SEDModel.build(
-    /tengri/examples/usecases/plot_usecase_simulation_seds.py:87: DefaultFixedParametersWarning: Group 'met' states no 'all_params' disposition, so its remaining 2 parameters were fixed at declared defaults:
-      met_alpha_fe=0, met_logzsol_scatter=0.1
-
-    To fit them, pass 'all_params': FREE:
-      met={'all_params': FREE, ...}
-    To keep them fixed and silence this warning, say so explicitly:
-      met={'all_params': FIXED, ...}
-      model_mean = tengri.SEDModel.build(
 
 
 
@@ -126,7 +118,7 @@ Reference: Conroy+2013.
         dust_attenuation={
             "law": "power_law",
             "type": "two_component",
-            "all_params": tengri.FIXED,
+            "all_params": tengri.Fixed(tengri.DEFAULT),
             "tau_bc": 0.4,
         },
         redshift=tengri.Fixed(Z_OBS),
@@ -151,7 +143,7 @@ Reference: Conroy+2013.
         dust_attenuation={
             "law": "power_law",
             "type": "two_component",
-            "all_params": tengri.FIXED,
+            "all_params": tengri.Fixed(tengri.DEFAULT),
             "tau_bc": 0.4,
         },
         redshift=tengri.Fixed(Z_OBS),
@@ -243,7 +235,7 @@ Reference: Conroy+2013.
 
 .. rst-class:: sphx-glr-timing
 
-   **Total running time of the script:** (0 minutes 3.341 seconds)
+   **Total running time of the script:** (0 minutes 6.882 seconds)
 
 
 .. _sphx_glr_download_auto_examples_usecases_plot_usecase_simulation_seds.py:

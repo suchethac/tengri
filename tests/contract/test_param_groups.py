@@ -7,7 +7,7 @@ to Parameters objects via parse_groups().
 
 import pytest
 
-from tengri.parameters import FIXED, FREE, Fixed, Uniform
+from tengri.parameters import DEFAULT, FREE, Fixed, Uniform
 from tengri.parameters.groups import parse_groups
 from tengri.parameters.parameters import Parameters
 
@@ -60,9 +60,9 @@ class TestWildcard:
         assert "sfh_dpl_log_total_mass" in params.free_params
 
     def test_all_params_fixed_fixes_all_declared_params(self):
-        """With 'all_params': FIXED, all params in the group should be fixed."""
+        """With 'all_params': Fixed(DEFAULT), all params in the group should be fixed."""
         params = parse_groups(
-            sfh={"type": "dpl", "all_params": FIXED},
+            sfh={"type": "dpl", "all_params": Fixed(DEFAULT)},
             redshift=Fixed(0.1),
         )
         assert isinstance(params, Parameters)
@@ -118,7 +118,7 @@ class TestEquivalence:
     def test_grouped_equals_flat_dpl_minimal(self):
         """Minimal grouped dpl should equal equivalent flat form (#1796).
 
-        When there's no met block, met_* parameters are implicitly FIXED.
+        When there's no met block, met_* parameters are implicitly Fixed.
         """
         # When dust group is NOT specified, dust defaults to free params
         grouped = parse_groups(
@@ -131,7 +131,7 @@ class TestEquivalence:
             dust_attenuation={
                 "law": "power_law",
                 "type": "two_component",
-                "all_params": FIXED,
+                "all_params": Fixed(DEFAULT),
             },
             redshift=Fixed(0.1),
         )
@@ -163,14 +163,14 @@ class TestEquivalence:
             dust_attenuation={
                 "type": "two_component",
                 "law": "calzetti",
-                "all_params": FIXED,
+                "all_params": Fixed(DEFAULT),
                 "tau_bc": 0.5,
             },
             dust_emission={
                 "type": "dale2014",
-                "all_params": FIXED,
+                "all_params": Fixed(DEFAULT),
             },
-            neb={"type": "cue", "all_params": FIXED},
+            neb={"type": "cue", "all_params": Fixed(DEFAULT)},
             igm={"type": "madau"},
             radio={"sf": {"type": "bell2003"}, "agn": {"type": "powerlaw"}},
             xray={"type": "simple"},
@@ -201,18 +201,18 @@ class TestNesting:
     def test_dust_emission_subblock(self):
         """dust.emission nested sub-block should activate dust IR params."""
         params = parse_groups(
-            sfh={"type": "dpl", "all_params": FIXED},
+            sfh={"type": "dpl", "all_params": Fixed(DEFAULT)},
             dust_attenuation={
                 "law": "power_law",
                 "type": "two_component",
-                "all_params": FIXED,
-                # FIXED, not FREE: every Dale+2014 param has a Fixed registry
+                "all_params": Fixed(DEFAULT),
+                # Fixed(DEFAULT), not FREE: every Dale+2014 param has a Fixed registry
                 # default, so FREE here frees nothing and is now refused. This
                 # test is about sub-block *declaration*, not freeing.
             },
             dust_emission={
                 "type": "dale2014",
-                "all_params": FIXED,
+                "all_params": Fixed(DEFAULT),
                 "alpha_dale": Uniform(0.5, 4.0),
             },
             redshift=Fixed(0.1),
@@ -226,11 +226,11 @@ class TestNesting:
     def test_dust_emission_omitted_means_no_ir(self):
         """Absence of dust.emission key should not activate IR params."""
         params = parse_groups(
-            sfh={"type": "dpl", "all_params": FIXED},
+            sfh={"type": "dpl", "all_params": Fixed(DEFAULT)},
             dust_attenuation={
                 "law": "power_law",
                 "type": "two_component",
-                "all_params": FIXED,
+                "all_params": Fixed(DEFAULT),
             },
             redshift=Fixed(0.1),
         )
@@ -245,7 +245,7 @@ class TestTypeMapping:
     def test_neb_cue(self):
         """neb={'type': 'cue'} should set nebular_cue=True."""
         params = parse_groups(
-            neb={"type": "cue", "all_params": FIXED},
+            neb={"type": "cue", "all_params": Fixed(DEFAULT)},
             redshift=Fixed(0.1),
         )
         assert params.nebular_mode == "cue"
@@ -254,7 +254,7 @@ class TestTypeMapping:
     def test_neb_ssp(self):
         """neb={'type': 'ssp'} should set nebular_ssp=True."""
         params = parse_groups(
-            neb={"type": "ssp", "all_params": FIXED},
+            neb={"type": "ssp", "all_params": Fixed(DEFAULT)},
             redshift=Fixed(0.1),
         )
         assert params.nebular_mode == "ssp"
@@ -273,7 +273,7 @@ class TestTypeMapping:
     def test_neb_cb19(self):
         """neb={'type': 'cb19'} should set nebular='cb19'."""
         params = parse_groups(
-            neb={"type": "cb19", "all_params": FIXED},
+            neb={"type": "cb19", "all_params": Fixed(DEFAULT)},
             redshift=Fixed(0.1),
         )
         assert params.nebular_mode == "cb19"
@@ -387,7 +387,7 @@ class TestTypeMapping:
             dust_attenuation={
                 "type": "two_component",
                 "law": "calzetti",
-                "all_params": FIXED,
+                "all_params": Fixed(DEFAULT),
             },
             redshift=Fixed(0.1),
         )
@@ -399,7 +399,7 @@ class TestTypeMapping:
             dust_attenuation={
                 "law": "power_law",
                 "type": "single_component",
-                "all_params": FIXED,
+                "all_params": Fixed(DEFAULT),
             },
             redshift=Fixed(0.1),
         )
@@ -526,11 +526,11 @@ class TestCanonicalExample:
             dust_attenuation={
                 "type": "two_component",
                 "law": "calzetti",
-                "all_params": FIXED,
+                "all_params": Fixed(DEFAULT),
                 "tau_bc": 0.5,
             },
-            dust_emission={"type": "dale2014", "all_params": FIXED},
-            neb={"type": "cue", "all_params": FIXED},
+            dust_emission={"type": "dale2014", "all_params": Fixed(DEFAULT)},
+            neb={"type": "cue", "all_params": Fixed(DEFAULT)},
             redshift=Uniform(0.01, 5.0),
         )
 
@@ -544,8 +544,8 @@ class TestCanonicalExample:
         assert "redshift" in params.free_params
 
 
-class TestFreeFixedSentinels:
-    """Test FREE/FIXED sentinel behavior."""
+class TestFreeDefaultSentinels:
+    """Test FREE/DEFAULT sentinel behavior."""
 
     def test_free_sentinel_identity(self):
         """FREE sentinel should preserve identity across copy/pickle."""
@@ -556,14 +556,14 @@ class TestFreeFixedSentinels:
         # Sentinel identity should be preserved
         assert FREE in copied or next(iter(copied)) is FREE
 
-    def test_fixed_sentinel_identity(self):
-        """FIXED sentinel should preserve identity across copy/pickle."""
+    def test_default_sentinel_identity(self):
+        """DEFAULT sentinel should preserve identity across copy/pickle."""
         import copy
 
-        sentinel = FIXED
+        sentinel = DEFAULT
         copied = copy.deepcopy({sentinel})
         # Sentinel identity should be preserved
-        assert FIXED in copied or next(iter(copied)) is FIXED
+        assert DEFAULT in copied or next(iter(copied)) is DEFAULT
 
 
 class TestEdgeCases:
@@ -591,19 +591,19 @@ class TestEdgeCases:
         assert "redshift" in params.all_params
 
     def test_full_prefix_override_under_star_fixed(self):
-        """Issue #424: per-param override under 'all_params': FIXED must accept the
+        """Issue #424: per-param override under 'all_params': Fixed(DEFAULT) must accept the
         full-prefixed key (``neb_logU``) as well as the short form
         (``logU``). Previously the full-prefix form was silently dropped,
         leaving the default in place — a silent footgun for new users.
         """
         # Short form (always worked).
         short = parse_groups(
-            neb={"type": "cue", "all_params": FIXED, "logU": Fixed(-2.5)},
+            neb={"type": "cue", "all_params": Fixed(DEFAULT), "logU": Fixed(-2.5)},
             redshift=Fixed(0.01),
         )
         # Full-prefix form (regressed silently before #424).
         full = parse_groups(
-            neb={"type": "cue", "all_params": FIXED, "neb_logU": Fixed(-2.5)},
+            neb={"type": "cue", "all_params": Fixed(DEFAULT), "neb_logU": Fixed(-2.5)},
             redshift=Fixed(0.01),
         )
         assert float(short._distributions["neb_logU"].value) == -2.5
@@ -614,7 +614,7 @@ class TestEdgeCases:
         params = parse_groups(
             sfh={
                 "type": "dpl",
-                "all_params": FIXED,
+                "all_params": Fixed(DEFAULT),
                 "sfh_dpl_alpha": Fixed(7.0),
             },
             redshift=Fixed(0.1),
@@ -628,7 +628,7 @@ class TestEdgeCases:
                 "type": "two_component",
                 "law_bc": "calzetti",
                 "law_diff": "smc",
-                "all_params": FIXED,
+                "all_params": Fixed(DEFAULT),
             },
             redshift=Fixed(0.1),
         )
@@ -643,8 +643,8 @@ class TestCueOptionalKnobExposure:
 
     def test_gas_logn_settable_and_free(self):
         params = parse_groups(
-            sfh={"type": "dpl", "all_params": FIXED},
-            neb={"type": "cue", "all_params": FIXED, "gas_logn": Uniform(1.0, 4.0)},
+            sfh={"type": "dpl", "all_params": Fixed(DEFAULT)},
+            neb={"type": "cue", "all_params": Fixed(DEFAULT), "gas_logn": Uniform(1.0, 4.0)},
             redshift=Fixed(0.05),
         )
         assert "gas_logn" in params.free_params
@@ -652,10 +652,10 @@ class TestCueOptionalKnobExposure:
     def test_ionspec_slopes_settable_and_free(self):
         """The ionizing-spectrum shape can be inferred (free ionspec_*)."""
         params = parse_groups(
-            sfh={"type": "dpl", "all_params": FIXED},
+            sfh={"type": "dpl", "all_params": Fixed(DEFAULT)},
             neb={
                 "type": "cue",
-                "all_params": FIXED,
+                "all_params": Fixed(DEFAULT),
                 "ionspec_index1": Uniform(1.0, 20.0),
                 "ionspec_logLratio1": Uniform(0.0, 5.0),
             },
@@ -666,10 +666,10 @@ class TestCueOptionalKnobExposure:
 
     def test_gas_abundances_settable(self):
         params = parse_groups(
-            sfh={"type": "dpl", "all_params": FIXED},
+            sfh={"type": "dpl", "all_params": Fixed(DEFAULT)},
             neb={
                 "type": "cue",
-                "all_params": FIXED,
+                "all_params": Fixed(DEFAULT),
                 "gas_logno": Uniform(-1.0, 1.0),
                 "gas_logco": Fixed(0.1),
             },
@@ -680,8 +680,8 @@ class TestCueOptionalKnobExposure:
 
     def test_bare_value_is_fixed(self):
         params = parse_groups(
-            sfh={"type": "dpl", "all_params": FIXED},
-            neb={"type": "cue", "all_params": FIXED, "gas_logn": 2.0},
+            sfh={"type": "dpl", "all_params": Fixed(DEFAULT)},
+            neb={"type": "cue", "all_params": Fixed(DEFAULT), "gas_logn": 2.0},
             redshift=Fixed(0.05),
         )
         assert "gas_logn" not in params.free_params
@@ -691,7 +691,7 @@ class TestCueOptionalKnobExposure:
         """gas_logn is a Cue-only knob; an ssp/cloudy neb group must reject it."""
         with pytest.raises(ValueError, match="gas_logn"):
             parse_groups(
-                sfh={"type": "dpl", "all_params": FIXED},
+                sfh={"type": "dpl", "all_params": Fixed(DEFAULT)},
                 neb={"type": "ssp", "gas_logn": Uniform(1.0, 4.0)},
                 redshift=Fixed(0.05),
             )
@@ -700,7 +700,7 @@ class TestCueOptionalKnobExposure:
         """The pre-fix gallery name ``neb_n_h`` is not a real param; reject it."""
         with pytest.raises(ValueError, match="neb_n_h"):
             parse_groups(
-                sfh={"type": "dpl", "all_params": FIXED},
+                sfh={"type": "dpl", "all_params": Fixed(DEFAULT)},
                 neb={"type": "cue", "neb_n_h": Fixed(2.0)},
                 redshift=Fixed(0.05),
             )
@@ -710,8 +710,8 @@ class TestCueOptionalKnobExposure:
         cannot expand them — require an explicit prior."""
         with pytest.raises(ValueError, match="explicit prior"):
             parse_groups(
-                sfh={"type": "dpl", "all_params": FIXED},
-                neb={"type": "cue", "all_params": FIXED, "gas_logn": FREE},
+                sfh={"type": "dpl", "all_params": Fixed(DEFAULT)},
+                neb={"type": "cue", "all_params": Fixed(DEFAULT), "gas_logn": FREE},
                 redshift=Fixed(0.05),
             )
 
@@ -723,8 +723,8 @@ class TestElineModeExposure:
 
     def test_fitted_registers_eline_params(self):
         params = parse_groups(
-            sfh={"type": "dpl", "all_params": FIXED},
-            neb={"type": "cue", "all_params": FIXED},
+            sfh={"type": "dpl", "all_params": Fixed(DEFAULT)},
+            neb={"type": "cue", "all_params": Fixed(DEFAULT)},
             eline_mode="fitted",
             redshift=Fixed(0.05),
         )
@@ -733,8 +733,8 @@ class TestElineModeExposure:
 
     def test_off_registers_nothing(self):
         params = parse_groups(
-            sfh={"type": "dpl", "all_params": FIXED},
-            neb={"type": "cue", "all_params": FIXED},
+            sfh={"type": "dpl", "all_params": Fixed(DEFAULT)},
+            neb={"type": "cue", "all_params": Fixed(DEFAULT)},
             redshift=Fixed(0.05),
         )
         assert "eline_sigma_kms" not in params.all_params
@@ -753,9 +753,9 @@ class TestAllParamsAlias:
             assert p in params.free_params
 
     def test_fixed_fixes_all_params(self):
-        """``all_params: FIXED`` fixes every declared param."""
+        """``all_params: Fixed(DEFAULT)`` fixes every declared param."""
         params = parse_groups(
-            sfh={"type": "dpl", "all_params": FIXED},
+            sfh={"type": "dpl", "all_params": Fixed(DEFAULT)},
             redshift=Fixed(0.1),
         )
         for p in ("sfh_dpl_alpha", "sfh_dpl_beta", "sfh_dpl_tau_gyr", "sfh_dpl_log_total_mass"):
@@ -773,10 +773,10 @@ class TestAllParamsAlias:
         """The retired '*' spelling is rejected even in nested sub-blocks."""
         with pytest.raises(ValueError, match="all_params"):
             parse_groups(
-                sfh={"type": "dpl", "all_params": FIXED},
+                sfh={"type": "dpl", "all_params": Fixed(DEFAULT)},
                 dust_emission={
                     "type": "dale2014",
-                    "*": FIXED,
+                    "*": Fixed(DEFAULT),
                 },
                 redshift=Fixed(0.1),
             )
@@ -794,15 +794,15 @@ class TestAllParamsAlias:
     def test_all_params_in_dust_emission_subblock(self):
         """``all_params`` resolves inside a nested sub-block (dust.emission)."""
         params = parse_groups(
-            sfh={"type": "dpl", "all_params": FIXED},
+            sfh={"type": "dpl", "all_params": Fixed(DEFAULT)},
             dust_attenuation={
                 "law": "power_law",
                 "type": "two_component",
-                "all_params": FIXED,
+                "all_params": Fixed(DEFAULT),
             },
             dust_emission={
                 "type": "dale2014",
-                "all_params": FIXED,
+                "all_params": Fixed(DEFAULT),
                 "alpha_dale": Uniform(0.5, 4.0),
             },
             redshift=Fixed(0.1),
@@ -812,7 +812,7 @@ class TestAllParamsAlias:
     def test_all_params_block_scoped_in_agn(self):
         """A top-level ``agn={'all_params': FREE}`` is block-scoped (does not affect sfh)."""
         params = parse_groups(
-            sfh={"type": "dpl", "all_params": FIXED},
+            sfh={"type": "dpl", "all_params": Fixed(DEFAULT)},
             agn={"type": "simple", "all_params": FREE},
             redshift=Fixed(0.1),
         )
@@ -826,10 +826,10 @@ class TestAllParamsAlias:
         # matching the behavior expected from the old `*` alias.
         # Just verify this doesn't raise an error and produces a valid Parameters object.
         params = parse_groups(
-            sfh={"type": "dpl", "all_params": FIXED},
+            sfh={"type": "dpl", "all_params": Fixed(DEFAULT)},
             agn={
                 "type": "composable",
-                "disc": {"type": "multicolor", "all_params": FIXED},
+                "disc": {"type": "multicolor", "all_params": Fixed(DEFAULT)},
                 "torus": {"type": "skirtor"},
                 "nlr": {"type": "none"},
                 "blr": {"type": "none"},
@@ -848,7 +848,7 @@ class TestAllParamsAlias:
         """
         with pytest.raises(ValueError, match="retired"):
             parse_groups(
-                sfh={"type": "dpl", "*": FREE, "all_params": FIXED},
+                sfh={"type": "dpl", "*": FREE, "all_params": Fixed(DEFAULT)},
                 redshift=Fixed(0.1),
             )
 
@@ -856,17 +856,38 @@ class TestAllParamsAlias:
         """The refusal reaches nested sub-blocks, not just top-level groups."""
         with pytest.raises(ValueError, match="retired"):
             parse_groups(
-                sfh={"type": "dpl", "all_params": FIXED},
+                sfh={"type": "dpl", "all_params": Fixed(DEFAULT)},
                 dust_attenuation={
                     "type": "two_component",
                 },
-                dust_emission={"type": "dale2014", "*": FREE, "all_params": FIXED},
+                dust_emission={"type": "dale2014", "*": FREE, "all_params": Fixed(DEFAULT)},
                 redshift=Fixed(0.1),
             )
 
+    def test_fixed_default_is_accepted_as_all_params_value(self):
+        """``Fixed(DEFAULT)`` is the one non-FREE sentinel this slot accepts."""
+        params = parse_groups(
+            sfh={"type": "dpl", "all_params": Fixed(DEFAULT)}, redshift=Fixed(0.1)
+        )
+        for p in ("sfh_dpl_alpha", "sfh_dpl_beta", "sfh_dpl_tau_gyr", "sfh_dpl_log_total_mass"):
+            assert p in params.fixed_params
+
+    def test_concrete_fixed_value_as_all_params_raises_cannot_smear(self):
+        """A concrete ``Fixed(v)`` cannot be the wildcard: one literal value
+        cannot apply across different parameters (unlike ``Fixed(DEFAULT)``,
+        which resolves each parameter to its own registry default)."""
+        with pytest.raises(ValueError, match=r"one literal value cannot apply"):
+            parse_groups(sfh={"type": "dpl", "all_params": Fixed(0.5)}, redshift=Fixed(0.1))
+
+    def test_bare_default_as_all_params_raises_fixed_default_pointer(self):
+        """Bare ``DEFAULT`` is not itself a wildcard value; it must be wrapped."""
+        with pytest.raises(ValueError, match=r"Fixed\(DEFAULT\)"):
+            parse_groups(sfh={"type": "dpl", "all_params": DEFAULT}, redshift=Fixed(0.1))
+
     @pytest.mark.parametrize("bad", ["free", "fixed", None, True])
     def test_invalid_alias_value_raises(self, bad):
-        """A non-sentinel ``all_params`` value raises the same error as ``'*'``."""
+        """A non-sentinel ``all_params`` value (not covered by the three cases
+        above) raises the same error as ``'*'``."""
         with pytest.raises(ValueError, match="all_params"):
             parse_groups(sfh={"type": "dpl", "all_params": bad}, redshift=Fixed(0.1))
 

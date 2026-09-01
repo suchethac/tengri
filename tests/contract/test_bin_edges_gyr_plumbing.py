@@ -54,7 +54,11 @@ class TestGrammarPlumbing:
 
     def test_grammar_accepts_bin_edges_gyr(self, edges_z2):
         params = parse_groups(
-            sfh={"type": _SFH, "all_params": tengri.FIXED, "bin_edges_gyr": edges_z2},
+            sfh={
+                "type": _SFH,
+                "all_params": tengri.Fixed(tengri.DEFAULT),
+                "bin_edges_gyr": edges_z2,
+            },
             redshift=Fixed(2.0),
         )
         np.testing.assert_array_equal(params.bin_edges_gyr, edges_z2)
@@ -62,7 +66,7 @@ class TestGrammarPlumbing:
     def test_default_is_none(self):
         """When ``bin_edges_gyr`` is not supplied the registry default is used."""
         params = parse_groups(
-            sfh={"type": _SFH, "all_params": tengri.FIXED},
+            sfh={"type": _SFH, "all_params": tengri.Fixed(tengri.DEFAULT)},
             redshift=Fixed(2.0),
         )
         assert params.bin_edges_gyr is None
@@ -81,7 +85,11 @@ class TestGrammarPlumbing:
     def test_bin_edges_gyr_is_recognized_neb_key(self, edges_z2):
         """No raise = key is accepted by the unknown-key validator."""
         parse_groups(
-            sfh={"type": _SFH, "all_params": tengri.FIXED, "bin_edges_gyr": edges_z2},
+            sfh={
+                "type": _SFH,
+                "all_params": tengri.Fixed(tengri.DEFAULT),
+                "bin_edges_gyr": edges_z2,
+            },
             redshift=Fixed(2.0),
         )
 
@@ -96,11 +104,15 @@ class TestForwardPassPropagation:
             warnings.simplefilter("ignore")
             model = tengri.SEDModel.build(
                 ssp,
-                sfh={"type": _SFH, "all_params": tengri.FIXED, "bin_edges_gyr": edges_z2},
+                sfh={
+                    "type": _SFH,
+                    "all_params": tengri.Fixed(tengri.DEFAULT),
+                    "bin_edges_gyr": edges_z2,
+                },
                 dust_attenuation={
                     "law": "power_law",
                     "type": "two_component",
-                    "all_params": tengri.FIXED,
+                    "all_params": tengri.Fixed(tengri.DEFAULT),
                 },
                 redshift=tengri.Fixed(2.0),
             )
@@ -116,11 +128,11 @@ class TestForwardPassPropagation:
             warnings.simplefilter("ignore")
             model = tengri.SEDModel.build(
                 ssp,
-                sfh={"type": _SFH, "all_params": tengri.FIXED},
+                sfh={"type": _SFH, "all_params": tengri.Fixed(tengri.DEFAULT)},
                 dust_attenuation={
                     "law": "power_law",
                     "type": "two_component",
-                    "all_params": tengri.FIXED,
+                    "all_params": tengri.Fixed(tengri.DEFAULT),
                 },
                 redshift=tengri.Fixed(2.0),
             )
@@ -138,7 +150,11 @@ class TestOtherNonparametricSfhs:
         """All validated non-parametric variants accept the override at the grammar layer."""
         edges = np.array([0.0, 0.03, 0.1, 0.5, 1.0, 3.0, 10.0, 13.6])
         params = parse_groups(
-            sfh={"type": sfh_type, "all_params": tengri.FIXED, "bin_edges_gyr": edges},
+            sfh={
+                "type": sfh_type,
+                "all_params": tengri.Fixed(tengri.DEFAULT),
+                "bin_edges_gyr": edges,
+            },
             redshift=Fixed(0.5),
         )
         np.testing.assert_array_equal(params.bin_edges_gyr, edges)

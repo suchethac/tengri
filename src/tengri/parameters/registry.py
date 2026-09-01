@@ -537,14 +537,14 @@ def recipe_parameters(recipe_dict: dict, free_only: bool = True) -> list[Paramet
             {
                 "sfh": {"type": "dpl", "all_params": FREE},
                 "dust": {"type": "two_component", "law": "calzetti", "all_params": FREE},
-                "neb": {"type": "cue", "all_params": FIXED},
+                "neb": {"type": "cue", "all_params": Fixed(DEFAULT)},
                 "redshift": Uniform(0.01, 6.0),
             }
 
     free_only : bool, optional
         If True (default), return only the free parameters (entries with
         non-fixed priors). If False, return all parameters the recipe
-        activates (including FIXED ones). Default is True.
+        activates (including fixed ones). Default is True.
 
     Returns
     -------
@@ -565,8 +565,9 @@ def recipe_parameters(recipe_dict: dict, free_only: bool = True) -> list[Paramet
     the recipe structure to a :class:`~tengri.Parameters` object and introspects
     its parameter names; the heaviest operation is a pure-Python dict traversal.
 
-    **Resolves sentinels.** FREE and FIXED sentinels are expanded to their
-    registry defaults; if ``free_only=True``, FIXED entries are filtered out.
+    **Resolves sentinels/tokens.** ``FREE`` is expanded to its registry default
+    prior, and ``Fixed(DEFAULT)`` is expanded to its registry default value;
+    if ``free_only=True``, fixed entries are filtered out.
 
     Examples
     --------

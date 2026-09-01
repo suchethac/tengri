@@ -2235,7 +2235,7 @@ class Fitter:
             # ``Uniform(9.6, 11.1)`` to ``Uniform(7, 13)`` changes no name, no
             # shape, no dtype and no control flow.
             self._free_prior_key(),
-            # Spec FIXED values (#1972 instance 2). ``_primals_to_params`` also
+            # Spec fixed values (#1972 instance 2). ``_primals_to_params`` also
             # bakes ``fitter._fixed_values``, so two models differing only in a
             # fixed scalar share one engine and fit #2 runs fit #1's physics,
             # measured -0.18 dex on mass for ``dust_slope`` -0.7 -> 0.4.
