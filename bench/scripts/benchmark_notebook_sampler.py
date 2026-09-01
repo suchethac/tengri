@@ -223,7 +223,7 @@ import numpy as np
 
 import tengri
 from tengri import (
-    FIXED,
+    DEFAULT,
     FREE,
     Data,
     Fixed,
@@ -363,11 +363,11 @@ def _build_ctl_jwst(ssp):
         observation=Observation(photometry=Photometry.from_names(list(_CTL_BROAD + _CTL_MEDIUM))),
         redshift=Fixed(_CTL_Z_GAL),
         sfh={"type": "continuity", "all_params": FREE, "bin_edges_gyr": bin_edges},
-        met={"logzsol": Uniform(-1.5, 0.3), "all_params": FIXED},
+        met={"logzsol": Uniform(-1.5, 0.3), "all_params": Fixed(DEFAULT)},
         dust_attenuation={
             "type": "two_component",
             "law": "calzetti",
-            "all_params": FIXED,
+            "all_params": Fixed(DEFAULT),
             "tau_bc": 0.0,
             "tau_diff": Uniform(0.0, 2.0),
         },
@@ -408,12 +408,12 @@ def _build_ctl_dpl(ssp):
         approx=WavePrecomp(),
         sfh=builders.sfh.dpl(all_params=FREE),
         dust_attenuation=builders.dust.two_component(
-            all_params=FIXED,
+            all_params=Fixed(DEFAULT),
             law="calzetti",
             tau_bc=Uniform(0.0, 1.0),
             tau_diff=Uniform(0.0, 1.0),
         ),
-        dust_emission=builders.dust.emission.modified_blackbody(all_params=FIXED),
+        dust_emission=builders.dust.emission.modified_blackbody(all_params=Fixed(DEFAULT)),
         neb=builders.neb.none(),
         met={"logzsol": Uniform(-1.5, 0.3)},
         redshift=Fixed(0.05),
@@ -450,7 +450,7 @@ def _build_nb00(ssp):
         approx=WavePrecomp(),
         sfh=builders.sfh.tsnorm(all_params=FREE),
         dust_attenuation=builders.dust.two_component(
-            all_params=FIXED, law="calzetti", tau_bc=Uniform(0.0, 1.0)
+            all_params=Fixed(DEFAULT), law="calzetti", tau_bc=Uniform(0.0, 1.0)
         ),
         neb=builders.neb.none(),
         met={"logzsol": Uniform(-2.0, 0.2)},
@@ -480,7 +480,10 @@ def _build_nb00_prelaw(ssp):
         approx=WavePrecomp(),
         sfh=builders.sfh.tsnorm(all_params=FREE),
         dust_attenuation=builders.dust.two_component(
-            all_params=FIXED, law_bc="calzetti", law_diff="power_law", tau_bc=Uniform(0.0, 1.0)
+            all_params=Fixed(DEFAULT),
+            law_bc="calzetti",
+            law_diff="power_law",
+            tau_bc=Uniform(0.0, 1.0),
         ),
         neb=builders.neb.none(),
         met={"logzsol": Uniform(-1.5, 0.3)},
@@ -550,12 +553,12 @@ def _build_nb05(ssp):
         approx=WavePrecomp(),
         sfh=builders.sfh.tsnorm(all_params=FREE),
         dust_attenuation=builders.dust.two_component(
-            all_params=FIXED,
+            all_params=Fixed(DEFAULT),
             law="calzetti",
             tau_bc=Uniform(0.0, 1.0),
             tau_diff=Uniform(0.0, 1.0),
         ),
-        dust_emission=builders.dust.emission.modified_blackbody(all_params=FIXED),
+        dust_emission=builders.dust.emission.modified_blackbody(all_params=Fixed(DEFAULT)),
         neb=builders.neb.none(),
         met={"logzsol": Uniform(-1.5, 0.3)},
         redshift=Fixed(0.05),
@@ -607,13 +610,13 @@ def _build_nb05_prelaw(ssp):
         approx=WavePrecomp(),
         sfh=builders.sfh.tsnorm(all_params=FREE),
         dust_attenuation=builders.dust.two_component(
-            all_params=FIXED,
+            all_params=Fixed(DEFAULT),
             law_bc="calzetti",
             law_diff="power_law",
             tau_bc=Uniform(0.0, 1.0),
             tau_diff=Uniform(0.0, 1.0),
         ),
-        dust_emission=builders.dust.emission.modified_blackbody(all_params=FIXED),
+        dust_emission=builders.dust.emission.modified_blackbody(all_params=Fixed(DEFAULT)),
         neb=builders.neb.none(),
         met={"logzsol": Uniform(-1.5, 0.3)},
         redshift=Fixed(0.05),
@@ -684,7 +687,7 @@ NOTEBOOKS = {
             superseded_by="#2044 (36d7189cf, 2026-08-23)",
             differs_in=(
                 "dust_attenuation.Rv",
-                "dust_attenuation.all_params",
+                "dust_attenuation.other_params",
                 "dust_attenuation.bump_strength",
                 "dust_attenuation.delta",
                 "dust_attenuation.f_obscuration",

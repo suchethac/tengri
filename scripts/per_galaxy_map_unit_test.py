@@ -12,7 +12,7 @@ import time
 import jax
 import numpy as np
 
-from tengri import FIXED, FREE, Fixed, Observation, Photometry, SEDModel, load_ssp_data
+from tengri import DEFAULT, FREE, Fixed, Observation, Photometry, SEDModel, load_ssp_data
 from tengri.analysis.population_mocks import assert_truth_is_discriminating, make_population
 from tengri.inference.fitter import Fitter
 
@@ -51,7 +51,11 @@ def main():
         ssp_data=ssp,
         observation=obs,
         sfh={"type": ["dpl", "field"], "all_params": FREE, "age_gyr": 11.0},
-        dust_attenuation={"type": "two_component", "law": "calzetti", "all_params": FIXED},
+        dust_attenuation={
+            "type": "two_component",
+            "law": "calzetti",
+            "all_params": Fixed(DEFAULT),
+        },
         neb={"type": "none"},
         redshift=Fixed(0.1),
         n_grid=N_GRID,

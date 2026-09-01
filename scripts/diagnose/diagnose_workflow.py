@@ -1,9 +1,12 @@
 import os
+
 os.environ["TF_CPP_MIN_LOG_LEVEL"] = "2"
 
 import warnings
+
 import jax
 import numpy as np
+
 import tengri
 
 warnings.filterwarnings("ignore", message=".*BakedInBackend.*")
@@ -26,7 +29,8 @@ model = tengri.SEDModel.build(
         "trunc": tengri.Uniform(1.0, 10.0),
         "logzsol": tengri.Uniform(-2.0, 0.2),
     },
-    dust_attenuation={"law": "power_law", 
+    dust_attenuation={
+        "law": "power_law",
         "type": "two_component",
         "tau_bc": tengri.Uniform(0.0, 2.0),
         "tau_diff": tengri.Uniform(0.0, 1.5),

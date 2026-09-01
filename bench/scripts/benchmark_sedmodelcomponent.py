@@ -40,7 +40,7 @@ import jax.numpy as jnp
 os.environ.setdefault("TENGRI_NO_BACKGROUND_COMPILE", "1")
 
 from tengri import (
-    FIXED,
+    DEFAULT,
     Fixed,
     Observation,
     Photometry,
@@ -81,7 +81,7 @@ def _build_model(ssp, obs, approx):
     return SEDModel.build(
         ssp_data=ssp,
         observation=obs,
-        sfh={"type": "dpl", "all_params": FIXED},
+        sfh={"type": "dpl", "all_params": Fixed(DEFAULT)},
         # law_bc: "calzetti" → law: "calzetti" is behavior-preserving:
         # pre-#1989 lone law_bc applied to both screens, now shared law does.
         dust_attenuation={

@@ -38,7 +38,7 @@ import jax
 import jax.numpy as jnp
 import numpy as np
 
-from tengri import FIXED, Fitter, Fixed, Observation, Photometry, SEDModel, Uniform, WavePrecomp
+from tengri import DEFAULT, Fitter, Fixed, Observation, Photometry, SEDModel, Uniform, WavePrecomp
 from tengri.inference.context import InferenceContext
 
 # --------------------------------------------------------------------------------------
@@ -48,7 +48,7 @@ from tengri.inference.context import InferenceContext
 _DUST_FREE = {
     "type": "two_component",
     "law": "calzetti",
-    "all_params": FIXED,
+    "all_params": Fixed(DEFAULT),
     "tau_diff": Uniform(0.0, 1.5),
     "tau_bc": 0.0,
 }
@@ -60,15 +60,15 @@ MODELS = {
     "stellar_dust": dict(dust_attenuation=_DUST_FREE),
     "dust_ir": dict(
         dust_attenuation=_DUST_FREE,
-        dust_emission={"type": "dale2014", "all_params": FIXED},
+        dust_emission={"type": "dale2014", "all_params": Fixed(DEFAULT)},
     ),
     "agn": dict(
         dust_attenuation=_DUST_FIXED,
         agn={
             "type": "composable",
-            "all_params": FIXED,
-            "disc": {"type": "multicolor", "all_params": FIXED},
-            "torus": {"type": "skirtor", "all_params": FIXED},
+            "all_params": Fixed(DEFAULT),
+            "disc": {"type": "multicolor", "all_params": Fixed(DEFAULT)},
+            "torus": {"type": "skirtor", "all_params": Fixed(DEFAULT)},
             "norm": "cigale_joint",
             "log_lbol": Fixed(10.5),
             "fracAGN": 0.1,
@@ -76,13 +76,13 @@ MODELS = {
     ),
     "panchromatic": dict(
         dust_attenuation=_DUST_FREE,
-        dust_emission={"type": "dale2014_cigale", "all_params": FIXED},
-        neb={"type": "cue", "all_params": FIXED},
+        dust_emission={"type": "dale2014_cigale", "all_params": Fixed(DEFAULT)},
+        neb={"type": "cue", "all_params": Fixed(DEFAULT)},
         agn={
             "type": "composable",
-            "all_params": FIXED,
-            "disc": {"type": "multicolor", "all_params": FIXED},
-            "torus": {"type": "skirtor", "all_params": FIXED},
+            "all_params": Fixed(DEFAULT),
+            "disc": {"type": "multicolor", "all_params": Fixed(DEFAULT)},
+            "torus": {"type": "skirtor", "all_params": Fixed(DEFAULT)},
             "norm": "cigale_joint",
             "log_lbol": Fixed(10.5),
             "fracAGN": 0.1,
@@ -147,7 +147,7 @@ def base(zspec):
     return dict(
         sfh={
             "type": "delayed",
-            "all_params": FIXED,
+            "all_params": Fixed(DEFAULT),
             "log_total_mass": Uniform(9.0, 11.0),
             "tau_gyr": 1.0,
             "age_gyr": 5.0,

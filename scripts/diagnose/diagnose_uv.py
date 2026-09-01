@@ -1,7 +1,9 @@
 """
 Diagnostic script to understand the UV absorption calculation issue.
 """
+
 import os
+
 os.environ["TF_CPP_MIN_LOG_LEVEL"] = "2"
 
 import warnings
@@ -11,7 +13,7 @@ import jax
 import numpy as np
 
 from tengri import (
-    FIXED,
+    DEFAULT,
     Fixed,
     Observation,
     Photometry,
@@ -25,6 +27,7 @@ warnings.filterwarnings("ignore", message=".*BakedInBackend.*")
 ssp_path = Path("data/fsps_prsc_miles_chabrier.h5")
 if not ssp_path.exists():
     import tengri
+
     ssp_path = Path(tengri.download_ssp("fsps_prsc_miles_chabrier"))
 ssp = load_ssp_data(str(ssp_path))
 
@@ -33,9 +36,19 @@ wave_rest = np.logspace(2.0, 7.0, 3000)
 wave_uv_min, wave_uv_max = 912.0, 3000.0
 
 filters = [
-    "sdss_u", "sdss_g", "sdss_r", "sdss_i", "sdss_z",
-    "irac_36", "irac_45", "irac_58", "irac_80",
-    "mips_24", "mips_70", "herschel_100", "herschel_160",
+    "sdss_u",
+    "sdss_g",
+    "sdss_r",
+    "sdss_i",
+    "sdss_z",
+    "irac_36",
+    "irac_45",
+    "irac_58",
+    "irac_80",
+    "mips_24",
+    "mips_70",
+    "herschel_100",
+    "herschel_160",
 ]
 obs = Observation(photometry=Photometry.from_names(filters))
 
@@ -49,8 +62,8 @@ model_intrinsic = SEDModel.build(
     ssp_data=ssp,
     observation=obs,
     redshift=Fixed(z),
-    sfh={"type": "tsnorm", "all_params": FIXED, "peak_lbt_gyr": 0.3},
-    neb={"type": "cue", "all_params": FIXED},
+    sfh={"type": "tsnorm", "all_params": Fixed(DEFAULT), "peak_lbt_gyr": 0.3},
+    neb={"type": "cue", "all_params": Fixed(DEFAULT)},
 )
 print(f"Intrinsic model free params: {model_intrinsic.spec.free_params}")
 
@@ -65,7 +78,9 @@ print(f"Intrinsic SED min/max: {sed_intrinsic_np.min():.4e} / {sed_intrinsic_np.
 
 mask_uv = (wave_rest >= wave_uv_min) & (wave_rest <= wave_uv_max)
 sed_uv_intrinsic = sed_intrinsic_np[mask_uv]
-print(f"Intrinsic UV SED (912-3000 Å) min/max: {sed_uv_intrinsic.min():.4e} / {sed_uv_intrinsic.max():.4e}")
+print(
+    f"Intrinsic UV SED (912-3000 Å) min/max: {sed_uv_intrinsic.min():.4e} / {sed_uv_intrinsic.max():.4e}"
+)
 print(f"Intrinsic UV SED has NaN: {np.isnan(sed_uv_intrinsic).any()}")
 print(f"Intrinsic UV SED has negative: {(sed_uv_intrinsic < 0).any()}")
 
@@ -80,14 +95,15 @@ model_dust = SEDModel.build(
     ssp_data=ssp,
     observation=obs,
     redshift=Fixed(z),
-    sfh={"type": "tsnorm", "all_params": FIXED, "peak_lbt_gyr": 0.3},
+    sfh={"type": "tsnorm", "all_params": Fixed(DEFAULT), "peak_lbt_gyr": 0.3},
     dust_attenuation={
         "type": "two_component",
         "law": "calzetti",
-        "all_params": FIXED,
+        "all_params": Fixed(DEFAULT),
         "tau_bc": 0.5,
-    }, dust_emission={"type": "dale2014", "all_params": FIXED},
-    neb={"type": "cue", "all_params": FIXED},
+    },
+    dust_emission={"type": "dale2014", "all_params": Fixed(DEFAULT)},
+    neb={"type": "cue", "all_params": Fixed(DEFAULT)},
 )
 print(f"Dust model free params: {model_dust.spec.free_params}")
 
@@ -132,4 +148,6 @@ sample_waves = [1000, 1500, 2000, 2500, 3000]
 for w in sample_waves:
     idx = np.argmin(np.abs(wave_rest - w))
     actual_w = wave_rest[idx]
-    print(f"λ={actual_w:.0f} Å: intrinsic={sed_intrinsic_np[idx]:.4e}, dust={sed_dust_np[idx]:.4e}, ratio={sed_dust_np[idx]/sed_intrinsic_np[idx]:.4f}")
+    print(
+        f"λ={actual_w:.0f} Å: intrinsic={sed_intrinsic_np[idx]:.4e}, dust={sed_dust_np[idx]:.4e}, ratio={sed_dust_np[idx] / sed_intrinsic_np[idx]:.4f}"
+    )
