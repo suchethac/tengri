@@ -107,6 +107,7 @@ from tengri.config.exceptions import (
     AdvisoryWarning,
     DefaultFixedParametersWarning,
     ParameterError,
+    WildcardNoOpWarning,
     WildcardPartialFreeWarning,
     warn_measured,
 )
@@ -1152,7 +1153,10 @@ def parse_groups(**kwargs) -> Parameters:
     # the more fundamental error.
     if not allow_empty_wildcard:
         _check_wildcard_freed_something(
-            _narrow_outcome_to_selected_component(wildcard_free_outcome, structural_params)
+            _seed_zero_declaration_wildcards(
+                _narrow_outcome_to_selected_component(wildcard_free_outcome, structural_params),
+                kwargs,
+            )
         )
 
     # ── Construct final Parameters ────────────────────────────────────
@@ -1546,6 +1550,67 @@ def _format_stuck(group: str, stuck: list[str]) -> tuple[str, str, str]:
     return shown, top, example
 
 
+#: Top-level groups whose structural choice can make them declare literally
+#: zero parameters: ``igm`` without ``patchy`` (its only top-level knobs,
+#: ``igm_bubble_mpc``/``igm_x_HI``, are declared only then), and ``radio`` /
+#: ``shock`` when every sub-model they can select is switched to ``'none'``
+#: (no component gets built at all). Named explicitly rather than every
+#: top-level group so that seeding below cannot start warning about some
+#: other group's legitimate wildcard by accident.
+_GROUPS_THAT_CAN_DECLARE_NOTHING: tuple[str, ...] = ("igm", "radio", "shock")
+
+
+def _seed_zero_declaration_wildcards(
+    outcome: dict[str, list[tuple[str, bool]]], kwargs: dict
+) -> dict[str, list[tuple[str, bool]]]:
+    """Give a FREE-disposed, zero-declaration group an empty entry in ``outcome``.
+
+    The resolve loop in :func:`parse_groups` only ever adds a group to
+    ``wildcard_free_outcome`` by *appending* a ``(param_name, freed)`` pair for
+    a parameter it actually visited. When the selected structural variant
+    declares no parameters for a group at all, the loop never visits a single
+    one, so the group never becomes a key in the outcome dict -- not even with
+    an empty list. A wildcard written there then resolves cleanly and the fit
+    runs with nothing in that group changed, which is indistinguishable at the
+    call site from a wildcard that did its job: there was no per-parameter
+    outcome for :func:`_check_wildcard_freed_something` to ever be asked
+    about.
+
+    This adds an explicit empty entry for exactly that case -- scoped to
+    :data:`_GROUPS_THAT_CAN_DECLARE_NOTHING`, the groups measured to actually
+    reach zero under a real structural choice -- so the adjudicator gets a
+    chance to say so instead of never being consulted.
+
+    Parameters
+    ----------
+    outcome : dict
+        Group name -> list of ``(param_name, was_freed)``, as built by the
+        resolve loop (and narrowed by
+        :func:`_narrow_outcome_to_selected_component`).
+    kwargs : dict
+        :func:`parse_groups` kwargs after Pass-0 wildcard-key normalization,
+        so every ``all_params``/``other_params`` spelling is already the
+        internal ``'*'`` (:data:`tengri.parameters.sentinels.WILDCARD_KEY`).
+
+    Returns
+    -------
+    dict
+        ``outcome`` with an empty list added for each zero-declaration group
+        whose wildcard disposition is ``FREE``. A group already present in
+        ``outcome``, or whose disposition is not ``FREE`` (unset, or
+        ``Fixed(DEFAULT)`` -- imperative and never a candidate for this),
+        passes through untouched.
+    """
+    seeded = dict(outcome)
+    for group in _GROUPS_THAT_CAN_DECLARE_NOTHING:
+        if group in seeded:
+            continue
+        group_dict = kwargs.get(group)
+        if isinstance(group_dict, dict) and group_dict.get(WILDCARD_KEY) is FREE:
+            seeded[group] = []
+    return seeded
+
+
 def _check_wildcard_freed_something(
     outcome: dict[str, list[tuple[str, bool]]],
 ) -> None:
@@ -1558,34 +1623,57 @@ def _check_wildcard_freed_something(
     with that physics constant, which is indistinguishable from success at the
     call site.
 
-    Three outcomes, three responses:
+    Four outcomes, four responses:
 
     * freed everything; silent, the request was honored;
-    * freed nothing; :class:`ParameterError`, since that is never intended;
-    * freed some; :class:`WildcardPartialFreeWarning` naming what stayed pinned
-      (issue #1474). A warning rather than a refusal because a partial free is
-      sometimes correct: ``dust_Rv`` is fixed by definition under a Calzetti law,
-      and six of the ten shipped recipes free a strict subset today.
+    * covered nothing at all -- the group declares no parameters under this
+      configuration, so there was nothing to attempt;
+      :class:`WildcardNoOpWarning` (via :func:`_seed_zero_declaration_wildcards`,
+      which is what gives such a group an (empty) entry here in the first
+      place -- a group with no entry at all is never seen by this function);
+    * covered something and freed none of it; :class:`ParameterError`, since
+      that is never intended;
+    * freed some, but not all, of what it covered; :class:`WildcardPartialFreeWarning`
+      naming what stayed pinned (issue #1474). A warning rather than a
+      refusal because a partial free is sometimes correct: ``dust_Rv`` is
+      fixed by definition under a Calzetti law, and six of the ten shipped
+      recipes free a strict subset today.
 
     Parameters
     ----------
     outcome : dict
         Group name -> list of ``(param_name, was_freed)`` for every parameter an
         *active* wildcard-FREE touched. Blocks scoped out by an inactive model
-        selection are excluded by the caller and never reach here.
+        selection are excluded by the caller and never reach here. A group
+        mapped to an empty list means its wildcard covered zero parameters
+        (see :func:`_seed_zero_declaration_wildcards`); a group absent
+        entirely never had a FREE wildcard worth adjudicating and is not
+        reachable here.
 
     Raises
     ------
     ParameterError
-        If any group's wildcard freed zero of the parameters it covered.
+        If any group's wildcard covered one or more parameters and freed
+        zero of them.
 
     Warns
     -----
+    WildcardNoOpWarning
+        If a group's wildcard covered zero parameters -- nothing to free in
+        the first place.
     WildcardPartialFreeWarning
-        If a group's wildcard freed some, but not all, of them.
+        If a group's wildcard freed some, but not all, of what it covered.
     """
     for group, entries in sorted(outcome.items()):
         if not entries:
+            warnings.warn(
+                f"'all_params'/'other_params': FREE in group {group!r} freed "
+                f"no parameters -- it declares none to free under this "
+                f"configuration. Remove the wildcard, or pass explicit "
+                f"priors for the parameters you meant to vary.",
+                WildcardNoOpWarning,
+                stacklevel=3,
+            )
             continue
         stuck = [name for name, freed in entries if not freed]
         if not stuck:

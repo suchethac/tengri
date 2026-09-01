@@ -41,7 +41,11 @@ import pytest
 
 import tengri
 from tengri import DEFAULT, FREE, Fixed, Uniform
-from tengri.config.exceptions import ParameterError, WildcardPartialFreeWarning
+from tengri.config.exceptions import (
+    ParameterError,
+    WildcardNoOpWarning,
+    WildcardPartialFreeWarning,
+)
 
 pytestmark = pytest.mark.contract
 
@@ -427,3 +431,121 @@ def test_introspection_path_is_exempt():
         free_only=False,
     )
     assert any(r.name.startswith("neb_") for r in recs)
+
+
+# ── A wildcard that covers ZERO parameters must warn, not stay mute ───
+
+# The guard above (#1474) fires only for a group that already appears in
+# ``wildcard_free_outcome`` -- built by the resolve loop *appending* an
+# outcome for every parameter it actually visits. When the selected
+# structural choice declares no parameters for a group at all, the loop
+# never visits a single one, so the group never becomes a key in that dict:
+# not even an empty list. ``igm={'type': 'inoue14', 'all_params': FREE}``
+# freed nothing and warned nothing, indistinguishable from success. Same
+# failure for ``radio``/``shock`` when every sub-model they can select is
+# switched to ``'none'`` (no component is built at all).
+#
+# :class:`WildcardNoOpWarning` is the fourth outcome
+# :func:`_check_wildcard_freed_something` now adjudicates, fed by
+# :func:`_seed_zero_declaration_wildcards` giving such a group an explicit
+# empty entry before the check runs.
+
+
+def test_guard_warns_on_an_outcome_with_zero_candidates():
+    """Unit level: an empty entry warns rather than being silently skipped."""
+    from tengri.parameters.groups import _check_wildcard_freed_something
+
+    with pytest.warns(WildcardNoOpWarning, match=r"group 'igm'"):
+        _check_wildcard_freed_something({"igm": []})
+
+
+def test_seed_zero_declaration_wildcards_is_selective():
+    """The seeding helper only adds an entry for a FREE-disposed, absent group."""
+    from tengri.parameters.groups import _seed_zero_declaration_wildcards
+
+    # FREE on a zero-declaration group: seeded with an empty entry.
+    assert _seed_zero_declaration_wildcards({}, {"igm": {"*": FREE}}) == {"igm": []}
+
+    # Fixed(DEFAULT) is the documented suppression idiom -- never seeded.
+    assert _seed_zero_declaration_wildcards({}, {"igm": {"*": Fixed(DEFAULT)}}) == {}
+
+    # No disposition stated at all -- never seeded.
+    assert _seed_zero_declaration_wildcards({}, {"igm": {"type": "inoue14"}}) == {}
+
+    # A group the resolve loop already populated is left exactly as-is, not
+    # overwritten with an empty list.
+    existing = {"igm": [("igm_bubble_mpc", True)]}
+    assert _seed_zero_declaration_wildcards(existing, {"igm": {"*": FREE}}) == existing
+
+
+def test_igm_inoue14_wildcard_free_warns_no_op():
+    """``inoue14`` names no top-level knob without ``patchy`` -- FREE frees nothing."""
+    with pytest.warns(WildcardNoOpWarning, match=r"group 'igm'"):
+        tengri.parse_groups(
+            sfh={"type": "dpl"}, igm={"type": "inoue14", "all_params": FREE}, redshift=Fixed(2.0)
+        )
+
+
+def test_igm_inoue14_wildcard_free_warns_no_op_other_params_spelling():
+    """Same repro under the ``other_params`` synonym."""
+    with pytest.warns(WildcardNoOpWarning, match=r"group 'igm'"):
+        tengri.parse_groups(
+            sfh={"type": "dpl"},
+            igm={"type": "inoue14", "other_params": FREE},
+            redshift=Fixed(2.0),
+        )
+
+
+def test_igm_inoue14_fixed_default_wildcard_does_not_warn():
+    """``Fixed(DEFAULT)`` is the documented suppression idiom; never warns here."""
+    with warnings.catch_warnings(record=True) as caught:
+        warnings.simplefilter("always")
+        tengri.parse_groups(
+            sfh={"type": "dpl"},
+            igm={"type": "inoue14", "all_params": Fixed(DEFAULT)},
+            redshift=Fixed(2.0),
+        )
+    assert not [w for w in caught if issubclass(w.category, WildcardNoOpWarning)]
+
+
+def test_igm_patchy_wildcard_free_does_not_get_the_no_op_warning():
+    """With ``patchy=True`` the wildcard genuinely frees ``igm_bubble_mpc``/``igm_x_HI``."""
+    with warnings.catch_warnings(record=True) as caught:
+        warnings.simplefilter("always")
+        freed = set(
+            tengri.parse_groups(
+                sfh={"type": "dpl"},
+                igm={"type": "inoue14", "patchy": True, "all_params": FREE},
+                redshift=Fixed(2.0),
+            ).free_params
+        )
+    assert not [w for w in caught if issubclass(w.category, WildcardNoOpWarning)]
+    assert "igm_bubble_mpc" in freed
+    assert "igm_x_HI" in freed
+
+
+def test_radio_wildcard_free_warns_when_both_submodels_disabled():
+    """``radio``'s component is never built once ``sf``/``agn`` are both ``'none'``."""
+    with pytest.warns(WildcardNoOpWarning, match=r"group 'radio'"):
+        tengri.parse_groups(
+            sfh={"type": "dpl"},
+            radio={"sf": {"type": "none"}, "agn": {"type": "none"}, "all_params": FREE},
+            redshift=Fixed(0.5),
+        )
+
+
+def test_shock_wildcard_free_warns_when_disabled():
+    """``shock={'type': 'none'}`` builds no component; FREE has nothing to free."""
+    with pytest.warns(WildcardNoOpWarning, match=r"group 'shock'"):
+        tengri.parse_groups(
+            sfh={"type": "dpl"}, shock={"type": "none", "all_params": FREE}, redshift=Fixed(0.5)
+        )
+
+
+def test_sfh_dpl_wildcard_free_does_not_get_the_no_op_warning():
+    """A wildcard that frees something must never trip the zero-candidate warning."""
+    with warnings.catch_warnings(record=True) as caught:
+        warnings.simplefilter("always")
+        freed = _free(sfh={"type": "dpl", "all_params": FREE})
+    assert not [w for w in caught if issubclass(w.category, WildcardNoOpWarning)]
+    assert any(p.startswith("sfh_") for p in freed)

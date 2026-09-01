@@ -180,8 +180,47 @@ class WildcardPartialFreeWarning(UserWarning):
     See Also
     --------
     tengri.config.exceptions.ParameterError
-        Raised instead when the wildcard frees *nothing*, which is never
-        intended.
+        Raised instead when the wildcard frees *nothing* but covered one or
+        more parameters, which is never intended.
+    tengri.config.exceptions.WildcardNoOpWarning
+        Warned instead when the wildcard covered *no* parameters at all --
+        the prior question to this one.
+    """
+
+
+class WildcardNoOpWarning(UserWarning):
+    """``all_params: FREE`` covered zero parameters -- there was nothing to free.
+
+    A group's declared parameters depend on the structural choice that
+    selected it: ``igm={'type': 'inoue14'}`` names no top-level knob unless
+    ``patchy=True`` also brings in ``igm_bubble_mpc``/``igm_x_HI``; ``radio``
+    and ``shock`` build no component at all when every sub-model is set to
+    ``'none'``. A ``'all_params': FREE`` written on one of these resolves
+    cleanly and the fit runs to completion with nothing in that group varying,
+    which is indistinguishable at the call site from a wildcard that did its
+    job -- there is no parameter list to be silent *about*, so nothing else
+    had reason to complain.
+
+    Distinct from :class:`ParameterError`: that fires when the wildcard did
+    cover one or more parameters and every one of them stayed pinned (each
+    has a declared prior that just is not a free one). This category is the
+    prior question -- there was nothing to attempt in the first place.
+
+    Warns rather than raises: a group that genuinely declares nothing under
+    the configuration in force (``igm`` without ``patchy``) is an ordinary,
+    working model, and the wildcard is simply inert there rather than wrong.
+    Filter this category if writing the wildcard anyway is deliberate (e.g. a
+    generic recipe that always sets ``'all_params': FREE`` across every
+    group it configures, whether or not a given group has anything to free).
+
+    See Also
+    --------
+    tengri.config.exceptions.ParameterError
+        Raised when the wildcard covered at least one parameter and freed
+        none of them.
+    tengri.config.exceptions.WildcardPartialFreeWarning
+        Warned when the wildcard covered several parameters and freed only
+        some.
     """
 
 
