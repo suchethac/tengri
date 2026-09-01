@@ -44,7 +44,7 @@ import numpy as np
 
 import tengri
 from tengri import (
-    FIXED,
+    DEFAULT,
     FREE,
     Fixed,
     ForwardModel,
@@ -183,9 +183,9 @@ sed_model = SEDModel.build(
     approx=WavePrecomp(),
     sfh=builders.sfh.tsnorm(all_params=FREE),
     dust_attenuation=builders.dust.two_component(
-        all_params=FIXED, law="calzetti", tau_diff=Uniform(0.0, 1.0)
+        all_params=Fixed(DEFAULT), law="calzetti", tau_diff=Uniform(0.0, 1.0)
     ),
-    dust_emission=builders.dust.emission.modified_blackbody(all_params=FIXED),
+    dust_emission=builders.dust.emission.modified_blackbody(all_params=Fixed(DEFAULT)),
     neb=builders.neb.none(),
     met={"logzsol": Uniform(-1.5, 0.3)},
     redshift=Fixed(0.0062),
