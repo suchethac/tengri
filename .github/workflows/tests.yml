@@ -1107,6 +1107,10 @@ jobs:
   # (issue #2128: before this change, nightly schedule reds were invisible,
   # because these jobs were omitted from `needs`, so their results never reached
   # the verdict policy at all).
+  #
+  # Timing note: on schedule/dispatch runs, ci-ok publishes only after the
+  # slowest gated job finishes (slow ~ up to 3 hours). This is deliberate and
+  # free on PR/push runs where those jobs skip instantly.
   ci-ok:
     name: ci-ok
     # `always()` so this still runs — and still reports — when a dependency
@@ -1144,11 +1148,12 @@ jobs:
         if: needs.ci-ok.result != 'success'
         run: |
           set -euo pipefail
-          ISSUES=$(gh issue list --state open --limit 100 --json number,title --jq '[.[] | select(.title | startswith("[nightly-red]"))]')
+          ISSUES=$(gh issue list --state open --label nightly-red --limit 100 --json number,title --jq '[.[] | select(.title | startswith("[nightly-red]"))]')
           COUNT=$(printf '%s' "$ISSUES" | python3 -c 'import json, sys; print(len(json.load(sys.stdin)))')
           if [ "$COUNT" -eq 0 ]; then
             gh issue create \
               --title "[nightly-red] Tests schedule run failed" \
+              --label nightly-red --label area:ci \
               --body "Schedule run ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }} (commit ${{ github.sha }}) failed ci-ok check. See the run for details on which jobs failed."
           else
             ISSUE_NUM=$(printf '%s' "$ISSUES" | python3 -c 'import json, sys; issues = json.load(sys.stdin); print(issues[0]["number"] if issues else "")')

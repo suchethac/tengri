@@ -33,12 +33,15 @@ the buckets carry the same meanings:
     ``success`` and ``skipped`` are legitimate.
 
 ``SCHEDULED_TIER``
-    Runs only on ``schedule`` and ``workflow_dispatch`` events (schedule runs
-    are the only place some tiers execute). Before this bucket, their failure
-    was invisible to the tier policy and could pass silently — issue #2128.
-    A skipped job on schedule or dispatch is a fault; a skipped job on push or
-    pull request is acceptable because these jobs never owed to run there. A
-    failure or cancellation is always a problem, whatever triggered the run.
+    Runs on schedule and dispatch events; slow and crossval also run on
+    pull requests carrying their opt-in labels (``run-slow-tests`` and
+    ``run-crossval`` respectively); coverage never runs on pull requests.
+    When a labeled PR run opts into slow or crossval, a failure reddens the
+    verdict and blocks that PR — deliberately, since a test the author chose
+    to run must not fail invisibly. Before this bucket, all three jobs' failure
+    was invisible on schedule runs — issue #2128. A skipped job on schedule or
+    dispatch is a fault (they are owed those events); a skipped job on push or
+    a PR without its label is acceptable.
 
 Why the ``labeled`` pull-request event is no longer a trigger
 ------------------------------------------------------------
@@ -90,8 +93,8 @@ FULL_TIER = ("test", "gallery-changes")
 #: Decided by another job's output; ``skipped`` is a legitimate result.
 GATED = ("gallery",)
 
-#: Run only on schedule and workflow_dispatch; ``skipped`` is a policy
-#: violation on those events, and a legitimate result on others.
+#: Run on schedule and dispatch; slow/crossval also run on label-opted PRs.
+#: On owed events, ``skipped`` is a policy violation; on others it is legitimate.
 SCHEDULED_TIER = ("slow", "coverage", "crossval")
 
 #: Events that always earn the full tier, having no base branch to weigh.
