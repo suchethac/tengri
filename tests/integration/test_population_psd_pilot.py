@@ -76,7 +76,14 @@ def _build_model_and_mock(n_galaxies):
     sigma_true = 0.6  # [dex], far from 0.1 and 0.505
     tau_true_myr = 350.0  # [Myr], far from 70.7 and 255
 
-    # Generate mock population
+    # Physically-realizable mock only (#1645 knobs; issue #2128). The unguarded
+    # seed-42 draw put galaxy 1 at z=10.09 with 5.35% of its stellar mass formed
+    # before the Big Bang; the truncation plateau broke its fit outright (the
+    # measurements live on the divergence assertion in the test below). Measured
+    # on this population: 0.05 rejects that draw while keeping galaxy 0's healthy
+    # 2.68% (z=4.05), and the redraw lands on a 0%-truncated z=0.94 galaxy after
+    # 65 attempts -- which is why max_resample_attempts is raised from the
+    # default 20, which would raise mid-generation.
     key = jax.random.PRNGKey(42)
     mock = make_population(
         model,
@@ -86,6 +93,9 @@ def _build_model_and_mock(n_galaxies):
         key=key,
         snr_phot=30.0,
         snr_line=50.0,
+        max_truncated_fraction=0.05,
+        resample_truncated=True,
+        max_resample_attempts=100,
     )
 
     return model, mock
@@ -168,9 +178,26 @@ def test_interim_fit_completes_on_a_small_population():
     assert "psd_xi" in result.rhat  # Field convergence should be present
     assert result.wall_time_s > 0.0
 
-    # ESS should be reasonable (non-zero, finite)
-    assert np.all(np.isfinite(result.ess))
-    assert np.all(result.ess > 0.0)
+    # Divergence fraction: n_divergent counts divergences over all post-burnin draws
+    # (before thinning). Galaxy 0: 2.68% truncated at z=4.05 (fit is healthy, 0.2%
+    # divergence). Galaxy 1 in the unguarded seed-42 draw: 5.35% truncated at z=10.09
+    # (the #2128 corpse with 100% sampling divergence from MAP loss 1.6e155 and
+    # collapsed warmup step size 1.41e-78). max_truncated_fraction=0.05 keeps the
+    # healthy 2.68% and rejects the 5.35%, triggering resampling. Galaxy 1 redraws
+    # to 0%-truncated z=0.94 after 65 attempts. max_resample_attempts=100 allows
+    # this; the default 20 would raise. (Issue #1645 gates this choice; 0.02 would
+    # needlessly redraw the healthy galaxy too: measured 67 attempts.) Healthy
+    # divergence is ~0.2% of all post-burnin draws; the threshold sits at 5% for
+    # 25x headroom while still catching dead chains decisively (#2128).
+    divergent_frac = result.n_divergent / _N_SAMPLES
+    assert np.all(divergent_frac < 0.05), (
+        f"Divergence rate {divergent_frac} exceeds 5% threshold; "
+        f"check for unphysical galaxies (#2128, #1645)"
+    )
+
+    # ESS is a placeholder (interim.py:498 sets np.ones(...)) until a real
+    # estimator is implemented. A real assert belongs here when one exists.
+    assert result.ess.shape == (_N_SMOKE,)
 
     # R-hat should be accessible
     for key_name, rhat_val in result.rhat.items():
