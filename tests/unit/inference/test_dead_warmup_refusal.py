@@ -37,6 +37,7 @@ from tengri.config.exceptions import InferenceError
 from tengri.inference.backends.mcmc._shared import (
     DEAD_WARMUP_DIVERGENCE_FRAC,
     DEAD_WARMUP_MIN_WINDOW,
+    DEAD_WARMUP_STEP_SIZE_FLOOR,
     DEAD_WARMUP_WINDOW_FRAC,
     final_window_divergence_frac,
     refuse_dead_warmup,
@@ -125,3 +126,87 @@ def test_the_error_survives_pickling():
         assert str(revived) == str(err)
         assert revived.warmup_divergence_frac == pytest.approx(1.0)
         assert revived.step_size == pytest.approx(0.0438)
+
+
+def test_step_size_floor_triggers_below_floor():
+    """Step size below the floor raises, regardless of divergence fraction (#2128)."""
+    # Test with low divergence fraction (below threshold) but collapsed step size
+    with pytest.raises(DeadFitError) as excinfo:
+        refuse_dead_warmup(0.1, sampler="HMC", step_size=1e-78, n_warmup=600, n_samples=600)
+    err = excinfo.value
+    assert err.step_size == pytest.approx(1e-78)
+    text = str(err)
+    # Require step-size value AND "#2128" AND "step size", no OR.
+    assert "1e-78" in text
+    assert "step size" in text.lower()
+    assert "#2128" in text
+
+
+def test_step_size_floor_does_not_trigger_above_floor():
+    """Step size above the floor does not trigger the floor check."""
+    # Step size above floor but still low divergence: should pass quietly
+    refuse_dead_warmup(
+        0.1, sampler="HMC", step_size=DEAD_WARMUP_STEP_SIZE_FLOOR * 10, n_warmup=600, n_samples=600
+    )
+    # Healthy step size: definitely should pass
+    refuse_dead_warmup(0.1, sampler="HMC", step_size=0.05, n_warmup=600, n_samples=600)
+
+
+def test_step_size_floor_edge_exactly_at_floor():
+    """Comparison direction: exactly at floor should NOT trigger (#2128 guard design)."""
+    # The guard uses `<` so exactly at the floor boundary should not raise.
+    # If floor is 1e-20, 1e-20 exactly should pass; only 1e-20 * 0.9 should fail.
+    refuse_dead_warmup(
+        0.1, sampler="HMC", step_size=DEAD_WARMUP_STEP_SIZE_FLOOR, n_warmup=600, n_samples=600
+    )
+
+
+def test_step_size_none_does_not_trigger_floor():
+    """Absence check: None step_size (no measurement) does not trigger floor check."""
+    # None step_size should return quietly (no verdict)
+    refuse_dead_warmup(None, sampler="HMC", step_size=None, n_warmup=600, n_samples=600)
+
+
+def test_step_size_nan_does_not_trigger_floor():
+    """Absence check: NaN step_size (no measurement) does not trigger floor check."""
+    # NaN step_size should not raise (isfinite guard catches it)
+    refuse_dead_warmup(0.1, sampler="HMC", step_size=float("nan"), n_warmup=600, n_samples=600)
+
+
+def test_step_size_zero_triggers_floor():
+    """Zero step size triggers the floor check (most frozen chain possible)."""
+    # 0.0 step_size is the ultimate collapsed step and should raise DeadFitError.
+    # This is the most extreme case of step-size collapse.
+    with pytest.raises(DeadFitError) as excinfo:
+        refuse_dead_warmup(0.1, sampler="HMC", step_size=0.0, n_warmup=600, n_samples=600)
+    err = excinfo.value
+    assert "#2128" in str(err)
+
+
+def test_step_size_floor_message_names_the_threshold():
+    """Error message names the DEAD_WARMUP_STEP_SIZE_FLOOR constant (#2128)."""
+    with pytest.raises(DeadFitError) as excinfo:
+        refuse_dead_warmup(
+            0.1,
+            sampler="HMC",
+            step_size=DEAD_WARMUP_STEP_SIZE_FLOOR * 0.1,
+            n_warmup=600,
+            n_samples=600,
+        )
+    err = excinfo.value
+    text = str(err)
+    # Message should reference the floor value in scientific notation
+    assert "1e-20" in text or f"{DEAD_WARMUP_STEP_SIZE_FLOOR:.3g}" in text
+
+
+def test_step_size_floor_with_unmeasured_divergence():
+    """Frac=None with step_size below floor raises DeadFitError, not TypeError."""
+    # The step-size floor check runs before the frac None-return, so it must
+    # handle None gracefully and still fire. Verifies frac_text precomputation.
+    with pytest.raises(DeadFitError) as excinfo:
+        refuse_dead_warmup(None, sampler="HMC", step_size=1e-50, n_warmup=600, n_samples=600)
+    err = excinfo.value
+    text = str(err)
+    # Message should mark the divergence fraction as unmeasured.
+    assert "unmeasured" in text
+    assert "#2128" in text

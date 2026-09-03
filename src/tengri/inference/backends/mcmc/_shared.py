@@ -425,6 +425,15 @@ DEAD_WARMUP_DIVERGENCE_FRAC = 0.9
 DEAD_WARMUP_WINDOW_FRAC = 0.1
 #: ... and never fewer than this many steps.
 DEAD_WARMUP_MIN_WINDOW = 10
+#: Minimum step size below which the sampler is physically unable to move.
+#: Below ~1e-16, ``x + eps*p`` cannot advance an O(1) whitened coordinate in
+#: float64 at all — the trajectory is bit-frozen by construction. 1e-20 is
+#: safely below any survivable adaptation (healthy: 1e-3..1e-1; #2128 corpse:
+#: 1.41e-78) so this fires only on genuine catastrophic collapse, not on merely
+#: small but functional steps. Complements DEAD_WARMUP_DIVERGENCE_FRAC as an
+#: independent trigger: a fit can slip past low divergence-fraction thresholds
+#: with a step size that would freeze the chain anyway (issue #2128).
+DEAD_WARMUP_STEP_SIZE_FLOOR = 1e-20
 
 #: Divergent fraction over all post-burnin draws at which a fit is rejected
 #: as dead after sampling completes (#2093). Healthy fits measure <0.5%
@@ -488,7 +497,37 @@ def refuse_dead_warmup(
     scan compiles. A ``frac`` of ``None`` means nothing was measured, so
     there is nothing to refuse on, and it returns quietly. The backends do
     not call this at all when they reuse a cached adaptation.
+
+    Also refuses when the adapted step size has collapsed below the floor
+    (DEAD_WARMUP_STEP_SIZE_FLOOR), which renders the sampler incapable of
+    moving in float64 coordinates. Issue #2128: a fit with 16.7% divergent
+    warmup fraction (below the 90% threshold) reached this floor at 1.41e-78
+    and produced 100% divergent sampling draws, caught only by post-hoc guards.
     """
+    # Check step size floor: absence (None/NaN) means no verdict.
+    if (
+        step_size is not None
+        and np.isfinite(float(step_size))
+        and float(step_size) < DEAD_WARMUP_STEP_SIZE_FLOOR
+    ):
+        frac_text = f"{frac:.1%}" if frac is not None else "unmeasured"
+        raise DeadFitError(
+            f"{sampler} warmup ended dead: step size {step_size:.3g} is below the "
+            f"survivability floor ({DEAD_WARMUP_STEP_SIZE_FLOOR:.3g}). At this magnitude, "
+            f"``x + eps*p`` cannot advance an O(1) whitened coordinate in float64 "
+            f"(coordinate changes are rounded to zero), so the sampler is frozen by "
+            f"construction and {n_samples} draws would only return a stalled posterior. "
+            f"Sampling was refused and the adaptation was not cached. Warmup divergence "
+            f"fraction was {frac_text} (below the {DEAD_WARMUP_DIVERGENCE_FRAC:.0%} threshold "
+            f"that would alone trigger refusal), demonstrating that divergence fraction "
+            f"alone cannot catch step-size collapse. This is a posterior problem, not a "
+            f"tuning one: verify data units and scale, prior bounds against MAP "
+            f"initialization, and that the initial log posterior is finite, before "
+            f"re-tuning. See issue #2128.",
+            warmup_divergence_frac=float(frac) if frac is not None else float("nan"),
+            step_size=step_size,
+        )
+
     if frac is None or frac < DEAD_WARMUP_DIVERGENCE_FRAC:
         return
 
