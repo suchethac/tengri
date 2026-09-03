@@ -488,7 +488,7 @@ def final_window_divergence_frac(warmup_divergent, n_warmup: int) -> float | Non
 
 
 def refuse_dead_warmup(
-    frac: float | None, *, sampler: str, step_size: float, n_warmup: int, n_samples: int
+    frac: float | None, *, sampler: str, step_size: float | None, n_warmup: int, n_samples: int
 ) -> None:
     """Raise :class:`DeadFitError` when the final warmup window is (nearly) all divergent.
 
@@ -532,9 +532,10 @@ def refuse_dead_warmup(
         return
 
     window = _dead_warmup_window(n_warmup, n_warmup)
+    step_text = f"{step_size:.3g}" if step_size is not None else "unmeasured"
     raise DeadFitError(
         f"{sampler} warmup ended dead: {frac:.0%} of its final {window} adaptation steps "
-        f"diverged at the adapted step size {step_size:.3g}, so the sampler rejects "
+        f"diverged at the adapted step size {step_text}, so the sampler rejects "
         f"essentially every proposal and {n_samples} draws would only return a frozen "
         f"posterior. Sampling was refused and the adaptation was not cached. This is a "
         f"posterior problem, not a tuning one: the measured trigger was data 1000x too "
@@ -543,7 +544,7 @@ def refuse_dead_warmup(
         f"the prior bounds against the MAP initialization, and that the initial log "
         f"posterior is finite, before re-tuning.",
         warmup_divergence_frac=frac,
-        step_size=step_size,
+        step_size=float(step_size) if step_size is not None else float("nan"),
     )
 
 

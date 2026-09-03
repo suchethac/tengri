@@ -154,8 +154,9 @@ def test_step_size_floor_does_not_trigger_above_floor():
 
 def test_step_size_floor_edge_exactly_at_floor():
     """Comparison direction: exactly at floor should NOT trigger (#2128 guard design)."""
-    # The guard uses `<` so exactly at the floor boundary should not raise.
-    # If floor is 1e-20, 1e-20 exactly should pass; only 1e-20 * 0.9 should fail.
+    # The guard uses `<` so exactly at the floor boundary should not raise;
+    # only a value strictly below the floor fails (exercised by the message
+    # test below at DEAD_WARMUP_STEP_SIZE_FLOOR * 0.1).
     refuse_dead_warmup(
         0.1, sampler="HMC", step_size=DEAD_WARMUP_STEP_SIZE_FLOOR, n_warmup=600, n_samples=600
     )
