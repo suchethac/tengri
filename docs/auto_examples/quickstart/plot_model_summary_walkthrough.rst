@@ -85,7 +85,7 @@ Understanding model structure through parameter provenance tags
 
     # Build a model with deliberately mixed provenance sources.
     # - sfh: tsnorm with FREE wildcards except one fixed param
-    # - dust: two-component with FIXED wildcards but user override on tau_bc
+    # - dust: two-component with a Fixed(DEFAULT) wildcard but a user override on tau_bc
     # - neb: all defaults (no wildcard)
     # - redshift: explicit user value
     model = tengri.SEDModel.build(
@@ -99,7 +99,7 @@ Understanding model structure through parameter provenance tags
             "type": "two_component",
             "law": "calzetti",
             "all_params": tengri.Fixed(tengri.DEFAULT),
-            "tau_bc": 0.5,  # [user] override on a FIXED wildcard
+            "tau_bc": 0.5,  # [user] override on a Fixed(DEFAULT) wildcard
         },
         neb={"type": "cue"},  # All defaults
         redshift=tengri.Fixed(0.05),  # [user]
