@@ -322,17 +322,38 @@ def test_ledgered_path_converts_fail_to_known_bad(tmp_path):
             ]
         )
     )
-    proc = _run_guard(
-        _make_repo(
-            tmp_path,
-            {
-                "notebooks/00_quickstart.ipynb": bad_nb,
-                "notebooks/other.ipynb": json.dumps(
-                    _make_notebook([_code_cell("print('ok')", [_text_output("ok\n")])])
-                ),
-            },
-        )
+    # Create a guard with a synthetic ledger entry injected
+    script = (REPO_ROOT / "tools" / "check_render_diagnostics.py").read_text(encoding="utf-8")
+    script = script.replace(
+        "KNOWN_BAD_LEDGER = {}",
+        'KNOWN_BAD_LEDGER = {"notebooks/test_bad.ipynb": "#9999"}',
     )
+
+    root = tmp_path / "repo"
+    root.mkdir()
+    subprocess.run(["git", "init", "-q"], cwd=root, check=True)
+    files = {
+        "notebooks/test_bad.ipynb": bad_nb,
+        "notebooks/other.ipynb": json.dumps(
+            _make_notebook([_code_cell("print('ok')", [_text_output("ok\n")])])
+        ),
+    }
+    for rel, content in files.items():
+        path = root / rel
+        path.parent.mkdir(parents=True, exist_ok=True)
+        path.write_text(content, encoding="utf-8")
+    subprocess.run(["git", "add", "-A"], cwd=root, check=True)
+
+    tmp_script = root / "_guard.py"
+    script = script.replace(
+        "ROOT = Path(__file__).resolve().parents[1]",
+        f"ROOT = Path({str(root)!r})",
+    )
+    tmp_script.write_text(script, encoding="utf-8")
+    proc = subprocess.run(
+        [sys.executable, str(tmp_script)], cwd=root, capture_output=True, text=True
+    )
+
     # Should pass (exit 0) because the ledger entries don't cause failure
     assert proc.returncode == 0, proc.stdout + proc.stderr
     # Should mention KNOWN-BAD
@@ -440,13 +461,29 @@ def test_weakening_rhat_threshold_breaks_synthetic_test(tmp_path):
 def test_stale_ledger_entry_clean_notebook_fails(tmp_path):
     """A ledgered notebook with zero failures must fail (stale entry)."""
     clean_nb = json.dumps(_make_notebook([_code_cell("print('ok')", [_text_output("ok\n")])]))
-    proc = _run_guard(
-        _make_repo(
-            tmp_path,
-            {
-                "notebooks/00_quickstart.ipynb": clean_nb,
-            },
-        )
+    # Create a guard with a synthetic ledger entry injected
+    script = (REPO_ROOT / "tools" / "check_render_diagnostics.py").read_text(encoding="utf-8")
+    script = script.replace(
+        "KNOWN_BAD_LEDGER = {}",
+        'KNOWN_BAD_LEDGER = {"notebooks/test_stale.ipynb": "#9999"}',
+    )
+
+    root = tmp_path / "repo"
+    root.mkdir()
+    subprocess.run(["git", "init", "-q"], cwd=root, check=True)
+    path = root / "notebooks/test_stale.ipynb"
+    path.parent.mkdir(parents=True, exist_ok=True)
+    path.write_text(clean_nb, encoding="utf-8")
+    subprocess.run(["git", "add", "-A"], cwd=root, check=True)
+
+    tmp_script = root / "_guard.py"
+    script = script.replace(
+        "ROOT = Path(__file__).resolve().parents[1]",
+        f"ROOT = Path({str(root)!r})",
+    )
+    tmp_script.write_text(script, encoding="utf-8")
+    proc = subprocess.run(
+        [sys.executable, str(tmp_script)], cwd=root, capture_output=True, text=True
     )
     # Should fail because the ledger entry is stale (notebook is now clean)
     assert proc.returncode == 1, proc.stdout + proc.stderr
@@ -465,16 +502,36 @@ def test_ledgered_notebook_with_failures_passes(tmp_path):
             ]
         )
     )
-    proc = _run_guard(
-        _make_repo(
-            tmp_path,
-            {
-                "notebooks/00_quickstart.ipynb": bad_nb,
-                "notebooks/other.ipynb": json.dumps(
-                    _make_notebook([_code_cell("print('ok')", [_text_output("ok\n")])])
-                ),
-            },
-        )
+    # Create a guard with a synthetic ledger entry injected
+    script = (REPO_ROOT / "tools" / "check_render_diagnostics.py").read_text(encoding="utf-8")
+    script = script.replace(
+        "KNOWN_BAD_LEDGER = {}",
+        'KNOWN_BAD_LEDGER = {"notebooks/test_known_bad.ipynb": "#9999"}',
+    )
+
+    root = tmp_path / "repo"
+    root.mkdir()
+    subprocess.run(["git", "init", "-q"], cwd=root, check=True)
+    files = {
+        "notebooks/test_known_bad.ipynb": bad_nb,
+        "notebooks/other.ipynb": json.dumps(
+            _make_notebook([_code_cell("print('ok')", [_text_output("ok\n")])])
+        ),
+    }
+    for rel, content in files.items():
+        path = root / rel
+        path.parent.mkdir(parents=True, exist_ok=True)
+        path.write_text(content, encoding="utf-8")
+    subprocess.run(["git", "add", "-A"], cwd=root, check=True)
+
+    tmp_script = root / "_guard.py"
+    script = script.replace(
+        "ROOT = Path(__file__).resolve().parents[1]",
+        f"ROOT = Path({str(root)!r})",
+    )
+    tmp_script.write_text(script, encoding="utf-8")
+    proc = subprocess.run(
+        [sys.executable, str(tmp_script)], cwd=root, capture_output=True, text=True
     )
     # Should pass (exit 0) because the ledger entry has failures
     assert proc.returncode == 0, proc.stdout + proc.stderr

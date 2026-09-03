@@ -46,24 +46,15 @@ number.
 .. code-block:: python
 
     KNOWN_BAD_LEDGER = {
-        # Vacuous DeadFitWarnings on Fixed parameters (pre-#2090 bug): #2113
-        "notebooks/00_quickstart.ipynb": "#2113",
-        "notebooks/01_why_jax.ipynb": "#2113",
-        "notebooks/06_fitting_spectroscopy.ipynb": "#2113",
-        "notebooks/07_joint_photo_spec.ipynb": "#2113",
-        "notebooks/11_catalog_fits.ipynb": "#2113",
-        "docs/spine/00_quickstart.ipynb": "#2113",
-        "docs/spine/01_why_jax.ipynb": "#2113",
-        "docs/spine/06_fitting_spectroscopy.ipynb": "#2113",
-        "docs/spine/07_joint_photo_spec.ipynb": "#2113",
-        "docs/spine/11_catalog_fits.ipynb": "#2113",
-        "docs/spine/experimental/jwst_nonparametric_fits.ipynb": "#2113",
-        "docs/spine/experimental/stochastic_sfh_recovery.ipynb": "#2113",
+        # Entries are added when a committed notebook render has a known issue
+        # tracked by a GitHub issue number. Removing an entry implies fixed.
+        # Example (resolved #2113, vacuous DeadFitWarning on Fixed params):
+        # "notebooks/00_quickstart.ipynb": "#2113",
     }
 
-**#2113** — These twelve notebooks carry vacuous DeadFitWarnings that fired
-on Fixed parameters with healthy fits (pre-#2090 bug in the warning logic).
-Re-rendering will remove these warnings automatically.
+**Ledger entries** — Notebooks with known committed-render failures are listed above
+keyed to the GitHub issue tracking the fix. Re-rendering will update the notebook;
+removing the entry confirms the issue is resolved.
 
 Usage
 -----
@@ -89,21 +80,7 @@ ROOT = Path(__file__).resolve().parents[1]
 # removing the entry implies fixing the issue. Entries whose files no longer exist
 # on disk are silently skipped (a deleted notebook should not fail the guard).
 # Removing a notebook from the repository also requires manual removal of its entry.
-KNOWN_BAD_LEDGER = {
-    # Vacuous DeadFitWarnings on Fixed parameters (pre-#2090 bug): #2113
-    "notebooks/00_quickstart.ipynb": "#2113",
-    "notebooks/01_why_jax.ipynb": "#2113",
-    "notebooks/06_fitting_spectroscopy.ipynb": "#2113",
-    "notebooks/07_joint_photo_spec.ipynb": "#2113",
-    "notebooks/11_catalog_fits.ipynb": "#2113",
-    "docs/spine/00_quickstart.ipynb": "#2113",
-    "docs/spine/01_why_jax.ipynb": "#2113",
-    "docs/spine/06_fitting_spectroscopy.ipynb": "#2113",
-    "docs/spine/07_joint_photo_spec.ipynb": "#2113",
-    "docs/spine/11_catalog_fits.ipynb": "#2113",
-    "docs/spine/experimental/jwst_nonparametric_fits.ipynb": "#2113",
-    "docs/spine/experimental/stochastic_sfh_recovery.ipynb": "#2113",
-}
+KNOWN_BAD_LEDGER = {}
 
 
 def _collect_notebook_paths() -> list[Path]:

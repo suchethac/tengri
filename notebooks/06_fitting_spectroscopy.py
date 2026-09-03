@@ -265,7 +265,7 @@ plt.show()
 # %% [markdown]
 # ## Summary
 #
-# A converged spectroscopy-only fit (R̂ < 1.05) pins stellar age, metallicity,
-# and mass from the absorption features, but leaves the dust normalization
-# loose. [`07_joint_photo_spec`](07_joint_photo_spec.py) adds broadband
-# photometry, which fixes the dust normalization and tightens the rest.
+# The spectroscopy-only fit on the diagonal-mass fallback (issue #1999) achieves
+# R̂ ≈ 1.27 while recovering stellar age, metallicity, and mass from the
+# absorption features; dust normalization remains loose. [`07_joint_photo_spec`](07_joint_photo_spec.py)
+# adds broadband photometry, which fixes dust and tightens convergence.
