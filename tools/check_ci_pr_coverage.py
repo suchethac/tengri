@@ -87,6 +87,7 @@ ALREADY_GATED_JOBS: dict[str, str] = {
     "coverage": "`schedule` / `workflow_dispatch` only; never fires on a PR",
     "slow": "opt-in via the `run-slow-tests` label",
     "crossval": "opt-in via the `run-crossval` label",
+    "nightly-alarm": "`schedule` only; alerts when the nightly run fails ci-ok",
 }
 
 _JOB_NAME = re.compile(r"^  ([A-Za-z][A-Za-z0-9_-]*):\s*$", re.MULTILINE)
