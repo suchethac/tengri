@@ -156,6 +156,33 @@ FLAT_UNSUPPORTED: dict[str, str] = {
         "mcmc_hmc for the hierarchical posterior and per-galaxy hmc_is/nss for "
         "evidences."
     ),
+    "vi_fullrank": (
+        "a full-rank Gaussian carries a dense Cholesky factor, D(D+1)/2 free "
+        "parameters, and hierarchical D grows with the catalog -- on this seam's "
+        "own D=516 two-galaxy fixture that is already 133,386 variational "
+        "parameters for two galaxies, and it grows quadratically from there. The "
+        "single-galaxy backend is measured at D=8 "
+        "(bench/reports/2026-08-31_vi_speed_evaluation.md) and nothing has "
+        "measured the factor's memory at hierarchical width; wiring a driver on "
+        "the strength of D=8 rows is the extrapolation this module's docstring "
+        "refuses. The measurement also argues against it on quality: at D=8 the "
+        "fit needs ~3000 ELBO steps before its draws explain the data at all, "
+        "and unpreconditioned it put a stellar mass 1.6 dex out with an error "
+        "bar 45x too wide. Run mcmc_nuts or mcmc_hmc for the hierarchical "
+        "posterior."
+    ),
+    "vi_meanfield": (
+        "a diagonal Gaussian cannot represent a tilt, and a hierarchical "
+        "posterior is defined by one: every galaxy's latents correlate with the "
+        "population hyperparameters, which is the structure the fit exists to "
+        "estimate. Measured at single-galaxy D=8, mean-field already reports "
+        "marginal widths 0.07-0.62x a converged NUTS reference's because it "
+        "returns conditional rather than marginal widths "
+        "(bench/reports/2026-08-31_vi_speed_evaluation.md); the hierarchical "
+        "correlations it would have to drop are stronger, not weaker. Refused on "
+        "the structure rather than pending a measurement. Run mcmc_nuts or "
+        "mcmc_hmc for the hierarchical posterior."
+    ),
 }
 
 
