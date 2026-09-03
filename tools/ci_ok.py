@@ -32,6 +32,14 @@ the buckets carry the same meanings:
     Decided by another job's output rather than by the tier, so both
     ``success`` and ``skipped`` are legitimate.
 
+``SCHEDULED_TIER``
+    Runs only on ``schedule`` and ``workflow_dispatch`` events (schedule runs
+    are the only place some tiers execute). Before this bucket, their failure
+    was invisible to the tier policy and could pass silently — issue #2128.
+    A skipped job on schedule or dispatch is a fault; a skipped job on push or
+    pull request is acceptable because these jobs never owed to run there. A
+    failure or cancellation is always a problem, whatever triggered the run.
+
 Why the ``labeled`` pull-request event is no longer a trigger
 ------------------------------------------------------------
 It cannot coexist with a single aggregate context. On a ``labeled`` event the
@@ -82,6 +90,10 @@ FULL_TIER = ("test", "gallery-changes")
 #: Decided by another job's output; ``skipped`` is a legitimate result.
 GATED = ("gallery",)
 
+#: Run only on schedule and workflow_dispatch; ``skipped`` is a policy
+#: violation on those events, and a legitimate result on others.
+SCHEDULED_TIER = ("slow", "coverage", "crossval")
+
 #: Events that always earn the full tier, having no base branch to weigh.
 _FULL_TIER_EVENTS = ("push", "schedule", "workflow_dispatch")
 
@@ -104,6 +116,23 @@ def full_tier_owed(event: str, base_ref: str) -> bool:
     if event in _FULL_TIER_EVENTS:
         return True
     return event == "pull_request" and base_ref == "main"
+
+
+def scheduled_tier_owed(event: str) -> bool:
+    """Whether this run was supposed to execute the scheduled tier jobs.
+
+    Parameters
+    ----------
+    event : str
+        The value of ``github.event_name``.
+
+    Returns
+    -------
+    bool
+        True when the scheduled tier is owed (schedule or workflow_dispatch),
+        so a skipped scheduled job is a fault.
+    """
+    return event in ("schedule", "workflow_dispatch")
 
 
 def decide(results: dict[str, str], event: str, base_ref: str) -> list[str]:
@@ -159,7 +188,29 @@ def decide(results: dict[str, str], event: str, base_ref: str) -> list[str]:
         if got not in (None, "success", "skipped"):
             problems.append(f"`{job}` is `{got}`")
 
-    classified = set(ALWAYS_RUN) | set(FULL_TIER) | set(GATED)
+    owed_scheduled = scheduled_tier_owed(event)
+    for job in SCHEDULED_TIER:
+        got = results.get(job)
+        if got is None:
+            problems.append(f"`{job}` reported no result")
+        elif got == "success":
+            continue
+        elif got == "skipped":
+            if owed_scheduled:
+                problems.append(
+                    f"`{job}` was skipped, but this run is a schedule or dispatch event "
+                    f"and so owed the scheduled tier. A withheld scheduled job must never "
+                    f"pass silently (tools/ci_ok.py: SCHEDULED_TIER)"
+                )
+        elif got in ("failure", "cancelled"):
+            problems.append(
+                f"`{job}` is `{got}`, and this must never pass silently whatever the event "
+                f"(tools/ci_ok.py: SCHEDULED_TIER)"
+            )
+        else:
+            problems.append(f"`{job}` is `{got}`")
+
+    classified = set(ALWAYS_RUN) | set(FULL_TIER) | set(GATED) | set(SCHEDULED_TIER)
     for job in sorted(set(results) - classified):
         problems.append(
             f"`{job}` is a dependency of ci-ok but is in no bucket in tools/ci_ok.py; "

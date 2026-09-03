@@ -1101,8 +1101,12 @@ jobs:
   # for each mistake it exists to catch; the skipped-heavy-job rule was verified
   # by inverting it and watching the suite fail, not by reading it.
   #
-  # NOT in `needs`: `coverage`, `slow`, `crossval`. They are schedule/dispatch
-  # or opt-in, so requiring them would block every PR on work no PR owes.
+  # In `needs`: `coverage`, `slow`, `crossval` are now included, but the tier
+  # policy accepts their skip on runs that do not owe them (push, PR to
+  # non-main). On schedule and workflow_dispatch, their failure or skip is red
+  # (issue #2128: before this change, nightly schedule reds were invisible,
+  # because these jobs were omitted from `needs`, so their results never reached
+  # the verdict policy at all).
   ci-ok:
     name: ci-ok
     # `always()` so this still runs — and still reports — when a dependency
@@ -1110,7 +1114,7 @@ jobs:
     # dependency, publishing `skipped`, which does not satisfy a required
     # context and would block exactly the PRs it is meant to adjudicate.
     if: always()
-    needs: [tier, lint, security, smoke, gallery-changes, gallery, test]
+    needs: [tier, lint, security, smoke, gallery-changes, gallery, test, slow, coverage, crossval]
     runs-on: ubuntu-latest
     timeout-minutes: 5
     steps:
@@ -1124,6 +1128,36 @@ jobs:
           CI_OK_RESULTS: ${{ toJSON(needs) }}
           CI_OK_EVENT: ${{ github.event_name }}
           CI_OK_BASE_REF: ${{ github.base_ref }}
+
+  # Alert on nightly schedule run failure. Opens or updates a deduplicated
+  # issue when ci-ok fails on schedule events, so red nightly runs are never
+  # silent (issue #2128).
+  nightly-alarm:
+    name: nightly-alarm
+    if: always() && github.event_name == 'schedule'
+    needs: [ci-ok]
+    runs-on: ubuntu-latest
+    permissions:
+      issues: write
+    steps:
+      - name: Open or update nightly failure issue
+        if: needs.ci-ok.result != 'success'
+        run: |
+          set -euo pipefail
+          ISSUES=$(gh issue list --state open --limit 100 --json number,title --jq '[.[] | select(.title | startswith("[nightly-red]"))]')
+          COUNT=$(printf '%s' "$ISSUES" | python3 -c 'import json, sys; print(len(json.load(sys.stdin)))')
+          if [ "$COUNT" -eq 0 ]; then
+            gh issue create \
+              --title "[nightly-red] Tests schedule run failed" \
+              --body "Schedule run ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }} (commit ${{ github.sha }}) failed ci-ok check. See the run for details on which jobs failed."
+          else
+            ISSUE_NUM=$(printf '%s' "$ISSUES" | python3 -c 'import json, sys; issues = json.load(sys.stdin); print(issues[0]["number"] if issues else "")')
+            gh issue comment "$ISSUE_NUM" \
+              --body "Schedule run ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }} (commit ${{ github.sha }}) also failed."
+          fi
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          GH_REPO: ${{ github.repository }}
 
   # Full-suite coverage → Codecov, WITHOUT slowing PR feedback. Runs on
   # push-to-main, the nightly schedule, and manual dispatch — not on PRs.

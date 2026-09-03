@@ -37,6 +37,9 @@ def _all_green() -> dict[str, str]:
         "test": "success",
         "gallery-changes": "success",
         "gallery": "success",
+        "slow": "success",
+        "coverage": "success",
+        "crossval": "success",
     }
 
 
@@ -138,7 +141,12 @@ class TestBucketsMirrorTheCoveragePolicy:
         spec.loader.exec_module(cov)
 
         classified = set(cov.ALL_PR_JOBS) | set(cov.FULL_TIER_JOBS) | set(cov.ALREADY_GATED_JOBS)
-        mine = set(ci_ok.ALWAYS_RUN) | set(ci_ok.FULL_TIER) | set(ci_ok.GATED)
+        mine = (
+            set(ci_ok.ALWAYS_RUN)
+            | set(ci_ok.FULL_TIER)
+            | set(ci_ok.GATED)
+            | set(ci_ok.SCHEDULED_TIER)
+        )
         assert mine <= classified, (
             f"ci_ok.py gates on {sorted(mine - classified)}, which "
             "tools/check_ci_pr_coverage.py does not classify"
@@ -153,3 +161,96 @@ class TestBucketsMirrorTheCoveragePolicy:
         # ci-ok itself is in ALL_PR_JOBS there but is not one of its own
         # dependencies, so exclude it from the comparison.
         assert set(ci_ok.ALWAYS_RUN) == set(cov.ALL_PR_JOBS) - {"ci-ok"}
+
+
+class TestScheduledTierOwed:
+    """Schedule and dispatch events owe the scheduled tier jobs."""
+
+    @pytest.mark.parametrize("event", ["schedule", "workflow_dispatch"])
+    def test_schedule_and_dispatch_owe_scheduled_tier(self, event):
+        assert ci_ok.scheduled_tier_owed(event) is True
+
+    @pytest.mark.parametrize("event", ["push", "pull_request"])
+    def test_push_and_pr_do_not_owe_scheduled_tier(self, event):
+        assert ci_ok.scheduled_tier_owed(event) is False
+
+
+class TestScheduledTierRedFails:
+    """A failure or cancellation in scheduled tier is always a problem."""
+
+    # Derived from ci_ok.GITHUB_RESULTS; failure and cancellation always fail.
+    @pytest.mark.parametrize("job", sorted(ci_ok.SCHEDULED_TIER))
+    @pytest.mark.parametrize("bad", ["failure", "cancelled"])
+    @pytest.mark.parametrize("event", ["schedule", "workflow_dispatch", "pull_request", "push"])
+    def test_scheduled_tier_red_fails_on_every_event(self, job, bad, event):
+        results = _all_green() | {job: bad}
+        base = "main" if event == "pull_request" else ""
+        problems = ci_ok.decide(results, event, base)
+        assert problems, f"`{job}` = {bad} on {event} must fail"
+        assert any(job in p for p in problems)
+
+
+class TestScheduledTierSkipped:
+    """A skipped scheduled job is a fault on schedule/dispatch, OK elsewhere."""
+
+    @pytest.mark.parametrize("job", sorted(ci_ok.SCHEDULED_TIER))
+    @pytest.mark.parametrize("event", ["schedule", "workflow_dispatch"])
+    def test_scheduled_tier_skipped_fails_on_schedule_and_dispatch(self, job, event):
+        results = _all_green() | {job: "skipped"}
+        problems = ci_ok.decide(results, event, "")
+        assert problems, f"`{job}` skipped on {event} must fail"
+        assert any(job in p for p in problems)
+
+    @pytest.mark.parametrize("job", sorted(ci_ok.SCHEDULED_TIER))
+    def test_scheduled_tier_skipped_is_ok_on_push(self, job):
+        results = _all_green() | {job: "skipped"}
+        # Push never owes the scheduled tier, so skipped is acceptable.
+        assert ci_ok.decide(results, "push", "") == []
+
+    @pytest.mark.parametrize("job", sorted(ci_ok.SCHEDULED_TIER))
+    @pytest.mark.parametrize("base", ["main", "worktree-fix-1738"])
+    def test_scheduled_tier_skipped_is_ok_on_pull_request(self, job, base):
+        results = _all_green() | {job: "skipped"}
+        # PR to any base never unconditionally owes the scheduled tier
+        # (they require labels on slow/crossval, and never run on coverage).
+        assert ci_ok.decide(results, "pull_request", base) == []
+
+
+class TestScheduledTierMissing:
+    """A missing scheduled job is always a problem."""
+
+    @pytest.mark.parametrize("job", sorted(ci_ok.SCHEDULED_TIER))
+    @pytest.mark.parametrize("event", ["schedule", "workflow_dispatch", "pull_request", "push"])
+    def test_scheduled_tier_missing_fails_on_every_event(self, job, event):
+        results = _all_green()
+        del results[job]
+        base = "main" if event == "pull_request" else ""
+        problems = ci_ok.decide(results, event, base)
+        assert problems, f"`{job}` missing on {event} must fail"
+        assert any(job in p for p in problems)
+
+
+class TestScheduledTierSuccess:
+    """A successful scheduled job is always acceptable."""
+
+    @pytest.mark.parametrize("job", sorted(ci_ok.SCHEDULED_TIER))
+    @pytest.mark.parametrize("event", ["schedule", "workflow_dispatch", "pull_request", "push"])
+    def test_scheduled_tier_success_passes_on_every_event(self, job, event):
+        results = _all_green()
+        base = "main" if event == "pull_request" else ""
+        # All green by construction, so this should pass on every event.
+        assert ci_ok.decide(results, event, base) == []
+
+
+class TestScheduledTierMalformed:
+    """Malformed result values (not in GITHUB_RESULTS) are always a problem."""
+
+    @pytest.mark.parametrize("job", sorted(ci_ok.SCHEDULED_TIER))
+    @pytest.mark.parametrize("bad_result", ["", "mystery"])
+    @pytest.mark.parametrize("event", ["schedule", "workflow_dispatch", "pull_request", "push"])
+    def test_scheduled_tier_malformed_fails_on_every_event(self, job, bad_result, event):
+        results = _all_green() | {job: bad_result}
+        base = "main" if event == "pull_request" else ""
+        problems = ci_ok.decide(results, event, base)
+        assert problems, f"`{job}` = {bad_result!r} on {event} must fail"
+        assert any(job in p for p in problems)
