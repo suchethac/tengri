@@ -178,9 +178,11 @@ class TestScheduledTierOwed:
 class TestScheduledTierRedFails:
     """A failure or cancellation in scheduled tier is always a problem."""
 
-    # Derived from ci_ok.GITHUB_RESULTS; failure and cancellation always fail.
+    # The two red results, derived from ci_ok.NOT_SUCCESS so the result GitHub
+    # spells the British way is written only in ci_ok.py (NAMING_CONTRACT §10:
+    # that file declares it once so no other file has to write the word).
     @pytest.mark.parametrize("job", sorted(ci_ok.SCHEDULED_TIER))
-    @pytest.mark.parametrize("bad", ["failure", "cancelled"])
+    @pytest.mark.parametrize("bad", [r for r in ci_ok.NOT_SUCCESS if r != "skipped"])
     @pytest.mark.parametrize("event", ["schedule", "workflow_dispatch", "pull_request", "push"])
     def test_scheduled_tier_red_fails_on_every_event(self, job, bad, event):
         results = _all_green() | {job: bad}
