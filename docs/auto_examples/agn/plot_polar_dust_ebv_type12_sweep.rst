@@ -111,8 +111,8 @@ References
             "type": "skirtor",
             "all_params": tengri.Fixed(tengri.DEFAULT),
             "tau_skirtor": 7.0,
-            # A Distribution at per-param level overrides the wildcard and makes
-            # the parameter FREE (a bare FREE sentinel is swallowed by '*: FIXED').
+            # A per-param entry overrides the wildcard: a Distribution sets your
+            # own prior; FREE frees the parameter with its registry default prior.
             # #1980: sub-block params nest under their owner — cos_inc is a torus
             # parameter, polar_ebv an atten one; writing them flat now raises.
             "cos_inc": tengri.Uniform(0.0, 1.0),
