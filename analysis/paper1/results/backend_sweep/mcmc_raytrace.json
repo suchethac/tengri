@@ -1,0 +1,18 @@
+{
+  "method": "mcmc_raytrace",
+  "dispatched_to": "Ray Tracing (Behroozi 2025)",
+  "gal_id": 13097,
+  "config": "II",
+  "wall_time_cold_s": 6.2007527090027,
+  "wall_time_warm_s": 5.848565250023967,
+  "n_params": 8,
+  "ess_min": 0.8339588024351597,
+  "s_per_ess_cold": 7.435322573365137,
+  "s_per_ess_warm": 7.0130145913037385,
+  "rhat_max": 11804477734145.207,
+  "acceptance": 0.0,
+  "step_size": 0.08485281374238571,
+  "log_stellar_mass": 10.286371489811273,
+  "log_sfr_100myr": 1.164885096629697,
+  "dust_tau": 1.0507294607187527
+}

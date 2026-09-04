@@ -32,6 +32,8 @@ Mutation checks (each test names the mutant that kills it):
 - the interim ``save_best_so_far`` call is dropped from ``run_fit``'s loop:
   ``test_run_fit_writes_the_best_so_far_after_each_missed_attempt``.
 - ``cell_is_adopted`` inverted: ``test_only_missing_skips_adopted_cells``.
+- ``has_rising_irac_colors`` comparison sign flipped (``>`` -> ``<``):
+  ``test_agn_screen_excludes_rising_irac_candidates``.
 """
 
 from __future__ import annotations
@@ -39,6 +41,7 @@ from __future__ import annotations
 import json
 import sys
 from pathlib import Path
+from typing import ClassVar
 
 import jax
 import numpy as np
@@ -418,7 +421,12 @@ def test_save_fit_outputs_writes_a_consistent_npz_for_every_configuration(config
         "sfh_sfr_median",
         "sfh_sfr_p16",
         "sfh_sfr_p84",
+        # Posterior-predictive photometry (#2089): median over PPD_N_DRAWS
+        # draws through predict_photometry, plus its p16/p84 -- not a single
+        # at-median-params point, which carried only the median key.
         "model_photometry_median",
+        "model_photometry_p16",
+        "model_photometry_p84",
         "obs_fnu",
         "obs_sigma",
         "filter_names",
@@ -436,8 +444,11 @@ def test_save_fit_outputs_writes_a_consistent_npz_for_every_configuration(config
     assert (arrays["sfh_sfr_median"] <= arrays["sfh_sfr_p84"] + 1e-30).all()
 
     n_bands = len(CANDELS_13097_FILTERS)
-    assert arrays["model_photometry_median"].shape == (n_bands,)
-    assert np.isfinite(arrays["model_photometry_median"]).all()
+    for name in ("model_photometry_median", "model_photometry_p16", "model_photometry_p84"):
+        assert arrays[name].shape == (n_bands,), name
+        assert np.isfinite(arrays[name]).all(), name
+    assert (arrays["model_photometry_p16"] <= arrays["model_photometry_median"] + 1e-30).all()
+    assert (arrays["model_photometry_median"] <= arrays["model_photometry_p84"] + 1e-30).all()
     np.testing.assert_array_equal(arrays["obs_fnu"], obs_fnu)
     np.testing.assert_array_equal(arrays["obs_sigma"], obs_sigma)
     assert list(arrays["filter_names"]) == CANDELS_13097_FILTERS
@@ -891,6 +902,55 @@ def test_sweep_nuts_rows_match_the_grid_cell_budget():
     assert "n_chains=2" in branches["mcmc_raytrace"]
 
 
+def test_sweep_raytrace_uses_backend_default_step():
+    """Ray tracing uses the backend's mode-aware step size, not a constant override.
+
+    The 0.05 constant from the D~137 benchmark disabled the backend's 0.03*sqrt(D)*0.3
+    correction for MAP initialization, causing 0% acceptance on D=8 (#2089). Both cold
+    and warm fit calls must omit step_size so the default engages.
+
+    Mutant: reintroduce ``step_size=0.05`` in either fit call -> fails; recorded.
+    """
+    import re
+
+    source = (PAPER1 / "run_backend_sweep.py").read_text()
+    # Split the dispatch into ``{method name: branch body}``.
+    parts = re.split(r'(?:el)?if method == "(\w+)":', source)
+    branches = dict(zip(parts[1::2], parts[2::2]))
+
+    raytrace_branch = branches["mcmc_raytrace"]
+    # Extract the two forward.fit calls (cold and warm).
+    calls = re.findall(r"forward\.fit\(\n(.*?)\n\s*\)", raytrace_branch, re.S)
+    assert len(calls) == 2, "expected a cold and a warm fit"
+    for i, call in enumerate(calls):
+        # Ensure NO step_size argument is present in either call.
+        assert not re.search(r"step_size\s*=", call), f"call {i}: step_size should not be set"
+
+
+def test_sweep_hmc_runs_preconditioned():
+    """HMC runs with preconditioned mass matrix for ~10x ESS/s gain (#2089).
+
+    The 2026-08 benchmark measured preconditioned L=50 near 10× faster per ESS
+    than unpreconditioned. Both cold and warm fit calls must pass precondition=True.
+
+    Mutant: drop ``precondition=True`` from either fit call -> fails; recorded.
+    """
+    import re
+
+    source = (PAPER1 / "run_backend_sweep.py").read_text()
+    # Split the dispatch into ``{method name: branch body}``.
+    parts = re.split(r'(?:el)?if method == "(\w+)":', source)
+    branches = dict(zip(parts[1::2], parts[2::2]))
+
+    hmc_branch = branches["mcmc_hmc"]
+    # Extract the two forward.fit calls (cold and warm).
+    calls = re.findall(r"forward\.fit\(\n(.*?)\n\s*\)", hmc_branch, re.S)
+    assert len(calls) == 2, "expected a cold and a warm fit"
+    for i, call in enumerate(calls):
+        # Ensure precondition=True is present in both calls.
+        assert re.search(r"precondition\s*=\s*True", call), f"call {i}: precondition=True required"
+
+
 def test_saves_are_atomic_no_tmp_left_and_content_complete(tmp_path):
     """Both of a fit's writes land through a temporary sibling and ``os.replace``.
 
@@ -1058,3 +1118,455 @@ def test_an_interim_save_failure_is_labeled_as_such_and_the_loop_continues(
     with np.load(npz_path, allow_pickle=False) as npz:
         for name, values in draws[1].items():
             np.testing.assert_array_equal(npz[name], values)
+
+
+def test_config_iii_retune_ladder_caps_at_two_attempts():
+    """``RETUNE_ATTEMPTS_BY_CONFIG`` caps III at 2 attempts; I and II keep 3.
+
+    Config III's ``met_logzsol`` ceiling (+0.5) sits at the SSP grid extent --
+    an immovable edge, unlike Config II's movable prior edge. Edge-mass
+    diagnostics on the best-so-far draws showed grid-edge pile-up (frac_hi
+    0.107 on 13097/III, 0.149 on 15336/III, both at max R-hat ~1.002): the
+    divergences are well-mixed, irreducible edge geometry, and raising
+    ``target_accept_rate`` to 0.99 cannot clear a structural edge -- it cost
+    13097/III its entire 21600 s cell timeout for nothing (#2089, ruling R60).
+
+    Mutation: delete the "III" entry from ``RETUNE_ATTEMPTS_BY_CONFIG`` ->
+    "III" resolves to ``DEFAULT_RETUNE_ATTEMPTS`` (3) and this test fails.
+    """
+    for config_key in ("I", "II"):
+        assert (
+            fit_one.RETUNE_ATTEMPTS_BY_CONFIG.get(config_key, fit_one.DEFAULT_RETUNE_ATTEMPTS)
+            == fit_one.DEFAULT_RETUNE_ATTEMPTS
+        )
+    assert fit_one.RETUNE_ATTEMPTS_BY_CONFIG.get("III", fit_one.DEFAULT_RETUNE_ATTEMPTS) == 2
+
+
+def test_run_fit_stops_after_the_capped_attempt_for_config_iii(catalog, tmp_path, monkeypatch):
+    """Config III's retune loop stops after attempt 2 (0.95); I still gets all 3.
+
+    The sampler seam (``ForwardModel.fit``) is stubbed to always miss the
+    adoption bar (rhat_max 1.02 >= the 1.01 bar), so the loop runs for exactly
+    as many attempts as the resolved budget allows -- the same
+    stubbed-``ForwardModel.fit`` pattern as
+    ``test_run_fit_writes_the_best_so_far_after_each_missed_attempt`` (#2089,
+    ruling R60).
+
+    Mutation: bypass the cap (resolve every config to
+    ``DEFAULT_RETUNE_ATTEMPTS``) -> the config III assertions below fail (3
+    attempts on disk instead of 2).
+    """
+    import configs
+
+    class _StubPosterior:
+        """The surface ``run_fit`` and ``save_fit_outputs`` read off a posterior."""
+
+        def __init__(self, samples, n_divergent, dust_param):
+            self.samples = samples
+            self.diagnostics = {"n_divergent": n_divergent}
+            self._dust_param = dust_param
+
+        def rhat(self):
+            return {self._dust_param: 1.02}
+
+        def effective_sample_size(self):
+            return {self._dust_param: 120.0}
+
+    def run_stub(config_key, n_attempts_expected):
+        try:
+            ssp = configs.load_ssp_for(config_key)
+        except FileNotFoundError:
+            pytest.skip(f"SSP grid for config {config_key} not found")
+
+        photometry = tengri.Photometry.from_names(CANDELS_13097_FILTERS)
+        observation = tengri.Observation(photometry=photometry)
+        sed_model = getattr(configs, f"config_{config_key}")(ssp, observation, CANDELS_13097_Z)
+        free_params = list(sed_model.spec.free_params)
+        dust_param = fit_one.dust_parameter_name(config_key)
+
+        draws = [
+            {
+                k: np.asarray(v, dtype=float)
+                for k, v in sed_model.spec.sample_batch(
+                    jax.random.PRNGKey(300 + i), BEST_SO_FAR_DRAWS
+                ).items()
+                if k in free_params
+            }
+            for i in range(n_attempts_expected)
+        ]
+
+        fit_calls: list[dict] = []
+
+        def stub_fit(self, data, **kwargs):
+            index = len(fit_calls)
+            fit_calls.append(dict(kwargs))
+            return _StubPosterior(draws[index], 20 + index, dust_param)
+
+        monkeypatch.setattr(fit_one.ForwardModel, "fit", stub_fit)
+
+        payload = fit_one.run_fit(
+            13097, config_key, "mcmc_nuts", tmp_path, n_warmup=4, n_samples=4, n_chains=1
+        )
+        json_path = tmp_path / f"13097_{config_key}.json"
+        final = json.loads(json_path.read_text())
+        return payload, final, fit_calls
+
+    payload_iii, final_iii, calls_iii = run_stub("III", 2)
+    assert len(calls_iii) == 2
+    assert len(final_iii["attempts"]) == 2
+    assert payload_iii["adoption_pass"] is False
+    assert final_iii["best_attempt"] in {a["retune_attempt"] for a in final_iii["attempts"]}
+
+    # A config I stub run still records 3: the cap is per-config, not global.
+    payload_i, final_i, calls_i = run_stub("I", 3)
+    assert len(calls_i) == 3
+    assert len(final_i["attempts"]) == 3
+    assert payload_i["best_attempt"] in {a["retune_attempt"] for a in final_i["attempts"]}
+
+
+def test_aggregate_summary_reads_disk_and_counts_adoption(tmp_path):
+    """Read cell JSONs from disk and count adoption status.
+
+    Builds a tmp_path results dir with two hand-written cell JSONs (one with
+    adoption_pass: true, one with adoption_pass: false); calls aggregate_summary;
+    asserts that fits has 2 rows, metadata["adopted_fits"] == 1,
+    metadata["summary_only"] is True, and every other grid cell appears in failed.
+
+    Mutant: count adopted with >= 0 truthiness (always True) or drop the failed
+    loop -> test fails; recorded.
+    """
+    import run_candels_fits
+
+    # Write two cell JSONs: one adopted, one not
+    adopted_json = tmp_path / "13097_I.json"
+    adopted_json.write_text(
+        json.dumps(
+            {
+                "gal_id": 13097,
+                "config": "I",
+                "adoption_pass": True,
+                "divergences": 0,
+                "rhat_max": 1.001,
+                "ess_min": 500.0,
+                "wall_time_s": 100.0,
+            }
+        )
+    )
+
+    not_adopted_json = tmp_path / "13097_II.json"
+    not_adopted_json.write_text(
+        json.dumps(
+            {
+                "gal_id": 13097,
+                "config": "II",
+                "adoption_pass": False,
+                "divergences": 10,
+                "rhat_max": 1.025,
+                "ess_min": 50.0,
+                "wall_time_s": 150.0,
+            }
+        )
+    )
+
+    # Call aggregate_summary
+    summary = run_candels_fits.aggregate_summary(tmp_path)
+
+    # Assertions
+    assert len(summary["fits"]) == 2, "should have 2 fits"
+    assert summary["metadata"]["adopted_fits"] == 1, "should have 1 adopted fit"
+    assert summary["metadata"]["summary_only"] is True
+    assert summary["metadata"]["successful_fits"] == 2
+
+    # Every other grid cell (9 - 2 = 7) should be in failed
+    assert len(summary["failed"]) == 7, f"should have 7 failed, got {len(summary['failed'])}"
+
+    # Check that the reads are correct
+    fits_by_id = {(f["gal_id"], f["config"]): f for f in summary["fits"]}
+    assert fits_by_id[(13097, "I")]["adoption_pass"] is True
+    assert fits_by_id[(13097, "II")]["adoption_pass"] is False
+
+
+def test_summary_only_runs_no_fits(tmp_path, monkeypatch):
+    """--summary-only does not enter the fit loop; mutual exclusion with --only-missing.
+
+    Tests that the --summary-only flag is properly parsed and that it is
+    mutually exclusive with --only-missing. Tests via argparse validation
+    rather than a subprocess spy.
+
+    Mutant: omit the summary-only branch from main() so it falls through to
+    the fit loop -> the loop runs (caught by other integration tests); recorded.
+    """
+    import run_candels_fits
+
+    # Test 1: --summary-only flag parses correctly
+    args = run_candels_fits.parse_args(["--summary-only"])
+    assert args.summary_only is True
+    assert args.only_missing is False
+
+    # Test 2: --only-missing flag without --summary-only
+    args = run_candels_fits.parse_args(["--only-missing"])
+    assert args.only_missing is True
+    assert args.summary_only is False
+
+    # Test 3: --summary-only and --only-missing together raise an error
+    with pytest.raises(SystemExit):
+        run_candels_fits.parse_args(["--summary-only", "--only-missing"])
+
+    # Test 4: no flags
+    args = run_candels_fits.parse_args([])
+    assert args.summary_only is False
+    assert args.only_missing is False
+
+    # Test 5: aggregate_summary correctly skips the fit loop when called
+    # Set up a minimal results directory with one JSON
+    results_dir = tmp_path / "fits"
+    results_dir.mkdir()
+
+    cell_json = results_dir / "13097_I.json"
+    cell_json.write_text(
+        json.dumps(
+            {
+                "gal_id": 13097,
+                "config": "I",
+                "adoption_pass": True,
+                "divergences": 0,
+                "rhat_max": 1.001,
+            }
+        )
+    )
+
+    # Call aggregate_summary directly (the function that powers --summary-only)
+    summary = run_candels_fits.aggregate_summary(results_dir)
+    assert summary["metadata"]["summary_only"] is True
+    assert len(summary["fits"]) == 1
+    assert summary["fits"][0]["gal_id"] == 13097
+
+
+def test_agn_screen_excludes_rising_irac_candidates(monkeypatch):
+    """``select_galaxies.has_rising_irac_colors`` screens rising IRAC colors.
+
+    A rest 2-4 um power law (owner ruling, #2089 R64) is a signature no
+    stellar configuration fits, and shows up as a POSITIVE
+    ``m_CH1 - m_CHn`` AB-mag difference (brighter, i.e. lower mag, at the
+    longer wavelength). Galaxy 24497 was screened out for exactly this
+    (catalog values CH1-CH3=+0.84, CH1-CH4=+1.23); its replacement, galaxy
+    16049, has the ordinary stellar sign (CH1-CH3=-0.46, CH1-CH4=-0.38).
+    The synthetic values below exercise the predicate directly, including
+    the missing-band exemptions that mirror ``compute_color_safe``.
+
+    Mutant: flip the comparison sign (``>`` -> ``<``) in
+    ``has_rising_irac_colors`` -> the excluded case (+1.0, +1.23) passes the
+    screen instead of failing it; recorded.
+    """
+    # Import-time only: ingest_art_sedfitting.py just needs the env var set,
+    # it does no file I/O until its parse_* functions are called.
+    monkeypatch.setenv("ART_SEDFITTING_DIR", str(REPO))
+    import select_galaxies
+
+    # Both arms rise: excluded.
+    assert select_galaxies.has_rising_irac_colors(1.0, 1.23) is True
+    # Stellar-like (galaxy 16049's actual sign): kept.
+    assert select_galaxies.has_rising_irac_colors(-0.4, -0.38) is False
+    # CH3 missing, but the CH4 arm alone still excludes.
+    assert select_galaxies.has_rising_irac_colors(None, 1.23) is True
+    # Both arms missing: exempt from the screen, kept.
+    assert select_galaxies.has_rising_irac_colors(None, None) is False
+
+
+def test_model_photometry_is_posterior_predictive_not_at_median_params(tmp_path):
+    """The stored median is the median OF ``predict_photometry`` over draws, not
+    ``predict_photometry`` AT the componentwise-median parameter vector (#2089).
+
+    Peer verification (2026-09-01): for skewed, correlated posteriors (Config
+    III's continuity ratios) the at-median-params point sits off the posterior
+    ridge -- stored chi2/n read 8.88 (13097/III) and 12.38 (16049/III) against
+    a true posterior-predictive chi2/n of 0.26 and 0.18 from 200 draws pushed
+    through ``predict_photometry``; the stored model would draw ~15% below
+    every photometric point in Figure 5.
+
+    This stub reproduces the mechanism with a model whose ``predict_photometry``
+    is the nonlinear ``exp(a) + exp(b)`` of two ANTI-CORRELATED parameters. A
+    single parameter would not do: for any monotonic transform, the median
+    commutes with the transform (``median(f(x)) == f(median(x))``), so a
+    one-parameter ``exp`` could never show the gap regardless of skew. The bug
+    needs a joint, non-comonotonic pair of parameters -- exactly the
+    "correlated posterior" shape of the real defect -- and this pair is
+    deliberately anti-correlated (as ``a`` rises ``b`` falls) so no draw sits
+    at both parameters' marginal medians together.
+
+    Mutant: recompute at the componentwise-median parameter vector
+    (``{**fixed_values, **{k: float(np.median(v)) for k, v in samples_thin.items()}}``)
+    instead of taking the median over per-draw ``predict_photometry`` calls --
+    the assertion below (3.0862 vs 2.0) fails; recorded.
+    """
+    from types import SimpleNamespace
+
+    class _StubSpec:
+        def get_fixed_values(self):
+            return {}
+
+    class _StubModel:
+        spec = _StubSpec()
+
+        def predict(self, params):
+            return SimpleNamespace(
+                properties={"stellar_mass": 1e10, "sfr_100myr": 1.0, "sfr_10myr": 1.0}
+            )
+
+        def predict_state(self, params):
+            t = np.logspace(6.0, 10.0, 20)
+            return SimpleNamespace(derived={"sfh_grid_lbt_yr": t, "sfr_history": np.ones_like(t)})
+
+        def predict_photometry(self, params):
+            return np.array([np.exp(params["a"]) + np.exp(params["b"])])
+
+    # Anti-correlated (not comonotonic) draws: as ``a`` rises ``b`` falls.
+    a = np.array([-2.0, -1.0, 0.0, 1.0, 2.0])
+    b = np.array([2.0, 1.0, 0.0, -1.0, -2.0])
+    posterior = SimpleNamespace(samples={"a": a, "b": b})
+
+    npz_path, _json_path = fit_one.save_fit_outputs(
+        posterior,
+        {"gal_id": 1, "config": "I"},
+        [{"gal_id": 1, "config": "I"}],
+        [],
+        _StubModel(),
+        "I",
+        1,
+        tmp_path,
+        obs_fnu=np.array([1.0]),
+        obs_sigma=np.array([0.1]),
+        filter_names=["hst_f160w"],
+    )
+
+    with np.load(npz_path, allow_pickle=False) as npz:
+        median = float(npz["model_photometry_median"][0])
+        p16 = float(npz["model_photometry_p16"][0])
+        p84 = float(npz["model_photometry_p84"][0])
+
+    per_draw = np.exp(a) + np.exp(b)
+    expected_median = float(np.median(per_draw))
+    at_median_params_point = float(np.exp(np.median(a)) + np.exp(np.median(b)))
+    assert at_median_params_point == pytest.approx(2.0, rel=1e-9, abs=0)
+
+    # THE POINT: the stored value is the median OF the per-draw predictions...
+    assert median == pytest.approx(expected_median, rel=1e-9, abs=0)
+    # ... measurably different from predict_photometry AT the median params.
+    assert median > at_median_params_point * 1.2
+
+    assert p16 <= median <= p84
+    assert p16 == pytest.approx(float(np.percentile(per_draw, 16)), rel=1e-9, abs=0)
+    assert p84 == pytest.approx(float(np.percentile(per_draw, 84)), rel=1e-9, abs=0)
+
+
+def test_postprocess_ppd_updates_npz_preserving_keys(tmp_path, monkeypatch):
+    """The no-refit pass writes the three PPD keys and preserves everything else.
+
+    ``rebuild_model`` is monkeypatched to a stub model (no SSP grid or CANDELS
+    catalog needed): the target of this test is the read-modify-atomic-write
+    path over an existing NPZ, not model construction (covered by
+    ``rebuild_model`` reading a real cell's JSON, exercised implicitly by every
+    other test in this module that builds a real ``configs.config_*`` model).
+
+    Mutant: write only the new keys (``np.savez(tmp, **quantiles)`` instead of
+    ``{**npz_payload, **quantiles}``) -- the sentinel and ``p`` assertions below
+    fail with a ``KeyError``; recorded.
+    """
+    import postprocess_ppd
+
+    class _StubSpec:
+        free_params: ClassVar[list[str]] = ["p"]
+
+        def get_fixed_values(self):
+            return {}
+
+    class _StubModel:
+        spec = _StubSpec()
+
+        def predict_photometry(self, params):
+            return np.array([params["p"] ** 2 + 1.0])
+
+    monkeypatch.setattr(
+        postprocess_ppd,
+        "rebuild_model",
+        lambda gal_id, config_key, out_dir: (_StubModel(), ["hst_f160w"], 1.0),
+    )
+
+    npz_path = tmp_path / "13097_I.npz"
+    draws = np.linspace(-2.0, 2.0, 9)
+    sentinel = np.array([1234.5, 6789.0])
+    np.savez(npz_path, p=draws, sentinel_extra_key=sentinel)
+
+    # No obs_fnu/obs_sigma in this NPZ: chi2/n cannot be computed, and the
+    # function says so rather than raising or guessing.
+    chi2_n = postprocess_ppd.postprocess_cell(13097, "I", tmp_path, n_draws=9)
+    assert chi2_n is None
+
+    with np.load(npz_path, allow_pickle=False) as npz:
+        arrays = {k: npz[k] for k in npz.files}
+
+    for key in ("model_photometry_median", "model_photometry_p16", "model_photometry_p84"):
+        assert key in arrays, key
+        assert arrays[key].shape == (1,)
+        assert np.isfinite(arrays[key]).all()
+
+    expected = np.median(draws**2 + 1.0)
+    assert float(arrays["model_photometry_median"][0]) == pytest.approx(expected, rel=1e-9, abs=0)
+
+    # THE POINT: every pre-existing key survives the write, sentinel included.
+    np.testing.assert_array_equal(arrays["sentinel_extra_key"], sentinel)
+    np.testing.assert_array_equal(arrays["p"], draws)
+
+    # Atomic write: nothing but the finished file is left behind.
+    assert sorted(p.name for p in tmp_path.iterdir()) == ["13097_I.npz"]
+
+
+def test_sweep_summary_aggregates_all_method_files_on_disk(tmp_path):
+    """The summary write reads every method's JSON off disk, not just this run's rows.
+
+    Before this (#2089), ``summary.json`` was rebuilt from ``results`` -- the
+    in-memory rows of only the methods just run -- so ``--methods
+    mcmc_hmc,mcmc_raytrace`` overwrote a six-row summary with two rows; the
+    other four JSONs stayed on disk, simply no longer aggregated.
+
+    Mutant: aggregate only the run's own in-memory rows instead of reading
+    every ``{method}.json`` off disk -- the three-row assertion below fails
+    (only whatever subset was "just run" would appear); recorded.
+    """
+    import inspect
+
+    import run_backend_sweep
+
+    for method, payload in [
+        ("map", {"method": "map", "gal_id": 13097, "wall_time_cold_s": 1.0}),
+        ("laplace", {"method": "laplace", "gal_id": 13097, "wall_time_cold_s": 2.0}),
+        ("mcmc_hmc", {"method": "mcmc_hmc", "gal_id": 13097, "wall_time_cold_s": 3.0}),
+    ]:
+        (tmp_path / f"{method}.json").write_text(json.dumps(payload))
+
+    # THE POINT: three method JSONs on disk, all three aggregate, in
+    # SWEEP_METHODS order (not insertion order, not alphabetical).
+    rows = run_backend_sweep.aggregate_sweep_summary(tmp_path)
+    assert [r["method"] for r in rows] == ["map", "laplace", "mcmc_hmc"]
+
+    # A subsequent subset run refreshes ITS method's file and leaves the
+    # others' files untouched; the same default-args call the production
+    # summary write actually makes picks up the refresh AND keeps the rest.
+    (tmp_path / "mcmc_hmc.json").write_text(
+        json.dumps({"method": "mcmc_hmc", "gal_id": 13097, "wall_time_cold_s": 99.0})
+    )
+    refreshed = run_backend_sweep.aggregate_sweep_summary(tmp_path)
+    assert len(refreshed) == 3
+    by_method = {r["method"]: r for r in refreshed}
+    assert by_method["mcmc_hmc"]["wall_time_cold_s"] == 99.0
+    assert by_method["map"]["wall_time_cold_s"] == 1.0
+    assert by_method["laplace"]["wall_time_cold_s"] == 2.0
+
+    # A method with no JSON on disk is absent, not an error.
+    assert "mcmc_raytrace" not in by_method
+
+    # Not a parallel definition: the production summary write actually calls
+    # this seam (default methods=SWEEP_METHODS), never the run's own rows.
+    source = inspect.getsource(run_backend_sweep.run_backend_sweep)
+    assert "aggregate_sweep_summary(out_dir)" in source
+    assert '"backends": results' not in source

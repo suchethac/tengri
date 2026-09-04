@@ -33,8 +33,8 @@ $python_exe analysis/paper1/fit_one.py --galaxy 13097 --config I --method mcmc_n
 # Fit galaxy 15336 with config II
 $python_exe analysis/paper1/fit_one.py --galaxy 15336 --config II --method mcmc_nuts --out analysis/paper1/results/fits --seed 42
 
-# Fit galaxy 24497 with config III
-$python_exe analysis/paper1/fit_one.py --galaxy 24497 --config III --method mcmc_nuts --out analysis/paper1/results/fits --seed 42
+# Fit galaxy 16049 with config III
+$python_exe analysis/paper1/fit_one.py --galaxy 16049 --config III --method mcmc_nuts --out analysis/paper1/results/fits --seed 42
 ```
 
 **Outputs:**
@@ -70,7 +70,9 @@ draws, D = 11), attempt 1 at 0.85 missed the bar on 77/2400 divergences at max R
 5741 s, and percent-level divergences are a step-size problem (the standard remedy is a higher
 `adapt_delta`). The mass matrix is never switched to dense by a retune — on cell 13097/II
 (D = 8), attempt 1 on a diagonal mass matrix gave 3/2400 divergences at max R̂ 1.0014 and the
-old dense-mass retune gave 79/2400 at 1.023. The default is 3 attempts.
+old dense-mass retune gave 79/2400 at 1.023. The default is 3 attempts. Config III stops
+at the 0.95 rung (2 attempts) because its met ceiling is the SSP grid extent and the
+residual edge divergences are structural.
 
 **Every missed attempt is saved before the next one starts.** Once an attempt returns a
 posterior that misses the bar, the best attempt so far is written to `results/fits/<ID>_<config>.npz`
@@ -102,6 +104,40 @@ pass, and `fit_summary.json` carries `adoption_pass` and `best_attempt` in each 
   cell that produced a posterior, adopted or not
 - `results/fits/*.json` — Per-fit diagnostics, including `adoption_pass` and `best_attempt`
 - `results/fit_summary.json` — Aggregated summary table
+
+## Posterior-Predictive Photometry Post-Processing (postprocess_ppd.py)
+
+**Purpose:** No-refit recomputation of `model_photometry_median`/`_p16`/`_p84` for grid
+NPZs written before the posterior-predictive fix (#2089): the previous median was
+`predict_photometry` at the componentwise-median parameter vector, which for skewed,
+correlated posteriors (Config III's continuity ratios) sits off the posterior ridge
+(measured stored chi2/n of 8.88 and 12.38 against a true posterior-predictive 0.26 and
+0.18 on two cells). This script rebuilds each cell's model from its own JSON
+(`configs.config_I/II/III` + `configs.load_ssp_for` + `Observation`/`Photometry.from_names`),
+subsamples the ALREADY-SAVED draws in its NPZ, and rewrites just the three keys —
+every other key, and the fit itself, is untouched.
+
+**Command:**
+```bash
+cd analysis/paper1
+$python_exe postprocess_ppd.py [--cells 13097_III,16049_III] [--n-draws 200] [--out-dir DIR]
+```
+
+**Options:**
+- `--cells` — Comma-separated `{gal_id}_{config}` cells (default: every cell of
+  `run_candels_fits.GALAXIES` × `run_candels_fits.CONFIGS`). A cell with no NPZ on
+  disk is skipped with a warning, not an error.
+- `--n-draws` — Draws pushed through `predict_photometry` per cell (default: 200,
+  `fit_one.PPD_N_DRAWS`).
+- `--out-dir` — Directory holding the grid's NPZ/JSON files (default: `results/fits`).
+  Never descends into archive subdirectories (`agn_24497/`, `stale_met_ceiling_p03/`).
+
+**Outputs:** Rewrites `model_photometry_median`, `model_photometry_p16` and
+`model_photometry_p84` in each cell's existing `results/fits/<ID>_<config>.npz`
+(atomic tmp-sibling + `os.replace`, the same pattern `fit_one.py` uses); every other
+array in the NPZ is preserved unchanged. Logs the recomputed chi2/n per cell, read
+from the NPZ's own `obs_fnu`/`obs_sigma` (the cell's JSON carries diagnostics only,
+no per-band flux arrays, so there is no JSON fallback to read from in practice).
 
 ## Deliverable 3: Backend Sweep (run_backend_sweep.py)
 
@@ -137,7 +173,10 @@ $python_exe run_backend_sweep.py [--methods map,laplace] [--out-dir DIR]
 **Outputs:**
 - `<out-dir>/<method>.npz` — that method's thinned draws, one array per parameter under the parameter's own name (the schema `fit_one.py` writes, at the same `MAX_SAVED_DRAWS` cap), plus the diagnostics. `map` (and any method whose backend returns no draws; `laplace` returns 2000 draws by default and so is saved like the samplers) contributes its point estimate as length-1 arrays. Loads with `np.load(path, allow_pickle=False)`: a `None` diagnostic (the warm time of a row that has no warm run) is dropped and strings are stored as `np.str_` arrays, both of which the JSON keeps
 - `<out-dir>/<method>.json` — Method diagnostics, including the `None` warm times
-- `<out-dir>/summary.json` — Aggregated backend comparison
+- `<out-dir>/summary.json` — Aggregated backend comparison. Rebuilt by reading every
+  `SWEEP_METHODS` name's `{method}.json` off disk (`aggregate_sweep_summary`, #2089),
+  not just the methods this run just executed — a `--methods` subset run refreshes
+  its own rows without truncating `summary.json` down to that subset.
 
 ## NUTS Settings (Canonical from Quickstart)
 
@@ -251,10 +290,14 @@ SDSS ugriz at z=0.1, 200 timed calls after 5 warmup calls, commit 996b72ccb, no 
 ## Figure 5: CANDELS Galaxies × Configurations
 
 **Purpose:** Generate a 3 rows (galaxies) × 3 columns (panels) figure showing three CANDELS galaxies 
-(IDs 13097, 15336, 24497) across three model configurations (I, II, III), with panels showing:
+(IDs 13097, 15336, 16049) across three model configurations (I, II, III), with panels showing:
 - (a) Observed photometry and posterior-predictive photometry bands
 - (b) Star formation history with 16-84% confidence band
 - (c) Joint posterior contours of log M* and log SFR(100 Myr)
+
+The trio is selected by `select_galaxies.py`, whose criteria include an AGN screen that
+excludes candidates with rising IRAC colors (m_CH1 - m_CH3 > 0.3 or m_CH1 - m_CH4 > 0.5 AB
+mag) — the reason galaxy 24497 was replaced by 16049 (#2089).
 
 **Command:**
 ```bash
@@ -347,6 +390,6 @@ PYTHONPATH=$PWD/src JAX_PLATFORMS=cpu python analysis/paper1/fig07_backends.py \
 
 **Noted limitations:**
 - Sampler budgets from run_backend_sweep.py (lines 99–210): MAP (500 steps + 8 restarts); Laplace (Gaussian);
-  MCMC/Auto (600+600x2); NUTS (600+600x2); HMC (200+300x4, L=50); Ray Tracing (400+400x2, step=0.05)
+  MCMC/Auto (600+600x2); NUTS (600+600x2); HMC (200+300x4, L=50, preconditioned); Ray Tracing (400+400x2, backend's mode-aware default step)
 - The sweep script saves JSON diagnostics only; full posterior samples are not persisted to NPZ files
 - Agreement summary (sidecar) computed only when all samplers present (requires full sweep, not smoke subset)

@@ -274,4 +274,6 @@ run[0-9].log
 docs/_generated/
 
 # Paper I fit-run logs carry the invoking machine's worktree path (#2089)
+# — archive subdirectories (agn_24497/, stale_met_ceiling_p03/) included.
 analysis/paper1/results/fits/*.log
+analysis/paper1/results/fits/**/*.log

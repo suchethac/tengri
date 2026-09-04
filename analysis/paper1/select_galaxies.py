@@ -6,6 +6,7 @@ Selection criteria:
     - High median S/N
     - Present in all successfully parsed SED fitting codes
     - Three types by color proxy: blue star-forming, red/quiescent, intermediate/dusty
+    - No rising IRAC colors (screens out AGN-like SEDs; see ``has_rising_irac_colors``)
 """
 
 from __future__ import annotations
@@ -51,6 +52,35 @@ def compute_color_safe(
     return None
 
 
+def has_rising_irac_colors(ch1_ch3: float | None, ch1_ch4: float | None) -> bool:
+    """AGN screen: a rising mid-IR color that no stellar population fits.
+
+    A rest 2-4 um power law (owner ruling, #2089 ruling R64) makes flux rise
+    from IRAC channel 1 to channels 3/4. Because AB magnitude runs opposite
+    to flux, that rise shows up as a POSITIVE ``m_CH1 - m_CHn`` difference,
+    not a negative one: galaxy 24497's CH1-CH4 = +1.23 mag is such a rise;
+    galaxy 16049's CH1-CH4 = -0.38 mag is the ordinary stellar-SED sign.
+
+    A candidate missing CH3 (or CH4) -- ``None`` from ``compute_color_safe``
+    -- is exempt from that one comparison, mirroring ``compute_color_safe``'s
+    own missing-band handling; a candidate missing both arms is exempt from
+    the screen entirely (kept).
+
+    Args:
+        ch1_ch3: m_CH1 - m_CH3 in AB mag, or None if either band is
+            undetected.
+        ch1_ch4: m_CH1 - m_CH4 in AB mag, or None if either band is
+            undetected.
+
+    Returns:
+        True if the candidate screens out as AGN-like (CH1-CH3 > 0.3 or
+        CH1-CH4 > 0.5), False if it is kept.
+    """
+    ch3_rising = ch1_ch3 is not None and ch1_ch3 > 0.3
+    ch4_rising = ch1_ch4 is not None and ch1_ch4 > 0.5
+    return ch3_rising or ch4_rising
+
+
 def select_z1_galaxies() -> dict:
     """Select three representative z~1 galaxies with highest S/N in each class."""
     # Load CANDELS photometry
@@ -94,6 +124,10 @@ def select_z1_galaxies() -> dict:
     ehawki_ks_idx = header.index("eHAWKI_KS")
     irac36_idx = header.index("IRAC_CH1")
     eirac36_idx = header.index("eIRAC_CH1")
+    irac58_idx = header.index("IRAC_CH3")
+    eirac58_idx = header.index("eIRAC_CH3")
+    irac80_idx = header.index("IRAC_CH4")
+    eirac80_idx = header.index("eIRAC_CH4")
 
     # Build list of all non-error columns for S/N calculation
     band_indices = []
@@ -110,6 +144,7 @@ def select_z1_galaxies() -> dict:
 
     # Compute colors, S/N, and n_detected for all candidates
     candidates = []
+    agn_screened = []
 
     for idx, gal_id in enumerate(ids):
         if gal_id not in selected_ids:
@@ -141,6 +176,10 @@ def select_z1_galaxies() -> dict:
         ehawki_ks = data[idx, ehawki_ks_idx]
         irac36 = data[idx, irac36_idx]
         eirac36 = data[idx, eirac36_idx]
+        irac58 = data[idx, irac58_idx]
+        eirac58 = data[idx, eirac58_idx]
+        irac80 = data[idx, irac80_idx]
+        eirac80 = data[idx, eirac80_idx]
 
         # Try ISAAC first, then HAWKI, then IRAC
         ks_mag = isaac_ks if abs(isaac_ks - 98.99) > 0.1 else hawki_ks
@@ -149,6 +188,14 @@ def select_z1_galaxies() -> dict:
         color = compute_color_safe(f160w, ef160w, ks_mag, eks_mag, f160w, ef160w, irac36, eirac36)
 
         if color is None or n_detected < 10:
+            continue
+
+        # AGN screen: exclude rising IRAC colors (a rest 2-4 um power law no
+        # stellar configuration fits) before this candidate can be ranked.
+        ch1_ch3 = compute_color_safe(irac36, eirac36, irac58, eirac58)
+        ch1_ch4 = compute_color_safe(irac36, eirac36, irac80, eirac80)
+        if has_rising_irac_colors(ch1_ch3, ch1_ch4):
+            agn_screened.append({"id": int(gal_id), "ch1_ch3": ch1_ch3, "ch1_ch4": ch1_ch4})
             continue
 
         # SFR from ingest
@@ -173,6 +220,11 @@ def select_z1_galaxies() -> dict:
         )
 
     print(f"\nCandidates with n_detected >= 10: {len(candidates)}")
+    print(f"AGN-screened (rising IRAC colors CH1-CH3 > 0.3 or CH1-CH4 > 0.5): {len(agn_screened)}")
+    for screened in agn_screened:
+        print(
+            f"  ID {screened['id']}: CH1-CH3={screened['ch1_ch3']}, CH1-CH4={screened['ch1_ch4']}"
+        )
 
     # Classify by color and rank by S/N within each class
     blue_candidates = []
@@ -246,6 +298,11 @@ def select_z1_galaxies() -> dict:
             "clean_flags": "flg1 == 0",
             "min_detected_bands": 10,
             "present_in_all_codes": True,
+            "agn_screen": (
+                "exclude rising IRAC colors (m_CH1 - m_CH3 > 0.3 or m_CH1 - m_CH4 > 0.5 "
+                "AB mag), a rest 2-4 um power law no stellar configuration fits"
+            ),
+            "agn_screened": agn_screened,
             "ranked_by": "median_SNR_within_color_class",
             "codes": codes,
         },

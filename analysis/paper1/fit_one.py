@@ -45,6 +45,19 @@ logger = logging.getLogger(__name__)
 #: Draws kept per parameter in the saved NPZ (4 chains x 1000 draws).
 MAX_SAVED_DRAWS = 4000
 
+#: Draws pushed through ``predict_photometry`` for the posterior-predictive
+#: ``model_photometry_median``/``_p16``/``_p84`` quantiles (#2089). Peer
+#: verification (2026-09-01) found the previous point -- ``predict`` at the
+#: componentwise-median parameter vector -- sits off the posterior ridge for
+#: skewed, correlated posteriors: Config III's continuity ratios gave a stored
+#: chi2/n of 8.88 (13097/III) and 12.38 (16049/III) against a true
+#: posterior-predictive chi2/n of 0.26 and 0.18 from 200 draws pushed through
+#: ``predict_photometry`` -- the stored model would draw ~15% below every
+#: photometric point in Figure 5. (Sanity anchor 15336/III: 1.82 stored vs 1.32
+#: predictive -- that metric was already consistent, so the fix is not
+#: uniform.) Also used by ``postprocess_ppd.py``'s ``--n-draws`` default.
+PPD_N_DRAWS = 200
+
 #: The paper's canonical NUTS budget (quickstart notebook). The CLI exposes all
 #: three so the save path can be exercised end to end at a tiny budget without
 #: editing this file; the defaults are the paper's and are what the grid runs.
@@ -67,6 +80,17 @@ RETUNE_TARGET_ACCEPT_2 = 0.99
 
 #: Attempts the adoption loop makes before it keeps the best one it has.
 DEFAULT_RETUNE_ATTEMPTS = 3
+
+#: Per-configuration override of ``DEFAULT_RETUNE_ATTEMPTS`` (ruling R60).
+#: Config III's ``met_logzsol`` ceiling (+0.5) sits at the SSP grid extent --
+#: an immovable edge, unlike Config II's movable prior edge. Edge-mass
+#: diagnostics on the best-so-far draws showed grid-edge pile-up (frac_hi
+#: 0.107 on 13097/III, 0.149 on 15336/III, both at max R-hat ~1.002): the
+#: divergences are well-mixed, irreducible edge geometry, not a step-size
+#: problem. Raising ``target_accept_rate`` to 0.99 cannot clear a structural
+#: edge and cost 13097/III its entire 21600 s cell timeout for nothing, so
+#: III's ladder caps at the 0.95 rung (2 attempts) (#2089).
+RETUNE_ATTEMPTS_BY_CONFIG = {"III": 2}
 
 #: Keys the NPZ carries beside the sampled parameters, one array each.
 #: ``dust_tau`` is the configuration's dust optical depth whichever parameter
@@ -407,21 +431,42 @@ def save_fit_outputs(
     # from the configuration.
     derived["dust_tau_name"] = np.array(dust_param)
 
-    grids = {
-        # SFH grid
-        "sfh_lookback_time_yr": t_lbt_yr,
-        "sfh_sfr_median": sfr_median,
-        "sfh_sfr_p16": sfr_p16,
-        "sfh_sfr_p84": sfr_p84,
-        # Model photometry at posterior median
-        "model_photometry_median": np.asarray(
+    # Posterior-predictive model photometry: median/p16/p84 of PPD_N_DRAWS draws
+    # each pushed through ``predict_photometry``, NOT ``predict`` at the
+    # componentwise-median parameter vector (see PPD_N_DRAWS docstring, #2089).
+    # A posterior with no draws (``samples_thin`` empty) falls back to the old
+    # single-point prediction for the median key alone, and the p16/p84 keys
+    # are omitted -- there is nothing to take a quantile of.
+    ppd_draws = [
+        np.asarray(sed_model.predict_photometry(params))
+        for params in iter_draws(samples_thin, fixed_values, PPD_N_DRAWS)
+    ]
+    if ppd_draws:
+        ppd_stack = np.stack(ppd_draws)
+        model_photometry_median = np.median(ppd_stack, axis=0)
+        model_photometry_p16 = np.percentile(ppd_stack, 16, axis=0)
+        model_photometry_p84 = np.percentile(ppd_stack, 84, axis=0)
+    else:
+        model_photometry_median = np.asarray(
             sed_model.predict_photometry(
                 {
                     **fixed_values,
                     **{k: float(np.median(v)) for k, v in samples_thin.items()},
                 }
             )
-        ),
+        )
+        model_photometry_p16 = None
+        model_photometry_p84 = None
+
+    grids = {
+        # SFH grid
+        "sfh_lookback_time_yr": t_lbt_yr,
+        "sfh_sfr_median": sfr_median,
+        "sfh_sfr_p16": sfr_p16,
+        "sfh_sfr_p84": sfr_p84,
+        # Model photometry: posterior-predictive quantiles over PPD_N_DRAWS
+        # draws (median key kept its name; its meaning is now the honest one).
+        "model_photometry_median": model_photometry_median,
         # Observed photometry and errors
         "obs_fnu": np.asarray(obs_fnu),
         "obs_sigma": np.asarray(obs_sigma),
@@ -429,6 +474,9 @@ def save_fit_outputs(
         # be read back with ``allow_pickle=True`` (#2089).
         "filter_names": np.asarray(filter_names, dtype=np.str_),
     }
+    if model_photometry_p16 is not None:
+        grids["model_photometry_p16"] = model_photometry_p16
+        grids["model_photometry_p84"] = model_photometry_p84
 
     # Every key the NPZ carries goes through the collision guard (#2089).
     npz_payload = build_npz_payload(samples_thin, derived, grids)
@@ -513,7 +561,9 @@ def run_fit(
         out_dir: Output directory for results
         seed: Random seed for reproducibility
         retune_attempts: Attempts made before the best one is kept (see
-            :func:`retune_settings`; default: DEFAULT_RETUNE_ATTEMPTS)
+            :func:`retune_settings`; default: DEFAULT_RETUNE_ATTEMPTS, unless
+            ``config_key`` has an override in RETUNE_ATTEMPTS_BY_CONFIG). An
+            explicitly passed value always wins over the per-config default.
         n_warmup: NUTS warmup draws per chain (default: the paper's 600)
         n_samples: NUTS kept draws per chain (default: the paper's 600)
         n_chains: NUTS chains (default: the paper's 4)
@@ -521,6 +571,12 @@ def run_fit(
     Returns:
         Dict with fit result and diagnostics
     """
+    # An explicit caller override (a value other than the module default) wins;
+    # otherwise the per-config table applies (RETUNE_ATTEMPTS_BY_CONFIG) --
+    # e.g. Config III caps at 2 (#2089, ruling R60).
+    if retune_attempts == DEFAULT_RETUNE_ATTEMPTS:
+        retune_attempts = RETUNE_ATTEMPTS_BY_CONFIG.get(config_key, DEFAULT_RETUNE_ATTEMPTS)
+
     out_dir = Path(out_dir)
     out_dir.mkdir(parents=True, exist_ok=True)
     # The JSON path is needed before the loop: a failed attempt is persisted

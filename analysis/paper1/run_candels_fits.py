@@ -27,7 +27,7 @@ import numpy as np
 logger = logging.getLogger(__name__)
 
 # Three representative galaxies
-GALAXIES = [13097, 15336, 24497]  # blue, red, intermediate
+GALAXIES = [13097, 15336, 16049]  # blue, red, intermediate
 
 # Three model configurations
 CONFIGS = ["I", "II", "III"]
@@ -36,7 +36,7 @@ CONFIGS = ["I", "II", "III"]
 CONFIG_DIMENSIONS = {"I": 5, "II": 8, "III": 11}
 
 # Galaxy labels for reporting
-GALAXY_LABELS = {13097: "blue", 15336: "red", 24497: "intermediate"}
+GALAXY_LABELS = {13097: "blue", 15336: "red", 16049: "intermediate"}
 
 #: Per-cell subprocess timeout. 600 s killed the first retune of the grid (#2089).
 #: Measured 2026-08-30, the simplest cell (configuration I, 5 free parameters) needs
@@ -82,6 +82,52 @@ def cell_is_adopted(json_path: Path) -> bool:
     """
     payload = read_cell_json(json_path)
     return bool(payload is not None and payload.get("adoption_pass"))
+
+
+def aggregate_summary(results_dir: Path) -> dict:
+    """Rebuild fit_summary.json from the cell JSONs on disk without running fits.
+
+    Iterates over GALAXIES × CONFIGS; for each cell reads the JSON file if it
+    exists (adopted or not); appends every JSON that exists to the fits list;
+    cells with no JSON go to the failed list.
+
+    Args:
+        results_dir: Directory containing cell JSON files
+
+    Returns:
+        Summary dict with the same shape as main() writes today.
+    """
+    all_diagnostics = []
+    failed_fits = []
+
+    for gal_id in GALAXIES:
+        for config_key in CONFIGS:
+            cell_json = results_dir / f"{gal_id}_{config_key}.json"
+            diagnostics = read_cell_json(cell_json)
+
+            if diagnostics is None:
+                failed_fits.append((gal_id, config_key))
+            else:
+                all_diagnostics.append(diagnostics)
+
+    summary_dict = {
+        "metadata": {
+            "n_galaxies": len(GALAXIES),
+            "n_configs": len(CONFIGS),
+            "total_fits": len(GALAXIES) * len(CONFIGS),
+            "successful_fits": len(all_diagnostics),
+            "failed_fits": len(failed_fits),
+            "adopted_fits": sum(1 for row in all_diagnostics if row.get("adoption_pass")),
+            "summary_only": True,
+        },
+        "galaxy_list": GALAXIES,
+        "config_list": CONFIGS,
+        "config_dimensions": CONFIG_DIMENSIONS,
+        "fits": all_diagnostics,
+        "failed": [{"gal_id": gid, "config": cfg} for gid, cfg in failed_fits],
+    }
+
+    return summary_dict
 
 
 def run_fit_subprocess(
@@ -242,6 +288,9 @@ def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
 
     ``--only-missing`` is opt-in: without it the driver runs every cell, exactly
     as it always has.
+
+    ``--summary-only`` rebuilds fit_summary.json from the cell JSONs on disk
+    without running any fits.
     """
     parser = argparse.ArgumentParser(description="Run the 3x3 grid of CANDELS NUTS fits")
     parser.add_argument(
@@ -252,7 +301,18 @@ def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
             "and reuse that JSON for the summary; run every other cell"
         ),
     )
-    return parser.parse_args(argv)
+    parser.add_argument(
+        "--summary-only",
+        action="store_true",
+        help=("Rebuild fit_summary.json from the cell JSONs on disk without running fits"),
+    )
+    args = parser.parse_args(argv)
+
+    # Mutual exclusion: --summary-only and --only-missing cannot be used together
+    if args.summary_only and args.only_missing:
+        parser.error("--summary-only and --only-missing are mutually exclusive")
+
+    return args
 
 
 def main(argv: list[str] | None = None):
@@ -266,6 +326,18 @@ def main(argv: list[str] | None = None):
 
     results_dir = Path(__file__).parent / "results" / "fits"
     results_dir.mkdir(parents=True, exist_ok=True)
+
+    # --summary-only: rebuild from disk without running fits
+    if args.summary_only:
+        summary_dict = aggregate_summary(results_dir)
+        print_summary_table(summary_dict["fits"])
+
+        summary_json = results_dir.parent / "fit_summary.json"
+        with open(summary_json, "w") as f:
+            json.dump(summary_dict, f, indent=2)
+
+        logger.info(f"\nSummary saved to {summary_json}")
+        return 0
 
     # Run all fits
     all_diagnostics = []
