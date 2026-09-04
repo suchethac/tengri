@@ -275,12 +275,15 @@ AI-assisted PRs. The bar is the same as for any other PR:
 
 ## Release process
 
-Releases are cut by the maintainer (see GOVERNANCE.md):
+Releases are cut by the maintainer (see GOVERNANCE.md). The steps live in one
+place, [`docs/dev/release-checklist.md`](docs/dev/release-checklist.md): the
+one-time PyPI trusted-publisher setup, the gates to clear before tagging, the
+files the version string is hand-copied into, and the fact that uploading
+is triggered by publishing a GitHub Release rather than by pushing the tag.
 
-1. bump version in `pyproject.toml` and `CITATION.cff`,
-2. update `CHANGELOG.md`,
-3. `git tag v0.2.0 && git push origin v0.2.0`,
-4. GitHub Actions builds and uploads to PyPI.
+They are deliberately not summarized here. This section used to carry its own
+four-step copy, and both of the places it disagreed with `publish.yml` —
+the version files and the trigger — were wrong.
 
 ## Governance
 
