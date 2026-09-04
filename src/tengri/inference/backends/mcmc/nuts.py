@@ -202,6 +202,7 @@ def run_nuts(
     n_chains=1,
     target_accept_rate=0.85,
     max_num_doublings=DEFAULT_MAX_NUM_DOUBLINGS,
+    warmup_max_num_doublings: int | None = None,
     dense_mass_matrix: bool | None = None,
     pathfinder_warmstart=False,
     precondition: bool | float | None = None,
@@ -265,6 +266,37 @@ def run_nuts(
         reducing divergences in the SED degeneracy banana. Range
         0.7-0.95; higher = smaller steps = fewer divergences but
         slower mixing.
+    warmup_max_num_doublings : int or None, default None
+        Tree-depth cap for the **window adaptation only**, leaving the sampling
+        phase on ``max_num_doublings``. ``None`` keeps the two equal, which is
+        what every caller gets unless they ask otherwise.
+
+        **Measured and NOT recommended.** The idea is sound and the mechanism is
+        real: a capped adaptation cannot complete the deep trajectories a small
+        step size implies, so dual averaging settles on a larger step size and
+        the sampling phase then runs shallower trees. Measured on ``ctl-dpl``
+        (D=8, 600 warmup + 600 draws, sampling cap 10) that produced **6.16x
+        fewer gradient evaluations per draw at seed 7** — and **0.69x, i.e. 45 %
+        MORE, at seed 8**. The effect does not merely shrink on a second seed,
+        it reverses sign, so on the one fixture it has been tried on it is not a
+        reliable win (``bench/reports/2026-08-31_fast_nuts.md`` Finding 9).
+
+        Combining it with ``precondition`` is worse still: both knobs enlarge the
+        adapted step size and composing them enlarges it too far — max split-R-hat
+        1.0228, min ESS 50.4, the only measured configuration that fails the
+        R-hat clause outright.
+
+        What DID replicate on that fixture is ``precondition=0.5`` at full
+        warmup: 8.16x and 2.34x fewer gradients per draw on the two seeds, and a
+        per-seed cost stable to 5 % where the unpreconditioned control swings
+        3.65x. Reach for that first.
+
+        Kept because it is a correct implementation of a real degree of freedom
+        and because a knob measured and found wanting is more useful documented
+        than deleted. Any use of it must carry its R-hat and min-ESS columns:
+        ``bench/reports/2026-04-22_pathfinder_vs_window_nuts.md`` records an 18x
+        regression from an under-adapted step size, which is the failure this
+        knob courts by construction.
     max_num_doublings : int, default DEFAULT_MAX_NUM_DOUBLINGS (10)
         Maximum tree depth for NUTS trajectory (up to 2^max_num_doublings - 1
         leapfrog steps per sample). Default 10 follows the BlackJAX/Stan
@@ -479,7 +511,31 @@ def run_nuts(
     # caps would silently sample at the wrong step size. Leaving a knob out of
     # this tuple is what makes it inert rather than wrong -- see
     # ``_adaptation_cache_key``.
-    tuning = (int(n_warmup), float(target_accept_rate), int(max_num_doublings))
+    # Warmup may run under a SHALLOWER cap than sampling. The two halves are not
+    # symmetric: during warmup the step size has not converged, so trees are at
+    # their deepest and most heterogeneous exactly where they are least
+    # informative -- one vmapped 100-step adaptation over 64 lanes at D = 3 cost
+    # 1272 s, ~12.7 s per step, for a three-parameter model
+    # (bench/reports/2026-08-31_fast_nuts.md Finding 7). Capping the adaptation
+    # harder than the sampling is therefore a knob that did not exist: #2101 made
+    # ``max_num_doublings`` reach warmup at all, and it reaches it with the
+    # sampling value. ``None`` keeps them equal, so this is a no-op unless asked
+    # for.
+    #
+    # It is not free, and the failure mode has a name: an adaptation that cannot
+    # complete a trajectory returns a step size tuned for a truncated one.
+    # ``bench/reports/2026-04-22_pathfinder_vs_window_nuts.md`` records an 18x
+    # regression from an under-adapted step size, so any use of this must carry
+    # its R-hat and ESS columns.
+    warmup_max_doublings = int(
+        max_num_doublings if warmup_max_num_doublings is None else warmup_max_num_doublings
+    )
+    tuning = (
+        int(n_warmup),
+        float(target_accept_rate),
+        int(max_num_doublings),
+        warmup_max_doublings,
+    )
     adapt_key = ("nuts", not use_dense, bool(pathfinder_warmstart), tuning, problem.cache_key)
     cached = _get_cached_adaptation(fitter, adapt_key)
 
@@ -526,7 +582,7 @@ def run_nuts(
                 use_dense,
                 target_accept_rate,
                 bool(pathfinder_warmstart),
-                int(max_num_doublings),
+                warmup_max_doublings,
             )
             jax.block_until_ready(step_size)
         # Refuse before caching and before the sampling scan compiles (#2088).
@@ -674,6 +730,7 @@ def run_nuts(
             "step_size": float(parameters["step_size"]),
             "warmup": "pathfinder" if pathfinder_warmstart else "window",
             **diag,
+            "warmup_max_num_doublings": warmup_max_doublings,
             **depth_stats,
         },
         loss_history=None,
