@@ -57,8 +57,8 @@ this order.
      behavior changes flagged `breaking-change`
 
 6. **Version bump.** Nothing derives the version — there is no
-   `[tool.setuptools_scm]` section — so it is hand-copied into four files that
-   have to move together:
+   `[tool.setuptools_scm]` section — so it is hand-copied into multiple files
+   that have to move together:
 
    | File | Form |
    |---|---|
@@ -67,9 +67,28 @@ this order.
    | `docs/conf.py` | `release = "0.1.0"` |
    | `CITATION.cff` | `version: 0.1.0` |
 
+   Plus these shadow sites that go stale silently:
+
+   | File | Form | Note |
+   |---|---|---|
+   | `src/tengri/results.py` | `'0.1.0'` (doctest expected value) | The docstring example prints `tengri.__version__`; no doctest runner executes it in CI (see the comment above the `tools/check_doc_examples.py` step in `.github/workflows/tests.yml`), so a stale expected value ships silently. |
+   | `docs/known_limitations.md` | `(v0.1.0)` in prose | Goes silently stale on bump. |
+
+   To catch any site this list does not know about, run:
+
    ```bash
-   grep -rn '0\.1\.0' pyproject.toml src/tengri/__init__.py docs/conf.py CITATION.cff
+   git grep -n '0\.1\.0' -- ':!*.ipynb' ':!CHANGELOG.md' ':!docs/changelog.md' ':!notebooks/archive'
    ```
+
+   Expected hits: the four canonical files (`pyproject.toml` twice — its
+   `version =` line, plus `jax-metal>=0.1.0` on the `metal` extra, which is a
+   dependency floor and never bumps), the two shadow sites, one comment in
+   `.github/workflows/publish.yml` naming an example tag (`v0.1.0a1`), and this
+   checklist's own tables and commands (update them with the bump). **Any other
+   hit is a version-copy site this list does not know: add it to the tables
+   above.** Run the same grep again *after* the bump, on the old version
+   string — the only survivors should be the `jax-metal` floor and the
+   publish.yml example tag.
 
    Missing `src/tengri/__init__.py` is the quiet one. Wheel metadata comes from
    `pyproject.toml`, so the build still succeeds and `twine check` still passes;
@@ -122,7 +141,7 @@ Then, in one commit:
 
    ```markdown
    [![PyPI](https://img.shields.io/pypi/v/astro-tengri)](https://pypi.org/project/astro-tengri/)
-   [![Downloads](https://img.shields.io/pepy/dt/astro-tengri)](https://pepy.tech/project/astro-tengri)
+   [![Downloads](https://img.shields.io/pepy/dt/astro-tengri)](https://pepy.tech/projects/astro-tengri)
    ```
 
    Cumulative downloads (`pepy/dt`) rather than monthly (`pypi/dm`) on purpose:
@@ -140,7 +159,7 @@ Then, in one commit:
       <p class="tg-hero__badges">
         <a href="https://pypi.org/project/astro-tengri/"><img
           src="https://img.shields.io/pypi/v/astro-tengri" alt="PyPI" /></a>
-        <a href="https://pepy.tech/project/astro-tengri"><img
+        <a href="https://pepy.tech/projects/astro-tengri"><img
           src="https://img.shields.io/pepy/dt/astro-tengri" alt="Downloads" /></a>
       </p>
     ```

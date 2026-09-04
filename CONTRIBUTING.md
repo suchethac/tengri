@@ -278,7 +278,7 @@ AI-assisted PRs. The bar is the same as for any other PR:
 Releases are cut by the maintainer (see GOVERNANCE.md). The steps live in one
 place, [`docs/dev/release-checklist.md`](docs/dev/release-checklist.md): the
 one-time PyPI trusted-publisher setup, the gates to clear before tagging, the
-four files the version string is hand-copied into, and the fact that uploading
+files the version string is hand-copied into, and the fact that uploading
 is triggered by publishing a GitHub Release rather than by pushing the tag.
 
 They are deliberately not summarized here. This section used to carry its own
