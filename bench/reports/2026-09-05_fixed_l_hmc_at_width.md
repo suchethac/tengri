@@ -318,9 +318,9 @@ with zero divergences; `uniq_min` is the worst lane's unique-draw fraction.
 
 ### Preconditioned NUTS, same metric, same widths
 
-| N | warm s | gal/GPUmin | **conv/GPUmin** | converged | max R-hat | min ESS | div | peak GiB |
-|---:|---:|---:|---:|---:|---:|---:|---:|---:|
-| 32 | 223.90 | 9.0 | **3.0** | 11/32 | 1.2090 | 1.8 | 0 | 0.11 |
+| N | warm s | gal/GPUmin | **conv/GPUmin** | converged | max R-hat | min ESS | div | uniq_min | peak GiB | load |
+|---:|---:|---:|---:|---:|---:|---:|---:|---:|---:|---:|
+| 32 | 223.90 | 8.6 | **2.9** | 11/32 | 1.2090 | 1.8 | 0 | 0.955 | 0.114 | 8.81 |
 
 **Three findings, and the first two are what the campaign predicted.**
 
@@ -330,11 +330,18 @@ with zero divergences; `uniq_min` is the worst lane's unique-draw fraction.
    the sampler — which is exactly why the load stamp was added. There is no vmap
    penalty to find, because there is no cost variance to lose: every lane runs
    exactly `L` leapfrogs.
-2. **Fixed-L HMC is 6.0x faster than NUTS at equal metric and equal width**
-   (54.2 vs 9.0 gal/GPU-min at N=32) and converges *slightly more* galaxies
+2. **Fixed-L HMC is 6.3x faster than NUTS at equal metric and equal width**
+   (54.2 vs 8.6 gal/GPU-min at N=32) and converges *slightly more* galaxies
    (14/32 vs 11/32). On the throughput axis the thesis is **correct**. This is
    the strongest evidence in the report for the original hypothesis, and it is
    not enough to save it.
+
+   That gap is **not** an artifact of the shared box, and the HMC rows are what
+   prove it: they span load 1.88 to 16.47 — a 9x range — and move less than 10%
+   in throughput (56.7 vs 51.9). A workload that barely notices a 9x load swing
+   cannot lose a factor of 6.3 to the 2x difference between the NUTS row's load
+   8.81 and the HMC row's 4.27. The comparison survives its own contention
+   caveat, which is the only reason it is quoted.
 3. **The converged fraction is ~41% and does not improve with width** — 14/32
    (44%), 49/128 (38%), 210/512 (41%). This **independently reproduces the
    seed-level result** from sections 1 and 1b, on a different fixture, a
@@ -420,7 +427,7 @@ catalog job by VRAM.
   *distribution* could not be measured directly. Threading that into the catalog
   diagnostics is the prerequisite for the mechanism measurement, and is the
   single highest-value follow-up here. What *is* measured is the consequence —
-  the 6.0x aggregate gap at N=32 — and fixed-L HMC's side of it exactly, since
+  the 6.3x aggregate gap at N=32 — and fixed-L HMC's side of it exactly, since
   gradients per draw is `L` with zero variance by construction.
 * **NUTS at N=512.** The N=32 and N=128 rows are the width evidence; the 512 cell
   was not affordable on the shared window.
