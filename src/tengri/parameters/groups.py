@@ -4879,10 +4879,91 @@ def _resolve_value(
         )
 
 
+@lru_cache(maxsize=8)
+def _sfh_type_prefixes(_registry_keys: frozenset[str]) -> tuple[str, ...]:
+    """Public ``sfh_<type>_`` prefixes declared by the SFH registry, longest first.
+
+    A type's public prefix is not always one token: ``declining_exp``,
+    ``snorm_burst``, ``tsnorm_burst``, ``delayed_bq``, ``top_hat`` and
+    ``gaussian_burst`` all spell theirs with two or three. A prefix qualifies
+    only when *every* parameter the spec declares starts with it, which is what
+    keeps ``field`` at ``sfh_field_`` (giving ``psd_sigma``) instead of the
+    longest common prefix of its two parameters, ``sfh_field_psd_``.
+
+    Longest-first ordering resolves the nesting pairs: ``sfh_snorm_burst_``
+    must win over ``sfh_snorm_``, and ``sfh_delayed_bq_`` over ``sfh_delayed_``.
+
+    Parameters
+    ----------
+    _registry_keys : frozenset of str
+        Snapshot of ``SFH_REGISTRY`` keys. Only a cache key -- passing it makes
+        a plugin registering a new SFH type invalidate the memo rather than
+        being shadowed by a stale one.
+
+    Returns
+    -------
+    tuple of str
+        Candidate prefixes, longest first.
+    """
+    from tengri.components.stellar.sfh.registry import SFH_REGISTRY
+
+    prefixes = set()
+    for type_name, spec in SFH_REGISTRY.items():
+        params = tuple(getattr(spec, "params", ()) or ())
+        if not params:
+            continue
+        candidate = f"sfh_{type_name}_"
+        if all(p.startswith(candidate) for p in params):
+            prefixes.add(candidate)
+    return tuple(sorted(prefixes, key=len, reverse=True))
+
+
+def _strip_sfh_prefix(full_param_name: str) -> str:
+    """Drop the whole ``sfh_<type>_`` prefix from an SFH parameter name.
+
+    Splitting at the first underscore after ``sfh_`` -- what this did before --
+    is right only for the single-token abbreviations (``sfh_dpl_``,
+    ``sfh_dir_``, ``sfh_cont_``, ``sfh_cexp_``, ...). For a multi-token public
+    prefix it left a fragment of the type name welded to the short key, so
+    ``sfh_declining_exp_tau_gyr`` resolved to ``'exp_tau_gyr'`` and the
+    documented ``'tau_gyr'`` was rejected as an unknown key.
+
+    Registry-declared prefixes are tried first (longest match wins); the
+    first-underscore split remains the fallback for the abbreviations, whose
+    prefix is not derivable from the type name.
+
+    Parameters
+    ----------
+    full_param_name : str
+        Fully-prefixed SFH parameter name, e.g. ``"sfh_snorm_burst_burst_sfr"``.
+
+    Returns
+    -------
+    str
+        The short name, e.g. ``"burst_sfr"``.
+    """
+    try:
+        from tengri.components.stellar.sfh.registry import SFH_REGISTRY
+
+        prefixes = _sfh_type_prefixes(frozenset(SFH_REGISTRY))
+    except ImportError:  # pragma: no cover - registry always importable in practice
+        prefixes = ()
+
+    for prefix in prefixes:
+        if full_param_name.startswith(prefix) and len(full_param_name) > len(prefix):
+            return full_param_name[len(prefix) :]
+
+    rest = full_param_name[4:]  # Remove 'sfh_'
+    parts = rest.split("_", 1)
+    return parts[1] if len(parts) == 2 else rest
+
+
 def _extract_short_name(full_param_name: str, group_dict: dict) -> str:
     """Extract short parameter name by removing group prefix.
 
-    E.g., 'sfh_dpl_alpha' -> 'alpha' (for sfh group).
+    E.g., 'sfh_dpl_alpha' -> 'alpha' (for sfh group). The SFH prefix is the
+    type's whole public prefix, however many tokens it spells:
+    'sfh_snorm_burst_burst_sfr' -> 'burst_sfr' (see :func:`_strip_sfh_prefix`).
     Handles nested sub-keys: dust.emission params, AGN sub-blocks.
     For SFH composition with ambiguous short names, checks if user
     provided a full-prefix name.
@@ -4907,27 +4988,25 @@ def _extract_short_name(full_param_name: str, group_dict: dict) -> str:
     # For SFH composition: check if user provided a full-prefix name
     # If so, prefer that. Otherwise, extract the short name and check for ambiguity.
     if full_param_name.startswith("sfh_"):
-        rest = full_param_name[4:]  # Remove 'sfh_'
-        parts = rest.split("_", 1)
-        if len(parts) == 2:
-            short = parts[1]
-            # Check if user provided the full param name
-            if full_param_name in group_dict:
-                return full_param_name
-            # Check for short name in composition
-            # (If mean_sfh_type is a list, we need to check all types)
-            if short in group_dict:
-                # User provided the short name; check for ambiguity
-                # A short name is ambiguous if it exists in multiple composition types
-                sfh_type = group_dict.get("type")
-                if isinstance(sfh_type, list):
-                    # Multiple types in composition; ambiguity possible
-                    # For now, defer to Parameters validation
-                    pass
-                return short
-            # Extract short name as usual
-            return parts[1]
-        return rest
+        # Strip the whole ``sfh_<type>_`` prefix, not just the first token
+        # after ``sfh_`` (see :func:`_strip_sfh_prefix`).
+        short = _strip_sfh_prefix(full_param_name)
+        # Check if user provided the full param name
+        if full_param_name in group_dict:
+            return full_param_name
+        # Check for short name in composition
+        # (If mean_sfh_type is a list, we need to check all types)
+        if short in group_dict:
+            # User provided the short name; check for ambiguity
+            # A short name is ambiguous if it exists in multiple composition types
+            sfh_type = group_dict.get("type")
+            if isinstance(sfh_type, list):
+                # Multiple types in composition; ambiguity possible
+                # For now, defer to Parameters validation
+                pass
+            return short
+        # Extract short name as usual
+        return short
     elif full_param_name.startswith("met_"):
         return full_param_name[4:]
     elif full_param_name.startswith("dust_"):

@@ -8,8 +8,9 @@ in N lookback-time bins.
 
 - **Continuity**: free parameters are log-SFR *ratios* between adjacent bins,
   with a Student-t(df=2, scale=0.3) smoothness prior penalizing sharp jumps.
-- **Dirichlet**: free parameters are auxiliary Beta(1,1) variables that map
-  to mass fractions via stick-breaking, giving a symmetric Dirichlet prior.
+- **Dirichlet**: free parameters are uniform auxiliary variables mapped to
+  Beta(1, N-1-j) quantiles, which stick-break into the SFR fractions, giving
+  a symmetric Dirichlet(1,...,1) prior on them.
 - **Bursty continuity**: same continuity SFH, but young bins use a wider
   Student-t scale (1.0) than old bins (0.3) to permit rapid recent fluctuations.
 - **ContinuityFlex**: anchored young/old bins + N flexible intermediate bins
@@ -286,17 +287,20 @@ def bursty_continuity_prior_logp(
 
 
 def _stick_breaking(z_fractions: jnp.ndarray) -> jnp.ndarray:
-    """Convert auxiliary variables to mass fractions via stick-breaking.
+    """Convert auxiliary variables to a simplex vector via stick-breaking.
 
     Parameters
     ----------
     z_fractions : array (N-1,)
-        Auxiliary variables in (0, 1), each drawn from Beta(1, 1) = Uniform.
+        Auxiliary variables in (0, 1). For a symmetric Dirichlet(1, ..., 1)
+        result, element ``j`` must be a Beta(1, N-1-j) variate — see
+        :func:`dirichlet`, which maps uniform latents through that quantile
+        before calling this helper.
 
     Returns
     -------
     array (N,)
-        Mass fractions summing to 1.0.
+        Non-negative fractions summing to 1.0.
     """
     # f_0 = z_0
     # f_1 = (1 - z_0) * z_1
@@ -326,9 +330,10 @@ def dirichlet(
 ) -> jnp.ndarray:
     """Non-parametric piecewise-constant SFH with symmetric Dirichlet prior (Leja+2017).
 
-    A flexible non-parametric model parameterized by mass fractions in age bins.
-    The mass fractions are derived from auxiliary variables via stick-breaking,
-    with a natural symmetric Dirichlet(1,...,1) prior on the fractions.
+    A flexible non-parametric model parameterized by the *SFR fractions* in age
+    bins. The SFR fractions are derived from auxiliary variables via
+    stick-breaking, giving an exactly symmetric Dirichlet(1,...,1) prior on
+    them; the bin masses follow as :math:`m_j \\propto f_j \\Delta t_j`.
 
     Parameters
     ----------
@@ -340,7 +345,9 @@ def dirichlet(
         Bin edges in Gyr. Default: 7-edge log-spaced grid from 0 to 13.7 Gyr.
     **z_kwargs
         Keyword arguments ``z_frac_0``, ``z_frac_1``, ..., ``z_frac_{N-2}``
-        containing the auxiliary Beta(1,1) variables (uniform on [0, 1]).
+        containing the auxiliary variables :math:`u_j`, uniform on [0, 1]
+        [dimensionless]. They are mapped internally to the Beta variates the
+        Dirichlet construction requires.
 
     Returns
     -------
@@ -349,25 +356,54 @@ def dirichlet(
 
     Notes
     -----
-    **JIT-compatible**: yes, all operations use ``jnp`` primitives.
+    **JIT-compatible**: yes, all operations use ``jnp`` primitives. ``n_bins``
+    comes from the static shape of ``bin_edges_gyr``, and the Beta exponents
+    are a static NumPy vector built from it.
 
-    The mass fractions are derived from auxiliary variables :math:`z_j \\sim \\mathrm{Beta}(1,1)`
-    via stick-breaking:
+    Leja et al. 2017 [1]_ (Sect. 2.3 and Appendix) stick-breaks the
+    :math:`N` **SFR fractions** from :math:`N-1` auxiliary variables
+    :math:`z_j \\sim \\mathrm{Beta}(N-1-j,\\, 1)`. tengri exposes the
+    auxiliaries as :math:`u_j \\sim \\mathrm{Uniform}(0, 1)` and applies the
+    Beta(1, N-1-j) quantile function (equivalently, :math:`1 - z_j` for the
+    Leja :math:`z_j` above):
 
     .. math::
 
-        f_0 &= z_0 \\\\
-        f_1 &= (1 - z_0) z_1 \\\\
-        f_2 &= (1 - z_0)(1 - z_1) z_2 \\\\
+        v_j = 1 - (1 - u_j)^{1/(N-1-j)}, \\qquad j = 0, \\ldots, N-2
+
+    where :math:`u_j` is the uniform latent [dimensionless] and :math:`v_j`
+    the Beta(1, N-1-j) variate [dimensionless]. Stick-breaking then gives the
+    SFR fractions
+
+    .. math::
+
+        f_0 &= v_0 \\\\
+        f_1 &= (1 - v_0) v_1 \\\\
+        f_2 &= (1 - v_0)(1 - v_1) v_2 \\\\
         &\\ldots \\\\
-        f_{N-1} &= \\prod_{j=0}^{N-2} (1 - z_j)
+        f_{N-1} &= \\prod_{j=0}^{N-2} (1 - v_j)
 
-    When all :math:`z_j \\sim \\mathrm{Uniform}(0, 1)`, the mass fractions
-    :math:`\\mathbf{f} = (f_0, \\ldots, f_{N-1})` automatically follow
-    a symmetric :math:`\\mathrm{Dirichlet}(1, \\ldots, 1)` distribution.
+    and :math:`\\mathbf{f} = (f_0, \\ldots, f_{N-1})` is then exactly a
+    symmetric :math:`\\mathrm{Dirichlet}(1, \\ldots, 1)` vector: every bin has
+    mean SFR fraction :math:`1/N` and marginal :math:`\\mathrm{Beta}(1, N-1)`.
 
-    The SFR in each bin is :math:`\\mathrm{SFR}_j = f_j \\cdot M_{\\star} / \\Delta t_j`,
-    where :math:`\\Delta t_j` is the width of bin j.
+    The mass fractions weight :math:`f_j` by the bin widths, and the per-bin
+    SFR follows from the mass:
+
+    .. math::
+
+        m_j = \\frac{f_j \\Delta t_j}{\\sum_k f_k \\Delta t_k}, \\qquad
+        \\mathrm{SFR}_j = \\frac{m_j M_{\\star}}{\\Delta t_j}
+                        = \\frac{f_j M_{\\star}}{\\sum_k f_k \\Delta t_k}
+
+    with :math:`\\Delta t_j` the width of bin :math:`j` [yr],
+    :math:`M_{\\star} = 10^{\\mathtt{log\\_total\\_mass}}` [Msun] and
+    :math:`\\mathrm{SFR}_j` in [Msun/yr]. So :math:`\\mathrm{SFR}_j \\propto
+    f_j`, as the name "SFR fraction" says.
+
+    Implements the same model as Prospector's ``zfrac_to_sfrac`` /
+    ``zfrac_to_masses`` (Johnson et al. 2021 [3]_), reached from
+    uniform latents rather than Beta-distributed ones.
 
     References
     ----------
@@ -378,23 +414,39 @@ def dirichlet(
     .. [2] J. Leja et al., "How to Measure Galaxy Star Formation Histories.
        II. Nonparametric Models," ApJ, 876, 3 (2019). arXiv:1811.03637.
        https://doi.org/10.3847/1538-4357/ab133c
+    .. [3] B. D. Johnson et al., "Stellar Population Inference with Prospector,"
+       ApJS, 254, 22 (2021). arXiv:2012.01426.
+       https://doi.org/10.3847/1538-4365/abef67
     """
     if bin_edges_gyr is None:
         bin_edges_gyr = DEFAULT_BIN_EDGES_GYR
 
     n_bins = bin_edges_gyr.shape[0] - 1  # len() raises ConcretizationTypeError under JIT
 
-    # Collect z_fractions from kwargs in order
-    z_fractions = jnp.array([z_kwargs[f"z_frac_{i}"] for i in range(n_bins - 1)])
+    # Collect the uniform latents from kwargs in order
+    u_latents = jnp.array([z_kwargs[f"z_frac_{i}"] for i in range(n_bins - 1)])
+    u_latents = jnp.clip(u_latents, 0.0, 1.0)
 
-    # Clip to (epsilon, 1-epsilon) for numerical stability
-    z_fractions = jnp.clip(z_fractions, 1e-6, 1.0 - 1e-6)
+    # Uniform -> Beta(1, N-1-j) via the inverse CDF. The exponents depend only
+    # on the static bin count, so they are a concrete NumPy vector.
+    beta_exponents = jnp.asarray(1.0 / (n_bins - 1 - np.arange(n_bins - 1, dtype=float)))
+    v_betas = 1.0 - (1.0 - u_latents) ** beta_exponents
 
-    # Stick-breaking -> mass fractions
-    mass_fracs = _stick_breaking(z_fractions)
+    # Clip the Beta variates, not the uniform latents, to (epsilon, 1-epsilon):
+    # the quantile map compresses the upper end (u = 1 - 1e-6 gives v_0 = 0.9
+    # for seven bins), so clipping before it would cap the youngest SFR
+    # fraction at 0.9 and cut the Dirichlet support.
+    v_betas = jnp.clip(v_betas, 1e-6, 1.0 - 1e-6)
+
+    # Stick-breaking -> SFR fractions (Dirichlet(1,...,1); Leja+2017)
+    sfr_fracs = _stick_breaking(v_betas)
+
+    # Mass fractions weight the SFR fractions by the bin widths
+    bin_widths_yr = jnp.diff(bin_edges_gyr) * 1e9
+    mass_unnorm = sfr_fracs * bin_widths_yr
+    mass_fracs = mass_unnorm / jnp.sum(mass_unnorm)
 
     # Convert mass fractions to SFR: SFR_j = M_j / delta_t_j
-    bin_widths_yr = jnp.diff(bin_edges_gyr) * 1e9
     total_mass = 10.0**log_total_mass
     sfr_bins = mass_fracs * total_mass / bin_widths_yr
 

@@ -1407,8 +1407,10 @@ _register(
                     f"Dirichlet stick-breaking variable {i}",
                     lambda lo, hi: lo >= 0 and hi <= 1,
                     "must be in [0, 1]",
-                    # Beta(1, 1) is exactly Uniform(0, 1); faithful Leja+2017
-                    # symmetric Dirichlet(1,...,1) marginal on mass fractions.
+                    # Uniform latent; `dirichlet` maps it through the
+                    # Beta(1, N-1-i) quantile before stick-breaking, so the
+                    # SFR fractions are exactly symmetric Dirichlet(1,...,1)
+                    # (Leja+2017).
                     Uniform(0.0, 1.0, default=0.5),
                 )
                 for i in range(6)  # 7 bins -> 6 auxiliary variables
@@ -1423,8 +1425,9 @@ _register(
     ),
     citation="Leja et al. 2017 (ApJ 837, 170)",
     short_doc=(
-        "Non-parametric Dirichlet SFH (Leja+17); "
-        "Beta(1,1) = Uniform(0,1) stick-breaking aux variables"
+        "Non-parametric Dirichlet SFH (Leja+17); Uniform(0,1) aux variables "
+        "mapped to Beta(1, N-1-i) quantiles, stick-broken into SFR fractions "
+        "with a symmetric Dirichlet(1,...,1) prior"
     ),
 )
 
