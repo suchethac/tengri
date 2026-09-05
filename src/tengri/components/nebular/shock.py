@@ -240,18 +240,42 @@ def _load_mappings_grids() -> dict | None:
             return None
         g = f["mappings5"]
 
-        def _load_ratios(arr: np.ndarray) -> jnp.ndarray:
-            """Load ratio array, replacing NaN with 0.0.
+        def _load_ratios(arr: np.ndarray) -> tuple[jnp.ndarray, jnp.ndarray]:
+            """Load ratio array and compute population mask.
 
             The MAPPINGS V grid is sparse: not all (abundance, density, B-field)
-            combinations have MAPPINGS V model outputs.  Positions without models
-            are stored as NaN in the rectangular HDF5 array.  Replacing NaN with
-            0.0 here ensures that triweight interpolation smoothly returns zero
-            emission in unphysical/unmodeled regions rather than propagating NaN.
+            combinations have MAPPINGS V model outputs. Positions without models
+            are stored as NaN in the rectangular HDF5 array.
+
+            Returns: (zero-filled ratios, population mask)
+            where population mask is 1.0 for populated cells, 0.0 for unpopulated.
+            The mask is computed from raw data (before zero-filling) to distinguish
+            true zeros from unpopulated cells.
             """
             raw = np.asarray(arr[:], dtype=np.float32)
-            raw = np.where(np.isnan(raw), 0.0, raw)
-            return jnp.array(raw, dtype=jnp.float32)
+            is_finite = np.isfinite(raw)
+            # Reduce over all dimensions except abundance, density, B to get population mask
+            # For 5D arrays (N_abund, N_n, N_v, N_B, N_lines): reduce over (2, 4)
+            # For 4D arrays (N_abund, N_n, N_v, N_B): reduce over (2,)
+            if raw.ndim == 5:
+                all_finite = np.all(is_finite, axis=(2, 4))  # (N_abund, N_n, N_B)
+            elif raw.ndim == 4:
+                all_finite = np.all(is_finite, axis=2)  # (N_abund, N_n, N_B)
+            else:
+                raise ValueError(f"Unexpected ratio array shape: {raw.shape}")
+            population_mask = np.where(all_finite, 1.0, 0.0).astype(np.float32)
+
+            # Zero-fill the ratios
+            filled = np.where(np.isnan(raw), 0.0, raw)
+            return (
+                jnp.array(filled, dtype=jnp.float32),
+                jnp.array(population_mask, dtype=jnp.float32),
+            )
+
+        shock_ratios, shock_pop_mask = _load_ratios(g["shock_ratios"])
+        precursor_ratios, precursor_pop_mask = _load_ratios(g["precursor_ratios"])
+        combined_ratios, combined_pop_mask = _load_ratios(g["combined_ratios"])
+        hbeta_ratios, hbeta_pop_mask = _load_ratios(g["hbeta_log_lum_erg_s"])
 
         grids["mappings5"] = {
             "velocities_kms": jnp.array(g["velocities_kms"][:], dtype=jnp.float32),
@@ -261,10 +285,15 @@ def _load_mappings_grids() -> dict | None:
             "line_names": _decode(g["line_names"][:]),
             "line_wavelengths_aa": jnp.array(g["line_wavelengths_aa"][:], dtype=jnp.float32),
             # Shape (N_abund, N_n, N_v, N_B, N_lines): NaN-filled cells → 0.0
-            "shock_ratios": _load_ratios(g["shock_ratios"]),
-            "precursor_ratios": _load_ratios(g["precursor_ratios"]),
-            "combined_ratios": _load_ratios(g["combined_ratios"]),
-            "hbeta_log_lum_erg_s": _load_ratios(g["hbeta_log_lum_erg_s"]),
+            "shock_ratios": shock_ratios,
+            "precursor_ratios": precursor_ratios,
+            "combined_ratios": combined_ratios,
+            "hbeta_log_lum_erg_s": hbeta_ratios,
+            # Population masks: shape (N_abund, N_n, N_B), 1.0 for populated, 0.0 for unpopulated
+            "shock_pop_mask": shock_pop_mask,
+            "precursor_pop_mask": precursor_pop_mask,
+            "combined_pop_mask": combined_pop_mask,
+            "hbeta_pop_mask": hbeta_pop_mask,
         }
 
     # Precompute bin edges for triweight interpolation (static, avoids rebuilding in JIT)
@@ -488,10 +517,35 @@ def shock_line_ratios(
         grid_abund = ratio_array[i_abund]  # (N_n, N_v, N_B, N_lines)
         grid_vbn = jnp.transpose(grid_abund, (1, 2, 0, 3))  # (N_v, N_B, N_n, N_lines)
 
+        # Get population mask for this abundance and apply it to the grid.
+        # The mask tells us which (density, B) pairs are populated.
+        # Unpopulated cells (mask=0) are already zero-filled, but we apply the mask
+        # explicitly so gradients correctly track only through populated cells.
+        mask_field_name = (
+            "shock_pop_mask"
+            if ratio_field == "shock_ratios"
+            else (
+                "precursor_pop_mask" if ratio_field == "precursor_ratios" else "combined_pop_mask"
+            )
+        )
+        mask_abund = g[mask_field_name][i_abund]  # (N_n, N_B)
+
+        # Reshape mask to broadcast with grid_vbn: (1, N_B, N_n, 1)
+        # grid_vbn is (N_v, N_B, N_n, N_lines), mask needs to affect (B, n) dims
+        mask_expanded = jnp.expand_dims(mask_abund.T, (0, 3))  # (1, N_B, N_n, 1)
+        grid_vbn_masked = grid_vbn * mask_expanded
+
         # --- C²-continuous triweight interpolation across all 3 continuous axes ---
         axes = (v_grid, b_grid, log_den_grid)
         edges = (g["v_edges"], g["b_edges"], g["n_edges"])
-        ratios_vec = _interp_nd_triweight(grid_vbn, axes, edges, (v_q, b_q, n_q))
+        ratios_vec = _interp_nd_triweight(
+            grid_vbn_masked,
+            axes,
+            edges,
+            (v_q, b_q, n_q),
+            index_space_interp=True,
+            population_mask=mask_abund,
+        )
         # ratios_vec: shape (N_lines,)
 
         return {name: ratios_vec[j] for j, name in enumerate(g["line_names"])}

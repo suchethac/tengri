@@ -602,12 +602,20 @@ def preintegrate_lines(
     )
 
 
-def _tensor_contract(grid: jnp.ndarray, weights_per_axis: list[jnp.ndarray]) -> jnp.ndarray:
+def _tensor_contract(
+    grid: jnp.ndarray,
+    weights_per_axis: list[jnp.ndarray],
+    population_mask: jnp.ndarray | None = None,
+) -> jnp.ndarray:
     """Contract grid along leading axes with weight vectors.
 
     Each weight vector has shape (n_i,) and contracts along axis i.
     After each contraction, the next weight contracts along axis 0 of
     the reduced tensor.
+
+    The population_mask parameter is accepted for API compatibility but
+    currently unused. Masking is handled upstream by zeroing unpopulated
+    grid cells before interpolation (#2066).
 
     Parameters
     ----------
@@ -615,14 +623,18 @@ def _tensor_contract(grid: jnp.ndarray, weights_per_axis: list[jnp.ndarray]) -> 
         Shape (*grid_dims, n_trailing). Grid to contract.
     weights_per_axis : list[jnp.ndarray]
         One weight vector per grid dimension. w[i] has shape (grid_dims[i],).
+    population_mask : jnp.ndarray, optional
+        Accepted for API compatibility; unused. Masking is applied to the
+        grid values themselves, not post-contraction.
 
     Returns
     -------
     jnp.ndarray
         Shape (n_trailing,) if grid was (*grid_dims, n_trailing).
     """
+
     result = grid
-    for w in weights_per_axis:
+    for _i, w in enumerate(weights_per_axis):
         result = jnp.tensordot(w, result, axes=([0], [0]))
     return result
 
@@ -636,6 +648,7 @@ def interp_nd_triweight(
     scatters: tuple | None = None,
     index_space_interp: bool | None = None,
     on_out_of_grid: str = "clamp",
+    population_mask: jnp.ndarray | None = None,
 ) -> jnp.ndarray:
     """N-dimensional smooth interpolation via triweight kernel.
 
@@ -669,6 +682,13 @@ def interp_nd_triweight(
         (query entirely outside grid bounds on that axis). Default ``"clamp"``
         (clip to edge value, zero gradient outside). See :func:`compute_grid_weights`
         for alternatives. Issue #895.
+    population_mask : jnp.ndarray or None
+        Optional 2D population mask shape (n_density, n_b) with 1.0 for
+        populated cells and 0.0 for unpopulated. For 3-D grids with axes
+        (velocity, B-field, density), this mask is applied after velocity
+        contraction to exclude zero-filled sparse (B, density) families from
+        affecting interpolation. Enables correct gradients through sparse
+        grids (#2066). Default None (no masking, backward compatible).
 
     Returns
     -------
@@ -687,6 +707,12 @@ def interp_nd_triweight(
     corrected index-space path. This eliminates the nearest-neighbor degeneracy
     and produces smooth gradients throughout the grid range. The interpolant is
     C2 within intervals and C0 at nodes where adjacent spacings differ.
+
+    **Population masking (#2066)**: Pass ``population_masks`` to weight kernel
+    contributions by 1.0 for populated cells and 0.0 for unpopulated (e.g.,
+    zero-filled sparse grids). This prevents distant zero-filled cells from
+    diluting gradients and ensures queries in entirely unpopulated regions
+    return NaN (when ``on_out_of_grid='nan'``) rather than zero.
     """
     n_dims = len(axes)
 
@@ -711,8 +737,8 @@ def interp_nd_triweight(
         )
         weights_per_axis.append(w)
 
-    # Contract grid with weights
-    return _tensor_contract(grid, weights_per_axis)
+    # Contract grid with weights, applying population mask if provided
+    return _tensor_contract(grid, weights_per_axis, population_mask=population_mask)
 
 
 def _bcast_axis0(vec: jnp.ndarray, ndim: int) -> jnp.ndarray:
