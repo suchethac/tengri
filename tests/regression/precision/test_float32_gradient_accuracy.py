@@ -234,21 +234,12 @@ def test_likelihood_gradient_is_accurate_in_float32(ssp_bare, obs):
 
 
 @pytest.mark.xfail(
-    reason="#1415 residual, and it is REVERSE MODE ONLY — see "
-    "test_photometry_gradient_is_accurate_in_float32_forward_mode just below, which "
-    "computes this same gradient correctly in pure float32. Reverse mode has to "
-    "materialize d(F_nu)/d(L_nu) = 10**(-58) at the flux projection, which is below "
-    "float32's smallest subnormal (~1.4e-45), so the cotangent flushes to exactly 0.0 "
-    "on the way to an answer (~1e-27) that float32 represents perfectly well. No local "
-    "change to apply_log10_scale can help: that ratio is a property of the magnitudes "
-    "being related (L_nu ~1e30 -> F_nu ~1e-28), not of how the scale is applied. It "
-    "needs #1388's scaled-SED contract — carry the SED already scaled, so no step ever "
-    "relates a ~1e30 quantity to a ~1e-28 one. What DOES recover this gradient without "
-    "that contract is changing the cotangent that arrives: "
-    "tengri.utils.scale.loss_scaled_grad boosts the scalar by 2**100 and divides back, "
-    "and returns the float64 answer to ~1e-6 on this and every other seam — measured "
-    "per seam in test_float32_photometry_grad_seams.py. This xfail is about the bare "
-    "jax.grad, which is what a caller reaches for first and what silently returns zero.",
+    reason="#1388 INVESTIGATION: custom_jvp with explicit arithmetic still underflows. "
+    "Changed _apply_flux_scale_safe to use split-exponent arithmetic in both primal and JVP, "
+    "but reverse-mode still returns [0.0, 0.0]. Root cause may be: (1) the cotangent still "
+    "flows through a downstream VJP before reaching this safe rule, or (2) the tangent-wrt-log10_scale "
+    "path needs explicit zero-marking via nondiff_argnums. Forward mode passes (jacfwd), so the issue "
+    "is specific to reverse-mode linearization of the JVP.",
     strict=True,
 )
 def test_photometry_gradient_is_accurate_in_float32(ssp_bare, obs):

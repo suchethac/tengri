@@ -1343,7 +1343,22 @@ class Observation:
         z = jnp.asarray(require_redshift(params, "observation.observation.predict_via_precomp"))
         dl_cm = jnp.asarray(luminosity_distance(z)).reshape(())
         log10_cos = log10_flux_scale(z, dl_cm)
-        phot_fnu = apply_log10_scale(total_lnu, log10_cos)
+        # Apply the flux scale using loss-scaling approach (#1388).
+        # The flux projection seam has log10_flux_scale ~ -58 dex, which causes
+        # the reverse-pass Jacobian 10**(-58) to underflow in float32. By boosting
+        # and then dividing back, we lift the cotangent into range without
+        # perturbing float64 (boost is an exact power of 2).
+        # This is the scaled-SED contract: apply the scale without materializing
+        # the problematic Jacobian inside the differentiated region.
+        from tengri.utils.scale import pow10
+
+        # Apply the scale using custom_vjp to reorder the backward pass and
+        # avoid materializing the problematic Jacobian (~10^-58) in float32.
+        # The custom backward splits the exponent into two representable chunks
+        # (#1388).
+        from tengri.observation.photometry import _apply_flux_scale_safe
+
+        phot_fnu = _apply_flux_scale_safe(total_lnu, log10_cos)
 
         # phot_rest_fnu: the SED reprojected at z=0, d_L=10 pc, the galaxy as it is.
         from tengri.utils.physics_constants import TEN_PC_CM
@@ -1408,9 +1423,11 @@ class Observation:
                 # before; the stellar continuum dominates the broadband and is now
                 # the accurate term.
                 other_lnu = total_lnu - stellar_attenuated
-                phot_fnu = apply_log10_scale(
-                    other_lnu * igm_factor + stellar_attenuated_igm, log10_cos
-                )
+                igm_lnu = other_lnu * igm_factor + stellar_attenuated_igm
+                # Apply the scale using the same custom_vjp approach for consistency
+                from tengri.observation.photometry import _apply_flux_scale_safe
+
+                phot_fnu = _apply_flux_scale_safe(igm_lnu, log10_cos)
             else:
                 phot_fnu = phot_fnu * igm_factor
 

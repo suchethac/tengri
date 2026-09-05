@@ -413,7 +413,8 @@ def lnu_to_fnu(
     lnu: jnp.ndarray,
     dl_cm: jnp.ndarray,
     redshift: jnp.ndarray,
-) -> jnp.ndarray:
+    scaled: bool = False,
+) -> jnp.ndarray | tuple[jnp.ndarray, jnp.ndarray]:
     """Convert spectral luminosity to spectral flux (k-corrected for redshift).
 
     f_ν = L_ν × (1+z) / (4π d_L²)
@@ -426,27 +427,42 @@ def lnu_to_fnu(
         Luminosity distance d_L [cm].
     redshift : jnp.ndarray
         Redshift z. Shape must be broadcastable with lnu and dl_cm.
+    scaled : bool, optional
+        If True, return (unscaled_value, log_offset) pair instead of applying
+        the scale. This enables the scaled-SED contract (#1388) where the scale
+        is applied outside the differentiated region. Default False (applies
+        scale and returns flux directly).
 
     Returns
     -------
-    jnp.ndarray
-        Spectral flux density f_ν [erg/s/cm²/Hz] in the observed frame.
+    jnp.ndarray or tuple[jnp.ndarray, jnp.ndarray]
+        If scaled=False: Spectral flux density f_ν [erg/s/cm²/Hz] in the observed frame.
+        If scaled=True: (unscaled_value, log_offset) where applying
+        apply_log10_scale(unscaled_value, log_offset) gives the flux.
 
     Notes
     -----
     The factor (1+z) accounts for the redshifting of photon energies.
     The 1/(4π d_L²) is the inverse-square dilution over luminosity distance.
 
+    The scaled=True form enables the scaled-SED contract (#1388), which carries
+    SEDs as (value, log-offset) pairs so no absolute scale is applied inside the
+    differentiated region. This prevents reverse-mode gradients from materializing
+    the large negative exponent ~10**(-58) at the flux projection seam, which
+    would underflow to exactly zero in float32.
+
     Reference: Hogg et al. (1999), AJ, 118, 1407.
 
     Notes
     -----
     The flux-scale factor is computed via log-offset arithmetic (apply_log10_scale)
-    to avoid float32 underflow. See issue #1186.
+    to avoid float32 underflow. See issue #1186 and #1388.
     """
     redshift = jnp.asarray(redshift)
     dl_cm = jnp.asarray(dl_cm)
     log10_factor = log10_flux_scale(redshift, dl_cm)
+    if scaled:
+        return lnu, log10_factor
     return apply_log10_scale(lnu, log10_factor)
 
 

@@ -482,6 +482,8 @@ def log10_magnitude(value):
     return jnp.where(finite, zero_or_log, jnp.inf)
 
 
+
+
 def apply_log10_scale(arr, log10_scale):
     """Return ``arr * 10**log10_scale`` without out-of-range intermediates.
 

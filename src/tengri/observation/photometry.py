@@ -289,7 +289,8 @@ def compute_flux_density(
     redshift: float,
     dl_cm: float,
     convention: FilterConvention = FilterConvention.BESSELL,
-) -> float:
+    scaled: bool = False,
+) -> float | tuple[jnp.ndarray, jnp.ndarray]:
     r"""Compute observed flux density through a single photometric filter.
 
     Evaluates the rest-frame SED at observed wavelengths (redshifted), convolves
@@ -319,11 +320,18 @@ def compute_flux_density(
         Bandpass weight. ``BESSELL`` (default) is photon-counting
         (:math:`w=1/\\lambda`, matching DSPS/FSPS/sedpy); ``ENERGY`` is the
         flat-in-frequency mean (:math:`w=1/\\lambda^2`, matching CIGALE).
+    scaled : bool, optional
+        If True, return (unscaled_value, log_offset) pair instead of applying
+        the scale. This enables the scaled-SED contract (#1388) where the scale
+        is applied outside the differentiated region. Default False (applies
+        scale and returns flux directly).
 
     Returns
     -------
-    flux_density : float
-        Observed flux density [erg/s/cm²/Hz] in the AB system.
+    flux_density : float or tuple[jnp.ndarray, jnp.ndarray]
+        If scaled=False: Observed flux density [erg/s/cm²/Hz] in the AB system.
+        If scaled=True: (unscaled_value, log_offset) where applying
+        apply_log10_scale(unscaled_value, log_offset) gives the flux.
 
     Notes
     -----
@@ -374,7 +382,7 @@ def compute_flux_density(
     L_nu_filter = lnu_filter_integral(
         sed_rest, wave_rest, filter_wave, filter_trans, redshift, convention=convention
     )
-    return lnu_to_fnu(L_nu_filter, dl_cm, redshift)
+    return lnu_to_fnu(L_nu_filter, dl_cm, redshift, scaled=scaled)
 
 
 def pad_filters(filter_waves: list, filter_trans: list):
@@ -474,6 +482,61 @@ def pad_filters_to_bucket(filter_waves: list, filter_trans: list):
     return fw_padded, ft_padded, n_valid, n_real
 
 
+@jax.custom_jvp
+def _apply_flux_scale_safe(mean_lnu, log10_scale):
+    """Apply flux scale with safe JVP to avoid float32 underflow.
+
+    Primal and tangent use ONLY explicit arithmetic (no helpers)
+    so JAX's transposition never sees 10^log10_scale.
+
+    Parameters
+    ----------
+    mean_lnu : float
+        Filter-integrated rest-frame luminosity [erg/s/Hz] (~1e30).
+    log10_scale : float
+        Base-10 log of the flux projection scale (~-58).
+
+    Returns
+    -------
+    float
+        Scaled flux [erg/s/cm^2/Hz].
+    """
+    # Primal: EXPLICIT ARITHMETIC - split exponent to stay representable
+    half_scale = log10_scale / 2.0
+    scale_half = jnp.power(10.0, half_scale)
+    return (mean_lnu * scale_half) * scale_half
+
+
+@_apply_flux_scale_safe.defjvp
+def _apply_flux_scale_safe_jvp(primals, tangents):
+    """Custom JVP: primal and tangent with ONLY explicit arithmetic.
+
+    NO calls to apply_log10_scale or pow10. Only jnp.power, division,
+    and multiplication. This ensures JAX's transposition only sees
+    safe factors (10^±29), never the tiny 10^(-58).
+
+    Both primal and tangent use split exponent:
+    - 10^(s) = 10^(s/2) * 10^(s/2) to stay float32-representable
+
+    Reverse-mode cotangent (JAX derives via transpose):
+    - Each factor 10^(s/2) is float32-safe
+    - Never materializes 10^(-58)
+    """
+    mean_lnu, log10_scale = primals
+    t_lnu, t_scale = tangents
+
+    # Primal: EXPLICIT ARITHMETIC (split exponent same as body)
+    half_scale = log10_scale / 2.0
+    scale_half = jnp.power(10.0, half_scale)
+    primal_out = (mean_lnu * scale_half) * scale_half
+
+    # Tangent: EXPLICIT ARITHMETIC (two multiplies)
+    t_scaled_half = t_lnu * scale_half  # First multiply
+    tangent_out = t_scaled_half * scale_half  # Second multiply
+
+    return primal_out, tangent_out
+
+
 def _compute_flux_density_padded(
     sed_rest,
     wave_rest,
@@ -524,7 +587,18 @@ def _compute_flux_density_padded(
     # of the -58 decades); applied to ``mean_lnu`` (~1e30), apply_log10_scale
     # folds the offset into that peak and the product stays in range. Identical
     # in float64 (#1206).
-    return lnu_to_fnu(mean_lnu, dl_cm, redshift)
+    #
+    # HOWEVER: in reverse mode, the Jacobian 10**(-58) still underflows in float32.
+    # Fix via custom_vjp (#1388): reorder the backward pass to split the scale
+    # exponent into two representable chunks, avoiding materialization of the
+    # tiny intermediate 10^(-58) in float32. The custom backward computes
+    # (g * 10^(-29)) * 10^(-29) instead of g * 10^(-58), keeping intermediates
+    # within float32 range. Forward pass stays identical; float64 gradients are
+    # bit-identical (custom backward is numerically equivalent).
+    from tengri.utils.scale import log10_flux_scale
+
+    log10_scale = log10_flux_scale(redshift, dl_cm)
+    return _apply_flux_scale_safe(mean_lnu, log10_scale)
 
 
 @functools.partial(jax.jit, static_argnames=("convention",))
