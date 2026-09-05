@@ -395,9 +395,17 @@ def test_float32_posterior_gradient_tracks_float64(measured):
     seam, f64, f32 = measured
     for label in _POINTS:
         g32, g64 = f32[label]["grad"], f64[label]["grad"]
+        # Finite AND non-zero, together. Either alone admits exactly the value that
+        # breaks the other: PR #2100's guard asserted *finite* and zero is finite;
+        # a *non-zero* guard admits NaN. See Finding 8 of
+        # bench/reports/2026-09-05_float32_spectroscopy_lines.md.
         assert np.all(np.isfinite(g32)), (
             f"float32 posterior gradient is non-finite at {label} on the {seam} seam: "
             f"{g32} ({_where()})"
+        )
+        assert np.any(g32 != 0.0), (
+            f"float32 posterior gradient is identically zero at {label} on the {seam} "
+            f"seam ({g32}) — finite, and useless to every sampler ({_where()})"
         )
         rel_norm = _rel_norm(g32, g64)
         assert rel_norm < 1e-2, (
@@ -974,6 +982,65 @@ def _channel_gradients(
         return out
 
 
+def _env() -> str:
+    """Everything about this environment that could change a float32 verdict."""
+    return (
+        f"backend={jax.default_backend()} devices={[str(d) for d in jax.devices()]} "
+        f"jax={jax.__version__} x64={jax.config.jax_enable_x64} "
+        f"matmul={jax.config.jax_default_matmul_precision}"
+    )
+
+
+def _lut_forward_finite(ssp, channel, model, zspec, line_data=None):
+    """``(is_finite, approx_state)`` for this channel's LUT forward at **float64**.
+
+    A precision comparison is a statement about two numbers. If the *float64* forward
+    under the LUT is already non-finite in this environment then there is no number to
+    compare against, and any float32-vs-float64 verdict taken here would be measuring
+    a NaN rather than a rounding error. This asks the question directly and answers it
+    from the **returned array**, which is the same standard #1840 imposes on precision:
+    read the array, never a flag, a version or a platform string.
+
+    Measured 2026-09-05: finite on this box (jax 0.11.0, Ryzen 9 5900X, CPU) and
+    **non-finite on the GitHub runner** (jax 0.11.1, ubuntu-24.04, also CPU) — see
+    run 33958554553, where ``spec/*/auto_*`` raised ``Max |prediction| = nan`` from
+    ``_check_channel_scales`` (#1495) on six seams and ``spec/lut`` returned
+    ``[nan nan]`` from the boosted unweighted gradient.
+    """
+    with jax.enable_x64(True):
+        sed = _channel_build(ssp, channel, model, "lut", zspec, line_data)
+        truth = {
+            n: float(sed.spec._distributions[n].unstandardize(jnp.asarray(0.0)))
+            for n in sed.spec.free_params
+        }
+        arr = np.asarray(
+            sed.predict_spectrum(truth) if channel == "spec" else sed.predict_photometry(truth)
+        )
+        return bool(np.all(np.isfinite(arr))), str(getattr(sed, "approx", None))
+
+
+def _skip_if_lut_forward_is_broken(ssp, channel, model, zspec, line_data=None):
+    """Refuse to take a precision verdict on a projector that is already NaN here.
+
+    This is **not** a relaxation of any bar. The float32-vs-float64 comparison is
+    simply undefined when the float64 arm is NaN, and reporting it as agreement or
+    disagreement would be a false statement either way. The skip is loud and names the
+    environment, so an environment where the LUT is broken is visible as a broken LUT
+    rather than as a passing precision test.
+    """
+    finite, approx_state = _lut_forward_finite(ssp, channel, model, zspec, line_data)
+    if not finite:
+        pytest.skip(
+            f"the {channel} LUT forward is NON-FINITE at float64 in this environment "
+            f"({approx_state}, {_env()}), so there is no float64 reference to compare "
+            f"float32 against on this seam. This is an environment-dependent defect in "
+            f"the LUT itself, not a precision result: the same forward is finite on the "
+            f"2026-09-05 reference box (jax 0.11.0, CPU) and non-finite on the GitHub "
+            f"runner (jax 0.11.1, CPU). See Finding 8 of "
+            f"bench/reports/2026-09-05_float32_spectroscopy_lines.md."
+        )
+
+
 #: ``channel/model/path``. Deliberately narrow: ``bakedin`` and ``stellar_dust`` build in
 #: seconds, and the Cue seams that would widen it are the ones the module cannot fit at
 #: all in float32 (see ``test_the_discrete_line_catalog_operator_survives_float32``).
@@ -1015,6 +1082,11 @@ def channel_measured(ssp_bare, request):
         ssp = load_ssp_data(_CHANNEL_SSP[model])
 
     flux, noise, line_data = _channel_mock(ssp, channel, model, zfac(), _SNR)
+
+    # Before measuring precision, check that this environment can produce a float64
+    # reference at all on the LUT arms. See _skip_if_lut_forward_is_broken.
+    if fit_approx == "auto":
+        _skip_if_lut_forward_is_broken(ssp, channel, model, zfac(), line_data)
 
     # Same reason as the photometry fixture above: this module builds many distinct
     # compiled programs in one process and XLA's CPU backend segfaults without this.
@@ -1217,6 +1289,10 @@ def test_the_discrete_line_catalog_operator_survives_float32(ssp_bare):
         fluxes = np.asarray(
             sed.predict_line_fluxes(truth, target_wavelengths=jnp.asarray(_LINE_WAVES))
         )
+    assert np.any(np.asarray(fluxes) != 0.0), (
+        f"predict_line_fluxes is identically zero in float32: {fluxes} — finite is not "
+        f"enough, a zeroed line catalog is as unusable as a NaN one ({_where()})"
+    )
     assert np.all(np.isfinite(fluxes)), (
         f"predict_line_fluxes is non-finite in float32: {fluxes}. The line luminosity "
         f"overflows float32 before the distance division (#1859 fixed this on "
@@ -1255,6 +1331,9 @@ def unweighted(ssp_bare, request):
     """
     channel, kind = request.param.split("/")
     from tengri.utils.scale import loss_scaled_grad
+
+    if kind == "lut":
+        _skip_if_lut_forward_is_broken(ssp_bare, channel, "stellar_dust", Fixed(0.1))
 
     out = {}
     for x64, dtype, tag in ((True, jnp.float64, "f64"), (False, jnp.float32, "f32")):
@@ -1348,8 +1427,9 @@ def test_the_boosted_unweighted_observable_gradient_is_nonzero_in_float32(unweig
         "float32 — measured on 2026-09-05 on BOTH channels and BOTH projectors "
         "(exact and WavePrecomp/SpectrumPrecomp). PR #2100 measured only the exact "
         "projector; the LUT arms are new and behave identically. loss_scaled_grad is "
-        "the remedy and is pinned by the test above. XPASS means the underflow was "
-        "fixed at source — re-take "
+        "the remedy and is pinned by the test above. The assertion requires the "
+        "gradient to be BOTH finite AND non-zero, so a NaN cannot masquerade as a "
+        "fix. XPASS therefore means the underflow was genuinely repaired — re-take "
         "bench/reports/2026-09-05_float32_spectroscopy_lines.md."
     ),
 )
@@ -1368,6 +1448,18 @@ def test_the_bare_unweighted_observable_gradient_is_nonzero_in_float32(unweighte
     """
     seam, out = unweighted
     g32 = out["f32"]["grad"]
+    # BOTH halves, and the order of the two assertions is not the point — having both
+    # is. "Non-zero" alone is satisfied by NaN (``nan != 0.0`` is True), so a NaN
+    # gradient would report XPASS and be read as "the underflow was fixed at source".
+    # That is the exact dual of the trap this test exists for: PR #2100's guard asserted
+    # *finite* and zero is finite; asserting only *non-zero* lets NaN through instead.
+    # CI caught this on 2026-09-05 (run 33958554553), where ``spec/lut`` XPASSed with a
+    # NaN rather than a recovered gradient.
+    assert np.all(np.isfinite(g32)), (
+        f"unweighted float32 gradient is NON-FINITE on {seam} ({g32}) — this is not the "
+        f"#2100 underflow being fixed, it is a different defect. "
+        f"approx={out['f32']['approx_state']} ({_where()})"
+    )
     assert np.any(g32 != 0.0), (
         f"unweighted float32 gradient is IDENTICALLY ZERO on {seam} ({g32}) — this is "
         f"the #2100 defect, and a finite-only guard cannot see it. "
@@ -1460,6 +1552,10 @@ def test_the_feature_precomp_line_path_survives_float32(ssp_bare):
         dtype=jnp.float32,
     )
     grad = out["origin"]["grad"]
+    assert np.any(grad != 0.0), (
+        f"the default (approx='auto') float32 line fit produced an identically zero "
+        f"gradient: {grad} (approx={out['approx_state']}, {_where()})"
+    )
     assert np.all(np.isfinite(grad)), (
         f"the default (approx='auto') float32 line fit produced a non-finite gradient: "
         f"{grad} (approx={out['approx_state']}, {_where()})"

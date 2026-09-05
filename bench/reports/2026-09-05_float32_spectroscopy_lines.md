@@ -30,10 +30,13 @@ families; only an explicit `approx=None` line fit on a baked-in SSP works, and i
 the slowest of the three. The failures are **loud, not silent** —
 `_check_channel_scales` (#1495) raises at construction on the non-finite log-prob — which
 is the one piece of good news in this section.
-**The third item, PR #2104's last open one, closes with a defect intact.** The bare
-`sum(predict_photometry)` gradient is **still identically zero** in float32 — and is now
-measured under the LUT as well, on both channels, with the LUT verified to have actually
-reached the graph. `WavePrecomp` and `SpectrumPrecomp` neither cause nor cure it; the
+**The third item, PR #2104's last open one, closes with a defect intact — on every
+environment where the question is well posed.** The bare `sum(predict_photometry)`
+gradient is **identically zero** in float32 on the reference box, on both channels and
+both projectors, with the LUT verified to have actually reached the graph. It is *not*
+zero on the GitHub runner, and Finding 8 is the account of why: there the
+`SpectrumPrecomp` forward is itself NaN, so the gradient is NaN rather than recovered,
+and the claim is void rather than contradicted on that arm. `WavePrecomp` and `SpectrumPrecomp` neither cause nor cure it; the
 `2**70` cotangent boost does, recovering the gradient to 2.4e-06 - 5.3e-06 on every arm
 and both backends. The assertion is written against **zero**, not "finite", because
 PR #2100's guard pinned it finite and zero is finite. Verifying that column cost two
@@ -60,13 +63,15 @@ fails its finite-difference check on one direction** — spectroscopic free reds
 stated rather than quietly excluded.
 **Platform:** Linux 6.8, AMD Ryzen 9 5900X CPU (`JAX_PLATFORMS=cpu`) and NVIDIA
 RTX 3060 12 GB (GA106). JAX 0.11.0 / jaxlib 0.11.0. Branch
-`float32-spectroscopy-lines` off `origin/main` at **`df0260bcf`**, which is what
-`origin/main` pointed at when this work started; the remote advanced by five commits
-during the campaign and this branch was **not** rebased onto them, because every number
-below was taken against `df0260bcf` and re-pointing the provenance without re-running
-would be a claim rather than a measurement. Two of those five touch `src/`
-(`parameters.py`, `nuts.py`); neither is on any seam here, but the drift is stated
-rather than papered over. **No `src/` change was made by this work** — `git diff
+`float32-spectroscopy-lines`. Every number below was taken against **`df0260bcf`**,
+which is what `origin/main` pointed at when this work started. The branch has since been
+rebased twice, onto `4e6902631` and then onto **`2d1ef9c62`**, and in both cases the
+affected seam matrices were **re-taken rather than assumed**: all **10** gradient arrays
+per rebase — float64, float32 and the exact-projector reference, across both channels and
+both projectors — came back **bit-identical**. The rebases moved code, not measurements.
+Several intervening commits touch `src/` (`parameters.py`, `nuts.py`, `raytrace.py`,
+`emission_templates.py`, the new MCMC backends); none is on a seam measured here, and the
+bit-identity is the evidence for that rather than the assertion of it. **No `src/` change was made by this work** — `git diff
 df0260bcf..HEAD -- src/` is empty — so no float64 result anywhere in the library can
 have moved, and the bit-identity non-negotiable is met outright rather than by
 measurement.
@@ -478,7 +483,7 @@ to plan against: scaled linearly, CPU crosses 1e-2 near SNR 70 on this seam whil
 would not until ~SNR 380. A float32 spectroscopic fit that is safe on the GPU is not
 automatically safe on the CPU control that validates it.
 
-## Finding 6 — the unweighted observable is still identically zero in float32, under the LUT too
+## Finding 6 — the unweighted observable is identically zero in float32, under the LUT too
 
 PR #2104's last open item from PR #2100's original list: `loss_scaled_grad` and the bare
 `sum(predict_photometry)` gradient were measured **on the exact projector only** and
@@ -498,6 +503,10 @@ positive evidence that the LUT reached the graph: 5.45e-05 on photometry and 1.2
 spectroscopy, against exact zeros on the arms where no LUT was asked for. (The
 spectroscopy LUT being ~440x closer to exact than the photometry one is Finding 1's
 point restated on the forward model.)
+
+**This holds where the float64 arm is finite, and Finding 8 records an environment
+where it is not.** Every number in the table above is from the reference box; on the
+GitHub runner the two `spec` rows have no float64 reference to compare against.
 
 **Re-taken on CUDA, every cell reads the same**: bare zero on all four arms, boosted
 non-zero, `lut_engaged=True` on both LUT arms
@@ -558,6 +567,84 @@ rather than by inspecting a config object:
 passed on `phot2`, which is precisely the discrimination an `ApproxState` check cannot
 make. It is kept so the distinction cannot quietly collapse again. The table above is
 taken on the engaged surfaces.
+
+## Finding 8 — `SpectrumPrecomp` is finite here and NaN on GitHub's runner, and a "non-zero" assertion could not tell NaN from a fix
+
+This finding exists because a **strict** `xfail` reported XPASS on CI, and the reason it
+did is not the reason it looks like.
+
+**What CI reported** (run 33958554553, `test (regression-a, …/precision)`), all of it on
+one seam family:
+
+| CI outcome | test | detail |
+|---|---|---|
+| 6 x ERROR | `spec/stellar_dust/auto_fixedz`, `spec/stellar_dust/auto_freez` | `_check_channel_scales` (#1495): `log_prob = nan`, **`Max \|prediction\| = nan`** |
+| FAILED | `test_the_boosted_unweighted_…[spec/lut]` | boosted float32 gradient `[nan nan]` |
+| **XPASS(strict)** | `test_the_bare_unweighted_…[spec/lut]` | — |
+
+Everything that moved is `SpectrumPrecomp`. `spec/*/exact_*`, every photometry arm and
+every line arm passed.
+
+**The XPASS was not a recovered gradient.** `np.any(g != 0.0)` is **True for NaN**, so a
+NaN gradient satisfied a "non-zero" assertion and the strict `xfail` reported it as
+"the underflow was fixed at source". It was not fixed; it was NaN. The companion boosted
+test on the *same fixture instance and the same observable* returned `[nan nan]`, and the
+six errors show the **forward prediction** under that projector is NaN, so both gradients
+are NaN and neither says anything about the #2100 underflow.
+
+That is the exact dual of the trap this module was built around, and the pair is worth
+stating as a rule rather than as two anecdotes:
+
+> PR #2100's guard asserted the gradient was **finite**, and **zero is finite**.
+> This module's guard asserted it was **non-zero**, and **NaN is non-zero**.
+> Each assertion is individually reasonable, and each admits precisely the value that
+> defeats it. The correct predicate is **finite AND non-zero**, asserted together.
+
+Both halves are now asserted at **every** site in
+`test_float32_fitting_path_seams.py` that asserts either — the two unweighted tests, the
+photometry and channel posterior-gradient tests, and both line-operator `xfail`s. That
+closes the class rather than this instance, which is the only reason the second half of
+the pair was worth the red CI run that found it.
+
+**Which of the two readings this is.** Neither, as posed — and the distinguishing
+evidence rules out the offered mechanism:
+
+* It is **not** a GPU/CPU fixture divergence. The failing assertion contains **no**
+  backend-conditional logic (the file's two `jax.default_backend() == "cpu"` guards are
+  both inside the *cotangent-boost* float64 bit-identity tests, a different assertion),
+  and both environments report **`backend=cpu devices=['cpu:0']`**. The fixture resolved
+  to the same projector on both.
+* It **is** environment-dependent, but in a different quantity than "the gradient is
+  zero here and finite there". The environment-dependent quantity is the **float64
+  forward under `SpectrumPrecomp`**:
+
+| | reference box | GitHub runner |
+|---|---|---|
+| backend / devices | `cpu` / `['cpu:0']` | `cpu` / `['cpu:0']` |
+| jax / jaxlib | **0.11.0** | **0.11.1** |
+| host | Ryzen 9 5900X, Linux 6.8 | ubuntu-24.04 runner image |
+| `SpectrumPrecomp` float64 forward | **finite** (256/256, 1.264e-28 – 1.543e-27) | **NaN** |
+| `spec/lut` bare float32 gradient | **identically 0** | **NaN** |
+
+The identified deltas are the jax/jaxlib patch version and the host; the campaign did not
+isolate which, and says so rather than guessing. What it does establish is that the
+LUT-served spectroscopy forward is **not portable**, which is a more serious statement
+than any precision number in this report: a float64 spectroscopic result under
+`SpectrumPrecomp` can be finite on one machine and NaN on another, with no flag, version
+check or config inspection distinguishing them beforehand.
+
+**Consequence for the tests.** A precision comparison is a statement about two numbers,
+and when the float64 arm is NaN there is no second number. The LUT seams now run a
+**precondition** that computes that float64 forward and reads finiteness **off the
+returned array** — the same standard #1840 imposes on precision, applied to the
+environment — and skip loudly, naming the environment and this finding, when it is not
+finite. That is deliberately not a relaxed bar: the bar is unchanged wherever the
+question is well posed, and where it is not the module now reports a broken LUT instead
+of a passing precision test.
+
+**Not covered:** whether jaxlib 0.11.1 or the host CPU is responsible, and whether the
+same non-portability affects `WavePrecomp` (no photometry arm reproduced it on either
+environment). Both need a bisect this campaign did not run.
 
 ## Caveats
 
