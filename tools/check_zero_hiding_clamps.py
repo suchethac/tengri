@@ -125,7 +125,7 @@ from collections.abc import Sequence
 #: contributed ``0 * inf = NaN`` to the survivor. Raising the floor would have
 #: kept the clamp and kept this count at 99 while fixing nothing — the count
 #: falling is a *consequence* of the right fix, not the goal of it.
-EXPECTED_SITES = 96
+EXPECTED_SITES = 95
 
 SRC = pathlib.Path(__file__).resolve().parent.parent / "src" / "tengri"
 
