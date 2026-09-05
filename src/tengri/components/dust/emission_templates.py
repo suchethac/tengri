@@ -2336,13 +2336,18 @@ def _qhac_axis_to_cigale(qhac_grid: jnp.ndarray) -> jnp.ndarray:
 
     Notes
     -----
-    **JIT-compatible**: no -- reads a concrete max to pick a convention.
+    **JIT-compatible**: yes -- the convention select is a traced ``jnp.where``
+    (#2114), so the function works on concrete and traced grids alike.
 
     Regression: ``tests/components/dust/test_themis_qhac_convention.py``.
     """
-    if float(jnp.max(qhac_grid)) > 0.5:
-        return qhac_grid * _QHAC_FSPS_TO_CIGALE
-    return qhac_grid
+    # Use JAX conditional to handle both concrete and traced cases. The grid is
+    # always host data from disk (load_themis_templates), but may be traced if
+    # load() is called lazily inside component chain building (#2114, #1649).
+    # jnp.where keeps both branches traced, avoiding ConcretizationTypeError.
+    max_qhac = jnp.max(qhac_grid)
+    needs_conversion = max_qhac > 0.5
+    return jnp.where(needs_conversion, qhac_grid * _QHAC_FSPS_TO_CIGALE, qhac_grid)
 
 
 def create_themis_from_grid(template_data: dict | str) -> Callable:
@@ -2390,11 +2395,12 @@ def create_themis_from_grid(template_data: dict | str) -> Callable:
     powerlaw = template_data["powerlaw"]  # (n_qhac, n_umin, n_wave)
     tmpl_wave = template_data["wavelength_aa"]
     umin_grid = template_data["umin_grid"]
-    # ``_qhac_axis_to_cigale`` reads a concrete max to pick a unit convention,
-    # so it cannot run on traced arrays. When the caller threaded this grid in
-    # (see EmissionComponent.threaded_templates) it supplies the axis already
-    # converted, under a distinct key. The membership test is Python-level and
-    # therefore safe under trace; the conversion itself stays eager (#1649).
+    # ``_qhac_axis_to_cigale`` is trace-safe (#2114): its convention select
+    # runs as a traced ``jnp.where``. A caller that threaded this grid in
+    # (see EmissionComponent.threaded_templates) still supplies the axis
+    # already converted, under a distinct key, so the conversion runs once,
+    # eagerly, where the data is concrete (#1649). The membership test is
+    # Python-level and therefore safe under trace.
     if "qhac_grid_cigale" in template_data:
         qhac_grid = template_data["qhac_grid_cigale"]
     else:

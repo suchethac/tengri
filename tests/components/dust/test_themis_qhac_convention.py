@@ -81,3 +81,44 @@ def test_qhac_energy_conserved_across_sweep():
     # THEMIS is energy-balance-normalized: the band-integrated luminosity is
     # nearly invariant under qhac (shape redistributes, total is conserved).
     np.testing.assert_allclose(bands, bands[0], rtol=5e-2)
+
+
+def test_qhac_axis_conversion_under_jit():
+    """Regression #2114: _qhac_axis_to_cigale must not raise under trace.
+
+    The component chain is built lazily inside the first traced call to
+    predict_photometry. If _qhac_axis_to_cigale runs inside a trace,
+    float(jnp.max(...)) on a traced array raises ConcretizationTypeError.
+    The fix keeps the convention select inside the traced graph via jnp.where.
+    """
+    import jax
+    import jax.numpy as jnp
+
+    from tengri.components.dust.emission_templates import _qhac_axis_to_cigale
+
+    # FSPS-scaled grid: max > 0.5 → needs conversion
+    fsps_grid = jnp.array([0.909, 4.545, 9.091, 13.636, 18.18])
+    cigale_expected = fsps_grid * 2.2 / 100.0
+
+    # JIT the conversion to trace all array operations
+    jitted_convert = jax.jit(_qhac_axis_to_cigale)
+    result = jitted_convert(fsps_grid)
+    np.testing.assert_allclose(result, cigale_expected, rtol=1e-14)
+
+    # CIGALE-scaled grid: max <= 0.5 → no conversion
+    cigale_grid = jnp.array([0.02, 0.10, 0.17, 0.30, 0.40])
+    result = jitted_convert(cigale_grid)
+    np.testing.assert_allclose(result, cigale_grid, rtol=1e-14)
+
+    # Gradient through the conversion: this would fail with ConcretizationTypeError
+    # in the pre-fix code when running inside jax.grad
+    def wrapper(qhac_grid):
+        converted = _qhac_axis_to_cigale(qhac_grid)
+        return jnp.sum(converted)  # Scalar for grad
+
+    # This must not raise even though qhac_grid is under trace, and the
+    # select resolves to one branch, so the gradient is the conversion
+    # factor on an FSPS grid and exactly 1 on a CIGALE grid.
+    grad_fn = jax.grad(wrapper)
+    np.testing.assert_allclose(grad_fn(fsps_grid), 2.2 / 100.0, rtol=1e-14)
+    np.testing.assert_allclose(grad_fn(cigale_grid), 1.0, rtol=1e-14)
