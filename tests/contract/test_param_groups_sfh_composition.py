@@ -14,7 +14,7 @@ Tests the sfh type as a list (additive composition), including:
 import pytest
 
 pytestmark = pytest.mark.contract
-from tengri.parameters import FIXED, FREE, Fixed, Uniform
+from tengri.parameters import DEFAULT, FREE, Fixed, Uniform
 from tengri.parameters.groups import parse_groups
 from tengri.parameters.parameters import Parameters
 
@@ -36,7 +36,7 @@ class TestSFHBasics:
     def test_sfh_composition_mean_sfh_type_list(self):
         """mean_sfh_type set to the list of types."""
         params = parse_groups(
-            sfh={"type": ["dpl", "field"], "all_params": FIXED},
+            sfh={"type": ["dpl", "field"], "all_params": Fixed(DEFAULT)},
             redshift=Fixed(0.1),
         )
         # mean_sfh_type should be a list containing both types
@@ -62,9 +62,9 @@ class TestSFHCompositionWildcard:
         assert len(field_free) > 0
 
     def test_wildcard_fixed_fixes_all_composition_params(self):
-        """'all_params': FIXED fixes ALL params across the composition."""
+        """'all_params': Fixed(DEFAULT) fixes ALL params across the composition."""
         params = parse_groups(
-            sfh={"type": ["dpl", "field"], "all_params": FIXED},
+            sfh={"type": ["dpl", "field"], "all_params": Fixed(DEFAULT)},
             redshift=Fixed(0.1),
         )
         # All dpl params should be fixed
@@ -94,7 +94,11 @@ class TestSFHCompositionShortNames:
     def test_sfh_unique_short_name_in_composition(self):
         """Unique short name (e.g., psd_sigma) resolves to correct full name."""
         params = parse_groups(
-            sfh={"type": ["dpl", "field"], "all_params": FIXED, "psd_sigma": Uniform(0, 1)},
+            sfh={
+                "type": ["dpl", "field"],
+                "all_params": Fixed(DEFAULT),
+                "psd_sigma": Uniform(0, 1),
+            },
             redshift=Fixed(0.1),
         )
         # psd_sigma is unique to field
@@ -142,7 +146,7 @@ class TestSFHCompositionValidation:
         """At most one burst; multiple bursts raises ValueError."""
         with pytest.raises(ValueError, match="burst"):
             parse_groups(
-                sfh={"type": ["burst", "burst"], "all_params": FIXED},
+                sfh={"type": ["burst", "burst"], "all_params": Fixed(DEFAULT)},
                 redshift=Fixed(0.1),
             )
 
@@ -151,14 +155,14 @@ class TestSFHCompositionValidation:
         # Only burst (not additive) should raise or be invalid
         with pytest.raises(ValueError):
             parse_groups(
-                sfh={"type": ["burst"], "all_params": FIXED},
+                sfh={"type": ["burst"], "all_params": Fixed(DEFAULT)},
                 redshift=Fixed(0.1),
             )
 
     def test_sfh_composition_dense_basis_autoswap_with_burst(self):
         """dense_basis + burst auto-swaps to dense_basis_pure."""
         params = parse_groups(
-            sfh={"type": ["dense_basis", "burst"], "all_params": FIXED},
+            sfh={"type": ["dense_basis", "burst"], "all_params": Fixed(DEFAULT)},
             redshift=Fixed(0.1),
         )
         # mean_sfh_type should have been swapped to dense_basis_pure
@@ -175,7 +179,11 @@ class TestSFHCompositionExamples:
         """Standard dpl + field composition."""
         params = parse_groups(
             sfh={"type": ["dpl", "field"], "all_params": FREE},
-            dust_attenuation={"law": "power_law", "type": "two_component", "all_params": FIXED},
+            dust_attenuation={
+                "law": "power_law",
+                "type": "two_component",
+                "all_params": Fixed(DEFAULT),
+            },
             redshift=Fixed(0.1),
         )
         # Standard SFH composition params present
@@ -194,7 +202,7 @@ class TestSFHCompositionExamples:
     def test_sfh_three_component(self):
         """Three-component composition: dpl + field + burst."""
         params = parse_groups(
-            sfh={"type": ["dpl", "field", "burst"], "all_params": FIXED},
+            sfh={"type": ["dpl", "field", "burst"], "all_params": Fixed(DEFAULT)},
             redshift=Fixed(0.1),
         )
         assert isinstance(params, Parameters)

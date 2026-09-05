@@ -76,23 +76,23 @@ Reference: Bell+2003; Delvecchio+2021; McCheyne+2022 (q_IR calibrations).
     warnings.filterwarnings("ignore", message=".*BakedInBackend.*")
     warnings.filterwarnings("ignore", message=".*experimental.*")
 
-    SFH = {"type": "const", "all_params": tengri.FIXED, "log_total_mass": 10.5}
+    SFH = {"type": "const", "all_params": tengri.Fixed(tengri.DEFAULT), "log_total_mass": 10.5}
     DUST = {
         "law": "power_law",
         "type": "two_component",
-        "all_params": tengri.FIXED,
+        "all_params": tengri.Fixed(tengri.DEFAULT),
         "tau_diff": 1.0,
         "tau_bc": 1.5,
     }
     # dale2014_cigale: this example enables the radio component, and plain
     # dale2014 embeds its own SF radio continuum — the pair is refused at
     # build as a double-count (#1970).
-    DUST_EMISSION = {"type": "dale2014_cigale", "all_params": tengri.FIXED}
+    DUST_EMISSION = {"type": "dale2014_cigale", "all_params": tengri.Fixed(tengri.DEFAULT)}
     AGN = {
         "type": "composable",
-        "all_params": tengri.FIXED,
-        "disc": {"type": "qsogen", "all_params": tengri.FIXED},
-        "torus": {"type": "skirtor", "all_params": tengri.FIXED},
+        "all_params": tengri.Fixed(tengri.DEFAULT),
+        "disc": {"type": "qsogen", "all_params": tengri.Fixed(tengri.DEFAULT)},
+        "torus": {"type": "skirtor", "all_params": tengri.Fixed(tengri.DEFAULT)},
         "log_lbol": 12.0,  # log10(L_bol / L_sun) at API level, never erg/s
     }
 
@@ -124,9 +124,9 @@ Reference: Bell+2003; Delvecchio+2021; McCheyne+2022 (q_IR calibrations).
     for name, color in zip(sf_blocks, plt.get_cmap("viridis")(np.linspace(0.1, 0.85, len(sf_blocks)))):
         nu, sed = spectrum(
             {
-                "sf": {"type": name, "all_params": tengri.FIXED},
+                "sf": {"type": name, "all_params": tengri.Fixed(tengri.DEFAULT)},
                 "agn": {"type": "none"},
-                "all_params": tengri.FIXED,
+                "all_params": tengri.Fixed(tengri.DEFAULT),
             },
             with_agn=False,
         )
@@ -139,9 +139,9 @@ Reference: Bell+2003; Delvecchio+2021; McCheyne+2022 (q_IR calibrations).
     ):
         nu, sed = spectrum(
             {
-                "sf": {"type": "bell2003", "all_params": tengri.FIXED},
-                "agn": {"type": name, "all_params": tengri.FIXED, "loudness": 2.0},
-                "all_params": tengri.FIXED,
+                "sf": {"type": "bell2003", "all_params": tengri.Fixed(tengri.DEFAULT)},
+                "agn": {"type": name, "all_params": tengri.Fixed(tengri.DEFAULT), "loudness": 2.0},
+                "all_params": tengri.Fixed(tengri.DEFAULT),
             },
             with_agn=True,
         )
@@ -161,7 +161,7 @@ Reference: Bell+2003; Delvecchio+2021; McCheyne+2022 (q_IR calibrations).
 
 .. rst-class:: sphx-glr-timing
 
-   **Total running time of the script:** (0 minutes 8.458 seconds)
+   **Total running time of the script:** (0 minutes 7.168 seconds)
 
 
 .. _sphx_glr_download_auto_examples_radio_plot_radio_model_family_compare.py:

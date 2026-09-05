@@ -82,7 +82,7 @@ Schaerer 2003, A&A, 397, 527 (ionizing photon production in massive starburst po
             log_total_mass_age = np.log10(age_myr * 1e6)
             sfh_config_age = {
                 "type": "const",
-                "all_params": tengri.FIXED,
+                "all_params": tengri.Fixed(tengri.DEFAULT),
                 "log_total_mass": log_total_mass_age,
                 "start_gyr": age_myr / 1e3,
                 "end_gyr": 0.0,
@@ -90,7 +90,7 @@ Schaerer 2003, A&A, 397, 527 (ionizing photon production in massive starburst po
 
             neb_config = {
                 "type": "cue",
-                "all_params": tengri.FIXED,
+                "all_params": tengri.Fixed(tengri.DEFAULT),
                 "logZ_gas": met,
                 "logU": -2.0,
                 "fesc": 0.0,
@@ -100,7 +100,7 @@ Schaerer 2003, A&A, 397, 527 (ionizing photon production in massive starburst po
             dust_config = {
                 "law": "power_law",
                 "type": "two_component",
-                "all_params": tengri.FIXED,
+                "all_params": tengri.Fixed(tengri.DEFAULT),
                 "tau_diff": 0.0,
                 "tau_bc": 0.0,
             }
@@ -151,7 +151,7 @@ Schaerer 2003, A&A, 397, 527 (ionizing photon production in massive starburst po
 
 .. rst-class:: sphx-glr-timing
 
-   **Total running time of the script:** (0 minutes 19.519 seconds)
+   **Total running time of the script:** (0 minutes 10.908 seconds)
 
 
 .. _sphx_glr_download_auto_examples_nebular_plot_lyalpha_ew_vs_age.py:

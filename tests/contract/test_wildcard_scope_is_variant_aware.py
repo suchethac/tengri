@@ -102,7 +102,7 @@ import jax.numpy as jnp
 import numpy as np
 import pytest
 
-from tengri import FIXED, FREE, Fixed, SEDModel
+from tengri import DEFAULT, FREE, Fixed, SEDModel
 from tengri.components.stellar.sps.dsps_wrapper import SSPData
 from tengri.observation import Observation, Photometry
 from tengri.observation.photometry import FilterCurve
@@ -215,7 +215,7 @@ def _dust_law_cases():
                     "law_diff": law,
                     "all_params": FREE,
                 },
-                "dust_emission": {"type": "themis", "all_params": FIXED},
+                "dust_emission": {"type": "themis", "all_params": Fixed(DEFAULT)},
                 "neb": {"type": "none"},
             },
             overrides=_DEEP_ATTENUATION,
@@ -233,7 +233,7 @@ def _shock_cases():
                 "dust_attenuation": {
                     "type": "two_component",
                     "law": "calzetti",
-                    "all_params": FIXED,
+                    "all_params": Fixed(DEFAULT),
                 },
                 "neb": {"type": "none"},
                 "shock": {"norm": norm, "all_params": FREE},
@@ -291,7 +291,7 @@ def _xray_cases():
                 "dust_attenuation": {
                     "type": "two_component",
                     "law": "calzetti",
-                    "all_params": FIXED,
+                    "all_params": Fixed(DEFAULT),
                 },
                 "neb": {"type": "none"},
                 "xray": {"type": model, "all_params": FREE},
@@ -308,7 +308,7 @@ def _xray_cases():
                 # scope.
                 "agn": {
                     "type": "composable",
-                    "all_params": FIXED,
+                    "all_params": Fixed(DEFAULT),
                     "log_lbol": Fixed(13.0),
                     "disc": {"type": "multicolor"},
                     "torus": {"type": "skirtor"},
@@ -327,7 +327,11 @@ def _simple_group_cases():
         {
             "sfh": {"type": "dpl", "all_params": FREE},
             "neb": {"type": "none"},
-            "dust_attenuation": {"law": "power_law", "type": "two_component", "all_params": FIXED},
+            "dust_attenuation": {
+                "law": "power_law",
+                "type": "two_component",
+                "all_params": Fixed(DEFAULT),
+            },
         },
     )
     yield Case(
@@ -336,7 +340,11 @@ def _simple_group_cases():
         "met_",
         {
             "neb": {"type": "none"},
-            "dust_attenuation": {"law": "power_law", "type": "two_component", "all_params": FIXED},
+            "dust_attenuation": {
+                "law": "power_law",
+                "type": "two_component",
+                "all_params": Fixed(DEFAULT),
+            },
             "met": {"all_params": FREE},
         },
     )
@@ -346,7 +354,11 @@ def _simple_group_cases():
         "radio_",
         {
             "neb": {"type": "none"},
-            "dust_attenuation": {"law": "power_law", "type": "two_component", "all_params": FIXED},
+            "dust_attenuation": {
+                "law": "power_law",
+                "type": "two_component",
+                "all_params": Fixed(DEFAULT),
+            },
             "radio": {"sf": {"type": "bell2003"}, "agn": {"type": "powerlaw"}, "all_params": FREE},
         },
     )
@@ -413,7 +425,7 @@ def _build(ssp, obs, case):
     # A case may carry its own sfh group (the sfh case frees it); otherwise the
     # sfh is pinned so it contributes no free params to the prefix under test.
     groups = dict(case["groups"])
-    sfh = dict(groups.pop("sfh", None) or {"type": "dpl", "all_params": FIXED})
+    sfh = dict(groups.pop("sfh", None) or {"type": "dpl", "all_params": Fixed(DEFAULT)})
     if case["log_total_mass"] is not None:
         sfh["log_total_mass"] = case["log_total_mass"]
     with warnings.catch_warnings():
@@ -501,7 +513,7 @@ def test_the_dust_freed_set_depends_on_the_selected_law(synthetic_ssp_wide, panc
                     "law_diff": law,
                     "all_params": FREE,
                 },
-                "dust_emission": {"type": "themis", "all_params": FIXED},
+                "dust_emission": {"type": "themis", "all_params": Fixed(DEFAULT)},
                 "neb": {"type": "none"},
             },
         )
@@ -544,7 +556,7 @@ def test_an_omitted_law_scopes_as_its_resolved_default():
         with warnings.catch_warnings():
             warnings.simplefilter("ignore")
             spec = tengri.parse_groups(
-                sfh={"type": "dpl", "all_params": FIXED},
+                sfh={"type": "dpl", "all_params": Fixed(DEFAULT)},
                 dust_attenuation=dust,
                 neb={"type": "none"},
                 redshift=Fixed(0.1),
@@ -622,11 +634,11 @@ def test_the_threaded_values_actually_reach_the_backend(synthetic_ssp_wide, panc
         model = SEDModel.build(
             ssp_data=synthetic_ssp_wide,
             observation=panchromatic_obs,
-            sfh={"type": "dpl", "all_params": FIXED},
+            sfh={"type": "dpl", "all_params": Fixed(DEFAULT)},
             dust_attenuation={
                 "type": "two_component",
                 "law": "calzetti",
-                "all_params": FIXED,
+                "all_params": Fixed(DEFAULT),
             },
             neb={"type": "cb19", "all_params": FREE},
             redshift=Fixed(0.5),

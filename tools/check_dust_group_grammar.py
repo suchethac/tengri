@@ -112,11 +112,14 @@ DUST_EMISSION_TYPES = frozenset(
     }
 )
 
-# Keys that mark a tengri dust dict
+# Keys that mark a tengri dust dict. 'all_params' / 'other_params' are the
+# two accepted user-facing wildcard spellings; the internal '*' key is
+# refused as user input (parse_groups raises ValueError on it), so it is not
+# a spelling that can legitimately appear here and is deliberately excluded.
 TENGRI_DUST_MARKERS = frozenset(
     {
         "all_params",
-        "*",
+        "other_params",
         "law",
         "law_bc",
         "law_diff",
@@ -170,8 +173,8 @@ def is_tengri_dust_dict(dict_node: ast.Dict) -> bool:
     A dict keyed by dust/dust_attenuation/dust_emission is a TENGRI dust group
     only if it carries tengri markers:
     - 'type' with string value in tengri type/engine sets
-    - Any of: all_params, *, law, law_bc, law_diff, tau_bc, tau_diff, tau_v,
-      eta_balance, lyman_cutoff
+    - Any of: all_params, other_params, law, law_bc, law_diff, tau_bc,
+      tau_diff, tau_v, eta_balance, lyman_cutoff
     - Nested 'emission' dict with tengri markers
 
     External reference-code configs (e.g., bagpipes {"type": "CF00", "Av": 0.2},

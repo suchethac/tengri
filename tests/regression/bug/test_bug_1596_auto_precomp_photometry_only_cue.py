@@ -48,7 +48,7 @@ Assertions are **structural, not timed**: a shared runner cannot measure this
 import numpy as np
 import pytest
 
-from tengri import FIXED, FREE, ForwardModel, Observation, SEDModel
+from tengri import DEFAULT, FREE, Fixed, ForwardModel, Observation, SEDModel
 from tengri.forward.sed_model import WavePrecomp
 from tengri.inference.fitter import Fitter, _resolve_batch_fit_approx
 from tengri.observation import LineRatioData
@@ -74,7 +74,7 @@ def _cue_model(ssp, obs, approx=None):
         sfh={"type": "dpl", "all_params": FREE},
         dust_attenuation={"type": "none"},
         redshift=0.05,
-        neb={"type": "cue", "all_params": FIXED},
+        neb={"type": "cue", "all_params": Fixed(DEFAULT)},
         approx=approx,
     )
 

@@ -32,7 +32,7 @@ from __future__ import annotations
 
 import pytest
 
-from tengri import FIXED, Fixed, ForwardModel, SEDModel
+from tengri import DEFAULT, Fixed, ForwardModel, SEDModel
 from tengri.citations.associations import BACKEND_CITATIONS
 from tengri.citations.collect import _backend_from, collect_citations
 from tengri.inference.posterior import Posterior
@@ -50,8 +50,12 @@ def sed(synthetic_ssp_wide, synthetic_tophat_obs):
     return SEDModel.build(
         ssp_data=synthetic_ssp_wide,
         observation=synthetic_tophat_obs,
-        sfh={"type": "dpl", "all_params": FIXED},
-        dust_attenuation={"type": "two_component", "law": "calzetti", "all_params": FIXED},
+        sfh={"type": "dpl", "all_params": Fixed(DEFAULT)},
+        dust_attenuation={
+            "type": "two_component",
+            "law": "calzetti",
+            "all_params": Fixed(DEFAULT),
+        },
         redshift=Fixed(0.1),
     )
 

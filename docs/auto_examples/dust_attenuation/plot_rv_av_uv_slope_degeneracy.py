@@ -52,7 +52,7 @@ def _beta_uv(wave, l_nu):
 
 SFH = {
     "type": "tsnorm",
-    "all_params": tengri.FIXED,
+    "all_params": tengri.Fixed(tengri.DEFAULT),
     "peak_lbt_gyr": 0.05,
     "width_gyr": 0.05,
     "log_total_mass": 8.7,
@@ -68,7 +68,7 @@ def _model(av, rv):
         sfh=SFH,
         dust_attenuation={
             "type": "two_component",
-            "all_params": tengri.FIXED,
+            "all_params": tengri.Fixed(tengri.DEFAULT),
             "tau_bc": 0.0,
             "tau_diff": av / 1.086,
             # Per-screen pair: this example varies R_V on the diffuse screen,

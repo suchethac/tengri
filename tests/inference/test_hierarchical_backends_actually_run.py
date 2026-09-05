@@ -45,7 +45,7 @@ import pytest
 
 import tengri
 from tengri import (
-    FIXED,
+    DEFAULT,
     Fixed,
     Observation,
     Photometry,
@@ -84,7 +84,7 @@ def population():
             observation=obs,
             sfh={
                 "type": ["dpl", "field"],
-                "all_params": FIXED,
+                "all_params": Fixed(DEFAULT),
                 "log_total_mass": Uniform(9.0, 11.0),
                 "psd_sigma": Fixed(float(psd_sigma)),
                 "psd_tau_myr": Fixed(float(psd_tau_myr)),
@@ -92,7 +92,7 @@ def population():
             dust_attenuation={
                 "type": "two_component",
                 "law": "calzetti",
-                "all_params": FIXED,
+                "all_params": Fixed(DEFAULT),
             },
             neb={"type": "none"},
             redshift=Fixed(0.05),
@@ -128,7 +128,7 @@ def spectroscopic_population():
             observation=obs,
             sfh={
                 "type": ["dpl", "field"],
-                "all_params": FIXED,
+                "all_params": Fixed(DEFAULT),
                 "log_total_mass": Uniform(9.0, 11.0),
                 "psd_sigma": Fixed(float(psd_sigma)),
                 "psd_tau_myr": Fixed(float(psd_tau_myr)),
@@ -136,7 +136,7 @@ def spectroscopic_population():
             dust_attenuation={
                 "type": "two_component",
                 "law": "calzetti",
-                "all_params": FIXED,
+                "all_params": Fixed(DEFAULT),
             },
             neb={"type": "none"},
             redshift=Fixed(0.05),

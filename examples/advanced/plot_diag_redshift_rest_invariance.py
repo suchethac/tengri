@@ -31,14 +31,20 @@ obs = tengri.Observation(photometry=tengri.Photometry.from_names(["sdss_g"]))
 model = tengri.SEDModel.build(
     ssp,
     observation=obs,
-    sfh={"type": "dpl", "all_params": tengri.FIXED, "alpha": 2.0, "beta": 1.5, "tau_gyr": 5.0},
+    sfh={
+        "type": "dpl",
+        "all_params": tengri.Fixed(tengri.DEFAULT),
+        "alpha": 2.0,
+        "beta": 1.5,
+        "tau_gyr": 5.0,
+    },
     dust_attenuation={
         "law": "power_law",
         "type": "two_component",
-        "all_params": tengri.FIXED,
+        "all_params": tengri.Fixed(tengri.DEFAULT),
         "tau_bc": 0.3,
     },
-    neb={"type": "cue", "all_params": tengri.FIXED},
+    neb={"type": "cue", "all_params": tengri.Fixed(tengri.DEFAULT)},
     redshift=tengri.Uniform(0.0, 5.0),
 )
 

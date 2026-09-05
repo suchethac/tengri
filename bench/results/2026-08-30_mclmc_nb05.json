@@ -1,0 +1,92 @@
+{
+  "notebook": "05",
+  "seeds": [
+    7,
+    8,
+    9
+  ],
+  "rows": {
+    "nuts (shipped)": [
+      {
+        "wall": 506.4447200089926,
+        "rhat": 1.004338077882841,
+        "divergences": 4,
+        "eevpd": null,
+        "eevpd_target": null,
+        "nonfinite_steps": null,
+        "min_ess": 88.06729540645878,
+        "worst": "sfh_tsnorm_skew",
+        "sec_per_ess": 5.7506559917797855,
+        "grad_per_draw": 146.7788206220499,
+        "grad_per_ess": 1999.999931115658
+      },
+      {
+        "wall": 584.7578264960321,
+        "rhat": 1.0003418318262078,
+        "divergences": 13,
+        "eevpd": null,
+        "eevpd_target": null,
+        "nonfinite_steps": null,
+        "min_ess": 206.0187219610748,
+        "worst": "sfh_tsnorm_peak_lbt_gyr",
+        "sec_per_ess": 2.8383722650532524,
+        "grad_per_draw": 157.31364480508785,
+        "grad_per_ess": 916.3068869137672
+      },
+      {
+        "wall": 539.9015149270417,
+        "rhat": 1.0621155620801013,
+        "divergences": 55,
+        "eevpd": null,
+        "eevpd_target": null,
+        "nonfinite_steps": null,
+        "min_ess": 19.463846470047475,
+        "worst": "met_logzsol",
+        "sec_per_ess": 27.738685452430246,
+        "grad_per_draw": 86.17315897240327,
+        "grad_per_ess": 5312.813730113219
+      }
+    ],
+    "mclmc 2x": [
+      {
+        "wall": 218.7627320890315,
+        "rhat": 1.0023903260236298,
+        "divergences": null,
+        "eevpd": 0.006791459453334122,
+        "eevpd_target": 0.0005,
+        "nonfinite_steps": 0,
+        "min_ess": 247.5707834606023,
+        "worst": "sfh_tsnorm_skew",
+        "sec_per_ess": 0.8836371119043809,
+        "grad_per_draw": 2.0,
+        "grad_per_ess": 646.2798144574355
+      },
+      {
+        "wall": 195.22766619501635,
+        "rhat": 1.0083789236897311,
+        "divergences": null,
+        "eevpd": 0.14623616802505435,
+        "eevpd_target": 0.0005,
+        "nonfinite_steps": 0,
+        "min_ess": 204.6100375252031,
+        "worst": "sfh_tsnorm_skew",
+        "sec_per_ess": 0.9541451072309634,
+        "grad_per_draw": 2.0,
+        "grad_per_ess": 781.9753221065306
+      },
+      {
+        "wall": 183.06513062200975,
+        "rhat": 1.0007734137251012,
+        "divergences": null,
+        "eevpd": 0.012255347441301714,
+        "eevpd_target": 0.0005,
+        "nonfinite_steps": 0,
+        "min_ess": 462.74898939467533,
+        "worst": "sfh_tsnorm_peak_lbt_gyr",
+        "sec_per_ess": 0.3956035233301715,
+        "grad_per_draw": 2.0,
+        "grad_per_ess": 345.75980427163535
+      }
+    ]
+  }
+}

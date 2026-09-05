@@ -16,7 +16,7 @@ import warnings
 import numpy as np
 import pytest
 
-from tengri import FIXED, Fixed, SEDModel
+from tengri import DEFAULT, Fixed, SEDModel
 
 _WEIGHTS = os.path.join("data", "cue_weights.npz")
 pytestmark = [
@@ -38,10 +38,14 @@ def cue_model(synthetic_ssp_wide):
                 "tau_gyr": Fixed(1.0),
                 "age_gyr": Fixed(5.0),
                 "log_total_mass": Fixed(0.0),
-                "all_params": FIXED,
+                "all_params": Fixed(DEFAULT),
             },
-            dust_attenuation={"law": "power_law", "type": "two_component", "all_params": FIXED},
-            neb={"type": "cue", "all_params": FIXED},
+            dust_attenuation={
+                "law": "power_law",
+                "type": "two_component",
+                "all_params": Fixed(DEFAULT),
+            },
+            neb={"type": "cue", "all_params": Fixed(DEFAULT)},
             redshift=Fixed(0.0),
         )
 

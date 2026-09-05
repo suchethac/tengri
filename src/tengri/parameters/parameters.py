@@ -234,10 +234,9 @@ class Parameters:
 
     agn_model : str or None
         AGN SED model.  Default: ``None`` (disabled).
-        Options: ``"simple"`` (3 params), ``"standard"`` (SS73 disc + 2T torus),
-        ``"kubota_done"`` (physical disc), ``"unified_nlr_blr"`` (NLR/BLR with
-        geometric masking), ``"qsogen"`` (empirical quasar, Temple+2021),
-        ``"skirtor"`` (clumpy torus RT templates, Stalevski+2016).
+        Options: ``"composable"`` (modular blocks), or deprecated monolithic names
+        like ``"kubota_done_full"`` (physical disc), ``"qsogen"`` (empirical quasar),
+        ``"skirtor"`` (clumpy torus templates).
 
     **Multi-wavelength Settings**
 
@@ -1403,9 +1402,17 @@ class Parameters:
         -----
         **Provenance-aware collapsing**: If this Parameters was built via
         ``parse_groups``, provenance tags are used to collapse parameters that
-        shared the same wildcard marker (``'all_params': FREE`` or
-        ``'all_params': FIXED``) back into that wildcard, with explicit
-        overrides listed separately.
+        shared the same wildcard marker (``FREE`` or ``Fixed(DEFAULT)``) back
+        into a single wildcard entry, with explicit overrides listed
+        separately.
+
+        **Wildcard emission convention**: per-parameter entries are emitted
+        first, then the wildcard LAST. It is spelled ``'all_params'`` when it
+        is the group's only parameter directive, and ``'other_params'`` when
+        explicit per-param entries coexist beside it -- reading as "the
+        others" after the named overrides. Both spellings are exact synonyms
+        on input; this only governs which spelling and position ``to_groups``
+        produces.
 
         **Flat-built fallback**: If this Parameters was built via flat-kwarg
         ``Parameters(...)``, all parameters are listed explicitly (no wildcard).
@@ -1424,13 +1431,21 @@ class Parameters:
 
         Examples
         --------
-        >>> from tengri import parse_groups, FREE, FIXED, Uniform, Fixed
+        A bare ``'all_params': Fixed(DEFAULT)`` genuinely collapses to the
+        sole-directive spelling. (``'all_params': FREE`` on a bare ``sfh``
+        group would NOT collapse this cleanly: its met_* parameters --
+        pinned via a special case when no ``met`` block is given -- carry a
+        wildcard tag that mismatches the rest of the group's, so
+        ``groups["sfh"]`` would list them explicitly instead.)
+
+        >>> from tengri import parse_groups, Fixed, DEFAULT
         >>> spec = parse_groups(
-        ...     sfh={"type": "dpl", "all_params": FREE, "beta": Uniform(1, 3)},
+        ...     sfh={"type": "dpl", "all_params": Fixed(DEFAULT)},
         ...     redshift=Fixed(0.05),
         ... )
         >>> groups = spec.to_groups()
-        >>> assert "all_params" in groups["sfh"]  # preferred spelling on output
+        >>> groups["sfh"] == {"type": "dpl", "all_params": Fixed(DEFAULT)}  # sole directive
+        True
         >>> roundtripped = parse_groups(**groups)
         >>> spec.free_params == roundtripped.free_params
         True
@@ -2035,7 +2050,8 @@ class Parameters:
             modules.append("shock")
         dust_mdl = getattr(self, "dust_model", "two_component")
         if dust_mdl == "single_component":
-            modules.append(f"dust=single({getattr(self, 'dust_law_bc', 'power_law')})")
+            dust_law = getattr(self, "dust_law_bc", "power_law")
+            modules.append(f"dust_attenuation=single_component({dust_law})")
         else:
             dust_bc = getattr(self, "dust_law_bc", "power_law")
             dust_diff = getattr(self, "dust_law_diff", None) or dust_bc
@@ -2060,7 +2076,12 @@ class Parameters:
             "user_fixed": "[user]",
             "user_free": "[user FREE]",
             "wildcard_free": f"[{WILDCARD_ALIAS} FREE]",
-            "wildcard_fixed": f"[{WILDCARD_ALIAS} FIXED]",
+            "wildcard_fixed": f"[{WILDCARD_ALIAS} Fixed(DEFAULT)]",
+            # Block-scoped wildcard (e.g. AGN sub-block not selected by the
+            # active variant): the param stays declared-but-Fixed rather than
+            # being freed by the group's wildcard. See _resolve_value's
+            # wildcard_active=False branch in parameters/groups.py.
+            "wildcard_fixed_inactive": f"[{WILDCARD_ALIAS} Fixed(DEFAULT) -> inactive]",
             "registry_default": "[default]",
             # The "_grid" suffix marks a declared free prior that was
             # intersected with the selected component's template grid, whose

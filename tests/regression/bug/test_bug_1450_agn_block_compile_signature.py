@@ -24,7 +24,7 @@ import numpy as np
 import pytest
 
 import tengri  # noqa: F401
-from tengri import FIXED, Fixed, SEDModel
+from tengri import DEFAULT, Fixed, SEDModel
 
 pytestmark = pytest.mark.regression_bug
 
@@ -52,7 +52,7 @@ def _model(ssp, obs, **block):
     agn = {
         "type": "composable",
         "disc": {"type": "grahsp_sbpl"},
-        "all_params": FIXED,
+        "all_params": Fixed(DEFAULT),
     }
     for key, value in block.items():
         # #1979: smc_prevot is a DUST_LAWS curve — selected via 'law', not
@@ -65,7 +65,7 @@ def _model(ssp, obs, **block):
     return SEDModel.build(
         ssp_data=ssp,
         observation=obs,
-        sfh={"type": "dpl", "all_params": FIXED},
+        sfh={"type": "dpl", "all_params": Fixed(DEFAULT)},
         agn=agn,
         redshift=Fixed(0.05),
     )
@@ -101,13 +101,13 @@ def test_agn_norm_policy_changes_the_signature(synthetic_ssp_wide, synthetic_top
         return SEDModel.build(
             ssp_data=synthetic_ssp_wide,
             observation=synthetic_tophat_obs,
-            sfh={"type": "dpl", "all_params": FIXED},
+            sfh={"type": "dpl", "all_params": Fixed(DEFAULT)},
             agn={
                 "type": "composable",
                 "disc": {"type": "grahsp_sbpl"},
                 "torus": {"type": "skirtor"},
                 "norm": norm,
-                "all_params": FIXED,
+                "all_params": Fixed(DEFAULT),
             },
             redshift=Fixed(0.05),
         )

@@ -12,7 +12,7 @@ from __future__ import annotations
 
 import pytest
 
-from tengri import FIXED, Fixed, SEDModel
+from tengri import DEFAULT, Fixed, SEDModel
 from tengri.components.nebular import IonizingSpectrumInconsistencyError
 from tengri.config.exceptions import TengriIOError
 from tengri.observation import Observation, Photometry
@@ -38,7 +38,7 @@ def test_bare_backend_warns_or_raises(ssp_data_fsps, backend_type):
             SEDModel.build(
                 ssp_data=ssp_data_fsps,
                 observation=obs,
-                sfh={"type": "dpl", "all_params": FIXED},
+                sfh={"type": "dpl", "all_params": Fixed(DEFAULT)},
                 redshift=Fixed(0.1),
                 neb={"type": backend_type},
             )
@@ -48,7 +48,7 @@ def test_bare_backend_warns_or_raises(ssp_data_fsps, backend_type):
             SEDModel.build(
                 ssp_data=ssp_data_fsps,
                 observation=obs,
-                sfh={"type": "dpl", "all_params": FIXED},
+                sfh={"type": "dpl", "all_params": Fixed(DEFAULT)},
                 redshift=Fixed(0.1),
                 neb={"type": backend_type},
             )
@@ -70,7 +70,7 @@ def test_backend_builds_with_suppress(ssp_data_fsps, backend_type):
             SEDModel.build(
                 ssp_data=ssp_data_fsps,
                 observation=obs,
-                sfh={"type": "dpl", "all_params": FIXED},
+                sfh={"type": "dpl", "all_params": Fixed(DEFAULT)},
                 redshift=Fixed(0.1),
                 neb={
                     "type": backend_type,
@@ -89,7 +89,7 @@ def test_backend_builds_with_suppress(ssp_data_fsps, backend_type):
             SEDModel.build(
                 ssp_data=ssp_data_fsps,
                 observation=obs,
-                sfh={"type": "dpl", "all_params": FIXED},
+                sfh={"type": "dpl", "all_params": Fixed(DEFAULT)},
                 redshift=Fixed(0.1),
                 neb={
                     "type": backend_type,
@@ -116,7 +116,7 @@ def test_mappings_ionization_response(ssp_data_fsps):
         SEDModel.build(
             ssp_data=ssp_data_fsps,
             observation=obs,
-            sfh={"type": "dpl", "all_params": FIXED},
+            sfh={"type": "dpl", "all_params": Fixed(DEFAULT)},
             neb={
                 "type": "mappings",
                 "ionizing_source_warning": "suppress",
@@ -139,7 +139,7 @@ def test_unknown_neb_key_refused(ssp_data_fsps):
         SEDModel.build(
             ssp_data=ssp_data_fsps,
             observation=obs,
-            sfh={"type": "dpl", "all_params": FIXED},
+            sfh={"type": "dpl", "all_params": Fixed(DEFAULT)},
             redshift=Fixed(0.1),
             neb={
                 "type": "mappings",
@@ -196,7 +196,7 @@ def test_mappings_exact_path_predicts(ssp_data_fsps):
         SEDModel.build(
             ssp_data=ssp_data_fsps,
             observation=obs,
-            sfh={"type": "dpl", "all_params": FIXED},
+            sfh={"type": "dpl", "all_params": Fixed(DEFAULT)},
             neb={
                 "type": "mappings",
                 "ionizing_source_warning": "suppress",
@@ -230,7 +230,7 @@ def test_mappings_ionization_response_varies(ssp_data_fsps):
         SEDModel.build(
             ssp_data=ssp_data_fsps,
             observation=obs,
-            sfh={"type": "dpl", "all_params": FIXED},
+            sfh={"type": "dpl", "all_params": Fixed(DEFAULT)},
             neb={
                 "type": "mappings",
                 "ionizing_source_warning": "suppress",

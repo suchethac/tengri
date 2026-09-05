@@ -330,7 +330,7 @@ def test_massmap_box_builds_via_group_dict_grammar(synthetic_ssp):
     massmap_lin's) even when ``met_mode`` was set explicitly. Either one made
     ``SEDModel.build(met={'type': 'massmap_box', ...})`` crash.
     """
-    from tengri import FIXED, Fixed, SEDModel
+    from tengri import DEFAULT, Fixed, SEDModel
 
     model = SEDModel.build(
         ssp_data=synthetic_ssp,
@@ -339,15 +339,15 @@ def test_massmap_box_builds_via_group_dict_grammar(synthetic_ssp):
             "logzsol_start": Fixed(-2.15),
             "logzsol_final": Fixed(0.15),
             "yield": Fixed(0.03),
-            "all_params": FIXED,
+            "all_params": Fixed(DEFAULT),
         },
-        sfh={"type": "const", "log_total_mass": Fixed(10.0), "all_params": FIXED},
+        sfh={"type": "const", "log_total_mass": Fixed(10.0), "all_params": Fixed(DEFAULT)},
         dust_attenuation={
             "law": "power_law",
             "type": "two_component",
             "tau_bc": Fixed(0.0),
             "tau_diff": Fixed(0.0),
-            "all_params": FIXED,
+            "all_params": Fixed(DEFAULT),
         },
         redshift=Fixed(0.0),
     )

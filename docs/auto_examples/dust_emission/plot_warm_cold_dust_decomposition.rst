@@ -121,20 +121,20 @@ References
         dust_config = {
             "law": "power_law",
             "type": "two_component",
-            "all_params": tengri.FIXED,
+            "all_params": tengri.Fixed(tengri.DEFAULT),
             "tau_diff": 1.0,
             "tau_bc": 0.3,
         }
         dust_emission = {
             "type": "draine_li2007",
-            "all_params": tengri.FIXED,
+            "all_params": tengri.Fixed(tengri.DEFAULT),
             "qpah": 2.5,  # Fixed PAH mass fraction
             "umin": tengri.Uniform(0.5, 8.0),  # Promote to FREE: varies across regimes
         }
 
         model = tengri.SEDModel.build(
             ssp,
-            sfh={"type": "const", "all_params": tengri.FIXED, "log_total_mass": 11.0},
+            sfh={"type": "const", "all_params": tengri.Fixed(tengri.DEFAULT), "log_total_mass": 11.0},
             dust_attenuation=dust_config,
             dust_emission=dust_emission,
             redshift=tengri.Fixed(0.05),
@@ -267,7 +267,7 @@ References
 
 .. rst-class:: sphx-glr-timing
 
-   **Total running time of the script:** (0 minutes 5.240 seconds)
+   **Total running time of the script:** (0 minutes 4.149 seconds)
 
 
 .. _sphx_glr_download_auto_examples_dust_emission_plot_warm_cold_dust_decomposition.py:

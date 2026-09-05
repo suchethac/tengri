@@ -47,15 +47,15 @@ import jax
 
 import tengri
 from tengri import (
-    FIXED,
     Catalog,
+    DEFAULT,
     Fixed,
     ForwardModel,
     Observation,
     Photometry,
+    plot,
     SEDModel,
     WavePrecomp,
-    plot,
 )
 from tengri.utils.cosmology import age_at_z
 
@@ -93,9 +93,17 @@ def build_model(approx=PRECOMP, neb=None):
         observation=Observation(photometry=phot),
         redshift=Fixed(Z_OBS),
         sfh={"type": "table"},  # SFH arrives at runtime, as data
-        met={"type": "table", "all_params": FIXED},  # so does the stellar metallicity
-        dust_attenuation={"type": "two_component", "law": "calzetti", "all_params": FIXED},
-        neb=neb or {"type": "ssp", "all_params": FIXED},  # baked into the SSP: zero per-galaxy cost
+        met={"type": "table", "all_params": Fixed(DEFAULT)},  # so does the stellar metallicity
+        dust_attenuation={
+            "type": "two_component",
+            "law": "calzetti",
+            "all_params": Fixed(DEFAULT),
+        },
+        neb=neb
+        or {
+            "type": "ssp",
+            "all_params": Fixed(DEFAULT),
+        },  # baked into the SSP: zero per-galaxy cost
         approx=approx,  # SSP x filter LUT, or None for the exact path
     )
     return ForwardModel.build(sed=sed)
@@ -446,9 +454,13 @@ def build_cloudy():
         observation=Observation(photometry=phot),
         redshift=Fixed(Z_OBS),
         sfh={"type": "table"},
-        met={"type": "table", "all_params": FIXED},
-        dust_attenuation={"type": "two_component", "law": "calzetti", "all_params": FIXED},
-        neb={"type": "cloudy", "all_params": FIXED},
+        met={"type": "table", "all_params": Fixed(DEFAULT)},
+        dust_attenuation={
+            "type": "two_component",
+            "law": "calzetti",
+            "all_params": Fixed(DEFAULT),
+        },
+        neb={"type": "cloudy", "all_params": Fixed(DEFAULT)},
         approx=WavePrecomp(),
     )
     return ForwardModel.build(sed=sed)
@@ -689,7 +701,7 @@ print(f"\n  agreement with float64: median {np.median(dmag):.0e} mag, worst {dma
 #
 # ```python
 # import numpy as np, tengri
-# from tengri import (Catalog, Fixed, FIXED, ForwardModel, Observation,
+# from tengri import (Catalog, DEFAULT, Fixed, ForwardModel, Observation,
 #                     Photometry, SEDModel, WavePrecomp)
 #
 # ssp = tengri.load_ssp("prsc_miles_chabrier_wNE", download=True)
@@ -699,7 +711,7 @@ print(f"\n  agreement with float64: median {np.median(dmag):.0e} mag, worst {dma
 #     ssp_data=ssp, observation=obs, redshift=Fixed(0.1),
 #     sfh={"type": "table"}, met={"type": "table"},
 #     dust_attenuation={"type": "two_component", "law": "calzetti",
-#                       "all_params": FIXED},
+#                       "all_params": Fixed(DEFAULT)},
 #     neb={"type": "ssp"}, approx=WavePrecomp(),
 # ))
 #

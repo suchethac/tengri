@@ -50,7 +50,9 @@ fig, axes = plt.subplots(
 )
 
 ref = tengri.SEDModel.build(
-    ssp, sfh={"type": "dpl", "all_params": tengri.FIXED}, redshift=tengri.Fixed(0.0)
+    ssp,
+    sfh={"type": "dpl", "all_params": tengri.Fixed(tengri.DEFAULT)},
+    redshift=tengri.Fixed(0.0),
 )
 p_ref = dict(ref.spec.sample(jax.random.PRNGKey(99)))
 sfh_ref = ref.predict_sfh(p_ref)

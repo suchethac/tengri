@@ -35,16 +35,16 @@ REDSHIFT = 0.1
 
 def _build(ssp, obs, *, shock, approx, tau_bc=0.5):
     """Model with everything fixed except the two knobs under test."""
-    from tengri import FIXED, Fixed, SEDModel
+    from tengri import DEFAULT, Fixed, SEDModel
 
     kwargs = dict(
         ssp_data=ssp,
         observation=obs,
-        sfh={"type": "const", "all_params": FIXED, "log_total_mass": 10.0},
+        sfh={"type": "const", "all_params": Fixed(DEFAULT), "log_total_mass": 10.0},
         dust_attenuation={
             "law": "power_law",
             "type": "two_component",
-            "all_params": FIXED,
+            "all_params": Fixed(DEFAULT),
             "tau_bc": tau_bc,
             "tau_diff": tau_bc * 0.4,
         },

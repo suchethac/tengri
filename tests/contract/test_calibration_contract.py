@@ -28,14 +28,14 @@ import numpy as np
 import pytest
 
 import tengri
-from tengri import FIXED, Fixed, Observation, SEDModel, Spectroscopy
+from tengri import DEFAULT, Fixed, Observation, SEDModel, Spectroscopy
 from tengri.config.exceptions import ConfigError
 
 pytestmark = pytest.mark.contract
 
 _WAVE_OBS = jnp.linspace(4000.0, 9000.0, 300)
-_SFH = {"type": "dpl", "all_params": FIXED}
-_DUST = {"type": "single_component", "law": "calzetti", "all_params": FIXED}
+_SFH = {"type": "dpl", "all_params": Fixed(DEFAULT)}
+_DUST = {"type": "single_component", "law": "calzetti", "all_params": Fixed(DEFAULT)}
 
 
 @pytest.fixture(scope="module")

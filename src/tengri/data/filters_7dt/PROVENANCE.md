@@ -105,8 +105,30 @@ The numerical data is 7DT instrument characterization, provided by the Im Lab
 in response to a question about fitting 7DT photometry with tengri. It is
 instrument metadata, not code.
 
-**Redistribution permission is not yet on record.** The curves were sent for
-use, which is not the same as consent to ship them in a public package. Confirm
-with the depositor (Eunjae Herr, Im Lab, SNU) and record the answer here before
-these files go out in a release. Cite the 7DT instrument papers when publishing
-photometry synthesized through them.
+**Redistribution permission is not on record.** The curves were sent for use,
+which is not the same as consent to republish them. Confirm with the depositor
+(Eunjae Herr, Im Lab, SNU) and record the answer here. Tracked in #2140.
+
+Where these files actually stand, so the ask above is not mistaken for a gate
+that still holds:
+
+- **Already public.** Bundled by #2072 (commit `44113f7fe`, on `main`
+  2026-08-28) in a public repository with third-party forks. Publication is
+  redistribution; that step has been taken, not deferred.
+- **Not yet in a package release.** `astro-tengri` is not on PyPI and the
+  repository has no GitHub releases. The `v0.1.0-collab-handoff` tag predates
+  these files.
+- **Nothing gates the next release.** `pyproject.toml` packages this directory
+  under `[tool.setuptools.package-data]`, and
+  `.github/workflows/publish.yml` builds and uploads on `release: published`
+  with no licensing check. The next release ships these files automatically.
+
+If permission is declined, removal is `git rm` on this directory plus its
+`pyproject.toml` package-data entry, its `BUNDLED_FILTER_REGISTRY` entries
+(defined in `observation/filters/bundled.py`, referenced from three further
+modules), and the two contract tests that assert the bundled set — but the
+public history keeps them, so a history rewrite would be the only complete
+removal, and #1817 already declined one on other grounds.
+
+Cite the 7DT instrument papers when publishing photometry synthesized through
+these curves.

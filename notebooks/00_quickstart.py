@@ -42,6 +42,7 @@ quiet()
 # notebook's headline modeling assumption and the warning signals the frozen
 # logU/logZ_gas assumptions to users.
 import warnings
+
 warnings.filterwarnings("default", message=".*BakedInBackend.*")
 
 from pathlib import Path
@@ -53,20 +54,20 @@ import numpy as np
 
 import tengri
 from tengri import (
-    FIXED,
-    FREE,
+    citations,
+    cosmology,
     Data,
+    DEFAULT,
     Fixed,
     ForwardModel,
+    FREE,
+    generate_mock,
     Observation,
     Photometry,
+    plot,
     SEDModel,
     Uniform,
     WavePrecomp,
-    citations,
-    cosmology,
-    generate_mock,
-    plot,
 )
 from tengri.utils.conversions import lnu_to_fnu
 
@@ -178,7 +179,9 @@ truth = {
 truth_full_temp = {**sed_model.spec.get_fixed_values(), **truth}
 pred_truth = sed_model.predict(truth_full_temp)
 ssfr_truth = float(pred_truth.ssfr)
-assert ssfr_truth > 1e-11, f"Truth is not star-forming: sSFR = {ssfr_truth:.3e} /yr (need > 1e-11 /yr)"
+assert ssfr_truth > 1e-11, (
+    f"Truth is not star-forming: sSFR = {ssfr_truth:.3e} /yr (need > 1e-11 /yr)"
+)
 
 state_truth = sed_model.predict_state(truth_full_temp)
 sfr_grid = np.asarray(state_truth.derived["sfr_history"])
@@ -291,7 +294,9 @@ print(f"  MAP wall:  {time.perf_counter() - t:6.2f} s")
 
 t = time.perf_counter()
 posterior = forward.fit(data, key=key_fit, init_from=map_result, **hmc_kwargs)
-print(f"  HMC wall (adapt + sample; 4 chains × 300 = 1200 draws): {time.perf_counter() - t:6.2f} s")
+print(
+    f"  HMC wall (adapt + sample; 4 chains × 300 = 1200 draws): {time.perf_counter() - t:6.2f} s"
+)
 posterior.summary()
 
 # Convergence: read R̂ together with the divergence count — divergent
@@ -445,6 +450,7 @@ fig.savefig(FIG_DIR / "00_posterior_sed.pdf", bbox_inches="tight")
 
 # %% [markdown]
 # ## Star-formation history
+
 
 # %%
 def sfh(p):

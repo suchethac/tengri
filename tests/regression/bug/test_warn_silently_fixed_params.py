@@ -10,7 +10,7 @@ import warnings
 
 import pytest
 
-from tengri import FIXED, FREE, Fixed
+from tengri import DEFAULT, FREE, Fixed
 from tengri.config.exceptions import DefaultFixedParametersWarning
 from tengri.parameters import parse_groups
 
@@ -25,7 +25,7 @@ class TestSilentlyFixedParametersWarning:
         with warnings.catch_warnings(record=True) as w:
             warnings.simplefilter("always")
             params = parse_groups(
-                sfh={"type": "dpl"},  # no 'all_params' → silent FIXED
+                sfh={"type": "dpl"},  # no 'all_params' → silently fixed
                 redshift=0.5,
             )
 
@@ -43,11 +43,11 @@ class TestSilentlyFixedParametersWarning:
             assert "=" in message  # param=value format
 
     def test_no_warn_with_explicit_all_params_fixed(self):
-        """Don't warn when user explicitly states 'all_params': FIXED."""
+        """Don't warn when user explicitly states 'all_params': Fixed(DEFAULT)."""
         with warnings.catch_warnings(record=True) as w:
             warnings.simplefilter("always", DefaultFixedParametersWarning)
             params = parse_groups(
-                sfh={"type": "dpl", "all_params": FIXED},  # explicit FIXED
+                sfh={"type": "dpl", "all_params": Fixed(DEFAULT)},  # explicit Fixed(DEFAULT)
                 redshift=0.5,
             )
 
@@ -122,7 +122,10 @@ class TestSilentlyFixedParametersWarning:
             # Should suggest the fix
             assert "all_params" in message.lower()
             has_disposition_hint = (
-                "FREE" in message or "free" in message or "FIXED" in message or "fixed" in message
+                "FREE" in message
+                or "free" in message
+                or "Fixed(DEFAULT)" in message
+                or "fixed" in message
             )
             assert has_disposition_hint
 
@@ -150,24 +153,24 @@ class TestSilentlyFixedParametersWarning:
             assert not_groups_internals
 
     def test_model_behavior_unchanged(self):
-        """n_free and predictions are identical with explicit FIXED."""
-        # Build with implicit default-FIXED
+        """n_free and predictions are identical with explicit Fixed(DEFAULT)."""
+        # Build with implicit default-fixed
         with warnings.catch_warnings():
             warnings.simplefilter("ignore")
             params_implicit = parse_groups(
-                sfh={"type": "dpl"},  # implicit FIXED
-                dust_attenuation={"type": "single_component", "law": "calzetti"},  # implicit FIXED
+                sfh={"type": "dpl"},  # implicit fixed
+                dust_attenuation={"type": "single_component", "law": "calzetti"},  # implicit fixed
                 redshift=0.5,
             )
 
-        # Build with explicit FIXED
+        # Build with explicit Fixed(DEFAULT)
         params_explicit = parse_groups(
-            sfh={"type": "dpl", "all_params": FIXED},  # explicit FIXED
+            sfh={"type": "dpl", "all_params": Fixed(DEFAULT)},  # explicit Fixed(DEFAULT)
             dust_attenuation={
                 "type": "single_component",
                 "law": "calzetti",
-                "all_params": FIXED,
-            },  # explicit FIXED
+                "all_params": Fixed(DEFAULT),
+            },  # explicit Fixed(DEFAULT)
             redshift=0.5,
         )
 
@@ -211,8 +214,8 @@ class TestDefect1GroupAttribution:
 
         When there's no explicit met={} block, met_* parameters fall into the
         sfh group as a fallback grouping (#311). The warning should NOT
-        attribute them to sfh group, since sfh={'all_params': FIXED} is not
-        the correct remedy for a warning about met_* parameters.
+        attribute them to sfh group, since sfh={'all_params': Fixed(DEFAULT)}
+        is not the correct remedy for a warning about met_* parameters.
         """
         with warnings.catch_warnings(record=True) as w:
             warnings.simplefilter("always")

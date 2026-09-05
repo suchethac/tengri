@@ -22,7 +22,7 @@ import jax
 import pytest
 
 import tengri
-from tengri import FIXED, SEDModel
+from tengri import DEFAULT, SEDModel
 from tengri.components.stellar.sps.dsps_wrapper import load_ssp_data
 from tengri.observation import Observation, Photometry
 from tengri.parameters.priors import Fixed
@@ -101,8 +101,12 @@ def test_baseline_without_dust_emission_bakes_almost_nothing(ssp, obs):
         model = SEDModel.build(
             ssp_data=ssp,
             observation=obs,
-            sfh={"type": "dpl", "all_params": FIXED},
-            dust_attenuation={"law": "power_law", "type": "two_component", "all_params": FIXED},
+            sfh={"type": "dpl", "all_params": Fixed(DEFAULT)},
+            dust_attenuation={
+                "law": "power_law",
+                "type": "two_component",
+                "all_params": Fixed(DEFAULT),
+            },
             redshift=Fixed(0.1),
         )
     baked = _traced_baked_mb(model)
@@ -118,11 +122,11 @@ def test_dust_emission_template_threads_as_argument(ssp, obs, emission):
             model = SEDModel.build(
                 ssp_data=ssp,
                 observation=obs,
-                sfh={"type": "dpl", "all_params": FIXED},
+                sfh={"type": "dpl", "all_params": Fixed(DEFAULT)},
                 dust_attenuation={
                     "law": "power_law",
                     "type": "two_component",
-                    "all_params": FIXED,
+                    "all_params": Fixed(DEFAULT),
                 },
                 dust_emission={"type": emission},
                 redshift=Fixed(0.1),

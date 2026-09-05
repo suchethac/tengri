@@ -42,7 +42,7 @@ import jax.numpy as jnp
 import numpy as np
 import pytest
 
-from tengri import FIXED, Fixed, Observation, Photometry, SEDModel, Uniform
+from tengri import DEFAULT, Fixed, Observation, Photometry, SEDModel, Uniform
 from tengri.forward.sed_model import FeaturePrecomp, WavePrecomp
 
 pytestmark = pytest.mark.regression_bug
@@ -50,7 +50,7 @@ pytestmark = pytest.mark.regression_bug
 _BASE = dict(
     sfh={
         "type": "delayed",
-        "all_params": FIXED,
+        "all_params": Fixed(DEFAULT),
         "log_total_mass": Uniform(9.0, 11.0),
         "tau_gyr": 1.0,
         "age_gyr": 5.0,
@@ -64,17 +64,17 @@ _BASE = dict(
 _DUST = {
     "type": "two_component",
     "law": "calzetti",
-    "all_params": FIXED,
+    "all_params": Fixed(DEFAULT),
     "tau_diff": Uniform(0.0, 1.5),
     "tau_bc": 0.0,
 }
-_DUST_EMISSION = {"type": "dale2014", "all_params": FIXED}
+_DUST_EMISSION = {"type": "dale2014", "all_params": Fixed(DEFAULT)}
 
 _AGN = {
     "type": "composable",
-    "all_params": FIXED,
-    "disc": {"type": "multicolor", "all_params": FIXED},
-    "torus": {"type": "skirtor", "all_params": FIXED},
+    "all_params": Fixed(DEFAULT),
+    "disc": {"type": "multicolor", "all_params": Fixed(DEFAULT)},
+    "torus": {"type": "skirtor", "all_params": Fixed(DEFAULT)},
     "norm": "cigale_joint",
     "log_lbol": Fixed(10.5),  # #2069: pinned to break flat direction
     "fracAGN": 0.1,
@@ -87,18 +87,18 @@ _MODELS = {
     "cue": dict(
         dust_attenuation=_DUST,
         dust_emission=_DUST_EMISSION,
-        neb={"type": "cue", "all_params": FIXED},
+        neb={"type": "cue", "all_params": Fixed(DEFAULT)},
     ),
     "cue_shock": dict(
         dust_attenuation=_DUST,
         dust_emission=_DUST_EMISSION,
-        neb={"type": "cue", "all_params": FIXED},
+        neb={"type": "cue", "all_params": Fixed(DEFAULT)},
         shock={"frac": 0.1},
     ),
     "cue_agn": dict(
         dust_attenuation=_DUST,
         dust_emission=_DUST_EMISSION,
-        neb={"type": "cue", "all_params": FIXED},
+        neb={"type": "cue", "all_params": Fixed(DEFAULT)},
         agn=_AGN,
     ),
 }
@@ -223,7 +223,7 @@ def test_the_grid_still_serves_photometry_when_nothing_consumes_the_continuum(ss
     model = _build(
         ssp_data_fsps,
         obs,
-        dict(dust_attenuation={"type": "none"}, neb={"type": "cue", "all_params": FIXED}),
+        dict(dust_attenuation={"type": "none"}, neb={"type": "cue", "all_params": Fixed(DEFAULT)}),
         (WavePrecomp(), FeaturePrecomp()),
     )
     neb = [c for c in model._cached_component_chain if isinstance(c, NebularSEDComponent)]
@@ -256,8 +256,8 @@ def test_every_dust_law_is_seen_as_a_nebular_consumer(ssp_data_fsps, obs, dust_t
         ssp_data_fsps,
         obs,
         dict(
-            dust_attenuation={"law": "power_law", "type": dust_type, "all_params": FIXED},
-            neb={"type": "cue", "all_params": FIXED},
+            dust_attenuation={"law": "power_law", "type": dust_type, "all_params": Fixed(DEFAULT)},
+            neb={"type": "cue", "all_params": Fixed(DEFAULT)},
         ),
         None,
     )

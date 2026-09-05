@@ -140,7 +140,7 @@ def _mass_model(ssp_real, mass_prior):
         observation=Observation(photometry=Photometry.from_names(list(BANDS))),
         sfh={
             "type": "tsnorm",
-            "all_params": tengri.FIXED,
+            "all_params": tengri.Fixed(tengri.DEFAULT),
             "log_total_mass": mass_prior,
             "peak_lbt_gyr": Uniform(1.0, 6.0),
             "width_gyr": Uniform(1.0, 3.0),
@@ -152,7 +152,7 @@ def _mass_model(ssp_real, mass_prior):
             # #1989: attenuation laws are explicit — 'law' applies one curve
             # to both screens, matching this test's pre-#1989 implicit default.
             "law": "calzetti",
-            "all_params": tengri.FIXED,
+            "all_params": tengri.Fixed(tengri.DEFAULT),
             "tau_diff": Uniform(0.0, 0.6),
             "tau_bc": Uniform(0.0, 0.8),
         },

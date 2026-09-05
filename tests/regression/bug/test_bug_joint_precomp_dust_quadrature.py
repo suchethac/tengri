@@ -50,7 +50,7 @@ import jax.numpy as jnp
 import pytest
 
 from tengri import (
-    FIXED,
+    DEFAULT,
     Fixed,
     Observation,
     Photometry,
@@ -93,13 +93,13 @@ def _build(ssp, obs, approx, *, tau_diff=1.5, z=0.05):
         return SEDModel.build(
             ssp_data=ssp,
             observation=obs,
-            sfh={"type": "dpl", "all_params": FIXED},
+            sfh={"type": "dpl", "all_params": Fixed(DEFAULT)},
             # Diffuse-only: isolates the screen quadrature from the birth-cloud
             # LUT residual (#617).
             dust_attenuation={
                 "type": "two_component",
                 "law": "calzetti",
-                "all_params": FIXED,
+                "all_params": Fixed(DEFAULT),
                 "tau_bc": 0.0,
                 "tau_diff": tau_diff,
             },

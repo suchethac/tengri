@@ -45,11 +45,11 @@ ssp = tengri.load_ssp()
 
 # Suppress stellar/nebular component so the AGN SED is unambiguous.
 COMMON = dict(
-    sfh={"type": "const", "all_params": tengri.FIXED, "log_total_mass": -30.0},
+    sfh={"type": "const", "all_params": tengri.Fixed(tengri.DEFAULT), "log_total_mass": -30.0},
     dust_attenuation={
         "law": "power_law",
         "type": "two_component",
-        "all_params": tengri.FIXED,
+        "all_params": tengri.Fixed(tengri.DEFAULT),
         "tau_diff": 0.0,
         "tau_bc": 0.0,
     },
@@ -59,25 +59,25 @@ COMMON = dict(
 # AGN: multicolor disc + SKIRTOR torus + polar-dust attenuation.
 # Make agn_polar_ebv and agn_cos_inc FREE so we can sweep them at predict time.
 AGN = {
-    "disc": {"type": "multicolor", "all_params": tengri.FIXED},
+    "disc": {"type": "multicolor", "all_params": tengri.Fixed(tengri.DEFAULT)},
     "torus": {
         "type": "skirtor",
-        "all_params": tengri.FIXED,
+        "all_params": tengri.Fixed(tengri.DEFAULT),
         "tau_skirtor": 7.0,
-        # A Distribution at per-param level overrides the wildcard and makes
-        # the parameter FREE (a bare FREE sentinel is swallowed by '*: FIXED').
+        # A per-param entry overrides the wildcard: a Distribution sets your
+        # own prior; FREE frees the parameter with its registry default prior.
         # #1980: sub-block params nest under their owner — cos_inc is a torus
         # parameter, polar_ebv an atten one; writing them flat now raises.
         "cos_inc": tengri.Uniform(0.0, 1.0),
     },
-    "nlr": {"type": "none", "all_params": tengri.FIXED},
-    "blr": {"type": "none", "all_params": tengri.FIXED},
+    "nlr": {"type": "none", "all_params": tengri.Fixed(tengri.DEFAULT)},
+    "blr": {"type": "none", "all_params": tengri.Fixed(tengri.DEFAULT)},
     "atten": {
         "type": "polar_dust",
-        "all_params": tengri.FIXED,
+        "all_params": tengri.Fixed(tengri.DEFAULT),
         "polar_ebv": tengri.Uniform(0.0, 0.5),
     },
-    "all_params": tengri.FIXED,
+    "all_params": tengri.Fixed(tengri.DEFAULT),
     "log_lbol": 12.0,
     "lum_ratio": 1.0,  # without this the AGN is multiplied by 0 (default)
 }

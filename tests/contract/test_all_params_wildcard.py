@@ -14,7 +14,7 @@ Validates that:
 import pytest
 
 from tengri import (
-    FIXED,
+    DEFAULT,
     FREE,
     Fixed,
     SEDModel,
@@ -34,12 +34,12 @@ BUILDER_VARIANTS = [
         id="sfh_dpl",
     ),
     pytest.param(
-        lambda: builders.dust.two_component(all_params=FIXED, law="calzetti"),
+        lambda: builders.dust.two_component(all_params=Fixed(DEFAULT), law="calzetti"),
         "dust.two_component",
         id="dust_two_component",
     ),
     pytest.param(
-        lambda: builders.neb.cue(all_params=FIXED),
+        lambda: builders.neb.cue(all_params=Fixed(DEFAULT)),
         "neb.cue",
         id="neb_cue",
     ),
@@ -56,11 +56,18 @@ class TestBuilderAllParams:
         assert sfh_dict["all_params"] is FREE
 
     def test_builder_all_params_with_override(self):
-        """Builder with all_params= and per-param overrides."""
-        sfh_dict = builders.sfh.dpl(all_params=FIXED, alpha=Uniform(0.5, 3.0))
+        """Builder with all_params= and per-param overrides.
+
+        A per-param override alongside the wildcard means the emitted dict
+        spells the wildcard ``other_params`` (placed last), not
+        ``all_params``: the emission convention, not an input restriction --
+        ``all_params=`` is still accepted on the call.
+        """
+        sfh_dict = builders.sfh.dpl(all_params=Fixed(DEFAULT), alpha=Uniform(0.5, 3.0))
         assert sfh_dict["type"] == "dpl"
-        assert sfh_dict["all_params"] is FIXED
+        assert sfh_dict["other_params"] == Fixed(DEFAULT)
         assert sfh_dict["alpha"] == Uniform(0.5, 3.0)
+        assert list(sfh_dict.keys())[-1] == "other_params"
 
     def test_builder_defaults_retired_raises(self):
         """Builder rejects retired defaults= with TypeError."""
@@ -108,29 +115,29 @@ class TestMultipleBuilderTypes:
     def test_all_builders_accept_all_params(self, builder_fn, name):
         """All builder types accept all_params= as canonical."""
         result = builder_fn()
-        assert result["all_params"] in (FREE, FIXED), f"{name} should have all_params key"
+        assert result["all_params"] in (FREE, Fixed(DEFAULT)), f"{name} should have all_params key"
 
     def test_dust_all_params_canonical(self):
         """dust.two_component accepts all_params= canonically."""
-        dust_dict = builders.dust.two_component(all_params=FIXED, law="calzetti")
+        dust_dict = builders.dust.two_component(all_params=Fixed(DEFAULT), law="calzetti")
         assert dust_dict["type"] == "two_component"
-        assert dust_dict["all_params"] is FIXED
+        assert dust_dict["all_params"] == Fixed(DEFAULT)
 
     def test_dust_defaults_retired_raises(self):
         """dust.two_component rejects retired defaults=."""
         with pytest.raises(TypeError, match=r"defaults=.*retired"):
-            builders.dust.two_component(defaults=FIXED, law="calzetti")
+            builders.dust.two_component(defaults=Fixed(DEFAULT), law="calzetti")
 
     def test_neb_all_params_canonical(self):
         """neb.cue accepts all_params= canonically."""
-        neb_dict = builders.neb.cue(all_params=FIXED)
+        neb_dict = builders.neb.cue(all_params=Fixed(DEFAULT))
         assert neb_dict["type"] == "cue"
-        assert neb_dict["all_params"] is FIXED
+        assert neb_dict["all_params"] == Fixed(DEFAULT)
 
     def test_neb_defaults_retired_raises(self):
         """neb.cue rejects retired defaults=."""
         with pytest.raises(TypeError, match=r"defaults=.*retired"):
-            builders.neb.cue(defaults=FIXED)
+            builders.neb.cue(defaults=Fixed(DEFAULT))
 
 
 class TestBuilderDictEquivalence:
@@ -157,13 +164,13 @@ class TestBuilderDictEquivalence:
         assert model_builder.spec.free_params == model_dict.spec.free_params
 
     def test_builder_and_dict_fixed_params_match(self, synthetic_ssp_wide, synthetic_tophat_obs):
-        """Models built via builder and dict have identical free_params (FIXED case)."""
+        """Models built via builder and dict have identical free_params (Fixed(DEFAULT) case)."""
         # Builder spelling
         model_builder = SEDModel.build(
             ssp_data=synthetic_ssp_wide,
             observation=synthetic_tophat_obs,
             redshift=Fixed(0.1),
-            sfh=builders.sfh.dpl(all_params=FIXED),
+            sfh=builders.sfh.dpl(all_params=Fixed(DEFAULT)),
         )
 
         # Dict spelling
@@ -171,7 +178,7 @@ class TestBuilderDictEquivalence:
             ssp_data=synthetic_ssp_wide,
             observation=synthetic_tophat_obs,
             redshift=Fixed(0.1),
-            sfh={"type": "dpl", "all_params": FIXED},
+            sfh={"type": "dpl", "all_params": Fixed(DEFAULT)},
         )
 
         assert model_builder.spec.free_params == model_dict.spec.free_params

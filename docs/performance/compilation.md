@@ -92,6 +92,30 @@ import tengri
 print(tengri.cache_size_bytes() / 1024**2, "MB")
 ```
 
+### Is the cap actually binding, and on what?
+
+A size alone cannot tell you whether to raise `TENGRI_JAX_CACHE_MAX_GB` or to
+raise `min_compile_time_secs`, because a full cache looks the same either way.
+`cache_stats()` separates them:
+
+```python
+from tengri.utils.jax_cache import cache_stats
+
+s = cache_stats()
+print(s["fraction_of_cap"])                       # is the cap reached at all
+print(s["top100_bytes"] / s["total_bytes"])       # a few big modules, or many small ones
+print(s["n_entries_under_64kb"], s["bytes_under_64kb"])
+```
+
+Measured on a four-worktree development box at 99.0 % of an 8 GiB cap
+(`bench/reports/2026-08-31_fast_nuts.md`): 1 585 of 2 284 entries were under
+64 KB and together held **0.11 %** of the bytes, while the largest **100 entries
+held 79.2 %** and the single largest was 124.8 MB. The cap there is reached by a
+few dozen compiled samplers, not by the per-filter micro-kernels
+`min_compile_time_secs = 0.05` deliberately persists — so raising that threshold
+would have freed nothing, and the cap is the knob that matters. Read your own
+numbers before choosing; the ratio is a property of your models, not of tengri.
+
 ## Use cases
 
 - **Notebook iteration.** Restart kernel → cache hit → first cell of a

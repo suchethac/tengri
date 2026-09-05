@@ -279,7 +279,7 @@ PARAMS = {"sfh_delayed_log_total_mass": 10.0, "dust_tau_diff": 0.5}
 
 
 def _build_chain(ssp, with_cue):
-    from tengri import FIXED, Fixed, SEDModel, Uniform
+    from tengri import DEFAULT, Fixed, SEDModel, Uniform
     from tengri.observation import Observation, Photometry
 
     groups = dict(
@@ -289,7 +289,7 @@ def _build_chain(ssp, with_cue):
         ),
         sfh={
             "type": "delayed",
-            "all_params": FIXED,
+            "all_params": Fixed(DEFAULT),
             "log_total_mass": Uniform(9.0, 11.0),
             "tau_gyr": 1.5,
             "age_gyr": 5.0,
@@ -297,7 +297,7 @@ def _build_chain(ssp, with_cue):
         dust_attenuation={
             "type": "two_component",
             "law": "calzetti",
-            "all_params": FIXED,
+            "all_params": Fixed(DEFAULT),
             "tau_diff": Uniform(0.0, 1.5),
             "tau_bc": 0.3,
         },
@@ -305,7 +305,7 @@ def _build_chain(ssp, with_cue):
         approx=None,
     )
     if with_cue:
-        groups["neb"] = {"type": "cue", "all_params": FIXED}
+        groups["neb"] = {"type": "cue", "all_params": Fixed(DEFAULT)}
     return SEDModel.build(**groups)
 
 

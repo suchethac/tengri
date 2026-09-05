@@ -109,7 +109,7 @@ surface brightness; Sandage (1988) on K-corrections as pedagogical tools.
         observation=obs,
         sfh={
             "type": "tsnorm",  # Truncated normal SFH (analytic burst)
-            "all_params": tengri.FIXED,
+            "all_params": tengri.Fixed(tengri.DEFAULT),
             "log_total_mass": 10.0,  # peak SFR = 10 Msun/yr
             "peak_lbt_gyr": 0.5,  # peak at age = 0.5 Gyr lookback time
             "width_gyr": 0.2,  # narrow gaussian → bursty
@@ -119,12 +119,12 @@ surface brightness; Sandage (1988) on K-corrections as pedagogical tools.
         dust_attenuation={
             "law": "power_law",
             "type": "two_component",  # Adopted dust attenuation
-            "all_params": tengri.FIXED,
+            "all_params": tengri.Fixed(tengri.DEFAULT),
             "tau_diff": 0.3,  # diffuse attenuation optical depth
             "tau_bc": 0.5,  # birth-cloud attenuation
             "slope": -0.7,  # Calzetti-like slope
         },
-        redshift=tengri.FIXED,  # Will vary manually
+        redshift=tengri.Fixed(tengri.DEFAULT),  # Will vary manually
     )
 
     # Sample baseline parameters once (deterministic)
@@ -146,7 +146,7 @@ surface brightness; Sandage (1988) on K-corrections as pedagogical tools.
             observation=obs,
             sfh={
                 "type": "tsnorm",
-                "all_params": tengri.FIXED,
+                "all_params": tengri.Fixed(tengri.DEFAULT),
                 "log_total_mass": 10.0,
                 "peak_lbt_gyr": 0.5,
                 "width_gyr": 0.2,
@@ -156,7 +156,7 @@ surface brightness; Sandage (1988) on K-corrections as pedagogical tools.
             dust_attenuation={
                 "law": "power_law",
                 "type": "two_component",
-                "all_params": tengri.FIXED,
+                "all_params": tengri.Fixed(tengri.DEFAULT),
                 "tau_diff": 0.3,
                 "tau_bc": 0.5,
                 "slope": -0.7,
@@ -208,7 +208,7 @@ surface brightness; Sandage (1988) on K-corrections as pedagogical tools.
 
 .. rst-class:: sphx-glr-timing
 
-   **Total running time of the script:** (0 minutes 4.974 seconds)
+   **Total running time of the script:** (0 minutes 4.008 seconds)
 
 
 .. _sphx_glr_download_auto_examples_photometry_plot_cosmic_dimming_observed_flux.py:

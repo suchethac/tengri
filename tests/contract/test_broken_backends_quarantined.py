@@ -49,8 +49,22 @@ KNOWN_BROKEN = {
     "mcmc_mclmc",
     "native_vi_linear",
     "native_vi_nonlinear",
-    "pathfinder",
 }
+
+#: ``pathfinder`` left this set on 2026-08-31, and the reason is worth keeping
+#: beside the set rather than only in a report. Its quarantine rested on
+#: ``scripts/validate_backends_231.py`` labeling every childless subprocess
+#: ``"SegfaultOrAbort"`` -- **it never read the return code**. The same file's
+#: stored results (``scripts/_backend_validation_results.json``) record the two
+#: ``native_vi_*`` rows on the dpl mock as ``status: "timeout"``, so two of the
+#: five entries above still cite evidence that says something other than
+#: "segfaults". The two real defects on the Pathfinder path were a blackjax
+#: >= 1.4 ``AttributeError`` (``4c1002ae7``) and uncapped ELBO draws at 26 GB
+#: (``8807c838d``), both fixed six and seven weeks after the quarantine, in PRs
+#: about other things, and neither propagated back to the tier. Measured clean
+#: on the same model family in
+#: ``bench/reports/2026-08-31_vi_speed_evaluation.md``.
+
 
 #: Markers a backend uses to declare itself unusable.
 SELF_FLAGS = ("[UNSTABLE]", "[POOR MIXING]", "Do not use")

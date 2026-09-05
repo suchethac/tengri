@@ -32,13 +32,13 @@ import jax.numpy as jnp
 import numpy as np
 import pytest
 
-from tengri import FIXED, Fixed, Observation, Photometry, SEDModel, Uniform
+from tengri import DEFAULT, Fixed, Observation, Photometry, SEDModel, Uniform
 
 pytestmark = pytest.mark.regression_bug
 
 _SFH = {
     "type": "delayed",
-    "all_params": FIXED,
+    "all_params": Fixed(DEFAULT),
     "log_total_mass": Uniform(9.0, 11.0),
     "tau_gyr": 1.0,
     "age_gyr": 5.0,
@@ -46,11 +46,11 @@ _SFH = {
 _DUST = {
     "type": "two_component",
     "law": "calzetti",
-    "all_params": FIXED,
+    "all_params": Fixed(DEFAULT),
     "tau_diff": 0.3,
     "tau_bc": 0.0,
 }
-_DISC = {"type": "multicolor", "all_params": FIXED}
+_DISC = {"type": "multicolor", "all_params": Fixed(DEFAULT)}
 
 
 def _params(dtype):
@@ -74,15 +74,15 @@ def _model(ssp, agn=None):
 _AGN_CASES = {
     "no_torus": {
         "type": "composable",
-        "all_params": FIXED,
+        "all_params": Fixed(DEFAULT),
         "disc": _DISC,
         "log_lbol": Uniform(9.0, 12.0),
     },
     "skirtor": {
         "type": "composable",
-        "all_params": FIXED,
+        "all_params": Fixed(DEFAULT),
         "disc": _DISC,
-        "torus": {"type": "skirtor", "all_params": FIXED},
+        "torus": {"type": "skirtor", "all_params": Fixed(DEFAULT)},
         "log_lbol": Uniform(9.0, 12.0),
     },
 }

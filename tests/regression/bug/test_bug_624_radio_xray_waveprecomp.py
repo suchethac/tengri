@@ -42,7 +42,7 @@ def _ssp_or_skip():
 def test_radio_xray_in_waveprecomp(group, band_wave, fam):
     import warnings
 
-    from tengri import FIXED, Fixed, Observation, Photometry, SEDModel, WavePrecomp
+    from tengri import DEFAULT, Fixed, Observation, Photometry, SEDModel, WavePrecomp
     from tengri.observation.photometry import FilterCurve
     from tengri.parameters.groups import _valid_radio_types, _valid_xray_types
 
@@ -68,8 +68,12 @@ def test_radio_xray_in_waveprecomp(group, band_wave, fam):
     )
     obs = Observation(photometry=Photometry(filters=filt))
     base = dict(
-        sfh={"type": "dpl", "all_params": FIXED},
-        dust_attenuation={"type": "two_component", "law": "calzetti", "all_params": FIXED},
+        sfh={"type": "dpl", "all_params": Fixed(DEFAULT)},
+        dust_attenuation={
+            "type": "two_component",
+            "law": "calzetti",
+            "all_params": Fixed(DEFAULT),
+        },
         neb={"type": "none"},
     )
     # #1980: the radio menu's {'type': name} spelling is retired — resolve the
@@ -79,10 +83,14 @@ def test_radio_xray_in_waveprecomp(group, band_wave, fam):
         from tengri.parameters.groups import _legacy_radio_type_to_blocks
 
         sf_variant, agn_variant = _legacy_radio_type_to_blocks(gtype)
-        radio_cfg = {"sf": {"type": sf_variant}, "agn": {"type": agn_variant}, "all_params": FIXED}
+        radio_cfg = {
+            "sf": {"type": sf_variant},
+            "agn": {"type": agn_variant},
+            "all_params": Fixed(DEFAULT),
+        }
         groups = dict(base, radio=radio_cfg)
     else:
-        groups = dict(base, **{group: {"type": gtype, "all_params": FIXED}})
+        groups = dict(base, **{group: {"type": gtype, "all_params": Fixed(DEFAULT)}})
     with warnings.catch_warnings():
         warnings.simplefilter("ignore")
         m_exact = SEDModel.build(

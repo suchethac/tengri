@@ -45,9 +45,9 @@ Swap any one into a full model with ``agn={'disc': {'type': <name>}}``.
 
  .. code-block:: none
 
-    /tengri/src/tengri/parameters/parameters.py:699: RecipeWarning: Composable AGN: agn_log_mbh with the 'slone_netzer' disc block — the fixed value 7 lies outside the grid extent [7.4, 9.8], so it is clipped onto the nearest edge node. The SED there is bit-identical to the edge node and the gradient is exactly zero, so a fit cannot move it. Narrow agn_log_mbh to [7.4, 9.8], or select a disc block with no template grid.
+    /tengri/src/tengri/parameters/parameters.py:701: RecipeWarning: Composable AGN: agn_log_mbh with the 'slone_netzer' disc block: the fixed value 7 lies outside the grid extent [7.4, 9.8], so it is clipped onto the nearest edge node. The SED there is bit-identical to the edge node and the gradient is exactly zero, so a fit cannot move it. Narrow agn_log_mbh to [7.4, 9.8], or select a disc block with no template grid.
       validate_block_recipe(
-    /tengri/src/tengri/parameters/parameters.py:699: RecipeWarning: Composable AGN: agn_log_ledd with the 'slone_netzer' disc block — the fixed value -1 lies outside the grid extent [-4, -1.95861], so it is clipped onto the nearest edge node. The SED there is bit-identical to the edge node and the gradient is exactly zero, so a fit cannot move it. Narrow agn_log_ledd to [-4, -1.95861], or select a disc block with no template grid.
+    /tengri/src/tengri/parameters/parameters.py:701: RecipeWarning: Composable AGN: agn_log_ledd with the 'slone_netzer' disc block: the fixed value -1 lies outside the grid extent [-4, -1.95861], so it is clipped onto the nearest edge node. The SED there is bit-identical to the edge node and the gradient is exactly zero, so a fit cannot move it. Narrow agn_log_ledd to [-4, -1.95861], or select a disc block with no template grid.
       validate_block_recipe(
 
 
@@ -96,11 +96,11 @@ Swap any one into a full model with ``agn={'disc': {'type': <name>}}``.
     COLORS = plt.cm.tab20(np.linspace(0, 1, 20))[: len(DISC_MODELS)]
 
     C_AA_PER_S = 2.998e18
-    SFH = {"type": "const", "all_params": tengri.FIXED, "log_total_mass": -10.0}
+    SFH = {"type": "const", "all_params": tengri.Fixed(tengri.DEFAULT), "log_total_mass": -10.0}
     DUST = {
         "law": "power_law",
         "type": "two_component",
-        "all_params": tengri.FIXED,
+        "all_params": tengri.Fixed(tengri.DEFAULT),
         "tau_diff": 0.0,
         "tau_bc": 0.0,
     }
@@ -120,8 +120,8 @@ Swap any one into a full model with ``agn={'disc': {'type': <name>}}``.
             sfh=SFH,
             dust_attenuation=DUST,
             agn={
-                "disc": {"type": disc, "all_params": tengri.FIXED},
-                "all_params": tengri.FIXED,
+                "disc": {"type": disc, "all_params": tengri.Fixed(tengri.DEFAULT)},
+                "all_params": tengri.Fixed(tengri.DEFAULT),
                 "log_lbol": 12.5,
                 "lum_ratio": 1.0,
             },
@@ -151,7 +151,7 @@ Swap any one into a full model with ``agn={'disc': {'type': <name>}}``.
 
 .. rst-class:: sphx-glr-timing
 
-   **Total running time of the script:** (0 minutes 14.796 seconds)
+   **Total running time of the script:** (0 minutes 6.373 seconds)
 
 
 .. _sphx_glr_download_auto_examples_agn_plot_agn_disc_compare.py:

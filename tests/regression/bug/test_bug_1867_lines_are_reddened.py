@@ -42,7 +42,7 @@ import pytest
 pytestmark = pytest.mark.regression_bug
 
 import tengri
-from tengri import FIXED, Fixed, Observation, Photometry, SEDModel, Uniform
+from tengri import DEFAULT, Fixed, Observation, Photometry, SEDModel, Uniform
 from tengri.observation.photometry import FilterCurve
 
 HALPHA_AA = 6564.72
@@ -103,7 +103,7 @@ def model(ssp_bare, observation):
         # this redshift and re-triggers the same truncation.
         sfh={
             "type": "const",
-            "all_params": FIXED,
+            "all_params": Fixed(DEFAULT),
             "log_total_mass": 10.0,
             "start_gyr": 10.0,
             "end_gyr": 0.0,
@@ -115,7 +115,7 @@ def model(ssp_bare, observation):
             "tau_bc": Uniform(0.1, 1.0),
             "tau_diff": Uniform(0.1, 3.0),
         },
-        neb={"type": "cue", "all_params": FIXED},
+        neb={"type": "cue", "all_params": Fixed(DEFAULT)},
         redshift=Fixed(0.05),
     )
 
@@ -355,7 +355,7 @@ def test_every_public_line_surface_shares_one_screen(ssp_bare, observation, law)
         observation=observation,
         sfh={
             "type": "const",
-            "all_params": FIXED,
+            "all_params": Fixed(DEFAULT),
             "log_total_mass": 10.0,
             "start_gyr": 10.0,
             "end_gyr": 0.0,
@@ -367,7 +367,7 @@ def test_every_public_line_surface_shares_one_screen(ssp_bare, observation, law)
             "tau_bc": Uniform(0.1, 1.0),
             "tau_diff": Uniform(0.1, 3.0),
         },
-        neb={"type": "cue", "all_params": FIXED},
+        neb={"type": "cue", "all_params": Fixed(DEFAULT)},
         redshift=Fixed(0.05),
     )
     params = dict(model.spec.sample(jax.random.PRNGKey(0)))

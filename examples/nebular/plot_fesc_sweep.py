@@ -45,7 +45,7 @@ model = tengri.SEDModel.build(
     ssp,
     sfh={
         "type": "dpl",
-        "all_params": tengri.FIXED,
+        "all_params": tengri.Fixed(tengri.DEFAULT),
         "alpha": 1.0,
         "beta": 2.5,
         "tau_gyr": 0.3,
@@ -54,11 +54,15 @@ model = tengri.SEDModel.build(
     dust_attenuation={
         "law": "power_law",
         "type": "two_component",
-        "all_params": tengri.FIXED,
+        "all_params": tengri.Fixed(tengri.DEFAULT),
         "tau_diff": 0.0,
         "tau_bc": 0.0,
     },
-    neb={"type": "cue", "all_params": tengri.FIXED, "fesc": tengri.Uniform(0.0, 1.0)},
+    neb={
+        "type": "cue",
+        "all_params": tengri.Fixed(tengri.DEFAULT),
+        "fesc": tengri.Uniform(0.0, 1.0),
+    },
     redshift=tengri.Fixed(0.05),
 )
 baseline = dict(model.spec.sample(jax.random.PRNGKey(0)))

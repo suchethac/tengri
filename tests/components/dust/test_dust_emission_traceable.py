@@ -26,7 +26,7 @@ import jax
 import jax.numpy as jnp
 import pytest
 
-from tengri import FIXED, Fixed, SEDModel
+from tengri import DEFAULT, Fixed, SEDModel
 from tengri.observation import Observation, Photometry
 from tengri.observation.photometry import FilterCurve
 
@@ -63,15 +63,15 @@ def _build(ssp, obs, emission_type):
     return SEDModel.build(
         ssp_data=ssp,
         observation=obs,
-        sfh={"type": "dpl", "all_params": FIXED},
+        sfh={"type": "dpl", "all_params": Fixed(DEFAULT)},
         dust_attenuation={
             "type": "two_component",
             "law": "calzetti",
-            "all_params": FIXED,
+            "all_params": Fixed(DEFAULT),
             "tau_bc": _TAU_BC,
             "tau_diff": _TAU_DIFF,
         },
-        dust_emission={"type": emission_type, "all_params": FIXED},
+        dust_emission={"type": emission_type, "all_params": Fixed(DEFAULT)},
         neb={"type": "none"},
         redshift=Fixed(0.5),
     )

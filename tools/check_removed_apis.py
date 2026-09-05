@@ -45,6 +45,7 @@ import ast
 import json
 import re
 import sys
+from collections.abc import Sequence
 from pathlib import Path
 
 REPO_ROOT = Path(__file__).resolve().parent.parent
@@ -198,7 +199,7 @@ def iter_files(roots):
             yield path
 
 
-def main() -> int:
+def main(argv: Sequence[str] | None = None) -> int:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument(
         "--root",
@@ -207,7 +208,7 @@ def main() -> int:
         help="Repository-relative path to scan (repeatable). "
         f"Defaults: {', '.join(DEFAULT_ROOTS)}.",
     )
-    args = parser.parse_args()
+    args = parser.parse_args(argv)
 
     violations = []
     for path in iter_files(args.roots or list(DEFAULT_ROOTS)):

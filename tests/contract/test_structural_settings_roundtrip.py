@@ -32,7 +32,7 @@ proves the *next* key cannot be added without one.
 import numpy as np
 import pytest
 
-from tengri import FIXED, Fixed
+from tengri import DEFAULT, Fixed
 from tengri.parameters.groups import (
     _GROUP_STRUCTURAL_KEYS,
     _STRUCTURAL_ROUNDTRIP,
@@ -57,13 +57,13 @@ pytestmark = pytest.mark.contract
 CASES = [
     (
         "sfh.age_kernel",
-        dict(sfh={"type": "dpl", "all_params": FIXED, "age_kernel": "dsps"}),
+        dict(sfh={"type": "dpl", "all_params": Fixed(DEFAULT), "age_kernel": "dsps"}),
         "age_kernel",
         "dsps",
     ),
     (
         "sfh.field_centering",
-        dict(sfh={"type": ["dpl", "field"], "all_params": FIXED, "field_centering": 0.5}),
+        dict(sfh={"type": ["dpl", "field"], "all_params": Fixed(DEFAULT), "field_centering": 0.5}),
         "field_centering",
         0.5,
     ),
@@ -75,7 +75,7 @@ CASES = [
         dict(
             sfh={
                 "type": "continuity",
-                "all_params": FIXED,
+                "all_params": Fixed(DEFAULT),
                 "bin_edges_gyr": [0.0, 0.03, 0.1, 0.3, 1.0, 3.0, 6.0, 13.0],
             }
         ),
@@ -85,8 +85,8 @@ CASES = [
     (
         "stellar.met_mode",
         dict(
-            sfh={"type": "dpl", "all_params": FIXED},
-            met={"type": "chem_evol", "all_params": FIXED},
+            sfh={"type": "dpl", "all_params": Fixed(DEFAULT)},
+            met={"type": "chem_evol", "all_params": Fixed(DEFAULT)},
         ),
         "met_mode",
         "chem_evol",
@@ -94,8 +94,8 @@ CASES = [
     (
         "dust_attenuation.dust_curve",
         dict(
-            sfh={"type": "dpl", "all_params": FIXED},
-            dust_attenuation={"type": "wg00", "all_params": FIXED, "dust_curve": "smc"},
+            sfh={"type": "dpl", "all_params": Fixed(DEFAULT)},
+            dust_attenuation={"type": "wg00", "all_params": Fixed(DEFAULT), "dust_curve": "smc"},
         ),
         "dust_wg00_curve",
         "smc",
@@ -103,8 +103,8 @@ CASES = [
     (
         "dust_attenuation.geometry",
         dict(
-            sfh={"type": "dpl", "all_params": FIXED},
-            dust_attenuation={"type": "wg00", "all_params": FIXED, "geometry": "dusty"},
+            sfh={"type": "dpl", "all_params": Fixed(DEFAULT)},
+            dust_attenuation={"type": "wg00", "all_params": Fixed(DEFAULT), "geometry": "dusty"},
         ),
         "dust_wg00_geometry",
         "dusty",
@@ -112,8 +112,8 @@ CASES = [
     (
         "dust_attenuation.structure",
         dict(
-            sfh={"type": "dpl", "all_params": FIXED},
-            dust_attenuation={"type": "wg00", "all_params": FIXED, "structure": "clumpy"},
+            sfh={"type": "dpl", "all_params": Fixed(DEFAULT)},
+            dust_attenuation={"type": "wg00", "all_params": Fixed(DEFAULT), "structure": "clumpy"},
         ),
         "dust_wg00_structure",
         "clumpy",
@@ -121,49 +121,54 @@ CASES = [
     (
         "neb.full_catalog",
         dict(
-            sfh={"type": "dpl", "all_params": FIXED},
-            neb={"type": "cue", "all_params": FIXED, "full_catalog": True},
+            sfh={"type": "dpl", "all_params": Fixed(DEFAULT)},
+            neb={"type": "cue", "all_params": Fixed(DEFAULT), "full_catalog": True},
         ),
         "cue_full_catalog",
         True,
     ),
     (
         "shock.norm",
-        dict(sfh={"type": "dpl", "all_params": FIXED}, shock={"norm": "lhalpha"}),
+        dict(sfh={"type": "dpl", "all_params": Fixed(DEFAULT)}, shock={"norm": "lhalpha"}),
         "shock_norm",
         "lhalpha",
     ),
     (
         "shock.abundance",
-        dict(sfh={"type": "dpl", "all_params": FIXED}, shock={"abundance": "twice_solar"}),
+        dict(
+            sfh={"type": "dpl", "all_params": Fixed(DEFAULT)}, shock={"abundance": "twice_solar"}
+        ),
         "shock_abundance",
         "twice_solar",
     ),
     (
         "igm.patchy",
-        dict(sfh={"type": "dpl", "all_params": FIXED}, igm={"type": "inoue", "patchy": True}),
+        dict(
+            sfh={"type": "dpl", "all_params": Fixed(DEFAULT)},
+            igm={"type": "inoue", "patchy": True},
+        ),
         "igm_patchy",
         True,
     ),
     (
         "agn.norm",
         dict(
-            sfh={"type": "dpl", "all_params": FIXED},
-            agn={"type": "composable", "all_params": FIXED, "norm": "independent"},
+            sfh={"type": "dpl", "all_params": Fixed(DEFAULT)},
+            agn={"type": "composable", "all_params": Fixed(DEFAULT), "norm": "independent"},
         ),
         "agn_norm",
         "independent",
     ),
     (
         "foreground.ebmv_mw",
-        dict(sfh={"type": "dpl", "all_params": FIXED}, foreground={"ebmv_mw": 0.07}),
+        dict(sfh={"type": "dpl", "all_params": Fixed(DEFAULT)}, foreground={"ebmv_mw": 0.07}),
         "foreground_ebmv_mw",
         0.07,
     ),
     (
         "foreground.rv",
         dict(
-            sfh={"type": "dpl", "all_params": FIXED},
+            sfh={"type": "dpl", "all_params": Fixed(DEFAULT)},
             foreground={"ebmv_mw": 0.07, "rv": 2.9},
         ),
         "foreground_rv",
@@ -222,7 +227,7 @@ def test_patchy_igm_reparses_instead_of_raising():
     rejected outright.
     """
     spec = parse_groups(
-        sfh={"type": "dpl", "all_params": FIXED},
+        sfh={"type": "dpl", "all_params": Fixed(DEFAULT)},
         igm={"type": "inoue", "patchy": True},
         redshift=Fixed(0.1),
     )
@@ -240,7 +245,7 @@ def test_default_spec_grows_no_spurious_groups():
     onto every spec, which breaks call sites that diff to_groups() output.
     """
     groups = parse_groups(
-        sfh={"type": "dpl", "all_params": FIXED}, redshift=Fixed(0.1)
+        sfh={"type": "dpl", "all_params": Fixed(DEFAULT)}, redshift=Fixed(0.1)
     ).to_groups()
     assert "foreground" not in groups
     assert "age_kernel" not in groups.get("sfh", {})
@@ -258,9 +263,11 @@ def test_every_structural_key_has_a_roundtrip_rule():
     """
     # Handled by _extract_group_type and the wildcard analyzer, not the table.
     # 'all_params' is the user-facing wildcard spelling; '*' is what the
-    # normalizer rewrites it to internally. Both are accepted by the analyzer,
-    # so neither needs a round-trip rule.
-    meta_keys = {"type", "*", "all_params"}
+    # normalizer rewrites it to internally; 'other_params' is the exact
+    # synonym _GROUP_STRUCTURAL_KEYS unions in alongside 'all_params' (see
+    # groups.py). All three are accepted by the analyzer, so none needs a
+    # round-trip rule of its own.
+    meta_keys = {"type", "*", "all_params", "other_params"}
     # Dust attenuation laws stay hand-written in _add_structural_settings:
     # law/law_bc/law_diff are an explicit XOR (never a default comparison:
     # the emit collapses to shared 'law' when both screens agree, else the
@@ -312,7 +319,7 @@ def test_roundtrip_table_targets_real_attributes():
     the default forever, so the key would silently never emit — the same
     failure the table exists to prevent, one layer down.
     """
-    spec = parse_groups(sfh={"type": "dpl", "all_params": FIXED}, redshift=Fixed(0.1))
+    spec = parse_groups(sfh={"type": "dpl", "all_params": Fixed(DEFAULT)}, redshift=Fixed(0.1))
     unknown = [
         f"{group}.{entry.key} -> {entry.attr}"
         for group, entries in _STRUCTURAL_ROUNDTRIP.items()

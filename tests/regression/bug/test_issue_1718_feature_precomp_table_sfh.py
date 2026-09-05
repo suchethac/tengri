@@ -106,7 +106,7 @@ def test_a_tabulated_metallicity_also_gets_a_stand_in_on_the_same_axis():
 
 
 def _build(ssp, obs, *, met_mode, approx):
-    from tengri import FIXED, SEDModel
+    from tengri import DEFAULT, SEDModel
     from tengri.parameters.priors import Fixed, Uniform
 
     met = {"type": "table"} if met_mode == "table" else {"logzsol": Uniform(-2.0, 0.4)}
@@ -119,11 +119,15 @@ def _build(ssp, obs, *, met_mode, approx):
             met=met,
             neb={
                 "type": "cue",
-                "all_params": FIXED,
+                "all_params": Fixed(DEFAULT),
                 "logU": Uniform(-4.0, -1.0),
                 "logZ_gas": Uniform(-1.5, 0.3),
             },
-            dust_attenuation={"law": "power_law", "type": "two_component", "all_params": FIXED},
+            dust_attenuation={
+                "law": "power_law",
+                "type": "two_component",
+                "all_params": Fixed(DEFAULT),
+            },
             redshift=Fixed(0.1),
             approx=approx,
         )

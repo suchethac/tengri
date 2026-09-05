@@ -42,9 +42,12 @@ Add new exceptions with a one-line justification — never to silence a genuine
 British spelling in tengri's own code.
 """
 
+from __future__ import annotations
+
 import argparse
 import re
 import sys
+from collections.abc import Sequence
 from pathlib import Path
 
 REPO_ROOT = Path(__file__).resolve().parent.parent
@@ -601,7 +604,7 @@ def iter_files(roots):
             yield path
 
 
-def main() -> int:
+def main(argv: Sequence[str] | None = None) -> int:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument(
         "--root",
@@ -615,7 +618,7 @@ def main() -> int:
         action="store_true",
         help="Rewrite British -> American spellings in place (case-preserving).",
     )
-    args = parser.parse_args()
+    args = parser.parse_args(argv)
     roots = args.roots or list(DEFAULT_ROOTS)
 
     if args.fix:

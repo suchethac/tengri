@@ -268,7 +268,7 @@ class NebularSEDComponent(TemplateThreading):
             ParamDeclaration(
                 "neb_logU",
                 # default -2.5: representative HII-region ionization parameter
-                # (Cue/CLOUDY grids span logU ~ -3..-2). Explicit so '*': FIXED
+                # (Cue/CLOUDY grids span logU ~ -3..-2). Explicit so '*': Fixed(DEFAULT)
                 # does not silently use the prior midpoint (#477 / #478 / #845).
                 Uniform(-5.0, 0.0, default=-2.5),
                 "log10 ionization parameter U [dimensionless]",

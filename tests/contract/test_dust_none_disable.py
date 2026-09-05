@@ -15,7 +15,7 @@ import jax
 import numpy as np
 import pytest
 
-from tengri import FIXED, Fixed, Parameters, SEDModel
+from tengri import DEFAULT, Fixed, Parameters, SEDModel
 
 pytestmark = [pytest.mark.contract, pytest.mark.regression_bug]
 
@@ -25,7 +25,7 @@ def _phot(ssp, obs, **build):
         ssp_data=ssp,
         observation=obs,
         redshift=Fixed(0.1),
-        sfh={"type": "dpl", "all_params": FIXED},
+        sfh={"type": "dpl", "all_params": Fixed(DEFAULT)},
         **build,
     )
     phot = np.asarray(model.predict_photometry(model.spec.sample(jax.random.PRNGKey(0))))
@@ -68,7 +68,7 @@ def test_heavy_dust_attenuates(synthetic_ssp_wide, synthetic_tophat_obs):
             "type": "two_component",
             "law_bc": "calzetti",
             "law_diff": "calzetti",
-            "all_params": FIXED,
+            "all_params": Fixed(DEFAULT),
             "tau_bc": Fixed(3.0),
             "tau_diff": Fixed(3.0),
         },
@@ -81,7 +81,7 @@ def test_dust_none_with_wildcard_builds(synthetic_ssp_wide, synthetic_tophat_obs
     model, phot = _phot(
         synthetic_ssp_wide,
         synthetic_tophat_obs,
-        dust_attenuation={"type": "none", "all_params": FIXED},
+        dust_attenuation={"type": "none", "all_params": Fixed(DEFAULT)},
     )
     assert model._dust_model == "off"
     assert np.all(np.isfinite(phot))
@@ -94,7 +94,7 @@ def test_dust_emission_none_builds(synthetic_ssp_wide, synthetic_tophat_obs):
         dust_attenuation={
             "law": "power_law",
             "type": "two_component",
-            "all_params": FIXED,
+            "all_params": Fixed(DEFAULT),
         },
         dust_emission={"type": "none"},
     )

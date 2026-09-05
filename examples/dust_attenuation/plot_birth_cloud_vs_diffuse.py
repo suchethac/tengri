@@ -40,7 +40,7 @@ C_AA_PER_S = 2.998e18
 ssp = tengri.load_ssp()
 SFH = {
     "type": "dpl",
-    "all_params": tengri.FIXED,
+    "all_params": tengri.Fixed(tengri.DEFAULT),
     "tau_gyr": 0.3,
     "log_total_mass": 10.0,
     "alpha": 4.0,
@@ -55,7 +55,7 @@ def _model(tau_diff, tau_bc):
         dust_attenuation={
             "law": "power_law",
             "type": "two_component",
-            "all_params": tengri.FIXED,
+            "all_params": tengri.Fixed(tengri.DEFAULT),
             "tau_diff": tau_diff,
             "tau_bc": tau_bc,
             "slope": -0.7,
@@ -149,7 +149,7 @@ for i, (age_myr, peak_lbt_gyr) in enumerate(zip(ages_myr, peak_lbt_values)):
         ssp,
         sfh={
             "type": "tsnorm",
-            "all_params": tengri.FIXED,
+            "all_params": tengri.Fixed(tengri.DEFAULT),
             "peak_lbt_gyr": float(peak_lbt_gyr),
             "width_gyr": 0.1,
             "log_total_mass": 10.0,
@@ -157,7 +157,7 @@ for i, (age_myr, peak_lbt_gyr) in enumerate(zip(ages_myr, peak_lbt_values)):
         dust_attenuation={
             "law": "power_law",
             "type": "two_component",
-            "all_params": tengri.FIXED,
+            "all_params": tengri.Fixed(tengri.DEFAULT),
             "tau_bc": TAU_BC,
             "tau_diff": TAU_DIFF,
             "slope": -0.7,

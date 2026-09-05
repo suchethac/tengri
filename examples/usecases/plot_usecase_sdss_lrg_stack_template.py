@@ -72,7 +72,7 @@ model = tengri.SEDModel.build(
     # time → approximates a single-age stellar population
     sfh={
         "type": "tsnorm",
-        "all_params": tengri.FIXED,
+        "all_params": tengri.Fixed(tengri.DEFAULT),
         "peak_lbt_gyr": tengri.Uniform(AGE_GYR_MIN, AGE_GYR_MAX),
         "width_gyr": 0.10,  # 50 Myr / sqrt(2.355) = narrow burst
         "skew": 0.0,
@@ -82,7 +82,7 @@ model = tengri.SEDModel.build(
     dust_attenuation={
         "law": "power_law",
         "type": "two_component",
-        "all_params": tengri.FIXED,
+        "all_params": tengri.Fixed(tengri.DEFAULT),
         "tau_diff": 0.0,
         "tau_bc": 0.0,
     },

@@ -122,12 +122,112 @@ FLAT_SAMPLERS: dict[str, str] = {
 #: Listed so ``PopulationFitter`` can raise a specific error instead of a generic
 #: "unknown method", and so the reason survives longer than a commit message.
 FLAT_UNSUPPORTED: dict[str, str] = {
+    "mcmc_chees": (
+        "ChEES adapts one trajectory length from an ensemble of chains held in "
+        "memory at once, and hierarchical D grows with the catalog -- a 32-chain "
+        "ensemble is 32 simultaneous copies of a problem whose single-chain NUTS "
+        "warmup already peaks in the gigabytes. The single-galaxy backend is "
+        "measured (bench/reports/2026-08-30_chees_hmc.md); nothing here has "
+        "measured the ensemble's memory at hierarchical width, and a driver "
+        "wired on the strength of the single-galaxy rows would be exactly the "
+        "extrapolation this seam's docstring refuses. Run mcmc_nuts or mcmc_hmc "
+        "for the hierarchical posterior."
+    ),
+    "mcmc_smc": (
+        "tempered SMC carries n_particles simultaneous copies of the whole "
+        "parameter vector -- 512 by default, each with its own HMC integrator "
+        "state -- at every rung, and hierarchical D grows with the catalog. "
+        "That is the ChEES entry's problem an order of magnitude worse: 512 "
+        "copies rather than 32. Worse, the width is the point: "
+        "bench/reports/2026-08-31_smc_evaluation.md Finding 3 measures the "
+        "particle axis as genuine accelerator width (CPU throughput flat across "
+        "a 64x particle sweep while the GPU rises 6.6x), which is exactly why "
+        "it cannot also be spent on a galaxy axis -- the accelerator has one "
+        "width. Nothing has measured the memory product of the particle axis "
+        "nested under the hierarchical one, and wiring a driver on the strength "
+        "of the single-galaxy rows would be the extrapolation this seam's "
+        "docstring refuses. Run mcmc_nuts or mcmc_hmc for the hierarchical "
+        "posterior."
+    ),
     "hmc_is": (
         "importance-sampled evidence needs a proposal that covers the posterior; "
         "hierarchical D grows with the catalog, and a single Student-t fitted to "
         "the flat chain misses mass long before that (ESS collapses). Run "
         "mcmc_hmc for the hierarchical posterior and per-galaxy hmc_is/nss for "
         "evidences."
+    ),
+    "vi_fullrank": (
+        "a full-rank Gaussian carries a dense Cholesky factor, D(D+1)/2 free "
+        "parameters, and hierarchical D grows with the catalog -- on this seam's "
+        "own D=516 two-galaxy fixture that is already 133,386 variational "
+        "parameters for two galaxies, and it grows quadratically from there. The "
+        "single-galaxy backend is measured at D=8 "
+        "(bench/reports/2026-08-31_vi_speed_evaluation.md) and nothing has "
+        "measured the factor's memory at hierarchical width; wiring a driver on "
+        "the strength of D=8 rows is the extrapolation this module's docstring "
+        "refuses. The measurement also argues against it on quality: at D=8 the "
+        "fit needs ~3000 ELBO steps before its draws explain the data at all, "
+        "and unpreconditioned it put a stellar mass 1.6 dex out with an error "
+        "bar 45x too wide. Run mcmc_nuts or mcmc_hmc for the hierarchical "
+        "posterior."
+    ),
+    "vi_meanfield": (
+        "a diagonal Gaussian cannot represent a tilt, and a hierarchical "
+        "posterior is defined by one: every galaxy's latents correlate with the "
+        "population hyperparameters, which is the structure the fit exists to "
+        "estimate. Measured at single-galaxy D=8, mean-field already reports "
+        "marginal widths 0.07-0.62x a converged NUTS reference's because it "
+        "returns conditional rather than marginal widths "
+        "(bench/reports/2026-08-31_vi_speed_evaluation.md); the hierarchical "
+        "correlations it would have to drop are stronger, not weaker. Refused on "
+        "the structure rather than pending a measurement. Run mcmc_nuts or "
+        "mcmc_hmc for the hierarchical posterior."
+    ),
+    "mcmc_barker": (
+        "a first-order proposal's optimal step size scales as D^(-1/3) against "
+        "HMC's D^(-1/4), so the gap widens with dimension -- and hierarchical D "
+        "grows with the catalog (this seam's own two-galaxy fixture is D=516). "
+        "The one measurement that exists runs the wrong way already: at "
+        "single-galaxy D=8 on 05_fitting_photometry, Barker spent 52,466 "
+        "gradients per effective sample against NUTS's 21,604 on the same mock "
+        "and seed, 2.4x worse, at split R-hat 2.96 and a distinct-draw fraction "
+        "of 0.544 -- 46% of its draws were repeats "
+        "(bench/reports/2026-08-31_blackjax_sampler_survey.md, Finding 2). "
+        "Nothing has measured it at hierarchical width, and wiring a driver on "
+        "the strength of a single unfavorable D=8 row is exactly the "
+        "extrapolation this module's docstring refuses. Run mcmc_nuts or "
+        "mcmc_hmc for the hierarchical posterior."
+    ),
+    "mcmc_mala": (
+        "the same D^(-1/3) scaling as mcmc_barker, and worse: MALA's Gaussian "
+        "proposal must shrink to the STIFFEST direction, where Barker's "
+        "skew-symmetric one need not. Measured on one D=8 posterior at an equal "
+        "0.574 acceptance target, MALA's adapted step size was 4.6e-05 against "
+        "Barker's 1.27e-02, a factor of 275 "
+        "(bench/reports/2026-08-31_blackjax_sampler_survey.md). A hierarchical "
+        "posterior is defined by a tilt across galaxy latents and population "
+        "hyperparameters, i.e. by exactly the heterogeneous scales that "
+        "penalty measures. It also exists as mcmc_barker's CONTROL, so driving "
+        "it hierarchically while its subject is refused would invert the "
+        "comparison it was built for. Run mcmc_nuts or mcmc_hmc for the "
+        "hierarchical posterior."
+    ),
+    "mcmc_hmc_lowrank": (
+        "the mass matrix is a rank-k correction to a diagonal with k fixed at "
+        "max_rank (default 10), and the rank the geometry actually needs grows "
+        "with the catalog. Measured on the D=74 stoch-field fixture, ONE "
+        "galaxy's likelihood puts 7 of 74 metric eigenvalues above twice the "
+        "median, with lambda_20/lambda_min = 1.005 -- a diagonal floor plus "
+        "about seven stiff directions "
+        "(bench/reports/2026-08-31_blackjax_sampler_survey.md, Finding 5). N "
+        "galaxies contribute their own such directions, so a two-galaxy fit "
+        "already wants ~14 and rank 10 is short before the catalog is "
+        "interesting. The failure is silent rather than loud: an "
+        "under-ranked correction is still a valid positive-definite mass "
+        "matrix, it is merely the wrong one, so the fit returns draws and no "
+        "diagnostic reports the truncation. Choosing max_rank at hierarchical "
+        "width is unmeasured. Run mcmc_nuts or mcmc_hmc for the hierarchical "
+        "posterior."
     ),
 }
 
@@ -755,13 +855,16 @@ def run_flat_sampler(
         distribution (#1537), so exceeding this raises rather than returning
         plausible wrong error bars.
     ghmc_alpha : float
-        GHMC momentum persistence, in [0, 1] [dimensionless]. Same default as
-        the single-galaxy ``run_ghmc``. The GHMC driver always uses a diagonal
-        mass matrix (momentum-generator constraint), regardless of
-        ``dense_mass_matrix``.
+        GHMC momentum persistence, in [0, 1] [dimensionless]. Hand-set here, and
+        no longer shared with the single-galaxy ``run_ghmc``: that path adapts
+        both this and ``ghmc_delta`` from a MEADS ensemble and defaults them to
+        ``None`` (see ``bench/reports/2026-08-30_ghmc_meads_adaptation.md``).
+        This driver still window-adapts, so it still needs a number. The GHMC
+        driver always uses a diagonal mass matrix (momentum-generator
+        constraint), regardless of ``dense_mass_matrix``.
     ghmc_delta : float
-        GHMC proposal step-size scaling [dimensionless]. Same default as the
-        single-galaxy ``run_ghmc``.
+        GHMC proposal step-size scaling [dimensionless]. Hand-set here; see
+        ``ghmc_alpha``.
     mclmc_target_accept_rate : float
         Metropolis acceptance target for the ``adjusted_mclmc`` driver's
         tuner [dimensionless]. Same default (0.65) as the single-galaxy

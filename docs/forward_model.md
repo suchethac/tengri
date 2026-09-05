@@ -48,7 +48,7 @@ SubModel underneath happens to be.
 
 ```python
 import tengri
-from tengri import FIXED, ForwardModel, SEDModel
+from tengri import Fixed, DEFAULT, ForwardModel, SEDModel
 
 ssp = tengri.load_ssp_data(tengri.download_ssp())
 obs = tengri.Observation(photometry=tengri.Photometry.from_names(["sdss_u", "sdss_g", "sdss_r"]))
@@ -57,8 +57,8 @@ obs = tengri.Observation(photometry=tengri.Photometry.from_names(["sdss_u", "sds
 sed = SEDModel.build(
     ssp_data=ssp,
     observation=obs,
-    sfh={"type": "dpl", "all_params": FIXED, "log_total_mass": 10.0},
-    dust_attenuation={"type": "two_component", "law": "calzetti", "all_params": FIXED},
+    sfh={"type": "dpl", "log_total_mass": 10.0, "other_params": Fixed(DEFAULT)},
+    dust_attenuation={"type": "two_component", "law": "calzetti", "all_params": Fixed(DEFAULT)},
     neb={"type": "none"},
     redshift=tengri.Fixed(0.05),
 )

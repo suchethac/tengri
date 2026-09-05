@@ -28,7 +28,7 @@ import jax.numpy as jnp
 import numpy as np
 import pytest
 
-from tengri import FIXED, Fixed, SEDModel
+from tengri import DEFAULT, Fixed, SEDModel
 from tengri.components.stellar.component import _refine_sfh_table_ages
 from tengri.components.stellar.sps.dsps_wrapper import SSPData
 
@@ -64,15 +64,15 @@ def _old_snorm_model(ssp):
             "width_gyr": Fixed(2.0),
             "skew": Fixed(0.5),
             "log_total_mass": Fixed(10.0),
-            "all_params": FIXED,
+            "all_params": Fixed(DEFAULT),
         },
-        met={"logzsol": Fixed(0.0), "all_params": FIXED},
+        met={"logzsol": Fixed(0.0), "all_params": Fixed(DEFAULT)},
         dust_attenuation={
             "law": "power_law",
             "type": "two_component",
             "tau_bc": Fixed(0.0),
             "tau_diff": Fixed(0.0),
-            "all_params": FIXED,
+            "all_params": Fixed(DEFAULT),
         },
         redshift=Fixed(0.0),
     )

@@ -28,7 +28,7 @@ import jax.numpy as jnp
 import numpy as np
 import pytest
 
-from tengri import FIXED, Fixed, SEDModel
+from tengri import DEFAULT, Fixed, SEDModel
 from tengri.components.stellar.component import _inject_edge_knots, _refine_sfh_table_ages
 from tengri.components.stellar.sfh.nonparametric import (
     CFLEX_DEFAULT_ANCHOR_GYR,
@@ -111,7 +111,7 @@ def test_edge_knot_sfh_conserves_mass_and_finite(synthetic_ssp_wide):
         "flex_1": Fixed(-0.5),
         "flex_2": Fixed(0.4),
         "ratio_old": Fixed(-0.4),
-        "all_params": FIXED,
+        "all_params": Fixed(DEFAULT),
     }
     model = SEDModel.build(
         ssp_data=synthetic_ssp_wide,
@@ -121,7 +121,7 @@ def test_edge_knot_sfh_conserves_mass_and_finite(synthetic_ssp_wide):
             "type": "two_component",
             "tau_bc": Fixed(0.0),
             "tau_diff": Fixed(0.0),
-            "all_params": FIXED,
+            "all_params": Fixed(DEFAULT),
         },
         redshift=Fixed(0.0),
     )
@@ -143,14 +143,14 @@ def test_edge_knot_sfh_is_jit_safe(synthetic_ssp_wide):
             "log_total_mass": Fixed(10.0),
             "flex_0": Fixed(0.4),
             "flex_1": Fixed(-0.3),
-            "all_params": FIXED,
+            "all_params": Fixed(DEFAULT),
         },
         dust_attenuation={
             "law": "power_law",
             "type": "two_component",
             "tau_bc": Fixed(0.0),
             "tau_diff": Fixed(0.0),
-            "all_params": FIXED,
+            "all_params": Fixed(DEFAULT),
         },
         redshift=Fixed(0.0),
     )

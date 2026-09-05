@@ -63,7 +63,7 @@ def _stellar_of(model):
 
 
 def _build(synthetic_ssp_wide, synthetic_tophat_obs, *, met_table=False):
-    from tengri import FIXED, SEDModel
+    from tengri import DEFAULT, SEDModel
     from tengri.parameters.priors import Fixed, Uniform
 
     groups = dict(
@@ -73,7 +73,7 @@ def _build(synthetic_ssp_wide, synthetic_tophat_obs, *, met_table=False):
         dust_attenuation={
             "law": "power_law",
             "type": "two_component",
-            "all_params": FIXED,
+            "all_params": Fixed(DEFAULT),
             "tau_bc": 0.5,
             "tau_diff": Uniform(0.0, 2.0),
         },
@@ -260,7 +260,7 @@ def test_tabulated_history_reproduces_the_parametric_sfh(synthetic_ssp_wide, syn
     so the only difference is whether the SFH arrives as two scalars or as a
     tabulated history.
     """
-    from tengri import FIXED, SEDModel
+    from tengri import DEFAULT, SEDModel
     from tengri.parameters.priors import Fixed, Uniform
 
     # start_gyr is the lookback to SF ONSET and end_gyr the lookback to
@@ -279,7 +279,7 @@ def test_tabulated_history_reproduces_the_parametric_sfh(synthetic_ssp_wide, syn
                 dust_attenuation={
                     "law": "power_law",
                     "type": "two_component",
-                    "all_params": FIXED,
+                    "all_params": Fixed(DEFAULT),
                     "tau_bc": 0.5,
                     "tau_diff": Uniform(0.0, 2.0),
                 },

@@ -33,11 +33,11 @@ warnings.filterwarnings("ignore", message=".*BakedInBackend.*")
 
 C_AA_PER_S = 2.998e18
 LOG_LBOL = 12.5
-SFH = {"type": "const", "all_params": tengri.FIXED, "log_total_mass": -10.0}
+SFH = {"type": "const", "all_params": tengri.Fixed(tengri.DEFAULT), "log_total_mass": -10.0}
 DUST = {
     "law": "power_law",
     "type": "two_component",
-    "all_params": tengri.FIXED,
+    "all_params": tengri.Fixed(tengri.DEFAULT),
     "tau_diff": 0.0,
     "tau_bc": 0.0,
 }
@@ -47,34 +47,39 @@ ssp = tengri.load_ssp()
 TIERS = [
     (
         "bare multicolor disc",
-        {"disc": {"type": "multicolor", "all_params": tengri.FIXED}},
+        {"disc": {"type": "multicolor", "all_params": tengri.Fixed(tengri.DEFAULT)}},
     ),
     (
         "disc + SKIRTOR torus",
         {
-            "disc": {"type": "multicolor", "all_params": tengri.FIXED},
-            "torus": {"type": "skirtor", "all_params": tengri.FIXED},
+            "disc": {"type": "multicolor", "all_params": tengri.Fixed(tengri.DEFAULT)},
+            "torus": {"type": "skirtor", "all_params": tengri.Fixed(tengri.DEFAULT)},
         },
     ),
     (
         "disc + torus + NLR lines",
         {
-            "disc": {"type": "multicolor", "all_params": tengri.FIXED},
-            "torus": {"type": "skirtor", "all_params": tengri.FIXED},
-            "nlr": {"type": "analytic", "all_params": tengri.FIXED},
-            "blr": {"type": "none", "all_params": tengri.FIXED},
+            "disc": {"type": "multicolor", "all_params": tengri.Fixed(tengri.DEFAULT)},
+            "torus": {"type": "skirtor", "all_params": tengri.Fixed(tengri.DEFAULT)},
+            "nlr": {"type": "analytic", "all_params": tengri.Fixed(tengri.DEFAULT)},
+            "blr": {"type": "none", "all_params": tengri.Fixed(tengri.DEFAULT)},
         },
     ),
     (
         "empirical QSOgen template",
-        {"disc": {"type": "qsogen", "all_params": tengri.FIXED}},
+        {"disc": {"type": "qsogen", "all_params": tengri.Fixed(tengri.DEFAULT)}},
     ),
 ]
 colors = plt.cm.viridis(np.linspace(0.05, 0.9, len(TIERS)))
 
 fig, ax = plt.subplots(figsize=(7.5, 4.8))
 for (label, blocks), color in zip(TIERS, colors):
-    agn = {"all_params": tengri.FIXED, "log_lbol": LOG_LBOL, "lum_ratio": 1.0, **blocks}
+    agn = {
+        "all_params": tengri.Fixed(tengri.DEFAULT),
+        "log_lbol": LOG_LBOL,
+        "lum_ratio": 1.0,
+        **blocks,
+    }
     model = tengri.SEDModel.build(
         ssp, sfh=SFH, dust_attenuation=DUST, agn=agn, redshift=tengri.Fixed(0.0)
     )

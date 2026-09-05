@@ -10,7 +10,7 @@ import jax
 import jax.numpy as jnp
 import pytest
 
-from tengri import FIXED, FREE, Fixed, Observation, SEDModel
+from tengri import DEFAULT, FREE, Fixed, Observation, SEDModel
 from tengri.analysis.population_mocks import make_population
 from tengri.observation import Photometry
 from tengri.observation.photometry import FilterCurve
@@ -51,7 +51,7 @@ def field_model(synthetic_ssp_wide, phot_obs):
         dust_attenuation={
             "type": "two_component",
             "law": "calzetti",
-            "all_params": FIXED,
+            "all_params": Fixed(DEFAULT),
         },
         n_grid=16,
         redshift=Fixed(0.1),

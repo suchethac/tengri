@@ -29,7 +29,7 @@ import pytest
 
 pytestmark = pytest.mark.contract
 
-from tengri import FIXED, FREE, Fixed, SEDModel
+from tengri import DEFAULT, FREE, Fixed, SEDModel
 from tengri.components.agn._params import PARAMS as _AGN_PARAMS
 from tengri.components.agn.blocks._consumes import (
     AGN_BLOCK_CONSUMES,
@@ -229,8 +229,12 @@ def test_unified_agn_nlr_blr_additive(synthetic_ssp_wide):
     def sed(nlr_block, blr_block):
         m = SEDModel.build(
             ssp_data=synthetic_ssp_wide,
-            sfh={"type": "delayed", "all_params": FIXED},
-            dust_attenuation={"law": "power_law", "type": "two_component", "all_params": FIXED},
+            sfh={"type": "delayed", "all_params": Fixed(DEFAULT)},
+            dust_attenuation={
+                "law": "power_law",
+                "type": "two_component",
+                "all_params": Fixed(DEFAULT),
+            },
             agn={
                 "type": "composable",
                 "disc": {"type": "kubota_done"},
@@ -238,7 +242,7 @@ def test_unified_agn_nlr_blr_additive(synthetic_ssp_wide):
                 "nlr": {"type": nlr_block},
                 "blr": {"type": blr_block},
                 "agn_log_lbol": Fixed(12.0),
-                "all_params": FIXED,
+                "all_params": Fixed(DEFAULT),
             },
             redshift=Fixed(0.05),
         )
@@ -265,13 +269,13 @@ def test_unified_agn_type1_type2_masking(synthetic_ssp_wide):
     def sed(nlr_block, blr_block, cos_inc):
         m = SEDModel.build(
             ssp_data=synthetic_ssp_wide,
-            sfh={"type": "delayed", "all_params": FIXED},
+            sfh={"type": "delayed", "all_params": Fixed(DEFAULT)},
             dust_attenuation={
                 "law": "power_law",
                 "type": "two_component",
                 "tau_bc": Fixed(0.0),
                 "tau_diff": Fixed(0.0),
-                "all_params": FIXED,
+                "all_params": Fixed(DEFAULT),
             },
             agn={
                 "type": "composable",
@@ -282,7 +286,7 @@ def test_unified_agn_type1_type2_masking(synthetic_ssp_wide):
                 "agn_log_lbol": Fixed(12.0),
                 "agn_cos_inc": Fixed(cos_inc),
                 "agn_theta_torus": Fixed(45.0),
-                "all_params": FIXED,
+                "all_params": Fixed(DEFAULT),
             },
             redshift=Fixed(0.05),
         )
@@ -316,7 +320,9 @@ def test_unified_agn_recipe_structure():
     # Parametric luminosity mode: the two scaling knobs are pinned fixed.
     assert isinstance(agn["lum_ratio"], Fixed)
     assert isinstance(agn["ir_frac"], Fixed)
-    assert agn["all_params"] is FREE
+    # Mixed group (explicit lum_ratio/ir_frac entries alongside the wildcard)
+    # spells the wildcard "other_params", not "all_params".
+    assert agn["other_params"] is FREE
 
 
 def test_composable_wildcard_frees_only_active_params(synthetic_ssp_wide):
@@ -332,8 +338,12 @@ def test_composable_wildcard_frees_only_active_params(synthetic_ssp_wide):
     }
     model = SEDModel.build(
         ssp_data=synthetic_ssp_wide,
-        sfh={"type": "delayed", "all_params": FIXED},
-        dust_attenuation={"law": "power_law", "type": "two_component", "all_params": FIXED},
+        sfh={"type": "delayed", "all_params": Fixed(DEFAULT)},
+        dust_attenuation={
+            "law": "power_law",
+            "type": "two_component",
+            "all_params": Fixed(DEFAULT),
+        },
         agn={
             "type": "composable",
             "disc": {"type": "multicolor"},
@@ -349,17 +359,24 @@ def test_composable_wildcard_frees_only_active_params(synthetic_ssp_wide):
 
 
 def test_all_fixed_wildcard_frees_nothing_and_keeps_old_defaults(synthetic_ssp_wide):
-    """Back-compat: ``'all_params': FIXED`` yields no free AGN params at the historic values."""
+    """Back-compat: ``'all_params': Fixed(DEFAULT)`` yields no free AGN params.
+
+    Values stay at their historic defaults.
+    """
     model = SEDModel.build(
         ssp_data=synthetic_ssp_wide,
-        sfh={"type": "delayed", "all_params": FIXED},
-        dust_attenuation={"law": "power_law", "type": "two_component", "all_params": FIXED},
+        sfh={"type": "delayed", "all_params": Fixed(DEFAULT)},
+        dust_attenuation={
+            "law": "power_law",
+            "type": "two_component",
+            "all_params": Fixed(DEFAULT),
+        },
         agn={
             "type": "composable",
             "disc": {"type": "multicolor"},
             "torus": {"type": "two_temperature"},
             "lines": {"type": "nlr"},
-            "all_params": FIXED,
+            "all_params": Fixed(DEFAULT),
         },
         redshift=Fixed(0.05),
     )
@@ -430,7 +447,7 @@ def test_agn_panchromatic_free_params_all_move_predict(real_ssp_only):
             # invalidate the no-op guard for exactly those params.
             "atten": {"type": "polar_dust"},
             "agn_log_lbol": Fixed(12.0),
-            "all_params": FIXED,
+            "all_params": Fixed(DEFAULT),
         }
         if name is not None:
             # #1980: sub-block-owned params must nest under their PARTITION
@@ -451,7 +468,7 @@ def test_agn_panchromatic_free_params_all_move_predict(real_ssp_only):
                 try:
                     parse_groups(
                         agn={**agn, name: Fixed(value)},
-                        sfh={"type": "delayed", "all_params": FIXED},
+                        sfh={"type": "delayed", "all_params": Fixed(DEFAULT)},
                         redshift=Fixed(0.05),
                     )
                 except ValueError as exc:
@@ -465,12 +482,12 @@ def test_agn_panchromatic_free_params_all_move_predict(real_ssp_only):
         m = SEDModel.build(
             ssp_data=ssp,
             observation=obs,
-            sfh={"type": "delayed", "all_params": FIXED},
+            sfh={"type": "delayed", "all_params": Fixed(DEFAULT)},
             dust_attenuation={
                 "law": "power_law",
                 "type": "two_component",
                 "tau_diff": Fixed(0.3),
-                "all_params": FIXED,
+                "all_params": Fixed(DEFAULT),
             },
             dust_emission={"type": "dale2014_cigale"},
             agn=agn,

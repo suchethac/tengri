@@ -1,5 +1,8 @@
 # Benchmark: forward-model precompute speedup across all emitters
 
+**SUPERSEDED 2026-08-31:** After PR #135, the compositional/hybrid kernel adapter family was deleted.
+This report's hybrid-path measurements are archived. Fresh measured numbers appear in the 2026-08-31 report (#2092).
+
 **Date:** 2026-05-06
 **Verdict:** PASS — precompute fast path delivers the predicted 30–400× speedup
 across all emitter families with sub-1% approximation error in typical configs.

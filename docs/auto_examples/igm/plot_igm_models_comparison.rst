@@ -98,7 +98,7 @@ References:
     # Star-forming galaxy SED (young, minimal dust)
     SFH = {
         "type": "dpl",
-        "all_params": tengri.FIXED,
+        "all_params": tengri.Fixed(tengri.DEFAULT),
         "tau_gyr": 0.1,
         "age_gyr": 0.5,  # Bound to 0.5 Gyr to fit within cosmic age at z=7 (0.76 Gyr)
         "log_total_mass": 10.0,
@@ -109,7 +109,7 @@ References:
     DUST = {
         "law": "power_law",
         "type": "two_component",
-        "all_params": tengri.FIXED,
+        "all_params": tengri.Fixed(tengri.DEFAULT),
         "tau_diff": 0.02,
         "tau_bc": 0.02,
     }

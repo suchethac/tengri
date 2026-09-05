@@ -37,13 +37,13 @@ def test_predict_spectrum_uses_observation_wave_obs_when_unset():
     model = tengri.SEDModel.build(
         ssp_data=ssp,
         observation=obs,
-        sfh={"type": "dpl", "all_params": tengri.FIXED},
+        sfh={"type": "dpl", "all_params": tengri.Fixed(tengri.DEFAULT)},
         dust_attenuation={
             "type": "single_component",
             "law": "calzetti",
-            "all_params": tengri.FIXED,
+            "all_params": tengri.Fixed(tengri.DEFAULT),
         },
-        neb={"type": "ssp", "all_params": tengri.FIXED},
+        neb={"type": "ssp", "all_params": tengri.Fixed(tengri.DEFAULT)},
         redshift=tengri.Fixed(0.05),
     )
 
@@ -66,13 +66,13 @@ def test_predict_spectrum_raises_without_any_grid():
     # No observation at all → no spectroscopy fallback path.
     model = tengri.SEDModel.build(
         ssp_data=ssp,
-        sfh={"type": "dpl", "all_params": tengri.FIXED},
+        sfh={"type": "dpl", "all_params": tengri.Fixed(tengri.DEFAULT)},
         dust_attenuation={
             "type": "single_component",
             "law": "calzetti",
-            "all_params": tengri.FIXED,
+            "all_params": tengri.Fixed(tengri.DEFAULT),
         },
-        neb={"type": "ssp", "all_params": tengri.FIXED},
+        neb={"type": "ssp", "all_params": tengri.Fixed(tengri.DEFAULT)},
         redshift=tengri.Fixed(0.05),
     )
 

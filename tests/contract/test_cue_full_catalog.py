@@ -32,13 +32,13 @@ class TestGrammarPlumbing:
 
     def test_default_is_false(self):
         params = parse_groups(
-            neb={"type": "cue", "all_params": tengri.FIXED}, redshift=Fixed(0.05)
+            neb={"type": "cue", "all_params": tengri.Fixed(tengri.DEFAULT)}, redshift=Fixed(0.05)
         )
         assert params.cue_full_catalog is False
 
     def test_opt_in_is_true(self):
         params = parse_groups(
-            neb={"type": "cue", "all_params": tengri.FIXED, "full_catalog": True},
+            neb={"type": "cue", "all_params": tengri.Fixed(tengri.DEFAULT), "full_catalog": True},
             redshift=Fixed(0.05),
         )
         assert params.cue_full_catalog is True
@@ -47,7 +47,7 @@ class TestGrammarPlumbing:
         """The flag is a no-op on non-cue backends — adding it on cb19
         shouldn't trip an unknown-key validator and shouldn't propagate."""
         params = parse_groups(
-            neb={"type": "cb19", "all_params": tengri.FIXED, "full_catalog": True},
+            neb={"type": "cb19", "all_params": tengri.Fixed(tengri.DEFAULT), "full_catalog": True},
             redshift=Fixed(0.05),
         )
         # Allowed by the validator, but not interpreted for cb19.
@@ -58,7 +58,7 @@ class TestGrammarPlumbing:
         flag on the cue group."""
         # No raise means the key is in _GROUP_STRUCTURAL_KEYS['neb'].
         parse_groups(
-            neb={"type": "cue", "all_params": tengri.FIXED, "full_catalog": True},
+            neb={"type": "cue", "all_params": tengri.Fixed(tengri.DEFAULT), "full_catalog": True},
             redshift=Fixed(0.05),
         )
 

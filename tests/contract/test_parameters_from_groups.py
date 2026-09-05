@@ -9,7 +9,7 @@ than re-testing the parser logic, which lives in test_param_groups.py.
 import pytest
 
 pytestmark = pytest.mark.contract
-from tengri.parameters import FIXED, FREE, Fixed, Uniform
+from tengri.parameters import DEFAULT, FREE, Fixed, Uniform
 from tengri.parameters.groups import parse_groups
 from tengri.parameters.parameters import Parameters
 
@@ -20,7 +20,7 @@ class TestFromGroupsBridge:
     def test_from_groups_returns_parameters(self):
         """Classmethod returns a Parameters instance."""
         spec = parse_groups(
-            sfh={"type": "dpl", "all_params": FIXED},
+            sfh={"type": "dpl", "all_params": Fixed(DEFAULT)},
             redshift=Fixed(0.1),
         )
         assert isinstance(spec, Parameters)
@@ -32,10 +32,10 @@ class TestFromGroupsBridge:
             dust_attenuation={
                 "type": "two_component",
                 "law": "calzetti",
-                "all_params": FIXED,
+                "all_params": Fixed(DEFAULT),
                 "tau_bc": 0.5,
             },
-            neb={"type": "cue", "all_params": FIXED},
+            neb={"type": "cue", "all_params": Fixed(DEFAULT)},
             redshift=Fixed(0.05),
         )
         via_method = parse_groups(**kwargs)
@@ -51,11 +51,11 @@ class TestFromGroupsBridge:
             dust_attenuation={
                 "type": "two_component",
                 "law": "calzetti",
-                "all_params": FIXED,
+                "all_params": Fixed(DEFAULT),
                 "tau_bc": 0.5,
             },
-            dust_emission={"type": "dale2014", "all_params": FIXED},
-            neb={"type": "cue", "all_params": FIXED},
+            dust_emission={"type": "dale2014", "all_params": Fixed(DEFAULT)},
+            neb={"type": "cue", "all_params": Fixed(DEFAULT)},
             redshift=FREE,
         )
         assert "sfh_dpl_beta" in spec.free_params

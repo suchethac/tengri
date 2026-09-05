@@ -19,7 +19,7 @@ params.
 
 import pytest
 
-from tengri import FIXED, FREE, Fixed, Parameters, Uniform, parse_groups
+from tengri import DEFAULT, FREE, Fixed, Parameters, Uniform, parse_groups
 
 
 @pytest.fixture
@@ -35,7 +35,7 @@ def grouped_spec():
         dust_attenuation={
             "type": "two_component",
             "law": "calzetti",
-            "all_params": FIXED,
+            "all_params": Fixed(DEFAULT),
             "tau_bc": 0.5,  # user_fixed (bare value)
         },
         redshift=Fixed(0.05),  # user_fixed (top-level)
@@ -67,8 +67,8 @@ class TestProvenanceAttribution:
         assert grouped_spec._group_provenance["sfh_dpl_tau_gyr"] == "wildcard_free"
 
     def test_wildcard_fixed_tagged_correctly(self, grouped_spec):
-        """Wildcard 'all_params': FIXED expansions get 'wildcard_fixed'."""
-        # dust has 'all_params': FIXED; dust_tau_diff wasn't overridden
+        """Wildcard 'all_params': Fixed(DEFAULT) expansions get 'wildcard_fixed'."""
+        # dust has 'all_params': Fixed(DEFAULT); dust_tau_diff wasn't overridden
         assert grouped_spec._group_provenance["dust_tau_diff"] == "wildcard_fixed"
         assert grouped_spec._group_provenance["dust_slope"] == "wildcard_fixed"
 
@@ -115,8 +115,8 @@ class TestProvenanceAttribution:
     def test_pinned_tag_still_round_trips_as_a_wildcard(self):
         """``to_groups()`` must hand back ``all_params: FREE``, not overrides (#1796).
 
-        With no met block, met_* params are implicitly FIXED, creating mixed
-        wildcard types (sfh_* FREE + met_* FIXED) that prevent wildcard collapse.
+        With no met block, met_* params are implicitly Fixed, creating mixed
+        wildcard types (sfh_* FREE + met_* Fixed) that prevent wildcard collapse.
         The round trip shows all params explicitly, correctly representing the
         mixed wildcard provenances.
         """
@@ -127,8 +127,8 @@ class TestProvenanceAttribution:
             spec = parse_groups(sfh={"type": "dpl", "all_params": FREE}, redshift=Fixed(0.1))
 
         groups = spec.to_groups()
-        # When there's no met block, met_* params are implicitly FIXED.
-        # This creates mixed provenances (sfh_* FREE, met_* FIXED), preventing
+        # When there's no met block, met_* params are implicitly Fixed.
+        # This creates mixed provenances (sfh_* FREE, met_* Fixed), preventing
         # wildcard collapse. So 'all_params' is not present.
         assert groups["sfh"].get("all_params") is None
         # But sfh_* params are shown explicitly with their correct provenances
@@ -165,11 +165,53 @@ class TestSummaryRendering:
         assert "[all_params FREE]" in lines[0]
 
     def test_grouped_summary_includes_wildcard_fixed_tag(self, grouped_spec):
-        """Wildcard-FIXED params show [all_params FIXED]."""
+        """Wildcard-Fixed(DEFAULT) params show [all_params Fixed(DEFAULT)]."""
         out = grouped_spec.summary_str()
         lines = [ln for ln in out.splitlines() if "dust_tau_diff" in ln]
         assert len(lines) == 1
-        assert "[all_params FIXED]" in lines[0]
+        assert "[all_params Fixed(DEFAULT)]" in lines[0]
+
+    def test_grouped_summary_includes_wildcard_fixed_inactive_tag(self):
+        """A block-scoped wildcard-FREE param outside the active variant's scope
+        shows [all_params Fixed(DEFAULT) -> inactive] (#1796 block scoping).
+
+        ``calzetti`` reads no attenuation-curve shape parameters (see
+        ``_law_shape_params("calzetti") == frozenset()`` in
+        test_wildcard_scope_is_variant_aware.py), so under an 'all_params': FREE
+        wildcard, dust_Rv/dust_delta/dust_bump_strength/dust_slope stay
+        declared-but-Fixed rather than being freed into no-op dimensions.
+        """
+        spec = parse_groups(
+            sfh={"type": "dpl", "all_params": Fixed(DEFAULT)},
+            dust_attenuation={"type": "two_component", "law": "calzetti", "all_params": FREE},
+            redshift=Fixed(0.1),
+        )
+        out = spec.summary_str()
+        lines = [ln for ln in out.splitlines() if "dust_Rv" in ln]
+        assert len(lines) == 1
+        assert "[all_params Fixed(DEFAULT) -> inactive]" in lines[0]
+        assert spec._group_provenance["dust_Rv"] == "wildcard_fixed_inactive"
+
+    def test_single_component_dust_attenuation_modules_line(self):
+        """Single-component dust attenuation prints grammar-consistent key (#2137).
+
+        The Modules line must show ``dust_attenuation=single_component(law)``
+        to match the build-time grammar, never the retired ``dust=single(law)``
+        spelling that raises at build.
+        """
+        spec = parse_groups(
+            sfh={"type": "dpl", "all_params": Fixed(DEFAULT)},
+            dust_attenuation={
+                "type": "single_component",
+                "law": "calzetti",
+                "all_params": Fixed(DEFAULT),
+            },
+            redshift=Fixed(0.1),
+        )
+        out = spec.summary_str()
+        assert "dust_attenuation=single_component(calzetti)" in out
+        # Regression: the retired spelling must not appear anywhere
+        assert "dust=single(" not in out
 
     def test_flat_summary_omits_source_column(self):
         """Flat-kwarg specs render the existing summary without a Source column."""

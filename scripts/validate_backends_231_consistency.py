@@ -34,7 +34,7 @@ jax.config.update("jax_enable_x64", True)
 jax.config.update("jax_platforms", "cpu")
 
 from tengri import (
-    FIXED,
+    DEFAULT,
     FREE,
     Fitter,
     Fixed,
@@ -74,7 +74,7 @@ def build_model_and_mock():
         sfh=builders.sfh.dpl(all_params=FREE),
         dust_attenuation={
             "type": "two_component",
-            "all_params": FIXED,
+            "all_params": Fixed(DEFAULT),
             "law": "calzetti",
             "tau_bc": Uniform(0.0, 1.0),
         },

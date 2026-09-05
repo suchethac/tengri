@@ -52,7 +52,7 @@ import numpy as np
 from reproduction.bagpipes._drivers import bagpipes_driver as B, units as U
 
 import tengri
-from tengri import FIXED, Fixed, SEDModel, load_ssp_data
+from tengri import DEFAULT, Fixed, SEDModel, load_ssp_data
 from tengri.utils.physics_constants import C_AA, L_SUN, LOG10_ZSUN
 
 # Force the inline backend so figures embed on (re-)render regardless of the
@@ -82,7 +82,7 @@ print(
 # Asplund+2009 Z_⊙ that `LOG10_ZSUN` carries, at HDU `ZMET_1.000ZSOL`.
 # tengri's `met_logzsol = log10(Z/Z_⊙) = 0` is the bit-aligned counterpart.
 MET_LOGZSOL = 0.0
-MET_FIDUCIAL = {"logzsol": Fixed(MET_LOGZSOL), "all_params": FIXED}
+MET_FIDUCIAL = {"logzsol": Fixed(MET_LOGZSOL), "all_params": Fixed(DEFAULT)}
 
 # Notebook-vs-script compatible: ``__file__`` is undefined when this is
 # run via nbclient (the kernel's resources path is set to the
@@ -256,9 +256,15 @@ _m_sfh = SEDModel.build(
         "tau_gyr": Fixed(TAU_GYR_FIDUCIAL),
         "age_gyr": Fixed(AGE_GYR_FIDUCIAL),
         "log_total_mass": Fixed(LOG_MASS_FIDUCIAL),
-        "all_params": FIXED,
+        "all_params": Fixed(DEFAULT),
     },
-    dust_attenuation={"law": "power_law", "type": "two_component", "tau_bc": Fixed(0.0), "tau_diff": Fixed(0.0), "all_params": FIXED},
+    dust_attenuation={
+        "law": "power_law",
+        "type": "two_component",
+        "tau_bc": Fixed(0.0),
+        "tau_diff": Fixed(0.0),
+        "all_params": Fixed(DEFAULT),
+    },
     redshift=Fixed(0.0),
 )
 _state_sfh = _m_sfh.predict_state({})
@@ -354,9 +360,15 @@ m_dpl = SEDModel.build(
         "tau_gyr": Fixed(DPL_TAU_GYR),
         "age_gyr": Fixed(AGE_OF_UNIVERSE_GYR),
         "log_total_mass": Fixed(LOG_MASS_FIDUCIAL),
-        "all_params": FIXED,
+        "all_params": Fixed(DEFAULT),
     },
-    dust_attenuation={"law": "power_law", "type": "two_component", "tau_bc": Fixed(0.0), "tau_diff": Fixed(0.0), "all_params": FIXED},
+    dust_attenuation={
+        "law": "power_law",
+        "type": "two_component",
+        "tau_bc": Fixed(0.0),
+        "tau_diff": Fixed(0.0),
+        "all_params": Fixed(DEFAULT),
+    },
     redshift=Fixed(0.0),
 )
 s_dpl = m_dpl.predict_state({})
@@ -440,9 +452,15 @@ m_ln = SEDModel.build(
         "width_gyr": Fixed(LN_WIDTH_DEX),
         "age_gyr": Fixed(AGE_OF_UNIVERSE_GYR),
         "log_total_mass": Fixed(LOG_MASS_FIDUCIAL),
-        "all_params": FIXED,
+        "all_params": Fixed(DEFAULT),
     },
-    dust_attenuation={"law": "power_law", "type": "two_component", "tau_bc": Fixed(0.0), "tau_diff": Fixed(0.0), "all_params": FIXED},
+    dust_attenuation={
+        "law": "power_law",
+        "type": "two_component",
+        "tau_bc": Fixed(0.0),
+        "tau_diff": Fixed(0.0),
+        "all_params": Fixed(DEFAULT),
+    },
     redshift=Fixed(0.0),
 )
 s_ln = m_ln.predict_state({})
@@ -538,9 +556,15 @@ for row, (label, ratios) in enumerate(_cases):
             "type": "continuity",
             "log_total_mass": Fixed(LOG_MASS_FIDUCIAL),
             **{f"ratio_{i}": Fixed(ratios[i]) for i in range(6)},
-            "all_params": FIXED,
+            "all_params": Fixed(DEFAULT),
         },
-        dust_attenuation={"law": "power_law", "type": "two_component", "tau_bc": Fixed(0.0), "tau_diff": Fixed(0.0), "all_params": FIXED},
+        dust_attenuation={
+            "law": "power_law",
+            "type": "two_component",
+            "tau_bc": Fixed(0.0),
+            "tau_diff": Fixed(0.0),
+            "all_params": Fixed(DEFAULT),
+        },
         redshift=Fixed(0.0),
     )
     s_c = m_c.predict_state({})
@@ -592,9 +616,15 @@ m_stellar = SEDModel.build(
         "tau_gyr": Fixed(TAU_GYR_FIDUCIAL),
         "age_gyr": Fixed(AGE_GYR_FIDUCIAL),
         "log_total_mass": Fixed(LOG_MASS_FIDUCIAL),
-        "all_params": FIXED,
+        "all_params": Fixed(DEFAULT),
     },
-    dust_attenuation={"law": "power_law", "type": "two_component", "tau_bc": Fixed(0.0), "tau_diff": Fixed(0.0), "all_params": FIXED},
+    dust_attenuation={
+        "law": "power_law",
+        "type": "two_component",
+        "tau_bc": Fixed(0.0),
+        "tau_diff": Fixed(0.0),
+        "all_params": Fixed(DEFAULT),
+    },
     redshift=Fixed(0.0),
 )
 s_stellar = m_stellar.predict_state({})
@@ -692,15 +722,21 @@ for color, z, logz in zip(_colors, _Z_VALUES, _logzsol_values):
     ax_b.plot(w_b_z, L_b_z, color=color, linewidth=1.7, label=f"Z = {z:g} Z⊙")
     m_z = SEDModel.build(
         ssp_data=ssp,
-        met={"logzsol": Fixed(logz), "all_params": FIXED},
+        met={"logzsol": Fixed(logz), "all_params": Fixed(DEFAULT)},
         sfh={
             "type": "delayed",
             "tau_gyr": Fixed(TAU_GYR_FIDUCIAL),
             "age_gyr": Fixed(AGE_GYR_FIDUCIAL),
             "log_total_mass": Fixed(LOG_MASS_FIDUCIAL),
-            "all_params": FIXED,
+            "all_params": Fixed(DEFAULT),
         },
-        dust_attenuation={"law": "power_law", "type": "two_component", "tau_bc": Fixed(0.0), "tau_diff": Fixed(0.0), "all_params": FIXED},
+        dust_attenuation={
+            "law": "power_law",
+            "type": "two_component",
+            "tau_bc": Fixed(0.0),
+            "tau_diff": Fixed(0.0),
+            "all_params": Fixed(DEFAULT),
+        },
         redshift=Fixed(0.0),
     )
     s_z = m_z.predict_state({})
@@ -732,7 +768,7 @@ _law_pairs = [
     ({"type": "CF00", "Av": 1.0, "eta": 2.0, "n": -0.7}, "noll09", "Charlot & Fall 2000"),
     ({"type": "Salim", "Av": 1.0, "delta": 0.0, "B": 0.0}, "salim", "Salim+2018 (δ=0)"),
 ]
-_tengri_laws = list_laws(headline=False).to_dict('fn')  # {name: fn(wave_aa) -> k at tau_V=1}
+_tengri_laws = list_laws(headline=False).to_dict("fn")  # {name: fn(wave_aa) -> k at tau_V=1}
 wave_law = np.logspace(np.log10(1000.0), np.log10(50000.0), 2000)
 
 
@@ -810,9 +846,15 @@ m_nd = SEDModel.build(
         "tau_gyr": Fixed(TAU_GYR_FIDUCIAL),
         "age_gyr": Fixed(AGE_GYR_FIDUCIAL),
         "log_total_mass": Fixed(LOG_MASS_FIDUCIAL),
-        "all_params": FIXED,
+        "all_params": Fixed(DEFAULT),
     },
-    dust_attenuation={"law": "power_law", "type": "two_component", "tau_bc": Fixed(0.0), "tau_diff": Fixed(0.0), "all_params": FIXED},
+    dust_attenuation={
+        "law": "power_law",
+        "type": "two_component",
+        "tau_bc": Fixed(0.0),
+        "tau_diff": Fixed(0.0),
+        "all_params": Fixed(DEFAULT),
+    },
     redshift=Fixed(0.0),
 )
 s_nd = m_nd.predict_state({})
@@ -825,7 +867,7 @@ m_d = SEDModel.build(
         "tau_gyr": Fixed(TAU_GYR_FIDUCIAL),
         "age_gyr": Fixed(AGE_GYR_FIDUCIAL),
         "log_total_mass": Fixed(LOG_MASS_FIDUCIAL),
-        "all_params": FIXED,
+        "all_params": Fixed(DEFAULT),
     },
     dust_attenuation={
         "type": "two_component",
@@ -833,7 +875,7 @@ m_d = SEDModel.build(
         "law_diff": "calzetti",
         "tau_bc": Fixed(TAU_BC),
         "tau_diff": Fixed(TAU_DIFF),
-        "all_params": FIXED,
+        "all_params": Fixed(DEFAULT),
     },
     redshift=Fixed(0.0),
 )
@@ -912,7 +954,7 @@ m_ir = SEDModel.build(
         "tau_gyr": Fixed(TAU_GYR_FIDUCIAL),
         "age_gyr": Fixed(AGE_GYR_FIDUCIAL),
         "log_total_mass": Fixed(LOG_MASS_FIDUCIAL),
-        "all_params": FIXED,
+        "all_params": Fixed(DEFAULT),
     },
     dust_attenuation={
         "type": "two_component",
@@ -920,14 +962,15 @@ m_ir = SEDModel.build(
         "law_diff": "calzetti",
         "tau_bc": Fixed(TAU_BC),
         "tau_diff": Fixed(TAU_DIFF),
-        "all_params": FIXED,
-    }, dust_emission={
-            "type": "draine_li2007",
-            "qpah": Fixed(QPAH_FIDUCIAL),
-            "umin": Fixed(UMIN_FIDUCIAL),
-            "gamma_dl": Fixed(GAMMA_FIDUCIAL),
-            "all_params": FIXED,
-        },
+        "all_params": Fixed(DEFAULT),
+    },
+    dust_emission={
+        "type": "draine_li2007",
+        "qpah": Fixed(QPAH_FIDUCIAL),
+        "umin": Fixed(UMIN_FIDUCIAL),
+        "gamma_dl": Fixed(GAMMA_FIDUCIAL),
+        "all_params": Fixed(DEFAULT),
+    },
     redshift=Fixed(0.0),
 )
 s_ir = m_ir.predict_state({})
@@ -1037,10 +1080,21 @@ m_neb_on = SEDModel.build(
         "start_gyr": Fixed(NEB_AGE),
         "end_gyr": Fixed(0.0),
         "log_total_mass": Fixed(9.0),
-        "all_params": FIXED,
+        "all_params": Fixed(DEFAULT),
     },
-    dust_attenuation={"law": "power_law", "type": "two_component", "tau_bc": Fixed(0.0), "tau_diff": Fixed(0.0), "all_params": FIXED},
-    neb={"type": "cue", "neb_logU": Fixed(-2.0), "neb_logZ_gas": Fixed(0.0), "all_params": FIXED},
+    dust_attenuation={
+        "law": "power_law",
+        "type": "two_component",
+        "tau_bc": Fixed(0.0),
+        "tau_diff": Fixed(0.0),
+        "all_params": Fixed(DEFAULT),
+    },
+    neb={
+        "type": "cue",
+        "neb_logU": Fixed(-2.0),
+        "neb_logZ_gas": Fixed(0.0),
+        "all_params": Fixed(DEFAULT),
+    },
     redshift=Fixed(0.0),
 )
 s_neb_on = m_neb_on.predict_state({})
@@ -1053,9 +1107,15 @@ m_neb_off = SEDModel.build(
         "start_gyr": Fixed(NEB_AGE),
         "end_gyr": Fixed(0.0),
         "log_total_mass": Fixed(9.0),
-        "all_params": FIXED,
+        "all_params": Fixed(DEFAULT),
     },
-    dust_attenuation={"law": "power_law", "type": "two_component", "tau_bc": Fixed(0.0), "tau_diff": Fixed(0.0), "all_params": FIXED},
+    dust_attenuation={
+        "law": "power_law",
+        "type": "two_component",
+        "tau_bc": Fixed(0.0),
+        "tau_diff": Fixed(0.0),
+        "all_params": Fixed(DEFAULT),
+    },
     redshift=Fixed(0.0),
 )
 s_neb_off = m_neb_off.predict_state({})
@@ -1266,7 +1326,7 @@ m_full = SEDModel.build(
         "tau_gyr": Fixed(TAU_GYR_FIDUCIAL),
         "age_gyr": Fixed(AGE_GYR_FIDUCIAL),
         "log_total_mass": Fixed(LOG_MASS_FIDUCIAL),
-        "all_params": FIXED,
+        "all_params": Fixed(DEFAULT),
     },
     dust_attenuation={
         "type": "two_component",
@@ -1274,15 +1334,21 @@ m_full = SEDModel.build(
         "law_diff": "calzetti",
         "tau_bc": Fixed(TAU_BC),
         "tau_diff": Fixed(TAU_DIFF),
-        "all_params": FIXED,
-    }, dust_emission={
-            "type": "draine_li2007",
-            "qpah": Fixed(QPAH_FIDUCIAL),
-            "umin": Fixed(UMIN_FIDUCIAL),
-            "gamma_dl": Fixed(GAMMA_FIDUCIAL),
-            "all_params": FIXED,
-        },
-    neb={"type": "cue", "neb_logU": Fixed(-2.0), "neb_logZ_gas": Fixed(0.0), "all_params": FIXED},
+        "all_params": Fixed(DEFAULT),
+    },
+    dust_emission={
+        "type": "draine_li2007",
+        "qpah": Fixed(QPAH_FIDUCIAL),
+        "umin": Fixed(UMIN_FIDUCIAL),
+        "gamma_dl": Fixed(GAMMA_FIDUCIAL),
+        "all_params": Fixed(DEFAULT),
+    },
+    neb={
+        "type": "cue",
+        "neb_logU": Fixed(-2.0),
+        "neb_logZ_gas": Fixed(0.0),
+        "all_params": Fixed(DEFAULT),
+    },
     redshift=Fixed(0.0),
 )
 s_full = m_full.predict_state({})
@@ -1533,7 +1599,7 @@ m_full_nonneb = SEDModel.build(
         "tau_gyr": Fixed(TAU_GYR_FIDUCIAL),
         "age_gyr": Fixed(AGE_GYR_FIDUCIAL),
         "log_total_mass": Fixed(LOG_MASS_FIDUCIAL),
-        "all_params": FIXED,
+        "all_params": Fixed(DEFAULT),
     },
     dust_attenuation={
         "type": "two_component",
@@ -1541,14 +1607,15 @@ m_full_nonneb = SEDModel.build(
         "law_diff": "calzetti",
         "tau_bc": Fixed(TAU_BC),
         "tau_diff": Fixed(TAU_DIFF),
-        "all_params": FIXED,
-    }, dust_emission={
-            "type": "draine_li2007",
-            "qpah": Fixed(QPAH_FIDUCIAL),
-            "umin": Fixed(UMIN_FIDUCIAL),
-            "gamma_dl": Fixed(GAMMA_FIDUCIAL),
-            "all_params": FIXED,
-        },
+        "all_params": Fixed(DEFAULT),
+    },
+    dust_emission={
+        "type": "draine_li2007",
+        "qpah": Fixed(QPAH_FIDUCIAL),
+        "umin": Fixed(UMIN_FIDUCIAL),
+        "gamma_dl": Fixed(GAMMA_FIDUCIAL),
+        "all_params": Fixed(DEFAULT),
+    },
     redshift=Fixed(0.0),
 )
 s_full_nonneb = m_full_nonneb.predict_state({})
@@ -1628,8 +1695,9 @@ for _b, _f, _mf, _mn, _mfn, _mnn in zip(
     _nb = _band_avg(w_b_full, _L_b_neb_only, _f)
     _nt = _band_avg(_w_t_full, _L_t_neb_only, _f)
     print(
-        f"{_b:8s} {_d_full:+8.3f} {_d_nn:+9.3f} {_d_full - _d_nn:+11.3f}"
-        f"  {_nt / _nb:.2f}×" if _nb > 0 else f"{_b:8s} {_d_full:+8.3f}"
+        f"{_b:8s} {_d_full:+8.3f} {_d_nn:+9.3f} {_d_full - _d_nn:+11.3f}  {_nt / _nb:.2f}×"
+        if _nb > 0
+        else f"{_b:8s} {_d_full:+8.3f}"
     )
 
 

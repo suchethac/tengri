@@ -48,7 +48,7 @@ for met in met_logzsol:
         log_total_mass_age = np.log10(age_myr * 1e6)
         sfh_config_age = {
             "type": "const",
-            "all_params": tengri.FIXED,
+            "all_params": tengri.Fixed(tengri.DEFAULT),
             "log_total_mass": log_total_mass_age,
             "start_gyr": age_myr / 1e3,
             "end_gyr": 0.0,
@@ -56,7 +56,7 @@ for met in met_logzsol:
 
         neb_config = {
             "type": "cue",
-            "all_params": tengri.FIXED,
+            "all_params": tengri.Fixed(tengri.DEFAULT),
             "logZ_gas": met,
             "logU": -2.0,
             "fesc": 0.0,
@@ -66,7 +66,7 @@ for met in met_logzsol:
         dust_config = {
             "law": "power_law",
             "type": "two_component",
-            "all_params": tengri.FIXED,
+            "all_params": tengri.Fixed(tengri.DEFAULT),
             "tau_diff": 0.0,
             "tau_bc": 0.0,
         }

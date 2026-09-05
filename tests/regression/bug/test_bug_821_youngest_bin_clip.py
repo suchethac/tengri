@@ -38,7 +38,7 @@ import jax.numpy as jnp
 import numpy as np
 import pytest
 
-from tengri import FIXED, Fixed, SEDModel
+from tengri import DEFAULT, Fixed, SEDModel
 from tengri.components.stellar.component import _youngest_bin_lookback_multiplier
 from tengri.components.stellar.sps.dsps_wrapper import SSPData
 
@@ -103,15 +103,15 @@ def test_boost_raises_youngest_weight_and_conserves_mass():
             "tau_gyr": Fixed(1.0),
             "age_gyr": Fixed(3.0),
             "log_total_mass": Fixed(log_mass),
-            "all_params": FIXED,
+            "all_params": Fixed(DEFAULT),
         },
-        met={"logzsol": Fixed(0.0), "all_params": FIXED},
+        met={"logzsol": Fixed(0.0), "all_params": Fixed(DEFAULT)},
         dust_attenuation={
             "law": "power_law",
             "type": "two_component",
             "tau_bc": Fixed(0.0),
             "tau_diff": Fixed(0.0),
-            "all_params": FIXED,
+            "all_params": Fixed(DEFAULT),
         },
         redshift=Fixed(0.5),
     )
@@ -179,15 +179,15 @@ def test_qh_recovers_exact_convolution_real_grid(real_ssp_only):
             "tau_gyr": Fixed(1.0),
             "age_gyr": Fixed(3.0),
             "log_total_mass": Fixed(0.0),
-            "all_params": FIXED,
+            "all_params": Fixed(DEFAULT),
         },
-        met={"logzsol": Fixed(0.0), "all_params": FIXED},
+        met={"logzsol": Fixed(0.0), "all_params": Fixed(DEFAULT)},
         dust_attenuation={
             "law": "power_law",
             "type": "two_component",
             "tau_bc": Fixed(0.0),
             "tau_diff": Fixed(0.0),
-            "all_params": FIXED,
+            "all_params": Fixed(DEFAULT),
         },
         redshift=Fixed(z),
     )

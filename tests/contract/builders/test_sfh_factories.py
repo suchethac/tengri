@@ -24,7 +24,7 @@ import pytest
 
 pytestmark = pytest.mark.contract
 
-from tengri import FIXED, FREE, Fixed, Uniform, builders, parse_groups
+from tengri import DEFAULT, FREE, Fixed, Uniform, builders, parse_groups
 from tengri.components.stellar.sfh.registry import SFH_REGISTRY
 
 # ── Coverage: every canonical variant gets a factory ──────────────
@@ -72,7 +72,16 @@ def test_dpl_signature_lists_expected_params() -> None:
     sig = inspect.signature(builders.sfh.dpl)
     params = list(sig.parameters)
     assert params[0] == "all_params", "wildcard kwarg must come first for ergonomics"
-    assert set(params[1:]) == {"alpha", "beta", "tau_gyr", "age_gyr", "log_total_mass"}
+    # ``other_params`` is the synonym alias for the wildcard kwarg; it sits
+    # alongside ``all_params`` on every factory now.
+    assert set(params[1:]) == {
+        "other_params",
+        "alpha",
+        "beta",
+        "tau_gyr",
+        "age_gyr",
+        "log_total_mass",
+    }
     for name, p in sig.parameters.items():
         assert p.kind == inspect.Parameter.KEYWORD_ONLY, name
 
@@ -82,8 +91,8 @@ def test_every_factory_has_a_real_signature(variant: str) -> None:
     factory = getattr(builders.sfh, variant)
     sig = inspect.signature(factory)
     assert "all_params" in sig.parameters, "wildcard kwarg missing"
-    # Wildcard defaults to FIXED.
-    assert sig.parameters["all_params"].default is FIXED
+    # Wildcard defaults to Fixed(DEFAULT).
+    assert sig.parameters["all_params"].default == Fixed(DEFAULT)
     # Every non-wildcard kwarg is KEYWORD_ONLY.
     for name, p in sig.parameters.items():
         if name == "all_params":
@@ -95,7 +104,7 @@ def test_every_factory_has_a_real_signature(variant: str) -> None:
 
 
 def test_default_call_produces_minimal_dict() -> None:
-    assert builders.sfh.dpl() == {"type": "dpl", "all_params": FIXED}
+    assert builders.sfh.dpl() == {"type": "dpl", "all_params": Fixed(DEFAULT)}
 
 
 def test_wildcard_free() -> None:
@@ -103,15 +112,19 @@ def test_wildcard_free() -> None:
 
 
 def test_per_param_override_is_preserved() -> None:
+    """A per-param override means the wildcard is spelled 'other_params', LAST."""
     prior = Uniform(1.0, 3.0)
     out = builders.sfh.dpl(beta=prior)
-    assert out == {"type": "dpl", "all_params": FIXED, "beta": prior}
+    assert out == {"type": "dpl", "beta": prior, "other_params": Fixed(DEFAULT)}
+    assert list(out.keys()) == ["type", "beta", "other_params"]
 
 
 def test_wildcard_plus_explicit_override() -> None:
+    """Same convention with all_params=FREE: still 'other_params', LAST."""
     pin = Fixed(1.0)
     out = builders.sfh.dpl(all_params=FREE, log_total_mass=pin)
-    assert out == {"type": "dpl", "all_params": FREE, "log_total_mass": pin}
+    assert out == {"type": "dpl", "log_total_mass": pin, "other_params": FREE}
+    assert list(out.keys()) == ["type", "log_total_mass", "other_params"]
 
 
 # ── Validation: typos and bad sentinels ───────────────────────────
@@ -182,7 +195,7 @@ def _additive_variants() -> list[str]:
 
 @pytest.mark.parametrize("variant", _additive_variants())
 def test_every_additive_factory_default_call_parses_cleanly(variant: str) -> None:
-    """Default-call output (no overrides, FIXED wildcard) must parse cleanly.
+    """Default-call output (no overrides, Fixed(DEFAULT) wildcard) must parse cleanly.
 
     Restricted to additive (smooth) variants because mixture/modulator
     variants compose with a smooth SFH and are not valid standalone.
@@ -196,7 +209,7 @@ def test_burst_and_field_factories_emit_valid_dicts() -> None:
     though they cannot be used standalone as ``sfh=``."""
     burst_out = builders.sfh.burst()
     assert burst_out["type"] == "burst"
-    assert burst_out["all_params"] is FIXED
+    assert burst_out["all_params"] == Fixed(DEFAULT)
     field_out = builders.sfh.field(all_params=FREE)
     assert field_out["type"] == "field"
     assert field_out["all_params"] is FREE

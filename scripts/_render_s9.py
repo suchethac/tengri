@@ -10,10 +10,12 @@ import warnings
 
 warnings.filterwarnings("ignore")
 from pathlib import Path
-import numpy as np
+
 import matplotlib.pyplot as plt
+import numpy as np
 from reproduction.cigale._drivers import cigale_driver as C, units as U
-from tengri import FIXED, Fixed, SEDModel
+
+from tengri import DEFAULT, Fixed, SEDModel
 from tengri.components.stellar.sps.dsps_wrapper import load_ssp_data
 
 SSP_PATH = Path("reproduction/cigale/_drivers/data/bc03_from_cigale.h5")
@@ -27,7 +29,7 @@ _E_BV_STARS = 0.44 * 0.3
 TAU_DIFF_FIDUCIAL = 4.05 * _E_BV_STARS / 1.086
 TAU_BC_FIDUCIAL = 0.0
 
-MET_FIDUCIAL = {"logzsol": Fixed(MET_LOGZSOL_FIDUCIAL), "all_params": FIXED}
+MET_FIDUCIAL = {"logzsol": Fixed(MET_LOGZSOL_FIDUCIAL), "all_params": Fixed(DEFAULT)}
 
 _sfh_args_d = (
     "sfhdelayed",
@@ -61,7 +63,7 @@ m_agn_base = SEDModel.build(
         "tau_gyr": Fixed(1.0),
         "age_gyr": Fixed(5.0),
         "log_total_mass": Fixed(0.0),
-        "all_params": FIXED,
+        "all_params": Fixed(DEFAULT),
     },
     dust_attenuation={
         "type": "two_component",
@@ -69,8 +71,9 @@ m_agn_base = SEDModel.build(
         "law_diff": "leitherer02",
         "tau_bc": Fixed(TAU_BC_FIDUCIAL),
         "tau_diff": Fixed(TAU_DIFF_FIDUCIAL),
-        "all_params": FIXED,
-    }, dust_emission={"type": "dale2014", "all_params": FIXED},
+        "all_params": Fixed(DEFAULT),
+    },
+    dust_emission={"type": "dale2014", "all_params": Fixed(DEFAULT)},
     redshift=Fixed(0.0),
 )
 s_agn_base = m_agn_base.predict_state({})
@@ -115,7 +118,7 @@ m_agn = SEDModel.build(
         "tau_gyr": Fixed(1.0),
         "age_gyr": Fixed(5.0),
         "log_total_mass": Fixed(0.0),
-        "all_params": FIXED,
+        "all_params": Fixed(DEFAULT),
     },
     dust_attenuation={
         "type": "two_component",
@@ -123,15 +126,16 @@ m_agn = SEDModel.build(
         "law_diff": "leitherer02",
         "tau_bc": Fixed(TAU_BC_FIDUCIAL),
         "tau_diff": Fixed(TAU_DIFF_FIDUCIAL),
-        "all_params": FIXED,
-    }, dust_emission={"type": "dale2014", "all_params": FIXED},
+        "all_params": Fixed(DEFAULT),
+    },
+    dust_emission={"type": "dale2014", "all_params": Fixed(DEFAULT)},
     agn={
         "type": "composable",
-        "disc": {"type": "schartmann2005", "all_params": FIXED},
-        "torus": {"type": "skirtor", "all_params": FIXED},
+        "disc": {"type": "schartmann2005", "all_params": Fixed(DEFAULT)},
+        "torus": {"type": "skirtor", "all_params": Fixed(DEFAULT)},
         "agn_log_lbol": Fixed(-0.42),
         "agn_fracAGN": Fixed(0.3),
-        "all_params": FIXED,
+        "all_params": Fixed(DEFAULT),
     },
     redshift=Fixed(0.0),
 )

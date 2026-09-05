@@ -359,8 +359,8 @@ class DustSEDComponent(TemplateThreading):
             ParamDeclaration(
                 "dust_tau_bc",
                 # default 1.0: Charlot & Fall (2000) canonical birth-cloud tau_V
-                # (Prospector dust1 ~ 1). Explicit default so '*': FIXED does not
-                # silently fall back to the prior midpoint (#478 / surfaced by #844).
+                # (Prospector dust1 ~ 1). Explicit default so '*': Fixed(DEFAULT) does
+                # not silently fall back to the prior midpoint (#478 / surfaced by #844).
                 Uniform(0.0, 4.0, default=1.0),
                 "Birth-cloud V-band optical depth [dimensionless]",
             ),

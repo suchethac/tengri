@@ -39,7 +39,7 @@ import jax.numpy as jnp
 import numpy as np
 import pytest
 
-from tengri import FIXED, Fixed, Observation, Photometry, SEDModel, SSPData, WavePrecomp
+from tengri import DEFAULT, Fixed, Observation, Photometry, SEDModel, SSPData, WavePrecomp
 from tengri.observation.photometry import FilterCurve
 
 pytestmark = pytest.mark.regression_bug
@@ -86,7 +86,7 @@ def _photometry(ssp, obs, law: str, approx) -> np.ndarray:
         model = SEDModel.build(
             ssp_data=ssp,
             observation=obs,
-            sfh={"type": "dpl", "all_params": FIXED},
+            sfh={"type": "dpl", "all_params": Fixed(DEFAULT)},
             dust_attenuation={"type": "single_component", "law": law, "tau_v": Fixed(1.0)},
             redshift=Fixed(0.5),
             approx=approx,

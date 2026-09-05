@@ -34,7 +34,7 @@ def _ssp_path():
 def _build(approx, wave_lo=3500.0):
     import warnings
 
-    from tengri import FIXED, Fixed, Observation, SEDModel, Spectroscopy, load_ssp_data
+    from tengri import DEFAULT, Fixed, Observation, SEDModel, Spectroscopy, load_ssp_data
 
     ssp_path = _ssp_path()
     if ssp_path is None:
@@ -46,11 +46,11 @@ def _build(approx, wave_lo=3500.0):
         return SEDModel.build(
             ssp_data=ssp,
             observation=obs,
-            sfh={"type": "dpl", "all_params": FIXED},
+            sfh={"type": "dpl", "all_params": Fixed(DEFAULT)},
             dust_attenuation={
                 "type": "two_component",
                 "law": "calzetti",
-                "all_params": FIXED,
+                "all_params": Fixed(DEFAULT),
             },
             neb={"type": "none"},
             redshift=Fixed(0.05),
@@ -110,7 +110,7 @@ class TestSpectralIndexAsData:
     def test_index_constraint_in_cohort(self):
         import warnings
 
-        from tengri import FIXED, Fitter, Fixed, Observation, Photometry, SEDModel, load_ssp_data
+        from tengri import DEFAULT, Fitter, Fixed, Observation, Photometry, SEDModel, load_ssp_data
         from tengri.inference.loss_functions import build_loglikelihood_fn
 
         ssp_path = _ssp_path()
@@ -129,11 +129,11 @@ class TestSpectralIndexAsData:
             m = SEDModel.build(
                 ssp_data=ssp,
                 observation=obs,
-                sfh={"type": "dpl", "all_params": FIXED},
+                sfh={"type": "dpl", "all_params": Fixed(DEFAULT)},
                 dust_attenuation={
                     "type": "two_component",
                     "law": "calzetti",
-                    "all_params": FIXED,
+                    "all_params": Fixed(DEFAULT),
                 },
                 neb={"type": "none"},
                 redshift=Fixed(0.05),

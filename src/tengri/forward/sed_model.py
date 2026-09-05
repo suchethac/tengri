@@ -315,7 +315,7 @@ class WavePrecomp:
     >>> # Catalog fit: 10⁴ galaxies at per-galaxy known z.
     >>> sed = SEDModel.build(
     ...     ...,
-    ...     redshift=FIXED,  # per-galaxy value supplied by the redshift column
+    ...     redshift=Fixed(DEFAULT),  # per-galaxy value supplied by the redshift column
     ...     approx=WavePrecomp(catalog_z_range=(0.05, 1.5), n_z=200),
     ... )
     >>> forward = ForwardModel.build(sed=sed, observation=obs)
@@ -4612,7 +4612,7 @@ class SEDModel:
         # 2026-05-20: drop fixed-parameter VALUES from the
         # cache key. Keep names + types-of-fixed only. Two SEDModels with
         # the same physics + same SSP + same filters + same WavePrecomp
-        # config + same FREE-parameter shape and same set of FIXED names
+        # config + same FREE-parameter shape and same set of fixed names
         # now share a compile slot. Their actual fixed VALUES are threaded
         # as a runtime JIT input (see ``_get_or_build_predict_observables_jit``
         # below) so the compiled function uses the correct per-galaxy
@@ -7100,7 +7100,7 @@ class SEDModel:
                 "nebular backend: emission is baked into the SSP grid and "
                 "no discrete line catalog is published. To predict line "
                 "luminosities, build the model with a photoionization "
-                "backend, e.g. neb={'type': 'cue', 'all_params': FIXED} (requires "
+                "backend, e.g. neb={'type': 'cue', 'all_params': Fixed(DEFAULT)} (requires "
                 "a bare-stellar SSP) or neb={'type': 'cloudy_grid', ...}. "
                 "For a quick narrow-band measurement on the BakedIn SED, "
                 "integrate model._predict_rest_sed(params).sed across the "
@@ -8884,7 +8884,8 @@ class SEDModel:
            component-specific settings (``'law'`` for dust, ``'norm'`` for AGN, etc.).
         2. **``'all_params'`` wildcard** sets free/fixed status for all parameters
            in the group not explicitly overridden. Accepts :data:`~tengri.FREE` or
-           :data:`~tengri.FIXED` (default). The only valid wildcard spelling.
+           ``Fixed(DEFAULT)`` (default; see :data:`~tengri.Fixed`, :data:`~tengri.DEFAULT`).
+           The only valid wildcard spelling.
         3. **Parameter keys** are bare or full-prefixed names that override the
            wildcard or default. Use short forms (``'beta'`` in sfh, ``'tau_bc'`` in
            dust) for readability.
@@ -9017,8 +9018,8 @@ class SEDModel:
             a :class:`Parameters` spec.
         tengri.recipes : Pre-built configuration dicts for common cases
             (star-forming galaxies, AGN, high-z, etc.).
-        tengri.FREE, tengri.FIXED : Sentinel values for the ``'all_params'``
-            wildcard.
+        tengri.FREE, tengri.Fixed, tengri.DEFAULT : ``FREE`` and ``Fixed(DEFAULT)``
+            are the two values the ``'all_params'`` wildcard accepts.
         SEDModel.from_dict : Load a model from a serialized config dict.
         SEDModel.from_file : Load a model from a config file (JSON or YAML).
         model_configuration : Reference documentation for the grammar.
@@ -9027,19 +9028,19 @@ class SEDModel:
         --------
         **Minimal star-forming galaxy (fixed redshift, photometry only):**
 
-        >>> from tengri import SEDModel, FREE, FIXED, Uniform, Fixed
+        >>> from tengri import SEDModel, FREE, DEFAULT, Uniform, Fixed
         >>> model = SEDModel.build(
         ...     ssp_data=ssp,
         ...     sfh={"type": "dpl", "all_params": FREE},
         ...     dust_attenuation={
         ...         "type": "two_component",
         ...         "law": "calzetti",
-        ...         "all_params": FIXED,
+        ...         "all_params": Fixed(DEFAULT),
         ...         "tau_bc": 0.5,
         ...         "tau_diff": 0.3,
         ...     },
-        ...     dust_emission={"type": "dale2014", "all_params": FIXED},
-        ...     neb={"type": "cue", "all_params": FIXED},
+        ...     dust_emission={"type": "dale2014", "all_params": Fixed(DEFAULT)},
+        ...     neb={"type": "cue", "all_params": Fixed(DEFAULT)},
         ...     redshift=Fixed(0.05),
         ...     filters=["sdss_u", "sdss_g", "sdss_r"],
         ... )
@@ -9065,10 +9066,10 @@ class SEDModel:
 
         >>> model = SEDModel.build(
         ...     ssp_data=ssp,
-        ...     sfh={"type": "dpl", "all_params": FIXED, "alpha": Uniform(0.5, 3)},
+        ...     sfh={"type": "dpl", "all_params": Fixed(DEFAULT), "alpha": Uniform(0.5, 3)},
         ...     agn={
         ...         "type": "composable",
-        ...         "disc": {"type": "powerlaw", "all_params": FIXED},
+        ...         "disc": {"type": "powerlaw", "all_params": Fixed(DEFAULT)},
         ...         "torus": {"type": "skirtor", "all_params": FREE},
         ...         "nlr": {"type": "cue", "logZ_gas": -0.3},
         ...         "norm": "cigale_joint",

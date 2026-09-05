@@ -8,7 +8,7 @@ What we pin down here:
 
 1. Every variant in the parser's ``_VALID_*_TYPES`` enum surfaces as a
    factory.
-2. Factory output is shape-correct: ``{'type': <variant>, 'all_params': FIXED}``
+2. Factory output is shape-correct: ``{'type': <variant>, 'all_params': Fixed(DEFAULT)}``
    on a default call, with per-param overrides honored.
 3. Per-param :class:`Distribution` overrides round-trip through the
    parser — the factory dict is byte-equivalent to a hand-written one.
@@ -31,7 +31,7 @@ import pytest
 
 pytestmark = pytest.mark.contract
 
-from tengri import FIXED, Fixed, Uniform, builders, parse_groups
+from tengri import DEFAULT, Fixed, Uniform, builders, parse_groups
 
 
 @pytest.mark.parametrize(
@@ -58,7 +58,7 @@ def test_module_surface_and_default_dict(
         assert out["sf"]["type"] and out["agn"]["type"]
     else:
         assert out["type"] == representative_variant
-    assert out["all_params"] is FIXED
+    assert out["all_params"] == Fixed(DEFAULT)
     if sample_short_param is not None:
         sig = inspect.signature(getattr(mod, representative_variant))
         assert sample_short_param in sig.parameters, (
@@ -145,7 +145,7 @@ def test_igm_dla_param_round_trips_to_free() -> None:
 def test_igm_none_has_no_flags_in_signature() -> None:
     """``igm.none`` is a no-op; no flags or params to expose."""
     sig = inspect.signature(builders.igm.none)
-    assert list(sig.parameters) == ["all_params"]
+    assert list(sig.parameters) == ["all_params", "other_params"]
 
 
 # ── Module-level wiring ───────────────────────────────────────────
@@ -171,9 +171,9 @@ def test_all_three_factories_emit_type_key() -> None:
         for variant in mod.available():
             out = getattr(mod, variant)()
             assert out["type"] == variant
-            assert out["all_params"] is FIXED
+            assert out["all_params"] == Fixed(DEFAULT)
     for variant in builders.radio.available():
         out = getattr(builders.radio, variant)()
         assert "type" not in out, f"radio.{variant} still emits the retired type key"
         assert out["sf"]["type"] and out["agn"]["type"]
-        assert out["all_params"] is FIXED
+        assert out["all_params"] == Fixed(DEFAULT)

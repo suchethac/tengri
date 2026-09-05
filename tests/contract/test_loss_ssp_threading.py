@@ -26,7 +26,7 @@ import jax.numpy as jnp
 import numpy as np
 import pytest
 
-from tengri import FIXED, Fixed, Observation, Photometry, SEDModel, Uniform
+from tengri import DEFAULT, Fixed, Observation, Photometry, SEDModel, Uniform
 from tengri.inference.fitter import Fitter
 from tengri.inference.loss_functions import build_loss_fn
 from tengri.observation.photometry import FilterCurve
@@ -49,8 +49,12 @@ def _build_model(ssp, observation):
     return SEDModel.build(
         ssp_data=ssp,
         observation=observation,
-        sfh={"type": "dpl", "all_params": FIXED, "log_total_mass": Uniform(8, 12)},
-        dust_attenuation={"type": "two_component", "law": "calzetti", "all_params": FIXED},
+        sfh={"type": "dpl", "all_params": Fixed(DEFAULT), "log_total_mass": Uniform(8, 12)},
+        dust_attenuation={
+            "type": "two_component",
+            "law": "calzetti",
+            "all_params": Fixed(DEFAULT),
+        },
         neb={"type": "none"},
         redshift=Fixed(0.5),
     )
@@ -407,14 +411,18 @@ def test_hierarchical_forwards_are_excluded_from_threading(synthetic_ssp, simple
     broke two of them in CI. The exclusion is now stated via
     ``_supports_jit_threading``, and this pins it.
     """
-    from tengri import FIXED, SEDModel, Uniform
+    from tengri import DEFAULT, Fixed, SEDModel, Uniform
     from tengri.forward.population_sed_model import PopulationSEDModel
 
     template = SEDModel.build(
         ssp_data=synthetic_ssp,
         observation=simple_observation,
-        sfh={"type": "dpl", "all_params": FIXED, "log_total_mass": Uniform(8, 12)},
-        dust_attenuation={"type": "two_component", "law": "calzetti", "all_params": FIXED},
+        sfh={"type": "dpl", "all_params": Fixed(DEFAULT), "log_total_mass": Uniform(8, 12)},
+        dust_attenuation={
+            "type": "two_component",
+            "law": "calzetti",
+            "all_params": Fixed(DEFAULT),
+        },
         neb={"type": "none"},
         redshift=Fixed(0.5),
     )

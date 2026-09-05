@@ -21,7 +21,7 @@ References
        Digital Sky Survey," AJ, 122, 549. arXiv:astro-ph/0105231.
        https://doi.org/10.1086/321167
 .. [2] Boroson & Green 1992, "The Emission-Line Properties of Low-Redshift
-       Quasars," ApJS, 80, 109.
+       Quasi-stellar Objects," ApJS, 80, 109.
 .. [3] Tsuzuki et al. 2006, "Fe II Emission in 14 Low-Redshift Quasars.
        I. Observations," ApJ, 650, 57. (UV Fe II decomposition)
        Verified against ~/writing-workspace/projects/tengri/99-references.bib:Tsuzuki_2006.

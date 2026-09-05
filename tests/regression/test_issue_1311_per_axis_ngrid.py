@@ -23,7 +23,7 @@ import jax
 import numpy as np
 import pytest
 
-from tengri import FIXED, FREE, FeaturePrecomp, SEDModel, Uniform, WavePrecomp
+from tengri import DEFAULT, FREE, FeaturePrecomp, Fixed, SEDModel, Uniform, WavePrecomp
 from tengri.components.nebular.nebular_grid_precompute import (
     _CANDIDATE_AXES,
     _DEFAULT_N_GRID,
@@ -100,7 +100,7 @@ class TestPerAxisReachesTheBuilder:
             met={"logzsol": FREE},
             neb={
                 "type": "cue",
-                "all_params": FIXED,
+                "all_params": Fixed(DEFAULT),
                 "logU": Uniform(-3.5, -1.5),
                 "logZ_gas": Uniform(-1.0, 0.4),
             },

@@ -58,7 +58,7 @@ import warnings
 # calls are fixed in the code, not hidden.
 warnings.filterwarnings("ignore", message=".*BakedInBackend.*")
 warnings.filterwarnings("ignore", message=".*WavePrecomp.*")
-warnings.filterwarnings("ignore", message=".*was marked FIXED.*")
+warnings.filterwarnings("ignore", message=".*states no 'all_params' disposition.*")
 warnings.filterwarnings("ignore", message=".*Composable AGN.*")
 warnings.filterwarnings("ignore", message=".*before the Big Bang.*")
 warnings.filterwarnings("ignore", category=RuntimeWarning)
@@ -73,17 +73,17 @@ import matplotlib.pyplot as plt
 import tengri
 from _setup import FIG_DIR
 from tengri import (
-    FIXED,
-    FREE,
+    builders,
+    DEFAULT,
     Fixed,
+    FREE,
     Observation,
     Parameters,
+    parse_groups,
     Photometry,
+    recipes,
     SEDModel,
     Uniform,
-    builders,
-    parse_groups,
-    recipes,
 )
 from tengri import cosmology, plot, units
 
@@ -151,8 +151,8 @@ groups_dict = {
         "law": "calzetti",
         "all_params": FREE,
     },
-    "dust_emission": {"type": "dale2014", "all_params": FIXED},
-    "neb": {"type": "cue", "all_params": FIXED},
+    "dust_emission": {"type": "dale2014", "all_params": Fixed(DEFAULT)},
+    "neb": {"type": "cue", "all_params": Fixed(DEFAULT)},
     "redshift": Uniform(0.01, 6.0),
     "igm": {"type": "inoue"},
 }
@@ -178,8 +178,8 @@ factory_groups = {
         "law": "calzetti",
         "all_params": FREE,
     },
-    "dust_emission": {"type": "dale2014", "all_params": FIXED},
-    "neb": {"type": "cue", "all_params": FIXED},
+    "dust_emission": {"type": "dale2014", "all_params": Fixed(DEFAULT)},
+    "neb": {"type": "cue", "all_params": Fixed(DEFAULT)},
     "redshift": Uniform(0.01, 6.0),
     "igm": {"type": "inoue"},
 }
@@ -221,9 +221,9 @@ groups_sfh_tour = {
     "dust_attenuation": {
         "type": "two_component",
         "law": "calzetti",
-        "all_params": FIXED,
+        "all_params": Fixed(DEFAULT),
     },
-    "neb": {"type": "cue", "all_params": FIXED},
+    "neb": {"type": "cue", "all_params": Fixed(DEFAULT)},
     "redshift": Fixed(0.05),
 }
 spec_sfh_tour = parse_groups(**groups_sfh_tour)
@@ -242,14 +242,14 @@ print("─" * 70)
 
 # Attenuation and IR emission are two peer groups, each with its own factory.
 groups_dust_tour = {
-    "sfh": {"type": "tsnorm", "all_params": FIXED},
+    "sfh": {"type": "tsnorm", "all_params": Fixed(DEFAULT)},
     "dust_attenuation": builders.dust.two_component(
         law="calzetti",
         all_params=FREE,
         tau_bc=Uniform(0.0, 2.0),
     ),
-    "dust_emission": builders.dust.emission.dale2014(all_params=FIXED),
-    "neb": {"type": "cue", "all_params": FIXED},
+    "dust_emission": builders.dust.emission.dale2014(all_params=Fixed(DEFAULT)),
+    "neb": {"type": "cue", "all_params": Fixed(DEFAULT)},
     "redshift": Fixed(0.05),
 }
 spec_dust_tour = parse_groups(**groups_dust_tour)
@@ -271,8 +271,12 @@ print()
 # Try cb19 (adds log_nH parameter)
 try:
     groups_neb_tour = {
-        "sfh": {"type": "tsnorm", "all_params": FIXED},
-        "dust_attenuation": {"law": "power_law", "type": "two_component", "all_params": FIXED},
+        "sfh": {"type": "tsnorm", "all_params": Fixed(DEFAULT)},
+        "dust_attenuation": {
+            "law": "power_law",
+            "type": "two_component",
+            "all_params": Fixed(DEFAULT),
+        },
         "neb": builders.neb.cb19(all_params=FREE, log_nH=Uniform(1.0, 4.0)),
         "redshift": Fixed(0.05),
     }
@@ -283,9 +287,13 @@ except Exception as e:
     # Fallback: bare-stellar SSP may not support non-Cue backends
     print(f"cb19 skipped (bare-stellar SSP limitation): {str(e)[:50]}...")
     groups_neb_tour = {
-        "sfh": {"type": "tsnorm", "all_params": FIXED},
-        "dust_attenuation": {"law": "power_law", "type": "two_component", "all_params": FIXED},
-        "neb": builders.neb.cue(all_params=FIXED),
+        "sfh": {"type": "tsnorm", "all_params": Fixed(DEFAULT)},
+        "dust_attenuation": {
+            "law": "power_law",
+            "type": "two_component",
+            "all_params": Fixed(DEFAULT),
+        },
+        "neb": builders.neb.cue(all_params=Fixed(DEFAULT)),
         "redshift": Fixed(0.05),
     }
     spec_neb_tour = parse_groups(**groups_neb_tour)
@@ -318,10 +326,10 @@ agn_dict = builders.agn.composable(
     all_params=FREE,
     log_lbol=Uniform(9.42, 13.42),
     disc=builders.agn.disc.multicolor(all_params=FREE),
-    torus=builders.agn.torus.skirtor(all_params=FIXED),
+    torus=builders.agn.torus.skirtor(all_params=Fixed(DEFAULT)),
     nlr=builders.agn.nlr.analytic(),
     feii=builders.agn.feii.none(),
-    atten=builders.agn.atten.smc_prevot(all_params=FIXED),
+    atten=builders.agn.atten.smc_prevot(all_params=Fixed(DEFAULT)),
 )
 print(f"Composable AGN dict keys: {list(agn_dict.keys())}")
 print(f"  agn_dict['type'] = '{agn_dict['type']}'")
@@ -338,13 +346,13 @@ print()
 #
 # - `[user]` — explicitly specified in your nested dict
 # - `[all_params FREE]` — matched by wildcard directive
-# - `[all_params FIXED]` — matched by wildcard directive
+# - `[all_params Fixed(DEFAULT)]` — matched by wildcard directive
 # - `[default]` — registry default (usually fixed at median)
 #
 # The `neb` group below deliberately states no disposition so the summary can
 # show `[default]` tags — and the `DefaultFixedParametersWarning` it triggers
 # is the grammar flagging exactly that: a group you engaged that yielded
-# nothing free. Stating `all_params: FIXED` is how you say it was intentional.
+# nothing free. Stating `{'all_params': Fixed(DEFAULT)}` is how you say it was intentional.
 
 # %%
 # Build a model with mixed provenance
@@ -357,7 +365,7 @@ base_groups = {
     "dust_attenuation": {
         "type": "two_component",
         "law": "calzetti",
-        "all_params": FIXED,  # All dust params are [all_params FIXED]
+        "all_params": Fixed(DEFAULT),  # All dust params are [all_params Fixed(DEFAULT)]
         "tau_bc": 0.5,  # Override to explicit value (still fixed)
     },
     "neb": {"type": "cue"},  # No wildcard → all use [default]
@@ -436,13 +444,13 @@ base_groups_sfh = {
     "dust_attenuation": {
         "type": "two_component",
         "law": "calzetti",
-        "all_params": FIXED,  # deliberately all-fixed for this demo (#1995)
+        "all_params": Fixed(DEFAULT),  # deliberately all-fixed for this demo (#1995)
         "tau_bc": Fixed(0.5),
         "tau_diff": Fixed(0.3),
         "slope": Fixed(-0.7),
     },
-    "dust_emission": {"type": "dale2014", "all_params": FIXED},
-    "neb": {"type": "cue", "all_params": FIXED},
+    "dust_emission": {"type": "dale2014", "all_params": Fixed(DEFAULT)},
+    "neb": {"type": "cue", "all_params": Fixed(DEFAULT)},
     "redshift": Fixed(0.05),
     "igm": {"type": "none"},
 }
@@ -450,7 +458,11 @@ base_groups_sfh = {
 for sfh_name, _ in sfh_families:
     # Swap SFH family: one-line edit
     groups_variant = base_groups_sfh.copy()
-    groups_variant["sfh"] = {"type": sfh_name, "all_params": FIXED, "met_logzsol": Fixed(-0.1)}
+    groups_variant["sfh"] = {
+        "type": sfh_name,
+        "all_params": Fixed(DEFAULT),
+        "met_logzsol": Fixed(-0.1),
+    }
 
     spec_sfh = parse_groups(**groups_variant)
     sfh_params = [p for p in spec_sfh.free_params if p.startswith("sfh_")]
@@ -475,9 +487,9 @@ print("─" * 70)
 
 # Composable radio: SF driven by Bell 2003 FIRRC, AGN via power-law
 groups_radio = {
-    "sfh": {"type": "tsnorm", "all_params": FIXED},
-    "dust_attenuation": {"law": "calzetti", "type": "two_component", "all_params": FIXED},
-    "neb": {"type": "cue", "all_params": FIXED},
+    "sfh": {"type": "tsnorm", "all_params": Fixed(DEFAULT)},
+    "dust_attenuation": {"law": "calzetti", "type": "two_component", "all_params": Fixed(DEFAULT)},
+    "neb": {"type": "cue", "all_params": Fixed(DEFAULT)},
     "radio": {
         "sf": {"type": "bell2003"},  # FIR-radio correlation (Bell 2003)
         "agn": {"type": "powerlaw"},  # AGN radio as power-law
@@ -505,12 +517,12 @@ print("─" * 70)
 
 # X-ray: yang20 model (X-ray from XRB + AGN corona via alpha_ox)
 groups_xray = {
-    "sfh": {"type": "tsnorm", "all_params": FIXED},
-    "dust_attenuation": {"law": "calzetti", "type": "two_component", "all_params": FIXED},
-    "neb": {"type": "cue", "all_params": FIXED},
+    "sfh": {"type": "tsnorm", "all_params": Fixed(DEFAULT)},
+    "dust_attenuation": {"law": "calzetti", "type": "two_component", "all_params": Fixed(DEFAULT)},
+    "neb": {"type": "cue", "all_params": Fixed(DEFAULT)},
     "xray": {
         "type": "yang20",  # Yang+2020; AGN corona via alpha_ox–L_2500 (Lusso & Risaliti 2016)
-        "all_params": FIXED,
+        "all_params": Fixed(DEFAULT),
     },
     "redshift": Fixed(0.05),
 }
@@ -537,9 +549,9 @@ print("─" * 70)
 
 # Shock with 'frac' (relative) normalization: fraction of the galaxy's Hα
 groups_shock_frac = {
-    "sfh": {"type": "tsnorm", "all_params": FIXED},
-    "dust_attenuation": {"law": "calzetti", "type": "two_component", "all_params": FIXED},
-    "neb": {"type": "cue", "all_params": FIXED},
+    "sfh": {"type": "tsnorm", "all_params": Fixed(DEFAULT)},
+    "dust_attenuation": {"law": "calzetti", "type": "two_component", "all_params": Fixed(DEFAULT)},
+    "neb": {"type": "cue", "all_params": Fixed(DEFAULT)},
     "shock": {
         "norm": "frac",  # Relative: shock Hα as a fraction of galaxy Hα
         "frac": Uniform(0.0, 0.5),  # Free parameter, 0–50% of Hα
@@ -556,9 +568,9 @@ print()
 
 # Shock with 'lhalpha' (absolute) normalization: absolute Hα luminosity
 groups_shock_lha = {
-    "sfh": {"type": "tsnorm", "all_params": FIXED},
-    "dust_attenuation": {"law": "calzetti", "type": "two_component", "all_params": FIXED},
-    "neb": {"type": "cue", "all_params": FIXED},
+    "sfh": {"type": "tsnorm", "all_params": Fixed(DEFAULT)},
+    "dust_attenuation": {"law": "calzetti", "type": "two_component", "all_params": Fixed(DEFAULT)},
+    "neb": {"type": "cue", "all_params": Fixed(DEFAULT)},
     "shock": {
         "norm": "lhalpha",  # Absolute: direct shock Hα luminosity
         "log_lhalpha": Uniform(38.0, 42.0),  # log10(L_Hα / erg/s)
@@ -595,10 +607,10 @@ print()
 
 # Example 1: scalar metallicity (simplest)
 groups_met_scalar = {
-    "sfh": {"type": "tsnorm", "all_params": FIXED},
+    "sfh": {"type": "tsnorm", "all_params": Fixed(DEFAULT)},
     "met": {"logzsol": Uniform(-0.5, 0.3)},  # Vary scalar metallicity
-    "dust_attenuation": {"law": "calzetti", "type": "two_component", "all_params": FIXED},
-    "neb": {"type": "cue", "all_params": FIXED},
+    "dust_attenuation": {"law": "calzetti", "type": "two_component", "all_params": Fixed(DEFAULT)},
+    "neb": {"type": "cue", "all_params": Fixed(DEFAULT)},
     "redshift": Fixed(0.05),
 }
 spec_met_scalar = parse_groups(**groups_met_scalar)
@@ -641,13 +653,13 @@ groups_roundtrip = {
     "dust_attenuation": {
         "type": "two_component",
         "law": "calzetti",
-        "all_params": FIXED,
+        "all_params": Fixed(DEFAULT),
         "tau_bc": Fixed(0.5),
         "tau_diff": Fixed(0.3),
         "slope": Fixed(-0.7),
     },
-    "dust_emission": {"type": "dale2014", "all_params": FIXED},
-    "neb": {"type": "cue", "all_params": FIXED},
+    "dust_emission": {"type": "dale2014", "all_params": Fixed(DEFAULT)},
+    "neb": {"type": "cue", "all_params": Fixed(DEFAULT)},
     "igm": {"type": "inoue"},  # Enable IGM absorption
     "redshift": Uniform(0.01, 0.1),
 }
@@ -694,17 +706,17 @@ dl_cm = float(cosmology.luminosity_distance(z))
 sed_rows = []
 for sfh_name, truth_sfh in sfh_families:
     groups_sfh_fig = {
-        "sfh": {"type": sfh_name, "all_params": FIXED, "met_logzsol": Fixed(-0.1)},
+        "sfh": {"type": sfh_name, "all_params": Fixed(DEFAULT), "met_logzsol": Fixed(-0.1)},
         "dust_attenuation": {
             "type": "two_component",
             "law": "calzetti",
-            "all_params": FIXED,  # deliberately all-fixed for this figure (#1995)
+            "all_params": Fixed(DEFAULT),  # deliberately all-fixed for this figure (#1995)
             "tau_bc": Fixed(0.5),
             "tau_diff": Fixed(0.3),
             "slope": Fixed(-0.7),
         },
-        "dust_emission": {"type": "dale2014", "all_params": FIXED},
-        "neb": {"type": "cue", "all_params": FIXED},
+        "dust_emission": {"type": "dale2014", "all_params": Fixed(DEFAULT)},
+        "neb": {"type": "cue", "all_params": Fixed(DEFAULT)},
         "redshift": Fixed(z),
         "igm": {"type": "none"},
     }
@@ -809,13 +821,13 @@ base_groups_dust = {
     "dust_attenuation": {
         "law": "power_law",
         "type": "two_component",
-        "all_params": FIXED,  # deliberately all-fixed for this demo (#1995)
+        "all_params": Fixed(DEFAULT),  # deliberately all-fixed for this demo (#1995)
         "tau_bc": Fixed(0.5),
         "tau_diff": Fixed(0.3),
         "slope": Fixed(-0.7),
     },
-    "dust_emission": {"type": "dale2014", "all_params": FIXED},
-    "neb": {"type": "cue", "all_params": FIXED},
+    "dust_emission": {"type": "dale2014", "all_params": Fixed(DEFAULT)},
+    "neb": {"type": "cue", "all_params": Fixed(DEFAULT)},
     "redshift": Fixed(0.05),
     "igm": {"type": "none"},
 }
@@ -867,13 +879,15 @@ groups_nodust = {
     "dust_attenuation": {
         "type": "two_component",
         "law": "calzetti",
-        "all_params": FIXED,  # dust-free comparison: everything pinned, taus at zero (#1995)
+        "all_params": Fixed(
+            DEFAULT
+        ),  # dust-free comparison: everything pinned, taus at zero (#1995)
         "tau_bc": Fixed(0.0),
         "tau_diff": Fixed(0.0),
         "slope": Fixed(-0.7),
     },
-    "dust_emission": {"type": "dale2014", "all_params": FIXED},
-    "neb": {"type": "cue", "all_params": FIXED},
+    "dust_emission": {"type": "dale2014", "all_params": Fixed(DEFAULT)},
+    "neb": {"type": "cue", "all_params": Fixed(DEFAULT)},
     "redshift": Fixed(z),
     "igm": {"type": "none"},
 }
@@ -936,13 +950,13 @@ for idx, dust_law in enumerate(dust_laws):
         "dust_attenuation": {
             "type": "two_component",
             "law": dust_law,
-            "all_params": FIXED,  # deliberately all-fixed for this figure (#1995)
+            "all_params": Fixed(DEFAULT),  # deliberately all-fixed for this figure (#1995)
             "tau_bc": Fixed(0.5),
             "tau_diff": Fixed(0.3),
             "slope": Fixed(-0.7),
         },
-        "dust_emission": {"type": "dale2014", "all_params": FIXED},
-        "neb": {"type": "cue", "all_params": FIXED},
+        "dust_emission": {"type": "dale2014", "all_params": Fixed(DEFAULT)},
+        "neb": {"type": "cue", "all_params": Fixed(DEFAULT)},
         "redshift": Fixed(z),
         "igm": {"type": "none"},
     }
@@ -1020,12 +1034,12 @@ base_groups_emission = {
     "dust_attenuation": {
         "type": "two_component",
         "law": "calzetti",
-        "all_params": FIXED,  # deliberately all-fixed for this demo (#1995)
+        "all_params": Fixed(DEFAULT),  # deliberately all-fixed for this demo (#1995)
         "tau_bc": Fixed(0.5),
         "tau_diff": Fixed(0.3),
         "slope": Fixed(-0.7),
     },
-    "neb": {"type": "cue", "all_params": FIXED},
+    "neb": {"type": "cue", "all_params": Fixed(DEFAULT)},
     "redshift": Fixed(0.05),
     "igm": {"type": "none"},
 }
@@ -1034,7 +1048,7 @@ for emission in dust_emissions:
     try:
         # Swap emission type: one-line edit
         groups_emission_var = base_groups_emission.copy()
-        groups_emission_var["dust_emission"] = {"type": emission, "all_params": FIXED}
+        groups_emission_var["dust_emission"] = {"type": emission, "all_params": Fixed(DEFAULT)}
 
         spec = parse_groups(**groups_emission_var)
         emission_params = [p for p in spec.free_params if p.startswith("dust_")]
@@ -1083,13 +1097,13 @@ for idx, emission in enumerate(dust_emissions):
         "dust_attenuation": {
             "type": "two_component",
             "law": "calzetti",
-            "all_params": FIXED,  # deliberately all-fixed for this figure (#1995)
+            "all_params": Fixed(DEFAULT),  # deliberately all-fixed for this figure (#1995)
             "tau_bc": Fixed(0.5),
             "tau_diff": Fixed(0.3),
             "slope": Fixed(-0.7),
         },
-        "dust_emission": {"type": emission, "all_params": FIXED},
-        "neb": {"type": "cue", "all_params": FIXED},
+        "dust_emission": {"type": emission, "all_params": Fixed(DEFAULT)},
+        "neb": {"type": "cue", "all_params": Fixed(DEFAULT)},
         "redshift": Fixed(z),
         "igm": {"type": "none"},
     }
@@ -1140,13 +1154,13 @@ for emission in dust_emissions:
         "dust_attenuation": {
             "type": "two_component",
             "law": "calzetti",
-            "all_params": FIXED,  # deliberately all-fixed for this figure (#1995)
+            "all_params": Fixed(DEFAULT),  # deliberately all-fixed for this figure (#1995)
             "tau_bc": Fixed(0.5),
             "tau_diff": Fixed(0.3),
             "slope": Fixed(-0.7),
         },
-        "dust_emission": {"type": emission, "all_params": FIXED},
-        "neb": {"type": "cue", "all_params": FIXED},
+        "dust_emission": {"type": emission, "all_params": Fixed(DEFAULT)},
+        "neb": {"type": "cue", "all_params": Fixed(DEFAULT)},
         "redshift": Fixed(z),
         "igm": {"type": "none"},
     }
@@ -1209,7 +1223,7 @@ groups_ref = {
         "all_params": FREE,
         "slope": Fixed(-0.7),
     },
-    "dust_emission": {"type": "dale2014", "all_params": FIXED},
+    "dust_emission": {"type": "dale2014", "all_params": Fixed(DEFAULT)},
     "redshift": Uniform(0.01, 0.1),
     "igm": {"type": "none"},
 }
@@ -1226,7 +1240,7 @@ groups_free_z = {
         "all_params": FREE,
         "slope": Fixed(-0.7),
     },
-    "dust_emission": {"type": "dale2014", "all_params": FIXED},
+    "dust_emission": {"type": "dale2014", "all_params": Fixed(DEFAULT)},
     "redshift": Uniform(0.01, 0.1),  # FREE
     "igm": {"type": "none"},
 }
@@ -1241,7 +1255,7 @@ groups_fixed_z = {
         "all_params": FREE,
         "slope": Fixed(-0.7),
     },
-    "dust_emission": {"type": "dale2014", "all_params": FIXED},
+    "dust_emission": {"type": "dale2014", "all_params": Fixed(DEFAULT)},
     "redshift": Fixed(0.05),  # FIXED
     "igm": {"type": "none"},
 }
@@ -1278,12 +1292,12 @@ groups_perf = {
     "dust_attenuation": {
         "type": "two_component",
         "law": "calzetti",
-        "all_params": FIXED,  # deliberately all-fixed for this demo (#1995)
+        "all_params": Fixed(DEFAULT),  # deliberately all-fixed for this demo (#1995)
         "tau_bc": Fixed(0.5),
         "tau_diff": Fixed(0.3),
         "slope": Fixed(-0.7),
     },
-    "dust_emission": {"type": "dale2014", "all_params": FIXED},
+    "dust_emission": {"type": "dale2014", "all_params": Fixed(DEFAULT)},
     "redshift": Fixed(0.05),
     "igm": {"type": "none"},
 }

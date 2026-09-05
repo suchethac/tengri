@@ -25,7 +25,7 @@ Examples
 --------
 >>> from tengri import builders, Uniform
 >>> builders.xray.simple(delta_alpha_ox=Uniform(-0.4, 0.4))  # doctest: +SKIP
-{'type': 'simple', 'all_params': FIXED, 'delta_alpha_ox': Uniform(...)}
+{'type': 'simple', 'delta_alpha_ox': Uniform(...), 'other_params': Fixed(DEFAULT)}
 """
 
 from __future__ import annotations

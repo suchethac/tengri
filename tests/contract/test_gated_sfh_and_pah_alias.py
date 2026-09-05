@@ -17,7 +17,7 @@ from __future__ import annotations
 import numpy as np
 import pytest
 
-from tengri import FIXED, Fixed, SEDModel
+from tengri import DEFAULT, Fixed, SEDModel
 
 pytestmark = pytest.mark.contract
 
@@ -46,7 +46,7 @@ def test_gated_sfh_raises_clear_error_at_build(synthetic_ssp_wide, sfh_type):
     with pytest.raises(ValueError, match=r"not yet validated|not available|Unknown SFH"):
         SEDModel.build(
             ssp_data=synthetic_ssp_wide,
-            sfh={"type": sfh_type, "all_params": FIXED, "log_total_mass": 10.0},
+            sfh={"type": sfh_type, "all_params": Fixed(DEFAULT), "log_total_mass": 10.0},
             redshift=Fixed(0.05),
         )
 
@@ -63,15 +63,15 @@ def test_draine2021_pah_builds_and_emits(synthetic_ssp_wide):
     """dust.emission='draine2021_pah' builds and produces finite far-IR re-emission."""
     model = SEDModel.build(
         ssp_data=synthetic_ssp_wide,
-        sfh={"type": "delayed", "all_params": FIXED, "log_total_mass": 10.0},
+        sfh={"type": "delayed", "all_params": Fixed(DEFAULT), "log_total_mass": 10.0},
         dust_attenuation={
             "law": "power_law",
             "type": "two_component",
-            "all_params": FIXED,
+            "all_params": Fixed(DEFAULT),
             "tau_diff": Fixed(1.5),
             "tau_bc": Fixed(0.0),
         },
-        dust_emission={"type": "draine2021_pah", "all_params": FIXED},
+        dust_emission={"type": "draine2021_pah", "all_params": Fixed(DEFAULT)},
         redshift=Fixed(0.05),
     )
     state = model.predict_state({})

@@ -111,8 +111,14 @@ def test_broken_tier_backends_stay_gated():
     """Reachable is not unguarded.
 
     ``pathfinder`` on this path was measured to OOM-kill the process outright
-    (SIGKILL, exit 137) on a 2-galaxy D=18 problem — exactly what its tier
-    records. Opening the seam must not become a way around ``check_usable``.
+    (SIGKILL, exit 137) on a 2-galaxy D=18 problem. That measurement stands and
+    is why the gate matters here — but it is no longer "exactly what its tier
+    records": #231 moved ``pathfinder`` to ``experimental`` after establishing
+    that its ``tier="broken"`` label came from a harness that never read a child
+    return code, and its short_doc now carries the D=18 OOM as a caveat instead.
+    The gate this test pins is unaffected, since it is about ``check_usable``
+    being applied at all, and the subject is derived from the registry by
+    :func:`_a_broken_tier_flat_method` rather than named.
     """
     src = inspect.getsource(
         __import__("tengri.inference._hierarchical_flat", fromlist=["x"]).run_flat_sampler
@@ -182,6 +188,24 @@ class _SentinelReached(Exception):
     """Raised by the stubbed builder: reaching it proves every gate passed."""
 
 
+def _a_broken_tier_flat_method() -> str:
+    """A ``tier="broken"`` backend this seam actually drives, read from the registry.
+
+    Derived rather than named. Both tests below need "a method the tier gate must
+    refuse", and both used to spell that ``"pathfinder"`` -- which stopped being
+    true when #231 promoted it to ``experimental`` on the evidence that its
+    quarantine label was a harness artifact. The forwarding test then still
+    passed while proving nothing (an experimental method dispatches with or
+    without the opt-in), and only its control went red. A hard-coded example of a
+    category is a second census of the registry, and this file already exists
+    because of what those cost.
+    """
+    for name in _BACKENDS:
+        if _tier(name) == "broken" and name in FLAT_SAMPLERS:
+            return name
+    pytest.skip("no tier='broken' backend is driven by this seam; the gate has no subject")
+
+
 def test_the_allow_unvalidated_opt_in_reaches_the_inner_gate(monkeypatch):
     """``run()`` must forward ``allow_unvalidated`` into ``run_flat_sampler``.
 
@@ -205,7 +229,7 @@ def test_the_allow_unvalidated_opt_in_reaches_the_inner_gate(monkeypatch):
     stub = object.__new__(PopulationFitter)
 
     with pytest.raises(_SentinelReached):
-        PopulationFitter.run(stub, "pathfinder", allow_unvalidated=True)
+        PopulationFitter.run(stub, _a_broken_tier_flat_method(), allow_unvalidated=True)
 
 
 def test_the_gate_still_refuses_a_broken_tier_method_without_the_opt_in(monkeypatch):
@@ -222,12 +246,13 @@ def test_the_gate_still_refuses_a_broken_tier_method_without_the_opt_in(monkeypa
     monkeypatch.setattr(hf, "build_flat_problem", _sentinel)
     stub = object.__new__(PopulationFitter)
 
+    method = _a_broken_tier_flat_method()
     with pytest.raises(Exception) as exc:
-        PopulationFitter.run(stub, "pathfinder")
+        PopulationFitter.run(stub, method)
     assert not isinstance(exc.value, _SentinelReached), (
         "the outer tier gate is gone: a broken-tier method dispatched with no opt-in"
     )
-    assert "pathfinder" in str(exc.value) or "unvalidated" in str(exc.value).lower()
+    assert method in str(exc.value) or "unvalidated" in str(exc.value).lower()
 
 
 def test_the_unknown_method_error_derives_its_list():

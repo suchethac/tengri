@@ -35,7 +35,7 @@ from __future__ import annotations
 
 import pytest
 
-from tengri import FIXED, Fixed, SEDModel
+from tengri import DEFAULT, Fixed, SEDModel
 from tengri.config.exceptions import ConfigError
 
 pytestmark = pytest.mark.regression_bug
@@ -173,7 +173,7 @@ class TestDale2014RadioDoubleCount1970:
         model = SEDModel.build(
             ssp_data=synthetic_ssp_wide,
             observation=synthetic_tophat_obs,
-            sfh={"type": "const", "all_params": FIXED},
+            sfh={"type": "const", "all_params": Fixed(DEFAULT)},
             dust_attenuation={
                 "type": "two_component",
                 "law": "calzetti",

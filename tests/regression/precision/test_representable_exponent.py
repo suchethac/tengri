@@ -139,7 +139,7 @@ def test_cue_forward_is_finite_in_pure_float32(ssp_bare):
     leaving :func:`representable_exponent` in place -- a unit test of the helper
     alone cannot, because the helper would still be correct and unused.
     """
-    from tengri import FIXED, Fixed, Observation, Photometry, SEDModel, Uniform
+    from tengri import DEFAULT, Fixed, Observation, Photometry, SEDModel, Uniform
 
     params = {"sfh_delayed_log_total_mass": 10.0, "dust_tau_diff": 0.5}
 
@@ -149,7 +149,7 @@ def test_cue_forward_is_finite_in_pure_float32(ssp_bare):
             observation=Observation(photometry=Photometry.from_names(["sdss_g", "sdss_r"])),
             sfh={
                 "type": "delayed",
-                "all_params": FIXED,
+                "all_params": Fixed(DEFAULT),
                 "log_total_mass": Uniform(9.0, 11.0),
                 "tau_gyr": 1.0,
                 "age_gyr": 5.0,
@@ -157,11 +157,11 @@ def test_cue_forward_is_finite_in_pure_float32(ssp_bare):
             dust_attenuation={
                 "type": "two_component",
                 "law": "calzetti",
-                "all_params": FIXED,
+                "all_params": Fixed(DEFAULT),
                 "tau_diff": Uniform(0.0, 1.5),
                 "tau_bc": 0.0,
             },
-            neb={"type": "cue", "all_params": FIXED},
+            neb={"type": "cue", "all_params": Fixed(DEFAULT)},
             redshift=Fixed(0.1),
             approx=None,
         )

@@ -12,7 +12,7 @@ Every declaration carries a *prior* (``Uniform`` / ``LogUniform``) whose
 range is the documented physical or library-grid extent, and a
 ``default=`` equal to the historical fixed value. The two work together:
 
-* ``'all_params': FIXED`` (and the grammar's implicit default) collapses each
+* ``'all_params': Fixed(DEFAULT)`` (and the grammar's implicit default) collapses each
   param to ``Fixed(default)``: i.e. the exact pre-existing value, so behavior
   is unchanged for any model that did not opt a parameter free.
 * ``'all_params': FREE`` (dict grammar) or ``all_params=FREE`` (builders) now expands
@@ -55,7 +55,7 @@ PARAMS: tuple[ParamDeclaration, ...] = (
         "longer called ``agn_frac`` (#1296). Used as a scalar "
         "multiplier on the composable runner output and as the AGN-to-stellar "
         "ratio in the non-parametric AGN path. Default 1.0 means 'use the "
-        "configured AGN at full strength'; a wildcard ``'all_params': FIXED`` on an "
+        "configured AGN at full strength'; a wildcard ``'all_params': Fixed(DEFAULT)`` on an "
         "AGN-configured group therefore yields a working AGN (closes #417). "
         "Set explicitly to 0.0 to disable the AGN while keeping the rest of "
         "the agn config in place.",
@@ -887,7 +887,7 @@ DEFAULT_AGN_LOG_MBH = declared_default(PARAMS, "agn_log_mbh")
 DEFAULT_AGN_COS_INC = declared_default(PARAMS, "agn_cos_inc")
 
 #: Default AGN-to-stellar luminosity ratio. 1.0 means "use the configured AGN at
-#: full strength", so a wildcard ``'all_params': FIXED`` yields a working AGN
+#: full strength", so a wildcard ``'all_params': Fixed(DEFAULT)`` yields a working AGN
 #: (#417). The legacy 0.1 silently delivered a tenth of the requested AGN.
 DEFAULT_AGN_LUM_RATIO = declared_default(PARAMS, "agn_lum_ratio")
 

@@ -94,6 +94,7 @@ import inspect
 import re
 import sys
 import textwrap
+from collections.abc import Sequence
 from pathlib import Path
 
 REPO = Path(__file__).resolve().parent.parent
@@ -589,10 +590,10 @@ def check(verbose: bool = False) -> list[str]:
     return sorted(set(violations))
 
 
-def main() -> int:
+def main(argv: Sequence[str] | None = None) -> int:
     ap = argparse.ArgumentParser(description=__doc__)
     ap.add_argument("--verbose", action="store_true", help="list every reference checked")
-    args = ap.parse_args()
+    args = ap.parse_args(argv)
 
     violations = check(verbose=args.verbose)
     if violations:

@@ -32,7 +32,7 @@ import jax.numpy as jnp
 import numpy as np
 import pytest
 
-from tengri import FIXED, Fixed, Observation, Photometry, SEDModel, SSPData, WavePrecomp
+from tengri import DEFAULT, Fixed, Observation, Photometry, SEDModel, SSPData, WavePrecomp
 from tengri.observation.photometry import FilterCurve
 
 pytestmark = pytest.mark.regression_bug
@@ -85,7 +85,7 @@ def test_every_xray_type_builds_and_predicts_on_both_paths(
         model = SEDModel.build(
             ssp_data=xray_ssp,
             observation=xray_obs,
-            sfh={"type": "dpl", "all_params": FIXED},
+            sfh={"type": "dpl", "all_params": Fixed(DEFAULT)},
             agn=_LUMINOUS_AGN,
             xray={"type": xray_type},
             redshift=Fixed(0.5),

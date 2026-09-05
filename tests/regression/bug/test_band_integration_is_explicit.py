@@ -37,7 +37,7 @@ import numpy as np
 import pytest
 
 import tengri
-from tengri import FIXED, Fixed, Observation, Photometry, SEDModel, WavePrecomp
+from tengri import DEFAULT, Fixed, Observation, Photometry, SEDModel, WavePrecomp
 
 pytestmark = pytest.mark.regression_bug
 
@@ -66,7 +66,7 @@ def obs():
 
 
 def _model(ssp, obs, *, dust_type, approx):
-    dust = {"law": "power_law", "type": dust_type, "all_params": FIXED}
+    dust = {"law": "power_law", "type": dust_type, "all_params": Fixed(DEFAULT)}
     if dust_type == "two_component":
         # `law`, not `law_bc`: under the old symmetric inheritance naming one
         # screen applied that curve to both, so a single `law` reproduces it.
@@ -76,7 +76,7 @@ def _model(ssp, obs, *, dust_type, approx):
     return SEDModel.build(
         ssp_data=ssp,
         observation=obs,
-        sfh={"type": "dpl", "all_params": FIXED, "log_total_mass": 10.0},
+        sfh={"type": "dpl", "all_params": Fixed(DEFAULT), "log_total_mass": 10.0},
         dust_attenuation=dust,
         neb={"type": "none"},
         redshift=Fixed(0.05),

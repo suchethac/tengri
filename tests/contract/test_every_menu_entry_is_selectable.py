@@ -45,7 +45,7 @@ import re
 import pytest
 
 import tengri
-from tengri import FIXED, Fixed, Observation, Photometry, SEDModel
+from tengri import DEFAULT, Fixed, Observation, Photometry, SEDModel
 from tengri.config.exceptions import TengriIOError
 
 pytestmark = pytest.mark.contract
@@ -80,13 +80,19 @@ def _radio_model_to_composable(n: str) -> dict:
     from tengri.parameters.groups import _legacy_radio_type_to_blocks
 
     if n == "none":
-        return {"radio": {"sf": {"type": "none"}, "agn": {"type": "none"}, "all_params": FIXED}}
+        return {
+            "radio": {
+                "sf": {"type": "none"},
+                "agn": {"type": "none"},
+                "all_params": Fixed(DEFAULT),
+            }
+        }
     elif n == "condon92":
         return {
             "radio": {
                 "sf": {"type": "bell2003"},
                 "agn": {"type": "powerlaw"},
-                "all_params": FIXED,
+                "all_params": Fixed(DEFAULT),
             }
         }
     else:
@@ -95,7 +101,7 @@ def _radio_model_to_composable(n: str) -> dict:
             "radio": {
                 "sf": {"type": sf_variant},
                 "agn": {"type": agn_variant},
-                "all_params": FIXED,
+                "all_params": Fixed(DEFAULT),
             }
         }
 
@@ -107,7 +113,11 @@ def _cases() -> list[tuple[str, str, dict]]:
             "dust law",
             tengri.list_dust_laws,
             lambda n: {
-                "dust_attenuation": {"type": "two_component", "law": n, "all_params": FIXED}
+                "dust_attenuation": {
+                    "type": "two_component",
+                    "law": n,
+                    "all_params": Fixed(DEFAULT),
+                }
             },
         ),
         (
@@ -115,9 +125,9 @@ def _cases() -> list[tuple[str, str, dict]]:
             tengri.list_dust_models,
             lambda n: {
                 "dust_attenuation": (
-                    {"type": n, "law": "calzetti", "all_params": FIXED}
+                    {"type": n, "law": "calzetti", "all_params": Fixed(DEFAULT)}
                     if n in ("two_component", "single_component")
-                    else {"type": n, "all_params": FIXED}
+                    else {"type": n, "all_params": Fixed(DEFAULT)}
                 )
             },
         ),
@@ -128,27 +138,41 @@ def _cases() -> list[tuple[str, str, dict]]:
                 "dust_attenuation": {
                     "law": "calzetti",
                     "type": "two_component",
-                    "all_params": FIXED,
+                    "all_params": Fixed(DEFAULT),
                 },
-                "dust_emission": {"type": n, "all_params": FIXED},
+                "dust_emission": {"type": n, "all_params": Fixed(DEFAULT)},
             },
         ),
-        ("sfh model", tengri.list_sfh_models, lambda n: {"sfh": {"type": n, "all_params": FIXED}}),
+        (
+            "sfh model",
+            tengri.list_sfh_models,
+            lambda n: {"sfh": {"type": n, "all_params": Fixed(DEFAULT)}},
+        ),
         (
             "nebular backend",
             tengri.list_nebular_backends,
             lambda n: (
-                {"neb": {"type": n, "all_params": FIXED, "ionizing_source_warning": "suppress"}}
+                {
+                    "neb": {
+                        "type": n,
+                        "all_params": Fixed(DEFAULT),
+                        "ionizing_source_warning": "suppress",
+                    }
+                }
                 if n in ("mappings", "mappings_agn")
-                else {"neb": {"type": n, "all_params": FIXED}}
+                else {"neb": {"type": n, "all_params": Fixed(DEFAULT)}}
             ),
         ),
         (
             "metallicity mode",
             tengri.list_metallicity_modes,
-            lambda n: {"met": {"type": n, "all_params": FIXED}},
+            lambda n: {"met": {"type": n, "all_params": Fixed(DEFAULT)}},
         ),
-        ("igm model", tengri.list_igm_models, lambda n: {"igm": {"type": n, "all_params": FIXED}}),
+        (
+            "igm model",
+            tengri.list_igm_models,
+            lambda n: {"igm": {"type": n, "all_params": Fixed(DEFAULT)}},
+        ),
         (
             "radio model",
             tengri.list_radio_models,
@@ -157,17 +181,17 @@ def _cases() -> list[tuple[str, str, dict]]:
         (
             "xray model",
             tengri.list_xray_models,
-            lambda n: {"xray": {"type": n, "all_params": FIXED}},
+            lambda n: {"xray": {"type": n, "all_params": Fixed(DEFAULT)}},
         ),
         (
             "shock model",
             tengri.list_shock_models,
-            lambda n: {"shock": {"type": n, "all_params": FIXED}},
+            lambda n: {"shock": {"type": n, "all_params": Fixed(DEFAULT)}},
         ),
         (
             "age kernel",
             tengri.list_age_kernels,
-            lambda n: {"sfh": {"type": "delayed", "age_kernel": n, "all_params": FIXED}},
+            lambda n: {"sfh": {"type": "delayed", "age_kernel": n, "all_params": Fixed(DEFAULT)}},
         ),
     ]
     out = []
@@ -189,9 +213,9 @@ def _cases() -> list[tuple[str, str, dict]]:
         # Special handling for atten/smc_prevot: use law key instead of type
         axis = m.group(1)
         if axis == "atten" and name == "smc_prevot":
-            sub_block_spec = {"law": "prevot_smc", "all_params": FIXED}
+            sub_block_spec = {"law": "prevot_smc", "all_params": Fixed(DEFAULT)}
         else:
-            sub_block_spec = {"type": name, "all_params": FIXED}
+            sub_block_spec = {"type": name, "all_params": Fixed(DEFAULT)}
         out.append(
             (
                 f"agn.{axis}",

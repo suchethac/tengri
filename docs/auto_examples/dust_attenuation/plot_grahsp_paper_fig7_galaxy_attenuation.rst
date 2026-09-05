@@ -72,7 +72,7 @@ red curve for reference.
     from matplotlib import cm, colors
 
     import tengri
-    from tengri import FIXED, Fixed, SEDModel
+    from tengri import DEFAULT, Fixed, SEDModel
     from tengri.plot import setup_style
 
     setup_style()
@@ -117,7 +117,7 @@ red curve for reference.
         ssp_data=ssp,
         sfh={
             "type": "delayed",
-            "all_params": FIXED,
+            "all_params": Fixed(DEFAULT),
             "tau_gyr": 5.0,
             "age_gyr": 3.0,
             "log_total_mass": 10.0,
@@ -125,11 +125,11 @@ red curve for reference.
         dust_attenuation={
             "type": "two_component",
             "law": "calzetti",
-            "all_params": FIXED,
+            "all_params": Fixed(DEFAULT),
             "tau_bc": 0.3,  # fixed birth-cloud baseline (stabilizes the FIR peak)
             "tau_diff": 0.3,  # baseline; overridden per E(B-V) below
         },
-        dust_emission={"type": "dale2014", "all_params": FIXED},
+        dust_emission={"type": "dale2014", "all_params": Fixed(DEFAULT)},
         redshift=Fixed(0.01),
     )
     base_params = model.spec.get_fixed_values()
@@ -208,11 +208,6 @@ red curve for reference.
 
     fig.tight_layout()
     plt.savefig("plot_grahsp_paper_fig7_galaxy_attenuation.png", dpi=150, bbox_inches="tight")
-
-
-.. rst-class:: sphx-glr-timing
-
-   **Total running time of the script:** (0 minutes 2.801 seconds)
 
 
 .. _sphx_glr_download_auto_examples_dust_attenuation_plot_grahsp_paper_fig7_galaxy_attenuation.py:

@@ -75,7 +75,7 @@ at R~5000 (JWST-like).
         observation=obs,
         sfh={
             "type": "dpl",
-            "all_params": tengri.FIXED,
+            "all_params": tengri.Fixed(tengri.DEFAULT),
             "tau_gyr": 0.05,
             "log_total_mass": 10.0,
             "alpha": 2.5,
@@ -84,11 +84,11 @@ at R~5000 (JWST-like).
         dust_attenuation={
             "law": "power_law",
             "type": "two_component",
-            "all_params": tengri.FIXED,
+            "all_params": tengri.Fixed(tengri.DEFAULT),
             "tau_bc": 0.1,
             "tau_diff": 0.05,
         },
-        neb={"type": "cue", "all_params": tengri.FIXED, "logU": -2.0},
+        neb={"type": "cue", "all_params": tengri.Fixed(tengri.DEFAULT), "logU": -2.0},
         redshift=tengri.Fixed(REDSHIFT),
     )
 
@@ -110,7 +110,7 @@ at R~5000 (JWST-like).
             observation=obs_r,
             sfh={
                 "type": "dpl",
-                "all_params": tengri.FIXED,
+                "all_params": tengri.Fixed(tengri.DEFAULT),
                 "tau_gyr": 0.05,
                 "log_total_mass": 10.0,
                 "alpha": 2.5,
@@ -119,11 +119,11 @@ at R~5000 (JWST-like).
             dust_attenuation={
                 "law": "power_law",
                 "type": "two_component",
-                "all_params": tengri.FIXED,
+                "all_params": tengri.Fixed(tengri.DEFAULT),
                 "tau_bc": 0.1,
                 "tau_diff": 0.05,
             },
-            neb={"type": "cue", "all_params": tengri.FIXED, "logU": -2.0},
+            neb={"type": "cue", "all_params": tengri.Fixed(tengri.DEFAULT), "logU": -2.0},
             redshift=tengri.Fixed(REDSHIFT),
         )
 
@@ -150,7 +150,7 @@ at R~5000 (JWST-like).
 
 .. rst-class:: sphx-glr-timing
 
-   **Total running time of the script:** (0 minutes 6.174 seconds)
+   **Total running time of the script:** (0 minutes 4.608 seconds)
 
 
 .. _sphx_glr_download_auto_examples_spectroscopy_plot_resolution_sweep.py:

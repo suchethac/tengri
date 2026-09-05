@@ -28,7 +28,7 @@ import numpy as np
 import pytest
 
 from tengri import (
-    FIXED,
+    DEFAULT,
     FREE,
     Fitter,
     Fixed,
@@ -96,7 +96,7 @@ def test_phot_plus_dn4000_objective_is_jit_and_nonsilent(ssp_data_wne):
             dust_attenuation={
                 "type": "two_component",
                 "law": "calzetti",
-                "all_params": FIXED,
+                "all_params": Fixed(DEFAULT),
                 "tau_diff": Uniform(0.0, 2.0),
             },
             neb={"type": "none"},
@@ -120,7 +120,7 @@ def test_phot_plus_dn4000_objective_is_jit_and_nonsilent(ssp_data_wne):
             dust_attenuation={
                 "type": "two_component",
                 "law": "calzetti",
-                "all_params": FIXED,
+                "all_params": Fixed(DEFAULT),
                 "tau_diff": Uniform(0.0, 2.0),
             },
             neb={"type": "none"},
@@ -155,7 +155,7 @@ def test_phot_plus_dn4000_objective_is_jit_and_nonsilent(ssp_data_wne):
             dust_attenuation={
                 "type": "two_component",
                 "law": "calzetti",
-                "all_params": FIXED,
+                "all_params": Fixed(DEFAULT),
                 "tau_diff": Uniform(0.0, 2.0),
             },
             neb={"type": "none"},
@@ -184,10 +184,10 @@ def test_desi_joint_phot_lines_dn4000_objective(ssp_data_fsps):
                 dust_attenuation={
                     "type": "two_component",
                     "law": "calzetti",
-                    "all_params": FIXED,
+                    "all_params": Fixed(DEFAULT),
                     "tau_diff": Uniform(0.0, 2.0),
                 },
-                neb={"type": "cue", "all_params": FIXED},
+                neb={"type": "cue", "all_params": Fixed(DEFAULT)},
                 redshift=Fixed(0.1),
                 approx=WavePrecomp(),
             )

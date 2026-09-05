@@ -51,9 +51,10 @@ What is in the package
 ======================
 
 **Model construction:** ``SEDModel``, ``ForwardModel``, ``recipes``,
-``builders``, ``Parameters``, ``parse_groups``, and the ``FREE``/``FIXED``
-sentinels with the seven distributions (``Uniform``, ``Gaussian``, ``Fixed``,
-``LogUniform``, ``LogNormal``, ``StudentT``, ``Laplace``).
+``builders``, ``Parameters``, ``parse_groups``, and the ``FREE``/``DEFAULT``
+sentinels (``DEFAULT`` legal only as ``Fixed(DEFAULT)``) with the
+seven distributions (``Uniform``, ``Gaussian``, ``Fixed``, ``LogUniform``,
+``LogNormal``, ``StudentT``, ``Laplace``).
 
 **Physics namespaces:** ``agn``, ``dust``, ``nebular``, ``stellar``, ``sfh``,
 ``sps``, ``igm``, ``radio``, ``xray``.
@@ -338,6 +339,7 @@ from tengri.components.stellar.sps.mass_remaining import compute_mass_remaining_
 from tengri.config.exceptions import (
     BackendError,
     ConfigError,
+    DeadFitError,
     InferenceError,
     ParameterError,
     TengriError,
@@ -451,7 +453,7 @@ from tengri.parameters.registry import (
     list_parameters,
     recipe_parameters,
 )
-from tengri.parameters.sentinels import FIXED, FREE
+from tengri.parameters.sentinels import DEFAULT, FREE
 from tengri.protocols import ComponentIOError, DerivedKey, DerivedState, ForwardState
 from tengri.utils import jit_logging
 from tengri.utils.batching import vmap_chunked
@@ -590,8 +592,8 @@ from tengri.registry import (
 __all__ = [  # noqa: RUF022
     # ========== Tier 1: CORE (user-facing classes for a first fit) ==========
     # Sentinels & distributions
-    "FIXED",
     "FREE",
+    "DEFAULT",
     "Fixed",
     "Gaussian",
     "Laplace",
@@ -752,6 +754,7 @@ __all__ = [  # noqa: RUF022
     "ConfigError",
     "BackendError",
     "InferenceError",
+    "DeadFitError",
     "TengriIOError",
     # ========== Layer modules (optional imports, see docs) ==========
     "citations",
@@ -881,9 +884,9 @@ _CURATED_DIR = (
     "LineList",
     "Instrument",
     "list_instruments",
-    # 3.  Priors / distributions (+ the FREE/FIXED build sentinels)
+    # 3.  Priors / distributions (+ the FREE/DEFAULT build sentinels)
     "FREE",
-    "FIXED",
+    "DEFAULT",
     "Uniform",
     "Gaussian",
     "LogUniform",

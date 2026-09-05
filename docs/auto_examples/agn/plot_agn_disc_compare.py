@@ -49,11 +49,11 @@ DISC_MODELS = [
 COLORS = plt.cm.tab20(np.linspace(0, 1, 20))[: len(DISC_MODELS)]
 
 C_AA_PER_S = 2.998e18
-SFH = {"type": "const", "all_params": tengri.FIXED, "log_total_mass": -10.0}
+SFH = {"type": "const", "all_params": tengri.Fixed(tengri.DEFAULT), "log_total_mass": -10.0}
 DUST = {
     "law": "power_law",
     "type": "two_component",
-    "all_params": tengri.FIXED,
+    "all_params": tengri.Fixed(tengri.DEFAULT),
     "tau_diff": 0.0,
     "tau_bc": 0.0,
 }
@@ -73,8 +73,8 @@ for (disc, label), color in zip(DISC_MODELS, COLORS):
         sfh=SFH,
         dust_attenuation=DUST,
         agn={
-            "disc": {"type": disc, "all_params": tengri.FIXED},
-            "all_params": tengri.FIXED,
+            "disc": {"type": disc, "all_params": tengri.Fixed(tengri.DEFAULT)},
+            "all_params": tengri.Fixed(tengri.DEFAULT),
             "log_lbol": 12.5,
             "lum_ratio": 1.0,
         },

@@ -10,8 +10,16 @@ Detects two failure classes:
    — These propagate NaN/inf through the clip's VJP in float32, causing gradient failures.
    Issue #1719.
 
-Every current offender is tracked in an allowlist ledger below; new sites fail the check,
-and stale ledger entries (sites that no longer match) also fail.
+Every current offender is tracked in a ledger keyed on (file path, pattern description)
+with a count; this makes the ledger immune to line-number drift (#2050). New sites (live
+count > ledger count) fail the check, as do stale entries (live count < ledger count).
+
+The bucket key embeds the visitor's literal message wording, so any rewording orphans the
+entire ledger at once — loudly (blanket --regen required), by design.
+
+Blind spot: a same-bucket swap (one site removed, one added in the same bucket in a single
+commit) leaves the count equal and ships the new site unadjudicated. This is the accepted
+cost of drift-proofness; code review catches the swap.
 
 Usage
 -----
@@ -28,16 +36,11 @@ import ast
 import subprocess
 import sys
 from collections import defaultdict
+from collections.abc import Sequence
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parent.parent
 LEDGER_FILE = Path(__file__).resolve().parent / ".numeric_guards_ledger"
-
-# Pattern: path:line -> pattern description
-LEDGER: dict[str, str] = {
-    # Existing safe patterns that are explicitly guarded
-    # (Empty for now; populate with --regen or via audits)
-}
 
 
 class NumericGuardVisitor(ast.NodeVisitor):
@@ -184,8 +187,14 @@ def check_file(filepath: Path) -> list[tuple[int, str]]:
         return []
 
 
-def load_ledger() -> dict[str, str]:
-    """Load the allowlist ledger from disk."""
+def load_ledger() -> dict[tuple[str, str], int]:
+    """Load the ledger from disk. Format: path | pattern -> count.
+
+    Returns a dict mapping (file_path, pattern_description) to count.
+    The ledger format is drift-proof: entries are keyed on (file, pattern),
+    not on line numbers, so edits above a violation do not invalidate it.
+    See #2050.
+    """
     if not LEDGER_FILE.exists():
         return {}
     ledger = {}
@@ -193,25 +202,64 @@ def load_ledger() -> dict[str, str]:
         if line and not line.startswith("#"):
             parts = line.split(" -> ", 1)
             if len(parts) == 2:
-                ledger[parts[0].strip()] = parts[1].strip()
+                key_part = parts[0].strip()
+                count_part = parts[1].strip()
+                key_bits = key_part.split(" | ", 1)
+                if len(key_bits) == 2:
+                    path = key_bits[0].strip()
+                    pattern = key_bits[1].strip()
+                    try:
+                        count = int(count_part)
+                        ledger[(path, pattern)] = count
+                    except ValueError:
+                        pass
     return ledger
 
 
-def save_ledger(ledger: dict[str, str]) -> None:
-    """Save the allowlist ledger to disk."""
+def save_ledger(ledger: dict[tuple[str, str], int]) -> None:
+    """Save the ledger to disk. Format: path | pattern -> count.
+
+    The (file, pattern) key is immune to line-number drift. See #2050.
+    """
     lines = [
-        "# Allowlist of safe numeric guard patterns (auto-generated)",
-        "# Format: path:line -> pattern description",
+        "# Ledger of safe numeric guard patterns (auto-generated)",
+        "# Format: path | pattern -> count",
+        "# Keyed on (file path, pattern description) for drift-proofness (#2050).",
     ]
-    for key in sorted(ledger.keys()):
-        lines.append(f"{key} -> {ledger[key]}")
+    for (path, pattern), count in sorted(ledger.items()):
+        lines.append(f"{path} | {pattern} -> {count}")
     LEDGER_FILE.write_text("\n".join(lines) + "\n")
 
 
-def main():
+def bucket_violations_by_pattern(
+    violations_by_file: dict[str, list[tuple[int, str]]],
+) -> dict[tuple[str, str], list[int]]:
+    """Group violations into (file_path, pattern) buckets with their line numbers.
+
+    Parameters
+    ----------
+    violations_by_file : dict[str, list[tuple[int, str]]]
+        Violations keyed by file path, values are (lineno, pattern) pairs.
+
+    Returns
+    -------
+    dict
+        Maps (file_path, pattern_description) to sorted list of line numbers.
+    """
+    buckets: dict[tuple[str, str], list[int]] = defaultdict(list)
+    for filepath_str, violations in violations_by_file.items():
+        for lineno, pattern in violations:
+            buckets[(filepath_str, pattern)].append(lineno)
+    for key in buckets:
+        buckets[key].sort()
+    return dict(buckets)
+
+
+def main(argv: Sequence[str] | None = None) -> int:
+    """Check numeric guards against ledger. See module docstring for usage."""
     parser = argparse.ArgumentParser(__doc__)
     parser.add_argument("--regen", action="store_true", help="Regenerate the ledger")
-    args = parser.parse_args()
+    args = parser.parse_args(argv)
 
     files = _tracked_python_files_in_src()
     violations_by_file: dict[str, list[tuple[int, str]]] = defaultdict(list)
@@ -222,53 +270,68 @@ def main():
             rel_path = filepath.relative_to(ROOT)
             violations_by_file[str(rel_path)] = violations
 
+    # Group violations into (file, pattern) buckets
+    live_buckets = bucket_violations_by_pattern(violations_by_file)
+    live_counts = {key: len(lines) for key, lines in live_buckets.items()}
+
     if args.regen:
-        # Rebuild ledger from current violations
-        new_ledger = {}
-        for filepath_str, violations in violations_by_file.items():
-            for lineno, pattern in violations:
-                key = f"{filepath_str}:{lineno}"
-                new_ledger[key] = pattern
-        save_ledger(new_ledger)
-        print(f"Regenerated ledger with {len(new_ledger)} entries", file=sys.stderr)
+        # Rebuild ledger from live counts
+        save_ledger(live_counts)
+        total_sites = sum(live_counts.values())
+        print(
+            f"Regenerated ledger with {len(live_counts)} bucket(s), "
+            f"{total_sites} total site(s)",
+            file=sys.stderr,
+        )
         return 0
 
     # Load existing ledger
-    ledger = load_ledger()
+    ledger_counts = load_ledger()
 
-    # Find new violations not in ledger
-    new_violations = []
-    for filepath_str, violations in violations_by_file.items():
-        for lineno, pattern in violations:
-            key = f"{filepath_str}:{lineno}"
-            if key not in ledger:
-                new_violations.append((key, pattern))
+    # Find new offenders: buckets where live count > ledger count
+    new_offenders = []
+    for key, live_count in live_counts.items():
+        ledger_count = ledger_counts.get(key, 0)
+        if live_count > ledger_count:
+            filepath, pattern = key
+            new_count = live_count - ledger_count
+            lines = live_buckets[key]
+            new_offenders.append((filepath, pattern, new_count, lines))
 
-    # Find stale ledger entries (in ledger but not in current violations)
-    current_keys = {
-        f"{path}:{lineno}"
-        for path, violations in violations_by_file.items()
-        for lineno, _ in violations
-    }
-    stale_entries = [key for key in ledger if key not in current_keys]
+    # Find stale entries: buckets in ledger but not in live
+    stale_entries = []
+    for key, ledger_count in ledger_counts.items():
+        live_count = live_counts.get(key, 0)
+        if live_count < ledger_count:
+            filepath, pattern = key
+            stale_entries.append((filepath, pattern, ledger_count, live_count))
 
     # Report findings
-    if new_violations:
-        print("New unsafe numeric patterns found:", file=sys.stderr)
-        for key, pattern in new_violations:
-            print(f"  {key}: {pattern}", file=sys.stderr)
+    if new_offenders:
+        print(
+            "FAILED: new unsafe numeric pattern site(s) found:", file=sys.stderr
+        )
+        for filepath, pattern, _count, lines in sorted(new_offenders):
+            print(f"  {filepath}: {pattern}", file=sys.stderr)
+            print(f"    Ledger: {ledger_counts.get((filepath, pattern), 0)}, "
+                  f"Live: {live_counts[(filepath, pattern)]}", file=sys.stderr)
+            print(f"    Line(s): {', '.join(map(str, lines))}", file=sys.stderr)
         print("\nRun with --regen to update the ledger", file=sys.stderr)
 
     if stale_entries:
-        print("Stale ledger entries (patterns no longer present):", file=sys.stderr)
-        for key in stale_entries:
-            print(f"  {key}", file=sys.stderr)
-        print("\nRun with --regen to clean up the ledger", file=sys.stderr)
+        print(
+            "FAILED: site(s) removed — ratchet down the ledger:", file=sys.stderr
+        )
+        for filepath, pattern, ledger_count, live_count in sorted(stale_entries):
+            print(f"  {filepath}: {pattern}", file=sys.stderr)
+            print(f"    Ledger: {ledger_count}, Live: {live_count}", file=sys.stderr)
+        print("\nRun with --regen to lock in the improvement", file=sys.stderr)
 
-    if new_violations or stale_entries:
+    if new_offenders or stale_entries:
         return 1
 
-    msg = f"OK: {len(ledger)} safe patterns verified in {len(files)} files"
+    total_sites = sum(ledger_counts.values())
+    msg = f"OK: {len(ledger_counts)} bucket(s), {total_sites} safe pattern(s) verified"
     print(msg, file=sys.stderr)
     return 0
 

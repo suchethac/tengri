@@ -9,7 +9,7 @@ import pytest
 
 pytestmark = pytest.mark.contract
 
-from tengri import FIXED, FREE, Fixed, Uniform, builders, parse_groups
+from tengri import DEFAULT, FREE, Fixed, Uniform, builders, parse_groups
 from tengri.parameters.groups import (
     _VALID_AGN_ATTEN_TYPES,
     _VALID_AGN_BLR_TYPES,
@@ -42,21 +42,21 @@ def test_axis_factories_cover_every_variant(axis: str, expected_set: set[str]) -
 
 
 def test_disc_default_call() -> None:
-    assert builders.agn.disc.multicolor() == {"type": "multicolor", "all_params": FIXED}
+    assert builders.agn.disc.multicolor() == {"type": "multicolor", "all_params": Fixed(DEFAULT)}
 
 
 def test_torus_default_call() -> None:
     out = builders.agn.torus.skirtor()
     assert out["type"] == "skirtor"
-    assert out["all_params"] is FIXED
+    assert out["all_params"] == Fixed(DEFAULT)
 
 
 def test_nlr_none_default_call() -> None:
-    assert builders.agn.nlr.none() == {"type": "none", "all_params": FIXED}
+    assert builders.agn.nlr.none() == {"type": "none", "all_params": Fixed(DEFAULT)}
 
 
 def test_blr_none_default_call() -> None:
-    assert builders.agn.blr.none() == {"type": "none", "all_params": FIXED}
+    assert builders.agn.blr.none() == {"type": "none", "all_params": Fixed(DEFAULT)}
 
 
 # ── Sub-block signatures: variants within an axis share the same params ──
@@ -101,8 +101,9 @@ def test_composable_signature_lists_sub_block_kwargs() -> None:
     sig = inspect.signature(builders.agn.composable)
     params = list(sig.parameters)
     assert params[0] == "all_params"
-    # Sub-blocks come right after the wildcard.
-    assert set(params[1:7]) == {"disc", "torus", "nlr", "blr", "feii", "atten"}
+    assert params[1] == "other_params", "wildcard synonym comes right after all_params"
+    # Sub-blocks come right after the two wildcard spellings.
+    assert set(params[2:8]) == {"disc", "torus", "nlr", "blr", "feii", "atten"}
 
 
 def test_composable_signature_includes_shared_short_params() -> None:
@@ -114,7 +115,7 @@ def test_composable_signature_includes_shared_short_params() -> None:
 
 
 def test_composable_default_call_is_minimal() -> None:
-    assert builders.agn.composable() == {"type": "composable", "all_params": FIXED}
+    assert builders.agn.composable() == {"type": "composable", "all_params": Fixed(DEFAULT)}
 
 
 def test_full_composition_produces_grammar_shape() -> None:
@@ -122,16 +123,20 @@ def test_full_composition_produces_grammar_shape() -> None:
         all_params=FREE,
         log_lbol=Uniform(9.42, 13.42),
         disc=builders.agn.disc.multicolor(all_params=FREE),
-        torus=builders.agn.torus.skirtor(all_params=FIXED),
+        torus=builders.agn.torus.skirtor(all_params=Fixed(DEFAULT)),
         nlr=builders.agn.nlr.analytic(),
         blr=builders.agn.blr.analytic(),
         feii=builders.agn.feii.none(),
         atten=builders.agn.atten.smc_prevot(),
     )
     assert out["type"] == "composable"
-    assert out["all_params"] is FREE
+    # log_lbol is a genuine per-param override (sub-blocks are structural
+    # selectors, not parameter entries), so the wildcard is spelled
+    # 'other_params' and emitted LAST.
+    assert out["other_params"] is FREE
+    assert list(out.keys())[-1] == "other_params"
     assert out["disc"] == {"type": "multicolor", "all_params": FREE}
-    assert out["torus"] == {"type": "skirtor", "all_params": FIXED}
+    assert out["torus"] == {"type": "skirtor", "all_params": Fixed(DEFAULT)}
     assert out["log_lbol"] == Uniform(9.42, 13.42)
 
 
@@ -266,7 +271,7 @@ def test_skirtor_default_call_shape() -> None:
     """All top-level models return a dict with type and wildcard."""
     out = builders.agn.skirtor()
     assert out["type"] == "skirtor"
-    assert out["all_params"] is FIXED
+    assert out["all_params"] == Fixed(DEFAULT)
 
 
 def test_top_level_models_share_signature() -> None:

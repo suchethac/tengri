@@ -52,7 +52,7 @@ def _build_with_burst(ssp, *, width_gyr: float, peak_lbt_gyr: float):
                 ssp,
                 sfh={
                     "type": "tsnorm",
-                    "all_params": tengri.FIXED,
+                    "all_params": tengri.Fixed(tengri.DEFAULT),
                     "log_total_mass": 8.0,
                     "peak_lbt_gyr": peak_lbt_gyr,
                     "width_gyr": width_gyr,
@@ -63,7 +63,7 @@ def _build_with_burst(ssp, *, width_gyr: float, peak_lbt_gyr: float):
                 dust_attenuation={
                     "law": "power_law",
                     "type": "two_component",
-                    "all_params": tengri.FIXED,
+                    "all_params": tengri.Fixed(tengri.DEFAULT),
                 },
                 redshift=Fixed(0.1),
             )

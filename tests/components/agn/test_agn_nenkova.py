@@ -262,22 +262,22 @@ def test_builder_exposes_agn_tau_as_free(synthetic_ssp) -> None:
 
     model = tengri.SEDModel.build(
         synthetic_ssp,
-        sfh={"type": "const", "all_params": tengri.FIXED, "log_total_mass": -10.0},
+        sfh={"type": "const", "all_params": tengri.Fixed(tengri.DEFAULT), "log_total_mass": -10.0},
         dust_attenuation={
             "law": "power_law",
             "type": "two_component",
-            "all_params": tengri.FIXED,
+            "all_params": tengri.Fixed(tengri.DEFAULT),
             "tau_diff": 0.0,
             "tau_bc": 0.0,
         },
         agn={
-            "disc": {"type": "multicolor", "all_params": tengri.FIXED},
+            "disc": {"type": "multicolor", "all_params": tengri.Fixed(tengri.DEFAULT)},
             "torus": {
                 "type": "nenkova",
-                "all_params": tengri.FIXED,
+                "all_params": tengri.Fixed(tengri.DEFAULT),
                 "tau": tengri.Uniform(5, 150),
             },
-            "all_params": tengri.FIXED,
+            "all_params": tengri.Fixed(tengri.DEFAULT),
             "log_lbol": 12.0,
             "frac": 1.0,
         },
@@ -317,22 +317,22 @@ def test_agn_tau_threads_through_model_layer() -> None:
     ssp = tengri.load_ssp()
     model = tengri.SEDModel.build(
         ssp,
-        sfh={"type": "const", "all_params": tengri.FIXED, "log_total_mass": -10.0},
+        sfh={"type": "const", "all_params": tengri.Fixed(tengri.DEFAULT), "log_total_mass": -10.0},
         dust_attenuation={
             "law": "power_law",
             "type": "two_component",
-            "all_params": tengri.FIXED,
+            "all_params": tengri.Fixed(tengri.DEFAULT),
             "tau_diff": 0.0,
             "tau_bc": 0.0,
         },
         agn={
-            "disc": {"type": "multicolor", "all_params": tengri.FIXED},
+            "disc": {"type": "multicolor", "all_params": tengri.Fixed(tengri.DEFAULT)},
             "torus": {
                 "type": "nenkova",
-                "all_params": tengri.FIXED,
+                "all_params": tengri.Fixed(tengri.DEFAULT),
                 "tau": tengri.Uniform(5, 150),
             },
-            "all_params": tengri.FIXED,
+            "all_params": tengri.Fixed(tengri.DEFAULT),
             "log_lbol": 12.5,
             "frac": 1.0,
         },

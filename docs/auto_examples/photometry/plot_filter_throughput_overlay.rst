@@ -38,7 +38,7 @@ The SED uses a starburst history (τ = 100 Myr) with two-component dust and
 sfr-scaled nebular emission, rendered in the observer frame at z=1 with complete
 IGM attenuation.
 
-.. GENERATED FROM PYTHON SOURCE LINES 22-163
+.. GENERATED FROM PYTHON SOURCE LINES 22-168
 
 
 
@@ -52,7 +52,7 @@ IGM attenuation.
 
  .. code-block:: none
 
-    /tengri/examples/photometry/plot_filter_throughput_overlay.py:161: UserWarning: This figure includes Axes that are not compatible with tight_layout, so results might be incorrect.
+    /tengri/examples/photometry/plot_filter_throughput_overlay.py:166: UserWarning: This figure includes Axes that are not compatible with tight_layout, so results might be incorrect.
       fig.tight_layout()
 
 
@@ -90,7 +90,7 @@ IGM attenuation.
     z = 1.0
     sfh_config = {
         "type": "tsnorm",
-        "all_params": tengri.FIXED,
+        "all_params": tengri.Fixed(tengri.DEFAULT),
         "peak_lbt_gyr": 0.1,  # Peak 100 Myr ago (recent burst)
         "width_gyr": 0.1,  # Duration 100 Myr
         "log_total_mass": 10.0,  # SFR ≈ 30 M_sun/yr
@@ -100,12 +100,12 @@ IGM attenuation.
 
     dust_config = {
         "type": "two_component",
-        "all_params": tengri.FIXED,
+        "all_params": tengri.Fixed(tengri.DEFAULT),
         "tau_diff": 0.3,  # Diffuse attenuation
         "tau_bc": 0.5,  # Dust clouds
         "law": "calzetti",  # Starburst attenuation law
     }
-    dust_emission = {"type": "dale2014", "all_params": tengri.FIXED}
+    dust_emission = {"type": "dale2014", "all_params": tengri.Fixed(tengri.DEFAULT)}
 
     # Build the model using bare-stellar SSP with Cue nebular backend
     model = tengri.SEDModel.build(
@@ -113,7 +113,12 @@ IGM attenuation.
         sfh=sfh_config,
         dust_attenuation=dust_config,
         dust_emission=dust_emission,
-        neb={"type": "cue", "all_params": tengri.FIXED, "logZ_gas": -0.5, "logU": -2.0},
+        neb={
+            "type": "cue",
+            "all_params": tengri.Fixed(tengri.DEFAULT),
+            "logZ_gas": -0.5,
+            "logU": -2.0,
+        },
         redshift=tengri.Fixed(z),
     )
 
@@ -205,11 +210,6 @@ IGM attenuation.
 
     fig.tight_layout()
     plt.savefig("plot_filter_throughput_overlay.png", dpi=150, bbox_inches="tight")
-
-
-.. rst-class:: sphx-glr-timing
-
-   **Total running time of the script:** (0 minutes 2.708 seconds)
 
 
 .. _sphx_glr_download_auto_examples_photometry_plot_filter_throughput_overlay.py:

@@ -108,7 +108,7 @@ def test_delayed_buildable_via_sedmodel_build():
         ssp_data=ssp,
         sfh={
             "type": "delayed",
-            "all_params": tengri.FIXED,
+            "all_params": tengri.Fixed(tengri.DEFAULT),
             "log_total_mass": 10.0,
             "tau_gyr": 1.0,
             "age_gyr": 5.0,
@@ -116,9 +116,9 @@ def test_delayed_buildable_via_sedmodel_build():
         dust_attenuation={
             "type": "single_component",
             "law": "calzetti",
-            "all_params": tengri.FIXED,
+            "all_params": tengri.Fixed(tengri.DEFAULT),
         },
-        neb={"type": "ssp", "all_params": tengri.FIXED},
+        neb={"type": "ssp", "all_params": tengri.Fixed(tengri.DEFAULT)},
         redshift=tengri.Fixed(0.05),
     )
     # If we got here the registry round-tripped — that's the contract this test pins.

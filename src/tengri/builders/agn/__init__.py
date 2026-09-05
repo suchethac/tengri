@@ -12,25 +12,25 @@ AGN composition has five orthogonal sub-block axes (``disc``,
 ...     "all_params": FREE,
 ...     "log_lbol": Uniform(9.42, 13.42),
 ...     "disc": {"type": "multicolor", "all_params": FREE},
-...     "torus": {"type": "skirtor", "all_params": FIXED},
+...     "torus": {"type": "skirtor", "all_params": Fixed(DEFAULT)},
 ...     "nlr": {"type": "analytic"},
 ...     "blr": {"type": "analytic"},
 ...     "feii": {"type": "none"},
-...     "atten": {"law": "prevot_smc", "all_params": FIXED},
+...     "atten": {"law": "prevot_smc", "all_params": Fixed(DEFAULT)},
 ... }
 
 The factory mirror:
 
->>> from tengri import builders, FREE, FIXED, Uniform
+>>> from tengri import builders, FREE, Fixed, DEFAULT, Uniform
 >>> agn = builders.agn.composable(
 ...     all_params=FREE,
 ...     log_lbol=Uniform(9.42, 13.42),
 ...     disc=builders.agn.disc.multicolor(all_params=FREE),
-...     torus=builders.agn.torus.skirtor(all_params=FIXED),
+...     torus=builders.agn.torus.skirtor(all_params=Fixed(DEFAULT)),
 ...     nlr=builders.agn.nlr.analytic(),
 ...     blr=builders.agn.blr.analytic(),
 ...     feii=builders.agn.feii.none(),
-...     atten=builders.agn.atten.smc_prevot(all_params=FIXED),
+...     atten=builders.agn.atten.smc_prevot(all_params=Fixed(DEFAULT)),
 ... )
 
 All 14 top-level AGN models are exposed as factories:
@@ -64,11 +64,18 @@ from collections.abc import Callable
 from typing import Any
 
 from tengri._completion import curated_dir
-from tengri.builders._factory import UNSET, _pop_wildcard, make_factory, short_form
+from tengri.builders._factory import (
+    _DEFAULT_WILDCARD,
+    UNSET,
+    _pop_wildcard,
+    _validate_wildcard,
+    make_factory,
+    short_form,
+)
 from tengri.builders.agn import atten, blr, disc, feii, nlr, torus
 from tengri.parameters.groups import _AGN_PARTITION
 from tengri.parameters.registry import recipe_parameters
-from tengri.parameters.sentinels import FIXED, FREE, WILDCARD_ALIAS
+from tengri.parameters.sentinels import FREE, WILDCARD_ALIAS, WILDCARD_ALIAS_OTHER
 
 _AXIS_MODULES = {
     "disc": disc,
@@ -116,11 +123,7 @@ _SHARED_SHORT_PARAMS = _discover_shared_params()
 def composable(**kwargs: Any) -> dict:
     """Build a ``composable`` AGN config dict with six sub-block selectors."""
     wildcard = _pop_wildcard("agn.composable", kwargs)
-    if wildcard not in (FREE, FIXED):
-        raise ValueError(
-            f"agn.composable(all_params=...): expected FREE or FIXED, got "
-            f"{wildcard!r}. Use tengri.FREE or tengri.FIXED."
-        )
+    _validate_wildcard("agn.composable", wildcard)
     sub_blocks = {axis: kwargs.pop(axis, None) for axis in _AXIS_MODULES}
     for axis, value in sub_blocks.items():
         if value is None:
@@ -136,21 +139,38 @@ def composable(**kwargs: Any) -> dict:
         raise TypeError(
             f"agn.composable() got unexpected keyword arguments: {unknown}. "
             f"Valid sub-blocks: {list(_AXIS_MODULES)}. "
-            f"Valid shared params: {_SHARED_SHORT_PARAMS}."
+            f"Valid shared params: {_SHARED_SHORT_PARAMS}. "
+            f"(Pass ``all_params=FREE`` or ``all_params=Fixed(DEFAULT)`` -- or the "
+            f"synonym ``other_params=`` -- to set the policy.)"
         )
-    out: dict[str, Any] = {"type": "composable", WILDCARD_ALIAS: wildcard}
-    for short in _SHARED_SHORT_PARAMS:
-        if short in kwargs and kwargs[short] is not UNSET:
-            out[short] = kwargs[short]
+    out: dict[str, Any] = {"type": "composable"}
+    # Sub-block dicts are structural selectors, not per-parameter overrides
+    # (per the emission convention), so they're placed among the settings.
     for axis, value in sub_blocks.items():
         if value is not None:
             out[axis] = value
+    param_entries: dict[str, Any] = {
+        short: kwargs[short]
+        for short in _SHARED_SHORT_PARAMS
+        if short in kwargs and kwargs[short] is not UNSET
+    }
+    out.update(param_entries)
+    # Wildcard LAST: 'all_params' when it is the only parameter directive
+    # (sub-blocks don't count), 'other_params' when shared per-param
+    # overrides precede it.
+    wildcard_key = WILDCARD_ALIAS if not param_entries else WILDCARD_ALIAS_OTHER
+    out[wildcard_key] = wildcard
     return out
 
 
 # Attach a real signature so IDEs see the sub-block + shared-param kwargs.
 _sig_params = [
-    inspect.Parameter("all_params", inspect.Parameter.KEYWORD_ONLY, default=FIXED, annotation=Any),
+    inspect.Parameter(
+        "all_params", inspect.Parameter.KEYWORD_ONLY, default=_DEFAULT_WILDCARD, annotation=Any
+    ),
+    inspect.Parameter(
+        "other_params", inspect.Parameter.KEYWORD_ONLY, default=UNSET, annotation=Any
+    ),
 ]
 for axis in _AXIS_MODULES:
     _sig_params.append(

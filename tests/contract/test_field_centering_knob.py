@@ -34,14 +34,14 @@ from __future__ import annotations
 import numpy as np
 import pytest
 
-from tengri import FIXED, Fixed, SEDModel
+from tengri import DEFAULT, Fixed, SEDModel
 
 pytestmark = pytest.mark.contract
 
 
 SFH_FIELD = {
     "type": ["dpl", "field"],
-    "all_params": FIXED,
+    "all_params": Fixed(DEFAULT),
 }
 
 
@@ -52,14 +52,14 @@ def _build(ssp, obs=None, **sfh_extra):
         kwargs["observation"] = obs
     return SEDModel.build(
         ssp_data=ssp,
-        met={"logzsol": Fixed(0.0), "all_params": FIXED},
+        met={"logzsol": Fixed(0.0), "all_params": Fixed(DEFAULT)},
         sfh=dict(SFH_FIELD, **sfh_extra),
         dust_attenuation={
             "law": "power_law",
             "type": "two_component",
             "tau_bc": Fixed(0.0),
             "tau_diff": Fixed(0.0),
-            "all_params": FIXED,
+            "all_params": Fixed(DEFAULT),
         },
         redshift=Fixed(0.05),
         n_grid=16,
@@ -171,20 +171,20 @@ class TestFieldCenteringRejectsBadInput:
         with pytest.raises(ValueError, match=r"field_centering.*field"):
             SEDModel.build(
                 ssp_data=synthetic_ssp_wide,
-                met={"logzsol": Fixed(0.0), "all_params": FIXED},
+                met={"logzsol": Fixed(0.0), "all_params": Fixed(DEFAULT)},
                 sfh={
                     "type": "delayed",
                     "tau_gyr": Fixed(1.0),
                     "age_gyr": Fixed(5.0),
                     "log_total_mass": Fixed(10.0),
                     "field_centering": 0.5,
-                    "all_params": FIXED,
+                    "all_params": Fixed(DEFAULT),
                 },
                 dust_attenuation={
                     "type": "two_component",
                     "tau_bc": Fixed(0.0),
                     "tau_diff": Fixed(0.0),
-                    "all_params": FIXED,
+                    "all_params": Fixed(DEFAULT),
                 },
                 redshift=Fixed(0.05),
             )

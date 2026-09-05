@@ -27,7 +27,7 @@
 #
 # ---
 #
-# [`00_quickstart`](00_quickstart.py) ran a minimal fit. This notebook keeps the same machinery — `SEDModel.build` with the `WavePrecomp` lookup table, NUTS sampling — and extends it in the two ways that matter for real work. First, we add free parameters: stellar metallicity and diffuse dust optical depth, opening the classic age–metallicity–dust degeneracy that broadband photometry struggles with. Second, we verify the posterior using per-parameter split-R̂, effective sample size, divergence counts, chain traces, and posterior-predictive χ². These diagnostics let you know whether a credible interval actually means something.
+# [`00_quickstart`](00_quickstart.py) ran a minimal fit. This notebook keeps the same machinery — `SEDModel.build` with the `WavePrecomp` lookup table, MCMC sampling — and extends it in the two ways that matter for real work. First, we add free parameters: stellar metallicity and diffuse dust optical depth, opening the classic age–metallicity–dust degeneracy that broadband photometry struggles with. Second, we verify the posterior using per-parameter split-R̂, effective sample size, divergence counts, chain traces, and posterior-predictive χ². These diagnostics let you know whether a credible interval actually means something.
 
 # %%
 from _setup import FIG_DIR, effective_wavelengths_um, quiet
@@ -44,19 +44,19 @@ import numpy as np
 
 import tengri
 from tengri import (
-    FIXED,
-    FREE,
+    builders,
+    cosmology,
+    DEFAULT,
     Fixed,
     ForwardModel,
+    FREE,
+    generate_mock,
     Observation,
     Photometry,
+    plot,
     SEDModel,
     Uniform,
     WavePrecomp,
-    builders,
-    cosmology,
-    generate_mock,
-    plot,
 )
 from tengri.utils.conversions import lnu_to_fnu
 
@@ -105,12 +105,12 @@ sed_model = SEDModel.build(
     approx=WavePrecomp(),
     sfh=builders.sfh.tsnorm(all_params=FREE),
     dust_attenuation=builders.dust.two_component(
-        all_params=FIXED,
+        all_params=Fixed(DEFAULT),
         law="calzetti",
         tau_bc=Uniform(0.0, 1.0),
         tau_diff=Uniform(0.0, 1.0),
     ),
-    dust_emission=builders.dust.emission.modified_blackbody(all_params=FIXED),
+    dust_emission=builders.dust.emission.modified_blackbody(all_params=Fixed(DEFAULT)),
     neb=builders.neb.none(),
     met={"logzsol": Uniform(-1.5, 0.3)},
     redshift=Fixed(0.05),
@@ -142,11 +142,11 @@ print(f"Mock: {len(flux_obs)} bands, SNR = 20")
 # %% [markdown]
 # ## Fit
 #
-# We use two parallel chains to get a genuine cross-chain split-R̂.
+# This model's posterior is poorly conditioned for window-adapted diagonal NUTS (see issue #2095 for the measured degeneracies across the full problem). The notebook therefore uses ChEES-HMC with the analytic preconditioner—the configuration measured to converge robustly on this problem with max split-R̂ < 1.01. Choosing the sampler per notebook by measurement follows the repository's existing practice: nb06 and nb07 made the same NUTS→HMC move on measurement. We run two parallel chains to obtain a genuine cross-chain split-R̂.
 
 # %%
 t = time.perf_counter()
-forward.prewarm(method="mcmc_nuts", n_chains=2)
+forward.prewarm(method="mcmc_chees", n_chains=2)
 print(f"  prewarm wall: {time.perf_counter() - t:6.2f} s")
 
 map_result = forward.fit(flux_obs, noise, method="map", key=key_fit, n_steps=200)
@@ -155,21 +155,22 @@ t = time.perf_counter()
 posterior = forward.fit(
     flux_obs,
     noise,
-    method="mcmc_nuts",
+    method="mcmc_chees",
     key=key_fit,
-    n_warmup=600,
-    n_samples=600,
+    n_warmup=2400,
+    n_samples=2400,
     n_chains=2,
     n_burnin=0,
+    precondition=True,
 )
-print(f"  NUTS wall (2 chains × 600 = 1200 samples): {time.perf_counter() - t:6.2f} s")
+print(f"  ChEES-HMC wall (2 chains × 2400 = 4800 samples): {time.perf_counter() - t:6.2f} s")
 posterior.summary()
 
 # %% [markdown]
 # ## Convergence
 #
 # Before any science: did the chains converge? Split-R̂ should be < 1.01,
-# effective sample size (ESS) a healthy fraction of the 1200 draws, and
+# effective sample size (ESS) a healthy fraction of the 4800 draws, and
 # divergences few. Anything failing here means the credible intervals are not
 # trustworthy.
 
@@ -185,7 +186,7 @@ for p in rhat:
     estr = "—" if e is None else f"{float(e):.0f}"
     print(f"{p:<28}{float(rhat[p]):>8.4f}{estr:>9}")
 rhat_max = max(float(v) for v in rhat.values())
-print(f"\nmax R̂ = {rhat_max:.4f}   divergences = {n_div}   (2 chains × 600 draws)")
+print(f"\nmax split-R̂ = {rhat_max:.4f}   divergences = {n_div}   (2 chains × 2400 draws)")
 
 # %% [markdown]
 # <!-- docs-voice: criterion -->

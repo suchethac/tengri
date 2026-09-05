@@ -861,7 +861,7 @@ def igm_transmission_madau(
        High-Redshift Galaxies," ApJ, 441, 18 (1995).
        https://doi.org/10.1086/175332
     .. [2] B. D. Johnson et al., "Stellar Population Inference," ApJS, 254,
-       22 (2021). arXiv:2012.01426. https://doi.org/10.3847/1538-4295/abef67
+       22 (2021). arXiv:2012.01426. https://doi.org/10.3847/1538-4365/abef67
 
     Examples
     --------

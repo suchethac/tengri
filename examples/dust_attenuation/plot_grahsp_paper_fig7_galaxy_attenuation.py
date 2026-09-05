@@ -27,7 +27,7 @@ import numpy as np
 from matplotlib import cm, colors
 
 import tengri
-from tengri import FIXED, Fixed, SEDModel
+from tengri import DEFAULT, Fixed, SEDModel
 from tengri.plot import setup_style
 
 setup_style()
@@ -72,7 +72,7 @@ model = SEDModel.build(
     ssp_data=ssp,
     sfh={
         "type": "delayed",
-        "all_params": FIXED,
+        "all_params": Fixed(DEFAULT),
         "tau_gyr": 5.0,
         "age_gyr": 3.0,
         "log_total_mass": 10.0,
@@ -80,11 +80,11 @@ model = SEDModel.build(
     dust_attenuation={
         "type": "two_component",
         "law": "calzetti",
-        "all_params": FIXED,
+        "all_params": Fixed(DEFAULT),
         "tau_bc": 0.3,  # fixed birth-cloud baseline (stabilizes the FIR peak)
         "tau_diff": 0.3,  # baseline; overridden per E(B-V) below
     },
-    dust_emission={"type": "dale2014", "all_params": FIXED},
+    dust_emission={"type": "dale2014", "all_params": Fixed(DEFAULT)},
     redshift=Fixed(0.01),
 )
 base_params = model.spec.get_fixed_values()

@@ -20,7 +20,7 @@ import pytest
 jax = pytest.importorskip("jax")
 
 from tengri import (
-    FIXED,
+    DEFAULT,
     FREE,
     Fixed,
     ForwardModel,
@@ -54,7 +54,7 @@ def _build(ssp_data):
         approx=WavePrecomp(),
         sfh=builders.sfh.tsnorm(all_params=FREE),
         dust_attenuation=builders.dust.two_component(
-            all_params=FIXED, law="calzetti", tau_bc=Uniform(0.0, 1.0)
+            all_params=Fixed(DEFAULT), law="calzetti", tau_bc=Uniform(0.0, 1.0)
         ),
         neb=builders.neb.none(),
         redshift=Fixed(0.05),

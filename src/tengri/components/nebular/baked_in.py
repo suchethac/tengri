@@ -79,7 +79,7 @@ class BakedInBackend:
         if ionizing_source_warning != "suppress":
             msg = (
                 "BakedInBackend: nebular emission is baked into the SSP file at a "
-                "FIXED logU and FIXED escape fraction determined when the SSP grid "
+                "fixed logU and fixed escape fraction determined when the SSP grid "
                 "was generated (commonly logU = −3, but depends on the SSP file). "
                 "The ionization parameter and escape fraction are NOT free parameters "
                 ": varying neb_logU or neb_fesc in your Parameters will have no "

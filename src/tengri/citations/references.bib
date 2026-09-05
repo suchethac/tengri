@@ -363,6 +363,25 @@
   upstream_code = {blackjax-devs/blackjax},
 }
 
+@article{Selig_2013,
+  author        = {{Selig}, M. and {Bell}, M. R. and {Junklewitz}, H. and {Oppermann}, N. and {Reinecke}, M. and {Greiner}, M. and {Pachajoa}, C. and {En{\ss}lin}, T. A.},
+  title         = {{NIFTY - Numerical Information Field Theory. A versatile PYTHON library for signal inference}},
+  journal       = {\aap},
+  year          = 2013,
+  volume        = {554},
+  eid           = {A26},
+  pages         = {A26},
+  doi           = {10.1051/0004-6361/201321236},
+  archiveprefix = {arXiv},
+  eprint        = {1301.4499},
+  primaryclass  = {astro-ph.IM},
+  registry_key  = {nifty_selig2013},
+  category      = {framework},
+  short         = {Selig et al. (2013)},
+  role          = {Original NIFTy signal-inference library; foundation for the correlated-field SFH prior},
+  upstream_code = {NIFTy-PPL/NIFTy},
+}
+
 %% =====================================================================
 %%  Reference SED-fitting frameworks (for comparison and credit)
 %% =====================================================================
@@ -412,6 +431,25 @@
   short         = {Carnall et al. (2018)},
   role          = {Reference SED fitting framework (BAGPIPES)},
   upstream_code = {ACCarnall/bagpipes},
+}
+
+@article{Robotham_2020,
+  author        = {{Robotham}, A. S. G. and {Bellstedt}, S. and {Lagos}, C. del P. and {Thorne}, J. E. and {Davies}, L. J. and {Driver}, S. P. and {Bravo}, M.},
+  title         = {{ProSpect: generating spectral energy distributions with complex star formation and metallicity histories}},
+  journal       = {\mnras},
+  year          = 2020,
+  volume        = {495},
+  number        = {1},
+  pages         = {905--931},
+  doi           = {10.1093/mnras/staa1116},
+  archiveprefix = {arXiv},
+  eprint        = {2002.06980},
+  primaryclass  = {astro-ph.GA},
+  registry_key  = {prospect_robotham2020},
+  category      = {reference_code},
+  short         = {Robotham et al. (2020)},
+  role          = {ProSpect SED generator; source of the snorm/tsnorm burst SFH forms},
+  upstream_code = {asgr/ProSpect},
 }
 
 %% =====================================================================
@@ -807,6 +845,53 @@
   role          = {Standard thin accretion disc (multicolour)},
 }
 
+@article{Boroson_1992,
+  author        = {{Boroson}, T. A. and {Green}, R. F.},
+  title         = {{The Emission-Line Properties of Low-Redshift Quasi-stellar Objects}},
+  journal       = {\apjs},
+  year          = 1992,
+  volume        = {80},
+  pages         = {109--135},
+  doi           = {10.1086/191679},
+  registry_key  = {boroson_green1992},
+  category      = {agn},
+  short         = {Boroson \& Green (1992)},
+  role          = {Empirical optical Fe II template from I Zw 1-like QSOs},
+}
+
+@article{Dovciak_2004,
+  author        = {{Dov{\v{c}}iak}, M. and {Karas}, V. and {Yaqoob}, T.},
+  title         = {{An Extended Scheme for Fitting X-Ray Data with Accretion Disk Spectra in the Strong Gravity Regime}},
+  journal       = {\apjs},
+  year          = 2004,
+  volume        = {153},
+  pages         = {205--221},
+  doi           = {10.1086/421115},
+  archiveprefix = {arXiv},
+  eprint        = {astro-ph/0403541},
+  registry_key  = {kyconv_dovciak2004},
+  category      = {agn},
+  short         = {Dov{\v{c}}iak et al. (2004)},
+  role          = {KYCONV relativistic convolution kernel used by the RELAGN disc},
+}
+
+@article{Hagen_Done_2023,
+  author        = {{Hagen}, S. and {Done}, C.},
+  title         = {{Estimating black hole spin from AGN SED fitting: the impact of general-relativistic ray tracing}},
+  journal       = {\mnras},
+  year          = 2023,
+  volume        = {525},
+  number        = {3},
+  pages         = {3455--3467},
+  doi           = {10.1093/mnras/stad2499},
+  archiveprefix = {arXiv},
+  eprint        = {2304.01253},
+  registry_key  = {relagn_hagen_done2023},
+  category      = {agn},
+  short         = {Hagen \& Done (2023)},
+  role          = {RELAGN relativistic accretion disc with general-relativistic ray tracing},
+}
+
 @article{Temple_2021,
   author        = {{Temple}, Matthew J. and {Hewett}, Paul C. and {Banerji}, Manda},
   title         = {{QSOgen: a model of the UV-to-submillimetre spectral energy distributions of quasars}},
@@ -936,6 +1021,8 @@
   volume        = {23},
   number        = {306},
   pages         = {1--49},
+  eprint        = {2108.03782},
+  archiveprefix = {arXiv},
   registry_key  = {pathfinder},
   category      = {inference},
   short         = {Zhang et al. (2022)},
@@ -972,6 +1059,53 @@
 %% =====================================================================
 %%  SFH stochastic / burstiness priors
 %% =====================================================================
+
+@article{Iyer_Gawiser_2017,
+  author        = {{Iyer}, K. G. and {Gawiser}, E.},
+  title         = {{Reconstruction of Galaxy Star Formation Histories through SED Fitting: The Dense Basis Approach}},
+  journal       = {\apj},
+  year          = 2017,
+  volume        = {838},
+  eid           = {127},
+  pages         = {127},
+  doi           = {10.3847/1538-4357/aa63f0},
+  archiveprefix = {arXiv},
+  eprint        = {1702.04371},
+  registry_key  = {dense_basis_iyer2017},
+  category      = {sfh},
+  short         = {Iyer \& Gawiser (2017)},
+  role          = {Dense Basis non-parametric SFH reconstruction},
+}
+
+@article{Leja_2017,
+  author        = {{Leja}, J. and {Johnson}, B. D. and {Conroy}, C. and {van Dokkum}, P. G. and {Byler}, N.},
+  title         = {{Deriving Physical Properties from Broadband Photometry with Prospector: Description of the Model and a Demonstration of its Accuracy Using 129 Galaxies in the Local Universe}},
+  journal       = {\apj},
+  year          = 2017,
+  volume        = {837},
+  eid           = {170},
+  pages         = {170},
+  doi           = {10.3847/1538-4357/aa5ffe},
+  registry_key  = {leja2017},
+  category      = {sfh},
+  short         = {Leja et al. (2017)},
+  role          = {Prospector model description; source of the continuity SFH prior},
+}
+
+@article{Bellstedt_2020,
+  author        = {{Bellstedt}, S. and {Robotham}, A. S. G. and {Driver}, S. P. and {Thorne}, J. E. and {Davies}, L. J. M. and {Lagos}, C. del P. and {Stevens}, A. R. H. and {Taylor}, E. N. and {Baldry}, I. K. and {Moffett}, A. J. and {Hopkins}, A. M. and {Phillipps}, S.},
+  title         = {{Galaxy And Mass Assembly (GAMA): a forensic SED reconstruction of the cosmic star formation history and metallicity evolution by galaxy type}},
+  journal       = {\mnras},
+  year          = 2020,
+  volume        = {498},
+  number        = {4},
+  pages         = {5581--5603},
+  doi           = {10.1093/mnras/staa2620},
+  registry_key  = {bellstedt2020},
+  category      = {sfh},
+  short         = {Bellstedt et al. (2020)},
+  role          = {Forensic SED reconstruction of cosmic SFH and metallicity evolution; source of the snorm/tsnorm parameterization},
+}
 
 @ARTICLE{Caplar_2019,
   author        = {{Caplar}, Neven and {Tacchella}, Sandro},
@@ -2044,4 +2178,37 @@
   category      = {inference},
   short         = {Hoeting et al. (1999)},
   role          = {Bayesian Model Averaging (BMA)},
+}
+
+@article{Livingstone_2022,
+  author        = {{Livingstone}, Samuel and {Zanella}, Giacomo},
+  title         = {{The Barker proposal: combining robustness and efficiency in gradient-based MCMC}},
+  journal       = {Journal of the Royal Statistical Society Series B: Statistical Methodology},
+  year          = 2022,
+  volume        = 84,
+  number        = 2,
+  pages         = {496--523},
+  doi           = {10.1111/rssb.12482},
+  archiveprefix = {arXiv},
+  eprint        = {1908.11812},
+  primaryclass  = {stat.CO},
+  registry_key  = {barker2022},
+  category      = {inference},
+  short         = {Livingstone \& Zanella (2022)},
+  role          = {Barker proposal, robust to step-size misspecification},
+}
+
+@article{Roberts_1998,
+  author        = {{Roberts}, Gareth O. and {Rosenthal}, Jeffrey S.},
+  title         = {{Optimal scaling of discrete approximations to Langevin diffusions}},
+  journal       = {Journal of the Royal Statistical Society Series B: Statistical Methodology},
+  year          = 1998,
+  volume        = 60,
+  number        = 1,
+  pages         = {255--268},
+  doi           = {10.1111/1467-9868.00123},
+  registry_key  = {roberts1998},
+  category      = {inference},
+  short         = {Roberts \& Rosenthal (1998)},
+  role          = {Optimal MALA acceptance rate 0.574},
 }

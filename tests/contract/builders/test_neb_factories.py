@@ -9,7 +9,7 @@ import pytest
 
 pytestmark = pytest.mark.contract
 
-from tengri import FIXED, Fixed, Uniform, builders, parse_groups
+from tengri import DEFAULT, Fixed, Uniform, builders, parse_groups
 from tengri.parameters.groups import _valid_nebular_types
 
 
@@ -21,7 +21,7 @@ def test_none_and_ssp_expose_only_wildcard() -> None:
     """Backends that contribute no free params expose just ``wildcard``."""
     for variant in ("none", "ssp"):
         sig = inspect.signature(getattr(builders.neb, variant))
-        assert list(sig.parameters) == ["all_params"], variant
+        assert list(sig.parameters) == ["all_params", "other_params"], variant
 
 
 def test_cue_signature_lists_canonical_short_params() -> None:
@@ -50,8 +50,8 @@ def test_cloudy_borrows_cue_signature() -> None:
 
 
 def test_default_call_returns_canonical_shape() -> None:
-    assert builders.neb.cue() == {"type": "cue", "all_params": FIXED}
-    assert builders.neb.none() == {"type": "none", "all_params": FIXED}
+    assert builders.neb.cue() == {"type": "cue", "all_params": Fixed(DEFAULT)}
+    assert builders.neb.none() == {"type": "none", "all_params": Fixed(DEFAULT)}
 
 
 def test_per_param_override_round_trips_to_free() -> None:

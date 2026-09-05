@@ -45,7 +45,7 @@ C_AA_PER_S = 2.998e18
 z = 1.0
 sfh_config = {
     "type": "tsnorm",
-    "all_params": tengri.FIXED,
+    "all_params": tengri.Fixed(tengri.DEFAULT),
     "peak_lbt_gyr": 0.1,  # Peak 100 Myr ago (recent burst)
     "width_gyr": 0.1,  # Duration 100 Myr
     "log_total_mass": 10.0,  # SFR ≈ 30 M_sun/yr
@@ -55,12 +55,12 @@ sfh_config = {
 
 dust_config = {
     "type": "two_component",
-    "all_params": tengri.FIXED,
+    "all_params": tengri.Fixed(tengri.DEFAULT),
     "tau_diff": 0.3,  # Diffuse attenuation
     "tau_bc": 0.5,  # Dust clouds
     "law": "calzetti",  # Starburst attenuation law
 }
-dust_emission = {"type": "dale2014", "all_params": tengri.FIXED}
+dust_emission = {"type": "dale2014", "all_params": tengri.Fixed(tengri.DEFAULT)}
 
 # Build the model using bare-stellar SSP with Cue nebular backend
 model = tengri.SEDModel.build(
@@ -68,7 +68,12 @@ model = tengri.SEDModel.build(
     sfh=sfh_config,
     dust_attenuation=dust_config,
     dust_emission=dust_emission,
-    neb={"type": "cue", "all_params": tengri.FIXED, "logZ_gas": -0.5, "logU": -2.0},
+    neb={
+        "type": "cue",
+        "all_params": tengri.Fixed(tengri.DEFAULT),
+        "logZ_gas": -0.5,
+        "logU": -2.0,
+    },
     redshift=tengri.Fixed(z),
 )
 

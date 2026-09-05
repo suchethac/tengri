@@ -33,7 +33,7 @@ import h5py
 import numpy as np
 import pytest
 
-from tengri import FIXED, Fixed, SEDModel, load_ssp_data
+from tengri import DEFAULT, Fixed, SEDModel, load_ssp_data
 
 pytestmark = [pytest.mark.regression_bug, pytest.mark.physics]
 
@@ -86,20 +86,20 @@ def f32_bc03(tmp_path_factory):
 def _build(ssp, **neb):
     return SEDModel.build(
         ssp_data=ssp,
-        met={"logzsol": Fixed(0.0), "all_params": FIXED},
+        met={"logzsol": Fixed(0.0), "all_params": Fixed(DEFAULT)},
         sfh={
             "type": "const",
             "start_gyr": Fixed(0.01),
             "end_gyr": Fixed(0.0),
             "log_total_mass": Fixed(9.0),
-            "all_params": FIXED,
+            "all_params": Fixed(DEFAULT),
         },
         dust_attenuation={
             "law": "power_law",
             "type": "two_component",
             "tau_bc": Fixed(0.0),
             "tau_diff": Fixed(0.0),
-            "all_params": FIXED,
+            "all_params": Fixed(DEFAULT),
         },
         redshift=Fixed(0.0),
         **neb,
@@ -164,7 +164,7 @@ def test_cue_balmer_decrement_on_float32_grid(f32_bc03):
             "type": "cue",
             "neb_logU": Fixed(-2.0),
             "neb_logZ_gas": Fixed(0.0),
-            "all_params": FIXED,
+            "all_params": Fixed(DEFAULT),
         },
     ).predict_state({})
 

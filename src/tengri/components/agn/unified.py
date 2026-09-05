@@ -1239,7 +1239,7 @@ def relagn_agn(
        ApJS, 153, 205. doi:10.1086/421115  [KYCONV]
 
     .. [2] Hagen, S. & Done, C. (2023).
-       MNRAS, 521, 251. doi:10.1093/mnras/stad478  [RELAGN disc]
+       MNRAS, 525, 3455-3467. doi:10.1093/mnras/stad2499  [RELAGN disc]
 
     .. [3] Silva, L., Maiolino, R., & Granato, G. L. (2004). MNRAS, 355, 973.
        arXiv:astro-ph/0403425. AGN torus radiative transfer.

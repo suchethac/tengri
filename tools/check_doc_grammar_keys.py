@@ -6,7 +6,14 @@ Ensures that:
    in tengri.parameters.groups._GROUP_STRUCTURAL_KEYS.
 2. Every user-facing structural key appears somewhere in the documentation.
 
-The internal '*' wildcard is replaced by 'all_params' for user documentation.
+The internal '*' wildcard is refused as user input; the grammar accepts two
+exact user-facing spellings, 'all_params' and 'other_params'. Code-side key
+sets already carry both spellings (see tengri.parameters.groups
+._GROUP_STRUCTURAL_KEYS, which unions 'other_params' in wherever 'all_params'
+is listed), so this guard's '*' -> 'all_params' translation only normalizes
+the retired internal spelling if it ever appears literally; a doc bullet
+naming both 'all_params' and 'other_params' is matched key-for-key against
+that unioned set with no special-casing required.
 
 Exit codes:
 - 0: All structural keys documented and accounted for.
@@ -47,8 +54,11 @@ def _read_doc_keys_from_file(doc_path: pathlib.Path) -> dict[str, set[str]]:
     Returns
     -------
     dict[str, set[str]]
-        Mapping of domain name to set of documented keys (with '*' replaced
-        by 'all_params' to match user-facing spelling).
+        Mapping of domain name to set of documented keys (with any literal
+        '*' replaced by 'all_params' to match user-facing spelling;
+        'all_params' and 'other_params' are both extracted verbatim, since
+        the bullet regex matches every backtick-quoted key on the line
+        regardless of how many spellings it names).
     """
     content = doc_path.read_text(encoding="utf-8")
 
@@ -89,7 +99,10 @@ def _read_doc_keys_from_file(doc_path: pathlib.Path) -> dict[str, set[str]]:
         keys = set()
         for line in bullet_lines:
             # Only add keys that appear before the em-dash (—) separator.
-            # In practice, keys come before the em-dash, examples after.
+            # In practice, keys come before the em-dash, examples after: the
+            # `'type'` bullet's description names several backtick-quoted
+            # *type values* (`'dpl'`, `'delayed_tau'`, ...), and those must
+            # not be mistaken for documented keys.
             em_dash_pos = line.find("—")
             if em_dash_pos == -1:
                 em_dash_pos = len(line)
@@ -97,7 +110,28 @@ def _read_doc_keys_from_file(doc_path: pathlib.Path) -> dict[str, set[str]]:
             key_matches = re.findall(r"`['\"]([a-z_A-Z0-9]+)['\"]`", before_dash)
             keys.update(key_matches)
 
-        # Translate '*' to 'all_params' for user-facing comparison
+            # The wildcard bullet documents its exact synonym in the
+            # description rather than before the em-dash, e.g.:
+            #   - `'all_params'` — Wildcard: ... Exact synonym:
+            #     `'other_params'` (reads best written last, ...). Not
+            #     `'*'` (retired).
+            # That callout sits in the same after-dash region as the
+            # `'type'` bullet's throwaway value strings, so it is matched by
+            # its distinctive "Exact synonym:" label rather than by
+            # scanning the whole line for any backtick-quoted token --
+            # a blanket scan would also pick up those value strings (and,
+            # in the AGN section, the `'type'`/`'all_params'` mentioned
+            # inline in each sub-block bullet's own description) as if they
+            # were newly documented keys.
+            synonym_matches = re.findall(
+                r"[Ee]xact synonym:\s*`['\"]([a-z_A-Z0-9]+)['\"]`", line
+            )
+            keys.update(synonym_matches)
+
+        # Translate a literal '*' to 'all_params' for user-facing comparison.
+        # 'other_params' needs no translation: it is extracted verbatim above
+        # when the doc bullet names it directly (e.g. "'all_params' /
+        # 'other_params'") or via the "Exact synonym:" callout.
         keys = {("all_params" if k == "*" else k) for k in keys}
         domain_keys[domain] = keys
 
@@ -110,11 +144,15 @@ def _get_code_keys() -> dict[str, set[str]]:
     Reads tengri.parameters.groups._GROUP_STRUCTURAL_KEYS and returns
     a mapping of domain to keys. The internal '*' is kept as-is in the code
     mapping (since we'll translate it to 'all_params' in the comparison).
+    'other_params' is already present as a literal member of each domain's
+    key set wherever 'all_params' is -- _GROUP_STRUCTURAL_KEYS unions it in
+    at import time -- so it needs no translation here either.
 
     Returns
     -------
     dict[str, set[str]]
-        Mapping of domain name to set of structural keys (with '*' included).
+        Mapping of domain name to set of structural keys (with '*' and, where
+        applicable, 'other_params' included).
     """
     try:
         from tengri.parameters.groups import _GROUP_STRUCTURAL_KEYS
@@ -141,7 +179,10 @@ def _check_consistency(
             issues.append(KeyMismatch(domain, "missing_from_docs"))
             continue
 
-        # Translate '*' to 'all_params' for comparison
+        # Translate '*' to 'all_params' for comparison. 'other_params' is
+        # already a literal member of `keys` wherever 'all_params' is
+        # (unioned in by _GROUP_STRUCTURAL_KEYS), so it passes through
+        # unchanged and is compared like any other structural key.
         code_keys_translated = {("all_params" if k == "*" else k) for k in keys}
         doc_keys_for_domain = doc_keys[domain]
 

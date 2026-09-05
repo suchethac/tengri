@@ -58,7 +58,7 @@ import jax.numpy as jnp
 import numpy as np
 import pytest
 
-from tengri import FIXED, FREE, Fixed, SEDModel, WavePrecomp
+from tengri import DEFAULT, FREE, Fixed, SEDModel, WavePrecomp
 from tengri.components.stellar.sps.dsps_wrapper import SSPData
 from tengri.observation import Observation, Photometry
 from tengri.observation.photometry import FilterCurve
@@ -556,8 +556,8 @@ def _config_for_selector(group: str, name: str) -> tuple[str, dict]:
         # Include a disc so attenuation has AGN emission to act on
         return "agn", {
             "type": "composable",
-            "all_params": FIXED,
-            "disc": {"type": "powerlaw", "all_params": FIXED},
+            "all_params": Fixed(DEFAULT),
+            "disc": {"type": "powerlaw", "all_params": Fixed(DEFAULT)},
             "atten": {"law": name},
         }
     elif group == "foreground":
@@ -790,8 +790,8 @@ def test_selector_surface_control_is_load_bearing(group: str) -> None:
         actual_group_on, _ = _config_for_selector(group, name)
         cfg_on = {
             "type": "composable",
-            "all_params": FIXED,
-            "disc": {"type": "powerlaw", "all_params": FIXED},
+            "all_params": Fixed(DEFAULT),
+            "disc": {"type": "powerlaw", "all_params": Fixed(DEFAULT)},
             "atten": {"law": name, "attenuation_ebv": 0.4},
         }
     elif group == "foreground":

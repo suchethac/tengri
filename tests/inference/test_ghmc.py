@@ -45,20 +45,28 @@ class TestGHMCSignatures:
         assert "delta" in sig.parameters
         assert "verbose" in sig.parameters
 
-    def test_run_ghmc_alpha_default_is_reasonable(self):
+    def test_run_ghmc_alpha_defaults_to_adapted(self):
+        """``0.8`` was a guess; MEADS derives the damping from the ensemble.
+
+        Was ``assert alpha_param.default == 0.8`` until the 2026-08-30 MEADS
+        switch. Window adaptation cannot see ``alpha`` at all, so the one
+        parameter that governs GHMC's
+        mixing was the one nothing tuned -- the diagnosis behind ``tier='broken'``.
+        ``None`` means "let ``blackjax.meads_adaptation`` decide"; a float still
+        pins it, which is what the old default did unconditionally.
+        """
         import inspect
 
         from tengri.inference.backends.mcmc.ghmc import run_ghmc
 
         sig = inspect.signature(run_ghmc)
-        alpha_param = sig.parameters["alpha"]
-        assert alpha_param.default == 0.8
+        assert sig.parameters["alpha"].default is None
 
-    def test_run_ghmc_delta_default_is_reasonable(self):
+    def test_run_ghmc_delta_defaults_to_adapted(self):
+        """MEADS Algorithm 3 sets ``delta = alpha / 2``; ``0.65`` was unrelated."""
         import inspect
 
         from tengri.inference.backends.mcmc.ghmc import run_ghmc
 
         sig = inspect.signature(run_ghmc)
-        delta_param = sig.parameters["delta"]
-        assert delta_param.default == 0.65
+        assert sig.parameters["delta"].default is None

@@ -9,7 +9,7 @@ while keeping the boolean form working for back-compat.
 
 import pytest
 
-from tengri import FIXED, FREE, parse_groups
+from tengri import DEFAULT, FREE, parse_groups
 from tengri.parameters.priors import Fixed, Uniform
 
 pytestmark = pytest.mark.contract
@@ -18,7 +18,7 @@ pytestmark = pytest.mark.contract
 class TestDLABuilderBlock:
     def test_dict_form_activates_and_routes_overrides(self):
         spec = parse_groups(
-            sfh={"type": "dpl", "all_params": FIXED},
+            sfh={"type": "dpl", "all_params": Fixed(DEFAULT)},
             igm={
                 "type": "inoue14",
                 # FIXED, not FREE: both DLA params carry Fixed registry
@@ -27,7 +27,7 @@ class TestDLABuilderBlock:
                 "dla": {
                     "log_n_hi": Uniform(19, 22),
                     "b_turb": Fixed(10.0),
-                    "all_params": FIXED,
+                    "all_params": Fixed(DEFAULT),
                 },
             },
             redshift=Fixed(2.0),
@@ -39,7 +39,7 @@ class TestDLABuilderBlock:
 
     def test_boolean_form_still_works(self):
         spec = parse_groups(
-            sfh={"type": "dpl", "all_params": FIXED},
+            sfh={"type": "dpl", "all_params": Fixed(DEFAULT)},
             igm={"type": "inoue14", "dla": True},
             redshift=Fixed(2.0),
         )
@@ -47,7 +47,7 @@ class TestDLABuilderBlock:
 
     def test_no_dla_block_means_no_absorber(self):
         spec = parse_groups(
-            sfh={"type": "dpl", "all_params": FIXED},
+            sfh={"type": "dpl", "all_params": Fixed(DEFAULT)},
             igm={"type": "inoue14"},
             redshift=Fixed(2.0),
         )
@@ -56,7 +56,7 @@ class TestDLABuilderBlock:
     def test_unknown_dla_key_raises(self):
         with pytest.raises(ValueError, match=r"dla|igm"):
             parse_groups(
-                sfh={"type": "dpl", "all_params": FIXED},
+                sfh={"type": "dpl", "all_params": Fixed(DEFAULT)},
                 igm={
                     "type": "inoue14",
                     "dla": {"not_a_dla_param": Uniform(0, 1), "all_params": FREE},

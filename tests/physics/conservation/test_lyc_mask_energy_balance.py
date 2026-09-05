@@ -28,7 +28,7 @@ import jax.numpy as jnp
 import numpy as np
 import pytest
 
-from tengri import FIXED, Fixed, Observation, Photometry, SEDModel, WavePrecomp, builders
+from tengri import DEFAULT, Fixed, Observation, Photometry, SEDModel, WavePrecomp, builders
 from tengri.components.stellar.sps.dsps_wrapper import SSPData
 from tengri.forward.energy_balance import bolometric_absorbed
 from tengri.observation.photometry import FilterCurve
@@ -41,12 +41,17 @@ _WG00_GRID = Path(__file__).resolve().parents[3] / "data" / "wg00_attenuation_gr
 TWO_COMPONENT = {
     "type": "two_component",
     "law": "calzetti",
-    "all_params": FIXED,
+    "all_params": Fixed(DEFAULT),
     "tau_bc": 0.5,
     "tau_diff": 0.3,
 }
-SINGLE_SCREEN = {"law": "power_law", "type": "single_component", "all_params": FIXED, "tau_v": 0.5}
-WG00 = {"type": "wg00", "all_params": FIXED, "tau_v": 0.5}
+SINGLE_SCREEN = {
+    "law": "power_law",
+    "type": "single_component",
+    "all_params": Fixed(DEFAULT),
+    "tau_v": 0.5,
+}
+WG00 = {"type": "wg00", "all_params": Fixed(DEFAULT), "tau_v": 0.5}
 
 _DUST_CASES = [
     pytest.param(TWO_COMPONENT, id="two_component"),
@@ -81,7 +86,7 @@ def _build(ssp, dust, approx=None):
         # were captured under — the registry's curated defaults would
         # otherwise shift the SFH (and every golden) silently.
         sfh=builders.sfh.tsnorm(
-            all_params=FIXED,
+            all_params=Fixed(DEFAULT),
             log_total_mass=9.75,
             peak_lbt_gyr=6.25,
             width_gyr=2.6,
@@ -131,7 +136,7 @@ class TestLycMaskedLAbsorbed:
         transparent = {
             "type": "two_component",
             "law": "calzetti",
-            "all_params": FIXED,
+            "all_params": Fixed(DEFAULT),
             "tau_bc": 0.0,
             "tau_diff": 0.0,
         }
@@ -236,12 +241,12 @@ class TestGoldenValues:
         UV-bright case specifically.
         """
         dust_attenuation = dict(TWO_COMPONENT)
-        dust_emission = {"type": "modified_blackbody", "all_params": FIXED}
+        dust_emission = {"type": "modified_blackbody", "all_params": Fixed(DEFAULT)}
         m_exact = SEDModel.build(
             ssp_data=synthetic_ssp_wide,
             observation=_obs(),
             sfh=builders.sfh.tsnorm(
-                all_params=FIXED,
+                all_params=Fixed(DEFAULT),
                 log_total_mass=9.75,
                 peak_lbt_gyr=6.25,
                 width_gyr=2.6,
@@ -258,7 +263,7 @@ class TestGoldenValues:
             observation=_obs(),
             approx=WavePrecomp(),
             sfh=builders.sfh.tsnorm(
-                all_params=FIXED,
+                all_params=Fixed(DEFAULT),
                 log_total_mass=9.75,
                 peak_lbt_gyr=6.25,
                 width_gyr=2.6,

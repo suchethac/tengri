@@ -26,7 +26,7 @@ import jax.numpy as jnp
 import numpy as np
 import pytest
 
-from tengri import FIXED, Fixed, Observation, SEDModel, WavePrecomp
+from tengri import DEFAULT, Fixed, Observation, SEDModel, WavePrecomp
 from tengri.observation.photometry_config import Photometry
 
 FILTERS = ["sdss_u", "sdss_g", "sdss_r", "sdss_i", "sdss_z"]
@@ -44,7 +44,7 @@ def _model(*, approx=None, z=3.0, **extra):
         ssp_data=pytest.importorskip("tengri").load_ssp(),
         observation=Observation(photometry=Photometry.from_names(FILTERS)),
         redshift=Fixed(z),
-        sfh={"type": "dpl", "all_params": FIXED},
+        sfh={"type": "dpl", "all_params": Fixed(DEFAULT)},
         approx=approx,
         **extra,
     )
@@ -177,7 +177,7 @@ def test_spectrum_lut_does_not_evaluate_the_igm_on_the_full_grid():
             ssp_data=ssp,
             observation=obs,
             redshift=Fixed(3.0),
-            sfh={"type": "dpl", "all_params": FIXED},
+            sfh={"type": "dpl", "all_params": Fixed(DEFAULT)},
             approx=SpectrumPrecomp(),
             **extra,
         )
@@ -217,7 +217,7 @@ def test_the_igm_is_still_applied_to_the_lut_spectrum():
             ssp_data=ssp,
             observation=obs,
             redshift=Fixed(3.0),
-            sfh={"type": "dpl", "all_params": FIXED},
+            sfh={"type": "dpl", "all_params": Fixed(DEFAULT)},
             approx=SpectrumPrecomp(),
             **extra,
         )
@@ -261,8 +261,12 @@ def test_free_redshift_band_factor_interpolation_stays_bounded():
             ssp_data=ssp,
             observation=obs,
             redshift=Uniform(0.0, 4.0),
-            sfh={"type": "dpl", "all_params": FIXED},
-            dust_attenuation={"type": "single_component", "law": "calzetti", "all_params": FIXED},
+            sfh={"type": "dpl", "all_params": Fixed(DEFAULT)},
+            dust_attenuation={
+                "type": "single_component",
+                "law": "calzetti",
+                "all_params": Fixed(DEFAULT),
+            },
             igm={"type": "inoue"},
             approx=approx,
         )

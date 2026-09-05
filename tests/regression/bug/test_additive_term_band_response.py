@@ -35,7 +35,7 @@ import jax.numpy as jnp
 import numpy as np
 import pytest
 
-from tengri import FIXED, Fixed, Observation, SEDModel, Uniform, WavePrecomp
+from tengri import DEFAULT, Fixed, Observation, SEDModel, Uniform, WavePrecomp
 from tengri.observation.filters import load_tophat_filter
 from tengri.observation.photometry_config import Photometry
 
@@ -93,7 +93,7 @@ MAX_EMITTER_FLOPS = 500_000
 AGN = {
     "type": "composable",
     "torus": {"type": "skirtor"},
-    "all_params": FIXED,
+    "all_params": Fixed(DEFAULT),
     "log_lbol": Fixed(45.5),
     "fracAGN": Fixed(0.3),
 }
@@ -108,20 +108,20 @@ EMITTERS = {
         "group": {
             "sf": {"type": "bell2003"},
             "agn": {"type": "powerlaw"},
-            "all_params": FIXED,
+            "all_params": Fixed(DEFAULT),
             "alpha_sf": Fixed(0.9),
         },
         "free": ("radio_alpha_sf", Uniform(0.6, 1.0)),
         "band": RADIO_BAND,
     },
     "xray_yang20": {
-        "group": {"type": "yang20", "all_params": FIXED, "gamma_agn": Fixed(2.1)},
+        "group": {"type": "yang20", "all_params": Fixed(DEFAULT), "gamma_agn": Fixed(2.1)},
         "free": ("xray_gamma_agn", Uniform(1.4, 2.2)),
         "block": "xray",
         "band": XRAY_BAND,
     },
     "xray_lopez24": {
-        "group": {"type": "lopez24", "all_params": FIXED, "gamma_agn": Fixed(2.1)},
+        "group": {"type": "lopez24", "all_params": Fixed(DEFAULT), "gamma_agn": Fixed(2.1)},
         "free": ("xray_gamma_agn", Uniform(1.4, 2.2)),
         "block": "xray",
         "band": XRAY_BAND,
@@ -163,13 +163,13 @@ def _model(name, *, approx, free_shape=False, bands=None):
         ssp_data=pytest.importorskip("tengri").load_ssp(),
         observation=Observation(photometry=_photometry(bands or name)),
         redshift=Fixed(0.1),
-        sfh={"type": "dpl", "all_params": FIXED},
+        sfh={"type": "dpl", "all_params": Fixed(DEFAULT)},
         dust_attenuation={
             "type": "two_component",
             "law": "calzetti",
-            "all_params": FIXED,
+            "all_params": Fixed(DEFAULT),
         },
-        dust_emission={"type": "dale2014_cigale", "all_params": FIXED},
+        dust_emission={"type": "dale2014_cigale", "all_params": Fixed(DEFAULT)},
         agn=AGN,
         approx=approx,
         **block,

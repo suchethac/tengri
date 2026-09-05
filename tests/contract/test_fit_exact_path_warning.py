@@ -28,7 +28,7 @@ import warnings
 
 import pytest
 
-from tengri import FIXED, Fixed, ForwardModel, SEDModel, WavePrecomp
+from tengri import DEFAULT, Fixed, ForwardModel, SEDModel, WavePrecomp
 from tengri.inference.fitter import _warn_if_exact_forward_path
 
 pytestmark = [pytest.mark.contract, pytest.mark.regression_bug]
@@ -40,7 +40,7 @@ def _build(ssp, obs, approx):
     return SEDModel.build(
         ssp_data=ssp,
         observation=obs,
-        sfh={"type": "dpl", "all_params": FIXED},
+        sfh={"type": "dpl", "all_params": Fixed(DEFAULT)},
         redshift=Fixed(0.1),
         approx=approx,
     )

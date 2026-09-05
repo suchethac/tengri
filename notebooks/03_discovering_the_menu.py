@@ -38,7 +38,7 @@ import warnings
 # reader to meet it for the first time alone, in their own code.
 warnings.filterwarnings("ignore", message=".*BakedInBackend.*")
 warnings.filterwarnings("ignore", message=".*WavePrecomp.*")
-warnings.filterwarnings("ignore", message=".*was marked FIXED.*")
+warnings.filterwarnings("ignore", message=".*states no 'all_params' disposition.*")
 warnings.filterwarnings("ignore", message=".*Composable AGN.*")
 warnings.filterwarnings("ignore", message=".*before the Big Bang.*")
 warnings.filterwarnings("ignore", category=RuntimeWarning)
@@ -53,14 +53,15 @@ import numpy as np
 from _setup import FIG_DIR
 import tengri
 from tengri import (
-    FIXED,
-    Observation,
-    Photometry,
-    SEDModel,
     builders,
     citations,
+    DEFAULT,
+    Fixed,
+    Observation,
+    Photometry,
     plot,
     recipes,
+    SEDModel,
 )
 
 plot.setup_style()
@@ -110,8 +111,12 @@ def _build_sfh(sfh_factory):
     return SEDModel.build(
         ssp_data=ssp,
         observation=obs,
-        sfh=sfh_factory(all_params=FIXED),
-        dust_attenuation={"type": "two_component", "law": "calzetti", "all_params": FIXED},
+        sfh=sfh_factory(all_params=Fixed(DEFAULT)),
+        dust_attenuation={
+            "type": "two_component",
+            "law": "calzetti",
+            "all_params": Fixed(DEFAULT),
+        },
         neb={"type": "none"},
         redshift=0.05,
     )
@@ -322,7 +327,7 @@ tengri.list_recipes()
 #
 # Two introspection surfaces close the loop:
 # `model.spec.summary()` tags every parameter with where its value came
-# from (`[user]` / `[all_params FREE]` / `[all_params FIXED]` / `[default]`).
+# from (`[user]` / `[all_params FREE]` / `[all_params Fixed(DEFAULT)]` / `[default]`).
 # `citations.collect_citations(model)` returns the bibliography of every
 # physics ingredient.
 

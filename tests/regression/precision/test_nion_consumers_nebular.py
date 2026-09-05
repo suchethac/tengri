@@ -17,7 +17,7 @@ import numpy as np
 import pytest
 
 from tengri import (
-    FIXED,
+    DEFAULT,
     FREE,
     Fixed,
     Observation,
@@ -87,7 +87,7 @@ def _wave_model(neb, sfh_wild=FREE):
             dust_attenuation={
                 "type": "two_component",
                 "law": "calzetti",
-                "all_params": FIXED,
+                "all_params": Fixed(DEFAULT),
                 "tau_diff": Fixed(0.0),
                 "tau_bc": Fixed(0.0),
             },
@@ -121,7 +121,8 @@ def test_reconstruct_nebular_phot_f64_parity_log_vs_linear():
     pow10(log_nion) * (10.0**log_ppq) at rtol=1e-12.
     """
     m = _wave_model(
-        {"type": "cue", "all_params": FIXED, "logU": Uniform(-4.0, -1.0)}, sfh_wild=FIXED
+        {"type": "cue", "all_params": Fixed(DEFAULT), "logU": Uniform(-4.0, -1.0)},
+        sfh_wild=Fixed(DEFAULT),
     )
     table = precompute_nebular_grid(m, _LW, n_grid=14)
     assert table.log_phot_per_qh is not None, "photometry channel missing"
@@ -166,7 +167,8 @@ def test_reconstruct_nebular_phot_pure_f32_finiteness():
     - The linear reference pow10(f32 56) * (10**log_ppq) is inf
     """
     m = _wave_model(
-        {"type": "cue", "all_params": FIXED, "logU": Uniform(-4.0, -1.0)}, sfh_wild=FIXED
+        {"type": "cue", "all_params": Fixed(DEFAULT), "logU": Uniform(-4.0, -1.0)},
+        sfh_wild=Fixed(DEFAULT),
     )
 
     # Build table at f64

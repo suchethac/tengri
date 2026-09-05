@@ -50,7 +50,7 @@ import numpy as np
 from reproduction.prospect_r._drivers import prospect_driver as P, units as U
 
 import tengri
-from tengri import FIXED, Fixed, SEDModel, load_ssp_data
+from tengri import DEFAULT, Fixed, SEDModel, load_ssp_data
 from tengri.utils.physics_constants import LOG10_ZSUN
 
 # Force the inline backend so figures embed on (re-)render regardless of the
@@ -253,16 +253,22 @@ t_p_dt, sfr_p_dt = P.sfh_curve(sfh="dtau", mSFR=10.0, mpeak=10.0, mtau=3.0)
 LOG_MASS_SNORM = float(np.log10(PRO_MASS))
 m_sfh = SEDModel.build(
     ssp_data=ssp,
-    met={"logzsol": Fixed(MET_LOGZSOL), "all_params": FIXED},
+    met={"logzsol": Fixed(MET_LOGZSOL), "all_params": Fixed(DEFAULT)},
     sfh={
         "type": "snorm",
         "peak_lbt_gyr": Fixed(SNORM_FIDUCIAL["mpeak"]),
         "width_gyr": Fixed(SNORM_FIDUCIAL["mperiod"]),
         "skew": Fixed(SNORM_FIDUCIAL["mskew"]),
         "log_total_mass": Fixed(LOG_MASS_SNORM),
-        "all_params": FIXED,
+        "all_params": Fixed(DEFAULT),
     },
-    dust_attenuation={"law": "power_law", "type": "two_component", "tau_bc": Fixed(0.0), "tau_diff": Fixed(0.0), "all_params": FIXED},
+    dust_attenuation={
+        "law": "power_law",
+        "type": "two_component",
+        "tau_bc": Fixed(0.0),
+        "tau_diff": Fixed(0.0),
+        "all_params": Fixed(DEFAULT),
+    },
     redshift=Fixed(0.0),
 )
 s_sfh = m_sfh.predict_state({})
@@ -328,7 +334,7 @@ m_zmm = SEDModel.build(
         "type": "massmap_lin",
         "met_logzsol_start": Fixed(logzsol_for_Z(Z_START)),
         "met_logzsol_final": Fixed(logzsol_for_Z(Z_FINAL)),
-        "all_params": FIXED,
+        "all_params": Fixed(DEFAULT),
     },
     sfh={
         "type": "snorm",
@@ -336,9 +342,15 @@ m_zmm = SEDModel.build(
         "width_gyr": Fixed(SNORM_FIDUCIAL["mperiod"]),
         "skew": Fixed(SNORM_FIDUCIAL["mskew"]),
         "log_total_mass": Fixed(LOG_MASS_FIDUCIAL),
-        "all_params": FIXED,
+        "all_params": Fixed(DEFAULT),
     },
-    dust_attenuation={"law": "power_law", "type": "two_component", "tau_bc": Fixed(0.0), "tau_diff": Fixed(0.0), "all_params": FIXED},
+    dust_attenuation={
+        "law": "power_law",
+        "type": "two_component",
+        "tau_bc": Fixed(0.0),
+        "tau_diff": Fixed(0.0),
+        "all_params": Fixed(DEFAULT),
+    },
     redshift=Fixed(0.0),
 )
 s_zmm = m_zmm.predict_state({})
@@ -364,7 +376,7 @@ m_zmb = SEDModel.build(
         "met_logzsol_start": Fixed(logzsol_for_Z(Z_START)),
         "met_logzsol_final": Fixed(logzsol_for_Z(Z_FINAL)),
         "met_yield": Fixed(0.03),
-        "all_params": FIXED,
+        "all_params": Fixed(DEFAULT),
     },
     sfh={
         "type": "snorm",
@@ -372,9 +384,15 @@ m_zmb = SEDModel.build(
         "width_gyr": Fixed(SNORM_FIDUCIAL["mperiod"]),
         "skew": Fixed(SNORM_FIDUCIAL["mskew"]),
         "log_total_mass": Fixed(LOG_MASS_FIDUCIAL),
-        "all_params": FIXED,
+        "all_params": Fixed(DEFAULT),
     },
-    dust_attenuation={"law": "power_law", "type": "two_component", "tau_bc": Fixed(0.0), "tau_diff": Fixed(0.0), "all_params": FIXED},
+    dust_attenuation={
+        "law": "power_law",
+        "type": "two_component",
+        "tau_bc": Fixed(0.0),
+        "tau_diff": Fixed(0.0),
+        "all_params": Fixed(DEFAULT),
+    },
     redshift=Fixed(0.0),
 )
 _Z_box_t = 10.0 ** np.asarray(m_zmb.predict_state({}).derived["log_metallicity_history"])
@@ -445,16 +463,22 @@ L_p3 = L_p3 * PRO_SCALE
 
 m_stellar = SEDModel.build(
     ssp_data=ssp,
-    met={"logzsol": Fixed(MET_LOGZSOL), "all_params": FIXED},
+    met={"logzsol": Fixed(MET_LOGZSOL), "all_params": Fixed(DEFAULT)},
     sfh={
         "type": "snorm",
         "peak_lbt_gyr": Fixed(SNORM_FIDUCIAL["mpeak"]),
         "width_gyr": Fixed(SNORM_FIDUCIAL["mperiod"]),
         "skew": Fixed(SNORM_FIDUCIAL["mskew"]),
         "log_total_mass": Fixed(LOG_MASS_FIDUCIAL),
-        "all_params": FIXED,
+        "all_params": Fixed(DEFAULT),
     },
-    dust_attenuation={"law": "power_law", "type": "two_component", "tau_bc": Fixed(0.0), "tau_diff": Fixed(0.0), "all_params": FIXED},
+    dust_attenuation={
+        "law": "power_law",
+        "type": "two_component",
+        "tau_bc": Fixed(0.0),
+        "tau_diff": Fixed(0.0),
+        "all_params": Fixed(DEFAULT),
+    },
     redshift=Fixed(0.0),
 )
 s_stellar = m_stellar.predict_state({})
@@ -508,7 +532,7 @@ print(
 # %%
 from tengri.dust import list_laws
 
-_tengri_laws = list_laws(headline=False).to_dict('fn')
+_tengri_laws = list_laws(headline=False).to_dict("fn")
 wave_law = np.logspace(np.log10(1000.0), np.log10(30000.0), 2000)
 
 
@@ -596,18 +620,18 @@ DUST_FIDUCIAL = {
     "law_diff": "power_law",
     "tau_bc": Fixed(TAU_BIRTH_FIDUCIAL),
     "tau_diff": Fixed(TAU_SCREEN_FIDUCIAL),
-    "all_params": FIXED,
+    "all_params": Fixed(DEFAULT),
 }
 m_d = SEDModel.build(
     ssp_data=ssp,
-    met={"logzsol": Fixed(MET_LOGZSOL), "all_params": FIXED},
+    met={"logzsol": Fixed(MET_LOGZSOL), "all_params": Fixed(DEFAULT)},
     sfh={
         "type": "snorm",
         "peak_lbt_gyr": Fixed(SNORM_FIDUCIAL["mpeak"]),
         "width_gyr": Fixed(SNORM_FIDUCIAL["mperiod"]),
         "skew": Fixed(SNORM_FIDUCIAL["mskew"]),
         "log_total_mass": Fixed(LOG_MASS_FIDUCIAL),
-        "all_params": FIXED,
+        "all_params": Fixed(DEFAULT),
     },
     dust_attenuation=DUST_FIDUCIAL,
     redshift=Fixed(0.0),
@@ -664,14 +688,14 @@ L_p6 = L_p6 * PRO_SCALE
 
 m_ir = SEDModel.build(
     ssp_data=ssp,
-    met={"logzsol": Fixed(MET_LOGZSOL), "all_params": FIXED},
+    met={"logzsol": Fixed(MET_LOGZSOL), "all_params": Fixed(DEFAULT)},
     sfh={
         "type": "snorm",
         "peak_lbt_gyr": Fixed(SNORM_FIDUCIAL["mpeak"]),
         "width_gyr": Fixed(SNORM_FIDUCIAL["mperiod"]),
         "skew": Fixed(SNORM_FIDUCIAL["mskew"]),
         "log_total_mass": Fixed(LOG_MASS_FIDUCIAL),
-        "all_params": FIXED,
+        "all_params": Fixed(DEFAULT),
     },
     dust_attenuation={
         "type": "two_component",
@@ -679,8 +703,9 @@ m_ir = SEDModel.build(
         "law_diff": "power_law",
         "tau_bc": Fixed(0.0),
         "tau_diff": Fixed(TAU_SCREEN_FIDUCIAL),
-        "all_params": FIXED,
-    }, dust_emission={"type": "dale2014", "alpha_dale": Fixed(3.0), "all_params": FIXED},
+        "all_params": Fixed(DEFAULT),
+    },
+    dust_emission={"type": "dale2014", "alpha_dale": Fixed(3.0), "all_params": Fixed(DEFAULT)},
     redshift=Fixed(0.0),
 )
 s_ir = m_ir.predict_state({})
@@ -820,17 +845,28 @@ ssp_neb = load_ssp_data(
 )
 m_neb = SEDModel.build(
     ssp_data=ssp_neb,
-    met={"logzsol": Fixed(0.0), "all_params": FIXED},
+    met={"logzsol": Fixed(0.0), "all_params": Fixed(DEFAULT)},
     # Confine star formation to the last 10 Myr — a young, ionizing population.
     sfh={
         "type": "const",
         "start_gyr": Fixed(NEB_AGE_GYR),
         "end_gyr": Fixed(0.0),
         "log_total_mass": Fixed(NEB_LOG_MASS),
-        "all_params": FIXED,
+        "all_params": Fixed(DEFAULT),
     },
-    dust_attenuation={"law": "power_law", "type": "two_component", "tau_bc": Fixed(0.0), "tau_diff": Fixed(0.0), "all_params": FIXED},
-    neb={"type": "cue", "neb_logU": Fixed(-2.0), "neb_logZ_gas": Fixed(0.0), "all_params": FIXED},
+    dust_attenuation={
+        "law": "power_law",
+        "type": "two_component",
+        "tau_bc": Fixed(0.0),
+        "tau_diff": Fixed(0.0),
+        "all_params": Fixed(DEFAULT),
+    },
+    neb={
+        "type": "cue",
+        "neb_logU": Fixed(-2.0),
+        "neb_logZ_gas": Fixed(0.0),
+        "all_params": Fixed(DEFAULT),
+    },
     redshift=Fixed(0.0),
 )
 s_neb = m_neb.predict_state({})
@@ -944,16 +980,22 @@ print(
 # the AGN down by ``frac_agn`` as a host-fraction knob).
 m_agn = SEDModel.build(
     ssp_data=ssp,
-    met={"logzsol": Fixed(MET_LOGZSOL), "all_params": FIXED},
+    met={"logzsol": Fixed(MET_LOGZSOL), "all_params": Fixed(DEFAULT)},
     sfh={
         "type": "snorm",
         "peak_lbt_gyr": Fixed(SNORM_FIDUCIAL["mpeak"]),
         "width_gyr": Fixed(SNORM_FIDUCIAL["mperiod"]),
         "skew": Fixed(SNORM_FIDUCIAL["mskew"]),
         "log_total_mass": Fixed(LOG_MASS_FIDUCIAL),
-        "all_params": FIXED,
+        "all_params": Fixed(DEFAULT),
     },
-    dust_attenuation={"law": "power_law", "type": "two_component", "tau_bc": Fixed(0.0), "tau_diff": Fixed(0.0), "all_params": FIXED},
+    dust_attenuation={
+        "law": "power_law",
+        "type": "two_component",
+        "tau_bc": Fixed(0.0),
+        "tau_diff": Fixed(0.0),
+        "all_params": Fixed(DEFAULT),
+    },
     # Raw-Stalevski SKIRTOR model. ProSpect's `SKIRTOR_interp` reads the
     # SKIRTOR template directly — the disc + torus as Stalevski's radiative
     # transfer computed them. tengri's `skirtor_stalevski` model does the same:
@@ -974,7 +1016,7 @@ m_agn = SEDModel.build(
         "agn_p_skirtor": Fixed(1.0),  # ProSpect p=1
         "agn_q_skirtor": Fixed(1.0),  # ProSpect q=1
         "agn_band_frac": Fixed(1.0),  # full L_bol into template (match ProSpect lum)
-        "all_params": FIXED,
+        "all_params": Fixed(DEFAULT),
     },
     redshift=Fixed(0.0),
 )
@@ -1052,14 +1094,14 @@ L_p11 = L_p11 * PRO_SCALE
 
 m_radio = SEDModel.build(
     ssp_data=ssp,
-    met={"logzsol": Fixed(MET_LOGZSOL), "all_params": FIXED},
+    met={"logzsol": Fixed(MET_LOGZSOL), "all_params": Fixed(DEFAULT)},
     sfh={
         "type": "snorm",
         "peak_lbt_gyr": Fixed(SNORM_FIDUCIAL["mpeak"]),
         "width_gyr": Fixed(SNORM_FIDUCIAL["mperiod"]),
         "skew": Fixed(SNORM_FIDUCIAL["mskew"]),
         "log_total_mass": Fixed(LOG_MASS_FIDUCIAL),
-        "all_params": FIXED,
+        "all_params": Fixed(DEFAULT),
     },
     dust_attenuation={
         "type": "two_component",
@@ -1067,10 +1109,10 @@ m_radio = SEDModel.build(
         "law_diff": "power_law",
         "tau_bc": Fixed(TAU_BIRTH_FIDUCIAL),
         "tau_diff": Fixed(TAU_SCREEN_FIDUCIAL),
-        "all_params": FIXED,
+        "all_params": Fixed(DEFAULT),
     },
-    dust_emission={"type": "dale2014", "alpha_dale": Fixed(3.0), "all_params": FIXED},
-    radio={"sf": {"type": "bell2003"}, "agn": {"type": "powerlaw"}, "all_params": FIXED},
+    dust_emission={"type": "dale2014", "alpha_dale": Fixed(3.0), "all_params": Fixed(DEFAULT)},
+    radio={"sf": {"type": "bell2003"}, "agn": {"type": "powerlaw"}, "all_params": Fixed(DEFAULT)},
     redshift=Fixed(0.0),
 )
 s_radio = m_radio.predict_state({})

@@ -71,8 +71,9 @@ ALLOWED_TOP_LEVEL: frozenset[str] = frozenset(
         "StudentT",
         "Uniform",
         # ── Sentinels (parameters/sentinels.py) ──────────────────────
-        # Used by every recipe and 100+ tests via `from tengri import FIXED, FREE`.
-        "FIXED",
+        # Used by every recipe and 100+ tests via `from tengri import DEFAULT, FREE`.
+        # The FIXED sentinel was removed; `Fixed(DEFAULT)` replaces it.
+        "DEFAULT",
         "FREE",
         # ── Forward-model outputs and helpers ────────────────────────
         "PriorPredictive",
@@ -84,6 +85,7 @@ ALLOWED_TOP_LEVEL: frozenset[str] = frozenset(
         # ── Exceptions ──────────────────────────────────────────────
         "BackendError",
         "ConfigError",
+        "DeadFitError",
         "InferenceError",
         "ParameterError",
         "TengriError",

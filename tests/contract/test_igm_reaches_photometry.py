@@ -24,7 +24,7 @@ import numpy as np
 import pytest
 
 from tengri import (
-    FIXED,
+    DEFAULT,
     FREE,
     Fixed,
     Observation,
@@ -42,7 +42,11 @@ def _build(ssp, obs, *, igm_on, approx=None, model="inoue"):
         ssp_data=ssp,
         observation=obs,
         sfh={"type": "dpl", "all_params": FREE},
-        dust_attenuation={"type": "two_component", "law": "calzetti", "all_params": FIXED},
+        dust_attenuation={
+            "type": "two_component",
+            "law": "calzetti",
+            "all_params": Fixed(DEFAULT),
+        },
         neb={"type": "none"},
         redshift=Fixed(3.0),
         approx=approx,
@@ -100,7 +104,11 @@ def test_predict_obs_sed_runs_with_igm_and_dla(synthetic_ssp_wide, synthetic_top
         ssp_data=synthetic_ssp_wide,
         observation=synthetic_tophat_obs,
         sfh={"type": "dpl", "all_params": FREE},
-        dust_attenuation={"type": "two_component", "law": "calzetti", "all_params": FIXED},
+        dust_attenuation={
+            "type": "two_component",
+            "law": "calzetti",
+            "all_params": Fixed(DEFAULT),
+        },
         neb={"type": "none"},
         redshift=Fixed(3.0),
         igm={"type": "inoue", "dla": {"log_n_hi": Fixed(21.0)}},
@@ -120,7 +128,11 @@ def test_igm_attenuates_spectrum_precomp_path(synthetic_ssp_wide):
         ssp_data=synthetic_ssp_wide,
         observation=obs,
         sfh={"type": "dpl", "all_params": FREE},
-        dust_attenuation={"type": "two_component", "law": "calzetti", "all_params": FIXED},
+        dust_attenuation={
+            "type": "two_component",
+            "law": "calzetti",
+            "all_params": Fixed(DEFAULT),
+        },
         neb={"type": "none"},
         redshift=Fixed(3.0),
         approx=SpectrumPrecomp(),
@@ -144,11 +156,11 @@ def _igm_parity_ratios(ssp, obs, *, redshift_spec, params=None, approx=None):
     common = dict(
         ssp_data=ssp,
         observation=obs,
-        sfh={"type": "dpl", "all_params": FIXED},
+        sfh={"type": "dpl", "all_params": Fixed(DEFAULT)},
         dust_attenuation={
             "law": "power_law",
             "type": "two_component",
-            "all_params": FIXED,
+            "all_params": Fixed(DEFAULT),
             "tau_bc": 0.0,
             "tau_diff": 0.0,
         },

@@ -64,6 +64,7 @@ import inspect
 import pathlib
 import re
 import sys
+from collections.abc import Sequence
 
 REPO_ROOT = pathlib.Path(__file__).resolve().parent.parent
 DOCS = REPO_ROOT / "docs"
@@ -143,10 +144,10 @@ def census(tengri) -> list[str]:
     return sorted(union)
 
 
-def main() -> int:
+def main(argv: Sequence[str] | None = None) -> int:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--verbose", action="store_true", help="list every symbol and its status")
-    args = parser.parse_args()
+    args = parser.parse_args(argv)
 
     sys.path.insert(0, str(REPO_ROOT / "src"))
     import tengri

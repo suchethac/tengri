@@ -38,6 +38,10 @@ jobs:
       - name: Install pandoc
         run: sudo apt-get install -y pandoc
 
+      # Verify every registered component appears in the published reference.
+      # This guard needs the docs extra (sphinx-gallery) to execute docs/conf.py.
+      - run: python tools/check_component_page.py
+
       # Warnings are errors. The docs are the API reference (docs/api/*.rst are
       # autodoc stubs, so docstrings ARE the published pages), and a Sphinx
       # warning there means something is actually wrong: LaTeX eaten by a

@@ -1,0 +1,42 @@
+[
+  {
+    "stage": "nuts_warmup",
+    "notebook": "05",
+    "seed": 7,
+    "n_dim": 8,
+    "n_warmup": 300,
+    "n_samples": 110,
+    "max_doublings": 10,
+    "n_leapfrog": 20,
+    "precondition": null,
+    "device": "cpu",
+    "load1": 27.87,
+    "load5": 29.75,
+    "load15": 33.92,
+    "n_cpu": 24,
+    "trace_lower_s": 1.465,
+    "compile_s": 6.719,
+    "run_s": null,
+    "stablehlo_lines": 7883
+  },
+  {
+    "stage": "nuts_scan",
+    "notebook": "05",
+    "seed": 7,
+    "n_dim": 8,
+    "n_warmup": 300,
+    "n_samples": 110,
+    "max_doublings": 10,
+    "n_leapfrog": 20,
+    "precondition": null,
+    "device": "cpu",
+    "load1": 31.64,
+    "load5": 30.06,
+    "load15": 33.22,
+    "n_cpu": 24,
+    "trace_lower_s": 0.563,
+    "compile_s": 3.574,
+    "run_s": null,
+    "stablehlo_lines": 4396
+  }
+]

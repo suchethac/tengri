@@ -172,5 +172,8 @@ def test_docstring_only_names_real_constants():
 
 
 def test_repository_is_clean():
-    """The whole repo passes the guard, so a regression fails loudly in CI."""
-    assert guard.main() == 0
+    """The whole repo passes the guard, so a regression fails loudly in CI.
+
+    Issue #2075: pass explicit argv to guard.main() so pytest flags don't interfere.
+    """
+    assert guard.main([]) == 0

@@ -8,11 +8,15 @@ Provides a Bagpipes-style nested-dictionary interface to the Parameters
 class. Instead of flat kwargs (e.g., ``sfh_dpl_alpha=..., sfh_dpl_beta=...``),
 users can organize parameters into semantic groups::
 
-    from tengri.parameters import parse_groups, FREE, FIXED
+    from tengri.parameters import parse_groups, FREE, Fixed, DEFAULT
 
     params = parse_groups(
         sfh={"type": "dpl", "all_params": FREE, "beta": 0.5},
-        dust_attenuation={"type": "two_component", "law": "calzetti", "all_params": FIXED},
+        dust_attenuation={
+            "type": "two_component",
+            "law": "calzetti",
+            "all_params": Fixed(DEFAULT),
+        },
         dust_emission={"type": "dale2014"},
         neb={"type": "cue"},
         redshift=FREE,
@@ -28,7 +32,7 @@ model configuration kwargs (e.g., ``sfh['type'] = 'dpl'`` → ``mean_sfh_type='d
 for each declared parameter, decide its final prior/value by:
 
 1. Checking for per-parameter override in the user's group dict.
-2. Checking for a wildcard directive ('all_params': FREE / FIXED).
+2. Checking for a wildcard directive ('all_params': FREE / Fixed(DEFAULT)).
 3. Using the registry's default (fixed at median for free defaults).
 
 Parameters
@@ -67,11 +71,11 @@ Notes
 translator and cannot be called inside a JAX gradient tape.
 
 **Wildcard semantics**: The 'all_params' key in a group dict applies a default
-(FREE or FIXED) to all parameters in that group not explicitly overridden.
-'all_params' is the only accepted user-facing spelling; '*' is an internal key
-the normalizer rewrites to, not a user input synonym.
+(FREE or Fixed(DEFAULT)) to all parameters in that group not explicitly
+overridden. 'all_params' is the only accepted user-facing spelling; '*' is an
+internal key the normalizer rewrites to, not a user input synonym.
 
-**Sentinels**: FREE and FIXED are singleton objects that preserve identity
+**Sentinels**: FREE and DEFAULT are singleton objects that preserve identity
 across copy and pickle operations.
 
 References
@@ -80,7 +84,7 @@ References
 
 Examples
 --------
->>> from tengri.parameters import parse_groups, FREE, FIXED
+>>> from tengri.parameters import parse_groups, FREE
 >>> from tengri.parameters import Uniform
 >>> params = parse_groups(
 ...     sfh={"type": "dpl", "all_params": FREE, "alpha": Uniform(0.5, 3.0)},
@@ -103,19 +107,27 @@ from tengri.config.exceptions import (
     AdvisoryWarning,
     DefaultFixedParametersWarning,
     ParameterError,
+    WildcardNoOpWarning,
     WildcardPartialFreeWarning,
     warn_measured,
 )
 from tengri.parameters._builders import _resolve_lazy_bucket
 from tengri.parameters.parameters import Parameters
-from tengri.parameters.priors import Distribution, Fixed
-from tengri.parameters.sentinels import FIXED, FREE, WILDCARD_ALIAS, WILDCARD_KEY
+from tengri.parameters.priors import Distribution, Fixed, _is_default_fixed
+from tengri.parameters.sentinels import (
+    DEFAULT,
+    FREE,
+    WILDCARD_ALIAS,
+    WILDCARD_ALIAS_OTHER,
+    WILDCARD_KEY,
+    _Sentinel,
+)
 
 __all__ = ["parameters_to_groups", "parse_groups"]
 
 
 # Canonical fixed-default values that override the prior-midpoint rule
-# (``registry_default.unstandardize(0.0)``) used by the wildcard-FIXED
+# (``registry_default.unstandardize(0.0)``) used by the wildcard-Fixed(DEFAULT)
 # resolver. The midpoint is rarely what the user actually wants for a
 # default: e.g. ``Uniform(-2.0, 0.2)`` for ``met_logzsol`` gives -0.9,
 # which silently injected a ~0.85 dex Z offset in CIGALE comparisons
@@ -131,7 +143,7 @@ _CANONICAL_FIXED_DEFAULTS: dict[str, float] = {
     "met_logzsol_young": 0.0,
     "met_logzsol_burst": 0.0,
     # Lognormal metallicity-scatter sigma [dex] (#506). Pinned to the historical
-    # fixed ``config.lgmet_scatter`` (0.1) so ``*: FIXED`` delta models are
+    # fixed ``config.lgmet_scatter`` (0.1) so ``*: Fixed(DEFAULT)`` delta models are
     # byte-unchanged; free it to fit the MDF width.
     "met_logzsol_scatter": 0.1,
 }
@@ -179,7 +191,7 @@ def _expand_free(param_name: str, registry_default: Distribution) -> Distributio
 
 
 def _default_fixed_value(param_name: str, registry_default: Distribution) -> float:
-    """Pick the fixed value used when wildcard-FIXED collapses a free param.
+    """Pick the fixed value used when wildcard-Fixed(DEFAULT) collapses a free param.
 
     Resolution order:
     1. ``_CANONICAL_FIXED_DEFAULTS``: hand-curated per-name override for
@@ -213,7 +225,7 @@ def _default_fixed_value(param_name: str, registry_default: Distribution) -> flo
     # ``UserWarning`` so it shows up by default; do not silence it without
     # adding the default at the declaration site.
     warn_measured(
-        f"{param_name!r} has no curated default, so 'all_params': FIXED pins it at its "
+        f"{param_name!r} has no curated default, so 'all_params': Fixed(DEFAULT) pins it at its "
         f"prior midpoint ({float(registry_default.unstandardize(0.0)):.4g}): "
         f"an arbitrary rather than physically motivated value. Pass an "
         f"explicit value for it in the group dict to silence this, or leave "
@@ -223,6 +235,37 @@ def _default_fixed_value(param_name: str, registry_default: Distribution) -> flo
         prior_midpoint=float(registry_default.unstandardize(0.0)),
     )
     return float(registry_default.unstandardize(0.0))
+
+
+def _bare_default_error(param_name: str) -> ParameterError:
+    """Build the error for a bare ``DEFAULT`` sentinel used as a parameter value.
+
+    ``DEFAULT`` is only legal as the argument of ``Fixed(...)``. Used bare in
+    a group dict (e.g. ``{"logzsol": DEFAULT}``, or as the ``'all_params'``
+    wildcard, or as a top-level setting like ``redshift=DEFAULT``) it raises
+    here rather than silently wrapping into ``Fixed(DEFAULT)`` on the
+    caller's behalf: unlike ``FREE``/``Fixed(DEFAULT)``, ``DEFAULT`` alone is
+    not a grammar directive.
+
+    One message, reused everywhere a bare ``DEFAULT`` can appear, rather than
+    several near-duplicate strings.
+    """
+    return ParameterError(
+        f"{param_name!r}: bare DEFAULT is not a valid parameter value. "
+        f"DEFAULT is only legal as the argument of Fixed(...); did you mean "
+        f"Fixed(DEFAULT) (pin at the registry default)?"
+    )
+
+
+def _is_wildcard_disposition(x: object) -> bool:
+    """Return True if ``x`` is a legal ``'all_params'``/``'*'`` disposition.
+
+    True for ``FREE`` or an unresolved ``Fixed(DEFAULT)`` token.
+    Always an explicit identity/type check, never ``x in (FREE, ...)``:
+    ``Fixed`` is unhashable (no set membership), and tuple-``in`` falls back
+    to ``==``, which is unnecessary to lean on when identity suffices.
+    """
+    return x is FREE or _is_default_fixed(x)
 
 
 # Ensure SEDModelComponent subclasses are imported and registered.
@@ -645,18 +688,19 @@ _SEDMODEL_PASSTHROUGH = {
 
 
 def _normalize_wildcard_keys(group: object) -> object:
-    """Rewrite the user-facing ``all_params`` wildcard key to internal ``'*'``.
+    """Rewrite the user-facing wildcard key spelling to internal ``'*'``.
 
-    ``all_params`` is the one spelling the grammar accepts; ``'*'`` is an
-    internal detail and is refused on input. This normalizer rewrites the
-    user's key to the internal one once at the parser boundary, so every
-    downstream site keeps operating on the single ``'*'`` invariant without
-    that invariant ever being something a user has to know. Anything printing
-    a normalized dict back to a user must undo this with
-    :func:`_wildcard_keys_for_display`. Recurses through nested sub-block dicts
-    (``dust.emission``, the ``agn.*`` selectors, ``igm.dla``, ``radio.sf`` /
-    ``radio.agn``, …); per-parameter values are never dicts, so recursing into
-    every dict-valued entry is safe.
+    ``all_params`` (:data:`WILDCARD_ALIAS`) and its exact synonym
+    ``other_params`` (:data:`WILDCARD_ALIAS_OTHER`) are the two spellings the
+    grammar accepts; ``'*'`` is an internal detail and is refused on input.
+    This normalizer rewrites whichever spelling the user wrote to the internal
+    one once at the parser boundary, so every downstream site keeps operating
+    on the single ``'*'`` invariant without that invariant ever being
+    something a user has to know. Anything printing a normalized dict back to
+    a user must undo this with :func:`_wildcard_keys_for_display`. Recurses
+    through nested sub-block dicts (``dust.emission``, the ``agn.*``
+    selectors, ``igm.dla``, ``radio.sf`` / ``radio.agn``, …); per-parameter
+    values are never dicts, so recursing into every dict-valued entry is safe.
 
     Parameters
     ----------
@@ -666,14 +710,17 @@ def _normalize_wildcard_keys(group: object) -> object:
     Returns
     -------
     object
-        A new dict with ``all_params`` keys rewritten to ``'*'`` (the input is
-        never mutated), or the original value if it is not a dict.
+        A new dict with ``all_params`` / ``other_params`` keys rewritten to
+        ``'*'`` (the input is never mutated), or the original value if it is
+        not a dict.
 
     Raises
     ------
     ValueError
         If a dict carries ``'*'`` at all -- the key is retired, whether or not
-        ``all_params`` is present beside it.
+        ``all_params`` / ``other_params`` is present beside it. Also raised if
+        a dict carries BOTH ``all_params`` and ``other_params`` -- they are
+        synonyms for the same wildcard, so only one may be given.
 
     Notes
     -----
@@ -681,19 +728,27 @@ def _normalize_wildcard_keys(group: object) -> object:
     """
     if not isinstance(group, dict):
         return group
-    # One rule, whether or not the dict also carries the preferred spelling:
+    # One rule, whether or not the dict also carries a preferred spelling:
     # the advice for both cases is to drop the star. Keeping a separate
     # "you set both" branch would have to name ``'*'`` as an option to explain
     # itself, which is a retirement error teaching the retired form.
     if WILDCARD_KEY in group:
         raise ValueError(
             f"The wildcard key {WILDCARD_KEY!r} has been retired; the wildcard "
-            f"is spelled {WILDCARD_ALIAS!r}. Write "
-            f"{{{WILDCARD_ALIAS!r}: FREE}} instead of {{{WILDCARD_KEY!r}: FREE}}."
+            f"is spelled {WILDCARD_ALIAS!r} (or its synonym {WILDCARD_ALIAS_OTHER!r}). "
+            f"Write {{{WILDCARD_ALIAS!r}: FREE}} instead of {{{WILDCARD_KEY!r}: FREE}}."
+        )
+    # The two spellings set the same policy; giving both is a contradiction
+    # in the making (which one wins?), not a redundancy to silently resolve.
+    if WILDCARD_ALIAS in group and WILDCARD_ALIAS_OTHER in group:
+        raise ValueError(
+            f"{WILDCARD_ALIAS!r} and {WILDCARD_ALIAS_OTHER!r} are synonyms for the same "
+            f"wildcard; give only one. Write {{{WILDCARD_ALIAS!r}: FREE}} or "
+            f"{{{WILDCARD_ALIAS_OTHER!r}: FREE}}, not both."
         )
     normalized: dict[object, object] = {}
     for key, value in group.items():
-        canonical_key = WILDCARD_KEY if key == WILDCARD_ALIAS else key
+        canonical_key = WILDCARD_KEY if key in (WILDCARD_ALIAS, WILDCARD_ALIAS_OTHER) else key
         normalized[canonical_key] = _normalize_wildcard_keys(value)
     return normalized
 
@@ -769,7 +824,7 @@ def parse_groups(**kwargs) -> Parameters:
 
     Examples
     --------
-    >>> from tengri.parameters import parse_groups, FREE, FIXED
+    >>> from tengri.parameters import parse_groups, FREE
     >>> params = parse_groups(
     ...     sfh={"type": "dpl", "all_params": FREE},
     ...     redshift=0.1,
@@ -830,7 +885,7 @@ def parse_groups(**kwargs) -> Parameters:
             f"got dust_attenuation={dust_val!r}."
         )
     if not has_dust_atten and not has_dust_old:
-        kwargs["dust_attenuation"] = {"type": "none", "all_params": FIXED}
+        kwargs["dust_attenuation"] = {"type": "none", "*": Fixed(DEFAULT)}
     elif (
         has_dust_atten
         and kwargs["dust_attenuation"].get("type") == "none"
@@ -838,9 +893,10 @@ def parse_groups(**kwargs) -> Parameters:
         and "*" not in kwargs["dust_attenuation"]
     ):
         # User wrote dust_attenuation={'type': 'none'} explicitly without stating
-        # 'all_params' disposition. Set it to FIXED so the warning machinery doesn't
-        # complain about a missing disposition on an empty-parameter group.
-        kwargs["dust_attenuation"]["all_params"] = FIXED
+        # 'all_params' disposition. Set it to the internal '*': Fixed(DEFAULT) so
+        # the warning machinery doesn't complain about a missing disposition on an
+        # empty-parameter group.
+        kwargs["dust_attenuation"]["*"] = Fixed(DEFAULT)
 
     # ── Pass 1: Translate structural choices ──────────────────────────
 
@@ -863,13 +919,13 @@ def parse_groups(**kwargs) -> Parameters:
     # Partition declared params by owning group. ``met_*`` lands in
     # ``"stellar"`` when the user opted into the new top-level slot
     # (issue #311); otherwise it stays in ``"sfh"`` so the legacy
-    # ``sfh={'*': FIXED}`` wildcard keeps cascading over met_* params
+    # ``sfh={'*': Fixed(DEFAULT)}`` wildcard keeps cascading over met_* params
     # (preserves pre-#311 behavior for every fixture/recipe that didn't
     # pass a ``met={}`` block.
     dust_emission_active = structural_params.dust_emission is not None
     has_met_block = isinstance(kwargs.get("met"), dict)
     # ``met`` owns met_* when present (#1720), else ``sfh``; the pre-#311
-    # default, kept so a legacy ``sfh={'*': FIXED}`` wildcard still cascades
+    # default, kept so a legacy ``sfh={'*': Fixed(DEFAULT)}`` wildcard still cascades
     # over met_* for fixtures and recipes that pass no metallicity block.
     param_partition = _partition_by_group(
         structural_params.all_params,
@@ -913,7 +969,9 @@ def parse_groups(**kwargs) -> Parameters:
                 if val is FREE:
                     resolved_kwargs[param_name] = structural_params.get_distribution(param_name)
                     provenance[param_name] = "user_free"
-                elif val is FIXED:
+                elif _is_default_fixed(val):
+                    # Fixed(DEFAULT) resolves through the same canonical-table
+                    # path (#412) -- never a second one.
                     registry_default = structural_params.get_distribution(param_name)
                     if registry_default.is_fixed:
                         resolved_kwargs[param_name] = registry_default
@@ -922,6 +980,8 @@ def parse_groups(**kwargs) -> Parameters:
                             _default_fixed_value(param_name, registry_default)
                         )
                     provenance[param_name] = "user_fixed"
+                elif val is DEFAULT:
+                    raise _bare_default_error(param_name)
                 else:
                     if isinstance(val, Distribution):
                         resolved_kwargs[param_name] = val
@@ -970,15 +1030,16 @@ def parse_groups(**kwargs) -> Parameters:
         # pinned at Fixed defaults, not freed by sfh wildcard (#1796).
         # These params logically belong to "met" group. When there's an explicit
         # sfh override (e.g., sfh={'logzsol': Uniform(...)}) honor it with a
-        # migration warning. Otherwise, treat as implicit FIXED wildcard.
+        # migration warning. Otherwise, treat as implicit Fixed(DEFAULT) wildcard.
         if group == "sfh" and param_name.startswith("met_"):
             short_name = _extract_short_name(param_name, group_dict)
             has_explicit_override = short_name in group_dict or param_name in group_dict
 
             if not has_explicit_override and group_dict.get("*") is FREE and not has_met_block:
                 # sfh wildcard is FREE, but met_* should not be freed (no met
-                # block means implicit FIXED). Override with FIXED for this param.
-                group_dict = {"*": FIXED}
+                # block means implicit Fixed(DEFAULT)). Override with Fixed(DEFAULT)
+                # for this param.
+                group_dict = {"*": Fixed(DEFAULT)}
 
                 # Emit migration warning once per parse (#1796)
                 if not met_suppression_warned:
@@ -1036,7 +1097,7 @@ def parse_groups(**kwargs) -> Parameters:
         # AGN group is configured. The AGN clause is essential: AGN parameters
         # now carry *free* Uniform/LogUniform registry defaults (so FREE can
         # expand them), which means an untouched AGN param would otherwise keep
-        # its free prior; violating the grammar's FIXED-by-default contract.
+        # its free prior; violating the grammar's fixed-by-default contract.
         # ``_resolve_value`` collapses such untouched params to Fixed(default)
         # via its registry-default branch, so applying it here pins them fixed
         # unless explicitly/wildcard-freed. (Non-AGN params keep Fixed scalar
@@ -1051,24 +1112,30 @@ def parse_groups(**kwargs) -> Parameters:
     # Forward any the user set in a ``type='cue'`` neb group straight to the
     # flat constructor, which registers them on demand (#653). Only explicit
     # priors / values are accepted (no '*' wildcard or bare sentinel, since
-    # these params have no registry default to expand a FREE/FIXED against).
+    # these params have no registry default to expand a FREE / Fixed(DEFAULT) against).
     neb_group = kwargs.get("neb")
     if isinstance(neb_group, dict) and neb_group.get("type") == "cue":
         for pname in _OPTIONAL_NEB_PARAM_NAMES:
             if pname not in neb_group:
                 continue
             val = neb_group[pname]
-            if isinstance(val, Distribution):
-                resolved_kwargs[pname] = val
-                provenance[pname] = "user_prior"
-            elif val is FREE or val is FIXED:
+            # Sentinel/token checks MUST come before the isinstance(Distribution)
+            # check: Fixed(DEFAULT) (like every Fixed) *is* a Distribution, but
+            # these knobs carry no registry default to resolve it against, so
+            # it must hit the "needs an explicit prior or value" error below
+            # rather than being accepted as a plain user-supplied Fixed.
+            if val is DEFAULT:
+                raise _bare_default_error(pname)
+            elif val is FREE or _is_default_fixed(val):
                 raise ValueError(
                     f"neb[{pname!r}] needs an explicit prior or value "
-                    f"(e.g. Uniform(lo, hi) or a number); the 'all_params' wildcard "
-                    f"(also '*') and "
-                    f"bare FREE/FIXED are unsupported for optional Cue knobs "
-                    f"because they carry no registry default."
+                    f"(e.g. Uniform(lo, hi) or a number); the 'all_params' wildcard and "
+                    f"bare FREE / Fixed(DEFAULT) are unsupported for optional Cue "
+                    f"knobs because they carry no registry default."
                 )
+            elif isinstance(val, Distribution):
+                resolved_kwargs[pname] = val
+                provenance[pname] = "user_prior"
             else:
                 resolved_kwargs[pname] = Fixed(val)
                 provenance[pname] = "user_fixed"
@@ -1086,7 +1153,10 @@ def parse_groups(**kwargs) -> Parameters:
     # the more fundamental error.
     if not allow_empty_wildcard:
         _check_wildcard_freed_something(
-            _narrow_outcome_to_selected_component(wildcard_free_outcome, structural_params)
+            _seed_zero_declaration_wildcards(
+                _narrow_outcome_to_selected_component(wildcard_free_outcome, structural_params),
+                kwargs,
+            )
         )
 
     # ── Construct final Parameters ────────────────────────────────────
@@ -1480,6 +1550,67 @@ def _format_stuck(group: str, stuck: list[str]) -> tuple[str, str, str]:
     return shown, top, example
 
 
+#: Top-level groups whose structural choice can make them declare literally
+#: zero parameters: ``igm`` without ``patchy`` (its only top-level knobs,
+#: ``igm_bubble_mpc``/``igm_x_HI``, are declared only then), and ``radio`` /
+#: ``shock`` when every sub-model they can select is switched to ``'none'``
+#: (no component gets built at all). Named explicitly rather than every
+#: top-level group so that seeding below cannot start warning about some
+#: other group's legitimate wildcard by accident.
+_GROUPS_THAT_CAN_DECLARE_NOTHING: tuple[str, ...] = ("igm", "radio", "shock")
+
+
+def _seed_zero_declaration_wildcards(
+    outcome: dict[str, list[tuple[str, bool]]], kwargs: dict
+) -> dict[str, list[tuple[str, bool]]]:
+    """Give a FREE-disposed, zero-declaration group an empty entry in ``outcome``.
+
+    The resolve loop in :func:`parse_groups` only ever adds a group to
+    ``wildcard_free_outcome`` by *appending* a ``(param_name, freed)`` pair for
+    a parameter it actually visited. When the selected structural variant
+    declares no parameters for a group at all, the loop never visits a single
+    one, so the group never becomes a key in the outcome dict -- not even with
+    an empty list. A wildcard written there then resolves cleanly and the fit
+    runs with nothing in that group changed, which is indistinguishable at the
+    call site from a wildcard that did its job: there was no per-parameter
+    outcome for :func:`_check_wildcard_freed_something` to ever be asked
+    about.
+
+    This adds an explicit empty entry for exactly that case -- scoped to
+    :data:`_GROUPS_THAT_CAN_DECLARE_NOTHING`, the groups measured to actually
+    reach zero under a real structural choice -- so the adjudicator gets a
+    chance to say so instead of never being consulted.
+
+    Parameters
+    ----------
+    outcome : dict
+        Group name -> list of ``(param_name, was_freed)``, as built by the
+        resolve loop (and narrowed by
+        :func:`_narrow_outcome_to_selected_component`).
+    kwargs : dict
+        :func:`parse_groups` kwargs after Pass-0 wildcard-key normalization,
+        so every ``all_params``/``other_params`` spelling is already the
+        internal ``'*'`` (:data:`tengri.parameters.sentinels.WILDCARD_KEY`).
+
+    Returns
+    -------
+    dict
+        ``outcome`` with an empty list added for each zero-declaration group
+        whose wildcard disposition is ``FREE``. A group already present in
+        ``outcome``, or whose disposition is not ``FREE`` (unset, or
+        ``Fixed(DEFAULT)`` -- imperative and never a candidate for this),
+        passes through untouched.
+    """
+    seeded = dict(outcome)
+    for group in _GROUPS_THAT_CAN_DECLARE_NOTHING:
+        if group in seeded:
+            continue
+        group_dict = kwargs.get(group)
+        if isinstance(group_dict, dict) and group_dict.get(WILDCARD_KEY) is FREE:
+            seeded[group] = []
+    return seeded
+
+
 def _check_wildcard_freed_something(
     outcome: dict[str, list[tuple[str, bool]]],
 ) -> None:
@@ -1492,34 +1623,57 @@ def _check_wildcard_freed_something(
     with that physics constant, which is indistinguishable from success at the
     call site.
 
-    Three outcomes, three responses:
+    Four outcomes, four responses:
 
     * freed everything; silent, the request was honored;
-    * freed nothing; :class:`ParameterError`, since that is never intended;
-    * freed some; :class:`WildcardPartialFreeWarning` naming what stayed pinned
-      (issue #1474). A warning rather than a refusal because a partial free is
-      sometimes correct: ``dust_Rv`` is fixed by definition under a Calzetti law,
-      and six of the ten shipped recipes free a strict subset today.
+    * covered nothing at all -- the group declares no parameters under this
+      configuration, so there was nothing to attempt;
+      :class:`WildcardNoOpWarning` (via :func:`_seed_zero_declaration_wildcards`,
+      which is what gives such a group an (empty) entry here in the first
+      place -- a group with no entry at all is never seen by this function);
+    * covered something and freed none of it; :class:`ParameterError`, since
+      that is never intended;
+    * freed some, but not all, of what it covered; :class:`WildcardPartialFreeWarning`
+      naming what stayed pinned (issue #1474). A warning rather than a
+      refusal because a partial free is sometimes correct: ``dust_Rv`` is
+      fixed by definition under a Calzetti law, and six of the ten shipped
+      recipes free a strict subset today.
 
     Parameters
     ----------
     outcome : dict
         Group name -> list of ``(param_name, was_freed)`` for every parameter an
         *active* wildcard-FREE touched. Blocks scoped out by an inactive model
-        selection are excluded by the caller and never reach here.
+        selection are excluded by the caller and never reach here. A group
+        mapped to an empty list means its wildcard covered zero parameters
+        (see :func:`_seed_zero_declaration_wildcards`); a group absent
+        entirely never had a FREE wildcard worth adjudicating and is not
+        reachable here.
 
     Raises
     ------
     ParameterError
-        If any group's wildcard freed zero of the parameters it covered.
+        If any group's wildcard covered one or more parameters and freed
+        zero of them.
 
     Warns
     -----
+    WildcardNoOpWarning
+        If a group's wildcard covered zero parameters -- nothing to free in
+        the first place.
     WildcardPartialFreeWarning
-        If a group's wildcard freed some, but not all, of them.
+        If a group's wildcard freed some, but not all, of what it covered.
     """
     for group, entries in sorted(outcome.items()):
         if not entries:
+            warnings.warn(
+                f"'all_params'/'other_params': FREE in group {group!r} freed "
+                f"no parameters -- it declares none to free under this "
+                f"configuration. Remove the wildcard, or pass explicit "
+                f"priors for the parameters you meant to vary.",
+                WildcardNoOpWarning,
+                stacklevel=3,
+            )
             continue
         stuck = [name for name, freed in entries if not freed]
         if not stuck:
@@ -1566,7 +1720,10 @@ def _warn_silently_fixed_parameters(
     param_partition : dict[str, str]
         Maps parameter names to their group (group name or "_toplevel", "_structural").
     kwargs : dict
-        The original user-provided kwargs to parse_groups.
+        The parse_groups kwargs after Pass 0 normalization: the user-facing
+        ``'all_params'`` / ``'other_params'`` wildcard spellings have already
+        been rewritten to the internal ``'*'`` key by
+        :func:`_normalize_wildcard_keys` by the time this runs.
 
     Notes
     -----
@@ -1603,7 +1760,7 @@ def _warn_silently_fixed_parameters(
         # ``met_*`` sits in the ``sfh`` partition when the user passed no ``met``
         # block, by design (#311/#1720, see ``met_group=`` above). Warning about
         # it under the ``sfh`` label would name a group the user never wrote and
-        # hand them a remedy that does not apply: ``sfh={'all_params': FIXED}``
+        # hand them a remedy that does not apply: ``sfh={'all_params': Fixed(DEFAULT)}``
         # says nothing about metallicity. Naming the wrong group is worse than
         # staying quiet, so stay quiet.
         if group == "sfh" and param_name.startswith("met_") and not has_met_block:
@@ -1664,10 +1821,11 @@ def _warn_silently_fixed_parameters(
             # Group was provided but not as a dict, so skip
             continue
 
-        # Check if user stated a disposition in their provided dict
-        has_explicit_disposition = (
-            "all_params" in group_dict and group_dict["all_params"] in (FREE, FIXED)
-        ) or ("*" in group_dict and group_dict["*"] in (FREE, FIXED))
+        # Check if user stated a disposition in their provided dict. ``kwargs``
+        # (and therefore ``group_dict``) is already Pass-0 normalized, so the
+        # wildcard -- however the user spelled it -- is always under the
+        # internal ``'*'`` key here; there is no ``'all_params'`` arm to check.
+        has_explicit_disposition = "*" in group_dict and _is_wildcard_disposition(group_dict["*"])
 
         if has_explicit_disposition:
             # User explicitly stated a disposition, so don't warn
@@ -1694,7 +1852,7 @@ def _warn_silently_fixed_parameters(
             f"To fit them, pass 'all_params': FREE:\n"
             f"  {group}={{'all_params': FREE, ...}}\n"
             f"To keep them fixed and silence this warning, say so explicitly:\n"
-            f"  {group}={{'all_params': FIXED, ...}}"
+            f"  {group}={{'all_params': Fixed(DEFAULT), ...}}"
         )
 
         warnings.warn(
@@ -2063,6 +2221,28 @@ def _translate_structural(groups: dict) -> dict:
                 f"priors as needed), or {group_name}={{'type': 'none'}} / omit to disable."
             )
 
+        # A bare sentinel/token given directly as a group's value (e.g.
+        # ``sfh=FREE``) is a common slip carried over from the flat-kwargs
+        # ``Parameters(...)`` constructor, where a bare value like that is
+        # legal. In the nested-dict grammar the wildcard directive lives
+        # *inside* the group dict; silently ``continue``-ing past it below
+        # (like any other non-dict) built a spec with that group entirely
+        # unconfigured and gave no sign anything was wrong. Checks
+        # identity/type specifically -- not every non-dict, which would also
+        # swallow the legal bool gates above.
+        if group_dict is FREE or _is_default_fixed(group_dict):
+            raise ParameterError(
+                f"{group_name}={group_dict!r} is not a valid declaration; the "
+                f"wildcard goes inside the group dict: "
+                f"{group_name}={{'all_params': {group_dict!r}}}."
+            )
+        if group_dict is DEFAULT:
+            raise ParameterError(
+                f"{group_name}=DEFAULT is not a valid declaration; DEFAULT is only "
+                f"legal as the argument of Fixed(...). Did you mean "
+                f"{group_name}={{'all_params': Fixed(DEFAULT)}}?"
+            )
+
         if not isinstance(group_dict, dict):
             continue
 
@@ -2092,12 +2272,18 @@ def _translate_structural(groups: dict) -> dict:
         elif group_name == "agn":
             _translate_agn(group_dict, result)
 
-    # Top-level settings win over group-derived ones; sentinels (FREE/FIXED)
-    # are resolved later in _resolve_value, not here.
+    # Top-level settings win over group-derived ones; sentinels (FREE,
+    # Fixed(DEFAULT), and bare DEFAULT) are resolved (or, for bare DEFAULT,
+    # rejected) later in the "_toplevel" branch of the resolve loop, not
+    # here. Passing one of them through to this structural pre-pass's
+    # ``Parameters(**structural_kwargs)`` call would crash there instead:
+    # ``Fixed(DEFAULT)`` because its readers raise until resolved, bare
+    # ``DEFAULT`` because it is not a Distribution/scalar/tuple at all.
     for key in list(groups.keys()):
         if key in _TOP_LEVEL_SETTINGS:
             val = groups[key]
-            if val is not FREE and val is not FIXED:
+            is_sentinel_or_token = val is FREE or val is DEFAULT or _is_default_fixed(val)
+            if not is_sentinel_or_token:
                 result[key] = val
 
     return result
@@ -2155,7 +2341,7 @@ def _normalize_sfh_field(kwargs: dict) -> dict:
     else:
         raise ValueError(
             "sfh 'field' must be a dict of field/PSD priors (e.g. "
-            "sfh={'type': 'dpl', 'field': {'*': FREE}}), or True to enable it "
+            "sfh={'type': 'dpl', 'field': {'all_params': FREE}}), or True to enable it "
             "with defaults."
         )
 
@@ -2187,7 +2373,7 @@ def _translate_sfh(sfh_dict: dict, result: dict) -> None:
     # Gyr) that only applies to non-parametric SFHs. Surface it as a
     # top-level kwarg so ``Parameters.__init__`` can pop it and forward
     # to ``resolve_sfh(mean_sfh_type, bin_edges_gyr=...)`` via
-    # ``_build_legacy``. The wildcard ``'*': FREE / FIXED`` does NOT
+    # ``_build_legacy``. The wildcard ``'*': FREE`` / ``Fixed(DEFAULT)`` does NOT
     # apply to this; it's a config, not a free parameter.
     if "bin_edges_gyr" in sfh_dict:
         _validate_sfh_bin_edges(sfh_type, sfh_dict["bin_edges_gyr"])
@@ -2273,7 +2459,7 @@ def _translate_sfh(sfh_dict: dict, result: dict) -> None:
         raise TypeError(
             f"sfh 'type' must be a string (or a list of strings for a "
             f"composition), got {type(sfh_type).__name__}: {sfh_type!r}. "
-            f"Example: sfh={{'type': 'delayed', 'all_params': FIXED}}."
+            f"Example: sfh={{'type': 'delayed', 'all_params': Fixed(DEFAULT)}}."
         )
     if isinstance(sfh_type, list):
         for type_name in sfh_type:
@@ -3422,11 +3608,12 @@ _AGN_SUBBLOCK_KEYS = frozenset({"disc", "torus", "nlr", "blr", "feii", "atten", 
 #: Keys nested in a sub-block (e.g. ``dust.emission``) appear separately.
 # Do NOT remove entries from _GROUP_STRUCTURAL_KEYS. The '*' key (WILDCARD_KEY)
 # is required for post-normalization acceptance; validation runs after
-# _normalize_wildcard_keys converts user-facing 'all_params' to '*', and the
-# acceptance set must contain '*' for the converted dict to pass validation.
-# The 'all_params' key is required as user-facing vocabulary for typo
-# suggestions and displayed key lists in error messages. Removing either breaks
-# a different consumer.
+# _normalize_wildcard_keys converts user-facing 'all_params' / 'other_params' to
+# '*', and the acceptance set must contain '*' for the converted dict to pass
+# validation. The 'all_params' key is required as user-facing vocabulary for
+# typo suggestions and displayed key lists in error messages; 'other_params'
+# (added below, not in the literal table) serves the same two purposes for its
+# exact synonym. Removing any of the three breaks a different consumer.
 _GROUP_STRUCTURAL_KEYS: dict[str, frozenset[str]] = {
     "sfh": frozenset(
         {"type", "*", "all_params", "bin_edges_gyr", "age_kernel", "field_centering"}
@@ -3496,6 +3683,20 @@ _GROUP_STRUCTURAL_KEYS: dict[str, frozenset[str]] = {
     # Deprecated: agn.lines is expanded to (agn.nlr, agn.blr) via expand_lines_alias
     "agn.lines": frozenset({"type", "*", "all_params"}),
     "foreground": frozenset({"ebmv_mw", "law", "rv"}),
+}
+
+# other_params (WILDCARD_ALIAS_OTHER) is an exact synonym of all_params
+# (WILDCARD_ALIAS) -- see sentinels.py. Every group above that lists
+# 'all_params' must also list 'other_params', for the same two reasons the
+# comment above gives for 'all_params' itself (typo-suggestion pools and
+# displayed-key lists in error messages); validation runs post-normalization,
+# so this union does not change what keys are actually *accepted* -- both
+# spellings are already rewritten to '*' by then. A one-line union keeps the
+# literal table above single-spelling and readable rather than doubling every
+# entry.
+_GROUP_STRUCTURAL_KEYS = {
+    group: (keys | {WILDCARD_ALIAS_OTHER} if WILDCARD_ALIAS in keys else keys)
+    for group, keys in _GROUP_STRUCTURAL_KEYS.items()
 }
 
 
@@ -3794,6 +3995,7 @@ def _validate_user_keys(
         "radio",
         "xray",
         "agn",
+        "foreground",
     }
 
     # Build the AGN cross-level acceptance set (shared params land in any sub-block).
@@ -3934,12 +4136,25 @@ def _check_dict_keys(
         if key in allowed:
             continue
 
+        # Special case: 'foreground' declares no fitted parameters at all
+        # (it is a bare MW-screen settings dict, see _translate_foreground),
+        # so its wildcard has nothing to govern. Name that explicitly rather
+        # than falling through to the generic "unknown key" message below,
+        # which would print the internal '*' key the user never wrote.
+        if group == "foreground" and key == WILDCARD_KEY:
+            raise ParameterError(
+                "group 'foreground' declares no parameters; the "
+                "'all_params'/'other_params' wildcard has nothing to govern here"
+            )
+
         # Special case: user wrote 'defaults' instead of 'all_params'
         if key == "defaults":
             raise ValueError(
-                f"Unknown key 'defaults' in group {group!r}. Did you mean 'all_params'? "
-                f"The nested-dict grammar uses ``'all_params': FREE`` / ``FIXED`` to set the "
-                f"wildcard policy (matching the builder factories' ``all_params=`` parameter)."
+                f"Unknown key 'defaults' in group {group!r}. Did you mean 'all_params' "
+                f"(or its exact synonym 'other_params')? "
+                f"The nested-dict grammar uses ``'all_params': FREE`` / ``Fixed(DEFAULT)`` (or "
+                f"``'other_params'``) to set the wildcard policy (matching the builder "
+                f"factories' ``all_params=`` / ``other_params=`` parameter)."
             )
 
         # Suggestion pool: same group's allowed keys + every short name
@@ -4483,12 +4698,12 @@ def _resolve_value(
 
     Checks (in order):
     1. Per-parameter override in group_dict (including bare values)
-    2. Wildcard '*' (FREE or FIXED)
+    2. Wildcard '*' (FREE or Fixed(DEFAULT))
     3. Registry default
 
     ``wildcard_active`` (keyword-only, default ``True``) gates the
     wildcard-``FREE`` branch only. When ``False`` a ``'*': FREE`` is treated
-    as ``'*': FIXED`` for *this* parameter: used by the AGN group so a group
+    as ``'*': Fixed(DEFAULT)`` for *this* parameter: used by the AGN group so a group
     wildcard frees only the parameters the active disc/torus/nlr/blr/feii/atten
     blocks actually consume, not the full declared superset (which would
     otherwise create unconstrained no-op nuisance dimensions). An *explicit*
@@ -4583,10 +4798,14 @@ def _resolve_value(
             # These are structural keys, not parameters
             return registry_default, "registry_default"
 
+        if val is DEFAULT:
+            raise _bare_default_error(param_name)
         if val is FREE:
             return _expand_free(param_name, registry_default), "user_free"
-        elif val is FIXED:
-            # FIXED: convert registry default to Fixed at its center
+        elif _is_default_fixed(val):
+            # Fixed(DEFAULT) converts the registry default to Fixed at its
+            # canonical-table value (#412) -- the same resolver every other
+            # path through this function uses, never a second one.
             if registry_default.is_fixed:
                 return registry_default, "user_fixed"
             else:
@@ -4619,7 +4838,7 @@ def _resolve_value(
                 Fixed(_default_fixed_value(param_name, registry_default)),
                 "wildcard_fixed_inactive",
             )
-        elif wildcard is FIXED:
+        elif _is_default_fixed(wildcard):
             if registry_default.is_fixed:
                 return registry_default, "wildcard_fixed"
             else:
@@ -4627,13 +4846,26 @@ def _resolve_value(
                     Fixed(_default_fixed_value(param_name, registry_default)),
                     "wildcard_fixed",
                 )
-        else:
-            # Bad wildcard value: only FREE or FIXED are accepted in the
-            # wildcard slot ('all_params', or its synonym '*').
+        elif wildcard is DEFAULT:
+            raise _bare_default_error(param_name)
+        elif isinstance(wildcard, Fixed):
+            # A concrete Fixed(v) (v != DEFAULT) cannot be the wildcard: one
+            # literal value cannot apply across different parameters -- give
+            # each parameter its own entry instead.
             raise ValueError(
-                f"The 'all_params' wildcard (also '*') must be FREE or FIXED "
-                f"(the sentinels exported from tengri), got {wildcard!r}. "
-                f"Did you mean ``'all_params': FREE`` or ``'all_params': FIXED``? "
+                f"The 'all_params' wildcard (or its synonym 'other_params') must be "
+                f"FREE or Fixed(DEFAULT), got {wildcard!r}. A concrete Fixed(v) "
+                f"cannot be the wildcard because one literal value cannot apply "
+                f"across different parameters; give each parameter its own entry, "
+                f"e.g. {{'{short_name}': {wildcard!r}, ...}}."
+            )
+        else:
+            # Bad wildcard value: only FREE or Fixed(DEFAULT) are accepted in
+            # the wildcard slot ('all_params', or its synonym 'other_params').
+            raise ValueError(
+                f"The 'all_params' wildcard must be FREE or Fixed(DEFAULT) "
+                f"(the sentinels/distribution exported from tengri), got {wildcard!r}. "
+                f"Did you mean ``'all_params': FREE`` or ``'all_params': Fixed(DEFAULT)``? "
                 f"Note: string 'free'/'fixed' is not accepted; use the sentinel."
             )
 
@@ -4759,8 +4991,16 @@ def parameters_to_groups(spec: Parameters) -> dict:
     -----
     **Provenance-aware collapsing**: If spec has _group_provenance metadata,
     parameters sharing the same wildcard tag ('wildcard_free' or 'wildcard_fixed')
-    are collapsed into a single 'all_params': FREE or 'all_params': FIXED entry,
-    with explicit overrides listed separately.
+    are collapsed into a single wildcard entry (FREE or Fixed(DEFAULT)), with
+    explicit overrides listed separately.
+
+    **Wildcard emission convention**: per-parameter entries are emitted
+    first, then the wildcard LAST. The wildcard is spelled 'all_params' when
+    it is the group's only parameter directive (nothing survived collapsing
+    as an explicit override), and 'other_params' when explicit per-param
+    entries coexist beside it -- reading as "the others" after the named
+    overrides. Both spellings are exact synonyms on input; this only governs
+    which spelling and position the emitter produces.
 
     **Flat-built fallback**: If spec was built via flat-kwarg Parameters(...),
     all parameters are listed explicitly (no wildcard).
@@ -4800,12 +5040,20 @@ def parameters_to_groups(spec: Parameters) -> dict:
 
     Examples
     --------
+    A bare ``'all_params': Fixed(DEFAULT)`` genuinely collapses to the
+    sole-directive spelling. (``'all_params': FREE`` on a bare ``sfh`` group
+    would NOT collapse this cleanly: its met_* parameters -- pinned via a
+    special case when no ``met`` block is given -- carry a wildcard tag that
+    mismatches the rest of the group's, so ``groups["sfh"]`` would list them
+    explicitly instead; see ``_analyze_wildcard_intent``.)
+
     >>> spec = parse_groups(
-    ...     sfh={"type": "dpl", "all_params": FREE, "beta": Uniform(1, 3)},
+    ...     sfh={"type": "dpl", "all_params": Fixed(DEFAULT)},
     ...     redshift=Fixed(0.05),
     ... )
     >>> groups = spec.to_groups()
-    >>> assert "all_params" in groups["sfh"]  # preferred spelling on output
+    >>> groups["sfh"] == {"type": "dpl", "all_params": Fixed(DEFAULT)}  # sole directive
+    True
     >>> roundtripped = parse_groups(**groups)
     >>> spec.free_params == roundtripped.free_params
     True
@@ -4874,8 +5122,6 @@ def parameters_to_groups(spec: Parameters) -> dict:
         wildcard_intent = _analyze_wildcard_intent(param_names, spec, provenance)
 
         if wildcard_intent is not None:
-            # Emit the preferred wildcard spelling for collapsed params.
-            group_output[WILDCARD_ALIAS] = wildcard_intent
             explicit_params = _get_explicit_overrides(
                 param_names, spec, provenance, wildcard_intent
             )
@@ -4883,10 +5129,21 @@ def parameters_to_groups(spec: Parameters) -> dict:
             # No wildcard; list all params explicitly
             explicit_params = {p: spec.get_distribution(p) for p in param_names}
 
-        # Add explicit params to the group dict
+        # Add explicit per-param entries to the group dict FIRST.
         for full_name, distribution in explicit_params.items():
             short_name = _extract_short_name(full_name, {})
             group_output[short_name] = distribution
+
+        # Emit the wildcard LAST, after any per-param entries. Spelled
+        # ``all_params`` when it is the group's only parameter directive
+        # (no explicit overrides survived collapsing), ``other_params`` when
+        # explicit per-param entries coexist beside it -- reading as "the
+        # others" after the named overrides. The two keys are exact synonyms
+        # on input (:data:`WILDCARD_ALIAS` / :data:`WILDCARD_ALIAS_OTHER`);
+        # this only decides which spelling and position the emitter uses.
+        if wildcard_intent is not None:
+            wildcard_key = WILDCARD_ALIAS if not explicit_params else WILDCARD_ALIAS_OTHER
+            group_output[wildcard_key] = wildcard_intent
 
     # Also add groups that have no params but have a configured type (e.g., neb='none')
     for group_name in sorted(_TOP_LEVEL_TYPED_GROUPS):
@@ -5096,11 +5353,11 @@ def _add_structural_settings(group_name: str, group_output: dict, spec: Paramete
 
 def _analyze_wildcard_intent(
     param_names: list[str], spec: Parameters, provenance: dict
-) -> str | None:
+) -> _Sentinel | Fixed | None:
     """Determine if a group can be represented with a wildcard.
 
-    Returns FREE or FIXED if all non-explicit params share the same wildcard
-    tag, otherwise returns None (use explicit listing).
+    Returns FREE or Fixed(DEFAULT) if all non-explicit params share the same
+    wildcard tag, otherwise returns None (use explicit listing).
 
     Parameters
     ----------
@@ -5113,8 +5370,8 @@ def _analyze_wildcard_intent(
 
     Returns
     -------
-    str or None
-        FREE, FIXED, or None.
+    _Sentinel, Fixed, or None
+        FREE, Fixed(DEFAULT), or None.
     """
     if not provenance:
         # No provenance: don't use wildcard
@@ -5134,7 +5391,7 @@ def _analyze_wildcard_intent(
         if tag == "wildcard_free":
             return FREE
         elif tag == "wildcard_fixed":
-            return FIXED
+            return Fixed(DEFAULT)
 
     return None
 
@@ -5143,7 +5400,7 @@ def _get_explicit_overrides(
     param_names: list[str],
     spec: Parameters,
     provenance: dict,
-    wildcard_intent: str | None,
+    wildcard_intent: _Sentinel | Fixed | None,
 ) -> dict[str, Distribution]:
     """Extract parameters that should be explicit (not collapsed by wildcard).
 
@@ -5155,8 +5412,8 @@ def _get_explicit_overrides(
         The Parameters object.
     provenance : dict
         The _group_provenance dict.
-    wildcard_intent : str or None
-        The wildcard intent (FREE, FIXED, or None).
+    wildcard_intent : _Sentinel, Fixed, or None
+        The wildcard intent (FREE, Fixed(DEFAULT), or None).
 
     Returns
     -------
@@ -5174,7 +5431,7 @@ def _get_explicit_overrides(
         if wildcard_intent is not None:
             if wildcard_intent is FREE and tag == "wildcard_free":
                 continue
-            if wildcard_intent is FIXED and tag == "wildcard_fixed":
+            if _is_default_fixed(wildcard_intent) and tag == "wildcard_fixed":
                 continue
 
         # Include: per-param overrides, mismatched tags, or defaults

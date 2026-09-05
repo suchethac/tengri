@@ -86,7 +86,7 @@ Useful intuition this figure makes obvious:
             observation=obs,
             sfh={
                 "type": "tsnorm",
-                "all_params": tengri.FIXED,
+                "all_params": tengri.Fixed(tengri.DEFAULT),
                 "peak_lbt_gyr": peak_lbt,
                 "width_gyr": width,
                 "log_total_mass": 10.0,
@@ -96,7 +96,7 @@ Useful intuition this figure makes obvious:
             dust_attenuation={
                 "law": "power_law",
                 "type": "two_component",
-                "all_params": tengri.FIXED,
+                "all_params": tengri.Fixed(tengri.DEFAULT),
                 "tau_diff": tau_diff,
                 "tau_bc": 0.3,
                 "slope": -0.7,

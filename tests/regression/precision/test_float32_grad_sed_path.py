@@ -15,6 +15,13 @@ component actually emits in.
 
 Doing so found #1439 — with any AGN present, ``d(sum rest_sed)/d(agn_log_lbol)`` is NaN
 in pure float32, while the forward value and the mass gradient are both exact.
+
+On ``multicolor`` that is now **fixed**: the disc's float32 renormalization returned
+``l_nu * scale``, and transposing that product forms ``sum(g * l_nu)`` — ~1e64 with the
+cotangent the AGN reference offset supplies, so ``inf``, against a partner term that
+underflows to ``0``. Returning the L1-normalized SED against the correspondingly
+inflated scale is the same number with both factors in range. ``kubota_done`` is a
+different defect at the same call site and is still open; see its strict xfail.
 """
 
 import jax
@@ -22,13 +29,13 @@ import jax.numpy as jnp
 import numpy as np
 import pytest
 
-from tengri import FIXED, Fixed, Observation, Photometry, SEDModel, Uniform
+from tengri import DEFAULT, Fixed, Observation, Photometry, SEDModel, Uniform
 
 pytestmark = pytest.mark.regression_bug
 
 _SFH = {
     "type": "delayed",
-    "all_params": FIXED,
+    "all_params": Fixed(DEFAULT),
     "log_total_mass": Uniform(9.0, 11.0),
     "tau_gyr": 1.0,
     "age_gyr": 5.0,
@@ -36,7 +43,7 @@ _SFH = {
 _DUST = {
     "type": "two_component",
     "law": "calzetti",
-    "all_params": FIXED,
+    "all_params": Fixed(DEFAULT),
     "tau_diff": 0.3,
     "tau_bc": 0.0,
 }
@@ -48,11 +55,17 @@ def obs():
     return Observation(photometry=Photometry.from_names(["sdss_r", "wise_w1"]))
 
 
-def _band_gradient(ssp, obs, groups, *, lo, hi, x64, dtype):
-    """(names, band L_nu, gradient) of the rest-frame SED summed over [lo, hi) Å."""
+def _band_gradient(ssp, obs, groups, *, lo, hi, x64, dtype, at=None):
+    """(names, band L_nu, gradient) of the rest-frame SED summed over [lo, hi) Å.
+
+    ``at`` overrides individual entries of :data:`_TRUTH` — used to sweep
+    ``agn_log_lbol`` across its declared prior, where the reverse-mode defect of
+    #1439 varied smoothly with luminosity rather than failing at one point.
+    """
+    truth = {**_TRUTH, **(at or {})}
     with jax.enable_x64(x64):
         model = SEDModel.build(ssp_data=ssp, observation=obs, redshift=Fixed(0.1), **groups)
-        names = sorted(n for n in model.spec.free_params if n in _TRUTH)
+        names = sorted(n for n in model.spec.free_params if n in truth)
         wave = np.asarray(model._rest_wavelength, dtype=np.float64)
         mask = jnp.asarray((wave >= lo) & (wave < hi))
 
@@ -60,7 +73,7 @@ def _band_gradient(ssp, obs, groups, *, lo, hi, x64, dtype):
             params = {k: values[i] for i, k in enumerate(names)}
             return jnp.sum(jnp.where(mask, model.predict(params).rest_sed(), 0.0))
 
-        base = [jnp.asarray(_TRUTH[k], dtype=dtype) for k in names]
+        base = [jnp.asarray(truth[k], dtype=dtype) for k in names]
         value = float(np.asarray(band_sum(base)))
         grad = np.array([float(np.asarray(g)) for g in jax.grad(band_sum)(base)])
         return names, int(mask.sum()), value, grad
@@ -121,48 +134,40 @@ def test_radio_sed_gradient_is_accurate_in_float32(ssp_bare, obs):
     )
 
 
-@pytest.mark.xfail(
-    reason="#1439 residual, now narrowed to REVERSE MODE on the SHAPE-CLASS discs. "
-    "d(sum rest_sed)/d(agn_log_lbol) is NaN in pure float32 for 'multicolor' and "
-    "'kubota_done' — the discs that take agn_log_lbol_shape, so the true L_bol drives "
-    "the shape while the magnitude rides the reference. That creates two paths through "
-    "the log-space renormalization, and reverse mode fails to cancel them. It is not a "
-    "single bad point: on multicolor_disc alone the reverse gradient degrades SMOOTHLY "
-    "with luminosity — 1.02x at log L_bol 9, 1.54x at 10, 2.14x at 11, 2.33x at 12.5 — "
-    "finite and plausible the whole way, across the entire realistic AGN range, and it "
-    "becomes NaN once the full chain runs. Degrading with magnitude separation is the "
-    "#1388 class (a reverse-mode cancellation no local rule reaches), which is why the "
-    "fix is the scaled-SED contract and not another regrouping here. Three things are "
-    "NOT the cause, "
-    "each ruled out by A/B measurement: the Planck reciprocal (identical to the last "
-    "digit with and without its custom_jvp), the EUV tail (all four options give 2.13-"
-    "2.14x), and the ring count (n_radii=8 gives 2.33x, so it is not accumulation). "
-    "Scope: forward mode is EXACT (1.0000 vs float64) for every disc, and the "
-    "shape-invariant 'richards2006' disc is exact in BOTH modes — see the two passing "
-    "companions below. predict_photometry gradients are unaffected, so inference "
-    "through photometry is not blocked.",
-    strict=True,
-)
-def test_agn_sed_gradient_is_finite_in_float32(ssp_bare, obs):
-    """Differentiating the SED w.r.t. ``agn_log_lbol`` must not produce NaN in float32.
+@pytest.mark.parametrize("log_lbol", [9.0, 11.0, 12.0])
+def test_multicolor_agn_sed_gradient_is_accurate_in_float32(ssp_bare, obs, log_lbol):
+    """``d(sum rest_sed)/d(agn_log_lbol)`` must track float64 across the whole prior.
 
-    Deliberately asserts only **finiteness**, not accuracy. A NaN is not a precision
-    question — float64 gets a perfectly ordinary answer here and the float32 forward
-    pass reproduces it exactly, so there is nothing about this quantity that float32
-    cannot represent.
+    This was #1439's strict xfail: NaN in pure float32 while the forward pass and
+    ``jacfwd`` were both exact. The cause was **not** a cancellation no local rule
+    could reach — it was the grouping of ``multicolor_disc``'s float32
+    renormalization. Transposing ``arr * scale`` makes JAX form ``sum(g * arr)``, and
+    with the raw ~1e28 disc SED against the ~10**34.6 cotangent the AGN reference
+    offset hands back, that inner product is ~1e64: ``inf`` in float32, while its
+    partner ``d scale/d arr`` ~1e-64 flushes to 0, and ``inf * 0`` is NaN. Returning
+    the L1-normalized SED times the correspondingly inflated scale — algebraically the
+    same number — keeps both factors in range.
+
+    Swept across the declared ``Uniform(9, 12)`` rather than measured at one point,
+    because the defect varied smoothly with luminosity (the recorded 1.02x at 9,
+    2.14x at 11) before it became NaN: a single-point check could have landed where
+    the error was small. Measured after the fix: 1.000002 at every point here.
+
+    Not covered: ``kubota_done``, which takes the same ``agn_log_lbol_shape`` hand-off
+    and is still wrong — see the strict xfail below.
     """
     groups = dict(
         sfh=_SFH,
         dust_attenuation=_DUST,
         agn={
             "type": "composable",
-            "all_params": FIXED,
-            "disc": {"type": "multicolor", "all_params": FIXED},
+            "all_params": Fixed(DEFAULT),
+            "disc": {"type": "multicolor", "all_params": Fixed(DEFAULT)},
             "log_lbol": Uniform(9.0, 12.0),
             "fracAGN": 0.1,
         },
     )
-    kw = dict(lo=0.0, hi=1e12)
+    kw = dict(lo=0.0, hi=1e12, at={"agn_log_lbol": log_lbol})
 
     names, _, _, g64 = _band_gradient(ssp_bare, obs, groups, x64=True, dtype=jnp.float64, **kw)
     _, _, v32, g32 = _band_gradient(ssp_bare, obs, groups, x64=False, dtype=jnp.float32, **kw)
@@ -175,7 +180,46 @@ def test_agn_sed_gradient_is_finite_in_float32(ssp_bare, obs):
     )
     assert np.all(np.isfinite(g32)), (
         f"float32 SED gradient is non-finite (names={names}, f32={g32}, f64={g64}) "
-        "while the forward pass is exact — #1439"
+        "while the forward pass is exact — multicolor_disc's float32 renormalization "
+        "lost its L1 factorization (#1439)"
+    )
+    rel = np.abs(g32 - g64) / np.maximum(np.abs(g64), 1e-300)
+    assert rel.max() < 1e-3, (
+        f"float32 SED gradient disagrees with float64 by {rel.max():.2e} at "
+        f"log L_bol = {log_lbol} (names={names}, f32={g32}, f64={g64})"
+    )
+
+
+@pytest.mark.xfail(
+    reason="#1439 residual, now narrowed to 'kubota_done' alone — 'multicolor' is "
+    "fixed and pinned by the sweep above. This is NOT the same defect: it is not a "
+    "range problem at all. With an O(1) cotangent, where nothing can overflow, "
+    "d(sum L_nu)/d(agn_log_lbol) in pure float32 is -0.034x float64 — SIGN FLIPPED — "
+    "and it becomes NaN only once the cotangent passes ~1e10. Localized by A/B "
+    "measurement: agn_f_hard=0.0 (no hot corona) restores float32/float64 agreement "
+    "to 3e-04, and every nonzero agn_f_hard reproduces the -0.034x exactly, so the "
+    "defect is in the hot-corona zone (_hot_corona_lnu / the nthcomp custom_jvp of "
+    "#1822), not in the disc renormalization. Regrouping the renormalization the way "
+    "multicolor_disc's is regrouped was written and measured here: it does not close "
+    "this, and was reverted rather than shipped unverified.",
+    strict=True,
+)
+def test_kubota_done_agn_sed_gradient_is_accurate_in_float32(ssp_bare, obs):
+    """The other shape-class disc, pinned so its state cannot change silently."""
+    groups = _agn_groups("kubota_done")
+    kw = dict(lo=0.0, hi=1e12)
+
+    names, _, _, g64 = _band_gradient(ssp_bare, obs, groups, x64=True, dtype=jnp.float64, **kw)
+    _, _, v32, g32 = _band_gradient(ssp_bare, obs, groups, x64=False, dtype=jnp.float32, **kw)
+
+    assert np.isfinite(v32), f"float32 forward value is non-finite ({v32})"
+    assert np.all(np.isfinite(g32)), (
+        f"float32 SED gradient is non-finite (names={names}, f32={g32}, f64={g64})"
+    )
+    rel = np.abs(g32 - g64) / np.maximum(np.abs(g64), 1e-300)
+    assert rel.max() < 1e-3, (
+        f"float32 SED gradient disagrees with float64 by {rel.max():.2e} "
+        f"(names={names}, f32={g32}, f64={g64})"
     )
 
 
@@ -185,8 +229,8 @@ def _agn_groups(disc):
         dust_attenuation=_DUST,
         agn={
             "type": "composable",
-            "all_params": FIXED,
-            "disc": {"type": disc, "all_params": FIXED},
+            "all_params": Fixed(DEFAULT),
+            "disc": {"type": disc, "all_params": Fixed(DEFAULT)},
             "log_lbol": Uniform(9.0, 12.0),
             "fracAGN": 0.1,
         },
@@ -194,18 +238,21 @@ def _agn_groups(disc):
 
 
 def test_agn_sed_forward_mode_gradient_is_exact_in_float32(ssp_bare, obs):
-    """Forward mode gets the AGN SED gradient right where reverse mode does not.
+    """Forward mode gets the AGN SED gradient right where reverse mode did not.
 
-    This is what makes the xfail above a statement about **reverse mode** rather
-    than about float32: the quantity is representable and float32 computes it.
+    This is what made #1439 a statement about **reverse mode** rather than about
+    float32: the quantity is representable and float32 computes it in either mode.
+    Reverse mode now agrees (the sweep above); keeping the forward-mode measurement
+    is what would separate a future regression in the *transpose* from one in the
+    disc physics, which is how the multicolor defect was localized in the first place.
 
     It is also the guard that the forward *value* stays finite. Until the rest
     grid was made to follow the session precision (#1206/#1439), a composable AGN
     with no torus left the grid float64, every ``wave.dtype == jnp.float32`` gate
     in components/ fell through to its float64 branch, and ``sed_agn`` was NaN at
-    all 5994 points. The strict xfail above absorbed that silently — it was still
-    "failing", just for a different reason than its text claimed. A passing test
-    is what keeps the forward path honest.
+    all 5994 points. The strict xfail that used to stand here absorbed that
+    silently — it was still "failing", just for a different reason than its text
+    claimed. A passing test is what keeps the forward path honest.
     """
     groups = _agn_groups("multicolor")
     kw = dict(lo=0.0, hi=1e12)
@@ -231,12 +278,12 @@ def test_agn_sed_forward_mode_gradient_is_exact_in_float32(ssp_bare, obs):
 
 
 def test_shape_invariant_disc_sed_gradient_is_exact_in_float32(ssp_bare, obs):
-    """A shape-invariant disc is exact in BOTH modes — the xfail's other boundary.
+    """A shape-invariant disc is exact in BOTH modes — the other boundary of #1439.
 
     ``richards2006`` does not take ``agn_log_lbol_shape``, so its magnitude rides the
     reference evaluation with no second path through the renormalization. That it
-    passes in reverse mode is what localizes the residual defect to the
-    shape-class discs rather than to the AGN path as a whole.
+    passed in reverse mode while the shape-class discs did not is what localized the
+    defect to them rather than to the AGN path as a whole.
     """
     groups = _agn_groups("richards2006")
     kw = dict(lo=0.0, hi=1e12)

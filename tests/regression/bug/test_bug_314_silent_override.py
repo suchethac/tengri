@@ -43,11 +43,11 @@ def model_with_filters():
     return tengri.SEDModel.build(
         ssp,
         observation=obs,
-        sfh={"type": "dpl", "all_params": tengri.FIXED},
+        sfh={"type": "dpl", "all_params": tengri.Fixed(tengri.DEFAULT)},
         dust_attenuation={
             "law": "power_law",
             "type": "two_component",
-            "all_params": tengri.FIXED,
+            "all_params": tengri.Fixed(tengri.DEFAULT),
             "tau_diff": 0.0,
             "tau_bc": 0.0,
         },

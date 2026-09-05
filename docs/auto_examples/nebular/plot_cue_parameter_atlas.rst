@@ -91,7 +91,7 @@ References:
         ssp,
         sfh={
             "type": "dpl",
-            "all_params": tengri.FIXED,
+            "all_params": tengri.Fixed(tengri.DEFAULT),
             "tau_gyr": 0.3,
             "log_total_mass": 10.0,
             "alpha": 3.0,
@@ -100,13 +100,13 @@ References:
         dust_attenuation={
             "law": "power_law",
             "type": "two_component",
-            "all_params": tengri.FIXED,
+            "all_params": tengri.Fixed(tengri.DEFAULT),
             "tau_diff": 0.05,
             "tau_bc": 0.1,
         },
         neb={
             "type": "cue",
-            "all_params": tengri.FIXED,
+            "all_params": tengri.Fixed(tengri.DEFAULT),
             "logU": tengri.Uniform(-4.0, -1.0),
             "logZ_gas": tengri.Uniform(-2.0, 0.5),
         },
@@ -181,7 +181,7 @@ References:
 
 .. rst-class:: sphx-glr-timing
 
-   **Total running time of the script:** (1 minutes 19.448 seconds)
+   **Total running time of the script:** (0 minutes 46.992 seconds)
 
 
 .. _sphx_glr_download_auto_examples_nebular_plot_cue_parameter_atlas.py:

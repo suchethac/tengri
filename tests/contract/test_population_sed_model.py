@@ -101,15 +101,19 @@ def test_parameter_axes_partitions_shared_and_per_galaxy() -> None:
 
 def _real_template(synthetic_ssp, simple_observation):
     """Build a minimal real SEDModel template for batched-vmap tests."""
-    from tengri import FIXED, SEDModel, Uniform
+    from tengri import DEFAULT, Fixed, SEDModel, Uniform
 
     return SEDModel.build(
         ssp_data=synthetic_ssp,
         observation=simple_observation,
         # Keep the SFH simple but with one free per-galaxy parameter so
         # we can verify the vmap actually fans out across galaxies.
-        sfh={"type": "dpl", "all_params": FIXED, "log_total_mass": Uniform(-1.0, 3.0)},
-        dust_attenuation={"type": "two_component", "law": "calzetti", "all_params": FIXED},
+        sfh={"type": "dpl", "all_params": Fixed(DEFAULT), "log_total_mass": Uniform(-1.0, 3.0)},
+        dust_attenuation={
+            "type": "two_component",
+            "law": "calzetti",
+            "all_params": Fixed(DEFAULT),
+        },
         neb={"type": "none"},
         redshift=0.05,
     )

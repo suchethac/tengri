@@ -118,7 +118,7 @@ _BANDS = [
 
 
 def _redshift_gradient(ssp, n_bands, x64):
-    from tengri import FIXED, FREE, SEDModel
+    from tengri import DEFAULT, FREE, Fixed, SEDModel
     from tengri.observation import Observation, Photometry
     from tengri.parameters.priors import Uniform
 
@@ -127,7 +127,11 @@ def _redshift_gradient(ssp, n_bands, x64):
         ssp_data=ssp,
         observation=obs,
         sfh={"type": "dpl", "all_params": FREE},
-        dust_attenuation={"law": "power_law", "type": "two_component", "all_params": FIXED},
+        dust_attenuation={
+            "law": "power_law",
+            "type": "two_component",
+            "all_params": Fixed(DEFAULT),
+        },
         redshift=Uniform(0.01, 2.0, "redshift"),
         approx=None,
     )

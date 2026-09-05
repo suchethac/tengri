@@ -389,21 +389,21 @@ class TestCueMultiBuildBudget:
         if not os.path.exists("data/cue_weights.npz"):
             pytest.skip("Cue weights not found")
 
-        from tengri import FIXED, Fixed, SEDModel
+        from tengri import DEFAULT, Fixed, SEDModel
 
         ssp = ssp_data_fsps
 
         def _build_one():
             return SEDModel.build(
                 ssp_data=ssp,
-                sfh={"type": "delayed", "all_params": FIXED},
-                neb={"type": "cue", "all_params": FIXED},
+                sfh={"type": "delayed", "all_params": Fixed(DEFAULT)},
+                neb={"type": "cue", "all_params": Fixed(DEFAULT)},
                 dust_attenuation={
                     "law": "power_law",
                     "type": "two_component",
                     "tau_bc": Fixed(0.0),
                     "tau_diff": Fixed(0.0),
-                    "all_params": FIXED,
+                    "all_params": Fixed(DEFAULT),
                 },
                 redshift=Fixed(0.0),
             )

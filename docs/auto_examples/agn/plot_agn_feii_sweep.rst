@@ -82,11 +82,11 @@ References
     ssp = tengri.load_ssp()
 
     # Minimal host: suppress stellar emission, focus on AGN continuum
-    SFH = {"type": "const", "all_params": tengri.FIXED, "log_total_mass": -10.0}
+    SFH = {"type": "const", "all_params": tengri.Fixed(tengri.DEFAULT), "log_total_mass": -10.0}
     DUST = {
         "law": "power_law",
         "type": "two_component",
-        "all_params": tengri.FIXED,
+        "all_params": tengri.Fixed(tengri.DEFAULT),
         "tau_diff": 0.0,
         "tau_bc": 0.0,
     }
@@ -101,9 +101,9 @@ References
         dust_attenuation=DUST,
         agn={
             "type": "composable",
-            "disc": {"type": "multicolor", "all_params": tengri.FIXED},
-            "blr": {"type": "analytic", "all_params": tengri.FIXED, "agn_blr_cf": 0.1},
-            "all_params": tengri.FIXED,
+            "disc": {"type": "multicolor", "all_params": tengri.Fixed(tengri.DEFAULT)},
+            "blr": {"type": "analytic", "all_params": tengri.Fixed(tengri.DEFAULT), "agn_blr_cf": 0.1},
+            "all_params": tengri.Fixed(tengri.DEFAULT),
             "log_lbol": 12.0,
             "log_ledd": -1.0,
             "lum_ratio": 1.0,
@@ -175,11 +175,6 @@ References
 
     fig.tight_layout()
     plt.show()
-
-
-.. rst-class:: sphx-glr-timing
-
-   **Total running time of the script:** (0 minutes 2.311 seconds)
 
 
 .. _sphx_glr_download_auto_examples_agn_plot_agn_feii_sweep.py:

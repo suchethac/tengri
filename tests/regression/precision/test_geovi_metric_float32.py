@@ -245,7 +245,7 @@ _DATA = (1.9e-28, 2.4e-28, 3.1e-28, 2.0e-28, 1.5e-28)
 
 def _build_engine(ssp_wide, obs):
     """Return ``(engine, data_args, flat_position)`` for a real Fitter."""
-    from tengri import FIXED, FREE, SEDModel
+    from tengri import DEFAULT, FREE, Fixed, SEDModel
     from tengri.components.stellar.sps.dsps_wrapper import SSPData
     from tengri.inference.fitter import Fitter
     from tengri.inference.jit_engine import build_jit_engine
@@ -263,7 +263,11 @@ def _build_engine(ssp_wide, obs):
         ssp_data=ssp,
         observation=obs,
         sfh={"type": "dpl", "all_params": FREE},
-        dust_attenuation={"law": "power_law", "type": "two_component", "all_params": FIXED},
+        dust_attenuation={
+            "law": "power_law",
+            "type": "two_component",
+            "all_params": Fixed(DEFAULT),
+        },
         redshift=0.05,
         approx=None,
     )

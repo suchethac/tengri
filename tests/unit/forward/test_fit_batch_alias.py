@@ -18,7 +18,7 @@ pytestmark = pytest.mark.contract
 @pytest.fixture
 def minimal_sed_model(synthetic_ssp_wide, simple_observation):
     """Minimal SEDModel for testing."""
-    from tengri import FIXED, FREE, SEDModel
+    from tengri import DEFAULT, FREE, Fixed, SEDModel
 
     model = SEDModel.build(
         ssp_data=synthetic_ssp_wide,
@@ -27,11 +27,11 @@ def minimal_sed_model(synthetic_ssp_wide, simple_observation):
         dust_attenuation={
             "law": "power_law",
             "type": "two_component",
-            "all_params": FIXED,
+            "all_params": Fixed(DEFAULT),
             "tau_bc": 0.5,
         },
         neb={"type": "none"},
-        redshift=FIXED,
+        redshift=Fixed(DEFAULT),
     )
     return model
 

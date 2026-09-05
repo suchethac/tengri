@@ -16,7 +16,7 @@ import jax
 import jax.numpy as jnp
 import pytest
 
-from tengri import FIXED, FREE, Fixed, SEDModel
+from tengri import DEFAULT, FREE, Fixed, SEDModel
 from tengri.forward.component_factory import state_to_sfh_quantities
 from tengri.forward.properties import assemble_available_properties
 
@@ -33,7 +33,7 @@ def base_model(synthetic_ssp_wide):
         dust_attenuation={
             "type": "two_component",
             "law": "calzetti",
-            "all_params": FIXED,
+            "all_params": Fixed(DEFAULT),
             "tau_bc": 0.5,
         },
         neb={"type": "none"},
@@ -519,7 +519,7 @@ class TestSEDGroupBitEquality:
             dust_attenuation={
                 "type": "two_component",
                 "law": "calzetti",
-                "all_params": FIXED,
+                "all_params": Fixed(DEFAULT),
                 "tau_bc": 0.5,
             },
             neb={"type": "none"},
@@ -585,7 +585,7 @@ class TestLuminosityWeightedSFHBitEquality:
             dust_attenuation={
                 "type": "two_component",
                 "law": "calzetti",
-                "all_params": FIXED,
+                "all_params": Fixed(DEFAULT),
                 "tau_bc": 0.5,
             },
             neb={"type": "none"},
@@ -641,7 +641,7 @@ class TestIonizingGroupBitEquality:
             dust_attenuation={
                 "type": "two_component",
                 "law": "calzetti",
-                "all_params": FIXED,
+                "all_params": Fixed(DEFAULT),
                 "tau_bc": 0.5,
             },
             neb={"type": "none"},
@@ -685,11 +685,15 @@ class TestRadioGroupBitEquality:
             dust_attenuation={
                 "type": "two_component",
                 "law": "calzetti",
-                "all_params": FIXED,
+                "all_params": Fixed(DEFAULT),
                 "tau_bc": 0.5,
             },
             neb={"type": "none"},
-            radio={"sf": {"type": "bell2003"}, "agn": {"type": "powerlaw"}, "all_params": FIXED},
+            radio={
+                "sf": {"type": "bell2003"},
+                "agn": {"type": "powerlaw"},
+                "all_params": Fixed(DEFAULT),
+            },
             redshift=Fixed(0.1),
         )
         return spec
@@ -732,11 +736,11 @@ class TestXRayGroupBitEquality:
             dust_attenuation={
                 "type": "two_component",
                 "law": "calzetti",
-                "all_params": FIXED,
+                "all_params": Fixed(DEFAULT),
                 "tau_bc": 0.5,
             },
             neb={"type": "none"},
-            xray={"type": "simple", "all_params": FIXED},
+            xray={"type": "simple", "all_params": Fixed(DEFAULT)},
             redshift=Fixed(0.1),
         )
         return spec
@@ -777,7 +781,7 @@ class TestLinesGroupNaNBehavior:
             dust_attenuation={
                 "type": "two_component",
                 "law": "calzetti",
-                "all_params": FIXED,
+                "all_params": Fixed(DEFAULT),
                 "tau_bc": 0.5,
             },
             neb={"type": "none"},  # No nebular → no line catalog

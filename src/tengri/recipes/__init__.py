@@ -30,7 +30,7 @@ import tengri.builders as builders
 from tengri._completion import curated_dir
 from tengri.forward.sed_model import WavePrecomp
 from tengri.parameters.priors import Fixed, Uniform
-from tengri.parameters.sentinels import FIXED, FREE, WILDCARD_ALIAS
+from tengri.parameters.sentinels import DEFAULT, FREE
 
 __all__ = [
     "agn_panchromatic",
@@ -99,9 +99,9 @@ def star_forming_photometry() -> dict:
             all_params=FREE,
             law="calzetti",
         ),
-        dust_emission=builders.dust.emission.dale2014(all_params=FIXED),
+        dust_emission=builders.dust.emission.dale2014(all_params=Fixed(DEFAULT)),
         met={"logzsol": FREE},
-        neb=builders.neb.cue(all_params=FIXED),
+        neb=builders.neb.cue(all_params=Fixed(DEFAULT)),
         redshift=Uniform(0.01, 6.0),
         igm={"type": "inoue"},
         approx=WavePrecomp(),
@@ -154,19 +154,19 @@ def quiescent_z0() -> dict:
     """
     return dict(
         sfh=builders.sfh.dexp(all_params=FREE),
-        # ``all_params=FIXED``: only tau_bc / tau_diff are fitted here. The
-        # remaining attenuation params (slope, Rv, delta, bump_strength,
-        # f_obscuration) carry Fixed registry defaults, so the FREE this
-        # previously requested never freed any of them: the recipe now says
-        # what it has always actually done.
+        # ``other_params=Fixed(DEFAULT)``: only tau_bc / tau_diff are fitted
+        # here. The remaining attenuation params (slope, Rv, delta,
+        # bump_strength, f_obscuration) carry Fixed registry defaults, so the
+        # FREE this previously requested never freed any of them: the recipe
+        # now says what it has always actually done.
         dust_attenuation=builders.dust.two_component(
-            all_params=FIXED,
             law="calzetti",
             tau_bc=Uniform(0, 0.5),
             tau_diff=Uniform(0, 0.3),
+            other_params=Fixed(DEFAULT),
         ),
         met={"logzsol": FREE},
-        neb=builders.neb.cue(all_params=FIXED),
+        neb=builders.neb.cue(all_params=Fixed(DEFAULT)),
         redshift=Fixed(0.05),
         approx=WavePrecomp(),
     )
@@ -216,22 +216,22 @@ def high_z() -> dict:
     return dict(
         sfh={
             "type": "tsnorm",
-            "all_params": FIXED,
             "log_total_mass": Uniform(8.0, 12.0),
             "peak_lbt_gyr": Uniform(0.1, 1.5),
             "width_gyr": Uniform(0.05, 1.0),
             "skew": Uniform(-1.0, 1.0),
             "trunc": Uniform(1.0, 10.0),
             "met_logzsol": Uniform(-1.0, 0.2),
+            "other_params": Fixed(DEFAULT),
         },
         dust_attenuation={
             "type": "two_component",
-            "all_params": FIXED,
             "law_bc": "calzetti",
             "law_diff": "power_law",
             "tau_bc": Uniform(0.1, 1.5),
             "tau_diff": Uniform(0.0, 0.8),
             "slope": Fixed(-0.7),
+            "other_params": Fixed(DEFAULT),
         },
         neb={"type": "ssp"},
         redshift=Uniform(3.5, 10.0),
@@ -280,21 +280,21 @@ def photoz() -> dict:
     return dict(
         sfh={
             "type": "dpl",
-            "all_params": FIXED,
             "alpha": Uniform(0.5, 3.0),
             "beta": Uniform(0.3, 2.0),
             "tau_gyr": Uniform(0.5, 13.0),
             "log_total_mass": Uniform(8.0, 12.5),
             "met_logzsol": Uniform(-1.0, 0.5),
+            "other_params": Fixed(DEFAULT),
         },
         dust_attenuation={
             "type": "two_component",
-            "all_params": FIXED,
             "law_bc": "calzetti",
             "law_diff": "power_law",
             "tau_bc": Uniform(0.0, 3.0),
             "tau_diff": Uniform(0.0, 2.0),
             "slope": Fixed(-0.7),
+            "other_params": Fixed(DEFAULT),
         },
         neb={"type": "none"},
         redshift=Uniform(0.01, 12.0),
@@ -357,29 +357,30 @@ def agn_panchromatic() -> dict:
             all_params=FREE,
             law="calzetti",
         ),
-        # ``all_params=FIXED``: the Dale+2014 knobs are a template-family
-        # choice, not something a wildcard should open by default.
-        # ``dale2014_cigale``: this recipe enables the radio component, and
-        # plain dale2014 embeds its own SF radio continuum; the pair
-        # double-counts the synchrotron and is refused at build (#1970).
-        dust_emission=builders.dust.emission.dale2014_cigale(all_params=FIXED),
+        # ``all_params=Fixed(DEFAULT)``: the Dale+2014 knobs are a
+        # template-family choice, not something a wildcard should open by
+        # default. ``dale2014_cigale``: this recipe enables the radio
+        # component, and plain dale2014 embeds its own SF radio continuum;
+        # the pair double-counts the synchrotron and is refused at build
+        # (#1970).
+        dust_emission=builders.dust.emission.dale2014_cigale(all_params=Fixed(DEFAULT)),
         met={"logzsol": FREE},
-        neb=builders.neb.cue(all_params=FIXED),
+        neb=builders.neb.cue(all_params=Fixed(DEFAULT)),
         agn=builders.agn.composable(
             all_params=FREE,
             disc=builders.agn.disc.multicolor(all_params=FREE),
             torus=builders.agn.torus.skirtor(all_params=FREE),
             nlr=builders.agn.nlr.analytic(all_params=FREE),
         ),
-        # ``all_params``: FIXED restates the default. It is written out
-        # because omitting it warns, and the warning would be about a
+        # ``all_params``: Fixed(DEFAULT) restates the default. It is written
+        # out because omitting it warns, and the warning would be about a
         # disposition this recipe chose rather than one its user did.
         radio={
             "sf": {"type": "bell2003"},
             "agn": {"type": "powerlaw"},
-            "all_params": FIXED,
+            "all_params": Fixed(DEFAULT),
         },
-        xray={"type": "simple", "all_params": FIXED},
+        xray={"type": "simple", "all_params": Fixed(DEFAULT)},
         redshift=Uniform(0.01, 6.0),
         approx=WavePrecomp(),
     )
@@ -450,14 +451,15 @@ def composable_agn() -> dict:
             all_params=FREE,
             law="calzetti",
         ),
-        # ``all_params=FIXED``: the Dale+2014 knobs are a template-family
-        # choice, not something a wildcard should open by default.
-        # ``dale2014_cigale``: this recipe enables the radio component, and
-        # plain dale2014 embeds its own SF radio continuum; the pair
-        # double-counts the synchrotron and is refused at build (#1970).
-        dust_emission=builders.dust.emission.dale2014_cigale(all_params=FIXED),
+        # ``all_params=Fixed(DEFAULT)``: the Dale+2014 knobs are a
+        # template-family choice, not something a wildcard should open by
+        # default. ``dale2014_cigale``: this recipe enables the radio
+        # component, and plain dale2014 embeds its own SF radio continuum;
+        # the pair double-counts the synchrotron and is refused at build
+        # (#1970).
+        dust_emission=builders.dust.emission.dale2014_cigale(all_params=Fixed(DEFAULT)),
         met={"logzsol": FREE},
-        neb=builders.neb.cue(all_params=FIXED),
+        neb=builders.neb.cue(all_params=Fixed(DEFAULT)),
         agn={
             "type": "composable",
             "disc": {"type": "multicolor"},
@@ -469,17 +471,17 @@ def composable_agn() -> dict:
             "norm": "cigale_joint",
             # agn_ir_frac constraint is [0, 1): keep the upper bound strictly < 1.
             "ir_frac": Uniform(0.01, 0.99),
-            WILDCARD_ALIAS: FREE,
+            "other_params": FREE,
         },
-        # ``all_params``: FIXED restates the default. It is written out
-        # because omitting it warns, and the warning would be about a
+        # ``all_params``: Fixed(DEFAULT) restates the default. It is written
+        # out because omitting it warns, and the warning would be about a
         # disposition this recipe chose rather than one its user did.
         radio={
             "sf": {"type": "bell2003"},
             "agn": {"type": "powerlaw"},
-            "all_params": FIXED,
+            "all_params": Fixed(DEFAULT),
         },
-        xray={"type": "simple", "all_params": FIXED},
+        xray={"type": "simple", "all_params": Fixed(DEFAULT)},
         redshift=Uniform(0.01, 6.0),
         approx=WavePrecomp(),
     )
@@ -534,14 +536,14 @@ def stochastic_sfh_jwst() -> dict:
     # type-list dict. The builder factories cover individual variants; the
     # composed form remains the canonical grammar for now.
     return dict(
-        sfh={"type": ["dpl", "field"], WILDCARD_ALIAS: FREE},
+        sfh={"type": ["dpl", "field"], "all_params": FREE},
         dust_attenuation=builders.dust.two_component(
             all_params=FREE,
             law="calzetti",
         ),
-        dust_emission=builders.dust.emission.dale2014(all_params=FIXED),
+        dust_emission=builders.dust.emission.dale2014(all_params=Fixed(DEFAULT)),
         met={"logzsol": FREE},
-        neb=builders.neb.cue(all_params=FIXED),
+        neb=builders.neb.cue(all_params=Fixed(DEFAULT)),
         redshift=Uniform(0.5, 12.0),
         igm={"type": "inoue"},
         approx=WavePrecomp(),
@@ -588,11 +590,11 @@ def mock_recovery_minimal() -> dict:
     return dict(
         sfh=builders.sfh.tsnorm(all_params=FREE),
         dust_attenuation=builders.dust.two_component(
-            all_params=FIXED,
             law="calzetti",
             tau_bc=Uniform(0, 1),
+            other_params=Fixed(DEFAULT),
         ),
-        met={"all_params": FIXED, "logzsol": FREE},
+        met={"logzsol": FREE, "other_params": Fixed(DEFAULT)},
         neb=builders.neb.none(),
         redshift=Fixed(0.05),
         approx=WavePrecomp(),
@@ -602,7 +604,7 @@ def mock_recovery_minimal() -> dict:
 def dust_demo() -> dict:
     """Recipe for forward-only dust attenuation gallery sweeps.
 
-    Young star-forming galaxy at z = 0.1 with every parameter ``FIXED`` so
+    Young star-forming galaxy at z = 0.1 with every parameter fixed so
     that :func:`~tengri.analysis.plotting.sweep_parameter` can override
     one knob at a time without touching the rest.
 
@@ -646,19 +648,19 @@ def dust_demo() -> dict:
     # uses the prior median (= -0.3) for every iteration anyway.
     return dict(
         sfh=builders.sfh.tsnorm(
-            all_params=FIXED,
             log_total_mass=10.0,
             peak_lbt_gyr=2.0,
             width_gyr=1.5,
             skew=0.2,
             trunc=3.0,
+            other_params=Fixed(DEFAULT),
         ),
         dust_attenuation=builders.dust.two_component(
-            all_params=FIXED,
             law="calzetti",
             tau_bc=0.5,
             tau_diff=0.3,
             slope=-0.7,
+            other_params=Fixed(DEFAULT),
         ),
         redshift=Fixed(0.1),
     )
@@ -705,13 +707,13 @@ def unified_agn() -> dict:
     >>> assert params["agn"]["blr"]["type"] == "synthesizer_spectra"
     """
     return dict(
-        sfh={"type": "delayed", WILDCARD_ALIAS: FIXED},
+        sfh={"type": "delayed", "all_params": Fixed(DEFAULT)},
         dust_attenuation={
             "type": "two_component",
             "law": "power_law",
-            WILDCARD_ALIAS: FIXED,
             "tau_diff": 0.0,
             "tau_bc": 0.0,
+            "other_params": Fixed(DEFAULT),
         },
         agn={
             "type": "composable",
@@ -724,7 +726,7 @@ def unified_agn() -> dict:
             # (freeing them would add no-op nuisance dimensions in this mode).
             "lum_ratio": Fixed(1.0),
             "ir_frac": Fixed(0.0),
-            WILDCARD_ALIAS: FREE,
+            "other_params": FREE,
         },
         redshift=Fixed(0.0),
     )

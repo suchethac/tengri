@@ -641,7 +641,7 @@ def check_missing_free_params(params, spec, param_map=None):
             f"Missing values for free parameters: {missing}. Every non-Fixed "
             "parameter needs a value at predict time. Draw a complete set with "
             "``params = model.spec.sample(jax.random.PRNGKey(0))``, or fix "
-            "parameters at build time (``'all_params': FIXED`` in the group dict, or "
+            "parameters at build time (``'all_params': Fixed(DEFAULT)`` in the group dict, or "
             "``param=Fixed(value)``). ``model.spec.summary()`` shows which "
             "parameters are free."
         )

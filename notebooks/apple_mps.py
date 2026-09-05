@@ -141,7 +141,7 @@ print("dtype  :", jnp.zeros(1).dtype)
 # Nothing about the model API changes. Build and predict exactly as on CPU.
 
 # %%
-from tengri import FIXED, FREE, SEDModel, Uniform, load_ssp
+from tengri import DEFAULT, Fixed, FREE, load_ssp, SEDModel, Uniform
 from tengri.observation import Observation, Photometry
 
 # load_ssp resolves a short alias and walks parent dirs for data/, so this works
@@ -159,7 +159,7 @@ model = SEDModel.build(
     ssp_data=ssp,
     observation=obs,
     sfh={"type": "dpl", "all_params": FREE},
-    dust_attenuation={"law": "power_law", "type": "two_component", "all_params": FIXED},
+    dust_attenuation={"law": "power_law", "type": "two_component", "all_params": Fixed(DEFAULT)},
     redshift=Uniform(0.01, 2.0, "redshift"),
     approx=tengri.WavePrecomp(),  # the path fits use; also the cheaper one here
 )
@@ -279,6 +279,11 @@ MPS_PER = np.array([46.65, 1.83, 0.294, 0.124, 0.094])
 CPU_TOT = CPU_PER * BATCH
 MPS_TOT = MPS_PER * BATCH
 
+print("Measured per-batch timings (ms):")
+print(f"  BATCH sizes: {BATCH.tolist()}")
+print(f"  CPU per-batch: {CPU_TOT.tolist()}")
+print(f"  MPS per-batch: {MPS_TOT.tolist()}")
+
 fig, (ax1, ax2) = plt.subplots(1, 2, figsize=(11, 4.2))
 
 ax1.loglog(BATCH, CPU_PER, "o-", label="CPU (float32)", color="#1f77b4")
@@ -311,8 +316,8 @@ fig.tight_layout()
 plt.show()
 
 # %% [markdown]
-# The right-hand panel is the point. MPS goes from 46.7 ms to 94.4 ms while doing
-# 512x more work; CPU goes from 0.8 ms to 158 ms. The GPU is not getting faster
+# The right-hand panel is the point. MPS goes from 46.7 ms to ~385 ms while doing
+# 4096x more work; CPU goes from 0.8 ms to ~1230 ms. The GPU is not getting faster
 # as N grows — it is finally being given enough work to be worth waking up.
 
 # %% [markdown]
@@ -343,9 +348,6 @@ fitter = Fitter(
 )
 print("resolved approx:", fitter.model.approx)  # expect wave_precomp=True, ztable=True
 
-# Run three times: the first includes XLA compilation, the rest do not.
-# Confirms a fit runs on the GPU. Timings are in the table below, measured
-# outside a notebook.
 posterior = fitter.run("map", n_steps=100, verbose=False)
 print("MAP fit completed on", jax.devices()[0])
 

@@ -96,6 +96,8 @@ _MANY_EVAL_SAMPLERS = frozenset(
         "mcmc_nuts",
         "mcmc_hmc",
         "mcmc_dynamic_hmc",
+        "mcmc_chees",
+        "mcmc_smc",
         "mcmc_ess",
         "mcmc_ghmc",
         "mcmc_mclmc",
@@ -174,11 +176,21 @@ _CANONICAL_METHODS = {
     "native_vi_linear",  # Pure-JAX MGVI (lax.while_loop, fastest)
     # "vi" kept as canonical synonym for vi_nonlinear (backward compat)
     "vi",
+    # Gaussian VI on BlackJAX: one Gaussian fitted by SGD on the ELBO.
+    # `vi_fullrank` carries a Cholesky factor and can represent the age/dust/met
+    # tilt; `vi_meanfield` is diagonal and structurally cannot.
+    "vi_fullrank",
+    "vi_meanfield",
     "mcmc",  # auto: NUTS (D≤20) or Ray Tracing (D>20)
     "mcmc_raytrace",
     "mcmc_nuts",
     "mcmc_hmc",
     "mcmc_dynamic_hmc",
+    "mcmc_chees",
+    "mcmc_smc",  # tempered Sequential Monte Carlo (prior -> posterior)
+    "mcmc_barker",  # Barker proposal: 1 gradient/draw, branch-free
+    "mcmc_mala",  # MALA: the control that isolates Barker's proposal
+    "mcmc_hmc_lowrank",  # fixed-L HMC, rank-k mass matrix from warmup
     "mcmc_ghmc",
     "mcmc_mclmc",
     "mcmc_adjusted_mclmc",
@@ -2231,7 +2243,7 @@ class Fitter:
             # ``Uniform(9.6, 11.1)`` to ``Uniform(7, 13)`` changes no name, no
             # shape, no dtype and no control flow.
             self._free_prior_key(),
-            # Spec FIXED values (#1972 instance 2). ``_primals_to_params`` also
+            # Spec fixed values (#1972 instance 2). ``_primals_to_params`` also
             # bakes ``fitter._fixed_values``, so two models differing only in a
             # fixed scalar share one engine and fit #2 runs fit #1's physics,
             # measured -0.18 dex on mass for ``dust_slope`` -0.7 -> 0.4.
@@ -2866,7 +2878,9 @@ class Fitter:
 
     # ── AOT pre-warm and adaptation persistence ──────────────────────
 
-    def prewarm(self, method: str = "mcmc_nuts", *, n_chains: int | None = None, key=None):
+    def prewarm(
+        self, method: str = "mcmc_nuts", *, n_chains: int | None = None, key=None, **kwargs
+    ):
         """Pre-compile JIT kernels and populate the adaptation cache for ``method``.
 
         After this returns, a subsequent :meth:`run` call with the same
@@ -2897,6 +2911,22 @@ class Fitter:
             Optional seed. Default uses a fixed key, the pre-warm run
             is throwaway and its randomness does not affect the
             subsequent real fit.
+        **kwargs
+            Forwarded to the throwaway :meth:`run`, so the pre-warm can be
+            matched to the fit it is warming. **This matters more than it
+            looks.** A pre-warm only removes compile from a later fit if it
+            compiles the *same program*, and for NUTS the program is keyed on
+            the budget: ``_nuts_warmup_only`` takes ``n_warmup`` as a static
+            argument (it is the ``lax.scan`` length) and ``_nuts_chain_scan``
+            traces against a ``chain_keys`` array of length
+            ``n_burnin + n_samples``. So a default pre-warm (``n_samples=10``,
+            ``n_warmup=300``) and a fit at ``n_warmup=600, n_samples=600``
+            compile four modules where the fit alone would compile two.
+            Structural knobs are cheaper to match than budget ones:
+            ``max_num_doublings``, ``dense_mass_matrix`` and ``precondition``
+            change the program without changing how much of it runs, whereas
+            matching ``n_warmup`` / ``n_samples`` means the pre-warm does the
+            fit's own sampling work.
 
         Returns
         -------
@@ -2921,7 +2951,17 @@ class Fitter:
         if key is None:
             key = _jax.random.PRNGKey(0)
         sample_kwarg = "n_steps" if method in ("mcmc_raytrace", "raytrace") else "n_samples"
-        warmup_kw = {sample_kwarg: 10}
+        # A prewarm only warms the program the real fit will run, and for NUTS
+        # that program depends on the budget: ``_nuts_warmup_only`` takes
+        # ``n_warmup`` as a static argument (it is the ``lax.scan`` length) and
+        # ``_nuts_chain_scan`` is traced against a ``chain_keys`` array of length
+        # ``n_burnin + n_samples``. Both are part of the compile key, so a
+        # prewarm hardcoded at ``n_samples=10`` and the default ``n_warmup=300``
+        # compiles two programs a fit at 600/600 never asks for, and the fit
+        # pays the full XLA cost anyway. Passing the fit's own kwargs through is
+        # what makes ``prewarm`` an ahead-of-time compile of *that* fit rather
+        # than of a differently-shaped one.
+        warmup_kw = {sample_kwarg: 10, **kwargs}
         try:
             # prewarm=False: this throwaway run must not re-enter auto-prewarm
             # (run -> _auto_prewarm -> prewarm -> run would recurse).
@@ -3158,8 +3198,16 @@ class Fitter:
             - ``"mcmc"``: Auto: NUTS (D≤20) or Ray Tracing (D>20)
             - ``"mcmc_hmc"``: Standard HMC (fixed trajectory length)
             - ``"mcmc_dynamic_hmc"``: Dynamic HMC (adaptive trajectory)
+            - ``"mcmc_chees"``: ChEES-HMC, one trajectory length learned from
+              cross-chain statistics so the chains stay lock-step (experimental;
+              measured in ``bench/reports/2026-08-30_chees_hmc.md``)
+            - ``"mcmc_smc"``: Tempered Sequential Monte Carlo -- a particle
+              population annealed from the exact standardized ``N(0, I)`` prior
+              to the posterior, so it never starts at the MAP (experimental;
+              measured in ``bench/reports/2026-08-31_smc_evaluation.md``)
             - ``"mcmc_ghmc"``: Generalized HMC (**broken**: R-hat ~ 2.5-3.1,
-              ESS ~ 1 on D=6-7 mocks)
+              ESS ~ 1 on D=6-8 mocks; MEADS adaptation did not fix it, see
+              ``bench/reports/2026-08-30_ghmc_meads_adaptation.md``)
             - ``"mcmc_mclmc"``: MCLMC (**broken**: R-hat ~ 1.7, ESS ~ 1)
             - ``"mcmc_adjusted_mclmc"``: MCLMC + Metropolis correction
             - ``"mcmc_ess"``: Elliptical Slice Sampling (gradient-free)
@@ -3695,7 +3743,7 @@ class Fitter:
         lines.append(
             "  Methods:     vi, vi_linear, vi_nonlinear_fast, vi_linear_fast, "
             "vi_native, vi_native_linear, mcmc, mcmc_raytrace, mcmc_nuts, "
-            "mcmc_hmc, mcmc_dynamic_hmc, mcmc_ghmc, mcmc_mclmc, "
+            "mcmc_hmc, mcmc_dynamic_hmc, mcmc_chees, mcmc_ghmc, mcmc_mclmc, "
             "mcmc_adjusted_mclmc, mcmc_ess, map, laplace, pathfinder, nss, auto"
         )
 
@@ -4280,7 +4328,16 @@ class Fitter:
         elif method == "mcmc_dynamic_hmc":
             _adapt_algo, _adapt_kwargs = blackjax.hmc, {"num_integration_steps": 10}
         else:  # mcmc_nuts, mcmc_ghmc, both tune with the NUTS window
-            _adapt_algo, _adapt_kwargs = blackjax.nuts, {}
+            # ``max_num_doublings`` must reach the *adaptation* kernel, not only the
+            # sampling one below. ``window_adaptation`` runs its own NUTS and
+            # forwards ``**extra_parameters`` into it, so leaving it out ran warmup
+            # at BlackJAX's default of 10 -- up to 1023 leapfrogs per step -- for
+            # every caller who asked for a cap. That is the expensive half: during
+            # warmup the step size has not converged, so trees are at their deepest.
+            # ``bench/reports/2026-08-31_catalog_batched_samplers.md`` Finding 2
+            # measured the same omission on the single-galaxy path at 54.88 s -> 2.14 s
+            # for one 50 + 50 cell, and fixed it there; this entry point was missed.
+            _adapt_algo, _adapt_kwargs = blackjax.nuts, {"max_num_doublings": max_num_doublings}
 
         def _run_window_adaptation(adapt_key, init_flat, data_args_first):
             """Window-adapt step size / mass matrix on the first galaxy.
@@ -4311,6 +4368,11 @@ class Fitter:
             bool(use_dense),
             float(target_accept_rate),
             int(n_leapfrog_steps),
+            # In the key because it now reaches the warmup kernel: a step size
+            # dual-averaged under one cap is not the one another cap would find,
+            # so a cached adaptation reused across caps would sample at the wrong
+            # step size and nothing would say so.
+            int(max_num_doublings),
             int(n_dim),
         )
         _run_adapt = self._memo_batch_kernel(
@@ -4640,6 +4702,7 @@ class Fitter:
                     "n_warmup": n_warmup,
                     "n_burnin": n_burnin,
                     "n_samples": n_samples,
+                    "n_chains": 1,
                     "n_divergent": n_div,
                     "step_size": float(step_size),
                     "batch_size": n_gal,

@@ -29,7 +29,7 @@ from __future__ import annotations
 
 import pytest
 
-from tengri import FIXED, Fixed, Observation, Photometry, SEDModel
+from tengri import DEFAULT, Fixed, Observation, Photometry, SEDModel
 from tengri.forward.properties import PROPERTY_REGISTRY, missing_property_message
 
 pytestmark = [pytest.mark.contract, pytest.mark.regression_bug]
@@ -42,11 +42,11 @@ def stellar_only_model(ssp_data_fsps):
     return SEDModel.build(
         ssp_data=ssp_data_fsps,
         observation=obs,
-        sfh={"type": "dpl", "all_params": FIXED},
+        sfh={"type": "dpl", "all_params": Fixed(DEFAULT)},
         dust_attenuation={
             "type": "two_component",
             "law": "calzetti",
-            "all_params": FIXED,
+            "all_params": Fixed(DEFAULT),
         },
         neb={"type": "none"},
         redshift=Fixed(0.1),

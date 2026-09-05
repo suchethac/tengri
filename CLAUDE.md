@@ -164,7 +164,7 @@ User-facing model construction has two surfaces. The **recommended path** is
 the nested-dict builder shipped in 2026-05 (`parameters/groups.py`):
 
 ```python
-from tengri import SEDModel, FREE, FIXED, Fixed, Uniform, recipes
+from tengri import SEDModel, FREE, Fixed, DEFAULT, Uniform, recipes
 
 # Preferred: from a recipe
 model = SEDModel.build(ssp_data=ssp, observation=obs,
@@ -175,12 +175,12 @@ model = SEDModel.build(
     ssp_data=ssp, observation=obs,
     sfh={'type': 'dpl', 'all_params': FREE, 'beta': Uniform(1, 3)},
     dust_attenuation={'type': 'two_component', 'law': 'calzetti',
-                      'all_params': FIXED, 'tau_bc': 0.5, 'tau_diff': 0.3},
-    dust_emission={'type': 'dale2014', 'all_params': FIXED},
-    neb={'type': 'cue', 'all_params': FIXED},
+                      'tau_bc': 0.5, 'tau_diff': 0.3, 'other_params': Fixed(DEFAULT)},
+    dust_emission={'type': 'dale2014', 'all_params': Fixed(DEFAULT)},
+    neb={'type': 'cue', 'all_params': Fixed(DEFAULT)},
     redshift=Fixed(0.05),
 )
-model.spec.summary()    # provenance-tagged: [user] / [all_params FREE] / [all_params FIXED] / [default]
+model.spec.summary()    # provenance-tagged: [user] / [all_params FREE] / [all_params Fixed(DEFAULT)] / [default]
 groups = model.spec.to_groups()    # round-trip for inspection/editing
 
 # Or with builder factories (autocomplete-friendly; SFH only as of Phase II-3.3)
@@ -188,14 +188,16 @@ from tengri import builders
 model = SEDModel.build(
     ssp_data=ssp, observation=obs,
     sfh=builders.sfh.dpl(all_params=FREE, beta=Uniform(1, 3)),  # ← IDE sees alpha, beta, tau_gyr, log_total_mass
-    dust_attenuation={'type': 'two_component', 'law': 'calzetti', 'all_params': FIXED},
-    neb={'type': 'cue', 'all_params': FIXED},
+    dust_attenuation={'type': 'two_component', 'law': 'calzetti', 'all_params': Fixed(DEFAULT)},
+    neb={'type': 'cue', 'all_params': Fixed(DEFAULT)},
 )
 ```
 
 - Grammar: each group dict accepts `'type'` (structural choice), `'all_params'`
-  wildcard (`FREE`/`FIXED`; default `FIXED`), and per-parameter short-form overrides (e.g.
-  `'beta'` inside the sfh group resolves to `sfh_dpl_beta`).
+  wildcard (exact synonym `'other_params'`, written last after explicit
+  per-param entries; `FREE`/`Fixed(DEFAULT)`; default `Fixed(DEFAULT)`), and
+  per-parameter short-form overrides (e.g. `'beta'` inside the sfh group
+  resolves to `sfh_dpl_beta`).
 - **`met` is the metallicity group**, parallel to `sfh`: `met={'type': 'table'}`,
   `met={'type': 'ramp', 'logzsol_0': ...}`, `met={'logzsol': Uniform(...)}`.
   The `stellar={'met_mode': ...}` spelling of #311 is **gone** (#1720) — it was
@@ -227,9 +229,9 @@ model = SEDModel.build(
   'velocity'/...: prior}`. `'frac'` (default) scales the galaxy Hα (bit-exact
   with the legacy `shock_emission`); `'lhalpha'` sets an absolute
   `shock_log_lhalpha` (decoupled from the SFR — for AGN NLR/outflow shocks).
-  `shock={'type':'none'}` disables. Like radio, `'all_params':FREE` is a no-op for the
-  Fixed-default shock bucket — use explicit priors (`shock={'frac':
-  Uniform(0,1)}`). Canonical component: `ShockNebular` (`_REGISTRY['shock']`).
+  `shock={'type':'none'}` disables. `'all_params':FREE` frees only the params
+  with declared priors and warns about the Fixed-only rest; explicit priors
+  (`shock={'frac': Uniform(0, 1)}`) are the precise spelling. Canonical component: `ShockNebular` (`_REGISTRY['shock']`).
   `'mappings'` is the shock group's default `type` and selects `ShockNebular`;
   the older standalone `mappings` component is gone, not merely superseded.
 - AGN cross-block normalisation policy: `agn={'type': 'composable', ...,
@@ -239,7 +241,11 @@ model = SEDModel.build(
   `'independent'` keeps each component on its own luminosity scale (disc on
   `agn_log_lbol`, torus on `agn_power`, polar via the legacy face-on proxy) —
   the GRAHSP/AGNfitter-style bookkeeping. See `AGNSEDComponentConfig.agn_norm`.
-- Sentinels (`FREE`, `FIXED`) are singletons exported from `tengri`.
+- Sentinels (`FREE`, `DEFAULT`) are singletons exported from `tengri`. `FREE`
+  defers a parameter to the registry's default prior; `DEFAULT` is legal only
+  as `Fixed(DEFAULT)`, pinning a parameter at the registry default value. The
+  old `FIXED` sentinel is removed (pre-1.0 break, no shim); a bare `DEFAULT`
+  (not wrapped in `Fixed(...)`) raises.
 - Recipes: `tengri.recipes.*` — ten curated starting points. Five general
   (`star_forming_photometry`, `quiescent_z0`, `stochastic_sfh_jwst`,
   `high_z`, `photoz`), three AGN (`agn_panchromatic`, `composable_agn`,

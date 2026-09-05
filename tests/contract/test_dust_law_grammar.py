@@ -13,7 +13,7 @@ explicit and requires them to be specified. Tests cover:
 
 import pytest
 
-from tengri.parameters import FIXED, Fixed
+from tengri.parameters import DEFAULT, Fixed
 from tengri.parameters.groups import parse_groups
 from tengri.parameters.parameters import Parameters
 
@@ -389,7 +389,7 @@ class TestRoundTrip:
         from tengri.parameters.groups import parameters_to_groups
 
         params = parse_groups(
-            sfh={"type": "dpl", "all_params": FIXED},
+            sfh={"type": "dpl", "all_params": Fixed(DEFAULT)},
             dust_attenuation={
                 "type": "two_component",
                 "law_bc": "calzetti",

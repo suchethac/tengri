@@ -16,7 +16,7 @@ question directly and cannot be inert, which is what these tests assert.
 
 import pytest
 
-from tengri import FIXED, Fixed, SEDModel
+from tengri import DEFAULT, Fixed, SEDModel
 
 pytestmark = pytest.mark.regression_bug
 
@@ -25,9 +25,9 @@ def _model(ssp, obs, xray_type):
     return SEDModel.build(
         ssp_data=ssp,
         observation=obs,
-        sfh={"type": "dpl", "all_params": FIXED},
+        sfh={"type": "dpl", "all_params": Fixed(DEFAULT)},
         neb={"type": "none"},
-        xray={"type": xray_type, "all_params": FIXED},
+        xray={"type": xray_type, "all_params": Fixed(DEFAULT)},
         redshift=Fixed(0.05),
     )
 
@@ -52,7 +52,7 @@ def test_a_model_without_xray_still_differs_from_one_with(
     without = SEDModel.build(
         ssp_data=synthetic_ssp_wide,
         observation=synthetic_tophat_obs,
-        sfh={"type": "dpl", "all_params": FIXED},
+        sfh={"type": "dpl", "all_params": Fixed(DEFAULT)},
         neb={"type": "none"},
         redshift=Fixed(0.05),
     ).compile_signature()

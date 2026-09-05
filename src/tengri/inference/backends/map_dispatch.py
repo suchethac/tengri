@@ -834,10 +834,20 @@ def run_laplace(context, *, key, init_from=None, n_map_steps=1000, **kwargs):
     )
 
 
-def run_pathfinder(context, *, key, init_from=None, **kwargs):
-    """Pathfinder: fast approximate posterior via L-BFGS path."""
+def run_pathfinder(context, *, key, init_from=None, precondition=None, **kwargs):
+    """Pathfinder: fast approximate posterior via L-BFGS path.
+
+    ``precondition`` whitens the latent coordinates with the analytic
+    ``J^T N^-1 J + I`` metric before the L-BFGS path is traced, and maps the draws
+    back afterwards. It is the one geometric lever this backend has: Pathfinder's
+    covariance is a **low-rank** inverse Hessian read off the L-BFGS history, and
+    :mod:`tengri.inference.preconditioning` measures the raw posterior at
+    condition 8.5e4 to 3.1e8 on every configuration tested. Off by default
+    (#1397), like every other backend.
+    """
     from tengri.inference.backends.mcmc._shared import _get_flat_logdensity
     from tengri.inference.backends.pathfinder import run_pathfinder
+    from tengri.inference.preconditioning import prepare_preconditioning
 
     context = InferenceContext.from_target(context)
     init_params = context.initial_params(key, init_from=init_from)
@@ -849,16 +859,35 @@ def run_pathfinder(context, *, key, init_from=None, **kwargs):
         init_params,
     )
 
+    problem = prepare_preconditioning(
+        log_posterior_flat_2arg, init_flat, data_args, precondition=precondition
+    )
+    if problem.enabled and kwargs.get("verbose", True):
+        logger.info(
+            "Pathfinder preconditioning: strength=%.2f, cond %.2e -> %.2e at the initial point",
+            problem.strength,
+            problem.metric_condition,
+            problem.whitened_condition,
+        )
+    whitened_logdensity = problem.logdensity
+
     def log_posterior_flat(pos):
         """Evaluate the flat log posterior with data_args bound from the enclosing scope."""
-        return log_posterior_flat_2arg(pos, data_args)
+        return whitened_logdensity(pos, data_args)
 
     return run_pathfinder(
         key=key,
         log_posterior_flat=log_posterior_flat,
-        init_flat=init_flat,
+        init_flat=problem.init_flat,
         unravel_fn=unravel_fn,
         to_physical_fn=context.to_physical,
         model=context.model,
+        restore_fn=problem.restore,
+        precondition_diagnostics={
+            "precondition_enabled": problem.enabled,
+            "precondition_strength": problem.strength,
+            "metric_condition": problem.metric_condition,
+            "whitened_condition": problem.whitened_condition,
+        },
         **kwargs,
     )

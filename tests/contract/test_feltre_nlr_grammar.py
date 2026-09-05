@@ -14,7 +14,7 @@ import os
 import numpy as np
 import pytest
 
-from tengri import FIXED, Fixed, SEDModel
+from tengri import DEFAULT, Fixed, SEDModel
 
 _GRID = os.path.join("data", "feltre_grid.h5")
 pytestmark = [
@@ -33,21 +33,21 @@ def _build_feltre(synthetic_ssp_wide, logU):
             "tau_gyr": Fixed(1.0),
             "age_gyr": Fixed(5.0),
             "log_total_mass": Fixed(0.0),
-            "all_params": FIXED,
+            "all_params": Fixed(DEFAULT),
         },
         dust_attenuation={
             "law": "power_law",
             "type": "two_component",
             "tau_bc": Fixed(0.0),
             "tau_diff": Fixed(0.0),
-            "all_params": FIXED,
+            "all_params": Fixed(DEFAULT),
         },
         agn={
             "type": "composable",
-            "all_params": FIXED,
+            "all_params": Fixed(DEFAULT),
             "log_lbol": 13.0,
-            "disc": {"type": "multicolor", "all_params": FIXED},
-            "nlr": {"type": "feltre", "nlr_logU": Fixed(logU), "all_params": FIXED},
+            "disc": {"type": "multicolor", "all_params": Fixed(DEFAULT)},
+            "nlr": {"type": "feltre", "nlr_logU": Fixed(logU), "all_params": Fixed(DEFAULT)},
         },
         redshift=Fixed(0.0),
     )

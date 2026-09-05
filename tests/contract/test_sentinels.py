@@ -1,10 +1,12 @@
 # SPDX-License-Identifier: BSD-3-Clause
-"""Tests for FREE and FIXED sentinel objects.
+"""Tests for FREE and DEFAULT sentinel objects.
 
-27 tests become 8. `TestFreeSingleton` and `TestFixedSingleton` were the same
-ten tests written twice, differing only in which sentinel they named, so they
-are one parametrized class here; the four "not equal to True / False / None / 0"
-tests per sentinel are one test over a table of look-alikes.
+27 tests become 8. `TestFreeSingleton` and `TestFixedSingleton` (originally
+named for FREE and the now-removed FIXED sentinel; DEFAULT is the surviving
+pair member post pre-1.0 clean break) were the same ten tests written twice,
+differing only in which sentinel they named, so they are one parametrized
+class here; the four "not equal to True / False / None / 0" tests per
+sentinel are one test over a table of look-alikes.
 
 Two did not survive:
 
@@ -24,7 +26,7 @@ import pickle
 
 import pytest
 
-from tengri.parameters.sentinels import FIXED, FREE
+from tengri.parameters.sentinels import DEFAULT, FREE
 
 pytestmark = pytest.mark.contract
 
@@ -35,7 +37,7 @@ pytestmark = pytest.mark.contract
 _LOOKALIKES = [True, False, None, 0, 0.0, "", [], {}]
 
 
-@pytest.mark.parametrize("sentinel", [FREE, FIXED], ids=repr)
+@pytest.mark.parametrize("sentinel", [FREE, DEFAULT], ids=repr)
 class TestEachSentinel:
     """Properties both sentinels must satisfy, stated once."""
 
@@ -47,7 +49,7 @@ class TestEachSentinel:
 
     def test_repr_is_its_own_name(self, sentinel):
         """``repr`` is the bare name, which is what `spec.summary()` prints."""
-        assert repr(sentinel) in {"FREE", "FIXED"}
+        assert repr(sentinel) in {"FREE", "DEFAULT"}
 
     def test_survives_deepcopy(self, sentinel):
         assert copy.deepcopy(sentinel) is sentinel
@@ -77,9 +79,9 @@ class TestTheTwoTogether:
 
     def test_the_sentinels_are_distinguishable(self):
         """Different objects, unequal, and separately hashable."""
-        assert FREE is not FIXED
-        assert FREE != FIXED
-        assert hash(FREE) != hash(FIXED)
+        assert FREE is not DEFAULT
+        assert FREE != DEFAULT
+        assert hash(FREE) != hash(DEFAULT)
 
     def test_they_keep_their_identity_inside_a_nested_structure(self):
         """deepcopy and pickle of a container must not clone the singletons.
@@ -88,12 +90,12 @@ class TestTheTwoTogether:
         nested dict of these, and a fitter that deep-copied it into new objects
         would break every ``is FREE`` check downstream.
         """
-        nested = {"a": {"b": {"free": FREE, "fixed": FIXED, "list": [FREE, FIXED, 1.0]}}}
+        nested = {"a": {"b": {"free": FREE, "default": DEFAULT, "list": [FREE, DEFAULT, 1.0]}}}
 
         for restored in (copy.deepcopy(nested), pickle.loads(pickle.dumps(nested))):
             inner = restored["a"]["b"]
             assert inner["free"] is FREE
-            assert inner["fixed"] is FIXED
+            assert inner["default"] is DEFAULT
             assert inner["list"][0] is FREE
-            assert inner["list"][1] is FIXED
+            assert inner["list"][1] is DEFAULT
             assert inner["list"][2] == 1.0

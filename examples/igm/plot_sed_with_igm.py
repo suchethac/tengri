@@ -44,7 +44,7 @@ COLORS = plt.cm.viridis(np.linspace(0.1, 0.85, len(REDSHIFTS)))
 C_AA_PER_S = 2.998e18
 SFH = {
     "type": "dpl",
-    "all_params": tengri.FIXED,
+    "all_params": tengri.Fixed(tengri.DEFAULT),
     "tau_gyr": 0.3,
     "log_total_mass": 10.0,
     "alpha": 3.0,
@@ -53,7 +53,7 @@ SFH = {
 DUST = {
     "law": "power_law",
     "type": "two_component",
-    "all_params": tengri.FIXED,
+    "all_params": tengri.Fixed(tengri.DEFAULT),
     "tau_diff": 0.1,
     "tau_bc": 0.1,
 }

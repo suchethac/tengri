@@ -170,6 +170,7 @@ EXPECTED_ALL = frozenset(
         # Exceptions
         "BackendError",
         "ConfigError",
+        "DeadFitError",
         "InferenceError",
         "ParameterError",
         "TengriError",
@@ -183,7 +184,8 @@ EXPECTED_ALL = frozenset(
         "StudentT",
         "Uniform",
         # Sentinels (used in every recipe + 100+ tests)
-        "FIXED",
+        # The FIXED sentinel was removed; `Fixed(DEFAULT)` replaces it.
+        "DEFAULT",
         "FREE",
         # Forward-model outputs and helpers
         "PriorPredictive",
@@ -273,7 +275,7 @@ def test_unknown_attribute_raises_attribute_error() -> None:
 # The curated tab-completion surface (``tengri.__dir__``) is intentionally
 # smaller than ``__all__``, but it must still expose the symbols a fresh user
 # reaches for in the first ten lines of the quickstart — otherwise
-# ``tengri.<TAB>`` and ``dir(tengri)`` hide the SSP loaders, the FREE/FIXED
+# ``tengri.<TAB>`` and ``dir(tengri)`` hide the SSP loaders, the FREE/DEFAULT
 # build sentinels, and the construction helpers. (Fresh-user audit 2026-07.)
 _FIRST_SESSION_SYMBOLS = (
     "load_ssp",
@@ -287,7 +289,7 @@ _FIRST_SESSION_SYMBOLS = (
     "recipes",
     "fit_batch",
     "FREE",
-    "FIXED",
+    "DEFAULT",
     "Fixed",
     "Uniform",
     "PopulationSEDModel",

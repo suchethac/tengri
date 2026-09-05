@@ -57,7 +57,7 @@ def build_model(z: float) -> tengri.SEDModel:
         dust_attenuation={
             "law": "power_law",
             "type": "two_component",
-            "all_params": tengri.FIXED,
+            "all_params": tengri.Fixed(tengri.DEFAULT),
             "tau_bc": 0.3,
             "tau_diff": 0.2,
             "slope": -0.7,

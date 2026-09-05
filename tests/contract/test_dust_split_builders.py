@@ -15,7 +15,7 @@ import pytest
 from tengri import builders, recipes
 from tengri.parameters.groups import parse_groups
 from tengri.parameters.priors import Fixed, Uniform
-from tengri.parameters.sentinels import FIXED, FREE
+from tengri.parameters.sentinels import DEFAULT, FREE
 
 pytestmark = pytest.mark.contract
 
@@ -78,9 +78,11 @@ class TestDustAttenutationBuilders:
     def test_single_component_in_build(self):
         """single_component() output is accepted by dust_attenuation= kwarg."""
         # Smoke test: builder output parses without error.
-        dust_attenuation = builders.dust.single_component(law="calzetti", all_params=FIXED)
+        dust_attenuation = builders.dust.single_component(
+            law="calzetti", all_params=Fixed(DEFAULT)
+        )
         groups = {
-            "sfh": {"type": "dpl", "all_params": FIXED},
+            "sfh": {"type": "dpl", "all_params": Fixed(DEFAULT)},
             "dust_attenuation": dust_attenuation,
             "neb": {"type": "none"},
             "redshift": Fixed(0.1),
@@ -91,9 +93,9 @@ class TestDustAttenutationBuilders:
 
     def test_two_component_in_build(self):
         """two_component() output is accepted by dust_attenuation= kwarg."""
-        dust_attenuation = builders.dust.two_component(law="calzetti", all_params=FIXED)
+        dust_attenuation = builders.dust.two_component(law="calzetti", all_params=Fixed(DEFAULT))
         groups = {
-            "sfh": {"type": "dpl", "all_params": FIXED},
+            "sfh": {"type": "dpl", "all_params": Fixed(DEFAULT)},
             "dust_attenuation": dust_attenuation,
             "neb": {"type": "none"},
             "redshift": Fixed(0.1),
@@ -108,20 +110,20 @@ class TestDustEmissionBuilders:
 
     def test_emission_dale2014_returns_emission_dict(self):
         """dale2014() returns an emission dict with correct type."""
-        result = builders.dust.emission.dale2014(all_params=FIXED)
+        result = builders.dust.emission.dale2014(all_params=Fixed(DEFAULT))
         assert isinstance(result, dict)
         assert result["type"] == "dale2014"
         assert "emission" not in result
 
     def test_emission_in_build(self):
         """dust_emission= kwarg accepts emission builder output."""
-        dust_emission = builders.dust.emission.dale2014(all_params=FIXED)
+        dust_emission = builders.dust.emission.dale2014(all_params=Fixed(DEFAULT))
         groups = {
-            "sfh": {"type": "dpl", "all_params": FIXED},
+            "sfh": {"type": "dpl", "all_params": Fixed(DEFAULT)},
             "dust_attenuation": {
                 "type": "single_component",
                 "law": "calzetti",
-                "all_params": FIXED,
+                "all_params": Fixed(DEFAULT),
             },
             "dust_emission": dust_emission,
             "neb": {"type": "none"},
@@ -148,8 +150,12 @@ class TestDustEmissionBuilders:
         """relaxed_energy_balance() output builds successfully."""
         dust_emission = builders.dust.emission.relaxed_energy_balance(sigma=0.3)
         groups = {
-            "sfh": {"type": "dpl", "all_params": FIXED},
-            "dust_attenuation": {"type": "two_component", "law": "calzetti", "all_params": FIXED},
+            "sfh": {"type": "dpl", "all_params": Fixed(DEFAULT)},
+            "dust_attenuation": {
+                "type": "two_component",
+                "law": "calzetti",
+                "all_params": Fixed(DEFAULT),
+            },
             "dust_emission": dust_emission,
             "neb": {"type": "none"},
             "redshift": Fixed(0.1),
@@ -272,7 +278,7 @@ class TestRecipeFreeparams:
         with warnings.catch_warnings():
             warnings.simplefilter("ignore")
             spec = parse_groups(**recipes.quiescent_z0())
-        # With all_params=FIXED, only explicit priors are free
+        # With all_params=Fixed(DEFAULT), only explicit priors are free
         assert "sfh_dexp_tau_gyr" in spec.free_params
         assert "sfh_dexp_log_total_mass" in spec.free_params
         assert "dust_tau_bc" in spec.free_params
@@ -286,7 +292,7 @@ class TestRecipeFreeparams:
         with warnings.catch_warnings():
             warnings.simplefilter("ignore")
             spec = parse_groups(**recipes.photoz())
-        # With all_params=FIXED, only explicit priors are free
+        # With all_params=Fixed(DEFAULT), only explicit priors are free
         assert "sfh_dpl_alpha" in spec.free_params
         assert "dust_tau_bc" in spec.free_params
         assert "dust_tau_diff" in spec.free_params
@@ -300,38 +306,64 @@ class TestRecipeFreeparams:
         with warnings.catch_warnings():
             warnings.simplefilter("ignore")
             spec = parse_groups(**recipes.mock_recovery_minimal())
-        # With all_params=FREE for SFH and FIXED for dust (with explicit tau_bc)
+        # With all_params=FREE for SFH and Fixed(DEFAULT) for dust (with explicit tau_bc)
         assert "sfh_tsnorm_log_total_mass" in spec.free_params
         assert "dust_tau_bc" in spec.free_params
         assert "met_logzsol" in spec.free_params
 
 
 class TestExplicitAllParamsPreserved:
-    """Recipes that declare all_params: FIXED are preserved exactly."""
+    """Recipes that declare all_params: Fixed(DEFAULT) are preserved exactly."""
 
     def test_high_z_all_params_fixed(self):
-        """high_z has all_params: FIXED on dust_attenuation and sfh."""
+        """high_z has other_params: Fixed(DEFAULT) on dust_attenuation and sfh.
+
+        Both groups carry explicit per-param entries alongside the wildcard,
+        so the recipe spells it ``other_params`` (placed last) rather than
+        ``all_params`` -- see ``TestWildcardSpellingConvention`` in
+        ``test_to_groups_roundtrip.py`` for the pinned convention itself.
+        """
         recipe_dict = recipes.high_z()
-        assert recipe_dict["sfh"]["all_params"] == FIXED
-        assert recipe_dict["dust_attenuation"]["all_params"] == FIXED
+        assert recipe_dict["sfh"]["other_params"] == Fixed(DEFAULT)
+        assert recipe_dict["dust_attenuation"]["other_params"] == Fixed(DEFAULT)
 
     def test_photoz_all_params_fixed(self):
-        """photoz has all_params: FIXED on dust_attenuation and sfh."""
+        """photoz has other_params: Fixed(DEFAULT) on dust_attenuation and sfh."""
         recipe_dict = recipes.photoz()
-        assert recipe_dict["sfh"]["all_params"] == FIXED
-        assert recipe_dict["dust_attenuation"]["all_params"] == FIXED
+        assert recipe_dict["sfh"]["other_params"] == Fixed(DEFAULT)
+        assert recipe_dict["dust_attenuation"]["other_params"] == Fixed(DEFAULT)
 
     def test_unified_agn_all_params_fixed(self):
-        """unified_agn has all_params: FIXED on dust_attenuation and sfh."""
-        recipe_dict = recipes.unified_agn()
-        assert recipe_dict["sfh"]["all_params"] == FIXED
-        assert recipe_dict["dust_attenuation"]["all_params"] == FIXED
+        """unified_agn: sfh is a sole-directive group (all_params); dust_attenuation
+        carries explicit tau_bc/tau_diff plus the wildcard, so it is other_params.
 
-    def test_dust_demo_all_params_fixed(self):
-        """dust_demo has all_params: FIXED on sfh and dust_attenuation."""
+        This pins the grammar's spelling convention itself: a group with no
+        explicit per-param entries spells the wildcard ``all_params`` (sfh,
+        here); a group that also carries explicit per-param entries spells
+        it ``other_params``, placed last in the dict (dust_attenuation, here).
+        """
+        recipe_dict = recipes.unified_agn()
+        # Sole-directive group: only "type" + "all_params", nothing else.
+        assert list(recipe_dict["sfh"].keys()) == ["type", "all_params"]
+        assert recipe_dict["sfh"]["all_params"] == Fixed(DEFAULT)
+        # Mixed group: explicit per-param entries plus "other_params" last.
+        assert list(recipe_dict["dust_attenuation"].keys())[-1] == "other_params"
+        assert recipe_dict["dust_attenuation"]["other_params"] == Fixed(DEFAULT)
+
+    def test_dust_demo_other_params_fixed(self):
+        """dust_demo has other_params: Fixed(DEFAULT), LAST, on sfh and dust_attenuation.
+
+        Both builder calls (``builders.sfh.tsnorm``, ``builders.dust.two_component``)
+        are given explicit per-param kwargs, so the emitted wildcard is spelled
+        ``other_params`` rather than ``all_params`` -- see
+        ``TestWildcardSpellingConvention`` in ``test_to_groups_roundtrip.py`` for
+        the pinned convention itself.
+        """
         recipe_dict = recipes.dust_demo()
-        assert recipe_dict["sfh"]["all_params"] == FIXED
-        assert recipe_dict["dust_attenuation"]["all_params"] == FIXED
+        assert recipe_dict["sfh"]["other_params"] == Fixed(DEFAULT)
+        assert recipe_dict["dust_attenuation"]["other_params"] == Fixed(DEFAULT)
+        assert list(recipe_dict["sfh"].keys())[-1] == "other_params"
+        assert list(recipe_dict["dust_attenuation"].keys())[-1] == "other_params"
 
 
 class TestBuildersSurfaceContract:

@@ -63,6 +63,7 @@ import argparse
 import ast
 import pathlib
 import sys
+from collections.abc import Sequence
 
 REPO = pathlib.Path(__file__).resolve().parents[1]
 EXAMPLES = REPO / "examples"
@@ -146,10 +147,10 @@ def collect() -> tuple[list[tuple[str, int]], list[tuple[str, int]]]:
     return every, unrecorded
 
 
-def main() -> int:
+def main(argv: Sequence[str] | None = None) -> int:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--list", action="store_true", help="print every broad handler found")
-    args = parser.parse_args()
+    args = parser.parse_args(argv)
 
     every, unrecorded = collect()
 

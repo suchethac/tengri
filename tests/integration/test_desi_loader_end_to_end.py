@@ -48,7 +48,7 @@ def ssp_data():
 def desi_model(tmp_path, ssp_data):
     """A model whose observation came entirely out of a DESI-format file."""
     pytest.importorskip("astropy")
-    from tengri import FIXED, Fixed, Observation, SEDModel
+    from tengri import DEFAULT, Fixed, Observation, SEDModel
     from tengri.io import desi_spectroscopy, read_desi, read_desi_cameras
 
     path = tmp_path / "coadd-e2e.fits"
@@ -61,8 +61,12 @@ def desi_model(tmp_path, ssp_data):
     model = SEDModel.build(
         ssp_data=ssp_data,
         observation=Observation(spectroscopy=spectroscopy),
-        sfh={"type": "dpl", "all_params": FIXED},
-        dust_attenuation={"type": "single_component", "law": "calzetti", "all_params": FIXED},
+        sfh={"type": "dpl", "all_params": Fixed(DEFAULT)},
+        dust_attenuation={
+            "type": "single_component",
+            "law": "calzetti",
+            "all_params": Fixed(DEFAULT),
+        },
         redshift=Fixed(0.1),
     )
     return model, spectroscopy, spectrum, built
@@ -113,14 +117,18 @@ def test_resolution_matrix_changes_the_prediction(desi_model):
     params = model.spec.sample(jax.random.PRNGKey(0))
     with_matrix = np.asarray(model.predict_spectrum(params))
 
-    from tengri import FIXED, Fixed, Observation, SEDModel
+    from tengri import DEFAULT, Fixed, Observation, SEDModel
 
     bare = dataclasses.replace(spectroscopy, resolution_matrix=None, resolution=None)
     bare_model = SEDModel.build(
         ssp_data=model.ssp_data,
         observation=Observation(spectroscopy=bare),
-        sfh={"type": "dpl", "all_params": FIXED},
-        dust_attenuation={"type": "single_component", "law": "calzetti", "all_params": FIXED},
+        sfh={"type": "dpl", "all_params": Fixed(DEFAULT)},
+        dust_attenuation={
+            "type": "single_component",
+            "law": "calzetti",
+            "all_params": Fixed(DEFAULT),
+        },
         redshift=Fixed(0.1),
     )
     without = np.asarray(bare_model.predict_spectrum(params))

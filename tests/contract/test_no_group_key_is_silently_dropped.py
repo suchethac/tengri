@@ -34,12 +34,12 @@ import warnings
 
 import pytest
 
-from tengri import FIXED, Fixed, Observation, Photometry, SEDModel, Uniform
+from tengri import DEFAULT, Fixed, Observation, Photometry, SEDModel, Uniform
 
 pytestmark = [pytest.mark.contract, pytest.mark.regression_bug]
 
-_SFH = {"type": "dpl", "all_params": FIXED}
-_EMIS = {"type": "dale2014", "all_params": FIXED}
+_SFH = {"type": "dpl", "all_params": Fixed(DEFAULT)}
+_EMIS = {"type": "dale2014", "all_params": Fixed(DEFAULT)}
 
 
 @pytest.fixture(scope="module")
@@ -69,7 +69,7 @@ def _emission_params(ssp, obs) -> list[str]:
     Discovered rather than listed, so a new emission template is covered the
     day it registers.
     """
-    base = {"type": "two_component", "law": "calzetti", "all_params": FIXED}
+    base = {"type": "two_component", "law": "calzetti", "all_params": Fixed(DEFAULT)}
     without = set(_build(ssp, obs, dict(base)).spec.all_params)
     with_em = _build(ssp, obs, dict(base), dust_emission=_EMIS)
     return sorted(set(with_em.spec.all_params) - without)
@@ -89,7 +89,7 @@ class TestFlattenedKeysAreRefusedNotDropped:
         base = {
             "type": "two_component",
             "law": "calzetti",
-            "all_params": FIXED,
+            "all_params": Fixed(DEFAULT),
         }
         accepted: list[str] = []
         for full in _emission_params(ssp_data_fsps, obs):
@@ -119,7 +119,7 @@ class TestFlattenedKeysAreRefusedNotDropped:
         base = {
             "type": "two_component",
             "law": "calzetti",
-            "all_params": FIXED,
+            "all_params": Fixed(DEFAULT),
             "emission": _EMIS,
         }
         with pytest.raises(ValueError, match=r"dust_emission") as excinfo:
@@ -135,7 +135,7 @@ class TestFlattenedKeysAreRefusedNotDropped:
         base = {
             "type": "two_component",
             "law": "calzetti",
-            "all_params": FIXED,
+            "all_params": Fixed(DEFAULT),
         }
         with pytest.raises(ValueError):
             # Try to set emission param at dust_attenuation level with a prior (should be refused)
@@ -149,7 +149,7 @@ class TestFlattenedKeysAreRefusedNotDropped:
             {
                 "type": "two_component",
                 "law": "calzetti",
-                "all_params": FIXED,
+                "all_params": Fixed(DEFAULT),
             },
             dust_emission={**_EMIS, "alpha": Uniform(1.0, 3.0)},
         )
@@ -168,8 +168,8 @@ class TestCrossLevelAcceptanceThatWorksIsKept:
         """
         agn = {
             "type": "composable",
-            "all_params": FIXED,
-            "disc": {"type": "multicolor", "all_params": FIXED},
+            "all_params": Fixed(DEFAULT),
+            "disc": {"type": "multicolor", "all_params": Fixed(DEFAULT)},
         }
         with warnings.catch_warnings():
             warnings.simplefilter("ignore")
@@ -177,7 +177,11 @@ class TestCrossLevelAcceptanceThatWorksIsKept:
                 ssp_data=ssp_data_fsps,
                 observation=obs,
                 sfh=_SFH,
-                dust_attenuation={"type": "two_component", "law": "calzetti", "all_params": FIXED},
+                dust_attenuation={
+                    "type": "two_component",
+                    "law": "calzetti",
+                    "all_params": Fixed(DEFAULT),
+                },
                 neb={"type": "none"},
                 redshift=Fixed(0.1),
                 agn=agn,
@@ -189,7 +193,11 @@ class TestCrossLevelAcceptanceThatWorksIsKept:
                 ssp_data=ssp_data_fsps,
                 observation=obs,
                 sfh=_SFH,
-                dust_attenuation={"type": "two_component", "law": "calzetti", "all_params": FIXED},
+                dust_attenuation={
+                    "type": "two_component",
+                    "law": "calzetti",
+                    "all_params": Fixed(DEFAULT),
+                },
                 neb={"type": "none"},
                 redshift=Fixed(0.1),
                 agn={**agn, "log_lbol": baseline + 0.25},

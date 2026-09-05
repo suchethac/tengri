@@ -51,7 +51,7 @@ import jax.numpy as jnp
 import numpy as np
 import pytest
 
-from tengri import FIXED, Fixed, ForwardModel, Observation, SEDModel, Uniform
+from tengri import DEFAULT, Fixed, ForwardModel, Observation, SEDModel, Uniform
 from tengri.observation.spectroscopy import Spectroscopy
 
 pytestmark = pytest.mark.contract
@@ -97,11 +97,11 @@ def _build(ssp, observation):
     return SEDModel.build(
         ssp_data=ssp,
         observation=observation,
-        sfh={"type": "dpl", "all_params": FIXED, "log_total_mass": Uniform(8, 12)},
+        sfh={"type": "dpl", "all_params": Fixed(DEFAULT), "log_total_mass": Uniform(8, 12)},
         dust_attenuation={
             "type": "two_component",
             "law": "calzetti",
-            "all_params": FIXED,
+            "all_params": Fixed(DEFAULT),
         },
         neb={"type": "none"},
         redshift=Fixed(0.5),

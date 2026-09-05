@@ -65,6 +65,8 @@ __all__ = [
     "preconditioned_logdensity",
     "prepare_preconditioning",
     "temper_metric",
+    "traced_metric_conditioning",
+    "traced_preconditioner",
 ]
 
 #: Smallest eigenvalue the metric may carry. The standardized prior contributes
@@ -472,6 +474,188 @@ def _preconditioner_with_conditioning(
     return preconditioner, (
         float(jnp.max(raw) / jnp.min(raw)),
         float(jnp.max(whitened_eigenvalues) / jnp.min(whitened_eigenvalues)),
+    )
+
+
+# ----------------------------------------------------------------------------
+# Traced (JIT/vmap-safe) construction, for the batched catalog path
+# ----------------------------------------------------------------------------
+#
+# Everything above this line reads a concrete boolean somewhere -- the finiteness
+# gate in :func:`metric_preconditioner`, the expansion-point gate in
+# :func:`_reject_nonfinite_expansion_point`, the ``float()`` casts on the
+# condition numbers -- and raises ``TracerBoolConversionError`` under trace. That
+# is the right behavior for a single fit, where the caller is standing there and
+# a refusal is actionable.
+#
+# It is the wrong behavior inside ``lax.map`` over a catalog. The metric is
+# per-galaxy by construction (``J`` is the Jacobian at *that* galaxy's MAP and
+# ``N`` is *its* noise), so it has a galaxy axis and must ride the same batching
+# as the data. In that setting a Python raise is not expressible at all, and even
+# if it were, one pathological galaxy of 10 000 must not abort the catalog.
+#
+# So the traced pair below replaces every raise with a per-lane ``jnp.where``
+# fallback to the identity transform: a galaxy whose metric is non-finite or not
+# factorizable samples **unpreconditioned** rather than poisoning its neighbors,
+# and says so through the returned ``ok`` flag.
+
+
+def _traced_transform(tempered, finite, identity):
+    """Cholesky-whiten a tempered metric, falling back to the identity per lane.
+
+    Returns ``(matrix, inverse, ok)`` where ``ok`` is a traced boolean scalar that
+    is ``False`` for a lane whose metric could not be factorized.
+    """
+    lower = jnp.linalg.cholesky(tempered)
+    ok = finite & jnp.all(jnp.isfinite(lower))
+    # Substitute BEFORE the triangular solve, not after: solving against a NaN
+    # triangle can emit NaN that a later ``where`` would keep (the gradient of a
+    # ``where`` whose dead branch is NaN is still NaN), and this runs under vmap
+    # where that NaN would be a lane of the same batched array.
+    lower = jnp.where(ok, lower, identity)
+    matrix = jax.scipy.linalg.solve_triangular(lower, identity, lower=True).T
+    return matrix, lower.T, ok
+
+
+def _traced_metric_pair(logdensity_fn, position, data_args, *, strength, floor, max_condition):
+    """Metric at ``position`` and its tempered form, identity where non-finite."""
+    position = jnp.asarray(position)
+    identity = jnp.eye(position.shape[0], dtype=position.dtype)
+    metric = negative_hessian_metric(logdensity_fn, position, data_args, floor=floor)
+    finite = jnp.all(jnp.isfinite(metric)) & jnp.all(jnp.isfinite(position))
+    # Sanitize before the eigendecomposition rather than after. ``eigh`` on a NaN
+    # matrix is unspecified across backends -- cuSOLVER has been observed to
+    # return garbage rather than NaN -- so a lane that is going to fall back
+    # should never reach it.
+    metric = jnp.where(finite, metric, identity)
+    tempered = temper_metric(metric, strength=strength, max_condition=max_condition)
+    return metric, tempered, finite, identity
+
+
+def traced_preconditioner(
+    logdensity_fn: Callable,
+    position: jnp.ndarray,
+    data_args,
+    *,
+    strength: float = DEFAULT_WHITENING_STRENGTH,
+    floor: float = PRIOR_METRIC_FLOOR,
+    max_condition: float = MAX_METRIC_CONDITION,
+) -> tuple[LinearPreconditioner, jnp.ndarray]:
+    """Build the whitening transform **inside** a trace, one lane per galaxy.
+
+    The traced counterpart of :func:`prepare_preconditioning`. Same metric
+    (:math:`J^\\top N^{-1} J + I` via :func:`negative_hessian_metric`), same
+    tempering (:func:`temper_metric`), same Cholesky factorization -- and no
+    concrete boolean anywhere, so it composes with :func:`jax.vmap` and
+    :func:`jax.lax.map`.
+
+    Parameters
+    ----------
+    logdensity_fn : callable
+        ``log_p(xi, data_args) -> scalar`` in the standardized latent space.
+    position : array_like, shape (D,)
+        Expansion point for **this lane**, normally that galaxy's MAP.
+    data_args : pytree
+        **This lane's** observed-data tensors. Traced, so each galaxy's metric is
+        built from its own noise, which is the whole reason the metric cannot be
+        hoisted out of the vmap as a shared constant.
+    strength : float, optional
+        Whitening exponent :math:`\\alpha`. Static (a concrete Python float);
+        :func:`temper_metric` validates it. Default
+        :data:`DEFAULT_WHITENING_STRENGTH`.
+    floor, max_condition : float, optional
+        As for :func:`prepare_preconditioning`.
+
+    Returns
+    -------
+    preconditioner : LinearPreconditioner
+        ``A`` and ``A^-1`` as traced ``(D, D)`` arrays. Both are the identity on
+        a lane that fell back.
+    ok : ndarray, shape (), bool
+        Whether this lane was actually whitened. **Reduce and report it**: a
+        silent fallback is a galaxy sampled in a different basis from its
+        neighbors, and the draws are correctly shaped either way.
+
+    Notes
+    -----
+    **JIT/vmap-safe**, which is the entire point, and it is bought by replacing
+    :func:`metric_preconditioner`'s two raises with a per-lane fallback. The
+    single-fit path keeps the raises: there, a non-finite metric means the MAP
+    diverged and the caller can fix it, so failing loudly is better than
+    silently sampling an unwhitened posterior. In a catalog it is the other way
+    round.
+
+    **Memory**: dense ``(D, D)`` per lane, plus the ``(D, D)`` Hessian and two
+    eigendecompositions. A chunk of ``K`` galaxies therefore holds ``O(K D^2)``,
+    so ``K`` and ``D`` trade against each other; see
+    :data:`PRECONDITION_MAX_DIM` for where the ``O(D^3)`` factorization stops
+    having a measured cost profile.
+    """
+    _metric, tempered, finite, identity = _traced_metric_pair(
+        logdensity_fn,
+        position,
+        data_args,
+        strength=strength,
+        floor=floor,
+        max_condition=max_condition,
+    )
+    matrix, inverse, ok = _traced_transform(tempered, finite, identity)
+    return LinearPreconditioner(matrix=matrix, inverse=inverse), ok
+
+
+def traced_metric_conditioning(
+    logdensity_fn: Callable,
+    position: jnp.ndarray,
+    data_args,
+    *,
+    strength: float = DEFAULT_WHITENING_STRENGTH,
+    floor: float = PRIOR_METRIC_FLOOR,
+    max_condition: float = MAX_METRIC_CONDITION,
+) -> tuple[jnp.ndarray, jnp.ndarray, jnp.ndarray]:
+    """Condition numbers either side of the transform, as traced scalars.
+
+    The traced counterpart of :func:`_preconditioner_with_conditioning`, and the
+    only way a batched fit can report what its metric actually bought. Without
+    it a catalog run can say it whitened but not whether the whitening did
+    anything, which is how a 58x spread in throughput stayed invisible from
+    inside a fit.
+
+    Returns
+    -------
+    metric_condition : ndarray, shape ()
+        Condition number of the metric as built, before tempering.
+    whitened_condition : ndarray, shape ()
+        Condition number the sampler actually faces at ``position``.
+    ok : ndarray, shape (), bool
+        As for :func:`traced_preconditioner`. A lane that fell back reports
+        ``metric_condition == whitened_condition == 1.0``, because its metric was
+        replaced by the identity -- so read this flag before reading those two.
+
+    Notes
+    -----
+    **JIT/vmap-safe.** Deliberately a separate call from
+    :func:`traced_preconditioner` rather than an extra return value: it costs two
+    further ``(D, D)`` eigendecompositions, and those belong in a one-off
+    diagnostic pass over the catalog rather than inside the sampler's compiled
+    program, where they would be paid once and reported once but carried in every
+    graph.
+    """
+    metric, tempered, finite, identity = _traced_metric_pair(
+        logdensity_fn,
+        position,
+        data_args,
+        strength=strength,
+        floor=floor,
+        max_condition=max_condition,
+    )
+    matrix, _inverse, ok = _traced_transform(tempered, finite, identity)
+    raw = jnp.linalg.eigvalsh(metric)
+    whitened = matrix.T @ metric @ matrix
+    whitened_eigenvalues = jnp.linalg.eigvalsh(0.5 * (whitened + whitened.T))
+    return (
+        jnp.max(raw) / jnp.min(raw),
+        jnp.max(whitened_eigenvalues) / jnp.min(whitened_eigenvalues),
+        ok,
     )
 
 

@@ -89,11 +89,12 @@ class MissingParameterError(ParameterError):
 
 
 class ParameterDefaultMissingError(ParameterError):
-    """A parameter was marked FIXED without a physically-motivated default.
+    """A parameter was pinned at its registry default with no physically-motivated value to pin at.
 
     Raised by :func:`tengri.parameters.groups.parse_groups` when the
-    ``'all_params': FIXED`` wildcard (or an explicit short-form ``FIXED``) is applied
-    to a registry entry whose ``Distribution`` carries no ``default=``. Prior
+    ``'all_params': Fixed(DEFAULT)`` wildcard (or an explicit per-parameter
+    ``Fixed(DEFAULT)``) is applied to a registry entry whose ``Distribution``
+    carries no ``default=``. Prior
     behavior silently fell back to the midpoint of the prior support, which
     was an implicit and often physically wrong choice (e.g. ``Uniform(0, 5)``
     for ``log10(n_H/cm^-3)`` collapsed to 2.5 (316 cm^-3) when the
@@ -140,6 +141,65 @@ class InferenceError(TengriError, RuntimeError):
     """
 
 
+class DeadFitError(InferenceError):
+    """MCMC fit divergence detected; sampling halted (#2088, #2093).
+
+    Raised at two points in the MCMC pipeline:
+
+    1. **Pre-hoc (warmup-time, #2088)**: The final window of warmup ends with
+       essentially every transition divergent (``DEAD_WARMUP_DIVERGENCE_FRAC``
+       threshold, 0.9). A 4-chain NUTS fit whose every one of 2400 transitions
+       diverged spent 227 s in warmup and another 237 s sampling before
+       :class:`DeadFitWarning` could name the failure. The warmup's own
+       divergence record already held the verdict, so window-adaptation backends
+       (NUTS, HMC, dynamic HMC) now read the final window of that record and
+       refuse to sample. The adaptation is not cached, so the next call re-tunes.
+
+    2. **Post-hoc (sampling-time, #2093)**: Sampling completed but every
+       kept draw diverged (``DEAD_SAMPLING_DIVERGENCE_FRAC`` threshold, 0.9).
+       A fit that survived warmup but sampled a frozen posterior is logged
+       explicitly instead of silently: the cost was paid, but the result is
+       uninformative.
+
+    Raises rather than warns: there is nothing to return. A sampler that
+    rejects every proposal produces a frozen posterior, and the measured cause
+    is the data, not the tuning (fluxes 1000x too faint from a wrong AB zero
+    point pushed the stellar mass to its prior edge, where the bounded
+    transform runs to infinity).
+
+    Attributes
+    ----------
+    warmup_divergence_frac : float
+        Divergent fraction over the final warmup window (pre-hoc trigger).
+        NaN if triggered post-hoc.
+    sampling_divergence_frac : float
+        Divergent fraction over all post-burnin draws (post-hoc trigger).
+        NaN if triggered pre-hoc.
+    step_size : float
+        The adapted step size at the end of warmup (pre-hoc) or sampling
+        (post-hoc).
+    """
+
+    def __init__(
+        self,
+        message: str,
+        *,
+        warmup_divergence_frac: float = float("nan"),
+        sampling_divergence_frac: float = float("nan"),
+        step_size: float = float("nan"),
+    ):
+        # All measurements default so the exception survives ``pickle`` and
+        # ``copy``: ``BaseException.__reduce__`` re-invokes the constructor
+        # with ``self.args`` alone (the message) and restores ``__dict__``
+        # afterwards, so a required keyword argument would make every
+        # round-trip raise ``TypeError`` -- which is what a multiprocessing
+        # driver would surface in place of the refusal message.
+        super().__init__(message)
+        self.warmup_divergence_frac = float(warmup_divergence_frac)
+        self.sampling_divergence_frac = float(sampling_divergence_frac)
+        self.step_size = float(step_size)
+
+
 class TengriIOError(TengriError, OSError):
     """File I/O, missing data files, format mismatch.
 
@@ -179,8 +239,47 @@ class WildcardPartialFreeWarning(UserWarning):
     See Also
     --------
     tengri.config.exceptions.ParameterError
-        Raised instead when the wildcard frees *nothing*, which is never
-        intended.
+        Raised instead when the wildcard frees *nothing* but covered one or
+        more parameters, which is never intended.
+    tengri.config.exceptions.WildcardNoOpWarning
+        Warned instead when the wildcard covered *no* parameters at all --
+        the prior question to this one.
+    """
+
+
+class WildcardNoOpWarning(UserWarning):
+    """``all_params: FREE`` covered zero parameters -- there was nothing to free.
+
+    A group's declared parameters depend on the structural choice that
+    selected it: ``igm={'type': 'inoue14'}`` names no top-level knob unless
+    ``patchy=True`` also brings in ``igm_bubble_mpc``/``igm_x_HI``; ``radio``
+    and ``shock`` build no component at all when every sub-model is set to
+    ``'none'``. A ``'all_params': FREE`` written on one of these resolves
+    cleanly and the fit runs to completion with nothing in that group varying,
+    which is indistinguishable at the call site from a wildcard that did its
+    job -- there is no parameter list to be silent *about*, so nothing else
+    had reason to complain.
+
+    Distinct from :class:`ParameterError`: that fires when the wildcard did
+    cover one or more parameters and every one of them stayed pinned (each
+    has a declared prior that just is not a free one). This category is the
+    prior question -- there was nothing to attempt in the first place.
+
+    Warns rather than raises: a group that genuinely declares nothing under
+    the configuration in force (``igm`` without ``patchy``) is an ordinary,
+    working model, and the wildcard is simply inert there rather than wrong.
+    Filter this category if writing the wildcard anyway is deliberate (e.g. a
+    generic recipe that always sets ``'all_params': FREE`` across every
+    group it configures, whether or not a given group has anything to free).
+
+    See Also
+    --------
+    tengri.config.exceptions.ParameterError
+        Raised when the wildcard covered at least one parameter and freed
+        none of them.
+    tengri.config.exceptions.WildcardPartialFreeWarning
+        Warned when the wildcard covered several parameters and freed only
+        some.
     """
 
 
@@ -214,8 +313,9 @@ class DeadFitWarning(UserWarning):
     """An MCMC fit returned a dead posterior: frozen or 100% divergent (#1999).
 
     Two unambiguous signatures trigger this at :class:`Posterior` construction:
-    every transition diverged (``n_divergent == n_samples``), or a free
-    parameter shows a single unique draw across 100+ kept samples. Both mean
+    every kept draw across every chain diverged
+    (``n_divergent == n_samples * n_chains``, #2087), or a free parameter
+    shows a single unique draw across 100+ kept samples. Both mean
     the sampler rejected essentially every proposal, typically an adapted
     step size past the model's stability limit (#1999 isolated the dense
     mass-matrix adaptation as one trigger).
@@ -449,14 +549,14 @@ class DefaultFixedParametersWarning(AdvisoryWarning):
     emitted, so a user could believe they had configured an SFH when they had
     actually pinned it entirely.
 
-    Pass ``'all_params': FREE`` to fit the parameters, or ``'all_params': FIXED``
+    Pass ``'all_params': FREE`` to fit the parameters, or ``'all_params': Fixed(DEFAULT)``
     to state the intent explicitly and silence this warning. See
     :func:`~tengri.parameters.groups.parse_groups` for the grammar.
 
-    Warns rather than raising: explicitly stating ``'all_params': FIXED`` is a
+    Warns rather than raising: explicitly stating ``'all_params': Fixed(DEFAULT)`` is a
     legitimate and common pattern (e.g. when fitting only redshift). This warns
     to catch the accidental case where the user forgot to state a disposition.
-    Filter this category if the silent FIXED is deliberate.
+    Filter this category if the silent pin-at-default is deliberate.
     """
 
 

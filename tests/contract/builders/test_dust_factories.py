@@ -9,7 +9,7 @@ import pytest
 
 pytestmark = pytest.mark.contract
 
-from tengri import FIXED, FREE, Fixed, Uniform, builders, parse_groups
+from tengri import DEFAULT, FREE, Fixed, Uniform, builders, parse_groups
 from tengri.components.dust.attenuation import DUST_LAWS
 from tengri.parameters.groups import _valid_dust_emission_types
 
@@ -74,7 +74,7 @@ def test_two_component_shared_law_carries_law_string() -> None:
     out = builders.dust.two_component(law="calzetti")
     assert out == {
         "type": "two_component",
-        "all_params": FIXED,
+        "all_params": Fixed(DEFAULT),
         "law": "calzetti",
     }
 
@@ -83,7 +83,7 @@ def test_two_component_pair_law_carries_both_strings() -> None:
     out = builders.dust.two_component(law_bc="calzetti", law_diff="power_law")
     assert out == {
         "type": "two_component",
-        "all_params": FIXED,
+        "all_params": Fixed(DEFAULT),
         "law_bc": "calzetti",
         "law_diff": "power_law",
     }
@@ -98,13 +98,13 @@ def test_single_component_carries_one_law() -> None:
     out = builders.dust.single_component(law="calzetti")
     assert out == {
         "type": "single_component",
-        "all_params": FIXED,
+        "all_params": Fixed(DEFAULT),
         "law": "calzetti",
     }
 
 
 def test_emission_default_does_not_include_settings() -> None:
-    assert builders.dust.emission.dale2014() == {"type": "dale2014", "all_params": FIXED}
+    assert builders.dust.emission.dale2014() == {"type": "dale2014", "all_params": Fixed(DEFAULT)}
 
 
 # ── Settings validation ───────────────────────────────────────────
