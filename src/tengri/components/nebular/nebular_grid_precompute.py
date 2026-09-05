@@ -324,6 +324,28 @@ def _nion_of_state(state) -> jnp.ndarray:
     return jnp.sum(nion) if jnp.ndim(nion) else nion
 
 
+def _log_nion_of_state(state) -> jnp.ndarray:
+    """log10 Q_H [dex re photons/s], never materializing the ~1e53 linear value.
+
+    Q_H overflows float32 (max 3.4e38), so the stellar component publishes
+    ``log_nion`` alongside ``nion`` for exactly this reason. Falls back to the
+    log of the linear publish for a state that carries only the latter.
+    """
+    log_nion = state.derived.get("log_nion")
+    if log_nion is None:
+        return jnp.log10(_nion_of_state(state))
+    log_nion = jnp.asarray(log_nion)
+    if not jnp.ndim(log_nion):
+        return log_nion
+    # ``_nion_of_state`` sums a multi-component Q_H; the log-domain sum is
+    # logsumexp, not ``log10(sum(10**x))``, whose intermediate is the overflow
+    # this helper exists to avoid.
+    from jax.scipy.special import logsumexp
+
+    ln10 = jnp.log(jnp.asarray(10.0, dtype=log_nion.dtype))
+    return logsumexp(log_nion * ln10) / ln10
+
+
 def _refuse_tabulated_metallicity(model):
     """Refuse a tabulated metallicity, whose LUT axis cannot exist (#1718).
 
@@ -547,24 +569,39 @@ def precompute_nebular_grid(
         for i, name in enumerate(axis_names):
             p[name] = row[i]
         state = model.predict_state(p)
-        inv_qh = 1.0 / jnp.maximum(_nion_of_state(state), 1e-30)
+        # Q_H is ~1e53 photons/s, so the LINEAR ``nion`` is ``inf`` in float32 and
+        # ``inv_qh`` is then exactly 0. The reciprocal is only ever used as a
+        # divisor, so take it as a log offset instead and it never materializes
+        # (#1859). ``log10(1e-30) == -30`` reproduces the old clamp.
+        neg_log_qh = -jnp.maximum(_log_nion_of_state(state), -30.0)
         # intrinsic (redden=False) observed flux -> luminosity per Q_H
         flux = model.predict_line_fluxes(
             p, target_wavelengths=wavelengths, redden=False, state=state
         )
-        line_per_qh = apply_log10_scale(jnp.asarray(flux), log10_ref_divisor) * inv_qh
+        # The un-divided luminosity is ~1e40 against a float32 max of 3.4e38, so
+        # recovering it from the flux and *then* dividing by Q_H was ``inf * 0``.
+        # Both offsets are ~+55 and ~-53 dex and cancel to an O(1e-13) answer;
+        # applying them together is what keeps every intermediate in range.
+        line_per_qh = apply_log10_scale(jnp.asarray(flux), log10_ref_divisor + neg_log_qh)
         if not want_phot:
             return line_per_qh, None, None
         # intrinsic nebular filter-integrated rest-frame L_nu per Q_H (the exact
         # per-eval publish, captured once at build time). Absent when the model
         # has no WavePrecomp filters (line-only grid).
+        # Same reciprocal, same reason: ``inv_qh`` is ~1e-53, below float32's
+        # smallest subnormal (1.4e-45), so the linear multiply flushes the whole
+        # band to zero even though the ~1e-25 answer is representable.
         neb_phot = state.derived.get("nebular_phot_lnu_precomp")
-        phot_per_qh = None if neb_phot is None else jnp.asarray(neb_phot) * inv_qh
+        phot_per_qh = (
+            None if neb_phot is None else apply_log10_scale(jnp.asarray(neb_phot), neg_log_qh)
+        )
         # ...and its rest-frame twin, captured in the SAME forward (#1665).
         # Capturing only the observed band is what silently stripped the nebular
         # contribution out of every rest-frame band on the fast path.
         neb_rest = state.derived.get("nebular_restband_lnu_precomp")
-        rest_per_qh = None if neb_rest is None else jnp.asarray(neb_rest) * inv_qh
+        rest_per_qh = (
+            None if neb_rest is None else apply_log10_scale(jnp.asarray(neb_rest), neg_log_qh)
+        )
         return line_per_qh, phot_per_qh, rest_per_qh
 
     if not axis_names:
@@ -694,8 +731,12 @@ def reconstruct_nebular_lines(nion, params, redshift, table) -> jnp.ndarray:
     **JIT-compatible / gradient-safe**: yes, node-exact PCHIP interpolation + a
     scalar multiply + the cosmology divisor.
     """
-    return apply_log10_scale(
-        reconstruct_nebular_line_lums(nion, params, table), -_log10_four_pi_dl2(redshift)
+    # The intrinsic luminosity (~1e40 erg/s) and the divisor (~1e57) are both out
+    # of float32 range and in opposite directions while the flux (~1e-16) is not,
+    # so neither end is materialized: one exponent, one ``pow10`` (#1859).
+    return pow10(
+        reconstruct_nebular_line_log_lums(jnp.log10(jnp.asarray(nion)), params, table)
+        - _log10_four_pi_dl2(redshift)
     )
 
 
@@ -723,13 +764,66 @@ def reconstruct_nebular_line_lums(nion, params, table) -> jnp.ndarray:
     -------
     ndarray, shape (n_lines,)
         Intrinsic line luminosities [erg/s].
+
+    Notes
+    -----
+    **Not float32-safe, by construction**: a line luminosity is ~1e40 erg/s and
+    ``nion`` ~1e53, both past float32's 3.4e38 ceiling, so this returns ``inf``
+    there. That is a property of the erg/s contract, not a defect. Callers that
+    must work at either precision take
+    :func:`reconstruct_nebular_line_log_lums` and stay in the exponent, which is
+    what :meth:`~tengri.forward.sed_model.SEDModel.predict_line_fluxes` does.
+    """
+    return pow10(reconstruct_nebular_line_log_lums(jnp.log10(jnp.asarray(nion)), params, table))
+
+
+def reconstruct_nebular_line_log_lums(log_nion, params, table) -> jnp.ndarray:
+    r"""log10 intrinsic line luminosities from the grid — the float32-safe form.
+
+    .. math::
+
+        \log_{10} L_{\rm line} = \log_{10} n_{\rm ion} + \log_{10}\ell
+
+    with :math:`\ell` the interpolated luminosity-per-Q_H and :math:`n_{\rm ion}`
+    the ionizing photon rate [photons/s].
+
+    The linear sibling :func:`reconstruct_nebular_line_lums` multiplies a ~1e53
+    :math:`n_{\rm ion}` by a ~1e-13 table value. Against a float32 max of 3.4e38
+    the factor is ``inf`` before the multiply and the ~1e40 product would be out of
+    range anyway, so the linear spelling is ``inf`` and the flux it feeds is
+    ``nan`` (#1859) — while the ~1e-16 flux at the end of the chain is
+    representable throughout. Adding the exponents keeps every intermediate in
+    range, and it is the same closing step :func:`reconstruct_nebular_phot`
+    already uses for the broadband twin — the line channel simply never got it.
+
+    Parameters
+    ----------
+    log_nion : ndarray, shape ()
+        log10 ionizing photon rate [dex re photons/s] (stellar-published
+        ``log_nion``; == log10(q_h)).
+    params : Mapping
+        Parameter dict: the free-axis values (``params[name]`` for ``name`` in
+        ``table.axis_names``) locate the query point. Use full public names
+        (``met_logzsol`` / ``neb_logU`` / ``neb_logZ_gas``).
+    table : NebularGridTable
+        The grid from :func:`precompute_nebular_grid`.
+
+    Returns
+    -------
+    ndarray, shape (n_lines,)
+        log10 intrinsic line luminosities [dex re erg/s].
+
+    Notes
+    -----
+    **JIT-compatible / gradient-safe**: yes, node-exact PCHIP interpolation plus
+    a scalar add.
     """
     if not table.axis_names:
         log_lpq = table.log_line_per_qh
     else:
         point = tuple(jnp.asarray(params[name]).reshape(()) for name in table.axis_names)
         log_lpq = interp_nd_pchip(table.log_line_per_qh, table.axes, point, _kinds(table))
-    return jnp.asarray(nion) * (10.0**log_lpq)  # node-exact geometric interp
+    return jnp.asarray(log_nion) + log_lpq  # node-exact geometric interp
 
 
 def reconstruct_nebular_phot(log_nion, params, table) -> jnp.ndarray:

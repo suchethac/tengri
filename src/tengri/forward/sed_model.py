@@ -5310,6 +5310,17 @@ class SEDModel:
         # ``ssp_weights`` + ``ssp_log_ages_yr`` and the canonical
         # neb_logZ_gas → absolute-log10(Z) translation.
         #
+        # The float32-safe carrier (#1859). A line luminosity is ~1e40 erg/s against
+        # a float32 max of 3.4e38 and ``4*pi*d_L**2`` is ~1e57, so the LINEAR
+        # catalog is out of range in both directions while the flux it makes sits
+        # comfortably inside: materializing either end is ``inf``, and ``inf/inf``
+        # is the ``nan`` this operator returned on every line at every redshift.
+        # ``log_all_lums`` carries log10(L/[erg/s]) instead wherever a producer can
+        # supply one, and the cosmology tail below exponentiates ONCE, with the
+        # distance already folded into the exponent. ``all_lums`` stays the linear
+        # fallback for producers that cannot, and is bit-identical there.
+        log_all_lums = None
+        all_lums = None
         grid = getattr(self, "_nebular_grid_table", None)
         if grid is not None:
             # FAST path (#950): reconstruct intrinsic line luminosities from the
@@ -5318,16 +5329,21 @@ class SEDModel:
             # ``compute_nion``); the grid supplies ``L_line / Q_H``. The shared
             # redden + target-match + cosmology tail below is unchanged.
             from tengri.components.nebular.nebular_grid_precompute import (
-                reconstruct_nebular_line_lums,
+                _log_nion_of_state,
+                reconstruct_nebular_line_log_lums,
             )
 
-            if state is not None and "nion" in state.derived:
-                nion = state.derived["nion"]
+            # Q_H is ~1e53 photons/s and the table value ~1e-13, so the linear
+            # ``nion * interp`` is ``inf * subnormal`` in float32. Take the log
+            # publish and add exponents — the same closing step the broadband twin
+            # ``reconstruct_nebular_phot`` has always used.
+            if state is not None and ("log_nion" in state.derived or "nion" in state.derived):
+                log_nion = _log_nion_of_state(state)
             else:
-                nion = self._compute_nion(params)
-            nion = jnp.sum(nion) if jnp.ndim(nion) else nion
+                log_nion = self._compute_log_nion(params)
+                log_nion = jnp.squeeze(log_nion) if jnp.ndim(log_nion) else log_nion
             all_waves = jnp.asarray(grid.wavelengths)
-            all_lums = reconstruct_nebular_line_lums(nion, params, grid)
+            log_all_lums = reconstruct_nebular_line_log_lums(log_nion, params, grid)
         else:
             # ``state`` may be supplied by a caller that has already run the
             # forward (e.g. the joint loss deriving line fluxes + ratios +
@@ -5346,6 +5362,15 @@ class SEDModel:
                 )
             all_waves = jnp.asarray(state.derived["line_waves"])
             all_lums = jnp.asarray(state.derived["line_lums"])
+            # ``line_lums`` is the LINEAR erg/s catalog and a strong optical line is
+            # ~1e40 against a float32 max of 3.4e38, so it arrives here already
+            # ``inf`` in float32 (measured: 84 of Cue's 128 lines). The backend
+            # publishes the same catalog in log10 alongside it precisely so the
+            # overflow has a way round (#1859); prefer it and never materialize the
+            # linear form. See the ``log_all_lums`` note above.
+            _log_lums = state.derived.get("log_line_lums")
+            if _log_lums is not None:
+                log_all_lums = jnp.asarray(_log_lums)
 
         # Dust-redden the lines at their wavelengths. Reads the catalog the dust
         # component published (#1867) rather than computing its own, so this
@@ -5373,10 +5398,20 @@ class SEDModel:
                 state.derived.get("log_line_lums_attenuated") if state is not None else None
             )
             if _log_atten is None:
-                all_lums = self._attenuate_line_catalog(params, all_waves, all_lums)
+                if log_all_lums is None:
+                    all_lums = self._attenuate_line_catalog(params, all_waves, all_lums)
+                else:
+                    # Attenuation is a pure multiplicative screen
+                    # (``attenuate_emission`` is ``sed * exp(-tau_bc k_bc) *
+                    # exp(-tau_diff k_diff)``), so in the log carrier it is an ADD.
+                    # Taking the screen from the same helper on a unit catalog keeps
+                    # this surface on the ONE screen #1867 single-sourced, rather
+                    # than growing a second copy of the dust law here.
+                    screen = self._attenuate_line_catalog(
+                        params, all_waves, jnp.ones_like(jnp.asarray(all_waves))
+                    )
+                    log_all_lums = log_all_lums + jnp.log10(screen)
             else:
-                from tengri.utils.scale import pow10
-
                 # The published catalog is indexed on ``state.derived['line_waves']``
                 # (the backend's FULL line list) while the fast branch above set
                 # ``all_waves`` to ``grid.wavelengths``, which holds only the lines
@@ -5396,7 +5431,10 @@ class SEDModel:
                 # the nebular component publishing the attenuated catalog (#1281).
                 # A dust-free model publishes none, takes the fallback screen above,
                 # and was never affected.
-                all_lums = pow10(jnp.asarray(_log_atten))
+                # The attenuated catalog is published in log10 (#1859). Powering it
+                # back to ~1e40 erg/s here was the overflow: it is ``inf`` in
+                # float32 before the distance division ever runs. Carry the log.
+                log_all_lums = jnp.asarray(_log_atten)
                 all_waves = jnp.asarray(state.derived["line_waves"])
 
         if target_wavelengths is not None:
@@ -5435,9 +5473,11 @@ class SEDModel:
                         f"Pass tolerance_aa=None to disable, or pick a backend "
                         f"that publishes the missing line(s)."
                     )
-            selected_lums = all_lums[indices]
+            selected_lums = None if all_lums is None else all_lums[indices]
+            selected_log_lums = None if log_all_lums is None else log_all_lums[indices]
         else:
             selected_lums = all_lums
+            selected_log_lums = log_all_lums
 
         dl_cm = self._get_dl_cm(params)
         # ``line_lums`` are published in erg/s (DerivedKey contract in
@@ -5445,6 +5485,17 @@ class SEDModel:
         # L_SUN was a 33.6-dex unit error that made every joint
         # photometry+line-flux fit unusable against real data.
         log10_scale = -log10_four_pi_dl2(dl_cm)
+        if selected_log_lums is not None:
+            # ONE exponentiation, with the ~-55 dex distance already inside it. The
+            # ~1e40 numerator and the ~1e57 denominator both exist only as exponents
+            # and the ~1e-16 answer is what materializes, so every intermediate is in
+            # float32 range. This is the grouping #1859 applied to
+            # ``_line_flux_from_means``; ``predict_line_fluxes`` is the operator
+            # ``loss_functions`` selects for Cue and every other line-publishing
+            # backend, and it never got it.
+            from tengri.utils.scale import pow10
+
+            return pow10(selected_log_lums + log10_scale)
         flux = apply_log10_scale(selected_lums, log10_scale)
         return flux
 
@@ -5603,6 +5654,28 @@ class SEDModel:
             raise ValueError("No StellarSEDComponent in the chain, cannot compute Q_H.")
         sliced = slice_params_for_component(stellar, params)
         return stellar.compute_nion(sliced, ssp_data=self.ssp_data)
+
+    def _compute_log_nion(self, params):
+        """SED-free log10 :math:`Q_H` [dex re photons/s]; the float32-safe sibling.
+
+        :meth:`_compute_nion` exponentiates a ~52.8 dex result, which is ``inf`` in
+        float32 (max 3.4e38) — and ``log10(inf)`` is ``inf``, so a caller that only
+        wanted the exponent back paid an irrecoverable overflow for the round trip.
+        ``StellarSEDComponent.compute_log_nion`` is the log-domain core
+        :meth:`~tengri.components.stellar.component.StellarSEDComponent.compute_nion`
+        itself wraps, so this is the shorter path as well as the safe one.
+        """
+        from tengri.components.stellar.component import StellarSEDComponent
+        from tengri.forward.orchestrator import slice_params_for_component
+
+        chain = getattr(self, "_cached_component_chain", None)
+        if chain is None:
+            chain = self._cached_component_chain = self._build_component_chain()
+        stellar = next((c for c in chain if isinstance(c, StellarSEDComponent)), None)
+        if stellar is None:
+            raise ValueError("No StellarSEDComponent in the chain, cannot compute Q_H.")
+        sliced = slice_params_for_component(stellar, params)
+        return stellar.compute_log_nion(sliced, ssp_data=self.ssp_data)
 
     def predict_line_ratios(self, params, line_ratio_data, *, state=None):
         """Predict emission line ratios for a :class:`LineRatioData` set.
@@ -6056,12 +6129,10 @@ class SEDModel:
 
         if approx:
             from tengri.components.dust.two_component import DustSEDComponent
-            from tengri.components.stellar.sps.dsps_wrapper import LSUN_ERG_PER_S
 
             chain = self._feature_chain()
             stellar = self._require_feature_fast_eligible(chain, caller="measure_line_fluxes")
             joint_weights, total_mass, ssp_ages_yr = stellar.compute_joint_weights(params)
-            scale = total_mass * LSUN_ERG_PER_S
             pc = self._line_window_precomp(line_defs)
             dust = next((c for c in chain if isinstance(c, DustSEDComponent)), None)
             if dust is None:
@@ -6069,7 +6140,7 @@ class SEDModel:
             else:
                 transmission = dust.compute_transmission(params, pc.window_centers, ssp_ages_yr)
             return measure_line_fluxes_from_window_lut(
-                joint_weights, scale, transmission, pc, log10_4pi_dl2
+                joint_weights, total_mass, transmission, pc, log10_4pi_dl2
             )
 
         if state is None:
