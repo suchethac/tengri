@@ -482,15 +482,15 @@ class TestFusedKernelSpeedup:
         # what made the old wall-clock form blind. We pass the precomputed
         # tables as traced arguments so the two paths have distinct code.
         flops_unfused = _flops(
-            lambda sfr, lz, tv1, tv2, ssp_p, ssp_m, ages, dw: jnp.sum(
+            lambda sfr, lz, tv1, tv2, ssp_p, ssp_m, ages, dw, eff_w, flux_s: jnp.sum(
                 _unfused_photometry(
                     sfr,
                     ssp_p,
                     ssp_m,
                     ages,
-                    eff_waves_rest,
+                    eff_w,
                     dw,
-                    log10_flux_scale,
+                    flux_s,
                     lz,
                     tv1,
                     tv2,
@@ -505,6 +505,8 @@ class TestFusedKernelSpeedup:
             ssp_lgmet,
             ssp_ages_yr,
             dust_age_weights,
+            eff_waves_rest,
+            jnp.asarray(log10_flux_scale),
         )
 
         # Build the fused fn INSIDE the traced function so the SSP tables and
@@ -513,13 +515,13 @@ class TestFusedKernelSpeedup:
         # exact #1696 blindness this guard exists to prevent -- and make the
         # two arms incomparable (folded constants vs traced arrays).
         flops_fused = _flops(
-            lambda sfr, lz, tv1, tv2, ssp_p, ssp_m, ages, dw: jnp.sum(
+            lambda sfr, lz, tv1, tv2, ssp_p, ssp_m, ages, dw, eff_w, flux_s: jnp.sum(
                 _make_fused_phot(
                     ssp_p,
                     ssp_m,
-                    eff_waves_rest,
+                    eff_w,
                     dw,
-                    log10_flux_scale,
+                    flux_s,
                     ages,
                 )(sfr, lz, tv1, tv2, -0.7)
             ),
@@ -531,6 +533,8 @@ class TestFusedKernelSpeedup:
             ssp_lgmet,
             ssp_ages_yr,
             dust_age_weights,
+            eff_waves_rest,
+            jnp.asarray(log10_flux_scale),
         )
 
         assert flops_fused < flops_unfused, (
@@ -563,15 +567,15 @@ class TestFusedKernelSpeedup:
 
         # Unfused path (unchanged)
         flops_unfused = _flops(
-            lambda sfr, lz, tv1, tv2, ssp_p, ssp_m, ages, dw: jnp.sum(
+            lambda sfr, lz, tv1, tv2, ssp_p, ssp_m, ages, dw, eff_w, flux_s: jnp.sum(
                 _unfused_photometry(
                     sfr,
                     ssp_p,
                     ssp_m,
                     ages,
-                    eff_waves_rest,
+                    eff_w,
                     dw,
-                    log10_flux_scale,
+                    flux_s,
                     lz,
                     tv1,
                     tv2,
@@ -586,20 +590,22 @@ class TestFusedKernelSpeedup:
             ssp_lgmet,
             ssp_ages_yr,
             dust_age_weights,
+            eff_waves_rest,
+            jnp.asarray(log10_flux_scale),
         )
 
         # MUTANT: Fused path replaced with unfused implementation
         # This simulates the degradation the guard should catch
         flops_fused_mutant = _flops(
-            lambda sfr, lz, tv1, tv2, ssp_p, ssp_m, ages, dw: jnp.sum(
+            lambda sfr, lz, tv1, tv2, ssp_p, ssp_m, ages, dw, eff_w, flux_s: jnp.sum(
                 _unfused_photometry(  # <-- MUTANT: unfused instead of fused
                     sfr,
                     ssp_p,
                     ssp_m,
                     ages,
-                    eff_waves_rest,
+                    eff_w,
                     dw,
-                    log10_flux_scale,
+                    flux_s,
                     lz,
                     tv1,
                     tv2,
@@ -614,6 +620,8 @@ class TestFusedKernelSpeedup:
             ssp_lgmet,
             ssp_ages_yr,
             dust_age_weights,
+            eff_waves_rest,
+            jnp.asarray(log10_flux_scale),
         )
 
         # The FLOP counts must be equal (or close) under the mutation

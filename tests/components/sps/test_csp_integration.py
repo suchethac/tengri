@@ -256,7 +256,7 @@ class TestCspBenchmark:
             ages,
         )
 
-        assert flops_precomputed <= flops_inline, (
+        assert flops_precomputed < flops_inline, (
             f"Precomputed path does more work: {flops_precomputed:,.0f} FLOPs "
             f"vs inline {flops_inline:,.0f}. A precomputed path should do <= work "
             f"compared to inline computation."
