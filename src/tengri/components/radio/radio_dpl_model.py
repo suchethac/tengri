@@ -24,17 +24,13 @@ __all__ = ["RadioDPL"]
 class RadioDPL(SEDModelComponent):
     r"""Radio synchrotron + free-free + AGN double-power-law with aging cutoff.
 
-    AGNfitter-rx broken double power-law:
+    AGNfitter-rx broken double power-law with smooth transition (Martinez-Ramirez+2024):
 
     .. math::
 
-        S_\nu^{\rm AGN} =
-            \begin{cases}
-                S_{\rm t}\,(\nu/\nu_{\rm t})^{\alpha_{\rm thin}}\,e^{-\nu/\nu_{\rm cut}}
-                    & \nu < \nu_{\rm t} \\
-                S_{\rm t}\,(\nu/\nu_{\rm t})^{\alpha_{\rm thick}}\,e^{-\nu/\nu_{\rm cut}}
-                    & \nu \geq \nu_{\rm t}
-            \end{cases}
+        L_\nu = L_{5\,\mathrm{GHz}} \left(\frac{\nu}{\nu_t}\right)^{\alpha_1}
+        \left[1 - \exp\left(-\left(\frac{\nu_t}{\nu}\right)^{\alpha_1 - \alpha_2}
+        \right)\right] \exp\left(-\frac{\nu}{\nu_{\mathrm{cut}}}\right)
 
     Pairs with the SF (Bell+2003 q_IR) and optional thermal free-free
     components: those flow through the standard radio primitive.
