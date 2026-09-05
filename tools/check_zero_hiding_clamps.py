@@ -137,7 +137,21 @@ from collections.abc import Sequence
 #: the second kind (a template that resamples to nothing on the grid emits
 #: nothing), selected rather than clamped, so it is not a clamped
 #: denominator and leaves this inventory.
-EXPECTED_SITES = 95
+#:
+#: 95 -> 94 with the float32 line-channel fix. The retired site is
+#: ``nebular_grid_precompute``'s ``inv_qh = 1.0 / jnp.maximum(nion, 1e-30)``.
+#: Like the #1860 pair above this is a genuine retirement rather than a hoist:
+#: the reciprocal existed only to be used as a divisor, and it is now applied as
+#: a ``-log10 Q_H`` offset, so there is no denominator left to clamp.
+#:
+#: The clamp was not the defect but it was hiding one. Q_H is ~1e53 photons/s,
+#: so in float32 ``nion`` is ``inf``, ``jnp.maximum(inf, 1e-30)`` is ``inf``, and
+#: the reciprocal is exactly 0.0 — a clamp that fires on the wrong end of the
+#: range and returns a plausible zero. Downstream that made ``inf * 0`` -> NaN on
+#: the line column and silently flushed the photometry and rest-band per-Q_H
+#: columns to zero (~1e-53 is below float32's smallest subnormal anyway). The
+#: count falling is a consequence of carrying the exponent instead, not the goal.
+EXPECTED_SITES = 94
 
 SRC = pathlib.Path(__file__).resolve().parent.parent / "src" / "tengri"
 

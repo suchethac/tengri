@@ -124,9 +124,15 @@ _F32_DERIVATIVE_BOUND = 1.0844e-19
 #: first and normalized on the evaluation grid through a ``jnp.where``-selected
 #: division, so the floored denominator is gone rather than moved.
 #:
+#: 45 -> 44 with the float32 line-channel fix: ``nebular_grid_precompute``'s
+#: ``1.0 / jnp.maximum(nion, 1e-30)`` is gone, not re-floored. Q_H is ~1e53, so
+#: in float32 the clamped denominator was ``inf`` and the quotient exactly 0.0;
+#: the reciprocal is now a ``-log10 Q_H`` offset and there is no denominator.
+#: This is the "migrated, so lower the pin" case the check below asks for.
+#:
 #: Do NOT raise this to make a red run green. A rise means a new site was added,
 #: which is the thing this exists to prevent.
-_PINNED_DENOMINATORS = 45
+_PINNED_DENOMINATORS = 44
 
 
 def _derivative_unsafe_denominators(tree: ast.AST) -> list[tuple[int, float]]:

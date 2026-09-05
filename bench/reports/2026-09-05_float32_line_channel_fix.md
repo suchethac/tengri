@@ -21,10 +21,19 @@ relative error **3.36e-15 against the old 4.73e-15**. Bit-identity is unattainab
 there in principle, and the reason is stated below rather than waved at.
 
 **Platform:** Linux 6.8, AMD Ryzen 9 5900X (`JAX_PLATFORMS=cpu`), JAX 0.11.0 /
-jaxlib 0.11.0. Branch `float32-line-channel-fix` off `origin/main` at `4e6902631`,
-with the three measurement commits of `float32-spectroscopy-lines` cherry-picked so
-the pinned `xfail`s are present to convert. Every run set
-`TENGRI_DISABLE_JAX_CACHE=1` (the box was shared).
+jaxlib 0.11.0. Branch `float32-line-channel-fix`, **stacked on
+`float32-spectroscopy-lines`** (PR #2143) at `eb66d8f34`, which is itself rebased
+onto `origin/main`. The measurement branch carries the strict `xfail`s this work
+converts; stacking rather than cherry-picking keeps a single copy of those
+assertions, so the diff here shows the fix and the flipped assertions and nothing
+else. Every run set `TENGRI_DISABLE_JAX_CACHE=1` (the box was shared).
+
+**Every number below was re-taken after that rebase**, in a private scratch
+directory, rather than carried over: the branch this work stacks on moved under it,
+and a second agent was writing to the scratch directory the first pass had used. The
+re-take reproduced the earlier run **to the digit on all 13 seams** — which is the
+evidence that neither the rebase nor the shared directory disturbed anything, and
+not something that was assumed.
 
 **Precision** is proven throughout on **the dtype of the array that came back**,
 never on `jax.config.jax_enable_x64` — #1840: `tengri/__init__.py` re-enables x64 on
@@ -225,6 +234,31 @@ reference, and a probe that re-implements the thing it is measuring is not an
 instrument.
 
 ---
+
+### Three ratchets that the fix tripped by succeeding
+
+Running the `lint` list extracted from this branch's own
+`.github/workflows/tests.yml` — with the PR template's `sed` commands rather than a
+transcription — caught three failures that `ruff` and `pytest` do not see, all of
+them the *fix* moving a counter the repo pins:
+
+* `check_zero_hiding_clamps.py`: 96 → **95**. The retired site is
+  `inv_qh = 1.0 / jnp.maximum(nion, 1e-30)`. A genuine retirement, not a hoist: the
+  reciprocal existed only to be a divisor and is now a `−log10 Q_H` offset, so no
+  denominator remains. **The clamp was not the defect but it was hiding one** —
+  `jnp.maximum(inf, 1e-30)` is `inf`, so in float32 that guard fired on the wrong
+  end of the range and handed back a plausible `0.0`.
+* `check_representable_floors.py`: 46 → **45**, the same site.
+* `check_numeric_guards.py`: one bucket moved from `floor 1e-30` to `floor -30.0` in
+  `nebular_grid_precompute`. That is the *same* guard re-expressed in log space
+  (−30 dex ≡ 1e-30 linear), not a new 30-orders-smaller floor; the matcher reads the
+  literal, not the space it lives in, so the ledger carries a note saying so. Its
+  own header documents a same-bucket-swap blind spot — this was a **cross**-bucket
+  swap, and the guard caught it.
+
+Both pins were lowered with a stated reason, per each tool's own instruction, never
+raised. Regenerating the ledger also silently dropped a hand-written comment line
+from it; that line is restored and the ledger now warns about the behavior.
 
 ### A guard that was waiting for this
 
