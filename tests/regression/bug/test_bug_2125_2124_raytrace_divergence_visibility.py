@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: BSD-3-Clause
 """Tests for #2125 (non-finite proposal visibility with auto-backoff) and #2124 (step reduction).
 
 #2125: sample_raytrace counts non-finite proposal energies instead of silently
