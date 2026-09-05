@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: BSD-3-Clause
 """Regression tests for issue #1999: dense mass matrix step size stability.
 
 The dense_mass_matrix option in window_adaptation can return a step size ~6x

@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: BSD-3-Clause
 """#1999: dense-mass HMC on the SpectrumPrecomp arm samples live.
 
 The frozen arm from the 2026-08-24 evidence matrix (the notebook-06
