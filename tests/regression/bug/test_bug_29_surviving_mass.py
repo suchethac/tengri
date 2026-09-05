@@ -55,30 +55,80 @@ class TestBug29MstarSurvivingMass:
         assert jnp.all(mr > 0.0), "Mass-remaining fractions must be positive"
         assert jnp.all(mr <= 1.0), "Mass-remaining fractions must be <= 1"
 
-    def test_orchestrator_exposes_surviving_mass(self):
+    def test_orchestrator_exposes_surviving_mass(self, synthetic_ssp_wide):
         """The orchestrator path must compute and expose surviving stellar mass.
 
-        Originally pinned to the legacy ``sed_pipeline.compute_sed_components``
-        output dict (deleted in Phase B closure). The equivalent invariant —
-        that surviving mass is computed via ``compute_surviving_mass`` (not
-        a bare ``jnp.sum(weights)``) — is now upheld in StellarSEDComponent
-        and the SEDModel orchestrator helpers.
+        Regression: #29. The StellarSEDComponent must publish both mstar_formed
+        and mstar_surv into the state.derived dict via compute_surviving_mass.
+
+        Test: Build a model, get state, and verify:
+        1. Both mstar_formed and mstar_surv are published
+        2. mstar_surv < mstar_formed (mass is lost to stellar evolution)
+        3. The ratio is consistent with age-dependent mass-remaining fractions
         """
-        import inspect
+        import jax
 
-        from tengri.components.stellar import component as stellar_component
-        from tengri.forward import prediction, sed_model
+        from tengri import FREE, Fixed, SEDModel, SSPData
 
-        stellar_src = inspect.getsource(stellar_component)
-        assert "compute_surviving_mass" in stellar_src, (
-            "StellarSEDComponent must call compute_surviving_mass"
+        # ``synthetic_ssp_wide`` carries no ``ssp_mass_remaining``, so on it the
+        # orchestrator publishes ``log_mstar_surviving`` as NaN. An earlier version
+        # of this test guarded every assertion below with
+        # ``if jnp.isfinite(log_mstar_surviving):`` and so passed while checking
+        # nothing at all about surviving mass -- the entire subject of #29.
+        # Supply the grid the claim needs rather than skipping around its absence.
+        base = synthetic_ssp_wide
+        n_met = base.ssp_lgmet.shape[0]
+        n_age = base.ssp_lg_age_gyr.shape[0]
+        # Decreasing with age: a young population keeps nearly all its mass, a
+        # 13.8 Gyr one keeps ~0.55 (B&C03, Kroupa IMF).
+        frac = jnp.linspace(0.98, 0.55, n_age)
+        ssp = SSPData(
+            ssp_wave=base.ssp_wave,
+            ssp_flux=base.ssp_flux,
+            ssp_lg_age_gyr=base.ssp_lg_age_gyr,
+            ssp_lgmet=base.ssp_lgmet,
+            ssp_mass_remaining=jnp.broadcast_to(frac[None, :], (n_met, n_age)),
         )
-        assert "mstar_surv" in stellar_src, (
-            "StellarSEDComponent must publish mstar_surv into pipeline state"
+
+        model = SEDModel.build(
+            ssp_data=ssp,
+            observation=None,
+            sfh={"type": "dpl", "all_params": FREE},
+            met={"logzsol": Fixed(0.0)},
+            redshift=Fixed(0.0),
+        )
+        params = model.spec.sample(jax.random.PRNGKey(0))
+        state = model.predict_state(params)
+
+        assert "log_mstar_formed" in state.derived, (
+            "log_mstar_formed must be published in ForwardState.derived"
+        )
+        assert "log_mstar_surviving" in state.derived, (
+            "log_mstar_surviving must be published in ForwardState.derived"
         )
 
-        sed_src = inspect.getsource(sed_model)
-        pred_src = inspect.getsource(prediction)
-        assert "compute_surviving_mass" in sed_src or "compute_surviving_mass" in pred_src, (
-            "SEDModel/Prediction must call compute_surviving_mass for derived mass"
+        log_formed = state.derived["log_mstar_formed"]
+        log_surviving = state.derived["log_mstar_surviving"]
+
+        # Unconditional: a non-finite value here is the failure, not a reason to skip.
+        assert jnp.isfinite(log_formed), f"log_mstar_formed must be finite, got {log_formed}"
+        assert jnp.isfinite(log_surviving), (
+            f"log_mstar_surviving is {log_surviving}: this SSP supplies "
+            f"ssp_mass_remaining, so a non-finite value means the surviving-mass "
+            f"path never ran"
+        )
+
+        f_surv = float(10.0 ** (log_surviving - log_formed))
+        assert 0.0 < f_surv < 1.0, (
+            f"surviving fraction must lie in (0, 1); got {f_surv:.4f}. Equal masses "
+            f"mean the mass-remaining weighting was never applied -- the #29 defect"
+        )
+        # Tighter than (0, 1): an SFH-weighted mean of a profile bounded by
+        # [0.55, 0.98] cannot fall outside those bounds. This is what separates
+        # "a surviving fraction was applied" from "this particular grid was used".
+        assert float(frac.min()) <= f_surv <= float(frac.max()), (
+            f"surviving fraction {f_surv:.4f} lies outside the range the supplied "
+            f"mass-remaining grid spans ([{float(frac.min()):.2f}, "
+            f"{float(frac.max()):.2f}]): the published value is not a weighted mean "
+            f"of this grid"
         )

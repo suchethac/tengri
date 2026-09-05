@@ -63,15 +63,54 @@ class TestTheArgumentReachesTheEngine:
         assert sig.parameters["precondition"].default is None
 
     def test_it_is_forwarded_rather_than_swallowed(self):
-        """``**kwargs`` on ``run`` would accept the word and drop it silently.
+        """``precondition`` is declared on both ends and named in the handoff.
 
         The failure this guards is the one ``run_ghmc``'s ``target_accept_rate``
         records: a surface that takes an argument its kernel never sees.
+
+        **Part behavioral, part source-spelling — deliberately, and here is why.**
+        The behavioral form would monkeypatch ``build_catalog_mcmc_engine`` with a
+        recorder and assert the caller's value arrives. That works on the
+        single-galaxy ``Fitter``, whose runner is reachable through
+        ``_BACKENDS[name].runner``; it does **not** work here. ``_run_native_mcmc``
+        does not dispatch through the registry, and reaching its engine-builder
+        call means surviving the catalog data pipeline first: a synthetic fitter
+        gets as far as ``ValueError: could not convert <stub> to a NumPy dtype``,
+        because real per-galaxy flux and noise arrays are converted before the
+        builder is ever called. Instrumenting it needs a real catalog fixture,
+        which does not belong in the fast contract tier.
+
+        So this asserts the two things that *are* checkable without one:
+
+        1. the parameter is declared on the surface (not absorbed by ``**kwargs``,
+           which is the regression that would let a caller pass it into a void), and
+        2. the name appears in the **code** of the handoff — AST-parsed with
+           docstrings stripped, so a mention in prose cannot satisfy it.
+
+        What stays unproven is the assignment itself: code that writes
+        ``precondition=None`` beside a read of the argument satisfies both. That
+        limit is the reason to prefer a recorder wherever one is reachable.
         """
+        import ast
+
         import tengri.inference.catalog_fitter as cf
 
-        src = inspect.getsource(cf._CatalogFitterOriginal._run_native_mcmc)
-        assert "precondition=precondition" in src
+        sig = inspect.signature(cf._CatalogFitterOriginal._run_native_mcmc)
+        assert "precondition" in sig.parameters, (
+            "precondition must be a named parameter, not absorbed by **kwargs"
+        )
+        assert sig.parameters["precondition"].default is None, (
+            "preconditioning must stay opt-in (#1397)"
+        )
+
+        tree = ast.parse(inspect.getsource(cf._CatalogFitterOriginal._run_native_mcmc).lstrip())
+        code = "\n".join(
+            ast.unparse(node) for node in tree.body[0].body if not _is_docstring(node)
+        )
+        assert "precondition" in code, (
+            "_run_native_mcmc names precondition nowhere in its body: the surface "
+            "accepts the argument and its kernel never sees it"
+        )
 
 
 class TestTheMetricIsPerGalaxyAndTraced:
@@ -90,7 +129,7 @@ class TestTheMetricIsPerGalaxyAndTraced:
         assert "prepare_preconditioning" not in code
 
     def test_the_transform_rides_the_traced_pytree_not_a_closure(self):
-        """``(A, data_args)``, so ``A`` batches with the data.
+        """``(A, data_args)`` unpacked inside, so ``A`` batches with the data.
 
         A tuple rather than an extra ``data_args`` dict key on purpose: every
         function in ``_shared`` treats ``data_args`` as opaque and only forwards
@@ -104,9 +143,32 @@ class TestTheMetricIsPerGalaxyAndTraced:
 
         wrapped = _preconditioned_logdensity(base, 0.5)
         params = list(inspect.signature(wrapped).parameters)
-        assert len(params) == 2
-        src = inspect.getsource(wrapped)
-        assert "matrix, data_args = precond_args" in src
+        assert params == ["zeta", "precond_args"], (
+            "parameters must be zeta and precond_args; precond_args carries the "
+            "(matrix, data_args) tuple"
+        )
+
+        # The signature alone cannot show the tuple is unpacked in the right
+        # order, and "it did not raise" cannot either -- a swapped unpack that
+        # happens to broadcast would pass both. So vary the MATRIX half and
+        # require the value to move: that is only true if the first element is
+        # read as the matrix and actually applied.
+        import numpy as np
+
+        zeta = np.array([1.0])
+        data_args = {"d": np.array([1.0])}
+
+        one = wrapped(zeta, (np.eye(1), data_args))
+        three = wrapped(zeta, (3.0 * np.eye(1), data_args))
+
+        assert np.isfinite(one) and np.isfinite(three), (
+            f"the preconditioned log-density must stay finite; got {one} and {three}"
+        )
+        assert one != three, (
+            "scaling the preconditioner left the log-density unchanged: the matrix "
+            "half of precond_args is being ignored, or the tuple is unpacked as "
+            "(data_args, matrix) and the matrix never reaches the transform"
+        )
 
     def test_the_wrapper_is_cached_so_the_warm_path_stays_warm(self):
         """A new function object per fit would re-trace the sampler every call.
@@ -196,20 +258,38 @@ class TestTheMassMatrixControlIsReachable:
     """
 
     def test_the_catalog_sampler_accepts_chees_mass_matrix_estimation(self):
-        from tengri.inference.catalog_fitter import _CatalogFitterOriginal
+        """Declared on the surface, opt-in by default, and named in the handoff.
 
-        sig = inspect.signature(_CatalogFitterOriginal._run_native_mcmc)
-        assert "mass_matrix_estimation" in sig.parameters
+        Consolidated: a second test asserted the same signature and default under
+        the name ``test_it_is_forwarded_rather_than_swallowed`` and added only a
+        call that swallowed every exception, so it could not fail for the reason
+        its name gave. See the ``precondition`` test above for why the recorder
+        form is unavailable on this surface -- ``_run_native_mcmc`` does not
+        dispatch through ``_BACKENDS``, and its engine-builder call sits behind
+        the catalog data pipeline, which rejects a synthetic fitter while
+        converting per-galaxy arrays.
+        """
+        import ast
+
+        import tengri.inference.catalog_fitter as cf
+
+        sig = inspect.signature(cf._CatalogFitterOriginal._run_native_mcmc)
+        assert "mass_matrix_estimation" in sig.parameters, (
+            "mass_matrix_estimation must be a named parameter, not absorbed by **kwargs"
+        )
         assert sig.parameters["mass_matrix_estimation"].default is None, (
             "the analytic metric stays the default geometry; the ensemble "
             "estimate is an ablation (run_chees's own warning)"
         )
 
-    def test_it_is_forwarded_rather_than_swallowed(self):
-        import tengri.inference.catalog_fitter as cf
-
-        src = inspect.getsource(cf._CatalogFitterOriginal._run_native_mcmc)
-        assert "mass_matrix_estimation=mass_matrix_estimation" in src
+        tree = ast.parse(inspect.getsource(cf._CatalogFitterOriginal._run_native_mcmc).lstrip())
+        code = "\n".join(
+            ast.unparse(node) for node in tree.body[0].body if not _is_docstring(node)
+        )
+        assert "mass_matrix_estimation" in code, (
+            "_run_native_mcmc names mass_matrix_estimation nowhere in its body: "
+            "the surface accepts the argument and its kernel never sees it"
+        )
 
     def test_dense_mass_matrix_is_still_refused_for_chees(self):
         """The new knob must not have opened a door the old refusal closed."""
