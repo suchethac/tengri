@@ -89,12 +89,19 @@ def _silent_build(spec, ssp, obs, **kwargs):
 
 
 def test_no_agn_returns_no_agn_templates(ssp_bare, obs):
-    """When no AGN component is present, template_data has no 'agn' key."""
+    """When no AGN component is present, template_data has no 'agn' key.
+
+    Written as a disjunction rather than ``if td is not None:``. Both express
+    the same claim -- ``td is None`` satisfies it, since nothing threaded means
+    no ``agn`` key -- but the ``if`` form hides whether the body runs at all.
+    Its sibling in ``test_phase4d_b_dust_ir_threading.py`` was measured always
+    taking the ``None`` branch, so that form there was asserting nothing.
+    """
     model = _silent_build(_no_agn_spec(), ssp_bare, obs)
     td = model._template_data_for_jit()
-    # Either None or a dict without 'agn' key is acceptable.
-    if td is not None:
-        assert "agn" not in td, "No-AGN model should not have 'agn' in template_data"
+    assert td is None or "agn" not in td, (
+        f"No-AGN model should not have 'agn' in template_data; got {td!r}"
+    )
 
 
 def test_skirtor_agn_publishes_templates_for_jit(ssp_bare, obs):
