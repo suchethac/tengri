@@ -38,10 +38,15 @@ Source: https://bitbucket.org/pbehroozi/ray-tracing-sampler/src/main/
 """
 
 import operator as op
+from logging import getLogger
 
 import jax
 import jax.numpy as jnp
 from jax.tree_util import tree_leaves, tree_map, tree_reduce
+
+from tengri.config.exceptions import DeadFitError
+
+logger = getLogger(__name__)
 
 __all__ = ["sample_hamiltonian", "sample_raytrace"]
 
@@ -629,6 +634,8 @@ def sample_raytrace(
         Log-likelihood at each accepted sample.
     accept_prob : array, shape (n_steps,)
         Acceptance probability at each step.
+    n_nonfinite_proposals : int
+        Count of steps where log_accept_prob was non-finite (NaN/Inf).
 
     Notes
     -----
@@ -643,7 +650,7 @@ def sample_raytrace(
     >>> from tengri import sample_raytrace
     >>> key = jax.random.PRNGKey(0)
     >>> log_prob_fn = lambda x: -0.5 * jnp.sum(x**2)
-    >>> chain, lnl, acc = sample_raytrace(
+    >>> chain, lnl, acc, n_nonfinite = sample_raytrace(
     ...     key, jnp.zeros(5), log_prob_fn, n_steps=10, n_leapfrog_steps=5, step_size=0.1
     ... )
     >>> chain.shape
@@ -682,16 +689,16 @@ def sample_raytrace(
         Parameters
         ----------
         carry : tuple
-            (params, key, old_lnl) state.
+            (params, key, old_lnl, n_nonfinite) state.
         x : None
             Unused (scan compatibility).
 
         Returns
         -------
         tuple
-            Updated carry and (params, accept_prob, log_likelihood) output.
+            Updated carry and (params, accept_prob, log_likelihood, is_nonfinite) output.
         """
-        params, key, old_lnl = carry
+        params, key, old_lnl, n_nonfinite = carry
         key, normal_key, uniform_key = jax.random.split(key, 3)
 
         momentum = normal_like_tree(normal_key, params)
@@ -711,22 +718,29 @@ def sample_raytrace(
         new_lnl = log_prob_fn(new_params)
         log_likelihood_diff = new_lnl - old_lnl
         log_accept_prob = log_likelihood_diff - delta_ln_L
+
+        # Count non-finite proposals before converting them
+        is_nonfinite = ~jnp.isfinite(log_accept_prob)
+        n_nonfinite = n_nonfinite + jnp.asarray(is_nonfinite, dtype=jnp.int32)
+
         log_accept_prob = jnp.nan_to_num(log_accept_prob, nan=-jnp.inf)
         accept_prob = jnp.minimum(1.0, jnp.exp(log_accept_prob))
         accept_prob = jnp.maximum(accept_prob, 1.0 - metro_check)
         accept = jax.random.uniform(uniform_key) < accept_prob
         params = ifelse(accept, new_params, params)
         lnl = ifelse(accept, new_lnl, old_lnl)
-        return (params, key, lnl), (params, accept_prob, lnl)
+        return (params, key, lnl, n_nonfinite), (params, accept_prob, lnl, is_nonfinite)
 
-    _, (chain, accept_prob, log_likelihood) = jax.lax.scan(
+    final_carry, (chain, accept_prob, log_likelihood, _nonfinite_per_step) = jax.lax.scan(
         ray_step_fn,
-        (params_init, key, init_lnl),
+        (params_init, key, init_lnl, jnp.array(0, dtype=jnp.int32)),
         xs=None,
         length=n_steps,
     )
 
-    return chain, log_likelihood, accept_prob
+    n_nonfinite_proposals = int(final_carry[3])
+
+    return chain, log_likelihood, accept_prob, n_nonfinite_proposals
 
 
 # ── Fitter interface ─────────────────────────────────
@@ -740,6 +754,101 @@ from tengri.inference.backends.mcmc._shared import (
 )
 
 logger = logging.getLogger(__name__)
+
+
+#: ``Posterior.method`` prefixes whose point estimate is a posterior mode.
+_MODE_START_PREFIXES = ("map", "laplace")
+
+
+def _is_mode_start(init_from):
+    """True when ``init_from``'s point estimate sits at a posterior mode (#2124).
+
+    MAP posteriors carry display strings like ``"MAP (L-BFGS-B)"`` and Laplace
+    posteriors ``"Laplace"`` -- both are mode-centered point estimates. Sampler
+    warm starts (``"mcmc_nuts"``, ...) hand over a posterior mean, not a mode.
+    """
+    method = getattr(init_from, "method", "") or ""
+    return method.lower().startswith(_MODE_START_PREFIXES)
+
+
+def _resolve_initial_step(dim, step_size, init_from):
+    """Resolve the initial leapfrog step size (#2124).
+
+    Behroozi (2025) recommends ``0.03 * sqrt(D)``; for D > 10 the psd_xi
+    variables create a tighter curvature, so a smaller default applies.
+    Initializing at the posterior mode -- the highest-curvature region --
+    makes the standard step overshoot until every trajectory diverges, so
+    mode starts take a 0.3x step. The reduction keys on how the start point
+    was produced (:func:`_is_mode_start`), never on which argument carried
+    it; sampler warm starts keep the full step.
+    """
+    if step_size is not None:
+        return step_size
+    step_size = 0.03 * jnp.sqrt(float(dim)) if dim <= 10 else 0.01
+    if init_from is not None and _is_mode_start(init_from):
+        step_size = step_size * 0.3
+    return step_size
+
+
+def _backoff_step_on_divergence(
+    probe_burnin,
+    *,
+    step_size,
+    initial_fraction,
+    n_probe_proposals,
+    verbose,
+    max_backoffs=8,
+    divergence_threshold=0.95,
+):
+    """Halve the step size until burnin proposals stop diverging (#2125).
+
+    ``probe_burnin(candidate_step)`` runs a burnin segment and returns its
+    total non-finite proposal count. Returns ``(step_size, n_backoffs,
+    nonfinite_fraction)``. Raises :class:`DeadFitError` when
+    ``max_backoffs`` halvings still leave the non-finite fraction above
+    ``divergence_threshold`` -- integrator divergence, not ordinary low
+    acceptance. A healthy initial fraction returns immediately with zero
+    backoffs and never calls the probe.
+
+    ``initial_fraction`` may be measured over the full first run while probe
+    fractions cover a burnin segment only; at the 0.95 threshold the two
+    definitions agree (a step that diverges keeps diverging at fixed size).
+    Probes deliberately draw fresh keys and jitter -- they are new short
+    burnins, not replays of the first run.
+    """
+    initial_step_size = float(step_size)
+    nonfinite_fraction = float(initial_fraction)
+    n_backoffs = 0
+    while nonfinite_fraction > divergence_threshold and n_backoffs < max_backoffs:
+        step_size = step_size * 0.5
+        n_backoffs += 1
+        if verbose:
+            logger.info(
+                "Ray Tracing: divergence detected (%.0f%% non-finite proposals). "
+                "Backoff %d/%d: reducing step_size to %.4f",
+                nonfinite_fraction * 100,
+                n_backoffs,
+                max_backoffs,
+                float(step_size),
+            )
+        total_nonfinite = probe_burnin(step_size)
+        nonfinite_fraction = (
+            float(total_nonfinite) / float(n_probe_proposals) if n_probe_proposals > 0 else 0.0
+        )
+    if nonfinite_fraction > divergence_threshold:
+        raise DeadFitError(
+            f"Ray Tracing backend: leapfrog integrator diverged at all step "
+            f"sizes down to {float(step_size):.3g}. After {max_backoffs} "
+            f"halvings from initial step {initial_step_size:.3g}, the final "
+            f"burnin still had {nonfinite_fraction:.0%} non-finite proposal "
+            f"energies. This indicates a posterior pathology: the likelihood "
+            f"surface is too steep, has support edges, or the data units/scale "
+            f"are wrong. Check data units, scale, and prior bounds against the "
+            f"MAP initialization before adjusting the step size further.",
+            warmup_divergence_frac=nonfinite_fraction,
+            step_size=float(step_size),
+        )
+    return step_size, n_backoffs, nonfinite_fraction
 
 
 def run_raytrace(
@@ -805,20 +914,7 @@ def run_raytrace(
 
     D = len(init_flat)
 
-    if step_size is None:
-        # Behroozi (2025) recommends 0.03 * sqrt(D), but for
-        # stochastic SFH models the psd_xi variables create a
-        # tighter curvature. Use a smaller default for D > 10.
-        if D <= 10:
-            step_size = 0.03 * jnp.sqrt(float(D))
-        else:
-            step_size = 0.01
-        # Initializing from a point estimate (e.g. MAP) starts the chain at the
-        # posterior mode, the highest-curvature region. The standard step then
-        # overshoots and every leapfrog trajectory diverges, collapsing the
-        # acceptance rate to ~0. Take a smaller step when starting from the mode.
-        if init_from is not None:
-            step_size = step_size * 0.3
+    step_size = _resolve_initial_step(D, step_size, init_from)
 
     total_steps = n_burnin + n_steps
 
@@ -842,7 +938,7 @@ def run_raytrace(
         chain_keys = keys[1:]  # one per chain
 
         def _one_chain(k, init):
-            return sample_raytrace(
+            chain_res = sample_raytrace(
                 key=k,
                 params_init=init,
                 log_prob_fn=log_prob_flat,
@@ -853,15 +949,19 @@ def run_raytrace(
                 metro_check=1,
                 sample_hmc=False,
             )
+            return chain_res
 
-        chains, log_lik, accept = jax.vmap(_one_chain)(chain_keys, init_batch)
+        chains, log_lik, accept, n_nonfinite_per_chain = jax.vmap(_one_chain)(
+            chain_keys, init_batch
+        )
         # Per-chain burnin discard, then flatten (n_chains, n_iter, D) → (..., D)
         chain = chains[:, n_burnin:].reshape(-1, chains.shape[-1])
         log_likelihood = log_lik[:, n_burnin:].reshape(-1)
         accept_prob_post = accept[:, n_burnin:].reshape(-1)
         accept_prob = accept.reshape(-1)
+        total_nonfinite = int(jnp.sum(n_nonfinite_per_chain))
     else:
-        chain, log_likelihood, accept_prob = sample_raytrace(
+        chain, log_likelihood, accept_prob, n_nonfinite = sample_raytrace(
             key=sample_key,
             params_init=init_flat,
             log_prob_fn=log_prob_flat,
@@ -876,6 +976,114 @@ def run_raytrace(
         chain = chain[n_burnin:]
         log_likelihood = log_likelihood[n_burnin:]
         accept_prob_post = accept_prob[n_burnin:]
+        total_nonfinite = int(n_nonfinite)
+
+    # Adaptive backoff on a diverged burnin (#2125): the loop itself lives in
+    # _backoff_step_on_divergence; only the burnin probe is bound here.
+    nonfinite_fraction = (
+        float(total_nonfinite) / float(total_steps * n_chains)
+        if total_steps * n_chains > 0
+        else 0.0
+    )
+    initial_step_size = float(step_size)
+
+    def _probe_burnin(candidate_step):
+        nonlocal key
+        key, probe_key = jax.random.split(key)
+        if n_chains > 1:
+            keys = jax.random.split(probe_key, n_chains + 1)
+            jitter = 1e-3 * jax.random.normal(keys[0], shape=(n_chains, init_flat.shape[0]))
+            init_batch = init_flat[None, :] + jitter
+            chain_keys = keys[1:]
+
+            def _one_chain_burnin(k, init):
+                return sample_raytrace(
+                    key=k,
+                    params_init=init,
+                    log_prob_fn=log_prob_flat,
+                    n_steps=n_burnin,
+                    n_leapfrog_steps=n_leapfrog_steps,
+                    step_size=float(candidate_step),
+                    refresh_rate=float(refresh_rate),
+                    metro_check=1,
+                    sample_hmc=False,
+                )
+
+            _, _, _, n_nonfinite_per_chain = jax.vmap(_one_chain_burnin)(chain_keys, init_batch)
+            return int(jnp.sum(n_nonfinite_per_chain))
+        _, _, _, probe_nonfinite = sample_raytrace(
+            key=probe_key,
+            params_init=init_flat,
+            log_prob_fn=log_prob_flat,
+            n_steps=n_burnin,
+            n_leapfrog_steps=n_leapfrog_steps,
+            step_size=float(candidate_step),
+            refresh_rate=float(refresh_rate),
+            metro_check=1,
+            sample_hmc=False,
+        )
+        return int(probe_nonfinite)
+
+    step_size, n_backoffs, nonfinite_fraction = _backoff_step_on_divergence(
+        _probe_burnin,
+        step_size=step_size,
+        initial_fraction=nonfinite_fraction,
+        n_probe_proposals=n_burnin * n_chains,
+        verbose=verbose,
+    )
+
+    # Re-run full sampling with the adapted step size only if backoffs occurred
+    if n_backoffs > 0:
+        if verbose:
+            logger.info(
+                "Ray Tracing: proceeding with adapted step_size=%.4f after %d backoffs",
+                float(step_size),
+                n_backoffs,
+            )
+
+        # Re-run full sampling with the adapted step size
+        key, sample_key = jax.random.split(key)
+        if n_chains > 1:
+            keys = jax.random.split(sample_key, n_chains + 1)
+            jitter = 1e-3 * jax.random.normal(keys[0], shape=(n_chains, init_flat.shape[0]))
+            init_batch = init_flat[None, :] + jitter
+            chain_keys = keys[1:]
+
+            def _one_chain_full(k, init):
+                return sample_raytrace(
+                    key=k,
+                    params_init=init,
+                    log_prob_fn=log_prob_flat,
+                    n_steps=total_steps,
+                    n_leapfrog_steps=n_leapfrog_steps,
+                    step_size=float(step_size),
+                    refresh_rate=float(refresh_rate),
+                    metro_check=1,
+                    sample_hmc=False,
+                )
+
+            result = jax.vmap(_one_chain_full)(chain_keys, init_batch)
+            chains, log_lik, accept, n_nonfinite_per_chain = result
+            chain = chains[:, n_burnin:].reshape(-1, chains.shape[-1])
+            log_likelihood = log_lik[:, n_burnin:].reshape(-1)
+            accept_prob_post = accept[:, n_burnin:].reshape(-1)
+            accept_prob = accept.reshape(-1)
+            total_nonfinite = int(jnp.sum(n_nonfinite_per_chain))
+        else:
+            chain, log_likelihood, accept_prob, total_nonfinite = sample_raytrace(
+                key=sample_key,
+                params_init=init_flat,
+                log_prob_fn=log_prob_flat,
+                n_steps=total_steps,
+                n_leapfrog_steps=n_leapfrog_steps,
+                step_size=float(step_size),
+                refresh_rate=float(refresh_rate),
+                metro_check=1,
+                sample_hmc=False,
+            )
+            chain = chain[n_burnin:]
+            log_likelihood = log_likelihood[n_burnin:]
+            accept_prob_post = accept_prob[n_burnin:]
 
     wall_time = time.time() - t0
     n_samples_out = chain.shape[0]
@@ -883,17 +1091,27 @@ def run_raytrace(
     mean_accept = float(jnp.mean(accept_prob))
     mean_accept_post = float(jnp.mean(accept_prob_post))
 
+    # Compute final non-finite fraction for diagnostics
+    nonfinite_fraction = (
+        float(total_nonfinite) / float(total_steps * n_chains)
+        if total_steps * n_chains > 0
+        else 0.0
+    )
+
     samples_phys = _vmap_samples_to_physical(chain, unravel_fn, context.to_physical)
     best_params = _mean_params(samples_phys)
 
     if verbose:
         logger.info(
             "  Ray Tracing complete in %.1fs. Acceptance: %.1f%% (overall), "
-            "%.1f%% (post burn-in). Samples: %d",
+            "%.1f%% (post burn-in). Samples: %d. Step backoffs: %d. "
+            "Non-finite proposals: %.2f%%",
             wall_time,
             mean_accept * 100,
             mean_accept_post * 100,
             n_samples_out,
+            n_backoffs,
+            nonfinite_fraction * 100,
         )
 
     return Posterior(
@@ -907,10 +1125,14 @@ def run_raytrace(
             "n_chains": n_chains,
             "n_samples": n_samples_out,
             "n_leapfrog_steps": n_leapfrog_steps,
-            "step_size": float(step_size),
+            "initial_step_size": initial_step_size,
+            "final_step_size": float(step_size),
+            "n_step_backoffs": n_backoffs,
             "refresh_rate": float(refresh_rate),
             "accept_rate": mean_accept,
             "accept_rate_post_burnin": mean_accept_post,
+            "nonfinite_proposal_count": total_nonfinite,
+            "nonfinite_proposal_fraction": nonfinite_fraction,
         },
         loss_history=None,
         _model=context.model,
