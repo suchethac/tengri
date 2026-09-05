@@ -35,7 +35,7 @@ class TestDustEmissionAnalyticPorts:
         required_names = {
             "modified_blackbody",
             "casey2012",
-            "greybody",
+            "graybody",
             "pah_drude",
             "schreiber2016",
         }
@@ -201,12 +201,12 @@ class TestDustEmissionAnalyticPorts:
             err_msg=f"Casey2012 CMB parity broken at z={z}",
         )
 
-    def test_greybody_z0_exact(self, wave_grid, L_ir):
-        """Greybody: z=0 golden test (exact match to closure)."""
-        from tengri.components.dust.emission import greybody as closure_fn
+    def test_graybody_z0_exact(self, wave_grid, L_ir):
+        """Graybody: z=0 golden test (exact match to closure)."""
+        from tengri.components.dust.emission import graybody as closure_fn
         from tengri.components.sed_model_component import _REGISTRY
 
-        comp = _REGISTRY["greybody"]()
+        comp = _REGISTRY["graybody"]()
 
         # Closure call (golden truth)
         golden = closure_fn(
@@ -234,15 +234,15 @@ class TestDustEmissionAnalyticPorts:
             golden,
             rtol=0.0,
             atol=0.0,
-            err_msg="Greybody component does not match closure exactly",
+            err_msg="Graybody component does not match closure exactly",
         )
 
-    def test_greybody_cmb_parity(self, wave_grid, L_ir):
-        """Greybody: z>0 CMB parity (component vs direct closure)."""
-        from tengri.components.dust.emission import greybody as closure_fn
+    def test_graybody_cmb_parity(self, wave_grid, L_ir):
+        """Graybody: z>0 CMB parity (component vs direct closure)."""
+        from tengri.components.dust.emission import graybody as closure_fn
         from tengri.components.sed_model_component import _REGISTRY
 
-        comp = _REGISTRY["greybody"]()
+        comp = _REGISTRY["graybody"]()
 
         z = 6.0
 
@@ -272,7 +272,7 @@ class TestDustEmissionAnalyticPorts:
             golden,
             rtol=0.0,
             atol=0.0,
-            err_msg=f"Greybody CMB parity broken at z={z}",
+            err_msg=f"Graybody CMB parity broken at z={z}",
         )
 
     def test_pah_drude_z0_exact(self, wave_grid, L_ir):
@@ -411,7 +411,7 @@ class TestDustEmissionAnalyticPorts:
 # were orphaned this way. Parametrizing over them is what makes them coverage
 # rather than decoration.
 
-_ANALYTIC_GOLDENS = ("casey2012", "greybody", "modified_blackbody", "pah_drude", "schreiber2016")
+_ANALYTIC_GOLDENS = ("casey2012", "graybody", "modified_blackbody", "pah_drude", "schreiber2016")
 
 
 @pytest.mark.regression_bug

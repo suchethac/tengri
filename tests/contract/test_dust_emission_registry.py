@@ -30,7 +30,7 @@ class TestRegistration:
         # non-default eta_balance=1.0, so a loader-cache entry would be a
         # divergent second dispatch path — removed for single dispatch (#850).
         # See test_dust_emission_single_dispatch.py for the component-side assertion.
-        for name in ("greybody", "modified_blackbody", "casey2012"):
+        for name in ("graybody", "modified_blackbody", "casey2012"):
             assert name in DUST_EMISSION_MODELS
             assert callable(DUST_EMISSION_MODELS[name])
 

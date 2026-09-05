@@ -147,10 +147,10 @@ def modified_blackbody(
     return result * contrast
 
 
-# ── Model 1a: General-opacity greybody ──
+# ── Model 1a: General-opacity graybody ──
 
 
-def greybody(
+def graybody(
     wavelength_aa: jnp.ndarray,
     L_absorbed: float,
     dust_T: float = 35.0,

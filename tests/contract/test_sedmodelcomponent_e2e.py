@@ -133,7 +133,7 @@ def test_dust_attenuation_e2e(ssp, obs, law):
 @pytest.mark.parametrize(
     "emission_type",
     [
-        "greybody",
+        "graybody",
         "modified_blackbody",
         "dl07",
         "dl14",

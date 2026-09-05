@@ -12,7 +12,7 @@ four analytic dust-emission models:
    ``dust_alpha_mir`` (mid-IR power-law slope), ``dust_lambda_0_um`` (opacity
    pivot wavelength).
 
-3. **greybody**: General-opacity graybody with free pivot wavelength.
+3. **graybody**: General-opacity graybody with free pivot wavelength.
    Three free axes: ``dust_T`` (temperature), ``dust_beta_ir`` (emissivity index),
    ``dust_lambda_0_um`` (opacity pivot wavelength).
 
@@ -47,7 +47,7 @@ import numpy as np
 from tengri.components.dust.drude_profiles import compute_pah_template as _compute_pah
 from tengri.components.dust.emission import (
     casey2012 as _casey2012,
-    greybody as _greybody,
+    graybody as _graybody,
     modified_blackbody as _modified_blackbody,
 )
 from tengri.forward.precompute.templates import (
@@ -66,8 +66,8 @@ AXIS_PARAMS_MBB = ("dust_T", "dust_beta_ir")
 # casey2012: parametrized by temperature, emissivity index, mid-IR slope, opacity pivot
 AXIS_PARAMS_CASEY = ("dust_T", "dust_beta_ir", "dust_alpha_mir", "dust_lambda_0_um")
 
-# greybody: parametrized by temperature, emissivity index, opacity pivot
-AXIS_PARAMS_GREYBODY = ("dust_T", "dust_beta_ir", "dust_lambda_0_um")
+# graybody: parametrized by temperature, emissivity index, opacity pivot
+AXIS_PARAMS_GRAYBODY = ("dust_T", "dust_beta_ir", "dust_lambda_0_um")
 
 # pah_drude: pure template; no grid axes (runtime amplitude scaling)
 AXIS_PARAMS_PAH = ()
@@ -76,7 +76,7 @@ AXIS_PARAMS_PAH = ()
 AXIS_PARAMS: dict[str, tuple[str, ...]] = {
     "modified_blackbody": AXIS_PARAMS_MBB,
     "casey2012": AXIS_PARAMS_CASEY,
-    "greybody": AXIS_PARAMS_GREYBODY,
+    "graybody": AXIS_PARAMS_GRAYBODY,
     "pah_drude": AXIS_PARAMS_PAH,
 }
 
@@ -237,7 +237,7 @@ def _build_grid_casey2012(
     )
 
 
-def _build_grid_greybody(
+def _build_grid_graybody(
     filter_waves: list,
     filter_trans: list,
     redshift: float,
@@ -246,7 +246,7 @@ def _build_grid_greybody(
     lambda_0_um_grid: np.ndarray,
     L_absorbed_ref: float = 1.0,
 ) -> PreintegratedGrid:
-    """Preintegrate greybody over a 3D grid of (T, beta, lambda_0_um) values.
+    """Preintegrate graybody over a 3D grid of (T, beta, lambda_0_um) values.
 
     Parameters
     ----------
@@ -285,7 +285,7 @@ def _build_grid_greybody(
             phot_lambda = []
             for lambda_0_um in lambda_0_um_grid:
                 l_nu = np.asarray(
-                    _greybody(
+                    _graybody(
                         jnp.asarray(wave_rest),
                         L_absorbed=L_absorbed_ref,
                         dust_T=float(T),
@@ -401,10 +401,10 @@ def precompute(
     parameters : Parameters | None
         Parameters spec, used to detect Fixed-axis parameters.
     model : str, keyword-only
-        One of "modified_blackbody", "casey2012", "greybody", "pah_drude".
+        One of "modified_blackbody", "casey2012", "graybody", "pah_drude".
         Default: "modified_blackbody".
     T_grid : ndarray, optional
-        Temperature grid for modified_blackbody/casey2012/greybody [K]. If None, uses a
+        Temperature grid for modified_blackbody/casey2012/graybody [K]. If None, uses a
         default range [20, 60] with 9 points.
     beta_grid : ndarray, optional
         Emissivity-index grid [dimensionless]. If None, uses [1.5, 1.8, 2.0].
@@ -412,7 +412,7 @@ def precompute(
         Mid-IR power-law slope grid for casey2012 [dimensionless]. If None,
         uses [1.5, 2.0, 2.5].
     lambda_0_um_grid : ndarray, optional
-        Opacity pivot wavelength grid for greybody and casey2012 [micron].
+        Opacity pivot wavelength grid for graybody and casey2012 [micron].
         If None, uses [100.0, 150.0, 200.0].
 
     Returns
@@ -478,7 +478,7 @@ def precompute(
         }
         axis_params = AXIS_PARAMS_CASEY
 
-    elif model == "greybody":
+    elif model == "graybody":
         if T_grid is None:
             T_grid = np.linspace(20.0, 60.0, 9, dtype=np.float64)
         if beta_grid is None:
@@ -486,7 +486,7 @@ def precompute(
         if lambda_0_um_grid is None:
             lambda_0_um_grid = np.array([100.0, 150.0, 200.0], dtype=np.float64)
         result = {
-            "grid_phot": _build_grid_greybody(
+            "grid_phot": _build_grid_graybody(
                 filter_waves, filter_trans, redshift, T_grid, beta_grid, lambda_0_um_grid
             ).phot,
             "axes": (
@@ -494,11 +494,11 @@ def precompute(
                 jnp.asarray(beta_grid),
                 jnp.asarray(lambda_0_um_grid),
             ),
-            "_preint": _build_grid_greybody(
+            "_preint": _build_grid_graybody(
                 filter_waves, filter_trans, redshift, T_grid, beta_grid, lambda_0_um_grid
             ),
         }
-        axis_params = AXIS_PARAMS_GREYBODY
+        axis_params = AXIS_PARAMS_GRAYBODY
 
     elif model == "pah_drude":
         result = {

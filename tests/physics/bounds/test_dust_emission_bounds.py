@@ -551,57 +551,57 @@ class TestCmbContrastFactorBounds:
             config.update("jax_enable_x64", old_state)
 
 
-# ── Greybody (general-opacity graybody) tests ─────────────────────
+# ── Graybody (general-opacity graybody) tests ─────────────────────
 
 
-class TestGreybodyBounds:
-    """Tests for greybody (general-opacity graybody) physical bounds."""
+class TestGraybodyBounds:
+    """Tests for graybody (general-opacity graybody) physical bounds."""
 
     @pytest.fixture
     def wave_ir(self):
         """Broad IR wavelength grid (Angstrom), 1 μm – 10 mm."""
         return jnp.logspace(4, 9, 500)
 
-    def test_greybody_finite_non_negative(self, wave_ir):
-        from tengri.components.dust.emission import greybody
+    def test_graybody_finite_non_negative(self, wave_ir):
+        from tengri.components.dust.emission import graybody
 
-        sed = greybody(wave_ir, L_absorbed=1e10, dust_lambda_0_um=200.0)
+        sed = graybody(wave_ir, L_absorbed=1e10, dust_lambda_0_um=200.0)
         chex.assert_tree_all_finite(sed)
         assert_non_negative(sed, name="sed")
 
-    def test_greybody_output_shape(self, wave_ir):
-        from tengri.components.dust.emission import greybody
+    def test_graybody_output_shape(self, wave_ir):
+        from tengri.components.dust.emission import graybody
 
-        sed = greybody(wave_ir, L_absorbed=1e10, dust_lambda_0_um=200.0)
+        sed = graybody(wave_ir, L_absorbed=1e10, dust_lambda_0_um=200.0)
         chex.assert_equal_shape([sed, wave_ir])
 
-    def test_greybody_zero_luminosity(self, wave_ir):
-        from tengri.components.dust.emission import greybody
+    def test_graybody_zero_luminosity(self, wave_ir):
+        from tengri.components.dust.emission import graybody
 
-        sed = greybody(wave_ir, L_absorbed=0.0, dust_lambda_0_um=200.0)
+        sed = graybody(wave_ir, L_absorbed=0.0, dust_lambda_0_um=200.0)
         assert jnp.allclose(sed, 0.0)
 
-    def test_greybody_hotter_peaks_shorter_wavelength(self, wave_ir):
+    def test_graybody_hotter_peaks_shorter_wavelength(self, wave_ir):
         """Higher temperature → peak at shorter wavelength (Wien)."""
-        from tengri.components.dust.emission import greybody
+        from tengri.components.dust.emission import graybody
 
-        sed_cold = greybody(wave_ir, L_absorbed=1e10, dust_T=20.0, dust_lambda_0_um=200.0)
-        sed_warm = greybody(wave_ir, L_absorbed=1e10, dust_T=50.0, dust_lambda_0_um=200.0)
+        sed_cold = graybody(wave_ir, L_absorbed=1e10, dust_T=20.0, dust_lambda_0_um=200.0)
+        sed_warm = graybody(wave_ir, L_absorbed=1e10, dust_T=50.0, dust_lambda_0_um=200.0)
         peak_cold = float(wave_ir[jnp.argmax(sed_cold)])
         peak_warm = float(wave_ir[jnp.argmax(sed_warm)])
         assert peak_warm < peak_cold
 
-    def test_greybody_beta_ir_zero_is_finite(self, wave_ir):
-        """greybody with beta_ir=0 should be finite and reasonable (pure blackbody).
+    def test_graybody_beta_ir_zero_is_finite(self, wave_ir):
+        """graybody with beta_ir=0 should be finite and reasonable (pure blackbody).
 
         At beta_ir=0, the emissivity is 1 everywhere. The spectrum is well-defined
         and should be smooth like a pure blackbody. The peak of L_nu (per Hz) is at
         a longer wavelength than Wien's displacement law peak (which applies to
         L_lambda).
         """
-        from tengri.components.dust.emission import greybody
+        from tengri.components.dust.emission import graybody
 
-        sed = greybody(
+        sed = graybody(
             wave_ir,
             L_absorbed=1e10,
             dust_T=30.0,
@@ -622,12 +622,12 @@ class TestGreybodyBounds:
             f"Peak at {peak_wavelength_um} um is outside expected range [140-200]"
         )
 
-    def test_greybody_large_lambda_0_optically_thin_limit(self, wave_ir):
-        """When lambda_0_um >> wavelength, greybody → optically-thin limit."""
-        from tengri.components.dust.emission import greybody, modified_blackbody
+    def test_graybody_large_lambda_0_optically_thin_limit(self, wave_ir):
+        """When lambda_0_um >> wavelength, graybody → optically-thin limit."""
+        from tengri.components.dust.emission import graybody, modified_blackbody
 
         # lambda_0 = 1e6 um means tau << 1 everywhere on the IR grid
-        sed_greybody = greybody(
+        sed_graybody = graybody(
             wave_ir,
             L_absorbed=1e10,
             dust_T=30.0,
@@ -642,22 +642,22 @@ class TestGreybodyBounds:
         # Compare on wavelengths where contrast ~ 1 (FIR)
         wave_fir_idx = wave_ir >= 1e5  # 10 um and longer
         if jnp.any(wave_fir_idx):
-            max_sb = jnp.max(sed_greybody[wave_fir_idx]) + 1e-30
+            max_sb = jnp.max(sed_graybody[wave_fir_idx]) + 1e-30
             max_ot = jnp.max(sed_optically_thin[wave_fir_idx]) + 1e-30
-            shape_greybody = sed_greybody[wave_fir_idx] / max_sb
+            shape_graybody = sed_graybody[wave_fir_idx] / max_sb
             shape_optically_thin = sed_optically_thin[wave_fir_idx] / max_ot
-            np.testing.assert_allclose(shape_greybody, shape_optically_thin, rtol=1e-6)
+            np.testing.assert_allclose(shape_graybody, shape_optically_thin, rtol=1e-6)
 
-    def test_greybody_energy_balance(self):
-        """Greybody integral over frequency equals L_absorbed."""
-        from tengri.components.dust.emission import greybody
+    def test_graybody_energy_balance(self):
+        """Graybody integral over frequency equals L_absorbed."""
+        from tengri.components.dust.emission import graybody
         from tengri.components.dust.emission._physics import integrate_lnu_over_nu
 
         # UV-to-radio grid: 0.01 dex spacing from 1e2 to 1e8 Angstrom
         wave = jnp.array(10.0 ** np.arange(2.0, 8.0, 0.01))
         L_abs = 1e10
 
-        sed = greybody(
+        sed = graybody(
             wave,
             L_absorbed=L_abs,
             dust_T=30.0,
@@ -674,23 +674,23 @@ class TestGreybodyBounds:
             L_abs,
             rtol=1e-4,
             atol=0,
-            err_msg="Greybody energy balance failed",
+            err_msg="Graybody energy balance failed",
         )
 
-    def test_greybody_different_pivots_different_shapes(self):
+    def test_graybody_different_pivots_different_shapes(self):
         """Different lambda_0_um values produce different spectral shapes."""
-        from tengri.components.dust.emission import greybody
+        from tengri.components.dust.emission import graybody
 
         wave_ir = jnp.logspace(5, 8, 300)
 
-        sed_100 = greybody(
+        sed_100 = graybody(
             wave_ir,
             L_absorbed=1e10,
             dust_T=25.0,
             dust_beta_ir=2.0,
             dust_lambda_0_um=100.0,
         )
-        sed_200 = greybody(
+        sed_200 = graybody(
             wave_ir,
             L_absorbed=1e10,
             dust_T=25.0,

@@ -1,10 +1,10 @@
 r"""
-Greybody dust opacity: optically thin vs. general form across temperature
+Graybody dust opacity: optically thin vs. general form across temperature
 =========================================================================
 
 The optically thin dust emission (modified blackbody) is ν^β B_ν(T),
 where dust temperature T and emissivity index β determine the SED shape.
-Adding a frequency-dependent opacity (general greybody) introduces
+Adding a frequency-dependent opacity (general graybody) introduces
 (1 - exp(-(λ_0/λ)^β)) B_ν(T), which peaks in the FIR before flattening
 in the sub-mm — this shape is also used in CIGALE. A pure blackbody is
 obtained by setting β = 0 in the modified blackbody form. Both models
@@ -94,10 +94,10 @@ for T in T_grid:
     wave_um, shape = _get_dust_ir_normalized(model)
     ax_thin.loglog(wave_um, shape, color=cmap(norm_T(T)), lw=1.4)
 
-# Bottom panel: general opacity (greybody)
+# Bottom panel: general opacity (graybody)
 for T in T_grid:
     dust_emission_thick = {
-        "type": "greybody",
+        "type": "graybody",
         "beta_ir": tengri.Fixed(2.0),
         "lambda_0_um": tengri.Fixed(100.0),
         "T": tengri.Fixed(T),
@@ -120,4 +120,4 @@ cbar = fig.colorbar(
 )
 cbar.set_label(r"$T_{\rm dust}$  [K]")
 
-plt.savefig("plot_greybody_opacity_temperature.png", dpi=150, bbox_inches="tight")
+plt.savefig("plot_graybody_opacity_temperature.png", dpi=150, bbox_inches="tight")

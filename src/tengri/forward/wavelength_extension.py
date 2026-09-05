@@ -80,7 +80,7 @@ _DUST_EMISSION_TEMPLATES: dict[str, tuple[tuple[str, str, float], ...]] = {
 # complexes through the Rayleigh–Jeans tail.
 _ANALYTIC_DUST_EMISSION = frozenset(
     {
-        "greybody",
+        "graybody",
         "modified_blackbody",
         "casey2012",
         "pah_drude",

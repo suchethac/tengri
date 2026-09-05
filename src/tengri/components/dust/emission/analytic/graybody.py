@@ -1,5 +1,5 @@
 # SPDX-License-Identifier: BSD-3-Clause
-"""General-opacity greybody dust emission as SEDModelComponent.
+"""General-opacity graybody dust emission as SEDModelComponent.
 
 Wraps the pure closure from :mod:`tengri.components.dust.emission`.
 """
@@ -14,13 +14,13 @@ from tengri.components.dust.emission._component_base import EmissionComponent
 from tengri.parameters.priors import Fixed
 from tengri.parameters.resolve import require_redshift
 
-__all__ = ["GreybodyIRSEDComponent"]
+__all__ = ["GraybodyIRSEDComponent"]
 
 
-class GreybodyIRSEDComponent(EmissionComponent):
+class GraybodyIRSEDComponent(EmissionComponent):
     """General-opacity graybody dust IR emission.
 
-    Wraps the pure closure :func:`~tengri.components.dust.emission.greybody`,
+    Wraps the pure closure :func:`~tengri.components.dust.emission.graybody`,
     which provides a parametric graybody model with variable opacity pivot.
 
     The unnormalized spectrum is::
@@ -60,7 +60,7 @@ class GreybodyIRSEDComponent(EmissionComponent):
 
     """
 
-    name: str = "greybody"
+    name: str = "graybody"
 
     # Free parameters (user-facing names, prefix-stripped)
     T = Fixed(35.0)
@@ -82,7 +82,7 @@ class GreybodyIRSEDComponent(EmissionComponent):
         *,
         L_ir: float,
     ) -> tuple[jnp.ndarray, dict[str, jnp.ndarray]]:
-        """Compute greybody dust emission.
+        """Compute graybody dust emission.
 
         Parameters
         ----------
@@ -103,9 +103,9 @@ class GreybodyIRSEDComponent(EmissionComponent):
             contains {"sed_dust_ir": emission SED in erg/s/Hz}.
 
         """
-        from tengri.components.dust.emission import greybody as gb_fn
+        from tengri.components.dust.emission import graybody as gb_fn
 
-        z = jnp.asarray(require_redshift(p, "components.dust.emission.analytic.greybody.predict"))
+        z = jnp.asarray(require_redshift(p, "components.dust.emission.analytic.graybody.predict"))
         sed = gb_fn(
             wave,
             L_ir,

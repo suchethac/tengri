@@ -59,7 +59,7 @@ class TestBuildResolverDustEmission:
     @pytest.mark.parametrize(
         "emission",
         [
-            "greybody",
+            "graybody",
             "modified_blackbody",
             "dl07",
             "dl14",

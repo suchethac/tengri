@@ -74,7 +74,7 @@ PARAMS: tuple[ParamDeclaration, ...] = (
         Fixed(200.0),
         "General-opacity pivot wavelength (um) where the graybody optical depth is unity "
         "(Casey 2012 Eq. 1: 200 um; Synthesizer's Greybody default is 100 um). "
-        "Used by greybody and casey2012; not used by modified_blackbody.",
+        "Used by graybody and casey2012; not used by modified_blackbody.",
         lambda lo, hi: lo > 0,
         "must be > 0",
         units="um",

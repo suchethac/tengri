@@ -11,7 +11,7 @@ SEDModelComponent subclasses.
 - `dale2014_cigale`
 - `draine_li2007`
 - `draine_li2014`
-- `greybody`
+- `graybody`
 - `modified_blackbody`
 - `pah_drude`
 - `schreiber2016`
@@ -50,5 +50,5 @@ this 512-point grid the previous files were off by: bosa 4.0%, dale2014
 3.1%, dale2014_cigale 2.9%, draine_li2014 3.1%, themis 12.9%. The frozen
 component goldens `astrodust.npy` (0.99%) and `draine2021_pah_ir.npy`
 (0.74%) were re-frozen with the same call path as
-`tests/regression/test_dust_goldens_852.py`. `greybody.npy` and
+`tests/regression/test_dust_goldens_852.py`. `graybody.npy` and
 `schreiber2018.npy` are new.

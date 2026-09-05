@@ -1,5 +1,5 @@
 # SPDX-License-Identifier: BSD-3-Clause
-"""Tests for greybody dust emission model registration and grammar.
+"""Tests for graybody dust emission model registration and grammar.
 
 Covers component registration, parameter declarations, and public API.
 """
@@ -11,46 +11,46 @@ import tengri
 pytestmark = pytest.mark.contract
 
 
-class TestGreybodyRegistration:
-    """Greybody component should be registered alongside other analytic models."""
+class TestGraybodyRegistration:
+    """Graybody component should be registered alongside other analytic models."""
 
-    def test_greybody_in_list_dust_emission_models(self):
-        """greybody should appear in the public dust emission models list."""
+    def test_graybody_in_list_dust_emission_models(self):
+        """graybody should appear in the public dust emission models list."""
         models = tengri.list_dust_emission_models()
         model_names = [m["name"] for m in models]
-        assert "greybody" in model_names
+        assert "graybody" in model_names
 
-    def test_greybody_describe(self):
-        """tengri.describe('greybody') should return a use line."""
-        doc = tengri.describe("greybody")
+    def test_graybody_describe(self):
+        """tengri.describe('graybody') should return a use line."""
+        doc = tengri.describe("graybody")
         assert doc is not None
         # describe() returns a _DescribeRecord, which has a string representation
-        assert "greybody" in str(doc).lower()
+        assert "graybody" in str(doc).lower()
 
-    def test_greybody_grammar_fixed_defaults(self):
-        """SEDModel.build with greybody and all params fixed should work."""
+    def test_graybody_grammar_fixed_defaults(self):
+        """SEDModel.build with graybody and all params fixed should work."""
         ssp = tengri.load_ssp()
         model = tengri.SEDModel.build(
             ssp_data=ssp,
             sfh={"type": "delayed", "all_params": tengri.Fixed(tengri.DEFAULT)},
             dust_attenuation={"law": "calzetti", "all_params": tengri.Fixed(tengri.DEFAULT)},
             dust_emission={
-                "type": "greybody",
+                "type": "graybody",
                 "all_params": tengri.Fixed(tengri.DEFAULT),
             },
             redshift=tengri.Fixed(0.0),
         )
         assert model is not None
 
-    def test_greybody_grammar_custom_params(self):
-        """SEDModel.build with greybody and custom params should work."""
+    def test_graybody_grammar_custom_params(self):
+        """SEDModel.build with graybody and custom params should work."""
         ssp = tengri.load_ssp()
         model = tengri.SEDModel.build(
             ssp_data=ssp,
             sfh={"type": "delayed", "all_params": tengri.Fixed(tengri.DEFAULT)},
             dust_attenuation={"law": "calzetti", "all_params": tengri.Fixed(tengri.DEFAULT)},
             dust_emission={
-                "type": "greybody",
+                "type": "graybody",
                 "all_params": tengri.Fixed(tengri.DEFAULT),
                 "T": tengri.Fixed(30.0),
                 "beta_ir": tengri.Fixed(2.0),
@@ -60,15 +60,15 @@ class TestGreybodyRegistration:
         )
         assert model is not None
 
-    def test_greybody_sed_dust_ir_published(self):
-        """Greybody should publish sed_dust_ir in predict_state output."""
+    def test_graybody_sed_dust_ir_published(self):
+        """Graybody should publish sed_dust_ir in predict_state output."""
         ssp = tengri.load_ssp()
         model = tengri.SEDModel.build(
             ssp_data=ssp,
             sfh={"type": "delayed", "all_params": tengri.Fixed(tengri.DEFAULT)},
             dust_attenuation={"law": "calzetti", "all_params": tengri.Fixed(tengri.DEFAULT)},
             dust_emission={
-                "type": "greybody",
+                "type": "graybody",
                 "all_params": tengri.Fixed(tengri.DEFAULT),
                 "T": tengri.Fixed(30.0),
                 "beta_ir": tengri.Fixed(2.0),
@@ -80,17 +80,17 @@ class TestGreybodyRegistration:
 
 
 class TestLambda0UmParameter:
-    """dust_lambda_0_um parameter should exist and work with greybody and casey2012."""
+    """dust_lambda_0_um parameter should exist and work with graybody and casey2012."""
 
-    def test_lambda_0_um_in_greybody(self):
-        """greybody should accept lambda_0_um parameter."""
+    def test_lambda_0_um_in_graybody(self):
+        """graybody should accept lambda_0_um parameter."""
         ssp = tengri.load_ssp()
         model = tengri.SEDModel.build(
             ssp_data=ssp,
             sfh={"type": "delayed", "all_params": tengri.Fixed(tengri.DEFAULT)},
             dust_attenuation={"law": "calzetti", "all_params": tengri.Fixed(tengri.DEFAULT)},
             dust_emission={
-                "type": "greybody",
+                "type": "graybody",
                 "all_params": tengri.Fixed(tengri.DEFAULT),
                 "lambda_0_um": tengri.Fixed(50.0),
             },
@@ -98,7 +98,7 @@ class TestLambda0UmParameter:
         )
         assert model is not None
 
-    @pytest.mark.parametrize("dust_type", ["greybody", "casey2012"])
+    @pytest.mark.parametrize("dust_type", ["graybody", "casey2012"])
     def test_lambda_0_um_reaches_the_closure(self, dust_type):
         """A different pivot must change the emitted spectrum through the public build.
 
@@ -128,42 +128,42 @@ class TestLambda0UmParameter:
             state = model.predict_state({})
             seds.append(np.asarray(state.derived["sed_dust_ir"]) / float(state.derived["L_ir"]))
         # Measured through the closure: the 50 vs 400 micron pivots differ by
-        # 93% of the peak for casey2012 and 38% for greybody at 25-35 K.
+        # 93% of the peak for casey2012 and 38% for graybody at 25-35 K.
         rel = np.max(np.abs(seds[0] - seds[1])) / np.max(seds[0])
         assert rel > 0.1, (
             f"{dust_type}: lambda_0_um is inert through the public build (rel={rel:.2e})"
         )
 
 
-class TestGreybodyWavelengthExtension:
-    """Greybody needs FIR/submm support on the master grid (#1005)."""
+class TestGraybodyWavelengthExtension:
+    """Graybody needs FIR/submm support on the master grid (#1005)."""
 
-    def test_greybody_master_grid_extends_to_far_ir(self):
-        """Greybody build should extend master grid to at least 1 cm (1e8 A)."""
+    def test_graybody_master_grid_extends_to_far_ir(self):
+        """Graybody build should extend master grid to at least 1 cm (1e8 A)."""
         ssp = tengri.load_ssp()
         model = tengri.SEDModel.build(
             ssp_data=ssp,
             sfh={"type": "delayed", "all_params": tengri.Fixed(tengri.DEFAULT)},
             dust_attenuation={"law": "calzetti", "all_params": tengri.Fixed(tengri.DEFAULT)},
-            dust_emission={"type": "greybody", "all_params": tengri.Fixed(tengri.DEFAULT)},
+            dust_emission={"type": "graybody", "all_params": tengri.Fixed(tengri.DEFAULT)},
             redshift=tengri.Fixed(0.0),
         )
         state = model.predict_state({})
         # Master grid should extend to at least 1 cm (1e8 Angstrom)
         assert state.wave[-1] >= 1e8, (
             f"Master grid max wavelength {state.wave[-1]} A is less than 1 cm "
-            "(1e8 A); greybody emission will truncate"
+            "(1e8 A); graybody emission will truncate"
         )
 
-    def test_greybody_150um_peak_in_grid(self):
-        """For 20 K greybody, FIR peak (~150 um) should be inside master grid."""
+    def test_graybody_150um_peak_in_grid(self):
+        """For 20 K graybody, FIR peak (~150 um) should be inside master grid."""
         ssp = tengri.load_ssp()
         model = tengri.SEDModel.build(
             ssp_data=ssp,
             sfh={"type": "delayed", "all_params": tengri.Fixed(tengri.DEFAULT)},
             dust_attenuation={"law": "calzetti", "all_params": tengri.Fixed(tengri.DEFAULT)},
             dust_emission={
-                "type": "greybody",
+                "type": "graybody",
                 "all_params": tengri.Fixed(tengri.DEFAULT),
                 "T": tengri.Fixed(20.0),
             },
@@ -202,15 +202,15 @@ class TestBetaIrRelaxation:
         )
         assert model is not None
 
-    def test_beta_ir_zero_in_greybody(self):
-        """beta_ir = 0 should be accepted in greybody."""
+    def test_beta_ir_zero_in_graybody(self):
+        """beta_ir = 0 should be accepted in graybody."""
         ssp = tengri.load_ssp()
         model = tengri.SEDModel.build(
             ssp_data=ssp,
             sfh={"type": "delayed", "all_params": tengri.Fixed(tengri.DEFAULT)},
             dust_attenuation={"law": "calzetti", "all_params": tengri.Fixed(tengri.DEFAULT)},
             dust_emission={
-                "type": "greybody",
+                "type": "graybody",
                 "all_params": tengri.Fixed(tengri.DEFAULT),
                 "beta_ir": tengri.Fixed(0.0),
             },

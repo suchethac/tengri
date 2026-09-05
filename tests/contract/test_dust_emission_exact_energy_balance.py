@@ -42,7 +42,7 @@ _REQUIRED = (
     "draine2021_pah",
     "draine_li2007",
     "draine_li2014",
-    "greybody",
+    "graybody",
     "modified_blackbody",
     "schreiber2016",
     "schreiber2018",
@@ -51,7 +51,7 @@ _REQUIRED = (
 _NOT_BALANCED_BY_DESIGN = ("pah_drude", "energy_balance_split")
 # Menu spellings that select a component already covered under its canonical name.
 _ALIASES_OF_REQUIRED = ("dl07", "dl14", "mbb")
-_ANALYTIC = ("casey2012", "greybody", "modified_blackbody", "schreiber2016")
+_ANALYTIC = ("casey2012", "graybody", "modified_blackbody", "schreiber2016")
 _RTOL_TEMPLATE = 1e-7
 _RTOL_ANALYTIC = 5e-6
 

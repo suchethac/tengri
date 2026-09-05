@@ -71,7 +71,7 @@
         512
       ]
     },
-    "greybody": {
+    "graybody": {
       "params": {
         "dust_T": 35.0,
         "dust_beta_ir": 1.8,

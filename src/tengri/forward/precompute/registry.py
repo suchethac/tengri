@@ -44,7 +44,7 @@ _REGISTRY: dict[str, str] = {
     # Dust IR emission, analytic models
     "modified_blackbody": "tengri.components.dust.dust_analytic_precompute",
     "casey2012": "tengri.components.dust.dust_analytic_precompute",
-    "greybody": "tengri.components.dust.dust_analytic_precompute",
+    "graybody": "tengri.components.dust.dust_analytic_precompute",
     "pah_drude": "tengri.components.dust.dust_analytic_precompute",
     # AGN torus templates
     "skirtor": "tengri.components.agn.skirtor_precompute",

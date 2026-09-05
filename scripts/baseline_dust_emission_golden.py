@@ -64,7 +64,7 @@ def main():
                 "redshift": 0.0,
             },
         },
-        "greybody": {
+        "graybody": {
             "call_path": "closure",
             "params": {
                 "dust_T": 35.0,

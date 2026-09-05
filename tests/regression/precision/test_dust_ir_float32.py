@@ -55,7 +55,7 @@ TEMPLATE_MODELS = (
     # removed from planck_bnu (#1206).
     "mbb",
     "modified_blackbody",
-    "greybody",
+    "graybody",
     "casey2012",
     "schreiber2016",
     # Affine model — proportional to the *total* budget L_ir + dust_L_agn_ir.

@@ -122,7 +122,7 @@ def test_dust_energy_balance(intrinsic_sed, emission_type, tau):
 # re-emit it (∫ L_emit dν ≈ L_absorbed). ``pah_drude`` is deliberately excluded
 # — it is a PAH-only building block, not a standalone energy-balanced emitter.
 _ANALYTIC_BALANCED = [
-    "greybody",
+    "graybody",
     "modified_blackbody",
     "casey2012",
     "schreiber2016",

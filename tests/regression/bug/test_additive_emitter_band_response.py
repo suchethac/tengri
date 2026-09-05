@@ -54,7 +54,7 @@ SHAPES = {
     "themis": {"qhac": 0.10},
     "casey2012": {"T": 40.0, "beta_ir": 1.8},
     "modified_blackbody": {"T": 40.0, "beta_ir": 1.8},
-    "greybody": {"T": 40.0, "beta_ir": 1.8, "lambda_0_um": 150.0},
+    "graybody": {"T": 40.0, "beta_ir": 1.8, "lambda_0_um": 150.0},
     "schreiber2016": {},
     "schreiber2018": {},
     "astrodust": {},

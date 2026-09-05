@@ -188,7 +188,7 @@ from tengri.components.dust.emission._physics import (
 from tengri.components.dust.emission.analytic._closures import (
     casey2012 as casey2012,
     energy_balance_split as energy_balance_split,
-    greybody as greybody,
+    graybody as graybody,
     modified_blackbody as modified_blackbody,
     pah_drude as pah_drude,
     schreiber2016 as schreiber2016,
@@ -198,7 +198,7 @@ from tengri.components.dust.emission.analytic._closures import (
 # analytic/_closures.py; #843). energy_balance_split is intentionally NOT
 # registered here: it dispatches via its _REGISTRY component only (single
 # dispatch, #850).
-DUST_EMISSION_MODELS["greybody"] = greybody
+DUST_EMISSION_MODELS["graybody"] = graybody
 DUST_EMISSION_MODELS["modified_blackbody"] = modified_blackbody
 DUST_EMISSION_MODELS["casey2012"] = casey2012
 DUST_EMISSION_MODELS["pah_drude"] = pah_drude
