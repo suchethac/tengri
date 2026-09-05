@@ -15,6 +15,11 @@ in N lookback-time bins.
   Student-t scale (1.0) than old bins (0.3) to permit rapid recent fluctuations.
 - **ContinuityFlex**: anchored young/old bins + N flexible intermediate bins
   whose edges are derived from the SFR ratios (constant-mass-per-flex-bin).
+- **PSB continuity** (Suess+2021): a youngest bin of width ``tlast``, a
+  flexible zone out to ``tflex`` cut into equal-width bins, then fixed old
+  bins. Distinct from ContinuityFlex: here the flex ratios set the bins'
+  *amplitudes* and the widths are equal, there they set the *widths* and the
+  masses are equal.
 
 Convention: t_lookback in years, SFR returned in Msun/yr.
 All functions are pure JAX and JIT-compatible.
@@ -562,7 +567,8 @@ def psb_continuity(
     Extends the continuity SFH (Leja+2019) with two additional parameters that
     track the quenching epoch. The oldest N bins have fixed edges and log-SFR
     ratio priors (same as continuity). A flexible zone between ``tlast_gyr``
-    and ``tflex_gyr`` captures the transition epoch. The youngest bin spans
+    and ``tflex_gyr`` captures the transition epoch, resolved into
+    ``n_flex`` equal-width bins. The youngest bin spans
     [0, tlast_gyr] and its SFR ratio encodes how recently star formation ceased.
 
     Parameters
@@ -578,12 +584,27 @@ def psb_continuity(
         Upper boundary of the flexible zone [Gyr]. Default 2.0.
     bin_edges_gyr : array_like, shape (n_fixed+1,), optional
         Fixed old bin edges [Gyr]. Default: ``DEFAULT_BIN_EDGES_GYR[2:]``
-        = [0.3, 1.0, 3.0, 6.0, 13.7] Gyr.
+        = [0.1, 0.3, 1.0, 3.0, 6.0, 13.7] Gyr. The first entry is the boundary
+        ``tflex_gyr`` replaces and is discarded; only ``[1:]`` is read, so
+        ``tflex_gyr`` must stay below ``bin_edges_gyr[1]`` or the resulting
+        ladder is not ascending. :func:`psb_continuity_flex` removes that
+        constraint by deriving the fixed bins from ``tflex_gyr``.
     **ratio_kwargs
-        Log-SFR ratios. Convention:
+        Log-SFR ratios [dex]. Every ratio is
+        :math:`\\log_{10}(\\mathrm{SFR}_i / \\mathrm{SFR}_{i+1})` for adjacent
+        bins ordered youngest to oldest. Convention:
 
-        - ``ratio_young``: youngest bin vs flex bin (large positive = burst).
-        - ``ratio_old_0``, ``ratio_old_1``, ...: ratios among old fixed bins.
+        - ``ratio_young``: youngest bin vs the youngest flex bin (large
+          positive = recent burst).
+        - ``flex_0``, ``flex_1``, ..., ``flex_{n_flex-2}``: ratios *within* the
+          flexible zone. The number of ``flex_*`` keys sets ``n_flex``: N keys
+          give N+1 equal-width flex bins. Default: no keys, so ``n_flex = 1``
+          and the flexible zone is a single bin, which is the layout this
+          model shipped with.
+        - ``ratio_old_0``, ``ratio_old_1``, ...: ratios among the old fixed
+          bins. The ratio between the OLDEST flex bin and the youngest fixed
+          bin is pinned at 0 (they share an SFR), so ``n_fixed`` bins take
+          ``n_fixed - 1`` of these.
 
     Returns
     -------
@@ -592,12 +613,20 @@ def psb_continuity(
 
     Notes
     -----
-    **JIT-compatible**: yes, uses ``jnp`` primitives; ``tlast_gyr`` and
-    ``tflex_gyr`` must be concrete scalars (not traced inside JIT).
+    **JIT-compatible**: yes, uses ``jnp`` primitives. ``tlast_gyr`` and
+    ``tflex_gyr`` may be traced; the bin *count* is static because it is read
+    off the ``flex_*`` keyword names rather than from a numeric argument.
 
     Implements the same calculation as Prospector ``psb_logsfr_ratios_to_agebins`` and
     ``logsfr_ratios_to_masses_psb`` (Johnson et al. 2021 [1]_), reimplemented
-    as a pure JAX step-function SFH compatible with DSPS.
+    as a pure JAX step-function SFH compatible with DSPS. Synthesizer
+    (Lovell et al. 2025 [3]_; Roper et al. 2026 [4]_) builds the same ladder in
+    its ``SFH.ContinuityPSB``; against that class the parameter map is
+    ``ratio_young = logsfr_ratio_young``, ``flex_i = logsfr_ratios[i]``,
+    ``ratio_old_i = logsfr_ratio_old[i + 1]``, and
+    ``bin_edges_gyr = linspace(tflex, max_age, nfixed + 1)``; Synthesizer's
+    ``logsfr_ratio_old[0]`` is the flex-to-fixed step this function pins at 0,
+    so exact agreement needs ``logsfr_ratio_old[0] == 0``.
 
     References
     ----------
@@ -606,6 +635,13 @@ def psb_continuity(
     .. [2] K. A. Suess et al., "Half-mass Radii for ~7000 Galaxies," ApJ,
        915, 87 (2021). arXiv:2101.03177.
        https://doi.org/10.3847/1538-4357/ac062c
+    .. [3] C. C. Lovell et al., "Synthesizer: Synthetic Observables For
+       Modern Astronomy," Open Journal of Astrophysics, 8 (2025).
+       https://doi.org/10.33232/001c.145766
+    .. [4] W. J. Roper et al., "Synthesizer: A fast, flexible and modular
+       Python package for generating synthetic observations of astrophysical
+       simulations," Journal of Open Source Software, 11, 9436 (2026).
+       https://doi.org/10.21105/joss.09436
 
     Examples
     --------
@@ -617,6 +653,8 @@ def psb_continuity(
     ...     tlast_gyr=0.3,
     ...     tflex_gyr=2.0,
     ...     ratio_young=1.0,
+    ...     flex_0=0.1,
+    ...     flex_1=-0.2,
     ...     ratio_old_0=0.2,
     ...     ratio_old_1=-0.3,
     ... )
@@ -628,8 +666,19 @@ def psb_continuity(
 
     n_fixed_bins = bin_edges_gyr.shape[0] - 1
 
-    # Full edge array: [0, tlast, tflex, old_fixed_bins...]
-    all_edges_gyr = jnp.concatenate([jnp.array([0.0, tlast_gyr, tflex_gyr]), bin_edges_gyr[1:]])
+    # Number of flexible bins, from the ``flex_*`` ratios the caller supplied:
+    # N ratios describe N+1 bins, and no ratios is the single flex bin this
+    # model shipped with. Counting kwargs (rather than taking an ``n_flex``
+    # argument) keeps the count a Python int, so the bin count stays static
+    # under JIT while ``tlast_gyr`` / ``tflex_gyr`` remain traceable.
+    n_flex_ratios = sum(1 for k in ratio_kwargs if k.startswith("flex_"))
+    n_flex_bins = n_flex_ratios + 1
+
+    # Full edge array: [0, tlast, <n_flex equal-width flex edges>, old_fixed...]
+    flex_edges_gyr = jnp.linspace(tlast_gyr, tflex_gyr, n_flex_bins + 1)[1:]
+    all_edges_gyr = jnp.concatenate(
+        [jnp.array([0.0, tlast_gyr]), flex_edges_gyr, bin_edges_gyr[1:]]
+    )
     n_bins_total = all_edges_gyr.shape[0] - 1
 
     # Old bins: log-SFR ratios (oldest = reference = 0)
@@ -639,11 +688,17 @@ def psb_continuity(
     )
     log_sfr_old = jnp.concatenate([jnp.cumsum(ratio_old[::-1])[::-1], jnp.array([0.0])])
 
-    # Flex bin: same log-SFR as innermost old bin; youngest bin adds ratio_young
-    log_sfr_flex = log_sfr_old[0]
-    log_sfr_young = log_sfr_flex + ratio_young
+    # Flex bins: the OLDEST flex bin is tied to the innermost old bin (ratio
+    # pinned at 0), and each ``flex_i`` steps log-SFR from flex bin i to bin
+    # i+1. With no ``flex_*`` ratios this collapses to the single flex bin at
+    # ``log_sfr_old[0]``, bit-identical to the one-flex-bin model this replaces.
+    flex_ratios = jnp.array([ratio_kwargs.get(f"flex_{i}", 0.0) for i in range(n_flex_ratios)])
+    log_sfr_flex = (
+        jnp.concatenate([jnp.cumsum(flex_ratios[::-1])[::-1], jnp.array([0.0])]) + log_sfr_old[0]
+    )
+    log_sfr_young = log_sfr_flex[0] + ratio_young
 
-    log_sfr_bins = jnp.concatenate([jnp.array([log_sfr_young, log_sfr_flex]), log_sfr_old])
+    log_sfr_bins = jnp.concatenate([jnp.array([log_sfr_young]), log_sfr_flex, log_sfr_old])
 
     # Normalize to total mass
     bin_widths_yr = jnp.diff(all_edges_gyr) * 1e9
@@ -654,6 +709,124 @@ def psb_continuity(
     # Piecewise-constant lookup
     bin_edges_yr = all_edges_gyr * 1e9
     return _piecewise_constant_sfr(age_yr, bin_edges_yr, sfr_bins_norm, n_bins_total)
+
+
+#: Number of fixed old bins :func:`psb_continuity_flex` lays down when no
+#: ``bin_edges_gyr`` is given, and the oldest edge [Gyr] it lays them out to.
+#: Synthesizer ``ContinuityPSB``'s defaults (``nfixed=3``), and 13.7 Gyr is the
+#: oldest edge every other tengri non-parametric ladder ends at.
+PSB_FLEX_DEFAULT_N_FIXED = 3
+PSB_FLEX_DEFAULT_MAX_AGE_GYR = 13.7
+
+
+def psb_continuity_flex(
+    age_yr: jnp.ndarray,
+    log_total_mass: float = 10.0,
+    tlast_gyr: float = 0.2,
+    tflex_gyr: float = 2.0,
+    bin_edges_gyr: jnp.ndarray | None = None,
+    **ratio_kwargs,
+) -> jnp.ndarray:
+    r"""Post-starburst SFH with equal-width fixed old bins (Synthesizer ContinuityPSB).
+
+    :func:`psb_continuity` with one change: the fixed old bins are laid out as
+    ``n_fixed`` equal-width intervals spanning ``[tflex_gyr, max_age]``, rather
+    than being taken verbatim from ``bin_edges_gyr``. That is how Synthesizer's
+    ``ContinuityPSB`` builds them, and it is what makes the ladder ascending for
+    *any* ``tflex_gyr`` below ``max_age``.
+
+    Parameters
+    ----------
+    age_yr : array_like, shape (n_age,)
+        Lookback time grid [yr].
+    log_total_mass : float, optional
+        log10 of total stellar mass formed [Msun]. Default 10.0.
+    tlast_gyr : float, optional
+        Lookback time of quenching onset [Gyr]; width of the youngest bin.
+        Default 0.2 (Synthesizer's ``tlast``).
+    tflex_gyr : float, optional
+        Boundary between the flexible zone and the fixed old bins [Gyr].
+        Default 2.0 (Synthesizer's ``tflex``).
+    bin_edges_gyr : array_like, shape (n_fixed+1,), optional
+        Supplies only two things here: the **number** of fixed old bins
+        (``len - 1``) and the **oldest edge** (``[-1]``, i.e. Synthesizer's
+        ``max_age``). The interior values are not used, because the fixed bins
+        are equal-width by construction. Default: 3 bins out to 13.7 Gyr.
+    **ratio_kwargs
+        As :func:`psb_continuity`: ``ratio_young``, ``flex_0`` ...
+        ``flex_{n_flex-2}``, and ``ratio_old_0`` ... ``ratio_old_{n_fixed-2}``.
+
+    Returns
+    -------
+    ndarray, shape (n_age,)
+        SFR at each lookback time [Msun/yr], non-negative.
+
+    Notes
+    -----
+    **JIT-compatible**: yes. ``tflex_gyr`` may be traced; the bin *counts* are
+    static (read off the ``flex_*`` keyword names and ``bin_edges_gyr``'s
+    length).
+
+    **Why not just reuse** :func:`psb_continuity` **'s ladder.** That function
+    splices ``tflex_gyr`` in ahead of ``bin_edges_gyr[1:]``, which requires the
+    caller to keep ``tflex_gyr`` below the first fixed edge. With the shipped
+    default ladder that first edge is 0.3 Gyr while ``tflex_gyr``'s prior runs
+    from 0.5 to 5.0 Gyr, so the edges cross and
+    :func:`jax.numpy.searchsorted` is evaluated on a non-ascending array.
+    Deriving the fixed bins from ``tflex_gyr`` removes the ordering constraint
+    instead of asking the user to respect it.
+
+    Implements the same model as Synthesizer (Lovell et al. 2025 [1]_; Roper
+    et al. 2026 [2]_) ``SFH.ContinuityPSB``. Parameter map:
+    ``ratio_young = logsfr_ratio_young``, ``flex_i = logsfr_ratios[i]``,
+    ``ratio_old_i = logsfr_ratio_old[i + 1]``; Synthesizer's
+    ``logsfr_ratio_old[0]`` is the flex-to-fixed step this model pins at 0.
+
+    References
+    ----------
+    .. [1] C. C. Lovell et al., "Synthesizer: Synthetic Observables For
+       Modern Astronomy," Open Journal of Astrophysics, 8 (2025).
+       https://doi.org/10.33232/001c.145766
+    .. [2] W. J. Roper et al., "Synthesizer: A fast, flexible and modular
+       Python package for generating synthetic observations of astrophysical
+       simulations," Journal of Open Source Software, 11, 9436 (2026).
+       https://doi.org/10.21105/joss.09436
+
+    Examples
+    --------
+    >>> import jax.numpy as jnp
+    >>> t = jnp.logspace(6.0, 10.14, 256)
+    >>> sfr = psb_continuity_flex(
+    ...     t,
+    ...     log_total_mass=10.0,
+    ...     tlast_gyr=0.2,
+    ...     tflex_gyr=2.0,
+    ...     ratio_young=0.3,
+    ...     flex_0=0.1,
+    ...     flex_1=-0.2,
+    ...     flex_2=0.05,
+    ...     flex_3=0.1,
+    ...     ratio_old_0=-0.1,
+    ...     ratio_old_1=0.2,
+    ... )
+    >>> sfr.shape
+    (256,)
+    """
+    if bin_edges_gyr is None:
+        n_fixed = PSB_FLEX_DEFAULT_N_FIXED
+        max_age_gyr = PSB_FLEX_DEFAULT_MAX_AGE_GYR
+    else:
+        n_fixed = bin_edges_gyr.shape[0] - 1
+        max_age_gyr = bin_edges_gyr[-1]
+    fixed_edges_gyr = jnp.linspace(tflex_gyr, max_age_gyr, n_fixed + 1)
+    return psb_continuity(
+        age_yr,
+        log_total_mass=log_total_mass,
+        tlast_gyr=tlast_gyr,
+        tflex_gyr=tflex_gyr,
+        bin_edges_gyr=fixed_edges_gyr,
+        **ratio_kwargs,
+    )
 
 
 # ── ContinuityFlex SFH (Leja+2019) ────────────────────────────────

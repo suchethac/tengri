@@ -67,10 +67,12 @@ class TestSFHParametricVsSynthesizer:
       synthesizer LogNormal is a proper lognormal PDF in cosmic time.
       These are different functional forms; no tight crossval is possible.
 
-    - tengri dpl follows Carnall+2018: 1/(x^alpha + x^(-beta)).
-      synthesizer DoublePowerLaw uses ((t/peak)^alpha + (t/peak)^beta)^(-1),
-      which is monotonically decreasing for positive exponents.
-      These are different functional forms; no tight crossval is possible.
+    - tengri dpl follows Carnall+2018: 1/(x^alpha + x^(-beta)) in COSMIC time
+      since formation. synthesizer DoublePowerLaw applies the algebra to the
+      stellar age instead, and writes the second exponent signed:
+      ((age/peak)^alpha + (age/peak)^beta)^(-1). tengri's dpl_lookback is the
+      lookback-time model, and beta_synth = -beta_tengri; see
+      TestSynthesizerConventionSFHs below, which crossvalidates it exactly.
     """
 
     def test_gaussian_sfh(self):
@@ -132,14 +134,14 @@ class TestSFHParametricVsSynthesizer:
 
     @pytest.mark.skip(
         reason=(
-            "Different functional forms: synthesizer DoublePowerLaw uses "
-            "((t/peak)^alpha + (t/peak)^beta)^-1, which is monotonically decreasing "
-            "for positive exponents. tengri dpl follows Carnall+2018: "
-            "1/(x^alpha + x^(-beta)), which has an interior peak. No mapping exists."
+            "Different time variables: tengri dpl follows Carnall+2018 in cosmic "
+            "time since formation, synthesizer DoublePowerLaw uses the stellar age. "
+            "The lookback-time model is tengri dpl_lookback, crossvalidated exactly "
+            "in TestSynthesizerConventionSFHs.test_dpl_lookback_matches_synthesizer."
         )
     )
     def test_double_powerlaw_sfh(self):
-        """Skipped: tengri dpl and synthesizer DoublePowerLaw are different functional forms."""
+        """Skipped: tengri dpl is the cosmic-time model; see dpl_lookback instead."""
 
     def test_delayed_exponential_sfh(self):
         """tengri delayed_tau vs synthesizer DelayedExponential.
@@ -222,6 +224,311 @@ class TestSFHParametricVsSynthesizer:
         mask = sfr_synth > 1e-30
         diffs = _rel_diff(sfr_tengri[mask], sfr_synth[mask])
         assert diffs.max() < 0.01, f"ContinuityFlex max relative diff: {diffs.max():.2e}"
+
+
+# ── Part 1b: the three SFH families a validation round found missing ──
+
+
+def _shape_and_mass_metrics(t_yr, sfr_tengri, sfr_synth, lo_yr, hi_yr):
+    """Two numbers per comparison, measuring two different things.
+
+    ``max_rel_shape``
+        Largest deviation of ``sfr_tengri / sfr_synth`` from its own median,
+        over nodes at least one grid cell inside the truncation window. A
+        constant ratio there means the two implement the *same function*; the
+        constant itself is the mass normalization, which the two codes set
+        differently (tengri to ``10**log_total_mass``, synthesizer to a unit
+        weight), so it carries no information.
+
+    ``l1_half``
+        Total-variation distance between the two histories after normalizing
+        each to unit integrated mass on the shared grid: the fraction of
+        stellar mass that would have to be moved to turn one into the other.
+        This one *does* see the truncation edges, where tengri cell-averages
+        the window (``window_weight``, for a nonzero boundary gradient) and
+        synthesizer applies a hard mask. So it floors at the edge-cell share
+        of the mass rather than at machine precision.
+    """
+    t = np.asarray(t_yr, dtype=float)
+    a = np.asarray(sfr_tengri, dtype=float)
+    b = np.asarray(sfr_synth, dtype=float)
+
+    h = float(np.max(np.diff(t)))
+    inside = (t > lo_yr + h) & (t < hi_yr - h) & (b > 0)
+    assert inside.sum() > 100, "window too narrow for a meaningful comparison"
+    ratio = a[inside] / b[inside]
+    max_rel_shape = float(np.max(np.abs(ratio / np.median(ratio) - 1.0)))
+
+    p = a / np.trapezoid(a, t)
+    q = b / np.trapezoid(b, t)
+    l1_half = float(0.5 * np.trapezoid(np.abs(p - q), t))
+    return max_rel_shape, l1_half
+
+
+class TestSynthesizerConventionSFHs:
+    """Crossvalidate the SFH families a validation round against synthesizer 1.2.0 found missing.
+
+    Sign conventions, read off the synthesizer source rather than assumed:
+
+    - ``SFH.DoublePowerLaw._sfr`` returns ``((age/peak)**alpha +
+      (age/peak)**beta)**-1`` with **both** exponents as written, so its
+      ``beta`` is the negative of the Carnall+2018 rising slope that tengri's
+      ``dpl``/``dpl_lookback`` use. An interior peak needs ``beta < 0`` in
+      synthesizer's spelling.
+    - ``SFH.Exponential._sfr`` returns ``exp(-(max_age - age)/tau)``, so a
+      **positive** tau makes SFR *increase* with lookback age: declining in
+      cosmic time, the classic tau model. tengri's ``trunc_exp`` takes the same
+      signed tau.
+    - ``SFH.ContinuityPSB`` orders its ratios youngest-to-oldest as
+      ``[logsfr_ratio_young] + logsfr_ratios + logsfr_ratio_old``, so
+      ``logsfr_ratio_old[0]`` is the step from the oldest flex bin to the
+      youngest fixed bin. tengri pins that step at 0, so exact agreement needs
+      ``logsfr_ratio_old[0] == 0``.
+    """
+
+    # Fine, uniform: the truncation boundaries then fall inside one narrow cell.
+    _T_YR = np.linspace(0.0, 13.8e9, 200_001)
+
+    @pytest.mark.parametrize(
+        ("alpha", "beta_tengri", "peak_yr", "end_yr", "age_yr"),
+        [
+            (2.0, 1.0, 2e9, 0.0, 10e9),
+            (3.0, -0.5, 1.5e9, 0.3e9, 12e9),
+            (1.5, 2.0, 4e9, 1.0e9, 13.0e9),
+        ],
+    )
+    def test_dpl_lookback_matches_synthesizer(self, alpha, beta_tengri, peak_yr, end_yr, age_yr):
+        """tengri ``dpl_lookback`` vs synthesizer ``DoublePowerLaw``, beta_synth = -beta."""
+        from synthesizer.parametric.sf_hist import DoublePowerLaw
+
+        from tengri.components.stellar.sfh.mean_sfh import dpl_lookback
+
+        sfh_synth = DoublePowerLaw(
+            peak_age=unyt_quantity(peak_yr, "yr"),
+            alpha=alpha,
+            beta=-beta_tengri,
+            min_age=unyt_quantity(end_yr, "yr"),
+            max_age=unyt_quantity(age_yr, "yr"),
+        )
+        sfr_synth = np.asarray(sfh_synth.get_sfr(self._T_YR))
+        sfr_tengri = np.asarray(
+            dpl_lookback(
+                jnp.array(self._T_YR),
+                peak=peak_yr,
+                alpha=alpha,
+                beta=beta_tengri,
+                age=age_yr,
+                end=end_yr,
+                log_total_mass=0.0,
+            )
+        )
+        assert_non_negative(sfr_tengri, name="dpl_lookback")
+        max_rel, l1_half = _shape_and_mass_metrics(
+            self._T_YR, sfr_tengri, sfr_synth, end_yr, age_yr
+        )
+        # Measured 2026-09-06 against synthesizer 1.2.0 on this grid:
+        # shape 8.9e-16 / 8.9e-16 / 7.8e-16, L1/2 4.9e-08 / 2.7e-05 / 3.5e-05.
+        assert max_rel < 1e-12, f"dpl_lookback shape differs by {max_rel:.3e}"
+        assert l1_half < 1e-3, f"dpl_lookback places {l1_half:.3e} of the mass differently"
+
+    def test_dpl_lookback_beta_sign_maps_to_synthesizer(self):
+        """The sign map on a concrete case: synthesizer beta=+1.0 is tengri beta=-1.0.
+
+        With both exponents positive the history has no interior peak and
+        diverges as the age goes to zero, so the grid starts at 1 Myr. Reaching
+        that branch from tengri needs a negative ``beta``, which is outside the
+        declared prior on ``sfh_dpl_lookback_beta`` -- deliberately, since the
+        peaked family is what the registry advertises.
+        """
+        from synthesizer.parametric.sf_hist import DoublePowerLaw
+
+        from tengri.components.stellar.sfh.mean_sfh import dpl_lookback
+
+        t_yr = np.linspace(1e6, 13.8e9, 200_001)
+        sfh_synth = DoublePowerLaw(
+            peak_age=unyt_quantity(2e9, "yr"),
+            alpha=2.0,
+            beta=1.0,
+            max_age=unyt_quantity(10e9, "yr"),
+        )
+        sfr_synth = np.asarray(sfh_synth.get_sfr(t_yr))
+        sfr_tengri = np.asarray(
+            dpl_lookback(
+                jnp.array(t_yr),
+                peak=2e9,
+                alpha=2.0,
+                beta=-1.0,
+                age=10e9,
+                end=0.0,
+                log_total_mass=0.0,
+            )
+        )
+        max_rel, l1_half = _shape_and_mass_metrics(t_yr, sfr_tengri, sfr_synth, 1e6, 10e9)
+        # Measured: shape 7.8e-16, L1/2 7.0e-09.
+        assert max_rel < 1e-12
+        assert l1_half < 1e-3
+        # ...and the shape really is monotonic in this branch.
+        live = sfr_synth > 0
+        assert np.all(np.diff(sfr_tengri[live]) <= 0)
+
+    @pytest.mark.parametrize(
+        ("tau_yr", "end_yr", "age_yr"),
+        [
+            (1e9, 0.5e9, 8e9),
+            (-1e9, 0.5e9, 8e9),
+            (3e9, 0.0, 12e9),
+            (-4e9, 2.0e9, 13.0e9),
+        ],
+    )
+    def test_trunc_exp_matches_synthesizer(self, tau_yr, end_yr, age_yr):
+        """tengri ``trunc_exp`` vs synthesizer ``TruncatedExponential``, same signed tau."""
+        from synthesizer.parametric.sf_hist import TruncatedExponential
+
+        from tengri.components.stellar.sfh.mean_sfh import trunc_exp
+
+        sfh_synth = TruncatedExponential(
+            tau=unyt_quantity(tau_yr, "yr"),
+            max_age=unyt_quantity(age_yr, "yr"),
+            min_age=unyt_quantity(end_yr, "yr"),
+        )
+        sfr_synth = np.asarray(sfh_synth.get_sfr(self._T_YR))
+        sfr_tengri = np.asarray(
+            trunc_exp(
+                jnp.array(self._T_YR), log_total_mass=0.0, tau=tau_yr, age=age_yr, end=end_yr
+            )
+        )
+        assert_non_negative(sfr_tengri, name="trunc_exp")
+        max_rel, l1_half = _shape_and_mass_metrics(
+            self._T_YR, sfr_tengri, sfr_synth, end_yr, age_yr
+        )
+        # Measured 2026-09-06 against synthesizer 1.2.0: shape 1.2e-15 or better,
+        # L1/2 3.3e-05 / 8.5e-06 / 1.1e-05 / 1.5e-05.
+        assert max_rel < 1e-12, f"trunc_exp shape differs by {max_rel:.3e}"
+        assert l1_half < 1e-3, f"trunc_exp places {l1_half:.3e} of the mass differently"
+
+    @pytest.mark.parametrize(
+        ("nflex", "nfixed", "tlast_gyr", "tflex_gyr", "max_age_gyr", "ratio_young", "flex", "old"),
+        [
+            # The synthesizer defaults: nflex=5, nfixed=3.
+            (5, 3, 0.2, 2.0, 13.8, 0.3, [0.1, -0.2, 0.05, 0.1], [0.0, -0.1, 0.2]),
+            # Stronger structure inside the quenching zone.
+            (5, 3, 0.2, 2.0, 13.8, -0.8, [0.9, -0.8, 0.6, -0.5], [0.0, 0.4, -0.3]),
+            # nflex=1: the layout tengri's psb_suess2022 already had.
+            (1, 4, 0.15, 2.5, 13.7, 0.4, [], [0.0, -0.2, 0.35, 0.1]),
+        ],
+    )
+    def test_psb_flex_matches_synthesizer_continuity_psb(
+        self, nflex, nfixed, tlast_gyr, tflex_gyr, max_age_gyr, ratio_young, flex, old
+    ):
+        """tengri ``psb_continuity_flex`` vs synthesizer ``ContinuityPSB``.
+
+        Both are piecewise constant and both normalize by an exact sum over bin
+        widths, so this comparison is exact in the SFR values themselves, not
+        only in shape.
+        """
+        from synthesizer.parametric.sf_hist import ContinuityPSB
+
+        from tengri.components.stellar.sfh.nonparametric import psb_continuity_flex
+
+        assert old[0] == 0.0, "tengri pins the flex-to-fixed step at 0"
+
+        sfh_synth = ContinuityPSB(
+            logsfr_ratio_young=ratio_young,
+            logsfr_ratios=np.array(flex),
+            logsfr_ratio_old=np.array(old),
+            tlast=unyt_quantity(tlast_gyr * 1e9, "yr"),
+            tflex=unyt_quantity(tflex_gyr * 1e9, "yr"),
+            nflex=nflex,
+            nfixed=nfixed,
+            max_age=unyt_quantity(max_age_gyr * 1e9, "yr"),
+        )
+        t_yr = np.linspace(0.0, max_age_gyr * 1e9, 200_001)
+        sfr_synth = np.asarray(sfh_synth.get_sfr(t_yr))
+
+        kwargs = {f"flex_{i}": flex[i] for i in range(len(flex))}
+        kwargs.update({f"ratio_old_{i}": old[i + 1] for i in range(nfixed - 1)})
+        sfr_tengri = np.asarray(
+            psb_continuity_flex(
+                jnp.array(t_yr),
+                log_total_mass=0.0,
+                tlast_gyr=tlast_gyr,
+                tflex_gyr=tflex_gyr,
+                # Only the length (n_fixed + 1) and the last entry are read.
+                bin_edges_gyr=jnp.array(np.linspace(tflex_gyr, max_age_gyr, nfixed + 1)),
+                ratio_young=ratio_young,
+                **kwargs,
+            )
+        )
+        assert_non_negative(sfr_tengri, name="psb_continuity_flex")
+
+        # Bin edges must agree before the SFRs can mean the same thing.
+        tengri_edges_gyr = np.concatenate(
+            [
+                [0.0, tlast_gyr],
+                np.linspace(tlast_gyr, tflex_gyr, nflex + 1)[1:],
+                np.linspace(tflex_gyr, max_age_gyr, nfixed + 1)[1:],
+            ]
+        )
+        chex.assert_trees_all_close(
+            tengri_edges_gyr, np.asarray(sfh_synth.bin_edges) / 1e9, rtol=1e-12, atol=0.0
+        )
+
+        live = sfr_synth > 0
+        max_rel = float(np.max(np.abs(sfr_tengri[live] / sfr_synth[live] - 1.0)))
+        _, l1_half = _shape_and_mass_metrics(t_yr, sfr_tengri, sfr_synth, 0.0, max_age_gyr * 1e9)
+        # Measured 2026-09-06 against synthesizer 1.2.0: max|rel| 4.4e-16,
+        # L1/2 1.9e-06 (one grid cell at the oldest edge).
+        assert max_rel < 1e-12, f"ContinuityPSB SFR differs by {max_rel:.3e}"
+        assert l1_half < 1e-4, f"ContinuityPSB places {l1_half:.3e} of the mass differently"
+
+    def test_one_flex_bin_cannot_represent_the_synthesizer_default(self):
+        """The gap this closes: the shipped one-bin quenching zone is not enough.
+
+        With the flexible zone as a single bin, the nflex=5 history is
+        unreachable no matter what the remaining parameters do -- the zone is
+        flat by construction. Quantified as the fraction of stellar mass placed
+        differently.
+        """
+        from synthesizer.parametric.sf_hist import ContinuityPSB
+
+        from tengri.components.stellar.sfh.nonparametric import psb_continuity_flex
+
+        flex = [0.9, -0.8, 0.6, -0.5]
+        old = [0.0, -0.1, 0.2]
+        sfh_synth = ContinuityPSB(
+            logsfr_ratio_young=0.3,
+            logsfr_ratios=np.array(flex),
+            logsfr_ratio_old=np.array(old),
+            tlast=unyt_quantity(0.2e9, "yr"),
+            tflex=unyt_quantity(2e9, "yr"),
+            nflex=5,
+            nfixed=3,
+            max_age=unyt_quantity(13.8e9, "yr"),
+        )
+        t_yr = np.linspace(0.0, 13.8e9, 200_001)
+        sfr_synth = np.asarray(sfh_synth.get_sfr(t_yr))
+        one_bin = np.asarray(
+            psb_continuity_flex(
+                jnp.array(t_yr),
+                log_total_mass=0.0,
+                tlast_gyr=0.2,
+                tflex_gyr=2.0,
+                bin_edges_gyr=jnp.array(np.linspace(2.0, 13.8, 4)),
+                ratio_young=0.3,
+                ratio_old_0=old[1],
+                ratio_old_1=old[2],
+            )
+        )
+        p = one_bin / np.trapezoid(one_bin, t_yr)
+        q = sfr_synth / np.trapezoid(sfr_synth, t_yr)
+        l1_half = 0.5 * np.trapezoid(np.abs(p - q), t_yr)
+        # Measured 2026-09-06: L1/2 = 0.038 for these ratios. Small in absolute
+        # terms only because the fixed bins from 2 to 13.8 Gyr hold most of the
+        # mass; inside the quenching zone the two histories are unrelated.
+        assert l1_half > 0.01, (
+            "the one-flex-bin model reproduced a five-bin quenching zone, which "
+            "would mean the flex ratios do nothing"
+        )
 
 
 # ── Part 2: Non-parametric SFH ─────────────────────────────────────

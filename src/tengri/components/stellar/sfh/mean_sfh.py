@@ -19,10 +19,15 @@ Canonical names (short name alias in parentheses):
 - **lognormal** (lnorm): Gaussian in log10(age) space (3 params).
 - **dpl** (canonical): Carnall+2018 BAGPIPES parameterization with log_total_mass (4 params).
 - **double_powerlaw**: Low-level implementation used by ``dpl``.
+- **dpl_lookback**: the same algebra as ``dpl`` applied to the stellar age rather
+  than to cosmic time since formation (Synthesizer convention). A different
+  model, not a reparameterization of ``dpl``.
 - **constant** (const): flat SFR between start and end times (3 params).
 - **exponential** (exp): declining exponential from start (3 params).
 - **delayed_exponential** (dexp): peaks at start + tau (3 params).
-- **declining_exponential** (tau): FSPS/bagpipes tau model in lookback time (3 params).
+- **declining_exponential** (declining_exp): FSPS/bagpipes tau model in lookback time (3 params).
+- **trunc_exp**: ``declining_exponential`` with a young-end cutoff and a signed
+  tau (Synthesizer ``TruncatedExponential``); identical to it when ``end = 0``.
 - **triweight_burst**: compact triweight kernel in log-age for burst component.
 - **spline**: N-node monotone cubic (PCHIP) spline in log-age space. Nodes are
   static (set at JIT-compile time); SFR values are free parameters. Use directly
@@ -709,6 +714,136 @@ def dpl(
     return _renormalize_to_mass(jnp.maximum(shape, 0.0), t_lookback, log_total_mass)
 
 
+def dpl_lookback(
+    t_lookback: jnp.ndarray,
+    peak: float,
+    alpha: float,
+    beta: float,
+    age: float,
+    end: float,
+    log_total_mass: float,
+) -> jnp.ndarray:
+    r"""Double power-law SFH written in **lookback time** (Synthesizer convention).
+
+    .. math::
+
+       \mathrm{SFR}(t_{\mathrm{lb}}) \propto
+       \bigl[(t_{\mathrm{lb}}/t_{\mathrm{peak}})^{\alpha}
+             + (t_{\mathrm{lb}}/t_{\mathrm{peak}})^{-\beta}\bigr]^{-1},
+       \qquad t_{\mathrm{end}} \le t_{\mathrm{lb}} \le t_{\mathrm{age}}
+
+    and zero outside that window, where :math:`t_{\mathrm{lb}}` is lookback time
+    [yr], :math:`t_{\mathrm{peak}}` the turnover lookback time [yr],
+    :math:`\alpha` the slope on the old side (large lookback), :math:`\beta` the
+    slope on the young side (small lookback), and
+    :math:`t_{\mathrm{end}}`, :math:`t_{\mathrm{age}}` the young and old
+    truncation lookback times [yr]. The shape is rescaled so the integrated mass
+    equals ``10**log_total_mass``.
+
+    Parameters
+    ----------
+    t_lookback : array_like, shape (n_age,)
+        Lookback time [yr].
+    peak : float
+        Turnover lookback time [yr]. The SFR peaks at
+        :math:`t_{\mathrm{peak}}(\beta/\alpha)^{1/(\alpha+\beta)}`.
+    alpha : float
+        Old-side slope exponent [dimensionless]. Typical 0.5-4.
+    beta : float
+        Young-side slope exponent [dimensionless]. Typical 0.3-3.
+    age : float
+        Older truncation lookback time [yr]; SFR is zero for
+        ``t_lookback > age``. Synthesizer spells this ``max_age``.
+    end : float
+        Younger truncation lookback time [yr]; SFR is zero for
+        ``t_lookback < end``. Synthesizer spells this ``min_age``; 0 means star
+        formation continues to the epoch of observation.
+    log_total_mass : float
+        log10 of total stellar mass formed [Msun]. The shape is rescaled so that
+        ``trapezoid(sfr, t_lookback) = 10**log_total_mass``.
+
+    Returns
+    -------
+    ndarray, shape (n_age,)
+        SFR at each lookback time [Msun/yr].
+
+    Notes
+    -----
+    **JIT/grad/vmap-safe**: yes, pure elementwise JAX; the truncation uses
+    :func:`window_weight`, so both boundaries carry a nonzero gradient.
+
+    **Convention: this is NOT :func:`dpl`.** Both apply the same algebra, but to
+    different time variables, and the form is not symmetric under
+    :math:`T \leftrightarrow \mathrm{age} - T`, so the two are genuinely
+    different models rather than a reparameterization of one another. :func:`dpl`
+    is BAGPIPES ``dblplaw`` (Carnall et al. 2018 [1]_): the argument is
+    :math:`T = \mathrm{age} - t_{\mathrm{lb}}`, cosmic time **since formation**,
+    so ``tau`` is a turnover measured forward from the Big Bang. Here the
+    argument is the stellar age itself, so ``peak`` is a turnover measured back
+    from the epoch of observation. Reach for :func:`dpl` to compare with
+    BAGPIPES/Carnall and for this function to compare with Synthesizer;
+    ``dpl`` remains the default double power law.
+
+    **Sign of** ``beta`` **against Synthesizer.** ``synthesizer.parametric.SFH.
+    DoublePowerLaw`` writes its second term as
+    :math:`(t_{\mathrm{lb}}/t_{\mathrm{peak}})^{\beta_{\rm synth}}` with a
+    *signed* exponent, whereas this function (like Carnall et al. 2018 and like
+    :func:`dpl`) writes :math:`-\beta`. So
+    :math:`\beta_{\rm synth} = -\beta`, and an interior peak requires
+    :math:`\beta_{\rm synth} < 0`; a positive :math:`\beta_{\rm synth}` gives a
+    monotonically declining history that diverges as
+    :math:`t_{\mathrm{lb}} \to 0`. The declared prior on
+    ``sfh_dpl_lookback_beta`` is positive, which spans exactly the peaked
+    family.
+
+    **The** ``t_lookback = 0`` **node returns exactly zero.** For
+    :math:`\beta > 0` that is the limit; for :math:`\beta < 0` the limit is
+    :math:`+\infty` and this returns 0 instead, deliberately, because an
+    infinity there poisons the mass normalization and the gradient of every
+    other node. That branch is outside the declared prior, and any grid whose
+    first node is above zero is unaffected either way.
+
+    Implements the same model as Synthesizer (Lovell et al. 2025 [2]_; Roper
+    et al. 2026 [3]_) ``SFH.DoublePowerLaw``, under the sign convention above.
+
+    References
+    ----------
+    .. [1] A. C. Carnall et al., "Inferring the star formation histories of
+       massive quiescent galaxies with BAGPIPES: evidence for multiple quenching
+       mechanisms," MNRAS, 480, 4379 (2018). arXiv:1712.04452.
+       https://doi.org/10.1093/mnras/sty2169
+    .. [2] C. C. Lovell et al., "Synthesizer: Synthetic Observables For
+       Modern Astronomy," Open Journal of Astrophysics, 8 (2025).
+       https://doi.org/10.33232/001c.145766
+    .. [3] W. J. Roper et al., "Synthesizer: A fast, flexible and modular
+       Python package for generating synthetic observations of astrophysical
+       simulations," Journal of Open Source Software, 11, 9436 (2026).
+       https://doi.org/10.21105/joss.09436
+
+    Examples
+    --------
+    >>> import jax.numpy as jnp
+    >>> from tengri.components.stellar.sfh import dpl_lookback
+    >>> t = jnp.logspace(7, 10.14, 64)
+    >>> sfr = dpl_lookback(
+    ...     t, peak=2e9, alpha=2.0, beta=1.0, age=10e9, end=0.0, log_total_mass=10.0
+    ... )
+    >>> sfr.shape
+    (64,)
+    """
+    # ``t_lookback = 0`` sends x**(-beta) to +inf, so the true SFR there is 0.
+    # Evaluating that branch anyway leaks inf (and a NaN VJP) through the
+    # ``where``, so substitute a finite positive dummy (``peak``, i.e. x = 1)
+    # in the dead region and mask it out afterwards -- the same double-``where``
+    # the ``dpl`` sibling above uses for its formation anchor.
+    positive = t_lookback > 0.0
+    t_safe = jnp.where(positive, t_lookback, peak)
+    x = t_safe / peak
+    shape = jnp.where(positive, 1.0 / (x**alpha + x ** (-beta)), 0.0)
+    shape = shape * window_weight(t_lookback, end, age)
+    return _renormalize_to_mass(jnp.maximum(shape, 0.0), t_lookback, log_total_mass)
+
+
 def constant(
     t_lookback: jnp.ndarray,
     log_total_mass: float,
@@ -986,6 +1121,123 @@ def declining_exponential(
     dt_safe = jnp.maximum(dt, 0.0)
     raw = jnp.exp(-dt_safe / tau)
     shape = raw * window_weight(t_lookback, 0.0, age)
+    return _renormalize_to_mass(shape, t_lookback, log_total_mass)
+
+
+def trunc_exp(
+    t_lookback: jnp.ndarray,
+    log_total_mass: float,
+    tau: float,
+    age: float,
+    end: float = 0.0,
+) -> jnp.ndarray:
+    r"""Exponential SFH truncated at **both** ends (Synthesizer convention).
+
+    .. math::
+
+       \mathrm{SFR}(t_{\mathrm{lb}}) \propto
+       \exp\!\left(-\frac{t_{\mathrm{age}} - t_{\mathrm{lb}}}{\tau}\right),
+       \qquad t_{\mathrm{end}} \le t_{\mathrm{lb}} \le t_{\mathrm{age}}
+
+    and zero outside, where :math:`t_{\mathrm{lb}}` is lookback time [yr],
+    :math:`t_{\mathrm{age}}` the lookback time of formation [yr],
+    :math:`t_{\mathrm{end}}` the lookback time at which star formation stops
+    [yr], and :math:`\tau` the e-folding timescale [yr]. The exponent's argument
+    :math:`t_{\mathrm{age}} - t_{\mathrm{lb}}` is cosmic time elapsed since
+    formation. The shape is rescaled so the integrated mass equals
+    ``10**log_total_mass``.
+
+    Parameters
+    ----------
+    t_lookback : array_like, shape (n_age,)
+        Lookback time [yr].
+    log_total_mass : float
+        log10 of total stellar mass formed [Msun].
+    tau : float
+        Signed e-folding timescale [yr]; must be non-zero. **Positive**
+        :math:`\tau` declines in cosmic time (the SFR *rises* with lookback
+        age: highest at formation, lowest at ``end``), which is the classic
+        tau model. **Negative** :math:`\tau` rises in cosmic time. Measured
+        against ``synthesizer.parametric.SFH.Exponential._sfr`` in Synthesizer
+        1.2.0, whose sign convention this matches exactly.
+    age : float
+        Lookback time of formation [yr]; SFR is zero for ``t_lookback > age``.
+        Synthesizer spells this ``max_age``.
+    end : float, optional
+        Lookback time at which star formation ceases [yr]; SFR is zero for
+        ``t_lookback < end``. Synthesizer spells this ``min_age``. Default 0.0
+        (star formation continues to the epoch of observation), which reduces
+        this function to :func:`declining_exponential`.
+
+    Returns
+    -------
+    ndarray, shape (n_age,)
+        SFR at each lookback time [Msun/yr], non-negative.
+
+    Notes
+    -----
+    **JIT/grad/vmap-safe**: yes, pure elementwise JAX; the truncation uses
+    :func:`window_weight`, so both boundaries carry a nonzero gradient.
+
+    **Relation to the models tengri already has.** With ``end = 0`` this is
+    bit-identical to :func:`declining_exponential` (registry ``declining_exp``),
+    so the new content is the young-end cutoff and the signed :math:`\tau`.
+    It is *not* :func:`constant_then_exponential` (registry ``const_exp``),
+    which is flat for ``t_lb >= quench_age`` and decays only on the young side
+    of that epoch, nor :func:`top_hat`, which is constant inside its window with
+    sigmoid edges and carries no exponential at all. A galaxy that formed at
+    ``age``, declined exponentially, and then shut off at ``end`` is not
+    expressible by either, which is why this is a separate entry rather than an
+    alias.
+
+    The exponent is stabilized by subtracting its in-window maximum before
+    :func:`jax.numpy.exp`. The rescaling to ``log_total_mass`` is invariant
+    under a constant shift of the exponent, so this is exact rather than an
+    approximation; it is what keeps a negative (rising) :math:`\tau` from
+    overflowing and a very small positive :math:`\tau` from underflowing the
+    whole window to zero. The shift is clamped at zero and taken under
+    :func:`jax.lax.stop_gradient`, so for :math:`\tau > 0` it is exactly zero
+    and the arithmetic reduces to :func:`declining_exponential`'s.
+
+    Implements the same model as Synthesizer (Lovell et al. 2025 [1]_; Roper
+    et al. 2026 [2]_) ``SFH.TruncatedExponential``.
+
+    References
+    ----------
+    .. [1] C. C. Lovell et al., "Synthesizer: Synthetic Observables For
+       Modern Astronomy," Open Journal of Astrophysics, 8 (2025).
+       https://doi.org/10.33232/001c.145766
+    .. [2] W. J. Roper et al., "Synthesizer: A fast, flexible and modular
+       Python package for generating synthetic observations of astrophysical
+       simulations," Journal of Open Source Software, 11, 9436 (2026).
+       https://doi.org/10.21105/joss.09436
+
+    Examples
+    --------
+    >>> import jax.numpy as jnp
+    >>> from tengri.components.stellar.sfh import trunc_exp
+    >>> t = jnp.logspace(7, 10.14, 64)
+    >>> sfr = trunc_exp(t, log_total_mass=10.0, tau=1e9, age=8e9, end=5e8)
+    >>> sfr.shape
+    (64,)
+    """
+    w = window_weight(t_lookback, end, age)
+    # Clamped so ``expo`` stays finite where the window is zero; dt >= 0
+    # throughout the window, so in-window values are untouched.
+    dt_safe = jnp.maximum(age - t_lookback, 0.0)
+    expo = -dt_safe / tau
+    in_window = jnp.where(w > 0.0, expo, -jnp.inf)
+    shift = jnp.max(in_window)
+    # An all-zero window (end >= age) leaves ``shift`` at -inf; fall back to 0
+    # so the degenerate case returns zeros rather than NaN.
+    shift = jax.lax.stop_gradient(jnp.where(jnp.isfinite(shift), jnp.maximum(shift, 0.0), 0.0))
+    # Double-``where``: outside the window the exponent can be arbitrarily
+    # large for a negative tau, and ``inf * 0`` is NaN in both the forward pass
+    # and the VJP. Substituting ``shift`` there makes the discarded branch
+    # exp(0) = 1, which the zero weight then cleanly removes. In-window the
+    # shifted exponent is <= 0 by construction, so nothing overflows.
+    expo_safe = jnp.where(w > 0.0, expo, shift)
+    shape = jnp.exp(expo_safe - shift) * w
     return _renormalize_to_mass(shape, t_lookback, log_total_mass)
 
 

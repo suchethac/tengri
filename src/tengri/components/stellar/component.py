@@ -2124,6 +2124,14 @@ class StellarSEDComponent:
         _SUPPORTED_SFH = (
             "tsnorm",
             "dpl",
+            # Synthesizer-convention siblings of entries already on this list:
+            # they reuse the same shape-function machinery (a closed-form
+            # lookback-time curve, a truncated exponential, and the very
+            # ``psb_continuity`` callable ``psb_suess2022`` uses), so there is
+            # no new forward path to validate.
+            "dpl_lookback",
+            "trunc_exp",
+            "psb_flex",
             "continuity",
             "dirichlet",
             "dense_basis",
