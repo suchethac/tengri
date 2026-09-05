@@ -665,6 +665,13 @@ jobs:
       - run: python tools/check_doc_grammar_keys.py
       - run: python tools/check_param_prefixes.py
       - run: python tools/check_param_defaults.py
+      # Grid-backed AGN priors (agn_log_nh_silva, agn_a_cat3d, agn_fwd_cat3d,
+      # agn_cos_inc via cat3d, agn_oa_skirtor/agn_incl_skirtor/agn_tv_skirtor)
+      # must declare exactly the vendored HDF5 grid's own axis extent (#2050
+      # Task 1, M-A). Needs only h5py + numpy (installed above), not a JIT
+      # trace, so it lives beside the other declaration guards rather than in
+      # `lint` (which installs only ruff).
+      - run: python tools/check_param_grid_extent.py
       # The redshift-specific instance of the same rule: a numeric default on
       # params.get('redshift', …) is unreachable in live paths and silences the
       # one condition worth hearing about — #1432.

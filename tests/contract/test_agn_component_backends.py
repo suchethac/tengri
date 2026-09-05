@@ -177,6 +177,22 @@ class TestSilva04TorusContract:
         expected = {"agn_log_lbol", "agn_log_nh_silva", "agn_torus_frac"}
         assert param_names == expected
 
+    def test_silva04_log_nh_matches_canonical_declaration(self):
+        """log_nh_silva derives from the canonical PARAMS declaration (single source
+        of truth, Task 1/M-A). Fails if the class ever restates a literal
+        ``Uniform(lo, hi, ...)`` that can drift from ``agn_log_nh_silva`` again,
+        the way it drifted to ``(22.0, 25.0)`` while the grid moved to
+        ``(21.5, 24.45)``.
+        """
+        from tengri.components.agn._params import PARAMS
+        from tengri.protocols.component import declared_prior
+
+        canonical = declared_prior(PARAMS, "agn_log_nh_silva")
+        component = Silva04Torus()
+        assert component.log_nh_silva.lo == canonical.lo
+        assert component.log_nh_silva.hi == canonical.hi
+        assert component.log_nh_silva.default == canonical.default
+
     def test_silva04_outputs(self):
         """Silva04Torus publishes L_agn_torus."""
         component = Silva04Torus()
@@ -231,6 +247,29 @@ class TestCAT3DTorusContract:
             "agn_torus_frac",
         }
         assert param_names == expected
+
+    def test_cat3d_bounds_match_canonical_declaration(self):
+        """a_cat3d/fwd_cat3d/cos_inc derive from the canonical PARAMS declarations
+        (single source of truth, Task 1/M-A). Fails if the class ever restates a
+        literal ``Uniform(lo, hi, ...)`` that can drift from
+        ``agn_a_cat3d``/``agn_fwd_cat3d``/``agn_cos_inc`` again, the way
+        ``fwd_cat3d`` drifted to a stale ``Uniform(0.0, 1.0)`` while the canonical
+        declaration (and the vendored grid) moved to ``(1.0, 2.25)``.
+        """
+        from tengri.components.agn._params import PARAMS
+        from tengri.protocols.component import declared_prior
+
+        component = CAT3DTorus()
+        for attr, canonical_name in (
+            ("a_cat3d", "agn_a_cat3d"),
+            ("fwd_cat3d", "agn_fwd_cat3d"),
+            ("cos_inc", "agn_cos_inc"),
+        ):
+            canonical = declared_prior(PARAMS, canonical_name)
+            prior = getattr(component, attr)
+            assert prior.lo == canonical.lo, attr
+            assert prior.hi == canonical.hi, attr
+            assert prior.default == canonical.default, attr
 
     def test_cat3d_outputs(self):
         """CAT3DTorus publishes L_agn_torus."""

@@ -27,12 +27,21 @@ from typing import Any, ClassVar
 
 import jax.numpy as jnp
 
+from tengri.components.agn._params import PARAMS as _AGN_PARAMS
 from tengri.components.agn.silva04 import create_silva04_from_grid
 from tengri.components.sed_model_component import SEDModelComponent
 from tengri.parameters.priors import Uniform
-from tengri.protocols.component import SEDComponentConfig, SEDComponentState
+from tengri.protocols.component import SEDComponentConfig, SEDComponentState, declared_prior
 
 __all__ = ["Silva04Torus"]
+
+#: Single source of truth for ``log_nh_silva``'s bounds and default: the
+#: shared ``agn_log_nh_silva`` declaration in ``_params.py``, whose range is
+#: the ``data/silva04_torus_grid.h5`` axis extent. Read once at class-
+#: definition time so the class attribute below cannot drift from it the way
+#: it did before Task 1 (declared [22, 25] here while the grid was [21.5,
+#: 24.45]).
+_LOG_NH_SILVA_PRIOR = declared_prior(_AGN_PARAMS, "agn_log_nh_silva")
 
 
 @dataclass(frozen=True)
@@ -88,7 +97,7 @@ class Silva04Torus(SEDModelComponent):
     log_lbol : Uniform
         log₁₀(L_bol / L_sun). [dex, 8–14]
     log_nh_silva : Uniform
-        log₁₀(N_H / cm^-2), hydrogen column density. [dex, 22–25]
+        log₁₀(N_H / cm^-2), hydrogen column density. [dex, 21.5–24.45]
     torus_frac : Uniform
         Fraction of L_bol reprocessed by torus. [dimensionless, 0–1]
 
@@ -145,11 +154,11 @@ class Silva04Torus(SEDModelComponent):
         default=11.0,
     )
     log_nh_silva = Uniform(
-        22.0,
-        25.0,
+        _LOG_NH_SILVA_PRIOR.lo,
+        _LOG_NH_SILVA_PRIOR.hi,
         description="Hydrogen column density (Silva et al.)",
         units="dex (cm^-2)",
-        default=23.5,
+        default=_LOG_NH_SILVA_PRIOR.default,
     )
     torus_frac = Uniform(
         0.0,

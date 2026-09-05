@@ -209,10 +209,15 @@ PARAMS: tuple[ParamDeclaration, ...] = (
         lambda lo, hi: lo >= 0,
         "must be >= 0",
     ),
+    # Half-opening angle axis, measured from data/skirtor_mean3p_torus_grid.h5,
+    # data/skirtor_templates_v2.h5, data/skirtor_templates_v3.h5, and
+    # data/agnfitter_torus_reference.h5: all four agree on {10, 20, ..., 80}
+    # degrees. The prior declared [20, 60] here for a long time; no vendored
+    # SKIRTOR grid ever did (second audit, Task 1 addendum).
     ParamDeclaration(
         "agn_oa_skirtor",
-        Uniform(20.0, 60.0, default=40.0),
-        "SKIRTOR torus half-opening angle [degrees] (20-60)",
+        Uniform(10.0, 80.0, default=40.0),
+        "SKIRTOR torus half-opening angle [degrees] (10-80)",
         lambda lo, hi: lo > 0,
         "must be > 0",
         units="deg",
@@ -258,12 +263,15 @@ PARAMS: tuple[ParamDeclaration, ...] = (
     ),
     # Silva, Maiolino & Granato (2004) smooth obscured-torus templates,
     # indexed by line-of-sight column density. Default matches silva04_torus_block.
+    # Range is the log_nh_axis extent measured from data/silva04_torus_grid.h5
+    # (group 'silva04'): 60 nodes, step 0.05, [21.5, 24.45] (Task 1, #2050 plan).
+    # The prior declared [22, 25] here for a long time; the grid never did.
     ParamDeclaration(
         "agn_log_nh_silva",
-        Uniform(22.0, 25.0, default=23.0),
-        "Silva+04 torus log10(N_H / cm^-2) (grid 22 to 25)",
-        lambda lo, hi: lo >= 22.0 and hi <= 25.0,
-        "must be within the Silva+04 grid extent [22, 25]",
+        Uniform(21.5, 24.45, default=23.0),
+        "Silva+04 torus log10(N_H / cm^-2) (grid 21.5 to 24.45)",
+        lambda lo, hi: lo >= 21.5 and hi <= 24.45,
+        "must be within the Silva+04 grid extent [21.5, 24.45]",
         units="log10(cm^-2)",
     ),
     # Stalevski+ 2016 SKIRTOR_mean_3p (AGNfitter-rX averaged) torus. Shares
@@ -891,10 +899,111 @@ DEFAULT_AGN_COS_INC = declared_default(PARAMS, "agn_cos_inc")
 #: (#417). The legacy 0.1 silently delivered a tenth of the requested AGN.
 DEFAULT_AGN_LUM_RATIO = declared_default(PARAMS, "agn_lum_ratio")
 
+#: Grid-backed AGN priors whose declared bound must equal the vendored grid's
+#: own axis extent exactly (Task 1, M-A: "declared priors/defaults disagree
+#: with the data they gate"). Read by ``tools/check_param_grid_extent.py``,
+#: which parses this module with :mod:`ast` (never imports ``tengri``, so the
+#: guard runs without the JAX-heavy import chain) rather than importing it, so
+#: every value below must be a **literal** ``ParamDeclaration(name,
+#: Uniform(lo, hi, ...), ...)`` call for the ``name`` key to resolve.
+#:
+#: Each entry is ``key: (declared_param_name, h5_path, dataset_path,
+#: transform)``:
+#:
+#: - ``key`` is a descriptive, block-scoped label (not necessarily the
+#:   parameter name): several vendored grids can back the *same* declared
+#:   parameter (e.g. ``agn_cos_inc``), so the key -- not the param name --
+#:   is what the dict keys on.
+#: - ``h5_path`` is repo-root-relative.
+#: - ``dataset_path`` is the dataset's path inside the h5 file
+#:   (``"group/dataset"``).
+#: - ``transform`` is ``"identity"`` (the axis *is* the parameter -- compare
+#:   directly) or ``"cos_deg"`` (the axis is an inclination in *degrees*, but
+#:   the declared parameter is its cosine -- compare against
+#:   ``cos(deg2rad(axis))`` instead).
+#:
+#: Add a new grid-backed parameter with one entry. Excluded, deliberately (see
+#: task-1-report.md for the full reasoning):
+#:
+#: - ``dh02_ce01``'s only axis (log L_IR) is derived from ``L_absorbed`` by
+#:   energy balance, not user-set (``declares_no_parameters = True`` on
+#:   ``DH02CE01IRSEDComponent``) -- there is no Uniform declaration to compare.
+#: - ``schreiber2018``'s ``T`` / ``f_pah`` are declared ``Fixed(...)`` at the
+#:   component level, not ``Uniform`` -- nothing here to compare either. The
+#:   *shared* ``dust_T`` free-prior range (``components/dust/_params.py``) is
+#:   deliberately wider than any one dust-emission grid (it also serves
+#:   ``modified_blackbody``/``casey2012``, which have no grid at all) and is
+#:   already reconciled per-block by ``components/grid_support.py``'s
+#:   ``GRID_SUPPORT`` table (#1586) -- registering it here would duplicate
+#:   that mechanism and permanently fail this guard for a non-defect.
+#: - ``nenkova_agnfitter``'s inclination axis (10-90 deg -> cos 0-0.985) backs
+#:   the *shared* ``agn_cos_inc`` declaration, which must stay at its full
+#:   physical [0, 1] support to serve every other consumer (cat3d, disc
+#:   reddening, ...). ``nenkova_agnfitter`` has no ``SEDModelComponent``
+#:   adapter of its own to carry a block-scoped override, so this guard --
+#:   which only ever compares one grid against one *global* ``PARAMS``
+#:   declaration -- cannot express "narrower for this block only" without a
+#:   false failure. ``components/grid_support.py`` is the mechanism built for
+#:   exactly this (see its module docstring); a ``("agn.torus",
+#:   "nenkova_agnfitter")`` entry there, not here, is the right fix.
+#: - ``slone_netzer``'s ``agn_log_mbh`` / ``agn_log_ledd`` axes are narrower
+#:   than the shared declarations above, for the same reason: those two
+#:   parameters are also consumed by every non-grid AGN disc model
+#:   (``kd18_disc_model``, ``adaf``, ``unified``, ``disc``), which need the
+#:   wide physical range. Already reconciled by
+#:   ``slone_netzer_grid_support()`` + ``GRID_SUPPORT[("agn.disc",
+#:   "slone_netzer")]`` (#1586); registering it here would duplicate that and
+#:   permanently fail this guard for a non-defect.
+GRID_EXTENT_SOURCES: dict[str, tuple[str, str, str, str]] = {
+    "silva04_log_nh": (
+        "agn_log_nh_silva",
+        "data/silva04_torus_grid.h5",
+        "silva04/log_nh_axis",
+        "identity",
+    ),
+    "cat3d_a": (
+        "agn_a_cat3d",
+        "data/cat3d_wind_torus_grid.h5",
+        "cat3d_wind/a_axis",
+        "identity",
+    ),
+    "cat3d_fwd": (
+        "agn_fwd_cat3d",
+        "data/cat3d_wind_torus_grid.h5",
+        "cat3d_wind/fwd_axis",
+        "identity",
+    ),
+    "cat3d_cos_inc": (
+        "agn_cos_inc",
+        "data/cat3d_wind_torus_grid.h5",
+        "cat3d_wind/incl_axis",
+        "cos_deg",
+    ),
+    "skirtor_agnfitter_oa": (
+        "agn_oa_skirtor",
+        "data/skirtor_mean3p_torus_grid.h5",
+        "skirtor_mean3p/oa_axis",
+        "identity",
+    ),
+    "skirtor_agnfitter_incl": (
+        "agn_incl_skirtor",
+        "data/skirtor_mean3p_torus_grid.h5",
+        "skirtor_mean3p/incl_axis",
+        "identity",
+    ),
+    "skirtor_agnfitter_tv": (
+        "agn_tv_skirtor",
+        "data/skirtor_mean3p_torus_grid.h5",
+        "skirtor_mean3p/tv_axis",
+        "identity",
+    ),
+}
+
 __all__ = [
     "DEFAULT_AGN_COS_INC",
     "DEFAULT_AGN_LOG_LBOL",
     "DEFAULT_AGN_LOG_MBH",
     "DEFAULT_AGN_LUM_RATIO",
+    "GRID_EXTENT_SOURCES",
     "PARAMS",
 ]

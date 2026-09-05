@@ -29,6 +29,7 @@ from __future__ import annotations
 
 from pathlib import Path
 
+import h5py
 import jax.numpy as jnp
 import numpy as np
 import pytest
@@ -43,6 +44,15 @@ if not _GRID.is_file():
         "(build with: python scripts/build_silva04_grid.py --download)",
         allow_module_level=True,
     )
+
+with h5py.File(_GRID, "r") as _f:
+    _N_LOG_NH: int = _f["silva04"]["log_nh_axis"].shape[0]
+
+#: Explicit node indices, not a frac -> round(frac * (n - 1)) mapping: the
+#: latter never lands on the last node for any frac < 1 (e.g. frac=0.99 on
+#: n=60 rounds 58.41 -> 58, one short of index 59), so the worst-behaved edge
+#: node was never exercised. See task-1-brief.md item 3.
+_NODE_INDICES = [0, _N_LOG_NH // 4, _N_LOG_NH // 2, 3 * _N_LOG_NH // 4, _N_LOG_NH - 1]
 
 
 @pytest.fixture(scope="module")
@@ -89,10 +99,9 @@ def test_peak_in_infrared(grid, component):
     assert 1.0 < peak_um < 200.0, f"Silva+04 peak {peak_um:.1f} µm outside the IR torus band"
 
 
-@pytest.mark.parametrize("frac", [0.0, 0.25, 0.5, 0.75, 0.99])
-def test_node_shape_matches_grid(grid, component, frac):
+@pytest.mark.parametrize("i", _NODE_INDICES)
+def test_node_shape_matches_grid(grid, component, i):
     """Runtime component reproduces the stored node template shape (triweight budget)."""
-    i = round(frac * (grid["log_nh"].size - 1))
     ref = grid["template"][i]
     out = _call(component, grid, i)
 
@@ -109,9 +118,10 @@ def test_node_shape_matches_grid(grid, component, frac):
     )
 
 
-def test_parameter_bounds():
-    """Priors cover the Silva+04 grid extent."""
+def test_parameter_bounds(grid):
+    """Priors cover the Silva+04 grid extent, read from the h5 axis (not a literal)."""
     from tengri.components.agn.silva04_model import Silva04Torus
 
     c = Silva04Torus()
-    assert (c.log_nh_silva.lo, c.log_nh_silva.hi) == (22.0, 25.0)
+    lo, hi = float(grid["log_nh"].min()), float(grid["log_nh"].max())
+    assert (c.log_nh_silva.lo, c.log_nh_silva.hi) == (lo, hi)
