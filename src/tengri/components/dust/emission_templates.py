@@ -2395,11 +2395,12 @@ def create_themis_from_grid(template_data: dict | str) -> Callable:
     powerlaw = template_data["powerlaw"]  # (n_qhac, n_umin, n_wave)
     tmpl_wave = template_data["wavelength_aa"]
     umin_grid = template_data["umin_grid"]
-    # ``_qhac_axis_to_cigale`` reads a concrete max to pick a unit convention,
-    # so it cannot run on traced arrays. When the caller threaded this grid in
-    # (see EmissionComponent.threaded_templates) it supplies the axis already
-    # converted, under a distinct key. The membership test is Python-level and
-    # therefore safe under trace; the conversion itself stays eager (#1649).
+    # ``_qhac_axis_to_cigale`` is trace-safe (#2114): its convention select
+    # runs as a traced ``jnp.where``. A caller that threaded this grid in
+    # (see EmissionComponent.threaded_templates) still supplies the axis
+    # already converted, under a distinct key, so the conversion runs once,
+    # eagerly, where the data is concrete (#1649). The membership test is
+    # Python-level and therefore safe under trace.
     if "qhac_grid_cigale" in template_data:
         qhac_grid = template_data["qhac_grid_cigale"]
     else:
