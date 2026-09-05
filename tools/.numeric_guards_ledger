@@ -2,6 +2,12 @@
 # Format: path | pattern -> count
 # Keyed on (file path, pattern description) for drift-proofness (#2050).
 # Blind spot: same-bucket swap (remove + add in one commit) ships unadjudicated; code review catches it.
+# NOTE: --regen rewrites this file from the tree and drops hand-written comment
+# lines above; re-add them after regenerating (the line above was lost once).
+# nebular_grid_precompute's '-30.0' floor is a LOG-SPACE floor: it clamps
+# log10(Q_H), so -30.0 dex is the same guard as the 1e-30 linear floor it
+# replaced, not a new 30-orders-smaller one. The pattern matcher reads the
+# literal, not the space it lives in.
 src/tengri/analysis/diagnostics/lines.py | jnp.clip with floor 0.0 < 1e-20 -> 2
 src/tengri/analysis/diagnostics/spectral.py | jnp.maximum with floor 1e-40 < 1e-20 -> 5
 src/tengri/components/agn/_nthcomp.py | jnp.clip with floor 0.0 < 1e-20 -> 2
@@ -72,7 +78,7 @@ src/tengri/components/nebular/fesc_model.py | jnp.clip with floor 0.0 < 1e-20 ->
 src/tengri/components/nebular/fesc_model.py | jnp.maximum with floor 1e-50 < 1e-20 -> 1
 src/tengri/components/nebular/ionizing_spectrum.py | jnp.clip with floor 0.0 < 1e-20 -> 4
 src/tengri/components/nebular/line_precompute.py | jnp.maximum with floor 1e-30 < 1e-20 -> 1
-src/tengri/components/nebular/nebular_grid_precompute.py | jnp.maximum with floor 1e-30 < 1e-20 -> 1
+src/tengri/components/nebular/nebular_grid_precompute.py | jnp.maximum with floor -30.0 < 1e-20 -> 1
 src/tengri/components/nebular/nebular_grid_precompute.py | jnp.maximum with floor 1e-300 < 1e-20 -> 1
 src/tengri/components/nebular/shock_model.py | jnp.maximum with floor 1e-30 < 1e-20 -> 3
 src/tengri/components/stellar/component.py | jnp.clip with floor 0.0 < 1e-20 -> 1
