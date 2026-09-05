@@ -61,6 +61,30 @@ def test_nearest_lookup_matches_interp1d_kind_nearest_semantics() -> None:
     assert not np.isclose(A._nearest_lookup(1.9, x_grid, y_grid), linear_at_1_9)
 
 
+def test_nearest_lookup_descending_grid_midpoint_matches_scipy() -> None:
+    """A descending grid must still resolve an exact midpoint tie like scipy.
+
+    ``_l2500_from_template`` passes ``log_nu`` -- descending, since
+    frequency falls as wavelength rises -- straight into
+    ``_nearest_lookup``. ``np.argmin`` alone returns the *first* occurrence
+    on a tie, which is the high-``x`` node for a descending array; scipy's
+    ``interp1d(kind='nearest')`` always resolves an exact midpoint to the
+    **lower-``x``** neighbor regardless of input order. Sorting internally
+    is what makes those agree.
+    """
+    from scipy.interpolate import interp1d
+
+    x_grid_desc = np.array([3.0, 1.0, 0.0])
+    y_grid_desc = np.array([30.0, 20.0, 10.0])
+    x_query = 2.0  # exact midpoint between the x=1.0 and x=3.0 nodes
+
+    scipy_nearest = interp1d(x_grid_desc, y_grid_desc, kind="nearest", assume_sorted=False)
+    expected = float(scipy_nearest(x_query))
+
+    assert expected == 20.0, "fixture sanity: scipy's own tie-break must pick the x=1.0 node"
+    assert A._nearest_lookup(x_query, x_grid_desc, y_grid_desc) == expected
+
+
 def test_disk_xray_extension_still_produces_a_finite_positive_spectrum() -> None:
     """The nearest-neighbor fix must not break the X-ray extension itself."""
     wave_aa = np.geomspace(1e3, 1e4, 50)

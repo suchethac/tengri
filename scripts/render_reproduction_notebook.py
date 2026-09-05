@@ -107,7 +107,13 @@ def _tengri_version() -> str:
         import tengri
 
         return getattr(tengri, "__version__", "unknown")
-    except Exception:
+    # `import tengri` raises ImportError when it's absent from PYTHONPATH; the
+    # `getattr` default already covers a present-but-versionless package, so
+    # AttributeError here would only come from something stranger (a broken
+    # partial import) that is still worth degrading gracefully for a stamp
+    # field, not from a bug this function should hide. Anything else -- a
+    # real error inside tengri's own import machinery -- propagates.
+    except (ImportError, AttributeError):
         return "unknown"
 
 

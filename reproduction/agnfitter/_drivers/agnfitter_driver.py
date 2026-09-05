@@ -718,13 +718,25 @@ def _nearest_lookup(x_query: float, x_grid: np.ndarray, y_grid: np.ndarray) -> f
     -------
     float
         ``y_grid`` at the grid node nearest ``x_query`` -- a snap to a node,
-        never a blend of two. Ties resolve to the lower index (``argmin``'s
-        own tie-break), same as ``interp1d``.
+        never a blend of two. An exact midpoint between two nodes resolves
+        to the **lower-``x`` neighbor**, matching ``interp1d``'s own
+        tie-break (verified against it: ``interp1d([0,1,3],[10,20,30],
+        kind='nearest')(2.0) == 20.0``, the node at ``x=1``, not ``x=3``) --
+        and independent of whether ``x_grid`` arrives ascending or
+        descending, because the grid is sorted internally before the
+        distances are compared. ``np.argmin`` alone is order-dependent (it
+        returns the *first* occurrence on a tie, which is the low-``x``
+        node only if the input already happens to be ascending); sorting
+        first is what makes the "any order" claim above true rather than
+        an accident of whoever's caller passes ascending data.
     """
     x_grid = np.asarray(x_grid, dtype=np.float64)
     y_grid = np.asarray(y_grid, dtype=np.float64)
-    idx = int(np.argmin(np.abs(x_grid - x_query)))
-    return float(y_grid[idx])
+    order = np.argsort(x_grid)
+    x_sorted = x_grid[order]
+    y_sorted = y_grid[order]
+    idx = int(np.argmin(np.abs(x_sorted - x_query)))
+    return float(y_sorted[idx])
 
 
 def _l2500_from_template(wave_aa: np.ndarray, L_nu: np.ndarray) -> float:
