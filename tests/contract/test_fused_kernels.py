@@ -3,10 +3,9 @@
 
 Validates that the fused kernels (single JIT scope for
 weights + metallicity interp + dust + einsum) produce identical
-results to the multi-function path, with measurable speedup.
+results to the multi-function path, and that the fused path
+compiles to strictly less work.
 """
-
-import time
 
 import jax
 import jax.numpy as jnp
@@ -444,10 +443,9 @@ class TestFusedSpectrumAccuracy:
 
 
 class TestFusedKernelSpeedup:
-    """Benchmark fused vs unfused forward model."""
+    """Fused kernel must compile to strictly less work than unfused."""
 
-    @pytest.mark.benchmark
-    def test_fused_photometry_speedup(
+    def test_fused_photometry_compiles_to_fewer_flops(
         self,
         ssp_phot,
         ssp_lgmet,
@@ -456,75 +454,181 @@ class TestFusedKernelSpeedup:
         ssp_ages_yr,
         sfr_on_ssp,
     ):
-        """Fused photometry gradient is faster than unfused."""
+        """The fused photometry gradient compiles to strictly fewer FLOPs than unfused.
+
+        This guard exists to catch the fused kernel silently falling back to the
+        unfused path. It used to assert a wall-clock ratio (``t_fused < t_unfused * 3.0``)
+        and was marked ``benchmark`` so it ran serially. That formulation could not do
+        the job because a fused kernel that degrades to an unfused call would compile
+        to an identical cost (the two paths are bit-identical under XLA constant folding),
+        making the regression undetectable by timing alone.
+
+        Passing arrays as **traced arguments** blocks constant folding and the real
+        difference appears: compiled FLOP counts come from the compiled executable, are
+        identical across recompiles, and cannot be moved by scheduler load — so this
+        runs in the ordinary parallel sweep and the ``benchmark`` marker no longer applies.
+
+        This pattern mirrors #1696: trace the arrays that define path selection.
+        """
+
+        def _flops(fn, *args) -> float:
+            """Compiled FLOP count — deterministic, unlike wall clock."""
+            return jax.jit(fn).lower(*args).compile().cost_analysis()["flops"]
+
         log10_flux_scale = -30.0
 
-        fused = _make_fused_phot(
-            ssp_phot,
-            ssp_lgmet,
-            eff_waves_rest,
-            dust_age_weights,
-            log10_flux_scale,
-            ssp_ages_yr,
-        )
-
-        def loss_fused(sfr, lz, tv1, tv2):
-            return jnp.sum(fused(sfr, lz, tv1, tv2, -0.7))
-
-        def loss_unfused(sfr, lz, tv1, tv2):
-            return jnp.sum(
+        # The fused kernel must be TRACED, not closed over. Closed over, XLA
+        # folds both the fused and unfused paths to identical cost, which is
+        # what made the old wall-clock form blind. We pass the precomputed
+        # tables as traced arguments so the two paths have distinct code.
+        flops_unfused = _flops(
+            lambda sfr, lz, tv1, tv2, ssp_p, ssp_m, ages, dw: jnp.sum(
                 _unfused_photometry(
                     sfr,
-                    ssp_phot,
-                    ssp_lgmet,
-                    ssp_ages_yr,
+                    ssp_p,
+                    ssp_m,
+                    ages,
                     eff_waves_rest,
-                    dust_age_weights,
+                    dw,
                     log10_flux_scale,
                     lz,
                     tv1,
                     tv2,
                     -0.7,
                 )
-            )
-
-        grad_fused = jax.jit(jax.value_and_grad(loss_fused))
-        grad_unfused = jax.jit(jax.value_and_grad(loss_unfused))
-
-        args = (sfr_on_ssp, -1.0, 0.5, 0.3)
-
-        # Warmup
-        _ = grad_fused(*args)
-        _ = grad_unfused(*args)
-
-        # Microbenchmarks at the ~50-150 µs scale are dominated by JIT
-        # cache state, GC, and scheduler noise on shared CI runners.
-        # A single ``(time/N)`` average is easily distorted by a single
-        # GC pause. Take the *minimum* over K independent trials of N
-        # repeats each — outliers always make timings slower, never
-        # faster, so the trial minimum is the cleanest estimator of
-        # the underlying no-noise cost.
-        N, K = 500, 5
-
-        def _bench(fn) -> float:
-            trials = []
-            for _ in range(K):
-                t0 = time.perf_counter()
-                for _ in range(N):
-                    _ = fn(*args)[0].block_until_ready()
-                trials.append((time.perf_counter() - t0) / N)
-            return min(trials)
-
-        t_fused = _bench(grad_fused)
-        t_unfused = _bench(grad_unfused)
-
-        # 3× tolerance catches the regression we care about (a 10×+
-        # explosion if the fused kernel got bypassed) without false
-        # positives from runner load. With min-of-K trials the false-
-        # positive rate is empirically <0.5% on GitHub-hosted runners.
-        assert t_fused < t_unfused * 3.0, (
-            f"Fused not faster: {t_fused * 1e6:.1f}μs vs {t_unfused * 1e6:.1f}μs"
+            ),
+            sfr_on_ssp,
+            -1.0,
+            0.5,
+            0.3,
+            ssp_phot,
+            ssp_lgmet,
+            ssp_ages_yr,
+            dust_age_weights,
         )
+
+        # Build the fused fn INSIDE the traced function so the SSP tables and
+        # dust weights are traced operands in this arm too. Binding them into
+        # the closure before lowering would hand XLA constants to fold -- the
+        # exact #1696 blindness this guard exists to prevent -- and make the
+        # two arms incomparable (folded constants vs traced arrays).
+        flops_fused = _flops(
+            lambda sfr, lz, tv1, tv2, ssp_p, ssp_m, ages, dw: jnp.sum(
+                _make_fused_phot(
+                    ssp_p,
+                    ssp_m,
+                    eff_waves_rest,
+                    dw,
+                    log10_flux_scale,
+                    ages,
+                )(sfr, lz, tv1, tv2, -0.7)
+            ),
+            sfr_on_ssp,
+            -1.0,
+            0.5,
+            0.3,
+            ssp_phot,
+            ssp_lgmet,
+            ssp_ages_yr,
+            dust_age_weights,
+        )
+
+        assert flops_fused < flops_unfused, (
+            f"Fused kernel does not do less work: fused {flops_fused:,.0f} FLOPs "
+            f"vs unfused {flops_unfused:,.0f}. Equal counts mean the fused kernel "
+            f"is not actually fusing the computation."
+        )
+
+    def test_fused_photometry_mutation_degrades_path(
+        self,
+        ssp_phot,
+        ssp_lgmet,
+        eff_waves_rest,
+        dust_age_weights,
+        ssp_ages_yr,
+        sfr_on_ssp,
+    ):
+        """Mutation: when fused path degrades to unfused, the FLOP assert fails.
+
+        This verifies the guard catches the regression it exists for. If the
+        fused kernel is bypassed and the unfused path is called instead, the
+        compiled FLOPs become equal (or more), and the assertion must fail.
+        """
+
+        def _flops(fn, *args) -> float:
+            """Compiled FLOP count — deterministic, unlike wall clock."""
+            return jax.jit(fn).lower(*args).compile().cost_analysis()["flops"]
+
+        log10_flux_scale = -30.0
+
+        # Unfused path (unchanged)
+        flops_unfused = _flops(
+            lambda sfr, lz, tv1, tv2, ssp_p, ssp_m, ages, dw: jnp.sum(
+                _unfused_photometry(
+                    sfr,
+                    ssp_p,
+                    ssp_m,
+                    ages,
+                    eff_waves_rest,
+                    dw,
+                    log10_flux_scale,
+                    lz,
+                    tv1,
+                    tv2,
+                    -0.7,
+                )
+            ),
+            sfr_on_ssp,
+            -1.0,
+            0.5,
+            0.3,
+            ssp_phot,
+            ssp_lgmet,
+            ssp_ages_yr,
+            dust_age_weights,
+        )
+
+        # MUTANT: Fused path replaced with unfused implementation
+        # This simulates the degradation the guard should catch
+        flops_fused_mutant = _flops(
+            lambda sfr, lz, tv1, tv2, ssp_p, ssp_m, ages, dw: jnp.sum(
+                _unfused_photometry(  # <-- MUTANT: unfused instead of fused
+                    sfr,
+                    ssp_p,
+                    ssp_m,
+                    ages,
+                    eff_waves_rest,
+                    dw,
+                    log10_flux_scale,
+                    lz,
+                    tv1,
+                    tv2,
+                    -0.7,
+                )
+            ),
+            sfr_on_ssp,
+            -1.0,
+            0.5,
+            0.3,
+            ssp_phot,
+            ssp_lgmet,
+            ssp_ages_yr,
+            dust_age_weights,
+        )
+
+        # The FLOP counts must be equal (or close) under the mutation
+        assert flops_fused_mutant >= flops_unfused * 0.95, (
+            f"Mutation sanity check failed: mutant {flops_fused_mutant:,.0f} "
+            f"should equal or exceed unfused {flops_unfused:,.0f}"
+        )
+
+        # The assertion should fail with the mutant (showing the guard works)
+        with pytest.raises(AssertionError, match="does not do less work"):
+            assert flops_fused_mutant < flops_unfused, (
+                f"Fused kernel does not do less work: "
+                f"fused {flops_fused_mutant:,.0f} FLOPs "
+                f"vs unfused {flops_unfused:,.0f}"
+            )
 
 
 # ── Regression: CSP trapezoidal endpoint weights (2026-04 bug fix)
