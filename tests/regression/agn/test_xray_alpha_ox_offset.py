@@ -152,3 +152,53 @@ def test_xray_delta_alpha_ox_no_longer_noop():
     # Both should be physically reasonable
     assert jnp.all(sed_1 > 0.0) and jnp.all(sed_2 > 0.0)
     assert jnp.all(jnp.isfinite(sed_1)) and jnp.all(jnp.isfinite(sed_2))
+
+
+def test_xray_delta_alpha_ox_has_free_prior_over_paper_range():
+    """xray_delta_alpha_ox gets a declared free_prior (task-12 public-API
+    audit): AGNfitter-rX fits Delta(alpha_ox) over [-0.4, 0.4] (the scatter
+    around the Just+2007 empirical relation), but the declaration previously
+    carried NO free_prior, so ``xray={'all_params': FREE}`` could never reach
+    it even though it is a real, live, in-scope parameter for the
+    agn_xray_corona/simple/... models (already listed in
+    _XRAY_PARAMS_BY_MODEL) -- explicit naming was the only way to fit it.
+    """
+    from tengri.components.xray._params import PARAMS
+
+    decl = next(pd for pd in PARAMS if pd.name == "xray_delta_alpha_ox")
+    assert decl.free_prior is not None, "xray_delta_alpha_ox still has no free_prior"
+    assert decl.free_prior.bounds == (-0.4, 0.4)
+
+
+def test_xray_wildcard_now_frees_delta_alpha_ox():
+    """``xray={'type': 'agn_xray_corona', 'all_params': FREE}`` frees
+    xray_delta_alpha_ox with the paper-cited [-0.4, 0.4] bounds -- previously
+    it stayed Fixed(0.0) under any wildcard because of the missing
+    free_prior, even though the scoping table already listed it as a
+    parameter that model reads."""
+    import warnings
+
+    from tengri import DEFAULT, FREE, Fixed
+    from tengri.parameters.groups import parse_groups
+
+    with warnings.catch_warnings():
+        warnings.simplefilter("ignore")
+        params = parse_groups(
+            sfh={"type": "dpl", "all_params": Fixed(DEFAULT)},
+            dust_attenuation={
+                "type": "two_component",
+                "law": "calzetti",
+                "all_params": Fixed(DEFAULT),
+            },
+            xray={"type": "agn_xray_corona", "all_params": FREE},
+            agn={
+                "type": "composable",
+                "disc": {"type": "multicolor", "all_params": Fixed(DEFAULT)},
+                "agn_log_lbol": Fixed(12.0),
+                "all_params": Fixed(DEFAULT),
+            },
+            redshift=Fixed(0.1),
+        )
+    assert "xray_delta_alpha_ox" in params.free_params
+    dist = params.get_distribution("xray_delta_alpha_ox")
+    assert dist.bounds == (-0.4, 0.4)

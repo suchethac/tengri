@@ -172,7 +172,13 @@ class TestAGNParameterRouting:
             )
 
     def test_agn_wildcard_at_agn_level_frees_shared(self):
-        """agn={'all_params': FREE, 'disc': {...}} frees shared agn params."""
+        """agn={'all_params': FREE, 'disc': {...}} frees exactly the shared
+        params the active disc block consumes -- ``agn_active_param_set``,
+        the same table the top-level wildcard's scope is sourced from
+        (:func:`_wildcard_scopes`). Was ``assert isinstance(params, Parameters)``
+        (task-12 audit: vacuous, passes for any freed set whatsoever)."""
+        from tengri.components.agn.blocks._consumes import agn_active_param_set
+
         params = parse_groups(
             sfh={"type": "dpl", "all_params": Fixed(DEFAULT)},
             agn={
@@ -181,22 +187,37 @@ class TestAGNParameterRouting:
             },
             redshift=Fixed(0.1),
         )
-        # At least some shared params should be free
-        # (agn_lum_ratio and/or agn_log_lbol are typical shared params)
-        free_agn_shared = [
-            p
-            for p in params.free_params
-            if p.startswith("agn_")
-            and not any(
-                block in p for block in ["_disc_", "_torus_", "_lines_", "_feii_", "_atten_"]
-            )
-        ]
-        # This might be empty depending on Parameters' shared param declaration,
-        # but the test confirms that the *wildcard* was processed without error
-        assert isinstance(params, Parameters)
+        expected = agn_active_param_set(
+            {
+                "agn_model": "composable",
+                "agn_disc_block": "multicolor",
+                "agn_torus_block": "none",
+                "agn_nlr_block": "none",
+                "agn_blr_block": "none",
+                "agn_feii_block": "none",
+                "agn_attenuation_block": "none",
+            }
+        )
+        free_agn = {p for p in params.free_params if p.startswith("agn_")}
+        assert free_agn == expected
+        # Pinned so a change to either source is visible here, not only
+        # through the indirection above.
+        assert free_agn == {"agn_lum_ratio", "agn_log_lbol", "agn_a_spin", "agn_log_mbh"}
+        for name in free_agn:
+            assert not params.get_distribution(name).is_fixed
 
     def test_wildcard_at_sub_block_level_frees_block_params(self):
-        """wildcard '*' at sub-block level frees that block's params."""
+        """``torus={'type': 'skirtor', 'all_params': FREE}`` frees exactly
+        SKIRTOR's own declared parameters -- :func:`_agn_subblock_declared_params`
+        (signature introspection on the composable torus block), narrower
+        than (and independent of) the top-level ``agn`` scope's
+        all-active-blocks union. Was ``assert isinstance(params, Parameters)``
+        (task-12 audit D2: this vacuous shape passed identically whether the
+        wildcard froze 0 of SKIRTOR's params, all of them, or a foreign
+        torus's params entirely -- exactly the defect this rewrite exists to
+        catch)."""
+        from tengri.parameters.groups import _agn_subblock_declared_params
+
         params = parse_groups(
             sfh={"type": "dpl", "all_params": Fixed(DEFAULT)},
             agn={
@@ -205,27 +226,49 @@ class TestAGNParameterRouting:
             },
             redshift=Fixed(0.1),
         )
-        # Just verify the parameters object was created successfully
-        assert isinstance(params, Parameters)
+        expected = _agn_subblock_declared_params("torus", "skirtor")
+        assert expected == {
+            "agn_oa_skirtor",
+            "agn_p_skirtor",
+            "agn_q_skirtor",
+            "agn_radius_ratio",
+            "agn_tau_skirtor",
+            "agn_torus_frac",
+        }
+        free_agn = {p for p in params.free_params if p.startswith("agn_")}
+        # disc=multicolor is Fixed(DEFAULT), so torus's own wildcard is the
+        # ONLY source of free AGN params here: exact equality, not a subset.
+        assert free_agn == expected
+        for name in expected:
+            assert not params.get_distribution(name).is_fixed
 
     def test_per_param_override_beats_wildcard(self):
-        """Per-parameter override wins over sub-block wildcard."""
+        """An explicit per-parameter prior inside a wildcarded sub-block wins,
+        and does not disturb the wildcard's freedom over the block's OTHER
+        declared parameters. Was ``assert isinstance(params, Parameters)``
+        (task-12 audit: vacuous -- the docstring claimed a precedence rule
+        this body never exercised, because ``agn_log_lbol`` is a SHARED
+        param and ``powerlaw`` disc owns nothing of its own to override)."""
         params = parse_groups(
             sfh={"type": "dpl", "all_params": Fixed(DEFAULT)},
             agn={
-                "disc": {
-                    "type": "powerlaw",
+                "disc": {"type": "multicolor", "all_params": Fixed(DEFAULT)},
+                "torus": {
+                    "type": "skirtor",
                     "all_params": FREE,
-                    "log_lbol": Fixed(10.42),  # Per-disc-param override
+                    "tau_skirtor": Fixed(7.0),  # per-param override
                 },
             },
             redshift=Fixed(0.1),
         )
-        # agn_log_lbol at disc level should override wildcard
-        # But note: agn_log_lbol is a SHARED param, not a disc-specific param
-        # So this test should reflect that disc-level params don't override shared params
-        # Let's test a disc-specific param instead
-        assert isinstance(params, Parameters)
+        tau_dist = params.get_distribution("agn_tau_skirtor")
+        assert tau_dist.is_fixed
+        assert float(tau_dist.default) == 7.0
+        assert "agn_tau_skirtor" not in params.free_params
+        # The wildcard still frees every OTHER declared torus param: the
+        # override did not collapse the whole sub-block to Fixed.
+        for name in ("agn_torus_frac", "agn_p_skirtor", "agn_q_skirtor", "agn_oa_skirtor"):
+            assert name in params.free_params, f"{name} should stay free under the wildcard"
 
 
 class TestAGNValidation:
@@ -421,6 +464,86 @@ class TestAGNValidBlockTypes:
         assert "smc_prevot" in error_msg
         assert "law" in error_msg
         assert "prevot_smc" in error_msg
+
+
+class TestAGNEbvMigration:
+    """D1 (task-12 public-API audit): the migration message this repo's own
+    error raises for the retired ``type='smc_prevot'`` spelling recommends
+    ``agn={'atten': {'law': 'prevot_smc', 'ebv': Uniform(...)}}``. Following
+    it verbatim used to free ``agn_ebv`` -- an unrelated, pre-existing,
+    ``qsogen_smc``-owned parameter that happens to share the same
+    agn_-prefix-stripped short name -- while the disc reddening the user
+    asked to free (``agn_attenuation_ebv``, live: grad != 0) stayed pinned
+    at ``Fixed(0.0)``. Fixed via an explicit short-name alias
+    (``_AGN_SUBBLOCK_KEY_ALIASES``) plus a guard so the unrelated shared
+    ``agn_ebv`` no longer claims the same key via its sibling-search.
+    """
+
+    def test_prevot_smc_ebv_short_form_frees_live_param(self):
+        """``atten={'law': 'prevot_smc', 'ebv': Uniform(...)}`` frees exactly
+        ``agn_attenuation_ebv`` (live), never the unrelated ``agn_ebv``."""
+        params = parse_groups(
+            sfh={"type": "dpl", "all_params": Fixed(DEFAULT)},
+            agn={
+                "disc": {"type": "multicolor", "all_params": Fixed(DEFAULT)},
+                "atten": {"law": "prevot_smc", "ebv": Uniform(0.0, 1.0)},
+                "all_params": Fixed(DEFAULT),
+            },
+            redshift=Fixed(0.1),
+        )
+        free_agn = {p for p in params.free_params if p.startswith("agn_")}
+        assert free_agn == {"agn_attenuation_ebv"}, (
+            f"expected exactly {{'agn_attenuation_ebv'}}, got {sorted(free_agn)} "
+            f"-- 'ebv' resolved to the wrong parameter"
+        )
+        dist = params.get_distribution("agn_attenuation_ebv")
+        assert dist.bounds == (0.0, 1.0)
+        # agn_ebv (the unrelated qsogen_smc knob) must stay at its own
+        # registry default, untouched by the atten-level 'ebv' key.
+        agn_ebv_dist = params.get_distribution("agn_ebv")
+        assert agn_ebv_dist.is_fixed
+
+    def test_prevot_smc_ebv_is_live_not_dead(self, synthetic_ssp_wide, synthetic_tophat_obs):
+        """The freed parameter must be the LIVE one: jax.grad != 0 on a band
+        flux (D1's original symptom was a dead free parameter)."""
+        import jax
+        import jax.numpy as jnp
+
+        from tengri import SEDModel
+
+        model = SEDModel.build(
+            synthetic_ssp_wide,
+            observation=synthetic_tophat_obs,
+            sfh={
+                "type": "const",
+                "all_params": Fixed(DEFAULT),
+                "log_total_mass": 10.0,
+                "start_gyr": 1.0,
+            },
+            dust_attenuation={
+                "type": "two_component",
+                "law": "calzetti",
+                "all_params": Fixed(DEFAULT),
+            },
+            agn={
+                "type": "composable",
+                "disc": {"type": "multicolor", "all_params": Fixed(DEFAULT)},
+                "atten": {"law": "prevot_smc", "ebv": Uniform(0.0, 1.0)},
+                "all_params": Fixed(DEFAULT),
+                "agn_log_lbol": Fixed(12.0),
+                "norm": "independent",
+            },
+            redshift=Fixed(1.0),
+        )
+        p = dict(model.spec.sample(jax.random.PRNGKey(0)))
+        v0 = jnp.asarray(p["agn_attenuation_ebv"])
+
+        def obj(v):
+            pd = {**p, "agn_attenuation_ebv": v}
+            return jnp.log(jnp.sum(model.predict_photometry(pd)) + 1e-300)
+
+        grad = float(jax.grad(obj)(v0))
+        assert grad != 0.0, "agn_attenuation_ebv is dead -- the D1 fix regressed"
 
 
 class TestAGNComplexScenarios:
@@ -1152,3 +1275,67 @@ class TestAGNSubblockStrictness:
                 },
                 redshift=Fixed(0.1),
             )
+
+
+class TestAGNRoundTrip:
+    """D9 (task-12 public-API audit): ``SEDModel.to_dict()`` (thin alias of
+    ``model.spec.to_groups()``) round-trips through ``SEDModel.build`` bit-
+    exactly, on the composable AGN capstone config this file's other classes
+    exercise piecewise."""
+
+    def test_to_dict_and_to_groups_roundtrip_bit_exact(
+        self, synthetic_ssp_wide, synthetic_tophat_obs
+    ):
+        """``SEDModel.build(**m.spec.to_groups())`` and
+        ``SEDModel.build(**m.to_dict())`` both reproduce
+        ``predict_photometry`` bit-exactly on a composable AGN model
+        spanning disc + torus (wildcarded) + nlr + atten (short-form 'ebv')."""
+        import jax
+        import numpy as np
+
+        from tengri import SEDModel
+
+        def _build():
+            return SEDModel.build(
+                synthetic_ssp_wide,
+                observation=synthetic_tophat_obs,
+                sfh={
+                    "type": "const",
+                    "all_params": Fixed(DEFAULT),
+                    "log_total_mass": 10.0,
+                    "start_gyr": 1.0,
+                },
+                dust_attenuation={
+                    "type": "two_component",
+                    "law": "calzetti",
+                    "all_params": Fixed(DEFAULT),
+                },
+                agn={
+                    "type": "composable",
+                    "disc": {"type": "multicolor", "all_params": Fixed(DEFAULT)},
+                    "torus": {"type": "skirtor", "all_params": FREE},
+                    "nlr": {"type": "analytic", "all_params": Fixed(DEFAULT)},
+                    "atten": {"law": "prevot_smc", "ebv": Uniform(0.0, 1.0)},
+                    "all_params": Fixed(DEFAULT),
+                    "agn_log_lbol": Fixed(12.0),
+                    "norm": "independent",
+                },
+                redshift=Fixed(1.0),
+            )
+
+        model = _build()
+        p = dict(model.spec.sample(jax.random.PRNGKey(0)))
+        reference = np.asarray(model.predict_photometry(p))
+
+        via_to_groups = SEDModel.build(
+            synthetic_ssp_wide, observation=synthetic_tophat_obs, **model.spec.to_groups()
+        )
+        via_to_dict = SEDModel.build(
+            synthetic_ssp_wide, observation=synthetic_tophat_obs, **model.to_dict()
+        )
+
+        assert model.spec.to_groups() == model.to_dict(), (
+            "to_dict() must be exactly spec.to_groups(), not merely equivalent"
+        )
+        assert np.array_equal(reference, np.asarray(via_to_groups.predict_photometry(p)))
+        assert np.array_equal(reference, np.asarray(via_to_dict.predict_photometry(p)))

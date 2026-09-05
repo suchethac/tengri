@@ -359,7 +359,11 @@ class _DescribeRecord(dict):
 def _extract_params(entry: Any, kind: str) -> list[str]:
     """Best-effort free-parameter list for a registry entry.
 
-    AGN entries → introspect callable signature, keep names starting with ``agn_``.
+    AGN model entries → introspect ``entry.callable``'s signature, keep names
+    starting with ``agn_``. AGN BLOCK entries (composable disc/nlr/blr/feii/
+    torus/attenuation) → same introspection, but ``entry`` IS the callable
+    (``AGN_BLOCKS[category][name]``, a bare function with no wrapping
+    dataclass) rather than something carrying a ``.callable`` attribute.
     SFH entries → ``callable.params`` (an ``SFHModelSpec`` field) → key list.
     Dust laws / others → empty (parameters come from the caller, not the
     registered function).
@@ -375,6 +379,16 @@ def _extract_params(entry: Any, kind: str) -> list[str]:
     if kind == "agn_model":
         fn = getattr(entry, "callable", None)
         if fn is None:
+            return []
+        try:
+            sig = inspect.signature(fn)
+        except (TypeError, ValueError):
+            return []
+        return [p.name for p in sig.parameters.values() if p.name.startswith("agn_")]
+
+    if kind == "agn_block":
+        fn = entry
+        if not callable(fn):
             return []
         try:
             sig = inspect.signature(fn)
@@ -504,6 +518,39 @@ def _extract_param_details(entry: Any, kind: str) -> list[dict]:
 
         fn = getattr(entry, "callable", None)
         if fn is None:
+            return out
+        try:
+            sig = inspect.signature(fn)
+        except (TypeError, ValueError):
+            return out
+        agn_names = [p.name for p in sig.parameters.values() if p.name.startswith("agn_")]
+        try:
+            from tengri.parameters._builders import _resolve_lazy_bucket
+
+            agn_params = _resolve_lazy_bucket("_AGN_PARAMS")
+            for n in agn_names:
+                meta = agn_params.get(n)
+                if meta is None:
+                    continue
+                description, _check, _err, default = meta
+                out.append(
+                    {
+                        "name": n,
+                        "default": str(default),
+                        "description": description,
+                    }
+                )
+        except (ImportError, AttributeError):
+            pass
+        return out
+
+    if kind == "agn_block":
+        # Same lookup as agn_model, but ``entry`` IS the callable directly
+        # (see _extract_params).
+        import inspect
+
+        fn = entry
+        if not callable(fn):
             return out
         try:
             sig = inspect.signature(fn)
@@ -764,6 +811,7 @@ def list_agn_blocks(*, category: str | None = None, status: str | None = None) -
                 use_str = f"SEDModel.build(..., agn={{'{group_key}': {{'law': 'prevot_smc'}}}}"
             else:
                 use_str = f"SEDModel.build(..., agn={{'{group_key}': {{'type': '{name}'}}}}"
+            fn = AGN_BLOCKS[cat][name]
             entry_dict = {
                 "name": name,
                 "category": cat,
@@ -773,6 +821,19 @@ def list_agn_blocks(*, category: str | None = None, status: str | None = None) -
                 "short_doc": meta.get("short_doc", ""),
                 "use": use_str,
             }
+            # Mirrors list_sfh_models / list_agn_models: params/param_details
+            # are the "what range do I put in my Uniform()" answer for a
+            # block the caller hasn't seen before. Previously absent for
+            # every composable block (D8, task-12 audit) -- `_extract_params`
+            # /`_extract_param_details` take the callable directly for this
+            # kind, since a bare AGN_BLOCKS entry has no wrapping dataclass
+            # to read a `.callable` off of.
+            params = _extract_params(fn, "agn_block")
+            if params:
+                entry_dict["params"] = params
+            details = _extract_param_details(fn, "agn_block")
+            if details:
+                entry_dict["param_details"] = details
             out.append(entry_dict)
 
     out = _filter_menu(out, "status", status, listing="list_agn_blocks")

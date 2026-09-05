@@ -9170,13 +9170,52 @@ class SEDModel:
     def from_dict(
         cls, config: dict, ssp_data, *, filters=None, observation=None, **model_kwargs
     ) -> SEDModel:
-        """Build an SEDModel from a serialized config dict."""
+        """Build an SEDModel from a serialized config dict.
+
+        See Also
+        --------
+        SEDModel.to_dict : The introspection-side pair -- a LIVE model's own
+            nested-dict grammar (``self.spec.to_groups()``), not the
+            JSON/YAML-serialized form this method deserializes
+            (``tengri.config.serialize.deserialize_config``). Round-trip a
+            model you already built with
+            ``SEDModel.build(ssp_data=ssp, **model.to_dict())``; use
+            ``from_dict``/``from_json``/``from_yaml`` for a config that
+            arrived serialized (a file, a wire payload).
+        """
         from tengri.config.serialize import deserialize_config
 
         deserialized = deserialize_config(config)
         return cls.build(
             ssp_data, filters=filters, observation=observation, **deserialized, **model_kwargs
         )
+
+    def to_dict(self) -> dict:
+        """Return this model's nested-dict grammar (thin alias of ``self.spec.to_groups()``).
+
+        The introspection-side pair to :meth:`from_dict`: a round-trip
+        ``SEDModel.build(ssp_data=ssp, observation=obs, **model.to_dict())``
+        reproduces ``model.predict_photometry`` bit-exactly (D9, task-12
+        public-API audit -- ``from_dict`` existed with no such counterpart,
+        so the working round-trip was the less-discoverable
+        ``model.spec.to_groups()`` directly).
+
+        Returns
+        -------
+        dict
+            Nested-dict suitable for ``SEDModel.build(ssp_data=ssp, **result)``
+            or ``tengri.parse_groups(**result)``. Live ``Distribution``/
+            sentinel objects, NOT the JSON/YAML-serialized form ``from_dict``
+            consumes -- see :meth:`from_dict`.
+
+        See Also
+        --------
+        tengri.parameters.parameters.Parameters.to_groups : What this delegates to.
+        SEDModel.from_dict : The serialized-config-side counterpart.
+        SEDModel.config : Equivalent property (kept for back-compat); this
+            method is the discoverable, symmetric-with-``from_dict`` spelling.
+        """
+        return self.spec.to_groups()
 
     @classmethod
     def from_file(

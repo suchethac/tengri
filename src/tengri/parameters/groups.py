@@ -590,6 +590,29 @@ _AGN_BLOCK_TO_KWARG: dict[str, str] = {
     "atten": "agn_attenuation_block",
 }
 
+#: Sub-block short-key aliases reserved for one specific full parameter name.
+#: ``agn_attenuation_ebv``'s natural short name (stripping only the ``agn_``
+#: prefix, per :func:`_extract_short_name`) is the verbose ``attenuation_ebv``;
+#: since it is the ONLY E(B-V) knob the ``smc_prevot``/``qsogen`` attenuation
+#: blocks read, the terser ``'ebv'`` (the exact spelling the ``type='smc_prevot'``
+#: migration error advertises) is unambiguous *inside the atten sub-block* and
+#: is registered here as its alias.
+#:
+#: Without this table, a bare ``'ebv'`` written under ``agn={'atten': {...}}``
+#: would resolve through the generic "shared parameter, searchable from any
+#: sibling sub-block" path to the unrelated, pre-existing ``agn_ebv`` (the
+#: ``qsogen_smc`` block's own reddening knob, whose natural short name is
+#: ALSO ``'ebv'``) instead of ``agn_attenuation_ebv`` -- D1 (task-12 audit):
+#: following the migration error's own suggested spelling verbatim froze the
+#: disc reddening it was supposed to free (issue-grade silent parameter
+#: aliasing). :func:`_build_agn_search_view` consults this map to keep
+#: ``agn_ebv``'s stray-sibling search from claiming a key reserved here for a
+#: DIFFERENT full name; ``agn_attenuation_ebv``'s own canonical-dict lookup is
+#: unaffected (it already resolves via :func:`_extract_short_name`).
+_AGN_SUBBLOCK_KEY_ALIASES: dict[str, dict[str, str]] = {
+    "atten": {"ebv": "agn_attenuation_ebv"},
+}
+
 #: Partition table: agn_* param name -> group path (for sub-block routing).
 #: Maps full agn_* param names to their owning group (agn, agn.disc, agn.torus, etc.)
 _AGN_PARTITION = {
@@ -647,6 +670,35 @@ _AGN_PARTITION = {
     "agn_polar_T": "agn.atten",
     "agn_polar_beta": "agn.atten",
     "agn_attenuation_ebv": "agn.atten",  # smc_prevot block E(B-V)
+    # GRAHSP torus (Buchner+2024): all seven are torus-only per
+    # AGN_BLOCK_CONSUMES[("torus", "grahsp")]. Without an explicit entry
+    # here, every "agn_grahsp_*" name falls through the catch-all below to
+    # "agn.disc", so a torus wildcard could never reach them (task-12 audit,
+    # same mechanism family as D2/D3: the catch-all was written for the
+    # GENUINE grahsp disc params and over-reached to every OTHER grahsp
+    # category, which happens to share the same substring).
+    "agn_grahsp_cool_lam_um": "agn.torus",
+    "agn_grahsp_cool_width": "agn.torus",
+    "agn_grahsp_fcov": "agn.torus",
+    "agn_grahsp_hot_fcov": "agn.torus",
+    "agn_grahsp_hot_lam_um": "agn.torus",
+    "agn_grahsp_hot_width": "agn.torus",
+    "agn_grahsp_si": "agn.torus",
+    # GRAHSP FeII-only knob.
+    "agn_grahsp_a_feii": "agn.feii",
+    # GRAHSP line-strength/-width pair: consumed by NLR, BLR, *and* FeII
+    # simultaneously (AGN_BLOCK_CONSUMES lists both under all three
+    # categories) -- a genuine multi-owner case the one-name-one-group
+    # partition table cannot represent exactly. Assigned to "agn.nlr" (first
+    # in the disc->nlr->blr->feii->torus->atten pipeline order) so at least
+    # nlr={'type': 'grahsp', 'all_params': FREE} reaches them; blr/grahsp and
+    # feii/grahsp's own wildcard cannot (their declared, OWNED set is empty
+    # or partial -- see the task-12 report for the measured per-type table).
+    "agn_grahsp_a_lines": "agn.nlr",
+    "agn_grahsp_linewidth_kms": "agn.nlr",
+    # GRAHSP bi-attenuation (attenuation-only).
+    "agn_grahsp_ebv": "agn.atten",
+    "agn_grahsp_ebv_agn": "agn.atten",
     # Radiation physics (shared disc normalization)
     "agn_f_hard": "agn",
     "agn_gamma_warm": "agn",
@@ -655,6 +707,41 @@ _AGN_PARTITION = {
     "agn_kt_hot": "agn",
     "agn_r_warm_ratio": "agn",
 }
+
+
+def _agn_param_group(name: str) -> str:
+    """Owning group for one ``agn_*`` full parameter name.
+
+    Single source :func:`_partition_by_group` (the general per-build
+    partition table) and :func:`_agn_subblock_declared_params` (composable
+    sub-block wildcard scoping) both read, so the two cannot independently
+    drift on the ``agn_grahsp_*`` catch-all the way they briefly did: an
+    earlier version of ``_agn_subblock_declared_params`` read
+    ``_AGN_PARTITION`` directly (skipping this fallback), which silently
+    emptied ``grahsp_sbpl``'s and every other un-listed grahsp disc
+    parameter's declared set.
+
+    Parameters
+    ----------
+    name : str
+        Full ``agn_*`` parameter name.
+
+    Returns
+    -------
+    str
+        ``"agn"`` (shared) or ``"agn.<subblock>"``.
+    """
+    group = _AGN_PARTITION.get(name, "agn")
+    if group == "agn" and "grahsp" in name:
+        # Catch-all for GRAHSP disc params with no explicit entry above
+        # (agn_grahsp_l5100, _uvslope, _plslope, _plbendloc_nm,
+        # _plbendwidth, _cutoff_nm): every OTHER grahsp param that could be
+        # confused for a disc param by this substring test now has an
+        # explicit entry above (torus/nlr/blr/feii/atten), so this only
+        # ever reaches disc's own.
+        return "agn.disc"
+    return group
+
 
 #: Top-level kwargs that are not groups (passed through to Parameters).
 _TOP_LEVEL_SETTINGS = {
@@ -1383,8 +1470,20 @@ def _narrow_free_priors_to_grid(
 #: Sub-block group name -> the ``structural_params`` attribute naming the
 #: component selected for it. Only groups listed here are narrowed; add an
 #: entry when another sub-block's parameter partition is wider than any one
-#: component's declarations.
-_SUBBLOCK_COMPONENT_ATTR: dict[str, str] = {"dust_emission": "dust_emission"}
+#: component's declarations. The six ``agn.*`` entries route through
+#: :func:`_agn_subblock_declared_params` (signature introspection) rather
+#: than :func:`_declared_param_names` (the ``component_factory._REGISTRY``
+#: lookup dust_emission and every other entry here use) -- see
+#: :func:`_narrow_outcome_to_selected_component`.
+_SUBBLOCK_COMPONENT_ATTR: dict[str, str] = {
+    "dust_emission": "dust_emission",
+    "agn.disc": "agn_disc_block",
+    "agn.torus": "agn_torus_block",
+    "agn.nlr": "agn_nlr_block",
+    "agn.blr": "agn_blr_block",
+    "agn.feii": "agn_feii_block",
+    "agn.atten": "agn_attenuation_block",
+}
 
 
 def _declared_param_names(component_type: str) -> frozenset[str] | None:
@@ -1493,7 +1592,10 @@ def _narrow_outcome_to_selected_component(
         component_type = getattr(structural_params, attr, None)
         if component_type is None:
             continue
-        declared = _declared_param_names(component_type)
+        if group.startswith("agn."):
+            declared = _agn_subblock_declared_params(group[len("agn.") :], component_type)
+        else:
+            declared = _declared_param_names(component_type)
         if declared is None:
             continue  # unregistered or declaration-free: keep the old behavior
         freed = {name for name, was_freed in narrowed[group] if was_freed}
@@ -1559,6 +1661,15 @@ def _format_stuck(group: str, stuck: list[str]) -> tuple[str, str, str]:
 #: other group's legitimate wildcard by accident.
 _GROUPS_THAT_CAN_DECLARE_NOTHING: tuple[str, ...] = ("igm", "radio", "shock")
 
+#: AGN sub-block groups: seeded unconditionally rather than enumerated by
+#: measured exception, because EVERY one of the six can reach an empty
+#: declared-and-OWNED set for some registered type (see
+#: :func:`_agn_subblock_declared_params`'s "multi-owner"/"shared-axis" notes
+#: -- ``blr={'type': 'grahsp', ...}``, ``nenkova_agnfitter`` before it grew a
+#: real axis, ...), unlike the top-level groups above where that is rare
+#: enough to name by hand.
+_AGN_SUBBLOCK_GROUPS: tuple[str, ...] = tuple(f"agn.{c}" for c in _AGN_BLOCK_TO_KWARG)
+
 
 def _seed_zero_declaration_wildcards(
     outcome: dict[str, list[tuple[str, bool]]], kwargs: dict
@@ -1608,6 +1719,17 @@ def _seed_zero_declaration_wildcards(
         group_dict = kwargs.get(group)
         if isinstance(group_dict, dict) and group_dict.get(WILDCARD_KEY) is FREE:
             seeded[group] = []
+
+    # AGN sub-blocks: same failure, but nested one level deeper
+    # (kwargs['agn'][category] rather than a top-level kwargs[group]).
+    agn_top = kwargs.get("agn")
+    if isinstance(agn_top, dict):
+        for group in _AGN_SUBBLOCK_GROUPS:
+            if group in seeded:
+                continue
+            sub = agn_top.get(group[len("agn.") :])
+            if isinstance(sub, dict) and sub.get(WILDCARD_KEY) is FREE:
+                seeded[group] = []
     return seeded
 
 
@@ -1995,6 +2117,90 @@ def _all_law_shape_params() -> frozenset[str]:
 #: independent choice, so a shape parameter is live if *any* slot's law reads it.
 _DUST_LAW_SLOTS: tuple[str, ...] = ("dust_law_bc", "dust_law_diff", "dust_law_neb")
 
+#: Grammar sub-block key -> the composable-block registry's category label.
+#: Five of six match; ``AGN_BLOCKS``/``AGN_BLOCK_CONSUMES`` spell the sixth
+#: ``"attenuation"``, the grammar's terser ``"atten"``.
+_AGN_CONSUMES_CATEGORY: dict[str, str] = {
+    "disc": "disc",
+    "torus": "torus",
+    "nlr": "nlr",
+    "blr": "blr",
+    "feii": "feii",
+    "atten": "attenuation",
+}
+
+
+def _agn_subblock_declared_params(category: str, block_type: str | None) -> frozenset[str] | None:
+    """Declared parameters ONE AGN sub-block's OWN wildcard may free.
+
+    Ground truth is the SELECTED composable block function's own signature
+    (mirroring :func:`_law_shape_params`'s dust-law introspection): every
+    named ``agn_*`` keyword-or-positional parameter it declares, read via
+    ``inspect.signature`` on ``AGN_BLOCKS[category][block_type]``. This is
+    always current -- there is no second table to fall out of sync with the
+    dispatch it describes, unlike the empirically-measured
+    ``tengri.components.agn.blocks._consumes.AGN_BLOCK_CONSUMES``
+    (which stays the source for the TOP-LEVEL ``agn`` group's scope, unioned
+    across every active block; that mechanism and its own contract tests
+    are untouched here).
+
+    The raw signature also names parameters this block reads but does not
+    OWN in the partition table (:data:`_AGN_PARTITION`) -- shared masking
+    knobs (``agn_cos_inc``, ``agn_theta_torus``) every physical-decomposition
+    torus reads, or (for ``skirtor`` specifically) the ``agn.atten``-owned
+    polar-dust triple it also applies. Those are filtered out: a param
+    partitioned outside ``agn.<category>`` is reachable only through ITS
+    owning group's wildcard or an explicit name (see
+    :func:`_build_agn_search_view`), never through this sub-block's own
+    ``'*'`` -- crediting it here would claim a freedom the resolver cannot
+    actually deliver. When every parameter a type reads is such a shared
+    knob (``nenkova_agnfitter``'s sole axis is the shared ``agn_cos_inc``;
+    GRAHSP's NLR/BLR line-strength pair is consumed by three categories at
+    once), the filtered answer is a non-``None`` empty set: NOT "unknown,
+    leave unnarrowed" but "covers zero parameters here", which
+    :func:`_check_wildcard_freed_something` turns into a loud
+    ``WildcardNoOpWarning`` instead of silently freeing nothing (D3).
+
+    Parameters
+    ----------
+    category : str
+        Grammar sub-block key: ``"disc"``, ``"torus"``, ``"nlr"``, ``"blr"``,
+        ``"feii"``, or ``"atten"``.
+    block_type : str or None
+        The selected type/law for this sub-block, or ``"none"``/``None``.
+
+    Returns
+    -------
+    frozenset of str or None
+        This sub-block's own declared, freeable parameters for
+        ``block_type`` (possibly empty -- see above), or ``None`` when
+        ``block_type`` is not a registered composable block at all (should
+        not happen for a grammar-validated type; the safe "leave unnarrowed"
+        answer if it ever does).
+    """
+    if not block_type or block_type == "none":
+        return frozenset()
+
+    from tengri.components.agn.blocks._protocol import AGN_BLOCKS
+
+    consumes_category = _AGN_CONSUMES_CATEGORY.get(category, category)
+    fn = AGN_BLOCKS.get(consumes_category, {}).get(block_type)
+    if fn is None:
+        return None
+
+    try:
+        sig = inspect.signature(fn)
+    except (TypeError, ValueError):  # pragma: no cover - no unsigned callables registered
+        return None
+
+    read = frozenset(
+        p.name
+        for p in sig.parameters.values()
+        if p.kind not in (p.VAR_KEYWORD, p.VAR_POSITIONAL) and p.name.startswith("agn_")
+    )
+    owning_group = f"agn.{category}"
+    return frozenset(name for name in read if _agn_param_group(name) == owning_group)
+
 
 def _wildcard_scopes(
     structural_kwargs: dict,
@@ -2046,11 +2252,26 @@ def _wildcard_scopes(
     """
     scopes: dict[str, frozenset[str] | None] = {}
 
-    # ── AGN: every agn.* sub-block shares the active-block scope ──
+    # ── AGN ──
+    # Top level: the union across every ACTIVE block (unchanged mechanism,
+    # AGN_BLOCK_CONSUMES-sourced; pinned by test_agn_block_consumes.py).
+    # Each agn.<category> sub-block: its OWN, narrower scope -- exactly what
+    # the SELECTED type's own block function declares (signature
+    # introspection, see _agn_subblock_declared_params). These are
+    # deliberately DIFFERENT computations: the old code gave every sub-block
+    # the same all-active-blocks union the top level uses, so a torus-only
+    # wildcard could free (or fail to free) parameters no torus type reads
+    # (D2 silva04 froze 0 of its own 2 params; cat3d_wind, absent from the
+    # CONSUMES table, fell back to the full ~50-param superset and froze 20
+    # dead names) -- task-12 audit.
     agn_active = _agn_active_param_set(structural_kwargs)
     for group in set(param_partition.values()):
-        if group == "agn" or group.startswith("agn."):
+        if group == "agn":
             scopes[group] = agn_active
+        elif group.startswith("agn."):
+            category = group[len("agn.") :]
+            block_type = structural_kwargs.get(_AGN_BLOCK_TO_KWARG.get(category, ""))
+            scopes[group] = _agn_subblock_declared_params(category, block_type)
 
     # ── radio: the selected sf mode / agn model ──
     scopes["radio.sf"] = _RADIO_SF_PARAMS_BY_MODE.get(
@@ -4274,10 +4495,12 @@ def _build_agn_search_view(param_name: str, agn_dict: dict, group: str) -> dict:
     if not isinstance(agn_dict, dict):
         return {}
 
-    # The short name the resolver expects (`_extract_short_name` strips
-    # the `agn_` prefix from full AGN param names; pre-compute it here
-    # so we can search every candidate dict by either spelling).
-    short_name = param_name[4:] if param_name.startswith("agn_") else param_name
+    # The short name the resolver expects. Delegates to `_extract_short_name`
+    # (rather than a local `agn_`-prefix strip) so the two agree on the
+    # handful of names with an explicit alias (`agn_attenuation_ebv` -> 'ebv');
+    # pre-computed here so we can search every candidate dict by either
+    # spelling.
+    short_name = _extract_short_name(param_name, {})
 
     # Canonical and sibling dicts to scan.
     canonical_subkey = group.replace("agn.", "") if group.startswith("agn.") else None
@@ -4315,6 +4538,20 @@ def _build_agn_search_view(param_name: str, agn_dict: dict, group: str) -> dict:
     for location, sub in siblings:
         for key in (short_name, param_name):
             if key in sub and key not in ("type", "*"):
+                # A SHARED param's stray-sibling search must not steal a key
+                # this sibling reserves as another (sub-block-owned) param's
+                # OWN alias -- e.g. 'ebv' inside 'atten' is
+                # agn_attenuation_ebv's alias, not a stray home for the
+                # unrelated shared agn_ebv (D1, task-12 audit). The reserving
+                # param's own canonical-dict lookup, a few lines above, is a
+                # separate code path and is unaffected.
+                reserved_for = _AGN_SUBBLOCK_KEY_ALIASES.get(location, {}).get(key)
+                if (
+                    canonical_subkey is None
+                    and reserved_for is not None
+                    and reserved_for != param_name
+                ):
+                    continue
                 # VALIDATION: Check if this parameter is allowed in this sibling location.
                 # RULE: Sub-block-owned parameters must be in their owner sub-block.
                 # Shared parameters can go anywhere (top level or any sub-block).
@@ -4541,7 +4778,10 @@ def _translate_agn(agn_dict: dict, result: dict) -> None:
                     "  agn={'atten': {'law': 'prevot_smc', 'ebv': Uniform(...)}}\n"
                     "'prevot_smc' is the only law this block implements -- it applies "
                     "that curve unconditionally, so the rename is a spelling change, "
-                    "not a new choice."
+                    "not a new choice. The 'ebv' key here resolves to agn_attenuation_ebv "
+                    "(the E(B-V) this block itself applies) -- NOT the unrelated, "
+                    "pre-existing agn_ebv parameter (the separate qsogen_smc "
+                    "attenuation block's own reddening knob)."
                 )
 
             if law_key is not None:
@@ -4648,11 +4888,7 @@ def _partition_by_group(
             if agn_flat:
                 partition[name] = "agn"
                 continue
-            # Use partition table for fine-grained routing
-            partition[name] = _AGN_PARTITION.get(name, "agn")
-            # Catch-all for grahsp_* -> disc
-            if partition[name] == "agn" and "grahsp" in name:
-                partition[name] = "agn.disc"
+            partition[name] = _agn_param_group(name)
         elif name.startswith("xray_"):
             partition[name] = "xray"
         elif name in _RADIO_SF_PARAM_NAMES:
@@ -4945,6 +5181,14 @@ def _extract_short_name(full_param_name: str, group_dict: dict) -> str:
     elif full_param_name.startswith("xray_"):
         return full_param_name[5:]
     elif full_param_name.startswith("agn_"):
+        # Explicit alias (see _AGN_SUBBLOCK_KEY_ALIASES): 'agn_attenuation_ebv'
+        # is the only E(B-V) knob the smc_prevot/qsogen attenuation blocks
+        # read, so the terser 'ebv' -- the exact spelling the
+        # type='smc_prevot' migration error advertises -- is unambiguous
+        # inside the atten sub-block and is the canonical short name here,
+        # not the generic agn_-prefix-stripped 'attenuation_ebv' (D1).
+        if full_param_name == "agn_attenuation_ebv":
+            return "ebv"
         # AGN params: check partition table to determine prefix stripping
         # For sub-blocks like agn.torus, strip appropriate prefix
         if full_param_name in _AGN_PARTITION:

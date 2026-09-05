@@ -31,12 +31,13 @@ PARAMS: tuple[ParamDeclaration, ...] = (
         "Offset [dex] applied to the L_2500-derived alpha_ox (Just+2007,"
         " CIGALE convention). 0 (default) = pure empirical alpha_ox(L_2500);"
         " negative hardens the X-ray corona, positive softens it.",
-        # Deliberately NO free_prior. The sensible width of an offset on an
-        # empirical relation is that relation's intrinsic scatter, and neither
-        # this description nor the declaration records the Just+2007 scatter --
-        # so any interval chosen here would be a guess dressed as a default.
-        # It is a genuine knob; free it explicitly once you have a scatter to
-        # justify, e.g. delta_alpha_ox=Uniform(-0.2, 0.2).
+        # AGNfitter-rX (Martinez-Ramirez+2024) fits Delta(alpha_ox) over
+        # [-0.4, 0.4] as the scatter around the Just+2007 empirical relation;
+        # that is the interval this repo's own reproduction targets, not a
+        # guessed default width.
+        free_prior=Uniform(
+            -0.4, 0.4, "Offset applied to the L_2500-derived alpha_ox", default=0.0
+        ),
     ),
     # The two X-ray-binary photon indices deliberately get NO free_prior. They
     # are not per-galaxy quantities: Gamma = 2.0 (HMXB) and 1.6 (LMXB) are the
