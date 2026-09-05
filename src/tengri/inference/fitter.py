@@ -1985,7 +1985,8 @@ class Fitter:
         _supports = getattr(model, "_supports_jit_threading", None)
         _threadable = _supports() if callable(_supports) else True
         if _threadable and all(
-            hasattr(model, attr) for attr in ("spec", "ssp_data", "_template_data_for_jit")
+            hasattr(model, attr)
+            for attr in ("spec", "ssp_data", "_template_data_for_jit", "_ztable_data_for_jit")
         ):
             # Per-fit params override (#1329): the forward pass reads fixed values
             # (e.g. redshift under ``catalog_z_range``) from this threaded dict at
@@ -2001,6 +2002,7 @@ class Fitter:
                 "fixed_values": jit_fixed_values,
                 "ssp_data": model.ssp_data,
                 "template_data": model._template_data_for_jit(),
+                "ztable_data": model._ztable_data_for_jit(),
             }
 
         return args

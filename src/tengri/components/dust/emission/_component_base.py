@@ -158,6 +158,7 @@ class EmissionComponent(SEDModelComponent):
         params: Mapping[str, jnp.ndarray],
         ssp_data: Any | None = None,
         template_data: Mapping[str, Any] | None = None,
+        ztable_data: Any | None = None,
     ) -> ForwardState:
         """Apply dust IR emission with WavePrecomp support.
 

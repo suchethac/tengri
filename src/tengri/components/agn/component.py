@@ -332,6 +332,7 @@ class AGNSEDComponent(TemplateThreading):
         params: Mapping[str, jnp.ndarray],
         ssp_data: Any | None = None,
         template_data: Any | None = None,
+    ztable_data: Any | None = None,
     ) -> ForwardState:
         """Add AGN emission to ``state.sed_intrinsic`` and publish ``L_agn_bol``.
 
