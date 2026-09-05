@@ -75,12 +75,27 @@ def test_newly_reachable_components_build_with_fixed_defaults(
             }
         else:
             cfg = {"type": comp_name, "all_params": Fixed(DEFAULT)}
+        extra = {}
+        if axis == "radio":
+            # The legacy mapping leaves the SF arm on its FIRRC default
+            # (bell2003), which normalizes against L_ir and is refused at
+            # build time without a dust component (#2106). Reachability is
+            # the subject here, so supply the dust the FIRRC arm requires.
+            extra = {
+                "dust_attenuation": {
+                    "type": "two_component",
+                    "law": "calzetti",
+                    "all_params": Fixed(DEFAULT),
+                },
+                "dust_emission": {"type": "dale2014", "all_params": Fixed(DEFAULT)},
+            }
         try:
             model = SEDModel.build(
                 ssp_data=synthetic_ssp_wide,
                 observation=synthetic_tophat_obs,
                 redshift=0.1,
                 **{axis: cfg},
+                **extra,
             )
             # If we reach here, the model built successfully.
             assert model is not None
