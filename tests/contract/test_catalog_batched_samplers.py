@@ -210,13 +210,85 @@ class TestTheTreeDepthCapReachesWarmup:
     steps at 36 s; capping both took the whole cell to 2.1 s.
     """
 
-    def test_the_full_scan_forwards_the_cap_to_the_adaptation(self):
+    def test_the_full_scan_forwards_the_cap_to_the_adaptation(self, monkeypatch):
+        """The max tree-depth cap VALUE reaches window_adaptation, not just sampling.
+
+        If it only capped the sampling kernel (not warmup), warmup would use
+        BlackJAX's default of 10 doublings (expensive) while sampling uses the
+        caller's cap. This test verifies the cap VALUE reaches the adaptation.
+        """
+
         from tengri.inference.backends.mcmc import _shared
 
-        src = inspect.getsource(_shared._nuts_full_scan)
-        assert "max_num_doublings" in src, (
-            "the cap must reach blackjax.window_adaptation, not only the "
-            "sampling kernel; see Finding 3 of the 2026-08-30 GPU report"
+        # Recording stub: capture what gets passed to window_adaptation
+        class _Reached(Exception):
+            pass
+
+        captured_kwargs = {}
+
+        try:
+            import blackjax
+
+            original_adapt = blackjax.window_adaptation
+        except (ImportError, AttributeError):
+            # If blackjax not available or doesn't have window_adaptation,
+            # skip this test
+            pytest.skip("blackjax.window_adaptation not available")
+            return
+
+        def record_adapt(*args, **kwargs):
+            captured_kwargs.update(kwargs)
+            raise _Reached("window_adaptation_called")
+
+        monkeypatch.setattr(blackjax, "window_adaptation", record_adapt)
+
+        # Distinctive value that won't be a default
+        sentinel_cap = 7
+
+        try:
+            # Call _nuts_full_scan with the distinctive cap value
+            # (This will fail when it hits our stub, but that's ok)
+            import jax
+            import jax.random
+            import numpy as np
+
+            init_flat = np.array([0.0, 0.0])
+            key = jax.random.PRNGKey(0)
+            chain_keys = jax.random.split(key, 4)
+
+            def dummy_logdensity(x):
+                return -0.5 * np.sum(x**2)
+
+            def dummy_logdensity_2arg(x, _data):
+                return dummy_logdensity(x)
+
+            _shared._nuts_full_scan(
+                init_flat,
+                key,
+                chain_keys,
+                dummy_logdensity_2arg,
+                {},
+                n_warmup=10,
+                max_doublings=sentinel_cap,
+                use_dense=False,
+                target_accept_rate=0.85,
+            )
+        except _Reached:
+            # Expected: the stub raises once it has recorded the cap.
+            pass
+        # Deliberately no blanket ``except Exception``. If the scan fails before
+        # reaching the adaptation, that error is the diagnosis; swallowing it
+        # leaves only "did not reach window_adaptation", which is true of a
+        # dropped cap and of an unrelated crash alike.
+
+        # Critical assertion: max_doublings VALUE reached the adaptation
+        assert "max_num_doublings" in captured_kwargs or "max_doublings" in captured_kwargs, (
+            "max_doublings did not reach window_adaptation"
+        )
+
+        cap_arg = captured_kwargs.get("max_num_doublings") or captured_kwargs.get("max_doublings")
+        assert cap_arg is sentinel_cap, (
+            f"max_doublings={cap_arg} != {sentinel_cap}; cap dropped or default used"
         )
 
     def test_the_warmup_only_entry_point_takes_the_cap(self):
