@@ -285,13 +285,19 @@ unique-draw fraction of 1.000.
 
 The gate does not license a throughput headline, and none is claimed. What the
 width sweep can settle without a converged sampler is the **mechanism** question:
-does fixed-L HMC stay flat as the vmapped batch grows, and does NUTS degrade?
-That is a question about cost, not about correctness, and it has an answer.
+does fixed-L HMC stay flat as the vmapped batch grows, and how does it compare
+with NUTS at equal metric? That is a question about cost, not about correctness,
+and the first half has a clean answer. **The second half is only half-measured:**
+NUTS has one width point here (N=32), so this report shows the HMC-vs-NUTS *gap*
+but does **not** establish the campaign's prediction that NUTS degrades *with
+width*. That claim still rests on
+`bench/reports/2026-08-31_catalog_batched_samplers.md`, not on anything here.
 
 **Fixture warning, and it is the most important sentence in this section:** this
 is `benchmark_catalog_throughput.py`'s own mock, which is **D = 3**
 (`sfh_dpl_log_total_mass`, `sfh_dpl_alpha`, `met_logzsol`; everything else
-pinned) over 5 SDSS-like bands at median SNR **19.96**, `WavePrecomp()`
+pinned) over 5 SDSS-like bands at median SNR **~19.9** (19.8-20.0 between the
+two arms' mocks; min 16.5, max 23.1), `WavePrecomp()`
 quadrature with `n_subbands=5`, float64. It is **not** the D=8 fixture the gate
 ran on and **not** the D=12 DSPS of Zacharegkas+2025. Every number below is a
 three-parameter posterior's number.
