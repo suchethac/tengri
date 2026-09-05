@@ -59,8 +59,26 @@ _SFR_IR_KENNICUTT: float = 1.73e10 * _L_SUN  # ≈ 6.62e43 erg/s
 _LOG10_FIRRC_CONST: float = math.log10(3.75e12)  # bell/delvecchio/mccheyne norm
 _LOG10_SFR_IR_KENNICUTT: float = math.log10(_SFR_IR_KENNICUTT)  # free-free
 
-# Declared defaults from _params.py
+# Declared default from _params.py: the Bell-2003 family and the radio_total*
+# dispatchers share this single registry value (Condon 1992, 0.8).
 _ALPHA_SF_DEFAULT: float = declared_default(_RADIO_PARAMS, "radio_alpha_sf")
+
+# Delvecchio+2021 and McCheyne+2022 each cite their OWN consensus spectral
+# index (Novak+2017 / SEMPER) rather than the registry default above -- a
+# single shared constant would silently overwrite one calibration's cited
+# value with the other's (round-2 fix, ruling R8, supersedes the blanket
+# "unify everyone to 0.8" reading of R2). Declared once each, not as bare
+# literals in the signatures below.
+_ALPHA_SF_DELVECCHIO2021: float = 0.7  # Novak+2017 consensus, SEMPER Eq. 4
+_ALPHA_SF_MCCHEYNE2022: float = 0.7  # McCheyne+2022, SEMPER Eq. 5
+
+# Reference (calibration) frequencies: each SF relation is anchored at the
+# frequency its survey was calibrated at, so these are per-relation
+# constants, not a single shared value, and the AGN jet has its own separate
+# reference frequency.
+_NU_REF_BELL2003_HZ: float = 1.4e9  # Bell (2003) calibration frequency
+_NU_REF_DELVECCHIO2021_HZ: float = 1.4e9  # SEMPER Eq. 4 (1.4 GHz)
+_NU_REF_MCCHEYNE2022_HZ: float = 1.5e8  # SEMPER Eq. 5 (150 MHz)
 _NU_REF_AGN_HZ: float = 5.0e9  # AGN radio reference frequency [Hz] (5 GHz)
 
 
@@ -123,7 +141,7 @@ def radio_sfr_bell2003(
     L_ir: float,
     q_ir: float = 2.64,
     alpha_sf: float = _ALPHA_SF_DEFAULT,
-    nu_ref: float = 1.4e9,
+    nu_ref: float = _NU_REF_BELL2003_HZ,
     *,
     log_L_ir: float | None = None,
 ) -> jnp.ndarray:
@@ -185,8 +203,8 @@ def radio_sfr_delvecchio2021(
     q0: float = 2.743,
     mass_slope: float = 0.234,
     z_slope: float = -0.025,
-    alpha_sf: float = _ALPHA_SF_DEFAULT,
-    nu_ref: float = 1.4e9,
+    alpha_sf: float = _ALPHA_SF_DELVECCHIO2021,
+    nu_ref: float = _NU_REF_DELVECCHIO2021_HZ,
     apply_suppression: bool = True,
     *,
     log_L_ir: float | None = None,
@@ -274,8 +292,8 @@ def radio_sfr_mccheyne2022(
     q0: float = 1.98,
     mass_slope: float = -0.22,
     z_slope: float = 0.02,
-    alpha_sf: float = _ALPHA_SF_DEFAULT,
-    nu_ref: float = 1.5e8,
+    alpha_sf: float = _ALPHA_SF_MCCHEYNE2022,
+    nu_ref: float = _NU_REF_MCCHEYNE2022_HZ,
     apply_suppression: bool = True,
     *,
     log_L_ir: float | None = None,
@@ -627,7 +645,7 @@ def radio_agn_dpl(
     alpha2: float = -0.1,
     log_nu_t: float = 10.0,
     log_nu_cut: float = 13.0,
-    nu_ref: float = 5.0e9,
+    nu_ref: float = _NU_REF_AGN_HZ,
     l_bband: float = 0.0,
     *,
     log_L_agn_bol: float | None = None,
