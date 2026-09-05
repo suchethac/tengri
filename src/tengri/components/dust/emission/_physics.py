@@ -207,10 +207,11 @@ def cmb_contrast_factor(
     (since :math:`\log(\exp(x) - 1) \approx x` in that regime). The
     exponents are clipped to :math:`[1e-10, 30]` only within the ``expm1``
     branch, keeping both branches of the ``where`` finite under gradient.
-    Finally, :math:`\log(\text{ratio})` is clipped to :math:`[-700, 0]` so
-    that :math:`\exp(\text{clipped})` stays in :math:`[0, 1]` and the
-    contrast stays in :math:`[0, 1]` as wavelength -> 0 the ratio -> 0
-    and contrast -> 1.
+    Finally, :math:`\log(\text{ratio})` is capped at 0 (it is non-positive by
+    construction, so the cap only absorbs rounding) and exponentiated: as
+    wavelength -> 0 the argument -> -infinity, the exponential underflows to
+    0, and the contrast -> 1. No lower floor is applied, so the ratio never
+    saturates at a finite value.
 
     """
     T_cmb_z = _T_CMB_0 * (1.0 + redshift)
@@ -246,7 +247,12 @@ def cmb_contrast_factor(
     # and the ratio is in [0, 1]. At short wavelengths, x_cmb >> x_eff,
     # so log_ratio -> -infinity and ratio -> 0, giving contrast -> 1.
     log_ratio = log_expm1_eff - log_expm1_cmb
-    ratio = jnp.exp(jnp.clip(log_ratio, -700.0, 0.0))
+    # log_ratio <= 0 by construction; the cap at 0 only absorbs rounding. No
+    # floor: exp of a large negative argument underflows to exactly 0, which
+    # is the physical limit (contrast -> 1), and a floor would saturate the
+    # ratio early instead (the -100 / -700 floors this replaces were flagged
+    # by tools/check_numeric_guards.py as sub-subnormal guards).
+    ratio = jnp.exp(jnp.minimum(log_ratio, 0.0))
 
     return jnp.clip(1.0 - ratio, 0.0, 1.0)
 

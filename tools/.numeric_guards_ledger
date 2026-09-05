@@ -49,7 +49,6 @@ src/tengri/components/dust/attenuation.py | jnp.clip with floor 0.0 < 1e-20 -> 1
 src/tengri/components/dust/attenuation.py | jnp.maximum with floor 0.0 < 1e-20 -> 2
 src/tengri/components/dust/dust_emission_precompute.py | jnp.clip with floor 0.0 < 1e-20 -> 1
 src/tengri/components/dust/dust_emission_precompute.py | jnp.maximum with floor 1e-30 < 1e-20 -> 1
-src/tengri/components/dust/emission/_physics.py | jnp.clip with floor -100.0 < 1e-20 -> 1
 src/tengri/components/dust/emission/_physics.py | jnp.clip with floor 0.0 < 1e-20 -> 3
 src/tengri/components/dust/emission/_physics.py | jnp.maximum with floor 0.0 < 1e-20 -> 1
 src/tengri/components/dust/emission/analytic/_closures.py | jnp.clip with floor 0.0 < 1e-20 -> 2
