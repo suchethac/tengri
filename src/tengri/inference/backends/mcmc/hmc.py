@@ -17,11 +17,13 @@ from tengri.inference._sample_utils import _maybe_map_init, _mean_params, _vmap_
 from tengri.inference.backends.mcmc._shared import (
     _get_cached_adaptation,
     _get_flat_logdensity,
+    _get_hmc_kernel,
     _hmc_chain_scan,
     _hmc_warmup_only,
     _parallel_chains,
     _sequential_chains,
     _set_cached_adaptation,
+    _stabilize_dense_mass_step,
     _vmap_chains,
     final_window_divergence_frac,
     refuse_dead_sampling,
@@ -229,6 +231,7 @@ def run_hmc(
     # return different chains. ``warmup_key`` is unused on the cached path.
     key, warmup_key = jax.random.split(key)
 
+    dense_mass_backoffs = 0
     if cached is not None:
         parameters = cached
         # A reused adaptation was tuned in an earlier call, so this fit measured no
@@ -256,6 +259,32 @@ def run_hmc(
                 target_accept_rate,
             )
             jax.block_until_ready(step_size)
+
+        # Post-adaptation step size stability probe for dense mass matrix (#1999)
+        if use_dense:
+            import blackjax
+
+            initial_state = blackjax.hmc.init(
+                init_flat, lambda p: log_posterior_flat_2arg(p, data_args)
+            )
+            kernel = _get_hmc_kernel()
+            step_size, backoff_count = _stabilize_dense_mass_step(
+                kernel,
+                initial_state,
+                log_posterior_flat_2arg,
+                data_args,
+                float(step_size),
+                inv_mass_matrix,
+                n_leapfrog_steps,  # For HMC, max_doublings is the n_leapfrog_steps
+                sampler_name="HMC",
+            )
+            step_size = jnp.asarray(step_size)
+            dense_mass_backoffs = int(backoff_count)
+            if verbose and backoff_count > 0:
+                logger.info(
+                    f"  Dense-mass probe: step size backoff applied ({backoff_count} halving(s))"
+                )
+
         # Refuse before caching and before the sampling scan compiles (#2088).
         warmup_divergence_frac = final_window_divergence_frac(warmup_divergent, n_warmup)
         refuse_dead_warmup(
@@ -386,6 +415,7 @@ def run_hmc(
             "n_chains": n_chains,
             "n_leapfrog_steps": n_leapfrog_steps,
             "n_divergent": n_divergent,
+            "dense_mass_step_backoffs": dense_mass_backoffs,
             **warmup_record,
             "step_size": float(parameters["step_size"]),
             **diag,
