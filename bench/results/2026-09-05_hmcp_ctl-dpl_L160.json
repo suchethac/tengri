@@ -1,0 +1,95 @@
+{
+  "notebook": "ctl-dpl",
+  "seeds": [
+    7,
+    8
+  ],
+  "rows": {
+    "hmc+precond L=160": [
+      {
+        "wall": 292.63225730200065,
+        "rhat": 1.0186400743933683,
+        "divergences": 20,
+        "eevpd": null,
+        "eevpd_target": null,
+        "nonfinite_steps": null,
+        "min_ess": 43.1438628292012,
+        "worst": "sfh_dpl_tau_gyr",
+        "sec_per_ess": 6.782708782022583,
+        "unique_frac": 0.8033333333333333,
+        "n_draws_total": 1200,
+        "n_transitions_total": null,
+        "n_leapfrog": 160,
+        "step_size": 0.016085676485905243,
+        "tree_depth_mean": null,
+        "tree_depth_max": null,
+        "frac_max_depth": null,
+        "grad_per_draw": 160.0,
+        "grad_per_ess": 4450.227388309979,
+        "leapfrogs_per_draw": 160,
+        "min_ancestor_ess": null,
+        "n_temperatures": null,
+        "reached_target": null,
+        "log_evidence": null,
+        "log_evidence_spread": null,
+        "accept_rate": null,
+        "preconditioned": null,
+        "metric_condition": null,
+        "whitened_condition": null,
+        "loadavg_before": [
+          12.583984375,
+          12.1435546875,
+          11.37109375
+        ],
+        "loadavg_after": [
+          8.80712890625,
+          10.32421875,
+          10.8271484375
+        ],
+        "started_unix": 1788551493.8597546
+      },
+      {
+        "wall": 334.6280512440135,
+        "rhat": 1.0043117465814675,
+        "divergences": 7,
+        "eevpd": null,
+        "eevpd_target": null,
+        "nonfinite_steps": null,
+        "min_ess": 231.19241315857178,
+        "worst": "sfh_dpl_log_total_mass",
+        "sec_per_ess": 1.44740065935683,
+        "unique_frac": 0.845,
+        "n_draws_total": 1200,
+        "n_transitions_total": null,
+        "n_leapfrog": 160,
+        "step_size": 0.012107430711573563,
+        "tree_depth_mean": null,
+        "tree_depth_max": null,
+        "frac_max_depth": null,
+        "grad_per_draw": 160.0,
+        "grad_per_ess": 830.477079143206,
+        "leapfrogs_per_draw": 160,
+        "min_ancestor_ess": null,
+        "n_temperatures": null,
+        "reached_target": null,
+        "log_evidence": null,
+        "log_evidence_spread": null,
+        "accept_rate": null,
+        "preconditioned": null,
+        "metric_condition": null,
+        "whitened_condition": null,
+        "loadavg_before": [
+          9.62353515625,
+          10.46826171875,
+          10.87109375
+        ],
+        "loadavg_after": [
+          11.54541015625,
+          13.296875,
+          12.1806640625
+        ],
+        "started_unix": 1788551855.716527
+      }
+    ]
+  }
+}
