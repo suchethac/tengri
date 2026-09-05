@@ -109,6 +109,11 @@ def test_dense_mass_spectrum_precomp_fit_is_live():
     assert n_div <= 30, f"expected a live chain, got {n_div} divergent draws"
     assert min(uniq) > 400, f"chain barely moves: unique/param={uniq}"
     assert "dense_mass_step_backoffs" in posterior.diagnostics
+    # Divergence count and unique-draw fraction alone are uninformative on
+    # this codebase: a 2026-09-05 campaign measured cells at R-hat 2.97 with
+    # zero divergences and unique fractions ~1.0. Pair all three.
+    rhat_max = max(posterior.rhat().values())
+    assert rhat_max < 1.2, f"between-chain disagreement survived: max R-hat {rhat_max:.3f}"
 
 
 def test_probe_is_load_bearing(monkeypatch):
