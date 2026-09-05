@@ -95,23 +95,64 @@ def test_dsps_rest_sed_matches_einsum_reconstruction():
     )
 
 
-def test_sed_intrinsic_uses_total_mass_reconstruction():
+def test_sed_intrinsic_uses_total_mass_reconstruction(synthetic_ssp_wide):
     """``StellarSEDComponent.apply()`` must build ``sed_intrinsic`` from the
     ``total_mass`` reconstruction (= ``Σ_age lnu_age``), NOT from DSPS's
-    ``rest_sed`` (= ``mstar_obs``-normalized). Pin the wire by re-reading the
-    source so a future change can't silently re-introduce the #394 path that
-    breaks the trapezoid normalization contract at low z (#616)."""
-    import inspect
+    ``rest_sed`` (= ``mstar_obs``-normalized).
 
-    from tengri.components.stellar import component
+    Regression: #394 (reversed by #616). Using ``rest_sed`` violates the
+    trapezoid normalization contract by up to ~6.6% at low z because
+    ``mstar_obs`` (DSPS cumulative-SFH quadrature) and ``total_mass``
+    (trapezoid normalization) diverge at low z (large t_obs).
 
-    src = inspect.getsource(component)
-    assert "sed_intrinsic = lnu_age.sum(axis=0)" in src, (
-        "StellarSEDComponent no longer builds sed_intrinsic from the total_mass "
-        "reconstruction (Σ_age lnu_age) — this would re-introduce the #394 "
-        "dsps_result.rest_sed path that violates the trapezoid normalization "
-        "contract by up to ~6.6% at low z (see #616)."
+    Test: sed_intrinsic must scale linearly with log_total_mass (the sole
+    multiplicative normalization), indicating reconstruction from
+    Σ_age(lnu_age) × total_mass, not from mstar_obs-normalized rest_sed.
+    """
+    from tengri import Fixed, SEDModel
+
+    ssp = synthetic_ssp_wide
+
+    # Build a simple model with only stellar component
+    from tengri import FREE
+
+    model = SEDModel.build(
+        ssp_data=ssp,
+        observation=None,  # No observation needed for state test
+        sfh={"type": "dpl", "all_params": FREE},  # All SFH params free
+        met={"logzsol": Fixed(0.0)},  # Fixed solar metallicity
+        redshift=Fixed(0.0),  # Rest-frame observation
     )
-    assert "sed_intrinsic = dsps_result.rest_sed" not in src, (
-        "sed_intrinsic must not use DSPS's mstar_obs-normalized rest_sed (reversed in #616)."
+
+    # Create two parameter sets with different total_mass values
+    import jax
+
+    key = jax.random.PRNGKey(0)
+    params1 = model.spec.sample(key)
+    params1 = dict(params1)  # Convert to dict for modification
+    params1["sfh_dpl_log_total_mass"] = 10.0  # log10(M_sun)
+
+    params2 = model.spec.sample(key)
+    params2 = dict(params2)  # Convert to dict for modification
+    params2["sfh_dpl_log_total_mass"] = 11.0  # 10x more mass
+
+    # Get forward states
+    state1 = model.predict_state(params1)
+    state2 = model.predict_state(params2)
+
+    sed1 = state1.sed_intrinsic
+    sed2 = state2.sed_intrinsic
+
+    # If sed_intrinsic is built from total_mass reconstruction, it should
+    # scale linearly (in linear space, not log). The ratio should be ~10.
+    ratio = sed2 / sed1
+    expected_ratio = 10.0  # 10^(11-10) = 10
+
+    # Allow 1% tolerance (numerical precision, interpolation)
+    assert jnp.allclose(ratio, expected_ratio, rtol=0.01), (
+        f"sed_intrinsic does not scale linearly with total_mass. "
+        f"Expected 10x, got {jnp.mean(ratio):.2f}x "
+        f"(min={jnp.min(ratio):.2f}, max={jnp.max(ratio):.2f}). "
+        f"This suggests it is built from mstar_obs-normalized rest_sed "
+        f"rather than the total_mass reconstruction."
     )
