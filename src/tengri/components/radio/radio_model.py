@@ -42,6 +42,7 @@ from typing import Any, ClassVar
 
 import jax.numpy as jnp
 
+from tengri.components.radio._params import PARAMS as _RADIO_PARAMS
 from tengri.components.radio.radio import radio_total
 from tengri.components.sed_model_component import SEDModelComponent
 from tengri.parameters.priors import Fixed, Uniform
@@ -49,6 +50,7 @@ from tengri.parameters.resolve import require_redshift
 from tengri.protocols.component import (
     ParamDeclaration,
     SEDComponentConfig,
+    declared_default,
 )
 
 __all__ = ["RadioPowerLawSEDComponent", "RadioPowerLawSEDComponentConfig"]
@@ -114,11 +116,11 @@ class RadioPowerLawSEDComponent(SEDModelComponent):
         default=2.4,
     )
     alpha_sf = Uniform(
-        -1.0,
-        1.0,
-        description="SFR-driven radio spectral index",
+        -1.2,
+        -0.5,
+        description="SFR-driven radio spectral index (L_ν ∝ ν^{-α}; negated in formula)",
         units="dimensionless",
-        default=-0.7,
+        default=-declared_default(_RADIO_PARAMS, "radio_alpha_sf"),
     )
     loudness = Fixed(0.0, description="AGN radio loudness", units="dex")
     alpha_agn = Uniform(

@@ -13,10 +13,12 @@ from typing import Any
 
 import jax.numpy as jnp
 
+from tengri.components.radio._params import PARAMS as _RADIO_PARAMS
 from tengri.components.radio.radio import radio_total_dpl
 from tengri.components.sed_model_component import SEDModelComponent
 from tengri.parameters.priors import Fixed, Uniform
 from tengri.parameters.resolve import require_redshift
+from tengri.protocols.component import declared_default
 
 __all__ = ["RadioDPL"]
 
@@ -67,7 +69,11 @@ class RadioDPL(SEDModelComponent):
         description="FIR-radio correlation q_IR (Bell+2003)",
         units="dimensionless",
     )
-    alpha_sf = Fixed(0.8, description="SF synchrotron spectral index", units="dimensionless")
+    alpha_sf = Fixed(
+        declared_default(_RADIO_PARAMS, "radio_alpha_sf"),
+        description="SF synchrotron spectral index (L_ν ∝ ν^{-α})",
+        units="dimensionless",
+    )
 
     # AGN power-law trunk
     alpha_thin = Uniform(

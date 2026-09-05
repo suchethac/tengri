@@ -30,6 +30,7 @@ import math
 
 import jax.numpy as jnp
 
+from tengri.components.radio._params import PARAMS as _RADIO_PARAMS
 from tengri.protocols.component import declared_default
 from tengri.utils.physics_constants import C_AA as _C_AA, L_SUN as _L_SUN
 from tengri.utils.scale import pow10 as _pow10
@@ -58,14 +59,9 @@ _SFR_IR_KENNICUTT: float = 1.73e10 * _L_SUN  # ≈ 6.62e43 erg/s
 _LOG10_FIRRC_CONST: float = math.log10(3.75e12)  # bell/delvecchio/mccheyne norm
 _LOG10_SFR_IR_KENNICUTT: float = math.log10(_SFR_IR_KENNICUTT)  # free-free
 
-
-def _get_alpha_sf_default() -> float:
-    """Get the declared default for alpha_sf from _params.PARAMS."""
-    from tengri.components.radio._params import PARAMS as _RADIO_PARAMS
-    return declared_default(_RADIO_PARAMS, "radio_alpha_sf")
-
-
-_ALPHA_SF_DEFAULT = _get_alpha_sf_default()
+# Declared defaults from _params.py
+_ALPHA_SF_DEFAULT: float = declared_default(_RADIO_PARAMS, "radio_alpha_sf")
+_NU_REF_AGN_HZ: float = 5.0e9  # AGN radio reference frequency [Hz] (5 GHz)
 
 
 def _synchrotron_suppression(L_ref: jnp.ndarray) -> jnp.ndarray:
@@ -538,7 +534,7 @@ def radio_agn(
     L_agn_bol: float,
     radio_loudness: float = 0.0,
     alpha_agn: float = 0.7,
-    nu_ref: float = 1.4e9,
+    nu_ref: float = _NU_REF_AGN_HZ,
     l_bband: float = 0.0,
     log_nu_cut: float = 13.0,
     *,
@@ -972,7 +968,7 @@ def radio_total_dpl_terms(
     L_ir: float = 0.0,
     L_agn_bol: float = 0.0,
     q_ir: float = 2.64,
-    alpha_sf: float = 0.8,
+    alpha_sf: float = _ALPHA_SF_DEFAULT,
     radio_loudness: float = 0.0,
     alpha1: float = -0.75,
     alpha2: float = -0.1,
@@ -1124,7 +1120,7 @@ def radio_total_dpl(
     L_ir: float = 0.0,
     L_agn_bol: float = 0.0,
     q_ir: float = 2.64,
-    alpha_sf: float = 0.8,
+    alpha_sf: float = _ALPHA_SF_DEFAULT,
     radio_loudness: float = 0.0,
     alpha1: float = -0.75,
     alpha2: float = -0.1,
@@ -1235,7 +1231,7 @@ def compute_radio_components(
     L_ir: float = 0.0,
     L_agn_bol: float = 0.0,
     q_ir: float = 2.64,
-    alpha_sf: float = 0.8,
+    alpha_sf: float = _ALPHA_SF_DEFAULT,
     radio_loudness: float = 0.0,
     alpha_agn: float = 0.7,
     sfr_mode: str = "bell2003",
