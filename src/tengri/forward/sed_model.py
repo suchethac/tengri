@@ -7455,7 +7455,7 @@ class SEDModel:
             ztable_data=ztable_data,
         )
 
-    def predict_observables(self, params, *, ssp_data=None, template_data=None):
+    def predict_observables(self, params, *, ssp_data=None, template_data=None, ztable_data=None):
         """Project the orchestrator state into every configured observable.
 
         Single bit-exact entry point: runs the SEDComponent chain and
@@ -7517,7 +7517,7 @@ class SEDModel:
         return impl(
             params,
             self.spec.get_fixed_values(),
-            *self._resolve_threaded_data(ssp_data, template_data),
+            *self._resolve_threaded_data(ssp_data, template_data, ztable_data),
         )
 
     def predict_observables_jit(
