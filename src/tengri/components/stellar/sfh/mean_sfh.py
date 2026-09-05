@@ -812,12 +812,11 @@ def dpl_lookback(
        massive quiescent galaxies with BAGPIPES: evidence for multiple quenching
        mechanisms," MNRAS, 480, 4379 (2018). arXiv:1712.04452.
        https://doi.org/10.1093/mnras/sty2169
-    .. [2] C. C. Lovell et al., "Synthesizer: Synthetic Observables For
-       Modern Astronomy," Open Journal of Astrophysics, 8 (2025).
+    .. [2] C. C. Lovell et al., "Synthesizer: a Software Package for Synthetic
+       Astronomical Observables," Open Journal of Astrophysics, 8 (2025).
        https://doi.org/10.33232/001c.145766
-    .. [3] W. J. Roper et al., "Synthesizer: A fast, flexible and modular
-       Python package for generating synthetic observations of astrophysical
-       simulations," Journal of Open Source Software, 11, 9436 (2026).
+    .. [3] W. J. Roper et al., "Synthesizer: Synthetic Observables for
+       Modern Astronomy," Journal of Open Source Software, 11, 9436 (2026).
        https://doi.org/10.21105/joss.09436
 
     Examples
@@ -1204,12 +1203,11 @@ def trunc_exp(
 
     References
     ----------
-    .. [1] C. C. Lovell et al., "Synthesizer: Synthetic Observables For
-       Modern Astronomy," Open Journal of Astrophysics, 8 (2025).
+    .. [1] C. C. Lovell et al., "Synthesizer: a Software Package for Synthetic
+       Astronomical Observables," Open Journal of Astrophysics, 8 (2025).
        https://doi.org/10.33232/001c.145766
-    .. [2] W. J. Roper et al., "Synthesizer: A fast, flexible and modular
-       Python package for generating synthetic observations of astrophysical
-       simulations," Journal of Open Source Software, 11, 9436 (2026).
+    .. [2] W. J. Roper et al., "Synthesizer: Synthetic Observables for
+       Modern Astronomy," Journal of Open Source Software, 11, 9436 (2026).
        https://doi.org/10.21105/joss.09436
 
     Examples

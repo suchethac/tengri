@@ -36,10 +36,11 @@ Run with::
 
 References
 ----------
-.. [1] C. C. Lovell et al., "Synthesizer: synthetic observables for modern
-   astronomy," The Open Journal of Astrophysics (2025).
+.. [1] C. C. Lovell et al., "Synthesizer: a Software Package for Synthetic
+   Astronomical Observables," Open Journal of Astrophysics, 8 (2025).
    https://doi.org/10.33232/001c.145766
-.. [2] W. J. Roper et al., "Synthesizer," Journal of Open Source Software (2026).
+.. [2] W. J. Roper et al., "Synthesizer: Synthetic Observables for Modern
+   Astronomy," Journal of Open Source Software, 11, 9436 (2026).
    https://doi.org/10.21105/joss.09436
 .. [3] K. G. Iyer et al., "Nonparametric star formation history reconstruction
    with Gaussian processes I: counting major episodes of star formation,"

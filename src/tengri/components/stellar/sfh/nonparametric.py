@@ -635,12 +635,11 @@ def psb_continuity(
     .. [2] K. A. Suess et al., "Half-mass Radii for ~7000 Galaxies," ApJ,
        915, 87 (2021). arXiv:2101.03177.
        https://doi.org/10.3847/1538-4357/ac062c
-    .. [3] C. C. Lovell et al., "Synthesizer: Synthetic Observables For
-       Modern Astronomy," Open Journal of Astrophysics, 8 (2025).
+    .. [3] C. C. Lovell et al., "Synthesizer: a Software Package for Synthetic
+       Astronomical Observables," Open Journal of Astrophysics, 8 (2025).
        https://doi.org/10.33232/001c.145766
-    .. [4] W. J. Roper et al., "Synthesizer: A fast, flexible and modular
-       Python package for generating synthetic observations of astrophysical
-       simulations," Journal of Open Source Software, 11, 9436 (2026).
+    .. [4] W. J. Roper et al., "Synthesizer: Synthetic Observables for
+       Modern Astronomy," Journal of Open Source Software, 11, 9436 (2026).
        https://doi.org/10.21105/joss.09436
 
     Examples
@@ -784,12 +783,11 @@ def psb_continuity_flex(
 
     References
     ----------
-    .. [1] C. C. Lovell et al., "Synthesizer: Synthetic Observables For
-       Modern Astronomy," Open Journal of Astrophysics, 8 (2025).
+    .. [1] C. C. Lovell et al., "Synthesizer: a Software Package for Synthetic
+       Astronomical Observables," Open Journal of Astrophysics, 8 (2025).
        https://doi.org/10.33232/001c.145766
-    .. [2] W. J. Roper et al., "Synthesizer: A fast, flexible and modular
-       Python package for generating synthetic observations of astrophysical
-       simulations," Journal of Open Source Software, 11, 9436 (2026).
+    .. [2] W. J. Roper et al., "Synthesizer: Synthetic Observables for
+       Modern Astronomy," Journal of Open Source Software, 11, 9436 (2026).
        https://doi.org/10.21105/joss.09436
 
     Examples
