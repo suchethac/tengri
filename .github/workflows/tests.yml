@@ -98,6 +98,11 @@ concurrency:
 # resolved dependency (pinned to <0.4.8 in pyproject.toml). See #798.
 env:
   SETUPTOOLS_SCM_PRETEND_VERSION_FOR_DSPS: "0.4.7"
+  # Arm the whole-file-skip guard (tests/conftest.py, #1615/#1946): a file whose
+  # every collected test skips is inert coverage and fails the session. The guard
+  # scopes itself to the fast-tier trees and excludes integration/crossval, so
+  # arming it workflow-wide is safe for the data-gated jobs.
+  TENGRI_GUARD_FULLY_SKIP: "1"
 
 # Skip the HEAVY jobs on bare `labeled` PR events. GitHub fires one `labeled`
 # webhook PER label added, so labelling a PR with N labels used to spawn N
