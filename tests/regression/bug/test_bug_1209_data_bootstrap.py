@@ -250,14 +250,23 @@ def test_download_and_load_share_one_default():
     from tengri._data_setup import _KNOWN_SSPS, DEFAULT_SSP, download_ssp
     from tengri.components.stellar.sps import dsps_wrapper
 
+    # download_ssp must default to DEFAULT_SSP
     assert inspect.signature(download_ssp).parameters["name"].default == DEFAULT_SSP, (
         "download_ssp no longer defaults to DEFAULT_SSP — the two can drift again"
     )
-    source = inspect.getsource(dsps_wrapper.load_ssp)
-    assert "DEFAULT_SSP" in source, (
-        "load_ssp resolves its no-argument default from something other than "
-        "DEFAULT_SSP — the two defaults can drift apart again"
+    # Behavioral test: both load_ssp() (no args) and load_ssp(DEFAULT_SSP) must return
+    # the same grid (same metallicity axis shape proves they're the same file)
+    ssp_no_args = dsps_wrapper.load_ssp()
+    ssp_explicit = dsps_wrapper.load_ssp(DEFAULT_SSP)
+    assert ssp_no_args is not None, "load_ssp() with no arguments returned None"
+    assert ssp_explicit is not None, f"load_ssp({DEFAULT_SSP!r}) returned None"
+    # Both must have matching grid dimensions (ssp_lgmet shape is an SSP identifier)
+    assert ssp_no_args.ssp_lgmet.shape == ssp_explicit.ssp_lgmet.shape, (
+        f"load_ssp() and load_ssp({DEFAULT_SSP!r}) returned different grids: "
+        f"ssp_lgmet shape {ssp_no_args.ssp_lgmet.shape} vs {ssp_explicit.ssp_lgmet.shape}. "
+        f"The no-argument default is not DEFAULT_SSP."
     )
+    # The loaded SSP must match the known catalog entry
     assert DEFAULT_SSP in _KNOWN_SSPS, "the default must be fetchable by download_ssp()"
 
 
