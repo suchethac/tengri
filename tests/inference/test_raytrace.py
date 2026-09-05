@@ -43,7 +43,7 @@ class TestSampleRaytraceGaussian:
         log_prob_fn = _gaussian_log_prob(true_mean, cov_inv)
         step_size = 0.03 * jnp.sqrt(float(D))
 
-        chain, _log_likelihood, _accept_prob = sample_raytrace(
+        chain, _log_likelihood, _accept_prob, _n_nonfinite = sample_raytrace(
             key=key,
             params_init=true_mean + 0.1,
             log_prob_fn=log_prob_fn,
@@ -90,7 +90,7 @@ class TestSampleRaytraceAcceptance:
         log_prob_fn = _gaussian_log_prob(mean, cov_inv)
         step_size = 0.03 * jnp.sqrt(float(D))
 
-        _chain, _log_likelihood, accept_prob = sample_raytrace(
+        _chain, _log_likelihood, accept_prob, _n_nonfinite = sample_raytrace(
             key=key,
             params_init=jnp.zeros(D),
             log_prob_fn=log_prob_fn,
@@ -116,7 +116,7 @@ class TestSampleRaytraceShapes:
         log_prob_fn = _gaussian_log_prob(mean, cov_inv)
         step_size = 0.03 * jnp.sqrt(float(D))
 
-        chain, log_likelihood, accept_prob = sample_raytrace(
+        chain, log_likelihood, accept_prob, _n_nonfinite = sample_raytrace(
             key=key,
             params_init=jnp.zeros(D),
             log_prob_fn=log_prob_fn,
@@ -152,7 +152,7 @@ class TestRaytraceVsHmcGaussian:
 
         # Ray tracing
         key_rt = jax.random.PRNGKey(10)
-        chain_rt, _, _ = sample_raytrace(
+        chain_rt, _, _, _ = sample_raytrace(
             key=key_rt,
             params_init=true_mean + 0.05,
             log_prob_fn=log_prob_fn,
@@ -352,7 +352,7 @@ class TestKDKIntegrator:
         log_prob_fn = _gaussian_log_prob(true_mean, cov_inv)
         step_size = 0.03 * jnp.sqrt(float(D))
 
-        chain, _lnl, accept_prob = sample_raytrace(
+        chain, _lnl, accept_prob, _n_nonfinite = sample_raytrace(
             key=key,
             params_init=jnp.zeros(D),
             log_prob_fn=log_prob_fn,
@@ -379,7 +379,7 @@ class TestKDKIntegrator:
 
         log_prob_fn = _gaussian_log_prob(true_mean, cov_inv)
 
-        chain, _lnl, accept_prob = sample_raytrace(
+        chain, _lnl, accept_prob, _n_nonfinite = sample_raytrace(
             key=key,
             params_init=true_mean,
             log_prob_fn=log_prob_fn,
@@ -423,7 +423,7 @@ class TestPosteriorAutocorrelation:
         key = jax.random.PRNGKey(0)
         log_prob_fn = _gaussian_log_prob(jnp.zeros(D), jnp.eye(D))
 
-        chain, _log_lik, _accept_prob = sample_raytrace(
+        chain, _log_lik, _accept_prob, _n_nonfinite = sample_raytrace(
             key=key,
             params_init=jnp.zeros(D),
             log_prob_fn=log_prob_fn,

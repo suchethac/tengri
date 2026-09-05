@@ -809,6 +809,12 @@ def _backoff_step_on_divergence(
     ``divergence_threshold`` -- integrator divergence, not ordinary low
     acceptance. A healthy initial fraction returns immediately with zero
     backoffs and never calls the probe.
+
+    ``initial_fraction`` may be measured over the full first run while probe
+    fractions cover a burnin segment only; at the 0.95 threshold the two
+    definitions agree (a step that diverges keeps diverging at fixed size).
+    Probes deliberately draw fresh keys and jitter -- they are new short
+    burnins, not replays of the first run.
     """
     initial_step_size = float(step_size)
     nonfinite_fraction = float(initial_fraction)
