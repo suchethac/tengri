@@ -87,6 +87,8 @@ DUST_EMISSION_CITATIONS: dict[str, list[str]] = {
     # Canonical modified-blackbody (Hildebrand 1983); da Cunha 2013 supplies
     # the CMB-heating correction applied automatically at redshift > 0.
     "modified_blackbody": ["hildebrand1983", "dacunha2013"],
+    # General-opacity graybody (Casey 2012 Eq. 1); da Cunha 2013 for CMB correction.
+    "greybody": ["casey2012", "dacunha2013"],
     "mbb": ["casey2012"],
     "casey2012": ["casey2012"],
     "dale2014": ["dale2014"],

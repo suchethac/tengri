@@ -58,7 +58,15 @@ class TestBuildResolverDustEmission:
 
     @pytest.mark.parametrize(
         "emission",
-        ["modified_blackbody", "dl07", "dl14", "dale2014", "astrodust", "draine_li2014"],
+        [
+            "greybody",
+            "modified_blackbody",
+            "dl07",
+            "dl14",
+            "dale2014",
+            "astrodust",
+            "draine_li2014",
+        ],
     )
     def test_emission_model_builds(self, ssp_data_bc03, emission):
         """``dust={'emission':{'type': <engine name>}}`` builds on the engine."""

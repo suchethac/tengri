@@ -121,7 +121,13 @@ def test_dust_energy_balance(intrinsic_sed, emission_type, tau):
 # Every dust IR model that is meant to carry the *whole* absorbed energy must
 # re-emit it (∫ L_emit dν ≈ L_absorbed). ``pah_drude`` is deliberately excluded
 # — it is a PAH-only building block, not a standalone energy-balanced emitter.
-_ANALYTIC_BALANCED = ["modified_blackbody", "casey2012", "schreiber2016", "energy_balance_split"]
+_ANALYTIC_BALANCED = [
+    "greybody",
+    "modified_blackbody",
+    "casey2012",
+    "schreiber2016",
+    "energy_balance_split",
+]
 _GRID_BALANCED = ["draine_li2014", "astrodust", "bosa", "schreiber2018"]
 
 

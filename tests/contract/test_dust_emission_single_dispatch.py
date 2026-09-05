@@ -18,6 +18,7 @@ pytestmark = pytest.mark.contract
 
 # Every dispatchable grammar emission type + every alias.
 _GRAMMAR_TYPES = [
+    "greybody",
     "modified_blackbody",
     "casey2012",
     "pah_drude",

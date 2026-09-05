@@ -1,7 +1,7 @@
 # SPDX-License-Identifier: BSD-3-Clause
 """Smoke tests for the analytic dust-emission precompute adapter (PR 3).
 
-Covers ``modified_blackbody``, ``casey2012``, and the ``pah_drude`` template.
+Covers ``modified_blackbody``, ``casey2012``, ``greybody``, and the ``pah_drude`` template.
 """
 
 from __future__ import annotations
@@ -29,7 +29,7 @@ def filter_set():
     return waves, trans
 
 
-@pytest.mark.parametrize("model", ["modified_blackbody", "casey2012", "pah_drude"])
+@pytest.mark.parametrize("model", ["modified_blackbody", "casey2012", "greybody", "pah_drude"])
 def test_dust_analytic_precompute_and_lookup(model, filter_set):
     from tengri.components.dust import dust_analytic_precompute as adapter
 
@@ -54,7 +54,7 @@ def test_dust_analytic_precompute_and_lookup(model, filter_set):
     chex.assert_tree_all_finite(np.asarray(out))
 
 
-@pytest.mark.parametrize("key", ["modified_blackbody", "casey2012", "pah_drude"])
+@pytest.mark.parametrize("key", ["modified_blackbody", "casey2012", "greybody", "pah_drude"])
 def test_dust_analytic_registered(key):
     from tengri.forward.precompute.registry import _REGISTRY
 

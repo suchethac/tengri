@@ -929,6 +929,12 @@ _DUST_EMISSION_METADATA: dict[str, dict[str, str]] = {
         "citation": "Casey 2012 (MNRAS 425, 3094)",
         "short_doc": "Single-temperature modified blackbody (alias of modified_blackbody)",
     },
+    "greybody": {
+        "status": "production",
+        "citation": "Boquien et al. 2019 (A&A 622, A103) / Casey 2012 (MNRAS 425, 3094)",
+        "short_doc": "General-opacity graybody with free pivot "
+        "(Synthesizer Greybody optically_thin=False; CIGALE mbb)",
+    },
     "modified_blackbody": {
         "status": "production",
         "citation": "Casey 2012 (MNRAS 425, 3094)",

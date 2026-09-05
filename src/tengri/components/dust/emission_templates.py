@@ -458,18 +458,18 @@ def dl14_sed_from_grid(
         dust_gamma_dl * r_power
     ) * _trilinear(powerlaw)
 
+    # Interpolate template onto target wavelength grid FIRST
+    sed = resample_template(wavelength_aa, tmpl_wave, template, left=0.0, right=0.0)
+
     # Normalize template to enforce energy balance: ∫L_nu dnu = L_absorbed.
-    # Templates may be stored in arbitrary units; normalization makes scaling exact.
+    # Must normalize AFTER resampling to ensure the delivered SED integrates
+    # to L_absorbed regardless of the native template grid spacing.
     # (Same approach as DL07 loader; DL14 stores j_nu so no L_lambda→L_nu conversion.)
-    nu_tmpl = _C_CGS / (tmpl_wave * _AA_TO_CM)
-    sort_tmpl = jnp.argsort(nu_tmpl)
-    tmpl_integral = jnp.trapezoid(template[sort_tmpl], nu_tmpl[sort_tmpl])
-    template_norm = template / jnp.maximum(jnp.abs(tmpl_integral), 1e-100)
+    nu = _C_CGS / (wavelength_aa * _AA_TO_CM)
+    eval_integral = -jnp.trapezoid(sed, nu)
+    norm = jnp.where(eval_integral > 0.0, L_absorbed / eval_integral, 0.0)
 
-    # Interpolate normalized template onto target wavelength grid
-    sed = resample_template(wavelength_aa, tmpl_wave, template_norm, left=0.0, right=0.0)
-
-    return L_absorbed * sed
+    return norm * sed
 
 
 def create_dl14_from_grid(grid_path: str) -> Callable:
@@ -685,8 +685,17 @@ def dale2014_emission_lnu(
         template_mixed = template_sf
         scale_factor = L_absorbed
 
+    # Resample onto target wavelength grid FIRST
     sed = resample_template(wavelength_aa, wavelength_grid, template_mixed, left=0.0, right=0.0)
-    return scale_factor * sed
+
+    # Normalize to enforce energy balance on the evaluation grid.
+    # Must normalize AFTER resampling to ensure the delivered SED integrates
+    # correctly regardless of the native template grid spacing.
+    nu = _C_CGS / (wavelength_aa * _AA_TO_CM)
+    t_integral = -jnp.trapezoid(sed, nu)
+    norm = jnp.where(t_integral > 0.0, 1.0 / t_integral, 0.0)
+
+    return scale_factor * norm * sed
 
 
 def load_dale2014_lnu_grid(grid_path: str) -> dict:
@@ -1771,22 +1780,24 @@ def create_astrodust_from_grid(
             dust_gamma_dl * r_power
         ) * _bilinear(powerlaw)
 
-        # Energy balance: the R weighting makes the mixed template integrate to
-        # 1 + gamma*(R-1), so renormalize to unit frequency integral on the
-        # (full) template grid before scaling by L_absorbed below.
-        nu_tmpl = _C_CGS / (tmpl_wave * _AA_TO_CM)
-        t_integral = -jnp.trapezoid(template, nu_tmpl)
-        template = jnp.where(t_integral > 0.0, template / t_integral, template)
-
-        # Interpolate onto target wavelength grid
+        # Interpolate onto target wavelength grid FIRST
         sed = resample_template(wavelength_aa, tmpl_wave, template, left=0.0, right=0.0)
+
+        # Energy balance: renormalize to unit frequency integral on the
+        # evaluation grid AFTER resampling to ensure the delivered SED
+        # integrates to L_absorbed regardless of the native template grid spacing.
+        # Use the same log-wavelength integration as the component-level normalization
+        # for consistency across different astrodust calling paths.
+        nu_lnu = (_C_CGS / (wavelength_aa * _AA_TO_CM)) * sed
+        t_integral = jnp.trapezoid(nu_lnu, jnp.log(wavelength_aa))
+        norm = jnp.where(t_integral > 0.0, L_absorbed / t_integral, 0.0)
 
         # No CMB contrast factor here; see the note in ``create_themis_from_grid``.
         # It is an *observational* suppression, so applying it to the emitted SED
         # breaks the energy-balance invariant (int L_nu dnu == L_absorbed) that
         # this component exists to satisfy. ``redshift`` is kept in the signature
         # for call-site compatibility.
-        return L_absorbed * sed
+        return norm * sed
 
     return astrodust_emission
 
@@ -2013,15 +2024,22 @@ def create_bosa_from_grid(template_data: dict | str) -> Callable:
             + fl * fs * spectra[i_l + 1, i_s + 1]
         )
 
-        # Interpolate onto target wavelength grid
+        # Interpolate onto target wavelength grid FIRST
         sed = resample_template(wavelength_aa, tmpl_wave, template, left=0.0, right=0.0)
+
+        # Normalize to enforce energy balance: ∫L_nu dnu = L_absorbed.
+        # Must normalize AFTER resampling to ensure the delivered SED integrates
+        # to L_absorbed regardless of the native template grid spacing.
+        nu = _C_CGS / (wavelength_aa * _AA_TO_CM)
+        t_integral = -jnp.trapezoid(sed, nu)
+        norm = jnp.where(t_integral > 0.0, L_absorbed / t_integral, 0.0)
 
         # No CMB contrast factor here; see the note in ``create_themis_from_grid``.
         # It is an *observational* suppression, so applying it to the emitted SED
         # breaks the energy-balance invariant (int L_nu dnu == L_absorbed) that
         # this component exists to satisfy. ``redshift`` is kept in the signature
         # for call-site compatibility.
-        return L_absorbed * sed
+        return norm * sed
 
     return bosa_emission
 
@@ -2519,15 +2537,15 @@ def create_themis_from_grid(template_data: dict | str) -> Callable:
         # as a luminosity fraction directly: no analytic R needed (cf. DL07).
         template = (1.0 - dust_gamma_dl) * _bilinear(single_u) + dust_gamma_dl * pdr_template
 
-        # Energy balance: the mix integrates to (1-gamma) + gamma*ratio, so
-        # renormalize to unit frequency integral on the (full) template grid
-        # before scaling by L_absorbed.
-        nu_tmpl = _C_CGS / (tmpl_wave * _AA_TO_CM)
-        t_integral = -jnp.trapezoid(template, nu_tmpl)
-        template = jnp.where(t_integral > 0.0, template / t_integral, template)
-
-        # Interpolate onto target wavelength grid
+        # Interpolate onto target wavelength grid FIRST
         sed = resample_template(wavelength_aa, tmpl_wave, template, left=0.0, right=0.0)
+
+        # Energy balance: renormalize to unit frequency integral on the
+        # evaluation grid AFTER resampling to ensure the delivered SED
+        # integrates to L_absorbed regardless of the native template grid spacing.
+        nu = _C_CGS / (wavelength_aa * _AA_TO_CM)
+        t_integral = -jnp.trapezoid(sed, nu)
+        norm = jnp.where(t_integral > 0.0, L_absorbed / t_integral, 0.0)
 
         # The da Cunha et al. (2013) CMB contrast factor is deliberately NOT
         # applied to the emitted SED.
@@ -2544,7 +2562,7 @@ def create_themis_from_grid(template_data: dict | str) -> Callable:
         # odd ones out. If a CMB contrast is wanted it belongs at the observation
         # layer, applied uniformly, not inside the energy-balanced emitter.
         # ``redshift`` is kept in the signature for call-site compatibility.
-        return L_absorbed * sed
+        return norm * sed
 
     return themis_emission
 

@@ -64,6 +64,16 @@ def main():
                 "redshift": 0.0,
             },
         },
+        "greybody": {
+            "call_path": "closure",
+            "params": {
+                "dust_T": 35.0,
+                "dust_beta_ir": 1.8,
+                "dust_lambda_0_um": 150.0,
+                "dust_epsilon_mbb": 1.0,
+                "redshift": 0.0,
+            },
+        },
         "pah_drude": {
             "call_path": "closure",
             "params": {"redshift": 0.0},

@@ -103,6 +103,8 @@ def test_dust_law_mapping(law: str, expected: str):
         # correction applied automatically at z > 0); see the registry entry
         # in tengri/citations/associations.py.
         ("modified_blackbody", "hildebrand1983"),
+        # greybody = Casey 2012 (with da Cunha 2013 CMB-heating correction).
+        ("greybody", "casey2012"),
         ("dale2014", "dale2014"),
         ("draine_li2007", "draine_li2007"),
         ("draine_li2014", "draine2014"),
