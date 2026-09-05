@@ -280,6 +280,16 @@ def test_barker_and_mala_share_one_adaptation():
     assert "run_first_order(context, proposal=proposal" in inspect.getsource(_forward)
     for fn in (run_barker, run_mala):
         assert "_forward(" in inspect.getsource(fn)
+
+    # The following source assertions check run_first_order's internal
+    # composition. These are legitimately about *structure*, not naming:
+    # they verify that the function composition (full_scan for warmup,
+    # chain_scan for sampling) is present. The control flow is not
+    # observable at runtime without reading the implementation in detail.
     source = inspect.getsource(run_first_order)
-    assert "_first_order_full_scan(" in source
-    assert "_first_order_chain_scan(" in source
+    assert "_first_order_full_scan(" in source, (
+        "run_first_order must compose _first_order_full_scan for the warmup phase"
+    )
+    assert "_first_order_chain_scan(" in source, (
+        "run_first_order must compose _first_order_chain_scan for the sampling phase"
+    )

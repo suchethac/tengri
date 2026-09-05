@@ -130,7 +130,11 @@ def test_the_advice_it_gives_is_real_api():
 
 @pytest.mark.parametrize("surface", ["fitter", "catalog"])
 def test_every_surface_calls_the_shared_guard_not_its_own_copy(surface):
-    """One implementation, N call sites — never N implementations."""
+    """One implementation, N call sites — never N implementations.
+
+    The NUTS high-dimension advisory is a single guard checked from all surfaces.
+    Verify both that each surface calls it and that there is no local redefinition.
+    """
     if surface == "fitter":
         from tengri.inference import fitter as mod
 
@@ -139,8 +143,12 @@ def test_every_surface_calls_the_shared_guard_not_its_own_copy(surface):
         from tengri.inference import catalog_fitter as mod
 
         src = inspect.getsource(mod._CatalogFitterOriginal.run)
+
     assert "_warn_if_nuts_high_dim(" in src, f"{surface} must call the shared guard"
-    # No locally re-implemented threshold comparison.
+
+    # Verify no locally re-implemented threshold comparison.
+    # The guard lives in _dimension_guard and has a single threshold (NUTS_WARN_D).
+    # Hardcoding "> 30" or "30 <" would be a duplicate implementation.
     assert "> 30" not in src and "30 <" not in src, (
         f"{surface} appears to hardcode its own threshold instead of using the shared one"
     )
