@@ -455,18 +455,35 @@ python bench/scripts/benchmark_notebook_sampler.py \
     --sweep-json bench/results/2026-09-05_hmc_control_ctl-dpl.json
 ```
 
-The width sweep this report did **not** run, recorded so the next attempt starts
-from a configuration that converges rather than from this one:
+The nb05 gate is the same command with `--notebook 05`.
+
+The width sweep (section 3) runs on the **GPU**, so unset `JAX_PLATFORMS`.
+`JAX_DEFAULT_MATMUL_PRECISION=highest` is mandatory on CUDA: XLA silently lowers
+float32 matmuls to TF32 on Ampere and `NVIDIA_TF32_OVERRIDE=0` does not fix it
+(2026-08-20 Finding 7). It is set here even though these rows are float64, so the
+command is correct if someone re-runs it at `--dtype f32`.
 
 ```sh
-# ONLY after an N=1 cell clears max split R-hat < 1.01 with zero divergences
-# on both seeds. JAX_DEFAULT_MATMUL_PRECISION=highest is required on CUDA:
-# XLA silently lowers float32 matmuls to TF32 on Ampere and NVIDIA_TF32_OVERRIDE=0
-# does not fix it (2026-08-20 Finding 7).
+unset JAX_PLATFORMS
 JAX_DEFAULT_MATMUL_PRECISION=highest python bench/scripts/benchmark_catalog_throughput.py \
-    --method mcmc_hmc --precondition 0.5 --n-leapfrog <the L that converged> \
-    --n-gal 8 32 128 512 --chunk 32 --json bench/results/<date>_width.json
+    --method mcmc_hmc --precondition 0.5 --n-leapfrog 10 \
+    --n-gal 8 32 128 512 --chunk 32 --warmup 200 --burnin 0 --samples 200 \
+    --dtype f64 --json bench/results/2026-09-05_width_hmc.json --tag rtx3060-idle
+
+JAX_DEFAULT_MATMUL_PRECISION=highest python bench/scripts/benchmark_catalog_throughput.py \
+    --method mcmc_nuts --precondition 0.5 \
+    --n-gal 8 32 128 --chunk 32 --warmup 200 --burnin 0 --samples 200 \
+    --dtype f64 --json bench/results/2026-09-05_width_nuts.json --tag rtx3060-idle
 ```
+
+`--n-gal 8` is accepted and then skipped: the harness skips any cell with
+`n_gal < K`, so with `--chunk 32` the sweep starts at N=32.
+
+**Run the width sweep on an otherwise idle box, and check `nvidia-smi` first.**
+Its headline columns are wall clocks. Two JAX processes on one 12 GB card is not
+merely slow — a concurrent 9 GB pytest job made `gpusolverDnCreate` fail outright
+with `cuSolver internal error`, which is what killed the first two attempts at
+the NUTS N=128 cell.
 
 ### Harness changes made for this report
 
@@ -497,5 +514,12 @@ Four, all in `bench/scripts/`, none touching `src/`:
   (fixture, config, seed).
 * `bench/results/2026-09-05_hmc_control.jsonl` — the unpreconditioned control.
 * `bench/results/2026-09-05_hmcp_ctl-dpl.json`,
-  `bench/results/2026-09-05_hmc_control_ctl-dpl.json` — the same sweeps as
-  single nested documents.
+  `bench/results/2026-09-05_hmcp_ctl-dpl_L160.json`,
+  `bench/results/2026-09-05_hmcp_nb05.json`,
+  `bench/results/2026-09-05_hmc_control_L160.json` — the same sweeps as single
+  nested documents.
+* `bench/results/2026-09-05_width_hmc.json`,
+  `bench/results/2026-09-05_width_nuts.json` — the GPU width sweep, one row per
+  (method, N, K), each carrying `converged_gal_per_gpu_min`, `max_rhat`,
+  `min_ess`, `divergences`, `n_frozen_chains`, `min_distinct_frac`,
+  `peak_bytes` and `loadavg`.
