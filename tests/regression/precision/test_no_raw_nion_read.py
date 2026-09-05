@@ -10,7 +10,13 @@ Allowed exceptions (Tier B deferred — linear q_h / erg/s paths):
 - forward/component_factory.py — state_to_ionizing_quantities.q_h linear surface
 - components/nebular/line_precompute.py — build-path _nion_of_state (erg/s + 4pi dL^2)
 - components/nebular/nebular_grid_precompute.py — build-path _nion_of_state (f64 build)
-- forward/sed_model.py — fast-line path feeds the erg/s line reconstruct (~1e41)
+
+``forward/sed_model.py`` was on this list and is not any more: its fast-line path
+took the linear ``nion`` (~1e53, ``inf`` in float32) only to feed an erg/s line
+reconstruct that then overflowed too, which was the whole of why a float32 Cue line
+fit could not run. It now reads ``log_nion`` and stays in the exponent, so the
+Tier B item 3 migration has landed for that file and its entry is removed rather
+than kept green by widening the pattern.
 
 Each entry will be removed when its corresponding Tier B item (2 or 3) migration lands
 (see issue #1206).
@@ -38,7 +44,6 @@ ALLOW = {
     "forward/component_factory.py": "Tier B item 3 — state_to_ionizing_quantities.q_h linear",
     "components/nebular/line_precompute.py": "Tier B item 2/3 — build-path _nion_of_state (erg/s)",
     "components/nebular/nebular_grid_precompute.py": "Tier B item 2/3 — build _nion_of_state",
-    "forward/sed_model.py": "Tier B item 3 — fast-line feeds the erg/s reconstruct (~1e41)",
 }
 
 # Match raw nion-reader patterns: derived["nion"] or derived.get("nion"

@@ -44,6 +44,7 @@ seam, so a verdict is never taken from an unvalidated instrument.
 from __future__ import annotations
 
 import gc
+import math
 
 import jax
 import jax.numpy as jnp
@@ -1190,9 +1191,18 @@ def test_the_discrete_line_catalog_operator_survives_float32(ssp_bare):
     non-finite log-prob, so this is a loud failure, not a silent one — but the channel
     is unavailable in float32 and the report says so.
 
-    Marked ``xfail(strict=True)`` because finite is the behavior that is wanted, not
-    the behavior that exists: extending #1859's grouping to this operator will flip
-    this test to XPASS and the report's Finding 2 will then need re-taking.
+    **Fixed.** #1859's grouping now reaches this operator: the ~1e40 luminosity and
+    the ~1e57 divisor exist only as exponents and one ``pow10`` produces the ~1e-16
+    answer, so no intermediate leaves float32 range. Measured on this tree at the
+    same point, float32 now returns
+    ``[4.81e-16 5.88e-16 1.70e-15 5.31e-16]`` against float64's
+    ``[4.81e-16 5.88e-16 1.70e-15 5.31e-16]``.
+
+    The assertions are **finite, non-zero, and tracking float64** — not merely
+    finite. PR #2100's trap is that a guard pinning the unweighted gradient *finite*
+    stayed green while the value was identically zero, and ``pow10`` of a large
+    negative exponent flushes to exactly 0.0, which is the failure mode this
+    particular repair could plausibly introduce.
     """
     # PR #2104's hazard, met again: this module accumulates a large number of
     # distinct compiled programs, and XLA's CPU backend dies part-way through the
@@ -1214,27 +1224,47 @@ def test_the_discrete_line_catalog_operator_survives_float32(ssp_bare):
             n: float(sed.spec._distributions[n].unstandardize(jnp.asarray(0.0)))
             for n in sed.spec.free_params
         }
-        fluxes = np.asarray(
-            sed.predict_line_fluxes(truth, target_wavelengths=jnp.asarray(_LINE_WAVES))
+        f32 = sed.predict_line_fluxes(truth, target_wavelengths=jnp.asarray(_LINE_WAVES))
+        dtype32 = f32.dtype
+        fluxes = np.asarray(f32)
+    with jax.enable_x64(True):
+        sed64 = SEDModel.build(
+            ssp_data=ssp_bare,
+            observation=Observation(photometry=Photometry.from_names(_PHOT2)),
+            approx=None,
+            **_base(Fixed(0.1)),
+            **_CHANNEL_MODELS["neb_cue"],
         )
+        truth64 = {
+            n: float(sed64.spec._distributions[n].unstandardize(jnp.asarray(0.0)))
+            for n in sed64.spec.free_params
+        }
+        f64 = sed64.predict_line_fluxes(truth64, target_wavelengths=jnp.asarray(_LINE_WAVES))
+        dtype64 = f64.dtype
+        ref = np.asarray(f64)
+
+    # #1840: tengri/__init__.py re-enables x64 on import, so jax_enable_x64 lies.
+    # The dtype of the array that came back is the only admissible proof.
+    assert dtype32 == jnp.float32 and dtype64 == jnp.float64, (
+        f"precision not established from the returned arrays: f32 arm gave {dtype32}, "
+        f"f64 arm gave {dtype64} ({_where()})"
+    )
     assert np.all(np.isfinite(fluxes)), (
         f"predict_line_fluxes is non-finite in float32: {fluxes}. The line luminosity "
         f"overflows float32 before the distance division (#1859 fixed this on "
         f"measure_line_fluxes only). {_where()}"
     )
-
-
-# Applied after definition so the docstring above reads as the statement of intent
-# rather than as a decorator argument.
-test_the_discrete_line_catalog_operator_survives_float32 = pytest.mark.xfail(
-    strict=True,
-    reason=(
-        "#1859's log-offset grouping is applied in line_measurement.py only; "
-        "predict_line_fluxes still materializes a ~1e40 erg/s luminosity, which "
-        "overflows float32 to inf and then to nan. Flipping to XPASS means the fix "
-        "was extended — re-take bench/reports/2026-09-05_float32_spectroscopy_lines.md."
-    ),
-)(test_the_discrete_line_catalog_operator_survives_float32)
+    # Zero is finite. A grouped ``pow10(logL - log(4 pi d_L^2))`` that lost its
+    # numerator would return exactly 0.0 and pass a finiteness check unchanged.
+    assert np.all(fluxes != 0.0), (
+        f"predict_line_fluxes is identically zero in float32: {fluxes} — finite, and "
+        f"not a line flux ({_where()})"
+    )
+    rel = _rel_norm(fluxes, ref)
+    assert rel < 1e-4, (
+        f"float32 predict_line_fluxes disagrees with float64 by {rel:.2e} in norm "
+        f"(f32={fluxes}, f64={ref}) — the grouping is finite but wrong ({_where()})"
+    )
 
 
 # --------------------------------------------------------------------------------------
@@ -1423,16 +1453,18 @@ def test_the_feature_precomp_line_path_survives_float32(ssp_bare):
     operator                         float32
     ===============================  ==============================================
     ``measure_line_fluxes(False)``   finite, tracks float64 to ~2e-04 (the #1859 fix)
-    ``measure_line_fluxes(True)``    **non-finite** — this test, via the default fit
-    ``predict_line_fluxes``          **non-finite** — the Cue/catalog operator
+    ``measure_line_fluxes(True)``    finite — **this test**, via the default fit
+    ``predict_line_fluxes``          finite — the Cue/catalog operator
     ===============================  ==============================================
 
-    So the arithmetic that survives is reachable only by passing ``approx=None``
-    explicitly, which is also the slowest of the three (CLAUDE.md prices the
-    line-channel LUT at 4.77x on the #1477 fixture).
-
-    ``xfail(strict=True)``: a runnable float32 line fit is what is wanted, so a fix flips
-    this to XPASS and the report's Finding 3 needs re-taking.
+    **Fixed, and by a different mechanism from the other two.** The overflow here is
+    not the line luminosity at all: it is the *scale constant*
+    ``stellar_mass_scale = total_mass * L_sun`` ~ 4e43, which is ``inf`` in float32
+    on its own while the ~6e28 window mean it multiplies and the ~1e-16 flux it
+    produces are both in range. ``feat_mean - cont_mean`` was then ``inf - inf``.
+    ``L_sun`` is now carried as an exact power-of-two exponent and restored with
+    ``ldexp``, which is **bit-identical in float64** — 30 of 30 forward values in the
+    cross-tree A/B, `array_equal`, not a tolerance.
     """
     # PR #2104's hazard, met again: this module accumulates a large number of
     # distinct compiled programs, and XLA's CPU backend dies part-way through the
@@ -1460,23 +1492,169 @@ def test_the_feature_precomp_line_path_survives_float32(ssp_bare):
         dtype=jnp.float32,
     )
     grad = out["origin"]["grad"]
+    # #1840: the config flag lies; the returned array's dtype does not.
+    assert out["origin"]["dtype"] == ["float32"], (
+        f"this seam did not run in float32: gradient came back as "
+        f"{out['origin']['dtype']} ({_where()})"
+    )
     assert np.all(np.isfinite(grad)), (
         f"the default (approx='auto') float32 line fit produced a non-finite gradient: "
         f"{grad} (approx={out['approx_state']}, {_where()})"
     )
+    # Zero is finite (PR #2100). A default line fit whose gradient is identically
+    # zero samples nothing, and would pass a finiteness-only guard unchanged.
+    assert np.any(grad != 0.0), (
+        f"the default (approx='auto') float32 line fit produced an identically zero "
+        f"gradient: {grad} (approx={out['approx_state']}, {_where()})"
+    )
 
 
-test_the_feature_precomp_line_path_survives_float32 = pytest.mark.xfail(
-    strict=True,
-    raises=(ValueError, AssertionError),
-    reason=(
-        "The FeaturePrecomp-served line path is non-finite in float32, so the DEFAULT "
-        "line fit (Fitter(approx='auto') appends FeaturePrecomp whenever lines are fit) "
-        "cannot be constructed: _check_channel_scales (#1495) raises with "
-        "log_prob = nan on the line_flux_constraint channel. XPASS means fixed — "
-        "re-take bench/reports/2026-09-05_float32_spectroscopy_lines.md."
-    ),
-)(test_the_feature_precomp_line_path_survives_float32)
+def test_the_cue_fast_nebular_grid_builds_and_reconstructs_in_float32(ssp_bare):
+    """The **third** line-channel float32 blocker: the fast grid would not build.
+
+    Finding 2 of the measurement report records two independent failures for a Cue
+    line fit, one per projector. This is the second: under ``approx="auto"`` the
+    nebular fast grid raised at BUILD time in float32 while building fine in
+    float64 ::
+
+        [f64] Cue+FeaturePrecomp BUILT OK: ApproxState(wave_precomp=True, ...)
+        [f32] Cue+FeaturePrecomp BUILD FAILED: RuntimeError: nebular fast grid:
+              vmapped build disagrees with the eager reference forward at the first
+              node: a tracer/vmap regression, not a rounding gap.
+
+    The report flagged that message as suspect ("whatever the guard is detecting is
+    precision-dependent, which is worth flagging because the guard's own message
+    asserts the opposite") and left "why the Cue fast-grid guard fires only in
+    float32" explicitly unresolved. **The guard was right and its wording was
+    right**: it was not a rounding gap and it was not a tracer regression either —
+    its *input* was ``nan``, and ``allclose(nan, nan)`` is False. The build calls
+    ``predict_line_fluxes``, which returned ``nan`` (the test above), and then
+    recovered the luminosity from the flux and divided by a Q_H that is itself
+    ``inf`` in float32 (~1e53 against a max of 3.4e38), which is ``inf * 0``.
+
+    So this defect is **downstream of, but not identical to, the first**: fixing
+    ``predict_line_fluxes`` alone left it failing, because the per-Q_H division and
+    the ``nion * interp`` reconstruction are two further materializations of the
+    same class. Both now carry the exponent instead. The guard is untouched and
+    still fires on a genuine disagreement.
+    """
+    # PR #2104's XLA hazard: drop the caches before a heavy standalone build.
+    jax.clear_caches()
+    gc.collect()
+
+    from tengri import FeaturePrecomp
+    from tengri.observation.line_flux_data import LineFluxData
+    from tengri.parameters.resolve import resolve_fixed_params
+
+    obs = Observation(
+        photometry=Photometry.from_names(_PHOT2),
+        line_fluxes=LineFluxData(
+            names=_LINE_NAMES,
+            wavelengths=_LINE_WAVES,
+            fluxes=np.ones(len(_LINE_NAMES)) * 1e-16,
+            errors=np.ones(len(_LINE_NAMES)) * 1e-17,
+        ),
+    )
+    out = {}
+    for x64, tag in ((True, "f64"), (False, "f32")):
+        with jax.enable_x64(x64):
+            sed = SEDModel.build(
+                ssp_data=ssp_bare,
+                observation=obs,
+                approx=(WavePrecomp(), FeaturePrecomp()),
+                **_base(Fixed(0.1)),
+                **_CHANNEL_MODELS["neb_cue"],
+            )
+            assert sed._nebular_grid_table is not None, (
+                f"[{tag}] FeaturePrecomp resolved without attaching a nebular grid, so "
+                f"this seam never reached the code it exists to test ({_where()})"
+            )
+            # The grid path reaches ``compute_joint_weights``, which refuses a dict
+            # without ``redshift`` rather than defaulting it to 10 pc.
+            truth = dict(
+                resolve_fixed_params(
+                    sed,
+                    {
+                        n: float(sed.spec._distributions[n].unstandardize(jnp.asarray(0.0)))
+                        for n in sed.spec.free_params
+                    },
+                )
+            )
+            fluxes = sed.predict_line_fluxes(truth, target_wavelengths=jnp.asarray(_LINE_WAVES))
+            out[tag] = (np.asarray(fluxes), fluxes.dtype)
+
+    (f32, d32), (f64, d64) = out["f32"], out["f64"]
+    # #1840 again: prove the precision off the returned array, never off the flag.
+    assert (d32, d64) == (jnp.float32, jnp.float64), (
+        f"precision not established from the returned arrays: {d32} / {d64} ({_where()})"
+    )
+    assert np.all(np.isfinite(f32)), (
+        f"the grid-served float32 line fluxes are non-finite: {f32} ({_where()})"
+    )
+    assert np.all(f32 != 0.0), (
+        f"the grid-served float32 line fluxes are identically zero: {f32} — finite, "
+        f"and not a line flux ({_where()})"
+    )
+    rel = _rel_norm(f32, f64)
+    assert rel < 1e-4, (
+        f"grid-served float32 line fluxes disagree with float64 by {rel:.2e} in norm "
+        f"(f32={f32}, f64={f64}) ({_where()})"
+    )
+
+
+def test_the_mass_scale_power_of_two_split_is_exact_in_float64():
+    """Why the window-LUT repair moves no float64 result, asserted rather than claimed.
+
+    ``measure_line_fluxes(approx=True)`` overflowed on ``total_mass * L_sun`` ~4e43,
+    not on anything physical: the window mean (~6e28) and the flux (~1e-16) are both
+    inside float32. The repair carries ``L_sun``'s binary exponent (112) rather than its value
+    and restores them with ``ldexp``.
+
+    That is safe **because scaling by a power of two is exact and commutes with
+    rounding**, so ``ldexp(fl(m*x), k)`` and ``fl(2**k * m * x)`` are the same
+    float64 — the identical property that lets :data:`DEFAULT_COTANGENT_BOOST` be
+    divided back out without perturbing a float64 result. Asserted with
+    ``array_equal`` over a wide mass range, not with a tolerance: a tolerance would
+    pass on a split that was merely close, which is the claim this test exists to
+    refuse.
+    """
+    from tengri.observation.line_measurement import _LSUN_EXP2, _LSUN_MANTISSA
+    from tengri.utils.physics_constants import L_SUN
+
+    assert math.ldexp(_LSUN_MANTISSA, _LSUN_EXP2) == L_SUN, (
+        f"the split does not reconstruct L_sun: "
+        f"ldexp({_LSUN_MANTISSA!r}, {_LSUN_EXP2}) != {L_SUN!r} ({_where()})"
+    )
+    with jax.enable_x64(True):
+        # Formed stellar masses from a dwarf to a BCG, and the window means the LUT
+        # actually contracts, so the equality is asserted on the product that
+        # overflowed rather than only on the constant.
+        masses = jnp.asarray(np.logspace(4.0, 13.0, 37))
+        means = jnp.asarray(np.logspace(-22.0, -10.0, 37))
+        direct = np.asarray((masses * L_SUN) * means)
+        split = np.asarray(jnp.ldexp((masses * _LSUN_MANTISSA) * means, _LSUN_EXP2))
+        assert direct.dtype == np.float64, f"this check did not run in float64 ({_where()})"
+        assert np.array_equal(direct, split), (
+            f"the power-of-two split is not bit-exact in float64: "
+            f"{np.max(np.abs(split - direct) / np.abs(direct)):.3e} relative, first "
+            f"mismatch at index {int(np.argmax(direct != split))} ({_where()})"
+        )
+    # ...and the same split is finite in float32 where the direct product is not.
+    with jax.enable_x64(False):
+        m32 = jnp.asarray(1e10, dtype=jnp.float32)
+        assert not np.isfinite(np.asarray(m32 * jnp.asarray(L_SUN, dtype=jnp.float32))), (
+            f"total_mass * L_sun no longer overflows float32 — this test's premise is "
+            f"gone and the repair it guards may be unnecessary ({_where()})"
+        )
+        got = jnp.ldexp(
+            (m32 * jnp.asarray(_LSUN_MANTISSA, dtype=jnp.float32))
+            * jnp.asarray(1.6e-15, dtype=jnp.float32),
+            _LSUN_EXP2,
+        )
+        assert got.dtype == jnp.float32, f"not float32: {got.dtype} ({_where()})"
+        assert np.isfinite(np.asarray(got)) and got != 0.0, (
+            f"the split is not finite and non-zero in float32: {got} ({_where()})"
+        )
 
 
 def test_the_spectroscopic_redshift_finite_difference_is_truncation_not_defect(ssp_bare):
