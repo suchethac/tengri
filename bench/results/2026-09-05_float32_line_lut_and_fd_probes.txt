@@ -1,0 +1,15 @@
+# Cue + FeaturePrecomp build, float64 vs float32 (CPU, 2026-09-05)
+# probe: build SEDModel(neb=cue, approx=(WavePrecomp(), FeaturePrecomp())) at each precision
+[f64] Cue+FeaturePrecomp BUILT OK: ApproxState(wave_precomp=True, feature_precomp=True, n_subbands=5)
+[f32] Cue+FeaturePrecomp BUILD FAILED: RuntimeError: nebular fast grid: vmapped build disagrees with the eager reference forward at the first node: a tracer/vmap regression, not a rounding gap.
+
+# float64 finite-difference step-size sweep, spec/stellar_dust/exact_freez, SNR 30
+# names: ['dust_tau_diff', 'redshift', 'sfh_delayed_log_total_mass']
+names: ['dust_tau_diff', 'redshift', 'sfh_delayed_log_total_mass']
+autodiff: [ -221.03555964 -8908.85800093   306.73951977]
+  h=   1e-02  rel_norm=1.049e+00  per-component=[0.029 1.05  0.233]
+  h=   1e-03  rel_norm=2.606e-01  per-component=[0.    0.261 0.002]
+  h=   1e-04  rel_norm=1.146e-01  per-component=[2.930e-06 1.147e-01 2.329e-05]
+  h=   1e-05  rel_norm=1.856e-02  per-component=[2.953e-08 1.857e-02 2.327e-07]
+  h=   1e-06  rel_norm=7.660e-03  per-component=[8.759e-09 7.667e-03 2.912e-09]
+  h=   1e-07  rel_norm=5.852e-09  per-component=[9.199e-08 5.348e-09 2.056e-08]

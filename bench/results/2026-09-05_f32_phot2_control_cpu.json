@@ -1,0 +1,702 @@
+{
+  "meta": {
+    "platform": "cpu",
+    "devices": [
+      "cpu:0"
+    ],
+    "jax": "0.11.0",
+    "env": {
+      "JAX_PLATFORMS": "cpu",
+      "JAX_ENABLE_X64": null,
+      "JAX_DEFAULT_MATMUL_PRECISION": null,
+      "NVIDIA_TF32_OVERRIDE": null,
+      "XLA_PYTHON_CLIENT_PREALLOCATE": null,
+      "TENGRI_DISABLE_JAX_CACHE": "1"
+    },
+    "n_z": 64,
+    "points": {
+      "origin": 0.0,
+      "half_sigma": 0.5
+    },
+    "spec_pixels": 256,
+    "spec_wave_range": [
+      4000.0,
+      9000.0
+    ],
+    "lines": [
+      "Hbeta",
+      "OIII_5007",
+      "Halpha",
+      "NII_6584"
+    ],
+    "mode": "seams",
+    "line_sigma_convention": "floored",
+    "line_sigma_floor": 0.05
+  },
+  "rows": [
+    {
+      "channel": "phot2",
+      "model": "bakedin",
+      "path": "exact_fixedz",
+      "snr": 30.0,
+      "line_sigma_convention": null,
+      "names": [
+        "dust_tau_diff",
+        "sfh_delayed_log_total_mass"
+      ],
+      "data_type": "photometry",
+      "has_line_catalog": false,
+      "n_data": 2,
+      "approx_state_f64": "ApproxState(n_subbands=5)",
+      "approx_state_f32": "ApproxState(n_subbands=5)",
+      "truth": {
+        "dust_tau_diff": 0.75,
+        "sfh_delayed_log_total_mass": 10.0
+      },
+      "seconds": 6.79,
+      "points": {
+        "origin": {
+          "grad_f64": [
+            -18.391319064678825,
+            54.59825958158323
+          ],
+          "grad_f32": [
+            -18.392621994018555,
+            54.602020263671875
+          ],
+          "grad_exact_f64": [
+            -18.391319064678825,
+            54.59825958158323
+          ],
+          "dtype_f64": [
+            "float64"
+          ],
+          "dtype_f32": [
+            "float32"
+          ],
+          "value_f64": 0.3291141551338066,
+          "f64_vs_fd64": 9.73698820797825e-07,
+          "f32_vs_f64": 6.908202316859339e-05,
+          "f32_vs_f64_cw": 7.084480102527568e-05,
+          "lut_f64_vs_exact_f64": 0.0,
+          "f32_vs_exact_f64": 6.908202316859339e-05,
+          "f32_finite": true,
+          "f32_nonzero": true
+        },
+        "half_sigma": {
+          "grad_f64": [
+            -1412.125825732501,
+            3959.9142491895927
+          ],
+          "grad_f32": [
+            -1412.1317138671875,
+            3959.927490234375
+          ],
+          "grad_exact_f64": [
+            -1412.125825732501,
+            3959.9142491895927
+          ],
+          "dtype_f64": [
+            "float64"
+          ],
+          "dtype_f32": [
+            "float32"
+          ],
+          "value_f64": 540.2125551233188,
+          "f64_vs_fd64": 1.8778680013689227e-08,
+          "f32_vs_f64": 3.4468701906516987e-06,
+          "f32_vs_f64_cw": 4.169695489759102e-06,
+          "lut_f64_vs_exact_f64": 0.0,
+          "f32_vs_exact_f64": 3.4468701906516987e-06,
+          "f32_finite": true,
+          "f32_nonzero": true
+        }
+      }
+    },
+    {
+      "channel": "phot2",
+      "model": "bakedin",
+      "path": "auto_fixedz",
+      "snr": 30.0,
+      "line_sigma_convention": null,
+      "names": [
+        "dust_tau_diff",
+        "sfh_delayed_log_total_mass"
+      ],
+      "data_type": "photometry",
+      "has_line_catalog": false,
+      "n_data": 2,
+      "approx_state_f64": "ApproxState(wave_precomp=True, n_subbands=5)",
+      "approx_state_f32": "ApproxState(wave_precomp=True, n_subbands=5)",
+      "truth": {
+        "dust_tau_diff": 0.75,
+        "sfh_delayed_log_total_mass": 10.0
+      },
+      "seconds": 9.56,
+      "points": {
+        "origin": {
+          "grad_f64": [
+            -18.452002979525005,
+            54.763095292817724
+          ],
+          "grad_f32": [
+            -18.448118209838867,
+            54.75239181518555
+          ],
+          "grad_exact_f64": [
+            -18.391319064678825,
+            54.59825958158323
+          ],
+          "dtype_f64": [
+            "float64"
+          ],
+          "dtype_f32": [
+            "float32"
+          ],
+          "value_f64": 0.3305334439834585,
+          "f64_vs_fd64": 9.708455706609102e-07,
+          "f32_vs_f64": 0.00019704123482997912,
+          "f32_vs_f64_cw": 0.00021053376646691603,
+          "lut_f64_vs_exact_f64": 0.0030488338335365227,
+          "f32_vs_exact_f64": 0.0028511943109936705,
+          "f32_finite": true,
+          "f32_nonzero": true
+        },
+        "half_sigma": {
+          "grad_f64": [
+            -1412.3867116685376,
+            3960.2410447210927
+          ],
+          "grad_f32": [
+            -1412.3795166015625,
+            3960.220703125
+          ],
+          "grad_exact_f64": [
+            -1412.125825732501,
+            3959.9142491895927
+          ],
+          "dtype_f64": [
+            "float64"
+          ],
+          "dtype_f32": [
+            "float32"
+          ],
+          "value_f64": 540.2758521800307,
+          "f64_vs_fd64": 1.8762838955274664e-08,
+          "f32_vs_f64": 5.131710343346937e-06,
+          "f32_vs_f64_cw": 5.136454034752133e-06,
+          "lut_f64_vs_exact_f64": 9.9462940041932e-05,
+          "f32_vs_exact_f64": 9.46288486028528e-05,
+          "f32_finite": true,
+          "f32_nonzero": true
+        }
+      }
+    },
+    {
+      "channel": "phot2",
+      "model": "bakedin",
+      "path": "exact_freez",
+      "snr": 30.0,
+      "line_sigma_convention": null,
+      "names": [
+        "dust_tau_diff",
+        "redshift",
+        "sfh_delayed_log_total_mass"
+      ],
+      "data_type": "photometry",
+      "has_line_catalog": false,
+      "n_data": 2,
+      "approx_state_f64": "ApproxState(n_subbands=5)",
+      "approx_state_f32": "ApproxState(n_subbands=5)",
+      "truth": {
+        "dust_tau_diff": 0.75,
+        "redshift": 0.525,
+        "sfh_delayed_log_total_mass": 10.0
+      },
+      "seconds": 7.72,
+      "points": {
+        "origin": {
+          "grad_f64": [
+            -24.946069683894418,
+            -75.56484135390262,
+            54.5982595815832
+          ],
+          "grad_f32": [
+            -24.94622230529785,
+            -75.56777954101562,
+            54.59967041015625
+          ],
+          "grad_exact_f64": [
+            -24.946069683894418,
+            -75.56484135390262,
+            54.5982595815832
+          ],
+          "dtype_f64": [
+            "float64"
+          ],
+          "dtype_f32": [
+            "float32"
+          ],
+          "value_f64": 0.3291141551338104,
+          "f64_vs_fd64": 2.1540191894310098e-05,
+          "f32_vs_f64": 3.381074028393847e-05,
+          "f32_vs_f64_cw": 3.8882991882983806e-05,
+          "lut_f64_vs_exact_f64": 0.0,
+          "f32_vs_exact_f64": 3.381074028393847e-05,
+          "f32_finite": true,
+          "f32_nonzero": true
+        },
+        "half_sigma": {
+          "grad_f64": [
+            372.12776449493236,
+            754.4625783926355,
+            -697.8070292097188
+          ],
+          "grad_f32": [
+            372.1283874511719,
+            754.4635620117188,
+            -697.8082885742188
+          ],
+          "grad_exact_f64": [
+            372.12776449493236,
+            754.4625783926355,
+            -697.8070292097188
+          ],
+          "dtype_f64": [
+            "float64"
+          ],
+          "dtype_f32": [
+            "float32"
+          ],
+          "value_f64": 190.26588493580886,
+          "f64_vs_fd64": 3.263290161462023e-06,
+          "f32_vs_f64": 1.5691847228334065e-06,
+          "f32_vs_f64_cw": 1.8047460790524722e-06,
+          "lut_f64_vs_exact_f64": 0.0,
+          "f32_vs_exact_f64": 1.5691847228334065e-06,
+          "f32_finite": true,
+          "f32_nonzero": true
+        }
+      }
+    },
+    {
+      "channel": "phot2",
+      "model": "bakedin",
+      "path": "auto_freez",
+      "snr": 30.0,
+      "line_sigma_convention": null,
+      "names": [
+        "dust_tau_diff",
+        "redshift",
+        "sfh_delayed_log_total_mass"
+      ],
+      "data_type": "photometry",
+      "has_line_catalog": false,
+      "n_data": 2,
+      "approx_state_f64": "ApproxState(wave_precomp=True, ztable=True, n_subbands=5)",
+      "approx_state_f32": "ApproxState(wave_precomp=True, ztable=True, n_subbands=5)",
+      "truth": {
+        "dust_tau_diff": 0.75,
+        "redshift": 0.525,
+        "sfh_delayed_log_total_mass": 10.0
+      },
+      "seconds": 16.94,
+      "points": {
+        "origin": {
+          "grad_f64": [
+            -24.970512031618686,
+            -74.93878010285917,
+            54.651623992040356
+          ],
+          "grad_f32": [
+            -24.974178314208984,
+            -74.95329284667969,
+            54.65919494628906
+          ],
+          "grad_exact_f64": [
+            -24.946069683894418,
+            -75.56484135390262,
+            54.5982595815832
+          ],
+          "dtype_f64": [
+            "float64"
+          ],
+          "dtype_f32": [
+            "float32"
+          ],
+          "value_f64": 0.32985777736887395,
+          "f64_vs_fd64": 5.181170080783131e-06,
+          "f32_vs_f64": 0.0001746372844253165,
+          "f32_vs_f64_cw": 0.00019366132996291217,
+          "lut_f64_vs_exact_f64": 0.006515756827485037,
+          "f32_vs_exact_f64": 0.0063749627787266575,
+          "f32_finite": true,
+          "f32_nonzero": true
+        },
+        "half_sigma": {
+          "grad_f64": [
+            372.1894565438098,
+            754.5744744071368,
+            -697.8182743761454
+          ],
+          "grad_f32": [
+            372.18994140625,
+            754.585205078125,
+            -697.8191528320312
+          ],
+          "grad_exact_f64": [
+            372.12776449493236,
+            754.4625783926355,
+            -697.8070292097188
+          ],
+          "dtype_f64": [
+            "float64"
+          ],
+          "dtype_f32": [
+            "float32"
+          ],
+          "value_f64": 190.28612900344004,
+          "f64_vs_fd64": 5.272460127342841e-07,
+          "f32_vs_f64": 9.85959519723752e-06,
+          "f32_vs_f64_cw": 1.422082425547269e-05,
+          "lut_f64_vs_exact_f64": 0.00011735655690061394,
+          "f32_vs_exact_f64": 0.00012627987293681382,
+          "f32_finite": true,
+          "f32_nonzero": true
+        }
+      }
+    },
+    {
+      "channel": "phot2",
+      "model": "bakedin",
+      "path": "exact_fixedz",
+      "snr": 300.0,
+      "line_sigma_convention": null,
+      "names": [
+        "dust_tau_diff",
+        "sfh_delayed_log_total_mass"
+      ],
+      "data_type": "photometry",
+      "has_line_catalog": false,
+      "n_data": 2,
+      "approx_state_f64": "ApproxState(n_subbands=5)",
+      "approx_state_f32": "ApproxState(n_subbands=5)",
+      "truth": {
+        "dust_tau_diff": 0.75,
+        "sfh_delayed_log_total_mass": 10.0
+      },
+      "seconds": 10.23,
+      "points": {
+        "origin": {
+          "grad_f64": [
+            -183.9131906467881,
+            545.9825958158299
+          ],
+          "grad_f32": [
+            -184.0432891845703,
+            546.3560791015625
+          ],
+          "grad_exact_f64": [
+            -183.9131906467881,
+            545.9825958158299
+          ],
+          "dtype_f64": [
+            "float64"
+          ],
+          "dtype_f32": [
+            "float32"
+          ],
+          "value_f64": 0.32911415513379694,
+          "f64_vs_fd64": 9.70324932852504e-06,
+          "f32_vs_f64": 0.0006864712363054742,
+          "f32_vs_f64_cw": 0.0007073910105342143,
+          "lut_f64_vs_exact_f64": 0.0,
+          "f32_vs_exact_f64": 0.0006864712363054742,
+          "f32_finite": true,
+          "f32_nonzero": true
+        },
+        "half_sigma": {
+          "grad_f64": [
+            -138651.68800136974,
+            388154.6067587508
+          ],
+          "grad_f32": [
+            -138652.265625,
+            388156.0
+          ],
+          "grad_exact_f64": [
+            -138651.68800136974,
+            388154.6067587508
+          ],
+          "dtype_f64": [
+            "float64"
+          ],
+          "dtype_f32": [
+            "float32"
+          ],
+          "value_f64": 51835.493891262784,
+          "f64_vs_fd64": 1.9170277207941517e-08,
+          "f32_vs_f64": 3.6592075807250776e-06,
+          "f32_vs_f64_cw": 4.166005034550839e-06,
+          "lut_f64_vs_exact_f64": 0.0,
+          "f32_vs_exact_f64": 3.6592075807250776e-06,
+          "f32_finite": true,
+          "f32_nonzero": true
+        }
+      }
+    },
+    {
+      "channel": "phot2",
+      "model": "bakedin",
+      "path": "auto_fixedz",
+      "snr": 300.0,
+      "line_sigma_convention": null,
+      "names": [
+        "dust_tau_diff",
+        "sfh_delayed_log_total_mass"
+      ],
+      "data_type": "photometry",
+      "has_line_catalog": false,
+      "n_data": 2,
+      "approx_state_f64": "ApproxState(wave_precomp=True, n_subbands=5)",
+      "approx_state_f32": "ApproxState(wave_precomp=True, n_subbands=5)",
+      "truth": {
+        "dust_tau_diff": 0.75,
+        "sfh_delayed_log_total_mass": 10.0
+      },
+      "seconds": 14.59,
+      "points": {
+        "origin": {
+          "grad_f64": [
+            -189.86909355486117,
+            562.2318496650456
+          ],
+          "grad_f32": [
+            -189.48854064941406,
+            561.1830444335938
+          ],
+          "grad_exact_f64": [
+            -183.9131906467881,
+            545.9825958158299
+          ],
+          "dtype_f64": [
+            "float64"
+          ],
+          "dtype_f32": [
+            "float32"
+          ],
+          "value_f64": 0.3435024105216294,
+          "f64_vs_fd64": 9.421391046854298e-06,
+          "f32_vs_f64": 0.0018801182339553764,
+          "f32_vs_f64_cw": 0.0020042909476320116,
+          "lut_f64_vs_exact_f64": 0.030039244669772834,
+          "f32_vs_exact_f64": 0.028102679212222627,
+          "f32_finite": true,
+          "f32_nonzero": true
+        },
+        "half_sigma": {
+          "grad_f64": [
+            -138677.48613291865,
+            388187.0290903947
+          ],
+          "grad_f32": [
+            -138676.78125,
+            388185.125
+          ],
+          "grad_exact_f64": [
+            -138651.68800136974,
+            388154.6067587508
+          ],
+          "dtype_f64": [
+            "float64"
+          ],
+          "dtype_f32": [
+            "float32"
+          ],
+          "value_f64": 51841.66494756932,
+          "f64_vs_fd64": 1.9154935457481887e-08,
+          "f32_vs_f64": 4.9255313928685536e-06,
+          "f32_vs_f64_cw": 5.0828936859851916e-06,
+          "lut_f64_vs_exact_f64": 0.0001005245078885935,
+          "f32_vs_exact_f64": 9.585714369338271e-05,
+          "f32_finite": true,
+          "f32_nonzero": true
+        }
+      }
+    },
+    {
+      "channel": "phot2",
+      "model": "bakedin",
+      "path": "exact_freez",
+      "snr": 300.0,
+      "line_sigma_convention": null,
+      "names": [
+        "dust_tau_diff",
+        "redshift",
+        "sfh_delayed_log_total_mass"
+      ],
+      "data_type": "photometry",
+      "has_line_catalog": false,
+      "n_data": 2,
+      "approx_state_f64": "ApproxState(n_subbands=5)",
+      "approx_state_f32": "ApproxState(n_subbands=5)",
+      "truth": {
+        "dust_tau_diff": 0.75,
+        "redshift": 0.525,
+        "sfh_delayed_log_total_mass": 10.0
+      },
+      "seconds": 11.03,
+      "points": {
+        "origin": {
+          "grad_f64": [
+            -249.46069683894305,
+            -755.6484135390231,
+            545.9825958158298
+          ],
+          "grad_f32": [
+            -249.4719696044922,
+            -755.927001953125,
+            546.1126708984375
+          ],
+          "grad_exact_f64": [
+            -249.46069683894305,
+            -755.6484135390231,
+            545.9825958158298
+          ],
+          "dtype_f64": [
+            "float64"
+          ],
+          "dtype_f32": [
+            "float32"
+          ],
+          "value_f64": 0.32911415513385667,
+          "f64_vs_fd64": 4.075387740903589e-05,
+          "f32_vs_f64": 0.00031880608888434735,
+          "f32_vs_f64_cw": 0.0003686746496259871,
+          "lut_f64_vs_exact_f64": 0.0,
+          "f32_vs_exact_f64": 0.00031880608888434735,
+          "f32_finite": true,
+          "f32_nonzero": true
+        },
+        "half_sigma": {
+          "grad_f64": [
+            38255.563644644215,
+            77876.40087292157,
+            -72000.293479577
+          ],
+          "grad_f32": [
+            38255.625,
+            77876.515625,
+            -72000.40625
+          ],
+          "grad_exact_f64": [
+            38255.563644644215,
+            77876.40087292157,
+            -72000.293479577
+          ],
+          "dtype_f64": [
+            "float64"
+          ],
+          "dtype_f32": [
+            "float32"
+          ],
+          "value_f64": 20293.051714523626,
+          "f64_vs_fd64": 3.3410588555867935e-06,
+          "f32_vs_f64": 1.5272094566064446e-06,
+          "f32_vs_f64_cw": 1.603828304687479e-06,
+          "lut_f64_vs_exact_f64": 0.0,
+          "f32_vs_exact_f64": 1.5272094566064446e-06,
+          "f32_finite": true,
+          "f32_nonzero": true
+        }
+      }
+    },
+    {
+      "channel": "phot2",
+      "model": "bakedin",
+      "path": "auto_freez",
+      "snr": 300.0,
+      "line_sigma_convention": null,
+      "names": [
+        "dust_tau_diff",
+        "redshift",
+        "sfh_delayed_log_total_mass"
+      ],
+      "data_type": "photometry",
+      "has_line_catalog": false,
+      "n_data": 2,
+      "approx_state_f64": "ApproxState(wave_precomp=True, ztable=True, n_subbands=5)",
+      "approx_state_f32": "ApproxState(wave_precomp=True, ztable=True, n_subbands=5)",
+      "truth": {
+        "dust_tau_diff": 0.75,
+        "redshift": 0.525,
+        "sfh_delayed_log_total_mass": 10.0
+      },
+      "seconds": 19.58,
+      "points": {
+        "origin": {
+          "grad_f64": [
+            -251.73784450731898,
+            -756.0143399028335,
+            551.1961549505609
+          ],
+          "grad_f32": [
+            -252.1004180908203,
+            -756.9745483398438,
+            551.9429321289062
+          ],
+          "grad_exact_f64": [
+            -249.46069683894305,
+            -755.6484135390231,
+            545.9825958158298
+          ],
+          "dtype_f64": [
+            "float64"
+          ],
+          "dtype_f32": [
+            "float32"
+          ],
+          "value_f64": 0.33659084345484286,
+          "f64_vs_fd64": 1.9946767515480982e-05,
+          "f32_vs_f64": 0.0013100620320296015,
+          "f32_vs_f64_cw": 0.0014402823866666928,
+          "lut_f64_vs_exact_f64": 0.005907350477111578,
+          "f32_vs_exact_f64": 0.006893122101702286,
+          "f32_finite": true,
+          "f32_nonzero": true
+        },
+        "half_sigma": {
+          "grad_f64": [
+            38261.8361258251,
+            77889.2539687991,
+            -72001.37248701899
+          ],
+          "grad_f32": [
+            38261.8671875,
+            77899.015625,
+            -72001.4296875
+          ],
+          "grad_exact_f64": [
+            38255.563644644215,
+            77876.40087292157,
+            -72000.293479577
+          ],
+          "dtype_f64": [
+            "float64"
+          ],
+          "dtype_f32": [
+            "float32"
+          ],
+          "value_f64": 20295.10419050179,
+          "f64_vs_fd64": 5.305376184946821e-07,
+          "f32_vs_f64": 8.65718424151699e-05,
+          "f32_vs_f64_cw": 0.00012532738090952154,
+          "lut_f64_vs_exact_f64": 0.00012720864215593332,
+          "f32_vs_exact_f64": 0.0002084664007298034,
+          "f32_finite": true,
+          "f32_nonzero": true
+        }
+      }
+    }
+  ]
+}
