@@ -83,13 +83,15 @@ Only R-hat and ESS caught these.
 
 **Platform:** Linux 6.8.0-138-generic, AMD Ryzen 9 5900X, NVIDIA GeForce
 RTX 3060 12 GB (GA106, driver 580.173.02), Python 3.12.13, JAX 0.11.0,
-BlackJAX 1.6.2, NumPy 2.5.2. **Every row in this report ran on the CPU
-backend** (`JAX_PLATFORMS=cpu`): the gate is a convergence question, and R-hat,
-ESS, divergence counts, adapted step size and gradients per draw are
-deterministic given the seed, so they do not need the accelerator and are not
-affected by what else was on it. No CUDA row was taken, so
-`JAX_DEFAULT_MATMUL_PRECISION=highest` is recorded as a requirement for the
-width sweep that was not run rather than as a setting any row here used.
+BlackJAX 1.6.2, NumPy 2.5.2. **The gate (sections 1, 1b, 2) ran on the CPU
+backend** (`JAX_PLATFORMS=cpu`): it is a convergence question, and R-hat, ESS,
+divergence counts, adapted step size and gradients per draw are deterministic
+given the seed, so they do not need the accelerator and are not affected by what
+else was on it. **The width sweep (section 3) ran on the RTX 3060** with
+`JAX_DEFAULT_MATMUL_PRECISION=highest` set, which matters on Ampere because XLA
+otherwise lowers float32 matmuls to TF32 and `NVIDIA_TF32_OVERRIDE=0` does not
+fix it (2026-08-20 Finding 7) — those rows are float64, so the setting is
+belt-and-braces there rather than load-bearing.
 
 **Precision:** float64 throughout.
 
@@ -368,13 +370,17 @@ catalog job by VRAM.
 
 ## Caveats
 
-* **CPU only, and deliberately.** No row here ran on CUDA. The gate is a
-  convergence question and its columns are seed-deterministic. This also means
-  no VRAM number, no GPU wall clock and no `JAX_DEFAULT_MATMUL_PRECISION`
-  exposure exists in this report.
-* **Wall clocks are uninterpretable.** The box was shared throughout at load
-  2.1-22.8. Wall columns are recorded in the JSON rows with their load stamps
-  and are used for nothing.
+* **The gate is CPU, the width sweep is GPU, and they are different fixtures.**
+  Sections 1, 1b and 2 ran on the CPU backend because convergence columns are
+  seed-deterministic and do not need an accelerator; section 3 ran on CUDA with
+  `JAX_DEFAULT_MATMUL_PRECISION=highest`. No row anywhere is a CPU-vs-GPU
+  comparison, and nothing here should be read as one.
+* **Wall clocks carry no claim in sections 1-2, and carry the whole claim in
+  section 3.** The box was shared at load 1.9-22.8 throughout. The gate's wall
+  columns are recorded with their load stamps and used for nothing. Section 3's
+  are the measurement, which is why that section argues its contention case
+  explicitly from the HMC rows' own 9x load span rather than asserting the box
+  was quiet.
 * **Two seeds, not six.** Two is the minimum this campaign accepts and it was
   decisive here (it inverted two would-be headlines). It is not enough to put an
   error bar on any of these numbers, and the converged/not verdict is a step
@@ -395,8 +401,8 @@ catalog job by VRAM.
   not tengri's.
 * **The catalog throughput fixture is D=3, not D=8 and not D=12.**
   `benchmark_catalog_throughput.py`'s `build_model` frees only
-  `sfh_dpl_log_total_mass`, `sfh_dpl_alpha` and `met_logzsol` over 5 synthetic
-  bands. Any galaxies-per-GPU-minute figure that harness produces — including
+  `sfh_dpl_log_total_mass`, `sfh_dpl_alpha` and `met_logzsol` over the 5 SDSS
+  bands (`sdss_u` through `sdss_z`, the real-SSP branch of its `build_model`). Any galaxies-per-GPU-minute figure that harness produces — including
   the ones already published in `2026-08-30_gpu_catalog_throughput.md` and
   `2026-08-31_catalog_preconditioning.md` — is measured on a **three-parameter**
   posterior and is not comparable to a D=12 published rate without saying so.
