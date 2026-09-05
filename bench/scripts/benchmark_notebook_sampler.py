@@ -929,7 +929,14 @@ NOTEBOOKS = {
 #: "preconditioned HMC" is the incumbent any new sampler has to beat, and a
 #: campaign must be able to select it without dragging in four unpreconditioned
 #: fixed-L rows it is not comparing against.
-FAMILIES = ("nuts", "hmc", "hmcp", "ghmc", "chees", "mclmc", "smc")
+#:
+#: ``nutsp`` is preconditioned NUTS, and it is the row ``hmcp`` has to be read
+#: against. The whole case for fixed-L HMC at width is that NUTS wastes work in
+#: a vmapped batch because its per-lane cost varies; that argument is only worth
+#: acting on if fixed L reaches a comparable posterior at comparable gradient
+#: cost on ONE galaxy first. Without this family the comparison had to be made
+#: against a number quoted from another branch's report, on a different fixture.
+FAMILIES = ("nuts", "nutsp", "hmc", "hmcp", "ghmc", "chees", "mclmc", "smc")
 
 
 def shipped_family(cfg: dict) -> str:
@@ -1025,13 +1032,40 @@ def configurations(nb: str, quick: bool, dense: bool, families=FAMILIES) -> dict
                 n_ensemble=32,
                 precondition=precondition,
             )
+    if "nutsp" in families:
+        # The shipped NUTS call plus the analytic metric, and nothing else
+        # changed, so the pair (nuts (shipped), nuts+precond) isolates the
+        # metric on the same sampler the notebooks actually ship. Warmup and
+        # draws follow the shipped config rather than the HMC rows' 1000/600:
+        # this row exists to be compared with the shipped baseline.
+        configs["nuts+precond"] = dict(
+            method="mcmc_nuts",
+            n_warmup=shipped["n_warmup"],
+            n_samples=shipped["n_samples"],
+            precondition=True,
+        )
     if "hmcp" in families:
         # The incumbent. ``2026-08-31_catalog_preconditioning.md`` Finding 4: the
         # metric roughly doubles HMC's converged count for 7% wall clock, and
         # Finding 7, that HALF whitening beats full even where the metric is
         # measurably exact. L=20 is the shortest row the 2026-08-17 reports
         # measured; L=80 brackets it upward without paying L=160's 125 s.
-        for leapfrog in (20,) if quick else (20, 80):
+        #
+        # L=10 and L=40 were added for
+        # ``bench/reports/2026-09-05_fixed_l_hmc_at_width.md``, which asks
+        # whether the analytic metric rescues fixed L at all. That question is
+        # about the SHAPE of the L -> R-hat curve, and two points cannot show a
+        # shape: (20, 80) alone cannot distinguish "converges above some L" from
+        # "never converges". L=10 also prices the regime Zacharegkas+2025 run
+        # their fixed-L HMC in, which is the comparison the report exists for.
+        # L=160 matches the longest row the 2026-08-17 reports measured, so the
+        # preconditioned and unpreconditioned L sweeps can be read against each
+        # other end to end. It is also the row that answers "did you simply not
+        # go far enough?" -- without it, a sweep that fails at every L is open to
+        # the objection that the next L would have cleared, and R-hat here is
+        # NOT monotone in L (ctl-dpl seed 7: 1.0161 at L=20, 3.2707 at L=40,
+        # 1.0023 at L=80), so that objection cannot be answered by extrapolation.
+        for leapfrog in (20,) if quick else (10, 20, 40, 80, 160):
             configs[f"hmc+precond L={leapfrog}"] = dict(
                 method="mcmc_hmc",
                 n_warmup=warmup,
@@ -1327,7 +1361,30 @@ def clears_bar_comparative(row: dict, baseline_ess: float) -> bool:
 
 
 def run_one(nb: str, label: str, kwargs: dict, seed: int) -> dict:
-    """Build the notebook's mock at ``seed``, MAP-seed it, run one fit, score it."""
+    """Build the notebook's mock at ``seed``, MAP-seed it, run one fit, score it.
+
+    Wraps :func:`_run_one_scored` only to stamp the machine's load average onto
+    the row. Every wall-clock column in this file is measured on a shared box:
+    ``bench/reports/2026-08-20_cuda_device_matrix.md`` recorded a 9.5x
+    wall-clock spread from scheduling alone, and one byte-identical fit that
+    measured 2834.9 s contended against 1541.6 s idle. A ``wall`` or
+    ``sec_per_ess`` cell is therefore only readable next to the load the box was
+    under when it was taken, and a load that is not recorded at the moment of
+    the fit cannot be recovered afterwards. R-hat, ESS, divergences, step size
+    and ``grad_per_draw`` are unaffected -- they are deterministic given the
+    seed, which is why they, not the clock, carry this campaign's claims.
+    """
+    load_before = os.getloadavg()
+    started_wall = time.time()
+    row = _run_one_scored(nb, label, kwargs, seed)
+    row["loadavg_before"] = list(load_before)
+    row["loadavg_after"] = list(os.getloadavg())
+    row["started_unix"] = started_wall
+    return row
+
+
+def _run_one_scored(nb: str, label: str, kwargs: dict, seed: int) -> dict:
+    """The fit itself. See :func:`run_one` for why the load average is stamped."""
     cfg = NOTEBOOKS[nb]
     ssp = tengri.load_ssp(cfg.get("ssp", "fsps_prsc_miles_chabrier"), download=True)
     sed = cfg["build"](ssp)

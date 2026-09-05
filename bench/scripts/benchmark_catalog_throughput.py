@@ -344,6 +344,15 @@ def _diagnostics(cp, max_gal):
     )
     worst_rhat_param = min_ess_param = None
     worst, least = -np.inf, np.inf
+    # The unique-draw fraction, reported as its own column on every row rather
+    # than only as an input to the ``frozen`` bucket. The bucket is a THRESHOLD
+    # test (``FROZEN_DISTINCT_FRAC`` = 0.01) and a row can pass it while still
+    # having lanes that barely moved -- 0.02 is not frozen by the rule and is
+    # nowhere near the ~1.0 a healthy chain sits at. #1999's frozen chains came
+    # back with ZERO divergences, so neither the divergence column nor split
+    # R-hat can stand in for this one; publishing the worst lane's fraction is
+    # what makes "0 divergences" readable as health rather than as silence.
+    least_distinct = np.inf
     for row in report.per_galaxy:
         if row.max_rhat is not None and row.max_rhat > worst:
             worst = row.max_rhat
@@ -351,7 +360,10 @@ def _diagnostics(cp, max_gal):
         if row.min_ess is not None and row.min_ess < least:
             least = row.min_ess
             min_ess_param = row.min_ess_param
+        if row.distinct_frac is not None and row.distinct_frac < least_distinct:
+            least_distinct = row.distinct_frac
     return {
+        "min_distinct_frac": (None if not np.isfinite(least_distinct) else float(least_distinct)),
         "n_gal_checked": report.n_galaxies,
         "n_gal_converged": report.n_converged,
         "n_frozen_chains": report.n_frozen,
@@ -918,6 +930,16 @@ def main(argv=None):
                     "peak_bytes": peak,
                     "peak_bytes_delta": dpeak,
                     "lut_grad_error_est": bias,
+                    # Every throughput column on this row -- gal_per_s,
+                    # gal_per_gpu_min, s_per_eff_sample -- is a wall clock, and
+                    # this box has shown a 9.5x wall-clock spread from
+                    # scheduling alone (2026-08-20_cuda_device_matrix.md). A
+                    # galaxies-per-GPU-minute figure compared against a
+                    # published one is only honest if the load it was taken
+                    # under travels with it, and load cannot be reconstructed
+                    # after the fact. The convergence columns beside it are
+                    # deterministic given the seed and do not need this.
+                    "loadavg": list(os.getloadavg()),
                     **diag,
                 }
                 # What the metric bought, read off the fit rather than assumed.
