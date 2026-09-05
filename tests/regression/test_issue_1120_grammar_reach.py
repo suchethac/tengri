@@ -87,7 +87,7 @@ def test_newly_reachable_components_build_with_fixed_defaults(
                     "law": "calzetti",
                     "all_params": Fixed(DEFAULT),
                 },
-                "dust_emission": {"type": "dale2014", "all_params": Fixed(DEFAULT)},
+                "dust_emission": {"type": "dale2014_cigale", "all_params": Fixed(DEFAULT)},
             }
         try:
             model = SEDModel.build(
