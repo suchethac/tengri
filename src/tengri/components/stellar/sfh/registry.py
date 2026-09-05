@@ -1942,11 +1942,165 @@ def validate_bin_edges_gyr(sfh_type, edges) -> None:
         )
 
 
+def _spec_public_prefix(spec) -> str:
+    """The ``sfh_<abbrev>_`` prefix every parameter of an SFH spec shares.
+
+    Parameters
+    ----------
+    spec : SFHModelSpec
+        A registered SFH model specification.
+
+    Returns
+    -------
+    str
+        The shared prefix (``"sfh_norm_"``, ``"sfh_cont_"``, ``"sfh_db_"``),
+        or ``""`` when the spec declares no parameters or its names share no
+        such prefix.
+
+    Notes
+    -----
+    **JIT-compatible**: no; build-time introspection of the registry.
+
+    A type's public prefix is not derivable from its name alone: nine families
+    abbreviate (``continuity`` declares ``sfh_cont_*``, ``dirichlet``
+    ``sfh_dir_*``, ``dense_basis`` ``sfh_db_*``, ``psb_wild2020``
+    ``sfh_psb_*``, ...). Every abbreviation is a single token after ``sfh_``,
+    which is what makes the two candidates below exhaustive: the type's own
+    name first, then the one token the first parameter spells.
+    """
+    names = tuple(spec.params or ())
+    if not names:
+        return ""
+    by_type = f"sfh_{spec.name}_"
+    if all(n.startswith(by_type) for n in names):
+        return by_type
+    parts = names[0].split("_")
+    if len(parts) < 3 or parts[0] != "sfh":
+        return ""
+    abbrev = f"sfh_{parts[1]}_"
+    return abbrev if all(n.startswith(abbrev) for n in names) else ""
+
+
+def _instance_repeated_spec(spec, ordinal: int):
+    """Give the ``ordinal``-th occurrence of an SFH type its own parameter names.
+
+    Parameters
+    ----------
+    spec : SFHModelSpec
+        The registry entry for the repeated type.
+    ordinal : int
+        1-based occurrence index within the composition list.
+
+    Returns
+    -------
+    SFHModelSpec
+        ``spec`` unchanged for ``ordinal == 1``; otherwise a copy whose public
+        parameter names carry the ordinal, e.g. ``sfh_norm_log_total_mass`` ->
+        ``sfh_norm_2_log_total_mass``.
+
+    Raises
+    ------
+    ValueError
+        If the type declares no shared public prefix to insert the ordinal
+        into, so a repeat could not be named without colliding.
+
+    Notes
+    -----
+    **JIT-compatible**: no; build-time.
+
+    Only the *public* names change. The internal kwargs, the callable, the
+    settings and ``spec.name`` are the type's own and stay put: the composed
+    closure dispatches additive members by public name, so two instances of one
+    family reach their shared internal ``log_total_mass`` from different public
+    parameters, exactly as two *different* families already do (#372).
+    """
+    if ordinal == 1:
+        return spec
+    prefix = _spec_public_prefix(spec)
+    if not prefix:
+        raise ValueError(
+            f"SFH type {spec.name!r} cannot be repeated in a composition: its "
+            "parameters share no 'sfh_<type>_' prefix to number, so the second "
+            "instance would collide with the first. List it once."
+        )
+    cut = len(prefix)
+
+    def _numbered(name: str) -> str:
+        return f"{prefix}{ordinal}_{name[cut:]}"
+
+    return spec._replace(
+        params={_numbered(k): v for k, v in spec.params.items()},
+        internal_param_map={_numbered(k): v for k, v in spec.internal_param_map.items()},
+    )
+
+
+def _mix_burst_mass_fraction(t_lookback, smooth, burst_shape, f):
+    r"""Mix a burst into a smooth SFH at a fixed fraction of the formed mass.
+
+    Parameters
+    ----------
+    t_lookback : array_like, shape (n_age,)
+        Lookback time [yr]. The evaluation grid; may ascend or descend.
+    smooth : array_like, shape (n_age,)
+        Summed additive (smooth) SFH on that grid [Msun/yr].
+    burst_shape : array_like, shape (n_age,)
+        Unnormalized, non-negative burst kernel on that grid [dimensionless].
+    f : float
+        Burst mass fraction, :math:`f = 10^{\log f_{\rm burst}} \in [0, 1)`.
+
+    Returns
+    -------
+    ndarray, shape (n_age,)
+        Mixed SFH [Msun/yr] whose time integral equals that of ``smooth``.
+
+    Notes
+    -----
+    **JIT-compatible**: yes, JIT/grad/vmap-safe (no host-side branching, no
+    Python floats read off traced values).
+
+    With :math:`M = \int \mathrm{SFR}_{\rm smooth}\,\mathrm{d}t` the mass the
+    smooth members form on this grid, and :math:`B(t)` the burst kernel,
+
+    .. math::
+
+        \mathrm{SFR}(t) = (1 - f)\,\mathrm{SFR}_{\rm smooth}(t)
+                        + f\,M\,\frac{B(t)}{\int B\,\mathrm{d}t}
+
+    where :math:`t` is lookback time [yr], :math:`\mathrm{SFR}` is [Msun/yr],
+    :math:`M` is [Msun] and :math:`B` is dimensionless. Both terms integrate to
+    :math:`(1-f)M` and :math:`fM`, so :math:`\int \mathrm{SFR}\,\mathrm{d}t = M`
+    exactly: adding a burst redistributes formed mass in time, it never creates
+    or destroys it. The burst therefore carries exactly the fraction :math:`f`
+    of the formed mass its parameter is named for, and wherever :math:`B` is
+    zero the history is the smooth one scaled by exactly :math:`1 - f`.
+
+    Both integrals are trapezoidal on the caller's grid, so their ratio is
+    invariant under reversing it (a descending ``t_lookback`` flips the sign of
+    both). Integrating on the evaluation grid rather than reading the members'
+    declared ``log_total_mass`` is what makes the conservation exact rather than
+    approximate, and it is the only option that also covers the additive
+    families that declare no total mass (tabulated, non-parametric,
+    ``dense_basis``).
+
+    A burst whose compact support misses the grid entirely integrates to zero;
+    it then contributes nothing and the mixing fraction is zeroed with it, so
+    the formed mass is still :math:`M`. The double ``where`` is the standard JAX
+    safe-divide guard: a NaN in the unused branch would still poison the
+    gradient.
+    """
+    m_smooth = jnp.trapezoid(smooth, t_lookback)
+    s_burst = jnp.trapezoid(burst_shape, t_lookback)
+    live = jnp.abs(s_burst) > 0.0
+    safe = jnp.where(live, s_burst, 1.0)
+    f_eff = jnp.where(live, f, 0.0)
+    return (1.0 - f_eff) * smooth + f_eff * m_smooth * burst_shape / safe
+
+
 def resolve_sfh(
     mean_sfh_type: str | list[str],
     bin_edges_gyr: object = None,
 ) -> tuple[object, dict[str, ParamDef], dict[str, tuple[str, float, float]], dict[str, Any]]:
-    """Resolve SFH specification to a composed function + params.
+    r"""Resolve SFH specification to a composed function + params.
 
     Parameters
     ----------
@@ -1985,10 +2139,36 @@ def resolve_sfh(
 
     - **Additive**: smooth models summed. E.g., ``["tsnorm", "dpl"]`` yields
       ``SFR_total = SFR_tsnorm + SFR_dpl``.
-    - **Mixture** (burst): mass-fraction weighted, replaces smooth. E.g.,
-      ``["tsnorm", "burst"]`` yields ``SFR = (1-f)*SFR_tsnorm + f*burst_shape``.
+    - **Mixture** (burst): the burst takes a fraction
+      :math:`f = 10^{\log f_{\rm burst}}` of the mass the smooth members form,
+      and the smooth history is scaled by :math:`1 - f` to make room for it.
+      With :math:`M = \int \mathrm{SFR}_{\rm smooth}\,\mathrm{d}t` [Msun] over
+      the evaluation grid and :math:`B(t)` the burst kernel,
+
+      .. math::
+
+          \mathrm{SFR}(t) = (1 - f)\,\mathrm{SFR}_{\rm smooth}(t)
+                          + f\,M\,\frac{B(t)}{\int B\,\mathrm{d}t}
+
+      where :math:`t` is lookback time [yr] and :math:`\mathrm{SFR}` is
+      [Msun/yr]. The formed mass is :math:`M` whether or not a burst is
+      present, and wherever :math:`B` vanishes the history is exactly
+      :math:`1 - f` times the smooth one. See
+      ``_mix_burst_mass_fraction``.
     - **Modulator** (field): multiplicative GP modulation. E.g.,
       ``["tsnorm", "field"]`` yields ``SFR = SFR_tsnorm * exp(gp_x - K_0/2)``.
+
+    **Repeated members.** A type may appear more than once:
+    ``["norm", "norm"]`` is two Gaussian bursts, ``["const", "norm", "norm"]``
+    a plateau under two of them. The k-th occurrence (k >= 2) takes the type's
+    public prefix with the ordinal appended -- ``sfh_norm_log_total_mass`` for
+    the first, ``sfh_norm_2_log_total_mass`` for the second,
+    ``sfh_norm_3_...`` for the third -- with the same priors, defaults and
+    internal kwargs as the base entry, and dispatches to its own callable. The
+    grammar's short key for a repeat keeps the ordinal
+    (``norm_2_log_total_mass``). Only additive members can usefully repeat: a
+    second ``burst`` or ``field`` is still refused by the one-mixture and
+    one-modulator rules below.
 
     Auto-swap: ``dense_basis`` → ``dense_basis_pure`` if burst or field is
     present (to avoid SFR constraint interference with composition).
@@ -2008,13 +2188,18 @@ def resolve_sfh(
 
     mean_sfh_type = apply_compositor_swap(mean_sfh_type)
 
-    # Look up models
+    # Look up models. A type may appear more than once -- ``["norm", "norm"]``
+    # is two Gaussian bursts, a shape no single spec expresses -- so each
+    # occurrence after the first is instanced under its own public names
+    # (``_instance_repeated_spec``).
     specs = []
+    occurrences: dict[str, int] = {}
     for name in mean_sfh_type:
         if name not in SFH_REGISTRY:
             valid = sorted(SFH_REGISTRY.keys())
             raise KeyError(f"Unknown SFH model '{name}'. Valid models: {valid}")
-        specs.append(SFH_REGISTRY[name])
+        occurrences[name] = occurrences.get(name, 0) + 1
+        specs.append(_instance_repeated_spec(SFH_REGISTRY[name], occurrences[name]))
 
     additive = [s for s in specs if s.composition_type == "additive"]
     mixtures = [s for s in specs if s.composition_type == "mixture"]
@@ -2108,8 +2293,7 @@ def resolve_sfh(
                 kw, burst_pub_to_internal, burst_internal, skip=("log_fburst",)
             )
             burst_shape = burst_fn(t_lookback, **burst_kw)
-            # Normalize burst shape to match smooth integral scale
-            smooth = (1.0 - f) * smooth + f * burst_shape * jnp.max(smooth)
+            smooth = _mix_burst_mass_fraction(t_lookback, smooth, burst_shape, f)
 
         # 3. Apply field modulation
         if has_field and "gp_x" in kw and "k0_half" in kw:

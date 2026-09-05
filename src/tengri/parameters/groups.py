@@ -4918,6 +4918,36 @@ def _sfh_type_prefixes(_registry_keys: frozenset[str]) -> tuple[str, ...]:
     return tuple(sorted(prefixes, key=len, reverse=True))
 
 
+def _short_name_keeping_repeat_ordinal(prefix: str, tail: str) -> str:
+    """Short name for ``prefix + tail``, keeping a repeated member's ordinal.
+
+    A composition may list one type twice (``sfh={'type': ['norm', 'norm']}``);
+    ``resolve_sfh`` then numbers the second instance's public parameters,
+    ``sfh_norm_log_total_mass`` beside ``sfh_norm_2_log_total_mass``. Stripping
+    the whole prefix from both would hand them the same short key, so the
+    numbered one keeps its type token and ordinal: ``norm_2_log_total_mass``.
+    That is the one place duplicate-type naming reaches the short-name rule.
+
+    Parameters
+    ----------
+    prefix : str
+        The matched ``sfh_<type>_`` prefix, e.g. ``"sfh_norm_"``.
+    tail : str
+        What follows it, e.g. ``"log_total_mass"`` or ``"2_log_total_mass"``.
+
+    Returns
+    -------
+    str
+        ``tail`` for a first (unnumbered) instance, ``"<type>_" + tail`` when
+        ``tail`` opens with an ordinal. No registered parameter's short name
+        starts with a digit token, so this never fires on an ordinary name.
+    """
+    head, sep, _rest = tail.partition("_")
+    if sep and head.isdigit():
+        return prefix[4:] + tail  # drop 'sfh_', keep '<type>_<k>_<short>'
+    return tail
+
+
 def _strip_sfh_prefix(full_param_name: str) -> str:
     """Drop the whole ``sfh_<type>_`` prefix from an SFH parameter name.
 
@@ -4951,11 +4981,13 @@ def _strip_sfh_prefix(full_param_name: str) -> str:
 
     for prefix in prefixes:
         if full_param_name.startswith(prefix) and len(full_param_name) > len(prefix):
-            return full_param_name[len(prefix) :]
+            return _short_name_keeping_repeat_ordinal(prefix, full_param_name[len(prefix) :])
 
     rest = full_param_name[4:]  # Remove 'sfh_'
     parts = rest.split("_", 1)
-    return parts[1] if len(parts) == 2 else rest
+    if len(parts) != 2:
+        return rest
+    return _short_name_keeping_repeat_ordinal(f"sfh_{parts[0]}_", parts[1])
 
 
 def _extract_short_name(full_param_name: str, group_dict: dict) -> str:

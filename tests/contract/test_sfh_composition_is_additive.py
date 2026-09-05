@@ -86,7 +86,18 @@ def test_members_sharing_an_internal_kwarg_keep_their_own_values(ssp_data_fsps):
 
 
 def test_burst_mixture_is_applied(ssp_data_fsps):
-    """["const", "burst"] with log_fburst=-0.5 scales the smooth history by 1 - 10^-0.5."""
+    """["const", "burst"] with log_fburst=-0.5 gives the burst 10^-0.5 of the formed mass.
+
+    The mixture is a mass fraction, not a peak fraction: the smooth history is
+    scaled by ``1 - f`` and the burst kernel is normalized by its own time
+    integral and given ``f * M``, so the formed mass is untouched. The
+    peak-scaled mixture this file first pinned put the burst amplitude at
+    ``f * max(smooth)``, which moved ``log_mstar_formed`` 10.000000 ->
+    9.956891 and left the burst carrying 0.260371 of the mass instead of
+    0.316228. See ``test_sfh_burst_is_a_mass_fraction.py`` for the full set of
+    invariants; this test keeps the composition-level check that the burst
+    reaches the SFH at all (dropping it left every ratio at exactly 1).
+    """
     base = {
         "sfh_const_log_total_mass": Fixed(10.0),
         "sfh_const_start_gyr": Fixed(5.0),
@@ -97,25 +108,30 @@ def test_burst_mixture_is_applied(ssp_data_fsps):
         "sfh_burst_log_tpeak_myr": Fixed(1.5),
         "sfh_burst_log_tmax_myr": Fixed(2.5),
     }
+    f = 10.0**-0.5
     s_const = _state(ssp_data_fsps, {"type": "const", **base})
     s_mix = _state(ssp_data_fsps, {"type": ["const", "burst"], **base, **burst})
 
     lbt = np.asarray(s_const.derived["sfh_grid_lbt_yr"])
     sfr_const = np.asarray(s_const.derived["sfr_history"])
     sfr_mix = np.asarray(s_mix.derived["sfr_history"])
-    # The mixture rescales the smooth history by (1 - f) and adds the burst
-    # term; with the burst dropped both ratios were exactly 1. Measured with
-    # the fix: 0.78 at 3 Gyr and 0.80 at the 30 Myr burst peak, so the burst
-    # term is present at both epochs (its shape is not pinned here).
+
+    # The burst is present: at 3 Gyr the mixture is 0.805878 of the const
+    # history (below 1 because of the 1 - f rescaling, above 1 - f = 0.683772
+    # because this broad kernel still has support there).
     i_old = np.argmin(np.abs(lbt - 3.0e9))
-    i_peak = np.argmin(np.abs(lbt - 10.0**1.5 * 1e6))
     ratio_old = sfr_mix[i_old] / sfr_const[i_old]
-    ratio_peak = sfr_mix[i_peak] / sfr_const[i_peak]
     assert abs(ratio_old - 1.0) > 0.05, (
         f"burst mixture not applied at 3 Gyr (ratio={ratio_old:.4f})"
     )
-    assert ratio_peak > (1.0 - 10.0**-0.5) * 1.05, (
-        f"burst term absent at its peak (ratio={ratio_peak:.4f})"
+    assert ratio_old > 1.0 - f, f"the burst adds nothing at 3 Gyr (ratio={ratio_old:.4f})"
+
+    # And it carries exactly f of the formed mass, which is itself unchanged.
+    assert abs(float(s_mix.derived["log_mstar_formed"]) - 10.0) < 1e-6
+    m_total = np.trapezoid(sfr_mix, lbt)
+    m_burst = np.trapezoid(sfr_mix - (1.0 - f) * sfr_const, lbt)
+    assert abs(m_burst / m_total - f) < 1e-6, (
+        f"burst carries {m_burst / m_total:.6f} of the mass, not {f:.6f}"
     )
 
 

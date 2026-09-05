@@ -1060,14 +1060,30 @@ def triweight_burst(
     Returns
     -------
     ndarray, shape (n_age,)
-        Unnormalized burst shape [dimensionless], non-negative. Integrates to ~1.
+        Unnormalized burst shape [dimensionless], non-negative. It integrates
+        to 1 in the normalized offset :math:`x` defined below, **not** in
+        lookback time, so a caller that needs a mass must divide by
+        :math:`\int B\,\mathrm{d}t` on its own grid.
 
     Notes
     -----
     **JIT-compatible**: yes, all operations use ``jnp`` primitives.
 
     This is a **shape-only** function (unitless, not in Msun/yr). The burst
-    amplitude is set by the burst mixture fraction in the composition step.
+    amplitude is set in the composition step (``_mix_burst_mass_fraction`` in
+    ``tengri.components.stellar.sfh.registry``), which normalizes this kernel
+    by its own time integral and gives it a fraction
+    :math:`f = 10^{\log f_{\rm burst}}` of the mass the smooth members form:
+
+    .. math::
+
+        \mathrm{SFR}(t) = (1 - f)\,\mathrm{SFR}_{\rm smooth}(t)
+                        + f\,M\,\frac{B(t)}{\int B\,\mathrm{d}t},
+        \qquad M = \int \mathrm{SFR}_{\rm smooth}\,\mathrm{d}t
+
+    with :math:`t` lookback time [yr], :math:`\mathrm{SFR}` [Msun/yr],
+    :math:`M` [Msun] and :math:`B` this dimensionless kernel. The amplitude is
+    therefore set by an integral of the kernel, never by its peak.
 
     The triweight kernel in normalized variable :math:`u = x/3` is:
 
