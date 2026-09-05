@@ -43,11 +43,12 @@ absorption-clean intrinsic line flux is wanted.
 from __future__ import annotations
 
 import dataclasses
+import math
 
 import jax.numpy as jnp
 
 from tengri.observation.spectral_indices import _window_mean_flux, soft_window_ssp_integral
-from tengri.utils.physics_constants import C_AA
+from tengri.utils.physics_constants import C_AA, L_SUN
 from tengri.utils.scale import apply_log10_scale
 
 
@@ -272,8 +273,25 @@ def precompute_line_windows(ssp_wave, ssp_flux, line_defs, edge_width: float = 1
     )
 
 
+#: ``L_sun`` [erg/s] split as ``_LSUN_MANTISSA * 2**_LSUN_EXP2``, exactly.
+#:
+#: ``total_mass * L_sun`` is ~4e43 for an ordinary galaxy against a float32 max of
+#: 3.4e38, so the **scale constant** overflows to ``inf`` on its own — while the
+#: window mean it multiplies (~6e28) and the flux that comes out (~1e-16) are both
+#: comfortably in range. Every one of the offending decades sits in ``L_sun``'s
+#: binary exponent (112), so stripping it leaves the arithmetic at the mass's own
+#: scale and :func:`jax.numpy.ldexp` puts it back at the end.
+#:
+#: The split is **bit-exact in float64**: scaling by a power of two is exact and
+#: commutes with rounding, so ``ldexp(fl(m*x), k) == fl(2**k*m*x)`` for every
+#: intermediate below. That is the same property that makes
+#: :data:`~tengri.utils.scale.DEFAULT_COTANGENT_BOOST` safe to divide back out, and
+#: it is why this repair moves no float64 result.
+_LSUN_MANTISSA, _LSUN_EXP2 = math.frexp(L_SUN)
+
+
 def measure_line_fluxes_from_window_lut(
-    joint_weights, scale, transmission, precomp, log10_four_pi_dl2
+    joint_weights, total_mass, transmission, precomp, log10_four_pi_dl2
 ):
     r"""Fast catalog-style line fluxes from the SSP window-integral LUT.
 
@@ -286,8 +304,11 @@ def measure_line_fluxes_from_window_lut(
     ----------
     joint_weights : ndarray, shape (n_met, n_age)
         Published SFH × metallicity CSP weights (sum to 1).
-    scale : ndarray, shape ()
-        ``stellar_mass_scale`` = ``total_mass · L_sun`` [erg/s per Msun weight].
+    total_mass : ndarray, shape ()
+        Total formed stellar mass [Msun]. The ``erg/s`` scale is
+        ``total_mass · L_sun``, applied here rather than by the caller so the
+        power-of-two split that keeps it inside float32 stays in one place
+        (see :data:`_LSUN_MANTISSA`).
     transmission : ndarray, shape (n_age, n_window)
         Two-component transmission at each window center per SSP age.
     precomp : LineWindowPrecomputation
@@ -307,7 +328,15 @@ def measure_line_fluxes_from_window_lut(
     the LUT reconstructs the SED (baked-in / LUT-eligible models).
     """
     wint_age = jnp.einsum("ma,maw->aw", joint_weights, precomp.window_integrals)
-    window_means = scale * jnp.sum(transmission * wint_age, axis=0) / precomp.window_norms
+    # ``L_sun`` is carried as a binary exponent, not as a factor: the
+    # product runs at the mass's own scale (~1e-5) and ``ldexp`` restores the
+    # ~1e28 erg/s/Hz window mean in one exact step. Spelling this as
+    # ``(total_mass * L_sun) * ...`` was ``inf * finite`` in float32, and the
+    # ``feat - cont`` below then read ``inf - inf`` -> ``nan`` on every line (#1859).
+    scale = total_mass * _LSUN_MANTISSA
+    window_means = jnp.ldexp(
+        scale * jnp.sum(transmission * wint_age, axis=0) / precomp.window_norms, _LSUN_EXP2
+    )
     centers = precomp.window_centers
     out = []
     for _name, b, r, f, lam_c, width in precomp.line_slots:
