@@ -147,7 +147,7 @@ construction from `random_seed` and freezes it. tengri carries the standardized
 latent `sfh_field_xi` — an N(0, I) vector, one entry per SFH grid node — as a
 parameter, so the same construction serves both mock generation (draw it with
 `spec.sample(key)`) and inference (the sampler explores it). The gallery example
-`examples/sfh/plot_stochastic_sfh_tau_sweep.py` mirrors Synthesizer's τ sweep by
+`examples/sfh/plot_stochastic_sfh_tau_sweep.py` runs the same τ sweep as Synthesizer's documentation page,
 holding one draw fixed across three timescales.
 
 **Kernel menu and grid.** `DampedRandomWalk` is the only kernel on Synthesizer's

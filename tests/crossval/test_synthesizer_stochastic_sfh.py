@@ -24,11 +24,11 @@ defensible — the correction preserves the mean SFR, its absence preserves the
 mean log SFR — but a normalization compared across the two codes must account
 for it.
 
-This file needs no Synthesizer install. The reference is transcribed below from
-Synthesizer ``main`` (``synthesizer/parametric/sfh_kernels.py`` and
-``sf_hist.py``, read 2026-09-06); ``TestTranscribedReference`` checks the
-transcription against the closed form it is meant to implement before anything
-else compares against it.
+This file needs no Synthesizer install. The reference below is an independent
+NumPy implementation of the damped-random-walk covariance and the Cholesky
+sampler that Synthesizer's Stochastic SFH documents (its ``main`` branch as of
+2026-09-06); ``TestReferenceKernel`` checks that reference against the closed
+form before anything else compares against it.
 
 Run with::
 
@@ -76,13 +76,12 @@ TAU_YR = 1.0e9
 K0_HALF = 0.5 * (SIGMA_DEX * LN10) ** 2
 
 
-# ── Reference: transcribed from Synthesizer main ──────────────────────
+# ── Reference: the documented Synthesizer construction ────────────────
 #
-# Transcribed 2026-09-06 from the Synthesizer ``main`` branch:
-#   synthesizer/parametric/sfh_kernels.py  -- Kernel.build_covariance_matrix,
-#                                             DampedRandomWalk.covariance
-#   synthesizer/parametric/sf_hist.py      -- _sample_multivariate_normal
-# Unit handling (``unyt``) and validation are dropped; the numerics are verbatim.
+# An independent NumPy implementation of what Synthesizer's Stochastic SFH
+# documents (main branch, 2026-09-06): a Toeplitz covariance
+# sigma^2 exp(-|dt|/tau) on a uniform cosmic-time grid and a Cholesky draw of
+# the log10 SFR fluctuations. Units and input validation are out of scope here.
 
 
 def synthesizer_drw_covariance(delta_t, sigma, tau):
@@ -211,10 +210,10 @@ def _field_gp(xi, log_age_grid, n_grid):
     return _field_gp_and_k0(xi, log_age_grid, n_grid)[0]
 
 
-# ── Part 0: the transcription itself ──────────────────────────────────
+# ── Part 0: the reference itself ──────────────────────────────────────
 
 
-class TestTranscribedReference:
+class TestReferenceKernel:
     """A reference is only a reference once it reproduces its closed form."""
 
     def test_toeplitz_fill_equals_the_direct_kernel(self):
@@ -222,7 +221,7 @@ class TestTranscribedReference:
         built = synthesizer_build_covariance_matrix(t_yr, SIGMA_DEX, TAU_YR)
         direct = synthesizer_drw_covariance(t_yr[:, None] - t_yr[None, :], SIGMA_DEX, TAU_YR)
         assert np.max(np.abs(built - direct)) < 1e-15, (
-            f"the transcribed Toeplitz fill differs from sigma^2 exp(-|dt|/tau) by "
+            f"the reference Toeplitz fill differs from sigma^2 exp(-|dt|/tau) by "
             f"{np.max(np.abs(built - direct)):.3e} dex^2"
         )
 
@@ -493,7 +492,7 @@ class TestLogNormalCentering:
         ``sfr_cosmic = 10**(log10(base) + fluctuations)`` with zero-mean
         fluctuations has ensemble mean ``exp(K(0)/2) * base``. At sigma = 0.3 dex
         that is ``exp(0.238585) = 1.26945``, i.e. **+26.95 %**. Measured through
-        the transcribed sampler: 1.2696.
+        the reference sampler: 1.2696.
 
         This is the one place a normalization carried between the two codes
         needs an explicit conversion; recorded in
