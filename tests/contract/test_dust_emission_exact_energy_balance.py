@@ -31,7 +31,7 @@ pytestmark = pytest.mark.contract
 
 _C_AA_PER_S = 2.99792458e18
 
-# Copied from the run log; a rename or removal must edit this list on purpose.
+# The names as a measured run listed them; a rename or removal must edit this on purpose.
 _REQUIRED = (
     "astrodust",
     "bosa",
