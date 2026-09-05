@@ -55,6 +55,10 @@ ALLOWED_REFUSALS = (
     "not yet validated against the DSPS forward path",
     "At least one additive (smooth) SFH component required",
     "model protocol surface incomplete",  # MAPPINGS AGN backend (#2082)
+    # ``pah_drude``: a PAH feature template with no thermal continuum, listed
+    # because it composes into custom models but refused as a model's only dust
+    # emitter — standalone it re-emits a measured 1.8925e-04 of L_ir.
+    "is a PAH building block, not an energy-balanced dust emission model",
 )
 
 #: Wordings that mark a ``ValueError`` as *absent data* rather than a refusal.

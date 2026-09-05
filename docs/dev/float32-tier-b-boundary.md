@@ -539,11 +539,26 @@ is pinned per model by `tests/contract/test_dust_emission_l_ir_linearity.py`, an
 `EmissionComponent.factors_l_ir` lets a non-proportional model opt out rather than return a silently
 wrong SED.
 
-Measured, all 11 template models now 100% finite in float32, float64 agreement within 2% of the SED
-peak (`astrodust` 1.6e-2, the rest ~1e-6): `dale2014`, `dale2014_cigale`, `dl07`, `dl07_tabulated`,
-`dl14`, `draine_li2007`, `draine_li2014`, `bosa`, `themis`, `schreiber2018`, `astrodust`,
-`pah_drude`. float64 cross-version parity over 288 configurations: 13728 fields bit-exact, 192 moved
-(only `sed_dust_ir`), worst 1.22e-14, zero NaN-status changes.
+Measured, every template model 100% finite in float32, float64 agreement within 2% of the SED
+peak (`astrodust` 1.6e-2, `draine2021_pah` 5.8e-3, the rest ~1e-4 or better): `dale2014`,
+`dale2014_cigale`, `dl07`, `dl14`, `draine_li2007`, `draine_li2014`, `bosa`, `themis`,
+`schreiber2018`, `astrodust`, `dh02_ce01`, `draine2021_pah` (and its registry key
+`draine2021_pah_ir`). float64 cross-version parity over 288 configurations: 13728 fields bit-exact,
+192 moved (only `sed_dust_ir`), worst 1.22e-14, zero NaN-status changes.
+
+Two names moved in and out of that list later, for reasons worth keeping straight because they look
+alike and are not:
+
+* `draine2021_pah` was **missing** from it, and its `sed_dust_ir` was **0% finite** in float32. It
+  subclassed `SEDModelComponent` rather than `EmissionComponent`, so it never reached the `apply`
+  that factors `L_ir` — and the same declaration gap hid it: it declared only `L_ir_emission` in
+  `outputs`, while the census in `tests/regression/precision/test_dust_ir_float32.py` enumerates
+  emission components by the `sed_dust_ir` they publish. A model can be absent from a completeness
+  guard *because of* the defect the guard exists to find.
+* `pah_drude` is float32-clean and always was, but is no longer selectable as a standalone
+  `dust_emission` type (it is a PAH building block: standalone it re-emits a measured 1.8925e-04 of
+  `L_ir`). It is still measured, through the flat `Parameters(...)` form — see `BUILDING_BLOCKS` in
+  that test file. Its float32 behavior was never the problem; its energy budget was.
 
 **A latent bug this surfaced.** `apply_log10_scale(zeros, 43.17)` returned all-`NaN` in float32 while
 returning zeros in float64. With no peak to fold in, the exponent collapses to the raw scale, which

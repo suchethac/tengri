@@ -342,6 +342,26 @@ def test_list_agn_blocks_use_strings_name_valid_grammar_keys(
     assert model is not None
 
 
+def _builder_rejects() -> frozenset[str]:
+    """Menu names ``SEDModel.build`` refuses, read off the source of the refusal.
+
+    ``status='unvalidated'`` is one reason a row can be unbuildable, and it was
+    the only one when the two tests below were written. Dust-emission
+    *building blocks* are a second: ``pah_drude`` is production-status and
+    perfectly validated as a PAH template — it simply cannot be a model's only
+    dust emitter, because it re-emits a measured 1.8925e-04 of ``L_ir``.
+
+    Derived from the grammar's own two sets rather than restated here, so a new
+    building block joins both checks the day it is declared.
+    """
+    from tengri.parameters.groups import (
+        _standalone_dust_emission_types,
+        _valid_dust_emission_types,
+    )
+
+    return _valid_dust_emission_types() - _standalone_dust_emission_types()
+
+
 def test_model_menu_use_strings_teach_sedmodel_build():
     """Every model-menu ``use:`` hint teaches the recommended build path.
 
@@ -373,11 +393,14 @@ def test_model_menu_use_strings_teach_sedmodel_build():
     # ValueError, which is why the "advice that raises" class (#1275) read as
     # holding across 153 hints. A row the builder rejects must not advertise a
     # call at all; see ``test_unbuildable_rows_do_not_advertise_a_build_call``.
+    rejected = _builder_rejects()
     offenders = [
         (fn.__name__, row["name"], row["use"])
         for fn in menus
         for row in fn()
-        if row.get("status") != "unvalidated" and not row["use"].startswith("SEDModel.build(")
+        if row.get("status") != "unvalidated"
+        and row["name"] not in rejected
+        and not row["use"].startswith("SEDModel.build(")
     ]
     assert not offenders, offenders
 
@@ -385,18 +408,25 @@ def test_model_menu_use_strings_teach_sedmodel_build():
 def test_unbuildable_rows_do_not_advertise_a_build_call():
     """A row the builder rejects must not hand the user a call that raises.
 
-    The complement of the check above: ``status='unvalidated'`` rows are kept
-    in the menu on purpose — delisting them recreates the invisibility of #1120
-    — but their ``use:`` field must carry the reason and the next step rather
-    than a copy-pasteable ``SEDModel.build(...)`` that fails.
+    The complement of the check above: ``status='unvalidated'`` rows and dust
+    emission building blocks are kept in the menu on purpose — delisting them
+    recreates the invisibility of #1120 — but their ``use:`` field must carry
+    the reason and the next step rather than a copy-pasteable
+    ``SEDModel.build(...)`` that fails.
+
+    Scoped to the two menus that actually hold such rows. Widening it beyond
+    them would be a check with no subject, which is how the shape test above
+    came to read as holding across 153 hints.
     """
     import tengri
 
+    rejected = _builder_rejects()
     offenders = [
         (row["name"], row["use"])
-        for fn in (tengri.list_sfh_models,)
+        for fn in (tengri.list_sfh_models, tengri.list_dust_emission_models)
         for row in fn()
-        if row.get("status") == "unvalidated" and row["use"].startswith("SEDModel.build(")
+        if (row.get("status") == "unvalidated" or row["name"] in rejected)
+        and row["use"].startswith("SEDModel.build(")
     ]
     assert not offenders, (
         f"unbuildable rows advertise a build call that raises: {offenders}. "

@@ -104,8 +104,10 @@ _EMISSION_TYPE_ALIASES = {
 # - xray: {xray, xray_aird, agn_xray_corona}
 # - igm: {igm}
 #
-# Note: draine2021_pah_ir and schreiber2016_ir do not route through
-# _resolve_registry_component and are not included here.
+# Note: schreiber2016_ir does not route through _resolve_registry_component and
+# is not included here. draine2021_pah_ir does: it is an EmissionComponent, so
+# the auto-populated dust_emission set picks it up (and the
+# ``draine2021_pah`` -> ``draine2021_pah_ir`` alias above resolves through it).
 def _build_domain_membership_map() -> dict[str, set[str]]:
     """Build the domain → component-names map.
 

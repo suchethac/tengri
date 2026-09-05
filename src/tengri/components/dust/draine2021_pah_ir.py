@@ -32,8 +32,8 @@ from tengri.components.dust.draine2021_pah import (
     select_pahspec_axes,
     select_pahspec_starlight_auto,
 )
+from tengri.components.dust.emission._component_base import EmissionComponent
 from tengri.components.dust.emission._physics import integrate_lnu_over_nu
-from tengri.components.sed_model_component import SEDModelComponent
 from tengri.parameters.priors import Uniform
 from tengri.protocols.component import SEDComponentConfig
 
@@ -87,7 +87,7 @@ class Draine2021PAHIRConfig(SEDComponentConfig):
     auto_sps_family: str | None = None
 
 
-class Draine2021PAHIRSEDComponent(SEDModelComponent):
+class Draine2021PAHIRSEDComponent(EmissionComponent):
     """Dust IR emission via tabulated Draine+2021 PAHspec templates.
 
     Closes the dust energy balance by re-emitting absorbed UV/optical
@@ -107,8 +107,22 @@ class Draine2021PAHIRSEDComponent(SEDModelComponent):
     -----
     **Cross-component contract**:
 
-    - Reads: ``state.derived["L_ir"]`` (erg/s), the luminosity absorbed by dust.
-    - Publishes: ``{"L_ir_emission": erg/s}``, the bolometric IR from templates.
+    - Reads: ``state.derived["L_ir"]`` [erg/s], the luminosity absorbed by dust.
+    - Publishes: ``{"sed_dust_ir": erg/s/Hz}``, the IR emission profile, and
+      ``{"L_ir_emission": erg/s}``, the bolometric IR actually re-radiated.
+
+    **Float32 range**: :class:`EmissionComponent` evaluates :meth:`predict` at
+    ``L_ir = 1`` and re-applies the true luminosity as a ``log10`` offset
+    (:attr:`~EmissionComponent.factors_l_ir`), because the linear ``L_ir`` is
+    ~1.5e43 erg/s and therefore ``inf`` in pure float32 while the emitted SED
+    it normalizes to (~5.5e30 erg/s/Hz) is comfortably in range. That is exact
+    here: :meth:`predict` divides by the template's own frequency integral, so
+    the emission is exactly *proportional* to ``L_ir``. Before this component
+    joined the emission family it inherited the plain
+    :class:`~tengri.components.sed_model_component.SEDModelComponent` ``apply``,
+    which does not factor, and its ``sed_dust_ir`` was 0% finite in float32
+    (measured; pinned by
+    ``tests/regression/precision/test_dust_ir_float32.py``).
 
     **Template loading**: Templates are loaded during :meth:`load` (precomputation)
     and stored on ``self.data``. If template files are unavailable, the component
@@ -133,9 +147,19 @@ class Draine2021PAHIRSEDComponent(SEDModelComponent):
     # Free parameters: auto-discovered by base class
     lgU = Uniform(0.0, 7.0, default=1.0, description="log10(U), starlight intensity", units="dex")
 
-    # Cross-component contract
-    inputs: ClassVar = {"L_ir": "erg/s"}
-    outputs: ClassVar = {"L_ir_emission": "erg/s"}
+    # Cross-component contract. ``L_ir`` is inherited from
+    # :class:`EmissionComponent` as an *optional* input (absent means "nothing
+    # was absorbed", i.e. zero contribution) — that is the shape every emission
+    # backend shares, and it is what routes this component through the
+    # ``L_ir``-factoring ``apply``.
+    #
+    # ``sed_dust_ir`` comes from :class:`EmissionComponent` (the tuples are
+    # built from the MRO union, so a subclass dict adds to the base's rather
+    # than replacing it) and is restated here because :meth:`predict` publishes
+    # it: it was published and *not* declared on the old base, which is how the
+    # float32 census — which enumerates emission components by that very
+    # output — could not see this component at all.
+    outputs: ClassVar = {"L_ir_emission": "erg/s", "sed_dust_ir": "erg/s/Hz"}
 
     def __init__(self, config: Draine2021PAHIRConfig | None = None) -> None:
         # Override the class-level default config if an instance is provided.

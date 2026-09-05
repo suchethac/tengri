@@ -119,16 +119,28 @@ def _emission_types() -> tuple[str, ...]:
     flat directions is the same defect whatever the maturity label says.
 
     Only ``deprecated`` is excluded, plus anything named in
-    :data:`_UNDISCRIMINATING` with a measured reason. So a backend added
-    tomorrow is measured on the day it ships.
+    :data:`_UNDISCRIMINATING` with a measured reason, plus the **building
+    blocks** — types the menu lists because they compose into custom models but
+    which ``SEDModel.build`` refuses as a model's only dust emitter. Every test
+    here builds one model per name with a ``dust_emission`` wildcard, so a name
+    the builder refuses cannot be measured through this file at all; it is
+    excluded by the same derivation the builder uses rather than by name.
+    ``pah_drude`` is the one such name today, and it leaves
+    :data:`DECLARES_NOTHING` non-empty behind it (``dh02_ce01``), so the
+    declares-nothing branch keeps a subject.
+
+    So a backend added tomorrow is measured on the day it ships.
     """
     from tengri import registry
+    from tengri.parameters.groups import _standalone_dust_emission_types
 
+    standalone = _standalone_dust_emission_types()
     return tuple(
         sorted(
             e["name"]
             for e in registry.list_dust_emission_models()
             if e.get("name")
+            and e["name"] in standalone
             and e.get("status", "production") != "deprecated"
             and e["name"] not in _UNDISCRIMINATING
             and e["name"] != "none"
@@ -175,10 +187,16 @@ def _declares_nothing() -> frozenset[str]:
     """Backends that state they read no parameters at all.
 
     Distinct from :data:`NOTHING_FREEABLE`, which is "declares parameters, but
-    every one is Fixed-by-default". These declare none: ``pah_drude`` is a pure
-    template shape and ``dh02_ce01`` a fixed template pair, so ``'all_params': FREE``
-    correctly frees nothing and "at least one live parameter" is the wrong
-    question rather than a failed one.
+    every one is Fixed-by-default". These declare none: ``dh02_ce01`` is a fixed
+    template pair, so ``'all_params': FREE`` correctly frees nothing and "at
+    least one live parameter" is the wrong question rather than a failed one.
+
+    ``pah_drude``, the other pure template shape, is no longer reachable from
+    here: it is a building block the builder refuses, so
+    :func:`_emission_types` drops it before this derivation runs. Its half of
+    the same guarantee is pinned in
+    ``tests/regression/bug/test_parameter_free_emission_wildcard.py``, which
+    checks the narrowing mechanism itself rather than a built model.
 
     Both were invisible until :func:`_emission_types` started deriving the
     parametrization -- and both were freeing **twenty** parameters and reading

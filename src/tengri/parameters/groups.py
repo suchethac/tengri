@@ -405,6 +405,56 @@ def _valid_dust_emission_types() -> frozenset[str]:
     return dust_ir_components | alias_keys | _LAZY_DUST_EMISSION_TYPES
 
 
+def _dust_emission_component_class(emission_type: str):
+    """Return the registered component class a ``dust_emission`` type names.
+
+    Parameters
+    ----------
+    emission_type : str
+        A grammar spelling, alias or registry key.
+
+    Returns
+    -------
+    type or None
+        The registered class, or ``None`` for a name that resolves only through
+        the lazy loader cache (``dl07_tabulated``) and has no component.
+    """
+    from tengri.components.sed_model_component import _REGISTRY
+    from tengri.forward.component_factory import _EMISSION_TYPE_ALIASES
+
+    return _REGISTRY.get(_EMISSION_TYPE_ALIASES.get(emission_type, emission_type))
+
+
+def _standalone_dust_emission_types() -> frozenset[str]:
+    """Accepted ``dust_emission.type`` values that may be a model's only emitter.
+
+    :func:`_valid_dust_emission_types` minus the **building blocks** — backends
+    that emit a physically correct *piece* of the IR SED scaled by ``L_ir``
+    without renormalizing to it, so that selecting one alone silently discards
+    most of the absorbed energy. ``pah_drude`` re-emits a measured 1.8925e-04
+    of ``L_ir``.
+
+    Returns
+    -------
+    frozenset[str]
+        Names ``SEDModel.build`` accepts for the ``dust_emission`` group.
+
+    Notes
+    -----
+    Derived from ``EmissionComponent.energy_balanced`` on the registered class,
+    not from a hand-written list here: a list is a second source of truth that
+    goes stale in the direction nobody checks, and the flag also carries the
+    reason to the component that owns it. A name with no registered class
+    (loader-cache-only spellings) counts as standalone — nothing declares
+    otherwise, and refusing on absent information would be a guess.
+    """
+    return frozenset(
+        name
+        for name in _valid_dust_emission_types()
+        if getattr(_dust_emission_component_class(name), "energy_balanced", True)
+    )
+
+
 def _valid_nebular_types() -> frozenset[str]:
     """Derive accepted ``neb.type`` values from :data:`NEBULAR_MODELS`.
 
