@@ -1,21 +1,22 @@
 # SPDX-License-Identifier: BSD-3-Clause
-"""Contract tests for three SFH shapes a validation round found tengri could not express.
+"""Contract tests for ``dpl_lookback``, ``trunc_exp`` and ``psb_flex``.
 
-One round of validation against Synthesizer 1.2.0 found three SFH shapes tengri
-could not express:
+Each of the three is a sibling of an SFH tengri already carried, differing in
+one stated way:
 
 ``dpl_lookback``
-    A double power law whose argument is the **stellar age**, not cosmic time
-    since formation. ``dpl`` (BAGPIPES ``dblplaw``, Carnall+2018) applies the
-    same algebra to ``T = age - t_lookback``, and the form is not symmetric
-    under that reflection, so the two are different models: measured here,
-    41-96 % of the stellar mass lands in different age bins on matched
+    The double power law of Carnall+2018 written against the **stellar age**
+    rather than cosmic time since formation. ``dpl`` (BAGPIPES ``dblplaw``)
+    applies the same algebra to ``T = age - t_lookback``, and the form is not
+    symmetric under that reflection, so the two are different models: measured
+    here, 41-96 % of the stellar mass lands in different age bins on matched
     parameters.
 
 ``trunc_exp``
-    ``declining_exp`` plus a young-end cutoff (Synthesizer ``min_age``) and a
-    signed tau. Pinned here to be bit-identical to ``declining_exp`` when the
-    cutoff is at zero, so the new content is exactly the cutoff.
+    ``declining_exp`` — the FSPS ``sfh=1`` / BAGPIPES ``exponential`` tau model
+    — plus a young-end cutoff and a signed tau. Pinned here to be bit-identical
+    to ``declining_exp`` when the cutoff is at zero, so the new content is
+    exactly the cutoff.
 
 ``psb_flex``
     The Suess+2022 post-starburst SFH with its flexible quenching zone cut into
@@ -24,9 +25,9 @@ could not express:
     when no ``flex_*`` ratio is supplied, which is what keeps every existing
     ``psb_suess2022`` build unchanged.
 
-Cross-validation against Synthesizer itself lives in
-``tests/crossval/test_synthesizer_crossval.py`` (crossval tier, external
-dependency). These tests need no external package and run in the default tier.
+These tests need no external package and run in the default tier; the numerical
+comparison against Synthesizer lives in
+``tests/crossval/test_synthesizer_crossval.py``.
 """
 
 import jax
@@ -236,6 +237,52 @@ def test_psb_flex_refuses_a_bin_edge_count_its_ratios_cannot_fill():
     validate_bin_edges_gyr("psb_flex", np.array([2.0, 6.0, 10.0, 13.7]))
 
 
+def test_every_psb_flex_ratio_lands_on_the_pair_of_bins_it_names():
+    """Each declared ratio is ``log10(SFR_i / SFR_{i+1})`` for the pair it names.
+
+    Read off the returned history bin by bin rather than inferred from a
+    global norm: a ratio wired to the wrong end of the flexible zone (say
+    ``ratio_young`` anchored to the oldest flex bin instead of the youngest)
+    leaves the total mass, the positivity and the zone-changed check all
+    intact, and only this comparison sees it.
+    """
+    tlast_gyr, tflex_gyr = 0.2, 2.0
+    n_flex = 5
+    flex = [0.7, -0.5, 0.4, -0.3]
+    sfr = np.asarray(
+        psb_continuity_flex(
+            T_FINE_YR,
+            log_total_mass=10.0,
+            tlast_gyr=tlast_gyr,
+            tflex_gyr=tflex_gyr,
+            ratio_young=0.6,
+            **{f"flex_{i}": flex[i] for i in range(len(flex))},
+            ratio_old_0=-0.25,
+            ratio_old_1=0.35,
+        )
+    )
+    t_gyr = np.asarray(T_FINE_YR) / 1e9
+
+    edges = np.concatenate(
+        [
+            [0.0, tlast_gyr],
+            np.linspace(tlast_gyr, tflex_gyr, n_flex + 1)[1:],
+            np.linspace(tflex_gyr, PSB_FLEX_DEFAULT_MAX_AGE_GYR, PSB_FLEX_DEFAULT_N_FIXED + 1)[1:],
+        ]
+    )
+    # SFR sampled at each bin's midpoint: piecewise constant, so one sample is
+    # the whole bin.
+    mid = 0.5 * (edges[:-1] + edges[1:])
+    per_bin = np.array([sfr[np.searchsorted(t_gyr, m)] for m in mid])
+    assert np.all(per_bin > 0)
+
+    got = np.log10(per_bin[:-1] / per_bin[1:])
+    # youngest -> oldest: young/flex_0, the four flex steps, the pinned
+    # flex_last/fixed_0 step, then the two fixed steps.
+    want = np.array([0.6, *flex, 0.0, -0.25, 0.35])
+    np.testing.assert_allclose(got, want, rtol=0.0, atol=1e-12)
+
+
 # ── 2. trunc_exp: a strict extension of declining_exp ──────────────
 
 
@@ -267,11 +314,11 @@ def test_trunc_exp_cutoff_empties_the_young_end():
 
 
 def test_trunc_exp_negative_tau_rises_toward_the_present():
-    """Synthesizer's sign convention: positive tau declines in cosmic time.
+    """Sign convention: a positive tau declines in cosmic time.
 
-    Positive tau -> SFR *increases* with lookback age (highest at formation).
-    Negative tau -> the reverse. Read off ``Exponential._sfr``, which evaluates
-    ``exp(-(max_age - age) / tau)``.
+    The exponent is ``-(age - t_lookback) / tau``, so a positive tau makes the
+    SFR *increase* with lookback age (highest at formation); a negative tau
+    does the reverse.
     """
     pos = np.asarray(trunc_exp(T_FINE_YR, log_total_mass=10.0, tau=2e9, age=10e9, end=0.0))
     neg = np.asarray(trunc_exp(T_FINE_YR, log_total_mass=10.0, tau=-2e9, age=10e9, end=0.0))

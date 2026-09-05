@@ -38,8 +38,7 @@ References
 - Johnson+2021: Prospector implementation.
 - Tacchella et al. 2022, ApJ, 926, 134 (arXiv:2102.11954): Bursty continuity.
 - Wang et al. 2024 (arXiv:2401.12198): Prospector-β agebins scheme.
-- Synthesizer (ContinuityFlex upstream ref); cite both: Lovell et al. 2025
-  (OJA) + Roper et al. 2026 (JOSS).
+- Suess et al. 2022 (ApJ 935, 146; arXiv:2207.02883): PSB flexible-zone SFH.
 
 """
 
@@ -619,14 +618,7 @@ def psb_continuity(
 
     Implements the same calculation as Prospector ``psb_logsfr_ratios_to_agebins`` and
     ``logsfr_ratios_to_masses_psb`` (Johnson et al. 2021 [1]_), reimplemented
-    as a pure JAX step-function SFH compatible with DSPS. Synthesizer
-    (Lovell et al. 2025 [3]_; Roper et al. 2026 [4]_) builds the same ladder in
-    its ``SFH.ContinuityPSB``; against that class the parameter map is
-    ``ratio_young = logsfr_ratio_young``, ``flex_i = logsfr_ratios[i]``,
-    ``ratio_old_i = logsfr_ratio_old[i + 1]``, and
-    ``bin_edges_gyr = linspace(tflex, max_age, nfixed + 1)``; Synthesizer's
-    ``logsfr_ratio_old[0]`` is the flex-to-fixed step this function pins at 0,
-    so exact agreement needs ``logsfr_ratio_old[0] == 0``.
+    as a pure JAX step-function SFH compatible with DSPS.
 
     References
     ----------
@@ -635,12 +627,6 @@ def psb_continuity(
     .. [2] K. A. Suess et al., "Half-mass Radii for ~7000 Galaxies," ApJ,
        915, 87 (2021). arXiv:2101.03177.
        https://doi.org/10.3847/1538-4357/ac062c
-    .. [3] C. C. Lovell et al., "Synthesizer: a Software Package for Synthetic
-       Astronomical Observables," Open Journal of Astrophysics, 8 (2025).
-       https://doi.org/10.33232/001c.145766
-    .. [4] W. J. Roper et al., "Synthesizer: Synthetic Observables for
-       Modern Astronomy," Journal of Open Source Software, 11, 9436 (2026).
-       https://doi.org/10.21105/joss.09436
 
     Examples
     --------
@@ -712,7 +698,7 @@ def psb_continuity(
 
 #: Number of fixed old bins :func:`psb_continuity_flex` lays down when no
 #: ``bin_edges_gyr`` is given, and the oldest edge [Gyr] it lays them out to.
-#: Synthesizer ``ContinuityPSB``'s defaults (``nfixed=3``), and 13.7 Gyr is the
+#: Three equal-width fixed bins spanning ``tflex_gyr`` to 13.7 Gyr, which is the
 #: oldest edge every other tengri non-parametric ladder ends at.
 PSB_FLEX_DEFAULT_N_FIXED = 3
 PSB_FLEX_DEFAULT_MAX_AGE_GYR = 13.7
@@ -726,13 +712,12 @@ def psb_continuity_flex(
     bin_edges_gyr: jnp.ndarray | None = None,
     **ratio_kwargs,
 ) -> jnp.ndarray:
-    r"""Post-starburst SFH with equal-width fixed old bins (Synthesizer ContinuityPSB).
+    r"""Post-starburst SFH with equal-width fixed old bins.
 
     :func:`psb_continuity` with one change: the fixed old bins are laid out as
     ``n_fixed`` equal-width intervals spanning ``[tflex_gyr, max_age]``, rather
-    than being taken verbatim from ``bin_edges_gyr``. That is how Synthesizer's
-    ``ContinuityPSB`` builds them, and it is what makes the ladder ascending for
-    *any* ``tflex_gyr`` below ``max_age``.
+    than being taken verbatim from ``bin_edges_gyr``. That is what makes the
+    ladder ascending for *any* ``tflex_gyr`` below ``max_age``.
 
     Parameters
     ----------
@@ -742,15 +727,16 @@ def psb_continuity_flex(
         log10 of total stellar mass formed [Msun]. Default 10.0.
     tlast_gyr : float, optional
         Lookback time of quenching onset [Gyr]; width of the youngest bin.
-        Default 0.2 (Synthesizer's ``tlast``).
+        Default 0.2.
     tflex_gyr : float, optional
         Boundary between the flexible zone and the fixed old bins [Gyr].
-        Default 2.0 (Synthesizer's ``tflex``).
+        Default 2.0.
     bin_edges_gyr : array_like, shape (n_fixed+1,), optional
         Supplies only two things here: the **number** of fixed old bins
-        (``len - 1``) and the **oldest edge** (``[-1]``, i.e. Synthesizer's
-        ``max_age``). The interior values are not used, because the fixed bins
-        are equal-width by construction. Default: 3 bins out to 13.7 Gyr.
+        (``len - 1``) and the **oldest edge** (``[-1]``, the oldest lookback
+        time that forms stars). The interior values are not used, because the
+        fixed bins are equal-width by construction. Default: 3 bins out to
+        13.7 Gyr.
     **ratio_kwargs
         As :func:`psb_continuity`: ``ratio_young``, ``flex_0`` ...
         ``flex_{n_flex-2}``, and ``ratio_old_0`` ... ``ratio_old_{n_fixed-2}``.
@@ -775,20 +761,19 @@ def psb_continuity_flex(
     Deriving the fixed bins from ``tflex_gyr`` removes the ordering constraint
     instead of asking the user to respect it.
 
-    Implements the same model as Synthesizer (Lovell et al. 2025 [1]_; Roper
-    et al. 2026 [2]_) ``SFH.ContinuityPSB``. Parameter map:
-    ``ratio_young = logsfr_ratio_young``, ``flex_i = logsfr_ratios[i]``,
-    ``ratio_old_i = logsfr_ratio_old[i + 1]``; Synthesizer's
-    ``logsfr_ratio_old[0]`` is the flex-to-fixed step this model pins at 0.
+    Implements the post-starburst-optimized non-parametric SFH of Suess et al.
+    2022 [1]_, on the Prospector continuity machinery (Johnson et al. 2021
+    [2]_), with the flexible zone resolved into equal-width bins. The step
+    between the oldest flex bin and the youngest fixed bin is pinned at 0: the
+    two share an SFR.
 
     References
     ----------
-    .. [1] C. C. Lovell et al., "Synthesizer: a Software Package for Synthetic
-       Astronomical Observables," Open Journal of Astrophysics, 8 (2025).
-       https://doi.org/10.33232/001c.145766
-    .. [2] W. J. Roper et al., "Synthesizer: Synthetic Observables for
-       Modern Astronomy," Journal of Open Source Software, 11, 9436 (2026).
-       https://doi.org/10.21105/joss.09436
+    .. [1] K. A. Suess et al., "Recovering the Star Formation Histories of
+       Recently Quenched Galaxies: The Impact of Model and Prior Choices,"
+       ApJ, 935, 146 (2022). arXiv:2207.02883.
+    .. [2] B. D. Johnson et al., "Stellar Population Inference," ApJS, 254,
+       22 (2021). arXiv:2012.01426. https://doi.org/10.3847/1538-4365/abef67
 
     Examples
     --------
@@ -830,7 +815,7 @@ def psb_continuity_flex(
 # ── ContinuityFlex SFH (Leja+2019) ────────────────────────────────
 
 # Anchor bin edges [t_young_end_gyr, t_old_start_gyr, t_max_gyr].
-# Matches synthesizer's ContinuityFlex defaults:
+# ContinuityFlex anchor defaults:
 #   young bin [0, 10^7.5 yr] = [0, 31.6 Myr], old bin [10^9.7, 10^10.136 yr] = [5.01, 13.7 Gyr].
 CFLEX_DEFAULT_ANCHOR_GYR = np.array([0.0316, 5.012, 13.7])
 
@@ -857,7 +842,7 @@ def continuity_flex(
         log10 total stellar mass formed [Msun]. Default 10.0.
     bin_edges_gyr : array_like, shape (3,), optional
         Anchor bin edges ``[t_young_end, t_old_start, t_max]`` [Gyr].
-        Default: ``[0.0316, 5.012, 13.7]`` (matches synthesizer ContinuityFlex).
+        Default: ``[0.0316, 5.012, 13.7]``.
     **ratio_kwargs
         ``ratio_young`` : float
             log10(SFR_young / SFR_flex[0]) [dimensionless]. Default 0.
@@ -906,8 +891,8 @@ def continuity_flex(
         {\\rm SFR}_{\\rm young} = s_{\\rm young}\\,M_{\\rm bin}/\\Delta t_0, \\quad
         {\\rm SFR}_{\\rm old} = s_{\\rm old}\\,M_{\\rm bin}/\\Delta t_N.
 
-    Implements the same approach as ``synthesizer.parametric.sf_hist.ContinuityFlex``
-    (Wilkins et al. 2025 [3]_).
+    Implements the ContinuityFlex prior of Leja et al. 2019 [1]_ as it is built
+    in Prospector (Johnson et al. 2021 [2]_).
 
     References
     ----------
@@ -917,10 +902,6 @@ def continuity_flex(
     .. [2] B. D. Johnson et al., "Stellar Population Inference from the
        Spectral Energy Distributions of Billions of Galaxies," ApJS, 254, 22
        (2021). arXiv:2012.01426. https://doi.org/10.3847/1538-4365/abef67
-    .. [3] C. C. Lovell et al. 2025, Open J. Astrophys. 8,
-       "Synthesizer: a Software Package for Synthetic Astronomical Observables,"
-       doi:10.33232/001c.145766; W. J. Roper et al. 2026, JOSS 11, 9436,
-       doi:10.21105/joss.09436 (cite both Synthesizer papers).
 
     Examples
     --------

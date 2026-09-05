@@ -20,14 +20,14 @@ Canonical names (short name alias in parentheses):
 - **dpl** (canonical): Carnall+2018 BAGPIPES parameterization with log_total_mass (4 params).
 - **double_powerlaw**: Low-level implementation used by ``dpl``.
 - **dpl_lookback**: the same algebra as ``dpl`` applied to the stellar age rather
-  than to cosmic time since formation (Synthesizer convention). A different
-  model, not a reparameterization of ``dpl``.
+  than to cosmic time since formation. A different model, not a
+  reparameterization of ``dpl``.
 - **constant** (const): flat SFR between start and end times (3 params).
 - **exponential** (exp): declining exponential from start (3 params).
 - **delayed_exponential** (dexp): peaks at start + tau (3 params).
 - **declining_exponential** (declining_exp): FSPS/bagpipes tau model in lookback time (3 params).
 - **trunc_exp**: ``declining_exponential`` with a young-end cutoff and a signed
-  tau (Synthesizer ``TruncatedExponential``); identical to it when ``end = 0``.
+  tau; identical to it when ``end = 0``.
 - **triweight_burst**: compact triweight kernel in log-age for burst component.
 - **spline**: N-node monotone cubic (PCHIP) spline in log-age space. Nodes are
   static (set at JIT-compile time); SFR values are free parameters. Use directly
@@ -723,7 +723,7 @@ def dpl_lookback(
     end: float,
     log_total_mass: float,
 ) -> jnp.ndarray:
-    r"""Double power-law SFH written in **lookback time** (Synthesizer convention).
+    r"""Double power-law SFH written in **lookback time**.
 
     .. math::
 
@@ -753,11 +753,11 @@ def dpl_lookback(
         Young-side slope exponent [dimensionless]. Typical 0.3-3.
     age : float
         Older truncation lookback time [yr]; SFR is zero for
-        ``t_lookback > age``. Synthesizer spells this ``max_age``.
+        ``t_lookback > age``.
     end : float
         Younger truncation lookback time [yr]; SFR is zero for
-        ``t_lookback < end``. Synthesizer spells this ``min_age``; 0 means star
-        formation continues to the epoch of observation.
+        ``t_lookback < end``. 0 means star formation continues to the epoch of
+        observation.
     log_total_mass : float
         log10 of total stellar mass formed [Msun]. The shape is rescaled so that
         ``trapezoid(sfr, t_lookback) = 10**log_total_mass``.
@@ -781,16 +781,11 @@ def dpl_lookback(
     so ``tau`` is a turnover measured forward from the Big Bang. Here the
     argument is the stellar age itself, so ``peak`` is a turnover measured back
     from the epoch of observation. Reach for :func:`dpl` to compare with
-    BAGPIPES/Carnall and for this function to compare with Synthesizer;
-    ``dpl`` remains the default double power law.
+    BAGPIPES/Carnall; ``dpl`` remains the default double power law.
 
-    **Sign of** ``beta`` **against Synthesizer.** ``synthesizer.parametric.SFH.
-    DoublePowerLaw`` writes its second term as
-    :math:`(t_{\mathrm{lb}}/t_{\mathrm{peak}})^{\beta_{\rm synth}}` with a
-    *signed* exponent, whereas this function (like Carnall et al. 2018 and like
-    :func:`dpl`) writes :math:`-\beta`. So
-    :math:`\beta_{\rm synth} = -\beta`, and an interior peak requires
-    :math:`\beta_{\rm synth} < 0`; a positive :math:`\beta_{\rm synth}` gives a
+    **Sign of** :math:`\beta`. The second term carries a *negative* exponent
+    here, as in Carnall et al. 2018 [1]_ and in :func:`dpl`. An interior peak
+    therefore requires :math:`\beta > 0`; a negative :math:`\beta` gives a
     monotonically declining history that diverges as
     :math:`t_{\mathrm{lb}} \to 0`. The declared prior on
     ``sfh_dpl_lookback_beta`` is positive, which spans exactly the peaked
@@ -803,8 +798,9 @@ def dpl_lookback(
     other node. That branch is outside the declared prior, and any grid whose
     first node is above zero is unaffected either way.
 
-    Implements the same model as Synthesizer (Lovell et al. 2025 [2]_; Roper
-    et al. 2026 [3]_) ``SFH.DoublePowerLaw``, under the sign convention above.
+    Uses the double power-law parameterization of Carnall et al. 2018 [1]_
+    (BAGPIPES ``dblplaw``), the same shape :func:`dpl` implements, applied to
+    lookback time.
 
     References
     ----------
@@ -812,12 +808,6 @@ def dpl_lookback(
        massive quiescent galaxies with BAGPIPES: evidence for multiple quenching
        mechanisms," MNRAS, 480, 4379 (2018). arXiv:1712.04452.
        https://doi.org/10.1093/mnras/sty2169
-    .. [2] C. C. Lovell et al., "Synthesizer: a Software Package for Synthetic
-       Astronomical Observables," Open Journal of Astrophysics, 8 (2025).
-       https://doi.org/10.33232/001c.145766
-    .. [3] W. J. Roper et al., "Synthesizer: Synthetic Observables for
-       Modern Astronomy," Journal of Open Source Software, 11, 9436 (2026).
-       https://doi.org/10.21105/joss.09436
 
     Examples
     --------
@@ -1130,7 +1120,7 @@ def trunc_exp(
     age: float,
     end: float = 0.0,
 ) -> jnp.ndarray:
-    r"""Exponential SFH truncated at **both** ends (Synthesizer convention).
+    r"""Exponential SFH truncated at **both** ends.
 
     .. math::
 
@@ -1156,17 +1146,14 @@ def trunc_exp(
         Signed e-folding timescale [yr]; must be non-zero. **Positive**
         :math:`\tau` declines in cosmic time (the SFR *rises* with lookback
         age: highest at formation, lowest at ``end``), which is the classic
-        tau model. **Negative** :math:`\tau` rises in cosmic time. Measured
-        against ``synthesizer.parametric.SFH.Exponential._sfr`` in Synthesizer
-        1.2.0, whose sign convention this matches exactly.
+        tau model. **Negative** :math:`\tau` rises in cosmic time.
     age : float
         Lookback time of formation [yr]; SFR is zero for ``t_lookback > age``.
-        Synthesizer spells this ``max_age``.
     end : float, optional
         Lookback time at which star formation ceases [yr]; SFR is zero for
-        ``t_lookback < end``. Synthesizer spells this ``min_age``. Default 0.0
-        (star formation continues to the epoch of observation), which reduces
-        this function to :func:`declining_exponential`.
+        ``t_lookback < end``. Default 0.0 (star formation continues to the
+        epoch of observation), which reduces this function to
+        :func:`declining_exponential`.
 
     Returns
     -------
@@ -1198,17 +1185,22 @@ def trunc_exp(
     :func:`jax.lax.stop_gradient`, so for :math:`\tau > 0` it is exactly zero
     and the arithmetic reduces to :func:`declining_exponential`'s.
 
-    Implements the same model as Synthesizer (Lovell et al. 2025 [1]_; Roper
-    et al. 2026 [2]_) ``SFH.TruncatedExponential``.
+    Implements the same declining-:math:`\tau` model as FSPS ``sfh=1``
+    (Conroy, Gunn & White 2009 [1]_) and BAGPIPES ``exponential``
+    (Carnall et al. 2018 [2]_) — the model :func:`declining_exponential`
+    carries — with the young-end cutoff at ``end`` added.
 
     References
     ----------
-    .. [1] C. C. Lovell et al., "Synthesizer: a Software Package for Synthetic
-       Astronomical Observables," Open Journal of Astrophysics, 8 (2025).
-       https://doi.org/10.33232/001c.145766
-    .. [2] W. J. Roper et al., "Synthesizer: Synthetic Observables for
-       Modern Astronomy," Journal of Open Source Software, 11, 9436 (2026).
-       https://doi.org/10.21105/joss.09436
+    .. [1] C. Conroy, J. E. Gunn, M. White, "The Propagation of Uncertainties
+       in Stellar Population Synthesis Modeling. I. The Relevance of Uncertain
+       Aspects of Stellar Evolution and the Initial Mass Function to the Derived
+       Physical Properties of Galaxies," ApJ, 699, 486 (2009). arXiv:0809.4261.
+       https://doi.org/10.1088/0004-637X/699/1/486
+    .. [2] A. C. Carnall et al., "Inferring the star formation histories of
+       massive quiescent galaxies with BAGPIPES: evidence for multiple quenching
+       mechanisms," MNRAS, 480, 4379 (2018). arXiv:1712.04452.
+       https://doi.org/10.1093/mnras/sty2169
 
     Examples
     --------
