@@ -32,12 +32,24 @@ from typing import Any, ClassVar
 
 import jax.numpy as jnp
 
+from tengri.components.agn._params import PARAMS as _AGN_PARAMS
 from tengri.components.agn.skirtor_agnfitter import create_skirtor_agnfitter_from_grid
 from tengri.components.sed_model_component import SEDModelComponent
 from tengri.parameters.priors import Uniform
-from tengri.protocols.component import SEDComponentConfig, SEDComponentState
+from tengri.protocols.component import SEDComponentConfig, SEDComponentState, declared_prior
 
 __all__ = ["SKIRTORAgnfitterTorus"]
+
+#: Single source of truth for ``oa_skirtor``/``incl_skirtor``/``tv_skirtor``'s
+#: bounds and defaults: the shared ``agn_oa_skirtor`` / ``agn_incl_skirtor`` /
+#: ``agn_tv_skirtor`` declarations in ``_params.py``. Read once at class-
+#: definition time so the class attributes below cannot drift from them the
+#: way ``CAT3DTorus``/``Silva04Torus`` did before Task 1 -- these three were
+#: numerically equal to the canonical declaration but were still an
+#: unprotected literal restatement (Task 1 fix round 1, finding 1).
+_OA_SKIRTOR_PRIOR = declared_prior(_AGN_PARAMS, "agn_oa_skirtor")
+_INCL_SKIRTOR_PRIOR = declared_prior(_AGN_PARAMS, "agn_incl_skirtor")
+_TV_SKIRTOR_PRIOR = declared_prior(_AGN_PARAMS, "agn_tv_skirtor")
 
 
 @dataclass(frozen=True)
@@ -166,25 +178,25 @@ class SKIRTORAgnfitterTorus(SEDModelComponent):
         default=11.0,
     )
     oa_skirtor = Uniform(
-        10.0,
-        80.0,
+        _OA_SKIRTOR_PRIOR.lo,
+        _OA_SKIRTOR_PRIOR.hi,
         description="Half-opening angle (Stalevski et al.)",
         units="deg",
-        default=40.0,
+        default=_OA_SKIRTOR_PRIOR.default,
     )
     incl_skirtor = Uniform(
-        0.0,
-        90.0,
+        _INCL_SKIRTOR_PRIOR.lo,
+        _INCL_SKIRTOR_PRIOR.hi,
         description="Inclination angle (Stalevski et al.)",
         units="deg",
-        default=30.0,
+        default=_INCL_SKIRTOR_PRIOR.default,
     )
     tv_skirtor = Uniform(
-        3.0,
-        11.0,
+        _TV_SKIRTOR_PRIOR.lo,
+        _TV_SKIRTOR_PRIOR.hi,
         description="Equatorial optical depth τ_9.7",
         units="dimensionless",
-        default=7.0,
+        default=_TV_SKIRTOR_PRIOR.default,
     )
     torus_frac = Uniform(
         0.0,

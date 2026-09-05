@@ -16,6 +16,8 @@ from tengri.components.agn.cat3d_torus_model import CAT3DTorus
 from tengri.components.agn.kd18_disc_model import KD18Disc
 from tengri.components.agn.powerlaw_disc_model import PowerLawDisc
 from tengri.components.agn.silva04_model import Silva04Torus
+from tengri.components.agn.skirtor_agnfitter_model import SKIRTORAgnfitterTorus
+from tengri.components.agn.skirtor_model import SKIRTORTorus
 from tengri.components.sed_model_component import SEDModelComponent
 
 pytestmark = pytest.mark.contract
@@ -300,3 +302,80 @@ class TestCAT3DTorusContract:
         # Should return zero emission gracefully
         assert sed_out.shape == wave.shape
         assert published["L_agn_torus"] == 0.0
+
+
+class TestSKIRTORAgnfitterTorusContract:
+    """SKIRTOR_mean_3p (AGNfitter-faithful) torus component contract validation
+    (Task 1/M-A fix round 1, finding 1).
+    """
+
+    def test_skirtor_agnfitter_registered(self):
+        """SKIRTORAgnfitterTorus is registered with unique name."""
+        from tengri.components.sed_model_component import _REGISTRY
+
+        assert "skirtor_agnfitter" in _REGISTRY
+        assert _REGISTRY["skirtor_agnfitter"] is SKIRTORAgnfitterTorus
+
+    def test_skirtor_agnfitter_bounds_match_canonical_declaration(self):
+        """oa_skirtor/incl_skirtor/tv_skirtor derive from the canonical PARAMS
+        declarations (single source of truth, Task 1/M-A). Numerically equal
+        to ``agn_oa_skirtor``/``agn_incl_skirtor``/``agn_tv_skirtor`` today but
+        were unprotected literal restatements before this fix round -- fails
+        if the class ever restates one of them as a literal again (the same
+        way ``CAT3DTorus.fwd_cat3d`` drifted to a stale ``Uniform(0.0, 1.0)``
+        while its canonical declaration moved to ``(1.0, 2.25)``).
+        """
+        from tengri.components.agn._params import PARAMS
+        from tengri.protocols.component import declared_prior
+
+        component = SKIRTORAgnfitterTorus()
+        for attr, canonical_name in (
+            ("oa_skirtor", "agn_oa_skirtor"),
+            ("incl_skirtor", "agn_incl_skirtor"),
+            ("tv_skirtor", "agn_tv_skirtor"),
+        ):
+            canonical = declared_prior(PARAMS, canonical_name)
+            prior = getattr(component, attr)
+            assert prior.lo == canonical.lo, attr
+            assert prior.hi == canonical.hi, attr
+            assert prior.default == canonical.default, attr
+
+
+class TestSKIRTORTorusContract:
+    """SKIRTOR (X-CIGALE-faithful, default ``skirtor`` block) torus component
+    contract validation (Task 1/M-A fix round 1, finding 2).
+    """
+
+    def test_skirtor_registered(self):
+        """SKIRTORTorus is registered with unique name."""
+        from tengri.components.sed_model_component import _REGISTRY
+
+        assert "skirtor" in _REGISTRY
+        assert _REGISTRY["skirtor"] is SKIRTORTorus
+
+    def test_skirtor_bounds_match_canonical_declaration(self):
+        """oa_skirtor/tau_skirtor/p_skirtor/q_skirtor/cos_inc derive from the
+        canonical PARAMS declarations (single source of truth, Task 1/M-A).
+        Fails if the class ever restates a literal ``Uniform(lo, hi, ...)``
+        that can drift from ``agn_oa_skirtor``/... again, the way
+        ``oa_skirtor`` drifted to a stale ``Uniform(20.0, 60.0)`` while both
+        the canonical declaration and this class's own vendored grid
+        (``data/skirtor_templates_v3.h5``, ``grid/opening_angle`` = [10, 80])
+        moved to ``(10.0, 80.0)``.
+        """
+        from tengri.components.agn._params import PARAMS
+        from tengri.protocols.component import declared_prior
+
+        component = SKIRTORTorus()
+        for attr, canonical_name in (
+            ("oa_skirtor", "agn_oa_skirtor"),
+            ("tau_skirtor", "agn_tau_skirtor"),
+            ("p_skirtor", "agn_p_skirtor"),
+            ("q_skirtor", "agn_q_skirtor"),
+            ("cos_inc", "agn_cos_inc"),
+        ):
+            canonical = declared_prior(PARAMS, canonical_name)
+            prior = getattr(component, attr)
+            assert prior.lo == canonical.lo, attr
+            assert prior.hi == canonical.hi, attr
+            assert prior.default == canonical.default, attr

@@ -25,11 +25,30 @@ from typing import Any, ClassVar
 
 import jax.numpy as jnp
 
+from tengri.components.agn._params import PARAMS as _AGN_PARAMS
 from tengri.components.sed_model_component import SEDModelComponent
 from tengri.parameters.priors import Uniform
-from tengri.protocols.component import SEDComponentConfig, SEDComponentState
+from tengri.protocols.component import SEDComponentConfig, SEDComponentState, declared_prior
 
 __all__ = ["SKIRTORTorus"]
+
+#: Single source of truth for ``oa_skirtor``/``tau_skirtor``/``p_skirtor``/
+#: ``q_skirtor``/``cos_inc``'s bounds and defaults: the shared
+#: ``agn_oa_skirtor`` / ``agn_tau_skirtor`` / ``agn_p_skirtor`` /
+#: ``agn_q_skirtor`` / ``agn_cos_inc`` declarations in ``_params.py``. Read
+#: once at class-definition time so the class attributes below cannot drift
+#: from them the way ``oa_skirtor`` did (this class restated a stale
+#: ``Uniform(20.0, 60.0, default=40.0)`` while the canonical declaration --
+#: and this class's own vendored grid, ``data/skirtor_templates_v3.h5``,
+#: ``grid/opening_angle`` = [10, 80] -- had moved to ``[10, 80]``; Task 1 fix
+#: round 1, finding 2). ``tau_skirtor``/``p_skirtor``/``q_skirtor``/``cos_inc``
+#: were numerically equal to their canonical declarations already but were
+#: still unprotected class-level literals.
+_OA_SKIRTOR_PRIOR = declared_prior(_AGN_PARAMS, "agn_oa_skirtor")
+_TAU_SKIRTOR_PRIOR = declared_prior(_AGN_PARAMS, "agn_tau_skirtor")
+_P_SKIRTOR_PRIOR = declared_prior(_AGN_PARAMS, "agn_p_skirtor")
+_Q_SKIRTOR_PRIOR = declared_prior(_AGN_PARAMS, "agn_q_skirtor")
+_COS_INC_PRIOR = declared_prior(_AGN_PARAMS, "agn_cos_inc")
 
 
 @dataclass(frozen=True)
@@ -106,7 +125,7 @@ class SKIRTORTorus(SEDModelComponent):
     q_skirtor : Uniform
         Polar dust density power-law gradient. [dimensionless, 0–1.5]
     oa_skirtor : Uniform
-        Torus half-opening angle. [degrees, 20–60]
+        Torus half-opening angle. [degrees, 10–80]
     cos_inc : Uniform
         Cosine of inclination (1 = face-on, 0 = edge-on). [dimensionless, 0–1]
     frac_agn : Uniform
@@ -192,39 +211,39 @@ class SKIRTORTorus(SEDModelComponent):
         default=11.0,
     )
     tau_skirtor = Uniform(
-        3.0,
-        11.0,
+        _TAU_SKIRTOR_PRIOR.lo,
+        _TAU_SKIRTOR_PRIOR.hi,
         description="9.7 µm optical depth (Stalevski et al.)",
         units="dimensionless",
-        default=7.0,
+        default=_TAU_SKIRTOR_PRIOR.default,
     )
     p_skirtor = Uniform(
-        0.0,
-        1.5,
+        _P_SKIRTOR_PRIOR.lo,
+        _P_SKIRTOR_PRIOR.hi,
         description="Radial dust density gradient",
         units="dimensionless",
-        default=1.0,
+        default=_P_SKIRTOR_PRIOR.default,
     )
     q_skirtor = Uniform(
-        0.0,
-        1.5,
+        _Q_SKIRTOR_PRIOR.lo,
+        _Q_SKIRTOR_PRIOR.hi,
         description="Polar dust density gradient",
         units="dimensionless",
-        default=1.0,
+        default=_Q_SKIRTOR_PRIOR.default,
     )
     oa_skirtor = Uniform(
-        20.0,
-        60.0,
+        _OA_SKIRTOR_PRIOR.lo,
+        _OA_SKIRTOR_PRIOR.hi,
         description="Torus half-opening angle",
         units="deg",
-        default=40.0,
+        default=_OA_SKIRTOR_PRIOR.default,
     )
     cos_inc = Uniform(
-        0.0,
-        1.0,
+        _COS_INC_PRIOR.lo,
+        _COS_INC_PRIOR.hi,
         description="Cosine of inclination",
         units="dimensionless",
-        default=0.45,
+        default=_COS_INC_PRIOR.default,
     )
     band_frac = Uniform(
         0.0,

@@ -76,7 +76,10 @@ def _sed(ssp, torus: dict) -> np.ndarray:
         # below 1.0 and only passed because 0.2 clamped onto the (cloned)
         # fwd=1.0 plane while 1.5 hit a real one (#1036).
         ("cat3d_wind", "fwd_cat3d", 1.0, 2.25),
-        ("silva04", "log_nh_silva", 22.0, 25.0),
+        # Grid edges (data/silva04_torus_grid.h5['silva04/log_nh_axis']),
+        # corrected by Task 1: the prior declared [22, 25] for a long time
+        # while the grid never did.
+        ("silva04", "log_nh_silva", 21.5, 24.45),
         ("skirtor_agnfitter", "oa_skirtor", 20.0, 70.0),
         ("skirtor_agnfitter", "incl_skirtor", 10.0, 80.0),
         ("skirtor_agnfitter", "tv_skirtor", 3.0, 11.0),

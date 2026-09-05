@@ -997,6 +997,53 @@ GRID_EXTENT_SOURCES: dict[str, tuple[str, str, str, str]] = {
         "skirtor_mean3p/tv_axis",
         "identity",
     ),
+    # SKIRTOR (X-CIGALE-faithful, default ``skirtor`` block) v3 templates.
+    # Independent vendored grid from the skirtor_agnfitter entries above (same
+    # SKIRTOR library, different averaging convention -- see skirtor_model.py's
+    # module docstring), so it gets its own key even where axes coincide
+    # numerically. ``SKIRTORTorus.oa_skirtor`` restated a stale ``(20, 60)``
+    # against both this grid and the canonical declaration (Task 1 fix round 1,
+    # finding 2); the other four entries were already numerically correct but
+    # unprotected class-level literals.
+    "skirtor_oa": (
+        "agn_oa_skirtor",
+        "data/skirtor_templates_v3.h5",
+        "grid/opening_angle",
+        "identity",
+    ),
+    "skirtor_tau": (
+        "agn_tau_skirtor",
+        "data/skirtor_templates_v3.h5",
+        "grid/tau_97",
+        "identity",
+    ),
+    "skirtor_p": (
+        "agn_p_skirtor",
+        "data/skirtor_templates_v3.h5",
+        "grid/p",
+        "identity",
+    ),
+    "skirtor_q": (
+        "agn_q_skirtor",
+        "data/skirtor_templates_v3.h5",
+        "grid/q",
+        "identity",
+    ),
+    "skirtor_radius_ratio": (
+        "agn_radius_ratio",
+        "data/skirtor_templates_v3.h5",
+        "grid/radius_ratio",
+        "identity",
+    ),
+    # v3's ``cos_inclination`` axis stores the cosine directly (not degrees),
+    # unlike CAT3D-Wind's ``incl_axis`` -- so the transform is "identity" here,
+    # not "cos_deg".
+    "skirtor_cos_inc": (
+        "agn_cos_inc",
+        "data/skirtor_templates_v3.h5",
+        "grid/cos_inclination",
+        "identity",
+    ),
 }
 
 __all__ = [

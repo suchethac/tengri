@@ -57,8 +57,6 @@ _NODE_INDICES = [0, _N_LOG_NH // 4, _N_LOG_NH // 2, 3 * _N_LOG_NH // 4, _N_LOG_N
 
 @pytest.fixture(scope="module")
 def grid() -> dict:
-    import h5py
-
     with h5py.File(_GRID, "r") as f:
         g = f["silva04"]
         return {
