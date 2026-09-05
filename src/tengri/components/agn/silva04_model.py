@@ -80,8 +80,8 @@ class Silva04Torus(SEDModelComponent):
     """Silva, Maiolino & Granato (2004) smooth AGN torus.
 
     One-parameter semi-empirical torus library keyed on hydrogen column
-    density. Provides C²-continuous gradients via triweight kernel
-    interpolation. Requires a prior download of the template grid.
+    density. Provides node-exact PCHIP (monotone-cubic) interpolation with
+    C¹-continuous gradients. Requires a prior download of the template grid.
 
     Attributes
     ----------
@@ -110,7 +110,8 @@ class Silva04Torus(SEDModelComponent):
     -----
     **JIT-compatible**: yes, predict() is pure JAX.
 
-    **Gradient-safe**: yes, triweight interpolation is fully differentiable.
+    **Gradient-safe**: yes, PCHIP (monotone-cubic) interpolation is fully
+    differentiable and reproduces the tabulated grid nodes exactly.
 
     **Requires template grid**: The Silva+04 template library must be
     downloaded separately and pointed to via ``grid_path`` in config.

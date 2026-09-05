@@ -120,3 +120,36 @@ class TestAccessorsRunWithoutCheckout:
             "DH02_CE01 endpoints of the reported axis give identical templates — "
             "the axis is not the grid the template selector indexes"
         )
+
+
+_CROSSVAL_DIR = Path(__file__).resolve().parents[1] / "crossval"
+
+
+def test_agnfitter_crossval_tests_read_no_tmp_clone() -> None:
+    """Every ``test_*_vs_agnfitter.py`` file reads committed data only.
+
+    ``test_schreiber2018_vs_agnfitter.py`` used to hardcode
+    ``Path("/tmp/AGNfitter-rX/models/STARBURST/...")`` and skip at module
+    level whenever that local clone was absent — the only one of the
+    ``test_*_vs_agnfitter.py`` files that could not collect on a clean
+    checkout (census.md D6; the other nine already read only committed
+    ``data/*.h5``). This is a textual guard, not a runtime one (unlike the
+    accessor-level class above): it greps every AGNfitter parity test file
+    for the literal ``/tmp/`` substring, so a future test cannot reintroduce
+    a live-clone path even somewhere a narrower "no such import" check would
+    miss it (a hardcoded string literal, not an import).
+    """
+    crossval_files = sorted(_CROSSVAL_DIR.glob("test_*_vs_agnfitter.py"))
+    assert crossval_files, f"no test_*_vs_agnfitter.py files found under {_CROSSVAL_DIR}"
+
+    offenders: dict[str, list[str]] = {}
+    for path in crossval_files:
+        hits = [line.strip() for line in path.read_text().splitlines() if "/tmp/" in line]
+        if hits:
+            offenders[path.name] = hits
+
+    assert not offenders, (
+        "the following AGNfitter parity test file(s) contain a literal "
+        "'/tmp/' path -- they must read only committed data/*.h5, never a "
+        f"live upstream clone: {offenders}"
+    )

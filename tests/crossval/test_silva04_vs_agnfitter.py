@@ -10,10 +10,14 @@ needed). This test reads only that HDF5 (no pickle, no AGNfitter driver) so it
 runs in CI rather than skipping (#613). The grid's stored node templates ARE the
 AGNfitter reference; the test checks that the runtime component reproduces them.
 
-Tolerance note: the runtime uses the project-standard C²-smooth triweight kernel
-(``interp_nd_triweight``) over the single ``log N_H`` axis for gradient-safe HMC.
-At a grid node that kernel mixes in neighbors, giving a peak-normalized shape
-residual inherent to the kernel, not a implementation error.
+Interpolation note: the runtime uses node-exact monotone-cubic (PCHIP)
+interpolation (``interp_nd_pchip``) over the single ``log N_H`` axis, so at a
+grid node it reproduces the stored AGNfitter template to floating-point
+precision. This replaced the C²-smooth triweight *smoother*, which averaged
+neighboring nodes and smeared the boundary-node shape by ~9% (the same
+peak-smear class that moved ``cat3d_wind``/``nenkova_agnfitter`` to node-exact
+interpolation). Monotone cubic keeps C¹-continuous gradients for HMC/geoVI
+without overshooting on the sparse (5-bin) grid.
 
 References
 ----------
@@ -99,7 +103,13 @@ def test_peak_in_infrared(grid, component):
 
 @pytest.mark.parametrize("i", _NODE_INDICES)
 def test_node_shape_matches_grid(grid, component, i):
-    """Runtime component reproduces the stored node template shape (triweight budget)."""
+    """Runtime component reproduces the stored node template shape (PCHIP node-exact budget).
+
+    Includes the two boundary nodes (``i=0`` and ``i=_N_LOG_NH - 1``), the
+    tightest case: the triweight smoother this replaced mixed in a single
+    neighbor there (no node on the far side), giving the largest smear (~9%,
+    torus.md D2).
+    """
     ref = grid["template"][i]
     out = _call(component, grid, i)
 
@@ -110,9 +120,9 @@ def test_node_shape_matches_grid(grid, component, i):
     assert abs(np.nanargmax(ref) - np.nanargmax(out)) <= 2
 
     worst = float(np.nanmax(np.abs(out_n[mask] - ref_n[mask]) / ref_n[mask]))
-    assert worst < 0.15, (
-        f"Node log_nh={grid['log_nh'][i]:.2f}: shape residual {worst * 100:.1f}% > 15% "
-        "(triweight-kernel smoothing budget)"
+    assert worst < 1.0e-3, (
+        f"Node log_nh={grid['log_nh'][i]:.2f}: shape residual {worst * 100:.4f}% > 0.1% "
+        "(PCHIP node-exact budget; floating-point noise only)"
     )
 
 

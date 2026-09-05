@@ -3,8 +3,12 @@
 
 One-parameter semi-empirical torus library keyed on hydrogen column density
 (``log10(N_H / cm^-2)``).  The grid (5 bins in Silva+04) is interpolated with
-a C²-continuous triweight kernel so gradients flow cleanly through
-``agn_log_nh_silva`` during HMC / geoVI / MAP inference.
+node-exact monotone-cubic (PCHIP) interpolation, so gradients flow cleanly
+through ``agn_log_nh_silva`` during HMC / geoVI / MAP inference while
+reproducing every tabulated node exactly (matching the interpolation kernel
+used by every other tabulated torus library: ``nenkova_agnfitter``,
+``skirtor_agnfitter``, ``cat3d_wind``; see ``torus_lnu_from_grid`` in
+``components/agn/_template_grid.py``).
 
 Grid provenance
 ---------------
@@ -46,7 +50,7 @@ from tengri.components.agn._phys import (
     bolometric_integral_nu as _bolometric_integral_nu,
     wavelength_to_nu as _wavelength_to_nu,
 )
-from tengri.utils.grid_interp import interp_nd_triweight, resample_template
+from tengri.utils.grid_interp import interp_nd_pchip, resample_template
 from tengri.utils.physics_constants import L_SUN as _LSUN_ERG
 
 __all__ = [
@@ -73,15 +77,12 @@ class Silva04Grid(NamedTuple):
         Tabulated torus templates [arbitrary units; normalized on use].
     log_nh_axis : ndarray, shape (n_nh,)
         Grid axis, :math:`\\log_{10}(N_H / {\\rm cm}^{-2})`.
-    edges : ndarray, shape (n_nh + 1,)
-        Triweight-kernel bin edges derived from ``log_nh_axis``.
     wave_grid : ndarray, shape (n_wave,)
         Template rest-frame wavelength grid [Angstrom].
     """
 
     template: jnp.ndarray
     log_nh_axis: jnp.ndarray
-    edges: jnp.ndarray
     wave_grid: jnp.ndarray
 
 
@@ -139,21 +140,21 @@ def create_silva04_from_grid(grid_path: str) -> Callable:
     Notes
     -----
     **JIT-compatible**: yes, the returned closure uses only ``jnp`` and
-    triweight interpolation.
+    PCHIP interpolation.
 
-    **Gradient-safe**: yes, triweight kernel is C²-continuous in
-    ``agn_log_nh_silva``.
+    **Gradient-safe**: yes, PCHIP (monotone-cubic) interpolation is
+    C¹-continuous in ``agn_log_nh_silva`` and node-exact.
     """
     # Keep the captured grid arrays as ``np.ndarray`` rather than
     # ``jnp.ndarray``. If this loader is first invoked inside a JIT trace
     # (e.g. via ``@functools.cache`` on ``_load_silva04_default``) and we
-    # convert to JAX here, any ``jnp`` ops on those arrays: including
-    # ``edges_for_grid``: produce Tracers that the returned closure
-    # captures. The cache then immortalizes a poisoned closure, leaking
-    # tracers as ``UnexpectedTracerError`` on subsequent out-of-trace
-    # calls. ``jnp.asarray`` of a numpy array inside the closure body is
-    # safe in either context: a DeviceArray when called eagerly, a JIT
-    # constant when called under trace.
+    # convert to JAX here, any ``jnp`` op on those arrays would produce
+    # Tracers that the returned closure captures. The cache then
+    # immortalizes a poisoned closure, leaking tracers as
+    # ``UnexpectedTracerError`` on subsequent out-of-trace calls.
+    # ``jnp.asarray`` of a numpy array inside the closure body is safe in
+    # either context: a DeviceArray when called eagerly, a JIT constant
+    # when called under trace.
     return functools.partial(silva04_sed_from_grid, load_silva04_grid(grid_path))
 
 
@@ -184,18 +185,9 @@ def load_silva04_grid(grid_path: str) -> Silva04Grid:
     at the point of use is safe in either context.
     """
     raw = _load_silva04_arrays(grid_path)
-    log_nh_np = np.asarray(raw["log_nh_axis"], dtype=np.float64)
-    # ``edges_for_grid`` uses ``jnp.concatenate``; running it on a numpy
-    # array still yields a JAX array, so compute the equivalent in pure
-    # numpy to keep the precompute fully concrete.
-    half_lo = (log_nh_np[1] - log_nh_np[0]) / 2.0
-    half_hi = (log_nh_np[-1] - log_nh_np[-2]) / 2.0
-    mid = 0.5 * (log_nh_np[1:] + log_nh_np[:-1])
-    edges_np = np.concatenate([[log_nh_np[0] - half_lo], mid, [log_nh_np[-1] + half_hi]])
     return Silva04Grid(
         template=np.asarray(raw["template"], dtype=np.float64),
-        log_nh_axis=log_nh_np,
-        edges=edges_np,
+        log_nh_axis=np.asarray(raw["log_nh_axis"], dtype=np.float64),
         wave_grid=np.asarray(raw["wavelength"], dtype=np.float64),
     )
 
@@ -244,18 +236,20 @@ def silva04_sed_from_grid(
     evaluated on the (sorted) frequency grid corresponding to
     ``wavelength``.
 
-    **JIT-compatible**: yes. Differentiable in ``agn_log_nh_silva``
-    (triweight kernel is C²-continuous).
+    **JIT-compatible**: yes. Differentiable in ``agn_log_nh_silva`` (PCHIP
+    monotone-cubic interpolation is C¹-continuous and node-exact: it
+    reproduces the tabulated template exactly at each ``log_nh_axis`` node,
+    unlike the C²-smooth triweight kernel this replaced, which averaged
+    neighboring nodes and smeared the template by ~9% at the boundary node).
 
     **Approximation**: the template is semi-empirical (Silva, Maiolino &
     Granato 2004 [1]_); it assumes smooth-dust geometry and is not a
     full 3D radiative-transfer solution.  For silicate-feature–level
     accuracy, use SKIRTOR ([2]_) instead.
     """
-    template = interp_nd_triweight(
+    template = interp_nd_pchip(
         jnp.asarray(grid.template),
         (jnp.asarray(grid.log_nh_axis),),
-        (jnp.asarray(grid.edges),),
         (agn_log_nh_silva,),
     )
     sed = resample_template(wavelength, jnp.asarray(grid.wave_grid), template, left=0.0, right=0.0)
