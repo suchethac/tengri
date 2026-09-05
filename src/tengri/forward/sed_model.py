@@ -998,6 +998,12 @@ def _validate_firrc_requires_dust(spec) -> None:
     """
     from tengri.config.exceptions import ConfigError
 
+    # radio_sfr_mode carries its "bell2003" default even when the radio
+    # component is disabled, so gate on the radio flag first -- the
+    # _validate_dale2014_requires_no_sf_radio sibling guards the same way.
+    if not getattr(spec, "radio", False):
+        return
+
     # Check if any FIRRC mode is active
     sfr_mode = getattr(spec, "radio_sfr_mode", "bell2003")
     if sfr_mode not in ("bell2003", "delvecchio2021", "mccheyne2022"):

@@ -250,3 +250,18 @@ class TestFIRRCDustCoupling2106:
         sed = pred.rest_sed()
         assert jnp.all(jnp.isfinite(sed)), "SED with free FIRRC params contains non-finite"
         assert jnp.any(sed > 0.0), "Radio SED with free FIRRC params is identically zero"
+
+    # Negative coverage: no radio group at all + dust off must build.
+    # radio_sfr_mode defaults to "bell2003" even when radio is disabled, so
+    # the validator must first check the radio flag (the dale2014 sibling
+    # validator guards the same way).
+    def test_radio_disabled_dust_off_builds(self, synthetic_ssp_wide, synthetic_tophat_obs):
+        """Dust none + no radio group builds: FIRRC validation must not fire."""
+        model = SEDModel.build(
+            ssp_data=synthetic_ssp_wide,
+            observation=synthetic_tophat_obs,
+            sfh={"type": "const"},
+            dust_attenuation={"type": "none"},
+            redshift=Fixed(0.1),
+        )
+        assert model is not None
