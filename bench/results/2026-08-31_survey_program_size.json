@@ -1,0 +1,35 @@
+{
+  "n_dim": 4,
+  "rows": [
+    {
+      "sampler": "nuts (max_doublings=10)",
+      "hlo_lines": 1895,
+      "while_ops": 14,
+      "compile_s": 3.071561867996934
+    },
+    {
+      "sampler": "hmc L=10 diag",
+      "hlo_lines": 907,
+      "while_ops": 8,
+      "compile_s": 1.4142346269945847
+    },
+    {
+      "sampler": "hmc L=10 lowrank",
+      "hlo_lines": 1438,
+      "while_ops": 9,
+      "compile_s": 2.4496785270021064
+    },
+    {
+      "sampler": "barker",
+      "hlo_lines": 959,
+      "while_ops": 7,
+      "compile_s": 1.9477219250111375
+    },
+    {
+      "sampler": "mala",
+      "hlo_lines": 748,
+      "while_ops": 6,
+      "compile_s": 1.4390010459901532
+    }
+  ]
+}

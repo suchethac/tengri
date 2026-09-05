@@ -420,6 +420,69 @@ def _build_ctl_dpl(ssp):
     )
 
 
+#: Field latents in :func:`_build_stoch_field`, i.e. ``SEDModel.build``'s
+#: ``n_grid``. 64 rather than the 256 default, for one reason and one only:
+#: ``blackjax.window_adaptation_low_rank``'s ``max_rank`` defaults to 10, so
+#: **below D = 10 a "low-rank" correction is a full-rank one and the knob
+#: cannot bind**. Every other fixture in this file is D = 3 to 9, which means
+#: none of them can test low-rank-ness at all -- they test the estimator. 64
+#: latents puts the sampled dimension at ~75, an order of magnitude above the
+#: rank, which is the regime the method is for.
+_STOCH_FIELD_N_GRID = 64
+
+
+def _build_stoch_field(ssp):
+    """DPL + stochastic GP field on nb05's bands and dust. ``n_latent`` ~ 75.
+
+    **The only fixture here where the sampled dimension exceeds the mass
+    matrix's rank**, and therefore the only one on which
+    ``blackjax.window_adaptation_low_rank`` is doing what its name says. It is
+    also the configuration BlackJAX's own low-rank page recommends the method
+    for -- a genuine low-rank correlation structure at a dimension where a
+    dense metric is expensive -- and nothing in this project has measured it:
+    every published sampler row is D = 3 to 9.
+
+    Deliberately **not** ``recipes.stochastic_sfh_jwst``. That recipe is the
+    natural candidate and it was measured first: it builds ``n_free = 11``
+    named parameters and ``n_latent = 267`` (256 field latents at the default
+    ``n_grid``), with Cue nebular emission, Dale 2014 dust IR and IGM on top.
+    Its forward model is several times more expensive per gradient, so a
+    sampler comparison on it would be dominated by physics this report is not
+    asking about. This fixture keeps nb05's bands, dust, SNR and seed so the
+    D ~ 75 rows sit beside the D = 8 rows, and changes only the SFH family and
+    the presence of the field.
+
+    **The field is non-centered**, which is the shipped parameterization and is
+    the whole interpretive question. ``compute_field_gp`` maps ``xi ~ N(0, I)``
+    through the OU Cholesky, so ``drw_latent_log_prior`` at ``centering = 1.0``
+    is exactly ``-1/2 xi^T xi`` -- measured, and independent of ``psd_sigma``,
+    by ``bench/scripts/probe_latent_gaussian_fit.py``. BlackJAX's own caveat is
+    that *"noncentered parameterizations reduce benefits by weakening
+    correlations"*, and on their 140-D noncentered IRT model a **diagonal**
+    mass matrix beat low-rank. So this fixture is where that caveat is tested
+    rather than argued: the prior correlation really is gone, but the
+    likelihood's ``J^T N^-1 J`` correlation across the field latents is not,
+    and which one governs is a measurement.
+    """
+    return SEDModel.build(
+        ssp_data=ssp,
+        observation=Observation(photometry=Photometry.from_names(list(_NB05_FILTERS))),
+        approx=WavePrecomp(),
+        n_grid=_STOCH_FIELD_N_GRID,
+        sfh={"type": ["dpl", "field"], "all_params": FREE},
+        dust_attenuation=builders.dust.two_component(
+            all_params=Fixed(DEFAULT),
+            law="calzetti",
+            tau_bc=Uniform(0.0, 1.0),
+            tau_diff=Uniform(0.0, 1.0),
+        ),
+        dust_emission=builders.dust.emission.modified_blackbody(all_params=Fixed(DEFAULT)),
+        neb=builders.neb.none(),
+        met={"logzsol": Uniform(-1.5, 0.3)},
+        redshift=Fixed(0.05),
+    )
+
+
 def _build_nb00(ssp):
     """The **pre-#2044** ``00_quickstart``: tsnorm SFH, two-component Calzetti. D=7.
 
@@ -892,6 +955,38 @@ NOTEBOOKS = {
             "Finding 15). Called 'ctl' in 2026-08-30_chees_hmc.md."
         ),
     ),
+    "stoch-field": dict(
+        build=_build_stoch_field,
+        parity=dict(
+            kind="standalone",
+            why=(
+                "not a notebook: nb05's bands, mock, seed, SNR and dust over a "
+                "DPL + stochastic GP-field SFH at n_grid=64, so the sampled "
+                "dimension is ~75 rather than 8. The ONLY fixture here where "
+                "window_adaptation_low_rank's max_rank=10 is a low-rank "
+                "correction rather than a full-rank one, and the only one at a "
+                "dimension where a dense mass matrix is expensive. Nothing "
+                "upstream to mirror; recipes.stochastic_sfh_jwst is the nearest "
+                "relative and is deliberately not used -- see the builder."
+            ),
+        ),
+        # nb05's seed, SNR and chain count, so the D ~ 75 rows are readable
+        # beside the D = 8 ones. Everything except the SFH family and n_grid is
+        # held at ctl-dpl's values.
+        seed=7,
+        snr=20.0,
+        n_chains=2,
+        shipped=dict(method="mcmc_nuts", n_warmup=600, n_samples=600),
+        note=(
+            "NOT a notebook. DPL + stochastic GP field at n_grid=64, so "
+            "n_latent ~ 75 against every other fixture's 3-9. Exists because "
+            "blackjax.window_adaptation_low_rank's max_rank defaults to 10: "
+            "below D=10 a 'low-rank' mass matrix is a full-rank one and the "
+            "method cannot be tested at all. The field is NON-CENTERED (the "
+            "shipped parameterization), which is the regime BlackJAX's own page "
+            "warns reduces the benefit -- that warning is what this row tests."
+        ),
+    ),
     "ctl-jwst": dict(
         build=_build_ctl_jwst,
         # Its docstring claims to mirror the page "exactly"; kind="mirrors"
@@ -936,7 +1031,19 @@ NOTEBOOKS = {
 #: the cost of sampling, per ``bench/reports/2026-08-31_fast_nuts.md`` Finding 2
 #: -- can be shortened or bounded. The answer measured there was no on both
 #: counts, and the families are kept so that result stays reproducible.
-FAMILIES = ("nuts", "nutswarm", "nutscap", "hmc", "hmcp", "ghmc", "chees", "mclmc", "smc")
+FAMILIES = (
+    "nuts",
+    "nutswarm",
+    "nutscap",
+    "hmc",
+    "hmcp",
+    "ghmc",
+    "chees",
+    "mclmc",
+    "smc",
+    "barker",
+    "lowrank",
+)
 
 #: Warmup lengths swept by the ``nutswarm`` family, longest first.
 #:
@@ -1198,6 +1305,64 @@ def configurations(nb: str, quick: bool, dense: bool, families=FAMILIES) -> dict
                 n_samples=1000 if quick else mclmc_draws,
                 allow_unvalidated=True,
             )
+    if "barker" in families:
+        # A 2x2, and every cell of it is load-bearing. The proposal axis
+        # (barker vs mala) is what tests Livingstone & Zanella's robustness
+        # claim; the metric axis is what separates "the proposal helps" from
+        # "the geometry helps", which every prior report here has found to be
+        # the larger effect. Reporting only the barker+precond cell would
+        # reproduce Phase 2's error of crediting a pair for what one half did.
+        #
+        # The draw budget is in the sampler's OWN units. One Barker or MALA
+        # draw is ONE gradient; a NUTS draw on these fixtures is 53-119
+        # (2026-08-30_chees_hmc.md). Comparing 600 draws to 600 draws would be
+        # a ~90x budget difference read as a sampler defect -- exactly the
+        # units error 2026-08-30_mclmc_tuning.md found behind MCLMC's
+        # quarantine. 30 000 draws is ~30 000 gradients against NUTS's
+        # ~54 000 for its 600, so these rows are given LESS, not more.
+        #
+        # The 3x row exists because a single budget cannot tell "this sampler
+        # mixes badly here" from "this sampler was given a tenth of what it
+        # needs", and 2026-08-30_mclmc_tuning.md is a whole report about
+        # mistaking the second for the first. Two budgets make the dependence
+        # visible instead of assumed.
+        for label, (proposal, precondition, mult) in {
+            "barker": ("barker", None, 1),
+            "barker+precond": ("barker", True, 1),
+            "mala": ("mala", None, 1),
+            "mala+precond": ("mala", True, 1),
+            "barker+precond 3x": ("barker", True, 3),
+        }.items():
+            configs[label] = dict(
+                method="mcmc_barker" if proposal == "barker" else "mcmc_mala",
+                n_warmup=1000 if quick else 5000,
+                n_burnin=0,
+                n_samples=(3000 if quick else 30000) * mult,
+                precondition=precondition,
+            )
+    if "lowrank" in families:
+        # Four rows: {diagonal, low-rank} x {no metric, analytic metric}, at
+        # ONE trajectory length so the mass matrix is the only thing moving.
+        # L=10 rather than this file's usual 20-160 because that is the value
+        # 2026-08-31_catalog_preconditioning.md measured ChEES's learned length
+        # against, so these rows join that table rather than starting a new one.
+        for label, (method, precondition) in {
+            "hmc L=10 diag": ("mcmc_hmc", None),
+            "hmc L=10 diag+precond": ("mcmc_hmc", True),
+            "hmc L=10 lowrank": ("mcmc_hmc_lowrank", None),
+            "hmc L=10 lowrank+prec": ("mcmc_hmc_lowrank", True),
+        }.items():
+            extra = {"dense_mass_matrix": False} if method == "mcmc_hmc" else {"max_rank": 10}
+            configs[label] = dict(
+                method=method,
+                n_warmup=warmup,
+                n_burnin=0,
+                n_samples=draws,
+                n_leapfrog_steps=10,
+                target_accept_rate=0.85,
+                precondition=precondition,
+                **extra,
+            )
     return configs
 
 
@@ -1221,6 +1386,11 @@ def _gradients_per_draw(diag: dict) -> float | None:
         return float(2.0 ** diag["tree_depth_mean"])
     if "energy_var_per_dim" in diag:  # MCLMC: one isokinetic McLachlan step
         return 2.0
+    if diag.get("n_gradients_per_draw") is not None:
+        # Barker / MALA: the backend states it rather than leaving it to be
+        # inferred, because there is no trajectory-length key to read it off
+        # and a missing column here would print as a blank rather than as 1.
+        return float(diag["n_gradients_per_draw"])
     if diag.get("n_leapfrog_steps") is not None:
         return float(diag["n_leapfrog_steps"])
     return None
@@ -1236,11 +1406,24 @@ def _unique_draw_fraction(posterior) -> float:
     to see. Split R-hat cannot detect that and neither can ESS on its own, so
     the count of distinct rows is carried as its own column. Healthy chains sit
     near 1.0; anything far below it is a chain that stopped moving.
+
+    **Vector-valued parameters are reshaped, not ravelled.** ``.ravel()`` on a
+    ``(n_draws, n_grid)`` field latent flattens the draw axis into the grid
+    axis, so ``column_stack`` then meets a length-``n_draws`` column beside a
+    length-``n_draws * n_grid`` one and raises. That is not hypothetical: it
+    killed every row of the first ``stoch-field`` sweep after the sampling had
+    already finished, i.e. it discarded a completed fit at the scoring step. A
+    field model is exactly the case this diagnostic is most wanted for, since a
+    frozen field latent is invisible in the named parameters.
     """
     keys = sorted(posterior.samples)
     if not keys:
         return float("nan")
-    matrix = np.column_stack([np.asarray(posterior.samples[k]).ravel() for k in keys])
+    columns = []
+    for k in keys:
+        arr = np.asarray(posterior.samples[k])
+        columns.append(arr.reshape(arr.shape[0], -1) if arr.ndim > 1 else arr[:, None])
+    matrix = np.concatenate(columns, axis=1)
     return float(len(np.unique(matrix, axis=0)) / matrix.shape[0])
 
 

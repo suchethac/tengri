@@ -65,6 +65,12 @@ the forward model, and listed oldest first within each group.
   & MacKay (2010), [arXiv:1001.0175](https://arxiv.org/abs/1001.0175).
 - Importance-sampling evidence estimation. Perrakis, Ntzoufras &
   Tsamardinos (2014), [arXiv:1106.5578](https://arxiv.org/abs/1106.5578).
+- The Barker proposal — gradient-based MCMC robust to a step size that is
+  wrong for one direction's scale. Livingstone & Zanella (2022),
+  [arXiv:1908.11812](https://arxiv.org/abs/1908.11812).
+- Optimal scaling of Langevin diffusions — the 0.574 acceptance rate the
+  Barker and MALA backends tune to. Roberts & Rosenthal (1998),
+  [doi:10.1111/1467-9868.00123](https://doi.org/10.1111/1467-9868.00123).
 - Pathfinder — fast approximate-posterior sampler. Zhang et al. (2022),
   *Journal of Machine Learning Research* **23**(306), 1–49.
 - [NIFTy.re](https://github.com/NIFTy-PPL/NIFTy) — information field theory,
