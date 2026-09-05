@@ -283,12 +283,18 @@ def fully_skipped_test_files(
 #   - tests/components/agn/grahsp/test_template_parity.py: upstream GRAHSP repo
 #   - tests/components/dust/test_synthesizer_line_parity.py: optional Synthesizer grids
 #   - tests/components/nebular/test_cue_hybrid_diagnostic.py: optional BC03 SSP
+#   - tests/contract/test_build_resolver_sedmodelcomponent.py: BC03 SSP not shipped
+#   - tests/contract/test_phase4d_c_agn_threading.py: bare-stellar SSP not shipped
+#   - tests/contract/test_synthesizer_nlr_grammar.py: optional Synthesizer grids
 # ─────────────────────────────────────────────────────────────────────
 
 _SKIP_GUARD_ALLOWLIST: set[str] = {
     "tests/components/agn/grahsp/test_template_parity.py",
     "tests/components/dust/test_synthesizer_line_parity.py",
     "tests/components/nebular/test_cue_hybrid_diagnostic.py",
+    "tests/contract/test_build_resolver_sedmodelcomponent.py",
+    "tests/contract/test_phase4d_c_agn_threading.py",
+    "tests/contract/test_synthesizer_nlr_grammar.py",
 }
 
 _EXCLUDED_TREES = ("tests/integration/", "tests/crossval/")
