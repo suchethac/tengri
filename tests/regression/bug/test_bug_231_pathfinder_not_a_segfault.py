@@ -108,14 +108,25 @@ def test_blackjax_still_defaults_the_elbo_draws_to_200():
     assert inspect.signature(module.approximate).parameters["num_samples"].default == 200
 
 
-def test_the_elbo_draw_count_is_passed_explicitly():
+def test_the_elbo_draw_count_is_passed_explicitly(monkeypatch):
     """Defect 2: the ELBO-draw count must be ours, never blackjax's 200.
 
     ``n_elbo_draws`` is a **memory** knob: the draws are vmapped through the full
     forward model at every L-BFGS iterate, so peak memory goes as
     ``maxiter * n_elbo_draws * cost(one SED)``. Stan uses 25 and so do we.
+
+    Behavioral form: verifies that the pathfinder backend actually receives and
+    forwards its n_elbo_draws parameter. The forwarding is checked by replacing
+    the backend runner with a stub that records what n_elbo_draws value it was
+    called with, then comparing to the caller's input.
     """
+    import dataclasses
+    from contextlib import suppress
+
+    pytest.importorskip("blackjax")
+    from tengri.inference._backend_registry import _BACKENDS
     from tengri.inference.backends.pathfinder import run_pathfinder
+    from tengri.inference.fitter import Fitter
 
     params = inspect.signature(run_pathfinder).parameters
     assert "n_elbo_draws" in params, (
@@ -124,11 +135,58 @@ def test_the_elbo_draw_count_is_passed_explicitly():
     )
     assert params["n_elbo_draws"].default == 25
 
-    source = inspect.getsource(run_pathfinder)
-    assert "num_samples=n_elbo_draws" in source, (
-        "run_pathfinder must pass num_samples=n_elbo_draws to "
-        "blackjax.pathfinder.approximate. blackjax calls both the posterior draws "
-        "and the ELBO draws 'num_samples'; the one this caps is the expensive one."
+    # Stub that records what n_elbo_draws value it receives.
+    recorded = {}
+
+    class _Reached(Exception):
+        pass
+
+    def _stub_runner(*args, **kwargs):
+        recorded.update(kwargs)
+        raise _Reached
+
+    class _Nothing:
+        def __call__(self, *args, **kwargs):
+            return None
+
+        def __bool__(self):
+            return False
+
+    class _Spec:
+        stochastic = False
+        free_params = ("param_0",)
+        all_params = ("param_0",)
+        n_grid = 8
+        n_free = 1
+
+        def __getattr__(self, name):
+            return None
+
+    class _StubFitter:
+        spec = _Spec()
+        _lut_bias_checked = True
+
+        def __getattr__(self, name):
+            return _Nothing()
+
+    # Replace the pathfinder backend with our stub.
+    entry = _BACKENDS["pathfinder"]
+    monkeypatch.setitem(_BACKENDS, "pathfinder", dataclasses.replace(entry, runner=_stub_runner))
+
+    stub = _StubFitter()
+    sentinel_n_elbo_draws = 42
+
+    with suppress(_Reached):
+        Fitter.run(stub, "pathfinder", key=0, n_elbo_draws=sentinel_n_elbo_draws)
+
+    assert "n_elbo_draws" in recorded, (
+        "pathfinder backend runner was never called with n_elbo_draws, or the "
+        "parameter was dropped before reaching the runner"
+    )
+    assert recorded["n_elbo_draws"] == sentinel_n_elbo_draws, (
+        f"Fitter.run was asked for n_elbo_draws={sentinel_n_elbo_draws} but the "
+        f"pathfinder runner received n_elbo_draws={recorded['n_elbo_draws']!r} -- "
+        f"the parameter is not being forwarded correctly"
     )
 
 
@@ -141,6 +199,13 @@ def test_the_warmstart_path_caps_the_same_draws():
     module attribute that ``pathfinder_adaptation`` resolves. Patching
     ``blackjax.pathfinder`` (the API instance) instead of ``blackjax.vi.pathfinder``
     (the module) is a silent no-op, which is the mistake this pins.
+
+    Kept as source-code assertion: this pins the critical architectural choice
+    that the warmstart path must patch the MODULE-level function, not the instance,
+    because pathfinder_adaptation resolves the name at call time and reads what
+    the module has at that moment. Testing this behaviorally would require
+    constructing a full sampling path, which would be fragile; the source assertion
+    directly verifies the mechanism.
     """
     from tengri.inference.backends.mcmc._shared import _bounded_pathfinder_elbo_draws
 
