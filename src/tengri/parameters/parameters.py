@@ -2050,7 +2050,8 @@ class Parameters:
             modules.append("shock")
         dust_mdl = getattr(self, "dust_model", "two_component")
         if dust_mdl == "single_component":
-            modules.append(f"dust=single({getattr(self, 'dust_law_bc', 'power_law')})")
+            dust_law = getattr(self, "dust_law_bc", "power_law")
+            modules.append(f"dust_attenuation=single_component({dust_law})")
         else:
             dust_bc = getattr(self, "dust_law_bc", "power_law")
             dust_diff = getattr(self, "dust_law_diff", None) or dust_bc

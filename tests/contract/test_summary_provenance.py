@@ -192,6 +192,27 @@ class TestSummaryRendering:
         assert "[all_params Fixed(DEFAULT) -> inactive]" in lines[0]
         assert spec._group_provenance["dust_Rv"] == "wildcard_fixed_inactive"
 
+    def test_single_component_dust_attenuation_modules_line(self):
+        """Single-component dust attenuation prints grammar-consistent key (#2137).
+
+        The Modules line must show ``dust_attenuation=single_component(law)``
+        to match the build-time grammar, never the retired ``dust=single(law)``
+        spelling that raises at build.
+        """
+        spec = parse_groups(
+            sfh={"type": "dpl", "all_params": Fixed(DEFAULT)},
+            dust_attenuation={
+                "type": "single_component",
+                "law": "calzetti",
+                "all_params": Fixed(DEFAULT),
+            },
+            redshift=Fixed(0.1),
+        )
+        out = spec.summary_str()
+        assert "dust_attenuation=single_component(calzetti)" in out
+        # Regression: the retired spelling must not appear anywhere
+        assert "dust=single(" not in out
+
     def test_flat_summary_omits_source_column(self):
         """Flat-kwarg specs render the existing summary without a Source column."""
         spec = Parameters(
