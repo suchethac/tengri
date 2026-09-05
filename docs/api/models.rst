@@ -137,6 +137,22 @@ Accretion disc, torus, BLR, NLR, and unified AGN models.
    :members: unified_agn, multicolor_agn, kubota_done_full_agn, unified_nlr_blr
    :noindex:
 
+AGN informative priors
+~~~~~~~~~~~~~~~~~~~~~~~
+
+Optional composite log-prior penalty terms transcribed from AGNfitter-rX's
+``PRIORS_AGNfitter.py`` (energy balance, AGN-fraction luminosity-function
+ties, mid-IR/UV/X-ray consistency). Reachable as ``tengri.agn.priors``
+(mirroring the dust-priors pattern above); wired into a fit via
+``Fitter(..., extra_log_prior=...)``, see
+:func:`tengri.inference.loss_functions.build_logprior_fn`.
+
+.. automodule:: tengri.parameters.agn_priors
+   :members: AGNFITTER_HARD_REJECT, gaussian_log_prior, prior_energy_balance,
+      prior_stellar_mass, prior_agn_fraction, prior_low_agn_fraction,
+      prior_ir_syn_fraction, prior_uv_xrays, prior_ir_xrays, prior_midir_uv
+   :noindex:
+
 Nebular emission
 ----------------
 

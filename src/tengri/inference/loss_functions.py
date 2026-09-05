@@ -627,7 +627,9 @@ def build_logprior_fn(fitter):
     Parameters
     ----------
     fitter : Fitter
-        Fitter instance with ``spec`` (Parameters) and ``_free_names``.
+        Fitter instance with ``spec`` (Parameters), ``_free_names``, and
+        (optionally) an ``extra_log_prior`` callable set at construction
+        (see :class:`~tengri.inference.fitter.Fitter`).
 
     Returns
     -------
@@ -647,6 +649,25 @@ def build_logprior_fn(fitter):
     falls outside bounds; all other distributions use their continuous
     pdf/cdf definitions and can have finite density at boundaries.
 
+    **Extra log-prior hook**: when ``fitter._extra_log_prior`` is not
+    ``None``, the returned ``logprior_fn`` additionally (a) merges fixed
+    values and resolves mirrored parameters into ``free_params`` to build
+    the full physical parameter dict, (b) calls
+    ``fitter.model.predict_state(params)`` to get the predicted
+    :class:`~tengri.protocols.ForwardState`, and (c) adds
+    ``fitter._extra_log_prior(params, state)`` to the per-parameter prior
+    density computed above. This is the one seam a composite prior linking
+    multiple predicted quantities (e.g. an AGNfitter-style energy-balance
+    penalty, :mod:`tengri.agn.priors`) can use without tengri hard-coding any
+    specific physics; see :class:`~tengri.inference.fitter.Fitter`'s
+    ``extra_log_prior`` parameter for the full contract and a worked example.
+
+    **JIT-compatibility**: the extra term calls ``predict_state``, exactly as
+    the likelihood term already does elsewhere in this module, so it is
+    JIT/grad-safe under the same conditions (the user's ``extra_log_prior``
+    itself must be a pure function of ``(params, state)`` with no
+    Python-level branching on traced values).
+
     Examples
     --------
     >>> fitter = Fitter(model, data, noise)
@@ -657,6 +678,7 @@ def build_logprior_fn(fitter):
 
     spec = fitter.spec
     free_names = fitter._free_names
+    extra_log_prior = getattr(fitter, "_extra_log_prior", None)
 
     # Check if all distributions are Uniform
     all_uniform = all(isinstance(spec.get_distribution(name), Uniform) for name in free_names)
@@ -669,7 +691,7 @@ def build_logprior_fn(fitter):
         widths = upper_bounds - lower_bounds
         log_widths_sum = jnp.sum(jnp.log(widths))
 
-        def logprior_fn(free_params):
+        def base_logprior_fn(free_params):
             """Fast vectorized log prior for Uniform case: -log(widths) if in bounds."""
             # Stack parameter values into array
             param_values = jnp.array([free_params[name] for name in free_names])
@@ -679,13 +701,28 @@ def build_logprior_fn(fitter):
 
     else:
         # General case: loop over distributions (mixed Uniform/Gaussian/etc)
-        def logprior_fn(free_params):
+        def base_logprior_fn(free_params):
             """Sum log probabilities from each distribution (Uniform, Gaussian, etc)."""
             lp = 0.0
             for name in free_names:
                 dist = spec.get_distribution(name)
                 lp = lp + dist.log_prob(free_params[name])
             return lp
+
+    if extra_log_prior is None:
+        return base_logprior_fn
+
+    fixed_values = fitter._fixed_values
+    model = fitter.model
+
+    def logprior_fn(free_params):
+        """Per-parameter log prior plus the user's ``extra_log_prior`` term."""
+        params = dict(free_params)
+        for name, val in fixed_values.items():
+            params[name] = val
+        params = spec.resolve_mirrors(params)
+        state = model.predict_state(params)
+        return base_logprior_fn(free_params) + extra_log_prior(params, state)
 
     return logprior_fn
 
