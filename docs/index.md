@@ -157,6 +157,7 @@ and [NOTICE](https://github.com/suchethac/tengri/blob/main/NOTICE).
    forward_model
    model_configuration
    components
+   model_reference/index
    units
    method_selection
    performance/index
