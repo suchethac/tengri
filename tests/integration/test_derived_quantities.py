@@ -163,10 +163,24 @@ class TestDerivedQuantities:
         assert set(derived.keys()) == expected_keys
 
     def test_all_values_finite(self, model, fiducial_params):
+        """Every published derived value is finite.
+
+        ``None`` is a legitimate value for a few keys (stellar_mass_surviving
+        when the SSP carries no mass-remaining grid), so the loop skips them --
+        but a skip-everything run would report as a pass having checked nothing.
+        The count is asserted so that cannot happen silently.
+        """
         derived = model.predict_derived(fiducial_params)
+        checked = 0
         for key, val in derived.items():
-            if val is not None:  # stellar_mass_surviving can be None
-                assert jnp.isfinite(val), f"{key} is not finite: {val}"
+            if val is None:  # stellar_mass_surviving can legitimately be None
+                continue
+            assert jnp.isfinite(val), f"{key} is not finite: {val}"
+            checked += 1
+        assert checked >= max(1, len(derived) // 2), (
+            f"only {checked} of {len(derived)} derived values were non-None and "
+            f"actually checked; a mostly-None derived dict makes this test vacuous"
+        )
 
     def test_sfr_positive_for_star_forming(self, model, fiducial_params):
         derived = model.predict_derived(fiducial_params)
