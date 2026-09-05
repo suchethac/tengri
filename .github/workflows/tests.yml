@@ -379,6 +379,11 @@ jobs:
       - run: python tools/check_notebooks_executed.py
       # Validate that all reproduction notebooks have valid status assertions.
       - run: python tools/check_repro_status.py
+      # A committed reproduction render must still match the source it claims
+      # to have run from (metadata["tengri_render"]["source_sha256"]).
+      # Non-strict: most comparisons predate the stamp, so an unstamped
+      # render only warns; a stamped-but-stale one always fails.
+      - run: python tools/check_repro_render_fresh.py
       # Census: verify every check_*.py is wired or explicitly declared not wired (#2050).
       - run: python tools/check_guard_wiring.py
       # The same hazard one directory over: a gallery example that catches

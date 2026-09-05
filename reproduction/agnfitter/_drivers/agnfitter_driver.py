@@ -543,7 +543,12 @@ def _s17_radio_tables():
     tdust : ndarray, shape (n_tdust,)
         Dust temperatures [K].
     lir_conv : ndarray, shape (n_tdust,)
-        LIR conversion factors (Bell 2003 convention).
+        L_IR already in erg/s (the vendored ``LIR_conv`` column, unlike the
+        plain ``LIR`` column read elsewhere in this module, is **not** in
+        L_sun -- ``LIR_conv / LIR == 3.826e33`` exactly across every Tdust
+        node, i.e. upstream has already applied the L_sun -> erg/s
+        conversion for this column). A caller that multiplies it by
+        ``3.826e33`` again double-converts by 33 orders of magnitude.
     fpah : ndarray, shape (n_fpah,)
         PAH mass fraction grid.
     """
@@ -629,8 +634,10 @@ def cold_dust_radio_axes() -> dict[str, np.ndarray]:
     Returns
     -------
     dict
-        Keys ``tdust`` (dust temperature [K]) and ``fpah`` (PAH mass fraction),
-        ``lir_conv`` (LIR conversion factor for Bell 2003 relation).
+        Keys ``tdust`` (dust temperature [K]), ``fpah`` (PAH mass fraction),
+        and ``lir_conv`` (L_IR **already in erg/s** -- see
+        :func:`_s17_radio_tables`'s docstring; do not re-multiply by
+        ``3.826e33``).
     """
     _, _, _, _, tdust_ax, lir_conv, fpah_ax = _s17_radio_tables()
     return {"tdust": tdust_ax, "fpah": fpah_ax, "lir_conv": lir_conv}
@@ -695,6 +702,59 @@ def alpha_ox(l_2500: float, scatter: float = 0.0) -> float:
     return -0.137 * np.log10(l_2500) + 2.638 + scatter
 
 
+def _nearest_lookup(x_query: float, x_grid: np.ndarray, y_grid: np.ndarray) -> float:
+    """Nearest-neighbor lookup, matching ``scipy.interpolate.interp1d(kind='nearest')``.
+
+    Parameters
+    ----------
+    x_query : float
+        Query abscissa.
+    x_grid : ndarray, shape (n,)
+        Grid abscissa, any order (not required to be sorted).
+    y_grid : ndarray, shape (n,)
+        Grid ordinate, in the same order as ``x_grid``.
+
+    Returns
+    -------
+    float
+        ``y_grid`` at the grid node nearest ``x_query`` -- a snap to a node,
+        never a blend of two. Ties resolve to the lower index (``argmin``'s
+        own tie-break), same as ``interp1d``.
+    """
+    x_grid = np.asarray(x_grid, dtype=np.float64)
+    y_grid = np.asarray(y_grid, dtype=np.float64)
+    idx = int(np.argmin(np.abs(x_grid - x_query)))
+    return float(y_grid[idx])
+
+
+def _l2500_from_template(wave_aa: np.ndarray, L_nu: np.ndarray) -> float:
+    """L(2500 Angstrom), snapped to the nearest disk-template node.
+
+    Implements ``MODEL_AGNfitter.XRAYS``'s own
+    ``interp1d(bbb_nu, bbb_Fnu, kind='nearest')`` -- a node snap, not a
+    linear blend. Measured on the THB21 template: linear interpolation gives
+    L_2500 = 3.610371e-30 against nearest-neighbor's 3.615649e-30 (0.06%,
+    negligible at this template's fine 1024-point sampling, but the point is
+    fidelity to the upstream lookup rule, not the size of the effect on any
+    one template).
+
+    Parameters
+    ----------
+    wave_aa : ndarray, shape (n,)
+        Disk wavelength grid [Angstrom].
+    L_nu : ndarray, shape (n,)
+        Disk luminosity density [erg/s/Hz], same grid.
+
+    Returns
+    -------
+    float
+        L_nu [erg/s/Hz] at the grid node nearest 2500 Angstrom, compared in
+        log frequency (upstream's own axis).
+    """
+    log_nu = np.log10(units.C_ANGSTROM_PER_S / np.asarray(wave_aa, dtype=np.float64))
+    return _nearest_lookup(np.log10(NU_2500), log_nu, np.asarray(L_nu, dtype=np.float64))
+
+
 def disk_xray_extension(
     wave_aa: np.ndarray,
     L_nu: np.ndarray,
@@ -726,10 +786,7 @@ def disk_xray_extension(
     xray_L_nu : ndarray, shape (1000,)
         X-ray luminosity density [erg/s/Hz].
     """
-    log_nu = np.log10(units.C_ANGSTROM_PER_S / np.asarray(wave_aa, dtype=np.float64))
-    L_2500 = float(
-        np.interp(np.log10(NU_2500), np.sort(log_nu), np.asarray(L_nu)[np.argsort(log_nu)])
-    )
+    L_2500 = _l2500_from_template(wave_aa, L_nu)
     alpha = alpha_ox(L_2500, scatter)
     fnu_2kev = L_2500 * 10.0 ** (alpha / 0.3838)
     a = fnu_2kev / ((_H_KEV_PER_HZ * NU_2KEV) ** (-gamma + 1) * np.exp(-NU_2KEV / 7.2540e19))

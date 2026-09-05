@@ -50,12 +50,25 @@ untrusted external data. The driver itself reads only the committed h5:
 ## Running
 
 ```bash
-cd reproduction/agnfitter
-jupytext --to ipynb 01_agnfitter.py
-jupyter nbconvert --to html --execute 01_agnfitter.ipynb
+python scripts/render_reproduction_notebook.py agnfitter
 ```
 
-The figures are written to `_figs/agnfitter_*.png`.
+This runs `reproduction/CONTRACT.md` §7's recipe end to end (`jupytext --to
+ipynb`, then a headless `PYTHONHASHSEED=0 jupyter nbconvert --execute
+--inplace`), fails loudly on any error-output cell or a `SystemExit`-truncated
+run, stamps the render with the SHA-256 of the source `.py` it ran from, and
+publishes the result to `docs/reproduction/`. The figures are written to
+`_figs/agnfitter_*.png`.
+
+`validate_matched_physics.py` is the strict companion check: it removes every
+input difference between tengri and AGNFITTER-RX and compares the cold-dust
+and accretion-disk SEDs pixel by pixel at matched template nodes, rather than
+the notebook's own configuration-level comparisons.
+
+```bash
+JAX_PLATFORMS=cpu PYTHONPATH=$PWD/src:$PWD \
+    .venv/bin/python reproduction/agnfitter/validate_matched_physics.py [--figdir DIR]
+```
 
 ## References
 
