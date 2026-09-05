@@ -689,7 +689,11 @@ def refuse_dead_sampling(
 # ---------------------------------------------------------------------------
 #: Number of fixed-length probe trajectories to test for stability.
 STABILITY_PROBE_LENGTH = 20
-#: Divergence threshold above which step size is considered unstable.
+#: Divergence threshold above which step size is considered unstable. The
+#: raytrace backend's analogous backoff triggers at 0.95 over a full burnin
+#: (hundreds of proposals); this probe sees STABILITY_PROBE_LENGTH
+#: trajectories, where a 0.95 cut on n=20 is one flipped draw away from
+#: never firing -- a majority test is the robust form at this sample size.
 STABILITY_PROBE_DIVERGENCE_THRESHOLD = 0.5
 #: Maximum number of step size halving attempts before giving up.
 STABILITY_PROBE_MAX_BACKOFFS = 8
