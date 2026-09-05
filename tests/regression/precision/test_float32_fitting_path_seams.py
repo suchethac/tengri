@@ -1016,7 +1016,27 @@ def _lut_forward_finite(ssp, channel, model, zspec, line_data=None):
         arr = np.asarray(
             sed.predict_spectrum(truth) if channel == "spec" else sed.predict_photometry(truth)
         )
-        return bool(np.all(np.isfinite(arr))), str(getattr(sed, "approx", None))
+        if not bool(np.all(np.isfinite(arr))):
+            return False, str(getattr(sed, "approx", None))
+
+    # Both arms, not only the reference. A float32 forward that is NaN here leaves the
+    # comparison just as undefined as a NaN float64 one, and the failure is the same
+    # environment-dependent LUT defect seen from the other side: measured finite on the
+    # 2026-09-05 reference box and non-finite on the GitHub runner (jax 0.11.1), where
+    # ``spec/lut`` returns ``[nan nan]`` from the boosted unweighted gradient while the
+    # float64 forward on the same seam stays finite.
+    with jax.enable_x64(False):
+        sed32 = _channel_build(ssp, channel, model, "lut", zspec, line_data)
+        truth32 = {
+            n: float(sed32.spec._distributions[n].unstandardize(jnp.asarray(0.0)))
+            for n in sed32.spec.free_params
+        }
+        arr32 = np.asarray(
+            sed32.predict_spectrum(truth32)
+            if channel == "spec"
+            else sed32.predict_photometry(truth32)
+        )
+        return bool(np.all(np.isfinite(arr32))), str(getattr(sed32, "approx", None))
 
 
 def _skip_if_lut_forward_is_broken(ssp, channel, model, zspec, line_data=None):
