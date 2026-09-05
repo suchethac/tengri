@@ -11,6 +11,77 @@ import jax.numpy as jnp
 import numpy as np
 import pytest
 
+# ── Import source verification guard ────────────────────────────────────────
+#
+# Guard against importing tengri from a different checkout or worktree than
+# the one running tests. This catches misconfigurations of the shared venv
+# (.venv/lib/python3.12/site-packages/__editable__.astro_tengri-*.pth files
+# that point to a stale worktree), which silently run tests against incorrect
+# source code (#2170).
+#
+# Mechanism: when tests exist in src/tengri/, verify that the imported module
+# lives in the same tree. The check runs at module load time (before any test)
+# so failures block collection instead of silently running the wrong code.
+# Stays silent for installed (non-editable) releases, since there is no
+# src/tengri/ to compare.
+
+
+def _check_tengri_source_tree_match(
+    repo_root: Path | None = None,
+    imported_file: Path | None = None,
+) -> None:
+    """Verify imported tengri lives in the same tree as the tests.
+
+    Parameters
+    ----------
+    repo_root : Path, optional
+        Repository root to check. Defaults to the parent of this file's
+        directory (the real repository). Injectable for testing.
+    imported_file : Path, optional
+        Path of the imported ``tengri/__init__.py``. Defaults to importing
+        tengri and reading ``__file__``. Injectable for testing.
+
+    Raises
+    ------
+    RuntimeError
+        If tests exist in src/tengri/ but the imported tengri module
+        comes from a different location.
+    """
+    if repo_root is None:
+        repo_root = Path(__file__).resolve().parent.parent
+    tengri_src = repo_root / "src" / "tengri"
+
+    # Only check if this is a development tree with local source.
+    if not tengri_src.exists():
+        return
+
+    if imported_file is None:
+        import tengri
+
+        imported_file = Path(tengri.__file__)
+
+    # Resolve both sides so symlinked checkouts (e.g. /tmp vs /private/tmp
+    # on macOS) compare by real location, not spelling.
+    imported_file = Path(imported_file).resolve()
+    expected_file = (tengri_src / "__init__.py").resolve()
+
+    if imported_file != expected_file:
+        raise RuntimeError(
+            f"Imported tengri from wrong source tree (#2170).\n"
+            f"Tests are in:    {repo_root}\n"
+            f"Expected source: {expected_file}\n"
+            f"Actual source:   {imported_file}\n\n"
+            f"This usually means the shared .venv has a stale editable install "
+            f"pth file pointing to a different worktree. Fix by running:\n"
+            f"  pip install -e . --force-reinstall --no-deps\n"
+            f"from {repo_root}, or by setting:\n"
+            f"  PYTHONPATH={repo_root / 'src'}"
+        )
+
+
+# Run the import verification at collection time.
+_check_tengri_source_tree_match()
+
 # ── Network guard ────────────────────────────────────────────────────────
 #
 # No test may reach the network. This exists because two tests that did
