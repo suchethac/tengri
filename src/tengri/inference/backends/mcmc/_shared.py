@@ -740,12 +740,12 @@ def _stabilize_dense_mass_step(
     inv_mass_matrix,
     max_doublings: int,
     sampler_name: str = "NUTS",
-) -> float:
+) -> tuple[float, int]:
     """Probe and stabilize step size for dense mass matrix (#1999).
 
     When using a dense mass matrix, window_adaptation may return a step size
     ~6x above the stability limit, causing all proposals to diverge. This
-    function probes the adapted step and backsoff by halving if unstable,
+    function probes the adapted step and backs off by halving if unstable,
     up to 8 times. Logs adjustments and records the backoff count.
 
     Parameters
