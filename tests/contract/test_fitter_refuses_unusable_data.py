@@ -1,5 +1,5 @@
 # SPDX-License-Identifier: BSD-3-Clause
-"""A fit on unusable data must not return a number (#1777).
+"""A fit on unusable data must not return a number (#2155).
 
 One NaN flux in a five-band photometry fit produced this::
 
@@ -46,7 +46,7 @@ import numpy as np
 import pytest
 
 from tengri import (
-    FIXED,
+    DEFAULT,
     Fitter,
     Fixed,
     ForwardModel,
@@ -67,8 +67,17 @@ def _build(ssp, bands):
     model = SEDModel.build(
         ssp_data=ssp,
         observation=obs,
-        sfh={"type": "delayed", "all_params": FIXED, "log_total_mass": Uniform(9.0, 11.0)},
-        dust={"type": "two_component", "law_bc": "calzetti", "all_params": FIXED},
+        sfh={
+            "type": "delayed",
+            "all_params": Fixed(DEFAULT),
+            "log_total_mass": Uniform(9.0, 11.0),
+        },
+        dust_attenuation={
+            "type": "two_component",
+            "law": "calzetti",
+            "all_params": Fixed(DEFAULT),
+        },
+        dust_emission={"type": "dale2014", "all_params": Fixed(DEFAULT)},
         neb={"type": "none"},
         redshift=Fixed(0.1),
     )
@@ -209,3 +218,64 @@ class TestTheAdviceInTheMessageWorks:
         presence[_DROP + 1] = 0.0  # some other band absent
         with pytest.raises(ValueError):
             _fit(model, obs, nan_flux, noise, presence=presence)
+
+
+class TestOrderDependence:
+    """Verify the guard runs on EVERY fit call, not cached from the first (#2155).
+
+    The root cause was that multiple Fitter instances with the same model and
+    data shape share a cached loss function. A fresh Fitter.__init__ was the
+    only place the guard ran per-fit call. If a code path reused a Fitter or
+    skipped __init__ for subsequent fits, bad data in fit N would not be
+    caught even if fit 1 was clean.
+
+    These tests pin the cache-skip regime on the direct Fitter path: a
+    warm loss cache must never stand in for validation of a later
+    Fitter's own data.
+    """
+
+    def test_bad_data_in_second_fit_is_refused(self, clean):
+        """Fit 1 good, Fit 2 bad: bad data must still raise.
+
+        Simulates the order-dependent case: first Fitter compiles and caches
+        the loss function, second Fitter with different (bad) data reuses the
+        cache. Without the __init__ guard on EVERY Fitter, fit 2 would silently
+        return a wrong answer.
+        """
+        model, obs, flux, noise = clean
+
+        # Fit 1: clean data (warms the cache)
+        post1 = _fit(model, obs, flux, noise)
+        assert np.isfinite(post1.diagnostics["final_loss"])
+
+        # Fit 2: same model, same shape, but different bad data
+        bad_flux = flux.copy()
+        bad_flux[_DROP] = np.nan
+        with pytest.raises(ValueError) as exc:
+            _fit(model, obs, bad_flux, noise)
+        message = str(exc.value)
+        assert str(_DROP) in message, f"bad fit 2 did not name the bad index: {message}"
+        assert "presence=" in message
+
+    def test_bad_noise_in_second_fit_is_refused(self, clean):
+        """Fit 1 good, Fit 2 bad noise: bad noise must still raise.
+
+        Same as above but with noise, testing both zero and negative.
+        """
+        model, obs, flux, noise = clean
+
+        # Fit 1: clean
+        post1 = _fit(model, obs, flux, noise)
+        assert np.isfinite(post1.diagnostics["final_loss"])
+
+        # Fit 2: zero noise
+        bad_noise = noise.copy()
+        bad_noise[_DROP] = 0.0
+        with pytest.raises(ValueError):
+            _fit(model, obs, flux, bad_noise)
+
+        # Fit 3: negative noise (separate Fitter, same cache state)
+        bad_noise2 = noise.copy()
+        bad_noise2[_DROP] = -1.0
+        with pytest.raises(ValueError):
+            _fit(model, obs, flux, bad_noise2)
