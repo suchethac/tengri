@@ -54,7 +54,6 @@ def model_with_cue(ssp_bare):
             "law": "calzetti",
             "tau_diff": 0.5,
             "tau_bc": 0.1,
-            "slope": -0.7,
         },
         neb={"type": "cue", "all_params": Fixed(DEFAULT)},
         redshift=Fixed(0.05),

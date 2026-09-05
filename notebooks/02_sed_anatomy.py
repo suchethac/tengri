@@ -143,7 +143,6 @@ kitchen_sink = dict(
         "all_params": Fixed(DEFAULT),
         "tau_bc": 0.8,
         "tau_diff": 0.3,
-        "slope": -0.4,
         # dale2014_cigale, not dale2014: this notebook also switches on a radio
         # block, and the plain Dale+2014 template embeds its own star-forming
         # radio synchrotron continuum out to 1.335 GHz. Running both double-counts
@@ -475,7 +474,6 @@ money_shot = dict(
         "all_params": Fixed(DEFAULT),
         "tau_bc": 0.8,
         "tau_diff": 0.3,
-        "slope": -0.4,
         # dale2014_cigale, not dale2014: this notebook also switches on a radio
         # block, and the plain Dale+2014 template embeds its own star-forming
         # radio synchrotron continuum out to 1.335 GHz. Running both double-counts
