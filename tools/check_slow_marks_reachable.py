@@ -16,15 +16,21 @@ That silent gap is exactly what happened:
 (``-m 'not crossval and not slow and not benchmark'``) deselects it from every
 ordinary local run and from the PR-gating tier, and the ``slow`` job's matrix
 covered only ``tests/inference`` and ``tests/integration``, so the test never
-ran in CI, on any trigger, and sat broken for three weeks after an unrelated
-API change (#1796) invalidated its fixture. See #2199 (brief:
-``.superpowers/sdd/plan-validation-followups/task-4-brief.md``) for the
-fixture fix and the census this guard now enforces going forward.
+ran in CI, on any trigger, and sat broken for three weeks. Its fixture broke
+when commit b7a0dcf29 (#1796/#1915) stopped the ``sfh`` group's
+``all_params: FREE`` wildcard from freeing ``met_logzsol`` implicitly; the
+same-day sibling commit 4243f5f98 (#1926) fixed four other fixtures in the
+same file that depended on the old behavior, but missed this fifth one
+because nothing exercised it: the ``slow`` job's matrix never covered
+``tests/components``, so no CI run, then or since, could have caught the
+break. The fixture fix and this guard both land together as the correction.
 
 What this checks
 -----------------
-1. Read ``_SLOW_TREES`` from ``tests/conftest.py`` (parsed, not evaluated as
-   code: the value must already be a literal tuple/list of strings).
+1. Read ``_SLOW_TREES`` from the top-level ``tests/conftest.py`` (parsed, not
+   evaluated as code: the value must already be a literal tuple/list of
+   strings). A nested ``conftest.py`` with its own slow-marking hook is not
+   read; today only the top-level one exists.
 2. Read the ``slow`` job's ``strategy.matrix.include`` from
    ``.github/workflows/tests.yml``. Each entry covers either the tree named by
    its ``suite`` field (the ``inference``/``integration`` shape:
@@ -115,9 +121,14 @@ def read_slow_matrix_trees(workflow_path: Path = WORKFLOW_PATH) -> set[str]:
     Raises
     ------
     ValueError
-        If the workflow has no ``jobs.slow.strategy.matrix.include`` list.
+        If the workflow does not parse as YAML, has no
+        ``jobs.slow.strategy.matrix.include`` list, or that list contains an
+        entry that is not a mapping.
     """
-    doc = yaml.safe_load(workflow_path.read_text(encoding="utf-8"))
+    try:
+        doc = yaml.safe_load(workflow_path.read_text(encoding="utf-8"))
+    except yaml.YAMLError as exc:
+        raise ValueError(f"{workflow_path}: does not parse as YAML ({exc})") from exc
     try:
         include = doc["jobs"]["slow"]["strategy"]["matrix"]["include"]
     except (KeyError, TypeError) as exc:
@@ -129,6 +140,11 @@ def read_slow_matrix_trees(workflow_path: Path = WORKFLOW_PATH) -> set[str]:
 
     trees: set[str] = set()
     for entry in include:
+        if not isinstance(entry, dict):
+            raise ValueError(
+                f"{workflow_path}: jobs.slow.strategy.matrix.include entry "
+                f"{entry!r} is not a mapping"
+            )
         paths = entry.get("paths")
         if paths:
             for token in paths.split():

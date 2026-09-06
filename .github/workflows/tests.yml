@@ -697,8 +697,8 @@ jobs:
       - run: python tools/check_param_free_priors.py
       - run: python tools/check_test_markers.py
       # A @pytest.mark.slow test outside tests/inference and tests/integration
-      # only runs if the `slow` job's matrix reaches its tree: #2199 found one
-      # that never had, for three weeks. See the guard's own docstring.
+      # only runs if the `slow` job's matrix reaches its tree. One such test
+      # never had, for three weeks. See the guard's own docstring.
       - run: python tools/check_slow_marks_reachable.py
       - run: python tools/check_single_dispatch.py
       - run: python tools/check_registry_completeness.py
