@@ -132,6 +132,12 @@ RECIPE_FREE_PARAMS = {
         # mechanism removed by R22. Add atten={'type': 'polar_dust'} to this
         # recipe to opt back into polar dust explicitly.
         "agn_q_skirtor",
+        # agn_radius_ratio added (Task 12's scope fix, 07c9d849d -- this
+        # task's own base commit, predates all task13 work): the AGN
+        # sub-block wildcard scoping fix there started freeing it under
+        # this recipe's torus='skirtor' + 'all_params': FREE; the frozen
+        # list here was never updated to match.
+        "agn_radius_ratio",
         "agn_tau_skirtor",
         "agn_torus_frac",
         "dust_tau_bc",
@@ -163,6 +169,9 @@ RECIPE_FREE_PARAMS = {
         "agn_polar_ebv",
         "agn_polar_oa",
         "agn_q_skirtor",
+        # agn_radius_ratio added (Task 12's scope fix, 07c9d849d -- see the
+        # agn_panchromatic entry above for the same, longer-standing note).
+        "agn_radius_ratio",
         "agn_tau_skirtor",
         "agn_torus_frac",
         "dust_tau_bc",
