@@ -737,8 +737,62 @@ def list_agn_models(*, status: str | None = None) -> _RegistryTable:
     from tengri.components.agn.unified import AGN_MODELS
 
     out = [_entry_to_dict(n, e, kind="agn_model") for n, e in AGN_MODELS.items()]
+    out.extend(_monolithic_agn_model_rows())
     out = _filter_menu(out, "status", status, listing="list_agn_models")
     return _RegistryTable(sorted(out, key=lambda m: m["name"]))
+
+
+def _monolithic_agn_model_rows() -> list[dict]:
+    """Menu rows for the non-composable ``agn={'type': ...}`` names.
+
+    ``AGN_MODELS`` holds exactly one entry, the composable runner, because the
+    monolithic names are not registered through :func:`register_agn_model` --
+    the preset names route through the composable runner with fixed block
+    selectors, and the two self-contained names resolve to their own forward
+    function. Both remain buildable, so both belong on the advertised menu:
+    listing only ``composable`` made every other accepted spelling
+    undiscoverable.
+
+    Each row is derived, never restated. A preset's summary is its own
+    ``_description`` and its citation is the union of the citations of the
+    blocks it selects; a self-contained model carries both in its registry
+    entry.
+    """
+    from tengri.components.agn.blocks._protocol import AGN_BLOCK_META
+    from tengri.components.agn.unified import _AGN_PRESETS, _SELF_CONTAINED_AGN_MODELS
+
+    rows: list[dict] = []
+    for name, meta in _SELF_CONTAINED_AGN_MODELS.items():
+        rows.append(
+            {
+                "name": name,
+                "kind": "agn_model",
+                "status": "deprecated",
+                "citation": meta["citation"],
+                "short_doc": meta["_description"],
+                "use": _usage_hint(name, "agn_model"),
+            }
+        )
+    for name, preset in _AGN_PRESETS.items():
+        citations: list[str] = []
+        for kwarg, block_type in preset.items():
+            if not kwarg.endswith("_block") or block_type == "none":
+                continue
+            category = kwarg.removeprefix("agn_").removesuffix("_block")
+            citation = AGN_BLOCK_META.get((category, block_type), {}).get("citation", "")
+            if citation and citation not in citations:
+                citations.append(citation)
+        rows.append(
+            {
+                "name": name,
+                "kind": "agn_model",
+                "status": "deprecated",
+                "citation": "; ".join(citations),
+                "short_doc": preset["_description"],
+                "use": _usage_hint(name, "agn_model"),
+            }
+        )
+    return rows
 
 
 def list_agn_blocks(*, category: str | None = None, status: str | None = None) -> _RegistryTable:

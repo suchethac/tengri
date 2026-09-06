@@ -4556,14 +4556,24 @@ def _validate_user_keys(
         # Validate the top-level group dict.
         group_allowed = _GROUP_STRUCTURAL_KEYS.get(top_key, frozenset({"type", "*"}))
         param_names = _short_names_for_group(top_key, param_partition)
+        monolithic_agn_model: str | None = None
         if top_key == "agn":
-            # AGN top-level accepts only the shared param short/full names
-            # (agn_log_lbol, agn_lum_ratio), not sub-block-owned params.
-            # Sub-block params written at the top level raise with guidance
-            # on correct nesting (e.g., agn={'torus': {'tau_skirtor': ...}}).
-            # This matches dust.emission strictness: parameters must be nested
-            # under their owning sub-block.
+            # For a COMPOSABLE build the AGN top level accepts only the shared
+            # param short/full names (agn_log_lbol, agn_lum_ratio); sub-block
+            # params written at the top level raise with guidance on correct
+            # nesting (e.g., agn={'torus': {'tau_skirtor': ...}}). This matches
+            # dust.emission strictness: parameters belong to their owner.
             param_names = param_names | agn_shared_names
+            # A MONOLITHIC build has no sub-block to nest under -- and
+            # agn={'type': <monolithic>, 'disc': {...}} is refused outright by
+            # the monolithic/sub-block check -- so the nesting guard would
+            # leave it with no working spelling at all (R27). Its declared
+            # parameters ARE the agn top level, enumerated from the registry
+            # rather than allow-listed; names it does not declare still raise,
+            # with advice that fits a monolithic build.
+            monolithic_agn_model = _monolithic_agn_type(top_val)
+            if monolithic_agn_model is not None:
+                param_names = param_names | _monolithic_agn_top_level_names(monolithic_agn_model)
         # NOTE: the dust top level deliberately does NOT accept dust.emission
         # short names. It used to, "for legacy code that flattens emission
         # params at the dust level ... still resolved via the dust.emission
@@ -4612,7 +4622,11 @@ def _validate_user_keys(
                 neb_type_specific_keys = frozenset({"density", "ionizing_source_warning", "grid"})
 
         _check_dict_keys(
-            top_key, top_val, group_allowed | param_names | neb_type_specific_keys, param_partition
+            top_key,
+            top_val,
+            group_allowed | param_names | neb_type_specific_keys,
+            param_partition,
+            monolithic_agn_model=monolithic_agn_model,
         )
 
         # Recurse into sub-block dicts.
@@ -4661,13 +4675,53 @@ def _validate_user_keys(
                 _check_dict_keys(sub_group, sub, sub_allowed | sub_params, param_partition)
 
 
+def _monolithic_agn_type(agn_dict: dict) -> str | None:
+    """The non-composable AGN model ``agn_dict`` selects, if it selects one.
+
+    Parameters
+    ----------
+    agn_dict : dict
+        The user's ``agn`` group dict.
+
+    Returns
+    -------
+    str or None
+        The model name, or ``None`` for a composable build (including the
+        implicit composable form that states no ``'type'`` at all).
+    """
+    from tengri.components.agn.unified import monolithic_agn_model_names
+
+    model = agn_dict.get("type")
+    if not isinstance(model, str) or model == "composable":
+        return None
+    return model if model in monolithic_agn_model_names() else None
+
+
+def _monolithic_agn_top_level_names(model: str) -> set[str]:
+    """Short and full spellings a monolithic AGN model accepts at the agn level."""
+    from tengri.components.agn.blocks._consumes import monolithic_agn_declared_params
+
+    out: set[str] = set()
+    for full_name in monolithic_agn_declared_params(model):
+        out.add(full_name)
+        out.add(_extract_short_name(full_name, {}))
+    return out
+
+
 def _check_dict_keys(
     group: str,
     user_dict: dict,
     allowed: set,
     param_partition: dict[str, str],
+    *,
+    monolithic_agn_model: str | None = None,
 ) -> None:
-    """Raise ``ValueError`` on any unrecognized key in ``user_dict``."""
+    """Raise ``ValueError`` on any unrecognized key in ``user_dict``.
+
+    ``monolithic_agn_model`` names the non-composable AGN model this dict
+    selects, when it selects one; the sub-block nesting advice is replaced for
+    those, because such a build has no sub-block to nest under.
+    """
     for key in user_dict:
         if key in allowed:
             continue
@@ -4704,6 +4758,19 @@ def _check_dict_keys(
         # produced before: tells the reader to write exactly what they wrote.
         # Name the sub-block instead.
         owner = _subblock_owning(str(key), group, param_partition)
+        if owner is not None and monolithic_agn_model is not None:
+            # The nesting advice is a dead end here: a monolithic build refuses
+            # sub-block keys on the next hop, so the reader would be sent from
+            # one refusal to another. Say what this model does declare instead.
+            raise ValueError(
+                f"{key!r} is not a parameter of the monolithic AGN model "
+                f"{monolithic_agn_model!r}, so writing it here would be silently "
+                f"ignored. A monolithic model takes its own parameters flat at the "
+                f"agn level and refuses sub-block keys, so there is no nesting that "
+                f"would work. Either drop {key!r}, or switch to "
+                f"agn={{'type': 'composable', ...}}, where {key!r} is owned by the "
+                f"{owner.split('.', 1)[1]!r} sub-block."
+            )
         if owner is not None:
             sub = owner.split(".", 1)[1]
             raise ValueError(

@@ -394,6 +394,7 @@ __all__ = [
     "AGN_SHARED_PARAMS",
     "ALL_AGN_PARAMS",
     "agn_active_param_set",
+    "monolithic_agn_declared_params",
 ]
 
 
@@ -440,3 +441,77 @@ def agn_active_param_set(structural_kwargs: dict) -> frozenset[str]:
             return ALL_AGN_PARAMS  # unknown/grid-gated block: safe over-free
         active |= consumed
     return frozenset(active)
+
+
+def monolithic_agn_declared_params(model: str) -> frozenset[str]:
+    """The ``agn_*`` names a non-composable AGN model declares.
+
+    A monolithic model has no sub-block to nest a parameter under: its declared
+    parameters ARE the ``agn`` top level, so this is the set the key validator
+    accepts there (R27). Derived, never hand-listed:
+
+    * a **preset** name routes through the composable runner with fixed block
+      selectors, so it declares :data:`AGN_SHARED_PARAMS`, whatever its selected
+      blocks declare in :data:`AGN_BLOCK_CONSUMES`, and its own
+      :data:`AGN_MODEL_CONSUMES` entry when it has one;
+    * a **self-contained** name resolves to its own forward function, so it
+      declares the ``agn_*`` parameters in that function's signature plus the
+      shared normalization knobs.
+
+    Parameters
+    ----------
+    model : str
+        A non-composable AGN model name (see
+        :func:`~tengri.components.agn.unified.monolithic_agn_model_names`).
+
+    Returns
+    -------
+    frozenset of str
+        Fully prefixed ``agn_*`` names. Empty for an unrecognized model.
+
+    Notes
+    -----
+    **JIT-compatible**: no, pure-Python builder-time helper.
+
+    A ``**kwargs`` catch-all in a self-contained forward function is NOT a
+    declaration: ``skirtor_stalevski`` swallows ``agn_torus_frac`` that way and
+    pins ``frac_agn=1.0`` internally, so the parameter is exactly inert there
+    (measured: 0.0 relative SED change from 0.05 to 0.95, against 19.7 for
+    ``agn_oa_skirtor`` on the same call). Accepting a swallowed name would free
+    a dimension the model cannot see.
+    """
+    import inspect
+
+    from tengri.components.agn.unified import (
+        _AGN_PRESETS,
+        _SELF_CONTAINED_AGN_MODELS,
+        _resolve_monolithic_model,
+    )
+
+    if model in _SELF_CONTAINED_AGN_MODELS:
+        import warnings
+
+        with warnings.catch_warnings():
+            warnings.simplefilter("ignore", DeprecationWarning)
+            fn = _resolve_monolithic_model(model)
+        if fn is None:  # pragma: no cover - table and resolver share one source
+            return frozenset()
+        # Intersected with ALL_AGN_PARAMS so a structural selector that happens
+        # to carry the prefix (grahsp's ``agn_type``, which chooses a variant
+        # rather than being fitted) is not offered as a fittable parameter.
+        signature_names = {
+            name for name in inspect.signature(fn).parameters if name.startswith("agn_")
+        } & ALL_AGN_PARAMS
+        return frozenset(AGN_SHARED_PARAMS | signature_names)
+
+    preset = _AGN_PRESETS.get(model)
+    if preset is None:
+        return frozenset()
+
+    declared = set(AGN_SHARED_PARAMS) | set(AGN_MODEL_CONSUMES.get(model, ()))
+    for category, kwarg in _BLOCK_SELECTOR_KWARGS:
+        block_type = preset.get(kwarg)
+        if not block_type or block_type == "none":
+            continue
+        declared |= set(AGN_BLOCK_CONSUMES.get((category, block_type), ()))
+    return frozenset(declared)
