@@ -1495,7 +1495,7 @@ jobs:
       # polar sweeps), including every (category, type) pair the PR-tier
       # subset drops. Runs once, on the `inference` leg only, since the marker
       # expression is the same whichever suite the matrix is on.
-      - if: matrix.suite == 'inference'
+      - if: always() && matrix.suite == 'inference'
         run: pytest tests/contract -q -m 'slow and not crossval' -n 0
         timeout-minutes: 30
       - uses: actions/cache/save@v6
