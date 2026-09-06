@@ -131,12 +131,18 @@ def test_gradient_is_finite_through_the_quadrature(ssp):
     m = _build(ssp, WavePrecomp(n_subbands=5))
     p = dict(m.spec.sample(KEY))
     g = assert_grad_matches_fd(lambda q: jnp.sum(m.predict_photometry(q)), p)
-    for v in jax.tree.leaves(g):
+    leaves = jax.tree.leaves(g)
+    for v in leaves:
         assert bool(jnp.all(jnp.isfinite(v)))
-        assert jnp.any(v != 0.0), (
-            "`v` is identically zero — finite is not enough, "
-            "a value that has collapsed to zero is as unusable as a NaN one (#2100)"
-        )
+    # Non-zero is claimed of the gradient as a whole, not of every leaf: on the
+    # BakedIn nebular backend neb_logU and neb_fesc are inert by construction
+    # (the ionization parameter is baked into the SSP file), so their leaves are
+    # legitimately exactly zero. What must not happen is the WHOLE gradient
+    # collapsing, which is the #2100 shape a finite-only check cannot see.
+    assert any(bool(jnp.any(v != 0.0)) for v in leaves), (
+        f"the photometry gradient is identically zero on every one of the "
+        f"{len(leaves)} free parameters — finite is not enough (#2100)"
+    )
 
 
 # ── 3. n_subbands must color the compiled-kernel cache ────────────────────────

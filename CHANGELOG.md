@@ -30,6 +30,19 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
   repairs a predicate that runs and admits the undecided state. Complementary,
   not duplicative.
 
+- `test_met_table_grad_wrt_lgmet` was **vacuous**, and the guard found it. It
+  differentiated the total CSP mass with respect to `lgmet_table` and asserted
+  only `isfinite`. The metallicity table chooses which SSP template each age bin
+  draws from; it does not move mass between bins, so the total is *exactly*
+  invariant and the gradient is identically zero — as is the finite-difference
+  reference it was compared against, so the check compared 0 with 0. Measured:
+  `total_mass` is `7942282347.242821693420` at `lgmet`, at `lgmet+0.5`, at
+  `lgmet+2.0` and at `lgmet-2.0`, the same digits to the last one. The
+  conservation is now the claim, stated positively, and a second assertion
+  differentiates the *metallicity weights*, which the table does steer
+  (measured `max|grad| = 25.7`, all 20 entries non-zero), so the test measures a
+  gradient rather than a conservation law twice.
+
 - `TestCmbContrastFactorBounds::test_gradient_safety_float64` was **vacuous**,
   and the guard found it. It differentiated `cmb_contrast_factor` at
   `T_eff = 25 K, z = 10` and asserted only `isfinite`. The z = 10 CMB floor is

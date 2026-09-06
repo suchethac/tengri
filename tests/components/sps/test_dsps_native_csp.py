@@ -442,10 +442,34 @@ def test_met_table_grad_wrt_lgmet():
 
     lgmet = jnp.array(LGMET_TABLE)
     grad = assert_grad_matches_fd(total_mass, lgmet)
-    assert jnp.all(jnp.isfinite(grad)), f"Non-finite gradient: {grad}"
-    assert jnp.any(grad != 0.0), (
-        "`grad` is identically zero — finite is not enough, "
-        "a value that has collapsed to zero is as unusable as a NaN one (#2100)"
+
+    # The total CSP mass is INVARIANT under the metallicity table, exactly. lgmet
+    # chooses which SSP template each age bin draws from; it does not move mass
+    # between bins, so d sum(age_weights) / d lgmet is identically zero and the
+    # finite-difference check compares 0 against 0. Measured: total_mass is
+    # 7942282347.242821693420 at lgmet, at lgmet+0.5, at lgmet+2.0 and at
+    # lgmet-2.0 — the same digits to the last one. Asserting only `isfinite` on
+    # the gradient of a constant therefore claimed nothing (#2100), so the
+    # conservation is now the claim, stated positively.
+    assert jnp.all(grad == 0.0), (
+        f"total CSP mass must be exactly invariant under lgmet_table — the "
+        f"metallicity chooses templates, it does not move mass — but grad is {grad}"
+    )
+
+    # And a quantity that DOES depend on lgmet, so the test measures a gradient
+    # rather than a conservation law twice. The metallicity weights are what the
+    # table actually steers.
+    def met_weighted_index(lg):
+        _, mw = compute_dsps_met_table_weights(
+            sfr, lg, SSP_AGES_YR, SSP_LGMET, SSP_LG_AGE_GYR, SSP_FLUX, T_OBS_GYR, LGMET_SCATTER
+        )
+        return jnp.sum(mw * jnp.arange(mw.shape[-1], dtype=mw.dtype))
+
+    mgrad = assert_grad_matches_fd(met_weighted_index, lgmet)
+    assert jnp.all(jnp.isfinite(mgrad)), f"Non-finite metallicity-weight gradient: {mgrad}"
+    assert jnp.any(mgrad != 0.0), (
+        f"the metallicity weights do not respond to lgmet_table at all: {mgrad} — "
+        f"finite is not enough, a dead gradient here means the table is inert (#2100)"
     )
 
 

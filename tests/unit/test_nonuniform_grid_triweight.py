@@ -217,11 +217,8 @@ class TestNonuniformTriweight:
             grad_fn = jax.jit(jax.grad(interp_sum))
             for x in xs:
                 grad = grad_fn(x)
+                # grad-assert: finite-only — #1851 makes this axis nearest-neighbor
                 assert np.isfinite(grad), f"Gradient at x={x} is not finite in f32: {grad}"
-                assert np.any(grad != 0.0), (
-                    "`grad` is identically zero — finite is not enough, "
-                    "a value that has collapsed to zero is as unusable as a NaN one (#2100)"
-                )
         finally:
             jax.config.update("jax_enable_x64", True)
 
