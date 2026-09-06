@@ -841,10 +841,19 @@ jobs:
         # (~0.66 GB/test never released). Fix that and `-n 2` should come back —
         # revisit with a measurement, not an assumption. See #1346.
         include:
+          # 70, not 50: the budget must clear the shard's wall clock under
+          # runner-pool congestion, which is worth +60% on its own. Measured
+          # 2026-09-05 by rerunning the SAME main SHA's contract job in the
+          # evening pool: ~25m (original daytime run) -> 40m34s (rerun, run
+          # 33979717459 attempt 2). Evening PR runs sat at 47-48m, and
+          # #2147's job was killed AT the 50m cap with zero test failures.
+          # The per-test `--timeout=600` below still catches real hangs, so
+          # this cap only bounds total wall clock — sizing it tight buys
+          # nothing and manufactures spurious reds.
           - shard: contract
             paths: tests/contract
             nproc: 2
-            budget: 50
+            budget: 70
           # `tests/unit` rides along here (2026-07-26). It was in NO shard: the
           # #148 rehome emptied the tree and the matrix was rewritten around the
           # physics-first trees without it, so anything landing back in
@@ -1235,10 +1244,14 @@ jobs:
         # measure: #1362 (chunked fast-grid build) shrinks the underlying
         # allocation; revisit -n 2 once it lands.
         include:
+          # 70, not 50, for the same reason as the test job's contract row
+          # above: pool congestion alone moved the same-SHA contract shard
+          # ~25m -> 40m34s (2026-09-05), and this copy carries `--cov` on
+          # top. The per-test `--timeout=600` still catches real hangs.
           - shard: contract
             paths: tests/contract
             nproc: 2
-            budget: 50
+            budget: 70
           # `tests/unit` rides along here (2026-07-26). It was in NO shard: the
           # #148 rehome emptied the tree and the matrix was rewritten around the
           # physics-first trees without it, so anything landing back in
