@@ -200,9 +200,48 @@ def disk_template(
 
 
 # ── Torus libraries ─────────────────────────────────────────────────────────
+# Task 4 vendored five additional AGNfitter-rX torus reductions into
+# ``agnfitter_torus_reference.h5`` (native resolution, no resampling -- see
+# ``scripts/build_agnfitter_bbb_reference.py::_write_df_grid_native``), but
+# left no accessor for them. These map onto the SAME (incl, oa, tau, a, fwd)
+# keyword vocabulary the four legacy libraries already use below, so no new
+# parameter names are introduced -- ``tau`` doubles for a reduction's
+# ``tv_axis`` exactly as it already does for SKIRTOR's ``tv-values``.
+_TORUS_REDUCTION_GROUP: dict[str, str] = {
+    "NK08_2P": "nk08_2p",
+    "NK08_3P": "nk08_3p",
+    "SKIRTOR_MEAN1P": "skirtor_mean1p",
+    "SKIRTOR_MEAN2P": "skirtor_mean2p",
+    "CAT3D_LOWFWD": "cat3d_lowfwd",
+}
+# Per-reduction axis order, as stored by the h5 writer (``<axis>_axis``
+# datasets in this order, then the trailing wavelength axis on ``template``).
+_TORUS_REDUCTION_AXES: dict[str, tuple[str, ...]] = {
+    "NK08_2P": ("incl", "oa"),
+    "NK08_3P": ("incl", "oa", "tau"),
+    "SKIRTOR_MEAN1P": ("incl",),
+    "SKIRTOR_MEAN2P": ("oa", "incl"),
+    "CAT3D_LOWFWD": ("incl", "a", "fwd"),
+}
+# keyword -> h5 dataset name for each axis token used above.
+_AXIS_H5_KEY: dict[str, str] = {
+    "incl": "incl_axis",
+    "oa": "oa_axis",
+    "tau": "tv_axis",
+    "a": "a_axis",
+    "fwd": "fwd_axis",
+}
+
+
 def list_tori() -> list[str]:
-    """Names of the torus libraries this driver can load."""
-    return ["S04", "NK08", "SKIRTOR", "CAT3D"]
+    """Names of the torus libraries this driver can load.
+
+    The first four are AGNfitter-rX's headline libraries (one template or a
+    coarse grid each); the remaining five are additional averaged reductions
+    of the same NK08/SKIRTOR/CAT3D families that AGNfitter-rX also ships
+    (Task 4), read from the same committed ``agnfitter_torus_reference.h5``.
+    """
+    return ["S04", "NK08", "SKIRTOR", "CAT3D", *_TORUS_REDUCTION_GROUP]
 
 
 def torus_template(
@@ -221,20 +260,22 @@ def torus_template(
 
     Parameters
     ----------
-    name : {"S04", "NK08", "SKIRTOR", "CAT3D"}
-        Torus library name.
+    name : {"S04", "NK08", "SKIRTOR", "CAT3D", "NK08_2P", "NK08_3P", \
+"SKIRTOR_MEAN1P", "SKIRTOR_MEAN2P", "CAT3D_LOWFWD"}
+        Torus library or reduction name (see :func:`list_tori`).
     log_nh : float, optional
         S04 hydrogen column ``log10(N_H)``.
     incl : float, optional
-        Inclination [deg] (NK08, SKIRTOR, CAT3D).
+        Inclination [deg] (NK08, SKIRTOR, CAT3D, and every ``_2P``/``_3P``/
+        ``_MEAN*P`` reduction below).
     oa : float, optional
-        Half-opening angle [deg] (SKIRTOR).
+        Half-opening angle [deg] (SKIRTOR, NK08_2P, NK08_3P, SKIRTOR_MEAN2P).
     tau : float, optional
-        Equatorial optical depth (SKIRTOR ``tv``).
+        Equatorial optical depth (SKIRTOR ``tv``; also NK08_3P's ``tv_axis``).
     a : float, optional
-        Radial cloud power-law index (CAT3D).
+        Radial cloud power-law index (CAT3D, CAT3D_LOWFWD).
     fwd : float, optional
-        Polar-wind mass fraction (CAT3D).
+        Polar-wind mass fraction (CAT3D, CAT3D_LOWFWD).
 
     Returns
     -------
@@ -244,6 +285,8 @@ def torus_template(
         Torus luminosity density [erg/s/Hz], AGNFITTER-RX normalization.
     """
     name = name.upper()
+    if name in _TORUS_REDUCTION_GROUP:
+        return _reduction_template(name, incl=incl, oa=oa, tau=tau, a=a, fwd=fwd)
     if name == "S04":
         d = _ref(_TORUS_H5, "s04")
         i = _nearest(d["axis"], log_nh)
@@ -283,9 +326,44 @@ def torus_template(
     raise ValueError(f"Unknown torus library {name!r}; choose from {list_tori()}")
 
 
+def _reduction_template(
+    name: str,
+    *,
+    incl: float | None,
+    oa: float | None,
+    tau: float | None,
+    a: float | None,
+    fwd: float | None,
+) -> tuple[np.ndarray, np.ndarray]:
+    """Load one of the five Task-4 torus reductions at its nearest grid node.
+
+    Reads ``agnfitter_torus_reference.h5``'s ``<reduction>`` group (native
+    wavelength resolution, ascending Å already -- see
+    ``scripts/build_agnfitter_bbb_reference.py::_write_df_grid_native``) and
+    indexes its ``template`` array along the reduction's declared axis order
+    (:data:`_TORUS_REDUCTION_AXES`), selecting the nearest node on each axis
+    given by name from the local scope (``incl``, ``oa``, ``tau``, ``a``,
+    ``fwd``).
+    """
+    values = {"incl": incl, "oa": oa, "tau": tau, "a": a, "fwd": fwd}
+    d = _ref(_TORUS_H5, _TORUS_REDUCTION_GROUP[name])
+    idx = tuple(
+        _nearest(d[_AXIS_H5_KEY[axis]], values[axis]) for axis in _TORUS_REDUCTION_AXES[name]
+    )
+    template = np.asarray(d["template"], dtype=np.float64)[idx]
+    wave_aa = np.asarray(d["wavelength"], dtype=np.float64)
+    return wave_aa, _renorm("TO", template)
+
+
 def torus_axes(name: str) -> dict[str, np.ndarray]:
     """Grid axes for a torus library."""
     name = name.upper()
+    if name in _TORUS_REDUCTION_GROUP:
+        d = _ref(_TORUS_H5, _TORUS_REDUCTION_GROUP[name])
+        return {
+            axis: np.asarray(d[_AXIS_H5_KEY[axis]], dtype=np.float64)
+            for axis in _TORUS_REDUCTION_AXES[name]
+        }
     if name == "S04":
         d = _ref(_TORUS_H5, "s04")
         return {"log_nh": np.asarray(d["axis"], dtype=np.float64)}
