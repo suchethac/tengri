@@ -35,6 +35,7 @@ References
 from __future__ import annotations
 
 import functools
+import math
 from collections.abc import Callable
 from dataclasses import dataclass
 from typing import Any, NamedTuple
@@ -1644,7 +1645,19 @@ _register(
 # bound of the flex zone), ratio_young (youngest-vs-flex SFR ratio), and
 # ratio_old_0..N-2 for the fixed old bins. Suess+2022 Table 1 sets tlast
 # uniform in [0.01, 1.0] Gyr and a Student-t on every SFR ratio, here
-# StudentT(0, 0.3, 2); tflex_gyr carries tengri's Uniform(0.5, 5.0).
+# StudentT(0, 0.3, 2); tflex_gyr carries tengri's Uniform(1.0, 5.0).
+#
+# That tflex floor is the tlast CEILING, deliberately: the flexible zone is
+# [tlast, tflex], so any joint draw with tlast > tflex gives it negative width,
+# which annihilates the zone and lets the youngest bin overrun it. Priors that
+# overlap cannot express that constraint, so the floor removes the overlap
+# instead. The paper loses nothing: Suess+2022 fix tflex at 2 Gyr and draw
+# tlast on [0.01, 1.0], and 2.0 remains the default here. Equality
+# (tlast = tflex = 1.0) stays legal and is the only contact point: measured, it
+# gives a zero-width flexible bin, a non-decreasing ladder, a finite
+# non-negative history, mass closed to 1.3e-4 and a finite gradient in tflex.
+# Pinned values bypass a prior, so `validate_psb_quench_ordering` below refuses
+# a crossing that `Fixed()` would otherwise smuggle past this floor.
 #
 # Two tengri layout choices, recorded here because neither is the paper's own
 # construction:
@@ -1652,7 +1665,7 @@ _register(
 #   * The three fixed old bins are equal-width from `tflex_gyr` to 13.7 Gyr
 #     (`psb_continuity_flex`'s default), an approximation of the paper's
 #     template edges. Deriving them FROM `tflex_gyr` is what keeps the ladder
-#     ascending for every value the Uniform(0.5, 5.0) prior can draw. Until
+#     ascending for every value the Uniform(1.0, 5.0) prior can draw. Until
 #     #2184 this entry spliced `tflex_gyr` in ahead of a fixed ladder starting
 #     at 0.3 Gyr, so the ladder crossed itself over that whole prior,
 #     `jnp.searchsorted` ran on an unsorted array, and the mass closed to
@@ -1664,6 +1677,14 @@ _register(
 #     bin instead, which gives its fixed section one more free amplitude than
 #     this entry has.
 _N_PSB_OLD_RATIOS = PSB_FLEX_DEFAULT_N_FIXED - 1
+
+#: Ceiling of the ``tlast_gyr`` prior [Gyr] (Suess+2022 Table 1), and therefore
+#: the floor of the ``tflex_gyr`` prior on both post-starburst entries: the two
+#: priors must not overlap or their joint support contains ladders whose
+#: flexible zone has negative width.
+_PSB_TLAST_CEIL_GYR = 1.0
+_PSB_TFLEX_FLOOR_GYR = _PSB_TLAST_CEIL_GYR
+
 _register(
     SFHModelSpec(
         name="psb_suess2022",
@@ -1679,13 +1700,14 @@ _register(
                 "Quenching-onset lookback time (Gyr); width of the youngest bin",
                 _lo_positive,
                 "must have lo > 0",
-                Uniform(0.01, 1.0, default=0.1),
+                Uniform(0.01, _PSB_TLAST_CEIL_GYR, default=0.1),
             ),
             "sfh_psb2022_tflex_gyr": ParamDef(
-                "Upper boundary of the flexible quenching zone (Gyr)",
+                "Upper boundary of the flexible quenching zone (Gyr); prior floor "
+                "equals the tlast_gyr ceiling so the zone can never have negative width",
                 _lo_positive,
                 "must have lo > 0",
-                Uniform(0.5, 5.0, default=2.0),
+                Uniform(_PSB_TFLEX_FLOOR_GYR, 5.0, default=2.0),
             ),
             "sfh_psb2022_ratio_young": ParamDef(
                 "log10(SFR_young / SFR_flex); large positive = recent burst",
@@ -1736,6 +1758,17 @@ _register(
 # its ``nflex = 1`` case. That equivalence is pinned by
 # ``tests/components/sfh/test_sfh_lookback_dpl_trunc_exp_psb_flex.py``.
 #
+# A third tengri layout choice on top of the two the ``psb_suess2022`` block
+# records, and flagged for the same reason: the five flexible bins here are
+# EQUAL-WIDTH with free amplitudes (``ratio_flex_*``), while Suess+2022
+# Sect. 3.1.4 gives the flexible zone five bins of EQUAL MASS whose edges move.
+# The two agree only for a flat history across the zone. Approximation, not
+# equivalence.
+#
+# ``tflex_gyr``'s prior floor is the ``tlast_gyr`` ceiling here too, for the
+# reason the ``psb_suess2022`` block states: overlapping priors would put
+# negative-width flexible zones in the joint support.
+#
 # The flex-bin count is fixed at registration rather than settable per build:
 # an SFH model's parameter list is read straight off its static registry
 # entry, so a per-build count would need a new structural seam through the
@@ -1761,13 +1794,14 @@ _register(
                 "Quenching-onset lookback time (Gyr); width of the youngest bin",
                 _lo_positive,
                 "must have lo > 0",
-                Uniform(0.01, 1.0, default=0.2),
+                Uniform(0.01, _PSB_TLAST_CEIL_GYR, default=0.2),
             ),
             "sfh_psb_flex_tflex_gyr": ParamDef(
-                "Upper boundary of the flexible quenching zone (Gyr)",
+                "Upper boundary of the flexible quenching zone (Gyr); prior floor "
+                "equals the tlast_gyr ceiling so the zone can never have negative width",
                 _lo_positive,
                 "must have lo > 0",
-                Uniform(0.5, 5.0, default=2.0),
+                Uniform(_PSB_TFLEX_FLOOR_GYR, 5.0, default=2.0),
             ),
             "sfh_psb_flex_ratio_young": ParamDef(
                 "log10(SFR_young / SFR_flex_0); large positive = recent burst",
@@ -2165,12 +2199,16 @@ def validate_bin_edges_gyr(sfh_type, edges) -> None:
 
     Notes
     -----
-    The ratio-count rule holds only for the models whose shape function *is*
-    :func:`continuity` (``continuity``, ``bursty_continuity``,
-    ``prospector_beta``): they declare ``n_bins - 1`` ratios, so an array of
-    ``n`` edges needs exactly ``n - 2`` declared ratios. ``continuity_flex``
-    spends some of its parameters on bin *widths* and ``dirichlet`` declares no
-    ratios at all, so the rule is not applied to them.
+    Two families take a ratio-count rule, and they take the same arithmetic for
+    different reasons. The models whose shape function *is* :func:`continuity`
+    (``continuity``, ``bursty_continuity``, ``prospector_beta``) declare
+    ``n_bins - 1`` ratios, so ``n`` edges need exactly ``n - 2`` of them. The
+    post-starburst models on :func:`psb_continuity_flex` (``psb_suess2022``,
+    ``psb_flex``) read only the *length* and the last entry of the array, and
+    their ``ratio_old_*`` count the steps of the fixed section, which again
+    comes to ``n - 2``. ``continuity_flex`` spends some of its parameters on bin
+    *widths* and ``dirichlet`` declares no ratios at all, so the rule is not
+    applied to them.
 
     A mismatched count is not cosmetic: the surplus ratios are swallowed by the
     SFH's ``**ratio_kwargs``, sample a prior that reaches no bin, and change no
@@ -2200,7 +2238,8 @@ def validate_bin_edges_gyr(sfh_type, edges) -> None:
         return
 
     if spec.fn is psb_continuity_flex:
-        # ``psb_flex`` reads only the LENGTH and the last entry: the fixed old
+        # Both post-starburst entries (``psb_suess2022`` since #2184, and
+        # ``psb_flex``) read only the LENGTH and the last entry: the fixed old
         # bins are equal-width from ``tflex_gyr`` to ``edges[-1]``. So the
         # count rule is its own: ``n`` edges means ``n - 1`` fixed bins, which
         # take ``n - 2`` ``ratio_old_*`` parameters. Surplus or missing ones
@@ -2228,6 +2267,120 @@ def validate_bin_edges_gyr(sfh_type, edges) -> None:
             f"{n_declared + 2} bin edges, but bin_edges_gyr has {arr.shape[0]}. Supply "
             f"{n_declared + 2} edges (for example tengri.make_agebins_from_zred(zred=...))."
         )
+
+
+#: SFH families whose flexible zone spans ``[tlast_gyr, tflex_gyr]`` and which
+#: therefore need those two ordered.
+_PSB_QUENCH_TYPES = frozenset({"psb_suess2022", "psb_flex"})
+
+
+def _reachable_range(spec, public_name, given):
+    """Smallest and largest value a build can give one parameter, or None.
+
+    ``given`` is what the grammar resolved for it: ``None`` or ``Fixed(DEFAULT)``
+    for "not named", which pins the registry default; the ``FREE`` sentinel for
+    the declared prior; a ``Fixed`` for a pinned scalar; any other
+    ``Distribution`` for a caller-supplied prior. Returns ``None`` for a form
+    this cannot read, so an unknown input is never turned into a false refusal.
+    """
+    from tengri.parameters.priors import _is_default_fixed
+    from tengri.parameters.sentinels import DEFAULT, FREE
+
+    declared = spec.params[public_name].default
+    if given is None or given is DEFAULT or _is_default_fixed(given):
+        value = float(declared.default)
+        return value, value
+    if given is FREE:
+        lo, hi = declared.bounds
+        return float(lo), float(hi)
+    if isinstance(given, Fixed):
+        value = given.value
+        if not isinstance(value, (int, float)):
+            return None
+        return float(value), float(value)
+    if isinstance(given, Distribution):
+        lo, hi = given.bounds
+        if not (math.isfinite(lo) and math.isfinite(hi)):
+            return None
+        return float(lo), float(hi)
+    if isinstance(given, (int, float)):
+        return float(given), float(given)
+    return None
+
+
+def validate_psb_quench_ordering(sfh_type, tlast, tflex) -> None:
+    """Refuse a post-starburst build whose flexible zone could have negative width.
+
+    Parameters
+    ----------
+    sfh_type : str
+        Registry name of the SFH being built. Any family other than a
+        post-starburst one returns immediately.
+    tlast : Distribution or float or None
+        What the build grammar resolved for ``tlast_gyr``: a ``Fixed``, a free
+        ``Distribution``, the ``FREE`` sentinel, or ``None`` when the parameter
+        was not named (which pins it at the registry default).
+    tflex : Distribution or float or None
+        The same for ``tflex_gyr``.
+
+    Raises
+    ------
+    ValueError
+        If some ``tlast_gyr`` the build can reach is strictly greater than some
+        ``tflex_gyr`` it can reach.
+
+    Notes
+    -----
+    The flexible zone is ``[tlast_gyr, tflex_gyr]``. The declared priors cannot
+    cross, because ``tflex_gyr``'s floor is ``tlast_gyr``'s ceiling, but a
+    pinned value bypasses its prior, so a build can still ask for
+    ``tlast_gyr > tflex_gyr``. Nothing downstream raises there: the ladder stops
+    ascending, the flexible bin takes a negative width, the youngest bin
+    overruns it, and the total mass still closes, because the same signed widths
+    that build the history also normalize it. Measured at ``tlast_gyr = 1.0,
+    tflex_gyr = 0.5``: ladder ``[0, 1.0, 0.5, 4.9, 9.3, 13.7]``, integrated mass
+    1.000128 of the declared total. Silent, so it is refused here rather than
+    left to a mass-closure test that cannot see it.
+
+    Equality is legal, and is the single point the two priors share. Measured at
+    ``tlast_gyr = tflex_gyr = 1.0``: the flexible bin has zero width, the ladder
+    is non-decreasing, the history is finite and non-negative, the mass closes
+    to 1.3e-4 (the same as its neighbors), and ``d/d tflex_gyr`` is finite and
+    continuous with the interior.
+
+    **JIT-compatible**: not applicable; a build-time check on Python objects.
+    """
+    if not isinstance(sfh_type, str) or sfh_type not in _PSB_QUENCH_TYPES:
+        return
+    spec = SFH_REGISTRY.get(sfh_type)
+    if spec is None:
+        return
+
+    prefix = _spec_public_prefix(spec)
+    last = _reachable_range(spec, f"{prefix}tlast_gyr", tlast)
+    flex = _reachable_range(spec, f"{prefix}tflex_gyr", tflex)
+    if last is None or flex is None:
+        return
+    if last[1] <= flex[0]:
+        return
+
+    def _describe(name, rng):
+        if rng[0] == rng[1]:
+            return f"{name}={rng[0]:g} (pinned)"
+        return f"{name} in [{rng[0]:g}, {rng[1]:g}]"
+
+    raise ValueError(
+        f"sfh type={sfh_type!r} would put the flexible quenching zone "
+        f"[tlast_gyr, tflex_gyr] at negative width: "
+        f"{_describe('tlast_gyr', last)} reaches "
+        f"{last[1]:g} Gyr, above {_describe('tflex_gyr', flex)} at "
+        f"{flex[0]:g} Gyr. The zone starts at tlast_gyr and ends at tflex_gyr, so "
+        f"tlast_gyr must stay at or below tflex_gyr everywhere the build can "
+        f"reach; a crossing annihilates the flexible bin and lets the youngest "
+        f"bin overrun it, with the mass still closing and nothing raised. Raise "
+        f"tflex_gyr above {last[1]:g} Gyr, or pin tlast_gyr at or below "
+        f"{flex[0]:g} Gyr."
+    )
 
 
 def _spec_public_prefix(spec) -> str:

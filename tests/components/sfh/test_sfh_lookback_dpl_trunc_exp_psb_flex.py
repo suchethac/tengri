@@ -198,7 +198,7 @@ def test_psb_flex_conserves_the_declared_total_mass():
     assert bool(jnp.all(sfr >= 0.0))
 
 
-@pytest.mark.parametrize("tflex_gyr", [0.5, 0.9, 2.0, 5.0])
+@pytest.mark.parametrize("tflex_gyr", [1.0, 1.4, 2.0, 5.0])
 def test_psb_flex_ladder_is_ascending_for_every_tflex_in_its_prior(tflex_gyr):
     """``psb_flex`` lays its fixed bins out FROM ``tflex``, so they never cross.
 
@@ -206,7 +206,8 @@ def test_psb_flex_ladder_is_ascending_for_every_tflex_in_its_prior(tflex_gyr):
     fixed edges, so it is the caller's job to keep ``tflex_gyr`` below the
     first of them. That is checked here on the derived ladder, which is what
     makes ``jnp.searchsorted`` well defined and the mass sum exact across the
-    whole Uniform(0.5, 5.0) prior on ``tflex_gyr``.
+    whole Uniform(1.0, 5.0) prior on ``tflex_gyr`` (floor raised to the
+    ``tlast_gyr`` ceiling in #2184, so the joint prior cannot cross either).
     """
     fixed = np.linspace(tflex_gyr, PSB_FLEX_DEFAULT_MAX_AGE_GYR, PSB_FLEX_DEFAULT_N_FIXED + 1)
     edges = np.concatenate([[0.0, 0.2, tflex_gyr], fixed[1:]])

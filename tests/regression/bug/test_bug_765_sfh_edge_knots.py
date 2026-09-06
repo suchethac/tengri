@@ -33,10 +33,13 @@ from tengri.components.stellar.component import _inject_edge_knots, _refine_sfh_
 from tengri.components.stellar.sfh.nonparametric import (
     CFLEX_DEFAULT_ANCHOR_GYR,
     DEFAULT_BIN_EDGES_GYR,
+    PSB_FLEX_DEFAULT_MAX_AGE_GYR,
+    PSB_FLEX_DEFAULT_N_FIXED,
     continuity,
     continuity_flex,
     dirichlet,
     psb_continuity,
+    psb_continuity_flex,
     sfh_bin_edges_yr,
 )
 from tests._bounds import assert_non_negative
@@ -67,19 +70,42 @@ def test_sfh_bin_edges_yr_continuity_flex_matches_analytic():
     assert_non_negative(np.diff(edges), name="output")
 
 
-def test_sfh_bin_edges_yr_psb_continuity():
-    """psb_continuity edges mirror its own ``all_edges_gyr`` construction.
+def test_sfh_bin_edges_yr_psb_continuity_flex():
+    """The post-starburst ladder mirrors ``psb_continuity_flex``'s construction.
 
-    psb_continuity builds ``[0, tlast, tflex, *bin_edges_gyr[1:]]`` (Suess+2021);
-    these are the transition lookback times to resolve. They are not necessarily
-    listed in ascending order, but ``_inject_edge_knots`` sorts before use, so
-    injecting them still places a knot at every step the SFH actually has.
+    ``[0, tlast]``, then the equal-width flexible edges out to ``tflex``, then
+    the equal-width fixed edges out to the oldest age. This is the branch #2184
+    added: both post-starburst registry entries name that callable, and until
+    then neither was served any knots at all.
     """
     kw = dict(tlast_gyr=0.3, tflex_gyr=2.0, ratio_young=1.0)
-    edges = np.asarray(sfh_bin_edges_yr(psb_continuity, kw))
-    old = np.asarray(DEFAULT_BIN_EDGES_GYR[2:])  # [0.3, 1.0, 3.0, 6.0, 13.7]
-    expect = np.concatenate([[0.0, 0.3, 2.0], old[1:]]) * 1e9
+    edges = np.asarray(sfh_bin_edges_yr(psb_continuity_flex, kw))
+    fixed = np.linspace(2.0, PSB_FLEX_DEFAULT_MAX_AGE_GYR, PSB_FLEX_DEFAULT_N_FIXED + 1)
+    expect = np.concatenate([[0.0, 0.3], fixed]) * 1e9
     assert np.allclose(edges, expect)
+    assert_non_negative(np.diff(edges), name="output")
+
+
+def test_sfh_bin_edges_yr_psb_continuity_flex_counts_the_flex_ratios():
+    """``flex_*`` kwargs resolve the flexible zone, and the knots must follow it."""
+    kw = dict(tlast_gyr=0.2, tflex_gyr=2.0, flex_0=0.1, flex_1=-0.2, flex_2=0.3, flex_3=0.0)
+    edges = np.asarray(sfh_bin_edges_yr(psb_continuity_flex, kw)) / 1e9
+    flex = np.linspace(0.2, 2.0, 6)  # four ratios describe five flexible bins
+    fixed = np.linspace(2.0, PSB_FLEX_DEFAULT_MAX_AGE_GYR, PSB_FLEX_DEFAULT_N_FIXED + 1)
+    expect = np.concatenate([[0.0], flex, fixed[1:]])
+    assert np.allclose(edges, expect)
+
+
+def test_sfh_bin_edges_yr_none_for_bare_psb_continuity():
+    """``psb_continuity`` alone has no knowable ladder, so it gets none.
+
+    Its fixed edges arrive as a separate argument the caller supplies, not in
+    ``sfh_kwargs``, so a branch here could only guess at them; the branch that
+    used to do exactly that returned the shipped default ladder for every
+    caller. No registry entry names this callable since #2184 (both go through
+    :func:`psb_continuity_flex`), so nothing on the model path is served by it.
+    """
+    assert sfh_bin_edges_yr(psb_continuity, dict(tlast_gyr=0.3, tflex_gyr=2.0)) is None
 
 
 def test_sfh_bin_edges_yr_none_for_parametric():
@@ -132,6 +158,51 @@ def test_edge_knot_sfh_conserves_mass_and_finite(synthetic_ssp_wide):
     )
     sed = np.asarray(state.sed_intrinsic)
     assert np.all(np.isfinite(sed)) and np.all(sed >= 0.0)
+
+
+@pytest.mark.parametrize("sfh_type", ["psb_suess2022", "psb_flex"])
+def test_edge_knots_close_the_post_starburst_formed_mass(synthetic_ssp_wide, sfh_type):
+    """Both post-starburst entries must form the mass they declare, on the default grid.
+
+    Before #2184 wired ``psb_continuity_flex`` into :func:`sfh_bin_edges_yr`,
+    neither entry got any knots, and the 256-node log-spaced integrand smeared
+    every step of the ladder: measured 9.995266 against a declared 10.0, and a
+    1.14 % offset on the whole intrinsic SED, which is a normalization error and
+    not a shape one. With the knots both entries return 9.999999.
+
+    Run at z = 0 so the lookback grid reaches the ladder's oldest edge; at any
+    higher redshift the cosmic-age cap truncates the oldest bin and the formed
+    mass is legitimately below the declared total.
+    """
+    log_total_mass = 10.0
+    sfh = {
+        "type": sfh_type,
+        "log_total_mass": Fixed(log_total_mass),
+        "tlast_gyr": Fixed(0.3),
+        "tflex_gyr": Fixed(2.0),
+        "ratio_young": Fixed(-1.5),
+        "ratio_old_0": Fixed(0.2),
+        "ratio_old_1": Fixed(-0.3),
+        "all_params": Fixed(DEFAULT),
+    }
+    model = SEDModel.build(
+        ssp_data=synthetic_ssp_wide,
+        met={"logzsol": Fixed(0.0), "all_params": Fixed(DEFAULT)},
+        sfh=sfh,
+        dust_attenuation={
+            "law": "power_law",
+            "type": "two_component",
+            "tau_bc": Fixed(0.0),
+            "tau_diff": Fixed(0.0),
+            "all_params": Fixed(DEFAULT),
+        },
+        redshift=Fixed(0.0),
+    )
+    formed = float(model.predict_state({}).derived["log_mstar_formed"])
+    assert abs(formed - log_total_mass) < 1e-4, (
+        f"{sfh_type} formed log10={formed:.6f} against a declared {log_total_mass}: "
+        "the ladder's bin edges are not reaching the integrand as knots (#765/#2184)"
+    )
 
 
 def test_edge_knot_sfh_is_jit_safe(synthetic_ssp_wide):

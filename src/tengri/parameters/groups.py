@@ -2443,6 +2443,31 @@ def _validate_sfh_bin_edges(sfh_type, edges) -> None:
     validate_bin_edges_gyr(sfh_type, edges)
 
 
+def _validate_sfh_quench_ordering(sfh_type, sfh_dict: dict) -> None:
+    """Refuse a post-starburst build whose quenching epochs are out of order (#2184).
+
+    Reads what the group dict says about ``tlast_gyr`` and ``tflex_gyr``, in the
+    grammar's own order of precedence (an explicit per-parameter entry, else the
+    wildcard, else nothing, which pins the registry default), and hands both to
+    the registry. The rule itself lives there, beside
+    :func:`validate_bin_edges_gyr`, so the grammar owns only the lookup.
+
+    By this pass ``all_params`` / ``other_params`` have been normalized to the
+    ``'*'`` key; both spellings are still read so the lookup does not depend on
+    that normalization staying upstream of this call.
+    """
+    from tengri.components.stellar.sfh.registry import validate_psb_quench_ordering
+
+    wildcard = sfh_dict.get("*")
+    if wildcard is None:
+        wildcard = sfh_dict.get("all_params", sfh_dict.get("other_params"))
+    validate_psb_quench_ordering(
+        sfh_type,
+        sfh_dict.get("tlast_gyr", wildcard),
+        sfh_dict.get("tflex_gyr", wildcard),
+    )
+
+
 def _translate_sfh(sfh_dict: dict, result: dict) -> None:
     """Resolve `sfh.type` (or a list composition) into `mean_sfh_type`.
 
@@ -2551,6 +2576,7 @@ def _translate_sfh(sfh_dict: dict, result: dict) -> None:
                 suggestions = difflib.get_close_matches(type_name, valid, n=3, cutoff=0.6)
                 suggest_str = f" Did you mean: {', '.join(suggestions)}?" if suggestions else ""
                 raise ValueError(f"Unknown SFH type '{type_name}' in composition.{suggest_str}")
+            _validate_sfh_quench_ordering(type_name, sfh_dict)
         result["mean_sfh_type"] = sfh_type
         return
 
@@ -2568,6 +2594,7 @@ def _translate_sfh(sfh_dict: dict, result: dict) -> None:
         suggest_str = f" Did you mean: {', '.join(suggestions)}?" if suggestions else ""
         raise ValueError(f"Unknown SFH type '{sfh_type}'.{suggest_str}")
 
+    _validate_sfh_quench_ordering(sfh_type, sfh_dict)
     result["mean_sfh_type"] = sfh_type
 
 
