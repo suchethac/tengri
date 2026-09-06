@@ -133,6 +133,12 @@ def _build(ir_ssp, ir_obs, engine: str):
 def test_parameter_free_engine_wildcard_is_refused(engine, ir_ssp, ir_obs):
     """The zero-coverage wildcard must be refused at build time.
 
+    Both engines take the same path even though #2179 separately refuses
+    ``pah_drude`` as a model's only dust emitter: the wildcard's covered-0
+    ``ParameterError`` fires during ``parse_groups``, before the only-emitter
+    check is reached (measured), so the parametrization deliberately stays
+    over the full pair rather than the standalone-selectable subset.
+
     Before #2187, the empty narrowing (from the ``declares_no_parameters`` marker
     added during #1482) made ``dust_emission={'type': engine, 'all_params': FREE}``
     build successfully with the wildcard freeing nothing — indistinguishable at the

@@ -150,6 +150,7 @@ References
 from __future__ import annotations
 
 import warnings
+from collections.abc import Iterable
 from pathlib import Path
 from typing import Any, NamedTuple
 
@@ -168,7 +169,7 @@ from tengri.components.nebular._shared import (
     render_nebular_lines,
     sanitize_qh_table,
 )
-from tengri.config.exceptions import warn_measured
+from tengri.config.exceptions import ParameterError, TengriIOError, warn_measured
 from tengri.utils.grid_interp import (
     PreintegratedGrid,
     PreintegratedLines,
@@ -200,18 +201,26 @@ class CB19NoContinuumWarning(UserWarning):
     """Warning: CB19Backend provides no nebular continuum (returns zeros)."""
 
 
-class CB19DegenerateGridWarning(UserWarning):
-    """Warning: the loaded CB19 line-ratio grid carries no usable variation.
+class CB19DegenerateGridError(TengriIOError):
+    """The CB_19 line-ratio grid on disk is the flat placeholder, not a grid.
 
-    Emitted at load time when every line ratio in the grid is identical (the
-    flat placeholder ``cb19_templates.h5`` of #924). A degenerate grid gives all
-    emission lines the same luminosity: e.g. Halpha/Hbeta = 1.0 instead of the
-    Case B 2.87: producing plausible-looking but silently wrong line physics.
+    Raised at load time when every line ratio in the file is identical (#924).
+    Interpolating a constant slab returns the same value at every query point,
+    so every emission line receives the same luminosity (Halpha/Hbeta = 1.0
+    instead of the Case B 2.87) and every grid-axis parameter is bit-exactly
+    inert.
+
+    This warned rather than raised until #2181, where a fit built on the
+    placeholder reported a posterior for five nebular parameters whose
+    measured effect on the photometry was exactly 0.0 each: the warning was
+    filtered, as warnings routinely are, and nothing else in the output said
+    the likelihood was flat. An incomplete data file is refused here the way
+    the MAPPINGS backends refuse theirs (#2070, #2078).
     """
 
 
-def _warn_if_degenerate_line_ratios(ratios: np.ndarray, filepath: Path) -> None:
-    """Warn loudly if a CB19 line-ratio slab has no usable variation (#924).
+def _reject_degenerate_line_ratios(ratios: np.ndarray, filepath: Path) -> None:
+    """Refuse a CB19 line-ratio slab that carries no usable variation (#924, #2181).
 
     A grid is degenerate when every finite ratio is identical: interpolating it
     is a no-op and all lines collapse to the same luminosity. This is the shipped
@@ -223,21 +232,33 @@ def _warn_if_degenerate_line_ratios(ratios: np.ndarray, filepath: Path) -> None:
     ratios : ndarray
         Loaded line-ratio slab (L_line / L_Hbeta), any shape.
     filepath : Path
-        Source file, for the diagnostic message.
+        Source file, named in the message.
+
+    Raises
+    ------
+    CB19DegenerateGridError
+        When every finite ratio in the slab is identical, or none is finite.
+
+    Notes
+    -----
+    **JIT-compatible**: no: load-time only.
     """
     finite = ratios[np.isfinite(ratios)]
     if finite.size == 0 or float(finite.min()) == float(finite.max()):
         value = float(finite.min()) if finite.size else float("nan")
-        warnings.warn(
-            f"CB19: the line-ratio grid loaded from {filepath} is DEGENERATE: "
-            f"every line ratio is identical ({value:g}). This is the flat "
-            "placeholder cb19_templates.h5 (#924), not a usable CLOUDY grid: all "
-            "10 emission lines would receive the same luminosity (Halpha/Hbeta = "
-            "1.0 instead of the Case B 2.87), producing plausible-looking but "
-            "silently wrong line physics. Regenerate the real grid with "
-            "scripts/download_cb19_templates.py.",
-            CB19DegenerateGridWarning,
-            stacklevel=3,
+        raise CB19DegenerateGridError(
+            f"The CB_19 line-ratio grid at {filepath} is the flat placeholder "
+            f"(#924): every line ratio in it is identical ({value:g}), so it is "
+            "not a usable CLOUDY grid. Interpolating it returns the same value "
+            "at every point, which gives all 10 emission lines the same "
+            "luminosity (Halpha/Hbeta = 1.0 instead of the Case B 2.87) and "
+            "leaves every CB_19 grid parameter (neb_logU, neb_logZ_gas, "
+            "neb_log_nH, neb_co, neb_dno) unable to move the prediction at all "
+            "(#2181). Fix (one of):\n"
+            "  1. Build the real grid:  python scripts/download_cb19_templates.py\n"
+            "  2. Use a nebular backend whose shipped data varies: "
+            "neb={'type': 'cue'}, neb={'type': 'cloudy', 'grid': <path>}, or "
+            "neb={'type': 'ssp'} with a wNE SSP grid."
         )
 
 
@@ -315,7 +336,7 @@ _LOG_FLOOR = 1e-30  # prevent log(0) for zero-flux lines
 
 
 def load_cb19_grid(
-    filepath: str | Path = _DEFAULT_PATH,
+    filepath: str | Path | None = None,
     sed_type: str = "SSP",
     imf: str = "Kroupa01",
     mup: float = 100.0,
@@ -332,8 +353,9 @@ def load_cb19_grid(
 
     Parameters
     ----------
-    filepath : str or Path
+    filepath : str or Path, optional
         Path to ``cb19_templates.h5`` (built by ``scripts/download_cb19_templates.py``).
+        ``None`` (the default) resolves the packaged location at call time.
     sed_type : {"SSP", "CSF"}
         Ionizing SED type. "SSP" = single stellar population (use for line-weighted
         CSP sums); "CSF" = constant star formation.
@@ -358,6 +380,8 @@ def load_cb19_grid(
         to build it.
     KeyError
         If the requested (sed_type, imf, mup) combination is not in the file.
+    CB19DegenerateGridError
+        If every line ratio in the file is identical (the flat placeholder).
 
     Notes
     -----
@@ -365,7 +389,10 @@ def load_cb19_grid(
     at model initialization and cache the result for repeated use.
 
     """
-    filepath = Path(filepath)
+    # Resolved here, not in the signature: a module-level default is bound at
+    # import time, so a ``$TENGRI_DATA_DIR`` (or a test fixture) that moves
+    # ``_DEFAULT_PATH`` afterwards had no effect on any caller relying on it.
+    filepath = Path(_DEFAULT_PATH if filepath is None else filepath)
     if not filepath.exists():
         raise FileNotFoundError(
             f"CB_19 template file not found: {filepath}\n"
@@ -414,9 +441,10 @@ def load_cb19_grid(
         grp = f[group_key]
         ratios = np.array(grp["line_ratios"][:, :, :, :, :, :, i_hb, :], dtype=np.float32)
 
-    # Guard against a degenerate/placeholder grid (all ratios identical), which
-    # would silently give every line the same luminosity (#924).
-    _warn_if_degenerate_line_ratios(ratios, filepath)
+    # Refuse a degenerate/placeholder grid (all ratios identical), which would
+    # otherwise give every line the same luminosity and leave every grid-axis
+    # parameter inert (#924, #2181).
+    _reject_degenerate_line_ratios(ratios, filepath)
 
     # Convert to log10 space; replace NaN with log10(floor)
     log_ratios = np.log10(np.where(np.isfinite(ratios) & (ratios > 0), ratios, _LOG_FLOOR))
@@ -431,6 +459,128 @@ def load_cb19_grid(
         line_wavelengths=line_wavelengths,
         log_line_ratios=jnp.array(log_ratios),
         log_hb_per_qh=float(np.log10(_HB_PER_QH_LSUN)),
+    )
+
+
+#: Which CB_19 interpolation axis each user-facing parameter indexes.
+#:
+#: Keyed by the axis position in ``log_line_ratios``
+#: ``(N_OH, N_age, N_U, N_nH, N_CO, N_dNO, N_lines)``. Axis 1 (age) is absent
+#: because the SSP grid indexes it, not a fitted parameter, and the trailing
+#: line axis is not an interpolation axis at all. ``neb_dig_delta_logU`` sits
+#: with ``neb_logU`` because the DIG regime enters the *same* ``log_U`` axis as
+#: an offset (``NebularSEDComponent.apply``), so it is inert on exactly the
+#: grids ``neb_logU`` is inert on.
+_CB19_AXIS_PARAMS: dict[int, tuple[str, tuple[str, ...]]] = {
+    0: ("log_OH", ("neb_logZ_gas",)),
+    2: ("log_U", ("neb_logU", "neb_dig_delta_logU")),
+    3: ("log_nH", ("neb_log_nH",)),
+    4: ("log_CO", ("neb_co",)),
+    5: ("dNO", ("neb_dno",)),
+}
+
+#: Spread in ``log10(ratio)`` at or below which an axis carries no variation.
+#:
+#: The slab is stored float32, whose relative resolution is ~1e-7, so a spread
+#: of 1e-12 dex is orders of magnitude below anything the file can represent:
+#: an axis under it cannot move the prediction. Deliberately far under the
+#: float32 floor rather than at it, so the test refuses only grids that are
+#: provably inert and never a real grid with a genuinely shallow axis.
+_AXIS_FLAT_ATOL: float = 1e-12
+
+
+def cb19_flat_axis_params(grid: CB19GridData) -> dict[str, str]:
+    """Parameters whose CB_19 grid axis carries no variation (#2181).
+
+    Interpolating a constant axis returns the same value for every coordinate,
+    so the parameter that indexes it is **bit-exactly** inert: the SED, the
+    photometry and the gradient are all identical across its whole prior.
+
+    Parameters
+    ----------
+    grid : CB19GridData
+        Loaded grid slice, as returned by :func:`load_cb19_grid`.
+
+    Returns
+    -------
+    dict of str to str
+        ``{parameter_name: axis_label}`` for every parameter whose axis is
+        flat. Empty when every axis carries variation.
+
+    Notes
+    -----
+    **JIT-compatible**: no: reads the concrete slab with numpy and is called
+    once at model construction, outside any JAX transform.
+
+    An axis of length 1 is flat by construction and reported as such.
+    """
+    ratios = np.asarray(grid.log_line_ratios)
+    flat: dict[str, str] = {}
+    for axis, (label, params) in _CB19_AXIS_PARAMS.items():
+        if ratios.shape[axis] < 2:
+            spread = 0.0
+        else:
+            spread = float(np.ptp(ratios, axis=axis).max())
+        if spread <= _AXIS_FLAT_ATOL:
+            for name in params:
+                flat[name] = label
+    return flat
+
+
+def check_cb19_free_params(
+    grid: CB19GridData,
+    free_params: Iterable[str],
+    *,
+    grid_path: str | Path,
+) -> None:
+    """Refuse free parameters the loaded CB_19 grid cannot respond to (#2181).
+
+    Parameters
+    ----------
+    grid : CB19GridData
+        Loaded grid slice, as returned by :func:`load_cb19_grid`.
+    free_params : iterable of str
+        Parameter names the spec declares free.
+    grid_path : str or Path
+        File the grid came from, named in the message.
+
+    Raises
+    ------
+    ParameterError
+        When any declared-free parameter indexes an axis carrying no
+        variation.
+
+    Notes
+    -----
+    **JIT-compatible**: no: composition-time only.
+
+    This is the partial case of the same defect
+    :class:`CB19DegenerateGridError` covers. That one tests the slab for being
+    constant *everywhere*, which is the shipped placeholder; a grid varying
+    per line but constant along one axis passes it and still leaves that
+    axis's parameter bit-exactly inert. Measured on a grid given variation
+    along ``log_U`` and ``log_OH`` only: ``neb_logU`` and ``neb_logZ_gas``
+    moved the photometry by 1.7e-01 and 2.4e-01 relative while
+    ``neb_log_nH``, ``neb_co`` and ``neb_dno`` stayed at exactly 0.0 (#2181).
+    """
+    flat = cb19_flat_axis_params(grid)
+    offenders = sorted(name for name in set(free_params) if name in flat)
+    if not offenders:
+        return
+    detail = ", ".join(f"{name} (axis {flat[name]})" for name in offenders)
+    raise ParameterError(
+        f"neb={{'type': 'cb19'}} declares {detail} free, but the CB_19 "
+        f"line-ratio grid loaded from {grid_path} carries no variation along "
+        "those axes: every value in the prior gives a bit-identical SED, so a "
+        "fit would explore them and report a posterior that is only the prior. "
+        "Fix (one of):\n"
+        "  1. Regenerate the grid, which the flat placeholder is standing in "
+        "for:\n"
+        "     python scripts/download_cb19_templates.py\n"
+        "  2. Pin them instead of fitting them, e.g. "
+        "neb={'type': 'cb19', 'logU': Fixed(-3.0)}.\n"
+        "  3. Use a backend whose shipped grid varies: neb={'type': 'cue'}, "
+        "or neb={'type': 'cloudy', 'grid': <path>}."
     )
 
 
@@ -565,7 +715,8 @@ class CB19Backend:
         radiation-bounded (default). Snapped to nearest grid point at init.
         Ionizing photon escape fraction ≈ 1 − hbfrac.
     grid_path : str or Path, optional
-        Path to ``cb19_templates.h5``. Defaults to ``data/cb19_templates.h5``.
+        Path to ``cb19_templates.h5``. ``None`` (the default) resolves
+        ``data/cb19_templates.h5`` at call time.
     ssp_data : SSPData, optional
         SSP templates used to precompute Q_H(Z, age) table. If None, Q_H must
         be provided externally via ``_qh_table``.
@@ -593,7 +744,7 @@ class CB19Backend:
         imf: str = "Kroupa01",
         mup: float = 100.0,
         hbfrac: float = 1.0,
-        grid_path: str | Path = _DEFAULT_PATH,
+        grid_path: str | Path | None = None,
         ssp_data=None,
         ionizing_source_warning: str = "warn",
         continuum_warning: str = "warn",
@@ -605,9 +756,14 @@ class CB19Backend:
         self.imf = imf
         self.mup = mup
         self.hbfrac = hbfrac
+        #: File the grid came from, so a caller that finds an axis inert can
+        #: name it (:func:`check_cb19_free_params`). Resolved from the module
+        #: default at call time rather than in the signature; see
+        #: :func:`load_cb19_grid`.
+        self.grid_path = Path(_DEFAULT_PATH if grid_path is None else grid_path)
 
         self.grid = load_cb19_grid(
-            filepath=grid_path,
+            filepath=self.grid_path,
             sed_type=sed_type,
             imf=imf,
             mup=mup,

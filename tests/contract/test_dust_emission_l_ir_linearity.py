@@ -41,8 +41,47 @@ AFFINE_MODELS = {
 }
 
 
+def _is_standalone(model_name: str) -> bool:
+    """Whether ``SEDModel.build`` accepts this type as a model's only emitter."""
+    from tengri.parameters.groups import _standalone_dust_emission_types
+
+    return model_name in _standalone_dust_emission_types()
+
+
+def _flat_model(ssp, model_name, eta, **emission_extra):
+    """The same model through the flat ``Parameters`` expert escape hatch.
+
+    ``SEDModel.build`` refuses a *building block* — a backend that scales a
+    template by ``L_ir`` without renormalizing to it, ``pah_drude`` being the
+    one shipped — as a model's only dust emitter. The proportionality this file
+    pins is a property of the **component**, not of the grammar, and it is what
+    ``EmissionComponent.factors_l_ir`` rests on for every backend including that
+    one, so the sweep must still reach it. The flat form is how, and it is
+    deliberate rather than a workaround: composing a custom model out of pieces
+    is exactly what that form is for.
+    """
+    from tengri import Parameters
+
+    kwargs = {
+        "mean_sfh_type": "delayed",
+        "sfh_delayed_tau_gyr": Fixed(1.0),
+        "sfh_delayed_age_gyr": Fixed(5.0),
+        "sfh_delayed_log_total_mass": Fixed(10.0),
+        "met_logzsol": Fixed(0.0),
+        "dust_tau_bc": Fixed(1.0),
+        "dust_tau_diff": Fixed(0.7),
+        "dust_emission": model_name,
+        "dust_eta_balance": Fixed(eta),
+        "redshift": Fixed(0.0),
+    }
+    kwargs.update({f"dust_{k}": v for k, v in emission_extra.items()})
+    return SEDModel(Parameters(**kwargs), ssp)
+
+
 def _model(ssp, model_name, eta, **emission_extra):
     """Two-component dust with one emission model at a given eta_balance."""
+    if not _is_standalone(model_name):
+        return _flat_model(ssp, model_name, eta, **emission_extra)
     emission = {"type": model_name, "all_params": Fixed(DEFAULT), "eta_balance": Fixed(eta)}
     emission.update(emission_extra)
     return SEDModel.build(
@@ -145,8 +184,15 @@ def test_every_advertised_emission_model_can_be_evaluated(synthetic_ssp_wide):
     whatever raises, so a menu entry that does not resolve costs a silent hole
     in the sweep rather than a failure. This asserts the two registries agree.
 
-    Evaluation, not construction: ``SEDModel.build`` accepts every advertised
-    name, so a build-only check passes and proves nothing.
+    Evaluation, not construction: a build-only check proves nothing about
+    whether the forward pass runs.
+
+    ``_model`` routes each name through the surface that is supposed to accept
+    it — ``SEDModel.build`` for a model, the flat ``Parameters`` form for a
+    building block such as ``pah_drude``, which the builder refuses on purpose.
+    That keeps this a check on *evaluability* rather than a restatement of
+    which names the grammar happens to allow; the refusal itself is pinned in
+    ``tests/contract/test_valid_dust_types_parity.py``.
 
     This carried an ``xfail(strict=True)`` exempting ``dh02_ce01``, which
     ``emission_builders.available()`` advertised while ``predict_state``

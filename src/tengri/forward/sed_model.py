@@ -1093,6 +1093,70 @@ def _validate_dale2014_requires_no_sf_radio(spec) -> None:
     )
 
 
+def _validate_dust_emission_is_energy_balanced(spec) -> None:
+    r"""Raise if the ``dust_emission`` type is a building block, not a model.
+
+    Every dust emission backend but one renormalizes its template so that
+    :math:`\int L_\nu\,d\nu = L_{\rm ir}`, which is what makes it able to carry
+    a model's whole IR budget. ``pah_drude`` does not: it is the Smith+2007 PAH
+    Drude feature forest, scaled by ``L_ir`` but never renormalized to it, and
+    selecting it as a model's only dust emitter re-emits a **measured
+    1.8925e-04 of the absorbed luminosity** (``|int sed_dust_ir dnu| / L_ir``
+    at z = 0) while everything downstream reports a normal-looking fit.
+
+    Parameters
+    ----------
+    spec : Parameters
+        The parsed grammar spec; ``spec.dust_emission`` holds the type name.
+
+    Raises
+    ------
+    ParameterError
+        When the selected type declares ``energy_balanced = False``.
+
+    Notes
+    -----
+    Deliberately a ``build``-time check on the parsed spec rather than a check
+    inside ``parse_groups``: the builders menu enumerates every accepted type
+    through the grammar at import time
+    (``tengri.builders.dust.emission._populate_factories``), so refusing inside
+    the parser would make ``import tengri`` raise. The flat
+    ``Parameters(dust_emission=...)`` expert escape hatch is likewise untouched
+    — that is where composing a custom model deliberately lives.
+    """
+    from tengri.config.exceptions import ParameterError
+    from tengri.parameters.groups import (
+        _dust_emission_component_class,
+        _standalone_dust_emission_types,
+    )
+
+    emission_type = getattr(spec, "dust_emission", None)
+    if not emission_type or emission_type in _standalone_dust_emission_types():
+        return
+
+    cls = _dust_emission_component_class(emission_type)
+    fraction = getattr(cls, "standalone_l_ir_fraction", None)
+    measured = (
+        f"Measured standalone at z = 0 it re-emits {fraction:.4e} of the absorbed "
+        f"luminosity ({100.0 * fraction:.2f}% of L_ir), discarding the rest with "
+        "nothing raised. "
+        if fraction is not None
+        else "It re-emits only a fraction of the absorbed luminosity. "
+    )
+    balanced = ", ".join(sorted(_standalone_dust_emission_types()))
+    raise ParameterError(
+        f"dust_emission={{'type': {emission_type!r}}} is a PAH building block, not an "
+        f"energy-balanced dust emission model, so it cannot be a model's only dust "
+        f"emitter. It carries the aromatic-feature forest with no thermal continuum: "
+        f"its template is scaled by L_ir but never renormalized to it. "
+        f"{measured}"
+        f"Choose an energy-balanced type instead (tengri.list_dust_emission_models()): "
+        f"{balanced}. "
+        f"The {emission_type!r} closure, component and precompute grid stay available "
+        f"for composing a custom model."
+    )
+
+
 def _state_has_content(state) -> bool:
     """Report whether a component state carries anything beyond its name.
 
@@ -2925,8 +2989,19 @@ class SEDModel:
             # whose ``_nebular_backend`` was the wrong class, every line
             # accessor then returned NaN with no warning. Dispatch explicitly.
             from tengri.components.nebular import CB19Backend
+            from tengri.components.nebular.cloudy_cb19 import check_cb19_free_params
 
             self._nebular_backend = CB19Backend(ssp_data=ssp_data)
+            # #2181: the grid's own axes decide which nebular parameters can
+            # move the prediction. On the flat placeholder grid all five are
+            # constant, so a fit explores them against a likelihood that is
+            # bit-exactly flat and reports the prior back as a posterior.
+            # Refuse at construction rather than at the end of a fit.
+            check_cb19_free_params(
+                self._nebular_backend.grid,
+                spec.free_params,
+                grid_path=self._nebular_backend.grid_path,
+            )
         elif spec.nebular_mode == "mappings":
             # MAPPINGS V photoionization grid (Flury et al. 2024). Stellar model,
             # density structure, and ionizing source warning are configurable.
@@ -8090,6 +8165,8 @@ class SEDModel:
                 dict(dust.config.bc_law_overrides),
                 dict(dust.config.diff_law_overrides),
                 dust.config.live_shape_params,
+                bc_law=dust.config.law_bc,
+                diff_law=dust.config.law_diff,
             )
             ssp_ages_yr = (10.0**self.ssp_data.ssp_lg_age_gyr) * 1e9
 
@@ -9270,6 +9347,7 @@ class SEDModel:
                 groups["eline_mode"] = _obs_eline
 
         spec = parse_groups(**groups)
+        _validate_dust_emission_is_energy_balanced(spec)
         _validate_fracagn_requires_dust(spec)
         _validate_firrc_requires_dust(spec)
         _validate_dale2014_requires_no_sf_radio(spec)
