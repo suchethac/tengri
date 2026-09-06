@@ -8,6 +8,37 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 
 ### Fixed
 
+- `mcmc_hmc_lowrank` ran its warmup fused into chain 0's sampling scan, which
+  had two consequences. The #1999 post-adaptation stability probe had nowhere to
+  run, leaving the one dense-capable metric path reachable above the D=30 cap
+  with no step-size remediation; and chain 0 sampled inside the warmup program
+  while chains 1..n-1 ran the separate `_hmc_chain_scan`, so a multi-chain fit
+  ran two structurally different compiled programs over one adaptation — the
+  shape that made NUTS irreproducible under a pinned key before its own split.
+  The fused scan is replaced by `_hmc_low_rank_warmup_only` plus the shared
+  chain scan; the probe and the dead-warmup refusal (#2088) are wired in, and
+  `dense_mass_step_backoffs` / `warmup_divergence_frac` join the diagnostics.
+  Measured on a D=74 posterior, the probe declines on all 12 rows and returns a
+  bit-identical adapted step size, so this is insurance rather than repair
+  (`bench/reports/2026-09-06_low_rank_metric_d74.md`, Finding 6).
+
+- The dense mass-matrix cap is one seam, and crossing it is no longer silent.
+  `use_dense = <policy> and n_dim <= 30` existed at **six** sites with four
+  behaviors: `mcmc_nuts` logged the downgrade at INFO and only when
+  `verbose=True`, `mcmc_hmc` applied it silently, `mcmc_dynamic_hmc` applied it
+  silently from a signature that *defaults* to `dense_mass_matrix=True`,
+  `CatalogFitter` applied the auto-policy without the cap at all — under a
+  comment claiming it used "the same policy the single-galaxy samplers use" —
+  and `fit_batch`, which shares one adaptation across a whole batch, applied it
+  silently too. So an explicit `dense_mass_matrix=True` on a wide problem got a
+  diagonal metric, or an O(D^2) allocation, depending only on which entry point
+  the caller used, and in most cases with no way to find out. All six now route
+  through `resolve_dense_mass_gate`, which honors the request where it can and
+  raises a `UserWarning` carrying `n_dim` and `max_dim` where it cannot. The
+  warning fires regardless of `verbose`: losing the sampler's most consequential
+  setting is not a verbosity question. Nothing about which metric is *chosen*
+  changes — every existing fit gets the same mass matrix it got before.
+
 - `_mass_scale_lnu`'s forward product went `nan` in float32 on the
   `SpectrumPrecomp` path under jaxlib 0.11.1, where jaxlib 0.11.0 was finite —
   with **byte-identical optimized HLO**, so the graph did not change and the

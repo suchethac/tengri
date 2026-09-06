@@ -116,7 +116,14 @@ def run_dynamic_hmc(
 
     n_dim = len(init_flat)
 
-    use_dense = dense_mass_matrix and n_dim <= 30
+    # Shared with HMC and NUTS. This backend defaults to dense in its own
+    # signature, so above the cap it was the one silently discarding a dense
+    # request on every call rather than only on an explicit one.
+    from tengri.inference.backends.mcmc.nuts import resolve_dense_mass_gate
+
+    use_dense = resolve_dense_mass_gate(
+        dense_mass_matrix, n_dim, method="mcmc_dynamic_hmc", verbose=verbose
+    )
 
     if verbose:
         burnin_msg = f", {n_burnin} burn-in" if n_burnin > 0 else ""

@@ -2676,6 +2676,7 @@ class Fitter:
                 _hmc_full_scan,
                 _nuts_full_scan,
             )
+            from tengri.inference.backends.mcmc.nuts import DENSE_MASS_MAX_DIM
 
             log_posterior_flat_2arg, _, init_flat, data_args = _get_flat_logdensity(
                 self, dummy_pos
@@ -2684,7 +2685,11 @@ class Fitter:
             warmup_key = jax.random.PRNGKey(1)
             chain_keys = jax.random.split(jax.random.PRNGKey(2), n_chain)
             n_dim = len(init_flat)
-            use_dense = n_dim <= 30
+            # Which program shape to WARM, not which to fit with, so this
+            # reads the shared cap rather than calling the gate: a
+            # precompilation pass has no user request to refuse and must not
+            # warn about one.
+            use_dense = n_dim <= DENSE_MASS_MAX_DIM
 
             for method in mcmc_methods:
                 if verbose:
@@ -4438,7 +4443,14 @@ class Fitter:
         init_flats = jnp.stack([ravel_pytree(p)[0] for p in init_params_list])
 
         n_dim = init_flats.shape[1]
-        use_dense = dense_mass_matrix and n_dim <= 30
+        from tengri.inference.backends.mcmc.nuts import resolve_dense_mass_gate
+
+        # One adaptation is shared across the whole batch here, so a mass
+        # matrix silently downgraded on this seam is downgraded for every
+        # galaxy at once.
+        use_dense = resolve_dense_mass_gate(
+            dense_mass_matrix, n_dim, method="fit_batch", verbose=verbose
+        )
 
         # Adaptation on the first galaxy, shared across the batch. Wrapped in a
         # memoized jax.jit that takes the galaxy data as a *traced* argument so the
