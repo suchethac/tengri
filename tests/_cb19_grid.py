@@ -1,10 +1,13 @@
 # SPDX-License-Identifier: BSD-3-Clause
 """Synthetic CB_19 line-ratio grids for tests.
 
-The real grid is a 20-60 minute download from 3MdB_17
+The real grid was a 20-60 minute download from 3MdB_17
 (``scripts/download_cb19_templates.py``) and is not tracked, so the suite has
-always run CB_19 against a stand-in. Two stand-ins are needed and they are not
-interchangeable:
+always run CB_19 against a stand-in. As of 2026-09 the download route is
+broken upstream (#2198): the 3MdB CB_19 table is unpopulated pending the
+3MdB team's own corrected grid and erratum, so a stand-in is currently the
+*only* way to run these tests, not merely the untracked one. Two stand-ins
+are needed and they are not interchangeable:
 
 * :func:`write_synthetic_cb19_grid` writes a grid that varies along **every**
   interpolation axis. This is what the backend needs to be exercised at all:
@@ -138,8 +141,9 @@ def write_synthetic_cb19_grid(path: str | Path) -> Path:
     multiply to. H-beta is the reference the ratios are defined against and
     stays exactly 1.0.
 
-    The factors are illustrative, not physical: this is a plumbing fixture,
-    and the real grid is a download away (``scripts/download_cb19_templates.py``).
+    The factors are illustrative, not physical: this is a plumbing fixture.
+    ``scripts/download_cb19_templates.py`` built the real grid; as of 2026-09
+    it cannot (#2198), so this fixture is what CB_19 tests run against.
     """
     axes = _axes()
     ratios = np.ones(_SHAPE, dtype=np.float32)

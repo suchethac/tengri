@@ -142,8 +142,10 @@ requires_cue_weights = pytest.mark.skipif(
 
 requires_cb19 = pytest.mark.skipif(
     not CB19_TEMPLATES.is_file(),
-    reason=f"CB_19 photoionization grid not found at {CB19_TEMPLATES} "
-    "(run scripts/download_cb19_templates.py)",
+    reason=f"CB_19 photoionization grid not found at {CB19_TEMPLATES}. "
+    "scripts/download_cb19_templates.py cannot currently build one: the "
+    "upstream 3MdB CB_19 table is unpopulated pending an erratum (#2198); "
+    "see docs/internal/advanced/cb19_grid.md.",
 )
 
 
@@ -183,8 +185,10 @@ requires_nondegenerate_cb19 = pytest.mark.skipif(
     reason=f"the CB_19 grid at {CB19_TEMPLATES} is constant along log_U, so a "
     "gradient with respect to neb_logU is identically zero and cannot be "
     "checked against a finite difference. This is the synthetic fixture "
-    "tests/conftest.py writes when the real grid is missing -- run "
-    "scripts/download_cb19_templates.py for a grid with a live log_U axis.",
+    "tests/conftest.py writes when the real grid is missing; "
+    "scripts/download_cb19_templates.py would give a grid with a live "
+    "log_U axis, but as of 2026-09 it cannot build one (#2198): the "
+    "upstream 3MdB CB_19 table is unpopulated pending an erratum.",
 )
 
 

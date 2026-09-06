@@ -9,6 +9,25 @@ CB_19 photoionization grid:
   2,358,330 entries from CLOUDY c17.01 runs with C&B 2019 SSP/CSF SEDs.
   Stored in 3MdB_17, table tab_17, ref = 'CB_19'.
 
+Status (as of a read-only probe on 2026-09-07, #2198)
+------------------------------------------------------
+This script currently cannot build the grid: querying ref = 'CB_19' returns
+zero rows from 3MdB_17.tab_17 (and from every other database reachable with
+these credentials -- 3MdB.tab and 3MdBs.projects -- under every near-miss
+spelling tried). This is not a renamed or moved reference to chase: the 3MdB
+project page for CB_19
+(https://sites.google.com/site/mexicanmillionmodels/the-different-projects/cb_19)
+carries a standing notice from the grid's own authors that there is a bug in
+how chemical abundances and metallicities are defined, and that a new grid
+and an erratum will be produced. That page also names the database as
+'3MdB', not '3MdB_17' as queried here -- querying '3MdB.tab' directly finds
+no CB_19 rows either. Run with --discover (or without) to see this reported
+at the query, with a non-zero exit; the script is left in place because it
+is the intended route once 3MdB republishes the grid, not because it works
+today. Until then, build a nebular model with neb={'type': 'cue'},
+neb={'type': 'cloudy', 'grid': <path>}, or neb={'type': 'ssp'} with a wNE
+SSP grid -- see docs/internal/advanced/cb19_grid.md for the full status.
+
 Database access (public credentials, same server as 3MdBs MAPPINGS grids)
 ---------------------------------------------------------------------------
   host:   3mdb.astro.unam.mx   (alias for 132.248.3.52)
@@ -190,6 +209,49 @@ def _connect() -> "pymysql.Connection":  # type: ignore[name-defined]
         read_timeout=600,
         cursorclass=pymysql.cursors.DictCursor,
     )
+
+
+#: 3MdB project page for CB_19, which carries the upstream errata notice.
+_CB19_PROJECT_PAGE = (
+    "https://sites.google.com/site/mexicanmillionmodels/the-different-projects/cb_19"
+)
+
+#: Printed (and raised) when ``ref = 'CB_19'`` returns no rows (#2198). This is
+#: not a renamed or moved reference to chase: a read-only probe on 2026-09-07
+#: found zero CB_19-like rows under every reachable database (3MdB_17.tab_17,
+#: 3MdB.tab, 3MdBs.projects) and every near-miss spelling tried, and the
+#: project page above -- which names the database as '3MdB', not '3MdB_17' as
+#: queried here -- carries a standing notice from the grid's own authors that
+#: there is a bug in how chemical abundances and metallicities are defined,
+#: and that a new grid and an erratum will be produced.
+_NO_ROWS_MESSAGE = (
+    f"No rows found with ref='{_REF}' in {_DB_NAME}.{_DB_TABLE}. As of a "
+    "read-only probe on 2026-09-07, this is not a column-name or ref-spelling "
+    "problem: the same query against 3MdB, 3MdB_17 and 3MdBs (every database "
+    "reachable with these credentials) returns zero rows for 'CB_19' and "
+    "every near-miss spelling tried (CB19, CB_2019, Bruzual, Charlot). The "
+    f"3MdB project page for CB_19 ({_CB19_PROJECT_PAGE}) carries a standing "
+    "notice: chemical abundances and metallicities are defined incorrectly "
+    "in the grid, and the 3MdB team will produce a new grid and an erratum. "
+    "That page also names the database as '3MdB', not '3MdB_17' as queried "
+    "here. There is currently no route to build data/cb19_templates.h5 from "
+    "3MdB; this script will work again once the 3MdB team republishes the "
+    "grid. See docs/internal/advanced/cb19_grid.md for the full status."
+)
+
+
+def _ref_row_count(co) -> int:
+    """Count rows with ``ref = _REF`` in ``_DB_TABLE`` (#2198).
+
+    A dedicated, cheap query run before the expensive axis discovery and full
+    fetch, so a ``ref`` that has gone missing upstream is reported clearly
+    rather than crashing deep inside :func:`_query_axes` on an empty-sequence
+    ``max()``.
+    """
+    cur = co.cursor()
+    cur.execute(f"SELECT COUNT(*) AS n FROM {_DB_TABLE} WHERE ref = %s", (_REF,))
+    row = cur.fetchone()
+    return int(row["n"]) if row else 0
 
 
 def _discover_schema(co) -> None:
@@ -772,6 +834,14 @@ def main() -> None:
         print("OK")
     except Exception as exc:
         print(f"\nERROR: {exc}")
+        sys.exit(1)
+
+    print(f"Checking ref='{_REF}' is populated ... ", end="", flush=True)
+    n_rows = _ref_row_count(co)
+    print(f"{n_rows:,} rows")
+    if n_rows == 0:
+        print(f"\nERROR: {_NO_ROWS_MESSAGE}")
+        co.close()
         sys.exit(1)
 
     if args.discover:

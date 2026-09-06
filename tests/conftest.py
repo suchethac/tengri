@@ -656,8 +656,10 @@ def pytest_configure(config):
     This hook runs when the root conftest is imported — before collection —
     so any skipif that checks for cb19_templates.h5 will see the file.
 
-    When the real file is present (e.g. after running
-    scripts/download_cb19_templates.py), this hook is a no-op.
+    When the real file is present (built by scripts/download_cb19_templates.py
+    while that route still worked, or supplied by hand -- see
+    docs/internal/advanced/cb19_grid.md for the current status), this hook is
+    a no-op.
     """
     # Keep the suite hermetic: never read or write the user's on-disk
     # z-table cache (~/.cache/tengri_precomp). The cache's own contract
@@ -790,7 +792,9 @@ def _create_cb19_fixture_if_missing(cb19_path: Path) -> None:
 
     warnings.warn(
         f"Created synthetic CB19 fixture at {cb19_path} for tests. "
-        "Run scripts/download_cb19_templates.py to replace with the real grid.",
+        "scripts/download_cb19_templates.py cannot currently replace it with "
+        "the real grid: the upstream 3MdB CB_19 table is unpopulated "
+        "pending an erratum (#2198); see docs/internal/advanced/cb19_grid.md.",
         UserWarning,
         stacklevel=1,
     )
