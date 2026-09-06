@@ -26,6 +26,7 @@ import numpy as np
 import pytest
 
 import tengri
+from tests._data_skip import PAHSPEC_EMISSION_TYPES, has_pahspec, requires_pahspec
 
 pytestmark = pytest.mark.contract
 
@@ -93,7 +94,21 @@ def _integral_over_l_ir(dust_type: str) -> float:
     return float(-np.trapezoid(sed, nu)) / l_ir
 
 
-@pytest.mark.parametrize("dust_type", _all_balanced_types())
+def _all_balanced_type_params() -> list:
+    """The census as parametrize cases; the PAH spellings gated on their grid.
+
+    ``data/pahspec_draine2021.h5`` is untracked, so CI never has it; without it
+    the Draine+2021 component publishes nothing (#1278) and the check would
+    fail on a missing key rather than on physics. The gate skips the measurement
+    and the census below treats a data-gated skip as recorded, not missing.
+    """
+    return [
+        pytest.param(name, marks=requires_pahspec) if name in PAHSPEC_EMISSION_TYPES else name
+        for name in _all_balanced_types()
+    ]
+
+
+@pytest.mark.parametrize("dust_type", _all_balanced_type_params())
 def test_integral_of_sed_dust_ir_equals_l_ir(dust_type: str):
     ratio = _integral_over_l_ir(dust_type)
     rtol = _RTOL_ANALYTIC if dust_type in _ANALYTIC else _RTOL_TEMPLATE
@@ -104,8 +119,14 @@ def test_integral_of_sed_dust_ir_equals_l_ir(dust_type: str):
 
 
 def test_census_every_required_type_completed():
-    """Runs last in file order; a skip, rename, or removal above fails here, not silently."""
-    missing = sorted(set(_REQUIRED) - set(_COMPLETED))
+    """Runs last in file order; a skip, rename, or removal above fails here, not silently.
+
+    The one skip this census accepts is the data gate: a PAH spelling skipped
+    because the untracked grid is absent is a known, named absence, not a
+    silent drop, and it is subtracted only when the grid really is missing.
+    """
+    data_gated = set() if has_pahspec() else set(PAHSPEC_EMISSION_TYPES)
+    missing = sorted(set(_REQUIRED) - set(_COMPLETED) - data_gated)
     assert not missing, (
         f"required dust emission types did not complete the balance check: {missing}"
     )
