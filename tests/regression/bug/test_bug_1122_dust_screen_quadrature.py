@@ -133,6 +133,10 @@ def test_gradient_is_finite_through_the_quadrature(ssp):
     g = assert_grad_matches_fd(lambda q: jnp.sum(m.predict_photometry(q)), p)
     for v in jax.tree.leaves(g):
         assert bool(jnp.all(jnp.isfinite(v)))
+        assert jnp.any(v != 0.0), (
+            "`v` is identically zero — finite is not enough, "
+            "a value that has collapsed to zero is as unusable as a NaN one (#2100)"
+        )
 
 
 # ── 3. n_subbands must color the compiled-kernel cache ────────────────────────

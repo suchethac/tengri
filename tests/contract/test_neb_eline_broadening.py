@@ -85,6 +85,10 @@ def test_velocity_profile_jit_and_grad_safe():
         100.0
     )
     assert np.isfinite(g)
+    assert np.any(g != 0.0), (
+        "`g` is identically zero — finite is not enough, "
+        "a value that has collapsed to zero is as unusable as a NaN one (#2100)"
+    )
 
 
 def test_zero_width_floors_to_finite_profile():

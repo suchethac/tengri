@@ -185,6 +185,10 @@ class TestMixDigEmission:
             grad_jax, grad_fd, rtol=1e-3, err_msg=f"autodiff={grad_jax:.4e}, FD={grad_fd:.4e}"
         )
         assert not jnp.allclose(grad_jax, 0.0)
+        assert np.all(np.isfinite(grad_jax)), (
+            "`grad_jax` is non-finite — non-zero is not enough, `nan != 0.0` is True "
+            "and a NaN satisfies a non-zero assertion (#2178)"
+        )
 
     def test_kwargs_forwarded_to_backend(self, common_kw):
         """Extra kwargs should be forwarded to the backend."""

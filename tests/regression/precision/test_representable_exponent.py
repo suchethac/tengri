@@ -89,6 +89,10 @@ def test_float32_caps_below_its_ceiling_and_the_power_is_finite():
             f"10**{cap} is {float(power)} in float32 -- the cap is not representable, "
             "which is the whole defect this function exists to fix"
         )
+        assert np.any(float(power) != 0.0), (
+            "`float(power)` is identically zero — finite is not enough, "
+            "a value that has collapsed to zero is as unusable as a NaN one (#2100)"
+        )
 
 
 def test_the_bound_is_sized_for_the_derivative_not_just_the_value():
@@ -114,6 +118,10 @@ def test_the_bound_is_sized_for_the_derivative_not_just_the_value():
             f"base={base}: at the cap {cap} the derivative base**cap*ln(base) is "
             f"{derivative}, so a saturating clip produces 0 * inf = NaN in reverse "
             "mode even though the forward value is finite"
+        )
+        assert np.any(derivative != 0.0), (
+            "`derivative` is identically zero — finite is not enough, "
+            "a value that has collapsed to zero is as unusable as a NaN one (#2100)"
         )
 
     # base e costs nothing, because ln(e) == 1.
@@ -171,6 +179,10 @@ def test_cue_forward_is_finite_in_pure_float32(ssp_bare):
     assert np.isfinite(phot).all(), (
         f"pure-float32 Cue photometry is non-finite: {phot}. The ±50 dex exponent "
         "clip is back, or another float64-era bound has been introduced."
+    )
+    assert np.any(phot != 0.0), (
+        "`phot` is identically zero — finite is not enough, "
+        "a value that has collapsed to zero is as unusable as a NaN one (#2100)"
     )
 
 
@@ -262,5 +274,9 @@ def test_the_exp_form_poisons_only_the_gradient(ssp_bare):
         f"d(hot dust blackbody)/d(tbb) is {g32} in pure float32 -- the exp() bound is "
         "back above float32's e**88.72 ceiling, so exp() saturates to inf and the "
         "reverse pass forms 0 * inf"
+    )
+    assert np.any(g32 != 0.0), (
+        "`g32` is identically zero — finite is not enough, "
+        "a value that has collapsed to zero is as unusable as a NaN one (#2100)"
     )
     assert abs(g32 - g64) / abs(g64) < 1e-4, f"float32 {g32} vs float64 {g64}"

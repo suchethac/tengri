@@ -120,6 +120,10 @@ class TestPoissonNoiseLikelihood:
         pred0 = jnp.array([100.0])
         grad_val = assert_grad_matches_fd(loss, pred0)
         assert jnp.isfinite(grad_val[0])
+        assert jnp.any(grad_val[0] != 0.0), (
+            "`grad_val[0]` is identically zero — finite is not enough, "
+            "a value that has collapsed to zero is as unusable as a NaN one (#2100)"
+        )
 
     def test_outlier_same_as_inlier(self):
         """Residual |d - m| drives variance, not magnitude."""
@@ -239,7 +243,15 @@ class TestStudentTLikelihood:
         grad_sigma = jax.grad(loss_sigma)(jnp.array([1.0]))
 
         assert jnp.isfinite(grad_pred[0])
+        assert jnp.any(grad_pred[0] != 0.0), (
+            "`grad_pred[0]` is identically zero — finite is not enough, "
+            "a value that has collapsed to zero is as unusable as a NaN one (#2100)"
+        )
         assert jnp.isfinite(grad_sigma[0])
+        assert jnp.any(grad_sigma[0] != 0.0), (
+            "`grad_sigma[0]` is identically zero — finite is not enough, "
+            "a value that has collapsed to zero is as unusable as a NaN one (#2100)"
+        )
 
     def test_symmetry_residual(self):
         """log_prob depends on |obs - pred|, so (obs, pred) ↔ (pred, obs) up

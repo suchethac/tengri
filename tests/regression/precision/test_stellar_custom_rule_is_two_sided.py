@@ -80,6 +80,10 @@ def test_forward_mode_autodiff_works(custom, plain, args, bit_exact):
         _, tangent_plain = jax.jvp(plain, primals, tangents)
 
         assert jnp.all(jnp.isfinite(tangent_custom))
+        assert jnp.any(tangent_custom != 0.0), (
+            "`tangent_custom` is identically zero — finite is not enough, "
+            "a value that has collapsed to zero is as unusable as a NaN one (#2100)"
+        )
         if bit_exact:
             assert jnp.array_equal(tangent_custom, tangent_plain), (
                 f"forward-mode tangent differs from the plain expression: "
@@ -140,5 +144,17 @@ def test_reverse_mode_still_works_after_forward_mode():
         )[1]
 
         assert jnp.isfinite(tangent)
+        assert jnp.any(tangent != 0.0), (
+            "`tangent` is identically zero — finite is not enough, "
+            "a value that has collapsed to zero is as unusable as a NaN one (#2100)"
+        )
         assert all(jnp.all(jnp.isfinite(jnp.asarray(g))) for g in grads)
+        assert any(jnp.any(jnp.asarray(g) != 0.0) for g in grads), (
+            "the reverse-mode gradients are identically zero — finite is not enough, a "
+            "custom rule that has detached is as unusable as a NaN one (#2100)"
+        )
         assert jnp.all(jnp.isfinite(hvp))
+        assert jnp.any(hvp != 0.0), (
+            "`hvp` is identically zero — finite is not enough, "
+            "a value that has collapsed to zero is as unusable as a NaN one (#2100)"
+        )

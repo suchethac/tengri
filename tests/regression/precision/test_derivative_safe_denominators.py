@@ -82,6 +82,10 @@ def test_mass_weighted_age_gradient_is_finite_in_float32(degenerate):
         assert np.all(np.isfinite(np.asarray(g))), (
             f"mass-weighted-age gradient non-finite in float32 (degenerate={degenerate})"
         )
+        assert np.any(np.asarray(g) != 0.0), (
+            "`np.asarray(g)` is identically zero — finite is not enough, "
+            "a value that has collapsed to zero is as unusable as a NaN one (#2100)"
+        )
 
 
 @pytest.mark.parametrize("empty_band", [False, True])
@@ -96,6 +100,10 @@ def test_mean_flux_in_band_gradient_is_finite_in_float32(empty_band):
         assert np.all(np.isfinite(np.asarray(g))), (
             f"_mean_flux_in_band gradient non-finite in float32 (empty_band={empty_band})"
         )
+        assert np.any(np.asarray(g) != 0.0), (
+            "`np.asarray(g)` is identically zero — finite is not enough, "
+            "a value that has collapsed to zero is as unusable as a NaN one (#2100)"
+        )
 
 
 @pytest.mark.parametrize("flat", [False, True])
@@ -109,6 +117,10 @@ def test_break_indices_gradients_are_finite_in_float32(flat):
             assert np.all(np.isfinite(np.asarray(g))), (
                 f"{fn.__name__} gradient non-finite in float32 (flat={flat})"
             )
+            assert np.any(np.asarray(g) != 0.0), (
+                "`np.asarray(g)` is identically zero — finite is not enough, "
+                "a value that has collapsed to zero is as unusable as a NaN one (#2100)"
+            )
 
 
 @pytest.mark.parametrize("flat", [False, True])
@@ -121,6 +133,10 @@ def test_uv_slope_beta_gradient_is_finite_in_float32(flat):
         g = jax.grad(lambda s: jnp.sum(jnp.nan_to_num(compute_uv_slope_beta(s, wave))))(sed)
         assert np.all(np.isfinite(np.asarray(g))), (
             f"uv_slope_beta gradient non-finite in float32 (flat={flat})"
+        )
+        assert np.any(np.asarray(g) != 0.0), (
+            "`np.asarray(g)` is identically zero — finite is not enough, "
+            "a value that has collapsed to zero is as unusable as a NaN one (#2100)"
         )
 
 

@@ -97,6 +97,10 @@ def test_chi2_is_finite_in_pure_float32_however_it_is_called(form):
         "optimization_barrier in standardized_residual has stopped binding and XLA is "
         "folding 1/sigma**2 to inf again (#1535)"
     )
+    assert np.any(chi2 != 0.0), (
+        "`chi2` is identically zero — finite is not enough, "
+        "a value that has collapsed to zero is as unusable as a NaN one (#2100)"
+    )
     assert chi2 == pytest.approx(_EXPECTED, rel=1e-4), (
         f"{form!r} gives {chi2}, not the expected {_EXPECTED} — finite but wrong is a "
         "worse failure than NaN"
@@ -166,6 +170,10 @@ def test_the_folded_reciprocal_is_gone_from_the_compiled_module():
         value = float(closed(mu))
 
     assert np.isfinite(value), "precondition: the closure form must be fixed first"
+    assert np.any(value != 0.0), (
+        "`value` is identically zero — finite is not enough, "
+        "a value that has collapsed to zero is as unusable as a NaN one (#2100)"
+    )
     assert _folded_infinities(hlo) == 0, (
         "the compiled closure-form module still contains a bare constant(inf) — XLA is "
         "folding 1/sigma**2 again, so standardized_residual's barrier is not binding "

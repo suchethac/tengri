@@ -107,6 +107,10 @@ def test_sed_radio_finite_and_matches_f64_in_float32(ssp_bare, radio):
         "or the AGN jet L_agn_bol fallback still materializes the out-of-range "
         "linear luminosity"
     )
+    assert np.any(f32 != 0.0), (
+        "`f32` is identically zero — finite is not enough, "
+        "a value that has collapsed to zero is as unusable as a NaN one (#2100)"
+    )
     # Compare only where the radio SED is non-negligible: the long-wavelength
     # radio regime. The optical/IR end is ~1e-160 in float64 and flushes to zero
     # in float32 — a meaningless ratio there, not a radio-model error.
@@ -149,4 +153,8 @@ def test_neg_log_posterior_gradient_finite_with_radio_in_float32(ssp_bare):
     assert all(np.all(np.isfinite(v)) for v in leaves), (
         "grad(nlp) is non-finite in pure float32 with radio — a radio kernel's "
         "reverse pass overflows"
+    )
+    assert any(np.any(v != 0.0) for v in leaves), (
+        "grad(nlp) is identically ZERO in pure float32 with radio — finite is not enough, "
+        "a radio kernel that has underflowed to zero is as unusable as a NaN one (#2100)"
     )

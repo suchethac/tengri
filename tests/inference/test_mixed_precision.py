@@ -308,6 +308,10 @@ class TestMixedPrecisionGradients:
         # accuracy test is test_gradients_agree_with_f64 below.
         for g in grads:
             assert jnp.isfinite(g)
+            assert jnp.any(g != 0.0), (
+                "`g` is identically zero — finite is not enough, "
+                "a value that has collapsed to zero is as unusable as a NaN one (#2100)"
+            )
 
     def test_gradients_agree_with_f64(
         self,

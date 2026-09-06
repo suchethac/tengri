@@ -61,6 +61,10 @@ def test_forward_model_end_to_end_jit(sed_model_minimal, simple_observation) -> 
 
     grads = assert_grad_matches_fd(loss, params)
     assert all(jnp.isfinite(g).all() for g in grads.values())
+    assert any(jnp.any(g != 0.0) for g in grads.values()), (
+        "the end-to-end gradient is identically zero — finite is not enough, a detached "
+        "forward model is as unusable as a NaN one (#2100)"
+    )
 
 
 @pytest.mark.integration

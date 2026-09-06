@@ -39,6 +39,10 @@ def test_engine_receives_per_galaxy_line_data(synthetic_ssp_wide, synthetic_toph
     g0 = float(ca.line_flux_obs[0, 0])
     g1 = float(ca.line_flux_obs[1, 0])
     assert g0 != 0.0, f"Galaxy 0 flux is zero: {g0}"
+    assert np.all(np.isfinite(g0)), (
+        "`g0` is non-finite — non-zero is not enough, `nan != 0.0` is True "
+        "and a NaN satisfies a non-zero assertion (#2178)"
+    )
     ratio = g1 / g0
     assert np.allclose(ratio, 4.0), (
         f"Galaxy 1 is not 4x galaxy 0: ratio={ratio:.4f}, g0={g0:.4e}, g1={g1:.4e}"

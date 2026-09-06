@@ -101,6 +101,10 @@ def test_energy_balance_pure_float32_is_not_silently_zero():
     sed_i, sed_a = _seds(wave)
     ref_log = float(bolometric_absorbed_log10(sed_i, sed_a, nu, wave=wave)[0])
     assert np.isfinite(ref_log)
+    assert np.any(ref_log != 0.0), (
+        "`ref_log` is identically zero — finite is not enough, "
+        "a value that has collapsed to zero is as unusable as a NaN one (#2100)"
+    )
 
     with jax.enable_x64(False):
         w32 = jnp.asarray(np.asarray(wave), dtype=jnp.float32)
@@ -112,6 +116,10 @@ def test_energy_balance_pure_float32_is_not_silently_zero():
         frozen32 = float(_frozen_bolometric_absorbed(i32, a32, nu32, wave=w32))
 
     assert np.isfinite(got_log), f"log energy balance non-finite in float32: {got_log}"
+    assert np.any(got_log != 0.0), (
+        "`got_log` is identically zero — finite is not enough, "
+        "a value that has collapsed to zero is as unusable as a NaN one (#2100)"
+    )
     assert_allclose(got_log, ref_log, atol=5e-3)
     # The frozen form silently returns 0.0 -- proves this test is load-bearing.
     assert frozen32 == 0.0, f"expected the frozen linear form to fail open to 0.0, got {frozen32}"
@@ -189,6 +197,10 @@ def test_energy_balance_gradient_is_finite():
 
     for tau in (0.1, 1.0, 5.0):
         assert np.isfinite(float(jax.grad(loss_linear)(tau))), f"linear grad at tau={tau}"
+        assert np.any(float(jax.grad(loss_linear)(tau)) != 0.0), (
+            "`float(jax.grad(loss_linear)(tau))` is identically zero — finite is not enough, "
+            "a value that has collapsed to zero is as unusable as a NaN one (#2100)"
+        )
         assert np.isfinite(float(jax.grad(loss_log)(tau))), f"log grad at tau={tau}"
 
 
@@ -207,6 +219,10 @@ def test_energy_balance_log_sign_tracks_the_linear_sign():
     linear = float(bolometric_absorbed(sed_i, sed_a, nu, wave=wave))
     _, sign = bolometric_absorbed_log10(sed_i, sed_a, nu, wave=wave)
     assert float(sign) == np.sign(linear) != 0.0
+    assert np.all(np.isfinite(np.sign(linear))), (
+        "`np.sign(linear)` is non-finite — non-zero is not enough, `nan != 0.0` is True "
+        "and a NaN satisfies a non-zero assertion (#2178)"
+    )
 
     # Amplification: the roles swap, so the signed integral flips.
     linear_flipped = float(bolometric_absorbed(sed_a, sed_i, nu, wave=wave))

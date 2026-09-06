@@ -70,6 +70,10 @@ def _f32_vs_f64(ssp, tol, **groups):
     with jax.enable_x64(False):
         f32 = _rest_sed(ssp, jnp.float32, **groups)
     assert np.all(np.isfinite(f32)), "rest_sed is non-finite in pure float32"
+    assert np.any(f32 != 0.0), (
+        "`f32` is identically zero — finite is not enough, "
+        "a value that has collapsed to zero is as unusable as a NaN one (#2100)"
+    )
     peak = np.abs(ref).max()
     live = np.abs(ref) > 1e-6 * peak
     rel = np.abs(f32[live] - ref[live]) / np.abs(ref[live])
@@ -120,4 +124,8 @@ def test_xray_hotgas_kernel_is_finite_in_float32():
         assert np.all(np.isfinite(np.asarray(value))), (
             f"X-ray '{name}' term is non-finite in float32 — a 10**40-ish "
             "normalization overflowed before being divided by the band integral"
+        )
+        assert np.any(np.asarray(value) != 0.0), (
+            "`np.asarray(value)` is identically zero — finite is not enough, "
+            "a value that has collapsed to zero is as unusable as a NaN one (#2100)"
         )

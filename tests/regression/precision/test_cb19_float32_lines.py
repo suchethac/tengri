@@ -103,6 +103,10 @@ def test_setup_float64_really_has_lines(both):
         "exercises the defect"
     )
     assert np.isfinite(log64).all(), f"float64 log companion is not finite: {log64}"
+    assert np.any(log64 != 0.0), (
+        "`log64` is identically zero — finite is not enough, "
+        "a value that has collapsed to zero is as unusable as a NaN one (#2100)"
+    )
 
 
 def test_cb19_lines_are_not_silently_zero_in_float32(both):
@@ -120,6 +124,10 @@ def test_cb19_lines_are_not_silently_zero_in_float32(both):
         f"CB19 float32 log companion is non-finite: {log32}. It is derived on the [Lsun] "
         "side (~1e8), which fits float32 comfortably — a +inf here means the erg/s scale "
         "leaked back upstream of the log"
+    )
+    assert np.any(log32 != 0.0), (
+        "`log32` is identically zero — finite is not enough, "
+        "a value that has collapsed to zero is as unusable as a NaN one (#2100)"
     )
 
 

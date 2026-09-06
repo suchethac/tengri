@@ -233,3 +233,7 @@ def test_descending_grid_is_still_jit_and_grad_safe(grids):
     g_sigma, g_tau = jax.grad(summ, argnums=(0, 1))(0.7, 3e8)
     assert np.isfinite(float(g_sigma)) and float(g_sigma) != 0.0
     assert np.isfinite(float(g_tau))
+    assert np.any(float(g_tau) != 0.0), (
+        "`float(g_tau)` is identically zero — finite is not enough, "
+        "a value that has collapsed to zero is as unusable as a NaN one (#2100)"
+    )

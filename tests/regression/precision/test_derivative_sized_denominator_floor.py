@@ -38,6 +38,10 @@ def test_denominator_floor_keeps_its_reciprocal_square_representable():
         assert np.isfinite(f32(1.0) / (f32(floor) * f32(floor))), (
             f"1/{floor}**2 overflows float32; the VJP of a quotient cannot use it"
         )
+        assert np.any(f32(1.0) / (f32(floor) * f32(floor)) != 0.0), (
+            "`f32(1.0) / (f32(floor) * f32(floor))` is identically zero — finite is not enough, "
+            "a value that has collapsed to zero is as unusable as a NaN one (#2100)"
+        )
         assert floor >= np.sqrt(_tiny(np.float32))
 
 
@@ -102,6 +106,10 @@ def test_a_value_sized_floor_nans_a_quotient_vjp(literal):
         "longer detect the regression it exists for"
     )
     assert np.isfinite(safe), f"derivative-sized floor {literal} still NaNs the VJP"
+    assert np.any(safe != 0.0), (
+        "`safe` is identically zero — finite is not enough, "
+        "a value that has collapsed to zero is as unusable as a NaN one (#2100)"
+    )
 
 
 # --- end-to-end ------------------------------------------------------------
@@ -159,4 +167,8 @@ def test_free_redshift_gradient_is_finite_in_pure_float32(ssp_bare, n_bands):
     assert np.isfinite(g), (
         f"{n_bands} bands ({pad_rows} all-zero padded row(s)) gave a "
         f"non-finite float32 redshift gradient: {g}"
+    )
+    assert np.any(g != 0.0), (
+        "`g` is identically zero — finite is not enough, "
+        "a value that has collapsed to zero is as unusable as a NaN one (#2100)"
     )

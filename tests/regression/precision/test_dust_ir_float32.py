@@ -131,6 +131,10 @@ def test_dust_ir_sed_is_finite_in_pure_float32(synthetic_ssp_wide, emission_type
     ref = ref.astype(np.float64)
     peak = float(np.abs(ref).max())
     assert np.all(np.isfinite(ref)), "setup: float64 dust IR is not finite"
+    assert np.any(ref != 0.0), (
+        "`ref` is identically zero — finite is not enough, "
+        "a value that has collapsed to zero is as unusable as a NaN one (#2100)"
+    )
     assert 0.0 < peak < 3.4e38, f"setup: emitted SED {peak:.3e} is not float32-representable"
 
     with jax.enable_x64(False):
@@ -160,6 +164,10 @@ def test_dust_ir_sed_is_finite_in_pure_float32(synthetic_ssp_wide, emission_type
     assert total is not None, "probe setup failed: total SED was not published"
     assert np.all(np.isfinite(total)), (
         f"{emission_type}: dust IR poisoned the total SED in float32"
+    )
+    assert np.any(total != 0.0), (
+        "`total` is identically zero — finite is not enough, "
+        "a value that has collapsed to zero is as unusable as a NaN one (#2100)"
     )
 
 
@@ -285,6 +293,10 @@ def test_photometry_is_finite_in_pure_float32(synthetic_ssp_wide):
     model = _model(ssp, "dale2014")
     sed64 = np.asarray(model.predict_state({}).sed_intrinsic, dtype=np.float64)
     assert np.all(np.isfinite(sed64)), "setup: float64 SED is not finite"
+    assert np.any(sed64 != 0.0), (
+        "`sed64` is identically zero — finite is not enough, "
+        "a value that has collapsed to zero is as unusable as a NaN one (#2100)"
+    )
 
     with jax.enable_x64(False):
         sed32 = np.asarray(_model(ssp, "dale2014").predict_state({}).sed_intrinsic)
@@ -293,6 +305,10 @@ def test_photometry_is_finite_in_pure_float32(synthetic_ssp_wide):
         f"total SED non-finite in pure float32 "
         f"({float(np.isfinite(sed32).mean()):.2%} finite) — dust IR is the last "
         "out-of-range consumer in the chain"
+    )
+    assert np.any(sed32 != 0.0), (
+        "`sed32` is identically zero — finite is not enough, "
+        "a value that has collapsed to zero is as unusable as a NaN one (#2100)"
     )
 
 

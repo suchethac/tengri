@@ -218,6 +218,10 @@ class TestNonuniformTriweight:
             for x in xs:
                 grad = grad_fn(x)
                 assert np.isfinite(grad), f"Gradient at x={x} is not finite in f32: {grad}"
+                assert np.any(grad != 0.0), (
+                    "`grad` is identically zero — finite is not enough, "
+                    "a value that has collapsed to zero is as unusable as a NaN one (#2100)"
+                )
         finally:
             jax.config.update("jax_enable_x64", True)
 
@@ -246,6 +250,10 @@ class TestNonuniformTriweight:
 
         assert np.isfinite(result), "Function result should be finite"
         assert np.isfinite(grad_result), "Gradient should be finite"
+        assert np.any(grad_result != 0.0), (
+            "`grad_result` is identically zero — finite is not enough, "
+            "a value that has collapsed to zero is as unusable as a NaN one (#2100)"
+        )
 
     def test_single_node_axis_no_crash(self):
         """Length-1 axis should not crash on min() of empty spacings."""

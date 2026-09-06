@@ -91,6 +91,10 @@ def test_log_stellar_mass_scale_finite_in_pure_float32(synthetic_ssp_wide):
         np.asarray(_model(synthetic_ssp_wide).predict_state({}).derived["log_stellar_mass_scale"])
     )
     assert np.isfinite(ref)
+    assert np.any(ref != 0.0), (
+        "`ref` is identically zero — finite is not enough, "
+        "a value that has collapsed to zero is as unusable as a NaN one (#2100)"
+    )
     assert 10.0**ref > _F32_MAX, (
         f"setup: the linear scale 1e{ref:.2f} must exceed the float32 ceiling "
         "for this test to mean anything"

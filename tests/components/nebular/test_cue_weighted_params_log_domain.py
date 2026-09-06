@@ -336,3 +336,7 @@ def test_gradient_nonzero_and_smooth():
     assert jnp.all(jnp.isfinite(g_old)), (
         f"gradient w.r.t. ssp_weights has NaN/inf for degenerate population: {g_old}"
     )
+    assert jnp.any(g_old != 0.0), (
+        "`g_old` is identically zero — finite is not enough, "
+        "a value that has collapsed to zero is as unusable as a NaN one (#2100)"
+    )

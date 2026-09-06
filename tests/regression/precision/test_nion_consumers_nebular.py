@@ -201,6 +201,10 @@ def test_reconstruct_nebular_phot_pure_f32_finiteness():
         assert np.all(np.isfinite(np.asarray(log_result_f32))), (
             "log-domain reconstruct is not all-finite"
         )
+        assert np.any(np.asarray(log_result_f32) != 0.0), (
+            "`np.asarray(log_result_f32)` is identically zero — finite is not enough, "
+            "a value that has collapsed to zero is as unusable as a NaN one (#2100)"
+        )
         log_max = np.max(np.abs(np.asarray(log_result_f32)))
         assert 1e20 < log_max < 1e35, (
             f"log-domain result magnitude {log_max:.2e} outside expected L_nu scale [1e20, 1e35]"
@@ -274,6 +278,10 @@ def test_cue_fallback_log_path_parity():
             assert np.isfinite(float(new_path_f32)), (
                 f"new path not finite at log_nion={log_nion} (f32)"
             )
+            assert np.any(float(new_path_f32) != 0.0), (
+                "`float(new_path_f32)` is identically zero — finite is not enough, "
+                "a value that has collapsed to zero is as unusable as a NaN one (#2100)"
+            )
 
             # For high log_nion (56.0), the old path may overflow in f32 — that's the bug
             # we're fixing. For lower values, they should agree.
@@ -287,4 +295,8 @@ def test_cue_fallback_log_path_parity():
                 old_path_f32 = jnp.log10(jnp.maximum(pow10(log_nion_f32), 1.0))
                 assert np.isfinite(float(old_path_f32)), (
                     f"old path not finite at log_nion={log_nion} (f32)"
+                )
+                assert np.any(float(old_path_f32) != 0.0), (
+                    "`float(old_path_f32)` is identically zero — finite is not enough, "
+                    "a value that has collapsed to zero is as unusable as a NaN one (#2100)"
                 )

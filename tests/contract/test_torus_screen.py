@@ -131,4 +131,8 @@ def test_gradient_finite_across_edge():
     for c in (0.0, 0.6428, 0.9):
         g = jax.grad(uv_loss_cos)(c)
         assert np.isfinite(float(g))
+        assert np.any(float(g) != 0.0), (
+            "`float(g)` is identically zero — finite is not enough, "
+            "a value that has collapsed to zero is as unusable as a NaN one (#2100)"
+        )
     assert np.isfinite(float(jax.grad(uv_loss_tau)(7.0)))

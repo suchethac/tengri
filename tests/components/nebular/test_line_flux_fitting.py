@@ -246,6 +246,10 @@ class TestLineFluxChi2:
         )
         grad = assert_grad_matches_fd(lf.log_likelihood, jnp.array([0.9e-16]))
         assert jnp.isfinite(grad).all()
+        assert jnp.any(grad != 0.0), (
+            "`grad` is identically zero — finite is not enough, "
+            "a value that has collapsed to zero is as unusable as a NaN one (#2100)"
+        )
 
 
 class TestLineFluxUpperLimits:
@@ -309,6 +313,10 @@ class TestLineFluxUpperLimits:
 
         grad = assert_grad_matches_fd(lf.log_likelihood, model)
         assert jnp.isfinite(grad).all()
+        assert jnp.any(grad != 0.0), (
+            "`grad` is identically zero — finite is not enough, "
+            "a value that has collapsed to zero is as unusable as a NaN one (#2100)"
+        )
 
 
 # ── Fitter data_args packing ──────────────────────────────────────

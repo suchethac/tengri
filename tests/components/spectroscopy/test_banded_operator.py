@@ -77,6 +77,10 @@ def test_banded_matvec_is_differentiable():
 
     g = assert_grad_matches_fd(loss, jnp.asarray(rng.standard_normal(n)))
     assert np.all(np.isfinite(np.asarray(g)))
+    assert np.any(np.asarray(g) != 0.0), (
+        "`np.asarray(g)` is identically zero — finite is not enough, "
+        "a value that has collapsed to zero is as unusable as a NaN one (#2100)"
+    )
 
 
 class TestBlockDiagonalBands:

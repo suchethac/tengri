@@ -39,7 +39,15 @@ def test_log_q_h_property(ssp_bare):
     log_q_h = np.float64(pred.log_q_h)
     q_h = np.float64(pred.q_h)
     assert np.isfinite(log_q_h), "log_q_h must be finite"
+    assert np.any(log_q_h != 0.0), (
+        "`log_q_h` is identically zero — finite is not enough, "
+        "a value that has collapsed to zero is as unusable as a NaN one (#2100)"
+    )
     assert np.isfinite(q_h), "q_h must be finite in float64"
+    assert np.any(q_h != 0.0), (
+        "`q_h` is identically zero — finite is not enough, "
+        "a value that has collapsed to zero is as unusable as a NaN one (#2100)"
+    )
     assert np.allclose(log_q_h, np.log10(q_h), rtol=1e-12), "log_q_h should equal log10(q_h)"
 
     # 3b. log_q_h is a direct read of the published derived["log_nion"] (bit-exact)
@@ -61,6 +69,10 @@ def test_log_q_h_property(ssp_bare):
 
         # log_q_h must be finite
         assert np.isfinite(log_q_h_f32), "log_q_h must be finite in pure float32 (the whole point)"
+        assert np.any(log_q_h_f32 != 0.0), (
+            "`log_q_h_f32` is identically zero — finite is not enough, "
+            "a value that has collapsed to zero is as unusable as a NaN one (#2100)"
+        )
 
         # q_h overflows to inf (the problem we're solving)
         assert not np.isfinite(q_h_f32), (

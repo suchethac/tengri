@@ -443,6 +443,10 @@ def test_met_table_grad_wrt_lgmet():
     lgmet = jnp.array(LGMET_TABLE)
     grad = assert_grad_matches_fd(total_mass, lgmet)
     assert jnp.all(jnp.isfinite(grad)), f"Non-finite gradient: {grad}"
+    assert jnp.any(grad != 0.0), (
+        "`grad` is identically zero — finite is not enough, "
+        "a value that has collapsed to zero is as unusable as a NaN one (#2100)"
+    )
 
 
 # ── SEDModel-level: csp_integration='dsps_met_table' accepted ────────

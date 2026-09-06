@@ -214,6 +214,10 @@ class TestJITCompatibility:
 
             # Gradient should be finite (possibly zero, but finite)
             assert jnp.isfinite(grads[param_name])
+            assert jnp.any(grads[param_name] != 0.0), (
+                "`grads[param_name]` is identically zero — finite is not enough, "
+                "a value that has collapsed to zero is as unusable as a NaN one (#2100)"
+            )
 
 
 class TestKeyError:

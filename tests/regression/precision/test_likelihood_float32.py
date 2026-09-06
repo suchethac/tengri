@@ -105,6 +105,10 @@ def test_gaussian_chi2_is_finite_in_float32():
         "chi2 is NaN in float32 — (d-mu)**2 (~1e-56) and sigma**2 (~1e-60) both "
         "underflow to zero and 0/0 = NaN; standardizing before squaring keeps r O(1)"
     )
+    assert np.any(f32 != 0.0), (
+        "`f32` is identically zero — finite is not enough, "
+        "a value that has collapsed to zero is as unusable as a NaN one (#2100)"
+    )
     # chi2 ~ O(n_bands); float32 tracks float64 to its ~7-digit precision.
     assert abs(float(f32) / float(f64) - 1.0) < 1e-4, "float32 chi2 departs from float64"
 

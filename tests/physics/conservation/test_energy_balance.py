@@ -159,6 +159,10 @@ class TestEnergyBalanceEta:
             grad_jax, grad_fd, rtol=1e-3, err_msg=f"autodiff={grad_jax:.4e}, FD={grad_fd:.4e}"
         )
         assert grad_jax != 0.0, "Gradient is zero — eta has no effect"
+        assert np.all(np.isfinite(grad_jax)), (
+            "`grad_jax` is non-finite — non-zero is not enough, `nan != 0.0` is True "
+            "and a NaN satisfies a non-zero assertion (#2178)"
+        )
 
     def test_paramspec_accepts_eta_as_free(self):
         """Parameters should accept dust_eta_balance=Uniform(0.5, 2.0)."""

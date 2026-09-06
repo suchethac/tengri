@@ -195,6 +195,10 @@ class TestAGNFusedPhotometry:
         h = 1e-4
         fd = (float(loss_at(log_lbol + h)) - float(loss_at(log_lbol - h))) / (2.0 * h)
         assert analytic != 0.0, "AGN luminosity has no gradient where the AGN is luminous"
+        assert jnp.all(jnp.isfinite(analytic)), (
+            "`analytic` is non-finite — non-zero is not enough, `nan != 0.0` is True "
+            "and a NaN satisfies a non-zero assertion (#2178)"
+        )
         assert analytic == pytest.approx(fd, rel=2e-2), (
             f"log_lbol={log_lbol}: jax.grad {analytic:.6e} vs central difference {fd:.6e}"
         )

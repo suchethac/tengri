@@ -123,6 +123,10 @@ class TestTorusFracGradientContinuity:
         assert jnp.isfinite(jnp.array([g_049, g_050, g_051])).all(), (
             "Gradient must be finite at frac=0.49, 0.50, 0.51"
         )
+        assert jnp.any(jnp.array([g_049, g_050, g_051]) != 0.0), (
+            "`jnp.array([g_049, g_050, g_051])` is identically zero — finite is not enough, "
+            "a value that has collapsed to zero is as unusable as a NaN one (#2100)"
+        )
 
         # Gradient should vary smoothly (no large relative jump).
         # The key check is that there's no NaN or sign flip at exactly 0.5.

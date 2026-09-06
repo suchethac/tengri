@@ -83,12 +83,20 @@ class TestLycDustEscapeFactor:
         grad_fn = grad(lambda x: lyc_dust_escape_factor(x, 0.0))
         grad_at_zero = grad_fn(0.0)
         assert jnp.isfinite(grad_at_zero)
+        assert jnp.any(grad_at_zero != 0.0), (
+            "`grad_at_zero` is identically zero — finite is not enough, "
+            "a value that has collapsed to zero is as unusable as a NaN one (#2100)"
+        )
 
     def test_gradient_finite_away_from_boundary(self):
         """Gradient should be finite away from the photon-loss boundary."""
         grad_fn = grad(lambda x: lyc_dust_escape_factor(x, 0.1))
         grad_at_point = grad_fn(0.2)
         assert jnp.isfinite(grad_at_point)
+        assert jnp.any(grad_at_point != 0.0), (
+            "`grad_at_point` is identically zero — finite is not enough, "
+            "a value that has collapsed to zero is as unusable as a NaN one (#2100)"
+        )
 
     def test_vectorized_over_arrays(self):
         """k-factor should work with array inputs."""

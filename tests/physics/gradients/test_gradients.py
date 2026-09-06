@@ -159,7 +159,15 @@ class TestGradientCorrectness:
                 )
             )(1.0)
             assert jnp.isfinite(g_alpha), f"dpl ∂/∂alpha non-finite at age={age:.3e}"
+            assert jnp.any(g_alpha != 0.0), (
+                "`g_alpha` is identically zero — finite is not enough, "
+                "a value that has collapsed to zero is as unusable as a NaN one (#2100)"
+            )
             assert jnp.isfinite(g_beta), f"dpl ∂/∂beta non-finite at age={age:.3e}"
+            assert jnp.any(g_beta != 0.0), (
+                "`g_beta` is identically zero — finite is not enough, "
+                "a value that has collapsed to zero is as unusable as a NaN one (#2100)"
+            )
 
     def test_2_dust_attenuation_gradient(self) -> None:
         """Test 2: Dust attenuation gradient wrt tau_bc (birth cloud optical depth).
