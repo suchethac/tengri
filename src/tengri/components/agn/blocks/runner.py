@@ -150,6 +150,18 @@ _DISCS_WITH_5100A_CONTINUUM = _DISCS_WITH_5100A_CONTINUUM | frozenset(
     }
 )
 
+# Grid-tabulated discs: node-exact template libraries whose crossval tests
+# (test_slone_netzer_vs_agnfitter.py / test_kd18_grid_vs_agnfitter.py) confirm
+# the standard UV/optical accretion-disc peak (< 1 um in L_nu), so 5100A is a
+# meaningful continuum for all three, not an edge case like ADAF's inner flow.
+_DISCS_WITH_5100A_CONTINUUM = _DISCS_WITH_5100A_CONTINUUM | frozenset(
+    {
+        "slone_netzer",
+        "kd18_agnfitter",
+        "kd18_agnfitter_warmindex",
+    }
+)
+
 #: Speed of light in Å × Hz, used for L_λ → L_ν conversion.
 from tengri.components.agn._params import DEFAULT_AGN_LOG_LBOL, DEFAULT_AGN_LUM_RATIO
 from tengri.utils.physics_constants import C_AA as C_AA_PER_S

@@ -69,8 +69,10 @@ download.
 
 References
 ----------
-- Kubota, A. & Done, C., "A physical interpretation of the hard X-ray excess
-  in low-luminosity AGN," MNRAS 480, 1247 (2018). arXiv:1804.02334.
+- Kubota, A. & Done, C., "A physical model of the broad-band continuum of AGN
+  and its implications for the UV/X relation and optical variability," MNRAS
+  480, 1247 (2018). doi:10.1093/mnras/sty1890. arXiv:1804.00171.
+  bibcode:2018MNRAS.480.1247K.
 - Martinez-Ramirez et al. 2024, A&A 688, A46 (AGNfitter-rX).
 
 Usage

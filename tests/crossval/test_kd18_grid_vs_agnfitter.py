@@ -22,8 +22,10 @@ floating-point level, not a kernel budget.
 
 References
 ----------
-.. [1] A. Kubota & C. Done, "A physical interpretation of the hard X-ray
-   excess in low-luminosity AGN," MNRAS 480, 1247 (2018). arXiv:1804.02334.
+.. [1] A. Kubota & C. Done, "A physical model of the broad-band continuum of
+   AGN and its implications for the UV/X relation and optical variability,"
+   MNRAS 480, 1247 (2018). doi:10.1093/mnras/sty1890. arXiv:1804.00171.
+   bibcode:2018MNRAS.480.1247K.
 .. [2] L. N. Martinez-Ramirez et al., "AGNfitter-rx: Modeling the
    radio-to-X-ray spectral energy distributions of AGNs," A&A 688, A46
    (2024). arXiv:2405.12111. DOI: 10.1051/0004-6361/202449329.

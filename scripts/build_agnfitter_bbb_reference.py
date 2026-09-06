@@ -29,7 +29,9 @@ from __future__ import annotations
 
 import argparse
 import hashlib
+import io
 import pickle
+import pickletools
 import sys
 from pathlib import Path
 
@@ -43,11 +45,20 @@ from _grid_native_sampling import dedupe_last_write_wins, native_wavelength_grid
 
 from tengri.utils.physics_constants import C_AA
 
-# Allow-list: the minimal numpy/pandas container set that round-trips AGNfitter's
-# legacy-pandas pickles. Deliberately EXCLUDES ``new_block`` / ``_unpickle_block``
-# so pandas takes the legacy ``Block`` path that accepts a ``slice`` placement —
-# the newer typed path rejects the slice these old pickles store. ``functools.partial``
-# is required by THB21.
+# Allow-list: the minimal numpy/pandas container set that round-trips every
+# pickle this script reads (R06, THB21, KD18, SN12 under models/BBB;
+# DH02_CE01 under models/STARBURST; S04, NK0_mean_1p, SKIRTOR_mean_3p,
+# CAT3D_mean_3p under models/TORUS) -- measured by running the preflight
+# opcode scan below against all nine files (see task-5-report.md for the
+# per-file GLOBAL listing). ``Block`` (legacy) and ``new_block`` (the format
+# THB21/SKIRTOR_mean_3p use) are BOTH needed: which one a given pickle's byte
+# stream references was fixed at write time by whatever pandas version wrote
+# it, so allow-listing both does not change which reconstruction path any one
+# file takes -- it only stops the OTHER files from needing a less-restricted
+# fallback. Likewise ``BlockManager`` (multi-column) and
+# ``SingleBlockManager`` (single-column, SKIRTOR_mean_3p's Series). No pickle
+# in this set needs ``_unpickle_block``. ``functools.partial`` is required by
+# THB21.
 _SAFE_CLASSES = frozenset(
     {
         ("numpy.core.multiarray", "_reconstruct"),
@@ -62,7 +73,9 @@ _SAFE_CLASSES = frozenset(
         ("pandas.core.indexes.base", "_new_Index"),
         ("pandas.core.indexes.range", "RangeIndex"),
         ("pandas.core.internals.managers", "BlockManager"),
+        ("pandas.core.internals.managers", "SingleBlockManager"),
         ("pandas.core.internals.blocks", "Block"),
+        ("pandas.core.internals.blocks", "new_block"),
         ("pandas.core.arrays.numpy_", "PandasArray"),
         ("__builtin__", "slice"),
         ("builtins", "slice"),
@@ -70,6 +83,30 @@ _SAFE_CLASSES = frozenset(
         ("functools", "partial"),
     }
 )
+_PY2_MODULE_ALIASES: dict[str, str] = {"__builtin__": "builtins"}
+
+
+def _safe_new_block(values, placement, *args, **kwargs):
+    """Trusted shim for ``pandas.core.internals.blocks.new_block``.
+
+    THB21.pickle was written by a pandas version that stored a plain
+    ``slice`` as the block placement; the installed pandas' real
+    ``new_block`` requires a ``BlockPlacement`` and raises ``TypeError`` on a
+    bare slice (confirmed empirically: the SAME slice-vs-``BlockPlacement``
+    mismatch the ``_SAFE_CLASSES`` comment above already flags for the
+    legacy ``Block`` path, here on the ``new_block`` path instead). This is
+    exactly what ``pandas.read_pickle``'s own version-compat shims do
+    internally; doing the equivalent one-line conversion here keeps the load
+    on the restricted unpickler instead of reaching for pandas' full (much
+    larger, less audited) compat machinery.
+    """
+    from pandas.core.internals.blocks import new_block as _real_new_block
+
+    if isinstance(placement, slice):
+        from pandas._libs.internals import BlockPlacement
+
+        placement = BlockPlacement(placement)
+    return _real_new_block(values, placement, *args, **kwargs)
 
 
 class _RestrictedUnpickler(pickle.Unpickler):
@@ -82,30 +119,56 @@ class _RestrictedUnpickler(pickle.Unpickler):
             import builtins
 
             return getattr(builtins, name)
+        if (module, name) == ("pandas.core.internals.blocks", "new_block"):
+            return _safe_new_block
         return super().find_class(module, name)
 
 
-def _load(pickle_path: Path):
-    """Load an AGNfitter pickle.
+def _preflight_opcode_scan(pickle_path: Path) -> None:
+    """Abort if any GLOBAL reference in the pickle is outside ``_SAFE_CLASSES``.
 
-    Tries the restricted unpickler first. AGNfitter's DataFrame pickles were
-    written across several pandas versions whose internal block formats are not
-    forward-compatible with the plain unpickler; for those we fall back to
-    ``pandas.read_pickle`` (which carries the version-compat shims). This is a
-    BUILD-TIME-ONLY read of a trusted, developer-supplied AGNfitter clone — the
-    shipped artefact is HDF5 and no test ever reads a pickle.
+    Mirrors ``scripts/build_kd18_grid.py``'s preflight scan: a defense-in-depth
+    check that runs BEFORE unpickling, so an unexpected class name is refused
+    outright rather than relying solely on ``find_class`` rejecting it mid-load.
     """
-    try:
-        with pickle_path.open("rb") as fh:
-            return _RestrictedUnpickler(fh, encoding="latin1").load()
-    except (pickle.UnpicklingError, TypeError, ModuleNotFoundError) as exc:
-        import pandas as pd
-
-        print(
-            f"  (restricted unpickle of {pickle_path.name} failed: {exc}; "
-            "falling back to trusted pandas.read_pickle)"
+    seen: set[tuple[str, str]] = set()
+    with pickle_path.open("rb") as fh:
+        out = io.StringIO()
+        pickletools.dis(fh, annotate=0, out=out)
+    for line in out.getvalue().splitlines():
+        if "GLOBAL" not in line:
+            continue
+        try:
+            qual = line.split("'", 1)[1].rsplit("'", 1)[0]
+        except IndexError:
+            continue
+        parts = qual.rsplit(" ", 1)
+        if len(parts) != 2:
+            continue
+        mod, name = parts
+        mod = _PY2_MODULE_ALIASES.get(mod, mod)
+        seen.add((mod, name))
+    unexpected = seen - _SAFE_CLASSES
+    if unexpected:
+        raise RuntimeError(
+            f"Unexpected GLOBAL references in {pickle_path}: {sorted(unexpected)}. "
+            "Refusing to proceed."
         )
-        return pd.read_pickle(pickle_path)
+
+
+def _load(pickle_path: Path):
+    """Load an AGNfitter pickle: untrusted data, restricted-unpickler ONLY.
+
+    Scans every ``GLOBAL`` opcode against ``_SAFE_CLASSES`` before unpickling,
+    then unpickles through :class:`_RestrictedUnpickler`. There is no
+    ``pandas.read_pickle`` fallback: these pickles are untrusted upstream
+    data (AGNfitter-rX is a third-party repository, cloned/downloaded by a
+    contributor, not developer-authored), so a class the allow-list rejects
+    must fail the build, not silently escalate to an unrestricted loader.
+    """
+    _preflight_opcode_scan(pickle_path)
+    with pickle_path.open("rb") as fh:
+        return _RestrictedUnpickler(fh, encoding="latin1").load()
 
 
 def _log_nu_to_aa(log_nu_hz: np.ndarray) -> np.ndarray:
@@ -300,7 +363,7 @@ def main() -> None:
     # ── Torus references: S04 / NK08 / SKIRTOR / CAT3D ──────────────────────
     # Built from models/TORUS so the AGNfitter torus comparison is available
     # without the /tmp clone. The existing data/*_torus_grid.h5 are tengri's OWN
-    # model grids (different normalisation/coverage) — NOT the AGNfitter refs —
+    # model grids (different normalization/coverage) — NOT the AGNfitter refs —
     # so these are stored separately as the upstream tabulation.
     torus_src = args.src.parent / "TORUS"
     torus_out = args.out.parent / "agnfitter_torus_reference.h5"

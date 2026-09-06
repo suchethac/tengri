@@ -876,7 +876,10 @@ def kd18_agnfitter_disc_block(
 
     References
     ----------
-    .. [1] A. Kubota & C. Done, MNRAS, 480, 1247 (2018).
+    .. [1] A. Kubota & C. Done, "A physical model of the broad-band continuum
+       of AGN and its implications for the UV/X relation and optical
+       variability," MNRAS, 480, 1247 (2018). doi:10.1093/mnras/sty1890.
+       arXiv:1804.00171. bibcode:2018MNRAS.480.1247K.
     .. [2] L. N. Martinez-Ramirez et al., A&A, 688, A46 (2024). arXiv:2405.12111.
     """
     from tengri.components.agn.kd18_agnfitter import kd18_agnfitter_sed
@@ -947,7 +950,10 @@ def kd18_agnfitter_warmindex_disc_block(
 
     References
     ----------
-    .. [1] A. Kubota & C. Done, MNRAS, 480, 1247 (2018).
+    .. [1] A. Kubota & C. Done, "A physical model of the broad-band continuum
+       of AGN and its implications for the UV/X relation and optical
+       variability," MNRAS, 480, 1247 (2018). doi:10.1093/mnras/sty1890.
+       arXiv:1804.00171. bibcode:2018MNRAS.480.1247K.
     .. [2] L. N. Martinez-Ramirez et al., A&A, 688, A46 (2024). arXiv:2405.12111.
     """
     from tengri.components.agn.kd18_agnfitter import kd18_agnfitter_warmindex_sed
