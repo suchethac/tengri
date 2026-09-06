@@ -8,6 +8,28 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 
 ### Fixed
 
+- `_mass_scale_lnu`'s forward product went `nan` in float32 on the
+  `SpectrumPrecomp` path under jaxlib 0.11.1, where jaxlib 0.11.0 was finite —
+  with **byte-identical optimized HLO**, so the graph did not change and the
+  emitted kernel did. `total_mass * L_sun` is ~3.8e43 (`inf` in float32), and a
+  backend that emits its own kernel for the fused `multiply -> multiply ->
+  reduce` may hoist the two scalar broadcasts into that single factor. Ages
+  beyond the galaxy's age carry an exactly-zero SFH weight, so `inf * 0` is
+  `nan` and the reduction over age is `nan` at every pixel. PR #2100 had
+  already pinned the *reverse* pass's grouping for the same overflow; this is
+  the same hazard reached from the forward. The grouping is now stated in the
+  graph with `optimization_barrier`, on both spellings of the product — the
+  function body and the `custom_jvp`'s `primal_out` — because fixing only one
+  leaves the differentiated forward `nan` while the undifferentiated one is
+  finite. Float64 is bit-identical, verified as equality rather than tolerance
+  across all sixteen seams, which matters because the barrier changes emitted
+  HLO for every fit. Note the assertion hole that hid this: the seam checks
+  asserted gradients were non-zero, and `nan != 0.0` is `True` — the mirror of
+  #2100's hole, where `isfinite` admitted zero. This closes the float32
+  symptom only; the separate float64 non-finiteness on six `spec/*/auto_*`
+  seams is not established as the same defect and #2178 stays open for it
+  (#2178, #2100).
+
 - `multicolor_disc`'s pure-float32 bolometric renormalization returned
   `l_nu_intrinsic * scale`, and transposing that product makes JAX form
   `sum(g * l_nu_intrinsic)`. With the raw disc SED (~1e28) and the cotangent
