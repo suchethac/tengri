@@ -696,6 +696,10 @@ jobs:
       # freeable, 33 pinned), so this turns it on with no ratchet.
       - run: python tools/check_param_free_priors.py
       - run: python tools/check_test_markers.py
+      # A @pytest.mark.slow test outside tests/inference and tests/integration
+      # only runs if the `slow` job's matrix reaches its tree: #2199 found one
+      # that never had, for three weeks. See the guard's own docstring.
+      - run: python tools/check_slow_marks_reachable.py
       - run: python tools/check_single_dispatch.py
       - run: python tools/check_registry_completeness.py
       # ROADMAP.md names physics that does not exist yet; it has twice
@@ -1442,6 +1446,18 @@ jobs:
             timeout: 60
           - suite: integration
             timeout: 180
+          # Every other @pytest.mark.slow test outside the two trees above.
+          # tools/check_slow_marks_reachable.py fails the build if this list
+          # stops being exhaustive. Unlike inference/integration (auto-marked
+          # slow by path in tests/conftest.py's `_SLOW_TREES`), most tests in
+          # these five trees are NOT slow and already run in the default
+          # tier; `-m slow` below selects just the individually-decorated
+          # ones. Timeout sized from a one-file-per-process measurement of
+          # all 12 currently-slow files here (~546 s serial, all passing);
+          # 30 min leaves >3x headroom for a slower CI runner plus growth.
+          - suite: components-unit-regression-contract-physics
+            paths: tests/components tests/unit tests/regression tests/contract tests/physics
+            timeout: 30
     # Own concurrency group per suite: do NOT inherit the workflow-level
     # `cancel-in-progress: true` (which kills slow whenever main moves).
     # `cancel-in-progress: false` means newer slow triggers queue behind
@@ -1491,7 +1507,17 @@ jobs:
       # `-n 0` keeps the tier serial: the default addopts now request `-n auto`,
       # but the sampler-heavy tests peak at several GB each and xdist workers
       # would OOM the 16 GB runner (the reason this tier was never parallelized).
-      - run: pytest tests/${{ matrix.suite }} -q --ignore=tests/crossval -m 'not crossval' -n 0
+      #
+      # The third matrix entry (`matrix.paths` set) covers @pytest.mark.slow
+      # tests living outside tests/inference and tests/integration: those five
+      # trees are not auto-marked slow by path, so `-m slow` (not
+      # `-m 'not crossval'`) selects only the individually-decorated tests.
+      - run: |
+          if [ -n "${{ matrix.paths }}" ]; then
+            pytest ${{ matrix.paths }} -q -m slow -n 0
+          else
+            pytest tests/${{ matrix.suite }} -q --ignore=tests/crossval -m 'not crossval' -n 0
+          fi
         timeout-minutes: ${{ matrix.timeout }}
       - uses: actions/cache/save@v6
         if: always()
