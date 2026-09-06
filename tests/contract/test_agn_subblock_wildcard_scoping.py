@@ -360,11 +360,19 @@ def skip_if_empty_scope(build_fn, *, category: str, block_type: str) -> bool:
 
     Every surface that builds an ``all_params: FREE`` wildcard over a
     (category, type) whose declared set is empty has to go through
-    :func:`_expect_empty_scope`, not merely leave the no-op unasserted: four
-    pairs are measurably empty today (``torus/qsogen``, ``blr/grahsp``,
-    ``blr/qsogen``, ``atten/qsogen_smc``), and after PR #2207 building such a
-    wildcard raises instead of warning. Routing every surface through the one
-    helper keeps that flip a single-line change here.
+    :func:`_expect_empty_scope`, not merely leave the no-op unasserted, and
+    after PR #2207 building such a wildcard raises instead of warning.
+    Routing every surface through the one helper keeps that flip a
+    single-line change here.
+
+    Which pairs are empty is **measured, not listed** -- the emptiness of a
+    scope moves with the ownership partition and with the companion rules
+    (R33/R36), and the selection this file pins decides some of them, so a
+    written list goes stale silently and reads as a contract the code never
+    checks. Measured today, for the record only: ``torus/qsogen``,
+    ``nlr/grahsp``, ``blr/grahsp``, ``blr/qsogen``. (``atten/qsogen_smc``,
+    listed here through round 2, has owned a parameter since R34 gave it
+    ``agn_ebv``.)
 
     Returns ``True`` after asserting and skipping is not possible (it raises
     ``Skipped``); ``False`` when the scope is non-empty and the caller should
