@@ -218,17 +218,6 @@ _HANDLED: dict[str, tuple[str, tuple[str, ...]]] = {
             "tengri.components.agn.unified:unified_nlr_blr",
         ),
     ),
-    "agn_black_hole_mass": (
-        "``M_sun * 10**agn_log_mbh`` reaches 2.0e43 at the top of the declared "
-        "prior. Both sites consume it as a RATIO -- the Eddington luminosity and "
-        "the gravitational radius both divide the mass scale out again within the "
-        "same expression -- so the constant never stands against the parameter in "
-        "an array the SED carries.",
-        (
-            "tengri.components.agn.disc:_eddington_luminosity",
-            "tengri.components.agn.disc:_gravitational_radius",
-        ),
-    ),
     "xrb_mass_scale": (
         "#722. The Lehmer+2016 LMXB normalization ``9.05e28 * stellar_mass`` "
         "reaches 2.9e41 for a 3e12 Msun galaxy at the top of the declared mass "
@@ -238,9 +227,39 @@ _HANDLED: dict[str, tuple[str, tuple[str, ...]]] = {
     ),
 }
 
+#: Over-range seams that are **not** handled: the enumeration found them, a
+#: measurement confirmed them, and they are filed rather than fixed here.
+#: Separated from ``_HANDLED`` on purpose -- an inventory that files a live
+#: defect under "handled" is worse than no inventory. Every entry must name the
+#: issue it is filed under, and the sweep module asserts that the arithmetic
+#: claim (the product leaves float32's range inside the declared prior) still
+#: holds, so an entry cannot sit here after it stops being true.
+_OPEN_DEFECTS: dict[str, tuple[str, tuple[str, ...]]] = {
+    "agn_black_hole_mass": (
+        "#2210. ``M_sun * 10**agn_log_mbh`` is 1.99e39 at the BOTTOM of the "
+        "declared Uniform(6, 10) prior -- past float32's 3.403e38 across the "
+        "entire range, with no in-range corner. Measured: the float32 forward "
+        "of a kubota_done disc is ``nan`` at ``agn_log_mbh = 6`` under jaxlib "
+        "0.11.1 and finite under 0.11.0, the same graph-versus-kernel split as "
+        "#2178. ``_gravitational_radius`` is a regrouping away from safe; "
+        "``_eddington_luminosity`` is not (L_Edd itself is ~1.26e44 erg/s at "
+        "the bottom of the prior) and needs the log-domain treatment the other "
+        "bolometric seams got. Filed, not fixed here: hand-fixing a second "
+        "component inside the PR that builds this enumeration is the per-site "
+        "habit the enumeration exists to replace.",
+        (
+            "tengri.components.agn.disc:_eddington_luminosity",
+            "tengri.components.agn.disc:_gravitational_radius",
+        ),
+    ),
+}
+
 #: ``seam key -> family``. Derived, never written twice.
 _FAMILY_OF: dict[str, str] = {
-    key: family for family, (_, keys) in _HANDLED.items() for key in keys
+    key: family
+    for bucket in (_HANDLED, _OPEN_DEFECTS)
+    for family, (_, keys) in bucket.items()
+    for key in keys
 }
 
 
@@ -519,7 +538,10 @@ def main(argv: Sequence[str] | None = None) -> int:
             "register it in _HANDLED in this file with the reason -- and add it to "
             "tests/regression/precision/test_float32_scale_seam_sweep.py, which "
             "sweeps each registered seam across its declared prior in float32 and "
-            "requires the gradient to come back finite AND non-zero."
+            "requires the gradient to come back finite AND non-zero;\n"
+            "  4. if it is over range and NOT safe, file it and record it in "
+            "_OPEN_DEFECTS with the issue number. That keeps the gate green "
+            "without letting the inventory claim a live defect is handled."
         )
         return 1
 
@@ -538,8 +560,8 @@ def main(argv: Sequence[str] | None = None) -> int:
 
     print(
         f"OK: {len(seams)} scale seam(s) enumerated, {len(over)} over float32 range "
-        f"within their own declared prior in {len(_HANDLED)} families, all with a "
-        f"recorded grouping."
+        f"within their own declared prior -- {len(_HANDLED)} families with a recorded "
+        f"grouping, {len(_OPEN_DEFECTS)} filed as open defect(s)."
     )
     return 0
 

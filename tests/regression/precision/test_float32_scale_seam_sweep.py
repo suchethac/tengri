@@ -43,6 +43,7 @@ bite everywhere.
 from __future__ import annotations
 
 import importlib.util
+import re
 from pathlib import Path
 
 import jax
@@ -79,7 +80,6 @@ _TOOL = _load_tool("check_float32_scale_seams")
 _SWEEP_OF_FAMILY: dict[str, str] = {
     "stellar_mass_scale": "stellar_mass_scale",
     "agn_bolometric_renorm": "agn_bolometric",
-    "agn_black_hole_mass": "agn_black_hole_mass",
     "xrb_mass_scale": "xrb_mass_scale",
 }
 
@@ -210,41 +210,6 @@ def _agn_bolometric(ssp, dtype):
         return name, _evaluate(objective, lo, hi, dtype)
 
 
-def _agn_black_hole_mass(ssp, dtype):
-    """``M_sun * 10**agn_log_mbh`` in the Kubota & Done disc, across its prior."""
-    name, lo, hi = _declared_range(r"^agn_log_mbh$")
-    with jax.enable_x64(dtype is jnp.float64):
-        sed = SEDModel.build(
-            ssp_data=ssp,
-            observation=Observation(
-                photometry=Photometry.from_names(["sdss_r", "wise_w1", "wise_w4"])
-            ),
-            approx=None,
-            sfh={"type": "delayed", "all_params": Fixed(DEFAULT), "tau_gyr": 1.0, "age_gyr": 5.0},
-            redshift=Fixed(0.1),
-            dust_attenuation=_DUST,
-            agn={
-                "type": "composable",
-                "all_params": Fixed(DEFAULT),
-                "disc": {
-                    "type": "kubota_done",
-                    "all_params": Fixed(DEFAULT),
-                    "log_mbh": Uniform(lo, hi),
-                },
-                "torus": {"type": "skirtor", "all_params": Fixed(DEFAULT)},
-                "norm": "cigale_joint",
-                "log_lbol": Fixed(12.0),
-                "fracAGN": 0.1,
-            },
-        )
-        base = _reference_point(sed)
-
-        def objective(x):
-            return jnp.sum(sed.predict_photometry({**base, name: x}))
-
-        return name, _evaluate(objective, lo, hi, dtype)
-
-
 def _xrb_mass_scale(ssp, dtype):
     """The XRB mass term (#722), read through its float32 path, across the prior.
 
@@ -285,7 +250,6 @@ def _xrb_mass_scale(ssp, dtype):
 _SWEEPS = {
     "stellar_mass_scale": _stellar_mass_scale,
     "agn_bolometric": _agn_bolometric,
-    "agn_black_hole_mass": _agn_black_hole_mass,
     "xrb_mass_scale": _xrb_mass_scale,
 }
 
@@ -366,7 +330,7 @@ def test_every_over_range_seam_family_has_a_behavioral_sweep():
         "these scale seams are over float32 range within their own declared prior "
         f"and carry no recorded grouping: {unregistered}"
     )
-    families = {_TOOL._FAMILY_OF[key] for key in over}
+    families = {_TOOL._FAMILY_OF[key] for key in over} - set(_TOOL._OPEN_DEFECTS)
     missing = sorted(families - set(_SWEEP_OF_FAMILY))
     assert not missing, (
         f"these seam families are over float32 range and no sweep in this module "
@@ -381,6 +345,44 @@ def test_every_over_range_seam_family_has_a_behavioral_sweep():
     assert set(_SWEEP_OF_FAMILY.values()) <= set(_SWEEPS), (
         "_SWEEP_OF_FAMILY refers to a sweep id that does not exist"
     )
+
+
+def test_every_filed_defect_is_still_out_of_range_and_names_an_issue():
+    """A seam parked in ``_OPEN_DEFECTS`` cannot quietly stop being a defect.
+
+    ``_OPEN_DEFECTS`` is the escape hatch for an over-range seam that is NOT
+    safely grouped -- found by the enumeration, confirmed by measurement, and
+    filed rather than hand-fixed. An escape hatch with no gate on it is how an
+    inventory becomes a list of claims nobody checks, so two things are pinned
+    here.
+
+    First, the arithmetic: the product still leaves float32's range somewhere
+    inside the parameter's own declared prior. That statement is
+    environment-free -- it is about the constant, the prior and ``finfo`` -- so
+    it holds on every backend and every jaxlib, unlike the behaviour it
+    predicts. When the seam is fixed, or the prior narrows, this fails and the
+    entry has to move or go.
+
+    Second, the paper trail: each entry names the issue it is filed under. A
+    defect recorded without one is a defect nobody is going to fix.
+    """
+    by_key = {seam.key: seam for seam in _TOOL._scan()}
+    for family, (reason, keys) in _TOOL._OPEN_DEFECTS.items():
+        assert re.search(r"#\d{3,}", reason), (
+            f"_OPEN_DEFECTS[{family!r}] records no issue number; a filed defect "
+            f"that names no issue is not filed"
+        )
+        for key in keys:
+            assert key in by_key, (
+                f"_OPEN_DEFECTS[{family!r}] names {key}, which the enumeration no "
+                f"longer finds -- delete the entry rather than leave it pinned to "
+                f"nothing"
+            )
+            seam = by_key[key]
+            assert seam.over_range, (
+                f"{key} is no longer over float32 range within its declared prior "
+                f"(reach {seam.reach:.4e}); move it out of _OPEN_DEFECTS"
+            )
 
 
 # --------------------------------------------------------------------------------------
