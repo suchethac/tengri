@@ -73,6 +73,71 @@ def test_skirtor_torus_no_longer_consumes_polar_dust_knobs():
     assert not ({"agn_polar_ebv", "agn_polar_T", "agn_polar_beta"} & skirtor)
 
 
+def test_skirtor_torus_consumes_radius_ratio():
+    """Task 16 (item 3, F4): agn_radius_ratio (the SKIRTOR grid's third axis)
+    was missing from AGN_BLOCK_CONSUMES[('torus', 'skirtor')] even though
+    skirtor_torus_block's own signature has always read it -- so
+    agn={'all_params': FREE} + torus='skirtor' never froze it via the
+    top-level wildcard (only the sub-block's own explicit short-key path
+    reached it). See test_skirtor_torus_wiring.py's own liveness guard.
+    """
+    assert "agn_radius_ratio" in AGN_BLOCK_CONSUMES[("torus", "skirtor")]
+
+
+def test_qsogen_and_smc_prevot_atten_consume_attenuation_ebv():
+    """Task 16 (item 3): ('attenuation', 'qsogen') was missing entirely from
+    AGN_BLOCK_CONSUMES (the top-level wildcard silently fell back to the
+    full superset whenever Temple+2021's own quasar extinction curve was
+    selected); ('attenuation', 'smc_prevot') was present but wrongly empty
+    (smc_prevot_block's signature reads agn_attenuation_ebv, same as
+    qsogen's). Both attenuation blocks delegate to the same E(B-V) knob.
+    """
+    assert AGN_BLOCK_CONSUMES[("attenuation", "qsogen")] == frozenset({"agn_attenuation_ebv"})
+    assert AGN_BLOCK_CONSUMES[("attenuation", "smc_prevot")] == frozenset({"agn_attenuation_ebv"})
+
+
+def test_slone_netzer_disc_registered():
+    """Task 16 (item 3): ('disc', 'slone_netzer') was omitted on a stale
+    "grid absent from CI" rationale; measured (this checkout) agn_log_mbh is
+    live and agn_log_ledd is dead (#846-shaped degeneracy, same as
+    multicolor/kubota_done above)."""
+    assert AGN_BLOCK_CONSUMES[("disc", "slone_netzer")] == frozenset({"agn_log_mbh"})
+
+
+def test_subblock_declared_params_sourced_from_consumes_table():
+    """Task 16 (item 3): the AGN sub-block wildcard's own per-(category, type)
+    scope (:func:`tengri.parameters.groups._agn_subblock_declared_params`)
+    and AGN_BLOCK_CONSUMES must agree, over every (category, type) pair the
+    table covers -- one source, not two independently-maintained dispatch
+    tables that can silently drift (the earlier version of
+    ``_agn_subblock_declared_params`` read only the raw function signature,
+    which is why ``disc='kubota_done'``/``'multicolor'``/``'slone_netzer'``'s
+    dead ``agn_log_ledd`` -- already excluded here via #846 -- was freed by
+    the sub-block wildcard anyway: an inert dimension the resolver could not
+    see was dead).
+    """
+    from tengri.parameters.groups import (
+        _AGN_CONSUMES_CATEGORY,
+        _agn_param_group,
+        _agn_subblock_companion_params,
+        _agn_subblock_declared_params,
+    )
+
+    grammar_of = {v: k for k, v in _AGN_CONSUMES_CATEGORY.items()}
+    mismatches = []
+    for (consumes_cat, block_type), consumed in AGN_BLOCK_CONSUMES.items():
+        grammar_cat = grammar_of.get(consumes_cat, consumes_cat)
+        owning_group = f"agn.{grammar_cat}"
+        companion = _agn_subblock_companion_params(grammar_cat, block_type)
+        expected = frozenset(
+            name for name in (consumed | companion) if _agn_param_group(name) == owning_group
+        )
+        actual = _agn_subblock_declared_params(grammar_cat, block_type)
+        if actual != expected:
+            mismatches.append(f"({consumes_cat!r}, {block_type!r}): got {actual}, want {expected}")
+    assert not mismatches, "\n".join(mismatches)
+
+
 def test_active_set_scopes_to_active_blocks():
     """agn_active_param_set unions shared + active-block consumed params."""
     cfg = {

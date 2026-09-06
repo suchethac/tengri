@@ -30,17 +30,17 @@ disc block) reconstructs the full live set. The contract test
 empirically live set is a subset of the scoped active set, so this table cannot
 silently drift out of date.
 
-Blocks/models that require a data grid absent from CI (``slone_netzer``) are
-intentionally **omitted**: :func:`agn_active_param_set` falls back to the full
-superset for any unregistered block, so the wildcard over-frees (never
-under-frees) for a genuinely unregistered name, a safe, documented degradation
+Blocks/models genuinely absent from this table fall back to the full
+superset via :func:`agn_active_param_set`, so the wildcard over-frees (never
+under-frees) for an unregistered name -- a safe, documented degradation
 rather than a silent exclusion. Fix round 2: this sentence previously listed
 ``cat3d_wind`` and "the GRAHSP line/feii blocks" here too, but both are
 registered below (``cat3d_wind``/``cat3d_wind_lowfwd`` since fix round 1 --
 their grids are tracked in CI, so the original "grid absent from CI" rationale
 no longer held; the GRAHSP ``nlr``/``blr``/``feii`` entries were registered
-independently of this task) -- the fallback-to-superset path now serves only
-names like ``slone_netzer`` that are genuinely unregistered.
+independently of this task). Task 16 similarly registered ``("disc",
+"slone_netzer")``, previously omitted on the same "grid absent from CI"
+rationale -- also stale (measured, this checkout).
 """
 
 from __future__ import annotations
@@ -103,6 +103,14 @@ AGN_BLOCK_CONSUMES: dict[tuple[str, str], frozenset[str]] = {
         }
     ),
     ("disc", "skirtor"): frozenset({"agn_cigale_disk_delta"}),
+    # Task 16 (item 3): previously omitted with "requires a data grid absent
+    # from CI" -- that no longer holds (the grid this checkout ships builds
+    # and differentiates it fine); measured like every other disc entry:
+    # agn_log_ledd is dead (jax.grad exactly 0.0 at every sampled point,
+    # same #846-shaped degeneracy as kubota_done/multicolor above -- the
+    # Eddington ratio does not independently move this disc's SED shape),
+    # agn_log_mbh is live (tiny but consistently nonzero, ~1e-15).
+    ("disc", "slone_netzer"): frozenset({"agn_log_mbh"}),
     ("torus", "grahsp"): frozenset(
         {
             "agn_grahsp_cool_lam_um",
@@ -191,6 +199,13 @@ AGN_BLOCK_CONSUMES: dict[tuple[str, str], frozenset[str]] = {
             "agn_q_skirtor",
             "agn_tau_skirtor",
             "agn_torus_frac",
+            # Task 14/16 (F4): agn_radius_ratio (the SKIRTOR grid's third
+            # axis) was missing here -- skirtor_torus_block's own signature
+            # has always read it (unlike SKIRTORTorus, the class, whose
+            # equivalent bug -- hardcoded 20.0, never passed through -- Task
+            # 14 fixed); measured live via
+            # test_skirtor_torus_wiring.py::test_skirtor_radius_ratio_live_on_composable_path.
+            "agn_radius_ratio",
         }
     ),
     ("torus", "skirtor_agnfitter"): frozenset(
@@ -263,7 +278,13 @@ AGN_BLOCK_CONSUMES: dict[tuple[str, str], frozenset[str]] = {
         }
     ),
     ("attenuation", "qsogen_smc"): frozenset(),
-    ("attenuation", "smc_prevot"): frozenset(),
+    ("attenuation", "smc_prevot"): frozenset({"agn_attenuation_ebv"}),
+    # Task 16 (item 3): previously missing entirely -- the top-level wildcard
+    # silently fell back to the full ~50-name superset whenever atten='qsogen'
+    # (Temple+2021's own quasar extinction curve, alternates.py
+    # qsogen_quasar_ext_block) was selected. Its signature reads
+    # agn_attenuation_ebv (like smc_prevot above), nothing else.
+    ("attenuation", "qsogen"): frozenset({"agn_attenuation_ebv"}),
 }
 
 #: Monolithic (non-composable) AGN model -> the agn_* params it consumes.

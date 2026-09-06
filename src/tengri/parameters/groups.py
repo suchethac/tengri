@@ -616,18 +616,44 @@ _AGN_SUBBLOCK_KEY_ALIASES: dict[str, dict[str, str]] = {
 #: Partition table: agn_* param name -> group path (for sub-block routing).
 #: Maps full agn_* param names to their owning group (agn, agn.disc, agn.torus, etc.)
 _AGN_PARTITION = {
-    # Shared params (no sub-block prefix)
+    # Truly shared params (no sub-block prefix; read across every category,
+    # or governing the top-level AGN normalization itself, not one disc/torus
+    # physics choice): agn_log_lbol (bolometric normalization every block
+    # scales against), agn_cos_inc (viewing-angle masking knob every
+    # physical-decomposition disc/torus reads), agn_lum_ratio (cross-block
+    # luminosity-ratio normalization used by disc, torus and the qsogen/
+    # richards2006/GRAHSP recipes alike).
     "agn_lum_ratio": "agn",
     "agn_log_lbol": "agn",
-    "agn_alpha": "agn",
-    "agn_log_mbh": "agn",
-    "agn_log_ledd": "agn",
-    "agn_a_spin": "agn",
     "agn_cos_inc": "agn",
-    # Disc dust obscuration (Prevot SMC; AGNfitter EBVbbb). Shared (not
-    # agn.disc): redden_disc applies it at the runner disc stage for every
-    # disc type, mirroring agn_log_lbol.
-    "agn_ebv_disc": "agn",
+    # Disc physics (Task 16, item 1 addendum -- Task 5 review): these eleven
+    # names were misclassified "agn" (shared) even though every one is read
+    # ONLY by disc block functions (adaf/disc_precompute/disc.py, kd18_*,
+    # slone_netzer.py -- grep-verified, no torus/nlr/blr/feii/atten file
+    # references any of them). Misclassifying them "agn" made
+    # disc={'type': T, 'all_params': FREE} (the agn.disc sub-block's OWN
+    # wildcard) a structural no-op for 13 of the 14 registered disc types
+    # (measured; test_kd18_agnfitter_public_grammar.py pinned the CURRENT,
+    # now-fixed, no-op behavior): _agn_subblock_declared_params filters a
+    # disc block's own signature down to names owned by "agn.disc", and
+    # _AGN_PARTITION had no "agn.disc" entries at all.
+    "agn_alpha": "agn.disc",
+    "agn_log_mbh": "agn.disc",
+    "agn_log_ledd": "agn.disc",
+    "agn_a_spin": "agn.disc",
+    "agn_f_hard": "agn.disc",
+    "agn_gamma_warm": "agn.disc",
+    "agn_kt_warm": "agn.disc",
+    "agn_gamma_hard": "agn.disc",
+    "agn_kt_hot": "agn.disc",
+    "agn_r_warm_ratio": "agn.disc",
+    # Disc dust obscuration (Prevot SMC; AGNfitter EBVbbb). redden_disc
+    # applies it at the runner's disc stage for every disc type -- a
+    # runner-level "disc category" read, not one specific disc type's own
+    # parameter, but disc-owned nonetheless (declared-reads model, item 1):
+    # the agn.disc wildcard should free it, same as any other disc-stage
+    # read.
+    "agn_ebv_disc": "agn.disc",
     # Torus
     "agn_T_torus": "agn.torus",
     "agn_T_hot": "agn.torus",
@@ -707,13 +733,6 @@ _AGN_PARTITION = {
     # GRAHSP bi-attenuation (attenuation-only).
     "agn_grahsp_ebv": "agn.atten",
     "agn_grahsp_ebv_agn": "agn.atten",
-    # Radiation physics (shared disc normalization)
-    "agn_f_hard": "agn",
-    "agn_gamma_warm": "agn",
-    "agn_kt_warm": "agn",
-    "agn_gamma_hard": "agn",
-    "agn_kt_hot": "agn",
-    "agn_r_warm_ratio": "agn",
 }
 
 
@@ -2141,23 +2160,39 @@ _AGN_CONSUMES_CATEGORY: dict[str, str] = {
 def _agn_subblock_declared_params(category: str, block_type: str | None) -> frozenset[str] | None:
     """Declared parameters ONE AGN sub-block's OWN wildcard may free.
 
-    Ground truth is the SELECTED composable block function's own signature
-    (mirroring :func:`_law_shape_params`'s dust-law introspection): every
-    named ``agn_*`` keyword-or-positional parameter it declares, read via
-    ``inspect.signature`` on ``AGN_BLOCKS[category][block_type]``. This is
-    always current -- there is no second table to fall out of sync with the
-    dispatch it describes, unlike the empirically-measured
-    ``tengri.components.agn.blocks._consumes.AGN_BLOCK_CONSUMES``
-    (which stays the source for the TOP-LEVEL ``agn`` group's scope, unioned
-    across every active block; that mechanism and its own contract tests
-    are untouched here).
+    Ground truth (Task 16, item 1: the declared-reads model) is
+    ``tengri.components.agn.blocks._consumes.AGN_BLOCK_CONSUMES`` -- the
+    SAME empirically-measured, per-(category, type) table the TOP-LEVEL
+    ``agn`` group's scope already sources (unioned across every active
+    block via :func:`_agn_active_param_set`) -- when it has an entry for
+    this ``(category, block_type)``. Falls back to raw
+    ``inspect.signature`` introspection on ``AGN_BLOCKS[category][block_type]``
+    (mirroring :func:`_law_shape_params`'s dust-law introspection) only for a
+    type genuinely absent from that table (grid-gated or otherwise
+    unregistered), matching the top-level scope's own safe "over-free"
+    fallback.
 
-    The raw signature also names parameters this block reads but does not
-    OWN in the partition table (:data:`_AGN_PARTITION`) -- shared masking
-    knobs (``agn_cos_inc``, ``agn_theta_torus``) every physical-decomposition
-    torus reads. Those are filtered out: a param partitioned outside
-    ``agn.<category>`` is reachable only through ITS owning group's
-    wildcard or an explicit name (see
+    One source, not two: the earlier version of this function read only the
+    raw signature, independent of ``AGN_BLOCK_CONSUMES``. A block's function
+    signature commonly accepts a parameter it does not, for that specific
+    registered type, actually use (Task 16, item 1 addendum: ``kubota_done``'s
+    own signature names ``agn_log_ledd`` -- the Eddington ratio is derived
+    from ``agn_log_lbol`` instead, #846 -- and ``multicolor``/``slone_netzer``
+    the same; measured dead, ``jax.grad`` exactly 0.0 at every sampled point).
+    ``AGN_BLOCK_CONSUMES`` already excludes these EMPIRICALLY (the top-level
+    wildcard has relied on that since task-12); reading raw signatures here
+    instead let the sub-block wildcard free them anyway, an inert dimension
+    the resolver could not see was dead. Sourcing from the same table makes
+    the two mechanisms agree by construction
+    (``tests/contract/test_agn_block_consumes.py``).
+
+    Every name this returns is additionally filtered to what this sub-block
+    OWNS in the partition table (:data:`_AGN_PARTITION`): a shared masking
+    knob (``agn_cos_inc``, ``agn_theta_torus``) that ``AGN_BLOCK_CONSUMES``
+    lists as consumed (because the runner reads it for this category, not
+    because the block itself owns it) is filtered out here -- a param
+    partitioned outside ``agn.<category>`` is reachable only through ITS
+    owning group's wildcard or an explicit name (see
     :func:`_build_agn_search_view`), never through this sub-block's own
     ``'*'`` -- crediting it here would claim a freedom the resolver cannot
     actually deliver. When every parameter a type reads is such a shared
@@ -2188,6 +2223,7 @@ def _agn_subblock_declared_params(category: str, block_type: str | None) -> froz
     if not block_type or block_type == "none":
         return frozenset()
 
+    from tengri.components.agn.blocks._consumes import AGN_BLOCK_CONSUMES
     from tengri.components.agn.blocks._protocol import AGN_BLOCKS
 
     consumes_category = _AGN_CONSUMES_CATEGORY.get(category, category)
@@ -2195,16 +2231,20 @@ def _agn_subblock_declared_params(category: str, block_type: str | None) -> froz
     if fn is None:
         return None
 
-    try:
-        sig = inspect.signature(fn)
-    except (TypeError, ValueError):  # pragma: no cover - no unsigned callables registered
-        return None
+    consumed = AGN_BLOCK_CONSUMES.get((consumes_category, block_type))
+    if consumed is not None:
+        read = frozenset(consumed) | _agn_subblock_companion_params(category, block_type)
+    else:
+        try:
+            sig = inspect.signature(fn)
+        except (TypeError, ValueError):  # pragma: no cover - no unsigned callables registered
+            return None
 
-    read = frozenset(
-        p.name
-        for p in sig.parameters.values()
-        if p.kind not in (p.VAR_KEYWORD, p.VAR_POSITIONAL) and p.name.startswith("agn_")
-    ) | _agn_subblock_companion_params(category, block_type)
+        read = frozenset(
+            p.name
+            for p in sig.parameters.values()
+            if p.kind not in (p.VAR_KEYWORD, p.VAR_POSITIONAL) and p.name.startswith("agn_")
+        ) | _agn_subblock_companion_params(category, block_type)
     owning_group = f"agn.{category}"
     return frozenset(name for name in read if _agn_param_group(name) == owning_group)
 

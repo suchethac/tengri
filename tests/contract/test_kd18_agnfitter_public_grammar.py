@@ -4,26 +4,25 @@
 A block can be perfectly implemented and still be practically unreachable
 through the public ``SEDModel.build`` grammar if nothing wires its
 parameters into a scope a user can actually free. This module checks the
-two surfaces that DO reach ``kd18_agnfitter`` / ``kd18_agnfitter_warmindex``
-parameters (explicit per-parameter short keys inside the ``agn.disc``
-sub-block, and the top-level ``agn={'all_params': FREE}`` wildcard), that a
-free parameter actually moves a UV/optical band's photometry (``jax.grad``
-nonzero), and pins the one surface that currently does NOT reach them (the
-``agn.disc`` sub-block's OWN wildcard, ``disc={'all_params': FREE}``).
+THREE surfaces that reach ``kd18_agnfitter`` / ``kd18_agnfitter_warmindex``
+parameters -- explicit per-parameter short keys inside the ``agn.disc``
+sub-block, the top-level ``agn={'all_params': FREE}`` wildcard, and (Task 16)
+the ``agn.disc`` sub-block's OWN wildcard, ``disc={'all_params': FREE}`` --
+and that a free parameter actually moves a UV/optical band's photometry
+(``jax.grad`` nonzero).
 
-The sub-block no-op is not a defect in this task's two blocks specifically:
+The sub-block wildcard used to be a structural no-op for every composable
+disc type (measured: 13 of the 14 registered ``AGN_BLOCKS["disc"]`` types),
+not a defect in this task's two blocks specifically:
 ``_agn_subblock_declared_params`` (``parameters/groups.py``) filters a disc
 block's own signature down to parameters owned by the ``"agn.disc"`` group
-in ``_AGN_PARTITION`` -- and ``_AGN_PARTITION`` has **no entries at all**
-mapped to ``"agn.disc"`` (every disc-relevant name is partitioned to the
-shared ``"agn"`` group instead), so the sub-block wildcard is structurally a
-no-op for every composable disc type, not just these two (measured: 13 of
-the 14 registered ``AGN_BLOCKS["disc"]`` types). That is a cross-cutting
-``_AGN_PARTITION`` ownership gap fixed by a different task (Task 16 in the
-AGNfitter-rX parity plan); this module pins the CURRENT no-op behavior with
-``pytest.warns`` so the assertion flips loudly (forcing this file to be
-updated) the moment Task 16 closes the gap, rather than silently going
-stale.
+in ``_AGN_PARTITION`` -- and ``_AGN_PARTITION`` had **no entries at all**
+mapped to ``"agn.disc"`` (every disc-relevant name, including
+``agn_log_mbh``/``agn_log_ledd``/``agn_gamma_warm``, was partitioned to the
+shared ``"agn"`` group instead). Task 16 (AGNfitter-rX parity plan, item 1
+addendum) gave disc physics parameters their own ``"agn.disc"`` entries in
+``_AGN_PARTITION``, so the sub-block wildcard now reaches them like any
+other composable sub-block's own wildcard.
 """
 
 from __future__ import annotations
@@ -191,38 +190,47 @@ def test_free_parameters_move_a_uv_optical_band(ssp_data, disc_type):
 
 
 @pytest.mark.parametrize("disc_type", _DISC_TYPES)
-def test_subblock_wildcard_is_currently_a_no_op(ssp_data, disc_type):
-    """(d) PINNED CURRENT BEHAVIOR, not the desired one: ``disc={'type': T,
-    'all_params': FREE}`` frees NOTHING for these (or any other) composable
-    disc type, because ``_AGN_PARTITION`` has no ``"agn.disc"`` entries at
-    all (see module docstring). This test must be updated -- not deleted --
-    when Task 16 (AGNfitter-rX parity plan: AGN sub-block partition-table
-    ownership gap, 13/14 disc types affected) wires ``agn.disc``-owned
-    entries into ``_AGN_PARTITION``: at that point this assertion flips to
-    asserting the wildcard DOES free ``agn_log_mbh``/``agn_log_ledd`` (and
-    ``agn_gamma_warm``) and the ``pytest.warns`` below stops firing.
+def test_subblock_wildcard_frees_disc_physics_params(ssp_data, disc_type):
+    """(d) Task 16 (AGNfitter-rX parity plan, item 1 addendum): ``disc={'type':
+    T, 'all_params': FREE}`` -- the ``agn.disc`` sub-block's OWN wildcard --
+    now frees ``agn_log_mbh``/``agn_log_ledd`` (and ``agn_gamma_warm`` for the
+    warmindex type), because ``_AGN_PARTITION`` now maps them to
+    ``"agn.disc"`` instead of the shared ``"agn"`` group (see module
+    docstring). This flips the PREVIOUSLY pinned no-op behavior (which
+    asserted ``pytest.warns(WildcardNoOpWarning)``); no warning should fire
+    now that the wildcard covers real parameters, and the freed parameters
+    must be live (nonzero gradient), not merely present.
     """
     with warnings.catch_warnings():
-        warnings.simplefilter("ignore")
-        warnings.filterwarnings("always", category=WildcardNoOpWarning)
-        with pytest.warns(WildcardNoOpWarning, match=r"group 'agn\.disc'"):
-            model = SEDModel.build(
-                ssp_data=ssp_data,
-                observation=Photometry.from_names(list(_UV_OPTICAL_BANDS)),
-                sfh={"type": "dpl", "all_params": Fixed(DEFAULT)},
-                dust_attenuation={"type": "none"},
-                agn={
-                    "type": "composable",
-                    "disc": {"type": disc_type, "all_params": FREE},
-                    "norm": "independent",
-                    "log_lbol": Uniform(10.0, 12.0),
-                },
-                redshift=Fixed(0.1),
-            )
+        warnings.simplefilter("error", category=WildcardNoOpWarning)
+        model = SEDModel.build(
+            ssp_data=ssp_data,
+            observation=Photometry.from_names(list(_UV_OPTICAL_BANDS)),
+            sfh={"type": "dpl", "all_params": Fixed(DEFAULT)},
+            dust_attenuation={"type": "none"},
+            agn={
+                "type": "composable",
+                "disc": {"type": disc_type, "all_params": FREE},
+                "norm": "independent",
+                "log_lbol": Uniform(10.0, 12.0),
+            },
+            redshift=Fixed(0.1),
+        )
     free = model.spec.free_params
-    assert "agn_log_mbh" not in free, (
-        "agn_log_mbh is now free via the agn.disc wildcard -- if Task 16 wired "
-        "_AGN_PARTITION['agn_log_mbh'] = 'agn.disc' on purpose, update this test "
-        "to assert the wildcard DOES free it, and drop the pytest.warns above"
+    assert "agn_log_mbh" in free, (
+        "agn_log_mbh is not free via the agn.disc wildcard -- _AGN_PARTITION "
+        "no longer maps it to 'agn.disc'?"
     )
-    assert "agn_log_ledd" not in free
+    assert "agn_log_ledd" in free
+    if disc_type == "kd18_agnfitter_warmindex":
+        assert "agn_gamma_warm" in free
+
+    params = model.spec.sample(jax.random.PRNGKey(0))
+    grad = jax.grad(lambda p: jnp.sum(model.predict_photometry(p)))(params)
+    names = ["agn_log_mbh", "agn_log_ledd"]
+    if disc_type == "kd18_agnfitter_warmindex":
+        names.append("agn_gamma_warm")
+    for name in names:
+        g = float(grad[name])
+        assert jnp.isfinite(g), f"{name}: non-finite gradient {g}"
+        assert g != 0.0, f"{name}: identically-zero gradient on a UV/optical band (dead free)"

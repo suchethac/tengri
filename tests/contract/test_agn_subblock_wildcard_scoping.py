@@ -276,18 +276,32 @@ def test_q1_wildcard_frees_exactly_declared_and_live(ssp, obs, category, block_t
         )
         return
 
-    p = dict(model.spec.sample(jax.random.PRNGKey(0)))
-
     def obj(pd):
         return jnp.log(jnp.sum(model.predict_photometry(pd)) + 1e-300)
 
+    # Retry a name across a handful of seeds before declaring it dead: a
+    # weak-but-real physical effect (e.g. kubota_done's warm-Comptonization
+    # component, agn_r_warm_ratio -- measured nonzero at magnitude ~1e-16 to
+    # 1e-18 across most sampled points) can underflow to exactly 0.0 at one
+    # unlucky draw without being architecturally dead. A name still exactly
+    # 0.0 at EVERY one of these seeds is a real, not a floating-point, no-op.
+    _SEEDS = (0, 1, 2, 3, 4)
     dead = []
     for name in sorted(free_agn):
-        v0 = jnp.asarray(p[name])
-        g = float(jax.grad(lambda v, name=name: obj({**p, name: v}))(v0))
-        if g == 0.0:
+        live_at_any_seed = False
+        for seed in _SEEDS:
+            p = dict(model.spec.sample(jax.random.PRNGKey(seed)))
+            v0 = jnp.asarray(p[name])
+            g = float(jax.grad(lambda v, name=name, p=p: obj({**p, name: v}))(v0))
+            if g != 0.0:
+                live_at_any_seed = True
+                break
+        if not live_at_any_seed:
             dead.append(name)
-    assert not dead, f"{category}/{block_type}: freed but dead (grad=0 on photometry): {dead}"
+    assert not dead, (
+        f"{category}/{block_type}: freed but dead (grad=0 on photometry at "
+        f"every one of {len(_SEEDS)} seeds): {dead}"
+    )
 
 
 @pytest.mark.parametrize(
