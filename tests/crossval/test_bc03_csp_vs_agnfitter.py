@@ -44,8 +44,10 @@ References
 .. [1] L. N. Martinez-Ramirez, et al., "AGNFITTER-RX: Modeling the
    radio-to-X-ray spectral energy distributions of AGNs," A&A 688, A46
    (2024). doi:10.1051/0004-6361/202449329. arXiv:2405.12111.
+   bibcode: 2024A&A...688A..46M
 .. [2] G. Bruzual & S. Charlot, "Stellar population synthesis at the
    resolution of 2003," MNRAS, 344, 1000 (2003).
+   bibcode: 2003MNRAS.344.1000B
 """
 
 from __future__ import annotations
