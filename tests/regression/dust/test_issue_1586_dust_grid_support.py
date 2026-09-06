@@ -91,6 +91,12 @@ _GRID_FREE = frozenset(
         # axis key is therefore unverifiable here; registering a guessed key
         # would be an unchecked assertion.
         "draine2021_pah",
+        # The registry key the line above aliases to — one component, two
+        # spellings, so the same reasoning applies to both. It entered this
+        # menu when the component joined the EmissionComponent family (the menu
+        # is derived from the backends publishing ``sed_dust_ir``), which is
+        # also why listing only the alias stopped being enough.
+        "draine2021_pah_ir",
     }
 )
 
