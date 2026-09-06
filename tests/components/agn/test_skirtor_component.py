@@ -40,10 +40,13 @@ _has_skirtor_data = _SKIRTOR_PATH is not None
 #: ``SEDModelComponent.predict`` receives a prefix-stripped dict -- ``p["log_lbol"]``,
 #: not ``p["agn_log_lbol"]`` (CLAUDE.md, "Adding a new physics block"). Every call
 #: site here passed the prefixed spelling and raised ``KeyError: 'log_lbol'``. Then
-#: the next key raised too: ``torus_frac`` was renamed ``band_frac`` by #329, which
-#: :func:`test_declared_parameter_names` in this same file already asserts. None of
-#: it was visible because ``_DATA_DIR`` resolved to ``tests/data`` and the whole
-#: class skipped on every machine.
+#: the next key raised too: ``torus_frac`` was renamed ``band_frac`` by #329, then
+#: renamed BACK to ``torus_frac`` by Task 16's R17 (the composable
+#: ``skirtor_torus_block`` and six OTHER composable torus blocks always called
+#: this same quantity ``agn_torus_frac``; ``agn_band_frac`` was retired).
+#: :func:`test_declared_parameter_names` in this same file already asserts the
+#: current name. None of it was visible because ``_DATA_DIR`` resolved to
+#: ``tests/data`` and the whole class skipped on every machine.
 #:
 #: Declared once, because five copies of these keys were five chances to fix only
 #: some of them, and checked against the live declarations by
@@ -65,7 +68,7 @@ _PREDICT_PARAMS = {
     "oa_skirtor": jnp.array(40.0),
     "radius_ratio": jnp.array(20.0),
     "cos_inc": jnp.array(0.5),
-    "band_frac": jnp.array(0.5),
+    "torus_frac": jnp.array(0.5),
     "polar_ebv": jnp.array(0.0),
     "polar_T": jnp.array(100.0),
     "polar_beta": jnp.array(1.5),
@@ -152,14 +155,19 @@ class TestSKIRTORParameterDiscovery:
         """Parameter names have agn_ prefix as per naming contract.
 
         Post-#329 ``agn_torus_frac`` was renamed to ``agn_band_frac`` to align
-        with CIGALE's nomenclature. The polar-dust trio (``agn_polar_ebv``,
-        ``agn_polar_T``, ``agn_polar_beta``) was promoted to free
-        params when the bi-conical re-emission pipeline was wired through
-        (Yang+2020 §2.2.2). Task 14: ``agn_radius_ratio`` added (previously a
-        silent no-op); ``agn_polar_temperature`` renamed ``agn_polar_T`` to
-        match the composable ``skirtor_torus_block``'s name for the same
-        quantity (the canonical ``agn_polar_temperature`` declaration in
-        ``_params.py`` remains, consumed elsewhere).
+        with CIGALE's nomenclature. Task 16 (R17) renamed it BACK to
+        ``agn_torus_frac`` and retired ``agn_band_frac`` -- ``agn_band_frac``
+        had exactly one consumer (this class), while ``agn_torus_frac`` is
+        the composable ``skirtor_torus_block``'s (and six OTHER composable
+        torus blocks') name for the identical quantity; one canonical name,
+        not a per-backend spelling variant. The polar-dust trio
+        (``agn_polar_ebv``, ``agn_polar_T``, ``agn_polar_beta``) was promoted
+        to free params when the bi-conical re-emission pipeline was wired
+        through (Yang+2020 §2.2.2). Task 14: ``agn_radius_ratio`` added
+        (previously a silent no-op); ``agn_polar_temperature`` renamed
+        ``agn_polar_T`` to match the composable ``skirtor_torus_block``'s
+        name for the same quantity (the canonical ``agn_polar_temperature``
+        declaration in ``_params.py`` remains, consumed elsewhere).
         """
         comp = SKIRTORTorus()
         decls = comp.declared_parameters()
@@ -172,7 +180,7 @@ class TestSKIRTORParameterDiscovery:
             "agn_oa_skirtor",
             "agn_radius_ratio",
             "agn_cos_inc",
-            "agn_band_frac",
+            "agn_torus_frac",
             "agn_polar_ebv",
             "agn_polar_T",
             "agn_polar_beta",
@@ -204,9 +212,10 @@ class TestSKIRTORParameterDiscovery:
 
         A hand-written params dict cannot notice a rename, and this file held
         five copies of one that had missed #329's ``agn_torus_frac`` ->
-        ``agn_band_frac``. Every ``predict()`` call raised ``KeyError``, and the
-        class skipped on every machine so nothing reported it. Comparing against
-        the live declarations is the check the copies could not perform.
+        ``agn_band_frac`` (since reverted by Task 16's R17). Every
+        ``predict()`` call raised ``KeyError``, and the class skipped on
+        every machine so nothing reported it. Comparing against the live
+        declarations is the check the copies could not perform.
         """
         comp = SKIRTORTorus()
         prefix = comp.parameter_prefix

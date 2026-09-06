@@ -14,9 +14,9 @@ error to tell them apart.
 
 The renames, each via ``_LEGACY_PARAM_ALIASES`` + ``DeprecationWarning``:
 
-    agn_fracAGN  -> agn_ir_frac     the AGN share of the dust IR
-    agn_frac_agn -> agn_band_frac   the AGN share in a band
-    agn_frac     -> agn_lum_ratio   a *ratio* (0-5), not a fraction
+    agn_fracAGN  -> agn_ir_frac      the AGN share of the dust IR
+    agn_frac_agn -> agn_torus_frac   the AGN share in a band
+    agn_frac     -> agn_lum_ratio    a *ratio* (0-5), not a fraction
 
 ``dust_frac_agn`` keeps its name: the ``dust_`` prefix already says which
 component owns it.
@@ -26,6 +26,16 @@ component owns it.
 with a different prior in the same module. Applying it would have silently
 merged two AGN normalizations — in the code path #556 already had to
 disentangle once. ``test_no_rename_collided`` pins that they stayed distinct.
+
+**Update (Task 16, R17).** ``agn_frac_agn``'s target was originally
+``agn_band_frac``: SKIRTORTorus's own name for this exact quantity. Task 16
+found ``agn_band_frac`` had exactly one consumer (that class) while SEVEN
+composable torus blocks (and, since R17, SKIRTORTorus itself) call the
+identical quantity ``agn_torus_frac`` -- one canonical name, not two that
+happened to mean the same thing. ``agn_band_frac`` is retired (a loud-error
+legacy key in the ``agn.torus`` sub-block grammar, not a soft alias here --
+see ``groups.py``), and this module's ``RENAMES``/assertions were repointed
+at ``agn_torus_frac``.
 """
 
 from __future__ import annotations
@@ -41,7 +51,7 @@ pytestmark = pytest.mark.contract
 
 RENAMES = {
     "agn_fracAGN": "agn_ir_frac",
-    "agn_frac_agn": "agn_band_frac",
+    "agn_frac_agn": "agn_torus_frac",
     "agn_frac": "agn_lum_ratio",
 }
 
@@ -101,7 +111,7 @@ def test_no_rename_collided():
     )
     # The specific values, pinned — a merge would change one of them.
     assert str(priors["agn_ir_frac"]).startswith("Uniform(0.0, 0.99")
-    assert str(priors["agn_band_frac"]).startswith("Uniform(0.0, 1.0")
+    assert str(priors["agn_torus_frac"]).startswith("Uniform(0.0, 1.0")
     assert str(priors["agn_lum_ratio"]).startswith("Uniform(0.0, 5.0")
 
 
@@ -117,7 +127,7 @@ def test_each_new_name_says_which_normalization_it_is():
     """The point of the rename: the name must disambiguate, not just differ."""
     expectations = {
         "agn_ir_frac": "ir",
-        "agn_band_frac": "band",
+        "agn_torus_frac": "band",
         "agn_lum_ratio": "ratio",
     }
     for name, token in expectations.items():

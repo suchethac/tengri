@@ -101,16 +101,16 @@ PARAMS: tuple[ParamDeclaration, ...] = (
     ParamDeclaration(
         "agn_torus_frac",
         Uniform(0.0, 1.0, default=0.5),
-        "AGN torus covering factor; DEPRECATED; use agn_band_frac",
-        lambda lo, hi: lo >= 0 and hi <= 1,
-        "must be in [0, 1]",
-    ),
-    ParamDeclaration(
-        "agn_band_frac",
-        Uniform(0.0, 1.0, default=0.5),
-        "AGN fraction of the total luminosity in a configurable band "
-        "(L_AGN / L_total, CIGALE convention). Distinct from ``agn_ir_frac``, "
-        "which is the AGN share of the dust *IR* specifically (#1296).",
+        "AGN torus covering factor: L_AGN / L_total in a configurable band "
+        "(CIGALE convention). Canonical name (Task 16, R17) -- the live kwarg "
+        "of seven composable torus blocks (fritz, nenkova, cat3d_wind, "
+        "two_temperature, simple, skirtor_agnfitter, ...) and, since R17, "
+        "SKIRTORTorus's own attribute too. Distinct from ``agn_ir_frac``, "
+        "which is the AGN share of the dust *IR* specifically (#1296). "
+        "``agn_band_frac`` (SKIRTORTorus's former, single-consumer name for "
+        "this exact same quantity -- the description above previously called "
+        "THIS name deprecated in ITS favor, backwards) is retired: nest under "
+        "``agn={'torus': {'torus_frac': ...}}``.",
         lambda lo, hi: lo >= 0 and hi <= 1,
         "must be in [0, 1]",
     ),

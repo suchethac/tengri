@@ -52,8 +52,17 @@ _LEGACY_PARAM_ALIASES = {
     #
     # dust_frac_agn keeps its name -- the ``dust_`` prefix already says which
     # component owns it, so it was never ambiguous.
+    #
+    # agn_frac_agn's target was retargeted from agn_band_frac to agn_torus_frac
+    # (Task 16, R17): agn_band_frac was SKIRTORTorus's own name for the exact
+    # same quantity seven OTHER composable torus blocks (and now SKIRTORTorus
+    # itself) call agn_torus_frac -- one canonical name, not two that happened
+    # to mean the same thing. agn_band_frac itself is now a retired, loud-error
+    # legacy key (see groups.py's agn.torus sub-block translation), not a soft
+    # alias -- unlike every other entry in this table, it cannot resolve here
+    # because the quantity has a live REPLACEMENT name, not merely a rename.
     "agn_fracAGN": "agn_ir_frac",
-    "agn_frac_agn": "agn_band_frac",
+    "agn_frac_agn": "agn_torus_frac",
     "agn_frac": "agn_lum_ratio",
 }
 

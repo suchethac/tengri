@@ -105,6 +105,7 @@ from typing import NamedTuple
 
 from tengri.config.exceptions import (
     AdvisoryWarning,
+    ConfigError,
     DefaultFixedParametersWarning,
     ParameterError,
     WildcardNoOpWarning,
@@ -2281,6 +2282,110 @@ def _agn_subblock_companion_params(category: str, block_type: str) -> frozenset[
         for p in sig.parameters.values()
         if p.kind not in (p.VAR_KEYWORD, p.VAR_POSITIONAL) and p.name.startswith("agn_")
     )
+
+
+#: (torus type name) -> (class-only names allowed, block-only names allowed),
+#: each a documented, physics-grounded deviation. A torus type string present
+#: in both registries but absent here must match EXACTLY.
+_TORUS_REGISTRY_ALLOWED_DEVIATIONS: dict[str, tuple[frozenset[str], frozenset[str]]] = {
+    # SKIRTORTorus (the monolithic class) additionally bundles its own disc
+    # shape (agn_delta, R12c: the composable design puts the disc in a
+    # separate disc block instead) and its own polar-dust reemission trio
+    # (agn_polar_ebv/T/beta -- R22, task13 fix-round-1, retired the
+    # composable torus block's OWN bundled polar dust; on the composable
+    # path polar dust is owned exclusively by the standalone ``polar_dust``
+    # attenuation block now). See test_skirtor_torus_wiring.py's own
+    # class/block reconciliation test, which pins the identical exclusion.
+    "skirtor": (
+        frozenset({"agn_delta", "agn_polar_ebv", "agn_polar_T", "agn_polar_beta"}),
+        frozenset(),
+    ),
+}
+
+
+def check_agn_torus_registry_agreement() -> None:
+    """RULING R13: every torus type registered in BOTH the monolithic and
+    composable AGN registries must declare the SAME ``agn_*`` parameter
+    names.
+
+    Two independent registries can dispatch the identical torus physics: the
+    monolithic ``component_factory._REGISTRY`` (a bare ``SEDModelComponent``
+    subclass, e.g. ``agn=SKIRTORTorus(...)``) and the composable
+    ``AGN_BLOCKS['torus']`` (``agn={'torus': {'type': ...}}``). Before R17
+    (Task 16) they silently disagreed for ``'skirtor'``: the class declared
+    ``agn_band_frac`` for its own covering fraction while the composable
+    block (and six OTHER composable torus blocks) declared the identical
+    quantity ``agn_torus_frac`` -- two spellings for one physical parameter,
+    reachable through two different names depending which path a caller
+    used. This function is the live guard against that class of drift
+    recurring, over EVERY currently-shared torus type string, not just
+    ``'skirtor'``.
+
+    Scoped to the torus category deliberately: ``AGN_BLOCKS['disc']`` ALSO
+    has an entry named ``'skirtor'`` (the SKIRTOR-inspired disc continuum
+    shape), but ``component_factory._REGISTRY['skirtor']`` is
+    ``SKIRTORTorus`` -- a TORUS class. Comparing it against the DISC block
+    would compare unrelated physics that happen to share an English name,
+    not the same model reached two ways -- ``AGN_MODEL_CONSUMES``'s own
+    ``'skirtor'`` entry (the monolithic dispatch's own consumed-param table)
+    confirms the class is torus-flavored, matching
+    ``AGN_BLOCK_CONSUMES[('torus', 'skirtor')]`` closely.
+
+    Raises
+    ------
+    ConfigError
+        Naming both sides' full parameter-name sets, for every type string
+        that disagrees beyond :data:`_TORUS_REGISTRY_ALLOWED_DEVIATIONS`.
+
+    Notes
+    -----
+    **JIT-compatible**: no; build-time/CI introspection over the registries,
+    not called on the model-build hot path. Exercised by
+    ``tests/contract/test_agn_registry_param_agreement.py`` (a monkeypatched
+    synthetic disagreement, and a live check over every currently-shared
+    string).
+    """
+    from tengri.components.agn.blocks._protocol import AGN_BLOCKS
+    from tengri.forward.component_factory import _REGISTRY
+
+    torus_blocks = AGN_BLOCKS.get("torus", {})
+    mismatches = []
+    for name in sorted(set(_REGISTRY) & set(torus_blocks)):
+        cls = _REGISTRY[name]
+        fn = torus_blocks[name]
+        try:
+            instance = cls()
+        except TypeError:
+            continue  # not a bare-constructible SEDModelComponent; not this check's concern
+        class_names = {d.name for d in instance.declared_parameters()}
+        block_names = frozenset(
+            p.name
+            for p in inspect.signature(fn).parameters.values()
+            if p.kind not in (p.VAR_KEYWORD, p.VAR_POSITIONAL) and p.name.startswith("agn_")
+        )
+        allowed_class_only, allowed_block_only = _TORUS_REGISTRY_ALLOWED_DEVIATIONS.get(
+            name, (frozenset(), frozenset())
+        )
+        class_only = class_names - block_names - allowed_class_only
+        block_only = block_names - class_names - allowed_block_only
+        if class_only or block_only:
+            mismatches.append((name, class_names, block_names, class_only, block_only))
+
+    if mismatches:
+        name, class_names, block_names, class_only, block_only = mismatches[0]
+        raise ConfigError(
+            f"AGN torus registry disagreement for {name!r}: the monolithic "
+            f"component_factory._REGISTRY class and the composable "
+            f"AGN_BLOCKS['torus'] block declare different agn_* parameter "
+            f"names.\n"
+            f"  class names: {sorted(class_names)}\n"
+            f"  block names: {sorted(block_names)}\n"
+            f"  class-only (unexpected): {sorted(class_only)}\n"
+            f"  block-only (unexpected): {sorted(block_only)}\n"
+            f"Reconcile the two registrations to the same names, or document "
+            f"the deviation in _TORUS_REGISTRY_ALLOWED_DEVIATIONS with the "
+            f"physics reason (RULING R13)."
+        )
 
 
 def _wildcard_scopes(
@@ -4843,6 +4948,26 @@ def _translate_agn(agn_dict: dict, result: dict) -> None:
             raise ValueError(
                 f"agn['{block_name}'] must be a dict with 'type' and optional parameters, "
                 f"got {type(block_spec).__name__}."
+            )
+
+        # R17 (Task 16): agn_band_frac is a retired legacy key -- SKIRTORTorus's
+        # former, single-consumer name for the SAME covering-fraction quantity
+        # every other composable torus block (and, since R17, SKIRTORTorus
+        # itself) calls agn_torus_frac. Intercept BOTH spellings a caller might
+        # still write (the short key 'band_frac' and the full 'agn_band_frac')
+        # before the generic per-parameter key resolver reaches them: since
+        # neither is a declared parameter any more, that resolver's difflib
+        # suggestion does not reliably land on 'torus_frac' (edit distance
+        # between "band_frac" and "torus_frac" is large), so a caller updating
+        # old code would see a generic "unknown key" with the wrong suggestion
+        # rather than the one-message redirect this raises instead.
+        if block_name == "torus" and ("band_frac" in block_spec or "agn_band_frac" in block_spec):
+            raise ValueError(
+                "agn['torus']['band_frac'] (or 'agn_band_frac') is no longer "
+                "supported: SKIRTORTorus's own name for the AGN torus covering "
+                "factor was retired in favor of the name every OTHER composable "
+                "torus block already used for the identical quantity. Use:\n"
+                "  agn={'torus': {'type': 'skirtor', 'torus_frac': Uniform(...)}}"
             )
 
         # Special handling for atten: 'law' key selects smc_prevot via DUST_LAWS,

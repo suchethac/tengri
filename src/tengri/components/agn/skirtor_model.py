@@ -56,7 +56,13 @@ _RADIUS_RATIO_PRIOR = declared_prior(_AGN_PARAMS, "agn_radius_ratio")
 _POLAR_EBV_PRIOR = declared_prior(_AGN_PARAMS, "agn_polar_ebv")
 _POLAR_T_PRIOR = declared_prior(_AGN_PARAMS, "agn_polar_T")
 _POLAR_BETA_PRIOR = declared_prior(_AGN_PARAMS, "agn_polar_beta")
-_BAND_FRAC_PRIOR = declared_prior(_AGN_PARAMS, "agn_band_frac")
+#: R17 (Task 16): renamed from ``_BAND_FRAC_PRIOR``/``agn_band_frac``. This
+#: class's covering-fraction attribute and the composable ``skirtor_torus_block``
+#: (and six OTHER composable torus blocks) always meant the same physical
+#: quantity under two different declared names -- ``_params.py``'s own
+#: deprecation note had it backwards (called agn_torus_frac deprecated in
+#: FAVOR of agn_band_frac, the name with exactly one consumer: this class).
+_TORUS_FRAC_PRIOR = declared_prior(_AGN_PARAMS, "agn_torus_frac")
 _DELTA_PRIOR = declared_prior(_AGN_PARAMS, "agn_delta")
 
 
@@ -137,8 +143,11 @@ class SKIRTORTorus(SEDModelComponent):
         Torus half-opening angle. [degrees, 10–80]
     cos_inc : Uniform
         Cosine of inclination (1 = face-on, 0 = edge-on). [dimensionless, 0–1]
-    band_frac : Uniform
-        AGN fraction in a configurable band (CIGALE convention).
+    torus_frac : Uniform
+        AGN torus covering factor: L_AGN / L_total in a configurable band
+        (CIGALE convention). Renamed from ``band_frac`` (R17, Task 16): the
+        composable ``skirtor_torus_block`` and six other composable torus
+        blocks always called this same quantity ``agn_torus_frac``.
         [dimensionless, 0–1]
     polar_ebv : Uniform
         Polar dust E(B-V) (Type-1 sightline only). [mag, 0–0.5]
@@ -264,12 +273,12 @@ class SKIRTORTorus(SEDModelComponent):
         units="dimensionless",
         default=_RADIUS_RATIO_PRIOR.default,
     )
-    band_frac = Uniform(
-        _BAND_FRAC_PRIOR.lo,
-        _BAND_FRAC_PRIOR.hi,
-        description="AGN fraction (L_AGN / L_total, CIGALE convention)",
+    torus_frac = Uniform(
+        _TORUS_FRAC_PRIOR.lo,
+        _TORUS_FRAC_PRIOR.hi,
+        description="AGN torus covering factor (L_AGN / L_total, CIGALE convention)",
         units="dimensionless",
-        default=_BAND_FRAC_PRIOR.default,
+        default=_TORUS_FRAC_PRIOR.default,
     )
     polar_ebv = Uniform(
         _POLAR_EBV_PRIOR.lo,
@@ -383,7 +392,7 @@ class SKIRTORTorus(SEDModelComponent):
             - oa_skirtor: opening angle (degrees)
             - radius_ratio: torus outer/inner radius ratio
             - cos_inc: cosine of inclination
-            - band_frac: AGN luminosity fraction
+            - torus_frac: AGN torus covering factor (L_AGN / L_total)
             - delta: disc spectral slope modulation (-1.0 to 1.0)
             - polar_ebv: polar dust E(B-V)
             - polar_T: polar dust graybody temperature (K)
@@ -456,7 +465,7 @@ class SKIRTORTorus(SEDModelComponent):
             agn_oa_skirtor=p["oa_skirtor"],
             agn_radius_ratio=p["radius_ratio"],
             agn_cos_inc=p["cos_inc"],
-            frac_agn=p["band_frac"],
+            frac_agn=p["torus_frac"],
         )
 
         # Unpack components

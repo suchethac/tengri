@@ -100,7 +100,7 @@ _CLASS_PARAMS = {
     "oa_skirtor": jnp.array(40.0),
     "radius_ratio": jnp.array(20.0),
     "cos_inc": jnp.array(0.866),
-    "band_frac": jnp.array(0.5),
+    "torus_frac": jnp.array(0.5),
     "polar_ebv": jnp.array(0.1),
     "polar_T": jnp.array(100.0),
     "polar_beta": jnp.array(1.6),
@@ -330,33 +330,25 @@ def test_skirtor_torus_radius_ratio_declared():
 #:   bundled disc (skirtor_model.py's disc-shape selection in predict()); the
 #:   composable design puts the disc in the separate disc block instead, so
 #:   ``skirtor_torus_block`` (torus-only) has no equivalent parameter.
-#: - ``agn_band_frac`` / ``agn_torus_frac`` (R12b): both registered names
-#:   drive the identical physics (the AGN covering-factor scaling
-#:   ``l_scale = L_bol x frac`` -- confirmed by ``skirtor.py``'s own
-#:   ``create_skirtor_components_from_grid``, which accepts ``agn_torus_frac``
-#:   as a deprecated fallback for its canonical ``frac_agn`` kwarg, the exact
-#:   quantity the class's ``band_frac`` attribute is derived from). The
-#:   class already uses the canonical ``agn_band_frac`` (``_params.py:109``);
-#:   the composable ``skirtor_torus_block`` (and EVERY other composable torus
-#:   block: cat3d_wind/fritz/nenkova/nenkova_agnfitter/silva04/
-#:   skirtor_agnfitter -- ``blocks/torus.py``) still names its own covering-
-#:   factor kwarg ``agn_torus_frac``; nothing in the codebase reads
-#:   ``agn_band_frac`` except the class itself (verified: the only override
-#:   near the ``agn_torus_frac`` deprecation note, ``_params.py`` around
-#:   ``agn_ir_frac``, is driven by ``agn_ir_frac`` -- a DIFFERENT, CIGALE
-#:   dust-IR-fraction quantity, not ``agn_band_frac``; ``component.py:385-404``).
-#:   Renaming ``agn_torus_frac`` -> ``agn_band_frac`` on the composable side is
-#:   a cross-cutting change spanning all six composable torus blocks (plus
-#:   ``blocks/_consumes.py``'s wildcard-scoping table), not a SKIRTOR-specific
-#:   fix, and a SKIRTOR-only alias would be exactly the inconsistent
-#:   per-backend grammar variant this project avoids. Out of this task's
-#:   declared scope; reported for the ledger (see report "Fix round 1").
+#: - ``agn_band_frac`` / ``agn_torus_frac`` (R12b, RESOLVED by Task 16's R17):
+#:   both registered names used to drive the identical physics (the AGN
+#:   covering-factor scaling ``l_scale = L_bol x frac`` -- confirmed by
+#:   ``skirtor.py``'s own ``create_skirtor_components_from_grid``, which
+#:   accepts ``agn_torus_frac`` as a deprecated fallback for its canonical
+#:   ``frac_agn`` kwarg, the exact quantity the class's ``band_frac``
+#:   attribute was derived from) under TWO different declared names -- the
+#:   class used ``agn_band_frac`` (its only consumer in the whole codebase),
+#:   while ``skirtor_torus_block`` and six OTHER composable torus blocks
+#:   (cat3d_wind/fritz/nenkova/nenkova_agnfitter/silva04/skirtor_agnfitter)
+#:   named their own covering-factor kwarg ``agn_torus_frac``. R17 (Task 16)
+#:   renamed the class's attribute to ``torus_frac``/``agn_torus_frac`` and
+#:   retired ``agn_band_frac``, so this is no longer a class/block
+#:   discrepancy -- both sides now share the one canonical name, and this
+#:   pair no longer needs an exclusion.
 #: standalone SKIRTORTorus bundles polar dust (monolithic path); the
 #: composable path applies polar dust only via atten='polar_dust' (R22, Task 13)
-_CLASS_ONLY_NAMES = frozenset(
-    {"agn_delta", "agn_band_frac", "agn_polar_ebv", "agn_polar_T", "agn_polar_beta"}
-)
-_BLOCK_ONLY_NAMES = frozenset({"agn_torus_frac"})
+_CLASS_ONLY_NAMES = frozenset({"agn_delta", "agn_polar_ebv", "agn_polar_T", "agn_polar_beta"})
+_BLOCK_ONLY_NAMES: frozenset[str] = frozenset()
 
 
 def test_skirtor_composable_and_class_param_names_reconciled():
