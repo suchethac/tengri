@@ -272,6 +272,14 @@ class WildcardNoOpWarning(UserWarning):
     generic recipe that always sets ``'all_params': FREE`` across every
     group it configures, whether or not a given group has anything to free).
 
+    .. note::
+       Since #2187, ``parse_groups`` no longer emits this warning: a wildcard
+       that covers zero parameters raises :class:`ParameterError` instead (an
+       empty wildcard is never something a fit should run with silently).
+       This class stays defined -- and importable -- for any caller still
+       holding a filter for it; it is simply never instantiated by
+       :mod:`tengri.parameters.groups` any more.
+
     See Also
     --------
     tengri.config.exceptions.ParameterError

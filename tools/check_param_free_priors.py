@@ -91,8 +91,6 @@ REFUSED: dict[str, tuple[str, str]] = {
     "dust_f_obscuration": ("fixed-by-physics", "pre-existing decision; degenerate with tau_diff"),
     # ── target-dependent: the bound is set by the source, not by physics ──
     "dust_L_agn_ir": ("target-dependent", "absolute luminosity; no galaxy-independent scale"),
-    "sfh_snorm_burst_burst_sfr": ("target-dependent", "absolute SFR; scale set by the galaxy"),
-    "sfh_tsnorm_burst_burst_sfr": ("target-dependent", "as the snorm variant"),
     "sfh_exp_start_gyr": ("target-dependent", "onset capped by the age of the universe at z"),
     "sfh_dexp_start_gyr": ("target-dependent", "as sfh_exp_start_gyr; caught by test_bug_1031"),
     "sfh_const_start_gyr": ("target-dependent", "as sfh_exp_start_gyr"),
@@ -106,7 +104,6 @@ REFUSED: dict[str, tuple[str, str]] = {
     "shock_b_over_sqrt_n": ("not-continuous", "snapped to nearest grid point -- zero gradient"),
     "noise_dof": ("not-continuous", "0 is a sentinel selecting the Gaussian likelihood"),
     "dla_z": ("not-continuous", "0 is a sentinel meaning 'use the source redshift'"),
-    "redshift": ("not-continuous", "top-level grammar argument; survey-dependent range"),
     "sfh_const_end_gyr": ("not-continuous", "ordering constraint with sfh_const_start_gyr"),
     "sfh_dpl_lookback_end_gyr": (
         "not-continuous",

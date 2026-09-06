@@ -209,13 +209,21 @@ class TestAGNParameterRouting:
         assert isinstance(params, Parameters)
 
     def test_per_param_override_beats_wildcard(self):
-        """Per-parameter override wins over sub-block wildcard."""
+        """Per-parameter override wins over sub-block wildcard.
+
+        No 'all_params' on the disc block itself (#2187): every ``powerlaw``
+        disc parameter (``log_lbol`` included) is a *shared* AGN parameter --
+        partitioned under ``"agn"``, never ``"agn.disc"`` -- so a wildcard
+        restated there covers zero parameters and raises. The per-param
+        override below is unaffected either way; it wins over any wildcard by
+        construction (checked before the wildcard branch in
+        ``_resolve_value``).
+        """
         params = parse_groups(
             sfh={"type": "dpl", "all_params": Fixed(DEFAULT)},
             agn={
                 "disc": {
                     "type": "powerlaw",
-                    "all_params": FREE,
                     "log_lbol": Fixed(10.42),  # Per-disc-param override
                 },
             },
@@ -295,18 +303,26 @@ class TestAGNProvenance:
         assert prov["agn_log_lbol"] == "user_fixed"
 
     def test_agn_provenance_wildcard_free(self):
-        """Agn params from wildcard FREE tagged 'wildcard_free'."""
+        """Agn params from wildcard FREE tagged 'wildcard_free'.
+
+        The wildcard sits on the shared top-level ``agn`` dict, not nested in
+        ``disc`` (#2187): every ``multicolor`` disc parameter is a *shared*
+        AGN parameter -- partitioned under ``"agn"``, never ``"agn.disc"`` --
+        so a wildcard restated on ``disc`` itself covers zero parameters and
+        raises. The top-level wildcard is what actually reaches them.
+        """
         params = parse_groups(
             sfh={"type": "dpl", "all_params": Fixed(DEFAULT)},
             agn={
-                "disc": {"type": "multicolor", "all_params": FREE},
+                "disc": {"type": "multicolor"},
+                "all_params": FREE,
             },
             redshift=Fixed(0.1),
         )
         prov = params._group_provenance
-        # At least some disc-related params should have wildcard_free tag
-        # (depends on Parameters' disc param declarations)
+        # At least some disc-related (shared) params carry the wildcard_free tag.
         assert isinstance(params, Parameters)
+        assert prov["agn_log_lbol"] == "wildcard_free"
 
 
 class TestAGNValidBlockTypes:
