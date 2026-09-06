@@ -12,7 +12,11 @@ from jax import Array
 
 from tengri.components.agn._params import DEFAULT_AGN_COS_INC, PARAMS as _AGN_PARAMS
 from tengri.components.agn.blocks._protocol import register_agn_block
-from tengri.components.agn.polar_dust import polar_dust_emission, polar_dust_extinction
+from tengri.components.agn.polar_dust import (
+    polar_cone_covering_fraction,
+    polar_dust_emission,
+    polar_dust_extinction,
+)
 from tengri.protocols.component import declared_default
 
 #: Declared defaults for the polar-dust re-emission knobs (ADR-0011:
@@ -110,12 +114,15 @@ def polar_dust_reemission_lnu(
     r"""Compute polar-dust graybody reemission in L_ν units.
 
     Takes the pre-attenuation SED (in L_λ, erg/s/Å), computes the total
-    absorbed luminosity from the polar dust extinction cross-section, and
-    returns the graybody reemission spectrum in observer-frame L_ν
-    (erg/s/Hz).
+    absorbed luminosity from the polar dust extinction cross-section, scales
+    it by the polar cone's covering fraction, and returns the graybody
+    reemission spectrum in observer-frame L_ν (erg/s/Hz).
 
     The absorbed luminosity is geometry-independent (Yang+2020 §2.2.2),
     so reemission is isotropic and visible from all viewing angles.
+    ``agn_polar_oa`` sets the covering fraction (task13 fix-round-1 item 1):
+    see :func:`tengri.components.agn.polar_dust.polar_cone_covering_fraction`
+    for the derivation.
 
     Parameters
     ----------
@@ -130,7 +137,9 @@ def polar_dust_reemission_lnu(
         ``agn_cos_inc`` default, ``cos(30 deg)``.
     agn_polar_oa : float, optional
         Torus half-opening angle [deg, measured from equator]. Defaults to
-        the declared ``agn_polar_oa`` default (``45``).
+        the declared ``agn_polar_oa`` default (``45``). Sets the polar
+        cone's covering fraction (task13 fix-round-1): see
+        :func:`tengri.components.agn.polar_dust.polar_cone_covering_fraction`.
     agn_polar_T : float, optional
         Dust temperature [K]. Defaults to the declared ``agn_polar_T``
         default (``100.0``). **Named to match the declared parameter**
@@ -156,9 +165,12 @@ def polar_dust_reemission_lnu(
     Notes
     -----
     This function computes the geometry-independent absorbed luminosity from
-    :func:`polar_dust_extinction`, integrates it, and passes it to
-    :func:`polar_dust_emission` to compute the FIR graybody. The result is
-    valid for all inclinations and should be added to the attenuated disc SED.
+    :func:`polar_dust_extinction`, integrates it, scales it by the polar
+    cone's covering fraction (:func:`polar_cone_covering_fraction`, a
+    function of ``agn_polar_oa`` alone -- Yang+2020 §2.2.2 / Stalevski+2012),
+    and passes the result to :func:`polar_dust_emission` to compute the FIR
+    graybody. The result is valid for all inclinations and should be added
+    to the attenuated disc SED.
 
     **JIT-compatible**: yes, uses JAX primitives throughout.
 
@@ -166,7 +178,9 @@ def polar_dust_reemission_lnu(
     ----------
     .. [1] Yang, A., et al. 2020, MNRAS, 491, 740 (X-CIGALE polar dust).
        https://doi.org/10.1093/mnras/stz3001
-    .. [2] Boquien, M. et al. 2019, A&A, 622, A103, CIGALE ``skirtor2016``
+    .. [2] Stalevski, M. et al. 2012, MNRAS, 420, 2756 (disc anisotropic
+       emission law the cone-covering factor integrates). arXiv:1109.1286.
+    .. [3] Boquien, M. et al. 2019, A&A, 622, A103, CIGALE ``skirtor2016``
        polar-dust module. arXiv:1811.03094.
     """
     wave_aa = jnp.asarray(wavelength)
@@ -187,6 +201,12 @@ def polar_dust_reemission_lnu(
     # mix erg/s/Å with Hz and produce a ~12-dex overshoot in the reemission.
     idx_w = jnp.argsort(wave_aa)
     l_absorbed_total = jnp.trapezoid(l_absorbed_per_bin[idx_w], wave_aa[idx_w])
+
+    # Cone-covering factor (task13 fix-round-1 item 1): only the fraction of
+    # the disc's bolometric luminosity within the polar cone can ever be
+    # absorbed by the polar dust -- see polar_cone_covering_fraction's
+    # docstring for the derivation. Function of agn_polar_oa alone.
+    l_absorbed_total = polar_cone_covering_fraction(agn_polar_oa) * l_absorbed_total
 
     # Returns L_ν in erg/s/Hz.
     l_nu_reemit = polar_dust_emission(

@@ -14,10 +14,11 @@ recognizes) silently fell through to ``**_params`` and was discarded: the
 re-emission graybody was always evaluated at its hardcoded 100 K default,
 regardless of the requested temperature.
 
-The energy-balance test below additionally pins the CIGALE/Yang+2020
-normalization this block already implements: the luminosity the polar screen
-removes from the pre-attenuation SED must equal the luminosity re-emitted as
-the graybody, to within numerical-integration noise.
+``TestPolarDustCoveringFactor`` additionally pins the CIGALE/Yang+2020
+normalization this block implements, including the cone-covering factor
+(task13 fix-round-1 item 1): the disc's anisotropic emission integrated over
+the polar cone's solid angle, times the absorbed fraction, equals the
+re-emitted graybody luminosity, to numerical-integration noise.
 
 References
 ----------
@@ -33,7 +34,9 @@ import jax
 import jax.numpy as jnp
 import pytest
 
+from tengri.components.agn.blocks.atten import polar_dust_reemission_lnu
 from tengri.components.agn.blocks.runner import composable_agn_l_nu
+from tengri.components.agn.polar_dust import polar_cone_covering_fraction, polar_dust_extinction
 from tengri.utils.physics_constants import C_AA
 
 pytestmark = pytest.mark.regression_bug
@@ -103,32 +106,100 @@ class TestPolarDustTemperatureIsLive:
         )
 
 
-class TestPolarDustEnergyConservation:
-    """Absorbed-by-screen luminosity must equal re-emitted graybody luminosity."""
+class TestPolarDustCoveringFactor:
+    """Yang et al. 2020 X-CIGALE section 2.2.2 cone-covering factor (task13
+    fix-round-1 item 1): the absorbed (and hence re-emitted) luminosity is
+    the disc's anisotropic emission integrated over the polar cone's solid
+    angle -- a function of ``agn_polar_oa`` alone -- times the absorbed
+    fraction. Supersedes the earlier "deep-Type-1 coincidence" energy test
+    (``TestPolarDustEnergyConservation``, removed): once the reemission is
+    weighted by :func:`polar_cone_covering_fraction`, comparing it against
+    the LOS-only "before minus after the Stage-5 screen" difference no
+    longer coincides (that quantity never carried the cone weight to begin
+    with) -- the identity below is the correct one, and holds for EVERY
+    ``(oa, cos_inc)``, not just a deep-Type-1 special case, because the
+    absorbed luminosity :func:`polar_dust_extinction` returns is
+    geometry-independent (Yang+2020 §2.2.2): cos_inc has no effect on it at
+    all, so this identity is exact at every inclination by construction.
+    """
 
-    def test_absorbed_equals_reemitted_at_type1(self):
-        p_before = {**_BASE_PARAMS, "agn_attenuation_block": "none"}
-        sed_before = composable_agn_l_nu(_WAVE, **p_before)
+    #: Synthetic disc-like spectrum: an arbitrary smooth power law, exactly
+    #: like ``test_polar_dust.py``'s ``L_NU_DISC`` fixture. The identity
+    #: under test does not depend on which physical disc produced this
+    #: shape.
+    _L_LAMBDA_DISC = 1e10 * (_WAVE / 5000.0) ** (-1.5)
+    _EBV = 0.3
 
-        sed_after_total, components = composable_agn_l_nu(
-            _WAVE, return_components=True, **_BASE_PARAMS
+    @pytest.mark.parametrize("cos_inc", [1.0, 0.5, 0.0])
+    @pytest.mark.parametrize("oa", [10.0, 45.0, 80.0])
+    def test_reemitted_equals_cone_absorbed(self, oa, cos_inc):
+        reemitted = polar_dust_reemission_lnu(
+            _WAVE,
+            self._L_LAMBDA_DISC,
+            agn_polar_ebv=self._EBV,
+            agn_cos_inc=cos_inc,
+            agn_polar_oa=oa,
+            agn_polar_T=100.0,
+            agn_polar_beta=1.6,
+            agn_polar_law="smc",
         )
-        sed_agn_polar = components["polar"]
-        sed_after_no_reemit = sed_after_total - sed_agn_polar
+        reemitted_bol = _integrate_lnu_bolometric(reemitted)
 
-        absorbed = _integrate_lnu_bolometric(sed_before) - _integrate_lnu_bolometric(
-            sed_after_no_reemit
+        # Independent reconstruction from the two public physics functions:
+        # the existing (unchanged) geometry-independent absorbed fraction,
+        # times the NEW cone-covering fraction.
+        _, l_absorbed_per_bin = polar_dust_extinction(
+            self._L_LAMBDA_DISC,
+            _WAVE,
+            cos_inc=cos_inc,
+            opening_angle_deg=oa,
+            ebv=self._EBV,
+            law="smc",
         )
-        reemitted = _integrate_lnu_bolometric(sed_agn_polar)
+        idx_w = jnp.argsort(_WAVE)
+        l_absorbed_raw = jnp.trapezoid(l_absorbed_per_bin[idx_w], _WAVE[idx_w])
+        cone_absorbed = polar_cone_covering_fraction(oa) * l_absorbed_raw
 
-        assert float(reemitted) != 0.0, (
-            "reemitted luminosity is exactly zero -- the energy-balance ratio "
-            "below is undefined, not merely small; check agn_polar_ebv/oa/T."
+        assert float(cone_absorbed) != 0.0, (
+            "cone-absorbed luminosity is exactly zero -- the energy-balance "
+            "ratio below is undefined, not merely small."
         )
-        rel_diff = abs(float(absorbed) - float(reemitted)) / float(reemitted)
-        assert rel_diff < 1e-3, (
-            f"absorbed={float(absorbed):.6e} erg/s, reemitted={float(reemitted):.6e} "
-            f"erg/s, relative difference {rel_diff:.3e} (expected < 1e-3)."
+        rel_diff = abs(float(reemitted_bol) - float(cone_absorbed)) / float(cone_absorbed)
+        assert rel_diff < 1e-6, (
+            f"oa={oa}, cos_inc={cos_inc}: reemitted={float(reemitted_bol):.6e} erg/s, "
+            f"cone_absorbed={float(cone_absorbed):.6e} erg/s, relative difference "
+            f"{rel_diff:.3e} (expected < 1e-6)."
+        )
+
+    def test_covering_fraction_bounds(self):
+        """f_cone(0) = 1 (whole hemisphere is polar cone), f_cone(90) = 0
+        (torus edge reaches the pole, no escape cone left), monotonically
+        decreasing in between -- the physical range the derivation predicts."""
+        f0 = float(polar_cone_covering_fraction(0.0))
+        f90 = float(polar_cone_covering_fraction(90.0))
+        f45 = float(polar_cone_covering_fraction(45.0))
+        assert f0 == pytest.approx(1.0, abs=1e-9)
+        assert f90 == pytest.approx(0.0, abs=1e-9)
+        assert 0.0 < f45 < 1.0
+        assert f0 > f45 > f90
+
+    def test_sed_agn_polar_changes_with_oa(self):
+        """The published sed_agn_polar component itself (not just the total
+        SED, which already moved via the Stage-5 attenuation factor) must
+        differ across agn_polar_oa -- the direct regression this item fixes.
+        """
+        p_narrow = {**_BASE_PARAMS, "agn_polar_oa": 10.0}
+        p_wide = {**_BASE_PARAMS, "agn_polar_oa": 80.0}
+        _, comp_narrow = composable_agn_l_nu(_WAVE, return_components=True, **p_narrow)
+        _, comp_wide = composable_agn_l_nu(_WAVE, return_components=True, **p_wide)
+        polar_narrow = comp_narrow["polar"]
+        polar_wide = comp_wide["polar"]
+        max_rel_diff = float(
+            jnp.max(jnp.abs(polar_wide - polar_narrow)) / jnp.max(jnp.abs(polar_narrow))
+        )
+        assert max_rel_diff > 1e-3, (
+            f"sed_agn_polar at agn_polar_oa=10deg vs 80deg differs by only "
+            f"{max_rel_diff:.3e} relative -- the cone-covering factor has no effect."
         )
 
 

@@ -209,6 +209,91 @@ def gaskell2004_extinction_curve(wavelength: jnp.ndarray) -> jnp.ndarray:
     return k_lambda
 
 
+def polar_cone_covering_fraction(opening_angle_deg: float) -> jnp.ndarray:
+    r"""Fraction of the disc's bolometric luminosity within the polar cone.
+
+    X-CIGALE's polar dust (Yang et al. 2020 [1]_, section 2.2.2) sits in the
+    bicone above and below the dusty torus -- the region a Type-1 (face-on)
+    sightline escapes through. This function is that cone's *solid-angle*
+    share of the disc's own anisotropic emission pattern, i.e. what fraction
+    of the disc's total (one-hemisphere) luminosity the polar dust can ever
+    intercept, independent of any particular observer's line of sight
+    (:func:`polar_dust_extinction` already handles the *observed*,
+    inclination-dependent transmission separately, via its Type-1/2 mask).
+
+    Derivation. The disc's specific intensity as a function of polar angle
+    :math:`\theta` (measured from the pole, :math:`\theta=0` face-on)
+    follows the anisotropic thin-disc emission law used throughout the
+    SKIRTOR torus model (Stalevski et al. 2012 [2]_, eq. 3):
+
+    .. math::
+
+        I(\theta) = I_0 \cos\theta\,(1 + 2\cos\theta), \qquad
+        0 \le \theta \le \pi/2.
+
+    Integrating over the one-sided hemisphere (:math:`\mu = \cos\theta`)
+    gives the disc's total one-face luminosity
+
+    .. math::
+
+        L_{\rm bol} = 2\pi \int_0^{\pi/2} I(\theta)\,\sin\theta\,d\theta
+                    = 2\pi I_0 \int_0^1 \mu(1+2\mu)\,d\mu
+                    = \frac{7\pi}{3} I_0.
+
+    The polar/escape cone spans polar angle :math:`\theta \in [0,
+    \theta_{\rm max}]` with :math:`\theta_{\rm max} = 90^\circ - \Phi`
+    (:math:`\Phi` = ``opening_angle_deg``, the torus half-opening angle
+    measured from the equator -- the same convention
+    :func:`polar_dust_extinction`'s Type-1/2 mask uses, where
+    :math:`\mu_{\rm max} = \cos\theta_{\rm max} = \sin\Phi`). Integrating
+    :math:`I(\theta)` over just that range and dividing by :math:`L_{\rm
+    bol}` gives the cone's share:
+
+    .. math::
+
+        f_{\rm cone}(\Phi) = \frac{2\pi\int_0^{\theta_{\rm max}}
+        I(\theta)\sin\theta\,d\theta}{L_{\rm bol}}
+        = 1 - \frac{3}{7}\sin^2\Phi - \frac{4}{7}\sin^3\Phi.
+
+    :math:`f_{\rm cone}(0^\circ) = 1` (an infinitesimally thin equatorial
+    torus leaves the ENTIRE hemisphere as escape cone) and
+    :math:`f_{\rm cone}(90^\circ) = 0` (the torus edge reaches the pole, no
+    escape cone at all), monotonically decreasing in between.
+
+    Parameters
+    ----------
+    opening_angle_deg : float
+        Torus half-opening angle :math:`\Phi` [deg, measured from the
+        equator] -- ``agn_polar_oa``.
+
+    Returns
+    -------
+    f_cone : ndarray, scalar
+        Fraction of the disc's bolometric luminosity within the polar cone,
+        :math:`\in [0, 1]`. Dimensionless.
+
+    Notes
+    -----
+    **JIT-compatible**: yes, uses ``jnp`` primitives only. **Gradient-safe**:
+    yes, :math:`\sin\Phi` is smooth everywhere.
+
+    :func:`polar_dust_reemission_lnu` multiplies the geometry-independent
+    absorbed luminosity (:func:`polar_dust_extinction`'s ``l_absorbed``,
+    integrated) by this factor before normalizing the re-emission graybody,
+    so the re-emitted luminosity tracks ``agn_polar_oa`` as the declared
+    parameter's description promises ("sets covering fraction").
+
+    References
+    ----------
+    .. [1] Yang, A., et al. 2020, MNRAS, 491, 740 (X-CIGALE polar dust,
+       section 2.2.2). https://doi.org/10.1093/mnras/stz3001
+    .. [2] Stalevski, M. et al. 2012, MNRAS, 420, 2756 (disc anisotropic
+       emission law). arXiv:1109.1286.
+    """
+    sin_phi = jnp.sin(jnp.radians(jnp.asarray(opening_angle_deg)))
+    return 1.0 - (3.0 / 7.0) * sin_phi**2 - (4.0 / 7.0) * sin_phi**3
+
+
 def polar_dust_extinction(
     l_nu: jnp.ndarray,
     wavelength: jnp.ndarray,
