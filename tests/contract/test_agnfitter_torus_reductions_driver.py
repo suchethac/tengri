@@ -63,7 +63,13 @@ _AXES = {
     "SKIRTOR_MEAN2P": ("oa", "incl"),
     "CAT3D_LOWFWD": ("incl", "a", "fwd"),
 }
-_H5_AXIS_KEY = {"incl": "incl_axis", "oa": "oa_axis", "tau": "tv_axis", "a": "a_axis", "fwd": "fwd_axis"}
+_H5_AXIS_KEY = {
+    "incl": "incl_axis",
+    "oa": "oa_axis",
+    "tau": "tv_axis",
+    "a": "a_axis",
+    "fwd": "fwd_axis",
+}
 
 
 def test_list_tori_includes_all_nine(driver):
@@ -102,9 +108,7 @@ def test_template_matches_direct_h5_index_at_a_named_node(driver, name):
     with h5py.File(_REF, "r") as h:
         g = h[_H5_GROUP[name]]
         axis_values = {axis: np.asarray(g[_H5_AXIS_KEY[axis]][:]) for axis in _AXES[name]}
-        idx = tuple(
-            (pos + 1) % axis_values[axis].size for pos, axis in enumerate(_AXES[name])
-        )
+        idx = tuple((pos + 1) % axis_values[axis].size for pos, axis in enumerate(_AXES[name]))
         expected_template = np.asarray(g["template"][:])[idx]
         expected_wave = np.asarray(g["wavelength"][:])
 
