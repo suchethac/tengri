@@ -107,11 +107,42 @@ def test_active_set_empty_without_agn():
 
 
 def test_unknown_block_falls_back_to_full_superset():
-    """An unknown/grid-gated block over-frees (safe) rather than under-frees."""
-    cfg = {"agn_model": "composable", "agn_torus_block": "cat3d_wind"}  # grid-gated, omitted
+    """An unknown/grid-gated block over-frees (safe) rather than under-frees.
+
+    Uses a name that is not, and can never accidentally become, a real
+    registered block (``cat3d_wind`` used to sit here on the theory its grid
+    was absent from CI; fix round 1 found the grid IS tracked and added the
+    real entry below, so this regression test now needs a genuinely
+    unregistered name rather than one that could quietly stop testing the
+    fallback the day someone registers it).
+    """
+    cfg = {"agn_model": "composable", "agn_torus_block": "definitely_unregistered_torus_type"}
     assert agn_active_param_set(cfg) == ALL_AGN_PARAMS
     # Unknown monolithic model likewise.
     assert agn_active_param_set({"agn_model": "grahsp"}) == ALL_AGN_PARAMS
+
+
+def test_cat3d_wind_family_top_level_wildcard_frees_exact_consumed_set():
+    """Fix round 1 (CRITICAL): ``cat3d_wind`` and ``cat3d_wind_lowfwd`` were
+    both absent from ``AGN_BLOCK_CONSUMES``, so ``agn={'all_params': FREE}``
+    with either torus fell back to the full ~96-name superset (89 of them
+    foreign to the block). Assert the exact freed set, not a count -- a
+    superset regression must fail here even if some other unrelated entry
+    changes the total count.
+    """
+    for torus_type, axis_params in (
+        ("cat3d_wind", {"agn_a_cat3d", "agn_fwd_cat3d"}),
+        ("cat3d_wind_lowfwd", {"agn_a_cat3d_lowfwd", "agn_fwd_cat3d_lowfwd"}),
+    ):
+        cfg = {"agn_model": "composable", "agn_torus_block": torus_type}
+        active = agn_active_param_set(cfg)
+        assert active != ALL_AGN_PARAMS, f"{torus_type}: still falling back to the full superset"
+        expected = (
+            AGN_SHARED_PARAMS | {"agn_cos_inc", "agn_theta_torus", "agn_torus_frac"} | axis_params
+        )
+        assert active == expected, (
+            f"{torus_type}: freed {sorted(active)}, expected {sorted(expected)}"
+        )
 
 
 def test_grahsp_composable_blocks_scope_not_superset():

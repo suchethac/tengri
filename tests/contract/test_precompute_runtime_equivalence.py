@@ -54,8 +54,11 @@ References
 
 from __future__ import annotations
 
+import importlib
+
 import chex
 import jax
+import jax.numpy as jnp
 import numpy as np
 import pytest
 
@@ -731,3 +734,277 @@ class TestPAHDrudePrecomputeEquivalence:
 
         # PAH template has no grid axes, so numerical error should be < 1e-10
         _assert_equivalent(phot_precomp, phot_runtime, "pah_drude precompute↔runtime", rtol=1e-10)
+
+
+# ── Grid-torus adapter precompute↔runtime equivalence (fix round 1) ──────
+#
+# Directly exercises the seven ``PrecomputeModule``-shaped torus adapters
+# (five new AGNfitter-rX reductions + the two siblings whose pattern they
+# mirror) rather than going through ``SEDModel``: the composable AGN runner's
+# own WavePrecomp path (``composable_agn.blocks.composable_precompute``)
+# re-evaluates the exact runner on an outer-product grid and never calls
+# these adapters at all, and none of the five new reductions (nor
+# ``nenkova_agnfitter``) has a monolithic ``agn_model=`` name, so building a
+# full SEDModel through either surface would silently test something else.
+# Calling ``module.precompute()`` / ``module.build_lookup()`` directly is the
+# only way to test what these adapters actually promise (the
+# ``PrecomputeModule`` Protocol contract), and is what the monkeypatch-to-
+# raise proof below establishes: the test provably drives this exact call,
+# not a bypass.
+#
+# "Exact" reference: the runtime ``*_sed_from_grid`` function (the same one
+# the composable torus block calls) evaluated at the point under test, then
+# filter-integrated via :func:`tengri.observation.photometry.lnu_filter_integral`
+# -- the same BESSELL-convention integral
+# :func:`tengri.utils.grid_interp.preintegrate_grid` documents itself as
+# matching, but a genuinely independent call (no shared code with the
+# adapter under test).
+#
+# Tolerance, measured (not guessed): at an exact grid node neither path
+# interpolates, so agreement is machine precision (measured worst case
+# 8.6e-15 across all seven blocks) -- rtol=1e-10 leaves 5 orders of margin.
+# Off-node, the two paths do not commute (precompute interpolates
+# NODE-PREINTEGRATED PHOTOMETRY via PCHIP; the exact path integrates the
+# TEMPLATE interpolated in wavelength space, then integrates through the
+# filter) so a real, larger residual is expected: measured worst case 3.45e-2
+# (``cat3d_wind_lowfwd``, whose axes are widest in relative terms) -- rtol
+# =5e-2 leaves ~50% margin over every measured case.
+#
+# Bug found by this table (fixed in this round, not merely tested around):
+# ``skirtor_agnfitter{,_1p,_2p}_precompute.py`` each multiplied by
+# ``_LSUN_ERG`` *twice* -- once folded into ``grid_phot`` at the precompute
+# stage (correct) and again in ``l_scale`` at lookup time (double-counted) --
+# over-scaling every SKIRTOR-family precompute photometry by exactly
+# ``_LSUN_ERG`` (~3.83e33). The three ``l_scale = ... * _LSUN_ERG * ...``
+# lines are now ``l_scale = ... * ...``; see the fix-round-1 report for the
+# RED run this produced before the fix.
+
+from tengri.observation.photometry import lnu_filter_integral
+
+
+def _grid_torus_specs() -> list[dict]:
+    """One entry per grid-torus adapter: (name, modules, loader/sed_fn names,
+    grid path, axis kwarg names in ``grid.axes`` order)."""
+    return [
+        dict(
+            name="nenkova_agnfitter_2p",
+            runtime_mod="tengri.components.agn.nenkova_agnfitter_2p",
+            precompute_mod="tengri.components.agn.nenkova_agnfitter_2p_precompute",
+            loader="load_nenkova_agnfitter_2p_grid",
+            sed_fn="nenkova_agnfitter_2p_sed_from_grid",
+            grid_path=_REPO_DATA / "nenkova_agnfitter_2p_torus_grid.h5",
+            axis_kwargs=("agn_cos_inc", "agn_oa_nenkova"),
+        ),
+        dict(
+            name="nenkova_agnfitter_3p",
+            runtime_mod="tengri.components.agn.nenkova_agnfitter_3p",
+            precompute_mod="tengri.components.agn.nenkova_agnfitter_3p_precompute",
+            loader="load_nenkova_agnfitter_3p_grid",
+            sed_fn="nenkova_agnfitter_3p_sed_from_grid",
+            grid_path=_REPO_DATA / "nenkova_agnfitter_3p_torus_grid.h5",
+            axis_kwargs=("agn_cos_inc", "agn_oa_nenkova", "agn_tv_nenkova"),
+        ),
+        dict(
+            name="skirtor_agnfitter_1p",
+            runtime_mod="tengri.components.agn.skirtor_agnfitter_1p",
+            precompute_mod="tengri.components.agn.skirtor_agnfitter_1p_precompute",
+            loader="load_skirtor_agnfitter_1p_grid",
+            sed_fn="skirtor_agnfitter_1p_sed_from_grid",
+            grid_path=_REPO_DATA / "skirtor_mean1p_torus_grid.h5",
+            axis_kwargs=("agn_incl_skirtor",),
+        ),
+        dict(
+            name="skirtor_agnfitter_2p",
+            runtime_mod="tengri.components.agn.skirtor_agnfitter_2p",
+            precompute_mod="tengri.components.agn.skirtor_agnfitter_2p_precompute",
+            loader="load_skirtor_agnfitter_2p_grid",
+            sed_fn="skirtor_agnfitter_2p_sed_from_grid",
+            grid_path=_REPO_DATA / "skirtor_mean2p_torus_grid.h5",
+            axis_kwargs=("agn_oa_skirtor", "agn_incl_skirtor"),
+        ),
+        dict(
+            name="cat3d_wind_lowfwd",
+            runtime_mod="tengri.components.agn.cat3d_wind_lowfwd",
+            precompute_mod="tengri.components.agn.cat3d_wind_lowfwd_precompute",
+            loader="load_cat3d_wind_lowfwd_grid",
+            sed_fn="cat3d_wind_lowfwd_sed_from_grid",
+            grid_path=_REPO_DATA / "cat3d_wind_lowfwd_torus_grid.h5",
+            axis_kwargs=("agn_cos_inc", "agn_a_cat3d_lowfwd", "agn_fwd_cat3d_lowfwd"),
+        ),
+        dict(
+            name="nenkova_agnfitter",
+            runtime_mod="tengri.components.agn.nenkova_agnfitter",
+            precompute_mod="tengri.components.agn.nenkova_agnfitter_precompute",
+            loader="load_nenkova_agnfitter_grid",
+            sed_fn="nenkova_agnfitter_sed_from_grid",
+            grid_path=_REPO_DATA / "nenkova_agnfitter_torus_grid.h5",
+            axis_kwargs=("agn_cos_inc",),
+        ),
+        dict(
+            name="skirtor_agnfitter",
+            runtime_mod="tengri.components.agn.skirtor_agnfitter",
+            precompute_mod="tengri.components.agn.skirtor_agnfitter_precompute",
+            loader="load_skirtor_agnfitter_grid",
+            sed_fn="skirtor_agnfitter_sed_from_grid",
+            grid_path=_REPO_DATA / "skirtor_mean3p_torus_grid.h5",
+            axis_kwargs=("agn_oa_skirtor", "agn_incl_skirtor", "agn_tv_skirtor"),
+        ),
+    ]
+
+
+_GRID_TORUS_SPECS = _grid_torus_specs()
+_GRID_TORUS_IDS = [s["name"] for s in _GRID_TORUS_SPECS]
+
+
+def _node_and_offnode(grid):
+    """Middle-node axis values, and one off-node value per axis (the midpoint
+    to an adjacent node, so it genuinely requires interpolation on both
+    paths)."""
+    node_idx = tuple(len(ax) // 2 for ax in grid.axes)
+    node_vals = tuple(float(grid.axes[i][node_idx[i]]) for i in range(len(grid.axes)))
+    offnode_vals = []
+    for i, ax in enumerate(grid.axes):
+        j = node_idx[i]
+        if j + 1 < len(ax):
+            offnode_vals.append(float((ax[j] + ax[j + 1]) / 2.0))
+        elif j > 0:
+            offnode_vals.append(float((ax[j] + ax[j - 1]) / 2.0))
+        else:
+            offnode_vals.append(float(ax[j]))
+    return node_vals, tuple(offnode_vals)
+
+
+def _exact_grid_torus_photometry(sed_fn, grid, axis_kwargs, values, waves, trans):
+    """Filter-integrated photometry from the runtime SED function directly."""
+    kwargs = dict(zip(axis_kwargs, values, strict=True))
+    L_nu = sed_fn(
+        grid, jnp.asarray(grid.wave_grid), agn_log_lbol=0.0, agn_torus_frac=1.0, **kwargs
+    )
+    out = [
+        float(
+            lnu_filter_integral(
+                L_nu, jnp.asarray(grid.wave_grid), jnp.asarray(w), jnp.asarray(t), 0.0
+            )
+        )
+        for w, t in zip(waves, trans, strict=True)
+    ]
+    return np.asarray(out)
+
+
+def _precompute_grid_torus_photometry(
+    precompute_mod, grid_path, axis_kwargs, values, waves, trans
+):
+    """Filter-integrated photometry via the adapter's own Protocol entry points."""
+    preint = precompute_mod.precompute(
+        list(waves), list(trans), 0.0, None, grid_path=str(grid_path)
+    )
+    lookup = precompute_mod.build_lookup(preint)
+    kwargs = dict(zip(axis_kwargs, values, strict=True))
+    return np.asarray(lookup(agn_log_lbol=0.0, agn_torus_frac=1.0, **kwargs))
+
+
+@pytest.fixture(scope="module")
+def grid_torus_filters():
+    """UV-optical-IR filters, reused from :func:`agn_torus_filter_set`'s
+    construction (module-scoped here: shared across every (block, point)
+    case, cheap and immutable)."""
+    centers = np.array([1500.0, 5500.0, 12000.0, 25000.0, 100000.0])
+    widths = np.array([300.0, 1000.0, 2000.0, 5000.0, 20000.0])
+    waves: list[np.ndarray] = []
+    trans: list[np.ndarray] = []
+    for c, w in zip(centers, widths):
+        wv = np.linspace(c - 3 * w, c + 3 * w, 64)
+        tr = np.exp(-0.5 * ((wv - c) / w) ** 2)
+        waves.append(wv)
+        trans.append(tr)
+    return waves, trans
+
+
+@pytest.mark.parametrize("spec", _GRID_TORUS_SPECS, ids=_GRID_TORUS_IDS)
+class TestGridTorusPrecomputeRuntimeEquivalence:
+    """Precompute↔runtime equivalence for the seven grid-torus adapters.
+
+    Five new AGNfitter-rX reductions (Task 4) plus the two siblings whose
+    ``PrecomputeModule`` pattern they mirror (``nenkova_agnfitter``,
+    ``skirtor_agnfitter``). See the module-level comment above this class for
+    why these are tested by calling the adapter directly rather than through
+    ``SEDModel``, and for the measured tolerances.
+    """
+
+    def _skip_if_missing(self, spec):
+        if not spec["grid_path"].exists():
+            pytest.skip(f"{spec['name']}: grid not found at {spec['grid_path']}")
+
+    def _modules(self, spec):
+        runtime_mod = importlib.import_module(spec["runtime_mod"])
+        precompute_mod = importlib.import_module(spec["precompute_mod"])
+        return runtime_mod, precompute_mod
+
+    def test_node_matches_exact(self, spec, grid_torus_filters):
+        """At an exact grid node, precompute and exact photometry agree to
+        machine precision (measured worst case 8.6e-15; rtol=1e-10 here)."""
+        self._skip_if_missing(spec)
+        runtime_mod, precompute_mod = self._modules(spec)
+        loader = getattr(runtime_mod, spec["loader"])
+        sed_fn = getattr(runtime_mod, spec["sed_fn"])
+        grid = loader(str(spec["grid_path"]))
+        node_vals, _ = _node_and_offnode(grid)
+        waves, trans = grid_torus_filters
+
+        exact = _exact_grid_torus_photometry(
+            sed_fn, grid, spec["axis_kwargs"], node_vals, waves, trans
+        )
+        precomp = _precompute_grid_torus_photometry(
+            precompute_mod, spec["grid_path"], spec["axis_kwargs"], node_vals, waves, trans
+        )
+        _assert_equivalent(precomp, exact, f"{spec['name']} node precompute<->exact", rtol=1e-10)
+
+    def test_offnode_matches_exact(self, spec, grid_torus_filters):
+        """Off a grid node, the two paths do not commute (interpolate-then-
+        integrate vs integrate-then-interpolate); measured worst case 3.45e-2
+        (cat3d_wind_lowfwd) -- rtol=5e-2 here."""
+        self._skip_if_missing(spec)
+        runtime_mod, precompute_mod = self._modules(spec)
+        loader = getattr(runtime_mod, spec["loader"])
+        sed_fn = getattr(runtime_mod, spec["sed_fn"])
+        grid = loader(str(spec["grid_path"]))
+        _, offnode_vals = _node_and_offnode(grid)
+        waves, trans = grid_torus_filters
+
+        exact = _exact_grid_torus_photometry(
+            sed_fn, grid, spec["axis_kwargs"], offnode_vals, waves, trans
+        )
+        precomp = _precompute_grid_torus_photometry(
+            precompute_mod, spec["grid_path"], spec["axis_kwargs"], offnode_vals, waves, trans
+        )
+        _assert_equivalent(
+            precomp, exact, f"{spec['name']} off-node precompute<->exact", rtol=5e-2
+        )
+
+    def test_precompute_entry_point_is_actually_driven(
+        self, spec, grid_torus_filters, monkeypatch
+    ):
+        """Vacuity proof: monkeypatch the adapter's own ``precompute`` to
+        raise, and confirm the SAME call this test class makes above
+        propagates that raise -- i.e. this test suite cannot pass by
+        silently comparing two copies of the same exact-path computation, or
+        any other bypass of the adapter under test (Task 3 found exactly
+        this class of vacuity elsewhere in this file)."""
+        self._skip_if_missing(spec)
+        _, precompute_mod = self._modules(spec)
+        waves, trans = grid_torus_filters
+
+        def _raise(*_args, **_kwargs):
+            raise RuntimeError(f"MONKEYPATCH_PROOF: {spec['name']}.precompute was called")
+
+        monkeypatch.setattr(precompute_mod, "precompute", _raise)
+        placeholder_vals = (0.0,) * len(spec["axis_kwargs"])
+        with pytest.raises(RuntimeError, match="MONKEYPATCH_PROOF"):
+            _precompute_grid_torus_photometry(
+                precompute_mod,
+                spec["grid_path"],
+                spec["axis_kwargs"],
+                placeholder_vals,
+                waves,
+                trans,
+            )

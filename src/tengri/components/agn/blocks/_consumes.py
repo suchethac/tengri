@@ -116,6 +116,29 @@ AGN_BLOCK_CONSUMES: dict[tuple[str, str], frozenset[str]] = {
         {"agn_ir_frac", "agn_tau", "agn_torus_frac", "agn_cos_inc", "agn_theta_torus"}
     ),
     ("torus", "nenkova_agnfitter"): frozenset({"agn_cos_inc", "agn_theta_torus"}),
+    # CAT3D-Wind (Hönig & Kishimoto 2017): neither in TORUS_SCREEN_PARAMS
+    # (torus_screen.py) nor _SELF_CONTAINED_TORI (runner.py), so both receive
+    # the same generic gray mask as nenkova/silva04/two_temperature above
+    # (empirically confirmed: perturbing agn_theta_torus across its prior
+    # moves sed_agn by ~1.5e-3 for both, isolated with a multicolor disc).
+    # Fix round 1 (CRITICAL): both entries were previously absent -- the
+    # historical "grid absent from CI" rationale for cat3d_wind no longer
+    # holds (data/cat3d_wind_torus_grid.h5 is tracked and negated in
+    # .gitignore) -- so agn={'all_params': FREE} with either torus silently
+    # fell back to the full ~96-name superset (89 of them foreign to the
+    # block). See test_cat3d_wind_family_top_level_wildcard_frees_exact_consumed_set.
+    ("torus", "cat3d_wind"): frozenset(
+        {"agn_cos_inc", "agn_theta_torus", "agn_a_cat3d", "agn_fwd_cat3d", "agn_torus_frac"}
+    ),
+    ("torus", "cat3d_wind_lowfwd"): frozenset(
+        {
+            "agn_cos_inc",
+            "agn_theta_torus",
+            "agn_a_cat3d_lowfwd",
+            "agn_fwd_cat3d_lowfwd",
+            "agn_torus_frac",
+        }
+    ),
     ("torus", "nenkova_agnfitter_2p"): frozenset(
         {"agn_cos_inc", "agn_theta_torus", "agn_oa_nenkova", "agn_torus_frac"}
     ),

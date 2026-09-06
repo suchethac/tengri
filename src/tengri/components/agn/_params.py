@@ -1069,6 +1069,24 @@ GRID_EXTENT_SOURCES: dict[str, tuple[str, str, str, str]] = {
         "nenkova_agnfitter_3p/tv_axis",
         "identity",
     ),
+    # NK0_mean_2p / NK0_mean_3p reuse the shared agn_cos_inc declaration for
+    # their inclination axis (0-90 deg -> cos [0, 1], matching the shared
+    # [0, 1] declaration exactly -- unlike NK0_mean_1p's narrower 10-90 deg,
+    # which is why only the 1p case is excluded per the module docstring
+    # above). Fix round 1: registered so the guard actually checks this
+    # (mirrors cat3d_lowfwd_cos_inc's transform).
+    "nk08_2p_incl": (
+        "agn_cos_inc",
+        "data/nenkova_agnfitter_2p_torus_grid.h5",
+        "nenkova_agnfitter_2p/incl_axis",
+        "cos_deg",
+    ),
+    "nk08_3p_incl": (
+        "agn_cos_inc",
+        "data/nenkova_agnfitter_3p_torus_grid.h5",
+        "nenkova_agnfitter_3p/incl_axis",
+        "cos_deg",
+    ),
     # SKIRTOR_mean_1p / SKIRTOR_mean_2p share the shared agn_oa_skirtor /
     # agn_incl_skirtor declarations already registered above for
     # SKIRTOR_mean_3p (all three grids agree on both extents).

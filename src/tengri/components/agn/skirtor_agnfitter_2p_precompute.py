@@ -186,7 +186,11 @@ def build_skirtor_agnfitter_2p_photometry_lookup(precomp: dict):
         **Gradient-safe**: yes, node-exact PCHIP is C¹ differentiable.
         """
         phot = interp_nd_pchip(grid_jax, axes, (agn_oa_skirtor, agn_incl_skirtor))
-        l_scale = 10.0**agn_log_lbol * _LSUN_ERG * agn_torus_frac
+        # grid_phot/phot already carries the _LSUN_ERG factor from the
+        # precompute stage (lnu_grid = _LSUN_ERG * template / integral); do
+        # not multiply it in again here (fix round 1: this double-counted
+        # _LSUN_ERG, over-scaling precompute photometry by ~3.8e33).
+        l_scale = 10.0**agn_log_lbol * agn_torus_frac
         return l_scale * phot
 
     return skirtor_agnfitter_2p_photometry
@@ -283,7 +287,11 @@ def build_lookup(preint: dict, *, free_param_names: tuple[str, ...] | None = Non
     @jax.jit
     def skirtor_agnfitter_2p_phot_collapsed(agn_log_lbol, *free_axis_values, agn_torus_frac):
         """SKIRTOR_mean_2p torus photometry with collapsed (fixed) axes via PCHIP."""
-        l_scale = 10.0**agn_log_lbol * _LSUN_ERG * agn_torus_frac
+        # grid_phot/phot already carries the _LSUN_ERG factor from the
+        # precompute stage (lnu_grid = _LSUN_ERG * template / integral); do
+        # not multiply it in again here (fix round 1: this double-counted
+        # _LSUN_ERG, over-scaling precompute photometry by ~3.8e33).
+        l_scale = 10.0**agn_log_lbol * agn_torus_frac
         phot = interp_collapsed(grid_phot, axes, free_axis_values, kernel="pchip")
         return l_scale * phot
 
