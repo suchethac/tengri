@@ -749,12 +749,8 @@ NOTEBOOKS = {
             anchor="00now",
             superseded_by="#2044 (36d7189cf, 2026-08-23)",
             differs_in=(
-                "dust_attenuation.Rv",
                 "dust_attenuation.other_params",
-                "dust_attenuation.bump_strength",
-                "dust_attenuation.delta",
                 "dust_attenuation.f_obscuration",
-                "dust_attenuation.slope",
                 "dust_attenuation.tau_bc",
                 "dust_attenuation.tau_v",
                 "dust_attenuation.type",
@@ -766,11 +762,16 @@ NOTEBOOKS = {
                 "ssp.nebular",
             ),
             why=(
-                "The pre-#2044 quickstart. Fifteen spec keys differ from today's "
+                "The pre-#2044 quickstart. Eleven spec keys differ from today's "
                 "because #2044 replaced the SFH family, the dust component, the "
                 "nebular treatment, the SSP grid and the dimension in one commit. "
                 "Kept because 2026-08-17_quickstart_nuts_vs_hmc.md and the two "
-                "2026-08-30 reports measured THIS model."
+                "2026-08-30 reports measured THIS model. Four more used to be "
+                "listed here -- Rv, bump_strength, delta, slope -- and stopped "
+                "differing once ``to_groups()`` began emitting only the shape "
+                "parameters the selected law reads: Calzetti reads none of the "
+                "four, so both sides now omit all four rather than emitting them "
+                "with differently-shaped defaults."
             ),
         ),
         # PRNGKey(9) at SNR 30, not this file's usual (1, 20): these are

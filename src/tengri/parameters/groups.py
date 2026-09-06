@@ -97,9 +97,8 @@ True
 from __future__ import annotations
 
 import difflib
-import inspect
 import warnings
-from collections.abc import Callable
+from collections.abc import Callable, Iterable
 from functools import cache, lru_cache
 from typing import NamedTuple
 
@@ -403,6 +402,56 @@ def _valid_dust_emission_types() -> frozenset[str]:
     alias_keys = frozenset(_EMISSION_TYPE_ALIASES.keys())
 
     return dust_ir_components | alias_keys | _LAZY_DUST_EMISSION_TYPES
+
+
+def _dust_emission_component_class(emission_type: str):
+    """Return the registered component class a ``dust_emission`` type names.
+
+    Parameters
+    ----------
+    emission_type : str
+        A grammar spelling, alias or registry key.
+
+    Returns
+    -------
+    type or None
+        The registered class, or ``None`` for a name that resolves only through
+        the lazy loader cache (``dl07_tabulated``) and has no component.
+    """
+    from tengri.components.sed_model_component import _REGISTRY
+    from tengri.forward.component_factory import _EMISSION_TYPE_ALIASES
+
+    return _REGISTRY.get(_EMISSION_TYPE_ALIASES.get(emission_type, emission_type))
+
+
+def _standalone_dust_emission_types() -> frozenset[str]:
+    """Accepted ``dust_emission.type`` values that may be a model's only emitter.
+
+    :func:`_valid_dust_emission_types` minus the **building blocks** — backends
+    that emit a physically correct *piece* of the IR SED scaled by ``L_ir``
+    without renormalizing to it, so that selecting one alone silently discards
+    most of the absorbed energy. ``pah_drude`` re-emits a measured 1.8925e-04
+    of ``L_ir``.
+
+    Returns
+    -------
+    frozenset[str]
+        Names ``SEDModel.build`` accepts for the ``dust_emission`` group.
+
+    Notes
+    -----
+    Derived from ``EmissionComponent.energy_balanced`` on the registered class,
+    not from a hand-written list here: a list is a second source of truth that
+    goes stale in the direction nobody checks, and the flag also carries the
+    reason to the component that owns it. A name with no registered class
+    (loader-cache-only spellings) counts as standalone — nothing declares
+    otherwise, and refusing on absent information would be a guess.
+    """
+    return frozenset(
+        name
+        for name in _valid_dust_emission_types()
+        if getattr(_dust_emission_component_class(name), "energy_balanced", True)
+    )
 
 
 def _valid_nebular_types() -> frozenset[str]:
@@ -1146,7 +1195,7 @@ def parse_groups(**kwargs) -> Parameters:
     # ``dust={'tau_qpah': 5}`` (instead of ``dust_qpah``) used to vanish
     # without trace. Walk the user's dicts now and raise a friendly
     # "Did you mean ...?" error on any unrecognized key.
-    _validate_user_keys(kwargs, structural_params, param_partition)
+    _validate_user_keys(kwargs, structural_params, param_partition, wildcard_scopes)
 
     # ── Validate every ``all_params: FREE`` actually freed something ───
     # Runs after key validation so a typo is reported before this, which is
@@ -1929,11 +1978,13 @@ def _law_shape_params(law_name: str) -> frozenset[str]:
     **JIT-compatible**: no; signature introspection at build time.
 
     Read off the function signature rather than a maintained table, so a law
-    registered later is scoped without editing this module. Every law also
-    takes ``**kwargs``, which is exactly why the signature is the only honest
-    source: ``def calzetti(wavelength, **_kwargs)`` *accepts* ``dust_Rv`` and
-    silently discards it, so "does the call succeed?" cannot answer "does this
-    law read this parameter?" - only the named parameters can.
+    registered later is scoped without editing this module. The signature is the
+    only honest source: a law that also declared ``**kwargs`` would *accept*
+    ``dust_Rv`` and silently discard it, so "does the call succeed?" cannot
+    answer "does this law read this parameter?" - only the named parameters can.
+    That catch-all is why the four ``slope``/``delta`` pairs of #2185 shipped;
+    it is gone from the laws, and ``tools/check_dust_law_kwargs.py`` refuses a
+    new one.
 
     Two spellings reach the same quantity: the law kwarg (``n_slope``) and the
     flat parameter (``dust_slope``). ``_TWO_COMPONENT_LAW_PARAMS`` is the
@@ -1941,28 +1992,19 @@ def _law_shape_params(law_name: str) -> frozenset[str]:
     its own flat name.
     """
     from tengri.components.dust._apply import _TWO_COMPONENT_LAW_PARAMS
-    from tengri.components.dust.laws._registry import DUST_LAWS
+    from tengri.components.dust.laws._registry import DUST_LAWS, law_kwarg_names
 
-    entry = DUST_LAWS.get(law_name)
-    if entry is None:
+    if law_name not in DUST_LAWS:
         return frozenset()
-    fn = entry["fn"] if isinstance(entry, dict) else entry
 
     kwarg_to_flat = {kwarg: flat for kwarg, flat, _ in _TWO_COMPONENT_LAW_PARAMS}
-    try:
-        sig = inspect.signature(fn)
-    except (TypeError, ValueError):  # pragma: no cover - builtins have no signature
-        return frozenset()
-
     names = set()
-    for param in sig.parameters.values():
-        if param.kind is param.VAR_KEYWORD:
-            continue
-        flat = kwarg_to_flat.get(param.name)
+    for kwarg in law_kwarg_names(law_name):
+        flat = kwarg_to_flat.get(kwarg)
         if flat is not None:
             names.add(flat)
-        elif param.name.startswith("dust_"):
-            names.add(param.name)
+        elif kwarg.startswith("dust_"):
+            names.add(kwarg)
     return frozenset(names)
 
 
@@ -1994,6 +2036,76 @@ def _all_law_shape_params() -> frozenset[str]:
 #: Law slots a two-component/single-component dust model can select. Each is an
 #: independent choice, so a shape parameter is live if *any* slot's law reads it.
 _DUST_LAW_SLOTS: tuple[str, ...] = ("dust_law_bc", "dust_law_diff", "dust_law_neb")
+
+
+def _dust_wildcard_scopes(
+    structural_params: Parameters,
+    param_partition: dict[str, str],
+) -> dict[str, frozenset[str] | None]:
+    """Variant scope for ``dust_emission`` and ``dust_attenuation``.
+
+    Parameters
+    ----------
+    structural_params : Parameters
+        Structural-only spec carrying the selected IR engine and law slots.
+    param_partition : dict
+        Full parameter name -> owning group, from :func:`_partition_by_group`.
+
+    Returns
+    -------
+    dict
+        Group name -> the parameters that variant reads, or ``None`` to leave
+        the group unscoped. Same contract as :func:`_wildcard_scopes`.
+
+    Notes
+    -----
+    **JIT-compatible**: no; build-time introspection.
+
+    Split out of :func:`_wildcard_scopes` because these two entries are the only
+    ones derivable from a finished :class:`Parameters` alone -- every other group
+    reads its structural choice out of the translated kwargs. That is what lets
+    :func:`parameters_to_groups`, which has a spec and no kwargs, ask the same
+    question on the way *out* that :func:`_validate_user_keys` asks on the way
+    in. Without it the emitter writes back per-parameter entries the selected
+    variant never reads, and the round-trip no longer re-parses.
+    """
+    scopes: dict[str, frozenset[str] | None] = {}
+
+    # ── dust_emission: the selected IR engine's own declarations ──
+    scopes["dust_emission"] = (
+        _declared_param_names(structural_params.dust_emission)
+        if structural_params.dust_emission is not None
+        else None
+    )
+
+    # ── dust: the attenuation laws the selected slots name ──
+    # The group owns both the optical depths (which every law consumes through
+    # the Charlot & Fall geometry, not as a curve-shape argument) and the four
+    # curve-shape modifiers, which only some laws read. Narrow by removing the
+    # shape parameters no selected law names, leaving everything else free.
+    dust_group_params = {
+        name for name, grp in param_partition.items() if grp == "dust_attenuation"
+    }
+    if dust_group_params:
+        # Read the slots off ``structural_params``, not ``structural_kwargs``:
+        # a slot the user did not name is absent from the kwargs but still
+        # resolves to a real law (both default to ``power_law``, which reads
+        # ``dust_slope``). Consulting the raw kwargs would narrow away a
+        # parameter the law in force does read; the failure this prevents,
+        # inverted.
+        active_shape = frozenset().union(
+            *(
+                _law_shape_params(law)
+                for law in (getattr(structural_params, slot, None) for slot in _DUST_LAW_SLOTS)
+                if law is not None
+            ),
+            frozenset(),
+        )
+        scopes["dust_attenuation"] = frozenset(
+            dust_group_params - (_all_law_shape_params() - active_shape)
+        )
+
+    return scopes
 
 
 def _wildcard_scopes(
@@ -2060,39 +2172,11 @@ def _wildcard_scopes(
         structural_kwargs.get("radio_agn_model"), frozenset()
     )
 
-    # ── dust_emission: the selected IR engine's own declarations ──
-    scopes["dust_emission"] = (
-        _declared_param_names(structural_params.dust_emission)
-        if structural_params.dust_emission is not None
-        else None
-    )
-
-    # ── dust: the attenuation laws the selected slots name ──
-    # The group owns both the optical depths (which every law consumes through
-    # the Charlot & Fall geometry, not as a curve-shape argument) and the four
-    # curve-shape modifiers, which only some laws read. Narrow by removing the
-    # shape parameters no selected law names, leaving everything else free.
-    dust_group_params = {
-        name for name, grp in param_partition.items() if grp == "dust_attenuation"
-    }
-    if dust_group_params:
-        # Read the slots off ``structural_params``, not ``structural_kwargs``:
-        # a slot the user did not name is absent from the kwargs but still
-        # resolves to a real law (both default to ``power_law``, which reads
-        # ``dust_slope``). Consulting the raw kwargs would narrow away a
-        # parameter the law in force does read; the failure this prevents,
-        # inverted.
-        active_shape = frozenset().union(
-            *(
-                _law_shape_params(law)
-                for law in (getattr(structural_params, slot, None) for slot in _DUST_LAW_SLOTS)
-                if law is not None
-            ),
-            frozenset(),
-        )
-        scopes["dust_attenuation"] = frozenset(
-            dust_group_params - (_all_law_shape_params() - active_shape)
-        )
+    # ── the two dust groups ──
+    # Kept in :func:`_dust_wildcard_scopes` because they are the only entries
+    # derivable from a finished spec alone, which is what the round-trip
+    # emitter needs.
+    scopes.update(_dust_wildcard_scopes(structural_params, param_partition))
 
     # ── xray: the selected corona model ──
     # Read the model off ``structural_params`` for the same reason the dust
@@ -2551,6 +2635,140 @@ def _set_met_mode(met_mode, result: dict, *, key: str) -> None:
     result["met_mode"] = met_mode
 
 
+def _partner_screen_reads(
+    stem: str,
+    dust_law: str | None,
+    dust_law_bc: str | None,
+    dust_law_diff: str | None,
+    has_bc: bool,
+) -> bool:
+    """Whether the screen NOT named by the user reads the paired per-screen key.
+
+    Parameters
+    ----------
+    stem : str
+        Per-screen key stem, e.g. ``"slope"``. ``"tau"`` is an optical depth
+        every law consumes through the Charlot & Fall geometry, never a curve
+        argument, so it is always paired.
+    dust_law : str or None
+        The shared ``law`` key, when the user gave one.
+    dust_law_bc, dust_law_diff : str or None
+        The per-screen ``law_bc`` / ``law_diff`` keys.
+    has_bc : bool
+        True when the user named the ``_bc`` half, so the partner is ``_diff``.
+
+    Returns
+    -------
+    bool
+        True when the partner must be named too. True whenever the partner's law
+        cannot be resolved here, which keeps the pre-#2185 requirement as the
+        conservative default.
+
+    Notes
+    -----
+    **JIT-compatible**: no; construction-time grammar validation.
+    """
+    from tengri.components.dust.attenuation import TWO_COMPONENT_OVERRIDE_KEYS
+    from tengri.components.dust.laws._registry import DUST_LAWS, law_kwarg_names
+
+    law_kw = TWO_COMPONENT_OVERRIDE_KEYS.get(stem)
+    if law_kw is None:  # 'tau': not a curve argument, always paired
+        return True
+    partner_law = dust_law or (dust_law_diff if has_bc else dust_law_bc)
+    if partner_law is None or partner_law not in DUST_LAWS:
+        return True
+    return law_kw in law_kwarg_names(partner_law)
+
+
+def _reject_per_screen_keys_no_law_reads(
+    dust_atten_dict: dict, result: dict, dust_type: str
+) -> None:
+    """Raise on a ``slope_bc``-style key the screen's own law never reads.
+
+    Parameters
+    ----------
+    dust_atten_dict : dict
+        The user's ``dust_attenuation`` group dict.
+    result : dict
+        Translated structural choices; carries the resolved ``dust_law_bc`` /
+        ``dust_law_diff`` / ``dust_law_neb`` by the time this runs.
+    dust_type : str
+        The selected ``dust_attenuation`` type.
+
+    Raises
+    ------
+    ParameterError
+        Naming the offending per-screen key, the law that screen selected, and
+        the per-screen keys that law does read.
+
+    Notes
+    -----
+    **JIT-compatible**: no; construction-time grammar validation.
+
+    The shared spellings (``slope``, ``Rv``, ...) are scoped to the selected
+    laws by :func:`_dust_wildcard_scopes`; the per-screen spellings were not,
+    and they route past the parameter partition entirely (they are structural
+    keys carrying a static float, not declared parameters). So
+    ``{'law': 'noll09', 'slope_bc': -1.0, 'slope_diff': -1.0}`` reached
+    ``noll09``, which reads ``dust_delta`` and not ``n_slope``, and the value
+    was discarded at the law's signature: 72 (law, key) pairs across the 22
+    registered laws, measured bit-identical to omitting the key (#2185).
+
+    ``bc`` reads ``dust_law_bc``, ``diff`` reads ``dust_law_diff``, and ``neb``
+    reads ``dust_law_neb`` falling back to ``dust_law_bc`` -- the same
+    inheritance ``DustSEDComponent`` applies, so the check and the forward model
+    cannot disagree about which law a key is being tested against.
+    """
+    from tengri.components.dust.attenuation import TWO_COMPONENT_OVERRIDE_KEYS
+    from tengri.components.dust.laws._registry import law_kwarg_names
+
+    present = [
+        (f"{short}_{comp}", short, comp)
+        for short in TWO_COMPONENT_OVERRIDE_KEYS
+        for comp in ("bc", "diff", "neb")
+        if f"{short}_{comp}" in dust_atten_dict
+    ]
+    if not present:
+        return
+
+    if dust_type != "two_component":
+        named = ", ".join(repr(key) for key, _, _ in present)
+        raise ParameterError(
+            f"{named} {'are' if len(present) > 1 else 'is'} a per-screen "
+            f"dust_attenuation override, and type={dust_type!r} has only one screen, "
+            f"so writing {'them' if len(present) > 1 else 'it'} here would be silently "
+            f"ignored: only 'two_component' routes per-screen overrides. Use the shared "
+            f"spelling instead, e.g. {{'slope': ...}}, or select "
+            f"type='two_component'."
+        )
+
+    kw_to_short = {law_kw: short for short, law_kw in TWO_COMPONENT_OVERRIDE_KEYS.items()}
+    law_for = {
+        "bc": result.get("dust_law_bc"),
+        "diff": result.get("dust_law_diff"),
+        "neb": result.get("dust_law_neb") or result.get("dust_law_bc"),
+    }
+    screen_name = {"bc": "birth-cloud", "diff": "diffuse-ISM", "neb": "nebular birth-cloud"}
+
+    for key, short, comp in present:
+        law = law_for[comp]
+        if law is None:
+            continue
+        reads = law_kwarg_names(law)
+        if TWO_COMPONENT_OVERRIDE_KEYS[short] in reads:
+            continue
+        accepted = sorted(
+            f"{kw_to_short[law_kw]}_{comp}" for law_kw in reads if law_kw in kw_to_short
+        )
+        accepts = ", ".join(accepted) if accepted else "no per-screen keys at all"
+        raise ParameterError(
+            f"{key!r} is not read by the 'dust_attenuation' {screen_name[comp]} law "
+            f"{law!r}, so writing it here would be silently ignored: the key belongs to "
+            f"another attenuation law. Law {law!r} accepts: {accepts}. "
+            f"Drop the key, or select a law that reads it."
+        )
+
+
 def _translate_dust_attenuation(dust_atten_dict: dict, result: dict) -> None:
     """Translate dust_attenuation group to dust_model and law settings.
 
@@ -2740,12 +2958,19 @@ def _translate_dust_attenuation(dust_atten_dict: dict, result: dict) -> None:
     # declared 0.3 while the birth cloud was fitted -- and the diffuse screen
     # usually dominates the total attenuation, so that is rarely what anyone
     # means. A wildcard is still an accepted way to say "free the partner too".
+    #
+    # The partner is only required when the partner screen's law *reads* it: on
+    # ``law_bc='power_law', law_diff='noll09'`` there is no ``slope_diff`` to
+    # give, because noll09 has no slope to set. Demanding one there and then
+    # refusing it as unread (#2185) would leave no spelling that parses.
     if dust_type == "two_component" and not ({"all_params", "*"} & set(dust_atten_dict)):
         for stem in ("tau", "Rv", "delta", "slope", "bump_strength"):
             bc, diff = f"{stem}_bc", f"{stem}_diff"
             has_bc = dust_atten_dict.get(bc) is not None
             has_diff = dust_atten_dict.get(diff) is not None
             if has_bc == has_diff:
+                continue
+            if not _partner_screen_reads(stem, dust_law, dust_law_bc, dust_law_diff, has_bc):
                 continue
             named, missing = (bc, diff) if has_bc else (diff, bc)
             raise ValueError(
@@ -2861,6 +3086,8 @@ def _translate_dust_attenuation(dust_atten_dict: dict, result: dict) -> None:
     # DustSEDComponent. The 'neb' channel reddens only the nebular birth cloud
     # (shares the diffuse ISM screen with the stars).
     from tengri.components.dust.attenuation import TWO_COMPONENT_OVERRIDE_KEYS
+
+    _reject_per_screen_keys_no_law_reads(dust_atten_dict, result, dust_type)
 
     overrides: dict[str, dict[str, float]] = {}
     for short, law_kw in TWO_COMPONENT_OVERRIDE_KEYS.items():
@@ -3908,19 +4135,31 @@ def _emit_declared_structural(group_name: str, group_output: dict, spec: Paramet
             group_output[entry.key] = value
 
 
-def _short_names_for_group(group: str, param_partition: dict[str, str]) -> set[str]:
-    """Return the set of short and full names every declared param exposes
-    under ``group`` (e.g. ``"agn.torus"`` → ``{"tau_skirtor", "agn_tau_skirtor", ...}``).
+def _name_spellings(full_names: Iterable[str]) -> set[str]:
+    """Every spelling the grammar accepts for each fully-prefixed parameter name.
 
-    Used by :func:`_validate_user_keys` to recognize per-parameter overrides
-    when walking a user's group dict.
+    Parameters
+    ----------
+    full_names : iterable of str
+        Fully-prefixed canonical names (``dust_umin``, ``agn_tau_skirtor``).
+
+    Returns
+    -------
+    set of str
+        Both the full and short spelling of each name, plus both spellings of
+        every legacy alias it carries.
+
+    Notes
+    -----
+    Factored out of :func:`_short_names_for_group` so a *narrowed* name set
+    (:func:`_variant_scoped_param_names`) admits exactly the same spellings as
+    the unnarrowed one. Expanding a narrowed set by hand is how a guard starts
+    rejecting the full-name spelling of a key it accepts in short form.
     """
     from tengri.parameters._aliases import legacy_names_for
 
     out: set[str] = set()
-    for full_name, owner in param_partition.items():
-        if owner != group:
-            continue
+    for full_name in full_names:
         out.add(full_name)
         out.add(_extract_short_name(full_name, {}))
         # Legacy spellings stay accepted so a rename does not turn a working
@@ -3931,6 +4170,18 @@ def _short_names_for_group(group: str, param_partition: dict[str, str]) -> set[s
             out.add(legacy_full)
             out.add(_extract_short_name(legacy_full, {}))
     return out
+
+
+def _short_names_for_group(group: str, param_partition: dict[str, str]) -> set[str]:
+    """Return the set of short and full names every declared param exposes
+    under ``group`` (e.g. ``"agn.torus"`` → ``{"tau_skirtor", "agn_tau_skirtor", ...}``).
+
+    Used by :func:`_validate_user_keys` to recognize per-parameter overrides
+    when walking a user's group dict.
+    """
+    return _name_spellings(
+        full_name for full_name, owner in param_partition.items() if owner == group
+    )
 
 
 def _short_names_for_registered_type(type_name: str | None) -> set[str]:
@@ -3964,10 +4215,169 @@ def _short_names_for_registered_type(type_name: str | None) -> set[str]:
     return out
 
 
+#: Groups whose per-parameter key set is narrowed to the structural variant the
+#: group dict selected, instead of the union over every variant the group can
+#: dispatch to.
+#:
+#: The two dust groups partition a superset: ``dust_emission`` owns 22 names
+#: across nine IR engines, ``dust_attenuation`` the curve-shape modifiers of 22
+#: attenuation laws. Accepting the whole superset let a key the selected variant
+#: never reads through the validator, and the resolver then wrote it to a
+#: parameter no component consults -- a fit exploring a flat direction, or a
+#: value the author believes is pinning something. ``sfh`` and ``igm`` have
+#: raised on the same mistake all along (``sfh={'type': 'delayed', 'umin': ...}``
+#: is an "Unknown key"); these two did not, because their partition is wide
+#: enough to contain the foreign name.
+#:
+#: The accepted set is derived from :func:`_dust_wildcard_scopes`, which is also
+#: what :func:`_wildcard_scopes` gives these two groups, so the validator and the
+#: ``all_params`` wildcard cannot drift apart: a key this validator accepts is a
+#: key that wildcard would free. :func:`parameters_to_groups` narrows what it
+#: emits by the same scope, so a spec round-trips through a dict this validator
+#: accepts.
+_VARIANT_SCOPED_KEY_GROUPS: frozenset[str] = frozenset({"dust_attenuation", "dust_emission"})
+
+
+def _variant_scoped_param_names(
+    group: str,
+    param_partition: dict[str, str],
+    group_allowed: frozenset[str] | set[str],
+    wildcard_scopes: dict[str, frozenset[str] | None],
+) -> frozenset[str] | None:
+    """Canonical parameter names the variant selected for ``group`` reads.
+
+    Parameters
+    ----------
+    group : str
+        Group name, one of :data:`_VARIANT_SCOPED_KEY_GROUPS`.
+    param_partition : dict
+        Full parameter name -> owning group, from :func:`_partition_by_group`.
+    group_allowed : frozenset of str
+        The group's structural keys, from ``_GROUP_STRUCTURAL_KEYS``. A group
+        parameter whose short name appears here is a *group-level* knob the
+        grammar documents (``dust_eta_balance`` <-> ``'eta_balance'``) and stays
+        accepted whichever variant is selected.
+    wildcard_scopes : dict
+        Group -> the parameters its ``all_params`` wildcard may free, from
+        :func:`_wildcard_scopes`.
+
+    Returns
+    -------
+    frozenset of str or None
+        Fully-prefixed names, or ``None`` when the group is unscoped (no
+        variant selected, or one that declares nothing introspectable). The
+        caller then leaves the accepted set unnarrowed rather than guessing.
+
+    Notes
+    -----
+    **JIT-compatible**: no; build-time introspection.
+
+    ``None`` and ``frozenset()`` mean different things here for the same reason
+    they do in :func:`_wildcard_scopes`: ``None`` is "no information, accept
+    what the group declares", while an empty scope is a positive statement that
+    the selected variant reads nothing of its own (``pah_drude``, a pure
+    template shape), and every per-parameter key is then foreign to it.
+    """
+    scope = wildcard_scopes.get(group)
+    if scope is None:
+        return None
+    owned = {name for name, owner in param_partition.items() if owner == group}
+    shared = {name for name in owned if _extract_short_name(name, {}) in group_allowed}
+    return frozenset(set(scope) | shared)
+
+
+def _variant_selection_text(group: str, structural_params: Parameters) -> str:
+    """Human-readable description of the structural variant ``group`` selected.
+
+    Parameters
+    ----------
+    group : str
+        One of :data:`_VARIANT_SCOPED_KEY_GROUPS`.
+    structural_params : Parameters
+        Structural-only spec carrying the resolved type and law slots.
+
+    Returns
+    -------
+    str
+        e.g. ``"type 'casey2012'"`` or
+        ``"type 'two_component' with law_bc='calzetti', law_diff='power_law'"``.
+    """
+    if group == "dust_emission":
+        return f"type {structural_params.dust_emission!r}"
+    model = getattr(structural_params, "dust_model", None)
+    law_bc = getattr(structural_params, "dust_law_bc", None)
+    law_diff = getattr(structural_params, "dust_law_diff", None)
+    law_neb = getattr(structural_params, "dust_law_neb", None)
+    if law_bc == law_diff and law_neb is None:
+        laws = f"law {law_bc!r}"
+    else:
+        parts = [f"law_bc={law_bc!r}", f"law_diff={law_diff!r}"]
+        if law_neb is not None:
+            parts.append(f"law_neb={law_neb!r}")
+        laws = ", ".join(parts)
+    return f"type {model!r} with {laws}"
+
+
+def _reject_foreign_variant_keys(
+    group: str,
+    user_dict: dict,
+    accepted_spellings: set[str],
+    accepted_full: frozenset[str],
+    group_spellings: set[str],
+    structural_params: Parameters,
+) -> None:
+    """Raise on a key the group declares but the selected variant never reads.
+
+    Parameters
+    ----------
+    group : str
+        Group name being validated.
+    user_dict : dict
+        The user's group dict (post wildcard normalization).
+    accepted_spellings : set of str
+        Every spelling the selected variant accepts, short and full.
+    accepted_full : frozenset of str
+        Canonical full names behind ``accepted_spellings``; used to render the
+        short-name list in the message.
+    group_spellings : set of str
+        Every spelling the *group* declares across all its variants. A key
+        outside this set is an ordinary typo and is left to
+        :func:`_check_dict_keys`, whose "Did you mean ...?" message fits it
+        better.
+    structural_params : Parameters
+        Structural-only spec, for naming the selected variant.
+
+    Raises
+    ------
+    ParameterError
+        Naming the group, the selected variant, the offending key, and the
+        keys that variant does accept.
+    """
+    foreign = sorted(k for k in user_dict if k in group_spellings and k not in accepted_spellings)
+    if not foreign:
+        return
+    selection = _variant_selection_text(group, structural_params)
+    shown = sorted({_extract_short_name(name, {}) for name in accepted_full})
+    accepts = ", ".join(shown) if shown else "no per-parameter keys at all"
+    many = len(foreign) > 1
+    noun, verb, pronoun = ("keys", "are", "them") if many else ("key", "is", "it")
+    offending = ", ".join(repr(k) for k in foreign)
+    raise ParameterError(
+        f"{offending} {verb} not read by the {group!r} {selection}, so writing {pronoun} "
+        f"here would be silently ignored: the {noun} {'belong' if many else 'belongs'} to "
+        f"another {group!r} variant. This {selection} accepts: {accepts} "
+        f"(either spelling, short or fully prefixed). "
+        f"Drop the {noun}, select a variant that reads {pronoun}, or use the "
+        f"'all_params' / 'other_params' wildcard to set the policy for every parameter "
+        f"this variant does read."
+    )
+
+
 def _validate_user_keys(
     kwargs: dict,
     structural_params: Parameters,
     param_partition: dict[str, str],
+    wildcard_scopes: dict[str, frozenset[str] | None] | None = None,
 ) -> None:
     """Validate that every key the user supplied is recognized.
 
@@ -3983,7 +4393,24 @@ def _validate_user_keys(
     hint generated via :mod:`difflib`. Silent typos were the dominant
     "AI slop" failure mode of the nested-dict API before this validator
     was added (issue tracked in the forward-model cleanup arc).
+
+    Parameters
+    ----------
+    kwargs : dict
+        The user's normalized group dicts.
+    structural_params : Parameters
+        Structural-only spec (types and law slots already resolved).
+    param_partition : dict
+        Full parameter name -> owning group.
+    wildcard_scopes : dict, optional
+        Group -> the parameters its ``all_params`` wildcard may free, from
+        :func:`_wildcard_scopes`. When given, the groups in
+        :data:`_VARIANT_SCOPED_KEY_GROUPS` accept only the per-parameter keys
+        the variant they selected actually reads. Omitting it keeps the
+        superset behavior, so a caller that validates without having resolved
+        the wildcard scopes still works.
     """
+    wildcard_scopes = wildcard_scopes or {}
     valid_top_groups = {
         "sfh",
         "met",
@@ -4074,6 +4501,26 @@ def _validate_user_keys(
                 )
             elif neb_type == "mappings_agn":
                 neb_type_specific_keys = frozenset({"density", "ionizing_source_warning", "grid"})
+
+        # A group whose parameter partition spans several structural variants
+        # accepts only the keys the variant it selected actually reads. Derived
+        # from the wildcard scope, never from a per-type list, so the two
+        # answers to "which parameters does this variant read?" stay one answer.
+        if top_key in _VARIANT_SCOPED_KEY_GROUPS:
+            accepted_full = _variant_scoped_param_names(
+                top_key, param_partition, group_allowed, wildcard_scopes
+            )
+            if accepted_full is not None:
+                # A user-registered subclass declares params the partition has
+                # never seen (#391); those stay accepted for the same reason
+                # they are accepted above.
+                accepted = _name_spellings(accepted_full) | _short_names_for_registered_type(
+                    top_val.get("type") if isinstance(top_val.get("type"), str) else None
+                )
+                _reject_foreign_variant_keys(
+                    top_key, top_val, accepted, accepted_full, param_names, structural_params
+                )
+                param_names = accepted
 
         _check_dict_keys(
             top_key, top_val, group_allowed | param_names | neb_type_specific_keys, param_partition
@@ -4879,10 +5326,123 @@ def _resolve_value(
         )
 
 
+@lru_cache(maxsize=8)
+def _sfh_type_prefixes(_registry_keys: frozenset[str]) -> tuple[str, ...]:
+    """Public ``sfh_<type>_`` prefixes declared by the SFH registry, longest first.
+
+    A type's public prefix is not always one token: ``declining_exp``,
+    ``snorm_burst``, ``tsnorm_burst``, ``delayed_bq``, ``top_hat`` and
+    ``gaussian_burst`` all spell theirs with two or three. A prefix qualifies
+    only when *every* parameter the spec declares starts with it, which is what
+    keeps ``field`` at ``sfh_field_`` (giving ``psd_sigma``) instead of the
+    longest common prefix of its two parameters, ``sfh_field_psd_``.
+
+    Longest-first ordering resolves the nesting pairs: ``sfh_snorm_burst_``
+    must win over ``sfh_snorm_``, and ``sfh_delayed_bq_`` over ``sfh_delayed_``.
+
+    Parameters
+    ----------
+    _registry_keys : frozenset of str
+        Snapshot of ``SFH_REGISTRY`` keys. Only a cache key -- passing it makes
+        a plugin registering a new SFH type invalidate the memo rather than
+        being shadowed by a stale one.
+
+    Returns
+    -------
+    tuple of str
+        Candidate prefixes, longest first.
+    """
+    from tengri.components.stellar.sfh.registry import SFH_REGISTRY
+
+    prefixes = set()
+    for type_name, spec in SFH_REGISTRY.items():
+        params = tuple(getattr(spec, "params", ()) or ())
+        if not params:
+            continue
+        candidate = f"sfh_{type_name}_"
+        if all(p.startswith(candidate) for p in params):
+            prefixes.add(candidate)
+    return tuple(sorted(prefixes, key=len, reverse=True))
+
+
+def _short_name_keeping_repeat_ordinal(prefix: str, tail: str) -> str:
+    """Short name for ``prefix + tail``, keeping a repeated member's ordinal.
+
+    A composition may list one type twice (``sfh={'type': ['norm', 'norm']}``);
+    ``resolve_sfh`` then numbers the second instance's public parameters,
+    ``sfh_norm_log_total_mass`` beside ``sfh_norm_2_log_total_mass``. Stripping
+    the whole prefix from both would hand them the same short key, so the
+    numbered one keeps its type token and ordinal: ``norm_2_log_total_mass``.
+    That is the one place duplicate-type naming reaches the short-name rule.
+
+    Parameters
+    ----------
+    prefix : str
+        The matched ``sfh_<type>_`` prefix, e.g. ``"sfh_norm_"``.
+    tail : str
+        What follows it, e.g. ``"log_total_mass"`` or ``"2_log_total_mass"``.
+
+    Returns
+    -------
+    str
+        ``tail`` for a first (unnumbered) instance, ``"<type>_" + tail`` when
+        ``tail`` opens with an ordinal. No registered parameter's short name
+        starts with a digit token, so this never fires on an ordinary name.
+    """
+    head, sep, _rest = tail.partition("_")
+    if sep and head.isdigit():
+        return prefix[4:] + tail  # drop 'sfh_', keep '<type>_<k>_<short>'
+    return tail
+
+
+def _strip_sfh_prefix(full_param_name: str) -> str:
+    """Drop the whole ``sfh_<type>_`` prefix from an SFH parameter name.
+
+    Splitting at the first underscore after ``sfh_`` -- what this did before --
+    is right only for the single-token abbreviations (``sfh_dpl_``,
+    ``sfh_dir_``, ``sfh_cont_``, ``sfh_cexp_``, ...). For a multi-token public
+    prefix it left a fragment of the type name welded to the short key, so
+    ``sfh_declining_exp_tau_gyr`` resolved to ``'exp_tau_gyr'`` and the
+    documented ``'tau_gyr'`` was rejected as an unknown key.
+
+    Registry-declared prefixes are tried first (longest match wins); the
+    first-underscore split remains the fallback for the abbreviations, whose
+    prefix is not derivable from the type name.
+
+    Parameters
+    ----------
+    full_param_name : str
+        Fully-prefixed SFH parameter name, e.g. ``"sfh_snorm_burst_burst_sfr"``.
+
+    Returns
+    -------
+    str
+        The short name, e.g. ``"burst_sfr"``.
+    """
+    try:
+        from tengri.components.stellar.sfh.registry import SFH_REGISTRY
+
+        prefixes = _sfh_type_prefixes(frozenset(SFH_REGISTRY))
+    except ImportError:  # pragma: no cover - registry always importable in practice
+        prefixes = ()
+
+    for prefix in prefixes:
+        if full_param_name.startswith(prefix) and len(full_param_name) > len(prefix):
+            return _short_name_keeping_repeat_ordinal(prefix, full_param_name[len(prefix) :])
+
+    rest = full_param_name[4:]  # Remove 'sfh_'
+    parts = rest.split("_", 1)
+    if len(parts) != 2:
+        return rest
+    return _short_name_keeping_repeat_ordinal(f"sfh_{parts[0]}_", parts[1])
+
+
 def _extract_short_name(full_param_name: str, group_dict: dict) -> str:
     """Extract short parameter name by removing group prefix.
 
-    E.g., 'sfh_dpl_alpha' -> 'alpha' (for sfh group).
+    E.g., 'sfh_dpl_alpha' -> 'alpha' (for sfh group). The SFH prefix is the
+    type's whole public prefix, however many tokens it spells:
+    'sfh_snorm_burst_burst_sfr' -> 'burst_sfr' (see :func:`_strip_sfh_prefix`).
     Handles nested sub-keys: dust.emission params, AGN sub-blocks.
     For SFH composition with ambiguous short names, checks if user
     provided a full-prefix name.
@@ -4907,27 +5467,25 @@ def _extract_short_name(full_param_name: str, group_dict: dict) -> str:
     # For SFH composition: check if user provided a full-prefix name
     # If so, prefer that. Otherwise, extract the short name and check for ambiguity.
     if full_param_name.startswith("sfh_"):
-        rest = full_param_name[4:]  # Remove 'sfh_'
-        parts = rest.split("_", 1)
-        if len(parts) == 2:
-            short = parts[1]
-            # Check if user provided the full param name
-            if full_param_name in group_dict:
-                return full_param_name
-            # Check for short name in composition
-            # (If mean_sfh_type is a list, we need to check all types)
-            if short in group_dict:
-                # User provided the short name; check for ambiguity
-                # A short name is ambiguous if it exists in multiple composition types
-                sfh_type = group_dict.get("type")
-                if isinstance(sfh_type, list):
-                    # Multiple types in composition; ambiguity possible
-                    # For now, defer to Parameters validation
-                    pass
-                return short
-            # Extract short name as usual
-            return parts[1]
-        return rest
+        # Strip the whole ``sfh_<type>_`` prefix, not just the first token
+        # after ``sfh_`` (see :func:`_strip_sfh_prefix`).
+        short = _strip_sfh_prefix(full_param_name)
+        # Check if user provided the full param name
+        if full_param_name in group_dict:
+            return full_param_name
+        # Check for short name in composition
+        # (If mean_sfh_type is a list, we need to check all types)
+        if short in group_dict:
+            # User provided the short name; check for ambiguity
+            # A short name is ambiguous if it exists in multiple composition types
+            sfh_type = group_dict.get("type")
+            if isinstance(sfh_type, list):
+                # Multiple types in composition; ambiguity possible
+                # For now, defer to Parameters validation
+                pass
+            return short
+        # Extract short name as usual
+        return short
     elif full_param_name.startswith("met_"):
         return full_param_name[4:]
     elif full_param_name.startswith("dust_"):
@@ -5092,9 +5650,27 @@ def parameters_to_groups(spec: Parameters) -> dict:
             groups_dict[group] = []
         groups_dict[group].append(param_name)
 
+    # The two dust groups accept only the per-parameter keys their selected
+    # variant reads (:data:`_VARIANT_SCOPED_KEY_GROUPS`), so emitting the whole
+    # partition writes a dict the parser refuses on the way back in. Narrow the
+    # emitted list by the same scope the validator applies: a shape parameter no
+    # selected law names, or an engine knob the selected engine does not declare,
+    # carried no effect in the spec being emitted either.
+    dust_scopes = _dust_wildcard_scopes(spec, partition)
+
     # Process each group
     for group_name in sorted(groups_dict.keys()):
         param_names = sorted(groups_dict[group_name])
+
+        if group_name in _VARIANT_SCOPED_KEY_GROUPS:
+            emittable = _variant_scoped_param_names(
+                group_name,
+                partition,
+                _GROUP_STRUCTURAL_KEYS.get(group_name, frozenset()),
+                dust_scopes,
+            )
+            if emittable is not None:
+                param_names = [name for name in param_names if name in emittable]
 
         # Handle nested groups (dust.emission, agn.*)
         if "." in group_name:

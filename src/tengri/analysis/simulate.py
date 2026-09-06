@@ -44,7 +44,7 @@ References
 
 import jax.numpy as jnp
 
-from tengri.components.dust.attenuation import two_component_dust
+from tengri.components.dust.attenuation import select_law_kwargs, two_component_dust
 from tengri.components.stellar.sps.dsps_wrapper import (
     compute_csp_sed,
     compute_csp_weights,
@@ -193,6 +193,22 @@ def sed_from_sfh(
 
     # Dust attenuation
     if dust_tau_bc > 0 or dust_tau_diff > 0:
+        # ``dust_slope`` is this function's own defaulted argument, so it is
+        # offered to every law -- and most laws have no slope to set. Narrow to
+        # what the selected law declares (#2185): a slope-free law such as
+        # ``calzetti`` would otherwise be handed an ``n_slope`` it cannot use,
+        # which was silently discarded before the laws dropped their ``**kwargs``
+        # and is a loud ``ValueError`` now. Keys the caller passed in
+        # ``dust_kwargs`` are NOT narrowed: those are explicit, and a law that
+        # cannot read one should say so.
+        #
+        # ``dict(...)`` rather than a ``{...}`` literal so this reads as what it
+        # is to ``tools/check_dust_law_kwargs.py``: a one-key mapping handed
+        # straight to the narrowing helper, not a hand-assembled law-parameter
+        # dict splatted into an evaluation. What that rule guards against is a
+        # dict carrying "whatever its author remembered"; here the selected law
+        # decides what survives, which is the property the rule wants.
+        law_kw = select_law_kwargs(dust_law, dict(n_slope=dust_slope))
         dust_atten = two_component_dust(
             ssp_data.ssp_wave,
             ssp_ages_yr,
@@ -200,7 +216,7 @@ def sed_from_sfh(
             tau_v2=dust_tau_diff,
             law_bc=dust_law,
             law_diff=dust_law,
-            n_slope=dust_slope,
+            **law_kw,
             **dust_kwargs,
         )
     else:

@@ -105,3 +105,99 @@ def test_previously_rejected_dust_laws_now_accepted() -> None:
         # Should not raise.
         _translate_dust_attenuation({"type": "two_component", "law": law}, result)
         assert result["dust_law_bc"] == law
+
+
+# ── Building blocks: accepted by the parser, refused by the builder ───
+
+
+def test_standalone_set_is_the_valid_set_minus_the_building_blocks() -> None:
+    """The two sets must differ, and differ only by declared building blocks.
+
+    Equality would mean the refusal has no subject; an unexplained difference
+    would mean a real model quietly stopped being selectable. Both halves are
+    read off ``EmissionComponent.energy_balanced``, so the guard fails rather
+    than drifts when a backend changes its declaration.
+    """
+    from tengri.parameters.groups import (
+        _dust_emission_component_class,
+        _standalone_dust_emission_types,
+        _valid_dust_emission_types,
+    )
+
+    valid = _valid_dust_emission_types()
+    standalone = _standalone_dust_emission_types()
+
+    assert standalone < valid, (
+        "no dust_emission type is refused as a building block, so the refusal "
+        "SEDModel.build performs has no subject and every test of it is vacuous"
+    )
+    for name in valid - standalone:
+        cls = _dust_emission_component_class(name)
+        assert cls is not None and cls.energy_balanced is False, (
+            f"{name!r} is excluded from the standalone set but its component does not "
+            "declare energy_balanced = False — the exclusion is not derived from anything"
+        )
+
+
+def test_pah_drude_is_the_declared_building_block() -> None:
+    """Pin the specimen, so the guards above cannot go quiet by losing it.
+
+    ``pah_drude`` carries the Smith+2007 aromatic-feature forest with no thermal
+    continuum: scaled by ``L_ir``, never renormalized to it. Measured standalone
+    at z = 0, ``|int sed_dust_ir dnu| / L_ir = 1.8925e-04``.
+    """
+    from tengri.parameters.groups import (
+        _standalone_dust_emission_types,
+        _valid_dust_emission_types,
+    )
+
+    assert "pah_drude" in _valid_dust_emission_types(), (
+        "pah_drude must stay a *valid* type: the loader cache holds it, the analytic "
+        "precompute grid builds it, and the builders menu enumerates every valid name "
+        "through the grammar at import time"
+    )
+    assert "pah_drude" not in _standalone_dust_emission_types()
+
+
+def test_the_parser_still_accepts_a_building_block() -> None:
+    """The refusal must not move into ``parse_groups``.
+
+    ``tengri.builders.dust.emission`` enumerates every accepted type through the
+    grammar at *import* time to build its factory menu, so a refusal inside the
+    parser makes ``import tengri`` raise. It belongs at ``SEDModel.build``,
+    which is also what leaves the flat ``Parameters(...)`` escape hatch — the
+    documented way to compose a custom model — working.
+    """
+    from tengri.parameters.groups import _translate_dust_emission
+
+    result: dict = {}
+    _translate_dust_emission({"type": "pah_drude"}, result)
+    assert result["dust_emission"] == "pah_drude"
+
+
+def test_build_refuses_a_building_block_and_says_why(synthetic_ssp_wide) -> None:
+    """The user-facing half: the message must name the defect and the way out."""
+    from tengri import DEFAULT, Fixed, SEDModel
+    from tengri.config.exceptions import ParameterError
+
+    with pytest.raises(ParameterError) as excinfo:
+        SEDModel.build(
+            ssp_data=synthetic_ssp_wide,
+            sfh={"type": "dpl", "all_params": Fixed(DEFAULT)},
+            dust_attenuation={
+                "type": "two_component",
+                "law": "calzetti",
+                "all_params": Fixed(DEFAULT),
+            },
+            dust_emission={"type": "pah_drude", "all_params": Fixed(DEFAULT)},
+            redshift=Fixed(0.1),
+        )
+
+    message = str(excinfo.value)
+    assert "building block" in message
+    # The size of the hole, not just the fact of the refusal.
+    assert "1.8925e-04" in message
+    # ...and at least one thing the user can type instead.
+    assert "dale2014" in message
+    # A ParameterError is a ValueError, so the existing grammar handlers catch it.
+    assert isinstance(excinfo.value, ValueError)

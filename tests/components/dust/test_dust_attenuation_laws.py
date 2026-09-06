@@ -64,10 +64,17 @@ class TestDustAttenuation:
         assert abs(k2[1] - baseline) / baseline < 0.1, "SMC should not have UV bump"
 
     def test_salim_collapses_to_calzetti_at_delta_zero(self):
-        """Salim+2018: δ=0 and bump=1.0 recovers Calzetti within 1%."""
+        """Salim+2018: δ=0 and no bump recovers Calzetti within 2%.
+
+        The bump argument read ``dust_uv_bump=1.0`` until #2185. ``salim`` has
+        no such parameter -- its knob is ``dust_bump_strength`` -- so the value
+        went into the law's ``**_kwargs`` and was discarded, and what this test
+        actually measured was the bump-free curve at the signature default 0.0.
+        Spelled correctly now; the numbers are unchanged because 0.0 is what ran.
+        """
         from tengri.components.dust.attenuation import calzetti, salim
 
-        ks = np.array(salim(self.WL, dust_delta=0.0, dust_uv_bump=1.0))
+        ks = np.array(salim(self.WL, dust_delta=0.0, dust_bump_strength=0.0))
         kc = np.array(calzetti(self.WL))
         np.testing.assert_allclose(ks, kc, rtol=0.02)
 
@@ -80,7 +87,20 @@ class TestDustLawCombinations:
     """
 
     WL: ClassVar = jnp.array([1500.0, 2175.0, 3000.0, 5500.0, 9000.0])
-    _REQUIRES_RV: ClassVar[set[str]] = {"cardelli", "conroy2010", "d03_mwrv31"}
+
+    @staticmethod
+    def _rv_kwargs(name: str) -> dict:
+        """``{'dust_Rv': 3.1}`` for the laws that declare it, else ``{}``.
+
+        Read off the signature rather than a hand-kept set. The set said
+        ``{cardelli, conroy2010, d03_mwrv31}``; ``d03_mwrv31`` is a tabulated
+        grain curve with R_V = 3.1 already in the table and no ``dust_Rv``
+        parameter at all, so the value went into the law's ``**_kwargs`` and was
+        discarded (#2185). A hand-kept list cannot notice that.
+        """
+        from tengri.components.dust.laws._registry import law_kwarg_names
+
+        return {"dust_Rv": 3.1} if "dust_Rv" in law_kwarg_names(name) else {}
 
     @pytest.mark.parametrize("name", every_dust_law(exclude=_NOT_V_NORMALIZED))
     def test_dust_law_normalized_at_V_band(self, name):
@@ -95,7 +115,7 @@ class TestDustLawCombinations:
         from tengri.components.dust.attenuation import resolve_dust_law
 
         fn = resolve_dust_law(name)
-        kwargs = {"dust_Rv": 3.1} if name in self._REQUIRES_RV else {}
+        kwargs = self._rv_kwargs(name)
         k = np.array(fn(self.WL, **kwargs))
         chex.assert_tree_all_finite(k)
         assert_non_negative(k, name="k", msg=f"{name}: negative k values")
@@ -125,7 +145,7 @@ class TestDustLawCombinations:
 
         fn = resolve_dust_law(name)
         wl2 = jnp.array([1900.0, 2175.0, 2450.0])
-        kwargs = {"dust_Rv": 3.1} if name in self._REQUIRES_RV else {}
+        kwargs = self._rv_kwargs(name)
         k = np.array(fn(wl2, **kwargs))
         baseline = 0.5 * (k[0] + k[2])
         assert k[1] > baseline, f"{name}: no UV bump (k(2175)={k[1]:.2f})"

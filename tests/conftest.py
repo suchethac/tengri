@@ -691,84 +691,98 @@ def pytest_configure(config):
     _create_synthetic_ssp_if_missing(_SSP_FILE_WNE)
 
 
+def _cb19_grid_is_degenerate(path: Path) -> bool:
+    """Whether a CB_19 file on disk carries a single repeated line ratio.
+
+    Parameters
+    ----------
+    path : Path
+        Candidate ``cb19_templates.h5``.
+
+    Returns
+    -------
+    bool
+        ``True`` when the file is absent, unreadable, or every finite entry of
+        its line-ratio slab is the same number.
+    """
+    if not path.is_file():
+        return True
+    try:
+        with h5py.File(path, "r") as f:
+            key = "grids/SSP/Kroupa01/mu100/line_ratios"
+            if key not in f:
+                return True
+            ratios = f[key][:]
+    except (OSError, KeyError):
+        return True
+    finite = ratios[np.isfinite(ratios)]
+    return bool(finite.size == 0 or finite.min() == finite.max())
+
+
+@pytest.fixture(scope="session")
+def usable_cb19_grid_path(tmp_path_factory) -> Path:
+    """A CB_19 grid file that loads: the packaged one, or a synthetic stand-in.
+
+    ``data/cb19_templates.h5`` is untracked and, on a machine that ran an early
+    build script, is the flat placeholder of #924: one repeated ratio, which
+    :class:`~tengri.components.nebular.CB19DegenerateGridError` now refuses.
+    Any test that needs *a grid to load* rather than *the packaged file
+    specifically* should take this fixture.
+
+    Returns
+    -------
+    Path
+        The packaged file when it is usable, else a synthetic grid varying
+        along every interpolation axis, written under a session tmp dir.
+    """
+    from tests._cb19_grid import write_synthetic_cb19_grid
+
+    packaged = Path(__file__).parent.parent / "data" / "cb19_templates.h5"
+    if not _cb19_grid_is_degenerate(packaged):
+        return packaged
+    return write_synthetic_cb19_grid(tmp_path_factory.mktemp("cb19_grid") / "cb19_templates.h5")
+
+
+@pytest.fixture(scope="session", autouse=True)
+def _usable_cb19_default_path(usable_cb19_grid_path):
+    """Point CB_19's default path at a grid that loads, when the packaged one does not.
+
+    Refusing the placeholder is the point of #2181, but it must not turn every
+    CB_19 test into an error about the developer's data directory. The file on
+    disk is left untouched; the refusal itself is asserted by
+    ``tests/regression/bug/test_bug_2181_cb19_placeholder_grid.py``, which
+    writes its own placeholder.
+
+    Inert wherever the packaged file is usable, which includes CI (where
+    ``pytest_configure`` writes the synthetic grid) and any machine carrying
+    the real download.
+    """
+    packaged = Path(__file__).parent.parent / "data" / "cb19_templates.h5"
+    if usable_cb19_grid_path == packaged:
+        yield
+        return
+
+    patch = pytest.MonkeyPatch()
+    patch.setattr("tengri.components.nebular.cloudy_cb19._DEFAULT_PATH", usable_cb19_grid_path)
+    yield
+    patch.undo()
+
+
 def _create_cb19_fixture_if_missing(cb19_path: Path) -> None:
+    """Write a synthetic CB_19 grid at the packaged path when none is present.
+
+    The stand-in varies along every interpolation axis. Before #2181 it was ten
+    Case B ratios *broadcast* across all seven axes: distinguishable per line,
+    constant along every physical axis, so ``neb_logU``, ``neb_logZ_gas``,
+    ``neb_log_nH``, ``neb_co`` and ``neb_dno`` were bit-exactly inert on it and
+    no test in the suite could observe that.
+    """
     if cb19_path.exists():
         return
 
-    cb19_path.parent.mkdir(parents=True, exist_ok=True)
+    from tests._cb19_grid import write_synthetic_cb19_grid
 
-    # Grid dimensions — must satisfy all TestCB19WithRealH5 assertions:
-    #   n_oh=7, n_u=6, n_nh=4 (shape checks)
-    #   n_age >= 11 (index 10 accessed in test_hb_ratio_is_unity)
-    #   HbFrac=[0.0, 1.0]: hbfrac=1.0 → i_hb=1; hbfrac=0.42 → gap=0.42 > 0.15 → warns
-    n_oh, n_age, n_u, n_nh, n_co, n_dno, n_hbfrac, n_lines = 7, 11, 6, 4, 3, 3, 2, 10
-
-    # log_U linspace(-4.0, -1.5, 6) = [-4.0, -3.5, -3.0, -2.5, -2.0, -1.5]
-    # index 2 = -3.0, which is the fiducial logU used in test_no_all_nan_slices_at_solar
-    log_u = np.linspace(-4.0, -1.5, n_u).astype(np.float32)
-    log_age = np.linspace(6.0, 10.0, n_age).astype(np.float32)
-
-    with h5py.File(cb19_path, "w") as f:
-        ax = f.create_group("axes")
-        ax.create_dataset("log_OH_total", data=np.linspace(-5.06, -2.58, n_oh).astype(np.float32))
-        ax.create_dataset("log_age_yr_ssp", data=log_age)
-        ax.create_dataset("log_U", data=log_u)
-        ax.create_dataset("log_nH", data=np.linspace(1.0, 4.0, n_nh).astype(np.float32))
-        ax.create_dataset("log_CO", data=np.linspace(-1.0, 0.15, n_co).astype(np.float32))
-        ax.create_dataset("dNO", data=np.linspace(-0.25, 0.25, n_dno).astype(np.float32))
-        ax.create_dataset("HbFrac", data=np.array([0.0, 1.0], dtype=np.float32))
-
-        # Line wavelengths — must include Hβ=4862.68 Å and Hα=6564.61 Å
-        line_waves = np.array(
-            [
-                1215.67,
-                1549.0,
-                3727.0,
-                4340.47,
-                4862.68,
-                5008.24,
-                6300.30,
-                6548.05,
-                6564.61,
-                6583.45,
-            ],
-            dtype=np.float32,
-        )
-        f.create_dataset("line_wavelengths_aa", data=line_waves)
-
-        # Per-line ratios (linear L_line / L_Hβ). Plumbing tests need
-        # Hβ = 1.0 (test_hb_ratio_is_unity) and all entries finite
-        # (test_no_all_nan_slices_at_solar). Beyond those constraints,
-        # ship *physically-distinct-per-line* defaults so consumers like
-        # ``CB19Backend.predict_nebular_line_luminosities`` produce
-        # visible per-line variation under the synthetic grid — without
-        # this, every line collapses to the same luminosity and #361
-        # Bug C reproduces. The numbers below are rough SF Case B Hβ
-        # ratios (Osterbrock & Ferland 2006, Tables 4.4/4.10) — not
-        # production-grade, but enough to break the degeneracy in
-        # plumbing tests. Replace with the real Martinez-Paredes+2023
-        # grid via ``scripts/download_cb19_templates.py`` for science.
-        per_line_ratios_to_hbeta = np.array(
-            [
-                10.0,  # 1215.67  Lyα (intrinsic Case B; resonant scatter applied downstream)
-                0.50,  # 1549     C IV
-                2.00,  # 3727     [O II]
-                0.47,  # 4340.47  Hγ (Case B)
-                1.00,  # 4862.68  Hβ (reference; required = 1.0)
-                4.00,  # 5008.24  [O III]
-                0.10,  # 6300.30  [O I]
-                0.10,  # 6548.05  [N II] (one tail of doublet)
-                2.87,  # 6564.61  Hα (Case B)
-                0.30,  # 6583.45  [N II] (other tail)
-            ],
-            dtype=np.float32,
-        )
-        ratios = np.broadcast_to(
-            per_line_ratios_to_hbeta,
-            (n_oh, n_age, n_u, n_nh, n_co, n_dno, n_hbfrac, n_lines),
-        ).astype(np.float32)
-        grp = f.create_group("grids/SSP/Kroupa01/mu100")
-        grp.create_dataset("line_ratios", data=ratios)
+    write_synthetic_cb19_grid(cb19_path)
 
     # Tag as synthetic so developers know it's a test fixture, not the real data.
     # pytest_configure output goes before any test output; warn() is the right channel.

@@ -1,0 +1,125 @@
+r"""
+Casey 2012 dust model: temperature and pivot wavelength effects
+===============================================================
+
+Casey 2012 Eq. 1 defines a mid-to-far-IR dust SED with temperature T,
+MIR emissivity index α_mir, FIR emissivity index β, and a pivot wavelength
+λ_0 where the opacity transitions from the MIR to FIR regime. The top
+panel sweeps temperature at a fixed 200 μm pivot (the value used in
+Synthesizer's documentation); the bottom panel holds temperature at 35 K
+and varies the pivot wavelength, showing how it controls the FIR peak
+location. Both use a constant dust mass and fixed attenuation.
+"""
+
+import os
+
+os.environ["TF_CPP_MIN_LOG_LEVEL"] = "2"  # suppress XLA/PjRt C++ INFO+WARNING logs
+
+import warnings
+
+import matplotlib as mpl
+import matplotlib.pyplot as plt
+import numpy as np
+
+import tengri
+from tengri.plot import setup_style
+
+setup_style()
+warnings.filterwarnings("ignore", message=".*BakedInBackend.*")
+
+
+def _build_model(dust_emission_dict):
+    """Build a model with the specified dust_emission configuration."""
+    dust = {
+        "law": "power_law",
+        "type": "two_component",
+        "all_params": tengri.Fixed(tengri.DEFAULT),
+        "tau_diff": 0.5,
+        "tau_bc": 1.0,
+    }
+    model = tengri.SEDModel.build(
+        tengri.load_ssp(),
+        sfh={"type": "const", "all_params": tengri.Fixed(tengri.DEFAULT), "log_total_mass": 11.13},
+        dust_attenuation=dust,
+        dust_emission=dust_emission_dict,
+        redshift=tengri.Fixed(0.05),
+    )
+    return model
+
+
+def _get_dust_ir_normalized(model):
+    """
+    Extract isolated dust emission normalized by L_IR.
+    Returns (wave_um, normalized_lnu) where normalized_lnu = (c/lambda) * sed_dust_ir / L_ir.
+    """
+    state = model.predict_state({})
+    wave_aa = np.asarray(state.wave)
+    sed_dust_ir = np.asarray(state.derived["sed_dust_ir"])
+    l_ir = float(state.derived["L_ir"])
+
+    # Compute nu = c / lambda (speed of light / wavelength in Angstrom)
+    c_aa_s = 2.99792458e18  # Angstrom/s
+    nu = c_aa_s / wave_aa
+
+    # Compute nu*L_nu / L_IR (dimensionless shape)
+    shape = nu * sed_dust_ir / l_ir
+
+    # Convert wavelength to micrometers
+    wave_um = wave_aa * 1e-4
+
+    return wave_um, shape
+
+
+# Create figure with two panels
+fig, (ax_temp, ax_pivot) = plt.subplots(
+    2, 1, figsize=(7.2, 6.4), sharex=True, gridspec_kw={"hspace": 0.06}
+)
+
+cmap = plt.get_cmap("viridis")
+
+# Top panel: temperature sweep at fixed lambda_0 = 200 um
+T_grid = np.array([25.0, 50.0, 100.0, 200.0])
+norm_T = mpl.colors.Normalize(vmin=T_grid.min(), vmax=T_grid.max())
+for T in T_grid:
+    dust_emission = {
+        "type": "casey2012",
+        "beta_ir": tengri.Fixed(2.0),
+        "alpha_mir": tengri.Fixed(2.0),
+        "lambda_0_um": tengri.Fixed(200.0),
+        "T": tengri.Fixed(T),
+        "all_params": tengri.Fixed(tengri.DEFAULT),
+    }
+    model = _build_model(dust_emission)
+    wave_um, shape = _get_dust_ir_normalized(model)
+    ax_temp.loglog(wave_um, shape, color=cmap(norm_T(T)), lw=1.4)
+
+# Bottom panel: lambda_0 sweep at fixed T = 35 K
+lambda_0_grid = np.array([50.0, 100.0, 200.0, 400.0])
+norm_lam = mpl.colors.Normalize(vmin=lambda_0_grid.min(), vmax=lambda_0_grid.max())
+for lam0 in lambda_0_grid:
+    dust_emission = {
+        "type": "casey2012",
+        "beta_ir": tengri.Fixed(2.0),
+        "alpha_mir": tengri.Fixed(2.0),
+        "lambda_0_um": tengri.Fixed(lam0),
+        "T": tengri.Fixed(35.0),
+        "all_params": tengri.Fixed(tengri.DEFAULT),
+    }
+    model = _build_model(dust_emission)
+    wave_um, shape = _get_dust_ir_normalized(model)
+    ax_pivot.loglog(wave_um, shape, color=cmap(norm_lam(lam0)), lw=1.4)
+
+# Set axis labels and limits
+for ax in (ax_temp, ax_pivot):
+    ax.set(xlim=(1, 1e4), ylim=(1e-3, 2), ylabel=r"$\nu L_\nu / L_{\rm IR}$")
+
+ax_pivot.set_xlabel(r"Rest-frame wavelength $\lambda$ [$\mu$m]")
+
+# Separate colorbars for each panel
+cb_temp = fig.colorbar(plt.cm.ScalarMappable(norm=norm_T, cmap=cmap), ax=ax_temp, pad=0.01)
+cb_temp.set_label(r"$T_{\rm dust}$  [K]   ($\lambda_0$ = 200 μm fixed)")
+
+cb_pivot = fig.colorbar(plt.cm.ScalarMappable(norm=norm_lam, cmap=cmap), ax=ax_pivot, pad=0.01)
+cb_pivot.set_label(r"Pivot $\lambda_0$ [μm]   ($T$ = 35 K fixed)")
+
+plt.savefig("plot_casey2012_temperature_pivot.png", dpi=150, bbox_inches="tight")

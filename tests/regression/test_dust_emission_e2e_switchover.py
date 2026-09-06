@@ -189,7 +189,7 @@ def test_port_conserves_energy(synthetic_ssp_wide):
     wave = jnp.logspace(3.0, 7.0, 4000)  # 1000 A .. 1 mm
     nu = C_AA / wave
     L_ir = 1.0e44
-    for name in ("modified_blackbody", "casey2012", "dale2014", "themis"):
+    for name in ("modified_blackbody", "casey2012", "graybody", "dale2014", "themis"):
         comp = _REGISTRY[name]()
         if hasattr(comp, "precompute"):
             with contextlib.suppress(Exception):
@@ -200,6 +200,14 @@ def test_port_conserves_energy(synthetic_ssp_wide):
                 "beta_ir": 1.8,
                 "epsilon_mbb": 1.0,
                 "alpha_mir": 2.0,
+                # The opacity pivot casey2012 and graybody both declare as
+                # Fixed(200.0). ``predict`` reads it out of ``p`` with no
+                # fallback on purpose: the grammar resolves every declared
+                # parameter before the component is called, so a ``.get`` here
+                # would be a second, silently-different default living in the
+                # component. A hand-built dict has to supply what the grammar
+                # would have.
+                "lambda_0_um": 200.0,
                 "alpha_dale": 2.0,
                 "frac_agn": 0.0,
                 "umin": 1.0,
