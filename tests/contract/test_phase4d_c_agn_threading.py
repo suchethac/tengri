@@ -18,10 +18,11 @@ from __future__ import annotations
 import pathlib
 import warnings
 
+import jax
 import jax.numpy as jnp
 import pytest
 
-from tengri import Parameters, SEDModel
+from tengri import DEFAULT, SEDModel
 from tengri.components.stellar.sps.dsps_wrapper import load_ssp_data
 from tengri.observation import Observation, Photometry
 from tengri.parameters.priors import Fixed
@@ -45,44 +46,40 @@ def obs():
     )
 
 
-def _no_agn_spec():
-    """Spec without AGN (control case)."""
-    return Parameters(
-        mean_sfh_type="dpl",
-        sfh_dpl_alpha=Fixed(2.0),
-        sfh_dpl_beta=Fixed(1.0),
-        sfh_dpl_tau_gyr=Fixed(5.0),
-        sfh_dpl_log_total_mass=Fixed(1.0),
-        met_logzsol=Fixed(-0.5),
-        redshift=Fixed(0.1),
-        dust_tau_bc=Fixed(0.0),
-        dust_tau_diff=Fixed(0.0),
-        apply_igm=False,
-    )
+def _build(ssp, obs, **groups):
+    """Build through the group grammar, quietly.
 
-
-def _skirtor_spec():
-    """Spec with SKIRTOR AGN."""
-    return Parameters(
-        mean_sfh_type="dpl",
-        sfh_dpl_alpha=Fixed(2.0),
-        sfh_dpl_beta=Fixed(1.0),
-        sfh_dpl_tau_gyr=Fixed(5.0),
-        sfh_dpl_log_total_mass=Fixed(1.0),
-        met_logzsol=Fixed(-0.5),
-        redshift=Fixed(0.1),
-        dust_tau_bc=Fixed(0.0),
-        dust_tau_diff=Fixed(0.0),
-        agn_log_lbol=Fixed(10.42),
-        agn_torus_frac=Fixed(0.5),
-        apply_igm=False,
-    )
-
-
-def _silent_build(spec, ssp, obs, **kwargs):
+    The two specs this replaced were `Parameters(...)` flat forms. The no-AGN
+    one left `sfh_dpl_age_gyr` free while every test here calls with
+    `params = {}`; the SKIRTOR one passed `agn_log_lbol` and `agn_torus_frac`
+    without declaring an AGN model, which the grammar no longer accepts. Both
+    raise the moment this file's SSP grid exists -- and nothing generates it,
+    so the file has never run in CI (#2183).
+    """
     with warnings.catch_warnings():
         warnings.simplefilter("ignore")
-        return SEDModel(spec, ssp, observation=obs, **kwargs)
+        return SEDModel.build(
+            ssp_data=ssp,
+            observation=obs,
+            sfh={"type": "dpl", "all_params": Fixed(DEFAULT)},
+            dust_attenuation={
+                "type": "single_component",
+                "law": "calzetti",
+                "all_params": Fixed(DEFAULT),
+            },
+            redshift=Fixed(0.1),
+            **groups,
+        )
+
+
+def _no_agn(ssp, obs):
+    """Control: no AGN group at all."""
+    return _build(ssp, obs)
+
+
+def _skirtor(ssp, obs):
+    """SKIRTOR torus, every parameter pinned so `params = {}` is complete."""
+    return _build(ssp, obs, agn={"torus": {"type": "skirtor"}, "all_params": Fixed(DEFAULT)})
 
 
 # ── _template_data_for_jit() contract ────────────────────────────────────────
@@ -97,7 +94,7 @@ def test_no_agn_returns_no_agn_templates(ssp_bare, obs):
     Its sibling in ``test_phase4d_b_dust_ir_threading.py`` was measured always
     taking the ``None`` branch, so that form there was asserting nothing.
     """
-    model = _silent_build(_no_agn_spec(), ssp_bare, obs)
+    model = _no_agn(ssp_bare, obs)
     td = model._template_data_for_jit()
     assert td is None or "agn" not in td, (
         f"No-AGN model should not have 'agn' in template_data; got {td!r}"
@@ -107,7 +104,7 @@ def test_no_agn_returns_no_agn_templates(ssp_bare, obs):
 def test_skirtor_agn_publishes_templates_for_jit(ssp_bare, obs):
     """A model built with SKIRTOR AGN has template_data with 'agn.skirtor'."""
     try:
-        model = _silent_build(_skirtor_spec(), ssp_bare, obs, agn_model="skirtor")
+        model = _skirtor(ssp_bare, obs)
     except (ImportError, FileNotFoundError):
         pytest.skip("SKIRTOR templates not available")
 
@@ -116,11 +113,18 @@ def test_skirtor_agn_publishes_templates_for_jit(ssp_bare, obs):
     assert "agn" in td, "SKIRTOR should populate 'agn' key in template_data"
     agn_data = td["agn"]
     assert isinstance(agn_data, dict), "agn value should be a dict"
-    assert "skirtor" in agn_data, "SKIRTOR key should be in agn dict"
 
-    # Verify the template is a callable (or similar).
-    skirtor_template = agn_data["skirtor"]
-    assert skirtor_template is not None, "SKIRTOR template should be non-None"
+    # The original asserted `"skirtor" in agn_data`. Measured, the blocks are
+    # nested one level deeper and keyed by their composable slot, so that claim
+    # was false as written -- invisible while the file skipped.
+    blocks = agn_data["blocks"]
+    assert "torus/skirtor" in blocks, (
+        f"SKIRTOR torus block should be threaded; got {sorted(blocks)}"
+    )
+    leaves = [
+        leaf for leaf in jax.tree.flatten(blocks["torus/skirtor"])[0] if hasattr(leaf, "shape")
+    ]
+    assert leaves, "the SKIRTOR block should carry array leaves, not an empty container"
 
 
 # ── JIT-path bit-exactness ──────────────────────────────────────────────────
@@ -128,7 +132,7 @@ def test_skirtor_agn_publishes_templates_for_jit(ssp_bare, obs):
 
 def test_jit_and_non_jit_agree_no_agn(ssp_bare, obs):
     """JIT and non-JIT paths agree when no AGN (proves signature didn't break)."""
-    model = _silent_build(_no_agn_spec(), ssp_bare, obs)
+    model = _no_agn(ssp_bare, obs)
     params = {}
 
     via_jit = model.predict_observables_jit(params).phot_fnu
@@ -142,7 +146,7 @@ def test_jit_and_non_jit_agree_no_agn(ssp_bare, obs):
 def test_jit_and_non_jit_agree_with_skirtor(ssp_bare, obs):
     """JIT and non-JIT paths agree with SKIRTOR AGN after threading."""
     try:
-        model = _silent_build(_skirtor_spec(), ssp_bare, obs, agn_model="skirtor")
+        model = _skirtor(ssp_bare, obs)
     except (ImportError, FileNotFoundError):
         pytest.skip("SKIRTOR templates not available")
 
