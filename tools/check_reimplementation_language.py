@@ -138,6 +138,7 @@ BANNED_PHRASES = (
     r"\badapted\s+from\b",
     r"\btranslated\s+from\b",
     r"\btransliterat(?:ed|ion)\s+(?:of|from)",
+    r"\btranscrib\w*",
 )
 BANNED_RE = re.compile("|".join(BANNED_PHRASES), re.IGNORECASE)
 

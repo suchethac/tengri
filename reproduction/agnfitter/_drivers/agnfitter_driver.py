@@ -603,9 +603,12 @@ def cold_dust_radio_template(
 
     Notes
     -----
-    This model includes radio frequencies (down to ~1.4 GHz = 0.2 mm) and was
-    calibrated against the infrared-radio correlation (Bell 2003). The radio
-    tail above ~1 mm is a power law with spectral index ~-0.75.
+    This model includes radio frequencies (down to the vendored table's
+    lowest tabulated node, ~1.0017 GHz -- measured directly from
+    ``_s17_radio_tables()['dust_nu_hz'].min()``, not the ~1.4 GHz this
+    docstring previously claimed) and was calibrated against the
+    infrared-radio correlation (Bell 2003). The radio tail above ~1 mm is a
+    power law with spectral index ~-0.75.
 
     References
     ----------

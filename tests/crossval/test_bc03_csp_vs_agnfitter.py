@@ -29,11 +29,15 @@ The public dict grammar's short-form parameter resolution accepts bare
 ``tau_gyr``/``age_gyr``/``log_total_mass`` for ``sfh={'type': 'delayed', ...}``
 but RAISES ``ValueError`` for the literally identical spelling under
 ``sfh={'type': 'declining_exp', ...}`` -- only the fully-prefixed
-``sfh_declining_exp_tau_gyr`` (etc.) resolves. Verified directly by
-:func:`test_declining_exp_requires_full_param_prefix` below. This is a real
-inconsistency in the short-name resolver (not the SFH-form defect this file
-exists to catch), flagged here per the parity audit's UNVERIFIED note rather
-than silently worked around.
+``sfh_declining_exp_tau_gyr`` (etc.) resolves. This is a real inconsistency
+in the short-name resolver (not the SFH-form defect this file exists to
+catch), flagged here per the parity audit's UNVERIFIED note rather than
+silently worked around. Pinned as an ``xfail(strict=True)`` below
+(:func:`test_declining_exp_short_form_keys_resolve`) asserting the POSITIVE
+claim ("bare keys resolve for both types") so a future resolver fix turns it
+into a loud XPASS rather than leaving the inconsistency silently
+un-noticed forever. Every other test in this file uses the fully-prefixed
+spelling regardless of this xfail's outcome.
 
 References
 ----------
@@ -143,23 +147,26 @@ def _norm_at(wave: np.ndarray, sed: np.ndarray, target: float = 5500.0) -> np.nd
     return sed / sed[idx]
 
 
-def test_declining_exp_requires_full_param_prefix(ssp_data):
-    """Documents the short-name resolver inconsistency (see module docstring).
+@pytest.mark.xfail(
+    strict=True,
+    reason=(
+        "short-name resolver: bare tau_gyr/age_gyr/log_total_mass resolve for "
+        "sfh 'delayed' but raise for 'declining_exp' (parameters/groups.py, "
+        "out of scope for this task); xfail(strict=True) so a future resolver "
+        "fix turns this into a loud XPASS instead of staying silently green"
+    ),
+)
+def test_declining_exp_short_form_keys_resolve(ssp_data):
+    """Positive claim: bare short-form sfh keys resolve for BOTH SFH types.
 
-    Bare ``tau_gyr``/``age_gyr``/``log_total_mass`` resolve for
-    ``sfh={'type': 'delayed', ...}`` but raise for the identical spelling
-    under ``'declining_exp'``; only the fully-prefixed
-    ``sfh_declining_exp_tau_gyr`` (etc.) works. Both are checked directly so
-    this file's use of the full-prefix spelling (below) does not go silently
-    stale if a future fix makes the short form work too.
+    Currently FALSE for ``declining_exp`` -- only the fully-prefixed
+    ``sfh_declining_exp_tau_gyr`` (etc.) works there, even though the
+    identical bare spelling resolves for ``sfh={'type': 'delayed', ...}``.
+    Every other test in this file uses the fully-prefixed spelling (that
+    invariant is exercised, and must keep working, independently of this
+    xfail's outcome).
     """
-    with pytest.raises(ValueError, match="Unknown key"):
-        _build_declining_exp_model(
-            ssp_data, tau_gyr=_TAU_GYR, age_gyr=_AGE_GYR, use_short_form=True
-        )
-
-    # The fully-prefixed spelling (used by every other test below) must work.
-    _build_declining_exp_model(ssp_data, tau_gyr=_TAU_GYR, age_gyr=_AGE_GYR)
+    _build_declining_exp_model(ssp_data, tau_gyr=_TAU_GYR, age_gyr=_AGE_GYR, use_short_form=True)
 
 
 def test_csp_shape_matches_reference_at_matched_node(ssp_data):

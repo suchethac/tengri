@@ -119,8 +119,13 @@ def test_bell2003_split_shape_matches_vendored_s17_radio_tail(freq_hz):
     )
 
 
-def test_sfr_from_lir_kennicutt1998_matches_upstream_constant():
-    """``sfr_from_lir(1e45) == 3.88e-44 * 1e45`` (AGNfitter-rX's sfr_IR)."""
+def test_sfr_from_lir_murphy2011_matches_upstream_constant():
+    """``sfr_from_lir(1e45) == 3.88e-44 * 1e45`` (AGNfitter-rX's ``sfr_IR``).
+
+    3.88e-44 is Murphy et al. (2011) Eq. 4, not Kennicutt (1998) (whose own
+    published TIR-SFR constant is 4.5e-44) -- see ``sfr_from_lir``'s
+    docstring.
+    """
     expected = 3.88e-44 * 1e45
     actual = float(sfr_from_lir(1e45))
     assert actual == pytest.approx(expected, rel=1e-12)

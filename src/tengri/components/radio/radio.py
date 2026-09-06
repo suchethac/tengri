@@ -61,7 +61,15 @@ _RADIO_WAVE_MIN_AA: float = 1.0e7
 # At 1.4 GHz, Te=1e4: 2.174e27 × (1.4)^{-0.1} ≈ 2.10e27 erg/s/Hz per M☉/yr
 _C_FF: float = 1.0 / 4.6e-28  # ≈ 2.174e27
 
-# Kennicutt+1998 IR-SFR calibration: L_IR [erg/s] → SFR [M☉/yr]
+# L_IR [erg/s] → SFR [M☉/yr] normalization for radio_freefree's internal
+# SFR intermediate. Labeled "Kennicutt+1998" at introduction, but the
+# implied constant (1/6.62e43 ≈ 1.51e-44) does not match either Kennicutt
+# (1998)'s published TIR-SFR calibration (4.5e-44, Salpeter IMF) or Murphy
+# et al. (2011) Eq. 4 (3.88e-44, Kroupa IMF, see ``sfr_from_lir`` below) --
+# a fix-round citation audit (2026-09) could not independently confirm this
+# specific value's literature source. Left unchanged here (radio_freefree's
+# existing numeric behavior is out of this audit's scope); NOT exposed as a
+# named calibration option in :func:`sfr_from_lir` for exactly this reason.
 _SFR_IR_KENNICUTT: float = 1.73e10 * _L_SUN  # ≈ 6.62e43 erg/s
 
 # log10 of the FIRRC / free-free divisors: used by the float32-safe branches
@@ -105,16 +113,20 @@ _ALPHA_NONTHERMAL_AGNFITTER: float = 0.75  # Baan & Klockner (2006)
 _ALPHA_THERMAL_AGNFITTER: float = 0.10  # Dale & Helou (2002); Condon (1992)
 
 # Upstream AGNfitter-rX's generic derived-SFR reporting utility
-# (MODEL_AGNfitter.py:1434-1449, ``sfr_IR``): a Kennicutt (1998)-type
-# L_IR -> SFR calibration used for REPORTING an already-fit galaxy's SFR, not
-# for building the radio SED itself. Distinct from (and NOT to be conflated
-# with) ``_SFR_IR_KENNICUTT`` above, which is Murphy+2011's free-free
-# calibration threshold used internally by :func:`radio_freefree` -- the two
-# give different implied L_IR -> SFR constants (3.88e-44 vs ~1.51e-44
-# erg/s -> Msun/yr) because they are different citations for different
-# purposes; :func:`sfr_from_lir` exposes both explicitly rather than
-# picking one.
-_SFR_FROM_LIR_KENNICUTT1998: float = 3.88e-44  # Msun/yr per erg/s
+# (MODEL_AGNfitter.py:1434-1449, ``sfr_IR``): used for REPORTING an
+# already-fit galaxy's SFR, not for building the radio SED itself. The
+# constant 3.88e-44 is Murphy et al. (2011, ApJ 737, 67) Eq. 4 -- their own
+# Starburst99-derived total-infrared (8-1000 um) SFR calibration for a
+# Kroupa (2001) IMF -- NOT Kennicutt (1998), whose published TIR-SFR
+# constant is 4.5e-44 (Salpeter 1955 IMF, 0.1-100 Msun); an earlier version
+# of this module attributed 3.88e-44 to Kennicutt (1998) in error. Distinct
+# from (and NOT to be conflated with) ``_SFR_IR_KENNICUTT`` above, which is
+# a different intermediate normalization used internally by
+# :func:`radio_freefree` (its own provenance is not independently confirmed
+# to match either Murphy+2011's or Kennicutt+1998's published constant --
+# see :func:`sfr_from_lir`'s docstring -- so it is not exposed as a second
+# named calibration here).
+_SFR_FROM_LIR_MURPHY2011: float = 3.88e-44  # Msun/yr per erg/s (Murphy+2011 Eq. 4)
 
 
 def _synchrotron_suppression(L_ref: jnp.ndarray) -> jnp.ndarray:
@@ -297,14 +309,17 @@ def radio_sfr_bell2003_split(
     .. [1] E. F. Bell, "Estimating Star Formation Rates from Infrared and
        Radio Luminosities: The Origin of the Radio-Infrared Correlation,"
        ApJ, 586, 794 (2003). https://doi.org/10.1086/367829
-    .. [2] W. A. Baan and H. R. Klockner, "The powerful nuclear activity in
-       IRAS FSC 10214+4724," A&A, 449, 559 (2006).
-       https://doi.org/10.1051/0004-6361:20053936
+       bibcode: 2003ApJ...586..794B
+    .. [2] W. A. Baan and H. R. Klockner, "Radio properties of FIR-megamaser
+       nuclei," A&A, 449, 559 (2006). https://doi.org/10.1051/0004-6361:20053936
+       bibcode: 2006A&A...449..559B
     .. [3] D. A. Dale and G. Helou, "The Infrared Spectral Energy
-       Distributions of Normal Star-Forming Galaxies," ApJ, 576, 159 (2002).
-       https://doi.org/10.1086/341632
-    .. [4] J. J. Condon, "Radio emission from normal galaxies," ARA&A, 30,
+       Distribution of Normal Star-forming Galaxies: Calibration at
+       Far-Infrared and Submillimeter Wavelengths," ApJ, 576, 159 (2002).
+       https://doi.org/10.1086/341632 bibcode: 2002ApJ...576..159D
+    .. [4] J. J. Condon, "Radio Emission from Normal Galaxies," ARA&A, 30,
        575 (1992). https://doi.org/10.1146/annurev.aa.30.090192.003043
+       bibcode: 1992ARA&A..30..575C
     .. [5] L. N. Martinez-Ramirez, et al., "AGNFITTER-RX: Modeling the
        radio-to-X-ray spectral energy distributions of AGNs," A&A 688, A46
        (2024). doi:10.1051/0004-6361/202449329. arXiv:2405.12111.
@@ -324,15 +339,14 @@ def radio_sfr_bell2003_split(
 
 def sfr_from_lir(
     L_ir_erg_s: jnp.ndarray,
-    calibration: str = "kennicutt1998",
+    calibration: str = "murphy2011",
 ) -> jnp.ndarray:
     r"""Derived star formation rate from total infrared luminosity.
 
     Reproduces AGNFITTER-RX's ``sfr_IR`` reporting utility
-    (``MODEL_AGNfitter.py:1434-1449``): a Kennicutt (1998)-type calibration
-    used to REPORT a fitted galaxy's derived SFR, distinct from (and not
-    used by) the FIR-radio correlation functions in this module that build
-    the radio SED itself.
+    (``MODEL_AGNfitter.py:1434-1449``): used to REPORT a fitted galaxy's
+    derived SFR, distinct from (and not used by) the FIR-radio correlation
+    functions in this module that build the radio SED itself.
 
     .. math::
 
@@ -343,15 +357,21 @@ def sfr_from_lir(
     L_ir_erg_s : array_like
         Total infrared luminosity (8-1000 um) [erg/s].
     calibration : str
-        - ``"kennicutt1998"`` (default): :math:`C = 3.88 \times 10^{-44}`
-          Msun/yr per erg/s, AGNFITTER-RX's own ``sfr_IR`` constant.
-        - ``"murphy2011"``: reuses the SAME L_IR normalization
-          :func:`radio_freefree` applies internally
-          (:math:`C = 1 / (1.73 \times 10^{10}\,L_{\odot,{\rm IAU}})`,
-          Murphy et al. 2011's free-free calibration built on the Kennicutt
-          1998 L_IR threshold) -- a deliberately DIFFERENT constant from
-          ``"kennicutt1998"`` (do not conflate the two: see D9 in the
-          colddust/radio parity audit).
+        - ``"murphy2011"`` (default, and the only option): :math:`C =
+          3.88 \times 10^{-44}` Msun/yr per erg/s -- Murphy et al. (2011)
+          Eq. 4, their own Starburst99-derived total-infrared SFR
+          calibration for a Kroupa (2001) IMF, and AGNFITTER-RX's own
+          ``sfr_IR`` constant (verified against ``MODEL_AGNfitter.py``
+          directly, not from memory). An earlier version of this function
+          named this constant ``"kennicutt1998"`` in error: Kennicutt
+          (1998)'s own published total-infrared SFR constant is
+          :math:`4.5 \times 10^{-44}` (Salpeter 1955 IMF), a different
+          number. No ``"kennicutt1998"`` option is offered: the only other
+          L_IR-normalization constant in this module
+          (``radio_freefree``'s internal ``_SFR_IR_KENNICUTT``) could not
+          be independently confirmed to match Kennicutt (1998)'s published
+          constant either, so it is not exposed here under any calibration
+          name (see that constant's own comment in this module).
 
     Returns
     -------
@@ -361,7 +381,7 @@ def sfr_from_lir(
     Raises
     ------
     ValueError
-        If ``calibration`` is not one of the two documented options.
+        If ``calibration`` is not ``"murphy2011"``.
 
     Notes
     -----
@@ -369,24 +389,22 @@ def sfr_from_lir(
 
     References
     ----------
-    .. [1] R. C. Kennicutt, Jr., "Star Formation in Galaxies Along the
+    .. [1] E. Murphy et al., "Calibrating Extinction-Free Star Formation
+       Rate Diagnostics with 33 GHz Free-Free Emission in NGC 6946," ApJ,
+       737, 67 (2011), Eq. 4. https://doi.org/10.1088/0004-637X/737/2/67
+       bibcode: 2011ApJ...737...67M
+    .. [2] R. C. Kennicutt, Jr., "Star Formation in Galaxies Along the
        Hubble Sequence," ARA&A, 36, 189 (1998).
        https://doi.org/10.1146/annurev.astro.36.1.189
-    .. [2] E. Murphy et al., "Calibrating Extinction-Free Star Formation
-       Rate Diagnostics with 33 GHz Free-Free Emission in NGC 6946," ApJ,
-       737, 67 (2011). https://doi.org/10.1088/0004-637X/737/2/67
+       bibcode: 1998ARA&A..36..189K
     .. [3] L. N. Martinez-Ramirez, et al., "AGNFITTER-RX: Modeling the
        radio-to-X-ray spectral energy distributions of AGNs," A&A 688, A46
        (2024). doi:10.1051/0004-6361/202449329. arXiv:2405.12111.
     """
     L_ir_erg_s = jnp.asarray(L_ir_erg_s)
-    if calibration == "kennicutt1998":
-        return _SFR_FROM_LIR_KENNICUTT1998 * L_ir_erg_s
     if calibration == "murphy2011":
-        return L_ir_erg_s / _SFR_IR_KENNICUTT
-    raise ValueError(
-        f"Unknown calibration {calibration!r}. Choose 'kennicutt1998' or 'murphy2011'."
-    )
+        return _SFR_FROM_LIR_MURPHY2011 * L_ir_erg_s
+    raise ValueError(f"Unknown calibration {calibration!r}. Choose 'murphy2011'.")
 
 
 def radio_sfr_delvecchio2021(
