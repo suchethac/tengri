@@ -30,11 +30,17 @@ disc block) reconstructs the full live set. The contract test
 empirically live set is a subset of the scoped active set, so this table cannot
 silently drift out of date.
 
-Blocks/models that require a data grid absent from CI (``cat3d_wind``,
-``slone_netzer``, the GRAHSP line/feii blocks) are intentionally **omitted**:
-:func:`agn_active_param_set` falls back to the full superset for any unknown
-block, so the wildcard over-frees (never under-frees) for those, a safe,
-documented degradation rather than a silent exclusion.
+Blocks/models that require a data grid absent from CI (``slone_netzer``) are
+intentionally **omitted**: :func:`agn_active_param_set` falls back to the full
+superset for any unregistered block, so the wildcard over-frees (never
+under-frees) for a genuinely unregistered name, a safe, documented degradation
+rather than a silent exclusion. Fix round 2: this sentence previously listed
+``cat3d_wind`` and "the GRAHSP line/feii blocks" here too, but both are
+registered below (``cat3d_wind``/``cat3d_wind_lowfwd`` since fix round 1 --
+their grids are tracked in CI, so the original "grid absent from CI" rationale
+no longer held; the GRAHSP ``nlr``/``blr``/``feii`` entries were registered
+independently of this task) -- the fallback-to-superset path now serves only
+names like ``slone_netzer`` that are genuinely unregistered.
 """
 
 from __future__ import annotations

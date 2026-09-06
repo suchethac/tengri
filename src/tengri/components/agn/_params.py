@@ -302,7 +302,8 @@ PARAMS: tuple[ParamDeclaration, ...] = (
     ParamDeclaration(
         "agn_oa_nenkova",
         Uniform(15.0, 70.0, default=40.0),
-        "NK0_mean_2p/3p (AGNfitter-rX) CLUMPY torus half-opening angle [degrees] (grid 15-70)",
+        "NK0_mean_2p/3p (AGNfitter-rX) CLUMPY torus half-opening angle [degrees] "
+        "(grid 15-70; default = grid node 40.0)",
         lambda lo, hi: lo >= 15.0 and hi <= 70.0,
         "must be within the NK0_mean_2p/3p grid extent [15, 70]",
         units="deg",
@@ -310,7 +311,8 @@ PARAMS: tuple[ParamDeclaration, ...] = (
     ParamDeclaration(
         "agn_tv_nenkova",
         Uniform(10.0, 300.0, default=60.0),
-        "NK0_mean_3p (AGNfitter-rX) CLUMPY torus equatorial optical depth (grid 10-300)",
+        "NK0_mean_3p (AGNfitter-rX) CLUMPY torus equatorial optical depth "
+        "(grid 10-300; default = grid node 60.0)",
         lambda lo, hi: lo >= 10.0 and hi <= 300.0,
         "must be within the NK0_mean_3p grid extent [10, 300]",
     ),
@@ -322,7 +324,7 @@ PARAMS: tuple[ParamDeclaration, ...] = (
         "agn_a_cat3d_lowfwd",
         Uniform(-3.0, -0.5, default=-2.0),
         "CAT3D-Wind low-fwd radial cloud-distribution power-law index "
-        "(grid -3 to -0.5, AGNfitter rows 0-209 set)",
+        "(grid -3 to -0.5, AGNfitter rows 0-209 set; default = grid node -2.0)",
         lambda lo, hi: lo >= -3.0 and hi <= -0.5,
         "must be within the CAT3D-Wind low-fwd grid extent [-3, -0.5]",
     ),
@@ -330,7 +332,7 @@ PARAMS: tuple[ParamDeclaration, ...] = (
         "agn_fwd_cat3d_lowfwd",
         Uniform(0.15, 0.75, default=0.45),
         "CAT3D-Wind low-fwd polar-wind mass fraction "
-        "(grid 0.15 to 0.75, AGNfitter rows 0-209 set)",
+        "(grid 0.15 to 0.75, AGNfitter rows 0-209 set; default = grid node 0.45)",
         lambda lo, hi: lo >= 0.15 and hi <= 0.75,
         "must be within the CAT3D-Wind low-fwd grid extent [0.15, 0.75]",
     ),
