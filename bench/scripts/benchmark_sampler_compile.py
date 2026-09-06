@@ -97,9 +97,13 @@ def main() -> None:
             _shared._hmc_full_scan,
             (init_flat, wkey, keys, log_p2, data_args, N_WARMUP, 10, False, 0.85),
         ),
-        "hmc L=10 lowrank": (
-            _shared._hmc_low_rank_full_scan,
-            (init_flat, wkey, keys, log_p2, data_args, N_WARMUP, 10, 10, 0.85),
+        # Warmup only, because that is now the whole of what differs: the
+        # low-rank runner samples through the shared ``_hmc_chain_scan`` like
+        # ``mcmc_hmc`` does, so a fused-scan row would price the same sampling
+        # program twice and attribute it to the metric.
+        "hmc L=10 lowrank (warmup)": (
+            _shared._hmc_low_rank_warmup_only,
+            (init_flat, wkey, log_p2, data_args, N_WARMUP, 10, 10, 0.85),
         ),
         "barker": (
             _shared._first_order_full_scan,

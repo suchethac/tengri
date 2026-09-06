@@ -192,32 +192,52 @@ def test_low_rank_hmc_does_not_add_a_search(call_args):
 
     ``mcmc_hmc_lowrank``'s claim is that whatever it buys, it buys at
     ``mcmc_hmc``'s per-draw cost, because the kernel is ``blackjax.hmc``
-    unchanged and only the warmup differs. Measured, it adds exactly **one**
-    ``while`` op and ~530 HLO lines, both in the adaptation. A larger increase
-    would mean the sampling half had changed too, and the head-to-head against
-    ``mcmc_hmc`` would no longer isolate the mass matrix.
+    unchanged and only the warmup differs.
+
+    Since the low-rank runner was split into a warmup-only adaptation plus the
+    shared :func:`_hmc_chain_scan` (so the #1999 stability probe has a seam),
+    the sampling half of that claim holds **by identity**: both backends call
+    the same function object, asserted below. What remains to check is that the
+    difference is confined to the adaptation, which is what the two warmup-only
+    programs are compared for.
     """
-    init, wkey, keys, scales = call_args
+    init, wkey, _keys, scales = call_args
     diag = _lowered_text(
-        _shared._hmc_full_scan, init, wkey, keys, _target, scales, N_WARMUP, 10, False, 0.85
+        _shared._hmc_warmup_only, init, wkey, _target, scales, N_WARMUP, 10, False, 0.85
     )
     low_rank = _lowered_text(
-        _shared._hmc_low_rank_full_scan,
-        init,
-        wkey,
-        keys,
-        _target,
-        scales,
-        N_WARMUP,
-        10,
-        2,
-        0.85,
+        _shared._hmc_low_rank_warmup_only, init, wkey, _target, scales, N_WARMUP, 10, 2, 0.85
     )
     extra = _n_while(low_rank) - _n_while(diag)
     assert extra <= MAX_LOW_RANK_EXTRA_WHILE_OPS, (
-        f"low-rank HMC lowered to {_n_while(low_rank)} while ops against "
-        f"diagonal HMC's {_n_while(diag)}, {extra} more. Only the warmup is "
-        "supposed to differ."
+        f"low-rank adaptation lowered to {_n_while(low_rank)} while ops against "
+        f"diagonal adaptation's {_n_while(diag)}, {extra} more. Only the metric "
+        "estimator is supposed to differ."
+    )
+
+
+def test_low_rank_hmc_samples_through_the_same_program_as_hmc():
+    """Both backends sample with ``_hmc_chain_scan`` -- the same object.
+
+    This is the strong form of the "only the warmup differs" claim, and it only
+    became assertable when the fused low-rank scan was split. While the two
+    halves were fused, chain 0 sampled inside the warmup program and chains
+    1..n-1 ran ``_hmc_chain_scan``, so a multi-chain low-rank fit ran two
+    structurally different compiled computations over one adaptation -- the
+    shape that made NUTS irreproducible under a pinned key before its own split.
+    """
+    import inspect
+
+    from tengri.inference.backends.mcmc.hmc import run_hmc
+    from tengri.inference.backends.mcmc.low_rank import run_hmc_low_rank
+
+    for runner in (run_hmc, run_hmc_low_rank):
+        assert "_hmc_chain_scan(" in inspect.getsource(runner), (
+            f"{runner.__name__} does not sample through the shared chain scan"
+        )
+    assert "_hmc_low_rank_full_scan" not in dir(_shared), (
+        "the fused low-rank warmup+sampling scan is back; it leaves the #1999 "
+        "probe no seam and gives chain 0 a different program from its siblings"
     )
 
 

@@ -1820,7 +1820,7 @@ class _CatalogFitterOriginal:
             build_catalog_metric_diagnostics,
         )
         from tengri.inference.backends.mcmc.chees import CHEES_TARGET_ACCEPT_RATE
-        from tengri.inference.backends.mcmc.nuts import _resolve_dense_mass_matrix
+        from tengri.inference.backends.mcmc.nuts import resolve_dense_mass_gate
         from tengri.inference.posterior import Posterior
         from tengri.inference.preconditioning import _resolve_whitening_strength
 
@@ -1892,7 +1892,17 @@ class _CatalogFitterOriginal:
         # different mass matrix from a single fit of it (PR #2031, #1999).
         _dummy_flat = ravel_pytree(fitter._initialize_unbounded(jax.random.PRNGKey(0)))[0]
         user_set_dense = dense_mass_matrix is not None
-        use_dense = _resolve_dense_mass_matrix(dense_mass_matrix, int(_dummy_flat.shape[0]))
+        # ...including the D<=30 cap, which this seam did not apply. The comment
+        # above says "the same policy the single-galaxy samplers use" and that
+        # was true of the #319 auto-switch and false of the cap, so an explicit
+        # dense request on a wide-D catalog allocated the O(D^2) matrix the
+        # single-galaxy paths refuse.
+        use_dense = resolve_dense_mass_gate(
+            dense_mass_matrix,
+            int(_dummy_flat.shape[0]),
+            method="CatalogFitter",
+            verbose=verbose,
+        )
         if is_chees:
             use_dense = False
         elif verbose and not user_set_dense:

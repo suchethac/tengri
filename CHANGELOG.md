@@ -8,6 +8,23 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 
 ### Fixed
 
+- The dense mass-matrix cap is one seam, and crossing it is no longer silent.
+  `use_dense = <policy> and n_dim <= 30` existed at **six** sites with four
+  behaviors: `mcmc_nuts` logged the downgrade at INFO and only when
+  `verbose=True`, `mcmc_hmc` applied it silently, `mcmc_dynamic_hmc` applied it
+  silently from a signature that *defaults* to `dense_mass_matrix=True`,
+  `CatalogFitter` applied the auto-policy without the cap at all — under a
+  comment claiming it used "the same policy the single-galaxy samplers use" —
+  and `fit_batch`, which shares one adaptation across a whole batch, applied it
+  silently too. So an explicit `dense_mass_matrix=True` on a wide problem got a
+  diagonal metric, or an O(D^2) allocation, depending only on which entry point
+  the caller used, and in most cases with no way to find out. All six now route
+  through `resolve_dense_mass_gate`, which honors the request where it can and
+  raises a `UserWarning` carrying `n_dim` and `max_dim` where it cannot. The
+  warning fires regardless of `verbose`: losing the sampler's most consequential
+  setting is not a verbosity question. Nothing about which metric is *chosen*
+  changes — every existing fit gets the same mass matrix it got before.
+
 - `multicolor_disc`'s pure-float32 bolometric renormalization returned
   `l_nu_intrinsic * scale`, and transposing that product makes JAX form
   `sum(g * l_nu_intrinsic)`. With the raw disc SED (~1e28) and the cotangent
