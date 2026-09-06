@@ -486,29 +486,29 @@ def test_describe_agn_block_params_match_wildcard_scope(ssp, obs, category, bloc
         _maybe_skip_grid_gated(category, block_type, exc)
 
     free_agn = {p for p in model.spec.free_params if p.startswith("agn_")}
-    # describe_agn_block answers about a block in isolation, so it cannot see a
-    # companion read that another sub-block's selection switches on: with
-    # blr='analytic' pinned by _build, the feii wildcard legitimately also
-    # frees agn_fe2_strength (R33). Derived from the same helper rather than
-    # listed, so the two move together.
-    from tengri.components.agn.blocks._consumes import AGN_BLOCK_CONSUMES
-    from tengri.parameters.groups import _agn_subblock_companion_params
-
-    conditional = (
-        _agn_subblock_companion_params(
-            category, block_type, selection=_build_selection(category, block_type)
-        )
-        - _agn_subblock_companion_params(category, block_type)
-        # A block that declares the name in its OWN entry keeps it either way,
-        # so it is not conditional for that type (feii='boroson_green').
-        - AGN_BLOCK_CONSUMES.get((_CONSUMES_CATEGORY[category], block_type), frozenset())
+    # describe_agn_block answers about a block in ISOLATION -- it is given a
+    # name and a category, nothing about the rest of a build -- while the
+    # wildcard is scoped against the whole selection. Two companion reads make
+    # those differ legitimately, in opposite directions: with blr='analytic'
+    # pinned by _build the feii wildcard also frees agn_fe2_strength (R33),
+    # and with a blr selected that reads them, feii='boroson_green' does NOT
+    # claim agn_blr_cf / agn_blr_line_efficiency, which in isolation it would
+    # (R36). So the contract is one source consulted twice, not one answer:
+    # describe equals the isolation-scoped set, the build equals its own
+    # selection-scoped set, and both come from the same function.
+    isolated = _agn_subblock_declared_params(category, block_type)
+    build_scoped = _agn_subblock_declared_params(
+        category, block_type, selection=_build_selection(category, block_type)
     )
     rec = tengri.describe_agn_block(block_type, category=category)
     described = set(rec.get("params", []))
-    assert described == free_agn - conditional, (
+    assert described == isolated, (
         f"{category}/{block_type}: describe_agn_block params {sorted(described)} "
-        f"!= wildcard-freed params {sorted(free_agn - conditional)} "
-        f"(conditional companions excluded: {sorted(conditional)})"
+        f"!= the isolation-scoped declared set {sorted(isolated)}"
+    )
+    assert free_agn == build_scoped, (
+        f"{category}/{block_type}: wildcard froze {sorted(free_agn)}, "
+        f"selection-scoped declared set {sorted(build_scoped)}"
     )
 
 

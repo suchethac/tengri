@@ -380,7 +380,9 @@ def _agn_subblock_declared_params(
     # the filter deliberately (R36). Without the exception the disc that
     # applies SKIRTOR geometry could never free the geometry it reads.
     cross_category = frozenset(
-        name for name in companions if _agn_param_group(name) != owning_group
+        name
+        for name in companions
+        if _agn_param_group(name).startswith("agn.") and _agn_param_group(name) != owning_group
     )
     return (
         frozenset(name for name in read if _agn_param_group(name) == owning_group) | cross_category
@@ -490,9 +492,13 @@ def _agn_subblock_companion_params(
         The selected type for that sub-block.
     selection : mapping, optional
         Grammar category -> selected block type for the whole build. Absent
-        (the default) means "nothing else is known to be selected", which is
-        the conservative answer for a caller describing a block in isolation:
-        conditional companions are simply not claimed.
+        (the default) means "nothing else is selected", which is the right
+        reading for a caller describing a block in isolation
+        (``describe_agn_block``): a cross-category name is claimed, because on
+        such a build no other block reads it, while the feii companion is not,
+        because it exists only when a BLR block that reads it is present. The
+        two differ because one asks "is anyone else taking this?" and the
+        other "is anyone reading it at all?".
 
     Returns
     -------
