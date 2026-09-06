@@ -129,7 +129,13 @@ AGN_BLOCK_CONSUMES: dict[tuple[str, str], frozenset[str]] = {
     ("torus", "nenkova"): frozenset(
         {"agn_ir_frac", "agn_tau", "agn_torus_frac", "agn_cos_inc", "agn_theta_torus"}
     ),
-    ("torus", "nenkova_agnfitter"): frozenset({"agn_cos_inc", "agn_theta_torus"}),
+    # Task 16 (item 3): agn_torus_frac was missing -- nenkova_agnfitter_torus_
+    # block's own signature has always read it (its own covering fraction,
+    # like every other composable torus block); this entry previously listed
+    # only the generic gray Type-1/2 mask reads (agn_cos_inc/agn_theta_torus).
+    ("torus", "nenkova_agnfitter"): frozenset(
+        {"agn_cos_inc", "agn_theta_torus", "agn_torus_frac"}
+    ),
     # CAT3D-Wind (Hönig & Kishimoto 2017): neither in TORUS_SCREEN_PARAMS
     # (torus_screen.py) nor _SELF_CONTAINED_TORI (runner.py), so both receive
     # the same generic gray mask as nenkova/silva04/two_temperature above
@@ -166,7 +172,18 @@ AGN_BLOCK_CONSUMES: dict[tuple[str, str], frozenset[str]] = {
         }
     ),
     ("torus", "qsogen"): frozenset(),
-    ("torus", "silva04"): frozenset({"agn_cos_inc", "agn_theta_torus"}),
+    # Task 16 (item 3): silva04's own axis (agn_log_nh_silva) and covering
+    # fraction (agn_torus_frac) were missing -- this entry previously listed
+    # ONLY the generic gray Type-1/2 mask params (agn_cos_inc/agn_theta_torus,
+    # a runner Stage-4.5 read every physical-decomposition torus shares), so
+    # the top-level agn={'all_params': FREE} wildcard never reached silva04's
+    # own two declared parameters at all. Invisible until
+    # _agn_subblock_declared_params started sourcing from this table (Task 16,
+    # item 1): it used to fall back to raw signature introspection, which
+    # DID find them.
+    ("torus", "silva04"): frozenset(
+        {"agn_cos_inc", "agn_theta_torus", "agn_log_nh_silva", "agn_torus_frac"}
+    ),
     ("torus", "simple"): frozenset(
         {"agn_T_torus", "agn_ir_frac", "agn_torus_frac", "agn_cos_inc", "agn_theta_torus"}
     ),

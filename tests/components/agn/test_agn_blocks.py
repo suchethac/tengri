@@ -434,7 +434,10 @@ def test_agn_ebv_disc_settable_via_sedbuild(synthetic_ssp_wide, synthetic_tophat
     Regression: agn_ebv_disc (the AGNfitter ``EBVbbb`` analog, consumed by
     the composable runner since #916) had no ParamDeclaration and no partition
     entry, so the recommended SEDModel.build path could not redden the disc at
-    all. It now lowers like any other shared agn-group parameter.
+    all. It now lowers via the agn.disc sub-block (Task 16, item 1:
+    agn_ebv_disc is an ``agn.disc``-owned parameter, a runner-level disc-stage
+    read, not the shared "agn" group -- placing it flat at the top level now
+    raises, D1-guard-style: "nest it").
     """
     from tengri import DEFAULT, Fixed, SEDModel
 
@@ -462,12 +465,11 @@ def test_agn_ebv_disc_settable_via_sedbuild(synthetic_ssp_wide, synthetic_tophat
         redshift=Fixed(0.0),
         agn={
             "type": "composable",
-            "disc": {"type": "qsogen", "all_params": Fixed(DEFAULT)},
+            "disc": {"type": "qsogen", "all_params": Fixed(DEFAULT), "ebv_disc": Fixed(0.0)},
             "torus": {"type": "none"},
             "nlr": {"type": "none"},
             "blr": {"type": "none"},
             "agn_log_lbol": Fixed(11.0),
-            "agn_ebv_disc": Fixed(0.0),
             "all_params": Fixed(DEFAULT),
         },
     )
@@ -491,12 +493,11 @@ def test_agn_ebv_disc_settable_via_sedbuild(synthetic_ssp_wide, synthetic_tophat
         redshift=Fixed(0.0),
         agn={
             "type": "composable",
-            "disc": {"type": "qsogen", "all_params": Fixed(DEFAULT)},
+            "disc": {"type": "qsogen", "all_params": Fixed(DEFAULT), "ebv_disc": Fixed(0.5)},
             "torus": {"type": "none"},
             "nlr": {"type": "none"},
             "blr": {"type": "none"},
             "agn_log_lbol": Fixed(11.0),
-            "agn_ebv_disc": Fixed(0.5),
             "all_params": Fixed(DEFAULT),
         },
     )
@@ -527,7 +528,12 @@ def test_agn_attenuation_ebv_settable_via_sedbuild(synthetic_ssp_wide, synthetic
     Regression: agn_attenuation_ebv had no ParamDeclaration and no partition
     entry, so ``atten={'type': 'smc_prevot'}`` built a block pinned at
     E(B−V)=0 — a silent no-op. It now lowers via the agn.atten sub-block.
-    Updated to use law='prevot_smc' syntax (new form).
+    Updated to use law='prevot_smc' syntax (new form). Task 16 (item 11):
+    the short key 'attenuation_ebv' is not a recognized key for this
+    sub-block (its own short-key resolution strips the group's name too,
+    landing on 'ebv' -- reserved for the DIFFERENT agn_ebv parameter, see
+    _AGN_SUBBLOCK_KEY_ALIASES); the full name 'agn_attenuation_ebv' is the
+    working spelling and is used here.
     """
     from tengri import DEFAULT, Fixed, SEDModel
 
@@ -561,7 +567,7 @@ def test_agn_attenuation_ebv_settable_via_sedbuild(synthetic_ssp_wide, synthetic
             "blr": {"type": "none"},
             "atten": {
                 "law": "prevot_smc",
-                "attenuation_ebv": Fixed(0.0),
+                "agn_attenuation_ebv": Fixed(0.0),
                 "all_params": Fixed(DEFAULT),
             },
             "agn_log_lbol": Fixed(11.0),
@@ -594,7 +600,7 @@ def test_agn_attenuation_ebv_settable_via_sedbuild(synthetic_ssp_wide, synthetic
             "blr": {"type": "none"},
             "atten": {
                 "law": "prevot_smc",
-                "attenuation_ebv": Fixed(0.5),
+                "agn_attenuation_ebv": Fixed(0.5),
                 "all_params": Fixed(DEFAULT),
             },
             "agn_log_lbol": Fixed(11.0),
@@ -619,3 +625,32 @@ def test_agn_attenuation_ebv_settable_via_sedbuild(synthetic_ssp_wide, synthetic
         f"agn_attenuation_ebv parameter had no effect on SED: "
         f"max relative change = {max_rel_diff:.2e}"
     )
+
+
+@pytest.mark.contract
+def test_agn_attenuation_ebv_at_top_level_raises_with_nesting_advice():
+    """Task 16 (item 11): placing an 'agn.atten'-owned parameter FLAT at the
+    ``agn`` top level (rather than nested under ``agn={'atten': {...}}``) is
+    the D1 guard's intended refusal (Task 12), not merely absorbed and
+    ignored. This is the failure mode
+    test_agn_attenuation_ebv_settable_via_sedbuild and
+    test_qsogen_extinction.py::test_end_to_end_through_build hit at this
+    branch's base -- both rewritten to the nested form; this is the
+    complementary NEGATIVE case proving the top-level spelling really does
+    raise, with advice naming the correct nesting.
+    """
+    from tengri import DEFAULT, Fixed
+    from tengri.parameters.groups import parse_groups
+
+    with pytest.raises(ValueError, match=r"(?i)nest it"):
+        parse_groups(
+            sfh={"type": "dpl", "all_params": Fixed(DEFAULT)},
+            agn={
+                "type": "composable",
+                "disc": {"type": "qsogen", "all_params": Fixed(DEFAULT)},
+                "atten": {"type": "qsogen", "all_params": Fixed(DEFAULT)},
+                "agn_attenuation_ebv": Fixed(0.3),  # top-level: should raise
+                "all_params": Fixed(DEFAULT),
+            },
+            redshift=Fixed(0.1),
+        )

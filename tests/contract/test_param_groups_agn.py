@@ -172,11 +172,21 @@ class TestAGNParameterRouting:
             )
 
     def test_agn_wildcard_at_agn_level_frees_shared(self):
-        """agn={'all_params': FREE, 'disc': {...}} frees exactly the shared
-        params the active disc block consumes -- ``agn_active_param_set``,
-        the same table the top-level wildcard's scope is sourced from
-        (:func:`_wildcard_scopes`). Was ``assert isinstance(params, Parameters)``
-        (task-12 audit: vacuous, passes for any freed set whatsoever)."""
+        """agn={'all_params': FREE, 'disc': {...}} frees exactly the TRULY
+        shared params (agn_log_lbol/agn_lum_ratio) -- the ones NOT owned by
+        any specific composable sub-block in ``_AGN_PARTITION``.
+
+        Before Task 16 (item 1), ``agn_a_spin``/``agn_log_mbh`` were
+        misclassified as shared "agn" too, so the top-level wildcard froze
+        them even when the disc sub-block explicitly stated its OWN
+        disposition as ``Fixed(DEFAULT)`` (as here) -- the disc's explicit
+        "keep me fixed" was silently overridden for its own physics
+        parameters. Now that they are correctly ``agn.disc``-owned, the
+        disc sub-block's OWN explicit ``Fixed(DEFAULT)`` governs them, and
+        the top-level wildcard (whose scope is still
+        ``agn_active_param_set``, unioned across active blocks) can only
+        reach the names that stay outside every sub-block's ownership.
+        """
         from tengri.components.agn.blocks._consumes import agn_active_param_set
 
         params = parse_groups(
@@ -187,7 +197,14 @@ class TestAGNParameterRouting:
             },
             redshift=Fixed(0.1),
         )
-        expected = agn_active_param_set(
+        # agn_active_param_set (unchanged) still reports agn_a_spin/
+        # agn_log_mbh as consumed by multicolor -- that table describes
+        # what the ACTIVE BLOCK reads, not who is allowed to free it via
+        # which wildcard. The top-level wildcard's ACTUAL reach is now
+        # narrower: it is scoped to agn_active_param_set for names owned by
+        # the shared "agn" group, and agn_a_spin/agn_log_mbh moved out of
+        # that group (see _AGN_PARTITION).
+        consumed = agn_active_param_set(
             {
                 "agn_model": "composable",
                 "agn_disc_block": "multicolor",
@@ -198,11 +215,15 @@ class TestAGNParameterRouting:
                 "agn_attenuation_block": "none",
             }
         )
+        assert {"agn_a_spin", "agn_log_mbh"} <= consumed
         free_agn = {p for p in params.free_params if p.startswith("agn_")}
-        assert free_agn == expected
         # Pinned so a change to either source is visible here, not only
         # through the indirection above.
-        assert free_agn == {"agn_lum_ratio", "agn_log_lbol", "agn_a_spin", "agn_log_mbh"}
+        assert free_agn == {"agn_lum_ratio", "agn_log_lbol"}
+        assert not ({"agn_a_spin", "agn_log_mbh"} & free_agn), (
+            "disc's explicit Fixed(DEFAULT) should govern its own physics "
+            "parameters, not be silently overridden by the top-level wildcard"
+        )
         for name in free_agn:
             assert not params.get_distribution(name).is_fixed
 
@@ -901,10 +922,14 @@ class TestComposableAGNRuntimeWiring:
                     "all_params": Fixed(DEFAULT),
                     "frac": 1.0,
                     "log_lbol": 9.0,
-                    "log_mbh": 9.0,
                     "disc": {
                         "type": "adaf",
                         "all_params": Fixed(DEFAULT),
+                        # Task 16 (item 1): agn_log_mbh is an 'agn.disc'-owned
+                        # parameter (disc physics), not the shared 'agn' group
+                        # -- nest it here (placing it flat at the top level
+                        # now raises, D1-guard-style: "nest it").
+                        "log_mbh": 9.0,
                         "adaf_delta": Fixed(delta),
                         "adaf_alpha": Fixed(alpha),
                     },
