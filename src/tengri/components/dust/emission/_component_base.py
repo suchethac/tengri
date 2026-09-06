@@ -74,6 +74,32 @@ class EmissionComponent(SEDModelComponent):
     optional_inputs: ClassVar[dict[str, str]] = {"L_ir": "erg/s"}
     outputs: ClassVar[dict[str, str]] = {"sed_dust_ir": "erg/s/Hz"}
 
+    #: Whether this backend renormalizes its template so that
+    #: :math:`\\int L_\\nu\\,d\\nu = L_{\\rm ir}` — i.e. whether it carries the
+    #: whole absorbed budget and can therefore be a model's *only* dust emitter.
+    #:
+    #: A backend that sets this False is a **building block**: it emits a
+    #: physically correct piece of the IR SED (a feature forest, one grain
+    #: population) scaled by ``L_ir`` but never renormalized to it, so selected
+    #: on its own it silently loses the rest of the absorbed energy.
+    #: ``SEDModel.build`` refuses such a type for the ``dust_emission`` group
+    #: and says so, rather than returning a model whose energy balance is off by
+    #: orders of magnitude with nothing raised. The component, its closure and
+    #: its precompute grid stay available for composing a custom model.
+    #:
+    #: Derived, not restated: the grammar's standalone-selectable set is the
+    #: registry filtered on this flag
+    #: (``tengri.parameters.groups._standalone_dust_emission_types``), so a new
+    #: building block is refused the day it registers.
+    energy_balanced: ClassVar[bool] = True
+
+    #: Fraction of ``L_ir`` a non-energy-balanced backend re-emits standalone,
+    #: measured (``|int sed_dust_ir dnu| / L_ir`` at z = 0), quoted in the
+    #: refusal so the user is told the size of the hole rather than only that
+    #: the door is shut. ``None`` whenever :attr:`energy_balanced` is True,
+    #: where the fraction is 1 by construction.
+    standalone_l_ir_fraction: ClassVar[float | None] = None
+
     #: Whether ``apply`` may evaluate :meth:`predict` at ``L_ir = 1`` and
     #: re-apply the true scale in log space (#1206). Valid only for a model
     #: whose emission is exactly *proportional* to ``L_ir``: see
@@ -158,6 +184,7 @@ class EmissionComponent(SEDModelComponent):
         params: Mapping[str, jnp.ndarray],
         ssp_data: Any | None = None,
         template_data: Mapping[str, Any] | None = None,
+        ztable_data: Any | None = None,
     ) -> ForwardState:
         """Apply dust IR emission with WavePrecomp support.
 

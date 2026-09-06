@@ -821,7 +821,7 @@ m_ir = SEDModel.build(
         "lyman_cutoff": True,
         "all_params": Fixed(DEFAULT),
     },
-    dust_emission={"type": "dale2014", "alpha_mir": Fixed(2.0), "all_params": Fixed(DEFAULT)},
+    dust_emission={"type": "dale2014", "alpha_dale": Fixed(2.0), "all_params": Fixed(DEFAULT)},
     redshift=Fixed(0.0),
 )
 s_ir = m_ir.predict_state({})
@@ -984,7 +984,7 @@ _TNG_LW = 1.4
 _peaks = []
 
 # LEFT — Dale 2014 AGN fraction: pcigale dale2014.fracAGN (band) vs tengri (line).
-m_frac = _knob_model("dale2014", alpha_mir=Fixed(2.0))
+m_frac = _knob_model("dale2014", alpha_dale=Fixed(2.0))
 p_frac = dict(m_frac.spec.sample(jax.random.PRNGKey(0)))
 for f, c in zip([0.0, 0.3, 0.6], ["C0", "C1", "C3"]):
     sed = C.run_chain(
@@ -2025,7 +2025,7 @@ m_r = SEDModel.build(
         "lyman_cutoff": True,
         "all_params": Fixed(DEFAULT),
     },
-    dust_emission={"type": "dale2014", "alpha_mir": Fixed(2.0), "all_params": Fixed(DEFAULT)},
+    dust_emission={"type": "dale2014", "alpha_dale": Fixed(2.0), "all_params": Fixed(DEFAULT)},
     # q_IR pinned to CIGALE's qir_sf = 2.5 (tengri bucket default 2.64).
     radio={
         "type": "condon92",
@@ -2272,7 +2272,7 @@ m_full = SEDModel.build(
         "lyman_cutoff": True,
         "all_params": Fixed(DEFAULT),
     },
-    dust_emission={"type": "dale2014", "alpha_mir": Fixed(2.0), "all_params": Fixed(DEFAULT)},
+    dust_emission={"type": "dale2014", "alpha_dale": Fixed(2.0), "all_params": Fixed(DEFAULT)},
     xray={"type": "yang20", "all_params": Fixed(DEFAULT)},
     radio={
         "type": "condon92",

@@ -134,7 +134,6 @@ def test_balmer_decrement_rises_under_dust_sweep(ssp_bare):
                 "law": "calzetti",
                 "tau_diff": tau_diff,
                 "tau_bc": 0.0,
-                "slope": -0.7,
             },
             neb={"type": "cue", "all_params": Fixed(DEFAULT)},
             redshift=Fixed(0.05),

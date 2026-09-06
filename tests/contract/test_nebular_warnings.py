@@ -86,56 +86,37 @@ def test_cb19_has_continuum_false():
     assert b.has_continuum is False
 
 
-# ── CB19 degenerate-grid guard (#924) ─────────────────────────────
-
-
-def _write_flat_cb19_grid(src: Path, dst: Path, value: float = 1.0) -> None:
-    """Copy a CB19 grid file but flatten its line_ratios to a single constant.
-
-    Reproduces the shipped-placeholder failure mode of #924, where every entry
-    of ``grids/SSP/Kroupa01/mu100/line_ratios`` is identical.
-    """
-    import shutil
-
-    import h5py
-    import numpy as np
-
-    shutil.copy(src, dst)
-    with h5py.File(dst, "r+") as f:
-        ds = f["grids/SSP/Kroupa01/mu100/line_ratios"]
-        ds[...] = np.full(ds.shape, value, dtype=ds.dtype)
+# ── CB19 degenerate-grid guard (#924, #2181) ──────────────────────
 
 
 @pytest.mark.skipif(not _CB19_GRID_PATH.exists(), reason="CB19 grid file not present")
-def test_cb19_load_warns_on_degenerate_grid(tmp_path):
-    """load_cb19_grid warns loudly when every line ratio is identical (#924).
+def test_cb19_load_refuses_degenerate_grid(tmp_path):
+    """load_cb19_grid refuses a file whose line ratios are all identical.
 
     A flat grid gives all 10 emission lines the same luminosity (Halpha/Hbeta =
-    1.0 instead of the Case B 2.87) — plausible-looking, silently wrong line
-    physics. The backend must surface this at load time, not trust it.
+    1.0 instead of the Case B 2.87) and leaves every grid-axis parameter
+    bit-exactly inert. This warned until #2181, where a fit on the placeholder
+    reported a posterior for five parameters that could not move the
+    likelihood: warnings get filtered, and nothing else said so.
     """
     from tengri.components.nebular.cloudy_cb19 import (
-        CB19DegenerateGridWarning,
+        CB19DegenerateGridError,
         load_cb19_grid,
     )
+    from tests._cb19_grid import write_flat_cb19_grid
 
-    degenerate = tmp_path / "cb19_flat.h5"
-    _write_flat_cb19_grid(_CB19_GRID_PATH, degenerate)
-    with pytest.warns(CB19DegenerateGridWarning, match="DEGENERATE"):
+    degenerate = write_flat_cb19_grid(tmp_path / "cb19_flat.h5")
+    with pytest.raises(CB19DegenerateGridError, match="placeholder"):
         load_cb19_grid(degenerate)
 
 
-@pytest.mark.skipif(not _CB19_GRID_PATH.exists(), reason="CB19 grid file not present")
-def test_cb19_load_silent_on_real_grid():
-    """The shipped (non-degenerate) CB19 grid loads without the degenerate warning."""
-    from tengri.components.nebular.cloudy_cb19 import (
-        CB19DegenerateGridWarning,
-        load_cb19_grid,
-    )
+def test_cb19_load_accepts_a_varying_grid(tmp_path):
+    """A grid with variation loads: the refusal is about the data, not CB_19."""
+    from tengri.components.nebular.cloudy_cb19 import load_cb19_grid
+    from tests._cb19_grid import write_synthetic_cb19_grid
 
-    with warnings.catch_warnings():
-        warnings.simplefilter("error", CB19DegenerateGridWarning)
-        load_cb19_grid(_CB19_GRID_PATH)  # must not raise the degenerate-grid warning
+    usable = write_synthetic_cb19_grid(tmp_path / "cb19_varying.h5")
+    load_cb19_grid(usable)  # must not raise
 
 
 # ── MappingsPhotoStellarBackend ───────────────────────────────────

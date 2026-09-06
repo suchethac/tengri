@@ -514,6 +514,13 @@ class TestKnownBugReproduction:
         Inference: map (quick)
         Expected: ⚠️ Crash when calling posterior.derived (no ssp_mass_remaining table)
         """
+        if not _BPASS_EXISTS:
+            pytest.skip(
+                f"BPASS SSP grid not found at {_BPASS_SSP} (untracked file, #1946). "
+                "Using synthetic fixture instead of real BPASS data. This test verifies "
+                "BUG-NSS-01 (posterior.derived crash) requires the actual grid structure."
+            )
+
         params = Parameters(
             mean_sfh_type="dpl",
             sfh_dpl_alpha=Uniform(0.5, 3.0),

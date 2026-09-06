@@ -155,8 +155,8 @@ def test_xray_precompute_linearity_in_axis_params(filter_set):
     # Typically, harder photon indices (larger gamma) should suppress hard X-ray,
     # but the exact relationship is model-dependent. Just check smoothness.
     nonzero_mask = phot_base_arr > 1e-50
-    if np.any(nonzero_mask):
-        assert np.all(ratio_gh[nonzero_mask] > 0.5), "Unreasonably large change in gamma_hmxb"
-        assert np.all(ratio_gh[nonzero_mask] < 2.0), "Unreasonably large change in gamma_hmxb"
-        assert np.all(ratio_gl[nonzero_mask] > 0.5), "Unreasonably large change in gamma_lmxb"
-        assert np.all(ratio_gl[nonzero_mask] < 2.0), "Unreasonably large change in gamma_lmxb"
+    assert np.any(nonzero_mask), "probe setup failed: no nonzero X-ray flux to compare"
+    assert np.all(ratio_gh[nonzero_mask] > 0.5), "Unreasonably large change in gamma_hmxb"
+    assert np.all(ratio_gh[nonzero_mask] < 2.0), "Unreasonably large change in gamma_hmxb"
+    assert np.all(ratio_gl[nonzero_mask] > 0.5), "Unreasonably large change in gamma_lmxb"
+    assert np.all(ratio_gl[nonzero_mask] < 2.0), "Unreasonably large change in gamma_lmxb"

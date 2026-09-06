@@ -973,6 +973,60 @@ def _validate_fracagn_requires_dust(spec) -> None:
         )
 
 
+def _validate_firrc_requires_dust(spec) -> None:
+    """Raise if any FIRRC radio block is enabled without a dust component (#2106).
+
+    The three FIRRC models (bell2003, delvecchio2021, mccheyne2022) in the radio
+    component normalize their synchrotron luminosity against L_ir, the dust-absorbed
+    stellar luminosity published by the dust component. Without a dust component,
+    L_ir defaults to 0.0, causing the radio SED to silently return all zeros with
+    no signal to the user that the configuration is invalid.
+
+    This is a build-time safety gate: FIRRC radio modes are only safe when paired
+    with a dust component (dust_attenuation != 'none'). Dust-independent radio models
+    (powerlaw, dpl, none) remain usable without dust.
+
+    Raises
+    ------
+    ConfigError
+        If any FIRRC mode (bell2003, delvecchio2021, mccheyne2022) is selected
+        for radio_sfr_mode and dust is disabled.
+
+    See Also
+    --------
+    #2106 : Silent all-zero radio SED when FIRRC blocks used without dust.
+    """
+    from tengri.config.exceptions import ConfigError
+
+    # radio_sfr_mode carries its "bell2003" default even when the radio
+    # component is disabled, so gate on the radio flag first -- the
+    # _validate_dale2014_requires_no_sf_radio sibling guards the same way.
+    if not getattr(spec, "radio", False):
+        return
+
+    # Check if any FIRRC mode is active
+    sfr_mode = getattr(spec, "radio_sfr_mode", "bell2003")
+    if sfr_mode not in ("bell2003", "delvecchio2021", "mccheyne2022"):
+        return  # Non-FIRRC mode selected, no validation needed
+
+    # Check dust configuration: dust_model='off' means no dust
+    dust_model = getattr(spec, "dust_model", "off")
+
+    # A model with dust_model='off' is unsafe
+    if dust_model == "off":
+        raise ConfigError(
+            f"FIRRC radio block (radio_sfr_mode={sfr_mode!r}) normalizes synchrotron "
+            "emission against L_ir, the dust-absorbed stellar luminosity. "
+            "Without a dust component (dust_attenuation={'type':'none'} or no dust), "
+            "L_ir is ~zero and the radio SED would be silently zeroed. "
+            "Fix: either (1) add a dust component "
+            "(e.g. dust_attenuation={'type':'two_component'}), "
+            "or (2) use a dust-independent radio block such as powerlaw or dpl "
+            "(radio_sfr_mode='none' for AGN-only radio, or choose a different sfr_mode). "
+            "See issue #2106."
+        )
+
+
 def _validate_dale2014_requires_no_sf_radio(spec) -> None:
     """Raise if dale2014 dust emission is combined with SF radio (#1970).
 
@@ -1036,6 +1090,70 @@ def _validate_dale2014_requires_no_sf_radio(spec) -> None:
         "radio component. Alternatively, disable SF synchrotron with "
         "radio={'sf': {'type': 'none'}} if you only want AGN radio. "
         "See issue #1970."
+    )
+
+
+def _validate_dust_emission_is_energy_balanced(spec) -> None:
+    r"""Raise if the ``dust_emission`` type is a building block, not a model.
+
+    Every dust emission backend but one renormalizes its template so that
+    :math:`\int L_\nu\,d\nu = L_{\rm ir}`, which is what makes it able to carry
+    a model's whole IR budget. ``pah_drude`` does not: it is the Smith+2007 PAH
+    Drude feature forest, scaled by ``L_ir`` but never renormalized to it, and
+    selecting it as a model's only dust emitter re-emits a **measured
+    1.8925e-04 of the absorbed luminosity** (``|int sed_dust_ir dnu| / L_ir``
+    at z = 0) while everything downstream reports a normal-looking fit.
+
+    Parameters
+    ----------
+    spec : Parameters
+        The parsed grammar spec; ``spec.dust_emission`` holds the type name.
+
+    Raises
+    ------
+    ParameterError
+        When the selected type declares ``energy_balanced = False``.
+
+    Notes
+    -----
+    Deliberately a ``build``-time check on the parsed spec rather than a check
+    inside ``parse_groups``: the builders menu enumerates every accepted type
+    through the grammar at import time
+    (``tengri.builders.dust.emission._populate_factories``), so refusing inside
+    the parser would make ``import tengri`` raise. The flat
+    ``Parameters(dust_emission=...)`` expert escape hatch is likewise untouched
+    — that is where composing a custom model deliberately lives.
+    """
+    from tengri.config.exceptions import ParameterError
+    from tengri.parameters.groups import (
+        _dust_emission_component_class,
+        _standalone_dust_emission_types,
+    )
+
+    emission_type = getattr(spec, "dust_emission", None)
+    if not emission_type or emission_type in _standalone_dust_emission_types():
+        return
+
+    cls = _dust_emission_component_class(emission_type)
+    fraction = getattr(cls, "standalone_l_ir_fraction", None)
+    measured = (
+        f"Measured standalone at z = 0 it re-emits {fraction:.4e} of the absorbed "
+        f"luminosity ({100.0 * fraction:.2f}% of L_ir), discarding the rest with "
+        "nothing raised. "
+        if fraction is not None
+        else "It re-emits only a fraction of the absorbed luminosity. "
+    )
+    balanced = ", ".join(sorted(_standalone_dust_emission_types()))
+    raise ParameterError(
+        f"dust_emission={{'type': {emission_type!r}}} is a PAH building block, not an "
+        f"energy-balanced dust emission model, so it cannot be a model's only dust "
+        f"emitter. It carries the aromatic-feature forest with no thermal continuum: "
+        f"its template is scaled by L_ir but never renormalized to it. "
+        f"{measured}"
+        f"Choose an energy-balanced type instead (tengri.list_dust_emission_models()): "
+        f"{balanced}. "
+        f"The {emission_type!r} closure, component and precompute grid stay available "
+        f"for composing a custom model."
     )
 
 
@@ -2871,8 +2989,19 @@ class SEDModel:
             # whose ``_nebular_backend`` was the wrong class, every line
             # accessor then returned NaN with no warning. Dispatch explicitly.
             from tengri.components.nebular import CB19Backend
+            from tengri.components.nebular.cloudy_cb19 import check_cb19_free_params
 
             self._nebular_backend = CB19Backend(ssp_data=ssp_data)
+            # #2181: the grid's own axes decide which nebular parameters can
+            # move the prediction. On the flat placeholder grid all five are
+            # constant, so a fit explores them against a likelihood that is
+            # bit-exactly flat and reports the prior back as a posterior.
+            # Refuse at construction rather than at the end of a fit.
+            check_cb19_free_params(
+                self._nebular_backend.grid,
+                spec.free_params,
+                grid_path=self._nebular_backend.grid_path,
+            )
         elif spec.nebular_mode == "mappings":
             # MAPPINGS V photoionization grid (Flury et al. 2024). Stellar model,
             # density structure, and ionizing source warning are configurable.
@@ -4708,7 +4837,7 @@ class SEDModel:
             nebular_grid_sig,
         )
 
-    def predict_photometry(self, params, *, ssp_data=None, template_data=None):
+    def predict_photometry(self, params, *, ssp_data=None, template_data=None, ztable_data=None):
         """Compute observed photometric flux densities through all filters.
 
         Convolves the SED (redshifted and IGM-absorbed) through filter
@@ -4814,7 +4943,7 @@ class SEDModel:
         if self.filter_waves is None:
             raise ValueError("No filters set. Pass filters or observation= to SEDModel().")
         return self.predict_observables_jit(
-            params, ssp_data=ssp_data, template_data=template_data
+            params, ssp_data=ssp_data, template_data=template_data, ztable_data=ztable_data
         ).phot_fnu
 
     # There is deliberately no ``_refuse_on_fast_nebular`` here any more.
@@ -4850,6 +4979,7 @@ class SEDModel:
         *,
         ssp_data=None,
         template_data=None,
+        ztable_data=None,
     ):
         """Compute observed spectrum at given wavelengths with LSF convolution.
 
@@ -4975,7 +5105,7 @@ class SEDModel:
         ):
             del wave_obs, wave_chunk_size
             return self.predict_observables_jit(
-                params, ssp_data=ssp_data, template_data=template_data
+                params, ssp_data=ssp_data, template_data=template_data, ztable_data=ztable_data
             ).spec_fnu
 
         # No spectroscopy channel but a manually attached grid (``model._wave_obs``)
@@ -6287,7 +6417,9 @@ class SEDModel:
             self._property_catalog = assemble_available_properties(active_names)
         return self._property_catalog
 
-    def predict_properties(self, params, names=None, *, ssp_data=None, template_data=None):
+    def predict_properties(
+        self, params, names=None, *, ssp_data=None, template_data=None, ztable_data=None
+    ):
         """Compute derived properties from the forward state.
 
         Properties are computed from the same orchestrator :class:`ForwardState`
@@ -6415,7 +6547,9 @@ class SEDModel:
         # instead of compare.
 
         # Compute the state once
-        state = self.predict_state(params, ssp_data=ssp_data, template_data=template_data)
+        state = self.predict_state(
+            params, ssp_data=ssp_data, template_data=template_data, ztable_data=ztable_data
+        )
 
         # Evaluate each property
         result = {}
@@ -7264,6 +7398,7 @@ class SEDModel:
         fixed_values=None,
         ssp_data=None,
         template_data=None,
+        ztable_data=None,
         *,
         observables_only=False,
     ):
@@ -7333,6 +7468,12 @@ class SEDModel:
             components as JIT runtime inputs instead of closure capture.
             Defaults to ``None``, which causes components to use their
             internal template data.
+        ztable_data : Any | None, optional
+            Precomputed photometric redshift table. When provided, passed to
+            components as JIT runtime inputs instead of closure capture,
+            preventing XLA from materializing the z-table as a constant.
+            Defaults to ``None``, which causes components to use their
+            internal z-table.
         observables_only : bool, keyword-only, optional
             Declare that the caller reads only the *projected observables*
             (photometry and spectra off the LUT) and never the SED arrays or
@@ -7431,14 +7572,19 @@ class SEDModel:
             fixed_values = self.spec.get_fixed_values()
         full_params = {**fixed_values, **params}
 
-        # Thread ssp_data and template_data (nebular grids) as JIT inputs.
+        # Thread ssp_data, template_data, and ztable_data as JIT inputs.
         # A None default makes components fall back to their
-        # closure-captured copies (self.ssp_data / internal templates).
+        # closure-captured copies (self.ssp_data / internal templates / z-tables).
         return run_components(
-            chain, state0, full_params, ssp_data=ssp_data, template_data=template_data
+            chain,
+            state0,
+            full_params,
+            ssp_data=ssp_data,
+            template_data=template_data,
+            ztable_data=ztable_data,
         )
 
-    def predict_observables(self, params, *, ssp_data=None, template_data=None):
+    def predict_observables(self, params, *, ssp_data=None, template_data=None, ztable_data=None):
         """Project the orchestrator state into every configured observable.
 
         Single bit-exact entry point: runs the SEDComponent chain and
@@ -7500,10 +7646,12 @@ class SEDModel:
         return impl(
             params,
             self.spec.get_fixed_values(),
-            *self._resolve_threaded_data(ssp_data, template_data),
+            *self._resolve_threaded_data(ssp_data, template_data, ztable_data),
         )
 
-    def predict_observables_jit(self, params, *, ssp_data=None, template_data=None):
+    def predict_observables_jit(
+        self, params, *, ssp_data=None, template_data=None, ztable_data=None
+    ):
         """Self-JIT'd, structurally-cached version of :meth:`predict_observables`.
 
         Bit-exact with :meth:`predict_observables` (same orchestrator
@@ -7561,7 +7709,7 @@ class SEDModel:
         return self._get_or_build_predict_observables_jit()(
             params,
             self.spec.get_fixed_values(),
-            *self._resolve_threaded_data(ssp_data, template_data),
+            *self._resolve_threaded_data(ssp_data, template_data, ztable_data),
         )
 
     def _get_or_build_predict_observables_jit(self):
@@ -7616,7 +7764,7 @@ class SEDModel:
         if getattr(self, "_cached_component_chain", None) is None:
             self._cached_component_chain = self._build_component_chain()
 
-        def _impl(params, fixed_values, ssp_data, template_data):
+        def _impl(params, fixed_values, ssp_data, template_data, ztable_data):
             # The one caller that may take the publication shortcuts: this
             # kernel returns projected observables and never exposes the state,
             # so a zeroed sed_nebular is invisible to it by construction.
@@ -7625,6 +7773,7 @@ class SEDModel:
                 fixed_values=fixed_values,
                 ssp_data=ssp_data,
                 template_data=template_data,
+                ztable_data=ztable_data,
                 observables_only=True,
             )
             full = {**fixed_values, **params}
@@ -7669,11 +7818,12 @@ class SEDModel:
         cache["predict_observables_impl"] = _impl
         return jit_fn
 
-    def _resolve_threaded_data(self, ssp_data, template_data):
+    def _resolve_threaded_data(self, ssp_data, template_data, ztable_data=None):
         """Resolve the JIT-threading channel: caller's arrays, else this model's own.
 
         The one place the override policy lives, so every public surface that
-        accepts ``ssp_data=``/``template_data=`` resolves them identically.
+        accepts ``ssp_data=``/``template_data=``/``ztable_data=`` resolves them
+        identically.
 
         Threading matters only across a JIT boundary the *caller* owns. Inside
         :meth:`predict_observables_jit` the grids already ride in as arguments to a
@@ -7691,15 +7841,19 @@ class SEDModel:
         template_data : Any | None
             Caller-supplied template arrays, or ``None`` to use
             :meth:`_template_data_for_jit`.
+        ztable_data : Any | None
+            Caller-supplied z-table, or ``None`` to use the stellar component's
+            z-table (if free-redshift is configured).
 
         Returns
         -------
         tuple
-            ``(ssp_data, template_data)`` ready to hand to the impl closure.
+            ``(ssp_data, template_data, ztable_data)`` ready to hand to the impl closure.
         """
         return (
             self.ssp_data if ssp_data is None else ssp_data,
             self._template_data_for_jit() if template_data is None else template_data,
+            self._ztable_data_for_jit() if ztable_data is None else ztable_data,
         )
 
     def _template_data_for_jit(self):
@@ -7919,6 +8073,36 @@ class SEDModel:
     #: dust attenuation params that may be free (tau axes + linear eta scaling).
     _EB_ATTEN_FREE_OK = frozenset({"dust_tau_bc", "dust_tau_diff", "dust_eta_balance"})
 
+    def _ztable_data_for_jit(self):
+        """Collect z-table data for JIT threading (stellar component only).
+
+        Returns the stellar component's precomputed z-table if free-redshift
+        photometry is configured, so it can be passed as a JIT runtime input
+        instead of closure-captured. This prevents XLA from materializing the
+        z-table arrays (typically 200+ MB at n_z=250) as constants during
+        compilation, which would cause multi-GB compile-time memory peaks (#1413).
+
+        Returns
+        -------
+        PhotometricZTable | None
+            The z-table from the cached stellar component's state, or ``None``
+            if no z-table is configured (fixed redshift, or exact path).
+        """
+        cached = getattr(self, "_cached_component_chain", None)
+        if cached is None:
+            # Component chain not built yet; z-table will be available later
+            # when predict_state is called. Return None to fall back to closure.
+            return None
+
+        from tengri.components.stellar.component import StellarSEDComponent
+
+        for component in cached:
+            if isinstance(component, StellarSEDComponent):
+                state = component._state
+                if state is not None:
+                    return state.ssp_phot_ztable
+        return None
+
     def _energy_balance_lut(self, chain):
         """Build (and memoize) the two-component energy-balance LUT, or ``None``.
 
@@ -7981,6 +8165,8 @@ class SEDModel:
                 dict(dust.config.bc_law_overrides),
                 dict(dust.config.diff_law_overrides),
                 dust.config.live_shape_params,
+                bc_law=dust.config.law_bc,
+                diff_law=dust.config.law_diff,
             )
             ssp_ages_yr = (10.0**self.ssp_data.ssp_lg_age_gyr) * 1e9
 
@@ -8330,7 +8516,14 @@ class SEDModel:
         # ``sfh_dbp_*`` the user set, and silently fall back to registry
         # defaults, so tx_frac_* moved predict_sfh but never the photometry.
         mean_types = apply_compositor_swap(list(getattr(self.spec, "mean_sfh_type", ["tsnorm"])))
-        mean_model = next((m for m in mean_types if m != "field"), "tsnorm")
+        # A composite SFH (more than one non-field type, e.g. ["const", "norm"]
+        # or ["tsnorm", "burst"]) reaches the component as the full list so
+        # ``resolve_sfh`` composes every member; handing over only the first
+        # entry silently dropped the others. A single type stays a string so
+        # the single-type paths (table, dense_basis) are unchanged. ``field``
+        # is the GP modulator and is threaded separately via ``field_on``.
+        non_field_types = [m for m in mean_types if m != "field"] or ["tsnorm"]
+        mean_model = non_field_types[0] if len(non_field_types) == 1 else non_field_types
         field_on = "field" in mean_types
 
         # Nebular backend mapping. SEDModel's ``_nebular_backend`` is
@@ -9154,7 +9347,9 @@ class SEDModel:
                 groups["eline_mode"] = _obs_eline
 
         spec = parse_groups(**groups)
+        _validate_dust_emission_is_energy_balanced(spec)
         _validate_fracagn_requires_dust(spec)
+        _validate_firrc_requires_dust(spec)
         _validate_dale2014_requires_no_sf_radio(spec)
         _warn_agn_dust_double_count(spec)
         _warn_dead_gradient_params(spec)

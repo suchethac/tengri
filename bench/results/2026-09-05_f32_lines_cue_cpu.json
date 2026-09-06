@@ -1,0 +1,52 @@
+{
+  "meta": {
+    "platform": "cpu",
+    "devices": [
+      "cpu:0"
+    ],
+    "jax": "0.11.0",
+    "env": {
+      "JAX_PLATFORMS": "cpu",
+      "JAX_ENABLE_X64": null,
+      "JAX_DEFAULT_MATMUL_PRECISION": null,
+      "NVIDIA_TF32_OVERRIDE": null,
+      "XLA_PYTHON_CLIENT_PREALLOCATE": null,
+      "TENGRI_DISABLE_JAX_CACHE": "1"
+    },
+    "n_z": 64,
+    "points": {
+      "origin": 0.0,
+      "half_sigma": 0.5
+    },
+    "spec_pixels": 256,
+    "spec_wave_range": [
+      4000.0,
+      9000.0
+    ],
+    "lines": [
+      "Hbeta",
+      "OIII_5007",
+      "Halpha",
+      "NII_6584"
+    ],
+    "mode": "seams",
+    "line_sigma_convention": "floored",
+    "line_sigma_floor": 0.05
+  },
+  "rows": [
+    {
+      "channel": "lines_cue",
+      "model": "neb_cue",
+      "path": "exact_fixedz",
+      "snr": 30.0,
+      "error": "ValueError: Likelihood channel 1 ('line_flux_constraint') evaluated at the reference parameters gives log_prob = nan, which is non-finite. Max |prediction| = 3.263e-28, max |data| = 7.470e-28. A chi-squared this large silently absorbs every other channel through floating-point rounding, check this channel's units against what the model predicts for it (#1495)."
+    },
+    {
+      "channel": "lines_cue",
+      "model": "neb_cue",
+      "path": "auto_fixedz",
+      "snr": 30.0,
+      "error": "RuntimeError: nebular fast grid: vmapped build disagrees with the eager reference forward at the first node: a tracer/vmap regression, not a rounding gap."
+    }
+  ]
+}

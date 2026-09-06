@@ -438,11 +438,17 @@ class TestPrediction:
         assert 0 < float(age_mw) < 14.0
 
     def test_sed_energy_conservation(self, parametric_model, typical_params):
-        """l_dust_absorbed should be non-negative and finite."""
+        """l_dust_absorbed must be non-negative and finite.
+
+        The finiteness half was previously written as ``if jnp.isfinite(l_abs):``
+        wrapping the sign check, which excused the very failure the docstring
+        promised: a NaN or inf absorbed luminosity skipped the body and reported
+        as a pass. Both halves are asserted now.
+        """
         pred = parametric_model.predict(typical_params)
         l_abs = pred.sed.l_dust_absorbed
-        if jnp.isfinite(l_abs):
-            assert float(l_abs) >= 0
+        assert jnp.isfinite(l_abs), f"l_dust_absorbed is not finite: {l_abs}"
+        assert float(l_abs) >= 0, f"l_dust_absorbed is negative: {float(l_abs):.3e}"
 
     # --- Emission lines ---
 

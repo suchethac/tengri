@@ -11,6 +11,9 @@ from tengri.components.dust.emission.analytic.casey2012 import (
 from tengri.components.dust.emission.analytic.energy_balance_split import (
     EnergyBalanceSplitIRSEDComponent,
 )
+from tengri.components.dust.emission.analytic.graybody import (
+    GraybodyIRSEDComponent,
+)
 from tengri.components.dust.emission.analytic.modified_blackbody import (
     ModifiedBlackbodyIRSEDComponent,
 )
@@ -24,6 +27,7 @@ from tengri.components.dust.emission.analytic.schreiber2016 import (
 __all__ = [
     "Casey2012IRSEDComponent",
     "EnergyBalanceSplitIRSEDComponent",
+    "GraybodyIRSEDComponent",
     "ModifiedBlackbodyIRSEDComponent",
     "PAHDrudeIRSEDComponent",
     "Schreiber2016AnalyticIRSEDComponent",

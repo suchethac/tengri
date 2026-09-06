@@ -210,6 +210,7 @@ class WG00AttenuationSEDComponent(TemplateThreading):
         params: Mapping[str, jnp.ndarray],
         ssp_data: Any | None = None,
         template_data: Any | None = None,
+        ztable_data: Any | None = None,
     ) -> ForwardState:
         r"""Apply WG00 screen attenuation to ``state.sed_intrinsic``.
 

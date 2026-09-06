@@ -2103,6 +2103,7 @@ class StellarSEDComponent:
         params: Mapping[str, jnp.ndarray],
         ssp_data: Any | None = None,
         template_data: Any | None = None,
+        ztable_data: Any | None = None,
     ) -> ForwardState:
         """Compute stellar SED and publish derived quantities.
 
@@ -2124,6 +2125,11 @@ class StellarSEDComponent:
             When provided, uses this instead of ``self.ssp_data``. Enables
             SSP arrays to be ``Parameter`` ops in compiled code rather than
             ``Constant`` ops, reducing HLO size and compile time.
+        ztable_data : Any | None, optional
+            Precomputed photometric redshift table passed as a JIT runtime
+            input. When provided, uses this instead of ``self._state.ssp_phot_ztable``
+            for free-redshift photometry interpolation, preventing XLA from
+            materializing the z-table as a constant during compilation.
 
         Returns
         -------
@@ -2145,6 +2151,14 @@ class StellarSEDComponent:
         _SUPPORTED_SFH = (
             "tsnorm",
             "dpl",
+            # Siblings of entries already on this list: they reuse the same
+            # shape-function machinery (a closed-form
+            # lookback-time curve, a truncated exponential, and the very
+            # ``psb_continuity`` callable ``psb_suess2022`` uses), so there is
+            # no new forward path to validate.
+            "dpl_lookback",
+            "trunc_exp",
+            "psb_flex",
             "continuity",
             "dirichlet",
             "dense_basis",
@@ -2173,11 +2187,19 @@ class StellarSEDComponent:
             "buat08",
             "table",
         )
-        if self.config.sfh_model not in _SUPPORTED_SFH:
-            raise NotImplementedError(
-                f"sfh_model={self.config.sfh_model!r} not yet validated "
-                f"against legacy DSPS. Supported modes: {_SUPPORTED_SFH}."
-            )
+        # ``sfh_model`` is one validated family, or a composite list that
+        # ``resolve_sfh`` composes. Every member of a list must itself be a
+        # validated family, or the ``burst`` mixture compositor (a burst only
+        # makes sense on top of a smooth component, so it is list-only).
+        _is_composite = isinstance(self.config.sfh_model, list)
+        _sfh_types = self.config.sfh_model if _is_composite else [self.config.sfh_model]
+        _allowed_sfh = (*_SUPPORTED_SFH, "burst") if _is_composite else _SUPPORTED_SFH
+        for _sfh_type in _sfh_types:
+            if _sfh_type not in _allowed_sfh:
+                raise NotImplementedError(
+                    f"sfh_model={_sfh_type!r} not yet validated "
+                    f"against legacy DSPS. Supported modes: {_SUPPORTED_SFH}."
+                )
         _SUPPORTED_MET = (
             "delta",
             "ramp",
@@ -2224,11 +2246,33 @@ class StellarSEDComponent:
         # ``(internal_name, scale, offset)`` and the conversion is
         # ``internal = public * scale + offset``. This ensures both this
         # component and legacy SEDModel paths see the same units and naming.
-        from tengri.components.stellar.sfh.registry import SFH_REGISTRY
+        from tengri.components.stellar.sfh.registry import SFH_REGISTRY, resolve_sfh
 
-        sfh_spec = SFH_REGISTRY[self.config.sfh_model]
+        # A composite SFH (list) is evaluated through ``resolve_sfh``'s composed
+        # closure. That closure dispatches each additive member by PUBLIC
+        # parameter name, so two members sharing an internal kwarg (any two
+        # parametric families both take ``log_total_mass``) keep their own
+        # values (#372), while the burst mixture reads its ``log_fburst`` by
+        # internal name. The composite kwargs therefore carry every value under
+        # both names. A single type keeps the registry callable and internal
+        # names, so the table and dense_basis special cases below are unchanged.
+        sfh_model = self.config.sfh_model
+        is_composite = isinstance(sfh_model, list)
+        if is_composite:
+            sfh_fn_composed, spec_params, internal_param_map, sfh_spec_settings = resolve_sfh(
+                sfh_model, bin_edges_gyr=getattr(self.config, "bin_edges_gyr", None)
+            )
+            # Bin-edge knot discovery (#765) inspects the first member's callable.
+            sfh_spec = SFH_REGISTRY[sfh_model[0]]
+        else:
+            sfh_spec = SFH_REGISTRY[sfh_model]
+            sfh_fn_composed = None
+            spec_params = sfh_spec.params
+            internal_param_map = sfh_spec.internal_param_map
+            sfh_spec_settings = sfh_spec.settings
+
         sfh_kwargs = {}
-        for public_name, (internal_name, scale, offset) in sfh_spec.internal_param_map.items():
+        for public_name, (internal_name, scale, offset) in internal_param_map.items():
             if public_name in params:
                 raw = params[public_name]
             else:
@@ -2238,19 +2282,22 @@ class StellarSEDComponent:
                 # kwarg specs predating the dpl/lnorm ``age`` anchor of #514)
                 # still resolve every positional argument of the SFH callable.
                 # Mirrors the dense_basis age_universe injection just below.
-                pdef = sfh_spec.params.get(public_name)
+                pdef = spec_params.get(public_name)
                 default_scalar = pdef.default.default if pdef is not None else None
                 if default_scalar is None:
                     continue
                 raw = default_scalar
-            sfh_kwargs[internal_name] = jnp.asarray(raw) * scale + offset
+            value = jnp.asarray(raw) * scale + offset
+            sfh_kwargs[internal_name] = value
+            if is_composite:
+                sfh_kwargs[public_name] = value
 
         # Mode-specific settings that are NOT free parameters.
         # ``dense_basis`` needs an explicit ``age_universe_yr`` derived
         # from the configured cosmology; default of 13.47 Gyr matches
         # the registry setting (FlatLambdaCDM, H0=70, Omega_m=0.3, z=0).
-        if self.config.sfh_model == "dense_basis":
-            age_universe_gyr = sfh_spec.settings.get("sfh_db_age_universe_gyr", 13.47)
+        if isinstance(sfh_model, str) and sfh_model == "dense_basis":
+            age_universe_gyr = sfh_spec_settings.get("sfh_db_age_universe_gyr", 13.47)
             sfh_kwargs["age_universe_yr"] = float(age_universe_gyr) * 1e9
         sfh_kwargs.update(self.config.bin_edges_sfh_kwarg())
 
@@ -2264,10 +2311,10 @@ class StellarSEDComponent:
         # calls with different same-length tables share one compile. SFR is
         # edge-clamped outside the table (the legacy jnp.interp convention);
         # lookbacks older than t_obs are dropped by the CIC t_obs cutoff.
-        sfh_fn = sfh_spec.fn
+        sfh_fn = sfh_fn_composed if sfh_fn_composed is not None else sfh_spec.fn
         _tab_lbt_yr = None
         _tab_order = None
-        if self.config.sfh_model == "table":
+        if isinstance(sfh_model, str) and sfh_model == "table":
             if self.config.field:
                 raise NotImplementedError(
                     "sfh_model='table' with field=True is not supported: the "
@@ -3072,7 +3119,9 @@ class StellarSEDComponent:
                 edges_for_grid,
             )
 
-            ztable = self._state.ssp_phot_ztable
+            # Use ztable_data if threaded as JIT input, otherwise fall
+            # back to the closure (for non-JIT paths).
+            ztable = ztable_data if ztable_data is not None else self._state.ssp_phot_ztable
             z = jnp.asarray(require_redshift(params, "components.stellar.component.apply"))
             z_grid = ztable.z_grid
             z_edges = edges_for_grid(z_grid)

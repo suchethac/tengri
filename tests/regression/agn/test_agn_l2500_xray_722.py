@@ -221,5 +221,5 @@ class TestXRayConsumesL2500:
             state = model.predict_state({})
             assert jnp.all(jnp.isfinite(state.sed_intrinsic)), f"non-finite SED for disc={disc}"
             sed_xray = state.derived.get("sed_xray")
-            if sed_xray is not None:
-                assert jnp.all(jnp.isfinite(sed_xray)), f"X-ray NaN/Inf for disc={disc}"
+            assert sed_xray is not None, "probe setup failed: sed_xray was not published"
+            assert jnp.all(jnp.isfinite(sed_xray)), f"X-ray NaN/Inf for disc={disc}"

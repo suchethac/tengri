@@ -108,6 +108,14 @@ REFUSED: dict[str, tuple[str, str]] = {
     "dla_z": ("not-continuous", "0 is a sentinel meaning 'use the source redshift'"),
     "redshift": ("not-continuous", "top-level grammar argument; survey-dependent range"),
     "sfh_const_end_gyr": ("not-continuous", "ordering constraint with sfh_const_start_gyr"),
+    "sfh_dpl_lookback_end_gyr": (
+        "not-continuous",
+        "ordering constraint with sfh_dpl_lookback_age_gyr; overlapping supports are refused",
+    ),
+    "sfh_trunc_exp_end_gyr": (
+        "not-continuous",
+        "ordering constraint with sfh_trunc_exp_age_gyr; overlapping supports are refused",
+    ),
     # ── explicit-only: real freedom, but not one a default fit can constrain ──
     "met_logzsol_scatter": (
         "explicit-only",

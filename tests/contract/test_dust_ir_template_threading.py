@@ -74,15 +74,27 @@ def _traced_baked_mb(model):
             model.spec.get_fixed_values(),
             model.ssp_data,
             model._template_data_for_jit(),
+            model._ztable_data_for_jit(),
         )
     )
 
 
 def _emission_names():
-    """Every registered dust emission backend, from the live menu."""
+    """Every standalone-selectable dust emission backend, from the live menu.
+
+    Building blocks (``pah_drude``) are excluded at collection rather than left
+    to the ``except ValueError -> pytest.skip`` below: that handler reports
+    "unavailable", which for a refusal-by-design is the wrong reason, and a
+    wrong-reason skip is a green row about something else (#1615).
+    """
+    from tengri.parameters.groups import _standalone_dust_emission_types
+
+    standalone = _standalone_dust_emission_types()
     cases = []
     for row in tengri.list_dust_emission_models():
         name = row if isinstance(row, str) else row["name"]
+        if name not in standalone:
+            continue
         marks = []
         if name in _KNOWN_BAKING:
             marks.append(pytest.mark.xfail(reason=_KNOWN_BAKING[name], strict=True))
