@@ -70,11 +70,9 @@ from tengri.components.agn.blocks.torus_screen import (
     TORUS_SCREEN_PARAMS,
     torus_screen_transmission,
 )
-from tengri.components.agn.polar_dust import _RV_SMC, smc_extinction_curve
 from tengri.components.agn.reddening import redden_disc
 from tengri.components.agn.skirtor import SKIRTORBundle, skirtor_disc_dust_ratio
 from tengri.config.exceptions import AdvisoryWarning
-from tengri.utils.physics_constants import L_SUN
 
 #: Torus selectors that do NOT receive the gray Type-1/2 visibility mask:
 #: ``none`` (no torus) and the self-contained empirical quasar templates
@@ -379,6 +377,70 @@ agn_torus_block, agn_attenuation_block : str
     return issues
 
 
+def _agn_sed_components(
+    *,
+    L_lambda_disc: Array,
+    L_lambda_torus: Array,
+    L_lambda_lines_aniso: Array,
+    L_lambda_feii: Array,
+    L_lambda_lines_iso: Array,
+    central_mask: Array | float,
+    atten_factor: Array,
+    l_nu_conv: Array,
+    L_nu_polar: Array,
+) -> dict[str, Array]:
+    r"""Per-sub-block rest-frame :math:`L_\nu` SEDs (NAMING_CONTRACT §4b.5).
+
+    Pure decomposition of the SAME additive pieces :func:`compose_l_nu`
+    folds into its un-decomposed ``L_nu_result``: distributes
+    ``central_mask`` and ``atten_factor`` over the ``(disc + aniso-lines)``
+    sum individually instead of multiplying the combined bundle, so the
+    four returned arrays sum EXACTLY (to floating-point reassociation) back
+    to that same total (guarded by the 1e-12-relative sum contract test).
+    Extracted as its own function purely for readability -- no behavior
+    change from inlining it at the call site.
+
+    Parameters
+    ----------
+    L_lambda_disc, L_lambda_torus : array_like, shape (n_wave,)
+        Post-Stage-4 disc and torus :math:`L_\lambda` [erg/s/Å].
+    L_lambda_lines_aniso, L_lambda_feii : array_like, shape (n_wave,)
+        Anisotropic (Stage-4.5-masked) NLR+BLR and FeII :math:`L_\lambda`
+        [erg/s/Å].
+    L_lambda_lines_iso : array_like, shape (n_wave,)
+        Isotropic (unmasked) NLR :math:`L_\lambda` [erg/s/Å].
+    central_mask : array_like or float
+        Stage-4.5 Type-1/2 obscuration factor applied to disc + aniso-lines.
+    atten_factor : array_like, shape (n_wave,)
+        Stage-5 attenuation-block multiplicative factor.
+    l_nu_conv : array_like, shape (n_wave,)
+        :math:`\lambda^2/c` conversion factor, L_lambda -> L_nu [Hz/Å].
+    L_nu_polar : array_like, shape (n_wave,)
+        Stage-6 polar-dust re-emission :math:`L_\nu` [erg/s/Hz] (zeros
+        when inactive).
+
+    Returns
+    -------
+    dict
+        ``{"disc", "torus", "lines", "polar"}`` -> ndarray, shape
+        ``(n_wave,)``, each in :math:`L_\nu` [erg/s/Hz]. ``"lines"`` is
+        NLR + BLR + FeII combined.
+
+    Notes
+    -----
+    **JIT-compatible**: yes, pure JAX arithmetic.
+    """
+    L_lambda_lines_total = (
+        L_lambda_lines_aniso + L_lambda_feii
+    ) * central_mask + L_lambda_lines_iso
+    return {
+        "disc": L_lambda_disc * central_mask * atten_factor * l_nu_conv,
+        "torus": L_lambda_torus * atten_factor * l_nu_conv,
+        "lines": L_lambda_lines_total * atten_factor * l_nu_conv,
+        "polar": L_nu_polar,
+    }
+
+
 def compose_l_nu(
     wavelength: Array,
     agn_log_lbol: float,
@@ -546,36 +608,42 @@ agn_torus_block, agn_attenuation_block : str
     L_2500_intrinsic = jnp.interp(2500.0, wave, L_lambda_disc_30deg) * (2500.0**2 / C_AA_PER_S)
     L_4400_intrinsic = jnp.interp(4400.0, wave, L_lambda_disc_30deg) * (4400.0**2 / C_AA_PER_S)
 
-    # Disc extinction (CIGALE skirtor2016.py:341-348). For Type-1 viewing
-    # (i <= 90 - oa, i.e. cos_inc >= sin(oa)) the line-of-sight disc is
-    # reddened: ``disk *= ext_fac``. The energy the reddening removes is
-    # routed to the polar graybody (the SKIRTOR torus block normalizes
-    # disc+torus+polar jointly to agn_power: see below). Gated on
-    # ``agn_polar_ebv > 0`` → models without polar dust are untouched.
-    _polar_ebv = jnp.asarray(params.get("agn_polar_ebv", 0.0))
-    _cos_inc = jnp.asarray(params.get("agn_cos_inc", 0.86602540378443864))
-    _oa_deg = jnp.asarray(params.get("agn_oa_skirtor", params.get("agn_polar_oa", 40.0)))
-    _is_type1 = _cos_inc >= jnp.sin(jnp.deg2rad(_oa_deg))
-    _disc_ext = jnp.exp(-0.921 * _polar_ebv * _RV_SMC * smc_extinction_curve(wave))
-    _disc_ext = jnp.where(_is_type1 & (_polar_ebv > 0.0), _disc_ext, 1.0)
+    # R22 (ONE polar-dust mechanism): before this fix, polar-dust LOS
+    # reddening of the disc applied HERE unconditionally whenever
+    # ``agn_polar_ebv > 0`` -- regardless of the selected
+    # ``agn_attenuation_block`` (even ``"none"``) and regardless of
+    # ``agn_norm`` -- with no re-emission credit, while a SEPARATE bundled
+    # graybody term inside the SKIRTOR torus block AND the standalone
+    # ``polar_dust`` attenuation block (Stage 5/6 below) could also apply.
+    # Measured: at ``atten="none"``, ``norm="independent"``, this stage alone
+    # removed 76% of the AGN SED when ``agn_polar_ebv`` went 0 -> 0.3, with
+    # torus="skirtor" + atten="polar_dust" double-screening the disc on top.
+    # Now there is exactly ONE mechanism: the ``polar_dust`` attenuation
+    # block owns LOS reddening (Type-1 sightlines only, via the smooth
+    # Type-1/2 mask) AND isotropic re-emission end to end (Stage 5/6 below).
+    # Polar dust therefore applies ONLY when ``agn_attenuation_block ==
+    # "polar_dust"`` is explicitly selected -- a deliberate behavior change:
+    # the ``agn_polar_ebv`` default (0.03) no longer silently reddens every
+    # AGN. See task13 fix-round-1 report for the before/after measurements.
 
     # CIGALE single-reference disc normalization (#556). In fracAGN-coupled
     # mode with the SKIRTOR torus, CIGALE ties the disc to the SAME
     # ``agn_power`` as the dust via the fixed template ratio
     # ``R = lumin_disk/lumin_dust`` (skirtor2016.py ``norm = 1/∫dust``), so
-    # disc, torus and polar all scale together and the disc-reddening
-    # absorbed power is conserved into the polar graybody. ``R`` carries the
-    # anisotropy factor ``η(i) = cos(i)(1+2cos(i))/3``. We capture R from the
-    # *un-reddened* disc shape here (CIGALE normalizes before reddening) and
-    # apply the disc renormalization after the torus block fixes agn_power.
-    # Static dispatch on the torus name (JIT-safe); the fracAGN>0 gate is
-    # applied branchlessly after the torus block (below).
+    # disc and torus scale together. ``R`` carries the anisotropy factor
+    # ``η(i) = cos(i)(1+2cos(i))/3``. Captured from the UN-reddened disc
+    # shape: R22 removed the ONLY LOS-reddening path that used to reach this
+    # far (the polar screen now lives exclusively in the standalone
+    # ``polar_dust`` attenuation block, downstream of this R-tie), so the
+    # reddening factor ``skirtor_disc_dust_ratio`` takes is always the
+    # identity now.
     _agn_fracAGN = jnp.asarray(params.get("agn_ir_frac", 0.0))
+    _cos_inc = jnp.asarray(params.get("agn_cos_inc", 0.86602540378443864))
     _disc_R = None
     _disc_incl = None
-    # ``agn_norm`` policy: "cigale_joint" (current default) ties disc/torus/
-    # polar to the single agn_power reference (only meaningful for the SKIRTOR
-    # torus, whose template ratios define R, #556); "conserving" debits the disc
+    # ``agn_norm`` policy: "cigale_joint" (current default) ties disc/torus to
+    # the single agn_power reference (only meaningful for the SKIRTOR torus,
+    # whose template ratios define R, #556); "conserving" debits the disc
     # by the reprocessed fraction so disc(1-f)+torus(f) conserves L_bol for ALL
     # tori (the energy-ledger debit below): opt-in for now; it becomes the
     # default once the CIGALE reproduction + recipes pin cigale_joint explicitly
@@ -589,10 +657,10 @@ agn_torus_block, agn_attenuation_block : str
     _torus_frac = jnp.clip(jnp.asarray(params.get("agn_torus_frac", 0.5)), 0.0, 1.0)
     if _agn_norm == "cigale_joint" and agn_torus_block == "skirtor":
         _skirtor_bundle = _templates_for("torus", agn_torus_block)
-        _disc_R, _disc_incl, _disc_R_faceon = skirtor_disc_dust_ratio(
+        _disc_R, _disc_incl, _ = skirtor_disc_dust_ratio(
             wave,
             L_lambda_disc,
-            _disc_ext,
+            jnp.ones_like(wave),
             _template=(
                 _skirtor_bundle.disc_dust if isinstance(_skirtor_bundle, SKIRTORBundle) else None
             ),
@@ -602,37 +670,13 @@ agn_torus_block, agn_attenuation_block : str
             agn_oa_skirtor=params.get("agn_oa_skirtor", 40.0),
             agn_cos_inc=_cos_inc,
         )
-        # #556 mechanism 3: tie the polar ``l_ext`` to the SAME agn_power as
-        # the disc. The SKIRTOR torus block estimates the absorbed disc power
-        # from a FACE-ON disc proxy; in fracAGN mode it must use the
-        # agn_power-tied face-on disc ``agn_power·R/η`` (not the legacy
-        # ``18/7·10^agn_log_lbol`` which assumes agn_log_lbol = intrinsic 4π
-        # power, over-estimating l_ext ~2× → FIR +15%). ``agn_power`` here is
-        # the L_absorbed-coupled value the torus block normalizes to
-        # (``agn_torus_frac × L_bol``), available *before* the torus runs so
-        # there is no circular dependency on ∫torus. Branchless: fall back to
-        # the legacy proxy where ``agn_ir_frac == 0``.
-        _Lbol = 10.0**agn_log_lbol * L_SUN
-        _agn_power_pre = _torus_frac * _Lbol
-        # Face-on UN-reddened disc ∫AGN1.disk = agn_power × R_faceon (the
-        # ratio the CIGALE l_ext proxy needs), NOT agn_power × R (which is the
-        # reddened, inclination-weighted *observed* disc).
-        _faceon_frac = _agn_power_pre * _disc_R_faceon
-        _faceon_proxy = _Lbol * (18.0 / 7.0)
-        _faceon = jnp.where(_agn_fracAGN > 0.0, _faceon_frac, _faceon_proxy)
-        params = {
-            **params,
-            "agn_disc_faceon_lbol": jnp.log10(jnp.maximum(_faceon / L_SUN, 1e-30)),
-        }
-
-    L_lambda_disc = L_lambda_disc * _disc_ext
 
     # Compute lambda*L_lambda(5100Å) for downstream block (line/FeII/torus)
-    # normalizations. Convention: this is the LOS-reddened disc, taken *after*
-    # the polar/LOS disc extinction (``_disc_ext`` above) but *before* the
-    # conserving debit below. With agn_polar_ebv=0 (the common case) it equals
-    # the intrinsic disc; with Type-1 polar reddening it carries the extinction.
-    # GRAHSP l5100 parity (Phase 2) should confirm and pin the intended anchor.
+    # normalizations. Convention: this is the intrinsic (un-reddened) disc,
+    # before the conserving debit below -- R22 removed the only LOS-reddening
+    # path that used to reach this point, so l5100_disc no longer carries any
+    # polar-dust extinction (LOS reddening now lives exclusively downstream,
+    # in the standalone ``polar_dust`` attenuation block).
     l5100_disc = jnp.interp(5100.0, wave, L_lambda_disc) * 5100.0
 
     # ── Energy ledger (energy-conserving policies) ───────────────────────
@@ -822,25 +866,24 @@ agn_torus_block, agn_attenuation_block : str
         L_nu_reemit = jnp.zeros_like(wave)
     L_nu_result = L_nu_atten + L_nu_reemit
 
-    components = None
-    if return_components:
-        # Public per-sub-block rest-frame SEDs (NAMING_CONTRACT §4b.5):
-        # ``sed_agn_disc``, ``sed_agn_torus``, ``sed_agn_polar``,
-        # ``sed_agn_lines`` (nlr + blr + feii). Each is the SAME additive
-        # piece of ``L_lambda_total`` above, converted to L_nu -- the four
-        # arrays sum EXACTLY (to floating-point reassociation) to
-        # ``L_nu_result``, since ``_central_mask`` and ``factor`` are
-        # distributed over the same sum the un-decomposed path folds them
-        # into.
-        L_lambda_lines_total = (
-            L_lambda_lines_aniso + L_lambda_feii
-        ) * _central_mask + L_lambda_lines_iso
-        components = {
-            "disc": L_lambda_disc * _central_mask * factor * _conv,
-            "torus": L_lambda_torus * factor * _conv,
-            "lines": L_lambda_lines_total * factor * _conv,
-            "polar": L_nu_reemit,
-        }
+    # Public per-sub-block rest-frame SEDs (NAMING_CONTRACT §4b.5):
+    # ``sed_agn_disc``, ``sed_agn_torus``, ``sed_agn_polar``, ``sed_agn_lines``
+    # (nlr + blr + feii). See :func:`_agn_sed_components`.
+    components = (
+        _agn_sed_components(
+            L_lambda_disc=L_lambda_disc,
+            L_lambda_torus=L_lambda_torus,
+            L_lambda_lines_aniso=L_lambda_lines_aniso,
+            L_lambda_feii=L_lambda_feii,
+            L_lambda_lines_iso=L_lambda_lines_iso,
+            central_mask=_central_mask,
+            atten_factor=factor,
+            l_nu_conv=_conv,
+            L_nu_polar=L_nu_reemit,
+        )
+        if return_components
+        else None
+    )
 
     # Return with optional L_2500_intrinsic/L_4400_intrinsic and per-sub-block
     # components tuples.

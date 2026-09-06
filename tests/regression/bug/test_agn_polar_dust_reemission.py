@@ -121,6 +121,10 @@ class TestPolarDustEnergyConservation:
         )
         reemitted = _integrate_lnu_bolometric(sed_agn_polar)
 
+        assert float(reemitted) != 0.0, (
+            "reemitted luminosity is exactly zero -- the energy-balance ratio "
+            "below is undefined, not merely small; check agn_polar_ebv/oa/T."
+        )
         rel_diff = abs(float(absorbed) - float(reemitted)) / float(reemitted)
         assert rel_diff < 1e-3, (
             f"absorbed={float(absorbed):.6e} erg/s, reemitted={float(reemitted):.6e} "
@@ -130,13 +134,21 @@ class TestPolarDustEnergyConservation:
 
 class TestPolarDustOpeningAngleAndBetaMoveSED:
     def test_opening_angle_changes_sed(self):
-        sed_narrow = composable_agn_l_nu(_WAVE, **{**_BASE_PARAMS, "agn_polar_oa": 15.0})
-        sed_wide = composable_agn_l_nu(_WAVE, **{**_BASE_PARAMS, "agn_polar_oa": 75.0})
+        # cos_inc=0.5 (not the energy-balance test's saturated 1.0): the
+        # Type-1/2 sigmoid mask is unsaturated at this inclination, so
+        # sweeping oa across its full declared range gives a clean,
+        # comfortably-detectable signal through the Stage-5 attenuation
+        # factor alone (independent of the cone-covering-factor fix, R22
+        # fix-round-1 item 1, which additionally makes sed_agn_polar itself
+        # oa-dependent -- see TestPolarDustCoveringFactor below).
+        p = {**_BASE_PARAMS, "agn_cos_inc": 0.5}
+        sed_narrow = composable_agn_l_nu(_WAVE, **{**p, "agn_polar_oa": 10.0})
+        sed_wide = composable_agn_l_nu(_WAVE, **{**p, "agn_polar_oa": 80.0})
         max_rel_diff = float(
             jnp.max(jnp.abs(sed_wide - sed_narrow)) / jnp.max(jnp.abs(sed_narrow))
         )
         assert max_rel_diff > 1e-3, (
-            f"agn_polar_oa=15deg vs 75deg changed the SED by only {max_rel_diff:.3e} relative."
+            f"agn_polar_oa=10deg vs 80deg changed the SED by only {max_rel_diff:.3e} relative."
         )
 
     def test_beta_changes_sed(self):

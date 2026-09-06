@@ -125,9 +125,12 @@ RECIPE_FREE_PARAMS = {
         "agn_nlr_line_efficiency",
         "agn_oa_skirtor",
         "agn_p_skirtor",
-        "agn_polar_T",
-        "agn_polar_beta",
-        "agn_polar_ebv",
+        # agn_polar_T/beta/ebv removed (task13 fix-round-1, R22): this
+        # recipe never selects atten='polar_dust' (nor did it before), it
+        # only got these "for free" because skirtor_torus_block used to
+        # bundle its own polar-dust graybody -- a SECOND, independent
+        # mechanism removed by R22. Add atten={'type': 'polar_dust'} to this
+        # recipe to opt back into polar dust explicitly.
         "agn_q_skirtor",
         "agn_tau_skirtor",
         "agn_torus_frac",

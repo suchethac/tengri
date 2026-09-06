@@ -120,6 +120,41 @@ class TestSubblockComponentsAbsentForMonolithic:
             )
 
 
+class TestSubblockComponentsZeroForMonolithicViaPredictSed:
+    """task13 fix-round-1 item 5: the public model.predict(...).sed.components
+    surface (not just the lower-level AGNSEDComponent.apply() state.derived
+    dict tested above) returns zeros-shaped arrays for the four keys when the
+    AGN model is a monolithic (non-composable) one, going through a full
+    SEDModel.build -- state_to_sed_components' "absent reads as zero"
+    convention shared by every other component key in that dict."""
+
+    def test_monolithic_model_gives_zero_subblock_components(self, synthetic_ssp_wide):
+        model = SEDModel.build(
+            ssp_data=synthetic_ssp_wide,
+            sfh={"type": "delayed", "all_params": Fixed(DEFAULT)},
+            dust_attenuation={
+                "law": "power_law",
+                "type": "two_component",
+                "all_params": Fixed(DEFAULT),
+            },
+            agn={
+                "type": "multicolor_agn",
+                "all_params": Fixed(DEFAULT),
+                "agn_log_lbol": Fixed(12.0),
+            },
+            redshift=Fixed(0.05),
+        )
+        pred = model.predict(model.spec.get_fixed_values())
+        comp = pred.sed.components
+        # sed_agn itself is genuinely nonzero -- this is not a "no AGN at
+        # all" degenerate case, just a monolithic one with no sub-blocks.
+        assert float(np.max(np.abs(np.asarray(comp["sed_agn"])))) > 0.0
+        for key in _SUBBLOCK_KEYS:
+            arr = np.asarray(comp[key])
+            assert arr.shape == comp["sed_agn"].shape
+            assert np.all(arr == 0.0), f"{key} is not all-zero for a monolithic AGN model."
+
+
 class TestSubblockComponentsReachableViaPredictSed:
     """End-to-end: model.predict(params).sed.components[...] (NAMING_CONTRACT §4b.5)."""
 

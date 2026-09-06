@@ -52,20 +52,25 @@ def test_consumes_tables_reference_only_declared_params():
         assert params <= _DECLARED, f"{model} lists undeclared params: {params - _DECLARED}"
 
 
-def test_skirtor_torus_consumes_all_polar_dust_knobs():
-    """SKIRTOR torus must credit all three polar-dust knobs (regression).
+def test_skirtor_torus_no_longer_consumes_polar_dust_knobs():
+    """SKIRTOR torus must NOT credit any polar-dust knob (R22 regression guard).
 
-    ``skirtor_torus_block`` reads ``agn_polar_ebv``, ``agn_polar_T`` and
-    ``agn_polar_beta`` (polar-dust re-emission, active by default at
-    ``agn_polar_ebv = 0.03``). All three move the SED — empirically
-    ``Delta(polar_T) = 52%`` and ``Delta(polar_beta) = 2.4%`` across their
-    priors. Previously only ``agn_polar_ebv`` was credited, so a top-level
-    ``agn={'all_params': FREE}`` silently froze the polar-dust temperature and slope
-    (a silent-fixed gap). This guards against that regression without needing
-    the gitignored SKIRTOR grid (pure CONSUMES-table membership).
+    Superseded test (was ``test_skirtor_torus_consumes_all_polar_dust_knobs``):
+    ``skirtor_torus_block`` used to bundle its OWN Casey-2012 polar-dust
+    graybody (reading ``agn_polar_ebv``/``agn_polar_T``/``agn_polar_beta``,
+    active by default at ``agn_polar_ebv = 0.03``) — a SECOND, independent
+    polar-dust mechanism alongside the composable runner's Stage-1.5 disc
+    reddening and the standalone ``polar_dust`` attenuation block, so a
+    ``torus="skirtor"`` + ``atten="polar_dust"`` recipe screened the disc
+    TWICE (task13 fix-round-1, ruling R22). There is now exactly ONE
+    polar-dust mechanism — the standalone ``polar_dust`` attenuation block
+    (``("attenuation", "polar_dust")`` below) — and this torus emits only the
+    thermal SKIRTOR template. This guards against the bundled term coming
+    back, without needing the gitignored SKIRTOR grid (pure CONSUMES-table
+    membership).
     """
     skirtor = AGN_BLOCK_CONSUMES[("torus", "skirtor")]
-    assert {"agn_polar_ebv", "agn_polar_T", "agn_polar_beta"} <= skirtor
+    assert not ({"agn_polar_ebv", "agn_polar_T", "agn_polar_beta"} & skirtor)
 
 
 def test_active_set_scopes_to_active_blocks():

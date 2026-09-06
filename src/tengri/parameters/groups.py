@@ -2147,10 +2147,9 @@ def _agn_subblock_declared_params(category: str, block_type: str | None) -> froz
     The raw signature also names parameters this block reads but does not
     OWN in the partition table (:data:`_AGN_PARTITION`) -- shared masking
     knobs (``agn_cos_inc``, ``agn_theta_torus``) every physical-decomposition
-    torus reads, or (for ``skirtor`` specifically) the ``agn.atten``-owned
-    polar-dust triple it also applies. Those are filtered out: a param
-    partitioned outside ``agn.<category>`` is reachable only through ITS
-    owning group's wildcard or an explicit name (see
+    torus reads. Those are filtered out: a param partitioned outside
+    ``agn.<category>`` is reachable only through ITS owning group's
+    wildcard or an explicit name (see
     :func:`_build_agn_search_view`), never through this sub-block's own
     ``'*'`` -- crediting it here would claim a freedom the resolver cannot
     actually deliver. When every parameter a type reads is such a shared
@@ -2197,9 +2196,43 @@ def _agn_subblock_declared_params(category: str, block_type: str | None) -> froz
         p.name
         for p in sig.parameters.values()
         if p.kind not in (p.VAR_KEYWORD, p.VAR_POSITIONAL) and p.name.startswith("agn_")
-    )
+    ) | _agn_subblock_companion_params(category, block_type)
     owning_group = f"agn.{category}"
     return frozenset(name for name in read if _agn_param_group(name) == owning_group)
+
+
+#: (grammar category, block_type) whose physics spans TWO functions: the
+#: registered dispatch callable (``AGN_BLOCKS[category][block_type]``,
+#: introspected above) plus a companion helper the runner calls SEPARATELY
+#: for a later pipeline stage, invisible to that introspection. Currently
+#: just the standalone polar-dust attenuation block: the registered
+#: ``polar_dust_attenuation_block`` (Stage 5, the LOS reddening factor)
+#: declares ``agn_polar_ebv``/``agn_cos_inc``/``agn_polar_oa``/
+#: ``agn_polar_law``, while ``agn_polar_T``/``agn_polar_beta`` are read only
+#: by ``polar_dust_reemission_lnu`` (Stage 6, the re-emission graybody),
+#: which ``compose_l_nu`` calls directly rather than through the block
+#: registry (task13 fix-round-1). Both functions' ``agn_*`` names belong to
+#: this sub-block's own wildcard scope.
+_AGN_SUBBLOCK_COMPANION_KEY: tuple[str, str] = ("atten", "polar_dust")
+
+
+def _agn_subblock_companion_params(category: str, block_type: str) -> frozenset[str]:
+    """``agn_*`` names read by a sub-block's companion helper, if it has one.
+
+    See :data:`_AGN_SUBBLOCK_COMPANION_KEY`. Returns an empty set for every
+    other (category, block_type) pair.
+    """
+    if (category, block_type) != _AGN_SUBBLOCK_COMPANION_KEY:
+        return frozenset()
+
+    from tengri.components.agn.blocks.atten import polar_dust_reemission_lnu
+
+    sig = inspect.signature(polar_dust_reemission_lnu)
+    return frozenset(
+        p.name
+        for p in sig.parameters.values()
+        if p.kind not in (p.VAR_KEYWORD, p.VAR_POSITIONAL) and p.name.startswith("agn_")
+    )
 
 
 def _wildcard_scopes(

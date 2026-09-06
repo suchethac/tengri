@@ -138,15 +138,15 @@ AGN_BLOCK_CONSUMES: dict[tuple[str, str], frozenset[str]] = {
             "agn_ir_frac",
             "agn_oa_skirtor",
             "agn_p_skirtor",
-            # Polar-dust re-emission (active by default at agn_polar_ebv=0.03):
-            # all three polar knobs are read by skirtor_torus_block and move the
-            # SED (empirically Delta(polar_T)=52%, Delta(polar_beta)=2.4% across
-            # their priors). Earlier only agn_polar_ebv was credited, so a
-            # top-level agn={'*': FREE} silently froze the polar-dust temperature
-            # and slope.
-            "agn_polar_ebv",
-            "agn_polar_T",
-            "agn_polar_beta",
+            # R22 (task13 fix-round-1): the polar_dust knobs used to be listed
+            # here too -- skirtor_torus_block bundled its OWN Casey-2012 polar
+            # graybody (active by default at agn_polar_ebv=0.03), a SECOND
+            # polar-dust mechanism alongside the standalone ``polar_dust``
+            # attenuation block, so torus=skirtor + atten=polar_dust screened
+            # the disc twice. There is now exactly ONE mechanism (the
+            # standalone atten block, see ("attenuation", "polar_dust")
+            # below); this torus emits only the thermal SKIRTOR template and
+            # reads no agn_polar_* name.
             "agn_q_skirtor",
             "agn_tau_skirtor",
             "agn_torus_frac",

@@ -609,6 +609,94 @@ class TestSEDComponents:
         assert out["wavelength"].shape == (100,)
 
 
+# ── TestSEDComponentsAGNSubblocks (task13 fix-round-1 item 3) ────────────────
+
+
+class _FakeComponentModelWithAGNSubblocks(_FakeComponentModel):
+    """Extends :class:`_FakeComponentModel` to also publish the composable
+    AGN runner's per-sub-block keys (``sed_agn_disc``/``sed_agn_torus``/
+    ``sed_agn_lines``/``sed_agn_polar``), split arbitrarily across an
+    ``0.4/0.3/0.2/0.1`` partition of the AGN fraction so a test can check
+    both per-sample propagation and the sum-to-``sed_agn`` identity."""
+
+    def predict_state(self, params):
+        state = super().predict_state(params)
+        wave = self._wave
+        f = float(params.get("frac", 0.0))
+        agn = f * jnp.ones_like(wave)
+        derived = dict(state.derived)
+        derived["sed_agn_disc"] = 0.4 * agn
+        derived["sed_agn_torus"] = 0.3 * agn
+        derived["sed_agn_lines"] = 0.2 * agn
+        derived["sed_agn_polar"] = 0.1 * agn
+        return _FakeOrchestratorState(
+            wave=wave, sed_intrinsic=state.sed_intrinsic, derived=derived
+        )
+
+
+_AGN_SUBBLOCK_KEYS = ("sed_agn_disc", "sed_agn_torus", "sed_agn_lines", "sed_agn_polar")
+
+
+class TestSEDComponentsAGNSubblocks:
+    """``Posterior.sed_components()`` exposes the composable AGN runner's
+    per-sub-block SEDs (task13 fix-round-1 item 3)."""
+
+    def test_map_exposes_zeros_when_model_does_not_publish_them(self):
+        """Back-compat: a model/state that never publishes the four keys
+        (a monolithic AGN, or no AGN at all) reads back as zeros -- the same
+        "absent reads as zero" contract every other component key here has."""
+        wave = jnp.linspace(1000.0, 1e6, 100)
+        model = _FakeComponentModel(wave)  # unmodified fake: no sub-block keys
+        p = Posterior(
+            samples=None,
+            params={"frac": jnp.array(0.3)},
+            method="MAP",
+            wall_time_s=0.1,
+            diagnostics={},
+        )
+        p._model = model
+        out = p.sed_components()
+        for key in _AGN_SUBBLOCK_KEYS:
+            assert key in out
+            np.testing.assert_allclose(np.asarray(out[key]), 0.0)
+
+    def test_map_returns_published_subblock_arrays(self):
+        wave = jnp.linspace(1000.0, 1e6, 100)
+        model = _FakeComponentModelWithAGNSubblocks(wave)
+        p = Posterior(
+            samples=None,
+            params={"frac": jnp.array(0.3)},
+            method="MAP",
+            wall_time_s=0.1,
+            diagnostics={},
+        )
+        p._model = model
+        out = p.sed_components()
+        for key in _AGN_SUBBLOCK_KEYS:
+            assert out[key].shape == (100,)
+        total = sum(np.asarray(out[key]) for key in _AGN_SUBBLOCK_KEYS)
+        np.testing.assert_allclose(total, np.asarray(out["sed_agn"]), rtol=1e-10)
+
+    def test_sampling_returns_stacked_subblock_arrays(self):
+        wave = jnp.linspace(1000.0, 1e6, 50)
+        model = _FakeComponentModelWithAGNSubblocks(wave)
+        rng = np.random.default_rng(51)
+        n = 10
+        p = Posterior(
+            samples={"frac": jnp.asarray(rng.uniform(0.1, 0.9, size=n))},
+            params={"frac": jnp.array(0.5)},
+            method="mcmc_nuts",
+            wall_time_s=1.0,
+            diagnostics={},
+        )
+        p._model = model
+        out = p.sed_components()
+        for key in _AGN_SUBBLOCK_KEYS:
+            assert out[key].shape == (n, 50)
+        total = sum(np.asarray(out[key]) for key in _AGN_SUBBLOCK_KEYS)
+        np.testing.assert_allclose(total, np.asarray(out["sed_agn"]), rtol=1e-10)
+
+
 # ── TestBPTClassification ────────────────────────────────────────────────────
 
 
