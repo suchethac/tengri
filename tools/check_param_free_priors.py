@@ -91,8 +91,6 @@ REFUSED: dict[str, tuple[str, str]] = {
     "dust_f_obscuration": ("fixed-by-physics", "pre-existing decision; degenerate with tau_diff"),
     # ── target-dependent: the bound is set by the source, not by physics ──
     "dust_L_agn_ir": ("target-dependent", "absolute luminosity; no galaxy-independent scale"),
-    "sfh_snorm_burst_burst_sfr": ("target-dependent", "absolute SFR; scale set by the galaxy"),
-    "sfh_tsnorm_burst_burst_sfr": ("target-dependent", "as the snorm variant"),
     "sfh_exp_start_gyr": ("target-dependent", "onset capped by the age of the universe at z"),
     "sfh_dexp_start_gyr": ("target-dependent", "as sfh_exp_start_gyr; caught by test_bug_1031"),
     "sfh_const_start_gyr": ("target-dependent", "as sfh_exp_start_gyr"),
