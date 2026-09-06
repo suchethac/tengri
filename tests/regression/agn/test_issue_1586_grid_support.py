@@ -129,10 +129,10 @@ def test_live_fraction_measures_the_overlap():
     assert live_fraction((-jnp.inf, jnp.inf), (0.0, 10.0)) == 0.0
 
 
-def test_containment_tolerates_a_transcribed_bound():
+def test_containment_tolerates_a_hand_entered_bound():
     """A prior written to match the axis must not be reported as overrunning.
 
-    The SN12 log_edd axis ends at -1.958607314841775. A prior transcribed as
+    The SN12 log_edd axis ends at -1.958607314841775. A prior hand-entered as
     -1.95860731 overhangs by ~5e-9 — unreachable by any fit. Comparing exactly
     flagged it and then printed a self-contradictory "0% of its range lies
     outside", which is what this guards against.

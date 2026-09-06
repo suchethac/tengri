@@ -60,7 +60,7 @@ import numpy as np
 ROOT = Path(__file__).resolve().parent.parent
 PARAMS_FILE = ROOT / "src" / "tengri" / "components" / "agn" / "_params.py"
 
-#: Absolute tolerance on the lo/hi comparison. A prior transcribed from a grid
+#: Absolute tolerance on the lo/hi comparison. A prior hand-entered from a grid
 #: axis matches it exactly; the one case that does not (an inclination axis
 #: run through cos(deg2rad(...))) lands within a few ULP of an exact endpoint
 #: (e.g. cos(90 deg) = 6.123e-17, not bit-exact 0.0), which this tolerance

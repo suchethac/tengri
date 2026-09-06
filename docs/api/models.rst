@@ -140,8 +140,8 @@ Accretion disc, torus, BLR, NLR, and unified AGN models.
 AGN informative priors
 ~~~~~~~~~~~~~~~~~~~~~~~
 
-Optional composite log-prior penalty terms transcribed from AGNfitter-rX's
-``PRIORS_AGNfitter.py`` (energy balance, AGN-fraction luminosity-function
+Optional composite log-prior penalty terms implementing the same physics as
+AGNfitter-rX's ``PRIORS_AGNfitter.py`` (energy balance, AGN-fraction luminosity-function
 ties, mid-IR/UV/X-ray consistency). Reachable as ``tengri.agn.priors``
 (mirroring the dust-priors pattern above); wired into a fit via
 ``Fitter(..., extra_log_prior=...)``, see

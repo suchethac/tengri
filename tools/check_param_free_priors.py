@@ -159,7 +159,7 @@ def main() -> int:
             print(f"  {name}")
         print(
             "\nGive each a free_prior (its admissible range -- measured from the grid it\n"
-            "indexes where there is one, never transcribed from a description), or add it\n"
+            "indexes where there is one, never hand-entered from a description), or add it\n"
             "to REFUSED in this file with one of the four grounds and a reason."
         )
 

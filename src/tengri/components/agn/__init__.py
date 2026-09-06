@@ -115,8 +115,9 @@ from tengri.components.agn.unified import (
     unified_nlr_blr,
 )
 
-# Informative AGN prior penalty terms (transcribed from AGNfitter-rX's
-# PRIORS_AGNfitter.py); implementation lives in tengri.parameters.agn_priors,
+# Informative AGN prior penalty terms (implementing the same physics as
+# AGNfitter-rX's PRIORS_AGNfitter.py, validated against it); implementation
+# lives in tengri.parameters.agn_priors,
 # exposed here as ``tengri.agn.priors`` mirroring the
 # ``tengri.components.dust.priors`` (Narayanan+2018) pattern.
 from tengri.parameters import agn_priors as priors

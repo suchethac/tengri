@@ -2,12 +2,13 @@
 """Cross-validate tengri's AGN informative priors against AGNfitter-rX.
 
 Each of the eight functions in ``tengri.parameters.agn_priors`` (also
-reachable as ``tengri.agn.priors``) implements one branch of the informative
-prior AGNfitter-rX states in ``functions/PRIORS_AGNfitter.py`` (tag
-``AGNfitter-rX_v0.1``). This file writes those same branches out again
-independently, directly in numpy (not by importing tengri's implementation),
-and compares numeric output at >= 5 inputs per prior, including the
-branch/regime boundaries, with a tolerance of ``max|delta| < 1e-9``.
+reachable as ``tengri.agn.priors``) implements the same physics as one branch
+of AGNfitter-rX's ``functions/PRIORS_AGNfitter.py`` (tag ``AGNfitter-rX_v0.1``),
+which serves here as the validation oracle. This file independently
+reimplements the SAME upstream branches, directly in
+numpy (not by importing tengri's implementation), and compares numeric
+output at >= 5 inputs per prior, including the branch/regime boundaries,
+with a tolerance of ``max|delta| < 1e-9``.
 
 A previous implementation in this module (three differently-named functions,
 removed) had a contract test that compared its own formula to itself
@@ -53,12 +54,12 @@ _UP_REJECT = -9999.0
 
 
 def _up_gaussian(mu, sigma, par):
-    """Transcription of ``Gaussian_prior`` (PRIORS_AGNfitter.py:428-430)."""
+    """Independent reimplementation of ``Gaussian_prior`` (PRIORS_AGNfitter.py:428-430)."""
     return np.log(1.0 / (np.sqrt(2.0 * np.pi) * sigma)) - 0.5 * ((par - mu) / sigma) ** 2
 
 
 def _up_characteristic_mag(z):
-    """Transcription of ``characteristic_mag`` (PRIORS_AGNfitter.py:172,406)."""
+    """Independent reimplementation of ``characteristic_mag`` (PRIORS_AGNfitter.py:172,406)."""
     return -35.4 * (1.0 + z) ** 0.524 / (1.0 + (1.0 + z) ** 0.678)
 
 
@@ -338,15 +339,15 @@ def test_prior_ir_xrays_matches_upstream(nulnu_6um, offset):
 # this test (and of prior_midir_uv itself) fed the SAME nu*L_nu input to
 # both formulas but re-used upstream's L_nu-calibrated -27.30103 constant
 # directly on log10(nulnu_6um), silently off by log10(nu_6um) = 13.69897 in
-# x (e.g. nulnu_6um=1e44: x=16.7 instead of x=3.0). Fixed by writing the two
-# upstream call sites out on their OWN units and proving algebraic
+# x (e.g. nulnu_6um=1e44: x=16.7 instead of x=3.0). Fixed by reimplementing
+# upstream's two call sites on their OWN units and proving algebraic
 # equivalence below (13.69897 + 27.30103 = 41 exactly).
 # ===========================================================================
 _NU_6UM_HZ = 10.0**13.69897  # PRIORS_AGNfitter.py:306,331: "6 microns = 13.69897 log(Hz)"
 
 
 def _up_midir_uv_from_l_nu_6um(log_l2500a_bbmodel, l_nu_6um):
-    """Transcription of upstream's LITERAL formula (PRIORS_AGNfitter.py:333),
+    """Independent reimplementation of upstream's LITERAL formula (PRIORS_AGNfitter.py:333),
     which operates on tor_flux_6microns*lumfactor -- a SPECIFIC luminosity
     L_nu(6um) [erg/s/Hz], NOT nu*L_nu."""
     x = np.log10(l_nu_6um) - 27.30103
@@ -356,7 +357,7 @@ def _up_midir_uv_from_l_nu_6um(log_l2500a_bbmodel, l_nu_6um):
 
 
 def _up_midir_uv(log_l2500a_bbmodel, nulnu_6um):
-    """Transcription on tengri's public nu*L_nu [erg/s] input, converting to
+    """Independent reimplementation on tengri's public nu*L_nu [erg/s] input, converting to
     upstream's own L_nu-based x internally via the 6-micron frequency."""
     l_nu_6um = nulnu_6um / _NU_6UM_HZ
     return _up_midir_uv_from_l_nu_6um(log_l2500a_bbmodel, l_nu_6um)

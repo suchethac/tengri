@@ -7,7 +7,7 @@ Surface protected: the eight AGN prior functions in
 ``__init__.py``); JIT-compilability and gradient-smoothness of each; the
 documented error behavior of ``prior_energy_balance``'s ``mode`` argument.
 
-Exact numeric values against the upstream formulas they transcribe are
+Exact numeric values against the upstream formulas they implement are
 NOT this file's job -- that comparison (and the previous version of this
 file's failure to do it, comparing tengri's own formula to itself) lives in
 ``tests/crossval/test_agn_priors_vs_agnfitter.py``. Any numeric expectation

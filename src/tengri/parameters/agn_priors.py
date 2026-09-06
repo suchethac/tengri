@@ -1,5 +1,5 @@
 # SPDX-License-Identifier: BSD-3-Clause
-"""Informative AGN prior penalty terms, transcribed from AGNfitter-rX.
+"""Informative AGN prior penalty terms, implementing the same physics as AGNfitter-rX.
 
 These are the eight optional, composite log-prior penalty terms AGNfitter-rX
 adds on top of the per-parameter priors (Uniform/Gaussian/etc.) when the
@@ -9,8 +9,8 @@ the ``PRIORS()`` dispatcher). Unlike per-parameter priors, each of these links
 against the starburst-emitted luminosity), so they cannot be expressed as a
 bound on a single free parameter.
 
-Each function here is a pure, JIT/grad-safe JAX transcription of one upstream
-branch, taking the physical scalar(s) (luminosities/fluxes in erg/s or
+Each function here is a pure, JIT/grad-safe JAX implementation of one upstream
+branch's physics, taking the physical scalar(s) (luminosities/fluxes in erg/s or
 erg/s/Hz, magnitudes, redshift) that upstream's own local variables hold
 immediately before the prior arithmetic -- the array slicing, band selection,
 and de-reddening bookkeeping that upstream performs *to compute* those scalars
@@ -106,9 +106,9 @@ test returned nothing). They are removed rather than aliased.
 
 Implements the same AGN prior penalties as AGNfitter-rX (Martinez-Ramirez
 et al. 2024, A&A, 688, A46, arXiv:2405.12111,
-doi:10.1051/0004-6361/202449329); validated against faithful transcriptions
-of ``functions/PRIORS_AGNfitter.py`` in
-``tests/crossval/test_agn_priors_vs_agnfitter.py``.
+doi:10.1051/0004-6361/202449329); validated against independent
+reimplementations of ``functions/PRIORS_AGNfitter.py`` (the validation
+oracle) in ``tests/crossval/test_agn_priors_vs_agnfitter.py``.
 """
 
 from __future__ import annotations
@@ -157,7 +157,7 @@ def gaussian_log_prior(mu, sigma, par):
     **JIT-compatible**: yes. **Grad-compatible**: yes (smooth everywhere for
     ``sigma > 0``).
 
-    Faithful transcription of upstream's shared ``Gaussian_prior`` helper
+    Implements the same density as upstream's shared ``Gaussian_prior`` helper
     (``PRIORS_AGNfitter.py:428-430``), including the normalization term that
     every prior below needs for evidence (Z) comparisons across different
     sigma (see module docstring).
@@ -195,7 +195,7 @@ def _characteristic_uv_magnitude(redshift):
     -----
     **JIT-compatible**: yes. **Grad-compatible**: yes.
 
-    Transcription of the ``characteristic_mag`` expression that appears
+    Implements the same ``characteristic_mag`` expression that appears
     identically at ``PRIORS_AGNfitter.py:172`` (``prior_AGNfraction``) and
     ``:406`` (``prior_low_AGNfraction``). Upstream attributes this fit
     inconsistently -- the inline comment at line 172 cites "Parsa, Dunlop et
@@ -263,8 +263,8 @@ def prior_energy_balance(
     traced). **Grad-compatible**: yes, via ``jnp.where`` (both branches are
     always evaluated so no branch is ever pruned from the trace).
 
-    Faithful transcription of ``prior_energy_balance``
-    (``PRIORS_AGNfitter.py:78-106``). A prior implementation of this function
+    Implements the same prior as upstream's ``prior_energy_balance``
+    (``PRIORS_AGNfitter.py:78-106``), validated against it. A prior implementation of this function
     in tengri (removed by this rewrite) applied the restrictive-mode Gaussian
     in flexible mode too, and never hard-rejected -- see the module
     docstring's "Breaking change" note.
@@ -312,8 +312,8 @@ def prior_stellar_mass(ga):
     -----
     **JIT-compatible**: yes. **Grad-compatible**: yes.
 
-    Faithful transcription of ``prior_stellar_mass``
-    (``PRIORS_AGNfitter.py:201-210``): ``GA < 3`` upstream's comment reads
+    Implements the same prior as upstream's ``prior_stellar_mass``
+    (``PRIORS_AGNfitter.py:201-210``), validated against it: ``GA < 3`` upstream's comment reads
     corresponds to :math:`M_* < 10^9\,M_\odot`. Upstream sums this with
     :func:`prior_agn_fraction` under a single ``PRIOR_AGNfraction`` settings
     flag (``prior1 + prior2`` at ``PRIORS_AGNfitter.py:46-48``); tengri keeps
@@ -388,8 +388,8 @@ def prior_agn_fraction(bbb_flux_1500, gal_flux_1500, data_flux_1500, dlum, redsh
     -----
     **JIT-compatible**: yes. **Grad-compatible**: yes, via ``jnp.where``.
 
-    Faithful transcription of ``prior_AGNfraction``
-    (``PRIORS_AGNfitter.py:109-199``), specifically its branch tail
+    Implements the same prior as upstream's ``prior_AGNfraction``
+    (``PRIORS_AGNfitter.py:109-199``), validated against it, specifically its branch tail
     (:170-198`). This operates on a **rest-1500 A flux ratio** gated by a
     **redshift-dependent UV luminosity-function threshold**, not a bolometric
     AGN-fraction floor -- see the module docstring's "Breaking change" note
@@ -489,8 +489,8 @@ def prior_low_agn_fraction(bbb_flux_1500, gal_flux_1500, data_flux_1500, dlum, r
     -----
     **JIT-compatible**: yes. **Grad-compatible**: yes, via ``jnp.where``.
 
-    Faithful transcription of ``prior_low_AGNfraction``
-    (``PRIORS_AGNfitter.py:360-425``), specifically its branch tail
+    Implements the same prior as upstream's ``prior_low_AGNfraction``
+    (``PRIORS_AGNfitter.py:360-425``), validated against it, specifically its branch tail
     (:412-423). Distinct from :func:`prior_agn_fraction`: same mean (-2) in
     both regimes here (vs. -2/+2 there), a -3 mag threshold offset (vs. -1),
     different sigma values (0.5/2 vs. 2/2), and no hard-reject branch at all.
@@ -577,13 +577,13 @@ def prior_ir_syn_fraction(
     -----
     **JIT-compatible**: yes. **Grad-compatible**: yes, via ``jnp.where``.
 
-    Faithful transcription of ``prior_IR_SYNfraction``
-    (``PRIORS_AGNfitter.py:212-254``), specifically its arithmetic core
+    Implements the same prior as upstream's ``prior_IR_SYNfraction``
+    (``PRIORS_AGNfitter.py:212-254``), validated against it, specifically its arithmetic core
     (:237-254`); the caller-level early-return-0 when no radio/IR data is
     present (``:225-226,:232-233``) is a data-availability check that belongs
     to the adapter computing these inputs, not to this formula. Upstream's
     branch is undefined exactly AT the ``== 2`` boundary (neither ``if`` nor
-    ``elif`` fires, an upstream gap); this transcription resolves the tie to
+    ``elif`` fires, an upstream gap); this implementation resolves the tie to
     the ``< 2`` branch's complement (``>= 2``) rather than reproducing an
     undefined return.
 
@@ -637,8 +637,8 @@ def prior_uv_xrays(log_l2500a_data, log_l2kev_data):
     -----
     **JIT-compatible**: yes. **Grad-compatible**: yes.
 
-    Faithful transcription of ``prior_UV_xrays``
-    (``PRIORS_AGNfitter.py:256-299``), specifically the ``alpha_OX`` inverse
+    Implements the same prior as upstream's ``prior_UV_xrays``
+    (``PRIORS_AGNfitter.py:256-299``), validated against it, specifically the ``alpha_OX`` inverse
     relation and Gaussian penalty (:258-265,:291-297`). Upstream's own
     in-line docstring for ``alpha_OX`` attributes the (beta, gamma)
     coefficients to "Lusso&Risaliti +16 gives beta=[0.6-0.65], gamma=[7-8]"
@@ -762,8 +762,8 @@ def prior_ir_xrays(log_f2_10kev_data, nulnu_6um):
     -----
     **JIT-compatible**: yes. **Grad-compatible**: yes.
 
-    Faithful transcription of ``prior_IR_XRays``
-    (``PRIORS_AGNfitter.py:302-324``), specifically the Stern (2015) mid-IR--
+    Implements the same prior as upstream's ``prior_IR_XRays``
+    (``PRIORS_AGNfitter.py:302-324``), validated against it, specifically the Stern (2015) mid-IR--
     X-ray correlation and Gaussian penalty (:309-322`). ``x`` is computed by
     :func:`_x_from_nulnu_6um`, shared with :func:`prior_midir_uv` -- see that
     helper's Notes for why the two priors must agree on ``x`` for the same
@@ -822,8 +822,8 @@ def prior_midir_uv(log_l2500a_bbmodel, nulnu_6um):
     -----
     **JIT-compatible**: yes. **Grad-compatible**: yes.
 
-    Faithful transcription of ``prior_midIR_UV``
-    (``PRIORS_AGNfitter.py:327-357``), specifically the composite
+    Implements the same prior as upstream's ``prior_midIR_UV``
+    (``PRIORS_AGNfitter.py:327-357``), validated against it, specifically the composite
     correlation and Gaussian penalty (:333-355`). ``x`` is computed by
     :func:`_x_from_nulnu_6um`; upstream's own formula for this ``x``
     (``log10(tor_flux_6microns*lumfactor) - 27.30103``, a SPECIFIC luminosity

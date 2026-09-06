@@ -155,9 +155,9 @@ def grid_support(selector: str, name: str) -> dict[str, tuple[float, float]]:
 
 #: Slack on the containment test, relative to the grid's own width.
 #:
-#: A prior written to match a grid axis is normally transcribed to a handful of
+#: A prior written to match a grid axis is normally hand-entered to a handful of
 #: decimals, so it can overhang the true bound by a few ulp. Comparing exactly
-#: reports that transcription as a defect and then prints a self-contradictory
+#: reports that rounding as a defect and then prints a self-contradictory
 #: "0% of its range lies outside". A sliver this thin is not reachable by any
 #: fit, so treat it as contained (CLAUDE.md: compare floats with a tolerance,
 #: never ``==``).

@@ -6,7 +6,7 @@ way: two interpolation kernels, and a scalar-template guard that four of them
 had and five did not. They now share
 :func:`tengri.components._collapsed_lookup.interp_collapsed`.
 
-The reference implementations below are the **original bodies, transcribed
+The reference implementations below are the **original bodies, preserved
 verbatim**. They are deliberately not refactored to call the helper -- that
 would make this file assert that a thing equals itself. Every assertion is
 bit-exact (``array_equal``, not ``allclose``): this sits on the AGN and dust
@@ -33,7 +33,7 @@ from tengri.utils.interpolation import edges_for_grid
 pytestmark = pytest.mark.contract
 
 
-# ── the original bodies, transcribed ─────────────────────────────
+# ── the original bodies, preserved verbatim ─────────────────────────────
 
 
 def _original_triweight(grid_phot, axes, edges, free_axis_values):
