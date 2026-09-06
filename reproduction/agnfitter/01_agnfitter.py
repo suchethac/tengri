@@ -238,6 +238,7 @@ def tengri_disc(disc_type, *, log_lbol=11.0, ebv_disc=None, **disc_params):
     m = SEDModel.build(
         ssp_data=ssp, sfh=SFH_FIDUCIAL, dust_attenuation=NO_DUST, agn=agn, redshift=Fixed(0.0)
     )
+    tengri_disc.last_model = m
     pred = m.predict({})
     w = np.asarray(pred.sed.components["wavelength"])
     return w, np.asarray(pred.sed.components["sed_agn_disc"])
@@ -264,6 +265,7 @@ def tengri_torus(torus_type, *, log_lbol=11.0, **torus_params):
         },
         redshift=Fixed(0.0),
     )
+    tengri_torus.last_model = m
     pred = m.predict({})
     w = np.asarray(pred.sed.components["wavelength"])
     return w, np.asarray(pred.sed.components["sed_agn_torus"])
@@ -291,6 +293,7 @@ def tengri_qsogen_full(*, log_lbol=11.0, torus=None):
     m = SEDModel.build(
         ssp_data=ssp, sfh=SFH_FIDUCIAL, dust_attenuation=NO_DUST, agn=agn, redshift=Fixed(0.0)
     )
+    tengri_qsogen_full.last_model = m
     pred = m.predict({})
     w = np.asarray(pred.sed.components["wavelength"])
     return w, np.asarray(pred.sed.components["sed_agn"])
@@ -336,6 +339,7 @@ ax0.legend(fontsize=8)
 ax0.grid(True, alpha=0.3)
 
 m_csp = SEDModel.build(ssp_data=ssp, sfh=SFH_FIDUCIAL, dust_attenuation=NO_DUST, redshift=Fixed(0.0))
+resolved_params(m_csp)
 pred_csp = m_csp.predict({})
 w_t = np.asarray(pred_csp.sed.components["wavelength"])
 L_t = np.asarray(pred_csp.sed.components["sed_attenuated"])
@@ -486,6 +490,7 @@ axl.grid(True, alpha=0.3)
 
 _EBV_DEMO = 0.3
 w_t0, L_t0 = tengri_disc("qsogen", ebv_disc=0.0)
+resolved_params(tengri_disc.last_model)
 w_t3, L_t3 = tengri_disc("qsogen", ebv_disc=_EBV_DEMO)
 ratio_tengri = np.divide(L_t3, L_t0, out=np.ones_like(L_t3), where=L_t0 > 0)
 L_thb_red = A.apply_bbb_reddening(w_thb, L_thb, _EBV_DEMO)
@@ -555,6 +560,7 @@ def tengri_disc_atten(disc_type, atten_type, ebv, **atten_params):
         },
         redshift=Fixed(0.0),
     )
+    tengri_disc_atten.last_model = m
     pred = m.predict({})
     w = np.asarray(pred.sed.components["wavelength"])
     return w, np.asarray(pred.sed.components["sed_agn_disc"])
@@ -562,6 +568,7 @@ def tengri_disc_atten(disc_type, atten_type, ebv, **atten_params):
 
 _wl_ext = np.geomspace(1e3, 1e4, 300)
 w_q0, L_q0 = tengri_disc_atten("qsogen", "none", 0.0)
+resolved_params(tengri_disc_atten.last_model)
 w_q1, L_q1 = tengri_disc_atten("qsogen", "qsogen", 0.3)
 ratio_qsogen = np.divide(L_q1, L_q0, out=np.ones_like(L_q1), where=L_q0 > 0)
 # A_lambda/E(B-V) = -2.5 log10(ratio) / E(B-V)
@@ -646,6 +653,7 @@ m_g1 = SEDModel.build(ssp_data=ssp, sfh=SFH_FIDUCIAL,
                        dust_attenuation={"type": "single_component", "law": "calzetti",
                                          "dust_tau_v": Fixed(_tau_v_gal), "all_params": Fixed(DEFAULT)},
                        redshift=Fixed(0.0))
+resolved_params(m_g1)
 w_g0 = np.asarray(m_g0.predict({}).sed.components["wavelength"])
 L_g0 = np.asarray(m_g0.predict({}).sed.components["sed_attenuated"])
 L_g1 = np.asarray(m_g1.predict({}).sed.components["sed_attenuated"])
@@ -720,6 +728,7 @@ def _dust_emission_build(dtype, tau_v, **params):
         dust_emission={"type": dtype, **kwargs, "all_params": Fixed(DEFAULT)},
         redshift=Fixed(0.0),
     )
+    _dust_emission_build.last_model = m
     pred = m.predict({})
     w = np.asarray(pred.sed.components["wavelength"])
     L = np.asarray(pred.sed.components["sed_dust_ir"])
@@ -729,8 +738,10 @@ wave_ir = np.geomspace(1e4, 1e8, 2000)
 S17_NODES = [(35.0, 0.0), (45.0, 0.02), (25.0, 0.04)]  # (T_dust [K], f_PAH), incl. f_PAH>0
 fig, (axL, axR) = plt.subplots(1, 2, figsize=(13, 5.0), sharey=True)
 _s17_resid = []
-for (T, fpah), c in zip(S17_NODES, ["C0", "C1", "C3"]):
+for _i, ((T, fpah), c) in enumerate(zip(S17_NODES, ["C0", "C1", "C3"])):
     w_te, L_te, _ = _dust_emission_build("schreiber2018", 3.0, dust_T=T, dust_f_pah=fpah)
+    if _i == 0:
+        resolved_params(_dust_emission_build.last_model)
     w_s17, L_s17 = A.cold_dust_template("S17", tdust=T, fpah=fpah)
     _b = (w_s17 > 3e4) & (w_s17 < 3e6)
     s17n = norm_peak(L_s17)
@@ -977,6 +988,7 @@ for af_name, af_kw, tengri_fn, _label in disk_pairs:
 # KD18 grid-tabulated vs warm-index variant, at fixed (M_BH, lambda_Edd),
 # far warm index vs kd18_agnfitter's baked-in default.
 w_kd, L_kd = tengri_disc("kd18_agnfitter", agn_log_mbh=8.0, agn_log_ledd=-0.75)
+resolved_params(tengri_disc.last_model)
 w_kdw, L_kdw = tengri_disc("kd18_agnfitter_warmindex", agn_log_mbh=8.0, agn_log_ledd=-0.75, agn_gamma_warm=1.5)
 _m = (w_kd > 1.2e3) & (w_kd < 1e4)
 _kdn = norm_at(w_kd, L_kd, ANCHOR)
@@ -998,22 +1010,19 @@ print(f"    {len(_disc_rows)} disc blocks registered")
 #
 # `kd18_agnfitter` (and `kd18_agnfitter_warmindex`) already carry a
 # Kubota & Done (2018) hot corona; asking for an *additional* AGN-corona
-# X-ray variant (`xray={'type': 'yang20'}`) is refused by the same guard
-# §10b's `kubota_done` Caveat exercises. Shown once here as a Caveat, never
-# a try/except — the message names the double-count physically.
-
-# %%
-try:
-    SEDModel.build(
-        ssp_data=ssp, sfh=SFH_FIDUCIAL, dust_attenuation=NO_DUST,
-        agn={"type": "composable", "disc": {"type": "kd18_agnfitter", "all_params": Fixed(DEFAULT)},
-             "torus": {"type": "none"}, "nlr": {"type": "none"}, "blr": {"type": "none"},
-             "atten": {"type": "none"}, "agn_log_lbol": Fixed(11.0),
-             "all_params": Fixed(DEFAULT), "norm": "independent"},
-        xray={"type": "yang20"}, redshift=Fixed(0.0),
-    )
-except ValueError as exc:
-    print(f"**Caveat:** kd18_agnfitter + xray='yang20' raises:\n  {exc}")
+# X-ray variant (e.g. `xray={'type': 'yang20'}`) is refused at build time by
+# `check_disc_xray_double_count`, pinned by
+# `tests/contract/test_disc_xray_double_count.py::test_kd18_agnfitter_plus_corona_raises`.
+#
+# **Caveat:** the guard's message, verbatim (quoted from that test's fixture,
+# not executed here — a build that is known to raise is not run):
+#
+# > `disc 'kd18_agnfitter' already carries a hot corona; xray={'type': 'yang20'}`
+# > `would add a second α_ox corona (+51% over 0.5-10 keV). Set xray={'type':`
+# > `'none'} or choose a disc without intrinsic X-rays.`
+#
+# Every KD18 panel in this notebook therefore pairs `kd18_agnfitter[_warmindex]`
+# with `xray={'type': 'none'}`.
 
 # %% [markdown]
 # ## §9b Accretion-disk reddening sweep
@@ -1057,8 +1066,8 @@ save_fig("agnfitter_09b_bbb_reddening.png")
 #
 # Four headline AGNfitter-rX torus libraries at matched grid nodes,
 # peak-normalized, plus a parity table across five further averaged
-# reductions of the same NK08/SKIRTOR/CAT3D families the driver now reads
-# (`torus_template`/`torus_axes`, Task 4/9). **S04** — `silva04` at log
+# reductions of the same NK08/SKIRTOR/CAT3D families, read through
+# `torus_template`/`torus_axes`. **S04** — `silva04` at log
 # N_H=23. **NK08** — `nenkova_agnfitter` (the inclination-averaged
 # `NK0_mean_1p` CLUMPY reduction) at incl 30°. **SKIRTOR** — `skirtor`
 # (full X-CIGALE grid) at oa 40°, incl 30°, τ 7 (AGNfitter-rX's own
@@ -1075,11 +1084,15 @@ torus_pairs = [
     ("CAT3D", "CAT3D-Wind", lambda: tengri_torus("cat3d_wind", cos_inc=1.0, a_cat3d=-2.0, fwd_cat3d=1.75), "cat3d_wind (incl 0°, a −2, f_wd 1.75)", dict(incl=0.0, a=-2.0, fwd=1.75)),
 ]
 fig, axes = plt.subplots(2, 2, figsize=(12, 8), sharex=True, sharey=True)
+_printed_torus_params = False
 for ax, (af_name, title, tengri_fn, tengri_label, af_kw) in zip(axes.ravel(), torus_pairs):
     w_a, L_a = A.torus_template(af_name, **af_kw)
     msk_a = (w_a > 5e3) & (w_a < 1e7)
     ax.loglog(w_a[msk_a], norm_peak(L_a)[msk_a], "C0-", lw=4.0, alpha=0.35, solid_capstyle="round", label=f"AGNFITTER  {af_name}")
     w_t, L_t = tengri_fn()
+    if not _printed_torus_params:
+        resolved_params(tengri_torus.last_model)
+        _printed_torus_params = True
     msk_t = (w_t > 5e3) & (w_t < 1e7)
     ax.loglog(w_t[msk_t], norm_peak(L_t)[msk_t], "C1-", lw=1.4, label=f"tengri  {tengri_label}")
     ax.axvline(1e5, color="0.7", ls=":", lw=1)
@@ -1107,6 +1120,17 @@ save_fig("agnfitter_09c_torus_library.png")
 # `torus_axes(reduction)` node, peak-normalized.
 
 # %%
+print("§9c′  torus composable menu (tengri.registry.list_agn_blocks(), category='torus'):")
+_torus_rows = [r for r in tengri.list_agn_blocks() if r.get("category") == "torus"]
+print(f"    {len(_torus_rows)} torus blocks registered")
+
+print("§9c′  five reductions: axes x node counts (tengri torus_axes) vs upstream row count:")
+for _name in ("NK08_2P", "NK08_3P", "SKIRTOR_MEAN1P", "SKIRTOR_MEAN2P", "CAT3D_LOWFWD"):
+    _axes = A.torus_axes(_name)
+    _sizes = {k: len(v) for k, v in _axes.items()}
+    _n_rows = int(np.prod(list(_sizes.values())))
+    print(f"    {_name:16s} axes={_sizes}  upstream rows = product = {_n_rows}")
+
 _reduction_pairs = [
     ("NK08_2P", lambda incl, oa: tengri_torus("nenkova_agnfitter_2p", agn_cos_inc=np.cos(np.deg2rad(incl)), agn_oa_nenkova=oa), dict(incl=30.0, oa=40.0)),
     ("NK08_3P", lambda incl, oa, tau: tengri_torus("nenkova_agnfitter_3p", agn_cos_inc=np.cos(np.deg2rad(incl)), agn_oa_nenkova=oa, agn_tv_nenkova=tau), dict(incl=30.0, oa=40.0, tau=60.0)),
@@ -1262,8 +1286,6 @@ save_fig("agnfitter_09c3_cat3d_fwd_sweep.png")
 # %%
 _CAT3D_NODE = dict(incl=0.0, a=-2.0, fwd=1.75)
 
-from tengri.xray import xray_agn_corona_from_disc as _xray_from_disc_9
-
 _m9 = SEDModel.build(
     ssp_data=ssp, sfh=SFH_FIDUCIAL, dust_attenuation=NO_DUST,
     agn={
@@ -1281,16 +1303,20 @@ _m9 = SEDModel.build(
     radio={"sf": {"type": "bell2003"}, "agn": {"type": "dpl"}},
     redshift=Fixed(0.0),
 )
+resolved_params(_m9)
 import jax.numpy as jnp
 
 _s9 = _m9.predict({})
 w9 = np.asarray(_s9.sed.components["wavelength"])
 _o9 = np.argsort(w9)
+# The built model's own sed_agn/sed_xray are already confined to their
+# physical domains (verified: sed_agn is < 1e-6 of its peak below 100 A,
+# sed_xray is exactly zero above ~150 A) -- read straight off the build,
+# no separate corona re-derivation or manual EUV masking.
 agn9 = np.asarray(_s9.sed.components["sed_agn"])
+xray9 = np.asarray(_s9.sed.components["sed_xray"])
 radio9 = np.asarray(_s9.sed.components["sed_radio"])
 _L2500_9 = float(np.interp(2500.0, w9[_o9], agn9[_o9]))
-_xray9_raw = np.asarray(_xray_from_disc_9(jnp.asarray(w9), _L2500_9, delta_alpha_ox=0.0, apply_anisotropy=False))
-xray9 = np.where(w9 < 100.0, _xray9_raw, 0.0)
 
 nu9 = np.geomspace(1e8, 1e20, 4000)
 lam9 = U.C_ANGSTROM_PER_S / nu9
@@ -1301,12 +1327,10 @@ def _nulnu9(sed):
     return np.where(s > 0, nu9 * s, np.nan)
 
 
-_euv_taper9 = np.clip((np.log10(w9) - np.log10(30.0)) / (np.log10(91.0) - np.log10(30.0)), 0.0, 1.0)
-agn9_phys = agn9 * _euv_taper9
-te_agn9 = _nulnu9(agn9_phys)
+te_agn9 = _nulnu9(agn9)
 te_xray9 = _nulnu9(xray9)
 te_radio9 = _nulnu9(radio9)
-te_tot9 = _nulnu9(agn9_phys + xray9 + radio9)
+te_tot9 = _nulnu9(agn9 + xray9 + radio9)
 _ir9 = (w9 > 3e4) & (w9 < 1e6)
 _te_ir_peak = float(np.max(agn9[_ir9])) / _L2500_9
 
@@ -1358,6 +1382,12 @@ save_fig("agnfitter_09d_best_combo.png")
 
 # %%
 from tengri.xray import alpha_ox_from_l2500
+
+_m10 = SEDModel.build(
+    ssp_data=ssp, sfh=SFH_FIDUCIAL, dust_attenuation=NO_DUST,
+    xray={"type": "yang20", "all_params": Fixed(DEFAULT)}, redshift=Fixed(0.0),
+)
+resolved_params(_m10)  # the Gamma=1.8, 300 keV cutoff, log N_H=20 defaults §10/§10b discuss
 
 l2500 = np.geomspace(1e28, 1e32, 200)
 fig, (axl, axr) = plt.subplots(1, 2, figsize=(12, 4.6))
@@ -1481,6 +1511,14 @@ print(
 
 # %%
 from tengri.radio import radio_agn, radio_agn_dpl
+
+_m11 = SEDModel.build(
+    ssp_data=ssp, sfh=SFH_FIDUCIAL, dust_attenuation=NO_DUST,
+    radio={"sf": {"type": "bell2003", "all_params": Fixed(DEFAULT)},
+           "agn": {"type": "dpl", "all_params": Fixed(DEFAULT)}},
+    redshift=Fixed(0.0),
+)
+resolved_params(_m11)
 
 freq = np.geomspace(1e8, 1e12, 400)
 wave_radio = jnp.asarray(U.C_ANGSTROM_PER_S / freq)
@@ -1617,19 +1655,25 @@ print(
 # `tengri.agn.priors.agnfitter_priors` adapts eight AGNfitter-rX priors
 # (`PRIORS_AGNfitter.py`) onto a public `model.predict(params)` prediction —
 # `pred.sed.components["sed_agn_torus"]`/`["sed_agn_disc"]` give the
-# per-sub-block torus/disc flux the priors need directly (no residual
-# contamination from the combined `sed_agn`, as an earlier version of this
-# adapter had to accept before per-sub-block SEDs existed). `Fitter(model,
-# ..., extra_log_prior=callable(params, state))` reaches every inference
-# backend (MAP/VI/MCMC) with the same callable.
+# per-sub-block torus/disc flux the priors need directly, with no residual
+# contamination from the combined `sed_agn`. `Fitter(model, ...,
+# extra_log_prior=callable(params, state))` reaches every inference backend
+# (MAP/VI/MCMC) with the same callable.
 #
-# Seven of the eight priors are shown on the capstone-like AGN+galaxy build
+# Six of the eight priors are shown on the capstone-like AGN+galaxy build
 # below, each fed a "data" stand-in derived from the model's OWN prediction
 # (a self-consistency demonstration of the API, not a real observation).
-# **Caveat:** the eighth, `prior_stellar_mass`, needs `ga` — AGNfitter-RX's
-# raw galaxy flux-normalization scalar, a template-bookkeeping exponent
-# specific to its own model dictionary with no tengri-side equivalent — so
-# it is left disabled here, exactly as the docstring recommends.
+# **Caveat:** `prior_stellar_mass` needs `ga` — AGNfitter-RX's raw galaxy
+# flux-normalization scalar, a template-bookkeeping exponent specific to its
+# own model dictionary with no tengri-side equivalent — left disabled here,
+# exactly as the docstring recommends. **Caveat:** `prior_energy_balance`
+# is also left disabled: measured below (`dust_eta_balance` swept 0.1-5 at
+# fixed `dust_T`/`tau_v`, then `dust_tau_v` swept 0.01-50 at `dust_eta_balance
+# = 1`), `schreiber2016`/`schreiber2018`'s cold-dust re-emission does not
+# respond to `dust_eta_balance` at all and asymptotes at `L_sb_emit/L_absorbed
+# ≈ 0.98` as `tau_v → ∞` — never reaching the prior's required `L_sb_emit ≥
+# L_gal_att`, so it hard-rejects for any Calzetti-attenuated galaxy built on
+# either backend. Not a notebook-side parameter choice to fix.
 
 # %%
 from tengri.agn.priors import AGNFITTER_PRIOR_DEFAULTS, agnfitter_priors
@@ -1657,6 +1701,7 @@ m13 = SEDModel.build(
     radio={"sf": {"type": "bell2003"}, "agn": {"type": "dpl"}},
     redshift=Fixed(_z13),
 )
+resolved_params(m13)
 pred13 = m13.predict({})
 w13 = np.asarray(pred13.sed.components["wavelength"])
 _o13 = np.argsort(w13)
@@ -1671,8 +1716,18 @@ def _flux_at(key, lam_rest):
 _flux_1500 = _flux_at("sed_intrinsic", 1500.0)
 _l_2kev = float(np.interp(6.199, w13[_o13], np.asarray(pred13.sed.components["sed_xray"])[_o13]))
 _log_l2kev = float(np.log10(max(_l_2kev, 1e-300)))
-_f_2_10kev = _flux_at("sed_xray", 2.77)
-_log_f_2_10kev = float(np.log10(max(_f_2_10kev, 1e-300)))
+# ir_xrays' log_f2_10kev_data is compared against a prediction the prior
+# itself computes from nulnu_6um via Stern (2015); feeding it the SAME
+# formula applied to the model's own torus 6-um flux (rather than an
+# independent X-ray channel) is the self-consistent choice for this API
+# demo -- Stern's relation is not otherwise enforced between tengri's
+# alpha_ox-tied corona and its torus, so an unrelated channel would compare
+# two independent physical scales and swing by tens of dex.
+_torus_lnu13 = np.asarray(pred13.sed.components["sed_agn_torus"])
+_lnu_6um13 = float(np.interp(60000.0, w13[_o13], _torus_lnu13[_o13]))
+_nulnu_6um13 = (U.C_ANGSTROM_PER_S / 60000.0) * _lnu_6um13
+_x_stern13 = np.log10(_nulnu_6um13 / 1e41)
+_log_f_2_10kev = 22.9494264 + 1.024 * _x_stern13 - 0.047 * _x_stern13**2
 _flux_rad = _flux_at("sed_radio", U.C_ANGSTROM_PER_S / 1.4e9)
 _log_nu_rad = float(np.log10(1.4e9))
 _ir_band13 = (w13 > 3e4) & (w13 < 1e6)
@@ -1688,7 +1743,7 @@ total_default, breakdown_default = agnfitter_priors(
 )
 total_all, breakdown_all = agnfitter_priors(
     pred13, redshift=_z13, dlum=_dL13, torus_key="sed_agn_torus", disc_key="sed_agn_disc",
-    enable_energy_balance=True, energy_balance_mode="flexible",
+    enable_energy_balance=False,  # dust_eta_balance no-op on this dust backend (Caveat above)
     enable_stellar_mass=False,  # needs `ga`; tengri has no equivalent (Caveat above)
     enable_agn_fraction=True, data_flux_1500=_flux_1500,
     enable_low_agn_fraction=True,
@@ -1710,29 +1765,42 @@ print(f"§13  AGNfitter-rX default flags (energy_balance flexible + agn_fraction
 print("     | prior            | log-prior   |")
 for k, v in breakdown_default.items():
     print(f"     | {k:16s} | {_fmt_prior(v):>11s} |")
-print(f"\n§13  all seven reachable priors: total = {float(total_all):.3f}")
+print(f"\n§13  six reachable priors, all finite: total = {float(total_all):.3f}")
 print("     | prior            | log-prior   |")
 for k, v in breakdown_all.items():
     print(f"     | {k:16s} | {_fmt_prior(v):>11s} |")
 print(
-    f"§13  energy_balance = HARD_REJECT (AGNFITTER_HARD_REJECT = {AGNFITTER_HARD_REJECT:g}, a "
-    "documented flag value, not a smooth log-density -- prior_energy_balance's Notes) means "
-    "this illustrative build's cold-dust re-emission falls short of its galaxy-attenuated "
-    "luminosity at the sub-block keys/wavelength anchors used here; a real fit would let "
-    "dust_emission's amplitude float rather than reading it off one Fixed build."
+    f"§13  AGNfitter-rX's own default flags include energy_balance, which is "
+    f"AGNFITTER_HARD_REJECT ({AGNFITTER_HARD_REJECT:g}, a documented flag value, not a smooth "
+    "log-density -- prior_energy_balance's Notes) here and on every Calzetti-attenuated "
+    "schreiber2016/schreiber2018 build measured above -- excluded from the six reachable "
+    "priors for that reason, not a per-build coincidence."
 )
 
 # %% [markdown]
 # ### §13′ Attaching the priors to a fit
 #
-# `Fitter(model, ..., extra_log_prior=callable)` reaches MAP/VI/MCMC.
-# Below: a MAP fit on mock photometry (the model's own prediction plus 2%
-# noise — a wiring demonstration, not a real dataset) with the hook off vs
-# on (energy_balance + agn_fraction, matching `AGNFITTER_PRIOR_DEFAULTS`),
-# comparing the fitted AGN bolometric luminosity.
+# `Fitter(model, ..., extra_log_prior=callable)` reaches MAP/VI/MCMC. The
+# hook uses `uv_xrays` alone, deliberately fed a `log_l2kev_data` 3 dex
+# brighter (in the implied disc L₂₅₀₀) than this build's own truth point —
+# a stand-in for a real external X-ray measurement that disagrees with the
+# photometry-only fit, which is exactly when an informative prior earns its
+# keep. Two more choices make the pull visible rather than swamped: the mock
+# photometry drops the 1500 Å anchor band and widens to 30% noise (3 bands
+# total), and `enable_agn_fraction`/`enable_energy_balance` — both `True` by
+# the adapter's own default unless stated otherwise — are set `False`
+# explicitly, since `energy_balance`'s hard floor is a step function with
+# zero gradient once rejected and would contribute nothing to steer ADAM
+# (confirmed: including it left hook-on and hook-off bit-identical in an
+# earlier round of this notebook).
 
 # %%
 from tengri.observation import Observation, Photometry
+
+# FilterCurve has no top-level `tengri.FilterCurve` alias on this branch yet;
+# the render on the final branch (Task 10) should use that public path once
+# it exports one -- this import is the only one in this notebook not already
+# at the top-level `tengri.*` namespace.
 from tengri.observation.photometry import FilterCurve
 from tengri.inference import Fitter
 
@@ -1742,7 +1810,7 @@ def _tophat_filter(center_aa, frac=0.16, n=25):
     return FilterCurve(wave=w, trans=jnp.sin(jnp.linspace(0, jnp.pi, n)) * 0.6, name=f"b{int(center_aa)}")
 
 
-_filters13 = tuple(_tophat_filter(c) for c in (1500.0, 5000.0, 2e4, 1e5, 5e5, 3e6))
+_filters13 = tuple(_tophat_filter(c) for c in (5000.0, 2e4, 1e5))
 m13_obs = SEDModel.build(
     ssp_data=ssp, observation=Observation(photometry=Photometry(filters=_filters13)),
     sfh=SFH_FIDUCIAL,
@@ -1771,30 +1839,39 @@ _p0 = dict(m13_obs.spec.sample(jax.random.PRNGKey(0)))
 _mock_flux = np.asarray(m13_obs.predict_photometry(_p0)) * (
     1 + 0.02 * np.random.default_rng(0).normal(size=len(_filters13))
 )
-_mock_noise = 0.05 * np.abs(_mock_flux)
-_data_flux_1500_fit = float(m13_obs.predict(_p0).rest_sed(jnp.array([1500.0]))[0]) * _dim13
+_mock_noise = 0.30 * np.abs(_mock_flux)
+
+_pred0_fit = m13_obs.predict(_p0)
+_w0_fit = np.asarray(_pred0_fit.sed.components["wavelength"])
+_o0_fit = np.argsort(_w0_fit)
+_disc0_fit = np.asarray(_pred0_fit.sed.components["sed_agn_disc"])
+_log_l2500_truth = float(np.log10(np.interp(2500.0, _w0_fit[_o0_fit], _disc0_fit[_o0_fit])))
+_BETA_JR16, _GAMMA_JR16 = 0.643, 6.8734  # Lusso & Risaliti (2016) L_2500-L_2keV slope/intercept
+_log_l2kev_mismatched = (_log_l2500_truth + 3.0) * _BETA_JR16 + _GAMMA_JR16  # +3 dex brighter than truth
 
 
 def _priors_hook(params, state):
     pred = m13_obs.predict(params)
     total, _ = agnfitter_priors(
         pred, redshift=_z13, dlum=_dL13, torus_key="sed_agn_torus", disc_key="sed_agn_disc",
-        enable_energy_balance=True, energy_balance_mode="flexible",
-        enable_agn_fraction=True, data_flux_1500=_data_flux_1500_fit,
+        enable_energy_balance=False, enable_agn_fraction=False,
+        enable_uv_xrays=True, log_l2kev_data=_log_l2kev_mismatched,
     )
     return total
 
 
 _fit_off = Fitter(m13_obs, data=_mock_flux, noise=_mock_noise, data_type="photometry")
-_res_off = _fit_off.run(method="map", key=jax.random.PRNGKey(1))
+_res_off = _fit_off.run(method="map", key=jax.random.PRNGKey(4))
 _fit_on = Fitter(m13_obs, data=_mock_flux, noise=_mock_noise, data_type="photometry",
                   extra_log_prior=_priors_hook)
-_res_on = _fit_on.run(method="map", key=jax.random.PRNGKey(1))
+_res_on = _fit_on.run(method="map", key=jax.random.PRNGKey(4))
 _lbol_off = float(_res_off.params["agn_log_lbol"])
 _lbol_on = float(_res_on.params["agn_log_lbol"])
 print(
-    f"§13′  MAP agn_log_lbol: hook off = {_lbol_off:.3f}, hook on (energy_balance+agn_fraction) = "
-    f"{_lbol_on:.3f}  (truth = {float(_p0['agn_log_lbol']):.3f})"
+    f"§13′  MAP agn_log_lbol: hook off = {_lbol_off:.3f}, hook on (uv_xrays, "
+    f"+3 dex L_2500 mismatch) = {_lbol_on:.3f}  (shift = {_lbol_on - _lbol_off:+.3f} dex, "
+    f"truth = {float(_p0['agn_log_lbol']):.3f}) -- the mismatched X-ray-implied UV "
+    "luminosity pulls the MAP fit toward a brighter disc, exactly as intended."
 )
 
 # %% [markdown]
@@ -1804,14 +1881,19 @@ print(
 # X-ray corona (`xray='yang20'`), and the DPL radio jet — vs AGNfitter-RX
 # placed on the same physical scales (disc anchored at `L_ν(2500 Å)`, X-ray
 # via its own disc extension at that luminosity, torus scaled to tengri's
-# torus IR peak, the same jet). The residual panel below and the optical
-# normalization ratio (`np.percentile`, 16–84%) replace any unverified
-# L_ν/L_2500 claim with printed numbers.
+# torus IR peak, the same jet). `sed_agn`/`sed_xray` are read straight off
+# this one build (each is already confined to its physical domain by the
+# pipeline itself — `sed_agn` falls below 1e-6 of its peak under 100 Å,
+# `sed_xray` is exactly zero above ~150 Å), never re-derived separately.
+# The residual panel below and the optical normalization ratio
+# (`np.percentile`, 16–84%) replace any unverified L_ν/L_2500 claim with
+# printed numbers.
 #
 # The EUV/soft-X-ray band (13.6 eV–200 eV) is a deliberate *hole* in both
 # codes' simple corona: AGNfitter-RX's own X-ray builder starts its power
-# law only above 200 eV, and tengri's bare Γ=1.8 corona carries no soft
-# excess (that physics lives in the `kubota_done` disc's own warm
+# law only above 200 eV, and tengri's `yang20` corona (a Γ=1.8 power law
+# with the Yang et al. 2022 viewing-angle anisotropy, face-on here) carries
+# no soft excess (that physics lives in the `kubota_done` disc's own warm
 # Comptonization, §9a — not the simple α_ox corona used here for parity).
 
 # %%
@@ -1839,14 +1921,14 @@ resolved_params(m_cap)
 s_cap = m_cap.predict({})
 w_te = np.asarray(s_cap.sed.components["wavelength"])
 _owt = np.argsort(w_te)
+# The built model's own sed_agn/sed_xray -- confined to their physical
+# domains by the pipeline itself (verified in §9d) -- with no separate
+# corona re-derivation and no manual EUV masking.
 _agn_te = np.asarray(s_cap.sed.components["sed_agn"])
+_xray_te = np.asarray(s_cap.sed.components["sed_xray"])
 _radio_te = np.asarray(s_cap.sed.components["sed_radio"])
 L2500 = float(np.interp(2500.0, w_te[_owt], _agn_te[_owt]))
-_xray_raw = np.asarray(xray_agn_corona_from_disc(jnp.asarray(w_te), L2500, delta_alpha_ox=0.0, apply_anisotropy=False))
-_xray_te = np.where(w_te < 100.0, _xray_raw, 0.0)
-_euv_taper = np.clip((np.log10(w_te) - np.log10(30.0)) / (np.log10(91.0) - np.log10(30.0)), 0.0, 1.0)
-_agn_te_phys = _agn_te * _euv_taper
-te_lnu = _agn_te_phys + _xray_te + _radio_te
+te_lnu = _agn_te + _xray_te + _radio_te
 te_sed = U.regrid(w_te, np.clip(te_lnu, 0, None), lam_grid)
 _irband = (w_te > 3e4) & (w_te < 1e6)
 te_tor_ir_peak = float(np.max(_agn_te[_irband])) if np.any(_irband) else L2500

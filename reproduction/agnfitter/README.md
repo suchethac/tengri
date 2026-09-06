@@ -41,7 +41,13 @@ to `data/` (`agnfitter_bbb_reference.h5`, `agnfitter_torus_reference.h5`,
 `agnfitter_cold_dust_reference.h5`), so the notebook runs on a clean checkout
 with no AGNfitter clone. The clone is needed only to *regenerate* those
 references (`scripts/build_agnfitter_bbb_reference.py`,
-`scripts/build_agnfitter_s17_reference.py`, and the per-model grid builders):
+`scripts/build_agnfitter_s17_reference.py`, and the per-model grid builders).
+
+The BC03 + Chabrier SSP grid tengri's own side needs is **not** required to
+pre-exist: the notebook's Setup cell calls
+`tengri.download_ssp("bc03_pdva_stelib_chabrier", dest=...)`, which fetches
+it on first run and is a no-op on every run after (the file is cached
+alongside the driver).
 
 The build scripts fetch what they need straight from the pinned
 `AGNfitter-rX_v0.1` tag (cached under `~/.cache/tengri_agnfitter`), so a
