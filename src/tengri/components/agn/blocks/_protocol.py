@@ -84,6 +84,7 @@ __all__ = [
     "BLOCK_CATEGORIES",
     "BlockCategory",
     "collect_block_templates",
+    "disc_emits_xray",
     "register_agn_block",
     "resolve_agn_block",
 ]
@@ -142,6 +143,7 @@ def register_agn_block(
     status: str = "production",
     short_doc: str = "",
     template_loader: Callable[[], object] | None = None,
+    emits_xray: bool = False,
 ) -> Callable:
     """Decorator factory: register a block implementation in
     :data:`AGN_BLOCKS`.
@@ -169,6 +171,14 @@ def register_agn_block(
         JIT trace and pass it to the block as a traced argument. Blocks with
         no template library leave this ``None`` (default). The block must
         then accept the library via its ``templates`` keyword.
+    emits_xray : bool, optional
+        ``category="disc"`` only: whether this disc template already carries
+        its own intrinsic X-ray emission (a hot corona baked into the SED,
+        rather than a separate additive ``xray`` group component). Default
+        ``False``. Read by
+        ``check_disc_xray_double_count``,
+        which refuses to compose such a disc with an AGN-corona ``xray``
+        variant (double-counted corona).
 
     Returns
     -------
@@ -207,12 +217,35 @@ def register_agn_block(
             "citation": citation,
             "status": status,
             "short_doc": short_doc,
+            "emits_xray": emits_xray,
         }
         if template_loader is not None:
             AGN_BLOCK_TEMPLATE_LOADERS[(category, name)] = template_loader
         return fn
 
     return decorator
+
+
+def disc_emits_xray(name: str) -> bool:
+    """Whether a registered disc block's template carries its own hot corona.
+
+    Parameters
+    ----------
+    name : str
+        Disc block name, e.g. ``"kubota_done"``, ``"kd18_agnfitter"``.
+
+    Returns
+    -------
+    bool
+        ``True`` if the disc was registered with ``emits_xray=True``.
+        ``False`` for an unregistered name, matching the default a disc
+        declares by omitting the keyword.
+
+    Notes
+    -----
+    **JIT-compatible**: not applicable -- composition-time only.
+    """
+    return bool(AGN_BLOCK_META.get(("disc", name), {}).get("emits_xray", False))
 
 
 def collect_block_templates(recipe: dict[str, str]) -> dict[str, object]:

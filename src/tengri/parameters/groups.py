@@ -2507,6 +2507,15 @@ def _translate_structural(groups: dict) -> dict:
             if not is_sentinel_or_token:
                 result[key] = val
 
+    # Both the selected AGN disc block and the selected xray variant are now
+    # known: refuse a disc that already carries a hot corona (M-D) composed
+    # with an xray group that would add a second one (#1586-adjacent, but for
+    # X-ray rather than a grid clip). One call, single source of truth in
+    # ``components/xray/_models.py``.
+    from tengri.components.xray._models import check_disc_xray_double_count
+
+    check_disc_xray_double_count(result.get("agn_disc_block"), result.get("xray_model"))
+
     return result
 
 

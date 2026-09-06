@@ -954,6 +954,17 @@ DEFAULT_AGN_LUM_RATIO = declared_default(PARAMS, "agn_lum_ratio")
 #:   ``slone_netzer_grid_support()`` + ``GRID_SUPPORT[("agn.disc",
 #:   "slone_netzer")]`` (#1586); registering it here would duplicate that and
 #:   permanently fail this guard for a non-defect.
+#: - ``kd18_agnfitter``'s ``agn_log_mbh``/``agn_log_ledd`` axes and
+#:   ``kd18_agnfitter_warmindex``'s ``agn_log_mbh``/``agn_log_ledd``/
+#:   ``agn_gamma_warm`` axes are the same shared-parameter situation:
+#:   ``agn_log_mbh`` happens to match the declaration ``[6, 10]`` exactly, but
+#:   ``agn_log_ledd``'s vendored extent ``[-1.5, 0]`` is narrower than the
+#:   shared ``[-2.0, 0.5]`` and ``agn_gamma_warm``'s vendored extent
+#:   ``[1.5, 4.0]`` is *wider* than the shared ``[2.0, 3.0]`` -- three
+#:   different relationships on one block would make this table read as three
+#:   different rules for the same reason. Reconciled uniformly by
+#:   ``kd18_agnfitter_grid_support()`` / ``kd18_agnfitter_warmindex_grid_support()``
+#:   + ``GRID_SUPPORT[("agn.disc", "kd18_agnfitter"...)]`` instead (#1586).
 GRID_EXTENT_SOURCES: dict[str, tuple[str, str, str, str]] = {
     "silva04_log_nh": (
         "agn_log_nh_silva",

@@ -28,6 +28,10 @@ from tengri.components.agn.disc_cigale import (
     schartmann2005_disk_spectrum,
     skirtor_disk_spectrum,
 )
+from tengri.components.agn.kd18_agnfitter import (
+    load_kd18_agnfitter_default_grid,
+    load_kd18_agnfitter_warmindex_default_grid,
+)
 from tengri.components.agn.richards2006_disc import richards2006_disc
 from tengri.components.agn.skirtor import (
     load_skirtor_disc_atten_grid,
@@ -42,6 +46,8 @@ __all__ = [
     "cigale_schartmann_disc_block",
     "cigale_schartmann_skirtor_attenuated_disc_block",
     "cigale_skirtor_disc_block",
+    "kd18_agnfitter_disc_block",
+    "kd18_agnfitter_warmindex_disc_block",
     "kubota_done_disc_block",
     "multicolor_disc_block",
     "relagn_disc_block",
@@ -470,6 +476,7 @@ def cigale_skirtor_disc_block(
     status="production",
     short_doc="Kubota & Done 2018 three-zone disc and corona",
     template_loader=load_nthcomp_table,
+    emits_xray=True,
 )
 def kubota_done_disc_block(
     wavelength: Array,
@@ -817,6 +824,141 @@ def slone_netzer_disc_block(
         agn_log_lbol=agn_log_lbol,
         agn_log_mbh=agn_log_mbh,
         agn_log_ledd=agn_log_ledd,
+        _template=templates,
+    )
+    return L_nu * _C_AA_PER_S / wave_aa**2
+
+
+@register_agn_block(
+    "disc",
+    "kd18_agnfitter",
+    citation="Kubota & Done 2018, MNRAS, 480, 1247; Martinez-Ramirez et al. 2024, A&A, 688, A46",
+    status="production",
+    short_doc="AGNfitter-rX KD18 grid-tabulated disc (log M_BH, log Edd)",
+    template_loader=load_kd18_agnfitter_default_grid,
+    emits_xray=True,
+)
+def kd18_agnfitter_disc_block(
+    wavelength: Array,
+    agn_log_lbol: float,
+    *,
+    agn_log_mbh: float = DEFAULT_AGN_LOG_MBH,
+    agn_log_ledd: float = -1.0,
+    templates=None,
+    **_params,
+) -> Array:
+    r"""AGNfitter-rX KD18 grid-tabulated disc block.
+
+    Interpolates AGNfitter-rX's vendored Kubota & Done (2018) template grid
+    over ``(log M_BH, log Mdot/Mdot_Edd)`` and normalizes to ``agn_log_lbol``.
+    The template already carries its own hot corona (extends to
+    :math:`\lambda \approx 0.06` A, hard X-ray); see
+    :mod:`tengri.components.agn.kd18_agnfitter` and
+    ``check_disc_xray_double_count``.
+
+    Parameters
+    ----------
+    wavelength : array_like, shape (n_wave,)
+        Rest-frame wavelength [A].
+    agn_log_lbol : float
+        :math:`\log_{10}(L_{\rm bol}/L_\odot)`.
+    agn_log_mbh : float, optional
+        :math:`\log_{10}(M_{\rm BH}/M_\odot)`. Default ``7.0`` (on-grid: the
+        vendored axis is ``[6, 10]``).
+    agn_log_ledd : float, optional
+        :math:`\log_{10}(\dot m / \dot m_{\rm Edd})`. Default ``-1.0``
+        (on-grid: the vendored axis is ``[-1.5, 0]``).
+
+    Returns
+    -------
+    L_lambda : ndarray, shape (n_wave,)
+        Disc :math:`L_\lambda` [erg/s/A].
+
+    References
+    ----------
+    .. [1] A. Kubota & C. Done, MNRAS, 480, 1247 (2018).
+    .. [2] L. N. Martinez-Ramirez et al., A&A, 688, A46 (2024). arXiv:2405.12111.
+    """
+    from tengri.components.agn.kd18_agnfitter import kd18_agnfitter_sed
+
+    wave_aa = jnp.asarray(wavelength)
+    L_nu = kd18_agnfitter_sed(
+        wave_aa,
+        agn_log_lbol=agn_log_lbol,
+        agn_log_mbh=agn_log_mbh,
+        agn_log_ledd=agn_log_ledd,
+        _template=templates,
+    )
+    return L_nu * _C_AA_PER_S / wave_aa**2
+
+
+@register_agn_block(
+    "disc",
+    "kd18_agnfitter_warmindex",
+    citation="Kubota & Done 2018, MNRAS, 480, 1247; Martinez-Ramirez et al. 2024, A&A, 688, A46",
+    status="production",
+    short_doc="AGNfitter-rX KD18 grid-tabulated disc (log M_BH, log Edd, warm-zone index)",
+    template_loader=load_kd18_agnfitter_warmindex_default_grid,
+    emits_xray=True,
+)
+def kd18_agnfitter_warmindex_disc_block(
+    wavelength: Array,
+    agn_log_lbol: float,
+    *,
+    agn_log_mbh: float = DEFAULT_AGN_LOG_MBH,
+    agn_log_ledd: float = -1.0,
+    agn_gamma_warm: float = 2.5,
+    templates=None,
+    **_params,
+) -> Array:
+    r"""AGNfitter-rX KD18-warmIndex grid-tabulated disc block.
+
+    Interpolates AGNfitter-rX's vendored ``KD18_warmInd`` template grid over
+    ``(log M_BH, log Mdot/Mdot_Edd, gamma_warm)`` -- the warm Comptonization
+    spectral index -- and normalizes to ``agn_log_lbol``. NOT equivalent to
+    :func:`kd18_agnfitter_disc_block` at any fixed ``agn_gamma_warm`` (a
+    node-by-node measurement found no candidate value within a factor of 1.27
+    across the whole grid; see
+    :mod:`tengri.components.agn.kd18_agnfitter`), so it is vendored and
+    registered as an independent block rather than a third parameter on the
+    plain KD18 block. Also carries its own hot corona; see
+    ``check_disc_xray_double_count``.
+
+    Parameters
+    ----------
+    wavelength : array_like, shape (n_wave,)
+        Rest-frame wavelength [A].
+    agn_log_lbol : float
+        :math:`\log_{10}(L_{\rm bol}/L_\odot)`.
+    agn_log_mbh : float, optional
+        :math:`\log_{10}(M_{\rm BH}/M_\odot)`. Default ``7.0`` (on-grid: the
+        vendored axis is ``[6, 10]``).
+    agn_log_ledd : float, optional
+        :math:`\log_{10}(\dot m / \dot m_{\rm Edd})`. Default ``-1.0``
+        (on-grid: the vendored axis is ``[-1.5, 0]``).
+    agn_gamma_warm : float, optional
+        Warm Comptonization spectral index (AGNfitter-rX ``warmIndex``).
+        Default ``2.5`` (on-grid: the vendored axis is ``[1.5, 4.0]``).
+
+    Returns
+    -------
+    L_lambda : ndarray, shape (n_wave,)
+        Disc :math:`L_\lambda` [erg/s/A].
+
+    References
+    ----------
+    .. [1] A. Kubota & C. Done, MNRAS, 480, 1247 (2018).
+    .. [2] L. N. Martinez-Ramirez et al., A&A, 688, A46 (2024). arXiv:2405.12111.
+    """
+    from tengri.components.agn.kd18_agnfitter import kd18_agnfitter_warmindex_sed
+
+    wave_aa = jnp.asarray(wavelength)
+    L_nu = kd18_agnfitter_warmindex_sed(
+        wave_aa,
+        agn_log_lbol=agn_log_lbol,
+        agn_log_mbh=agn_log_mbh,
+        agn_log_ledd=agn_log_ledd,
+        agn_gamma_warm=agn_gamma_warm,
         _template=templates,
     )
     return L_nu * _C_AA_PER_S / wave_aa**2

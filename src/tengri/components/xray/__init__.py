@@ -2,8 +2,10 @@
 """X-ray emission: XRBs (HMXB + LMXB) + AGN corona."""
 
 from tengri.components.xray._models import (
+    AGN_CORONA_XRAY_VARIANTS,
     XRAY_MODELS,
     XRayRegistryEntry,
+    check_disc_xray_double_count,
     register_xray_model,
 )
 from tengri.components.xray.agn_xray_model import (
@@ -64,6 +66,7 @@ register_xray_model(
 )(xray_total_lopez24)
 
 __all__ = [
+    "AGN_CORONA_XRAY_VARIANTS",
     "COS_INC_REF_30DEG",
     "XRAY_MODELS",
     "AGNXRayCoronaSEDComponent",
@@ -72,6 +75,7 @@ __all__ = [
     "XRayAirdSEDComponentConfig",
     "XRayRegistryEntry",
     "alpha_ox_from_l2500",
+    "check_disc_xray_double_count",
     "compton_scattering_transmission",
     "pexrav_reflection",
     "register_xray_model",
