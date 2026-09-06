@@ -25,7 +25,13 @@ pytestmark = pytest.mark.contract
 # Each entry names a component and why it is not domain-scoped.
 _NOT_ROUTED = frozenset(
     {
-        "draine2021_pah_ir",  # Standalone IR component, not routed through build_components
+        # ``draine2021_pah_ir`` used to be here too. It became an
+        # ``EmissionComponent`` when it was given the ``L_ir`` factoring its
+        # float32 survival needs, and the dust_emission domain is auto-populated
+        # by that base class — so it is now domain-scoped like every other
+        # emission backend, which is also what the ``draine2021_pah`` ->
+        # ``draine2021_pah_ir`` entry in ``_EMISSION_TYPE_ALIASES`` always
+        # implied.
         "schreiber2016_ir",  # Standalone IR component, not routed through build_components
     }
 )

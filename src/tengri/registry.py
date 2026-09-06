@@ -409,6 +409,17 @@ def _usage_hint(name: str, kind: str) -> str:
             f"'law': '{name}'}})"
         )
     if kind == "dust_emission":
+        from tengri.parameters.groups import _standalone_dust_emission_types
+
+        # A building block is refused by SEDModel.build, so handing the user a
+        # build call here would be advice that raises (#1275). Carry the reason
+        # and the next step instead, exactly as an ``unvalidated`` SFH row does.
+        if name not in _standalone_dust_emission_types():
+            return (
+                f"building block, not a standalone model: '{name}' re-emits only a "
+                "fraction of L_ir. Compose it with an energy-balanced continuum "
+                "model, or pick one from list_dust_emission_models()"
+            )
         # dust_emission requires a dust_attenuation block for energy balance;
         # show both groups together with the minimal attenuation spelling.
         return (
@@ -889,6 +900,16 @@ _DUST_EMISSION_METADATA: dict[str, dict[str, str]] = {
         "citation": "Draine et al. 2021 (ApJ 917, 3)",
         "short_doc": "PAHspec grid: size distribution, ionization and starlight spectrum",
     },
+    # The registry key ``draine2021_pah`` resolves to (via _EMISSION_TYPE_ALIASES).
+    # It became separately selectable when the component joined the emission
+    # family — the menu is derived from the components publishing ``sed_dust_ir``
+    # — so it needs its own row, or it lists with a blank description and no
+    # credit.
+    "draine2021_pah_ir": {
+        "status": "production",
+        "citation": "Draine et al. 2021 (ApJ 917, 3)",
+        "short_doc": "PAHspec grid, canonical name (draine2021_pah resolves here)",
+    },
     "draine_li2007": {
         "status": "production",
         "citation": "Draine & Li 2007 (ApJ 657, 810)",
@@ -963,7 +984,12 @@ _DUST_EMISSION_METADATA: dict[str, dict[str, str]] = {
     "pah_drude": {
         "status": "production",
         "citation": "Smith et al. 2007 (ApJ 656, 770) Drude profiles",
-        "short_doc": "Drude-profile PAH emission features",
+        # Stays listed on purpose: it is a real, validated PAH template that
+        # composes into custom models, and delisting it would hide it the way
+        # #1120 hid the unvalidated SFH types. What the row must not do is read
+        # like a model you can select — standalone it re-emits a measured
+        # 1.8925e-04 of L_ir, and SEDModel.build refuses it.
+        "short_doc": "Drude-profile PAH emission features (building block; not selectable standalone)",  # noqa: E501
     },
     "energy_balance_split": {
         "status": "experimental",
