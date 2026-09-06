@@ -32,17 +32,29 @@ and add it to ``AGN_BLOCK_CONSUMES[("feii", "qsogen_balmer")]``. This restores
 the top-level ``agn={'type': 'composable', 'all_params': FREE, ...}`` wildcard
 path (measured below: ``agn_bcnorm`` is now freed and has a non-zero gradient).
 
-NEEDS_CONTEXT (out of this task's file scope, see the task-15 report): the
-*sub-block*-scoped wildcard (``agn.feii={'type': 'qsogen_balmer', 'all_params':
-FREE}``, exercised by
-``tests/contract/test_agn_subblock_wildcard_scoping.py``) additionally requires
-``agn_bcnorm`` to be entered in ``_AGN_PARTITION`` in
+RESOLVED (Task 16, item 7): the *sub-block*-scoped wildcard
+(``agn.feii={'type': 'qsogen_balmer', 'all_params': FREE}``, exercised by
+``tests/contract/test_agn_subblock_wildcard_scoping.py``) needed
+``agn_bcnorm`` entered in ``_AGN_PARTITION`` in
 ``src/tengri/parameters/groups.py`` (mapped to ``"agn.feii"``, alongside the
-existing ``"agn_fe2_strength": "agn.feii"`` entry) -- that file is off-limits
-to this task. Until that entry lands, the sub-block wildcard cannot reach
-``agn_bcnorm`` (it falls back to the shared top-level ``"agn"`` group), and
-``test_q2_wired_against_siblings[feii/qsogen_balmer]`` in that file remains
-mathematically bit-identical at ``Fixed(DEFAULT)`` even after this fix.
+existing ``"agn_fe2_strength": "agn.feii"`` entry) -- that entry has now
+landed. One side effect: ``agn_bcnorm``'s CANONICAL location is now the
+``feii`` sub-block, not the top level, so
+``_build_agn_search_view``'s documented precedence rule ("a sub-block
+wildcard takes precedence over the top-level one") applies to it like every
+other sub-block-owned parameter. ``test_qsogen_balmer_wildcard_frees_and_grad_is_live``
+below previously paired a top-level ``agn={'all_params': FREE}`` with an
+EXPLICIT ``feii={'all_params': Fixed(DEFAULT)}`` -- a recipe that only
+worked because ``agn_bcnorm`` was (mis)classified as a shared, top-level
+parameter at the time. It now demonstrates the sub-block's own explicit
+disposition correctly winning, not the top-level reach-in this test means
+to exercise; updated to omit the sub-block's own wildcard entirely (its
+structural ``'type'`` selection alone), letting the top-level wildcard's
+documented inheritance path govern it, matching how a caller actually
+frees a sub-block-owned parameter through an ancestor wildcard.
+``test_q2_wired_against_siblings[feii/qsogen_balmer]`` in that other file
+is unaffected: item 7 (issue #2175, prior_median evaluation) already made
+it pass for real -- see this repository's Task 16 report.
 """
 
 from __future__ import annotations
@@ -196,11 +208,19 @@ def test_qsogen_balmer_wildcard_frees_and_grad_is_live(synthetic_ssp_wide, near_
     """#2175 secondary claim: under the top-level ``agn={'all_params': FREE}``
     wildcard, ``agn_bcnorm`` must actually be freed (not silently pinned at its
     disabled default) and must have a non-zero gradient of
-    ``predict_photometry`` -- "selectable, unfittable, and inert" made false."""
+    ``predict_photometry`` -- "selectable, unfittable, and inert" made false.
+
+    The ``feii`` sub-dict states only its structural ``'type'``, no
+    ``'all_params'`` of its own (Task 16, item 7's ``_AGN_PARTITION`` entry
+    made ``agn_bcnorm``'s canonical home the ``feii`` sub-block; an explicit
+    sub-block wildcard there would take precedence over the top-level one
+    per ``_build_agn_search_view``'s documented rule, which is not the
+    top-level reach-in this test means to exercise -- see the module
+    docstring's RESOLVED note)."""
     model = _build(
         synthetic_ssp_wide,
         near_uv_obs,
-        {"type": "qsogen_balmer", "all_params": Fixed(DEFAULT)},
+        {"type": "qsogen_balmer"},
         agn_all_params=FREE,
     )
     free_agn = {p for p in model.spec.free_params if p.startswith("agn_")}
