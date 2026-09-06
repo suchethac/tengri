@@ -46,10 +46,23 @@ Skips: ``nlr``/``blr``'s ``synthesizer``/``synthesizer_spectra`` need
 ``synthesizer-download --agn-test-grids`` and not shipped in this checkout.
 Skipped narrowly on ``TengriIOError`` naming exactly that grid -- never a
 broad ``except Exception``. Any other build failure is a real test failure.
+
+Skip breakdown (task-12 fix round 1, item 4 -- named risk (b), answered from
+the code, not restated by hand): 10 total across ``test_q1_...`` +
+``test_q2_...``. 8 = the four Synthesizer-grid-gated ``(category, type)``
+pairs above (``nlr/synthesizer``, ``nlr/synthesizer_spectra``,
+``blr/synthesizer``, ``blr/synthesizer_spectra``) x {Q1, Q2} = 8 skips, each
+via :func:`_maybe_skip_grid_gated`. 2 = ``test_q2_wired_against_siblings``'s
+own reference-is-itself skips: ``torus/cat3d_wind`` (the ``_Q2_REFERENCE``
+torus entry) and ``feii/boroson_green`` (the ``_Q2_REFERENCE`` feii entry)
+each skip when the parametrized ``block_type`` IS that category's fixed
+reference type ("nothing to compare a type against itself"), which happens
+exactly once per category that declares a ``_Q2_REFERENCE`` entry.
 """
 
 from __future__ import annotations
 
+import re
 import warnings
 
 import jax
@@ -113,11 +126,13 @@ def _tophat(center: float, frac: float = 0.16, n: int = 40) -> FilterCurve:
 _CENTERS = (1500.0, 2500.0, 5000.0, 9000.0, 2.0e4, 1.0e5, 5.0e5, 2.0e6)
 
 
-@pytest.fixture(scope="module")
-def ssp() -> SSPData:
+def _make_ssp() -> SSPData:
     """Synthetic UV->submm SSP (no data/ssp_*.h5 dependency; mirrors
     tests/conftest.py::synthetic_ssp_wide, kept local and small so this
-    module's ~45 builds stay cheap)."""
+    module's ~45 builds stay cheap). Factored out of the ``ssp`` fixture
+    (task-12 fix round 1, item 2) so
+    :func:`test_feii_qsogen_balmer_xfail_reason_is_honest` can build one
+    without a pytest fixture context."""
     n_met, n_age = 3, 25
     wave = jnp.logspace(2.0, 7.0, 1600)  # 100 A - 1 mm
     ages_gyr = jnp.linspace(-3.0, 1.14, n_age)
@@ -132,9 +147,18 @@ def ssp() -> SSPData:
     return SSPData(ssp_wave=wave, ssp_flux=flux, ssp_lg_age_gyr=ages_gyr, ssp_lgmet=lgmet)
 
 
+def _make_obs() -> Observation:
+    return Observation(photometry=Photometry(filters=tuple(_tophat(c) for c in _CENTERS)))
+
+
+@pytest.fixture(scope="module")
+def ssp() -> SSPData:
+    return _make_ssp()
+
+
 @pytest.fixture(scope="module")
 def obs() -> Observation:
-    return Observation(photometry=Photometry(filters=tuple(_tophat(c) for c in _CENTERS)))
+    return _make_obs()
 
 
 def _build(ssp_data, observation, category, block_type, *, all_params):
@@ -266,6 +290,36 @@ def test_q1_wildcard_frees_exactly_declared_and_live(ssp, obs, category, block_t
     assert not dead, f"{category}/{block_type}: freed but dead (grad=0 on photometry): {dead}"
 
 
+@pytest.mark.parametrize(
+    ("category", "block_type"), _ALL_CASES, ids=[f"{c}/{t}" for c, t in _ALL_CASES]
+)
+def test_describe_agn_block_params_match_wildcard_scope(ssp, obs, category, block_type):
+    """Task-12 fix round 1, item 1: ``tengri.describe_agn_block(...)['params']``
+    and the ``'all_params': FREE`` wildcard must agree on EXACTLY the same set
+    for every registered ``(category, type)`` -- one source
+    (:func:`tengri.parameters.groups._agn_subblock_declared_params`), not two.
+    Before this fix, ``describe_agn_block``'s ``params`` came from raw
+    ``inspect.signature`` over the bare ``AGN_BLOCKS`` callable and listed
+    names the wildcard can never free -- e.g. skirtor's shared
+    ``agn_cos_inc``/``agn_log_lbol`` and the ``agn.atten``-owned
+    ``agn_polar_T``/``agn_polar_beta``/``agn_polar_ebv`` triple it also
+    applies. Reuses this module's Q1 build (:func:`_build`)."""
+    import tengri
+
+    try:
+        model = _build(ssp, obs, category, block_type, all_params=FREE)
+    except (TengriIOError, FileNotFoundError) as exc:
+        _maybe_skip_grid_gated(category, block_type, exc)
+
+    free_agn = {p for p in model.spec.free_params if p.startswith("agn_")}
+    rec = tengri.describe_agn_block(block_type, category=category)
+    described = set(rec.get("params", []))
+    assert described == free_agn, (
+        f"{category}/{block_type}: describe_agn_block params {sorted(described)} "
+        f"!= wildcard-freed params {sorted(free_agn)}"
+    )
+
+
 def _q2_case_id(category: str, block_type: str) -> str:
     return f"{category}/{block_type}"
 
@@ -281,8 +335,15 @@ for _category, _block_type in _ALL_CASES:
                     strict=True,
                     reason=(
                         "#2175: feii=qsogen_balmer photometry bit-identical to "
-                        "boroson_green (max rel diff 0.0) while feii=grahsp "
-                        "differs by 1.438e+00 at identical params"
+                        "boroson_green (max rel diff 0.0) while feii=grahsp's "
+                        "sed_agn digest (this module's _sed_agn_digest -- "
+                        "sum(|sed_agn|) from predict_state({}).derived['sed_agn'], "
+                        "on the module's 8-band UV-submm _CENTERS tophat "
+                        "filters) differs from boroson_green's by 7.0996e-03 "
+                        "(0.71%) at identical params (addendum's illustrative "
+                        "1.438e+00 was a DIFFERENT, photometric example -- see "
+                        "test_feii_qsogen_balmer_xfail_reason_is_honest, which "
+                        "recomputes and pins this number)"
                     ),
                 ),
                 id=_q2_case_id(_category, _block_type),
@@ -292,6 +353,40 @@ for _category, _block_type in _ALL_CASES:
         _Q2_PARAMS.append(
             pytest.param(_category, _block_type, id=_q2_case_id(_category, _block_type))
         )
+
+
+def test_feii_qsogen_balmer_xfail_reason_is_honest():
+    """Task-12 fix round 1, item 2: the qsogen_balmer xfail reason above
+    cites a feii=grahsp-vs-boroson_green sed_agn digest relative difference.
+    Recompute that SAME digest with THIS module's own _build/_sed_agn_digest
+    (independently of the fixture-scoped ssp/obs -- via _make_ssp/_make_obs,
+    so this test does not depend on test ordering or fixture caching) and
+    assert it matches the number PARSED BACK OUT of the actual xfail reason
+    string -- so editing the literal without updating the measurement (or a
+    code change that silently moves the measurement) fails HERE, not just
+    reads wrong on inspection."""
+    ssp_data = _make_ssp()
+    observation = _make_obs()
+    grahsp_model = _build(ssp_data, observation, "feii", "grahsp", all_params=Fixed(DEFAULT))
+    ref_model = _build(
+        ssp_data, observation, "feii", _Q2_REFERENCE["feii"], all_params=Fixed(DEFAULT)
+    )
+    grahsp_sum, _ = _sed_agn_digest(grahsp_model)
+    ref_sum, _ = _sed_agn_digest(ref_model)
+    measured = abs(grahsp_sum - ref_sum) / abs(ref_sum)
+
+    xfail_param = next(p for p in _Q2_PARAMS if p.id == _q2_case_id("feii", "qsogen_balmer"))
+    xfail_mark = next(m for m in xfail_param.marks if m.name == "xfail")
+    reason = xfail_mark.kwargs["reason"]
+    match = re.search(r"by (\d\.\d+e-\d+) \(", reason)
+    assert match, f"could not find the cited grahsp-vs-reference rel-diff number in: {reason!r}"
+    cited = float(match.group(1))
+
+    assert measured == pytest.approx(cited, rel=1e-3), (
+        f"measured feii=grahsp-vs-boroson_green sed_agn digest rel diff "
+        f"{measured:.6e} no longer matches the {cited:.6e} cited in the "
+        f"qsogen_balmer xfail reason above -- update that reason string."
+    )
 
 
 @pytest.mark.parametrize(("category", "block_type"), _Q2_PARAMS)

@@ -361,9 +361,23 @@ def _extract_params(entry: Any, kind: str) -> list[str]:
 
     AGN model entries → introspect ``entry.callable``'s signature, keep names
     starting with ``agn_``. AGN BLOCK entries (composable disc/nlr/blr/feii/
-    torus/attenuation) → same introspection, but ``entry`` IS the callable
-    (``AGN_BLOCKS[category][name]``, a bare function with no wrapping
-    dataclass) rather than something carrying a ``.callable`` attribute.
+    torus/attenuation) → ``entry`` is a ``(category, block_type)`` pair (the
+    grammar sub-block key, e.g. ``"torus"``, and the selected type name, e.g.
+    ``"skirtor"``), resolved through
+    ``tengri.parameters.groups._agn_subblock_declared_params`` -- the SAME
+    signature-introspection-then-partition-filter the ``all_params: FREE``
+    wildcard scoping uses (task-12 fix round 1, item 1). This is deliberately
+    NOT raw ``inspect.signature`` over the bare ``AGN_BLOCKS[category][name]``
+    callable (the pre-fix-round-1 behavior here, and still how ``agn_model``
+    below works): a bare signature also names parameters this block reads but
+    does not OWN (shared masking knobs like ``agn_cos_inc``, or -- for
+    ``skirtor`` -- the ``agn.atten``-owned polar-dust triple it also applies),
+    which the wildcard can never actually free, so listing them as
+    "params you can set" here would advertise a freedom the resolver does not
+    deliver. Nor is it ``_declared_param_names`` (the
+    ``component_factory._REGISTRY``-only lookup used for ``dust_emission``
+    et al.): composable AGN blocks are bare functions in ``AGN_BLOCKS``, not
+    entries in that registry.
     SFH entries → ``callable.params`` (an ``SFHModelSpec`` field) → key list.
     Dust laws / others → empty (parameters come from the caller, not the
     registered function).
@@ -387,14 +401,13 @@ def _extract_params(entry: Any, kind: str) -> list[str]:
         return [p.name for p in sig.parameters.values() if p.name.startswith("agn_")]
 
     if kind == "agn_block":
-        fn = entry
-        if not callable(fn):
+        from tengri.parameters.groups import _agn_subblock_declared_params
+
+        category, block_type = entry
+        declared = _agn_subblock_declared_params(category, block_type)
+        if not declared:
             return []
-        try:
-            sig = inspect.signature(fn)
-        except (TypeError, ValueError):
-            return []
-        return [p.name for p in sig.parameters.values() if p.name.startswith("agn_")]
+        return sorted(declared)
 
     return []
 
@@ -545,23 +558,20 @@ def _extract_param_details(entry: Any, kind: str) -> list[dict]:
         return out
 
     if kind == "agn_block":
-        # Same lookup as agn_model, but ``entry`` IS the callable directly
-        # (see _extract_params).
-        import inspect
+        # ``entry`` is a ``(category, block_type)`` pair, resolved through the
+        # same _agn_subblock_declared_params source _extract_params uses (see
+        # its docstring): the OWNED, freeable set, not a raw signature.
+        from tengri.parameters.groups import _agn_subblock_declared_params
 
-        fn = entry
-        if not callable(fn):
+        category, block_type = entry
+        declared = _agn_subblock_declared_params(category, block_type)
+        if not declared:
             return out
-        try:
-            sig = inspect.signature(fn)
-        except (TypeError, ValueError):
-            return out
-        agn_names = [p.name for p in sig.parameters.values() if p.name.startswith("agn_")]
         try:
             from tengri.parameters._builders import _resolve_lazy_bucket
 
             agn_params = _resolve_lazy_bucket("_AGN_PARAMS")
-            for n in agn_names:
+            for n in sorted(declared):
                 meta = agn_params.get(n)
                 if meta is None:
                     continue
@@ -811,7 +821,6 @@ def list_agn_blocks(*, category: str | None = None, status: str | None = None) -
                 use_str = f"SEDModel.build(..., agn={{'{group_key}': {{'law': 'prevot_smc'}}}}"
             else:
                 use_str = f"SEDModel.build(..., agn={{'{group_key}': {{'type': '{name}'}}}}"
-            fn = AGN_BLOCKS[cat][name]
             entry_dict = {
                 "name": name,
                 "category": cat,
@@ -823,15 +832,24 @@ def list_agn_blocks(*, category: str | None = None, status: str | None = None) -
             }
             # Mirrors list_sfh_models / list_agn_models: params/param_details
             # are the "what range do I put in my Uniform()" answer for a
-            # block the caller hasn't seen before. Previously absent for
-            # every composable block (D8, task-12 audit) -- `_extract_params`
-            # /`_extract_param_details` take the callable directly for this
-            # kind, since a bare AGN_BLOCKS entry has no wrapping dataclass
-            # to read a `.callable` off of.
-            params = _extract_params(fn, "agn_block")
+            # block the caller hasn't seen before. Previously absent for every
+            # composable block (D8, task-12 audit). `_extract_params`/
+            # `_extract_param_details` take ``(group_key, name)`` -- the
+            # grammar sub-block key (``group_key``, e.g. ``"atten"``, NOT the
+            # registry label ``cat``, e.g. ``"attenuation"`` -- see
+            # ``_agn_subblock_declared_params``'s ``category`` parameter) and
+            # the selected block-type name -- and resolve them through the
+            # SAME source the wildcard-scoping fix uses
+            # (``_agn_subblock_declared_params``), not raw signature
+            # introspection over the bare ``AGN_BLOCKS[cat][name]`` callable
+            # (task-12 fix round 1, item 1): a raw signature also names
+            # parameters this block reads but does not own (shared masking
+            # knobs, or another sub-block's own params), which the wildcard
+            # can never actually free.
+            params = _extract_params((group_key, name), "agn_block")
             if params:
                 entry_dict["params"] = params
-            details = _extract_param_details(fn, "agn_block")
+            details = _extract_param_details((group_key, name), "agn_block")
             if details:
                 entry_dict["param_details"] = details
             out.append(entry_dict)
