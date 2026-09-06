@@ -629,7 +629,7 @@ def radio_agn_dpl(
 ) -> jnp.ndarray:
     """Double power-law AGN radio emission (AGNfitter-rx).
 
-    Implements the broken power-law model from Martinez-Ramirez+2024 (Eq. 9-10)
+    Implements the broken power-law model from Martinez-Ramirez+2024 (Eq. (2))
     with an optically-thick low-frequency regime, an optically-thin steep
     high-frequency regime, and a synchrotron aging exponential cutoff.
 
@@ -648,10 +648,12 @@ def radio_agn_dpl(
     radio_loudness : float
         log10(L_5GHz / L_B). Default 0 (radio-quiet). Range: [-2, 5].
     alpha1 : float
-        Optically thin (steep) spectral slope. Default -0.75. Range: [-2, 0].
+        Optically thin (steep) spectral slope. Default -0.75. Range: [-1, 1]
+        (Martinez-Ramirez+2024, Table 1: alpha1, synchrotron aged).
     alpha2 : float
         Optically thick (flat/inverted) spectral slope. Default -0.1.
-        Range: [-1, 1].
+        Range: [-1, 0] (Martinez-Ramirez+2024, Table 1: alpha2,
+        self-absorbed).
     log_nu_t : float
         log10(transition frequency / Hz). Default 10.0. Range: [7, 13].
     log_nu_cut : float
@@ -696,7 +698,7 @@ def radio_agn_dpl(
     nu_t = 10.0**log_nu_t
     nu_cut = 10.0**log_nu_cut
 
-    # Double power-law (Martinez-Ramirez+2024 Eq. 9-10)
+    # Double power-law (Martinez-Ramirez+2024 Eq. (2))
     def _dpl_shape(freq):
         """Compute double power-law spectral shape with turnover and cutoff."""
         ratio = freq / nu_t

@@ -118,27 +118,28 @@ PARAMS: tuple[ParamDeclaration, ...] = (
         # absorb calibration error into a quantity physics fixes. Override
         # explicitly if you specifically want that slack.
     ),
-    # AGNfitter-rx double power-law AGN radio model parameters
-    # (Martinez-Ramirez+2024 Eq. 9-10). Activated by
+    # AGNfitter-rx double power-law AGN radio model parameters. Activated by
     # ``RadioSEDComponentConfig.agn_radio_model="dpl"``; ignored otherwise.
-    # The two DPL slopes deliberately get NO free_prior, for a reason that is
-    # about evidence rather than physics: their admissible ranges live in
-    # Table 1 of Martinez-Ramirez+2024, and that table could not be retrieved
-    # to check them (arXiv HTML timed out, the A&A copy returns 403). The
-    # descriptions give a typical *value* but no interval, and this file's own
-    # sign convention for the optically-thick slope (-0.1, "flat/inverted")
-    # does not match textbook synchrotron self-absorption (+2.5), so guessing
-    # an interval here would be guessing at a convention too. Declare them once
-    # Table 1 is in hand.
+    # Martinez-Ramirez, L. N. et al. 2024, "AGNfitter-rx: Modelling the
+    # radio-to-X-ray SEDs of AGNs," A&A, 688, A46,
+    # doi:10.1051/0004-6361/202449329, arXiv:2405.12111 -- Table 1 gives
+    # alpha1 (synchrotron aged / optically-thin) in [-1, 1] and alpha2
+    # (self-absorbed / optically-thick) in [-1, 0]. The paper's Eq. (2) uses
+    # the same L_nu ~ nu^alpha exponent convention as ``radio_agn_dpl`` below,
+    # so no sign conversion is needed. The paper's 3-band fallback
+    # alpha1 = -0.75 matches this file's existing default, and both existing
+    # Fixed defaults (-0.75, -0.1) lie inside these intervals.
     ParamDeclaration(
         "radio_alpha_thin",
         Fixed(-0.75),
         "AGN-DPL optically-thin (steep) spectral slope (typical -0.75)",
+        free_prior=Uniform(-1.0, 1.0, "AGN-DPL optically-thin spectral slope", default=-0.75),
     ),
     ParamDeclaration(
         "radio_alpha_thick",
         Fixed(-0.1),
         "AGN-DPL optically-thick (flat/inverted) spectral slope (typical -0.1)",
+        free_prior=Uniform(-1.0, 0.0, "AGN-DPL optically-thick spectral slope", default=-0.1),
     ),
     ParamDeclaration(
         "radio_log_nu_t",

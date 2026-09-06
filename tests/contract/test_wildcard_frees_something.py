@@ -827,3 +827,63 @@ class TestBurstSfrFreesUnderWildcard2187:
         ).get_distribution("sfh_snorm_burst_burst_sfr")
         assert not dist.is_fixed
         assert dist.bounds == (0.0, 10.0)
+
+
+# ── Regression: neb_logZ_gas and the radio DPL slopes now free ────────
+#
+# Three PARAMS-tuple members carried a ``Fixed`` default with no
+# ``free_prior`` and no recorded ground: ``neb_logZ_gas``, ``radio_alpha_thin``,
+# ``radio_alpha_thick``. ``all_params: FREE`` silently pinned them under
+# every shipped backend/model. All three now declare a ``free_prior``:
+#
+# * ``neb_logZ_gas``: ``Uniform(-1.30, 0.20)`` -- the intersection of Cue's,
+#   the shipped CloudyGrid files', and CB19's measured support in public
+#   log10(Z/Zsun) units (see the declaration in
+#   ``components/nebular/_params.py`` for the full derivation). The ``neb``
+#   group wildcard is not backend-scoped, so the same range applies whether
+#   the selected backend is ``cue``, ``cloudy``, or ``cb19``.
+# * ``radio_alpha_thin`` / ``radio_alpha_thick``: Table 1 of
+#   Martinez-Ramirez+2024 (A&A 688, A46), ``Uniform(-1.0, 1.0)`` and
+#   ``Uniform(-1.0, 0.0)`` respectively. Only routed under
+#   ``radio={'agn': {'type': 'dpl'}}`` (:data:`_RADIO_AGN_PARAMS_BY_MODEL`).
+
+
+@pytest.mark.parametrize("neb_type", ["cue", "cloudy", "cb19"])
+def test_neb_logZ_gas_frees_under_every_shipped_backend(neb_type):
+    """``neb_logZ_gas`` must free at the same declared range under cue,
+    cloudy, and cb19 alike -- the wildcard is not backend-scoped.
+
+    Parse-level only: none of these three backends needs a shipped grid file
+    to resolve ``parse_groups``' structural translation (grid loading happens
+    later, at ``SEDModel.build``/component-construction time), so this holds
+    even on a checkout missing ``data/cloudy_grid_*.h5``.
+    """
+    with warnings.catch_warnings():
+        # cb19 also declares neb_hbfrac (no free_prior, #2213), so its
+        # wildcard is a partial free and warns; irrelevant to this assertion.
+        warnings.simplefilter("ignore")
+        spec = tengri.parse_groups(
+            sfh={"type": "dpl", "all_params": Fixed(DEFAULT)},
+            neb={"type": neb_type, "all_params": FREE},
+            redshift=Fixed(0.1),
+        )
+    assert "neb_logZ_gas" in spec.free_params
+    assert spec.get_distribution("neb_logZ_gas") == Uniform(-1.30, 0.20)
+
+
+def test_radio_dpl_slopes_free_at_the_martinez_ramirez_table_1_ranges():
+    """``radio={'agn': {'type': 'dpl', 'all_params': FREE}}`` frees both slopes."""
+    with warnings.catch_warnings():
+        # The top-level 'radio' group states no disposition of its own here,
+        # which only concerns the SF-side params (radio_alpha_sf, etc.);
+        # irrelevant to this assertion.
+        warnings.simplefilter("ignore")
+        spec = tengri.parse_groups(
+            sfh={"type": "dpl", "all_params": Fixed(DEFAULT)},
+            radio={"agn": {"type": "dpl", "all_params": FREE}},
+            redshift=Fixed(0.1),
+        )
+    assert "radio_alpha_thin" in spec.free_params
+    assert "radio_alpha_thick" in spec.free_params
+    assert spec.get_distribution("radio_alpha_thin") == Uniform(-1.0, 1.0)
+    assert spec.get_distribution("radio_alpha_thick") == Uniform(-1.0, 0.0)

@@ -2,7 +2,7 @@
 """Radio AGN double-power-law model; SEDModelComponent implementation.
 
 AGNfitter-rx broken double power-law with phenomenological
-``exp(-ν/ν_cut)`` aging cutoff (Martinez-Ramirez+2024 Eq. 9-10).
+``exp(-ν/ν_cut)`` aging cutoff (Martinez-Ramirez+2024 Eq. (2)).
 Pairs with the SF + free-free contribution from the standard radio
 primitive.
 """
