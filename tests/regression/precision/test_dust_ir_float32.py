@@ -157,10 +157,10 @@ def test_dust_ir_sed_is_finite_in_pure_float32(synthetic_ssp_wide, emission_type
         f"{peak_relative_error:.3e} of the SED peak"
     )
 
-    if total is not None:
-        assert np.all(np.isfinite(total)), (
-            f"{emission_type}: dust IR poisoned the total SED in float32"
-        )
+    assert total is not None, "probe setup failed: total SED was not published"
+    assert np.all(np.isfinite(total)), (
+        f"{emission_type}: dust IR poisoned the total SED in float32"
+    )
 
 
 @pytest.mark.parametrize("emission_type", ENERGY_BALANCED_MODELS)

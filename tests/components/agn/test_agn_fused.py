@@ -156,10 +156,8 @@ class TestAGNFusedPhotometry:
         # test_agn_log_lbol_gradient_matches_finite_difference below.
         grads = jax.grad(loss_fn)(params)
         for name, grad_val in grads.items():
-            if grad_val is not None:
-                assert jnp.all(jnp.isfinite(grad_val)), (
-                    f"Non-finite gradient for {name}: {grad_val}"
-                )
+            assert grad_val is not None, "probe setup failed: grad_val was not published"
+            assert jnp.all(jnp.isfinite(grad_val)), f"Non-finite gradient for {name}: {grad_val}"
         # 96 of the 110 components are exactly zero at this sample point (the
         # spec declares the full AGN superset, most of which the active blocks
         # do not consume). That is expected — but a wholesale detachment would

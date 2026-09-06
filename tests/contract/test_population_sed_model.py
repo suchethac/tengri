@@ -186,9 +186,11 @@ def test_predict_one_is_un_batched_primitive(synthetic_ssp, simple_observation) 
         if not hasattr(val_direct, "shape"):
             continue
         val_via = dict(via_predict_one.derived).get(key)
-        if val_via is not None and hasattr(val_via, "shape"):
-            assert val_via.shape == val_direct.shape
-            assert _jnp.allclose(val_via, val_direct, rtol=1e-10, atol=0.0, equal_nan=True)
+        assert val_via is not None and hasattr(val_via, "shape"), (
+            "probe setup failed: val_via was not published or lacks a shape"
+        )
+        assert val_via.shape == val_direct.shape
+        assert _jnp.allclose(val_via, val_direct, rtol=1e-10, atol=0.0, equal_nan=True)
 
 
 def test_predict_one_composes_with_outer_vmap(synthetic_ssp, simple_observation) -> None:
@@ -217,9 +219,11 @@ def test_predict_one_composes_with_outer_vmap(synthetic_ssp, simple_observation)
         if not hasattr(val_run, "shape"):
             continue
         val_outer = dict(via_outer_vmap.derived).get(key)
-        if val_outer is not None and hasattr(val_outer, "shape"):
-            assert val_outer.shape == val_run.shape
-            assert _jnp.allclose(val_outer, val_run, rtol=1e-10, atol=0.0, equal_nan=True)
+        assert val_outer is not None and hasattr(val_outer, "shape"), (
+            "probe setup failed: val_outer was not published or lacks a shape"
+        )
+        assert val_outer.shape == val_run.shape
+        assert _jnp.allclose(val_outer, val_run, rtol=1e-10, atol=0.0, equal_nan=True)
 
 
 def test_run_single_galaxy_matches_template_directly(synthetic_ssp, simple_observation) -> None:
