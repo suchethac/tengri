@@ -194,6 +194,7 @@ def test_model_level_f32_gradient_with_delayed_sfh_cue_dust():
         "dust_tau_diff": 0.2,
         "met_logzsol": -0.3,
         "neb_logU": -3.0,
+        "neb_logZ_gas": -0.3,
         "neb_fesc": 0.0,
         "neb_fesc_lya": 0.0,
         "neb_fdust": 0.1,
