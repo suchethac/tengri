@@ -409,6 +409,7 @@ jax.config.update("jax_enable_x64", True)
 _DATA_DIR = Path(__file__).resolve().parent.parent / "data"
 _SSP_FILE_WNE = _DATA_DIR / "ssp_prsc_miles_chabrier_wNE_logGasU-3.0_logGasZ0.0.h5"
 _SSP_FILE_BARE = _DATA_DIR / "ssp_prsc_bc03_chabrier.h5"
+_SSP_FILE_MIST_WNE = _DATA_DIR / "ssp_mist_c3k_a_chabrier_wNE_logGasU-3.0_logGasZ0.0.h5"
 _SSP_FILE_FSPS = _DATA_DIR / "fsps_prsc_miles_chabrier.h5"
 _SSP_FILE_BC03 = _DATA_DIR / "bc03_pdva_stelib_chabrier.h5"
 
@@ -698,6 +699,15 @@ def pytest_configure(config):
     # Five tests raised the moment the grid existed. Same argument as #613
     # one grid over: a structural contract that cannot run cannot hold.
     _create_synthetic_ssp_if_missing(_SSP_FILE_BARE, nebular_included=False)
+    # #2202: same shape again, one grid further out. Five files name this
+    # path; it is untracked, absent from `tengri.list_known_ssps()` (the
+    # catalog ships the *bare* `fsps_mist_c3k_a_chabrier.h5`), and written
+    # by no script -- every grep hit consumes the name. Unlike the bare
+    # grid above it un-hides no failures: measured 42 passed / 1 skipped
+    # -> 43 passed / 0 skipped, so exactly one test was dead. No
+    # `nebular_included`; the wNE token in the filename classifies it,
+    # as for the #613 grid.
+    _create_synthetic_ssp_if_missing(_SSP_FILE_MIST_WNE)
 
 
 def _create_cb19_fixture_if_missing(cb19_path: Path) -> None:
