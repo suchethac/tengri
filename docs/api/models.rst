@@ -31,6 +31,8 @@ parameters, returning SFR in solar masses per year.
 
 .. autofunction:: tengri.delayed_exponential
 
+.. autofunction:: tengri.declining_exponential
+
 .. autofunction:: tengri.triweight_burst
 
 SFH registry
@@ -148,9 +150,10 @@ ties, mid-IR/UV/X-ray consistency). Reachable as ``tengri.agn.priors``
 :func:`tengri.inference.loss_functions.build_logprior_fn`.
 
 .. automodule:: tengri.parameters.agn_priors
-   :members: AGNFITTER_HARD_REJECT, gaussian_log_prior, prior_energy_balance,
-      prior_stellar_mass, prior_agn_fraction, prior_low_agn_fraction,
-      prior_ir_syn_fraction, prior_uv_xrays, prior_ir_xrays, prior_midir_uv
+   :members: AGNFITTER_HARD_REJECT, AGNFITTER_PRIOR_DEFAULTS, gaussian_log_prior,
+      prior_energy_balance, prior_stellar_mass, prior_agn_fraction,
+      prior_low_agn_fraction, prior_ir_syn_fraction, prior_uv_xrays,
+      prior_ir_xrays, prior_midir_uv, agnfitter_priors
    :noindex:
 
 AGN template-library grid reductions (AGNfitter-rX)

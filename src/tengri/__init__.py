@@ -288,6 +288,7 @@ from tengri.components.igm.dla import dla_transmission, dla_transmission_obs
 from tengri.components.stellar.sfh import (
     AGEMAX_YR,
     constant,
+    declining_exponential,
     delayed_exponential,
     delayed_tau,
     double_powerlaw,
@@ -682,6 +683,7 @@ __all__ = [  # noqa: RUF022
     "data_path",
     # Components & physics
     "FilterConvention",
+    "FilterCurve",
     "Data",
     "CompositeIndexDef",
     "SpectralIndexDef",

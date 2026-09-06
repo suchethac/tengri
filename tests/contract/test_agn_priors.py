@@ -29,6 +29,7 @@ pytestmark = pytest.mark.contract
 
 from tengri.parameters.agn_priors import (
     AGNFITTER_HARD_REJECT,
+    AGNFITTER_PRIOR_DEFAULTS,
     agnfitter_priors,
     gaussian_log_prior,
     prior_agn_fraction,
@@ -52,6 +53,7 @@ _ALL_PRIOR_NAMES = (
     "prior_ir_xrays",
     "prior_midir_uv",
     "agnfitter_priors",
+    "AGNFITTER_PRIOR_DEFAULTS",
 )
 
 
@@ -71,6 +73,56 @@ class TestPublicSurface:
         assert hasattr(tengri.agn, "priors"), "tengri.agn.priors is not exposed"
         for name in _ALL_PRIOR_NAMES:
             assert hasattr(tengri.agn.priors, name)
+
+    def test_agnfitter_priors_defaults_pinned_values(self):
+        """``AGNFITTER_PRIOR_DEFAULTS`` is AGNfitter-rX's ``modelsettings``
+        default (only energy balance + AGN fraction enabled). Task 11 item 9:
+        this constant was missing from ``docs/api/models.rst`` and this test
+        file even though ``agnfitter_priors`` already reads every one of its
+        own keyword defaults off it -- pinned here against independently
+        hardcoded values (not read back off the dict itself) so a value
+        drift in the module is caught, not just a key-set drift."""
+        assert AGNFITTER_PRIOR_DEFAULTS == {
+            "energy_balance": True,
+            "energy_balance_mode": "flexible",
+            "stellar_mass": False,
+            "agn_fraction": True,
+            "low_agn_fraction": False,
+            "midir_uv": False,
+            "uv_xrays": False,
+            "ir_xrays": False,
+            "ir_syn_fraction": False,
+        }
+
+    def test_agnfitter_priors_defaults_are_the_single_source(self):
+        """``agnfitter_priors``'s ``enable_*``/``*_mode`` keyword defaults
+        must equal ``AGNFITTER_PRIOR_DEFAULTS`` -- the adapter reads every
+        one directly off the dict at definition time, so this also guards
+        the key-set correspondence itself (a renamed/added/removed key on
+        either side that the other missed)."""
+        import inspect
+
+        params = inspect.signature(agnfitter_priors).parameters
+        mapping = {
+            "energy_balance_mode": "energy_balance_mode",
+            "enable_energy_balance": "energy_balance",
+            "enable_stellar_mass": "stellar_mass",
+            "enable_agn_fraction": "agn_fraction",
+            "enable_low_agn_fraction": "low_agn_fraction",
+            "enable_midir_uv": "midir_uv",
+            "enable_uv_xrays": "uv_xrays",
+            "enable_ir_xrays": "ir_xrays",
+            "enable_ir_syn_fraction": "ir_syn_fraction",
+        }
+        assert set(mapping.values()) == set(AGNFITTER_PRIOR_DEFAULTS), (
+            "AGNFITTER_PRIOR_DEFAULTS keys and agnfitter_priors' enable_* "
+            "parameters have drifted apart"
+        )
+        for param_name, key in mapping.items():
+            assert params[param_name].default == AGNFITTER_PRIOR_DEFAULTS[key], (
+                f"agnfitter_priors({param_name}=...) default disagrees with "
+                f"AGNFITTER_PRIOR_DEFAULTS[{key!r}]"
+            )
 
     def test_hard_reject_is_a_finite_sentinel_not_inf(self):
         """Upstream's own comment (`PRIORS_AGNfitter.py:98`) marks this choice:
