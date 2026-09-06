@@ -137,12 +137,17 @@ class TestPSBSuess2022Registration:
         # Priors should be the Suess defaults (uniform over the physically
         # meaningful quenching-timescale ranges).
         assert spec.params["sfh_psb2022_tlast_gyr"].default == Uniform(0.01, 1.0)
-        assert spec.params["sfh_psb2022_tflex_gyr"].default == Uniform(0.5, 5.0)
+        # The tflex floor is the tlast ceiling: overlapping priors could draw a
+        # negative-width flexible zone (#2184). Suess+2022 fix tflex at 2 Gyr,
+        # which is still the default.
+        assert spec.params["sfh_psb2022_tflex_gyr"].default == Uniform(1.0, 5.0)
 
     def test_ratio_priors_are_studentt(self):
+        # Two old ratios, one per step of the three-bin fixed section (#2184);
+        # the flex-to-fixed step is pinned at 0 and takes no parameter.
         spec = SFH_REGISTRY["psb_suess2022"]
         _assert_studentt(spec.params["sfh_psb2022_ratio_young"].default, sigma=0.3)
-        for i in range(3):
+        for i in range(2):
             _assert_studentt(spec.params[f"sfh_psb2022_ratio_old_{i}"].default, sigma=0.3)
 
 
