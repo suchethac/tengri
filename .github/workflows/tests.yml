@@ -323,6 +323,15 @@ jobs:
       # miscounts across eight files kept 27 tests from ever running, including
       # two whose grids are tracked in git. Stdlib-only, same as above.
       - run: python tools/check_test_data_paths.py
+      # A test can pass because the bad case slipped through the predicate rather
+      # than because the good case was verified. #2100 pinned a gradient `isfinite`
+      # and a gradient of exactly ZERO is finite, so the identically-zero float32
+      # photometry gradient sailed through the only coverage that could have caught
+      # it. #2178 is the mirror: seam checks pinned the gradient `!= 0.0`, and
+      # `nan != 0.0` is True, so a NaN satisfied a non-zero assertion and shipped on
+      # the default spectroscopy path. Finite AND non-zero, together — never either
+      # alone. AST-based, not a regex over source text (5d08a293e, #2108).
+      - run: python tools/check_gradient_assertions.py
       # `Fitter._build_data_args` reads its optional observation channels with
       # `getattr(obs, "line_ratios", None)` — correct against a real model,
       # unsatisfiable against a bare MagicMock, whose every attribute

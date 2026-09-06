@@ -8,6 +8,17 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 
 ### Fixed
 
+- The audit that came with `tools/check_gradient_assertions.py`: **272 test
+  sites** across 135 files asserted half the finite-AND-non-zero rule and now
+  assert both. 237 were the #2100 shape (finite, never non-zero) and 35 the
+  #2178 shape (non-zero, never finite). No assertion was weakened to make the
+  guard pass, and no escape hatch was needed — every site could state both
+  halves, including the ones whose subject is a pytree of gradient leaves. Two
+  of the repaired sites are the historical bugs themselves:
+  `test_inference_grad_float32.py` (still finite-only on `main`, which is how
+  #2100 stayed invisible) and the `!= 0.0` seam checks in
+  `test_float32_fitting_path_seams.py`.
+
 - `multicolor_disc`'s pure-float32 bolometric renormalization returned
   `l_nu_intrinsic * scale`, and transposing that product makes JAX form
   `sum(g * l_nu_intrinsic)`. With the raw disc SED (~1e28) and the cotangent
@@ -45,6 +56,35 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
   positive; files written before this load unchanged (#2087).
 
 ### Added
+
+- `tools/check_gradient_assertions.py`, wired into the `lint` job — a guard on
+  the "undecided treated as good" assertion class. A gradient has three states,
+  not two, and a predicate written against the *bad* state is satisfied for free
+  by the *undecided* one. Both halves have already shipped: #2100 pinned the
+  float32 seam gradients `isfinite`, and a gradient of exactly **zero is
+  finite**, so the identically-zero `sum(predict_photometry)` gradient passed on
+  CPU and GPU alike and the coverage meant to catch it structurally could not.
+  #2178 is the mirror — the seam checks pinned the gradient `!= 0.0`, `nan !=
+  0.0` is `True`, so a NaN satisfied a non-zero assertion, XPASSed a strict
+  xfail as a repaired underflow, and shipped a float32 NaN on the default
+  spectroscopy path. The rule is the conjunction: **finite AND non-zero,
+  asserted together**, never either alone. Scope is gradients everywhere under
+  `tests/`, plus every array under test in `tests/regression/precision/`, where
+  a forward that has collapsed to zero fails the float32 question exactly as a
+  NaN does. AST-based, with taint tracked through assignment so
+  `leaves = [np.asarray(v) for v in tree_leaves(g)]` is still `g` — deliberately
+  not a regex over source text, which 5d08a293e removed from this repository on
+  purpose (#2108) and which could not tell `x > 0` on a gradient from
+  `rel_err < 1e-5` on a residual. A lower bound (`max(abs(g)) > 0`) settles both
+  halves on its own, because NaN fails every ordered comparison; a value pinned
+  *as* zero or *as* NaN is the subject rather than the accident and is not asked
+  for a partner. The narrow escape hatch is
+  `# grad-assert: finite-only — <reason>` / `# grad-assert: nonzero-only —
+  <reason>`, and a marker carrying no reason is itself a CI failure. The guard
+  is verified against history, not intuition:
+  `tests/fixtures/assertion_holes/historical.py` transcribes both pre-fix
+  assertions verbatim and `tests/contract/test_gradient_assertion_guard.py`
+  pins that the guard fires on each (#2100, #2178).
 
 - `mcmc_smc` — tempered Sequential Monte Carlo via BlackJAX, at
   `tier="experimental"`. A particle population annealed from the exact
