@@ -16,8 +16,8 @@ freed" signal (``WildcardNoOpWarning``), never silence.
 
 Q2 WIRED -- the selected type must measurably change the AGN SED relative to
 some other registered type in the same slot, at otherwise-identical
-(all-default) parameters. Measured on ``predict_state({}).derived['sed_agn']``
-(a ``(sum(|SED|), max(SED))`` digest) rather than ``predict_photometry``:
+parameters. Measured on ``predict_state(params).derived['sed_agn']`` (a
+``(sum(|SED|), max(SED))`` digest) rather than ``predict_photometry``:
 broadband photometry swamps the BLR/FeII categories entirely (measured: EVERY
 blr/feii type gives bit-identical photometry across every OTHER type in its
 category at these filters -- the same "photometry cannot see it, the SED can"
@@ -27,19 +27,30 @@ a magnitude cutoff (measured torus spread vs cat3d_wind: sum-digest ratios
 from ~0.02 to ~1.2 depending on type; a threshold picked to pass the small end
 would hide a real regression at the large end).
 
+``params`` is every FREED parameter's own declared-prior MIDPOINT (Task 16,
+item 7 refinement -- the peer harness's own rule: prior-quantile points, never
+raw defaults), built via ``all_params=FREE`` on the category under test and
+evaluated with :func:`_prior_median_params`, NEVER ``Fixed(DEFAULT)``/``{}``.
+Task-12's original version used ``all_params=Fixed(DEFAULT)``, which made
+``feii='qsogen_balmer'`` measure bit-identical to ``'boroson_green'`` (issue
+#2175) and need an ``xfail`` here -- but ``agn_bcnorm``'s declared DEFAULT is
+0.0, and that IS upstream's own reference default (Temple's qsogen_balmer at
+bcnorm=0 legitimately reproduces boroson_green), so the "identical at
+defaults" measurement was an artifact of evaluating every type at the one
+point (0) where its OWN distinguishing knob is defined to be a no-op, not a
+wiring defect. Evaluating at each type's own prior median instead
+(``agn_bcnorm``'s median is 1.0, squarely inside its Balmer-continuum-active
+regime) makes qsogen_balmer measurably differ from boroson_green for real, so
+the ``xfail`` this module carried is gone.
+
 For ``torus`` and ``feii``, compared against ONE fixed reference type
 (``cat3d_wind`` / ``boroson_green``) -- mirroring the addendum's own measured
-baseline table exactly, and load-bearing for the xfail below: comparing
-against "any sibling" would let ``qsogen_balmer`` pass trivially (it differs
-from ``grahsp``, just not from ``boroson_green``). ``disc``/``nlr``/``blr``/
-``atten`` have no such baseline; "differs from at least one sibling" is used
-instead (measured non-vacuous for all four categories).
-
-Known exception: ``feii='qsogen_balmer'`` is bit-identical to
-``'boroson_green'`` (issue #2175, a genuine wiring defect Task 15 fixes, NOT
-this task) -- ``xfail(strict=True)`` on that ONE Q2 case only, so it flips to
-a loud XPASS (and Task 15 removes the marker) the moment the physics is
-fixed.
+baseline table exactly: comparing against "any sibling" would let a type pass
+trivially by differing from some OTHER sibling while still being a no-op
+relative to the specific reference the addendum measured against.
+``disc``/``nlr``/``blr``/``atten`` have no such baseline; "differs from at
+least one sibling" is used instead (measured non-vacuous for all four
+categories).
 
 Skips: ``nlr``/``blr``'s ``synthesizer``/``synthesizer_spectra`` need
 ``data/synthesizer_grids/test_grid_agn-{nlr,blr}.hdf5``, fetched via
@@ -62,7 +73,6 @@ exactly once per category that declares a ``_Q2_REFERENCE`` entry.
 
 from __future__ import annotations
 
-import re
 import warnings
 
 import jax
@@ -130,9 +140,7 @@ def _make_ssp() -> SSPData:
     """Synthetic UV->submm SSP (no data/ssp_*.h5 dependency; mirrors
     tests/conftest.py::synthetic_ssp_wide, kept local and small so this
     module's ~45 builds stay cheap). Factored out of the ``ssp`` fixture
-    (task-12 fix round 1, item 2) so
-    :func:`test_feii_qsogen_balmer_xfail_reason_is_honest` can build one
-    without a pytest fixture context."""
+    (task-12 fix round 1, item 2)."""
     n_met, n_age = 3, 25
     wave = jnp.logspace(2.0, 7.0, 1600)  # 100 A - 1 mm
     ages_gyr = jnp.linspace(-3.0, 1.14, n_age)
@@ -205,13 +213,33 @@ def _build(ssp_data, observation, category, block_type, *, all_params):
     )
 
 
-def _sed_agn_digest(model) -> tuple[float, float]:
+def _sed_agn_digest(model, params: dict | None = None) -> tuple[float, float]:
     """(sum(|sed_agn|), max(sed_agn)) -- a shape-independent summary so
     cross-type comparison survives disc types that extend the wavelength
     grid (X-ray/radio wings, CLAUDE.md 'tengri extends the wavelength
-    axis') and therefore return a differently-shaped sed_agn."""
-    sed = np.asarray(model.predict_state({}).derived["sed_agn"])
+    axis') and therefore return a differently-shaped sed_agn.
+
+    ``params`` defaults to ``{}`` (every parameter at its Fixed value) --
+    Q2 passes :func:`_prior_median_params` instead (item 7 refinement:
+    never evaluate at Fixed(DEFAULT))."""
+    sed = np.asarray(model.predict_state(params or {}).derived["sed_agn"])
     return (float(np.sum(np.abs(sed))), float(np.max(sed)))
+
+
+def _prior_median_params(model) -> dict:
+    """Every FREE parameter's own declared-prior MIDPOINT (Task 16, item 7
+    refinement -- the peer harness's own rule): ``0.5 * (lo + hi)`` of its
+    ``get_distribution(name).bounds``, never a Fixed(DEFAULT)/registry
+    default. A type whose distinguishing physics only activates away from
+    its own declared default (``agn_bcnorm``'s default IS the physics-off
+    value, matching upstream's own reference) must be measured somewhere
+    inside its live regime to tell "wired" from "identical because both
+    sides were evaluated at the off-switch"."""
+    out = {}
+    for name in model.spec.free_params:
+        lo, hi = model.spec.get_distribution(name).bounds
+        out[name] = 0.5 * (lo + hi)
+    return out
 
 
 def _cases(categories: tuple[str, ...] = ("disc", "torus", "nlr", "blr", "feii", "atten")):
@@ -338,96 +366,45 @@ def _q2_case_id(category: str, block_type: str) -> str:
     return f"{category}/{block_type}"
 
 
-_Q2_PARAMS = []
-for _category, _block_type in _ALL_CASES:
-    if (_category, _block_type) == ("feii", "qsogen_balmer"):
-        _Q2_PARAMS.append(
-            pytest.param(
-                _category,
-                _block_type,
-                marks=pytest.mark.xfail(
-                    strict=True,
-                    reason=(
-                        "#2175: feii=qsogen_balmer photometry bit-identical to "
-                        "boroson_green (max rel diff 0.0) while feii=grahsp's "
-                        "sed_agn digest (this module's _sed_agn_digest -- "
-                        "sum(|sed_agn|) from predict_state({}).derived['sed_agn'], "
-                        "on the module's 8-band UV-submm _CENTERS tophat "
-                        "filters) differs from boroson_green's by 7.0996e-03 "
-                        "(0.71%) at identical params (addendum's illustrative "
-                        "1.438e+00 was a DIFFERENT, photometric example -- see "
-                        "test_feii_qsogen_balmer_xfail_reason_is_honest, which "
-                        "recomputes and pins this number)"
-                    ),
-                ),
-                id=_q2_case_id(_category, _block_type),
-            )
-        )
-    else:
-        _Q2_PARAMS.append(
-            pytest.param(_category, _block_type, id=_q2_case_id(_category, _block_type))
-        )
+_Q2_PARAMS = [
+    pytest.param(_category, _block_type, id=_q2_case_id(_category, _block_type))
+    for _category, _block_type in _ALL_CASES
+]
 
 
-def test_feii_qsogen_balmer_xfail_reason_is_honest():
-    """Task-12 fix round 1, item 2: the qsogen_balmer xfail reason above
-    cites a feii=grahsp-vs-boroson_green sed_agn digest relative difference.
-    Recompute that SAME digest with THIS module's own _build/_sed_agn_digest
-    (independently of the fixture-scoped ssp/obs -- via _make_ssp/_make_obs,
-    so this test does not depend on test ordering or fixture caching) and
-    assert it matches the number PARSED BACK OUT of the actual xfail reason
-    string -- so editing the literal without updating the measurement (or a
-    code change that silently moves the measurement) fails HERE, not just
-    reads wrong on inspection."""
-    ssp_data = _make_ssp()
-    observation = _make_obs()
-    grahsp_model = _build(ssp_data, observation, "feii", "grahsp", all_params=Fixed(DEFAULT))
-    ref_model = _build(
-        ssp_data, observation, "feii", _Q2_REFERENCE["feii"], all_params=Fixed(DEFAULT)
-    )
-    grahsp_sum, _ = _sed_agn_digest(grahsp_model)
-    ref_sum, _ = _sed_agn_digest(ref_model)
-    measured = abs(grahsp_sum - ref_sum) / abs(ref_sum)
-
-    xfail_param = next(p for p in _Q2_PARAMS if p.id == _q2_case_id("feii", "qsogen_balmer"))
-    xfail_mark = next(m for m in xfail_param.marks if m.name == "xfail")
-    reason = xfail_mark.kwargs["reason"]
-    match = re.search(r"by (\d\.\d+e-\d+) \(", reason)
-    assert match, f"could not find the cited grahsp-vs-reference rel-diff number in: {reason!r}"
-    cited = float(match.group(1))
-
-    assert measured == pytest.approx(cited, rel=1e-3), (
-        f"measured feii=grahsp-vs-boroson_green sed_agn digest rel diff "
-        f"{measured:.6e} no longer matches the {cited:.6e} cited in the "
-        f"qsogen_balmer xfail reason above -- update that reason string."
-    )
+def _q2_build_and_digest(ssp, obs, category: str, block_type: str) -> tuple[float, float]:
+    """Build ``category``'s wildcard FREE and evaluate the digest at every
+    freed parameter's own prior median (item 7 refinement; never
+    Fixed(DEFAULT)/``{}``)."""
+    model = _build(ssp, obs, category, block_type, all_params=FREE)
+    return _sed_agn_digest(model, _prior_median_params(model))
 
 
 @pytest.mark.parametrize(("category", "block_type"), _Q2_PARAMS)
 def test_q2_wired_against_siblings(ssp, obs, category, block_type):
     """Q2: this type's AGN SED must differ from at least one other
     registered type in the same slot (torus/feii: from the fixed reference
-    specifically, matching the addendum's measured baseline) at identical
-    (all-default) parameters."""
+    specifically, matching the addendum's measured baseline), each
+    evaluated at its OWN freed parameters' prior median (item 7
+    refinement)."""
     try:
-        this_model = _build(ssp, obs, category, block_type, all_params=Fixed(DEFAULT))
+        this_digest = _q2_build_and_digest(ssp, obs, category, block_type)
     except (TengriIOError, FileNotFoundError) as exc:
         _maybe_skip_grid_gated(category, block_type, exc)
-    this_digest = _sed_agn_digest(this_model)
 
     reference = _Q2_REFERENCE.get(category)
     if reference is not None:
         if block_type == reference:
             pytest.skip(f"{category}/{block_type} IS the reference type; nothing to compare.")
         try:
-            ref_model = _build(ssp, obs, category, reference, all_params=Fixed(DEFAULT))
+            ref_digest = _q2_build_and_digest(ssp, obs, category, reference)
         except (TengriIOError, FileNotFoundError) as exc:
             _maybe_skip_grid_gated(category, reference, exc)
-        ref_digest = _sed_agn_digest(ref_model)
         assert this_digest != ref_digest, (
             f"{category}/{block_type}: AGN SED digest is bit-identical to the "
-            f"reference {category}/{reference} at default parameters "
-            f"({this_digest}) -- this type is wired as a no-op relative to it."
+            f"reference {category}/{reference} at each type's own prior-median "
+            f"parameters ({this_digest}) -- this type is wired as a no-op "
+            f"relative to it."
         )
         return
 
@@ -437,12 +414,12 @@ def test_q2_wired_against_siblings(ssp, obs, category, block_type):
         if (category, sib) in _SYNTHESIZER_GATED:
             continue
         try:
-            sib_model = _build(ssp, obs, category, sib, all_params=Fixed(DEFAULT))
+            digests.append(_q2_build_and_digest(ssp, obs, category, sib))
         except TengriIOError:
             continue
-        digests.append(_sed_agn_digest(sib_model))
     assert digests, f"{category}/{block_type}: no buildable sibling to compare against"
     assert any(this_digest != d for d in digests), (
         f"{category}/{block_type}: AGN SED digest ({this_digest}) is bit-identical "
-        f"to EVERY other {category} type at default parameters -- wired as a no-op."
+        f"to EVERY other {category} type at each type's own prior-median "
+        f"parameters -- wired as a no-op."
     )

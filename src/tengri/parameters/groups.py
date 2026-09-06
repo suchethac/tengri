@@ -699,6 +699,12 @@ _AGN_PARTITION = {
     "agn_blr_cf": "agn.blr",
     # FeII
     "agn_fe2_strength": "agn.feii",
+    # Task 16 (item 7, F5): agn_bcnorm (qsogen_balmer's Balmer-continuum
+    # strength knob, #2175) had no partition entry at all, so it fell
+    # through to the shared "agn" group -- the feii sub-block's own wildcard
+    # could never reach it (only the top-level agn wildcard could, via
+    # AGN_BLOCK_CONSUMES[("feii", "qsogen_balmer")]).
+    "agn_bcnorm": "agn.feii",
     # Attenuation
     "agn_polar_ebv": "agn.atten",
     "agn_polar_oa": "agn.atten",
@@ -5090,9 +5096,16 @@ def _translate_agn(agn_dict: dict, result: dict) -> None:
                 )
 
             # Reject old law-as-type spelling: type='smc_prevot'
-            if type_key == "smc_prevot":
+            if type_key in ("smc_prevot", "prevot_smc"):
+                # Task 16 (item 9, F8): both spellings a caller might try must
+                # reach the working form in ONE message. Before this,
+                # type='prevot_smc' (reversed word order) fell through to the
+                # generic "Unknown type" check below, which difflib-suggested
+                # 'smc_prevot' -- itself ALSO refused by this very check, a
+                # second hop to the same destination. Intercepting both here
+                # means either spelling reaches the fix directly.
                 raise ValueError(
-                    "agn['atten'] type='smc_prevot' is no longer supported. "
+                    f"agn['atten'] type={type_key!r} is no longer supported. "
                     "Use the new form with law key instead:\n"
                     "  agn={'atten': {'law': 'prevot_smc', 'ebv': Uniform(...)}}\n"
                     "'prevot_smc' is the only law this block implements -- it applies "

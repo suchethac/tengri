@@ -473,16 +473,22 @@ class TestAGNValidBlockTypes:
         )
         assert params.agn_attenuation_block == "smc_prevot"
 
-    def test_old_smc_prevot_type_key_raises(self):
-        """Old type='smc_prevot' spelling is rejected with helpful message."""
+    @pytest.mark.parametrize("bad_type", ["smc_prevot", "prevot_smc"])
+    def test_old_smc_prevot_type_key_raises(self, bad_type):
+        """Both retired type= spellings reach the working form in ONE
+        message (Task 16, item 9, F8): type='smc_prevot' (the registry key)
+        and type='prevot_smc' (the reversed spelling, which used to fall
+        through to a generic "Unknown type" error whose difflib suggestion
+        was 'smc_prevot' -- itself ALSO refused by this same check, a
+        second hop to the same destination)."""
         with pytest.raises(ValueError) as exc_info:
             parse_groups(
                 sfh={"type": "dpl", "all_params": Fixed(DEFAULT)},
-                agn={"atten": {"type": "smc_prevot"}},
+                agn={"atten": {"type": bad_type}},
                 redshift=Fixed(0.1),
             )
         error_msg = str(exc_info.value)
-        assert "smc_prevot" in error_msg
+        assert bad_type in error_msg
         assert "law" in error_msg
         assert "prevot_smc" in error_msg
 
