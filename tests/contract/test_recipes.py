@@ -117,6 +117,13 @@ RECIPE_FREE_PARAMS = {
     "agn_panchromatic": [
         "agn_a_spin",
         "agn_cos_inc",
+        # agn_ebv_disc added (Task 16, item 2): a category-wide companion
+        # read (compose_l_nu reddens EVERY disc block's own continuum with
+        # this Prevot-SMC screen at the runner stage, #916) invisible to
+        # per-type introspection/AGN_BLOCK_CONSUMES alike; this recipe's
+        # disc sub-dict states no 'all_params' of its own, so it inherits
+        # the top-level wildcard and is now correctly freed.
+        "agn_ebv_disc",
         "agn_ir_frac",
         "agn_log_lbol",
         "agn_log_mbh",
@@ -155,6 +162,9 @@ RECIPE_FREE_PARAMS = {
         "agn_blr_cf",
         "agn_blr_line_efficiency",
         "agn_cos_inc",
+        # agn_ebv_disc added (Task 16, item 2): see the agn_panchromatic
+        # entry above for the same note.
+        "agn_ebv_disc",
         "agn_fe2_strength",
         "agn_ir_frac",
         "agn_log_lbol",
