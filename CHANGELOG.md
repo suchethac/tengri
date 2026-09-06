@@ -12,7 +12,12 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
   sites** across 137 files asserted half the finite-AND-non-zero rule and now
   assert both. 241 were the #2100 shape (finite, never non-zero) and 35 the
   #2178 shape (non-zero, never finite). No assertion was weakened to make the
-  guard pass, and only judgment — not the escape hatch — was needed anywhere.
+  guard pass. 13 of the 276 carry the documented escape hatch
+  (`# grad-assert: finite-only — <reason>`): they construct a degenerate input
+  on purpose — a zeroed window, an empty band, zero ionizing flux, an exact
+  `log10_add` cancellation, the Hessian-vector product of a linear scaling, a
+  kernel evaluated outside its band — so zero is the correct answer there and
+  only the finite half is a claim.
   Two of the repaired sites are the historical bugs themselves:
   `test_inference_grad_float32.py` (still finite-only on `main`, which is how
   #2100 stayed invisible) and the `!= 0.0` seam checks in
