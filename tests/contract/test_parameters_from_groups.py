@@ -45,7 +45,13 @@ class TestFromGroupsBridge:
         assert via_method.fixed_params == via_function.fixed_params
 
     def test_from_groups_canonical_example(self):
-        """The canonical example from the design doc works end-to-end."""
+        """The canonical example from the design doc works end-to-end.
+
+        ``redshift=FREE`` genuinely frees redshift (#2187 owner reversal):
+        ``redshift`` declares a default ``free_prior=Uniform(0.0, 20.0)``
+        (``tengri.parameters._shared.PARAMS``), so ``FREE`` lands on that
+        interval rather than raising.
+        """
         spec = parse_groups(
             sfh={"type": "dpl", "all_params": FREE, "beta": Uniform(1, 3)},
             dust_attenuation={
@@ -62,6 +68,8 @@ class TestFromGroupsBridge:
         assert "sfh_dpl_alpha" in spec.free_params
         assert "dust_tau_bc" in spec.fixed_params
         assert spec.get_distribution("dust_tau_bc") == Fixed(0.5)
+        assert "redshift" in spec.free_params
+        assert spec.get_distribution("redshift") == Uniform(0.0, 20.0)
 
     def test_from_groups_propagates_validation_errors(self):
         """Unknown group keys raise the same ValueError as parse_groups."""
