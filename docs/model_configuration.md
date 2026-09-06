@@ -163,16 +163,32 @@ model = SEDModel.build(
 
 (A partial free — some parameters in the group have a declared range and some do not — warns with `WildcardPartialFreeWarning` rather than raising, naming which ones stay pinned; see the docstring of `_check_wildcard_freed_something` for the full four-outcome table.)
 
-The same refusal applies to an **explicitly named per-parameter `FREE`**, not just the wildcard: naming one specific parameter as `FREE` must free it or refuse, never silently leave it pinned. `redshift` is the worked example — it declares no `free_prior` (no galaxy-independent redshift interval exists; every shipped recipe picks a survey-specific range instead), so `redshift=FREE` raises rather than quietly building a model at its old Fixed default:
+The same refusal applies to an **explicitly named per-parameter `FREE`**, not just the wildcard: naming one specific parameter as `FREE` must free it or refuse, never silently leave it pinned. `met_alpha_fe` is the worked refusal example — the declared-but-not-yet-shipped alpha-enhancement axis has no `free_prior` (a wildcard cannot know whether the loaded SSP grid even carries an alpha-enhanced axis), so naming it `FREE` raises rather than quietly building a model with it pinned:
+
+```python
+model = SEDModel.build(
+    ssp_data=ssp, observation=obs, sfh={...},
+    met={'type': 'table', 'alpha_fe': FREE}, redshift=Fixed(0.1),
+)
+# Raises ParameterError:
+# "'alpha_fe': FREE cannot be honored -- 'met_alpha_fe' has no declared
+#  free prior (its registry default is Fixed(0.0)). Pass an explicit
+#  prior instead, e.g. alpha_fe: Uniform(lo, hi)."
+
+# CORRECT: an explicit prior for a parameter you genuinely mean to vary
+model = SEDModel.build(
+    ssp_data=ssp, observation=obs, sfh={...},
+    met={'type': 'table', 'alpha_fe': Uniform(-0.2, 0.4)}, redshift=Fixed(0.1),
+)
+```
+
+`redshift` is the worked example of the opposite outcome — a parameter **with** a declared default free prior. It declares `free_prior=Uniform(0.0, 20.0)`, an interval chosen to span and exceed every shipped recipe's redshift prior (photoz `Uniform(0.01, 6.0)`, high_z `Uniform(3.5, 10.0)`, stochastic/JWST `Uniform(0.01, 12.0)`), so `redshift=FREE` genuinely frees it over that range rather than raising:
 
 ```python
 model = SEDModel.build(ssp_data=ssp, observation=obs, sfh={...}, redshift=FREE)
-# Raises ParameterError:
-# "'redshift': FREE cannot be honored -- 'redshift' has no declared free
-#  prior (its registry default is Fixed(0.1)). Pass an explicit prior
-#  instead, e.g. redshift=Uniform(lo, hi)."
+# Builds. model.spec.get_distribution('redshift') == Uniform(0.0, 20.0)
 
-# CORRECT: an explicit prior for a photo-z fit
+# Narrow it with an explicit prior for a survey-specific photo-z fit
 model = SEDModel.build(ssp_data=ssp, observation=obs, sfh={...}, redshift=Uniform(0.01, 6.0))
 ```
 

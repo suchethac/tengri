@@ -43,7 +43,7 @@ model = tengri.SEDModel.build(
     },
     dust_emission={"type": "dale2014", "all_params": tengri.Fixed(tengri.DEFAULT)},
     neb={"type": "cue", "all_params": tengri.Fixed(tengri.DEFAULT)},
-    redshift=tengri.Uniform(0.01, 6.0),  # Explicit prior required since #2187
+    redshift=tengri.FREE,
 )
 
 # Generate synthetic observed photometry

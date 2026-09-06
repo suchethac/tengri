@@ -206,12 +206,14 @@ class TestToGroupsRoundtrip:
     def test_round_trip_mixed_free_fixed(self):
         """Mixed free and fixed params roundtrip.
 
-        ``redshift`` is given an explicit prior rather than ``FREE``:
-        ``redshift`` declares no ``free_prior`` (there is no galaxy-independent
-        redshift interval -- shipped recipes each pick a survey-specific
-        range), so ``redshift=FREE`` raises rather than silently resolving to
-        a pinned default (#2187). ``Uniform(0.01, 6.0)`` is the explicit-prior
-        workaround the raised error itself advises.
+        ``redshift=FREE`` genuinely frees redshift (#2187 owner reversal):
+        ``redshift`` declares a default ``free_prior=Uniform(0.0, 20.0)``
+        (``tengri.parameters._shared.PARAMS``), so ``FREE`` lands on that
+        interval rather than raising. ``to_groups()`` emits the *resolved*
+        distribution, not the ``FREE`` sentinel (``get_distribution`` at the
+        emitter, ``groups.py``), so the round-tripped spec is built from
+        ``redshift=Uniform(0.0, 20.0)`` explicitly -- the two specs still
+        agree on the concrete distribution either way.
         """
         original = parse_groups(
             sfh={"type": "dpl", "alpha": FREE, "beta": Uniform(0.5, 2.0), "tau_gyr": Fixed(1.0)},
@@ -221,17 +223,17 @@ class TestToGroupsRoundtrip:
                 "all_params": Fixed(DEFAULT),
                 "tau_bc": Uniform(0, 1),
             },
-            redshift=Uniform(0.01, 6.0),
+            redshift=FREE,
         )
         assert "redshift" in original.free_params
-        assert original.get_distribution("redshift") == Uniform(0.01, 6.0)
+        assert original.get_distribution("redshift") == Uniform(0.0, 20.0)
 
         roundtripped = parse_groups(**original.to_groups())
 
         assert original.free_params == roundtripped.free_params
         assert original.fixed_params == roundtripped.fixed_params
         assert "redshift" in roundtripped.free_params
-        assert roundtripped.get_distribution("redshift") == Uniform(0.01, 6.0)
+        assert roundtripped.get_distribution("redshift") == Uniform(0.0, 20.0)
 
         for name in original.all_params:
             orig_dist = original.get_distribution(name)

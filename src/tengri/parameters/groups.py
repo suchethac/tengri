@@ -8,7 +8,7 @@ Provides a Bagpipes-style nested-dictionary interface to the Parameters
 class. Instead of flat kwargs (e.g., ``sfh_dpl_alpha=..., sfh_dpl_beta=...``),
 users can organize parameters into semantic groups::
 
-    from tengri.parameters import parse_groups, FREE, Fixed, DEFAULT, Uniform
+    from tengri.parameters import parse_groups, FREE, Fixed, DEFAULT
 
     params = parse_groups(
         sfh={"type": "dpl", "all_params": FREE, "beta": 0.5},
@@ -19,7 +19,7 @@ users can organize parameters into semantic groups::
         },
         dust_emission={"type": "dale2014"},
         neb={"type": "cue"},
-        redshift=Uniform(0.01, 6.0),
+        redshift=FREE,
     )
 
 The parser translates group structure and parameter overrides into a

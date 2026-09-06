@@ -1206,7 +1206,7 @@ pinned."
 | -------------------------------------------------------------------------------------------------------------- | -------------------------------------------------------------------------------------------------------------------- |
 | Empty-coverage wildcard, e.g. `igm={'type': 'inoue14', 'all_params': FREE}` — warned `WildcardNoOpWarning`, built anyway at z=0.1 with no IGM knob varying | Raises `ParameterError` ("... covers no parameters ..."); remove the wildcard or pass an explicit prior for a parameter the configuration actually declares |
 | Explicit per-parameter `FREE` on a parameter with no declared `free_prior`, e.g. `met={'type': 'table', 'alpha_fe': FREE}` — silently pinned it at its `Fixed` default, no warning at all | Raises `ParameterError` ("... has no declared free prior ..."); pass an explicit prior for a parameter you genuinely mean to vary — `met_alpha_fe` itself is the declared-but-unshipped alpha-enhancement axis (its liveness has never been measured), so there the honest fix is to drop the key, not to free it |
-| `redshift=FREE` — silently resolved to `Fixed(0.1)` (the registry default), a model built at z=0.1 with zero warning | Raises `ParameterError`; write an explicit prior, e.g. `redshift=Uniform(0.01, 6.0)` |
+| `redshift=FREE` — silently resolved to `Fixed(0.1)` (the registry default), a model built at z=0.1 with zero warning | `redshift` declares `free_prior=Uniform(0.0, 20.0)`, so `redshift=FREE` genuinely frees it; an explicit prior narrows it |
 | `sfh={'type': 'snorm_burst', 'all_params': FREE}` (and `'tsnorm_burst'`) — froze `burst_sfr` at `Fixed(0.0)`, so the (successfully freed) `burst_age` was a zero-gradient dimension: varying where a zero-height plateau sits changes nothing | `burst_sfr` now declares `free_prior=Uniform(0.0, 10.0)` — a dimensionless burst-plateau amplitude ratio, not a Msun/yr rate — and frees alongside `burst_age` |
 
 A wildcard that frees a genuine strict *subset* of what it covers is
@@ -1218,13 +1218,19 @@ covered, or covered-but-none-freed — escalated from warning (or silence) to
 `ParameterError`.
 
 **`redshift=FREE`** deserves its own note because it is the highest-traffic
-case: `redshift` had no declared `free_prior` since the grammar's first
+case. `redshift` had no declared `free_prior` since the grammar's first
 version, so `redshift=FREE` always silently built a model at the registry's
 `Fixed(0.1)` default — a ~1e17 flux-scale error for anyone who actually meant
-to fit the redshift. No default free prior was added to close the gap: there
-is no galaxy-independent redshift interval (the shipped recipes alone span
-`Uniform(0.01, 6)`, `Uniform(3.5, 10)`, and `Uniform(0.01, 12)`), so the fix
-is the same explicit-prior discipline as every other no-free-prior parameter.
+to fit the redshift. `redshift` now declares `free_prior=Uniform(0.0, 20.0)`,
+an interval that spans and exceeds every shipped recipe's redshift prior
+(`Uniform(0.01, 6)`, `Uniform(3.5, 10)`, `Uniform(0.01, 12)`), so
+`redshift=FREE` genuinely frees it instead of raising or silently pinning. An
+explicit user prior still narrows it. **This can change the dimensionality of
+a model for code that wrote `redshift=FREE` expecting it to do nothing** (the
+silent-pinning behavior this whole issue exists to fix): that code's
+expectation was itself the bug, and it should now either pass an explicit
+`redshift=Fixed(z)`/`Uniform(lo, hi)` or accept that redshift is a genuinely
+free dimension.
 
 **`burst_sfr`** (`sfh_snorm_burst_burst_sfr` / `sfh_tsnorm_burst_burst_sfr`)
 is the one case in this batch where the right fix was to *add* a

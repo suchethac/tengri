@@ -47,11 +47,10 @@ class TestFromGroupsBridge:
     def test_from_groups_canonical_example(self):
         """The canonical example from the design doc works end-to-end.
 
-        ``redshift`` is given an explicit prior rather than ``FREE``:
-        ``redshift`` declares no ``free_prior`` (no galaxy-independent
-        redshift interval exists -- shipped recipes each pick a
-        survey-specific range), so ``redshift=FREE`` raises rather than
-        silently resolving to a pinned default (#2187).
+        ``redshift=FREE`` genuinely frees redshift (#2187 owner reversal):
+        ``redshift`` declares a default ``free_prior=Uniform(0.0, 20.0)``
+        (``tengri.parameters._shared.PARAMS``), so ``FREE`` lands on that
+        interval rather than raising.
         """
         spec = parse_groups(
             sfh={"type": "dpl", "all_params": FREE, "beta": Uniform(1, 3)},
@@ -63,14 +62,14 @@ class TestFromGroupsBridge:
             },
             dust_emission={"type": "dale2014", "all_params": Fixed(DEFAULT)},
             neb={"type": "cue", "all_params": Fixed(DEFAULT)},
-            redshift=Uniform(0.01, 6.0),
+            redshift=FREE,
         )
         assert "sfh_dpl_beta" in spec.free_params
         assert "sfh_dpl_alpha" in spec.free_params
         assert "dust_tau_bc" in spec.fixed_params
         assert spec.get_distribution("dust_tau_bc") == Fixed(0.5)
         assert "redshift" in spec.free_params
-        assert spec.get_distribution("redshift") == Uniform(0.01, 6.0)
+        assert spec.get_distribution("redshift") == Uniform(0.0, 20.0)
 
     def test_from_groups_propagates_validation_errors(self):
         """Unknown group keys raise the same ValueError as parse_groups."""

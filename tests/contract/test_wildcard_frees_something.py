@@ -725,23 +725,36 @@ class TestExplicitPerParamFreeMustBeHonoredOrRefused2187:
         assert "sfh_dpl_alpha" in freed
 
 
-# ── Regression: redshift=FREE raises rather than silently pinning ─────
+# ── Regression: redshift=FREE genuinely frees redshift ─────────────────
 #
-# #2187 follow-up, same seam as the class above: ``redshift`` used to resolve
-# ``FREE`` straight to its registry default, ``Fixed(0.1)`` -- so
-# ``redshift=FREE`` built a model at z=0.1 with zero warning, a silent
-# ~1e17 flux-scale error class for anyone who actually meant to fit the
-# redshift. No default free prior is invented for it: shipped recipes each
-# pick a survey-specific range (``Uniform(0.01, 6)``, ``Uniform(3.5, 10)``,
-# ``Uniform(0.01, 12)``), so there is no galaxy-independent interval to
-# declare. The documented workaround is the same as for any other
-# no-free-prior parameter: pass an explicit prior.
+# #2187 follow-up, same seam as the class above, then reversed by the owner:
+# an earlier version of this fix made ``redshift=FREE`` raise, on the
+# argument that shipped recipes each pick a survey-specific range and there
+# is no galaxy-independent interval to declare. The owner rejected that:
+# "redshift free should just work." The #887/#2187 refusal-over-silent-
+# pinning mechanism stays -- it is still correct for a parameter that
+# genuinely cannot carry a default, e.g. ``met_alpha_fe`` above -- but
+# redshift now declares one: ``free_prior=Uniform(0.0, 20.0)``
+# (``tengri.parameters._shared.PARAMS``), the owner-chosen default that
+# spans and exceeds every shipped recipe's redshift prior (photoz
+# ``Uniform(0.01, 6)``, high_z ``Uniform(3.5, 10)``, stochastic/JWST
+# ``Uniform(0.01, 12)``). ``redshift=FREE`` now lands free at exactly that
+# interval, and an explicit user prior still narrows it -- per-parameter
+# entries override the FREE expansion, same as every other parameter.
 
 
-def test_redshift_free_raises_rather_than_silently_pinning():
-    with pytest.raises(ParameterError, match=r"no declared free prior") as exc:
-        tengri.parse_groups(sfh={"type": "dpl", "all_params": Fixed(DEFAULT)}, redshift=FREE)
-    assert "redshift" in str(exc.value)
+def test_redshift_free_lands_free_at_the_declared_default():
+    spec = tengri.parse_groups(sfh={"type": "dpl", "all_params": Fixed(DEFAULT)}, redshift=FREE)
+    assert "redshift" in spec.free_params
+    assert spec.get_distribution("redshift") == Uniform(0.0, 20.0)
+
+
+def test_redshift_explicit_prior_overrides_the_declared_default():
+    spec = tengri.parse_groups(
+        sfh={"type": "dpl", "all_params": Fixed(DEFAULT)}, redshift=Uniform(0.5, 1.5)
+    )
+    assert "redshift" in spec.free_params
+    assert spec.get_distribution("redshift") == Uniform(0.5, 1.5)
 
 
 # ── Regression: snorm_burst/tsnorm_burst's burst_sfr now genuinely frees ──

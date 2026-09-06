@@ -99,7 +99,7 @@ parameter. A mismatch (>1e-3) indicates a non-differentiable operation.
         },
         dust_emission={"type": "dale2014", "all_params": tengri.Fixed(tengri.DEFAULT)},
         neb={"type": "cue", "all_params": tengri.Fixed(tengri.DEFAULT)},
-        redshift=tengri.Uniform(0.01, 6.0),  # Explicit prior required since #2187
+        redshift=tengri.FREE,
     )
 
     # Generate synthetic observed photometry
@@ -164,7 +164,7 @@ parameter. A mismatch (>1e-3) indicates a non-differentiable operation.
 
 .. rst-class:: sphx-glr-timing
 
-   **Total running time of the script:** (0 minutes 3.440 seconds)
+   **Total running time of the script:** (0 minutes 3.099 seconds)
 
 
 .. _sphx_glr_download_auto_examples_advanced_plot_diag_gradient_finite_difference.py:
