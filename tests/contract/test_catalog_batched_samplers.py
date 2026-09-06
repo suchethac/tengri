@@ -230,7 +230,7 @@ class TestTheTreeDepthCapReachesWarmup:
             import blackjax
 
             original_adapt = blackjax.window_adaptation
-        except (ImportError, AttributeError):
+        except ImportError:
             # If blackjax not available or doesn't have window_adaptation,
             # skip this test
             pytest.skip("blackjax.window_adaptation not available")

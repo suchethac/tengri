@@ -29,7 +29,9 @@ class TestSKIRTORComponentSeparation:
             if fn is None:
                 pytest.skip("SKIRTOR v3 grid not available")
             return fn
-        except Exception:
+        # The absent-grid case is the ``fn is None`` check above; anything else
+        # that reaches here is a loading defect, not a missing file.
+        except (FileNotFoundError, ImportError, OSError):
             pytest.skip("SKIRTOR grid loading failed")
 
     @pytest.fixture
@@ -213,7 +215,7 @@ class TestSKIRTORModelComponent:
             grid_path = _find_skirtor_grid()
             config = SKIRTORTorusConfig(grid_path=grid_path)
             return SKIRTORTorus(config=config)
-        except Exception:
+        except (FileNotFoundError, ImportError, OSError):
             pytest.skip("SKIRTOR grid or component instantiation failed")
 
     def test_model_parameter_sanity(self, skirtor_component):

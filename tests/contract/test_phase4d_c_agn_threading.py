@@ -108,7 +108,7 @@ def test_skirtor_agn_publishes_templates_for_jit(ssp_bare, obs):
     """A model built with SKIRTOR AGN has template_data with 'agn.skirtor'."""
     try:
         model = _silent_build(_skirtor_spec(), ssp_bare, obs, agn_model="skirtor")
-    except (ImportError, FileNotFoundError, KeyError):
+    except (ImportError, FileNotFoundError):
         pytest.skip("SKIRTOR templates not available")
 
     td = model._template_data_for_jit()
@@ -143,7 +143,7 @@ def test_jit_and_non_jit_agree_with_skirtor(ssp_bare, obs):
     """JIT and non-JIT paths agree with SKIRTOR AGN after threading."""
     try:
         model = _silent_build(_skirtor_spec(), ssp_bare, obs, agn_model="skirtor")
-    except (ImportError, FileNotFoundError, KeyError):
+    except (ImportError, FileNotFoundError):
         pytest.skip("SKIRTOR templates not available")
 
     params = {}

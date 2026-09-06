@@ -118,7 +118,7 @@ def test_cue_backend_publishes_weights_for_jit(ssp_bare, obs):
     """
     try:
         model = _silent_build(_cue_spec(), ssp_bare, obs)
-    except (ImportError, FileNotFoundError, KeyError):
+    except (ImportError, FileNotFoundError):
         pytest.skip("Cue backend not available")
 
     td = model._template_data_for_jit()
@@ -155,7 +155,7 @@ def test_jit_and_non_jit_paths_agree_with_cue(ssp_bare, obs):
     """
     try:
         model = _silent_build(_cue_spec(), ssp_bare, obs)
-    except (ImportError, FileNotFoundError, KeyError):
+    except (ImportError, FileNotFoundError):
         pytest.skip("Cue backend not available")
 
     params = {"neb_logU": jnp.asarray(-3.0)}

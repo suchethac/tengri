@@ -133,7 +133,7 @@ def test_dust_emission_template_threads_as_argument(ssp, obs, emission):
                 redshift=Fixed(0.1),
             )
         baked = _traced_baked_mb(model)
-    except (FileNotFoundError, ValueError, NotImplementedError) as exc:
+    except (FileNotFoundError, NotImplementedError) as exc:
         pytest.skip(f"dust emission {emission!r} unavailable: {exc}")
 
     assert baked < _BAKED_BUDGET_MB, (
