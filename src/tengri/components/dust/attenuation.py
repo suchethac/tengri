@@ -33,7 +33,7 @@ Available Attenuation Curves
 - **li08**: Li et al. (2008) Eq. (1) four-coefficient curve (continuum + FUV rise + 2175 Å bump)
 - **salim**: Salim et al. (2018) modified Calzetti (= DSPS default)
 - **tea**: Haskell et al. (2024) TEA 3-param empirical (NIHAO-SKIRT bump-slope correlation)
-- **narayanan_z**: Narayanan et al. (2018) redshift-dependent Kriek-Conroy (SIMBA RT)
+- **narayanan_z**: Narayanan et al. (2018) redshift-dependent Kriek-Conroy (MUFASA RT)
 - **conroy2010**: Conroy+2010 mixed MW + power-law (FSPS dust_type=1)
 - **vw07_bc**: Wild+2007 birth cloud power-law (n=-1.3)
 - **vw07_diff**: Wild+2007 diffuse ISM power-law (n=-0.7)
@@ -1281,10 +1281,53 @@ def tea(
     return kriek_conroy(wavelength, dust_delta=dust_delta, dust_bump_strength=eb)
 
 
+# The three tables below are the output of
+# ``scripts/fit_narayanan2018_medians.py``, which fits the Kriek & Conroy
+# (2013) form to ``data/attenuation/narayanan2018_median_curves.dat`` -- the
+# Narayanan et al. (2018) published medians, repackaged with attribution. Rerun
+# that script to reproduce every digit; it also writes
+# ``data/attenuation/narayanan2018_kc13_fits.json``, which
+# ``tests/regression/bug/test_bug_2199_narayanan_z_redshift.py`` reads back to
+# check this hand-copy against it.
+
+#: Redshifts at which Narayanan et al. (2018) publish a median attenuation curve.
+_NARAYANAN_Z_NODES = jnp.array([0.0, 1.0, 2.0, 3.0, 4.0, 5.0, 6.0])
+
+#: Kriek & Conroy (2013) slope :math:`\delta` fitted to each published median.
+#: Full precision, so that this table and the JSON the script writes are the
+#: same numbers and a golden pinned against either holds against both.
+_NARAYANAN_DELTA = jnp.array(
+    [
+        -0.5555790140809852,
+        -0.2910618326689639,
+        -0.4655455976558615,
+        -0.38570378510780945,
+        -0.32995141823672564,
+        0.13785066855951653,
+        0.07950863548914745,
+    ]
+)
+
+#: Multiplier on the KC13 bump amplitude fitted to each published median. The
+#: implied :math:`E_b = m\,(0.85 - 1.9\,\delta)` is 6.36, 2.77, 5.08, 5.36,
+#: 5.37, 1.98, 1.96 at z = 0 to 6.
+_NARAYANAN_BUMP_STRENGTH = jnp.array(
+    [
+        3.336277843127103,
+        1.9767528352381496,
+        2.926977165512936,
+        3.389079602445048,
+        3.6339238083055148,
+        3.3729209110204086,
+        2.809597222823232,
+    ]
+)
+
+
 @register_dust_law(
     "narayanan_z",
     citation="Narayanan et al. 2018 (ApJ 869, 70)",
-    short_doc="Narayanan et al. z-dependent attenuation (SIMBA)",
+    short_doc="Narayanan et al. z-dependent attenuation (MUFASA)",
 )
 def narayanan_z(
     wavelength: jnp.ndarray,
@@ -1294,20 +1337,28 @@ def narayanan_z(
 ) -> jnp.ndarray:
     r"""Narayanan+2018 redshift-dependent attenuation.
 
-    Uses the Kriek & Conroy (2013) curve with z-dependent median
-    parameters calibrated on SIMBA cosmological radiative-transfer
-    simulations.
+    Evaluates the Kriek & Conroy (2013) curve [2]_ at slope and bump values
+    interpolated in redshift from a table fitted to the median attenuation
+    curves Narayanan et al. (2018) [1]_ publish for their 25 Mpc MUFASA
+    cosmological radiative-transfer run. The curve gets grayer with redshift,
+    which is the trend the paper reports in its Section 5.1.
 
     Parameters
     ----------
     wavelength : array_like, shape (n_wave,)
         Wavelength grid. [Å]
     dust_delta : float
-        Power-law slope modification. [dimensionless] Default: -0.2 (triggers z-scaling).
+        Power-law slope modification :math:`\delta`. [dimensionless]
+        Default: -0.2, a **sentinel**, not a published value: left at it, the
+        slope comes from the fitted table instead. Any other value is used as
+        given, at every redshift.
     dust_bump_strength : float
-        UV bump amplitude E_b. [dimensionless] Default: 1.0 (triggers z-scaling).
+        Multiplier on the KC13 bump amplitude :math:`0.85 - 1.9\,\delta`.
+        [dimensionless] Default: 1.0, the same sentinel arrangement as
+        ``dust_delta``.
     redshift : float
-        Galaxy redshift. [dimensionless] Default: 0.0.
+        Galaxy redshift. [dimensionless] Default: 0.0. Supplied by the model,
+        not by the ``dust_attenuation`` group.
 
     Returns
     -------
@@ -1318,27 +1369,62 @@ def narayanan_z(
     -----
     **JIT-compatible**: yes, all operations are ``jnp`` primitives.
 
-    When default parameters are used (δ = -0.2, E_b = 1.0), the z-dependent
-    medians from SIMBA are applied:
+    **Gradient-safe**: yes, including with respect to ``redshift``: the table
+    is read with ``jnp.interp``, which is piecewise linear and so
+    differentiable away from the seven nodes.
+
+    With both shape parameters left at their sentinels,
 
     .. math::
 
-        \delta(z) &\approx -0.2 - 0.1 z \quad \text{(steeper at high z)} \\
-        E_b(z) &\approx \max(0, 1.0 - 0.15 z) \quad \text{(weaker bump at high z)}
+        k(\lambda, z) = k_{\rm KC13}\bigl(\lambda;\ \delta(z),\ m(z)\bigr),
+
+    where :math:`\delta(z)` and :math:`m(z)` are linear interpolations of the
+    module tables ``_NARAYANAN_DELTA`` and ``_NARAYANAN_BUMP_STRENGTH`` in
+    :math:`z` [dimensionless], :math:`k_{\rm KC13}` is :func:`kriek_conroy`,
+    and :math:`m` multiplies that curve's bump amplitude
+    :math:`E_b = 0.85 - 1.9\,\delta`. Outside :math:`0 \le z \le 6` the table
+    is held at its end node rather than extrapolated.
+
+    **Approximation**: the Kriek & Conroy form fitted to published median
+    curves, not a formula the paper states. Narayanan et al. (2018) give the
+    redshift dependence as median curves (their Figure 9) and publish them at
+    the data URL below; ``scripts/fit_narayanan2018_medians.py`` fits three
+    parameters per redshift (:math:`\delta`, the bump multiplier and a
+    normalization) to the repackaged copy at
+    ``data/attenuation/narayanan2018_median_curves.dat``, and every number in
+    the tables above comes from that fit. Residual rms over the fit window
+    1250 Å to 1 μm is 0.018, 0.024, 0.014, 0.011, 0.012, 0.019 and 0.010 at
+    z = 0 to 6, against curves of order unity there, so the form reproduces the
+    medians to a few percent and no better. Valid over
+    :math:`0 \le z \le 6` and 1250 Å to 1 μm; blueward of 1250 Å the Calzetti
+    (2000) baseline the KC13 form tilts is itself an extrapolation, and the
+    fit excludes that region.
+
+    The published curves are normalized by the 3000 Å optical depth rather than
+    by A_V, so each fit carries a free normalization; that factor is *not*
+    applied here, because this function returns k(5500 Å) = 1 like every other
+    registered law and the overall depth is the model's ``dust_tau_v``.
 
     References
     ----------
-    .. [1] D. Narayanan, K. Kriek, C. C. Hayward, et al., "A Theory for the
-       Variation of Dust Attenuation Laws in Galaxies," ApJ, 869, 70 (2018).
-       https://doi.org/10.3847/1538-4357/aae386
+    .. [1] D. Narayanan, C. Conroy, R. Davé, B. D. Johnson and G. Popping,
+       "A Theory for the Variation of Dust Attenuation Laws in Galaxies,"
+       ApJ, 869, 70 (2018). arXiv:1805.06905.
+       https://doi.org/10.3847/1538-4357/aaed25
+       Median curves: https://bitbucket.org/desika/narayanan_attenuation_laws/
+    .. [2] M. Kriek and C. Conroy, "The Dust Attenuation Law in Distant
+       Galaxies: Evidence for Variation with Spectral Type," ApJL, 775, L16
+       (2013). https://doi.org/10.1088/2041-8205/775/1/L16
     """
+    # ``jnp.interp`` holds the end node outside the tabulated range, which is
+    # the clip to 0 <= z <= 6 the fit range calls for; no separate clip.
+    z = jnp.asarray(redshift)
+    delta_table = jnp.interp(z, _NARAYANAN_Z_NODES, _NARAYANAN_DELTA)
+    bump_table = jnp.interp(z, _NARAYANAN_Z_NODES, _NARAYANAN_BUMP_STRENGTH)
     # Use tolerance comparison (not ==) to avoid JIT-unsafe float equality on traced values.
-    delta_z = jnp.where(jnp.abs(dust_delta - (-0.2)) < 1e-6, -0.2 - 0.1 * redshift, dust_delta)
-    bump_z = jnp.where(
-        jnp.abs(dust_bump_strength - 1.0) < 1e-6,
-        jnp.maximum(0.0, 1.0 - 0.15 * redshift),
-        dust_bump_strength,
-    )
+    delta_z = jnp.where(jnp.abs(dust_delta - (-0.2)) < 1e-6, delta_table, dust_delta)
+    bump_z = jnp.where(jnp.abs(dust_bump_strength - 1.0) < 1e-6, bump_table, dust_bump_strength)
     return kriek_conroy(wavelength, dust_delta=delta_z, dust_bump_strength=bump_z)
 
 

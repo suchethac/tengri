@@ -8469,6 +8469,16 @@ class SEDModel:
         dropped as unrequested while the user had plainly requested it. See
         :attr:`DustAttenuationSEDComponentConfig.live_shape_params` (#1808) and
         :attr:`DustSEDComponentConfig.live_shape_params` (#1833).
+
+        ``redshift`` bypasses the provenance filter (#2199). The filter answers
+        "did somebody ask for this ``dust_*`` value, or should the law's own
+        published default stand?", and ``redshift`` has no per-law default to
+        stand: a law that names it in its signature reads the model's redshift
+        or reads nothing. Where that bypass is load-bearing is the flat
+        ``Parameters(...)`` escape hatch, whose specs carry no
+        ``_group_provenance`` at all, so every name there reads as
+        ``registry_default``; :meth:`SEDModel.build` requires a redshift and
+        always records it as a request, so on that path the two branches agree.
         """
         from tengri.parameters.groups import _law_shape_params
 
@@ -8491,7 +8501,8 @@ class SEDModel:
             for name in reads
             # ``_grid`` suffixes mark a declared free prior intersected with a
             # template grid; still a request, so match on the stem.
-            if str(provenance.get(name, "registry_default")).removesuffix("_grid")
+            if name == "redshift"
+            or str(provenance.get(name, "registry_default")).removesuffix("_grid")
             in self._REQUESTED_PROVENANCE
         )
 

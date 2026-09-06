@@ -125,6 +125,7 @@ def resolve_bc_diff_law_params(
     live_shape_params: frozenset[str] | None = None,
     bc_law: str | None = None,
     diff_law: str | None = None,
+    redshift: jnp.ndarray | float | None = None,
 ) -> tuple[dict, dict]:
     """Split shared dust law parameters into birth-cloud and diffuse law dicts.
 
@@ -158,6 +159,10 @@ def resolve_bc_diff_law_params(
         narrowed to the keywords *that* screen's law declares, so a parameter
         the other screen's law reads is not offered to a law that would have to
         discard it (#2185). ``None`` leaves the dict unnarrowed.
+    redshift : jnp.ndarray or float, optional
+        The model redshift [dimensionless], offered to both screens before the
+        narrowing above. ``None`` offers nothing, for the direct callers that
+        have no model to ask.
 
     Returns
     -------
@@ -186,6 +191,14 @@ def resolve_bc_diff_law_params(
     ``dust_Rv`` it fixes internally at 4.05. The laws no longer take that
     catch-all, so the narrowing has to happen here, where the two laws are both
     known.
+
+    ``redshift`` is #2199, and it deliberately skips the ``live_shape_params``
+    gate the four tabled parameters pass through. That gate protects each law's
+    own *published default* for a parameter the ``dust_attenuation`` grammar can
+    set; ``redshift`` is neither -- it is a model-wide value with no per-law
+    default to protect, and the grammar never accepts it as a dust key. The
+    narrowing below is what keeps it away from the laws that do not read it, and
+    ``narayanan_z`` is the only one that does.
     """
     bc_overrides = bc_overrides or {}
     diff_overrides = diff_overrides or {}
@@ -199,6 +212,9 @@ def resolve_bc_diff_law_params(
                 target[law_kw] = overrides[law_kw]
             elif requested:
                 target[law_kw] = shared
+    if redshift is not None:
+        bc["redshift"] = redshift
+        diff["redshift"] = redshift
     if bc_law is not None:
         bc = select_law_kwargs(bc_law, bc)
     if diff_law is not None:

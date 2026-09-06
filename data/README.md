@@ -25,6 +25,17 @@ Dust IR templates are scientific data distributed with their publications.
 Upstream sources lack SPDX licenses; the convention is free use with
 citation (`tengri.cite_all()` and `CITATION.cff` handle this).
 
+## Dust attenuation curves in `data/attenuation/`
+
+| File | Scientific source | Build path | Usage |
+| --- | --- | --- | --- |
+| `narayanan2018_median_curves.dat` | Narayanan et al. 2018 (ApJ 869, 70) median attenuation curves at z = 0 to 6, from the 25 Mpc MUFASA radiative-transfer run | repackaged, with attribution, from `median_curve_redshifts.dat` at the paper's own data URL, https://bitbucket.org/desika/narayanan_attenuation_laws/: every 5th row, verbatim, retrieved 2026-09-07 | Paper-published data; cite Narayanan+ 2018 |
+| `narayanan2018_kc13_fits.json` | Kriek & Conroy (2013) shape parameters fitted to the curves above | `scripts/fit_narayanan2018_medians.py` | Derived here; the table `narayanan_z` interpolates |
+
+The `.dat` file carries its own provenance header: source URL, retrieval date,
+column meaning, and the 3000 Å normalization the paper states in its Section 5.1
+and that these columns measurably carry.
+
 ## AGN templates
 
 | File | Scientific source | Build path | Usage |

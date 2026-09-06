@@ -1990,6 +1990,14 @@ def _law_shape_params(law_name: str) -> frozenset[str]:
     flat parameter (``dust_slope``). ``_TWO_COMPONENT_LAW_PARAMS`` is the
     existing map between them; a signature name already spelled ``dust_*`` is
     its own flat name.
+
+    ``redshift`` is the one name here that is neither (#2199). It is a bare
+    model-wide parameter, not a ``dust_*`` key the grammar accepts, so the
+    ``dust_``-prefix branch dropped it and ``narayanan_z`` -- the only law whose
+    shape depends on it -- was evaluated at z = 0 whatever the model said. A law
+    that names it in its signature gets it listed here, which is what puts it in
+    ``live_shape_params`` and so both past the single screen's frozen curve cache
+    and into the keyword dict that screen splats.
     """
     from tengri.components.dust._apply import _TWO_COMPONENT_LAW_PARAMS
     from tengri.components.dust.laws._registry import DUST_LAWS, law_kwarg_names
@@ -2003,7 +2011,7 @@ def _law_shape_params(law_name: str) -> frozenset[str]:
         flat = kwarg_to_flat.get(kwarg)
         if flat is not None:
             names.add(flat)
-        elif kwarg.startswith("dust_"):
+        elif kwarg.startswith("dust_") or kwarg == "redshift":
             names.add(kwarg)
     return frozenset(names)
 

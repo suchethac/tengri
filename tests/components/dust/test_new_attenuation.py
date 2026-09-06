@@ -10,6 +10,9 @@ import numpy as np
 from numpy.testing import assert_allclose
 
 from tengri.components.dust.attenuation import (
+    _NARAYANAN_BUMP_STRENGTH,
+    _NARAYANAN_DELTA,
+    _NARAYANAN_Z_NODES,
     DUST_LAWS,
     cardelli,
     conroy2010,
@@ -117,31 +120,56 @@ class TestNarayananZ:
         """narayanan_z is registered in the dust law registry."""
         assert "narayanan_z" in DUST_LAWS
 
-    def test_z0_matches_kriek_conroy(self, wavelength):
-        """At z=0 with defaults, matches Kriek-Conroy(delta=-0.2, bump=1.0)."""
+    def test_z0_is_the_fitted_z0_row(self, wavelength):
+        """At z=0 with defaults, the curve is KC13 at the table's first row.
+
+        The three assertions below moved with #2199. They used to pin
+        ``delta(z) = -0.2 - 0.1 z`` and ``E_b(z) = max(0, 1 - 0.15 z)``, an
+        invented parametrization that appears nowhere in Narayanan et al. 2018
+        and that steepened the curve with redshift, opposite the trend the
+        paper's Section 5.1 states. The table is now fitted to the paper's own
+        published medians.
+        """
         k_nz = narayanan_z(wavelength, redshift=0.0)
-        k_kc = kriek_conroy(wavelength, dust_delta=-0.2, dust_bump_strength=1.0)
+        k_kc = kriek_conroy(
+            wavelength,
+            dust_delta=float(_NARAYANAN_DELTA[0]),
+            dust_bump_strength=float(_NARAYANAN_BUMP_STRENGTH[0]),
+        )
         assert_allclose(k_nz, k_kc, rtol=1e-12)
 
-    def test_high_z_steeper(self, wavelength):
-        """At z=6, delta is more negative (steeper curve)."""
+    def test_high_z_grayer(self, wavelength):
+        """At z=6 the curve is shallower in the UV than at z=0.
+
+        Narayanan et al. 2018 Section 5.1: the median attenuation curves become
+        grayer with redshift. Both curves are normalized to k(5500 A) = 1, so
+        the UV value alone carries the slope.
+        """
         k_z0 = narayanan_z(wavelength, redshift=0.0)
         k_z6 = narayanan_z(wavelength, redshift=6.0)
-        # At UV wavelengths, steeper curve gives more attenuation relative to V-band
         uv_idx = jnp.argmin(jnp.abs(wavelength - 1500.0))
-        assert float(k_z6[uv_idx]) > float(k_z0[uv_idx])
+        assert float(k_z6[uv_idx]) < float(k_z0[uv_idx])
 
-    def test_high_z_no_bump(self, wavelength):
-        """At z=6, bump strength is 0 (clipped)."""
-        # E_b(z=6) = max(0, 1.0 - 0.15*6) = max(0, 0.1) = 0.1
-        # At z=7: max(0, 1.0 - 1.05) = 0.0
-        k_z7 = narayanan_z(wavelength, redshift=7.0)
-        k_nobump = kriek_conroy(
-            wavelength,
-            dust_delta=-0.2 - 0.1 * 7.0,
-            dust_bump_strength=0.0,
+    def test_high_z_weaker_bump(self, wavelength):
+        """The 2175 A bump weakens with redshift, and z>6 holds at the z=6 row.
+
+        Measured as the excess over the same curve with the bump switched off:
+        the fitted E_b falls from 6.36 at z=0 to 1.96 at z=6.
+        """
+
+        def bump_excess(z: float) -> float:
+            k = narayanan_z(wavelength, redshift=z)
+            delta = float(jnp.interp(z, _NARAYANAN_Z_NODES, _NARAYANAN_DELTA))
+            k_flat = kriek_conroy(wavelength, dust_delta=delta, dust_bump_strength=0.0)
+            idx = jnp.argmin(jnp.abs(wavelength - 2175.0))
+            return float(k[idx] - k_flat[idx])
+
+        assert bump_excess(0.0) > bump_excess(6.0) > 0.0
+        assert_allclose(
+            narayanan_z(wavelength, redshift=9.0),
+            narayanan_z(wavelength, redshift=6.0),
+            rtol=1e-12,
         )
-        assert_allclose(k_z7, k_nobump, rtol=1e-12)
 
     def test_explicit_params_override_z(self, wavelength):
         """Explicit non-default params are used as-is regardless of z."""
