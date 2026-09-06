@@ -141,8 +141,17 @@ class TestCompileSignatureInvariants:
         # 18. mirror map (#1972 instance 3): spec.resolve_mirrors bakes
         # target -> source, so two specs sharing every name and prior but tying
         # to different sources silently tied to the same one.
-        assert len(fitter_sig) == 18, (
-            f"fitter_sig field count changed from 18 to {len(fitter_sig)}. "
+        # 19. extra_log_prior hook identity (task-7, RULING R10): the loss
+        # closure calls fitter._extra_log_prior(params, state) when set, so two
+        # Fitters sharing a Model -- documented, encouraged behavior -- would
+        # otherwise silently share whichever build_loss_fn closure compiled
+        # first regardless of the hook. Functions are hashable by identity by
+        # default: same callable -> cache hit; different callable (or None vs.
+        # not) -> cache miss, safely rebuilt. See
+        # tests/contract/test_fitter_extra_log_prior.py::
+        # test_extra_log_prior_does_not_leak_across_fitters_sharing_a_model.
+        assert len(fitter_sig) == 19, (
+            f"fitter_sig field count changed from 19 to {len(fitter_sig)}. "
             "If intentional, update this assertion and the docstring."
         )
 

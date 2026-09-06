@@ -356,12 +356,22 @@ def prior_agn_fraction(bbb_flux_1500, gal_flux_1500, data_flux_1500, dlum, redsh
     Parameters
     ----------
     bbb_flux_1500 : float
-        Model accretion-disc (BBB) flux density at rest-frame 1500 A
-        [erg/s/cm^2/Hz].
+        Model accretion-disc (BBB) brightness at rest-frame 1500 A. Only the
+        ratio ``bbb_flux_1500 / gal_flux_1500`` enters this prior (see
+        ``AGNfrac_1500`` above), so this need not be a flux density in the
+        strict [erg/s/cm^2/Hz] sense -- any common normalization is accepted
+        (flux density, specific luminosity L_nu [erg/s/Hz], or another
+        quantity proportional to those), **provided ``gal_flux_1500`` shares
+        the same one**. The public :func:`agnfitter_priors` adapter passes
+        specific luminosity (L_nu), not flux density.
     gal_flux_1500 : float
-        Model galaxy flux density at rest-frame 1500 A [erg/s/cm^2/Hz].
+        Model galaxy brightness at rest-frame 1500 A, in the same units and
+        normalization as ``bbb_flux_1500`` -- see that parameter's Notes.
     data_flux_1500 : float
-        Observed flux density at rest-frame 1500 A [erg/s/cm^2/Hz].
+        Observed flux density at rest-frame 1500 A [erg/s/cm^2/Hz]. Unlike
+        ``bbb_flux_1500``/``gal_flux_1500`` this enters only through
+        ``abs_mag_data`` (an absolute magnitude, not a ratio), so it MUST be
+        a genuine physical flux density -- see the equation above.
     dlum : float
         Luminosity distance [cm].
     redshift : float
@@ -392,12 +402,12 @@ def prior_agn_fraction(bbb_flux_1500, gal_flux_1500, data_flux_1500, dlum, redsh
     ``AGNfrac1500`` -- a model-bookkeeping detail of the ``R06``/``THB21``
     accretion-disc normalization convention (``BB`` there is the disc's log10
     flux-normalization scalar, and ``BB==0`` flags "already physical, not a
-    fittable amplitude"), not a physics term of this prior. This function's
-    ``bbb_flux_1500`` input is a genuinely physical flux density
-    [erg/s/cm^2/Hz] regardless of which disc model or normalization
-    convention produced it, so that branch is intentionally not reproduced
-    here; the caller supplying ``bbb_flux_1500`` is responsible for its own
-    disc-model normalization.
+    fittable amplitude"), not a physics term of this prior. Because only the
+    ``bbb_flux_1500 / gal_flux_1500`` ratio enters ``AGNfrac1500`` (see
+    Parameters above), that branch is intentionally not reproduced here
+    regardless of which disc model or normalization convention the caller
+    uses; the caller supplying ``bbb_flux_1500``/``gal_flux_1500`` is
+    responsible for using one common normalization for the pair.
 
     References
     ----------
@@ -443,12 +453,24 @@ def prior_low_agn_fraction(bbb_flux_1500, gal_flux_1500, data_flux_1500, dlum, r
     Parameters
     ----------
     bbb_flux_1500 : float
-        Model accretion-disc (BBB) flux density at rest-frame 1500 A
-        [erg/s/cm^2/Hz].
+        Model accretion-disc (BBB) brightness at rest-frame 1500 A. Only the
+        ratio ``bbb_flux_1500 / gal_flux_1500`` enters this prior (same
+        ``AGNfrac_1500`` as :func:`prior_agn_fraction`), so this need not be
+        a flux density in the strict [erg/s/cm^2/Hz] sense -- any common
+        normalization is accepted (flux density, specific luminosity L_nu
+        [erg/s/Hz], or another quantity proportional to those), **provided
+        ``gal_flux_1500`` shares the same one**. See
+        :func:`prior_agn_fraction`'s Parameters for the full discussion; the
+        public :func:`agnfitter_priors` adapter passes specific luminosity
+        (L_nu), not flux density.
     gal_flux_1500 : float
-        Model galaxy flux density at rest-frame 1500 A [erg/s/cm^2/Hz].
+        Model galaxy brightness at rest-frame 1500 A, in the same units and
+        normalization as ``bbb_flux_1500`` -- see that parameter's Notes.
     data_flux_1500 : float
-        Observed flux density at rest-frame 1500 A [erg/s/cm^2/Hz].
+        Observed flux density at rest-frame 1500 A [erg/s/cm^2/Hz]. Unlike
+        ``bbb_flux_1500``/``gal_flux_1500`` this enters only through
+        ``abs_mag_data`` (an absolute magnitude, not a ratio), so it MUST be
+        a genuine physical flux density.
     dlum : float
         Luminosity distance [cm].
     redshift : float

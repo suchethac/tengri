@@ -29,6 +29,7 @@ pytestmark = pytest.mark.contract
 
 from tengri.parameters.agn_priors import (
     AGNFITTER_HARD_REJECT,
+    agnfitter_priors,
     gaussian_log_prior,
     prior_agn_fraction,
     prior_energy_balance,
@@ -50,6 +51,7 @@ _ALL_PRIOR_NAMES = (
     "prior_uv_xrays",
     "prior_ir_xrays",
     "prior_midir_uv",
+    "agnfitter_priors",
 )
 
 
@@ -75,6 +77,27 @@ class TestPublicSurface:
         ``return -9999 #-np.inf`` -- a finite value, not -inf (grad-safety)."""
         assert AGNFITTER_HARD_REJECT == -9999.0
         assert jnp.isfinite(AGNFITTER_HARD_REJECT)
+
+    def test_three_import_spellings_resolve_to_the_same_object(self):
+        """Fix round 2: ``from tengri.agn.priors import agnfitter_priors`` used
+        to raise ``ModuleNotFoundError`` -- ``tengri.agn`` was aliased in
+        ``sys.modules`` but ``tengri.agn.priors`` was not, so attribute access
+        and the two-level ``from tengri.agn import priors`` both worked
+        (the latter falls back to attribute lookup on the already-imported
+        package) while the three-level form, which needs ``tengri.agn.priors``
+        to resolve as a genuine module first, did not. All three spellings
+        must now import the identical function object."""
+        import tengri
+        from tengri.agn import priors as priors_from_package
+        from tengri.agn.priors import agnfitter_priors as agnfitter_priors_direct
+
+        assert tengri.agn.priors.agnfitter_priors is agnfitter_priors_direct
+        assert priors_from_package.agnfitter_priors is agnfitter_priors_direct
+        assert agnfitter_priors_direct is agnfitter_priors  # this file's own import
+        # And the canonical, non-aliased import path agrees too.
+        import tengri.parameters.agn_priors as canonical
+
+        assert canonical.agnfitter_priors is agnfitter_priors_direct
 
 
 class TestGaussianLogPrior:
