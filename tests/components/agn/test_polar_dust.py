@@ -274,7 +274,7 @@ class TestSKIRTORPolarDustIntegration:
         was >5% before task13 fix-round-1 item 1 added the polar cone's
         covering fraction -- a function of agn_polar_oa alone, Yang+2020
         section 2.2.2 -- to the re-emission normalization: at the default
-        agn_polar_oa=45deg used here, the covering fraction is ~0.23, so the
+        agn_polar_oa=45deg used here, the covering fraction is ~0.58, so the
         FIR bump this test measures is correspondingly smaller than before;
         measured ratio at these exact params is 1.044.)
 
