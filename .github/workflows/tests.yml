@@ -1487,6 +1487,17 @@ jobs:
       # would OOM the 16 GB runner (the reason this tier was never parallelized).
       - run: pytest tests/${{ matrix.suite }} -q --ignore=tests/crossval -m 'not crossval' -n 0
         timeout-minutes: ${{ matrix.timeout }}
+      # Marker-scoped, not tree-scoped: `slow` outside tests/inference and
+      # tests/integration ran in NO job. The default addopts deselect the
+      # marker, and the step above collects two trees by path, so a `slow`
+      # test anywhere else was green nowhere -- which is where Task 16 put 130
+      # measured AGN-liveness cases (the exhaustive owned-and-live and R22
+      # polar sweeps), including every (category, type) pair the PR-tier
+      # subset drops. Runs once, on the `inference` leg only, since the marker
+      # expression is the same whichever suite the matrix is on.
+      - if: matrix.suite == 'inference'
+        run: pytest tests/contract -q -m 'slow and not crossval' -n 0
+        timeout-minutes: 30
       - uses: actions/cache/save@v6
         if: always()
         with:
