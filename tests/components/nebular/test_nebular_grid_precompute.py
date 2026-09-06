@@ -374,7 +374,11 @@ def test_snapped_met_axis_beats_uniform_on_a_dense_sweep():
     sensitive [OIII] line **while using no more grid points** — the snapped axis
     resolves the SSP-node kinks, so the cubic's cross-kink tangent error is gone.
     """
-    m = _model({"type": "cue", "all_params": Fixed(DEFAULT)}, sfh_wild=FREE)
+    m = _model(
+        {"type": "cue", "all_params": Fixed(DEFAULT)},
+        sfh_wild=FREE,
+        met={"logzsol": FREE},
+    )
     assert "met_logzsol" in m.spec.free_params
     lo, hi = -1.8, 0.2
     rng = {"met_logzsol": (lo, hi)}
