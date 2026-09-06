@@ -77,26 +77,26 @@ from tengri import DEFAULT, FREE, Fixed, SEDModel
 from tengri.config.exceptions import ParameterError
 from tengri.observation import Observation, Photometry
 from tengri.observation.photometry import FilterCurve
+from tests._data_skip import PAHSPEC_EMISSION_TYPES, requires_pahspec
 
 pytestmark = pytest.mark.contract
 
 #: Backends this suite refuses to measure, each with the reason it cannot
 #: discriminate #1482 -- not a convenience list.
 #:
-#: ``draine2021_pah`` is the only production entry here, and its exclusion is
-#: measured rather than assumed: in the fixture below it contributes
-#: ``3.706636e+42`` to the rest-frame 10-500 um flux, which is bit-identical to
-#: ``emission={'type': 'none'}``, against ``1.84e+49`` for ``dl07``. The
-#: component emits nothing, so *every* parameter it declares is inert for a
-#: reason that has nothing to do with wildcard scope. Judged here it would read
-#: as a #1482 residual and send the next reader to the wrong file.
-_UNDISCRIMINATING: dict[str, str] = {
-    "draine2021_pah": (
-        "#1278 -- silently emits nothing when its template is missing "
-        "(measured bit-identical to emission='none'), so parameter inertness "
-        "here is confounded and cannot indict wildcard scope"
-    ),
-}
+#: Empty, and the entry that used to be here is why the distinction matters.
+#: ``draine2021_pah`` was excluded unconditionally on the strength of a
+#: measurement -- it contributed ``3.706636e+42`` to the rest-frame 10-500 um
+#: flux, bit-identical to ``emission={'type': 'none'}``, against ``1.84e+49``
+#: for ``dl07`` -- read as a property of the component. It is a property of the
+#: **machine**: that number comes from a checkout with no PAHspec grid, where
+#: the component warns and contributes nothing by design (#1278). With the grid
+#: present it emits, and its ``dust_lgU`` moves the photometry like any other
+#: engine's parameter. An environment-dependent zero belongs behind
+#: :data:`~tests._data_skip.requires_pahspec`, which reports the absence as a
+#: skip, and not in a list whose contract is "cannot discriminate #1482 for a
+#: reason no download will change".
+_UNDISCRIMINATING: dict[str, str] = {}
 
 
 def _emission_types() -> tuple[str, ...]:
@@ -129,6 +129,11 @@ def _emission_types() -> tuple[str, ...]:
     :data:`DECLARES_NOTHING` non-empty behind it (``dh02_ce01``), so the
     declares-nothing branch keeps a subject.
 
+    A backend whose template grid is not on this machine is **not** excluded
+    here: it is parametrized and skipped, by a mark on
+    :data:`EMISSION_TYPE_PARAMS` rather than by absence from this tuple, so the
+    derivations that read this tuple keep seeing it.
+
     So a backend added tomorrow is measured on the day it ships.
     """
     from tengri import registry
@@ -149,6 +154,19 @@ def _emission_types() -> tuple[str, ...]:
 
 
 EMISSION_TYPES = _emission_types()
+
+#: :data:`EMISSION_TYPES` as parametrization arguments, with the two PAHspec
+#: spellings marked to skip where their grid is absent.
+#:
+#: The gate is on the *measurement*, never on the derivation: a name dropped
+#: from :data:`EMISSION_TYPES` would also vanish from :func:`_nothing_freeable`
+#: and :func:`_declares_nothing`, which read it, and this file's whole argument
+#: is that a hardcoded parametrization is what hid #1482 in the first place.
+#: Skipped, the name still shows in the report; excluded, it does not.
+EMISSION_TYPE_PARAMS = tuple(
+    pytest.param(name, marks=(requires_pahspec,) if name in PAHSPEC_EMISSION_TYPES else ())
+    for name in EMISSION_TYPES
+)
 
 
 def _nothing_freeable() -> dict[str, set[str]]:
@@ -281,7 +299,7 @@ def _live_params(model):
     return freed, live
 
 
-@pytest.mark.parametrize("emission_type", EMISSION_TYPES)
+@pytest.mark.parametrize("emission_type", EMISSION_TYPE_PARAMS)
 def test_wildcard_frees_at_least_one_live_parameter(
     synthetic_ssp_wide, panchromatic_obs, emission_type
 ):
@@ -355,7 +373,7 @@ def test_the_freed_set_depends_on_the_backend(synthetic_ssp_wide, panchromatic_o
     )
 
 
-@pytest.mark.parametrize("emission_type", EMISSION_TYPES)
+@pytest.mark.parametrize("emission_type", EMISSION_TYPE_PARAMS)
 def test_no_freed_parameter_is_inert(synthetic_ssp_wide, panchromatic_obs, emission_type):
     """Every parameter ``'all_params': FREE`` hands the sampler must move the prediction.
 

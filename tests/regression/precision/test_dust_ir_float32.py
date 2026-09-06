@@ -20,6 +20,7 @@ import pytest
 
 from tengri import DEFAULT, Fixed, SEDModel
 from tengri.utils.physics_constants import C_AA
+from tests._data_skip import PAHSPEC_EMISSION_TYPES, requires_pahspec
 
 pytestmark = pytest.mark.regression_bug
 
@@ -59,7 +60,11 @@ TEMPLATE_MODELS = (
     # missing from this inventory *because* of the very declaration gap that
     # hides its defect; the guard now reaches it.
     #
-    # Measured on the shipped PAHspec grid, not assumed: float64 peak
+    # Measured on the PAHspec grid, not assumed — and the grid is built
+    # locally rather than shipped (104 MB, uncommitted), so both spellings
+    # carry :data:`~tests._data_skip.requires_pahspec` below: without it the
+    # component publishes no ``sed_dust_ir`` at all and every assertion here
+    # raises ``KeyError`` on a runner that has no copy. float64 peak
     # 5.5166e+30 (float32-representable), ``sed_dust_ir`` 100% finite in pure
     # float32, peak-relative float32-vs-float64 error 5.79e-03 — the
     # second-loosest of the family behind astrodust's 1.58e-02 and inside the
@@ -118,6 +123,29 @@ NOT_YET_FLOAT32: dict[str, str] = {}
 #: user typing that name gets — but they must not be mistaken for missing
 #: registrations by the completeness guard below.
 LEGACY_ALIASES = frozenset({"dl07", "dl14", "mbb", "draine2021_pah"})
+
+
+def _params(names):
+    """``names`` as parametrization arguments, gated on the grids they need.
+
+    Every model here normalizes a template that ships in ``data/`` except the
+    two PAHspec spellings, whose 104 MB grid is built locally. Membership of
+    :data:`TEMPLATE_MODELS` is the inventory claim and must not depend on what
+    is on this machine -- :func:`test_emission_inventory_is_complete` reads it,
+    and dropping a name to make a runner green would delete the record that the
+    model exists. The gate belongs on the *measurement* instead.
+    """
+    return tuple(
+        pytest.param(name, marks=(requires_pahspec,) if name in PAHSPEC_EMISSION_TYPES else ())
+        for name in names
+    )
+
+
+#: :data:`TEMPLATE_MODELS` and :data:`ENERGY_BALANCED_MODELS` as grid-gated
+#: parametrization arguments. The tuples above stay plain strings; these are
+#: what the ``@parametrize`` decorators read.
+TEMPLATE_MODEL_PARAMS = _params(TEMPLATE_MODELS)
+ENERGY_BALANCED_MODEL_PARAMS = _params(ENERGY_BALANCED_MODELS)
 
 
 def _physical_ssp(ssp):
@@ -181,7 +209,7 @@ def _flat_model(ssp, emission_type):
     return SEDModel(spec, ssp)
 
 
-@pytest.mark.parametrize("emission_type", TEMPLATE_MODELS)
+@pytest.mark.parametrize("emission_type", TEMPLATE_MODEL_PARAMS)
 def test_dust_ir_sed_is_finite_in_pure_float32(synthetic_ssp_wide, emission_type):
     """``sed_dust_ir`` must be finite in float32 and match float64.
 
@@ -226,7 +254,7 @@ def test_dust_ir_sed_is_finite_in_pure_float32(synthetic_ssp_wide, emission_type
     )
 
 
-@pytest.mark.parametrize("emission_type", ENERGY_BALANCED_MODELS)
+@pytest.mark.parametrize("emission_type", ENERGY_BALANCED_MODEL_PARAMS)
 def test_dust_ir_reradiates_the_absorbed_luminosity(synthetic_ssp_wide, emission_type):
     r"""``\int sed_dust_ir d\nu`` must equal the absorbed ``L_ir``.
 
@@ -411,7 +439,7 @@ def test_photometry_is_finite_in_pure_float32(synthetic_ssp_wide):
     )
 
 
-@pytest.mark.parametrize("emission_type", ENERGY_BALANCED_MODELS)
+@pytest.mark.parametrize("emission_type", ENERGY_BALANCED_MODEL_PARAMS)
 def test_dust_ir_is_actually_added_to_the_sed(synthetic_ssp_wide, emission_type):
     """The published ``sed_dust_ir`` must be what the total SED actually gained.
 

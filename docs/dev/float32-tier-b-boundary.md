@@ -554,7 +554,11 @@ alike and are not:
   that factors `L_ir` — and the same declaration gap hid it: it declared only `L_ir_emission` in
   `outputs`, while the census in `tests/regression/precision/test_dust_ir_float32.py` enumerates
   emission components by the `sed_dust_ir` they publish. A model can be absent from a completeness
-  guard *because of* the defect the guard exists to find.
+  guard *because of* the defect the guard exists to find. Its numbers here are measured on a
+  locally built PAHspec grid: the 104 MB file is not committed, so on a runner without it the
+  component warns and publishes no `sed_dust_ir` at all (the designed response to missing data,
+  #1278) and the measurement is skipped rather than attempted — `requires_pahspec` in
+  `tests/_data_skip.py`.
 * `pah_drude` is float32-clean and always was, but is no longer selectable as a standalone
   `dust_emission` type (it is a PAH building block: standalone it re-emits a measured 1.8925e-04 of
   `L_ir`). It is still measured, through the flat `Parameters(...)` form — see `BUILDING_BLOCKS` in

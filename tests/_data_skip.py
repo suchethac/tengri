@@ -70,6 +70,59 @@ requires_mappings = pytest.mark.skipif(
     "(run scripts/download_mappings_templates.py)",
 )
 
+#: Basename of the Draine+2021 PAHspec grid, built by
+#: ``scripts/build_pahspec_hdf5.py``. At 104 MB it is not committed, so no CI
+#: runner has a copy.
+PAHSPEC_GRID_NAME = "pahspec_draine2021.h5"
+
+#: Both grammar spellings of the one PAHspec component: ``draine2021_pah`` is
+#: an alias that resolves to the ``draine2021_pah_ir`` registry key. A gate
+#: written against one spelling silently leaves the other ungated.
+PAHSPEC_EMISSION_TYPES = frozenset({"draine2021_pah", "draine2021_pah_ir"})
+
+
+def pahspec_grid_path() -> str | None:
+    """The PAHspec grid the Draine+2021 component would load, or ``None``.
+
+    Returns
+    -------
+    str or None
+        Path to the grid, or ``None`` when the component would find nothing.
+
+    Notes
+    -----
+    Unlike every other grid in this module, this one is **not** gated on
+    ``DATA_DIR / name``. ``Draine2021PAHIRSEDComponent.load`` reads
+    ``$TENGRI_PAHSPEC_PATH`` first and otherwise calls
+    :func:`tengri._data_setup.find_data_str`, whose search walks the ancestors
+    of the working directory. Those two locators disagree whenever the checkout
+    is a git worktree -- the grid sits in the parent checkout, the component
+    loads it, and a ``DATA_DIR``-gated test would skip a run that would have
+    passed. Asking the locator the component asks keeps the gate and the
+    behavior it guards on the same answer.
+    """
+    from tengri._data_setup import find_data_str
+    from tengri.components.dust.draine2021_pah import PAHSPEC_PATH_ENV
+
+    override = os.environ.get(PAHSPEC_PATH_ENV)
+    if override is not None:
+        return override if Path(override).is_file() else None
+    return find_data_str(PAHSPEC_GRID_NAME)
+
+
+def has_pahspec() -> bool:
+    """True when the Draine+2021 PAHspec grid is loadable on this machine."""
+    return pahspec_grid_path() is not None
+
+
+requires_pahspec = pytest.mark.skipif(
+    not has_pahspec(),
+    reason=f"Draine+2021 PAHspec grid ({PAHSPEC_GRID_NAME}) not found. Absent it "
+    "the component warns and contributes nothing -- the designed response to "
+    "missing data (#1278), so its emission cannot be measured here. Build it "
+    "with scripts/build_pahspec_hdf5.py or point $TENGRI_PAHSPEC_PATH at a copy.",
+)
+
 #: Photoionization grids and weights for the nebular backends.
 CLOUDY_GRID_MIST = DATA_DIR / "cloudy_grid_mist.h5"
 CUE_WEIGHTS = DATA_DIR / "cue_weights.npz"
