@@ -271,38 +271,82 @@ def _maybe_skip_grid_gated(category: str, block_type: str, exc: Exception):
     raise exc
 
 
+#: Coordination note (peer branch fix/2187-wildcard-free-priors, PR #2207,
+#: session ce311b): that branch makes EVERY 'all_params: FREE' group reach
+#: the wildcard adjudicator and escalates covered-0 from WildcardNoOpWarning
+#: to ParameterError ("covers no parameters", per the rebase facts logged in
+#: the Task 16 brief). It does not touch _wildcard_scopes,
+#: _agn_active_param_set, or any AGN scope mechanism -- so after Task 16 the
+#: ONLY empty-scope cases here are genuinely parameter-free variants (a type
+#: whose every declared param is shared/masking, not owned by this
+#: sub-block). Flip this ONE constant when #2207 lands; every empty-scope
+#: assertion in this module goes through :func:`_expect_empty_scope`, so the
+#: flip is one line here, not N call sites.
+_EMPTY_SCOPE_ESCALATED = False
+
+
+def _expect_empty_scope(build_fn, *, category: str, block_type: str):
+    """Build via ``build_fn()`` under whichever empty-scope regime is
+    currently active (see :data:`_EMPTY_SCOPE_ESCALATED`), asserting the
+    loud, non-silent signal each regime specifies. Also narrows a
+    Synthesizer-grid-gated build failure to a skip, same as
+    :func:`_maybe_skip_grid_gated`."""
+    if _EMPTY_SCOPE_ESCALATED:
+        from tengri.config.exceptions import ParameterError
+
+        try:
+            with pytest.raises(ParameterError, match=r"covers no parameters"):
+                build_fn()
+        except (TengriIOError, FileNotFoundError) as exc:
+            _maybe_skip_grid_gated(category, block_type, exc)
+        return None
+
+    with warnings.catch_warnings(record=True) as caught:
+        warnings.simplefilter("always")
+        try:
+            model = build_fn()
+        except (TengriIOError, FileNotFoundError) as exc:
+            _maybe_skip_grid_gated(category, block_type, exc)
+    loud = [w for w in caught if "Wildcard" in w.category.__name__]
+    assert loud, (
+        f"{category}/{block_type}: 'all_params': FREE covers zero of this "
+        f"type's own declared parameters, but no WildcardNoOpWarning fired "
+        f"-- a silent no-op wildcard."
+    )
+    return model
+
+
 @pytest.mark.parametrize(
     ("category", "block_type"), _ALL_CASES, ids=[f"{c}/{t}" for c, t in _ALL_CASES]
 )
 def test_q1_wildcard_frees_exactly_declared_and_live(ssp, obs, category, block_type):
     """Q1: the sub-block's own wildcard frees exactly its declared params,
-    all live; an empty declared set produces a loud, not silent, signal."""
-    with warnings.catch_warnings(record=True) as caught:
-        warnings.simplefilter("always")
-        try:
-            model = _build(ssp, obs, category, block_type, all_params=FREE)
-        except (TengriIOError, FileNotFoundError) as exc:
-            _maybe_skip_grid_gated(category, block_type, exc)
-
+    all live; an empty declared set produces a loud, not silent, signal
+    (:func:`_expect_empty_scope` -- coordination note, PR #2207)."""
     expected = _agn_subblock_declared_params(category, block_type)
     assert expected is not None, (
         f"{category}/{block_type}: _agn_subblock_declared_params returned None "
         f"(type not found in AGN_BLOCKS -- should not happen for a grammar-"
         f"validated type)."
     )
+
+    if not expected:
+        _expect_empty_scope(
+            lambda: _build(ssp, obs, category, block_type, all_params=FREE),
+            category=category,
+            block_type=block_type,
+        )
+        return
+
+    try:
+        model = _build(ssp, obs, category, block_type, all_params=FREE)
+    except (TengriIOError, FileNotFoundError) as exc:
+        _maybe_skip_grid_gated(category, block_type, exc)
+
     free_agn = {p for p in model.spec.free_params if p.startswith("agn_")}
     assert free_agn == expected, (
         f"{category}/{block_type}: wildcard froze {sorted(free_agn)}, declared {sorted(expected)}"
     )
-
-    if not expected:
-        loud = [w for w in caught if "Wildcard" in w.category.__name__]
-        assert loud, (
-            f"{category}/{block_type}: 'all_params': FREE covers zero of this "
-            f"type's own declared parameters, but no WildcardNoOpWarning fired "
-            f"-- a silent no-op wildcard."
-        )
-        return
 
     def obj(pd):
         return jnp.log(jnp.sum(model.predict_photometry(pd)) + 1e-300)
