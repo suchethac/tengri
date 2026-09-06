@@ -80,6 +80,18 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 
 ### Added
 
+- `bench/scripts/probe_block_metric_structure.py` — scores a candidate
+  mass-matrix structure against the analytic metric without running a sampler.
+  For a layout it forms the structured inverse mass matrix, whitens with it, and
+  reports the condition number that survives alongside the matrix entries stored,
+  so diagonal / block / low-rank / dense sit on one frontier. It also reports a
+  **per-group verdict** — internal off-diagonal mass and internal-over-external
+  coupling for each candidate group — which turns "which groups deserve a dense
+  block" into a measurement. Used to answer #2166: block-structured mass matrices
+  are dominated by a rank-`k` correction to a diagonal on every fixture and every
+  storage budget tested, so the feature was declined rather than built. Numbers
+  and the reasoning in `bench/reports/2026-09-06_block_metric_structure.md`.
+
 - `tools/check_float32_scale_seams.py` — enumerates the float32 **scale seams**
   themselves rather than sampling a representative model. A scale seam is a site
   where a large physical constant or unit conversion multiplies a
