@@ -975,9 +975,8 @@ print(
 # Pin tengri's SKIRTOR to ProSpect's `SKIRTOR_interp` defaults so the two read the
 # *same* point in the Stalevski (2016) library: inclination an=30° (cos_inc=0.866 —
 # a Type-1 sightline that looks into the polar cone and sees the disc), opening angle
-# ct=40°, optical depth ta=1, and p=q=1. ``agn_band_frac=1`` routes the full bolometric
-# into the template, matching ProSpect's ``lum`` normalization (tengri otherwise scales
-# the AGN down by ``frac_agn`` as a host-fraction knob).
+# ct=40°, optical depth ta=1, and p=q=1. The monolithic SKIRTOR model normalizes the
+# template to `agn_log_lbol` itself, matching ProSpect's ``lum`` normalization.
 m_agn = SEDModel.build(
     ssp_data=ssp,
     met={"logzsol": Fixed(MET_LOGZSOL), "all_params": Fixed(DEFAULT)},
@@ -1015,7 +1014,6 @@ m_agn = SEDModel.build(
         "agn_tau_skirtor": Fixed(1.0),  # ProSpect ta=1
         "agn_p_skirtor": Fixed(1.0),  # ProSpect p=1
         "agn_q_skirtor": Fixed(1.0),  # ProSpect q=1
-        "agn_band_frac": Fixed(1.0),  # full L_bol into template (match ProSpect lum)
         "all_params": Fixed(DEFAULT),
     },
     redshift=Fixed(0.0),
@@ -1111,7 +1109,15 @@ m_radio = SEDModel.build(
         "tau_diff": Fixed(TAU_SCREEN_FIDUCIAL),
         "all_params": Fixed(DEFAULT),
     },
-    dust_emission={"type": "dale2014", "alpha_dale": Fixed(3.0), "all_params": Fixed(DEFAULT)},
+    # dale2014_cigale (not dale2014): the plain Dale+2014 template embeds its own
+    # star-forming radio synchrotron continuum to 1.335 GHz, which double-counts
+    # against the active radio.sf block below (#1970); the CIGALE variant has that
+    # tail stripped and composes correctly with a separate radio component.
+    dust_emission={
+        "type": "dale2014_cigale",
+        "alpha_dale": Fixed(3.0),
+        "all_params": Fixed(DEFAULT),
+    },
     radio={"sf": {"type": "bell2003"}, "agn": {"type": "powerlaw"}, "all_params": Fixed(DEFAULT)},
     redshift=Fixed(0.0),
 )
