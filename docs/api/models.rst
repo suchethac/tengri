@@ -153,6 +153,37 @@ ties, mid-IR/UV/X-ray consistency). Reachable as ``tengri.agn.priors``
       prior_ir_syn_fraction, prior_uv_xrays, prior_ir_xrays, prior_midir_uv
    :noindex:
 
+AGN template-library grid reductions (AGNfitter-rX)
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+Additional AGNfitter-rX torus/disc grid reductions, vendored at native
+resolution and validated against the upstream library.
+
+.. automodule:: tengri.components.agn.kd18_agnfitter
+   :members: kd18_agnfitter_sed, kd18_agnfitter_warmindex_sed,
+      create_kd18_agnfitter_from_grid, create_kd18_agnfitter_warmindex_from_grid
+   :noindex:
+
+.. automodule:: tengri.components.agn.nenkova_agnfitter_2p
+   :members: nenkova_agnfitter_2p_sed, create_nenkova_agnfitter_2p_from_grid
+   :noindex:
+
+.. automodule:: tengri.components.agn.nenkova_agnfitter_3p
+   :members: nenkova_agnfitter_3p_sed, create_nenkova_agnfitter_3p_from_grid
+   :noindex:
+
+.. automodule:: tengri.components.agn.skirtor_agnfitter_1p
+   :members: skirtor_agnfitter_1p_sed, create_skirtor_agnfitter_1p_from_grid
+   :noindex:
+
+.. automodule:: tengri.components.agn.skirtor_agnfitter_2p
+   :members: skirtor_agnfitter_2p_sed, create_skirtor_agnfitter_2p_from_grid
+   :noindex:
+
+.. automodule:: tengri.components.agn.cat3d_wind_lowfwd
+   :members: cat3d_wind_lowfwd_sed, create_cat3d_wind_lowfwd_from_grid
+   :noindex:
+
 Nebular emission
 ----------------
 
