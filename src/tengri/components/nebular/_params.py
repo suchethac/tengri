@@ -53,13 +53,15 @@ PARAMS: tuple[ParamDeclaration, ...] = (
         "neb_logZ_gas",
         Fixed(-0.3),  # will be overridden to match met_logzsol if not set
         "Gas-phase metallicity log10(Z_gas/Zsun)",
-        # Deliberately NO free_prior, for the same reason as ``neb_xid`` (which
-        # lives in ``parameters/_builders.py::_AGN_EXTRAS``):
-        # its admissible range is the selected nebular backend's grid, and those
-        # differ (Cue, the Cloudy grids and the baked-in SSP tables do not share
-        # an extent). The ``neb`` group wildcard is not backend-scoped the way
-        # ``dust.emission`` is since #1482, so one declared range would be right
-        # for one backend and clipped or unreachable for the others.
+        # Deliberately NO free_prior: its admissible range is the selected
+        # nebular backend's grid, and those differ (Cue, the Cloudy grids and
+        # the baked-in SSP tables do not share an extent). The ``neb`` group
+        # wildcard is not backend-scoped the way ``dust.emission`` is since
+        # #1482, so one declared range would be right for one backend and
+        # clipped or unreachable for the others. (The Feltre NLR
+        # dust-to-metal axis used to be refused here for the same reason under
+        # a second name, ``neb_xid``; R41/#2214 gave that axis its one name,
+        # ``agn_nlr_xi_d``, whose range IS its own block's grid extent.)
         #
         # It is also tied: absent an explicit setting it tracks ``met_logzsol``,
         # so freeing it silently decouples gas-phase from stellar metallicity

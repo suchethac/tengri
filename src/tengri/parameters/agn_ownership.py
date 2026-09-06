@@ -119,7 +119,11 @@ _AGN_PARTITION = {
     # Narrow-line region
     "agn_nlr_cf": "agn.nlr",
     "agn_alpha_ion": "agn.nlr",  # NLR photoionization knob
-    "neb_xid": "agn.nlr",  # Nebular ionization for NLR
+    # R41 (#2214): "neb_xid" sat here, a second name for the Feltre NLR
+    # dust-to-metal grid axis this block reads as agn_nlr_xi_d (entered below,
+    # with the other five axes). The partition is consulted only for
+    # agn_-prefixed names, so the nebular-prefixed entry could never fire --
+    # the dead entry #2214 was filed against. The axis has one name now.
     # Broad-line region
     "agn_blr_cf": "agn.blr",
     # FeII

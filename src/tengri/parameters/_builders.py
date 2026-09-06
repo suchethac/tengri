@@ -15,7 +15,6 @@ from __future__ import annotations
 import importlib
 from collections.abc import Iterable
 
-from tengri.parameters.priors import Fixed
 from tengri.protocols.component import ParamDeclaration
 
 
@@ -38,36 +37,6 @@ def _bucket_from_declarations(
         )
         for d in decls
     }
-
-
-# ── AGN extras: neb_xid parameter merged at bucket resolution time ────────
-#
-# ``neb_xid`` is nebular-prefixed but owned/consumed by the Feltre NLR backend
-# and appears alongside ``agn_alpha_ion`` in the AGN bucket. Legacy code expects
-# it bundled with _AGN_PARAMS, so it is merged at bucket-resolution time rather
-# than moving it into ``components/agn/_params.py`` (which would violate the
-# prefix invariant checked by ``tools/check_param_prefixes.py``).
-
-# ``neb_xid`` carries no ``free_prior`` (#887), for two reasons that compound.
-# It is read only by the Feltre NLR backend, and the ``neb`` group wildcard is
-# not backend-scoped the way ``dust.emission`` has been since #1482, so freeing
-# it under any other nebular backend would add an inert dimension. Its grid is
-# also three nodes ({0.1, 0.3, 0.5}) inside a validator interval of
-# [0.05, 0.6], so the admissible interval and the tabulated one are not the same
-# object and a uniform over the former would spend most of its mass off-grid.
-#
-# This tuple is a *third* declaration shape besides ``ParamDeclaration`` and
-# ``ParamDef``/``MetParamDef``, and the only one still without a ``free_prior``
-# slot. Adding one here is not worth it for a single parameter that should not
-# be freed by wildcard anyway; fold it into a real declaration if that changes.
-_AGN_EXTRAS: dict = {
-    "neb_xid": (
-        "Dust-to-metal ratio (Feltre NLR backend) [0.1, 0.3, 0.5]",
-        lambda lo, hi: lo >= 0.05 and hi <= 0.6,
-        "must be in [0.05, 0.6] (grid values: 0.1, 0.3, 0.5)",
-        Fixed(0.3),
-    ),
-}
 
 
 # ── Lazy bucket resolution ──────────────────────────────────────────────────
@@ -117,29 +86,25 @@ _LAZY_DECL_SOURCES: dict[str, tuple[str, str]] = {
     ),
 }
 
-#: Extra entries merged into a lazily-resolved bucket after the
-#: component-owned declarations are converted. Keyed by bucket name.
-_LAZY_DECL_EXTRAS: dict[str, dict] = {
-    "_AGN_PARAMS": _AGN_EXTRAS,
-}
-
 
 def _resolve_lazy_bucket(name: str) -> dict:
     """Resolve a lazily-imported parameter bucket.
 
-    Loads the component module, converts its declarations to the legacy 4-tuple
-    format, merges any extras, and caches the result.
+    Loads the component module and converts its declarations to the legacy
+    4-tuple format.
+
+    Until R41 (#2214) this also merged a per-bucket ``_LAZY_DECL_EXTRAS``
+    table, which existed for exactly one entry: the ``neb_xid`` orphan, a
+    second name for the Feltre NLR dust-to-metal grid axis the AGN block
+    reads as ``agn_nlr_xi_d``. With one name for the axis there are no
+    extras, and every bucket is now its component's own declarations.
     """
     src = _LAZY_DECL_SOURCES.get(name)
     if src is None:
         raise AttributeError(f"No lazy source for bucket {name!r}")
     module_path, attr = src
     mod = importlib.import_module(module_path)
-    bucket = _bucket_from_declarations(getattr(mod, attr))
-    extras = _LAZY_DECL_EXTRAS.get(name)
-    if extras:
-        bucket = {**bucket, **extras}
-    return bucket
+    return _bucket_from_declarations(getattr(mod, attr))
 
 
 # ── Non-SFH parameter bucket (derived from canonical _shared.PARAMS) ────────

@@ -4877,6 +4877,43 @@ def _monolithic_agn_top_level_names(model: str) -> set[str]:
     return out
 
 
+#: Both spellings of the retired Feltre dust-to-metal key (R41, #2214): the
+#: nebular-prefixed orphan and the short form the sub-block grammar would have
+#: resolved it under. Neither is a declared parameter any more -- the axis has
+#: one name, ``agn_nlr_xi_d``, owned by the ``nlr`` block that reads it. Without
+#: an interception the generic key resolver answers ``neb_xid`` in the ``neb``
+#: group with "Did you mean: neb_fdust?", a real parameter of an unrelated
+#: quantity, so following the suggestion silently fits something else.
+_NEB_XID_KEYS: frozenset[str] = frozenset({"neb_xid", "xid"})
+
+
+def _neb_xid_retired_error(group: str, key: str) -> ValueError:
+    """The one message the retired ``neb_xid`` gets, wherever it was written.
+
+    Parameters
+    ----------
+    group : str
+        The group the key was found in (``'neb'``, ``'agn'``, ``'agn.nlr'``, ...).
+    key : str
+        The spelling the caller wrote.
+
+    Returns
+    -------
+    ValueError
+        Naming the replacement, why the old name never worked, and the one
+        placement that does.
+    """
+    return ValueError(
+        f"{key!r} (found in group {group!r}) was renamed 'agn_nlr_xi_d' (short "
+        f"form 'nlr_xi_d'): the Feltre+2016 NLR dust-to-metal grid axis was "
+        f"carried under two names, and the nebular-prefixed one was declared "
+        f"under every composable AGN build while nothing read it. The axis "
+        f"belongs to the 'nlr' sub-block, which is what reads it:\n"
+        f"  agn={{'type': 'composable', 'nlr': {{'type': 'feltre', "
+        f"'agn_nlr_xi_d': Uniform(0.1, 0.5)}}}}"
+    )
+
+
 def _check_dict_keys(
     group: str,
     user_dict: dict,
@@ -4894,6 +4931,15 @@ def _check_dict_keys(
     for key in user_dict:
         if key in allowed:
             continue
+
+        # R41 (#2214): the retired neb_xid is intercepted before the generic
+        # resolver reaches it, in every group -- it was a nebular-prefixed key
+        # for an AGN block's grid axis, so a pre-rename config could have
+        # written it under `neb`, at the `agn` top level, or nested under
+        # `agn.nlr`, and the generic suggestion is wrong (and actively harmful)
+        # in the first of those.
+        if key in _NEB_XID_KEYS:
+            raise _neb_xid_retired_error(group, str(key))
 
         # Special case: 'foreground' declares no fitted parameters at all
         # (it is a bare MW-screen settings dict, see _translate_foreground),

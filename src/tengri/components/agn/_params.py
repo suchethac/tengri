@@ -33,12 +33,12 @@ use the "typical" interval stated in the original docstring.
 
 Scope note
 ----------
-The legacy ``_AGN_PARAMS`` bucket also contained ``neb_xid``: a
-nebular-prefixed orphan kept inside the agn bucket because the Feltre
-NLR backend consumes it alongside ``agn_alpha_ion``. That entry remains
-in ``_param_defs.py`` so the bucket adapter can merge it back in;
-keeping it out of this tuple preserves the agn_* prefix invariant
-enforced by ``tools/check_param_prefixes.py``.
+The legacy ``_AGN_PARAMS`` bucket used to carry one entry this tuple did not:
+``neb_xid``, a nebular-prefixed second name for the Feltre NLR dust-to-metal
+grid axis, merged in by a bucket adapter. R41 (#2214) retired it. The axis is
+``agn_nlr_xi_d``, declared below like every other AGN parameter, so the bucket
+is now exactly this tuple and the ``agn_*`` prefix invariant
+(``tools/check_param_prefixes.py``) holds without an exception.
 """
 
 from __future__ import annotations

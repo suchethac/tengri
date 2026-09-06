@@ -200,8 +200,8 @@ class AGNSEDComponent(TemplateThreading):
         Returns the canonical :data:`PARAMS` tuple from
         ``tengri.components.agn._params``. The legacy ``_AGN_PARAMS``
         bucket in ``tengri.parameters._builders`` is a derived view
-        of the same tuple (plus the ``neb_xid`` orphan kept in the
-        registry for the Feltre NLR backend).
+        of the same tuple, exactly (R41, #2214, retired the one orphan
+        the bucket used to add on top).
 
         The full ``agn_*`` parameter superset is declared so that any
         registered model can run without missing keys. Users freely

@@ -77,7 +77,6 @@ REFUSED: dict[str, tuple[str, str]] = {
     # declarable, which is the general remedy this ground was pointing at.
     "dust_frac_agn": ("inert", "needs templates_qso; the default Dale file ships only SF"),
     "neb_logZ_gas": ("inert", "range is the selected nebular backend's grid; neb is unscoped"),
-    "neb_xid": ("inert", "Feltre NLR only, and a 3-node grid inside a wider validator"),
     # ── fixed-by-physics: real range, but not a per-object freedom ──
     "radio_alpha_ff": ("fixed-by-physics", "optically-thin bremsstrahlung is -0.1 analytically"),
     "radio_delv_mass_slope": ("fixed-by-physics", "FIRRC slope; degenerate at fixed (M*, z)"),

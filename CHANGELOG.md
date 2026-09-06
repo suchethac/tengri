@@ -226,6 +226,15 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 - SFH short keys resolve for multi-word type names: bare `tau_gyr`, `age_gyr`
   and `log_total_mass` now work for `declining_exp` as they already did for
   `delayed`.
+- The Feltre+2016 NLR dust-to-metal grid axis had two names: `agn_nlr_xi_d`,
+  which the `nlr='feltre'` block reads, and `neb_xid`, an orphan declared
+  under every composable AGN build and read by nothing. `neb_xid` is retired;
+  writing it in any group (`neb`, the `agn` top level, or nested under
+  `agn.nlr`) raises a loud legacy-key error naming `agn_nlr_xi_d` and the
+  placement that works. The `_AGN_EXTRAS` table, the `_LAZY_DECL_EXTRAS`
+  bucket hook, and the registry's adapter loop for them are removed with it,
+  so every parameter bucket is now exactly its component's own declarations
+  (#2214).
 
 ### Removed
 

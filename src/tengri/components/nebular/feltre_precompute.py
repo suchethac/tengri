@@ -5,7 +5,7 @@ Implements :class:`~tengri.forward.precompute.protocol.PrecomputeModule` for
 the Feltre, Charlot & Gutkin (2016) CLOUDY c13.03 AGN NLR photoionization grid,
 exposing a 4D preintegrated line-luminosity grid:
 
-    (neb_logZ_gas, agn_alpha_ion, neb_logU, neb_xid)
+    (neb_logZ_gas, agn_alpha_ion, neb_logU, agn_nlr_xi_d)
 
 with 20 emission lines (O II, Hβ, O III, O I, N II, Hα, S II, NV, CIV, HeII,
 and optical UV lines).
@@ -48,12 +48,17 @@ from tengri.utils.interpolation import edges_for_grid
 
 # Axis parameters: ordered tuple matching the Feltre grid axes.
 # neb_logZ_gas: absolute log10(Z), neb_logU: ionization parameter,
-# neb_xid: dust-to-metal ratio, agn_alpha_ion: UV power-law slope.
+# agn_nlr_xi_d: dust-to-metal ratio, agn_alpha_ion: UV power-law slope.
+#
+# R41 (#2214): the dust-to-metal axis was named ``neb_xid`` here and
+# ``agn_nlr_xi_d`` in the block that reads the same grid. One axis, one name:
+# ``agn_nlr_xi_d``, declared in ``components/agn/_params.py`` and owned by
+# ``agn.nlr``.
 AXIS_PARAMS: tuple[str, ...] = (
     "neb_logZ_gas",
     "agn_alpha_ion",
     "neb_logU",
-    "neb_xid",
+    "agn_nlr_xi_d",
 )
 
 
@@ -201,7 +206,7 @@ def build_lookup(preint: dict, **kwargs: Any) -> dict:
 
     Returns a callable with signature::
 
-        fn(log_qh, neb_logZ_gas, agn_alpha_ion, neb_logU, neb_xid)
+        fn(log_qh, neb_logZ_gas, agn_alpha_ion, neb_logU, agn_nlr_xi_d)
             -> (line_wavelengths, line_lum)
 
     Returns
