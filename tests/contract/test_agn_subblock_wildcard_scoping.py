@@ -462,11 +462,28 @@ def test_describe_agn_block_params_match_wildcard_scope(ssp, obs, category, bloc
         _maybe_skip_grid_gated(category, block_type, exc)
 
     free_agn = {p for p in model.spec.free_params if p.startswith("agn_")}
+    # describe_agn_block answers about a block in isolation, so it cannot see a
+    # companion read that another sub-block's selection switches on: with
+    # blr='analytic' pinned by _build, the feii wildcard legitimately also
+    # frees agn_fe2_strength (R33). Derived from the same helper rather than
+    # listed, so the two move together.
+    from tengri.parameters.groups import _agn_subblock_companion_params
+
+    from tengri.components.agn.blocks._consumes import AGN_BLOCK_CONSUMES
+
+    conditional = (
+        _agn_subblock_companion_params(category, block_type, blr_type="analytic")
+        - _agn_subblock_companion_params(category, block_type)
+        # A block that declares the name in its OWN entry keeps it either way,
+        # so it is not conditional for that type (feii='boroson_green').
+        - AGN_BLOCK_CONSUMES.get((_CONSUMES_CATEGORY[category], block_type), frozenset())
+    )
     rec = tengri.describe_agn_block(block_type, category=category)
     described = set(rec.get("params", []))
-    assert described == free_agn, (
+    assert described == free_agn - conditional, (
         f"{category}/{block_type}: describe_agn_block params {sorted(described)} "
-        f"!= wildcard-freed params {sorted(free_agn)}"
+        f"!= wildcard-freed params {sorted(free_agn - conditional)} "
+        f"(conditional companions excluded: {sorted(conditional)})"
     )
 
 
