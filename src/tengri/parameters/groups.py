@@ -5294,6 +5294,28 @@ def _translate_agn(agn_dict: dict, result: dict) -> None:
         # over. Raising here also runs before key validation, so the reader is
         # told the real problem.
         _validate_agn_top_type(top_type)
+        # R42: 'none' is the group's off switch, not a model name. R37
+        # (e5d2b447c) exempted it from the validator above but still forwarded
+        # it to ``agn_model``, where ``resolve_agn_model`` has no such model:
+        # every ``agn={'type': 'none'}`` build parsed and then died at the
+        # first ``predict_photometry`` with "Unknown AGN model 'none'".
+        # Normalize onto the same off sentinel every other group uses -- leave
+        # ``agn_model`` unset, which is what an omitted ``agn`` group carries
+        # and what the component factory tests (``if agn_model is not None``).
+        # The sub-block check is repeated here with its own message: the
+        # shared one below calls the type a monolithic AGN model, which
+        # 'none' is not, and returning without it would silently drop the
+        # sub-blocks the caller wrote.
+        if top_type == "none":
+            switched_off = sorted(k for k in _AGN_SUBBLOCK_KEYS if k in agn_dict)
+            if switched_off:
+                raise ValueError(
+                    f"agn={{'type': 'none'}} switches the AGN off entirely, but "
+                    f"sub-block keys {switched_off} are also present -- switched off, "
+                    f"they would be built by nothing and silently ignored. Drop "
+                    f"'type': 'none' to build those blocks, or drop the sub-blocks."
+                )
+            return
         # Reject mixing a monolithic ``type`` with sub-block selectors;
         # the two surfaces are mutually exclusive.
         used_blocks = sorted(k for k in _AGN_SUBBLOCK_KEYS if k in agn_dict)

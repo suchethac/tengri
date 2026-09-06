@@ -529,6 +529,15 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
   the render at 7 galaxies).
 - **The 18 restatement drifts `check_param_restatements.py` found across five legacy AGN disc/torus classes are fixed at the source.** `CAT3DTorus`, `KD18Disc`, `PowerLawDisc`, `Silva04Torus`, and `SKIRTORAgnfitterTorus` now derive their class-level free-parameter literals from `declared_prior(PARAMS, name)` instead of restating them, the same pattern `SKIRTORTorus` already used (above). **Behavior change:** every one of the five classes' `agn_log_lbol` default moves `11.0 -> 10.0`; `agn_torus_frac` bounds/default are corrected on `CAT3DTorus`, `Silva04Torus`, `SKIRTORAgnfitterTorus`; `KD18Disc` corrects `agn_log_mbh`, `agn_log_ledd`, `agn_a_spin`, `agn_cos_inc`, `agn_f_hard`, `agn_gamma_warm`, `agn_kt_warm`, `agn_gamma_hard`, `agn_kt_hot`, `agn_r_warm_ratio`, and `agn_lum_ratio` bounds/defaults; `PowerLawDisc` corrects `agn_alpha` and `agn_lum_ratio` bounds/defaults. Any existing caller that constructed one of these classes and relied on its unset defaults or declared support (e.g. a `Fixed(DEFAULT)` sample, or a sampler exploring the class's own stated prior range) samples differently now.
 - `scripts/build_slone_netzer_grid.py`'s HDF5 attrs key is restored to `g.attrs["edd_labelling"]`. An earlier `--fix` pass of `check_british_spelling.py` had renamed it to `edd_labeling`, but the shipped `data/slone_netzer_disc_grid.h5` was not regenerated and still carries the old key on disk, desynchronizing the generator script from its own committed output. No consumer reads this key today, so this had no runtime effect; `check_british_spelling.py` gains a scoped allowlist entry for the on-disk key spelling.
+- `agn={'type': 'none'}` built a model that raised `Unknown AGN model 'none'`
+  on the first `predict_photometry`. `'none'` is the grammar's universal off
+  switch — `neb`, `shock`, `radio`, `xray`, `igm` and both dust groups all take
+  it — but the AGN translator forwarded it to `agn_model` as though it named a
+  model. It now normalizes onto the same off sentinel an omitted `agn` group
+  carries, so the build has no AGN component and its photometry is bit-identical
+  to the omitted-`agn` build's. Writing a sub-block beside the off switch
+  (`agn={'type': 'none', 'disc': {...}}`) is refused rather than silently
+  dropped.
 
 ## [0.1.0] - 2026-05-22
 

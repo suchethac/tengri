@@ -24,6 +24,7 @@ stayed broken.
 
 import warnings
 
+import numpy as np
 import pytest
 
 pytestmark = pytest.mark.contract
@@ -46,6 +47,50 @@ def _parse(agn: dict):
             agn=agn,
             redshift=Fixed(0.5),
         )
+
+
+def _parse_no_agn():
+    """The same parse with the ``agn`` group omitted entirely (R42 control)."""
+    with warnings.catch_warnings():
+        warnings.simplefilter("ignore")
+        return parse_groups(
+            sfh={"type": "delayed", "all_params": Fixed(DEFAULT)},
+            redshift=Fixed(0.5),
+        )
+
+
+def _predict(agn: dict | None):
+    """Build a minimal model with (or without) an ``agn`` group and predict.
+
+    ``agn=None`` omits the group, which is the control R42 compares against.
+    The SSP and filters are the synthetic ones the AGN wildcard-scoping module
+    already builds, so no ``data/`` grid is needed.
+    """
+    from tengri import SEDModel
+
+    from .test_agn_subblock_wildcard_scoping import _make_obs, _make_ssp
+
+    kwargs = {} if agn is None else {"agn": agn}
+    with warnings.catch_warnings():
+        warnings.simplefilter("ignore")
+        model = SEDModel.build(
+            ssp_data=_make_ssp(),
+            observation=_make_obs(),
+            sfh={
+                "type": "const",
+                "all_params": Fixed(DEFAULT),
+                "log_total_mass": 10.0,
+                "start_gyr": 1.0,
+            },
+            dust_attenuation={
+                "type": "two_component",
+                "law": "calzetti",
+                "all_params": Fixed(DEFAULT),
+            },
+            redshift=Fixed(1.0),
+            **kwargs,
+        )
+    return np.asarray(model.predict_photometry(dict(model.spec.get_fixed_values())))
 
 
 def test_the_monolithic_registry_is_not_empty():
@@ -179,11 +224,62 @@ def test_none_is_the_off_switch_not_a_composable_block_name():
     'none', ...}}`` -- a build with an AGN. Every other group in the grammar
     takes the same off switch (``neb``, ``shock``, ``radio``, ``xray``,
     ``igm``, ``dust_attenuation``, ``dust_emission``), and ``_translate_dust``
-    names agn among them. Measured at a293dec69: it parsed, and the resulting
-    spec carried ``agn_model == 'none'``.
+    names agn among them.
+
+    R42: exempting ``'none'`` from the validator was only half the switch. The
+    string was still forwarded to ``agn_model``, and ``resolve_agn_model`` has
+    no model by that name, so the spec parsed and then died at the first
+    ``predict_photometry``. The off state is ``agn_model is None`` -- the same
+    sentinel the omitted-``agn`` build carries, and the one the component
+    factory tests (``if agn_model is not None``).
     """
     spec = _parse({"type": "none"})
-    assert spec.agn_model == "none"
+    assert spec.agn_model is None
+    assert spec.agn_model == _parse_no_agn().agn_model
+
+
+def test_none_builds_and_predicts_the_agn_omitted_photometry():
+    """R42: ``agn={'type': 'none'}`` must PREDICT, not merely parse.
+
+    Measured at b2a2a4d33 the build succeeded and the first
+    ``predict_photometry`` raised::
+
+        ValueError: Unknown AGN model 'none'. Available: 'composable', or any
+        of the deprecated monolithic names: ['adaf', 'cat3d_wind', 'grahsp',
+        ...]
+
+    raised from ``components/agn/unified.py::resolve_agn_model`` via
+    ``components/agn/component.py:451``, because ``_translate_agn`` forwarded
+    the off switch as if it were a model name. Switching the AGN off must give
+    back exactly the model with no AGN at all, so the two photometries are
+    compared bit for bit rather than approximately.
+    """
+    off = _predict({"type": "none"})
+    omitted = _predict(None)
+    np.testing.assert_array_equal(
+        off,
+        omitted,
+        err_msg="agn={'type': 'none'} must emit exactly the agn-omitted photometry",
+    )
+
+
+def test_the_off_switch_refuses_sub_blocks_rather_than_dropping_them():
+    """``agn={'type': 'none', 'disc': {...}}`` names the contradiction.
+
+    The off switch returns before any sub-block selector is read, so without
+    this refusal the sub-block would be silently discarded -- the
+    explicit-over-silent rule the whole R37/R42 line of work exists to keep.
+
+    It must also stop calling ``'none'`` a monolithic AGN model, which is what
+    the shared monolithic/sub-block message said at b2a2a4d33: the off switch
+    is not a model, and R42 is the ruling that it never was.
+    """
+    with pytest.raises(ValueError) as exc_info:
+        _parse({"type": "none", "disc": {"type": "multicolor"}})
+    message = str(exc_info.value)
+    assert "disc" in message, message
+    assert "none" in message, message
+    assert "monolithic" not in message, message
 
 
 @pytest.mark.parametrize("block_type", ["fritz", "kd18_agnfitter", "nenkova_agnfitter"])
