@@ -1073,8 +1073,11 @@ class FeltreGridData:
     Notes
     -----
     Grid axes follow the Feltre et al. (2016) CLOUDY c13.03 photoionization
-    calculations. Continuous axes (logUs, logn, logZ) can be interpolated
-    smoothly; discrete axes (alpha, xi_d) use nearest-neighbor lookup.
+    calculations. All five are node samplings of continuous physical
+    quantities and all five are interpolated with the same C2-continuous
+    triweight kernel: :math:`\\alpha_{\\rm pl}` and :math:`\\xi_d` are tabulated
+    at four and three nodes respectively, which is a coarser sampling, not a
+    different kind of axis.
 
     """
 
@@ -1137,36 +1140,6 @@ def _load_feltre_grid(filepath: str | Path) -> FeltreGridData:
     )
 
 
-def _nearest_idx(axis: jnp.ndarray, value: float) -> jnp.ndarray:
-    """Return nearest-neighbor index into a 1-D axis array.
-
-    Parameters
-    ----------
-    axis : array_like, shape (n,)
-        Axis node values.
-    value : float or Array
-        Coordinate to snap. May be a JAX tracer.
-
-    Returns
-    -------
-    ndarray
-        Scalar integer index, as a JAX array.
-
-    Notes
-    -----
-    **JIT-compatible**: yes. This deliberately does **not** wrap the result in
-    Python ``int()``: doing so raised ``ConcretizationTypeError`` whenever the
-    caller's coordinate was traced, which made the whole Feltre NLR block
-    unusable under ``jax.jit`` (#1640). Traced integer indices are fine: JAX
-    lowers them to a gather.
-
-    **Gradient**: nearest-neighbor snapping is piecewise-constant, so the
-    gradient w.r.t. ``value`` is zero. That was already true of the ``int()``
-    form; only the ability to trace it has changed.
-    """
-    return jnp.argmin(jnp.abs(jnp.asarray(axis) - value))
-
-
 class FeltreNLRBackend:
     """Feltre, Charlot & Gutkin (2016) AGN NLR photoionization backend.
 
@@ -1183,9 +1156,21 @@ class FeltreNLRBackend:
     Interpolation strategy
     ----------------------
 
-    - **Continuous axes** (log U_S, log Z, log n_H): C²-continuous triweight
-      interpolation via ``interp_nd_triweight``: compatible with VI/MAP.
-    - **Discrete axes** (α, ξ_d): nearest-neighbor index lookup.
+    All five grid axes (:math:`\\alpha_{\\rm pl}, \\log U_S, \\log n_{\\rm H},
+    \\log Z, \\xi_d`) are interpolated together with the C2-continuous
+    triweight kernel via ``interp_nd_triweight``, so every one of them carries
+    a gradient and is usable under VI/MAP/NUTS.
+
+    :math:`\\alpha_{\\rm pl}` and :math:`\\xi_d` were snapped to their nearest
+    node until R41 (#2214). A nearest-neighbor lookup is piecewise constant, so
+    its gradient is zero everywhere: :math:`\\xi_d` measured *exactly* dead on
+    ``predict_photometry`` at every prior quantile, which is why the composable
+    NLR block's wildcard excluded it. Feltre et al. sample both as points of a
+    continuous physical quantity, and interpolating between tabulated nodes is
+    what this backend already did on the other three axes, so they are treated
+    the same way. The grid arrays are sorted onto ascending axes once at
+    construction, which is also what makes a descending stored axis a
+    non-issue rather than a per-call reversal.
 
     This backend has ``has_continuum = False``.
 
@@ -1219,23 +1204,34 @@ class FeltreNLRBackend:
     def __init__(self, grid_path: str | Path = _DEFAULT_FELTRE_GRID_PATH) -> None:
         self.grid = _load_feltre_grid(grid_path)
 
-        # Pre-compute triweight edges for continuous axes at init time.
-        # Axes must be sorted ascending for interp_nd_triweight.
+        # Every axis is interpolated, so every axis must be ascending and the
+        # tabulated arrays must be permuted with it. Sorting once here (rather
+        # than reversing slices per call, as the pre-R41 three-axis path did)
+        # keeps the ordering fix in one place and out of the hot path. The
+        # stored order is (alpha, logUs, logn, logZ, xi_d) on both arrays; the
+        # trailing line axis of ``line_ratios`` is not an interpolation axis
+        # and is left alone.
         from tengri.utils.interpolation import edges_for_grid
 
-        # logUs_axis may be descending (-1, -2, -3, -4); sort ascending.
-        self._logUs_sorted = jnp.sort(self.grid.logUs_axis)
-        self._logUs_descending = bool(self.grid.logUs_axis[0] > self.grid.logUs_axis[-1])
+        axes = [
+            self.grid.alpha_axis,
+            self.grid.logUs_axis,
+            self.grid.logn_axis,
+            self.grid.logZ_axis,
+            self.grid.xi_d_axis,
+        ]
+        log_hb = self.grid.logHB_per_logq
+        ratios = self.grid.line_ratios
+        for i, axis in enumerate(axes):
+            order = jnp.argsort(axis)
+            axes[i] = axis[order]
+            log_hb = jnp.take(log_hb, order, axis=i)
+            ratios = jnp.take(ratios, order, axis=i)
 
-        self._logn_sorted = jnp.sort(self.grid.logn_axis)
-        self._logn_descending = bool(self.grid.logn_axis[0] > self.grid.logn_axis[-1])
-
-        self._logZ_sorted = jnp.sort(self.grid.logZ_axis)
-        self._logZ_descending = bool(self.grid.logZ_axis[0] > self.grid.logZ_axis[-1])
-
-        self._edges_logUs = edges_for_grid(self._logUs_sorted)
-        self._edges_logn = edges_for_grid(self._logn_sorted)
-        self._edges_logZ = edges_for_grid(self._logZ_sorted)
+        self._axes = tuple(axes)
+        self._edges = tuple(edges_for_grid(axis) for axis in self._axes)
+        self._logHB_sorted = log_hb
+        self._ratios_sorted = ratios
 
     def predict_agn_nlr_lines(
         self,
@@ -1253,8 +1249,8 @@ class FeltreNLRBackend:
         Parameters
         ----------
         alpha_pl : float
-            AGN EUV power-law slope (f_nu ~ nu^alpha_pl).  Nearest-neighbor
-            mapped to grid values [-1.2, -1.4, -1.7, -2.0].
+            AGN EUV power-law slope (f_nu ~ nu^alpha_pl).  Interpolated
+            continuously between the grid nodes [-2.0, -1.7, -1.4, -1.2].
         neb_logU : float
             Gas ionization parameter log10(U_S).  Interpolated continuously
             over [-4, -1].
@@ -1265,7 +1261,8 @@ class FeltreNLRBackend:
             Gas metallicity log10(Z) absolute.  Interpolated continuously.
             Converts to log10(Z) if absolute; use _LOG10_ZSUN = -1.8477 for solar.
         xi_d : float
-            Dust-to-metal ratio.  Nearest-neighbor mapped to [0.1, 0.3, 0.5].
+            Dust-to-metal ratio.  Interpolated continuously between the grid
+            nodes [0.1, 0.3, 0.5].
         log_qh : float
             log10(Q_H) ionizing photon rate [photons/s].
         neb_fesc : float
@@ -1283,48 +1280,29 @@ class FeltreNLRBackend:
         -----
         **JIT-compatible**: yes, all operations use ``jnp`` primitives.
 
-        Interpolation uses C²-continuous triweight on continuous axes
-        (logU_S, logn, logZ) and nearest-neighbor on discrete axes
-        (alpha, xi_d). The method first selects the nearest grid point for
-        discrete axes, then interpolates smoothly on the 3-D continuous grid.
+        One C2-continuous triweight interpolation over all five grid axes
+        (alpha, logU_S, logn, logZ, xi_d), so every axis carries a gradient.
+        Before R41 (#2214) alpha and xi_d were snapped to their nearest node
+        first and only the remaining 3-D slice was interpolated, which left
+        xi_d with an exactly zero gradient everywhere.
 
         """
         from tengri.utils.grid_interp import interp_nd_triweight
 
-        grid = self.grid
+        # One interpolation over all five axes, in the stored order
+        # (alpha, logUs, logn, logZ, xi_d). ``line_ratios`` carries a trailing
+        # line axis, which interp_nd_triweight preserves.
+        point = (alpha_pl, neb_logU, neb_logn, neb_logZ_gas, xi_d)
 
-        # --- Discrete axes: nearest-neighbor index lookup ---
-        i_alpha = _nearest_idx(grid.alpha_axis, alpha_pl)
-        i_xi_d = _nearest_idx(grid.xi_d_axis, xi_d)
-
-        # --- Sort grid slice to ascending order if needed ---
-        # Slice for fixed (alpha, xi_d): shape (n_logUs, n_logn, n_logZ, ...)
-        logHB_slice = grid.logHB_per_logq[i_alpha, :, :, :, i_xi_d]  # (nU, nn, nZ)
-        ratios_slice = grid.line_ratios[i_alpha, :, :, :, i_xi_d, :]  # (nU, nn, nZ, nl)
-
-        if self._logUs_descending:
-            logHB_slice = logHB_slice[::-1, :, :]
-            ratios_slice = ratios_slice[::-1, :, :, :]
-        if self._logn_descending:
-            logHB_slice = logHB_slice[:, ::-1, :]
-            ratios_slice = ratios_slice[:, ::-1, :, :]
-        if self._logZ_descending:
-            logHB_slice = logHB_slice[:, :, ::-1]
-            ratios_slice = ratios_slice[:, :, ::-1, :]
-
-        axes = (self._logUs_sorted, self._logn_sorted, self._logZ_sorted)
-        edges = (self._edges_logUs, self._edges_logn, self._edges_logZ)
-        point = (neb_logU, neb_logn, neb_logZ_gas)
-
-        logHB_interp = interp_nd_triweight(logHB_slice, axes, edges, point)
-        ratios_interp = interp_nd_triweight(ratios_slice, axes, edges, point)
+        logHB_interp = interp_nd_triweight(self._logHB_sorted, self._axes, self._edges, point)
+        ratios_interp = interp_nd_triweight(self._ratios_sorted, self._axes, self._edges, point)
 
         # L_Hβ = 10^{logHB_per_logq} × Q_H  [erg/s]
         # L_line = ratio × L_Hβ × (1 − fesc) / L_sun
         l_hb_erg = (10.0**logHB_interp) * (10.0**log_qh)
         line_lum = ratios_interp * l_hb_erg * (1.0 - neb_fesc) / _LSUN_ERG
 
-        return grid.line_wavelengths_aa, line_lum
+        return self.grid.line_wavelengths_aa, line_lum
 
 
 # ── Backend: analytic (existing) ──────────────────────────────────

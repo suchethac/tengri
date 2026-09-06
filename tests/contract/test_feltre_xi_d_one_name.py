@@ -36,7 +36,7 @@ import pytest
 
 pytestmark = pytest.mark.contract
 
-from tengri.parameters import DEFAULT, Fixed, parse_groups
+from tengri.parameters import DEFAULT, FREE, Fixed, parse_groups
 
 _GRID = os.path.join("data", "feltre_grid.h5")
 
@@ -198,3 +198,146 @@ def test_no_composable_build_carries_the_retired_name(nlr_type):
     spec = _parse(agn=_composable(nlr_type=nlr_type))
     assert "agn_nlr_xi_d" in spec.all_params
     assert "neb_xid" not in spec.all_params
+
+
+@pytest.mark.skipif(not os.path.exists(_GRID), reason="data/feltre_grid.h5 absent")
+def test_the_nlr_wildcard_frees_the_axis():
+    """``nlr={'type': 'feltre', 'all_params': FREE}`` must reach the axis.
+
+    R34 put the six Feltre axes in the block's own wildcard scope; the seventh
+    was excluded because a nearest-neighbor lookup made it measurably dead.
+    R41 replaced that lookup with the interpolation the continuous axes already
+    used, so the exclusion no longer describes anything.
+    """
+    agn = _composable()
+    agn["nlr"] = {"type": "feltre", "all_params": FREE}
+    spec = _parse(agn=agn)
+    assert "agn_nlr_xi_d" in spec.free_params, sorted(
+        p for p in spec.free_params if p.startswith("agn_nlr")
+    )
+
+
+@pytest.fixture(scope="module")
+def _feltre_model():
+    """One composable build with ``nlr='feltre'`` and the two axes freed.
+
+    Built once: each Feltre build loads the HDF5 grid, and the measurements
+    below only need to vary parameters in the params dict.
+    """
+    from tengri import SEDModel
+
+    from .test_agn_subblock_wildcard_scoping import _make_ssp
+
+    with warnings.catch_warnings():
+        warnings.simplefilter("ignore")
+        return SEDModel.build(
+            ssp_data=_make_ssp(),
+            sfh={"type": "delayed", "all_params": Fixed(DEFAULT)},
+            dust_attenuation={
+                "law": "power_law",
+                "type": "two_component",
+                "tau_bc": Fixed(0.0),
+                "tau_diff": Fixed(0.0),
+                "all_params": Fixed(DEFAULT),
+            },
+            agn={
+                "type": "composable",
+                "norm": "independent",
+                "disc": {"type": "multicolor"},
+                "nlr": {
+                    "type": "feltre",
+                    "agn_nlr_xi_d": FREE,
+                    "agn_nlr_logU": FREE,
+                    "all_params": Fixed(DEFAULT),
+                },
+                "agn_log_lbol": Fixed(12.0),
+                "all_params": Fixed(DEFAULT),
+            },
+            redshift=Fixed(0.05),
+        )
+
+
+def _prior_quantiles(name: str, qs=(0.1, 0.3, 0.5, 0.7, 0.9)) -> list[float]:
+    """The declared prior's own quantiles, never a raw 0.05-0.95 sweep.
+
+    A sweep in raw units reads a parameter as dead whenever the endpoints sit
+    outside its declared support; the quantiles of the declaration are inside
+    it by construction.
+    """
+    from tengri.parameters.registry import registry
+
+    prior = registry()[name].prior
+    lo, hi = float(prior.lo), float(prior.hi)
+    return [lo + q * (hi - lo) for q in qs]
+
+
+@pytest.mark.skipif(not os.path.exists(_GRID), reason="data/feltre_grid.h5 absent")
+def test_the_axis_carries_a_gradient_at_every_prior_quantile(_feltre_model):
+    """R41(b): the axis is interpolated, so a fit can move it.
+
+    Measured at b2a2a4d33 with the nearest-neighbor lookup: **exactly** 0.0 at
+    all five quantiles (a piecewise-constant lookup has no gradient anywhere),
+    against ~5e-18 for ``agn_nlr_logU`` on the same build. That is a dead
+    dimension by construction, not by underflow, which is what kept the axis
+    out of the block's wildcard scope.
+
+    ``agn_nlr_logU`` rides along as an in-model control: a build whose whole
+    NLR contribution had gone to zero would show a dead xi_d for a reason that
+    has nothing to do with the axis.
+    """
+    import jax
+    import jax.numpy as jnp
+
+    model = _feltre_model
+    base = dict(model.spec.get_fixed_values())
+    base["agn_nlr_xi_d"] = 0.3
+    base["agn_nlr_logU"] = -3.0
+
+    def total(name, value):
+        params = {**base, name: value}
+        return jnp.sum(model.predict_state(params).derived["sed_agn"])
+
+    dead = []
+    for name in ("agn_nlr_xi_d", "agn_nlr_logU"):
+        for value in _prior_quantiles(name):
+            grad = float(jax.grad(lambda v, n=name: total(n, v))(jnp.asarray(value)))
+            if grad == 0.0:
+                dead.append((name, value))
+    assert not dead, f"zero gradient (dead axis) at {dead}"
+
+
+@pytest.mark.skipif(not os.path.exists(_GRID), reason="data/feltre_grid.h5 absent")
+def test_the_axis_moves_the_agn_sed_above_the_consumes_threshold(_feltre_model):
+    """The criterion ``AGN_BLOCK_CONSUMES`` itself records: a relative
+    ``sed_agn`` change above 1e-6 across the parameter's prior.
+
+    Measured on this build: 0.154 between the 0.3 and 0.7 prior quantiles, the
+    same order as the five axes the entry already lists (``agn_nlr_logU``
+    0.384, ``agn_nlr_logZ`` 0.479, ``agn_nlr_alpha_pl`` 0.317). Exactly 0.0
+    before R41.
+    """
+    import numpy as np
+
+    model = _feltre_model
+    base = dict(model.spec.get_fixed_values())
+    base["agn_nlr_logU"] = -3.0
+
+    def sed(xi_d):
+        return np.asarray(model.predict_state({**base, "agn_nlr_xi_d": xi_d}).derived["sed_agn"])
+
+    lo_q, hi_q = _prior_quantiles("agn_nlr_xi_d", qs=(0.3, 0.7))
+    norm = max(np.max(np.abs(sed(0.3))), 1e-300)
+    rel = np.max(np.abs(sed(hi_q) - sed(lo_q))) / norm
+    assert rel > 1e-6, f"relative sed_agn change {rel:.3e} is at or below the 1e-6 no-op floor"
+
+
+def test_the_consumes_entry_lists_the_axis():
+    """The measured-live axis must be in the block's declared-reads entry.
+
+    Without it the wildcard scope for ``nlr='feltre'`` excludes a dimension the
+    block reads, which is exactly the gap ``AGN_BLOCK_CONSUMES`` exists to
+    close.
+    """
+    from tengri.components.agn.blocks._consumes import AGN_BLOCK_CONSUMES
+
+    assert "agn_nlr_xi_d" in AGN_BLOCK_CONSUMES[("nlr", "feltre")]

@@ -173,7 +173,7 @@ Table {ref}`2 <tab-agn-backends>` lists the available backends at each node. Ea
 |  | `cat3d_wind` | 3 | AGNfitter-rx | Clumpy disc + polar wind; subsumes polar dust |
 |  | `simple` | 4 | --- | Single-$T$ toy model; deprecated |
 | NLR | `analytic` | 3 | Groves et al. (2004) | Fixed line ratios, fast |
-|  | `feltre` | 5 | Feltre et al. (2016) | CLOUDY grids; $\xi_d$; 4 discrete $\alpha_{\rm pl}$ |
+|  | `feltre` | 5 | Feltre et al. (2016) | CLOUDY grids; $\xi_d$; $\alpha_{\rm pl}$ on 4 tabulated nodes |
 |  | `cue` | 7 | Li et al. (2025) | Neural emulator; continuous $\alpha_{\rm pl}$; free N/O, C/O |
 | X-ray | `alpha_ox` | 2 | X-CIGALE | Just+2007 $\alpha_{\rm ox}$ bridge |
 |  | `alpha_ox_aniso` | 2 | CIGALE v2022 | \+ viewing-angle anisotropy |
@@ -246,8 +246,8 @@ Fixed emission-line ratios from Groves et al. (2004) are applied with Gaussian p
 
 #### Backend 2: Feltre et al. (2016) CLOUDY grids.
 
-Full photoionization grids from Feltre et al. (2016) are interpolated in five dimensions ($\alpha_{\rm pl}$, $\log U$, $\log n_{\rm H}$, $\log Z/Z_\odot$, $\xi_d$). This gives exact CLOUDY results including the dust-to-metal ratio $\xi_d$, but the EUV slope is restricted to four discrete values ($\alpha_{\rm pl} \in
-\{-2.0, -1.7, -1.4, -1.2\}$) and nitrogen tracks oxygen at fixed solar N/O. The Cue backend (Backend 3) is recommended for continuous ionizing spectra and free abundance ratios.
+Full photoionization grids from Feltre et al. (2016) are interpolated in five dimensions ($\alpha_{\rm pl}$, $\log U$, $\log n_{\rm H}$, $\log Z/Z_\odot$, $\xi_d$), all five with the same $C^2$-continuous triweight kernel, so every axis carries a gradient and is fittable. This gives CLOUDY results including the dust-to-metal ratio $\xi_d$. The EUV slope and $\xi_d$ are tabulated on four and three nodes respectively ($\alpha_{\rm pl} \in
+\{-2.0, -1.7, -1.4, -1.2\}$, $\xi_d \in \{0.1, 0.3, 0.5\}$), so they are coarsely sampled rather than restricted, and nitrogen tracks oxygen at fixed solar N/O. The Cue backend (Backend 3) is recommended for a finely resolved ionizing spectrum and free abundance ratios.
 
 #### Backend 3: Cue emulator (Li et al. 2025).
 

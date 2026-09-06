@@ -15,6 +15,30 @@ pattern: emission lines are projected through filter curves via a precomputed
 ``(n_lines, n_filt)`` weight matrix, enabling fast filter-integrated line flux
 lookup at runtime.
 
+.. warning::
+
+    **This adapter has never run, and does not work as written** (measured at
+    b2a2a4d33 and unchanged by R41). Two independent reasons:
+
+    1. Nothing schedules it. ``forward/precompute/registry.py`` maps
+       ``"feltre_nlr"`` here, but ``registry.resolve`` has no caller anywhere
+       in ``src/`` -- the live precompute adapters are reached by direct
+       import instead. That is true of every entry in that registry, not only
+       this one, so the registry is currently a catalog rather than a
+       dispatch seam.
+    2. The axes do not match the grid. :data:`AXIS_PARAMS` and the ``axes``
+       tuple built in :func:`precompute` are four entries in the order
+       ``(logZ, alpha, logU, xi_d)``, while ``logHB_per_logq`` / ``line_ratios``
+       are five-dimensional in the order ``(alpha, logU, logn, logZ, xi_d)``:
+       ``logn`` is missing and the rest are permuted. Calling the callable
+       :func:`build_lookup` returns raises
+       ``TypeError: dot_general requires contracting dimensions to have the
+       same shape, got (16,) and (4,)``.
+
+    The runtime path -- :class:`~tengri.components.nebular.agn_nebular.FeltreNLRBackend`,
+    reached through ``agn={'nlr': {'type': 'feltre'}}`` -- is the one that
+    works, and it is what the ``nlr='feltre'`` block calls.
+
 References
 ----------
 .. [1] A. Feltre, S. Charlot, and J. Gutkin, "Updated photoionization models

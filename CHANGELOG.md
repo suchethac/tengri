@@ -233,8 +233,21 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
   `agn.nlr`) raises a loud legacy-key error naming `agn_nlr_xi_d` and the
   placement that works. The `_AGN_EXTRAS` table, the `_LAZY_DECL_EXTRAS`
   bucket hook, and the registry's adapter loop for them are removed with it,
-  so every parameter bucket is now exactly its component's own declarations
-  (#2214).
+  so every parameter bucket is now exactly its component's own declarations.
+  The axis was also inert: the Feltre backend snapped $\xi_d$ and
+  $\alpha_{\rm pl}$ to their nearest tabulated node, and a nearest-neighbor
+  lookup is piecewise constant, so `agn_nlr_xi_d` measured a gradient of
+  exactly 0.0 at every prior quantile — dead by construction, which is why the
+  `nlr='feltre'` wildcard excluded it. All five Feltre axes are now
+  interpolated together with the same C²-continuous triweight kernel the
+  continuous three already used, so `agn_nlr_xi_d` moves `sed_agn` by a
+  relative 0.154 across its prior (against 0.384 for `agn_nlr_logU`), is
+  listed in the block's `AGN_BLOCK_CONSUMES` entry, and is freed by
+  `agn={'nlr': {'type': 'feltre', 'all_params': FREE}}`. Numbers move: at the
+  grid node ($\alpha_{\rm pl}=-1.7$, $\xi_d=0.3$, solar $Z$) the 20 line
+  luminosities shift by a median 6.7% (min 1.1%, max 23.2%) against the
+  snapped values, because the triweight kernel spreads weight over
+  neighboring nodes rather than taking one exactly (#2214).
 
 ### Removed
 

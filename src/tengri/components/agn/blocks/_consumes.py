@@ -309,15 +309,20 @@ AGN_BLOCK_CONSUMES: dict[tuple[str, str], frozenset[str]] = {
             "agn_nlr_logn",
         }
     ),
-    # R34 partitioned the six Feltre grid axes to "agn.nlr", which put them in
-    # this block's own wildcard scope for the first time. Without an entry here
-    # the scope came from raw signature introspection, which also swept in
-    # agn_nlr_xi_d -- measured exactly dead (grad 0.0 at every one of five
-    # sampled points, 0.0 relative change across the declared [0.1, 0.5]): the
-    # shipped Feltre grid carries a single dust-to-metal node, so interpolation
-    # along that axis is constant and the gradient is zero by construction, not
-    # by underflow. Listing the six the block does read keeps the wildcard off
-    # a dimension a fit cannot move.
+    # R34 partitioned the Feltre grid axes to "agn.nlr", which put them in this
+    # block's own wildcard scope for the first time. agn_nlr_xi_d was excluded
+    # then: measured exactly dead, grad 0.0 at every one of five sampled points
+    # and 0.0 relative change across the declared [0.1, 0.5].
+    #
+    # R41 (#2214) found the cause was the backend, not the grid. The shipped
+    # data/feltre_grid.h5 carries THREE dust-to-metal nodes ([0.1, 0.3, 0.5]);
+    # the backend snapped xi_d to the nearest of them, and a nearest-neighbor
+    # lookup is piecewise constant, so its gradient is zero everywhere by
+    # construction. With the axis interpolated by the same C2 triweight kernel
+    # as logU/logn/logZ, xi_d measures live on this table's own criterion:
+    # 0.154 relative sed_agn change between the 0.3 and 0.7 prior quantiles,
+    # against 0.384 for agn_nlr_logU and 0.317 for agn_nlr_alpha_pl on the
+    # same build.
     ("nlr", "feltre"): frozenset(
         {
             "agn_nlr_cf",
@@ -326,6 +331,7 @@ AGN_BLOCK_CONSUMES: dict[tuple[str, str], frozenset[str]] = {
             "agn_nlr_logU",
             "agn_nlr_logn",
             "agn_nlr_logZ",
+            "agn_nlr_xi_d",
         }
     ),
     ("blr", "analytic"): frozenset(
