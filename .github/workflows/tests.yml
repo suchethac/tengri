@@ -1521,7 +1521,12 @@ jobs:
       # polar sweeps), including every (category, type) pair the PR-tier
       # subset drops. Runs once, on the `inference` leg only, since the marker
       # expression is the same whichever suite the matrix is on.
-      - if: always() && matrix.suite == 'inference'
+      # `!cancelled()`, not `always()`: `always()` runs this step even when the
+      # job was cancelled, so a cancelled run still spends 30 minutes here and
+      # reports its own outcome. `!cancelled()` keeps the run-on-failure
+      # behavior that matters (the step above going red must not skip this
+      # tier) while letting a cancellation actually cancel.
+      - if: ${{ !cancelled() && matrix.suite == 'inference' }}
         run: pytest tests/contract -q -m 'slow and not crossval' -n 0
         timeout-minutes: 30
       - uses: actions/cache/save@v6
