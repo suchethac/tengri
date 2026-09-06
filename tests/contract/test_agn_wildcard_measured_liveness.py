@@ -66,9 +66,30 @@ def obs():
 #: directly off the partition table -- NOT via _agn_subblock_declared_params
 #: (that is the function under test in the other module; this module's job
 #: is to measure independently of it).
+#: Owned names this module's exact-zero criterion would call live while the
+#: CONSUMES table's own criterion -- "moves the SED by more than a relative
+#: 1e-6", see that module's Provenance section -- calls them no-ops. The two
+#: differ by many orders of magnitude, and where they disagree the table's
+#: threshold is the one a fit can act on, so a name here is excluded from the
+#: owned set rather than demanded of the wildcard.
+#:
+#: ``agn_nlr_fwhm_kms``: the NLR analytic block does pass the line width
+#: through, and jax.grad on predict_photometry is not exactly zero -- but a
+#: line width at fixed line luminosity redistributes flux inside a line that a
+#: broadband filter integrates over, measured <= 1e-6 relative on the
+#: agn_panchromatic recipe's own filters
+#: (``test_agn_block_consumes.py::test_agn_panchromatic_free_params_all_move_predict``,
+#: which fails if it is freed).
+_BELOW_CONSUMES_THRESHOLD: frozenset[str] = frozenset({"agn_nlr_fwhm_kms"})
+
+
 def _owned_names(category: str) -> frozenset[str]:
     owner = f"agn.{category}"
-    return frozenset(name for name, group in _AGN_PARTITION.items() if group == owner)
+    return frozenset(
+        name
+        for name, group in _AGN_PARTITION.items()
+        if group == owner and name not in _BELOW_CONSUMES_THRESHOLD
+    )
 
 
 def _build_one_category(ssp_data, observation, category, block_type, *, all_params, mute=True):

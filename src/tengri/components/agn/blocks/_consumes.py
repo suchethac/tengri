@@ -266,10 +266,17 @@ AGN_BLOCK_CONSUMES: dict[tuple[str, str], frozenset[str]] = {
             "agn_theta_torus",
         }
     ),
-    # R34: agn_nlr_fwhm_kms (the line width this block broadens with) was
-    # missing -- measured live on predict_photometry once the partition gave
-    # the NLR grid knobs their owner.
-    ("nlr", "analytic"): frozenset({"agn_nlr_cf", "agn_nlr_line_efficiency", "agn_nlr_fwhm_kms"}),
+    # agn_nlr_fwhm_kms is deliberately absent, and the two measurements that
+    # disagree about it are both recorded here. This block does pass the line
+    # width through, and a jax.grad on predict_photometry is not exactly zero
+    # -- but the quantity this table records is "moves the SED by more than a
+    # relative 1e-6" (see Provenance above), and a line width at fixed line
+    # luminosity redistributes flux inside a line that a broadband filter
+    # integrates over: measured <= 1e-6 relative on the agn_panchromatic
+    # recipe's own filters, which is why
+    # test_agn_panchromatic_free_params_all_move_predict calls it a no-op.
+    # Listing it would make a recipe free a dimension no fit can constrain.
+    ("nlr", "analytic"): frozenset({"agn_nlr_cf", "agn_nlr_line_efficiency"}),
     ("nlr", "synthesizer"): frozenset({"agn_nlr_cf"}),
     ("nlr", "synthesizer_spectra"): frozenset({"agn_nlr_cf"}),
     ("nlr", "grahsp"): frozenset({"agn_grahsp_a_lines", "agn_grahsp_linewidth_kms"}),

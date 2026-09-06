@@ -172,6 +172,75 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 
 ### Changed
 
+- **AGN parameter ownership: disc physics nests under `disc`.** Eleven names
+  every reader of which is a disc block now belong to the `agn.disc` sub-block
+  rather than the shared `agn` top level: `agn_alpha`, `agn_log_mbh`,
+  `agn_log_ledd`, `agn_a_spin`, `agn_f_hard`, `agn_gamma_warm`, `agn_kt_warm`,
+  `agn_gamma_hard`, `agn_kt_hot`, `agn_r_warm_ratio` and `agn_ebv_disc`.
+  **Breaking for composable builds**: written at the agn top level they now
+  raise with the nesting to use —
+  `agn={'disc': {'type': ..., 'agn_log_mbh': ...}}`. The gain is that
+  `disc={'type': T, 'all_params': FREE}` frees that disc type's own physics,
+  which it did not for 13 of 14 registered disc types. `agn_attenuation_ebv`
+  and the polar-dust knobs nest under `atten` for the same reason.
+- **Monolithic AGN models keep their parameters flat.** The nesting guard above
+  applies to composable builds only. `agn={'type': 'kd18_agnfitter',
+  'agn_log_mbh': ...}` and every other non-composable type accept the
+  parameters that type declares at the agn top level, as they must: a
+  monolithic build has no sub-block, and one carrying sub-block keys is refused
+  outright, so applying the guard there left no working spelling at all
+  (measured: all 13 non-composable names raised). Unknown names still raise.
+- **`agn_band_frac` is retired in favor of `agn_torus_frac`.** SKIRTORTorus's
+  own, single-consumer name for the covering fraction every other torus block
+  already called `agn_torus_frac`. The old name raises a one-message redirect
+  from either placement — the agn top level (where pre-rename configs wrote it)
+  and the `torus` sub-block — branching on the build for the spelling that
+  works. `agn_frac_agn` now resolves to `agn_torus_frac`.
+- **`agn_polar_temperature` is an alias of `agn_polar_T`**, with the standard
+  deprecation warning; the duplicate declaration is gone.
+- **`list_agn_models()` lists every buildable AGN model.** It returned
+  `['composable']` while eleven deprecated preset names and two self-contained
+  ones (`skirtor_stalevski`, `grahsp`) were all accepted by
+  `agn={'type': ...}` — buildable and undiscoverable at the same time.
+- **The atten sub-block's short key is `attenuation_ebv`.** Each of the two
+  `agn_*` E(B-V) names keeps its own prefix-stripped short spelling:
+  `attenuation_ebv` for `agn_attenuation_ebv` (the atten block's own) and `ebv`
+  for `agn_ebv` (the separate `qsogen_smc` knob). The retired-spelling
+  migration message advertises the working one; it previously advertised
+  `'ebv'`, which froze the parameter it was meant to free.
+- **Recipe free-parameter counts move by one.** `agn_panchromatic` and
+  `composable_agn` both gain `agn_ebv_disc`: the runner reddens every disc
+  block's continuum with it (#916), so it is live for all 15 disc types, and
+  both recipes' disc sub-dicts state no wildcard of their own, so the
+  top-level one now reaches it. `composable_agn` loses `agn_torus_frac`, a
+  measured-dead dimension under that recipe's active fracAGN (see below).
+  Net −1/+1 on `composable_agn`, +1 on `agn_panchromatic`.
+- `agn_bcnorm` (qsogen_balmer's Balmer-continuum strength, #2175) belongs to
+  the `feii` sub-block, so `feii={'all_params': FREE}` reaches it. Update to
+  #2175: `qsogen_balmer` does differ from `boroson_green` — the earlier
+  "identical" reading came from evaluating both at `Fixed(DEFAULT)`, and
+  `agn_bcnorm`'s default 0.0 is exactly the value at which the Balmer
+  continuum is defined to vanish. At each type's own prior median they differ.
+- SFH short keys resolve for multi-word type names: bare `tau_gyr`, `age_gyr`
+  and `log_total_mass` now work for `declining_exp` as they already did for
+  `delayed`.
+
+### Fixed
+
+- **Naming both `agn_torus_frac` and an active fracAGN raises `ConfigError`**
+  (#2189). With fracAGN active, `AGNSEDComponent.apply` overrides whatever
+  `agn_torus_frac` was supplied with a value derived from the dust-absorbed
+  stellar luminosity, so the parameter is inert: measured 0.0 relative change
+  in photometry across its full range, against 8.5x-30.6x with fracAGN
+  inactive. A sub-block wildcard silently narrows it out instead of raising.
+  Every spelling and placement the grammar honors is seen, including
+  `ir_frac`/`fracAGN` written inside a sub-block.
+- `slone_netzer`'s `agn_log_ledd` is freed by the disc wildcard again. It had
+  been recorded as inert, from a gradient measured at the shared declared
+  default -1.0 — outside the block's own grid axis `[-4, -1.9586]`, where the
+  clip makes the gradient exactly zero by construction (#1586). Inside the
+  axis it runs 5.9e-2 to 8.8e-1.
+
 - Dust attenuation laws are explicit and required (#1989). A dust attenuation group
   spells its law as either `law` (one law, both screens) or, on `two_component` only,
   both `law_bc` and `law_diff` together — never one half of the pair, and never
