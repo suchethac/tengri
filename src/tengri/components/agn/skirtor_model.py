@@ -181,7 +181,10 @@ class SKIRTORTorus(SEDModelComponent):
 
     **Polar dust**: Applied to Type 1 sightlines (cos_inc ≥ cos(90° - oa))
     via the smooth sigmoid from polar_dust.py. Energy-conserving reemission
-    as Casey-2012 modified blackbody.
+    as Casey-2012 modified blackbody. This class's polar dust is bundled
+    into its own ``predict()``, independent of the composable path, where
+    it is instead owned end to end by the standalone ``atten='polar_dust'``
+    block (see ``blocks/atten.py::polar_dust_reemission_lnu``).
 
     **Citation**: Stalevski et al. 2016 (SKIRTOR); Yang et al. 2020, §2.2.2
     (polar dust + anisotropy).

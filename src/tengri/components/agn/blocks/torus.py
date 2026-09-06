@@ -393,7 +393,9 @@ def skirtor_torus_block(
     standalone ``polar_dust`` attenuation block (LOS reddening + isotropic
     re-emission end to end, selected via ``agn={'atten': {'type':
     'polar_dust'}}``); this torus block emits only the thermal SKIRTOR
-    template.
+    template. The standalone (non-composable) ``SKIRTORTorus`` component
+    (:mod:`tengri.components.agn.skirtor_model`) is a separate code path
+    with its own bundled polar dust, unaffected by this consolidation.
 
     Parameters
     ----------
