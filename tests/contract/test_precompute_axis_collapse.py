@@ -33,8 +33,25 @@ positional argument: 'agn_torus_frac'``. That is not a defect in the adapter:
 agn_torus_frac)`` -- one grid axis plus one *runtime* parameter that is
 deliberately not a grid axis (CLAUDE.md: ``agn_torus_frac`` must not be
 auto-derived in the forward pass). The old caller passed positionally and
-assumed an arity of ``1 + len(axes)``. Supplying it makes the collapse
-bit-exact: ``max|diff| = 0.0`` at ``agn_torus_frac`` of 0.25, 0.5 and 0.9.
+assumed an arity of ``1 + len(axes)``. Supplying it made the collapse
+bit-exact at the time (``max|diff| = 0.0`` at ``agn_torus_frac`` of 0.25, 0.5
+and 0.9) -- BEFORE Task 3 (RULING R11) migrated ``silva04_precompute``'s
+runtime lookup kernel from triweight to node-exact PCHIP
+(``interp_nd_pchip``/``interp_collapsed(..., kernel="pchip")``,
+``build_silva04_photometry_lookup``/``build_lookup``). The shared
+auto-collapse machinery both silva04 and ten other adapters share
+(``collapse_fixed_axes`` -> ``slice_fixed_axes``,
+``forward/precompute/templates.py`` / ``utils/grid_interp.py``) always
+collapses via triweight, unconditionally, regardless of which kernel the
+calling adapter's own runtime lookup uses. Once silva04's runtime kernel
+diverged from the collapse kernel, "collapse then evaluate" and "evaluate
+directly" stopped being the same computation: triweight is a smoothing
+kernel, not node-exact the way PCHIP is, so it disagrees with a direct PCHIP
+evaluation even pinned exactly at a grid node. Task 16 (AGNfitter-rX parity
+plan) measured this precisely (see ``_UNCOVERED["silva04_precompute"]``
+below) and moved silva04 out of ``_CASES``: fixing it for real means
+threading a kernel choice through the shared collapse utility for every
+adapter that calls it, out of scope for an AGN-grammar task.
 
 The two lookups disagree on how it is passed -- the full one takes it
 positionally, the collapsed one keyword-only after ``*free_axis_values`` -- so
@@ -82,12 +99,7 @@ from tests._data_skip import DATA_DIR, requires_cb19
 
 pytestmark = pytest.mark.contract
 
-_SILVA04_GRID = DATA_DIR / "silva04_torus_grid.h5"
 _CB19_GRID = DATA_DIR / "cb19_templates.h5"
-
-requires_silva04_torus = pytest.mark.skipif(
-    not _SILVA04_GRID.is_file(), reason=f"Silva04 torus grid not found at {_SILVA04_GRID}"
-)
 
 # Standard synthetic filter set (used across test adapters)
 _CENTERS = np.array([3e5, 1e7, 1e8, 1e10])  # FIR-radio Angstrom
@@ -223,17 +235,11 @@ _CASES = [
     ("xray_lopez24_ax1", "xray", "xray_precompute", "xray_corona_lopez24", 1, 2, "xray", {}, ()),
     ("dust_mbb", "dust", "dust_analytic_precompute", "modified_blackbody", 0, 2, "radio", {}, ()),
     ("dust_casey", "dust", "dust_analytic_precompute", "casey2012", 0, 3, "radio", {}, ()),
-    (
-        "silva04",
-        "agn",
-        "silva04_precompute",
-        None,
-        0,
-        1,
-        "radio",
-        {"grid_path": str(_SILVA04_GRID)},
-        (requires_silva04_torus,),
-    ),
+    # silva04_precompute: see _UNCOVERED["silva04_precompute"] and the module
+    # docstring above -- moved out of _CASES (Task 16, AGNfitter-rX parity
+    # plan), not "no test written": it WAS tested and measured to mismatch by
+    # ~5.2e-5 relative even pinned at an exact grid node (triweight-collapse
+    # vs PCHIP-runtime kernel mismatch, not floating-point noise).
 ]
 
 
@@ -376,6 +382,27 @@ _UNCOVERED: dict[str, str] = {
     ),
     "skirtor_agnfitter_2p_precompute": (
         "signature-driven collapse mismatches; cause not decidable from here"
+    ),
+    # Task 16 (AGNfitter-rX parity plan, item 14): WAS in _CASES until Task 3
+    # (RULING R11) migrated this adapter's runtime lookup kernel from
+    # triweight to node-exact PCHIP without also updating the shared
+    # collapse machinery it calls (collapse_fixed_axes -> slice_fixed_axes,
+    # forward/precompute/templates.py / utils/grid_interp.py), which always
+    # collapses via triweight regardless of the calling adapter's own
+    # runtime kernel. Measured: pinning the single agn_log_nh_silva axis at
+    # an EXACT grid node (test's own `a[len(a) // 2]`, a genuine tabulated
+    # value, not an interpolated midpoint) still gives a max relative
+    # mismatch of 5.19e-05 between the collapsed (triweight-collapsed then
+    # evaluated) and full (direct PCHIP) lookups -- non-zero, reproducible,
+    # not floating-point noise, and not fixable by pinning at a different
+    # node or by reordering axes (there is only one axis). A real fix means
+    # threading a kernel choice through the shared collapse utility for
+    # every one of the ~11 adapters that call it, out of scope for a
+    # AGN-parameter-ownership/wildcard-scope/grammar task.
+    "silva04_precompute": (
+        "triweight-collapse vs PCHIP-runtime kernel mismatch (Task 3 R11 migrated the "
+        "runtime kernel, not the shared collapse machinery); measured 5.19e-05 max rel "
+        "diff pinned exactly at a grid node"
     ),
     "cloudy_precompute": "3 axes; needs the untracked CLOUDY MIST grid",
     "feltre_precompute": "4 axes; no collapse test written",
