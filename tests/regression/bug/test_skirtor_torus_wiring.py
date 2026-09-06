@@ -347,7 +347,11 @@ def test_skirtor_torus_radius_ratio_declared():
 #:   fix, and a SKIRTOR-only alias would be exactly the inconsistent
 #:   per-backend grammar variant this project avoids. Out of this task's
 #:   declared scope; reported for the ledger (see report "Fix round 1").
-_CLASS_ONLY_NAMES = frozenset({"agn_delta", "agn_band_frac"})
+#: standalone SKIRTORTorus bundles polar dust (monolithic path); the
+#: composable path applies polar dust only via atten='polar_dust' (R22, Task 13)
+_CLASS_ONLY_NAMES = frozenset(
+    {"agn_delta", "agn_band_frac", "agn_polar_ebv", "agn_polar_T", "agn_polar_beta"}
+)
 _BLOCK_ONLY_NAMES = frozenset({"agn_torus_frac"})
 
 
