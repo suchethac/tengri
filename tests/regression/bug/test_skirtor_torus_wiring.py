@@ -1,17 +1,44 @@
 # SPDX-License-Identifier: BSD-3-Clause
 """Regression: SKIRTOR torus radius_ratio is wired and polar_beta matches canonical.
 
-Task 14: radius_ratio parameter was declared but never passed through predict(),
-causing it to be a silent no-op on SKIRTORTorus class. Also, polar_beta was
-declared at [1.0, 2.5] while the canonical declaration was [1.0, 2.0].
+Task 14: ``agn_radius_ratio`` was declared on ``SKIRTORTorus`` (the standalone
+``SEDModelComponent`` class, ``skirtor_model.py``) but never passed through
+``predict()`` to the interpolator -- it was hardcoded to 20.0 inside
+``create_skirtor_components_from_grid``, making the declared, guard-registered
+parameter a silent no-op on the class. The composable ``skirtor_torus_block``
+(``blocks/torus.py``) already wired ``agn_radius_ratio`` correctly before this
+task; only the class path was broken.
 
-This test ensures:
-1. radius_ratio changes the SED output (no-op guard)
-2. polar_beta declaration matches the canonical one
-3. SKIRTORTorus and composable block parameter names are reconciled
+Also, ``SKIRTORTorus.polar_beta`` was declared at ``[1.0, 2.5]`` while the
+canonical ``agn_polar_beta`` declaration is ``[1.0, 2.0]`` (a restatement that
+had drifted), and the class's polar-temperature parameter was registered as
+``agn_polar_temperature`` while the composable block's own parameter for the
+identical physical quantity is ``agn_polar_T`` -- two different registered
+names for the same physics on the two paths ("skirtor" registers both a
+standalone class and a composable block under the same string; Task 12).
+
+This file guards:
+
+1. ``agn_radius_ratio`` changes the SED on the CLASS path
+   (``SKIRTORTorus.predict()`` called directly) -- the bug this task exists
+   for -- and, separately, via the composable builder (already wired before
+   this task; kept as a belt-and-suspenders regression guard).
+2. ``polar_beta`` and the renamed ``polar_T`` declarations match the
+   canonical ``_params.py`` declarations exactly.
+3. The class and the composable ``skirtor_torus_block`` expose the SAME
+   registered parameter names for every physics parameter they share
+   (RULING R12d): a hand-written map cannot notice a future rename, so the
+   comparison is computed from live introspection on both sides.
+4. ``agn_radius_ratio``, ``agn_polar_T``, ``agn_polar_beta`` are live (nonzero
+   gradient) on BOTH the class path and the composable path.
+5. The vendored SKIRTOR grid's three ``radius_ratio`` nodes ([10, 20, 30])
+   each produce a finite, mutually-distinct SED -- the grid is tracked in
+   this repository, so its absence is a test FAILURE, never a skip.
 """
 
 from __future__ import annotations
+
+from inspect import signature
 
 import jax
 import jax.numpy as jnp
@@ -20,6 +47,12 @@ import pytest
 
 import tengri
 from tengri.components.agn._params import PARAMS as _AGN_PARAMS
+from tengri.components.agn.blocks.torus import skirtor_torus_block
+from tengri.components.agn.skirtor import (
+    _find_skirtor_grid,
+    create_skirtor_components_from_grid,
+)
+from tengri.components.agn.skirtor_model import SKIRTORTorus, SKIRTORTorusConfig
 from tengri.protocols.component import declared_prior
 
 pytestmark = pytest.mark.regression_bug
@@ -39,6 +72,24 @@ _DISC = {
     "frac": 1.0,
 }
 
+#: Prefix-stripped params for a direct ``SKIRTORTorus.predict()`` call, at the
+#: canonical defaults declared on the class (Task 14: includes radius_ratio
+#: and the renamed polar_T).
+_CLASS_PARAMS = {
+    "log_lbol": jnp.array(12.0),
+    "tau_skirtor": jnp.array(7.0),
+    "p_skirtor": jnp.array(1.0),
+    "q_skirtor": jnp.array(1.0),
+    "oa_skirtor": jnp.array(40.0),
+    "radius_ratio": jnp.array(20.0),
+    "cos_inc": jnp.array(0.866),
+    "band_frac": jnp.array(0.5),
+    "polar_ebv": jnp.array(0.1),
+    "polar_T": jnp.array(100.0),
+    "polar_beta": jnp.array(1.6),
+    "delta": jnp.array(0.0),
+}
+
 
 @pytest.fixture(scope="module")
 def ssp():
@@ -46,6 +97,26 @@ def ssp():
         return tengri.load_ssp()
     except FileNotFoundError as exc:
         pytest.skip(f"SSP data not on disk (CI runner): {exc}")
+
+
+@pytest.fixture(scope="module")
+def skirtor_grid_path() -> str:
+    """Resolve the vendored SKIRTOR grid via the package's own loader.
+
+    The grid (``data/skirtor_templates_v3.h5``, 27.5 MB) is tracked in this
+    repository, so ``_find_skirtor_grid`` raising ``FileNotFoundError`` is a
+    real failure, never a reason to skip.
+    """
+    return _find_skirtor_grid()
+
+
+@pytest.fixture(scope="module")
+def class_component(skirtor_grid_path):
+    """A ``SKIRTORTorus`` instance with templates loaded, ready to ``predict()``."""
+    wave = jnp.geomspace(1e3, 1e7, 400)
+    comp = SKIRTORTorus(config=SKIRTORTorusConfig(grid_path=skirtor_grid_path))
+    object.__setattr__(comp, "data", comp.load(wave))
+    return comp
 
 
 def _sed_with_radius_ratio(ssp, radius_ratio: float) -> np.ndarray:
@@ -64,11 +135,16 @@ def _sed_with_radius_ratio(ssp, radius_ratio: float) -> np.ndarray:
         redshift=tengri.Fixed(0.05),
     )
     p = dict(model.spec.sample(jax.random.PRNGKey(0)))
-    return np.asarray(model.predict_rest_sed(p).sed)
+    return np.asarray(model.predict(p).rest_sed())
 
 
 def test_skirtor_radius_ratio_is_not_a_noop_composable(ssp):
-    """radius_ratio parameter must change predict() via the composable builder."""
+    """radius_ratio parameter must change predict() via the composable builder.
+
+    The composable skirtor_torus_block was already wired before this task;
+    kept as a belt-and-suspenders regression guard alongside the class-path
+    test below, which is the one that catches the bug this task fixes.
+    """
     # Grid nodes are [10, 20, 30] per canonical declaration
     s1 = _sed_with_radius_ratio(ssp, 10.0)
     s2 = _sed_with_radius_ratio(ssp, 30.0)
@@ -79,10 +155,36 @@ def test_skirtor_radius_ratio_is_not_a_noop_composable(ssp):
     )
 
 
+def test_skirtor_torus_class_radius_ratio_is_not_a_noop(class_component):
+    """radius_ratio must change SKIRTORTorus.predict() output DIRECTLY.
+
+    This is the guard for the actual bug this task exists for:
+    ``SKIRTORTorus.predict()`` never passed ``agn_radius_ratio`` through to
+    ``create_skirtor_components_from_grid`` (hardcoded default 20.0 there),
+    so the declared, guard-registered class parameter was a silent no-op --
+    invisible to the composable-path test above, which exercises a completely
+    separate code path (``skirtor_torus_block``, already wired).
+    """
+    wave = jnp.geomspace(1e3, 1e7, 400)
+    sed_in = jnp.zeros_like(wave)
+
+    def _sed(radius_ratio: float) -> np.ndarray:
+        p = dict(_CLASS_PARAMS)
+        p["radius_ratio"] = jnp.array(radius_ratio)
+        sed_out, _ = class_component.predict(p, sed_in, wave)
+        return np.asarray(sed_out)
+
+    s1 = _sed(10.0)
+    s2 = _sed(30.0)
+    rel = float(np.abs(s1 - s2).max() / max(np.abs(s1).max(), 1e-99))
+    assert rel > 1e-3, (
+        f"SKIRTORTorus.predict() radius_ratio is a no-op (rel diff {rel:.2e}); "
+        "the pass-through to create_skirtor_components_from_grid is missing."
+    )
+
+
 def test_skirtor_torus_class_polar_beta_matches_canonical():
     """SKIRTORTorus.polar_beta must match the canonical agn_polar_beta declaration."""
-    from tengri.components.agn.skirtor_model import SKIRTORTorus
-
     canonical = declared_prior(_AGN_PARAMS, "agn_polar_beta")
     class_prior = SKIRTORTorus.polar_beta
 
@@ -100,10 +202,29 @@ def test_skirtor_torus_class_polar_beta_matches_canonical():
     )
 
 
+def test_skirtor_torus_class_polar_t_matches_canonical():
+    """SKIRTORTorus.polar_T must match the canonical agn_polar_T declaration.
+
+    RULING R12(a): the class's polar-temperature attribute is named ``polar_T``
+    (registers ``agn_polar_T``), matching the composable ``skirtor_torus_block``'s
+    own parameter name for the identical physical quantity -- NOT
+    ``polar_temperature``/``agn_polar_temperature``, a distinct canonical
+    declaration in ``_params.py`` still consumed by ``blocks/atten.py``
+    (a different, running task; untouched here).
+    """
+    canonical = declared_prior(_AGN_PARAMS, "agn_polar_T")
+    assert hasattr(SKIRTORTorus, "polar_T"), (
+        "SKIRTORTorus must declare polar_T (not polar_temperature) so its "
+        "registered name agn_polar_T matches the composable skirtor_torus_block."
+    )
+    class_prior = SKIRTORTorus.polar_T
+    assert class_prior.lo == canonical.lo
+    assert class_prior.hi == canonical.hi
+    assert class_prior.default == canonical.default
+
+
 def test_skirtor_torus_radius_ratio_declared():
     """SKIRTORTorus must declare radius_ratio as a free parameter."""
-    from tengri.components.agn.skirtor_model import SKIRTORTorus
-
     # Check that the class has radius_ratio attribute
     assert hasattr(SKIRTORTorus, "radius_ratio"), (
         "SKIRTORTorus must declare radius_ratio as a class attribute"
@@ -128,63 +249,152 @@ def test_skirtor_torus_radius_ratio_declared():
     )
 
 
+#: Physics parameters legitimately excluded from the class/composable
+#: shared-name equality below, with the one-line reason RULING R12 requires.
+#:
+#: - ``agn_delta`` (R12c): the disc power-law slope used by the CLASS's OWN
+#:   bundled disc (skirtor_model.py's disc-shape selection in predict()); the
+#:   composable design puts the disc in the separate disc block instead, so
+#:   ``skirtor_torus_block`` (torus-only) has no equivalent parameter.
+#: - ``agn_band_frac`` / ``agn_torus_frac`` (R12b): both registered names
+#:   drive the identical physics (the AGN covering-factor scaling
+#:   ``l_scale = L_bol x frac`` -- confirmed by ``skirtor.py``'s own
+#:   ``create_skirtor_components_from_grid``, which accepts ``agn_torus_frac``
+#:   as a deprecated fallback for its canonical ``frac_agn`` kwarg, the exact
+#:   quantity the class's ``band_frac`` attribute is derived from). The
+#:   class already uses the canonical ``agn_band_frac`` (``_params.py:109``);
+#:   the composable ``skirtor_torus_block`` (and EVERY other composable torus
+#:   block: cat3d_wind/fritz/nenkova/nenkova_agnfitter/silva04/
+#:   skirtor_agnfitter -- ``blocks/torus.py``) still names its own covering-
+#:   factor kwarg ``agn_torus_frac``; nothing in the codebase reads
+#:   ``agn_band_frac`` except the class itself (verified: the only override
+#:   near the ``agn_torus_frac`` deprecation note, ``_params.py`` around
+#:   ``agn_ir_frac``, is driven by ``agn_ir_frac`` -- a DIFFERENT, CIGALE
+#:   dust-IR-fraction quantity, not ``agn_band_frac``; ``component.py:385-404``).
+#:   Renaming ``agn_torus_frac`` -> ``agn_band_frac`` on the composable side is
+#:   a cross-cutting change spanning all six composable torus blocks (plus
+#:   ``blocks/_consumes.py``'s wildcard-scoping table), not a SKIRTOR-specific
+#:   fix, and a SKIRTOR-only alias would be exactly the inconsistent
+#:   per-backend grammar variant this project avoids. Out of this task's
+#:   declared scope; reported for the ledger (see report "Fix round 1").
+_CLASS_ONLY_NAMES = frozenset({"agn_delta", "agn_band_frac"})
+_BLOCK_ONLY_NAMES = frozenset({"agn_torus_frac"})
+
+
 def test_skirtor_composable_and_class_param_names_reconciled():
-    """Composable block and class must expose the same key physics parameters.
+    """Composable block and class must register the SAME shared physics names.
 
-    Verifies that skirtor_torus_block (composable) and SKIRTORTorus (class)
-    declare the radius_ratio and polar_beta parameters with compatible names.
+    RULING R12(d): computed from LIVE introspection on both sides (the
+    class's ``declared_parameters()`` and the composable block's function
+    signature), never a hand-written map -- a hand-written map cannot notice
+    a future rename drifting the two apart again.
     """
-    from inspect import signature
-
-    from tengri.components.agn.blocks.torus import skirtor_torus_block
-    from tengri.components.agn.skirtor_model import SKIRTORTorus
-
-    # Get the parameter names from the composable block
-    block_sig = signature(skirtor_torus_block)
-    block_params = set(block_sig.parameters.keys())
-
-    # Key parameters that must be present in the composable block
-    # Map from composable block names to expected class attribute names
-    key_params_map = {
-        "agn_radius_ratio": "radius_ratio",
-        "agn_polar_T": "polar_temperature",
-        "agn_polar_beta": "polar_beta",
-        "agn_tau_skirtor": "tau_skirtor",
-        "agn_oa_skirtor": "oa_skirtor",
-        "agn_cos_inc": "cos_inc",
+    class_names = {d.name for d in SKIRTORTorus().declared_parameters()}
+    block_names = {
+        name for name in signature(skirtor_torus_block).parameters if name.startswith("agn_")
     }
 
-    # Verify all key parameters are in the composable block signature
-    for param in key_params_map:
-        assert param in block_params, (
-            f"Key parameter '{param}' missing from composable skirtor_torus_block"
-        )
+    shared_class = class_names - _CLASS_ONLY_NAMES
+    shared_block = block_names - _BLOCK_ONLY_NAMES
 
-    # Verify key parameters have corresponding class attributes
-    for _block_param, class_param in key_params_map.items():
-        assert hasattr(SKIRTORTorus, class_param), (
-            f"Key parameter '{class_param}' missing from SKIRTORTorus class"
-        )
+    assert shared_class == shared_block, (
+        f"SKIRTORTorus and skirtor_torus_block disagree on shared parameter "
+        f"names: class-only (unexpected) {sorted(shared_class - shared_block)}; "
+        f"block-only (unexpected) {sorted(shared_block - shared_class)}"
+    )
+
+    # The three parameters this task specifically wires/reconciles must be
+    # registered identically on both paths.
+    for name in ("agn_radius_ratio", "agn_polar_T", "agn_polar_beta"):
+        assert name in class_names, f"{name} missing from SKIRTORTorus.declared_parameters()"
+        assert name in block_names, f"{name} missing from skirtor_torus_block's signature"
 
 
-@pytest.mark.parametrize("radius_ratio", [10.0, 20.0, 30.0])
-def test_skirtor_radius_ratio_within_grid_bounds(radius_ratio):
-    """radius_ratio parameter must work with all declared canonical values.
+def test_skirtor_radius_ratio_polar_t_polar_beta_live_on_class_path(class_component):
+    """agn_radius_ratio, agn_polar_T, agn_polar_beta must have nonzero gradient
+    through SKIRTORTorus.predict() directly (the class path)."""
+    wave = jnp.geomspace(1e3, 1e7, 400)
+    sed_in = jnp.zeros_like(wave)
 
-    Grid nodes are exactly [10, 20, 30]; node-exact queries via triweight
-    kernel should produce valid results at all three.
+    def _integral(params) -> jnp.ndarray:
+        sed_out, _ = class_component.predict(params, sed_in, wave)
+        return jnp.sum(jnp.abs(sed_out))
+
+    for name in ("radius_ratio", "polar_T", "polar_beta"):
+
+        def _obj(v, name=name):
+            p = {**_CLASS_PARAMS, name: v}
+            return _integral(p)
+
+        g = float(jax.grad(_obj)(_CLASS_PARAMS[name]))
+        assert g != 0.0, f"SKIRTORTorus.predict(): {name} has zero gradient (dead parameter)"
+
+
+def test_skirtor_radius_ratio_polar_t_polar_beta_live_on_composable_path(ssp):
+    """agn_radius_ratio, agn_polar_T, agn_polar_beta must have nonzero gradient
+    through the composable skirtor_torus_block, with 'norm': 'independent'
+    explicit (no cross-block energy coupling to confound the measurement).
+
+    Built ONCE with the three params FREE so they are ordinary entries of the
+    sampled ``params`` dict; differentiated by perturbing that dict entry
+    directly (``model.predict_photometry``, the JIT/vmap-safe surface),
+    never by rebuilding the model at a traced value (``Fixed(...)`` coerces
+    its argument via ``float()`` at construction and cannot accept a tracer).
     """
-    from tengri.components.agn.skirtor import create_skirtor_components_from_grid
+    agn = dict(
+        _DISC,
+        # radius_ratio partitions as an 'agn.torus' parameter -- nest it there.
+        torus={
+            "type": "skirtor",
+            "all_params": tengri.Fixed(tengri.DEFAULT),
+            "radius_ratio": tengri.FREE,
+        },
+        # polar_T/polar_beta partition as 'agn.atten' parameters in the
+        # builder grammar (shared with the polar_dust attenuation block),
+        # even though skirtor_torus_block ALSO reads them directly as its
+        # own kwargs (its bundled polar-dust reemission, independent of
+        # whichever 'atten' block, if any, is separately selected).
+        atten={
+            "all_params": tengri.Fixed(tengri.DEFAULT),
+            "polar_T": tengri.FREE,
+            "polar_beta": tengri.FREE,
+        },
+        norm="independent",
+    )
+    model = tengri.SEDModel.build(
+        ssp,
+        sfh=_SFH,
+        dust_attenuation=_DUST,
+        agn=agn,
+        redshift=tengri.Fixed(0.05),
+    )
+    p = dict(model.spec.sample(jax.random.PRNGKey(0)))
 
-    # Try to create components with this radius_ratio
-    # (Will skip if template grid is not available, which is ok for unit test)
-    try:
-        wave = jnp.linspace(1e3, 1e7, 100)
-        result = create_skirtor_components_from_grid.__wrapped__(
-            # Use the bundled grid path if available
-            "data/skirtor_templates_v3.h5"
-        )
-        components = result(
+    def _obj(pd):
+        return jnp.sum(jnp.abs(model.predict(pd).rest_sed()))
+
+    for name in ("agn_radius_ratio", "agn_polar_T", "agn_polar_beta"):
+        assert name in p, f"{name} not free on the composable build (all_params wiring gap)"
+        v0 = jnp.asarray(p[name])
+        g = float(jax.grad(lambda v, name=name: _obj({**p, name: v}))(v0))
+        assert g != 0.0, f"composable skirtor_torus_block: {name} has zero gradient"
+
+
+class TestSkirtorRadiusRatioGridNodes:
+    """The grid is tracked (data/skirtor_templates_v3.h5, 27.5 MB); its absence
+    is a FAILURE, never a skip. Resolves the grid path via the package's own
+    loader (_find_skirtor_grid), never a relative path or ``__wrapped__``."""
+
+    @pytest.fixture(scope="class")
+    def make_components(self, skirtor_grid_path):
+        return create_skirtor_components_from_grid(skirtor_grid_path)
+
+    @pytest.mark.parametrize("radius_ratio", [10.0, 20.0, 30.0])
+    def test_node_is_finite(self, make_components, radius_ratio):
+        """Every declared radius_ratio grid node ([10, 20, 30]) must produce
+        a finite disk/dust component."""
+        wave = jnp.geomspace(1e3, 1e7, 200)
+        components = make_components(
             wave,
             agn_log_lbol=12.0,
             agn_tau_skirtor=7.0,
@@ -195,8 +405,39 @@ def test_skirtor_radius_ratio_within_grid_bounds(radius_ratio):
             agn_cos_inc=0.866,
             frac_agn=0.5,
         )
-        # Verify we got valid output (no NaNs)
-        assert jnp.all(jnp.isfinite(components.disk)), "disk component contains NaN"
-        assert jnp.all(jnp.isfinite(components.dust)), "dust component contains NaN"
-    except (FileNotFoundError, AttributeError):
-        pytest.skip("SKIRTOR template grid not available")
+        assert jnp.all(jnp.isfinite(components.disk)), (
+            f"disk component contains non-finite values at radius_ratio={radius_ratio}"
+        )
+        assert jnp.all(jnp.isfinite(components.dust)), (
+            f"dust component contains non-finite values at radius_ratio={radius_ratio}"
+        )
+
+    def test_nodes_are_mutually_distinct(self, make_components):
+        """The three radius_ratio grid nodes must give mutually DIFFERENT
+        dust SEDs -- node-exact interpolation reproducing the same slice at
+        every node would also pass a bare finiteness check, so this is the
+        load-bearing half of the guard."""
+        wave = jnp.geomspace(1e3, 1e7, 200)
+
+        def _dust(radius_ratio: float) -> np.ndarray:
+            components = make_components(
+                wave,
+                agn_log_lbol=12.0,
+                agn_tau_skirtor=7.0,
+                agn_p_skirtor=1.0,
+                agn_q_skirtor=1.0,
+                agn_oa_skirtor=40.0,
+                agn_radius_ratio=radius_ratio,
+                agn_cos_inc=0.866,
+                frac_agn=0.5,
+            )
+            return np.asarray(components.dust)
+
+        seds = {r: _dust(r) for r in (10.0, 20.0, 30.0)}
+        pairs = [(10.0, 20.0), (20.0, 30.0), (10.0, 30.0)]
+        for r1, r2 in pairs:
+            rel = float(np.abs(seds[r1] - seds[r2]).max() / max(np.abs(seds[r1]).max(), 1e-99))
+            assert rel > 1e-6, (
+                f"radius_ratio={r1} and radius_ratio={r2} give indistinguishable "
+                f"dust SEDs (rel diff {rel:.2e})"
+            )

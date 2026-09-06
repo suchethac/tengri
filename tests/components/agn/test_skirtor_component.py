@@ -52,16 +52,22 @@ _has_skirtor_data = _SKIRTOR_PATH is not None
 #: The polar-dust trio is pinned to ``polar_ebv=0`` so the parity test compares
 #: like with like: ``create_skirtor_from_grid`` predates bi-conical re-emission and
 #: has no polar component to match.
+#:
+#: Task 14: ``radius_ratio`` was added as a free parameter (previously hardcoded
+#: to 20.0 inside ``predict()``, a silent no-op) and ``polar_temperature`` was
+#: renamed ``polar_T`` (registered ``agn_polar_T``) to match the composable
+#: ``skirtor_torus_block``'s own name for the same physical quantity.
 _PREDICT_PARAMS = {
     "log_lbol": jnp.array(10.0),
     "tau_skirtor": jnp.array(7.0),
     "p_skirtor": jnp.array(1.0),
     "q_skirtor": jnp.array(1.0),
     "oa_skirtor": jnp.array(40.0),
+    "radius_ratio": jnp.array(20.0),
     "cos_inc": jnp.array(0.5),
     "band_frac": jnp.array(0.5),
     "polar_ebv": jnp.array(0.0),
-    "polar_temperature": jnp.array(100.0),
+    "polar_T": jnp.array(100.0),
     "polar_beta": jnp.array(1.5),
     "delta": jnp.array(0.0),
 }
@@ -131,24 +137,29 @@ class TestSKIRTORParameterDiscovery:
     """Test auto-discovery of free parameters."""
 
     def test_declared_parameters_count(self):
-        """SKIRTORTorus declares eleven free parameters.
+        """SKIRTORTorus declares twelve free parameters.
 
-        Seven core + polar-dust trio (10) plus the CIGALE disc-shape
-        modulation ``agn_delta`` (disk_type is a static config choice, not a
-        free parameter).
+        Seven core + ``agn_radius_ratio`` (8) + polar-dust trio (11) plus the
+        CIGALE disc-shape modulation ``agn_delta`` (disk_type is a static
+        config choice, not a free parameter). Task 14 added ``agn_radius_ratio``
+        as a free parameter (previously hardcoded to 20.0 inside ``predict()``).
         """
         comp = SKIRTORTorus()
         decls = comp.declared_parameters()
-        assert len(decls) == 11
+        assert len(decls) == 12
 
     def test_declared_parameter_names(self):
         """Parameter names have agn_ prefix as per naming contract.
 
         Post-#329 ``agn_torus_frac`` was renamed to ``agn_band_frac`` to align
         with CIGALE's nomenclature. The polar-dust trio (``agn_polar_ebv``,
-        ``agn_polar_temperature``, ``agn_polar_beta``) was promoted to free
+        ``agn_polar_T``, ``agn_polar_beta``) was promoted to free
         params when the bi-conical re-emission pipeline was wired through
-        (Yang+2020 §2.2.2).
+        (Yang+2020 §2.2.2). Task 14: ``agn_radius_ratio`` added (previously a
+        silent no-op); ``agn_polar_temperature`` renamed ``agn_polar_T`` to
+        match the composable ``skirtor_torus_block``'s name for the same
+        quantity (the canonical ``agn_polar_temperature`` declaration in
+        ``_params.py`` remains, consumed elsewhere).
         """
         comp = SKIRTORTorus()
         decls = comp.declared_parameters()
@@ -159,10 +170,11 @@ class TestSKIRTORParameterDiscovery:
             "agn_p_skirtor",
             "agn_q_skirtor",
             "agn_oa_skirtor",
+            "agn_radius_ratio",
             "agn_cos_inc",
             "agn_band_frac",
             "agn_polar_ebv",
-            "agn_polar_temperature",
+            "agn_polar_T",
             "agn_polar_beta",
             # CIGALE disc-shape modulation (skirtor2016 ``delta``).
             "agn_delta",

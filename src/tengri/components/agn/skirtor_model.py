@@ -52,6 +52,8 @@ _COS_INC_PRIOR = declared_prior(_AGN_PARAMS, "agn_cos_inc")
 _RADIUS_RATIO_PRIOR = declared_prior(_AGN_PARAMS, "agn_radius_ratio")
 _POLAR_T_PRIOR = declared_prior(_AGN_PARAMS, "agn_polar_T")
 _POLAR_BETA_PRIOR = declared_prior(_AGN_PARAMS, "agn_polar_beta")
+_BAND_FRAC_PRIOR = declared_prior(_AGN_PARAMS, "agn_band_frac")
+_DELTA_PRIOR = declared_prior(_AGN_PARAMS, "agn_delta")
 
 
 @dataclass(frozen=True)
@@ -131,16 +133,16 @@ class SKIRTORTorus(SEDModelComponent):
         Torus half-opening angle. [degrees, 10–80]
     cos_inc : Uniform
         Cosine of inclination (1 = face-on, 0 = edge-on). [dimensionless, 0–1]
-    frac_agn : Uniform
+    band_frac : Uniform
         AGN fraction in a configurable band (CIGALE convention).
         [dimensionless, 0–1]
     polar_ebv : Uniform
         Polar dust E(B-V) (Type-1 sightline only). [mag, 0–0.5]
-    polar_temperature : Uniform
-        Polar dust graybody temperature. [K, 50–200]
+    polar_T : Uniform
+        Polar dust graybody temperature. [K, 50–150]
     polar_beta : Uniform
         Polar dust emissivity index (Casey 2012 modified blackbody).
-        [dimensionless, 1–2.5]
+        [dimensionless, 1–2]
     delta : Uniform
         Disc spectral slope modulation (CIGALE ``skirtor2016`` delta).
         [dimensionless, -1.0–1.0]. For ``disk_type`` 0/1 it tilts the disc
@@ -256,11 +258,11 @@ class SKIRTORTorus(SEDModelComponent):
         default=_RADIUS_RATIO_PRIOR.default,
     )
     band_frac = Uniform(
-        0.0,
-        1.0,
+        _BAND_FRAC_PRIOR.lo,
+        _BAND_FRAC_PRIOR.hi,
         description="AGN fraction (L_AGN / L_total, CIGALE convention)",
         units="dimensionless",
-        default=0.2,
+        default=_BAND_FRAC_PRIOR.default,
     )
     polar_ebv = Uniform(
         0.0,
@@ -269,7 +271,7 @@ class SKIRTORTorus(SEDModelComponent):
         units="mag",
         default=0.1,
     )
-    polar_temperature = Uniform(
+    polar_T = Uniform(
         _POLAR_T_PRIOR.lo,
         _POLAR_T_PRIOR.hi,
         description="Polar dust graybody temperature",
@@ -284,13 +286,13 @@ class SKIRTORTorus(SEDModelComponent):
         default=_POLAR_BETA_PRIOR.default,
     )
     delta = Uniform(
-        -1.0,
-        1.0,
+        _DELTA_PRIOR.lo,
+        _DELTA_PRIOR.hi,
         description="Disc spectral slope modulation delta (CIGALE skirtor2016). "
         "For disk_type 0/1 it tilts the optical-MIR disc slope; for disk_type 2 "
         "it is the ADAF->thin-disc blend weight (clipped to [0, 1]).",
         units="dimensionless",
-        default=0.0,
+        default=_DELTA_PRIOR.default,
     )
     # NOTE: CIGALE's ``lambda_fracAGN`` (band over which the AGN fraction is
     # normalized) is intentionally NOT exposed here. tengri normalizes frac_agn
@@ -372,11 +374,12 @@ class SKIRTORTorus(SEDModelComponent):
             - p_skirtor: radial density gradient
             - q_skirtor: polar density gradient
             - oa_skirtor: opening angle (degrees)
+            - radius_ratio: torus outer/inner radius ratio
             - cos_inc: cosine of inclination
-            - frac_agn: AGN luminosity fraction
+            - band_frac: AGN luminosity fraction
             - delta: disc spectral slope modulation (-1.0 to 1.0)
             - polar_ebv: polar dust E(B-V)
-            - polar_temperature: polar dust graybody temperature (K)
+            - polar_T: polar dust graybody temperature (K)
             - polar_beta: polar dust emissivity index
 
         sed_in : ndarray, shape (n_wave,)
@@ -517,7 +520,7 @@ class SKIRTORTorus(SEDModelComponent):
         sed_polar_reemit = polar_dust_emission(
             bolometric_integral_nu(l_abs, nu),
             wave,
-            temperature=p["polar_temperature"],
+            temperature=p["polar_T"],
             beta=p["polar_beta"],
             lambda_0=2e6,
         )

@@ -273,13 +273,18 @@ class TestDiscReshapeAffectsPredict:
             p_skirtor=1.0,
             q_skirtor=1.0,
             oa_skirtor=40.0,
+            # Task 14: radius_ratio is a free parameter (was hardcoded 20.0
+            # inside predict(), a silent no-op).
+            radius_ratio=20.0,
             cos_inc=0.9,
             # The component's param dict is keyed by prefix-stripped attribute
             # names, so renaming agn_frac_agn -> agn_band_frac (#1296) renamed
             # this key too.
             band_frac=0.5,
             polar_ebv=0.0,
-            polar_temperature=100.0,
+            # Task 14: renamed polar_temperature -> polar_T (registered
+            # agn_polar_T) to match the composable skirtor_torus_block.
+            polar_T=100.0,
             polar_beta=1.6,
             delta=delta,
         )
