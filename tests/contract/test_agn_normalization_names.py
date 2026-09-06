@@ -202,7 +202,7 @@ DOCUMENTED_MENTIONS = {
         "the short-form alias comment cites agn_frac -> agn_lum_ratio as the "
         "rename that invalidated the grammar's short key `agn={'frac': ...}`"
     ),
-    ("parameters/groups.py", "agn_fracAGN"): (
+    ("parameters/agn_ownership.py", "agn_fracAGN"): (
         "Task 16 (item 5, #2189): _AGN_IR_FRAC_SPELLINGS must recognize the "
         "OLD spelling too, so _agn_ir_frac_explicit_and_active still detects "
         "a user who wrote agn_fracAGN explicitly (it resolves through the "
