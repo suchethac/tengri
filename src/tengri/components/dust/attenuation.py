@@ -1331,8 +1331,6 @@ _NARAYANAN_BUMP_STRENGTH = jnp.array(
 )
 def narayanan_z(
     wavelength: jnp.ndarray,
-    dust_delta: float = -0.2,
-    dust_bump_strength: float = 1.0,
     redshift: float = 0.0,
 ) -> jnp.ndarray:
     r"""Narayanan+2018 redshift-dependent attenuation.
@@ -1343,19 +1341,15 @@ def narayanan_z(
     cosmological radiative-transfer run. The curve gets grayer with redshift,
     which is the trend the paper reports in its Section 5.1.
 
+    Redshift is the **only** knob. This law *is* the published median at z; a
+    slope or bump of your own is a different model, and it is
+    :func:`kriek_conroy`, which takes exactly those two parameters. The grammar
+    refuses ``dust_delta`` and ``dust_bump_strength`` on this law and says so.
+
     Parameters
     ----------
     wavelength : array_like, shape (n_wave,)
         Wavelength grid. [Å]
-    dust_delta : float
-        Power-law slope modification :math:`\delta`. [dimensionless]
-        Default: -0.2, a **sentinel**, not a published value: left at it, the
-        slope comes from the fitted table instead. Any other value is used as
-        given, at every redshift.
-    dust_bump_strength : float
-        Multiplier on the KC13 bump amplitude :math:`0.85 - 1.9\,\delta`.
-        [dimensionless] Default: 1.0, the same sentinel arrangement as
-        ``dust_delta``.
     redshift : float
         Galaxy redshift. [dimensionless] Default: 0.0. Supplied by the model,
         not by the ``dust_attenuation`` group.
@@ -1369,11 +1363,12 @@ def narayanan_z(
     -----
     **JIT-compatible**: yes, all operations are ``jnp`` primitives.
 
-    **Gradient-safe**: yes, including with respect to ``redshift``: the table
-    is read with ``jnp.interp``, which is piecewise linear and so
-    differentiable away from the seven nodes.
-
-    With both shape parameters left at their sentinels,
+    **Gradient-safe**: yes, and continuous in ``redshift``: the table is read
+    with ``jnp.interp``, which is piecewise linear. The gradient is
+    **identically zero above z = 6 and below z = 0**, where the end node is
+    held rather than extrapolated, so a photometric-redshift fit that wanders
+    past z = 6 gets no curve-shape information from this law there; and it is
+    discontinuous in the second derivative at the seven integer nodes.
 
     .. math::
 
@@ -1420,11 +1415,8 @@ def narayanan_z(
     # ``jnp.interp`` holds the end node outside the tabulated range, which is
     # the clip to 0 <= z <= 6 the fit range calls for; no separate clip.
     z = jnp.asarray(redshift)
-    delta_table = jnp.interp(z, _NARAYANAN_Z_NODES, _NARAYANAN_DELTA)
-    bump_table = jnp.interp(z, _NARAYANAN_Z_NODES, _NARAYANAN_BUMP_STRENGTH)
-    # Use tolerance comparison (not ==) to avoid JIT-unsafe float equality on traced values.
-    delta_z = jnp.where(jnp.abs(dust_delta - (-0.2)) < 1e-6, delta_table, dust_delta)
-    bump_z = jnp.where(jnp.abs(dust_bump_strength - 1.0) < 1e-6, bump_table, dust_bump_strength)
+    delta_z = jnp.interp(z, _NARAYANAN_Z_NODES, _NARAYANAN_DELTA)
+    bump_z = jnp.interp(z, _NARAYANAN_Z_NODES, _NARAYANAN_BUMP_STRENGTH)
     return kriek_conroy(wavelength, dust_delta=delta_z, dust_bump_strength=bump_z)
 
 

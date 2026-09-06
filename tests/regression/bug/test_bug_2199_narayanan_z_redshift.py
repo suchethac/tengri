@@ -42,13 +42,42 @@ import jax.numpy as jnp
 import numpy as np
 import pytest
 
-from tengri import DEFAULT, Fixed, Observation, Photometry, SEDModel, SSPData, Uniform
+from tengri import (
+    DEFAULT,
+    Fixed,
+    Observation,
+    Photometry,
+    SEDModel,
+    SSPData,
+    Uniform,
+    WavePrecomp,
+)
 from tengri.observation.photometry import FilterCurve
 
 pytestmark = pytest.mark.regression_bug
 
 #: Optical depth used to read k(lambda) back out of a pair of predicted SEDs.
 _TAU = 0.6
+
+
+def _filter_fixture_warnings() -> None:
+    """Silence the two warnings this fixture provably raises, and only those.
+
+    Measured by building every (screen, law) combination in this file under
+    ``warnings.simplefilter("always")`` and collecting the categories: a
+    ``BakedInNebularWarning`` (the synthetic SSP declares baked-in nebular
+    emission) and a ``SFHBeforeBigBangWarning`` (the default DPL forms mass
+    before the Big Bang at the fixture's redshifts). Neither is about dust.
+    A blanket ``simplefilter("ignore")`` would also hide a warning this change
+    introduced, which is the one thing a dust test must not hide.
+    """
+    from tengri.components.nebular.baked_in import BakedInNebularWarning
+    from tengri.components.stellar.component import SFHBeforeBigBangWarning
+
+    warnings.simplefilter("error")
+    warnings.simplefilter("ignore", BakedInNebularWarning)
+    warnings.simplefilter("ignore", SFHBeforeBigBangWarning)
+
 
 #: Bit-identity references for the laws that do NOT declare ``redshift``.
 #:
@@ -134,7 +163,7 @@ def _dust_group(screen: str, law: str, **shape) -> dict:
 def _build(uv_ssp, uv_obs, screen: str, law: str, redshift, approx=None, **shape):
     """One model, one screen, one law, at a pinned or freed redshift."""
     with warnings.catch_warnings():
-        warnings.simplefilter("ignore")
+        _filter_fixture_warnings()
         return SEDModel.build(
             ssp_data=uv_ssp,
             observation=uv_obs,
@@ -148,7 +177,7 @@ def _build(uv_ssp, uv_obs, screen: str, law: str, redshift, approx=None, **shape
 def _params(model, screen: str, tau: float = _TAU) -> dict:
     """Sampled parameters with the optical depths pinned, so only k(lambda) varies."""
     with warnings.catch_warnings():
-        warnings.simplefilter("ignore")
+        _filter_fixture_warnings()
         params = dict(model.spec.sample(jax.random.PRNGKey(0)))
     if screen == "single_component":
         params["dust_tau_v"] = jnp.asarray(tau)
@@ -165,7 +194,7 @@ def _photometry(
 ) -> np.ndarray:
     model = _build(uv_ssp, uv_obs, screen, law, Fixed(z), approx=approx, **shape)
     with warnings.catch_warnings():
-        warnings.simplefilter("ignore")
+        _filter_fixture_warnings()
         return np.asarray(model.predict_photometry(_params(model, screen)))
 
 
@@ -235,29 +264,65 @@ def test_at_z0_the_law_is_kriek_conroy_at_the_fitted_z0_row(screen, uv_ssp, uv_o
     np.testing.assert_allclose(ours, theirs, rtol=1e-10)
 
 
+def test_the_module_table_is_the_fit_script_output_element_for_element():
+    """Every row of the hand-copied table must equal the JSON the script wrote.
+
+    The z = 0 identity above pins one row through the model. This pins all
+    seven directly, so a digit mistyped in row 4 fails here by name rather than
+    surviving until somebody fits a z = 4 galaxy.
+    """
+    from tengri.components.dust.attenuation import (
+        _NARAYANAN_BUMP_STRENGTH,
+        _NARAYANAN_DELTA,
+        _NARAYANAN_Z_NODES,
+    )
+
+    fits = _fit_table()["fits"]
+    assert [row["z"] for row in fits] == [float(z) for z in _NARAYANAN_Z_NODES]
+    np.testing.assert_array_equal(
+        np.asarray(_NARAYANAN_DELTA), np.asarray([row["dust_delta"] for row in fits])
+    )
+    np.testing.assert_array_equal(
+        np.asarray(_NARAYANAN_BUMP_STRENGTH),
+        np.asarray([row["dust_bump_strength"] for row in fits]),
+    )
+
+
 # ── (ii) z > 0 reaches the law, and the curve gets grayer ────────────
 
 
 @pytest.mark.parametrize("screen", ["single_component", "two_component"])
 def test_the_model_redshift_reaches_the_law(screen, uv_ssp, uv_obs):
-    """The model-evaluated curve at z = 2 must differ from the one at z = 0.
+    """The model-evaluated curve at z = 2 must differ from z = 0, and from KC13.
 
     Cosmological dimming cannot be what moves: k(lambda) here is a ratio of two
     predictions at the same redshift, on the same rest-frame wavelengths. Before
     the fix the two curves agreed to the last bit at every wavelength, because
     the law was evaluated at z = 0 whatever the model said.
+
+    The second comparison is against ``kriek_conroy`` at *its own* published
+    defaults (delta = 0, bump = 1), the curve ``narayanan_z`` would collapse
+    onto if the table were ignored. It held before the fix too and is pinned
+    here so that a future change cannot satisfy the first assertion by making
+    the two laws the same curve.
     """
     probe = jnp.asarray([1200.0, 1500.0, 2175.0, 3000.0, 5500.0, 8000.0])
     with warnings.catch_warnings():
-        warnings.simplefilter("ignore")
+        _filter_fixture_warnings()
         model_z0 = _build(uv_ssp, uv_obs, screen, "narayanan_z", Fixed(0.0))
         model_z2 = _build(uv_ssp, uv_obs, screen, "narayanan_z", Fixed(2.0))
+        model_kc = _build(uv_ssp, uv_obs, screen, "kriek_conroy", Fixed(2.0))
         at_z0 = np.asarray(_curve(model_z0, screen, probe))
         at_z2 = np.asarray(_curve(model_z2, screen, probe))
+        kc_defaults = np.asarray(_curve(model_kc, screen, probe))
     assert np.max(np.abs(at_z2 - at_z0)) > 1e-3, (
         f"{screen}: the attenuation curve is unchanged between z=0 and z=2 "
         f"(max |dk| = {np.max(np.abs(at_z2 - at_z0)):.3e}). The model redshift is not "
         "reaching the law (#2199)."
+    )
+    assert np.max(np.abs(at_z2 - kc_defaults)) > 1e-3, (
+        f"{screen}: narayanan_z at z=2 collapsed onto kriek_conroy at its own "
+        f"defaults (max |dk| = {np.max(np.abs(at_z2 - kc_defaults)):.3e})."
     )
 
 
@@ -272,7 +337,7 @@ def test_the_curve_gets_grayer_with_redshift(screen, uv_ssp, uv_obs):
     """
     probe = jnp.asarray([1500.0, 5500.0])
     with warnings.catch_warnings():
-        warnings.simplefilter("ignore")
+        _filter_fixture_warnings()
         model_z0 = _build(uv_ssp, uv_obs, screen, "narayanan_z", Fixed(0.0))
         model_z6 = _build(uv_ssp, uv_obs, screen, "narayanan_z", Fixed(6.0))
         k_z0 = np.asarray(_curve(model_z0, screen, probe))
@@ -346,7 +411,7 @@ def test_the_spectral_index_window_lut_carries_the_same_row(uv_ssp, uv_obs):
     def measure(law: str, z: float, **shape) -> float:
         model = _build(uv_ssp, uv_obs, "two_component", law, Fixed(z), **shape)
         with warnings.catch_warnings():
-            warnings.simplefilter("ignore")
+            _filter_fixture_warnings()
             values = model.predict_spectral_indices(
                 _params(model, "two_component"), (index,), approx=True
             )
@@ -391,7 +456,7 @@ def test_the_flat_parameters_escape_hatch_also_reaches_the_law(uv_ssp, uv_obs):
 
     def ratio(z: float) -> float:
         with warnings.catch_warnings():
-            warnings.simplefilter("ignore")
+            _filter_fixture_warnings()
             spec = Parameters(
                 mean_sfh_type="dpl",
                 dust_model="single_component",
@@ -465,6 +530,131 @@ def test_the_table_interpolates_between_its_nodes_and_clips_outside():
     np.testing.assert_allclose(np.asarray(narayanan_z(wave, redshift=-1.0)), at_0)
 
 
+# ── the energy-balance LUT is the third caller of the same resolver ──
+
+
+@pytest.fixture(scope="module")
+def ir_obs() -> Observation:
+    """Optical bands that feed the energy balance, plus the 100 um band it heats."""
+
+    def _tophat(center: float, frac: float = 0.16, n: int = 40) -> FilterCurve:
+        wave = jnp.linspace(center * (1.0 - frac), center * (1.0 + frac), n)
+        trans = jnp.sin(jnp.linspace(0.0, jnp.pi, n)) * 0.6
+        return FilterCurve(wave=wave, trans=trans, name=f"b{int(center)}")
+
+    centers = (3500.0, 4800.0, 6200.0, 9000.0, 1.0e6)
+    return Observation(photometry=Photometry(filters=tuple(_tophat(c) for c in centers)))
+
+
+def _build_ir(uv_ssp, ir_obs, law: str, redshift, approx, **shape):
+    """Two-component screen with dale2014 IR re-emission, the LUT's own case."""
+    with warnings.catch_warnings():
+        _filter_fixture_warnings()
+        return SEDModel.build(
+            ssp_data=uv_ssp,
+            observation=ir_obs,
+            sfh={"type": "dpl", "all_params": Fixed(DEFAULT)},
+            dust_attenuation={
+                "type": "two_component",
+                "law": law,
+                "dust_tau_bc": Uniform(0.0, 1.0),
+                "dust_tau_diff": Uniform(0.0, 1.5),
+                **shape,
+            },
+            dust_emission={"type": "dale2014", "all_params": Fixed(DEFAULT)},
+            neb={"type": "none"},
+            redshift=redshift,
+            approx=approx,
+        )
+
+
+def _ir_photometry(model) -> np.ndarray:
+    with warnings.catch_warnings():
+        _filter_fixture_warnings()
+        params = {**model.spec.get_fixed_values(), **model.spec.sample(jax.random.PRNGKey(0))}
+        params["dust_tau_bc"] = jnp.asarray(0.0)
+        params["dust_tau_diff"] = jnp.asarray(_TAU)
+        return np.asarray(model.predict_photometry(params))
+
+
+@pytest.mark.parametrize("z", [0.0, 2.0, 6.0])
+def test_the_energy_balance_lut_is_built_at_the_model_redshift(z, uv_ssp, ir_obs):
+    """``L_ir`` under ``WavePrecomp`` must come from the curve at the model's z.
+
+    The LUT bakes one attenuation curve at build time from the *fixed* values,
+    and it is the third caller of ``resolve_bc_diff_law_params``. Left without
+    ``redshift``, it integrated the absorbed luminosity under the z = 0 curve
+    while ``apply()`` attenuated the starlight with the z-scaled one, so the
+    model violated its own energy balance. Measured on this fixture before the
+    fix, 100 um band against the exact path: 2.25e-4 at z = 0, **1.09e-2** at
+    z = 2 and **2.11e-1** at z = 6.
+
+    The bar is ``kriek_conroy`` at the same redshift: that law reads no
+    redshift, so its LUT was always right, and whatever residual it shows is
+    the LUT's own interpolation error rather than a wiring defect. Measured
+    after the fix, 100 um: narayanan_z 2.25e-4 / 2.87e-4 / 5.76e-4 at
+    z = 0 / 2 / 6, against kriek_conroy 5.60e-4 at all three.
+    """
+    ours = _ir_photometry(_build_ir(uv_ssp, ir_obs, "narayanan_z", Fixed(z), WavePrecomp()))
+    exact = _ir_photometry(_build_ir(uv_ssp, ir_obs, "narayanan_z", Fixed(z), None))
+    reference = _ir_photometry(_build_ir(uv_ssp, ir_obs, "kriek_conroy", Fixed(z), WavePrecomp()))
+    reference_exact = _ir_photometry(_build_ir(uv_ssp, ir_obs, "kriek_conroy", Fixed(z), None))
+
+    # The 100 um band is the one carrying L_ir; the optical bands also carry
+    # WavePrecomp's own blue-band approximation, which is a different budget.
+    ours_ir = abs(float(ours[-1] / exact[-1] - 1.0))
+    reference_ir = abs(float(reference[-1] / reference_exact[-1] - 1.0))
+    budget = max(reference_ir, 1e-6) * 1.5
+    assert ours_ir <= budget, (
+        f"z={z}: narayanan_z's IR band drifts {ours_ir:.3e} from the exact path, "
+        f"against {reference_ir:.3e} for kriek_conroy at the same redshift. The "
+        "energy-balance LUT was not built at the model redshift (#2199)."
+    )
+
+
+def test_a_free_redshift_disables_the_lut_only_for_a_law_that_reads_it(uv_ssp, ir_obs):
+    """A free z is a free curve-shape parameter exactly when the law reads z.
+
+    A build-time LUT cannot hold a curve that moves with a sampled parameter,
+    which is why a free ``dust_delta`` disables it. ``redshift`` is not spelled
+    ``dust_*``, so the existing filter could not see it. ``kriek_conroy`` reads
+    no redshift, so its LUT must survive a free z: a blanket "free redshift
+    disables the LUT" would cost every photometric-redshift fit the
+    optimization for nothing.
+    """
+    free_z = Uniform(0.1, 5.0)
+    ours = _build_ir(uv_ssp, ir_obs, "narayanan_z", free_z, WavePrecomp())
+    reads_no_z = _build_ir(uv_ssp, ir_obs, "kriek_conroy", free_z, WavePrecomp())
+    free_shape = _build_ir(
+        uv_ssp, ir_obs, "kriek_conroy", Fixed(2.0), WavePrecomp(), dust_delta=Uniform(-1.0, 0.4)
+    )
+    fixed_z = _build_ir(uv_ssp, ir_obs, "narayanan_z", Fixed(2.0), WavePrecomp())
+
+    def lut(model):
+        return getattr(model, "_energy_balance_lut_cache", None) is not None
+
+    assert not lut(free_shape), "a free dust_delta must already disable the LUT"
+    assert not lut(ours), (
+        "a free redshift left the LUT engaged on narayanan_z, so every sample "
+        "would share one baked curve (#2199)."
+    )
+    assert lut(reads_no_z), "a free redshift disabled the LUT for a law that ignores z"
+    assert lut(fixed_z), "a fixed redshift must keep the LUT on narayanan_z"
+
+    # The public effect, not only the cache: with the LUT off, the free-redshift
+    # model must still track the exact path.
+    exact = _build_ir(uv_ssp, ir_obs, "narayanan_z", free_z, None)
+    with warnings.catch_warnings():
+        _filter_fixture_warnings()
+        params = {**ours.spec.get_fixed_values(), **ours.spec.sample(jax.random.PRNGKey(0))}
+        params["dust_tau_bc"] = jnp.asarray(0.0)
+        params["dust_tau_diff"] = jnp.asarray(_TAU)
+        params["redshift"] = jnp.asarray(2.0)
+        a = np.asarray(ours.predict_photometry(params))
+        b = np.asarray(exact.predict_photometry(params))
+    assert abs(float(a[-1] / b[-1] - 1.0)) < 1e-2
+
+
 # ── (iv) a free redshift stays differentiable through the law ────────
 
 
@@ -493,7 +683,7 @@ def test_gradient_wrt_a_free_redshift_reaches_the_law(screen, uv_ssp, uv_obs):
         return k[0] / k[1]
 
     with warnings.catch_warnings():
-        warnings.simplefilter("ignore")
+        _filter_fixture_warnings()
         grad_photometry = float(jax.grad(photometry_sum)(jnp.asarray(2.0, dtype=jnp.float64)))
         grad_curve = float(jax.grad(curve_ratio)(jnp.asarray(2.0, dtype=jnp.float64)))
 

@@ -171,13 +171,23 @@ class TestNarayananZ:
             rtol=1e-12,
         )
 
-    def test_explicit_params_override_z(self, wavelength):
-        """Explicit non-default params are used as-is regardless of z."""
-        delta = -0.5
-        bump = 2.0
-        k_nz = narayanan_z(wavelength, dust_delta=delta, dust_bump_strength=bump, redshift=5.0)
-        k_kc = kriek_conroy(wavelength, dust_delta=delta, dust_bump_strength=bump)
-        assert_allclose(k_nz, k_kc, rtol=1e-12)
+    def test_redshift_is_the_only_knob(self, wavelength):
+        """The law takes wavelength and redshift, nothing else (#2199).
+
+        It used to accept ``dust_delta`` / ``dust_bump_strength`` as sentinels:
+        the exact value -0.2 (resp. 1.0) meant "use the redshift table" and
+        anything else meant "use mine", so k(1500 A) jumped 61 % across 1e-6 in
+        ``dust_delta`` at z = 0 -- and ``narayanan_prior(0)`` centered a Gaussian
+        on that very value. The law is now the published median curve at z; a
+        user who wants their own slope or bump uses ``kriek_conroy``, which is
+        that model.
+        """
+        from tengri.components.dust.laws._registry import law_kwarg_names
+
+        assert law_kwarg_names("narayanan_z") == frozenset({"redshift"})
+        for key in ("dust_delta", "dust_bump_strength"):
+            with pytest.raises(TypeError, match=key):
+                narayanan_z(wavelength, **{key: -0.5})
 
     def test_jit_compatible(self, wavelength):
         """narayanan_z is JIT-compilable."""

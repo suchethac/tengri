@@ -322,7 +322,10 @@ class DustAttenuationSEDComponent(TemplateThreading):
             ``None`` this method is a no-op (returns the input
             unchanged).
         params : mapping
-            Receives ``dust_*`` keys plus ``redshift`` (unused here).
+            Receives ``dust_*`` keys plus the bare ``redshift``, which
+            :meth:`_curve` forwards to a law that declares it (``narayanan_z``
+            is the one that does, #2199) and withholds from every law that does
+            not.
 
         Returns
         -------

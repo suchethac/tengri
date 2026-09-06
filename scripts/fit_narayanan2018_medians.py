@@ -160,7 +160,17 @@ def fit_one(wavelength: np.ndarray, median: np.ndarray) -> dict:
     -------
     dict
         ``dust_delta``, ``dust_bump_strength``, ``E_b``, ``norm``, ``rms``,
-        ``max_abs_residual``, ``n_distinct_solutions`` and ``on_bound``.
+        ``max_abs_residual``, ``n_distinct_solutions``, ``rms_spread`` and
+        ``on_bound``.
+
+    Notes
+    -----
+    ``n_distinct_solutions`` counts **every** start's converged parameter
+    vector, not only the ones that reached the best residual. Filtering to the
+    best residual first would discard exactly the start this diagnostic exists
+    to catch, the one that stopped at a worse local optimum, and would report
+    "1 optimum" for a fit that found two. ``rms_spread`` is the residual gap
+    between the worst and best start, which is zero when they all agree.
     """
 
     def residual(theta):
@@ -180,9 +190,8 @@ def fit_one(wavelength: np.ndarray, median: np.ndarray) -> dict:
         solutions.append((rms, tuple(float(v) for v in result.x), result.fun))
     solutions.sort(key=lambda item: item[0])
     best_rms, best_theta, best_residual = solutions[0]
-    distinct = {
-        tuple(np.round(theta, 6)) for rms, theta, _ in solutions if abs(rms - best_rms) < 1e-9
-    }
+    distinct = {tuple(np.round(theta, 4)) for _, theta, _ in solutions}
+    rms_spread = float(solutions[-1][0] - best_rms)
     delta, bump_strength, norm = best_theta
     on_bound = [
         name
@@ -199,6 +208,7 @@ def fit_one(wavelength: np.ndarray, median: np.ndarray) -> dict:
         "rms": best_rms,
         "max_abs_residual": float(np.max(np.abs(best_residual))),
         "n_distinct_solutions": len(distinct),
+        "rms_spread": rms_spread,
         "on_bound": on_bound,
     }
 
@@ -246,7 +256,11 @@ def main() -> int:
             f"  {entry['max_abs_residual']:>8.6f}"
         )
         if entry["n_distinct_solutions"] != 1:
-            print(f"    WARNING z={redshift}: {entry['n_distinct_solutions']} distinct optima")
+            print(
+                f"    WARNING z={redshift}: {len(STARTS)} starts reached "
+                f"{entry['n_distinct_solutions']} distinct solutions "
+                f"(rms spread {entry['rms_spread']:.3e})"
+            )
         if entry["on_bound"]:
             print(f"    WARNING z={redshift}: on bound {entry['on_bound']}")
 

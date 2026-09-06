@@ -18,7 +18,7 @@ while each law's signature carries its paper's value:
 law              published default
 ===============  ====================================================
 ``kriek_conroy``  ``dust_bump_strength = 1.0``  (KC13 as published)
-``narayanan_z``   ``dust_delta = -0.2``         (Narayanan+2018)
+``narayanan_z``   ``dust_delta = -0.2``         (2026-08; see below)
 ``salim``         ``dust_bump_strength = 0.0``
 ===============  ====================================================
 
@@ -26,6 +26,14 @@ Measured on a first attempt: passing unconditionally made ``kriek_conroy``,
 ``narayanan_z`` and ``salim`` **bit-identical**, collapsing three distinct
 published laws onto one curve. That trades an unfittable parameter for three
 silently-substituted laws — the same defect class, moved.
+
+``narayanan_z``'s row is history as of #2199. That -0.2 was never a published
+value; it was a sentinel meaning "use the redshift table", and the law now
+declares no ``dust_delta`` or ``dust_bump_strength`` at all -- it is the
+Narayanan+2018 median curve at the model redshift. It still belongs in the
+three-way distinctness check below, because staying distinct from
+``kriek_conroy`` and ``salim`` at default settings is exactly as much the
+contract now as it was then; only the reason changed.
 
 The resolution is to pass a shape parameter only when somebody actually asked
 for a value. ``spec._group_provenance`` says who did: ``user_fixed`` /
@@ -168,6 +176,11 @@ def test_published_law_defaults_are_not_overridden_by_the_shared_spec_default(uv
     laws carries a different published value in its own signature. Passing the
     spec value when nobody asked for one collapses all three onto a common base
     — measured, on a first attempt at #1808.
+
+    ``narayanan_z`` reaches the same requirement by a different route since
+    #2199: it declares neither parameter, so there is nothing for the shared
+    spec default to overwrite, and its curve is the Narayanan+2018 median at
+    this fixture's ``redshift=Fixed(0.5)``.
     """
     seds = {
         law: _sed(_build(uv_ssp, uv_obs, {"type": "single_component", "law": law}))
@@ -178,8 +191,9 @@ def test_published_law_defaults_are_not_overridden_by_the_shared_spec_default(uv
     assert not collapsed, (
         "Distinct published attenuation laws collapsed onto one curve at default "
         f"settings: {collapsed}. Their published defaults (kriek_conroy bump=1.0, "
-        "narayanan_z delta=-0.2, salim bump=0.0) were overridden by the shared "
-        "spec default of 0.0."
+        "salim bump=0.0; narayanan_z is the Narayanan+2018 median at the model "
+        "redshift and declares neither) were overridden by the shared spec "
+        "default of 0.0."
     )
 
 
