@@ -159,7 +159,13 @@ class DustAttenuationSEDComponent(TemplateThreading):
         """
         return (
             DerivedKey("L_ir", "erg/s", "Integrated dust-absorbed luminosity"),
-            DerivedKey("L_absorbed", "erg/s", "Alias for L_ir (energy balance)"),
+            DerivedKey(
+                "L_absorbed",
+                "erg/s",
+                "Dust-absorbed luminosity, LyC-masked. Equal to L_ir only at "
+                "dust_eta_balance=1.0 (strict energy balance); L_ir = eta * L_absorbed "
+                "otherwise.",
+            ),
             DerivedKey("log_L_ir", "dex", "log10(L_ir / (erg/s)); float32-safe form"),
             DerivedKey(
                 "dust_attenuation_factor",
@@ -357,10 +363,28 @@ class DustAttenuationSEDComponent(TemplateThreading):
         # Absorbed luminosities are ~1e43 erg/s (outside float32) so the
         # integral is done in log space and the linear form derived from it
         # (#1206). The sign only tracks grid orientation; the energy is |L|.
-        log_l_ir, _ = bolometric_absorbed_log10(
+        log_l_absorbed, _ = bolometric_absorbed_log10(
             state.sed_intrinsic, attenuated, nu, wave=state.wave
         )
-        warn_if_corrupt(log_l_ir, component=type(self).__name__)
+        warn_if_corrupt(log_l_absorbed, component=type(self).__name__)
+
+        # dust_eta_balance: L_IR = eta * L_absorbed. Declared
+        # ``components/dust/_params.py`` and already wired on the two-component
+        # path (``two_component.py``); this mirrors that exact log-space
+        # treatment so the single-screen path is no longer a silently dead
+        # parameter. eta<=0 has no re-emitted energy at all (-inf in log
+        # space, 0.0 linear), matching the ``jnp.maximum(..., 0.0)`` clip the
+        # linear form carries. Default eta=1.0 makes ``jnp.log10(1.0) == 0``,
+        # so L_ir reproduces L_absorbed bit-for-bit -- this wiring changes no
+        # existing default SED.
+        eta_balance = jnp.asarray(params.get("dust_eta_balance", 1.0))
+        eta_positive = eta_balance > 0
+        log_l_ir = jnp.where(
+            eta_positive,
+            log_l_absorbed + jnp.log10(jnp.where(eta_positive, eta_balance, 1.0)),
+            -jnp.inf,
+        )
+        l_absorbed = pow10(log_l_absorbed)  # erg/s
         l_ir = pow10(log_l_ir)  # erg/s
 
         # Filter-level A(λ_eff) and A'(λ_eff) LUTs.
@@ -370,7 +394,7 @@ class DustAttenuationSEDComponent(TemplateThreading):
         derived_overrides = dict(
             dust_attenuation_factor=attenuation,
             L_ir=l_ir,
-            L_absorbed=l_ir,
+            L_absorbed=l_absorbed,
             log_L_ir=log_l_ir,
             sed_dust_attenuated=attenuated,
         )

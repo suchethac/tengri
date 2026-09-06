@@ -41,20 +41,29 @@ reserved for a component that has stated nothing.
 
 Note on ``dust_eta_balance``, the one live parameter in the table above: it is
 the engine-agnostic energy-balance relaxation (``L_IR = eta * L_absorbed``),
-declared in ``_params.py`` rather than on any engine. Every engine that
-declares its own priors *already* excludes it from this wildcard -- ``dale2014``
-frees only ``dust_alpha_dale`` -- so narrowing these two makes them consistent
-with the other eleven rather than taking a live knob away from them.
+declared in ``_params.py`` rather than on any engine. An earlier revision of
+this note said every engine that declares its own priors *already* excludes it
+from this wildcard -- "``dale2014`` frees only ``dust_alpha_dale``" -- and
+called that harmless for a parameter-free engine because "there is no engine
+to un-anchor". That reasoning did not account for the attenuator: once
+``dust_eta_balance`` is wired on the SINGLE-component attenuation path too
+(``component.py``), it moves ``L_ir`` regardless of which
+``dust_emission`` engine sits downstream -- ``pah_drude``/``dh02_ce01``
+included -- so excluding it from THEIR wildcard scope orphaned the exact same
+live parameter ``energy_balance_split``'s marker exists to keep reachable.
+``_wildcard_scopes``'s ``dust_emission`` entry now unions ``dust_eta_balance``
+into every engine's narrowed scope unconditionally (one entry, not nine more
+per-engine markers), so ``dust_emission={'type': 'pah_drude', 'all_params':
+FREE}`` now frees it too. This file's own assertions were never about
+``dust_eta_balance`` (only about the OTHER 19 foreign parameters staying
+pinned), so they did not need to change; only this prose was wrong.
 
-An earlier revision of this note added "and freeable through the ``dust``
-group". That was wrong, and it is corrected here rather than deleted because
-the mistake is instructive: the grammar partitions ``eta_balance`` into
-**dust.emission**, so ``dust={'eta_balance': ...}`` raises *"'eta_balance' is a
-'dust.emission' parameter, not a 'dust' one"* and ``dust={'all_params': FREE}`` does not
-reach it either (measured: that wildcard frees ``dust_tau_bc`` and
-``dust_tau_diff`` only). For a parameter-free engine that is harmless -- there
-is no engine to un-anchor. For ``energy_balance_split`` it is not, which is why
-that engine's ``reads_parameters`` includes ``dust_eta_balance`` even though its
+The grammar still partitions ``eta_balance`` into **dust.emission**, so
+``dust={'eta_balance': ...}`` still raises *"'eta_balance' is a
+'dust.emission' parameter, not a 'dust' one"* and ``dust={'all_params': FREE}``
+still does not reach it (measured: that wildcard frees ``dust_tau_bc`` and
+``dust_tau_diff`` only). ``energy_balance_split``'s ``reads_parameters``
+includes ``dust_eta_balance`` even though its
 ``predict`` never reads it: leaving it out would have made a live parameter
 freeable by no wildcard at all.
 """

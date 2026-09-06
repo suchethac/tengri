@@ -2206,10 +2206,31 @@ def _wildcard_scopes(
     )
 
     # ── dust_emission: the selected IR engine's own declarations ──
-    scopes["dust_emission"] = (
+    # ``dust_eta_balance`` is partitioned into this group (registered whenever
+    # dust_emission is set, ``components/dust/_params.py``), but it is READ by
+    # the attenuator (``DustAttenuationSEDComponent``/``DustSEDComponent``
+    # apply ``L_ir = eta * L_absorbed``), not by any emission engine's own
+    # ``predict``. Narrowing this scope to the SELECTED engine's own
+    # declared set -- correct for every parameter an engine actually reads --
+    # silently orphans ``dust_eta_balance`` for every engine except
+    # ``energy_balance_split`` (which states it via its own
+    # ``reads_parameters`` marker, see that class): ``dust_emission={'type':
+    # 'schreiber2018', 'all_params': FREE}`` would free ``dust_T``/``dust_f_pah``
+    # but leave ``dust_eta_balance`` pinned at ``Fixed(1.0)``, reachable by no
+    # wildcard at all (``dust_attenuation={'all_params': FREE}`` does not reach
+    # it either -- the grammar partitions it into ``dust_emission``, not
+    # ``dust_attenuation``). It is live once wired on the attenuator (moves
+    # L_ir regardless of which IR engine is selected), so it belongs in every
+    # engine's freeable set unconditionally, the same fix
+    # ``energy_balance_split``'s marker already applies for itself, generalized
+    # here instead of via nine more per-engine markers.
+    _dust_emission_declared = (
         _declared_param_names(structural_params.dust_emission)
         if structural_params.dust_emission is not None
         else None
+    )
+    scopes["dust_emission"] = (
+        None if _dust_emission_declared is None else _dust_emission_declared | {"dust_eta_balance"}
     )
 
     # ── dust: the attenuation laws the selected slots name ──
