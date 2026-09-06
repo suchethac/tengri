@@ -30,6 +30,7 @@ from typing import Any
 import jax.numpy as jnp
 
 from tengri.components.dust.attenuation import calzetti, resolve_dust_law
+from tengri.components.dust.laws._registry import select_law_kwargs
 from tengri.components.template_threading import TemplateThreading
 from tengri.parameters.priors import Fixed
 from tengri.protocols.component import (
@@ -246,6 +247,11 @@ class DustAttenuationSEDComponent(TemplateThreading):
         for flat in live - tabled:
             if flat in params:
                 kwargs[flat] = jnp.asarray(params[flat])
+        # ``live`` is the union over every law slot in play, so on a model whose
+        # screens carry different laws it can hold a keyword THIS law does not
+        # declare. The laws no longer absorb one in a ``**kwargs`` catch-all
+        # (#2185), so narrow before binding.
+        kwargs = select_law_kwargs(law_fn, kwargs)
         if not kwargs:
             return law_fn
 

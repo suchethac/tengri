@@ -8165,6 +8165,8 @@ class SEDModel:
                 dict(dust.config.bc_law_overrides),
                 dict(dust.config.diff_law_overrides),
                 dust.config.live_shape_params,
+                bc_law=dust.config.law_bc,
+                diff_law=dust.config.law_diff,
             )
             ssp_ages_yr = (10.0**self.ssp_data.ssp_lg_age_gyr) * 1e9
 
