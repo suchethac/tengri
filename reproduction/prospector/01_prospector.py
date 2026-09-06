@@ -513,12 +513,14 @@ save_fig("prospector_02b_sfh_continuity_flex.png")
 # The Dirichlet SFH places a symmetric prior on the fraction of star formation
 # in each bin. We lead with **Prospector's** parametrization — the one users
 # know — latent z-fractions → SFR fractions → bin masses
-# (`zfrac_to_masses`). tengri implements the same Leja+2017 family but with a
-# different latent variable (a stick-breaking prior on the *mass* fractions),
-# so the two codes' z-values are **not** interchangeable. To compare at a
-# matched, recognizably-Prospector SFH, we draw the history from Prospector's
-# transform and invert tengri's stick-breaking to the z that reproduces those
-# same bin masses. Both codes then evaluate the identical step SFH.
+# (`zfrac_to_masses`). tengri implements the same Leja+2017 family and
+# stick-breaks the same SFR fractions, weighting them by bin width into masses
+# exactly as Prospector does; the two differ only in where they sample the
+# chain. Prospector's `z_fraction_i` is the Beta(N-1-i, 1) variate itself,
+# while tengri's `z_i` is a uniform latent that it maps through the
+# Beta(1, N-1-i) quantile. The substitution `v = 1 - z_fraction` carries one to
+# the other, and the helper below is that substitution, so both codes evaluate
+# the identical step SFH.
 
 # %%
 DIR_ZFRAC = np.array([0.6, 0.5, 0.5, 0.5, 0.4, 0.5])  # Prospector latent z-fractions
@@ -529,17 +531,19 @@ ab_dir, m_dir = P.dirichlet_masses(
 w_dir, L_dir = P.csp_lnu_binned(agebins=ab_dir, masses=m_dir, logzsol=MET_LOGZSOL)
 
 
-def _tengri_z_from_massfracs(mass_fracs):
-    """Invert tengri's stick-breaking: mass fractions → latent z (youngest first)."""
-    z = np.zeros(mass_fracs.shape[0] - 1)
-    remaining = 1.0
-    for i in range(z.shape[0]):
-        z[i] = np.clip(mass_fracs[i] / remaining, 1e-6, 1.0 - 1e-6)
-        remaining *= 1.0 - z[i]
-    return z
+def _tengri_u_from_zfrac(z_fraction, n_bins):
+    """Prospector's Beta(N-1-i, 1) `z_fraction` → tengri's uniform Dirichlet latent.
+
+    Both codes stick-break the same Leja et al. 2017 (ApJ 837, 170) SFR
+    fractions; tengri reaches them from a uniform latent through the
+    Beta(1, N-1-i) quantile, so with v = 1 - z_fraction the two chains meet at
+    u = 1 - z_fraction**(N-1-i).
+    """
+    i = np.arange(z_fraction.shape[0])
+    return 1.0 - z_fraction ** (n_bins - 1 - i)
 
 
-_z_tengri = _tengri_z_from_massfracs(m_dir / m_dir.sum())
+_z_tengri = _tengri_u_from_zfrac(DIR_ZFRAC, NONPARAM_EDGES_GYR.shape[0] - 1)
 _sfh_dir = {
     "type": "dirichlet",
     "log_total_mass": Fixed(LOG_MASS_FIDUCIAL),
@@ -554,7 +558,7 @@ _sfr_d = np.asarray(_s_dir.derived["sfr_history"])
 _res_d = _optical_resid(w_dir, L_dir, _s_dir.wave, _s_dir.sed_intrinsic)
 print(f"§2c dirichlet: optical median residual {_res_d:.2e}")
 
-fig, ax_l, ax_r = _sfr_sed_fig("Dirichlet SFH (Prospector z → matched masses)")
+fig, ax_l, ax_r = _sfr_sed_fig("Dirichlet SFH (matched latents, Leja+2017)")
 _plot_step(ax_l, ab_dir, m_dir, "C0", "Prospector  zfrac_to_masses")
 ax_l.plot(AGE_UNIV_GYR - _lbt_d, _sfr_d, "C1-", linewidth=1.5, label="tengri  dirichlet")
 ax_l.legend(fontsize=9)
