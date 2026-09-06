@@ -217,7 +217,7 @@ def tengri_disc(disc_type, *, log_lbol=11.0, ebv_disc=None, **disc_params):
     """Isolated tengri accretion-disc SED. Returns (wave_aa, L_nu).
 
     ``ebv_disc`` sets the shared disc obscuration ``agn_ebv_disc`` (the
-    AGNFITTER-RX ``EBVbbb`` analog), a top-level `agn` key independent of
+    AGNFITTER-RX ``EBVbbb`` analog), a disc-block key independent of
     the `atten` sub-block.
     """
     disc = {"type": disc_type, "all_params": Fixed(DEFAULT)}
@@ -234,7 +234,7 @@ def tengri_disc(disc_type, *, log_lbol=11.0, ebv_disc=None, **disc_params):
         "norm": "independent",
     }
     if ebv_disc is not None:
-        agn["agn_ebv_disc"] = Fixed(ebv_disc)
+        disc["agn_ebv_disc"] = Fixed(ebv_disc)
     m = SEDModel.build(
         ssp_data=ssp, sfh=SFH_FIDUCIAL, dust_attenuation=NO_DUST, agn=agn, redshift=Fixed(0.0)
     )
@@ -1290,13 +1290,13 @@ _m9 = SEDModel.build(
     ssp_data=ssp, sfh=SFH_FIDUCIAL, dust_attenuation=NO_DUST,
     agn={
         "type": "composable",
-        "disc": {"type": "qsogen", "all_params": Fixed(DEFAULT)},
+        "disc": {"type": "qsogen", "agn_ebv_disc": Fixed(0.0), "all_params": Fixed(DEFAULT)},
         "nlr": {"type": "none"}, "blr": {"type": "qsogen", "all_params": Fixed(DEFAULT)},
         "feii": {"type": "qsogen_balmer", "all_params": Fixed(DEFAULT)},
         "torus": {"type": "cat3d_wind", "cos_inc": Fixed(1.0), "a_cat3d": Fixed(-2.0),
                   "fwd_cat3d": Fixed(1.75), "all_params": Fixed(DEFAULT)},
         "atten": {"type": "none"},
-        "agn_log_lbol": Fixed(12.0), "agn_ebv_disc": Fixed(0.0),
+        "agn_log_lbol": Fixed(12.0),
         "all_params": Fixed(DEFAULT), "norm": "independent",
     },
     xray={"type": "yang20"},
@@ -1688,13 +1688,13 @@ m13 = SEDModel.build(
                     "all_params": Fixed(DEFAULT)},
     agn={
         "type": "composable",
-        "disc": {"type": "qsogen", "all_params": Fixed(DEFAULT)},
+        "disc": {"type": "qsogen", "agn_ebv_disc": Fixed(0.0), "all_params": Fixed(DEFAULT)},
         "nlr": {"type": "none"}, "blr": {"type": "qsogen", "all_params": Fixed(DEFAULT)},
         "feii": {"type": "qsogen_balmer", "all_params": Fixed(DEFAULT)},
         "torus": {"type": "cat3d_wind", "cos_inc": Fixed(1.0), "a_cat3d": Fixed(-2.0),
                   "fwd_cat3d": Fixed(1.75), "all_params": Fixed(DEFAULT)},
         "atten": {"type": "none"},
-        "agn_log_lbol": Fixed(11.5), "agn_ebv_disc": Fixed(0.0),
+        "agn_log_lbol": Fixed(11.5),
         "all_params": Fixed(DEFAULT), "norm": "independent",
     },
     xray={"type": "yang20"},
@@ -1820,13 +1820,13 @@ m13_obs = SEDModel.build(
                     "all_params": Fixed(DEFAULT)},
     agn={
         "type": "composable",
-        "disc": {"type": "qsogen", "all_params": Fixed(DEFAULT)},
+        "disc": {"type": "qsogen", "agn_ebv_disc": Fixed(0.0), "all_params": Fixed(DEFAULT)},
         "nlr": {"type": "none"}, "blr": {"type": "qsogen", "all_params": Fixed(DEFAULT)},
         "feii": {"type": "qsogen_balmer", "all_params": Fixed(DEFAULT)},
         "torus": {"type": "cat3d_wind", "cos_inc": Fixed(1.0), "a_cat3d": Fixed(-2.0),
                   "fwd_cat3d": Fixed(1.75), "all_params": Fixed(DEFAULT)},
         "atten": {"type": "none"},
-        "agn_log_lbol": tengri.Uniform(9.0, 13.0), "agn_ebv_disc": Fixed(0.0),
+        "agn_log_lbol": tengri.Uniform(9.0, 13.0),
         "all_params": Fixed(DEFAULT), "norm": "independent",
     },
     xray={"type": "none"},
@@ -1904,13 +1904,13 @@ m_cap = SEDModel.build(
     ssp_data=ssp, sfh=SFH_FIDUCIAL, dust_attenuation=NO_DUST,
     agn={
         "type": "composable",
-        "disc": {"type": "qsogen", "all_params": Fixed(DEFAULT)},
+        "disc": {"type": "qsogen", "agn_ebv_disc": Fixed(0.0), "all_params": Fixed(DEFAULT)},
         "nlr": {"type": "none"}, "blr": {"type": "qsogen", "all_params": Fixed(DEFAULT)},
         "feii": {"type": "qsogen_balmer", "all_params": Fixed(DEFAULT)},
         "torus": {"type": "cat3d_wind", "cos_inc": Fixed(1.0), "a_cat3d": Fixed(-2.0),
                   "fwd_cat3d": Fixed(1.75), "all_params": Fixed(DEFAULT)},
         "atten": {"type": "none"},
-        "agn_log_lbol": Fixed(12.0), "agn_ebv_disc": Fixed(0.0),
+        "agn_log_lbol": Fixed(12.0),
         "all_params": Fixed(DEFAULT), "norm": "independent",
     },
     xray={"type": "yang20"},
