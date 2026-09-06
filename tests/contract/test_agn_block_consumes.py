@@ -114,38 +114,47 @@ def test_slone_netzer_disc_registered():
     )
 
 
-def test_subblock_declared_params_sourced_from_consumes_table():
-    """Task 16 (item 3): the AGN sub-block wildcard's own per-(category, type)
-    scope (:func:`tengri.parameters.groups._agn_subblock_declared_params`)
-    and AGN_BLOCK_CONSUMES must agree, over every (category, type) pair the
-    table covers -- one source, not two independently-maintained dispatch
-    tables that can silently drift (the earlier version of
-    ``_agn_subblock_declared_params`` read only the raw function signature,
-    which is why ``disc='kubota_done'``/``'multicolor'``/``'slone_netzer'``'s
-    dead ``agn_log_ledd`` -- already excluded here via #846 -- was freed by
-    the sub-block wildcard anyway: an inert dimension the resolver could not
-    see was dead).
+def test_every_declared_and_consumed_name_has_one_partition_owner():
+    """R34: partition completeness is a contract, not a convenience.
+
+    ``_AGN_PARTITION`` decides which wildcard can free a name. A name absent
+    from it silently defaults to the shared ``"agn"`` group, so the model is
+    only as complete as the hand-maintained table -- and every instrument built
+    on top inherits the hole. The measured-liveness module derives its
+    ``owned`` set from the same table, so a missing entry is invisible to the
+    measurement too: the blind spot moves rather than closing.
+
+    Measured before this contract existed: 31 of 94 declared ``agn_*``
+    parameters had no entry, among them every ``agn_nlr_*`` grid knob,
+    ``agn_blr_logU``/``logZ``/``logn``, ``agn_adaf_alpha``/``beta``/``delta``,
+    ``agn_astar``, ``agn_log_mdot`` and ``agn_cigale_disk_delta``; eight of
+    them were measured live on ``predict_photometry`` while no wildcard could
+    free them.
+
+    The expected set is derived from the registries -- the declared parameter
+    table and every name any block records as consumed -- never from
+    ``_AGN_PARTITION`` itself, which is the thing under test.
     """
-    from tengri.parameters.groups import (
-        _AGN_CONSUMES_CATEGORY,
-        _agn_param_group,
-        _agn_subblock_companion_params,
-        _agn_subblock_declared_params,
+    from tengri.components.agn._params import PARAMS
+    from tengri.parameters.groups import _AGN_PARTITION
+
+    universe = {pd.name for pd in PARAMS}
+    for consumed in AGN_BLOCK_CONSUMES.values():
+        universe |= set(consumed)
+
+    missing = sorted(name for name in universe if name not in _AGN_PARTITION)
+    assert not missing, (
+        f"{len(missing)} declared/consumed AGN names have no explicit "
+        f"_AGN_PARTITION owner and silently fall through to the shared 'agn' "
+        f"group: {missing}"
     )
 
-    grammar_of = {v: k for k, v in _AGN_CONSUMES_CATEGORY.items()}
-    mismatches = []
-    for (consumes_cat, block_type), consumed in AGN_BLOCK_CONSUMES.items():
-        grammar_cat = grammar_of.get(consumes_cat, consumes_cat)
-        owning_group = f"agn.{grammar_cat}"
-        companion = _agn_subblock_companion_params(grammar_cat, block_type)
-        expected = frozenset(
-            name for name in (consumed | companion) if _agn_param_group(name) == owning_group
-        )
-        actual = _agn_subblock_declared_params(grammar_cat, block_type)
-        if actual != expected:
-            mismatches.append(f"({consumes_cat!r}, {block_type!r}): got {actual}, want {expected}")
-    assert not mismatches, "\n".join(mismatches)
+    # The reverse direction: an agn_* entry naming a parameter that no longer
+    # exists is a stale owner nothing can reach.
+    stale = sorted(
+        name for name in _AGN_PARTITION if name.startswith("agn_") and name not in universe
+    )
+    assert not stale, f"_AGN_PARTITION owns names that are not declared: {stale}"
 
 
 def test_active_set_scopes_to_active_blocks():
@@ -391,12 +400,15 @@ def test_unified_agn_type1_type2_masking(synthetic_ssp_wide):
             agn={
                 "type": "composable",
                 "disc": {"type": "multicolor"},
-                "torus": {"type": "simple"},
+                # agn_theta_torus is the gray mask's own opening angle, read at
+                # the runner's torus stage; R34 gave it its torus owner, so the
+                # composable spelling nests it (agn_cos_inc stays shared -- the
+                # sightline is read by disc, torus and atten alike).
+                "torus": {"type": "simple", "agn_theta_torus": Fixed(45.0)},
                 "nlr": {"type": nlr_block},
                 "blr": {"type": blr_block},
                 "agn_log_lbol": Fixed(12.0),
                 "agn_cos_inc": Fixed(cos_inc),
-                "agn_theta_torus": Fixed(45.0),
                 "all_params": Fixed(DEFAULT),
             },
             redshift=Fixed(0.05),

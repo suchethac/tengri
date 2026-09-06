@@ -704,19 +704,80 @@ _AGN_PARTITION = {
     "agn_grahsp_si": "agn.torus",
     # GRAHSP FeII-only knob.
     "agn_grahsp_a_feii": "agn.feii",
-    # GRAHSP line-strength/-width pair: consumed by NLR, BLR, *and* FeII
+    # GRAHSP line-strength/-width pair: consumed by NLR, BLR *and* FeII
     # simultaneously (AGN_BLOCK_CONSUMES lists both under all three
-    # categories) -- a genuine multi-owner case the one-name-one-group
-    # partition table cannot represent exactly. Assigned to "agn.nlr" (first
-    # in the disc->nlr->blr->feii->torus->atten pipeline order) so at least
-    # nlr={'type': 'grahsp', 'all_params': FREE} reaches them; blr/grahsp and
-    # feii/grahsp's own wildcard cannot (their declared, OWNED set is empty
-    # or partial -- see the task-12 report for the measured per-type table).
-    "agn_grahsp_a_lines": "agn.nlr",
-    "agn_grahsp_linewidth_kms": "agn.nlr",
+    # categories). One sub-block owner cannot serve three readers, because
+    # _agn_subblock_declared_params filters a block's consumed set down to
+    # names the partition assigns to THAT block: under "agn.nlr" (their
+    # previous home) blr='grahsp' read two parameters and its own wildcard
+    # freed nothing, measured live at 1.20e-16 and -1.14e-22. Genuinely
+    # shared at runtime, so shared is the assignment that lets every reader's
+    # build reach them, through the agn-level wildcard (R34).
+    "agn_grahsp_a_lines": "agn",
+    "agn_grahsp_linewidth_kms": "agn",
     # GRAHSP bi-attenuation (attenuation-only).
     "agn_grahsp_ebv": "agn.atten",
     "agn_grahsp_ebv_agn": "agn.atten",
+    # ── R34: the 31 names that used to have no entry at all ──────────────
+    # An unlisted name fell through to the shared "agn" group silently, so
+    # the table was only as complete as its last editor and every instrument
+    # built on it inherited the hole. Each name below is assigned by reading
+    # the code that consumes it; a name genuinely read across categories at
+    # runtime keeps the shared "agn" owner and says why.
+    #
+    # Disc physics, each read only inside a disc block function.
+    "agn_T_max": "agn.disc",  # powerlaw_disc_block's UV cutoff temperature
+    "agn_adaf_alpha": "agn.disc",
+    "agn_adaf_beta": "agn.disc",
+    "agn_adaf_delta": "agn.disc",
+    "agn_astar": "agn.disc",  # relagn black-hole spin
+    "agn_log_mdot": "agn.disc",  # relagn accretion rate
+    "agn_cigale_disk_delta": "agn.disc",  # skirtor/schartmann2005 disc slope
+    "agn_grahsp_cutoff_nm": "agn.disc",
+    "agn_grahsp_l5100": "agn.disc",
+    "agn_grahsp_plbendloc_nm": "agn.disc",
+    "agn_grahsp_plbendwidth": "agn.disc",
+    "agn_grahsp_plslope": "agn.disc",
+    "agn_grahsp_uvslope": "agn.disc",
+    # Torus. agn_theta_torus is the gray Type-1/2 visibility mask's opening
+    # angle, read at the runner's torus stage for every physical-decomposition
+    # torus; agn_delta backs SKIRTORTorus's own ``delta`` class attribute.
+    "agn_theta_torus": "agn.torus",
+    "agn_delta": "agn.torus",
+    # Narrow-line region: the analytic block's efficiency plus the six
+    # photoionization-grid axes, all read in blocks/nlr.py.
+    "agn_nlr_line_efficiency": "agn.nlr",
+    "agn_nlr_alpha_pl": "agn.nlr",
+    "agn_nlr_fwhm_kms": "agn.nlr",
+    "agn_nlr_logU": "agn.nlr",
+    "agn_nlr_logZ": "agn.nlr",
+    "agn_nlr_logn": "agn.nlr",
+    "agn_nlr_xi_d": "agn.nlr",
+    # Broad-line region: read in blocks/blr.py. agn_blr_line_efficiency is
+    # also read by the feii stage, the same shape as agn_blr_cf above, which
+    # has been blr-owned since it was partitioned; kept consistent with it.
+    "agn_blr_line_efficiency": "agn.blr",
+    "agn_blr_logU": "agn.blr",
+    "agn_blr_logZ": "agn.blr",
+    "agn_blr_logn": "agn.blr",
+    # Attenuation: the qsogen_smc block's own reddening knob, the one whose
+    # short name 'ebv' is NOT agn_attenuation_ebv's (R30).
+    "agn_ebv": "agn.atten",
+    # Genuinely shared, and each says why.
+    #
+    # agn_ir_frac (the fracAGN spelling) is read by compose_l_nu at the
+    # runner's cross-block normalization stage, where it sets the disc/torus
+    # energy split -- not inside any one torus block, which is why writing it
+    # at the agn top level is the spelling every caller and the #2189 guard
+    # already use.
+    "agn_ir_frac": "agn",
+    # The three self-contained-GRAHSP knobs: no composable block reads them
+    # (grep-verified across blocks/), only the monolithic grahsp forward
+    # function, where every parameter is written flat at the agn level (R27).
+    # A sub-block owner would name a sub-block that never runs for them.
+    "agn_grahsp_a_bc": "agn",
+    "agn_grahsp_tor_temp": "agn",
+    "agn_grahsp_tor_cutoff_um": "agn",
 }
 
 
@@ -742,16 +803,16 @@ def _agn_param_group(name: str) -> str:
     str
         ``"agn"`` (shared) or ``"agn.<subblock>"``.
     """
-    group = _AGN_PARTITION.get(name, "agn")
-    if group == "agn" and "grahsp" in name:
-        # Catch-all for GRAHSP disc params with no explicit entry above
-        # (agn_grahsp_l5100, _uvslope, _plslope, _plbendloc_nm,
-        # _plbendwidth, _cutoff_nm): every OTHER grahsp param that could be
-        # confused for a disc param by this substring test now has an
-        # explicit entry above (torus/nlr/blr/feii/atten), so this only
-        # ever reaches disc's own.
-        return "agn.disc"
-    return group
+    # No substring catch-all: the six GRAHSP disc parameters this used to
+    # cover (agn_grahsp_l5100, _uvslope, _plslope, _plbendloc_nm,
+    # _plbendwidth, _cutoff_nm) now have explicit entries, and R34's census
+    # keeps it that way. The rule was `"grahsp" in name -> "agn.disc"`, which
+    # OVERRODE an explicit shared entry rather than filling a gap: with
+    # agn_grahsp_a_lines correctly marked shared (three categories read it),
+    # the substring test still routed it to agn.disc, so a build with
+    # blr='grahsp' + agn={'all_params': FREE} froze it at its default while
+    # the parameter was measurably live.
+    return _AGN_PARTITION.get(name, "agn")
 
 
 #: Top-level kwargs that are not groups (passed through to Parameters).
@@ -1039,11 +1100,12 @@ def parse_groups(**kwargs) -> Parameters:
     # structural variant that group selected. Computed once, consulted once in
     # the resolve loop below; see :func:`_wildcard_scopes` for why every group
     # with a structural axis needs an entry and what happens when one lacks it.
+    agn_ir_frac_active = _agn_ir_frac_explicit_and_active(kwargs.get("agn"))
     wildcard_scopes = _wildcard_scopes(
         structural_kwargs,
         structural_params,
         param_partition,
-        agn_ir_frac_active=_agn_ir_frac_explicit_and_active(kwargs.get("agn")),
+        agn_ir_frac_active=agn_ir_frac_active,
     )
 
     # Outcome of every *active* ``all_params: FREE`` wildcard, keyed by the
@@ -1576,7 +1638,7 @@ def _declared_param_names(component_type: str) -> frozenset[str] | None:
 def _narrow_outcome_to_selected_component(
     outcome: dict[str, list[tuple[str, bool]]],
     structural_params,
-    wildcard_scopes: dict[str, frozenset[str] | None] | None = None,
+    wildcard_scopes: dict[str, frozenset[str] | None],
 ) -> dict[str, list[tuple[str, bool]]]:
     """Restrict a sub-block's wildcard outcome to its selected component's params.
 
@@ -1598,7 +1660,7 @@ def _narrow_outcome_to_selected_component(
         Group name -> list of ``(param_name, was_freed)``.
     structural_params : StructuralParams
         Carries the selected component per sub-block.
-    wildcard_scopes : dict, optional
+    wildcard_scopes : dict
         The SAME per-group scopes :func:`_wildcard_scopes` computed earlier
         in this parse (param name -> the group's actual freeable set). For
         an ``agn.<category>`` group this is consulted INSTEAD of
@@ -1609,15 +1671,15 @@ def _narrow_outcome_to_selected_component(
         fracAGN is active), so re-deriving it here silently un-does that
         narrowing and reports the excluded parameter as "stuck; no
         declared prior" -- true for #1482's dale2014 case, false and
-        misleading for this one. ``None`` (the default) preserves the
-        pre-#2189 behavior for any caller not yet threading it through.
+        misleading for this one. Required: the one caller always threads it,
+        and a fallback that re-derives an un-narrowed scope could only ever
+        re-introduce the bug this argument exists to fix.
 
     Returns
     -------
     dict
         ``outcome`` with narrowed sub-block entries; other groups pass through.
     """
-    wildcard_scopes = wildcard_scopes or {}
     narrowed = dict(outcome)
     for group, attr in _SUBBLOCK_COMPONENT_ATTR.items():
         if group not in narrowed:
@@ -1627,10 +1689,6 @@ def _narrow_outcome_to_selected_component(
             continue
         if group.startswith("agn."):
             declared = wildcard_scopes.get(group)
-            if declared is None and group not in wildcard_scopes:
-                # No entry at all (caller did not thread wildcard_scopes
-                # through): fall back to the raw, un-narrowed introspection.
-                declared = _agn_subblock_declared_params(group[len("agn.") :], component_type)
         else:
             declared = _declared_param_names(component_type)
         if declared is None:
@@ -2167,7 +2225,9 @@ _AGN_CONSUMES_CATEGORY: dict[str, str] = {
 }
 
 
-def _agn_subblock_declared_params(category: str, block_type: str | None) -> frozenset[str] | None:
+def _agn_subblock_declared_params(
+    category: str, block_type: str | None, *, blr_type: str | None = None
+) -> frozenset[str] | None:
     """Declared parameters ONE AGN sub-block's OWN wildcard may free.
 
     Ground truth (Task 16, item 1: the declared-reads model) is
@@ -2241,20 +2301,24 @@ def _agn_subblock_declared_params(category: str, block_type: str | None) -> froz
     if fn is None:
         return None
 
+    companions = _agn_subblock_companion_params(category, block_type, blr_type=blr_type)
     consumed = AGN_BLOCK_CONSUMES.get((consumes_category, block_type))
     if consumed is not None:
-        read = frozenset(consumed) | _agn_subblock_companion_params(category, block_type)
+        read = frozenset(consumed) | companions
     else:
         try:
             sig = inspect.signature(fn)
         except (TypeError, ValueError):  # pragma: no cover - no unsigned callables registered
             return None
 
-        read = frozenset(
-            p.name
-            for p in sig.parameters.values()
-            if p.kind not in (p.VAR_KEYWORD, p.VAR_POSITIONAL) and p.name.startswith("agn_")
-        ) | _agn_subblock_companion_params(category, block_type)
+        read = (
+            frozenset(
+                p.name
+                for p in sig.parameters.values()
+                if p.kind not in (p.VAR_KEYWORD, p.VAR_POSITIONAL) and p.name.startswith("agn_")
+            )
+            | companions
+        )
     owning_group = f"agn.{category}"
     return frozenset(name for name in read if _agn_param_group(name) == owning_group)
 
@@ -2287,20 +2351,19 @@ _AGN_CATEGORY_WIDE_COMPANION_PARAMS: dict[str, frozenset[str]] = {
     # function signature names it, so it is invisible to both raw
     # introspection and every per-type AGN_BLOCK_CONSUMES entry alike.
     "disc": frozenset({"agn_ebv_disc"}),
-    # agn_fe2_strength is ALSO a parameter of blr_analytic_block
-    # (blocks/blr.py, Krawczyk et al. 2013's own R_Fe = F(FeII)/F(Hbeta)
-    # ratio) -- live in any composable build with an active BLR block,
-    # regardless of which feii TYPE is selected. feii.py's own
-    # boroson_green function separately declares the same name for its
-    # FeII forest template strength (a second, independent mechanism
-    # sharing one physically-consistent knob); grahsp and qsogen_balmer
-    # have no declaration of their own, so only the BLR-side read makes it
-    # live for them.
-    "feii": frozenset({"agn_fe2_strength"}),
+    # The feii entry that used to sit here (agn_fe2_strength) is gone: the
+    # read it described belongs to the BLR analytic block, not to the feii
+    # category, so unconditionally it freed a parameter the selected
+    # configuration ignores -- measured DEAD for feii='grahsp' and
+    # feii='qsogen_balmer' under blr='none', LIVE for both under
+    # blr='analytic'. It is now a companion conditioned on the selected BLR
+    # block, in _agn_subblock_companion_params (R33).
 }
 
 
-def _agn_subblock_companion_params(category: str, block_type: str) -> frozenset[str]:
+def _agn_subblock_companion_params(
+    category: str, block_type: str, *, blr_type: str | None = None
+) -> frozenset[str]:
     """``agn_*`` names read by a sub-block's companion helper(s), if any.
 
     Two independent shapes of companion, both invisible to a plain
@@ -2312,6 +2375,19 @@ def _agn_subblock_companion_params(category: str, block_type: str) -> frozenset[
     set when neither applies to ``(category, block_type)``.
     """
     out = set(_AGN_CATEGORY_WIDE_COMPANION_PARAMS.get(category, frozenset()))
+
+    # Conditional companion (R33): agn_fe2_strength is read by the BLR analytic
+    # block, so the feii sub-block's wildcard may claim it only when such a BLR
+    # block is actually selected. As an unconditional category-wide entry it
+    # freed a measured-dead parameter under blr='none' (grahsp and
+    # qsogen_balmer both DEAD there, LIVE with blr='analytic'); the condition is
+    # read off the selected BLR block's own CONSUMES entry, so the two move
+    # together. A feii type that declares the name itself (boroson_green) gets
+    # it from its own entry regardless.
+    if category == "feii" and blr_type:
+        from tengri.components.agn.blocks._consumes import AGN_BLOCK_CONSUMES
+
+        out |= {"agn_fe2_strength"} & set(AGN_BLOCK_CONSUMES.get(("blr", blr_type), ()))
 
     if (category, block_type) == _AGN_SUBBLOCK_COMPANION_KEY:
         from tengri.components.agn.blocks.atten import polar_dust_reemission_lnu
@@ -2435,6 +2511,32 @@ def check_agn_torus_registry_agreement() -> None:
 #: form, and both spellings of the pre-#1296 legacy name.
 _AGN_IR_FRAC_SPELLINGS = frozenset({"agn_ir_frac", "ir_frac", "agn_fracAGN", "fracAGN"})
 
+#: The pre-#1296 legacy half of the set above. ``_build_agn_search_view``
+#: resolves the canonical name's own two spellings; these two it does not, so
+#: they are scanned separately across the same locations.
+_AGN_IR_FRAC_LEGACY_SPELLINGS: tuple[str, ...] = ("agn_fracAGN", "fracAGN")
+
+
+def _fracagn_value_is_active(value: object) -> bool:
+    """Whether one written fracAGN value can be nonzero.
+
+    A free prior almost surely samples positive, so any distribution counts.
+    ``Fixed(DEFAULT)`` (fracAGN's registry default is 0.0) and an explicit
+    ``Fixed(0.0)`` do not: explicit-but-inert is not the #2189 conflict.
+    Anything that is not a number -- a string, a multi-element array -- is not
+    a value this parameter can take, so it is not active either.
+    """
+    if isinstance(value, Fixed):
+        if _is_default_fixed(value):
+            return False
+        value = value.value
+    if isinstance(value, Distribution):
+        return True
+    try:
+        return float(value) > 0.0  # type: ignore[arg-type]
+    except (TypeError, ValueError):
+        return False
+
 
 def _agn_ir_frac_explicit_and_active(agn_dict: object) -> bool:
     """Whether the raw ``agn={...}`` dict explicitly sets fracAGN active.
@@ -2473,23 +2575,27 @@ def _agn_ir_frac_explicit_and_active(agn_dict: object) -> bool:
     """
     if not isinstance(agn_dict, dict):
         return False
-    for key in _AGN_IR_FRAC_SPELLINGS:
-        if key not in agn_dict:
+
+    written: list[object] = []
+    # The canonical spelling, resolved through the builder's OWN view, so
+    # every placement the builder honors is seen -- including a shared
+    # parameter written inside a sub-block, which the grammar advertises and
+    # which used to slip past this guard entirely (R34(b)).
+    view = _build_agn_search_view("agn_ir_frac", agn_dict, _agn_param_group("agn_ir_frac"))
+    short_name = _extract_short_name("agn_ir_frac", {})
+    if short_name in view:
+        written.append(view[short_name])
+    # The legacy spellings the view does not resolve, over the same locations.
+    for location in ("<top>", *sorted(_AGN_SUBBLOCK_KEYS)):
+        candidate = agn_dict if location == "<top>" else agn_dict.get(location)
+        if not isinstance(candidate, dict):
             continue
-        value = agn_dict[key]
-        if isinstance(value, Fixed):
-            if _is_default_fixed(value):
-                return False
-            val = value.value
-            return isinstance(val, (int, float)) and float(val) > 0.0
-        if isinstance(value, (int, float)):
-            return float(value) > 0.0
-        # A Distribution (Uniform, LogUniform, ...): a free prior, almost
-        # surely samples positive, so treat any free prior as active
-        # regardless of bounds. Anything else (e.g. a bare string) is not a
-        # value this parameter can take; not active.
-        return isinstance(value, Distribution)
-    return False
+        for key in _AGN_IR_FRAC_LEGACY_SPELLINGS:
+            if key in candidate:
+                written.append(candidate[key])
+    # Any active write makes it active: an answer that depended on which
+    # spelling was reached first would depend on set iteration order.
+    return any(_fracagn_value_is_active(value) for value in written)
 
 
 def _wildcard_scopes(
@@ -2569,7 +2675,9 @@ def _wildcard_scopes(
         elif group.startswith("agn."):
             category = group[len("agn.") :]
             block_type = structural_kwargs.get(_AGN_BLOCK_TO_KWARG.get(category, ""))
-            declared = _agn_subblock_declared_params(category, block_type)
+            declared = _agn_subblock_declared_params(
+                category, block_type, blr_type=structural_kwargs.get("agn_blr_block")
+            )
             # #2189 (RULING R15): agn_torus_frac is overridden and inert
             # whenever fracAGN is explicitly active (see
             # _agn_ir_frac_explicit_and_active); the torus sub-block's own

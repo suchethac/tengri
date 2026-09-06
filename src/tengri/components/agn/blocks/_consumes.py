@@ -87,7 +87,11 @@ AGN_BLOCK_CONSUMES: dict[tuple[str, str], frozenset[str]] = {
         }
     ),
     ("disc", "multicolor"): frozenset({"agn_a_spin", "agn_log_mbh"}),
-    ("disc", "powerlaw"): frozenset({"agn_alpha"}),
+    # R34: agn_T_max (the block's own UV cutoff temperature) was missing --
+    # measured live on predict_photometry once the partition gave it a disc
+    # owner, so the disc wildcard would otherwise free the slope and leave the
+    # cutoff pinned.
+    ("disc", "powerlaw"): frozenset({"agn_alpha", "agn_T_max"}),
     ("disc", "qsogen"): frozenset(),
     ("disc", "relagn"): frozenset({"agn_log_mbh", "agn_log_mdot", "agn_astar", "agn_cos_inc"}),
     ("disc", "richards2006"): frozenset(),
@@ -232,17 +236,24 @@ AGN_BLOCK_CONSUMES: dict[tuple[str, str], frozenset[str]] = {
             "agn_radius_ratio",
         }
     ),
+    # R34: agn_theta_torus (the runner's gray Type-1/2 visibility mask, the
+    # same read the nenkova/silva04/cat3d entries already record) was missing
+    # from all three AGNfitter-rX SKIRTOR variants -- measured live on
+    # predict_photometry for each once the partition gave it a torus owner.
     ("torus", "skirtor_agnfitter"): frozenset(
         {
             "agn_oa_skirtor",
             "agn_incl_skirtor",
             "agn_tv_skirtor",
             "agn_torus_frac",
+            "agn_theta_torus",
         }
     ),
-    ("torus", "skirtor_agnfitter_1p"): frozenset({"agn_incl_skirtor", "agn_torus_frac"}),
+    ("torus", "skirtor_agnfitter_1p"): frozenset(
+        {"agn_incl_skirtor", "agn_torus_frac", "agn_theta_torus"}
+    ),
     ("torus", "skirtor_agnfitter_2p"): frozenset(
-        {"agn_oa_skirtor", "agn_incl_skirtor", "agn_torus_frac"}
+        {"agn_oa_skirtor", "agn_incl_skirtor", "agn_torus_frac", "agn_theta_torus"}
     ),
     ("torus", "two_temperature"): frozenset(
         {
@@ -255,10 +266,32 @@ AGN_BLOCK_CONSUMES: dict[tuple[str, str], frozenset[str]] = {
             "agn_theta_torus",
         }
     ),
-    ("nlr", "analytic"): frozenset({"agn_nlr_cf", "agn_nlr_line_efficiency"}),
+    # R34: agn_nlr_fwhm_kms (the line width this block broadens with) was
+    # missing -- measured live on predict_photometry once the partition gave
+    # the NLR grid knobs their owner.
+    ("nlr", "analytic"): frozenset({"agn_nlr_cf", "agn_nlr_line_efficiency", "agn_nlr_fwhm_kms"}),
     ("nlr", "synthesizer"): frozenset({"agn_nlr_cf"}),
     ("nlr", "synthesizer_spectra"): frozenset({"agn_nlr_cf"}),
     ("nlr", "grahsp"): frozenset({"agn_grahsp_a_lines", "agn_grahsp_linewidth_kms"}),
+    # R34 partitioned the six Feltre grid axes to "agn.nlr", which put them in
+    # this block's own wildcard scope for the first time. Without an entry here
+    # the scope came from raw signature introspection, which also swept in
+    # agn_nlr_xi_d -- measured exactly dead (grad 0.0 at every one of five
+    # sampled points, 0.0 relative change across the declared [0.1, 0.5]): the
+    # shipped Feltre grid carries a single dust-to-metal node, so interpolation
+    # along that axis is constant and the gradient is zero by construction, not
+    # by underflow. Listing the six the block does read keeps the wildcard off
+    # a dimension a fit cannot move.
+    ("nlr", "feltre"): frozenset(
+        {
+            "agn_nlr_cf",
+            "agn_nlr_fwhm_kms",
+            "agn_nlr_alpha_pl",
+            "agn_nlr_logU",
+            "agn_nlr_logn",
+            "agn_nlr_logZ",
+        }
+    ),
     ("blr", "analytic"): frozenset(
         {
             "agn_blr_cf",
@@ -301,7 +334,11 @@ AGN_BLOCK_CONSUMES: dict[tuple[str, str], frozenset[str]] = {
             "agn_polar_T",
         }
     ),
-    ("attenuation", "qsogen_smc"): frozenset(),
+    # R34: this block's own reddening knob, agn_ebv, was recorded as reading
+    # nothing at all -- measured live on predict_photometry once the partition
+    # gave agn_ebv its atten owner. It is NOT agn_attenuation_ebv, the separate
+    # E(B-V) the smc_prevot/qsogen blocks apply (R30).
+    ("attenuation", "qsogen_smc"): frozenset({"agn_ebv"}),
     ("attenuation", "smc_prevot"): frozenset({"agn_attenuation_ebv"}),
     # Task 16 (item 3): previously missing entirely -- the top-level wildcard
     # silently fell back to the full ~50-name superset whenever atten='qsogen'

@@ -48,6 +48,7 @@ from .test_agn_subblock_wildcard_scoping import (
     _make_ssp,
     _maybe_skip_grid_gated,
     _registered_types,
+    skip_if_empty_scope,
 )
 
 
@@ -70,7 +71,7 @@ def _owned_names(category: str) -> frozenset[str]:
     return frozenset(name for name, group in _AGN_PARTITION.items() if group == owner)
 
 
-def _build_one_category(ssp_data, observation, category, block_type, *, all_params):
+def _build_one_category(ssp_data, observation, category, block_type, *, all_params, mute=True):
     """Mirrors test_agn_subblock_wildcard_scoping.py::_build exactly (kept
     as a local copy rather than importing a private helper twice removed --
     the fixtures/registries it depends on are re-imported above)."""
@@ -90,7 +91,10 @@ def _build_one_category(ssp_data, observation, category, block_type, *, all_para
     )
     agn[category] = sub
     with warnings.catch_warnings():
-        warnings.simplefilter("ignore")
+        # `mute=False` for the empty-scope path: a blanket suppression there
+        # would mute the very WildcardNoOpWarning that surface asserts, so the
+        # assertion would pass on silence (the reviewer's Finding 1).
+        warnings.simplefilter("ignore" if mute else "always")
         return SEDModel.build(
             ssp_data=ssp_data,
             observation=observation,
@@ -118,6 +122,11 @@ def test_owned_and_live_params_are_all_freed(ssp, obs, category, block_type):
     category that is NOT in the wildcard's freed set must NOT move
     predict_photometry either -- a declared-reads gap the scoping function
     cannot see by construction (it IS the function being checked)."""
+    skip_if_empty_scope(
+        lambda: _build_one_category(ssp, obs, category, block_type, all_params=FREE, mute=False),
+        category=category,
+        block_type=block_type,
+    )
     try:
         model = _build_one_category(ssp, obs, category, block_type, all_params=FREE)
     except (TengriIOError, FileNotFoundError) as exc:
@@ -173,7 +182,7 @@ _POLAR_NAMES = frozenset({"agn_polar_ebv", "agn_polar_oa", "agn_polar_T", "agn_p
 _ATTENUATION_EBV_TYPES = frozenset({"qsogen", "smc_prevot"})
 
 
-def _build_torus_atten(ssp_data, observation, torus_type: str, atten_type: str):
+def _build_torus_atten(ssp_data, observation, torus_type: str, atten_type: str, *, mute=True):
     """Composable build with the given torus TYPE selected (Fixed(DEFAULT)
     -- only the structural choice matters here, not its own wildcard) and
     the atten sub-block's own wildcard FREE, 'norm': 'independent' explicit.
@@ -194,7 +203,7 @@ def _build_torus_atten(ssp_data, observation, torus_type: str, atten_type: str):
         "norm": "independent",
     }
     with warnings.catch_warnings():
-        warnings.simplefilter("ignore")
+        warnings.simplefilter("ignore" if mute else "always")
         return SEDModel.build(
             ssp_data=ssp_data,
             observation=observation,
@@ -214,14 +223,46 @@ def _build_torus_atten(ssp_data, observation, torus_type: str, atten_type: str):
         )
 
 
+#: PR-tier torus sample for the polar sweep: one type per mechanism family --
+#: a template-grid torus (skirtor), a clumpy one (nenkova), a wind model
+#: (cat3d_wind) and the analytic toy (simple). R22's claim is that the polar
+#: names are read by the ATTEN block alone, so the torus axis is the control
+#: variable, not the subject; the full 16-type sweep runs in the slow tier.
+_POLAR_SMOKE_TORUS_TYPES = tuple(
+    t for t in ("skirtor", "nenkova", "cat3d_wind", "simple") if t in _ALL_TORUS_TYPES
+)
+
+
+@pytest.mark.slow
 @pytest.mark.parametrize("atten_type", _ALL_ATTEN_TYPES)
 @pytest.mark.parametrize("torus_type", _ALL_TORUS_TYPES)
-def test_polar_names_owned_by_atten_only_under_polar_dust(ssp, obs, torus_type, atten_type):
-    """R22 encoded as a literal expectation, over EVERY (torus, atten) pair:
-    agn_polar_ebv/oa/T/beta are freed AND live under atten='polar_dust' for
-    every torus type; inert (never freed) under every OTHER atten type, for
-    every torus type. agn_attenuation_ebv is freed only under the two atten
-    types whose own signature reads it (qsogen, smc_prevot)."""
+def test_polar_names_owned_by_atten_only_under_polar_dust_exhaustive(
+    ssp, obs, torus_type, atten_type
+):
+    """The full 16 torus x 5 atten sweep (slow tier).
+
+    80 measured builds cost ~4 minutes, which is PR-gate wall clock for a
+    statement whose torus axis is a control. The smoke test below keeps four
+    representative torus types in the fast tier; this keeps the exhaustive
+    claim, run on the schedule-gated tier.
+    """
+    _assert_polar_ownership(ssp, obs, torus_type, atten_type)
+
+
+def _assert_polar_ownership(ssp, obs, torus_type: str, atten_type: str) -> None:
+    """R22 as a literal expectation for one (torus, atten) pair.
+
+    ``agn_polar_ebv``/``oa``/``T``/``beta`` are freed AND measurably live under
+    ``atten='polar_dust'``, and absent from the freed set under every other
+    atten type, whatever torus is selected. ``agn_attenuation_ebv`` is freed
+    only under the two atten types whose own signature reads it (``qsogen``,
+    ``smc_prevot``).
+    """
+    skip_if_empty_scope(
+        lambda: _build_torus_atten(ssp, obs, torus_type, atten_type, mute=False),
+        category="atten",
+        block_type=atten_type,
+    )
     try:
         model = _build_torus_atten(ssp, obs, torus_type, atten_type)
     except (TengriIOError, FileNotFoundError) as exc:
@@ -273,3 +314,185 @@ def test_polar_names_owned_by_atten_only_under_polar_dust(ssp, obs, torus_type, 
         assert "agn_attenuation_ebv" not in free, (
             f"{torus_type}/{atten_type}: agn_attenuation_ebv unexpectedly freed"
         )
+
+
+@pytest.mark.parametrize("atten_type", _ALL_ATTEN_TYPES)
+@pytest.mark.parametrize("torus_type", _POLAR_SMOKE_TORUS_TYPES)
+def test_polar_names_owned_by_atten_only_under_polar_dust(ssp, obs, torus_type, atten_type):
+    """R22 over a torus sample x every atten type; the exhaustive 16-type
+    sweep is the slow-tier test above."""
+    _assert_polar_ownership(ssp, obs, torus_type, atten_type)
+
+
+# ──────────────────────────────────────────────────────────────────────────
+# R33: agn_fe2_strength is the BLR analytic block's read, conditioned on it.
+# ──────────────────────────────────────────────────────────────────────────
+
+_FEII_TYPES = _registered_types("feii")
+
+
+def _build_feii_with_blr(ssp_data, observation, feii_type: str, blr_type: str):
+    """Composable build with the feii sub-block's own wildcard FREE and the
+    BLR selection under test."""
+    agn = {
+        "type": "composable",
+        "disc": {"type": "multicolor", "all_params": Fixed(DEFAULT)},
+        "nlr": {"type": "analytic", "all_params": Fixed(DEFAULT)},
+        "blr": {"type": blr_type, "all_params": Fixed(DEFAULT)},
+        "feii": {"type": feii_type, "all_params": FREE},
+        "all_params": Fixed(DEFAULT),
+        "agn_log_lbol": Fixed(12.0),
+        "norm": "independent",
+    }
+    with warnings.catch_warnings():
+        warnings.simplefilter("ignore")
+        return SEDModel.build(
+            ssp_data=ssp_data,
+            observation=observation,
+            sfh={
+                "type": "const",
+                "all_params": Fixed(DEFAULT),
+                "log_total_mass": 10.0,
+                "start_gyr": 1.0,
+            },
+            dust_attenuation={
+                "type": "two_component",
+                "law": "calzetti",
+                "all_params": Fixed(DEFAULT),
+            },
+            agn=agn,
+            redshift=Fixed(1.0),
+        )
+
+
+@pytest.mark.parametrize("feii_type", _FEII_TYPES)
+def test_fe2_strength_not_freed_by_feii_wildcard_without_a_blr(ssp, obs, feii_type):
+    """R33: the read belongs to the BLR analytic block, so with no BLR
+    selected the feii wildcard must not free it.
+
+    ``agn_fe2_strength`` used to be an unconditional category-wide companion
+    of every feii type. Measured with ``blr='none'`` it is DEAD for
+    ``feii='grahsp'`` and ``feii='qsogen_balmer'`` (neither declares it) and
+    was freed anyway -- the owner rule inverted, a parameter the selected
+    configuration ignores handed to the sampler. ``boroson_green`` declares it
+    itself and keeps it through its own CONSUMES entry.
+    """
+    model = _build_feii_with_blr(ssp, obs, feii_type, "none")
+    free = set(model.spec.free_params)
+    declares_it_itself = feii_type == "boroson_green"
+    assert ("agn_fe2_strength" in free) is declares_it_itself, (
+        f"feii={feii_type!r} with blr='none': agn_fe2_strength "
+        f"{'missing from' if declares_it_itself else 'freed by'} the feii wildcard"
+    )
+
+
+@pytest.mark.parametrize("feii_type", _FEII_TYPES)
+def test_fe2_strength_freed_and_live_when_an_analytic_blr_is_active(ssp, obs, feii_type):
+    """The other half: with the BLR block that reads it selected, the feii
+    wildcard frees it AND it measurably moves photometry."""
+    model = _build_feii_with_blr(ssp, obs, feii_type, "analytic")
+    free = set(model.spec.free_params)
+    assert "agn_fe2_strength" in free, (
+        f"feii={feii_type!r} with blr='analytic': agn_fe2_strength not freed, "
+        f"though the selected BLR block reads it"
+    )
+
+    def obj(pd):
+        return jnp.log(jnp.sum(model.predict_photometry(pd)) + 1e-300)
+
+    live = False
+    for seed in (0, 1, 2, 3, 4):
+        p = dict(model.spec.sample(jax.random.PRNGKey(seed)))
+        v0 = jnp.asarray(p["agn_fe2_strength"])
+        if float(jax.grad(lambda v, p=p: obj({**p, "agn_fe2_strength": v}))(v0)) != 0.0:
+            live = True
+            break
+    assert live, f"feii={feii_type!r} with blr='analytic': agn_fe2_strength freed but dead"
+
+
+# ──────────────────────────────────────────────────────────────────────────
+# R34: the eight names measured live while no wildcard could free them.
+# ──────────────────────────────────────────────────────────────────────────
+
+#: (sub-block category, block type, parameter) rows the review measured live
+#: on predict_photometry (worst of five seeds) while no wildcard freed them,
+#: because the parameter had no _AGN_PARTITION entry -- or, for the GRAHSP
+#: line pair, an entry naming a category other than the one being built.
+#: Each is now reachable through its OWNER's wildcard: a sub-block one where
+#: the owner is a sub-block, the agn-level one where the name is genuinely
+#: shared across categories.
+_PREVIOUSLY_UNFREEABLE = (
+    ("blr", "grahsp", "agn_grahsp_a_lines"),
+    ("blr", "grahsp", "agn_grahsp_linewidth_kms"),
+    ("nlr", "analytic", "agn_nlr_line_efficiency"),
+    ("blr", "analytic", "agn_blr_line_efficiency"),
+    # The review's eighth row, blr='analytic' x agn_fe2_strength, is covered by
+    # the R33 pair above instead: its owner is the feii sub-block while the
+    # read belongs to the BLR block, so "its owner's wildcard" only means
+    # anything on a build that selects both, which is exactly what those two
+    # tests parametrize over every feii type.
+    ("disc", "adaf", "agn_adaf_alpha"),
+    ("disc", "relagn", "agn_astar"),
+    ("disc", "skirtor", "agn_cigale_disk_delta"),
+)
+
+
+def _build_with_owner_wildcard(ssp_data, observation, category, block_type, param):
+    """Build with the wildcard that OWNS ``param`` set FREE.
+
+    A sub-block-owned name gets its own sub-block's wildcard; a name the
+    partition marks shared gets the agn-level one, because no sub-block
+    wildcard can reach a shared name by construction.
+    """
+    owner = _AGN_PARTITION.get(param, "agn")
+    agn: dict = {
+        "type": "composable",
+        "disc": {"type": "multicolor", "all_params": Fixed(DEFAULT)},
+        "nlr": {"type": "analytic", "all_params": Fixed(DEFAULT)},
+        "blr": {"type": "analytic", "all_params": Fixed(DEFAULT)},
+        "all_params": FREE if owner == "agn" else Fixed(DEFAULT),
+        "agn_log_lbol": Fixed(12.0),
+        "norm": "independent",
+    }
+    agn[category] = {
+        "type": block_type,
+        "all_params": FREE if owner != "agn" else Fixed(DEFAULT),
+    }
+    with warnings.catch_warnings():
+        warnings.simplefilter("ignore")
+        return SEDModel.build(
+            ssp_data=ssp_data,
+            observation=observation,
+            sfh={
+                "type": "const",
+                "all_params": Fixed(DEFAULT),
+                "log_total_mass": 10.0,
+                "start_gyr": 1.0,
+            },
+            dust_attenuation={
+                "type": "two_component",
+                "law": "calzetti",
+                "all_params": Fixed(DEFAULT),
+            },
+            agn=agn,
+            redshift=Fixed(1.0),
+        )
+
+
+@pytest.mark.parametrize(
+    ("category", "block_type", "param"),
+    _PREVIOUSLY_UNFREEABLE,
+    ids=[f"{c}/{t}:{p}" for c, t, p in _PREVIOUSLY_UNFREEABLE],
+)
+def test_previously_unfreeable_live_names_are_freed_by_their_owner(
+    ssp, obs, category, block_type, param
+):
+    """Each of the eight is now freed by the wildcard its owner names."""
+    try:
+        model = _build_with_owner_wildcard(ssp, obs, category, block_type, param)
+    except (TengriIOError, FileNotFoundError) as exc:
+        _maybe_skip_grid_gated(category, block_type, exc)
+    assert param in set(model.spec.free_params), (
+        f"{category}/{block_type}: {param} (owner "
+        f"{_AGN_PARTITION.get(param, 'agn')!r}) is still not freed by its owner's wildcard"
+    )

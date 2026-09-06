@@ -169,6 +169,25 @@ def obs() -> Observation:
     return _make_obs()
 
 
+def _block_grid_support(category: str, block_type: str) -> dict[str, tuple[float, float]]:
+    """The block's own template-grid extent per parameter, if it registers one.
+
+    A grid-backed block clips its axes onto the shipped grid, so a gradient
+    measured outside that extent is exactly zero however live the parameter is
+    (#1586). This lets the liveness probe below ask the question it means to
+    ask.
+    """
+    from tengri.components.grid_support import GRID_SUPPORT
+
+    loader = GRID_SUPPORT.get((f"agn.{category}", block_type))
+    if loader is None:
+        return {}
+    try:
+        return dict(loader())
+    except (TengriIOError, FileNotFoundError):
+        return {}
+
+
 def _build(ssp_data, observation, category, block_type, *, all_params):
     """One minimal composable-AGN build: disc + nlr + blr always present
     (multicolor/analytic, Fixed(DEFAULT) unless under test) so the category
@@ -316,6 +335,31 @@ def _expect_empty_scope(build_fn, *, category: str, block_type: str):
     return model
 
 
+def skip_if_empty_scope(build_fn, *, category: str, block_type: str) -> bool:
+    """Assert the loud empty-scope signal and skip, when the scope IS empty.
+
+    Every surface that builds an ``all_params: FREE`` wildcard over a
+    (category, type) whose declared set is empty has to go through
+    :func:`_expect_empty_scope`, not merely leave the no-op unasserted: four
+    pairs are measurably empty today (``torus/qsogen``, ``blr/grahsp``,
+    ``blr/qsogen``, ``atten/qsogen_smc``), and after PR #2207 building such a
+    wildcard raises instead of warning. Routing every surface through the one
+    helper keeps that flip a single-line change here.
+
+    Returns ``True`` after asserting and skipping is not possible (it raises
+    ``Skipped``); ``False`` when the scope is non-empty and the caller should
+    build normally.
+    """
+    if _agn_subblock_declared_params(category, block_type, blr_type="analytic"):
+        return False
+    _expect_empty_scope(build_fn, category=category, block_type=block_type)
+    pytest.skip(
+        f"{category}/{block_type}: declared scope is empty; the loud no-op "
+        f"signal is the whole contract here, so there is nothing to measure."
+    )
+    return True  # pragma: no cover - pytest.skip raises
+
+
 @pytest.mark.parametrize(
     ("category", "block_type"), _ALL_CASES, ids=[f"{c}/{t}" for c, t in _ALL_CASES]
 )
@@ -323,7 +367,11 @@ def test_q1_wildcard_frees_exactly_declared_and_live(ssp, obs, category, block_t
     """Q1: the sub-block's own wildcard frees exactly its declared params,
     all live; an empty declared set produces a loud, not silent, signal
     (:func:`_expect_empty_scope` -- coordination note, PR #2207)."""
-    expected = _agn_subblock_declared_params(category, block_type)
+    # _build below pins blr='analytic', and that BLR block reads
+    # agn_fe2_strength, so the feii sub-block's wildcard legitimately claims it
+    # here (R33: the companion is conditioned on the selected BLR block, which
+    # is why the selection has to be passed rather than assumed).
+    expected = _agn_subblock_declared_params(category, block_type, blr_type="analytic")
     assert expected is not None, (
         f"{category}/{block_type}: _agn_subblock_declared_params returned None "
         f"(type not found in AGN_BLOCKS -- should not happen for a grammar-"
@@ -358,12 +406,23 @@ def test_q1_wildcard_frees_exactly_declared_and_live(ssp, obs, category, block_t
     # unlucky draw without being architecturally dead. A name still exactly
     # 0.0 at EVERY one of these seeds is a real, not a floating-point, no-op.
     _SEEDS = (0, 1, 2, 3, 4)
+    support = _block_grid_support(category, block_type)
     dead = []
     for name in sorted(free_agn):
         live_at_any_seed = False
         for seed in _SEEDS:
             p = dict(model.spec.sample(jax.random.PRNGKey(seed)))
             v0 = jnp.asarray(p[name])
+            if name in support:
+                # A template-backed block clips its axes onto the grid, where
+                # jnp.clip makes the gradient exactly zero however live the
+                # parameter is (#1586). slone_netzer's agn_log_ledd declares
+                # Uniform(-2, 0.5) against an axis ending at -1.9586, so 98% of
+                # the freed prior is that flat region and five draws land there
+                # with probability 0.92: a dead baseline, not a dead parameter.
+                # Probe inside the axis instead.
+                lo, hi = support[name]
+                v0 = jnp.asarray(0.5 * (lo + hi))
             g = float(jax.grad(lambda v, name=name, p=p: obj({**p, name: v}))(v0))
             if g != 0.0:
                 live_at_any_seed = True
@@ -392,6 +451,11 @@ def test_describe_agn_block_params_match_wildcard_scope(ssp, obs, category, bloc
     applies. Reuses this module's Q1 build (:func:`_build`)."""
     import tengri
 
+    skip_if_empty_scope(
+        lambda: _build(ssp, obs, category, block_type, all_params=FREE),
+        category=category,
+        block_type=block_type,
+    )
     try:
         model = _build(ssp, obs, category, block_type, all_params=FREE)
     except (TengriIOError, FileNotFoundError) as exc:
@@ -420,6 +484,11 @@ def _q2_build_and_digest(ssp, obs, category: str, block_type: str) -> tuple[floa
     """Build ``category``'s wildcard FREE and evaluate the digest at every
     freed parameter's own prior median (item 7 refinement; never
     Fixed(DEFAULT)/``{}``)."""
+    skip_if_empty_scope(
+        lambda: _build(ssp, obs, category, block_type, all_params=FREE),
+        category=category,
+        block_type=block_type,
+    )
     model = _build(ssp, obs, category, block_type, all_params=FREE)
     return _sed_agn_digest(model, _prior_median_params(model))
 

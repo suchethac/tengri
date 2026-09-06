@@ -49,7 +49,7 @@ from tengri.config.exceptions import ConfigError
 pytestmark = [pytest.mark.regression_bug, pytest.mark.contract]
 
 #: Torus types measured; F1's own probe covered these five.
-_TORUS_TYPES = ("fritz", "cat3d_wind", "nenkova", "simple", "skirtor")
+_TORUS_TYPES = ("fritz", "cat3d_wind", "nenkova", "nenkova_agnfitter", "simple", "skirtor")
 
 #: Measured (this branch) max relative photometry diff for agn_torus_frac
 #: 0.05 -> 0.95, fracAGN inactive, norm='independent' explicit. Every value
@@ -58,6 +58,12 @@ _MEASURED_LIVE_REL_DIFF = {
     "fritz": 8.7394,
     "cat3d_wind": 17.130,
     "nenkova": 16.948,
+    # R32: this type declares exactly ONE parameter of its own,
+    # agn_torus_frac, so the #2189 narrowing empties its whole wildcard scope
+    # when fracAGN is active. That is correct physics, not a scoping defect --
+    # and the parameter is emphatically live when fracAGN is inactive, which is
+    # what this row measures.
+    "nenkova_agnfitter": 16.885,
     "simple": 11.460,
     "skirtor": 16.448,
 }
@@ -207,3 +213,154 @@ def test_wildcard_never_frees_torus_frac_when_fracagn_active(ssp, obs, torus_typ
             f"also dropped OTHER declared torus parameters: "
             f"{sorted(other_declared - free)}"
         )
+
+
+# ──────────────────────────────────────────────────────────────────────────
+# The same guard, through the OTHER placements the grammar honors.
+# ──────────────────────────────────────────────────────────────────────────
+
+#: Every (location, key) a caller can legally write fracAGN under. The
+#: grammar accepts a shared parameter inside a sub-block as well as at the
+#: agn top level (``_build_agn_search_view``'s documented cross-level
+#: acceptance), and both the canonical and the legacy spelling. The guard
+#: read only the top-level dict, so the sub-block placements slipped past it:
+#: measured with ``torus={'type': 'fritz', 'all_params': FREE,
+#: 'ir_frac': Fixed(0.5)}``, ``agn_torus_frac`` was freed, its gradient was
+#: 0.0 across five seeds, and sweeping it 0.05 -> 0.95 moved photometry by
+#: 0.0 -- the exact dead dimension #2189 exists to prevent, reachable through
+#: a spelling the grammar advertises.
+_FRACAGN_PLACEMENTS = (
+    ("<top>", "ir_frac"),
+    ("<top>", "agn_ir_frac"),
+    ("<top>", "fracAGN"),
+    ("<top>", "agn_fracAGN"),
+    ("torus", "ir_frac"),
+    ("torus", "agn_ir_frac"),
+    ("disc", "ir_frac"),
+)
+
+
+def _build_with_placement(
+    ssp,
+    obs,
+    *,
+    location,
+    key,
+    torus_frac=None,
+    torus_wildcard=None,
+    torus_type="fritz",
+    mute=True,
+):
+    """One build with fracAGN written at ``location`` under ``key``.
+
+    ``mute=False`` lets the build's own advisories through, for the callers
+    whose subject IS one of those warnings -- a blanket suppression there
+    would make the assertion pass on silence.
+    """
+    torus: dict = {"type": torus_type}
+    if torus_wildcard is not None:
+        torus["all_params"] = torus_wildcard
+    else:
+        torus["all_params"] = Fixed(DEFAULT)
+    if torus_frac is not None:
+        torus["torus_frac"] = torus_frac
+    agn = {
+        "type": "composable",
+        "disc": {"type": "skirtor", "all_params": Fixed(DEFAULT)},
+        "torus": torus,
+        "agn_log_lbol": Fixed(12.0),
+        "norm": "independent",
+    }
+    if location == "<top>":
+        agn[key] = Fixed(0.5)
+    else:
+        agn[location][key] = Fixed(0.5)
+    with warnings.catch_warnings():
+        warnings.simplefilter("ignore" if mute else "always")
+        return SEDModel.build(
+            ssp_data=ssp,
+            observation=obs,
+            sfh={"type": "delayed", "all_params": Fixed(DEFAULT), "log_total_mass": Fixed(10.0)},
+            dust_attenuation={
+                "type": "two_component",
+                "law": "calzetti",
+                "all_params": Fixed(DEFAULT),
+            },
+            dust_emission={"type": "dl07", "all_params": Fixed(DEFAULT)},
+            neb={"type": "none"},
+            agn=agn,
+            redshift=Fixed(0.1),
+        )
+
+
+@pytest.mark.parametrize(
+    ("location", "key"), _FRACAGN_PLACEMENTS, ids=[f"{loc}:{k}" for loc, k in _FRACAGN_PLACEMENTS]
+)
+def test_explicit_torus_frac_raises_for_every_fracagn_placement(ssp, obs, location, key):
+    """Guard 1 must see fracAGN wherever the builder would resolve it."""
+    with pytest.raises(ConfigError) as excinfo:
+        _build_with_placement(ssp, obs, location=location, key=key, torus_frac=Fixed(0.3))
+    msg = str(excinfo.value)
+    assert "agn_torus_frac" in msg
+    assert "#2189" in msg
+
+
+@pytest.mark.parametrize(
+    ("location", "key"), _FRACAGN_PLACEMENTS, ids=[f"{loc}:{k}" for loc, k in _FRACAGN_PLACEMENTS]
+)
+def test_wildcard_narrows_for_every_fracagn_placement(ssp, obs, location, key):
+    """Guard 2 likewise: the torus wildcard must not free a dead dimension
+    because fracAGN was written one level down."""
+    model = _build_with_placement(ssp, obs, location=location, key=key, torus_wildcard=FREE)
+    assert "agn_torus_frac" not in set(model.spec.free_params), (
+        f"fracAGN written as {key!r} at {location!r} escaped the #2189 "
+        f"narrowing: agn_torus_frac was freed and is dead there"
+    )
+
+
+def test_the_narrowing_never_manufactures_an_empty_scope():
+    """R32, re-measured: no registered torus type is left with nothing.
+
+    The review found ``torus='nenkova_agnfitter'`` emptied by this narrowing
+    -- its declared set was ``{'agn_torus_frac'}`` alone -- which would make
+    the post-#2207 refusal read *"covers no parameters"* to a user whose real
+    problem is fracAGN. That premise no longer holds: R34's partition gave
+    ``agn_theta_torus`` (the gray Type-1/2 mask's own opening angle, which this
+    block reads) its torus owner, so the scope narrows to ``{agn_theta_torus}``
+    rather than to nothing.
+
+    This is the guard rather than the message, because a message for a
+    configuration nothing can reach is dead code. If a torus type ever does
+    declare ``agn_torus_frac`` and nothing else, this fires and the question
+    of what to say comes back with it.
+    """
+    from tengri.components.agn.blocks._protocol import AGN_BLOCKS
+    from tengri.parameters.groups import _agn_subblock_declared_params
+
+    emptied = []
+    for torus_type in sorted(AGN_BLOCKS["torus"]):
+        if torus_type == "none":
+            continue
+        declared = _agn_subblock_declared_params("torus", torus_type) or frozenset()
+        if declared and not (declared - {"agn_torus_frac"}):
+            emptied.append(torus_type)
+    assert not emptied, (
+        f"the #2189 narrowing empties the whole agn.torus wildcard scope for "
+        f"{emptied}: those builds need a message naming fracAGN as the cause, "
+        f"not a bare 'covers no parameters'"
+    )
+
+
+def test_nenkova_agnfitter_keeps_a_nonempty_scope_under_active_fracagn(ssp, obs):
+    """The measured half of the guard above, end to end."""
+    model = _build_with_placement(
+        ssp,
+        obs,
+        location="<top>",
+        key="ir_frac",
+        torus_wildcard=FREE,
+        torus_type="nenkova_agnfitter",
+    )
+    free = {p for p in model.spec.free_params if p.startswith("agn_")}
+    assert "agn_torus_frac" not in free, sorted(free)
+    assert "agn_theta_torus" in free, sorted(free)
