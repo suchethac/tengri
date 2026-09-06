@@ -383,19 +383,33 @@ def compute_l_tir(sed: jnp.ndarray, wave: jnp.ndarray) -> jnp.ndarray:
 
 
 def compute_l_dust_absorbed(
-    sed_intrinsic: jnp.ndarray, sed_attenuated: jnp.ndarray, wave: jnp.ndarray
+    sed_intrinsic: jnp.ndarray,
+    sed_attenuated: jnp.ndarray,
+    wave: jnp.ndarray,
+    *,
+    include_lyc: bool = False,
 ) -> jnp.ndarray:
-    """Dust-absorbed luminosity.
+    r"""Dust-absorbed luminosity.
 
     The energy removed from the stellar SED by dust attenuation:
 
     .. math::
 
-        L_{\\rm abs} = \\int (L_{\\nu,\\rm intrinsic}
-                       - L_{\\nu,\\rm attenuated}) \\, d\\nu
+        L_{\rm abs} = \int_{\lambda \ge \lambda_{\rm LyC}}
+            (L_{\nu,\rm intrinsic} - L_{\nu,\rm attenuated}) \, d\nu
 
     This should equal L_TIR when ``dust_eta_balance = 1.0`` (strict
     energy balance).
+
+    Physics convention (#922): Lyman-continuum photons
+    (:math:`\lambda < 912` Å) ionize hydrogen rather than heat dust, so by
+    default they are excluded from the integral -- the same
+    :data:`~tengri.forward.energy_balance.LYMAN_CUTOFF_AA` mask applied by
+    :func:`tengri.forward.energy_balance.bolometric_absorbed_log10`, the
+    canonical single source of truth for this quantity, matching CIGALE.
+    Both functions share :func:`tengri.forward.energy_balance.
+    absorbed_integrand` so the mask cannot silently drift between the two
+    public spellings.
 
     Parameters
     ----------
@@ -405,13 +419,23 @@ def compute_l_dust_absorbed(
         Dust-attenuated stellar SED in erg/s/Hz.
     wave : array, shape (n_wave,)
         Wavelength grid in Angstrom.
+    include_lyc : bool, optional
+        If ``True``, integrate the full grid (no Lyman-continuum mask),
+        recovering the pre-#922 unmasked total. No caller in ``src/`` needs
+        this; it exists as an explicit opt-out rather than a second function,
+        for a caller that genuinely wants the unmasked total (e.g. a
+        precision test comparing against a frozen unmasked reference).
+        Default ``False`` (masked, the energy-balance-consistent value).
 
     Returns
     -------
     float
         Dust-absorbed luminosity in Lsun.
     """
-    absorbed = sed_intrinsic - sed_attenuated
+    from tengri.forward.energy_balance import LYMAN_CUTOFF_AA, absorbed_integrand
+
+    lyman_cutoff_aa = None if include_lyc else LYMAN_CUTOFF_AA
+    absorbed = absorbed_integrand(sed_intrinsic, sed_attenuated, wave, lyman_cutoff_aa)
     return jnp.maximum(_trapz_to_lsun(absorbed, C_AA / wave), 0.0)
 
 

@@ -121,7 +121,15 @@ def test_default_breakdown_keys_match_default_settings(_pred):
 @pytest.mark.parametrize(
     "flag, extra_kwargs",
     [
-        ("enable_energy_balance", {}),
+        # "restrictive" mode: the fixture's dust attenuation/emission
+        # are exactly energy-balanced (eta=1.0, LyC-masked L_absorbed ==
+        # L_ir), so "flexible" mode's floor legitimately returns 0.0 -- same
+        # as the disabled baseline, so it cannot demonstrate the toggle
+        # changed anything. "restrictive" adds a Gaussian log-density term
+        # even at perfect balance (nonzero at its own mean), so it reliably
+        # differs from the 0.0 baseline regardless of how well-balanced the
+        # fixture is.
+        ("enable_energy_balance", {"energy_balance_mode": "restrictive"}),
         ("enable_agn_fraction", {}),
         ("enable_low_agn_fraction", {}),
         ("enable_midir_uv", {}),
