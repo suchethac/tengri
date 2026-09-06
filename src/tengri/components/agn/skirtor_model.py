@@ -32,24 +32,28 @@ from tengri.protocols.component import SEDComponentConfig, SEDComponentState, de
 
 __all__ = ["SKIRTORTorus"]
 
-#: Single source of truth for ``oa_skirtor``/``tau_skirtor``/``p_skirtor``/
-#: ``q_skirtor``/``cos_inc``'s bounds and defaults: the shared
-#: ``agn_oa_skirtor`` / ``agn_tau_skirtor`` / ``agn_p_skirtor`` /
-#: ``agn_q_skirtor`` / ``agn_cos_inc`` declarations in ``_params.py``. Read
-#: once at class-definition time so the class attributes below cannot drift
-#: from them the way ``oa_skirtor`` did (this class restated a stale
-#: ``Uniform(20.0, 60.0, default=40.0)`` while the canonical declaration --
-#: and this class's own vendored grid, ``data/skirtor_templates_v3.h5``,
+#: Single source of truth for EVERY class-level declared parameter's bounds
+#: and default: the corresponding canonical ``agn_*`` declaration in
+#: ``_params.py``. Read once at class-definition time so no class attribute
+#: below can drift from it the way ``oa_skirtor`` did (this class restated a
+#: stale ``Uniform(20.0, 60.0, default=40.0)`` while the canonical declaration
+#: -- and this class's own vendored grid, ``data/skirtor_templates_v3.h5``,
 #: ``grid/opening_angle`` = [10, 80] -- had moved to ``[10, 80]``; Task 1 fix
-#: round 1, finding 2). ``tau_skirtor``/``p_skirtor``/``q_skirtor``/``cos_inc``
-#: were numerically equal to their canonical declarations already but were
-#: still unprotected class-level literals.
+#: round 1, finding 2) and the way ``polar_beta`` restated a stale
+#: ``Uniform(1.0, 2.5)`` against the canonical ``[1.0, 2.0]`` (Task 14 fix
+#: round 1). Task 14 fix round 2: a re-review found the SAME drift class
+#: twice more (``polar_ebv`` default 0.1 vs canonical 0.03; ``log_lbol``
+#: default 11.0 vs canonical 10.0) after the round-1 fix had already derived
+#: ten of the twelve -- so ALL twelve are now derived, with none left as a
+#: literal a future reviewer would have to notice by hand.
+_LOG_LBOL_PRIOR = declared_prior(_AGN_PARAMS, "agn_log_lbol")
 _OA_SKIRTOR_PRIOR = declared_prior(_AGN_PARAMS, "agn_oa_skirtor")
 _TAU_SKIRTOR_PRIOR = declared_prior(_AGN_PARAMS, "agn_tau_skirtor")
 _P_SKIRTOR_PRIOR = declared_prior(_AGN_PARAMS, "agn_p_skirtor")
 _Q_SKIRTOR_PRIOR = declared_prior(_AGN_PARAMS, "agn_q_skirtor")
 _COS_INC_PRIOR = declared_prior(_AGN_PARAMS, "agn_cos_inc")
 _RADIUS_RATIO_PRIOR = declared_prior(_AGN_PARAMS, "agn_radius_ratio")
+_POLAR_EBV_PRIOR = declared_prior(_AGN_PARAMS, "agn_polar_ebv")
 _POLAR_T_PRIOR = declared_prior(_AGN_PARAMS, "agn_polar_T")
 _POLAR_BETA_PRIOR = declared_prior(_AGN_PARAMS, "agn_polar_beta")
 _BAND_FRAC_PRIOR = declared_prior(_AGN_PARAMS, "agn_band_frac")
@@ -209,11 +213,11 @@ class SKIRTORTorus(SEDModelComponent):
 
     # Free parameters: auto-discovered
     log_lbol = Uniform(
-        8.0,
-        14.0,
+        _LOG_LBOL_PRIOR.lo,
+        _LOG_LBOL_PRIOR.hi,
         description="AGN bolometric luminosity",
         units="dex (L_sun)",
-        default=11.0,
+        default=_LOG_LBOL_PRIOR.default,
     )
     tau_skirtor = Uniform(
         _TAU_SKIRTOR_PRIOR.lo,
@@ -265,11 +269,11 @@ class SKIRTORTorus(SEDModelComponent):
         default=_BAND_FRAC_PRIOR.default,
     )
     polar_ebv = Uniform(
-        0.0,
-        0.5,
+        _POLAR_EBV_PRIOR.lo,
+        _POLAR_EBV_PRIOR.hi,
         description="Polar dust E(B-V) (Type-1 sightline)",
         units="mag",
-        default=0.1,
+        default=_POLAR_EBV_PRIOR.default,
     )
     polar_T = Uniform(
         _POLAR_T_PRIOR.lo,

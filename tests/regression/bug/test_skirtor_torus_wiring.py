@@ -17,6 +17,17 @@ identical physical quantity is ``agn_polar_T`` -- two different registered
 names for the same physics on the two paths ("skirtor" registers both a
 standalone class and a composable block under the same string; Task 12).
 
+Fix round 2 re-review found the same restated-literal-with-drifted-default
+class surviving in two more places after round 1 had already derived ten of
+the twelve declared parameters from canonical: ``polar_ebv`` (default 0.1 vs
+canonical ``agn_polar_ebv`` 0.03) and ``log_lbol`` (default 11.0 vs canonical
+``agn_log_lbol`` 10.0). ``tools/check_param_defaults.py`` cannot see either
+(in-range != equal). All twelve now derive from ``declared_prior``, and
+``test_skirtor_torus_all_declared_params_match_canonical`` (below) iterates
+every declared parameter live so this drift class is impossible for this
+class going forward, not merely absent from the names a reviewer happened to
+check this round.
+
 This file guards:
 
 1. ``agn_radius_ratio`` changes the SED on the CLASS path
@@ -24,7 +35,9 @@ This file guards:
    for -- and, separately, via the composable builder (already wired before
    this task; kept as a belt-and-suspenders regression guard).
 2. ``polar_beta`` and the renamed ``polar_T`` declarations match the
-   canonical ``_params.py`` declarations exactly.
+   canonical ``_params.py`` declarations exactly, and (fix round 2) EVERY
+   declared parameter's bounds and default match canonical, with a
+   documented allow-list for any deliberate deviation.
 3. The class and the composable ``skirtor_torus_block`` expose the SAME
    registered parameter names for every physics parameter they share
    (RULING R12d): a hand-written map cannot notice a future rename, so the
@@ -221,6 +234,63 @@ def test_skirtor_torus_class_polar_t_matches_canonical():
     assert class_prior.lo == canonical.lo
     assert class_prior.hi == canonical.hi
     assert class_prior.default == canonical.default
+
+
+#: Deliberate deviations from the canonical declaration, by registered name,
+#: with the one-line reason the ruling requires. Empty: every one of
+#: SKIRTORTorus's twelve declared parameters derives from its canonical
+#: declaration via ``declared_prior`` (Task 14 fix round 2) -- there is
+#: currently no deliberate deviation on this class. Kept as a named,
+#: documented allow-list (rather than skipping the check outright) so a
+#: future deliberate deviation has one place to go, with a reason, instead
+#: of silently drifting back into a hardcoded literal.
+_DELIBERATE_DEVIATIONS: dict[str, str] = {}
+
+
+def test_skirtor_torus_all_declared_params_match_canonical():
+    """Every SKIRTORTorus declared parameter's bounds AND default must equal
+    the canonical ``_params.py`` declaration of its registered name.
+
+    Task 14 fix round 2: a re-review found the restated-literal-with-drifted-
+    default class surviving in TWO more places after fix round 1 had already
+    derived ten of the twelve declared parameters from their canonical
+    declarations: ``polar_ebv`` (default 0.1 vs canonical
+    ``agn_polar_ebv`` 0.03, ``_params.py:454-462``) and ``log_lbol`` (default
+    11.0 vs canonical ``agn_log_lbol`` 10.0, ``_params.py:65-69``).
+    ``tools/check_param_defaults.py`` cannot see either drift -- it only
+    checks that a signature default is INSIDE the declared prior, not that a
+    class-level restatement EQUALS it exactly. Iterates
+    ``declared_parameters()`` live (never a hand-picked subset of names) so
+    this drift class is impossible for this class going forward, not merely
+    absent from the names a reviewer happened to check this round.
+    """
+    comp = SKIRTORTorus()
+    declared = comp.declared_parameters()
+    assert len(declared) == 12, (
+        f"expected 12 declared parameters on SKIRTORTorus, got {len(declared)}: "
+        f"{sorted(d.name for d in declared)} (update this test's canonical-name "
+        "loop and the allow-list docstring if a parameter was deliberately added "
+        "or removed)"
+    )
+
+    mismatches = []
+    for decl in declared:
+        name = decl.name
+        if name in _DELIBERATE_DEVIATIONS:
+            continue
+        canonical = declared_prior(_AGN_PARAMS, name)
+        class_prior = decl.prior
+        if class_prior.lo != canonical.lo:
+            mismatches.append(f"{name}.lo: class={class_prior.lo} canonical={canonical.lo}")
+        if class_prior.hi != canonical.hi:
+            mismatches.append(f"{name}.hi: class={class_prior.hi} canonical={canonical.hi}")
+        if class_prior.default != canonical.default:
+            mismatches.append(
+                f"{name}.default: class={class_prior.default} canonical={canonical.default}"
+            )
+    assert not mismatches, "SKIRTORTorus restates a canonical declaration:\n" + "\n".join(
+        mismatches
+    )
 
 
 def test_skirtor_torus_radius_ratio_declared():
