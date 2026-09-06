@@ -166,10 +166,12 @@ def test_emission_waveprecomp_lights_up_and_matches_exact(synthetic_ssp_wide):
 
     ssp = synthetic_ssp_wide
     f_exact = np.asarray(_model(True, ssp).predict_photometry({}))
-    try:
-        f_lut = np.asarray(_model(True, ssp, approx=WavePrecomp()).predict_photometry({}))
-    except TypeError:
-        pytest.skip("SEDModel constructor does not accept approx= in this build")
+    # No try/except: ``approx=WavePrecomp(...)`` is the documented build-time
+    # knob, and the dict/bool/string spellings that were removed are precisely
+    # what raises TypeError at construction now. A handler skipping on TypeError
+    # could therefore only fire when the documented API regressed -- reporting
+    # "this build" for a defect.
+    f_lut = np.asarray(_model(True, ssp, approx=WavePrecomp()).predict_photometry({}))
     f_no = np.asarray(_model(False, ssp).predict_photometry({}))
     # far-IR is lit in the LUT path too (not silently zero)
     assert f_lut[4] > f_no[4] * 100.0, f"WavePrecomp far-IR must light up: {f_lut[4]:.3e}"

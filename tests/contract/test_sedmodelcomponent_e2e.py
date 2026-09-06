@@ -298,17 +298,20 @@ def test_radio_e2e(ssp, obs, radio_agn):
     """Each AGN-radio variant builds + predicts. Reads L_ir / L_agn_bol /
     log_mstar via optional_inputs from upstream when available; falls back to
     0.0 when not."""
-    try:
-        model = _silent_build(
-            ssp_data=ssp,
-            observation=obs,
-            sfh={"type": "dpl", "all_params": Fixed(DEFAULT)},
-            radio={"agn": {"type": radio_agn}, "all_params": Fixed(DEFAULT)},
-            dust_attenuation=_fixed_dust(),
-            redshift=Fixed(0.05),
-        )
-    except (TypeError, KeyError, ValueError) as exc:
-        _skip_with_tally(f"radio agn={radio_agn!r} build skipped: {exc}", radio_agn)
+    # Both variants are hardcoded above and documented as the canonical
+    # surface, so neither can be absent for an environmental reason. The
+    # handler that used to sit here caught ``(TypeError, KeyError, ValueError)``
+    # and skipped via ``_skip_with_tally`` -- and the tally is printed at
+    # end-of-session, never asserted, so it made the skip visible without making
+    # it fail. A build that raises now fails.
+    model = _silent_build(
+        ssp_data=ssp,
+        observation=obs,
+        sfh={"type": "dpl", "all_params": Fixed(DEFAULT)},
+        radio={"agn": {"type": radio_agn}, "all_params": Fixed(DEFAULT)},
+        dust_attenuation=_fixed_dust(),
+        redshift=Fixed(0.05),
+    )
     _assert_phot_ok(model.predict_photometry({}))
 
 
@@ -317,19 +320,20 @@ def test_xray_e2e(ssp, obs, xray_type):
     """Each X-ray component builds + predicts."""
     if xray_type not in _REGISTRY:
         pytest.skip(f"{xray_type!r} not registered")
-    try:
-        model = _silent_build(
-            ssp_data=ssp,
-            observation=obs,
-            sfh={"type": "dpl", "all_params": Fixed(DEFAULT)},
-            xray={"type": xray_type, "all_params": Fixed(DEFAULT)},
-            dust_attenuation=_fixed_dust(),
-            redshift=Fixed(0.05),
-        )
-    except (TypeError, KeyError, ValueError) as exc:
-        # These X-ray types were unified into the build selector by #1120.
-        # If a ValueError still fires, it indicates a real build issue.
-        pytest.skip(f"{xray_type!r} build skipped: {exc}")
+    # The handler that used to sit here caught ``(TypeError, KeyError,
+    # ValueError)`` and skipped, under a comment reading "If a ValueError still
+    # fires, it indicates a real build issue" -- so it skipped on exactly the
+    # signal it named as a defect. The ``_REGISTRY`` check above already covers
+    # the "not registered" case, which is the only environmental one here, so a
+    # build that raises now fails.
+    model = _silent_build(
+        ssp_data=ssp,
+        observation=obs,
+        sfh={"type": "dpl", "all_params": Fixed(DEFAULT)},
+        xray={"type": xray_type, "all_params": Fixed(DEFAULT)},
+        dust_attenuation=_fixed_dust(),
+        redshift=Fixed(0.05),
+    )
     _assert_phot_ok(model.predict_photometry({}))
 
 
