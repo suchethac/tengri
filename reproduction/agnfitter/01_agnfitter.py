@@ -1660,20 +1660,18 @@ print(
 # extra_log_prior=callable(params, state))` reaches every inference backend
 # (MAP/VI/MCMC) with the same callable.
 #
-# Six of the eight priors are shown on the capstone-like AGN+galaxy build
+# Seven of the eight priors are shown on the capstone-like AGN+galaxy build
 # below, each fed a "data" stand-in derived from the model's OWN prediction
 # (a self-consistency demonstration of the API, not a real observation).
-# **Caveat:** `prior_stellar_mass` needs `ga` — AGNfitter-RX's raw galaxy
-# flux-normalization scalar, a template-bookkeeping exponent specific to its
-# own model dictionary with no tengri-side equivalent — left disabled here,
-# exactly as the docstring recommends. **Caveat:** `prior_energy_balance`
-# is also left disabled: measured below (`dust_eta_balance` swept 0.1-5 at
-# fixed `dust_T`/`tau_v`, then `dust_tau_v` swept 0.01-50 at `dust_eta_balance
-# = 1`), `schreiber2016`/`schreiber2018`'s cold-dust re-emission does not
-# respond to `dust_eta_balance` at all and asymptotes at `L_sb_emit/L_absorbed
-# ≈ 0.98` as `tau_v → ∞` — never reaching the prior's required `L_sb_emit ≥
-# L_gal_att`, so it hard-rejects for any Calzetti-attenuated galaxy built on
-# either backend. Not a notebook-side parameter choice to fix.
+# `prior_energy_balance` compares the galaxy-attenuated (dust-absorbed)
+# luminosity against the cold-dust re-emitted luminosity; at
+# `dust_eta_balance`'s default (`Fixed(1.0)`, strict energy balance: `L_IR =
+# eta * L_absorbed`) the two match by construction, so the prior contributes
+# a normal (non-rejecting) log-density here. **Caveat:** `prior_stellar_mass`
+# needs `ga` — AGNfitter-RX's raw galaxy flux-normalization scalar, a
+# template-bookkeeping exponent specific to its own model dictionary with no
+# tengri-side equivalent — left disabled here, exactly as the docstring
+# recommends.
 
 # %%
 from tengri.agn.priors import AGNFITTER_PRIOR_DEFAULTS, agnfitter_priors
@@ -1743,7 +1741,7 @@ total_default, breakdown_default = agnfitter_priors(
 )
 total_all, breakdown_all = agnfitter_priors(
     pred13, redshift=_z13, dlum=_dL13, torus_key="sed_agn_torus", disc_key="sed_agn_disc",
-    enable_energy_balance=False,  # dust_eta_balance no-op on this dust backend (Caveat above)
+    enable_energy_balance=True,
     enable_stellar_mass=False,  # needs `ga`; tengri has no equivalent (Caveat above)
     enable_agn_fraction=True, data_flux_1500=_flux_1500,
     enable_low_agn_fraction=True,
@@ -1765,17 +1763,10 @@ print(f"§13  AGNfitter-rX default flags (energy_balance flexible + agn_fraction
 print("     | prior            | log-prior   |")
 for k, v in breakdown_default.items():
     print(f"     | {k:16s} | {_fmt_prior(v):>11s} |")
-print(f"\n§13  six reachable priors, all finite: total = {float(total_all):.3f}")
+print(f"\n§13  seven reachable priors, all finite: total = {float(total_all):.3f}")
 print("     | prior            | log-prior   |")
 for k, v in breakdown_all.items():
     print(f"     | {k:16s} | {_fmt_prior(v):>11s} |")
-print(
-    f"§13  AGNfitter-rX's own default flags include energy_balance, which is "
-    f"AGNFITTER_HARD_REJECT ({AGNFITTER_HARD_REJECT:g}, a documented flag value, not a smooth "
-    "log-density -- prior_energy_balance's Notes) here and on every Calzetti-attenuated "
-    "schreiber2016/schreiber2018 build measured above -- excluded from the six reachable "
-    "priors for that reason, not a per-build coincidence."
-)
 
 # %% [markdown]
 # ### §13′ Attaching the priors to a fit
