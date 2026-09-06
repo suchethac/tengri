@@ -113,8 +113,10 @@ def modified_blackbody(
     # full energy balance (default); < 1.0 scales the MBB luminosity down.
     L_absorbed = L_absorbed * jnp.clip(dust_epsilon_mbb, 0.0, 1.0)
 
-    # CMB correction: always applied. At z=0 this is a no-op since
-    # T_cmb(z=0) terms cancel and B_nu(T_cmb)/B_nu(T_dust) ~ 0.
+    # CMB correction: always applied. At z=0 the CMB suppression is
+    # wavelength-dependent: ~0.4% at 1 mm (contrast ~ 0.996) and ~8% at 1 cm
+    # (contrast ~ 0.92) for T_dust = 25 K, becoming negligible only at much
+    # shorter wavelengths in the FIR peak.
     T_eff = cmb_corrected_temperature(dust_T, redshift, dust_beta_ir)
 
     wavelength_cm = wavelength_aa * _AA_TO_CM
