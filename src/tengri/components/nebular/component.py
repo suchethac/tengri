@@ -608,6 +608,14 @@ class NebularSEDComponent(TemplateThreading):
         _dig_frac_is_zero = isinstance(_dig_frac, (int, float)) and float(_dig_frac) == 0.0
         _dig_kwargs = None  # built on demand only when needed
         if not _dig_frac_is_zero:
+            # THE SNAPSHOT IS TAKEN HERE, ~80 lines above its first use. Any key
+            # a backend branch below adds to ``common_kwargs`` is therefore
+            # absent from this copy and must be handed to the DIG calls
+            # explicitly, or the DIG regime silently evaluates something the HII
+            # regime did not. That is exactly how #2195 happened: the cue branch
+            # resolved the ionizing population into ``common_kwargs`` after this
+            # line, so the DIG call fell back to Cue's population-independent
+            # defaults. See ``cue_population`` in the cue branch.
             _dig_kwargs = dict(common_kwargs)
             _dig_kwargs["neb_logU"] = common_kwargs["neb_logU"] + jnp.asarray(_dig_delta_logU)
 

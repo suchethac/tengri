@@ -52,8 +52,6 @@ both DIG parameters.
 
 from __future__ import annotations
 
-import warnings
-
 import jax
 import jax.numpy as jnp
 import numpy as np
@@ -103,9 +101,13 @@ def _build(neb_extra, *, approx=None):
     )
     if approx is not None:
         kwargs["approx"] = approx
-    with warnings.catch_warnings():
-        warnings.simplefilter("ignore")
-        return SEDModel.build(**kwargs)
+    # No warning filter here, deliberately. Every build this file makes was
+    # measured with ``simplefilter("always")`` and raises exactly zero warnings,
+    # so a blanket ignore silenced nothing and would only have hidden the next
+    # one. The degenerate pair this fixture exercises on purpose,
+    # ``dig_delta_logU`` free at ``dig_frac = 0``, is a plausible future
+    # advisory; it should be visible here, not swallowed.
+    return SEDModel.build(**kwargs)
 
 
 def _prior_quantiles(model, name, q=0.05):
