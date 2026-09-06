@@ -214,6 +214,15 @@ jobs:
       # check_doc_examples.py resolves symbols and never looked at paths.
       # Stdlib-only, same as the guards around it.
       - run: python tools/check_claude_md_paths.py
+      # A test may not turn an arbitrary failure into a skip. The legitimate
+      # idiom is `except FileNotFoundError: pytest.skip(...)` -- a class that
+      # can only mean the environment lacks a file. A wider handler also
+      # catches a real regression, and then the test reports SKIPPED (which
+      # reads as "not applicable here") while the code is broken. Five
+      # CompileCache tests had never run for exactly this reason: their fixture
+      # passed a dict where an Observation belongs, and `except Exception`
+      # relabelled the TypeError "Could not create minimal model". Stdlib-only.
+      - run: python tools/check_test_skip_handlers.py
       # The verification protocol is where README sends anyone asking what is
       # safe to use for science, and its Test File column IS the evidence. It
       # cited eight crossval tests; all eight were absent, every row read
