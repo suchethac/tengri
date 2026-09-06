@@ -187,6 +187,45 @@ resolution and validated against the upstream library.
    :members: cat3d_wind_lowfwd_sed, create_cat3d_wind_lowfwd_from_grid
    :noindex:
 
+Legacy AGN template-library modules
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+Torus/disc template libraries and their ``SEDModelComponent`` adapters that
+predate the AGNfitter-rX parity branch (opt-in alternatives to the default
+``AGNSEDComponent`` registry entries above). Each adapter class names its own
+loader module under "See Also" in its docstring.
+
+.. automodule:: tengri.components.agn.skirtor
+   :members: create_skirtor_from_grid, skirtor_analytic, skirtor_sed
+   :noindex:
+
+.. automodule:: tengri.components.agn.nenkova_agnfitter
+   :members: create_nenkova_agnfitter_from_grid, nenkova_agnfitter_sed
+   :noindex:
+
+.. automodule:: tengri.components.agn.skirtor_agnfitter
+   :members: create_skirtor_agnfitter_from_grid, skirtor_agnfitter_sed
+   :noindex:
+
+.. automodule:: tengri.components.agn.cat3d_wind
+   :members: cat3d_wind_analytic, cat3d_wind_sed, cat3d_wind_sed_from_grid,
+      create_cat3d_wind_from_grid, load_cat3d_wind_default_grid,
+      load_cat3d_wind_grid
+   :noindex:
+
+.. automodule:: tengri.components.agn.silva04
+   :members: Silva04Grid, create_silva04_from_grid, load_silva04_grid,
+      silva04_analytic, silva04_sed, silva04_sed_from_grid
+   :noindex:
+
+.. automodule:: tengri.components.agn.cat3d_torus_model
+   :members: CAT3DTorus
+   :noindex:
+
+.. automodule:: tengri.components.agn.kd18_disc_model
+   :members: KD18Disc
+   :noindex:
+
 Nebular emission
 ----------------
 
