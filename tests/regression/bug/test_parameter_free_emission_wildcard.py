@@ -227,26 +227,26 @@ def test_parameter_free_engine_is_declared_not_inferred(engine):
     assert _declared_param_names(engine) == frozenset()
 
     split = _REGISTRY.get("energy_balance_split")
-    if split is not None:
-        assert getattr(split, "declares_no_parameters", False) is False, (
-            "energy_balance_split reads six parameters declared in "
-            "components/dust/_params.py; marking it parameter-free would pin all six."
-        )
-        # It answers the same question from the other side, via
-        # ``reads_parameters``. What matters is that the two engines get
-        # *different* answers -- this one must never be narrowed to the empty
-        # set, which is what would pin every knob it reads.
-        split_declared = _declared_param_names("energy_balance_split")
-        assert split_declared, (
-            "energy_balance_split narrowed to an empty/None declared set. Empty "
-            "would pin all six knobs it reads; the marker that distinguishes it "
-            f"from {engine} has stopped working. Got: {split_declared!r}"
-        )
-        assert split_declared != _declared_param_names(engine), (
-            f"energy_balance_split and {engine} now narrow to the same set, so the "
-            "empty-_priors ambiguity is no longer being resolved."
-        )
-        assert "dust_T_warm" in split_declared, (
-            "energy_balance_split's declared set no longer contains dust_T_warm, "
-            f"a knob its predict reads. Got: {sorted(split_declared)}"
-        )
+    assert split is not None, "probe setup failed: energy_balance_split was not registered"
+    assert getattr(split, "declares_no_parameters", False) is False, (
+        "energy_balance_split reads six parameters declared in "
+        "components/dust/_params.py; marking it parameter-free would pin all six."
+    )
+    # It answers the same question from the other side, via
+    # ``reads_parameters``. What matters is that the two engines get
+    # *different* answers -- this one must never be narrowed to the empty
+    # set, which is what would pin every knob it reads.
+    split_declared = _declared_param_names("energy_balance_split")
+    assert split_declared, (
+        "energy_balance_split narrowed to an empty/None declared set. Empty "
+        "would pin all six knobs it reads; the marker that distinguishes it "
+        f"from {engine} has stopped working. Got: {split_declared!r}"
+    )
+    assert split_declared != _declared_param_names(engine), (
+        f"energy_balance_split and {engine} now narrow to the same set, so the "
+        "empty-_priors ambiguity is no longer being resolved."
+    )
+    assert "dust_T_warm" in split_declared, (
+        "energy_balance_split's declared set no longer contains dust_T_warm, "
+        f"a knob its predict reads. Got: {sorted(split_declared)}"
+    )

@@ -81,16 +81,20 @@ def test_ssp_threaded_as_jit_parameter(model_stellar_only):
     fn_jit = model_stellar_only._get_or_build_predict_observables_jit()
 
     # Trace the function with dummy inputs to inspect the jaxpr's input
-    # avals. The closure takes (params, fixed_values, ssp_data) at the
-    # Python level — but ``jax.make_jaxpr`` flattens pytrees, so the
-    # number of in_avals equals the total leaf count across all three.
+    # avals. The closure takes (params, fixed_values, ssp_data,
+    # template_data, ztable_data) at the Python level — but
+    # ``jax.make_jaxpr`` flattens pytrees, so the number of in_avals
+    # equals the total leaf count across all five.
     # That's a structural property: the SSP arrays MUST appear among the
     # leaves (they're traced inputs), not be baked as constants.
     dummy_params = {}
     dummy_fixed = model_stellar_only.spec.get_fixed_values()
     dummy_ssp = model_stellar_only.ssp_data
     dummy_template = model_stellar_only._template_data_for_jit()
-    jaxpr = jax.make_jaxpr(fn_jit)(dummy_params, dummy_fixed, dummy_ssp, dummy_template)
+    dummy_ztable = model_stellar_only._ztable_data_for_jit()
+    jaxpr = jax.make_jaxpr(fn_jit)(
+        dummy_params, dummy_fixed, dummy_ssp, dummy_template, dummy_ztable
+    )
 
     # SSP grid shapes that we expect among the traced inputs. If the SSP
     # arrays were closure-baked, they'd appear as Constant ops with no

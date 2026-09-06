@@ -49,7 +49,6 @@ src/tengri/components/dust/attenuation.py | jnp.clip with floor 0.0 < 1e-20 -> 1
 src/tengri/components/dust/attenuation.py | jnp.maximum with floor 0.0 < 1e-20 -> 2
 src/tengri/components/dust/dust_emission_precompute.py | jnp.clip with floor 0.0 < 1e-20 -> 1
 src/tengri/components/dust/dust_emission_precompute.py | jnp.maximum with floor 1e-30 < 1e-20 -> 1
-src/tengri/components/dust/emission/_physics.py | jnp.clip with floor -100.0 < 1e-20 -> 1
 src/tengri/components/dust/emission/_physics.py | jnp.clip with floor 0.0 < 1e-20 -> 3
 src/tengri/components/dust/emission/_physics.py | jnp.maximum with floor 0.0 < 1e-20 -> 1
 src/tengri/components/dust/emission/analytic/_closures.py | jnp.clip with floor 0.0 < 1e-20 -> 2
@@ -85,12 +84,12 @@ src/tengri/components/stellar/sfh/dense_basis.py | jnp.maximum with floor 0.0 < 
 src/tengri/components/stellar/sfh/dense_basis.py | jnp.maximum with floor 1e-30 < 1e-20 -> 1
 src/tengri/components/stellar/sfh/gp_sfh.py | jnp.clip with floor 0.0 < 1e-20 -> 2
 src/tengri/components/stellar/sfh/mean_sfh.py | jnp.clip with floor 0.0 < 1e-20 -> 2
-src/tengri/components/stellar/sfh/mean_sfh.py | jnp.maximum with floor 0.0 < 1e-20 -> 26
+src/tengri/components/stellar/sfh/mean_sfh.py | jnp.maximum with floor 0.0 < 1e-20 -> 29
 src/tengri/components/stellar/sfh/mean_sfh.py | jnp.maximum with floor 1e-30 < 1e-20 -> 1
 src/tengri/components/stellar/sfh/mean_sfh.py | jnp.maximum with floor 1e-300 < 1e-20 -> 2
 src/tengri/components/stellar/sfh/metallicity_history.py | jnp.clip with floor 0.0 < 1e-20 -> 3
 src/tengri/components/stellar/sfh/metallicity_history.py | jnp.maximum with floor 1e-30 < 1e-20 -> 3
-src/tengri/components/stellar/sfh/nonparametric.py | jnp.clip with floor 0.0 < 1e-20 -> 1
+src/tengri/components/stellar/sfh/nonparametric.py | jnp.clip with floor 0.0 < 1e-20 -> 2
 src/tengri/components/stellar/sfh/nonparametric.py | jnp.maximum with floor 0.0 < 1e-20 -> 1
 src/tengri/components/stellar/sfh/psd_models.py | jnp.maximum with floor 1e-30 < 1e-20 -> 1
 src/tengri/components/stellar/sps/dsps_wrapper.py | jnp.clip with floor 0.0 < 1e-20 -> 12

@@ -31,8 +31,8 @@ def test_roundtrip_with_nebular_off():
     assert orig.nebular_mode == "off"
     groups = orig.to_groups()
     neb = groups.get("neb", None)
-    if neb is not None:
-        assert neb.get("type") == "none", f"Expected 'none', got {neb.get('type')!r}"
+    assert neb is not None, "probe setup failed: the nebular group is absent"
+    assert neb.get("type") == "none", f"Expected 'none', got {neb.get('type')!r}"
     # Round-trip must not raise
     rebuilt = parse_groups(**groups)
     assert rebuilt.nebular_mode == "off"

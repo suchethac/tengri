@@ -187,6 +187,7 @@ def _build_prediction(
             jit_inputs["fixed_values"],
             jit_inputs["ssp_data"],
             jit_inputs["template_data"],
+            jit_inputs.get("ztable_data"),
         )
 
     if data_type == "photometry":

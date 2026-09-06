@@ -1,0 +1,398 @@
+{
+  "meta": {
+    "platform": "cpu",
+    "devices": [
+      "cpu:0"
+    ],
+    "jax": "0.11.0",
+    "env": {
+      "JAX_PLATFORMS": "cpu",
+      "JAX_ENABLE_X64": null,
+      "JAX_DEFAULT_MATMUL_PRECISION": null,
+      "NVIDIA_TF32_OVERRIDE": null,
+      "XLA_PYTHON_CLIENT_PREALLOCATE": null,
+      "TENGRI_DISABLE_JAX_CACHE": "1"
+    },
+    "n_z": 64,
+    "points": {
+      "origin": 0.0,
+      "half_sigma": 0.5
+    },
+    "spec_pixels": 256,
+    "spec_wave_range": [
+      4000.0,
+      9000.0
+    ],
+    "lines": [
+      "Hbeta",
+      "OIII_5007",
+      "Halpha",
+      "NII_6584"
+    ],
+    "mode": "seams",
+    "line_sigma_convention": "floored",
+    "line_sigma_floor": 0.05
+  },
+  "rows": [
+    {
+      "channel": "lines_meas",
+      "model": "bakedin",
+      "path": "exact_fixedz",
+      "snr": 30.0,
+      "line_sigma_convention": "floored",
+      "names": [
+        "dust_tau_diff",
+        "sfh_delayed_log_total_mass"
+      ],
+      "data_type": "photometry",
+      "has_line_catalog": false,
+      "n_data": 2,
+      "approx_state_f64": "ApproxState(n_subbands=5)",
+      "approx_state_f32": "ApproxState(n_subbands=5)",
+      "truth": {
+        "dust_tau_diff": 0.75,
+        "sfh_delayed_log_total_mass": 10.0
+      },
+      "seconds": 17.96,
+      "points": {
+        "origin": {
+          "grad_f64": [
+            28.306912196366817,
+            -107.25217380404538
+          ],
+          "grad_f32": [
+            28.303091049194336,
+            -107.23707580566406
+          ],
+          "grad_exact_f64": [
+            28.306912196366817,
+            -107.25217380404538
+          ],
+          "dtype_f64": [
+            "float64"
+          ],
+          "dtype_f32": [
+            "float32"
+          ],
+          "value_f64": 6.812681340559886,
+          "f64_vs_fd64": 1.2556960151183055e-06,
+          "f32_vs_f64": 0.0001404017921966941,
+          "f32_vs_f64_cw": 0.00014077102445407086,
+          "lut_f64_vs_exact_f64": 0.0,
+          "f32_vs_exact_f64": 0.0001404017921966941,
+          "f32_finite": true,
+          "f32_nonzero": true
+        },
+        "half_sigma": {
+          "grad_f64": [
+            -3410.4104294924196,
+            10066.023571584128
+          ],
+          "grad_f32": [
+            -3410.439453125,
+            10066.119140625
+          ],
+          "grad_exact_f64": [
+            -3410.4104294924196,
+            10066.023571584128
+          ],
+          "dtype_f64": [
+            "float64"
+          ],
+          "dtype_f32": [
+            "float32"
+          ],
+          "value_f64": 1349.884923959755,
+          "f64_vs_fd64": 1.920350811867004e-08,
+          "f32_vs_f64": 9.397666152744708e-06,
+          "f32_vs_f64_cw": 9.494219856750343e-06,
+          "lut_f64_vs_exact_f64": 0.0,
+          "f32_vs_exact_f64": 9.397666152744708e-06,
+          "f32_finite": true,
+          "f32_nonzero": true
+        }
+      }
+    },
+    {
+      "channel": "lines_meas",
+      "model": "bakedin",
+      "path": "auto_fixedz",
+      "snr": 30.0,
+      "error": "ValueError: Likelihood channel 1 ('line_flux_constraint') evaluated at the reference parameters gives log_prob = nan, which is non-finite. Max |prediction| = 3.251e-28, max |data| = 7.442e-28. A chi-squared this large silently absorbs every other channel through floating-point rounding, check this channel's units against what the model predicts for it (#1495)."
+    },
+    {
+      "channel": "lines_meas",
+      "model": "bakedin",
+      "path": "exact_freez",
+      "snr": 30.0,
+      "line_sigma_convention": "floored",
+      "names": [
+        "dust_tau_diff",
+        "redshift",
+        "sfh_delayed_log_total_mass"
+      ],
+      "data_type": "photometry",
+      "has_line_catalog": false,
+      "n_data": 2,
+      "approx_state_f64": "ApproxState(n_subbands=5)",
+      "approx_state_f32": "ApproxState(n_subbands=5)",
+      "truth": {
+        "dust_tau_diff": 0.75,
+        "redshift": 0.525,
+        "sfh_delayed_log_total_mass": 10.0
+      },
+      "seconds": 17.7,
+      "points": {
+        "origin": {
+          "grad_f64": [
+            27.52966112698271,
+            118.76585699392461,
+            -107.25217380404577
+          ],
+          "grad_f32": [
+            27.513965606689453,
+            118.71635437011719,
+            -107.20122528076172
+          ],
+          "grad_exact_f64": [
+            27.52966112698271,
+            118.76585699392461,
+            -107.25217380404577
+          ],
+          "dtype_f64": [
+            "float64"
+          ],
+          "dtype_f32": [
+            "float32"
+          ],
+          "value_f64": 6.812681340559882,
+          "f64_vs_fd64": 1.8602930634170325e-05,
+          "f32_vs_f64": 0.00044803391951600964,
+          "f32_vs_f64_cw": 0.0005701312566420517,
+          "lut_f64_vs_exact_f64": 0.0,
+          "f32_vs_exact_f64": 0.00044803391951600964,
+          "f32_finite": true,
+          "f32_nonzero": true
+        },
+        "half_sigma": {
+          "grad_f64": [
+            564.7908023053127,
+            1174.660829570305,
+            -1263.926761780821
+          ],
+          "grad_f32": [
+            564.790771484375,
+            1174.6590576171875,
+            -1263.9232177734375
+          ],
+          "grad_exact_f64": [
+            564.7908023053127,
+            1174.660829570305,
+            -1263.926761780821
+          ],
+          "dtype_f64": [
+            "float64"
+          ],
+          "dtype_f32": [
+            "float32"
+          ],
+          "value_f64": 244.72540133358345,
+          "f64_vs_fd64": 2.360957774811372e-06,
+          "f32_vs_f64": 2.1824540167874924e-06,
+          "f32_vs_f64_cw": 2.803965776016828e-06,
+          "lut_f64_vs_exact_f64": 0.0,
+          "f32_vs_exact_f64": 2.1824540167874924e-06,
+          "f32_finite": true,
+          "f32_nonzero": true
+        }
+      }
+    },
+    {
+      "channel": "lines_meas",
+      "model": "bakedin",
+      "path": "auto_freez",
+      "snr": 30.0,
+      "error": "ValueError: Likelihood channel 1 ('line_flux_constraint') evaluated at the reference parameters gives log_prob = nan, which is non-finite. Max |prediction| = 1.773e-28, max |data| = 9.679e-30. A chi-squared this large silently absorbs every other channel through floating-point rounding, check this channel's units against what the model predicts for it (#1495)."
+    },
+    {
+      "channel": "lines_meas",
+      "model": "bakedin",
+      "path": "exact_fixedz",
+      "snr": 300.0,
+      "line_sigma_convention": "floored",
+      "names": [
+        "dust_tau_diff",
+        "sfh_delayed_log_total_mass"
+      ],
+      "data_type": "photometry",
+      "has_line_catalog": false,
+      "n_data": 2,
+      "approx_state_f64": "ApproxState(n_subbands=5)",
+      "approx_state_f32": "ApproxState(n_subbands=5)",
+      "truth": {
+        "dust_tau_diff": 0.75,
+        "sfh_delayed_log_total_mass": 10.0
+      },
+      "seconds": 15.81,
+      "points": {
+        "origin": {
+          "grad_f64": [
+            283.0691219636674,
+            -1072.5217380405309
+          ],
+          "grad_f32": [
+            282.4321594238281,
+            -1070.080322265625
+          ],
+          "grad_exact_f64": [
+            283.0691219636674,
+            -1072.5217380405309
+          ],
+          "dtype_f64": [
+            "float64"
+          ],
+          "dtype_f32": [
+            "float32"
+          ],
+          "value_f64": 6.812681340570116,
+          "f64_vs_fd64": 1.259105476593606e-05,
+          "f32_vs_f64": 0.0022746396556103483,
+          "f32_vs_f64_cw": 0.0022763322069035783,
+          "lut_f64_vs_exact_f64": 0.0,
+          "f32_vs_exact_f64": 0.0022746396556103483,
+          "f32_finite": true,
+          "f32_nonzero": true
+        },
+        "half_sigma": {
+          "grad_f64": [
+            -345451.9506800922,
+            1022823.275816957
+          ],
+          "grad_f32": [
+            -345455.3125,
+            1022834.375
+          ],
+          "grad_exact_f64": [
+            -345451.9506800922,
+            1022823.275816957
+          ],
+          "dtype_f64": [
+            "float64"
+          ],
+          "dtype_f32": [
+            "float32"
+          ],
+          "value_f64": 139070.53992487333,
+          "f64_vs_fd64": 1.8892277310620574e-08,
+          "f32_vs_f64": 1.0742218661687752e-05,
+          "f32_vs_f64_cw": 1.0851515902523958e-05,
+          "lut_f64_vs_exact_f64": 0.0,
+          "f32_vs_exact_f64": 1.0742218661687752e-05,
+          "f32_finite": true,
+          "f32_nonzero": true
+        }
+      }
+    },
+    {
+      "channel": "lines_meas",
+      "model": "bakedin",
+      "path": "auto_fixedz",
+      "snr": 300.0,
+      "error": "ValueError: Likelihood channel 1 ('line_flux_constraint') evaluated at the reference parameters gives log_prob = nan, which is non-finite. Max |prediction| = 3.251e-28, max |data| = 7.137e-28. A chi-squared this large silently absorbs every other channel through floating-point rounding, check this channel's units against what the model predicts for it (#1495)."
+    },
+    {
+      "channel": "lines_meas",
+      "model": "bakedin",
+      "path": "exact_freez",
+      "snr": 300.0,
+      "line_sigma_convention": "floored",
+      "names": [
+        "dust_tau_diff",
+        "redshift",
+        "sfh_delayed_log_total_mass"
+      ],
+      "data_type": "photometry",
+      "has_line_catalog": false,
+      "n_data": 2,
+      "approx_state_f64": "ApproxState(n_subbands=5)",
+      "approx_state_f32": "ApproxState(n_subbands=5)",
+      "truth": {
+        "dust_tau_diff": 0.75,
+        "redshift": 0.525,
+        "sfh_delayed_log_total_mass": 10.0
+      },
+      "seconds": 27.49,
+      "points": {
+        "origin": {
+          "grad_f64": [
+            275.2966112698227,
+            1187.6585699393165,
+            -1072.521738040528
+          ],
+          "grad_f32": [
+            273.4167175292969,
+            1181.67138671875,
+            -1066.33984375
+          ],
+          "grad_exact_f64": [
+            275.2966112698227,
+            1187.6585699393165,
+            -1072.521738040528
+          ],
+          "dtype_f64": [
+            "float64"
+          ],
+          "dtype_f32": [
+            "float32"
+          ],
+          "value_f64": 6.812681340569997,
+          "f64_vs_fd64": 8.841203294034007e-06,
+          "f32_vs_f64": 0.005424954163581076,
+          "f32_vs_f64_cw": 0.006828611990008432,
+          "lut_f64_vs_exact_f64": 0.0,
+          "f32_vs_exact_f64": 0.005424954163581076,
+          "f32_finite": true,
+          "f32_nonzero": true
+        },
+        "half_sigma": {
+          "grad_f64": [
+            54608.72949038388,
+            111902.4894560496,
+            -119534.27561407487
+          ],
+          "grad_f32": [
+            54608.484375,
+            111901.6875,
+            -119533.0859375
+          ],
+          "grad_exact_f64": [
+            54608.72949038388,
+            111902.4894560496,
+            -119534.27561407487
+          ],
+          "dtype_f64": [
+            "float64"
+          ],
+          "dtype_f32": [
+            "float32"
+          ],
+          "value_f64": 22767.588414894697,
+          "f64_vs_fd64": 2.2103869352933133e-06,
+          "f32_vs_f64": 8.432644373766502e-06,
+          "f32_vs_f64_cw": 9.952597853262397e-06,
+          "lut_f64_vs_exact_f64": 0.0,
+          "f32_vs_exact_f64": 8.432644373766502e-06,
+          "f32_finite": true,
+          "f32_nonzero": true
+        }
+      }
+    },
+    {
+      "channel": "lines_meas",
+      "model": "bakedin",
+      "path": "auto_freez",
+      "snr": 300.0,
+      "error": "ValueError: Likelihood channel 1 ('line_flux_constraint') evaluated at the reference parameters gives log_prob = nan, which is non-finite. Max |prediction| = 1.773e-28, max |data| = 9.282e-30. A chi-squared this large silently absorbs every other channel through floating-point rounding, check this channel's units against what the model predicts for it (#1495)."
+    }
+  ]
+}

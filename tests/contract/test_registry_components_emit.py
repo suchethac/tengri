@@ -47,7 +47,7 @@ import jax
 import jax.numpy as jnp
 import pytest
 
-from tengri import Fixed, SEDModel
+from tengri import DEFAULT, Fixed, SEDModel
 from tengri.parameters.groups import _legacy_radio_type_to_blocks
 from tengri.registry import _RegistryTable
 
@@ -359,6 +359,14 @@ class TestRegistryComponentsEmit:
                         observation=synthetic_tophat_obs,
                         sfh={"type": "const"},
                         radio=radio_spec,
+                        # The legacy mapping leaves the SF arm on its FIRRC
+                        # default, which requires dust at build time (#2106).
+                        dust_attenuation={
+                            "type": "two_component",
+                            "law": "calzetti",
+                            "all_params": Fixed(DEFAULT),
+                        },
+                        dust_emission={"type": "dale2014_cigale", "all_params": Fixed(DEFAULT)},
                         redshift=Fixed(0.1),
                     )
 

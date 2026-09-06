@@ -124,23 +124,26 @@ class TestDirichletSFH:
     """Tests for the Dirichlet prior SFH (Leja+2017)."""
 
     def test_equal_z_gives_roughly_equal_fractions(self):
-        """Correct stick-breaking z values give roughly equal mass fractions.
+        """Latents chosen for equal SFR fractions give a flat SFH.
 
-        For 7 bins (6 z values), equal mass fracs of 1/7 require
-        z_frac_k = 1/(7-k): [1/7, 1/6, 1/5, 1/4, 1/3, 1/2].
+        ``dirichlet`` stick-breaks the *SFR* fractions (Leja+2017) after
+        mapping each Uniform(0, 1) latent u_k through the Beta(1, 6-k)
+        quantile v_k = 1 - (1 - u_k)**(1/(6-k)). Equal SFR fractions of 1/7
+        need v_k = 1/(7-k), i.e. u_k = 1 - (1 - 1/(7-k))**(6-k). Equal SFR
+        fractions mean a constant SFR, so the step function is flat.
         """
-        equal_z = [1 / 7, 1 / 6, 1 / 5, 1 / 4, 1 / 3, 1 / 2]
+        equal_z = [1.0 - (1.0 - 1.0 / (7 - k)) ** (6 - k) for k in range(6)]
         kwargs = {f"z_frac_{i}": equal_z[i] for i in range(6)}
         sfr = dirichlet(AGE_YR, log_total_mass=10.0, **kwargs)
 
         chex.assert_equal_shape([sfr, AGE_YR])
         assert_non_negative(sfr, name="sfr")
 
-        # With equal mass fracs but unequal bin widths, SFR varies proportionally
-        # to the bin width ratio (max/min ~256 for the default 7-bin grid).
-        # Check that the range is bounded by the bin width ratio (not exponential).
-        sfr_range = jnp.max(sfr) / jnp.maximum(jnp.min(sfr), 1e-30)
-        assert sfr_range < 1000, f"SFR range too large for equal z: {sfr_range:.1f}"
+        # Equal SFR fractions => the same SFR in every bin, whatever the widths.
+        inside = float(DEFAULT_BIN_EDGES_GYR[-1]) * 1e9 >= AGE_YR
+        sfr_in = sfr[inside]
+        sfr_range = jnp.max(sfr_in) / jnp.maximum(jnp.min(sfr_in), 1e-30)
+        assert sfr_range < 1.0 + 1e-6, f"SFH is not flat for equal-SFR-fraction z: {sfr_range:.6f}"
 
     def test_stick_breaking_all_positive(self):
         """All mass fractions must be positive."""

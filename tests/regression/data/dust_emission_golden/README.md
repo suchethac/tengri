@@ -32,3 +32,10 @@ python scripts/baseline_dust_emission_golden.py
 ```
 
 All outputs use 64-bit JAX arrays (jax_enable_x64=True).
+
+## Re-frozen 2026-09-05 (CMB contrast fix)
+
+`casey2012.npy`, `modified_blackbody.npy` and `schreiber2016.npy` changed at
+one node only, the grid's first (1000 A): the old contrast factor clipped
+the blue end to an exact zero there, and the fix returns the physical value
+(at most 7.6e-7 of the peak). Every other node agrees to 1.4e-14.

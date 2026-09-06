@@ -1,0 +1,702 @@
+{
+  "meta": {
+    "platform": "cpu",
+    "devices": [
+      "cpu:0"
+    ],
+    "jax": "0.11.0",
+    "env": {
+      "JAX_PLATFORMS": "cpu",
+      "JAX_ENABLE_X64": null,
+      "JAX_DEFAULT_MATMUL_PRECISION": null,
+      "NVIDIA_TF32_OVERRIDE": null,
+      "XLA_PYTHON_CLIENT_PREALLOCATE": null,
+      "TENGRI_DISABLE_JAX_CACHE": "1"
+    },
+    "n_z": 64,
+    "points": {
+      "origin": 0.0,
+      "half_sigma": 0.5
+    },
+    "spec_pixels": 256,
+    "spec_wave_range": [
+      4000.0,
+      9000.0
+    ],
+    "lines": [
+      "Hbeta",
+      "OIII_5007",
+      "Halpha",
+      "NII_6584"
+    ],
+    "mode": "seams",
+    "line_sigma_convention": "floored",
+    "line_sigma_floor": 0.05
+  },
+  "rows": [
+    {
+      "channel": "spec",
+      "model": "stellar_dust",
+      "path": "exact_fixedz",
+      "snr": 30.0,
+      "line_sigma_convention": null,
+      "names": [
+        "dust_tau_diff",
+        "sfh_delayed_log_total_mass"
+      ],
+      "data_type": "spectroscopy",
+      "has_line_catalog": false,
+      "n_data": 256,
+      "approx_state_f64": "ApproxState(n_subbands=5)",
+      "approx_state_f32": "ApproxState(n_subbands=5)",
+      "truth": {
+        "dust_tau_diff": 0.75,
+        "sfh_delayed_log_total_mass": 10.0
+      },
+      "seconds": 5.24,
+      "points": {
+        "origin": {
+          "grad_f64": [
+            -172.21759123152597,
+            306.73951977361264
+          ],
+          "grad_f32": [
+            -171.6811981201172,
+            304.97930908203125
+          ],
+          "grad_exact_f64": [
+            -172.21759123152597,
+            306.73951977361264
+          ],
+          "dtype_f64": [
+            "float64"
+          ],
+          "dtype_f32": [
+            "float32"
+          ],
+          "value_f64": 134.84675998437757,
+          "f64_vs_fd64": 2.0324318707054394e-05,
+          "f32_vs_f64": 0.005230920583236249,
+          "f32_vs_f64_cw": 0.005738454219660074,
+          "lut_f64_vs_exact_f64": 0.0,
+          "f32_vs_exact_f64": 0.005230920583236249,
+          "f32_finite": true,
+          "f32_nonzero": true
+        },
+        "half_sigma": {
+          "grad_f64": [
+            -172091.7174654751,
+            578976.7745164983
+          ],
+          "grad_f32": [
+            -172093.109375,
+            578981.25
+          ],
+          "grad_exact_f64": [
+            -172091.7174654751,
+            578976.7745164983
+          ],
+          "dtype_f64": [
+            "float64"
+          ],
+          "dtype_f32": [
+            "float32"
+          ],
+          "value_f64": 82423.40103993997,
+          "f64_vs_fd64": 1.829307966994959e-08,
+          "f32_vs_f64": 7.759681719900711e-06,
+          "f32_vs_f64_cw": 8.088184285597292e-06,
+          "lut_f64_vs_exact_f64": 0.0,
+          "f32_vs_exact_f64": 7.759681719900711e-06,
+          "f32_finite": true,
+          "f32_nonzero": true
+        }
+      }
+    },
+    {
+      "channel": "spec",
+      "model": "stellar_dust",
+      "path": "auto_fixedz",
+      "snr": 30.0,
+      "line_sigma_convention": null,
+      "names": [
+        "dust_tau_diff",
+        "sfh_delayed_log_total_mass"
+      ],
+      "data_type": "spectroscopy",
+      "has_line_catalog": false,
+      "n_data": 256,
+      "approx_state_f64": "ApproxState(spectrum_precomp=True, n_subbands=5)",
+      "approx_state_f32": "ApproxState(spectrum_precomp=True, n_subbands=5)",
+      "truth": {
+        "dust_tau_diff": 0.75,
+        "sfh_delayed_log_total_mass": 10.0
+      },
+      "seconds": 5.96,
+      "points": {
+        "origin": {
+          "grad_f64": [
+            -172.20945203765135,
+            306.706423782136
+          ],
+          "grad_f32": [
+            -171.91159057617188,
+            305.73236083984375
+          ],
+          "grad_exact_f64": [
+            -172.21759123152597,
+            306.73951977361264
+          ],
+          "dtype_f64": [
+            "float64"
+          ],
+          "dtype_f32": [
+            "float32"
+          ],
+          "value_f64": 134.84682124245853,
+          "f64_vs_fd64": 2.032624252987725e-05,
+          "f32_vs_f64": 0.002895807252395315,
+          "f32_vs_f64_cw": 0.003175880473192136,
+          "lut_f64_vs_exact_f64": 9.688521186778504e-05,
+          "f32_vs_exact_f64": 0.0029922771199590104,
+          "f32_finite": true,
+          "f32_nonzero": true
+        },
+        "half_sigma": {
+          "grad_f64": [
+            -172091.69826728536,
+            578976.4988292162
+          ],
+          "grad_f32": [
+            -172094.625,
+            578986.25
+          ],
+          "grad_exact_f64": [
+            -172091.7174654751,
+            578976.7745164983
+          ],
+          "dtype_f64": [
+            "float64"
+          ],
+          "dtype_f32": [
+            "float32"
+          ],
+          "value_f64": 82423.34529101249,
+          "f64_vs_fd64": 1.8226342513043697e-08,
+          "f32_vs_f64": 1.6855516744369452e-05,
+          "f32_vs_f64_cw": 1.700682103846467e-05,
+          "lut_f64_vs_exact_f64": 4.575327081573102e-07,
+          "f32_vs_exact_f64": 1.6409520391149997e-05,
+          "f32_finite": true,
+          "f32_nonzero": true
+        }
+      }
+    },
+    {
+      "channel": "spec",
+      "model": "stellar_dust",
+      "path": "exact_freez",
+      "snr": 30.0,
+      "line_sigma_convention": null,
+      "names": [
+        "dust_tau_diff",
+        "redshift",
+        "sfh_delayed_log_total_mass"
+      ],
+      "data_type": "spectroscopy",
+      "has_line_catalog": false,
+      "n_data": 256,
+      "approx_state_f64": "ApproxState(n_subbands=5)",
+      "approx_state_f32": "ApproxState(n_subbands=5)",
+      "truth": {
+        "dust_tau_diff": 0.75,
+        "redshift": 0.525,
+        "sfh_delayed_log_total_mass": 10.0
+      },
+      "seconds": 6.05,
+      "points": {
+        "origin": {
+          "grad_f64": [
+            -221.0355596441867,
+            -8908.85800093195,
+            306.73951977382956
+          ],
+          "grad_f32": [
+            -221.98512268066406,
+            -8946.5751953125,
+            308.91156005859375
+          ],
+          "grad_exact_f64": [
+            -221.0355596441867,
+            -8908.85800093195,
+            306.73951977382956
+          ],
+          "dtype_f64": [
+            "float64"
+          ],
+          "dtype_f32": [
+            "float32"
+          ],
+          "value_f64": 134.84675998438067,
+          "f64_vs_fd64": 0.12947264292281999,
+          "f32_vs_f64": 0.004238211978334322,
+          "f32_vs_f64_cw": 0.007081057851188264,
+          "lut_f64_vs_exact_f64": 0.0,
+          "f32_vs_exact_f64": 0.004238211978334322,
+          "f32_finite": true,
+          "f32_nonzero": true
+        },
+        "half_sigma": {
+          "grad_f64": [
+            40190.04497345551,
+            67929.77997755431,
+            -83611.27960605022
+          ],
+          "grad_f32": [
+            40190.28125,
+            67914.46875,
+            -83611.8515625
+          ],
+          "grad_exact_f64": [
+            40190.04497345551,
+            67929.77997755431,
+            -83611.27960605022
+          ],
+          "dtype_f64": [
+            "float64"
+          ],
+          "dtype_f32": [
+            "float32"
+          ],
+          "value_f64": 19978.047183439416,
+          "f64_vs_fd64": 0.021022692537822827,
+          "f32_vs_f64": 0.00013327228182617322,
+          "f32_vs_f64_cw": 0.0002253978676122474,
+          "lut_f64_vs_exact_f64": 0.0,
+          "f32_vs_exact_f64": 0.00013327228182617322,
+          "f32_finite": true,
+          "f32_nonzero": true
+        }
+      }
+    },
+    {
+      "channel": "spec",
+      "model": "stellar_dust",
+      "path": "auto_freez",
+      "snr": 30.0,
+      "line_sigma_convention": null,
+      "names": [
+        "dust_tau_diff",
+        "redshift",
+        "sfh_delayed_log_total_mass"
+      ],
+      "data_type": "spectroscopy",
+      "has_line_catalog": false,
+      "n_data": 256,
+      "approx_state_f64": "ApproxState(spectrum_precomp=True, n_subbands=5)",
+      "approx_state_f32": "ApproxState(spectrum_precomp=True, n_subbands=5)",
+      "truth": {
+        "dust_tau_diff": 0.75,
+        "redshift": 0.525,
+        "sfh_delayed_log_total_mass": 10.0
+      },
+      "seconds": 10.08,
+      "points": {
+        "origin": {
+          "grad_f64": [
+            -220.88188368475883,
+            -8895.081319182118,
+            306.3909362175169
+          ],
+          "grad_f32": [
+            -221.84329223632812,
+            -8932.849609375,
+            308.58831787109375
+          ],
+          "grad_exact_f64": [
+            -221.0355596441867,
+            -8908.85800093195,
+            306.73951977382956
+          ],
+          "dtype_f64": [
+            "float64"
+          ],
+          "dtype_f32": [
+            "float32"
+          ],
+          "value_f64": 134.83686158157494,
+          "f64_vs_fd64": 0.1297614885312368,
+          "f32_vs_f64": 0.004250697556284845,
+          "f32_vs_f64_cw": 0.007171823294462058,
+          "lut_f64_vs_exact_f64": 0.0015456025408896576,
+          "f32_vs_exact_f64": 0.0027000810101309755,
+          "f32_finite": true,
+          "f32_nonzero": true
+        },
+        "half_sigma": {
+          "grad_f64": [
+            40190.28086464879,
+            67952.65514509805,
+            -83611.41896577906
+          ],
+          "grad_f32": [
+            40190.54296875,
+            67937.6875,
+            -83612.0703125
+          ],
+          "grad_exact_f64": [
+            40190.04497345551,
+            67929.77997755431,
+            -83611.27960605022
+          ],
+          "dtype_f64": [
+            "float64"
+          ],
+          "dtype_f32": [
+            "float32"
+          ],
+          "value_f64": 19978.263249686872,
+          "f64_vs_fd64": 0.021029485048318346,
+          "f32_vs_f64": 0.0001303029970376545,
+          "f32_vs_f64_cw": 0.0002202657874970104,
+          "lut_f64_vs_exact_f64": 0.0001989623132781777,
+          "f32_vs_exact_f64": 6.925120014659494e-05,
+          "f32_finite": true,
+          "f32_nonzero": true
+        }
+      }
+    },
+    {
+      "channel": "spec",
+      "model": "stellar_dust",
+      "path": "exact_fixedz",
+      "snr": 300.0,
+      "line_sigma_convention": null,
+      "names": [
+        "dust_tau_diff",
+        "sfh_delayed_log_total_mass"
+      ],
+      "data_type": "spectroscopy",
+      "has_line_catalog": false,
+      "n_data": 256,
+      "approx_state_f64": "ApproxState(n_subbands=5)",
+      "approx_state_f32": "ApproxState(n_subbands=5)",
+      "truth": {
+        "dust_tau_diff": 0.75,
+        "sfh_delayed_log_total_mass": 10.0
+      },
+      "seconds": 6.32,
+      "points": {
+        "origin": {
+          "grad_f64": [
+            -1722.1759123197016,
+            3067.3951977473826
+          ],
+          "grad_f32": [
+            -1668.243896484375,
+            2890.71435546875
+          ],
+          "grad_exact_f64": [
+            -1722.1759123197016,
+            3067.3951977473826
+          ],
+          "dtype_f64": [
+            "float64"
+          ],
+          "dtype_f32": [
+            "float32"
+          ],
+          "value_f64": 134.84675998435236,
+          "f64_vs_fd64": 0.0002031794327182936,
+          "f32_vs_f64": 0.05251287490673697,
+          "f32_vs_f64_cw": 0.057599634506953164,
+          "lut_f64_vs_exact_f64": 0.0,
+          "f32_vs_exact_f64": 0.05251287490673697,
+          "f32_finite": true,
+          "f32_nonzero": true
+        },
+        "half_sigma": {
+          "grad_f64": [
+            -17186338.6354794,
+            57863201.39227991
+          ],
+          "grad_f32": [
+            -17186476.0,
+            57863640.0
+          ],
+          "grad_exact_f64": [
+            -17186338.6354794,
+            57863201.39227991
+          ],
+          "dtype_f64": [
+            "float64"
+          ],
+          "dtype_f32": [
+            "float32"
+          ],
+          "value_f64": 8222758.326985694,
+          "f64_vs_fd64": 1.8305572335498138e-08,
+          "f32_vs_f64": 7.614359651851393e-06,
+          "f32_vs_f64_cw": 7.992657628346053e-06,
+          "lut_f64_vs_exact_f64": 0.0,
+          "f32_vs_exact_f64": 7.614359651851393e-06,
+          "f32_finite": true,
+          "f32_nonzero": true
+        }
+      }
+    },
+    {
+      "channel": "spec",
+      "model": "stellar_dust",
+      "path": "auto_fixedz",
+      "snr": 300.0,
+      "line_sigma_convention": null,
+      "names": [
+        "dust_tau_diff",
+        "sfh_delayed_log_total_mass"
+      ],
+      "data_type": "spectroscopy",
+      "has_line_catalog": false,
+      "n_data": 256,
+      "approx_state_f64": "ApproxState(spectrum_precomp=True, n_subbands=5)",
+      "approx_state_f32": "ApproxState(spectrum_precomp=True, n_subbands=5)",
+      "truth": {
+        "dust_tau_diff": 0.75,
+        "sfh_delayed_log_total_mass": 10.0
+      },
+      "seconds": 7.88,
+      "points": {
+        "origin": {
+          "grad_f64": [
+            -1721.3491474883851,
+            3064.075530513538
+          ],
+          "grad_f32": [
+            -1691.2777099609375,
+            2966.0498046875
+          ],
+          "grad_exact_f64": [
+            -1722.1759123197016,
+            3067.3951977473826
+          ],
+          "dtype_f64": [
+            "float64"
+          ],
+          "dtype_f32": [
+            "float32"
+          ],
+          "value_f64": 134.8474056584961,
+          "f64_vs_fd64": 0.000203370250456367,
+          "f32_vs_f64": 0.029174847632040497,
+          "f32_vs_f64_cw": 0.03199194172919392,
+          "lut_f64_vs_exact_f64": 0.0009725076108910222,
+          "f32_vs_exact_f64": 0.03011864237277173,
+          "f32_finite": true,
+          "f32_nonzero": true
+        },
+        "half_sigma": {
+          "grad_f64": [
+            -17186336.687439937,
+            57863173.82734008
+          ],
+          "grad_f32": [
+            -17186630.0,
+            57864132.0
+          ],
+          "grad_exact_f64": [
+            -17186338.6354794,
+            57863201.39227991
+          ],
+          "dtype_f64": [
+            "float64"
+          ],
+          "dtype_f32": [
+            "float32"
+          ],
+          "value_f64": 8222752.754429529,
+          "f64_vs_fd64": 1.8238824251900533e-08,
+          "f32_vs_f64": 1.6600988230887446e-05,
+          "f32_vs_f64_cw": 1.7066613170520115e-05,
+          "lut_f64_vs_exact_f64": 4.5780261331380663e-07,
+          "f32_vs_exact_f64": 1.6155198913006865e-05,
+          "f32_finite": true,
+          "f32_nonzero": true
+        }
+      }
+    },
+    {
+      "channel": "spec",
+      "model": "stellar_dust",
+      "path": "exact_freez",
+      "snr": 300.0,
+      "line_sigma_convention": null,
+      "names": [
+        "dust_tau_diff",
+        "redshift",
+        "sfh_delayed_log_total_mass"
+      ],
+      "data_type": "spectroscopy",
+      "has_line_catalog": false,
+      "n_data": 256,
+      "approx_state_f64": "ApproxState(n_subbands=5)",
+      "approx_state_f32": "ApproxState(n_subbands=5)",
+      "truth": {
+        "dust_tau_diff": 0.75,
+        "redshift": 0.525,
+        "sfh_delayed_log_total_mass": 10.0
+      },
+      "seconds": 6.64,
+      "points": {
+        "origin": {
+          "grad_f64": [
+            -2210.3555964544494,
+            -89088.58000851487,
+            3067.3951977679603
+          ],
+          "grad_f32": [
+            -2305.326904296875,
+            -92555.640625,
+            3284.821044921875
+          ],
+          "grad_exact_f64": [
+            -2210.3555964544494,
+            -89088.58000851487,
+            3067.3951977679603
+          ],
+          "dtype_f64": [
+            "float64"
+          ],
+          "dtype_f32": [
+            "float32"
+          ],
+          "value_f64": 134.84675998438306,
+          "f64_vs_fd64": 0.21909514297221233,
+          "f32_vs_f64": 0.038972943607154656,
+          "f32_vs_f64_cw": 0.07088289350916638,
+          "lut_f64_vs_exact_f64": 0.0,
+          "f32_vs_exact_f64": 0.038972943607154656,
+          "f32_finite": true,
+          "f32_nonzero": true
+        },
+        "half_sigma": {
+          "grad_f64": [
+            4021891.2303685015,
+            7226054.96134846,
+            -8357674.361083555
+          ],
+          "grad_f32": [
+            4021915.0,
+            7224726.5,
+            -8357731.5
+          ],
+          "grad_exact_f64": [
+            4021891.2303685015,
+            7226054.96134846,
+            -8357674.361083555
+          ],
+          "dtype_f64": [
+            "float64"
+          ],
+          "dtype_f32": [
+            "float32"
+          ],
+          "value_f64": 2001604.8632242102,
+          "f64_vs_fd64": 0.017690268467013204,
+          "f32_vs_f64": 0.00011310956443747686,
+          "f32_vs_f64_cw": 0.0001838432388856548,
+          "lut_f64_vs_exact_f64": 0.0,
+          "f32_vs_exact_f64": 0.00011310956443747686,
+          "f32_finite": true,
+          "f32_nonzero": true
+        }
+      }
+    },
+    {
+      "channel": "spec",
+      "model": "stellar_dust",
+      "path": "auto_freez",
+      "snr": 300.0,
+      "line_sigma_convention": null,
+      "names": [
+        "dust_tau_diff",
+        "redshift",
+        "sfh_delayed_log_total_mass"
+      ],
+      "data_type": "spectroscopy",
+      "has_line_catalog": false,
+      "n_data": 256,
+      "approx_state_f64": "ApproxState(spectrum_precomp=True, n_subbands=5)",
+      "approx_state_f32": "ApproxState(spectrum_precomp=True, n_subbands=5)",
+      "truth": {
+        "dust_tau_diff": 0.75,
+        "redshift": 0.525,
+        "sfh_delayed_log_total_mass": 10.0
+      },
+      "seconds": 7.85,
+      "points": {
+        "origin": {
+          "grad_f64": [
+            -2195.128430563008,
+            -87494.93206817895,
+            3034.187240516268
+          ],
+          "grad_f32": [
+            -2291.27880859375,
+            -90962.484375,
+            3254.142333984375
+          ],
+          "grad_exact_f64": [
+            -2210.3555964544494,
+            -89088.58000851487,
+            3067.3951977679603
+          ],
+          "dtype_f64": [
+            "float64"
+          ],
+          "dtype_f32": [
+            "float32"
+          ],
+          "value_f64": 134.75524377746166,
+          "f64_vs_fd64": 0.2237844810813784,
+          "f32_vs_f64": 0.03968997881672199,
+          "f32_vs_f64_cw": 0.07249226103484685,
+          "lut_f64_vs_exact_f64": 0.017876960825688445,
+          "f32_vs_exact_f64": 0.021138842157722364,
+          "f32_finite": true,
+          "f32_nonzero": true
+        },
+        "half_sigma": {
+          "grad_f64": [
+            4021914.58438981,
+            7228556.246515842,
+            -8357687.148775416
+          ],
+          "grad_f32": [
+            4021940.5,
+            7227265.5,
+            -8357750.0
+          ],
+          "grad_exact_f64": [
+            4021891.2303685015,
+            7226054.96134846,
+            -8357674.361083555
+          ],
+          "dtype_f64": [
+            "float64"
+          ],
+          "dtype_f32": [
+            "float32"
+          ],
+          "value_f64": 2001627.178086992,
+          "f64_vs_fd64": 0.017697005512201814,
+          "f32_vs_f64": 0.00010991698432607136,
+          "f32_vs_f64_cw": 0.00017856214599759024,
+          "lut_f64_vs_exact_f64": 0.0002127489834028796,
+          "f32_vs_exact_f64": 0.00010324344761285066,
+          "f32_finite": true,
+          "f32_nonzero": true
+        }
+      }
+    }
+  ]
+}

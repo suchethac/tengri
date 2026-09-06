@@ -11,6 +11,77 @@ import jax.numpy as jnp
 import numpy as np
 import pytest
 
+# ── Import source verification guard ────────────────────────────────────────
+#
+# Guard against importing tengri from a different checkout or worktree than
+# the one running tests. This catches misconfigurations of the shared venv
+# (.venv/lib/python3.12/site-packages/__editable__.astro_tengri-*.pth files
+# that point to a stale worktree), which silently run tests against incorrect
+# source code (#2170).
+#
+# Mechanism: when tests exist in src/tengri/, verify that the imported module
+# lives in the same tree. The check runs at module load time (before any test)
+# so failures block collection instead of silently running the wrong code.
+# Stays silent for installed (non-editable) releases, since there is no
+# src/tengri/ to compare.
+
+
+def _check_tengri_source_tree_match(
+    repo_root: Path | None = None,
+    imported_file: Path | None = None,
+) -> None:
+    """Verify imported tengri lives in the same tree as the tests.
+
+    Parameters
+    ----------
+    repo_root : Path, optional
+        Repository root to check. Defaults to the parent of this file's
+        directory (the real repository). Injectable for testing.
+    imported_file : Path, optional
+        Path of the imported ``tengri/__init__.py``. Defaults to importing
+        tengri and reading ``__file__``. Injectable for testing.
+
+    Raises
+    ------
+    RuntimeError
+        If tests exist in src/tengri/ but the imported tengri module
+        comes from a different location.
+    """
+    if repo_root is None:
+        repo_root = Path(__file__).resolve().parent.parent
+    tengri_src = repo_root / "src" / "tengri"
+
+    # Only check if this is a development tree with local source.
+    if not tengri_src.exists():
+        return
+
+    if imported_file is None:
+        import tengri
+
+        imported_file = Path(tengri.__file__)
+
+    # Resolve both sides so symlinked checkouts (e.g. /tmp vs /private/tmp
+    # on macOS) compare by real location, not spelling.
+    imported_file = Path(imported_file).resolve()
+    expected_file = (tengri_src / "__init__.py").resolve()
+
+    if imported_file != expected_file:
+        raise RuntimeError(
+            f"Imported tengri from wrong source tree (#2170).\n"
+            f"Tests are in:    {repo_root}\n"
+            f"Expected source: {expected_file}\n"
+            f"Actual source:   {imported_file}\n\n"
+            f"This usually means the shared .venv has a stale editable install "
+            f"pth file pointing to a different worktree. Fix by running:\n"
+            f"  pip install -e . --force-reinstall --no-deps\n"
+            f"from {repo_root}, or by setting:\n"
+            f"  PYTHONPATH={repo_root / 'src'}"
+        )
+
+
+# Run the import verification at collection time.
+_check_tengri_source_tree_match()
+
 # ── Network guard ────────────────────────────────────────────────────────
 #
 # No test may reach the network. This exists because two tests that did
@@ -142,6 +213,31 @@ def pytest_terminal_summary(terminalreporter, exitstatus, config):  # pragma: no
             "Either ship tiny synthetic test fixtures or accept the coverage gap honestly."
         )
 
+    # Class-killer guard: surface files where EVERY test skipped, whether
+    # from markers (setup phase) or from test-body logic (call phase).
+    # This guard is opt-in via TENGRI_GUARD_FULLY_SKIP env var to avoid
+    # false-positives on local partial runs (-k filters, single-file invocations).
+    if os.environ.get("TENGRI_GUARD_FULLY_SKIP"):
+        fully_skipped_files = fully_skipped_test_files(_FILE_OUTCOMES)
+        allowlist = _SKIP_GUARD_ALLOWLIST
+        violations = [
+            f for f, _ in fully_skipped_files if f not in allowlist and not _is_excluded_tree(f)
+        ]
+        if violations:
+            terminalreporter.write_sep("!", "FULLY-SKIPPING TEST FILES (CLASS-KILLER GUARD)")
+            for f in violations:
+                terminalreporter.write_line(f"  {f}")
+            terminalreporter.write_line(
+                "Every test in the file(s) above was skipped, rendering the file inert "
+                "coverage. Files on the guard allowlist or in excluded trees (integration, "
+                "crossval) are expected; others are bugs. See #1615/#1946."
+            )
+            if exitstatus == 0:
+                # Only fail the session if the test run itself succeeded but coverage is inert.
+                # If tests failed for other reasons, that takes precedence.
+                terminalreporter.write_sep("!", "FAILING: INERT COVERAGE DETECTED")
+                raise SystemExit(1)
+
 
 # ─────────────────────────────────────────────────────────────────────
 # Inert-file detector: a file where every test skipped *from inside a
@@ -172,6 +268,7 @@ def pytest_terminal_summary(terminalreporter, exitstatus, config):  # pragma: no
 # ─────────────────────────────────────────────────────────────────────
 
 _FILE_OUTCOMES: dict[str, dict[str, int]] = {}
+_FILE_COLLECTED: dict[str, int] = {}  # Track collected test count per file
 
 
 def pytest_runtest_logreport(report):  # pragma: no cover — pytest hook
@@ -195,6 +292,13 @@ def pytest_runtest_logreport(report):  # pragma: no cover — pytest hook
             rec["ran"] += 1
 
 
+def pytest_collection_finish(session):  # pragma: no cover — pytest hook
+    """Record how many tests were collected per file."""
+    for item in session.items:
+        path = item.nodeid.split("::")[0]
+        _FILE_COLLECTED[path] = _FILE_COLLECTED.get(path, 0) + 1
+
+
 def inert_test_files() -> list[tuple[str, dict[str, int]]]:
     """Files where nothing ran and at least one test skipped from its own body.
 
@@ -209,6 +313,67 @@ def inert_test_files() -> list[tuple[str, dict[str, int]]]:
         for path, rec in _FILE_OUTCOMES.items()
         if rec["ran"] == 0 and rec["skip_call"] > 0
     )
+
+
+def fully_skipped_test_files(
+    outcomes: dict[str, dict[str, int]],
+) -> list[tuple[str, dict[str, int]]]:
+    """Files whose every executed test skipped (ran == 0, skips > 0).
+
+    Derived purely from runtest reports: under pytest-xdist the workers'
+    reports reach the controller while ``session.items`` does not, so a
+    collection-based count is empty exactly where CI runs in parallel and
+    would make this guard vacuous there. Deselected tests (-k/-m) produce
+    no reports, so partial runs cannot make an innocent file look fully
+    skipped; a file whose only outcomes are errors has ran == 0 and zero
+    skips and is left to the ordinary failure reporting.
+    """
+    return sorted(
+        (path, rec)
+        for path, rec in outcomes.items()
+        if rec["ran"] == 0 and (rec["skip_setup"] + rec["skip_call"]) > 0
+    )
+
+
+# ─────────────────────────────────────────────────────────────────────
+# Guard allowlist: files that legitimately skip all collected tests.
+#
+# Entries here are expected to fully-skip due to missing optional data,
+# platform gates, or design (e.g., integration tests without SSP grids).
+# Keep justifications short: each entry documents *why* this file can
+# skip everything and still be considered correct coverage.
+#
+# EXCLUDED TREES (checked via path, not allowlisted):
+#   - tests/integration/: needs real SSP grids (data/ssp_*.h5), shipped to
+#     developers only. BUG-NSS-01 regression test (test_user_scenarios.py)
+#     is here; it skips if BPASS grid missing — that skip is expected.
+#   - tests/crossval/: regression against external code (bagpipes, FSPS),
+#     not run by default (explicitly gated with -m crossval).
+#
+# Per-file allowlist (entries are literal paths as pytest reports them):
+#   - tests/components/agn/grahsp/test_template_parity.py: upstream GRAHSP repo
+#   - tests/components/dust/test_synthesizer_line_parity.py: optional Synthesizer grids
+#   - tests/components/nebular/test_cue_hybrid_diagnostic.py: optional BC03 SSP
+#   - tests/contract/test_build_resolver_sedmodelcomponent.py: BC03 SSP not shipped
+#   - tests/contract/test_phase4d_c_agn_threading.py: bare-stellar SSP not shipped
+#   - tests/contract/test_synthesizer_nlr_grammar.py: optional Synthesizer grids
+# ─────────────────────────────────────────────────────────────────────
+
+_SKIP_GUARD_ALLOWLIST: set[str] = {
+    "tests/components/agn/grahsp/test_template_parity.py",
+    "tests/components/dust/test_synthesizer_line_parity.py",
+    "tests/components/nebular/test_cue_hybrid_diagnostic.py",
+    "tests/contract/test_build_resolver_sedmodelcomponent.py",
+    "tests/contract/test_phase4d_c_agn_threading.py",
+    "tests/contract/test_synthesizer_nlr_grammar.py",
+}
+
+_EXCLUDED_TREES = ("tests/integration/", "tests/crossval/")
+
+
+def _is_excluded_tree(file_path: str) -> bool:
+    """Check if a test file is in an excluded tree (integration, crossval)."""
+    return any(file_path.startswith(tree) for tree in _EXCLUDED_TREES)
 
 
 # Suppress background JIT compilation in the test suite.  Without this,
