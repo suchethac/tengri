@@ -162,6 +162,10 @@ def test_clean_input_is_still_finite(name, fn, clean, zero, corrupt):
     """
     out = float(fn(clean))
     assert np.isfinite(out), f"{name} gave {out} on healthy input {clean}"
+    assert np.any(out != 0.0), (
+        "`out` is identically zero — finite is not enough, "
+        "a value that has collapsed to zero is as unusable as a NaN one (#2100)"
+    )
 
 
 @pytest.mark.parametrize("name,fn,clean,zero,corrupt", PRODUCERS, ids=_IDS)
@@ -200,6 +204,7 @@ class TestThePrimitiveItself:
     def test_the_zero_branch_has_no_nan_gradient(self):
         """The where-dummy exists for this; losing it would NaN the backward pass."""
         grad = float(jax.grad(lambda v: log10_magnitude(v))(jnp.asarray(0.0)))
+        # grad-assert: finite-only — the zero branch is the subject of this test
         assert not np.isnan(grad), "log10_magnitude has a NaN gradient at exactly zero"
 
     def test_it_is_jittable(self):

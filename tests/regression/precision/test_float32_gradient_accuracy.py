@@ -179,6 +179,10 @@ def test_rest_frame_gradient_is_accurate_in_float32(ssp_bare, obs):
     auto32, _ = _autodiff_and_fd(ssp_bare, obs, False, jnp.float32, _rest_sed_sum)
 
     assert np.all(np.isfinite(auto32)), "float32 rest-frame gradient is non-finite"
+    assert np.any(auto32 != 0.0), (
+        "`auto32` is identically zero — finite is not enough, "
+        "a value that has collapsed to zero is as unusable as a NaN one (#2100)"
+    )
     rel = np.abs(auto32 - auto64) / np.maximum(np.abs(auto64), 1e-300)
     assert rel.max() < 1e-3, (
         f"float32 rest-frame gradient drifted from float64 by {rel.max():.2e}; it "
@@ -225,6 +229,10 @@ def test_likelihood_gradient_is_accurate_in_float32(ssp_bare, obs):
     _, g32 = nlp_gradient(False, jnp.float32)
 
     assert np.all(np.isfinite(g32)), "float32 likelihood gradient is non-finite"
+    assert np.any(g32 != 0.0), (
+        "`g32` is identically zero — finite is not enough, "
+        "a value that has collapsed to zero is as unusable as a NaN one (#2100)"
+    )
     rel = np.abs(g32 - g64) / np.maximum(np.abs(g64), 1e-300)
     assert rel.max() < 1e-3, (
         f"float32 likelihood gradient disagrees with float64 by {rel.max():.2e} "
@@ -315,6 +323,10 @@ def test_photometry_gradient_is_accurate_in_float32_forward_mode(ssp_bare, obs):
     assert np.all(f32 != 0.0), (
         f"forward-mode float32 photometry gradient underflowed to zero ({f32}); the "
         "tangent is supposed to stay in range through the projection (#1415)"
+    )
+    assert np.all(np.isfinite(f32)), (
+        "`f32` is non-finite — non-zero is not enough, `nan != 0.0` is True "
+        "and a NaN satisfies a non-zero assertion (#2178)"
     )
     rel = np.abs(f32 - f64) / np.maximum(np.abs(f64), 1e-300)
     assert rel.max() < 1e-3, (

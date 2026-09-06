@@ -137,6 +137,10 @@ def test_freed_shape_parameter_has_a_nonzero_gradient(law, param, uv_ssp, uv_obs
         f"{law}: free parameter {param!r} has an exactly-zero gradient. A fit cannot "
         "move it, so the posterior returns the prior and reports convergence (#1808)."
     )
+    assert np.all(np.isfinite(grad)), (
+        "`grad` is non-finite — non-zero is not enough, `nan != 0.0` is True "
+        "and a NaN satisfies a non-zero assertion (#2178)"
+    )
 
 
 @pytest.mark.parametrize(

@@ -97,7 +97,15 @@ def test_grad_flows_through_new_params():
         )
     )(0.3)
     assert np.isfinite(float(g_bc))
+    assert np.any(float(g_bc) != 0.0), (
+        "`float(g_bc)` is identically zero — finite is not enough, "
+        "a value that has collapsed to zero is as unusable as a NaN one (#2100)"
+    )
     assert np.isfinite(float(g_tt))
+    assert np.any(float(g_tt) != 0.0), (
+        "`float(g_tt)` is identically zero — finite is not enough, "
+        "a value that has collapsed to zero is as unusable as a NaN one (#2100)"
+    )
 
 
 def _toy_filters():

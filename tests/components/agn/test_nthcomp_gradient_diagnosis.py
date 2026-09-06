@@ -347,12 +347,20 @@ class TestNthcompGradientDiagnosis:
             "1e46 cotangent overflows. Note assert_allclose would ACCEPT this "
             "against a NaN reference (equal_nan=True), which is how it hid (#1822)."
         )
+        assert np.any(grad_val != 0.0), (
+            "`grad_val` is identically zero — finite is not enough, "
+            "a value that has collapsed to zero is as unusable as a NaN one (#2100)"
+        )
 
         def f_scalar(g):
             return float(f(jnp.array(g)))
 
         reference = fd_grad(f_scalar, float(gamma), eps=0.01)
         assert np.isfinite(reference), "the FD reference is NaN and cannot judge anything"
+        assert np.any(reference != 0.0), (
+            "`reference` is identically zero — finite is not enough, "
+            "a value that has collapsed to zero is as unusable as a NaN one (#2100)"
+        )
 
         assert_allclose(
             grad_val,
@@ -383,6 +391,10 @@ class TestNthcompGradientDiagnosis:
         edge = 1.5
         grad_val = float(jax.grad(f)(jnp.array(edge)))
         assert np.isfinite(grad_val), f"gradient at the boundary is {grad_val}"
+        assert np.any(grad_val != 0.0), (
+            "`grad_val` is identically zero — finite is not enough, "
+            "a value that has collapsed to zero is as unusable as a NaN one (#2100)"
+        )
 
         eps = 0.01
         one_sided = (fs(edge + eps) - fs(edge)) / eps
@@ -423,6 +435,10 @@ class TestNthcompGradientDiagnosis:
         grads = jax.grad(f)(gamma_array)
         assert jnp.all(jnp.isfinite(grads)), (
             f"Non-finite gradient through vmapped nthcomp: {grads}"
+        )
+        assert jnp.any(grads != 0.0), (
+            "`grads` is identically zero — finite is not enough, "
+            "a value that has collapsed to zero is as unusable as a NaN one (#2100)"
         )
         # FD check on first component
         g0 = float(gamma_array[0])

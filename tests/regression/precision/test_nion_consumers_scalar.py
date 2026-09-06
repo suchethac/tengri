@@ -133,6 +133,10 @@ class TestXiIonLogDomain:
 
         # Should be finite even with zero FUV
         assert jnp.isfinite(xi_ion), f"xi_ion non-finite with zero FUV: {xi_ion}"
+        assert jnp.any(xi_ion != 0.0), (
+            "`xi_ion` is identically zero — finite is not enough, "
+            "a value that has collapsed to zero is as unusable as a NaN one (#2100)"
+        )
 
     def test_xi_ion_pure_f32_finiteness(self):
         """(4) Pure-f32: xi_ion stays finite (numerator/denominator both overflow).

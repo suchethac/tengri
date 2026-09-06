@@ -76,6 +76,10 @@ class TestGaussianLineProfile:
 
         grad = assert_grad_matches_fd(loss, 5007.0)
         assert jnp.isfinite(grad)
+        assert jnp.any(grad != 0.0), (
+            "`grad` is identically zero — finite is not enough, "
+            "a value that has collapsed to zero is as unusable as a NaN one (#2100)"
+        )
 
     def test_nlr_blr_consistency(self, wavelength):
         """Shared kernel must match the old NLR/BLR inline implementation.

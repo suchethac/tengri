@@ -132,6 +132,10 @@ def test_pure_float32_finiteness_and_parity(ssp_bare):
 
     # Assert finite
     assert jnp.isfinite(result_f32), f"f32 result is non-finite: {result_f32}"
+    assert jnp.any(result_f32 != 0.0), (
+        "`result_f32` is identically zero — finite is not enough, "
+        "a value that has collapsed to zero is as unusable as a NaN one (#2100)"
+    )
 
     # Assert close to reference (5e-3 dex = ~1.2% error in linear)
     ref_f64 = jnp.asarray(ref_log, dtype=jnp.float64)
@@ -161,6 +165,7 @@ def test_zero_ionizing_flux():
     # Test gradient is finite (no NaN)
     grad_fn = jax.grad(lambda sed_: jnp.sum(_integrate_nion(sed_, wave)))
     grad_result = grad_fn(sed)
+    # grad-assert: finite-only — zero ionizing flux is the input under test
     assert jnp.all(jnp.isfinite(grad_result)), (
         f"Gradient contains non-finite values for zero ionizing flux: {grad_result}"
     )

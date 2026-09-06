@@ -176,6 +176,10 @@ class TestDerivedQuantities:
             if val is None:  # stellar_mass_surviving can legitimately be None
                 continue
             assert jnp.isfinite(val), f"{key} is not finite: {val}"
+            assert jnp.any(val != 0.0), (
+                "`val` is identically zero — finite is not enough, "
+                "a value that has collapsed to zero is as unusable as a NaN one (#2100)"
+            )
             checked += 1
         assert checked >= max(1, len(derived) // 2), (
             f"only {checked} of {len(derived)} derived values were non-None and "

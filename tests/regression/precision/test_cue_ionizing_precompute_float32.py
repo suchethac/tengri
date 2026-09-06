@@ -167,6 +167,10 @@ def test_fit_ionizing_spectrum_is_dtype_invariant():
         seg64 = np.asarray(fit64["log_seglum"], dtype=np.float64)
         seg32 = np.asarray(fit32["log_seglum"], dtype=np.float64)
         assert np.all(np.isfinite(seg64)), f"({im},{ia}) float64 reference broken: {seg64}"
+        assert np.any(seg64 != 0.0), (
+            "`seg64` is identically zero — finite is not enough, "
+            "a value that has collapsed to zero is as unusable as a NaN one (#2100)"
+        )
 
         checked += 1
         # Finiteness is absolute: a finite float64 segment may never come back

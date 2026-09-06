@@ -325,6 +325,10 @@ def test_xray_radio_grad_compatible(wave_uv_to_radio, agn_lbol_physical):
     assert all(jnp.all(jnp.isfinite(g)) for g in grads), (
         "Gradient computation produced NaN or Inf."
     )
+    assert any(jnp.any(g != 0.0) for g in grads), (
+        "every gradient is identically zero — finite is not enough, a detached X-ray/radio "
+        "objective is as unusable as a NaN one (#2100)"
+    )
 
 
 # ---------------------------------------------------------------------------

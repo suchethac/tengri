@@ -246,6 +246,10 @@ def test_unified_face_on_gradient_is_finite(wavelength, lum_ratio) -> None:
 
     g = jax.grad(loss)(1.0)
     assert jnp.isfinite(g), f"lum_ratio={lum_ratio}: d/d(agn_cos_inc) = {float(g)}"
+    assert jnp.any(g != 0.0), (
+        "`g` is identically zero — finite is not enough, "
+        "a value that has collapsed to zero is as unusable as a NaN one (#2100)"
+    )
 
 
 def test_unified_dispatch_registered() -> None:

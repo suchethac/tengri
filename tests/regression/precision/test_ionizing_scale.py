@@ -87,6 +87,10 @@ def test_balmer_decrement_mixed_precision_f32(ssp_bare):
 
     # Decrement should be finite and close to the f64 reference
     assert np.isfinite(dec32), f"f32 Balmer decrement is non-finite: {dec32}"
+    assert np.any(dec32 != 0.0), (
+        "`dec32` is identically zero — finite is not enough, "
+        "a value that has collapsed to zero is as unusable as a NaN one (#2100)"
+    )
     # The fixture is dusty (tau_bc ~ 2.05), so the OBSERVED decrement must sit
     # above the intrinsic Case B ratio. Asserting the intrinsic range here is
     # what let #1833 pass unnoticed — see INTRINSIC_DECREMENT_TAU_ZERO.
@@ -154,6 +158,10 @@ def test_pure_float32_non_finites_are_the_linear_transition_publishes(ssp_bare):
                 f"{log_key} is non-finite in pure float32 — the log contract that makes "
                 "the linear overflow survivable has itself regressed"
             )
+            assert np.any(value != 0.0), (
+                "`value` is identically zero — finite is not enough, "
+                "a value that has collapsed to zero is as unusable as a NaN one (#2100)"
+            )
 
 
 def test_balmer_decrement_pure_float32(ssp_bare):
@@ -194,6 +202,10 @@ def test_balmer_decrement_pure_float32(ssp_bare):
         dec32 = float(m32.predict(p).properties["balmer_decrement"])
 
     assert np.isfinite(dec32), f"pure-f32 Balmer decrement is non-finite: {dec32}"
+    assert np.any(dec32 != 0.0), (
+        "`dec32` is identically zero — finite is not enough, "
+        "a value that has collapsed to zero is as unusable as a NaN one (#2100)"
+    )
     assert CASE_B_INTRINSIC < dec32 < DECREMENT_CEILING, (
         f"pure-f32 Balmer decrement {dec32} outside "
         f"({CASE_B_INTRINSIC}, {DECREMENT_CEILING}) — an attenuated decrement "
@@ -270,7 +282,15 @@ def test_log_q_h_pure_float32_cue_only(ssp_bare):
         rest_sed_32 = np.asarray(pred32.rest_sed())
 
     assert np.isfinite(log_q_h_32), f"pure-f32 log_q_h non-finite: {log_q_h_32}"
+    assert np.any(log_q_h_32 != 0.0), (
+        "`log_q_h_32` is identically zero — finite is not enough, "
+        "a value that has collapsed to zero is as unusable as a NaN one (#2100)"
+    )
     assert np.all(np.isfinite(rest_sed_32)), "pure-f32 rest_sed has non-finite entries"
+    assert np.any(rest_sed_32 != 0.0), (
+        "`rest_sed_32` is identically zero — finite is not enough, "
+        "a value that has collapsed to zero is as unusable as a NaN one (#2100)"
+    )
     assert_allclose(log_q_h_32, log_q_h_64, atol=5e-3)  # dex
 
 
@@ -300,4 +320,12 @@ def test_linear_observables_pure_float32_cue_only(ssp_bare):
         dec_32 = float(pred32.properties["balmer_decrement"])
 
     assert np.isfinite(q_h_32), f"linear q_h overflows float32: {q_h_32}"
+    assert np.any(q_h_32 != 0.0), (
+        "`q_h_32` is identically zero — finite is not enough, "
+        "a value that has collapsed to zero is as unusable as a NaN one (#2100)"
+    )
     assert np.isfinite(dec_32), f"balmer_decrement is nan in float32: {dec_32}"
+    assert np.any(dec_32 != 0.0), (
+        "`dec_32` is identically zero — finite is not enough, "
+        "a value that has collapsed to zero is as unusable as a NaN one (#2100)"
+    )

@@ -70,3 +70,7 @@ def test_skirtor_disc_dust_ratio_grad_finite(param, at_node):
     assert np.isfinite(g), (
         f"NaN/Inf gradient of skirtor_disc_dust_ratio w.r.t. {param} (at_node={at_node})"
     )
+    assert np.any(g != 0.0), (
+        "`g` is identically zero — finite is not enough, "
+        "a value that has collapsed to zero is as unusable as a NaN one (#2100)"
+    )

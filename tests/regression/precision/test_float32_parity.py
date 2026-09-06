@@ -19,6 +19,10 @@ def test_f64_reference_is_finite(ssp_bare, z, log10_mass):
     out = forward_outputs(model, z, log10_mass)
     for k, v in out.items():
         assert np.all(np.isfinite(v)), f"{k} non-finite at z={z}, logM={log10_mass}"
+        assert np.any(v != 0.0), (
+            "`v` is identically zero — finite is not enough, "
+            "a value that has collapsed to zero is as unusable as a NaN one (#2100)"
+        )
 
 
 def _flux_case(dtype):
@@ -39,6 +43,10 @@ def test_flux_seam_f64_exact_and_f32_finite(z):
         wr32, L32, wo32 = _flux_case(jnp.float32)
         got = np.asarray(shift_to_obs_frame(wr32, L32, wo32, jnp.float32(z)))
     assert np.all(np.isfinite(got)), f"f32 flux seam non-finite at z={z}"
+    assert np.any(got != 0.0), (
+        "`got` is identically zero — finite is not enough, "
+        "a value that has collapsed to zero is as unusable as a NaN one (#2100)"
+    )
     m = ref > ref.max() * 1e-6
     assert_allclose(got[m], ref[m], rtol=2e-3)
 
@@ -57,6 +65,10 @@ def test_end_to_end_mixed_precision_f32_matches_f64(ssp_bare, z, log10_mass):
     # Both must be finite (the log-offset seams keep f32 arrays in range)
     assert np.all(np.isfinite(got["photometry"])), (
         f"photometry non-finite at z={z}, logM={log10_mass}"
+    )
+    assert np.any(got["photometry"] != 0.0), (
+        "`got['photometry']` is identically zero — finite is not enough, "
+        "a value that has collapsed to zero is as unusable as a NaN one (#2100)"
     )
     assert np.all(np.isfinite(got["rest_sed"])), f"rest_sed non-finite at z={z}, logM={log10_mass}"
 

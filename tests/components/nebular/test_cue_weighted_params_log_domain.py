@@ -333,6 +333,7 @@ def test_gradient_nonzero_and_smooth():
         return result["gas_logqion"]
 
     g_old = jax.grad(gas_logqion_fn_old)(ssp_weights_old)
+    # grad-assert: finite-only — this arm is the degenerate one on purpose
     assert jnp.all(jnp.isfinite(g_old)), (
         f"gradient w.r.t. ssp_weights has NaN/inf for degenerate population: {g_old}"
     )

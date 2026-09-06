@@ -123,6 +123,10 @@ def test_agn_sed_is_finite_in_float32_with_and_without_a_torus(ssp_bare, agn_key
             dtype=np.float64,
         )
     assert np.all(np.isfinite(ref)), f"setup: float64 sed_agn is not finite ({agn_key})"
+    assert np.any(ref != 0.0), (
+        "`ref` is identically zero — finite is not enough, "
+        "a value that has collapsed to zero is as unusable as a NaN one (#2100)"
+    )
 
     with jax.enable_x64(False):
         got = np.asarray(

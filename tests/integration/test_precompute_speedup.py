@@ -157,6 +157,10 @@ class TestGradientCleanliness:
             assert bool(jnp.isfinite(grads[name])), (
                 f"Gradient for {name} is not finite: {float(grads[name])}"
             )
+            assert jnp.any(grads[name] != 0.0), (
+                "`grads[name]` is identically zero — finite is not enough, "
+                "a value that has collapsed to zero is as unusable as a NaN one (#2100)"
+            )
 
     def test_autodiff_matches_finite_differences(self, ssp_data, sdss_filters, smooth_spec):
         """Autodiff gradients match finite differences to 4+ digits."""
@@ -235,5 +239,9 @@ class TestGradientCleanliness:
             g = grads[name]
             if g.ndim == 0:
                 assert bool(jnp.isfinite(g)), f"{name}: grad not finite"
+                assert jnp.any(g != 0.0), (
+                    "`g` is identically zero — finite is not enough, "
+                    "a value that has collapsed to zero is as unusable as a NaN one (#2100)"
+                )
             else:
                 assert bool(jnp.all(jnp.isfinite(g))), f"{name}: some grads not finite"

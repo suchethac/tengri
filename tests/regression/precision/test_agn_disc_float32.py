@@ -63,6 +63,10 @@ def test_multicolor_disc_finite_and_matches_f64_in_float32():
         "(L_bol ~1e44, L_Edd ~1e46, t_in**4 ~1e58, or the ~1e43 bolometric "
         "integral) overflowed instead of being formed in log space"
     )
+    assert np.any(f32 != 0.0), (
+        "`f32` is identically zero — finite is not enough, "
+        "a value that has collapsed to zero is as unusable as a NaN one (#2100)"
+    )
     peak = np.abs(ref).max()
     live = np.abs(ref) > 1e-6 * peak
     rel = np.abs(f32[live] - ref[live]) / np.abs(ref[live])
@@ -107,6 +111,10 @@ def test_kubota_done_disc_finite_and_matches_f64_in_float32():
         "intermediate (l0, seed/zone bolometric integral, or the warm-ring "
         "p_plain*area ~1e42) overflowed instead of being formed in L_sun units"
     )
+    assert np.any(f32 != 0.0), (
+        "`f32` is identically zero — finite is not enough, "
+        "a value that has collapsed to zero is as unusable as a NaN one (#2100)"
+    )
     peak = np.abs(ref).max()
     live = np.abs(ref) > 1e-6 * peak
     rel = np.abs(f32[live] - ref[live]) / np.abs(ref[live])
@@ -146,6 +154,10 @@ def test_adaf_spectrum_finite_and_matches_f64_in_float32():
     assert np.all(np.isfinite(f32)), (
         "adaf_spectrum is non-finite in pure float32 — the mdot-inversion coeff "
         "(~3e46) / l_bol_erg (~1e44) or the ~1e43 renorm integral overflowed"
+    )
+    assert np.any(f32 != 0.0), (
+        "`f32` is identically zero — finite is not enough, "
+        "a value that has collapsed to zero is as unusable as a NaN one (#2100)"
     )
     peak = np.abs(ref).max()
     live = np.abs(ref) > 1e-6 * peak
@@ -287,4 +299,8 @@ def test_multicolor_disc_agn_fit_gradient_finite_in_float32(ssp_bare):
             assert all(np.all(np.isfinite(v)) for v in leaves), (
                 f"grad(nlp) non-finite at draw {i} in pure float32 — a multicolor-disc "
                 "reverse-pass overflow"
+            )
+            assert any(np.any(v != 0.0) for v in leaves), (
+                f"grad(nlp) is identically ZERO at draw {i} in pure float32 — finite is "
+                "not enough, and a zero gradient is exactly the #2100 defect"
             )

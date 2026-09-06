@@ -92,6 +92,10 @@ def test_high_z_gradient_is_finite(synthetic_ssp_wide):
         warnings.simplefilter("ignore", SFHBeforeBigBangWarning)
         g = jax.grad(loss)(p)
     assert np.isfinite(float(g["sfh_dpl_log_total_mass"]))
+    assert np.any(float(g["sfh_dpl_log_total_mass"]) != 0.0), (
+        "`float(g['sfh_dpl_log_total_mass'])` is identically zero — finite is not enough, "
+        "a value that has collapsed to zero is as unusable as a NaN one (#2100)"
+    )
 
 
 def test_eager_warns_when_sfh_predates_big_bang(synthetic_ssp_wide):

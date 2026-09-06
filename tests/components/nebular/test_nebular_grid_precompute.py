@@ -212,6 +212,10 @@ def test_reconstruct_is_jittable_and_gradient_safe():
     val = jax.jit(total)(jnp.asarray(-2.5))
     g = jax.jit(jax.grad(total))(jnp.asarray(-2.5))
     assert np.isfinite(float(val)) and np.isfinite(float(g))
+    assert np.any(float(g) != 0.0), (
+        "`float(g)` is identically zero — finite is not enough, "
+        "a value that has collapsed to zero is as unusable as a NaN one (#2100)"
+    )
 
 
 def test_axis_range_reads_prior_not_default():

@@ -116,6 +116,10 @@ def test_grad_flows_through_log_nh(torus_fn, wavelength) -> None:
 
     g = assert_grad_matches_fd(scalar_loss, 23.0)
     assert jnp.isfinite(g)
+    assert jnp.any(g != 0.0), (
+        "`g` is identically zero — finite is not enough, "
+        "a value that has collapsed to zero is as unusable as a NaN one (#2100)"
+    )
 
 
 def test_unified_dispatch_registered() -> None:

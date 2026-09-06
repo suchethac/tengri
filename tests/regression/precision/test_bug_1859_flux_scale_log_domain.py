@@ -193,6 +193,10 @@ class TestLogWeightedSum:
 
         assert linear == 0.0, "fixture no longer exercises the float32 failure"
         assert np.isfinite(got)
+        assert np.any(got != 0.0), (
+            "`got` is identically zero — finite is not enough, "
+            "a value that has collapsed to zero is as unusable as a NaN one (#2100)"
+        )
         np.testing.assert_allclose(got, ref, rtol=_f32_rtol(1.0))
 
 
@@ -231,6 +235,10 @@ class TestLineFluxSeam:
             )
 
         assert np.isfinite(got), f"z={z}: got {got!r}, float64 says {ref:.4e}"
+        assert np.any(got != 0.0), (
+            "`got` is identically zero — finite is not enough, "
+            "a value that has collapsed to zero is as unusable as a NaN one (#2100)"
+        )
         np.testing.assert_allclose(got, ref, rtol=_f32_rtol(log10_four_pi_dl2(dls[z])))
 
     @pytest.mark.parametrize("z", ZS)
@@ -407,6 +415,10 @@ class TestZTableInterpolation:
             _, _, got = interpolate_ztable(phot, eff, logs, z_grid, 0.2)
 
         assert np.isfinite(float(got))
+        assert np.any(float(got) != 0.0), (
+            "`float(got)` is identically zero — finite is not enough, "
+            "a value that has collapsed to zero is as unusable as a NaN one (#2100)"
+        )
         np.testing.assert_allclose(float(got), float(ref), rtol=_f32_rtol(1.0))
 
     def test_smooth_log_interp_is_the_exact_weighted_sum(self, dls):
@@ -435,6 +447,10 @@ class TestZTableInterpolation:
             _, _, got = interpolate_ztable_smooth(phot, eff, logs, z_grid, 0.4, 0.25)
 
         assert np.isfinite(float(got))
+        assert np.any(float(got) != 0.0), (
+            "`float(got)` is identically zero — finite is not enough, "
+            "a value that has collapsed to zero is as unusable as a NaN one (#2100)"
+        )
         np.testing.assert_allclose(float(got), float(ref), rtol=_f32_rtol(1.0))
 
 
@@ -463,5 +479,9 @@ class TestPublicLineSurface:
         got = float(sed(jax.enable_x64(False)))
 
         assert np.isfinite(got), f"z={z}: got {got!r}, float64 says {ref:.4e}"
+        assert np.any(got != 0.0), (
+            "`got` is identically zero — finite is not enough, "
+            "a value that has collapsed to zero is as unusable as a NaN one (#2100)"
+        )
         np.testing.assert_allclose(got, ref, rtol=1e-4)
         assert wave.shape == (2000,)

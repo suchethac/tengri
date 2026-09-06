@@ -70,6 +70,10 @@ def test_gradient_finite_and_continuous():
     g = jax.jit(jax.grad(f))
     for xq in (0.0, 0.5, 1.0, 1.999, 2.0, 2.5, 3.0):
         assert jnp.isfinite(g(xq)), f"non-finite gradient at xq={xq}"
+        assert jnp.any(g(xq) != 0.0), (
+            "`g(xq)` is identically zero — finite is not enough, "
+            "a value that has collapsed to zero is as unusable as a NaN one (#2100)"
+        )
 
 
 @pytest.mark.regression_bug
@@ -98,3 +102,7 @@ def test_gradient_finite_on_symmetric_peak_node_values():
     ):
         grad = jax.grad(f)(y)
         assert jnp.all(jnp.isfinite(grad)), f"non-finite VJP on non-monotonic data: {grad}"
+        assert jnp.any(grad != 0.0), (
+            "`grad` is identically zero — finite is not enough, "
+            "a value that has collapsed to zero is as unusable as a NaN one (#2100)"
+        )

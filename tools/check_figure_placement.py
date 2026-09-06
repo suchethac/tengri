@@ -84,9 +84,7 @@ def census(nb: dict) -> tuple[int, int, int]:
         text = "".join(src) if isinstance(src, list) else str(src)
         if _MAKES_FIGURE.search(text):
             draws += 1
-        n = sum(
-            1 for out in (cell.get("outputs") or []) if "image/png" in (out.get("data") or {})
-        )
+        n = sum(1 for out in (cell.get("outputs") or []) if "image/png" in (out.get("data") or {}))
         figures += n
         if n:
             shows += 1
@@ -109,7 +107,9 @@ def main(argv: Sequence[str] | None = None) -> int:
         draws, shows, figures = census(nb)
         checked += 1
         if args.list:
-            print(f"  {str(path.relative_to(ROOT)):52} draws {draws:3d}  shows {shows:3d}  figs {figures:3d}")
+            print(
+                f"  {str(path.relative_to(ROOT)):52} draws {draws:3d}  shows {shows:3d}  figs {figures:3d}"
+            )
             continue
         if draws >= MIN_DRAWING_CELLS and shows < draws * MIN_SHOW_RATIO:
             problems.append(
@@ -127,7 +127,9 @@ def main(argv: Sequence[str] | None = None) -> int:
             print(f"  {p}", file=sys.stderr)
         return 1
 
-    print(f"OK: {checked} published notebooks place their figures beside the code that draws them.")
+    print(
+        f"OK: {checked} published notebooks place their figures beside the code that draws them."
+    )
     return 0
 
 

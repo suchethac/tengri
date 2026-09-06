@@ -138,6 +138,10 @@ def _check_gradient(fn, x0, eps, label):
         f"non-finite gradient is the jnp.where gradient leak -- the unsafe branch is "
         f"still evaluated under grad even when the primal selects the safe one."
     )
+    assert np.any(ad != 0.0), (
+        "`ad` is identically zero — finite is not enough, "
+        "a value that has collapsed to zero is as unusable as a NaN one (#2100)"
+    )
 
     sens = abs(x0 * ad / f0)
     assert sens > _MIN_LOG_SENS, (

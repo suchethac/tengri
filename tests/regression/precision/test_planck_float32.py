@@ -51,6 +51,10 @@ def test_dust_planck_is_finite_in_pure_float32():
     ref = np.asarray(_dust_bnu(jnp.asarray(_WAVE_AA), _T_DUST), dtype=np.float64)
     peak = float(np.abs(ref).max())
     assert np.all(np.isfinite(ref)), "setup: float64 Planck is not finite"
+    assert np.any(ref != 0.0), (
+        "`ref` is identically zero — finite is not enough, "
+        "a value that has collapsed to zero is as unusable as a NaN one (#2100)"
+    )
     assert 0.0 < peak < 3.4e38, f"setup: peak {peak:.3e} is not float32-representable"
 
     with jax.enable_x64(False):
@@ -73,6 +77,10 @@ def test_agn_planck_is_finite_in_pure_float32():
     ref = np.asarray(_agn_lnu(jnp.asarray(nu), 1.0e4), dtype=np.float64)
     peak = float(np.abs(ref).max())
     assert np.all(np.isfinite(ref)), "setup: float64 AGN Planck is not finite"
+    assert np.any(ref != 0.0), (
+        "`ref` is identically zero — finite is not enough, "
+        "a value that has collapsed to zero is as unusable as a NaN one (#2100)"
+    )
     assert 0.0 < peak < 3.4e38, f"setup: peak {peak:.3e} is not float32-representable"
 
     with jax.enable_x64(False):
@@ -123,6 +131,10 @@ def test_dust_planck_gradient_is_finite_in_float32():
         grad = float(jax.grad(total)(jnp.float32(_T_DUST)))
 
     assert np.isfinite(grad), f"float32 Planck gradient is {grad}"
+    assert np.any(grad != 0.0), (
+        "`grad` is identically zero — finite is not enough, "
+        "a value that has collapsed to zero is as unusable as a NaN one (#2100)"
+    )
 
 
 # ── The reverse pass under a caller's large cotangent (#1439) ─────────────
@@ -160,6 +172,10 @@ def test_planck_reverse_gradient_survives_a_large_cotangent_in_float32():
         f"float32 reverse-mode Planck gradient is {got} under a {_RING_AREA:.0e} "
         "cotangent — the quotient rule re-formed the squared denominator (#1439)"
     )
+    assert np.any(got != 0.0), (
+        "`got` is identically zero — finite is not enough, "
+        "a value that has collapsed to zero is as unusable as a NaN one (#2100)"
+    )
     assert abs(got - want) / want < 1e-5, f"float32 {got:.6e} vs float64 {want:.6e}"
 
 
@@ -183,6 +199,10 @@ def test_planck_still_supports_forward_mode():
         got = float(jax.jvp(_ring_sum, (jnp.float32(_RING_T),), (jnp.float32(1.0),))[1])
 
     assert np.isfinite(got), f"float32 forward-mode Planck gradient is {got}"
+    assert np.any(got != 0.0), (
+        "`got` is identically zero — finite is not enough, "
+        "a value that has collapsed to zero is as unusable as a NaN one (#2100)"
+    )
     assert abs(got - want) / want < 1e-5, f"float32 {got:.6e} vs float64 {want:.6e}"
 
 

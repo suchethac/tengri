@@ -175,6 +175,10 @@ def test_log_key_survives_pure_float32(derived_pair, key):
 
     value32 = float(np.asarray(f32[key]))
     assert np.isfinite(value32), f"{key} non-finite in pure float32: {value32}"
+    assert np.any(value32 != 0.0), (
+        "`value32` is identically zero — finite is not enough, "
+        "a value that has collapsed to zero is as unusable as a NaN one (#2100)"
+    )
     np.testing.assert_allclose(
         value32, float(np.asarray(f64[key])), atol=ATOL_DEX, err_msg=f"{key} float32 vs float64"
     )

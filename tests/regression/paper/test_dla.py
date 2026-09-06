@@ -221,6 +221,10 @@ class TestGradientsAndJIT:
 
         g = assert_grad_matches_fd(loss, 20.5)
         assert jnp.isfinite(g)
+        assert jnp.any(g != 0.0), (
+            "`g` is identically zero — finite is not enough, "
+            "a value that has collapsed to zero is as unusable as a NaN one (#2100)"
+        )
         assert g < 0, "Increasing N_HI should decrease mean transmission"
 
     def test_gradient_wrt_temperature_finite(self, wave_rest):
@@ -231,6 +235,10 @@ class TestGradientsAndJIT:
 
         g = assert_grad_matches_fd(loss, 1e4)
         assert jnp.isfinite(g)
+        assert jnp.any(g != 0.0), (
+            "`g` is identically zero — finite is not enough, "
+            "a value that has collapsed to zero is as unusable as a NaN one (#2100)"
+        )
 
     def test_gradient_wrt_turbulence_finite(self, wave_rest):
         """Gradient w.r.t. turbulence is finite."""
@@ -240,6 +248,10 @@ class TestGradientsAndJIT:
 
         g = assert_grad_matches_fd(loss, 10.0)
         assert jnp.isfinite(g)
+        assert jnp.any(g != 0.0), (
+            "`g` is identically zero — finite is not enough, "
+            "a value that has collapsed to zero is as unusable as a NaN one (#2100)"
+        )
 
     def test_gradient_stability_at_voigt_z_boundary(self):
         """Regression: gradients remain finite at Voigt z→0 boundary.
@@ -262,6 +274,10 @@ class TestGradientsAndJIT:
         # Finiteness check
         assert jnp.all(jnp.isfinite(grad_x)), (
             "Gradient contains NaN/Inf at z-boundary; denominator x²+1e-30 fix may have failed"
+        )
+        assert jnp.any(grad_x != 0.0), (
+            "`grad_x` is identically zero — finite is not enough, "
+            "a value that has collapsed to zero is as unusable as a NaN one (#2100)"
         )
 
         # Sanity check: no gradient should be astronomically large

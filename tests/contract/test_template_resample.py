@@ -141,6 +141,10 @@ def test_gradient_finite_including_across_zeros():
     ):
         g = np.asarray(jax.grad(total)(flux_in))
         assert np.all(np.isfinite(g)), f"non-finite VJP ({label}): {g}"
+        assert np.any(g != 0.0), (
+            "`g` is identically zero — finite is not enough, "
+            "a value that has collapsed to zero is as unusable as a NaN one (#2100)"
+        )
 
 
 @pytest.mark.limit
@@ -226,3 +230,7 @@ def test_loglog_integral_finite_gradient_with_zeros():
     ):
         g = np.asarray(jax.grad(total)(y))
         assert np.all(np.isfinite(g)), f"non-finite VJP: {g}"
+        assert np.any(g != 0.0), (
+            "`g` is identically zero — finite is not enough, "
+            "a value that has collapsed to zero is as unusable as a NaN one (#2100)"
+        )

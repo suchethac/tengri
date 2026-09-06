@@ -435,6 +435,10 @@ def test_bounded_fraction_is_hard_clamped_and_its_gradient_dies_at_the_bound(kno
 
     interior = float(grad(0.5))
     assert interior != 0.0, f"{knob} is dead in the middle of its own range"
+    assert np.all(np.isfinite(interior)), (
+        "`interior` is non-finite — non-zero is not enough, `nan != 0.0` is True "
+        "and a NaN satisfies a non-zero assertion (#2178)"
+    )
 
     for bound, outside in ((lo, lo - 0.1), (hi, hi + 0.1)):
         assert float(total(outside)) == float(total(bound)), (

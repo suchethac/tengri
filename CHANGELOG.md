@@ -30,6 +30,51 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
   seams is not established as the same defect and #2178 stays open for it
   (#2178, #2100).
 
+- The audit that came with `tools/check_gradient_assertions.py`: **276 test
+  sites** across 137 files asserted half the finite-AND-non-zero rule and now
+  assert both. 241 were the #2100 shape (finite, never non-zero) and 35 the
+  #2178 shape (non-zero, never finite). No assertion was weakened to make the
+  guard pass. 13 of the 276 carry the documented escape hatch
+  (`# grad-assert: finite-only — <reason>`): they construct a degenerate input
+  on purpose — a zeroed window, an empty band, zero ionizing flux, an exact
+  `log10_add` cancellation, the Hessian-vector product of a linear scaling, a
+  kernel evaluated outside its band — so zero is the correct answer there and
+  only the finite half is a claim.
+  Two of the repaired sites are the historical bugs themselves:
+  `test_inference_grad_float32.py` (still finite-only on `main`, which is how
+  #2100 stayed invisible) and the `!= 0.0` seam checks in
+  `test_float32_fitting_path_seams.py`.
+
+  The count is **disjoint from #2171's sweep**: re-measured against `main`
+  *after* that landed, this guard still reports the same 272 sites it reported
+  before, because #2171 repaired a different defect (an assertion wrapped in a
+  guard derived from its own subject, which declines to run) while this one
+  repairs a predicate that runs and admits the undecided state. Complementary,
+  not duplicative.
+
+- `test_met_table_grad_wrt_lgmet` was **vacuous**, and the guard found it. It
+  differentiated the total CSP mass with respect to `lgmet_table` and asserted
+  only `isfinite`. The metallicity table chooses which SSP template each age bin
+  draws from; it does not move mass between bins, so the total is *exactly*
+  invariant and the gradient is identically zero — as is the finite-difference
+  reference it was compared against, so the check compared 0 with 0. Measured:
+  `total_mass` is `7942282347.242821693420` at `lgmet`, at `lgmet+0.5`, at
+  `lgmet+2.0` and at `lgmet-2.0`, the same digits to the last one. The
+  conservation is now the claim, stated positively, and a second assertion
+  differentiates the *metallicity weights*, which the table does steer
+  (measured `max|grad| = 25.7`, all 20 entries non-zero), so the test measures a
+  gradient rather than a conservation law twice.
+
+- `TestCmbContrastFactorBounds::test_gradient_safety_float64` was **vacuous**,
+  and the guard found it. It differentiated `cmb_contrast_factor` at
+  `T_eff = 25 K, z = 10` and asserted only `isfinite`. The z = 10 CMB floor is
+  `2.725 x 11 = 29.98 K`, so at 25 K the factor is clamped to exactly zero at
+  all 601 wavelengths and the gradient is `-0.0` — finite, and measuring
+  nothing. Measured 2026-09-06: `sum = 0.0, grad = -0.0` there, against
+  `grad = 2.6` at `T_eff = 50 K` on the same grid. The sub-CMB point is now
+  pinned *as* zero (which is the correct physics) and a live point above the
+  floor is pinned finite AND non-zero, so the test measures a gradient again.
+
 - `multicolor_disc`'s pure-float32 bolometric renormalization returned
   `l_nu_intrinsic * scale`, and transposing that product makes JAX form
   `sum(g * l_nu_intrinsic)`. With the raw disc SED (~1e28) and the cotangent
@@ -79,6 +124,35 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
   are dominated by a rank-`k` correction to a diagonal on every fixture and every
   storage budget tested, so the feature was declined rather than built. Numbers
   and the reasoning in `bench/reports/2026-09-06_block_metric_structure.md`.
+
+- `tools/check_gradient_assertions.py`, wired into the `lint` job — a guard on
+  the "undecided treated as good" assertion class. A gradient has three states,
+  not two, and a predicate written against the *bad* state is satisfied for free
+  by the *undecided* one. Both halves have already shipped: #2100 pinned the
+  float32 seam gradients `isfinite`, and a gradient of exactly **zero is
+  finite**, so the identically-zero `sum(predict_photometry)` gradient passed on
+  CPU and GPU alike and the coverage meant to catch it structurally could not.
+  #2178 is the mirror — the seam checks pinned the gradient `!= 0.0`, `nan !=
+  0.0` is `True`, so a NaN satisfied a non-zero assertion, XPASSed a strict
+  xfail as a repaired underflow, and shipped a float32 NaN on the default
+  spectroscopy path. The rule is the conjunction: **finite AND non-zero,
+  asserted together**, never either alone. Scope is gradients everywhere under
+  `tests/`, plus every array under test in `tests/regression/precision/`, where
+  a forward that has collapsed to zero fails the float32 question exactly as a
+  NaN does. AST-based, with taint tracked through assignment so
+  `leaves = [np.asarray(v) for v in tree_leaves(g)]` is still `g` — deliberately
+  not a regex over source text, which 5d08a293e removed from this repository on
+  purpose (#2108) and which could not tell `x > 0` on a gradient from
+  `rel_err < 1e-5` on a residual. A lower bound (`max(abs(g)) > 0`) settles both
+  halves on its own, because NaN fails every ordered comparison; a value pinned
+  *as* zero or *as* NaN is the subject rather than the accident and is not asked
+  for a partner. The narrow escape hatch is
+  `# grad-assert: finite-only — <reason>` / `# grad-assert: nonzero-only —
+  <reason>`, and a marker carrying no reason is itself a CI failure. The guard
+  is verified against history, not intuition:
+  `tests/fixtures/assertion_holes/historical.py` transcribes both pre-fix
+  assertions verbatim and `tests/contract/test_gradient_assertion_guard.py`
+  pins that the guard fires on each (#2100, #2178).
 
 - `mcmc_smc` — tempered Sequential Monte Carlo via BlackJAX, at
   `tier="experimental"`. A particle population annealed from the exact
