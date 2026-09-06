@@ -23,21 +23,21 @@ normalized to 1 at 5500 A) at a matched (tau, age) node -- an absolute-flux
 comparison is not attempted (the two libraries' mass-formed normalization
 conventions are not established to be equal).
 
-Short-name grammar inconsistency (reported, not fixed here)
+Short-name grammar inconsistency (fixed by Task 16, item 8, F7)
 -------------------------------------------------------------
-The public dict grammar's short-form parameter resolution accepts bare
-``tau_gyr``/``age_gyr``/``log_total_mass`` for ``sfh={'type': 'delayed', ...}``
-but RAISES ``ValueError`` for the literally identical spelling under
-``sfh={'type': 'declining_exp', ...}`` -- only the fully-prefixed
-``sfh_declining_exp_tau_gyr`` (etc.) resolves. This is a real inconsistency
-in the short-name resolver (not the SFH-form defect this file exists to
-catch), flagged here per the parity audit's UNVERIFIED note rather than
-silently worked around. Pinned as an ``xfail(strict=True)`` below
-(:func:`test_declining_exp_short_form_keys_resolve`) asserting the POSITIVE
-claim ("bare keys resolve for both types") so a future resolver fix turns it
-into a loud XPASS rather than leaving the inconsistency silently
-un-noticed forever. Every other test in this file uses the fully-prefixed
-spelling regardless of this xfail's outcome.
+The public dict grammar's short-form parameter resolution used to accept
+bare ``tau_gyr``/``age_gyr``/``log_total_mass`` for
+``sfh={'type': 'delayed', ...}`` but RAISE ``ValueError`` for the literally
+identical spelling under ``sfh={'type': 'declining_exp', ...}`` -- only the
+fully-prefixed ``sfh_declining_exp_tau_gyr`` (etc.) resolved. Root cause:
+``_extract_short_name`` (``parameters/groups.py``) stripped the SFH
+type-name prefix by splitting at the FIRST underscore, assuming every SFH
+type name is a single token; ``declining_exp`` is two, so the split landed
+one token early. Fixed by matching the LONGEST registered SFH type name
+that is a genuine prefix, so a multi-word type is stripped whole.
+:func:`test_declining_exp_short_form_keys_resolve` now asserts the positive
+claim directly (no more ``xfail``). Every other test in this file uses the
+fully-prefixed spelling regardless.
 
 References
 ----------
@@ -149,24 +149,19 @@ def _norm_at(wave: np.ndarray, sed: np.ndarray, target: float = 5500.0) -> np.nd
     return sed / sed[idx]
 
 
-@pytest.mark.xfail(
-    strict=True,
-    reason=(
-        "short-name resolver: bare tau_gyr/age_gyr/log_total_mass resolve for "
-        "sfh 'delayed' but raise for 'declining_exp' (parameters/groups.py, "
-        "out of scope for this task); xfail(strict=True) so a future resolver "
-        "fix turns this into a loud XPASS instead of staying silently green"
-    ),
-)
 def test_declining_exp_short_form_keys_resolve(ssp_data):
     """Positive claim: bare short-form sfh keys resolve for BOTH SFH types.
 
-    Currently FALSE for ``declining_exp`` -- only the fully-prefixed
-    ``sfh_declining_exp_tau_gyr`` (etc.) works there, even though the
-    identical bare spelling resolves for ``sfh={'type': 'delayed', ...}``.
-    Every other test in this file uses the fully-prefixed spelling (that
-    invariant is exercised, and must keep working, independently of this
-    xfail's outcome).
+    Fixed by Task 16 (item 8, F7): ``_extract_short_name``'s SFH-prefix
+    stripping split ``rest`` at the FIRST underscore, assuming every SFH
+    type name is a single token. ``declining_exp`` is two tokens, so
+    ``"declining_exp_tau_gyr"`` split as ``"declining"`` + ``"exp_tau_gyr"``
+    -- the wrong boundary -- silently rejecting the bare ``tau_gyr`` spelling
+    that resolves identically for ``sfh={'type': 'delayed', ...}``. Fixed by
+    matching the LONGEST registered SFH type name that is a genuine prefix of
+    ``rest``, so a multi-word type name (``declining_exp``, ``delayed_bq``)
+    is stripped whole. Every other test in this file uses the fully-prefixed
+    spelling regardless (that invariant is exercised independently).
     """
     _build_declining_exp_model(ssp_data, tau_gyr=_TAU_GYR, age_gyr=_AGE_GYR, use_short_form=True)
 

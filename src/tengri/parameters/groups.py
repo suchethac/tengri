@@ -5476,7 +5476,32 @@ def _extract_short_name(full_param_name: str, group_dict: dict) -> str:
     # If so, prefer that. Otherwise, extract the short name and check for ambiguity.
     if full_param_name.startswith("sfh_"):
         rest = full_param_name[4:]  # Remove 'sfh_'
-        parts = rest.split("_", 1)
+        # Task 16 (item 8, F7): determine the type-name boundary from the
+        # registry rather than naively splitting at the FIRST underscore.
+        # A single split assumed every SFH type name is one token, so a
+        # multi-word type ("declining_exp", "delayed_bq") split as e.g.
+        # "declining" + "exp_tau_gyr" -- the wrong boundary, silently
+        # producing the WRONG short name ("exp_tau_gyr" instead of
+        # "tau_gyr") and so rejecting the bare key every single-word-typed
+        # SFH (delayed, dpl, ...) accepts for the identical physics
+        # ("bare tau_gyr/age_gyr/log_total_mass resolve for sfh='delayed'
+        # but raise for 'declining_exp'"). Matches the LONGEST registered
+        # SFH type name that is a genuine prefix (followed by '_') of
+        # ``rest`` -- longest first so "delayed_bq" is tried before its
+        # own prefix "delayed" for delayed_bq's own params.
+        _sfh_type_prefix = next(
+            (
+                candidate
+                for candidate in sorted(_valid_sfh_types(), key=len, reverse=True)
+                if rest.startswith(f"{candidate}_")
+            ),
+            None,
+        )
+        parts = (
+            [_sfh_type_prefix, rest[len(_sfh_type_prefix) + 1 :]]
+            if _sfh_type_prefix is not None
+            else rest.split("_", 1)
+        )
         if len(parts) == 2:
             short = parts[1]
             # Check if user provided the full param name
