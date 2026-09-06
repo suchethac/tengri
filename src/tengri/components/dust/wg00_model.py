@@ -135,7 +135,13 @@ class WG00AttenuationSEDComponent(TemplateThreading):
         """Cross-component derived keys published by the WG00 screen."""
         return (
             DerivedKey("L_ir", "erg/s", "Integrated dust-absorbed luminosity"),
-            DerivedKey("L_absorbed", "erg/s", "Alias for L_ir (energy balance)"),
+            DerivedKey(
+                "L_absorbed",
+                "erg/s",
+                "Dust-absorbed luminosity, LyC-masked. Equal to L_ir only at "
+                "dust_eta_balance=1.0 (strict energy balance); L_ir = eta * L_absorbed "
+                "otherwise.",
+            ),
             DerivedKey("log_L_ir", "dex", "log10(L_ir / (erg/s)); float32-safe form"),
             DerivedKey("dust_attenuation_factor", "", "exp(-A(lambda; tau_v)) on pipeline grid"),
             DerivedKey("sed_dust_attenuated", "erg/s/Hz", "Attenuated stellar SED"),
@@ -251,16 +257,32 @@ class WG00AttenuationSEDComponent(TemplateThreading):
 
         nu = C_AA / state.wave
         # Log-space integral: ~1e43 erg/s is outside float32 (#1206).
-        log_l_ir, _ = bolometric_absorbed_log10(
+        log_l_absorbed, _ = bolometric_absorbed_log10(
             state.sed_intrinsic, attenuated, nu, wave=state.wave
         )
-        warn_if_corrupt(log_l_ir, component="wg00")
+        warn_if_corrupt(log_l_absorbed, component="wg00")
+
+        # dust_eta_balance: L_IR = eta * L_absorbed. Same log-space treatment
+        # as component.py/two_component.py, so the parameter means one thing
+        # regardless of which dust_attenuation type is selected. eta<=0 has no
+        # re-emitted energy at all (-inf in log space, 0.0 linear), matching
+        # the jnp.maximum(..., 0.0) clip the linear form carries. Default
+        # eta=1.0 makes jnp.log10(1.0) == 0, so L_ir reproduces L_absorbed
+        # bit-for-bit -- this wiring changes no existing default SED.
+        eta_balance = jnp.asarray(params.get("dust_eta_balance", 1.0))
+        eta_positive = eta_balance > 0
+        log_l_ir = jnp.where(
+            eta_positive,
+            log_l_absorbed + jnp.log10(jnp.where(eta_positive, eta_balance, 1.0)),
+            -jnp.inf,
+        )
+        l_absorbed = pow10(log_l_absorbed)
         l_ir = pow10(log_l_ir)
 
         derived_overrides = dict(
             dust_attenuation_factor=attenuation,
             L_ir=l_ir,
-            L_absorbed=l_ir,
+            L_absorbed=l_absorbed,
             log_L_ir=log_l_ir,
             sed_dust_attenuated=attenuated,
         )
