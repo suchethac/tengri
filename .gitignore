@@ -224,6 +224,7 @@ _galrun/
 # `tools/check_tracked_not_ignored.py` now fails on any tracked file its own
 # .gitignore would exclude, so this list cannot silently fall behind again.
 !data/agnfitter_cold_dust_reference.h5
+!data/agnfitter_galaxy_reference.h5
 !data/agnfitter_torus_reference.h5
 !data/astrodust_templates.h5
 !data/bosa_templates.h5

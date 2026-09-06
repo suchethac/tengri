@@ -65,6 +65,7 @@ _DATA_DIR = Path(__file__).resolve().parents[3] / "data"
 _DISK_H5 = _DATA_DIR / "agnfitter_bbb_reference.h5"
 _TORUS_H5 = _DATA_DIR / "agnfitter_torus_reference.h5"
 _COLD_H5 = _DATA_DIR / "agnfitter_cold_dust_reference.h5"
+_GALAXY_H5 = _DATA_DIR / "agnfitter_galaxy_reference.h5"
 _C_AA = 2.99792458e18  # speed of light [Å/s]
 
 
@@ -814,3 +815,136 @@ def _nearest(axis: np.ndarray, value: float | None) -> int:
     if value is None:
         return int(len(axis) // 2)
     return int(np.argmin(np.abs(axis - float(value))))
+
+
+# ── GALAXY (BC03 stellar population) reference ──────────────────────────────
+# Vendored from AGNfitter-rX's models/GALAXY/{BC03_840seds,BC03_seds_metal_medium}
+# pickles by scripts/build_agnfitter_galaxy_reference.py: same never-touch-the-
+# clone-at-runtime contract as the disk/torus/cold-dust groups above, on a
+# separate committed h5 (data/agnfitter_galaxy_reference.h5) since GALAXY
+# is not part of any AGN block.
+def require_galaxy_available() -> None:
+    """Raise a clear, actionable error if the committed GALAXY grid is missing."""
+    if not _GALAXY_H5.is_file():
+        raise FileNotFoundError(
+            "AGNfitter GALAXY reference grid missing from data/ "
+            "(agnfitter_galaxy_reference.h5). Regenerate with "
+            "scripts/build_agnfitter_galaxy_reference.py (needs an AGNfitter-rX clone)."
+        )
+
+
+def galaxy_axes(metal: bool = False) -> dict[str, np.ndarray]:
+    """Grid axes for the GALAXY (BC03) stellar-population library.
+
+    Reproduces the ``(tau, age[, metal])`` grid ``MODEL_AGNfitter.GALAXY()``
+    tabulates for its ``'BC03'`` (single, near-solar metallicity) and
+    ``'BC03_metal'`` (4 metallicities) branches.
+
+    Parameters
+    ----------
+    metal : bool
+        If ``True``, read the ``bc03_metal`` group (4 metallicities, 18 tau x
+        20 ages) and include its ``metal`` axis. Default ``False`` reads the
+        single-metallicity ``bc03_840`` group (28 tau x 30 ages).
+
+    Returns
+    -------
+    dict
+        ``{"tau": ndarray [Gyr], "age": ndarray [yr], "wavelength": ndarray
+        [Angstrom]}``, plus ``"metal"`` (``[Z/Zsun]``) when ``metal=True``.
+    """
+    require_galaxy_available()
+    d = _ref(_GALAXY_H5, "bc03_metal" if metal else "bc03_840")
+    axes = {"tau": d["tau_axis"], "age": d["age_axis"], "wavelength": d["wavelength_aa"]}
+    if metal:
+        axes["metal"] = d["metal_axis"]
+    return axes
+
+
+def galaxy_template(
+    tau: float,
+    age: float,
+    metal: float | None = None,
+) -> tuple[np.ndarray, np.ndarray]:
+    """Load one GALAXY (BC03) stellar-population template (nearest grid node).
+
+    Reproduces the template access in ``MODEL_AGNfitter.GALAXY()`` (the
+    ``'BC03'`` / ``'BC03_metal'`` branches): a declining-exponential
+    (:math:`\\mathrm{SFR}(t) \\propto e^{-t/\\tau}`) star formation history at
+    fixed (tau, age[, metal]), unreddened (``E(B-V)_{gal} = 0``; reddening is
+    applied separately -- see :mod:`tengri.components.dust`).
+
+    Parameters
+    ----------
+    tau : float
+        e-folding timescale [Gyr] (nearest grid node).
+    age : float
+        Stellar population age [yr] (nearest grid node).
+    metal : float, optional
+        Metallicity [Z/Zsun] (nearest grid node). When given, reads the
+        4-metallicity ``bc03_metal`` group instead of the single-metallicity
+        ``bc03_840`` group.
+
+    Returns
+    -------
+    wave_aa : ndarray, shape (1221,)
+        Wavelength [Angstrom], ascending, AGNfitter-rX's native (unresampled)
+        BC03 grid.
+    L_nu : ndarray, shape (1221,)
+        Stellar luminosity density [erg/s/Hz].
+
+    Notes
+    -----
+    The 1221-point native wavelength grid is coarser than tengri's own
+    ``bc03_pdva_stelib_chabrier`` SSP grid (6900 points); this driver keeps
+    AGNfitter-rX's native sampling rather than resampling onto a shared grid
+    (M-B in the parity audit: resampling a narrow spectral feature loses
+    amplitude), so a node-exact comparison is only valid at each side's own
+    tabulated wavelengths, not point-by-point across a shared grid.
+    """
+    require_galaxy_available()
+    d = _ref(_GALAXY_H5, "bc03_metal" if metal is not None else "bc03_840")
+    t = _nearest(d["tau_axis"], tau)
+    a = _nearest(d["age_axis"], age)
+    if metal is not None:
+        m = _nearest(d["metal_axis"], metal)
+        L_nu = d["sed"][m, t, a, :]
+    else:
+        L_nu = d["sed"][t, a, :]
+    return d["wavelength_aa"], L_nu
+
+
+def galaxy_sfr(tau: float, metal: float | None = None) -> tuple[np.ndarray, np.ndarray]:
+    """Instantaneous SFR(age) at fixed tau from the GALAXY (BC03) library.
+
+    Reproduces ``MODEL_AGNfitter.GALAXY()``'s ``GALAXY_SFRdict``: the pickle's
+    own tabulated SFR(t), which pins the star-formation-history functional
+    form the reproduction notebook must use. At any tau node, SFR(age) is
+    monotonically declining from the youngest tabulated age (10 Myr) --
+    the classic declining-exponential tau-model, NOT a delayed-tau history
+    (which would rise before falling). See the parity audit's D1 finding.
+
+    Parameters
+    ----------
+    tau : float
+        e-folding timescale [Gyr] (nearest grid node).
+    metal : float, optional
+        Metallicity [Z/Zsun] (nearest grid node); reads ``bc03_metal`` when
+        given, else the single-metallicity ``bc03_840`` group.
+
+    Returns
+    -------
+    age_axis : ndarray, shape (n_age,)
+        Stellar population age [yr], ascending.
+    sfr : ndarray, shape (n_age,)
+        Instantaneous star formation rate [Msun/yr] at each ``age_axis`` node.
+    """
+    require_galaxy_available()
+    d = _ref(_GALAXY_H5, "bc03_metal" if metal is not None else "bc03_840")
+    t = _nearest(d["tau_axis"], tau)
+    if metal is not None:
+        m = _nearest(d["metal_axis"], metal)
+        sfr = d["sfr"][m, t, :]
+    else:
+        sfr = d["sfr"][t, :]
+    return d["age_axis"], sfr

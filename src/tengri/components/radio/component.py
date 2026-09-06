@@ -97,9 +97,18 @@ AGN_RADIO_MODELS: tuple[str, ...] = ("none", "powerlaw", "dpl")
 #
 # - ``"none"``: SF synchrotron turned off; AGN radio only.
 # - ``"bell2003"`` (default): fixed-q FIR-radio correlation.
+# - ``"bell2003_split"``: AGNFITTER-RX parity mode -- the Bell(2003) total
+#   L(1.4 GHz) split 90%/10% non-thermal/thermal (see radio.py module
+#   docstring for how this differs from tengri's default architecture).
 # - ``"delvecchio2021"``: mass- and z-dependent FIRRC at 1.4 GHz.
 # - ``"mccheyne2022"``: mass- and z-dependent FIRRC at 150 MHz.
-SF_RADIO_MODELS: tuple[str, ...] = ("none", "bell2003", "delvecchio2021", "mccheyne2022")
+SF_RADIO_MODELS: tuple[str, ...] = (
+    "none",
+    "bell2003",
+    "bell2003_split",
+    "delvecchio2021",
+    "mccheyne2022",
+)
 
 
 @dataclass(frozen=True)
@@ -111,10 +120,10 @@ class RadioSEDComponentConfig(SEDComponentConfig):
     name : str
         Diagnostic identifier. Default ``"radio"``.
     sfr_mode : str
-        Star-formation synchrotron mode. One of
-        ``{"none", "bell2003", "delvecchio2021", "mccheyne2022"}``. The
-        ``"none"`` mode turns off the SF component entirely (pure AGN radio).
-        Default ``"bell2003"``.
+        Star-formation synchrotron mode. One of :data:`SF_RADIO_MODELS`:
+        ``{"none", "bell2003", "bell2003_split", "delvecchio2021",
+        "mccheyne2022"}``. The ``"none"`` mode turns off the SF component
+        entirely (pure AGN radio). Default ``"bell2003"``.
     include_freefree : bool
         Add Murphy+2011 thermal free-free component. Default ``True``
         (matches :func:`radio_total`'s default).

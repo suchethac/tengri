@@ -9,6 +9,9 @@ Radio physics is decomposed into two independent axes:
 
 - ``none``: SF radio turned off (AGN only)
 - ``bell2003``: fixed q_IR (default)
+- ``bell2003_split``: AGNFITTER-RX parity mode (Bell 2003 total split
+  90%/10% non-thermal/thermal; see ``components.radio.radio`` module
+  docstring)
 - ``delvecchio2021``: mass + redshift dependent at 1.4 GHz
 - ``mccheyne2022``: mass + redshift dependent at 150 MHz
 
@@ -52,7 +55,7 @@ from tengri.parameters.sentinels import FREE, WILDCARD_ALIAS
 
 # ── SF synchrotron axis ────────────────────────────────────────────────────
 
-_SF_VARIANTS = frozenset({"none", "bell2003", "delvecchio2021", "mccheyne2022"})
+_SF_VARIANTS = frozenset({"none", "bell2003", "bell2003_split", "delvecchio2021", "mccheyne2022"})
 
 
 def _discover_sf_params(variant: str) -> list[str]:
