@@ -294,8 +294,23 @@ def test_download_script_reports_upstream_status_on_zero_rows(monkeypatch, capsy
     with an unrelated ``ValueError``. The script must instead name the
     upstream status and exit non-zero. No network is touched: both
     ``_connect`` and the row-count query are monkeypatched.
+
+    ``pymysql`` is not a declared dependency (neither ``dependencies`` nor the
+    ``dev`` extra in ``pyproject.toml``), so ``main()``'s own ``import
+    pymysql`` -- which runs before either monkeypatched helper is reached --
+    fails on a machine that never happened to install it (CI's ``pip install
+    -e ".[dev]"`` does not), and the script exits 1 with "pymysql not
+    installed" before this test's assertions ever run. A stub module in
+    ``sys.modules`` makes the import succeed regardless of whether the real
+    package is present, so this test does not depend on the ambient
+    environment. ``pytest.importorskip`` would only make the guard vacuous on
+    exactly the CI machines it needs to hold on.
     """
     import importlib.util
+    import sys
+    import types
+
+    monkeypatch.setitem(sys.modules, "pymysql", types.ModuleType("pymysql"))
 
     script_path = Path(__file__).resolve().parents[3] / "scripts" / "download_cb19_templates.py"
     spec = importlib.util.spec_from_file_location("download_cb19_templates", script_path)
