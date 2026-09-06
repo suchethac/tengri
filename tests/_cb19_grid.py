@@ -61,6 +61,18 @@ _BASE_RATIOS = np.array(
     dtype=np.float32,
 )
 
+#: Indices into :data:`CB19_LINE_WAVES_AA` of the hydrogen recombination lines
+#: (Ly-alpha, H-gamma, H-beta, H-alpha).
+#:
+#: Their ratios to H-beta are set by recombination, not by the ionizing
+#: spectrum or the abundances, and move by a few percent at most across the
+#: whole grid (Osterbrock & Ferland 2006, Table 4.4). The synthetic axis
+#: factors therefore leave them alone, which also keeps the Balmer decrement at
+#: the 2.87 the base ratios state: an axis factor applied to H-alpha but not to
+#: the H-beta reference would put the decrement wherever those factors happened
+#: to multiply to at the query point.
+_HYDROGEN_INDICES: tuple[int, ...] = (0, 3, 4, 8)
+
 #: Grid shape ``(N_OH, N_age, N_U, N_nH, N_CO, N_dNO, N_HbFrac, N_lines)``.
 #: ``n_age >= 11`` and ``n_oh, n_u, n_nh = 7, 6, 4`` are asserted by the CB_19
 #: contract tests; ``HbFrac = [0.0, 1.0]`` makes ``hbfrac=1.0`` snap exactly
@@ -114,13 +126,17 @@ def write_synthetic_cb19_grid(path: str | Path) -> Path:
     Notes
     -----
     Each of the five parameter-indexed axes (``log_OH``, ``log_U``,
-    ``log_nH``, ``log_CO``, ``dNO``) carries a smooth monotone factor, so
-    sweeping the parameter that indexes it moves the prediction and a
-    finite-difference gradient is comparable to the analytic one. The age axis
-    is left flat: the SSP grid indexes it, not a fitted parameter.
+    ``log_nH``, ``log_CO``, ``dNO``) carries a smooth monotone factor on the
+    metal lines, so sweeping the parameter that indexes it moves the prediction
+    and a finite-difference gradient is comparable to the analytic one. The age
+    axis is left flat: the SSP grid indexes it, not a fitted parameter.
 
-    H-beta stays exactly 1.0 everywhere, since it is the reference line the
-    ratios are defined against and the contract tests assert that value.
+    The four hydrogen recombination lines (:data:`_HYDROGEN_INDICES`) carry no
+    axis factor and keep their Case B ratios at every node, which is both how
+    the real grid behaves and what makes the H-alpha / H-beta decrement 2.87
+    everywhere in the slab rather than 2.87 times whatever the axis factors
+    multiply to. H-beta is the reference the ratios are defined against and
+    stays exactly 1.0.
 
     The factors are illustrative, not physical: this is a plumbing fixture,
     and the real grid is a download away (``scripts/download_cb19_templates.py``).
@@ -128,6 +144,9 @@ def write_synthetic_cb19_grid(path: str | Path) -> Path:
     axes = _axes()
     ratios = np.ones(_SHAPE, dtype=np.float32)
     ratios = ratios * _BASE_RATIOS[None, None, None, None, None, None, None, :]
+
+    varies = np.ones(len(CB19_LINE_WAVES_AA), dtype=bool)
+    varies[list(_HYDROGEN_INDICES)] = False
 
     # (axis position in the slab, node values, dex per unit of that axis).
     for axis, values, slope in (
@@ -140,7 +159,8 @@ def write_synthetic_cb19_grid(path: str | Path) -> Path:
         factor = 10.0 ** (slope * (values - values.mean()))
         shape = [1] * ratios.ndim
         shape[axis] = values.size
-        ratios = ratios * factor.reshape(shape).astype(np.float32)
+        scaled = ratios * factor.reshape(shape).astype(np.float32)
+        ratios = np.where(varies, scaled, ratios)
 
     ratios[..., _HBETA_INDEX] = 1.0
     _write(Path(path), ratios)
