@@ -165,7 +165,7 @@ class TestRaytraceVsHmcGaussian:
 
         # HMC
         key_hmc = jax.random.PRNGKey(20)
-        chain_hmc, _, _ = sample_hamiltonian(
+        chain_hmc, _, _, _ = sample_hamiltonian(
             key=key_hmc,
             params_init=true_mean + 0.05,
             log_prob_fn=log_prob_fn,
