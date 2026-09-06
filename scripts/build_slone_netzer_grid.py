@@ -182,7 +182,16 @@ def build(input_pickle: Path, output_h5: Path, n_wave: int = 2048) -> None:
         g.attrs["n_wave"] = n_wave
         g.attrs["wavelength_unit"] = "Angstrom"
         g.attrs["template_unit"] = "F_nu erg/s/Hz (renormalized at runtime)"
-        g.attrs["edd_labeling"] = "logEddra-values[:12] (AGNfitter-rX convention)"
+        # NOTE: the ``edd_labelling`` spelling (not the American "labeling")
+        # is deliberate, not a spelling bug -- the shipped
+        # data/slone_netzer_disc_grid.h5 already carries this exact attribute
+        # KEY, and this generator script must keep writing the same key it
+        # would find on disk. An earlier --fix pass of
+        # tools/check_british_spelling.py renamed this to the American
+        # spelling in the script only, without regenerating the grid, which
+        # left the two silently out of sync (Task 11 fix round 1, item 4;
+        # see the matching ALLOWED_PHRASES entry in check_british_spelling.py).
+        g.attrs["edd_labelling"] = "logEddra-values[:12] (AGNfitter-rX convention)"
 
     print(
         f"wrote {output_h5} — {log_mbh.size} M_BH × {log_edd.size} Edd × "

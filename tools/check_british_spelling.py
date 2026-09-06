@@ -171,6 +171,17 @@ ALLOWED_PHRASES = (
     # the published title uses "modelling"; the two References entries below
     # quote a shortened form of it, but the words kept are verbatim.
     "3D radiative transfer modelling of the dusty",
+    # HDF5 attribute key of a shipped data file: scripts/build_slone_netzer_grid.py
+    # writes ``g.attrs["edd_labelling"]``, and the committed
+    # data/slone_netzer_disc_grid.h5 already carries that exact key on disk
+    # (verified: ``h5py.File(...)["slone_netzer"].attrs`` has "edd_labelling",
+    # not "edd_labeling"). An earlier --fix pass renamed the key in this
+    # script to the American spelling without regenerating the grid, silently
+    # desynchronizing the generator from its own shipped output (Task 11 fix
+    # round 1, item 4). A bare "labelling" token entry would blind the guard
+    # to ordinary prose uses of the word elsewhere -- scoped to the full
+    # compound identifier instead, per the ALLOWED_TOKENS note above.
+    "edd_labelling",
 )
 
 
