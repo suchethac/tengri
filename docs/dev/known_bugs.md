@@ -717,3 +717,38 @@ consistency or perf improvements, not correctness bugs.
   the JIT cost (~17s compile for NIFTy vi, ~5s for native vi on the 7-param
   model) on first fit. A `scripts/warmup_cache.py` that pre-compiles the
   standard model configs would move that cost to install-time.
+
+## AGNfitter-rX Parity Audit (2026-09): deferred items
+
+Cross-cutting findings from the fourteen-task AGNfitter-rX parity sweep that
+are correctness or maintainability concerns but were out of scope for the
+tasks that found them (each would need its own review of downstream fit
+behavior or a larger refactor). Tracked here rather than fixed inline or
+silently dropped.
+
+- **PARITY-01 — `agn_log_lbol` and eleven siblings drift between five legacy
+  AGN disc/torus classes and their canonical `_params.py` declaration.**
+  `tools/check_param_restatements.py` (new, Task 11 item 5) statically
+  compares every class-level `Uniform(lo, hi, ..., default=d)` restatement
+  against the canonical `ParamDeclaration` for the same parameter name.
+  `CAT3DTorus`, `KD18Disc`, `PowerLawDisc`, `Silva04Torus`, and
+  `SKIRTORAgnfitterTorus` (`src/tengri/components/agn/{cat3d_torus_model,
+  kd18_disc_model, powerlaw_disc_model, silva04_model,
+  skirtor_agnfitter_model}.py`) all restate `agn_log_lbol`'s default as
+  `11.0`, against `agn/_params.py`'s canonical `10.0`. `KD18Disc` alone
+  restates ten more parameters (`agn_log_mbh`, `agn_log_ledd`, `agn_a_spin`,
+  `agn_cos_inc`, `agn_f_hard`, `agn_gamma_warm`, `agn_kt_warm`,
+  `agn_gamma_hard`, `agn_kt_hot`, `agn_r_warm_ratio`, `agn_lum_ratio`) with
+  bounds and/or defaults that disagree with the canonical declaration —
+  several by more than a default value (e.g. `agn_log_ledd` bounds
+  `[-3, 0]` vs canonical `[-2, 0.5]`); `PowerLawDisc` restates `agn_alpha`
+  and `agn_lum_ratio` similarly. All five class bodies predate the
+  AGNfitter-rX parity branch (`git log` shows `f92ed87f3`/`98ec30355`,
+  long before Task 1). `CAT3DTorus`'s and `Silva04Torus`'s *other* priors,
+  and all of `SKIRTORTorus`'s, already read off
+  `declared_prior(PARAMS, name)` after Task 1 / Task 14 — the fix is the
+  same mechanical pattern applied to the eighteen restatements above, but
+  changing a restated default or bound changes what an existing caller's
+  fit samples, so it needs its own review rather than a blanket
+  "make the numbers agree" in a hygiene sweep. Allowlisted in
+  `tools/check_param_restatements.py::ALLOWLIST` pending that fix.

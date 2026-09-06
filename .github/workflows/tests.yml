@@ -677,6 +677,14 @@ jobs:
       # trace, so it lives beside the other declaration guards rather than in
       # `lint` (which installs only ruff).
       - run: python tools/check_param_grid_extent.py
+      # A component class's class-level Uniform(lo, hi, ..., default=d)
+      # restates one domain _params.py PARAMS declaration by literal, and
+      # nothing required the two copies to agree: CAT3DTorus/Silva04Torus
+      # (Task 1) and SKIRTORTorus (Task 14) each drifted this way and were
+      # found only by hand. Pure ast + stdlib (no h5py/numpy needed, unlike
+      # the guard above), verified to run in a venv with nothing installed
+      # before being wired here.
+      - run: python tools/check_param_restatements.py
       # The redshift-specific instance of the same rule: a numeric default on
       # params.get('redshift', …) is unreachable in live paths and silences the
       # one condition worth hearing about — #1432.
