@@ -207,6 +207,14 @@ AGN_BLOCK_CONSUMES: dict[tuple[str, str], frozenset[str]] = {
             "agn_polar_beta",
             "agn_polar_ebv",
             "agn_polar_oa",
+            # Re-emission temperature (task13): the standalone polar_dust
+            # attenuation block's graybody term reads agn_polar_T via
+            # polar_dust_reemission_lnu (blocks/atten.py), called
+            # unconditionally by the runner whenever this block is
+            # selected. Previously omitted because a name mismatch
+            # (agn_polar_temperature vs the declared agn_polar_T) made the
+            # parameter empirically dead.
+            "agn_polar_T",
         }
     ),
     ("attenuation", "qsogen_smc"): frozenset(),

@@ -10,9 +10,16 @@ from __future__ import annotations
 import jax.numpy as jnp
 from jax import Array
 
-from tengri.components.agn._params import DEFAULT_AGN_COS_INC
+from tengri.components.agn._params import DEFAULT_AGN_COS_INC, PARAMS as _AGN_PARAMS
 from tengri.components.agn.blocks._protocol import register_agn_block
 from tengri.components.agn.polar_dust import polar_dust_emission, polar_dust_extinction
+from tengri.protocols.component import declared_default
+
+#: Declared defaults for the polar-dust re-emission knobs (ADR-0011:
+#: read the number off the declaration, never repeat it as a literal).
+_DEFAULT_AGN_POLAR_T = declared_default(_AGN_PARAMS, "agn_polar_T")
+_DEFAULT_AGN_POLAR_BETA = declared_default(_AGN_PARAMS, "agn_polar_beta")
+_DEFAULT_AGN_POLAR_OA = declared_default(_AGN_PARAMS, "agn_polar_oa")
 
 __all__ = [
     "polar_dust_attenuation_block",
@@ -94,9 +101,9 @@ def polar_dust_reemission_lnu(
     # selects the block without asking for reddening gets none.
     agn_polar_ebv: float = 0.0,
     agn_cos_inc: float = DEFAULT_AGN_COS_INC,
-    agn_polar_oa: float = 45.0,
-    agn_polar_temperature: float = 100.0,
-    agn_polar_beta: float = 1.6,
+    agn_polar_oa: float = _DEFAULT_AGN_POLAR_OA,
+    agn_polar_T: float = _DEFAULT_AGN_POLAR_T,
+    agn_polar_beta: float = _DEFAULT_AGN_POLAR_BETA,
     agn_polar_law: str = "smc",
     **_params,
 ) -> Array:
@@ -122,11 +129,21 @@ def polar_dust_reemission_lnu(
         :math:`\cos(i)` (1 = face-on, 0 = edge-on). Defaults to the declared
         ``agn_cos_inc`` default, ``cos(30 deg)``.
     agn_polar_oa : float, optional
-        Torus half-opening angle [deg, measured from equator]. Default ``45``.
-    agn_polar_temperature : float, optional
-        Dust temperature [K]. Default ``100.0``.
+        Torus half-opening angle [deg, measured from equator]. Defaults to
+        the declared ``agn_polar_oa`` default (``45``).
+    agn_polar_T : float, optional
+        Dust temperature [K]. Defaults to the declared ``agn_polar_T``
+        default (``100.0``). **Named to match the declared parameter**
+        (``tengri.components.agn._params``) and the SKIRTOR torus block's
+        own polar-dust term (``skirtor_torus_block``) -- this function
+        previously took ``agn_polar_temperature``, a name no declared
+        parameter or caller ever used, so the composable runner's
+        ``**params`` forwarding silently dropped every caller-supplied
+        temperature and this graybody was always evaluated at its 100 K
+        default (#task13).
     agn_polar_beta : float, optional
-        Dust emissivity index [dimensionless]. Default ``1.6``.
+        Dust emissivity index [dimensionless]. Defaults to the declared
+        ``agn_polar_beta`` default (``1.6``).
     agn_polar_law : str, optional
         Extinction law (``"smc"`` / ``"calzetti"`` / ``"gaskell"``).
         Default ``"smc"``.
@@ -148,6 +165,9 @@ def polar_dust_reemission_lnu(
     References
     ----------
     .. [1] Yang, A., et al. 2020, MNRAS, 491, 740 (X-CIGALE polar dust).
+       https://doi.org/10.1093/mnras/stz3001
+    .. [2] Boquien, M. et al. 2019, A&A, 622, A103, CIGALE ``skirtor2016``
+       polar-dust module. arXiv:1811.03094.
     """
     wave_aa = jnp.asarray(wavelength)
     l_lambda_in = jnp.asarray(l_in)
@@ -172,7 +192,7 @@ def polar_dust_reemission_lnu(
     l_nu_reemit = polar_dust_emission(
         l_absorbed_total,
         wave_aa,
-        temperature=agn_polar_temperature,
+        temperature=agn_polar_T,
         beta=agn_polar_beta,
         lambda_0=2e6,  # 200 μm reference wavelength
     )

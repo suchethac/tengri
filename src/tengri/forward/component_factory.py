@@ -1170,6 +1170,13 @@ def state_to_sed_components(state: Any) -> dict:
         - ``sed_nebular``, ``sed_shock``, ``sed_dust_ir``, ``sed_agn``,
           ``sed_radio``, ``sed_xray``, each component's own published
           contribution (zeros when the component is absent).
+        - ``sed_agn_disc``, ``sed_agn_torus``, ``sed_agn_lines``
+          (nlr + blr + feii), ``sed_agn_polar``: the composable AGN
+          runner's own per-sub-block rest-frame SEDs (task13,
+          NAMING_CONTRACT §4b.5), summing exactly to ``sed_agn``. Zeros
+          when the AGN component is absent OR uses a non-composable
+          (monolithic) model, which has no separate sub-blocks to
+          decompose.
 
     Notes
     -----
@@ -1201,6 +1208,10 @@ def state_to_sed_components(state: Any) -> dict:
         "sed_shock": jnp.asarray(derived.get("sed_shock", zeros)),
         "sed_dust_ir": jnp.asarray(derived.get("sed_dust_ir", zeros)),
         "sed_agn": jnp.asarray(derived.get("sed_agn", zeros)),
+        "sed_agn_disc": jnp.asarray(derived.get("sed_agn_disc", zeros)),
+        "sed_agn_torus": jnp.asarray(derived.get("sed_agn_torus", zeros)),
+        "sed_agn_lines": jnp.asarray(derived.get("sed_agn_lines", zeros)),
+        "sed_agn_polar": jnp.asarray(derived.get("sed_agn_polar", zeros)),
         "sed_radio": jnp.asarray(derived.get("sed_radio", zeros)),
         "sed_xray": jnp.asarray(derived.get("sed_xray", zeros)),
     }

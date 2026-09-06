@@ -21,6 +21,16 @@ Cross-component publications
   documented fallback (``state.derived.get("L_agn_bol", 0.0)``).
 - ``state.derived["sed_agn"]``: the AGN SED contribution
   (erg/s/Hz, shape n_wave) for diagnostics.
+- ``state.derived["sed_agn_disc"]``, ``["sed_agn_torus"]``,
+  ``["sed_agn_lines"]`` (nlr + blr + feii), ``["sed_agn_polar"]``
+  (erg/s/Hz, shape n_wave): the composable-runner's own per-sub-block
+  rest-frame SEDs (NAMING_CONTRACT §4b.5), summing exactly to
+  ``sed_agn``. Published only when ``model == "composable"`` (absent for
+  monolithic models, which have no separate sub-blocks to decompose);
+  ``sed_agn_polar`` is a zeros-shaped array (not absent) whenever the
+  composable model is configured with an ``agn_attenuation_block`` other
+  than ``"polar_dust"``, since polar-dust re-emission is inactive rather
+  than unconfigured for that recipe.
 
 Architectural notes
 -------------------
@@ -215,6 +225,32 @@ class AGNSEDComponent(TemplateThreading):
                 "(L_agn_bol ~1e46 overflows float32)",
             ),
             DerivedKey("sed_agn", "erg/s/Hz", "AGN SED contribution on pipeline wave grid"),
+            DerivedKey(
+                "sed_agn_disc",
+                "erg/s/Hz",
+                "AGN disc-only rest-frame SED, composable model only "
+                "(absent for monolithic AGN models)",
+            ),
+            DerivedKey(
+                "sed_agn_torus",
+                "erg/s/Hz",
+                "AGN torus-only rest-frame SED, composable model only "
+                "(absent for monolithic AGN models)",
+            ),
+            DerivedKey(
+                "sed_agn_lines",
+                "erg/s/Hz",
+                "AGN NLR+BLR+FeII rest-frame SED, composable model only "
+                "(absent for monolithic AGN models)",
+            ),
+            DerivedKey(
+                "sed_agn_polar",
+                "erg/s/Hz",
+                "AGN polar-dust re-emission rest-frame SED (CIGALE "
+                "skirtor2016 convention, Yang et al. 2020), composable "
+                "model only; zeros unless agn_attenuation_block="
+                "'polar_dust' (absent for monolithic AGN models)",
+            ),
             DerivedKey(
                 "L_2500_intrinsic",
                 "erg/s/Hz",
@@ -538,22 +574,33 @@ class AGNSEDComponent(TemplateThreading):
             # without overflow. (#1206)
             agn_kwargs = {**agn_kwargs, "agn_log_lbol_shape": agn_log_lbol}
         if self.config.model == "composable":
-            L_agn_unit, L_2500_unit, L_4400_unit = agn_fn(
-                wave, agn_log_lbol=_lbol_eval, return_l2500=True, **agn_kwargs
+            L_agn_unit, L_2500_unit, L_4400_unit, agn_components_unit = agn_fn(
+                wave,
+                agn_log_lbol=_lbol_eval,
+                return_l2500=True,
+                return_components=True,
+                **agn_kwargs,
             )
         else:
             L_agn_unit = agn_fn(wave, agn_log_lbol=_lbol_eval, **agn_kwargs)
             L_2500_unit = jnp.asarray(0.0)
             L_4400_unit = jnp.asarray(0.0)
+            agn_components_unit = None
         if _use_ref:
             _offset = agn_log_lbol - _AGN_LBOL_REF
             L_agn = apply_log10_scale(L_agn_unit, _offset)
             L_2500_intrinsic = apply_log10_scale(L_2500_unit, _offset)
             L_4400_intrinsic = apply_log10_scale(L_4400_unit, _offset)
+            agn_components = (
+                None
+                if agn_components_unit is None
+                else {k: apply_log10_scale(v, _offset) for k, v in agn_components_unit.items()}
+            )
         else:
             L_agn = L_agn_unit
             L_2500_intrinsic = L_2500_unit
             L_4400_intrinsic = L_4400_unit
+            agn_components = agn_components_unit
 
         # Filter-integrate L_agn through the cached filter
         # passbands and publish ``agn_phot_lnu_precomp`` so predict_via_precomp
@@ -580,6 +627,15 @@ class AGNSEDComponent(TemplateThreading):
                 else jnp.asarray(_XRAY_COS_INC_REF_30DEG)
             ),
         )
+        if agn_components is not None:
+            # Public per-sub-block rest-frame SEDs (NAMING_CONTRACT §4b.5),
+            # reachable via ``model.predict(params).sed.components[...]``.
+            # Composable-runner-only: absent for monolithic AGN models,
+            # which have no separate sub-blocks to decompose.
+            derived_overrides["sed_agn_disc"] = agn_components["disc"]
+            derived_overrides["sed_agn_torus"] = agn_components["torus"]
+            derived_overrides["sed_agn_lines"] = agn_components["lines"]
+            derived_overrides["sed_agn_polar"] = agn_components["polar"]
         if (
             self._state is not None
             and self._state.filter_waves is not None

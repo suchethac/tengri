@@ -245,6 +245,11 @@ _CANONICAL_UNITS: dict[str, str] = {
     "L_2500_intrinsic": "erg/s/Hz",
     "L_4400_intrinsic": "erg/s/Hz",
     "sed_agn": "erg/s/Hz",
+    # Per-sub-block AGN SEDs (task13): composable-runner only, sum to sed_agn.
+    "sed_agn_disc": "erg/s/Hz",
+    "sed_agn_torus": "erg/s/Hz",
+    "sed_agn_lines": "erg/s/Hz",
+    "sed_agn_polar": "erg/s/Hz",
     "sed_grahsp": "erg/s/Hz",
     # AGN, filter LUT (WavePrecomp).
     "agn_phot_lnu_precomp": "erg/s/Hz",

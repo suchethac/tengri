@@ -301,7 +301,7 @@ class TestSKIRTORPolarDustIntegration:
             "agn_torus_block": "skirtor",
             "agn_disc_block": "multicolor",
             "agn_cos_inc": 0.0,  # Type 2 (edge-on)
-            "agn_polar_temperature": 100.0,
+            "agn_polar_T": 100.0,
             "agn_polar_beta": 1.6,
             "agn_polar_oa": 45.0,
             "agn_polar_law": "smc",

@@ -391,6 +391,7 @@ def compose_l_nu(
     agn_attenuation_block: str,
     template_state: dict | None = None,
     return_l2500: bool = False,
+    return_components: bool = False,
     **params,
 ) -> Array | tuple[Array, float]:
     r"""Compose AGN-side :math:`L_\nu` from per-stage block implementations.
@@ -425,6 +426,15 @@ agn_torus_block, agn_attenuation_block : str
         When True, return ``(L_nu, L_2500_intrinsic, L_4400_intrinsic)``
         tuple. When False (default), return only ``L_nu`` for backward
         compatibility with existing single-return callers. Default: False.
+    return_components : bool, optional
+        When True, additionally return a ``components`` dict with keys
+        ``"disc"``, ``"torus"``, ``"lines"`` (nlr + blr + feii), ``"polar"``
+        -- the public per-sub-block rest-frame SEDs (NAMING_CONTRACT §4b.5,
+        published as ``sed_agn_disc``/``sed_agn_torus``/``sed_agn_lines``/
+        ``sed_agn_polar`` by :class:`~tengri.components.agn.component.AGNSEDComponent`).
+        The four arrays sum to ``L_nu`` (to floating-point reassociation).
+        Combines orthogonally with ``return_l2500``: the ``components`` dict
+        is always the LAST element of the returned tuple. Default: False.
     **params
         Per-impl free parameters. Each block consumes the keys it
         recognizes and ignores the rest.
@@ -443,6 +453,11 @@ agn_torus_block, agn_attenuation_block : str
         monochromatic luminosity at 4400 Å [erg/s/Hz], capturing the
         disc shape at the ``agn_log_lbol`` normalization. Returned as
         third element of tuple. Otherwise not returned.
+    components : dict, optional
+        When ``return_components=True``, ``{"disc", "torus", "lines",
+        "polar"}`` -> ndarray, shape ``(n_wave,)``, each in :math:`L_\nu`
+        [erg/s/Hz]. Returned as the last element of the tuple. Otherwise
+        not returned.
 
     Notes
     -----
@@ -758,22 +773,28 @@ agn_torus_block, agn_attenuation_block : str
     # Defaults (i=30, theta_torus=30 -> inc_crit=60 > i) give mask ~ 1, so
     # default-inclination models are unchanged. Static dispatch on the torus name
     # is JIT-safe.
-    L_lambda_central = L_lambda_disc + L_lambda_lines_aniso + L_lambda_feii
+    # ``_central_mask`` is factored out of the (disc + aniso-lines) sum
+    # instead of multiplying ``L_lambda_central`` in place, so the
+    # per-sub-block decomposition below (``sed_agn_disc`` / ``sed_agn_torus``
+    # / ``sed_agn_lines`` / ``sed_agn_polar``, NAMING_CONTRACT §4b.5) can
+    # apply the IDENTICAL mask to the disc and aniso-lines terms
+    # individually: multiplication distributes over the sum, so the two
+    # formulations agree to floating-point reassociation.
+    _central_mask = 1.0
     if agn_torus_block in TORUS_SCREEN_PARAMS:
         _oa_key, _tau_key = TORUS_SCREEN_PARAMS[agn_torus_block]
-        screen = torus_screen_transmission(
+        _central_mask = torus_screen_transmission(
             wave,
             cos_inc=params.get("agn_cos_inc", 0.86602540378443864),
             oa_deg=params.get(_oa_key, 40.0),
             tau_v=params.get(_tau_key, 7.0),
         )
-        L_lambda_central = L_lambda_central * screen
     elif agn_torus_block not in _SELF_CONTAINED_TORI:
-        vis = sigmoid_visibility_mask(
+        _central_mask = sigmoid_visibility_mask(
             params.get("agn_cos_inc", 0.86602540378443864),
             params.get("agn_theta_torus", 30.0),
         )
-        L_lambda_central = L_lambda_central * vis
+    L_lambda_central = (L_lambda_disc + L_lambda_lines_aniso + L_lambda_feii) * _central_mask
     # Isotropic NLR: visible at every inclination, so added after the mask.
     L_lambda_central = L_lambda_central + L_lambda_lines_iso
 
@@ -784,9 +805,11 @@ agn_torus_block, agn_attenuation_block : str
     L_lambda_total = (L_lambda_central + L_lambda_torus) * factor
 
     # Convert to L_nu [erg/s/Hz] using L_nu = L_lambda * lambda^2 / c.
-    L_nu_atten = L_lambda_total * wave**2 / C_AA_PER_S
+    _conv = wave**2 / C_AA_PER_S
+    L_nu_atten = L_lambda_total * _conv
 
-    # Stage 6 (conditional): polar-dust reemission.
+    # Stage 6 (conditional): polar-dust reemission (CIGALE skirtor2016 polar
+    # dust convention; Yang et al. 2020, MNRAS, 491, 740, section 2.2.2).
     # When polar_dust attenuation is selected, the absorbed photons are re-emitted
     # as a geometry-independent FIR graybody. Compute and add this to the SED.
     # Static dispatch on agn_attenuation_block (a Python string) is JIT-safe.
@@ -795,13 +818,38 @@ agn_torus_block, agn_attenuation_block : str
         # central engine + torus IR).
         L_lambda_pre_atten = L_lambda_central + L_lambda_torus
         L_nu_reemit = polar_dust_reemission_lnu(wave, L_lambda_pre_atten, **params)
-        L_nu_result = L_nu_atten + L_nu_reemit
     else:
-        L_nu_result = L_nu_atten
+        L_nu_reemit = jnp.zeros_like(wave)
+    L_nu_result = L_nu_atten + L_nu_reemit
 
-    # Return with optional L_2500_intrinsic and L_4400_intrinsic tuple.
-    if return_l2500:
+    components = None
+    if return_components:
+        # Public per-sub-block rest-frame SEDs (NAMING_CONTRACT §4b.5):
+        # ``sed_agn_disc``, ``sed_agn_torus``, ``sed_agn_polar``,
+        # ``sed_agn_lines`` (nlr + blr + feii). Each is the SAME additive
+        # piece of ``L_lambda_total`` above, converted to L_nu -- the four
+        # arrays sum EXACTLY (to floating-point reassociation) to
+        # ``L_nu_result``, since ``_central_mask`` and ``factor`` are
+        # distributed over the same sum the un-decomposed path folds them
+        # into.
+        L_lambda_lines_total = (
+            L_lambda_lines_aniso + L_lambda_feii
+        ) * _central_mask + L_lambda_lines_iso
+        components = {
+            "disc": L_lambda_disc * _central_mask * factor * _conv,
+            "torus": L_lambda_torus * factor * _conv,
+            "lines": L_lambda_lines_total * factor * _conv,
+            "polar": L_nu_reemit,
+        }
+
+    # Return with optional L_2500_intrinsic/L_4400_intrinsic and per-sub-block
+    # components tuples.
+    if return_l2500 and return_components:
+        return (L_nu_result, L_2500_intrinsic, L_4400_intrinsic, components)
+    elif return_l2500:
         return (L_nu_result, L_2500_intrinsic, L_4400_intrinsic)
+    elif return_components:
+        return (L_nu_result, components)
     else:
         return L_nu_result
 
@@ -818,6 +866,7 @@ def composable_agn_l_nu(
     agn_attenuation_block: str = "none",
     template_state: dict | None = None,
     return_l2500: bool = False,
+    return_components: bool = False,
     **params,
 ) -> Array | tuple[Array, float]:
     r"""AGN_MODELS["composable"] entry point: :data:`L_ν` in erg/s/Hz.
@@ -844,6 +893,11 @@ agn_torus_block, agn_attenuation_block : str, optional
         When True, return ``(L_nu, L_2500_intrinsic, L_4400_intrinsic)``
         tuple. When False (default), return only ``L_nu`` for backward
         compatibility. Default: False.
+    return_components : bool, optional
+        When True, additionally return a ``components`` dict (see
+        :func:`compose_l_nu`) as the last element of the returned tuple,
+        with every entry scaled by ``agn_lum_ratio`` (matching ``L_nu``).
+        Default: False.
     **params
         Per-impl free parameters forwarded to every block.
 
@@ -861,6 +915,10 @@ agn_torus_block, agn_attenuation_block : str, optional
         monochromatic luminosity at 4400 Å [erg/s/Hz]. NOT scaled by
         ``agn_lum_ratio`` (maintains the unscaled-intrinsic convention of
         ``L_agn_bol``). Returned as third element of tuple when enabled.
+    components : dict, optional
+        When ``return_components=True``, ``{"disc", "torus", "lines",
+        "polar"}`` -> ndarray, each scaled by ``agn_lum_ratio``. Returned as
+        the last element of the tuple.
 
     Notes
     -----
@@ -892,10 +950,19 @@ agn_torus_block, agn_attenuation_block : str, optional
         agn_attenuation_block=agn_attenuation_block,
         template_state=template_state,
         return_l2500=return_l2500,
+        return_components=return_components,
         **params,
     )
-    if return_l2500:
+    if return_l2500 and return_components:
+        L_nu, L_2500_intrinsic, L_4400_intrinsic, components = result
+        components = {k: agn_lum_ratio * v for k, v in components.items()}
+        return (agn_lum_ratio * L_nu, L_2500_intrinsic, L_4400_intrinsic, components)
+    elif return_l2500:
         L_nu, L_2500_intrinsic, L_4400_intrinsic = result
         return (agn_lum_ratio * L_nu, L_2500_intrinsic, L_4400_intrinsic)
+    elif return_components:
+        L_nu, components = result
+        components = {k: agn_lum_ratio * v for k, v in components.items()}
+        return (agn_lum_ratio * L_nu, components)
     else:
         return agn_lum_ratio * result
