@@ -752,3 +752,46 @@ silently dropped.
   fit samples, so it needs its own review rather than a blanket
   "make the numbers agree" in a hygiene sweep. Allowlisted in
   `tools/check_param_restatements.py::ALLOWLIST` pending that fix.
+
+- **PARITY-02 — `agn_priors.py` is 1198 lines; a package split was
+  suggested but not done (Task 7).** `src/tengri/parameters/agn_priors.py`
+  holds all eight AGNfitter-rX informative-prior functions plus their
+  `agnfitter_priors` adapter; the file-size guidance elsewhere in this repo
+  (`tools/check_file_sizes.py`) is 800 lines outside `data/`. Splitting by
+  prior family (energy balance / AGN fraction / mid-IR-X-ray-UV ties) was
+  raised in review and deferred as non-blocking.
+
+- **PARITY-03 — `radio.py` is 1574 lines (1328 pre-existing + Task 6's
+  `bell2003_split`/`sfr_from_lir`).** Same file-size guidance as above;
+  splitting the free-free/synchrotron calibration helpers from the
+  SED-component class was raised and deferred as non-blocking.
+
+- **PARITY-04 — `include_freefree` is not reachable via the model-building
+  dict grammar (Task 6).** `bell2003_split`'s separate free-free term is a
+  component/function-level Python option only (`component_factory.py`); no
+  `radio={'include_freefree': ...}` grammar key routes to it, so a user
+  cannot select it declaratively — dead plumbing by the explicit-over-silent
+  rule (either give it a grammar key, or remove the option).
+
+- **PARITY-05 — GRAHSP/composable AGN sub-block parameter ownership is
+  split three ways with no single source of truth (Task 12/13/16
+  findings).** A parameter like `agn_polar_ebv` can be read by a torus
+  block's bundled polar term, by the runner's Stage-1.5 line-of-sight
+  reddening (every `atten` type), and by the standalone
+  `atten='polar_dust'` block — which of the three "owns" a given parameter
+  for a given `(torus, atten)` configuration was determined only by
+  measurement (peer sweeps, Task 12/13's orchestrator probes), never by any
+  declaration. R22 (this task's CHANGELOG entry) consolidated the polar-dust
+  case specifically; the general three-way ownership split for AGN
+  sub-block parameters (which wildcard frees what, under which
+  `(torus, atten)` pair) is Task 16's larger, still-open item.
+
+- **PARITY-06 — `tools/check_param_defaults.py` was in-range-only, blind to
+  a restated declaration with a drifted default (closed by Task 11 item
+  5).** It only checked that a function *signature* default lies inside
+  its *own* declared prior's support; it had no notion of a *second*
+  independent declaration of the same parameter to compare against, so
+  `SKIRTORTorus`'s drifted `agn_band_frac`/`agn_polar_ebv`/`agn_log_lbol`
+  defaults (Task 14) and PARITY-01 above were both invisible to it.
+  `tools/check_param_restatements.py` (Task 11 item 5, wired into the
+  smoke job) closes this class of blind spot going forward.
