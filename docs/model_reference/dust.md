@@ -101,7 +101,9 @@ The Li et al. (2008) analytical curve provides a four-parameter family ($c_1$--$
 $$ (eq-li08)
  where $\lambda$ is in $\mu$m, $D_0 = 6.88^{c_2} + 0.145^{c_2} + c_3$, and the three terms represent the UV/optical continuum, far-UV rise, and 2175 Å bump respectively. This is the fiducial attenuation model in recent high-redshift JWST analyses (Markov et al. 2025).
 
-The remaining curves in Table {ref}`1 <tab-dust-curves>`, power law (Charlot and Fall 2000), Calzetti (Calzetti et al. 2000), Cardelli (Cardelli et al. 1989), SMC/LMC (Pei 1992), Leitherer02 (Leitherer et al. 2002), and the redshift-dependent Narayanan+18 (Narayanan et al. 2018), follow their published functional forms without modification.
+The remaining curves in Table {ref}`1 <tab-dust-curves>`, power law (Charlot and Fall 2000), Calzetti (Calzetti et al. 2000), Cardelli (Cardelli et al. 1989), SMC/LMC (Pei 1992), and Leitherer02 (Leitherer et al. 2002), follow their published functional forms without modification.
+
+`narayanan_z` is the exception, because Narayanan et al. (2018) publish no functional form for the redshift dependence. They report median attenuation curves at integer $z = 0$ to $6$ from a 25 Mpc MUFASA radiative-transfer run and distribute those curves as a table. tengri fits the Kriek and Conroy (2013) form to each published median over 1250 Å to 1 $\mu$m and interpolates the fitted slope and bump linearly in redshift, holding the end value outside $0 \le z \le 6$ rather than extrapolating. The residual root-mean-square of that fit is 0.010 to 0.024 on curves of order unity, so it reproduces the published medians to a few percent and no better. Redshift is the only free parameter: the law is the median curve at $z$, and a fit that wants a slope or bump of its own uses `kriek_conroy`, which is that model. `scripts/fit_narayanan2018_medians.py` reproduces the fit from the repackaged table in `data/attenuation/`.
 
 (app-dust-emission-details)=
 

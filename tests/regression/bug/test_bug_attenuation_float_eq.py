@@ -1,8 +1,17 @@
 # SPDX-License-Identifier: BSD-3-Clause
-"""Regression test for attenuation.py float equality safe bug.
+"""``narayanan_z`` must stay JIT-safe and differentiable in its own knob.
 
-Bug: attenuation.py:725-730 — narayanan_z used == for float sentinel detection,
-which is JIT-unsafe for traced values.
+Original bug: the law detected its sentinel defaults with ``==`` on values that
+could be traced, which is JIT-unsafe. That was fixed by comparing with a
+tolerance instead.
+
+#2199 removed the sentinels entirely, and with them the comparison this file was
+written for. Keeping the file as a comparison test would leave it passing for a
+reason that no longer exists; keeping the *property* is what matters, so it now
+pins the same two guarantees on the knob the law actually has. ``redshift`` is
+the sole traced input, it is read with ``jnp.interp`` over the fitted
+Narayanan+2018 table, and a photometric-redshift fit needs that read to compile
+and to differentiate.
 """
 
 import chex
@@ -20,40 +29,44 @@ def fd_grad(f, x: float, eps: float = 1e-4) -> float:
 
 
 class TestAttenuationFloatEqualitySafe:
-    """Bug: attenuation.py:725-730 — float == comparison not JIT-safe."""
+    """No Python-level branch on a traced value anywhere in ``narayanan_z``."""
 
     def test_narayanan_z_jit_safe(self):
-        """narayanan_z should JIT-compile and return correct results."""
+        """narayanan_z should JIT-compile on a traced redshift and stay finite."""
         from tengri.components.dust.attenuation import narayanan_z
 
         wave = jnp.linspace(1000.0, 10000.0, 100)
 
         @jax.jit
-        def _eval(delta, bump):
-            return narayanan_z(wave, dust_delta=delta, dust_bump_strength=bump, redshift=0.5)
+        def _eval(z):
+            return narayanan_z(wave, redshift=z)
 
-        # Default sentinel values (delta=-0.2, bump=1.0) should activate redshift scaling
-        k_default = _eval(-0.2, 1.0)
-        # Non-default values should not activate redshift scaling
-        k_custom = _eval(-0.4, 0.5)
+        k_low = _eval(0.5)
+        k_high = _eval(4.0)
 
-        chex.assert_tree_all_finite(k_default)
-        chex.assert_tree_all_finite(k_custom)
-        # The two should be different (different delta values)
-        assert not jnp.allclose(k_default, k_custom)
+        chex.assert_tree_all_finite(k_low)
+        chex.assert_tree_all_finite(k_high)
+        # Two different redshifts are two different curves; if they were equal
+        # the traced value never reached the table (#2199).
+        assert not jnp.allclose(k_low, k_high)
 
     def test_narayanan_z_gradient_exists(self):
-        """Gradient w.r.t. dust_delta should be finite (not NaN from == comparison)."""
+        """d k / d z must be finite and match a finite difference.
+
+        Taken at z = 0.3, inside the first table interval: the interpolation is
+        linear there, so autodiff and a central difference must agree closely.
+        The end nodes are deliberately flat and would give an uninformative zero.
+        """
         from tengri.components.dust.attenuation import narayanan_z
 
         wave = jnp.linspace(1000.0, 10000.0, 50)
 
-        def _sum(delta):
-            k = narayanan_z(wave, dust_delta=delta, dust_bump_strength=0.5, redshift=0.3)
-            return jnp.sum(k)
+        def _sum(z):
+            return jnp.sum(narayanan_z(wave, redshift=z))
 
-        g_jax = float(jax.grad(_sum)(-0.3))
-        g_fd = fd_grad(_sum, -0.3)
+        g_jax = float(jax.grad(_sum)(0.3))
+        g_fd = fd_grad(_sum, 0.3)
+        assert g_jax != 0.0, "redshift has an exactly-zero gradient inside the table"
         np.testing.assert_allclose(
             g_jax,
             g_fd,

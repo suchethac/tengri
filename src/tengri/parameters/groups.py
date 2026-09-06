@@ -2029,6 +2029,14 @@ def _law_shape_params(law_name: str) -> frozenset[str]:
     flat parameter (``dust_slope``). ``_TWO_COMPONENT_LAW_PARAMS`` is the
     existing map between them; a signature name already spelled ``dust_*`` is
     its own flat name.
+
+    ``redshift`` is the one name here that is neither (#2199). It is a bare
+    model-wide parameter, not a ``dust_*`` key the grammar accepts, so the
+    ``dust_``-prefix branch dropped it and ``narayanan_z`` -- the only law whose
+    shape depends on it -- was evaluated at z = 0 whatever the model said. A law
+    that names it in its signature gets it listed here, which is what puts it in
+    ``live_shape_params`` and so both past the single screen's frozen curve cache
+    and into the keyword dict that screen splats.
     """
     from tengri.components.dust._apply import _TWO_COMPONENT_LAW_PARAMS
     from tengri.components.dust.laws._registry import DUST_LAWS, law_kwarg_names
@@ -2042,7 +2050,7 @@ def _law_shape_params(law_name: str) -> frozenset[str]:
         flat = kwarg_to_flat.get(kwarg)
         if flat is not None:
             names.add(flat)
-        elif kwarg.startswith("dust_"):
+        elif kwarg.startswith("dust_") or kwarg == "redshift":
             names.add(kwarg)
     return frozenset(names)
 
@@ -4389,8 +4397,9 @@ def _reject_foreign_variant_keys(
     Raises
     ------
     ParameterError
-        Naming the group, the selected variant, the offending key, and the
-        keys that variant does accept.
+        Naming the group, the selected variant, the offending key, the keys
+        that variant does accept, and -- for ``dust_attenuation`` -- the
+        registered laws that do read the offending key.
     """
     foreign = sorted(k for k in user_dict if k in group_spellings and k not in accepted_spellings)
     if not foreign:
@@ -4408,8 +4417,44 @@ def _reject_foreign_variant_keys(
         f"(either spelling, short or fully prefixed). "
         f"Drop the {noun}, select a variant that reads {pronoun}, or use the "
         f"'all_params' / 'other_params' wildcard to set the policy for every parameter "
-        f"this variant does read."
+        f"this variant does read." + _laws_reading_hint(group, foreign)
     )
+
+
+def _laws_reading_hint(group: str, foreign: list[str]) -> str:
+    """Name the attenuation laws that read a key the selected law does not.
+
+    Parameters
+    ----------
+    group : str
+        Group being validated; only ``"dust_attenuation"`` gets a hint.
+    foreign : list of str
+        Rejected keys, in either spelling.
+
+    Returns
+    -------
+    str
+        A sentence to append to the rejection message, or ``""``.
+
+    Notes
+    -----
+    "Select a variant that reads it" is true and unhelpful when the user has to
+    guess which of 22 registered laws that is. Derived from the registry rather
+    than listed here, so a law registered later appears without an edit. ``#2199``
+    is the case that made it worth having: ``narayanan_z`` *is* the published
+    median curve at z and reads no slope or bump at all, and the answer a user
+    wants is the name of the law that does, which is ``kriek_conroy``.
+    """
+    if group != "dust_attenuation":
+        return ""
+    from tengri.components.dust.laws._registry import DUST_LAWS
+
+    wanted = {k if k.startswith("dust_") else f"dust_{k}" for k in foreign}
+    readers = sorted(law for law in DUST_LAWS if wanted & set(_law_shape_params(law)))
+    if not readers:
+        return ""
+    noun = "keys" if len(foreign) > 1 else "key"
+    return f" Laws that do read the {noun}: {', '.join(readers)}."
 
 
 def _validate_user_keys(
