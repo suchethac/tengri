@@ -107,11 +107,32 @@ def test_composable_signature_lists_sub_block_kwargs() -> None:
 
 
 def test_composable_signature_includes_shared_short_params() -> None:
+    """The composable factory offers the TRULY shared parameters.
+
+    ``log_mbh`` was pinned here as shared. It is not: every reader is a disc
+    block (adaf, kd18, kubota_done, multicolor, relagn, slone_netzer), so the
+    ownership model gave it the ``agn.disc`` owner and the composable factory
+    correctly stopped offering it at the top level. The assertion moves to the
+    disc factory rather than being dropped -- see
+    ``test_disc_signature_includes_disc_owned_short_params`` below.
+    """
     sig = inspect.signature(builders.agn.composable)
     params = set(sig.parameters)
     # Shared params live in the agn partition.
     assert "log_lbol" in params
-    assert "log_mbh" in params
+    assert "lum_ratio" in params
+    assert "log_mbh" not in params
+
+
+def test_disc_signature_includes_disc_owned_short_params() -> None:
+    """The equivalent assertion at ``log_mbh``'s new owner.
+
+    A disc factory that did not offer its own physics would be the same defect
+    one level down, so this is the half of the pin that still bites.
+    """
+    for factory in (builders.agn.disc.multicolor, builders.agn.disc.kd18_agnfitter):
+        params = set(inspect.signature(factory).parameters)
+        assert "log_mbh" in params, factory.__name__
 
 
 def test_composable_default_call_is_minimal() -> None:
