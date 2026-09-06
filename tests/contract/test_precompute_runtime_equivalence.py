@@ -450,6 +450,106 @@ class TestSilva04PrecomputeEquivalence:
         _assert_equivalent(phot_precomp, phot_runtime, "silva04 precompute↔runtime", rtol=1e-3)
 
 
+@pytest.mark.skipif(
+    not (_REPO_DATA / "silva04_torus_grid.h5").exists(),
+    reason="Silva+04 torus grid not available; build via scripts/build_silva04_grid.py.",
+)
+@pytest.mark.parametrize("where", ["node", "off_node"])
+def test_silva04_precompute_matches_exact_pchip(where) -> None:
+    """``silva04_precompute.py``'s LUT agrees with the exact path at a node AND off-node.
+
+    Regression test for task3 fix round 1, RULING R11: ``silva04_precompute.py``
+    used triweight (a C²-smooth *smoother*) while the exact path (``silva04.py``)
+    had already migrated to PCHIP (node-exact, C¹), so the two paths disagreed by
+    construction -- most sharply at the grid's boundary nodes (~9% shape smear,
+    ``torus.md`` D2), which this test targets directly.
+
+    ``TestSilva04PrecomputeEquivalence.test_silva04`` above goes through a full
+    ``SEDModel(precompute=True)``, which does NOT actually route this legacy
+    monolithic ``agn_model='silva04'`` selection through
+    ``silva04_precompute.py`` at all (checked directly: instrumenting
+    ``precompute_silva04_photometry`` to print on entry, it is never called
+    while building that test's ``model_precomp``) -- so that test's precompute
+    and runtime models are silently both computing the exact path, and it
+    cannot distinguish a working precompute LUT from a broken one, regardless
+    of interpolation kernel. This test instead calls
+    :func:`~tengri.components.agn.silva04_precompute.precompute_silva04_photometry`
+    / :func:`~tengri.components.agn.silva04_precompute.build_silva04_photometry_lookup`
+    directly, so it genuinely exercises the code RULING R11 migrated.
+
+    Tolerance: measured directly against the fixed (both-PCHIP) code at the
+    grid's two boundary nodes and the two adjacent off-node midpoints, the
+    precompute-vs-exact ratio differs from 1 by at most ~0.25% -- a small,
+    kernel-independent baseline (present identically at every node tested,
+    so it is a filter-integration convention difference between this test's
+    own reference quadrature and ``preintegrate_grid``'s, not an interpolation
+    artifact). Reintroducing triweight in ``silva04_precompute.py`` alone
+    (this test's mutant) pushes the boundary-node ratio to ~1.4% -- comfortably
+    past the 0.5% threshold below, which stays comfortably above the measured
+    baseline.
+    """
+    import h5py
+
+    from tengri.components.agn.silva04 import load_silva04_grid, silva04_sed_from_grid
+    from tengri.components.agn.silva04_precompute import (
+        build_silva04_photometry_lookup,
+        precompute_silva04_photometry,
+    )
+
+    grid_path = str(_REPO_DATA / "silva04_torus_grid.h5")
+    with h5py.File(grid_path, "r") as f:
+        log_nh_axis = np.asarray(f["silva04"]["log_nh_axis"][:], dtype=np.float64)
+    grid = load_silva04_grid(grid_path)
+
+    # Boundary nodes: where the triweight-vs-PCHIP kernel difference is
+    # largest (torus.md D2); an interior node's difference is too small to
+    # reliably separate from the baseline below. The off-node point sits 90%
+    # of the way from the second-to-last to the last node -- close to, but
+    # not on, the boundary node; the exact midpoint measured a smaller
+    # triweight-vs-PCHIP gap (triweight's neighbor-averaging happens to be
+    # closer to correct near a bin's center than near its edge).
+    if where == "node":
+        log_nh_value = float(log_nh_axis[-1])
+    else:
+        log_nh_value = float(log_nh_axis[-2] + 0.9 * (log_nh_axis[-1] - log_nh_axis[-2]))
+
+    filter_waves = [np.geomspace(1.0e5, 1.0e6, 300), np.geomspace(1.0e6, 1.0e7, 300)]
+    filter_trans = [np.ones(300), np.ones(300)]
+
+    precomp = precompute_silva04_photometry(grid_path, filter_waves, filter_trans, redshift=0.0)
+    lookup = build_silva04_photometry_lookup(precomp)
+    phot_precomp = np.asarray(lookup(0.0, log_nh_value, 1.0))
+
+    # Reference: the exact SED (silva04.py), evaluated on the template's own
+    # native grid (no intermediate resample), integrated through the SAME
+    # filters with the same BESSELL (1/lambda) weight
+    # preintegrate_grid uses (see its docstring).
+    wave = grid.wave_grid
+    sed = np.asarray(
+        silva04_sed_from_grid(
+            grid,
+            jax.numpy.asarray(wave),
+            agn_log_lbol=0.0,
+            agn_log_nh_silva=log_nh_value,
+            agn_torus_frac=1.0,
+        )
+    )
+    phot_exact = np.array(
+        [
+            np.trapezoid(np.interp(fw, wave, sed) * ft / fw, fw) / np.trapezoid(ft / fw, fw)
+            for fw, ft in zip(filter_waves, filter_trans)
+        ]
+    )
+
+    chex.assert_trees_all_close(
+        phot_precomp,
+        phot_exact,
+        rtol=5.0e-3,
+        atol=0.0,
+        custom_message=f"silva04 precompute vs exact at log_nh_silva={log_nh_value:.4f} ({where})",
+    )
+
+
 class TestCAT3DWindPrecomputeEquivalence:
     """Test cat3d_wind precompute↔runtime equivalence."""
 

@@ -18,6 +18,15 @@ of the pickle's 169 templates' own native wavelength sampling rather than
 double-resampling everything onto one foreign axis, which used to smear the
 aromatic/PAH-forest region (~3.2-3.9 µm) by up to 0.47 dex at the grid-edge
 ``irlum`` nodes (``colddust_radio.md`` D2).
+
+Both files also deduplicate three repeated ``irlum`` values the same way:
+keeping the LAST raw-order occurrence of each, matching AGNfitter-rX's own
+``STARBURSTFdict_4plot[str(irlum)] = ...`` dict construction
+(``MODEL_AGNfitter.py::STARBURST``), which overwrites a repeated key with
+every later row it sees. An earlier version kept the FIRST occurrence
+instead (task3 fix round 1, item 1), disagreeing with upstream by ~0.0254
+dex at the affected edge node -- undetected because the reference shared the
+same wrong tie-break.
 """
 
 from __future__ import annotations
@@ -225,3 +234,51 @@ def test_dh02_ce01_log_ratio_at_edges(log_lir_label) -> None:
         f"log_LIR={log_lir:.4f} (matched ref irlum={irlum_ref[idx_closest]:.4f}): "
         f"max|log10 ratio| = {worst:.4f} over 3-1000 um (expect <0.02)"
     )
+
+
+def test_dh02_ce01_duplicate_irlum_keeps_upstream_row() -> None:
+    """The duplicated irlum=8.3091 row must be upstream's LAST raw occurrence.
+
+    Regression test for task3 fix round 1, item 1. AGNfitter-rX's own
+    ``STARBURSTFdict_4plot[str(irlum)] = ...`` dict construction
+    (``MODEL_AGNfitter.py::STARBURST``) iterates the pickle's raw rows in
+    storage order and assigns into a plain dict, so a repeated ``irlum`` key
+    is overwritten by every later occurrence -- raw row 59 is what
+    AGNfitter-rX actually uses at runtime for ``irlum=8.3091``, not row 58.
+    An earlier version of ``build_dh02_ce01_grid.py`` kept row 58 (a stable
+    sort by irlum, then first-occurrence dedup), which disagreed with
+    upstream by ~0.0254 dex at this exact edge node. The two candidate rows
+    differ by ~1% in shape (not floating-point noise), so this is a real
+    physics choice.
+
+    Pins against a small vendored copy of raw row 59's own SED value at one
+    wavelength (read directly from ``DH02_CE01.pickle`` while writing this
+    test, independent of both builders) rather than only checking that the
+    production grid and the committed crossval reference agree with each
+    other -- agreeing with each other was exactly how this defect went
+    undetected: both files shared the same (wrong) tie-break.
+    """
+    import h5py
+
+    with h5py.File(_GRID_PATH, "r") as f:
+        g = f["dh02_ce01"]
+        irlum = np.asarray(g["irlum_axis"][:])
+        wave = np.asarray(g["wavelength"][:])
+        template = np.asarray(g["template"][:])
+        kept_raw_index = np.asarray(g["kept_raw_index"][:])
+
+    i_min = int(np.argmin(irlum))
+    assert abs(float(irlum[i_min]) - 8.3091) < 1.0e-6, (
+        f"expected the irlum=8.3091 edge node at the minimum, got {irlum[i_min]}"
+    )
+    assert int(kept_raw_index[i_min]) == 59, (
+        f"irlum=8.3091 must keep upstream's LAST raw-order occurrence (row 59); "
+        f"got row {kept_raw_index[i_min]} -- wrong duplicate-irlum tie-break"
+    )
+
+    # Vendored literal: DH02_CE01.pickle's raw row 59, SED value at
+    # wavelength 900277.651651651 Å (~90 um) -- a point where rows 58 and 59
+    # differ by ~1%, so this is a real distinguishing check, not noise.
+    idx_w = int(np.argmin(np.abs(wave - 900277.651651651)))
+    assert abs(wave[idx_w] - 900277.651651651) < 1.0e-3, "wavelength axis moved"
+    np.testing.assert_allclose(template[i_min, idx_w], 4.860547557732e-12, rtol=1.0e-9, atol=0.0)

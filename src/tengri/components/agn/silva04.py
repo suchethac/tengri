@@ -2,7 +2,8 @@
 """Silva, Maiolino & Granato (2004) smooth AGN torus.
 
 One-parameter semi-empirical torus library keyed on hydrogen column density
-(``log10(N_H / cm^-2)``).  The grid (5 bins in Silva+04) is interpolated with
+(``log10(N_H / cm^-2)``).  The grid (60 nodes in the vendored
+``silva04_torus_grid.h5``) is interpolated with
 node-exact monotone-cubic (PCHIP) interpolation, so gradients flow cleanly
 through ``agn_log_nh_silva`` during HMC / geoVI / MAP inference while
 reproducing every tabulated node exactly (matching the interpolation kernel

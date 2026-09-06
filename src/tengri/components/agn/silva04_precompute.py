@@ -34,9 +34,8 @@ from tengri.forward.precompute.templates import (
 )
 from tengri.utils.grid_interp import (
     PreintegratedGrid,
-    interp_nd_triweight,
+    interp_nd_pchip,
 )
-from tengri.utils.interpolation import edges_for_grid
 
 # Silva+04 grid parametrized by hydrogen column density only.
 AXIS_PARAMS: tuple[str, ...] = ("agn_log_nh_silva",)
@@ -147,7 +146,8 @@ def precompute_silva04_photometry(
 def build_silva04_photometry_lookup(precomp: dict):
     """Build a JIT-compiled Silva+04 torus photometry function.
 
-    Uses triweight interpolation for C²-continuous gradients.
+    Uses node-exact monotone-cubic (PCHIP) interpolation, matching the exact
+    (non-precomputed) path in ``silva04.py`` (task3 fix round 1, RULING R11).
 
     Parameters
     ----------
@@ -175,18 +175,18 @@ def build_silva04_photometry_lookup(precomp: dict):
     Notes
     -----
     **JIT-compatible**: yes, the returned function uses ``jnp`` and
-    triweight interpolation, which are JAX-native.
+    PCHIP interpolation, which are JAX-native.
 
-    **Gradient-safe**: yes, triweight kernel is fully differentiable.
+    **Gradient-safe**: yes, PCHIP (monotone-cubic) interpolation is fully
+    differentiable and reproduces the tabulated grid nodes exactly.
 
-    **Interpolation kernel**: Triweight kernel provides C²-continuous
-    gradients for autodiff, unlike nearest-neighbor or linear interpolation.
-    This is important for robust inference when Silva+04 parameters are
-    fitted via gradient descent.
+    **Interpolation kernel**: PCHIP is node-exact and C¹-continuous, unlike
+    the C²-smooth triweight *smoother* this replaced, which averaged
+    neighboring nodes and smeared the template shape by ~9% at the boundary
+    node (matching the exact path's fix, ``silva04.py``).
     """
     grid_phot = precomp["grid_phot"]
     axes = precomp["axes"]
-    edges = tuple(edges_for_grid(ax) for ax in axes)
 
     @jax.jit
     def silva04_phot(
@@ -194,7 +194,7 @@ def build_silva04_photometry_lookup(precomp: dict):
         agn_log_nh_silva,
         agn_torus_frac,
     ):
-        """Compute Silva+04 torus photometry via triweight interpolation on 1D grid.
+        """Compute Silva+04 torus photometry via PCHIP interpolation on 1D grid.
 
         Returns filter-integrated L_nu [erg/s/Hz] at runtime.
         """
@@ -202,7 +202,7 @@ def build_silva04_photometry_lookup(precomp: dict):
         # Return: L_bol_lsun [L_sun] * torus_frac * phot [erg/s/Hz/L_sun] = L_ν [erg/s/Hz]
         l_bol_lsun = 10.0**agn_log_lbol
         point = (agn_log_nh_silva,)
-        phot_per_lsun = interp_nd_triweight(grid_phot, axes, edges, point)
+        phot_per_lsun = interp_nd_pchip(grid_phot, axes, point)
         return l_bol_lsun * agn_torus_frac * phot_per_lsun
 
     return silva04_phot
@@ -306,7 +306,8 @@ def build_lookup(preint: dict, *, free_param_names: tuple[str, ...] | None = Non
     -----
     **JIT-compatible**: yes, the returned function is fully JAX-native.
 
-    **Gradient-safe**: yes, triweight interpolation is fully differentiable.
+    **Gradient-safe**: yes, PCHIP (monotone-cubic) interpolation is fully
+    differentiable and reproduces the tabulated grid nodes exactly.
     """
     if not preint.get("_collapsed_axes"):
         return build_silva04_photometry_lookup(preint)
@@ -314,19 +315,16 @@ def build_lookup(preint: dict, *, free_param_names: tuple[str, ...] | None = Non
     # Collapsed case: lookup takes (scale, *remaining_axis_values, torus_frac)
     grid_phot = preint["grid_phot"]
     axes = preint["axes"]
-    edges = tuple(edges_for_grid(ax) for ax in axes)
 
     @jax.jit
     def silva04_phot_collapsed(agn_log_lbol, *free_axis_values, agn_torus_frac):
-        """Compute Silva+04 torus photometry with collapsed (fixed) axes via triweight interp.
+        """Compute Silva+04 torus photometry with collapsed (fixed) axes via PCHIP interp.
 
         Returns filter-integrated L_nu [erg/s/Hz] at runtime.
         """
         # Same unit convention as build_silva04_photometry_lookup: L_ν [erg/s/Hz]
         l_bol_lsun = 10.0**agn_log_lbol
-        phot_per_lsun = interp_collapsed(
-            grid_phot, axes, free_axis_values, kernel="triweight", edges=edges
-        )
+        phot_per_lsun = interp_collapsed(grid_phot, axes, free_axis_values, kernel="pchip")
         return l_bol_lsun * agn_torus_frac * phot_per_lsun
 
     return silva04_phot_collapsed

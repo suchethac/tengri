@@ -39,6 +39,8 @@ import numpy as np
 # Allow standalone invocation (``python scripts/build_agnfitter_bbb_reference.py``)
 # to import the package's physics constants rather than redefining them.
 sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "src"))
+from _grid_native_sampling import dedupe_last_write_wins, native_wavelength_grid, place_on_grid
+
 from tengri.utils.physics_constants import C_AA
 
 # Allow-list: the minimal numpy/pandas container set that round-trips AGNfitter's
@@ -123,69 +125,6 @@ def _common_axis(all_log_nu: list[np.ndarray], n_wave: int) -> np.ndarray:
     lo = max(_log_nu_to_aa(np.max(x)) for x in all_log_nu)  # bluest common edge
     hi = min(_log_nu_to_aa(np.min(x)) for x in all_log_nu)  # reddest common edge
     return np.logspace(np.log10(lo), np.log10(hi), n_wave)
-
-
-def _native_wavelength_grid(wave_rows: list[np.ndarray]) -> tuple[np.ndarray, str]:
-    """Native-sample-preserving Å axis: verbatim if shared, else a common-range union.
-
-    Unlike :func:`_common_axis` (which discards every native sample onto a
-    fixed ``n_wave``-point log grid), this keeps every row's own tabulated
-    wavelength exactly where more than one row shares it, and otherwise takes
-    the sorted union of every distinct native grid restricted to the range
-    every grid covers (so no row needs extrapolation). See
-    ``build_dh02_ce01_grid.py`` for the identical mechanism applied to
-    tengri's own runtime grid (#task3-M-B D2): DH02_CE01's 169 templates use
-    exactly two distinct native ``log10(nu)`` grids (1366 points for
-    low/mid-``irlum`` rows, 193 for the highest), and resampling every row
-    onto one foreign axis smeared the aromatic/PAH-forest region (~3.2-3.9 µm)
-    by up to 0.47 dex at the top node.
-
-    Parameters
-    ----------
-    wave_rows : list of ndarray
-        One per-row wavelength array [Å] (any order; sorted internally).
-
-    Returns
-    -------
-    grid : ndarray
-        Ascending wavelength axis [Å].
-    mode : str
-        ``"verbatim"`` or ``"union(common-range)"``.
-    """
-    unique_grids: list[np.ndarray] = []
-    for w in wave_rows:
-        w_sorted = np.sort(np.asarray(w, dtype=np.float64))
-        is_new = not any(
-            w_sorted.shape == u.shape and np.allclose(w_sorted, u, rtol=1e-10, atol=0.0)
-            for u in unique_grids
-        )
-        if is_new:
-            unique_grids.append(w_sorted)
-    if len(unique_grids) == 1:
-        return unique_grids[0], "verbatim"
-    lo = max(g.min() for g in unique_grids)
-    hi = min(g.max() for g in unique_grids)
-    if lo >= hi:
-        raise RuntimeError("Native wavelength grids share no common range.")
-    pieces = [g[(g >= lo) & (g <= hi)] for g in unique_grids]
-    return np.unique(np.concatenate(pieces)), "union(common-range)"
-
-
-def _place_on_grid(wave_row: np.ndarray, sed_row: np.ndarray, grid: np.ndarray) -> np.ndarray:
-    """Express one row's SED on ``grid`` without resampling away native points.
-
-    Returns the row's own tabulated values unchanged when ``wave_row``
-    (sorted) already equals ``grid``; otherwise linearly interpolates, which
-    still reproduces every point ``grid`` inherited from this row's own
-    native grid exactly (``np.interp`` at an exact-match query point returns
-    the node value).
-    """
-    order = np.argsort(wave_row)
-    w = wave_row[order]
-    s = sed_row[order]
-    if w.shape == grid.shape and np.allclose(w, grid, rtol=1e-10, atol=0.0):
-        return s
-    return np.interp(grid, w, s)
 
 
 def _convert_single(d: dict, common_n: int) -> tuple[np.ndarray, np.ndarray]:
@@ -307,22 +246,34 @@ def main() -> None:
     # (`build_dh02_ce01_grid.py`) to keep native samples, comparing it against
     # a still-regridded reference reintroduced up to 0.4 dex of spurious
     # residual at 3.2-3.9 um that belonged to the reference, not the model
-    # (measured while implementing this fix). Using `_native_wavelength_grid`
-    # / `_place_on_grid` here instead keeps this reference exact wherever a
-    # row's own tabulated points allow it, matching `build_dh02_ce01_grid.py`.
+    # (measured while implementing this fix). Using the shared
+    # `native_wavelength_grid`/`place_on_grid` (task3 fix round 1 RULING R14)
+    # here instead keeps this reference exact wherever a row's own tabulated
+    # points allow it, matching `build_dh02_ce01_grid.py`.
+    #
+    # Duplicate-irlum tie-break (task3 fix round 1, item 1): three irlum
+    # values repeat across raw rows. This reference used to store all 169
+    # rows undeduped, with the production grid's (then-wrong) first-occurrence
+    # dedup and this file's own undeduped nearest-match lookup both landing on
+    # the SAME raw row by coincidence -- agreeing with each other, and both
+    # disagreeing with upstream's actual last-write-wins dict construction.
+    # dedupe_last_write_wins is shared with build_dh02_ce01_grid.py so this
+    # reference is upstream-faithful, not merely builder-consistent.
     cold_src = args.src.parent / "STARBURST" / "DH02_CE01.pickle"
     if cold_src.is_file():
         dh = _load(cold_src)
-        dh_irlum = np.asarray(dh["irlum-values"], dtype=np.float64).ravel()
-        dh_lognu_rows = [np.asarray(w, dtype=np.float64) for w in dh["wavelength"]]
-        dh_wave_aa_rows = [_log_nu_to_aa(ln) for ln in dh_lognu_rows]
-        common_dh, dh_mode = _native_wavelength_grid(dh_wave_aa_rows)
+        dh_irlum_raw = np.asarray(dh["irlum-values"], dtype=np.float64).ravel()
+        dh_lognu_rows_raw = [np.asarray(w, dtype=np.float64) for w in dh["wavelength"]]
+        dh_sed_rows_raw = [np.asarray(s, dtype=np.float64) for s in dh["SED"]]
+
+        dh_irlum, dh_kept_idx = dedupe_last_write_wins(dh_irlum_raw)
+        dh_wave_aa_rows = [_log_nu_to_aa(dh_lognu_rows_raw[i]) for i in dh_kept_idx]
+        dh_sed_rows = [dh_sed_rows_raw[i] for i in dh_kept_idx]
+
+        common_dh, dh_mode = native_wavelength_grid(dh_wave_aa_rows)
         dh_grid = np.stack(
-            [
-                _place_on_grid(wa, np.asarray(s, dtype=np.float64), common_dh)
-                for wa, s in zip(dh_wave_aa_rows, dh["SED"])
-            ]
-        )  # (n_irlum, n_wave)
+            [place_on_grid(wa, s, common_dh) for wa, s in zip(dh_wave_aa_rows, dh_sed_rows)]
+        )  # (n_irlum_unique, n_wave)
         cold_out = args.out.parent / "agnfitter_cold_dust_reference.h5"
         with h5py.File(cold_out, "w") as fc:
             fc.attrs["source"] = "AGNfitter-rX models/STARBURST"
@@ -335,7 +286,12 @@ def main() -> None:
             g.create_dataset("wavelength", data=common_dh, compression="gzip")
             g.create_dataset("sed", data=dh_grid, compression="gzip")
             g.create_dataset("irlum", data=dh_irlum, compression="gzip")
+            g.create_dataset("kept_raw_index", data=dh_kept_idx, compression="gzip")
             g.attrs["native_sampling"] = dh_mode
+            g.attrs["dedup"] = (
+                "last-write-wins (matches MODEL_AGNfitter.py's "
+                "dict-keyed-by-str(irlum) construction)"
+            )
             g.attrs["source_sha256"] = hashlib.sha256(cold_src.read_bytes()).hexdigest()
         print(f"Wrote {cold_out} ({cold_out.stat().st_size / 1024:.0f} KB)")
     else:

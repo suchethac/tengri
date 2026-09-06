@@ -26,10 +26,13 @@ sampling. An earlier version of this script threw that resolution away by
 regridding both tables onto a shared 1024-point ``np.geomspace`` axis, which
 smeared the 3.3 µm PAH feature by up to 32% (see the ``colddust_radio.md``
 D1 finding). If a future upstream release ever ships dust/PAH tables on
-*different* native grids, :func:`_native_wavelength_grid` falls back to the
-sorted union of every distinct native grid, so every native sample is still
-preserved (other rows are then linearly interpolated only onto that union,
-never resampled away from their own tabulated points).
+*different* native grids, :func:`~_grid_native_sampling.native_wavelength_grid`
+(shared with ``build_dh02_ce01_grid.py`` and
+``build_agnfitter_bbb_reference.py`` -- task3 fix round 1 RULING R14) falls
+back to the sorted union of every distinct native grid restricted to their
+common wavelength range, so every native sample is still preserved (other
+rows are then linearly interpolated only onto that union, never
+extrapolated past their own tabulated coverage).
 
 HDF5 schema
 -----------
@@ -71,6 +74,7 @@ from pathlib import Path
 
 import h5py
 import numpy as np
+from _grid_native_sampling import native_wavelength_grid, place_on_grid
 
 _C_AA_PER_S = 2.99792458e18  # speed of light [Å·Hz]
 
@@ -100,57 +104,6 @@ def _table_to_lnu(fits_path: Path) -> tuple[np.ndarray, np.ndarray, np.ndarray]:
     return tdust, wave_aa, l_nu
 
 
-def _native_wavelength_grid(wave_rows: list[np.ndarray]) -> tuple[np.ndarray, str]:
-    """Return the axis every row should be expressed on, preserving native samples.
-
-    Parameters
-    ----------
-    wave_rows : list of ndarray
-        One per-row wavelength array [Å] (any order; sorted internally).
-
-    Returns
-    -------
-    grid : ndarray
-        Ascending wavelength axis [Å].
-    mode : str
-        ``"verbatim"`` when every row shares exactly one native grid (the
-        returned axis IS that grid, unmodified); ``"union"`` when rows differ
-        and the axis is the sorted union of every distinct native grid (every
-        native sample from every row is a point on this axis).
-    """
-    unique_grids: list[np.ndarray] = []
-    for w in wave_rows:
-        w_sorted = np.sort(np.asarray(w, dtype=np.float64))
-        is_new = not any(
-            w_sorted.shape == u.shape and np.allclose(w_sorted, u, rtol=1e-10, atol=0.0)
-            for u in unique_grids
-        )
-        if is_new:
-            unique_grids.append(w_sorted)
-    if len(unique_grids) == 1:
-        return unique_grids[0], "verbatim"
-    return np.unique(np.concatenate(unique_grids)), "union"
-
-
-def _place_on_grid(wave_row: np.ndarray, sed_row: np.ndarray, grid: np.ndarray) -> np.ndarray:
-    """Express one row's SED on ``grid``, without resampling away native points.
-
-    If ``wave_row`` (sorted) already equals ``grid``, the row's own tabulated
-    values are returned unchanged (no interpolation arithmetic at all).
-    Otherwise linear interpolation fills the grid points this row lacks —
-    every point that IS one of this row's own native samples is still
-    reproduced exactly, since it is present verbatim in ``grid`` (the union of
-    every native grid) and ``np.interp`` returns the exact node value at an
-    exact-match query point.
-    """
-    order = np.argsort(wave_row)
-    w = wave_row[order]
-    s = sed_row[order]
-    if w.shape == grid.shape and np.allclose(w, grid, rtol=1e-10, atol=0.0):
-        return s
-    return np.interp(grid, w, s)
-
-
 def build(input_dir: Path, output_h5: Path) -> None:
     """Read the S17 dust + PAH FITS and emit ``schreiber2018_templates.h5``."""
     dust_path = input_dir / "s17_lowvsg_dust.fits"
@@ -162,7 +115,7 @@ def build(input_dir: Path, output_h5: Path) -> None:
         raise RuntimeError("S17 dust and PAH tables have mismatched T_dust axes.")
     n_t = tdust_d.size
 
-    common_wave, mode = _native_wavelength_grid(
+    common_wave, mode = native_wavelength_grid(
         [wave_d[i] for i in range(n_t)] + [wave_p[i] for i in range(n_t)]
     )
     n_wave = common_wave.size
@@ -170,8 +123,8 @@ def build(input_dir: Path, output_h5: Path) -> None:
     dust_grid = np.zeros((n_t, n_wave), dtype=np.float64)
     pah_grid = np.zeros((n_t, n_wave), dtype=np.float64)
     for i in range(n_t):
-        dust_grid[i] = _place_on_grid(wave_d[i], dust_lnu[i], common_wave)
-        pah_grid[i] = _place_on_grid(wave_p[i], pah_lnu[i], common_wave)
+        dust_grid[i] = place_on_grid(wave_d[i], dust_lnu[i], common_wave)
+        pah_grid[i] = place_on_grid(wave_p[i], pah_lnu[i], common_wave)
 
     # Sort the temperature axis ascending (carry the templates with it).
     order = np.argsort(tdust_d)
