@@ -528,12 +528,11 @@ def test_agn_attenuation_ebv_settable_via_sedbuild(synthetic_ssp_wide, synthetic
     Regression: agn_attenuation_ebv had no ParamDeclaration and no partition
     entry, so ``atten={'type': 'smc_prevot'}`` built a block pinned at
     E(B−V)=0 — a silent no-op. It now lowers via the agn.atten sub-block.
-    Updated to use law='prevot_smc' syntax (new form). Task 16 (item 11):
-    the short key 'attenuation_ebv' is not a recognized key for this
-    sub-block (its own short-key resolution strips the group's name too,
-    landing on 'ebv' -- reserved for the DIFFERENT agn_ebv parameter, see
-    _AGN_SUBBLOCK_KEY_ALIASES); the full name 'agn_attenuation_ebv' is the
-    working spelling and is used here.
+    Updated to use law='prevot_smc' syntax (new form). Both the short key
+    'attenuation_ebv' and the full name 'agn_attenuation_ebv' resolve here
+    (R30); the full name is used below because this test is about the
+    parameter's effect on predict_state, not about key resolution --
+    tests/contract/test_agn_atten_law_key.py owns the short-key contract.
     """
     from tengri import DEFAULT, Fixed, SEDModel
 

@@ -591,29 +591,6 @@ _AGN_BLOCK_TO_KWARG: dict[str, str] = {
     "atten": "agn_attenuation_block",
 }
 
-#: Sub-block short-key aliases reserved for one specific full parameter name.
-#: ``agn_attenuation_ebv``'s natural short name (stripping only the ``agn_``
-#: prefix, per :func:`_extract_short_name`) is the verbose ``attenuation_ebv``;
-#: since it is the ONLY E(B-V) knob the ``smc_prevot``/``qsogen`` attenuation
-#: blocks read, the terser ``'ebv'`` (the exact spelling the ``type='smc_prevot'``
-#: migration error advertises) is unambiguous *inside the atten sub-block* and
-#: is registered here as its alias.
-#:
-#: Without this table, a bare ``'ebv'`` written under ``agn={'atten': {...}}``
-#: would resolve through the generic "shared parameter, searchable from any
-#: sibling sub-block" path to the unrelated, pre-existing ``agn_ebv`` (the
-#: ``qsogen_smc`` block's own reddening knob, whose natural short name is
-#: ALSO ``'ebv'``) instead of ``agn_attenuation_ebv`` -- D1 (task-12 audit):
-#: following the migration error's own suggested spelling verbatim froze the
-#: disc reddening it was supposed to free (issue-grade silent parameter
-#: aliasing). :func:`_build_agn_search_view` consults this map to keep
-#: ``agn_ebv``'s stray-sibling search from claiming a key reserved here for a
-#: DIFFERENT full name; ``agn_attenuation_ebv``'s own canonical-dict lookup is
-#: unaffected (it already resolves via :func:`_extract_short_name`).
-_AGN_SUBBLOCK_KEY_ALIASES: dict[str, dict[str, str]] = {
-    "atten": {"ebv": "agn_attenuation_ebv"},
-}
-
 #: Partition table: agn_* param name -> group path (for sub-block routing).
 #: Maps full agn_* param names to their owning group (agn, agn.disc, agn.torus, etc.)
 _AGN_PARTITION = {
@@ -4834,10 +4811,9 @@ def _build_agn_search_view(param_name: str, agn_dict: dict, group: str) -> dict:
         return {}
 
     # The short name the resolver expects. Delegates to `_extract_short_name`
-    # (rather than a local `agn_`-prefix strip) so the two agree on the
-    # handful of names with an explicit alias (`agn_attenuation_ebv` -> 'ebv');
-    # pre-computed here so we can search every candidate dict by either
-    # spelling.
+    # (rather than a local `agn_`-prefix strip) so the two always agree on the
+    # spelling; pre-computed here so we can search every candidate dict by
+    # either the short or the full name.
     short_name = _extract_short_name(param_name, {})
 
     # Canonical and sibling dicts to scan.
@@ -4876,20 +4852,6 @@ def _build_agn_search_view(param_name: str, agn_dict: dict, group: str) -> dict:
     for location, sub in siblings:
         for key in (short_name, param_name):
             if key in sub and key not in ("type", "*"):
-                # A SHARED param's stray-sibling search must not steal a key
-                # this sibling reserves as another (sub-block-owned) param's
-                # OWN alias -- e.g. 'ebv' inside 'atten' is
-                # agn_attenuation_ebv's alias, not a stray home for the
-                # unrelated shared agn_ebv (D1, task-12 audit). The reserving
-                # param's own canonical-dict lookup, a few lines above, is a
-                # separate code path and is unaffected.
-                reserved_for = _AGN_SUBBLOCK_KEY_ALIASES.get(location, {}).get(key)
-                if (
-                    canonical_subkey is None
-                    and reserved_for is not None
-                    and reserved_for != param_name
-                ):
-                    continue
                 # VALIDATION: Check if this parameter is allowed in this sibling location.
                 # RULE: Sub-block-owned parameters must be in their owner sub-block.
                 # Shared parameters can go anywhere (top level or any sub-block).
@@ -5140,13 +5102,14 @@ def _translate_agn(agn_dict: dict, result: dict) -> None:
                 raise ValueError(
                     f"agn['atten'] type={type_key!r} is no longer supported. "
                     "Use the new form with law key instead:\n"
-                    "  agn={'atten': {'law': 'prevot_smc', 'ebv': Uniform(...)}}\n"
+                    "  agn={'atten': {'law': 'prevot_smc', 'attenuation_ebv': Uniform(...)}}\n"
                     "'prevot_smc' is the only law this block implements -- it applies "
                     "that curve unconditionally, so the rename is a spelling change, "
-                    "not a new choice. The 'ebv' key here resolves to agn_attenuation_ebv "
-                    "(the E(B-V) this block itself applies) -- NOT the unrelated, "
-                    "pre-existing agn_ebv parameter (the separate qsogen_smc "
-                    "attenuation block's own reddening knob)."
+                    "not a new choice. 'attenuation_ebv' is the short spelling of "
+                    "agn_attenuation_ebv, the E(B-V) this block itself applies -- NOT "
+                    "the unrelated, pre-existing agn_ebv parameter (the separate "
+                    "qsogen_smc attenuation block's own reddening knob), whose short "
+                    "spelling is 'ebv'."
                 )
 
             if law_key is not None:
@@ -5571,14 +5534,6 @@ def _extract_short_name(full_param_name: str, group_dict: dict) -> str:
     elif full_param_name.startswith("xray_"):
         return full_param_name[5:]
     elif full_param_name.startswith("agn_"):
-        # Explicit alias (see _AGN_SUBBLOCK_KEY_ALIASES): 'agn_attenuation_ebv'
-        # is the only E(B-V) knob the smc_prevot/qsogen attenuation blocks
-        # read, so the terser 'ebv' -- the exact spelling the
-        # type='smc_prevot' migration error advertises -- is unambiguous
-        # inside the atten sub-block and is the canonical short name here,
-        # not the generic agn_-prefix-stripped 'attenuation_ebv' (D1).
-        if full_param_name == "agn_attenuation_ebv":
-            return "ebv"
         # AGN params: check partition table to determine prefix stripping
         # For sub-blocks like agn.torus, strip appropriate prefix
         if full_param_name in _AGN_PARTITION:

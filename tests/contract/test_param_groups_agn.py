@@ -495,20 +495,79 @@ class TestAGNValidBlockTypes:
 
 class TestAGNEbvMigration:
     """D1 (task-12 public-API audit): the migration message this repo's own
-    error raises for the retired ``type='smc_prevot'`` spelling recommends
-    ``agn={'atten': {'law': 'prevot_smc', 'ebv': Uniform(...)}}``. Following
-    it verbatim used to free ``agn_ebv`` -- an unrelated, pre-existing,
-    ``qsogen_smc``-owned parameter that happens to share the same
-    agn_-prefix-stripped short name -- while the disc reddening the user
-    asked to free (``agn_attenuation_ebv``, live: grad != 0) stayed pinned
-    at ``Fixed(0.0)``. Fixed via an explicit short-name alias
-    (``_AGN_SUBBLOCK_KEY_ALIASES``) plus a guard so the unrelated shared
-    ``agn_ebv`` no longer claims the same key via its sibling-search.
+    error raises for the retired ``type='smc_prevot'`` spelling must recommend
+    a spelling that frees the parameter the user asked for.
+
+    Two ``agn_*`` names end in ``ebv`` and each keeps its own prefix-stripped
+    short name: ``agn_attenuation_ebv`` -> ``'attenuation_ebv'`` (the atten
+    block's own E(B-V)) and ``agn_ebv`` -> ``'ebv'`` (the unrelated,
+    pre-existing ``qsogen_smc`` reddening knob). D1's symptom was the message
+    advertising ``'ebv'``: following it verbatim froze
+    ``agn_attenuation_ebv`` at ``Fixed(0.0)`` and freed ``agn_ebv`` instead.
+
+    R30 fixes that at the message rather than by aliasing ``'ebv'`` onto the
+    other name -- one short spelling per parameter, no dual spellings, and the
+    two names stay distinguishable. So the contract is: the message's own
+    recommended key, taken verbatim, frees the live ``agn_attenuation_ebv``.
     """
 
-    def test_prevot_smc_ebv_short_form_frees_live_param(self):
-        """``atten={'law': 'prevot_smc', 'ebv': Uniform(...)}`` frees exactly
-        ``agn_attenuation_ebv`` (live), never the unrelated ``agn_ebv``."""
+    def _recommended_atten_key(self) -> str:
+        """The short key the retired-spelling migration message advertises.
+
+        Read out of the message rather than restated, so a message that drifts
+        back to the D1 spelling fails here instead of silently teaching it.
+        """
+        import re
+
+        with pytest.raises(ValueError) as exc_info:
+            parse_groups(
+                sfh={"type": "dpl", "all_params": Fixed(DEFAULT)},
+                agn={
+                    "disc": {"type": "multicolor", "all_params": Fixed(DEFAULT)},
+                    "atten": {"type": "smc_prevot"},
+                    "all_params": Fixed(DEFAULT),
+                },
+                redshift=Fixed(0.1),
+            )
+        pattern = r"agn=\{'atten': \{'law': 'prevot_smc', '([a-z_]+)'"
+        recipe = re.search(pattern, str(exc_info.value))
+        assert recipe is not None, str(exc_info.value)
+        return recipe.group(1)
+
+    def test_migration_message_recommends_the_working_short_key(self):
+        """The advertised key frees ``agn_attenuation_ebv``, not ``agn_ebv``."""
+        key = self._recommended_atten_key()
+        assert key == "attenuation_ebv", (
+            f"the migration message advertises {key!r}; 'ebv' is agn_ebv's own "
+            f"short name and freeing it is exactly the D1 defect"
+        )
+        params = parse_groups(
+            sfh={"type": "dpl", "all_params": Fixed(DEFAULT)},
+            agn={
+                "disc": {"type": "multicolor", "all_params": Fixed(DEFAULT)},
+                "atten": {"law": "prevot_smc", key: Uniform(0.0, 1.0)},
+                "all_params": Fixed(DEFAULT),
+            },
+            redshift=Fixed(0.1),
+        )
+        free_agn = {p for p in params.free_params if p.startswith("agn_")}
+        assert free_agn == {"agn_attenuation_ebv"}, (
+            f"expected exactly {{'agn_attenuation_ebv'}}, got {sorted(free_agn)} "
+            f"-- {key!r} resolved to the wrong parameter"
+        )
+        dist = params.get_distribution("agn_attenuation_ebv")
+        assert dist.bounds == (0.0, 1.0)
+        # agn_ebv (the unrelated qsogen_smc knob) must stay at its own
+        # registry default, untouched by the atten-level key.
+        agn_ebv_dist = params.get_distribution("agn_ebv")
+        assert agn_ebv_dist.is_fixed
+
+    def test_short_keys_stay_distinct_between_the_two_ebv_parameters(self):
+        """Each name keeps its own prefix-stripped short spelling.
+
+        ``'ebv'`` under ``atten`` is ``agn_ebv``'s short name and resolves
+        there; it is not a second spelling of ``agn_attenuation_ebv``.
+        """
         params = parse_groups(
             sfh={"type": "dpl", "all_params": Fixed(DEFAULT)},
             agn={
@@ -519,16 +578,8 @@ class TestAGNEbvMigration:
             redshift=Fixed(0.1),
         )
         free_agn = {p for p in params.free_params if p.startswith("agn_")}
-        assert free_agn == {"agn_attenuation_ebv"}, (
-            f"expected exactly {{'agn_attenuation_ebv'}}, got {sorted(free_agn)} "
-            f"-- 'ebv' resolved to the wrong parameter"
-        )
-        dist = params.get_distribution("agn_attenuation_ebv")
-        assert dist.bounds == (0.0, 1.0)
-        # agn_ebv (the unrelated qsogen_smc knob) must stay at its own
-        # registry default, untouched by the atten-level 'ebv' key.
-        agn_ebv_dist = params.get_distribution("agn_ebv")
-        assert agn_ebv_dist.is_fixed
+        assert free_agn == {"agn_ebv"}, sorted(free_agn)
+        assert params.get_distribution("agn_attenuation_ebv").is_fixed
 
     def test_prevot_smc_ebv_is_live_not_dead(self, synthetic_ssp_wide, synthetic_tophat_obs):
         """The freed parameter must be the LIVE one: jax.grad != 0 on a band
@@ -555,7 +606,7 @@ class TestAGNEbvMigration:
             agn={
                 "type": "composable",
                 "disc": {"type": "multicolor", "all_params": Fixed(DEFAULT)},
-                "atten": {"law": "prevot_smc", "ebv": Uniform(0.0, 1.0)},
+                "atten": {"law": "prevot_smc", "attenuation_ebv": Uniform(0.0, 1.0)},
                 "all_params": Fixed(DEFAULT),
                 "agn_log_lbol": Fixed(12.0),
                 "norm": "independent",
@@ -1320,7 +1371,8 @@ class TestAGNRoundTrip:
         """``SEDModel.build(**m.spec.to_groups())`` and
         ``SEDModel.build(**m.to_dict())`` both reproduce
         ``predict_photometry`` bit-exactly on a composable AGN model
-        spanning disc + torus (wildcarded) + nlr + atten (short-form 'ebv')."""
+        spanning disc + torus (wildcarded) + nlr + atten (short-form
+        'attenuation_ebv')."""
         import jax
         import numpy as np
 
@@ -1346,7 +1398,7 @@ class TestAGNRoundTrip:
                     "disc": {"type": "multicolor", "all_params": Fixed(DEFAULT)},
                     "torus": {"type": "skirtor", "all_params": FREE},
                     "nlr": {"type": "analytic", "all_params": Fixed(DEFAULT)},
-                    "atten": {"law": "prevot_smc", "ebv": Uniform(0.0, 1.0)},
+                    "atten": {"law": "prevot_smc", "attenuation_ebv": Uniform(0.0, 1.0)},
                     "all_params": Fixed(DEFAULT),
                     "agn_log_lbol": Fixed(12.0),
                     "norm": "independent",
