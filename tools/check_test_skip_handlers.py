@@ -48,6 +48,14 @@ and is not run in CI, so the behaviour-neutrality of narrowing a handler there
 cannot be measured, and an unverified edit is worse than a recorded exclusion.
 Its eight sites are listed by ``--list``.
 
+Relationship to ``tests/contract/test_broad_except_into_skip_does_not_spread.py``.
+That file ratchets the same idea for ``Exception``/``BaseException`` only, judged
+against an inventory, on the reasoning that "only a per-site read can" judge the
+survivors. This guard is the complementary half: every class that is not
+environmental, no allowlist, but silent on a handler that *gates* its skip. The
+two disagree on exactly the sites where gating is the whole argument, and that
+is deliberate -- both are right about what they measure.
+
 Usage::
 
     python tools/check_test_skip_handlers.py           # gate
@@ -60,6 +68,7 @@ import argparse
 import ast
 import pathlib
 import sys
+from collections.abc import Sequence
 
 REPO_ROOT = pathlib.Path(__file__).resolve().parents[1]
 TESTS = REPO_ROOT / "tests"
@@ -154,11 +163,31 @@ def _iter_test_files():
         yield path
 
 
-def scan(include_excluded: bool = False):
-    """Yield (relpath, lineno, funcname, classes, gated) for every skip handler.
+def _enclosing_function(tree: ast.Module, node: ast.AST) -> str:
+    """Innermost ``def`` containing ``node``; ``<module>`` if there is none.
 
-    Every function in a test file is scanned, not only ``test_*`` -- moving the
-    ``try`` into a module-local helper must not launder it.
+    Module scope matters: a `try/except Exception: pytest.skip(...,
+    allow_module_level=True)` around an import or a grid load skips the entire
+    file, which is the largest version of this defect, not an edge case. An
+    earlier draft walked only function bodies and missed every one of them.
+    """
+    best = None
+    for cand in ast.walk(tree):
+        if not isinstance(cand, (ast.FunctionDef, ast.AsyncFunctionDef)):
+            continue
+        end = cand.end_lineno or cand.lineno
+        if cand.lineno <= node.lineno <= end and (best is None or cand.lineno > best.lineno):
+            best = cand
+    return best.name if best else "<module>"
+
+
+def scan(include_excluded: bool = False):
+    """Yield (relpath, lineno, scope, classes, gated) for every skip handler.
+
+    Every ``try`` in a test file is scanned, at any depth and at module scope --
+    not only inside ``test_*`` functions. Seven of the sites this first found
+    were in fixtures, which skip every test they feed, and moving a ``try`` into
+    a module-local helper must not launder it either.
     """
     roots = sorted(TESTS.rglob("*.py")) if include_excluded else list(_iter_test_files())
     for path in roots:
@@ -166,22 +195,19 @@ def scan(include_excluded: bool = False):
             tree = ast.parse(path.read_text(encoding="utf-8"))
         except SyntaxError:
             continue
-        for func in ast.walk(tree):
-            if not isinstance(func, (ast.FunctionDef, ast.AsyncFunctionDef)):
+        for node in ast.walk(tree):
+            if not isinstance(node, ast.Try):
                 continue
-            for node in ast.walk(func):
-                if not isinstance(node, ast.Try):
+            for handler in node.handlers:
+                if not any(_is_skip_call(n) for n in ast.walk(handler)):
                     continue
-                for handler in node.handlers:
-                    if not any(_is_skip_call(n) for n in ast.walk(handler)):
-                        continue
-                    yield (
-                        str(path.relative_to(REPO_ROOT)),
-                        handler.lineno,
-                        func.name,
-                        _handler_classes(handler),
-                        _is_gated(handler),
-                    )
+                yield (
+                    str(path.relative_to(REPO_ROOT)),
+                    handler.lineno,
+                    _enclosing_function(tree, handler),
+                    _handler_classes(handler),
+                    _is_gated(handler),
+                )
 
 
 def violations():
@@ -192,10 +218,10 @@ def violations():
             yield rel, lineno, func, classes
 
 
-def main() -> int:
+def main(argv: Sequence[str] | None = None) -> int:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--list", action="store_true", help="print every site with its verdict")
-    args = parser.parse_args()
+    args = parser.parse_args(argv)
 
     if args.list:
         for rel, lineno, func, classes, gated in scan(include_excluded=True):
