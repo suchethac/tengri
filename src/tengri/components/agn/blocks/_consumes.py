@@ -194,7 +194,12 @@ AGN_BLOCK_CONSUMES: dict[tuple[str, str], frozenset[str]] = {
         }
     ),
     ("feii", "grahsp"): frozenset({"agn_grahsp_a_feii", "agn_grahsp_a_lines"}),
-    ("feii", "qsogen_balmer"): frozenset(),
+    # QSOgen Balmer continuum (Temple+2021), registered in #1488 but never
+    # added here, so the block's own enabling knob was invisible to the
+    # top-level ``agn={'all_params': FREE}`` wildcard scope: selectable,
+    # buildable, and (until a caller named ``agn_bcnorm`` explicitly)
+    # permanently pinned at its Fixed(DEFAULT)=0.0 (issue #2175).
+    ("feii", "qsogen_balmer"): frozenset({"agn_bcnorm"}),
     ("attenuation", "grahsp_biatten"): frozenset({"agn_grahsp_ebv", "agn_grahsp_ebv_agn"}),
     ("attenuation", "polar_dust"): frozenset(
         {

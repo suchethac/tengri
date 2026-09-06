@@ -216,7 +216,12 @@ def qsogen_blr_block(wavelength: Array, agn_log_lbol: float, l5100_disc: Array, 
     short_doc="Temple et al. 2021 QSOgen Balmer continuum",
 )
 def qsogen_balmer_block(
-    wavelength: Array, agn_log_lbol: float, l5100_disc: Array, **params
+    wavelength: Array,
+    agn_log_lbol: float,
+    l5100_disc: Array,
+    *,
+    agn_bcnorm: float = 0.0,
+    **params,
 ) -> Array:
     r"""QSOgen Balmer continuum block.
 
@@ -225,18 +230,37 @@ def qsogen_balmer_block(
     ``feii`` because the Balmer continuum is, like FeII, a pseudo-continuum
     pile-up of unresolved transitions on top of the disc.
 
+    ``agn_bcnorm`` is a named keyword-only parameter (not folded into
+    ``**params``) so it is this block's own declared, freeable parameter:
+    ``tengri.parameters.groups._agn_subblock_declared_params`` and
+    ``tengri.components.agn.blocks._consumes.AGN_BLOCK_CONSUMES``
+    both discover a block's own knobs by name, not by which keys it happens
+    to read out of a loose kwargs dict. Before this the block silently
+    read ``params.get("agn_bcnorm", ...)``, invisible to both, so
+    ``agn.feii={'type': 'qsogen_balmer', 'all_params': FREE}`` froze zero
+    parameters and the block was permanently pinned at its disabled
+    default (issue #2175).
+
     Parameters
     ----------
     wavelength : array_like, shape (n_wave,)
+        Rest-frame wavelength [Å].
     agn_log_lbol : float
+        :math:`\log_{10}(L_{\rm bol}/L_\odot)`.
     l5100_disc : array
-        Ignored.
+        Ignored: qsogen's Balmer continuum self-normalizes from the
+        internally recomputed continuum, not the shared 5100Å scalar.
+    agn_bcnorm : float, optional
+        Balmer continuum strength relative to the power-law continuum at
+        3000 Å (Grandi 1982 convention). Default ``0.0`` (disabled).
     **params
-        QSOgen kwargs.
+        Remaining QSOgen kwargs (see :func:`qsogen_continuum_block`).
     """
     del l5100_disc
     wave_aa = jnp.asarray(wavelength)
-    comps = _qsogen_components(wave_aa, **_resolve_qsogen_kwargs(params, agn_log_lbol))
+    kwargs = _resolve_qsogen_kwargs(params, agn_log_lbol)
+    kwargs["agn_bcnorm"] = agn_bcnorm
+    comps = _qsogen_components(wave_aa, **kwargs)
     return _l_nu_to_l_lambda(comps["balmer_continuum"], wave_aa)
 
 
