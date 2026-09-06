@@ -256,7 +256,6 @@ BIB_TITLE_DRIFT = frozenset(
         "10.1051/0004-6361/200912497",  # bib: Analysis of galaxy spectral energy distributi
         "10.1051/0004-6361/201834156",  # bib: CIGALE: a python Code Investigating GALaxy Em
         "10.1086/308197",  # bib: Multiple Scattering in Clumpy Media. II. Galactic Environm
-        "10.1086/308692",  # bib: The Dust Content and Opacity of Actively Star-forming Gala
         "10.1086/511055",  # bib: Infrared Emission from Interstellar Dust. IV. The Silicate
         "10.1086/589652",  # bib: The MAPPINGS III Library of Fast Radiative Shock Models
         "10.1088/0004-637x/780/2/172",  # bib: Andromeda's Dust

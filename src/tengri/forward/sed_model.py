@@ -1799,7 +1799,6 @@ class SEDModel:
             uses_igm=self._uses_igm,
             uses_radio=self._uses_radio,
             uses_xray=self._uses_xray,
-            radio_include_freefree=getattr(self, "_radio_include_freefree", None),
             radio_sfr_mode=getattr(self, "_radio_sfr_mode", None),
             radio_agn_model=getattr(self, "_radio_agn_model", None),
             z_fixed=self._z_fixed,
@@ -3189,7 +3188,6 @@ class SEDModel:
         if self._uses_radio:
             # Identity entries for radio_* now come from registry auto-derive
             # in _build_param_map (Step B).
-            self._radio_include_freefree = getattr(spec, "radio_include_freefree", True)
             self._radio_sfr_mode = getattr(spec, "radio_sfr_mode", "bell2003")
             self._radio_agn_model = getattr(spec, "radio_agn_model", "powerlaw")
 
@@ -4507,11 +4505,6 @@ class SEDModel:
         z_interp = str(self._z_interp)
 
         # Radio-specific flags
-        radio_include_freefree = (
-            bool(self._radio_include_freefree)
-            if hasattr(self, "_radio_include_freefree")
-            else False
-        )
         radio_sfr_mode = str(self._radio_sfr_mode) if hasattr(self, "_radio_sfr_mode") else "none"
         radio_agn_model = (
             str(self._radio_agn_model) if hasattr(self, "_radio_agn_model") else "powerlaw"
@@ -4697,7 +4690,6 @@ class SEDModel:
             build_precision,
             met_interp,
             z_interp,
-            radio_include_freefree,
             radio_sfr_mode,
             radio_agn_model,
             has_sigma_v,

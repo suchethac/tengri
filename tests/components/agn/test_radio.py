@@ -27,6 +27,7 @@ def fd_grad(f, x: float, eps: float = 1e-4) -> float:
 
 from tengri.components.radio.radio import (
     _L0_SYNCH,
+    _SFR_FROM_LIR_MURPHY2011,
     _synchrotron_suppression,
     compute_radio_components,
     radio_freefree,
@@ -542,17 +543,59 @@ class TestFreeFree:
     """Murphy+2011 thermal free-free calibration and spectral behavior."""
 
     def test_calibration_1p4ghz_murphy2011(self):
-        """At 1.4 GHz, Te=1e4: L_ff ≈ 5.49e-7 Lsun/Hz per M☉/yr.
-        Derivation: SFR=1 M☉/yr → L_ff = C_ff × 1.4^{-0.1} ≈ 5.49e-7.
+        """At 1.4 GHz, Te=1e4, SFR=1 M☉/yr: L_ff = C_ff x 1.4^-0.1 ~ 2.102e27 erg/s/Hz.
+
+        ``L_ir_1sfr`` is built from the module's own Murphy+2011 L_IR->SFR
+        constant (``_SFR_FROM_LIR_MURPHY2011``) so that SFR is exactly
+        1 Msun/yr by construction -- this checks the free-free SPECTRAL
+        calibration (C_ff, T_e and nu dependence, Murphy+2011 Eq. 11) in
+        isolation. Because it derives L_ir from the same constant
+        ``radio_freefree`` uses internally, this test alone cannot detect a
+        regression in that L_IR->SFR conversion; see
+        ``test_freefree_pinned_regression_value`` below for a fixed,
+        independently-computed L_ir that does.
+
+        A pre-2026-09 version of this test built ``L_ir_1sfr`` as a bare
+        Lsun-scale literal (1.73e10) fed directly into a function that
+        expects erg/s, and asserted a wide (5.0e-7, 6.5e-7) range against
+        the mislabeled result -- that units mismatch happened to cancel
+        only because the test's local literal matched the (since-removed,
+        uncited) production constant exactly, making the assertion
+        insensitive to the constant's actual value. Fixed here.
         """
-        sfr = 1.0  # M☉/yr
-        _SFR_IR_KENNICUTT = 1.73e10
-        L_ir_1sfr = sfr * _SFR_IR_KENNICUTT  # Lsun
+        sfr = 1.0  # M☉/yr, by construction
+        L_ir_1sfr = sfr / _SFR_FROM_LIR_MURPHY2011  # erg/s
         L = radio_freefree(_WAVE_14GHZ, L_ir_1sfr, T_e=1e4)
-        val = float(L[0])
-        assert 5.0e-7 < val < 6.5e-7, (
-            f"Murphy+2011 calibration: L_ff(1.4 GHz) = {val:.3e} Lsun/Hz, expected 5.0e-7 – 6.5e-7"
+        val = float(L[0])  # erg/s/Hz
+        expected = (1.0 / 4.6e-28) * 1.4**-0.1  # ~2.102e27 erg/s/Hz
+        assert abs(val - expected) / expected < 1e-6, (
+            f"Murphy+2011 calibration: L_ff(1.4 GHz, SFR=1) = {val:.6e} erg/s/Hz, "
+            f"expected {expected:.6e}"
         )
+
+    def test_freefree_pinned_regression_value(self):
+        """Pinned regression value at a fixed, independently-computed L_ir.
+
+        Unlike ``test_calibration_1p4ghz_murphy2011`` above, ``L_ir`` here
+        is a plain literal (1e44 erg/s) -- NOT derived from
+        ``_SFR_FROM_LIR_MURPHY2011`` -- so this test is sensitive to a
+        regression in the module's L_IR->SFR conversion itself (e.g. a
+        revert to the removed, uncited ``1.73e10 * L_SUN`` constant), which
+        the constant-derived test above cannot detect.
+
+        Expected value computed directly from Murphy et al. (2011) Eq. 4
+        (SFR = 3.88e-44 x L_ir) and Eq. 11 (free-free), independent of any
+        internal module constant:
+            sfr = 3.88e-44 * 1e44 = 3.88 Msun/yr
+            L_ff = (1 / 4.6e-28) * 1.4**-0.1 * 3.88 ~= 8.1557e27 erg/s/Hz
+        """
+        L_ir = 1.0e44  # erg/s, plain literal
+        L = radio_freefree(_WAVE_14GHZ, L_ir, T_e=1e4)
+        val = float(L[0])
+        sfr = 3.88e-44 * L_ir
+        expected = (1.0 / 4.6e-28) * 1.4**-0.1 * sfr
+        assert val == pytest.approx(expected, rel=1e-9)
+        assert val == pytest.approx(8.1557e27, rel=1e-4)
 
     def test_spectral_slope(self):
         """Spectral slope is alpha_ff = -0.1: ratio = (150MHz/1.4GHz)^{0.1}."""

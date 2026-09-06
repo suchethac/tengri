@@ -44,7 +44,7 @@ import jax.numpy as jnp
 
 from tengri.components.radio._params import PARAMS as _RADIO_PARAMS
 from tengri.protocols.component import declared_default
-from tengri.utils.physics_constants import C_AA as _C_AA, L_SUN as _L_SUN
+from tengri.utils.physics_constants import C_AA as _C_AA
 from tengri.utils.scale import pow10 as _pow10
 
 # Bell (2003) ApJ 586, 794 Eq. 3: characteristic luminosity L* at 1.4 GHz.
@@ -61,23 +61,11 @@ _RADIO_WAVE_MIN_AA: float = 1.0e7
 # At 1.4 GHz, Te=1e4: 2.174e27 × (1.4)^{-0.1} ≈ 2.10e27 erg/s/Hz per M☉/yr
 _C_FF: float = 1.0 / 4.6e-28  # ≈ 2.174e27
 
-# L_IR [erg/s] → SFR [M☉/yr] normalization for radio_freefree's internal
-# SFR intermediate. Labeled "Kennicutt+1998" at introduction, but the
-# implied constant (1/6.62e43 ≈ 1.51e-44) does not match either Kennicutt
-# (1998)'s published TIR-SFR calibration (4.5e-44, Salpeter IMF) or Murphy
-# et al. (2011) Eq. 4 (3.88e-44, Kroupa IMF, see ``sfr_from_lir`` below) --
-# a fix-round citation audit (2026-09) could not independently confirm this
-# specific value's literature source. Left unchanged here (radio_freefree's
-# existing numeric behavior is out of this audit's scope); NOT exposed as a
-# named calibration option in :func:`sfr_from_lir` for exactly this reason.
-_SFR_IR_KENNICUTT: float = 1.73e10 * _L_SUN  # ≈ 6.62e43 erg/s
-
-# log10 of the FIRRC / free-free divisors: used by the float32-safe branches
-# (#1206) that form the (representable) radio luminosity directly from
-# ``log10(L_IR)`` so the ~1e43 erg/s linear ``L_IR`` never materializes (it
-# overflows float32 max, 3.4e38, poisoning ``inf / finite → inf``).
+# log10 of the FIRRC divisor: used by the float32-safe branches (#1206) that
+# form the (representable) radio luminosity directly from ``log10(L_IR)`` so
+# the ~1e43 erg/s linear ``L_IR`` never materializes (it overflows float32
+# max, 3.4e38, poisoning ``inf / finite → inf``).
 _LOG10_FIRRC_CONST: float = math.log10(3.75e12)  # bell/delvecchio/mccheyne norm
-_LOG10_SFR_IR_KENNICUTT: float = math.log10(_SFR_IR_KENNICUTT)  # free-free
 
 # Declared default from _params.py: the Bell-2003 family and the radio_total*
 # dispatchers share this single registry value (Condon 1992, 0.8).
@@ -112,21 +100,40 @@ _F_THERMAL_AGNFITTER: float = 0.10  # thermal fraction of the Bell(2003) total
 _ALPHA_NONTHERMAL_AGNFITTER: float = 0.75  # Baan & Klockner (2006)
 _ALPHA_THERMAL_AGNFITTER: float = 0.10  # Dale & Helou (2002); Condon (1992)
 
-# Upstream AGNfitter-rX's generic derived-SFR reporting utility
-# (MODEL_AGNfitter.py:1434-1449, ``sfr_IR``): used for REPORTING an
-# already-fit galaxy's SFR, not for building the radio SED itself. The
-# constant 3.88e-44 is Murphy et al. (2011, ApJ 737, 67) Eq. 4 -- their own
-# Starburst99-derived total-infrared (8-1000 um) SFR calibration for a
-# Kroupa (2001) IMF -- NOT Kennicutt (1998), whose published TIR-SFR
-# constant is 4.5e-44 (Salpeter 1955 IMF, 0.1-100 Msun); an earlier version
-# of this module attributed 3.88e-44 to Kennicutt (1998) in error. Distinct
-# from (and NOT to be conflated with) ``_SFR_IR_KENNICUTT`` above, which is
-# a different intermediate normalization used internally by
-# :func:`radio_freefree` (its own provenance is not independently confirmed
-# to match either Murphy+2011's or Kennicutt+1998's published constant --
-# see :func:`sfr_from_lir`'s docstring -- so it is not exposed as a second
-# named calibration here).
+# L_IR [erg/s] -> SFR [Msun/yr] calibration. Originally introduced for
+# upstream AGNfitter-rX's generic derived-SFR reporting utility
+# (MODEL_AGNfitter.py:1434-1449, ``sfr_IR``, used for REPORTING an
+# already-fit galaxy's SFR via :func:`sfr_from_lir`), and -- as of a
+# fix-round citation audit (2026-09) -- ALSO used internally by
+# :func:`radio_freefree` to build the free-free term of the radio SED
+# itself. The constant 3.88e-44 is Murphy et al. (2011, ApJ 737, 67) Eq. 4
+# -- their own Starburst99-derived total-infrared (8-1000 um) SFR
+# calibration for a Kroupa (2001) IMF -- NOT Kennicutt (1998), whose
+# published TIR-SFR constant is 4.5e-44 (Salpeter 1955 IMF, 0.1-100 Msun);
+# an earlier version of this module attributed 3.88e-44 to Kennicutt (1998)
+# in error.
+#
+# Before the 2026-09 audit, :func:`radio_freefree` used a SEPARATE, uncited
+# constant (``_SFR_IR_KENNICUTT = 1.73e10 * L_SUN``, labeled "Kennicutt+1998")
+# whose provenance could not be confirmed against any of the three published
+# L_IR-SFR calibrations checked: Kennicutt (1998) implies an L_IR threshold
+# of 5.805e9 Lsun per Msun/yr (1/4.5e-44/L_SUN); Murphy et al. (2011) implies
+# 6.733e9 Lsun (1/3.88e-44/L_SUN); Bell (2003, ApJ 586, 794, Eq. 4,
+# SFR = 1.72e-10 x L_IR[Lsun]) implies 5.814e9 Lsun. The removed constant's
+# 1.73e10 Lsun threshold is 2.6-3x higher than all three -- consistent with
+# it being Bell (2003)'s own coefficient (1.72e-10) miscopied with the
+# exponent sign inverted (1.72e-10 -> 1.72e+10) rather than correctly
+# inverted (1 / 1.72e-10 = 5.81e9). :func:`radio_freefree` now uses this
+# module's single cited Murphy+2011 constant instead, which raises its
+# free-free normalization by a factor of
+# (3.88e-44 * L_SUN) / (1 / 1.73e10) ~ 2.5695x (see that function's
+# docstring for the updated worked example and
+# ``tests/components/agn/test_radio.py::TestFreeFree`` for the pinned
+# regression value).
 _SFR_FROM_LIR_MURPHY2011: float = 3.88e-44  # Msun/yr per erg/s (Murphy+2011 Eq. 4)
+# log10 form (float32-safe, see _LOG10_FIRRC_CONST's comment above): used
+# internally by radio_freefree.
+_LOG10_SFR_FROM_LIR_MURPHY2011: float = math.log10(_SFR_FROM_LIR_MURPHY2011)
 
 
 def _synchrotron_suppression(L_ref: jnp.ndarray) -> jnp.ndarray:
@@ -366,12 +373,12 @@ def sfr_from_lir(
           named this constant ``"kennicutt1998"`` in error: Kennicutt
           (1998)'s own published total-infrared SFR constant is
           :math:`4.5 \times 10^{-44}` (Salpeter 1955 IMF), a different
-          number. No ``"kennicutt1998"`` option is offered: the only other
-          L_IR-normalization constant in this module
-          (``radio_freefree``'s internal ``_SFR_IR_KENNICUTT``) could not
-          be independently confirmed to match Kennicutt (1998)'s published
-          constant either, so it is not exposed here under any calibration
-          name (see that constant's own comment in this module).
+          number. No ``"kennicutt1998"`` option is offered. This is the
+          same constant :func:`radio_freefree` now uses internally to build
+          its free-free term (a fix-round 2026-09 citation audit replaced
+          that function's previous, uncited normalization with this one --
+          see ``_SFR_FROM_LIR_MURPHY2011``'s module-level comment for the
+          measured effect on ``radio_freefree``'s output).
 
     Returns
     -------
@@ -598,10 +605,11 @@ def radio_freefree(
 ) -> jnp.ndarray:
     """Thermal free-free (bremsstrahlung) emission from HII regions.
 
-    Traces instantaneous SFR via the Kennicutt+1998 IR calibration and the
-    Murphy+2011 radio-SFR relation (Eq. 11).  At 1.4 GHz a typical star-forming
-    galaxy contributes ~5–15% of its total radio flux from free-free, depending
-    on the FIRRC calibration used for the synchrotron component.
+    Traces instantaneous SFR via the Murphy+2011 IR-SFR calibration (Eq. 4)
+    and the Murphy+2011 radio-SFR relation (Eq. 11).  At 1.4 GHz a typical
+    star-forming galaxy contributes ~5-15% of its total radio flux from
+    free-free, depending on the FIRRC calibration used for the synchrotron
+    component.
 
     .. math::
 
@@ -609,9 +617,19 @@ def radio_freefree(
         \\left(\\frac{\\nu}{\\rm GHz}\\right)^{\\alpha_{\\rm ff}}
         \\frac{L_{\\rm IR}}{L_{\\rm IR,\\odot}}
 
-    where :math:`C_{\\rm ff} = 1 / (4.6 \\times 10^{-28} \\, L_\\odot)
-    \\approx 5.68 \\times 10^{-7}` erg/s/Hz per M☉/yr at 1 GHz and
-    :math:`L_{\\rm IR,\\odot} = 1.73 \\times 10^{10}` Lsun (Kennicutt+1998).
+    where :math:`C_{\\rm ff} = 1 / (4.6 \\times 10^{-28})
+    \\approx 2.174 \\times 10^{27}` erg/s/Hz per M☉/yr at 1 GHz (this is
+    ``_C_FF`` in the source, unaffected by this fix) and
+    :math:`L_{\\rm IR,\\odot} = 6.733 \\times 10^{9}` Lsun (Murphy et al.
+    2011, Eq. 4: :math:`1 / (3.88 \\times 10^{-44}\\,{\\rm erg^{-1}\\,s}) /
+    L_\\odot`). A fix-round (2026-09) citation audit replaced this
+    function's previous normalization (an uncited
+    :math:`1.73 \\times 10^{10}` Lsun, labeled "Kennicutt+1998", that could
+    not be independently confirmed against Kennicutt 1998, Murphy et al.
+    2011, or Bell 2003) with this one; see ``_SFR_FROM_LIR_MURPHY2011``'s
+    module-level comment for the full before/after arithmetic. The change
+    raises this function's output by a factor of ~2.5695x at fixed
+    ``L_ir``.
 
     Parameters
     ----------
@@ -635,15 +653,16 @@ def radio_freefree(
     -----
     **JIT-compatible**: yes, pure JAX function.
 
-    Calibration check: at 1.4 GHz, Te=1e4 K, L_IR=1e10 Lsun (SFR≈0.58 M☉/yr):
-    L_ff ≈ 5.49e-7 × 0.58 ≈ 3.2e-7 Lsun/Hz (Murphy+2011 Table 1 consistent).
+    Calibration check: at 1.4 GHz, Te=1e4 K, L_IR=1e10 Lsun
+    (SFR = 3.88e-44 x 1e10 x 3.828e33 erg/s ≈ 1.485 M☉/yr, Murphy+2011 Eq. 4):
+    L_ff ≈ 2.102e27 erg/s/Hz per M☉/yr × 1.485 ≈ 3.122e27 erg/s/Hz
+    (≈ 8.156e-7 Lsun/Hz; Murphy+2011 Table 1 order-of-magnitude consistent).
 
     References
     ----------
 
-    - Murphy et al. 2011, ApJ, 737, 67 (Eq. 11)
+    - Murphy et al. 2011, ApJ, 737, 67 (Eq. 4, Eq. 11)
     - Condon 1992, ARA&A, 30, 575
-    - Kennicutt 1998, ARA&A, 36, 189
 
     """
     nu = _C_AA / wavelength  # Hz
@@ -651,9 +670,9 @@ def radio_freefree(
     # float32-safe (#1206): form the SFR straight from log10(L_IR) when supplied
     # so the ~1e43 linear L_IR (inf in float32) never materializes.
     if log_L_ir is None:
-        sfr = L_ir / _SFR_IR_KENNICUTT  # M☉/yr
+        sfr = L_ir * _SFR_FROM_LIR_MURPHY2011  # M☉/yr
     else:
-        sfr = _pow10(log_L_ir - _LOG10_SFR_IR_KENNICUTT)  # M☉/yr
+        sfr = _pow10(log_L_ir + _LOG10_SFR_FROM_LIR_MURPHY2011)  # M☉/yr
     # Murphy+2011 Eq. 11 inverted; (T_e/1e4)^0.45 factor from ionized gas physics
     L_nu = _C_FF * (T_e / 1.0e4) ** 0.45 * nu_ghz**alpha_ff * sfr
     return jnp.where(wavelength > _RADIO_WAVE_MIN_AA, L_nu, 0.0)

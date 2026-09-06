@@ -285,6 +285,13 @@ the forward model, and listed oldest first within each group.
   [doi:10.1146/annurev.aa.30.090192.003043](https://doi.org/10.1146/annurev.aa.30.090192.003043).
 - IR-radio correlation and SFR calibration. Bell (2003),
   [arXiv:astro-ph/0212121](https://arxiv.org/abs/astro-ph/0212121).
+- Total-infrared SFR calibration cited for comparison in ``sfr_from_lir``'s
+  docstring (tengri's own default calibration is Murphy et al. 2011).
+  Kennicutt (1998),
+  [doi:10.1146/annurev.astro.36.1.189](https://doi.org/10.1146/annurev.astro.36.1.189).
+- Non-thermal (synchrotron) spectral index adopted by
+  ``radio_sfr_bell2003_split``. Baan (2006),
+  [doi:10.1051/0004-6361:20053936](https://doi.org/10.1051/0004-6361:20053936).
 - X-ray binary luminosity scalings with stellar mass and SFR. Lehmer et al.
   (2016), [arXiv:1604.06461](https://arxiv.org/abs/1604.06461).
 - X-ray AGN corona, the X-CIGALE alpha-ox relation. Yang et al. (2020),
