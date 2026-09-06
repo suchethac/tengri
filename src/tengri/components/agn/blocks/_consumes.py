@@ -122,6 +122,18 @@ AGN_BLOCK_CONSUMES: dict[tuple[str, str], frozenset[str]] = {
     # tests/regression/agn/test_issue_1586_grid_support.py, which measures the
     # gradient rather than restating this table.
     ("disc", "slone_netzer"): frozenset({"agn_log_mbh", "agn_log_ledd"}),
+    # The two AGNfitter-rX Kubota & Done grids. Registered here rather than
+    # left to the signature fallback (R37 round 2): measured on the scoping
+    # module's own fixtures, worst-of-five-seeds |grad| on
+    # predict_photometry, every name in each signature is live --
+    # agn_log_mbh 1.6e-15, agn_log_ledd 1.9e-15 for both, and
+    # agn_gamma_warm 1.8e-16 for the warm-index variant, which is the axis
+    # that distinguishes it. agn_log_lbol is omitted from both, as from every
+    # other entry: it is in AGN_SHARED_PARAMS and always active.
+    ("disc", "kd18_agnfitter"): frozenset({"agn_log_mbh", "agn_log_ledd"}),
+    ("disc", "kd18_agnfitter_warmindex"): frozenset(
+        {"agn_log_mbh", "agn_log_ledd", "agn_gamma_warm"}
+    ),
     ("torus", "grahsp"): frozenset(
         {
             "agn_grahsp_cool_lam_um",
@@ -280,6 +292,23 @@ AGN_BLOCK_CONSUMES: dict[tuple[str, str], frozenset[str]] = {
     ("nlr", "synthesizer"): frozenset({"agn_nlr_cf"}),
     ("nlr", "synthesizer_spectra"): frozenset({"agn_nlr_cf"}),
     ("nlr", "grahsp"): frozenset({"agn_grahsp_a_lines", "agn_grahsp_linewidth_kms"}),
+    # Cue's five photoionization axes plus the covering fraction, all measured
+    # live (agn_nlr_cf 8.5e-15, agn_nlr_alpha_pl 2.9e-15, agn_nlr_logZ
+    # 1.2e-15, agn_nlr_logn 3.3e-16, agn_nlr_logU 1.1e-16).
+    # agn_nlr_fwhm_kms is excluded for the same reason as ('nlr', 'analytic')
+    # below: a line width at fixed line luminosity redistributes flux inside a
+    # line a broadband filter integrates over, so it falls under this table's
+    # own "> 1e-6 relative" criterion (its grad here, 1.5e-18, is the smallest
+    # of the seven by three orders of magnitude).
+    ("nlr", "cue"): frozenset(
+        {
+            "agn_nlr_cf",
+            "agn_nlr_alpha_pl",
+            "agn_nlr_logU",
+            "agn_nlr_logZ",
+            "agn_nlr_logn",
+        }
+    ),
     # R34 partitioned the six Feltre grid axes to "agn.nlr", which put them in
     # this block's own wildcard scope for the first time. Without an entry here
     # the scope came from raw signature introspection, which also swept in

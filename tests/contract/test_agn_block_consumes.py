@@ -689,3 +689,28 @@ def test_every_consumed_name_is_reachable_from_some_wildcard():
                 f"the shared agn-level one frees it"
             )
     assert not unreachable, "\n".join(unreachable)
+
+
+def test_every_registered_block_has_a_consumes_entry():
+    """A registered block with no entry is scoped by signature introspection.
+
+    That fallback is documented and safe in the over-freeing direction, but it
+    reads a signature rather than a measurement, so it credits a block with
+    every ``agn_*`` argument it accepts -- including ones it passes to a grid
+    axis that ignores them (``('nlr', 'feltre')``'s ``agn_nlr_xi_d``, measured
+    exactly dead, is why that entry exists). Registering every block makes the
+    table the single answer to "what does this block read".
+    """
+    from tengri.components.agn.blocks._protocol import AGN_BLOCKS
+
+    registered = {
+        (category, name)
+        for category, types in AGN_BLOCKS.items()
+        for name in types
+        if name != "none"
+    }
+    missing = sorted(pair for pair in registered if pair not in AGN_BLOCK_CONSUMES)
+    assert not missing, (
+        f"{len(missing)} registered AGN blocks have no AGN_BLOCK_CONSUMES entry, "
+        f"so their wildcard scope comes from signature introspection: {missing}"
+    )
