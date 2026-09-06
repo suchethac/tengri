@@ -26,10 +26,22 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
   HLO for every fit. Note the assertion hole that hid this: the seam checks
   asserted gradients were non-zero, and `nan != 0.0` is `True` — the mirror of
   #2100's hole, where `isfinite` admitted zero. This closes the float32
-  symptom only; the separate float64 non-finiteness on six `spec/*/auto_*`
-  seams is not established as the same defect and #2178 stays open for it
+  symptom, and the `spec/*/auto_*` symptom with it — see the next entry
   (#2178, #2100).
 
+- **Symptom 2 of #2178 was the same defect, not a second one.** The float64
+  spectroscopy forward was reported non-finite on six `spec/*/auto_*` seams (CI
+  run 33958554553), and `_skip_if_lut_forward_is_broken` (#2143) was left in
+  place until that could be answered. Reproduced under jaxlib 0.11.1: the
+  float64 arm builds, fits and differentiates cleanly, and the `ValueError`
+  from `_check_channel_scales` — carrying that run's own
+  `max |data| = 1.618e-27` and `2.751e-29`, to the digit — comes from the
+  **float32** arm the same module-scoped fixture builds next. Six errors is two
+  seams times three tests. One defect at one threshold, attributed to the wrong
+  arm. With the forward grouping stated in the graph the guard fires on **no**
+  seam, so it is deleted rather than widened, and
+  `tests/regression/precision/test_float32_fitting_path_seams.py` runs
+  41 passed / 0 skipped / 6 xfailed on jaxlib 0.11.1 (#2178, #2143).
 - `multicolor_disc`'s pure-float32 bolometric renormalization returned
   `l_nu_intrinsic * scale`, and transposing that product makes JAX form
   `sum(g * l_nu_intrinsic)`. With the raw disc SED (~1e28) and the cotangent
@@ -67,6 +79,31 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
   positive; files written before this load unchanged (#2087).
 
 ### Added
+
+- `tools/check_float32_scale_seams.py` — enumerates the float32 **scale seams**
+  themselves rather than sampling a representative model. A scale seam is a site
+  where a large physical constant or unit conversion multiplies a
+  parameter-derived quantity; four bugs have now come out of that one shape
+  (#1388, #1439, #2100, #2178) and each was fixed where it was found. The check
+  parses `src/tengri` (AST, and evaluated constants — not a grep over source
+  text, per #2108), and for each seam asks how large the product can get inside
+  the range the parameter **declares in the registry**, never a range copied
+  from a grid axis (45741f4cd). 52 seams; 46 of them exceed float32's range
+  within their own declared prior, in 4 families — `L_sun * 10**agn_log_lbol`
+  (38 sites), `L_sun * 10**log_total_mass` (5), `M_sun * 10**agn_log_mbh` (2)
+  and the Lehmer LMXB mass term (1). Each family carries a recorded grouping;
+  anything new is an error, and a registration whose seam is gone is also an
+  error, so the inventory cannot rot. Runs in the `smoke` job, beside
+  `check_float32_representable_constants.py`, which is where the checks that
+  need tengri installed live — `lint` installs only ruff.
+
+- `tests/regression/precision/test_float32_scale_seam_sweep.py` — sweeps each
+  enumerated seam family across its parameter's whole declared prior in float32
+  and requires the gradient to be finite **and** non-zero at every point (`nan
+  != 0.0` is `True`, and zero is finite, so neither half is coverage alone). The
+  inventory is read from the tool rather than written down twice: the module
+  fails if the enumeration grows a family it does not sweep, which is what makes
+  the recorded reason a measurement instead of the only evidence.
 
 - `mcmc_smc` — tempered Sequential Monte Carlo via BlackJAX, at
   `tier="experimental"`. A particle population annealed from the exact
