@@ -183,6 +183,45 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
   `disc={'type': T, 'all_params': FREE}` frees that disc type's own physics,
   which it did not for 13 of 14 registered disc types. `agn_attenuation_ebv`
   and the polar-dust knobs nest under `atten` for the same reason.
+- **AGN parameter ownership is complete, and 31 further names moved out of the
+  shared group.** Every declared and consumed `agn_*` name now has exactly one
+  owner; before, 31 of 94 had no entry at all and silently defaulted to shared,
+  which is why a wildcard could not free eight parameters that measurably move
+  `predict_photometry`. **Breaking for composable builds**: each of these was
+  accepted at the `agn` top level and now raises with the sub-block to nest it
+  under.
+  - `disc` (13): `agn_T_max`, `agn_adaf_alpha`, `agn_adaf_beta`,
+    `agn_adaf_delta`, `agn_astar`, `agn_cigale_disk_delta`,
+    `agn_grahsp_cutoff_nm`, `agn_grahsp_l5100`, `agn_grahsp_plbendloc_nm`,
+    `agn_grahsp_plbendwidth`, `agn_grahsp_plslope`, `agn_grahsp_uvslope`,
+    `agn_log_mdot`
+  - `nlr` (7): `agn_nlr_alpha_pl`, `agn_nlr_fwhm_kms`,
+    `agn_nlr_line_efficiency`, `agn_nlr_logU`, `agn_nlr_logZ`, `agn_nlr_logn`,
+    `agn_nlr_xi_d`
+  - `blr` (4): `agn_blr_line_efficiency`, `agn_blr_logU`, `agn_blr_logZ`,
+    `agn_blr_logn`
+  - `torus` (2): `agn_theta_torus`, `agn_delta`
+  - `atten` (1): `agn_ebv`
+  - still shared, and each says why in the table (4): `agn_ir_frac`, read by the
+    runner's cross-block normalization stage rather than by any one block; and
+    `agn_grahsp_a_bc`, `agn_grahsp_tor_temp`, `agn_grahsp_tor_cutoff_um`, which
+    no composable block reads at all -- only the monolithic `grahsp` model,
+    where every parameter is written flat.
+
+  Migration is the same one line in every case: nest the parameter under the
+  sub-block named above, e.g. `agn={'disc': {'type': ..., 'agn_astar': ...}}`.
+  Two consequences worth stating separately:
+  - `nlr={'type': 'grahsp', 'all_params': FREE}` is now a no-op and warns.
+    `agn_grahsp_a_lines` and `agn_grahsp_linewidth_kms` are read by the nlr,
+    blr AND feii GRAHSP blocks, so no single sub-block can own them; they are
+    shared, and the agn-level wildcard frees them instead. Previously they were
+    nlr-owned, which freed them for that one block and left `blr='grahsp'`
+    reading two parameters its own wildcard could not reach.
+  - `agn={'atten': {'law': 'prevot_smc', 'ebv': ...}}` now frees `agn_ebv` --
+    the `qsogen_smc` block's own E(B-V) -- and not `agn_attenuation_ebv`. Each
+    name keeps its own prefix-stripped short spelling; write
+    `'attenuation_ebv'` for the attenuation-stage screen.
+
 - **Monolithic AGN models keep their parameters flat.** The nesting guard above
   applies to composable builds only. `agn={'type': 'kd18_agnfitter',
   'agn_log_mbh': ...}` and every other non-composable type accept the
