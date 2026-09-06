@@ -2925,8 +2925,19 @@ class SEDModel:
             # whose ``_nebular_backend`` was the wrong class, every line
             # accessor then returned NaN with no warning. Dispatch explicitly.
             from tengri.components.nebular import CB19Backend
+            from tengri.components.nebular.cloudy_cb19 import check_cb19_free_params
 
             self._nebular_backend = CB19Backend(ssp_data=ssp_data)
+            # #2181: the grid's own axes decide which nebular parameters can
+            # move the prediction. On the flat placeholder grid all five are
+            # constant, so a fit explores them against a likelihood that is
+            # bit-exactly flat and reports the prior back as a posterior.
+            # Refuse at construction rather than at the end of a fit.
+            check_cb19_free_params(
+                self._nebular_backend.grid,
+                spec.free_params,
+                grid_path=self._nebular_backend.grid_path,
+            )
         elif spec.nebular_mode == "mappings":
             # MAPPINGS V photoionization grid (Flury et al. 2024). Stellar model,
             # density structure, and ionizing source warning are configurable.

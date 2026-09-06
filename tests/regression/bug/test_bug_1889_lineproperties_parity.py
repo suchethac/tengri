@@ -90,9 +90,14 @@ def test_lineproperties_parity_headline_fields(model_with_cue):
     ]:
         old_val = float(getattr(old_lines, field))
         new_val = float(getattr(new_lines, field))
-        assert jnp.allclose(jnp.asarray(old_val), jnp.asarray(new_val), rtol=1e-6, atol=1e-20), (
-            f"Field {field}: old={old_val}, new={new_val}"
-        )
+        # ``equal_nan``: NaN is a value both surfaces can legitimately carry,
+        # meaning "the active catalog has no line at this wavelength". Cue's
+        # catalog holds nothing within 5 A of C IV 1549, so ``civ_1549`` is NaN
+        # on both sides; before #2181 both returned the nearest entry 90 A away,
+        # twice, and this parity check passed on a pair of wrong numbers.
+        assert jnp.allclose(
+            jnp.asarray(old_val), jnp.asarray(new_val), rtol=1e-6, atol=1e-20, equal_nan=True
+        ), f"Field {field}: old={old_val}, new={new_val}"
 
 
 def test_lineproperties_parity_full_catalog(model_with_cue):
