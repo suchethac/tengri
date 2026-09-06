@@ -8439,7 +8439,14 @@ class SEDModel:
         # ``sfh_dbp_*`` the user set, and silently fall back to registry
         # defaults, so tx_frac_* moved predict_sfh but never the photometry.
         mean_types = apply_compositor_swap(list(getattr(self.spec, "mean_sfh_type", ["tsnorm"])))
-        mean_model = next((m for m in mean_types if m != "field"), "tsnorm")
+        # A composite SFH (more than one non-field type, e.g. ["const", "norm"]
+        # or ["tsnorm", "burst"]) reaches the component as the full list so
+        # ``resolve_sfh`` composes every member; handing over only the first
+        # entry silently dropped the others. A single type stays a string so
+        # the single-type paths (table, dense_basis) are unchanged. ``field``
+        # is the GP modulator and is threaded separately via ``field_on``.
+        non_field_types = [m for m in mean_types if m != "field"] or ["tsnorm"]
+        mean_model = non_field_types[0] if len(non_field_types) == 1 else non_field_types
         field_on = "field" in mean_types
 
         # Nebular backend mapping. SEDModel's ``_nebular_backend`` is
