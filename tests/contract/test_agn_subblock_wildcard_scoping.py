@@ -467,9 +467,8 @@ def test_describe_agn_block_params_match_wildcard_scope(ssp, obs, category, bloc
     # blr='analytic' pinned by _build, the feii wildcard legitimately also
     # frees agn_fe2_strength (R33). Derived from the same helper rather than
     # listed, so the two move together.
-    from tengri.parameters.groups import _agn_subblock_companion_params
-
     from tengri.components.agn.blocks._consumes import AGN_BLOCK_CONSUMES
+    from tengri.parameters.groups import _agn_subblock_companion_params
 
     conditional = (
         _agn_subblock_companion_params(category, block_type, blr_type="analytic")
