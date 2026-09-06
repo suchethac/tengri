@@ -159,12 +159,49 @@ def test_placeholder_grid_is_refused_at_build(ssp, observation, tmp_path, monkey
         _build(ssp, observation, placeholder, monkeypatch)
 
     message = str(excinfo.value)
-    assert "scripts/download_cb19_templates.py" in message, (
-        f"the refusal must name the script that builds a real grid: {message}"
-    )
     assert "placeholder" in message
+    # Where to put a real grid, now that the download route is broken (#2198).
+    assert "data/cb19_templates.h5" in message, (
+        f"the refusal must name where to supply a real grid: {message}"
+    )
     # The working alternatives, so the message is actionable without a search.
     assert "'cue'" in message and "'cloudy'" in message, message
+
+
+def test_placeholder_refusal_no_longer_names_the_broken_download_route(
+    ssp, observation, tmp_path, monkeypatch
+):
+    """The refusal must not send the reader to a download route that fails (#2198).
+
+    ``python scripts/download_cb19_templates.py`` used to be advertised as
+    *the* fix for this refusal. A read-only probe of the 3MdB servers on
+    2026-09-07 found that querying ``ref='CB_19'`` now returns zero rows from
+    every reachable database (``3MdB_17.tab_17``, ``3MdB.tab``,
+    ``3MdBs.projects``), and the 3MdB project page for CB_19 carries a
+    standing notice that the grid has an abundance/metallicity bug and will
+    be replaced, so running the script cannot build a real grid today, and
+    telling a user to run it bounces them from one failure to another. The
+    message must instead say the grid is supplied externally and name the
+    upstream status (see ``docs/internal/advanced/cb19_grid.md``).
+    """
+    placeholder = write_flat_cb19_grid(tmp_path / "cb19_templates.h5")
+
+    with pytest.raises(CB19DegenerateGridError) as excinfo:
+        _build(ssp, observation, placeholder, monkeypatch)
+
+    message = str(excinfo.value)
+    assert "Build the real grid" not in message, (
+        f"the refusal still presents the download script as the fix: {message}"
+    )
+    assert "python scripts/download_cb19_templates.py" not in message, (
+        f"the refusal still advises running the broken download script: {message}"
+    )
+    assert "Supply your own grid" in message, (
+        f"the refusal must say the grid is supplied externally: {message}"
+    )
+    assert "unpopulated" in message and "2026-09" in message, (
+        f"the refusal must name the upstream status: {message}"
+    )
 
 
 def test_control_parameter_moves_on_the_placeholder_backend(ssp, observation, tmp_path):
@@ -234,3 +271,63 @@ def test_flat_axis_free_parameter_is_refused(ssp, observation, tmp_path, monkeyp
 
     with pytest.raises(ParameterError, match=r"neb_log_nH"):
         _build(ssp, observation, path, monkeypatch)
+
+
+class _FakeConnection:
+    """A stand-in DB connection: enough surface for the no-rows exit path.
+
+    ``main()`` closes the connection on the way out of the no-rows branch;
+    nothing else on it is touched once ``_ref_row_count`` is monkeypatched.
+    """
+
+    def close(self) -> None:
+        pass
+
+
+def test_download_script_reports_upstream_status_on_zero_rows(monkeypatch, capsys):
+    """The download script must explain the outage, not crash cryptically (#2198).
+
+    ``ref='CB_19'`` now returns zero rows from 3MdB (a read-only probe on
+    2026-09-07 found none in ``3MdB_17.tab_17``, ``3MdB.tab``, or
+    ``3MdBs.projects``). Before this fix, a zero-row ``ref`` fell through to
+    ``_query_axes``, which called ``max()`` on an empty sequence and crashed
+    with an unrelated ``ValueError``. The script must instead name the
+    upstream status and exit non-zero. No network is touched: both
+    ``_connect`` and the row-count query are monkeypatched.
+
+    ``pymysql`` is not a declared dependency (neither ``dependencies`` nor the
+    ``dev`` extra in ``pyproject.toml``), so ``main()``'s own ``import
+    pymysql`` -- which runs before either monkeypatched helper is reached --
+    fails on a machine that never happened to install it (CI's ``pip install
+    -e ".[dev]"`` does not), and the script exits 1 with "pymysql not
+    installed" before this test's assertions ever run. A stub module in
+    ``sys.modules`` makes the import succeed regardless of whether the real
+    package is present, so this test does not depend on the ambient
+    environment. ``pytest.importorskip`` would only make the guard vacuous on
+    exactly the CI machines it needs to hold on.
+    """
+    import importlib.util
+    import sys
+    import types
+
+    monkeypatch.setitem(sys.modules, "pymysql", types.ModuleType("pymysql"))
+
+    script_path = Path(__file__).resolve().parents[3] / "scripts" / "download_cb19_templates.py"
+    spec = importlib.util.spec_from_file_location("download_cb19_templates", script_path)
+    module = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(module)
+
+    monkeypatch.setattr(module, "_connect", lambda: _FakeConnection())
+    monkeypatch.setattr(module, "_ref_row_count", lambda co: 0)
+    monkeypatch.setattr("sys.argv", ["download_cb19_templates.py"])
+
+    with pytest.raises(SystemExit) as excinfo:
+        module.main()
+    assert excinfo.value.code != 0, "zero rows must exit non-zero, not succeed silently"
+
+    output = capsys.readouterr().out
+    assert "3MdB" in output
+    assert "sites.google.com/site/mexicanmillionmodels" in output, (
+        f"the error must point at the project page carrying the errata notice: {output}"
+    )
+    assert "erratum" in output, f"the error must name the upstream status: {output}"

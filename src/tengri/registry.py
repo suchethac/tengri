@@ -1107,7 +1107,13 @@ def list_nebular_backends(*, status: str | None = None) -> _RegistryTable:
         # grid file." The key is ``grid``; this hint advertised ``gridfile``,
         # so the line printed to fix one failure raised a different one:
         # "Unknown key 'gridfile' in group 'neb'. Did you mean: grid?", and
-        # nothing checked either. (``cb19`` ships its own grid and stands alone.)
+        # nothing checked either. (``cb19`` keeps the bare form for a
+        # different reason: its neb grammar has no ``grid`` key at all, so
+        # there is no hint to correct here -- not because it "ships its own
+        # grid and stands alone", which was never true. The shipped default
+        # is the flat placeholder (#924), and as of 2026-09 the upstream
+        # 3MdB CB_19 table is unpopulated pending the 3MdB team's own
+        # corrected grid and erratum (#2198).)
         if m["name"] == "cloudy":
             m["use"] = "SEDModel.build(..., neb={'type': 'cloudy', 'grid': 'grid.h5'})"
     out = _filter_menu(out, "status", status, listing="list_nebular_backends")

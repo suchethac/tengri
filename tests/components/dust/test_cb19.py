@@ -34,7 +34,9 @@ pytestmark = pytest.mark.bounds
 _CB19_H5 = Path(__file__).resolve().parents[3] / "data" / "cb19_templates.h5"
 _SKIP_NO_H5 = pytest.mark.skipif(
     not _CB19_H5.exists(),
-    reason="data/cb19_templates.h5 not found; run scripts/download_cb19_templates.py",
+    reason="data/cb19_templates.h5 not found; supply one yourself -- "
+    "scripts/download_cb19_templates.py cannot currently build it (#2198), "
+    "see docs/internal/advanced/cb19_grid.md",
 )
 
 
