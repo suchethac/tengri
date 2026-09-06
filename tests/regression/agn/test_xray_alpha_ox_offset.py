@@ -202,3 +202,23 @@ def test_xray_wildcard_now_frees_delta_alpha_ox():
     assert "xray_delta_alpha_ox" in params.free_params
     dist = params.get_distribution("xray_delta_alpha_ox")
     assert dist.bounds == (-0.4, 0.4)
+
+
+def test_agn_xray_delta_alpha_ox_matches_xray_sibling():
+    """agn_xray_delta_alpha_ox's free_prior must equal xray_delta_alpha_ox's
+    exactly (ruling R26): the two spellings of this offset are read by
+    different components (agn_xray_corona reads the ``xray`` group's copy;
+    AGNXRayCoronaSEDComponent's own PARAMS entry is the ``agn_xray_``
+    spelling), and the two must not drift apart -- the same canonical-
+    equality contract already enforced for their sibling pair
+    xray_E_cut / agn_xray_e_cut.
+    """
+    from tengri.components.xray._params import PARAMS as XRAY_PARAMS
+    from tengri.components.xray.agn_xray._params import PARAMS as AGN_XRAY_PARAMS
+
+    xray_decl = next(pd for pd in XRAY_PARAMS if pd.name == "xray_delta_alpha_ox")
+    agn_xray_decl = next(pd for pd in AGN_XRAY_PARAMS if pd.name == "agn_xray_delta_alpha_ox")
+
+    assert agn_xray_decl.free_prior is not None, "agn_xray_delta_alpha_ox still has no free_prior"
+    assert agn_xray_decl.free_prior.bounds == xray_decl.free_prior.bounds
+    assert agn_xray_decl.free_prior.default == xray_decl.free_prior.default

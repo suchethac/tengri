@@ -120,8 +120,6 @@ REFUSED: dict[str, tuple[str, str]] = {
         "needs Table 1 of Martinez-Ramirez+2024; sign convention",
     ),
     "agn_grahsp_a_bc": ("no-evidence", "needs the GRAHSP prior table (arXiv:2405.19297)"),
-    "xray_delta_alpha_ox": ("no-evidence", "needs the Just+2007 alpha_ox intrinsic scatter"),
-    "agn_xray_delta_alpha_ox": ("no-evidence", "as xray_delta_alpha_ox; kept in step with it"),
 }
 
 VALID_GROUNDS = {

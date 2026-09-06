@@ -31,10 +31,11 @@ PARAMS: tuple[ParamDeclaration, ...] = (
         "Offset [dex] applied to the L_2500-derived alpha_ox (Just+2007,"
         " CIGALE convention). 0 (default) = pure empirical alpha_ox(L_2500);"
         " negative hardens the X-ray corona, positive softens it.",
-        # AGNfitter-rX (Martinez-Ramirez+2024) fits Delta(alpha_ox) over
-        # [-0.4, 0.4] as the scatter around the Just+2007 empirical relation;
-        # that is the interval this repo's own reproduction targets, not a
-        # guessed default width.
+        # AGNfitter-rX (Martinez-Ramirez et al. 2024) fits Δα_ox over ±0.4;
+        # the intrinsic scatter of α_ox about the L_2500 relation is σ =
+        # 0.146 dex (31 < log L < 32) and 0.131 dex (32 < log L < 33) (Just
+        # et al. 2007, ApJ 665, 1004, Table 4 footnote, quoting Steffen et
+        # al. 2006, AJ 131, 2826, Table 5), so Uniform(-0.4, 0.4) spans ≈3σ.
         free_prior=Uniform(
             -0.4, 0.4, "Offset applied to the L_2500-derived alpha_ox", default=0.0
         ),
