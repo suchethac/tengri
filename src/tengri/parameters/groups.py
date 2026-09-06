@@ -2088,14 +2088,15 @@ def _agn_ir_frac_explicit_and_active(agn_dict: object) -> bool:
     short_name = _extract_short_name("agn_ir_frac", {})
     if short_name in view:
         written.append(view[short_name])
-    # The legacy spellings the view does not resolve, over the same locations.
-    for location in ("<top>", *sorted(_AGN_SUBBLOCK_KEYS)):
-        candidate = agn_dict if location == "<top>" else agn_dict.get(location)
-        if not isinstance(candidate, dict):
-            continue
-        for key in _AGN_IR_FRAC_LEGACY_SPELLINGS:
-            if key in candidate:
-                written.append(candidate[key])
+    # The legacy spellings the view does not resolve, at the top level ONLY.
+    # fracAGN is a top-level key (R38): every sub-block placement of any of its
+    # four spellings is refused by _translate_agn, so scanning sub-dicts here
+    # could only ever disagree with what the builder honors -- which is exactly
+    # what it did, silently narrowing agn_torus_frac out of the torus wildcard
+    # on the strength of a sub-block key the builder dropped.
+    for key in _AGN_IR_FRAC_LEGACY_SPELLINGS:
+        if key in agn_dict:
+            written.append(agn_dict[key])
     # Any active write makes it active: an answer that depended on which
     # spelling was reached first would depend on set iteration order.
     return any(_fracagn_value_is_active(value) for value in written)
@@ -4746,6 +4747,31 @@ def _translate_agn(agn_dict: dict, result: dict) -> None:
     # the torus sub-block the first interception covered.
     if _AGN_BAND_FRAC_KEYS & set(agn_dict):
         raise _agn_band_frac_rename_error(agn_dict.get("type"), placement="top")
+
+    # R38: fracAGN is a top-level key. It drives the runner's cross-block
+    # normalization stage, not one block's physics, so writing it inside a
+    # sub-block reads as that block's parameter and is refused rather than
+    # half-honored. Before this the four spellings behaved three ways there:
+    # the builder honored 'ir_frac'/'agn_ir_frac' (a shared name resolves from
+    # any sub-block) and silently dropped the two legacy ones, while the #2189
+    # detector saw all four -- so a dropped key still narrowed agn_torus_frac
+    # out of the torus wildcard, and the conflict guard, which reads
+    # provenance, did not fire.
+    for sub_name in (*_AGN_SUBBLOCK_KEYS, "lines"):
+        sub_spec = agn_dict.get(sub_name)
+        if not isinstance(sub_spec, dict):
+            continue
+        misplaced = sorted(_AGN_IR_FRAC_SPELLINGS & set(sub_spec))
+        if misplaced:
+            raise ValueError(
+                f"agn[{sub_name!r}][{misplaced[0]!r}] is not a {sub_name} parameter: "
+                f"fracAGN sets the AGN's share of the reprocessed infrared for the "
+                f"whole model, at the runner's cross-block normalization stage, so "
+                f"it is written once at the agn top level:\n"
+                f"  agn={{'agn_ir_frac': ..., {sub_name!r}: {{...}}}}\n"
+                f"Note that an active fracAGN overrides agn_torus_frac (#2189), so "
+                f"the two cannot both be given explicitly."
+            )
 
     # Top-level 'type' selects a monolithic AGN model when not 'composable'.
     # Previously this key was silently dropped and the model collapsed to

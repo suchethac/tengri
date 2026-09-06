@@ -234,9 +234,16 @@ _FRACAGN_PLACEMENTS = (
     ("<top>", "agn_ir_frac"),
     ("<top>", "fracAGN"),
     ("<top>", "agn_fracAGN"),
-    ("torus", "ir_frac"),
-    ("torus", "agn_ir_frac"),
-    ("disc", "ir_frac"),
+)
+
+#: The same four spellings written inside a sub-block. fracAGN is a top-level
+#: key: it drives the cross-block normalization stage, not one block's physics.
+#: Every one of these is now refused (R38) rather than half-honored -- see
+#: ``test_a_sub_block_fracagn_key_is_refused``.
+_FRACAGN_SUBBLOCK_PLACEMENTS = tuple(
+    (location, key)
+    for location in ("torus", "disc", "nlr", "blr", "feii", "atten")
+    for key in ("ir_frac", "agn_ir_frac", "fracAGN", "agn_fracAGN")
 )
 
 
@@ -274,7 +281,9 @@ def _build_with_placement(
     if location == "<top>":
         agn[key] = Fixed(0.5)
     else:
-        agn[location][key] = Fixed(0.5)
+        sub = dict(agn.get(location) or {"type": "none"})
+        sub[key] = Fixed(0.5)
+        agn[location] = sub
     with warnings.catch_warnings():
         warnings.simplefilter("ignore" if mute else "always")
         return SEDModel.build(
@@ -364,3 +373,90 @@ def test_nenkova_agnfitter_keeps_a_nonempty_scope_under_active_fracagn(ssp, obs)
     free = {p for p in model.spec.free_params if p.startswith("agn_")}
     assert "agn_torus_frac" not in free, sorted(free)
     assert "agn_theta_torus" in free, sorted(free)
+
+
+# ──────────────────────────────────────────────────────────────────────────
+# R38: fracAGN is a top-level key, and saying so is better than half-honoring
+# it. Written inside a sub-block, the four spellings used to split three ways.
+# ──────────────────────────────────────────────────────────────────────────
+
+
+@pytest.mark.parametrize(
+    ("location", "key"),
+    _FRACAGN_SUBBLOCK_PLACEMENTS,
+    ids=[f"{loc}:{k}" for loc, k in _FRACAGN_SUBBLOCK_PLACEMENTS],
+)
+def test_a_sub_block_fracagn_key_is_refused_with_placement_advice(ssp, obs, location, key):
+    """Measured before this guard, the four spellings behaved three ways.
+
+    With ``agn={'torus': {'type': 'fritz', 'all_params': FREE,
+    'fracAGN': Fixed(0.5)}}``:
+
+    * the builder silently ignored the key -- ``agn_ir_frac`` stayed 0.0, i.e.
+      fracAGN INACTIVE;
+    * the #2189 detector's legacy scan saw it anyway and narrowed
+      ``agn_torus_frac`` out of the torus wildcard -- a live dimension
+      (measured 8.74 relative photometry change for ``fritz`` with fracAGN
+      inactive) lost to a key with no effect;
+    * and the #2189 conflict guard, which reads provenance, did not fire, so
+      the two halves of one guard disagreed.
+
+    The canonical spellings were honored by the builder but placed a key that
+    governs the runner's cross-block normalization stage inside one block's
+    dict, where it reads as that block's parameter. One rule for all four:
+    fracAGN belongs at the agn top level, and writing it elsewhere says so.
+    """
+    with pytest.raises(ValueError) as excinfo:
+        _build_with_placement(ssp, obs, location=location, key=key, torus_wildcard=FREE)
+    message = str(excinfo.value)
+    assert key in message, message
+    assert location in message, message
+    assert "agn_ir_frac" in message or "fracAGN" in message, message
+
+
+def test_the_legacy_scan_reads_only_the_top_level(ssp, obs):
+    """The detector sees exactly what the builder honors.
+
+    Unit-level, because the build now raises: a legacy spelling that appears
+    only inside a sub-block must not make the detector call fracAGN active,
+    which is what silently narrowed ``agn_torus_frac`` away.
+    """
+    from tengri.parameters.groups import _agn_ir_frac_explicit_and_active
+
+    assert not _agn_ir_frac_explicit_and_active(
+        {"type": "composable", "torus": {"type": "fritz", "fracAGN": Fixed(0.5)}}
+    )
+    assert not _agn_ir_frac_explicit_and_active(
+        {"type": "composable", "disc": {"type": "skirtor", "agn_fracAGN": Fixed(0.5)}}
+    )
+    # The top level still activates it, by either spelling.
+    assert _agn_ir_frac_explicit_and_active({"type": "composable", "fracAGN": Fixed(0.5)})
+    assert _agn_ir_frac_explicit_and_active({"type": "composable", "agn_ir_frac": Fixed(0.5)})
+
+
+def test_the_torus_wildcard_keeps_torus_frac_when_no_top_level_fracagn(ssp, obs):
+    """The control: with fracAGN nowhere at the top level, nothing narrows."""
+    agn = {
+        "type": "composable",
+        "disc": {"type": "skirtor", "all_params": Fixed(DEFAULT)},
+        "torus": {"type": "fritz", "all_params": FREE},
+        "agn_log_lbol": Fixed(12.0),
+        "norm": "independent",
+    }
+    with warnings.catch_warnings():
+        warnings.simplefilter("ignore")
+        model = SEDModel.build(
+            ssp_data=ssp,
+            observation=obs,
+            sfh={"type": "delayed", "all_params": Fixed(DEFAULT), "log_total_mass": Fixed(10.0)},
+            dust_attenuation={
+                "type": "two_component",
+                "law": "calzetti",
+                "all_params": Fixed(DEFAULT),
+            },
+            dust_emission={"type": "dl07", "all_params": Fixed(DEFAULT)},
+            neb={"type": "none"},
+            agn=agn,
+            redshift=Fixed(0.1),
+        )
+    assert "agn_torus_frac" in set(model.spec.free_params)
