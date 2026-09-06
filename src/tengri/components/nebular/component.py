@@ -676,23 +676,39 @@ class NebularSEDComponent(TemplateThreading):
             # ``predict_line_fluxes`` parity. Fall back to the explicit
             # ``gas_logqion`` shortcut only if upstream did not publish
             # ``age_weights`` (e.g. a chain without StellarSEDComponent).
+            #
+            # ``cue_population`` is kept as its own dict and passed to BOTH
+            # branches explicitly, the way the cloudy_grid branch below already
+            # passes ``ssp_weights`` / ``ssp_log_ages_yr`` (#2195). Folding it
+            # into ``common_kwargs`` alone is what the DIG branch could not see:
+            # ``_dig_kwargs`` is snapshotted well above this line, so the DIG
+            # call reached Cue with no population, fell back to
+            # ``default_gas_logqion = 49.1`` and the hard-coded young-starburst
+            # ``ionspec_*``, and mixed in a component whose normalization and
+            # ionizing-spectrum shape belonged to no galaxy. Line ratios cancel
+            # that; broadband photometry and absolute line luminosities do not.
             age_weights = state.derived.get("age_weights")
             ssp_ages_yr = state.derived.get("ssp_ages_yr")
+            cue_population: dict = {}
             if "gas_logqion" in params:
-                common_kwargs["gas_logqion"] = jnp.asarray(params["gas_logqion"])
+                cue_population["gas_logqion"] = jnp.asarray(params["gas_logqion"])
             elif age_weights is not None and ssp_ages_yr is not None:
-                common_kwargs["ssp_weights"] = jnp.asarray(age_weights)
-                common_kwargs["ssp_log_ages_yr"] = jnp.log10(jnp.asarray(ssp_ages_yr))
+                cue_population["ssp_weights"] = jnp.asarray(age_weights)
+                cue_population["ssp_log_ages_yr"] = jnp.log10(jnp.asarray(ssp_ages_yr))
             else:
                 log_nion = state.derived.get("log_nion")
                 if log_nion is not None:
-                    common_kwargs["gas_logqion"] = jnp.maximum(log_nion, 0.0)
+                    cue_population["gas_logqion"] = jnp.maximum(log_nion, 0.0)
+            common_kwargs.update(cue_population)
             nebular_sed = self.backend.predict_nebular_sed(
                 **common_kwargs, **cue_extras, template_data=template_data
             )
             if _dig_kwargs is not None:
                 nebular_sed_dig = self.backend.predict_nebular_sed(
-                    **_dig_kwargs, **cue_extras, template_data=template_data
+                    **_dig_kwargs,
+                    **cue_population,
+                    **cue_extras,
+                    template_data=template_data,
                 )
                 _f = jnp.asarray(_dig_frac)
                 nebular_sed = (1.0 - _f) * nebular_sed + _f * nebular_sed_dig
@@ -744,8 +760,10 @@ class NebularSEDComponent(TemplateThreading):
                         cloudyfsps_only=cue_cloudyfsps_only,
                     )
                     if _dig_kwargs is not None:
+                        # ``cue_population`` explicitly, as above (#2195).
                         _, line_lums_dig = self.backend.predict_nebular_line_luminosities(
                             **_dig_kwargs,
+                            **cue_population,
                             **cue_extras,
                             template_data=template_data,
                             cloudyfsps_only=cue_cloudyfsps_only,

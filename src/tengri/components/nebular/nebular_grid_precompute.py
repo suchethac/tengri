@@ -371,6 +371,82 @@ def _refuse_tabulated_metallicity(model):
     )
 
 
+def _refuse_active_dig_mixing(spec):
+    r"""Refuse DIG mixing, which this grid has no axis for (#2195).
+
+    The reconstruction is :math:`Q_H \times \mathrm{interp}(\ell)` over
+    :data:`_CANDIDATE_AXES`, one photoionization regime evaluated at one
+    ionization parameter. DIG mixing is a second regime,
+
+    .. math::
+
+        L(\lambda) = (1 - f_{\mathrm{DIG}}) \, L_{\mathrm{HII}}(\lambda, \log U)
+            + f_{\mathrm{DIG}} \, L_{\mathrm{DIG}}(\lambda, \log U + \Delta \log U)
+
+    with :math:`f_{\mathrm{DIG}}` = ``neb_dig_frac`` [dimensionless, in 0 to 1]
+    and :math:`\Delta \log U` = ``neb_dig_delta_logU`` [dex]. Neither parameter
+    is a candidate axis, and the stored :math:`\ell` carries no second regime to
+    mix, so an armed grid returns the HII term alone: both DIG parameters go
+    inert together, silently, wherever the grid answers.
+
+    This is not a dust-free corner. ``must_materialize_sed`` disarms the grid
+    for the **photometry** channel of any chain that reads ``sed_nebular``,
+    which every dusty model does, but the **line** channel reconstructs from
+    the grid whenever one is attached
+    (``SEDModel.predict_line_fluxes``), dusty or not. So the refusal is
+    reachable on dusty and dust-free builds alike, and a fit that reads lines is
+    the case it matters most for.
+
+    Parameters
+    ----------
+    spec : Parameters
+        The model's parameter specification.
+
+    Raises
+    ------
+    DIGNotOnNebularGridError
+        When ``neb_dig_frac`` is free, or fixed at a non-zero value.
+
+    Notes
+    -----
+    **JIT-compatible**: no; composition-time only.
+
+    References
+    ----------
+    .. [1] L. M. Haffner et al., "The warm ionized medium in spiral galaxies,"
+       Rev. Mod. Phys., 81, 969 (2009).
+       https://doi.org/10.1103/RevModPhys.81.969
+    .. [2] S. Tacchella et al., "H-alpha emission in local galaxies: star
+       formation, time variability, and the diffuse ionized gas," MNRAS, 513,
+       2904 (2022). arXiv:2112.00027. https://doi.org/10.1093/mnras/stac818
+    """
+    from tengri.config.exceptions import DIGNotOnNebularGridError
+
+    if "neb_dig_frac" not in spec.all_params:
+        return
+    if "neb_dig_frac" in spec.free_params:
+        disposition = "neb_dig_frac is free"
+    else:
+        value = spec.fixed_value("neb_dig_frac")
+        if value is None or float(value) == 0.0:
+            return
+        disposition = f"neb_dig_frac is fixed at {float(value)}"
+
+    raise DIGNotOnNebularGridError(
+        "the nebular precompute grid cannot represent DIG mixing, and "
+        f"{disposition}. The grid tabulates one photoionization regime over "
+        f"{list(_CANDIDATE_AXES)}; neither neb_dig_frac nor neb_dig_delta_logU "
+        "is an axis, and the stored luminosity-per-Q_H holds no second regime, "
+        "so a reconstruction returns the HII term alone and both DIG parameters "
+        "become inert. Fix (one of):\n"
+        "  1. Turn DIG mixing off for this fit: "
+        "neb={..., 'dig_frac': Fixed(0.0)}, which is the declared default.\n"
+        "  2. Keep DIG mixing and stay on the exact path: drop FeaturePrecomp "
+        "from approx= (WavePrecomp alone is unaffected and still applies), or "
+        "do not call enable_fast_nebular."
+    )
+
+
 def precompute_nebular_grid(
     model,
     wavelengths,
@@ -458,6 +534,7 @@ def precompute_nebular_grid(
     ranges = ranges or {}
 
     _refuse_tabulated_metallicity(model)
+    _refuse_active_dig_mixing(spec)
 
     met_nodes = _ssp_met_nodes(model) if snap_met_to_ssp_nodes else None
 
