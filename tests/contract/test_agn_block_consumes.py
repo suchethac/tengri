@@ -456,7 +456,21 @@ def test_composable_wildcard_frees_only_active_params(synthetic_ssp_wide):
         redshift=Fixed(0.05),
     )
     free_agn = {p for p in model.spec.free_params if p.startswith("agn")}
-    assert free_agn == agn_active_param_set(cfg)
+    # agn_ebv_disc (Task 16, item 2): a category-wide companion read
+    # (compose_l_nu reddens EVERY disc block's own continuum with this
+    # Prevot-SMC screen at the runner stage, blocks/runner.py) that no
+    # individual disc TYPE's own signature names, so it is invisible to
+    # agn_active_param_set's AGN_BLOCK_CONSUMES-only union -- but IS
+    # reachable here because the disc sub-dict states no 'all_params' of
+    # its own, so it inherits the top-level wildcard, and its OWN
+    # sub-block scope (_agn_subblock_declared_params, groups.py's
+    # _AGN_CATEGORY_WIDE_COMPANION_PARAMS) correctly includes it. Not a
+    # gap in agn_active_param_set's OWN contract (it unions per-block
+    # CONSUMES entries for params partitioned to the top-level "agn"
+    # group; agn_ebv_disc is partitioned to "agn.disc" instead) -- see
+    # test_agn_wildcard_measured_liveness.py for the measured liveness
+    # proof.
+    assert free_agn == agn_active_param_set(cfg) | {"agn_ebv_disc"}
 
 
 def test_all_fixed_wildcard_frees_nothing_and_keeps_old_defaults(synthetic_ssp_wide):
