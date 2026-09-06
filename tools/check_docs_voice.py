@@ -91,26 +91,64 @@ NOTATION_CANON = {
 REF_CODE_CANON = {"BAGPIPES", "Prospector", "CIGALE", "AGNfitter", "Synthesizer", "FSPS", "DSPS"}
 
 # Caveat keywords: indicate substantive content, not padding
-CAVEAT_KEYWORDS = {"must", "never", "silently", "fails", "raises", "not", "unless", "only", "wrong", "invalid", "requires"}
+CAVEAT_KEYWORDS = {
+    "must",
+    "never",
+    "silently",
+    "fails",
+    "raises",
+    "not",
+    "unless",
+    "only",
+    "wrong",
+    "invalid",
+    "requires",
+}
 
 # Unit tokens to detect fact-ful content
-UNIT_TOKENS = {"Å", "μm", "erg", "Msun", "M☉", "mag", "Gyr", "Myr", "yr", "dex", "K", "Jy", "keV", "GHz"}
+UNIT_TOKENS = {
+    "Å",
+    "μm",
+    "erg",
+    "Msun",
+    "M☉",
+    "mag",
+    "Gyr",
+    "Myr",
+    "yr",
+    "dex",
+    "K",
+    "Jy",
+    "keV",
+    "GHz",
+}
 
 # Restatement opening patterns (gallery headers only)
 RESTATEMENT_PATTERNS = {
-    "demonstrates", "generates", "we build", "we construct", "computes",
-    "shows how", "this example", "this script", "illustrates"
+    "demonstrates",
+    "generates",
+    "we build",
+    "we construct",
+    "computes",
+    "shows how",
+    "this example",
+    "this script",
+    "illustrates",
 }
 
 # STRONG evaluative tokens: characterize a quantity the reader can see printed.
 # Drop weak tokens ("agree", "matches", "close to") that describe setup, not verdict.
 EVALUATIVE_TOKENS_STRONG = {
-    "recovers", "recover",
-    "reproduce well", "reproduces well",
-    "well-mixed", "well constrained",
+    "recovers",
+    "recover",
+    "reproduce well",
+    "reproduces well",
+    "well-mixed",
+    "well constrained",
     "good agreement",
-    "track the", "tracks the",
-    "excellent"
+    "track the",
+    "tracks the",
+    "excellent",
 }
 
 # Development-detail patterns to flag
@@ -132,6 +170,7 @@ PRIVATE_VAR_ALLOWLIST = {"SFH_REGISTRY", "_REGISTRY"}
 @dataclass
 class Violation:
     """A single prose violation."""
+
     path: str
     line: int
     col: int
@@ -151,6 +190,7 @@ def _extract_constants_from_physics() -> dict[str, float]:
     # Try to import the actual module (handles computed constants, cannot drift from source)
     try:
         import importlib
+
         physics_module = importlib.import_module("tengri.utils.physics_constants")
         for name in dir(physics_module):
             # Only UPPER_SNAKE public attributes (not methods, not __dunder__)
@@ -165,7 +205,7 @@ def _extract_constants_from_physics() -> dict[str, float]:
         print(
             "WARNING: tengri.utils.physics_constants not importable; "
             "hardcoded_const check will be incomplete",
-            file=sys.stderr
+            file=sys.stderr,
         )
     except Exception as e:
         print(f"WARNING: Failed to import physics constants: {e}", file=sys.stderr)
@@ -177,7 +217,9 @@ def _extract_constants_from_physics() -> dict[str, float]:
             content = physics_file.read_text(encoding="utf-8")
             for line in content.split("\n"):
                 # Match: NAME: float = <literal>
-                m = re.match(r"^(\w+):\s*float\s*=\s*([-+]?[0-9]*\.?[0-9]+(?:[eE][-+]?[0-9]+)?)", line)
+                m = re.match(
+                    r"^(\w+):\s*float\s*=\s*([-+]?[0-9]*\.?[0-9]+(?:[eE][-+]?[0-9]+)?)", line
+                )
                 if m:
                     name, val = m.groups()
                     constants[name] = float(val)
@@ -200,7 +242,11 @@ def _mask_code_spans(text: str) -> str:
     text = re.sub(r"~~~[\s\S]*?~~~", lambda m: "\n" * m.group(0).count("\n"), text)
 
     # Blank RST code-block directives and following indented content
-    text = re.sub(r"\.\.\s+code-block::[^\n]*\n((?:\s{3,}[^\n]*\n)*)", lambda m: "\n" * m.group(0).count("\n"), text)
+    text = re.sub(
+        r"\.\.\s+code-block::[^\n]*\n((?:\s{3,}[^\n]*\n)*)",
+        lambda m: "\n" * m.group(0).count("\n"),
+        text,
+    )
 
     # Blank RST literal blocks (text followed by ::)
     text = re.sub(r"::\n\n((?:[ ]{3,}[^\n]*\n)+)", lambda m: "\n" * m.group(0).count("\n"), text)
@@ -358,7 +404,9 @@ def _check_fact_free_bulk(text: str) -> list[str]:
     has_digit = bool(re.search(r"\d", masked))
     has_unit = any(unit in masked for unit in UNIT_TOKENS)
     has_citation = bool(re.search(r"\w+\+\d{4}|et al", masked))
-    has_caveat = any(f" {kw} " in masked.lower() or f" {kw}." in masked.lower() for kw in CAVEAT_KEYWORDS)
+    has_caveat = any(
+        f" {kw} " in masked.lower() or f" {kw}." in masked.lower() for kw in CAVEAT_KEYWORDS
+    )
 
     if not (has_digit or has_unit or has_citation or has_caveat):
         violations.append(f"Fact-free padding: {words} words, no units/numbers/citations/caveats")
@@ -405,12 +453,31 @@ def _check_unicode_normalization(text: str) -> list[str]:
 
     # Codepoints that are intentionally formatted and should not be normalized
     INTENTIONAL = {
-        "²", "³", "¹",  # superscripts
-        "₀", "₁", "₂", "₃", "₄", "₅", "₆", "₇", "₈", "₉",  # subscripts
+        "²",
+        "³",
+        "¹",  # superscripts
+        "₀",
+        "₁",
+        "₂",
+        "₃",
+        "₄",
+        "₅",
+        "₆",
+        "₇",
+        "₈",
+        "₉",  # subscripts
         "…",  # ellipsis
-        "χ", "²",  # from notation canon (χ²)
-        "₁", "₀",  # from notation canon (log₁₀)
-        "Å", "☉", "×", "–", "μ", "τ", "Hα",  # from canon: all NFKC-stable
+        "χ",
+        "²",  # from notation canon (χ²)
+        "₁",
+        "₀",  # from notation canon (log₁₀)
+        "Å",
+        "☉",
+        "×",
+        "–",
+        "μ",
+        "τ",
+        "Hα",  # from canon: all NFKC-stable
         "R̂",  # combining circumflex: NFKC-stable
     }
 
@@ -484,8 +551,7 @@ def _check_hardcoded_constants_in_code(text: str, constants: dict[str, float]) -
     # Extract assignment patterns from text: VAR_NAME = <number>
     # This regex requires the assignment to be actual code, not prose
     assignment_pattern = re.compile(
-        r"^(\w+)\s*=\s*([-+]?(?:\d+\.?\d*|\.\d+)(?:[eE][-+]?\d+)?)(.*?)$",
-        re.MULTILINE
+        r"^(\w+)\s*=\s*([-+]?(?:\d+\.?\d*|\.\d+)(?:[eE][-+]?\d+)?)(.*?)$", re.MULTILINE
     )
 
     for match in assignment_pattern.finditer(text):
@@ -539,8 +605,7 @@ def _fix_notation_canon(text: str) -> str:
     lines = text.split("\n")
     if any("**Verification Status:**" in ln for ln in lines):
         return "\n".join(
-            ln if "**Verification Status:**" in ln else _fix_notation_canon(ln)
-            for ln in lines
+            ln if "**Verification Status:**" in ln else _fix_notation_canon(ln) for ln in lines
         )
 
     # A toctree body is a list of document names, not prose. Applying
@@ -556,8 +621,12 @@ def _fix_notation_canon(text: str) -> str:
                 out.append(ln)
                 continue
             if in_toctree:
-                if ln.strip().startswith("```") or (ln.strip() and not ln.startswith((" ", "\t", ":"))
-                                                    and ".. toctree::" in text and not ln.strip()):
+                if ln.strip().startswith("```") or (
+                    ln.strip()
+                    and not ln.startswith((" ", "\t", ":"))
+                    and ".. toctree::" in text
+                    and not ln.strip()
+                ):
                     in_toctree = False
                 elif ln.strip() == "" and out and out[-1].strip() == "":
                     in_toctree = False
@@ -571,7 +640,7 @@ def _fix_notation_canon(text: str) -> str:
     def is_in_code(pos: int, length: int) -> bool:
         """Check if any part of [pos, pos+length) overlaps with code."""
         for i in range(pos, min(pos + length, len(masked))):
-            if i < len(masked) and masked[i] == 'x':
+            if i < len(masked) and masked[i] == "x":
                 return True
         return False
 
@@ -611,7 +680,7 @@ def _fix_notation_canon(text: str) -> str:
     pattern = re.compile(r"(\d+)-(\d+)")
     for match in pattern.finditer(text):
         # Find the hyphen position within the match
-        hyphen_idx = match.group(0).find('-')
+        hyphen_idx = match.group(0).find("-")
         hyphen_pos = match.start() + hyphen_idx
         # Only replace if not in a skip range and not in code
         if not overlaps_skip(hyphen_pos) and not is_in_code(hyphen_pos, 1):
@@ -637,9 +706,9 @@ def _fix_unicode_normalization(text: str) -> str:
 
     # Replace ligatures
     ligature_map = {
-        "ﬁ": "fi",   # U+FB01 LATIN SMALL LIGATURE FI
-        "ﬂ": "fl",   # U+FB02 LATIN SMALL LIGATURE FL
-        "ﬀ": "ff",   # U+FB00 LATIN SMALL LIGATURE FF
+        "ﬁ": "fi",  # U+FB01 LATIN SMALL LIGATURE FI
+        "ﬂ": "fl",  # U+FB02 LATIN SMALL LIGATURE FL
+        "ﬀ": "ff",  # U+FB00 LATIN SMALL LIGATURE FF
         "ﬃ": "ffi",  # U+FB03 LATIN SMALL LIGATURE FFI
         "ﬄ": "ffl",  # U+FB04 LATIN SMALL LIGATURE FFL
     }
@@ -707,7 +776,7 @@ def scan_file(path: Path, constants: dict[str, float]) -> list[Violation]:
                 if not para.strip() or len(para.split()) < 3:
                     continue
 
-                line_num = masked[:masked.find(para)].count("\n") + 1
+                line_num = masked[: masked.find(para)].count("\n") + 1
                 col = 1
 
                 for check_name, check_fn in [
@@ -717,9 +786,16 @@ def scan_file(path: Path, constants: dict[str, float]) -> list[Violation]:
                     ("notation_canon", _check_notation_canon),
                 ]:
                     for msg in check_fn(para):
-                        violations.append(Violation(
-                            str(path.relative_to(REPO)), line_num, col, check_name, para[:50], msg
-                        ))
+                        violations.append(
+                            Violation(
+                                str(path.relative_to(REPO)),
+                                line_num,
+                                col,
+                                check_name,
+                                para[:50],
+                                msg,
+                            )
+                        )
         except Exception:
             pass
 
@@ -733,7 +809,7 @@ def scan_file(path: Path, constants: dict[str, float]) -> list[Violation]:
                 if not para.strip():
                     continue
 
-                line_num = masked[:masked.find(para)].count("\n") + 1
+                line_num = masked[: masked.find(para)].count("\n") + 1
                 col = 1
 
                 for check_name, check_fn in [
@@ -743,9 +819,16 @@ def scan_file(path: Path, constants: dict[str, float]) -> list[Violation]:
                     ("notation_canon", _check_notation_canon),
                 ]:
                     for msg in check_fn(para):
-                        violations.append(Violation(
-                            str(path.relative_to(REPO)), line_num, col, check_name, para[:50], msg
-                        ))
+                        violations.append(
+                            Violation(
+                                str(path.relative_to(REPO)),
+                                line_num,
+                                col,
+                                check_name,
+                                para[:50],
+                                msg,
+                            )
+                        )
         except Exception:
             pass
 
@@ -755,9 +838,16 @@ def scan_file(path: Path, constants: dict[str, float]) -> list[Violation]:
         if header:
             line_num = 1
             for msg in _check_restatement_openings(header):
-                violations.append(Violation(
-                    str(path.relative_to(REPO)), line_num, 1, "restatement_opening", header[:50], msg
-                ))
+                violations.append(
+                    Violation(
+                        str(path.relative_to(REPO)),
+                        line_num,
+                        1,
+                        "restatement_opening",
+                        header[:50],
+                        msg,
+                    )
+                )
 
             masked_header = _mask_code_spans(header)
             for check_name, check_fn in [
@@ -767,9 +857,11 @@ def scan_file(path: Path, constants: dict[str, float]) -> list[Violation]:
                 ("notation_canon", _check_notation_canon),
             ]:
                 for msg in check_fn(masked_header):
-                    violations.append(Violation(
-                        str(path.relative_to(REPO)), line_num, 1, check_name, header[:50], msg
-                    ))
+                    violations.append(
+                        Violation(
+                            str(path.relative_to(REPO)), line_num, 1, check_name, header[:50], msg
+                        )
+                    )
 
         # Check %% markdown blocks
         blocks = _extract_percent_blocks(path)
@@ -783,9 +875,16 @@ def scan_file(path: Path, constants: dict[str, float]) -> list[Violation]:
                 ("hardcoded_const", lambda t: _check_hardcoded_constants(t, constants)),
             ]:
                 for msg in check_fn(masked_block):
-                    violations.append(Violation(
-                        str(path.relative_to(REPO)), block_line_num, 1, check_name, block_content[:50], msg
-                    ))
+                    violations.append(
+                        Violation(
+                            str(path.relative_to(REPO)),
+                            block_line_num,
+                            1,
+                            check_name,
+                            block_content[:50],
+                            msg,
+                        )
+                    )
 
     elif path.suffix == ".ipynb":
         # Jupyter notebook: scan markdown cells and code cells (for hardcoded constants)
@@ -805,9 +904,16 @@ def scan_file(path: Path, constants: dict[str, float]) -> list[Violation]:
                     ("prose_vs_output", lambda t: _check_prose_vs_output(t, adjacent_has_output)),
                 ]:
                     for msg in check_fn(masked_cell):
-                        violations.append(Violation(
-                            str(path.relative_to(REPO)), cell_idx, 1, check_name, cell_text[:50], msg
-                        ))
+                        violations.append(
+                            Violation(
+                                str(path.relative_to(REPO)),
+                                cell_idx,
+                                1,
+                                check_name,
+                                cell_text[:50],
+                                msg,
+                            )
+                        )
 
             # Check code cells for hardcoded constants (check 6)
             for cell_idx, cell in enumerate(all_cells):
@@ -819,9 +925,16 @@ def scan_file(path: Path, constants: dict[str, float]) -> list[Violation]:
                         code_text = source
 
                     for msg in _check_hardcoded_constants_in_code(code_text, constants):
-                        violations.append(Violation(
-                            str(path.relative_to(REPO)), cell_idx, 1, "hardcoded_const", code_text[:50], msg
-                        ))
+                        violations.append(
+                            Violation(
+                                str(path.relative_to(REPO)),
+                                cell_idx,
+                                1,
+                                "hardcoded_const",
+                                code_text[:50],
+                                msg,
+                            )
+                        )
         except Exception:
             pass
 
@@ -879,7 +992,9 @@ def _compute_metrics(corpus: list[Path], constants: dict[str, float]) -> dict:
                 # Hand-holding: count certain pattern types
                 if "the (left|right|top|bottom|lower|upper) panel" in cell_text.lower():
                     hand_holding_stats[path.name].append("panel_narration")
-                if re.search(r"we\s+(build|construct|set|configure|vary|sweep)", cell_text.lower()):
+                if re.search(
+                    r"we\s+(build|construct|set|configure|vary|sweep)", cell_text.lower()
+                ):
                     hand_holding_stats[path.name].append("procedure")
                 if re.search(r"both codes\s+(integrate|use|consume)", cell_text.lower()):
                     hand_holding_stats[path.name].append("code_reference")
@@ -898,9 +1013,15 @@ def main(argv: Sequence[str] | None = None) -> int:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--strict", action="store_true", help="Fail on any violation (exit 1)")
     parser.add_argument("--report", action="store_true", help="Metrics only (no gated checks)")
-    parser.add_argument("--all", action="store_true", help="Print all violations (not just first 20)")
-    parser.add_argument("--fix", action="store_true", help="Rewrite notation_canon + unicode_norm in place")
-    parser.add_argument("--dry-run", action="store_true", help="Preview fixes without writing (requires --fix)")
+    parser.add_argument(
+        "--all", action="store_true", help="Print all violations (not just first 20)"
+    )
+    parser.add_argument(
+        "--fix", action="store_true", help="Rewrite notation_canon + unicode_norm in place"
+    )
+    parser.add_argument(
+        "--dry-run", action="store_true", help="Preview fixes without writing (requires --fix)"
+    )
     args = parser.parse_args(argv)
 
     constants = _extract_constants_from_physics()
@@ -942,9 +1063,11 @@ def main(argv: Sequence[str] | None = None) -> int:
                                 if fixed != text:
                                     modified = True
                                     if isinstance(source, list):
-                                        cell["source"] = fixed.split('\n')
+                                        cell["source"] = fixed.split("\n")
                                         # Add back newlines except after last
-                                        cell["source"] = [s + '\n' for s in cell["source"][:-1]] + [cell["source"][-1]]
+                                        cell["source"] = [
+                                            s + "\n" for s in cell["source"][:-1]
+                                        ] + [cell["source"][-1]]
                                     else:
                                         cell["source"] = fixed
 
@@ -967,25 +1090,43 @@ def main(argv: Sequence[str] | None = None) -> int:
                                     # Count notation_canon replacements
                                     for canonical, variants in NOTATION_CANON.items():
                                         for variant in variants:
-                                            count = len(re.findall(rf"\b{re.escape(variant)}\b", cell_text))
+                                            count = len(
+                                                re.findall(rf"\b{re.escape(variant)}\b", cell_text)
+                                            )
                                             if count > 0:
-                                                replacements_by_type[f"{variant}->{canonical}"] += count
+                                                replacements_by_type[
+                                                    f"{variant}->{canonical}"
+                                                ] += count
 
                                     # Count reference code casing
                                     for word in re.findall(r"\b[A-Za-z]+\b", cell_text):
-                                        if any(word.lower() == ref.lower() for ref in REF_CODE_CANON):
+                                        if any(
+                                            word.lower() == ref.lower() for ref in REF_CODE_CANON
+                                        ):
                                             if word not in REF_CODE_CANON:
-                                                canonical = next(ref for ref in REF_CODE_CANON if ref.lower() == word.lower())
-                                                count = len(re.findall(rf"\b{re.escape(word)}\b", cell_text))
+                                                canonical = next(
+                                                    ref
+                                                    for ref in REF_CODE_CANON
+                                                    if ref.lower() == word.lower()
+                                                )
+                                                count = len(
+                                                    re.findall(
+                                                        rf"\b{re.escape(word)}\b", cell_text
+                                                    )
+                                                )
                                                 if count > 0:
-                                                    replacements_by_type[f"casing:{word}->{canonical}"] += count
+                                                    replacements_by_type[
+                                                        f"casing:{word}->{canonical}"
+                                                    ] += count
 
                                     # Count unicode replacements
                                     if "µ" in cell_text:
                                         replacements_by_type["µ->μ"] += cell_text.count("µ")
                                     for ligature in ["ﬁ", "ﬂ", "ﬀ", "ﬃ", "ﬄ"]:
                                         if ligature in cell_text:
-                                            replacements_by_type[f"ligature:{ligature}"] += cell_text.count(ligature)
+                                            replacements_by_type[f"ligature:{ligature}"] += (
+                                                cell_text.count(ligature)
+                                            )
 
                     except Exception as e:
                         print(f"Warning: failed to process {path}: {e}", file=sys.stderr)
@@ -1024,7 +1165,9 @@ def main(argv: Sequence[str] | None = None) -> int:
                                 if re.match(r"^#\s*%%", lines[block_end_line]):
                                     break
                                 block_end_line += 1
-                            markdown_ranges.append((block_start_line, block_end_line, block_content))
+                            markdown_ranges.append(
+                                (block_start_line, block_end_line, block_content)
+                            )
 
                         # Fix markdown content and reconstruct
                         fixed_blocks = []
@@ -1037,14 +1180,22 @@ def main(argv: Sequence[str] | None = None) -> int:
                         if fixed_blocks:
                             new_lines = lines.copy()
                             # Process in reverse order to maintain line numbers
-                            for block_start_line, block_end_line, fixed_content in reversed(fixed_blocks):
+                            for block_start_line, block_end_line, fixed_content in reversed(
+                                fixed_blocks
+                            ):
                                 # Skip the header line (# %% [markdown])
                                 # Replace lines[block_start_line+1:block_end_line] with fixed_content
                                 fixed_content_lines = fixed_content.split("\n")
                                 # Add "# " prefix to each line
-                                fixed_content_lines = ["# " + line if line else "#" for line in fixed_content_lines]
+                                fixed_content_lines = [
+                                    "# " + line if line else "#" for line in fixed_content_lines
+                                ]
                                 # Replace the block
-                                new_lines = new_lines[:block_start_line + 1] + fixed_content_lines + new_lines[block_end_line:]
+                                new_lines = (
+                                    new_lines[: block_start_line + 1]
+                                    + fixed_content_lines
+                                    + new_lines[block_end_line:]
+                                )
                             new_text = "\n".join(new_lines)
                 else:
                     # For markdown and RST: apply to full text (respecting code spans)
@@ -1059,7 +1210,9 @@ def main(argv: Sequence[str] | None = None) -> int:
                             old_count = len(re.findall(rf"\b{re.escape(variant)}\b", text))
                             new_count = len(re.findall(rf"\b{re.escape(variant)}\b", new_text))
                             if old_count > new_count:
-                                replacements_by_type[f"{variant}->{canonical}"] += old_count - new_count
+                                replacements_by_type[f"{variant}->{canonical}"] += (
+                                    old_count - new_count
+                                )
 
                     # For reference code casing
                     for ref in REF_CODE_CANON:
@@ -1068,7 +1221,9 @@ def main(argv: Sequence[str] | None = None) -> int:
                                 old_count = len(re.findall(rf"\b{re.escape(word)}\b", text))
                                 new_count = len(re.findall(rf"\b{re.escape(word)}\b", new_text))
                                 if old_count > new_count:
-                                    replacements_by_type[f"casing:{word}->{ref}"] += old_count - new_count
+                                    replacements_by_type[f"casing:{word}->{ref}"] += (
+                                        old_count - new_count
+                                    )
 
                     # For unicode replacements
                     if "µ" in text and "µ" not in new_text:
@@ -1081,7 +1236,9 @@ def main(argv: Sequence[str] | None = None) -> int:
                     old_ranges = len(re.findall(r"\d+-\d+", text))
                     new_ranges = len(re.findall(r"\d+-\d+", new_text))
                     if old_ranges > new_ranges:
-                        replacements_by_type["numeric-range-hyphen->endash"] += old_ranges - new_ranges
+                        replacements_by_type["numeric-range-hyphen->endash"] += (
+                            old_ranges - new_ranges
+                        )
 
                     total_fixes += 1
                     files_modified.append(str(path.relative_to(REPO)))
@@ -1141,9 +1298,11 @@ def main(argv: Sequence[str] | None = None) -> int:
         if metrics:
             print("\nMetrics:")
             if "gallery_headers_total" in metrics:
-                print(f"  Gallery headers: {metrics['gallery_headers_total']} total, "
-                      f"{metrics['gallery_headers_long']} >= 120 words "
-                      f"({metrics['gallery_headers_long_pct']:.1f}%)")
+                print(
+                    f"  Gallery headers: {metrics['gallery_headers_total']} total, "
+                    f"{metrics['gallery_headers_long']} >= 120 words "
+                    f"({metrics['gallery_headers_long_pct']:.1f}%)"
+                )
 
     if args.report:
         return 0

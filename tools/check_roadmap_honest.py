@@ -52,8 +52,20 @@ ROADMAP = REPO_ROOT / "ROADMAP.md"
 PLANNED_HEADING = "## Planned Physics Modules"
 
 #: Tokens too generic to be meaningful even if some registry used them.
-_STOPWORDS = {"model", "models", "dust", "style", "disc", "disk", "emission",
-              "attenuation", "template", "templates", "features", "based"}
+_STOPWORDS = {
+    "model",
+    "models",
+    "dust",
+    "style",
+    "disc",
+    "disk",
+    "emission",
+    "attenuation",
+    "template",
+    "templates",
+    "features",
+    "based",
+}
 
 
 def _planned_headings(text: str) -> list[str]:
@@ -61,7 +73,7 @@ def _planned_headings(text: str) -> list[str]:
     start = text.find(PLANNED_HEADING)
     if start == -1:
         return []
-    rest = text[start + len(PLANNED_HEADING):]
+    rest = text[start + len(PLANNED_HEADING) :]
     end = rest.find("\n## ")
     if end != -1:
         rest = rest[:end]
@@ -110,8 +122,9 @@ def main() -> int:
 
     registered = _registered_names()
     if not registered:
-        print("FAIL: no registries could be read - the guard would pass vacuously",
-              file=sys.stderr)
+        print(
+            "FAIL: no registries could be read - the guard would pass vacuously", file=sys.stderr
+        )
         return 1
 
     violations = []
@@ -121,18 +134,26 @@ def main() -> int:
                 violations.append((heading, token, registered[token]))
 
     if violations:
-        print(f"{len(violations)} roadmap entr(ies) listed as unimplemented but already "
-              f"registered:\n", file=sys.stderr)
+        print(
+            f"{len(violations)} roadmap entr(ies) listed as unimplemented but already "
+            f"registered:\n",
+            file=sys.stderr,
+        )
         for heading, token, menu in violations:
-            print(f"  '{heading}' -> '{token}' is a live entry in tengri.{menu}()",
-                  file=sys.stderr)
-        print("\nMove it to the 'Already delivered' table with the name a user "
-              "would actually pass, or rename the heading if it means something else.",
-              file=sys.stderr)
+            print(
+                f"  '{heading}' -> '{token}' is a live entry in tengri.{menu}()", file=sys.stderr
+            )
+        print(
+            "\nMove it to the 'Already delivered' table with the name a user "
+            "would actually pass, or rename the heading if it means something else.",
+            file=sys.stderr,
+        )
         return 1
 
-    print(f"OK: all {len(headings)} planned module(s) are genuinely absent "
-          f"({len(registered)} registered names checked)")
+    print(
+        f"OK: all {len(headings)} planned module(s) are genuinely absent "
+        f"({len(registered)} registered names checked)"
+    )
     return 0
 
 

@@ -31,14 +31,14 @@ from typing import NamedTuple
 class KeyMismatch(NamedTuple):
     """
 
-# NOTE: Coupling with docs/model_configuration.md
-# This guard parses markdown structure expecting:
-# - Section headings: ### Domain: `key`
-# - Subsection marker: **Structural keys:**
-# - Bullet entries: - `'key'` — description
-# If the markdown structure changes, update the regex patterns in _read_doc_keys_from_file()
-# and vice versa.
-A discrepancy between doc and code."""
+    # NOTE: Coupling with docs/model_configuration.md
+    # This guard parses markdown structure expecting:
+    # - Section headings: ### Domain: `key`
+    # - Subsection marker: **Structural keys:**
+    # - Bullet entries: - `'key'` — description
+    # If the markdown structure changes, update the regex patterns in _read_doc_keys_from_file()
+    # and vice versa.
+    A discrepancy between doc and code."""
 
     key: str
     issue: str  # 'missing_from_code', 'undocumented', etc.
@@ -123,9 +123,7 @@ def _read_doc_keys_from_file(doc_path: pathlib.Path) -> dict[str, set[str]]:
             # in the AGN section, the `'type'`/`'all_params'` mentioned
             # inline in each sub-block bullet's own description) as if they
             # were newly documented keys.
-            synonym_matches = re.findall(
-                r"[Ee]xact synonym:\s*`['\"]([a-z_A-Z0-9]+)['\"]`", line
-            )
+            synonym_matches = re.findall(r"[Ee]xact synonym:\s*`['\"]([a-z_A-Z0-9]+)['\"]`", line)
             keys.update(synonym_matches)
 
         # Translate a literal '*' to 'all_params' for user-facing comparison.

@@ -326,10 +326,6 @@ def test_real_geovi_closures_are_finite_in_float32(synthetic_ssp_wide, synthetic
         f"non-finite entries in the shipped geoVI primitives: "
         f"{ {k: n for k, n in broken.items() if n} }"
     )
-    assert np.all(np.isfinite(broken.values())), (
-        "`broken.values()` is non-finite — non-zero is not enough, `nan != 0.0` is True "
-        "and a NaN satisfies a non-zero assertion (#2178)"
-    )
 
 
 def test_noise_inv_is_not_published_in_data_args(synthetic_ssp_wide, synthetic_tophat_obs):

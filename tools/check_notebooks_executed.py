@@ -111,7 +111,9 @@ def main(argv: Sequence[str] | None = None) -> int:
         return 0
 
     if problems:
-        print(f"FAIL: {len(problems)} notebook(s) published from a partial run:\n", file=sys.stderr)
+        print(
+            f"FAIL: {len(problems)} notebook(s) published from a partial run:\n", file=sys.stderr
+        )
         for p in problems:
             print(f"  {p}", file=sys.stderr)
         return 1

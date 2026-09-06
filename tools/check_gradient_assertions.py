@@ -404,7 +404,10 @@ class _FunctionScan:
                     arg = node.args[0] if node.args else node
                     add(self.roots(node), "finite" if id(node) in negated else "expected", arg)
                 elif name in ANY_FNS and node.args and self._is_magnitude(node.args[0]):
-                    add(self.roots(node.args[0]), "nonzero", node.args[0])
+                    # ``any(x)`` claims some element is non-zero; ``not any(x)`` claims
+                    # every element IS zero, which names the bad state as the subject.
+                    kind = "expected" if id(node) in negated else "nonzero"
+                    add(self.roots(node.args[0]), kind, node.args[0])
                 elif (
                     name in CLOSE_FNS
                     and any(_is_zero(arg) for arg in node.args)
@@ -505,7 +508,9 @@ def _malformed_markers(relpath: str, source: list[str]) -> list[str]:
     return problems
 
 
-def scan_file(path: pathlib.Path, relpath: str, precision: bool) -> tuple[list[Violation], list[str]]:
+def scan_file(
+    path: pathlib.Path, relpath: str, precision: bool
+) -> tuple[list[Violation], list[str]]:
     """Every half-asserted value in *path*, plus any malformed markers."""
     text = path.read_text(encoding="utf-8")
     source = text.splitlines()
@@ -568,7 +573,9 @@ def collect(targets: Sequence[pathlib.Path]) -> tuple[list[Violation], list[str]
 def main(argv: Sequence[str] | None = None) -> int:
     parser = argparse.ArgumentParser(description="finite AND non-zero, together (#2100, #2178)")
     parser.add_argument("paths", nargs="*", type=pathlib.Path, help="files or directories")
-    parser.add_argument("--list", action="store_true", help="print every finding without a verdict")
+    parser.add_argument(
+        "--list", action="store_true", help="print every finding without a verdict"
+    )
     args = parser.parse_args(argv)
 
     targets = args.paths or [TESTS_ROOT]
