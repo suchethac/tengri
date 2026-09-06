@@ -99,7 +99,7 @@ from __future__ import annotations
 import difflib
 import inspect
 import warnings
-from collections.abc import Callable
+from collections.abc import Callable, Iterable
 from functools import cache, lru_cache
 from typing import NamedTuple
 
@@ -1146,7 +1146,7 @@ def parse_groups(**kwargs) -> Parameters:
     # ``dust={'tau_qpah': 5}`` (instead of ``dust_qpah``) used to vanish
     # without trace. Walk the user's dicts now and raise a friendly
     # "Did you mean ...?" error on any unrecognized key.
-    _validate_user_keys(kwargs, structural_params, param_partition)
+    _validate_user_keys(kwargs, structural_params, param_partition, wildcard_scopes)
 
     # ── Validate every ``all_params: FREE`` actually freed something ───
     # Runs after key validation so a typo is reported before this, which is
@@ -1996,6 +1996,76 @@ def _all_law_shape_params() -> frozenset[str]:
 _DUST_LAW_SLOTS: tuple[str, ...] = ("dust_law_bc", "dust_law_diff", "dust_law_neb")
 
 
+def _dust_wildcard_scopes(
+    structural_params: Parameters,
+    param_partition: dict[str, str],
+) -> dict[str, frozenset[str] | None]:
+    """Variant scope for ``dust_emission`` and ``dust_attenuation``.
+
+    Parameters
+    ----------
+    structural_params : Parameters
+        Structural-only spec carrying the selected IR engine and law slots.
+    param_partition : dict
+        Full parameter name -> owning group, from :func:`_partition_by_group`.
+
+    Returns
+    -------
+    dict
+        Group name -> the parameters that variant reads, or ``None`` to leave
+        the group unscoped. Same contract as :func:`_wildcard_scopes`.
+
+    Notes
+    -----
+    **JIT-compatible**: no; build-time introspection.
+
+    Split out of :func:`_wildcard_scopes` because these two entries are the only
+    ones derivable from a finished :class:`Parameters` alone -- every other group
+    reads its structural choice out of the translated kwargs. That is what lets
+    :func:`parameters_to_groups`, which has a spec and no kwargs, ask the same
+    question on the way *out* that :func:`_validate_user_keys` asks on the way
+    in. Without it the emitter writes back per-parameter entries the selected
+    variant never reads, and the round-trip no longer re-parses.
+    """
+    scopes: dict[str, frozenset[str] | None] = {}
+
+    # ── dust_emission: the selected IR engine's own declarations ──
+    scopes["dust_emission"] = (
+        _declared_param_names(structural_params.dust_emission)
+        if structural_params.dust_emission is not None
+        else None
+    )
+
+    # ── dust: the attenuation laws the selected slots name ──
+    # The group owns both the optical depths (which every law consumes through
+    # the Charlot & Fall geometry, not as a curve-shape argument) and the four
+    # curve-shape modifiers, which only some laws read. Narrow by removing the
+    # shape parameters no selected law names, leaving everything else free.
+    dust_group_params = {
+        name for name, grp in param_partition.items() if grp == "dust_attenuation"
+    }
+    if dust_group_params:
+        # Read the slots off ``structural_params``, not ``structural_kwargs``:
+        # a slot the user did not name is absent from the kwargs but still
+        # resolves to a real law (both default to ``power_law``, which reads
+        # ``dust_slope``). Consulting the raw kwargs would narrow away a
+        # parameter the law in force does read; the failure this prevents,
+        # inverted.
+        active_shape = frozenset().union(
+            *(
+                _law_shape_params(law)
+                for law in (getattr(structural_params, slot, None) for slot in _DUST_LAW_SLOTS)
+                if law is not None
+            ),
+            frozenset(),
+        )
+        scopes["dust_attenuation"] = frozenset(
+            dust_group_params - (_all_law_shape_params() - active_shape)
+        )
+
+    return scopes
+
+
 def _wildcard_scopes(
     structural_kwargs: dict,
     structural_params: Parameters,
@@ -2060,39 +2130,11 @@ def _wildcard_scopes(
         structural_kwargs.get("radio_agn_model"), frozenset()
     )
 
-    # ── dust_emission: the selected IR engine's own declarations ──
-    scopes["dust_emission"] = (
-        _declared_param_names(structural_params.dust_emission)
-        if structural_params.dust_emission is not None
-        else None
-    )
-
-    # ── dust: the attenuation laws the selected slots name ──
-    # The group owns both the optical depths (which every law consumes through
-    # the Charlot & Fall geometry, not as a curve-shape argument) and the four
-    # curve-shape modifiers, which only some laws read. Narrow by removing the
-    # shape parameters no selected law names, leaving everything else free.
-    dust_group_params = {
-        name for name, grp in param_partition.items() if grp == "dust_attenuation"
-    }
-    if dust_group_params:
-        # Read the slots off ``structural_params``, not ``structural_kwargs``:
-        # a slot the user did not name is absent from the kwargs but still
-        # resolves to a real law (both default to ``power_law``, which reads
-        # ``dust_slope``). Consulting the raw kwargs would narrow away a
-        # parameter the law in force does read; the failure this prevents,
-        # inverted.
-        active_shape = frozenset().union(
-            *(
-                _law_shape_params(law)
-                for law in (getattr(structural_params, slot, None) for slot in _DUST_LAW_SLOTS)
-                if law is not None
-            ),
-            frozenset(),
-        )
-        scopes["dust_attenuation"] = frozenset(
-            dust_group_params - (_all_law_shape_params() - active_shape)
-        )
+    # ── the two dust groups ──
+    # Kept in :func:`_dust_wildcard_scopes` because they are the only entries
+    # derivable from a finished spec alone, which is what the round-trip
+    # emitter needs.
+    scopes.update(_dust_wildcard_scopes(structural_params, param_partition))
 
     # ── xray: the selected corona model ──
     # Read the model off ``structural_params`` for the same reason the dust
@@ -3908,19 +3950,31 @@ def _emit_declared_structural(group_name: str, group_output: dict, spec: Paramet
             group_output[entry.key] = value
 
 
-def _short_names_for_group(group: str, param_partition: dict[str, str]) -> set[str]:
-    """Return the set of short and full names every declared param exposes
-    under ``group`` (e.g. ``"agn.torus"`` → ``{"tau_skirtor", "agn_tau_skirtor", ...}``).
+def _name_spellings(full_names: Iterable[str]) -> set[str]:
+    """Every spelling the grammar accepts for each fully-prefixed parameter name.
 
-    Used by :func:`_validate_user_keys` to recognize per-parameter overrides
-    when walking a user's group dict.
+    Parameters
+    ----------
+    full_names : iterable of str
+        Fully-prefixed canonical names (``dust_umin``, ``agn_tau_skirtor``).
+
+    Returns
+    -------
+    set of str
+        Both the full and short spelling of each name, plus both spellings of
+        every legacy alias it carries.
+
+    Notes
+    -----
+    Factored out of :func:`_short_names_for_group` so a *narrowed* name set
+    (:func:`_variant_scoped_param_names`) admits exactly the same spellings as
+    the unnarrowed one. Expanding a narrowed set by hand is how a guard starts
+    rejecting the full-name spelling of a key it accepts in short form.
     """
     from tengri.parameters._aliases import legacy_names_for
 
     out: set[str] = set()
-    for full_name, owner in param_partition.items():
-        if owner != group:
-            continue
+    for full_name in full_names:
         out.add(full_name)
         out.add(_extract_short_name(full_name, {}))
         # Legacy spellings stay accepted so a rename does not turn a working
@@ -3931,6 +3985,18 @@ def _short_names_for_group(group: str, param_partition: dict[str, str]) -> set[s
             out.add(legacy_full)
             out.add(_extract_short_name(legacy_full, {}))
     return out
+
+
+def _short_names_for_group(group: str, param_partition: dict[str, str]) -> set[str]:
+    """Return the set of short and full names every declared param exposes
+    under ``group`` (e.g. ``"agn.torus"`` → ``{"tau_skirtor", "agn_tau_skirtor", ...}``).
+
+    Used by :func:`_validate_user_keys` to recognize per-parameter overrides
+    when walking a user's group dict.
+    """
+    return _name_spellings(
+        full_name for full_name, owner in param_partition.items() if owner == group
+    )
 
 
 def _short_names_for_registered_type(type_name: str | None) -> set[str]:
@@ -3964,10 +4030,169 @@ def _short_names_for_registered_type(type_name: str | None) -> set[str]:
     return out
 
 
+#: Groups whose per-parameter key set is narrowed to the structural variant the
+#: group dict selected, instead of the union over every variant the group can
+#: dispatch to.
+#:
+#: The two dust groups partition a superset: ``dust_emission`` owns 22 names
+#: across nine IR engines, ``dust_attenuation`` the curve-shape modifiers of 22
+#: attenuation laws. Accepting the whole superset let a key the selected variant
+#: never reads through the validator, and the resolver then wrote it to a
+#: parameter no component consults -- a fit exploring a flat direction, or a
+#: value the author believes is pinning something. ``sfh`` and ``igm`` have
+#: raised on the same mistake all along (``sfh={'type': 'delayed', 'umin': ...}``
+#: is an "Unknown key"); these two did not, because their partition is wide
+#: enough to contain the foreign name.
+#:
+#: The accepted set is derived from :func:`_dust_wildcard_scopes`, which is also
+#: what :func:`_wildcard_scopes` gives these two groups, so the validator and the
+#: ``all_params`` wildcard cannot drift apart: a key this validator accepts is a
+#: key that wildcard would free. :func:`parameters_to_groups` narrows what it
+#: emits by the same scope, so a spec round-trips through a dict this validator
+#: accepts.
+_VARIANT_SCOPED_KEY_GROUPS: frozenset[str] = frozenset({"dust_attenuation", "dust_emission"})
+
+
+def _variant_scoped_param_names(
+    group: str,
+    param_partition: dict[str, str],
+    group_allowed: frozenset[str] | set[str],
+    wildcard_scopes: dict[str, frozenset[str] | None],
+) -> frozenset[str] | None:
+    """Canonical parameter names the variant selected for ``group`` reads.
+
+    Parameters
+    ----------
+    group : str
+        Group name, one of :data:`_VARIANT_SCOPED_KEY_GROUPS`.
+    param_partition : dict
+        Full parameter name -> owning group, from :func:`_partition_by_group`.
+    group_allowed : frozenset of str
+        The group's structural keys, from ``_GROUP_STRUCTURAL_KEYS``. A group
+        parameter whose short name appears here is a *group-level* knob the
+        grammar documents (``dust_eta_balance`` <-> ``'eta_balance'``) and stays
+        accepted whichever variant is selected.
+    wildcard_scopes : dict
+        Group -> the parameters its ``all_params`` wildcard may free, from
+        :func:`_wildcard_scopes`.
+
+    Returns
+    -------
+    frozenset of str or None
+        Fully-prefixed names, or ``None`` when the group is unscoped (no
+        variant selected, or one that declares nothing introspectable). The
+        caller then leaves the accepted set unnarrowed rather than guessing.
+
+    Notes
+    -----
+    **JIT-compatible**: no; build-time introspection.
+
+    ``None`` and ``frozenset()`` mean different things here for the same reason
+    they do in :func:`_wildcard_scopes`: ``None`` is "no information, accept
+    what the group declares", while an empty scope is a positive statement that
+    the selected variant reads nothing of its own (``pah_drude``, a pure
+    template shape), and every per-parameter key is then foreign to it.
+    """
+    scope = wildcard_scopes.get(group)
+    if scope is None:
+        return None
+    owned = {name for name, owner in param_partition.items() if owner == group}
+    shared = {name for name in owned if _extract_short_name(name, {}) in group_allowed}
+    return frozenset(set(scope) | shared)
+
+
+def _variant_selection_text(group: str, structural_params: Parameters) -> str:
+    """Human-readable description of the structural variant ``group`` selected.
+
+    Parameters
+    ----------
+    group : str
+        One of :data:`_VARIANT_SCOPED_KEY_GROUPS`.
+    structural_params : Parameters
+        Structural-only spec carrying the resolved type and law slots.
+
+    Returns
+    -------
+    str
+        e.g. ``"type 'casey2012'"`` or
+        ``"type 'two_component' with law_bc='calzetti', law_diff='power_law'"``.
+    """
+    if group == "dust_emission":
+        return f"type {structural_params.dust_emission!r}"
+    model = getattr(structural_params, "dust_model", None)
+    law_bc = getattr(structural_params, "dust_law_bc", None)
+    law_diff = getattr(structural_params, "dust_law_diff", None)
+    law_neb = getattr(structural_params, "dust_law_neb", None)
+    if law_bc == law_diff and law_neb is None:
+        laws = f"law {law_bc!r}"
+    else:
+        parts = [f"law_bc={law_bc!r}", f"law_diff={law_diff!r}"]
+        if law_neb is not None:
+            parts.append(f"law_neb={law_neb!r}")
+        laws = ", ".join(parts)
+    return f"type {model!r} with {laws}"
+
+
+def _reject_foreign_variant_keys(
+    group: str,
+    user_dict: dict,
+    accepted_spellings: set[str],
+    accepted_full: frozenset[str],
+    group_spellings: set[str],
+    structural_params: Parameters,
+) -> None:
+    """Raise on a key the group declares but the selected variant never reads.
+
+    Parameters
+    ----------
+    group : str
+        Group name being validated.
+    user_dict : dict
+        The user's group dict (post wildcard normalization).
+    accepted_spellings : set of str
+        Every spelling the selected variant accepts, short and full.
+    accepted_full : frozenset of str
+        Canonical full names behind ``accepted_spellings``; used to render the
+        short-name list in the message.
+    group_spellings : set of str
+        Every spelling the *group* declares across all its variants. A key
+        outside this set is an ordinary typo and is left to
+        :func:`_check_dict_keys`, whose "Did you mean ...?" message fits it
+        better.
+    structural_params : Parameters
+        Structural-only spec, for naming the selected variant.
+
+    Raises
+    ------
+    ParameterError
+        Naming the group, the selected variant, the offending key, and the
+        keys that variant does accept.
+    """
+    foreign = sorted(k for k in user_dict if k in group_spellings and k not in accepted_spellings)
+    if not foreign:
+        return
+    selection = _variant_selection_text(group, structural_params)
+    shown = sorted({_extract_short_name(name, {}) for name in accepted_full})
+    accepts = ", ".join(shown) if shown else "no per-parameter keys at all"
+    many = len(foreign) > 1
+    noun, verb, pronoun = ("keys", "are", "them") if many else ("key", "is", "it")
+    offending = ", ".join(repr(k) for k in foreign)
+    raise ParameterError(
+        f"{offending} {verb} not read by the {group!r} {selection}, so writing {pronoun} "
+        f"here would be silently ignored: the {noun} {'belong' if many else 'belongs'} to "
+        f"another {group!r} variant. This {selection} accepts: {accepts} "
+        f"(either spelling, short or fully prefixed). "
+        f"Drop the {noun}, select a variant that reads {pronoun}, or use the "
+        f"'all_params' / 'other_params' wildcard to set the policy for every parameter "
+        f"this variant does read."
+    )
+
+
 def _validate_user_keys(
     kwargs: dict,
     structural_params: Parameters,
     param_partition: dict[str, str],
+    wildcard_scopes: dict[str, frozenset[str] | None] | None = None,
 ) -> None:
     """Validate that every key the user supplied is recognized.
 
@@ -3983,7 +4208,24 @@ def _validate_user_keys(
     hint generated via :mod:`difflib`. Silent typos were the dominant
     "AI slop" failure mode of the nested-dict API before this validator
     was added (issue tracked in the forward-model cleanup arc).
+
+    Parameters
+    ----------
+    kwargs : dict
+        The user's normalized group dicts.
+    structural_params : Parameters
+        Structural-only spec (types and law slots already resolved).
+    param_partition : dict
+        Full parameter name -> owning group.
+    wildcard_scopes : dict, optional
+        Group -> the parameters its ``all_params`` wildcard may free, from
+        :func:`_wildcard_scopes`. When given, the groups in
+        :data:`_VARIANT_SCOPED_KEY_GROUPS` accept only the per-parameter keys
+        the variant they selected actually reads. Omitting it keeps the
+        superset behavior, so a caller that validates without having resolved
+        the wildcard scopes still works.
     """
+    wildcard_scopes = wildcard_scopes or {}
     valid_top_groups = {
         "sfh",
         "met",
@@ -4074,6 +4316,26 @@ def _validate_user_keys(
                 )
             elif neb_type == "mappings_agn":
                 neb_type_specific_keys = frozenset({"density", "ionizing_source_warning", "grid"})
+
+        # A group whose parameter partition spans several structural variants
+        # accepts only the keys the variant it selected actually reads. Derived
+        # from the wildcard scope, never from a per-type list, so the two
+        # answers to "which parameters does this variant read?" stay one answer.
+        if top_key in _VARIANT_SCOPED_KEY_GROUPS:
+            accepted_full = _variant_scoped_param_names(
+                top_key, param_partition, group_allowed, wildcard_scopes
+            )
+            if accepted_full is not None:
+                # A user-registered subclass declares params the partition has
+                # never seen (#391); those stay accepted for the same reason
+                # they are accepted above.
+                accepted = _name_spellings(accepted_full) | _short_names_for_registered_type(
+                    top_val.get("type") if isinstance(top_val.get("type"), str) else None
+                )
+                _reject_foreign_variant_keys(
+                    top_key, top_val, accepted, accepted_full, param_names, structural_params
+                )
+                param_names = accepted
 
         _check_dict_keys(
             top_key, top_val, group_allowed | param_names | neb_type_specific_keys, param_partition
@@ -5203,9 +5465,27 @@ def parameters_to_groups(spec: Parameters) -> dict:
             groups_dict[group] = []
         groups_dict[group].append(param_name)
 
+    # The two dust groups accept only the per-parameter keys their selected
+    # variant reads (:data:`_VARIANT_SCOPED_KEY_GROUPS`), so emitting the whole
+    # partition writes a dict the parser refuses on the way back in. Narrow the
+    # emitted list by the same scope the validator applies: a shape parameter no
+    # selected law names, or an engine knob the selected engine does not declare,
+    # carried no effect in the spec being emitted either.
+    dust_scopes = _dust_wildcard_scopes(spec, partition)
+
     # Process each group
     for group_name in sorted(groups_dict.keys()):
         param_names = sorted(groups_dict[group_name])
+
+        if group_name in _VARIANT_SCOPED_KEY_GROUPS:
+            emittable = _variant_scoped_param_names(
+                group_name,
+                partition,
+                _GROUP_STRUCTURAL_KEYS.get(group_name, frozenset()),
+                dust_scopes,
+            )
+            if emittable is not None:
+                param_names = [name for name in param_names if name in emittable]
 
         # Handle nested groups (dust.emission, agn.*)
         if "." in group_name:
