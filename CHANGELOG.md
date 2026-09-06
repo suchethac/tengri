@@ -26,10 +26,43 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
   HLO for every fit. Note the assertion hole that hid this: the seam checks
   asserted gradients were non-zero, and `nan != 0.0` is `True` — the mirror of
   #2100's hole, where `isfinite` admitted zero. This closes the float32
-  symptom only; the separate float64 non-finiteness on six `spec/*/auto_*`
-  seams is not established as the same defect and #2178 stays open for it
+  symptom, and the `spec/*/auto_*` symptom with it — see the next entry
   (#2178, #2100).
 
+- The `optimization_barrier` that PR #2194 put on `_mass_scale_lnu`'s primal
+  costs neither memory nor time, measured rather than assumed. On the
+  `spec/lut` seam at a realistic `(n_age, n_wave) = (93, 4096)`, four
+  interleaved before/after repetitions on an otherwise idle box (1-minute load
+  average stamped per run, 0.46 to 3.6): XLA's own compiled-memory analysis is
+  **byte-identical** in both arms — `temp` 1.558 MB (forward) and 4.701 MB
+  (forward+gradient) in float32, 3.115 MB and 9.396 MB in float64, with
+  `output`, `argument` and `alias` zero throughout — and peak process RSS is
+  2481.5 MB without the barrier against 2495.2 MB with it, a 0.55 % difference
+  dominated by the SSP load and the model build rather than the kernel. Forward
+  wall time is 1.040 ms against 1.034 ms; forward+gradient is 3.083 ms against
+  3.095 ms, a 0.4 % difference inside a per-arm spread of 22 %. The premise that
+  the barrier forces an extra `(n_age, n_wave)` materialization does **not**
+  hold: the einsum already produces that array as its own output and the barrier
+  sits on a scalar multiply of it, which XLA does in place. No approach is
+  switched, and the docstring's note that folding `L_sun` into the einsum
+  operand "does not survive" the SSP-as-`Parameter` path is left standing
+  un-relitigated — a standalone reproducer at the seam's shape does not
+  reproduce the defect at all, so it cannot adjudicate that note either way
+  (#2178, #2194).
+
+- **Symptom 2 of #2178 was the same defect, not a second one.** The float64
+  spectroscopy forward was reported non-finite on six `spec/*/auto_*` seams (CI
+  run 33958554553), and `_skip_if_lut_forward_is_broken` (#2143) was left in
+  place until that could be answered. Reproduced under jaxlib 0.11.1: the
+  float64 arm builds, fits and differentiates cleanly, and the `ValueError`
+  from `_check_channel_scales` — carrying that run's own
+  `max |data| = 1.618e-27` and `2.751e-29`, to the digit — comes from the
+  **float32** arm the same module-scoped fixture builds next. Six errors is two
+  seams times three tests. One defect at one threshold, attributed to the wrong
+  arm. With the forward grouping stated in the graph the guard fires on **no**
+  seam, so it is deleted rather than widened, and
+  `tests/regression/precision/test_float32_fitting_path_seams.py` runs
+  41 passed / 0 skipped / 6 xfailed on jaxlib 0.11.1 (#2178, #2143).
 - `multicolor_disc`'s pure-float32 bolometric renormalization returned
   `l_nu_intrinsic * scale`, and transposing that product makes JAX form
   `sum(g * l_nu_intrinsic)`. With the raw disc SED (~1e28) and the cotangent
@@ -79,6 +112,37 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
   are dominated by a rank-`k` correction to a diagonal on every fixture and every
   storage budget tested, so the feature was declined rather than built. Numbers
   and the reasoning in `bench/reports/2026-09-06_block_metric_structure.md`.
+
+- `tools/check_float32_scale_seams.py` — enumerates the float32 **scale seams**
+  themselves rather than sampling a representative model. A scale seam is a site
+  where a large physical constant or unit conversion multiplies a
+  parameter-derived quantity; four bugs have now come out of that one shape
+  (#1388, #1439, #2100, #2178) and each was fixed where it was found. The check
+  parses `src/tengri` (AST, and evaluated constants — not a grep over source
+  text, per #2108), and for each seam asks how large the product can get inside
+  the range the parameter **declares in the registry**, never a range copied
+  from a grid axis (45741f4cd). 52 seams; 46 of them exceed float32's range
+  within their own declared prior, in 4 families — `L_sun * 10**agn_log_lbol`
+  (38 sites), `L_sun * 10**log_total_mass` (5), `M_sun * 10**agn_log_mbh` (2)
+  and the Lehmer LMXB mass term (1). Three families carry a recorded grouping
+  that keeps them safe; the fourth is filed as an open defect (#2210), because
+  recording a live defect as "handled" is worse than not recording it. Anything
+  new is an error, and a registration whose seam is gone is also an error, so
+  the inventory cannot rot. Runs in the `smoke` job, beside
+  `check_float32_representable_constants.py`, which is where the checks that
+  need tengri installed live — `lint` installs only ruff.
+
+- `tests/regression/precision/test_float32_scale_seam_sweep.py` — sweeps each
+  enumerated seam family across its parameter's whole declared prior in float32
+  and requires the gradient to be finite **and** non-zero at every point (`nan
+  != 0.0` is `True`, and zero is finite, so neither half is coverage alone). The
+  inventory is read from the tool rather than written down twice: the module
+  fails if the enumeration grows a family it does not sweep, which is what makes
+  the recorded reason a measurement instead of the only evidence. The sweep
+  refuted the first draft's reading of the black-hole-mass family as safe
+  (#2210): `M_sun * 10**agn_log_mbh` is 1.99e39 at the *bottom* of its declared
+  prior, and the float32 forward of a `kubota_done` disc is `nan` there under
+  jaxlib 0.11.1 while finite under 0.11.0.
 
 - `mcmc_smc` — tempered Sequential Monte Carlo via BlackJAX, at
   `tier="experimental"`. A particle population annealed from the exact
