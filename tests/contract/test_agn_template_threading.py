@@ -119,6 +119,7 @@ def _traced_baked_mb(model):
         model.spec.get_fixed_values(),
         model.ssp_data,
         model._template_data_for_jit(),
+        model._ztable_data_for_jit(),
     )
     return baked_mb(closed)
 

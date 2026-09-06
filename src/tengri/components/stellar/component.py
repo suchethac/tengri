@@ -2082,6 +2082,7 @@ class StellarSEDComponent:
         params: Mapping[str, jnp.ndarray],
         ssp_data: Any | None = None,
         template_data: Any | None = None,
+        ztable_data: Any | None = None,
     ) -> ForwardState:
         """Compute stellar SED and publish derived quantities.
 
@@ -2103,6 +2104,11 @@ class StellarSEDComponent:
             When provided, uses this instead of ``self.ssp_data``. Enables
             SSP arrays to be ``Parameter`` ops in compiled code rather than
             ``Constant`` ops, reducing HLO size and compile time.
+        ztable_data : Any | None, optional
+            Precomputed photometric redshift table passed as a JIT runtime
+            input. When provided, uses this instead of ``self._state.ssp_phot_ztable``
+            for free-redshift photometry interpolation, preventing XLA from
+            materializing the z-table as a constant during compilation.
 
         Returns
         -------
@@ -3051,7 +3057,9 @@ class StellarSEDComponent:
                 edges_for_grid,
             )
 
-            ztable = self._state.ssp_phot_ztable
+            # Use ztable_data if threaded as JIT input, otherwise fall
+            # back to the closure (for non-JIT paths).
+            ztable = ztable_data if ztable_data is not None else self._state.ssp_phot_ztable
             z = jnp.asarray(require_redshift(params, "components.stellar.component.apply"))
             z_grid = ztable.z_grid
             z_edges = edges_for_grid(z_grid)

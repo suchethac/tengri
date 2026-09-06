@@ -4762,7 +4762,7 @@ class SEDModel:
             nebular_grid_sig,
         )
 
-    def predict_photometry(self, params, *, ssp_data=None, template_data=None):
+    def predict_photometry(self, params, *, ssp_data=None, template_data=None, ztable_data=None):
         """Compute observed photometric flux densities through all filters.
 
         Convolves the SED (redshifted and IGM-absorbed) through filter
@@ -4868,7 +4868,7 @@ class SEDModel:
         if self.filter_waves is None:
             raise ValueError("No filters set. Pass filters or observation= to SEDModel().")
         return self.predict_observables_jit(
-            params, ssp_data=ssp_data, template_data=template_data
+            params, ssp_data=ssp_data, template_data=template_data, ztable_data=ztable_data
         ).phot_fnu
 
     # There is deliberately no ``_refuse_on_fast_nebular`` here any more.
@@ -4904,6 +4904,7 @@ class SEDModel:
         *,
         ssp_data=None,
         template_data=None,
+        ztable_data=None,
     ):
         """Compute observed spectrum at given wavelengths with LSF convolution.
 
@@ -5029,7 +5030,7 @@ class SEDModel:
         ):
             del wave_obs, wave_chunk_size
             return self.predict_observables_jit(
-                params, ssp_data=ssp_data, template_data=template_data
+                params, ssp_data=ssp_data, template_data=template_data, ztable_data=ztable_data
             ).spec_fnu
 
         # No spectroscopy channel but a manually attached grid (``model._wave_obs``)
@@ -6341,7 +6342,9 @@ class SEDModel:
             self._property_catalog = assemble_available_properties(active_names)
         return self._property_catalog
 
-    def predict_properties(self, params, names=None, *, ssp_data=None, template_data=None):
+    def predict_properties(
+        self, params, names=None, *, ssp_data=None, template_data=None, ztable_data=None
+    ):
         """Compute derived properties from the forward state.
 
         Properties are computed from the same orchestrator :class:`ForwardState`
@@ -6469,7 +6472,9 @@ class SEDModel:
         # instead of compare.
 
         # Compute the state once
-        state = self.predict_state(params, ssp_data=ssp_data, template_data=template_data)
+        state = self.predict_state(
+            params, ssp_data=ssp_data, template_data=template_data, ztable_data=ztable_data
+        )
 
         # Evaluate each property
         result = {}
@@ -7318,6 +7323,7 @@ class SEDModel:
         fixed_values=None,
         ssp_data=None,
         template_data=None,
+        ztable_data=None,
         *,
         observables_only=False,
     ):
@@ -7387,6 +7393,12 @@ class SEDModel:
             components as JIT runtime inputs instead of closure capture.
             Defaults to ``None``, which causes components to use their
             internal template data.
+        ztable_data : Any | None, optional
+            Precomputed photometric redshift table. When provided, passed to
+            components as JIT runtime inputs instead of closure capture,
+            preventing XLA from materializing the z-table as a constant.
+            Defaults to ``None``, which causes components to use their
+            internal z-table.
         observables_only : bool, keyword-only, optional
             Declare that the caller reads only the *projected observables*
             (photometry and spectra off the LUT) and never the SED arrays or
@@ -7485,14 +7497,19 @@ class SEDModel:
             fixed_values = self.spec.get_fixed_values()
         full_params = {**fixed_values, **params}
 
-        # Thread ssp_data and template_data (nebular grids) as JIT inputs.
+        # Thread ssp_data, template_data, and ztable_data as JIT inputs.
         # A None default makes components fall back to their
-        # closure-captured copies (self.ssp_data / internal templates).
+        # closure-captured copies (self.ssp_data / internal templates / z-tables).
         return run_components(
-            chain, state0, full_params, ssp_data=ssp_data, template_data=template_data
+            chain,
+            state0,
+            full_params,
+            ssp_data=ssp_data,
+            template_data=template_data,
+            ztable_data=ztable_data,
         )
 
-    def predict_observables(self, params, *, ssp_data=None, template_data=None):
+    def predict_observables(self, params, *, ssp_data=None, template_data=None, ztable_data=None):
         """Project the orchestrator state into every configured observable.
 
         Single bit-exact entry point: runs the SEDComponent chain and
@@ -7554,10 +7571,12 @@ class SEDModel:
         return impl(
             params,
             self.spec.get_fixed_values(),
-            *self._resolve_threaded_data(ssp_data, template_data),
+            *self._resolve_threaded_data(ssp_data, template_data, ztable_data),
         )
 
-    def predict_observables_jit(self, params, *, ssp_data=None, template_data=None):
+    def predict_observables_jit(
+        self, params, *, ssp_data=None, template_data=None, ztable_data=None
+    ):
         """Self-JIT'd, structurally-cached version of :meth:`predict_observables`.
 
         Bit-exact with :meth:`predict_observables` (same orchestrator
@@ -7615,7 +7634,7 @@ class SEDModel:
         return self._get_or_build_predict_observables_jit()(
             params,
             self.spec.get_fixed_values(),
-            *self._resolve_threaded_data(ssp_data, template_data),
+            *self._resolve_threaded_data(ssp_data, template_data, ztable_data),
         )
 
     def _get_or_build_predict_observables_jit(self):
@@ -7670,7 +7689,7 @@ class SEDModel:
         if getattr(self, "_cached_component_chain", None) is None:
             self._cached_component_chain = self._build_component_chain()
 
-        def _impl(params, fixed_values, ssp_data, template_data):
+        def _impl(params, fixed_values, ssp_data, template_data, ztable_data):
             # The one caller that may take the publication shortcuts: this
             # kernel returns projected observables and never exposes the state,
             # so a zeroed sed_nebular is invisible to it by construction.
@@ -7679,6 +7698,7 @@ class SEDModel:
                 fixed_values=fixed_values,
                 ssp_data=ssp_data,
                 template_data=template_data,
+                ztable_data=ztable_data,
                 observables_only=True,
             )
             full = {**fixed_values, **params}
@@ -7723,11 +7743,12 @@ class SEDModel:
         cache["predict_observables_impl"] = _impl
         return jit_fn
 
-    def _resolve_threaded_data(self, ssp_data, template_data):
+    def _resolve_threaded_data(self, ssp_data, template_data, ztable_data=None):
         """Resolve the JIT-threading channel: caller's arrays, else this model's own.
 
         The one place the override policy lives, so every public surface that
-        accepts ``ssp_data=``/``template_data=`` resolves them identically.
+        accepts ``ssp_data=``/``template_data=``/``ztable_data=`` resolves them
+        identically.
 
         Threading matters only across a JIT boundary the *caller* owns. Inside
         :meth:`predict_observables_jit` the grids already ride in as arguments to a
@@ -7745,15 +7766,19 @@ class SEDModel:
         template_data : Any | None
             Caller-supplied template arrays, or ``None`` to use
             :meth:`_template_data_for_jit`.
+        ztable_data : Any | None
+            Caller-supplied z-table, or ``None`` to use the stellar component's
+            z-table (if free-redshift is configured).
 
         Returns
         -------
         tuple
-            ``(ssp_data, template_data)`` ready to hand to the impl closure.
+            ``(ssp_data, template_data, ztable_data)`` ready to hand to the impl closure.
         """
         return (
             self.ssp_data if ssp_data is None else ssp_data,
             self._template_data_for_jit() if template_data is None else template_data,
+            self._ztable_data_for_jit() if ztable_data is None else ztable_data,
         )
 
     def _template_data_for_jit(self):
@@ -7972,6 +7997,36 @@ class SEDModel:
     )
     #: dust attenuation params that may be free (tau axes + linear eta scaling).
     _EB_ATTEN_FREE_OK = frozenset({"dust_tau_bc", "dust_tau_diff", "dust_eta_balance"})
+
+    def _ztable_data_for_jit(self):
+        """Collect z-table data for JIT threading (stellar component only).
+
+        Returns the stellar component's precomputed z-table if free-redshift
+        photometry is configured, so it can be passed as a JIT runtime input
+        instead of closure-captured. This prevents XLA from materializing the
+        z-table arrays (typically 200+ MB at n_z=250) as constants during
+        compilation, which would cause multi-GB compile-time memory peaks (#1413).
+
+        Returns
+        -------
+        PhotometricZTable | None
+            The z-table from the cached stellar component's state, or ``None``
+            if no z-table is configured (fixed redshift, or exact path).
+        """
+        cached = getattr(self, "_cached_component_chain", None)
+        if cached is None:
+            # Component chain not built yet; z-table will be available later
+            # when predict_state is called. Return None to fall back to closure.
+            return None
+
+        from tengri.components.stellar.component import StellarSEDComponent
+
+        for component in cached:
+            if isinstance(component, StellarSEDComponent):
+                state = component._state
+                if state is not None:
+                    return state.ssp_phot_ztable
+        return None
 
     def _energy_balance_lut(self, chain):
         """Build (and memoize) the two-component energy-balance LUT, or ``None``.
