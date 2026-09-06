@@ -195,10 +195,10 @@ met={'type': 'ramp', 'logzsol_0': Fixed(-0.3), 'logzsol_1': Free}  # two-knot ra
 - `'dust_curve'` — WG00 dust curve selector (only for `type='wg00'`).
 - `'geometry'` — WG00 geometry ('slab', 'sphere', etc.) (only for `type='wg00'`).
 - `'structure'` — WG00 structure ('clumpy', 'homogeneous', etc.) (only for `type='wg00'`).
-- `'slope_bc'`, `'slope_diff'`, `'slope_neb'` — Per-screen law-parameter overrides (two-component only).
-- `'bump_strength_bc'`, `'bump_strength_diff'`, `'bump_strength_neb'` — Per-screen bump-strength overrides (two-component only).
-- `'Rv_bc'`, `'Rv_diff'`, `'Rv_neb'` — Per-screen RV overrides (two-component only).
-- `'delta_bc'`, `'delta_diff'`, `'delta_neb'` — Per-screen delta overrides (two-component only).
+- `'slope_bc'`, `'slope_diff'`, `'slope_neb'` — Per-screen law-parameter overrides (two-component only). Accepted only when *that screen's* law reads a slope.
+- `'bump_strength_bc'`, `'bump_strength_diff'`, `'bump_strength_neb'` — Per-screen bump-strength overrides (two-component only). Accepted only when that screen's law reads a bump strength.
+- `'Rv_bc'`, `'Rv_diff'`, `'Rv_neb'` — Per-screen RV overrides (two-component only). Accepted only when that screen's law reads R_V.
+- `'delta_bc'`, `'delta_diff'`, `'delta_neb'` — Per-screen delta overrides (two-component only). Accepted only when that screen's law reads a slope modification.
 - `'lyman_cutoff'` — Zero attenuation below 912 Å (Lyman limit). Two-component only.
 - `'lyc_absorb_all'` — Absorb all ionizing photons (FSPS/CIGALE style) vs young-only (default). Two-component only.
 - `'eb_include_lyc'` — Include ionizing luminosity in the dust energy-balance integral (FSPS/Prospector parity). Default false.
@@ -221,8 +221,9 @@ dust_attenuation={'type': 'wg00', 'dust_curve': 'mw_rv31', 'geometry': 'slab', '
 **Gotchas:**
 - Dust attenuation and dust emission are **two separate peer groups**, not nested. The retired `dust={'attenuation': {...}, 'emission': {...}}` form raises.
 - Two-component law-pairing rule: if you name one of `'law_bc'`/`'law_diff'`, you must name both (or use a shared `'law'` for both).
-- Parameters like `'slope'`, `'bump_strength'`, `'Rv'`, `'delta'` are set per-screen on two-component (`'slope_bc'`, `'slope_diff'`, etc.). On single-component, just `'slope'`.
-- The `'neb'` channel (`'law_neb'`, `'slope_neb'`, etc.) reddens **only the nebular birth-cloud continuum**, not the young stars. Used when nebular emission is routed through a different dust screen.
+- Parameters like `'slope'`, `'bump_strength'`, `'Rv'`, `'delta'` are set per-screen on two-component (`'slope_bc'`, `'slope_diff'`, etc.). On single-component, just `'slope'` — the per-screen spellings raise there, because a single screen has no second screen to name and the value would never reach a curve.
+- **A shape key must be one the selected law reads.** Each law declares exactly the parameters it uses, so `'slope'` under `'noll09'` raises and names `'delta'`, the parameter that law does read; `'Rv'` under `'calzetti'` raises, because that curve is fitted at R_V = 4.05; `'slope'` under `'vw07_bc'` / `'vw07_diff'` raises, because those are the Charlot & Fall birth-cloud and diffuse slopes, not knobs (use `'power_law'` for a free slope). The same rule applies per screen: with `'law_bc': 'power_law', 'law_diff': 'noll09'`, `'slope_bc'` is accepted and `'slope_diff'` is not — and a lone `'slope_bc'` is then complete, because there is no partner to give.
+- The `'neb'` channel (`'law_neb'`, `'slope_neb'`, etc.) reddens **only the nebular birth-cloud continuum**, not the young stars. Used when nebular emission is routed through a different dust screen. `'law_neb'` defaults to `'law_bc'`, and a `'*_neb'` override is checked against whichever of the two is in force.
 
 
 ### Dust emission: `dust_emission`

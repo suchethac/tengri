@@ -97,7 +97,6 @@ True
 from __future__ import annotations
 
 import difflib
-import inspect
 import warnings
 from collections.abc import Callable, Iterable
 from functools import cache, lru_cache
@@ -1929,11 +1928,13 @@ def _law_shape_params(law_name: str) -> frozenset[str]:
     **JIT-compatible**: no; signature introspection at build time.
 
     Read off the function signature rather than a maintained table, so a law
-    registered later is scoped without editing this module. Every law also
-    takes ``**kwargs``, which is exactly why the signature is the only honest
-    source: ``def calzetti(wavelength, **_kwargs)`` *accepts* ``dust_Rv`` and
-    silently discards it, so "does the call succeed?" cannot answer "does this
-    law read this parameter?" - only the named parameters can.
+    registered later is scoped without editing this module. The signature is the
+    only honest source: a law that also declared ``**kwargs`` would *accept*
+    ``dust_Rv`` and silently discard it, so "does the call succeed?" cannot
+    answer "does this law read this parameter?" - only the named parameters can.
+    That catch-all is why the four ``slope``/``delta`` pairs of #2185 shipped;
+    it is gone from the laws, and ``tools/check_dust_law_kwargs.py`` refuses a
+    new one.
 
     Two spellings reach the same quantity: the law kwarg (``n_slope``) and the
     flat parameter (``dust_slope``). ``_TWO_COMPONENT_LAW_PARAMS`` is the
@@ -1941,28 +1942,19 @@ def _law_shape_params(law_name: str) -> frozenset[str]:
     its own flat name.
     """
     from tengri.components.dust._apply import _TWO_COMPONENT_LAW_PARAMS
-    from tengri.components.dust.laws._registry import DUST_LAWS
+    from tengri.components.dust.laws._registry import DUST_LAWS, law_kwarg_names
 
-    entry = DUST_LAWS.get(law_name)
-    if entry is None:
+    if law_name not in DUST_LAWS:
         return frozenset()
-    fn = entry["fn"] if isinstance(entry, dict) else entry
 
     kwarg_to_flat = {kwarg: flat for kwarg, flat, _ in _TWO_COMPONENT_LAW_PARAMS}
-    try:
-        sig = inspect.signature(fn)
-    except (TypeError, ValueError):  # pragma: no cover - builtins have no signature
-        return frozenset()
-
     names = set()
-    for param in sig.parameters.values():
-        if param.kind is param.VAR_KEYWORD:
-            continue
-        flat = kwarg_to_flat.get(param.name)
+    for kwarg in law_kwarg_names(law_name):
+        flat = kwarg_to_flat.get(kwarg)
         if flat is not None:
             names.add(flat)
-        elif param.name.startswith("dust_"):
-            names.add(param.name)
+        elif kwarg.startswith("dust_"):
+            names.add(kwarg)
     return frozenset(names)
 
 
@@ -2593,6 +2585,140 @@ def _set_met_mode(met_mode, result: dict, *, key: str) -> None:
     result["met_mode"] = met_mode
 
 
+def _partner_screen_reads(
+    stem: str,
+    dust_law: str | None,
+    dust_law_bc: str | None,
+    dust_law_diff: str | None,
+    has_bc: bool,
+) -> bool:
+    """Whether the screen NOT named by the user reads the paired per-screen key.
+
+    Parameters
+    ----------
+    stem : str
+        Per-screen key stem, e.g. ``"slope"``. ``"tau"`` is an optical depth
+        every law consumes through the Charlot & Fall geometry, never a curve
+        argument, so it is always paired.
+    dust_law : str or None
+        The shared ``law`` key, when the user gave one.
+    dust_law_bc, dust_law_diff : str or None
+        The per-screen ``law_bc`` / ``law_diff`` keys.
+    has_bc : bool
+        True when the user named the ``_bc`` half, so the partner is ``_diff``.
+
+    Returns
+    -------
+    bool
+        True when the partner must be named too. True whenever the partner's law
+        cannot be resolved here, which keeps the pre-#2185 requirement as the
+        conservative default.
+
+    Notes
+    -----
+    **JIT-compatible**: no; construction-time grammar validation.
+    """
+    from tengri.components.dust.attenuation import TWO_COMPONENT_OVERRIDE_KEYS
+    from tengri.components.dust.laws._registry import DUST_LAWS, law_kwarg_names
+
+    law_kw = TWO_COMPONENT_OVERRIDE_KEYS.get(stem)
+    if law_kw is None:  # 'tau': not a curve argument, always paired
+        return True
+    partner_law = dust_law or (dust_law_diff if has_bc else dust_law_bc)
+    if partner_law is None or partner_law not in DUST_LAWS:
+        return True
+    return law_kw in law_kwarg_names(partner_law)
+
+
+def _reject_per_screen_keys_no_law_reads(
+    dust_atten_dict: dict, result: dict, dust_type: str
+) -> None:
+    """Raise on a ``slope_bc``-style key the screen's own law never reads.
+
+    Parameters
+    ----------
+    dust_atten_dict : dict
+        The user's ``dust_attenuation`` group dict.
+    result : dict
+        Translated structural choices; carries the resolved ``dust_law_bc`` /
+        ``dust_law_diff`` / ``dust_law_neb`` by the time this runs.
+    dust_type : str
+        The selected ``dust_attenuation`` type.
+
+    Raises
+    ------
+    ParameterError
+        Naming the offending per-screen key, the law that screen selected, and
+        the per-screen keys that law does read.
+
+    Notes
+    -----
+    **JIT-compatible**: no; construction-time grammar validation.
+
+    The shared spellings (``slope``, ``Rv``, ...) are scoped to the selected
+    laws by :func:`_dust_wildcard_scopes`; the per-screen spellings were not,
+    and they route past the parameter partition entirely (they are structural
+    keys carrying a static float, not declared parameters). So
+    ``{'law': 'noll09', 'slope_bc': -1.0, 'slope_diff': -1.0}`` reached
+    ``noll09``, which reads ``dust_delta`` and not ``n_slope``, and the value
+    was discarded at the law's signature: 72 (law, key) pairs across the 22
+    registered laws, measured bit-identical to omitting the key (#2185).
+
+    ``bc`` reads ``dust_law_bc``, ``diff`` reads ``dust_law_diff``, and ``neb``
+    reads ``dust_law_neb`` falling back to ``dust_law_bc`` -- the same
+    inheritance ``DustSEDComponent`` applies, so the check and the forward model
+    cannot disagree about which law a key is being tested against.
+    """
+    from tengri.components.dust.attenuation import TWO_COMPONENT_OVERRIDE_KEYS
+    from tengri.components.dust.laws._registry import law_kwarg_names
+
+    present = [
+        (f"{short}_{comp}", short, comp)
+        for short in TWO_COMPONENT_OVERRIDE_KEYS
+        for comp in ("bc", "diff", "neb")
+        if f"{short}_{comp}" in dust_atten_dict
+    ]
+    if not present:
+        return
+
+    if dust_type != "two_component":
+        named = ", ".join(repr(key) for key, _, _ in present)
+        raise ParameterError(
+            f"{named} {'are' if len(present) > 1 else 'is'} a per-screen "
+            f"dust_attenuation override, and type={dust_type!r} has only one screen, "
+            f"so writing {'them' if len(present) > 1 else 'it'} here would be silently "
+            f"ignored: only 'two_component' routes per-screen overrides. Use the shared "
+            f"spelling instead, e.g. {{'slope': ...}}, or select "
+            f"type='two_component'."
+        )
+
+    kw_to_short = {law_kw: short for short, law_kw in TWO_COMPONENT_OVERRIDE_KEYS.items()}
+    law_for = {
+        "bc": result.get("dust_law_bc"),
+        "diff": result.get("dust_law_diff"),
+        "neb": result.get("dust_law_neb") or result.get("dust_law_bc"),
+    }
+    screen_name = {"bc": "birth-cloud", "diff": "diffuse-ISM", "neb": "nebular birth-cloud"}
+
+    for key, short, comp in present:
+        law = law_for[comp]
+        if law is None:
+            continue
+        reads = law_kwarg_names(law)
+        if TWO_COMPONENT_OVERRIDE_KEYS[short] in reads:
+            continue
+        accepted = sorted(
+            f"{kw_to_short[law_kw]}_{comp}" for law_kw in reads if law_kw in kw_to_short
+        )
+        accepts = ", ".join(accepted) if accepted else "no per-screen keys at all"
+        raise ParameterError(
+            f"{key!r} is not read by the 'dust_attenuation' {screen_name[comp]} law "
+            f"{law!r}, so writing it here would be silently ignored: the key belongs to "
+            f"another attenuation law. Law {law!r} accepts: {accepts}. "
+            f"Drop the key, or select a law that reads it."
+        )
+
+
 def _translate_dust_attenuation(dust_atten_dict: dict, result: dict) -> None:
     """Translate dust_attenuation group to dust_model and law settings.
 
@@ -2782,12 +2908,19 @@ def _translate_dust_attenuation(dust_atten_dict: dict, result: dict) -> None:
     # declared 0.3 while the birth cloud was fitted -- and the diffuse screen
     # usually dominates the total attenuation, so that is rarely what anyone
     # means. A wildcard is still an accepted way to say "free the partner too".
+    #
+    # The partner is only required when the partner screen's law *reads* it: on
+    # ``law_bc='power_law', law_diff='noll09'`` there is no ``slope_diff`` to
+    # give, because noll09 has no slope to set. Demanding one there and then
+    # refusing it as unread (#2185) would leave no spelling that parses.
     if dust_type == "two_component" and not ({"all_params", "*"} & set(dust_atten_dict)):
         for stem in ("tau", "Rv", "delta", "slope", "bump_strength"):
             bc, diff = f"{stem}_bc", f"{stem}_diff"
             has_bc = dust_atten_dict.get(bc) is not None
             has_diff = dust_atten_dict.get(diff) is not None
             if has_bc == has_diff:
+                continue
+            if not _partner_screen_reads(stem, dust_law, dust_law_bc, dust_law_diff, has_bc):
                 continue
             named, missing = (bc, diff) if has_bc else (diff, bc)
             raise ValueError(
@@ -2903,6 +3036,8 @@ def _translate_dust_attenuation(dust_atten_dict: dict, result: dict) -> None:
     # DustSEDComponent. The 'neb' channel reddens only the nebular birth cloud
     # (shares the diffuse ISM screen with the stars).
     from tengri.components.dust.attenuation import TWO_COMPONENT_OVERRIDE_KEYS
+
+    _reject_per_screen_keys_no_law_reads(dust_atten_dict, result, dust_type)
 
     overrides: dict[str, dict[str, float]] = {}
     for short, law_kw in TWO_COMPONENT_OVERRIDE_KEYS.items():

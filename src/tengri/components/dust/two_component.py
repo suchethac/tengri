@@ -50,6 +50,7 @@ from tengri.components.dust.attenuation import (
     resolve_bc_diff_law_params,
     two_component_dust,
 )
+from tengri.components.dust.laws._registry import select_law_kwargs
 from tengri.components.template_threading import TemplateThreading
 from tengri.parameters.priors import Fixed, Uniform
 from tengri.protocols.component import (
@@ -480,6 +481,8 @@ class DustSEDComponent(TemplateThreading):
             dict(self.config.bc_law_overrides),
             dict(self.config.diff_law_overrides),
             self.config.live_shape_params,
+            bc_law=self.config.law_bc,
+            diff_law=self.config.law_diff,
         )
         return self._transmission_from_law_params(
             params, wavelength, ssp_ages_yr, bc_law_params, diff_law_params
@@ -559,6 +562,8 @@ class DustSEDComponent(TemplateThreading):
             dict(self.config.bc_law_overrides),
             dict(self.config.diff_law_overrides),
             self.config.live_shape_params,
+            bc_law=self.config.law_bc,
+            diff_law=self.config.law_diff,
         )
         # The ONE binding for every curve evaluation in this method. Hoisted to
         # method scope on purpose: the photometry LUT and the spectroscopy pixel
@@ -653,7 +658,15 @@ class DustSEDComponent(TemplateThreading):
         # comprehension over its keys would drop a ``neb_law_overrides`` entry
         # for an omitted one: an explicit setting silently ignored, which is
         # the failure class #1833 itself is.
-        neb_bc_params = {k: jnp.asarray(v) for k, v in {**bc_law_params, **_neb_overrides}.items()}
+        # Narrowed to what ``neb_law`` declares: the stellar birth-cloud dict is
+        # scoped to ``law_bc``, and a decoupled nebular law reads a different
+        # set. The laws no longer swallow the difference (#2185); the grammar
+        # refuses a ``*_neb`` override the nebular law does not read, so nothing
+        # a user wrote is dropped here.
+        neb_bc_params = {
+            k: jnp.asarray(v)
+            for k, v in select_law_kwargs(neb_law, {**bc_law_params, **_neb_overrides}).items()
+        }
         diff_law_kw = {k: jnp.asarray(v) for k, v in diff_law_params.items()}
         k_bc_neb = _resolve_law(neb_law)(wave, **neb_bc_params)
         k_diff_neb = _resolve_law(self.config.law_diff)(wave, **diff_law_kw)
