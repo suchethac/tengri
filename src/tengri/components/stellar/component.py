@@ -207,7 +207,10 @@ def _fast_path_unsupported_sfh_fns():
       finite zero; silent, and beside correct photometry (#1395).
 
     Keyed on the function object rather than the model name so that a second
-    registry entry sharing one of these implementations is guarded too.
+    registry entry sharing one of these implementations is guarded too. A
+    *wrapper* around a guarded function is a different object and needs its own
+    entry: ``psb_continuity_flex`` calls ``psb_continuity`` and is just as
+    binned, but was invisible here until #2184 moved ``psb_suess2022`` onto it.
     Imported lazily to avoid import-order coupling at module load.
 
     Returns
@@ -221,6 +224,7 @@ def _fast_path_unsupported_sfh_fns():
         continuity_flex,
         dirichlet,
         psb_continuity,
+        psb_continuity_flex,
     )
     from tengri.components.stellar.sfh.registry import _table_sfh_placeholder
 
@@ -230,6 +234,7 @@ def _fast_path_unsupported_sfh_fns():
         continuity_flex: binned,
         dirichlet: binned,
         psb_continuity: binned,
+        psb_continuity_flex: binned,
         _table_sfh_placeholder: (
             "the tabulated history is supplied at apply(), which the fast path never "
             "reaches, so the fast path would evaluate an all-zero placeholder and "
@@ -2133,8 +2138,8 @@ class StellarSEDComponent:
             # Siblings of entries already on this list: they reuse the same
             # shape-function machinery (a closed-form
             # lookback-time curve, a truncated exponential, and the very
-            # ``psb_continuity`` callable ``psb_suess2022`` uses), so there is
-            # no new forward path to validate.
+            # ``psb_continuity_flex`` callable ``psb_suess2022`` runs since
+            # #2184), so there is no new forward path to validate.
             "dpl_lookback",
             "trunc_exp",
             "psb_flex",

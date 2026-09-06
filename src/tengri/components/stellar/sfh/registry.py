@@ -81,7 +81,6 @@ from tengri.components.stellar.sfh.nonparametric import (
     continuity,
     continuity_flex,
     dirichlet,
-    psb_continuity,
     psb_continuity_flex,
 )
 from tengri.components.stellar.sfh.psd_models import drw_variance
@@ -1633,29 +1632,42 @@ _register(
 
 # --- psb_suess2022 (Suess+2022): post-starburst nonparametric SFH ---
 # Distinct from the existing `psb_wild2020` (Wilkinson+2020 parametric).
+#
+# Suess+2022 Sect. 3.1.4 builds the history in three parts: the oldest portion
+# is cut into three bins with fixed edges and variable SFR, the middle is a
+# flexible zone the paper divides into five equal-mass bins with movable edges,
+# and the youngest is one bin of variable length [0, tlast] with variable SFR.
+# This entry keeps the flexible zone as a SINGLE bin; `psb_flex` below resolves
+# it into five.
+#
 # Free params: log_total_mass, tlast_gyr (quenching epoch), tflex_gyr (upper
 # bound of the flex zone), ratio_young (youngest-vs-flex SFR ratio), and
-# ratio_old_0..N-2 for the fixed old bins. Defaults match Suess+2022: tlast
-# in [0.01, 1.0] Gyr, tflex in [0.5, 5.0] Gyr, StudentT(0, 0.3, 2) on ratios.
-# Default fixed old bins = DEFAULT_BIN_EDGES_GYR[2:], which is
-# [0.1, 0.3, 1.0, 3.0, 6.0, 13.7] -> 5 old bins.
+# ratio_old_0..N-2 for the fixed old bins. Suess+2022 Table 1 sets tlast
+# uniform in [0.01, 1.0] Gyr and a Student-t on every SFR ratio, here
+# StudentT(0, 0.3, 2); tflex_gyr carries tengri's Uniform(0.5, 5.0).
 #
-# Two known mismatches, recorded rather than silently repaired because fixing
-# either moves this model's shipped numbers:
+# Two tengri layout choices, recorded here because neither is the paper's own
+# construction:
 #
-#   * 5 old bins need 4 ``ratio_old_*``; only 3 are declared, so the innermost
-#     step is stuck at the ``**ratio_kwargs`` default of 0.
-#   * ``psb_continuity`` splices ``tflex_gyr`` in ahead of the fixed edges,
-#     which start at 0.3 Gyr, while ``sfh_psb2022_tflex_gyr``'s prior runs
-#     0.5-5.0 Gyr. So the ladder is never ascending and ``jnp.searchsorted``
-#     runs on an unsorted array; total mass closes to 1-3 % rather than
-#     exactly. ``psb_flex`` below derives its fixed bins FROM ``tflex_gyr``
-#     and has neither problem.
-_N_PSB_OLD_RATIOS = 3
+#   * The three fixed old bins are equal-width from `tflex_gyr` to 13.7 Gyr
+#     (`psb_continuity_flex`'s default), an approximation of the paper's
+#     template edges. Deriving them FROM `tflex_gyr` is what keeps the ladder
+#     ascending for every value the Uniform(0.5, 5.0) prior can draw. Until
+#     #2184 this entry spliced `tflex_gyr` in ahead of a fixed ladder starting
+#     at 0.3 Gyr, so the ladder crossed itself over that whole prior,
+#     `jnp.searchsorted` ran on an unsorted array, and the mass closed to
+#     1-3 % instead of exactly.
+#   * The `ratio_old_*` are ADJACENT steps within the fixed section, with the
+#     step from the oldest flex bin to the youngest fixed bin pinned at 0 (the
+#     two share an SFR), so three fixed bins take two ratios. The paper's three
+#     `log(SFRratio,old)` entries are each measured against the first flexible
+#     bin instead, which gives its fixed section one more free amplitude than
+#     this entry has.
+_N_PSB_OLD_RATIOS = PSB_FLEX_DEFAULT_N_FIXED - 1
 _register(
     SFHModelSpec(
         name="psb_suess2022",
-        fn=psb_continuity,
+        fn=psb_continuity_flex,
         params={
             "sfh_psb2022_log_total_mass": ParamDef(
                 "log10 total stellar mass formed (Msun)",
@@ -1706,28 +1718,23 @@ _register(
     ),
     citation="Suess et al. 2022 (ApJ 935, 146); arXiv:2207.02883",
     short_doc=(
-        "Post-starburst non-parametric SFH (Suess+22): youngest bin [0, tlast] + "
-        "a single flex bin [tlast, tflex] + fixed old bins, with "
-        "StudentT(0, 0.3, df=2) ratios"
+        "Post-starburst non-parametric SFH (Suess+22, nflex=1, nfixed=3): youngest "
+        "bin [0, tlast] + a single flex bin [tlast, tflex] + three equal-width fixed "
+        "old bins out to 13.7 Gyr, with StudentT(0, 0.3, df=2) ratios"
     ),
 )
 
 
 # --- psb_flex (Suess+2022 post-starburst with a RESOLVED flexible zone) ---
-# The same physics as ``psb_suess2022``, with two differences:
+# The same physics, the same fixed section and the same ladder construction as
+# ``psb_suess2022``, with one difference: the flexible zone [tlast, tflex] is
+# cut into ``_N_PSB_FLEX_BINS`` equal-width bins whose relative amplitudes are
+# the ``ratio_flex_*`` parameters, instead of being a single bin.
 #
-#  1. the flexible zone [tlast, tflex] is cut into ``_N_PSB_FLEX_BINS``
-#     equal-width bins whose relative amplitudes are the ``ratio_flex_*``
-#     parameters, instead of being a single bin;
-#  2. the fixed old bins are equal-width from ``tflex`` to the oldest edge,
-#     so the ladder is ascending for any ``tflex`` (``psb_suess2022`` splices
-#     ``tflex`` in ahead of a fixed ladder starting at 0.3 Gyr, which its own
-#     Uniform(0.5, 5.0) prior on ``tflex`` always crosses).
-#
-# ``psb_suess2022`` keeps its exact parameter set and its exact numbers; the
-# shape function returns a bit-identical history when no ``flex_*`` ratio is
-# supplied, which
-# ``tests/components/sfh/test_sfh_lookback_dpl_trunc_exp_psb_flex.py`` pins.
+# Both entries run the same shape function, which returns a bit-identical
+# history when no ``flex_*`` ratio is supplied, so ``psb_suess2022`` is exactly
+# its ``nflex = 1`` case. That equivalence is pinned by
+# ``tests/components/sfh/test_sfh_lookback_dpl_trunc_exp_psb_flex.py``.
 #
 # The flex-bin count is fixed at registration rather than settable per build:
 # an SFH model's parameter list is read straight off its static registry
