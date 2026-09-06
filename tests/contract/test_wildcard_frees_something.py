@@ -433,7 +433,7 @@ def test_introspection_path_is_exempt():
     assert any(r.name.startswith("neb_") for r in recs)
 
 
-# ── A wildcard that covers ZERO parameters must warn, not stay mute ───
+# ── A wildcard that covers ZERO parameters must raise, not stay mute ──
 
 # The guard above (#1474) fires only for a group that already appears in
 # ``wildcard_free_outcome`` -- built by the resolve loop *appending* an
@@ -445,17 +445,28 @@ def test_introspection_path_is_exempt():
 # failure for ``radio``/``shock`` when every sub-model they can select is
 # switched to ``'none'`` (no component is built at all).
 #
-# :class:`WildcardNoOpWarning` is the fourth outcome
-# :func:`_check_wildcard_freed_something` now adjudicates, fed by
-# :func:`_seed_zero_declaration_wildcards` giving such a group an explicit
-# empty entry before the check runs.
+# This is the fourth outcome :func:`_check_wildcard_freed_something`
+# adjudicates, fed by :func:`_seed_zero_declaration_wildcards` giving such a
+# group an explicit empty entry before the check runs. It used to warn
+# (:class:`WildcardNoOpWarning`); #2187 escalated it to
+# :class:`ParameterError` -- see the regression class below for the bug that
+# motivated the escalation: a warning here is exactly as swallowable as the
+# silence it replaced, and every group covered by
+# :func:`_seed_zero_declaration_wildcards`'s old hand-maintained census
+# (``igm``/``radio``/``shock``) was itself an incomplete accounting of every
+# way a group can legitimately cover zero parameters.
 
 
-def test_guard_warns_on_an_outcome_with_zero_candidates():
-    """Unit level: an empty entry warns rather than being silently skipped."""
+def test_guard_raises_on_an_outcome_with_zero_candidates():
+    """Unit level: an empty entry raises rather than being silently skipped.
+
+    This used to warn (:class:`WildcardNoOpWarning`); #2187 escalated it to
+    :class:`ParameterError` because a warning is exactly as swallowable as
+    the silence it replaced, and an empty wildcard is never useful.
+    """
     from tengri.parameters.groups import _check_wildcard_freed_something
 
-    with pytest.warns(WildcardNoOpWarning, match=r"group 'igm'"):
+    with pytest.raises(ParameterError, match=r"group 'igm' covers no parameters"):
         _check_wildcard_freed_something({"igm": []})
 
 
@@ -478,17 +489,20 @@ def test_seed_zero_declaration_wildcards_is_selective():
     assert _seed_zero_declaration_wildcards(existing, {"igm": {"*": FREE}}) == existing
 
 
-def test_igm_inoue14_wildcard_free_warns_no_op():
-    """``inoue14`` names no top-level knob without ``patchy`` -- FREE frees nothing."""
-    with pytest.warns(WildcardNoOpWarning, match=r"group 'igm'"):
+def test_igm_inoue14_wildcard_free_raises_no_op():
+    """``inoue14`` names no top-level knob without ``patchy`` -- FREE frees nothing.
+
+    Was a warning (:class:`WildcardNoOpWarning`); #2187 escalated it to raise.
+    """
+    with pytest.raises(ParameterError, match=r"group 'igm' covers no parameters"):
         tengri.parse_groups(
             sfh={"type": "dpl"}, igm={"type": "inoue14", "all_params": FREE}, redshift=Fixed(2.0)
         )
 
 
-def test_igm_inoue14_wildcard_free_warns_no_op_other_params_spelling():
+def test_igm_inoue14_wildcard_free_raises_no_op_other_params_spelling():
     """Same repro under the ``other_params`` synonym."""
-    with pytest.warns(WildcardNoOpWarning, match=r"group 'igm'"):
+    with pytest.raises(ParameterError, match=r"group 'igm' covers no parameters"):
         tengri.parse_groups(
             sfh={"type": "dpl"},
             igm={"type": "inoue14", "other_params": FREE},
@@ -524,9 +538,9 @@ def test_igm_patchy_wildcard_free_does_not_get_the_no_op_warning():
     assert "igm_x_HI" in freed
 
 
-def test_radio_wildcard_free_warns_when_both_submodels_disabled():
+def test_radio_wildcard_free_raises_when_both_submodels_disabled():
     """``radio``'s component is never built once ``sf``/``agn`` are both ``'none'``."""
-    with pytest.warns(WildcardNoOpWarning, match=r"group 'radio'"):
+    with pytest.raises(ParameterError, match=r"group 'radio' covers no parameters"):
         tengri.parse_groups(
             sfh={"type": "dpl"},
             radio={"sf": {"type": "none"}, "agn": {"type": "none"}, "all_params": FREE},
@@ -534,9 +548,9 @@ def test_radio_wildcard_free_warns_when_both_submodels_disabled():
         )
 
 
-def test_shock_wildcard_free_warns_when_disabled():
+def test_shock_wildcard_free_raises_when_disabled():
     """``shock={'type': 'none'}`` builds no component; FREE has nothing to free."""
-    with pytest.warns(WildcardNoOpWarning, match=r"group 'shock'"):
+    with pytest.raises(ParameterError, match=r"group 'shock' covers no parameters"):
         tengri.parse_groups(
             sfh={"type": "dpl"}, shock={"type": "none", "all_params": FREE}, redshift=Fixed(0.5)
         )
@@ -549,3 +563,149 @@ def test_sfh_dpl_wildcard_free_does_not_get_the_no_op_warning():
         freed = _free(sfh={"type": "dpl", "all_params": FREE})
     assert not [w for w in caught if issubclass(w.category, WildcardNoOpWarning)]
     assert any(p.startswith("sfh_") for p in freed)
+
+
+# ── Regression: the zero-declaration seeding used to be a hand census ─
+#
+# #2187: ``met`` was the one group with a hand-written zero-declaration seed
+# path (its own dedicated ``freed 0 of N`` message), so ``met={'type':
+# 'table', 'all_params': FREE}`` already raised. Every OTHER way a group can
+# structurally cover zero parameters was invisible to
+# :func:`_check_wildcard_freed_something`, because
+# :func:`_seed_zero_declaration_wildcards` only ever seeded the three groups
+# named in its old hand-maintained census (``igm``, ``radio``, ``shock``).
+# Three more mechanisms reach zero and were silent before the fix:
+#
+# * a structural *type* that declares no parameters at all for its group
+#   (``sfh={'type': 'table'}`` -- an externally-supplied SFH has no free
+#   knobs of its own);
+# * a component whose grid-support scope is the empty frozenset, so every one
+#   of its parameters is tagged ``wildcard_fixed_inactive`` before the
+#   resolve loop ever records anything (``dust_emission`` types
+#   ``dh02_ce01`` and ``pah_drude``);
+# * an AGN sub-block whose parameters are excluded from the shared AGN scope
+#   under the selected variant (``agn.feii`` with ``qsogen_balmer``).
+#
+# The fix derives the seed set from the kwargs the caller actually passed
+# instead of a census, so all three (and any future case) are covered by
+# construction rather than by memory.
+
+
+class TestZeroDeclarationWildcardsRaise2187:
+    """A wildcard covering zero parameters must raise, however it gets there."""
+
+    def test_sfh_table_wildcard_covers_no_parameters(self):
+        """``type='table'`` names an externally-supplied SFH with no free knobs."""
+        with pytest.raises(ParameterError, match=r"group 'sfh' covers no parameters"):
+            tengri.parse_groups(sfh={"type": "table", "all_params": FREE}, redshift=Fixed(0.1))
+
+    @pytest.mark.parametrize("emission_type", ["dh02_ce01", "pah_drude"])
+    def test_dust_emission_empty_scope_wildcard_covers_no_parameters(self, emission_type):
+        """A component whose grid-support scope is empty tags every param inactive."""
+        with pytest.raises(ParameterError, match=r"group 'dust_emission' covers no parameters"):
+            tengri.parse_groups(
+                sfh={"type": "dpl", "all_params": Fixed(DEFAULT)},
+                dust_attenuation={
+                    "type": "two_component",
+                    "law": "calzetti",
+                    "all_params": Fixed(DEFAULT),
+                },
+                dust_emission={"type": emission_type, "all_params": FREE},
+                redshift=Fixed(0.1),
+            )
+
+    def test_agn_feii_qsogen_balmer_wildcard_covers_no_parameters(self):
+        """The shared AGN scope excludes ``qsogen_balmer``'s own parameters."""
+        with warnings.catch_warnings():
+            warnings.simplefilter("ignore")
+            with pytest.raises(ParameterError, match=r"group 'agn\.feii' covers no parameters"):
+                tengri.parse_groups(
+                    sfh={"type": "dpl", "all_params": Fixed(DEFAULT)},
+                    agn={
+                        "type": "composable",
+                        "feii": {"type": "qsogen_balmer", "all_params": FREE},
+                    },
+                    redshift=Fixed(0.1),
+                )
+
+    def test_met_table_still_raises_the_freed_0_of_form(self):
+        """The one group with a pre-existing dedicated check keeps its own message.
+
+        ``met={'type': 'table'}`` declares ``met_alpha_fe``, so this is the
+        *freed 0 of N* outcome, not the *covers no parameters* one -- distinct
+        code paths that must both keep working.
+        """
+        with pytest.raises(ParameterError, match=r"freed 0 of"):
+            tengri.parse_groups(
+                sfh={"type": "dpl", "all_params": Fixed(DEFAULT)},
+                met={"type": "table", "all_params": FREE},
+                redshift=Fixed(0.1),
+            )
+
+    def test_the_error_names_the_group_the_user_actually_wrote(self):
+        """Actionable: the message must name the dotted sub-block, not just 'agn'."""
+        with warnings.catch_warnings():
+            warnings.simplefilter("ignore")
+            with pytest.raises(ParameterError) as exc:
+                tengri.parse_groups(
+                    sfh={"type": "dpl", "all_params": Fixed(DEFAULT)},
+                    agn={
+                        "type": "composable",
+                        "feii": {"type": "qsogen_balmer", "all_params": FREE},
+                    },
+                    redshift=Fixed(0.1),
+                )
+        assert "agn.feii" in str(exc.value)
+
+
+# ── Regression: an explicit per-parameter FREE must be honored or refused ─
+#
+# Follow-up to #2187, same seam: ``FREE`` named for one specific parameter
+# used to resolve exactly like the wildcard's per-parameter fallback -- if
+# the parameter has no declared ``free_prior``, it silently stayed Fixed at
+# its registry default. Measured: ``sfh={'type': 'snorm_burst', 'burst_sfr':
+# FREE, 'all_params': Fixed(DEFAULT)}`` built with zero free parameters,
+# ``burst_sfr`` pinned at ``Fixed(0.0)``, and no warning at all -- worse than
+# the wildcard case, because the user named this exact parameter and asked
+# for it by name.
+#
+# The wildcard's per-parameter fallback (``'*': FREE`` reaching a parameter
+# with no declared range) must keep resolving to Fixed silently: that is the
+# input the group-level adjudicator (:func:`_check_wildcard_freed_something`)
+# needs in order to count outcomes and report a partial free or a freed-0-of-N
+# refusal with the *group's* context. Only the explicitly-named path raises
+# here, tagged ``"user_free"`` at the point of resolution -- never the
+# wildcard's ``"wildcard_free"`` tag.
+
+
+class TestExplicitPerParamFreeMustBeHonoredOrRefused2187:
+    """A parameter named ``FREE`` by the user must actually free, or refuse."""
+
+    def test_explicit_free_on_a_param_with_no_free_prior_raises(self):
+        """``burst_sfr`` declares no free prior: 'no galaxy-independent interval exists'."""
+        with pytest.raises(ParameterError, match=r"no declared free prior") as exc:
+            tengri.parse_groups(
+                sfh={
+                    "type": "snorm_burst",
+                    "burst_sfr": FREE,
+                    "all_params": Fixed(DEFAULT),
+                },
+                redshift=Fixed(0.1),
+            )
+        assert "burst_sfr" in str(exc.value)
+
+    def test_wildcard_free_on_the_same_group_still_takes_the_adjudication_path(self):
+        """The wildcard must never trip the new per-parameter error.
+
+        ``snorm_burst`` mixes params with and without a declared free prior,
+        so its wildcard is the pre-existing partial-free outcome (#1474), not
+        the new per-parameter refusal.
+        """
+        with pytest.warns(WildcardPartialFreeWarning, match=r"group 'sfh'"):
+            freed = _free(sfh={"type": "snorm_burst", "all_params": FREE})
+        assert any(p.startswith("sfh_snorm_burst_") for p in freed)
+
+    def test_explicit_free_on_a_param_with_a_declared_free_prior_still_works(self):
+        """The documented-working case: naming a freeable parameter by hand."""
+        freed = _free(sfh={"type": "dpl", "alpha": FREE, "all_params": Fixed(DEFAULT)})
+        assert "sfh_dpl_alpha" in freed
