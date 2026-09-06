@@ -636,6 +636,13 @@ def dale2014_emission_lnu(
     CIGALE's full-grid normalization (its integral over the dust grid is ~0.54,
     ~0.42 redward of 1 um).
 
+    Both templates are resampled onto ``wavelength_aa`` before
+    :math:`\int T_{\rm SF}\,d\nu = 1` is imposed, so the *delivered* spectrum
+    satisfies the equation above on the caller's grid rather than on the native
+    template grid (3.1% apart on a 512-point grid). The unit scale comes from
+    the SF template alone and multiplies the whole mixture, which leaves the
+    QSO/SF energy partition of #717 exactly as CIGALE sets it.
+
     Parameters
     ----------
     wavelength_aa : ndarray, shape (n_wave,)
@@ -676,24 +683,34 @@ def dale2014_emission_lnu(
     fa = (dust_alpha_c - alpha_grid[i_a]) / (alpha_grid[i_a + 1] - alpha_grid[i_a])
     template_sf = (1.0 - fa) * templates_sf[i_a] + fa * templates_sf[i_a + 1]
 
+    # Resample onto the target wavelength grid FIRST, then set the unit scale
+    # there: the SF template alone defines it, because ``int T_SF dnu = 1`` is
+    # the normalization the mixing equation above is written in, and it is the
+    # one that must hold exactly for f_AGN = 0 to re-emit exactly L_absorbed.
+    sed_sf = resample_template(wavelength_aa, wavelength_grid, template_sf, left=0.0, right=0.0)
+    nu = _C_CGS / (wavelength_aa * _AA_TO_CM)
+    sf_integral = -jnp.trapezoid(sed_sf, nu)
+    norm = jnp.where(sf_integral > 0.0, 1.0 / sf_integral, 0.0)
+
     if has_qso:
         f_agn = jnp.clip(dust_frac_agn, 0.0, 0.99)
-        template_mixed = (1.0 - f_agn) * template_sf + f_agn * templates_qso
+        # The QSO carries CIGALE's *full-grid* normalization, so its integral
+        # over the dust grid is ~0.54 (~0.42 redward of 1 um) rather than 1.
+        # That deficit is the energy partition #717 restored, so ``norm`` is
+        # the SF unit scale applied to the whole mixture -- a common factor
+        # that leaves the QSO/SF ratio untouched. Normalizing the *mixture* to
+        # unit instead erases the partition: the total then reads
+        # L_abs/(1 - f_AGN) for every f_AGN, which is 2.500 rather than
+        # CIGALE's 1.634 at f_AGN = 0.6 (measured, 1 um - 3 mm).
+        sed_qso = resample_template(
+            wavelength_aa, wavelength_grid, templates_qso, left=0.0, right=0.0
+        )
+        sed = (1.0 - f_agn) * sed_sf + f_agn * sed_qso
         # AGN is an independent power source: total IR = L_abs / (1 - f_agn).
         scale_factor = L_absorbed / jnp.maximum(1.0 - f_agn, 1e-10)
     else:
-        template_mixed = template_sf
+        sed = sed_sf
         scale_factor = L_absorbed
-
-    # Resample onto target wavelength grid FIRST
-    sed = resample_template(wavelength_aa, wavelength_grid, template_mixed, left=0.0, right=0.0)
-
-    # Normalize to enforce energy balance on the evaluation grid.
-    # Must normalize AFTER resampling to ensure the delivered SED integrates
-    # correctly regardless of the native template grid spacing.
-    nu = _C_CGS / (wavelength_aa * _AA_TO_CM)
-    t_integral = -jnp.trapezoid(sed, nu)
-    norm = jnp.where(t_integral > 0.0, 1.0 / t_integral, 0.0)
 
     return scale_factor * norm * sed
 

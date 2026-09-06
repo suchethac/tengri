@@ -222,7 +222,14 @@ _CASES = [
     ("xray_lopez24_ax0", "xray", "xray_precompute", "xray_corona_lopez24", 0, 2, "xray", {}, ()),
     ("xray_lopez24_ax1", "xray", "xray_precompute", "xray_corona_lopez24", 1, 2, "xray", {}, ()),
     ("dust_mbb", "dust", "dust_analytic_precompute", "modified_blackbody", 0, 2, "radio", {}, ()),
-    ("dust_casey", "dust", "dust_analytic_precompute", "casey2012", 0, 3, "radio", {}, ()),
+    # casey2012 carries four axes since ``dust_lambda_0_um`` became a declared
+    # parameter: (T, beta_ir, alpha_mir, lambda_0_um). Pin the first and the
+    # new last one -- a pivot axis that no case reaches is a pivot axis whose
+    # collapse is unguarded.
+    ("dust_casey", "dust", "dust_analytic_precompute", "casey2012", 0, 4, "radio", {}, ()),
+    ("dust_casey_pivot", "dust", "dust_analytic_precompute", "casey2012", 3, 4, "radio", {}, ()),
+    # graybody: (T, beta_ir, lambda_0_um). Pin its pivot for the same reason.
+    ("dust_graybody", "dust", "dust_analytic_precompute", "graybody", 2, 3, "radio", {}, ()),
     (
         "silva04",
         "agn",

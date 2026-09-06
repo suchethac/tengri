@@ -39,7 +39,7 @@ _REQUIRED = (
     "dale2014",
     "dale2014_cigale",
     "dh02_ce01",
-    "draine2021_pah",
+    "draine2021_pah_ir",
     "draine_li2007",
     "draine_li2014",
     "graybody",
@@ -50,7 +50,10 @@ _REQUIRED = (
 )
 _NOT_BALANCED_BY_DESIGN = ("pah_drude", "energy_balance_split")
 # Menu spellings that select a component already covered under its canonical name.
-_ALIASES_OF_REQUIRED = ("dl07", "dl14", "mbb")
+# ``draine2021_pah`` -> ``draine2021_pah_ir`` joined this list when the canonical
+# spelling became a menu row of its own: the component publishes ``sed_dust_ir``
+# and so is listed, and running both spellings would run one component twice.
+_ALIASES_OF_REQUIRED = ("dl07", "dl14", "draine2021_pah", "mbb")
 _ANALYTIC = ("casey2012", "graybody", "modified_blackbody", "schreiber2016")
 _RTOL_TEMPLATE = 1e-7
 _RTOL_ANALYTIC = 5e-6

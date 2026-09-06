@@ -68,8 +68,12 @@ class GraybodyIRSEDComponent(EmissionComponent):
     lambda_0_um = Fixed(200.0)
     epsilon_mbb = Fixed(1.0)
 
+    # ``cigale`` is the registry key that ``references.bib`` gives Boquien et
+    # al. (2019); ``boquien2019`` is not a key any lookup resolves, and
+    # ``citations()`` is looked up, so it has to be the spelling the record
+    # uses (the same class of miss #1777 pinned).
     _citations_tuple: ClassVar[tuple[str, ...]] = (
-        "boquien2019",
+        "cigale",
         "casey2012",
         "dacunha2013",
     )
