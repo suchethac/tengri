@@ -15,17 +15,21 @@ nuclei across `8 < log ν/Hz < 20`.
 
 | Block | AGNFITTER-RX libraries | tengri |
 |-------|------------------------|--------|
-| Accretion disk | R06, SN12, KD18, THB21 | `richards2006`, `slone_netzer`, `kubota_done`, `qsogen` (+ lines + FeII) |
-| Disk reddening | Prevot SMC `EBVbbb` | `agn_ebv_disc` / `agn.atten = "smc_prevot"` |
-| Torus | S04, NK08, SKIRTOR, CAT3D-Wind | `silva04`, `nenkova`, `skirtor` + `skirtor_agnfitter`, `cat3d_wind` |
-| Cold dust | DH02_CE01, S17, S17_radio (Schreiber+2018) | `schreiber2018` (also `schreiber2016`, `dale2014`) |
+| Accretion disk | R06, SN12, KD18, THB21 | `richards2006`, `slone_netzer`, `kd18_agnfitter` (+ `kd18_agnfitter_warmindex`), `qsogen` (+ `blr`/`feii`) |
+| Disk reddening | Prevot SMC `EBVbbb` | `agn_ebv_disc` (top-level); `agn.atten={'type': 'qsogen'}` for qsogen's own curve |
+| Galaxy attenuation | SMC / Calzetti (fit-time) | `dust_attenuation={'law': 'calzetti', ...}` |
+| Torus | S04, NK08, SKIRTOR, CAT3D-Wind, + NK0_mean_2p/3p, SKIRTOR_mean_1p/2p, CAT3D low-`f_wd` | `silva04`, `nenkova_agnfitter` (+`_2p`/`_3p`), `skirtor` + `skirtor_agnfitter` (+`_1p`/`_2p`), `cat3d_wind` (+`_lowfwd`) |
+| Cold dust | DH02_CE01, S17, S17_radio (Schreiber+2018) | `schreiber2018` (also `schreiber2016`, `dale2014`, `dh02_ce01`) |
 | X-ray corona | α_ox–L₂₅₀₀ (Just+2007) | `xray_agn_corona_from_disc`, `alpha_ox_from_l2500` |
-| Radio | SPL / DPL (Eqs. 9–10), Bell-2003 SF | `radio_agn`, `radio_agn_dpl`, `radio_sfr_bell2003` |
+| Radio | SPL / DPL (Eqs. 9–10), Bell-2003 SF (90/10 split) | `radio_agn`, `radio_agn_dpl`, `radio_sfr_bell2003_split`, `sfr_from_lir` |
+| Priors | Eight informative priors (`PRIORS_AGNfitter.py`) | `tengri.agn.priors.agnfitter_priors`; `Fitter(..., extra_log_prior=...)` |
 
-tengri's `slone_netzer`, `silva04`, `cat3d_wind`, `skirtor_agnfitter`, and
-`schreiber2018` blocks evaluate the template libraries published with
-AGNFITTER-RX (repackaged by the `scripts/build_*_grid.py` builders) and are
-validated against the vendored references (`data/agnfitter_*_reference.h5`),
+tengri's `slone_netzer`, `silva04`, `cat3d_wind` (+ `cat3d_wind_lowfwd`),
+`skirtor_agnfitter` (+ `_1p`/`_2p`), `nenkova_agnfitter` (+ `_2p`/`_3p`),
+`kd18_agnfitter` (+ `_warmindex`), and `schreiber2018` blocks evaluate the
+template libraries published with AGNFITTER-RX (repackaged by the
+`scripts/build_*_grid.py`/`build_agnfitter_torus_reductions.py` builders) and
+are validated against the vendored references (`data/agnfitter_*_reference.h5`),
 both in `tests/crossval/` and visually in the notebook. Every tengri model in
 the notebook is built through the public `SEDModel.build` grammar, so the
 comparisons double as end-to-end wiring checks of the composable AGN API.
