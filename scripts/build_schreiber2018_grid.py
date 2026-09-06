@@ -11,7 +11,7 @@ under ``models/STARBURST/``:
 Each table has a single row whose ``LAM`` / ``SED`` columns are 2-D arrays of
 shape ``(n_Tdust, n_wave)`` (micron, ``nu L_nu`` in L_sun), with ``TDUST`` the
 per-temperature axis. AGNFITTER-RX forms the cold-dust SED as the *native*
-mixture ``(1 - f_PAH)·dust + f_PAH·PAH`` and renormalises (see
+mixture ``(1 - f_PAH)·dust + f_PAH·PAH`` and renormalizes (see
 ``MODEL_AGNfitter.STARBURST`` S17 branch). This script repackages both tables
 onto a common ascending-wavelength [Å] grid as ``L_nu`` so tengri's
 ``schreiber2018`` emission model can reproduce that mixture at runtime.
@@ -43,7 +43,7 @@ Dataset         Shape                  Description
 ==============  =====================  =====================================
 ``tdust``       ``(n_T,)``             dust temperature [K], ascending
 ``wavelength``  ``(n_wave,)``          common wavelength grid [Å], ascending
-``dust``        ``(n_T, n_wave)``      dust-continuum L_nu (native, unnormalised)
+``dust``        ``(n_T, n_wave)``      dust-continuum L_nu (native, unnormalized)
 ``pah``         ``(n_T, n_wave)``      PAH L_nu (native, same scale as ``dust``)
 ==============  =====================  =====================================
 
@@ -144,7 +144,7 @@ def build(input_dir: Path, output_h5: Path) -> None:
         g.attrs["n_wave"] = n_wave
         g.attrs["tdust_unit"] = "K"
         g.attrs["wavelength_unit"] = "Angstrom"
-        g.attrs["template_unit"] = "L_nu (native relative; mix renormalised at runtime)"
+        g.attrs["template_unit"] = "L_nu (native relative; mix renormalized at runtime)"
         g.attrs["native_sampling"] = mode
         g.attrs["source_sha256_dust"] = _sha256(dust_path)
         g.attrs["source_sha256_pah"] = _sha256(pah_path)

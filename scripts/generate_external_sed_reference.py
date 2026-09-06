@@ -14,11 +14,11 @@ Requirements (install separately from tengri's .venv):
     pip install synthesizer-astro   # git: synthesizer-project/synthesizer
     # pcigale: not on PyPI, install from https://cigale.lam.fr
 
-PURPOSE: Absolute normalisation check
+PURPOSE: Absolute normalization check
 --------------------------------------
 All SEDs are output as L_nu in erg/s/Hz per Msun_formed on a common wavelength
 grid, so downstream tests check *absolute luminosity levels*, not just shape.
-This catches unit bugs, wrong M_formed normalisation, and SFH parameterisation mismatches.
+This catches unit bugs, wrong M_formed normalization, and SFH parameterization mismatches.
 
 Feature groups covered
 -----------------------
@@ -86,7 +86,7 @@ _D_BAGPIPES_CM = _dl_at_z(_BAGPIPES_REDSHIFT)
 # FSPS tage = cosmic age at observation in Gyr.
 
 STELLAR_CASES: list[dict] = [
-    # Constant SFH — the fundamental normalisation check
+    # Constant SFH — the fundamental normalization check
     dict(
         name="starforming",
         age_gyr=3.0,
@@ -309,7 +309,7 @@ IMF_CASES: list[dict] = [
 ]
 
 NEBULAR_CASES: list[dict] = [
-    # Young star-forming + nebular — tests CLOUDY logU convention + line normalisation
+    # Young star-forming + nebular — tests CLOUDY logU convention + line normalization
     dict(
         name="neb_young_u2",
         age_gyr=0.1,
@@ -541,7 +541,7 @@ AGN_CASES: list[dict] = [
 # ---------------------------------------------------------------------------
 # SMC / LMC dust extinction — Gordon+2003 / Pei+1992
 # FSPS dust_type=6 (SMC) / dust_type=7 (LMC).
-# bagpipes supports "SMC" and "LMC" dust types (Pei 1992 parametrisation).
+# bagpipes supports "SMC" and "LMC" dust types (Pei 1992 parametrization).
 # All cases: constant SFH, 2 Gyr, solar metallicity, varying Av (magnitudes).
 # dust1=0 → no birth-cloud component, so we see the extinction curve shape only.
 # ---------------------------------------------------------------------------
@@ -1371,7 +1371,7 @@ def generate_himet_fsps(cases: list[dict]) -> dict[str, np.ndarray]:
 # HIGH-Z PASSIVE — bagpipes + FSPS (const SFH, no dust, no IGM)
 # ===========================================================================
 def _highz_bagpipes_comp(case: dict) -> dict:
-    # Always use _BAGPIPES_REDSHIFT for luminosity-distance normalisation consistency.
+    # Always use _BAGPIPES_REDSHIFT for luminosity-distance normalization consistency.
     # _bagpipes_to_lnu() uses _D_BAGPIPES_CM = D_L(0.01); running bagpipes at a higher
     # redshift would corrupt the L_nu/Msun conversion by (D_L(zred)/D_L(0.01))^2.
     return {
@@ -1499,7 +1499,7 @@ def _run_synthesizer_cases(
 ) -> dict[str, np.ndarray]:
     """Run synthesizer for a list of cases via build_fn(case, grid) → Sed.
 
-    All SEDs are normalised to initial_mass=1 Msun so units are erg/s/Hz per Msun_formed.
+    All SEDs are normalized to initial_mass=1 Msun so units are erg/s/Hz per Msun_formed.
     """
     import warnings
 

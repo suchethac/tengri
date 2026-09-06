@@ -18,7 +18,7 @@ The ``SED`` array stores **12** accretion-rate columns, but
 ``logEddra-values`` holds **259** entries. AGNfitter-rX's loader
 (``MODEL_AGNfitter.BBB``) labels column ``j`` with ``logEddra-values[j]`` —
 i.e. it uses the **first 12** entries, ``[-4.0 .. -1.96]`` (monotonic with the
-columns' monotonically rising luminosity). We reproduce that exact labelling so
+columns' monotonically rising luminosity). We reproduce that exact labeling so
 this grid matches what AGNfitter-rX feeds its fitter; the upstream 259-vs-12
 mismatch is an AGNfitter-rX inconsistency, not introduced here.
 
@@ -38,7 +38,7 @@ Dataset         Shape                   Description
 ``log_mbh``     ``(n_mbh,)``            log10(M_BH / M_sun), ascending
 ``log_edd``     ``(n_edd,)``            log10(Mdot / Mdot_Edd), ascending
 ``wavelength``  ``(n_wave,)``           common wavelength grid [Å], ascending
-``template``    ``(n_mbh, n_edd, n_wave)``  F_nu template (unnormalised)
+``template``    ``(n_mbh, n_edd, n_wave)``  F_nu template (unnormalized)
 ==============  ======================  ==================================
 
 References
@@ -143,7 +143,7 @@ def build(input_pickle: Path, output_h5: Path, n_wave: int = 2048) -> None:
             f"SN12 SED has unexpected shape {sed.shape}; expected (n_freq, n_mbh, 12)."
         )
     log_mbh = np.asarray(d["logBHmass-values"], dtype=np.float64).ravel()
-    # Faithful to AGNfitter-rX: column j is labelled logEddra-values[j].
+    # Faithful to AGNfitter-rX: column j is labeled logEddra-values[j].
     log_edd = np.asarray(d["logEddra-values"], dtype=np.float64).ravel()[:_N_EDD_COLUMNS]
     freq = np.asarray(d["frequency"], dtype=np.float64).ravel()
     wave_native = _C_AA_PER_S / freq  # Å (descending as freq ascends)
@@ -181,8 +181,8 @@ def build(input_pickle: Path, output_h5: Path, n_wave: int = 2048) -> None:
         g.attrs["n_edd"] = log_edd.size
         g.attrs["n_wave"] = n_wave
         g.attrs["wavelength_unit"] = "Angstrom"
-        g.attrs["template_unit"] = "F_nu erg/s/Hz (renormalised at runtime)"
-        g.attrs["edd_labelling"] = "logEddra-values[:12] (AGNfitter-rX convention)"
+        g.attrs["template_unit"] = "F_nu erg/s/Hz (renormalized at runtime)"
+        g.attrs["edd_labeling"] = "logEddra-values[:12] (AGNfitter-rX convention)"
 
     print(
         f"wrote {output_h5} — {log_mbh.size} M_BH × {log_edd.size} Edd × "

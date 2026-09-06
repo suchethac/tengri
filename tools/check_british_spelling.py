@@ -73,6 +73,7 @@ DEFAULT_ROOTS = (
     "docs",
     "examples",
     "notebooks",
+    "scripts",
     ".github",
     "README.md",
     "CONTRIBUTING.md",
@@ -151,6 +152,25 @@ ALLOWED_PHRASES = (
     "modelling framework THEMIS",
     "spectral energy distribution modelling due to bursty",
     "modelling AGN and galaxy SEDs from radio to X-rays",
+    # pcigale's own ``sfhdelayed``/``sfhdelayedbq`` SED modules declare a
+    # parameter literally named ``normalise`` (site-packages/pcigale/
+    # sed_modules/sfhdelayed.py); passing ``normalize`` instead is an
+    # "unexpected parameter" that pcigale's SedModule.__init__ raises on, and
+    # setting ``sfh.parameters["normalize"]`` instead of the real key is
+    # silently ignored (the module falls back to its own default). An
+    # external data-contract key (NAMING_CONTRACT §10), not tengri prose, and
+    # scoped to the exact call-site spellings rather than a token entry so
+    # ordinary "normalise" prose elsewhere in scripts/ stays flagged.
+    "normalise=True,",
+    'sfh.parameters["normalise"]',
+    "normalise=True → sfh.sfr_integrated",
+    # Stalevski, Fritz, Baes, Nakos & Popović 2012, "3D radiative transfer
+    # modelling of the dusty tori around active galactic nuclei as a clumpy
+    # two-phase medium", MNRAS 420, 2756. arXiv:1109.1286,
+    # doi:10.1111/j.1365-2966.2011.19775.x. MNRAS is a British journal and
+    # the published title uses "modelling"; the two References entries below
+    # quote a shortened form of it, but the words kept are verbatim.
+    "3D radiative transfer modelling of the dusty",
 )
 
 

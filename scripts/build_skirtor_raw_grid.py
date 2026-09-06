@@ -134,7 +134,7 @@ def build(input_dir: Path, output: Path) -> None:
         h.attrs["processing"] = (
             "Faithful: full R axis; published RT total (.dat col2) preserved; "
             "disk=direct+scattered stellar (col3+4); dust=thermal+scattered (col5+6); "
-            "no analytic-disc substitution, no per-component renormalisation."
+            "no analytic-disc substitution, no per-component renormalization."
         )
         h.attrs["created_by"] = "scripts/build_skirtor_raw_grid.py"
     print(f"wrote {output}  shape {shape}")

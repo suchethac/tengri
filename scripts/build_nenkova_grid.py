@@ -23,8 +23,8 @@ Source file format (FSPS ``Nenkova08_y010_torusg_n10_q2.0.dat``)
 - 3 ``#`` comment lines (units + column description).
 - 1 header row of the 9 equatorial optical depths:
   ``5 10 20 30 40 60 80 100 150``.
-- ``n_wave`` data rows, each ``lambda[Å]  f_nu*9`` (f_nu normalised to unity
-  per the FSPS header, but re-normalised at runtime anyway).
+- ``n_wave`` data rows, each ``lambda[Å]  f_nu*9`` (f_nu normalized to unity
+  per the FSPS header, but re-normalized at runtime anyway).
 
 HDF5 schema
 -----------
@@ -36,7 +36,7 @@ Dataset                  Shape                Description
 ``tau_axis``             ``(n_tau,)``         equatorial optical depth, ascending
 ``wavelength``           ``(n_wave,)``        wavelength grid [Å], ascending
 ``template``             ``(n_tau, n_wave)``  F_nu template (relative; per-L_sun
-                                              normalised at runtime)
+                                              normalized at runtime)
 ======================  ===================  =========================================
 
 Port credit
@@ -112,7 +112,7 @@ def build(input_dat: Path, output_h5: Path) -> None:
         g.attrs["n_tau"] = tau_axis.size
         g.attrs["n_wave"] = wavelength_aa.size
         g.attrs["wavelength_unit"] = "Angstrom"
-        g.attrs["template_unit"] = "F_nu (relative, per-L_sun normalised at runtime)"
+        g.attrs["template_unit"] = "F_nu (relative, per-L_sun normalized at runtime)"
         g.attrs["provenance"] = (
             "Nenkova et al. 2008 (ApJ 685, 147 & 160); reformatted by FSPS "
             "(Conroy & Gunn 2010); same file used by Prospector (Johnson+2021)."

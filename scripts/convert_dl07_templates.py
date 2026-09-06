@@ -263,7 +263,7 @@ def convert(input_dir: str, output_path: str) -> None:
     # But for energy-balance normalization, we just need the SED *shape*
     # normalized so integral = 1. The absolute scaling comes from L_absorbed.
     #
-    # NOTE: single_u and powerlaw are EACH normalised to unit integral, which
+    # NOTE: single_u and powerlaw are EACH normalized to unit integral, which
     # discards their *relative* DL07 power. The power-law (PDR) component emits
     # R = U_max ln(U_max/U_min)/(U_max - U_min) times more per unit dust mass
     # (Draine & Li 2007, Eq. 33). That factor is restored at runtime in
@@ -323,10 +323,10 @@ def convert(input_dir: str, output_path: str) -> None:
         f.attrs["umax_powerlaw"] = 1e6
         f.attrs["description"] = (
             "DL07 IR emission templates for tengri. single_u and powerlaw are "
-            "each shape-normalised (unit integral). Usage: "
+            "each shape-normalized (unit integral). Usage: "
             "j_nu = (1-gamma)*single_u[iq,iu] + gamma*R*powerlaw[iq,iu] with "
             "R = U_max*ln(U_max/U_min)/(U_max-U_min) (DL07 Eq. 33 PDR luminosity "
-            "weight), then multiply by L_absorbed for energy-balance normalisation."
+            "weight), then multiply by L_absorbed for energy-balance normalization."
         )
 
     # Summary

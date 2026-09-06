@@ -8,7 +8,7 @@
     check that derived stellar mass + SFR_100Myr still land within
     0.5 dex of the truth. This is the practical question of "does
     inference give the right mass/SFR even if we picked the wrong
-    SFH parametrisation?"
+    SFH parametrization?"
 
 All fits use WavePrecomp() so each takes ≤ 10 s on D ≤ 8.
 """

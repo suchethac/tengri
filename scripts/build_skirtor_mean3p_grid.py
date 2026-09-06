@@ -50,12 +50,12 @@ Dataset              Shape                          Description
 ``incl_axis``        ``(n_incl,)``                  inclination [deg], ascending
 ``tv_axis``          ``(n_tv,)``                    optical depth, ascending
 ``wavelength``       ``(n_wave,)``                  common wavelength grid [Å], ascending
-``template``         ``(n_oa, n_incl, n_tv, n_wave)``  F_nu template (unnormalised)
+``template``         ``(n_oa, n_incl, n_tv, n_wave)``  F_nu template (unnormalized)
 ===================  ============================  ============================================
 
 Templates are shape-only; the runtime module
 (:mod:`tengri.components.agn.skirtor_agnfitter`) applies per-L_sun
-normalisation and scales to ``agn_log_lbol`` + ``agn_torus_frac``.
+normalization and scales to ``agn_log_lbol`` + ``agn_torus_frac``.
 
 References
 ----------
@@ -336,7 +336,7 @@ def build(
         g.attrs["n_tv"] = n_tv
         g.attrs["n_wave"] = n_wave
         g.attrs["wavelength_unit"] = "Angstrom"
-        g.attrs["template_unit"] = "F_nu (relative, per-L_sun normalised at runtime)"
+        g.attrs["template_unit"] = "F_nu (relative, per-L_sun normalized at runtime)"
         g.attrs["template_dtype"] = str(dtype_template)
         g.attrs["description"] = (
             "SKIRTOR-averaged (mean over clumpiness p,q and radial index) "

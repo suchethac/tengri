@@ -3,7 +3,7 @@
 
 Closes issue #528: tengri's previous Dale2014 templates were generated
 from a different source than CIGALE's, with an inconsistent ``alpha``
-labelling — tengri ``alpha=2.0`` peaked at 116 µm while CIGALE
+labeling — tengri ``alpha=2.0`` peaked at 116 µm while CIGALE
 ``alpha=2.0`` peaks at 90 µm. The ratios at ``§9`` MIR/FIR were 12-15%
 off because of this template shape mismatch.
 
@@ -143,23 +143,23 @@ def main() -> int:
     spectra_lam_per_W = np.array(spectra_lam_per_W)
 
     # The quasar template lives on its own (denser, bluer) wavelength grid in
-    # CIGALE — ~60 nm onward — and ``model.spec`` is already normalised to unit
+    # CIGALE — ~60 nm onward — and ``model.spec`` is already normalized to unit
     # total luminosity over that *full* grid (energy conservation: a unit of
     # L_AGN spread over the whole quasar SED). Resample onto the SF grid
-    # (linear in lambda, zero outside) but do **NOT** renormalise: ~46% of the
+    # (linear in lambda, zero outside) but do **NOT** renormalize: ~46% of the
     # quasar's energy is the UV/optical accretion-disc continuum below the SF
     # grid's blue edge (~360 nm), so the resampled template integrates to
     # ~0.54, with ~0.42 redward of 1 um. That truncated fraction IS the correct
     # IR weight per unit L_AGN — it is exactly what CIGALE's ``add_contribution
-    # ('agn', ..., L_AGN * model_quasar.spec)`` puts in the IR. Renormalising to
-    # unit over the truncated grid (the previous behaviour) inflated the IR
+    # ('agn', ..., L_AGN * model_quasar.spec)`` puts in the IR. Renormalizing to
+    # unit over the truncated grid (the previous behavior) inflated the IR
     # share to ~0.78 and made the ``dust_frac_agn`` mid-IR mixing over-bright,
     # growing with fracAGN (#717: §6 knobs panel ran 1.19x at f=0.3,
     # 1.43x at f=0.6 vs CIGALE). The tengri loader likewise must not
-    # renormalise the QSO template (see create_dale2014_from_grid).
+    # renormalize the QSO template (see create_dale2014_from_grid).
     spectra_qso_per_W = np.interp(wl_nm, qso_wl_nm, qso_spec_raw, left=0.0, right=0.0)
 
-    # CIGALE spec is L_λ-like per W of input dust luminosity, normalised
+    # CIGALE spec is L_λ-like per W of input dust luminosity, normalized
     # so ``∫spec dλ_nm = 1.0`` (energy conservation: dust IR = L_absorbed).
     # tengri stores the wavelength axis in Å — convert per-nm density to
     # per-Å (÷10) so the integral over the Å grid stays 1.0.
@@ -171,7 +171,7 @@ def main() -> int:
     i_2 = np.argmin(np.abs(ALPHA_GRID - 2.0))
     integral_check = np.trapezoid(spectra_lam_per_Aa[i_2], wl_aa)
     qso_integral = np.trapezoid(spectra_qso_per_Aa, wl_aa)
-    # Fraction of the unit-normalised quasar that survives the resample onto
+    # Fraction of the unit-normalized quasar that survives the resample onto
     # the SF grid (i.e. lives redward of the SF grid's blue edge). The rest is
     # the UV/optical accretion-disc continuum, which tengri's dust grid does
     # not represent. This is intentionally < 1 (see the resample comment).
@@ -181,11 +181,11 @@ def main() -> int:
         f"Quasar template integral on SF grid: ∫spec dλ_Å = {qso_integral:.6f}  "
         f"(expect ~0.5; full-grid integral = {qso_full_int:.6f})"
     )
-    assert abs(integral_check - 1.0) < 1e-3, "Template normalisation drift"
+    assert abs(integral_check - 1.0) < 1e-3, "Template normalization drift"
     assert 0.3 < qso_integral < 0.99, (
-        "Quasar template should keep CIGALE's full-grid normalisation "
+        "Quasar template should keep CIGALE's full-grid normalization "
         f"(truncated-grid integral ~0.5), got {qso_integral:.4f}. A value near "
-        "1.0 means the buggy truncate-then-renormalise was reintroduced (#717)."
+        "1.0 means the buggy truncate-then-renormalize was reintroduced (#717)."
     )
 
     # Use a CIGALE-specific filename so it doesn't shadow the
@@ -202,10 +202,10 @@ def main() -> int:
         f.attrs["source"] = "CIGALE pcigale.data Dale2014 (SimpleDatabase)"
         f.attrs["spectra_unit"] = (
             "L_lambda per W input. SF templates: integral over lambda_Aa = 1.0. "
-            "QSO template: keeps CIGALE full-grid unit normalisation, so its "
+            "QSO template: keeps CIGALE full-grid unit normalization, so its "
             "integral over the (truncated) stored grid is ~0.5 (the rest is the "
             "UV/optical disc continuum below the grid blue edge). Do NOT "
-            "renormalise the QSO to unit on load (#717)."
+            "renormalize the QSO to unit on load (#717)."
         )
         f.attrs["templates_qso_query"] = "db.get(fracAGN=1.0, alpha=0.0)"
         f.attrs["agn_mixing"] = (

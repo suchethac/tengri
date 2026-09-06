@@ -47,11 +47,11 @@ Dataset              Shape                   Description
 ``a_axis``           ``(n_a,)``              radial power-law index, ascending
 ``fwd_axis``         ``(n_fwd,)``            wind fraction, ascending
 ``wavelength``       ``(n_wave,)``           common wavelength grid [Å], ascending
-``template``         ``(n_incl, n_a, n_fwd, n_wave)``  F_nu template (unnormalised)
+``template``         ``(n_incl, n_a, n_fwd, n_wave)``  F_nu template (unnormalized)
 ===================  =====================  ============================================
 
 Templates are shape-only; the runtime module
-(:mod:`tengri.components.agn.cat3d_wind`) applies per-L_sun normalisation.
+(:mod:`tengri.components.agn.cat3d_wind`) applies per-L_sun normalization.
 
 References
 ----------
@@ -218,10 +218,10 @@ def build(input_pickle: Path, output_h5: Path, n_wave: int = 4096) -> None:
 
     # AGNfitter's CAT3D library is not a full Cartesian product of the
     # three axes.  Tengri's triweight interpolation would smear zero
-    # templates into neighbouring cells, producing unphysical SEDs at
+    # templates into neighboring cells, producing unphysical SEDs at
     # intermediate parameter values.  Fill missing cells with the
-    # nearest-neighbour populated cell in axis-index space — this
-    # matches AGNfitter's own nearest-neighbour runtime lookup at every
+    # nearest-neighbor populated cell in axis-index space — this
+    # matches AGNfitter's own nearest-neighbor runtime lookup at every
     # queried populated cell, and produces a smoothly-interpolable grid
     # for tengri's gradient-based inference.
     missing_count = int((~populated).sum())
@@ -247,7 +247,7 @@ def build(input_pickle: Path, output_h5: Path, n_wave: int = 4096) -> None:
         g.attrs["n_wave"] = n_wave
         g.attrs["missing_grid_points"] = missing_count
         g.attrs["wavelength_unit"] = "Angstrom"
-        g.attrs["template_unit"] = "F_nu (relative, per-L_sun normalised at runtime)"
+        g.attrs["template_unit"] = "F_nu (relative, per-L_sun normalized at runtime)"
 
     filled = incl_axis.size * a_axis.size * fwd_axis.size - missing_count
     print(

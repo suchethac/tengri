@@ -12,7 +12,7 @@ Faithful to ``pcigale.sed_modules.schreiber2016._init_code``:
 - ``continuum[t, :]`` = ``db.get(type=0, tdust=t)``  (dust continuum)
 - ``pah[t, :]``       = ``db.get(type=1, tdust=t)``  (PAH template)
 - Mixing at predict time: ``(1 - fpah) * continuum + fpah * pah``,
-  energy-balance normalised so ``\int spec dlambda = 1`` (= L_absorbed).
+  energy-balance normalized so ``\int spec dlambda = 1`` (= L_absorbed).
 
 Requirements: pcigale installed (tengri's main ``.venv`` has it).
 Output: ``data/schreiber2016_templates.h5``.
@@ -81,7 +81,7 @@ def main() -> int:
         f.attrs["arxiv"] = "1606.00841"
         f.attrs["upstream"] = "pcigale.data.SimpleDatabase('schreiber2016')"
         f.attrs["axes"] = "(tdust, wavelength)"
-        f.attrs["spectra_unit"] = "L_lambda per W input (raw W/nm/kg; loader normalises)"
+        f.attrs["spectra_unit"] = "L_lambda per W input (raw W/nm/kg; loader normalizes)"
         f.attrs["mixing"] = "(1-fpah)*continuum + fpah*pah, energy-balance to L_absorbed"
         f.attrs["generated_by"] = "scripts/regenerate_schreiber2016_from_cigale.py"
     print(f"Wrote {out_path} ({out_path.stat().st_size / 1024 / 1024:.2f} MB)")

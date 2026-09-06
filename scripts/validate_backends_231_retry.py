@@ -1,7 +1,7 @@
 """Targeted retry of backends that failed for fixable reasons.
 
 - mcmc_raytrace: harness used wrong kwarg name (n_samples→n_steps)
-- mcmc (auto): NUTS missing context normalisation — bug fixed in src
+- mcmc (auto): NUTS missing context normalization — bug fixed in src
 - native_vi_*: default n_seeds=5 explodes compile; now pinned to 1
 - mcmc_nuts: dense_mass→dense_mass_matrix kwarg name (fixed)
 """
