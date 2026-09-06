@@ -42,8 +42,12 @@ This file guards:
    registered parameter names for every physics parameter they share
    (RULING R12d): a hand-written map cannot notice a future rename, so the
    comparison is computed from live introspection on both sides.
-4. ``agn_radius_ratio``, ``agn_polar_T``, ``agn_polar_beta`` are live (nonzero
-   gradient) on BOTH the class path and the composable path.
+4. ``agn_radius_ratio`` is live (nonzero gradient) on BOTH the class path and
+   the composable path. ``agn_polar_T``/``agn_polar_beta`` are live on the
+   class path and, on the composable path, ONLY when the standalone
+   ``polar_dust`` attenuation block is selected (R22, task13 fix-round-1:
+   the composable torus block no longer bundles its own polar-dust term) --
+   inert (zero gradient) with ``atten='none'``.
 5. The vendored SKIRTOR grid's three ``radius_ratio`` nodes ([10, 20, 30])
    each produce a finite, mutually-distinct SED -- the grid is tracked in
    this repository, so its absence is a test FAILURE, never a skip.
@@ -377,11 +381,31 @@ def test_skirtor_composable_and_class_param_names_reconciled():
         f"block-only (unexpected) {sorted(shared_block - shared_class)}"
     )
 
-    # The three parameters this task specifically wires/reconciles must be
-    # registered identically on both paths.
-    for name in ("agn_radius_ratio", "agn_polar_T", "agn_polar_beta"):
+    # agn_radius_ratio is registered identically on both paths.
+    assert "agn_radius_ratio" in class_names, (
+        "agn_radius_ratio missing from SKIRTORTorus.declared_parameters()"
+    )
+    assert "agn_radius_ratio" in block_names, (
+        "agn_radius_ratio missing from skirtor_torus_block's signature"
+    )
+
+    # agn_polar_T / agn_polar_beta: R22 (task13 fix-round-1) removed the
+    # composable torus block's bundled Casey (2012) polar-dust graybody --
+    # the standalone SKIRTORTorus class keeps it (monolithic path), but the
+    # composable path's polar dust is owned exclusively by the standalone
+    # ``polar_dust`` attenuation block (and its
+    # ``polar_dust_reemission_lnu`` companion), selected via
+    # ``agn={'atten': {'type': 'polar_dust'}}`` -- not by the torus block.
+    # So these two names are now class-only, by design, not an accidental
+    # drift this test should paper over.
+    for name in ("agn_polar_T", "agn_polar_beta"):
         assert name in class_names, f"{name} missing from SKIRTORTorus.declared_parameters()"
-        assert name in block_names, f"{name} missing from skirtor_torus_block's signature"
+        assert name not in block_names, (
+            f"{name} is present on skirtor_torus_block's signature, but R22 "
+            f"retired the composable torus block's bundled polar dust -- this "
+            f"name should live only in the polar_dust attenuation block "
+            f"(and its reemission companion) now."
+        )
 
 
 def test_skirtor_radius_ratio_polar_t_polar_beta_live_on_class_path(class_component):
@@ -404,17 +428,9 @@ def test_skirtor_radius_ratio_polar_t_polar_beta_live_on_class_path(class_compon
         assert g != 0.0, f"SKIRTORTorus.predict(): {name} has zero gradient (dead parameter)"
 
 
-def test_skirtor_radius_ratio_polar_t_polar_beta_live_on_composable_path(ssp):
-    """agn_radius_ratio, agn_polar_T, agn_polar_beta must have nonzero gradient
-    through the composable skirtor_torus_block, with 'norm': 'independent'
-    explicit (no cross-block energy coupling to confound the measurement).
-
-    Built ONCE with the three params FREE so they are ordinary entries of the
-    sampled ``params`` dict; differentiated by perturbing that dict entry
-    directly (``model.predict_photometry``, the JIT/vmap-safe surface),
-    never by rebuilding the model at a traced value (``Fixed(...)`` coerces
-    its argument via ``float()`` at construction and cannot accept a tracer).
-    """
+def _skirtor_composable_model(ssp, *, atten: dict):
+    """One composable-AGN build with the SKIRTOR torus, radius_ratio FREE on
+    the torus sub-block, and the given ``atten`` sub-block dict."""
     agn = dict(
         _DISC,
         # radius_ratio partitions as an 'agn.torus' parameter -- nest it there.
@@ -423,35 +439,95 @@ def test_skirtor_radius_ratio_polar_t_polar_beta_live_on_composable_path(ssp):
             "all_params": tengri.Fixed(tengri.DEFAULT),
             "radius_ratio": tengri.FREE,
         },
-        # polar_T/polar_beta partition as 'agn.atten' parameters in the
-        # builder grammar (shared with the polar_dust attenuation block),
-        # even though skirtor_torus_block ALSO reads them directly as its
-        # own kwargs (its bundled polar-dust reemission, independent of
-        # whichever 'atten' block, if any, is separately selected).
-        atten={
-            "all_params": tengri.Fixed(tengri.DEFAULT),
-            "polar_T": tengri.FREE,
-            "polar_beta": tengri.FREE,
-        },
+        atten=atten,
         norm="independent",
     )
-    model = tengri.SEDModel.build(
+    return tengri.SEDModel.build(
         ssp,
         sfh=_SFH,
         dust_attenuation=_DUST,
         agn=agn,
         redshift=tengri.Fixed(0.05),
     )
+
+
+def test_skirtor_radius_ratio_live_on_composable_path(ssp):
+    """agn_radius_ratio must have nonzero gradient through the composable
+    skirtor_torus_block, with 'norm': 'independent' explicit (no cross-block
+    energy coupling to confound the measurement).
+
+    Built ONCE with the param FREE so it is an ordinary entry of the sampled
+    ``params`` dict; differentiated by perturbing that dict entry directly
+    (``model.predict_photometry``, the JIT/vmap-safe surface), never by
+    rebuilding the model at a traced value (``Fixed(...)`` coerces its
+    argument via ``float()`` at construction and cannot accept a tracer).
+    """
+    model = _skirtor_composable_model(
+        ssp, atten={"type": "none", "all_params": tengri.Fixed(tengri.DEFAULT)}
+    )
     p = dict(model.spec.sample(jax.random.PRNGKey(0)))
 
     def _obj(pd):
         return jnp.sum(jnp.abs(model.predict(pd).rest_sed()))
 
-    for name in ("agn_radius_ratio", "agn_polar_T", "agn_polar_beta"):
-        assert name in p, f"{name} not free on the composable build (all_params wiring gap)"
-        v0 = jnp.asarray(p[name])
-        g = float(jax.grad(lambda v, name=name: _obj({**p, name: v}))(v0))
-        assert g != 0.0, f"composable skirtor_torus_block: {name} has zero gradient"
+    v0 = jnp.asarray(p["agn_radius_ratio"])
+    g = float(jax.grad(lambda v: _obj({**p, "agn_radius_ratio": v}))(v0))
+    assert g != 0.0, "composable skirtor_torus_block: agn_radius_ratio has zero gradient"
+
+
+def test_skirtor_polar_t_polar_beta_live_only_with_atten_polar_dust(ssp):
+    """agn_polar_T/agn_polar_beta are live on the composable path ONLY when
+    ``atten='polar_dust'`` is explicitly selected, and inert under
+    ``atten='none'`` -- R22 (task13 fix-round-1) retired
+    ``skirtor_torus_block``'s bundled Casey (2012) polar-dust reemission;
+    the composable path's ONE polar-dust mechanism now lives exclusively in
+    the standalone ``polar_dust`` attenuation block (Stage 5) and its
+    ``polar_dust_reemission_lnu`` companion (Stage 6), which run only when
+    ``agn_attenuation_block == 'polar_dust'``.
+    """
+    live_model = _skirtor_composable_model(
+        ssp,
+        atten={
+            "type": "polar_dust",
+            "all_params": tengri.Fixed(tengri.DEFAULT),
+            "polar_T": tengri.FREE,
+            "polar_beta": tengri.FREE,
+        },
+    )
+    p_live = dict(live_model.spec.sample(jax.random.PRNGKey(0)))
+
+    def _obj_live(pd):
+        return jnp.sum(jnp.abs(live_model.predict(pd).rest_sed()))
+
+    for name in ("agn_polar_T", "agn_polar_beta"):
+        assert name in p_live, f"{name} not free under atten='polar_dust' (wiring gap)"
+        v0 = jnp.asarray(p_live[name])
+        g = float(jax.grad(lambda v, name=name: _obj_live({**p_live, name: v}))(v0))
+        assert g != 0.0, f"atten='polar_dust': {name} has zero gradient"
+
+    # Explicit short-key priors under atten='none': the names are declared
+    # (the short-key path is independent of block-selection scoping), but
+    # nothing on the composable path reads them when polar_dust is not the
+    # selected attenuation block -- inert, not merely "not offered".
+    inert_model = _skirtor_composable_model(
+        ssp,
+        atten={
+            "type": "none",
+            "all_params": tengri.Fixed(tengri.DEFAULT),
+            "polar_T": tengri.FREE,
+            "polar_beta": tengri.FREE,
+        },
+    )
+    p_inert = dict(inert_model.spec.sample(jax.random.PRNGKey(0)))
+
+    def _obj_inert(pd):
+        return jnp.sum(jnp.abs(inert_model.predict(pd).rest_sed()))
+
+    for name in ("agn_polar_T", "agn_polar_beta"):
+        assert name in p_inert, f"{name} not free under atten='none' (short-key wiring gap)"
+        v0 = jnp.asarray(p_inert[name])
+        g = float(jax.grad(lambda v, name=name: _obj_inert({**p_inert, name: v}))(v0))
+        assert g == 0.0, f"atten='none': {name} has NONZERO gradient (0.0 expected -- inert)"
 
 
 class TestSkirtorRadiusRatioGridNodes:
