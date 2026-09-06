@@ -180,7 +180,6 @@ UNCURATED_DOIS = frozenset(
         "10.1086/510378",  # drude_profiles.py +4
         "10.1086/519990",  # xray.py
         "10.1086/651008",  # desi.py +1
-        "10.1088/0004-637x/685/1/160",  # nenkova_agnfitter.py
         "10.1088/0004-637x/708/1/58",  # attenuation.py
         "10.1088/0004-637x/724/1/559",  # sed_quantities.py
         "10.1088/0004-637x/737/2/67",  # unified.py +2

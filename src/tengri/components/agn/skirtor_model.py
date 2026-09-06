@@ -12,9 +12,10 @@ References
 .. [1] M. Stalevski et al., "3D radiative transfer modeling of the dusty
    torus around AGN, the influence of clumping," MNRAS, 420, 2756 (2012).
    arXiv:1109.1286. https://doi.org/10.1111/j.1365-2966.2011.19775.x
-.. [2] M. Stalevski et al., "The dust covering factor in AGN: combining the
-   IR torus emission with polar dust component," MNRAS, 458, 2288 (2016).
-   arXiv:1602.01954. https://doi.org/10.1093/mnras/stw444
+.. [2] M. Stalevski, C. Ricci, Y. Ueda, P. Lira, J. Fritz, and M. Baes,
+   "The dust covering factor in active galactic nuclei," MNRAS, 458,
+   2288 (2016). arXiv:1602.06954. bibcode:2016MNRAS.458.2288S.
+   https://doi.org/10.1093/mnras/stw444
 """
 
 from __future__ import annotations

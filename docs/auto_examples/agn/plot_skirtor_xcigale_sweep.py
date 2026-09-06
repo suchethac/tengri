@@ -29,7 +29,7 @@ References
 .. [1] M. Stalevski et al., "3D radiative transfer modeling of the dusty torus
    around AGN," MNRAS 420, 2756 (2012). arXiv:1109.1286.
 .. [2] M. Stalevski et al., "The dust covering factor in active galactic
-   nuclei," MNRAS 458, 2288 (2016). arXiv:1602.01954.
+   nuclei," MNRAS 458, 2288 (2016). arXiv:1602.06954.
 .. [3] M. Boquien et al., "CIGALE: a python Code Investigating GALaxy Emission,"
    A&A 622, A103 (2019). arXiv:1811.03094.
 """

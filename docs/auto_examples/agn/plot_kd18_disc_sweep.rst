@@ -35,9 +35,10 @@ transforms across the two-dimensional parameter space.
 
 References
 ----------
-.. [1] A. Kubota & C. Done, "A physical interpretation of the hard
-   X-ray excess in low-luminosity AGN," MNRAS 480, 1247 (2018).
-   arXiv:1804.02334. https://doi.org/10.1093/mnras/sty1890
+.. [1] A. Kubota and C. Done, "A physical model of the broad-band continuum
+   of AGN and its implications for the UV/X relation and optical
+   variability," MNRAS, 480, 1247 (2018). doi:10.1093/mnras/sty1890.
+   arXiv:1804.00171. bibcode:2018MNRAS.480.1247K.
 
 .. GENERATED FROM PYTHON SOURCE LINES 23-138
 

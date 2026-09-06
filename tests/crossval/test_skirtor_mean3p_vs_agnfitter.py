@@ -23,7 +23,7 @@ shape residual).
 
 References
 ----------
-.. [1] Stalevski et al. 2016, MNRAS, 458, 2288. arXiv:1602.01954.
+.. [1] Stalevski et al. 2016, MNRAS, 458, 2288. arXiv:1602.06954.
 .. [2] Martinez-Ramirez et al. 2024, A&A, 688, A46 (AGNfitter-rX). arXiv:2405.12111.
 """
 

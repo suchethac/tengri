@@ -9,9 +9,10 @@ support K&D18 through the unified AGN registry.
 
 References
 ----------
-.. [1] A. Kubota & C. Done, "A physical interpretation of the hard
-   X-ray excess in low-luminosity AGN," MNRAS 480, 1247 (2018).
-   arXiv:1804.02334. https://doi.org/10.1093/mnras/sty1890
+.. [1] A. Kubota and C. Done, "A physical model of the broad-band continuum
+   of AGN and its implications for the UV/X relation and optical
+   variability," MNRAS, 480, 1247 (2018). doi:10.1093/mnras/sty1890.
+   arXiv:1804.00171. bibcode:2018MNRAS.480.1247K.
 .. [2] A. A. Beloborodov, "Energetic Radiation from Accretion Tori,"
    ApJ 510, L123 (1999). arXiv:astro-ph/9810145.
 """

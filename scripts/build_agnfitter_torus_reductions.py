@@ -51,8 +51,9 @@ etc.) applies per-L_sun normalization at evaluation time.
 
 References
 ----------
-.. [1] M. Nenkova et al., ApJ 685, 160 (2008). arXiv:0806.1512.
-.. [2] M. Stalevski et al., MNRAS, 458, 2288 (2016). arXiv:1602.01954.
+.. [1] M. Nenkova et al., "AGN Dusty Tori. II. Observational Implications of
+   Clumpiness," ApJ 685, 160 (2008). arXiv:0806.0512. bibcode:2008ApJ...685..160N.
+.. [2] M. Stalevski et al., MNRAS, 458, 2288 (2016). arXiv:1602.06954.
 .. [3] S. F. Hönig & M. Kishimoto, ApJL 838, L20 (2017). arXiv:1702.08691.
 .. [4] L. N. Martínez-Ramírez et al., "AGNfitter-rx: Modeling the
    radio-to-X-ray spectral energy distributions of AGNs," A&A 688, A46

@@ -14,7 +14,8 @@ row-by-row reader in ``scripts/build_agnfitter_bbb_reference.py``).
 
 References
 ----------
-.. [1] M. Nenkova et al., ApJ 685, 160 (2008). arXiv:0806.1512.
+.. [1] M. Nenkova et al., "AGN Dusty Tori. II. Observational Implications of
+   Clumpiness," ApJ 685, 160 (2008). arXiv:0806.0512. bibcode:2008ApJ...685..160N.
 .. [2] Martínez-Ramírez et al., A&A 688, A46 (2024) (AGNfitter-rX). arXiv:2405.12111.
 """
 
