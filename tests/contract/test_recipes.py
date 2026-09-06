@@ -173,7 +173,13 @@ RECIPE_FREE_PARAMS = {
         # agn_panchromatic entry above for the same, longer-standing note).
         "agn_radius_ratio",
         "agn_tau_skirtor",
-        "agn_torus_frac",
+        # agn_torus_frac REMOVED (Task 16, #2189, R15): this recipe's
+        # agn_ir_frac (fracAGN) is free, and AGNSEDComponent.apply()
+        # overrides whatever agn_torus_frac is given whenever fracAGN is
+        # active -- freeing it was a dead sampler dimension (measured: 0.0
+        # relative photometry change across its whole range under this
+        # exact condition). The agn.torus sub-block's own wildcard now
+        # narrows it out automatically.
         "dust_tau_bc",
         "dust_tau_diff",
         "met_logzsol",

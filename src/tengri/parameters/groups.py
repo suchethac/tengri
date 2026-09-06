@@ -1056,7 +1056,12 @@ def parse_groups(**kwargs) -> Parameters:
     # structural variant that group selected. Computed once, consulted once in
     # the resolve loop below; see :func:`_wildcard_scopes` for why every group
     # with a structural axis needs an entry and what happens when one lacks it.
-    wildcard_scopes = _wildcard_scopes(structural_kwargs, structural_params, param_partition)
+    wildcard_scopes = _wildcard_scopes(
+        structural_kwargs,
+        structural_params,
+        param_partition,
+        agn_ir_frac_active=_agn_ir_frac_explicit_and_active(kwargs.get("agn")),
+    )
 
     # Outcome of every *active* ``all_params: FREE`` wildcard, keyed by the
     # group it was written in. ``FREE`` resolves to the registry default, which
@@ -1269,7 +1274,9 @@ def parse_groups(**kwargs) -> Parameters:
     if not allow_empty_wildcard:
         _check_wildcard_freed_something(
             _seed_zero_declaration_wildcards(
-                _narrow_outcome_to_selected_component(wildcard_free_outcome, structural_params),
+                _narrow_outcome_to_selected_component(
+                    wildcard_free_outcome, structural_params, wildcard_scopes
+                ),
                 kwargs,
             )
         )
@@ -1586,6 +1593,7 @@ def _declared_param_names(component_type: str) -> frozenset[str] | None:
 def _narrow_outcome_to_selected_component(
     outcome: dict[str, list[tuple[str, bool]]],
     structural_params,
+    wildcard_scopes: dict[str, frozenset[str] | None] | None = None,
 ) -> dict[str, list[tuple[str, bool]]]:
     """Restrict a sub-block's wildcard outcome to its selected component's params.
 
@@ -1607,12 +1615,26 @@ def _narrow_outcome_to_selected_component(
         Group name -> list of ``(param_name, was_freed)``.
     structural_params : StructuralParams
         Carries the selected component per sub-block.
+    wildcard_scopes : dict, optional
+        The SAME per-group scopes :func:`_wildcard_scopes` computed earlier
+        in this parse (param name -> the group's actual freeable set). For
+        an ``agn.<category>`` group this is consulted INSTEAD of
+        re-deriving the declared set from
+        :func:`_agn_subblock_declared_params` directly: that raw
+        introspection cannot see build-specific narrowing (#2189, RULING
+        R15: ``agn_torus_frac`` dropped from the ``agn.torus`` scope when
+        fracAGN is active), so re-deriving it here silently un-does that
+        narrowing and reports the excluded parameter as "stuck; no
+        declared prior" -- true for #1482's dale2014 case, false and
+        misleading for this one. ``None`` (the default) preserves the
+        pre-#2189 behavior for any caller not yet threading it through.
 
     Returns
     -------
     dict
         ``outcome`` with narrowed sub-block entries; other groups pass through.
     """
+    wildcard_scopes = wildcard_scopes or {}
     narrowed = dict(outcome)
     for group, attr in _SUBBLOCK_COMPONENT_ATTR.items():
         if group not in narrowed:
@@ -1621,7 +1643,11 @@ def _narrow_outcome_to_selected_component(
         if component_type is None:
             continue
         if group.startswith("agn."):
-            declared = _agn_subblock_declared_params(group[len("agn.") :], component_type)
+            declared = wildcard_scopes.get(group)
+            if declared is None and group not in wildcard_scopes:
+                # No entry at all (caller did not thread wildcard_scopes
+                # through): fall back to the raw, un-narrowed introspection.
+                declared = _agn_subblock_declared_params(group[len("agn.") :], component_type)
         else:
             declared = _declared_param_names(component_type)
         if declared is None:
@@ -2388,10 +2414,74 @@ def check_agn_torus_registry_agreement() -> None:
         )
 
 
+#: Every spelling that resolves to ``agn_ir_frac`` (fracAGN) in the raw,
+#: pre-resolution ``agn={...}`` dict: the canonical full name, its bare short
+#: form, and both spellings of the pre-#1296 legacy name.
+_AGN_IR_FRAC_SPELLINGS = frozenset({"agn_ir_frac", "ir_frac", "agn_fracAGN", "fracAGN"})
+
+
+def _agn_ir_frac_explicit_and_active(agn_dict: object) -> bool:
+    """Whether the raw ``agn={...}`` dict explicitly sets fracAGN active.
+
+    Used to narrow the ``agn.torus`` sub-block's own wildcard scope (#2189,
+    RULING R15): whenever fracAGN is explicitly active,
+    ``AGNSEDComponent.apply`` (``components/agn/component.py``) OVERRIDES
+    whatever ``agn_torus_frac`` the user or wildcard supplied with a value
+    derived from the dust-absorbed stellar luminosity (the CIGALE
+    skirtor2016 ``agn_power = L_absorbed x fracAGN/(1-fracAGN)`` coupling),
+    so freeing ``agn_torus_frac`` under those conditions hands the sampler a
+    dimension with zero effect on the SED -- measured (F1): 0.0 relative
+    change in photometry across the full ``agn_torus_frac`` range whenever
+    fracAGN is explicitly active, versus 8.5x-30.6x otherwise.
+
+    Checked on the RAW dict, before alias/short-key resolution runs (this is
+    consulted while computing wildcard scopes, upstream of per-parameter
+    resolution) -- every spelling in :data:`_AGN_IR_FRAC_SPELLINGS` is tried,
+    since a user may write any of the full/short, canonical/legacy forms.
+
+    Parameters
+    ----------
+    agn_dict : object
+        The raw ``agn`` group value from the caller's kwargs (normally a
+        dict; anything else returns ``False``).
+
+    Returns
+    -------
+    bool
+        ``True`` iff fracAGN is explicitly given AND can be nonzero: a free
+        prior (``Uniform``, ...; almost surely samples positive), a bare
+        positive scalar, or ``Fixed`` at a positive value.
+        ``Fixed(DEFAULT)`` (fracAGN's own registry default is 0.0) and an
+        explicit ``Fixed(0.0)`` both return ``False`` -- explicit-but-inert,
+        not the conflict this guards.
+    """
+    if not isinstance(agn_dict, dict):
+        return False
+    for key in _AGN_IR_FRAC_SPELLINGS:
+        if key not in agn_dict:
+            continue
+        value = agn_dict[key]
+        if isinstance(value, Fixed):
+            if _is_default_fixed(value):
+                return False
+            val = value.value
+            return isinstance(val, (int, float)) and float(val) > 0.0
+        if isinstance(value, (int, float)):
+            return float(value) > 0.0
+        # A Distribution (Uniform, LogUniform, ...): a free prior, almost
+        # surely samples positive, so treat any free prior as active
+        # regardless of bounds. Anything else (e.g. a bare string) is not a
+        # value this parameter can take; not active.
+        return isinstance(value, Distribution)
+    return False
+
+
 def _wildcard_scopes(
     structural_kwargs: dict,
     structural_params: Parameters,
     param_partition: dict[str, str],
+    *,
+    agn_ir_frac_active: bool = False,
 ) -> dict[str, frozenset[str] | None]:
     """Per-group scope for ``all_params: FREE``, keyed by group name.
 
@@ -2403,6 +2493,12 @@ def _wildcard_scopes(
         Structural-only spec, used for the selected ``dust_emission`` engine.
     param_partition : dict
         Parameter name -> owning group, from :func:`_partition_by_group`.
+    agn_ir_frac_active : bool, keyword-only
+        Whether the raw ``agn={...}`` dict explicitly sets fracAGN active
+        (:func:`_agn_ir_frac_explicit_and_active`). When true, ``agn_torus_frac``
+        is removed from the ``agn.torus`` sub-block's own wildcard scope
+        (#2189, RULING R15): it is overridden and inert whenever fracAGN is
+        active, so freeing it would hand the sampler a dead dimension.
 
     Returns
     -------
@@ -2457,7 +2553,15 @@ def _wildcard_scopes(
         elif group.startswith("agn."):
             category = group[len("agn.") :]
             block_type = structural_kwargs.get(_AGN_BLOCK_TO_KWARG.get(category, ""))
-            scopes[group] = _agn_subblock_declared_params(category, block_type)
+            declared = _agn_subblock_declared_params(category, block_type)
+            # #2189 (RULING R15): agn_torus_frac is overridden and inert
+            # whenever fracAGN is explicitly active (see
+            # _agn_ir_frac_explicit_and_active); the torus sub-block's own
+            # wildcard must never free a dimension the CIGALE coupling
+            # discards regardless of its value.
+            if category == "torus" and agn_ir_frac_active and declared:
+                declared = declared - {"agn_torus_frac"}
+            scopes[group] = declared
 
     # ── radio: the selected sf mode / agn model ──
     scopes["radio.sf"] = _RADIO_SF_PARAMS_BY_MODE.get(

@@ -973,6 +973,73 @@ def _validate_fracagn_requires_dust(spec) -> None:
         )
 
 
+def _validate_torus_frac_fracagn_conflict(spec) -> None:
+    """Raise if BOTH agn_torus_frac AND fracAGN are explicitly set (#2189, R15).
+
+    ``AGNSEDComponent.apply`` (``components/agn/component.py``) OVERRIDES
+    whatever ``agn_torus_frac`` a caller supplies with a value derived from
+    the dust-absorbed stellar luminosity (the CIGALE skirtor2016
+    ``agn_power = L_absorbed x fracAGN/(1-fracAGN)`` coupling) whenever
+    fracAGN (``agn_ir_frac``) is active -- regardless of ``agn_norm``.
+    Explicitly naming BOTH an ``agn_torus_frac`` prior/Fixed value AND an
+    active fracAGN is therefore a contradiction: the torus_frac value is
+    silently discarded. Measured (F1): 0.0 relative photometry change across
+    the full ``agn_torus_frac`` range whenever fracAGN is explicitly active
+    (any ``agn_norm``), versus 8.5x-30.6x when fracAGN is left at its
+    registry default (0.0, inactive).
+
+    This is a build-time safety gate, mirroring
+    :func:`_validate_fracagn_requires_dust`. The companion narrowing --
+    ``agn.torus={'all_params': FREE}`` never freeing ``agn_torus_frac`` when
+    fracAGN is active -- is a SEPARATE mechanism
+    (``parameters.groups._agn_ir_frac_explicit_and_active``, consulted while
+    computing wildcard scopes): a wildcard silently omits it, but naming both
+    explicitly is loud, because a caller who spells out ``agn_torus_frac``
+    expects it to do something.
+
+    Raises
+    ------
+    ConfigError
+        If ``agn_torus_frac`` was explicitly given a prior or Fixed value
+        (provenance ``user_prior``/``user_fixed``/``user_free``/
+        ``user_free_grid`` -- NOT ``registry_default`` or any
+        ``wildcard_*`` tag) AND fracAGN (``agn_ir_frac``) is active (FREE, or
+        Fixed with a positive, non-default value).
+
+    See Also
+    --------
+    #2189 : agn_torus_frac silently discarded under fracAGN coupling.
+    """
+    from tengri.config.exceptions import ConfigError
+
+    provenance = getattr(spec, "_group_provenance", None) or {}
+    _EXPLICIT_TAGS = {"user_prior", "user_fixed", "user_free", "user_free_grid"}
+
+    if provenance.get("agn_torus_frac") not in _EXPLICIT_TAGS:
+        return  # torus_frac was not explicitly given; nothing to conflict with
+
+    if provenance.get("agn_ir_frac") not in _EXPLICIT_TAGS:
+        return  # fracAGN was not explicitly given (default 0.0 is inactive)
+
+    free = set(spec.free_params)
+    fixed = spec.get_fixed_values()
+    ir_frac_active = ("agn_ir_frac" in free) or (float(fixed.get("agn_ir_frac", 0.0)) > 0.0)
+    if not ir_frac_active:
+        return  # explicit but Fixed at 0.0: inert, not the conflict this guards
+
+    raise ConfigError(
+        "agn_torus_frac and fracAGN (agn_ir_frac) were both explicitly set. "
+        "Whenever fracAGN is active, AGNSEDComponent overrides agn_torus_frac "
+        "with a value derived from the dust-absorbed stellar luminosity (the "
+        "CIGALE skirtor2016 coupling) -- your agn_torus_frac value would be "
+        "silently discarded. Two ways out: (1) drop fracAGN "
+        "(agn={'ir_frac': Fixed(0.0)} or omit it) and keep agn_torus_frac for "
+        "independent torus scaling, or (2) drop agn_torus_frac and let "
+        "fracAGN drive the torus normalization via the CIGALE coupling. "
+        "See issue #2189."
+    )
+
+
 def _validate_dale2014_requires_no_sf_radio(spec) -> None:
     """Raise if dale2014 dust emission is combined with SF radio (#1970).
 
@@ -9147,6 +9214,7 @@ class SEDModel:
 
         spec = parse_groups(**groups)
         _validate_fracagn_requires_dust(spec)
+        _validate_torus_frac_fracagn_conflict(spec)
         _validate_dale2014_requires_no_sf_radio(spec)
         _warn_agn_dust_double_count(spec)
         _warn_dead_gradient_params(spec)
