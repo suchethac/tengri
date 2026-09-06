@@ -33,20 +33,22 @@ gradients per draw by **9.2x** (106.8 to 986.8 on the shipped call). Every
 seconds-level comparison in this report is smaller than that spread.
 
 **The catalog half is a separate answer and it is worse than it looks.** On the
-RTX 3060 the batched `CatalogFitter` path reaches **10.6 s/galaxy at N = 32**
-(5.7 galaxies/minute, 928 MiB peak) — *under* the 20 s budget — with **min ESS
-0.9 of 600 draws, median 1.5, and max split-R-hat 2.72. Zero usable posteriors.**
-The seconds are cheap because the fits are worthless, which is the same trap
-`bench/reports/2026-08-30_gpu_catalog_throughput.md` fell into at D = 3 and is
-why every throughput number here carries its R-hat and ESS columns.
+RTX 3060 the batched `CatalogFitter` path reaches **10.5 s/galaxy**, flat from
+N = 32 to N = 128 (5.7 galaxies/minute, 928-958 MiB peak) — *under* the 20 s
+budget — with **min ESS 0.7 of 600 draws, median 1.6, max split-R-hat 4.42, and
+zero of 128 galaxies reaching ESS 100 or clearing R-hat < 1.01.** The seconds are
+cheap because the fits are worthless, which is the same trap
+`bench/reports/2026-08-30_gpu_catalog_throughput.md` fell into at D = 3 and is why
+every throughput number here carries its R-hat and ESS columns.
 
 **Shared adaptation is not a valid speedup and must not be adopted.**
 `Fitter._fit_batch_vmap_mcmc` — one window adaptation on the first galaxy,
 reused for the rest — buys **11 %** of wall clock (339.9 s -> 306.4 s at N = 32)
 and **freezes 14 of 32 galaxies**, at a unique-draw fraction of **0.002**: every
-proposal rejected. `CatalogFitter`'s per-galaxy adaptation froze **zero** on the
-same 32 galaxies at the same budget. The premise that one galaxy's adapted metric
-serves the others is refused by the measurement.
+proposal rejected, and R-hat and ESS undefined on those lanes because a free
+parameter has zero variance. `CatalogFitter`'s per-galaxy adaptation froze
+**zero** on the same 32 galaxies at the same budget. The premise that one
+galaxy's adapted metric serves the others is refused by the measurement.
 
 **And the warmup cap does not cross the catalog seam.** The single-galaxy lever
 is `warmup_max_num_doublings` — a cap on *warmup only*, with sampling left at
@@ -141,11 +143,13 @@ rest look healthy. The worst parameter is named in every row.
    They inherit the load stamp above and are secondary to the gradient column.
 
 **Every row carries divergences AND unique-draw fraction AND max R-hat together.**
-None is sufficient: this project has measured cells at R-hat 2.97 with zero
-divergences, and #1999 records a *completely frozen* NUTS chain reporting zero
-divergences and an R-hat near 1.0 because both halves of the split have zero
-variance. The `fit_batch` rows below are exactly that failure and only the
-unique-draw column sees them.
+None is sufficient, and Finding 5 measures each of the three failing in turn:
+32 catalog lanes with **zero** divergences at max split-R-hat up to **2.696**;
+14 frozen lanes on which R-hat and ESS are **undefined** because a free parameter
+has zero variance; and a unique-draw fraction of **0.002** as the only column
+that names the freeze. #1999 is the standing warning — a completely frozen NUTS
+chain can report zero divergences and an R-hat near 1.0 — and it is why the
+divergence count is never read alone here.
 
 ## Finding 0 — the gradient columns are load-independent; the seconds are not, and fewer cores are faster
 
@@ -280,41 +284,55 @@ returns `num_trajectory_expansions` per galaxy (`catalog.py` discards
 `CatalogFitter.run("mcmc_nuts", ...)` on `ctl-dpl`, 600 warmup + 600 draws,
 one chain per galaxy, `precondition=0.5`, `max_num_doublings=5`, RTX 3060,
 `forward_chunk_size` K as noted. Wall is the **warm** (second) call, so compile is
-excluded; the cold call is recorded in the JSONL.
+excluded; the cold call is recorded in the JSONL and is 1.4-5.8 % above the warm
+one at every width, i.e. compile is already negligible against sampling at this
+budget.
 
-| arm | N | K | wall (s) | **s/galaxy** | gal/min | converged | frozen | max R-hat | min ESS | med ESS | min uniq |
-|---|---|---|---|---|---|---|---|---|---|---|---|
-| `catalog` | 8 | 8 | 346.3 | 43.29 | 1.4 | **0** | 0 | 3.2161 | 1.1 | 1.7 | 0.972 |
-| `catalog` | 32 | 32 | 339.9 | **10.62** | 5.7 | **0** | 0 | 2.7179 | 0.9 | 1.5 | 0.963 |
-| `fit_batch` | 8 | - | 287.8 | 35.98 | 1.7 | **0** | **5** | 2.9181 | 0.6 | 0.6 | **0.002** |
-| `fit_batch` | 32 | - | 306.4 | 9.57 | 6.3 | **0** | **14** | 3.8970 | 0.6 | 0.7 | **0.002** |
+| arm | N | K | wall (s) | **s/galaxy** | gal/min | converged | frozen | max R-hat | med R-hat | min ESS | med ESS | best ESS | min uniq |
+|---|---|---|---|---|---|---|---|---|---|---|---|---|---|
+| `catalog` | 8 | 8 | 346.3 | 43.29 | 1.4 | **0** | 0 | 3.2161 | - | 1.1 | 1.7 | - | 0.972 |
+| `catalog` | 32 | 32 | 339.9 | **10.62** | 5.7 | **0** | 0 | 2.7179 | 1.310 | 0.9 | 1.5 | 77.6 | 0.963 |
+| `catalog` | **128** | 32 | 1343.8 | **10.50** | 5.7 | **0** | 0 | 4.4172 | 1.308 | 0.7 | 1.6 | 64.8 | 0.797 |
+| `fit_batch` | 8 | - | 287.8 | 35.98 | 1.7 | **0** | **5** | 2.9181 | - | 0.6 | 0.6 | - | **0.002** |
+| `fit_batch` | 32 | - | 306.4 | 9.57 | 6.3 | **0** | **14** | 3.8970 | 2.501 | 0.6 | 0.7 | **1.04** | **0.002** |
 
-**The wall is flat from N = 8 to N = 32.** 346.3 s against 339.9 s for four times
-the galaxies: the GPU is nowhere near saturated at eight lanes of a D = 8 model,
-so the marginal galaxy is free until the device fills. That is the real content
-of "catalog is parallel", and it is why per-galaxy seconds fall through the 20 s
-line at N = 32 while nothing about the fit improved.
+**The batched path is genuinely parallel, and the number is 10.5 s/galaxy.** The
+wall is flat from N = 8 to N = 32 (346.3 s against 339.9 s for four times the
+galaxies — the GPU is nowhere near saturated at eight lanes of a D = 8 model, so
+the marginal galaxy is free until the device fills), and then exactly linear from
+N = 32 to N = 128 at fixed K = 32 (339.9 s -> 1343.8 s, 3.95x for 4x the
+galaxies). Per-galaxy cost saturates at **10.5-10.6 s** and stays there. That is
+the real content of "catalog is parallel", it is under the 20 s budget, and it is
+reproducible to within 1 % across a 4x change in catalog size.
 
 **Peak GPU memory was 928-958 MiB** of the 12 288 MiB card across every cell,
 including N = 128. Memory is not the binding constraint on this path at this
 dimension; the standing "limit the memory usage" requirement is satisfied with
-two orders of magnitude of headroom, and K is available as a knob long before it
-is needed.
+more than an order of magnitude of headroom, and `forward_chunk_size` is
+available as a knob long before it is needed.
 
-**And every cell converged zero galaxies.** Min ESS 0.9 of 600 draws. This is the
-same shape as `bench/reports/2026-08-30_gpu_catalog_throughput.md`'s
-"304 galaxies/GPU-minute of which zero are usable", one fixture and five
-dimensions further out, and it is why the throughput columns above are never
-printed without the four diagnostic columns beside them.
+**And every cell converged zero galaxies.** At N = 128: median per-galaxy split
+R-hat **1.308**, 90th percentile 2.274, max 4.417; median min ESS **1.56** of 600
+draws; the single best galaxy in the catalog reaches ESS **64.8**, and **none of
+the 128 reaches 100**. This is the same shape as
+`bench/reports/2026-08-30_gpu_catalog_throughput.md`'s "304 galaxies/GPU-minute of
+which zero are usable", one fixture and five dimensions further out, and it is why
+the throughput columns above are never printed without the diagnostic columns
+beside them.
 
-## Finding 5 — shared adaptation freezes lanes, and the divergence column cannot see it
+**Sixty-eight of those 128 lanes report zero divergences**, at max split-R-hat
+between **1.029 and 4.417**. Read on the divergence column alone this catalog is
+53 % clean. Finding 6 is why the ESS is what it is.
+
+## Finding 5 — shared adaptation freezes 44 % of the catalog to buy 11 % of the wall clock
 
 The `fit_batch` rows are `Fitter._fit_batch_vmap_mcmc`: **one** window adaptation,
 run on the first galaxy, its step size and mass matrix reused for every other
-galaxy. It is the convention that could make a 20 s/galaxy budget plausible,
-because warmup is 71.6 % of a zero-compile NUTS fit and this arm pays it once for
-the whole batch. The brief's condition on it was explicit — *"it is only valid if
-one galaxy's adapted metric actually serves the others"*.
+galaxy (`fitter.py`). It is the convention that could make a 20 s/galaxy budget
+plausible, because warmup is 71.6 % of a zero-compile NUTS fit and this arm pays
+it once for the whole batch instead of N times. The brief's condition on it was
+explicit — *"it is only valid if one galaxy's adapted metric actually serves the
+others"*.
 
 It does not.
 
@@ -323,21 +341,44 @@ It does not.
 | wall at N = 32 | 339.9 s | 306.4 s (**1.11x**) |
 | frozen galaxies | **0 / 32** | **14 / 32** |
 | min unique-draw fraction | 0.963 | **0.002** |
+| median per-galaxy R-hat | 1.310 | **2.501** |
 | max split-R-hat | 2.7179 | 3.8970 |
-| min ESS | 0.9 | 0.6 |
+| median per-galaxy min ESS | 1.48 | 0.74 |
+| best galaxy's min ESS | 77.57 | **1.04** |
+| galaxies clearing R-hat < 1.01 with zero divergences | 0 | 0 |
 
-A unique-draw fraction of 0.002 over 600 draws means roughly one distinct
-position per chain: every proposal rejected, the chain never moved. **44 % of the
-catalog** is in that state at N = 32 and 62 % at N = 8, and it is bought for an
-**11 %** wall-clock saving. The `frozen` count comes from the library's own
-`catalog_convergence`, which classifies on the unique-value and zero-variance
-tests rather than on divergences, because a frozen chain reports zero divergences
-and a split R-hat near 1.0 — #1999. A campaign reading the divergence column
-alone would have scored this arm as the winner.
+A unique-draw fraction of 0.002 over 600 draws is roughly one distinct position
+per chain: the chain never moved. **44 % of the catalog** is in that state at
+N = 32, and 62 % at N = 8, bought for an **11 %** wall-clock saving. The effect
+is not confined to the frozen tail either — the *best* galaxy in the shared arm
+reaches min ESS **1.04**, against 77.57 in the per-galaxy arm, so sharing the
+adaptation degrades every lane and not merely the ones it kills.
+
+**Three diagnostics, and each of them is blind somewhere in this table.** The
+brief required all three on every row and this cell is why:
+
+* **Divergences do see the freeze here** — the 14 frozen lanes report **596-600
+  divergences of 600 draws**. That is not the general rule (#1999 records
+  completely frozen NUTS chains reporting *zero*), so it cannot be relied on;
+  it is what happened on this model.
+* **R-hat is undefined on exactly those 14 lanes**, because a free parameter has
+  zero variance and both halves of the split agree perfectly. The one column that
+  is supposed to adjudicate convergence returns nothing precisely where the
+  failure is worst.
+* **Zero divergences means nothing.** Fourteen *other* lanes in the same shared
+  batch have **exactly zero divergences** at max split-R-hat between **1.484 and
+  3.115**. In the per-galaxy arm, **18 of 32 lanes** have zero divergences at
+  R-hat **1.059 to 2.696**. A campaign scoring on the divergence column alone
+  would have called more than half of both catalogs clean.
+
+Only the **unique-draw fraction** separates the frozen lanes from the merely
+unconverged ones, and only R-hat separates the unconverged ones from the healthy
+ones — of which, in these cells, there are none.
 
 **Recommendation: shared adaptation is not a valid speedup on this model and
 should not be adopted.** `CatalogFitter._run_native_mcmc`'s per-galaxy convention
-is both the statistically correct one and, at 1.11x, barely more expensive.
+is both the statistically correct one — a galaxy's posterior should not depend on
+which other galaxies were in its batch — and, at 1.11x, barely more expensive.
 
 ## Finding 6 — the warmup cap does not cross the catalog seam, and that is a code gap rather than a physics one
 
@@ -461,7 +502,7 @@ python bench/scripts/score_photometry_20s.py \
 #    adaptation conventions in one process so they see identical galaxies.
 XLA_PYTHON_CLIENT_PREALLOCATE=false JAX_PLATFORMS=cuda \
 python bench/scripts/benchmark_photometry_catalog_20s.py \
-    --notebook ctl-dpl --n-gal 8 32 --chunk 32 \
+    --notebook ctl-dpl --n-gal 8 32 128 --chunk 32 \
     --warmup 600 --samples 600 --max-doublings 5 --precondition 0.5 \
     --arms catalog fit_batch \
     --json bench/results/2026-09-06_photometry_catalog.jsonl
