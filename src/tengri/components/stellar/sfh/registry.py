@@ -407,12 +407,40 @@ _snorm_burst_spec = SFHModelSpec(
         "sfh_snorm_burst_skew": ParamDef(
             "Skewness", _always_true, "", Uniform(-1.0, 1.0, default=0.0)
         ),
-        # burst_sfr deliberately gets no free_prior: it is an absolute rate in
-        # Msun/yr, so its plausible range is set by the galaxy being fitted and
-        # no galaxy-independent interval exists (same reasoning as
-        # ``dust_L_agn_ir``). Free it explicitly against your own SFR scale.
+        # burst_sfr is dimensionless, not an absolute rate. snorm_burst adds
+        # the flat burst plateau to the BARE skew-normal kernel -- whose peak
+        # value is exactly 1 at age=peak_lbt regardless of width/skew, since
+        # Y=0 there for any skew (see _skewed_gaussian_kernel) -- and only
+        # THEN rescales the whole composite so its integral equals
+        # 10**log_total_mass (_renormalize_to_mass). That renormalization
+        # divides out any absolute scale, so burst_sfr is really the ratio of
+        # the burst plateau's height to the smooth kernel's own unit peak, not
+        # a Msun/yr rate. The claim this replaces ("it is an absolute rate in
+        # Msun/yr") is true of ProSpect's own massfunc_snorm_burst
+        # (Robotham et al. 2020) -- there ``mSFR``/``mburst`` are absolute,
+        # un-rescaled Msun/yr amplitudes with no downstream mass
+        # normalization -- but false of tengri's independent implementation,
+        # which composes the identical functional form inside the
+        # log_total_mass convention shared by every parametric SFH in this
+        # module.
+        #
+        # free_prior=Uniform(0.0, 10.0) is calibrated on that composite by
+        # numerical integration (trapezoid on a 20000-point log-spaced grid,
+        # 1e5-1.4e10 yr), not asserted: at this model's own registry defaults
+        # (width=1 Gyr, burst_age=0.1 Gyr, skew=0) burst_sfr=10 delivers ~29%
+        # of the total formed mass in the burst (0.4% at burst_sfr=0.1); the
+        # achievable fraction at burst_sfr=10 ranges from ~9% (width at its
+        # declared max, 5 Gyr) to ~67% (width at its declared min, 0.2 Gyr) to
+        # ~89% (burst_age at its declared max, 2 Gyr) across the rest of this
+        # model's own declared free ranges -- comparable in order of magnitude
+        # to the separate mixture-type ``burst`` compositor's own
+        # ``log_fburst`` range (up to ~8% at its declared upper edge).
         "sfh_snorm_burst_burst_sfr": ParamDef(
-            "Constant burst SFR amplitude (Msun/yr)", _lo_nonneg, "must have lo >= 0", Fixed(0.0)
+            "Burst plateau amplitude relative to the smooth kernel's unit peak [dimensionless]",
+            _lo_nonneg,
+            "must have lo >= 0",
+            Fixed(0.0),
+            Uniform(0.0, 10.0, "Burst amplitude ratio", default=0.0),
         ),
         "sfh_snorm_burst_burst_age_gyr": ParamDef(
             "Burst lookback duration (Gyr)",
@@ -474,9 +502,26 @@ _tsnorm_burst_spec = SFHModelSpec(
             "must have lo > 0",
             Uniform(1.0, 10.0, default=2.0),
         ),
-        # burst_sfr: no free_prior, for the same reason as the snorm variant.
+        # burst_sfr: same rationale as the snorm variant above -- the kernel
+        # and _renormalize_to_mass are shared, and burst_shape itself is
+        # identical (the truncation factor multiplies only the smooth kernel,
+        # never the burst plateau). The truncation does shrink the smooth
+        # kernel's own area (measured: ~2x smaller at this model's registry
+        # defaults, peak_lbt=5 Gyr and width=1 Gyr, largely independent of
+        # trunc's declared range since burst_age sits well inside the
+        # trunc_factor~1 regime ahead of the peak), so the same burst_sfr
+        # value delivers a somewhat LARGER burst mass fraction here than in
+        # the untruncated snorm_burst. The same free_prior is kept for both
+        # regardless -- one flat convention across the burst family rather
+        # than a per-shape-dependent range -- and it remains conservative:
+        # shrinking A_smooth only pushes the achievable mass fraction higher
+        # within the family's already-documented span, never outside it.
         "sfh_tsnorm_burst_burst_sfr": ParamDef(
-            "Constant burst SFR amplitude (Msun/yr)", _lo_nonneg, "must have lo >= 0", Fixed(0.0)
+            "Burst plateau amplitude relative to the smooth kernel's unit peak [dimensionless]",
+            _lo_nonneg,
+            "must have lo >= 0",
+            Fixed(0.0),
+            Uniform(0.0, 10.0, "Burst amplitude ratio", default=0.0),
         ),
         "sfh_tsnorm_burst_burst_age_gyr": ParamDef(
             "Burst lookback duration (Gyr)",

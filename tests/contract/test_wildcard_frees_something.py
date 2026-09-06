@@ -676,36 +676,141 @@ class TestZeroDeclarationWildcardsRaise2187:
 # refusal with the *group's* context. Only the explicitly-named path raises
 # here, tagged ``"user_free"`` at the point of resolution -- never the
 # wildcard's ``"wildcard_free"`` tag.
+#
+# ``burst_sfr`` was the original repro subject, but a follow-up fix (also
+# #2187) gave ``sfh_snorm_burst_burst_sfr``/``sfh_tsnorm_burst_burst_sfr`` a
+# declared ``free_prior`` -- see ``registry.py``, which turns ``snorm_burst``
+# into a *full* free under the wildcard rather than the mixed case this class
+# needs. ``met_alpha_fe`` (the unshipped alpha-enhancement axis,
+# ``src/tengri/components/stellar/_params.py``) is the new subject: it is
+# deliberately prior-less for a reason unrelated to this seam (a wildcard
+# cannot know whether the loaded SSP grid even carries an alpha-enhanced
+# axis), so it stays a clean no-free-prior repro. ``met={'type': 'delta'}``
+# takes over as the mixed-group repro: ``met_logzsol`` is already free by
+# registry default while ``met_alpha_fe`` and ``met_logzsol_scatter`` are
+# not, so its wildcard is a genuine partial free.
 
 
 class TestExplicitPerParamFreeMustBeHonoredOrRefused2187:
     """A parameter named ``FREE`` by the user must actually free, or refuse."""
 
     def test_explicit_free_on_a_param_with_no_free_prior_raises(self):
-        """``burst_sfr`` declares no free prior: 'no galaxy-independent interval exists'."""
+        """``met_alpha_fe`` declares no free prior: the SSP grid may not support it."""
         with pytest.raises(ParameterError, match=r"no declared free prior") as exc:
             tengri.parse_groups(
-                sfh={
-                    "type": "snorm_burst",
-                    "burst_sfr": FREE,
-                    "all_params": Fixed(DEFAULT),
-                },
+                sfh={"type": "dpl", "all_params": Fixed(DEFAULT)},
+                met={"type": "table", "alpha_fe": FREE},
                 redshift=Fixed(0.1),
             )
-        assert "burst_sfr" in str(exc.value)
+        assert "met_alpha_fe" in str(exc.value)
 
     def test_wildcard_free_on_the_same_group_still_takes_the_adjudication_path(self):
         """The wildcard must never trip the new per-parameter error.
 
-        ``snorm_burst`` mixes params with and without a declared free prior,
-        so its wildcard is the pre-existing partial-free outcome (#1474), not
-        the new per-parameter refusal.
+        ``met={'type': 'delta'}`` mixes params with and without a declared
+        free prior (``met_logzsol`` is free by default; ``met_alpha_fe`` and
+        ``met_logzsol_scatter`` are not), so its wildcard is the pre-existing
+        partial-free outcome (#1474), not the new per-parameter refusal.
         """
-        with pytest.warns(WildcardPartialFreeWarning, match=r"group 'sfh'"):
-            freed = _free(sfh={"type": "snorm_burst", "all_params": FREE})
-        assert any(p.startswith("sfh_snorm_burst_") for p in freed)
+        with pytest.warns(WildcardPartialFreeWarning, match=r"group 'met'"):
+            freed = _free(
+                sfh={"type": "dpl", "all_params": Fixed(DEFAULT)},
+                met={"type": "delta", "all_params": FREE},
+            )
+        assert "met_logzsol" in freed
 
     def test_explicit_free_on_a_param_with_a_declared_free_prior_still_works(self):
         """The documented-working case: naming a freeable parameter by hand."""
         freed = _free(sfh={"type": "dpl", "alpha": FREE, "all_params": Fixed(DEFAULT)})
         assert "sfh_dpl_alpha" in freed
+
+
+# ── Regression: redshift=FREE raises rather than silently pinning ─────
+#
+# #2187 follow-up, same seam as the class above: ``redshift`` used to resolve
+# ``FREE`` straight to its registry default, ``Fixed(0.1)`` -- so
+# ``redshift=FREE`` built a model at z=0.1 with zero warning, a silent
+# ~1e17 flux-scale error class for anyone who actually meant to fit the
+# redshift. No default free prior is invented for it: shipped recipes each
+# pick a survey-specific range (``Uniform(0.01, 6)``, ``Uniform(3.5, 10)``,
+# ``Uniform(0.01, 12)``), so there is no galaxy-independent interval to
+# declare. The documented workaround is the same as for any other
+# no-free-prior parameter: pass an explicit prior.
+
+
+def test_redshift_free_raises_rather_than_silently_pinning():
+    with pytest.raises(ParameterError, match=r"no declared free prior") as exc:
+        tengri.parse_groups(sfh={"type": "dpl", "all_params": Fixed(DEFAULT)}, redshift=FREE)
+    assert "redshift" in str(exc.value)
+
+
+# ── Regression: snorm_burst/tsnorm_burst's burst_sfr now genuinely frees ──
+#
+# #2187 follow-up: ``burst_sfr`` was declared ``Fixed(0.0)`` with no
+# ``free_prior``, on the claim that it names an absolute Msun/yr rate with "no
+# galaxy-independent interval". That claim was false for tengri's own
+# implementation: ``snorm_burst``/``snorm_trunc_burst`` add the flat burst
+# plateau to the BARE (un-rescaled) skew-normal kernel and only then
+# renormalize the whole composite to ``log_total_mass``
+# (``_renormalize_to_mass``), which divides out any absolute scale. So
+# ``burst_sfr`` is a dimensionless ratio of the burst plateau's height to the
+# smooth kernel's own unit peak -- exactly the kind of galaxy-independent,
+# declarable quantity a ``free_prior`` is for. Measured before the fix:
+# ``sfh={'type': 'snorm_burst', 'all_params': FREE}`` froze ``burst_sfr`` at
+# 0.0, which also made the (successfully freed) ``burst_age`` a zero-gradient
+# dimension -- varying where a burst plateau of height zero sits changes
+# nothing. See the ``ParamDef`` comment in
+# ``components/stellar/sfh/registry.py`` for the full derivation (kernel
+# semantics, the ProSpect comparison, and the mass-fraction range) behind
+# ``free_prior=Uniform(0.0, 10.0)``.
+
+
+class TestBurstSfrFreesUnderWildcard2187:
+    """``burst_sfr`` must free under ``all_params: FREE``, alongside ``burst_age``."""
+
+    def test_snorm_burst_wildcard_frees_burst_sfr_and_burst_age(self):
+        freed = _free(sfh={"type": "snorm_burst", "all_params": FREE})
+        assert "sfh_snorm_burst_burst_sfr" in freed
+        assert "sfh_snorm_burst_burst_age_gyr" in freed
+
+    def test_tsnorm_burst_wildcard_frees_burst_sfr_and_burst_age(self):
+        freed = _free(sfh={"type": "tsnorm_burst", "all_params": FREE})
+        assert "sfh_tsnorm_burst_burst_sfr" in freed
+        assert "sfh_tsnorm_burst_burst_age_gyr" in freed
+
+    def test_snorm_burst_wildcard_now_frees_everything_it_covers(self):
+        """No stuck parameters left in 'sfh' itself: the wildcard is a full free there.
+
+        Before the fix ``burst_sfr`` was the one holdout, so this exact
+        wildcard raised :class:`WildcardPartialFreeWarning` naming the 'sfh'
+        group's own stuck parameter
+        (``test_wildcard_free_on_the_same_group_still_takes_the_adjudication_path``,
+        before it was moved onto ``met``, exercised precisely this case). The
+        unrelated #1796 notice ("no longer frees metallicity parameters",
+        also a :class:`WildcardPartialFreeWarning`, fired because no explicit
+        ``met`` block is given here) is not what this test is about, so it
+        is filtered out rather than asserted away.
+        """
+        with warnings.catch_warnings(record=True) as caught:
+            warnings.simplefilter("always")
+            _free(sfh={"type": "snorm_burst", "all_params": FREE})
+        sfh_group_partials = [
+            w
+            for w in caught
+            if issubclass(w.category, WildcardPartialFreeWarning)
+            and str(w.message).startswith("'all_params: FREE' freed")
+        ]
+        assert not sfh_group_partials, [str(w.message) for w in sfh_group_partials]
+
+    def test_snorm_burst_explicit_burst_sfr_free_no_longer_raises(self):
+        """The exact repro from the follow-up bug now succeeds."""
+        freed = _free(sfh={"type": "snorm_burst", "burst_sfr": FREE, "all_params": Fixed(DEFAULT)})
+        assert "sfh_snorm_burst_burst_sfr" in freed
+
+    def test_burst_sfr_free_prior_is_nonneg_and_bounded(self):
+        """The declared range matches the amplitude's own lo>=0 bound_check."""
+        dist = tengri.parse_groups(
+            sfh={"type": "snorm_burst", "all_params": FREE}, redshift=Fixed(0.1)
+        ).get_distribution("sfh_snorm_burst_burst_sfr")
+        assert not dist.is_fixed
+        assert dist.bounds == (0.0, 10.0)

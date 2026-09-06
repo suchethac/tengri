@@ -1190,6 +1190,64 @@ deprecate.
 
 ---
 
+## Wildcard/per-parameter FREE that frees nothing now raises (2026-09, #2187)
+
+**Breaking — no shim.** `'all_params'/'other_params': FREE`, and an
+explicitly named per-parameter `FREE`, that cannot actually free anything now
+raise `ParameterError` instead of silently building a model with that physics
+pinned. The prior behavior — a `WildcardNoOpWarning` for an empty-coverage
+wildcard, and total silence for a Fixed-only parameter reached by name or by
+wildcard fallback — was exactly as swallowable as the bug it exists to catch:
+nothing in an ordinary test run distinguishes "the fit ran with N free
+parameters" from "the fit ran with N-1 free parameters and one silently
+pinned."
+
+| old                                                                                                          | new                                                                                                                    |
+| -------------------------------------------------------------------------------------------------------------- | -------------------------------------------------------------------------------------------------------------------- |
+| Empty-coverage wildcard, e.g. `igm={'type': 'inoue14', 'all_params': FREE}` — warned `WildcardNoOpWarning`, built anyway at z=0.1 with no IGM knob varying | Raises `ParameterError` ("... covers no parameters ..."); remove the wildcard or pass an explicit prior for a parameter the configuration actually declares |
+| Explicit per-parameter `FREE` on a parameter with no declared `free_prior`, e.g. `met={'type': 'table', 'alpha_fe': FREE}` — silently pinned it at its `Fixed` default, no warning at all | Raises `ParameterError` ("... has no declared free prior ..."); pass an explicit prior for a parameter you genuinely mean to vary — `met_alpha_fe` itself is the declared-but-unshipped alpha-enhancement axis (its liveness has never been measured), so there the honest fix is to drop the key, not to free it |
+| `redshift=FREE` — silently resolved to `Fixed(0.1)` (the registry default), a model built at z=0.1 with zero warning | Raises `ParameterError`; write an explicit prior, e.g. `redshift=Uniform(0.01, 6.0)` |
+| `sfh={'type': 'snorm_burst', 'all_params': FREE}` (and `'tsnorm_burst'`) — froze `burst_sfr` at `Fixed(0.0)`, so the (successfully freed) `burst_age` was a zero-gradient dimension: varying where a zero-height plateau sits changes nothing | `burst_sfr` now declares `free_prior=Uniform(0.0, 10.0)` — a dimensionless burst-plateau amplitude ratio, not a Msun/yr rate — and frees alongside `burst_age` |
+
+A wildcard that frees a genuine strict *subset* of what it covers is
+unaffected by this change and still only warns (`WildcardPartialFreeWarning`,
+#1474), because a partial free is sometimes the correct outcome — `dust_Rv`
+is fixed by definition under a Calzetti law, and several shipped recipes free
+a strict subset today. Only the two harder outcomes above — zero parameters
+covered, or covered-but-none-freed — escalated from warning (or silence) to
+`ParameterError`.
+
+**`redshift=FREE`** deserves its own note because it is the highest-traffic
+case: `redshift` had no declared `free_prior` since the grammar's first
+version, so `redshift=FREE` always silently built a model at the registry's
+`Fixed(0.1)` default — a ~1e17 flux-scale error for anyone who actually meant
+to fit the redshift. No default free prior was added to close the gap: there
+is no galaxy-independent redshift interval (the shipped recipes alone span
+`Uniform(0.01, 6)`, `Uniform(3.5, 10)`, and `Uniform(0.01, 12)`), so the fix
+is the same explicit-prior discipline as every other no-free-prior parameter.
+
+**`burst_sfr`** (`sfh_snorm_burst_burst_sfr` / `sfh_tsnorm_burst_burst_sfr`)
+is the one case in this batch where the right fix was to *add* a
+`free_prior`, not just to raise more loudly. The parameter was declared with
+no `free_prior` on the claim that it is "an absolute rate in Msun/yr" with no
+galaxy-independent interval — true of ProSpect's own `massfunc_snorm_burst`
+(Robotham et al. 2020), whose amplitude is never rescaled, but false of
+tengri's independent implementation: `snorm_burst`/`snorm_trunc_burst` add
+the flat burst plateau to the *bare*, un-rescaled skew-normal kernel and only
+then renormalize the whole composite to `log_total_mass`
+(`_renormalize_to_mass`), which divides out any absolute scale. `burst_sfr`
+is therefore a dimensionless ratio of the burst plateau's height to the
+smooth kernel's own unit peak — exactly the kind of galaxy-independent
+quantity a `free_prior` can state. `Uniform(0.0, 10.0)` is calibrated by
+numerical integration of the composite shape, not asserted: at this model's
+own registry defaults (`width=1 Gyr`, `burst_age=0.1 Gyr`) it spans burst
+mass fractions from ~0.4% to ~29%, reaching as high as ~89% at the edges of
+the model's own declared `width`/`burst_age` ranges. See the `ParamDef`
+comment in `src/tengri/components/stellar/sfh/registry.py` for the full
+derivation.
+
+---
+
 ## How to update this document
 
 1. Land the rename or move with a `deprecated_alias` shim in

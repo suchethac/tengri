@@ -8,7 +8,7 @@ Provides a Bagpipes-style nested-dictionary interface to the Parameters
 class. Instead of flat kwargs (e.g., ``sfh_dpl_alpha=..., sfh_dpl_beta=...``),
 users can organize parameters into semantic groups::
 
-    from tengri.parameters import parse_groups, FREE, Fixed, DEFAULT
+    from tengri.parameters import parse_groups, FREE, Fixed, DEFAULT, Uniform
 
     params = parse_groups(
         sfh={"type": "dpl", "all_params": FREE, "beta": 0.5},
@@ -19,7 +19,7 @@ users can organize parameters into semantic groups::
         },
         dust_emission={"type": "dale2014"},
         neb={"type": "cue"},
-        redshift=FREE,
+        redshift=Uniform(0.01, 6.0),
     )
 
 The parser translates group structure and parameter overrides into a
@@ -5104,11 +5104,12 @@ def _resolve_value(
         if val is FREE:
             # An explicit, per-parameter FREE must be honored or refused --
             # never silently pinned (#2187 follow-up). Some parameters
-            # deliberately declare no free prior (e.g. ``sfh_snorm_burst_
-            # burst_sfr``: "no galaxy-independent interval exists"), so a
-            # request that cannot be honored is a configuration error, not a
-            # bug in the parameter -- the message reads as "pass an explicit
-            # prior", never as "this is broken".
+            # deliberately declare no free prior (e.g. ``met_alpha_fe``: a
+            # wildcard cannot know whether the loaded SSP grid even carries
+            # an alpha-enhanced axis), so a request that cannot be honored is
+            # a configuration error, not a bug in the parameter -- the
+            # message reads as "pass an explicit prior", never as "this is
+            # broken".
             expanded = _expand_free(param_name, registry_default)
             if expanded.is_fixed:
                 raise ParameterError(

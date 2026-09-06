@@ -109,16 +109,71 @@ An optional group with no `'type'` but with other keys raises `ParameterError` w
 
 ### Wildcard rules and no-op detection
 
-`'all_params': FREE` on a group whose parameters default to `Fixed(DEFAULT)` is valid and cascades. However, on a group where **all** parameters are inherently fixed (e.g., `radio` without sub-blocks configured to use a free model, or `shock` with only fixed components), `'all_params': FREE` **raises an error** with an example of how to set explicit priors instead:
+`'all_params': FREE` on a group whose parameters default to `Fixed(DEFAULT)` is valid and cascades. However, when a wildcard cannot actually free anything, `'all_params': FREE` **raises `ParameterError`** instead of silently building a model with that physics pinned (#2187). Two shapes, both raise:
+
+**The group declares no parameters at all** under the selected configuration (e.g. `radio` with every sub-model disabled):
 
 ```python
-# WRONG: radio is free-param free
-model = SEDModel.build(ssp_data=ssp, observation=obs, radio={'type': 'sfonly', 'all_params': FREE})
-# Raises: "Cannot set all_params=FREE on radio — it has no free parameters."
-# "  Pass explicit priors instead: radio={'type': 'sfonly', 'q10': Uniform(...)}"
+model = SEDModel.build(
+    ssp_data=ssp, observation=obs,
+    radio={'sf': {'type': 'none'}, 'agn': {'type': 'none'}, 'all_params': FREE},
+)
+# Raises ParameterError:
+# "'all_params'/'other_params': FREE in group 'radio' covers no parameters --
+#  this group declares none to free under the selected configuration.
+#  FREE resolves each parameter's registry default; with nothing declared
+#  here there is nothing for it to resolve, so the fit would silently not
+#  vary anything in this group.
+#  Remove the wildcard, or pass explicit priors for the parameters you meant
+#  to vary (e.g. radio={'param_name': Uniform(lo, hi)} for whichever
+#  parameter your chosen configuration actually declares)."
+```
 
-# CORRECT: explicit prior on the one available parameter
-model = SEDModel.build(ssp_data=ssp, observation=obs, radio={'type': 'sfonly', 'q10': Uniform(-0.5, 0.5)})
+**The group declares parameters, but every one of them is `Fixed`-only** (no declared `free_prior`), so the wildcard would free zero of them:
+
+```python
+model = SEDModel.build(ssp_data=ssp, observation=obs, met={'type': 'table', 'all_params': FREE})
+# Raises ParameterError:
+# "'all_params: FREE' freed 0 of 1 parameters in group 'met'. These have no
+#  declared prior, only Fixed defaults:
+#    met_alpha_fe
+#  FREE resolves to each parameter's registry default, and these default to
+#  Fixed; so the wildcard would leave every one of them pinned and the fit
+#  would silently not vary this physics.
+#  Pass explicit priors instead, e.g. met={'alpha_fe': Uniform(lo, hi)}."
+
+# The remedy depends on the parameter -- it is not always "add a prior".
+# met_alpha_fe here is the declared-but-not-yet-shipped alpha-enhancement
+# axis (see the release-scope note in the project's CLAUDE.md): its
+# liveness has never been measured (no sweep has ever freed it end to
+# end), so the honest fix for THIS parameter is to drop the wildcard
+# rather than free it -- blessing an explicit prior on an axis nobody has
+# confirmed does anything is exactly the silent-inert-parameter disease
+# this guard exists to catch.
+model = SEDModel.build(ssp_data=ssp, observation=obs, met={'type': 'table'})
+
+# CORRECT (general case): an explicit prior on a parameter you genuinely
+# mean to vary -- gas-phase metallicity, live in every photoionized
+# nebular backend:
+model = SEDModel.build(
+    ssp_data=ssp, observation=obs,
+    neb={'type': 'cue', 'logZ_gas': Uniform(-1.0, 0.3)},
+)
+```
+
+(A partial free — some parameters in the group have a declared range and some do not — warns with `WildcardPartialFreeWarning` rather than raising, naming which ones stay pinned; see the docstring of `_check_wildcard_freed_something` for the full four-outcome table.)
+
+The same refusal applies to an **explicitly named per-parameter `FREE`**, not just the wildcard: naming one specific parameter as `FREE` must free it or refuse, never silently leave it pinned. `redshift` is the worked example — it declares no `free_prior` (no galaxy-independent redshift interval exists; every shipped recipe picks a survey-specific range instead), so `redshift=FREE` raises rather than quietly building a model at its old Fixed default:
+
+```python
+model = SEDModel.build(ssp_data=ssp, observation=obs, sfh={...}, redshift=FREE)
+# Raises ParameterError:
+# "'redshift': FREE cannot be honored -- 'redshift' has no declared free
+#  prior (its registry default is Fixed(0.1)). Pass an explicit prior
+#  instead, e.g. redshift=Uniform(lo, hi)."
+
+# CORRECT: an explicit prior for a photo-z fit
+model = SEDModel.build(ssp_data=ssp, observation=obs, sfh={...}, redshift=Uniform(0.01, 6.0))
 ```
 
 ### Error handling and suggestions
