@@ -8,6 +8,20 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 
 ### Fixed
 
+- `mcmc_hmc_lowrank` ran its warmup fused into chain 0's sampling scan, which
+  had two consequences. The #1999 post-adaptation stability probe had nowhere to
+  run, leaving the one dense-capable metric path reachable above the D=30 cap
+  with no step-size remediation; and chain 0 sampled inside the warmup program
+  while chains 1..n-1 ran the separate `_hmc_chain_scan`, so a multi-chain fit
+  ran two structurally different compiled programs over one adaptation — the
+  shape that made NUTS irreproducible under a pinned key before its own split.
+  The fused scan is replaced by `_hmc_low_rank_warmup_only` plus the shared
+  chain scan; the probe and the dead-warmup refusal (#2088) are wired in, and
+  `dense_mass_step_backoffs` / `warmup_divergence_frac` join the diagnostics.
+  Measured on a D=74 posterior, the probe declines on all 12 rows and returns a
+  bit-identical adapted step size, so this is insurance rather than repair
+  (`bench/reports/2026-09-06_low_rank_metric_d74.md`, Finding 6).
+
 - The dense mass-matrix cap is one seam, and crossing it is no longer silent.
   `use_dense = <policy> and n_dim <= 30` existed at **six** sites with four
   behaviors: `mcmc_nuts` logged the downgrade at INFO and only when
