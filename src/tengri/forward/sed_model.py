@@ -973,6 +973,60 @@ def _validate_fracagn_requires_dust(spec) -> None:
         )
 
 
+def _validate_firrc_requires_dust(spec) -> None:
+    """Raise if any FIRRC radio block is enabled without a dust component (#2106).
+
+    The three FIRRC models (bell2003, delvecchio2021, mccheyne2022) in the radio
+    component normalize their synchrotron luminosity against L_ir, the dust-absorbed
+    stellar luminosity published by the dust component. Without a dust component,
+    L_ir defaults to 0.0, causing the radio SED to silently return all zeros with
+    no signal to the user that the configuration is invalid.
+
+    This is a build-time safety gate: FIRRC radio modes are only safe when paired
+    with a dust component (dust_attenuation != 'none'). Dust-independent radio models
+    (powerlaw, dpl, none) remain usable without dust.
+
+    Raises
+    ------
+    ConfigError
+        If any FIRRC mode (bell2003, delvecchio2021, mccheyne2022) is selected
+        for radio_sfr_mode and dust is disabled.
+
+    See Also
+    --------
+    #2106 : Silent all-zero radio SED when FIRRC blocks used without dust.
+    """
+    from tengri.config.exceptions import ConfigError
+
+    # radio_sfr_mode carries its "bell2003" default even when the radio
+    # component is disabled, so gate on the radio flag first -- the
+    # _validate_dale2014_requires_no_sf_radio sibling guards the same way.
+    if not getattr(spec, "radio", False):
+        return
+
+    # Check if any FIRRC mode is active
+    sfr_mode = getattr(spec, "radio_sfr_mode", "bell2003")
+    if sfr_mode not in ("bell2003", "delvecchio2021", "mccheyne2022"):
+        return  # Non-FIRRC mode selected, no validation needed
+
+    # Check dust configuration: dust_model='off' means no dust
+    dust_model = getattr(spec, "dust_model", "off")
+
+    # A model with dust_model='off' is unsafe
+    if dust_model == "off":
+        raise ConfigError(
+            f"FIRRC radio block (radio_sfr_mode={sfr_mode!r}) normalizes synchrotron "
+            "emission against L_ir, the dust-absorbed stellar luminosity. "
+            "Without a dust component (dust_attenuation={'type':'none'} or no dust), "
+            "L_ir is ~zero and the radio SED would be silently zeroed. "
+            "Fix: either (1) add a dust component "
+            "(e.g. dust_attenuation={'type':'two_component'}), "
+            "or (2) use a dust-independent radio block such as powerlaw or dpl "
+            "(radio_sfr_mode='none' for AGN-only radio, or choose a different sfr_mode). "
+            "See issue #2106."
+        )
+
+
 def _validate_dale2014_requires_no_sf_radio(spec) -> None:
     """Raise if dale2014 dust emission is combined with SF radio (#1970).
 
@@ -9155,6 +9209,7 @@ class SEDModel:
 
         spec = parse_groups(**groups)
         _validate_fracagn_requires_dust(spec)
+        _validate_firrc_requires_dust(spec)
         _validate_dale2014_requires_no_sf_radio(spec)
         _warn_agn_dust_double_count(spec)
         _warn_dead_gradient_params(spec)

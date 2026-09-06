@@ -162,7 +162,14 @@ _KIND_INSTRUMENT: dict[str, tuple[float, float, str]] = {
 #: Groups a kind needs present before its own choice can matter.
 _KIND_SCAFFOLD: dict[str, dict] = {
     "xray": {"agn": _LUMINOUS_AGN},
-    "radio": {"agn": _LUMINOUS_AGN},
+    "radio": {
+        "agn": _LUMINOUS_AGN,
+        "dust_attenuation": {
+            "type": "two_component",
+            "law": "calzetti",
+            "all_params": Fixed(DEFAULT),
+        },
+    },
 }
 
 #: Wavelength window [A] a kind's physics actually occupies, when it is narrower
