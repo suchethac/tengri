@@ -571,7 +571,7 @@ def sample_hamiltonian(
     Returns
     -------
     tuple
-        (chain, log_likelihood, accept_prob), see sample_raytrace.
+        (chain, log_likelihood, accept_prob, n_nonfinite_proposals), see sample_raytrace.
     """
     return sample_raytrace(
         key,
