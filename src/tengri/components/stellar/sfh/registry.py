@@ -2274,6 +2274,35 @@ def validate_bin_edges_gyr(sfh_type, edges) -> None:
 _PSB_QUENCH_TYPES = frozenset({"psb_suess2022", "psb_flex"})
 
 
+def psb_quench_param_names(sfh_type) -> tuple[str, str] | None:
+    """The fully-prefixed quench-epoch parameter names of a post-starburst entry.
+
+    Parameters
+    ----------
+    sfh_type : str
+        Registry name of an SFH.
+
+    Returns
+    -------
+    tuple of str, or None
+        ``(tlast_gyr, tflex_gyr)`` fully prefixed for this entry, or ``None``
+        for any SFH that has no flexible quenching zone.
+
+    Notes
+    -----
+    Exists so a caller can look these two parameters up in a user's group dict
+    under every spelling the grammar accepts without hard-coding the prefix,
+    which differs between the two post-starburst entries.
+    """
+    if not isinstance(sfh_type, str) or sfh_type not in _PSB_QUENCH_TYPES:
+        return None
+    spec = SFH_REGISTRY.get(sfh_type)
+    if spec is None:
+        return None
+    prefix = _spec_public_prefix(spec)
+    return f"{prefix}tlast_gyr", f"{prefix}tflex_gyr"
+
+
 def _reachable_range(spec, public_name, given):
     """Smallest and largest value a build can give one parameter, or None.
 
@@ -2350,15 +2379,12 @@ def validate_psb_quench_ordering(sfh_type, tlast, tflex) -> None:
 
     **JIT-compatible**: not applicable; a build-time check on Python objects.
     """
-    if not isinstance(sfh_type, str) or sfh_type not in _PSB_QUENCH_TYPES:
+    names = psb_quench_param_names(sfh_type)
+    if names is None:
         return
-    spec = SFH_REGISTRY.get(sfh_type)
-    if spec is None:
-        return
-
-    prefix = _spec_public_prefix(spec)
-    last = _reachable_range(spec, f"{prefix}tlast_gyr", tlast)
-    flex = _reachable_range(spec, f"{prefix}tflex_gyr", tflex)
+    spec = SFH_REGISTRY[sfh_type]
+    last = _reachable_range(spec, names[0], tlast)
+    flex = _reachable_range(spec, names[1], tflex)
     if last is None or flex is None:
         return
     if last[1] <= flex[0]:

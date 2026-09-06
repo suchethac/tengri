@@ -763,16 +763,24 @@ def psb_continuity_flex(
     splices ``tflex_gyr`` in ahead of ``bin_edges_gyr[1:]``, which requires the
     caller to keep ``tflex_gyr`` below the first fixed edge. With the shipped
     default ladder that first edge is 0.3 Gyr while ``tflex_gyr``'s prior runs
-    from 0.5 to 5.0 Gyr, so the edges cross and
-    :func:`jax.numpy.searchsorted` is evaluated on a non-ascending array.
-    Deriving the fixed bins from ``tflex_gyr`` removes the ordering constraint
-    instead of asking the user to respect it.
+    to 5.0 Gyr, so the edges cross and :func:`jax.numpy.searchsorted` is
+    evaluated on a non-ascending array. Deriving the fixed bins from
+    ``tflex_gyr`` removes the ordering constraint instead of asking the user to
+    respect it.
 
     Implements the post-starburst-optimized non-parametric SFH of Suess et al.
     2022 [1]_, on the Prospector continuity machinery (Johnson et al. 2021
-    [2]_), with the flexible zone resolved into equal-width bins. The step
-    between the oldest flex bin and the youngest fixed bin is pinned at 0: the
-    two share an SFR.
+    [2]_). The step between the oldest flex bin and the youngest fixed bin is
+    pinned at 0: the two share an SFR.
+
+    **Approximation of Suess et al. 2022, Sect. 3.1.4, in two places.** That
+    paper divides the flexible zone into bins of equal *mass* whose edges move,
+    and fixes the old-bin edges by a template; both zones here are cut into
+    bins of equal *width*, the flexible ones carrying free amplitudes
+    (``flex_*``) and the fixed ones laid out from ``tflex_gyr``. The two
+    constructions agree only where the history is flat across the zone
+    concerned. Valid as a reparameterization of the same three-part shape, not
+    as a reproduction of the paper's bin edges.
 
     References
     ----------
@@ -1025,8 +1033,8 @@ def sfh_bin_edges_yr(fn, sfh_kwargs: dict) -> jnp.ndarray | None:
     """Lookback-time bin edges [yr] for a non-parametric SFH callable (#765).
 
     The piecewise-constant non-parametric SFHs (continuity / dirichlet /
-    psb_continuity / continuity_flex) have sharp bin-edge transitions. When the
-    SFH is sampled onto a log-spaced integrand grid for DSPS, those edges fall
+    continuity_flex / psb_continuity_flex) have sharp bin-edge transitions. When
+    the SFH is sampled onto a log-spaced integrand grid for DSPS, those edges fall
     *between* grid points, so DSPS interpolates across each step and smears the
     mass distribution; a resolution-insensitive 2-4.5 % optical residual vs
     Prospector (#765). Injecting these exact edges as knots makes the step

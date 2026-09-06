@@ -291,19 +291,54 @@ def _build_psb(ssp, **sfh_extra):
     )
 
 
-def test_a_pinned_crossing_is_refused_at_build(synthetic_ssp_wide):
+#: The crossing of the reviewer's probe, written in each spelling the grammar
+#: accepts for these two parameters. A guard that reads one of them is a guard
+#: with a bypass: the short-key-only version of this check accepted both of the
+#: full-name spellings below.
+_CROSSED_SPELLINGS = {
+    "short/short": {"tlast_gyr": Fixed(1.0), "tflex_gyr": Fixed(0.5)},
+    "full/full": {
+        "sfh_psb2022_tlast_gyr": Fixed(1.0),
+        "sfh_psb2022_tflex_gyr": Fixed(0.5),
+    },
+    "full/short": {"sfh_psb2022_tlast_gyr": Fixed(1.0), "tflex_gyr": Fixed(0.5)},
+    "short/full": {"tlast_gyr": Fixed(1.0), "sfh_psb2022_tflex_gyr": Fixed(0.5)},
+}
+
+
+@pytest.mark.parametrize("spelling", list(_CROSSED_SPELLINGS))
+def test_a_pinned_crossing_is_refused_at_build(synthetic_ssp_wide, spelling):
     """Two pinned values that cross must fail at build, not silently at predict.
 
     A ``Fixed`` bypasses the prior that the floor above constrains, so this is
     the other half of the same rule. The failure it prevents is silent in every
     other check: finite, non-negative, and mass-closed.
+
+    Parametrized over the spellings the grammar accepts, because the check has
+    to resolve the key the way the build does. All four resolve to the same
+    crossing.
     """
     with pytest.raises(ValueError, match="negative width"):
         _build_psb(
             synthetic_ssp_wide,
-            tlast_gyr=Fixed(1.0),
-            tflex_gyr=Fixed(0.5),
+            **_CROSSED_SPELLINGS[spelling],
             all_params=Fixed(DEFAULT),
+        )
+
+
+def test_a_pinned_crossing_in_the_full_spelling_is_refused_for_psb_flex(synthetic_ssp_wide):
+    """The sibling entry takes the same rule under its own longer prefix."""
+    with pytest.raises(ValueError, match="negative width"):
+        SEDModel.build(
+            ssp_data=synthetic_ssp_wide,
+            met={"logzsol": Fixed(0.0), "all_params": Fixed(DEFAULT)},
+            sfh={
+                "type": "psb_flex",
+                "sfh_psb_flex_tlast_gyr": Fixed(0.9),
+                "sfh_psb_flex_tflex_gyr": Fixed(0.6),
+                "all_params": Fixed(DEFAULT),
+            },
+            redshift=Fixed(0.05),
         )
 
 
@@ -312,10 +347,13 @@ def test_a_pinned_value_a_free_prior_can_cross_is_refused_at_build(synthetic_ssp
 
     ``tflex_gyr`` pinned at 0.7 Gyr with ``tlast_gyr`` free on [0.01, 1.0] draws
     a crossed ladder for every ``tlast_gyr`` above 0.7, which is 30 % of that
-    prior. Refused for the pair, not for either value on its own.
+    prior. Refused for the pair, not for either value on its own, and in either
+    spelling of the pinned key.
     """
     with pytest.raises(ValueError, match="negative width"):
         _build_psb(synthetic_ssp_wide, tflex_gyr=Fixed(0.7), all_params=FREE)
+    with pytest.raises(ValueError, match="negative width"):
+        _build_psb(synthetic_ssp_wide, sfh_psb2022_tflex_gyr=Fixed(0.7), all_params=FREE)
 
 
 def test_a_pinned_value_the_free_prior_cannot_reach_is_accepted(synthetic_ssp_wide):

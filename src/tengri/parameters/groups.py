@@ -2447,25 +2447,40 @@ def _validate_sfh_quench_ordering(sfh_type, sfh_dict: dict) -> None:
     """Refuse a post-starburst build whose quenching epochs are out of order (#2184).
 
     Reads what the group dict says about ``tlast_gyr`` and ``tflex_gyr``, in the
-    grammar's own order of precedence (an explicit per-parameter entry, else the
-    wildcard, else nothing, which pins the registry default), and hands both to
-    the registry. The rule itself lives there, beside
-    :func:`validate_bin_edges_gyr`, so the grammar owns only the lookup.
+    grammar's own order of precedence, and hands both to the registry. The rule
+    itself lives there, beside :func:`validate_bin_edges_gyr`, so the grammar
+    owns only the lookup.
+
+    The lookup goes through :func:`_override_key_for`, the same resolution
+    :func:`_resolve_value` performs, so every spelling the grammar accepts for
+    these two parameters reaches the check: short (``tflex_gyr``), full
+    (``sfh_psb2022_tflex_gyr``), and legacy. Reading only the short key left the
+    full-name spelling of a crossing accepted, which is a guard with a bypass.
+    When neither is present the wildcard applies, and when there is no wildcard
+    either the registry default does.
 
     By this pass ``all_params`` / ``other_params`` have been normalized to the
     ``'*'`` key; both spellings are still read so the lookup does not depend on
     that normalization staying upstream of this call.
     """
-    from tengri.components.stellar.sfh.registry import validate_psb_quench_ordering
+    from tengri.components.stellar.sfh.registry import (
+        psb_quench_param_names,
+        validate_psb_quench_ordering,
+    )
+
+    names = psb_quench_param_names(sfh_type)
+    if names is None:
+        return
 
     wildcard = sfh_dict.get("*")
     if wildcard is None:
         wildcard = sfh_dict.get("all_params", sfh_dict.get("other_params"))
-    validate_psb_quench_ordering(
-        sfh_type,
-        sfh_dict.get("tlast_gyr", wildcard),
-        sfh_dict.get("tflex_gyr", wildcard),
-    )
+
+    given = []
+    for full_name in names:
+        key = _override_key_for(full_name, sfh_dict, warn=False)
+        given.append(sfh_dict[key] if key is not None else wildcard)
+    validate_psb_quench_ordering(sfh_type, *given)
 
 
 def _translate_sfh(sfh_dict: dict, result: dict) -> None:
@@ -5161,6 +5176,58 @@ def _partition_by_group(
     return partition
 
 
+def _override_key_for(param_name: str, group_dict: dict, *, warn: bool = True) -> str | None:
+    """The key in ``group_dict`` that overrides ``param_name``, or None.
+
+    Parameters
+    ----------
+    param_name : str
+        Full parameter name (``sfh_dpl_alpha``).
+    group_dict : dict
+        The user's group dict.
+    warn : bool, optional
+        Emit the once-per-name deprecation warning when the match is a legacy
+        spelling. Default True. Pass False from a *validator* that only reads
+        the dict, so a build does not warn twice for one key.
+
+    Returns
+    -------
+    str or None
+        The matching key, in the grammar's own order of precedence: the short
+        form (``logU``), then the full-prefixed form (``neb_logU``), then each
+        legacy alias in both spellings.
+
+    Notes
+    -----
+    Both spellings are accepted because :func:`_short_names_for_group` admits
+    both, so silently dropping the full-prefixed form here would be a footgun
+    (#424). A renamed parameter also invalidates its *short* key: after
+    ``agn_frac`` became ``agn_lum_ratio``, ``agn={'frac': 0.5}`` read as
+    "Unknown key" (#1296), so legacy spellings resolve too.
+
+    Factored out so that every reader of a group dict resolves the same key.
+    A guard that reads only one spelling is a guard with a documented bypass:
+    #2184's quench-ordering check shipped reading only the short form and was
+    silent on the full-name spelling of the very crossing it exists to refuse.
+    """
+    short_name = _extract_short_name(param_name, group_dict)
+    if short_name in group_dict:
+        return short_name
+    if param_name != short_name and param_name in group_dict:
+        return param_name
+
+    from tengri.parameters._aliases import _warn_once_if_legacy, legacy_names_for
+
+    for legacy_full in legacy_names_for(param_name):
+        legacy_short = _extract_short_name(legacy_full, group_dict)
+        for candidate in (legacy_short, legacy_full):
+            if candidate in group_dict:
+                if warn:
+                    _warn_once_if_legacy(candidate, short_name)
+                return candidate
+    return None
+
+
 def _resolve_value(
     param_name: str,
     group_dict: dict,
@@ -5207,36 +5274,8 @@ def _resolve_value(
     ValueError
         If a parameter name in group_dict is unknown for this group.
     """
-    # Extract the short name (e.g., 'alpha' from 'sfh_dpl_alpha')
-    # by removing the group prefix
     short_name = _extract_short_name(param_name, group_dict)
-
-    # Accept either the short form ('logU') or the full-prefixed form
-    # ('neb_logU') as a per-param override key. The validator already
-    # admits both names (see _short_names_for_group), so silently
-    # dropping the full-prefix form here would be a footgun (issue #424).
-    override_key = None
-    if short_name in group_dict:
-        override_key = short_name
-    elif param_name != short_name and param_name in group_dict:
-        override_key = param_name
-    else:
-        # A renamed parameter also invalidates its *short* key: after
-        # agn_frac -> agn_lum_ratio, `agn={'frac': 0.5}` became "Unknown key"
-        # (#1296). Accept the legacy spelling, both short and full, and warn
-        # -- the full-name alias map alone does not cover the grammar's short
-        # form, because the short form is derived by stripping the prefix.
-        from tengri.parameters._aliases import _warn_once_if_legacy, legacy_names_for
-
-        for legacy_full in legacy_names_for(param_name):
-            legacy_short = _extract_short_name(legacy_full, group_dict)
-            for candidate in (legacy_short, legacy_full):
-                if candidate in group_dict:
-                    _warn_once_if_legacy(candidate, short_name)
-                    override_key = candidate
-                    break
-            if override_key is not None:
-                break
+    override_key = _override_key_for(param_name, group_dict)
 
     # Check for per-param override
     if override_key is not None:
