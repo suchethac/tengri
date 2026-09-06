@@ -86,34 +86,48 @@ def test_polar_dust_inert_when_atten_is_not_polar_dust(torus_type, atten_type):
     skirtor_torus_block) added a polar graybody regardless of the
     attenuation-block choice too. Both are gone: with neither ``"none"`` nor
     ``"qsogen"`` selected as the attenuation block, none of the four polar
-    knobs can reach the computation graph at all, so the two SEDs below are
-    bit-exact, not merely close.
+    knobs can reach the computation graph at all.
+
+    Each knob is changed ONE AT A TIME against a shared baseline (rather
+    than all four at once). Mechanism 1's own Type-1/2 sigmoid mask read
+    ``agn_polar_oa`` directly, so a joint perturbation that also swings
+    ``agn_polar_oa`` across that mask's threshold can silently cancel
+    mechanism 1's ``agn_polar_ebv`` effect against a fixed ``agn_cos_inc`` --
+    confirmed empirically: the joint form of this test (oa 10->80, ebv
+    0.0->0.3, at agn_cos_inc=0.7) passed bit-exact even when run against the
+    pre-R22 815104ad1 source tree, because oa=10 lands Type-1 and oa=80
+    lands Type-2 for that inclination, masking mechanism 1's screen at the
+    "on" state entirely. Isolating ``agn_polar_ebv`` alone (oa fixed at 30
+    deg, comfortably Type-1 for ``agn_cos_inc=0.7`` in both states) reveals
+    mechanism 1 cleanly: ``sum(sed)`` moved from ``1.880088e+33`` to
+    ``4.719414e+33`` (torus=skirtor, atten=none) against that same pre-R22
+    tree -- a 2.5x change, not the bit-exact match this test now requires.
     """
     base = _base_params(torus_type, atten_type)
-    p_off = {
+    default = {
         **base,
-        "agn_polar_ebv": 0.0,
-        "agn_polar_T": 50.0,
-        "agn_polar_beta": 1.0,
-        "agn_polar_oa": 10.0,
+        "agn_polar_ebv": 0.03,
+        "agn_polar_T": 100.0,
+        "agn_polar_beta": 1.6,
+        "agn_polar_oa": 30.0,
     }
-    p_on = {
-        **base,
-        "agn_polar_ebv": 0.3,
-        "agn_polar_T": 300.0,
-        "agn_polar_beta": 2.0,
-        "agn_polar_oa": 80.0,
-    }
-    sed_off = composable_agn_l_nu(_WAVE, **p_off)
-    sed_on = composable_agn_l_nu(_WAVE, **p_on)
-    np.testing.assert_array_equal(
-        np.asarray(sed_off),
-        np.asarray(sed_on),
-        err_msg=(
-            f"torus={torus_type!r}, atten={atten_type!r}: polar-dust params changed "
-            "the SED even though a non-polar_dust attenuation block was selected."
-        ),
-    )
+    sed_default = np.asarray(composable_agn_l_nu(_WAVE, **default))
+    for key, alt_value in (
+        ("agn_polar_ebv", 0.3),
+        ("agn_polar_T", 300.0),
+        ("agn_polar_beta", 2.0),
+        ("agn_polar_oa", 80.0),
+    ):
+        sed_alt = np.asarray(composable_agn_l_nu(_WAVE, **{**default, key: alt_value}))
+        np.testing.assert_array_equal(
+            sed_default,
+            sed_alt,
+            err_msg=(
+                f"torus={torus_type!r}, atten={atten_type!r}: changing {key} alone "
+                "changed the SED even though a non-polar_dust attenuation block was "
+                "selected."
+            ),
+        )
 
 
 def test_polar_dust_knobs_all_live_when_atten_is_polar_dust():
