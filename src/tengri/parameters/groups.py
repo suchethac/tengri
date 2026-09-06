@@ -2296,24 +2296,57 @@ def _agn_subblock_declared_params(category: str, block_type: str | None) -> froz
 #: this sub-block's own wildcard scope.
 _AGN_SUBBLOCK_COMPANION_KEY: tuple[str, str] = ("atten", "polar_dust")
 
+#: category -> agn_* names read by a companion step that applies to EVERY
+#: type registered in that category (not one specific type, unlike
+#: :data:`_AGN_SUBBLOCK_COMPANION_KEY` above). Found via Task 16, item 2's
+#: measured (not scoping-derived) liveness sweep
+#: (``tests/contract/test_agn_wildcard_measured_liveness.py``), which
+#: caught both entries as live-but-excluded for every affected type:
+_AGN_CATEGORY_WIDE_COMPANION_PARAMS: dict[str, frozenset[str]] = {
+    # agn_ebv_disc (#916): compose_l_nu reddens EVERY disc block's own
+    # continuum with this Prevot-SMC screen at the runner stage
+    # (blocks/runner.py, ``redden_disc(wave, L_lambda_disc,
+    # params.get("agn_ebv_disc", 0.0))``) -- no individual disc TYPE's own
+    # function signature names it, so it is invisible to both raw
+    # introspection and every per-type AGN_BLOCK_CONSUMES entry alike.
+    "disc": frozenset({"agn_ebv_disc"}),
+    # agn_fe2_strength is ALSO a parameter of blr_analytic_block
+    # (blocks/blr.py, Krawczyk et al. 2013's own R_Fe = F(FeII)/F(Hbeta)
+    # ratio) -- live in any composable build with an active BLR block,
+    # regardless of which feii TYPE is selected. feii.py's own
+    # boroson_green function separately declares the same name for its
+    # FeII forest template strength (a second, independent mechanism
+    # sharing one physically-consistent knob); grahsp and qsogen_balmer
+    # have no declaration of their own, so only the BLR-side read makes it
+    # live for them.
+    "feii": frozenset({"agn_fe2_strength"}),
+}
+
 
 def _agn_subblock_companion_params(category: str, block_type: str) -> frozenset[str]:
-    """``agn_*`` names read by a sub-block's companion helper, if it has one.
+    """``agn_*`` names read by a sub-block's companion helper(s), if any.
 
-    See :data:`_AGN_SUBBLOCK_COMPANION_KEY`. Returns an empty set for every
-    other (category, block_type) pair.
+    Two independent shapes of companion, both invisible to a plain
+    ``inspect.signature(AGN_BLOCKS[category][block_type])`` (and, for a type
+    with its own ``AGN_BLOCK_CONSUMES`` entry, invisible to that entry too):
+    a type-specific companion FUNCTION (:data:`_AGN_SUBBLOCK_COMPANION_KEY`)
+    and a category-wide companion READ that applies for every type in a
+    category (:data:`_AGN_CATEGORY_WIDE_COMPANION_PARAMS`). Returns an empty
+    set when neither applies to ``(category, block_type)``.
     """
-    if (category, block_type) != _AGN_SUBBLOCK_COMPANION_KEY:
-        return frozenset()
+    out = set(_AGN_CATEGORY_WIDE_COMPANION_PARAMS.get(category, frozenset()))
 
-    from tengri.components.agn.blocks.atten import polar_dust_reemission_lnu
+    if (category, block_type) == _AGN_SUBBLOCK_COMPANION_KEY:
+        from tengri.components.agn.blocks.atten import polar_dust_reemission_lnu
 
-    sig = inspect.signature(polar_dust_reemission_lnu)
-    return frozenset(
-        p.name
-        for p in sig.parameters.values()
-        if p.kind not in (p.VAR_KEYWORD, p.VAR_POSITIONAL) and p.name.startswith("agn_")
-    )
+        sig = inspect.signature(polar_dust_reemission_lnu)
+        out.update(
+            p.name
+            for p in sig.parameters.values()
+            if p.kind not in (p.VAR_KEYWORD, p.VAR_POSITIONAL) and p.name.startswith("agn_")
+        )
+
+    return frozenset(out)
 
 
 #: (torus type name) -> (class-only names allowed, block-only names allowed),
