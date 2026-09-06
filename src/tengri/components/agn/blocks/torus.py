@@ -18,10 +18,22 @@ from jax import Array
 
 from tengri.components.agn.blocks._protocol import register_agn_block
 from tengri.components.agn.cat3d_wind import cat3d_wind_sed, load_cat3d_wind_default_grid
+from tengri.components.agn.cat3d_wind_lowfwd import (
+    cat3d_wind_lowfwd_sed,
+    load_cat3d_wind_lowfwd_default_grid,
+)
 from tengri.components.agn.fritz import fritz_sed, load_fritz_default_grid
 from tengri.components.agn.nenkova_agnfitter import (
     load_nenkova_agnfitter_default_grid,
     nenkova_agnfitter_sed,
+)
+from tengri.components.agn.nenkova_agnfitter_2p import (
+    load_nenkova_agnfitter_2p_default_grid,
+    nenkova_agnfitter_2p_sed,
+)
+from tengri.components.agn.nenkova_agnfitter_3p import (
+    load_nenkova_agnfitter_3p_default_grid,
+    nenkova_agnfitter_3p_sed,
 )
 from tengri.components.agn.silva04 import load_silva04_default_grid, silva04_sed
 from tengri.components.agn.skirtor import SKIRTORBundle, load_skirtor_bundle, skirtor_sed
@@ -29,14 +41,27 @@ from tengri.components.agn.skirtor_agnfitter import (
     load_skirtor_agnfitter_default_grid,
     skirtor_agnfitter_sed,
 )
+from tengri.components.agn.skirtor_agnfitter_1p import (
+    load_skirtor_agnfitter_1p_default_grid,
+    skirtor_agnfitter_1p_sed,
+)
+from tengri.components.agn.skirtor_agnfitter_2p import (
+    load_skirtor_agnfitter_2p_default_grid,
+    skirtor_agnfitter_2p_sed,
+)
 from tengri.components.agn.torus import nenkova_torus
 
 __all__ = [
+    "cat3d_wind_lowfwd_torus_block",
     "cat3d_wind_torus_block",
     "fritz_torus_block",
+    "nenkova_agnfitter_2p_torus_block",
+    "nenkova_agnfitter_3p_torus_block",
     "nenkova_agnfitter_torus_block",
     "nenkova_torus_block",
     "silva04_torus_block",
+    "skirtor_agnfitter_1p_torus_block",
+    "skirtor_agnfitter_2p_torus_block",
     "skirtor_agnfitter_torus_block",
     "skirtor_torus_block",
 ]
@@ -81,6 +106,51 @@ def cat3d_wind_torus_block(
         agn_cos_inc=agn_cos_inc,
         agn_a_cat3d=agn_a_cat3d,
         agn_fwd_cat3d=agn_fwd_cat3d,
+        agn_torus_frac=agn_torus_frac,
+        _template=templates,
+    )
+    return L_nu * _C_AA_PER_S / wave_aa**2
+
+
+@register_agn_block(
+    "torus",
+    "cat3d_wind_lowfwd",
+    citation="Hönig & Kishimoto 2017, ApJ, 838, L20",
+    status="production",
+    short_doc="Hönig & Kishimoto 2017 CAT3D-wind torus, low-wind-fraction reduction",
+    template_loader=load_cat3d_wind_lowfwd_default_grid,
+)
+def cat3d_wind_lowfwd_torus_block(
+    wavelength: Array,
+    agn_log_lbol: float,
+    l5100_disc: Array,
+    *,
+    agn_cos_inc: float = DEFAULT_AGN_COS_INC,
+    agn_a_cat3d_lowfwd: float = -2.0,
+    agn_fwd_cat3d_lowfwd: float = 0.45,
+    agn_torus_frac: float = 0.5,
+    templates=None,
+    **_params,
+) -> Array:
+    r"""Hönig & Kishimoto CAT3D-wind torus block, low-wind-fraction reduction.
+
+    Wind-dominated torus with a polar dust component, drawn from rows
+    0-209 of AGNfitter-rX's ``CAT3D_mean_3p.pickle`` -- the low
+    polar-wind-mass-fraction (``fwd`` 0.15-0.75) sub-library, distinct from
+    :func:`cat3d_wind_torus_block`'s high-``fwd`` (1.0-2.25) default.
+
+    References
+    ----------
+    .. [1] Hönig, S. F. & Kishimoto, M. 2017, ApJ, 838, L20.
+    """
+    del l5100_disc
+    wave_aa = jnp.asarray(wavelength)
+    L_nu = cat3d_wind_lowfwd_sed(
+        wave_aa,
+        agn_log_lbol=agn_log_lbol,
+        agn_cos_inc=agn_cos_inc,
+        agn_a_cat3d_lowfwd=agn_a_cat3d_lowfwd,
+        agn_fwd_cat3d_lowfwd=agn_fwd_cat3d_lowfwd,
         agn_torus_frac=agn_torus_frac,
         _template=templates,
     )
@@ -263,6 +333,94 @@ def nenkova_agnfitter_torus_block(
 
 @register_agn_block(
     "torus",
+    "nenkova_agnfitter_2p",
+    citation="Nenkova et al. 2008, ApJ, 685, 160; Martínez-Ramírez et al. 2024, A&A, 688, A46",
+    status="production",
+    short_doc="Nenkova et al. 2008 CLUMPY torus (AGNfitter-rX NK0_mean_2p templates)",
+    template_loader=load_nenkova_agnfitter_2p_default_grid,
+)
+def nenkova_agnfitter_2p_torus_block(
+    wavelength: Array,
+    agn_log_lbol: float,
+    l5100_disc: Array,
+    *,
+    agn_cos_inc: float = DEFAULT_AGN_COS_INC,
+    agn_oa_nenkova: float = 40.0,
+    agn_torus_frac: float = 0.5,
+    templates=None,
+    **_params,
+) -> Array:
+    r"""Nenkova+ 2008 CLUMPY torus (AGNfitter-rX ``NK0_mean_2p``) block.
+
+    Two-parameter inclination + opening-angle reduction, one axis wider
+    than :func:`nenkova_agnfitter_torus_block` (inclination-only
+    ``NK0_mean_1p``).
+
+    References
+    ----------
+    .. [1] Nenkova, M. et al. 2008, ApJ, 685, 160.
+    .. [2] Martínez-Ramírez, L. N. et al. 2024, A&A, 688, A46.
+    """
+    del l5100_disc
+    wave_aa = jnp.asarray(wavelength)
+    L_nu = nenkova_agnfitter_2p_sed(
+        wave_aa,
+        agn_log_lbol=agn_log_lbol,
+        agn_cos_inc=agn_cos_inc,
+        agn_oa_nenkova=agn_oa_nenkova,
+        agn_torus_frac=agn_torus_frac,
+        _template=templates,
+    )
+    return L_nu * _C_AA_PER_S / wave_aa**2
+
+
+@register_agn_block(
+    "torus",
+    "nenkova_agnfitter_3p",
+    citation="Nenkova et al. 2008, ApJ, 685, 160; Martínez-Ramírez et al. 2024, A&A, 688, A46",
+    status="production",
+    short_doc="Nenkova et al. 2008 CLUMPY torus (AGNfitter-rX NK0_mean_3p templates)",
+    template_loader=load_nenkova_agnfitter_3p_default_grid,
+)
+def nenkova_agnfitter_3p_torus_block(
+    wavelength: Array,
+    agn_log_lbol: float,
+    l5100_disc: Array,
+    *,
+    agn_cos_inc: float = DEFAULT_AGN_COS_INC,
+    agn_oa_nenkova: float = 40.0,
+    agn_tv_nenkova: float = 60.0,
+    agn_torus_frac: float = 0.5,
+    templates=None,
+    **_params,
+) -> Array:
+    r"""Nenkova+ 2008 CLUMPY torus (AGNfitter-rX ``NK0_mean_3p``) block.
+
+    Full three-parameter (inclination, opening-angle, equatorial optical
+    depth) AGNfitter-rX sub-library, the widest of the three NK0
+    reductions tengri ships.
+
+    References
+    ----------
+    .. [1] Nenkova, M. et al. 2008, ApJ, 685, 160.
+    .. [2] Martínez-Ramírez, L. N. et al. 2024, A&A, 688, A46.
+    """
+    del l5100_disc
+    wave_aa = jnp.asarray(wavelength)
+    L_nu = nenkova_agnfitter_3p_sed(
+        wave_aa,
+        agn_log_lbol=agn_log_lbol,
+        agn_cos_inc=agn_cos_inc,
+        agn_oa_nenkova=agn_oa_nenkova,
+        agn_tv_nenkova=agn_tv_nenkova,
+        agn_torus_frac=agn_torus_frac,
+        _template=templates,
+    )
+    return L_nu * _C_AA_PER_S / wave_aa**2
+
+
+@register_agn_block(
+    "torus",
     "silva04",
     citation="Silva et al. 2004, MNRAS, 355, 973",
     status="production",
@@ -347,6 +505,92 @@ def skirtor_agnfitter_torus_block(
         agn_oa_skirtor=agn_oa_skirtor,
         agn_incl_skirtor=agn_incl_skirtor,
         agn_tv_skirtor=agn_tv_skirtor,
+        agn_torus_frac=agn_torus_frac,
+        _template=templates,
+    )
+    return L_nu * _C_AA_PER_S / wave_aa**2
+
+
+@register_agn_block(
+    "torus",
+    "skirtor_agnfitter_1p",
+    citation="Stalevski et al. 2016, MNRAS, 458, 2288",
+    status="production",
+    short_doc="Stalevski et al. 2016 SKIRTOR_mean_1p AGNfitter-rX torus",
+    template_loader=load_skirtor_agnfitter_1p_default_grid,
+)
+def skirtor_agnfitter_1p_torus_block(
+    wavelength: Array,
+    agn_log_lbol: float,
+    l5100_disc: Array,
+    *,
+    agn_incl_skirtor: float = 30.0,
+    agn_torus_frac: float = 0.5,
+    templates=None,
+    **_params,
+) -> Array:
+    r"""Stalevski+ 2016 SKIRTOR_mean_1p (AGNfitter-rX) torus block.
+
+    Inclination-only averaged torus library, the coarsest of the three
+    SKIRTOR-AGNfitter reductions tengri ships (see
+    :func:`skirtor_agnfitter_2p_torus_block` and
+    :func:`skirtor_agnfitter_torus_block`).
+
+    References
+    ----------
+    .. [1] Stalevski, M. et al. 2016, MNRAS, 458, 2288.
+    .. [2] Martínez-Ramírez, L. N. et al. 2024, A&A, 688, A46 (AGNfitter-rX).
+    """
+    del l5100_disc
+    wave_aa = jnp.asarray(wavelength)
+    L_nu = skirtor_agnfitter_1p_sed(
+        wave_aa,
+        agn_log_lbol=agn_log_lbol,
+        agn_incl_skirtor=agn_incl_skirtor,
+        agn_torus_frac=agn_torus_frac,
+        _template=templates,
+    )
+    return L_nu * _C_AA_PER_S / wave_aa**2
+
+
+@register_agn_block(
+    "torus",
+    "skirtor_agnfitter_2p",
+    citation="Stalevski et al. 2016, MNRAS, 458, 2288",
+    status="production",
+    short_doc="Stalevski et al. 2016 SKIRTOR_mean_2p AGNfitter-rX torus",
+    template_loader=load_skirtor_agnfitter_2p_default_grid,
+)
+def skirtor_agnfitter_2p_torus_block(
+    wavelength: Array,
+    agn_log_lbol: float,
+    l5100_disc: Array,
+    *,
+    agn_oa_skirtor: float = 40.0,
+    agn_incl_skirtor: float = 30.0,
+    agn_torus_frac: float = 0.5,
+    templates=None,
+    **_params,
+) -> Array:
+    r"""Stalevski+ 2016 SKIRTOR_mean_2p (AGNfitter-rX) torus block.
+
+    Two-parameter (opening-angle, inclination) averaged torus library,
+    between :func:`skirtor_agnfitter_1p_torus_block` (inclination-only)
+    and :func:`skirtor_agnfitter_torus_block` (the AGNfitter-faithful
+    three-parameter default, which adds equatorial optical depth).
+
+    References
+    ----------
+    .. [1] Stalevski, M. et al. 2016, MNRAS, 458, 2288.
+    .. [2] Martínez-Ramírez, L. N. et al. 2024, A&A, 688, A46 (AGNfitter-rX).
+    """
+    del l5100_disc
+    wave_aa = jnp.asarray(wavelength)
+    L_nu = skirtor_agnfitter_2p_sed(
+        wave_aa,
+        agn_log_lbol=agn_log_lbol,
+        agn_oa_skirtor=agn_oa_skirtor,
+        agn_incl_skirtor=agn_incl_skirtor,
         agn_torus_frac=agn_torus_frac,
         _template=templates,
     )

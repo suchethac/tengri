@@ -293,6 +293,47 @@ PARAMS: tuple[ParamDeclaration, ...] = (
         lambda lo, hi: lo >= 3.0 and hi <= 11.0,
         "must be within the SKIRTOR_mean_3p grid extent [3, 11]",
     ),
+    # NK0_mean_2p / NK0_mean_3p (AGNfitter-rX) torus axes not shared with
+    # NK0_mean_1p: those grids' inclination axis is 0-90 deg (cos 0-1),
+    # matching the shared agn_cos_inc declaration exactly (unlike
+    # NK0_mean_1p's narrower 10-90 deg), so only the opening-angle and
+    # optical-depth axes need their own declarations here. Defaults match
+    # nenkova_agnfitter_2p_torus_block / nenkova_agnfitter_3p_torus_block.
+    ParamDeclaration(
+        "agn_oa_nenkova",
+        Uniform(15.0, 70.0, default=40.0),
+        "NK0_mean_2p/3p (AGNfitter-rX) CLUMPY torus half-opening angle [degrees] (grid 15-70)",
+        lambda lo, hi: lo >= 15.0 and hi <= 70.0,
+        "must be within the NK0_mean_2p/3p grid extent [15, 70]",
+        units="deg",
+    ),
+    ParamDeclaration(
+        "agn_tv_nenkova",
+        Uniform(10.0, 300.0, default=60.0),
+        "NK0_mean_3p (AGNfitter-rX) CLUMPY torus equatorial optical depth (grid 10-300)",
+        lambda lo, hi: lo >= 10.0 and hi <= 300.0,
+        "must be within the NK0_mean_3p grid extent [10, 300]",
+    ),
+    # CAT3D_mean_3p's low-fwd sub-library (rows 0-209): a wider a-axis and a
+    # lower fwd-axis than the high-fwd sub-library's agn_a_cat3d/agn_fwd_cat3d
+    # above (rows 210+); the two ranges do not overlap, so they cannot share
+    # one declaration (see cat3d_wind_lowfwd_torus_block).
+    ParamDeclaration(
+        "agn_a_cat3d_lowfwd",
+        Uniform(-3.0, -0.5, default=-2.0),
+        "CAT3D-Wind low-fwd radial cloud-distribution power-law index "
+        "(grid -3 to -0.5, AGNfitter rows 0-209 set)",
+        lambda lo, hi: lo >= -3.0 and hi <= -0.5,
+        "must be within the CAT3D-Wind low-fwd grid extent [-3, -0.5]",
+    ),
+    ParamDeclaration(
+        "agn_fwd_cat3d_lowfwd",
+        Uniform(0.15, 0.75, default=0.45),
+        "CAT3D-Wind low-fwd polar-wind mass fraction "
+        "(grid 0.15 to 0.75, AGNfitter rows 0-209 set)",
+        lambda lo, hi: lo >= 0.15 and hi <= 0.75,
+        "must be within the CAT3D-Wind low-fwd grid extent [0.15, 0.75]",
+    ),
     ParamDeclaration(
         "agn_theta_torus",
         # Torus half-opening angle. Sets the Type-1/2 critical inclination
@@ -1007,6 +1048,68 @@ GRID_EXTENT_SOURCES: dict[str, tuple[str, str, str, str]] = {
         "data/skirtor_mean3p_torus_grid.h5",
         "skirtor_mean3p/tv_axis",
         "identity",
+    ),
+    # NK0_mean_2p / NK0_mean_3p (both grids share the oa/tv axes exactly;
+    # each contributes one entry so a change to either grid is caught).
+    "nk08_2p_oa": (
+        "agn_oa_nenkova",
+        "data/nenkova_agnfitter_2p_torus_grid.h5",
+        "nenkova_agnfitter_2p/oa_axis",
+        "identity",
+    ),
+    "nk08_3p_oa": (
+        "agn_oa_nenkova",
+        "data/nenkova_agnfitter_3p_torus_grid.h5",
+        "nenkova_agnfitter_3p/oa_axis",
+        "identity",
+    ),
+    "nk08_3p_tv": (
+        "agn_tv_nenkova",
+        "data/nenkova_agnfitter_3p_torus_grid.h5",
+        "nenkova_agnfitter_3p/tv_axis",
+        "identity",
+    ),
+    # SKIRTOR_mean_1p / SKIRTOR_mean_2p share the shared agn_oa_skirtor /
+    # agn_incl_skirtor declarations already registered above for
+    # SKIRTOR_mean_3p (all three grids agree on both extents).
+    "skirtor_mean1p_incl": (
+        "agn_incl_skirtor",
+        "data/skirtor_mean1p_torus_grid.h5",
+        "skirtor_mean1p/incl_axis",
+        "identity",
+    ),
+    "skirtor_mean2p_oa": (
+        "agn_oa_skirtor",
+        "data/skirtor_mean2p_torus_grid.h5",
+        "skirtor_mean2p/oa_axis",
+        "identity",
+    ),
+    "skirtor_mean2p_incl": (
+        "agn_incl_skirtor",
+        "data/skirtor_mean2p_torus_grid.h5",
+        "skirtor_mean2p/incl_axis",
+        "identity",
+    ),
+    # CAT3D-Wind low-fwd (rows 0-209): its own a/fwd declarations (disjoint
+    # from the high-fwd rows-210+ grid's agn_a_cat3d/agn_fwd_cat3d), plus the
+    # shared agn_cos_inc inclination axis (0-90 deg, matches [0, 1] exactly).
+    "cat3d_lowfwd_a": (
+        "agn_a_cat3d_lowfwd",
+        "data/cat3d_wind_lowfwd_torus_grid.h5",
+        "cat3d_wind_lowfwd/a_axis",
+        "identity",
+    ),
+    "cat3d_lowfwd_fwd": (
+        "agn_fwd_cat3d_lowfwd",
+        "data/cat3d_wind_lowfwd_torus_grid.h5",
+        "cat3d_wind_lowfwd/fwd_axis",
+        "identity",
+    ),
+    "cat3d_lowfwd_cos_inc": (
+        "agn_cos_inc",
+        "data/cat3d_wind_lowfwd_torus_grid.h5",
+        "cat3d_wind_lowfwd/incl_axis",
+        "cos_deg",
     ),
     # SKIRTOR (X-CIGALE-faithful, default ``skirtor`` block) v3 templates.
     # Independent vendored grid from the skirtor_agnfitter entries above (same

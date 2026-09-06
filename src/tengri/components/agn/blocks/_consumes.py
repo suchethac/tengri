@@ -116,6 +116,18 @@ AGN_BLOCK_CONSUMES: dict[tuple[str, str], frozenset[str]] = {
         {"agn_ir_frac", "agn_tau", "agn_torus_frac", "agn_cos_inc", "agn_theta_torus"}
     ),
     ("torus", "nenkova_agnfitter"): frozenset({"agn_cos_inc", "agn_theta_torus"}),
+    ("torus", "nenkova_agnfitter_2p"): frozenset(
+        {"agn_cos_inc", "agn_theta_torus", "agn_oa_nenkova", "agn_torus_frac"}
+    ),
+    ("torus", "nenkova_agnfitter_3p"): frozenset(
+        {
+            "agn_cos_inc",
+            "agn_theta_torus",
+            "agn_oa_nenkova",
+            "agn_tv_nenkova",
+            "agn_torus_frac",
+        }
+    ),
     ("torus", "qsogen"): frozenset(),
     ("torus", "silva04"): frozenset({"agn_cos_inc", "agn_theta_torus"}),
     ("torus", "simple"): frozenset(
@@ -159,6 +171,10 @@ AGN_BLOCK_CONSUMES: dict[tuple[str, str], frozenset[str]] = {
             "agn_tv_skirtor",
             "agn_torus_frac",
         }
+    ),
+    ("torus", "skirtor_agnfitter_1p"): frozenset({"agn_incl_skirtor", "agn_torus_frac"}),
+    ("torus", "skirtor_agnfitter_2p"): frozenset(
+        {"agn_oa_skirtor", "agn_incl_skirtor", "agn_torus_frac"}
     ),
     ("torus", "two_temperature"): frozenset(
         {

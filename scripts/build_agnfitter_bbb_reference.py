@@ -405,6 +405,69 @@ def main() -> None:
                     g.create_dataset(k, data=v.astype(np.float32), compression="gzip")
                 g.attrs["axis_cols"] = ",".join(axis_cols)
 
+            def _write_df_grid_native(grp_name, pickle_name, axis_cols, row_slice=None):
+                """Native-resolution (no regrid) DataFrame reference group.
+
+                Unlike ``_write_df_grid`` above (which regrids every template
+                onto a synthetic ``n_wave``-point log-spaced axis), the five
+                torus reductions this writes all share ONE ``log10(nu/Hz)``
+                axis across every row (verified below), so this reads it
+                directly and reshapes ``SED`` values into an N-D array
+                without resampling -- an exact reproduction of the upstream
+                numbers, not an interpolation of them. Deliberately an
+                independent row-by-row read of the pickle (its own
+                dict-lookup, not shared code with
+                ``scripts/build_agnfitter_torus_reductions.py``'s vendored-grid
+                builder), so a shared bug in one cannot silently pass the
+                other's crossval test.
+                """
+                df = _load(torus_src / pickle_name)
+                if row_slice is not None:
+                    df = df.iloc[row_slice]
+                df = df.reset_index(drop=True)
+
+                axis_arrays = [
+                    np.sort(np.asarray(df[c].unique(), dtype=np.float64)) for c in axis_cols
+                ]
+                shape = tuple(int(a.size) for a in axis_arrays)
+
+                first_log_nu = np.asarray(df["wavelength"].iloc[0], dtype=np.float64).ravel()
+                for log_nu in df["wavelength"]:
+                    if not np.array_equal(
+                        np.asarray(log_nu, dtype=np.float64).ravel(), first_log_nu
+                    ):
+                        raise ValueError(
+                            f"{pickle_name} ({grp_name}): rows do not share one "
+                            "common wavelength grid; native-resolution reference "
+                            "requires it."
+                        )
+                wave_desc_aa = _log_nu_to_aa(first_log_nu)
+                order = np.argsort(wave_desc_aa)
+                wave_aa = wave_desc_aa[order]
+
+                key_cols = [df[c].to_numpy(dtype=np.float64) for c in axis_cols]
+                row_by_key: dict[tuple[float, ...], int] = {}
+                for i in range(len(df)):
+                    row_by_key[tuple(float(col[i]) for col in key_cols)] = i
+
+                sed_values = df["SED"].to_numpy()
+                template = np.empty((*shape, wave_aa.size), dtype=np.float64)
+                for idx in np.ndindex(*shape):
+                    key = tuple(float(axis_arrays[d][idx[d]]) for d in range(len(axis_cols)))
+                    row_i = row_by_key[key]
+                    sed = np.asarray(sed_values[row_i], dtype=np.float64).ravel()
+                    template[idx] = sed[order]
+
+                g = ft.create_group(grp_name)
+                g.create_dataset("wavelength", data=wave_aa, compression="gzip")
+                g.create_dataset("template", data=template, compression="gzip")
+                for c, arr in zip(axis_cols, axis_arrays, strict=True):
+                    g.create_dataset(
+                        f"{c.replace('-values', '')}_axis", data=arr, compression="gzip"
+                    )
+                g.attrs["axis_cols"] = ",".join(axis_cols)
+                g.attrs["resolution"] = "native (no resampling)"
+
             _write_node_dict("s04", "S04.pickle", "Nh-values")
             _write_node_dict("nk08", "NK0_mean_1p.pickle", "incl-values")
             _write_df_grid(
@@ -415,6 +478,20 @@ def main() -> None:
                 "CAT3D_mean_3p.pickle",
                 ["incl-values", "a-values", "fwd-values"],
                 row_slice=210,
+            )
+            _write_df_grid_native("nk08_2p", "NK0_mean_2p.pickle", ["incl-values", "oa-values"])
+            _write_df_grid_native(
+                "nk08_3p", "NK0_mean_3p.pickle", ["incl-values", "oa-values", "tv-values"]
+            )
+            _write_df_grid_native("skirtor_mean1p", "SKIRTOR_mean_1p.pickle", ["incl-values"])
+            _write_df_grid_native(
+                "skirtor_mean2p", "SKIRTOR_mean_2p.pickle", ["oa-values", "incl-values"]
+            )
+            _write_df_grid_native(
+                "cat3d_lowfwd",
+                "CAT3D_mean_3p.pickle",
+                ["incl-values", "a-values", "fwd-values"],
+                row_slice=slice(0, 210),
             )
         print(f"Wrote {torus_out} ({torus_out.stat().st_size / 1024:.0f} KB)")
     else:

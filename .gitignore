@@ -95,6 +95,14 @@ data/*.h5
 !data/silva04_torus_grid.h5
 !data/nenkova_agnfitter_torus_grid.h5
 !data/dh02_ce01_grid.h5
+# AGNfitter-rX torus reductions beyond the AGNfitter-faithful defaults above
+# (Task 4). Regenerate with:
+#   python scripts/build_agnfitter_torus_reductions.py --torus-dir /tmp/AGNfitter-rX/models/TORUS
+!data/nenkova_agnfitter_2p_torus_grid.h5
+!data/nenkova_agnfitter_3p_torus_grid.h5
+!data/skirtor_mean1p_torus_grid.h5
+!data/skirtor_mean2p_torus_grid.h5
+!data/cat3d_wind_lowfwd_torus_grid.h5
 # Fritz+2006 torus grid (#347/#804). Regenerate with:
 #   python scripts/download_fritz2006_templates.py && python scripts/build_fritz2006_grid.py
 !data/fritz2006_torus_grid.h5

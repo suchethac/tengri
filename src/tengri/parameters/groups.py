@@ -646,6 +646,14 @@ _AGN_PARTITION = {
     # CAT3D-Wind clumpy torus (Hönig & Kishimoto 2017)
     "agn_a_cat3d": "agn.torus",
     "agn_fwd_cat3d": "agn.torus",
+    # CAT3D-Wind low-fwd sub-library (rows 0-209; disjoint a/fwd extents from
+    # the pair above)
+    "agn_a_cat3d_lowfwd": "agn.torus",
+    "agn_fwd_cat3d_lowfwd": "agn.torus",
+    # NK0_mean_2p / NK0_mean_3p (AGNfitter-rX) torus axes not shared with the
+    # NK0_mean_1p / SKIRTOR_mean_3p declarations above
+    "agn_oa_nenkova": "agn.torus",
+    "agn_tv_nenkova": "agn.torus",
     # Silva+04 obscured-torus column density
     "agn_log_nh_silva": "agn.torus",
     "agn_torus_frac": "agn.torus",
