@@ -125,7 +125,19 @@ from collections.abc import Sequence
 #: contributed ``0 * inf = NaN`` to the survivor. Raising the floor would have
 #: kept the clamp and kept this count at 99 while fixing nothing — the count
 #: falling is a *consequence* of the right fix, not the goal of it.
-EXPECTED_SITES = 96
+#:
+#: 96 -> 95 with the dust emission validation round (#2167):
+#: ``components/dust/emission_templates.py`` no longer normalizes a template
+#: on its native grid with ``template / jnp.maximum(abs(tmpl_integral),
+#: 1e-100)`` before resampling. The template is resampled first and then
+#: normalized on the evaluation grid, where the quadrature that sets the
+#: norm is the same one the energy-balance check integrates, so
+#: ``L_IR = L_absorbed`` closes exactly instead of to the resampling error.
+#: The new site is ``jnp.where(integral > 0, L_absorbed / integral, 0.0)``:
+#: the second kind (a template that resamples to nothing on the grid emits
+#: nothing), selected rather than clamped, so it is not a clamped
+#: denominator and leaves this inventory.
+EXPECTED_SITES = 95
 
 SRC = pathlib.Path(__file__).resolve().parent.parent / "src" / "tengri"
 

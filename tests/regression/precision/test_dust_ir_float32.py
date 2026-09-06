@@ -20,6 +20,7 @@ import pytest
 
 from tengri import DEFAULT, Fixed, SEDModel
 from tengri.utils.physics_constants import C_AA
+from tests._data_skip import PAHSPEC_EMISSION_TYPES, requires_pahspec
 
 pytestmark = pytest.mark.regression_bug
 
@@ -41,7 +42,6 @@ TEMPLATE_MODELS = (
     "themis",
     "schreiber2018",
     "astrodust",
-    "pah_drude",
     # Registered as a component in #1777 — before that it resolved only on the
     # legacy loader path, so the completeness guard below could not see it and
     # this file's claim silently excluded it. (#1738's registry emit census
@@ -51,10 +51,37 @@ TEMPLATE_MODELS = (
     # 2.09e-04 — the same order as dale2014's 9.03e-05 and far inside the
     # 2e-2 bound.
     "dh02_ce01",
+    # Draine+2021 PAHspec. Subclassed ``SEDModelComponent`` rather than
+    # ``EmissionComponent``, so it never got the L_ir factoring and its
+    # ``sed_dust_ir`` was 0% finite in pure float32 — while this file's own
+    # completeness guard could not see it, because the component declared only
+    # ``L_ir_emission`` in ``outputs`` and the guard enumerates emission
+    # components by the ``sed_dust_ir`` they publish. A model can therefore be
+    # missing from this inventory *because* of the very declaration gap that
+    # hides its defect; the guard now reaches it.
+    #
+    # Measured on the PAHspec grid, not assumed — and the grid is built
+    # locally rather than shipped (104 MB, uncommitted), so both spellings
+    # carry :data:`~tests._data_skip.requires_pahspec` below: without it the
+    # component publishes no ``sed_dust_ir`` at all and every assertion here
+    # raises ``KeyError`` on a runner that has no copy. float64 peak
+    # 5.5166e+30 (float32-representable), ``sed_dust_ir`` 100% finite in pure
+    # float32, peak-relative float32-vs-float64 error 5.79e-03 — the
+    # second-loosest of the family behind astrodust's 1.58e-02 and inside the
+    # 2e-2 bound. That residual is float32 template interpolation over a
+    # 1001-point PAHspec grid, not the L_ir seam: energy balance holds to
+    # 8.7e-06 in float64 either way.
+    #
+    # Both spellings are exercised — the grammar name and the registry key its
+    # alias resolves to, which must behave identically (measured: identical to
+    # every digit above).
+    "draine2021_pah",
+    "draine2021_pah_ir",
     # Analytic Planck closures, float32-clean since the nu**3 intermediate was
     # removed from planck_bnu (#1206).
     "mbb",
     "modified_blackbody",
+    "graybody",
     "casey2012",
     "schreiber2016",
     # Affine model — proportional to the *total* budget L_ir + dust_L_agn_ir.
@@ -63,10 +90,24 @@ TEMPLATE_MODELS = (
     "energy_balance_split",
 )
 
-#: Subset that is strictly energy-balanced, i.e. normalizes its template so the
-#: frequency integral equals L_ir. pah_drude is excluded: it scales a PAH
-#: template by L_ir without renormalizing to it, so it re-emits only a fraction.
-ENERGY_BALANCED_MODELS = tuple(m for m in TEMPLATE_MODELS if m != "pah_drude")
+#: Emission components that are **building blocks**, not standalone models:
+#: they scale a template by L_ir without renormalizing to it, so alone they
+#: re-emit only a fraction. ``SEDModel.build`` refuses them for the
+#: ``dust_emission`` group, so they are measured through the flat
+#: ``Parameters(...)`` escape hatch by :func:`_flat_model` instead — dropping
+#: them from this file entirely would leave a registered component whose
+#: float32 behavior nobody checks, which is the hole
+#: :func:`test_emission_inventory_is_complete` exists to close.
+#:
+#: Value is the measured standalone re-emitted fraction |int sed_dust_ir dnu| /
+#: L_ir at z = 0.5 on this file's fixture.
+BUILDING_BLOCKS: dict[str, float] = {"pah_drude": 1.8925e-4}
+
+#: Everything in :data:`TEMPLATE_MODELS` is strictly energy-balanced, i.e.
+#: normalizes its template so the frequency integral equals L_ir; the building
+#: blocks that are not live in :data:`BUILDING_BLOCKS` and are never in this
+#: tuple, because the grammar will not build them.
+ENERGY_BALANCED_MODELS = TEMPLATE_MODELS
 
 #: Models still not float32-capable, with the measured reason. Empty: every
 #: emission model this file *can* measure is now float32-clean.
@@ -75,12 +116,37 @@ ENERGY_BALANCED_MODELS = tuple(m for m in TEMPLATE_MODELS if m != "pah_drude")
 #: space (#1206).
 NOT_YET_FLOAT32: dict[str, str] = {}
 
-#: Names in :data:`TEMPLATE_MODELS` that are legacy spellings resolved through
-#: the loader cache rather than components of their own, so they never appear in
-#: the forward registry. Measuring them is still worthwhile — they are what a
-#: user typing the old name gets — but they must not be mistaken for missing
+#: Names in :data:`TEMPLATE_MODELS` that are grammar spellings resolved to some
+#: *other* registry key — through the loader cache (``dl07``, ``dl14``, ``mbb``)
+#: or through ``_EMISSION_TYPE_ALIASES`` (``draine2021_pah`` ->
+#: ``draine2021_pah_ir``) — so they never appear in the forward registry under
+#: the name written here. Measuring them is still worthwhile — they are what a
+#: user typing that name gets — but they must not be mistaken for missing
 #: registrations by the completeness guard below.
-LEGACY_ALIASES = frozenset({"dl07", "dl14", "mbb"})
+LEGACY_ALIASES = frozenset({"dl07", "dl14", "mbb", "draine2021_pah"})
+
+
+def _params(names):
+    """``names`` as parametrization arguments, gated on the grids they need.
+
+    Every model here normalizes a template that ships in ``data/`` except the
+    two PAHspec spellings, whose 104 MB grid is built locally. Membership of
+    :data:`TEMPLATE_MODELS` is the inventory claim and must not depend on what
+    is on this machine -- :func:`test_emission_inventory_is_complete` reads it,
+    and dropping a name to make a runner green would delete the record that the
+    model exists. The gate belongs on the *measurement* instead.
+    """
+    return tuple(
+        pytest.param(name, marks=(requires_pahspec,) if name in PAHSPEC_EMISSION_TYPES else ())
+        for name in names
+    )
+
+
+#: :data:`TEMPLATE_MODELS` and :data:`ENERGY_BALANCED_MODELS` as grid-gated
+#: parametrization arguments. The tuples above stay plain strings; these are
+#: what the ``@parametrize`` decorators read.
+TEMPLATE_MODEL_PARAMS = _params(TEMPLATE_MODELS)
+ENERGY_BALANCED_MODEL_PARAMS = _params(ENERGY_BALANCED_MODELS)
 
 
 def _physical_ssp(ssp):
@@ -118,7 +184,33 @@ def _model(ssp, emission_type):
     )
 
 
-@pytest.mark.parametrize("emission_type", TEMPLATE_MODELS)
+def _flat_model(ssp, emission_type):
+    """The same model through the flat ``Parameters`` expert escape hatch.
+
+    ``SEDModel.build`` refuses a :data:`BUILDING_BLOCKS` type outright, so this
+    is how one is still assembled — deliberately, since composing a custom
+    model out of pieces is what the flat form is for. Physically the same setup
+    as :func:`_model` up to the attenuation-law defaults (measured L_ir
+    1.4369e+43 here against 1.4687e+43 there), which is immaterial: every
+    assertion below is a float32-vs-float64 comparison of the same model.
+    """
+    from tengri import Parameters
+
+    spec = Parameters(
+        mean_sfh_type="delayed",
+        sfh_delayed_tau_gyr=Fixed(1.0),
+        sfh_delayed_age_gyr=Fixed(5.0),
+        sfh_delayed_log_total_mass=Fixed(10.0),
+        met_logzsol=Fixed(0.0),
+        dust_tau_bc=Fixed(1.0),
+        dust_tau_diff=Fixed(0.7),
+        dust_emission=emission_type,
+        redshift=Fixed(0.5),
+    )
+    return SEDModel(spec, ssp)
+
+
+@pytest.mark.parametrize("emission_type", TEMPLATE_MODEL_PARAMS)
 def test_dust_ir_sed_is_finite_in_pure_float32(synthetic_ssp_wide, emission_type):
     """``sed_dust_ir`` must be finite in float32 and match float64.
 
@@ -153,8 +245,11 @@ def test_dust_ir_sed_is_finite_in_pure_float32(synthetic_ssp_wide, emission_type
     # decades, so a far-wing bin carrying 1e-12 of the peak can differ by 100%
     # relative while being physically irrelevant; peak-normalized error is what
     # a flux measurement actually sees. 2% covers astrodust, the loosest of the
-    # family (measured 1.58e-2); the rest sit near 1e-6. This is float32
-    # template interpolation, not the L_ir seam.
+    # family (measured 1.23e-2 with its template stored at unit scale; 1.58e-2
+    # before, and 5.4e-2 while the predict-time normalization integrated the
+    # float32-interpolated ~1e-36 template, whose lgU blend underflows); the
+    # rest sit near 1e-6. This is float32 template resampling, not the L_ir
+    # seam.
     peak_relative_error = float(np.abs(got.astype(np.float64) - ref).max() / peak)
     assert peak_relative_error < 2.0e-2, (
         f"{emission_type}: float32 dust IR departs from float64 by "
@@ -171,7 +266,7 @@ def test_dust_ir_sed_is_finite_in_pure_float32(synthetic_ssp_wide, emission_type
     )
 
 
-@pytest.mark.parametrize("emission_type", ENERGY_BALANCED_MODELS)
+@pytest.mark.parametrize("emission_type", ENERGY_BALANCED_MODEL_PARAMS)
 def test_dust_ir_reradiates_the_absorbed_luminosity(synthetic_ssp_wide, emission_type):
     r"""``\int sed_dust_ir d\nu`` must equal the absorbed ``L_ir``.
 
@@ -269,14 +364,15 @@ def test_emission_inventory_is_complete():
     also leave the lists, so they cannot accumulate ghosts.
     """
     registered = _registered_emission_names()
-    accounted = set(TEMPLATE_MODELS) | set(NOT_YET_FLOAT32)
+    accounted = set(TEMPLATE_MODELS) | set(NOT_YET_FLOAT32) | set(BUILDING_BLOCKS)
 
     unaccounted = sorted(registered - accounted)
     assert not unaccounted, (
         f"selectable emission components covered by no list: {unaccounted}. Measure each "
-        "in pure float32, then add it to TEMPLATE_MODELS (clean) or NOT_YET_FLOAT32 "
-        "(broken, with the measured reason). Leaving it out overstates what float32 "
-        "delivers, in the direction nobody checks."
+        "in pure float32, then add it to TEMPLATE_MODELS (clean), NOT_YET_FLOAT32 "
+        "(broken, with the measured reason) or BUILDING_BLOCKS (not standalone-"
+        "selectable, measured through the flat Parameters form). Leaving it out "
+        "overstates what float32 delivers, in the direction nobody checks."
     )
 
     ghosts = sorted(accounted - registered - LEGACY_ALIASES)
@@ -284,6 +380,57 @@ def test_emission_inventory_is_complete():
         f"listed but no longer a registered component: {ghosts} — drop them from the "
         "inventory, or add them to LEGACY_ALIASES if they are old spellings that still "
         "resolve through the loader cache"
+    )
+
+
+@pytest.mark.parametrize("emission_type", sorted(BUILDING_BLOCKS))
+def test_building_blocks_are_float32_clean_and_refuse_standalone_selection(
+    synthetic_ssp_wide, emission_type
+):
+    """A building block must be float32-clean *and* unselectable on its own.
+
+    Two properties, one test, because separating them lets either half go
+    vacuous: a block that stopped being refused would keep passing a
+    float32-only check, and a block deleted from the grammar would keep passing
+    a refusal-only check while nothing measured its arithmetic any more.
+
+    The refusal is the point of the pairing. ``pah_drude`` is float32-clean and
+    always was — its failure mode is not precision but energy: standalone it
+    re-emits :data:`BUILDING_BLOCKS`'s measured fraction of ``L_ir`` and
+    reports a perfectly ordinary-looking model. So the flat form measures it,
+    and the grammar refuses it.
+    """
+    from tengri.config.exceptions import ParameterError
+
+    ssp = _physical_ssp(synthetic_ssp_wide)
+
+    with pytest.raises(ParameterError, match="building block"):
+        _model(ssp, emission_type)
+
+    state = _flat_model(ssp, emission_type).predict_state({})
+    ref = np.asarray(state.derived["sed_dust_ir"], dtype=np.float64)
+    peak = float(np.abs(ref).max())
+    assert np.all(np.isfinite(ref)), "setup: float64 dust IR is not finite"
+    assert 0.0 < peak < 3.4e38, f"setup: emitted SED {peak:.3e} is not float32-representable"
+
+    # The reason it is a building block, measured rather than asserted: a
+    # standalone selection would lose everything this ratio is short of 1.
+    nu = C_AA / np.asarray(state.wave, dtype=np.float64)
+    l_ir = float(np.asarray(state.derived["L_ir"]))
+    fraction = abs(np.trapezoid(ref, nu)) / l_ir
+    np.testing.assert_allclose(fraction, BUILDING_BLOCKS[emission_type], rtol=1e-3)
+
+    with jax.enable_x64(False):
+        got = np.asarray(_flat_model(ssp, emission_type).predict_state({}).derived["sed_dust_ir"])
+        assert got.dtype == jnp.float32  # precondition: genuinely pure float32
+
+    assert float(np.isfinite(got).mean()) == 1.0, (
+        f"{emission_type}: sed_dust_ir is not fully finite in pure float32"
+    )
+    peak_relative_error = float(np.abs(got.astype(np.float64) - ref).max() / peak)
+    assert peak_relative_error < 2.0e-2, (
+        f"{emission_type}: float32 dust IR departs from float64 by "
+        f"{peak_relative_error:.3e} of the SED peak"
     )
 
 
@@ -312,7 +459,7 @@ def test_photometry_is_finite_in_pure_float32(synthetic_ssp_wide):
     )
 
 
-@pytest.mark.parametrize("emission_type", ENERGY_BALANCED_MODELS)
+@pytest.mark.parametrize("emission_type", ENERGY_BALANCED_MODEL_PARAMS)
 def test_dust_ir_is_actually_added_to_the_sed(synthetic_ssp_wide, emission_type):
     """The published ``sed_dust_ir`` must be what the total SED actually gained.
 

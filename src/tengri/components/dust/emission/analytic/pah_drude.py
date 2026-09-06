@@ -59,6 +59,16 @@ class PAHDrudeIRSEDComponent(EmissionComponent):
 
     name: str = "pah_drude"
 
+    #: Not an energy-balanced dust emitter, so ``SEDModel.build`` refuses it as
+    #: a standalone ``dust_emission`` type. Measured on the z = 0 forward pass
+    #: of ``tests/regression/precision/test_dust_ir_float32.py``'s fixture:
+    #: ``|int sed_dust_ir dnu| / L_ir = 1.8925e-04``. It builds, converges and
+    #: reports a dust luminosity like any other model while discarding 99.98%
+    #: of the absorbed energy — the silent-wrong-answer shape, which is why the
+    #: refusal is loud rather than a warning.
+    energy_balanced: ClassVar[bool] = False
+    standalone_l_ir_fraction: ClassVar[float] = 1.8925e-4
+
     #: No free parameters for PAH Drude; just a template shape. Stating it makes
     #: the difference between narrowing this engine's wildcard to nothing and
     #: leaving it to free the whole static union: an empty ``_priors`` alone

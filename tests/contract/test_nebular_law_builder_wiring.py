@@ -46,13 +46,16 @@ def test_law_neb_lands_on_spec(synthetic_ssp_wide, synthetic_tophat_obs):
 
 
 def test_law_neb_round_trips_through_to_groups(synthetic_ssp_wide, synthetic_tophat_obs):
-    m = _build(synthetic_ssp_wide, synthetic_tophat_obs, law_neb="smc", slope_neb=-1.3)
+    # ``conroy2010`` rather than ``smc``: the nebular law has to READ the
+    # ``*_neb`` override paired with it, and smc reads nothing beyond
+    # wavelength, so ``slope_neb`` there is a value the curve discards (#2185).
+    m = _build(synthetic_ssp_wide, synthetic_tophat_obs, law_neb="conroy2010", slope_neb=-1.3)
     groups = m.spec.to_groups()
-    assert groups["dust_attenuation"]["law_neb"] == "smc"
+    assert groups["dust_attenuation"]["law_neb"] == "conroy2010"
     assert groups["dust_attenuation"]["slope_neb"] == pytest.approx(-1.3)
     # Re-build from the round-tripped groups: the nebular law survives.
     m2 = tengri.SEDModel.build(synthetic_ssp_wide, observation=synthetic_tophat_obs, **groups)
-    assert m2.spec.dust_law_neb == "smc"
+    assert m2.spec.dust_law_neb == "conroy2010"
     assert m2.spec.dust_law_overrides.get("neb", {}).get("n_slope") == pytest.approx(-1.3)
 
 

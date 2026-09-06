@@ -203,7 +203,7 @@ UNCURATED_DOIS = frozenset(
         "10.1093/mnras/stw044",  # feltre_precompute.py
         "10.1103/revmodphys.81.969",  # dig.py
         "10.1111/j.1365-2966.2004.07473.x",  # xray.py +1
-        "10.1111/j.1365-2966.2007.12255.x",  # attenuation.py
+        "10.1111/j.1365-2966.2007.12256.x",  # attenuation.py (Wild+2007; DOI corrected in #2185)
         "10.1111/j.1365-2966.2008.13535.x",  # _closures.py
         "10.1111/j.1365-2966.2011.18906.x",  # _recombination_coeffs.py
         "10.1111/j.1365-2966.2011.19779.x",  # disc.py

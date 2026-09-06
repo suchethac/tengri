@@ -94,14 +94,99 @@ the gap (§10 X-ray, §11 radio) to line up with the CIGALE master sequence.
   (disc + BLR vanish once `inclination + θ_torus > 90°`, the Type-1 → Type-2
   transition).
 
+## Star formation histories — the class-to-type map
+
+The notebook compares one SFH (§2, delayed-τ). The rest of `synthesizer.parametric.SFH`
+maps onto tengri's SFH registry as follows; `sfh={'type': '<name>'}` selects a row,
+and `tengri.list_sfh_models()` is the live menu.
+
+| Synthesizer | tengri | Convention notes |
+|---|---|---|
+| `Constant(min_age, max_age)` | `const` | `max_age` → `start_gyr`, `min_age` → `end_gyr`; both are lookback ages. |
+| `Gaussian(peak_age, sigma)` | `norm` | Synthesizer `exp(-((t-peak)/σ)²)`, tengri `exp(-(t-peak)²/2w²)`: `w = σ/√2`. |
+| `Exponential(tau>0)`, `DecliningExponential` | `declining_exp` | Same closed form. `Exponential(tau<0)` (rising) is tengri's `exp`. |
+| `TruncatedExponential` | `declining_exp` | tengri has no separate truncation parameter; bound the SFH age instead. |
+| `DelayedExponential(tau)` | `delayed` | Same `t exp(-t/τ)`; tengri evaluates it on cosmic elapsed time. |
+| `LogNormal` | `lnorm` | **Different functional forms.** Synthesizer is a log-normal PDF in cosmic time; tengri's `lnorm` is a Gaussian in log₁₀(lookback) with no 1/t Jacobian. |
+| `DoublePowerLaw(peak_age, alpha, beta)` | `dpl` | **Different variable.** Synthesizer evaluates `((age/peak)^α + (age/peak)^β)^-1` in **lookback age**, monotonically decreasing for positive exponents; tengri follows BAGPIPES (Carnall+2018) and evaluates `1/(x^α + x^-β)` in **cosmic time**, which peaks. |
+| `DenseBasis` | `dense_basis` | `dense_basis_pure` drops the SFR-constraint points; the swap is automatic when a compositor is present. |
+| `Continuity` | `continuity` | Same Leja+2019 log-SFR-ratio parametrization; tengri declares the smoothness prior as StudentT(0, 0.3, df=2). |
+| `ContinuityFlex` | `continuity_flex` | |
+| `Dirichlet` | `dirichlet` | Leja+2017 stick-breaking; tengri's auxiliary variables carry Beta(1,1). |
+| `ContinuityPSB` | `psb_suess2022` | Suess+2021/2022: youngest bin, flexible zone, fixed old bins. |
+| `CombinedSFH(sfhs, weights)` | `sfh={'type': ['a', 'b']}` | **Different normalization.** Synthesizer weights raw shapes, and the sum is normalized to the `Stars` object's `initial_mass`; each member of tengri's list carries its own `log_total_mass`, so the relative weighting is the mass difference and there is no separate weights vector. |
+| `Stochastic(kernel=DampedRandomWalk(σ, τ))` | `sfh={'type': ['<mean>', 'field'], 'psd_sigma': σ, 'psd_tau_myr': 1000·τ_Gyr}` | Same kernel; see below. |
+
+### Stochastic SFH ↔ the `field` compositor
+
+Both codes draw log-SFR fluctuations about a mean SFH from a Gaussian process with
+a damped-random-walk covariance (the Iyer et al. 2024, arXiv:2208.05938, GP + PSD
+formalism). Synthesizer's kernel is `C(Δt) = σ² exp(-|Δt|/τ)` in dex²; tengri's is
+`K(Δt) = (σ ln10)² exp(-|Δt|/τ)` in natural log, which is the same function once
+divided by `(ln10)²`. `psd_sigma` therefore *is* Synthesizer's `sigma` in dex and
+`psd_tau_myr` its `tau` in Myr — no factor of 2π, and no natural-log rescaling.
+Measured on a 100 × 100 Toeplitz matrix at σ = 0.3 dex, τ = 1 Gyr, the two agree to
+2.7 × 10⁻¹⁴ relative in the worst entry; a 4000-draw Monte Carlo through
+`compute_field_gp` on tengri's 256-node log-age grid gives a variance of
+0.089844 dex² against σ² = 0.09 (0.17 %) and an autocorrelation of 0.3593 at a lag
+of 1.000047 Gyr against e⁻¹ = 0.36788. Through the public build grammar and
+`spec.sample`, 64 field draws give 0.3039 dex. Pinned by
+`tests/crossval/test_synthesizer_stochastic_sfh.py`.
+
+Three differences remain, all of them conventions rather than disagreements.
+
+**Log-normal centering.** tengri applies `exp(x - K(0)/2)`, so the ensemble-mean
+*linear* SFR equals the mean SFH. Synthesizer forms `10**(log10(base) + fluctuations)`
+with no correction, so its ensemble-mean linear SFR sits `exp((σ ln10)²/2) - 1` above
+its base SFH — **+26.95 %** at σ = 0.3 dex, and +94.0 % at σ = 0.5 dex. The
+absence preserves the mean *log* SFR instead. A normalization carried between the
+two codes has to divide this out.
+
+**One realization vs a fitted field.** Synthesizer draws a single realization at
+construction from `random_seed` and freezes it. tengri carries the standardized
+latent `sfh_field_xi` — an N(0, I) vector, one entry per SFH grid node — as a
+parameter, so the same construction serves both mock generation (draw it with
+`spec.sample(key)`) and inference (the sampler explores it). The gallery example
+`examples/sfh/plot_stochastic_sfh_tau_sweep.py` runs the same τ sweep as Synthesizer's documentation page,
+holding one draw fixed across three timescales.
+
+**Kernel menu and grid.** `DampedRandomWalk` is the only kernel on Synthesizer's
+`main`. tengri's `field` defaults to the same DRW and additionally offers Matern
+(`psd_matern`, which recovers the DRW at ν = 0.5) and the two-component extended
+regulator of Tacchella+2020 / Caplar & Tacchella 2019 (`psd_extended_regulator`).
+Synthesizer samples on a uniform cosmic-time grid of `n_grid=1000` points from the
+Big Bang to the observation epoch; tengri samples on a log-spaced lookback grid of
+`n_grid` nodes (256 by default) spanning 1 Myr to ~13.8 Gyr. The process is
+stationary in physical time in both, so this is a difference in where the field is
+evaluated, not in what it is.
+
 ## What the comparison found
 
 The per-section scalars printed by the notebook are the quantitative record; the
-figures in `_figs/` are the visual one. The shared SSP grid (§1), the delayed-τ
-SFH (§2), the DL07 dust IR (§6, far-IR peak agreeing to ~1 µm), and the IGM (§12)
-reproduce Synthesizer to floating point or a fraction of a percent. The nebular
-block (§8) is the deliberate exception — Synthesizer's Cloudy grid and tengri's
-Cue emulator use different photoionization inputs, so the Hα ratio is reported
-rather than forced to agree. In §9, the disc, torus, and inclination treatment
-are independent implementations and compared on shape/amplitude; the line regions
-share grids and so match in line content.
+figures in `_figs/` are the visual one. The shared SSP grid (§1) and the
+delayed-τ SFH (§2) reproduce Synthesizer to floating point or a fraction of a
+percent. The Draine & Li dust IR (§6), with all four knobs matched (qpah, umin,
+gamma, alpha), agrees in shape at every band and in energy to 2.6 percent. The
+offset reflects different energy-balance conventions: Synthesizer balances on
+the reprocessed spectrum (stellar after gas ionization plus nebular, consuming
+the Lyman continuum), while tengri balances on incident stellar with LyC
+excluded. WISE W1 0.984x is the 3.3 um PAH feature resampled onto each code's
+grid. The nebular block (§8) is the deliberate exception — Synthesizer's Cloudy
+grid and tengri's Cue emulator use different photoionization inputs, so the Hα
+ratio is reported rather than forced to agree.
+
+In §12, Inoue14 IGM matches Synthesizer's Inoue14 to better than 1e-3 at every
+redshift (z = 3, 5, 7); Asada25 matches at z ≤ 5. Two documented convention
+differences exist: (1) tengri's Madau implementation uses 17 Lyman-series lines
+(Prospector table) whereas Synthesizer's Madau96 keeps only the first 4 (Lyα to
+Lyδ), so tengri absorbs about twice as much between Lyδ and the Lyman limit, but
+only where transmission is already below 0.02 (e.g. z = 5, rest 865–915 Å: tengri
+0.0006–0.008 vs Synthesizer 0.0013–0.016); redward of Lyδ the two agree to a few
+1e-3. (2) At z = 7 the Asada25 proximate-CGM damping wing is 2.4x stronger in
+Synthesizer (its C = 3 λ_α^2 Λ^2 / (8π) omits the Lyα oscillator strength
+f_α = 0.4162 that tengri includes; rest 1245 Å: tengri T = 0.976 vs Synthesizer
+0.939).
+
+In §9, the disc, torus, and inclination treatment are independent implementations
+and compared on shape/amplitude; the line regions share grids and so match in line
+content.
