@@ -2,12 +2,12 @@
 """Cross-validate tengri's AGN informative priors against AGNfitter-rX.
 
 Each of the eight functions in ``tengri.parameters.agn_priors`` (also
-reachable as ``tengri.agn.priors``) is a transcription of one branch of
-AGNfitter-rX's ``functions/PRIORS_AGNfitter.py`` (tag ``AGNfitter-rX_v0.1``).
-This file transcribes the SAME upstream branches independently, directly in
-numpy (not by importing tengri's implementation), and compares numeric
-output at >= 5 inputs per prior, including the branch/regime boundaries,
-with a tolerance of ``max|delta| < 1e-9``.
+reachable as ``tengri.agn.priors``) implements one branch of the informative
+prior AGNfitter-rX states in ``functions/PRIORS_AGNfitter.py`` (tag
+``AGNfitter-rX_v0.1``). This file writes those same branches out again
+independently, directly in numpy (not by importing tengri's implementation),
+and compares numeric output at >= 5 inputs per prior, including the
+branch/regime boundaries, with a tolerance of ``max|delta| < 1e-9``.
 
 A previous implementation in this module (three differently-named functions,
 removed) had a contract test that compared its own formula to itself
@@ -15,10 +15,11 @@ removed) had a contract test that compared its own formula to itself
 caught that it misstated every upstream branch it claimed to reproduce; this
 file exists specifically to close that gap.
 
-Reference: ``functions/PRIORS_AGNfitter.py``, AGNfitter-rX tag
-``AGNfitter-rX_v0.1`` (upstream source path recorded in the audit that
-motivated this test:
-``~/.claude/jobs/da5e6ce4/tmp/AGNfitter-rX/functions/PRIORS_AGNfitter.py``).
+Reference: ``functions/PRIORS_AGNfitter.py`` in the AGNfitter-rX repository at
+tag ``AGNfitter-rX_v0.1`` -- the repository-relative path, so the comparison
+is reproducible from a fresh clone of that tag rather than from one reader's
+working directory. This test itself reads no clone: every number it compares
+against is written out in this file.
 Tolerance: ``max|delta| < 1e-9`` (numpy float64 vs tengri's JAX float64).
 
 References
@@ -337,8 +338,8 @@ def test_prior_ir_xrays_matches_upstream(nulnu_6um, offset):
 # this test (and of prior_midir_uv itself) fed the SAME nu*L_nu input to
 # both formulas but re-used upstream's L_nu-calibrated -27.30103 constant
 # directly on log10(nulnu_6um), silently off by log10(nu_6um) = 13.69897 in
-# x (e.g. nulnu_6um=1e44: x=16.7 instead of x=3.0). Fixed by transcribing
-# upstream's two call sites on their OWN units and proving algebraic
+# x (e.g. nulnu_6um=1e44: x=16.7 instead of x=3.0). Fixed by writing the two
+# upstream call sites out on their OWN units and proving algebraic
 # equivalence below (13.69897 + 27.30103 = 41 exactly).
 # ===========================================================================
 _NU_6UM_HZ = 10.0**13.69897  # PRIORS_AGNfitter.py:306,331: "6 microns = 13.69897 log(Hz)"
