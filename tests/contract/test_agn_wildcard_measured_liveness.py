@@ -548,3 +548,93 @@ def test_previously_unfreeable_live_names_are_freed_by_their_owner(
         f"{category}/{block_type}: {param} (owner "
         f"{_AGN_PARTITION.get(param, 'agn')!r}) is still not freed by its owner's wildcard"
     )
+
+
+# ──────────────────────────────────────────────────────────────────────────
+# R36: a block that reads another category's parameters, and the owner.
+# ──────────────────────────────────────────────────────────────────────────
+
+#: SKIRTOR geometry the schartmann2005_skirtor_atten DISC block applies to its
+#: own continuum (`skirtor_disc_attenuation`), all owned by `agn.torus`.
+_SKIRTOR_GEOMETRY = ("agn_oa_skirtor", "agn_p_skirtor", "agn_q_skirtor", "agn_tau_skirtor")
+
+
+def _build_skirtor_atten_disc(ssp_data, observation, torus_type: str):
+    """Disc wildcard FREE on the block that reads SKIRTOR geometry, with the
+    torus selection under test."""
+    agn = {
+        "type": "composable",
+        "disc": {"type": "schartmann2005_skirtor_atten", "all_params": FREE},
+        # Structural 'type' only: the torus states no disposition of its own,
+        # so the geometry it does not read is governed by the block that does.
+        # An explicit torus 'all_params' would (correctly) win -- explicit over
+        # silent -- which is why this writes the natural form.
+        "torus": {"type": torus_type},
+        "all_params": Fixed(DEFAULT),
+        "agn_log_lbol": Fixed(12.0),
+        "norm": "independent",
+    }
+    with warnings.catch_warnings():
+        warnings.simplefilter("ignore")
+        return SEDModel.build(
+            ssp_data=ssp_data,
+            observation=observation,
+            sfh={
+                "type": "const",
+                "all_params": Fixed(DEFAULT),
+                "log_total_mass": 10.0,
+                "start_gyr": 1.0,
+            },
+            dust_attenuation={
+                "type": "two_component",
+                "law": "calzetti",
+                "all_params": Fixed(DEFAULT),
+            },
+            agn=agn,
+            redshift=Fixed(1.0),
+        )
+
+
+@pytest.mark.parametrize("torus_type", ["none", "silva04"])
+def test_disc_wildcard_frees_the_geometry_it_reads_when_no_torus_owns_it(ssp, obs, torus_type):
+    """R36: with no torus reading the SKIRTOR geometry, the disc that does
+    must be able to free it.
+
+    ``schartmann2005_skirtor_atten`` attenuates its own disc continuum through
+    ``skirtor_disc_attenuation``, so its CONSUMES entry names the four geometry
+    parameters -- every one owned by ``agn.torus``. Before the cross-category
+    companion nothing could free them on such a build: the disc's own wildcard
+    frees only what it owns, and the shared agn-level one cannot reach a
+    sub-block-owned name. Measured live there (gradients 6.9e-20, 1.2e-19,
+    -4.3e-19, 1.9e-19), so this was four live dimensions no fit could vary.
+    ``silva04`` is the control: a real torus that reads none of them.
+    """
+    model = _build_skirtor_atten_disc(ssp, obs, torus_type)
+    free = set(model.spec.free_params)
+    missing = [n for n in _SKIRTOR_GEOMETRY if n not in free]
+    assert not missing, (
+        f"torus={torus_type!r}: the disc reads {missing} and nothing else owns "
+        f"them here, but the disc wildcard did not free them"
+    )
+
+
+def test_the_owning_torus_keeps_sole_ownership_when_it_reads_them(ssp, obs):
+    """The other half: no name is freeable twice.
+
+    With ``torus='skirtor'`` the torus block reads the same geometry, so the
+    disc must NOT claim it -- the torus wildcard owns it, and a name two
+    wildcards could free is an ambiguity, not a convenience.
+    """
+    from tengri.parameters.groups import _agn_subblock_declared_params
+
+    selection = {"disc": "schartmann2005_skirtor_atten", "torus": "skirtor"}
+    disc_scope = _agn_subblock_declared_params(
+        "disc", "schartmann2005_skirtor_atten", selection=selection
+    )
+    overlap = sorted(set(_SKIRTOR_GEOMETRY) & disc_scope)
+    assert not overlap, (
+        f"torus='skirtor' reads {overlap} itself, so the disc must not also "
+        f"claim them: two wildcards could then free the same parameter"
+    )
+    torus_scope = _agn_subblock_declared_params("torus", "skirtor", selection=selection)
+    assert set(_SKIRTOR_GEOMETRY) <= torus_scope, sorted(torus_scope)

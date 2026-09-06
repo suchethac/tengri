@@ -335,6 +335,26 @@ def _expect_empty_scope(build_fn, *, category: str, block_type: str):
     return model
 
 
+def _build_selection(category: str, block_type: str) -> dict[str, str]:
+    """The per-category block selection :func:`_build` actually produces.
+
+    A sub-block's scope is conditioned on what the rest of the build selects
+    (R33's feii companion reads the BLR choice; R36's cross-category one reads
+    the owning category's choice), so the expected side has to be computed
+    against the same selection the model was built with, not a guess.
+    """
+    selection = {
+        "disc": "multicolor",
+        "torus": "none",
+        "nlr": "analytic",
+        "blr": "analytic",
+        "feii": "none",
+        "atten": "none",
+    }
+    selection[category] = block_type
+    return selection
+
+
 def skip_if_empty_scope(build_fn, *, category: str, block_type: str) -> bool:
     """Assert the loud empty-scope signal and skip, when the scope IS empty.
 
@@ -350,7 +370,9 @@ def skip_if_empty_scope(build_fn, *, category: str, block_type: str) -> bool:
     ``Skipped``); ``False`` when the scope is non-empty and the caller should
     build normally.
     """
-    if _agn_subblock_declared_params(category, block_type, blr_type="analytic"):
+    if _agn_subblock_declared_params(
+        category, block_type, selection=_build_selection(category, block_type)
+    ):
         return False
     _expect_empty_scope(build_fn, category=category, block_type=block_type)
     pytest.skip(
@@ -371,7 +393,9 @@ def test_q1_wildcard_frees_exactly_declared_and_live(ssp, obs, category, block_t
     # agn_fe2_strength, so the feii sub-block's wildcard legitimately claims it
     # here (R33: the companion is conditioned on the selected BLR block, which
     # is why the selection has to be passed rather than assumed).
-    expected = _agn_subblock_declared_params(category, block_type, blr_type="analytic")
+    expected = _agn_subblock_declared_params(
+        category, block_type, selection=_build_selection(category, block_type)
+    )
     assert expected is not None, (
         f"{category}/{block_type}: _agn_subblock_declared_params returned None "
         f"(type not found in AGN_BLOCKS -- should not happen for a grammar-"
@@ -471,7 +495,9 @@ def test_describe_agn_block_params_match_wildcard_scope(ssp, obs, category, bloc
     from tengri.parameters.groups import _agn_subblock_companion_params
 
     conditional = (
-        _agn_subblock_companion_params(category, block_type, blr_type="analytic")
+        _agn_subblock_companion_params(
+            category, block_type, selection=_build_selection(category, block_type)
+        )
         - _agn_subblock_companion_params(category, block_type)
         # A block that declares the name in its OWN entry keeps it either way,
         # so it is not conditional for that type (feii='boroson_green').

@@ -644,3 +644,48 @@ def test_agn_panchromatic_free_params_all_move_predict(real_ssp_only):
         if rel <= 1e-6:
             no_ops.append(name)
     assert not no_ops, f"recipe frees no-op AGN params (no effect on predict): {no_ops}"
+
+
+def test_every_consumed_name_is_reachable_from_some_wildcard():
+    """Every name a block reads can be freed by SOME wildcard on a build that
+    selects that block (R36).
+
+    Derived from ``AGN_BLOCK_CONSUMES`` -- the record of what each block
+    actually reads -- and checked against the partition, so it is the reads
+    that drive the expectation and never the ownership table it tests. A read
+    the grammar offers no way to fit is the defect this catches.
+
+    It caught one: ``('disc', 'schartmann2005_skirtor_atten')`` applies
+    SKIRTOR's own geometry to its disc continuum, so its CONSUMES entry names
+    ``agn_oa_skirtor``/``p``/``q``/``tau_skirtor`` -- all owned by ``agn.torus``
+    and all measured live (grads 6.9e-20 to 1.9e-19 with no torus selected).
+    With torus absent, no wildcard reached any of them: the disc's own frees
+    only what it owns, and the shared agn-level one cannot reach a
+    sub-block-owned name. Fixed by a cross-category companion, so the reading
+    block's wildcard claims such a name exactly while the owning category's
+    selected block does not read it itself.
+    """
+    from tengri.parameters.groups import (
+        _AGN_CONSUMES_CATEGORY,
+        _agn_param_group,
+        _agn_subblock_declared_params,
+    )
+
+    grammar_of = {v: k for k, v in _AGN_CONSUMES_CATEGORY.items()}
+    unreachable = []
+    for (consumes_cat, block_type), consumed in AGN_BLOCK_CONSUMES.items():
+        grammar_cat = grammar_of.get(consumes_cat, consumes_cat)
+        # The build under test selects this block and nothing else, which is
+        # the configuration in which its own wildcard has to suffice.
+        own = _agn_subblock_declared_params(
+            grammar_cat, block_type, selection={grammar_cat: block_type}
+        )
+        for name in sorted(consumed):
+            if name in own or _agn_param_group(name) == "agn":
+                continue
+            unreachable.append(
+                f"({consumes_cat!r}, {block_type!r}) reads {name!r}, owned by "
+                f"{_agn_param_group(name)!r}: neither this block's wildcard nor "
+                f"the shared agn-level one frees it"
+            )
+    assert not unreachable, "\n".join(unreachable)

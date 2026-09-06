@@ -28,11 +28,13 @@ import paths callers and tests already use are unchanged.
 from __future__ import annotations
 
 import inspect
+from collections.abc import Mapping
 
 from tengri.config.exceptions import ConfigError
 from tengri.parameters.priors import Distribution, Fixed, _is_default_fixed
 
 __all__ = [
+    "agn_cross_category_claims",
     "check_agn_torus_registry_agreement",
 ]
 
@@ -274,7 +276,10 @@ _AGN_CONSUMES_CATEGORY: dict[str, str] = {
 
 
 def _agn_subblock_declared_params(
-    category: str, block_type: str | None, *, blr_type: str | None = None
+    category: str,
+    block_type: str | None,
+    *,
+    selection: Mapping[str, str] | None = None,
 ) -> frozenset[str] | None:
     """Declared parameters ONE AGN sub-block's OWN wildcard may free.
 
@@ -349,7 +354,7 @@ def _agn_subblock_declared_params(
     if fn is None:
         return None
 
-    companions = _agn_subblock_companion_params(category, block_type, blr_type=blr_type)
+    companions = _agn_subblock_companion_params(category, block_type, selection=selection)
     consumed = AGN_BLOCK_CONSUMES.get((consumes_category, block_type))
     if consumed is not None:
         read = frozenset(consumed) | companions
@@ -368,7 +373,18 @@ def _agn_subblock_declared_params(
             | companions
         )
     owning_group = f"agn.{category}"
-    return frozenset(name for name in read if _agn_param_group(name) == owning_group)
+    # The filter stops a block claiming a name it merely happens to mention --
+    # a shared knob, or one another sub-block owns and reads itself. A
+    # CROSS-CATEGORY companion is the opposite statement: this block reads the
+    # name and the owning category's selected block does not, so it survives
+    # the filter deliberately (R36). Without the exception the disc that
+    # applies SKIRTOR geometry could never free the geometry it reads.
+    cross_category = frozenset(
+        name for name in companions if _agn_param_group(name) != owning_group
+    )
+    return (
+        frozenset(name for name in read if _agn_param_group(name) == owning_group) | cross_category
+    )
 
 
 #: (grammar category, block_type) whose physics spans TWO functions: the
@@ -409,19 +425,83 @@ _AGN_CATEGORY_WIDE_COMPANION_PARAMS: dict[str, frozenset[str]] = {
 }
 
 
+def agn_cross_category_claims(selection: Mapping[str, str] | None) -> dict[str, str]:
+    """Which sub-block's wildcard governs each cross-category companion name.
+
+    A block that reads a name another category owns has that name in its
+    wildcard SCOPE (see :func:`_agn_subblock_companion_params`), but the
+    resolver looks for a parameter in its OWNING sub-block dict, so the
+    reading block's ``'*'`` would never be consulted. This is the map that
+    tells the resolver otherwise: name -> the grammar category whose wildcard
+    also governs it on this build.
+
+    Parameters
+    ----------
+    selection : mapping or None
+        Grammar category -> selected block type for the whole build.
+
+    Returns
+    -------
+    dict
+        Name -> claiming category. Empty when nothing is claimed. A name
+        claimed by two categories at once keeps the first in the canonical
+        pipeline order, which is deterministic rather than
+        dict-iteration-dependent.
+
+    Notes
+    -----
+    **JIT-compatible**: no, pure-Python builder-time helper.
+    """
+    claims: dict[str, str] = {}
+    if not selection:
+        return claims
+    for category in _AGN_CONSUMES_CATEGORY:
+        block_type = selection.get(category)
+        if not block_type or block_type == "none":
+            continue
+        owning_group = f"agn.{category}"
+        for name in _agn_subblock_companion_params(category, block_type, selection=selection):
+            if _agn_param_group(name) != owning_group:
+                claims.setdefault(name, category)
+    return claims
+
+
 def _agn_subblock_companion_params(
-    category: str, block_type: str, *, blr_type: str | None = None
+    category: str, block_type: str, *, selection: Mapping[str, str] | None = None
 ) -> frozenset[str]:
     """``agn_*`` names read by a sub-block's companion helper(s), if any.
 
-    Two independent shapes of companion, both invisible to a plain
+    Three shapes of companion, none of them visible to a plain
     ``inspect.signature(AGN_BLOCKS[category][block_type])`` (and, for a type
     with its own ``AGN_BLOCK_CONSUMES`` entry, invisible to that entry too):
-    a type-specific companion FUNCTION (:data:`_AGN_SUBBLOCK_COMPANION_KEY`)
-    and a category-wide companion READ that applies for every type in a
-    category (:data:`_AGN_CATEGORY_WIDE_COMPANION_PARAMS`). Returns an empty
-    set when neither applies to ``(category, block_type)``.
+    a type-specific companion FUNCTION (:data:`_AGN_SUBBLOCK_COMPANION_KEY`),
+    a category-wide companion READ that applies for every type in a category
+    (:data:`_AGN_CATEGORY_WIDE_COMPANION_PARAMS`), and a CROSS-CATEGORY read,
+    where a block reads a name another category owns. The last two are
+    conditioned on what the build actually selects, which is why ``selection``
+    is passed: freeing a name whose owner is not active is the same defect as
+    not freeing one whose owner is.
+
+    Parameters
+    ----------
+    category : str
+        Grammar sub-block key of the block whose wildcard is being scoped.
+    block_type : str
+        The selected type for that sub-block.
+    selection : mapping, optional
+        Grammar category -> selected block type for the whole build. Absent
+        (the default) means "nothing else is known to be selected", which is
+        the conservative answer for a caller describing a block in isolation:
+        conditional companions are simply not claimed.
+
+    Returns
+    -------
+    frozenset of str
+        Companion names this block's own wildcard may free.
     """
+    from tengri.components.agn.blocks._consumes import AGN_BLOCK_CONSUMES
+
+    selection = dict(selection or {})
     out = set(_AGN_CATEGORY_WIDE_COMPANION_PARAMS.get(category, frozenset()))
 
     # Conditional companion (R33): agn_fe2_strength is read by the BLR analytic
@@ -432,10 +512,37 @@ def _agn_subblock_companion_params(
     # read off the selected BLR block's own CONSUMES entry, so the two move
     # together. A feii type that declares the name itself (boroson_green) gets
     # it from its own entry regardless.
+    blr_type = selection.get("blr")
     if category == "feii" and blr_type:
-        from tengri.components.agn.blocks._consumes import AGN_BLOCK_CONSUMES
-
         out |= {"agn_fe2_strength"} & set(AGN_BLOCK_CONSUMES.get(("blr", blr_type), ()))
+
+    # Cross-category companion (R36): a block can read a name another category
+    # owns. `('disc', 'schartmann2005_skirtor_atten')` applies SKIRTOR's own
+    # geometry to its disc continuum, so it reads agn_oa_skirtor / agn_p_skirtor
+    # / agn_q_skirtor / agn_tau_skirtor -- all owned by `agn.torus`. With no
+    # torus selected, nothing could free them: the disc's own wildcard frees
+    # only what it owns, and the shared agn-level one cannot reach a
+    # sub-block-owned name. Measured on that build, all four are live (grads
+    # 6.9e-20, 1.2e-19, -4.3e-19, 1.9e-19).
+    #
+    # The reading block claims such a name exactly while the OWNING category's
+    # selected block does not read it itself -- so with `torus='skirtor'` the
+    # torus keeps sole ownership and no name is freeable twice, while with the
+    # torus absent or on a torus that ignores the geometry the disc's wildcard
+    # reaches what the disc reads.
+    consumes_cat = _AGN_CONSUMES_CATEGORY.get(category, category)
+    for name in AGN_BLOCK_CONSUMES.get((consumes_cat, block_type), frozenset()):
+        owner = _agn_param_group(name)
+        if not owner.startswith("agn.") or owner == f"agn.{category}":
+            continue
+        owner_category = owner[len("agn.") :]
+        owner_type = selection.get(owner_category)
+        if not owner_type or owner_type == "none":
+            out.add(name)
+            continue
+        owner_consumes_cat = _AGN_CONSUMES_CATEGORY.get(owner_category, owner_category)
+        if name not in AGN_BLOCK_CONSUMES.get((owner_consumes_cat, owner_type), frozenset()):
+            out.add(name)
 
     if (category, block_type) == _AGN_SUBBLOCK_COMPANION_KEY:
         from tengri.components.agn.blocks.atten import polar_dust_reemission_lnu

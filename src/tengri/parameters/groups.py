@@ -105,6 +105,7 @@ from typing import NamedTuple
 
 from tengri.config.exceptions import (
     AdvisoryWarning,
+    ConfigError,
     DefaultFixedParametersWarning,
     ParameterError,
     WildcardNoOpWarning,
@@ -128,6 +129,7 @@ from tengri.parameters.agn_ownership import (  # noqa: F401
     _agn_subblock_companion_params,
     _agn_subblock_declared_params,
     _fracagn_value_is_active,
+    agn_cross_category_claims,
     check_agn_torus_registry_agreement,
 )
 from tengri.parameters.parameters import Parameters
@@ -900,6 +902,17 @@ def parse_groups(**kwargs) -> Parameters:
         param_partition,
         agn_ir_frac_active=agn_ir_frac_active,
     )
+    # A block that reads a name another category owns has it in its wildcard
+    # scope, but the resolver looks for a parameter in its OWNING sub-block
+    # dict, so the reading block's '*' would never be consulted. This maps such
+    # a name to the category whose wildcard also governs it here (R36).
+    agn_cross_claims = agn_cross_category_claims(
+        {
+            category: structural_kwargs.get(kwarg)
+            for category, kwarg in _AGN_BLOCK_TO_KWARG.items()
+            if structural_kwargs.get(kwarg)
+        }
+    )
 
     # Outcome of every *active* ``all_params: FREE`` wildcard, keyed by the
     # group it was written in. ``FREE`` resolves to the registry default, which
@@ -967,7 +980,12 @@ def parse_groups(**kwargs) -> Parameters:
             # or (less commonly) a sub-block parameter at the top level.
             # Both should work. Build a merged search view across the
             # canonical location and the sibling locations; conflicts raise.
-            group_dict = _build_agn_search_view(param_name, kwargs.get("agn", {}), group)
+            group_dict = _build_agn_search_view(
+                param_name,
+                kwargs.get("agn", {}),
+                group,
+                wildcard_from=agn_cross_claims.get(param_name),
+            )
         elif group == "radio.sf" or group == "radio.agn":
             # Radio sub-blocks: descend into radio={'sf': {...}} / {'agn': {...}}
             # (mirrors the dust.emission sub-group path above).
@@ -1026,6 +1044,16 @@ def parse_groups(**kwargs) -> Parameters:
         is_agn = group == "agn" or group.startswith("agn.")
         scope = wildcard_scopes.get(group)
         wildcard_active = scope is None or param_name in scope
+        # A cross-category companion is governed by the READING block's
+        # wildcard (R36), so its scope is the one that decides here: the
+        # owner's scope excludes it, and on a build where the owner is 'none'
+        # that scope is empty, which is exactly how four names the
+        # schartmann2005_skirtor_atten disc reads resolved
+        # wildcard_fixed_inactive with nothing able to free them.
+        claiming_category = agn_cross_claims.get(param_name)
+        if not wildcard_active and claiming_category is not None:
+            claim_scope = wildcard_scopes.get(f"agn.{claiming_category}")
+            wildcard_active = claim_scope is None or param_name in claim_scope
         final_dist, tag = _resolve_value(
             param_name,
             group_dict,
@@ -1038,7 +1066,14 @@ def parse_groups(**kwargs) -> Parameters:
         # so only the active branch is tracked.
         if tag == "wildcard_free":
             freed = not final_dist.is_fixed
-            wildcard_free_outcome.setdefault(group, []).append((param_name, freed))
+            # Booked against the wildcard that actually freed it. For a
+            # cross-category companion (R36) that is the READING block's, not
+            # the owner's: booking it under the owner made
+            # _narrow_outcome_to_selected_component rebuild the owner's group
+            # from a declared set the freed name is not in, and report the
+            # owner's own untouched parameters as "freed 0 of 3".
+            outcome_group = f"agn.{claiming_category}" if claiming_category else group
+            wildcard_free_outcome.setdefault(outcome_group, []).append((param_name, freed))
             # Report the *outcome*, not the request. A wildcard-FREE that found
             # no declared prior leaves the parameter Fixed, and tagging it
             # "[all_params FREE]" put a row reading FREE inside the Fixed block
@@ -2137,15 +2172,21 @@ def _wildcard_scopes(
     # CONSUMES table, fell back to the full ~50-param superset and froze 20
     # dead names) -- task-12 audit.
     agn_active = _agn_active_param_set(structural_kwargs)
+    # The whole per-category block selection, so a sub-block scope can be
+    # conditioned on what the rest of the build actually selects (R33's feii
+    # companion, R36's cross-category one).
+    agn_selection = {
+        cat: structural_kwargs.get(kwarg)
+        for cat, kwarg in _AGN_BLOCK_TO_KWARG.items()
+        if structural_kwargs.get(kwarg)
+    }
     for group in set(param_partition.values()):
         if group == "agn":
             scopes[group] = agn_active
         elif group.startswith("agn."):
             category = group[len("agn.") :]
             block_type = structural_kwargs.get(_AGN_BLOCK_TO_KWARG.get(category, ""))
-            declared = _agn_subblock_declared_params(
-                category, block_type, blr_type=structural_kwargs.get("agn_blr_block")
-            )
+            declared = _agn_subblock_declared_params(category, block_type, selection=agn_selection)
             # #2189 (RULING R15): agn_torus_frac is overridden and inert
             # whenever fracAGN is explicitly active (see
             # _agn_ir_frac_explicit_and_active); the torus sub-block's own
@@ -4458,7 +4499,9 @@ def _subblock_owning(key: str, group: str, param_partition: dict[str, str]) -> s
     return None
 
 
-def _build_agn_search_view(param_name: str, agn_dict: dict, group: str) -> dict:
+def _build_agn_search_view(
+    param_name: str, agn_dict: dict, group: str, *, wildcard_from: str | None = None
+) -> dict:
     """Build the resolution view for one AGN parameter.
 
     AGN parameters live in a two-level nest: the top-level ``agn`` dict
@@ -4589,10 +4632,22 @@ def _build_agn_search_view(param_name: str, agn_dict: dict, group: str) -> dict:
         # parameters the active blocks actually consume: e.g. ``agn_polar_ebv``
         # is partitioned to ``agn.atten`` but consumed by the SKIRTOR torus, so
         # a top-level wildcard must be able to reach it.
-        if canonical_subkey is not None and "*" not in canonical_dict and "*" in agn_dict:
-            merged = dict(canonical_dict)
-            merged["*"] = agn_dict["*"]
-            return merged
+        if canonical_subkey is not None and "*" not in canonical_dict:
+            # A cross-category companion (R36): the block that READS this name
+            # governs it with its own wildcard while the owning category's
+            # selected block does not read it. Consulted before the top-level
+            # fallback, and only when the owner's own dict states no wildcard,
+            # so an explicit disposition on the owner still wins.
+            if wildcard_from is not None:
+                claiming = agn_dict.get(wildcard_from)
+                if isinstance(claiming, dict) and "*" in claiming:
+                    merged = dict(canonical_dict)
+                    merged["*"] = claiming["*"]
+                    return merged
+            if "*" in agn_dict:
+                merged = dict(canonical_dict)
+                merged["*"] = agn_dict["*"]
+                return merged
         return canonical_dict
 
     # Single hit: return a synthetic dict carrying that one override
@@ -4606,6 +4661,52 @@ def _build_agn_search_view(param_name: str, agn_dict: dict, group: str) -> dict:
     elif canonical_subkey is not None and "*" in agn_dict:
         view["*"] = agn_dict["*"]
     return view
+
+
+def _validate_agn_top_type(top_type: str) -> None:
+    """Refuse an ``agn['type']`` that is not an AGN model (R37).
+
+    Parameters
+    ----------
+    top_type : str
+        The non-composable value written for ``agn['type']``.
+
+    Raises
+    ------
+    ConfigError
+        Naming the composable form when the string is a registered block type
+        (``'fritz'`` is a torus block, not a model), and the model menu with
+        close matches otherwise.
+    """
+    from tengri.components.agn.blocks._protocol import AGN_BLOCKS
+    from tengri.components.agn.unified import AGN_MODELS, monolithic_agn_model_names
+
+    valid = monolithic_agn_model_names() | set(AGN_MODELS)
+    if top_type in valid:
+        return
+
+    categories = sorted(
+        grammar_category
+        for grammar_category, consumes_category in _AGN_CONSUMES_CATEGORY.items()
+        if top_type in AGN_BLOCKS.get(consumes_category, {})
+    )
+    if categories:
+        where = categories[0]
+        plural = "" if len(categories) == 1 else f" (also registered under {categories[1:]})"
+        raise ConfigError(
+            f"agn['type']={top_type!r} is a composable {where} block, not an AGN "
+            f"model{plural}. Select it per sub-block:\n"
+            f"  agn={{'type': 'composable', {where!r}: {{'type': {top_type!r}, ...}}}}"
+        )
+
+    suggestions = difflib.get_close_matches(top_type, sorted(valid), n=2, cutoff=0.6)
+    hint = f" Did you mean: {', '.join(suggestions)}?" if suggestions else ""
+    raise ConfigError(
+        f"agn['type']={top_type!r} is not an AGN model.{hint} "
+        f"Models: {sorted(valid)}. Composable block types are selected per "
+        f"sub-block instead, e.g. agn={{'type': 'composable', "
+        f"'torus': {{'type': 'skirtor'}}}}."
+    )
 
 
 def _translate_agn(agn_dict: dict, result: dict) -> None:
@@ -4652,6 +4753,20 @@ def _translate_agn(agn_dict: dict, result: dict) -> None:
     # silent-failure footgun (closes #417 second case).
     top_type = agn_dict.get("type")
     if top_type is not None and top_type != "composable":
+        # R37: validate the name HERE, before anything else reads it. It used
+        # to be forwarded to ``agn_model`` unchecked, "validated lazily by
+        # resolve_agn_model at predict time, where the available list is fully
+        # populated (some models register late through plugins)" -- a rationale
+        # that never held: ``resolve_agn_model`` consults ``AGN_MODELS`` only
+        # for ``"composable"``, so a plugin registering any other name is
+        # unreachable regardless. What the deferral bought was that
+        # ``agn={'type': 'fritz'}`` and ``agn={'type': 'totally_bogus_xyz'}``
+        # built identically and both died on the first ``predict_photometry``
+        # with ``Unknown AGN model``; and a parameter written beside such a
+        # type got the sub-block nesting advice, which is a dead end twice
+        # over. Raising here also runs before key validation, so the reader is
+        # told the real problem.
+        _validate_agn_top_type(top_type)
         # Reject mixing a monolithic ``type`` with sub-block selectors;
         # the two surfaces are mutually exclusive.
         used_blocks = sorted(k for k in _AGN_SUBBLOCK_KEYS if k in agn_dict)
@@ -4662,10 +4777,8 @@ def _translate_agn(agn_dict: dict, result: dict) -> None:
                 f"the sub-blocks, or remove 'type' and let the composable "
                 f"runner use the per-block selectors."
             )
-        # Forward ``type`` to ``agn_model`` and skip the block-selector
-        # plumbing. Unknown model names are validated lazily by
-        # ``resolve_agn_model`` at predict time, where the available list
-        # is fully populated (some models register late through plugins).
+        # Forward the validated ``type`` to ``agn_model`` and skip the
+        # block-selector plumbing.
         result["agn_model"] = top_type
         return
 
