@@ -4682,7 +4682,14 @@ def _validate_agn_top_type(top_type: str) -> None:
     from tengri.components.agn.blocks._protocol import AGN_BLOCKS
     from tengri.components.agn.unified import AGN_MODELS, monolithic_agn_model_names
 
-    valid = monolithic_agn_model_names() | set(AGN_MODELS)
+    # 'none' is the grammar's universal off switch, not a model name -- neb,
+    # shock, radio, xray, igm and both dust groups all take it, and agn is
+    # named among them in _translate_dust's own comment. It is also a
+    # registered type in all six composable categories, so without this the
+    # block-name branch below claims it and answers "no AGN at all" with
+    # agn={'type': 'composable', 'atten': {'type': 'none', ...}} -- a build
+    # that HAS an AGN.
+    valid = monolithic_agn_model_names() | set(AGN_MODELS) | {"none"}
     if top_type in valid:
         return
 

@@ -157,7 +157,7 @@ def _validated_agn_types() -> set[str]:
     """Every string ``agn={'type': ...}`` accepts, from the registries."""
     from tengri.components.agn.unified import AGN_MODELS
 
-    return set(monolithic_agn_model_names()) | set(AGN_MODELS)
+    return set(monolithic_agn_model_names()) | set(AGN_MODELS) | {"none"}
 
 
 def test_the_r27_contract_covers_exactly_the_validated_type_set():
@@ -167,7 +167,23 @@ def test_the_r27_contract_covers_exactly_the_validated_type_set():
     have no coverage; if it refused one this file builds, the file would be
     testing a spelling users cannot write.
     """
-    assert _validated_agn_types() == set(_MONOLITHIC) | {"composable"}
+    assert _validated_agn_types() == set(_MONOLITHIC) | {"composable", "none"}
+
+
+def test_none_is_the_off_switch_not_a_composable_block_name():
+    """``agn={'type': 'none'}`` disables the group; it is not a block name.
+
+    ``'none'`` is registered as a type in all six composable categories, so
+    R37's block-name branch claimed the one spelling that means "no AGN at
+    all" and answered it with ``agn={'type': 'composable', 'atten': {'type':
+    'none', ...}}`` -- a build with an AGN. Every other group in the grammar
+    takes the same off switch (``neb``, ``shock``, ``radio``, ``xray``,
+    ``igm``, ``dust_attenuation``, ``dust_emission``), and ``_translate_dust``
+    names agn among them. Measured at a293dec69: it parsed, and the resulting
+    spec carried ``agn_model == 'none'``.
+    """
+    spec = _parse({"type": "none"})
+    assert spec.agn_model == "none"
 
 
 @pytest.mark.parametrize("block_type", ["fritz", "kd18_agnfitter", "nenkova_agnfitter"])
