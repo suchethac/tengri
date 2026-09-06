@@ -85,7 +85,13 @@ def test_xray_delta_alpha_ox_is_wired_with_agn(synthetic_ssp_wide, synthetic_top
     model = SEDModel.build(
         ssp_data=synthetic_ssp_wide,
         observation=synthetic_tophat_obs,
-        agn={"type": "composable", "disc": builders.agn.disc.multicolor(all_params=FREE)},
+        # No 'all_params' on the disc block itself (#2187): every multicolor
+        # disc parameter is a *shared* AGN parameter -- partitioned under
+        # "agn", never "agn.disc" -- so a wildcard restated on 'disc' covers
+        # zero parameters and now raises. This test only needs a disc present
+        # (to bring the corona online); it never relied on the disc wildcard
+        # freeing anything.
+        agn={"type": "composable", "disc": builders.agn.disc.multicolor()},
         xray={"type": "simple", "delta_alpha_ox": Uniform(-2.0, -1.0)},
         **_base_kwargs(),
     )

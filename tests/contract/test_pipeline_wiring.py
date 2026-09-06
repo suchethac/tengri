@@ -208,7 +208,13 @@ def _agn_model(ssp, obs):
         dust_attenuation={"type": "two_component", "law": "calzetti"},
         agn={
             "type": "composable",
-            "disc": {"type": "kubota_done", "all_params": FREE},
+            # No 'all_params' on the disc block itself (#2187): every
+            # kubota_done disc parameter is a *shared* AGN parameter --
+            # partitioned under "agn", never "agn.disc" -- so the
+            # composable-level wildcard below already frees every one of
+            # them; a wildcard restated on 'disc' covers zero parameters
+            # and now raises.
+            "disc": {"type": "kubota_done"},
             "torus": {"type": "skirtor", "all_params": FREE},
             "atten": {"type": "polar_dust", "all_params": FREE},
             "all_params": FREE,
