@@ -298,12 +298,19 @@ def test_a_narrowed_prior_still_round_trips_through_to_groups():
     would have failed that comparison, emitting ``lgU`` as an explicit
     override and quietly changing the emitted grammar.
 
-    Astrodust also carries several block-scoped-inactive Fixed params (they
-    stay declared-but-Fixed, a different provenance tag than the wildcard),
-    so those DO surface as explicit entries -- which is why the wildcard here
-    is spelled ``other_params`` rather than ``all_params`` (the emission
-    convention: sole directive -> ``all_params``, explicit entries alongside
-    it -> ``other_params``, last).
+    The emission convention is: wildcard as sole directive -> ``all_params``;
+    explicit entries alongside it -> ``other_params``, written last. Astrodust
+    emits the *sole directive* form, so ``all_params`` is what to expect here.
+
+    It emitted ``other_params`` until ``dust_eta_balance`` joined every IR
+    engine's freeable set (it is read by the attenuator, not by any engine's
+    own ``predict``, so scoping it to the selected engine's declarations left
+    it reachable by no wildcard at all). Before that it was the one
+    block-scoped-inactive Fixed parameter in this group, and it surfaced as an
+    explicit ``eta_balance`` entry, which is what made the wildcard the
+    ``other_params`` form. Now it collapses into the wildcard like every other
+    freed parameter and no explicit entry remains. The subject of this test is
+    unchanged: ``lgU`` must not surface as an explicit override.
     """
     if not grid_support("dust.emission", "astrodust"):
         pytest.skip("astrodust grid not installed")
@@ -316,8 +323,12 @@ def test_a_narrowed_prior_still_round_trips_through_to_groups():
     )
     # After the split, dust_emission is now a separate top-level group
     emitted = spec.to_groups()["dust_emission"]
-    assert emitted["other_params"] is FREE
-    assert list(emitted.keys())[-1] == "other_params"
+    assert emitted["all_params"] is FREE
+    assert list(emitted.keys())[-1] == "all_params"
+    assert "other_params" not in emitted, (
+        "the wildcard is the sole directive here, so the convention emits "
+        "'all_params'; 'other_params' would mean an explicit entry survived"
+    )
     assert "lgU" not in emitted, "narrowed param must collapse into the wildcard"
 
     with warnings.catch_warnings():

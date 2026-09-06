@@ -12,7 +12,8 @@ name is live (nonzero ``jax.grad`` of ``predict_photometry``). A type that
 owns no parameters of its own (every knob it reads is shared with other
 blocks, or split across categories -- see the module docstring on
 ``_agn_subblock_declared_params``) must produce an explicit "nothing was
-freed" signal (``WildcardNoOpWarning``), never silence.
+freed" signal, never silence. Since #2187 that signal is a ``ParameterError``
+("covers no parameters"); it was a ``WildcardNoOpWarning`` before.
 
 Q2 WIRED -- the selected type must measurably change the AGN SED relative to
 some other registered type in the same slot, at otherwise-identical
@@ -290,18 +291,18 @@ def _maybe_skip_grid_gated(category: str, block_type: str, exc: Exception):
     raise exc
 
 
-#: Coordination note (peer branch fix/2187-wildcard-free-priors, PR #2207,
-#: session ce311b): that branch makes EVERY 'all_params: FREE' group reach
-#: the wildcard adjudicator and escalates covered-0 from WildcardNoOpWarning
-#: to ParameterError ("covers no parameters", per the rebase facts logged in
-#: the Task 16 brief). It does not touch _wildcard_scopes,
-#: _agn_active_param_set, or any AGN scope mechanism -- so after Task 16 the
-#: ONLY empty-scope cases here are genuinely parameter-free variants (a type
+#: #2187 / PR #2207 has landed (merged into this branch): EVERY
+#: 'all_params: FREE' group now reaches the wildcard adjudicator, and
+#: covered-0 is escalated from WildcardNoOpWarning to ParameterError
+#: ("covers no parameters"). That change does not touch _wildcard_scopes,
+#: _agn_active_param_set, or any AGN scope mechanism -- so the ONLY
+#: empty-scope cases here are genuinely parameter-free variants (a type
 #: whose every declared param is shared/masking, not owned by this
-#: sub-block). Flip this ONE constant when #2207 lands; every empty-scope
-#: assertion in this module goes through :func:`_expect_empty_scope`, so the
-#: flip is one line here, not N call sites.
-_EMPTY_SCOPE_ESCALATED = False
+#: sub-block). Every empty-scope assertion in this module goes through
+#: :func:`_expect_empty_scope`, so adopting the new regime was one line
+#: here, not N call sites. The warning branch below is retained only as the
+#: record of what the assertion used to be; it is no longer reachable.
+_EMPTY_SCOPE_ESCALATED = True
 
 
 def _expect_empty_scope(build_fn, *, category: str, block_type: str):

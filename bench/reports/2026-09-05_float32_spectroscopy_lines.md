@@ -755,7 +755,7 @@ python bench/scripts/benchmark_float32_spectroscopy_line_seams.py \
 
 # --- Finding 2/3's forward evidence, and Finding 5's step-size sweep ------------
 # The two line operators at each precision (predict_line_fluxes -> nan; the Cue
-# FeaturePrecomp grid builds at f64 and raises at f32) are transcribed in
+# FeaturePrecomp grid builds at f64 and raises at f32) are recorded in
 #   bench/results/2026-09-05_float32_line_operator_overflow.txt
 #   bench/results/2026-09-05_float32_line_lut_and_fd_probes.txt
 # The lines_cue seam, recorded so the failure has a JSON row of its own:

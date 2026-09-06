@@ -325,7 +325,10 @@ def _agn_subblock_declared_params(
     once), the filtered answer is a non-``None`` empty set: NOT "unknown,
     leave unnarrowed" but "covers zero parameters here", which
     :func:`_check_wildcard_freed_something` turns into a loud
-    ``WildcardNoOpWarning`` instead of silently freeing nothing (D3).
+    :class:`~tengri.config.exceptions.ParameterError` instead of silently
+    freeing nothing (D3). That signal was a ``WildcardNoOpWarning`` until
+    #2187 escalated covered-zero to a raise, on the grounds that a warning
+    here is exactly as swallowable as the silence it replaced.
 
     Parameters
     ----------

@@ -200,6 +200,12 @@ def test_subblock_wildcard_frees_disc_physics_params(ssp_data, disc_type):
     asserted ``pytest.warns(WildcardNoOpWarning)``); no warning should fire
     now that the wildcard covers real parameters, and the freed parameters
     must be live (nonzero gradient), not merely present.
+
+    Since #2187, a covered-zero wildcard raises ``ParameterError`` rather
+    than warning, so the ``simplefilter`` below no longer carries the weight
+    it did: the load-bearing assertion is that ``SEDModel.build`` returns at
+    all, plus the per-parameter liveness checks. The filter is kept as a
+    ratchet against the warning form being reintroduced.
     """
     with warnings.catch_warnings():
         warnings.simplefilter("error", category=WildcardNoOpWarning)

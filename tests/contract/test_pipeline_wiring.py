@@ -208,12 +208,12 @@ def _agn_model(ssp, obs):
         dust_attenuation={"type": "two_component", "law": "calzetti"},
         agn={
             "type": "composable",
-            # No 'all_params' on the disc block itself (#2187): every
-            # kubota_done disc parameter is a *shared* AGN parameter --
-            # partitioned under "agn", never "agn.disc" -- so the
-            # composable-level wildcard below already frees every one of
-            # them; a wildcard restated on 'disc' covers zero parameters
-            # and now raises.
+            # No 'all_params' on the disc block itself: the composable-level
+            # wildcard below already frees what this test needs. (#2187
+            # dropped it on the stronger claim that a disc wildcard covers
+            # zero parameters and raises -- not true under per-sub-block
+            # declared-reads scoping, where "agn.disc" owns parameters of its
+            # own. Unnecessary here, not refused.)
             "disc": {"type": "kubota_done"},
             "torus": {"type": "skirtor", "all_params": FREE},
             "atten": {"type": "polar_dust", "all_params": FREE},

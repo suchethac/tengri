@@ -113,8 +113,11 @@ def _build_one_category(ssp_data, observation, category, block_type, *, all_para
     agn[category] = sub
     with warnings.catch_warnings():
         # `mute=False` for the empty-scope path: a blanket suppression there
-        # would mute the very WildcardNoOpWarning that surface asserts, so the
-        # assertion would pass on silence (the reviewer's Finding 1).
+        # would mute the very wildcard signal that surface asserts, so the
+        # assertion would pass on silence (the reviewer's Finding 1). Since
+        # #2187 covered-zero raises ParameterError rather than warning, which
+        # no filter can swallow -- but the partial-free surface still signals
+        # by warning, so the distinction stays load-bearing here.
         warnings.simplefilter("ignore" if mute else "always")
         return SEDModel.build(
             ssp_data=ssp_data,
