@@ -1293,6 +1293,10 @@ _RADIO_BLOCK_METADATA: dict[tuple[str, str], dict[str, str]] = {
         "citation": "Bell 2003 (ApJ 586, 794)",
         "short_doc": "Fixed-q FIR-radio correlation",
     },
+    ("sf", "bell2003_split"): {
+        "citation": "Bell 2003 (ApJ 586, 794); Martinez-Ramirez+2024 (A&A 692, A85)",
+        "short_doc": "Bell 2003 total L(1.4 GHz) split 90% non-thermal / 10% thermal",
+    },
     ("sf", "delvecchio2021"): {
         "citation": "Delvecchio+2021 FIRRC (SEMPER Eq. 4, arXiv:2503.20525)",
         "short_doc": "Mass- and z-dependent q_IR at 1.4 GHz",
