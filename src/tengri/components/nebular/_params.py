@@ -70,7 +70,7 @@ PARAMS: tuple[ParamDeclaration, ...] = (
         # is dead code on the build path, because the grammar always supplies
         # this declared default. Freeing gas-phase Z simply adds an
         # independent dimension beside ``met_logzsol`` -- an ordinary
-        # modelling choice, near-degenerate with it only to the extent the
+        # modeling choice, near-degenerate with it only to the extent the
         # data cannot separate lines from continuum.
         free_prior=Uniform(
             -1.30, 0.20, "Gas-phase metallicity", units="log10(Z/Zsun)", default=-0.3
