@@ -8,6 +8,39 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 
 ### Fixed
 
+- `compute_l_dust_absorbed` (`tengri.utils.sed_quantities`) integrated the
+  whole wavelength grid, while `bolometric_absorbed_log10`
+  (`tengri.forward.energy_balance`, the pipeline's own dust normalization)
+  masks `lambda < 912` Å (Lyman-continuum photons ionize hydrogen rather than
+  heat dust). The two now build their integrand through one shared helper
+  (`absorbed_integrand`, mask constant `LYMAN_CUTOFF_AA`), so LyC energy is no
+  longer counted as dust-absorbed by the utility path either. `agnfitter_priors`'s
+  `energy_balance` prior compared the unmasked total against the masked
+  `L_ir`, so any nonzero LyC fraction made the absorbed side exceed the
+  emitted side and returned `AGNFITTER_HARD_REJECT` for every
+  Calzetti-attenuated star-forming galaxy, independent of
+  `tau_v`/`dust_T`/`dust_eta_balance`. `compute_l_dust_absorbed` gains an
+  `include_lyc=False` keyword; pass `True` for the pre-fix unmasked total
+  (#922).
+- `dust_eta_balance` (`L_IR = eta * L_absorbed`) was read only on the
+  two-component dust-attenuation path; the single-component screen
+  (`components/dust/component.py`) and the WG00 screen
+  (`components/dust/wg00_model.py`) published `L_ir = L_absorbed`
+  unconditionally, so freeing `dust_eta_balance` on either path had no effect
+  on the SED at all — a declared free parameter whose posterior always
+  equaled its prior. Both now apply the same log-space treatment as the
+  two-component path (`L_ir = eta * L_absorbed`; `eta <= 0` re-emits nothing).
+  Default `eta = 1.0` changes no existing SED (`log10(1.0) == 0`).
+- WG00-attenuated models (`dust_attenuation={'type': 'wg00', ...}`) silently
+  dropped the configured `dust_emission` component with no warning:
+  `component_factory.py` excluded `wg00` from the dispatch that attaches dust
+  IR re-emission, an exclusion carried into the unified single-dispatch
+  conditional when attenuator selection converged onto the `_REGISTRY` seam
+  (b5ffa65e1); WG00 screen attenuation itself originates in #560/#665. WG00
+  now receives its configured `dust_emission` component exactly like the
+  other two attenuation types. **Far-IR photometry of a WG00-attenuated model
+  that configures `dust_emission=` changes**: the dust IR bump that was
+  previously silently absent now appears.
 - `multicolor_disc`'s pure-float32 bolometric renormalization returned
   `l_nu_intrinsic * scale`, and transposing that product makes JAX form
   `sum(g * l_nu_intrinsic)`. With the raw disc SED (~1e28) and the cotangent
