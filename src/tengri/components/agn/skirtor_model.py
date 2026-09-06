@@ -49,6 +49,9 @@ _TAU_SKIRTOR_PRIOR = declared_prior(_AGN_PARAMS, "agn_tau_skirtor")
 _P_SKIRTOR_PRIOR = declared_prior(_AGN_PARAMS, "agn_p_skirtor")
 _Q_SKIRTOR_PRIOR = declared_prior(_AGN_PARAMS, "agn_q_skirtor")
 _COS_INC_PRIOR = declared_prior(_AGN_PARAMS, "agn_cos_inc")
+_RADIUS_RATIO_PRIOR = declared_prior(_AGN_PARAMS, "agn_radius_ratio")
+_POLAR_T_PRIOR = declared_prior(_AGN_PARAMS, "agn_polar_T")
+_POLAR_BETA_PRIOR = declared_prior(_AGN_PARAMS, "agn_polar_beta")
 
 
 @dataclass(frozen=True)
@@ -245,6 +248,13 @@ class SKIRTORTorus(SEDModelComponent):
         units="dimensionless",
         default=_COS_INC_PRIOR.default,
     )
+    radius_ratio = Uniform(
+        _RADIUS_RATIO_PRIOR.lo,
+        _RADIUS_RATIO_PRIOR.hi,
+        description="Torus outer/inner radius ratio",
+        units="dimensionless",
+        default=_RADIUS_RATIO_PRIOR.default,
+    )
     band_frac = Uniform(
         0.0,
         1.0,
@@ -260,18 +270,18 @@ class SKIRTORTorus(SEDModelComponent):
         default=0.1,
     )
     polar_temperature = Uniform(
-        50.0,
-        200.0,
+        _POLAR_T_PRIOR.lo,
+        _POLAR_T_PRIOR.hi,
         description="Polar dust graybody temperature",
         units="K",
-        default=100.0,
+        default=_POLAR_T_PRIOR.default,
     )
     polar_beta = Uniform(
-        1.0,
-        2.5,
+        _POLAR_BETA_PRIOR.lo,
+        _POLAR_BETA_PRIOR.hi,
         description="Polar dust emissivity index",
         units="dimensionless",
-        default=1.6,
+        default=_POLAR_BETA_PRIOR.default,
     )
     delta = Uniform(
         -1.0,
@@ -434,6 +444,7 @@ class SKIRTORTorus(SEDModelComponent):
             agn_p_skirtor=p["p_skirtor"],
             agn_q_skirtor=p["q_skirtor"],
             agn_oa_skirtor=p["oa_skirtor"],
+            agn_radius_ratio=p["radius_ratio"],
             agn_cos_inc=p["cos_inc"],
             frac_agn=p["band_frac"],
         )
