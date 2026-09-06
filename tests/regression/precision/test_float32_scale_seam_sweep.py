@@ -359,18 +359,23 @@ def test_every_filed_defect_is_still_out_of_range_and_names_an_issue():
     First, the arithmetic: the product still leaves float32's range somewhere
     inside the parameter's own declared prior. That statement is
     environment-free -- it is about the constant, the prior and ``finfo`` -- so
-    it holds on every backend and every jaxlib, unlike the behaviour it
+    it holds on every backend and every jaxlib, unlike the behavior it
     predicts. When the seam is fixed, or the prior narrows, this fails and the
     entry has to move or go.
 
-    Second, the paper trail: each entry names the issue it is filed under. A
-    defect recorded without one is a defect nobody is going to fix.
+    Second, the paper trail: each entry OPENS with the issue it is filed under.
+    Anchored at the start rather than searched for anywhere in the reason --
+    these reasons cite several issues for context, so a search would be
+    satisfied by any of them and would not say where this defect is tracked. A
+    defect recorded without an issue is a defect nobody is going to fix.
     """
     by_key = {seam.key: seam for seam in _TOOL._scan()}
     for family, (reason, keys) in _TOOL._OPEN_DEFECTS.items():
-        assert re.search(r"#\d{3,}", reason), (
-            f"_OPEN_DEFECTS[{family!r}] records no issue number; a filed defect "
-            f"that names no issue is not filed"
+        assert re.match(r"#\d{3,}\.", reason), (
+            f"_OPEN_DEFECTS[{family!r}] does not OPEN with the issue it is filed "
+            f"under. Anchored at the start on purpose: a reason that merely "
+            f"mentions some issue number somewhere passes a search and says "
+            f"nothing about where this defect is tracked. Got: {reason[:60]!r}"
         )
         for key in keys:
             assert key in by_key, (

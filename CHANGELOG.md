@@ -29,6 +29,27 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
   symptom, and the `spec/*/auto_*` symptom with it — see the next entry
   (#2178, #2100).
 
+- The `optimization_barrier` that PR #2194 put on `_mass_scale_lnu`'s primal
+  costs neither memory nor time, measured rather than assumed. On the
+  `spec/lut` seam at a realistic `(n_age, n_wave) = (93, 4096)`, four
+  interleaved before/after repetitions on an otherwise idle box (1-minute load
+  average stamped per run, 0.46 to 3.6): XLA's own compiled-memory analysis is
+  **byte-identical** in both arms — `temp` 1.558 MB (forward) and 4.701 MB
+  (forward+gradient) in float32, 3.115 MB and 9.396 MB in float64, with
+  `output`, `argument` and `alias` zero throughout — and peak process RSS is
+  2481.5 MB without the barrier against 2495.2 MB with it, a 0.55 % difference
+  dominated by the SSP load and the model build rather than the kernel. Forward
+  wall time is 1.040 ms against 1.034 ms; forward+gradient is 3.083 ms against
+  3.095 ms, a 0.4 % difference inside a per-arm spread of 22 %. The premise that
+  the barrier forces an extra `(n_age, n_wave)` materialization does **not**
+  hold: the einsum already produces that array as its own output and the barrier
+  sits on a scalar multiply of it, which XLA does in place. No approach is
+  switched, and the docstring's note that folding `L_sun` into the einsum
+  operand "does not survive" the SSP-as-`Parameter` path is left standing
+  un-relitigated — a standalone reproducer at the seam's shape does not
+  reproduce the defect at all, so it cannot adjudicate that note either way
+  (#2178, #2194).
+
 - **Symptom 2 of #2178 was the same defect, not a second one.** The float64
   spectroscopy forward was reported non-finite on six `spec/*/auto_*` seams (CI
   run 33958554553), and `_skip_if_lut_forward_is_broken` (#2143) was left in
@@ -103,9 +124,11 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
   from a grid axis (45741f4cd). 52 seams; 46 of them exceed float32's range
   within their own declared prior, in 4 families — `L_sun * 10**agn_log_lbol`
   (38 sites), `L_sun * 10**log_total_mass` (5), `M_sun * 10**agn_log_mbh` (2)
-  and the Lehmer LMXB mass term (1). Each family carries a recorded grouping;
-  anything new is an error, and a registration whose seam is gone is also an
-  error, so the inventory cannot rot. Runs in the `smoke` job, beside
+  and the Lehmer LMXB mass term (1). Three families carry a recorded grouping
+  that keeps them safe; the fourth is filed as an open defect (#2210), because
+  recording a live defect as "handled" is worse than not recording it. Anything
+  new is an error, and a registration whose seam is gone is also an error, so
+  the inventory cannot rot. Runs in the `smoke` job, beside
   `check_float32_representable_constants.py`, which is where the checks that
   need tengri installed live — `lint` installs only ruff.
 
@@ -115,7 +138,11 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
   != 0.0` is `True`, and zero is finite, so neither half is coverage alone). The
   inventory is read from the tool rather than written down twice: the module
   fails if the enumeration grows a family it does not sweep, which is what makes
-  the recorded reason a measurement instead of the only evidence.
+  the recorded reason a measurement instead of the only evidence. The sweep
+  refuted the first draft's reading of the black-hole-mass family as safe
+  (#2210): `M_sun * 10**agn_log_mbh` is 1.99e39 at the *bottom* of its declared
+  prior, and the float32 forward of a `kubota_done` disc is `nan` there under
+  jaxlib 0.11.1 while finite under 0.11.0.
 
 - `mcmc_smc` — tempered Sequential Monte Carlo via BlackJAX, at
   `tier="experimental"`. A particle population annealed from the exact
