@@ -775,21 +775,25 @@ def _agn_grammar(disc="kubota_done", torus="simple", nlr="none", blr="none", cos
         },
         agn={
             "type": "composable",
-            "disc": {"type": disc},
-            "torus": {"type": torus},
-            "nlr": {"type": nlr},
-            "blr": {"type": blr},
-            "agn_log_lbol": Fixed(agn_log_lbol),
             # Match Synthesizer's black hole, not just its bolometric luminosity:
             # the kubota_done (qsosed) disc temperature profile — and therefore the
             # UV bump shape and height — is set by M_BH and the Eddington ratio.
             # Leaving these at tengri's defaults (1e7 M⊙) ran a hotter, fainter
             # disc (0.75x); pinning them to the §9 BH gives a ~0.98x match.
-            "agn_log_mbh": Fixed(float(np.log10(BH_MASS))),
-            "agn_log_ledd": Fixed(float(np.log10(BH_EDD))),
+            "disc": {
+                "type": disc,
+                "agn_log_mbh": Fixed(float(np.log10(BH_MASS))),
+                "agn_log_ledd": Fixed(float(np.log10(BH_EDD))),
+            },
+            "torus": {
+                "type": torus,
+                "agn_theta_torus": Fixed(THETA_TORUS),
+                "agn_torus_frac": Fixed(_TORUS_FRAC),
+            },
+            "nlr": {"type": nlr},
+            "blr": {"type": blr},
+            "agn_log_lbol": Fixed(agn_log_lbol),
             "agn_cos_inc": Fixed(cos_inc),
-            "agn_theta_torus": Fixed(THETA_TORUS),
-            "agn_torus_frac": Fixed(_TORUS_FRAC),
             "all_params": Fixed(DEFAULT),
         },
         redshift=Fixed(0.0),
@@ -835,15 +839,17 @@ for disc_type, _ in _disc_models:
         },
         agn={
             "type": "composable",
-            "disc": {"type": disc_type},
-            "torus": {"type": "none"},
-            "lines": {"type": "none"},
-            "agn_log_lbol": Fixed(agn_log_lbol),
             # Match the §9 BH so the kubota_done disc temperature profile matches
             # Synthesizer's qsosed (ignored by the power-law disc). Without this the
             # disc runs at tengri's default 1e7 M⊙ — hotter and ~0.75x in peak.
-            "agn_log_mbh": Fixed(float(np.log10(BH_MASS))),
-            "agn_log_ledd": Fixed(float(np.log10(BH_EDD))),
+            "disc": {
+                "type": disc_type,
+                "agn_log_mbh": Fixed(float(np.log10(BH_MASS))),
+                "agn_log_ledd": Fixed(float(np.log10(BH_EDD))),
+            },
+            "torus": {"type": "none"},
+            "lines": {"type": "none"},
+            "agn_log_lbol": Fixed(agn_log_lbol),
             "all_params": Fixed(DEFAULT),
         },
         redshift=Fixed(0.0),
@@ -1221,10 +1227,9 @@ _m_vis = SEDModel.build(
     agn={
         "type": "composable",
         "disc": {"type": "kubota_done"},
-        "torus": {"type": "simple"},
+        "torus": {"type": "simple", "agn_theta_torus": Fixed(THETA_TORUS)},
         "agn_log_lbol": Fixed(agn_log_lbol),
         "agn_cos_inc": Uniform(0.0, 1.0),
-        "agn_theta_torus": Fixed(THETA_TORUS),
         "all_params": Fixed(DEFAULT),
     },
     redshift=Fixed(0.0),
@@ -1310,16 +1315,20 @@ def _unified_phot(approx):
         },
         agn={
             "type": "composable",
-            "disc": {"type": "kubota_done"},
-            "torus": {"type": "simple"},
+            "disc": {
+                "type": "kubota_done",
+                "agn_log_mbh": Fixed(float(np.log10(BH_MASS))),
+                "agn_log_ledd": Fixed(float(np.log10(BH_EDD))),
+            },
+            "torus": {
+                "type": "simple",
+                "agn_theta_torus": Fixed(THETA_TORUS),
+                "agn_torus_frac": Fixed(_TORUS_FRAC),
+            },
             "nlr": {"type": "synthesizer_spectra"},
             "blr": {"type": "synthesizer_spectra"},
             "agn_log_lbol": Fixed(agn_log_lbol),
-            "agn_log_mbh": Fixed(float(np.log10(BH_MASS))),
-            "agn_log_ledd": Fixed(float(np.log10(BH_EDD))),
             "agn_cos_inc": Fixed(BH_COS_INC),
-            "agn_theta_torus": Fixed(THETA_TORUS),
-            "agn_torus_frac": Fixed(_TORUS_FRAC),
             "all_params": Fixed(DEFAULT),
         },
         redshift=Fixed(0.05),
