@@ -230,13 +230,33 @@ class TestIRXrays:
 
 
 class TestMidIRUV:
+    """Frozen: x = log10(nu*L_nu(6um)/1e41) -- the SAME x formula as
+    prior_ir_xrays (review round 1 fix: a previous version subtracted
+    upstream's L_nu-calibrated 27.30103 directly from log10(nulnu_6um)
+    without the 13.69897 frequency correction, off by log10(nu_6um) in x)."""
+
     def test_matches_scipy_at_peak(self):
         nulnu_6um = 1.0e44
-        x = jnp.log10(nulnu_6um) - 27.30103
+        x = jnp.log10(nulnu_6um / 1e41)
         model = float((16.2530786 + 1.024 * x - 0.047 * x**2) / 0.643)
         expected = stats.norm.logpdf(0.0, loc=0.0, scale=0.6)
         got = float(prior_midir_uv(model, nulnu_6um))
         assert got == pytest.approx(expected, abs=1e-9)
+
+    def test_shares_x_with_prior_ir_xrays(self):
+        """Both priors call the same private ``_x_from_nulnu_6um`` helper."""
+        from tengri.parameters.agn_priors import _x_from_nulnu_6um
+
+        nulnu_6um = 3.0e42
+        x = float(_x_from_nulnu_6um(nulnu_6um))
+        model_ir_xrays = 22.9494264 + 1.024 * x - 0.047 * x**2
+        model_midir_uv = (16.2530786 + 1.024 * x - 0.047 * x**2) / 0.643
+        assert float(prior_ir_xrays(model_ir_xrays, nulnu_6um)) == pytest.approx(
+            stats.norm.logpdf(0.0, loc=0.0, scale=0.5), abs=1e-9
+        )
+        assert float(prior_midir_uv(model_midir_uv, nulnu_6um)) == pytest.approx(
+            stats.norm.logpdf(0.0, loc=0.0, scale=0.6), abs=1e-9
+        )
 
     def test_grad_finite(self):
         grad_val = jax.grad(lambda x: prior_midir_uv(x, 1.0e44))(45.0)
@@ -245,7 +265,7 @@ class TestMidIRUV:
     def test_disagrees_with_direct_luminosity_comparison(self):
         """D7(c) regression: equal L_mir/L_uv is NOT this prior's peak."""
         lp_equal_luminosities = float(prior_midir_uv(45.0, 10**45.0))
-        x = jnp.log10(10.0**45.0) - 27.30103
+        x = jnp.log10(10.0**45.0 / 1e41)
         true_peak_bbmodel = float((16.2530786 + 1.024 * x - 0.047 * x**2) / 0.643)
         lp_at_true_peak = float(prior_midir_uv(true_peak_bbmodel, 10**45.0))
         assert lp_at_true_peak > lp_equal_luminosities + 50.0

@@ -327,12 +327,82 @@ def test_prior_ir_xrays_matches_upstream(nulnu_6um, offset):
 
 # ===========================================================================
 # 8. prior_midir_uv vs upstream prior_midIR_UV (:327-357, core :333-355)
+#
+# CRITICAL fix (review round 1): upstream's prior_midIR_UV computes
+# x = log10(tor_flux_6microns * lumfactor) - 27.30103, where
+# tor_flux_6microns * lumfactor is a SPECIFIC luminosity L_nu(6um)
+# [erg/s/Hz] -- NOT nu*L_nu. prior_IR_XRays instead explicitly forms
+# nuLnu_6microns = 10**13.69897 * tor_flux_6microns * lumfactor (nu*L_nu,
+# erg/s) before its own x = log10(nuLnu_6microns/1e41). A first version of
+# this test (and of prior_midir_uv itself) fed the SAME nu*L_nu input to
+# both formulas but re-used upstream's L_nu-calibrated -27.30103 constant
+# directly on log10(nulnu_6um), silently off by log10(nu_6um) = 13.69897 in
+# x (e.g. nulnu_6um=1e44: x=16.7 instead of x=3.0). Fixed by transcribing
+# upstream's two call sites on their OWN units and proving algebraic
+# equivalence below (13.69897 + 27.30103 = 41 exactly).
 # ===========================================================================
-def _up_midir_uv(log_l2500a_bbmodel, nulnu_6um):
-    x = np.log10(nulnu_6um) - 27.30103
+_NU_6UM_HZ = 10.0**13.69897  # PRIORS_AGNfitter.py:306,331: "6 microns = 13.69897 log(Hz)"
+
+
+def _up_midir_uv_from_l_nu_6um(log_l2500a_bbmodel, l_nu_6um):
+    """Transcription of upstream's LITERAL formula (PRIORS_AGNfitter.py:333),
+    which operates on tor_flux_6microns*lumfactor -- a SPECIFIC luminosity
+    L_nu(6um) [erg/s/Hz], NOT nu*L_nu."""
+    x = np.log10(l_nu_6um) - 27.30103
     model = (16.2530786 + 1.024 * x - 0.047 * x**2) / 0.643
     ratio = log_l2500a_bbmodel - model
     return _up_gaussian(0.0, 0.6, ratio)
+
+
+def _up_midir_uv(log_l2500a_bbmodel, nulnu_6um):
+    """Transcription on tengri's public nu*L_nu [erg/s] input, converting to
+    upstream's own L_nu-based x internally via the 6-micron frequency."""
+    l_nu_6um = nulnu_6um / _NU_6UM_HZ
+    return _up_midir_uv_from_l_nu_6um(log_l2500a_bbmodel, l_nu_6um)
+
+
+def test_prior_midir_uv_x_matches_upstream_specific_luminosity_path():
+    """Prove the fix directly against upstream's own tor_flux_6microns*lumfactor
+    path (PRIORS_AGNfitter.py:331-333), converting to nu*L_nu explicitly via
+    the 6-micron frequency (:306,331), rather than against tengri's own
+    formula. 13.69897 + 27.30103 = 41 exactly, so upstream's L_nu-based
+    x = log10(L_nu_6um) - 27.30103 and tengri's nu*L_nu-based
+    x = log10(nuLnu_6um/1e41) are the SAME number for the SAME physical torus
+    flux."""
+    assert abs((13.69897 + 27.30103) - 41.0) < _TOL
+    l_nu_6um = 3.7e29  # arbitrary torus specific luminosity [erg/s/Hz]
+    x_upstream_l_nu_path = np.log10(l_nu_6um) - 27.30103
+    nulnu_6um = _NU_6UM_HZ * l_nu_6um  # convert to nu*L_nu [erg/s], as prior_IR_XRays does
+    x_tengri_nulnu_path = np.log10(nulnu_6um / 1e41)
+    assert abs(x_tengri_nulnu_path - x_upstream_l_nu_path) < _TOL
+
+    # And prior_midir_uv, given nulnu_6um, reproduces the model prediction
+    # upstream's own L_nu-based x would give:
+    model_upstream = (
+        16.2530786 + 1.024 * x_upstream_l_nu_path - 0.047 * x_upstream_l_nu_path**2
+    ) / 0.643
+    got = float(prior_midir_uv(model_upstream, nulnu_6um))  # ratio == 0 exactly
+    expected = _up_gaussian(0.0, 0.6, 0.0)
+    assert abs(got - expected) < _TOL
+
+
+def test_prior_ir_xrays_and_prior_midir_uv_agree_on_x():
+    """Both priors share tengri's private ``_x_from_nulnu_6um`` helper -- for
+    the SAME nu*L_nu(6um) input, the Stern-correlation variable ``x`` each
+    uses internally must be identical (this was the exact quantity that
+    silently disagreed before the fix)."""
+    from tengri.parameters.agn_priors import _x_from_nulnu_6um
+
+    for nulnu_6um in (1.0e41, 1.0e43, 1.0e45):
+        x = float(_x_from_nulnu_6um(nulnu_6um))
+        model_ir_xrays = 22.9494264 + 1.024 * x - 0.047 * x**2
+        model_midir_uv = (16.2530786 + 1.024 * x - 0.047 * x**2) / 0.643
+        expected_peak_ir_xrays = _up_gaussian(0.0, 0.5, 0.0)
+        expected_peak_midir_uv = _up_gaussian(0.0, 0.6, 0.0)
+        got_ir_xrays = float(prior_ir_xrays(model_ir_xrays, nulnu_6um))
+        got_midir_uv = float(prior_midir_uv(model_midir_uv, nulnu_6um))
+        assert abs(got_ir_xrays - expected_peak_ir_xrays) < _TOL
+        assert abs(got_midir_uv - expected_peak_midir_uv) < _TOL
 
 
 @pytest.mark.parametrize(
@@ -346,7 +416,7 @@ def _up_midir_uv(log_l2500a_bbmodel, nulnu_6um):
     ],
 )
 def test_prior_midir_uv_matches_upstream(nulnu_6um, offset):
-    x = np.log10(nulnu_6um) - 27.30103
+    x = np.log10(nulnu_6um / 1e41)
     model = (16.2530786 + 1.024 * x - 0.047 * x**2) / 0.643
     log_l2500a_bbmodel = model + offset
     expected = _up_midir_uv(log_l2500a_bbmodel, nulnu_6um)
@@ -364,12 +434,12 @@ def test_prior_midir_uv_disagrees_sharply_with_equal_luminosities():
     """
     log_l2500a_bbmodel = 45.0
     nulnu_6um = 10**45.0
-    x = np.log10(nulnu_6um) - 27.30103
+    x = np.log10(nulnu_6um / 1e41)
     log_l2500a_tomodel = (16.2530786 + 1.024 * x - 0.047 * x**2) / 0.643
-    # Measured (probe07): the composite relation predicts ~30.6 dex at this
-    # torus flux, ~14.4 dex away from the naive "equal luminosities" point --
-    # nowhere near it on any astrophysical scale.
+    # The composite relation predicts ~30.5 dex at this torus flux, ~14.5 dex
+    # away from the naive "equal luminosities" point -- nowhere near it on
+    # any astrophysical scale.
     assert abs(log_l2500a_tomodel - 45.0) > 5.0
     got = float(prior_midir_uv(log_l2500a_bbmodel, nulnu_6um))
     direct_comparison_lp = _up_gaussian(0.0, 0.6, 0.0)  # what a naive L_mir==L_uv model gives
-    assert abs(got - direct_comparison_lp) > 50.0  # log-prior units: (14.4/0.6)^2/2 ~ 288
+    assert abs(got - direct_comparison_lp) > 50.0  # log-prior units: (14.5/0.6)^2/2 ~ 292

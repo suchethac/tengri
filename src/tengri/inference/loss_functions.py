@@ -561,6 +561,21 @@ def build_loss_fn(fitter):
     **JIT compatibility**: The returned function is fully JAX-compatible and
     safe inside :func:`jax.jit`, :func:`jax.grad`, :func:`jax.value_and_grad`.
 
+    **Extra log-prior hook**: when ``fitter._extra_log_prior`` is not
+    ``None`` (set via ``Fitter(..., extra_log_prior=...)``), the returned
+    ``loss_fn`` additionally calls ``fitter.model.predict_state(params)`` on
+    the resolved physical parameters and SUBTRACTS
+    ``fitter._extra_log_prior(params, state)`` from the loss (subtracted,
+    not added, because this function returns a quantity to MINIMIZE, unlike
+    :func:`build_logprior_fn`'s ``logprior_fn`` which returns a log-prior
+    directly and therefore adds the term). This is the SAME hook honored by
+    :func:`build_logprior_fn`, wired into both objectives so MAP, VI, and
+    MCMC (all of which minimize :attr:`~tengri.inference.context.
+    InferenceContext.neg_log_posterior_fn`, this function cached) see it,
+    not only nested sampling / evidence. See
+    :class:`~tengri.inference.fitter.Fitter`'s ``extra_log_prior``
+    parameter for the full contract and a worked example.
+
     References
     ----------
     .. [1] Standardized parameterization derivation and Jacobian cancellation:
@@ -574,9 +589,18 @@ def build_loss_fn(fitter):
     # once here rather than per call (#1355).
     field_centering = float(getattr(spec, "field_centering", 1.0))
     neg_log_lik = _build_data_neg_log_likelihood_fn(fitter)
+    # Extra log-prior hook (#[task-7], RULING R10): the SAME fitter._extra_log_prior
+    # honored by build_logprior_fn (physical-space prior, nested sampling /
+    # evidence) must also reach this objective, since MAP/VI/MCMC all minimize
+    # THIS function via InferenceContext.neg_log_posterior_fn -- a hook that
+    # only reached one of the two objectives would be a silent no-op on the
+    # primary inference backends. See fitter.Fitter's ``extra_log_prior``
+    # docstring for the full contract.
+    extra_log_prior = getattr(fitter, "_extra_log_prior", None)
+    model = fitter.model
 
     def loss_fn(params_unbounded, data_args):
-        """Compute loss: -log_lik + ½ξᵀξ prior on standardized params."""
+        """Compute loss: -log_lik + ½ξᵀξ prior on standardized params [- extra_log_prior]."""
         params = _unstandardize_parameters(
             params_unbounded, spec, free_names, fixed_values, stochastic
         )
@@ -602,7 +626,7 @@ def build_loss_fn(fitter):
         # StudentT priors.  Reference: tengri paper §2.2 + Appendix A.
         # The per-galaxy reduction lives in the helper, see its Notes for why a
         # rank-0 result is load-bearing rather than cosmetic.
-        return e_lh + standardized_neg_log_prior(
+        loss = e_lh + standardized_neg_log_prior(
             params_unbounded,
             free_names,
             stochastic=stochastic,
@@ -612,6 +636,18 @@ def build_loss_fn(fitter):
             # not a constant.
             psd_sigma_dex=(params.get("sfh_field_psd_sigma") if field_centering != 1.0 else None),
         )
+        if extra_log_prior is not None:
+            # ``loss`` is a NEGATIVE log posterior (to minimize); extra_log_prior
+            # returns a log-prior TERM (to add to the log posterior), so it is
+            # SUBTRACTED here -- the opposite sign convention from
+            # build_logprior_fn's logprior_fn, which returns (and therefore
+            # ADDS) a log-prior directly. Calls predict_state a second time
+            # (not threaded through the SSP-grid fast path that neg_log_lik
+            # uses, see test_loss_ssp_threading.py); only paid when this hook
+            # is actually set.
+            state = model.predict_state(params)
+            loss = loss - extra_log_prior(params, state)
+        return loss
 
     return loss_fn
 

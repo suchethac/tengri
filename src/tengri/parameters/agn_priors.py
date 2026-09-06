@@ -72,10 +72,26 @@ Adapters
 Turning a tengri :class:`~tengri.forward.prediction.Prediction` /
 ``ForwardState`` into the physical scalars each function above expects
 (rest-1500 A disc/galaxy fluxes, nu*L_nu(6 micron) of the torus, L_IR of the
-cold dust, ...) is model-specific glue outside the scope of this module. The
-fitter hook (``Fitter(..., extra_log_prior=...)``, see
-:func:`tengri.inference.loss_functions.build_logprior_fn`) is the place a user
-wires a closure that does that extraction and calls the functions below.
+cold dust, ...) is model-specific glue. Two routes, for two different jobs:
+
+- :func:`agnfitter_priors` -- the convenience adapter, built on the public,
+  rich :meth:`~tengri.forward.sed_model.SEDModel.predict` /
+  :attr:`Prediction.sed.components
+  <tengri.forward.prediction.SEDProperties.components>` surface. Computes
+  every prior's physical inputs from that dict plus (for the priors that
+  compare against actual data, not just model self-consistency) explicit
+  data keyword arguments, and returns ``(total_log_prior, breakdown_dict)``.
+  **Not JIT-compatible** (``Prediction`` is a Python-cached exploration
+  object per its own docstring) -- for post-fit inspection / reporting, one
+  prediction at a time.
+- ``Fitter(..., extra_log_prior=...)`` (see
+  :func:`tengri.inference.loss_functions.build_logprior_fn` and
+  :func:`~tengri.inference.loss_functions.build_loss_fn`) -- the JIT-safe
+  fitting hook. A user's closure receives ``(params, state)`` where ``state``
+  is the internal ``ForwardState`` (``model.predict_state(params)``, JIT/grad
+  safe) and calls the prior functions directly on ``state.derived`` keys;
+  this is the route that actually reaches MAP/VI/MCMC/nested-sampling
+  optimization.
 
 Breaking change (this rewrite)
 -------------------------------
@@ -371,6 +387,18 @@ def prior_agn_fraction(bbb_flux_1500, gal_flux_1500, data_flux_1500, dlum, redsh
     Upstream sums this with :func:`prior_stellar_mass` under one settings
     flag; see that function's Notes.
 
+    Upstream's caller (``PRIORS_AGNfitter.py:177-178``) applies
+    ``if BB==0: bbb_flux_1500Angs /= 4*pi*dlum**2`` before computing
+    ``AGNfrac1500`` -- a model-bookkeeping detail of the ``R06``/``THB21``
+    accretion-disc normalization convention (``BB`` there is the disc's log10
+    flux-normalization scalar, and ``BB==0`` flags "already physical, not a
+    fittable amplitude"), not a physics term of this prior. This function's
+    ``bbb_flux_1500`` input is a genuinely physical flux density
+    [erg/s/cm^2/Hz] regardless of which disc model or normalization
+    convention produced it, so that branch is intentionally not reproduced
+    here; the caller supplying ``bbb_flux_1500`` is responsible for its own
+    disc-model normalization.
+
     References
     ----------
     .. [1] L. N. Martinez-Ramirez et al., "AGNFITTER-RX: Modeling the
@@ -448,6 +476,12 @@ def prior_low_agn_fraction(bbb_flux_1500, gal_flux_1500, data_flux_1500, dlum, r
     rewrite) had accidentally borrowed this function's mu=-2, sigma=0.5
     constants while citing ``prior_AGNfraction`` -- see the module
     docstring's "Breaking change" note.
+
+    Unlike :func:`prior_agn_fraction`, upstream's ``prior_low_AGNfraction``
+    (``PRIORS_AGNfitter.py:360-425``) has no ``if BB==0`` caller-side
+    normalization branch on ``bbb_flux_1500Angs`` at all (verified by reading
+    the full function body: no such conditional appears there) -- that branch
+    is specific to ``prior_AGNfraction``; see that function's Notes.
 
     References
     ----------
@@ -612,6 +646,69 @@ def prior_uv_xrays(log_l2500a_data, log_l2kev_data):
     return gaussian_log_prior(0.0, 0.4, ratio)
 
 
+def _x_from_nulnu_6um(nulnu_6um):
+    r"""Stern (2015) mid-IR correlation variable, from nu*L_nu at 6 microns.
+
+    .. math::
+
+        x = \log_{10}\!\left(\frac{\nu L_\nu(6\,\mu{\rm m})}{10^{41}\,
+            {\rm erg/s}}\right)
+
+    Parameters
+    ----------
+    nulnu_6um : float
+        nu*L_nu of the torus at rest-frame 6 microns [erg/s].
+
+    Returns
+    -------
+    float or jnp.ndarray
+        Dimensionless log-luminosity variable ``x``.
+
+    Notes
+    -----
+    **JIT-compatible**: yes. **Grad-compatible**: yes.
+
+    Shared by :func:`prior_ir_xrays` and :func:`prior_midir_uv`, both built on
+    the Stern (2015) mid-IR--X-ray correlation (``PRIORS_AGNfitter.py:309``,
+    ``:333``) evaluated at the SAME physical quantity -- upstream's own two
+    call sites compute it in what look like different unit conventions but
+    are algebraically the same relation:
+
+    - ``prior_IR_XRays`` (:302-324`) explicitly forms
+      ``nuLnu_6microns = 10**13.69897 * tor_flux_6microns * lumfactor`` (i.e.
+      nu*L_nu, erg/s) THEN ``x = log10(nuLnu_6microns/1e41)``
+      (:308-309`, ``= log10(nuLnu_6microns) - 41``).
+    - ``prior_midIR_UV`` (:327-357`) instead uses
+      ``L_nu_6um = tor_flux_6microns * lumfactor`` directly (a SPECIFIC
+      luminosity, erg/s/Hz, NOT multiplied by the 6-micron frequency) and
+      computes ``x = log10(L_nu_6um) - 27.30103`` (:333`).
+
+    These agree because ``13.69897 + 27.30103 = 41`` exactly: writing
+    ``nuLnu_6um = nu_6um * L_nu_6um`` with
+    :math:`\nu_{6\mu m} = 10^{13.69897}\,{\rm Hz}` (``PRIORS_AGNfitter.py:306,
+    331``),
+
+    .. math::
+
+        \log_{10}(L_{\nu,6\mu m}) - 27.30103
+            = \log_{10}(\nu L_{\nu,6\mu m}) - 13.69897 - 27.30103
+            = \log_{10}(\nu L_{\nu,6\mu m}) - 41
+
+    is the SAME ``x`` as ``prior_IR_XRays``'s. A previous version of
+    :func:`prior_midir_uv` (fixed by this revision) took ``nulnu_6um`` (the
+    SAME nu*L_nu input as :func:`prior_ir_xrays`, per its own docstring) but
+    then subtracted the ``L_nu``-calibrated constant 27.30103 directly from
+    ``log10(nulnu_6um)`` without the ``-13.69897`` frequency correction --
+    off by ``log10(nu_6um) = 13.69897`` in ``x`` (before squaring), verified
+    against upstream's own two-different-looking formulas in
+    ``tests/crossval/test_agn_priors_vs_agnfitter.py``. tengri standardizes on
+    nu*L_nu [erg/s] as the one public input for both functions; this helper is
+    the single place that conversion happens, so the two priors cannot drift
+    apart again.
+    """
+    return jnp.log10(jnp.asarray(nulnu_6um, dtype=float) / 1e41)
+
+
 def prior_ir_xrays(log_f2_10kev_data, nulnu_6um):
     r"""Soft prior tying the torus mid-IR flux to the observed 2-10 keV flux.
 
@@ -645,7 +742,10 @@ def prior_ir_xrays(log_f2_10kev_data, nulnu_6um):
 
     Faithful transcription of ``prior_IR_XRays``
     (``PRIORS_AGNfitter.py:302-324``), specifically the Stern (2015) mid-IR--
-    X-ray correlation and Gaussian penalty (:309-322`).
+    X-ray correlation and Gaussian penalty (:309-322`). ``x`` is computed by
+    :func:`_x_from_nulnu_6um`, shared with :func:`prior_midir_uv` -- see that
+    helper's Notes for why the two priors must agree on ``x`` for the same
+    physical input.
 
     References
     ----------
@@ -657,7 +757,7 @@ def prior_ir_xrays(log_f2_10kev_data, nulnu_6um):
        citation policy); verify independently before citing this formula
        elsewhere.
     """
-    x = jnp.log10(jnp.asarray(nulnu_6um, dtype=float) / 1e41)
+    x = _x_from_nulnu_6um(nulnu_6um)
     log_f_2_10kev_model = 22.9494264 + 1.024 * x - 0.047 * x**2
     ratio = jnp.asarray(log_f2_10kev_data, dtype=float) - log_f_2_10kev_model
     return gaussian_log_prior(0.0, 0.5, ratio)
@@ -673,8 +773,8 @@ def prior_midir_uv(log_l2500a_bbmodel, nulnu_6um):
 
     .. math::
 
-        x = \log_{10}\!\left(\nu L_\nu(6\,\mu{\rm m})\ [{\rm erg/s}]\right)
-            - 27.30103
+        x = \log_{10}\!\left(\frac{\nu L_\nu(6\,\mu{\rm m})\ [{\rm erg/s}]}
+            {10^{41}\,{\rm erg/s}}\right)
 
         \log_{10}L_{2500\,\rm A}^{\rm pred} = \frac{16.2530786 + 1.024\,x -
             0.047\,x^2}{0.643}
@@ -688,7 +788,8 @@ def prior_midir_uv(log_l2500a_bbmodel, nulnu_6um):
         log10 of the model's (unreddened) accretion-disc luminosity density
         at rest-frame 2500 A [log10(erg/s/Hz)].
     nulnu_6um : float
-        nu*L_nu of the torus at rest-frame 6 microns [erg/s].
+        nu*L_nu of the torus at rest-frame 6 microns [erg/s]. Same physical
+        quantity, and same units, as :func:`prior_ir_xrays`'s ``nulnu_6um``.
 
     Returns
     -------
@@ -701,15 +802,24 @@ def prior_midir_uv(log_l2500a_bbmodel, nulnu_6um):
 
     Faithful transcription of ``prior_midIR_UV``
     (``PRIORS_AGNfitter.py:327-357``), specifically the composite
-    correlation and Gaussian penalty (:333-355`). The sigma=0.6 combines the
-    mid-IR--X-ray scatter (~0.5, :func:`prior_ir_xrays`) with the alpha_ox
-    scatter (~0.1, per upstream's in-line comment at
-    ``PRIORS_AGNfitter.py:354``). A prior tengri implementation (removed by
-    this rewrite) compared :math:`L_{\rm mir}` and :math:`L_{\rm uv}`
-    directly -- see the module docstring's "Breaking change" note; at equal
-    nominal log-luminosities that comparison and this one disagree by
-    hundreds of dex, because equal luminosities are nowhere near this
-    correlation's mean relation.
+    correlation and Gaussian penalty (:333-355`). ``x`` is computed by
+    :func:`_x_from_nulnu_6um`; upstream's own formula for this ``x``
+    (``log10(tor_flux_6microns*lumfactor) - 27.30103``, a SPECIFIC luminosity
+    L_nu, not nu*L_nu) is algebraically identical to that helper's nu*L_nu
+    form once the ``-13.69897`` frequency offset is accounted for -- see the
+    helper's Notes for the derivation and the bug it fixes (a previous
+    version of this function took the nu*L_nu input but applied the
+    L_nu-calibrated ``-27.30103`` offset directly, off by
+    ``log10(nu_6um) = 13.69897`` in ``x``).
+
+    The sigma=0.6 combines the mid-IR--X-ray scatter (~0.5,
+    :func:`prior_ir_xrays`) with the alpha_ox scatter (~0.1, per upstream's
+    in-line comment at ``PRIORS_AGNfitter.py:354``). A prior tengri
+    implementation (removed well before this revision) compared
+    :math:`L_{\rm mir}` and :math:`L_{\rm uv}` directly -- see the module
+    docstring's "Breaking change" note; at equal nominal log-luminosities
+    that comparison and this one disagree by hundreds of dex, because equal
+    luminosities are nowhere near this correlation's mean relation.
 
     References
     ----------
@@ -719,7 +829,348 @@ def prior_midir_uv(log_l2500a_bbmodel, nulnu_6um):
        see :func:`prior_uv_xrays` Notes for the citation-verification
        caveat.
     """
-    x = jnp.log10(jnp.asarray(nulnu_6um, dtype=float)) - 27.30103
+    x = _x_from_nulnu_6um(nulnu_6um)
     log_l2500a_tomodel = (16.2530786 + 1.024 * x - 0.047 * x**2) / 0.643
     ratio = jnp.asarray(log_l2500a_bbmodel, dtype=float) - log_l2500a_tomodel
     return gaussian_log_prior(0.0, 0.6, ratio)
+
+
+# ===========================================================================
+# Public adapter: agnfitter_priors -- from a Prediction to a total log-prior.
+# ===========================================================================
+
+#: Default enable/mode settings, matching ``SETTINGS_AGNfitter.py`` (upstream
+#: example config, ``example/SETTINGS_AGNfitter.py:225-247``):
+#: ``PRIOR_energy_balance='Flexible'`` (on, flexible), ``PRIOR_AGNfraction=True``
+#: (on), ``PRIOR_midIR_UV=False`` (off), ``PRIOR_galaxy_only=False`` (off,
+#: this is the flag that selects ``prior_low_AGNfraction``). ``XRAYS`` in that
+#: same file is the boolean ``True``, which matches NEITHER of the two literal
+#: strings (``'Prior_UV'``, ``'Prior_midIR'``) the ``PRIORS()`` dispatcher
+#: actually branches on (``PRIORS_AGNfitter.py:63,68``) -- i.e. upstream's own
+#: shipped example, read literally, leaves both X-ray-tied priors OFF; tengri
+#: mirrors that literal reading rather than guessing an intended default.
+#: ``prior_ir_syn_fraction`` has no dedicated ``PRIOR_*`` flag upstream at all
+#: (gated directly on ``RADIO``, ``PRIORS_AGNfitter.py:57``); off by default
+#: here since it always needs explicit radio+IR data kwargs regardless.
+AGNFITTER_PRIOR_DEFAULTS: dict = {
+    "energy_balance": True,
+    "energy_balance_mode": "flexible",
+    "stellar_mass": False,
+    "agn_fraction": True,
+    "low_agn_fraction": False,
+    "midir_uv": False,
+    "uv_xrays": False,
+    "ir_xrays": False,
+    "ir_syn_fraction": False,
+}
+
+
+def _integrate_l_nu(wave_aa, l_nu):
+    r"""Bolometric-like luminosity from an L_nu(wave) array: :math:`\int L_\nu\,d\nu`.
+
+    Parameters
+    ----------
+    wave_aa : array_like, shape (n_wave,)
+        Rest-frame wavelength grid [Angstrom], ascending.
+    l_nu : array_like, shape (n_wave,)
+        Spectral luminosity density [erg/s/Hz].
+
+    Returns
+    -------
+    float
+        Integrated luminosity [erg/s].
+
+    Notes
+    -----
+    **JIT-compatible**: yes. **Grad-compatible**: yes.
+
+    Thin unit wrapper over
+    :func:`tengri.utils.sed_quantities.compute_bolometric_luminosity`
+    (Lsun, range-safe in float32 via its peak-factored integrand), converted
+    to erg/s -- rather than a second, naive ``jnp.trapezoid`` reimplementation
+    of the same integral that would not share that range-safety.
+    """
+    from tengri.utils.physics_constants import L_SUN
+    from tengri.utils.sed_quantities import compute_bolometric_luminosity
+
+    l_nu = jnp.asarray(l_nu, dtype=float)
+    wave_aa = jnp.asarray(wave_aa, dtype=float)
+    return compute_bolometric_luminosity(l_nu, wave_aa) * L_SUN
+
+
+def _l_nu_at_wave(wave_aa, l_nu, target_wave_aa):
+    r"""Interpolate a rest-frame :math:`L_\nu` array onto one target wavelength.
+
+    Parameters
+    ----------
+    wave_aa : array_like, shape (n_wave,)
+        Rest-frame wavelength grid [Angstrom], ascending.
+    l_nu : array_like, shape (n_wave,)
+        Spectral luminosity density [erg/s/Hz].
+    target_wave_aa : float
+        Rest-frame wavelength at which to evaluate [Angstrom].
+
+    Returns
+    -------
+    float
+        :math:`L_\nu` at ``target_wave_aa`` [erg/s/Hz].
+
+    Notes
+    -----
+    **JIT-compatible**: yes. **Grad-compatible**: yes (piecewise-linear).
+    Approximation: linear interpolation on the model's native rest-frame
+    grid, not a native node value -- adequate for the smoothly-varying AGN
+    disc/torus continuum this adapter reads, but not a spectral-feature
+    measurement.
+    """
+    return jnp.interp(
+        jnp.asarray(target_wave_aa, dtype=float),
+        jnp.asarray(wave_aa, dtype=float),
+        jnp.asarray(l_nu, dtype=float),
+    )
+
+
+def _nulnu_at_wave(wave_aa, l_nu, target_wave_aa):
+    r"""nu*L_nu at one target rest-frame wavelength [erg/s]."""
+    from tengri.utils.physics_constants import C_AA
+
+    l_nu_target = _l_nu_at_wave(wave_aa, l_nu, target_wave_aa)
+    nu_target = C_AA / jnp.asarray(target_wave_aa, dtype=float)
+    return nu_target * l_nu_target
+
+
+def agnfitter_priors(
+    pred,
+    *,
+    redshift,
+    dlum,
+    torus_key: str = "sed_agn",
+    disc_key: str = "sed_agn",
+    dust_ir_key: str = "sed_dust_ir",
+    galaxy_key: str = "sed_attenuated",
+    energy_balance_mode: str = AGNFITTER_PRIOR_DEFAULTS["energy_balance_mode"],
+    enable_energy_balance: bool = AGNFITTER_PRIOR_DEFAULTS["energy_balance"],
+    enable_stellar_mass: bool = AGNFITTER_PRIOR_DEFAULTS["stellar_mass"],
+    enable_agn_fraction: bool = AGNFITTER_PRIOR_DEFAULTS["agn_fraction"],
+    enable_low_agn_fraction: bool = AGNFITTER_PRIOR_DEFAULTS["low_agn_fraction"],
+    enable_midir_uv: bool = AGNFITTER_PRIOR_DEFAULTS["midir_uv"],
+    enable_uv_xrays: bool = AGNFITTER_PRIOR_DEFAULTS["uv_xrays"],
+    enable_ir_xrays: bool = AGNFITTER_PRIOR_DEFAULTS["ir_xrays"],
+    enable_ir_syn_fraction: bool = AGNFITTER_PRIOR_DEFAULTS["ir_syn_fraction"],
+    ga=None,
+    data_flux_1500=None,
+    log_l2kev_data=None,
+    log_f2_10kev_data=None,
+    data_flux_rad=None,
+    data_nu_rad=None,
+    data_flux_ir=None,
+    data_nu_ir=None,
+):
+    r"""Evaluate the AGNfitter-rX informative priors on a tengri prediction.
+
+    Computes each enabled prior's physical inputs from the PUBLIC prediction
+    surface -- ``pred.sed.components`` (rest-frame ``wavelength`` [Angstrom]
+    plus per-component :math:`L_\nu` [erg/s/Hz]: ``sed_intrinsic``,
+    ``sed_attenuated``, ``sed_dust_ir``, ``sed_agn``, ``sed_xray``,
+    ``sed_radio``) -- and returns the total log-prior plus a per-prior
+    breakdown.
+
+    Parameters
+    ----------
+    pred : Prediction
+        A single-galaxy prediction, ``model.predict(params)``.
+    redshift : float
+        Source redshift [dimensionless]. Used by
+        :func:`prior_agn_fraction` / :func:`prior_low_agn_fraction`.
+    dlum : float
+        Luminosity distance [cm]. Used by the same two functions.
+    torus_key, disc_key : str, optional
+        Which ``pred.sed.components`` key to read the torus 6-micron nu*L_nu
+        and the disc 1500/2500 A flux from. Both default to ``"sed_agn"``
+        (disc+torus combined) -- **known approximation**: this reads the
+        disc and torus continua at the SAME wavelengths from the SAME
+        combined array, so the 6-micron value carries whatever residual
+        disc contributes there (small; discs fall steeply into the IR) and
+        the 1500/2500 A values carry whatever residual torus contributes
+        there (small; tori peak in the IR, torus UV is typically a scattered
+        fraction). A later task publishes per-sub-block AGN SEDs
+        (``sed_agn_disc``, ``sed_agn_torus``); switching to those once
+        available is a one-line change: ``torus_key="sed_agn_torus",
+        disc_key="sed_agn_disc"``.
+    dust_ir_key : str, optional
+        ``pred.sed.components`` key for the cold-dust/starburst IR emission
+        (:func:`prior_energy_balance`'s ``l_sb_emit``). Default
+        ``"sed_dust_ir"``.
+    galaxy_key : str, optional
+        ``pred.sed.components`` key for the dust-attenuated stellar SED
+        (used both as :func:`prior_energy_balance`'s attenuated-luminosity
+        reference and as :func:`prior_agn_fraction`'s galaxy flux). Default
+        ``"sed_attenuated"``.
+    energy_balance_mode : {"flexible", "restrictive"}, optional
+        Passed to :func:`prior_energy_balance`. Default ``"flexible"``
+        (``SETTINGS_AGNfitter.py``'s ``PRIOR_energy_balance`` default).
+    enable_energy_balance, enable_stellar_mass, enable_agn_fraction,
+    enable_low_agn_fraction, enable_midir_uv, enable_uv_xrays,
+    enable_ir_xrays, enable_ir_syn_fraction : bool, optional
+        Which of the eight priors to evaluate. Defaults are
+        :data:`AGNFITTER_PRIOR_DEFAULTS`, matching
+        ``example/SETTINGS_AGNfitter.py`` where a corresponding ``PRIOR_*``
+        flag exists (see that dict's own docstring for the two flags that
+        do not map cleanly, and why).
+    ga : float, optional
+        Upstream's raw galaxy flux-normalization scalar (``GA``), required
+        only if ``enable_stellar_mass=True``. tengri has no automatically
+        -derived equivalent (it is a template-normalization exponent
+        specific to upstream's model-dictionary bookkeeping, not a
+        published prediction quantity) -- callers wanting this term supply
+        it explicitly, e.g. from their own fit parameters if they have
+        constructed an analogous quantity.
+    data_flux_1500 : float, optional
+        Observed flux density at rest-frame 1500 A [erg/s/cm^2/Hz], required
+        if ``enable_agn_fraction`` or ``enable_low_agn_fraction`` is
+        ``True`` (both need :func:`prior_agn_fraction` /
+        :func:`prior_low_agn_fraction`'s ``data_flux_1500``, a genuinely
+        observed quantity, not a model prediction).
+    log_l2kev_data : float, optional
+        log10 of the observed luminosity density at rest-frame 2 keV
+        [log10(erg/s/Hz)], required if ``enable_uv_xrays=True``.
+    log_f2_10kev_data : float, optional
+        log10 of the observed monochromatic flux at the 2-10 keV band
+        center [log10(erg/s/Hz)], required if ``enable_ir_xrays=True``.
+    data_flux_rad, data_nu_rad, data_flux_ir, data_nu_ir : float, optional
+        Observed radio flux/frequency and cold-dust-peak flux/frequency
+        (``data_nu_*`` in log10(Hz)), required if
+        ``enable_ir_syn_fraction=True``. ``sb_flux_ir``/``syn_flux_ir`` (the
+        model-side inputs to :func:`prior_ir_syn_fraction`) are read from
+        ``dust_ir_key`` / ``sed_radio`` at the wavelength corresponding to
+        ``data_nu_ir``.
+
+    Returns
+    -------
+    total : float or jnp.ndarray
+        Sum of every enabled prior's log-prior contribution.
+    breakdown : dict of str to (float or jnp.ndarray)
+        Per-prior log-prior contribution, keyed by the same names as the
+        ``enable_*`` parameters (without the ``enable_`` prefix), for every
+        ENABLED prior only.
+
+    Raises
+    ------
+    ValueError
+        If a prior is enabled but a required data keyword argument is
+        ``None``.
+
+    Notes
+    -----
+    **JIT-compatible**: no. ``pred`` (:class:`~tengri.forward.prediction.
+    Prediction`) is a Python-cached exploration object by its own docstring
+    ("Not JIT-compatible (uses Python caching)"); this adapter is for
+    post-fit inspection and reporting, one prediction at a time -- not the
+    fitting hot path. For fitting, use ``Fitter(..., extra_log_prior=...)``
+    directly on ``state.derived`` (JIT/grad-safe); see the module
+    docstring's "Adapters" section.
+
+    **Grad-compatible**: the arithmetic inside is JAX-differentiable, but
+    since the whole function is not JIT-traced there is limited practical
+    reason to differentiate through it; differentiate the individual prior
+    functions directly if needed.
+
+    References
+    ----------
+    .. [1] L. N. Martinez-Ramirez et al., "AGNFITTER-RX: Modeling the
+       radio-to-X-ray spectral energy distributions of AGNs," A&A, 688, A46
+       (2024). arXiv:2405.12111. doi:10.1051/0004-6361/202449329.
+
+    Examples
+    --------
+    >>> pred = model.predict(params)  # doctest: +SKIP
+    >>> total, breakdown = agnfitter_priors(  # doctest: +SKIP
+    ...     pred,
+    ...     redshift=1.0,
+    ...     dlum=6.6e27,
+    ...     data_flux_1500=3e-28,
+    ... )
+    >>> breakdown.keys()  # doctest: +SKIP
+    dict_keys(['energy_balance', 'agn_fraction'])
+    """
+    components = pred.sed.components
+    wave = components["wavelength"]
+
+    breakdown: dict = {}
+
+    if enable_energy_balance:
+        from tengri.utils.physics_constants import L_SUN
+        from tengri.utils.sed_quantities import compute_l_dust_absorbed
+
+        l_absorbed = (
+            compute_l_dust_absorbed(components["sed_intrinsic"], components[galaxy_key], wave)
+            * L_SUN
+        )
+        l_sb_emit = _integrate_l_nu(wave, components[dust_ir_key])
+        breakdown["energy_balance"] = prior_energy_balance(
+            l_absorbed, l_sb_emit, mode=energy_balance_mode
+        )
+
+    if enable_stellar_mass:
+        if ga is None:
+            raise ValueError(
+                "enable_stellar_mass=True requires ga=... (upstream's raw GA "
+                "flux-normalization scalar; tengri has no automatically-derived "
+                "equivalent, see this function's docstring)."
+            )
+        breakdown["stellar_mass"] = prior_stellar_mass(ga)
+
+    if enable_agn_fraction or enable_low_agn_fraction:
+        if data_flux_1500 is None:
+            raise ValueError(
+                "enable_agn_fraction / enable_low_agn_fraction require "
+                "data_flux_1500=... (the OBSERVED rest-1500 A flux; these "
+                "priors tie the model to data, not just to itself)."
+            )
+        bbb_flux_1500 = _l_nu_at_wave(wave, components[disc_key], 1500.0)
+        gal_flux_1500 = _l_nu_at_wave(wave, components[galaxy_key], 1500.0)
+        if enable_agn_fraction:
+            breakdown["agn_fraction"] = prior_agn_fraction(
+                bbb_flux_1500, gal_flux_1500, data_flux_1500, dlum, redshift
+            )
+        if enable_low_agn_fraction:
+            breakdown["low_agn_fraction"] = prior_low_agn_fraction(
+                bbb_flux_1500, gal_flux_1500, data_flux_1500, dlum, redshift
+            )
+
+    if enable_midir_uv:
+        nulnu_6um = _nulnu_at_wave(wave, components[torus_key], 60000.0)
+        log_l2500a_bbmodel = jnp.log10(_l_nu_at_wave(wave, components[disc_key], 2500.0))
+        breakdown["midir_uv"] = prior_midir_uv(log_l2500a_bbmodel, nulnu_6um)
+
+    if enable_uv_xrays:
+        if log_l2kev_data is None:
+            raise ValueError("enable_uv_xrays=True requires log_l2kev_data=... (observed).")
+        log_l2500a_data = jnp.log10(_l_nu_at_wave(wave, components[disc_key], 2500.0))
+        breakdown["uv_xrays"] = prior_uv_xrays(log_l2500a_data, log_l2kev_data)
+
+    if enable_ir_xrays:
+        if log_f2_10kev_data is None:
+            raise ValueError("enable_ir_xrays=True requires log_f2_10kev_data=... (observed).")
+        nulnu_6um = _nulnu_at_wave(wave, components[torus_key], 60000.0)
+        breakdown["ir_xrays"] = prior_ir_xrays(log_f2_10kev_data, nulnu_6um)
+
+    if enable_ir_syn_fraction:
+        from tengri.utils.physics_constants import C_AA
+
+        if any(v is None for v in (data_flux_rad, data_nu_rad, data_flux_ir, data_nu_ir)):
+            raise ValueError(
+                "enable_ir_syn_fraction=True requires data_flux_rad, data_nu_rad, "
+                "data_flux_ir, data_nu_ir=... (all observed)."
+            )
+        wave_ir_aa = C_AA / (10.0 ** jnp.asarray(data_nu_ir, dtype=float))
+        sb_flux_ir = _l_nu_at_wave(wave, components[dust_ir_key], wave_ir_aa)
+        syn_flux_ir = _l_nu_at_wave(wave, components["sed_radio"], wave_ir_aa)
+        breakdown["ir_syn_fraction"] = prior_ir_syn_fraction(
+            data_flux_rad, data_nu_rad, data_flux_ir, data_nu_ir, sb_flux_ir, syn_flux_ir
+        )
+
+    total = jnp.asarray(0.0)
+    for term in breakdown.values():
+        total = total + term
+    return total, breakdown

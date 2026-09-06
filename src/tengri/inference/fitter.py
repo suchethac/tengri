@@ -2312,6 +2312,17 @@ class Fitter:
             # tying the same target to a DIFFERENT source; without this entry
             # the second silently ties to the first's source.
             self._mirror_key(),
+            # Extra log-prior hook identity (#[task-7], RULING R10). The
+            # engine cache is keyed on the MODEL object, so two Fitters
+            # sharing a Model -- the documented, encouraged pattern -- would
+            # otherwise silently share whichever ``build_loss_fn`` closure
+            # compiled first regardless of ``extra_log_prior``: a plain
+            # Fitter constructed after a hooked one would run the HOOKED
+            # objective (or vice versa), never raising. Functions are
+            # hashable by identity by default, which is exactly the wanted
+            # semantics: the SAME callable object -> cache hit; a different
+            # callable (or None vs. not-None) -> cache miss, safely rebuilt.
+            self._extra_log_prior,
         )
 
     def _free_prior_key(self) -> tuple:
