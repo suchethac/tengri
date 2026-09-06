@@ -69,7 +69,7 @@ def tengri_chain(gaussian_target):
 
     key = jax.random.PRNGKey(0)
     x0 = jnp.zeros(gaussian_target["D"])
-    chain, _log_lik, accept_prob = sample_raytrace(
+    chain, _log_lik, accept_prob, _n_nonfinite = sample_raytrace(
         key,
         x0,
         gaussian_target["log_prob"],
@@ -168,7 +168,7 @@ class TestHMCCrossValidation:
         x0 = jnp.zeros(gaussian_target["D"])
 
         # Tengri
-        chain_t, _, _ = sample_hamiltonian(
+        chain_t, _, _, _ = sample_hamiltonian(
             key,
             x0,
             gaussian_target["log_prob"],

@@ -170,8 +170,10 @@ class TestMetallicityBins:
         # SSP ages within bin range: use log10(age/yr)
         young_mask = (ssp_lg_age_gyr + 9.0 > 7.0) & (ssp_lg_age_gyr + 9.0 < 8.5)
         old_mask = (ssp_lg_age_gyr + 9.0 > 9.5) & (ssp_lg_age_gyr + 9.0 < 10.14)
-        if jnp.any(young_mask) and jnp.any(old_mask):
-            assert jnp.mean(result[young_mask]) > jnp.mean(result[old_mask])
+        assert jnp.any(young_mask) and jnp.any(old_mask), (
+            "probe setup failed: no young and old age ranges in grid"
+        )
+        assert jnp.mean(result[young_mask]) > jnp.mean(result[old_mask])
 
     def test_jit_compatible(self, ssp_lg_age_gyr, bin_edges_log_yr):
         n_bins = len(bin_edges_log_yr) - 1
@@ -218,8 +220,10 @@ class TestMetallicityBinsContinuity:
         )
         young_mask = ssp_lg_age_gyr < -1.5
         old_mask = ssp_lg_age_gyr > 0.5
-        if jnp.any(young_mask) and jnp.any(old_mask):
-            assert jnp.mean(result[young_mask]) > jnp.mean(result[old_mask])
+        assert jnp.any(young_mask) and jnp.any(old_mask), (
+            "probe setup failed: no young and old age ranges in grid"
+        )
+        assert jnp.mean(result[young_mask]) > jnp.mean(result[old_mask])
 
     def test_cumulative_sum_correct(self, ssp_lg_age_gyr, bin_edges_log_yr):
         """Final bin metallicity = base + sum(deltas)."""

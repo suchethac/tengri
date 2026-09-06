@@ -85,20 +85,30 @@ class TestEVIRuns:
         assert hasattr(result, "samples")
         assert hasattr(result, "diagnostics")
 
-        # All Uniform-prior samples must be within prior support.
+        # All bounded-prior samples must be within prior support.
         # A broken transform (wrong unbounding) pushes samples outside [low, high].
+        # Unbounded priors have no low/high and are skipped -- but a spec of only
+        # unbounded priors would skip every check and still report a pass, so the
+        # number actually checked is asserted rather than assumed.
+        checked = 0
         for name in simple_spec.free_params:
             dist = simple_spec.get_distribution(name)
-            if hasattr(dist, "low") and hasattr(dist, "high"):
-                samples = result.samples[name]
-                assert bool(jnp.all(samples >= dist.low)), (
-                    f"{name}: samples below prior lower bound {dist.low}; "
-                    f"min={float(jnp.min(samples)):.4f}"
-                )
-                assert bool(jnp.all(samples <= dist.high)), (
-                    f"{name}: samples above prior upper bound {dist.high}; "
-                    f"max={float(jnp.max(samples)):.4f}"
-                )
+            if not (hasattr(dist, "low") and hasattr(dist, "high")):
+                continue
+            samples = result.samples[name]
+            assert bool(jnp.all(samples >= dist.low)), (
+                f"{name}: samples below prior lower bound {dist.low}; "
+                f"min={float(jnp.min(samples)):.4f}"
+            )
+            assert bool(jnp.all(samples <= dist.high)), (
+                f"{name}: samples above prior upper bound {dist.high}; "
+                f"max={float(jnp.max(samples)):.4f}"
+            )
+            checked += 1
+        assert checked > 0, (
+            f"no bounded prior among {list(simple_spec.free_params)}, so the "
+            f"prior-support claim was never checked"
+        )
 
     def test_evi_samples_have_correct_keys(self, model_and_mock, simple_spec):
         """Posterior samples contain all free parameter names."""

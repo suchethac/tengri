@@ -274,8 +274,9 @@ def test_ism_attenuation_reduces_shock_sed():
         warnings.simplefilter("ignore", DeprecationWarning)
         shock_raw = compute_shock_sed(wave, 300.0, 1e7, line_sigma_aa=2.0)
 
-    # Apply diffuse ISM screen — same expression as sed_pipeline.py
-    k_diff = resolve_dust_law("power_law")(wave, n_slope=-0.7, dust_bump_strength=0.0)
+    # Apply diffuse ISM screen — same expression as sed_pipeline.py. power_law
+    # reads only its slope; since #2185 a law refuses a keyword it does not read.
+    k_diff = resolve_dust_law("power_law")(wave, n_slope=-0.7)
 
     tau_low = 0.1
     tau_high = 1.0

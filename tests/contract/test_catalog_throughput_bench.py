@@ -266,11 +266,23 @@ def test_dead_fit_error_becomes_a_row_not_a_crash(bench) -> None:
 
 
 def test_run_and_time_returns_four_values(bench) -> None:
-    """The refusal slot is part of the contract, so callers cannot ignore it."""
-    import inspect
+    """The refusal slot semantics: None on success, dict on refusal.
 
-    src = inspect.getsource(bench._run_and_time)
-    assert "return wall, cp, bias, None" in src
+    _run_and_time must always return exactly (wall_clock, posterior, bias, refused)
+    so callers can reliably unpack the result without checking arity. The fourth
+    slot (refused) is always present and carries the semantic meaning: None means
+    the fit succeeded (posterior and bias are meaningful); a dict means the fit
+    was refused (posterior and bias are None, refused describes the failure).
+    """
+    # Test the refusal path: refused must be non-None and structured
+    cat = _RefusingCatalogFitter()
+    wall, _cp, _bias, refused = bench._run_and_time(cat, "mcmc_nuts", 32, None, None, {})
+
+    # Refusal case: refused slot must contain failure details
+    assert isinstance(wall, (int, float)) and wall >= 0.0
+    assert refused is not None, "refusal must populate the refused slot"
+    assert isinstance(refused, dict), "refused must be a dict with failure details"
+    assert "reason" in refused, "refused dict must explain why the fit was rejected"
 
 
 # ── 3. JSON bookkeeping ─────────────────────────────────────────────

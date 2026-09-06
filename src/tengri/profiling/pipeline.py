@@ -225,11 +225,17 @@ def _profile_exact_path(model, params, n: int = 200) -> PipelineReport:
     )
 
     # 6. Dust attenuation
+    from tengri.components.dust.laws._registry import law_kwarg_names
+
     dust_kw = {}
     if hasattr(model, "_dust_law_bc"):
         dust_kw["law_bc"] = model._dust_law_bc
         dust_kw["law_diff"] = model._dust_law_diff
-    dust_kw["n_slope"] = p.get("dust_slope", -0.7)
+    # Offer the slope only to a law that reads it; since #2185 a law refuses a
+    # keyword it does not declare, and calzetti declares none.
+    laws_in_play = tuple(law for law in (dust_kw.get("law_bc"), dust_kw.get("law_diff")) if law)
+    if any("n_slope" in law_kwarg_names(law) for law in laws_in_play):
+        dust_kw["n_slope"] = p.get("dust_slope", -0.7)
 
     steps.append(
         _time_step(

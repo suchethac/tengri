@@ -58,7 +58,7 @@ References
 .. [2] Wright, E. L., Eisenhardt, P. R. M., Mainzer, A. K., et al., 2010,
        AJ, 140, 1868. "The Wide-field Infrared Survey Explorer (WISE)"
 
-.. GENERATED FROM PYTHON SOURCE LINES 43-277
+.. GENERATED FROM PYTHON SOURCE LINES 43-275
 
 
 
@@ -136,7 +136,6 @@ References
             "law": "calzetti",
             "tau_diff": tau_diff_samples[i],
             "tau_bc": tau_bc_samples[i],
-            "slope": -0.7,
         }
         dust_emission = {
             "type": "modified_blackbody",
@@ -219,7 +218,6 @@ References
             "law": "calzetti",
             "tau_diff": 0.5 + 0.1 * i,  # Variable dust opacity (AGN-heated)
             "tau_bc": 0.3 + 0.05 * i,
-            "slope": -0.7,
         }
         dust_emission = {
             "type": "modified_blackbody",
@@ -307,6 +305,11 @@ References
 
     fig.tight_layout()
     plt.savefig("plot_wise_agn_color_color.png", dpi=150, bbox_inches="tight")
+
+
+.. rst-class:: sphx-glr-timing
+
+   **Total running time of the script:** (0 minutes 2.555 seconds)
 
 
 .. _sphx_glr_download_auto_examples_photometry_plot_wise_agn_color_color.py:

@@ -48,7 +48,6 @@ from tengri.components.nebular._constants import (
     _LSUN_ERG,
 )
 from tengri.components.nebular.cloudy_cb19 import (
-    _DEFAULT_PATH,
     load_cb19_grid,
 )
 from tengri.forward.precompute.templates import collapse_fixed_axes
@@ -153,9 +152,8 @@ def precompute(
     ``line_weight_matrix`` encodes the filter-integrated profile for each line.
 
     """
-    if filepath is None:
-        filepath = _DEFAULT_PATH
-
+    # ``None`` is forwarded rather than resolved here: ``load_cb19_grid`` owns
+    # the default, and a second copy of it could only drift.
     grid = load_cb19_grid(
         filepath=filepath,
         sed_type=sed_type,

@@ -254,6 +254,7 @@ class ForwardModel:
         "_predict_rest_sed",
         "_predict_sfh_quantities",
         "_template_data_for_jit",
+        "_ztable_data_for_jit",
         "ssp_data",
         "mock",
         "name",

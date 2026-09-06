@@ -61,7 +61,13 @@ _GUARD_CALLS = {"maximum", "clip", "where"}
 # ``0.0``, the sub-subnormal literal failed to clamp it, and ``log10(0)``
 # returned the ``-inf`` that surfaced as ``m_uv = inf``. The guard is still
 # there and still live: a migration, not a deletion.
-_PINNED = 40
+# 40 -> 39: the dust emission validation round (#2167) deleted the
+# ``jnp.maximum(abs(tmpl_integral), 1e-100)`` template-normalization floor in
+# ``components/dust/emission_templates.py`` outright; the template is now
+# resampled first and normalized on the evaluation grid through a
+# ``jnp.where``-selected division. A deletion, not a migration, so the site
+# leaves both this count and ``_PINNED_DENOMINATORS`` below.
+_PINNED = 39
 
 _SRC = pathlib.Path(__file__).resolve().parent.parent / "src" / "tengri"
 
@@ -112,9 +118,15 @@ _F32_DERIVATIVE_BOUND = 1.0844e-19
 #: own reachability check, since a site whose denominator is bounded away from
 #: zero by construction is not a defect.
 #:
+#: 46 -> 45 with the dust emission validation round (#2167): the template
+#: normalization in ``components/dust/emission_templates.py`` no longer divides
+#: by ``jnp.maximum(abs(tmpl_integral), 1e-100)``; the template is resampled
+#: first and normalized on the evaluation grid through a ``jnp.where``-selected
+#: division, so the floored denominator is gone rather than moved.
+#:
 #: Do NOT raise this to make a red run green. A rise means a new site was added,
 #: which is the thing this exists to prevent.
-_PINNED_DENOMINATORS = 46
+_PINNED_DENOMINATORS = 45
 
 
 def _derivative_unsafe_denominators(tree: ast.AST) -> list[tuple[int, float]]:

@@ -20,6 +20,13 @@ Three spellings stay legal, and each says something different:
 
 Measured when the rule was added: no in-repo call site named a lone pair member
 without a wildcard, so this refuses only genuinely half-specified configs.
+
+Each stem is exercised under a law that READS it (#2185). Completeness is only a
+question once the key means something: ``slope_bc`` under ``calzetti`` is not
+half a pair, it is a value that curve has no place to put, and the grammar now
+refuses it by name. ``tau`` is the exception and keeps ``calzetti``, because the
+two optical depths enter through the Charlot & Fall geometry rather than as
+curve arguments, so every law consumes them.
 """
 
 from __future__ import annotations
@@ -30,13 +37,27 @@ from tengri import FREE, Uniform, parse_groups
 
 pytestmark = pytest.mark.contract
 
-PAIR_STEMS = ("tau", "Rv", "delta", "slope", "bump_strength")
+#: Per-screen stem -> a law that reads it. ``conroy2010`` reads ``n_slope`` and
+#: ``dust_Rv``; ``noll09`` reads ``dust_delta`` and ``dust_bump_strength``.
+PAIR_STEM_LAWS = {
+    "tau": "calzetti",
+    "Rv": "conroy2010",
+    "delta": "noll09",
+    "slope": "conroy2010",
+    "bump_strength": "noll09",
+}
+PAIR_STEMS = tuple(PAIR_STEM_LAWS)
 
 _BASE = {"type": "two_component", "law": "calzetti"}
 
 
 def _atten(**extra):
     return dict(_BASE, **extra)
+
+
+def _atten_for(stem, **extra):
+    """Attenuation dict on a law that reads ``stem``."""
+    return dict(_BASE, law=PAIR_STEM_LAWS[stem], **extra)
 
 
 def _build(atten):
@@ -48,19 +69,38 @@ def _build(atten):
 def test_lone_pair_member_raises_naming_the_partner(stem, named, missing):
     """Either half alone raises, and the message names the key to add."""
     with pytest.raises(ValueError, match=rf"{stem}_{missing}"):
-        _build(_atten(**{f"{stem}_{named}": 0.5}))
+        _build(_atten_for(stem, **{f"{stem}_{named}": 0.5}))
 
 
 @pytest.mark.parametrize("stem", PAIR_STEMS)
 def test_both_members_together_are_accepted(stem):
-    spec = _build(_atten(**{f"{stem}_bc": 0.5, f"{stem}_diff": 0.4}))
+    spec = _build(_atten_for(stem, **{f"{stem}_bc": 0.5, f"{stem}_diff": 0.4}))
     assert spec is not None
 
 
 @pytest.mark.parametrize("stem", PAIR_STEMS)
 def test_a_wildcard_is_an_accepted_way_to_free_the_partner(stem):
     """The wildcard states 'free the rest', which covers the partner."""
-    spec = _build(_atten(**{f"{stem}_bc": 0.5, "all_params": FREE}))
+    spec = _build(_atten_for(stem, **{f"{stem}_bc": 0.5, "all_params": FREE}))
+    assert spec is not None
+
+
+@pytest.mark.parametrize("stem", ("Rv", "delta", "slope", "bump_strength"))
+def test_the_partner_is_not_required_when_its_law_cannot_read_it(stem):
+    """A lone half is complete when the other screen's law has no such knob.
+
+    ``law_bc='conroy2010', law_diff='calzetti'`` reads ``slope_bc`` and has no
+    ``slope_diff`` to give. Requiring the partner and then refusing it as unread
+    (#2185) would leave no spelling that parses.
+    """
+    spec = _build(
+        {
+            "type": "two_component",
+            "law_bc": PAIR_STEM_LAWS[stem],
+            "law_diff": "smc",
+            f"{stem}_bc": 0.5,
+        }
+    )
     assert spec is not None
 
 

@@ -170,13 +170,13 @@ def _threaded_batch(model, method_name, params_batch, ssp_data, template_data):
     if resolve is None:  # pragma: no cover - ForwardModel delegates; SEDModel defines it
         inner = model._inner_sed_for_delegation()
         resolve = inner._resolve_threaded_data
-    ssp, templates = resolve(ssp_data, template_data)
+    ssp, templates, ztable = resolve(ssp_data, template_data, None)
     bound = getattr(model, method_name)
 
-    def _one(params, ssp_arg, template_arg):
-        return bound(params, ssp_data=ssp_arg, template_data=template_arg)
+    def _one(params, ssp_arg, template_arg, ztable_arg):
+        return bound(params, ssp_data=ssp_arg, template_data=template_arg, ztable_data=ztable_arg)
 
-    return jax.vmap(_one, in_axes=(0, None, None))(params_batch, ssp, templates)
+    return jax.vmap(_one, in_axes=(0, None, None, None))(params_batch, ssp, templates, ztable)
 
 
 def predict_photometry_batch(model: SEDModel, params_batch, *, ssp_data=None, template_data=None):

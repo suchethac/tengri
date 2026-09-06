@@ -19,9 +19,11 @@ from tengri.inference.backends.mcmc._shared import (
     DEFAULT_MAX_NUM_DOUBLINGS,
     _get_cached_adaptation,
     _get_flat_logdensity,
+    _get_nuts_kernel,
     _nuts_chain_scan,
     _nuts_warmup_only,
     _set_cached_adaptation,
+    _stabilize_dense_mass_step,
     _vmap_chains,
     final_window_divergence_frac,
     refuse_dead_sampling,
@@ -557,6 +559,7 @@ def run_nuts(
     # sampling-only scan against the cached parameters, structurally different
     # computations, so one pinned `key` returned two different posteriors. HMC
     # had already been split this way and was reproducible; NUTS had not.
+    dense_mass_backoffs = 0
     if cached is not None:
         parameters = cached
         # A reused adaptation was tuned in an earlier call, so this fit measured no
@@ -585,6 +588,33 @@ def run_nuts(
                 warmup_max_doublings,
             )
             jax.block_until_ready(step_size)
+
+        # Post-adaptation step size stability probe for dense mass matrix (#1999)
+
+        if use_dense:
+            import blackjax
+
+            initial_state = blackjax.nuts.init(
+                init_flat, lambda p: log_posterior_flat_2arg(p, data_args)
+            )
+            kernel = _get_nuts_kernel()
+            step_size, backoff_count = _stabilize_dense_mass_step(
+                kernel,
+                initial_state,
+                log_posterior_flat_2arg,
+                data_args,
+                float(step_size),
+                inv_mass_matrix,
+                warmup_max_doublings,
+                sampler_name="NUTS",
+            )
+            step_size = jnp.asarray(step_size)
+            dense_mass_backoffs = int(backoff_count)
+            if verbose and backoff_count > 0:
+                logger.info(
+                    f"  Dense-mass probe: step size backoff applied ({backoff_count} halving(s))"
+                )
+
         # Refuse before caching and before the sampling scan compiles (#2088).
         warmup_divergence_frac = final_window_divergence_frac(warmup_divergent, n_warmup)
         refuse_dead_warmup(
@@ -726,6 +756,7 @@ def run_nuts(
             "n_samples": n_samples,
             "n_chains": n_chains,
             "n_divergent": n_divergent,
+            "dense_mass_step_backoffs": dense_mass_backoffs,
             **warmup_record,
             "step_size": float(parameters["step_size"]),
             "warmup": "pathfinder" if pathfinder_warmstart else "window",

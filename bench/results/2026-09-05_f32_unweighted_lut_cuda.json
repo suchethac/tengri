@@ -1,0 +1,250 @@
+{
+  "meta": {
+    "platform": "gpu",
+    "devices": [
+      "cuda:0"
+    ],
+    "jax": "0.11.0",
+    "env": {
+      "JAX_PLATFORMS": null,
+      "JAX_ENABLE_X64": null,
+      "JAX_DEFAULT_MATMUL_PRECISION": "highest",
+      "NVIDIA_TF32_OVERRIDE": null,
+      "XLA_PYTHON_CLIENT_PREALLOCATE": "false",
+      "TENGRI_DISABLE_JAX_CACHE": "1"
+    },
+    "n_z": 64,
+    "points": {
+      "origin": 0.0,
+      "half_sigma": 0.5
+    },
+    "spec_pixels": 256,
+    "spec_wave_range": [
+      4000.0,
+      9000.0
+    ],
+    "lines": [
+      "Hbeta",
+      "OIII_5007",
+      "Halpha",
+      "NII_6584"
+    ],
+    "mode": "unweighted",
+    "line_sigma_convention": "floored",
+    "line_sigma_floor": 0.05
+  },
+  "rows": [
+    {
+      "channel": "phot2",
+      "model": "stellar_dust",
+      "approx_kind": "exact",
+      "f64": {
+        "names": [
+          "dust_tau_diff",
+          "sfh_delayed_log_total_mass"
+        ],
+        "grad": [
+          -1.1218327364226519e-27,
+          2.419537853009379e-27
+        ],
+        "grad_boosted": [
+          -1.1218327364226519e-27,
+          2.419537853009379e-27
+        ],
+        "grad_dtype": [
+          "float64"
+        ],
+        "approx_state": "ApproxState(n_subbands=5)",
+        "value": 1.0507919383180145e-27,
+        "boost": 1.2676506002282294e+30
+      },
+      "f32": {
+        "names": [
+          "dust_tau_diff",
+          "sfh_delayed_log_total_mass"
+        ],
+        "grad": [
+          0.0,
+          0.0
+        ],
+        "grad_boosted": [
+          -1.1218385925730153e-27,
+          2.4195506039585454e-27
+        ],
+        "grad_dtype": [
+          "float32"
+        ],
+        "approx_state": "ApproxState(n_subbands=5)",
+        "value": 1.0507973924933867e-27,
+        "boost": 1.2676506002282294e+30
+      },
+      "f32_all_zero": true,
+      "f32_boosted_all_zero": false,
+      "f32_finite": true,
+      "f32_vs_f64": 1.0,
+      "f32_boosted_vs_f64": 5.261211146356517e-06,
+      "f64_boost_moves_f64": 0.0,
+      "f64_boost_bit_identical": true
+    },
+    {
+      "channel": "phot2",
+      "model": "stellar_dust",
+      "approx_kind": "lut",
+      "f64": {
+        "names": [
+          "dust_tau_diff",
+          "sfh_delayed_log_total_mass"
+        ],
+        "grad": [
+          -1.1219197113417221e-27,
+          2.4196542289023195e-27
+        ],
+        "grad_boosted": [
+          -1.1219197113417221e-27,
+          2.4196542289023195e-27
+        ],
+        "grad_dtype": [
+          "float64"
+        ],
+        "approx_state": "ApproxState(wave_precomp=True, n_subbands=5)",
+        "value": 1.0508424797261447e-27,
+        "boost": 1.2676506002282294e+30
+      },
+      "f32": {
+        "names": [
+          "dust_tau_diff",
+          "sfh_delayed_log_total_mass"
+        ],
+        "grad": [
+          -0.0,
+          0.0
+        ],
+        "grad_boosted": [
+          -1.1219250668275183e-27,
+          2.4196655819762253e-27
+        ],
+        "grad_dtype": [
+          "float32"
+        ],
+        "approx_state": "ApproxState(wave_precomp=True, n_subbands=5)",
+        "value": 1.0508472740789463e-27,
+        "boost": 1.2676506002282294e+30
+      },
+      "f32_all_zero": true,
+      "f32_boosted_all_zero": false,
+      "f32_finite": true,
+      "f32_vs_f64": 1.0,
+      "f32_boosted_vs_f64": 4.7065433991929975e-06,
+      "f64_boost_moves_f64": 0.0,
+      "f64_boost_bit_identical": true,
+      "lut_engaged": true,
+      "lut_f64_vs_exact_f64": 5.447622365775975e-05
+    },
+    {
+      "channel": "spec",
+      "model": "stellar_dust",
+      "approx_kind": "exact",
+      "f64": {
+        "names": [
+          "dust_tau_diff",
+          "sfh_delayed_log_total_mass"
+        ],
+        "grad": [
+          -1.7278726340766606e-25,
+          4.666033254568675e-25
+        ],
+        "grad_boosted": [
+          -1.7278726340766606e-25,
+          4.666033254568675e-25
+        ],
+        "grad_dtype": [
+          "float64"
+        ],
+        "approx_state": "ApproxState(n_subbands=5)",
+        "value": 2.0264324948362459e-25,
+        "boost": 1.2676506002282294e+30
+      },
+      "f32": {
+        "names": [
+          "dust_tau_diff",
+          "sfh_delayed_log_total_mass"
+        ],
+        "grad": [
+          0.0,
+          0.0
+        ],
+        "grad_boosted": [
+          -1.727865213494673e-25,
+          4.666013153731066e-25
+        ],
+        "grad_dtype": [
+          "float32"
+        ],
+        "approx_state": "ApproxState(n_subbands=5)",
+        "value": 2.0264236746604392e-25,
+        "boost": 1.2676506002282294e+30
+      },
+      "f32_all_zero": true,
+      "f32_boosted_all_zero": false,
+      "f32_finite": true,
+      "f32_vs_f64": 1.0,
+      "f32_boosted_vs_f64": 4.306308706246587e-06,
+      "f64_boost_moves_f64": 0.0,
+      "f64_boost_bit_identical": true
+    },
+    {
+      "channel": "spec",
+      "model": "stellar_dust",
+      "approx_kind": "lut",
+      "f64": {
+        "names": [
+          "dust_tau_diff",
+          "sfh_delayed_log_total_mass"
+        ],
+        "grad": [
+          -1.7278729605249462e-25,
+          4.666032729590524e-25
+        ],
+        "grad_boosted": [
+          -1.7278729605249462e-25,
+          4.666032729590524e-25
+        ],
+        "grad_dtype": [
+          "float64"
+        ],
+        "approx_state": "ApproxState(spectrum_precomp=True, n_subbands=5)",
+        "value": 2.026432266841132e-25,
+        "boost": 1.2676506002282294e+30
+      },
+      "f32": {
+        "names": [
+          "dust_tau_diff",
+          "sfh_delayed_log_total_mass"
+        ],
+        "grad": [
+          -0.0,
+          0.0
+        ],
+        "grad_boosted": [
+          -1.7278686647611334e-25,
+          4.666021042340119e-25
+        ],
+        "grad_dtype": [
+          "float32"
+        ],
+        "approx_state": "ApproxState(spectrum_precomp=True, n_subbands=5)",
+        "value": 2.026427249186416e-25,
+        "boost": 1.2676506002282294e+30
+      },
+      "f32_all_zero": true,
+      "f32_boosted_all_zero": false,
+      "f32_finite": true,
+      "f32_vs_f64": 1.0,
+      "f32_boosted_vs_f64": 2.502516111889194e-06,
+      "f64_boost_moves_f64": 0.0,
+      "f64_boost_bit_identical": true,
+      "lut_engaged": true,
+      "lut_f64_vs_exact_f64": 1.242441640259204e-07
+    }
+  ]
+}

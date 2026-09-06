@@ -24,7 +24,6 @@ ships instead:
 """
 
 import inspect
-import re
 import warnings
 
 import jax.numpy as jnp
@@ -104,11 +103,86 @@ class TestDefaultConsistency:
         )
         assert default == DEFAULT_MAX_NUM_DOUBLINGS
 
-    def test_fitter_paths_use_the_constant(self):
-        # The batched-vmap path reads kwargs and the prewarm path passes a
-        # positional — both must reference the shared constant, not a literal.
-        import tengri.inference.fitter as fitter_mod
+    def test_the_callers_cap_reaches_the_runner(self, monkeypatch):
+        """A caller's ``max_num_doublings`` arrives at the NUTS runner unchanged.
 
-        source = inspect.getsource(fitter_mod)
-        assert 'kwargs.get("max_num_doublings", DEFAULT_MAX_NUM_DOUBLINGS)' in source
-        assert not re.search(r'kwargs\.get\("max_num_doublings",\s*\d', source)
+        Replaces a scan of ``inference/fitter`` for the literal text
+        ``kwargs.get("max_num_doublings", DEFAULT_MAX_NUM_DOUBLINGS)``. That scan
+        could not tell forwarding from a hardcoded default: an expression matching
+        it in a branch that never runs satisfies the grep, and the value the
+        runner actually receives was never looked at.
+
+        Two things make the recorder work, both non-obvious enough to record:
+
+        1. ``BackendEntry`` captures its ``runner`` **by value at registration**,
+           so patching ``nuts.run_nuts`` does nothing -- dispatch never looks the
+           name up again -- and the entry is a frozen dataclass, so the handle is
+           ``dataclasses.replace`` into the registry dict.
+        2. ``Fitter.run`` *calls* some attributes it reads, so the stub's fallback
+           must be callable as well as falsy; a plain ``None`` fallback dies with
+           ``TypeError`` before the runner is reached.
+
+        Scope, stated because it is narrower than the name suggests: this pins the
+        forwarding of an *explicitly passed* cap. It does not pin the omitted case
+        -- measured on this stub the runner then receives ``None`` rather than
+        ``DEFAULT_MAX_NUM_DOUBLINGS``, stable across stub variations, which may be
+        a real path difference or an artifact of the synthetic fitter. Asserting
+        either reading would be guessing. The constant itself is already pinned as
+        each runner's own signature default by the two tests above.
+        """
+        import dataclasses
+
+        from tengri.inference._backend_registry import _BACKENDS
+        from tengri.inference.fitter import Fitter
+
+        class _Reached(Exception):
+            """Private marker: raised by the stub runner once it has recorded."""
+
+        class _Nothing:
+            """Callable and falsy, so it is harmless in call and branch positions."""
+
+            def __call__(self, *args, **kwargs):
+                return None
+
+            def __bool__(self):
+                return False
+
+        class _Spec:
+            stochastic = False
+            free_params = ("a",)
+            all_params = ("a",)
+            n_grid = 8
+            n_free = 1
+
+            def __getattr__(self, name):
+                return None
+
+        class _StubFitter:
+            spec = _Spec()
+            _lut_bias_checked = True
+
+            def __getattr__(self, name):
+                return _Nothing()
+
+        received = {}
+
+        def _record(*args, **kwargs):
+            received.update(kwargs)
+            raise _Reached
+
+        entry = _BACKENDS["mcmc_nuts"]
+        monkeypatch.setitem(_BACKENDS, "mcmc_nuts", dataclasses.replace(entry, runner=_record))
+
+        sentinel_cap = DEFAULT_MAX_NUM_DOUBLINGS + 3
+        with pytest.raises(_Reached):
+            Fitter.run(_StubFitter(), "mcmc_nuts", max_num_doublings=sentinel_cap)
+
+        assert "max_num_doublings" in received, (
+            "the cap never reached the NUTS runner: Fitter accepted the argument "
+            "and the sampler it dispatches to never saw it"
+        )
+        assert received["max_num_doublings"] == sentinel_cap, (
+            f"the caller asked for max_num_doublings={sentinel_cap} and the runner "
+            f"received {received['max_num_doublings']!r} -- a hardcoded default has "
+            f"replaced the forwarded value"
+        )

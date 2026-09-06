@@ -97,22 +97,24 @@ class TestAgeWeightOldEdge:
         assert w_t[i_above] == pytest.approx(w_r[i_above], rel=0.05)
 
     def test_young_tophat_matches_dense_reference(self, synthetic_ssp_wide):
-        """A young constant-SFR bin (dirichlet one-hot) keeps its old slice."""
+        """A young constant-SFR bin (continuity, one dominant bin) keeps its old slice."""
         ssp = synthetic_ssp_wide
         lg_age = np.asarray(ssp.ssp_lg_age_gyr)
 
-        def z_from_mf(mf):
-            z = np.zeros(len(mf) - 1)
-            rem = 1.0
-            for i in range(len(z)):
-                z[i] = np.clip(mf[i] / rem, 1e-9, 1 - 1e-9)
-                rem *= 1 - z[i]
-            return z
-
-        mf = np.full(7, 1e-9)
-        mf[0] = 1.0 - 6e-9
-        sfh = {"type": "dirichlet", "log_total_mass": Fixed(10.0), "all_params": Fixed(DEFAULT)}
-        sfh.update({f"z_{i}": Fixed(float(z)) for i, z in enumerate(z_from_mf(mf))})
+        # A top-hat over the youngest default bin, [0, 30 Myr]. `dirichlet` was
+        # the vehicle here, via a helper that inverted tengri's stick-breaking
+        # on the *mass* fractions. That inverse encoded the pre-Leja+2017
+        # mapping (the stick-breaking now runs on the SFR fractions, from
+        # Beta(1, N-1-i)-mapped latents), so the test would have to restate
+        # the prior's transform to keep using it. `continuity` reaches the
+        # same SFH directly: one large log-SFR ratio puts 1e9x the SFR in the
+        # youngest bin, i.e. all but 5e-7 of the mass.
+        sfh = {
+            "type": "continuity",
+            "log_total_mass": Fixed(10.0),
+            "ratio_0": Fixed(9.0),
+            "all_params": Fixed(DEFAULT),
+        }
         w_t, _ = _age_marginal(ssp, sfh)
 
         def sfr_top(t_lb):  # tengri's bin convention: uniform over [0, 30 Myr]

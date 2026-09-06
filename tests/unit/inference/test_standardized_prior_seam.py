@@ -65,8 +65,14 @@ def test_the_field_is_excluded_when_the_model_is_not_stochastic():
 def test_the_context_accessor_and_the_objective_agree_by_construction():
     """Both must route through the helper, not restate the rule.
 
-    Pinned on the source, because two implementations that agree today are
-    exactly what this test exists to prevent from drifting again.
+    This is a source-based structural claim guarding against a regression
+    documented in the module docstring: two independent implementations of the
+    standardized N(0, I) prior existed, and they diverged on batched inputs
+    (one returned shape (N,), the other a scalar). The fix consolidated them
+    into a single helper. Pinning that both code paths call that helper is
+    the only way to prevent the divergence from creeping back in when someone
+    refactors either half. Tests above (test_the_penalty_is_scalar_*) verify
+    the scalar output; this one pins the architectural control.
     """
     import inspect
 

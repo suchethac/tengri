@@ -109,16 +109,87 @@ An optional group with no `'type'` but with other keys raises `ParameterError` w
 
 ### Wildcard rules and no-op detection
 
-`'all_params': FREE` on a group whose parameters default to `Fixed(DEFAULT)` is valid and cascades. However, on a group where **all** parameters are inherently fixed (e.g., `radio` without sub-blocks configured to use a free model, or `shock` with only fixed components), `'all_params': FREE` **raises an error** with an example of how to set explicit priors instead:
+`'all_params': FREE` on a group whose parameters default to `Fixed(DEFAULT)` is valid and cascades. However, when a wildcard cannot actually free anything, `'all_params': FREE` **raises `ParameterError`** instead of silently building a model with that physics pinned (#2187). Two shapes, both raise:
+
+**The group declares no parameters at all** under the selected configuration (e.g. `radio` with every sub-model disabled):
 
 ```python
-# WRONG: radio is free-param free
-model = SEDModel.build(ssp_data=ssp, observation=obs, radio={'type': 'sfonly', 'all_params': FREE})
-# Raises: "Cannot set all_params=FREE on radio — it has no free parameters."
-# "  Pass explicit priors instead: radio={'type': 'sfonly', 'q10': Uniform(...)}"
+model = SEDModel.build(
+    ssp_data=ssp, observation=obs,
+    radio={'sf': {'type': 'none'}, 'agn': {'type': 'none'}, 'all_params': FREE},
+)
+# Raises ParameterError:
+# "'all_params'/'other_params': FREE in group 'radio' covers no parameters --
+#  this group declares none to free under the selected configuration.
+#  FREE resolves each parameter's registry default; with nothing declared
+#  here there is nothing for it to resolve, so the fit would silently not
+#  vary anything in this group.
+#  Remove the wildcard, or pass explicit priors for the parameters you meant
+#  to vary (e.g. radio={'param_name': Uniform(lo, hi)} for whichever
+#  parameter your chosen configuration actually declares)."
+```
 
-# CORRECT: explicit prior on the one available parameter
-model = SEDModel.build(ssp_data=ssp, observation=obs, radio={'type': 'sfonly', 'q10': Uniform(-0.5, 0.5)})
+**The group declares parameters, but every one of them is `Fixed`-only** (no declared `free_prior`), so the wildcard would free zero of them:
+
+```python
+model = SEDModel.build(ssp_data=ssp, observation=obs, met={'type': 'table', 'all_params': FREE})
+# Raises ParameterError:
+# "'all_params: FREE' freed 0 of 1 parameters in group 'met'. These have no
+#  declared prior, only Fixed defaults:
+#    met_alpha_fe
+#  FREE resolves to each parameter's registry default, and these default to
+#  Fixed; so the wildcard would leave every one of them pinned and the fit
+#  would silently not vary this physics.
+#  Pass explicit priors instead, e.g. met={'alpha_fe': Uniform(lo, hi)}."
+
+# The remedy depends on the parameter -- it is not always "add a prior".
+# met_alpha_fe here is the declared-but-not-yet-shipped alpha-enhancement
+# axis (see the release-scope note in the project's CLAUDE.md): its
+# liveness has never been measured (no sweep has ever freed it end to
+# end), so the honest fix for THIS parameter is to drop the wildcard
+# rather than free it -- blessing an explicit prior on an axis nobody has
+# confirmed does anything is exactly the silent-inert-parameter disease
+# this guard exists to catch.
+model = SEDModel.build(ssp_data=ssp, observation=obs, met={'type': 'table'})
+
+# CORRECT (general case): an explicit prior on a parameter you genuinely
+# mean to vary -- gas-phase metallicity, live in every photoionized
+# nebular backend:
+model = SEDModel.build(
+    ssp_data=ssp, observation=obs,
+    neb={'type': 'cue', 'logZ_gas': Uniform(-1.0, 0.3)},
+)
+```
+
+(A partial free — some parameters in the group have a declared range and some do not — warns with `WildcardPartialFreeWarning` rather than raising, naming which ones stay pinned; see the docstring of `_check_wildcard_freed_something` for the full four-outcome table.)
+
+The same refusal applies to an **explicitly named per-parameter `FREE`**, not just the wildcard: naming one specific parameter as `FREE` must free it or refuse, never silently leave it pinned. `met_alpha_fe` is the worked refusal example — the declared-but-not-yet-shipped alpha-enhancement axis has no `free_prior` (a wildcard cannot know whether the loaded SSP grid even carries an alpha-enhanced axis), so naming it `FREE` raises rather than quietly building a model with it pinned:
+
+```python
+model = SEDModel.build(
+    ssp_data=ssp, observation=obs, sfh={...},
+    met={'type': 'table', 'alpha_fe': FREE}, redshift=Fixed(0.1),
+)
+# Raises ParameterError:
+# "'alpha_fe': FREE cannot be honored -- 'met_alpha_fe' has no declared
+#  free prior (its registry default is Fixed(0.0)). Pass an explicit
+#  prior instead, e.g. alpha_fe: Uniform(lo, hi)."
+
+# CORRECT: an explicit prior for a parameter you genuinely mean to vary
+model = SEDModel.build(
+    ssp_data=ssp, observation=obs, sfh={...},
+    met={'type': 'table', 'alpha_fe': Uniform(-0.2, 0.4)}, redshift=Fixed(0.1),
+)
+```
+
+`redshift` is the worked example of the opposite outcome — a parameter **with** a declared default free prior. It declares `free_prior=Uniform(0.0, 20.0)`, an interval chosen to span and exceed every shipped recipe's redshift prior (photoz `Uniform(0.01, 6.0)`, high_z `Uniform(3.5, 10.0)`, stochastic/JWST `Uniform(0.01, 12.0)`), so `redshift=FREE` genuinely frees it over that range rather than raising:
+
+```python
+model = SEDModel.build(ssp_data=ssp, observation=obs, sfh={...}, redshift=FREE)
+# Builds. model.spec.get_distribution('redshift') == Uniform(0.0, 20.0)
+
+# Narrow it with an explicit prior for a survey-specific photo-z fit
+model = SEDModel.build(ssp_data=ssp, observation=obs, sfh={...}, redshift=Uniform(0.01, 6.0))
 ```
 
 ### Error handling and suggestions
@@ -195,10 +266,10 @@ met={'type': 'ramp', 'logzsol_0': Fixed(-0.3), 'logzsol_1': Free}  # two-knot ra
 - `'dust_curve'` — WG00 dust curve selector (only for `type='wg00'`).
 - `'geometry'` — WG00 geometry ('slab', 'sphere', etc.) (only for `type='wg00'`).
 - `'structure'` — WG00 structure ('clumpy', 'homogeneous', etc.) (only for `type='wg00'`).
-- `'slope_bc'`, `'slope_diff'`, `'slope_neb'` — Per-screen law-parameter overrides (two-component only).
-- `'bump_strength_bc'`, `'bump_strength_diff'`, `'bump_strength_neb'` — Per-screen bump-strength overrides (two-component only).
-- `'Rv_bc'`, `'Rv_diff'`, `'Rv_neb'` — Per-screen RV overrides (two-component only).
-- `'delta_bc'`, `'delta_diff'`, `'delta_neb'` — Per-screen delta overrides (two-component only).
+- `'slope_bc'`, `'slope_diff'`, `'slope_neb'` — Per-screen law-parameter overrides (two-component only). Accepted only when *that screen's* law reads a slope.
+- `'bump_strength_bc'`, `'bump_strength_diff'`, `'bump_strength_neb'` — Per-screen bump-strength overrides (two-component only). Accepted only when that screen's law reads a bump strength.
+- `'Rv_bc'`, `'Rv_diff'`, `'Rv_neb'` — Per-screen RV overrides (two-component only). Accepted only when that screen's law reads R_V.
+- `'delta_bc'`, `'delta_diff'`, `'delta_neb'` — Per-screen delta overrides (two-component only). Accepted only when that screen's law reads a slope modification.
 - `'lyman_cutoff'` — Zero attenuation below 912 Å (Lyman limit). Two-component only.
 - `'lyc_absorb_all'` — Absorb all ionizing photons (FSPS/CIGALE style) vs young-only (default). Two-component only.
 - `'eb_include_lyc'` — Include ionizing luminosity in the dust energy-balance integral (FSPS/Prospector parity). Default false.
@@ -221,8 +292,9 @@ dust_attenuation={'type': 'wg00', 'dust_curve': 'mw_rv31', 'geometry': 'slab', '
 **Gotchas:**
 - Dust attenuation and dust emission are **two separate peer groups**, not nested. The retired `dust={'attenuation': {...}, 'emission': {...}}` form raises.
 - Two-component law-pairing rule: if you name one of `'law_bc'`/`'law_diff'`, you must name both (or use a shared `'law'` for both).
-- Parameters like `'slope'`, `'bump_strength'`, `'Rv'`, `'delta'` are set per-screen on two-component (`'slope_bc'`, `'slope_diff'`, etc.). On single-component, just `'slope'`.
-- The `'neb'` channel (`'law_neb'`, `'slope_neb'`, etc.) reddens **only the nebular birth-cloud continuum**, not the young stars. Used when nebular emission is routed through a different dust screen.
+- Parameters like `'slope'`, `'bump_strength'`, `'Rv'`, `'delta'` are set per-screen on two-component (`'slope_bc'`, `'slope_diff'`, etc.). On single-component, just `'slope'` — the per-screen spellings raise there, because a single screen has no second screen to name and the value would never reach a curve.
+- **A shape key must be one the selected law reads.** Each law declares exactly the parameters it uses, so `'slope'` under `'noll09'` raises and names `'delta'`, the parameter that law does read; `'Rv'` under `'calzetti'` raises, because that curve is fitted at R_V = 4.05; `'slope'` under `'vw07_bc'` / `'vw07_diff'` raises, because those are the Charlot & Fall birth-cloud and diffuse slopes, not knobs (use `'power_law'` for a free slope). The same rule applies per screen: with `'law_bc': 'power_law', 'law_diff': 'noll09'`, `'slope_bc'` is accepted and `'slope_diff'` is not — and a lone `'slope_bc'` is then complete, because there is no partner to give.
+- The `'neb'` channel (`'law_neb'`, `'slope_neb'`, etc.) reddens **only the nebular birth-cloud continuum**, not the young stars. Used when nebular emission is routed through a different dust screen. `'law_neb'` defaults to `'law_bc'`, and a `'*_neb'` override is checked against whichever of the two is in force.
 
 
 ### Dust emission: `dust_emission`

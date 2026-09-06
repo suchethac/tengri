@@ -21,7 +21,7 @@
 Dust attenuation across the SED: intrinsic, attenuated, and absorbed
 ====================================================================
 
-.. GENERATED FROM PYTHON SOURCE LINES 5-83
+.. GENERATED FROM PYTHON SOURCE LINES 5-82
 
 
 
@@ -76,7 +76,6 @@ Dust attenuation across the SED: intrinsic, attenuated, and absorbed
             "all_params": tengri.Fixed(tengri.DEFAULT),
             "tau_bc": 1.0,
             "tau_diff": 0.5,
-            "slope": -0.7,
         },
         redshift=tengri.Fixed(0.0),
     )
@@ -118,7 +117,7 @@ Dust attenuation across the SED: intrinsic, attenuated, and absorbed
 
 .. rst-class:: sphx-glr-timing
 
-   **Total running time of the script:** (0 minutes 3.207 seconds)
+   **Total running time of the script:** (0 minutes 4.041 seconds)
 
 
 .. _sphx_glr_download_auto_examples_quickstart_plot_sed_components.py:

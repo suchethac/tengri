@@ -15,7 +15,7 @@ dust emission components should re-emit the absorbed `L_ir`.
 
 This test establishes the baseline: on a default build, the PAH component
 does NOT publish its declared output, while sibling models (dale2014,
-pah_drude) DO (control tests to verify the harness is sound).
+modified_blackbody) DO (control tests to verify the harness is sound).
 """
 
 import warnings
@@ -48,7 +48,7 @@ def _draine2021_available() -> bool:
 
 
 #: Applied only to the assertions that need the grid. The two control tests
-#: (dale2014, pah_drude) and the publish-contract test do not.
+#: (dale2014, modified_blackbody) and the publish-contract test do not.
 requires_pahspec = pytest.mark.skipif(
     not _draine2021_available(), reason="draine2021 PAHspec template grid not available"
 )
@@ -152,13 +152,21 @@ def test_draine2021_pah_contributes_infrared_emission(synthetic_ssp_wide, synthe
     )
 
 
-@pytest.mark.parametrize("model_name", ["dale2014", "pah_drude"])
+@pytest.mark.parametrize("model_name", ["dale2014", "modified_blackbody"])
 def test_sibling_emission_models_publish(synthetic_ssp_wide, synthetic_tophat_obs, model_name):
-    """Sibling emission models (dale2014, pah_drude) DO publish on default builds.
+    """Sibling emission models DO publish on default builds.
 
     Control test: verify the harness is sound by checking that comparable
-    components work. If dale2014 and pah_drude both publish but draine2021_pah
-    does not, the failure is specific to Draine2021PAH, not a harness issue.
+    components work. If a tabulated (dale2014) and an analytic
+    (modified_blackbody) sibling both publish but draine2021_pah does not, the
+    failure is specific to Draine2021PAH, not a harness issue.
+
+    ``modified_blackbody`` replaced ``pah_drude`` as the analytic control when
+    ``pah_drude`` stopped being standalone-selectable (it is a PAH building
+    block, refused by ``SEDModel.build``). The control's job is to prove the
+    harness sound with a *comparable* component; any energy-balanced analytic
+    emitter does that, and this one still contrasts a closed-form model against
+    the tabulated one.
     """
     from tengri import SEDModel
 

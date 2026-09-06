@@ -11,6 +11,77 @@ import jax.numpy as jnp
 import numpy as np
 import pytest
 
+# ── Import source verification guard ────────────────────────────────────────
+#
+# Guard against importing tengri from a different checkout or worktree than
+# the one running tests. This catches misconfigurations of the shared venv
+# (.venv/lib/python3.12/site-packages/__editable__.astro_tengri-*.pth files
+# that point to a stale worktree), which silently run tests against incorrect
+# source code (#2170).
+#
+# Mechanism: when tests exist in src/tengri/, verify that the imported module
+# lives in the same tree. The check runs at module load time (before any test)
+# so failures block collection instead of silently running the wrong code.
+# Stays silent for installed (non-editable) releases, since there is no
+# src/tengri/ to compare.
+
+
+def _check_tengri_source_tree_match(
+    repo_root: Path | None = None,
+    imported_file: Path | None = None,
+) -> None:
+    """Verify imported tengri lives in the same tree as the tests.
+
+    Parameters
+    ----------
+    repo_root : Path, optional
+        Repository root to check. Defaults to the parent of this file's
+        directory (the real repository). Injectable for testing.
+    imported_file : Path, optional
+        Path of the imported ``tengri/__init__.py``. Defaults to importing
+        tengri and reading ``__file__``. Injectable for testing.
+
+    Raises
+    ------
+    RuntimeError
+        If tests exist in src/tengri/ but the imported tengri module
+        comes from a different location.
+    """
+    if repo_root is None:
+        repo_root = Path(__file__).resolve().parent.parent
+    tengri_src = repo_root / "src" / "tengri"
+
+    # Only check if this is a development tree with local source.
+    if not tengri_src.exists():
+        return
+
+    if imported_file is None:
+        import tengri
+
+        imported_file = Path(tengri.__file__)
+
+    # Resolve both sides so symlinked checkouts (e.g. /tmp vs /private/tmp
+    # on macOS) compare by real location, not spelling.
+    imported_file = Path(imported_file).resolve()
+    expected_file = (tengri_src / "__init__.py").resolve()
+
+    if imported_file != expected_file:
+        raise RuntimeError(
+            f"Imported tengri from wrong source tree (#2170).\n"
+            f"Tests are in:    {repo_root}\n"
+            f"Expected source: {expected_file}\n"
+            f"Actual source:   {imported_file}\n\n"
+            f"This usually means the shared .venv has a stale editable install "
+            f"pth file pointing to a different worktree. Fix by running:\n"
+            f"  pip install -e . --force-reinstall --no-deps\n"
+            f"from {repo_root}, or by setting:\n"
+            f"  PYTHONPATH={repo_root / 'src'}"
+        )
+
+
+# Run the import verification at collection time.
+_check_tengri_source_tree_match()
+
 # ── Network guard ────────────────────────────────────────────────────────
 #
 # No test may reach the network. This exists because two tests that did
@@ -142,6 +213,31 @@ def pytest_terminal_summary(terminalreporter, exitstatus, config):  # pragma: no
             "Either ship tiny synthetic test fixtures or accept the coverage gap honestly."
         )
 
+    # Class-killer guard: surface files where EVERY test skipped, whether
+    # from markers (setup phase) or from test-body logic (call phase).
+    # This guard is opt-in via TENGRI_GUARD_FULLY_SKIP env var to avoid
+    # false-positives on local partial runs (-k filters, single-file invocations).
+    if os.environ.get("TENGRI_GUARD_FULLY_SKIP"):
+        fully_skipped_files = fully_skipped_test_files(_FILE_OUTCOMES)
+        allowlist = _SKIP_GUARD_ALLOWLIST
+        violations = [
+            f for f, _ in fully_skipped_files if f not in allowlist and not _is_excluded_tree(f)
+        ]
+        if violations:
+            terminalreporter.write_sep("!", "FULLY-SKIPPING TEST FILES (CLASS-KILLER GUARD)")
+            for f in violations:
+                terminalreporter.write_line(f"  {f}")
+            terminalreporter.write_line(
+                "Every test in the file(s) above was skipped, rendering the file inert "
+                "coverage. Files on the guard allowlist or in excluded trees (integration, "
+                "crossval) are expected; others are bugs. See #1615/#1946."
+            )
+            if exitstatus == 0:
+                # Only fail the session if the test run itself succeeded but coverage is inert.
+                # If tests failed for other reasons, that takes precedence.
+                terminalreporter.write_sep("!", "FAILING: INERT COVERAGE DETECTED")
+                raise SystemExit(1)
+
 
 # ─────────────────────────────────────────────────────────────────────
 # Inert-file detector: a file where every test skipped *from inside a
@@ -172,6 +268,7 @@ def pytest_terminal_summary(terminalreporter, exitstatus, config):  # pragma: no
 # ─────────────────────────────────────────────────────────────────────
 
 _FILE_OUTCOMES: dict[str, dict[str, int]] = {}
+_FILE_COLLECTED: dict[str, int] = {}  # Track collected test count per file
 
 
 def pytest_runtest_logreport(report):  # pragma: no cover — pytest hook
@@ -195,6 +292,13 @@ def pytest_runtest_logreport(report):  # pragma: no cover — pytest hook
             rec["ran"] += 1
 
 
+def pytest_collection_finish(session):  # pragma: no cover — pytest hook
+    """Record how many tests were collected per file."""
+    for item in session.items:
+        path = item.nodeid.split("::")[0]
+        _FILE_COLLECTED[path] = _FILE_COLLECTED.get(path, 0) + 1
+
+
 def inert_test_files() -> list[tuple[str, dict[str, int]]]:
     """Files where nothing ran and at least one test skipped from its own body.
 
@@ -209,6 +313,67 @@ def inert_test_files() -> list[tuple[str, dict[str, int]]]:
         for path, rec in _FILE_OUTCOMES.items()
         if rec["ran"] == 0 and rec["skip_call"] > 0
     )
+
+
+def fully_skipped_test_files(
+    outcomes: dict[str, dict[str, int]],
+) -> list[tuple[str, dict[str, int]]]:
+    """Files whose every executed test skipped (ran == 0, skips > 0).
+
+    Derived purely from runtest reports: under pytest-xdist the workers'
+    reports reach the controller while ``session.items`` does not, so a
+    collection-based count is empty exactly where CI runs in parallel and
+    would make this guard vacuous there. Deselected tests (-k/-m) produce
+    no reports, so partial runs cannot make an innocent file look fully
+    skipped; a file whose only outcomes are errors has ran == 0 and zero
+    skips and is left to the ordinary failure reporting.
+    """
+    return sorted(
+        (path, rec)
+        for path, rec in outcomes.items()
+        if rec["ran"] == 0 and (rec["skip_setup"] + rec["skip_call"]) > 0
+    )
+
+
+# ─────────────────────────────────────────────────────────────────────
+# Guard allowlist: files that legitimately skip all collected tests.
+#
+# Entries here are expected to fully-skip due to missing optional data,
+# platform gates, or design (e.g., integration tests without SSP grids).
+# Keep justifications short: each entry documents *why* this file can
+# skip everything and still be considered correct coverage.
+#
+# EXCLUDED TREES (checked via path, not allowlisted):
+#   - tests/integration/: needs real SSP grids (data/ssp_*.h5), shipped to
+#     developers only. BUG-NSS-01 regression test (test_user_scenarios.py)
+#     is here; it skips if BPASS grid missing — that skip is expected.
+#   - tests/crossval/: regression against external code (bagpipes, FSPS),
+#     not run by default (explicitly gated with -m crossval).
+#
+# Per-file allowlist (entries are literal paths as pytest reports them):
+#   - tests/components/agn/grahsp/test_template_parity.py: upstream GRAHSP repo
+#   - tests/components/dust/test_synthesizer_line_parity.py: optional Synthesizer grids
+#   - tests/components/nebular/test_cue_hybrid_diagnostic.py: optional BC03 SSP
+#   - tests/contract/test_build_resolver_sedmodelcomponent.py: BC03 SSP not shipped
+#   - tests/contract/test_phase4d_c_agn_threading.py: bare-stellar SSP not shipped
+#   - tests/contract/test_synthesizer_nlr_grammar.py: optional Synthesizer grids
+# ─────────────────────────────────────────────────────────────────────
+
+_SKIP_GUARD_ALLOWLIST: set[str] = {
+    "tests/components/agn/grahsp/test_template_parity.py",
+    "tests/components/dust/test_synthesizer_line_parity.py",
+    "tests/components/nebular/test_cue_hybrid_diagnostic.py",
+    "tests/contract/test_build_resolver_sedmodelcomponent.py",
+    "tests/contract/test_phase4d_c_agn_threading.py",
+    "tests/contract/test_synthesizer_nlr_grammar.py",
+}
+
+_EXCLUDED_TREES = ("tests/integration/", "tests/crossval/")
+
+
+def _is_excluded_tree(file_path: str) -> bool:
+    """Check if a test file is in an excluded tree (integration, crossval)."""
+    return any(file_path.startswith(tree) for tree in _EXCLUDED_TREES)
 
 
 # Suppress background JIT compilation in the test suite.  Without this,
@@ -526,84 +691,98 @@ def pytest_configure(config):
     _create_synthetic_ssp_if_missing(_SSP_FILE_WNE)
 
 
+def _cb19_grid_is_degenerate(path: Path) -> bool:
+    """Whether a CB_19 file on disk carries a single repeated line ratio.
+
+    Parameters
+    ----------
+    path : Path
+        Candidate ``cb19_templates.h5``.
+
+    Returns
+    -------
+    bool
+        ``True`` when the file is absent, unreadable, or every finite entry of
+        its line-ratio slab is the same number.
+    """
+    if not path.is_file():
+        return True
+    try:
+        with h5py.File(path, "r") as f:
+            key = "grids/SSP/Kroupa01/mu100/line_ratios"
+            if key not in f:
+                return True
+            ratios = f[key][:]
+    except (OSError, KeyError):
+        return True
+    finite = ratios[np.isfinite(ratios)]
+    return bool(finite.size == 0 or finite.min() == finite.max())
+
+
+@pytest.fixture(scope="session")
+def usable_cb19_grid_path(tmp_path_factory) -> Path:
+    """A CB_19 grid file that loads: the packaged one, or a synthetic stand-in.
+
+    ``data/cb19_templates.h5`` is untracked and, on a machine that ran an early
+    build script, is the flat placeholder of #924: one repeated ratio, which
+    :class:`~tengri.components.nebular.CB19DegenerateGridError` now refuses.
+    Any test that needs *a grid to load* rather than *the packaged file
+    specifically* should take this fixture.
+
+    Returns
+    -------
+    Path
+        The packaged file when it is usable, else a synthetic grid varying
+        along every interpolation axis, written under a session tmp dir.
+    """
+    from tests._cb19_grid import write_synthetic_cb19_grid
+
+    packaged = Path(__file__).parent.parent / "data" / "cb19_templates.h5"
+    if not _cb19_grid_is_degenerate(packaged):
+        return packaged
+    return write_synthetic_cb19_grid(tmp_path_factory.mktemp("cb19_grid") / "cb19_templates.h5")
+
+
+@pytest.fixture(scope="session", autouse=True)
+def _usable_cb19_default_path(usable_cb19_grid_path):
+    """Point CB_19's default path at a grid that loads, when the packaged one does not.
+
+    Refusing the placeholder is the point of #2181, but it must not turn every
+    CB_19 test into an error about the developer's data directory. The file on
+    disk is left untouched; the refusal itself is asserted by
+    ``tests/regression/bug/test_bug_2181_cb19_placeholder_grid.py``, which
+    writes its own placeholder.
+
+    Inert wherever the packaged file is usable, which includes CI (where
+    ``pytest_configure`` writes the synthetic grid) and any machine carrying
+    the real download.
+    """
+    packaged = Path(__file__).parent.parent / "data" / "cb19_templates.h5"
+    if usable_cb19_grid_path == packaged:
+        yield
+        return
+
+    patch = pytest.MonkeyPatch()
+    patch.setattr("tengri.components.nebular.cloudy_cb19._DEFAULT_PATH", usable_cb19_grid_path)
+    yield
+    patch.undo()
+
+
 def _create_cb19_fixture_if_missing(cb19_path: Path) -> None:
+    """Write a synthetic CB_19 grid at the packaged path when none is present.
+
+    The stand-in varies along every interpolation axis. Before #2181 it was ten
+    Case B ratios *broadcast* across all seven axes: distinguishable per line,
+    constant along every physical axis, so ``neb_logU``, ``neb_logZ_gas``,
+    ``neb_log_nH``, ``neb_co`` and ``neb_dno`` were bit-exactly inert on it and
+    no test in the suite could observe that.
+    """
     if cb19_path.exists():
         return
 
-    cb19_path.parent.mkdir(parents=True, exist_ok=True)
+    from tests._cb19_grid import write_synthetic_cb19_grid
 
-    # Grid dimensions — must satisfy all TestCB19WithRealH5 assertions:
-    #   n_oh=7, n_u=6, n_nh=4 (shape checks)
-    #   n_age >= 11 (index 10 accessed in test_hb_ratio_is_unity)
-    #   HbFrac=[0.0, 1.0]: hbfrac=1.0 → i_hb=1; hbfrac=0.42 → gap=0.42 > 0.15 → warns
-    n_oh, n_age, n_u, n_nh, n_co, n_dno, n_hbfrac, n_lines = 7, 11, 6, 4, 3, 3, 2, 10
-
-    # log_U linspace(-4.0, -1.5, 6) = [-4.0, -3.5, -3.0, -2.5, -2.0, -1.5]
-    # index 2 = -3.0, which is the fiducial logU used in test_no_all_nan_slices_at_solar
-    log_u = np.linspace(-4.0, -1.5, n_u).astype(np.float32)
-    log_age = np.linspace(6.0, 10.0, n_age).astype(np.float32)
-
-    with h5py.File(cb19_path, "w") as f:
-        ax = f.create_group("axes")
-        ax.create_dataset("log_OH_total", data=np.linspace(-5.06, -2.58, n_oh).astype(np.float32))
-        ax.create_dataset("log_age_yr_ssp", data=log_age)
-        ax.create_dataset("log_U", data=log_u)
-        ax.create_dataset("log_nH", data=np.linspace(1.0, 4.0, n_nh).astype(np.float32))
-        ax.create_dataset("log_CO", data=np.linspace(-1.0, 0.15, n_co).astype(np.float32))
-        ax.create_dataset("dNO", data=np.linspace(-0.25, 0.25, n_dno).astype(np.float32))
-        ax.create_dataset("HbFrac", data=np.array([0.0, 1.0], dtype=np.float32))
-
-        # Line wavelengths — must include Hβ=4862.68 Å and Hα=6564.61 Å
-        line_waves = np.array(
-            [
-                1215.67,
-                1549.0,
-                3727.0,
-                4340.47,
-                4862.68,
-                5008.24,
-                6300.30,
-                6548.05,
-                6564.61,
-                6583.45,
-            ],
-            dtype=np.float32,
-        )
-        f.create_dataset("line_wavelengths_aa", data=line_waves)
-
-        # Per-line ratios (linear L_line / L_Hβ). Plumbing tests need
-        # Hβ = 1.0 (test_hb_ratio_is_unity) and all entries finite
-        # (test_no_all_nan_slices_at_solar). Beyond those constraints,
-        # ship *physically-distinct-per-line* defaults so consumers like
-        # ``CB19Backend.predict_nebular_line_luminosities`` produce
-        # visible per-line variation under the synthetic grid — without
-        # this, every line collapses to the same luminosity and #361
-        # Bug C reproduces. The numbers below are rough SF Case B Hβ
-        # ratios (Osterbrock & Ferland 2006, Tables 4.4/4.10) — not
-        # production-grade, but enough to break the degeneracy in
-        # plumbing tests. Replace with the real Martinez-Paredes+2023
-        # grid via ``scripts/download_cb19_templates.py`` for science.
-        per_line_ratios_to_hbeta = np.array(
-            [
-                10.0,  # 1215.67  Lyα (intrinsic Case B; resonant scatter applied downstream)
-                0.50,  # 1549     C IV
-                2.00,  # 3727     [O II]
-                0.47,  # 4340.47  Hγ (Case B)
-                1.00,  # 4862.68  Hβ (reference; required = 1.0)
-                4.00,  # 5008.24  [O III]
-                0.10,  # 6300.30  [O I]
-                0.10,  # 6548.05  [N II] (one tail of doublet)
-                2.87,  # 6564.61  Hα (Case B)
-                0.30,  # 6583.45  [N II] (other tail)
-            ],
-            dtype=np.float32,
-        )
-        ratios = np.broadcast_to(
-            per_line_ratios_to_hbeta,
-            (n_oh, n_age, n_u, n_nh, n_co, n_dno, n_hbfrac, n_lines),
-        ).astype(np.float32)
-        grp = f.create_group("grids/SSP/Kroupa01/mu100")
-        grp.create_dataset("line_ratios", data=ratios)
+    write_synthetic_cb19_grid(cb19_path)
 
     # Tag as synthetic so developers know it's a test fixture, not the real data.
     # pytest_configure output goes before any test output; warn() is the right channel.

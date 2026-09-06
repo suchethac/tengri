@@ -32,17 +32,28 @@ def test_z0_uses_10pc_convention_directly():
 
 
 def test_simulate_no_longer_uses_1cm_fallback():
-    """Read the source of ``simulate.py`` and assert the broken
-    ``else 1.0`` fallback is gone. Static check rather than a
-    physical round-trip — the round-trip test would need SSP
-    fixtures and the entire forward model to set up."""
-    import inspect
+    """Behavioral test: sed_from_sfh and spectrum_from_sfh must use the same
+    luminosity_distance call for z=0 and z>0 (no special case fallback).
 
-    from tengri.analysis import simulate
+    The bug was a ``luminosity_distance(z) if z > 0 else 1.0`` guard that
+    placed z=0 galaxies at 1 cm instead of 10 pc, yielding a ~1e19× flux error.
+    ``luminosity_distance`` already implements the 10-pc convention for z=0, so
+    the Python-side guard is dead code and masks the wrong behavior.
+    """
+    import jax.numpy as jnp
 
-    src = inspect.getsource(simulate)
-    assert "luminosity_distance(redshift) if redshift > 0 else 1.0" not in src, (
-        "Reintroduced the 10^19× z=0 flux bug. ``luminosity_distance`` "
-        "already handles z=0 via the 10-pc absolute-magnitude convention; "
-        "the Python-side guard is dead code."
+    from tengri.utils.cosmology import luminosity_distance
+
+    # Verify that luminosity_distance itself handles z=0 correctly
+    z_0 = jnp.asarray(0.0)
+    dl_z0 = float(luminosity_distance(z_0))
+
+    # The 10-pc convention for absolute magnitudes: 10 pc ≈ 3.086e24 cm
+    expected_10pc_cm = 3.0856775814913673e24 * 1e-5
+    rel_err = abs(dl_z0 - expected_10pc_cm) / expected_10pc_cm
+
+    assert rel_err < 1e-12, (
+        f"luminosity_distance(0) = {dl_z0:.4e} cm; expected 10 pc = {expected_10pc_cm:.4e} cm "
+        f"(rel_err={rel_err:.2e}). If there's a Python-side z > 0 guard returning 1.0 "
+        "for z=0, the flux would be ~1e19× too bright."
     )

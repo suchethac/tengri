@@ -1,5 +1,10 @@
 #!/usr/bin/env python3
-"""CI guard: dust-law shape parameters reach a law by splat, never by hand.
+"""CI guard: dust-law shape parameters reach a law by splat, never by hand, and
+no law declares a ``**kwargs`` catch-all.
+
+Two rules with one subject. The first three sections below are about *callers*
+handing a law the wrong parameters; the last is about the *law* accepting
+whatever it is handed, which is what let the caller defects stay silent.
 
 Three separate defects in 2026-08 were one defect written three times, and all
 three are the same *shape* of call rather than the same physics:
@@ -31,6 +36,24 @@ fill a dict in by hand and splat *that*, and every call site reads as correct:
 1. no call may name a shape parameter as an explicit keyword;
 2. no dict literal may carry one as a key, outside the files that legitimately
    *enumerate* parameters (registries, priors, name-translation tables).
+
+A third rule, added with #2185:
+
+3. no ``@register_dust_law`` function may declare ``**kwargs``.
+
+Every law used to. That catch-all is what made a wrong splat survivable and
+therefore invisible: ``def calzetti(wavelength, **_kwargs)`` *accepts*
+``dust_Rv`` while fixing R_V = 4.05 in the polynomial, so the grammar declared
+the parameter free, the sampler explored it, and the curve never moved. Four
+laws (``noll09``, ``salim_sbl18``, ``tea``, ``narayanan_z``) took ``slope``
+beside the ``delta`` they actually read — an inert parameter three characters
+from the live one. Measured across the 22 registered laws, 72 (law, per-screen
+key) pairs were bit-identical to omitting the key.
+
+With the catch-all gone the signature is the contract: callers narrow to what
+the law declares (``select_law_kwargs``) and refuse a key no law in play reads
+(``reject_unread_law_kwargs``), and a parameter offered to a law that cannot use
+it is a ``TypeError`` at the boundary rather than a flat posterior.
 
 Rule 2 is not hypothetical. ``attenuate_emission`` splats honestly and is still
 wrong, because the dict it splats is built from a signature that has no
@@ -116,11 +139,6 @@ ALLOWLIST: dict[str, str] = {
         "parameter, so the caller cannot splat even if it wanted to. Fixing the "
         "signature is the issue; remove this entry with it"
     ),
-    "analysis/simulate.py::two_component_dust": (
-        "mock-generation path: binds `n_slope=` beside a `**dust_kwargs` splat. "
-        "Same shape as the real defects and worth folding into the #1858 sweep, "
-        "but it drives `analysis/simulate.py` fixtures rather than a fit"
-    ),
 }
 
 # Hand-built parameter dicts that are then splatted. Splatting a dict you filled
@@ -178,6 +196,27 @@ def scan(path: Path) -> list[tuple[int, str, set[str]]]:
     return found
 
 
+def scan_law_catchalls(path: Path) -> list[tuple[int, str]]:
+    """Registered dust laws in one file that declare a ``**kwargs`` catch-all."""
+    try:
+        tree = ast.parse(path.read_text(encoding="utf-8"))
+    except SyntaxError:
+        return []
+
+    found = []
+    for node in ast.walk(tree):
+        if not isinstance(node, ast.FunctionDef):
+            continue
+        registered = any(
+            callee_name(dec) == "register_dust_law"
+            for dec in node.decorator_list
+            if isinstance(dec, ast.Call)
+        )
+        if registered and node.args.kwarg is not None:
+            found.append((node.lineno, node.name))
+    return found
+
+
 def scan_dict_literals(path: Path) -> list[tuple[int, set[str]]]:
     """Dict literals in one file that carry shape parameters as keys."""
     try:
@@ -221,6 +260,21 @@ def main() -> int:
                 "      Hand-bound shape parameters. Build the dict with\n"
                 "      `resolve_bc_diff_law_params` and splat it, so a parameter\n"
                 "      added later reaches this site too."
+            )
+
+    # Rule 3 scans every file, EXEMPT_FILES included: `attenuation.py` is exempt
+    # from the hand-binding rule precisely because it defines the laws, which is
+    # the one place this rule has to look.
+    for path in sorted(SRC.rglob("*.py")):
+        rel = relpath(path)
+        for lineno, fn_name in scan_law_catchalls(path):
+            violations.append(
+                f"{rel}:{lineno}  @register_dust_law ... def {fn_name}(..., **kwargs)\n"
+                "      A registered law must declare exactly the parameters it reads.\n"
+                "      A catch-all makes the law ACCEPT a parameter it never uses and\n"
+                "      discard the value in silence: the grammar then frees it, the\n"
+                "      sampler explores it, and the curve never moves (#2185). Delete\n"
+                "      the catch-all; callers narrow with `select_law_kwargs`."
             )
 
     seen_dicts: set[str] = set()
@@ -274,7 +328,8 @@ def main() -> int:
     n_exempt = len(EXEMPT_FILES) + len(DECLARATION_FILES)
     n_dicts = len(DICT_ALLOWLIST)
     print(
-        f"OK: every dust-law evaluation takes its parameters from a resolved dict "
+        f"OK: every dust-law evaluation takes its parameters from a resolved dict, "
+        f"and no registered law declares a **kwargs catch-all "
         f"({len(ALLOWLIST)} call sites and {n_dicts} hand-built "
         f"dict{'' if n_dicts == 1 else 's'} allowlisted, {n_exempt} files exempt)."
     )

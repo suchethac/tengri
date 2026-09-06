@@ -454,13 +454,21 @@ class TestDirichletSFHPhysics:
                 sfr, name="sfr", msg=f"Dirichlet SFR should be non-negative at z={z_val}"
             )
 
-    def test_extreme_z_concentrates_mass(self):
-        """z_frac_0 near 1 concentrates mass in youngest bin."""
-        from tengri.components.stellar.sfh import dirichlet
+    def test_extreme_z_concentrates_sfr(self):
+        """z_frac_0 near 1 concentrates the SFR in the youngest bin.
 
-        age_yr = jnp.geomspace(1e6, 13.7e9, 1000)
+        The stick-breaking runs on the SFR fractions (Leja+2017), so that is
+        the quantity a large ``z_frac_0`` concentrates. It is not the mass
+        fraction: the youngest default bin is 30 Myr out of 13.7 Gyr, so even
+        an SFR fraction of 0.54 there is only ~0.4% of the stellar mass.
+        """
+        from tengri.components.stellar.sfh import dirichlet
+        from tengri.components.stellar.sfh.nonparametric import DEFAULT_BIN_EDGES_GYR
+
+        edges = np.asarray(DEFAULT_BIN_EDGES_GYR)
+        centers_yr = jnp.asarray(0.5 * (edges[:-1] + edges[1:]) * 1e9)
         sfr = dirichlet(
-            age_yr,
+            centers_yr,
             log_total_mass=10.0,
             z_frac_0=0.99,
             z_frac_1=0.01,
@@ -469,13 +477,11 @@ class TestDirichletSFHPhysics:
             z_frac_4=0.01,
             z_frac_5=0.01,
         )
-        # Most mass should be in the youngest bin
-        young = age_yr < 100e6
-        mass_young = float(jnp.trapezoid(sfr[young], age_yr[young]))
-        mass_total = float(jnp.trapezoid(sfr, age_yr))
-        if mass_total > 0:
-            frac = mass_young / mass_total
-            assert frac > 0.3, f"z_frac_0=0.99 should concentrate mass young, got frac={frac:.2f}"
+        sfr_frac = np.asarray(sfr / jnp.sum(sfr))
+        assert sfr_frac[0] > 0.3, (
+            f"z_frac_0=0.99 should concentrate the SFR young, got {sfr_frac[0]:.3f}"
+        )
+        assert sfr_frac[0] > sfr_frac[1:].max(), f"youngest bin should dominate; got {sfr_frac}"
 
 
 # ── 9. ALL SFH MODELS — universal constraints ─────────────────────

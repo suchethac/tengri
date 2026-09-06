@@ -197,70 +197,154 @@ class TestCspIntegrationAccuracy:
 
 
 class TestCspBenchmark:
-    """Benchmark: precomputed _csp_age_dt vs computing inline.
+    """Precomputed CSP age_dt must compile to equal or less work than inline.
 
-    Since both methods now precompute dt at model init, the forward-pass
-    cost is a single elementwise multiply — identical for both methods.
+    This guard exists to catch the precomputed path silently reverting to
+    the inline computation. Both methods now precompute dt at model init,
+    so the forward-pass cost should be identical or less for the precomputed path.
     """
 
-    def _time_fn(self, fn, n_repeats=500, n_trials=5):
-        """Min over ``n_trials`` independent (mean-of-``n_repeats``) timings.
+    def test_precomputed_compiles_to_fewer_or_equal_flops(self):
+        """Precomputed age_dt compiles to <= FLOPs as inline computation.
 
-        Single-mean timings at the ~10 µs scale are dominated by GC and
-        scheduler noise on shared CI runners — a single hiccup can blow
-        a 10 µs measurement to 50 µs and break the assertion. Outliers
-        always slow timings down, never speed them up, so the trial
-        minimum is the cleanest estimator of the underlying no-noise
-        cost.
+        This replaces a wall-clock assertion (``t_pre <= t_inline * 3.0``)
+        which could not reliably detect a silent regression. At the ~10 us
+        scale, a single GC pause or scheduler hiccup can blow a measurement
+        from 10 us to 50 us. More importantly, with the age grid closed over
+        as a constant, XLA can fold the two paths to identical cost, making
+        the regression invisible by timing alone.
+
+        Passing arrays as **traced arguments** blocks constant folding and
+        reveals the real compiled cost. FLOP counts come from the compiled
+        executable, are identical across recompiles, and cannot be moved
+        by scheduler load.
+
+        This pattern mirrors #1696: trace the arrays that define path selection.
         """
-        fn()  # warmup
-        trials = []
-        for _ in range(n_trials):
-            t0 = time.perf_counter()
-            for _ in range(n_repeats):
-                fn()
-            t1 = time.perf_counter()
-            trials.append((t1 - t0) / n_repeats * 1e6)  # µs
-        return min(trials)
 
-    @pytest.mark.benchmark
-    def test_precomputed_vs_inline_speed(self):
-        """Precomputed age_dt (model._csp_age_dt) should not be slower than inline."""
+        def _flops(fn, *args) -> float:
+            """Compiled FLOP count — deterministic, unlike wall clock."""
+            return jax.jit(fn).lower(*args).compile().cost_analysis()["flops"]
+
         ages = make_log_spaced_ages(107)
         sfr = sfr_exponential(ages)
 
-        # Precomputed: just a multiply
+        # Precomputed: the dt is computed once and passed as a traced argument.
         dt_precomputed = csp_age_dt(ages, "trapz")
 
-        @jax.jit
-        def weights_precomputed(sfr, dt):
-            return sfr * dt
-
-        @jax.jit
-        def weights_inline(sfr, ages):
-            dt = jnp.concatenate(
-                [
-                    jnp.array([0.5 * (ages[1] - ages[0])]),
-                    0.5 * (ages[2:] - ages[:-2]),
-                    jnp.array([0.5 * (ages[-1] - ages[-2])]),
-                ]
-            )
-            return sfr * dt
-
-        # Compile
-        _ = weights_precomputed(sfr, dt_precomputed).block_until_ready()
-        _ = weights_inline(sfr, ages).block_until_ready()
-
-        t_pre = self._time_fn(lambda: weights_precomputed(sfr, dt_precomputed).block_until_ready())
-        t_inline = self._time_fn(lambda: weights_inline(sfr, ages).block_until_ready())
-
-        print(f"\n  Precomputed dt:  {t_pre:.2f} µs")
-        print(f"  Inline dt:       {t_inline:.2f} µs")
-
-        # Precomputed should be <= inline (or same, since XLA constant-folds both)
-        assert t_pre <= t_inline * 3.0, (
-            f"Precomputed ({t_pre:.1f}µs) should not be much slower than inline ({t_inline:.1f}µs)"
+        # The age grid must be TRACED, not closed over, so we can compare
+        # the precomputed path against the inline path fairly.
+        flops_precomputed = _flops(
+            lambda sfr_in, dt: sfr_in * dt,
+            sfr,
+            dt_precomputed,
         )
+
+        # Inline: dt is computed inside the function.
+        flops_inline = _flops(
+            lambda sfr_in, ages_in: (
+                sfr_in
+                * jnp.concatenate(
+                    [
+                        jnp.array([0.5 * (ages_in[1] - ages_in[0])]),
+                        0.5 * (ages_in[2:] - ages_in[:-2]),
+                        jnp.array([0.5 * (ages_in[-1] - ages_in[-2])]),
+                    ]
+                )
+            ),
+            sfr,
+            ages,
+        )
+
+        assert flops_precomputed < flops_inline, (
+            f"Precomputed path does more work: {flops_precomputed:,.0f} FLOPs "
+            f"vs inline {flops_inline:,.0f}. A precomputed path should do <= work "
+            f"compared to inline computation."
+        )
+
+    def test_precomputed_mutation_extra_work(self):
+        """Mutation: when precomputed path does extra work, the FLOP assert fails.
+
+        This verifies the guard catches the regression it exists for. If the
+        precomputed path is degraded (e.g., computes dt twice), the compiled FLOPs
+        exceed inline, and the assertion must fail.
+        """
+
+        def _flops(fn, *args) -> float:
+            """Compiled FLOP count — deterministic, unlike wall clock."""
+            return jax.jit(fn).lower(*args).compile().cost_analysis()["flops"]
+
+        ages = make_log_spaced_ages(107)
+        sfr = sfr_exponential(ages)
+
+        # Original precomputed path (unchanged)
+        dt_precomputed = csp_age_dt(ages, "trapz")
+
+        flops_precomputed = _flops(
+            lambda sfr_in, dt: sfr_in * dt,
+            sfr,
+            dt_precomputed,
+        )
+
+        # Original inline path (for comparison)
+        flops_inline = _flops(
+            lambda sfr_in, ages_in: (
+                sfr_in
+                * jnp.concatenate(
+                    [
+                        jnp.array([0.5 * (ages_in[1] - ages_in[0])]),
+                        0.5 * (ages_in[2:] - ages_in[:-2]),
+                        jnp.array([0.5 * (ages_in[-1] - ages_in[-2])]),
+                    ]
+                )
+            ),
+            sfr,
+            ages,
+        )
+
+        # Verify precomputed is better (baseline check)
+        assert flops_precomputed < flops_inline, (
+            f"Sanity check: precomputed {flops_precomputed:,.0f} "
+            f"should be < inline {flops_inline:,.0f}"
+        )
+
+        # MUTANT: Precomputed path computes dt twice (extra work)
+        # This simulates a degradation where the precomputation is lost
+        flops_precomputed_mutant = _flops(
+            lambda sfr_in, ages_in: (
+                sfr_in
+                * jnp.concatenate(
+                    [
+                        jnp.array([0.5 * (ages_in[1] - ages_in[0])]),
+                        0.5 * (ages_in[2:] - ages_in[:-2]),
+                        jnp.array([0.5 * (ages_in[-1] - ages_in[-2])]),
+                    ]
+                )
+                * jnp.concatenate(
+                    [
+                        jnp.array([0.5 * (ages_in[1] - ages_in[0])]),
+                        0.5 * (ages_in[2:] - ages_in[:-2]),
+                        jnp.array([0.5 * (ages_in[-1] - ages_in[-2])]),
+                    ]
+                )  # <-- MUTANT: multiply dt by itself (extra work)
+            ),
+            sfr,
+            ages,
+        )
+
+        # The mutant should do more work than inline
+        assert flops_precomputed_mutant > flops_inline * 1.2, (
+            f"Mutation sanity check failed: mutant {flops_precomputed_mutant:,.0f} "
+            f"should exceed inline {flops_inline:,.0f}"
+        )
+
+        # The assertion should fail with the mutant (showing the guard works)
+        with pytest.raises(AssertionError, match="does more work"):
+            assert flops_precomputed_mutant <= flops_inline, (
+                f"Precomputed path does more work: "
+                f"{flops_precomputed_mutant:,.0f} FLOPs "
+                f"vs inline {flops_inline:,.0f}"
+            )
 
     def test_trapz_log_trapz_same_forward_cost(self):
         """Both integration methods have identical forward-pass cost (single multiply)."""

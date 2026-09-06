@@ -82,9 +82,27 @@ def infrared_observation():
 
 
 def _advertised_types():
-    from tengri.parameters.groups import _valid_dust_emission_types
+    """Every dust emission type that is a *model*, i.e. selectable on its own.
 
-    return sorted(_valid_dust_emission_types())
+    The grammar accepts a second, smaller class — building blocks such as
+    ``pah_drude``, which emit a real piece of the IR SED but never renormalize
+    to ``L_ir`` — and ``SEDModel.build`` refuses those outright. Sweeping them
+    here would assert the opposite of the contract; :func:`_building_block_types`
+    and the test below check *their* contract instead, so neither set is
+    unchecked.
+    """
+    from tengri.parameters.groups import _standalone_dust_emission_types
+
+    return sorted(_standalone_dust_emission_types())
+
+
+def _building_block_types():
+    from tengri.parameters.groups import (
+        _standalone_dust_emission_types,
+        _valid_dust_emission_types,
+    )
+
+    return sorted(_valid_dust_emission_types() - _standalone_dust_emission_types())
 
 
 @pytest.mark.parametrize("name", _advertised_types())
@@ -163,6 +181,39 @@ def test_predict_alone_would_compute_nothing(synthetic_ssp, infrared_observation
     )
 
 
+@pytest.mark.parametrize("name", _building_block_types())
+def test_every_building_block_type_is_refused_with_its_reason(
+    name, synthetic_ssp, infrared_observation
+):
+    """The other half of the sweep: a non-model type must refuse, and say why.
+
+    Without this, narrowing :func:`_advertised_types` to the standalone set
+    would be a silent shrinking of coverage — the excluded name would simply
+    stop being tested and nothing would notice if it started building a model
+    that discards 99.98% of the absorbed energy.
+    """
+    from tengri import DEFAULT, SEDModel
+    from tengri.config.exceptions import ParameterError
+
+    with pytest.raises(ParameterError, match="building block"):
+        SEDModel.build(
+            ssp_data=synthetic_ssp,
+            observation=infrared_observation,
+            sfh={"type": "dpl"},
+            dust_attenuation={
+                "law": "power_law",
+                "type": "two_component",
+                "all_params": Fixed(DEFAULT),
+            },
+            dust_emission={"type": name, "all_params": Fixed(DEFAULT)},
+            redshift=Fixed(0.1),
+        )
+
+
 def test_the_sweep_is_not_empty():
     """If the menu derivation ever returned nothing, the sweep reports green."""
     assert len(_advertised_types()) >= 10
+    # ...and the refusal sweep above is parametrized off a set that must not be
+    # empty either, or it collects nothing and reports green having run zero
+    # cases (the ``SKIPPED [1] got empty parameter set`` shape).
+    assert len(_building_block_types()) >= 1

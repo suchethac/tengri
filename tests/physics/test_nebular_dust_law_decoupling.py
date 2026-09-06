@@ -74,9 +74,11 @@ def test_law_neb_decouples_only_the_birth_cloud():
     neb = _recover_nebular(comp.apply(_state_with_nebular(sed_neb), params))
 
     # bc part uses the nebular law (calzetti); diffuse part keeps the shared
-    # power_law(-0.7). Params inherited from the stellar bc (no overrides).
-    neb_kw = {"n_slope": -0.7, "dust_bump_strength": 0.0, "dust_delta": 0.0, "dust_Rv": 3.1}
-    k_bc = np.asarray(resolve_dust_law("calzetti")(_WAVE, **neb_kw))
+    # power_law(-0.7). Params inherited from the stellar bc are narrowed to what
+    # calzetti declares, which is nothing: it fixes R_V = 4.05 in the polynomial
+    # and takes no shape argument, so splatting the stellar bc dict into it is a
+    # TypeError rather than four silently discarded values (#2185).
+    k_bc = np.asarray(resolve_dust_law("calzetti")(_WAVE))
     k_diff = np.asarray(resolve_dust_law("power_law")(_WAVE, n_slope=-0.7))
     expected = np.asarray(sed_neb) * np.exp(-(1.0 * k_bc + 0.5 * k_diff))
     np.testing.assert_allclose(neb, expected, rtol=1e-5)

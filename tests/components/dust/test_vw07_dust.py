@@ -126,8 +126,15 @@ class TestJITAndGradients:
         k = assert_jit_matches_eager(vw07_diff, wavelengths)
         chex.assert_tree_all_finite(k)
 
-    def test_extra_kwargs_ignored(self, wavelengths):
-        """Should accept and ignore extra kwargs (like n_slope)."""
-        k = vw07_bc(wavelengths, n_slope=999.0, dust_delta=0.5)
-        k_ref = vw07_bc(wavelengths)
-        assert_allclose(k, k_ref, rtol=1e-14)
+    def test_extra_kwargs_raise(self, wavelengths):
+        """A parameter the law cannot use is refused, not absorbed (#2185).
+
+        This test asserted the opposite until #2185: "should accept and ignore
+        extra kwargs". Accepting them is what let the build grammar declare
+        ``dust_slope`` free under ``vw07_bc`` while n stayed pinned at -1.3 --
+        a parameter the sampler explored and the curve never saw.
+        """
+        with pytest.raises(TypeError, match="n_slope"):
+            vw07_bc(wavelengths, n_slope=999.0)
+        with pytest.raises(TypeError, match="dust_delta"):
+            vw07_bc(wavelengths, dust_delta=0.5)

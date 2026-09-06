@@ -309,6 +309,7 @@ class ShockNebular(SEDModelComponent):
         params: Any,
         ssp_data: Any | None = None,
         template_data: Any | None = None,
+        ztable_data: Any | None = None,
     ) -> Any:
         """Add shock emission, publishing a filter-integrated LUT under WavePrecomp.
 

@@ -448,6 +448,23 @@ Parametric forms (DPL, delayed-exponential, lognormal) and non-parametric (PSD-g
 
 .. raw:: html
 
+    <div class="sphx-glr-thumbcontainer" tooltip="The field compositor multiplies any mean SFH by a damped random walk in log SFR, C(Δt) = σ² exp(-|Δt|/τ) in dex². Amplitude and timescale are separate knobs: every curve here carries the same σ = 0.3 dex and the same latent draw, so the three differ only in how long the walk remembers.">
+
+.. only:: html
+
+  .. image:: /auto_examples/sfh/images/thumb/sphx_glr_plot_stochastic_sfh_tau_sweep_thumb.png
+    :alt:
+
+  :doc:`/auto_examples/sfh/plot_stochastic_sfh_tau_sweep`
+
+.. raw:: html
+
+      <div class="sphx-glr-thumbnail-title">Correlation timescale τ sets how bursty a stochastic SFH looks at fixed σ</div>
+    </div>
+
+
+.. raw:: html
+
     <div class="sphx-glr-thumbcontainer" tooltip="How observable is an underlying ancient burst (10 Gyr ago) beneath a young (300 Myr) starburst? outshining problem in broadband photometry (Trager+ 2000, Renzini 2006): the young burst&#x27;s UV emission completely dominates over the ancient burst&#x27;s optical/IR, rendering the ancient population invisible to broadband SED fitting.">
 
 .. only:: html

@@ -76,29 +76,53 @@ def _silent_build(spec, ssp, obs, **kwargs):
 # ── _template_data_for_jit() contract ────────────────────────────────────────
 
 
+def test_the_threading_accessor_is_inert_for_every_dust_config_here(ssp_wneref, obs):
+    """Pin the fact that makes the two tests below currently unreachable.
+
+    Measured 2026-09-06: ``_template_data_for_jit()`` returns ``None`` for every
+    configuration this file can build — no dust emission, ``modified_blackbody``
+    and ``dale2014`` (``draine_li`` and ``pahspec`` are not registry names and
+    raise). The two tests below were written as ``if td is not None: assert
+    "dust_ir" not in td``, so with ``td`` always ``None`` neither assertion ever
+    executed; both were passing having checked nothing.
+
+    That is pinned **here, once**, rather than left implicit in each test. If
+    this test starts failing, the accessor has begun threading something and the
+    disjunctions below become live claims that deserve re-reading — which is
+    exactly the moment a reviewer should look at them.
+    """
+    for dust_cfg in (None, "modified_blackbody", "dale2014"):
+        model = _silent_build(_base_spec(dust_emission=dust_cfg), ssp_wneref, obs)
+        td = model._template_data_for_jit()
+        assert td is None, (
+            f"dust_emission={dust_cfg!r} now threads template data ({td!r}). The "
+            f"dust_ir assertions in this file were unreachable while this was None; "
+            f"they are live now, so re-read them rather than updating this pin"
+        )
+
+
 def test_no_dust_emission_returns_no_dust_ir_template_data(ssp_wneref, obs):
-    """No dust emission configured — ``_template_data_for_jit()`` has no dust_ir key."""
+    """No dust emission configured — ``_template_data_for_jit()`` has no dust_ir key.
+
+    Written as a disjunction rather than as ``if td is not None:``. Both say the
+    same thing, but the ``if`` form hides that the body does not run (see the
+    inertness pin above), and a guard that can silently decline to execute is
+    indistinguishable from a passing test.
+    """
     model = _silent_build(_base_spec(), ssp_wneref, obs)
     td = model._template_data_for_jit()
-    # Either None or an empty/minimal mapping is acceptable.
-    if td is not None:
-        # If non-None, it might have other keys (nebular, etc.) but not dust_ir
-        assert "dust_ir" not in td or td.get("dust_ir") is None, (
-            f"No dust emission should not publish dust_ir template data; got {td!r}"
-        )
+    assert td is None or td.get("dust_ir") is None, (
+        f"No dust emission should not publish dust_ir template data; got {td!r}"
+    )
 
 
 def test_mbb_dust_returns_no_dust_ir_template_data(ssp_wneref, obs):
     """Analytic dust (MBB) has no templates to thread."""
-
-    dust_cfg = "modified_blackbody"
-    model = _silent_build(_base_spec(dust_emission=dust_cfg), ssp_wneref, obs)
+    model = _silent_build(_base_spec(dust_emission="modified_blackbody"), ssp_wneref, obs)
     td = model._template_data_for_jit()
-    # MBB has no templates to thread.
-    if td is not None:
-        assert "dust_ir" not in td or td.get("dust_ir") is None, (
-            f"MBB dust should not publish dust_ir template data; got {td!r}"
-        )
+    assert td is None or td.get("dust_ir") is None, (
+        f"MBB dust should not publish dust_ir template data; got {td!r}"
+    )
 
 
 def test_pahspec_dust_does_not_thread_template_data(ssp_wneref, obs):

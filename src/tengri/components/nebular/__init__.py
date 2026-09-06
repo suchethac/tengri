@@ -83,7 +83,7 @@ from tengri.components.nebular.cloudy23_inputs import (
 )
 from tengri.components.nebular.cloudy_cb19 import (
     CB19Backend,
-    CB19DegenerateGridWarning,
+    CB19DegenerateGridError,
     CB19IonizingSpectrumWarning,
     CB19NoContinuumWarning,
 )
@@ -169,7 +169,7 @@ __all__ = [
     "BakedInBackend",
     "BakedInNebularWarning",
     "CB19Backend",
-    "CB19DegenerateGridWarning",
+    "CB19DegenerateGridError",
     "CB19IonizingSpectrumWarning",
     "CB19NoContinuumWarning",
     "Cloudy23Deck",

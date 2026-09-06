@@ -2,16 +2,21 @@
 """Precompute adapters for analytic dust-emission models.
 
 Implements :class:`~tengri.forward.precompute.protocol.PrecomputeModule` for
-three analytic dust-emission models:
+four analytic dust-emission models:
 
 1. **modified_blackbody**: Optically-thin modified blackbody SED.
    Two free axes: ``dust_T`` (temperature), ``dust_beta_ir`` (emissivity index).
 
 2. **casey2012**: Casey (2012) modified blackbody + mid-IR power law.
-   Three free axes: ``dust_T`` (temperature), ``dust_beta_ir`` (emissivity index),
-   ``dust_alpha_mir`` (mid-IR power-law slope).
+   Four free axes: ``dust_T`` (temperature), ``dust_beta_ir`` (emissivity index),
+   ``dust_alpha_mir`` (mid-IR power-law slope), ``dust_lambda_0_um`` (opacity
+   pivot wavelength).
 
-3. **pah_drude**: Sum of 18 PAH Drude profiles (Smith et al. 2007).
+3. **graybody**: General-opacity graybody with free pivot wavelength.
+   Three free axes: ``dust_T`` (temperature), ``dust_beta_ir`` (emissivity index),
+   ``dust_lambda_0_um`` (opacity pivot wavelength).
+
+4. **pah_drude**: Sum of 18 PAH Drude profiles (Smith et al. 2007).
    No free axes (pure template; runtime amplitudes scale the combined PAH profile).
 
 Each model is preintegrated through filter curves at model-initialization time.
@@ -42,6 +47,7 @@ import numpy as np
 from tengri.components.dust.drude_profiles import compute_pah_template as _compute_pah
 from tengri.components.dust.emission import (
     casey2012 as _casey2012,
+    graybody as _graybody,
     modified_blackbody as _modified_blackbody,
 )
 from tengri.forward.precompute.templates import (
@@ -57,8 +63,11 @@ from tengri.utils.physics_constants import C_CGS as _C_CGS
 # modified_blackbody: parametrized by temperature and emissivity index
 AXIS_PARAMS_MBB = ("dust_T", "dust_beta_ir")
 
-# casey2012: parametrized by temperature, emissivity index, mid-IR slope
-AXIS_PARAMS_CASEY = ("dust_T", "dust_beta_ir", "dust_alpha_mir")
+# casey2012: parametrized by temperature, emissivity index, mid-IR slope, opacity pivot
+AXIS_PARAMS_CASEY = ("dust_T", "dust_beta_ir", "dust_alpha_mir", "dust_lambda_0_um")
+
+# graybody: parametrized by temperature, emissivity index, opacity pivot
+AXIS_PARAMS_GRAYBODY = ("dust_T", "dust_beta_ir", "dust_lambda_0_um")
 
 # pah_drude: pure template; no grid axes (runtime amplitude scaling)
 AXIS_PARAMS_PAH = ()
@@ -67,6 +76,7 @@ AXIS_PARAMS_PAH = ()
 AXIS_PARAMS: dict[str, tuple[str, ...]] = {
     "modified_blackbody": AXIS_PARAMS_MBB,
     "casey2012": AXIS_PARAMS_CASEY,
+    "graybody": AXIS_PARAMS_GRAYBODY,
     "pah_drude": AXIS_PARAMS_PAH,
 }
 
@@ -147,9 +157,10 @@ def _build_grid_casey2012(
     T_grid: np.ndarray,
     beta_grid: np.ndarray,
     alpha_mir_grid: np.ndarray,
+    lambda_0_um_grid: np.ndarray,
     L_absorbed_ref: float = 1.0,
 ) -> PreintegratedGrid:
-    """Preintegrate casey2012 over a 3D grid of (T, beta, alpha_mir) values.
+    """Preintegrate casey2012 over a 4D grid of (T, beta, alpha_mir, lambda_0_um).
 
     Parameters
     ----------
@@ -165,43 +176,52 @@ def _build_grid_casey2012(
         Emissivity-index grid [dimensionless].
     alpha_mir_grid : ndarray, shape (n_alpha,)
         Mid-IR power-law slope grid [dimensionless].
+    lambda_0_um_grid : ndarray, shape (n_lambda_0,)
+        Opacity pivot wavelength grid [micron].
     L_absorbed_ref : float
         Reference absorbed luminosity for normalization [L_sun]. Default 1.0.
 
     Returns
     -------
     PreintegratedGrid
-        Preintegrated photometry with shape (n_T, n_beta, n_alpha, n_filters).
+        Preintegrated photometry with shape
+        (n_T, n_beta, n_alpha, n_lambda_0, n_filters).
     """
     T_grid = np.asarray(T_grid, dtype=np.float64)
     beta_grid = np.asarray(beta_grid, dtype=np.float64)
     alpha_mir_grid = np.asarray(alpha_mir_grid, dtype=np.float64)
+    lambda_0_um_grid = np.asarray(lambda_0_um_grid, dtype=np.float64)
 
     # Standard rest-frame wavelength grid for integration
     wave_rest = np.logspace(2, 5.5, 1000, dtype=np.float64)
 
-    # Precompute L_nu for each (T, beta, alpha_mir) grid point
+    # Precompute L_nu for each (T, beta, alpha_mir, lambda_0_um) grid point
     phot_grid = []
     for T in T_grid:
         phot_beta = []
         for beta in beta_grid:
             phot_alpha = []
             for alpha_mir in alpha_mir_grid:
-                l_nu = np.asarray(
-                    _casey2012(
-                        jnp.asarray(wave_rest),
-                        L_absorbed=L_absorbed_ref,
-                        dust_T=float(T),
-                        dust_beta_ir=float(beta),
-                        dust_alpha_mir=float(alpha_mir),
-                        redshift=float(redshift),
+                phot_lambda_0 = []
+                for lambda_0_um in lambda_0_um_grid:
+                    l_nu = np.asarray(
+                        _casey2012(
+                            jnp.asarray(wave_rest),
+                            L_absorbed=L_absorbed_ref,
+                            dust_T=float(T),
+                            dust_beta_ir=float(beta),
+                            dust_alpha_mir=float(alpha_mir),
+                            dust_lambda_0_um=float(lambda_0_um),
+                            redshift=float(redshift),
+                        )
                     )
-                )
-                phot_alpha.append(l_nu)
+                    phot_lambda_0.append(l_nu)
+                phot_alpha.append(phot_lambda_0)
             phot_beta.append(phot_alpha)
         phot_grid.append(phot_beta)
 
-    templates = np.array(phot_grid, dtype=np.float64)  # (n_T, n_beta, n_alpha, n_wave)
+    # (n_T, n_beta, n_alpha, n_lambda_0, n_wave)
+    templates = np.array(phot_grid, dtype=np.float64)
 
     # Preintegrate through filters using template helper
     return precompute_template_photometry(
@@ -209,7 +229,84 @@ def _build_grid_casey2012(
         wave_rest=wave_rest,
         filter_waves=[np.asarray(fw, dtype=np.float64) for fw in filter_waves],
         filter_trans=[np.asarray(ft, dtype=np.float64) for ft in filter_trans],
-        axes=(T_grid, beta_grid, alpha_mir_grid),
+        axes=(T_grid, beta_grid, alpha_mir_grid, lambda_0_um_grid),
+        redshift=0.0,  # redshift already baked into L_nu via CMB correction
+        dl_cm=1.0,
+        energy_normalize=False,  # already normalized to L_absorbed_ref per model
+        units="lnu",
+    )
+
+
+def _build_grid_graybody(
+    filter_waves: list,
+    filter_trans: list,
+    redshift: float,
+    T_grid: np.ndarray,
+    beta_grid: np.ndarray,
+    lambda_0_um_grid: np.ndarray,
+    L_absorbed_ref: float = 1.0,
+) -> PreintegratedGrid:
+    """Preintegrate graybody over a 3D grid of (T, beta, lambda_0_um) values.
+
+    Parameters
+    ----------
+    filter_waves : list[ndarray]
+        Per-filter wavelength arrays [Angstrom].
+    filter_trans : list[ndarray]
+        Per-filter transmission curves.
+    redshift : float
+        Source redshift.
+    T_grid : ndarray, shape (n_T,)
+        Temperature grid [K].
+    beta_grid : ndarray, shape (n_beta,)
+        Emissivity-index grid [dimensionless].
+    lambda_0_um_grid : ndarray, shape (n_lambda_0,)
+        Opacity pivot wavelength grid [micron].
+    L_absorbed_ref : float
+        Reference absorbed luminosity for normalization [L_sun]. Default 1.0.
+
+    Returns
+    -------
+    PreintegratedGrid
+        Preintegrated photometry with shape (n_T, n_beta, n_lambda_0, n_filters).
+    """
+    T_grid = np.asarray(T_grid, dtype=np.float64)
+    beta_grid = np.asarray(beta_grid, dtype=np.float64)
+    lambda_0_um_grid = np.asarray(lambda_0_um_grid, dtype=np.float64)
+
+    # Standard rest-frame wavelength grid for integration
+    wave_rest = np.logspace(2, 5.5, 1000, dtype=np.float64)
+
+    # Precompute L_nu for each (T, beta, lambda_0_um) grid point
+    phot_grid = []
+    for T in T_grid:
+        phot_beta = []
+        for beta in beta_grid:
+            phot_lambda = []
+            for lambda_0_um in lambda_0_um_grid:
+                l_nu = np.asarray(
+                    _graybody(
+                        jnp.asarray(wave_rest),
+                        L_absorbed=L_absorbed_ref,
+                        dust_T=float(T),
+                        dust_beta_ir=float(beta),
+                        dust_lambda_0_um=float(lambda_0_um),
+                        redshift=float(redshift),
+                    )
+                )
+                phot_lambda.append(l_nu)
+            phot_beta.append(phot_lambda)
+        phot_grid.append(phot_beta)
+
+    templates = np.array(phot_grid, dtype=np.float64)  # (n_T, n_beta, n_lambda_0, n_wave)
+
+    # Preintegrate through filters using template helper
+    return precompute_template_photometry(
+        templates=templates,
+        wave_rest=wave_rest,
+        filter_waves=[np.asarray(fw, dtype=np.float64) for fw in filter_waves],
+        filter_trans=[np.asarray(ft, dtype=np.float64) for ft in filter_trans],
+        axes=(T_grid, beta_grid, lambda_0_um_grid),
         redshift=0.0,  # redshift already baked into L_nu via CMB correction
         dl_cm=1.0,
         energy_normalize=False,  # already normalized to L_absorbed_ref per model
@@ -286,6 +383,7 @@ def precompute(
     T_grid: np.ndarray | None = None,
     beta_grid: np.ndarray | None = None,
     alpha_mir_grid: np.ndarray | None = None,
+    lambda_0_um_grid: np.ndarray | None = None,
 ) -> dict:
     """Build preintegrated analytic dust grid, auto-collapsing Fixed-parameter axes.
 
@@ -303,16 +401,19 @@ def precompute(
     parameters : Parameters | None
         Parameters spec, used to detect Fixed-axis parameters.
     model : str, keyword-only
-        One of "modified_blackbody", "casey2012", "pah_drude".
+        One of "modified_blackbody", "casey2012", "graybody", "pah_drude".
         Default: "modified_blackbody".
     T_grid : ndarray, optional
-        Temperature grid for modified_blackbody/casey2012 [K]. If None, uses a
+        Temperature grid for modified_blackbody/casey2012/graybody [K]. If None, uses a
         default range [20, 60] with 9 points.
     beta_grid : ndarray, optional
         Emissivity-index grid [dimensionless]. If None, uses [1.5, 1.8, 2.0].
     alpha_mir_grid : ndarray, optional
         Mid-IR power-law slope grid for casey2012 [dimensionless]. If None,
         uses [1.5, 2.0, 2.5].
+    lambda_0_um_grid : ndarray, optional
+        Opacity pivot wavelength grid for graybody and casey2012 [micron].
+        If None, uses [100.0, 150.0, 200.0].
 
     Returns
     -------
@@ -354,20 +455,50 @@ def precompute(
             beta_grid = np.array([1.5, 1.8, 2.0], dtype=np.float64)
         if alpha_mir_grid is None:
             alpha_mir_grid = np.array([1.5, 2.0, 2.5], dtype=np.float64)
+        if lambda_0_um_grid is None:
+            lambda_0_um_grid = np.array([100.0, 150.0, 200.0], dtype=np.float64)
+        casey_preint = _build_grid_casey2012(
+            filter_waves,
+            filter_trans,
+            redshift,
+            T_grid,
+            beta_grid,
+            alpha_mir_grid,
+            lambda_0_um_grid,
+        )
         result = {
-            "grid_phot": _build_grid_casey2012(
-                filter_waves, filter_trans, redshift, T_grid, beta_grid, alpha_mir_grid
-            ).phot,
+            "grid_phot": casey_preint.phot,
             "axes": (
                 jnp.asarray(T_grid),
                 jnp.asarray(beta_grid),
                 jnp.asarray(alpha_mir_grid),
+                jnp.asarray(lambda_0_um_grid),
             ),
-            "_preint": _build_grid_casey2012(
-                filter_waves, filter_trans, redshift, T_grid, beta_grid, alpha_mir_grid
-            ),
+            "_preint": casey_preint,
         }
         axis_params = AXIS_PARAMS_CASEY
+
+    elif model == "graybody":
+        if T_grid is None:
+            T_grid = np.linspace(20.0, 60.0, 9, dtype=np.float64)
+        if beta_grid is None:
+            beta_grid = np.array([1.5, 1.8, 2.0], dtype=np.float64)
+        if lambda_0_um_grid is None:
+            lambda_0_um_grid = np.array([100.0, 150.0, 200.0], dtype=np.float64)
+        result = {
+            "grid_phot": _build_grid_graybody(
+                filter_waves, filter_trans, redshift, T_grid, beta_grid, lambda_0_um_grid
+            ).phot,
+            "axes": (
+                jnp.asarray(T_grid),
+                jnp.asarray(beta_grid),
+                jnp.asarray(lambda_0_um_grid),
+            ),
+            "_preint": _build_grid_graybody(
+                filter_waves, filter_trans, redshift, T_grid, beta_grid, lambda_0_um_grid
+            ),
+        }
+        axis_params = AXIS_PARAMS_GRAYBODY
 
     elif model == "pah_drude":
         result = {

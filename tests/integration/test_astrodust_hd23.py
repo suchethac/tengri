@@ -113,12 +113,10 @@ def test_load_returns_grid(loaded):
     data, wave_aa = loaded
     chex.assert_shape(data["lgU_grid"], (91,))
     chex.assert_shape(data["lnu_template"], (91, wave_aa.size))
-    chex.assert_shape(data["norm_per_lgU"], (91,))
-    # Norms are non-negative; the lowest-lgU (very weak field) slices emit
-    # essentially nothing, so their frequency integral underflows to 0 — the
-    # predict() rescale guards this with jnp.where(norm > 0, ...).
-    assert (np.asarray(data["norm_per_lgU"]) >= 0).all()
-    assert np.asarray(data["norm_per_lgU"]).max() > 0
+    # Normalization is computed in predict(), not load(), to ensure exact
+    # energy balance on the evaluation grid after both thermal and spinning
+    # dust components are assembled (issue #XXXX).
+    assert "norm_per_lgU" not in data
     # No spinning dust requested -> zeros.
     np.testing.assert_array_equal(
         np.asarray(data["lnu_spinning"]),

@@ -82,6 +82,13 @@ def attenuate_emission(
     if mode == "none":
         return sed
 
+    from tengri.components.dust.laws._registry import select_law_kwargs
+
+    # The two keys this helper carries belong to different laws (``n_slope`` to
+    # the power-law family, ``dust_bump_strength`` to the Kriek-Conroy family),
+    # so each law is offered only what it reads. Since #2185 the laws declare
+    # exactly their parameters and refuse the rest, which is what turned the
+    # old blind splat into a ``TypeError`` for every calzetti screen.
     dust_kw = {"n_slope": dust_slope, "dust_bump_strength": dust_bump_strength}
     sed_out = sed
 
@@ -91,13 +98,13 @@ def attenuate_emission(
     if mode in ("bc", "neb"):
         bc_fn = neb_bc_fn if (mode == "neb" and neb_bc_fn is not None) else law_bc_fn
         if bc_fn is not None:
-            k_bc = bc_fn(wave, **dust_kw)
+            k_bc = bc_fn(wave, **select_law_kwargs(bc_fn, dust_kw))
             sed_out = sed_out * jnp.exp(-tau_bc * k_bc)
 
     # Diffuse ISM attenuation (all modes except "none").
     # Same: always compute, let XLA optimize exp(-0*k)=1.
     if law_diff_fn is not None:
-        k_diff = law_diff_fn(wave, **dust_kw)
+        k_diff = law_diff_fn(wave, **select_law_kwargs(law_diff_fn, dust_kw))
         sed_out = sed_out * jnp.exp(-tau_diff * k_diff)
 
     return sed_out

@@ -359,18 +359,26 @@ class TestAGNProvenance:
         assert prov["agn_log_lbol"] == "user_fixed"
 
     def test_agn_provenance_wildcard_free(self):
-        """Agn params from wildcard FREE tagged 'wildcard_free'."""
+        """Agn params from wildcard FREE tagged 'wildcard_free'.
+
+        The wildcard sits on the shared top-level ``agn`` dict, not nested in
+        ``disc`` (#2187): every ``multicolor`` disc parameter is a *shared*
+        AGN parameter -- partitioned under ``"agn"``, never ``"agn.disc"`` --
+        so a wildcard restated on ``disc`` itself covers zero parameters and
+        raises. The top-level wildcard is what actually reaches them.
+        """
         params = parse_groups(
             sfh={"type": "dpl", "all_params": Fixed(DEFAULT)},
             agn={
-                "disc": {"type": "multicolor", "all_params": FREE},
+                "disc": {"type": "multicolor"},
+                "all_params": FREE,
             },
             redshift=Fixed(0.1),
         )
         prov = params._group_provenance
-        # At least some disc-related params should have wildcard_free tag
-        # (depends on Parameters' disc param declarations)
+        # At least some disc-related (shared) params carry the wildcard_free tag.
         assert isinstance(params, Parameters)
+        assert prov["agn_log_lbol"] == "wildcard_free"
 
 
 class TestAGNValidBlockTypes:

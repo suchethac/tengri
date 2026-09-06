@@ -100,7 +100,6 @@ class TestFlatEquivalence:
                 "law": "calzetti",
                 "tau_bc": Fixed(0.5),
                 "tau_diff": Fixed(0.3),
-                "slope": Fixed(-0.7),
             },
             redshift=Fixed(0.05),
         )

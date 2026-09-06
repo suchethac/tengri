@@ -71,23 +71,40 @@ class TestDraine2021PAHIRComponent:
         assert isinstance(published, dict)
 
     def test_inputs_outputs_contract(self):
-        """Draine2021PAHIR declares inputs and outputs."""
+        """Draine2021PAHIR declares the shared emission-component contract.
+
+        ``L_ir`` is an **optional** input, not a required one: that is the
+        ``EmissionComponent`` shape (absent means "nothing was absorbed", i.e.
+        no contribution), and declaring it that way is what routes this
+        component through the ``L_ir``-factoring ``apply`` it needs to stay
+        finite in pure float32. It was a required input on the bespoke
+        ``SEDModelComponent`` base, which is the state this assertion pinned.
+
+        ``sed_dust_ir`` is asserted alongside ``L_ir_emission`` because
+        :meth:`predict` publishes both and used to declare only the second —
+        an undeclared publish that hid the component from the emission census
+        in ``tests/regression/precision/test_dust_ir_float32.py``.
+        """
         comp = Draine2021PAHIRSEDComponent()
         assert callable(comp.inputs)
 
         assert callable(comp.outputs)
 
-        inputs_map = {k.name: k.units for k in comp.inputs()}
+        optional_map = {k.name: k.units for k in comp.optional_inputs()}
 
         outputs_map = {k.name: k.units for k in comp.outputs()}
 
-        assert "L_ir" in inputs_map
+        assert "L_ir" in optional_map
 
-        assert inputs_map["L_ir"] == "erg/s"
+        assert optional_map["L_ir"] == "erg/s"
 
         assert "L_ir_emission" in outputs_map
 
         assert outputs_map["L_ir_emission"] == "erg/s"
+
+        assert "sed_dust_ir" in outputs_map
+
+        assert outputs_map["sed_dust_ir"] == "erg/s/Hz"
 
     def test_config_auto_starlight(self):
         """Draine2021PAHIR config supports auto starlight selection."""

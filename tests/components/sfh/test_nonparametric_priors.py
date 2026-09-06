@@ -95,7 +95,14 @@ class TestBurstyContinuityPrior:
 
 
 class TestDirichletPrior:
-    """Leja+2017 ApJ 837, 170: stick-breaking aux variables ~ Beta(1, 1) = Uniform(0, 1)."""
+    """Leja+2017 ApJ 837, 170: the sampled aux variables are Uniform(0, 1).
+
+    Leja+2017 draws the stick-breaking variables from Beta(N-1-i, 1);
+    ``dirichlet`` reaches the same construction by mapping a Uniform(0, 1)
+    latent through the Beta(1, N-1-i) quantile, so the *declared prior* is
+    Uniform(0, 1) for every i. It is not Beta(1, 1) in disguise: only i =
+    N-2 has that quantile as the identity.
+    """
 
     def test_six_aux_vars_use_uniform_0_to_1(self):
         spec = SFH_REGISTRY["dirichlet"]
@@ -103,7 +110,7 @@ class TestDirichletPrior:
             prior = spec.params[f"sfh_dir_z_{i}"].default
             assert isinstance(prior, Uniform)
             assert prior.bounds == (0.0, 1.0), (
-                f"sfh_dir_z_{i} should be Uniform(0, 1) (Beta(1,1)); got {prior!r}"
+                f"sfh_dir_z_{i} should be Uniform(0, 1); got {prior!r}"
             )
 
 

@@ -60,12 +60,27 @@ PARAMS: tuple[ParamDeclaration, ...] = (
         "dust_beta_ir",
         Fixed(1.6),
         "IR emissivity index for graybody/Casey emission",
-        lambda lo, hi: lo > 0,
-        "must be > 0",
+        lambda lo, hi: lo >= 0,
+        "must be >= 0",
         # beta = 1.60 +/- 0.38 (Casey 2012). Floored at 1.0 -- where grain
         # models put the physical minimum, and below the widely presumed 1.5 --
-        # and carried to +2.4 sigma above the mean.
+        # and carried to +2.4 sigma above the mean. Relaxed to >= 0 to support
+        # pure blackbody (beta=0, emissivity ~ 1 everywhere); all closures are
+        # well-defined at beta=0.
         free_prior=Uniform(1.0, 2.5, "IR emissivity index", default=1.6),
+    ),
+    ParamDeclaration(
+        "dust_lambda_0_um",
+        Fixed(200.0),
+        "General-opacity pivot wavelength (um) where the graybody optical depth is unity "
+        "(Casey 2012 Eq. 1: 200 um; Synthesizer's Greybody default is 100 um). "
+        "Used by graybody and casey2012; not used by modified_blackbody.",
+        lambda lo, hi: lo > 0,
+        "must be > 0",
+        units="um",
+        free_prior=Uniform(
+            50.0, 500.0, "Graybody opacity pivot wavelength", units="um", default=200.0
+        ),
     ),
     ParamDeclaration(
         "dust_alpha_mir",

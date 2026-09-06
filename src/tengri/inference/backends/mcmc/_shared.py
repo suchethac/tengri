@@ -684,6 +684,146 @@ def refuse_dead_sampling(
     )
 
 
+# ---------------------------------------------------------------------------
+# Post-adaptation step size stability probe (#1999)
+# ---------------------------------------------------------------------------
+#: Number of fixed-length probe trajectories to test for stability.
+STABILITY_PROBE_LENGTH = 20
+#: Divergence threshold above which step size is considered unstable. The
+#: raytrace backend's analogous backoff triggers at 0.95 over a full burnin
+#: (hundreds of proposals); this probe sees STABILITY_PROBE_LENGTH
+#: trajectories, where a 0.95 cut on n=20 is one flipped draw away from
+#: never firing -- a majority test is the robust form at this sample size.
+STABILITY_PROBE_DIVERGENCE_THRESHOLD = 0.5
+#: Maximum number of step size halving attempts before giving up.
+STABILITY_PROBE_MAX_BACKOFFS = 8
+
+
+@functools.partial(jax.jit, static_argnums=(0, 2, 6))
+def _probe_nuts_stability_jit(
+    kernel,
+    state,
+    logdensity_fn_2arg,
+    data_args,
+    step_size: float,
+    inv_mass_matrix,
+    max_doublings: int,
+) -> jnp.ndarray:
+    """JIT-compiled NUTS step size stability probe.
+
+    After window_adaptation returns a dense mass matrix, the step size may be
+    incompatible with the metric's stiffness (#1999). This probe runs fixed-length
+    trajectories to detect instability (divergence fraction ~1).
+
+    Returns the divergence fraction [0, 1] over the probe run.
+    """
+
+    def ld_1arg(pos):
+        return logdensity_fn_2arg(pos, data_args)
+
+    # Generate probe keys
+    probe_key = jax.random.PRNGKey(0)  # Fixed seed for reproducibility
+    probe_keys = jax.random.split(probe_key, STABILITY_PROBE_LENGTH)
+
+    def _step(s, k):
+        """Run one step, return state and divergence flag."""
+        s, info = kernel(k, s, ld_1arg, step_size, inv_mass_matrix, max_doublings)
+        return s, info.is_divergent
+
+    _, divergence_flags = jax.lax.scan(_step, state, probe_keys)
+    divergence_frac = jnp.mean(divergence_flags)
+    return divergence_frac
+
+
+def _stabilize_dense_mass_step(
+    kernel,
+    state,
+    logdensity_fn_2arg,
+    data_args,
+    step_size: float,
+    inv_mass_matrix,
+    max_doublings: int,
+    sampler_name: str = "NUTS",
+) -> tuple[float, int]:
+    """Probe and stabilize step size for dense mass matrix (#1999).
+
+    When using a dense mass matrix, window_adaptation may return a step size
+    ~6x above the stability limit, causing all proposals to diverge. This
+    function probes the adapted step and backs off by halving if unstable,
+    up to 8 times. Logs adjustments and records the backoff count.
+
+    Parameters
+    ----------
+    kernel : callable
+        The HMC or NUTS kernel (build_kernel() result).
+    state : HMCState or NUTSState
+        Initial sampler state (from blackjax.*.init).
+    logdensity_fn_2arg : callable
+        2-argument log density function.
+    data_args : pytree
+        Data arguments passed to logdensity_fn_2arg.
+    step_size : float
+        Adapted step size (may need backoff).
+    inv_mass_matrix : ndarray
+        Adapted inverse mass matrix (diagonal or dense).
+    max_doublings : int
+        NUTS max doublings parameter.
+    sampler_name : str
+        Sampler name for logging (e.g., "NUTS", "HMC").
+
+    Returns
+    -------
+    stabilized_step_size : float
+        The largest stable step size found (≤ original).
+    backoff_count : int
+        Number of times step was halved (0 if no backoff needed).
+    """
+    import logging
+
+    logger = logging.getLogger(__name__)
+    original_step = step_size
+    backoff_count = 0
+
+    for attempt in range(STABILITY_PROBE_MAX_BACKOFFS):
+        divergence_frac = float(
+            _probe_nuts_stability_jit(
+                kernel,
+                state,
+                logdensity_fn_2arg,
+                data_args,
+                step_size,
+                inv_mass_matrix,
+                max_doublings,
+            )
+        )
+
+        if divergence_frac < STABILITY_PROBE_DIVERGENCE_THRESHOLD:
+            # Step is stable
+            if backoff_count > 0:
+                logger.info(
+                    f"{sampler_name} dense-mass probe: step size stabilized after "
+                    f"{backoff_count} backoff(s): {original_step:.3g} → {step_size:.3g}"
+                )
+            return step_size, backoff_count
+
+        # Step is unstable, try smaller value
+        step_size = step_size / 2.0
+        backoff_count += 1
+        logger.debug(
+            f"{sampler_name} dense-mass probe: attempt {attempt + 1}/"
+            f"{STABILITY_PROBE_MAX_BACKOFFS}, divergence {divergence_frac:.1%}, "
+            f"halving step to {step_size:.3g}"
+        )
+
+    # Exhausted backoffer attempts
+    logger.warning(
+        f"{sampler_name} dense-mass probe: step size still unstable after "
+        f"{STABILITY_PROBE_MAX_BACKOFFS} backoffer attempts (divergence {divergence_frac:.1%}). "
+        f"Using smallest tried step {step_size:.3g}."
+    )
+    return step_size, backoff_count
+
+
 @functools.partial(jax.jit, static_argnums=(3, 5, 6, 7, 8, 9))
 def _nuts_full_scan(
     init_flat,

@@ -59,18 +59,34 @@ _UNSET = object()
 
 
 def _short_form(full_param_name: str) -> str:
-    """Mirror ``tengri.parameters.groups._extract_short_name`` for SFH.
+    """Delegate to the grammar's own short-name derivation for SFH.
 
-    The grammar's parser strips ``sfh_`` then splits on the first
-    underscore, so ``sfh_dpl_alpha`` becomes ``alpha`` and
-    ``sfh_cexp_log_total_mass`` becomes ``log_sfr``. Factories must mirror this
-    rule so their kwargs match what the parser will look up.
+    A factory's kwargs are the keys it will emit into the group dict, so they
+    must be exactly the keys the parser looks up. This used to *restate* the
+    rule ("strip ``sfh_``, split on the first underscore") rather than call it,
+    and the two copies drifted the moment the rule changed: the parser learned
+    that a type's public prefix can be several tokens
+    (``sfh_declining_exp_tau_gyr`` -> ``'tau_gyr'``) while the factories kept
+    emitting ``'exp_tau_gyr'``, which the parser then rejected outright. One
+    call site, one rule.
+
+    Parameters
+    ----------
+    full_param_name : str
+        Fully-prefixed parameter name, e.g. ``"sfh_dpl_alpha"``.
+
+    Returns
+    -------
+    str
+        The short kwarg name, e.g. ``"alpha"``.
     """
+    # Local import: ``tengri.parameters.registry`` imports ``parse_groups`` for
+    # recipe introspection, so a module-level import risks closing that cycle.
+    from tengri.parameters.groups import _extract_short_name
+
     if not full_param_name.startswith("sfh_"):
         return full_param_name
-    rest = full_param_name[4:]
-    parts = rest.split("_", 1)
-    return parts[1] if len(parts) == 2 else rest
+    return _extract_short_name(full_param_name, {})
 
 
 def _build_docstring(variant: str, spec, param_records: list[tuple[str, Any]]) -> str:

@@ -42,7 +42,6 @@ model = tengri.SEDModel.build(
         "all_params": tengri.Fixed(tengri.DEFAULT),
         "tau_bc": 1.0,
         "tau_diff": 0.5,
-        "slope": -0.7,
     },
     redshift=tengri.Fixed(0.0),
 )

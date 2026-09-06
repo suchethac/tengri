@@ -73,7 +73,15 @@ class TestLineListAdviceIsConstructible:
         ],
     )
     def test_messages_advertise_the_working_constructor(self, module, needle):
-        """The advice string in the source must name ``from_names``, not the raising form."""
+        """The advice string in the source must name ``from_names``, not the raising form.
+
+        This is a negative source assertion (checking that bad advice is absent),
+        which is stronger than a positive one because the deleted construct
+        (``LineList([...])`` directly) has a wrong answer (raises TypeError).
+        Paired with test_the_advised_form_actually_constructs (positive: the good form
+        works), this pins that the error message does not regress to re-advertising
+        the bad construct.
+        """
         import importlib
         import inspect
 

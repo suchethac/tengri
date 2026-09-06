@@ -47,7 +47,7 @@ import jax
 import jax.numpy as jnp
 import pytest
 
-from tengri import Fixed, SEDModel
+from tengri import DEFAULT, Fixed, SEDModel
 from tengri.parameters.groups import _legacy_radio_type_to_blocks
 from tengri.registry import _RegistryTable
 
@@ -72,6 +72,15 @@ BUILD_EXEMPT = {
     # sfh='table' takes params['sfh_t_gyr'] [Gyr] and params['sfh_sfr']
     # [Msun/yr] from the caller.
     "table": "needs runtime arrays sfh_t_gyr / sfh_sfr; no default build exists",
+    # A PAH feature template with no thermal continuum: listed because it
+    # composes into custom models, refused by SEDModel.build as a model's only
+    # dust emitter (standalone it re-emits a measured 1.8925e-04 of L_ir).
+    # Exempted HERE rather than left to the runtime skip below, which would
+    # have reported "required template grid is not present on this machine" --
+    # pah_drude is analytic and has no grid, so the probe's "load() returned
+    # None" reads as absent data for a component that never had any. That is
+    # the wrong-reason skip #1615 warns about: green, and about something else.
+    "pah_drude": "building block, not standalone-selectable; SEDModel.build refuses it",
 }
 
 
@@ -350,6 +359,14 @@ class TestRegistryComponentsEmit:
                         observation=synthetic_tophat_obs,
                         sfh={"type": "const"},
                         radio=radio_spec,
+                        # The legacy mapping leaves the SF arm on its FIRRC
+                        # default, which requires dust at build time (#2106).
+                        dust_attenuation={
+                            "type": "two_component",
+                            "law": "calzetti",
+                            "all_params": Fixed(DEFAULT),
+                        },
+                        dust_emission={"type": "dale2014_cigale", "all_params": Fixed(DEFAULT)},
                         redshift=Fixed(0.1),
                     )
 

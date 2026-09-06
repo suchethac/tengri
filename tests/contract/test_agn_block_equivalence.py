@@ -117,15 +117,52 @@ def test_block_and_component_share_one_physics_module(block_mod, component_mod, 
     assert physics_module in component_src, f"{component_mod} no longer imports {physics_module}"
 
 
-def test_nlr_analytic_wraps_single_source_kernel():
+def test_nlr_analytic_wraps_single_source_kernel(monkeypatch):
     """After #897 removed the redundant NLR one-file component, the canonical
-    NLR block ``blocks.nlr_analytic`` must still wrap the single-source physics
+    NLR block ``blocks.nlr_analytic`` must wrap the single-source physics
     kernel ``compute_nlr_sed`` from ``components.agn.nlr`` — so there is one
     source of truth for the analytic NLR spectrum and no second copy to drift.
-    """
-    import inspect
 
-    block = importlib.import_module("tengri.components.agn.blocks.nlr")
-    src = inspect.getsource(block)
-    assert "from tengri.components.agn.nlr import compute_nlr_sed" in src
-    assert "compute_nlr_sed(" in src
+    Verified by: (1) instrumenting compute_nlr_sed to verify the block calls it,
+    (2) checking the returned spectrum is finite and non-negative, (3) verifying
+    the block is responsive to one of its parameters (agn_nlr_cf).
+    """
+    from tengri.components.agn.blocks.nlr import nlr_analytic_block
+    from tengri.components.agn.nlr import compute_nlr_sed
+
+    # Instrument compute_nlr_sed to record calls
+    call_log = []
+
+    def recording_compute_nlr_sed(*args, **kwargs):
+        call_log.append(True)
+        return compute_nlr_sed(*args, **kwargs)
+
+    block_module = importlib.import_module("tengri.components.agn.blocks.nlr")
+    monkeypatch.setattr(block_module, "compute_nlr_sed", recording_compute_nlr_sed)
+
+    wave = jnp.geomspace(1.0e3, 1.0e5, 50)
+    l5100 = jnp.asarray(1.0e44)
+    agn_log_lbol = 11.5
+
+    # Call the block with two different agn_nlr_cf values (positive control)
+    _wav_low, lum_cf_low = nlr_analytic_block(
+        wave, agn_log_lbol, l5100, agn_nlr_cf=0.1, agn_nlr_fwhm_kms=800.0
+    )
+    _wav_high, lum_cf_high = nlr_analytic_block(
+        wave, agn_log_lbol, l5100, agn_nlr_cf=0.5, agn_nlr_fwhm_kms=800.0
+    )
+
+    assert len(call_log) > 1, "NLR block did not call compute_nlr_sed — the delegation is broken"
+
+    # Verify output is finite and non-negative (proper spectrum)
+    assert jnp.all(jnp.isfinite(lum_cf_low)), "NLR block returned inf/nan"
+    assert jnp.all(lum_cf_low >= 0), "NLR block returned negative luminosity"
+    assert jnp.all(jnp.isfinite(lum_cf_high)), "NLR block returned inf/nan"
+    assert jnp.all(lum_cf_high >= 0), "NLR block returned negative luminosity"
+
+    # Positive control: agn_nlr_cf is a covering fraction; changing it must
+    # change the output (otherwise the block is insensitive to parameters)
+    assert not jnp.allclose(lum_cf_low, lum_cf_high, rtol=1e-6), (
+        "NLR block is unresponsive to agn_nlr_cf — either the parameter is "
+        "not passed to compute_nlr_sed, or the block discards its output"
+    )

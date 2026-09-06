@@ -1,0 +1,173 @@
+
+=== 05  D = 8 ===
+  cond(G) raw 6.375e+04
+  arm                          IMM=cov(struct)     prec=struct(G)   entries  off-diagonal mass kept
+                                    cond   recov        cond   recov         
+  full dense (ceiling)                 1   1.000           1   1.000       64  
+  diagonal (control)                 133   0.558       150.1   0.547        8  
+  low-rank k=3                     3.673   0.882       18.87   0.734       35  
+  block prefix                     50.73   0.645        41.2   0.664       30  raw 0.892 scaled 0.818
+      2 blocks [dust:2, sfh:5]; stored entries 30 of 64
+  block earned [sfh]               50.73   0.645        41.2   0.664       28  raw 0.892 scaled 0.818
+      1 blocks [sfh:5]; stored entries 28 of 64
+  block prefix sfh+dust            13.42   0.765       13.42   0.765       50  raw 0.997 scaled 0.980
+      1 blocks [0-7:7]; stored entries 50 of 64
+  block prefix sfh+dust+met            1   1.000           1   1.000       64  raw 1.000 scaled 1.000
+      1 blocks [0-7:8]; stored entries 64 of 64
+  block derived |R|>=0.9           73.03   0.612       75.07   0.610       12  raw 0.789 scaled 0.461
+      2 blocks [sfh:2, sfh:2]; stored entries 12 of 64
+  block derived |R|>=0.7           13.53   0.765       13.74   0.763       28  raw 0.997 scaled 0.927
+      1 blocks [1-7:5]; stored entries 28 of 64
+  block derived |R|>=0.5           13.53   0.765       13.74   0.763       28  raw 0.997 scaled 0.927
+      1 blocks [1-7:5]; stored entries 28 of 64
+  block derived |R|>=0.3           13.42   0.765       13.42   0.765       38  raw 0.997 scaled 0.980
+      1 blocks [1-7:6]; stored entries 38 of 64
+  per-group verdict, by parameter kind (domain prefix) (correlation form of G):
+      group          size  internal   int/ext       cond  entries  earns a block?
+      sfh               5     0.828     2.038      96.01       20  YES
+      dust              2     0.001     0.001      1.002        2  no (internal mass < 0.25)
+      met               1     0.000     0.000          1        0  no (single parameter, diagonal by definition)
+  per-group verdict, by physical structure (correlation form of G):
+      group          size  internal   int/ext       cond  entries  earns a block?
+      sfh_tsnorm        5     0.828     2.038      96.01       20  YES
+      dust_tau          2     0.001     0.001      1.002        2  no (internal mass < 0.25)
+      met               1     0.000     0.000          1        0  no (single parameter, diagonal by definition)
+  by-structure grouping: 3 candidate groups -> earned [sfh_tsnorm]  (identical to by-kind here)
+  cross-group coupling mass (Frobenius, correlation form):
+      sfh        internal 3.302 (frac 0.828)  |  vs  dust 1.538  met 0.510
+      dust       internal 0.001 (frac 0.001)  |  vs  sfh 1.538  met 0.253
+      met        internal 0.000 (frac 0.000)  |  vs  sfh 0.510  dust 0.253
+  where each cross-group coupler's off-diagonal mass goes:
+      dust_tau_diff                    own group dust 0.00  |  sfh 0.99  met 0.16  dust 0.00
+      met_logzsol                      own group met 0.00  |  sfh 0.90  dust 0.44
+      sfh_tsnorm_log_total_mass        own group sfh 0.88  |  sfh 0.88  dust 0.44  met 0.16
+      sfh_tsnorm_peak_lbt_gyr          own group sfh 0.89  |  sfh 0.89  dust 0.43  met 0.13
+      sfh_tsnorm_skew                  own group sfh 0.91  |  sfh 0.91  dust 0.40  met 0.14
+      sfh_tsnorm_trunc                 own group sfh 0.91  |  sfh 0.91  dust 0.39  met 0.12
+      sfh_tsnorm_width_gyr             own group sfh 0.90  |  sfh 0.90  dust 0.41  met 0.13
+  strongest off-diagonal correlations of G (top 8):
+      |R| = 0.954  sfh_tsnorm_log_total_mass x sfh_tsnorm_peak_lbt_gyr   within prefix block
+      |R| = 0.905  sfh_tsnorm_skew x sfh_tsnorm_width_gyr   within prefix block
+      |R| = 0.892  sfh_tsnorm_peak_lbt_gyr x sfh_tsnorm_skew   within prefix block
+      |R| = 0.872  sfh_tsnorm_peak_lbt_gyr x sfh_tsnorm_width_gyr   within prefix block
+      |R| = 0.861  sfh_tsnorm_log_total_mass x sfh_tsnorm_width_gyr   within prefix block
+      |R| = 0.856  sfh_tsnorm_log_total_mass x sfh_tsnorm_skew   within prefix block
+      |R| = 0.804  dust_tau_diff x sfh_tsnorm_log_total_mass   ACROSS prefix blocks
+      |R| = 0.784  dust_tau_diff x sfh_tsnorm_peak_lbt_gyr   ACROSS prefix blocks
+
+=== ctl-jwst  D = 9 ===
+  cond(G) raw 7.073e+04
+  arm                          IMM=cov(struct)     prec=struct(G)   entries  off-diagonal mass kept
+                                    cond   recov        cond   recov         
+  full dense (ceiling)                 1   1.000           1   1.000       81  
+  diagonal (control)                1074   0.375        1292   0.358        9  
+  low-rank k=3                      2.42   0.921       313.4   0.485       39  
+  block prefix                     515.3   0.441       432.2   0.457       51  raw 0.486 scaled 0.860
+      1 blocks [sfh:7]; stored entries 51 of 81
+  block earned [sfh]               515.3   0.441       432.2   0.457       51  raw 0.486 scaled 0.860
+      1 blocks [sfh:7]; stored entries 51 of 81
+  block prefix sfh+dust            74.08   0.614       74.08   0.614       65  raw 0.998 scaled 0.994
+      1 blocks [0-8:8]; stored entries 65 of 81
+  block prefix sfh+dust+met            1   1.000           1   1.000       81  raw 1.000 scaled 1.000
+      1 blocks [0-8:9]; stored entries 81 of 81
+  block derived |R|>=0.9           75.61   0.613       81.14   0.606       51  raw 0.997 scaled 0.879
+      1 blocks [0-8:7]; stored entries 51 of 81
+  block derived |R|>=0.7           74.08   0.614       74.08   0.614       65  raw 0.998 scaled 0.994
+      1 blocks [0-8:8]; stored entries 65 of 81
+  block derived |R|>=0.5           74.08   0.614       74.08   0.614       65  raw 0.998 scaled 0.994
+      1 blocks [0-8:8]; stored entries 65 of 81
+  block derived |R|>=0.3               1   1.000           1   1.000       81  raw 1.000 scaled 1.000
+      1 blocks [0-8:9]; stored entries 81 of 81
+  per-group verdict, by parameter kind (domain prefix) (correlation form of G):
+      group          size  internal   int/ext       cond  entries  earns a block?
+      sfh               7     0.910     2.395       1060       42  YES
+      dust              1     0.000     0.000          1        0  no (single parameter, diagonal by definition)
+      met               1     0.000     0.000          1        0  no (single parameter, diagonal by definition)
+  per-group verdict, by physical structure (correlation form of G):
+      group          size  internal   int/ext       cond  entries  earns a block?
+      sfh_cont          7     0.910     2.395       1060       42  YES
+      dust_tau          1     0.000     0.000          1        0  no (single parameter, diagonal by definition)
+      met               1     0.000     0.000          1        0  no (single parameter, diagonal by definition)
+  by-structure grouping: 3 candidate groups -> earned [sfh_cont]  (identical to by-kind here)
+  cross-group coupling mass (Frobenius, correlation form):
+      sfh        internal 5.825 (frac 0.910)  |  vs  dust 2.390  met 0.450
+      dust       internal 0.000 (frac 0.000)  |  vs  sfh 2.390  met 0.277
+      met        internal 0.000 (frac 0.000)  |  vs  sfh 0.450  dust 0.277
+  where each cross-group coupler's off-diagonal mass goes:
+      dust_tau_diff                    own group dust 0.00  |  sfh 0.99  met 0.12
+      met_logzsol                      own group met 0.00  |  sfh 0.85  dust 0.52
+      sfh_cont_log_total_mass          own group sfh 0.92  |  sfh 0.92  dust 0.36  met 0.14
+  strongest off-diagonal correlations of G (top 8):
+      |R| = 0.984  sfh_cont_ratio_3 x sfh_cont_ratio_4   within prefix block
+      |R| = 0.984  sfh_cont_ratio_4 x sfh_cont_ratio_5   within prefix block
+      |R| = 0.969  sfh_cont_ratio_2 x sfh_cont_ratio_3   within prefix block
+      |R| = 0.967  sfh_cont_ratio_3 x sfh_cont_ratio_5   within prefix block
+      |R| = 0.964  sfh_cont_ratio_2 x sfh_cont_ratio_4   within prefix block
+      |R| = 0.959  sfh_cont_log_total_mass x sfh_cont_ratio_5   within prefix block
+      |R| = 0.954  dust_tau_diff x sfh_cont_ratio_4   ACROSS prefix blocks
+      |R| = 0.944  dust_tau_diff x sfh_cont_ratio_3   ACROSS prefix blocks
+
+=== stoch-field  D = 74 ===
+  cond(G) raw 5.406e+04
+  arm                          IMM=cov(struct)     prec=struct(G)   entries  off-diagonal mass kept
+                                    cond   recov        cond   recov         
+  full dense (ceiling)                 1   1.000           1   1.000     5476  
+  diagonal (control)           2.403e+04   0.074   1.549e+05  -0.097       74  
+  low-rank k=3                     10.94   0.780   4.052e+04   0.026      299  
+  low-rank k=10                    1.445   0.966        5887   0.203      824  
+  low-rank k=20                    1.111   0.990       199.3   0.514     1574  
+  block prefix                 1.233e+04   0.136   1.877e+04   0.097     4150  raw 0.678 scaled 0.860
+      3 blocks [dust:2, psd:64, sfh:7]; stored entries 4150 of 5476
+  block earned [psd]           2.085e+04   0.087   3.724e+04   0.034     4106  raw 0.156 scaled 0.852
+      1 blocks [psd:64]; stored entries 4106 of 5476
+  block prefix sfh+dust        1.219e+04   0.137   1.505e+04   0.117     4178  raw 0.704 scaled 0.863
+      2 blocks [0-73:9, psd:64]; stored entries 4178 of 5476
+  block prefix sfh+dust+met    1.069e+04   0.149   1.069e+04   0.149     4196  raw 0.705 scaled 0.865
+      2 blocks [0-73:10, psd:64]; stored entries 4196 of 5476
+  block derived |R|>=0.9            3978   0.239   2.951e+04   0.056      682  raw 0.945 scaled 0.553
+      3 blocks [0-71:3, 35-73:25, sfh:2]; stored entries 682 of 5476
+  block derived |R|>=0.7           615.3   0.411        1587   0.324     2832  raw 0.995 scaled 0.918
+      2 blocks [0-73:53, sfh:2]; stored entries 2832 of 5476
+  block derived |R|>=0.5           1.895   0.941         1.9   0.941     4234  raw 1.000 scaled 0.998
+      1 blocks [0-73:65]; stored entries 4234 of 5476
+  block derived |R|>=0.3           1.895   0.941         1.9   0.941     4234  raw 1.000 scaled 0.998
+      1 blocks [0-73:65]; stored entries 4234 of 5476
+  per-group verdict, by parameter kind (domain prefix) (correlation form of G):
+      group          size  internal   int/ext       cond  entries  earns a block?
+      psd              64     0.974     2.401  4.084e+04     4032  YES
+      sfh               7     0.855     0.338       9908       42  no (couples outward more than inward)
+      dust              2     0.601     0.159      7.048        2  no (couples outward more than inward)
+      met               1     0.000     0.000          1        0  no (single parameter, diagonal by definition)
+  per-group verdict, by physical structure (correlation form of G):
+      group          size  internal   int/ext       cond  entries  earns a block?
+      psd              64     0.974     2.401  4.084e+04     4032  YES
+      sfh_dpl           5     0.815     0.266       7862       20  no (couples outward more than inward)
+      dust_tau          2     0.601     0.159      7.048        2  no (couples outward more than inward)
+      sfh_field         2     0.516     0.144      4.024        2  no (couples outward more than inward)
+      met               1     0.000     0.000          1        0  no (single parameter, diagonal by definition)
+  by-structure grouping: 5 candidate groups -> earned [psd]  (identical to by-kind here)
+  cross-group coupling mass (Frobenius, correlation form):
+      psd        internal 34.308 (frac 0.974)  |  vs  sfh 12.666  dust 6.225  met 2.249
+      sfh        internal 4.361 (frac 0.855)  |  vs  psd 12.666  dust 2.249  met 1.028
+      dust       internal 1.063 (frac 0.601)  |  vs  psd 6.225  sfh 2.249  met 1.007
+      met        internal 0.000 (frac 0.000)  |  vs  psd 2.249  sfh 1.028  dust 1.007
+  where each cross-group coupler's off-diagonal mass goes:
+      dust_tau_bc                      own group dust 0.17  |  psd 0.91  sfh 0.35  dust 0.17  met 0.14
+      dust_tau_diff                    own group dust 0.15  |  psd 0.92  sfh 0.32  met 0.15  dust 0.15
+      met_logzsol                      own group met 0.00  |  psd 0.84  sfh 0.38  dust 0.38
+      sfh_dpl_age_gyr                  own group sfh 0.29  |  psd 0.94  sfh 0.29  dust 0.16  met 0.05
+      sfh_dpl_alpha                    own group sfh 0.46  |  psd 0.84  sfh 0.46  dust 0.22  met 0.18
+      sfh_dpl_beta                     own group sfh 0.30  |  psd 0.94  sfh 0.30  dust 0.15  met 0.04
+      sfh_dpl_log_total_mass           own group sfh 0.32  |  psd 0.94  sfh 0.32  dust 0.12  met 0.02
+      sfh_dpl_tau_gyr                  own group sfh 0.27  |  psd 0.93  sfh 0.27  dust 0.22  met 0.10
+      sfh_field_psd_sigma              own group sfh 0.44  |  psd 0.84  sfh 0.44  dust 0.25  met 0.19
+      sfh_field_psd_tau_myr            own group sfh 0.35  |  psd 0.93  sfh 0.35  dust 0.09  met 0.02
+  strongest off-diagonal correlations of G (top 8):
+      |R| = 0.999  psd_xi[49] x psd_xi[50]   within prefix block
+      |R| = 0.998  psd_xi[50] x psd_xi[51]   within prefix block
+      |R| = 0.998  psd_xi[48] x psd_xi[49]   within prefix block
+      |R| = 0.998  psd_xi[47] x psd_xi[48]   within prefix block
+      |R| = 0.997  psd_xi[49] x psd_xi[51]   within prefix block
+      |R| = 0.997  psd_xi[46] x psd_xi[47]   within prefix block
+      |R| = 0.996  psd_xi[48] x psd_xi[50]   within prefix block
+      |R| = 0.995  psd_xi[50] x sfh_field_psd_tau_myr   ACROSS prefix blocks

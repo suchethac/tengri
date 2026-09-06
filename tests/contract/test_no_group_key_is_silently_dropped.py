@@ -142,7 +142,12 @@ class TestFlattenedKeysAreRefusedNotDropped:
             _build(ssp_data_fsps, obs, {**base, "alpha": Uniform(1.0, 3.0)}, dust_emission=_EMIS)
 
     def test_the_flat_form_works(self, ssp_data_fsps, obs):
-        """The refusal is only useful if the recommended flat spelling succeeds."""
+        """The refusal is only useful if the recommended flat spelling succeeds.
+
+        The key has to be one the selected type reads: ``alpha_dale`` is Dale
+        2014's slope. ``alpha`` is THEMIS's, and freeing it under a Dale build
+        used to be accepted and ignored, which the dust groups now refuse.
+        """
         model = _build(
             ssp_data_fsps,
             obs,
@@ -151,9 +156,9 @@ class TestFlattenedKeysAreRefusedNotDropped:
                 "law": "calzetti",
                 "all_params": Fixed(DEFAULT),
             },
-            dust_emission={**_EMIS, "alpha": Uniform(1.0, 3.0)},
+            dust_emission={**_EMIS, "alpha_dale": Uniform(1.0, 3.0)},
         )
-        assert "dust_alpha" in model.spec.free_params
+        assert "dust_alpha_dale" in model.spec.free_params
 
 
 class TestCrossLevelAcceptanceThatWorksIsKept:

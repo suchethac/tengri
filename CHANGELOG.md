@@ -8,6 +8,18 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 
 ### Added
 
+- `bench/scripts/probe_block_metric_structure.py` — scores a candidate
+  mass-matrix structure against the analytic metric without running a sampler.
+  For a layout it forms the structured inverse mass matrix, whitens with it, and
+  reports the condition number that survives alongside the matrix entries stored,
+  so diagonal / block / low-rank / dense sit on one frontier. It also reports a
+  **per-group verdict** — internal off-diagonal mass and internal-over-external
+  coupling for each candidate group — which turns "which groups deserve a dense
+  block" into a measurement. Used to answer #2166: block-structured mass matrices
+  are dominated by a rank-`k` correction to a diagonal on every fixture and every
+  storage budget tested, so the feature was declined rather than built. Numbers
+  and the reasoning in `bench/reports/2026-09-06_block_metric_structure.md`.
+
 - **New AGN template-library blocks**, vendored at native grid resolution from AGNfitter-rX: `kd18_agnfitter` / `kd18_agnfitter_warmindex` (two distinct grids — KD18's warm-Comptonization spectral index is not interchangeable with a fixed value, up to 27% off at any single `warmIndex`), `nenkova_agnfitter_2p` / `nenkova_agnfitter_3p`, `skirtor_agnfitter_1p` / `skirtor_agnfitter_2p`, and `cat3d_wind_lowfwd`. Each ships crossval tests against the vendored AGNfitter-rX reference and a `GRID_EXTENT_SOURCES` entry so its declared prior bounds are guarded against the vendored grid's own axis extent.
 - **Per-component AGN SED publishing**: `state.derived["sed_agn_disc"]`, `["sed_agn_torus"]`, `["sed_agn_lines"]` (NLR + BLR + Fe II combined), and `["sed_agn_polar"]` alongside the existing combined `["sed_agn"]`, so a caller can inspect or plot the disc/torus/line/polar-dust contributions separately instead of only their sum.
 - **AGNfitter-rX informative priors**: `tengri.parameters.agn_priors` (also reachable as `tengri.agn.priors`, a real registered import path — `from tengri.agn.priors import agnfitter_priors` and `import tengri.agn.priors` both work) implements the eight optional composite log-prior penalty terms AGNfitter-rX offers (energy balance, AGN-fraction luminosity-function ties, mid-IR/UV/X-ray consistency), independently validated against upstream's own formulas. Wire into a fit via `Fitter(..., extra_log_prior=your_prior_fn)`; the public `agnfitter_priors(pred, redshift, dlum, ...)` adapter computes every prior's physical inputs from a `model.predict(params)` result for post-fit inspection.
@@ -260,6 +272,28 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
   explicit-law rule.
 
 ### Fixed
+
+- `_mass_scale_lnu`'s forward product went `nan` in float32 on the
+  `SpectrumPrecomp` path under jaxlib 0.11.1, where jaxlib 0.11.0 was finite —
+  with **byte-identical optimized HLO**, so the graph did not change and the
+  emitted kernel did. `total_mass * L_sun` is ~3.8e43 (`inf` in float32), and a
+  backend that emits its own kernel for the fused `multiply -> multiply ->
+  reduce` may hoist the two scalar broadcasts into that single factor. Ages
+  beyond the galaxy's age carry an exactly-zero SFH weight, so `inf * 0` is
+  `nan` and the reduction over age is `nan` at every pixel. PR #2100 had
+  already pinned the *reverse* pass's grouping for the same overflow; this is
+  the same hazard reached from the forward. The grouping is now stated in the
+  graph with `optimization_barrier`, on both spellings of the product — the
+  function body and the `custom_jvp`'s `primal_out` — because fixing only one
+  leaves the differentiated forward `nan` while the undifferentiated one is
+  finite. Float64 is bit-identical, verified as equality rather than tolerance
+  across all sixteen seams, which matters because the barrier changes emitted
+  HLO for every fit. Note the assertion hole that hid this: the seam checks
+  asserted gradients were non-zero, and `nan != 0.0` is `True` — the mirror of
+  #2100's hole, where `isfinite` admitted zero. This closes the float32
+  symptom only; the separate float64 non-finiteness on six `spec/*/auto_*`
+  seams is not established as the same defect and #2178 stays open for it
+  (#2178, #2100).
 
 - `compute_l_dust_absorbed` (`tengri.utils.sed_quantities`) integrated the
   whole wavelength grid, while `bolometric_absorbed_log10`

@@ -1,0 +1,204 @@
+{
+  "meta": {
+    "platform": "gpu",
+    "devices": [
+      "cuda:0"
+    ],
+    "jax": "0.11.0",
+    "env": {
+      "JAX_PLATFORMS": null,
+      "JAX_ENABLE_X64": null,
+      "JAX_DEFAULT_MATMUL_PRECISION": "highest",
+      "NVIDIA_TF32_OVERRIDE": null,
+      "XLA_PYTHON_CLIENT_PREALLOCATE": "false",
+      "TENGRI_DISABLE_JAX_CACHE": "1"
+    },
+    "n_z": 64,
+    "points": {
+      "origin": 0.0,
+      "half_sigma": 0.5
+    },
+    "spec_pixels": 256,
+    "spec_wave_range": [
+      4000.0,
+      9000.0
+    ],
+    "lines": [
+      "Hbeta",
+      "OIII_5007",
+      "Halpha",
+      "NII_6584"
+    ],
+    "mode": "seams",
+    "line_sigma_convention": "floored",
+    "line_sigma_floor": 0.05
+  },
+  "rows": [
+    {
+      "channel": "lines_meas",
+      "model": "bakedin",
+      "path": "exact_fixedz",
+      "snr": 30.0,
+      "line_sigma_convention": "floored",
+      "names": [
+        "dust_tau_diff",
+        "sfh_delayed_log_total_mass"
+      ],
+      "data_type": "photometry",
+      "has_line_catalog": false,
+      "n_data": 2,
+      "approx_state_f64": "ApproxState(n_subbands=5)",
+      "approx_state_f32": "ApproxState(n_subbands=5)",
+      "truth": {
+        "dust_tau_diff": 0.75,
+        "sfh_delayed_log_total_mass": 10.0
+      },
+      "seconds": 23.55,
+      "points": {
+        "origin": {
+          "grad_f64": [
+            28.306912196367012,
+            -107.25217380404585
+          ],
+          "grad_f32": [
+            28.298648834228516,
+            -107.22490692138672
+          ],
+          "grad_exact_f64": [
+            28.306912196367012,
+            -107.25217380404585
+          ],
+          "dtype_f64": [
+            "float64"
+          ],
+          "dtype_f32": [
+            "float32"
+          ],
+          "value_f64": 6.812681340559724,
+          "f64_vs_fd64": 1.2556901487260203e-06,
+          "f32_vs_f64": 0.0002568542801440332,
+          "f32_vs_f64_cw": 0.00029192029427911164,
+          "lut_f64_vs_exact_f64": 0.0,
+          "f32_vs_exact_f64": 0.0002568542801440332,
+          "f32_finite": true,
+          "f32_nonzero": true
+        },
+        "half_sigma": {
+          "grad_f64": [
+            -3410.410429492385,
+            10066.023571584043
+          ],
+          "grad_f32": [
+            -3410.45458984375,
+            10066.17578125
+          ],
+          "grad_exact_f64": [
+            -3410.410429492385,
+            10066.023571584043
+          ],
+          "dtype_f64": [
+            "float64"
+          ],
+          "dtype_f32": [
+            "float32"
+          ],
+          "value_f64": 1349.884923959739,
+          "f64_vs_fd64": 1.9193524013472043e-08,
+          "f32_vs_f64": 1.4912061810416566e-05,
+          "f32_vs_f64_cw": 1.5121131485030988e-05,
+          "lut_f64_vs_exact_f64": 0.0,
+          "f32_vs_exact_f64": 1.4912061810416566e-05,
+          "f32_finite": true,
+          "f32_nonzero": true
+        }
+      }
+    },
+    {
+      "channel": "lines_meas",
+      "model": "bakedin",
+      "path": "exact_freez",
+      "snr": 30.0,
+      "line_sigma_convention": "floored",
+      "names": [
+        "dust_tau_diff",
+        "redshift",
+        "sfh_delayed_log_total_mass"
+      ],
+      "data_type": "photometry",
+      "has_line_catalog": false,
+      "n_data": 2,
+      "approx_state_f64": "ApproxState(n_subbands=5)",
+      "approx_state_f32": "ApproxState(n_subbands=5)",
+      "truth": {
+        "dust_tau_diff": 0.75,
+        "redshift": 0.525,
+        "sfh_delayed_log_total_mass": 10.0
+      },
+      "seconds": 23.36,
+      "points": {
+        "origin": {
+          "grad_f64": [
+            27.529661126982717,
+            118.76585699392436,
+            -107.25217380404567
+          ],
+          "grad_f32": [
+            27.514026641845703,
+            118.71627044677734,
+            -107.20125579833984
+          ],
+          "grad_exact_f64": [
+            27.529661126982717,
+            118.76585699392436,
+            -107.25217380404567
+          ],
+          "dtype_f64": [
+            "float64"
+          ],
+          "dtype_f32": [
+            "float32"
+          ],
+          "value_f64": 6.812681340559722,
+          "f64_vs_fd64": 1.860292978153433e-05,
+          "f32_vs_f64": 0.0004481733607405138,
+          "f32_vs_f64_cw": 0.0005679141877155085,
+          "lut_f64_vs_exact_f64": 0.0,
+          "f32_vs_exact_f64": 0.0004481733607405138,
+          "f32_finite": true,
+          "f32_nonzero": true
+        },
+        "half_sigma": {
+          "grad_f64": [
+            564.7908023052987,
+            1174.6608295702756,
+            -1263.9267617807786
+          ],
+          "grad_f32": [
+            564.790771484375,
+            1174.658935546875,
+            -1263.9234619140625
+          ],
+          "grad_exact_f64": [
+            564.7908023052987,
+            1174.6608295702756,
+            -1263.9267617807786
+          ],
+          "dtype_f64": [
+            "float64"
+          ],
+          "dtype_f32": [
+            "float32"
+          ],
+          "value_f64": 244.7254013335833,
+          "f64_vs_fd64": 2.360957638601211e-06,
+          "f32_vs_f64": 2.095704418061828e-06,
+          "f32_vs_f64_cw": 2.6108053218878174e-06,
+          "lut_f64_vs_exact_f64": 0.0,
+          "f32_vs_exact_f64": 2.095704418061828e-06,
+          "f32_finite": true,
+          "f32_nonzero": true
+        }
+      }
+    }
+  ]
+}

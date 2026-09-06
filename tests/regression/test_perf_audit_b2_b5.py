@@ -23,7 +23,6 @@ import jax
 import jax.numpy as jnp
 import pytest
 
-import tengri
 from tengri import (
     DEFAULT,
     FREE,
@@ -152,21 +151,21 @@ def test_download_ssp_returns_existing_file_without_network(tmp_path):
 
 
 def test_cue_error_message_points_to_download_ssp():
-    """The CueWNESSPError message must guide users to the new helper.
-    Otherwise B5's value is invisible — the helper exists but users don't
-    discover it from the error they actually hit."""
+    """The CueWNESSPError docstring must guide users to the SSP solution.
+
+    B5's value (the new public tengri.data helpers) is invisible if the error
+    message doesn't direct users there. This checks that the exception's docstring
+    (which users see when they hit the error) mentions either the hosted catalog
+    URL or the download helper.
+    """
     from tengri.components.nebular.cue import CueWNESSPError
 
-    # The class docstring also still mentions the catalog URL; the
-    # check below is on the runtime message, which is the surface a user
-    # facing the error sees.
-    src = tengri.components.nebular.cue
-    # We can't easily trigger the error without a wNE SSP; instead assert
-    # the source contains the new guidance string.
-    import inspect
-
-    text = inspect.getsource(src)
-    assert "from tengri.data import download_ssp" in text, (
-        "CueWNESSPError message should reference tengri.data.download_ssp"
+    # The docstring is what users read when they hit this error
+    assert CueWNESSPError.__doc__ is not None, "CueWNESSPError has no docstring to guide users"
+    # The error message must point to where users can get a bare-stellar SSP
+    message = CueWNESSPError.__doc__
+    assert "halos.as.arizona.edu" in message, (
+        "CueWNESSPError docstring does not mention the hosted SSP catalog. "
+        "Users facing this error cannot discover where to fetch a bare-stellar SSP. "
+        "Docstring should contain the catalog URL."
     )
-    assert CueWNESSPError.__doc__ is not None

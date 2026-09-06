@@ -2252,7 +2252,7 @@ class PopulationFitter:
         total_steps = n_burnin + n_steps
 
         key_rt = keys[-1]
-        chain, _log_likelihood, accept_prob = sample_raytrace(
+        chain, _log_likelihood, accept_prob, _n_nonfinite = sample_raytrace(
             key=key_rt,
             params_init=init_flat,
             log_prob_fn=log_prob,
