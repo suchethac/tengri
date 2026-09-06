@@ -251,3 +251,81 @@ def test_the_documented_mentions_are_still_real():
         assert re.search(rf"\b{re.escape(old)}\b", path.read_text()), (
             f"{rel} no longer mentions {old!r}, so its exemption is stale"
         )
+
+
+class TestBandFracRenameReachesEveryPlacement:
+    """``agn_band_frac`` gets ONE message wherever a pre-rename config wrote it.
+
+    The redirect used to fire only inside the ``torus`` sub-block. The top
+    level is where every pre-rename config actually wrote the key (see
+    ``reproduction/prospect_r/01_prospect_r.py``), and there it fell through to
+    the generic unknown-key path: *"Did you mean: agn_frac, agn_ir_frac?"* --
+    neither of which is the replacement, and both of which are real parameters,
+    so following the suggestion would silently fit something else.
+    """
+
+    @staticmethod
+    def _raises_rename_hint(agn: dict) -> str:
+        from tengri.parameters import DEFAULT, Fixed, parse_groups
+
+        with pytest.raises(ValueError) as exc_info, warnings.catch_warnings():
+            warnings.simplefilter("ignore")
+            parse_groups(
+                sfh={"type": "delayed", "all_params": Fixed(DEFAULT)},
+                agn=agn,
+                redshift=Fixed(0.5),
+            )
+        message = str(exc_info.value)
+        assert "agn_torus_frac" in message, message
+        assert "agn_ir_frac" not in message, message
+        assert "Did you mean" not in message, message
+        return message
+
+    @pytest.mark.parametrize("key", ["agn_band_frac", "band_frac"])
+    def test_composable_top_level_gets_the_rename_hint_and_the_nesting(self, key):
+        from tengri.parameters import Fixed
+
+        message = self._raises_rename_hint(
+            {
+                "type": "composable",
+                "norm": "independent",
+                "disc": {"type": "multicolor"},
+                "torus": {"type": "skirtor"},
+                key: Fixed(0.5),
+            }
+        )
+        assert "torus" in message, message
+
+    @pytest.mark.parametrize("key", ["agn_band_frac", "band_frac"])
+    def test_composable_torus_sub_block_gets_the_rename_hint(self, key):
+        from tengri.parameters import Fixed
+
+        self._raises_rename_hint(
+            {
+                "type": "composable",
+                "norm": "independent",
+                "disc": {"type": "multicolor"},
+                "torus": {"type": "skirtor", key: Fixed(0.5)},
+            }
+        )
+
+    @pytest.mark.parametrize("key", ["agn_band_frac", "band_frac"])
+    def test_monolithic_top_level_gets_the_rename_hint_at_the_same_level(self, key):
+        """A monolithic build has no sub-block, so the advice must not nest."""
+        from tengri.parameters import Fixed
+
+        message = self._raises_rename_hint({"type": "silva04", key: Fixed(0.5)})
+        assert "{'torus'" not in message, message
+
+    def test_a_monolithic_model_that_does_not_read_it_says_so(self):
+        """``skirtor_stalevski`` pins ``frac_agn=1.0`` internally, so the
+        renamed key has no effect there either: measured 0.0 relative SED
+        change across the whole prior. Sending the reader to ``agn_torus_frac``
+        without saying that would be a second dead end.
+        """
+        from tengri.parameters import Fixed
+
+        message = self._raises_rename_hint(
+            {"type": "skirtor_stalevski", "agn_band_frac": Fixed(1.0)}
+        )
+        assert "skirtor_stalevski" in message, message

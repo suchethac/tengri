@@ -4675,6 +4675,63 @@ def _validate_user_keys(
                 _check_dict_keys(sub_group, sub, sub_allowed | sub_params, param_partition)
 
 
+#: Both spellings of the retired covering-fraction key (R17): the short sub-block
+#: form and the fully prefixed one. Neither is a declared parameter any more, so
+#: without an interception the generic resolver difflib-suggests ``agn_frac`` /
+#: ``agn_ir_frac`` -- two real, unrelated parameters, so following the suggestion
+#: silently fits something else.
+_AGN_BAND_FRAC_KEYS: frozenset[str] = frozenset({"band_frac", "agn_band_frac"})
+
+
+def _agn_band_frac_rename_error(top_type: object, *, placement: str) -> ValueError:
+    """The one message the retired ``agn_band_frac`` gets, wherever it was written.
+
+    Parameters
+    ----------
+    top_type : object
+        The ``agn['type']`` value, or ``None`` for the implicit composable form.
+    placement : {"top", "torus"}
+        Where the key was found: the agn top level, or the torus sub-block.
+
+    Returns
+    -------
+    ValueError
+        Naming the replacement and the spelling that works for THIS build.
+        A composable build nests the key under ``torus``; a monolithic build
+        has no sub-block and writes it flat, so telling it to nest would be a
+        second refusal. A monolithic model that does not read the renamed
+        parameter at all is told that instead of being sent to a name it
+        ignores.
+    """
+    head = (
+        "'agn_band_frac' (short form 'band_frac') was renamed 'agn_torus_frac': "
+        "SKIRTORTorus's own, single-consumer name for the AGN torus covering "
+        "factor was retired in favor of the name every OTHER composable torus "
+        "block already used for the identical quantity."
+    )
+    model = top_type if isinstance(top_type, str) else "composable"
+    if model == "composable":
+        where = "found in agn['torus']" if placement == "torus" else "found at the agn top level"
+        return ValueError(
+            f"{head} A composable build nests it under the owning sub-block "
+            f"({where}):\n"
+            "  agn={'torus': {'type': 'skirtor', 'agn_torus_frac': Uniform(...)}}"
+        )
+    if "agn_torus_frac" in _monolithic_agn_top_level_names(model):
+        return ValueError(
+            f"{head} A monolithic build has no sub-block, so write the new name "
+            f"at the same level:\n"
+            f"  agn={{'type': {model!r}, 'agn_torus_frac': Uniform(...)}}"
+        )
+    return ValueError(
+        f"{head} The monolithic model {model!r} does not read 'agn_torus_frac' "
+        f"either -- it pins the covering fraction internally, so neither name "
+        f"has any effect on its SED. Drop the key, or select a model that reads "
+        f"it (agn={{'type': 'composable', 'torus': {{'type': 'skirtor', "
+        f"'agn_torus_frac': Uniform(...)}}}})."
+    )
+
+
 def _monolithic_agn_type(agn_dict: dict) -> str | None:
     """The non-composable AGN model ``agn_dict`` selects, if it selects one.
 
@@ -5006,6 +5063,13 @@ def _translate_agn(agn_dict: dict, result: dict) -> None:
         specification. Also raised if both ``lines`` and ``nlr``/``blr``
         are provided.
     """
+    # R17 (Task 16): the retired agn_band_frac reaches its replacement from
+    # wherever a pre-rename config wrote it, which is overwhelmingly the agn
+    # top level (reproduction/prospect_r/01_prospect_r.py wrote it there), not
+    # the torus sub-block the first interception covered.
+    if _AGN_BAND_FRAC_KEYS & set(agn_dict):
+        raise _agn_band_frac_rename_error(agn_dict.get("type"), placement="top")
+
     # Top-level 'type' selects a monolithic AGN model when not 'composable'.
     # Previously this key was silently dropped and the model collapsed to
     # composable-with-all-none-blocks, which emits identically zero: a
@@ -5133,14 +5197,8 @@ def _translate_agn(agn_dict: dict, result: dict) -> None:
         # between "band_frac" and "torus_frac" is large), so a caller updating
         # old code would see a generic "unknown key" with the wrong suggestion
         # rather than the one-message redirect this raises instead.
-        if block_name == "torus" and ("band_frac" in block_spec or "agn_band_frac" in block_spec):
-            raise ValueError(
-                "agn['torus']['band_frac'] (or 'agn_band_frac') is no longer "
-                "supported: SKIRTORTorus's own name for the AGN torus covering "
-                "factor was retired in favor of the name every OTHER composable "
-                "torus block already used for the identical quantity. Use:\n"
-                "  agn={'torus': {'type': 'skirtor', 'torus_frac': Uniform(...)}}"
-            )
+        if block_name == "torus" and _AGN_BAND_FRAC_KEYS & set(block_spec):
+            raise _agn_band_frac_rename_error("composable", placement="torus")
 
         # Special handling for atten: 'law' key selects smc_prevot via DUST_LAWS,
         # while 'type' selects genuine attenuation models (polar_dust, grahsp_biatten, etc)
