@@ -57,6 +57,44 @@ _BURST_WIDTH_TO_PEAK: dict[str, str] = {
 }
 
 
+_WIDTH_SUFFIX = "width_gyr"
+
+
+def _width_to_peak_pairs(declared_names) -> dict[str, str]:
+    """The ``(width, peak)`` parameter pairs to check, repeats included.
+
+    Parameters
+    ----------
+    declared_names : iterable of str
+        Parameter names the spec actually declares.
+
+    Returns
+    -------
+    dict of str to str
+        ``width_gyr`` parameter name -> its ``peak_lbt_gyr`` partner.
+
+    Notes
+    -----
+    A composition may list one type twice (``sfh={'type': ['norm', 'norm']}``),
+    and ``resolve_sfh`` numbers the repeat's public parameters:
+    ``sfh_norm_2_width_gyr`` beside ``sfh_norm_width_gyr``. Two Gaussian bursts
+    is exactly the configuration this warning exists for, so the numbered pairs
+    are added to the static map rather than left unchecked.
+    """
+    pairs = dict(_BURST_WIDTH_TO_PEAK)
+    names = tuple(declared_names)
+    for width_name, peak_name in _BURST_WIDTH_TO_PEAK.items():
+        prefix = width_name[: -len(_WIDTH_SUFFIX)]
+        peak_tail = peak_name[len(prefix) :]
+        for name in names:
+            if not name.startswith(prefix) or not name.endswith(_WIDTH_SUFFIX):
+                continue
+            ordinal = name[len(prefix) : -len(_WIDTH_SUFFIX)].rstrip("_")
+            if ordinal.isdigit():
+                pairs[name] = f"{prefix}{ordinal}_{peak_tail}"
+    return pairs
+
+
 def _ssp_grid_spacing_yr_at(ssp_ages_yr: np.ndarray, age_yr: float) -> float:
     """Local SSP grid spacing (years) in the bin bracketing ``age_yr``.
 
@@ -116,9 +154,10 @@ def maybe_warn_burst_aliasing(spec, ssp_ages_yr) -> None:
     """Emit :class:`SFHBurstAliasingWarning` for any too-narrow burst.
 
     Walks the spec's resolved parameter distributions, looks for known
-    ``sfh_<variant>_width_gyr`` parameters, compares the (fixed value or
-    median-of-prior) width to the SSP grid spacing at the burst peak,
-    and warns once per offending pair.
+    ``sfh_<variant>_width_gyr`` parameters (including the numbered
+    ``sfh_<variant>_<k>_width_gyr`` of a repeated composition member),
+    compares the (fixed value or median-of-prior) width to the SSP grid
+    spacing at the burst peak, and warns once per offending pair.
     """
     distributions = getattr(spec, "_distributions", None)
     if not distributions:
@@ -127,7 +166,7 @@ def maybe_warn_burst_aliasing(spec, ssp_ages_yr) -> None:
     if ssp_ages_arr.size < 2:
         return
 
-    for width_name, peak_name in _BURST_WIDTH_TO_PEAK.items():
+    for width_name, peak_name in _width_to_peak_pairs(distributions).items():
         if width_name not in distributions or peak_name not in distributions:
             continue
         width_gyr = _representative_value(distributions[width_name])

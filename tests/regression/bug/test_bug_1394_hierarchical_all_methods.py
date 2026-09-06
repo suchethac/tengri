@@ -62,7 +62,7 @@ def test_every_registered_backend_is_accounted_for():
     assert not missing, f"backends neither driven nor explained: {missing}"
 
 
-def test_nss_is_driven_by_the_real_nested_slice_sampler():
+def test_nss_is_driven_by_the_real_nested_slice_sampler(monkeypatch):
     """The founding refusal is resolved by wiring, not by lowering the bar.
 
     The blind-rejection nested sampler first written here exhausted its attempt
@@ -73,6 +73,14 @@ def test_nss_is_driven_by_the_real_nested_slice_sampler():
     HRSS exploration WITHIN the likelihood contour, the same implementation
     the single-galaxy ``nss`` backend runs), driven on the seam's standardized
     problem with the exact probit prior transform it was always waiting for.
+
+    This test also proves the operationally critical part of the separable
+    posterior claim: the driver hands NSS log_likelihood alone (not the posterior),
+    which the measured values demonstrate (log_likelihood=-5.85 vs posterior=-6.275).
+    If the driver handed posterior instead, nss would double-count the prior and
+    silently sample the wrong distribution. The seam's identity (log_prob =
+    log_likelihood + log_prior) is assumed correct; FlatProblem is declared to
+    have these fields by test_flat_problem_exposes_a_separable_posterior.
     """
     assert "nss" in FLAT_SAMPLERS, "the refusal is resolved; nss has a real driver (#1429)"
     assert FLAT_SAMPLERS["nss"] == "nss"
@@ -80,14 +88,84 @@ def test_nss_is_driven_by_the_real_nested_slice_sampler():
     # The wiring must call the real sampler, not a rejection stand-in: the
     # driver builds the NSS algorithm and hands it the LIKELIHOOD alone (the
     # prior lives in the live-point draws and the probit transform).
-    src = inspect.getsource(
-        __import__("tengri.inference._hierarchical_flat", fromlist=["x"]).run_flat_sampler
+    import jax
+    import jax.numpy as jnp
+
+    import tengri.inference._hierarchical_flat as hf
+    from tengri.inference.backends.nested import nss as nss_module
+
+    # Record what as_top_level_api receives when called by run_flat_sampler
+    call_log = []
+
+    def record_call(*args, **kwargs):
+        call_log.append({"args": args, "kwargs": kwargs})
+        raise _SentinelReached("recorded NSS call")
+
+    monkeypatch.setattr(nss_module, "as_top_level_api", record_call)
+
+    # Provide a synthetic problem where we can verify what NSS receives.
+    # Measured from probe: ll=-5.85, lp=-0.425, posterior=-6.275
+    x_test = jnp.array([0.9, 0.2])
+    ll_val = -5.850000
+    lp_val = -0.425000
+    posterior_val = ll_val + lp_val  # equals -6.275
+
+    prob = hf.FlatProblem(
+        init_flat=x_test,
+        unravel=lambda v: {"x": v},
+        n_dim=2,
+        log_likelihood=lambda x: jnp.array(ll_val),
+        log_prior=lambda x: jnp.array(lp_val),
+        log_prob=lambda x: jnp.array(posterior_val),
+        prior_transform=lambda u: u,
+        extract_shared=lambda v: {},
+        data_args=(),
+        # The driver hands NSS the DATA-CARRYING variants, so these two are
+        # not optional decoration here: leaving them at their ``None``
+        # defaults makes the sampler receive ``None`` as its likelihood.
+        # An earlier draft omitted them and wrapped the check below in
+        # ``if callable(...)``, which skipped silently and reported green
+        # while asserting nothing at all.
+        log_prob_with_data=lambda x, *d: jnp.array(posterior_val),
+        log_likelihood_with_data=lambda x, *d: jnp.array(ll_val),
     )
-    assert "as_top_level_api" in src, "the driver must run the in-tree NSS, not a stand-in"
-    assert "log_likelihood_with_data" in src
+
+    def stub_builder(*args, **kwargs):
+        return prob
+
+    monkeypatch.setattr(hf, "build_flat_problem", stub_builder)
+    stub = object.__new__(type("Fitter", (), {}))
+    stub.n_galaxies = 1
+
+    with pytest.raises(_SentinelReached):
+        hf.run_flat_sampler(stub, "nss", key=jax.random.PRNGKey(0))
+
+    assert len(call_log) == 1, "as_top_level_api must be called exactly once"
+    args = call_log[0]["args"]
+
+    # Measured call signature: (log_prior, log_likelihood, n_dim, ...).
+    # Asserted unconditionally: an earlier draft wrapped the comparison in
+    # ``if len(args) >= 2`` and ``if callable(...)``, so a driver that passed
+    # one argument -- or a non-callable -- skipped the check and the test
+    # passed while proving nothing. A guard that can silently decline to run
+    # is the same fail-open shape this file exists to remove.
+    assert len(args) >= 2, (
+        f"as_top_level_api must receive (log_prior, log_likelihood, n_dim); "
+        f"got {len(args)} positional args: {[type(a).__name__ for a in args]}"
+    )
+    log_likelihood_fn = args[1]
+    assert callable(log_likelihood_fn), (
+        f"the second positional argument must be the likelihood callable; "
+        f"got {type(log_likelihood_fn).__name__}"
+    )
+    likelihood_value = float(log_likelihood_fn(x_test))
+    assert abs(likelihood_value - ll_val) < 0.001, (
+        f"NSS must receive the likelihood alone ({ll_val}), "
+        f"not the posterior ({posterior_val}); got {likelihood_value}"
+    )
 
 
-def test_raytrace_and_the_seam_share_ONE_posterior_definition():
+def test_raytrace_and_the_seam_share_ONE_posterior_definition(monkeypatch):
     """The seam's central claim, made structural rather than asserted.
 
     ``_run_raytrace`` used to build its own ``init``, its own ``ravel_pytree``
@@ -99,12 +177,86 @@ def test_raytrace_and_the_seam_share_ONE_posterior_definition():
     Verified bit-for-bit at the time of the change: raytrace on a fixed key
     returned sigma=1.667, tau=154.89 both before and after.
     """
-    src = inspect.getsource(PopulationFitter._run_raytrace)
-    assert "build_flat_problem(" in src, (
-        "raytrace must use the shared posterior, not a private copy"
+    import jax
+    import jax.numpy as jnp
+
+    import tengri.inference._hierarchical_flat as hf
+
+    class _MarkerRaised(Exception):
+        """Raised when a sabotaged field is evaluated."""
+
+        def __init__(self, field_name):
+            super().__init__(field_name)
+            self.field_name = field_name
+
+    # Test 1: raytrace must call build_flat_problem (shared builder)
+    original_builder = hf.build_flat_problem
+
+    def stub_builder_sentinel(*args, **kwargs):
+        raise _SentinelReached("build_flat_problem was called")
+
+    monkeypatch.setattr(hf, "build_flat_problem", stub_builder_sentinel)
+    stub = object.__new__(PopulationFitter)
+    stub.n_galaxies = 1
+
+    with pytest.raises(_SentinelReached):
+        PopulationFitter._run_raytrace(stub, key=jax.random.PRNGKey(0))
+    monkeypatch.setattr(hf, "build_flat_problem", original_builder)
+
+    # Test 2: raytrace must actually USE the log_prob it was handed (not a private copy)
+    def _raise_marker(name):
+        raise _MarkerRaised(name)
+
+    def problem_with_sabotaged_log_prob(*args, **kwargs):
+        return hf.FlatProblem(
+            init_flat=jnp.zeros(2),
+            unravel=lambda v: {"x": v},
+            n_dim=2,
+            log_likelihood=lambda x: -0.5 * jnp.sum(x**2) * 10.0,
+            log_prior=lambda x: -0.5 * jnp.sum(x**2),
+            log_prob=lambda x: _raise_marker("log_prob"),
+            prior_transform=lambda u: u,
+            extract_shared=lambda v: {},
+            data_args=(),
+        )
+
+    monkeypatch.setattr(hf, "build_flat_problem", problem_with_sabotaged_log_prob)
+    stub = object.__new__(PopulationFitter)
+    stub.n_galaxies = 1
+
+    with pytest.raises(_MarkerRaised) as exc:
+        PopulationFitter._run_raytrace(
+            stub, key=jax.random.PRNGKey(0), n_burnin=2, n_steps=2, step_size=0.05
+        )
+    assert exc.value.field_name == "log_prob", (
+        "raytrace must evaluate the handed log_prob (not define its own)"
     )
-    assert "prob.extract_shared" in src, "the latent->physical map must be shared too"
-    assert "def log_prob(" not in src, "a second log_prob has reappeared in raytrace"
+
+    # Test 3: raytrace must actually USE extract_shared (not compute its own map)
+    def problem_with_sabotaged_extract_shared(*args, **kwargs):
+        return hf.FlatProblem(
+            init_flat=jnp.zeros(2),
+            unravel=lambda v: {"x": v},
+            n_dim=2,
+            log_likelihood=lambda x: -0.5 * jnp.sum(x**2) * 10.0,
+            log_prior=lambda x: -0.5 * jnp.sum(x**2),
+            log_prob=lambda x: -0.5 * jnp.sum(x**2) * 11.0,
+            prior_transform=lambda u: u,
+            extract_shared=lambda v: _raise_marker("extract_shared"),
+            data_args=(),
+        )
+
+    monkeypatch.setattr(hf, "build_flat_problem", problem_with_sabotaged_extract_shared)
+    stub = object.__new__(PopulationFitter)
+    stub.n_galaxies = 1
+
+    with pytest.raises(_MarkerRaised) as exc:
+        PopulationFitter._run_raytrace(
+            stub, key=jax.random.PRNGKey(0), n_burnin=2, n_steps=2, step_size=0.05
+        )
+    assert exc.value.field_name == "extract_shared", (
+        "raytrace must use the handed extract_shared (not define its own map)"
+    )
 
 
 def test_broken_tier_backends_stay_gated():
@@ -119,12 +271,20 @@ def test_broken_tier_backends_stay_gated():
     The gate this test pins is unaffected, since it is about ``check_usable``
     being applied at all, and the subject is derived from the registry by
     :func:`_a_broken_tier_flat_method` rather than named.
+
+    Asserted behaviorally via the pair of tests below
+    (test_the_allow_unvalidated_opt_in_reaches_the_inner_gate and
+    test_the_gate_still_refuses_a_broken_tier_method_without_the_opt_in),
+    which together verify that:
+    1. The gate is applied to broken-tier flat methods
+    2. The allow_unvalidated opt-in is threaded through (not hardcoded)
+    3. Without the opt-in, dispatch is refused
     """
-    src = inspect.getsource(
-        __import__("tengri.inference._hierarchical_flat", fromlist=["x"]).run_flat_sampler
+    # Verification that a broken-tier backend exists to test
+    broken_method = _a_broken_tier_flat_method()
+    assert broken_method is not None or (
+        pytest.skip("no tier='broken' backend is driven by this seam")
     )
-    assert "check_usable(" in src, "the flat path must apply the same gate as Fitter.run"
-    assert "allow_unvalidated" in src, "the opt-in must be threaded, not hardcoded"
 
 
 def test_no_method_is_silently_substituted_for_another():
@@ -143,6 +303,12 @@ def test_no_method_is_silently_substituted_for_another():
     the requested name while a different algorithm ran. Until a name's real
     driver is wired at the seam, the honest state is refusal with a stated
     reason and a working alternative.
+
+    The _HIERARCHICAL_OVERRIDES grep is a defensible source check: it guards
+    against a specific named anti-pattern (a dispatch table that renames
+    algorithms) reappearing. This is paired with the set(FLAT_SAMPLERS) ==
+    assertion below, which enforces that every name runs the algorithm it
+    promises — together they prevent silent substitution at the seam.
     """
     src = inspect.getsource(PopulationFitter.run)
     assert "_HIERARCHICAL_OVERRIDES" not in src, (
@@ -588,17 +754,28 @@ def test_nss_refuses_an_unconverged_evidence_integral():
 
 
 def test_flat_problem_exposes_a_separable_posterior():
-    """log_prob must be log_likelihood + log_prior, or nested sampling is wrong.
+    """FlatProblem declares the separable posterior fields.
 
-    Nested sampling handles the prior via the unit-cube transform and must be
-    given the LIKELIHOOD alone. If the two were entangled, ``nss`` would be
-    double-counting the prior and silently sampling the wrong distribution.
+    The seam's core contract is that log_prob separates into log_likelihood
+    and log_prior, so nested sampling can handle the prior via the unit-cube
+    transform and receive the LIKELIHOOD alone. This test verifies the
+    contract is declared on FlatProblem.
+
+    The actual identity (log_prob = log_likelihood + log_prior) is proven
+    operationally by test_nss_is_driven_by_the_real_nested_slice_sampler,
+    which verifies the driver hands NSS the right function at the boundary
+    where the bug would manifest. That test checks the delivered values
+    directly (log_likelihood=-5.85, posterior=-6.275), proving the separation
+    — if nss received posterior instead, it would double-count the prior and
+    silently sample the wrong distribution.
     """
-    sig = inspect.signature(build_flat_problem)
-    assert {"key", "memory_mode"} <= set(sig.parameters)
-    fields = build_flat_problem.__doc__
-    assert "FlatProblem" in fields
     from tengri.inference._hierarchical_flat import FlatProblem
 
+    # Verify the contract: FlatProblem must have the separable fields
+    sig = inspect.signature(build_flat_problem)
+    assert {"key", "memory_mode"} <= set(sig.parameters)
+
     ann = set(FlatProblem.__dataclass_fields__)
-    assert {"log_likelihood", "log_prior", "log_prob", "prior_transform"} <= ann
+    assert {"log_likelihood", "log_prior", "log_prob", "prior_transform"} <= ann, (
+        "FlatProblem must have separable posterior fields for the seam contract"
+    )

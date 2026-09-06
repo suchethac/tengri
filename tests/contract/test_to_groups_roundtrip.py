@@ -31,8 +31,8 @@ def test_roundtrip_with_nebular_off():
     assert orig.nebular_mode == "off"
     groups = orig.to_groups()
     neb = groups.get("neb", None)
-    if neb is not None:
-        assert neb.get("type") == "none", f"Expected 'none', got {neb.get('type')!r}"
+    assert neb is not None, "probe setup failed: the nebular group is absent"
+    assert neb.get("type") == "none", f"Expected 'none', got {neb.get('type')!r}"
     # Round-trip must not raise
     rebuilt = parse_groups(**groups)
     assert rebuilt.nebular_mode == "off"
@@ -551,7 +551,18 @@ class TestWildcardSpellingConvention:
 
     def test_explicit_overrides_emit_other_params_last(self):
         """A group whose wildcard coexists with explicit per-param overrides
-        spells the wildcard 'other_params' and emits it as the LAST key."""
+        spells the wildcard 'other_params' and emits it as the LAST key.
+
+        The explicit entry is a real one (``tau_bc``). It used to be implicit:
+        a bare ``{'law': 'calzetti', 'all_params': FREE}`` emitted ``Rv``,
+        ``slope``, ``delta`` and ``bump_strength`` as explicit overrides,
+        because the FREE wildcard is variant-scoped and Calzetti reads none of
+        the four, so they fell out of the wildcard tag and into the override
+        list. That made this test's premise -- "explicit per-param entries
+        coexist" -- true by accident, and the dict it asserted on was one the
+        parser now refuses: the four are foreign keys under Calzetti and are no
+        longer emitted at all.
+        """
         with warnings.catch_warnings():
             warnings.simplefilter("ignore")
             spec = parse_groups(
@@ -561,6 +572,7 @@ class TestWildcardSpellingConvention:
                     "type": "two_component",
                     "law": "calzetti",
                     "all_params": FREE,
+                    "tau_bc": Fixed(0.4),
                 },
             )
         result = spec.to_groups()

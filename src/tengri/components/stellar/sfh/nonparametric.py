@@ -8,12 +8,18 @@ in N lookback-time bins.
 
 - **Continuity**: free parameters are log-SFR *ratios* between adjacent bins,
   with a Student-t(df=2, scale=0.3) smoothness prior penalizing sharp jumps.
-- **Dirichlet**: free parameters are auxiliary Beta(1,1) variables that map
-  to mass fractions via stick-breaking, giving a symmetric Dirichlet prior.
+- **Dirichlet**: free parameters are uniform auxiliary variables mapped to
+  Beta(1, N-1-j) quantiles, which stick-break into the SFR fractions, giving
+  a symmetric Dirichlet(1,...,1) prior on them.
 - **Bursty continuity**: same continuity SFH, but young bins use a wider
   Student-t scale (1.0) than old bins (0.3) to permit rapid recent fluctuations.
 - **ContinuityFlex**: anchored young/old bins + N flexible intermediate bins
   whose edges are derived from the SFR ratios (constant-mass-per-flex-bin).
+- **PSB continuity** (Suess+2021): a youngest bin of width ``tlast``, a
+  flexible zone out to ``tflex`` cut into equal-width bins, then fixed old
+  bins. Distinct from ContinuityFlex: here the flex ratios set the bins'
+  *amplitudes* and the widths are equal, there they set the *widths* and the
+  masses are equal.
 
 Convention: t_lookback in years, SFR returned in Msun/yr.
 All functions are pure JAX and JIT-compatible.
@@ -32,8 +38,7 @@ References
 - Johnson+2021: Prospector implementation.
 - Tacchella et al. 2022, ApJ, 926, 134 (arXiv:2102.11954): Bursty continuity.
 - Wang et al. 2024 (arXiv:2401.12198): Prospector-β agebins scheme.
-- Synthesizer (ContinuityFlex upstream ref); cite both: Lovell et al. 2025
-  (OJA) + Roper et al. 2026 (JOSS).
+- Suess et al. 2022 (ApJ 935, 146; arXiv:2207.02883): PSB flexible-zone SFH.
 
 """
 
@@ -286,17 +291,20 @@ def bursty_continuity_prior_logp(
 
 
 def _stick_breaking(z_fractions: jnp.ndarray) -> jnp.ndarray:
-    """Convert auxiliary variables to mass fractions via stick-breaking.
+    """Convert auxiliary variables to a simplex vector via stick-breaking.
 
     Parameters
     ----------
     z_fractions : array (N-1,)
-        Auxiliary variables in (0, 1), each drawn from Beta(1, 1) = Uniform.
+        Auxiliary variables in (0, 1). For a symmetric Dirichlet(1, ..., 1)
+        result, element ``j`` must be a Beta(1, N-1-j) variate — see
+        :func:`dirichlet`, which maps uniform latents through that quantile
+        before calling this helper.
 
     Returns
     -------
     array (N,)
-        Mass fractions summing to 1.0.
+        Non-negative fractions summing to 1.0.
     """
     # f_0 = z_0
     # f_1 = (1 - z_0) * z_1
@@ -326,9 +334,10 @@ def dirichlet(
 ) -> jnp.ndarray:
     """Non-parametric piecewise-constant SFH with symmetric Dirichlet prior (Leja+2017).
 
-    A flexible non-parametric model parameterized by mass fractions in age bins.
-    The mass fractions are derived from auxiliary variables via stick-breaking,
-    with a natural symmetric Dirichlet(1,...,1) prior on the fractions.
+    A flexible non-parametric model parameterized by the *SFR fractions* in age
+    bins. The SFR fractions are derived from auxiliary variables via
+    stick-breaking, giving an exactly symmetric Dirichlet(1,...,1) prior on
+    them; the bin masses follow as :math:`m_j \\propto f_j \\Delta t_j`.
 
     Parameters
     ----------
@@ -340,7 +349,9 @@ def dirichlet(
         Bin edges in Gyr. Default: 7-edge log-spaced grid from 0 to 13.7 Gyr.
     **z_kwargs
         Keyword arguments ``z_frac_0``, ``z_frac_1``, ..., ``z_frac_{N-2}``
-        containing the auxiliary Beta(1,1) variables (uniform on [0, 1]).
+        containing the auxiliary variables :math:`u_j`, uniform on [0, 1]
+        [dimensionless]. They are mapped internally to the Beta variates the
+        Dirichlet construction requires.
 
     Returns
     -------
@@ -349,25 +360,54 @@ def dirichlet(
 
     Notes
     -----
-    **JIT-compatible**: yes, all operations use ``jnp`` primitives.
+    **JIT-compatible**: yes, all operations use ``jnp`` primitives. ``n_bins``
+    comes from the static shape of ``bin_edges_gyr``, and the Beta exponents
+    are a static NumPy vector built from it.
 
-    The mass fractions are derived from auxiliary variables :math:`z_j \\sim \\mathrm{Beta}(1,1)`
-    via stick-breaking:
+    Leja et al. 2017 [1]_ (Sect. 2.3 and Appendix) stick-breaks the
+    :math:`N` **SFR fractions** from :math:`N-1` auxiliary variables
+    :math:`z_j \\sim \\mathrm{Beta}(N-1-j,\\, 1)`. tengri exposes the
+    auxiliaries as :math:`u_j \\sim \\mathrm{Uniform}(0, 1)` and applies the
+    Beta(1, N-1-j) quantile function (equivalently, :math:`1 - z_j` for the
+    Leja :math:`z_j` above):
 
     .. math::
 
-        f_0 &= z_0 \\\\
-        f_1 &= (1 - z_0) z_1 \\\\
-        f_2 &= (1 - z_0)(1 - z_1) z_2 \\\\
+        v_j = 1 - (1 - u_j)^{1/(N-1-j)}, \\qquad j = 0, \\ldots, N-2
+
+    where :math:`u_j` is the uniform latent [dimensionless] and :math:`v_j`
+    the Beta(1, N-1-j) variate [dimensionless]. Stick-breaking then gives the
+    SFR fractions
+
+    .. math::
+
+        f_0 &= v_0 \\\\
+        f_1 &= (1 - v_0) v_1 \\\\
+        f_2 &= (1 - v_0)(1 - v_1) v_2 \\\\
         &\\ldots \\\\
-        f_{N-1} &= \\prod_{j=0}^{N-2} (1 - z_j)
+        f_{N-1} &= \\prod_{j=0}^{N-2} (1 - v_j)
 
-    When all :math:`z_j \\sim \\mathrm{Uniform}(0, 1)`, the mass fractions
-    :math:`\\mathbf{f} = (f_0, \\ldots, f_{N-1})` automatically follow
-    a symmetric :math:`\\mathrm{Dirichlet}(1, \\ldots, 1)` distribution.
+    and :math:`\\mathbf{f} = (f_0, \\ldots, f_{N-1})` is then exactly a
+    symmetric :math:`\\mathrm{Dirichlet}(1, \\ldots, 1)` vector: every bin has
+    mean SFR fraction :math:`1/N` and marginal :math:`\\mathrm{Beta}(1, N-1)`.
 
-    The SFR in each bin is :math:`\\mathrm{SFR}_j = f_j \\cdot M_{\\star} / \\Delta t_j`,
-    where :math:`\\Delta t_j` is the width of bin j.
+    The mass fractions weight :math:`f_j` by the bin widths, and the per-bin
+    SFR follows from the mass:
+
+    .. math::
+
+        m_j = \\frac{f_j \\Delta t_j}{\\sum_k f_k \\Delta t_k}, \\qquad
+        \\mathrm{SFR}_j = \\frac{m_j M_{\\star}}{\\Delta t_j}
+                        = \\frac{f_j M_{\\star}}{\\sum_k f_k \\Delta t_k}
+
+    with :math:`\\Delta t_j` the width of bin :math:`j` [yr],
+    :math:`M_{\\star} = 10^{\\mathtt{log\\_total\\_mass}}` [Msun] and
+    :math:`\\mathrm{SFR}_j` in [Msun/yr]. So :math:`\\mathrm{SFR}_j \\propto
+    f_j`, as the name "SFR fraction" says.
+
+    Implements the same model as Prospector's ``zfrac_to_sfrac`` /
+    ``zfrac_to_masses`` (Johnson et al. 2021 [3]_), reached from
+    uniform latents rather than Beta-distributed ones.
 
     References
     ----------
@@ -378,23 +418,39 @@ def dirichlet(
     .. [2] J. Leja et al., "How to Measure Galaxy Star Formation Histories.
        II. Nonparametric Models," ApJ, 876, 3 (2019). arXiv:1811.03637.
        https://doi.org/10.3847/1538-4357/ab133c
+    .. [3] B. D. Johnson et al., "Stellar Population Inference with Prospector,"
+       ApJS, 254, 22 (2021). arXiv:2012.01426.
+       https://doi.org/10.3847/1538-4365/abef67
     """
     if bin_edges_gyr is None:
         bin_edges_gyr = DEFAULT_BIN_EDGES_GYR
 
     n_bins = bin_edges_gyr.shape[0] - 1  # len() raises ConcretizationTypeError under JIT
 
-    # Collect z_fractions from kwargs in order
-    z_fractions = jnp.array([z_kwargs[f"z_frac_{i}"] for i in range(n_bins - 1)])
+    # Collect the uniform latents from kwargs in order
+    u_latents = jnp.array([z_kwargs[f"z_frac_{i}"] for i in range(n_bins - 1)])
+    u_latents = jnp.clip(u_latents, 0.0, 1.0)
 
-    # Clip to (epsilon, 1-epsilon) for numerical stability
-    z_fractions = jnp.clip(z_fractions, 1e-6, 1.0 - 1e-6)
+    # Uniform -> Beta(1, N-1-j) via the inverse CDF. The exponents depend only
+    # on the static bin count, so they are a concrete NumPy vector.
+    beta_exponents = jnp.asarray(1.0 / (n_bins - 1 - np.arange(n_bins - 1, dtype=float)))
+    v_betas = 1.0 - (1.0 - u_latents) ** beta_exponents
 
-    # Stick-breaking -> mass fractions
-    mass_fracs = _stick_breaking(z_fractions)
+    # Clip the Beta variates, not the uniform latents, to (epsilon, 1-epsilon):
+    # the quantile map compresses the upper end (u = 1 - 1e-6 gives v_0 = 0.9
+    # for seven bins), so clipping before it would cap the youngest SFR
+    # fraction at 0.9 and cut the Dirichlet support.
+    v_betas = jnp.clip(v_betas, 1e-6, 1.0 - 1e-6)
+
+    # Stick-breaking -> SFR fractions (Dirichlet(1,...,1); Leja+2017)
+    sfr_fracs = _stick_breaking(v_betas)
+
+    # Mass fractions weight the SFR fractions by the bin widths
+    bin_widths_yr = jnp.diff(bin_edges_gyr) * 1e9
+    mass_unnorm = sfr_fracs * bin_widths_yr
+    mass_fracs = mass_unnorm / jnp.sum(mass_unnorm)
 
     # Convert mass fractions to SFR: SFR_j = M_j / delta_t_j
-    bin_widths_yr = jnp.diff(bin_edges_gyr) * 1e9
     total_mass = 10.0**log_total_mass
     sfr_bins = mass_fracs * total_mass / bin_widths_yr
 
@@ -510,7 +566,8 @@ def psb_continuity(
     Extends the continuity SFH (Leja+2019) with two additional parameters that
     track the quenching epoch. The oldest N bins have fixed edges and log-SFR
     ratio priors (same as continuity). A flexible zone between ``tlast_gyr``
-    and ``tflex_gyr`` captures the transition epoch. The youngest bin spans
+    and ``tflex_gyr`` captures the transition epoch, resolved into
+    ``n_flex`` equal-width bins. The youngest bin spans
     [0, tlast_gyr] and its SFR ratio encodes how recently star formation ceased.
 
     Parameters
@@ -526,12 +583,27 @@ def psb_continuity(
         Upper boundary of the flexible zone [Gyr]. Default 2.0.
     bin_edges_gyr : array_like, shape (n_fixed+1,), optional
         Fixed old bin edges [Gyr]. Default: ``DEFAULT_BIN_EDGES_GYR[2:]``
-        = [0.3, 1.0, 3.0, 6.0, 13.7] Gyr.
+        = [0.1, 0.3, 1.0, 3.0, 6.0, 13.7] Gyr. The first entry is the boundary
+        ``tflex_gyr`` replaces and is discarded; only ``[1:]`` is read, so
+        ``tflex_gyr`` must stay below ``bin_edges_gyr[1]`` or the resulting
+        ladder is not ascending. :func:`psb_continuity_flex` removes that
+        constraint by deriving the fixed bins from ``tflex_gyr``.
     **ratio_kwargs
-        Log-SFR ratios. Convention:
+        Log-SFR ratios [dex]. Every ratio is
+        :math:`\\log_{10}(\\mathrm{SFR}_i / \\mathrm{SFR}_{i+1})` for adjacent
+        bins ordered youngest to oldest. Convention:
 
-        - ``ratio_young``: youngest bin vs flex bin (large positive = burst).
-        - ``ratio_old_0``, ``ratio_old_1``, ...: ratios among old fixed bins.
+        - ``ratio_young``: youngest bin vs the youngest flex bin (large
+          positive = recent burst).
+        - ``flex_0``, ``flex_1``, ..., ``flex_{n_flex-2}``: ratios *within* the
+          flexible zone. The number of ``flex_*`` keys sets ``n_flex``: N keys
+          give N+1 equal-width flex bins. Default: no keys, so ``n_flex = 1``
+          and the flexible zone is a single bin, which is the layout this
+          model shipped with.
+        - ``ratio_old_0``, ``ratio_old_1``, ...: ratios among the old fixed
+          bins. The ratio between the OLDEST flex bin and the youngest fixed
+          bin is pinned at 0 (they share an SFR), so ``n_fixed`` bins take
+          ``n_fixed - 1`` of these.
 
     Returns
     -------
@@ -540,8 +612,9 @@ def psb_continuity(
 
     Notes
     -----
-    **JIT-compatible**: yes, uses ``jnp`` primitives; ``tlast_gyr`` and
-    ``tflex_gyr`` must be concrete scalars (not traced inside JIT).
+    **JIT-compatible**: yes, uses ``jnp`` primitives. ``tlast_gyr`` and
+    ``tflex_gyr`` may be traced; the bin *count* is static because it is read
+    off the ``flex_*`` keyword names rather than from a numeric argument.
 
     Implements the same calculation as Prospector ``psb_logsfr_ratios_to_agebins`` and
     ``logsfr_ratios_to_masses_psb`` (Johnson et al. 2021 [1]_), reimplemented
@@ -565,6 +638,8 @@ def psb_continuity(
     ...     tlast_gyr=0.3,
     ...     tflex_gyr=2.0,
     ...     ratio_young=1.0,
+    ...     flex_0=0.1,
+    ...     flex_1=-0.2,
     ...     ratio_old_0=0.2,
     ...     ratio_old_1=-0.3,
     ... )
@@ -576,8 +651,19 @@ def psb_continuity(
 
     n_fixed_bins = bin_edges_gyr.shape[0] - 1
 
-    # Full edge array: [0, tlast, tflex, old_fixed_bins...]
-    all_edges_gyr = jnp.concatenate([jnp.array([0.0, tlast_gyr, tflex_gyr]), bin_edges_gyr[1:]])
+    # Number of flexible bins, from the ``flex_*`` ratios the caller supplied:
+    # N ratios describe N+1 bins, and no ratios is the single flex bin this
+    # model shipped with. Counting kwargs (rather than taking an ``n_flex``
+    # argument) keeps the count a Python int, so the bin count stays static
+    # under JIT while ``tlast_gyr`` / ``tflex_gyr`` remain traceable.
+    n_flex_ratios = sum(1 for k in ratio_kwargs if k.startswith("flex_"))
+    n_flex_bins = n_flex_ratios + 1
+
+    # Full edge array: [0, tlast, <n_flex equal-width flex edges>, old_fixed...]
+    flex_edges_gyr = jnp.linspace(tlast_gyr, tflex_gyr, n_flex_bins + 1)[1:]
+    all_edges_gyr = jnp.concatenate(
+        [jnp.array([0.0, tlast_gyr]), flex_edges_gyr, bin_edges_gyr[1:]]
+    )
     n_bins_total = all_edges_gyr.shape[0] - 1
 
     # Old bins: log-SFR ratios (oldest = reference = 0)
@@ -587,11 +673,17 @@ def psb_continuity(
     )
     log_sfr_old = jnp.concatenate([jnp.cumsum(ratio_old[::-1])[::-1], jnp.array([0.0])])
 
-    # Flex bin: same log-SFR as innermost old bin; youngest bin adds ratio_young
-    log_sfr_flex = log_sfr_old[0]
-    log_sfr_young = log_sfr_flex + ratio_young
+    # Flex bins: the OLDEST flex bin is tied to the innermost old bin (ratio
+    # pinned at 0), and each ``flex_i`` steps log-SFR from flex bin i to bin
+    # i+1. With no ``flex_*`` ratios this collapses to the single flex bin at
+    # ``log_sfr_old[0]``, bit-identical to the one-flex-bin model this replaces.
+    flex_ratios = jnp.array([ratio_kwargs.get(f"flex_{i}", 0.0) for i in range(n_flex_ratios)])
+    log_sfr_flex = (
+        jnp.concatenate([jnp.cumsum(flex_ratios[::-1])[::-1], jnp.array([0.0])]) + log_sfr_old[0]
+    )
+    log_sfr_young = log_sfr_flex[0] + ratio_young
 
-    log_sfr_bins = jnp.concatenate([jnp.array([log_sfr_young, log_sfr_flex]), log_sfr_old])
+    log_sfr_bins = jnp.concatenate([jnp.array([log_sfr_young]), log_sfr_flex, log_sfr_old])
 
     # Normalize to total mass
     bin_widths_yr = jnp.diff(all_edges_gyr) * 1e9
@@ -604,10 +696,126 @@ def psb_continuity(
     return _piecewise_constant_sfr(age_yr, bin_edges_yr, sfr_bins_norm, n_bins_total)
 
 
+#: Number of fixed old bins :func:`psb_continuity_flex` lays down when no
+#: ``bin_edges_gyr`` is given, and the oldest edge [Gyr] it lays them out to.
+#: Three equal-width fixed bins spanning ``tflex_gyr`` to 13.7 Gyr, which is the
+#: oldest edge every other tengri non-parametric ladder ends at.
+PSB_FLEX_DEFAULT_N_FIXED = 3
+PSB_FLEX_DEFAULT_MAX_AGE_GYR = 13.7
+
+
+def psb_continuity_flex(
+    age_yr: jnp.ndarray,
+    log_total_mass: float = 10.0,
+    tlast_gyr: float = 0.2,
+    tflex_gyr: float = 2.0,
+    bin_edges_gyr: jnp.ndarray | None = None,
+    **ratio_kwargs,
+) -> jnp.ndarray:
+    r"""Post-starburst SFH with equal-width fixed old bins.
+
+    :func:`psb_continuity` with one change: the fixed old bins are laid out as
+    ``n_fixed`` equal-width intervals spanning ``[tflex_gyr, max_age]``, rather
+    than being taken verbatim from ``bin_edges_gyr``. That is what makes the
+    ladder ascending for *any* ``tflex_gyr`` below ``max_age``.
+
+    Parameters
+    ----------
+    age_yr : array_like, shape (n_age,)
+        Lookback time grid [yr].
+    log_total_mass : float, optional
+        log10 of total stellar mass formed [Msun]. Default 10.0.
+    tlast_gyr : float, optional
+        Lookback time of quenching onset [Gyr]; width of the youngest bin.
+        Default 0.2.
+    tflex_gyr : float, optional
+        Boundary between the flexible zone and the fixed old bins [Gyr].
+        Default 2.0.
+    bin_edges_gyr : array_like, shape (n_fixed+1,), optional
+        Supplies only two things here: the **number** of fixed old bins
+        (``len - 1``) and the **oldest edge** (``[-1]``, the oldest lookback
+        time that forms stars). The interior values are not used, because the
+        fixed bins are equal-width by construction. Default: 3 bins out to
+        13.7 Gyr.
+    **ratio_kwargs
+        As :func:`psb_continuity`: ``ratio_young``, ``flex_0`` ...
+        ``flex_{n_flex-2}``, and ``ratio_old_0`` ... ``ratio_old_{n_fixed-2}``.
+
+    Returns
+    -------
+    ndarray, shape (n_age,)
+        SFR at each lookback time [Msun/yr], non-negative.
+
+    Notes
+    -----
+    **JIT-compatible**: yes. ``tflex_gyr`` may be traced; the bin *counts* are
+    static (read off the ``flex_*`` keyword names and ``bin_edges_gyr``'s
+    length).
+
+    **Why not just reuse** :func:`psb_continuity` **'s ladder.** That function
+    splices ``tflex_gyr`` in ahead of ``bin_edges_gyr[1:]``, which requires the
+    caller to keep ``tflex_gyr`` below the first fixed edge. With the shipped
+    default ladder that first edge is 0.3 Gyr while ``tflex_gyr``'s prior runs
+    from 0.5 to 5.0 Gyr, so the edges cross and
+    :func:`jax.numpy.searchsorted` is evaluated on a non-ascending array.
+    Deriving the fixed bins from ``tflex_gyr`` removes the ordering constraint
+    instead of asking the user to respect it.
+
+    Implements the post-starburst-optimized non-parametric SFH of Suess et al.
+    2022 [1]_, on the Prospector continuity machinery (Johnson et al. 2021
+    [2]_), with the flexible zone resolved into equal-width bins. The step
+    between the oldest flex bin and the youngest fixed bin is pinned at 0: the
+    two share an SFR.
+
+    References
+    ----------
+    .. [1] K. A. Suess et al., "Recovering the Star Formation Histories of
+       Recently Quenched Galaxies: The Impact of Model and Prior Choices,"
+       ApJ, 935, 146 (2022). arXiv:2207.02883.
+    .. [2] B. D. Johnson et al., "Stellar Population Inference," ApJS, 254,
+       22 (2021). arXiv:2012.01426. https://doi.org/10.3847/1538-4365/abef67
+
+    Examples
+    --------
+    >>> import jax.numpy as jnp
+    >>> t = jnp.logspace(6.0, 10.14, 256)
+    >>> sfr = psb_continuity_flex(
+    ...     t,
+    ...     log_total_mass=10.0,
+    ...     tlast_gyr=0.2,
+    ...     tflex_gyr=2.0,
+    ...     ratio_young=0.3,
+    ...     flex_0=0.1,
+    ...     flex_1=-0.2,
+    ...     flex_2=0.05,
+    ...     flex_3=0.1,
+    ...     ratio_old_0=-0.1,
+    ...     ratio_old_1=0.2,
+    ... )
+    >>> sfr.shape
+    (256,)
+    """
+    if bin_edges_gyr is None:
+        n_fixed = PSB_FLEX_DEFAULT_N_FIXED
+        max_age_gyr = PSB_FLEX_DEFAULT_MAX_AGE_GYR
+    else:
+        n_fixed = bin_edges_gyr.shape[0] - 1
+        max_age_gyr = bin_edges_gyr[-1]
+    fixed_edges_gyr = jnp.linspace(tflex_gyr, max_age_gyr, n_fixed + 1)
+    return psb_continuity(
+        age_yr,
+        log_total_mass=log_total_mass,
+        tlast_gyr=tlast_gyr,
+        tflex_gyr=tflex_gyr,
+        bin_edges_gyr=fixed_edges_gyr,
+        **ratio_kwargs,
+    )
+
+
 # ── ContinuityFlex SFH (Leja+2019) ────────────────────────────────
 
 # Anchor bin edges [t_young_end_gyr, t_old_start_gyr, t_max_gyr].
-# Matches synthesizer's ContinuityFlex defaults:
+# ContinuityFlex anchor defaults:
 #   young bin [0, 10^7.5 yr] = [0, 31.6 Myr], old bin [10^9.7, 10^10.136 yr] = [5.01, 13.7 Gyr].
 CFLEX_DEFAULT_ANCHOR_GYR = np.array([0.0316, 5.012, 13.7])
 
@@ -634,7 +842,7 @@ def continuity_flex(
         log10 total stellar mass formed [Msun]. Default 10.0.
     bin_edges_gyr : array_like, shape (3,), optional
         Anchor bin edges ``[t_young_end, t_old_start, t_max]`` [Gyr].
-        Default: ``[0.0316, 5.012, 13.7]`` (matches synthesizer ContinuityFlex).
+        Default: ``[0.0316, 5.012, 13.7]``.
     **ratio_kwargs
         ``ratio_young`` : float
             log10(SFR_young / SFR_flex[0]) [dimensionless]. Default 0.
@@ -683,8 +891,8 @@ def continuity_flex(
         {\\rm SFR}_{\\rm young} = s_{\\rm young}\\,M_{\\rm bin}/\\Delta t_0, \\quad
         {\\rm SFR}_{\\rm old} = s_{\\rm old}\\,M_{\\rm bin}/\\Delta t_N.
 
-    Implements the same approach as ``synthesizer.parametric.sf_hist.ContinuityFlex``
-    (Wilkins et al. 2025 [3]_).
+    Implements the ContinuityFlex prior of Leja et al. 2019 [1]_ as it is built
+    in Prospector (Johnson et al. 2021 [2]_).
 
     References
     ----------
@@ -694,10 +902,6 @@ def continuity_flex(
     .. [2] B. D. Johnson et al., "Stellar Population Inference from the
        Spectral Energy Distributions of Billions of Galaxies," ApJS, 254, 22
        (2021). arXiv:2012.01426. https://doi.org/10.3847/1538-4365/abef67
-    .. [3] C. C. Lovell et al. 2025, Open J. Astrophys. 8,
-       "Synthesizer: a Software Package for Synthetic Astronomical Observables,"
-       doi:10.33232/001c.145766; W. J. Roper et al. 2026, JOSS 11, 9436,
-       doi:10.21105/joss.09436 (cite both Synthesizer papers).
 
     Examples
     --------

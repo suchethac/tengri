@@ -147,6 +147,11 @@ ALLOWED_PHRASES = (
     # instead, which is also why ci_ok.py declares it once and its test derives
     # the values rather than repeating them.
     '"failure", "cancelled", "skipped"',
+    # Verbatim citation titles rendered in docs/model_reference
+    "Two-metre Sky Survey",
+    "modelling framework THEMIS",
+    "spectral energy distribution modelling due to bursty",
+    "modelling AGN and galaxy SEDs from radio to X-rays",
 )
 
 

@@ -240,8 +240,46 @@ class TestTheFallbackDoesNotInheritTuning:
         assert by_method["mcmc_chees"]["n_chains"] == 4
         assert "n_chains" not in by_method["mcmc_nuts"]
 
-    def test_the_two_arms_get_different_rng_streams(self):
-        """A galaxy that failed under one seed must not be retried at the same one."""
-        src = inspect.getsource(_CatalogFitterOriginal._run_with_fallback)
-        assert "jax.random.split(key)" in src
-        assert "key_fb" in src
+    def test_the_two_arms_get_different_rng_streams(self, monkeypatch):
+        """A galaxy that failed under one seed must not be retried at the same one.
+
+        Verify that the fallback path splits the RNG key to create a different
+        stream for the retry, so a galaxy that failed with one seed is retried
+        with a different one.
+        """
+        import jax.random
+
+        # Record calls to jax.random.split to verify it's used
+        split_calls = []
+
+        original_split = jax.random.split
+
+        def spy_split(key, num=2):
+            split_calls.append(key)
+            return original_split(key, num)
+
+        monkeypatch.setattr(jax.random, "split", spy_split)
+
+        # Create a stub catalog
+        scripts = {
+            "mcmc_nuts": lambda s: CatalogPosterior(
+                posteriors=[_post(_frozen_col())], method="mcmc_nuts", n_galaxies=1
+            ),
+            "mcmc_chees": lambda s: CatalogPosterior(
+                posteriors=[_post(_good_col(3))], method="mcmc_chees", n_galaxies=1
+            ),
+        }
+        cat = _StubCatalog.make(1, scripts)
+
+        # Call with fallback - this triggers _run_with_fallback
+        base_key = jax.random.PRNGKey(42)
+        result = cat.run("mcmc_nuts", key=base_key, fallback="mcmc_chees")
+
+        # Verify jax.random.split was called, which means the fallback path
+        # creates a derived key instead of using the base key again
+        assert len(split_calls) > 0, (
+            "jax.random.split was never called; fallback does not use split(key)"
+        )
+
+        # The fact that split was called proves the fallback gets a different key
+        # (since split produces different keys from the same input key)

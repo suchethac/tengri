@@ -64,10 +64,24 @@ def test_lnu_filter_integral_is_dl_cm_independent(fiducial):
 
 
 def test_no_inverse_cosmology_dance_in_agn_or_nebular():
-    """Pin that AGN and nebular components no longer build their
-    ``_phot_lnu_precomp`` by calling ``compute_flux_density(dl_cm=1.0)``
-    and multiplying by ``inv_cosmology``. Replaced by direct
-    ``lnu_filter_integral`` calls per ADR-0016."""
+    """Structural guard: ``agn/component.py`` and ``nebular/component.py`` must
+    not reintroduce the old ADR-0016 refactor regression pattern.
+
+    This was the pre-refactor flux conversion dance: build ``_phot_lnu_precomp``
+    by calling ``compute_flux_density(dl_cm=1.0)`` and then multiplying by
+    ``inv_cosmology``. The refactor replaced this with direct ``lnu_filter_integral``
+    calls (which return L_ν, distance-independent) followed by ``lnu_to_fnu`` at
+    projection time (which applies cosmological dimming).
+
+    This test checks that the source code of the two component modules does NOT
+    contain the old pattern. The internal ``_phot_lnu_precomp`` is not reachable
+    from the public API, so this is a source-level structural guard rather than
+    a behavioral test. It catches:
+    - Reintroducing the ``inv_cosmology = `` assignment
+    - Calling ``compute_flux_density(dl_cm=jnp.asarray(1.0))`` as the old dance
+
+    See ADR-0016 (#398.e) for the full refactor narrative.
+    """
     import inspect
 
     from tengri.components.agn import component as agn_component

@@ -55,6 +55,9 @@ ALLOWED_REFUSALS = (
     "not yet validated against the DSPS forward path",
     "At least one additive (smooth) SFH component required",
     "model protocol surface incomplete",  # MAPPINGS AGN backend (#2082)
+    # FIRRC radio blocks normalize against L_ir and refuse to build without a
+    # dust component rather than returning a silently zero SED (#2106).
+    "normalizes synchrotron emission against L_ir",
 )
 
 #: Wordings that mark a ``ValueError`` as *absent data* rather than a refusal.

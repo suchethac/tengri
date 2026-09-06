@@ -594,6 +594,7 @@ class SEDComponent(Protocol):
         params: Mapping[str, jnp.ndarray],
         ssp_data: Any | None = None,
         template_data: Any | None = None,
+        ztable_data: Any | None = None,
     ) -> ForwardState:
         """Pure JAX step.
 
@@ -625,6 +626,13 @@ class SEDComponent(Protocol):
             (typically nebular). Components that do not use it should
             ignore this argument. When provided, should override any
             template data held in ``self`` for JIT purposes.
+        ztable_data : Any | None, optional
+            Precomputed photometric redshift table. Passed by the
+            orchestrator for components that need it (typically stellar
+            with free-redshift configuration). Components that do not use it
+            should ignore this argument. When provided, should override any
+            z-table data held in ``self`` for JIT purposes, preventing
+            XLA from materializing large tables as constants.
 
         Returns
         -------

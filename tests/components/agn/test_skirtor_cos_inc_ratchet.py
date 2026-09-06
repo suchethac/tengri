@@ -137,12 +137,12 @@ def test_every_skirtor_grid_consumer_sees_ascending_axes():
     assert ascending(sk.load_skirtor_grid().axes), "load_skirtor_grid returned a descending axis"
 
     disc_dust = sk._load_raw_disk_dust_grid()
-    if disc_dust is not None:
-        assert ascending(disc_dust[3]), "_load_raw_disk_dust_grid returned a descending axis"
+    assert disc_dust is not None, "probe setup failed: disc_dust was not published"
+    assert ascending(disc_dust[3]), "_load_raw_disk_dust_grid returned a descending axis"
 
     atten = sk.load_skirtor_disc_atten_grid()
-    if atten is not None:
-        assert ascending(atten.axes), "disc-attenuation bundle returned a descending axis"
+    assert atten is not None, "probe setup failed: atten was not published"
+    assert ascending(atten.axes), "disc-attenuation bundle returned a descending axis"
 
 
 @requires_skirtor

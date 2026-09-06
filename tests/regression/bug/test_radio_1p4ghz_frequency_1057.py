@@ -53,7 +53,15 @@ def test_wave_1p4ghz_not_hi_line_frequency():
 
 
 def test_radio_component_uses_shared_constant():
-    """Radio component._l_1p4ghz_fn must use WAVE_1P4GHZ_AA from physics_constants."""
+    """Radio component._l_1p4ghz_fn must use WAVE_1P4GHZ_AA from physics_constants.
+
+    This is a source-spelling claim: both ``WAVE_1P4GHZ_AA`` and a bare numeric
+    literal compute the identical number (1.4 GHz in Angstrom), so there is no
+    behavioral signature to measure. The assertion guards against the refactoring
+    hazard that the constant might be inlined (losing the linkage to
+    component_factory.state_to_radio_quantities) and then drift apart when one
+    half is changed to a different frequency or value.
+    """
     import inspect
 
     from tengri.components.radio.component import _l_1p4ghz_fn
@@ -66,7 +74,14 @@ def test_radio_component_uses_shared_constant():
 
 
 def test_component_factory_uses_shared_constant():
-    """component_factory.state_to_radio_quantities must use WAVE_1P4GHZ_AA."""
+    """component_factory.state_to_radio_quantities must use WAVE_1P4GHZ_AA.
+
+    This is a source-spelling claim: both ``WAVE_1P4GHZ_AA`` and a bare numeric
+    literal compute the identical number (1.4 GHz in Angstrom), so there is no
+    behavioral signature to measure. The assertion guards that both radio code
+    paths (component.py and component_factory.py) stay synchronized on the same
+    constant, preventing silent 0.014% frequency drift that would be hard to detect.
+    """
     import inspect
 
     from tengri.forward.component_factory import state_to_radio_quantities
