@@ -866,12 +866,16 @@ PARAMS: tuple[ParamDeclaration, ...] = (
         "UV cutoff temperature",
         units="K",
     ),
-    ParamDeclaration(
-        "agn_polar_temperature",
-        Uniform(50.0, 200.0, default=100.0),
-        "Polar dust graybody temperature",
-        units="K",
-    ),
+    # agn_polar_temperature retired (Task 16, item 10): grep-verified no
+    # consumer remains in src/ (Task 13/14 renamed the composable
+    # polar-dust reemission block and SKIRTORTorus's own attribute to the
+    # canonical agn_polar_T; this was the ORIGINAL, now-orphaned
+    # declaration the rename left behind). Aliased to agn_polar_T in
+    # _aliases.py -- a soft warn-and-redirect like every other legacy name
+    # there, not a hard error (unlike agn_band_frac/R17: that name was
+    # retired IN FAVOR of a name that already meant the exact same
+    # quantity under a different spelling on a live consumer; this one
+    # simply has no consumer left to redirect away from).
     ParamDeclaration(
         "agn_delta",
         Uniform(

@@ -22,6 +22,12 @@ _LEGACY_PARAM_ALIASES = {
     "sfh_tau_peak_gyr": "sfh_dpl_tau_gyr",
     "psd_sigma": "sfh_field_psd_sigma",
     "psd_tau_myr": "sfh_field_psd_tau_myr",
+    # agn_polar_temperature retired (Task 16, item 10): no consumer remained
+    # in src/ (grep-verified) -- Task 13/14 already renamed every real
+    # consumer's own parameter to agn_polar_T (the composable polar-dust
+    # reemission block, SKIRTORTorus's own attribute). This declaration was
+    # the orphaned original the rename left behind.
+    "agn_polar_temperature": "agn_polar_T",
     # Dust-emission name unification (#849): the Schreiber tabulated components used
     # divergent spellings for the same physics: dust temperature and PAH mass
     # fraction. Canonical: ``dust_T`` (shared with modified_blackbody / casey2012
