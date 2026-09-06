@@ -98,10 +98,20 @@ def test_qsogen_and_smc_prevot_atten_consume_attenuation_ebv():
 
 def test_slone_netzer_disc_registered():
     """Task 16 (item 3): ('disc', 'slone_netzer') was omitted on a stale
-    "grid absent from CI" rationale; measured (this checkout) agn_log_mbh is
-    live and agn_log_ledd is dead (#846-shaped degeneracy, same as
-    multicolor/kubota_done above)."""
-    assert AGN_BLOCK_CONSUMES[("disc", "slone_netzer")] == frozenset({"agn_log_mbh"})
+    "grid absent from CI" rationale. Both of the block's own axis parameters
+    are live and both are listed.
+
+    ``agn_log_ledd`` was briefly recorded as dead here. That reading was taken
+    at the shared declared default -1.0, which lies above the SN12 axis
+    ``[-4, -1.9586]`` and is clipped onto the edge node, where ``jnp.clip``
+    makes the gradient exactly zero by construction -- the dead baseline
+    ``tests/regression/agn/test_issue_1586_grid_support.py`` exists to describe,
+    not a #846 degeneracy. Measured inside the axis the gradient runs 5.9e-2 to
+    8.8e-1; that file pins the measurement.
+    """
+    assert AGN_BLOCK_CONSUMES[("disc", "slone_netzer")] == frozenset(
+        {"agn_log_mbh", "agn_log_ledd"}
+    )
 
 
 def test_subblock_declared_params_sourced_from_consumes_table():

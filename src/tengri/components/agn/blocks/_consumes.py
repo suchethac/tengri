@@ -105,12 +105,19 @@ AGN_BLOCK_CONSUMES: dict[tuple[str, str], frozenset[str]] = {
     ("disc", "skirtor"): frozenset({"agn_cigale_disk_delta"}),
     # Task 16 (item 3): previously omitted with "requires a data grid absent
     # from CI" -- that no longer holds (the grid this checkout ships builds
-    # and differentiates it fine); measured like every other disc entry:
-    # agn_log_ledd is dead (jax.grad exactly 0.0 at every sampled point,
-    # same #846-shaped degeneracy as kubota_done/multicolor above -- the
-    # Eddington ratio does not independently move this disc's SED shape),
-    # agn_log_mbh is live (tiny but consistently nonzero, ~1e-15).
-    ("disc", "slone_netzer"): frozenset({"agn_log_mbh"}),
+    # and differentiates it fine). Both axis parameters are live and both are
+    # listed. agn_log_ledd was briefly recorded here as dead; that reading came
+    # from a baseline outside the block's own grid. The shared declared default
+    # -1.0 sits above the SN12 axis [-4, -1.9586] and is clipped onto the edge
+    # node, where jnp.clip makes the gradient exactly zero by construction
+    # (#1586's whole subject). Re-measured at points inside the axis, jax.grad
+    # of log(sum L_lambda) is 5.9e-2 at -2.0, 8.8e-1 at -2.5 and 1.2e-1 at
+    # -3.5, with a 754% relative SED change between -3.5 and -2.0 -- so this is
+    # nothing like the #846 degeneracy of kubota_done/multicolor above, where
+    # the Eddington ratio is genuinely derived from agn_log_lbol. Pinned by
+    # tests/regression/agn/test_issue_1586_grid_support.py, which measures the
+    # gradient rather than restating this table.
+    ("disc", "slone_netzer"): frozenset({"agn_log_mbh", "agn_log_ledd"}),
     ("torus", "grahsp"): frozenset(
         {
             "agn_grahsp_cool_lam_um",

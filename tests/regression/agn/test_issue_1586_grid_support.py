@@ -510,3 +510,47 @@ def test_narrowing_does_not_touch_a_grid_free_disc():
     spec = _spec_with_disc("multicolor")
     assert spec._distributions["agn_log_mbh"].bounds == pytest.approx((6.0, 10.0))
     assert not spec._group_provenance["agn_log_mbh"].endswith("_grid")
+
+
+def test_slone_netzer_consumes_log_ledd_measured_inside_its_own_grid():
+    """The block's Eddington ratio is live -- when measured on the grid.
+
+    ``AGN_BLOCK_CONSUMES`` decides what a sub-block wildcard frees, so a name
+    left out of the entry is fixed at its declared default rather than sampled.
+    ``agn_log_ledd``'s declared default ``-1.0`` sits outside the SN12 axis
+    ``[-4, -1.9586]`` and is clipped onto the edge node, where the gradient is
+    exactly zero by construction -- the dead baseline this whole module is
+    about. Measuring at prior points that fall *inside* the axis instead:
+
+    ========== ==========================
+    log_ledd   d(log sum L_lambda)/d
+    ========== ==========================
+    -1.0000    0.0        (clipped)
+    -1.9586    0.0        (edge node)
+    -2.0000    +5.93e-02
+    -2.5000    +8.80e-01
+    -3.5000    +1.19e-01
+    ========== ==========================
+
+    with a 754% relative SED change between -3.5 and -2.0. So the entry must
+    list it, and this test measures the liveness rather than restating the
+    table.
+    """
+    import jax
+    import jax.numpy as jnp
+
+    from tengri.components.agn.blocks._consumes import AGN_BLOCK_CONSUMES
+    from tengri.components.agn.blocks.disc import slone_netzer_disc_block
+
+    wave = jnp.geomspace(1e3, 1e6, 400)
+
+    def obj(log_ledd):
+        L = slone_netzer_disc_block(
+            wave, agn_log_lbol=12.0, agn_log_mbh=8.6, agn_log_ledd=log_ledd
+        )
+        return jnp.log(jnp.sum(L))
+
+    grads = [abs(float(jax.grad(obj)(x))) for x in (-2.0, -2.5, -3.0, -3.5)]
+    assert min(grads) > 1e-3, grads
+
+    assert "agn_log_ledd" in AGN_BLOCK_CONSUMES[("disc", "slone_netzer")]
