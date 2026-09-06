@@ -36,6 +36,7 @@ from tengri.parameters.priors import Distribution, Fixed, _is_default_fixed
 __all__ = [
     "agn_cross_category_claims",
     "check_agn_torus_registry_agreement",
+    "is_cross_category_companion",
 ]
 
 #: Partition table: agn_* param name -> group path (for sub-block routing).
@@ -380,9 +381,7 @@ def _agn_subblock_declared_params(
     # the filter deliberately (R36). Without the exception the disc that
     # applies SKIRTOR geometry could never free the geometry it reads.
     cross_category = frozenset(
-        name
-        for name in companions
-        if _agn_param_group(name).startswith("agn.") and _agn_param_group(name) != owning_group
+        name for name in companions if is_cross_category_companion(name, owning_group)
     )
     return (
         frozenset(name for name in read if _agn_param_group(name) == owning_group) | cross_category
@@ -427,6 +426,80 @@ _AGN_CATEGORY_WIDE_COMPANION_PARAMS: dict[str, frozenset[str]] = {
 }
 
 
+def is_cross_category_companion(name: str, owning_group: str) -> bool:
+    """Whether ``name`` is a companion of ANOTHER sub-block, for ``owning_group``.
+
+    The one statement of R36's rule. Three layers act on it -- the wildcard
+    scope, the resolver's claims map, and the outcome bookkeeping -- and when
+    each spelled it for itself the restriction landed in one of them: a SHARED
+    name's owner is ``"agn"``, which differs from every ``"agn.<category>"``,
+    so ``agn_cos_inc`` and ``agn_polar_law`` were claimed by whichever block
+    read them, and an ordinary
+    ``agn={'all_params': FREE, 'atten': {'type': 'polar_dust',
+    'all_params': Fixed(DEFAULT)}}`` raised ``ParameterError``.
+
+    A shared name is never cross-category: every wildcard can already reach it
+    through the agn top level, so claiming it takes it from the group that owns
+    it rather than giving it to one that could not have it.
+
+    Parameters
+    ----------
+    name : str
+        Full ``agn_*`` parameter name.
+    owning_group : str
+        The ``"agn.<category>"`` group of the block doing the reading.
+
+    Returns
+    -------
+    bool
+        True only for a name a DIFFERENT sub-block owns.
+
+    Notes
+    -----
+    **JIT-compatible**: no, pure-Python builder-time helper.
+    """
+    owner = _agn_param_group(name)
+    return owner.startswith("agn.") and owner != owning_group
+
+
+def _agn_own_side_companion_params(
+    category: str, block_type: str, selection: Mapping[str, str]
+) -> set[str]:
+    """Companions a block claims for itself, before any cross-category claim.
+
+    The category-wide table, the R33 conditional feii read, and the
+    type-specific companion FUNCTION. Split out from the cross-category shape
+    so the latter can ask "does the owner already claim this?" without
+    recursing back into itself.
+    """
+    from tengri.components.agn.blocks._consumes import AGN_BLOCK_CONSUMES
+
+    out = set(_AGN_CATEGORY_WIDE_COMPANION_PARAMS.get(category, frozenset()))
+
+    # Conditional companion (R33): agn_fe2_strength is read by the BLR analytic
+    # block, so the feii sub-block's wildcard may claim it only when such a BLR
+    # block is actually selected. As an unconditional category-wide entry it
+    # freed a measured-dead parameter under blr='none' (grahsp and
+    # qsogen_balmer both DEAD there, LIVE with blr='analytic'); the condition is
+    # read off the selected BLR block's own CONSUMES entry, so the two move
+    # together. A feii type that declares the name itself (boroson_green) gets
+    # it from its own entry regardless.
+    blr_type = selection.get("blr")
+    if category == "feii" and blr_type:
+        out |= {"agn_fe2_strength"} & set(AGN_BLOCK_CONSUMES.get(("blr", blr_type), ()))
+
+    if (category, block_type) == _AGN_SUBBLOCK_COMPANION_KEY:
+        from tengri.components.agn.blocks.atten import polar_dust_reemission_lnu
+
+        sig = inspect.signature(polar_dust_reemission_lnu)
+        out.update(
+            p.name
+            for p in sig.parameters.values()
+            if p.kind not in (p.VAR_KEYWORD, p.VAR_POSITIONAL) and p.name.startswith("agn_")
+        )
+    return out
+
+
 def agn_cross_category_claims(selection: Mapping[str, str] | None) -> dict[str, str]:
     """Which sub-block's wildcard governs each cross-category companion name.
 
@@ -463,7 +536,7 @@ def agn_cross_category_claims(selection: Mapping[str, str] | None) -> dict[str, 
             continue
         owning_group = f"agn.{category}"
         for name in _agn_subblock_companion_params(category, block_type, selection=selection):
-            if _agn_param_group(name) != owning_group:
+            if is_cross_category_companion(name, owning_group):
                 claims.setdefault(name, category)
     return claims
 
@@ -508,19 +581,7 @@ def _agn_subblock_companion_params(
     from tengri.components.agn.blocks._consumes import AGN_BLOCK_CONSUMES
 
     selection = dict(selection or {})
-    out = set(_AGN_CATEGORY_WIDE_COMPANION_PARAMS.get(category, frozenset()))
-
-    # Conditional companion (R33): agn_fe2_strength is read by the BLR analytic
-    # block, so the feii sub-block's wildcard may claim it only when such a BLR
-    # block is actually selected. As an unconditional category-wide entry it
-    # freed a measured-dead parameter under blr='none' (grahsp and
-    # qsogen_balmer both DEAD there, LIVE with blr='analytic'); the condition is
-    # read off the selected BLR block's own CONSUMES entry, so the two move
-    # together. A feii type that declares the name itself (boroson_green) gets
-    # it from its own entry regardless.
-    blr_type = selection.get("blr")
-    if category == "feii" and blr_type:
-        out |= {"agn_fe2_strength"} & set(AGN_BLOCK_CONSUMES.get(("blr", blr_type), ()))
+    out = _agn_own_side_companion_params(category, block_type, selection)
 
     # Cross-category companion (R36): a block can read a name another category
     # owns. `('disc', 'schartmann2005_skirtor_atten')` applies SKIRTOR's own
@@ -536,29 +597,27 @@ def _agn_subblock_companion_params(
     # torus keeps sole ownership and no name is freeable twice, while with the
     # torus absent or on a torus that ignores the geometry the disc's wildcard
     # reaches what the disc reads.
+    owning_group = f"agn.{category}"
     consumes_cat = _AGN_CONSUMES_CATEGORY.get(category, category)
     for name in AGN_BLOCK_CONSUMES.get((consumes_cat, block_type), frozenset()):
-        owner = _agn_param_group(name)
-        if not owner.startswith("agn.") or owner == f"agn.{category}":
+        if not is_cross_category_companion(name, owning_group):
             continue
-        owner_category = owner[len("agn.") :]
+        owner_category = _agn_param_group(name)[len("agn.") :]
         owner_type = selection.get(owner_category)
         if not owner_type or owner_type == "none":
             out.add(name)
             continue
         owner_consumes_cat = _AGN_CONSUMES_CATEGORY.get(owner_category, owner_category)
-        if name not in AGN_BLOCK_CONSUMES.get((owner_consumes_cat, owner_type), frozenset()):
-            out.add(name)
-
-    if (category, block_type) == _AGN_SUBBLOCK_COMPANION_KEY:
-        from tengri.components.agn.blocks.atten import polar_dust_reemission_lnu
-
-        sig = inspect.signature(polar_dust_reemission_lnu)
-        out.update(
-            p.name
-            for p in sig.parameters.values()
-            if p.kind not in (p.VAR_KEYWORD, p.VAR_POSITIONAL) and p.name.startswith("agn_")
-        )
+        # The owner keeps the name when it reads it itself, and equally when it
+        # claims it as its OWN-side companion: agn_fe2_strength is owned by
+        # feii and read by the analytic BLR block, and R33 gives it to the feii
+        # wildcard on exactly that build. Without this second half both blocks
+        # declared it, so which disposition won depended on resolution order.
+        if name in AGN_BLOCK_CONSUMES.get((owner_consumes_cat, owner_type), frozenset()):
+            continue
+        if name in _agn_own_side_companion_params(owner_category, owner_type, selection):
+            continue
+        out.add(name)
 
     return frozenset(out)
 

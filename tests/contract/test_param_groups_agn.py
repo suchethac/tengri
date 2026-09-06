@@ -1422,3 +1422,128 @@ class TestAGNRoundTrip:
         )
         assert np.array_equal(reference, np.asarray(via_to_groups.predict_photometry(p)))
         assert np.array_equal(reference, np.asarray(via_to_dict.predict_photometry(p)))
+
+
+class TestCrossCategoryCompanionDoesNotDisturbOtherWildcards:
+    """R36's cross-category claim must not reach a shared name, and must book
+    its outcome against the wildcard that actually did the freeing.
+
+    The claim exists so a block can free a parameter another category owns when
+    that category's selected block does not read it (``schartmann2005_skirtor_atten``
+    reading SKIRTOR geometry with no SKIRTOR torus). Two ways it over-reached:
+
+    * the claims map admitted any companion whose owner differed from the
+      block's own group, and a SHARED name's owner is ``"agn"``, which differs
+      from every ``"agn.<category>"`` -- so ``agn_cos_inc`` and
+      ``agn_polar_law`` were claimed by ``atten``;
+    * the outcome was re-booked to the claiming category whenever a wildcard
+      freed the name, without asking which wildcard fired.
+
+    Together those made an ordinary build raise, and made two advisories lie.
+    """
+
+    def test_top_level_wildcard_with_a_pinned_polar_dust_atten_builds(self):
+        """The hard regression: this raised ``ParameterError`` mid-round.
+
+        ``atten='polar_dust'`` with an explicit ``Fixed(DEFAULT)`` wildcard --
+        the exact spelling ``DefaultFixedParametersWarning`` tells users to
+        write -- plus a top-level ``all_params: FREE``. The shared
+        ``agn_cos_inc``/``agn_polar_law``, freed by the TOP-LEVEL wildcard,
+        were booked under ``agn.atten``; that group was then rebuilt from its
+        declared set (the four polar names, none of them freed) and reported
+        as ``'all_params: FREE' freed 0 of 4 parameters in group 'agn.atten'``.
+        """
+        with warnings.catch_warnings():
+            warnings.simplefilter("ignore", RecipeWarning)
+            params = parse_groups(
+                sfh={"type": "dpl", "all_params": Fixed(DEFAULT)},
+                agn={
+                    "type": "composable",
+                    "disc": {"type": "multicolor", "all_params": Fixed(DEFAULT)},
+                    "nlr": {"type": "analytic", "all_params": Fixed(DEFAULT)},
+                    "blr": {"type": "analytic", "all_params": Fixed(DEFAULT)},
+                    "atten": {"type": "polar_dust", "all_params": Fixed(DEFAULT)},
+                    "all_params": FREE,
+                    "norm": "independent",
+                },
+                redshift=Fixed(0.1),
+            )
+        free_agn = {p for p in params.free_params if p.startswith("agn_")}
+        # The shared knobs the top-level wildcard reaches, and nothing else.
+        assert free_agn == {"agn_cos_inc", "agn_log_lbol", "agn_lum_ratio"}, sorted(free_agn)
+        # The atten sub-block said Fixed(DEFAULT), so its own names stay pinned.
+        for name in ("agn_polar_T", "agn_polar_beta", "agn_polar_ebv", "agn_polar_oa"):
+            assert params.get_distribution(name).is_fixed, name
+
+    def test_a_feii_wildcard_does_not_report_a_blr_group_it_never_wrote(self):
+        """The false advisories: a group the user never wildcarded was
+        reported, and a freed parameter was reported pinned.
+
+        ``agn_fe2_strength`` is owned by ``feii`` and read by the analytic BLR
+        block, so the feii wildcard frees it (R33). Booking it under
+        ``agn.blr`` -- a group with no ``'*'`` at all here -- produced a
+        ``WildcardPartialFreeWarning`` for that phantom group AND made the feii
+        group report the parameter pinned while ``spec.free_params`` contained
+        it.
+        """
+        with warnings.catch_warnings(record=True) as caught:
+            warnings.simplefilter("always")
+            params = parse_groups(
+                sfh={"type": "dpl", "all_params": Fixed(DEFAULT)},
+                agn={
+                    "type": "composable",
+                    "disc": {"type": "multicolor", "all_params": Fixed(DEFAULT)},
+                    "blr": {"type": "analytic", "all_params": Fixed(DEFAULT)},
+                    "feii": {"type": "grahsp", "all_params": FREE},
+                    "all_params": Fixed(DEFAULT),
+                    "norm": "independent",
+                },
+                redshift=Fixed(0.1),
+            )
+        assert "agn_fe2_strength" in params.free_params
+
+        wildcard_messages = [str(w.message) for w in caught if "Wildcard" in w.category.__name__]
+        assert not [m for m in wildcard_messages if "'agn.blr'" in m], wildcard_messages
+        assert not [m for m in wildcard_messages if "agn_fe2_strength" in m and "pinned" in m], (
+            wildcard_messages
+        )
+
+    def test_no_name_is_declared_by_two_active_blocks(self):
+        """The invariant the claim must preserve, over every selection pair.
+
+        A name two active blocks both claim could be freed by either wildcard,
+        which makes "which disposition wins" depend on resolution order rather
+        than on what the user wrote. Swept over every ordered pair of
+        categories and their registered types.
+        """
+        from tengri.components.agn.blocks._protocol import AGN_BLOCKS
+        from tengri.parameters.groups import _AGN_CONSUMES_CATEGORY, _agn_subblock_declared_params
+
+        categories = list(_AGN_CONSUMES_CATEGORY)
+        types = {
+            category: [
+                name for name in AGN_BLOCKS[_AGN_CONSUMES_CATEGORY[category]] if name != "none"
+            ]
+            for category in categories
+        }
+        overlaps = []
+        for first in categories:
+            for second in categories:
+                if first >= second:
+                    continue
+                for first_type in types[first]:
+                    for second_type in types[second]:
+                        selection = {first: first_type, second: second_type}
+                        both = (
+                            _agn_subblock_declared_params(first, first_type, selection=selection)
+                            or frozenset()
+                        ) & (
+                            _agn_subblock_declared_params(second, second_type, selection=selection)
+                            or frozenset()
+                        )
+                        if both:
+                            overlaps.append(
+                                f"{first}/{first_type} and {second}/{second_type} "
+                                f"both declare {sorted(both)}"
+                            )
+        assert not overlaps, "\n".join(sorted(set(overlaps)))
