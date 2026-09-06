@@ -29,18 +29,15 @@ def integrate_lnu_over_nu(
     L_nu: jnp.ndarray,
     wave_aa: jnp.ndarray,
 ) -> jnp.ndarray:
-    r"""JIT-friendly trapezoid of :math:`\int L_\nu \, d\nu`.
+    r"""JIT-friendly trapezoid of :math:`\int L_\nu \, d\nu` on the evaluation grid.
 
-    Uses the identity
-    :math:`\int L_\nu \, d\nu = \int (\nu L_\nu)\, d\ln\nu` and the
-    transformation :math:`d\ln\nu = -d\ln\lambda`, with the two sign
-    flips canceling for an increasing-:math:`\lambda` grid:
-
-    .. math::
-
-        \int_{\nu_{\min}}^{\nu_{\max}} L_\nu \, d\nu
-        \;=\; \int_{\lambda_{\min}}^{\lambda_{\max}}
-              (\nu L_\nu)\, d\ln\lambda \, .
+    Trapezoid in :math:`\nu` on the grid's own nodes. Every template closure
+    pins its normalization with this same quadrature after resampling, so a
+    normalized ``sed_dust_ir`` integrates back to ``L_ir`` exactly on the
+    grid it is published on (the energy-balance contract). The equivalent
+    :math:`\int (\nu L_\nu)\, d\ln\lambda` form differs from this one by its
+    discretization error, 1.4e-5 for the Draine et al. (2021) PAH grid, which
+    is why the two conventions must not be mixed.
 
     Parameters
     ----------
@@ -64,8 +61,9 @@ def integrate_lnu_over_nu(
     (2026-07).
     """
     nu = _C_AA_PER_S / wave_aa
-    nu_lnu = nu * L_nu
-    return jnp.trapezoid(nu_lnu, jnp.log(wave_aa), axis=-1)
+    # nu descends along an ascending wavelength grid, so the signed trapezoid
+    # is negative.
+    return -jnp.trapezoid(L_nu, nu, axis=-1)
 
 
 # ── Utility: Planck function ──────────────────────────────────────
@@ -190,6 +188,8 @@ def cmb_contrast_factor(
     -----
     **JIT-compatible**: yes, all operations are ``jnp`` primitives.
 
+    **Gradient-safe**: yes, differentiable everywhere.
+
     The contrast factor is:
 
     .. math::
@@ -197,6 +197,19 @@ def cmb_contrast_factor(
         C(\lambda) = 1 - \frac{B_\nu(T_{\rm CMB}(z))}{B_\nu(T_{\rm eff})}
 
     Since :math:`T_{\rm eff} > T_{\rm CMB}(z)`, we have :math:`0 \leq C(\lambda) \leq 1`.
+
+    At short wavelengths (high x), the CMB Planck function vanishes much
+    faster than the dust one, so the contrast approaches 1. The log-space
+    computation uses ``log(expm1(x))`` only for :math:`x \leq 30`, where
+    ``expm1`` is well-behaved; for :math:`x > 30` we use :math:`x` directly
+    (since :math:`\log(\exp(x) - 1) \approx x` in that regime). The
+    exponents are clipped to :math:`[1e-10, 30]` only within the ``expm1``
+    branch, keeping both branches of the ``where`` finite under gradient.
+    Finally, :math:`\log(\text{ratio})` is capped at 0 (it is non-positive by
+    construction, so the cap only absorbs rounding) and exponentiated: as
+    wavelength -> 0 the argument -> -infinity, the exponential underflows to
+    0, and the contrast -> 1. No lower floor is applied, so the ratio never
+    saturates at a finite value.
 
     """
     T_cmb_z = _T_CMB_0 * (1.0 + redshift)
@@ -209,12 +222,17 @@ def cmb_contrast_factor(
     wavelength_cm = wavelength_aa * _AA_TO_CM
     nu = _C_CGS / wavelength_cm
 
-    x_eff = jnp.clip(_H_PLANCK * nu / (_K_BOLTZMANN * T_eff), 0.0, 500.0)
-    x_cmb = jnp.clip(_H_PLANCK * nu / (_K_BOLTZMANN * T_cmb_z), 0.0, 500.0)
+    # Compute exponents without upper clip to allow correct behavior at
+    # short wavelengths where both exponents are large but different.
+    # Lower clip at 0 to prevent negative values.
+    x_eff = jnp.clip(_H_PLANCK * nu / (_K_BOLTZMANN * T_eff), 0.0, None)
+    x_cmb = jnp.clip(_H_PLANCK * nu / (_K_BOLTZMANN * T_cmb_z), 0.0, None)
 
     # Ratio = (exp(x_eff) - 1) / (exp(x_cmb) - 1)
     # Use log-space: log(ratio) = log(expm1(x_eff)) - log(expm1(x_cmb))
-    # For large x, expm1(x) ~ exp(x), so log(expm1(x)) ~ x.
+    # For x > 30, expm1(x) ~ exp(x), so log(expm1(x)) ~ x.
+    # For x <= 30, compute log(expm1(x)) directly (clipped to [1e-10, 30]
+    # to keep expm1 finite under gradient).
     log_expm1_eff = jnp.where(
         x_eff > 30.0, x_eff, jnp.log(jnp.expm1(jnp.clip(x_eff, 1e-10, 30.0)))
     )
@@ -224,9 +242,15 @@ def cmb_contrast_factor(
 
     # B_cmb/B_eff = exp(log_expm1_eff - log_expm1_cmb)
     # Since T_eff >= T_cmb, x_cmb >= x_eff, so the exponent is <= 0
-    # and the ratio is in [0, 1].
+    # and the ratio is in [0, 1]. At short wavelengths, x_cmb >> x_eff,
+    # so log_ratio -> -infinity and ratio -> 0, giving contrast -> 1.
     log_ratio = log_expm1_eff - log_expm1_cmb
-    ratio = jnp.exp(jnp.clip(log_ratio, -100.0, 0.0))
+    # log_ratio <= 0 by construction; the cap at 0 only absorbs rounding. No
+    # floor: exp of a large negative argument underflows to exactly 0, which
+    # is the physical limit (contrast -> 1), and a floor would saturate the
+    # ratio early instead (the -100 / -700 floors this replaces were flagged
+    # by tools/check_numeric_guards.py as sub-subnormal guards).
+    ratio = jnp.exp(jnp.minimum(log_ratio, 0.0))
 
     return jnp.clip(1.0 - ratio, 0.0, 1.0)
 

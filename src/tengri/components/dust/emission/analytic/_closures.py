@@ -113,8 +113,10 @@ def modified_blackbody(
     # full energy balance (default); < 1.0 scales the MBB luminosity down.
     L_absorbed = L_absorbed * jnp.clip(dust_epsilon_mbb, 0.0, 1.0)
 
-    # CMB correction: always applied. At z=0 this is a no-op since
-    # T_cmb(z=0) terms cancel and B_nu(T_cmb)/B_nu(T_dust) ~ 0.
+    # CMB correction: always applied. At z=0 the CMB suppression is
+    # wavelength-dependent: ~0.4% at 1 mm (contrast ~ 0.996) and ~8% at 1 cm
+    # (contrast ~ 0.92) for T_dust = 25 K, becoming negligible only at much
+    # shorter wavelengths in the FIR peak.
     T_eff = cmb_corrected_temperature(dust_T, redshift, dust_beta_ir)
 
     wavelength_cm = wavelength_aa * _AA_TO_CM
@@ -145,6 +147,128 @@ def modified_blackbody(
     return result * contrast
 
 
+# ── Model 1a: General-opacity graybody ──
+
+
+def graybody(
+    wavelength_aa: jnp.ndarray,
+    L_absorbed: float,
+    dust_T: float = 35.0,
+    dust_beta_ir: float = 1.8,
+    dust_lambda_0_um: float = 200.0,
+    redshift: float = 0.0,
+    dust_epsilon_mbb: float = 1.0,
+    **_kwargs,
+) -> jnp.ndarray:
+    r"""General-opacity graybody dust emission.
+
+    The unnormalized spectrum is::
+
+        S_nu ~ (1 - exp(-(lam_0/lam)^beta)) * B_nu(T_dust)
+
+    which is then normalized so that the frequency integral equals
+    ``L_absorbed``.
+
+    This is the **general-opacity** graybody form used by Synthesizer
+    (``Greybody(..., optically_thin=False)``) and CIGALE's ``mbb`` module
+    (Boquien et al. 2019). It differs from the optically-thin modified
+    blackbody (which lacks the opacity factor) and from Casey 2012's graybody
+    (which adds a mid-IR power law and fixes the pivot at 200 μm). For
+    the optionally-thin form, use ``modified_blackbody``; for the graybody
+    plus mid-IR power law, use ``casey2012``.
+
+    When ``redshift > 0``, the dust temperature is corrected for CMB
+    heating (da Cunha et al. 2013) and the observed flux is reduced by
+    the CMB contrast factor.
+
+    Parameters
+    ----------
+    wavelength_aa : array, shape (n_wave,)
+        Wavelength grid in Angstrom (sorted ascending). [Å]
+    L_absorbed : float
+        Total absorbed luminosity.  Unit-agnostic: the output L_nu will be
+        in the same units per Hz (e.g. pass erg/s → get erg/s/Hz; pass
+        Lsun → get Lsun/Hz).
+    dust_T : float
+        Dust temperature in Kelvin.  Typical range: 20--60 K. [K]
+    dust_beta_ir : float
+        Emissivity index.  Typical range: 1.5--2.0. [dimensionless]
+    dust_lambda_0_um : float
+        Graybody optical depth pivot wavelength (µm): the wavelength where
+        optical depth τ = 1. Default 200 µm (Casey 2012); Synthesizer uses
+        100 µm. [µm]
+    redshift : float
+        Source redshift. When > 0, CMB heating correction is applied.
+        Default 0 (no correction). [dimensionless]
+    dust_epsilon_mbb : float
+        Fraction of L_absorbed carried by this graybody (CIGALE mbb epsilon_mbb;
+        1.0 = full energy balance). [dimensionless, in [0, 1]]
+
+    Returns
+    -------
+    array, shape (n_wave,)
+        Dust emission L_nu in ``[L_absorbed units] / Hz``.
+
+    Notes
+    -----
+    **JIT-compatible**: yes, all operations are ``jnp`` primitives.
+
+    **Gradient-safe**: yes, differentiable everywhere.
+
+    References
+    ----------
+    .. [1] Boquien, M., Burgarella, D., Roehlly, Y., et al. 2019,
+       A&A 622, A103. CIGALE: Code Investigating GALaxy Emission.
+       https://doi.org/10.1051/0004-6361/201834156
+
+    .. [2] Casey, C. M., 2012, MNRAS, 425, 3094, Eqs. 1-2, 11-12.
+       doi:10.1111/j.1365-2966.2012.21455.x, arXiv:1206.1595.
+
+    .. [3] da Cunha, E. et al., 2013, ApJ, 766, 13 (CMB corrections).
+       doi:10.1088/0004-637X/766/1/13, arXiv:1302.0844.
+
+    """
+    # epsilon_mbb (CIGALE mbb): fraction of L_dust carried by the MBB. 1.0 =
+    # full energy balance (default); < 1.0 scales the MBB luminosity down.
+    L_absorbed = L_absorbed * jnp.clip(dust_epsilon_mbb, 0.0, 1.0)
+
+    # CMB correction: always applied.
+    T_eff = cmb_corrected_temperature(dust_T, redshift, dust_beta_ir)
+
+    wavelength_cm = wavelength_aa * _AA_TO_CM
+    nu = _C_CGS / wavelength_cm
+
+    # Reference frequency at 250 um (convenient normalization pivot)
+    nu_ref = _C_CGS / (250.0e-4)  # 250 um in cm
+    emissivity = (nu / nu_ref) ** dust_beta_ir
+
+    bnu = planck_bnu(wavelength_aa, T_eff)
+
+    # Opacity factor: (1 - exp(-(lam_0/lam)^beta))
+    # Convert lambda_0_um to cm for consistent units
+    lambda_0_cm = dust_lambda_0_um * 1.0e-4  # um to cm
+    tau = (lambda_0_cm / wavelength_cm) ** dust_beta_ir
+    opacity = -jnp.expm1(-tau)  # = 1 - exp(-tau), numerically stable
+
+    # Unnormalized SED shape (erg/s/cm^2/Hz/sr units cancel in ratio)
+    shape = opacity * emissivity * bnu
+
+    # Integrate shape over frequency for normalization.
+    # nu is descending (wave ascending), so negate to get positive integral.
+    integral = -jnp.trapezoid(shape, nu)
+
+    # Guard against zero integral (e.g. wavelength grid entirely outside
+    # the thermal peak): return zeros instead of NaN
+    norm = jnp.where(integral > 0.0, L_absorbed / integral, 0.0)
+
+    result = norm * shape
+
+    # CMB contrast: suppresses flux where dust is observed against CMB
+    contrast = cmb_contrast_factor(wavelength_aa, T_eff, redshift)
+
+    return result * contrast
+
+
 # ── Model 1b: Casey (2012) modified blackbody + mid-IR power law ──
 
 # Casey (2012) Eqs. 11-12 turnover-fit coefficients: λ_c = (3/4)·λ_turnover
@@ -153,8 +277,9 @@ _CASEY_B1 = 26.68  # dimensionless
 _CASEY_B2 = 6.246  # dimensionless (per unit α)
 _CASEY_B3_PER_K = 1.905e-4  # 1/K
 _CASEY_B4_PER_K = 7.243e-5  # 1/K (per unit α)
-# Fixed opacity pivot of the general graybody, Casey (2012) Eq. 1.
-_CASEY_LAMBDA0_CM = 200.0e-4  # 200 µm [cm]
+# Default opacity pivot of the general graybody, Casey (2012) Eq. 1.
+# Now parametric via dust_lambda_0_um; this is the default.
+_CASEY_LAMBDA0_CM_DEFAULT = 200.0e-4  # 200 µm [cm]
 
 
 def _casey_lambda_c_cm(T_eff: float, dust_alpha_mir: float) -> jnp.ndarray:
@@ -178,6 +303,7 @@ def _casey_graybody_nu(
     T_eff: float,
     dust_beta_ir: float,
     optically_thin: bool,
+    lambda_0_cm: float = _CASEY_LAMBDA0_CM_DEFAULT,
 ) -> jnp.ndarray:
     r"""Graybody S_ν shape: the second term of Casey (2012) Eq. 1.
 
@@ -185,11 +311,24 @@ def _casey_graybody_nu(
 
         S_\nu \propto \left(1 - e^{-(\lambda_0/\lambda)^\beta}\right)
         \frac{\nu^3}{e^{h\nu/kT} - 1},
-        \qquad \lambda_0 = 200\,\mu m
+        \qquad \lambda_0 = 200\,\mu m \text{ (default)}
 
     With ``optically_thin=True`` the opacity factor is replaced by its
     small-τ limit :math:`(\lambda_0/\lambda)^\beta`, giving the familiar
     :math:`\nu^{3+\beta} B_\nu` form (Casey 2012, §2).
+
+    Parameters
+    ----------
+    wavelength_cm : array
+        Wavelength in cm.
+    T_eff : float
+        Effective temperature in K (after CMB correction).
+    dust_beta_ir : float
+        Emissivity index.
+    optically_thin : bool
+        If True, use tau; if False, use (1 - exp(-tau)).
+    lambda_0_cm : float
+        Opacity pivot wavelength in cm. Default 200 µm.
 
     Notes
     -----
@@ -209,7 +348,7 @@ def _casey_graybody_nu(
     # square is ~1e-7 at the same point. Measured: gradient NaN -> 9.9896e+04,
     # matching float64; float64 itself bit-identical.
     x = jnp.clip((_H_PLANCK * _C_CGS / _K_BOLTZMANN) / (wavelength_cm * T_eff), _X_MIN, _X_MAX)
-    tau = (_CASEY_LAMBDA0_CM / wavelength_cm) ** dust_beta_ir
+    tau = (lambda_0_cm / wavelength_cm) ** dust_beta_ir
     opacity = tau if optically_thin else -jnp.expm1(-tau)
     # ``nu**3`` written out reaches ~2.7e49 on a UV-to-far-IR grid, eleven
     # decades past the float32 ceiling. Using (1/lambda)**3 [cm^-3] instead
@@ -232,6 +371,7 @@ def casey2012(
     dust_T: float = 35.0,
     dust_beta_ir: float = 1.8,
     dust_alpha_mir: float = 2.0,
+    dust_lambda_0_um: float = 200.0,
     optically_thin: bool = False,
     redshift: float = 0.0,
     **_kwargs,
@@ -252,10 +392,10 @@ def casey2012(
               (\lambda/\lambda_c)^{\alpha}\, e^{-(\lambda/\lambda_c)^2}
         \right]
 
-    with :math:`\lambda_0 = 200\,\mu m` fixed and
-    :math:`\lambda_c(\alpha, T)` from Eqs. 11-12. Every variable:
-    :math:`T` = dust temperature [K], :math:`\beta` = emissivity index,
-    :math:`\alpha` = mid-IR slope, :math:`\nu` = frequency [Hz],
+    with :math:`\lambda_0` from ``dust_lambda_0_um`` (default 200 µm per
+    Casey 2012) and :math:`\lambda_c(\alpha, T)` from Eqs. 11-12. Every
+    variable: :math:`T` = dust temperature [K], :math:`\beta` = emissivity
+    index, :math:`\alpha` = mid-IR slope, :math:`\nu` = frequency [Hz],
     :math:`\lambda` = wavelength. The total frequency integral is
     normalized to ``L_absorbed``.
 
@@ -281,6 +421,9 @@ def casey2012(
         Dust emissivity index. Typical range: 1.5-2.0. [dimensionless]
     dust_alpha_mir : float
         Mid-IR power-law slope. Typical range: 1.5-2.5. [dimensionless]
+    dust_lambda_0_um : float
+        Graybody opacity pivot wavelength (µm). Default 200 µm (Casey 2012).
+        [µm]
     optically_thin : bool
         If True, use the optically-thin graybody limit
         :math:`(\lambda_0/\lambda)^\beta \nu^3 / (e^{h\nu/kT}-1)`
@@ -315,10 +458,15 @@ def casey2012(
     wavelength_cm = wavelength_aa * _AA_TO_CM
     nu = _C_CGS / wavelength_cm  # Hz, descending
 
+    # Convert dust_lambda_0_um to cm
+    lambda_0_cm = dust_lambda_0_um * 1.0e-4  # um to cm
+
     lambda_c_cm = _casey_lambda_c_cm(T_eff, dust_alpha_mir)
-    graybody = _casey_graybody_nu(wavelength_cm, T_eff, dust_beta_ir, optically_thin)
+    graybody = _casey_graybody_nu(wavelength_cm, T_eff, dust_beta_ir, optically_thin, lambda_0_cm)
     # Power-law amplitude tied to the graybody at the turnover (Eq. 2).
-    n_pl = _casey_graybody_nu(jnp.asarray(lambda_c_cm), T_eff, dust_beta_ir, optically_thin)
+    n_pl = _casey_graybody_nu(
+        jnp.asarray(lambda_c_cm), T_eff, dust_beta_ir, optically_thin, lambda_0_cm
+    )
     power_law = (
         n_pl
         * (wavelength_cm / lambda_c_cm) ** dust_alpha_mir

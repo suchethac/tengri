@@ -101,7 +101,7 @@ def test_an_unrelated_keyerror_is_not_relabeled():
         def declared_parameters(self):
             return []
 
-        def apply(self, state, params, *, ssp_data=None, template_data=None):
+        def apply(self, state, params, *, ssp_data=None, template_data=None, ztable_data=None):
             raise KeyError("some_internal_bookkeeping_key")
 
     with pytest.raises(KeyError) as exc:

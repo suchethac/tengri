@@ -76,6 +76,29 @@ pytestmark = pytest.mark.regression_bug
 #: Engines documented as declaring no free parameters of their own.
 _PARAMETER_FREE_ENGINES = ("pah_drude", "dh02_ce01")
 
+
+def _selectable_parameter_free_engines() -> tuple[str, ...]:
+    """The subset of :data:`_PARAMETER_FREE_ENGINES` a grammar wildcard can reach.
+
+    ``pah_drude`` is a building block: ``SEDModel.build`` refuses it as a
+    model's only dust emitter, so there is no ``dust_emission={'type':
+    'pah_drude', 'all_params': FREE}`` model to measure inert dimensions on.
+    Its half of #1482 is pinned statically instead, by
+    :func:`test_parameter_free_engine_is_declared_not_inferred` — which asserts
+    the narrowing mechanism itself (``declares_no_parameters`` ->
+    ``_declared_param_names`` -> the empty set) and stays parametrized over
+    *both* engines.
+
+    Derived from the grammar's own set rather than hardcoded to
+    ``("dh02_ce01",)``, so a future building block drops out of the runtime
+    sweep automatically and a building block promoted to a full model rejoins it.
+    """
+    from tengri.parameters.groups import _standalone_dust_emission_types
+
+    standalone = _standalone_dust_emission_types()
+    return tuple(e for e in _PARAMETER_FREE_ENGINES if e in standalone)
+
+
 _INERT_TOL = 1e-9
 
 
@@ -132,7 +155,20 @@ def _sed(model, params) -> np.ndarray:
         return np.asarray(model.predict(params).rest_sed())
 
 
-@pytest.mark.parametrize("engine", _PARAMETER_FREE_ENGINES)
+def test_the_runtime_sweep_has_a_subject():
+    """:func:`_selectable_parameter_free_engines` must not narrow to nothing.
+
+    It is a derived parametrization, so if every parameter-free engine became
+    unselectable the sweep below would collect an empty set and the file would
+    report green having measured no model at all.
+    """
+    assert _selectable_parameter_free_engines(), (
+        "no parameter-free IR engine is standalone-selectable any more, so "
+        "test_parameter_free_engine_frees_no_inert_parameter measures nothing"
+    )
+
+
+@pytest.mark.parametrize("engine", _selectable_parameter_free_engines())
 def test_parameter_free_engine_frees_no_inert_parameter(engine, ir_ssp, ir_obs):
     """Every parameter the wildcard frees must move the SED.
 
@@ -191,26 +227,26 @@ def test_parameter_free_engine_is_declared_not_inferred(engine):
     assert _declared_param_names(engine) == frozenset()
 
     split = _REGISTRY.get("energy_balance_split")
-    if split is not None:
-        assert getattr(split, "declares_no_parameters", False) is False, (
-            "energy_balance_split reads six parameters declared in "
-            "components/dust/_params.py; marking it parameter-free would pin all six."
-        )
-        # It answers the same question from the other side, via
-        # ``reads_parameters``. What matters is that the two engines get
-        # *different* answers -- this one must never be narrowed to the empty
-        # set, which is what would pin every knob it reads.
-        split_declared = _declared_param_names("energy_balance_split")
-        assert split_declared, (
-            "energy_balance_split narrowed to an empty/None declared set. Empty "
-            "would pin all six knobs it reads; the marker that distinguishes it "
-            f"from {engine} has stopped working. Got: {split_declared!r}"
-        )
-        assert split_declared != _declared_param_names(engine), (
-            f"energy_balance_split and {engine} now narrow to the same set, so the "
-            "empty-_priors ambiguity is no longer being resolved."
-        )
-        assert "dust_T_warm" in split_declared, (
-            "energy_balance_split's declared set no longer contains dust_T_warm, "
-            f"a knob its predict reads. Got: {sorted(split_declared)}"
-        )
+    assert split is not None, "probe setup failed: energy_balance_split was not registered"
+    assert getattr(split, "declares_no_parameters", False) is False, (
+        "energy_balance_split reads six parameters declared in "
+        "components/dust/_params.py; marking it parameter-free would pin all six."
+    )
+    # It answers the same question from the other side, via
+    # ``reads_parameters``. What matters is that the two engines get
+    # *different* answers -- this one must never be narrowed to the empty
+    # set, which is what would pin every knob it reads.
+    split_declared = _declared_param_names("energy_balance_split")
+    assert split_declared, (
+        "energy_balance_split narrowed to an empty/None declared set. Empty "
+        "would pin all six knobs it reads; the marker that distinguishes it "
+        f"from {engine} has stopped working. Got: {split_declared!r}"
+    )
+    assert split_declared != _declared_param_names(engine), (
+        f"energy_balance_split and {engine} now narrow to the same set, so the "
+        "empty-_priors ambiguity is no longer being resolved."
+    )
+    assert "dust_T_warm" in split_declared, (
+        "energy_balance_split's declared set no longer contains dust_T_warm, "
+        f"a knob its predict reads. Got: {sorted(split_declared)}"
+    )

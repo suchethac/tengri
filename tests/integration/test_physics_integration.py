@@ -81,10 +81,18 @@ class TestStellarMassConsistency:
         mass_formed = float(d["stellar_mass"])
         mass_surv = d["stellar_mass_surviving"]
 
-        if mass_surv is not None:
-            assert float(mass_surv) < mass_formed, (
-                f"Surviving mass ({float(mass_surv):.3e}) >= formed mass ({mass_formed:.3e})"
-            )
+        # Unconditional: an absent surviving mass is the failure this test
+        # exists to catch, not a reason to skip it. Guarded as
+        # ``if mass_surv is not None:`` the whole claim vanished whenever the
+        # SSP carried no mass-remaining grid -- the same shape that left the
+        # #29 regression test asserting nothing (fixed in #2156).
+        assert mass_surv is not None, (
+            "stellar_mass_surviving was not published, so the surviving-vs-formed "
+            "claim cannot be checked; the SSP grid must carry mass-remaining data"
+        )
+        assert float(mass_surv) < mass_formed, (
+            f"Surviving mass ({float(mass_surv):.3e}) >= formed mass ({mass_formed:.3e})"
+        )
 
     def test_return_fraction_physical(self, ssp_data, filters):
         """Surviving/formed mass ratio in [0.3, 0.9] for Chabrier IMF."""

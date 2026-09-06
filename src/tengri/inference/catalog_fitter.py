@@ -1431,8 +1431,18 @@ class _CatalogFitterOriginal:
             from tengri.inference.fitter import Fitter
 
             g = self.galaxies[0]
+            # Thread the presence mask, exactly as the per-galaxy fitter does.
+            # ``missing='mask'`` ingestion hands an absent band flux 0.0 AND
+            # noise 0.0 (both via np.nan_to_num), so without the mask this
+            # fitter sees a zero uncertainty and is refused by the data guard —
+            # a catalog with a masked band in galaxy 0 would fail to build.
             self._dummy_fitter = Fitter(
-                self.model, g["flux_obs"], g["noise"], data_type=self.data_type, cache=self.cache
+                self.model,
+                g["flux_obs"],
+                g["noise"],
+                data_type=self.data_type,
+                presence=g.get("presence", None),
+                cache=self.cache,
             )
         return self._dummy_fitter
 

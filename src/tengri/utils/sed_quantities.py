@@ -974,6 +974,69 @@ def compute_luminosity_weighted_metallicity(
 # ── Emission line extraction ──────────────────────────────────────
 
 
+#: Largest ``|Delta lambda|`` [Angstrom] at which a catalog line answers for a
+#: requested one.
+#:
+#: The lookup is a nearest-wavelength ``argmin``, which always returns
+#: *something*: on a catalog missing the requested line it returns a different
+#: line's luminosity, with nothing to say so. Measured against the sparsest
+#: catalog in the package, CB_19's ten lines: every genuine match is within
+#: 1.92 A (the widest being [NII] 6584, tabulated there in air against a vacuum
+#: target) and every genuine miss is at least 47.9 A away ([OIII] 4959, which
+#: that catalog does not carry). 5 A separates the two populations with an
+#: order of magnitude of margin on the miss side.
+_LINE_MATCH_TOL_AA: float = 5.0
+
+
+def _matched_line_indices(
+    line_waves: jnp.ndarray, target_waves: tuple[float, ...]
+) -> tuple[list[jnp.ndarray], list[jnp.ndarray], jnp.ndarray]:
+    """Nearest catalog entry for each target, and whether it is close enough.
+
+    Parameters
+    ----------
+    line_waves : array, shape (n_lines,)
+        Catalog rest-frame wavelengths [Angstrom].
+    target_waves : tuple of float
+        Requested rest-frame wavelengths [Angstrom].
+
+    Returns
+    -------
+    indices : list of ndarray
+        Nearest catalog index per target, one scalar array each.
+    keep : list of ndarray
+        Per-target boolean: within :data:`_LINE_MATCH_TOL_AA` **and** not
+        already counted under an earlier target.
+    any_match : ndarray
+        Boolean: at least one target found a catalog line within tolerance.
+
+    Notes
+    -----
+    **JIT-compatible**: yes; ``target_waves`` is a Python tuple, so the loops
+    unroll at trace time and only the comparisons are traced.
+
+    De-duplication is what lets a blended catalog entry stay correct. CB_19
+    carries [OII] as one 3727 A entry and C IV as one 1549 A entry, so both
+    members of those doublets match the *same* index; summing the matches
+    without de-duplicating would double the blend.
+    """
+    indices = [jnp.argmin(jnp.abs(line_waves - tw)) for tw in target_waves]
+    within = [
+        jnp.abs(line_waves[idx] - tw) <= _LINE_MATCH_TOL_AA
+        for idx, tw in zip(indices, target_waves)
+    ]
+    keep: list[jnp.ndarray] = []
+    for j, idx in enumerate(indices):
+        duplicate = jnp.zeros((), dtype=bool)
+        for earlier in indices[:j]:
+            duplicate = jnp.logical_or(duplicate, idx == earlier)
+        keep.append(jnp.logical_and(within[j], jnp.logical_not(duplicate)))
+    any_match = within[0]
+    for flag in within[1:]:
+        any_match = jnp.logical_or(any_match, flag)
+    return indices, keep, any_match
+
+
 def extract_line_luminosity(
     line_waves: jnp.ndarray, line_lums: jnp.ndarray, target_waves: tuple[float, ...]
 ) -> jnp.ndarray:
@@ -999,7 +1062,8 @@ def extract_line_luminosity(
     -------
     float
         Total line luminosity, in the same unit as ``line_lums``. Returns NaN
-        if ``line_waves`` is empty (no nebular model).
+        if ``line_waves`` is empty (no nebular model) **or** if no catalog
+        line lies within :data:`_LINE_MATCH_TOL_AA` of any target.
 
     Notes
     -----
@@ -1008,20 +1072,24 @@ def extract_line_luminosity(
     (the function never converts), but the docstring was evidence for the belief
     that the published catalog was in Lsun, which is how three backends came to
     publish it that way.
+
+    The match is nearest-wavelength, and an unconditional ``argmin`` always
+    returns a value: on CB_19's ten-line catalog, which carries no [OIII] 4959,
+    ``oiii_4959`` used to return the 5007 entry, so both members of the doublet
+    came back bit-identical while the accessors read as two measurements
+    (#2181). A target with no catalog line within tolerance now contributes
+    nothing, and a request whose targets all miss returns NaN: the same signal
+    this function already used for "no nebular model".
     """
     if line_waves.shape[0] == 0:
         return jnp.array(jnp.nan)
 
-    def _lookup_one(target):
-        """Extract line luminosity by nearest-wavelength matching."""
-        idx = jnp.argmin(jnp.abs(line_waves - target))
-        return line_lums[idx]
-
+    indices, keep, any_match = _matched_line_indices(line_waves, target_waves)
     total = jnp.array(0.0)
-    for tw in target_waves:
-        total = total + _lookup_one(tw)
+    for idx, flag in zip(indices, keep):
+        total = total + jnp.where(flag, line_lums[idx], 0.0)
 
-    return total
+    return jnp.where(any_match, total, jnp.nan)
 
 
 def extract_log_line_luminosity(
@@ -1049,8 +1117,8 @@ def extract_log_line_luminosity(
     Returns
     -------
     ndarray, scalar
-        ``log10`` of the summed luminosity [dex]. NaN if ``line_waves`` is empty,
-        matching the linear form.
+        ``log10`` of the summed luminosity [dex]. NaN if ``line_waves`` is empty
+        or no target matches a catalog line, matching the linear form.
 
     Notes
     -----
@@ -1075,12 +1143,13 @@ def extract_log_line_luminosity(
     if line_waves.shape[0] == 0:
         return jnp.array(jnp.nan)
 
-    def _lookup_one(target):
-        idx = jnp.argmin(jnp.abs(line_waves - target))
-        return log_line_lums[idx]
-
-    stacked = jnp.stack([_lookup_one(tw) for tw in target_waves])
-    return logsumexp(LN10 * stacked) / LN10
+    # An unmatched or duplicated target enters as -inf, which is the additive
+    # identity in the log domain and drops out of the sum exactly.
+    indices, keep, any_match = _matched_line_indices(line_waves, target_waves)
+    stacked = jnp.stack(
+        [jnp.where(flag, log_line_lums[idx], -jnp.inf) for idx, flag in zip(indices, keep)]
+    )
+    return jnp.where(any_match, logsumexp(LN10 * stacked) / LN10, jnp.nan)
 
 
 # ── Radio quantities (empirical scaling relations) ────────────────

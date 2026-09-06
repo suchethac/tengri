@@ -38,40 +38,32 @@ Nebular is OFF for the stellar+attenuation comparison: Synthesizer bakes Cloudy
 grids into its SSP grids while tengri uses the Cue emulator, which are
 different models by design (01_synthesizer.py §8).
 
-FINDING -- the dust IR agrees in energy and disagrees in shape, by one knob
---------------------------------------------------------------------------
+FINDING -- all four DL07 knobs map; the 2014 grid release agrees to 2.6 percent
+--------------------------------------------------------------------------------
 The stellar+attenuation ladder stops at 2MASS Ks, so the IR is compared
-separately on the **isolated Draine & Li 2007 component** -- Synthesizer's
+separately on the **isolated Draine & Li dust component** -- Synthesizer's
 ``TotalEmission`` tree label, tengri's build differenced with and without the
 ``emission`` block. That reaches SCUBA-2 850 um, 13 bands from 3.4 to 863 um.
 
-Integrated energy agrees: **L_IR (8-1000 um) ratio 1.052x**. The shape does
-not. At tengri's defaults the MIR runs low and the sub-mm high:
+Synthesizer's grid file ``draine_li_dust_emission_grid_MW_3p1.hdf5`` is the 2014
+template release (axes: qpah, umin, alpha; U_max = 1e7). All four knobs map
+through the two codes: both expose ``qpah`` (Synthesizer's is a mass *fraction*,
+0.025 <-> tengri's percent, 2.5), ``umin`` (directly), the PDR mass fraction
+``gamma`` (Synthesizer's parameter name, matched to tengri's ``gamma_dl``), and
+the alpha power-law index (Synthesizer's ``alpha`` mapped to tengri's
+``alpha_dl14``; both default to 2.0).
 
-    WISE W3 0.598x   MIPS 24 0.383x   PACS 160 1.503x   SPIRE 500 1.655x
-
-That is a colder SED at fixed total energy, and it is **one unmatched
-parameter**, not a modelling disagreement. Only two of DL07's three knobs map
-through the two grammars: both expose ``qpah`` (Synthesizer's is a mass
-*fraction*, 0.025 <-> tengri's percent, 2.5) and ``umin``. Synthesizer then
-exposes ``alpha``, the :math:`dU \\propto U^{-\\alpha}` index; tengri exposes
-``gamma_dl``, the PDR mass fraction. Different parameters, not two names for
-one.
-
-Sweeping the one tengri exposes moves the shape monotonically and leaves the
-energy alone -- which is what a warm/cold redistribution at fixed L_IR must do:
-
-    gamma_dl    W3      MIPS24   PACS160  SPIRE500   L_IR
-    0.00        0.520x  0.206x   1.667x   1.858x     1.055x
-    0.01 (def)  0.598x  0.383x   1.503x   1.655x     1.052x
-    0.05        0.788x  0.815x   1.102x   1.159x     1.045x
-    0.10        0.905x  1.082x   0.854x   0.853x     1.040x
-
-Synthesizer's DL07 at ``alpha = 2.0`` therefore behaves like ``gamma_dl ~ 0.1``
-in tengri's parameterization -- an order of magnitude above tengri's default of
-0.01. The table below is printed at the default, i.e. matched on two knobs of
-three, because tuning the third until the residual vanished would be fitting
-the answer. The sweep is the evidence that one knob explains it.
+At matched knobs (qpah=2.5%, umin=1, gamma=0.05, alpha=2.0), **L_IR (8-1000 um)
+ratio 1.026x** (median 1.026x across 13 bands). The two codes employ different
+energy-balance conventions: Synthesizer balances dust on the reprocessed
+spectrum (stellar continuum after gas ionization plus nebular), consuming the
+ionizing continuum below 912 Å, while tengri balances on incident stellar with
+the Lyman continuum excluded. This difference in absorbed luminosity integration
+accounts for the 2.6 percent L_IR offset: Synthesizer's absorbed luminosity
+integrated over reprocessed, 2.5005e43 erg/s, versus tengri's over incident
+>= 912 Å, 2.5677e43 erg/s, ratio 1.0269. The one outlier, WISE W1 at 0.984x,
+is the 3.3 um PAH feature resampled differently onto each code's master grid
+(locally 1.96x at the feature core; native templates agree to 2.6e-4 there).
 """
 
 import os
@@ -181,11 +173,11 @@ def tengri_stellar_dust(ssp, tau_bc):
 
 
 # Dust IR section. Synthesizer's qpah is a mass *fraction*, tengri's is in
-# percent: 0.025 <-> 2.5. umin matches directly. The third DL07 knob does not
-# map -- see dust_emission_only.
+# percent: 0.025 <-> 2.5. umin matches directly. gamma maps to gamma_dl.
 QPAH_FRAC, QPAH_PCT = 0.025, 2.5
 UMIN = 1.0
-ALPHA_SYNTH = 2.0
+ALPHA_DL14 = 2.0
+GAMMA_DL = 0.05  # Synthesizer's default gamma; maps to tengri's gamma_dl
 
 # Nebular section: a young constant-SFR population, where the lines dominate
 # (01_synthesizer.py fiducial).
@@ -194,16 +186,16 @@ NEB_LOGU, NEB_LOGZ, NEB_LOGMASS = -2.0, 0.0, 9.0
 
 
 def dust_emission_only(ssp):
-    """The Draine & Li 2007 IR component alone, from both codes.
+    """The Draine & Li dust IR component alone, from both codes.
 
     Isolating the dust-emission component is what makes the IR comparable at
-    all here. Synthesizer's ``TotalEmission`` attenuates the *reprocessed*
-    (stellar + nebular) spectrum, so its total carries a Cloudy c23.01 nebular
-    contribution that the matched tengri build does not; taking the tree's
-    ``dust_emission`` label keeps that out of the IR question. On the tengri
-    side the component is recovered by differencing the same build with and
-    without the ``emission`` block, so the attenuated stellar continuum
-    cancels exactly.
+    all here. Synthesizer's ``TotalEmission`` tree balances the dust energy on
+    the reprocessed spectrum (stellar continuum after gas-phase ionization plus
+    nebular emission), consuming the ionizing continuum below 912 Å. tengri
+    balances on the incident stellar spectrum. The 2.6 percent difference in
+    L_IR between the codes reflects this energy-balance convention: Synthesizer's
+    absorbed luminosity (integrated over reprocessed) versus tengri's absorbed
+    luminosity (integrated over incident with LyC excluded).
 
     Parameters
     ----------
@@ -217,14 +209,8 @@ def dust_emission_only(ssp):
 
     Notes
     -----
-    Only two of the three DL07 knobs can be matched through the two grammars.
-    Both expose ``qpah`` and ``umin``; Synthesizer then exposes ``alpha`` (the
-    :math:`dU \\propto U^{-\\alpha}` index) while tengri exposes ``gamma_dl``
-    (the PDR mass fraction). They are different parameters, not two names for
-    one, so each side keeps its own default for the third and the comparison is
-    that much weaker. Reported rather than hidden: a validator that quietly
-    matched two of three and presented the result as fully matched would be
-    making the mistake this whole file exists to catch.
+    All four DL07 knobs map: qpah, umin, gamma_dl (=``gamma``), and
+    alpha_dl14 (=``alpha``). Both grids are the 2014 release.
     """
     w_s, L_s = S.total_emission(
         tau_gyr=TAU_GYR,
@@ -234,12 +220,13 @@ def dust_emission_only(ssp):
         av=A_V,
         qpah=QPAH_FRAC,
         umin=UMIN,
-        alpha=ALPHA_SYNTH,
+        alpha=ALPHA_DL14,
+        gamma=GAMMA_DL,
         components=("dust_emission",),
     )["dust_emission"]
 
     def _tengri(with_emission):
-        dust = {
+        dust_attenuation = {
             "type": "two_component",
             "law_bc": "calzetti",
             "law_diff": "calzetti",
@@ -247,35 +234,38 @@ def dust_emission_only(ssp):
             "tau_diff": Fixed(TAU_DIFF),
             "all_params": Fixed(DEFAULT),
         }
-        if with_emission:
-            dust["emission"] = {
-                "type": "draine_li2007",
-                "qpah": Fixed(QPAH_PCT),
-                "umin": Fixed(UMIN),
-                "all_params": Fixed(DEFAULT),
-            }
-        m = SEDModel.build(
-            ssp_data=ssp,
-            met={"logzsol": Fixed(MET_LOGZSOL), "all_params": Fixed(DEFAULT)},
-            sfh={
+        build_kwargs = {
+            "ssp_data": ssp,
+            "met": {"logzsol": Fixed(MET_LOGZSOL), "all_params": Fixed(DEFAULT)},
+            "sfh": {
                 "type": "delayed",
                 "tau_gyr": Fixed(TAU_GYR),
                 "age_gyr": Fixed(AGE_GYR),
                 "log_total_mass": Fixed(LOG_MASS),
                 "all_params": Fixed(DEFAULT),
             },
-            dust_attenuation=dust,
-            redshift=Fixed(0.0),
-        )
+            "dust_attenuation": dust_attenuation,
+            "redshift": Fixed(0.0),
+        }
+        if with_emission:
+            build_kwargs["dust_emission"] = {
+                "type": "draine_li2014",
+                "qpah": Fixed(QPAH_PCT),
+                "umin": Fixed(UMIN),
+                "gamma_dl": Fixed(GAMMA_DL),
+                "alpha_dl14": Fixed(ALPHA_DL14),
+                "all_params": Fixed(DEFAULT),
+            }
+        m = SEDModel.build(**build_kwargs)
         s = m.predict_state({})
         return np.asarray(s.wave), np.asarray(s.sed_intrinsic)
 
     w_on, L_on = _tengri(True)
     w_off, L_off = _tengri(False)
-    # Attaching DL07 extends the master grid past the stellar templates, so the
-    # two builds do not share one. Regrid the no-emission baseline onto the
-    # with-emission grid before differencing; beyond the stellar grid's reach
-    # regrid returns 0, which is the right baseline there.
+    # Attaching the dust-emission grid extends the master grid past the stellar
+    # templates, so the two builds do not share one. Regrid the no-emission
+    # baseline onto the with-emission grid before differencing; beyond the
+    # stellar grid's reach regrid returns 0, which is the right baseline there.
     L_off_on = U.regrid(w_off, L_off, w_on)
     return w_s, np.clip(L_s, 0.0, None), w_on, np.clip(L_on - L_off_on, 0.0, None)
 
@@ -380,14 +370,16 @@ def main():
         f"{convention_sensitivity(w_s, L_t_on_s, L_s, filters=UV_TO_NIR):.2e}"
     )
 
-    # The IR half, on the isolated Draine & Li 2007 component so the ladder
-    # reaches SCUBA-2 without the stellar+attenuation comparison's scope limit.
+    # The IR half, on the isolated dust component so the ladder reaches SCUBA-2
+    # without the stellar+attenuation comparison's scope limit.
     w_ds, L_ds, w_dt, L_dt = dust_emission_only(ssp)
     L_dt_on_s = U.regrid(w_dt, L_dt, w_ds)
     print_filter_table(
         filter_rows(w_ds, L_dt_on_s, L_ds, filters=IR_BANDS),
         ref_name="Synth",
-        title="Dust IR alone — Draine & Li 2007, matched qpah and umin",
+        title=(
+            "Dust IR alone — Draine & Li 2014, all four knobs matched (qpah, umin, gamma, alpha)"
+        ),
     )
     # L_IR = int L_lambda dlambda over 8-1000 um, the standard definition.
     # Integrate on an ascending grid: reversing both arrays flips the sign.

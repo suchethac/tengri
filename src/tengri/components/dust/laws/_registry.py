@@ -11,8 +11,10 @@ without an import cycle (#843).
 
 from __future__ import annotations
 
-from collections.abc import Callable
+import inspect
+from collections.abc import Callable, Mapping
 from dataclasses import dataclass
+from functools import cache
 from typing import TYPE_CHECKING
 
 import jax.numpy as jnp
@@ -121,6 +123,7 @@ def register_dust_law(
             short_doc=short_doc,
         )
         DUST_LAWS[name] = entry
+        law_kwarg_names.cache_clear()
         return fn
 
     return decorator
@@ -154,6 +157,138 @@ def resolve_dust_law(name: str) -> Callable:
     if name not in DUST_LAWS:
         raise ValueError(f"Unknown dust law '{name}'. Available: {list(DUST_LAWS.keys())}")
     return DUST_LAWS[name]
+
+
+def _law_callable(law: str | Callable) -> Callable:
+    """Resolve a law given either its registry key or the function itself.
+
+    Parameters
+    ----------
+    law : str or callable
+        Registry key, or an already-resolved law function.
+
+    Returns
+    -------
+    Callable
+        The law function. A :class:`DustLawRegistryEntry` is unwrapped to the
+        function it holds so :func:`inspect.signature` sees the real signature.
+    """
+    fn = resolve_dust_law(law) if isinstance(law, str) else law
+    if isinstance(fn, DustLawRegistryEntry):
+        fn = object.__getattribute__(fn, "callable")
+    return fn
+
+
+@cache
+def law_kwarg_names(law: str | Callable) -> frozenset[str]:
+    """Keyword arguments the attenuation law declares, beyond ``wavelength``.
+
+    Parameters
+    ----------
+    law : str or callable
+        Registry key (e.g. ``"noll09"``) or the law function itself.
+
+    Returns
+    -------
+    frozenset of str
+        Law-function keyword names (``n_slope``, ``dust_delta``, ...). Empty
+        for a curve that reads only wavelength (``calzetti``, ``smc``, the
+        grain-model tables).
+
+    Notes
+    -----
+    **JIT-compatible**: no; signature introspection, cached because every
+    evaluation of a two-screen model asks twice and the registry is populated
+    at import time. :func:`register_dust_law` clears the cache.
+
+    The signature is the only honest source. A law that also declared
+    ``**kwargs`` would *accept* every parameter and read none of them, which is
+    why ``tools/check_dust_law_kwargs.py`` refuses one: "does the call
+    succeed?" cannot answer "does this law read this parameter?".
+    """
+    try:
+        sig = inspect.signature(_law_callable(law))
+    except (TypeError, ValueError):  # pragma: no cover - builtins have no signature
+        return frozenset()
+    return frozenset(
+        p.name
+        for p in sig.parameters.values()
+        if p.kind not in (p.VAR_KEYWORD, p.VAR_POSITIONAL) and p.name != "wavelength"
+    )
+
+
+def select_law_kwargs(law: str | Callable, law_params: Mapping) -> dict:
+    """Narrow a shared law-parameter dict to what one law reads.
+
+    Parameters
+    ----------
+    law : str or callable
+        Registry key or law function.
+    law_params : Mapping
+        Law-function keyword arguments, possibly the union across two screens.
+
+    Returns
+    -------
+    dict
+        The subset of ``law_params`` whose keys ``law`` declares.
+
+    Notes
+    -----
+    **JIT-compatible**: yes; dict construction only, values pass through
+    untouched (traced arrays stay traced).
+
+    A two-screen model holds ONE parameter dict and two laws, so a key can
+    legitimately belong to the other screen. Narrowing here is what lets the
+    laws themselves drop ``**kwargs``: the caller decides what each law is
+    offered, and the law refuses anything it cannot use. Callers must first
+    check that every key is read by *some* law in play
+    (:func:`reject_unread_law_kwargs`), otherwise the narrowing silently
+    absorbs a key nothing reads, which is the defect this pair replaces
+    (#2185).
+    """
+    declared = law_kwarg_names(law)
+    return {k: v for k, v in law_params.items() if k in declared}
+
+
+def reject_unread_law_kwargs(law_params: Mapping, laws: tuple, context: str) -> None:
+    """Raise when a law-parameter key is read by none of the laws in play.
+
+    Parameters
+    ----------
+    law_params : Mapping
+        Law-function keyword arguments the caller assembled.
+    laws : tuple
+        Registry keys or law functions the parameters will be offered to.
+    context : str
+        Caller name for the message, e.g. ``"two_component_dust"``.
+
+    Raises
+    ------
+    ValueError
+        Naming the unread keys, the laws in play, and what they do read.
+
+    Notes
+    -----
+    **JIT-compatible**: no; a build-time / trace-time key check on Python
+    strings. Runs once per trace, not per array element.
+    """
+    read: set[str] = set()
+    for law in laws:
+        if law is None:
+            continue
+        read |= set(law_kwarg_names(law))
+    unread = sorted(k for k in law_params if k not in read)
+    if not unread:
+        return
+    named = ", ".join(repr(k) for k in laws if k is not None)
+    accepts = ", ".join(sorted(read)) if read else "no shape parameters at all"
+    plural = "s" if len(unread) > 1 else ""
+    raise ValueError(
+        f"{context}: {', '.join(repr(k) for k in unread)} "
+        f"{'are' if len(unread) > 1 else 'is'} not read by any law in play "
+        f"({named}), so the value{plural} would be silently discarded. "
+        f"These laws read: {accepts}."
+    )
 
 
 # Curated headline subset for gallery comparisons. Each entry's value is the

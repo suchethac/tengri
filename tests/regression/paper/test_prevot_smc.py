@@ -133,10 +133,13 @@ class TestPrevotSMCFunction:
         chex.assert_shape(result, (500,))
         chex.assert_tree_all_finite(result)
 
-    def test_kwargs_ignored(self):
-        """prevot_smc should accept and ignore extra kwargs."""
+    def test_extra_kwargs_raise(self):
+        """prevot_smc refuses a keyword it does not read (#2185).
+
+        It used to accept ``dust_Rv`` through a ``**_kwargs`` catch-all and
+        discard it, which is how a parameter can be declared free, sampled, and
+        never reach the curve. The signature is now the contract.
+        """
         wavs = jnp.array([5500.0])
-        # Should work with extra kwargs (like dust_Rv for other laws)
-        result1 = prevot_smc(wavs)
-        result2 = prevot_smc(wavs, dust_Rv=3.1)  # ignored kwarg
-        np.testing.assert_allclose(result1, result2, rtol=1e-15)
+        with pytest.raises(TypeError, match="dust_Rv"):
+            prevot_smc(wavs, dust_Rv=3.1)
