@@ -150,17 +150,19 @@ requires_cb19 = pytest.mark.skipif(
 def _cb19_log_u_axis_is_degenerate() -> bool:
     """True when the CB19 grid does not vary along ``log_U``.
 
-    ``tests/conftest.py::pytest_configure`` writes a synthetic CB19 grid when
-    the real one is absent, built by broadcasting ten Case B Hbeta ratios across
-    the full 7-D shape. It is therefore *constant* along every physical axis by
-    construction -- its own comment says "not production-grade, but enough to
-    break the degeneracy in plumbing tests".
+    A gradient test cannot run on a grid with no ``log_U`` signal: d/d_logU of
+    a constant is zero, and comparing that zero against a finite-difference
+    zero passes for any implementation. This answers "is there a logU signal
+    here to differentiate", which is the actual precondition, rather than
+    guessing whether the file on disk is the real download.
 
-    Structural tests are fine on it. A gradient test is not: d/d_logU of a
-    constant is zero, and comparing that zero against a finite-difference zero
-    passes for any implementation. This answers "is there a logU signal here to
-    differentiate", which is the actual precondition, rather than guessing
-    whether the file on disk is the real download.
+    Until #2181 this was true of the stand-in ``tests/conftest.py`` writes,
+    which broadcast ten Case B Hbeta ratios across the full 7-D shape and so
+    was constant along every physical axis. That stand-in now varies along
+    each of the five parameter-indexed axes
+    (:func:`tests._cb19_grid.write_synthetic_cb19_grid`), so this lifts wherever
+    the packaged file is either that fixture or the real download, and still
+    holds on a machine carrying the flat placeholder of #924.
     """
     if not CB19_TEMPLATES.is_file():
         return True
