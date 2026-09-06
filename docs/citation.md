@@ -270,6 +270,9 @@ the forward model, and listed oldest first within each group.
   (2014), [arXiv:1311.4215](https://arxiv.org/abs/1311.4215).
 - AGNSED — accretion disc with warm and hot Comptonization. Kubota & Done
   (2018), [arXiv:1804.00171](https://arxiv.org/abs/1804.00171).
+- Mid-IR--X-ray luminosity correlation behind the AGNfitter-rX informative
+  AGN priors (`agn_priors.py`). Stern (2015),
+  [arXiv:1506.00162](https://arxiv.org/abs/1506.00162).
 - QSOgen — composite-quasar SED for BLR emission. Temple, Hewett & Banerji
   (2021),
   [doi:10.1093/mnras/stab2586](https://doi.org/10.1093/mnras/stab2586).

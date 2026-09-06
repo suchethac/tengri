@@ -771,13 +771,10 @@ def prior_ir_xrays(log_f2_10kev_data, nulnu_6um):
 
     References
     ----------
-    .. [1] D. Stern, mid-infrared--X-ray luminosity correlation for AGN
-       (Stern 2015), as cited by upstream's in-line comment at
-       ``PRIORS_AGNfitter.py:310``. Volume/page/DOI not found in tengri's
-       existing bibliography (``src/tengri/citations/references.bib``) for
-       this task and so are left absent rather than guessed (per project
-       citation policy); verify independently before citing this formula
-       elsewhere.
+    .. [1] D. Stern, "The X-Ray to Mid-Infrared Relation of AGNs at High
+       Luminosity," ApJ, 807, 129 (2015). doi:10.1088/0004-637X/807/2/129.
+       arXiv:1506.00162. bibcode:2015ApJ...807..129S. Cited by upstream's
+       in-line comment at ``PRIORS_AGNfitter.py:310``.
     """
     x = _x_from_nulnu_6um(nulnu_6um)
     log_f_2_10kev_model = 22.9494264 + 1.024 * x - 0.047 * x**2
@@ -845,8 +842,11 @@ def prior_midir_uv(log_l2500a_bbmodel, nulnu_6um):
 
     References
     ----------
-    .. [1] D. Stern (Stern 2015) -- mid-IR--X-ray correlation; see
-       :func:`prior_ir_xrays` Notes for the citation-verification caveat.
+    .. [1] D. Stern, "The X-Ray to Mid-Infrared Relation of AGNs at High
+       Luminosity," ApJ, 807, 129 (2015). doi:10.1088/0004-637X/807/2/129.
+       arXiv:1506.00162. bibcode:2015ApJ...807..129S -- mid-IR--X-ray
+       correlation; see :func:`prior_ir_xrays` References for the full
+       citation.
     .. [2] D. W. Just et al., 2007, ApJ, 665, 1004 -- alpha_ox correlation;
        see :func:`prior_uv_xrays` Notes for the citation-verification
        caveat.
