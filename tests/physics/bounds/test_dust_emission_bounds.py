@@ -521,8 +521,27 @@ class TestCmbContrastFactorBounds:
             return jnp.sum(cmb_contrast_factor(wave, T_eff=T, redshift=10.0))
 
         grad_fn = jax.grad(loss_fn)
-        grad_val = grad_fn(25.0)
-        assert jnp.isfinite(grad_val), f"Gradient not finite in float64: {grad_val}"
+
+        # T_eff = 25 K sits BELOW the z = 10 CMB floor (2.725 x 11 = 29.98 K), so the
+        # contrast factor is clamped to exactly zero at all 601 wavelengths and its
+        # gradient is zero with it. Measured 2026-09-06: sum = 0.0, grad = -0.0. The
+        # original test asserted only `isfinite` here, which a zero satisfies — it was
+        # pinning "finite" at a point where nothing is computed (#2100). Both halves are
+        # now stated: the sub-CMB point is pinned AS zero, and a live point above the
+        # floor is pinned finite AND non-zero.
+        cold = grad_fn(25.0)
+        assert jnp.all(cold == 0.0), (
+            f"below the z=10 CMB floor the contrast factor is clamped to zero, so its "
+            f"gradient must be exactly zero, not {cold}"
+        )
+
+        warm = grad_fn(50.0)
+        assert jnp.isfinite(warm), f"Gradient not finite in float64: {warm}"
+        assert jnp.any(warm != 0.0), (
+            f"Gradient is identically zero in float64 at T=50 K, above the z=10 CMB "
+            f"floor: {warm} — finite is not enough, a detached CMB contrast factor is "
+            f"as unusable as a NaN one (#2100)"
+        )
 
     def test_gradient_safety_float32(self):
         """Gradient is finite on UV-to-radio grid in float32 (with x64 disabled).
@@ -547,6 +566,10 @@ class TestCmbContrastFactorBounds:
             grad_fn = jax.grad(loss_fn)
             grad_val = grad_fn(jnp.float32(50.0))
             assert jnp.isfinite(grad_val), f"Gradient not finite in float32: {grad_val}"
+            assert jnp.any(grad_val != 0.0), (
+                f"Gradient is identically zero in float32: {grad_val} — finite is not "
+                "enough, an underflowed gradient is as unusable as a NaN one (#2100)"
+            )
         finally:
             config.update("jax_enable_x64", old_state)
 

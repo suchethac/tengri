@@ -8,16 +8,32 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 
 ### Fixed
 
-- The audit that came with `tools/check_gradient_assertions.py`: **272 test
-  sites** across 135 files asserted half the finite-AND-non-zero rule and now
-  assert both. 237 were the #2100 shape (finite, never non-zero) and 35 the
+- The audit that came with `tools/check_gradient_assertions.py`: **276 test
+  sites** across 137 files asserted half the finite-AND-non-zero rule and now
+  assert both. 241 were the #2100 shape (finite, never non-zero) and 35 the
   #2178 shape (non-zero, never finite). No assertion was weakened to make the
-  guard pass, and no escape hatch was needed — every site could state both
-  halves, including the ones whose subject is a pytree of gradient leaves. Two
-  of the repaired sites are the historical bugs themselves:
+  guard pass, and only judgment — not the escape hatch — was needed anywhere.
+  Two of the repaired sites are the historical bugs themselves:
   `test_inference_grad_float32.py` (still finite-only on `main`, which is how
   #2100 stayed invisible) and the `!= 0.0` seam checks in
   `test_float32_fitting_path_seams.py`.
+
+  The count is **disjoint from #2171's sweep**: re-measured against `main`
+  *after* that landed, this guard still reports the same 272 sites it reported
+  before, because #2171 repaired a different defect (an assertion wrapped in a
+  guard derived from its own subject, which declines to run) while this one
+  repairs a predicate that runs and admits the undecided state. Complementary,
+  not duplicative.
+
+- `TestCmbContrastFactorBounds::test_gradient_safety_float64` was **vacuous**,
+  and the guard found it. It differentiated `cmb_contrast_factor` at
+  `T_eff = 25 K, z = 10` and asserted only `isfinite`. The z = 10 CMB floor is
+  `2.725 x 11 = 29.98 K`, so at 25 K the factor is clamped to exactly zero at
+  all 601 wavelengths and the gradient is `-0.0` — finite, and measuring
+  nothing. Measured 2026-09-06: `sum = 0.0, grad = -0.0` there, against
+  `grad = 2.6` at `T_eff = 50 K` on the same grid. The sub-CMB point is now
+  pinned *as* zero (which is the correct physics) and a live point above the
+  floor is pinned finite AND non-zero, so the test measures a gradient again.
 
 - `multicolor_disc`'s pure-float32 bolometric renormalization returned
   `l_nu_intrinsic * scale`, and transposing that product makes JAX form
