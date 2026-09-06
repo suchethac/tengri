@@ -731,6 +731,13 @@ jobs:
       # conversion constant (4.78e-13 / L_sun) that appears in no source literal
       # and in no guard call. Finding it requires importing and evaluating.
       - run: python tools/check_float32_representable_constants.py
+      # Enumerates the CLASS its sibling above cannot see: a constant that is
+      # perfectly representable on its own but leaves float32's range once it
+      # multiplies a parameter, anywhere inside that parameter's declared prior
+      # (#1388, #1439, #2100, #2178). Lives in `smoke` and not `lint` for the
+      # same reason as its sibling: it reads priors from the registry, so it
+      # needs tengri installed, and `lint` installs only ruff.
+      - run: python tools/check_float32_scale_seams.py
       # Every test module in EVERY tier must still import. `check_test_paths_covered`
       # proves a tree is named by some job; it cannot see whether the files in it
       # collect. Those are independent failures, and the second one is invisible
