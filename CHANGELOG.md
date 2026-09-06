@@ -144,6 +144,15 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
   Kubota & Done 2018 models (`"multicolor_agn"` = deprecated alias
   `"kubota_done"`, `"kubota_done_full"`) and the SKIRTOR / Silva+04 /
   CAT3D-Wind / RELAGN templates.
+- `builders.agn.simple()` and `builders.agn.standard()`. They named the two
+  toy models deleted above, so the configs they produced raised at predict
+  time; `_TOP_LEVEL_MODELS` was a hand-written list, which is also why
+  `richards2006` and `skirtor_stalevski` had no factory at all. The factory
+  set is now derived from `monolithic_agn_model_names()` — the same registry
+  the build-time check validates against — so it gains those two and
+  `builders.agn.available()` is pinned to equal it. Migration:
+  `builders.agn.simple()` has no successor; pick a registered model from
+  `available()`, or use the composable grammar.
 - Public re-exports of `simple_torus` and `two_temperature_torus` from
   `tengri.components.agn`. The functions remain importable from
   `tengri.components.agn.torus` for the production models that still
@@ -222,6 +231,23 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
     name keeps its own prefix-stripped short spelling; write
     `'attenuation_ebv'` for the attenuation-stage screen.
 
+- **`agn['type']` is validated at build time.** It was forwarded to
+  `agn_model` unchecked and the first `predict_photometry` raised `Unknown AGN
+  model`, so `agn={'type': 'fritz'}` and `agn={'type': 'totally_bogus_xyz'}`
+  built identically. A registered *block* name is now refused with the
+  composable form that works — `agn={'type': 'composable', 'torus': {'type':
+  'fritz', ...}}` — and anything else with the model menu plus close matches.
+  **Breaking** only for builds that never worked: the refusal replaces a
+  deferred failure, not a working spelling.
+- **fracAGN belongs at the agn top level.** Written inside a sub-block, the
+  four spellings (`ir_frac`, `agn_ir_frac`, `fracAGN`, `agn_fracAGN`) split
+  three ways: the builder ignored the key so `agn_ir_frac` stayed 0.0, the
+  #2189 legacy scan saw it and narrowed `agn_torus_frac` out of that block's
+  wildcard anyway — dropping a live dimension (measured 8.74 relative
+  photometry change for `fritz` with fracAGN inactive) — and the conflict
+  guard, which reads provenance, stayed quiet. All four spellings now raise
+  inside any sub-block, naming the placement. It governs the runner's
+  cross-block normalization stage, not one block's physics.
 - **Monolithic AGN models keep their parameters flat.** The nesting guard above
   applies to composable builds only. `agn={'type': 'kd18_agnfitter',
   'agn_log_mbh': ...}` and every other non-composable type accept the
