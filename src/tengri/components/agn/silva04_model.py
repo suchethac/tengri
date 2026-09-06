@@ -42,6 +42,11 @@ __all__ = ["Silva04Torus"]
 #: it did before Task 1 (declared [22, 25] here while the grid was [21.5,
 #: 24.45]).
 _LOG_NH_SILVA_PRIOR = declared_prior(_AGN_PARAMS, "agn_log_nh_silva")
+#: ``log_lbol``/``torus_frac`` restated stale literals (default 11.0 vs the
+#: canonical 10.0) -- found by ``tools/check_param_restatements.py``
+#: (Task 11 item 5 / fix round 1, R25).
+_LOG_LBOL_PRIOR = declared_prior(_AGN_PARAMS, "agn_log_lbol")
+_TORUS_FRAC_PRIOR = declared_prior(_AGN_PARAMS, "agn_torus_frac")
 
 
 @dataclass(frozen=True)
@@ -148,11 +153,11 @@ class Silva04Torus(SEDModelComponent):
 
     # Free parameters: auto-discovered
     log_lbol = Uniform(
-        8.0,
-        14.0,
+        _LOG_LBOL_PRIOR.lo,
+        _LOG_LBOL_PRIOR.hi,
         description="AGN bolometric luminosity",
         units="dex (L_sun)",
-        default=11.0,
+        default=_LOG_LBOL_PRIOR.default,
     )
     log_nh_silva = Uniform(
         _LOG_NH_SILVA_PRIOR.lo,
@@ -162,11 +167,11 @@ class Silva04Torus(SEDModelComponent):
         default=_LOG_NH_SILVA_PRIOR.default,
     )
     torus_frac = Uniform(
-        0.0,
-        1.0,
+        _TORUS_FRAC_PRIOR.lo,
+        _TORUS_FRAC_PRIOR.hi,
         description="Torus luminosity fraction of L_bol",
         units="dimensionless",
-        default=0.5,
+        default=_TORUS_FRAC_PRIOR.default,
     )
 
     # Cross-component output

@@ -25,12 +25,36 @@ from typing import Any, ClassVar
 
 import jax.numpy as jnp
 
+from tengri.components.agn._params import PARAMS as _AGN_PARAMS
 from tengri.components.agn.disc import kubota_done_disc as _kubota_done_disc_fn
 from tengri.components.sed_model_component import SEDModelComponent
 from tengri.parameters.priors import Uniform
-from tengri.protocols.component import SEDComponentConfig
+from tengri.protocols.component import SEDComponentConfig, declared_prior
 
 __all__ = ["KD18Disc"]
+
+#: Single source of truth for every class-level prior below: the shared
+#: ``agn_*`` declarations in ``_params.py``. Read once at class-definition
+#: time so these class attributes cannot drift from the canonical
+#: declaration the way they did before this fix (found by
+#: ``tools/check_param_restatements.py``, Task 11 item 5 / fix round 1,
+#: R25): every one of the twelve priors below had restated its own literal
+#: bounds/default instead of reading them here, and most had drifted --
+#: ``log_lbol`` default 11.0 vs canonical 10.0; ``log_mbh`` default 8.0 vs
+#: canonical 7.0; ``log_ledd`` bounds (-3, 0) vs canonical (-2, 0.5); and
+#: eight more (see the fix-round commit message for the full table).
+_LOG_LBOL_PRIOR = declared_prior(_AGN_PARAMS, "agn_log_lbol")
+_LOG_MBH_PRIOR = declared_prior(_AGN_PARAMS, "agn_log_mbh")
+_LOG_LEDD_PRIOR = declared_prior(_AGN_PARAMS, "agn_log_ledd")
+_A_SPIN_PRIOR = declared_prior(_AGN_PARAMS, "agn_a_spin")
+_COS_INC_PRIOR = declared_prior(_AGN_PARAMS, "agn_cos_inc")
+_F_HARD_PRIOR = declared_prior(_AGN_PARAMS, "agn_f_hard")
+_GAMMA_WARM_PRIOR = declared_prior(_AGN_PARAMS, "agn_gamma_warm")
+_KT_WARM_PRIOR = declared_prior(_AGN_PARAMS, "agn_kt_warm")
+_GAMMA_HARD_PRIOR = declared_prior(_AGN_PARAMS, "agn_gamma_hard")
+_KT_HOT_PRIOR = declared_prior(_AGN_PARAMS, "agn_kt_hot")
+_R_WARM_RATIO_PRIOR = declared_prior(_AGN_PARAMS, "agn_r_warm_ratio")
+_LUM_RATIO_PRIOR = declared_prior(_AGN_PARAMS, "agn_lum_ratio")
 
 
 @dataclass(frozen=True)
@@ -76,26 +100,26 @@ class KD18Disc(SEDModelComponent):
     log_mbh : Uniform
         log₁₀(M_BH / M_sun). [dex, 6–10]
     log_ledd : Uniform
-        Eddington ratio log₁₀(L / L_Edd). [dex, -3–0]
+        Eddington ratio log₁₀(L / L_Edd). [dex, -2–0.5]
     a_spin : Uniform
         Dimensionless black hole spin (prograde). [dimensionless, 0–0.998]
     cos_inc : Uniform
-        Cosine of inclination (1 = face-on, 0 = edge-on). [dimensionless, 0.01–1]
+        Cosine of inclination (1 = face-on, 0 = edge-on). [dimensionless, 0–1]
     f_hard : Uniform
-        Fraction of Eddington luminosity in hot corona. [dimensionless, 0.01–0.5]
+        Fraction of Eddington luminosity in hot corona. [dimensionless, 0–0.1]
     gamma_warm : Uniform
-        Photon index of warm Comptonization zone. [dimensionless, 1.5–3.5]
+        Photon index of warm Comptonization zone. [dimensionless, 2–3]
     kt_warm : Uniform
-        Warm zone electron temperature. [keV, 0.1–0.5]
+        Warm zone electron temperature. [keV, 0.1–1]
     gamma_hard : Uniform
         Hard X-ray photon index (used if self_consistent_gamma=False).
         [dimensionless, 1.5–2.5]
     kt_hot : Uniform
-        Hot corona electron temperature. [keV, 50–200]
+        Hot corona electron temperature. [keV, 50–300]
     r_warm_ratio : Uniform
-        Radius ratio R_warm / R_hot. [dimensionless, 1.1–5]
-    frac : Uniform
-        Fraction of bolometric luminosity from disc. [dimensionless, 0–1]
+        Radius ratio R_warm / R_hot. [dimensionless, 1–5]
+    lum_ratio : Uniform
+        Fraction of bolometric luminosity from disc. [dimensionless, 0–5]
 
     Cross-component outputs
     -----------------------
@@ -139,88 +163,88 @@ class KD18Disc(SEDModelComponent):
 
     # Free parameters: auto-discovered
     log_lbol = Uniform(
-        8.0,
-        14.0,
+        _LOG_LBOL_PRIOR.lo,
+        _LOG_LBOL_PRIOR.hi,
         description="AGN bolometric luminosity",
         units="dex (L_sun)",
-        default=11.0,
+        default=_LOG_LBOL_PRIOR.default,
     )
     log_mbh = Uniform(
-        6.0,
-        10.0,
+        _LOG_MBH_PRIOR.lo,
+        _LOG_MBH_PRIOR.hi,
         description="Black hole mass",
         units="dex (M_sun)",
-        default=8.0,
+        default=_LOG_MBH_PRIOR.default,
     )
     log_ledd = Uniform(
-        -3.0,
-        0.0,
+        _LOG_LEDD_PRIOR.lo,
+        _LOG_LEDD_PRIOR.hi,
         description="Eddington ratio",
         units="dex",
-        default=-1.5,
+        default=_LOG_LEDD_PRIOR.default,
     )
     a_spin = Uniform(
-        0.0,
-        0.998,
+        _A_SPIN_PRIOR.lo,
+        _A_SPIN_PRIOR.hi,
         description="Black hole spin parameter",
         units="dimensionless",
-        default=0.5,
+        default=_A_SPIN_PRIOR.default,
     )
     cos_inc = Uniform(
-        0.01,
-        1.0,
+        _COS_INC_PRIOR.lo,
+        _COS_INC_PRIOR.hi,
         description="Cosine of inclination",
         units="dimensionless",
-        default=0.8,
+        default=_COS_INC_PRIOR.default,
     )
     f_hard = Uniform(
-        0.01,
-        0.5,
+        _F_HARD_PRIOR.lo,
+        _F_HARD_PRIOR.hi,
         description="Corona luminosity fraction",
         units="dimensionless",
-        default=0.1,
+        default=_F_HARD_PRIOR.default,
     )
     gamma_warm = Uniform(
-        1.5,
-        3.5,
+        _GAMMA_WARM_PRIOR.lo,
+        _GAMMA_WARM_PRIOR.hi,
         description="Warm Comptonization photon index",
         units="dimensionless",
-        default=2.5,
+        default=_GAMMA_WARM_PRIOR.default,
     )
     kt_warm = Uniform(
-        0.1,
-        0.5,
+        _KT_WARM_PRIOR.lo,
+        _KT_WARM_PRIOR.hi,
         description="Warm zone electron temperature",
         units="keV",
-        default=0.2,
+        default=_KT_WARM_PRIOR.default,
     )
     gamma_hard = Uniform(
-        1.5,
-        2.5,
+        _GAMMA_HARD_PRIOR.lo,
+        _GAMMA_HARD_PRIOR.hi,
         description="Hard X-ray photon index",
         units="dimensionless",
-        default=1.9,
+        default=_GAMMA_HARD_PRIOR.default,
     )
     kt_hot = Uniform(
-        50.0,
-        200.0,
+        _KT_HOT_PRIOR.lo,
+        _KT_HOT_PRIOR.hi,
         description="Hot corona electron temperature",
         units="keV",
-        default=100.0,
+        default=_KT_HOT_PRIOR.default,
     )
     r_warm_ratio = Uniform(
-        1.1,
-        5.0,
+        _R_WARM_RATIO_PRIOR.lo,
+        _R_WARM_RATIO_PRIOR.hi,
         description="Radius ratio R_warm / R_hot",
         units="dimensionless",
-        default=3.0,
+        default=_R_WARM_RATIO_PRIOR.default,
     )
     lum_ratio = Uniform(
-        0.0,
-        1.0,
+        _LUM_RATIO_PRIOR.lo,
+        _LUM_RATIO_PRIOR.hi,
         description="Disc luminosity fraction of L_bol",
         units="dimensionless",
-        default=0.5,
+        default=_LUM_RATIO_PRIOR.default,
     )
 
     # Cross-component output

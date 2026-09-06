@@ -51,6 +51,11 @@ __all__ = ["SKIRTORAgnfitterTorus"]
 _OA_SKIRTOR_PRIOR = declared_prior(_AGN_PARAMS, "agn_oa_skirtor")
 _INCL_SKIRTOR_PRIOR = declared_prior(_AGN_PARAMS, "agn_incl_skirtor")
 _TV_SKIRTOR_PRIOR = declared_prior(_AGN_PARAMS, "agn_tv_skirtor")
+#: ``log_lbol``/``torus_frac`` restated stale literals (default 11.0 vs the
+#: canonical 10.0) -- found by ``tools/check_param_restatements.py``
+#: (Task 11 item 5 / fix round 1, R25).
+_LOG_LBOL_PRIOR = declared_prior(_AGN_PARAMS, "agn_log_lbol")
+_TORUS_FRAC_PRIOR = declared_prior(_AGN_PARAMS, "agn_torus_frac")
 
 
 @dataclass(frozen=True)
@@ -172,11 +177,11 @@ class SKIRTORAgnfitterTorus(SEDModelComponent):
 
     # Free parameters: auto-discovered
     log_lbol = Uniform(
-        8.0,
-        14.0,
+        _LOG_LBOL_PRIOR.lo,
+        _LOG_LBOL_PRIOR.hi,
         description="AGN bolometric luminosity",
         units="dex (L_sun)",
-        default=11.0,
+        default=_LOG_LBOL_PRIOR.default,
     )
     oa_skirtor = Uniform(
         _OA_SKIRTOR_PRIOR.lo,
@@ -200,11 +205,11 @@ class SKIRTORAgnfitterTorus(SEDModelComponent):
         default=_TV_SKIRTOR_PRIOR.default,
     )
     torus_frac = Uniform(
-        0.0,
-        1.0,
+        _TORUS_FRAC_PRIOR.lo,
+        _TORUS_FRAC_PRIOR.hi,
         description="Torus luminosity fraction of L_bol",
         units="dimensionless",
-        default=0.5,
+        default=_TORUS_FRAC_PRIOR.default,
     )
 
     # Cross-component output

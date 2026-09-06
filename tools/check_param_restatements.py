@@ -89,64 +89,21 @@ Canonical = tuple[float, float, float]  # (lo, hi, default)
 
 #: full_param_name -> reason. See "Allowlist" above.
 #:
-#: Every entry below is a genuine pre-existing drift this guard found on its
-#: first run, in five AGN disc/torus classes that predate the AGNfitter-rX
-#: parity branch entirely (``git log`` shows their class bodies were written
-#: in ``f92ed87f3``/``98ec30355``, long before any of Tasks 1-16). Changing a
-#: restated default or bound changes what a fit samples for every existing
-#: caller of that class, which is a physics-behavior change this hygiene
-#: sweep is not positioned to make safely (it needs its own review of
-#: downstream fit expectations, not a blanket "make the numbers agree").
-#: Tracked as a known_bugs.md row (docs/dev/known_bugs.md) rather than fixed
-#: here or silently dropped -- remove an entry only alongside the fix that
-#: switches its class attribute to ``declared_prior(PARAMS, name)`` (the
-#: pattern ``CAT3DTorus``'s and ``Silva04Torus``'s *other* priors, and all of
-#: ``SKIRTORTorus``'s, already use after Task 1 / Task 14).
-ALLOWLIST: dict[str, str] = {
-    # agn_log_lbol: every disc/torus class below restates default=11.0
-    # against the canonical default=10.0 (agn/_params.py). Same drift, five
-    # independent restatements -- exactly the duplication declared_prior
-    # exists to prevent.
-    "agn_log_lbol": (
-        "pre-existing drift (5 classes default=11.0 vs canonical 10.0); docs/dev/known_bugs.md"
-    ),
-    # KD18Disc (kd18_disc_model.py): eleven more parameters restate their own
-    # bounds independently of kd18_agnfitter.py's (correct) declared_prior
-    # usage for the same physical quantities.
-    "agn_log_mbh": (
-        "pre-existing drift (KD18Disc default=8.0 vs canonical 7.0); docs/dev/known_bugs.md"
-    ),
-    "agn_log_ledd": (
-        "pre-existing drift (KD18Disc bounds/default vs canonical); docs/dev/known_bugs.md"
-    ),
-    "agn_a_spin": (
-        "pre-existing drift (KD18Disc default=0.5 vs canonical 0.0); docs/dev/known_bugs.md"
-    ),
-    "agn_cos_inc": (
-        "pre-existing drift (KD18Disc lo/default vs canonical); docs/dev/known_bugs.md"
-    ),
-    "agn_f_hard": (
-        "pre-existing drift (KD18Disc bounds/default vs canonical); docs/dev/known_bugs.md"
-    ),
-    "agn_gamma_warm": (
-        "pre-existing drift (KD18Disc bounds vs canonical); docs/dev/known_bugs.md"
-    ),
-    "agn_kt_warm": "pre-existing drift (KD18Disc hi vs canonical); docs/dev/known_bugs.md",
-    "agn_gamma_hard": (
-        "pre-existing drift (KD18Disc default=1.9 vs canonical 1.8); docs/dev/known_bugs.md"
-    ),
-    "agn_kt_hot": "pre-existing drift (KD18Disc hi vs canonical); docs/dev/known_bugs.md",
-    "agn_r_warm_ratio": (
-        "pre-existing drift (KD18Disc bounds/default vs canonical); docs/dev/known_bugs.md"
-    ),
-    "agn_lum_ratio": (
-        "pre-existing drift (KD18Disc, PowerLawDisc hi/default vs canonical); "
-        "docs/dev/known_bugs.md"
-    ),
-    "agn_alpha": (
-        "pre-existing drift (PowerLawDisc bounds/default vs canonical); docs/dev/known_bugs.md"
-    ),
-}
+#: Empty as of Task 11 fix round 1 (ruling R25): the guard's first run found
+#: 18 restated literal priors across five AGN disc/torus classes
+#: (``CAT3DTorus``, ``KD18Disc``, ``PowerLawDisc``, ``Silva04Torus``,
+#: ``SKIRTORAgnfitterTorus``) that predate the AGNfitter-rX parity branch
+#: entirely. An initial pass allowlisted them as "pre-existing drift, needs
+#: its own review of downstream fit expectations" -- ruling R25 overrode that
+#: decision: every one of the 18 restatements was switched to
+#: ``declared_prior(PARAMS, name)`` instead (the same pattern Task 1 and
+#: Task 14 already used for these same classes' *other* priors), because a
+#: hygiene sweep that can see the drift can also remove it at the source --
+#: allowlisting a restatement this guard exists to catch is a last resort,
+#: not a first move. The dict is kept empty rather than deleted so a future
+#: genuine, deliberately-different restatement has somewhere to be recorded
+#: with a reason; try ``declared_prior`` first, every time.
+ALLOWLIST: dict[str, str] = {}
 
 
 def _iter_params_files() -> list[Path]:
