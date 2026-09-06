@@ -1090,6 +1090,18 @@ def configurations(nb: str, quick: bool, dense: bool, families=FAMILIES) -> dict
     configs = {}
     if shipped_family(cfg) in families:
         configs[shipped_label(cfg)] = shipped
+        # The shipped call PLUS the analytic metric, at the fixture's OWN warmup
+        # length. ``nutswarm`` already pairs preconditioned and unpreconditioned
+        # arms, but only at the lengths in :data:`NUTS_WARMUP_SWEEP`, and two
+        # fixtures do not ship one of those: ``ctl-jwst`` warms up for 1000 steps
+        # and ``00`` / ``00pre`` for 1500. On those, every ``nutswarm`` pair also
+        # shortens warmup, so "the metric helped" and "the shorter warmup helped"
+        # arrive together and cannot be separated. This row changes exactly one
+        # thing against the baseline directly above it. Added by
+        # bench/reports/2026-09-06_photometry_20s.md, which needs the metric's
+        # effect isolated on four fixtures whose shipped warmups differ.
+        if shipped.get("method") == "mcmc_nuts" and shipped.get("precondition") is None:
+            configs[f"{shipped_label(cfg)}+precond"] = dict(shipped, precondition=0.5)
 
     draws = 150 if quick else max(600, shipped["n_samples"])
     warmup = 300 if quick else 1000

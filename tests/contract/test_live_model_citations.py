@@ -57,9 +57,13 @@ def _build(ssp, **extra):
         (
             {
                 "neb": {"type": "none"},
+                # No 'all_params' on the disc block itself (#2187): every
+                # multicolor disc parameter is a *shared* AGN parameter, so a
+                # wildcard restated on 'disc' covers zero parameters and now
+                # raises. Only a disc's presence (for the corona) matters here.
                 "agn": {
                     "type": "composable",
-                    "disc": builders.agn.disc.multicolor(all_params=FREE),
+                    "disc": builders.agn.disc.multicolor(),
                 },
                 "xray": {"type": "simple"},
             },

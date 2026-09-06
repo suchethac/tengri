@@ -168,7 +168,7 @@ class TestHMCCrossValidation:
         x0 = jnp.zeros(gaussian_target["D"])
 
         # Tengri
-        chain_t, _, _ = sample_hamiltonian(
+        chain_t, _, _, _ = sample_hamiltonian(
             key,
             x0,
             gaussian_target["log_prob"],

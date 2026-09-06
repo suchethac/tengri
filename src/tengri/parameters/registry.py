@@ -64,8 +64,17 @@ class ParameterRecord(NamedTuple):
 #: for SFH parameters.
 #: Ordered longest-meaning-first: a *semantic stem* names the whole quantity
 #: (``log_total_mass``), a *bare suffix* only names its unit (``_gyr``). Stems
-#: must be tried first or ``sfh_db_log_sfr_inst`` would match nothing while
-#: ``sfh_snorm_burst_burst_sfr`` matched ``_yr`` inside "Msun/yr".
+#: must be tried first or ``sfh_db_log_sfr_inst`` would match nothing: it
+#: does not end in any of the bare suffixes below, so without its own
+#: semantic-stem entry it would fall through to "" instead of
+#: "log10(Msun/yr)".
+#:
+#: ``burst_sfr`` (``sfh_snorm_burst_burst_sfr`` / ``sfh_tsnorm_burst_
+#: burst_sfr``) deliberately has NO entry here, past or present: it is a
+#: dimensionless amplitude ratio under tengri's ``log_total_mass``
+#: renormalization (see the ``ParamDef`` comment in
+#: ``components/stellar/sfh/registry.py``), not a Msun/yr rate, so falling
+#: through every entry below to "" is the correct answer, not a gap.
 #:
 #: Log quantities declare ``log10(<unit>)``, not ``<unit>``: ``log10(M/Msun)``
 #: is dimensionless, and saying "Msun" would invite exactly the units error
@@ -75,7 +84,6 @@ _SUFFIX_UNITS: tuple[tuple[str, str], ...] = (
     # semantic stems (more specific: must precede the bare unit suffixes)
     ("log_total_mass", "log10(Msun)"),
     ("log_sfr_inst", "log10(Msun/yr)"),
-    ("burst_sfr", "Msun/yr"),
     ("met_logzsol_scatter", "dex"),
     # bare unit suffixes
     ("_gyr", "Gyr"),
