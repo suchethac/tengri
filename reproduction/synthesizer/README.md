@@ -163,11 +163,30 @@ evaluated, not in what it is.
 ## What the comparison found
 
 The per-section scalars printed by the notebook are the quantitative record; the
-figures in `_figs/` are the visual one. The shared SSP grid (§1), the delayed-τ
-SFH (§2), the DL07 dust IR (§6, far-IR peak agreeing to ~1 µm), and the IGM (§12)
-reproduce Synthesizer to floating point or a fraction of a percent. The nebular
-block (§8) is the deliberate exception — Synthesizer's Cloudy grid and tengri's
-Cue emulator use different photoionization inputs, so the Hα ratio is reported
-rather than forced to agree. In §9, the disc, torus, and inclination treatment
-are independent implementations and compared on shape/amplitude; the line regions
-share grids and so match in line content.
+figures in `_figs/` are the visual one. The shared SSP grid (§1) and the
+delayed-τ SFH (§2) reproduce Synthesizer to floating point or a fraction of a
+percent. The Draine & Li dust IR (§6), with all four knobs matched (qpah, umin,
+gamma, alpha), agrees in shape at every band and in energy to 2.6 percent. The
+offset reflects different energy-balance conventions: Synthesizer balances on
+the reprocessed spectrum (stellar after gas ionization plus nebular, consuming
+the Lyman continuum), while tengri balances on incident stellar with LyC
+excluded. WISE W1 0.984x is the 3.3 um PAH feature resampled onto each code's
+grid. The nebular block (§8) is the deliberate exception — Synthesizer's Cloudy
+grid and tengri's Cue emulator use different photoionization inputs, so the Hα
+ratio is reported rather than forced to agree.
+
+In §12, Inoue14 IGM matches Synthesizer's Inoue14 to better than 1e-3 at every
+redshift (z = 3, 5, 7); Asada25 matches at z ≤ 5. Two documented convention
+differences exist: (1) tengri's Madau implementation uses 17 Lyman-series lines
+(Prospector table) whereas Synthesizer's Madau96 keeps only the first 4 (Lyα to
+Lyδ), so tengri absorbs about twice as much between Lyδ and the Lyman limit, but
+only where transmission is already below 0.02 (e.g. z = 5, rest 865–915 Å: tengri
+0.0006–0.008 vs Synthesizer 0.0013–0.016); redward of Lyδ the two agree to a few
+1e-3. (2) At z = 7 the Asada25 proximate-CGM damping wing is 2.4x stronger in
+Synthesizer (its C = 3 λ_α^2 Λ^2 / (8π) omits the Lyα oscillator strength
+f_α = 0.4162 that tengri includes; rest 1245 Å: tengri T = 0.976 vs Synthesizer
+0.939).
+
+In §9, the disc, torus, and inclination treatment are independent implementations
+and compared on shape/amplitude; the line regions share grids and so match in line
+content.

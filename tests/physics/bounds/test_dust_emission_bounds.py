@@ -551,6 +551,165 @@ class TestCmbContrastFactorBounds:
             config.update("jax_enable_x64", old_state)
 
 
+# ── Graybody (general-opacity graybody) tests ─────────────────────
+
+
+class TestGraybodyBounds:
+    """Tests for graybody (general-opacity graybody) physical bounds."""
+
+    @pytest.fixture
+    def wave_ir(self):
+        """Broad IR wavelength grid (Angstrom), 1 μm – 10 mm."""
+        return jnp.logspace(4, 9, 500)
+
+    def test_graybody_finite_non_negative(self, wave_ir):
+        from tengri.components.dust.emission import graybody
+
+        sed = graybody(wave_ir, L_absorbed=1e10, dust_lambda_0_um=200.0)
+        chex.assert_tree_all_finite(sed)
+        assert_non_negative(sed, name="sed")
+
+    def test_graybody_output_shape(self, wave_ir):
+        from tengri.components.dust.emission import graybody
+
+        sed = graybody(wave_ir, L_absorbed=1e10, dust_lambda_0_um=200.0)
+        chex.assert_equal_shape([sed, wave_ir])
+
+    def test_graybody_zero_luminosity(self, wave_ir):
+        from tengri.components.dust.emission import graybody
+
+        sed = graybody(wave_ir, L_absorbed=0.0, dust_lambda_0_um=200.0)
+        assert jnp.allclose(sed, 0.0)
+
+    def test_graybody_hotter_peaks_shorter_wavelength(self, wave_ir):
+        """Higher temperature → peak at shorter wavelength (Wien)."""
+        from tengri.components.dust.emission import graybody
+
+        sed_cold = graybody(wave_ir, L_absorbed=1e10, dust_T=20.0, dust_lambda_0_um=200.0)
+        sed_warm = graybody(wave_ir, L_absorbed=1e10, dust_T=50.0, dust_lambda_0_um=200.0)
+        peak_cold = float(wave_ir[jnp.argmax(sed_cold)])
+        peak_warm = float(wave_ir[jnp.argmax(sed_warm)])
+        assert peak_warm < peak_cold
+
+    def test_graybody_beta_ir_zero_is_finite(self, wave_ir):
+        """graybody with beta_ir=0 should be finite and reasonable (pure blackbody).
+
+        At beta_ir=0, the emissivity is 1 everywhere. The spectrum is well-defined
+        and should be smooth like a pure blackbody. The peak of L_nu (per Hz) is at
+        a longer wavelength than Wien's displacement law peak (which applies to
+        L_lambda).
+        """
+        from tengri.components.dust.emission import graybody
+
+        sed = graybody(
+            wave_ir,
+            L_absorbed=1e10,
+            dust_T=30.0,
+            dust_beta_ir=0.0,
+            dust_lambda_0_um=200.0,
+        )
+
+        # Must be finite, non-negative, and have reasonable shape
+        chex.assert_tree_all_finite(sed)
+        assert_non_negative(sed, name="sed")
+
+        # Peak of L_nu for 30 K blackbody is at ~ h*nu/(k*T) ≈ 2.82
+        # which corresponds to lambda ~ c / (2.82 * k*T / h) ~ 160-180 um
+        peak_idx = jnp.argmax(sed)
+        peak_wavelength_um = float(wave_ir[peak_idx]) / 1e4
+        # For 30 K blackbody, L_nu peak is ~ 160-180 um
+        assert 140 < peak_wavelength_um < 200, (
+            f"Peak at {peak_wavelength_um} um is outside expected range [140-200]"
+        )
+
+    def test_graybody_large_lambda_0_optically_thin_limit(self, wave_ir):
+        """When lambda_0_um >> wavelength, graybody → optically-thin limit."""
+        from tengri.components.dust.emission import graybody, modified_blackbody
+
+        # lambda_0 = 1e6 um means tau << 1 everywhere on the IR grid
+        sed_graybody = graybody(
+            wave_ir,
+            L_absorbed=1e10,
+            dust_T=30.0,
+            dust_beta_ir=1.8,
+            dust_lambda_0_um=1e6,
+        )
+        sed_optically_thin = modified_blackbody(
+            wave_ir, L_absorbed=1e10, dust_T=30.0, dust_beta_ir=1.8
+        )
+
+        # Shapes should match in the thin limit (contrast factor nearly cancels)
+        # Compare on wavelengths where contrast ~ 1 (FIR)
+        wave_fir_idx = wave_ir >= 1e5  # 10 um and longer
+        if jnp.any(wave_fir_idx):
+            max_sb = jnp.max(sed_graybody[wave_fir_idx]) + 1e-30
+            max_ot = jnp.max(sed_optically_thin[wave_fir_idx]) + 1e-30
+            shape_graybody = sed_graybody[wave_fir_idx] / max_sb
+            shape_optically_thin = sed_optically_thin[wave_fir_idx] / max_ot
+            np.testing.assert_allclose(shape_graybody, shape_optically_thin, rtol=1e-6)
+
+    def test_graybody_energy_balance(self):
+        """Graybody integral over frequency equals L_absorbed."""
+        from tengri.components.dust.emission import graybody
+        from tengri.components.dust.emission._physics import integrate_lnu_over_nu
+
+        # UV-to-radio grid: 0.01 dex spacing from 1e2 to 1e8 Angstrom
+        wave = jnp.array(10.0 ** np.arange(2.0, 8.0, 0.01))
+        L_abs = 1e10
+
+        sed = graybody(
+            wave,
+            L_absorbed=L_abs,
+            dust_T=30.0,
+            dust_beta_ir=2.0,
+            dust_lambda_0_um=200.0,
+            redshift=0.0,
+        )
+
+        # Use the canonical integration function from _physics
+        total_absorbed = integrate_lnu_over_nu(sed, wave)
+
+        np.testing.assert_allclose(
+            float(total_absorbed),
+            L_abs,
+            rtol=1e-4,
+            atol=0,
+            err_msg="Graybody energy balance failed",
+        )
+
+    def test_graybody_different_pivots_different_shapes(self):
+        """Different lambda_0_um values produce different spectral shapes."""
+        from tengri.components.dust.emission import graybody
+
+        wave_ir = jnp.logspace(5, 8, 300)
+
+        sed_100 = graybody(
+            wave_ir,
+            L_absorbed=1e10,
+            dust_T=25.0,
+            dust_beta_ir=2.0,
+            dust_lambda_0_um=100.0,
+        )
+        sed_200 = graybody(
+            wave_ir,
+            L_absorbed=1e10,
+            dust_T=25.0,
+            dust_beta_ir=2.0,
+            dust_lambda_0_um=200.0,
+        )
+
+        # The spectra should differ (different optical depth profiles)
+        # At short wavelengths (where tau is large), the two should differ more
+        assert not jnp.allclose(sed_100, sed_200, rtol=1e-3)
+
+        # Find peaks
+        peak_100 = float(wave_ir[jnp.argmax(sed_100)])
+        peak_200 = float(wave_ir[jnp.argmax(sed_200)])
+
+        # The 100 um pivot should peak blueward of 200 um pivot
+        assert peak_100 < peak_200
+
+
 # ── Additional TestCasey2012 bounds tests ─────────────────────────
 
 

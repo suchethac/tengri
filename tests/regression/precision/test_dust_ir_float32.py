@@ -81,6 +81,7 @@ TEMPLATE_MODELS = (
     # removed from planck_bnu (#1206).
     "mbb",
     "modified_blackbody",
+    "graybody",
     "casey2012",
     "schreiber2016",
     # Affine model — proportional to the *total* budget L_ir + dust_L_agn_ir.
@@ -240,8 +241,11 @@ def test_dust_ir_sed_is_finite_in_pure_float32(synthetic_ssp_wide, emission_type
     # decades, so a far-wing bin carrying 1e-12 of the peak can differ by 100%
     # relative while being physically irrelevant; peak-normalized error is what
     # a flux measurement actually sees. 2% covers astrodust, the loosest of the
-    # family (measured 1.58e-2); the rest sit near 1e-6. This is float32
-    # template interpolation, not the L_ir seam.
+    # family (measured 1.23e-2 with its template stored at unit scale; 1.58e-2
+    # before, and 5.4e-2 while the predict-time normalization integrated the
+    # float32-interpolated ~1e-36 template, whose lgU blend underflows); the
+    # rest sit near 1e-6. This is float32 template resampling, not the L_ir
+    # seam.
     peak_relative_error = float(np.abs(got.astype(np.float64) - ref).max() / peak)
     assert peak_relative_error < 2.0e-2, (
         f"{emission_type}: float32 dust IR departs from float64 by "

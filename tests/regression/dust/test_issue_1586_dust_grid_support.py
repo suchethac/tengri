@@ -80,6 +80,10 @@ _GRID_FREE = frozenset(
     {
         "casey2012",
         "energy_balance_split",
+        # Analytic closure: opacity times a Planck function, evaluated on the
+        # caller's wavelength grid. Same standing as ``modified_blackbody``,
+        # which it generalizes to finite optical depth.
+        "graybody",
         "mbb",
         "modified_blackbody",
         "pah_drude",

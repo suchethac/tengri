@@ -300,6 +300,8 @@ def total_emission(
     qpah: float = 0.025,
     umin: float = 1.0,
     alpha: float = 2.0,
+    gamma: float = 0.05,
+    fesc: float = 0.0,
     components: tuple[str, ...] = ("incident", "attenuated", "dust_emission", "total"),
 ) -> dict[str, tuple[np.ndarray, np.ndarray]]:
     r"""Energy-balanced panchromatic SED via Synthesizer's ``TotalEmission`` tree.
@@ -316,10 +318,11 @@ def total_emission(
         Delayed-τ SFH, metallicity, and formed mass of the galaxy.
     av : float
         Diffuse :math:`V`-band attenuation [mag] (Calzetti screen, ``tau_v = A_V/1.086``).
-    qpah, umin, alpha : float
-        Draine & Li (2007) parameters: PAH mass fraction, minimum radiation-field
-        intensity, and the :math:`dU \propto U^{-\alpha}` power-law index. (Note
-        Synthesizer's ``qpah`` is a *fraction* — 0.025 ≈ tengri's ``qpah = 2.5``.)
+    qpah, umin, alpha, gamma : float
+        Draine & Li parameters: PAH mass fraction, minimum radiation-field
+        intensity, the :math:`dU \propto U^{-\alpha}` power-law index, and the PDR
+        mass fraction. (Note Synthesizer's ``qpah`` is a *fraction* — 0.025 ≈
+        tengri's ``qpah = 2.5``.)
     components : tuple of str
         Tree labels to return.
 
@@ -342,9 +345,9 @@ def total_emission(
     # here are placeholders.
     stars.dust_mass = 1e7 * Msun
     stars.hydrogen_mass = 1e9 * Msun
-    de = DraineLi07(grid=dust_grid, qpah=qpah, umin=umin, alpha=alpha)
+    de = DraineLi07(grid=dust_grid, qpah=qpah, umin=umin, alpha=alpha, gamma=gamma)
     model = TotalEmission(
-        grid=g, dust_curve=Calzetti2000(), dust_emission_model=de, tau_v=av / 1.086
+        grid=g, dust_curve=Calzetti2000(), dust_emission_model=de, tau_v=av / 1.086, fesc=fesc
     )
     with np.errstate(over="ignore", invalid="ignore", divide="ignore"):
         stars.get_spectra(model)
