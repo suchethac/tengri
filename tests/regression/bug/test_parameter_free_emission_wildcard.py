@@ -57,26 +57,29 @@ is no engine to un-anchor. For ``energy_balance_split`` it is not, which is why
 that engine's ``reads_parameters`` includes ``dust_eta_balance`` even though its
 ``predict`` never reads it: leaving it out would have made a live parameter
 freeable by no wildcard at all.
+
+Since #2187, the parameter-free engines refuse the ``'all_params': FREE`` wildcard
+at build time with ``ParameterError("covers no parameters")``, superseding the earlier
+check that verified no inert dimension entered the fit. The question has moved from
+"frees nothing, satisfies the promise trivially" to "refuses the zero-coverage wildcard
+at the build step", so the inert-parameter analysis no longer applies.
 """
 
 from __future__ import annotations
 
 import warnings
 
-import jax
 import jax.numpy as jnp
-import numpy as np
 import pytest
 
 from tengri import DEFAULT, FREE, Fixed, Observation, Photometry, SEDModel, SSPData
+from tengri.config import ParameterError
 from tengri.observation.photometry import FilterCurve
 
 pytestmark = pytest.mark.regression_bug
 
 #: Engines documented as declaring no free parameters of their own.
 _PARAMETER_FREE_ENGINES = ("pah_drude", "dh02_ce01")
-
-_INERT_TOL = 1e-9
 
 
 @pytest.fixture(scope="module")
@@ -126,48 +129,19 @@ def _build(ir_ssp, ir_obs, engine: str):
         )
 
 
-def _sed(model, params) -> np.ndarray:
-    with warnings.catch_warnings():
-        warnings.simplefilter("ignore")
-        return np.asarray(model.predict(params).rest_sed())
-
-
 @pytest.mark.parametrize("engine", _PARAMETER_FREE_ENGINES)
-def test_parameter_free_engine_frees_no_inert_parameter(engine, ir_ssp, ir_obs):
-    """Every parameter the wildcard frees must move the SED.
+def test_parameter_free_engine_wildcard_is_refused(engine, ir_ssp, ir_obs):
+    """The zero-coverage wildcard must be refused at build time.
 
-    Asserted as "no inert freed parameter" rather than "frees nothing", because
-    the promise #1482 is about is that a freed dimension is one a fit can use.
-    An engine that declares nothing and frees nothing satisfies it trivially;
-    one that frees 19 no-op dimensions does not.
+    Before #2187, the empty narrowing (from the ``declares_no_parameters`` marker
+    added during #1482) made ``dust_emission={'type': engine, 'all_params': FREE}``
+    build successfully with the wildcard freeing nothing — indistinguishable at the
+    call site from a working wildcard. Since #2187, the zero-coverage wildcard is
+    explicitly refused at build with ``ParameterError("covers no parameters")``. The
+    check has moved from silent success to explicit refusal at the build step.
     """
-    model = _build(ir_ssp, ir_obs, engine)
-    freed = sorted(p for p in model.spec.free_params if p.startswith("dust_"))
-
-    base = dict(model.spec.sample(jax.random.PRNGKey(0)))
-    sed0 = _sed(model, base)
-    denom = np.where(np.abs(sed0) > 0, np.abs(sed0), 1.0)
-
-    inert = []
-    for name in freed:
-        lo, hi = model.spec.get_distribution(name).bounds
-        worst = 0.0
-        for value in np.linspace(float(lo), float(hi), 5):
-            worst = max(
-                worst,
-                float(
-                    np.max(np.abs(_sed(model, {**base, name: np.float64(value)}) - sed0) / denom)
-                ),
-            )
-        if worst <= _INERT_TOL:
-            inert.append(name)
-
-    assert not inert, (
-        f"{engine}: 'all_params': FREE freed {len(inert)} parameter(s) that cannot move "
-        f"the SED anywhere in their own declared support: {inert}. A sampler explores "
-        "every one of them and reports a confident posterior over dimensions the "
-        "likelihood cannot see (#1482)."
-    )
+    with pytest.raises(ParameterError, match=r"covers no parameters"):
+        _build(ir_ssp, ir_obs, engine)
 
 
 @pytest.mark.parametrize("engine", _PARAMETER_FREE_ENGINES)
