@@ -114,10 +114,43 @@ def _build_one_category(ssp_data, observation, category, block_type, *, all_para
         )
 
 
+#: PR-tier sample: one type per category, chosen as the type each category's
+#: own fixtures already exercise elsewhere. The exhaustive 50-case sweep runs
+#: in the slow tier -- 50 measured `SEDModel.build`s cost ~3 minutes of PR-gate
+#: wall clock, and the contract is per-category, not per-type.
+_SMOKE_CASES = tuple(
+    (category, block_type)
+    for category, block_type in _ALL_CASES
+    if (category, block_type)
+    in {
+        ("disc", "multicolor"),
+        ("torus", "skirtor"),
+        ("nlr", "analytic"),
+        ("blr", "analytic"),
+        ("feii", "boroson_green"),
+        ("atten", "polar_dust"),
+    }
+)
+
+
+@pytest.mark.slow
 @pytest.mark.parametrize(
     ("category", "block_type"), _ALL_CASES, ids=[f"{c}/{t}" for c, t in _ALL_CASES]
 )
+def test_owned_and_live_params_are_all_freed_exhaustive(ssp, obs, category, block_type):
+    """The full sweep over every registered (category, type) -- slow tier."""
+    _assert_owned_and_live_are_freed(ssp, obs, category, block_type)
+
+
+@pytest.mark.parametrize(
+    ("category", "block_type"), _SMOKE_CASES, ids=[f"{c}/{t}" for c, t in _SMOKE_CASES]
+)
 def test_owned_and_live_params_are_all_freed(ssp, obs, category, block_type):
+    """One type per category in the fast tier; the exhaustive sweep is above."""
+    _assert_owned_and_live_are_freed(ssp, obs, category, block_type)
+
+
+def _assert_owned_and_live_are_freed(ssp, obs, category, block_type):
     """live-and-owned subseteq freed: every agn_* name partitioned to this
     category that is NOT in the wildcard's freed set must NOT move
     predict_photometry either -- a declared-reads gap the scoping function
@@ -224,13 +257,11 @@ def _build_torus_atten(ssp_data, observation, torus_type: str, atten_type: str, 
 
 
 #: PR-tier torus sample for the polar sweep: one type per mechanism family --
-#: a template-grid torus (skirtor), a clumpy one (nenkova), a wind model
-#: (cat3d_wind) and the analytic toy (simple). R22's claim is that the polar
-#: names are read by the ATTEN block alone, so the torus axis is the control
-#: variable, not the subject; the full 16-type sweep runs in the slow tier.
-_POLAR_SMOKE_TORUS_TYPES = tuple(
-    t for t in ("skirtor", "nenkova", "cat3d_wind", "simple") if t in _ALL_TORUS_TYPES
-)
+#: a template-grid torus (skirtor) and the analytic toy (simple). R22's claim
+#: is that the polar names are read by the ATTEN block alone, so the torus axis
+#: is the control variable, not the subject; the full 16-type sweep runs in the
+#: slow tier.
+_POLAR_SMOKE_TORUS_TYPES = tuple(t for t in ("skirtor", "simple") if t in _ALL_TORUS_TYPES)
 
 
 @pytest.mark.slow

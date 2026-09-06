@@ -129,6 +129,11 @@ RECIPE_FREE_PARAMS = {
         "agn_log_mbh",
         "agn_lum_ratio",
         "agn_nlr_cf",
+        # agn_nlr_fwhm_kms added (R34): the NLR analytic block's own line
+        # width. Its CONSUMES entry omitted it and it had no partition entry
+        # at all, so no wildcard could reach a parameter measured live on
+        # predict_photometry; both are fixed, so the recipe frees it.
+        "agn_nlr_fwhm_kms",
         "agn_nlr_line_efficiency",
         "agn_oa_skirtor",
         "agn_p_skirtor",
@@ -171,6 +176,11 @@ RECIPE_FREE_PARAMS = {
         "agn_log_mbh",
         "agn_lum_ratio",
         "agn_nlr_cf",
+        # agn_nlr_fwhm_kms added (R34): the NLR analytic block's own line
+        # width. Its CONSUMES entry omitted it and it had no partition entry
+        # at all, so no wildcard could reach a parameter measured live on
+        # predict_photometry; both are fixed, so the recipe frees it.
+        "agn_nlr_fwhm_kms",
         "agn_nlr_line_efficiency",
         "agn_oa_skirtor",
         "agn_p_skirtor",
