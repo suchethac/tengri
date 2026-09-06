@@ -610,7 +610,9 @@ _res_p = _optical_resid(w_psb, L_psb, _s_psb.wave, _s_psb.sed_intrinsic)
 print(f"§2d post-starburst: optical median residual {_res_p:.2e}")
 
 # tengri's dedicated Suess+2022 PSB template (now wired into the DSPS forward
-# pass): youngest bin [0, t_last], one flex bin to t_flex, then fixed old bins.
+# pass): youngest bin [0, t_last], one flex bin to t_flex, then three
+# equal-width fixed old bins from t_flex out to 13.7 Gyr, which take the two
+# adjacent-step ratios below.
 _sfh_suess = {
     "type": "psb_suess2022",
     "log_total_mass": Fixed(LOG_MASS_FIDUCIAL),
@@ -619,7 +621,6 @@ _sfh_suess = {
     "ratio_young": Fixed(-1.5),
     "ratio_old_0": Fixed(0.2),
     "ratio_old_1": Fixed(-0.3),
-    "ratio_old_2": Fixed(0.0),
     "all_params": Fixed(DEFAULT),
 }
 _m_suess, _s_suess = _tengri_nonparam(_sfh_suess)
