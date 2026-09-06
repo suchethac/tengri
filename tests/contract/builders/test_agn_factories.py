@@ -10,6 +10,7 @@ import pytest
 pytestmark = pytest.mark.contract
 
 from tengri import DEFAULT, FREE, Fixed, Uniform, builders, parse_groups
+from tengri.components.agn.unified import monolithic_agn_model_names
 from tengri.parameters.groups import (
     _VALID_AGN_ATTEN_TYPES,
     _VALID_AGN_BLR_TYPES,
@@ -232,49 +233,30 @@ def test_available_axes_returns_dict_of_lists() -> None:
 
 def test_all_13_top_level_models_have_factories() -> None:
     """All 13 non-composable AGN models must be callable factories."""
-    top_level_models = [
-        "adaf",
-        "cat3d_wind",
-        "grahsp",
-        "kubota_done",
-        "kubota_done_full",
-        "multicolor_agn",
-        "qsogen",
-        "relagn",
-        "silva04",
-        "simple",
-        "skirtor",
-        "standard",
-        "unified_nlr_blr",
-    ]
+    top_level_models = sorted(monolithic_agn_model_names())
     for model_name in top_level_models:
         factory = getattr(builders.agn, model_name, None)
         assert factory is not None, f"builders.agn.{model_name} not found"
         assert callable(factory), f"builders.agn.{model_name} is not callable"
 
 
-def test_available_lists_all_14_top_level_models() -> None:
-    """The available() function must list 14 total factories."""
+def test_available_lists_every_buildable_model() -> None:
+    """``available()`` lists exactly the models ``agn={'type': ...}`` accepts.
+
+    These three lists were hand-written and had drifted: they carried
+    ``simple`` and ``standard`` -- composable torus block names, not models --
+    and omitted ``richards2006`` and ``skirtor_stalevski``, which do build. So
+    ``builders.agn.simple()`` produced a config that raised
+    ``Unknown AGN model`` at predict time, and the factory for a real model was
+    missing. Derived from the registry now, which is the same set R37 validates
+    ``agn['type']`` against.
+    """
     factories = builders.agn.available()
-    assert len(factories) == 14
     assert factories == sorted(factories)
+    assert set(factories) == set(monolithic_agn_model_names()) | {"composable"}
     assert "composable" in factories
-    # Check all 13 non-composable models are listed
-    non_composable = [
-        "adaf",
-        "cat3d_wind",
-        "grahsp",
-        "kubota_done",
-        "kubota_done_full",
-        "multicolor_agn",
-        "qsogen",
-        "relagn",
-        "silva04",
-        "simple",
-        "skirtor",
-        "standard",
-        "unified_nlr_blr",
-    ]
+    non_composable = sorted(monolithic_agn_model_names())
+    non_composable = sorted(monolithic_agn_model_names())
     for model_name in non_composable:
         assert model_name in factories, f"{model_name} not in available()"
 
@@ -297,34 +279,22 @@ def test_skirtor_default_call_shape() -> None:
 
 def test_top_level_models_share_signature() -> None:
     """All 13 top-level models must have identical keyword signatures."""
-    top_level_models = [
-        "adaf",
-        "cat3d_wind",
-        "grahsp",
-        "kubota_done",
-        "kubota_done_full",
-        "multicolor_agn",
-        "qsogen",
-        "relagn",
-        "silva04",
-        "simple",
-        "skirtor",
-        "standard",
-        "unified_nlr_blr",
-    ]
+    top_level_models = sorted(monolithic_agn_model_names())
     sigs = {
         m: list(inspect.signature(getattr(builders.agn, m)).parameters) for m in top_level_models
     }
-    reference = sigs["simple"]
+    reference = sigs["multicolor_agn"]
     for model_name, params in sigs.items():
-        assert params == reference, f"builders.agn.{model_name} signature drifted from simple"
+        assert params == reference, (
+            f"builders.agn.{model_name} signature drifted from multicolor_agn"
+        )
 
 
 def test_top_level_round_trip_makes_log_lbol_free() -> None:
     """Round-trip through parser must recognize top-level factory params."""
     spec = parse_groups(
         sfh={"type": "dpl"},
-        agn=builders.agn.simple(log_lbol=Uniform(9.42, 13.42)),
+        agn=builders.agn.multicolor_agn(log_lbol=Uniform(9.42, 13.42)),
         redshift=Fixed(0.1),
     )
     assert "agn_log_lbol" in spec.free_params

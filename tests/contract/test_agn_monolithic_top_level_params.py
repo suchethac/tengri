@@ -146,3 +146,66 @@ def test_describe_agn_model_resolves_every_listed_name(model):
     row = tengri.describe_agn_model(model)
     assert str(row["citation"]).strip(), model
     assert str(row["short_doc"]).strip(), model
+
+
+# ──────────────────────────────────────────────────────────────────────────
+# R37: an AGN `type` that is not an AGN model is refused at build time.
+# ──────────────────────────────────────────────────────────────────────────
+
+
+def _validated_agn_types() -> set[str]:
+    """Every string ``agn={'type': ...}`` accepts, from the registries."""
+    from tengri.components.agn.unified import AGN_MODELS
+
+    return set(monolithic_agn_model_names()) | set(AGN_MODELS)
+
+
+def test_the_r27_contract_covers_exactly_the_validated_type_set():
+    """The enumeration above and the set the grammar validates are one set.
+
+    If the validator accepted a name this file does not build, that name would
+    have no coverage; if it refused one this file builds, the file would be
+    testing a spelling users cannot write.
+    """
+    assert _validated_agn_types() == set(_MONOLITHIC) | {"composable"}
+
+
+@pytest.mark.parametrize("block_type", ["fritz", "kd18_agnfitter", "nenkova_agnfitter"])
+def test_a_composable_block_name_as_the_model_type_names_the_composable_form(block_type):
+    """A block name written as the model type is refused, naming the nesting.
+
+    These build silently and die at the first `predict_photometry` with
+    `ValueError: Unknown AGN model` -- `_translate_agn` forwarded any string to
+    `agn_model` and deferred validation to predict time. Worse, a parameter
+    written beside such a type got the sub-block nesting advice, which is a
+    dead end twice over: the nesting is refused for a monolithic build, and the
+    type is not a model in the first place. The error now says which it is.
+    """
+    with pytest.raises(ValueError) as exc_info:
+        _parse({"type": block_type, "all_params": Fixed(DEFAULT)})
+    message = str(exc_info.value)
+    assert block_type in message
+    assert "composable" in message
+    assert "Nest it" not in message, message
+
+
+def test_an_unknown_agn_type_is_refused_with_the_model_list():
+    """Anything that is neither a model nor a block name gets the menu."""
+    with pytest.raises(ValueError) as exc_info:
+        _parse({"type": "totally_bogus_xyz", "all_params": Fixed(DEFAULT)})
+    message = str(exc_info.value)
+    assert "totally_bogus_xyz" in message
+    assert "composable" in message
+
+
+def test_a_near_miss_model_name_gets_a_close_match():
+    """A typo on a real model name suggests the model, not the block menu."""
+    with pytest.raises(ValueError) as exc_info:
+        _parse({"type": "skirtor_stalevsky", "all_params": Fixed(DEFAULT)})
+    assert "skirtor_stalevski" in str(exc_info.value)
+
+
+@pytest.mark.parametrize("model", [*_MONOLITHIC, "composable"])
+def test_every_validated_type_still_builds(model):
+    """The guard refuses only what it should: every validated name builds."""
+    _parse({"type": model, "all_params": Fixed(DEFAULT)})
