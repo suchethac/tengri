@@ -53,13 +53,23 @@ def narayanan_prior(z: float) -> dict:
     dict
         Keys ``"dust_delta"`` and ``"dust_bump_strength"``, each mapping to a
         ``Gaussian`` distribution [dimensionless]. Suitable for direct use in
-        ``Parameters(..., **narayanan_prior(z))``.
+        ``Parameters(..., **narayanan_prior(z))``. ``dust_bump_strength`` is
+        truncated at zero (``lo=0.0``) -- it declares a ``bound_check``
+        requiring non-negative bounds, so an unbounded prior fails at
+        construction (#2226). ``dust_delta`` has no such constraint (its
+        fitted means straddle zero) and stays a plain, unbounded Gaussian.
 
     Examples
     --------
     >>> from tengri import Parameters
     >>> from tengri.components.dust.priors import narayanan_prior
-    >>> spec = Parameters(..., **narayanan_prior(z=2.0))
+    >>> spec = Parameters(
+    ...     mean_sfh_type="dpl",
+    ...     dust_model="single_component",
+    ...     dust_law_bc="kriek_conroy",
+    ...     redshift=2.0,
+    ...     **narayanan_prior(z=2.0),
+    ... )
 
     Notes
     -----
@@ -112,7 +122,10 @@ def narayanan_prior(z: float) -> dict:
 
     return {
         "dust_delta": Gaussian(delta_mean, delta_sigma),
-        "dust_bump_strength": Gaussian(bump_mean, bump_sigma),
+        # dust_bump_strength declares a lo >= 0 bound_check (_params.py); an
+        # unbounded Gaussian here violates it at Parameters construction
+        # (#2226). dust_delta has no such constraint and stays unbounded.
+        "dust_bump_strength": Gaussian(bump_mean, bump_sigma, lo=0.0),
     }
 
 
@@ -134,13 +147,20 @@ def narayanan_tau_prior(z: float, log_mstar: float = 10.0) -> dict:
     dict
         Key ``"dust_tau_diff"`` mapping to a ``Gaussian`` distribution
         [dimensionless]. Suitable for direct use in
-        ``Parameters(..., **narayanan_tau_prior(z, log_mstar))``.
+        ``Parameters(..., **narayanan_tau_prior(z, log_mstar))``. The
+        distribution is truncated at zero (``lo=0.0``) -- ``dust_tau_diff``
+        declares a ``bound_check`` requiring non-negative bounds, so an
+        unbounded prior fails at construction (#2226).
 
     Examples
     --------
     >>> from tengri import Parameters
     >>> from tengri.components.dust.priors import narayanan_tau_prior
-    >>> spec = Parameters(..., **narayanan_tau_prior(z=1.5, log_mstar=10.5))
+    >>> spec = Parameters(
+    ...     mean_sfh_type="dpl",
+    ...     redshift=1.5,
+    ...     **narayanan_tau_prior(z=1.5, log_mstar=10.5),
+    ... )
 
     Notes
     -----
@@ -161,4 +181,6 @@ def narayanan_tau_prior(z: float, log_mstar: float = 10.0) -> dict:
     tau_mean = 0.5 * (10 ** (log_mstar - 10)) ** 0.5 * (1 + z) ** 0.5
     tau_sigma = 0.3 * tau_mean + 0.1
 
-    return {"dust_tau_diff": Gaussian(tau_mean, tau_sigma)}
+    # dust_tau_diff declares a lo >= 0 bound_check (_params.py); an unbounded
+    # Gaussian here violates it at Parameters construction (#2226).
+    return {"dust_tau_diff": Gaussian(tau_mean, tau_sigma, lo=0.0)}

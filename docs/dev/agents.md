@@ -416,7 +416,7 @@ All major components are implemented and tested:
 
 - **SFH models**: double power law, tsnorm, continuity, dirichlet, GP field (IFT correlated field with DRW/Matern PSD)
 - **Stellar populations**: DSPS CSP integral, MILES/C3K SSP templates, alpha-enhancement
-- **Dust attenuation**: Charlot & Fall two-component (`two_component_dust`), Calzetti, Reddy, SMC/LMC (Pei 1992), Narayanan+2018 mass-dependent, WG00 geometries
+- **Dust attenuation**: Charlot & Fall two-component (`two_component_dust`), Calzetti, Reddy, SMC/LMC (Pei 1992), Narayanan+2018 redshift-dependent, WG00 geometries
 - **Dust emission**: Draine & Li 2007 (tabulated), Dale+2014 (tabulated), Casey 2012 MBB+power law
 - **Nebular emission**: BakedIn (H-line scaling), CLOUDY grid interpolation, Cue emulator (NN), MAPPINGS shock+precursor, Feltre+2016 (stub)
 - **AGN**: K&D 3-zone disc (powerlaw, multicolor, kubota_done_3zone, ADAF), SKIRTOR torus (skirtor2016_torus, skirtor_analytic), BLR/NLR (unified_nlr_blr with polar dust), QSOgen, nthcomp warm Comptonization (HDF5 templates)
