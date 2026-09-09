@@ -1071,9 +1071,12 @@ print(f"§9 torus νLν peak: ProSpect {_peak_p9 / 1e4:.1f} µm, tengri {_peak_t
 # ## §11 Radio continuum
 #
 # ProSpect models radio continuum tied to the SFR via `addradio_SF` (free-free
-# + synchrotron). tengri's `condon92` model (Condon 1992) is the matching
-# star-formation radio prescription. The comparison is slope and normalization
-# at matched SFR. (ProSpect has no X-ray component.)
+# + synchrotron). tengri's `bell2003_split` radio block matches that pair: the
+# Bell (2003) total SFR-radio luminosity L(1.4 GHz) split into a non-thermal
+# synchrotron component (S_ν ∝ ν^−0.75, Baan & Klockner 2006) and a thermal
+# free-free component (S_ν ∝ ν^−0.10, Dale & Helou 2002; Condon 1992). The
+# comparison is slope and normalization at matched SFR. (ProSpect has no
+# X-ray component.)
 
 # %% [markdown]
 # **Verification Status:** PARTIAL (3/16) — Radio + X-ray + AGN
@@ -1113,12 +1116,14 @@ m_radio = SEDModel.build(
     # star-forming radio synchrotron continuum to 1.335 GHz, which double-counts
     # against the active radio.sf block below (#1970); the CIGALE variant has that
     # tail stripped and composes correctly with a separate radio component.
+    # ProSpect's own Dale templates carry no radio tail, since ProSpect adds
+    # radio continuum as a separate step via `addradio_SF`.
     dust_emission={
         "type": "dale2014_cigale",
         "alpha_dale": Fixed(3.0),
         "all_params": Fixed(DEFAULT),
     },
-    radio={"sf": {"type": "bell2003"}, "agn": {"type": "powerlaw"}, "all_params": Fixed(DEFAULT)},
+    radio={"sf": {"type": "bell2003_split"}, "agn": {"type": "powerlaw"}, "all_params": Fixed(DEFAULT)},
     redshift=Fixed(0.0),
 )
 s_radio = m_radio.predict_state({})
@@ -1126,7 +1131,12 @@ w_t11 = np.asarray(s_radio.wave)
 L_t11 = np.asarray(s_radio.sed_intrinsic)
 
 fig, ax_l, ax_r = U.two_panel_fig()
-U.panel(ax_l, ax_r, label_l="ProSpect  + radio (free-free + sync)", label_r="tengri  + Condon 92")
+U.panel(
+    ax_l,
+    ax_r,
+    label_l="ProSpect  + radio (free-free + sync)",
+    label_r="tengri  bell2003_split (free-free + synchrotron)",
+)
 ax_l.plot(w_p11, L_p11, "C0-", linewidth=1.5)
 ax_r.plot(w_t11, L_t11, "C1-", linewidth=1.5)
 # Span the full SED in view (dust-IR peak through the radio tail) so the FIR bump
@@ -1252,5 +1262,8 @@ plt.show()
 # * Fritz et al. 2006, MNRAS 366, 767 — AGN torus library
 # * Levesque et al. 2010, ApJ 712, 1019 — nebular photoionization grid
 # * Condon 1992, ARA&A 30, 575 — radio continuum from star formation
+# * Bell 2003, ApJ 586, 794 — SFR-radio (FIRRC) normalization
+# * Dale & Helou 2002, ApJ 576, 159 — infrared-radio correlation calibration (thermal free-free slope)
+# * Baan & Klockner 2006, A&A 449, 559 — non-thermal (synchrotron) spectral index
 # * Inoue et al. 2014, MNRAS 442, 1805 — IGM absorption
 # * Li et al. 2025 — Cue nebular emulator
