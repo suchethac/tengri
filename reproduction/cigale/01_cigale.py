@@ -30,11 +30,14 @@
 # Dale et al. (2014) IR re-emission with α = 2. Each section sweeps one
 # physics block around this fiducial.
 #
-# **What to expect.** The stellar templates, SFH, attenuation curves, AGN,
-# dust IR, X-ray, IGM, and radio synchrotron all match CIGALE to floating
-# point or a fraction of a percent. One block differs by design: the nebular
-# emitter uses Cue (a neural emulator trained on Cloudy 17, Li et al. 2025)
-# rather than CIGALE's Cloudy 13.x grids.
+# **What to expect.** The shared SSP grid, the parametric SFHs, the
+# attenuation laws, the X-ray corona and the Meiksin IGM agree to floating
+# point or a fraction of a percent. Three things do not, and each is stated
+# where it is measured rather than here: tengri's age-binning convention
+# (§3), which sets a ~2 % floor under the dust IR and the radio; the nebular
+# emitter, which is Cue — a neural emulator trained on Cloudy 17
+# (Li et al. 2025) — against CIGALE's Cloudy 13.x grids (§8); and the AGN
+# dust budget (§9). Every section prints the number it claims.
 
 # %% [markdown]
 # ## Setup
@@ -140,6 +143,13 @@ _FIG_DPI = 150
 def save_fig(filename: str) -> None:
     """Save figure to ``_figs/`` and leave it open so inline embeds work."""
     plt.savefig(str(figs_dir / filename), dpi=_FIG_DPI, bbox_inches="tight")
+
+
+def _lbol_nu(wave_aa, l_nu):
+    """∫L_ν dν [erg/s] from L_ν [erg/s/Hz] on a wavelength grid [Å]."""
+    w = np.asarray(wave_aa)
+    order = np.argsort(w)[::-1]  # → increasing frequency
+    return float(np.trapezoid(np.asarray(l_nu)[order], C_AA / w[order]))
 
 
 def _assert_comparable(arr_ref, arr_t, *, name: str) -> None:
@@ -338,6 +348,13 @@ save_fig("cigale_01_ssp_bc03.png")
 # lookback grid; the `∫SFR dt = 1.0000 M☉` check verifies the integral matches
 # the constraint.
 #
+# Each subsection prints the SFR(t) shape agreement as well as the mass
+# integral: the two codes sample the same analytic shape on different grids,
+# so CIGALE is interpolated onto tengri's points and the median and
+# worst-point ratios are reported. The plotted maximum of the delayed curve
+# falls at whichever log node is nearest t = τ rather than at τ itself, which
+# is where the grid is and not a different peak.
+#
 # **Verification Status:** PARTIAL (11/33) — Parametric SFH family physics
 
 # %% [markdown]
@@ -399,6 +416,35 @@ _idx = np.argsort(t_t)
 _mass_formed = float(np.trapezoid(sfr_t[_idx], t_t[_idx]))
 print(f"tengri pipeline ∫SFR dt = {_mass_formed:.4f} M☉ (target: 1.0000 from log_total_mass=0)")
 
+
+def _sfr_shape_report(label, t_c_yr, sfr_c_arr, t_t_yr, sfr_t_arr, age_gyr):
+    """Print the SFR(t) shape agreement on tengri's own grid.
+
+    The two codes sample the same shape on different grids — CIGALE on a
+    uniform 1-Myr axis, tengri on a 256-point log-spaced lookback axis — so
+    the comparison is CIGALE interpolated onto tengri's points, over the
+    interior of the history (the first 2 % and last 1 % of the age are
+    dropped: both ends are grid edges, not physics).
+    """
+    _c_on_t = np.interp(t_t_yr, np.asarray(t_c_yr), np.asarray(sfr_c_arr), left=np.nan, right=np.nan)
+    _ok = (
+        np.isfinite(_c_on_t)
+        & (_c_on_t > 0)
+        & (t_t_yr > 0.02 * age_gyr * 1e9)
+        & (t_t_yr < 0.99 * age_gyr * 1e9)
+    )
+    _rr = np.asarray(sfr_t_arr)[_ok] / _c_on_t[_ok]
+    _k = int(np.argmax(np.abs(_rr - 1.0)))
+    print(
+        f"{label} SFR(t) shape, tengri / CIGALE on tengri's grid: "
+        f"median {float(np.median(_rr)):.5f}×, max {float(_rr.max()):.4f}× at "
+        f"t = {t_t_yr[_ok][_k] / 1e9:.3f} Gyr, "
+        f"{int((np.abs(_rr - 1.0) > 0.01).sum())}/{int(_ok.sum())} points more than 1 % off"
+    )
+
+
+_sfr_shape_report("§2 delayed", t_c, sfr_c, t_t, sfr_t, age_gyr)
+
 fig, ax_l, ax_r = U.two_panel_fig()
 for ax, title in (
     (ax_l, "pcigale.sed_modules.sfhdelayed (τ=1 Gyr, age=5 Gyr)"),
@@ -440,8 +486,18 @@ save_fig("cigale_02_sfh_tau.png")
 # recent exponential burst that carries a fixed fraction `f_burst` of the total
 # stellar mass. tengri registers the same form (`sfh.sfh2exp`). At matched
 # parameters (τ_main = 4 Gyr, τ_burst = 0.1 Gyr, f_burst = 0.1, burst 0.3 Gyr
-# ago, age 10 Gyr) the two SFR histories agree, and tengri's pipeline grid still
-# integrates to the requested mass.
+# ago, age 10 Gyr) the two histories agree everywhere except at the burst
+# onset, and tengri's pipeline grid still integrates to the requested mass.
+#
+# **The burst onset is a step, and the two codes resolve it differently.**
+# `f_burst` turns the burst on discontinuously at `burst_age`. CIGALE
+# evaluates its SFH on a uniform 1-Myr grid, so it puts a grid point on each
+# side of the step; tengri's 256-point log-spaced lookback grid has one point
+# inside it, and that point straddles the discontinuity. The printed
+# comparison is the whole story: one grid point of 122 lands more than 1 %
+# from CIGALE, and the median is 1.00043×. It is a sampling difference at a
+# discontinuity, not a difference in the SFH — the mass integral, which does
+# not care where the grid points fall, agrees to 4 decimal places.
 
 # %%
 t_c2, sfr_c2 = C.sfh_curve(
@@ -485,6 +541,7 @@ _t_2exp = (_age_gyr_2exp - _lbt_2exp / 1e9) * 1e9  # cosmic age since SF onset [
 _idx2 = np.argsort(_t_2exp)
 _mass_2exp = float(np.trapezoid(_sfr_2exp[_idx2], _t_2exp[_idx2]))
 print(f"tengri pipeline ∫SFR dt = {_mass_2exp:.4f} M☉ (target: 1.0000 from log_total_mass=0)")
+_sfr_shape_report("§2 sfh2exp", t_c2, sfr_c2, _t_2exp, _sfr_2exp, _age_gyr_2exp)
 
 fig, ax_l, ax_r = U.two_panel_fig()
 for ax, title in (
@@ -514,6 +571,44 @@ save_fig("cigale_02_sfh2exp.png")
 # The τ-delayed SFH convolved with the BC03 SSPs. No dust, no nebular.
 # CIGALE is normalized to 1 M☉ formed by construction; tengri's stellar
 # mass formed is reported in the annotation.
+#
+# **The one convention difference on this SSP, and where it goes.** The two
+# codes place the same star formation on the same SSP age grid in different
+# ways, and the whole rest of the notebook inherits the result, so it is
+# stated once here.
+#
+# tengri integrates the SFH onto the age axis with a cloud-in-cell kernel
+# whose integrand extends to lookback zero, so the youngest SSP node (1 Myr
+# on this grid) receives the star formation of the whole `[0, 1 Myr]` parcel.
+# CIGALE gives that node exactly one 1-Myr bin and ages every star by +1 Myr
+# (`pcigale/sed_modules/bc03.py`). tengri therefore carries recent star
+# formation that a native-age binning drops, and since the 1–10 Myr
+# population dominates the ionizing and far-UV output, the difference is
+# strongly wavelength-dependent. Measured on this pair, printed below:
+#
+# | quantity | tengri / CIGALE |
+# |---|---|
+# | 200–912 Å | 1.144× |
+# | 912–1200 Å | 1.057× |
+# | 1200–3000 Å | 1.027× |
+# | 0.3–1 µm | 1.001× |
+# | stellar L_bol | 1.016× |
+# | Q_H (λ < 911.76 Å) | 1.150× |
+#
+# This is tengri's documented convention, not a defect, and it is ratcheted
+# by `tests/crossval/test_dsps_csp_uv_dense_reference.py` — which pins the
+# sign and the size of the rest-UV excess against a native-age
+# re-integration of tengri's own SFH, on this very grid. The ionizing budget
+# is why: the knot moves Q_H *toward* the analytic continuous SFH→SSP
+# convolution, so the side that drops the parcel is the one that is
+# incomplete.
+#
+# Three later sections are this table and nothing else. §6's dust IR is
+# normalized to `L_absorbed`, which inherits the 1.6 % L_bol offset weighted
+# toward the UV, and lands at 1.021× CIGALE's `dust.luminosity`. §11's
+# synchrotron is anchored on the same luminosity, so the 1.021 appears there
+# as a flat factor. §8's line luminosities scale with Q_H. None of those is
+# a separate discrepancy.
 
 # %%
 sed_c = C.run_chain(
@@ -584,6 +679,33 @@ ax.text(
 )
 _opt = (w_c >= 1e3) & (w_c <= 1e4) & (L_c > 0)
 print(f"§3 stellar tengri/CIGALE median (0.1–1 µm): {float(np.median(ratio[_opt])):.3f}×")
+
+# The age-binning convention, band by band. This is the table the §3 prose
+# quotes, and the term every later section inherits.
+_L_t_on_c3 = U.regrid(np.asarray(s_stellar.wave), np.asarray(s_stellar.sed_intrinsic), w_c)
+_r3 = _L_t_on_c3 / np.where(L_c > 0, L_c, np.nan)
+print("§3 intrinsic stellar SED, median ratio by band (tengri / CIGALE):")
+for _lo, _hi, _wname in (
+    (200.0, 912.0, "200–912 Å  "),
+    (912.0, 1200.0, "912–1200 Å "),
+    (1200.0, 3000.0, "1200–3000 Å"),
+    (3000.0, 10000.0, "0.3–1 µm   "),
+):
+    _m3 = (w_c >= _lo) & (w_c <= _hi) & np.isfinite(_r3)
+    print(f"    {_wname}: {float(np.median(_r3[_m3])):.3f}×")
+_pos3 = L_c > 0
+_lbol_c3 = _lbol_nu(w_c[_pos3], np.asarray(L_c)[_pos3])
+_lbol_t3 = _lbol_nu(w_c[_pos3], _L_t_on_c3[_pos3])
+_n_ly_c3 = float(sed_c.info["stellar.n_ly"])
+_q_h_t3 = float(np.asarray(s_stellar.derived["nion"]))
+print(
+    f"    stellar L_bol: CIGALE {_lbol_c3:.4e}, tengri {_lbol_t3:.4e} erg/s "
+    f"→ {_lbol_t3 / _lbol_c3:.3f}×"
+)
+print(
+    f"    Q_H          : CIGALE {_n_ly_c3:.4e}, tengri {_q_h_t3:.4e} ph/s "
+    f"→ {_q_h_t3 / _n_ly_c3:.3f}×"
+)
 fig.tight_layout()
 save_fig("cigale_03_stellar_sed.png")
 
@@ -863,17 +985,27 @@ plt.show()
 #
 # CIGALE re-emits absorbed stellar UV/optical through the Dale et al. (2014)
 # template family (α = 2); tengri evaluates the same templates and enforces
-# energy balance,
-# $L_{\rm IR,\,emitted} \equiv L_{\rm absorbed}$, to floating-point —
-# the residual is annotated on the right panel. The energy anchors agree
-# to 2%: tengri's `L_absorbed` sits above CIGALE's `dust.luminosity` by
-# the FUV shape difference between the two codes' Leitherer-extended
-# Calzetti curves. That anchor offset, plus template regridding, is the
-# printed 10–100 μm median.
+# energy balance, $L_{\rm IR,\,emitted} \equiv L_{\rm absorbed}$, to
+# floating-point — the residual is annotated on the right panel and printed
+# below, and it is exactly zero.
+#
+# **The energy anchor.** tengri's `L_absorbed` sits 2.1 % above CIGALE's
+# `dust.luminosity` (printed below). That is §3's age-binning convention
+# arriving here: the absorbed luminosity is an integral over the attenuated
+# far-UV and optical, weighted toward the wavelengths where tengri's youngest
+# SSP node adds flux. The two codes' attenuation *curves* are not the cause —
+# §4 measures them agreeing to 0.000 % away from the 1500–1800 Å crossover,
+# and the absorbed fraction they produce differs by less than half a percent.
+# Since the IR is normalized to that anchor, it appears in the printed
+# 10–100 µm median as a floor under whatever the templates themselves do.
 #
 # **Lyman continuum.** tengri's attenuation curves polynomial-extend
-# through the FUV; CIGALE zeros attenuation below 912 Å. Models here
-# set `dust_attenuation={'lyman_cutoff': True}` to match (see §7).
+# through the FUV; CIGALE zeros attenuation below 912 Å, and the models here
+# set `dust_attenuation={'lyman_cutoff': True}` to match. This changes the
+# emergent far-UV continuum, which is what §7's panel shows, and *not* the IR
+# budget: `L_absorbed` masks λ < 912 Å unconditionally, on the reasoning that
+# Lyman-continuum photons ionize hydrogen rather than heat dust. The IR here
+# is bit-identical with and without the flag.
 #
 # **Verification Status:** CROSSVAL — Dust IR emission vs BAGPIPES
 
@@ -955,6 +1087,26 @@ ax.text(
 )
 _fir = (w_c_ir >= 1e5) & (w_c_ir <= 1e6) & (L_c_ir > 0)
 print(f"§6 dust IR tengri/CIGALE median (10–100 µm): {float(np.median(ratio[_fir])):.3f}×")
+
+# The energy anchor the IR is normalized to, and the absorbed fraction that
+# sets it. Printed because §6's IR ratio, §11's synchrotron amplitude and the
+# capstone's FIR all rest on this one number, and it is not the attenuation
+# curve (§4) — it is the §3 age-binning convention reaching the integral.
+_L_DUST_C = float(sed_c_ir.info["dust.luminosity"]) * 1e7
+_L_STAR_C = float(sed_c_ir.info["stellar.lum"]) * 1e7
+# §3's dust-free twin is this galaxy's intrinsic stellar SED — same SFH, same
+# SSP, same 1 M☉ — so its bolometric integral is the denominator CIGALE's
+# ``stellar.lum`` is.
+_L_star_t = _lbol_nu(np.asarray(s_stellar.wave), np.asarray(s_stellar.sed_intrinsic))
+print(
+    f"§6 energy anchor: CIGALE dust.luminosity {_L_DUST_C:.4e}, "
+    f"tengri L_absorbed {L_abs:.4e} erg/s → {L_abs / _L_DUST_C:.4f}×"
+)
+print(
+    f"§6 absorbed fraction: CIGALE {_L_DUST_C / _L_STAR_C:.6f}, "
+    f"tengri {L_abs / _L_star_t:.6f}"
+)
+print(f"§6 energy balance |L_IR − L_abs| / L_abs = {residual:.3e}")
 fig.tight_layout()
 fig.savefig(str(figs_dir / "cigale_06_dust_ir_dale2014.png"), dpi=150, bbox_inches="tight")
 plt.show()
@@ -963,32 +1115,27 @@ plt.show()
 # %% [markdown]
 # ### Dust-IR model knobs: AGN heating and the radiation-field slope
 #
-# Two further CIGALE dust-IR parameters.
+# Two further CIGALE dust-IR parameters. Both panels sit on the same
+# energy anchor as §6 — `_knob_model` uses the notebook's fiducial
+# attenuation block, a single screen (`tau_bc = 0`, matching
+# `dustatt_modified_starburst`, which has no Charlot & Fall birth cloud;
+# A_V = R_V × E(B−V)_cont = 4.05 × 0.132 = 0.535 mag) carrying the
+# Leitherer-extended Calzetti curve with the 912 Å clip. So the 2.1 % anchor
+# offset of §3/§6 is a floor under every ratio printed here, and what the
+# panels add is whatever the *templates* do on top of it.
 #
-# **The attenuation must match for the IR to match.** The dust IR is
-# energy-balance-normalized to the *absorbed* starlight, so reproducing
-# CIGALE's IR means reproducing its `dustatt_modified_starburst`, a
-# **single Calzetti screen** on the stellar continuum with no Charlot &
-# Fall birth cloud (A_V = R_V x E(B-V)_cont = 4.05 x 0.132 = 0.535 mag).
-# tengri's two-component default adds a `tau_bc` birth-cloud screen, which
-# over-absorbs by **~9 %** and inflates the whole IR by the same factor.
-# `_knob_model` therefore uses the single screen (`tau_bc = 0`), at which
-# the absorbed fraction matches CIGALE to **0.2 %**.
-#
-# **Left — Dale 2014 AGN fraction (`dale2014.fracAGN`).** With the screen
-# corrected, the stellar-heated curve matches CIGALE to **~1.5 %**. That
-# residual is the BC03->DSPS conversion, not the dust or the attenuation:
-# tengri's intrinsic stellar $L_{\rm bol}$ is 1.4 % low. `fracAGN` adds an
+# **Left — Dale 2014 AGN fraction (`dale2014.fracAGN`).** `fracAGN` adds an
 # AGN-heated source as a separate power budget ($L_{\rm AGN}=L_{\rm
-# dust}\,f/(1-f)$) using CIGALE's own ``model_quasar`` template
-# (`SED = L\,T_{\rm SF}(\alpha) + L_{\rm AGN}\,T_{\rm QSO}`, `dale2014.py`),
-# and tengri tracks CIGALE to **~1.5 % across the sweep** ($f_{\rm AGN}=0,
-# 0.3, 0.6$) with no fracAGN-dependent drift. The subtlety that makes this
-# work: CIGALE normalizes ``model_quasar`` to unit luminosity over its full
-# native grid (~60 nm onward), where ~46 % of the quasar energy is the
-# UV/optical accretion-disc continuum below the dust grid's blue edge. Only
-# its ~0.42 IR share enters the dust mixing, and tengri carries that exact
-# partition, so the mid-IR lift does not run high at $f_{\rm AGN}=0.6$.
+# dust}\,f/(1-f)$) using CIGALE's own `model_quasar` template
+# ($SED = L\,T_{\rm SF}(\alpha) + L_{\rm AGN}\,T_{\rm QSO}$, `dale2014.py`).
+# The subtlety that makes the mixing work: CIGALE normalizes `model_quasar`
+# to unit luminosity over its full native grid (~60 nm onward), where ~46 %
+# of the quasar energy is the UV/optical accretion-disc continuum below the
+# dust grid's blue edge. Only its ~0.42 IR share enters the dust mixing, and
+# tengri carries that same partition. The cell prints the 3–8 µm and
+# 8–1000 µm median ratio at each $f_{\rm AGN}$, so the question of whether
+# the mid-IR lift drifts with $f_{\rm AGN}$ is answered by three numbers
+# rather than by eye.
 #
 # **Right — THEMIS slope $\alpha$ (`themis.alpha`, $dU/dM \propto
 # U^{-\alpha}$, matched `qhac=0.17, umin=1.0, gamma=0.1`).** tengri's THEMIS
@@ -997,10 +1144,11 @@ plt.show()
 # pinned to CIGALE's 0.17 on both sides. CIGALE quotes it as a fraction
 # while the DustEM grid tabulates it in FSPS scaling (`qhac × 100/2.2`), so
 # the two must be reconciled before interpolation or the wrong grain model
-# is selected. With the composition matched the curves track across the
-# whole $\alpha$ sweep. The small residual is CIGALE's own DustEM run using
-# `umax=1e7`, a slightly hotter PDR that nudges the IR partition at the
-# few-percent level.
+# is selected. One input is *not* matched and cannot be: CIGALE's own DustEM
+# run used `umax = 1e7`, a slightly hotter PDR, which redistributes the IR
+# rather than changing its total. The printed 8–30 µm and 8–1000 µm ratios
+# separate the two — a redistribution moves the first and leaves the second
+# on the anchor.
 
 # %%
 import jax
@@ -1227,21 +1375,33 @@ plt.show()
 # swaps to a **τ=300 Myr, age=100 Myr** delayed SFH where Hα and the
 # metal-line forest are physically strong. Only the SFH changes.
 #
-# The two emitters see the same H II region: `logU = −2.0`,
-# `Z_gas = Z_⊙` (Cue's `neb_logZ_gas` is pinned to
-# `log10(0.02/Z_⊙) ≈ +0.149`), `f_esc = 0`, `n_H = 100 cm⁻³`
-# (`gas_logn = 2.0`), solar N/O and C/O (`gas_logno = gas_logco = 0`). The
-# Q_H reaching Cue is the integral of the SSP-convolved ionizing spectrum
-# below 911.76 Å, published by the stellar component on every forward pass.
+# The two emitters see the same H II region: `logU = −2.0`, Z_gas = 0.02
+# (Cue's `neb_logZ_gas` pinned to `log10(0.02/Z_⊙) ≈ +0.149`, the same
+# absolute metallicity as CIGALE's `zgas = 0.02` and as the stars on both
+# sides), `f_esc = 0`, `n_H = 100 cm⁻³` (`gas_logn = 2.0`), solar N/O and C/O
+# (`gas_logno = gas_logco = 0`). The Q_H reaching Cue is the integral of the
+# SSP-convolved ionizing spectrum below 911.76 Å, published by the stellar
+# component on every forward pass.
 #
-# **Remaining residual.** The gap lives downstream of the gas knobs. Cue
-# was trained on Cloudy 17 (Li et al. 2025) while CIGALE bundles Cloudy
-# 13.x grids, and Cue's bare-stellar path differs from CIGALE's wNE-SSP
-# convolution. The three strong lines come out high by nearly the same factor (printed
-# below), so the line ratios survive while the absolute normalization does
-# not — the signature of a Cloudy-version offset rather than a line-physics
-# error. It is
-# quantified below with the **integrated** line luminosity
+# **Read the ionizing budget before the line ratios.** Every line scales with
+# the Q_H handed to the emitter, so the cell prints Q_H first: CIGALE's
+# `stellar.n_ly` against tengri's `nion`, on the shared BC03 grid and on the
+# dense FSPS grid the lines are measured on. Two known terms enter it. On the
+# shared grid it is §3's age-binning convention alone. On the dense grid the
+# SSP swap adds to it — deliberate, and the reason for it is below.
+#
+# **What is left after that is the emitter.** Cue was trained on Cloudy 17
+# (Li et al. 2025) while CIGALE bundles Cloudy 13.x grids, and Cue's
+# bare-stellar path differs from CIGALE's wNE-SSP convolution. The printed
+# line ratios divide out neither term, so they are an upper bound on the
+# emitter difference rather than a measurement of it — and they do not move
+# together: the recombination lines and [O III] behave differently, which is
+# what a line-physics or abundance difference looks like and not what a
+# uniform normalization offset looks like. Closing this properly needs
+# tengri's own static grid at matched Q_H (`neb={'type': 'cloudy'}`, below),
+# a Cloudy-against-Cloudy comparison; this notebook does not run it.
+#
+# Each line is quantified with the **integrated** luminosity
 # (continuum-subtracted, width-independent), not a single-bin peak ratio,
 # which would measure line width and grid resolution (CIGALE broadens to
 # `lines_width = 300 km/s`) rather than physics.
@@ -1468,36 +1628,42 @@ for _c, _name in [(6563.0, "Hα"), (5007.0, "[O III]"), (4861.0, "Hβ")]:
 # **`disc.schartmann2005` matches CIGALE's `skirtor2016 disk_type=1`**
 # default: the Schartmann (2005) piecewise power law with the 1200 Å
 # bend that CIGALE substitutes for the FITS-bundled disc. tengri also
-# ships `disc.skirtor` (CIGALE `disk_type=0`) and `disc.adaf_lopez2024`
-# (`disk_type=2`). Its library defaults follow CIGALE's: `agn_torus_frac
-# = 0.5` and `agn_polar_ebv = 0.03` (Casey-2012 polar dust, T = 100 K,
-# β = 1.6), so disc, torus, and polar-dust graybody are engaged with no
-# per-fit overrides. Agreement is within ~1 % from the UV to the NIR and
-# ~6 % in the MIR/FIR under the default `norm='cigale_joint'`.
+# ships `disc.skirtor` (CIGALE `disk_type=0`, §9b) and `disc.adaf_lopez2024`
+# (`disk_type=2`).
 #
 # A differentiable alternative (M_BH, ṁ, spin) is available as
 # `disc={"type": "multicolor", ...}`, a Shakura-Sunyaev disc. It carries
 # a far-UV bump separated from the optical Wien tail by a notch near
 # 5000 Å and diverges from CIGALE in the disc UV continuum, though the
 # torus IR still matches. This notebook uses `disc.schartmann2005` to
-# match CIGALE exactly.
+# match CIGALE's default.
 #
-# The torus IR uses the same templates and reproduces at all
-# inclinations: at i = 30° both sides peak at ~6–9 μm, and edge-on
-# viewing pushes the dust peak out to ~30 μm. The Casey-2012 polar-dust
-# graybody, on by default (`agn_polar_ebv = 0.03`; set `Fixed(0.0)` to
-# disable), lifts the ~100 μm tail by a factor of a few.
+# **Three components, and all three have to be selected.** CIGALE's
+# `skirtor2016` emits a disc, a torus and a Casey-2012 polar-dust graybody,
+# and publishes them separately. tengri's composable AGN has the same three,
+# but the polar graybody is a standalone `atten` block — it is not bundled
+# with the torus, and `derived["sed_agn_polar"]` is a zeros array whenever the
+# block is not selected. The build below therefore names all three, at
+# CIGALE's own defaults (`oa = 40°`, τ_9.7 = 7, p = q = 1, i = 30°,
+# `agn_torus_frac = 0.5`, `agn_polar_ebv = 0.03`, T = 100 K, β = 1.6). §9c
+# prints the disc, torus and polar-dust luminosities separately, which is the
+# only way a FIR residual can be attributed: at 100 µm all three overlap and
+# a band ratio cannot say which one carries it.
+#
+# The torus IR uses the same templates and reproduces at all inclinations:
+# at i = 30° both sides peak at ~6–9 μm, and edge-on viewing pushes the dust
+# peak out to ~30 μm.
 #
 # **Energy-balance normalization.** CIGALE ties disc, torus, and polar
 # dust to a single `agn_power` reference through the fixed SKIRTOR
 # template ratios. tengri's default `norm='cigale_joint'` does the same:
 # the disc is tied to `agn_power × R`, where `R = η(i)·∫disc/∫dust` and
 # `η(i) = cos i (1+2cos i)/3` is the Stalevski+2016 anisotropy factor
-# (η = 0.789 at i = 30°). The stellar+AGN SED lands at {UV: 0.99, opt: 1.00,
-# NIR: 0.99, 30 μm: 0.96, 100 μm: 0.94} against CIGALE, within ~6 % end to
-# end. The legacy scaling (`'norm':'independent'`, ~0.80 / 0.79 / 1.06 / 1.15)
-# is available for users who want the disc decoupled from the absorbed-energy
-# budget.
+# (η = 0.789 at i = 30°). `agn_power` itself is not a free input here — with
+# `agn_ir_frac` set it is derived from `L_absorbed × f/(1−f)`, exactly as
+# CIGALE derives it from `fracAGN`, so §6's energy anchor enters the AGN
+# normalization too. The legacy scaling (`'norm':'independent'`) is available
+# for users who want the disc decoupled from the absorbed-energy budget.
 #
 # **Verification Status:** CROSSVAL — SKIRTOR torus (mean 3-param)
 
@@ -1743,13 +1909,6 @@ for _name, _lo, _hi in [
 # its SKIRTOR contributions (``agn.SKIRTOR2016_disk`` / ``_torus`` /
 # ``_polar_dust``) and tengri publishes the same three on ``state.derived``,
 # so the comparison can be made component by component instead.
-def _lbol_nu(wave_aa, l_nu):
-    """∫L_ν dν [erg/s] from L_ν [erg/s/Hz] on an Å grid."""
-    w = np.asarray(wave_aa)
-    order = np.argsort(w)[::-1]  # → increasing frequency
-    return float(np.trapezoid(np.asarray(l_nu)[order], C_AA / w[order]))
-
-
 def _agn_component_pair(sed_c, state_t, cig_key, tengri_key):
     """(CIGALE, tengri) ∫L_ν dν for one AGN component, on their shared support.
 
@@ -1959,9 +2118,11 @@ save_fig("cigale_09b_disc_skirtor.png")
 # plus X-ray binaries and hot gas. tengri ships `xray.yang20`. Three
 # conventions are matched: α_ox is derived from L_2500 (Just et al. 2007,
 # `L_2keV = L_2500 · 10^(α_ox/0.3838)`) on both sides at log₁₀ L_2500 = 29.47;
-# inclination follows Yang+2020 at i = 30°; N_H is pinned
-# to zero, and tengri's constant 1% scattered floor (Ricci et al. 2017) appears
-# as +1% in the ratio.
+# inclination follows Yang+2020 at i = 30°; and N_H is pinned to zero on both
+# sides. At `log N_H = 0` tengri's Ricci et al. (2017) scattered floor is 1 %
+# of an unabsorbed corona and contributes nothing here, so it is not what the
+# printed residual is; the residual is a fraction of a percent and the cell
+# prints it at 2 keV and as a median over 0.5–10 keV.
 #
 # **Verification Status:** PARTIAL (3/16) — Radio + X-ray + AGN
 
@@ -2210,36 +2371,38 @@ save_fig("cigale_10b_xray_inclination.png")
 # `L_ref = L_dust / (3.75e12 · 10^q_IR)`, so any mismatch in the absorbed
 # energy lands 1:1 in the radio.
 #
-# tengri sits **4 % above CIGALE at 1.4 GHz**, and the excess *grows with
-# frequency* — 1.01× at 150 MHz, 1.04× at 1.4 GHz, 1.16× at 10 GHz, 1.75× at
-# 100 GHz. The shape is the diagnosis: a normalization error would offset the
-# whole band by a constant, and this does not.
+# tengri sits above CIGALE across the band and the excess *grows with
+# frequency* — the four printed total ratios climb monotonically from
+# 150 MHz to 100 GHz. The shape is the diagnosis: a normalization error would
+# offset the whole band by a constant, and this does not.
 #
 # Separate the ratio into the only two things it can be made of.
 #
 # **The non-thermal terms agree, and their offset is pure convention.** Both
 # codes emit a synchrotron power law of the same index, so tengri's synchrotron
-# over CIGALE's can only be a constant — and it is: **1.005, flat across all
-# three decades** (the dotted line on the ratio panel). Two conventions predict
-# that constant without reference to the measurement:
+# over CIGALE's can only be a constant — and it is: flat across all three
+# decades (printed, and the dotted line on the ratio panel). Two conventions
+# predict that constant without reference to the measurement:
 #
 # - **Anchor frequency, ×0.985.** Bell 2003 defines q_IR at 1.4 GHz; CIGALE
 #   normalizes at 21 cm = 1.4276 GHz — a pure `(1.4276/1.4)^−0.8` offset.
-# - **Energy balance, ×1.020.** `L_absorbed` runs 2 % above CIGALE's
-#   `dust.luminosity` for this attenuation setup (the §6 FUV curve-shape
-#   residual). Both codes anchor the synchrotron on the dust luminosity
+# - **Energy balance.** `L_absorbed` runs 2.1 % above CIGALE's
+#   `dust.luminosity` (§6's printed anchor, and §3's age-binning convention
+#   behind it — not an attenuation-curve difference). Both codes anchor the
+#   synchrotron on the dust luminosity
 #   (`L_ref = L_dust / (3.75e12 · 10^q_IR)`), so it lands in the radio 1:1.
 #
-# Their product, ×1.005, is the measured flat offset. Nothing is fitted here:
-# the prediction comes from the two conventions, the measurement from the two
-# SEDs, and they meet.
+# Their product is the measured flat offset; the cell prints the prediction
+# and the measurement side by side. Nothing is fitted: the prediction comes
+# from the two conventions, the measurement from the two SEDs, and they meet.
 #
 # **Everything above that line is thermal.** tengri's `condon92` carries a
 # Murphy+2011 free-free term; CIGALE's `radio` module has none. Free-free
 # is flat (α ≈ 0.1) where synchrotron is steep (α = 0.8), so its share climbs
-# with frequency — 4 % at 1.4 GHz, 75 % at 100 GHz. That is the entire rise of
-# the ratio panel, and it is a physics difference between the two codes rather
-# than a discrepancy in the shared physics.
+# with frequency, which is the entire rise of the ratio panel — the printed
+# thermal fraction at 0.15, 1.4, 10 and 100 GHz is that share. It is a physics
+# difference between the two codes rather than a discrepancy in the shared
+# physics.
 #
 # **Verification Status:** PARTIAL (3/25) — Radio / X-ray / IGM / PSD physics
 
@@ -2353,7 +2516,8 @@ print(f"§11 radio tengri/CIGALE median (1.0–1.5 GHz): {float(np.median(ratio[
 # Close the ratio *at every frequency*, not at one probe point. The prediction
 # is purely the two convention/physics factors — thermal fraction (frequency
 # dependent) and the fixed 21 cm-vs-1.4 GHz anchor — times the energy-balance
-# anchor, which is now ~1. If that curve traces the measured ratio across three
+# anchor, which §3 and §6 already account for and which is printed here from
+# this section's own SED. If that curve traces the measured ratio across three
 # decades, the "radio deviation" is fully accounted for and nothing is left over.
 _L_ir_t = float(np.asarray(state_r.derived["L_ir"]))
 _f_lir = _L_ir_t / (float(sed_r.info["dust.luminosity"]) * 1e7)
@@ -2412,10 +2576,10 @@ save_fig("cigale_11_radio_synchrotron.png")
 # forest continuum suppression, so transmission redward of the Lyman
 # limit at z = 3 sits at ~0.18–0.25 rather than 1. tengri ships the
 # matching `igm.meiksin06`; this panel uses it directly so both sides
-# apply the same Meiksin prescription. The transmission curves overlay
-# at z = 3, 5, 7 to **max |ΔT| ~ 1e-7** (float precision, median
-# ΔT = 0): tengri matches CIGALE's Meiksin transmission bit for bit,
-# not just visually.
+# apply the same Meiksin prescription. The printed max and median |ΔT| at
+# z = 3, 5, 7 are at float precision with no point anywhere above 1e-3:
+# tengri matches CIGALE's Meiksin transmission to the last digit, not just
+# visually.
 #
 # **Verification Status:** CROSSVAL — Inoue+2014 IGM transmission
 
@@ -2442,12 +2606,19 @@ ax_l.set_title("pcigale  redshifting.igm_transmission (Meiksin 2006)")
 ax_r.set_title("tengri  igm.meiksin06")
 
 wave_obs_aa = np.logspace(np.log10(500.0), np.log10(1e4), 600)
+print("§12 Meiksin 2006 transmission (tengri − CIGALE) on the plotted grid:")
 for color, z in zip(("C0", "C1", "C2"), (3.0, 5.0, 7.0)):
     # CIGALE igm_transmission takes wavelength in nm.
     T_c = np.asarray(cigale_igm(wave_obs_aa / 10.0, z))
     T_t = np.asarray(igm_transmission_meiksin06(_jnp.asarray(wave_obs_aa), z))
     ax_l.plot(wave_obs_aa, T_c, color=color, linewidth=1.4, label=rf"$z = {z:.0f}$")
     ax_r.plot(wave_obs_aa, T_t, color=color, linewidth=1.4, label=rf"$z = {z:.0f}$")
+    _dT = np.abs(T_t - T_c)
+    print(
+        f"    z = {z:.0f}: max |ΔT| = {float(_dT.max()):.2e}, "
+        f"median |ΔT| = {float(np.median(_dT)):.2e}, "
+        f"{int((_dT > 1e-3).sum())}/{_dT.size} points above 1e-3"
+    )
 
 ax_l.legend(fontsize=9)
 
@@ -2470,12 +2641,11 @@ save_fig("cigale_12_igm_transmission.png")
 # single-screen dust mapping (`tau_bc = 0`) the residual sits inside ±25 %
 # from the far-UV through the FIR; the sub-912 Å excursion is the
 # Lyman-continuum extrapolation and the mm-tail offset is the Dale template
-# cutoff (§6). The X-ray wing (XRB + hot gas, 1 keV ≈ 0.97×, 5 keV ≈ 0.96×)
-# and radio wings match CIGALE once `q_IR = 2.5` is pinned on both sides (§11).
-# A wiring bug fixed here: the X-ray component was calling the Lehmer+2016
-# LMXB scaling with its 1 Gyr default age instead of the galaxy's mass-weighted
-# age, making a ~3 Gyr population ~3.4× too luminous; threading the SSP
-# mass-weighted age into `xray_total` collapsed the wing to ~0.97×.
+# cutoff (§6). The X-ray wing here is XRB + hot gas with no AGN corona —
+# `alpha_ox` is supplied but there is no disc for it to act on — and the
+# Lehmer+2016 LMXB term is scaled by the SSP mass-weighted age of this
+# galaxy, not by a default age. The radio wings rest on `q_IR = 2.5`, pinned
+# on both sides (§11). Every one of these is printed below.
 
 # %%
 import chex
@@ -2651,13 +2821,52 @@ plt.show()
 # %% [markdown]
 # ## Summary
 #
-# Module by module, at matched parameters, CIGALE and tengri agree
-# wherever they evaluate the same mathematics — the BC03 SSP grid, the
-# τ-delayed SFH, the attenuation curves, the Dale+2014 dust IR through
-# energy balance, the X-ray corona + binary scalings, the radio
-# synchrotron + free-free composite, and the Meiksin IGM — and differ in
-# the two places they use different physics inputs: the nebular grid (Cue
-# vs CIGALE's Cloudy 13.x, §8) and the SKIRTOR torus shape (§9).
+# Section by section, with the number each one prints.
+#
+# * **§1 SSP.** The shared BC03 grid round-trips at the float32 level
+#   (median 2e-8), and the write and read sides use one speed of light.
+# * **§2 SFH.** The `delayed` shape agrees to a flat 1.00043×. `sfh2exp`
+#   agrees to the same median, with a single grid point at the burst step
+#   where tengri's log lookback grid straddles a discontinuity CIGALE's
+#   uniform 1-Myr grid brackets. Both mass integrals hit 1.0000 M☉.
+# * **§3 stellar SED.** One convention differs, and this is where it is
+#   stated: tengri's cloud-in-cell age kernel captures the `[0, 1 Myr]` star
+#   formation that CIGALE's native-age binning drops. It is +14 % at
+#   200–912 Å, +1.6 % on L_bol, +15 % on Q_H and +0.1 % in the optical —
+#   documented, ratcheted by `tests/crossval/test_dsps_csp_uv_dense_reference.py`,
+#   and the reason §6, §8 and §11 have the offsets they do.
+# * **§4 attenuation laws.** Analytic curve against analytic curve, the three
+#   families agree to 0.000 % away from one window: CIGALE hands over from
+#   Leitherer to Calzetti at 1500 Å and tengri at 1800 Å, worth 0.25 %
+#   between them. tengri follows Leitherer et al.'s stated 912–1800 Å range;
+#   pcigale's own docstring says the same and its code does not.
+# * **§5–§7 attenuation applied, dust IR, panchromatic.** Energy balance is
+#   exact (`|L_IR − L_absorbed| / L_absorbed = 0`). The energy *anchor* runs
+#   2.1 % above CIGALE's `dust.luminosity`, which is §3 and not the dust: the
+#   attenuation curves agree to 0.000 % and the absorbed fractions to under
+#   half a percent. `lyman_cutoff` matches CIGALE's 912 Å clip on the
+#   emergent far-UV; it does not touch the IR budget, which masks the Lyman
+#   continuum unconditionally on both sides.
+# * **§8 nebular.** Different emitters by design — Cue (a Cloudy 17 emulator)
+#   against CIGALE's Cloudy 13.x grids — on a deliberately different, denser
+#   SSP, since CIGALE's own ~20 Å optical grid cannot resolve a line. The
+#   ionizing budget is printed with the lines, because the line ratios bound
+#   the emitter difference rather than measuring it. A Cloudy-against-Cloudy
+#   comparison at matched Q_H would close it and is not run here.
+# * **§9 AGN.** Disc, torus and polar dust are compared as three separate
+#   luminosities rather than as band medians of their sum. The two analytic
+#   discs both agree with CIGALE's to about a percent once the polar screen is
+#   taken out; the AGN dust budget does not, and §9c says which component.
+# * **§10 X-ray.** Matched to 4 decimal places on disc L_2500, then a
+#   fraction of a percent at 2 keV, and the Yang+2022 inclination tilt is the
+#   same function on both sides across i = 0–80°.
+# * **§11 radio.** The synchrotron terms agree up to a flat factor that two
+#   conventions predict without being fitted to it: the 21 cm-vs-1.4 GHz
+#   anchor (×0.985) and §6's energy anchor. Everything above that line is
+#   tengri's Murphy+2011 free-free, which CIGALE's radio module does not
+#   have.
+# * **§12 IGM.** Meiksin 2006 on both sides, max |ΔT| ~ 1e-7 at z = 3, 5, 7
+#   with median ΔT of order 1e-17 — the same prescription evaluated twice.
 
 # %% [markdown]
 # ## References
