@@ -51,20 +51,30 @@ PARAMS: tuple[ParamDeclaration, ...] = (
     ),
     ParamDeclaration(
         "neb_logZ_gas",
-        Fixed(-0.3),  # will be overridden to match met_logzsol if not set
+        Fixed(-0.3),  # grammar always supplies this default (met inheritance is dead code)
         "Gas-phase metallicity log10(Z_gas/Zsun)",
-        # Deliberately NO free_prior, for the same reason as ``neb_xid`` (which
-        # lives in ``parameters/_builders.py::_AGN_EXTRAS``):
-        # its admissible range is the selected nebular backend's grid, and those
-        # differ (Cue, the Cloudy grids and the baked-in SSP tables do not share
-        # an extent). The ``neb`` group wildcard is not backend-scoped the way
-        # ``dust.emission`` is since #1482, so one declared range would be right
-        # for one backend and clipped or unreachable for the others.
+        # The interval is the intersection of every shipped backend's measured
+        # support in public log10(Z/Zsun) units: Cue's training design
+        # back-solved from the NN normalization constants gives [-2.20, 0.50];
+        # the four shipped CloudyGrid files' lines axes are [-1.30, 0.30] with
+        # continuum axes [-1.98, 0.20] (mist/pdva/prsc) and [-1.30, 0.30]
+        # (bpass), so worst-case [-1.30, 0.20] -- the binding constraint;
+        # CB19's log_OH axis maps to [-1.99, 0.49]. Deliberately conservative:
+        # Cue and CB19 have real headroom a single static prior forfeits, and
+        # ``free_prior`` is strictly one static Distribution per name (a
+        # variant-keyed range would be new mechanism). An explicit user prior
+        # still overrides.
         #
-        # It is also tied: absent an explicit setting it tracks ``met_logzsol``,
-        # so freeing it silently decouples gas-phase from stellar metallicity
-        # and adds a near-degenerate dimension. Free it explicitly when you mean
-        # to fit that decoupling, with a range drawn from your backend's grid.
+        # Stellar and gas-phase metallicity are separate knobs: the
+        # backend-level ``if neb_logZ_gas is None: ... = log_z`` inheritance
+        # is dead code on the build path, because the grammar always supplies
+        # this declared default. Freeing gas-phase Z simply adds an
+        # independent dimension beside ``met_logzsol`` -- an ordinary
+        # modeling choice, near-degenerate with it only to the extent the
+        # data cannot separate lines from continuum.
+        free_prior=Uniform(
+            -1.30, 0.20, "Gas-phase metallicity", units="log10(Z/Zsun)", default=-0.3
+        ),
     ),
     ParamDeclaration(
         "neb_fesc",

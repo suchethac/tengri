@@ -75,9 +75,25 @@ REFUSED: dict[str, tuple[str, str]] = {
     # dust_Rv, dust_delta, dust_bump_strength, dust_slope -- are declared now.
     # Scoping the dust wildcard to the laws the build selects is what made them
     # declarable, which is the general remedy this ground was pointing at.
-    "dust_frac_agn": ("inert", "needs templates_qso; the default Dale file ships only SF"),
-    "neb_logZ_gas": ("inert", "range is the selected nebular backend's grid; neb is unscoped"),
     "neb_xid": ("inert", "Feltre NLR only, and a 3-node grid inside a wider validator"),
+    "neb_hbfrac": (
+        "inert",
+        "declared but never wired -- constructor-only argument; HbFrac axis "
+        "collapsed at grid load (#2213)",
+    ),
+    "shock_log_density": (
+        "inert",
+        "triweight interpolation is differentiable (gradient FD-verified; the "
+        "old 'snapped, zero gradient' claim described a pre-refactor "
+        "mechanism); blocked by #2065 -- grid ~10% populated, upper range "
+        "returns an exact-zero spectrum silently",
+    ),
+    "shock_b_over_sqrt_n": (
+        "inert",
+        "not snapped -- flat off-node because the triweight bandwidth is "
+        "mis-set for the 7-decade irregular axis (#2066); index_space_interp "
+        "fix precedented elsewhere in-repo",
+    ),
     # ── fixed-by-physics: real range, but not a per-object freedom ──
     "radio_alpha_ff": ("fixed-by-physics", "optically-thin bremsstrahlung is -0.1 analytically"),
     "radio_delv_mass_slope": ("fixed-by-physics", "FIRRC slope; degenerate at fixed (M*, z)"),
@@ -88,7 +104,6 @@ REFUSED: dict[str, tuple[str, str]] = {
     "xray_gamma_lmxb": ("fixed-by-physics", "Lehmer+2016 population constant; see xray_det_lmxb"),
     "met_alpha_fe": ("fixed-by-physics", "pre-existing decision; only constrained by spectra"),
     "met_alpha_fe_young": ("fixed-by-physics", "as met_alpha_fe"),
-    "dust_f_obscuration": ("fixed-by-physics", "pre-existing decision; degenerate with tau_diff"),
     # ── target-dependent: the bound is set by the source, not by physics ──
     "dust_L_agn_ir": ("target-dependent", "absolute luminosity; no galaxy-independent scale"),
     "sfh_exp_start_gyr": ("target-dependent", "onset capped by the age of the universe at z"),
@@ -99,9 +114,6 @@ REFUSED: dict[str, tuple[str, str]] = {
         "not-continuous",
         "validator requires int; selects one of 3 shapes",
     ),
-    "neb_hbfrac": ("not-continuous", "snapped to the nearest of 2 grid values at load time"),
-    "shock_log_density": ("not-continuous", "snapped to nearest grid point -- zero gradient"),
-    "shock_b_over_sqrt_n": ("not-continuous", "snapped to nearest grid point -- zero gradient"),
     "noise_dof": ("not-continuous", "0 is a sentinel selecting the Gaussian likelihood"),
     "dla_z": ("not-continuous", "0 is a sentinel meaning 'use the source redshift'"),
     "sfh_const_end_gyr": ("not-continuous", "ordering constraint with sfh_const_start_gyr"),
@@ -118,13 +130,29 @@ REFUSED: dict[str, tuple[str, str]] = {
         "explicit-only",
         "MDF second moment; declaring one added it to 6 of 10 shipped recipes",
     ),
-    # ── no-evidence: revisit these first ──
-    "radio_alpha_thin": ("no-evidence", "needs Table 1 of Martinez-Ramirez+2024"),
-    "radio_alpha_thick": (
-        "no-evidence",
-        "needs Table 1 of Martinez-Ramirez+2024; sign convention",
+    "dust_frac_agn": (
+        "explicit-only",
+        "real range [0, 0.99); the QSO-carrying grid ships (dale2014_cigale, "
+        "wired and tested), but the registry is flat (one declaration shared "
+        "by both Dale engines), so a global free would open it as an inert "
+        "dimension under plain SF-only dale2014 (#1482 class) -- free it "
+        "explicitly beside dale2014_cigale",
     ),
-    "agn_grahsp_a_bc": ("no-evidence", "needs the GRAHSP prior table (arXiv:2405.19297)"),
+    "dust_f_obscuration": (
+        "explicit-only",
+        "achromatic transmission floor, only partially/regime-dependently "
+        "degenerate with tau_diff (unverified in-repo -- the old claim "
+        "overstated it); withheld because every in-repo wildcard call site "
+        "means {tau_bc, tau_diff}; explicit Uniform(0.0, 0.5) works (worked "
+        "example in parameters.py)",
+    ),
+    # ── no-evidence: revisit these first ──
+    "agn_grahsp_a_bc": (
+        "no-evidence",
+        "GRAHSP tested and dropped the Balmer component (arXiv:2405.19297 "
+        "Sec 2.1.2); no range in the paper's prior table or reference code "
+        "(default 0.0 only) -- any interval would be invented",
+    ),
     "xray_delta_alpha_ox": ("no-evidence", "needs the Just+2007 alpha_ox intrinsic scatter"),
     "agn_xray_delta_alpha_ox": ("no-evidence", "as xray_delta_alpha_ox; kept in step with it"),
 }
