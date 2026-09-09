@@ -569,6 +569,14 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
   to the omitted-`agn` build's. Writing a sub-block beside the off switch
   (`agn={'type': 'none', 'disc': {...}}`) is refused rather than silently
   dropped.
+- `tools/check_param_grid_extent.py` had no `GRID_EXTENT_SOURCES` entries for
+  any of the five Feltre+2016 NLR grid axes (`agn_nlr_xi_d`,
+  `agn_nlr_alpha_pl`, `agn_nlr_logU`, `agn_nlr_logZ`, `agn_nlr_logn`), so a
+  declared-bound/grid-extent drift there would go uncaught. Adding the
+  annotations surfaced one: `agn_nlr_logZ`'s declared upper bound, `-1.155`,
+  disagreed with the vendored grid's top node, `log10(0.07) =
+  -1.154901959985743`, by 9.8e-5 — five orders of magnitude above the guard's
+  1e-9 tolerance. Transcribed exactly now; the guard covers 29 cases (#2214).
 
 ## [0.1.0] - 2026-05-22
 

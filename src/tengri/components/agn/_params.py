@@ -593,11 +593,17 @@ PARAMS: tuple[ParamDeclaration, ...] = (
     ),
     ParamDeclaration(
         "agn_nlr_logZ",
-        Uniform(-4.0, -1.155, default=-1.8477),
+        # Task 16 follow-up round 2 (item B): the vendored grid's top node is
+        # Z=0.07 absolute, log10(0.07) = -1.154901959985743 -- the rounded
+        # literal -1.155 used here disagreed with that by 9.8e-5, ~5 orders of
+        # magnitude above check_param_grid_extent.py's 1e-9 tolerance. Adding
+        # this axis's GRID_EXTENT_SOURCES entry (below) surfaced the drift;
+        # transcribed exactly now, the same fix Task 1 made for skirtor_oa.
+        Uniform(-4.0, -1.154901959985743, default=-1.8477),
         "NLR gas metallicity log10(Z) absolute (Feltre+2016 logZ grid axis; "
         "default -1.8477 = solar, IAU 2015 Zsun=0.0142).",
-        lambda lo, hi: lo >= -4.0 and hi <= -1.155,
-        "must be within the Feltre grid metallicity axis [-4.0, -1.155]",
+        lambda lo, hi: lo >= -4.0 and hi <= -1.154901959985743,
+        "must be within the Feltre grid metallicity axis [-4.0, -1.154901959985743]",
     ),
     ParamDeclaration(
         "agn_nlr_xi_d",
@@ -1180,6 +1186,41 @@ GRID_EXTENT_SOURCES: dict[str, tuple[str, str, str, str]] = {
         "agn_cos_inc",
         "data/skirtor_templates_v3.h5",
         "grid/cos_inclination",
+        "identity",
+    ),
+    # Feltre+2016 CLOUDY NLR photoionization grid axes (Task 16 follow-up
+    # round 2, item B): the re-review found this guard's 24 cases came from
+    # torus/disc grids only -- the Feltre declarations carried no
+    # GRID_EXTENT_SOURCES entry at all, so a declared-bound/grid-extent drift
+    # here would go uncaught the way skirtor_oa's did before Task 1.
+    "feltre_xi_d": (
+        "agn_nlr_xi_d",
+        "data/feltre_grid.h5",
+        "feltre/xi_d_axis",
+        "identity",
+    ),
+    "feltre_alpha_pl": (
+        "agn_nlr_alpha_pl",
+        "data/feltre_grid.h5",
+        "feltre/alpha_axis",
+        "identity",
+    ),
+    "feltre_logU": (
+        "agn_nlr_logU",
+        "data/feltre_grid.h5",
+        "feltre/logUs_axis",
+        "identity",
+    ),
+    "feltre_logZ": (
+        "agn_nlr_logZ",
+        "data/feltre_grid.h5",
+        "feltre/logZ_axis",
+        "identity",
+    ),
+    "feltre_logn": (
+        "agn_nlr_logn",
+        "data/feltre_grid.h5",
+        "feltre/logn_axis",
         "identity",
     ),
 }
