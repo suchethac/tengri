@@ -246,11 +246,12 @@ for block, (cig, tng) in registries.items():
 # CIGALE's `bc03/Z=0.02_imf=chab.pickle` read directly against the same
 # templates in tengri's HDF5. The relative residual |tengri − CIGALE| /
 # CIGALE is the float32 round-trip of the repackaged grid and nothing else:
-# median 2e-8 at every age, max 6e-8. Four of 1262 wavelength points exceed
-# 1e-7, all in the extreme UV below 240 Å where the SSP is 15 decades below
-# its peak and the relative measure is reading the last float32 digit of a
-# number near zero (the 230 Å point, $L_\nu = 1.5\times10^{-7}$ of the peak,
-# is the 5e-6 spike on the residual panel).
+# median 2e-8 at every age, and max 6e-8 at four of the five. Only the 100 Myr
+# SSP has any point above 1e-7 — four of its 1218 non-zero points, all in the
+# extreme UV below 240 Å where the SSP is 15 decades below its peak and the
+# relative measure is reading the last float32 digit of a number near zero
+# (the 230 Å point, $L_\nu = 1.5\times10^{-7}$ of the peak, is the 5e-6 spike
+# on the residual panel).
 #
 # Both sides divide by the same speed of light — tengri's `C_AA`, which
 # `_drivers/cigale_ssp_to_dsps.py` also uses to write the grid and
@@ -817,6 +818,17 @@ for (label, A_c, A_t, pair), color in zip(_law_pairs, ("C0", "C1", "C3")):
         f"(outside 1500–1800 Å: max|Δ| "
         f"{float(np.nanmax(np.abs(_r[~_cross] - 1.0))) * 100:6.3f}%)"
     )
+
+# The mispairing this section avoids, measured rather than asserted: tengri's
+# bare ``calzetti`` against the same CIGALE calzleit curve, below 1500 Å.
+_a_c_cz = _norm_AV(wave_law, C.attenuation_curve("dustatt_calzleit", wave_law, **_BUMP_KW))
+_a_t_cz = _norm_AV(wave_law, np.asarray(_tengri_laws["calzetti"](wave_law)))
+_m_fuv = wave_law < 1500.0
+print(
+    f"  for contrast, calzleit ↔ calzetti (no L02 extension) below 1500 Å: "
+    f"max|Δ| {float(np.abs(_a_t_cz[_m_fuv] / _a_c_cz[_m_fuv] - 1.0).max()) * 100:.1f}%"
+)
+
 ax.plot([], [], "k-", lw=4.0, alpha=0.35, label="pcigale")
 ax.plot([], [], "k-", lw=1.4, label="tengri")
 ax.set(xscale="log", yscale="log", xlim=(1e3, 3e4), ylim=(0.05, 20))
@@ -953,9 +965,14 @@ for _name, _wc, _Lc, _wt, _Lt in (
     _r5 = _Lt_on_c / np.where(_Lc > 0, _Lc, np.nan)
     for _lo, _hi, _wname in ((912.0, 1200.0, "912–1200 Å"), (1000.0, 10000.0, "0.1–1 µm  ")):
         _m5 = (_wc >= _lo) & (_wc <= _hi) & np.isfinite(_r5)
+        _d5 = np.abs(_r5[_m5] - 1.0)
+        # Where the worst point is, not just how bad it is: on this ~20 Å
+        # optical grid the extremum is a single point in a line or a deep
+        # absorption trough, and the median is what the panel shows.
         print(
             f"    {_name} {_wname}: median {float(np.median(_r5[_m5])):.4f}×, "
-            f"max |Δ| {float(np.abs(_r5[_m5] - 1.0).max()) * 100:.2f}%"
+            f"max |Δ| {float(_d5.max()) * 100:.2f}% at "
+            f"{float(_wc[_m5][int(np.argmax(_d5))]):.0f} Å"
         )
 
 fig, ((ax_l1, ax_r1), (ax_l2, ax_r2)) = plt.subplots(2, 2, sharey=True, figsize=(12, 8))
@@ -1121,8 +1138,8 @@ plt.show()
 # `dustatt_modified_starburst`, which has no Charlot & Fall birth cloud;
 # A_V = R_V × E(B−V)_cont = 4.05 × 0.132 = 0.535 mag) carrying the
 # Leitherer-extended Calzetti curve with the 912 Å clip. So the 2.1 % anchor
-# offset of §3/§6 is a floor under every ratio printed here, and what the
-# panels add is whatever the *templates* do on top of it.
+# offset of §3/§6 enters every ratio printed here, and what the panels add is
+# whatever the *templates* do on top of it.
 #
 # **Left — Dale 2014 AGN fraction (`dale2014.fracAGN`).** `fracAGN` adds an
 # AGN-heated source as a separate power budget ($L_{\rm AGN}=L_{\rm
@@ -1145,10 +1162,9 @@ plt.show()
 # while the DustEM grid tabulates it in FSPS scaling (`qhac × 100/2.2`), so
 # the two must be reconciled before interpolation or the wrong grain model
 # is selected. One input is *not* matched and cannot be: CIGALE's own DustEM
-# run used `umax = 1e7`, a slightly hotter PDR, which redistributes the IR
-# rather than changing its total. The printed 8–30 µm and 8–1000 µm ratios
-# separate the two — a redistribution moves the first and leaves the second
-# on the anchor.
+# run used `umax = 1e7`, a slightly hotter PDR. The cell prints both an
+# 8–30 µm and an 8–1000 µm ratio at each α, so a redistribution of the IR
+# within the band can be told apart from a change in its total.
 
 # %%
 import jax
@@ -1322,9 +1338,14 @@ plt.show()
 # Two panels on independent y-axes read as agreement whatever they contain,
 # so the band-by-band ratio is printed beside them. The §6 model, seen from
 # the Lyman continuum to the submillimeter.
-_r_pan = U.regrid(np.asarray(s_ir.wave), np.asarray(s_ir.sed_intrinsic), w_c_ir) / np.where(
-    L_c_ir > 0, L_c_ir, np.nan
-)
+_L_t_pan = U.regrid(np.asarray(s_ir.wave), np.asarray(s_ir.sed_intrinsic), w_c_ir)
+# ``regrid`` zero-fills outside tengri's grid, and a zero divided by CIGALE's
+# model is a ratio of 0.000 that reads as total disagreement rather than as
+# "the model stops here". Count the points where *both* codes carry a model
+# and say so, so the mm tail is reported as missing coverage and not as a
+# residual.
+_cov_pan = (L_c_ir > 0) & (_L_t_pan > 0)
+_r_pan = np.where(_cov_pan, _L_t_pan / np.where(L_c_ir > 0, L_c_ir, 1.0), np.nan)
 print("§7 panchromatic median ratio (tengri / CIGALE):")
 for _lo, _hi, _wname in (
     (200.0, 912.0, "200–912 Å (LyC) "),
@@ -1335,9 +1356,16 @@ for _lo, _hi, _wname in (
     (1.0e5, 1.0e6, "10–100 µm       "),
     (1.0e6, 1.0e7, "100–1000 µm     "),
 ):
-    _mp = (w_c_ir >= _lo) & (w_c_ir <= _hi) & np.isfinite(_r_pan)
-    if _mp.any():
-        print(f"    {_wname}: {float(np.median(_r_pan[_mp])):.4f}×")
+    _band = (w_c_ir >= _lo) & (w_c_ir <= _hi)
+    _n_c = int((_band & (L_c_ir > 0)).sum())
+    _n_both = int((_band & _cov_pan).sum())
+    if _n_both:
+        print(
+            f"    {_wname}: {float(np.nanmedian(_r_pan[_band])):.4f}×  "
+            f"({_n_both}/{_n_c} points where both grids carry a model)"
+        )
+    else:
+        print(f"    {_wname}: tengri's grid does not reach this band ({_n_c} CIGALE points)")
 
 fig, (ax_l, ax_r) = plt.subplots(1, 2, sharey=True, figsize=(12, 5))
 U.panel(
@@ -1985,11 +2013,11 @@ plt.show()
 #
 # **What the disc-shape number contains.** Both codes publish the disc *after*
 # the polar-dust screen, so the deviation printed below is the analytic disc
-# shape and the SMC screen together, and the screen is the larger of the two.
-# The disc-dependent part is the difference between this section's number and
-# §9's, printed under the same definition on the same grid; whatever is common
-# to both is the screen, not the disc. Turning the screen off on both sides
-# leaves ~1 %, which is the regridding onto CIGALE's grid.
+# shape and the two codes' SMC screens together — it is an upper bound on the
+# disc difference, not a measurement of it. The disc-dependent part is the
+# difference between this section's number and §9's: the two are printed under
+# the same definition, on the same grid, with the same screen, so whatever
+# they share is the screen and the gap between them is the disc.
 
 # %%
 sed_skirtor0 = C.run_chain(
@@ -2732,12 +2760,14 @@ mask = (w_ext > 0) & (L_ext > 0) & (L_t_on_ext > 0)
 resid = np.full(w_ext.shape, np.nan, dtype=float)
 resid[mask] = L_t_on_ext[mask] / L_ext[mask] - 1.0
 
-# Headline numbers: the optical normalization ratio tengri/CIGALE and
-# its 16–84% spread. With the shared BC03 grid, matched mass convention,
-# and single-screen dust mapping the ratio sits at ~1 with a few-percent
-# spread; the only residual is the sub-912 Å Lyman-continuum extrapolation
-# and the mm-tail Dale-template cutoff (§6), not emission lines (this
-# chain carries no nebular block).
+# Headline numbers: the optical normalization ratio tengri/CIGALE and its
+# 16–84% spread. With the shared BC03 grid, matched mass convention and
+# single-screen dust mapping the ratio sits at ~1 with a few-percent spread.
+# Three things sit outside that window, all of them already accounted for:
+# the far-UV, which is §3's age-binning convention; the sub-912 Å excursion,
+# which is the Lyman-continuum extrapolation; and the mm tail, where the Dale
+# template stops. Nothing here is emission lines — this chain carries no
+# nebular block.
 opt = mask & (w_ext >= 1000.0) & (w_ext <= 10000.0)
 ratio_opt = L_t_on_ext[opt] / L_ext[opt]
 norm = float(np.median(ratio_opt))
@@ -2825,10 +2855,10 @@ plt.show()
 #
 # * **§1 SSP.** The shared BC03 grid round-trips at the float32 level
 #   (median 2e-8), and the write and read sides use one speed of light.
-# * **§2 SFH.** The `delayed` shape agrees to a flat 1.00043×. `sfh2exp`
-#   agrees to the same median, with a single grid point at the burst step
-#   where tengri's log lookback grid straddles a discontinuity CIGALE's
-#   uniform 1-Myr grid brackets. Both mass integrals hit 1.0000 M☉.
+# * **§2 SFH.** The `delayed` shape agrees to a flat 1.00044×, `sfh2exp` to a
+#   median 1.00043× with a single grid point at the burst step, where tengri's
+#   log lookback grid straddles a discontinuity CIGALE's uniform 1-Myr grid
+#   brackets. Both mass integrals hit 1.0000 M☉.
 # * **§3 stellar SED.** One convention differs, and this is where it is
 #   stated: tengri's cloud-in-cell age kernel captures the `[0, 1 Myr]` star
 #   formation that CIGALE's native-age binning drops. It is +14 % at
@@ -2854,9 +2884,10 @@ plt.show()
 #   the emitter difference rather than measuring it. A Cloudy-against-Cloudy
 #   comparison at matched Q_H would close it and is not run here.
 # * **§9 AGN.** Disc, torus and polar dust are compared as three separate
-#   luminosities rather than as band medians of their sum. The two analytic
-#   discs both agree with CIGALE's to about a percent once the polar screen is
-#   taken out; the AGN dust budget does not, and §9c says which component.
+#   luminosities rather than as band medians of their sum, so a FIR residual
+#   can be attributed to a component instead of to a wavelength. The disc
+#   agrees to a few percent under either `disk_type`; the AGN dust budget does
+#   not, and §9c and §9b print which of the two dust components carries it.
 # * **§10 X-ray.** Matched to 4 decimal places on disc L_2500, then a
 #   fraction of a percent at 2 keV, and the Yang+2022 inclination tilt is the
 #   same function on both sides across i = 0–80°.
@@ -2865,8 +2896,9 @@ plt.show()
 #   anchor (×0.985) and §6's energy anchor. Everything above that line is
 #   tengri's Murphy+2011 free-free, which CIGALE's radio module does not
 #   have.
-# * **§12 IGM.** Meiksin 2006 on both sides, max |ΔT| ~ 1e-7 at z = 3, 5, 7
-#   with median ΔT of order 1e-17 — the same prescription evaluated twice.
+# * **§12 IGM.** Meiksin 2006 on both sides, max |ΔT| ~ 1e-7 at z = 3, 5, 7,
+#   median |ΔT| between 1e-17 and 1e-23, and no point anywhere above 1e-3 —
+#   the same prescription evaluated twice.
 
 # %% [markdown]
 # ## References
