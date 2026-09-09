@@ -853,20 +853,28 @@ def test_neb_logZ_gas_frees_under_every_shipped_backend(neb_type):
     """``neb_logZ_gas`` must free at the same declared range under cue,
     cloudy, and cb19 alike -- the wildcard is not backend-scoped.
 
-    Parse-level only: none of these three backends needs a shipped grid file
-    to resolve ``parse_groups``' structural translation (grid loading happens
-    later, at ``SEDModel.build``/component-construction time), so this holds
-    even on a checkout missing ``data/cloudy_grid_*.h5``.
+    Data-gated for cloudy: its structural translation resolves the grid file
+    during ``parse_groups`` (not at build time), so a checkout without
+    ``data/cloudy_grid_*.h5`` raises here and must skip -- CI proved this by
+    failing where a local run passed only because the data-path ancestor walk
+    found another checkout's grids. Same narrow-``ValueError`` idiom as
+    ``test_build_resolver_sedmodelcomponent.py``; ``except ImportError``-class
+    narrowness keeps it off the broad-except ratchet.
     """
     with warnings.catch_warnings():
         # cb19 also declares neb_hbfrac (no free_prior, #2213), so its
         # wildcard is a partial free and warns; irrelevant to this assertion.
         warnings.simplefilter("ignore")
-        spec = tengri.parse_groups(
-            sfh={"type": "dpl", "all_params": Fixed(DEFAULT)},
-            neb={"type": neb_type, "all_params": FREE},
-            redshift=Fixed(0.1),
-        )
+        try:
+            spec = tengri.parse_groups(
+                sfh={"type": "dpl", "all_params": Fixed(DEFAULT)},
+                neb={"type": neb_type, "all_params": FREE},
+                redshift=Fixed(0.1),
+            )
+        except ValueError as exc:
+            if "grid" in str(exc).lower():
+                pytest.skip(f"{neb_type} grid not on disk: {exc}")
+            raise
     assert "neb_logZ_gas" in spec.free_params
     assert spec.get_distribution("neb_logZ_gas") == Uniform(-1.30, 0.20)
 
