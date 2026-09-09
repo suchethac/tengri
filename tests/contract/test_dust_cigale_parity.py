@@ -451,3 +451,205 @@ def test_bounded_fraction_is_hard_clamped_and_its_gradient_dies_at_the_bound(kno
             f"not half the interior slope {interior:.6e}. The clamp's "
             f"differentiation convention changed."
         )
+
+
+# ── Dale2014 grid typing: one declaration, no guessing (#R56) ──
+
+
+class TestDale2014GridUnitIsDeclaredNotGuessed:
+    """The stored unit of a Dale2014 grid must be declared, never inferred.
+
+    ``load_dale2014_lnu_grid`` decides whether to apply the L_lambda -> L_nu
+    Jacobian from the file's ``spectra_unit`` attribute. Deciding that by exact
+    equality against one magic string makes every other value -- an absent
+    attribute, a prose description, a typo, a future spelling -- mean "convert",
+    silently. A grid genuinely stored in L_nu but labeled anything else is then
+    multiplied by ``lambda^2 / c`` a second time.
+
+    Measured on ``data/dale2014_templates_cigale.h5`` (alpha=2.0): the two
+    typings of the very same rows disagree by a factor spanning 1.07e-2 to
+    9.60e4 once each is unit-normalized in L_nu -- the Dale grid's own
+    lambda-Jacobian across 2.0e4-6.0e7 A. There is no tolerance at which a
+    wrong typing is a small error, so the loader must refuse to choose.
+    """
+
+    def _grid(self, tmp_path, unit_attr, *, lnu_values):
+        """Write a two-alpha Dale grid whose rows really are ``lnu_values``."""
+        import h5py
+
+        wave = np.geomspace(2.0e4, 6.0e7, 128)
+        nu = 2.99792458e18 / wave
+        rows = np.stack([(wave / 1.0e6) ** -1.5, (wave / 1.0e6) ** -2.0])
+        if lnu_values:
+            # Unit-normalize in L_nu, the convention the "already L_nu" branch
+            # expects; the loader must then pass these through untouched.
+            rows = np.stack([r / -np.trapezoid(r, nu) for r in rows])
+        else:
+            rows = np.stack([r / np.trapezoid(r, wave) for r in rows])
+        tmp_path.mkdir(parents=True, exist_ok=True)
+        path = tmp_path / "dale_probe.h5"
+        with h5py.File(path, "w") as f:
+            f.create_dataset("wavelength_aa", data=wave)
+            f.create_dataset("alpha_grid", data=np.array([1.0, 2.0]))
+            f.create_dataset("templates_sf", data=rows)
+            if unit_attr is not None:
+                f.attrs["spectra_unit"] = unit_attr
+        return str(path)
+
+    def test_absent_unit_attribute_raises(self, tmp_path):
+        """A Dale grid with no ``spectra_unit`` is refused, not guessed at."""
+        from tengri.components.dust.emission_templates import load_dale2014_lnu_grid
+
+        path = self._grid(tmp_path, None, lnu_values=True)
+        with pytest.raises(ValueError, match=r"spectra_unit"):
+            load_dale2014_lnu_grid(path)
+
+    def test_unrecognized_unit_attribute_raises(self, tmp_path):
+        """An unrecognized ``spectra_unit`` is refused, not read as L_lambda.
+
+        This is the live hazard: a grid stored in L_nu that spells its unit
+        any other way is silently converted a second time.
+        """
+        from tengri.components.dust.emission_templates import load_dale2014_lnu_grid
+
+        path = self._grid(tmp_path, "L_nu (unit integral over nu)", lnu_values=True)
+        with pytest.raises(ValueError, match=r"spectra_unit"):
+            load_dale2014_lnu_grid(path)
+
+    def test_refusal_message_names_both_accepted_values(self, tmp_path):
+        """The error tells the user exactly which two strings are accepted."""
+        from tengri.components.dust.emission_templates import (
+            DALE2014_UNIT_L_LAMBDA,
+            DALE2014_UNIT_L_NU,
+            load_dale2014_lnu_grid,
+        )
+
+        path = self._grid(tmp_path, "whatever", lnu_values=False)
+        with pytest.raises(ValueError) as exc:
+            load_dale2014_lnu_grid(path)
+        msg = str(exc.value)
+        assert DALE2014_UNIT_L_NU in msg
+        assert DALE2014_UNIT_L_LAMBDA in msg
+
+    def test_declared_l_nu_grid_is_not_converted(self, tmp_path):
+        """A grid declaring L_nu comes back unit-normalized in L_nu."""
+        from tengri.components.dust.emission_templates import (
+            DALE2014_UNIT_L_NU,
+            load_dale2014_lnu_grid,
+        )
+
+        path = self._grid(tmp_path, DALE2014_UNIT_L_NU, lnu_values=True)
+        out = np.asarray(load_dale2014_lnu_grid(path)["templates_sf"])
+        wave = np.asarray(load_dale2014_lnu_grid(path)["wavelength_aa"])
+        nu = 2.99792458e18 / wave
+        for row in out:
+            assert -np.trapezoid(row, nu) == pytest.approx(1.0, rel=2e-2, abs=0.0)
+
+    def test_declared_l_lambda_grid_is_converted(self, tmp_path):
+        """A grid declaring L_lambda per A is Jacobian-converted, then normalized."""
+        from tengri.components.dust.emission_templates import (
+            DALE2014_UNIT_L_LAMBDA,
+            DALE2014_UNIT_L_NU,
+            load_dale2014_lnu_grid,
+        )
+
+        path = self._grid(tmp_path, DALE2014_UNIT_L_LAMBDA, lnu_values=False)
+        loaded = load_dale2014_lnu_grid(path)
+        out = np.asarray(loaded["templates_sf"])
+        wave = np.asarray(loaded["wavelength_aa"])
+        nu = 2.99792458e18 / wave
+        for row in out:
+            assert -np.trapezoid(row, nu) == pytest.approx(1.0, rel=2e-2, abs=0.0)
+        # And it is genuinely a different array from the pass-through typing.
+        passthrough = self._grid(tmp_path / "b", DALE2014_UNIT_L_NU, lnu_values=False)
+        other = np.asarray(load_dale2014_lnu_grid(passthrough)["templates_sf"])
+        assert not np.allclose(out, other)
+
+    def test_vendored_cigale_grid_declares_its_unit(self):
+        """The shipped CIGALE-sourced Dale grid carries an accepted declaration."""
+        import h5py
+
+        from tengri.components.dust.emission_templates import (
+            DALE2014_UNIT_L_LAMBDA,
+            DALE2014_UNIT_L_NU,
+        )
+
+        path = _require("data/dale2014_templates_cigale.h5")
+        with h5py.File(path) as f:
+            declared = str(f.attrs.get("spectra_unit", ""))
+        assert declared in (DALE2014_UNIT_L_NU, DALE2014_UNIT_L_LAMBDA), (
+            f"data/dale2014_templates_cigale.h5 declares spectra_unit="
+            f"{declared!r}, which the loader does not accept. Regenerate it "
+            f"with scripts/regenerate_dale2014_from_cigale.py."
+        )
+
+    def test_vendored_builtin_grid_declares_its_unit(self):
+        """The shipped Wyoming-sourced Dale grid carries an accepted declaration."""
+        import h5py
+
+        from tengri.components.dust.emission_templates import (
+            DALE2014_UNIT_L_LAMBDA,
+            DALE2014_UNIT_L_NU,
+        )
+
+        path = _require("data/dale2014_templates.h5")
+        with h5py.File(path) as f:
+            declared = str(f.attrs.get("spectra_unit", ""))
+        assert declared in (DALE2014_UNIT_L_NU, DALE2014_UNIT_L_LAMBDA)
+
+
+class TestDale2014RegistryPathsAgree:
+    """Every route onto one Dale grid file must deliver the same templates.
+
+    Three public routes reach the same file: the ``dale2014_cigale`` registry
+    entry (a lazy loader), :func:`create_dale2014_from_grid`, and
+    :func:`register_dale2014_tabulated`. Nothing compared them before, and
+    ``register_dale2014_tabulated`` had no test reference anywhere -- which is
+    how a divergence between two typings of one file could go unnoticed.
+    """
+
+    def test_three_routes_return_identical_templates(self):
+        from tengri.components.dust.emission.emission import DUST_EMISSION_MODELS
+        from tengri.components.dust.emission_templates import (
+            create_dale2014_from_grid,
+            load_dale2014_lnu_grid,
+            register_dale2014_tabulated,
+        )
+
+        path = _require("data/dale2014_templates_cigale.h5")
+        direct = load_dale2014_lnu_grid(path)
+
+        wave = np.asarray(WAVE)
+        expected = np.asarray(
+            create_dale2014_from_grid(path)(wave, 1.0, dust_alpha_dale=2.0, dust_frac_agn=0.0)
+        )
+
+        registry = np.asarray(
+            DUST_EMISSION_MODELS["dale2014_cigale"](
+                wave, 1.0, dust_alpha_dale=2.0, dust_frac_agn=0.0
+            )
+        )
+        name = "dale2014_paths_agree_probe"
+        register_dale2014_tabulated(path, name=name)
+        try:
+            registered = np.asarray(
+                DUST_EMISSION_MODELS[name](wave, 1.0, dust_alpha_dale=2.0, dust_frac_agn=0.0)
+            )
+        finally:
+            DUST_EMISSION_MODELS.pop(name, None)
+
+        assert np.array_equal(registry, expected), (
+            "the dale2014_cigale registry entry and create_dale2014_from_grid "
+            "disagree on the same file"
+        )
+        assert np.array_equal(registered, expected), (
+            "register_dale2014_tabulated and create_dale2014_from_grid disagree on the same file"
+        )
+        # And the arrays behind them, not just one SED slice.
+        for key in ("wavelength_aa", "alpha_grid", "templates_sf", "templates_qso"):
+            a = direct[key]
+            b = load_dale2014_lnu_grid(path)[key]
+            if a is None:
+                assert b is None
+                continue
+            assert np.array_equal(np.asarray(a), np.asarray(b)), key

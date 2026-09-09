@@ -715,6 +715,67 @@ def dale2014_emission_lnu(
     return scale_factor * norm * sed
 
 
+#: ``spectra_unit`` declaring rows already in the L_nu convention.
+#:
+#: Rows carrying this value are used as stored: unit-normalized
+#: :math:`L_\nu` with :math:`\int L_\nu\,d\nu = 1`. Written by
+#: ``scripts/regenerate_dale2014_from_official.py``.
+DALE2014_UNIT_L_NU = "L_nu normalized (integral over nu = 1)"
+
+#: ``spectra_unit`` declaring rows in the per-Angstrom L_lambda convention.
+#:
+#: Rows carrying this value are Jacobian-converted on load
+#: (:math:`L_\nu = L_\lambda\,\lambda^2/c`) and then unit-normalized in
+#: :math:`\nu`. Written by ``scripts/regenerate_dale2014_from_cigale.py``.
+DALE2014_UNIT_L_LAMBDA = "L_lambda per Angstrom (integral over lambda_Aa = 1)"
+
+#: The two declarations :func:`load_dale2014_lnu_grid` accepts.
+DALE2014_ACCEPTED_UNITS = (DALE2014_UNIT_L_NU, DALE2014_UNIT_L_LAMBDA)
+
+
+def _dale2014_already_lnu(declared: str | None, grid_path: str) -> bool:
+    """Whether a Dale2014 grid's declared unit means "use the rows as stored".
+
+    Parameters
+    ----------
+    declared : str or None
+        The grid's ``spectra_unit`` declaration, or ``None`` when absent.
+    grid_path : str
+        Path to the grid, for the refusal message.
+
+    Returns
+    -------
+    bool
+        ``True`` for :data:`DALE2014_UNIT_L_NU`, ``False`` for
+        :data:`DALE2014_UNIT_L_LAMBDA`.
+
+    Raises
+    ------
+    ValueError
+        When ``declared`` is absent or is neither accepted value. Choosing a
+        default here would be a guess, and the two typings of one Dale grid
+        differ by the grid's own lambda-Jacobian -- on
+        ``dale2014_templates_cigale.h5`` a factor spanning 1.07e-2 to 9.60e4
+        across 2.0e4-6.0e7 A once each is unit-normalized in L_nu. There is no
+        tolerance at which the wrong typing is a small error.
+    """
+    if declared in DALE2014_ACCEPTED_UNITS:
+        return declared == DALE2014_UNIT_L_NU
+    seen = "absent" if declared is None else repr(declared)
+    raise ValueError(
+        f"Dale2014 grid {grid_path!r} does not declare a readable "
+        f"'spectra_unit' ({seen}). The stored unit decides whether the "
+        f"L_lambda -> L_nu Jacobian is applied, and the two typings of the "
+        f"same rows differ by the grid's own lambda-Jacobian (measured: a "
+        f"factor spanning 1.07e-2 to 9.60e4 on the CIGALE-sourced grid), so "
+        f"it cannot be inferred. Set 'spectra_unit' to exactly one of:\n"
+        f"  {DALE2014_UNIT_L_NU!r}\n"
+        f"  {DALE2014_UNIT_L_LAMBDA!r}\n"
+        f"Regenerate with scripts/regenerate_dale2014_from_cigale.py or "
+        f"scripts/regenerate_dale2014_from_official.py, which write it."
+    )
+
+
 def load_dale2014_lnu_grid(grid_path: str) -> dict:
     r"""Load + normalize a Dale+2014 template grid into L_nu jnp arrays.
 
@@ -727,12 +788,19 @@ def load_dale2014_lnu_grid(grid_path: str) -> dict:
     that lives on the (truncated) dust grid (~0.54), preserving CIGALE's energy
     partition so the ``dust_frac_agn`` mixing matches CIGALE (#717).
 
+    The grid must **declare** the convention its rows are stored in, via a
+    ``spectra_unit`` entry holding exactly one of :data:`DALE2014_UNIT_L_NU`
+    (used as stored) or :data:`DALE2014_UNIT_L_LAMBDA` (Jacobian-converted).
+    Anything else -- absent, prose, a typo, a future spelling -- is refused
+    rather than read as one of them.
+
     Parameters
     ----------
     grid_path : str
         Path to a ``.npz`` or ``.h5`` Dale2014 template file. Must contain
         ``wavelength_aa`` (or ``wavelength``), ``alpha_grid`` (or ``grid/alpha``),
-        ``templates_sf`` (or ``spectra/templates``), and optionally
+        ``templates_sf`` (or ``spectra/templates``), a ``spectra_unit``
+        declaration (HDF5 attribute, or ``.npz`` array), and optionally
         ``templates_qso``.
 
     Returns
@@ -741,6 +809,11 @@ def load_dale2014_lnu_grid(grid_path: str) -> dict:
         ``wavelength_aa`` (n_wave,), ``alpha_grid`` (n_alpha,), ``templates_sf``
         (n_alpha, n_wave) [L_nu], ``templates_qso`` (n_wave,) [L_nu] or ``None``,
         ``has_qso`` (bool): arrays are jnp.
+
+    Raises
+    ------
+    ValueError
+        When the grid carries no accepted ``spectra_unit`` declaration.
 
     Notes
     -----
@@ -756,7 +829,8 @@ def load_dale2014_lnu_grid(grid_path: str) -> dict:
         templates_qso_raw = data.get("templates_qso", None)
         if templates_qso_raw is not None:
             templates_qso_raw = np.array(templates_qso_raw)
-        already_lnu = False
+        declared = str(data["spectra_unit"]) if "spectra_unit" in data else None
+        already_lnu = _dale2014_already_lnu(declared, grid_path)
     else:
         import h5py as _h5py
 
@@ -772,10 +846,12 @@ def load_dale2014_lnu_grid(grid_path: str) -> dict:
                 alpha_grid_raw = np.array(f["alpha_grid"][:])
                 templates_raw = np.array(f["templates_sf"][:])
                 templates_qso_raw = None
-            # Check if already in L_nu normalized form
-            already_lnu = (
-                f.attrs.get("spectra_unit", "") == "L_nu normalized (integral over nu = 1)"
-            )
+            # The stored convention is declared, never inferred: an
+            # unrecognized value used to fall through to "convert", so a grid
+            # already in L_nu but labeled any other way was multiplied by
+            # lambda^2/c a second time, silently.
+            declared = str(f.attrs["spectra_unit"]) if "spectra_unit" in f.attrs else None
+            already_lnu = _dale2014_already_lnu(declared, grid_path)
             # Optional: load pure-AGN QSO template
             if "templates_qso" in f:
                 templates_qso_raw = np.array(f["templates_qso"][:])

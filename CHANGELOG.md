@@ -318,6 +318,27 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 
 ### Fixed
 
+- A Dale+2014 template grid must now **declare** the convention its rows are
+  stored in, and `load_dale2014_lnu_grid` refuses a grid it cannot type instead
+  of guessing. The stored unit decides whether the L_lambda -> L_nu Jacobian is
+  applied, and the decision was an exact-string comparison against one magic
+  value, so every other `spectra_unit` -- absent, prose, a typo, a future
+  spelling -- silently meant "convert". A grid already in L_nu but labeled any
+  other way was therefore multiplied by `lambda^2/c` a second time, with no
+  error and no tolerance at which that is a small mistake: on the shipped
+  CIGALE-sourced grid the two typings of the same rows differ by a factor
+  spanning 1.07e-2 to 9.60e4 across 2.0e4-6.0e7 A once each is unit-normalized
+  in L_nu (the grid's own lambda-Jacobian). The two accepted declarations are
+  now named constants, `DALE2014_UNIT_L_NU` and `DALE2014_UNIT_L_LAMBDA`;
+  `scripts/regenerate_dale2014_from_cigale.py` writes the machine-readable one
+  and keeps its descriptive text in a separate `spectra_unit_note` attribute,
+  and `data/dale2014_templates_cigale.h5` was regenerated to carry it (all four
+  datasets bitwise identical, max|delta| = 0 -- only the attributes moved).
+  A contract test also pins that the three public routes onto one Dale grid
+  (the `dale2014_cigale` registry entry, `create_dale2014_from_grid`, and
+  `register_dale2014_tabulated`, which had no test reference anywhere) deliver
+  bit-identical templates.
+
 - The composable AGN `validate_block_recipe` "no disc, active downstream"
   advisory (Rule 3) named every active `nlr`/`blr`/`feii`/`torus` block when
   `agn_disc_block='none'`, but only a block that actually reads

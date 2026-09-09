@@ -33,6 +33,8 @@ from pathlib import Path
 import h5py
 import numpy as np
 
+from tengri.components.dust.emission_templates import DALE2014_UNIT_L_LAMBDA
+
 # CIGALE's published alpha grid (64 values, 0.0625 → 4.0 in steps of 0.0625).
 # Matches ``pcigale.sed_modules.dale2014`` exactly.
 ALPHA_GRID = np.array(
@@ -200,7 +202,13 @@ def main() -> int:
         f.create_dataset("templates_sf", data=spectra_lam_per_Aa, dtype=np.float64)
         f.create_dataset("templates_qso", data=spectra_qso_per_Aa, dtype=np.float64)
         f.attrs["source"] = "CIGALE pcigale.data Dale2014 (SimpleDatabase)"
-        f.attrs["spectra_unit"] = (
+        # ``spectra_unit`` is a machine-readable declaration, not prose: the
+        # loader compares it against exactly two accepted values and refuses a
+        # grid it cannot type, because the two typings of these same rows
+        # differ by the grid's own lambda-Jacobian. Descriptive text belongs in
+        # ``spectra_unit_note``, where no loader reads it.
+        f.attrs["spectra_unit"] = DALE2014_UNIT_L_LAMBDA
+        f.attrs["spectra_unit_note"] = (
             "L_lambda per W input. SF templates: integral over lambda_Aa = 1.0. "
             "QSO template: keeps CIGALE full-grid unit normalization, so its "
             "integral over the (truncated) stored grid is ~0.5 (the rest is the "
