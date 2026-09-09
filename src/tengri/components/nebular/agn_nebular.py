@@ -1172,6 +1172,16 @@ class FeltreNLRBackend:
     construction, which is also what makes a descending stored axis a
     non-issue rather than a per-call reversal.
 
+    The alpha axis is non-uniformly spaced (node spacings 0.3, 0.3, 0.2) and
+    ``interp_nd_triweight`` runs with its default ``index_space_interp=None``
+    (the physical-space path) here; the logZ axis is far more non-uniform
+    (ratio 5.94) and already took this same path before R41 with no measured
+    dead plateau, and none was measured on alpha either (gradient nonzero and
+    smooth at every prior quantile, including at the nodes). If a future round
+    wants the corrected index-space kernel for every Feltre axis,
+    ``index_space_interp=True`` is the documented remedy (see
+    :func:`~tengri.utils.grid_interp.interp_nd_triweight`'s Notes).
+
     This backend has ``has_continuum = False``.
 
     Parameters

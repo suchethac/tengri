@@ -118,7 +118,11 @@ _AGN_PARTITION = {
     "agn_fritz_psy": "agn.torus",
     # Narrow-line region
     "agn_nlr_cf": "agn.nlr",
-    "agn_alpha_ion": "agn.nlr",  # NLR photoionization knob
+    # R50 (#2214): "agn_alpha_ion" sat here, a second name for the Feltre NLR
+    # ionizing power-law slope this block reads as agn_nlr_alpha_pl (entered
+    # below, with the other five axes). Identical prior and default, read by
+    # nothing on any live path -- the same disease R41 fixed for the
+    # dust-to-metal axis one ruling earlier. The axis has one name now.
     # R41 (#2214): "neb_xid" sat here, a second name for the Feltre NLR
     # dust-to-metal grid axis this block reads as agn_nlr_xi_d (entered below,
     # with the other five axes). The partition is consulted only for

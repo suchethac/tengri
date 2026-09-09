@@ -649,14 +649,14 @@ PARAMS: tuple[ParamDeclaration, ...] = (
         lambda lo, hi: lo >= 0 and hi <= 2.0,
         "must be in [0, 2.0]",
     ),
-    ParamDeclaration(
-        "agn_alpha_ion",
-        Uniform(-2.0, -1.2, default=-1.7),
-        "AGN EUV power-law slope (f_nu ~ nu^alpha) for Feltre NLR backend. "
-        "Range matches the Feltre+2016 CLOUDY grid (4 grid points: -2.0, -1.7, -1.4, -1.2).",
-        lambda lo, hi: lo >= -2.0 and hi <= -1.2,
-        "must be in [-2.0, -1.2] (grid values: -2.0, -1.7, -1.4, -1.2)",
-    ),
+    # R50 (#2214): "agn_alpha_ion" used to be declared here -- a second name
+    # for the Feltre+2016 NLR ionizing power-law slope, identical prior and
+    # default to "agn_nlr_alpha_pl" below, described as the Feltre backend's
+    # own slope, partitioned to agn.nlr, and read by nothing on any live path
+    # (only the dead feltre_nlr precompute adapter's AXIS_PARAMS). The block
+    # that actually reads the slope, blocks/nlr.py, reads agn_nlr_alpha_pl.
+    # One quantity, one name.
+    #
     # GRAHSP AGN model (Buchner+ 2024, arXiv:2405.19297). Prior ranges are the
     # "typical" intervals stated in each docstring (from the GRAHSP paper).
     ParamDeclaration(

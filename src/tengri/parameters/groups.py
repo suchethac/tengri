@@ -4914,6 +4914,44 @@ def _neb_xid_retired_error(group: str, key: str) -> ValueError:
     )
 
 
+#: Both spellings of the retired Feltre ionizing-slope key (R50, #2214): the
+#: duplicate declaration and the short form the sub-block grammar would have
+#: resolved it under. Neither is a declared parameter any more -- the axis has
+#: one name, ``agn_nlr_alpha_pl``, owned by the ``nlr`` block that reads it.
+#: The re-review that found this (task-16-followup-review.md #4) measured it
+#: reachable and silently inert: ``nlr={'type': 'feltre', 'agn_alpha_ion':
+#: FREE}`` (or the short form) parsed, freed the parameter, and moved nothing.
+_ALPHA_ION_KEYS: frozenset[str] = frozenset({"agn_alpha_ion", "alpha_ion"})
+
+
+def _alpha_ion_retired_error(group: str, key: str) -> ValueError:
+    """The one message the retired ``agn_alpha_ion`` gets, wherever written.
+
+    Parameters
+    ----------
+    group : str
+        The group the key was found in (``'agn'``, ``'agn.nlr'``, ...).
+    key : str
+        The spelling the caller wrote.
+
+    Returns
+    -------
+    ValueError
+        Naming the replacement, why the old name never worked, and the one
+        placement that does.
+    """
+    return ValueError(
+        f"{key!r} (found in group {group!r}) was renamed 'agn_nlr_alpha_pl' (short "
+        f"form 'nlr_alpha_pl'): the Feltre+2016 NLR ionizing power-law slope was "
+        f"carried under two names -- identical prior and default -- and "
+        f"'agn_alpha_ion' was read by nothing while 'agn_nlr_alpha_pl' is what "
+        f"blocks/nlr.py actually reads. The axis belongs to the 'nlr' sub-block, "
+        f"which is what reads it:\n"
+        f"  agn={{'type': 'composable', 'nlr': {{'type': 'feltre', "
+        f"'agn_nlr_alpha_pl': Uniform(-2.0, -1.2)}}}}"
+    )
+
+
 def _check_dict_keys(
     group: str,
     user_dict: dict,
@@ -4940,6 +4978,13 @@ def _check_dict_keys(
         # in the first of those.
         if key in _NEB_XID_KEYS:
             raise _neb_xid_retired_error(group, str(key))
+
+        # R50 (#2214): same shape, one ruling later -- the retired
+        # agn_alpha_ion (a duplicate of agn_nlr_alpha_pl, not a cross-prefix
+        # orphan) is intercepted in every group before it can be freed as a
+        # silently inert dimension.
+        if key in _ALPHA_ION_KEYS:
+            raise _alpha_ion_retired_error(group, str(key))
 
         # Special case: 'foreground' declares no fitted parameters at all
         # (it is a bare MW-screen settings dict, see _translate_foreground),

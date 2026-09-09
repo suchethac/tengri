@@ -248,6 +248,15 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
   luminosities shift by a median 6.7% (min 1.1%, max 23.2%) against the
   snapped values, because the triweight kernel spreads weight over
   neighboring nodes rather than taking one exactly (#2214).
+- The Feltre+2016 NLR ionizing power-law slope had the same disease one
+  ruling later: `agn_nlr_alpha_pl`, which `blocks/nlr.py` reads, and
+  `agn_alpha_ion`, a duplicate declaration with an identical prior and
+  default, partitioned to `agn.nlr` and read by nothing. `agn_alpha_ion` was
+  reachable and silently inert — `nlr={'type': 'feltre', 'agn_alpha_ion':
+  FREE}` (or the short form `alpha_ion`) parsed, freed the parameter, and
+  moved nothing. `agn_alpha_ion` is retired; writing it (or `alpha_ion`) in
+  any group raises a loud legacy-key error naming `agn_nlr_alpha_pl` and the
+  placement that works (#2214).
 
 ### Removed
 
