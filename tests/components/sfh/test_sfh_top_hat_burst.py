@@ -231,7 +231,7 @@ class TestEvolvingMetallicity:
 
         try:
             ssp = load_ssp_data()
-        except (FileNotFoundError, RuntimeError):
+        except FileNotFoundError:
             pytest.skip("SSP data not available")
 
         t_gyr = jnp.linspace(0.1, 13.7, 32)
@@ -262,7 +262,7 @@ class TestEvolvingMetallicity:
 
         try:
             ssp = load_ssp_data()
-        except (FileNotFoundError, RuntimeError):
+        except FileNotFoundError:
             pytest.skip("SSP data not available")
 
         t_gyr = jnp.linspace(0.1, 13.7, 32)
