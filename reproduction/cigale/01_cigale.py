@@ -652,8 +652,8 @@ m_stellar = SEDModel.build(
 s_stellar = m_stellar.predict_state({})
 _assert_comparable(L_c, s_stellar.sed_intrinsic, name="§3 stellar")
 
-# Shared-axis overlay + tengri/CIGALE ratio panel (#864): a single scale makes
-# any normalization offset visible at a glance. Both codes form 1 M_sun; the
+# Shared-axis overlay + tengri/CIGALE ratio panel: a single scale makes any
+# normalization offset visible at a glance. Both codes form 1 M_sun; the
 # tengri box reports its *surviving* stellar mass, so the ratio panel shows
 # whether the M_star = 1.0 vs 0.558 label difference is a real SED offset (it is
 # not — formed-vs-surviving-mass convention) or a genuine ~1.8x mismatch.
@@ -1062,8 +1062,8 @@ L_emit = float(s_ir.derived.get("L_ir", 0.0))
 residual = abs(L_abs - L_emit) / max(L_abs, 1e-30)
 _assert_comparable(L_c_ir, s_ir.sed_intrinsic, name="§6 IR")
 
-# Shared-axis overlay + ratio panel (#864): the FIR-peak partition difference
-# (~1.0–1.15, Dale2014 stellar-heated) is only readable on one scale.
+# Shared-axis overlay + ratio panel: the FIR-peak partition difference is
+# only readable on one scale.
 fig, ax, ax_r, ratio = U.overlay_ratio_fig(
     w_c_ir,
     L_c_ir,
@@ -1295,9 +1295,9 @@ ax_r.plot([], [], "k-", lw=_TNG_LW, label="tengri")
 ax_r.set(xlim=(3e4, 1e7), xlabel=r"$\lambda$ [Å]", title=r"THEMIS radiation-field slope $\alpha$")
 ax_r.legend(fontsize=8, frameon=False, ncol=2)
 
-# Five decades below the peak rather than the old three: at alpha = 1 the
-# radiation field is hot enough that the FIR bump falls away steeply, and a
-# 1e42 floor cut the curve off mid-decline as though the model had stopped.
+# Five decades below the peak: at alpha = 1 the radiation field is hot enough
+# that the FIR bump falls away steeply, and a shallower floor cuts the curve
+# off mid-decline as though the model had stopped.
 _ypk = max(_peaks)
 for ax in (ax_l, ax_r):
     ax.set_ylim(_ypk * 1e-5, _ypk * 2.0)
@@ -2469,8 +2469,8 @@ state_r = m_r.predict_state({})
 w_t = np.asarray(state_r.wave)
 sed_t = np.asarray(state_r.derived["sed_radio"])  # synchrotron + Murphy free-free
 
-# Shared-axis overlay + ratio panel (#864): the ratio rising above unity toward
-# high ν is tengri's free-free that CIGALE's synchrotron-only module lacks (#863).
+# Shared-axis overlay + ratio panel: the ratio rising above unity toward high ν
+# is tengri's free-free, which CIGALE's synchrotron-only module does not have.
 fig, ax, ax_r, ratio = U.overlay_ratio_fig(
     w_r,
     L_r,
