@@ -28,6 +28,24 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
   change 0.00% -> 17.04%, matching the equivalent `parse_groups` build to
   `rtol=1e-10` (#2231).
 
+- `SEDModel.compile_signature()` did not key on which dust attenuation shape
+  parameters (`dust_slope`, `dust_delta`, `dust_Rv`, `dust_bump_strength`) a
+  build resolved "live", so two structurally-identical models that disagreed
+  only on liveness collided on one compiled, closure-captured prediction
+  kernel — whichever was built (and called) first silently decided the
+  live/not-live branch for both. Before the #2231 fix above this axis was
+  unreachable from a flat `Parameters(...)` spec (its shape parameters were
+  always not-live), so the collision could not fire from that surface; that
+  fix is exactly what exposes it, since a flat spec can now resolve a shape
+  parameter live. `compile_signature()` now includes the sorted set of live
+  shape-parameter names (`dust_live_shape_params_sig`), same rationale as the
+  existing `dust_law_overrides_sig` / `dust_lyman_cutoff_sig` color-leak
+  entries. Measured end to end: a not-live `kriek_conroy` build followed by a
+  live one with `dust_bump_strength` overridden to 3.3 via the same
+  `params` dict previously reported identical `galex_nuv` photometry
+  (0.00% difference, the not-live kernel silently reused); with the fix the
+  two differ by 12.06% (#2231).
+
 - `mcmc_hmc_lowrank` ran its warmup fused into chain 0's sampling scan, which
   had two consequences. The #1999 post-adaptation stability probe had nowhere to
   run, leaving the one dense-capable metric path reachable above the D=30 cap

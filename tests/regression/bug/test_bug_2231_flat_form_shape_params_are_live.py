@@ -26,15 +26,21 @@ photometry change from moving one shape parameter must agree to machine
 precision, and the change must be >1% in at least one band (an in-model
 control against a trivially-vacuous 0 == 0 pass).
 
-Note on ``clear_shared_caches()``: two ``SEDModel`` instances with an
-identical ``compile_signature()`` share a cached, closure-captured prediction
-kernel (see ``SEDModel._get_or_build_predict_observables_jit``).
-``compile_signature()`` does not currently key on which shape parameters a
-build marked "live" (a gap orthogonal to this fix -- flagged, not addressed,
-here), so building a flat and a group model with the same law back-to-back in
-one process can silently hand one model's compiled kernel to the other.
-Clearing the shared caches before every ``predict_photometry`` call below
-forces each model to compile against its own spec.
+``TestCompileSignatureKeysLiveShapeParams`` below pins a second, closely
+related fix. Two ``SEDModel`` instances with an identical
+``compile_signature()`` share a cached, closure-captured prediction kernel
+(see ``SEDModel._get_or_build_predict_observables_jit``); before that fix,
+``compile_signature()`` did not key on which shape parameters a build
+resolved "live", so a flat build with a shape parameter live and one without
+it -- structurally identical apart from that Python-level branch -- collided
+on one compiled closure, and whichever was built (and called) first silently
+decided the outcome for both. Before #2231 every flat spec's shape
+parameters were unconditionally not-live, so this axis never varied across
+flat builds and the collision was unreachable from that surface; #2231 lets
+a flat spec become live, which is what exposes it. ``compile_signature()``
+now includes the resolved live-shape-parameter set, so the tests above no
+longer need to guard against this by clearing the shared caches between
+builds.
 """
 
 from __future__ import annotations
@@ -55,7 +61,6 @@ from tengri import (
     SSPData,
     parse_groups,
 )
-from tengri.inference.jit_engine import clear_shared_caches
 
 pytestmark = pytest.mark.regression_bug
 
@@ -150,10 +155,15 @@ def _group_model(ssp, obs, law: str, tau_v: float = 0.6, **shape_kwargs) -> SEDM
 
 
 def _phot(model: SEDModel) -> np.ndarray:
-    """Photometry with every free parameter Fixed, guarded against #2231's
-    orthogonal ``compile_signature()`` kernel-sharing hazard (see module
-    docstring)."""
-    clear_shared_caches()
+    """Photometry with every free parameter Fixed.
+
+    No cache-clearing needed: every pair of models compared in this file
+    agrees on which shape parameters are live (both explicitly request the
+    swept parameter, or neither does), so ``compile_signature()`` correctly
+    routes them to the same or a distinct compiled kernel as appropriate --
+    see ``TestCompileSignatureKeysLiveShapeParams`` for the case that does
+    need distinct kernels.
+    """
     return np.asarray(model.predict_photometry({}))
 
 
@@ -314,3 +324,68 @@ class TestGrammarProvenanceUnchanged:
         spec = Parameters(mean_sfh_type="dpl", redshift=Fixed(0.1), dust_bump_strength=Fixed(2.0))
         assert not hasattr(spec, "_group_provenance")
         assert spec._flat_provenance.get("dust_bump_strength") == "user_fixed"
+
+
+class TestCompileSignatureKeysLiveShapeParams:
+    """``compile_signature()`` must key on which shape parameters are live.
+
+    #2231's provenance fix lets a flat spec's shape parameter resolve
+    "live" (previously it never could), so two flat builds -- one that
+    explicitly requests a shape parameter and one that does not -- are now
+    reachable as a same-law, same-fixed-names pair that disagree ONLY on
+    liveness. ``SEDModel._get_or_build_predict_observables_jit`` caches a
+    closure keyed on ``compile_signature()``; without liveness in that key,
+    the two builds collide on one compiled closure and whichever was built
+    (and called) first decides the outcome for both.
+    """
+
+    def test_signature_differs_between_live_and_not_live(self):
+        """Same law, same fixed-parameter names, only liveness differs."""
+        ssp = _build_ssp()
+        obs = _obs()
+
+        live = _flat_model(ssp, obs, "kriek_conroy", dust_bump_strength=1.0)
+        not_live = _flat_model(ssp, obs, "kriek_conroy")
+
+        assert "dust_bump_strength" in live._requested_law_shape_params()
+        assert "dust_bump_strength" not in not_live._requested_law_shape_params()
+        assert live.compile_signature() != not_live.compile_signature(), (
+            "a live and a not-live build of the same law hashed to the same "
+            "compile_signature(); they would share a compiled prediction "
+            "kernel and the second model built would silently inherit the "
+            "first's live/not-live decision (#2231)."
+        )
+
+    def test_live_and_not_live_do_not_share_a_compiled_kernel(self):
+        """End to end, without any cache-clearing workaround.
+
+        Builds the not-live model first and calls ``predict_photometry``
+        once, populating the module-level structural kernel cache under its
+        ``compile_signature()``. Then builds the live model and calls
+        ``predict_photometry`` with the SAME ``params`` dict -- carrying
+        ``dust_bump_strength=3.3`` for both calls, an override the not-live
+        model's compiled kernel structurally never reads (see
+        ``DustAttenuationSEDComponent._curve``: a not-live parameter is
+        excluded from the law kwargs regardless of what is in ``params``).
+        If the two builds collided on one kernel, the live model's call
+        would silently execute the not-live model's compiled closure and
+        report the same photometry.
+        """
+        ssp = _build_ssp()
+        obs = _obs()
+        params = {"dust_bump_strength": 3.3}
+
+        not_live = _flat_model(ssp, obs, "kriek_conroy")
+        not_live_phot = np.asarray(not_live.predict_photometry(params))
+
+        live = _flat_model(ssp, obs, "kriek_conroy", dust_bump_strength=3.3)
+        live_phot = np.asarray(live.predict_photometry(params))
+
+        nuv_idx = _FILTER_NAMES.index("galex_nuv")
+        rel = abs(live_phot[nuv_idx] - not_live_phot[nuv_idx]) / abs(not_live_phot[nuv_idx])
+        assert rel > 0.05, (
+            f"galex_nuv relative difference {rel:.4%} between the live and "
+            "not-live builds is too small: the live model's call may have "
+            "silently reused the not-live model's compiled kernel from the "
+            "shared structural cache (#2231's compile_signature() gap)."
+        )
