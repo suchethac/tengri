@@ -773,10 +773,26 @@ _register(
                 _lo_positive,
                 "must have lo > 0",
                 Fixed(AGEMAX_YR / 1e9),
-                # No free_prior, for the redshift-dependence reason given on
-                # ``sfh_exp_start_gyr`` below, which applies to every SF-onset
-                # lookback: the ceiling is the age of the universe at the source
-                # redshift and the declaration cannot know it.
+                # Lower bound is 0.01, not 0: bound_check is _lo_positive (lo >
+                # 0), AND Parameters._validate_orderings requires this
+                # parameter's floor to exceed sfh_const_end_gyr's Fixed(0.0)
+                # ceiling (g_lo > l_hi) -- so lo must be strictly positive.
+                # Upper bound is today's cosmic age (_AGE_UNIV_GYR);
+                # parameters/groups.py's _narrow_free_priors_to_z narrows it to
+                # age_at_z(z) at parse time whenever the build's redshift floor
+                # is knowable -- same mechanism and rationale as
+                # sfh_exp_start_gyr below.
+                #
+                # The registry default above (AGEMAX_YR / 1e9 = 14.0 Gyr, a
+                # generic numerical safety ceiling reused from the lookback-time
+                # clip in mean_sfh.py) sits ABOVE _AGE_UNIV_GYR (13.81 Gyr, the
+                # actual age of the universe today), so it cannot double as this
+                # free_prior's default without violating its own bounds.
+                # _AGE_UNIV_GYR is used instead, following the same
+                # "default = ceiling" convention already used on
+                # sfh_dpl_age_gyr / sfh_lnorm_age_gyr / sfh_dpl_lookback_age_gyr
+                # above.
+                Uniform(0.01, _AGE_UNIV_GYR, default=_AGE_UNIV_GYR),
             ),
             "sfh_const_end_gyr": ParamDef(
                 "Lookback to SF cessation (Gyr): when did SF stop? (0 = ongoing)",
@@ -829,24 +845,33 @@ _register(
                 "must have lo > 0",
                 Uniform(0.1, 10.0, default=2.0),
             ),
-            # Deliberately NO free_prior (#887), and this covers the ``dexp`` and
-            # ``const`` onsets too. ``start`` is a lookback: these SFHs form
-            # stars only at ``t_lookback >= start``, so the parameter's ceiling
-            # is the age of the universe at the SOURCE redshift -- 8.6 Gyr at
-            # z=0.5, 3.3 at z=2, 0.9 at z=6. A declaration cannot know that, and
-            # no static interval is right for all of them: any bound generous
-            # enough for z~0 admits draws at z=2 where star formation never
-            # happens, giving a zero-mass galaxy and zero flux.
+            # ``start`` is a lookback: these SFHs form stars only at
+            # ``t_lookback >= start``, so the parameter's ceiling is the age of
+            # the universe at the SOURCE redshift -- 8.6 Gyr at z=0.5, 3.3 at
+            # z=2, 0.9 at z=6. This covers the ``dexp`` and ``const`` onsets
+            # too (see their own entries below/above).
             #
-            # Measured, not argued: declaring Uniform(0, 14) made
-            # test_bug_1031_dense_basis_composite::
+            # The static declaration below uses today's cosmic age
+            # (``_AGE_UNIV_GYR``, z=0) as the ceiling -- the widest value that
+            # is ever correct, since a declaration cannot know the source
+            # redshift. ``parameters/groups.py``'s ``_narrow_free_priors_to_z``
+            # then narrows it to ``age_at_z(z)`` at parse time whenever the
+            # build's redshift floor is knowable, closing exactly the gap a
+            # static-only declaration could not: any bound generous enough for
+            # z~0 admits draws at z=2 where star formation never happens,
+            # giving a zero-mass galaxy and zero flux.
+            #
+            # Measured, not argued: declaring Uniform(0, 14) with no narrowing
+            # made test_bug_1031_dense_basis_composite::
             # test_working_sfh_topologies_still_predict[dexp] draw such a value
-            # at z=0.5 and fail `assert jnp.all(flux > 0)`.
-            #
-            # Free it explicitly against your own redshift, e.g.
-            # sfh={'start_gyr': Uniform(0, 6)} for a z=1 target.
+            # at z=0.5 and fail `assert jnp.all(flux > 0)` -- exactly the draw
+            # the narrowing pass now forecloses.
             "sfh_exp_start_gyr": ParamDef(
-                "Start lookback (Gyr)", _lo_nonneg, "must have lo >= 0", Fixed(0.0)
+                "Start lookback (Gyr)",
+                _lo_nonneg,
+                "must have lo >= 0",
+                Fixed(0.0),
+                Uniform(0.0, _AGE_UNIV_GYR, default=0.0),
             ),
         },
         settings={},
@@ -878,9 +903,15 @@ _register(
                 "must have lo > 0",
                 Uniform(0.1, 10.0, default=2.0),
             ),
-            # No free_prior -- see the shared note on ``sfh_exp_start_gyr``.
+            # Same redshift-dependent onset, same static ceiling, same
+            # parse-time z-narrowing -- see the shared note on
+            # ``sfh_exp_start_gyr`` above.
             "sfh_dexp_start_gyr": ParamDef(
-                "Start lookback (Gyr)", _lo_nonneg, "must have lo >= 0", Fixed(0.0)
+                "Start lookback (Gyr)",
+                _lo_nonneg,
+                "must have lo >= 0",
+                Fixed(0.0),
+                Uniform(0.0, _AGE_UNIV_GYR, default=0.0),
             ),
         },
         settings={},
