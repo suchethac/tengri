@@ -549,3 +549,36 @@ def test_sfh_dpl_wildcard_free_does_not_get_the_no_op_warning():
         freed = _free(sfh={"type": "dpl", "all_params": FREE})
     assert not [w for w in caught if issubclass(w.category, WildcardNoOpWarning)]
     assert any(p.startswith("sfh_") for p in freed)
+
+
+# ── Regression: dust_bump_strength's ceiling widened for Narayanan+2018 ────
+#
+# ``dust_bump_strength``'s ``free_prior`` was ``Uniform(0.0, 2.0)``, which
+# cannot reach the MUFASA-fitted bump multipliers Narayanan, Conroy, Davé,
+# Johnson & Popping (2018, ApJ 869, 70) publish (up to 3.634 at z=4,
+# ``_NARAYANAN_BUMP_STRENGTH`` in ``components/dust/attenuation.py``) -- so a
+# ``kriek_conroy`` fit with ``dust_bump_strength: FREE`` could not sample what
+# the paper finds. The ceiling is now ``Uniform(0.0, 4.0)`` (#2226).
+# Mutation-checked: reverting the ceiling to 2.0 fails this test.
+
+
+def test_dust_bump_strength_frees_at_the_widened_ceiling():
+    """``dust_attenuation={'law': 'kriek_conroy', 'all_params': FREE}`` must
+    free ``dust_bump_strength`` at exactly ``Uniform(0.0, 4.0)``."""
+    with warnings.catch_warnings():
+        # Since #2207 a dust wildcard also emits a partial-free warning
+        # (dust_f_obscuration stays stuck under kriek_conroy); irrelevant to
+        # this assertion, which pins the freed bound only.
+        warnings.simplefilter("ignore")
+        spec = tengri.parse_groups(
+            sfh={"type": "dpl", "all_params": Fixed(DEFAULT)},
+            dust_attenuation={
+                "type": "single_component",
+                "law": "kriek_conroy",
+                "tau_v": 1.0,
+                "all_params": FREE,
+            },
+            redshift=Fixed(0.1),
+        )
+    assert "dust_bump_strength" in spec.free_params
+    assert spec.get_distribution("dust_bump_strength") == Uniform(0.0, 4.0)

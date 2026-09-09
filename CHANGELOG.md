@@ -8,6 +8,29 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 
 ### Fixed
 
+- `narayanan_prior(z)` and `narayanan_tau_prior(z, log_mstar)` centered
+  unbounded `Gaussian` priors on `dust_bump_strength` and `dust_tau_diff`,
+  both of which declare a `lo >= 0` `bound_check` — so the docstrings' own
+  Examples raised `ValueError: ... bounds (-inf, inf) violate physical
+  constraint: must be >= 0` at `Parameters` construction. Both Gaussians now
+  truncate at zero (`lo=0.0`); `dust_delta`, which has no such constraint
+  and whose fitted means straddle zero, stays unbounded. That fix exposed a
+  second, independent defect in `Gaussian`: `_truncated` was derived from
+  `self._cdf_lo > 0.0`, and for a bound more than ~8 sigma from the mean
+  `erf` underflows to exactly 0.0, so `_truncated` read `False` and
+  `unstandardize`/`sample` silently fell back to the untruncated affine map
+  — inert for a `lo=0.0` bound 6.6–12 sigma away from these two priors'
+  means. `_truncated` now reads the bound directly
+  (`self._lo > -inf or self._hi < inf`); behavior-preserving for every other
+  caller (every other bounded `Gaussian` in the tree already has at least one
+  bound within a few sigma, where the CDF does not underflow, so
+  `_truncated` already read `True` before this fix; every unbounded
+  `Gaussian` is untouched). Finally, `dust_bump_strength`'s declared
+  `free_prior` widened from `Uniform(0.0, 2.0)` to `Uniform(0.0, 4.0)`, since
+  the old ceiling
+  could not reach the Narayanan et al. (2018) MUFASA-fitted bump multipliers
+  (up to 3.634 at z=4) that `narayanan_prior` itself now centers on (#2226).
+
 - `multicolor_disc`'s pure-float32 bolometric renormalization returned
   `l_nu_intrinsic * scale`, and transposing that product makes JAX form
   `sum(g * l_nu_intrinsic)`. With the raw disc SED (~1e28) and the cotangent
