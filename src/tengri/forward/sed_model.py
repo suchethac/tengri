@@ -8952,7 +8952,7 @@ class SEDModel:
         cls,
         ssp,
         sfh=...,
-        dust=...,
+        dust_attenuation_law=...,
         nebular=...,
         agn=...,
         redshift=...,
@@ -8973,8 +8973,13 @@ class SEDModel:
             Path to SSP HDF5 file, or a pre-loaded ``SSPData`` instance.
         sfh : str
             SFH family name, e.g. ``"tsnorm"``, ``"dpl"``, ``"dpl+field"``.
-        dust : str
-            Dust attenuation law. ``"charlot_fall"`` (default), ``"calzetti"``, etc.
+        dust_attenuation_law : str
+            Dust attenuation law applied to BOTH screens (birth cloud +
+            diffuse ISM) of the default two-component model, e.g.
+            ``"calzetti"``, ``"kl04"``. ``"charlot_fall"`` (the default) is
+            an alias for ``"power_law"`` on both screens -- the classic
+            Charlot & Fall (2000) model -- not a law-registry name. ``dust=``
+            is a deprecated alias for this parameter.
         nebular : str or None
             Nebular emission backend. ``"baked_in"``, ``"cloudy_grid"``, ``"cb19"``,
             ``"mappings"``, ``"cue"``, ``"shock"``, or None.
@@ -9001,8 +9006,8 @@ class SEDModel:
         Notes
         -----
         Ellipsis (``...``) placeholders in optional parameters map to
-        defaults from ``defaults.toml``. For example, ``dust=...`` uses
-        the default dust attenuation law.
+        defaults from ``defaults.toml``. For example,
+        ``dust_attenuation_law=...`` uses the default dust attenuation law.
 
         Examples
         --------
@@ -9031,7 +9036,7 @@ class SEDModel:
             cls,
             ssp,
             sfh=_r(sfh),
-            dust=_r(dust),
+            dust_attenuation_law=_r(dust_attenuation_law),
             nebular=_r(nebular),
             agn=_r(agn),
             redshift=_r(redshift),
