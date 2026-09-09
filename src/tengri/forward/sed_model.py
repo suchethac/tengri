@@ -973,6 +973,40 @@ def _validate_fracagn_requires_dust(spec) -> None:
         )
 
 
+#: Provenance tags meaning "the user named this parameter" (#2189).
+#:
+#: Everything else -- ``registry_default`` and the ``wildcard_*`` tags -- is
+#: the grammar filling a slot in, which a guard about a *stated* value must
+#: not read as a statement.
+_USER_PROVIDED_PROVENANCE = frozenset({"user_prior", "user_fixed", "user_free", "user_free_grid"})
+
+
+def _param_is_user_provided(spec, name: str) -> bool:
+    """Whether ``name`` carries a user-provided disposition in ``spec``.
+
+    Parameters
+    ----------
+    spec : Parameters
+        The parameter specification.
+    name : str
+        Full prefixed parameter name, e.g. ``'agn_log_lbol'``.
+
+    Returns
+    -------
+    bool
+        ``True`` only for the tags in :data:`_USER_PROVIDED_PROVENANCE`.
+        ``False`` when the spec carries no provenance at all -- the flat-kwarg
+        ``Parameters(...)`` escape hatch does not record it, and an expert
+        path must not be judged by a rule it cannot express.
+
+    Notes
+    -----
+    **JIT-compatible**: not applicable -- composition-time only.
+    """
+    provenance = getattr(spec, "_group_provenance", None) or {}
+    return provenance.get(name) in _USER_PROVIDED_PROVENANCE
+
+
 def _validate_torus_frac_fracagn_conflict(spec) -> None:
     """Raise if BOTH agn_torus_frac AND fracAGN are explicitly set (#2189, R15).
 
@@ -1012,13 +1046,10 @@ def _validate_torus_frac_fracagn_conflict(spec) -> None:
     """
     from tengri.config.exceptions import ConfigError
 
-    provenance = getattr(spec, "_group_provenance", None) or {}
-    _EXPLICIT_TAGS = {"user_prior", "user_fixed", "user_free", "user_free_grid"}
-
-    if provenance.get("agn_torus_frac") not in _EXPLICIT_TAGS:
+    if not _param_is_user_provided(spec, "agn_torus_frac"):
         return  # torus_frac was not explicitly given; nothing to conflict with
 
-    if provenance.get("agn_ir_frac") not in _EXPLICIT_TAGS:
+    if not _param_is_user_provided(spec, "agn_ir_frac"):
         return  # fracAGN was not explicitly given (default 0.0 is inactive)
 
     free = set(spec.free_params)
@@ -3162,6 +3193,7 @@ class SEDModel:
         self._needs_agn_lbol_flat_check = False
         self._agn_lbol_dist = None
         self._agn_ir_frac_dist = None
+        self._agn_lbol_is_user_fixed = False
 
         self._agn_model = getattr(spec, "agn_model", None)
         # Static block selectors for the "composable" AGN recipe; default to
@@ -3189,9 +3221,29 @@ class SEDModel:
             # whether the SED is identical at upper and lower bounds of agn_log_lbol.
             # If identical, the direction is flat; raise loudly. The measurement is
             # deferred until after the model is fully constructed (line ~1808 of __init__).
+            #
+            # R55 widens the trigger from "free" to "free or user-provided". A
+            # value the user spelled out and the coupling then discards is the
+            # same defect as a flat sampler direction, and the repo's rule is
+            # explicit-over-silent: state a luminosity that cannot act and you
+            # are told, not quietly overruled. The registry default stays
+            # exempt -- every ``'all_params': Fixed(DEFAULT)`` AGN build
+            # carries one, and refusing those would refuse the recipes.
+            #
+            # The trigger is deliberately NOT a list of carve-outs. Measured
+            # across the declared Uniform(8, 14) prior with agn_ir_frac=0.3,
+            # only one configuration is inert (rel change 6.4e-15); an active
+            # nlr or blr block, a non-SKIRTOR torus, no torus, and
+            # norm='independent' all measure 2.5e5. The measurement below sees
+            # every one of those without being told about them.
             torus_is_skirtor = self._agn_torus_block == "skirtor" or self._agn_model == "skirtor"
             agn_norm_is_cigale_joint = self._agn_norm == "cigale_joint"
-            if torus_is_skirtor and agn_norm_is_cigale_joint and lbol_is_free:
+            lbol_is_user_provided = _param_is_user_provided(spec, "agn_log_lbol")
+            if (
+                torus_is_skirtor
+                and agn_norm_is_cigale_joint
+                and (lbol_is_free or lbol_is_user_provided)
+            ):
                 agn_ir_frac_dist = agn_dists.get("agn_ir_frac")
                 ir_frac_is_fixed_at_zero = (
                     agn_ir_frac_dist is not None
@@ -3202,6 +3254,7 @@ class SEDModel:
                     # Store info needed for deferred measurement
                     self._agn_lbol_dist = agn_lbol_dist
                     self._agn_ir_frac_dist = agn_ir_frac_dist
+                    self._agn_lbol_is_user_fixed = lbol_is_user_provided and not lbol_is_free
                     self._needs_agn_lbol_flat_check = True
             # Identity entries for agn_* now come from registry auto-derive
             # in _build_param_map (Step B).
@@ -3302,8 +3355,20 @@ class SEDModel:
         """
         from tengri.config.exceptions import ConfigError
 
-        # Get the prior bounds for agn_log_lbol
-        lo, hi = self._agn_lbol_dist.bounds
+        # Bounds to sweep agn_log_lbol between. A free parameter carries the
+        # interval a sampler would explore. A user-provided ``Fixed`` value
+        # (R55) carries the DEGENERATE interval (v, v), and sweeping that
+        # compares the SED against itself -- "flat" for every model, a guard
+        # that would refuse every build. Sweep the declared prior instead:
+        # the question is whether the AGN luminosity direction does anything
+        # at all, not whether the pinned value in particular does.
+        if self._agn_lbol_dist.is_fixed:
+            from tengri.components.agn._params import PARAMS as _AGN_PARAMS
+
+            _decl = next(p for p in _AGN_PARAMS if p.name == "agn_log_lbol")
+            lo, hi = float(_decl.prior.lo), float(_decl.prior.hi)
+        else:
+            lo, hi = self._agn_lbol_dist.bounds
 
         # Get the prior midpoint for agn_ir_frac. With precondition "agn_ir_frac
         # not Fixed(0)", it MUST have bounds (either as a distribution or as a Fixed
@@ -3369,15 +3434,32 @@ class SEDModel:
         is_flat = rel_diff < 1e-10
 
         if is_flat:
+            # Same measurement, two readings of it. R55: a value the user
+            # spelled out is discarded; #2069: a free direction the sampler
+            # cannot move. The remedies are the same three, and none of them
+            # may be "pin agn_log_lbol" -- this guard now refuses that too, and
+            # advice a guard refuses is the #1364 defect.
+            kind = (
+                "agn_log_lbol was given a value and agn_ir_frac is active"
+                if self._agn_lbol_is_user_fixed
+                else "agn_norm='cigale_joint' with skirtor and free agn_log_lbol"
+            )
+            consequence = (
+                "your agn_log_lbol value is computed over and discarded"
+                if self._agn_lbol_is_user_fixed
+                else "agn_log_lbol cannot move the likelihood"
+            )
             raise ConfigError(
-                f"agn_norm='cigale_joint' with skirtor and free agn_log_lbol: "
-                f"measured: the predicted SED is identical to within 1e-10 relative "
-                f"at agn_log_lbol={lo} and {hi} with agn_ir_frac={frac_mid} "
-                f"(rel_diff={rel_diff:.3e}). "
-                f"The CIGALE coupling ties amplitude to agn_ir_frac (fracAGN), so "
-                f"agn_log_lbol cannot move the likelihood. "
-                f"Fix agn_log_lbol (any value; it cancels), fix agn_ir_frac=0.0 to disable "
-                f"the tie, or set agn_norm='independent' to fit the luminosity directly."
+                f"{kind}: measured: the predicted SED is identical to within "
+                f"1e-10 relative at agn_log_lbol={lo} and {hi} with "
+                f"agn_ir_frac={frac_mid} (rel_diff={rel_diff:.3e}). With "
+                f"agn_ir_frac the AGN power is derived from the dust-absorbed "
+                f"stellar luminosity, L_absorbed * f/(1 - f) (the CIGALE "
+                f"skirtor2016 coupling), so {consequence}. Drop one: omit "
+                f"agn_log_lbol and let fracAGN set the AGN power, set "
+                f"agn_ir_frac=0.0 to disable the tie, or set "
+                f"agn_norm='independent' to put the disc on agn_log_lbol "
+                f"directly. See issues #2069 and #2210."
             )
 
     def _init_multiwavelength(self, spec, ssp_data):

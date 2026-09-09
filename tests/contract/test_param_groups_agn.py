@@ -1555,3 +1555,208 @@ class TestCrossCategoryCompanionDoesNotDisturbOtherWildcards:
                                 f"both declare {sorted(both)}"
                             )
         assert not overlaps, "\n".join(sorted(set(overlaps)))
+
+
+class TestAgnLogLbolFracAgnConflict:
+    """A user-provided ``agn_log_lbol`` that cannot act must raise (R55).
+
+    Under ``agn_norm='cigale_joint'`` with a SKIRTOR torus and an active
+    ``agn_ir_frac``, the AGN power is derived from the dust-absorbed stellar
+    luminosity, ``L_absorbed x f/(1-f)``, and a user-supplied
+    ``agn_log_lbol`` is computed over and discarded.
+
+    Measured on this branch (composable disc=schartmann2005, ``sfh=delayed``,
+    ``dust_emission=dale2014_cigale``), sweeping ``agn_log_lbol`` across the
+    5%/95% quantiles of its declared ``Uniform(8, 14)`` prior -- 8.3 to 13.7,
+    a 5.4-dex range -- and reading ``max|d sed_agn| / max sed_agn``:
+
+    ==========================================  ==========  ======
+    configuration (``agn_ir_frac=0.3``)         rel change  verdict
+    ==========================================  ==========  ======
+    cigale_joint + skirtor, no line block         6.44e-15  inert
+    cigale_joint + skirtor, ``nlr='analytic'``    2.51e+05  live
+    cigale_joint + skirtor, ``blr='analytic'``    2.51e+05  live
+    cigale_joint + ``torus='fritz'``              2.51e+05  live
+    cigale_joint + no torus                       2.51e+05  live
+    ``norm='independent'`` + skirtor              2.51e+05  live
+    cigale_joint + skirtor, ``agn_ir_frac=0.0``   2.51e+05  live
+    ==========================================  ==========  ======
+
+    Exactly one row is inert, so the refusal must be that narrow. It is, and
+    not by restating those five carve-outs as a condition list that can go
+    stale: #2069's guard *measures* the SED at the prior bounds and refuses
+    only a flat direction. R55's addition is that a **user-provided Fixed**
+    value gets the same measurement a FREE one already got -- the value being
+    silently discarded is the same defect whether or not a sampler is moving
+    it (explicit-over-silent). The registry default is never refused: every
+    ``'all_params': Fixed(DEFAULT)`` AGN build carries one.
+
+    Sibling: ``_validate_torus_frac_fracagn_conflict`` (#2189, R15).
+    """
+
+    def _build(self, ssp, *, log_lbol=None, ir_frac=None, norm="cigale_joint", torus="skirtor"):
+        import tengri
+
+        agn = {
+            "type": "composable",
+            "norm": norm,
+            "disc": {"type": "schartmann2005", "all_params": Fixed(DEFAULT)},
+            "all_params": Fixed(DEFAULT),
+        }
+        if torus is not None:
+            agn["torus"] = {"type": torus, "all_params": Fixed(DEFAULT)}
+        if log_lbol is not None:
+            agn["agn_log_lbol"] = log_lbol
+        if ir_frac is not None:
+            agn["agn_ir_frac"] = ir_frac
+        return tengri.SEDModel.build(
+            ssp,
+            sfh={
+                "type": "delayed",
+                "tau_gyr": Fixed(1.0),
+                "age_gyr": Fixed(5.0),
+                "log_total_mass": Fixed(0.0),
+                "all_params": Fixed(DEFAULT),
+            },
+            dust_attenuation={
+                "law": "calzetti",
+                "type": "two_component",
+                "tau_bc": Fixed(0.0),
+                "tau_diff": Fixed(0.5),
+                "all_params": Fixed(DEFAULT),
+            },
+            dust_emission={"type": "dale2014_cigale", "all_params": Fixed(DEFAULT)},
+            agn=agn,
+            redshift=Fixed(0.05),
+        )
+
+    # ── the refusal ────────────────────────────────────────────────
+
+    def test_user_fixed_log_lbol_with_active_ir_frac_raises(self, synthetic_ssp_wide):
+        """R55: a pinned value that is discarded is refused, not accepted."""
+        from tengri.config.exceptions import ConfigError
+
+        with pytest.raises(ConfigError, match=r"agn_log_lbol"):
+            self._build(synthetic_ssp_wide, log_lbol=Fixed(12.0), ir_frac=Fixed(0.3))
+
+    def test_refusal_names_the_coupling_and_the_way_out(self, synthetic_ssp_wide):
+        """The message says where the AGN power comes from and what to change.
+
+        And it must not advise a configuration this same guard refuses --
+        #1364's rule. Before R55 the message read "Fix agn_log_lbol (any
+        value; it cancels)", which is exactly the build this test performs.
+        """
+        from tengri.config.exceptions import ConfigError
+
+        with pytest.raises(ConfigError) as exc:
+            self._build(synthetic_ssp_wide, log_lbol=Fixed(12.0), ir_frac=Fixed(0.3))
+        msg = str(exc.value)
+        assert "agn_ir_frac" in msg
+        assert "identical" in msg, "the refusal must report its measurement"
+        assert "Fix agn_log_lbol" not in msg, (
+            "the advice must not name the configuration the guard refuses (#1364)"
+        )
+
+    def test_free_log_lbol_with_active_ir_frac_still_raises(self, synthetic_ssp_wide):
+        """#2069's original case keeps raising: a flat FREE direction."""
+        from tengri.config.exceptions import ConfigError
+
+        with pytest.raises(ConfigError, match=r"agn_log_lbol"):
+            self._build(synthetic_ssp_wide, log_lbol=FREE, ir_frac=Fixed(0.3))
+
+    def test_free_ir_frac_with_user_fixed_log_lbol_raises(self, synthetic_ssp_wide):
+        """A FREE fracAGN is active by construction; the pin is still dead."""
+        from tengri.config.exceptions import ConfigError
+
+        with pytest.raises(ConfigError, match=r"agn_log_lbol"):
+            self._build(synthetic_ssp_wide, log_lbol=Fixed(12.0), ir_frac=FREE)
+
+    # ── every configuration measured LIVE must keep building ───────
+
+    def test_ir_frac_alone_builds(self, synthetic_ssp_wide):
+        """fracAGN on its own is the CIGALE-style configuration: legal."""
+        assert self._build(synthetic_ssp_wide, ir_frac=Fixed(0.3)).spec.agn_model == "composable"
+
+    def test_log_lbol_alone_builds(self, synthetic_ssp_wide):
+        """A direct AGN luminosity with no fracAGN coupling: legal, and live."""
+        assert self._build(synthetic_ssp_wide, log_lbol=Fixed(12.0)).spec.agn_model == "composable"
+
+    def test_ir_frac_explicitly_zero_does_not_raise(self, synthetic_ssp_wide):
+        """``agn_ir_frac=0.0`` states "no coupling", so nothing is discarded.
+
+        Measured live: 2.51e5 relative across the prior.
+        """
+        model = self._build(synthetic_ssp_wide, log_lbol=Fixed(12.0), ir_frac=Fixed(0.0))
+        assert model.spec.agn_model == "composable"
+
+    def test_independent_norm_does_not_raise(self, synthetic_ssp_wide):
+        """``norm='independent'`` puts the disc on ``agn_log_lbol`` itself.
+
+        Measured live: 2.51e5 relative across the prior, with
+        ``agn_ir_frac=0.3`` active.
+        """
+        model = self._build(
+            synthetic_ssp_wide, log_lbol=Fixed(12.0), ir_frac=Fixed(0.3), norm="independent"
+        )
+        assert model.spec.agn_model == "composable"
+
+    def test_non_skirtor_torus_does_not_raise(self, synthetic_ssp_wide):
+        """The joint coupling is a SKIRTOR mechanism; ``fritz`` is untouched.
+
+        Measured live: 2.51e5 relative across the prior.
+        """
+        model = self._build(
+            synthetic_ssp_wide, log_lbol=Fixed(12.0), ir_frac=Fixed(0.3), torus="fritz"
+        )
+        assert model.spec.agn_model == "composable"
+
+    def test_active_nlr_block_does_not_raise(self, synthetic_ssp_wide):
+        """An NLR block reads the disc luminosity, so the direction is live.
+
+        Measured live: 2.51e5 relative across the prior. This is the carve-out
+        a static condition list would have to remember and the measurement
+        gets for free.
+        """
+        import tengri
+
+        model = tengri.SEDModel.build(
+            synthetic_ssp_wide,
+            sfh={
+                "type": "delayed",
+                "tau_gyr": Fixed(1.0),
+                "age_gyr": Fixed(5.0),
+                "log_total_mass": Fixed(0.0),
+                "all_params": Fixed(DEFAULT),
+            },
+            dust_attenuation={
+                "law": "calzetti",
+                "type": "two_component",
+                "tau_bc": Fixed(0.0),
+                "tau_diff": Fixed(0.5),
+                "all_params": Fixed(DEFAULT),
+            },
+            dust_emission={"type": "dale2014_cigale", "all_params": Fixed(DEFAULT)},
+            agn={
+                "type": "composable",
+                "norm": "cigale_joint",
+                "disc": {"type": "schartmann2005", "all_params": Fixed(DEFAULT)},
+                "torus": {"type": "skirtor", "all_params": Fixed(DEFAULT)},
+                "nlr": {"type": "analytic", "all_params": Fixed(DEFAULT)},
+                "agn_log_lbol": Fixed(12.0),
+                "agn_ir_frac": Fixed(0.3),
+                "all_params": Fixed(DEFAULT),
+            },
+            redshift=Fixed(0.05),
+        )
+        assert model.spec.agn_model == "composable"
+
+    # ── the guard gates on user-provided, never on the default ─────
+
+    def test_default_log_lbol_beside_active_ir_frac_builds(self, synthetic_ssp_wide):
+        """Every ``'all_params': Fixed(DEFAULT)`` AGN build carries the default.
+
+        Refusing those would refuse the recipes, so the registry default is
+        not a conflict even though it is just as inert.
+        """
+        model = self._build(synthetic_ssp_wide, ir_frac=Fixed(0.3))
+        assert "agn_log_lbol" in model.spec.get_fixed_values()

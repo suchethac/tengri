@@ -318,6 +318,25 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 
 ### Fixed
 
+- A user-provided `agn_log_lbol` is no longer accepted and discarded when the
+  CIGALE fracAGN coupling owns the AGN power. #2069 already refused a **free**
+  `agn_log_lbol` under `agn_norm='cigale_joint'` with a SKIRTOR torus and an
+  active `agn_ir_frac`, by measuring that the SED is identical at the two prior
+  bounds; a `Fixed` value the user spelled out went the other way -- silently
+  computed over. Measured across the declared `Uniform(8, 14)` prior (5%/95%
+  quantiles 8.3 and 13.7, a 5.4-dex range) with `agn_ir_frac=0.3`: that one
+  configuration moves `sed_agn` by 6.4e-15 relative, floating-point roundoff,
+  while an active `nlr` or `blr` block, a `fritz` torus, no torus,
+  `norm='independent'`, and `agn_ir_frac=0.0` each move it by 2.5e5. So the
+  refusal is the same *measurement* widened to the user-provided case rather
+  than a second, static guard listing those five carve-outs -- it cannot go
+  stale as blocks are added. The registry default stays exempt (every
+  `'all_params': Fixed(DEFAULT)` AGN build carries one), and the flat-kwarg
+  `Parameters(...)` escape hatch is untouched, since it records no provenance.
+  The refusal's advice also no longer reads "Fix agn_log_lbol (any value; it
+  cancels)", which this same guard now refuses -- advice a guard refuses is the
+  #1364 defect.
+
 - A Dale+2014 template grid must now **declare** the convention its rows are
   stored in, and `load_dale2014_lnu_grid` refuses a grid it cannot type instead
   of guessing. The stored unit decides whether the L_lambda -> L_nu Jacobian is
