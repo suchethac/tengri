@@ -778,13 +778,13 @@ def _agn_grammar(disc="kubota_done", torus="simple", nlr="none", blr="none", cos
             "type": "composable",
             # Match Synthesizer's black hole, not just its bolometric luminosity:
             # the kubota_done (qsosed) disc temperature profile — and therefore the
-            # UV bump shape and height — is set by M_BH and the Eddington ratio.
-            # Leaving these at tengri's defaults (1e7 M⊙) ran a hotter, fainter
-            # disc (0.75x); pinning them to the §9 BH gives a ~0.98x match.
+            # UV bump shape and height — is set by M_BH (the Eddington ratio is
+            # derived from agn_log_lbol and agn_log_mbh, #846, not a separate knob).
+            # Leaving agn_log_mbh at tengri's default (1e7 M⊙) ran a hotter, fainter
+            # disc (0.75x); pinning it to the §9 BH gives a ~0.98x match.
             "disc": {
                 "type": disc,
                 "agn_log_mbh": Fixed(float(np.log10(BH_MASS))),
-                "agn_log_ledd": Fixed(float(np.log10(BH_EDD))),
             },
             "torus": {
                 "type": torus,
@@ -846,10 +846,10 @@ for disc_type, _ in _disc_models:
             "disc": {
                 "type": disc_type,
                 "agn_log_mbh": Fixed(float(np.log10(BH_MASS))),
-                "agn_log_ledd": Fixed(float(np.log10(BH_EDD))),
             },
             "torus": {"type": "none"},
-            "lines": {"type": "none"},
+            "nlr": {"type": "none"},
+            "blr": {"type": "none"},
             "agn_log_lbol": Fixed(agn_log_lbol),
             "all_params": Fixed(DEFAULT),
         },
@@ -1056,7 +1056,8 @@ for torus_type in ("nenkova", "two_temperature"):
             "type": "composable",
             "disc": {"type": "none"},
             "torus": {"type": torus_type},
-            "lines": {"type": "none"},
+            "nlr": {"type": "none"},
+            "blr": {"type": "none"},
             "agn_log_lbol": Fixed(agn_log_lbol),
             "all_params": Fixed(DEFAULT),
         },
@@ -1319,7 +1320,6 @@ def _unified_phot(approx):
             "disc": {
                 "type": "kubota_done",
                 "agn_log_mbh": Fixed(float(np.log10(BH_MASS))),
-                "agn_log_ledd": Fixed(float(np.log10(BH_EDD))),
             },
             "torus": {
                 "type": "simple",
