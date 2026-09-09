@@ -129,7 +129,25 @@ _DISCS_WITH_5100A_CONTINUUM: frozenset[str] = frozenset(
 # Includes BLR/NLR (their λL_λ → L_disc_bol conversion uses the Krawczyk+2013
 # bolometric correction, which assumes a UV/optical continuum at 5100Å).
 _DOWNSTREAM_NEEDS_L5100: dict[str, frozenset[str]] = {
-    "nlr": frozenset({"analytic", "grahsp"}),
+    # ``nlr='analytic'`` is deliberately absent. ``nlr_analytic_block`` is
+    # illuminated by the intrinsic bolometric ``10**agn_log_lbol`` and its body
+    # opens with ``del l5100_disc``, so it is not disc-anchored and Rule 4
+    # naming it was a false advisory -- R48's own rule, that a block which does
+    # not normalize off the disc's 5100 A luminosity must not be listed here.
+    # Measured with every other slot off, marginal ``sum|sed_agn|`` over
+    # 500 A - 1 mm at ``agn_log_lbol=12``:
+    #
+    #   block               disc='none'     disc='multicolor'
+    #   nlr='analytic'      2.022386e+31    2.022386e+31   <- bit-identical
+    #   nlr='grahsp'        0.000000e+00    1.642265e+31
+    #   blr='analytic'      0.000000e+00    4.686986e+30
+    #   blr='grahsp'        0.000000e+00    7.246841e+31
+    #   feii='grahsp'       0.000000e+00    5.363636e+30
+    #   torus='grahsp'      0.000000e+00    2.493180e+34
+    #
+    # Every listed entry goes to exactly zero without a disc; ``analytic`` is
+    # the one that does not move at all.
+    "nlr": frozenset({"grahsp"}),
     "blr": frozenset({"analytic", "grahsp"}),
     "feii": frozenset({"grahsp", "boroson_green"}),
     "torus": frozenset({"grahsp"}),

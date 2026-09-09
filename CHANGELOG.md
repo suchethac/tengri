@@ -318,6 +318,22 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 
 ### Fixed
 
+- Rule 4 of the composable-AGN recipe validator no longer names
+  `nlr={'type': 'analytic'}` as disc-anchored. `nlr_analytic_block` is
+  illuminated by the intrinsic bolometric `10**agn_log_lbol` and its body opens
+  with `del l5100_disc`, so warning that it "scales by the disc's 5100 A
+  luminosity (zero)" when no disc is selected was a false advisory -- R48's own
+  rule, that a block which does not normalize off the disc must not be listed.
+  Measured with every other slot off, marginal `sum|sed_agn|` over 500 A - 1 mm
+  at `agn_log_lbol=12`: `nlr='analytic'` gives **2.022386e+31 both with
+  `disc='none'` and with a full `multicolor` disc** -- bit-identical -- while
+  every entry that stays in the table goes to exactly zero without a disc
+  (`nlr='grahsp'` 0 -> 1.642265e+31, `blr='analytic'` 0 -> 4.686986e+30,
+  `blr='grahsp'` 0 -> 7.246841e+31, `feii='grahsp'` 0 -> 5.363636e+30,
+  `torus='grahsp'` 0 -> 2.493180e+34). Rule 4's negative control was probing
+  with `analytic`, which the fix makes un-fireable, so it would have passed
+  vacuously; it now probes `nlr='grahsp'`, measured disc-anchored.
+
 - The #1970 refusal (Dale+2014's embedded star-forming radio synchrotron
   double-counted against an SF radio block) now measures the selected template
   instead of testing its registry name. Keying on
