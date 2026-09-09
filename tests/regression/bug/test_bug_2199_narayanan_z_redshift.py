@@ -699,17 +699,60 @@ def test_gradient_wrt_a_free_redshift_reaches_the_law(screen, uv_ssp, uv_obs):
 
 
 @pytest.mark.parametrize(("screen", "law"), sorted(_UNTOUCHED_LAW_PHOTOMETRY))
-def test_a_law_that_does_not_read_redshift_is_bit_identical(screen, law, uv_ssp, uv_obs):
-    """Threading z must not perturb a law whose signature never names it.
+def test_a_law_that_does_not_read_redshift_is_unchanged_to_ulp(screen, law, uv_ssp, uv_obs):
+    """Threading z must not perturb a law whose signature never names it, to one ulp.
 
     ``select_law_kwargs`` narrows the seeded ``redshift`` away for every law but
-    ``narayanan_z``. The references were captured on the merge base before any
-    source edit, so this is a before/after comparison and not a self-consistency
-    check.
+    ``narayanan_z``. The references were captured on the merge base (0ec4d492c)
+    on macOS, before any source edit, so this is a before/after comparison and
+    not a self-consistency check. Linux XLA differs from macOS XLA in the last
+    ulp of these ~1e-14 values (e.g. 2.2269787817749572e-14 vs
+    2.2269787817749566e-14), so the comparison uses ``rtol=1e-12`` rather than
+    exact equality -- tight enough to admit only that float noise, not a
+    genuine change in the photometry. The exact form of the invariant --
+    ``redshift`` never reaching a law that does not declare it -- is decided by
+    the resolver-level test below, which is ulp-free.
     """
     reference = np.asarray(_UNTOUCHED_LAW_PHOTOMETRY[(screen, law)])
     measured = _photometry(uv_ssp, uv_obs, screen, law, 0.5)
-    assert np.array_equal(measured, reference), (
-        f"{screen}/{law}: photometry moved. Expected {reference.tolist()}, got "
-        f"{measured.tolist()}."
+    np.testing.assert_allclose(
+        measured,
+        reference,
+        rtol=1e-12,
+        atol=0.0,
+        err_msg=f"{screen}/{law}: photometry moved beyond float64 ulp noise.",
     )
+
+
+@pytest.mark.parametrize("law", sorted({law for _, law in _UNTOUCHED_LAW_PHOTOMETRY}))
+def test_redshift_is_not_offered_to_a_law_that_does_not_read_it(law):
+    """The resolver must never put ``redshift`` into a law's kwargs unless it reads it.
+
+    This is the ulp-free form of the invariant the photometry test above only
+    checks approximately: it calls ``resolve_bc_diff_law_params`` directly and
+    inspects the returned dicts, so there is no float noise to tolerate. The
+    positive control below (``narayanan_z``) rules out this test passing
+    vacuously because the resolver stopped offering ``redshift`` to anyone.
+    """
+    from tengri.components.dust._apply import resolve_bc_diff_law_params
+
+    shared = {"dust_slope": -0.7, "dust_bump_strength": 0.0, "dust_delta": 0.0, "dust_Rv": 3.1}
+    bc, diff = resolve_bc_diff_law_params(
+        shared, {}, {}, None, bc_law=law, diff_law=law, redshift=0.5
+    )
+    assert "redshift" not in bc and "redshift" not in diff, (law, bc, diff)
+
+
+def test_redshift_is_offered_to_narayanan_z():
+    """Positive control for the negative test above: ``narayanan_z`` DOES read it.
+
+    Without this, the negative test could pass vacuously if the resolver
+    stopped threading ``redshift`` through to any law at all.
+    """
+    from tengri.components.dust._apply import resolve_bc_diff_law_params
+
+    shared = {"dust_slope": -0.7, "dust_bump_strength": 0.0, "dust_delta": 0.0, "dust_Rv": 3.1}
+    bc, diff = resolve_bc_diff_law_params(
+        shared, {}, {}, None, bc_law="narayanan_z", diff_law="narayanan_z", redshift=0.5
+    )
+    assert bc["redshift"] == 0.5 and diff["redshift"] == 0.5
