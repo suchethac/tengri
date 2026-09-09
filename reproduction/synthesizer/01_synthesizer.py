@@ -78,6 +78,7 @@ except NameError:
     pass
 
 warnings.filterwarnings("ignore")
+warnings.filterwarnings("default", module=r"tengri(\.|$)")
 tengri.plot.setup_style()
 
 # Unit-sanity guard. Synthesizer reports L_ν in erg/s/Hz natively, so the bridge
@@ -234,7 +235,7 @@ _m_sfh = SEDModel.build(
         "tau_diff": Fixed(0.0),
         "all_params": Fixed(DEFAULT),
     },
-    redshift=Fixed(0.0),
+    neb={"type": "ssp"}, redshift=Fixed(0.0),
 )
 _state_sfh = _m_sfh.predict_state({})
 _lbt_yr = np.asarray(_state_sfh.derived["sfh_grid_lbt_yr"])
@@ -303,7 +304,7 @@ m_stellar = SEDModel.build(
         "tau_diff": Fixed(0.0),
         "all_params": Fixed(DEFAULT),
     },
-    redshift=Fixed(0.0),
+    neb={"type": "ssp"}, redshift=Fixed(0.0),
 )
 s_stellar = m_stellar.predict_state({})
 _assert_comparable(L_s3, s_stellar.sed_intrinsic, name="§3 stellar")
@@ -423,7 +424,7 @@ m_d = SEDModel.build(
         "tau_diff": Fixed(TAU_DIFF),
         "all_params": Fixed(DEFAULT),
     },
-    redshift=Fixed(0.0),
+    neb={"type": "ssp"}, redshift=Fixed(0.0),
 )
 s_d = m_d.predict_state({})
 _assert_comparable(L_s5_attn, s_d.derived["sed_dust_attenuated"], name="§5 dust applied")
@@ -496,7 +497,7 @@ m_ir = SEDModel.build(
         "gamma_dl": Fixed(0.05),
         "all_params": Fixed(DEFAULT),
     },
-    redshift=Fixed(0.0),
+    neb={"type": "ssp"}, redshift=Fixed(0.0),
 )
 s_ir = m_ir.predict_state({})
 _L_abs = float(np.asarray(s_ir.derived["L_absorbed"]))
@@ -796,7 +797,7 @@ def _agn_grammar(disc="kubota_done", torus="simple", nlr="none", blr="none", cos
             "agn_cos_inc": Fixed(cos_inc),
             "all_params": Fixed(DEFAULT),
         },
-        redshift=Fixed(0.0),
+        neb={"type": "ssp"}, redshift=Fixed(0.0),
     )
     s = m.predict_state({})
     return np.asarray(s.wave), np.asarray(s.derived["sed_agn"])
@@ -852,7 +853,7 @@ for disc_type, _ in _disc_models:
             "agn_log_lbol": Fixed(agn_log_lbol),
             "all_params": Fixed(DEFAULT),
         },
-        redshift=Fixed(0.0),
+        neb={"type": "ssp"}, redshift=Fixed(0.0),
     )
     s = m.predict_state({})
     _disc_tengri[disc_type] = (np.asarray(s.wave), np.asarray(s.derived["sed_agn"]))
@@ -1059,7 +1060,7 @@ for torus_type in ("nenkova", "two_temperature"):
             "agn_log_lbol": Fixed(agn_log_lbol),
             "all_params": Fixed(DEFAULT),
         },
-        redshift=Fixed(0.0),
+        neb={"type": "ssp"}, redshift=Fixed(0.0),
     )
     s = m.predict_state({})
     _torus_tengri[torus_type] = (np.asarray(s.wave), np.asarray(s.derived["sed_agn"]))
@@ -1232,7 +1233,7 @@ _m_vis = SEDModel.build(
         "agn_cos_inc": Uniform(0.0, 1.0),
         "all_params": Fixed(DEFAULT),
     },
-    redshift=Fixed(0.0),
+    neb={"type": "ssp"}, redshift=Fixed(0.0),
 )
 _w_vis = np.asarray(_m_vis.predict_state({"agn_cos_inc": 0.5}).wave)
 _i5000 = int(np.argmin(np.abs(_w_vis - 5000.0)))
@@ -1331,7 +1332,7 @@ def _unified_phot(approx):
             "agn_cos_inc": Fixed(BH_COS_INC),
             "all_params": Fixed(DEFAULT),
         },
-        redshift=Fixed(0.05),
+        neb={"type": "ssp"}, redshift=Fixed(0.05),
     )
     return np.asarray(m.predict_photometry({}))
 
@@ -1387,7 +1388,7 @@ _m_free = SEDModel.build(
         "agn_log_lbol": Fixed(agn_log_lbol),
         "all_params": FREE,
     },
-    redshift=Fixed(0.0),
+    neb={"type": "ssp"}, redshift=Fixed(0.0),
 )
 _agn_free = sorted(str(_p) for _p in _m_free.spec.free_params if str(_p).startswith("agn_"))
 print(f"§9h 'all_params': FREE frees {len(_agn_free)} AGN parameters:")

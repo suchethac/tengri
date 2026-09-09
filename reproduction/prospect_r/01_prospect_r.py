@@ -62,6 +62,7 @@ except NameError:
     pass
 
 warnings.filterwarnings("ignore")
+warnings.filterwarnings("default", module=r"tengri(\.|$)")
 tengri.plot.setup_style()
 
 # Unit-sanity guard: ProSpect returns L_λ in L⊙/Å, which the driver
@@ -269,7 +270,7 @@ m_sfh = SEDModel.build(
         "tau_diff": Fixed(0.0),
         "all_params": Fixed(DEFAULT),
     },
-    redshift=Fixed(0.0),
+    neb={"type": "ssp"}, redshift=Fixed(0.0),
 )
 s_sfh = m_sfh.predict_state({})
 _lbt_yr = np.asarray(s_sfh.derived["sfh_grid_lbt_yr"])
@@ -351,7 +352,7 @@ m_zmm = SEDModel.build(
         "tau_diff": Fixed(0.0),
         "all_params": Fixed(DEFAULT),
     },
-    redshift=Fixed(0.0),
+    neb={"type": "ssp"}, redshift=Fixed(0.0),
 )
 s_zmm = m_zmm.predict_state({})
 _age_t = np.asarray(s_zmm.derived["sfh_grid_lbt_yr"])
@@ -393,7 +394,7 @@ m_zmb = SEDModel.build(
         "tau_diff": Fixed(0.0),
         "all_params": Fixed(DEFAULT),
     },
-    redshift=Fixed(0.0),
+    neb={"type": "ssp"}, redshift=Fixed(0.0),
 )
 _Z_box_t = 10.0 ** np.asarray(m_zmb.predict_state({}).derived["log_metallicity_history"])
 
@@ -479,7 +480,7 @@ m_stellar = SEDModel.build(
         "tau_diff": Fixed(0.0),
         "all_params": Fixed(DEFAULT),
     },
-    redshift=Fixed(0.0),
+    neb={"type": "ssp"}, redshift=Fixed(0.0),
 )
 s_stellar = m_stellar.predict_state({})
 _assert_comparable(L_p3, s_stellar.sed_intrinsic, name="§3 stellar")
@@ -634,7 +635,7 @@ m_d = SEDModel.build(
         "all_params": Fixed(DEFAULT),
     },
     dust_attenuation=DUST_FIDUCIAL,
-    redshift=Fixed(0.0),
+    neb={"type": "ssp"}, redshift=Fixed(0.0),
 )
 s_d = m_d.predict_state({})
 L_t_atten = np.asarray(s_d.derived["sed_dust_attenuated"])
@@ -706,7 +707,7 @@ m_ir = SEDModel.build(
         "all_params": Fixed(DEFAULT),
     },
     dust_emission={"type": "dale2014", "alpha_dale": Fixed(3.0), "all_params": Fixed(DEFAULT)},
-    redshift=Fixed(0.0),
+    neb={"type": "ssp"}, redshift=Fixed(0.0),
 )
 s_ir = m_ir.predict_state({})
 _L_abs = float(np.asarray(s_ir.derived["L_absorbed"]))
@@ -1016,7 +1017,7 @@ m_agn = SEDModel.build(
         "agn_q_skirtor": Fixed(1.0),  # ProSpect q=1
         "all_params": Fixed(DEFAULT),
     },
-    redshift=Fixed(0.0),
+    neb={"type": "ssp"}, redshift=Fixed(0.0),
 )
 s_agn = m_agn.predict_state({})
 w_t9 = np.asarray(s_agn.wave)
@@ -1124,7 +1125,7 @@ m_radio = SEDModel.build(
         "all_params": Fixed(DEFAULT),
     },
     radio={"sf": {"type": "bell2003_split"}, "agn": {"type": "powerlaw"}, "all_params": Fixed(DEFAULT)},
-    redshift=Fixed(0.0),
+    neb={"type": "ssp"}, redshift=Fixed(0.0),
 )
 s_radio = m_radio.predict_state({})
 w_t11 = np.asarray(s_radio.wave)

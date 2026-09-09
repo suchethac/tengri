@@ -69,6 +69,7 @@ except NameError:
     pass
 
 warnings.filterwarnings("ignore")
+warnings.filterwarnings("default", module=r"tengri(\.|$)")
 tengri.plot.setup_style()
 
 # nbclient kernels don't bind ``__file__``; fall back to cwd so the Setup
@@ -236,7 +237,7 @@ def tengri_disc(disc_type, *, log_lbol=11.0, ebv_disc=None, **disc_params):
     if ebv_disc is not None:
         disc["agn_ebv_disc"] = Fixed(ebv_disc)
     m = SEDModel.build(
-        ssp_data=ssp, sfh=SFH_FIDUCIAL, dust_attenuation=NO_DUST, agn=agn, redshift=Fixed(0.0)
+        ssp_data=ssp, sfh=SFH_FIDUCIAL, dust_attenuation=NO_DUST, agn=agn, neb={"type": "ssp"}, redshift=Fixed(0.0)
     )
     tengri_disc.last_model = m
     pred = m.predict({})
@@ -263,7 +264,7 @@ def tengri_torus(torus_type, *, log_lbol=11.0, **torus_params):
             "all_params": Fixed(DEFAULT),
             "norm": "independent",
         },
-        redshift=Fixed(0.0),
+        neb={"type": "ssp"}, redshift=Fixed(0.0),
     )
     tengri_torus.last_model = m
     pred = m.predict({})
@@ -291,7 +292,7 @@ def tengri_qsogen_full(*, log_lbol=11.0, torus=None):
         "norm": "independent",
     }
     m = SEDModel.build(
-        ssp_data=ssp, sfh=SFH_FIDUCIAL, dust_attenuation=NO_DUST, agn=agn, redshift=Fixed(0.0)
+        ssp_data=ssp, sfh=SFH_FIDUCIAL, dust_attenuation=NO_DUST, agn=agn, neb={"type": "ssp"}, redshift=Fixed(0.0)
     )
     tengri_qsogen_full.last_model = m
     pred = m.predict({})
@@ -325,7 +326,7 @@ for age, c in [(0.1, "C0"), (5.0, "C3")]:
             "all_params": Fixed(DEFAULT),
         },
         dust_attenuation=NO_DUST,
-        redshift=Fixed(0.0),
+        neb={"type": "ssp"}, redshift=Fixed(0.0),
     )
     pred = m.predict({})
     w = np.asarray(pred.sed.components["wavelength"])
@@ -338,7 +339,7 @@ ax0.set_title("BC03 + Chabrier stellar populations (shared library)")
 ax0.legend(fontsize=8)
 ax0.grid(True, alpha=0.3)
 
-m_csp = SEDModel.build(ssp_data=ssp, sfh=SFH_FIDUCIAL, dust_attenuation=NO_DUST, redshift=Fixed(0.0))
+m_csp = SEDModel.build(ssp_data=ssp, sfh=SFH_FIDUCIAL, dust_attenuation=NO_DUST, neb={"type": "ssp"}, redshift=Fixed(0.0))
 resolved_params(m_csp)
 pred_csp = m_csp.predict({})
 w_t = np.asarray(pred_csp.sed.components["wavelength"])
@@ -385,7 +386,7 @@ print(
 # **Verification Status:** PARTIAL (11/33) — Parametric SFH family physics
 
 # %%
-m2 = SEDModel.build(ssp_data=ssp, sfh=SFH_FIDUCIAL, dust_attenuation=NO_DUST, redshift=Fixed(0.0))
+m2 = SEDModel.build(ssp_data=ssp, sfh=SFH_FIDUCIAL, dust_attenuation=NO_DUST, neb={"type": "ssp"}, redshift=Fixed(0.0))
 pred2 = m2.predict({})
 mass_formed = pred2.sfh.stellar_mass  # public property: SFH's own mass-formed integral
 
@@ -558,7 +559,7 @@ def tengri_disc_atten(disc_type, atten_type, ebv, **atten_params):
             "atten": atten,
             "agn_log_lbol": Fixed(11.0), "all_params": Fixed(DEFAULT), "norm": "independent",
         },
-        redshift=Fixed(0.0),
+        neb={"type": "ssp"}, redshift=Fixed(0.0),
     )
     tengri_disc_atten.last_model = m
     pred = m.predict({})
@@ -648,11 +649,11 @@ _k_analytic = np.clip((_k_prime + _RV_CALZETTI) / _RV_CALZETTI / _k5500 * _RV_CA
 m_g0 = SEDModel.build(ssp_data=ssp, sfh=SFH_FIDUCIAL,
                        dust_attenuation={"type": "single_component", "law": "calzetti",
                                          "dust_tau_v": Fixed(0.0), "all_params": Fixed(DEFAULT)},
-                       redshift=Fixed(0.0))
+                       neb={"type": "ssp"}, redshift=Fixed(0.0))
 m_g1 = SEDModel.build(ssp_data=ssp, sfh=SFH_FIDUCIAL,
                        dust_attenuation={"type": "single_component", "law": "calzetti",
                                          "dust_tau_v": Fixed(_tau_v_gal), "all_params": Fixed(DEFAULT)},
-                       redshift=Fixed(0.0))
+                       neb={"type": "ssp"}, redshift=Fixed(0.0))
 resolved_params(m_g1)
 w_g0 = np.asarray(m_g0.predict({}).sed.components["wavelength"])
 L_g0 = np.asarray(m_g0.predict({}).sed.components["sed_attenuated"])
@@ -726,7 +727,7 @@ def _dust_emission_build(dtype, tau_v, **params):
         dust_attenuation={"type": "single_component", "law": "calzetti", "dust_tau_v": Fixed(tau_v),
                            "all_params": Fixed(DEFAULT)},
         dust_emission={"type": dtype, **kwargs, "all_params": Fixed(DEFAULT)},
-        redshift=Fixed(0.0),
+        neb={"type": "ssp"}, redshift=Fixed(0.0),
     )
     _dust_emission_build.last_model = m
     pred = m.predict({})
@@ -816,7 +817,7 @@ m7 = SEDModel.build(
                        "all_params": Fixed(DEFAULT)},
     dust_emission={"type": "schreiber2018", "dust_T": Fixed(35.0), "dust_f_pah": Fixed(0.02),
                     "all_params": Fixed(DEFAULT)},
-    redshift=Fixed(0.0),
+    neb={"type": "ssp"}, redshift=Fixed(0.0),
 )
 pred7 = m7.predict({})
 w7 = np.asarray(pred7.sed.components["wavelength"])
@@ -873,11 +874,11 @@ print(
 # %% [markdown]
 # ## §8 Host nebular emission
 #
-# AGNfitter-rX's GALAXY component carries no host nebular-emission term
-# (no emission lines, no nebular continuum); tengri's stellar component can
-# add one (`neb={'type': ...}`), so this reproduction leaves it off (`SFH_FIDUCIAL`
-# above has no `neb` group) wherever the comparison targets AGNfitter-rX's
-# own physics.
+# AGNfitter-rX's GALAXY component carries no host nebular-emission term (no
+# emission lines, no nebular continuum); the SSP grid used throughout this
+# reproduction carries baked-in nebular lines at a fixed ionization
+# parameter instead, and every build states that choice explicitly with
+# `neb={'type': 'ssp'}`.
 
 # %% [markdown]
 # ## §9a Accretion-disk library face-off
@@ -1301,7 +1302,7 @@ _m9 = SEDModel.build(
     },
     xray={"type": "yang20"},
     radio={"sf": {"type": "bell2003"}, "agn": {"type": "dpl"}},
-    redshift=Fixed(0.0),
+    neb={"type": "ssp"}, redshift=Fixed(0.0),
 )
 resolved_params(_m9)
 import jax.numpy as jnp
@@ -1385,7 +1386,7 @@ from tengri.xray import alpha_ox_from_l2500
 
 _m10 = SEDModel.build(
     ssp_data=ssp, sfh=SFH_FIDUCIAL, dust_attenuation=NO_DUST,
-    xray={"type": "yang20", "all_params": Fixed(DEFAULT)}, redshift=Fixed(0.0),
+    xray={"type": "yang20", "all_params": Fixed(DEFAULT)}, neb={"type": "ssp"}, redshift=Fixed(0.0),
 )
 resolved_params(_m10)  # the Gamma=1.8, 300 keV cutoff, log N_H=20 defaults §10/§10b discuss
 
@@ -1516,7 +1517,7 @@ _m11 = SEDModel.build(
     ssp_data=ssp, sfh=SFH_FIDUCIAL, dust_attenuation=NO_DUST,
     radio={"sf": {"type": "bell2003", "all_params": Fixed(DEFAULT)},
            "agn": {"type": "dpl", "all_params": Fixed(DEFAULT)}},
-    redshift=Fixed(0.0),
+    neb={"type": "ssp"}, redshift=Fixed(0.0),
 )
 resolved_params(_m11)
 
@@ -1697,7 +1698,7 @@ m13 = SEDModel.build(
     },
     xray={"type": "yang20"},
     radio={"sf": {"type": "bell2003"}, "agn": {"type": "dpl"}},
-    redshift=Fixed(_z13),
+    neb={"type": "ssp"}, redshift=Fixed(_z13),
 )
 resolved_params(m13)
 pred13 = m13.predict({})
@@ -1822,7 +1823,7 @@ m13_obs = SEDModel.build(
     },
     xray={"type": "none"},
     radio={"sf": {"type": "none"}, "agn": {"type": "none"}},
-    redshift=Fixed(_z13),
+    neb={"type": "ssp"}, redshift=Fixed(_z13),
 )
 import jax
 
@@ -1906,7 +1907,7 @@ m_cap = SEDModel.build(
     },
     xray={"type": "yang20"},
     radio={"sf": {"type": "bell2003"}, "agn": {"type": "dpl"}},
-    redshift=Fixed(0.0),
+    neb={"type": "ssp"}, redshift=Fixed(0.0),
 )
 resolved_params(m_cap)
 s_cap = m_cap.predict({})

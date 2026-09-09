@@ -86,6 +86,7 @@ if _CIGALE_DALE_PATH.is_file():
     register_dale2014_tabulated(str(_CIGALE_DALE_PATH), name="dale2014")
 
 warnings.filterwarnings("ignore")
+warnings.filterwarnings("default", module=r"tengri(\.|$)")
 tengri.plot.setup_style()
 
 # Unit-sanity guard: every panel below claims percent-level agreement,
@@ -365,7 +366,7 @@ _m_sfh = SEDModel.build(
         "tau_diff": Fixed(0.0),
         "all_params": Fixed(DEFAULT),
     },
-    redshift=Fixed(0.0),
+    neb={"type": "ssp"}, redshift=Fixed(0.0),
 )
 _state_sfh = _m_sfh.predict_state({})
 _lbt_yr = np.asarray(_state_sfh.derived["sfh_grid_lbt_yr"])
@@ -459,7 +460,7 @@ _m_2exp = SEDModel.build(
         "tau_diff": Fixed(0.0),
         "all_params": Fixed(DEFAULT),
     },
-    redshift=Fixed(0.0),
+    neb={"type": "ssp"}, redshift=Fixed(0.0),
 )
 _st_2exp = _m_2exp.predict_state({})
 _lbt_2exp = np.asarray(_st_2exp.derived["sfh_grid_lbt_yr"])
@@ -535,7 +536,7 @@ m_stellar = SEDModel.build(
         "tau_diff": Fixed(0.0),
         "all_params": Fixed(DEFAULT),
     },
-    redshift=Fixed(0.0),
+    neb={"type": "ssp"}, redshift=Fixed(0.0),
 )
 s_stellar = m_stellar.predict_state({})
 _assert_comparable(L_c, s_stellar.sed_intrinsic, name="§3 stellar")
@@ -704,7 +705,7 @@ m_nd = SEDModel.build(
         "tau_diff": Fixed(0.0),
         "all_params": Fixed(DEFAULT),
     },
-    redshift=Fixed(0.0),
+    neb={"type": "ssp"}, redshift=Fixed(0.0),
 )
 s_nd = m_nd.predict_state({})
 
@@ -731,7 +732,7 @@ m_d = SEDModel.build(
         "lyman_cutoff": True,
         "all_params": Fixed(DEFAULT),
     },
-    redshift=Fixed(0.0),
+    neb={"type": "ssp"}, redshift=Fixed(0.0),
 )
 s_d = m_d.predict_state({})
 _assert_comparable(L_c_d, s_d.derived["sed_dust_attenuated"], name="§5 dust applied")
@@ -822,7 +823,7 @@ m_ir = SEDModel.build(
         "all_params": Fixed(DEFAULT),
     },
     dust_emission={"type": "dale2014", "alpha_dale": Fixed(2.0), "all_params": Fixed(DEFAULT)},
-    redshift=Fixed(0.0),
+    neb={"type": "ssp"}, redshift=Fixed(0.0),
 )
 s_ir = m_ir.predict_state({})
 L_abs = float(s_ir.derived.get("L_absorbed", 0.0))
@@ -962,7 +963,7 @@ def _knob_model(emission_type, **emkw):
             "all_params": Fixed(DEFAULT),
         },
         dust_emission={"type": emission_type, "all_params": Fixed(DEFAULT), **emkw},
-        redshift=Fixed(0.0),
+        neb={"type": "ssp"}, redshift=Fixed(0.0),
     )
 
 
@@ -1182,7 +1183,7 @@ m_no_neb = SEDModel.build(
         "tau_diff": Fixed(0.0),
         "all_params": Fixed(DEFAULT),
     },
-    redshift=Fixed(0.0),
+    neb={"type": "ssp"}, redshift=Fixed(0.0),
 )
 s_no_neb = m_no_neb.predict_state({})
 
@@ -1382,7 +1383,7 @@ m_agn_base = SEDModel.build(
         "lyman_cutoff": True,
         "all_params": Fixed(DEFAULT),
     },
-    redshift=Fixed(0.0),
+    neb={"type": "ssp"}, redshift=Fixed(0.0),
 )
 s_agn_base = m_agn_base.predict_state({})
 
@@ -1468,7 +1469,7 @@ m_agn = SEDModel.build(
         "agn_ir_frac": Fixed(0.3),
         "all_params": Fixed(DEFAULT),
     },
-    redshift=Fixed(0.0),
+    neb={"type": "ssp"}, redshift=Fixed(0.0),
 )
 s_agn = m_agn.predict_state({})
 
@@ -1645,7 +1646,7 @@ m_agn_sk = SEDModel.build(
         "agn_ir_frac": Fixed(0.3),
         "all_params": Fixed(DEFAULT),
     },
-    redshift=Fixed(0.0),
+    neb={"type": "ssp"}, redshift=Fixed(0.0),
 )
 s_agn_sk = m_agn_sk.predict_state({})
 
@@ -1806,7 +1807,7 @@ def _tengri_xray(log_lbol, cos_inc):
             "all_params": Fixed(DEFAULT),
         },
         xray={"type": "yang20", "log_nh": Fixed(0.0), "all_params": Fixed(DEFAULT)},
-        redshift=Fixed(0.0),
+        neb={"type": "ssp"}, redshift=Fixed(0.0),
     )
 
 
@@ -2033,7 +2034,7 @@ m_r = SEDModel.build(
         "radio_alpha_sf": Fixed(0.8),
         "all_params": Fixed(DEFAULT),
     },
-    redshift=Fixed(0.0),
+    neb={"type": "ssp"}, redshift=Fixed(0.0),
 )
 state_r = m_r.predict_state({})
 w_t = np.asarray(state_r.wave)
@@ -2280,7 +2281,7 @@ m_full = SEDModel.build(
         "radio_alpha_sf": Fixed(0.8),
         "all_params": Fixed(DEFAULT),
     },
-    redshift=Fixed(0.0),
+    neb={"type": "ssp"}, redshift=Fixed(0.0),
 )
 s_full = m_full.predict_state({})
 wave_t = np.asarray(s_full.wave)
