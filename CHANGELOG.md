@@ -318,6 +318,29 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 
 ### Fixed
 
+- The #1970 refusal (Dale+2014's embedded star-forming radio synchrotron
+  double-counted against an SF radio block) now measures the selected template
+  instead of testing its registry name. Keying on
+  `spec.dust_emission == 'dale2014'` was neither sufficient nor necessary: a
+  tail-free grid registered under that name --
+  `register_dale2014_tabulated(cigale_grid, name='dale2014')` -- was refused
+  although it carries no radio, and the tail-bearing grid filed under the
+  tail-free name `dale2014_cigale` was accepted. The guard now reads the grid
+  via the new `dust_emission_radio_tail_aa`, which requires two measured
+  conditions: the emitting span reaches past 1e8 Å (1 cm, 30 GHz, blueward of
+  the whole 1.34-10 GHz double-count window) **and** `L_nu` is rising there.
+  Reach alone would have newly refused `astrodust`, whose spinning-dust
+  component emits to 3.0e8 Å and double-counts nothing. Measured red-end
+  `dlogL_nu/dloglambda`: `dale2014` **+0.665** (a textbook SF synchrotron
+  index) against -3.111 (`bosa`), -3.326 (`astrodust`), -4.810
+  (`schreiber2016`), -5.510 (`dale2014_cigale`) -- the two families are 3.8
+  apart in slope, so only `dale2014` qualifies. The span is the union over
+  every template row, not one row's: `dale2014_cigale` stops emitting at
+  7.727e7 Å over its 64 alpha rows (the strip edge its component documents)
+  while its `alpha=2.0` row alone stops at 6.026e7 Å, and a build-time refusal
+  has to hold for every alpha a fit can reach. A model whose red end cannot be
+  measured -- a closed-form law, or an uninstalled grid -- is not refused.
+
 - A user-provided `agn_log_lbol` is no longer accepted and discarded when the
   CIGALE fracAGN coupling owns the AGN power. #2069 already refused a **free**
   `agn_log_lbol` under `agn_norm='cigale_joint'` with a SKIRTOR torus and an

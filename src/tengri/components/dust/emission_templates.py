@@ -1006,6 +1006,13 @@ def create_dale2014_from_grid(grid_path: str) -> Callable:
             dust_frac_agn=dust_frac_agn,
         )
 
+    # Stamp the grid's own red edge onto the closure. The #1970 radio
+    # double-count guard has to know whether the template a model will
+    # actually evaluate reaches into the radio, and any grid may be filed
+    # under any registry name (``register_dale2014_tabulated(path, name=...)``),
+    # so the answer has to travel with the data, not with the key.
+    dale2014_tabulated.dust_emission_red_end = _red_end_from_grid_file(grid_path)
+
     return dale2014_tabulated
 
 
@@ -2410,6 +2417,241 @@ def dust_emission_grid_support(name: str) -> dict[str, tuple[float, float]]:
                 axis = np.asarray(_qhac_axis_to_cigale(jnp.asarray(axis)), dtype=float)
             support[param] = (float(axis.min()), float(axis.max()))
     return support
+
+
+#: Wavelength past which an emitting template overlaps the radio (1 cm, 30 GHz).
+#:
+#: Blueward of the whole 1.34-10 GHz window in which the Dale+2014 embedded
+#: continuum double-counts an SF radio block. The shipped grids sit either
+#: side with margin: ``dale2014`` emits to 2.2459e9 Å (22x redward) and
+#: ``dale2014_cigale`` stops at 7.727e7 Å (1.29x blueward).
+_RADIO_TAIL_RED_EDGE_AA = 1.0e8
+
+
+def _red_end_from_grid_file(path: str) -> tuple[float, float] | None:
+    r"""Red edge of a dust-emission grid and its :math:`L_\nu` slope there.
+
+    Parameters
+    ----------
+    path : str
+        Path to a template HDF5 grid.
+
+    Returns
+    -------
+    tuple[float, float] or None
+        ``(red_edge_aa, slope)`` -- the reddest wavelength [Å] at which any
+        template row is non-zero, and the steepest (most positive)
+        :math:`d\log L_\nu / d\log\lambda` any row shows over the reddest
+        decade of that span. ``None`` when the file carries no recognizable
+        wavelength/template pair.
+
+    Notes
+    -----
+    The slope is what separates an embedded non-thermal continuum from a cold
+    or spinning-dust tail that merely reaches long wavelengths. Synchrotron is
+    :math:`S_\nu \propto \nu^{-\alpha}`, so :math:`L_\nu` RISES with
+    wavelength; dust past its peak falls steeply. Measured on the shipped
+    grids: ``dale2014`` +0.665 (a textbook SF synchrotron index) against
+    -3.111 (bosa), -3.326 (astrodust), -4.810 (schreiber2016) and -5.510
+    (dale2014_cigale). The two families are separated by 3.8 in slope, so a
+    threshold at 0 is nowhere near either.
+
+    Notes
+    -----
+    **JIT-compatible**: no, file I/O. Composition-time only.
+
+    Reads the *non-zero span*, not the grid extent: a grid may be padded with
+    zeros far past its physical red edge, and it is the emitting edge that
+    decides whether the template overlaps a separately-modeled component.
+    ``data/dale2014_templates_cigale.h5`` is exactly that shape -- its axis
+    runs to 2.2459e9 Å while its flux stops at 7.727e7 Å, the strip edge
+    ``Dale2014CigaleIRSEDComponent`` documents.
+
+    The span is the union over every template row, not one row's: a model may
+    be evaluated anywhere on its grid, so a build-time refusal has to hold for
+    every reachable axis value. The Dale grid's ``alpha=2.0`` row alone stops
+    at 6.026e7 Å, 1.28x blueward of the 64-row union.
+    """
+    import h5py
+    import numpy as np
+
+    with h5py.File(path, "r") as f:
+        wave = None
+        for key, scale in (
+            ("wavelength_aa", 1.0),
+            ("wavelength", 1.0e4),
+            ("wavelength_um", 1.0e4),
+        ):
+            if isinstance(f.get(key), h5py.Dataset):
+                wave = np.asarray(f[key][()], dtype=float).ravel() * scale
+                break
+        if wave is None or wave.size == 0:
+            return None
+        emitting = np.zeros(wave.size, dtype=bool)
+        rows_all: list[np.ndarray] = []
+        found = False
+        for key in (
+            "templates_sf",
+            "spectra/templates",
+            "spectra",
+            "continuum",
+            "pah",
+            "L_nu_total",
+            "L_nu_solLum_per_Hz",
+        ):
+            # ``in f`` is true for groups too, and indexing a group then
+            # slicing it raises: several grids (dl07, dl14) store a ``spectra``
+            # GROUP where others store a dataset of that name. Only datasets
+            # carry rows to measure.
+            if not isinstance(f.get(key), h5py.Dataset):
+                continue
+            arr = np.asarray(f[key][()], dtype=float)
+            if arr.ndim == 1 and arr.size == wave.size:
+                rows = arr[None, :]
+            elif arr.ndim >= 2 and arr.shape[-1] == wave.size:
+                rows = arr.reshape(-1, wave.size)
+            elif arr.ndim >= 2 and arr.shape[0] == wave.size:
+                rows = arr.reshape(wave.size, -1).T
+            else:
+                continue
+            emitting |= np.any(rows != 0.0, axis=0)
+            rows_all.append(rows)
+            found = True
+        if not found or not emitting.any():
+            return None
+        edge = float(wave[emitting].max())
+
+    # Steepest rise any row shows over the reddest decade of the emitting span.
+    # Per-row, not on the row sum: one radio-bearing row in an otherwise
+    # thermal library is still a double-count wherever the model can reach it.
+    window = emitting & (wave >= edge / 10.0) & (wave <= edge)
+    slope = -np.inf
+    for row in np.vstack(rows_all):
+        m = window & (row > 0.0)
+        if int(m.sum()) < 3:
+            continue
+        fit = np.polyfit(np.log10(wave[m]), np.log10(row[m]), 1)
+        slope = max(slope, float(fit[0]))
+    if not np.isfinite(slope):
+        return None
+    return edge, slope
+
+
+def dust_emission_red_edge_aa(name: str) -> float | None:
+    r"""Reddest emitting wavelength of the SELECTED dust-emission template.
+
+    The #1970 guard needs to know whether the template a model will actually
+    evaluate carries flux into the radio, which is a property of the *grid*,
+    not of the registry key it was filed under. A caller may register any grid
+    under any name (:func:`register_dale2014_tabulated`), so this consults the
+    live registry entry first and only then the name's vendored default.
+
+    Parameters
+    ----------
+    name : str
+        Registry name of the emission model, e.g. ``'dale2014'``.
+
+    Returns
+    -------
+    float or None
+        Reddest wavelength [Å] with non-zero flux, or ``None`` when the model
+        is not template-backed, its grid is not installed, or its red edge
+        cannot be measured (a closed-form model, or an unresolved lazy entry
+        with no vendored file).
+
+    Notes
+    -----
+    **JIT-compatible**: no, file I/O. Call at composition time.
+
+    Measured on the shipped grids: ``dale2014`` reaches 2.2459e9 Å (1.335 GHz,
+    the embedded star-forming synchrotron continuum) and ``dale2014_cigale``
+    stops at 6.026e7 Å (6 mm), CIGALE having stripped that tail.
+
+    Examples
+    --------
+    >>> from tengri.components.dust.emission_templates import dust_emission_red_edge_aa
+    >>> dust_emission_red_edge_aa("dale2014_cigale")  # doctest: +SKIP
+    60255959.0
+    """
+    measured = _dust_emission_red_end(name)
+    return None if measured is None else measured[0]
+
+
+def _dust_emission_red_end(name: str) -> tuple[float, float] | None:
+    """``(red_edge_aa, red_end_slope)`` of the grid ``name`` will evaluate."""
+    from tengri._data_setup import find_data
+
+    from .emission.emission import DUST_EMISSION_MODELS
+
+    # A registered override wins: ``register_*_tabulated`` stamps the grid's
+    # measured red end onto the closure it files, so a name pointing at a
+    # different grid than its vendored default reports that grid's numbers.
+    stamped = getattr(DUST_EMISSION_MODELS.get(name), "dust_emission_red_end", None)
+    if stamped is not None:
+        return float(stamped[0]), float(stamped[1])
+
+    entry = _DUST_EMISSION_GRID_AXES.get(_DUST_EMISSION_ALIASES.get(name, name))
+    if entry is None:
+        return None
+    stem = entry[0].rsplit(".", 1)[0]
+    path = find_data(stem + "_v2.h5", entry[0])
+    if path is None:
+        return None
+    return _red_end_from_grid_file(str(path))
+
+
+def dust_emission_radio_tail_aa(name: str) -> float | None:
+    r"""Red edge of ``name``'s embedded radio synchrotron tail, if it has one.
+
+        The question the #1970 double-count guard actually asks: does the template
+        this model will evaluate carry its own **non-thermal** continuum into the
+        radio? Two measured conditions, both required.
+
+        1. The emitting span reaches past 1e8 Å (1 cm, 30 GHz), blueward of the
+           whole 1.34-10 GHz window where an embedded continuum overlaps an SF
+           radio block.
+        2. :math:`L_
+    u` is RISING at the red end. Synchrotron is
+           :math:`S_
+    u \propto
+    u^{-lpha}`, so it rises with wavelength;
+           cold dust and spinning dust past their peaks fall steeply. Without
+           this, any template merely reaching the microwave is caught: measured,
+           ``astrodust`` emits to 3.0e8 Å on its spinning-dust component, which
+           is dust emission and double-counts nothing.
+
+        Parameters
+        ----------
+        name : str
+            Registry name of the emission model, e.g. ``'dale2014'``.
+
+        Returns
+        -------
+        float or None
+            The red edge [Å] when both conditions hold, else ``None``.
+
+        Notes
+        -----
+        **JIT-compatible**: no, file I/O. Call at composition time.
+
+        Measured on every installed template-backed grid: only ``dale2014``
+        qualifies, at 2.2459e9 Å with slope +0.665. The rest fall -3.111 (bosa),
+        -3.326 (astrodust), -4.810 (schreiber2016), -5.510 (dale2014_cigale) --
+        separated from Dale's rise by 3.8 in slope.
+
+        Examples
+        --------
+        >>> from tengri.components.dust.emission_templates import dust_emission_radio_tail_aa
+        >>> dust_emission_radio_tail_aa("dale2014_cigale") is None  # doctest: +SKIP
+        True
+    """
+    measured = _dust_emission_red_end(name)
+    if measured is None:
+        return None
+    edge, slope = measured
+    if edge > _RADIO_TAIL_RED_EDGE_AA and slope > 0.0:
+        return edge
+    return None
 
 
 #: FSPS-to-CIGALE rescaling of the THEMIS a-C(:H) mass-fraction axis.

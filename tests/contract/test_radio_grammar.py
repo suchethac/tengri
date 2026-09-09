@@ -13,6 +13,8 @@ Marker: @pytest.mark.contract
 
 from __future__ import annotations
 
+from typing import ClassVar
+
 import pytest
 
 from tengri import DEFAULT, Fixed, SEDModel, Uniform
@@ -434,3 +436,200 @@ class TestRadioLegacyTypeRetirement:
         assert params.radio is True
         assert params.radio_sfr_mode == "bell2003"
         assert params.radio_agn_model == "powerlaw"
+
+
+@pytest.mark.contract
+class TestDaleRadioGuardMeasuresTheTemplate:
+    """The #1970 refusal must key on the grid's red edge, not on its name (R58).
+
+    Dale+2014's published templates embed a star-forming radio synchrotron
+    continuum, so pairing them with an active SF radio block double-counts the
+    radio. The guard refused the *name* ``'dale2014'``, which is neither
+    sufficient nor necessary:
+
+    * a tail-free grid registered under the name ``dale2014`` -- exactly what
+      ``register_dale2014_tabulated(cigale_grid, name='dale2014')`` produces --
+      was refused although it carries no radio to double-count;
+    * a tail-bearing grid registered under any other name was accepted.
+
+    Measured red edges (reddest wavelength with non-zero flux, union over
+    every alpha row): ``data/dale2014_templates.h5`` reaches **2.2459e9 A**
+    (1.335 GHz) and ``data/dale2014_templates_cigale.h5`` stops at
+    **7.727e7 A**, the strip edge ``Dale2014CigaleIRSEDComponent`` documents.
+    The 1e8 A threshold (1 cm, 30 GHz) sits between them -- 22x below the
+    tail-bearing one, 1.29x above the stripped one -- and blueward of the
+    whole 1.34-10 GHz double-count window.
+
+    The union matters: a single row is not the grid. The ``alpha=2.0`` row
+    alone stops at 6.026e7 A, 1.28x blueward of the 64-row union, and a
+    build-time refusal has to hold for every alpha the model can reach.
+
+    Reach alone is not enough, either: the tail must be **rising** in L_nu,
+    which is what synchrotron does and cold dust does not.
+    ``data/astrodust_templates.h5`` emits out to 3.0e8 A on its spinning-dust
+    component -- past the threshold -- and double-counts nothing. Measured
+    red-end slopes: dale2014 **+0.665** against -3.111 (bosa), -3.326
+    (astrodust), -4.810 (schreiber2016), -5.510 (dale2014_cigale).
+    """
+
+    _RADIO_SF: ClassVar[dict] = {"sf": {"type": "bell2003"}, "agn": {"type": "none"}}
+
+    def _build(self, ssp, emission_type, *, radio=True):
+        kw = {}
+        if radio:
+            kw["radio"] = self._RADIO_SF
+        return SEDModel.build(
+            ssp_data=ssp,
+            sfh={"type": "dpl", "all_params": Fixed(DEFAULT)},
+            dust_attenuation={
+                "type": "two_component",
+                "law": "calzetti",
+                "all_params": Fixed(DEFAULT),
+            },
+            dust_emission={"type": emission_type, "all_params": Fixed(DEFAULT)},
+            redshift=Fixed(0.1),
+            **kw,
+        )
+
+    #: ``registry name -> (grid file, red edge [A], red-end dlogLnu/dloglam)``,
+    #: every template-backed emission model whose grid ships here. Only the
+    #: first is a radio tail: the others either stop blueward of 1e8 A or fall
+    #: steeply in L_nu where a synchrotron tail rises.
+    _MEASURED_RED_ENDS: ClassVar[dict[str, tuple[str, float, float]]] = {
+        "dale2014": ("data/dale2014_templates.h5", 2.245912e9, +0.665),
+        "dale2014_cigale": ("data/dale2014_templates_cigale.h5", 7.727e7, -5.510),
+        "astrodust": ("data/astrodust_templates.h5", 3.0e8, -3.326),
+        "bosa": ("data/bosa_templates.h5", 1.0e8, -3.111),
+        "schreiber2016": ("data/schreiber2016_templates.h5", 3.001310e7, -4.810),
+    }
+
+    @pytest.mark.parametrize("name", sorted(_MEASURED_RED_ENDS))
+    def test_measured_red_end_of_every_shipped_grid(self, name):
+        """Pin the edge AND the slope for every grid the guard can see."""
+        import os
+
+        from tengri.components.dust.emission_templates import _red_end_from_grid_file
+
+        path, edge, slope = self._MEASURED_RED_ENDS[name]
+        if not os.path.exists(path):
+            pytest.skip(f"{path} not available")
+        got_edge, got_slope = _red_end_from_grid_file(path)
+        assert got_edge == pytest.approx(edge, rel=1e-3, abs=0.0)
+        assert got_slope == pytest.approx(slope, rel=1e-2, abs=0.0)
+
+    @pytest.mark.parametrize("name", sorted(_MEASURED_RED_ENDS))
+    def test_only_dale2014_reads_as_a_radio_tail(self, name):
+        """The rising-slope condition is what keeps astrodust out.
+
+        astrodust reaches 3.0e8 A -- past the 1e8 A threshold -- so an
+        edge-only test would newly refuse ``astrodust`` + SF radio, which
+        double-counts nothing.
+        """
+        import os
+
+        from tengri.components.dust.emission_templates import dust_emission_radio_tail_aa
+
+        path, edge, _slope = self._MEASURED_RED_ENDS[name]
+        if not os.path.exists(path):
+            pytest.skip(f"{path} not available")
+        tail = dust_emission_radio_tail_aa(name)
+        if name == "dale2014":
+            assert tail == pytest.approx(edge, rel=1e-3, abs=0.0)
+        else:
+            assert tail is None, f"{name} must not read as a radio tail"
+
+    def test_builtin_dale2014_still_refused_with_sf_radio(self, synthetic_ssp_wide):
+        """#1970's own case keeps raising: the tail-bearing grid is unsafe."""
+        from tengri.config.exceptions import ConfigError
+
+        with pytest.raises(ConfigError, match=r"radio"):
+            self._build(synthetic_ssp_wide, "dale2014")
+
+    def test_refusal_names_the_offending_red_edge(self, synthetic_ssp_wide):
+        """The message must carry the measured edge, not just the name."""
+        from tengri.config.exceptions import ConfigError
+
+        with pytest.raises(ConfigError) as exc:
+            self._build(synthetic_ssp_wide, "dale2014")
+        msg = str(exc.value)
+        assert "2.2459e+09" in msg or "2.246e+09" in msg, (
+            f"the refusal must name the template's measured red edge; got: {msg}"
+        )
+
+    def test_builtin_dale2014_builds_without_sf_radio(self, synthetic_ssp_wide):
+        """No SF radio, nothing to double-count."""
+        model = self._build(synthetic_ssp_wide, "dale2014", radio=False)
+        assert model.spec.dust_emission == "dale2014"
+
+    def test_tail_free_grid_registered_as_dale2014_builds_with_radio(
+        self, synthetic_ssp_wide, monkeypatch
+    ):
+        """R58: the CIGALE grid under the name ``dale2014`` carries no radio.
+
+        This is the case ``eae23ba02`` had to work around in the reproduction
+        notebook, and the name test refused it.
+        """
+        import os
+
+        from tengri.components.dust.emission.emission import DUST_EMISSION_MODELS
+        from tengri.components.dust.emission_templates import register_dale2014_tabulated
+
+        path = "data/dale2014_templates_cigale.h5"
+        if not os.path.exists(path):
+            pytest.skip(f"{path} not available")
+        saved = DUST_EMISSION_MODELS.get("dale2014")
+        register_dale2014_tabulated(path, name="dale2014")
+        try:
+            model = self._build(synthetic_ssp_wide, "dale2014")
+            assert model.spec.dust_emission == "dale2014"
+        finally:
+            if saved is not None:
+                DUST_EMISSION_MODELS["dale2014"] = saved
+
+    def test_tail_bearing_grid_under_the_tail_free_name_is_refused(self, synthetic_ssp_wide):
+        """R58's mirror: the tail follows the data, so the refusal must too.
+
+        Registering the radio-bearing grid under ``dale2014_cigale`` -- the
+        name whose whole point is that its tail is stripped -- must be
+        refused. The name test accepted it. (An arbitrary new registry name
+        is not reachable here: ``dust_emission={'type': ...}`` validates
+        against the component registry and raises ``ValueError`` for a name
+        it does not know, so ``dale2014_cigale`` is the reachable mirror.)
+        """
+        import os
+
+        from tengri.components.dust.emission.emission import DUST_EMISSION_MODELS
+        from tengri.components.dust.emission_templates import register_dale2014_tabulated
+        from tengri.config.exceptions import ConfigError
+
+        path = "data/dale2014_templates.h5"
+        if not os.path.exists(path):
+            pytest.skip(f"{path} not available")
+        saved = DUST_EMISSION_MODELS.get("dale2014_cigale")
+        register_dale2014_tabulated(path, name="dale2014_cigale")
+        try:
+            with pytest.raises(ConfigError, match=r"radio"):
+                self._build(synthetic_ssp_wide, "dale2014_cigale")
+        finally:
+            if saved is not None:
+                DUST_EMISSION_MODELS["dale2014_cigale"] = saved
+            else:
+                DUST_EMISSION_MODELS.pop("dale2014_cigale", None)
+
+    def test_astrodust_builds_with_sf_radio(self, synthetic_ssp_wide):
+        """The control the rising-slope condition exists for.
+
+        astrodust's emitting span reaches 3.0e8 A, past the 1e8 A threshold,
+        but falls at -3.326 in L_nu: spinning dust, not synchrotron.
+        """
+        import os
+
+        if not os.path.exists("data/astrodust_templates.h5"):
+            pytest.skip("astrodust grid not available")
+        model = self._build(synthetic_ssp_wide, "astrodust")
+        assert model.spec.dust_emission == "astrodust"
+
+    def test_tail_free_builtin_variant_builds_with_radio(self, synthetic_ssp_wide):
+        """``dale2014_cigale`` keeps working, by measurement now not by name."""
+        model = self._build(synthetic_ssp_wide, "dale2014_cigale")
+        assert model.spec.dust_emission == "dale2014_cigale"

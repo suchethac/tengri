@@ -1126,34 +1126,54 @@ def _validate_firrc_requires_dust(spec) -> None:
 
 
 def _validate_dale2014_requires_no_sf_radio(spec) -> None:
-    """Raise if dale2014 dust emission is combined with SF radio (#1970).
+    """Raise if a radio-bearing dust template is combined with SF radio (#1970).
 
-    The Dale+2014 dust emission template (component name 'dale2014') embeds a
-    star-forming radio synchrotron continuum rising to 2.2459e9 Å (1.335 GHz).
-    The stripped variant 'dale2014_cigale' removes the radio tail beyond
-    7.727e7 Å per CIGALE convention.
+    Dale+2014's published dust emission templates embed a star-forming radio
+    synchrotron continuum rising to 2.2459e9 Å (1.335 GHz). Pairing them with
+    an active SF radio block double-counts the synchrotron in ``rest_sed``
+    between ~1.34 and ~10 GHz (3-22 cm), and the composed SED steps down ~2x
+    at the 1.335 GHz template edge (measured slope -4.93 vs. +0.77 expected).
 
-    When dale2014 is paired with an active SF radio block (radio enabled and
-    radio_sfr_mode != 'none'), the synchrotron is double-counted in rest_sed
-    between ~1.34 and ~10 GHz (3–22 cm), and the composed SED steps down ~2x at
-    the 1.335 GHz template edge (measured slope −4.93 vs. +0.77 expected).
+    **The test is on the template, not on its name** (R58). The guard used to
+    key on ``spec.dust_emission == 'dale2014'``, which is neither sufficient
+    nor necessary: a tail-free grid registered under that name -- what
+    ``register_dale2014_tabulated(cigale_grid, name='dale2014')`` produces --
+    was refused although it carries no radio, while a tail-bearing grid
+    registered under that name would have been accepted had it been filed
+    under any other. The embedded continuum is a property of the data, so the
+    refusal now reads the selected grid, via
+    :func:`~tengri.components.dust.emission_templates.dust_emission_radio_tail_aa`.
 
-    This is a build-time safety gate: dale2014 is only safe when combined with
-    AGN-only radio (radio_sfr_mode='none') or when radio is disabled entirely.
-    The remedy: switch to dale2014_cigale, which composes correctly with SF radio.
+    That function requires the tail to be both far enough red (past 1e8 Å =
+    30 GHz) and **rising** in :math:`L_\nu`, because reach alone is not
+    synchrotron: ``astrodust`` emits out to 3.0e8 Å on its spinning-dust
+    component and double-counts nothing. Measured, only ``dale2014``
+    qualifies -- slope +0.665, against -3.111 (bosa), -3.326 (astrodust),
+    -4.810 (schreiber2016) and -5.510 (dale2014_cigale).
 
-    Deliberately NOT guarded: the radio component's free-free term (emitted only
-    when a nebular component publishes ``log_nion``; no grammar knob controls it)
-    overlaps the template's embedded thermal radio at the <~10% level near
-    1.4 GHz. Refusing it would block dale2014 + AGN radio + nebular with no
-    grammar-reachable remedy, so that overlap is documented on both Dale
-    components instead of guarded here.
+    A model whose red end cannot be measured -- a closed-form emission law, or
+    a grid that is not installed -- is not refused: an absent file must not
+    break model construction, and the loader raises on its own if the model is
+    ever evaluated.
+
+    Deliberately NOT guarded: the radio component's free-free term (emitted
+    only when a nebular component publishes ``log_nion``; no grammar knob
+    controls it) overlaps the template's embedded thermal radio at the <~10%
+    level near 1.4 GHz. Refusing it would block dale2014 + AGN radio +
+    nebular with no grammar-reachable remedy, so that overlap is documented on
+    both Dale components instead of guarded here.
+
+    Parameters
+    ----------
+    spec : Parameters
+        The parameter specification.
 
     Raises
     ------
     ConfigError
-        If dust.emission == 'dale2014' AND radio is active with SF synchrotron
-        enabled (radio=True and radio_sfr_mode != 'none').
+        If the selected dust-emission template carries a rising non-thermal
+        tail past 1e8 Å AND radio is active with SF synchrotron enabled
+        (``radio=True`` and ``radio_sfr_mode != 'none'``).
 
     See Also
     --------
@@ -1161,9 +1181,9 @@ def _validate_dale2014_requires_no_sf_radio(spec) -> None:
     """
     from tengri.config.exceptions import ConfigError
 
-    # Check if dust emission is dale2014 (the radio-bearing variant)
-    if getattr(spec, "dust_emission", None) != "dale2014":
-        return  # Not dale2014, no guard needed
+    emission = getattr(spec, "dust_emission", None)
+    if not emission:
+        return  # No dust emission model, no template to double-count
 
     # Check if radio is enabled
     if not getattr(spec, "radio", False):
@@ -1176,18 +1196,33 @@ def _validate_dale2014_requires_no_sf_radio(spec) -> None:
     if radio_sfr_mode == "none":
         return  # SF synchrotron is disabled (AGN-only), no conflict
 
-    # Both conditions met: dale2014 + active SF radio = double-count
+    from tengri.components.dust.emission_templates import (
+        _dust_emission_red_end,
+        dust_emission_radio_tail_aa,
+    )
+
+    red_edge = dust_emission_radio_tail_aa(emission)
+    if red_edge is None:
+        return  # Not template-backed, grid absent, or no rising radio tail
+
+    slope = _dust_emission_red_end(emission)[1]
+    ghz = 2.99792458e18 / red_edge / 1.0e9
     raise ConfigError(
-        "The Dale+2014 dust emission template (dust.emission='dale2014') "
-        "embeds its own star-forming radio synchrotron continuum to 1.335 GHz. "
-        "Combining it with an active SF radio block (radio.sf.type != 'none') "
-        "causes double-counting of the radio continuum (~2x in rest_sed "
-        "between ~1.34 and ~10 GHz). "
-        "Fix: use dust.emission='dale2014_cigale' instead, which has the radio "
-        "tail stripped per CIGALE convention and composes correctly with the "
-        "radio component. Alternatively, disable SF synchrotron with "
-        "radio={'sf': {'type': 'none'}} if you only want AGN radio. "
-        "See issue #1970."
+        f"The Dale+2014-family dust emission template selected by "
+        f"dust.emission={emission!r} embeds its own star-forming radio "
+        f"synchrotron continuum: measured, it still emits at {red_edge:.4e} A "
+        f"({ghz:.3f} GHz) and is RISING in L_nu there (slope {slope:+.3f}), "
+        f"the signature of synchrotron rather than dust. Combining it with an "
+        f"active SF radio block (radio.sf.type != 'none') causes "
+        f"double-counting of the radio continuum (~2x in rest_sed between "
+        f"~1.34 and ~10 GHz). "
+        f"Fix: use dust.emission='dale2014_cigale' instead, which has the "
+        f"radio tail stripped per CIGALE convention (its templates stop "
+        f"emitting at 7.727e+07 A) and composes correctly with the radio "
+        f"component. Alternatively, disable SF synchrotron with "
+        f"radio={{'sf': {{'type': 'none'}}}} if you only want AGN radio, or "
+        f"register a tail-free grid under this name. "
+        f"See issue #1970."
     )
 
 
