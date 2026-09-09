@@ -593,12 +593,9 @@ PARAMS: tuple[ParamDeclaration, ...] = (
     ),
     ParamDeclaration(
         "agn_nlr_logZ",
-        # Task 16 follow-up round 2 (item B): the vendored grid's top node is
-        # Z=0.07 absolute, log10(0.07) = -1.154901959985743 -- the rounded
-        # literal -1.155 used here disagreed with that by 9.8e-5, ~5 orders of
-        # magnitude above check_param_grid_extent.py's 1e-9 tolerance. Adding
-        # this axis's GRID_EXTENT_SOURCES entry (below) surfaced the drift;
-        # transcribed exactly now, the same fix Task 1 made for skirtor_oa.
+        # Upper bound equals the vendored Feltre grid's last logZ node
+        # (data/feltre_grid.h5 feltre/logZ_axis[-1] = -1.154901959985743);
+        # tools/check_param_grid_extent.py pins it.
         Uniform(-4.0, -1.154901959985743, default=-1.8477),
         "NLR gas metallicity log10(Z) absolute (Feltre+2016 logZ grid axis; "
         "default -1.8477 = solar, IAU 2015 Zsun=0.0142).",
