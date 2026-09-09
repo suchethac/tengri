@@ -591,28 +591,42 @@ save_fig("cigale_03_stellar_sed.png")
 # %% [markdown]
 # ## §4 Dust attenuation curves
 #
-# tengri's `calzetti`, `noll09`, and `power_law` attenuation laws against
-# their CIGALE counterparts (`dustatt_calzleit`,
-# `dustatt_modified_starburst`, `dustatt_modified_CF00`). Both sides
-# evaluate the analytic law directly (tengri via `tengri.dust.list_laws`),
-# normalized to `A(λ)/A_V` at 5500 Å — curve against curve, no
-# SSP-convolution noise. CIGALE's default laws carry no 2175 Å bump (it is
-# opt-in via `uv_bump_amplitude`); tengri's `noll09` reproduces the
-# Noll+2009 Drude bump, pinned against `dust_attenuation` in the test suite.
+# CIGALE's three `dustatt_*` families against tengri's, each side evaluating
+# its own analytic curve on one grid and normalized to `A(λ)/A_V` at 5500 Å.
+# The pairings are by curve, not by module name:
+#
+# | CIGALE | tengri | shared continuum |
+# |---|---|---|
+# | `dustatt_calzleit` | `leitherer02` | Calzetti+2000 with the L02 far-UV extension |
+# | `dustatt_modified_starburst`, `uv_bump_amplitude = 3` | `noll09(dust_bump_strength=3)` | the same, plus the 2175 Å Drude bump |
+# | `dustatt_modified_CF00` | `power_law` twice, `slope_ISM = −0.7` + `slope_BC = −1.3` | (λ/5500 Å)^δ, two screens |
+#
+# `calzleit` is paired with `leitherer02`, not with tengri's `calzetti`:
+# CIGALE's curve carries the Leitherer far-UV extension and tengri's bare
+# `calzetti` does not, which is an 8.4 % gap below 1500 Å between two laws
+# that are not the same law. `modified_CF00` needs two curves on each side —
+# CIGALE attenuates young stars through the birth cloud *and* the ISM
+# (`Av_BC = Av_ISM(1−µ)/µ = 1.53` at the defaults), so a single
+# (λ/5500 Å)^−0.7 is the wrong object to compare it against.
+#
+# **The one real convention difference is the Leitherer↔Calzetti crossover.**
+# CIGALE hands over at 1500 Å (`a_vs_ebv`), tengri at 1800 Å, which is the
+# upper end of the 912–1800 Å range Leitherer et al. (2002) state for their
+# fit. That is the whole of the printed max |Δ| below; away from
+# 1500–1800 Å the pairs agree to 0.000 %. tengri is the reference here:
+# pcigale's own `k_leitherer2002` docstring gives the range as 91.2–180 nm
+# while `a_vs_ebv` truncates it at 150 nm.
+#
+# Below the Lyman limit the two diverge by construction — CIGALE's curves are
+# zero there, tengri's polynomial continues unless
+# `dust_attenuation={'lyman_cutoff': True}` clips it. Every applied-dust
+# section below sets that flag; see §5.
 #
 # **Verification Status:** CROSSVAL — Attenuation law library
 
 # %%
 from tengri.dust import list_laws
 
-# (CIGALE module, CIGALE kwargs for A_V ≈ 1.2, tengri law, label). Pairs
-# match by curve family: Calzetti, Calzetti + Leitherer UV slope, and the
-# (λ/550)^δ power law.
-_law_pairs = [
-    ("dustatt_calzleit", dict(E_BVs_young=0.3), "calzetti", "Calzetti+2000"),
-    ("dustatt_modified_starburst", dict(E_BV_lines=0.3), "noll09", "Calzetti + Leitherer UV"),
-    ("dustatt_modified_CF00", dict(Av_ISM=1.2), "power_law", "Charlot & Fall power law"),
-]
 _tengri_laws = list_laws(headline=False).to_dict("fn")  # {name: fn(wave_aa) -> k at tau_V=1}
 wave_law = np.logspace(np.log10(1000.0), np.log10(30000.0), 2000)
 
@@ -622,33 +636,79 @@ def _norm_AV(wave, A):
     return A / A[np.argmin(np.abs(wave - 5500.0))]
 
 
-fig, (ax_l, ax_r) = plt.subplots(1, 2, figsize=(13, 5.5), sharey=True)
-for ax, title in (
-    (ax_l, "pcigale.sed_modules attenuation laws"),
-    (ax_r, "tengri attenuation laws"),
-):
-    ax.set_xscale("log")
-    ax.set_yscale("log")
-    ax.set_xlabel(r"$\lambda$ [Å]")
-    ax.set_xlim(1e3, 3e4)
-    ax.set_ylim(0.05, 20)
-    ax.set_title(title)
-    ax.grid(True, alpha=0.3)
-ax_l.set_ylabel(r"$A_\lambda / A_V$")
+# CIGALE's bump/slope arguments are the module defaults except where a pair
+# exercises one of them: bump_wave and bump_width in nm, bump_ampl the
+# Milky-Way 3.0 for the second pair, power_slope 0.
+_BUMP_KW = dict(bump_wave=217.5, bump_width=35.0, bump_ampl=0.0, power_slope=0.0)
 
-for cig_law, cig_kw, tengri_law, label in _law_pairs:
-    try:
-        w_c, A_c = C.attenuation_curve(cig_law, **cig_kw)
-        ax_l.plot(w_c, _norm_AV(w_c, A_c), linewidth=2.0, label=label)
-    except Exception:
-        pass
+_A_ISM, _MU = 1.2, 0.44
+_AV_BC = _A_ISM * (1.0 - _MU) / _MU  # CIGALE ModCF00Att._init_code
 
-    # tengri's law functions are JAX-native but accept array-likes; the
-    # result is wrapped back to NumPy for plotting.
-    A_t = np.asarray(_tengri_laws[tengri_law](wave_law))
-    ax_r.plot(wave_law, _norm_AV(wave_law, A_t), linewidth=2.0, label=label)
-ax_l.legend(fontsize=10)
-ax_r.legend(fontsize=10)
+# Charlot & Fall: the curve a young star sees is both screens in series.
+# CIGALE returns A(λ)/A_V per screen, so compose in magnitudes before
+# normalizing; tengri's law functions return k(λ) with k(5500 Å) = 1, so the
+# same composition is A_V-weighted there.
+_cf00_c = _A_ISM * C.attenuation_curve(
+    "dustatt_modified_CF00", wave_law, delta=-0.7
+) + _AV_BC * C.attenuation_curve("dustatt_modified_CF00", wave_law, delta=-1.3)
+_cf00_t = _A_ISM * np.asarray(_tengri_laws["power_law"](wave_law, n_slope=-0.7)) + _AV_BC * np.asarray(
+    _tengri_laws["power_law"](wave_law, n_slope=-1.3)
+)
+
+_law_pairs = [
+    (
+        "Calzetti + Leitherer far-UV",
+        C.attenuation_curve("dustatt_calzleit", wave_law, **_BUMP_KW),
+        np.asarray(_tengri_laws["leitherer02"](wave_law)),
+        "calzleit ↔ leitherer02",
+    ),
+    (
+        "  + 2175 Å bump (E_b = 3)",
+        C.attenuation_curve("dustatt_modified_starburst", wave_law, **{**_BUMP_KW, "bump_ampl": 3.0}),
+        np.asarray(_tengri_laws["noll09"](wave_law, dust_bump_strength=3.0)),
+        "modified_starburst ↔ noll09",
+    ),
+    (
+        "Charlot & Fall, two screens",
+        _cf00_c,
+        _cf00_t,
+        "modified_CF00 ↔ power_law × 2",
+    ),
+]
+
+# pcigale thick and translucent, tengri thin on top (the §6-knobs
+# convention): agreement reads as a line down the middle of its own halo.
+fig, (ax, ax_r) = plt.subplots(
+    2, 1, figsize=(10, 7), sharex=True, gridspec_kw={"height_ratios": [3, 1]}
+)
+print("§4 attenuation law parity (tengri / CIGALE, A_λ/A_V):")
+for (label, A_c, A_t, pair), color in zip(_law_pairs, ("C0", "C1", "C3")):
+    a_c, a_t = _norm_AV(wave_law, A_c), _norm_AV(wave_law, A_t)
+    ax.plot(wave_law, a_c, color=color, lw=4.0, alpha=0.35, solid_capstyle="round")
+    ax.plot(wave_law, a_t, color=color, lw=1.4, label=label)
+    _r = a_t / np.where(a_c > 0, a_c, np.nan)
+    ax_r.plot(wave_law, _r, color=color, lw=1.0)
+    _cross = (wave_law >= 1500.0) & (wave_law <= 1800.0)
+    print(
+        f"  {pair:34s} max|Δ| {float(np.nanmax(np.abs(_r - 1.0))) * 100:6.3f}%  "
+        f"median ratio {float(np.nanmedian(_r)):.5f}  "
+        f"(outside 1500–1800 Å: max|Δ| "
+        f"{float(np.nanmax(np.abs(_r[~_cross] - 1.0))) * 100:6.3f}%)"
+    )
+ax.plot([], [], "k-", lw=4.0, alpha=0.35, label="pcigale")
+ax.plot([], [], "k-", lw=1.4, label="tengri")
+ax.set(xscale="log", yscale="log", xlim=(1e3, 3e4), ylim=(0.05, 20))
+ax.set_ylabel(r"$A_\lambda / A_V$")
+ax.set_title("§4 attenuation laws — pcigale (band) vs tengri (line)")
+ax.legend(fontsize=9, ncol=2)
+ax.grid(True, alpha=0.3)
+ax_r.axhspan(0.99, 1.01, color="0.85", zorder=0)
+ax_r.axhline(1.0, color="0.5", lw=0.8)
+ax_r.axvspan(1500.0, 1800.0, color="C2", alpha=0.12, zorder=0)
+ax_r.set(xscale="log", ylim=(0.99, 1.01))
+ax_r.set_xlabel(r"$\lambda$ [Å]")
+ax_r.set_ylabel("tengri / CIGALE", fontsize=9)
+ax_r.grid(True, alpha=0.3)
 fig.tight_layout()
 save_fig("cigale_04_dust_attenuation.png")
 plt.show()
@@ -950,15 +1010,14 @@ _DUSTATT_CHAIN = ("dustatt_modified_starburst", dict(E_BV_lines=0.3))
 def _knob_model(emission_type, **emkw):
     """tengri fiducial twin of the matched pcigale chain (1e11 M_sun).
 
-    CIGALE's ``dustatt_modified_starburst`` is a **single** Calzetti screen on
-    the stellar continuum (A_V = R_V x E(B-V)_cont = 4.05 x 0.132 = 0.535 mag,
-    i.e. ``tau_diff = TAU_DIFF_FIDUCIAL``). It has no Charlot & Fall birth-cloud
-    component, so we set ``tau_bc = 0``: adding the extra birth-cloud screen
-    (the two-component default elsewhere in this notebook) over-absorbs the
-    starlight by ~9 %, and since the Dale/THEMIS IR is normalized to the
-    absorbed energy that inflates the whole IR. With the single screen the
-    absorbed *fraction* matches CIGALE to 0.2 %; the residual ~1.4 % is the
-    BC03-to-DSPS conversion (tengri's intrinsic stellar Lbol is 1.4 % lower).
+    The attenuation is the notebook's fiducial: a **single** screen
+    (``tau_bc = 0``, matching CIGALE's ``dustatt_modified_starburst``, which
+    has no Charlot & Fall birth cloud) carrying the Leitherer-extended
+    Calzetti curve with the 912 Å clip, i.e. exactly the block §5–§11 use.
+    That matters here rather than being housekeeping: the Dale and THEMIS
+    templates are normalized to the *absorbed* starlight, so the IR can only
+    match to the extent the attenuation does, and a different curve or a
+    missing clip would show up as an IR offset with no dust-side cause.
     """
     return SEDModel.build(
         ssp_data=ssp,
@@ -972,10 +1031,11 @@ def _knob_model(emission_type, **emkw):
         },
         dust_attenuation={
             "type": "two_component",
-            "law_bc": "calzetti",
-            "law_diff": "calzetti",
-            "tau_bc": Fixed(0.0),
+            "law_bc": "leitherer02",
+            "law_diff": "leitherer02",
+            "tau_bc": Fixed(TAU_BC_FIDUCIAL),
             "tau_diff": Fixed(TAU_DIFF_FIDUCIAL),
+            "lyman_cutoff": True,
             "all_params": Fixed(DEFAULT),
         },
         dust_emission={"type": emission_type, "all_params": Fixed(DEFAULT), **emkw},
@@ -1280,12 +1340,18 @@ _ssp_neb_dense = load_ssp_data(
 )
 _m_neb_dense = SEDModel.build(
     ssp_data=_ssp_neb_dense,
-    met={"logzsol": Fixed(0.0), "all_params": Fixed(DEFAULT)},
+    # CIGALE runs this section at Z = 0.02 for both the stars (bc03
+    # metallicity=0.02) and the gas (nebular zgas=0.02). Pin both sides of
+    # the dense-SSP twin to the same absolute metallicity — a bare
+    # ``logzsol = 0.0`` here would be Z = 0.0142, a 0.15 dex mismatch on top
+    # of the disclosed SSP swap, and it moves the metal lines much more than
+    # the recombination lines.
+    met=MET_FIDUCIAL,
     sfh=_neb_sfh_kw,
     neb={
         "type": "cue",
         "neb_logU": Fixed(-2.0),
-        "neb_logZ_gas": Fixed(0.0),
+        "neb_logZ_gas": Fixed(MET_LOGZSOL),
         "neb_fesc": Fixed(0.0),
         "all_params": Fixed(DEFAULT),
     },
@@ -1457,31 +1523,32 @@ m_agn = SEDModel.build(
         "lyman_cutoff": True,
         "all_params": Fixed(DEFAULT),
     },
-    # ``agn_log_lbol`` matches CIGALE's ``sed.info["agn.accretion_power"]``
-    # at the §9 fiducial: 9.18e25 W = 0.240 L☉ → log_lbol = -0.620.
-    # This is the **intrinsic 4π disc bolometric** — the L_bol that the
-    # accretion engine produces, before extinction. CIGALE derives it from
-    # agn_power × ∫AGN1.disk × norm × 0.493 (skirtor2016.py:507). Using
-    # the observed (extinction-corrected) disc luminosity instead would
-    # underestimate the intrinsic power by a factor of ~1.6.
-    #
-    # All other tengri AGN defaults already match CIGALE skirtor2016
-    # defaults (oa=40, tau=7, p=q=1, i=30, EBV=0.03, T=100, β=1.6,
-    # disk_type=1 → ``disc.schartmann2005``). The polar-dust graybody
-    # is integrated into the SKIRTOR thermal-dust normalization
-    # (CIGALE skirtor2016.py:389 adds polar BB before the ``norm =
-    # 1/∫dust`` step). The differentiable multicolor disc remains
+    # tengri's AGN defaults already match CIGALE skirtor2016's (oa=40,
+    # tau=7, p=q=1, i=30, EBV=0.03, T=100, β=1.6, disk_type=1 →
+    # ``disc.schartmann2005``). The differentiable multicolor disc remains
     # available — ``disc={"type": "multicolor", ...}``.
     agn={
         "type": "composable",
         "disc": {"type": "schartmann2005", "all_params": Fixed(DEFAULT)},
         "torus": {"type": "skirtor", "all_params": Fixed(DEFAULT)},
-        "agn_log_lbol": Fixed(-0.42),
+        # The Casey-2012 polar-dust graybody is its own attenuation block,
+        # not a rider on the torus: without this entry the model has no
+        # polar component at all and ``derived["sed_agn_polar"]`` is zeros,
+        # so the comparison would put disc+torus against CIGALE's
+        # disc+torus+polar chain. ``agn_polar_ebv = 0.03``, T = 100 K and
+        # β = 1.6 are CIGALE's skirtor2016 defaults on both sides.
+        "atten": {
+            "type": "polar_dust",
+            "agn_polar_ebv": Fixed(0.03),
+            "all_params": Fixed(DEFAULT),
+        },
         # ``agn_ir_frac = 0.3`` mirrors CIGALE's ``fracAGN`` parameter.
         # tengri's AGN component reads ``state.derived["L_absorbed"]``
         # and computes ``agn_power = L_abs × frac/(1-frac)`` exactly
         # like CIGALE ``skirtor2016.py:498`` (lambda_fracAGN="0/0")
-        # via cross-component energy coupling.
+        # via cross-component energy coupling. That coupling *is* the AGN
+        # power here, so there is no ``agn_log_lbol`` to set: the two
+        # together are a contradiction the build refuses.
         "agn_ir_frac": Fixed(0.3),
         "all_params": Fixed(DEFAULT),
     },
@@ -1652,13 +1719,22 @@ m_agn_sk = SEDModel.build(
         "law_diff": "leitherer02",
         "tau_bc": Fixed(TAU_BC_FIDUCIAL),
         "tau_diff": Fixed(TAU_DIFF_FIDUCIAL),
+        # Same Lyman-limit clip as §9, so the stellar+dust floor under this
+        # panel is the one §9 and the dashed baseline below already plot.
+        "lyman_cutoff": True,
         "all_params": Fixed(DEFAULT),
     },
     agn={
         "type": "composable",
         "disc": {"type": "skirtor", "all_params": Fixed(DEFAULT)},  # ← the SKIRTOR analytic disc
         "torus": {"type": "skirtor", "all_params": Fixed(DEFAULT)},
-        "agn_log_lbol": Fixed(-0.42),
+        # Same polar-dust block and same fracAGN coupling as §9 — only the
+        # disc changes, so the two panels differ in one input.
+        "atten": {
+            "type": "polar_dust",
+            "agn_polar_ebv": Fixed(0.03),
+            "all_params": Fixed(DEFAULT),
+        },
         "agn_ir_frac": Fixed(0.3),
         "all_params": Fixed(DEFAULT),
     },
@@ -1818,6 +1894,17 @@ def _tengri_xray(log_lbol, cos_inc):
             "type": "composable",
             "disc": {"type": "schartmann2005", "all_params": Fixed(DEFAULT)},
             "torus": {"type": "skirtor", "all_params": Fixed(DEFAULT)},
+            # Polar dust is declared and switched off, matching the ``EBV=0.0``
+            # in this section's skirtor2016 call. Leaving the block out would
+            # reach the same SED, but by omission rather than by statement —
+            # and it is the one AGN input §9 and §10 deliberately differ on.
+            "atten": {
+                "type": "polar_dust",
+                "agn_polar_ebv": Fixed(0.0),
+                "all_params": Fixed(DEFAULT),
+            },
+            # No ``agn_ir_frac`` here: this section solves for the disc power
+            # directly, so ``agn_log_lbol`` is the knob that acts.
             "agn_log_lbol": Fixed(log_lbol),
             "agn_cos_inc": Fixed(cos_inc),
             "all_params": Fixed(DEFAULT),
