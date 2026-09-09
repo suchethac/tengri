@@ -46,12 +46,15 @@ os.environ.setdefault("TENGRI_NO_BACKGROUND_COMPILE", "1")
 
 import warnings
 
-# Override the ``dale2014`` emission model to use CIGALE-sourced templates
-# for this reproduction notebook. The shipped ``data/dale2014_templates.h5``
-# is the unmodified Wyoming-source Dale et al. 2014 release; the comparison
-# panel uses ``data/dale2014_templates_cigale.h5`` so it matches CIGALE's
-# actual ``dale2014`` SED template directly. Both files come from
-# ``scripts/regenerate_dale2014_from_{cigale,official}.py``.
+# Register CIGALE's own Dale et al. 2014 grid for this reproduction notebook.
+# The shipped ``data/dale2014_templates.h5`` is the unmodified Wyoming-source
+# Dale et al. 2014 release, whose tengri name (``dale2014``) embeds an SF
+# radio tail and so refuses to compose with a separate ``radio={...}`` block
+# (#1970). ``data/dale2014_templates_cigale.h5`` matches CIGALE's actual
+# ``dale2014`` SED template directly and carries no such tail -- register it
+# under tengri's tail-free Dale name, ``dale2014_cigale``, the name whose
+# contract is exactly "no radio tail; compose with a separate radio block".
+# Both files come from ``scripts/regenerate_dale2014_from_{cigale,official}.py``.
 from pathlib import (
     Path,
     Path as _Path,
@@ -83,7 +86,7 @@ _CIGALE_DALE_PARENT = (
 )
 _CIGALE_DALE_PATH = _CIGALE_DALE_PARENT / "data" / "dale2014_templates_cigale.h5"
 if _CIGALE_DALE_PATH.is_file():
-    register_dale2014_tabulated(str(_CIGALE_DALE_PATH), name="dale2014")
+    register_dale2014_tabulated(str(_CIGALE_DALE_PATH), name="dale2014_cigale")
 
 warnings.filterwarnings("ignore")
 warnings.filterwarnings("default", module=r"tengri(\.|$)")
@@ -822,7 +825,7 @@ m_ir = SEDModel.build(
         "lyman_cutoff": True,
         "all_params": Fixed(DEFAULT),
     },
-    dust_emission={"type": "dale2014", "alpha_dale": Fixed(2.0), "all_params": Fixed(DEFAULT)},
+    dust_emission={"type": "dale2014_cigale", "alpha_dale": Fixed(2.0), "all_params": Fixed(DEFAULT)},
     neb={"type": "ssp"}, redshift=Fixed(0.0),
 )
 s_ir = m_ir.predict_state({})
@@ -985,7 +988,7 @@ _TNG_LW = 1.4
 _peaks = []
 
 # LEFT — Dale 2014 AGN fraction: pcigale dale2014.fracAGN (band) vs tengri (line).
-m_frac = _knob_model("dale2014", alpha_dale=Fixed(2.0))
+m_frac = _knob_model("dale2014_cigale", alpha_dale=Fixed(2.0))
 p_frac = dict(m_frac.spec.sample(jax.random.PRNGKey(0)))
 for f, c in zip([0.0, 0.3, 0.6], ["C0", "C1", "C3"]):
     sed = C.run_chain(
@@ -2026,10 +2029,11 @@ m_r = SEDModel.build(
         "lyman_cutoff": True,
         "all_params": Fixed(DEFAULT),
     },
-    dust_emission={"type": "dale2014", "alpha_dale": Fixed(2.0), "all_params": Fixed(DEFAULT)},
+    dust_emission={"type": "dale2014_cigale", "alpha_dale": Fixed(2.0), "all_params": Fixed(DEFAULT)},
     # q_IR pinned to CIGALE's qir_sf = 2.5 (tengri bucket default 2.64).
     radio={
-        "type": "condon92",
+        "sf": {"type": "bell2003"},
+        "agn": {"type": "powerlaw"},
         "radio_q_ir": Fixed(2.5),
         "radio_alpha_sf": Fixed(0.8),
         "all_params": Fixed(DEFAULT),
@@ -2273,10 +2277,11 @@ m_full = SEDModel.build(
         "lyman_cutoff": True,
         "all_params": Fixed(DEFAULT),
     },
-    dust_emission={"type": "dale2014", "alpha_dale": Fixed(2.0), "all_params": Fixed(DEFAULT)},
+    dust_emission={"type": "dale2014_cigale", "alpha_dale": Fixed(2.0), "all_params": Fixed(DEFAULT)},
     xray={"type": "yang20", "all_params": Fixed(DEFAULT)},
     radio={
-        "type": "condon92",
+        "sf": {"type": "bell2003"},
+        "agn": {"type": "powerlaw"},
         "radio_q_ir": Fixed(2.5),
         "radio_alpha_sf": Fixed(0.8),
         "all_params": Fixed(DEFAULT),
