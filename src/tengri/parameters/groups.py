@@ -5370,6 +5370,16 @@ def _translate_agn(agn_dict: dict, result: dict) -> None:
     # composable-with-all-none-blocks, which emits identically zero: a
     # silent-failure footgun (closes #417 second case).
     top_type = agn_dict.get("type")
+    # R51 (#2214): 'off' is the same off-switch synonym both dust groups
+    # already accept (_translate_dust_attenuation's and
+    # _translate_dust_emission's own ``in ("none", "off")`` checks) -- agn was
+    # the one group in the "neb, shock, radio, xray, igm, dust_attenuation,
+    # dust_emission" off-switch family (R42's own comment lists them) that
+    # took 'none' only. Normalize right here, before the R37 validator and the
+    # R42 'none' branch below, so both spellings are indistinguishable from
+    # this point on -- the way R42 unified 'none' onto the shared sentinel.
+    if top_type == "off":
+        top_type = "none"
     if top_type is not None and top_type != "composable":
         # R37: validate the name HERE, before anything else reads it. It used
         # to be forwarded to ``agn_model`` unchecked, "validated lazily by

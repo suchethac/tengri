@@ -215,7 +215,8 @@ def test_the_r27_contract_covers_exactly_the_validated_type_set():
     assert _validated_agn_types() == set(_MONOLITHIC) | {"composable", "none"}
 
 
-def test_none_is_the_off_switch_not_a_composable_block_name():
+@pytest.mark.parametrize("spelling", ["none", "off"])
+def test_none_is_the_off_switch_not_a_composable_block_name(spelling):
     """``agn={'type': 'none'}`` disables the group; it is not a block name.
 
     ``'none'`` is registered as a type in all six composable categories, so
@@ -232,13 +233,18 @@ def test_none_is_the_off_switch_not_a_composable_block_name():
     ``predict_photometry``. The off state is ``agn_model is None`` -- the same
     sentinel the omitted-``agn`` build carries, and the one the component
     factory tests (``if agn_model is not None``).
+
+    R51 (#2214): both dust groups already accept ``'off'`` as a synonym of
+    ``'none'``; agn's own validator took ``'none'`` only. ``spelling`` covers
+    both -- the two must parse identically.
     """
-    spec = _parse({"type": "none"})
+    spec = _parse({"type": spelling})
     assert spec.agn_model is None
     assert spec.agn_model == _parse_no_agn().agn_model
 
 
-def test_none_builds_and_predicts_the_agn_omitted_photometry():
+@pytest.mark.parametrize("spelling", ["none", "off"])
+def test_none_builds_and_predicts_the_agn_omitted_photometry(spelling):
     """R42: ``agn={'type': 'none'}`` must PREDICT, not merely parse.
 
     Measured at b2a2a4d33 the build succeeded and the first
@@ -253,13 +259,16 @@ def test_none_builds_and_predicts_the_agn_omitted_photometry():
     the off switch as if it were a model name. Switching the AGN off must give
     back exactly the model with no AGN at all, so the two photometries are
     compared bit for bit rather than approximately.
+
+    R51 (#2214): ``spelling`` covers both ``'none'`` and its ``'off'`` synonym
+    -- both must emit exactly the agn-omitted photometry.
     """
-    off = _predict({"type": "none"})
+    off = _predict({"type": spelling})
     omitted = _predict(None)
     np.testing.assert_array_equal(
         off,
         omitted,
-        err_msg="agn={'type': 'none'} must emit exactly the agn-omitted photometry",
+        err_msg=f"agn={{'type': {spelling!r}}} must emit exactly the agn-omitted photometry",
     )
 
 

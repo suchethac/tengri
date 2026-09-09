@@ -577,6 +577,11 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
   disagreed with the vendored grid's top node, `log10(0.07) =
   -1.154901959985743`, by 9.8e-5 — five orders of magnitude above the guard's
   1e-9 tolerance. Transcribed exactly now; the guard covers 29 cases (#2214).
+- `agn={'type': 'off'}` raised `agn['type']='off' is not an AGN model` —
+  both dust groups already accept `'off'` as a synonym of `'none'`
+  (`dust_attenuation`, `dust_emission`), but `agn`'s own validator took
+  `'none'` only. `'off'` now normalizes onto `'none'` before the validator
+  runs, so the two spellings parse and predict identically (#2214).
 
 ## [0.1.0] - 2026-05-22
 
