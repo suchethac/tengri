@@ -720,6 +720,14 @@ class FeaturePrecomp:
     *not* allowed for spectral indices, where a break is a flux **ratio** and a
     smooth additive offset does not cancel.
 
+    **What it refuses.** The grid tabulates a single photoionization regime, so
+    DIG mixing has no place in it: a build with ``neb_dig_frac`` free or fixed
+    non-zero raises
+    :class:`~tengri.config.exceptions.DIGNotOnNebularGridError` rather than
+    reconstructing the HII term alone and leaving both DIG parameters inert
+    (#2195). Pin ``neb_dig_frac`` at 0, its declared default, or keep the exact
+    path for the nebular channel.
+
     **JIT-compatible**: the resulting line prediction is JIT- and gradient-safe;
     the one-time build is eager.
 
@@ -5619,6 +5627,12 @@ class SEDModel:
         ------
         ValueError
             If no Q_H-linear nebular backend (Cue) is configured.
+        DIGNotOnNebularGridError
+            If DIG mixing is active (``neb_dig_frac`` free, or fixed non-zero).
+            The grid has no DIG axis and no second photoionization regime to
+            mix, so it would answer with the HII term alone and leave both DIG
+            parameters inert (#2195). Reachable on dusty builds too: dust
+            disarms the grid for photometry, not for the line channel.
 
         Notes
         -----
