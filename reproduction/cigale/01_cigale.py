@@ -235,19 +235,25 @@ for block, (cig, tng) in registries.items():
 # BC03 Chabrier (Bruzual & Charlot 2003) at Z = 0.02 from 1 Myr to 10 Gyr:
 # CIGALE's `bc03/Z=0.02_imf=chab.pickle` read directly against the same
 # templates in tengri's HDF5. The relative residual |tengri − CIGALE| /
-# CIGALE is ~1e-7, the float32 round-trip through HDF5 repackaging.
+# CIGALE is the float32 round-trip of the repackaged grid and nothing else:
+# median 2e-8 at every age, max 6e-8. Four of 1262 wavelength points exceed
+# 1e-7, all in the extreme UV below 240 Å where the SSP is 15 decades below
+# its peak and the relative measure is reading the last float32 digit of a
+# number near zero (the 230 Å point, $L_\nu = 1.5\times10^{-7}$ of the peak,
+# is the 5e-6 spike on the residual panel).
+#
+# Both sides divide by the same speed of light — tengri's `C_AA`, which
+# `_drivers/cigale_ssp_to_dsps.py` also uses to write the grid and
+# `_drivers/units.py` to convert CIGALE's W/nm. A rounded c on either side
+# puts a floor of $|\Delta c|/c$ under this residual at every wavelength and
+# every age, 2.5e-5 for the usual 2.998e18 — three decades above the float32
+# floor this panel is measuring.
 
 # %%
 import pickle as _pickle
 from pathlib import Path as _P
 
 ages_yr = [1e6, 1e7, 1e8, 1e9, 1e10]
-# Both sides use tengri's `C_AA`. This notebook used to carry a rounded
-# 2.998e18 of its own, 2.5e-5 low. Re-executed against pcigale 2025.1 the swap
-# moves one printed digit — §11's synchrotron ratio goes 1.0045–1.0046 to
-# 1.0046–1.0047 — because that section divides c by wavelength to get a
-# frequency, so the offset lands directly on the axis. Everything else is
-# unchanged. Worth knowing before reading a fourth decimal as physics.
 
 # CIGALE side: raw BC03 Chabrier Z=0.02 pickle, converted W/nm/Msun →
 # Lsun/Hz/Msun (the exact conversion used by _drivers/cigale_ssp_to_dsps.py).
@@ -289,6 +295,7 @@ fig, (ax, ax_r) = plt.subplots(
     2, 1, figsize=(9, 7), sharex=True, gridspec_kw={"height_ratios": [3, 1]}
 )
 colors = plt.cm.viridis(np.linspace(0, 1, len(ages_yr)))
+print("§1 SSP residual |tengri − CIGALE| / CIGALE (float32 eps = 1.19e-7):")
 for color, age_yr, (w_c, L_c), (w_t, L_t) in zip(colors, ages_yr, cigale_ssp, tengri_ssp):
     label = f"{age_yr / 1e6:g} Myr"
     ax.plot(w_c, L_c, color=color, linewidth=2.0, label=label)
@@ -297,6 +304,12 @@ for color, age_yr, (w_c, L_c), (w_t, L_t) in zip(colors, ages_yr, cigale_ssp, te
     L_t_on_c = U.regrid(w_t, L_t, w_c)
     resid = np.abs(L_t_on_c - L_c) / np.maximum(np.abs(L_c), 1e-30)
     resid[~np.isfinite(resid)] = 0.0
+    _pos = L_c > 0
+    print(
+        f"    {age_yr / 1e6:>6g} Myr: median {np.median(resid[_pos]):.2e}, "
+        f"max {resid[_pos].max():.2e}, "
+        f"{int((resid[_pos] > 1e-7).sum())}/{int(_pos.sum())} points above 1e-7"
+    )
     ax_r.plot(w_c, resid, color=color, linewidth=1.0)
 ax.set_xscale("log")
 ax.set_yscale("log")

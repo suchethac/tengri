@@ -8,7 +8,9 @@ component.
 
 - **`01_cigale.py`** — the notebook (jupytext percent format).
 - **`_drivers/`** — code-side glue:
-  - `units.py` — CIGALE (W/nm on nm) ↔ tengri (erg/s/Hz on Å).
+  - `units.py` — CIGALE (W/nm on nm) ↔ tengri (erg/s/Hz on Å). Its speed
+    of light is tengri's `C_AA`, the one value used on both sides of every
+    comparison here.
   - `cigale_driver.py` — instantiate `pcigale.sed_modules` and read
     out SEDs, attenuation curves, SFH curves.
   - `cigale_ssp_to_dsps.py` — one-off repackaging of CIGALE's BC03 Chabrier
@@ -16,8 +18,9 @@ component.
   - `consistency_audit.py` — wavelength-resolved CIGALE vs tengri
     ratio statistics for every section, runnable on its own.
 - **`_drivers/data/bc03_from_cigale.h5`** — the shared SSP file. Both
-  codes consume this; §1 residuals below floating-point precision are
-  interpolation, nothing else.
+  codes consume this; §1's residual is the float32 round-trip of the
+  repackaging (median 2e-8), and the write and read sides share one
+  speed of light so nothing coarser sits under it.
 - **`_figs/`** — generated figures.
 
 ## Prerequisites
@@ -58,10 +61,13 @@ runs use the persistent cache and finish in well under a minute.
 ## Regenerating the BC03 templates
 
 ```bash
-python _drivers/cigale_ssp_to_dsps.py \
-  --input /path/to/.venv/lib/python3.12/site-packages/pcigale/data/bc03/ \
-  --output _drivers/data/bc03_from_cigale.h5
+python -m reproduction.cigale._drivers.cigale_ssp_to_dsps
 ```
+
+It reads all six metallicities from the installed pcigale's
+`data/bc03/Z=*_imf=chab.pickle` and writes
+`_drivers/data/bc03_from_cigale.h5`; both paths are fixed, so there are no
+arguments. Re-run it after any change to the unit conversion.
 
 The output HDF5 has the DSPS-compatible shape:
 
@@ -70,10 +76,12 @@ The output HDF5 has the DSPS-compatible shape:
 | `ssp_lg_age_gyr` | `(n_age,)` | `log10(age / Gyr)` |
 | `ssp_lgmet` | `(n_met,)` | `log10(Z)` (absolute, not solar) |
 | `ssp_wave` | `(n_wave,)` | rest-frame wavelength [Å] |
-| `ssp_flux` | `(n_age, n_met, n_wave)` | L_λ at unit stellar mass |
+| `ssp_flux` | `(n_met, n_age, n_wave)` | L_ν [L☉/Hz] at unit stellar mass |
+| `ssp_mass_remaining` | `(n_met, n_age)` | surviving stellar mass fraction |
 
-Both `pcigale.sed_modules.bc03` and `tengri.load_ssp()` consume the
-same file with no per-side modifications.
+Both `pcigale.sed_modules.bc03` and `tengri.load_ssp_data()` consume the
+same templates with no per-side modifications: pcigale reads the pickles
+directly, tengri the HDF5 this script writes from them.
 
 ## What the notebook covers
 
