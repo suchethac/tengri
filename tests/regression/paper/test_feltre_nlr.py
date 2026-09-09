@@ -15,7 +15,6 @@ When ``data/feltre_grid.h5`` *is* present, additional tests validate:
   - Gradient w.r.t. neb_logU and neb_logZ_gas is finite (triweight is C²)
   - alpha_pl is interpolated, not snapped: a sub-node perturbation moves the
     result (R41, #2214 -- it used to be required NOT to)
-  - At-grid-node interpolation: result equals direct table lookup within 1%
 """
 
 from __future__ import annotations

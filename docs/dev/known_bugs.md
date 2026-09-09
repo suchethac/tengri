@@ -257,6 +257,14 @@ These are not numerical bugs but missing or placeholder implementations that pro
 **Grid data:** VizieR catalog J/MNRAS/456/3354 was not deposited. Acquisition path documented in `scripts/download_feltre_grid.py`. When `data/feltre_grid.h5` is absent, `FeltreNLRBackend.__init__` raises `FileNotFoundError` with instructions rather than crashing at inference time.
 **Tests:** `tests/unit/test_feltre_nlr.py` — 13 tests: 6 data-independent (import, FileNotFoundError, nearest-idx, dispatcher routing) always pass; 7 smoke/physics tests skip when `data/feltre_grid.h5` absent.
 **Reference:** Feltre, Charlot & Gutkin (2016), MNRAS 456, 3354.
+**Update (2026-09, R41(b), #2214):** Since R41(b) both α_pl and ξ_d are
+interpolated with the same C²-continuous triweight kernel as the other three
+axes, not snapped to their nearest node — the file paths and test module
+named above (`src/tengri/models/nebular/agn_nebular.py`,
+`tests/unit/test_feltre_nlr.py`) no longer exist; the current locations are
+`src/tengri/components/nebular/agn_nebular.py` and
+`tests/regression/paper/test_feltre_nlr.py`. This paragraph is a historical
+record of the original fix and is left as written above.
 
 ---
 
