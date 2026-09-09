@@ -3136,7 +3136,17 @@ class SEDModel:
         else:
             from tengri.components.nebular import BakedInBackend
 
-            self._nebular_backend = BakedInBackend()
+            # R49: an explicit neb={'type': 'ssp'} or neb={'type': 'none'}
+            # (both resolve here -- 'ssp' never falls into any branch above,
+            # 'none' resolves to nebular_mode='off' identically to an omitted
+            # neb=) states the baked-in choice, so the advisory is silenced.
+            # An omitted neb= reaches this same branch with the same
+            # nebular_mode='off' but _nebular_explicit=False, so the
+            # advisory still fires -- it is the only signal that
+            # distinguishes "the user said no nebular emission" from
+            # "the user never mentioned nebular emission at all".
+            warning_mode = "suppress" if getattr(spec, "_nebular_explicit", False) else "warn"
+            self._nebular_backend = BakedInBackend(ionizing_source_warning=warning_mode)
 
         return delta
 

@@ -743,6 +743,22 @@ class Parameters:
 
     def _init_nebular_config(self, kwargs):
         """Resolve nebular emission backend from kwargs."""
+        # R49: presence, not value, of any of the three neb-group kwargs
+        # means the caller explicitly stated a nebular disposition -- via
+        # ``SEDModel.build(neb={'type': ...})`` -> ``parse_groups``
+        # (``_translate_neb`` sets at least one of these three keys for
+        # every ``neb_type``, including 'none': ``nebular=False,
+        # nebular_ssp=False, nebular_cue=False``) or directly via this flat
+        # constructor. Omitted ``neb=`` never reaches ``_translate_neb``, so
+        # none of the three keys are present here. Same presence-based
+        # mechanism as ``_user_provided`` (parameters.py, used for
+        # ``agn_log_ledd``), just at group granularity: this decides whether
+        # :class:`~tengri.components.nebular.baked_in.BakedInBackend`'s
+        # advisory should fire (see ``SEDModel._init_nebular``'s ``else``
+        # branch).
+        self._nebular_explicit = (
+            "nebular_ssp" in kwargs or "nebular" in kwargs or "nebular_cue" in kwargs
+        )
         nebular_ssp = kwargs.pop("nebular_ssp", False)
         nebular = kwargs.pop("nebular", False)
         nebular_cue = kwargs.pop("nebular_cue", False)

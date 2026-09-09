@@ -104,6 +104,20 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 
 ### Changed
 
+- **An explicit `neb={'type': 'ssp'}` (or `{'type': 'none'}`) now silences
+  `BakedInNebularWarning`; an omitted `neb=` still fires it (R49).** Both
+  spellings resolve to the same `BakedInBackend` as an omitted `neb=`
+  (`nebular_mode='off'`/`'ssp'`), so the advisory could not previously tell
+  "the user said no nebular emission" from "the user never mentioned it" —
+  every reproduction build fired the same warning regardless of intent.
+  `Parameters` now records whether any of the three neb-group kwargs
+  (`nebular`, `nebular_ssp`, `nebular_cue`) was explicitly present (same
+  presence-based mechanism as `_user_provided`, at group granularity), and
+  `SEDModel` constructs `BakedInBackend(ionizing_source_warning='suppress')`
+  when it was. The warning text no longer advises a `warnings.filterwarnings
+  (message=...)` filter (a message filter is the anti-pattern that hides
+  every other warning matching the same text); it names the explicit
+  `neb={'type': 'ssp'}` acknowledgment instead.
 - **AGN parameter ownership: disc physics nests under `disc`.** Eleven names
   every reader of which is a disc block now belong to the `agn.disc` sub-block
   rather than the shared `agn` top level: `agn_alpha`, `agn_log_mbh`,
