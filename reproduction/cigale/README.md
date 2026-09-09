@@ -26,7 +26,7 @@ component.
 # pcigale is not on PyPI under any name; it builds its template database at
 # install time, which is why the clone is ~2.8 GB and the build is not quick.
 git clone https://gitlab.lam.fr/cigale/cigale.git && cd cigale
-# CIGALE 2025.1 predates numpy 2, which removed np.trapz in favour of the
+# CIGALE 2025.1 predates numpy 2, which removed np.trapz in favor of the
 # identically-signed np.trapezoid. 58 call sites, no other numpy-2 breakage:
 grep -rl 'np\.trapz' --include='*.py' . | xargs sed -i '' 's/np\.trapz\b/np.trapezoid/g'
 pip install --no-build-isolation .
