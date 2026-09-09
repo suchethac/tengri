@@ -8469,6 +8469,21 @@ class SEDModel:
         dropped as unrequested while the user had plainly requested it. See
         :attr:`DustAttenuationSEDComponentConfig.live_shape_params` (#1808) and
         :attr:`DustSEDComponentConfig.live_shape_params` (#1833).
+
+        Two provenance sources, read in priority order. A grammar-built spec
+        (``parse_groups`` / ``SEDModel.build``) carries ``spec._group_provenance``,
+        a name -> tag map covering every parameter, including the untouched ones
+        (``"registry_default"``). A flat ``Parameters(...)`` spec carries no such
+        map, but since #2231 it carries ``spec._flat_provenance`` instead: a
+        narrower map recording only the parameters the caller actually named in
+        the constructor call, tagged ``"user_prior"``/``"user_fixed"``. A name
+        absent from ``_flat_provenance`` was never passed, so it falls through
+        to ``"registry_default"`` below exactly as before -- a flat spec that
+        never mentions a shape parameter still gets the law's own published
+        default, bit-identical to pre-#2231. ``redshift`` is not a dust shape
+        parameter under either source: :func:`_law_shape_params` only ever
+        returns ``dust_*`` names, so it bypasses this filter by never
+        appearing in ``reads``, regardless of which provenance map is read.
         """
         from tengri.parameters.groups import _law_shape_params
 
@@ -8485,7 +8500,10 @@ class SEDModel:
                 continue
         if not reads:
             return frozenset()
-        provenance = getattr(self.spec, "_group_provenance", None) or {}
+        provenance = getattr(self.spec, "_group_provenance", None)
+        if provenance is None:
+            provenance = getattr(self.spec, "_flat_provenance", None)
+        provenance = provenance or {}
         return frozenset(
             name
             for name in reads

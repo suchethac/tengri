@@ -8,6 +8,26 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 
 ### Fixed
 
+- A flat `Parameters(...)` spec that freed or pinned a dust attenuation shape
+  parameter (`dust_slope`, `dust_delta`, `dust_Rv`, `dust_bump_strength`) had
+  the forward model never read it: `SEDModel._requested_law_shape_params`
+  decides which shape parameters are "live" from `spec._group_provenance`,
+  the richer map `parse_groups` attaches after construction, and a flat spec
+  never gets one, so every name resolved to `"registry_default"` and the
+  attenuation law silently evaluated its own published default no matter
+  what the flat spec declared — the parameter still appeared in
+  `free_params` and sampled a posterior that was exactly its prior.
+  `Parameters.__init__` now records a `_flat_provenance` map (distinct from
+  `_group_provenance`, so `parse_groups`, `translate.py`'s
+  `legacy_flat_spec` gate, and the flat-form `summary()` are all unaffected)
+  for every parameter the constructor call actually named, by presence in
+  the call rather than by comparing against a default — an explicit value
+  equal to a law's own published default (e.g. `dust_bump_strength=Fixed(1.0)`,
+  KC13's own value) is still a request. Measured: `dust_bump_strength`
+  0.0 -> 3.3 on `single_component` `kriek_conroy`, `galex_nuv` relative
+  change 0.00% -> 17.04%, matching the equivalent `parse_groups` build to
+  `rtol=1e-10` (#2231).
+
 - `mcmc_hmc_lowrank` ran its warmup fused into chain 0's sampling scan, which
   had two consequences. The #1999 post-adaptation stability probe had nowhere to
   run, leaving the one dense-capable metric path reachable above the D=30 cap
