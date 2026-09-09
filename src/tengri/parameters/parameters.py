@@ -702,6 +702,7 @@ class Parameters:
                 agn_nlr_block=self.agn_nlr_block,
                 agn_blr_block=self.agn_blr_block,
                 agn_feii_block=self.agn_feii_block,
+                agn_norm=self.agn_norm,
                 agn_torus_block=self.agn_torus_block,
                 agn_attenuation_block=self.agn_attenuation_block,
                 params=recipe_params,

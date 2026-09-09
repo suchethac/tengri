@@ -194,6 +194,7 @@ def validate_block_recipe(
     agn_feii_block: str,
     agn_torus_block: str,
     agn_attenuation_block: str,
+    agn_norm: str | None = None,
     params: dict | None = None,
     param_support: dict[str, tuple[float, float]] | None = None,
 ) -> list[str]:
@@ -213,11 +214,28 @@ def validate_block_recipe(
        error so users notice immediately).
     2. **All-none recipe**: every selector is ``"none"``; output will be
        identically zero. Almost certainly a misuse.
-    3. **No disc, active downstream**: disc is ``"none"`` but nlr / blr /
-       feii / torus are not. The downstream blocks scale by the disc's
-       :math:`\lambda L_\lambda(5100\,\mathrm{\AA})` (zero), so they emit
-       zero too. Either the user forgot to pick a disc impl, or the recipe
-       is genuinely degenerate.
+    3. **No disc, active anchored downstream**: disc is ``"none"`` but an
+       nlr / blr / feii / torus block that actually *reads* the disc's
+       :math:`\lambda L_\lambda(5100\,\mathrm{\AA})` for its normalization
+       (:data:`_DOWNSTREAM_NEEDS_L5100`) is selected. That block scales by
+       the disc's 5100Å luminosity (zero), so it emits zero too. Either the
+       user forgot to pick a disc impl, or the recipe is genuinely
+       degenerate. **Not every torus/nlr/blr/feii block anchors this way**:
+       most torus impls (``cat3d_wind``, ``skirtor``, ``simple``,
+       ``qsogen``, ...) normalize off ``agn_log_lbol``/``agn_torus_frac``
+       directly and emit non-zero flux with ``agn_disc_block='none'``
+       (measured: ``cat3d_wind`` under both ``agn_norm='independent'`` and
+       ``agn_norm='cigale_joint'`` sums ``sed_agn_torus`` to 3.849e34, never
+       zero) -- naming them here would be a false advisory (R48). The one
+       torus exception is ``"grahsp"``, whose block body reads
+       ``l5100_disc`` directly (measured: it correctly goes to zero with
+       ``agn_disc_block='none'``). ``agn_norm`` is accepted so this check
+       can become policy-aware if a future norm policy changes which blocks
+       anchor to the disc; measured at this HEAD, no registered policy does
+       -- every block's anchoring is intrinsic to its own implementation,
+       not to ``agn_norm`` (``cigale_joint``'s disc/torus tie only changes
+       how the *disc* is normalized when ``agn_torus_block='skirtor'``, not
+       whether a downstream block reads ``l5100_disc``).
     4. **GRAHSP downstream + non-5100Å disc**; GRAHSP nlr / blr / feii / torus
        expect the disc to deliver a meaningful UV/optical continuum at
        5100Å. Pairing them with an exotic disc (e.g. pure ADAF) likely
@@ -247,6 +265,13 @@ def validate_block_recipe(
     agn_disc_block, agn_nlr_block, agn_blr_block, agn_feii_block, \
 agn_torus_block, agn_attenuation_block : str
         Selectors for each pipeline stage.
+    agn_norm : str, optional
+        Cross-block normalization policy (``"independent"`` or
+        ``"cigale_joint"``, see :attr:`AGNSEDComponentConfig.agn_norm`).
+        Consumed by Rule 3 so the disc-anchoring check can become
+        policy-aware if a future policy changes which blocks read
+        ``l5100_disc``; measured at this HEAD, none does (see Rule 3).
+        ``None`` (default) is treated the same as either policy.
     params : dict, optional
         Concrete parameter values, used by Rule 7 to surface a no-op
         ``agn_polar_ebv``. Values may legitimately be absent or traced.
@@ -295,17 +320,25 @@ agn_torus_block, agn_attenuation_block : str
             "produce non-trivial output."
         )
 
-    # Rule 3: no disc, active downstream.
-    downstream_active = any(selectors[cat] != "none" for cat in ("nlr", "blr", "feii", "torus"))
-    if selectors["disc"] == "none" and downstream_active:
-        active = [
-            f"{cat}={selectors[cat]!r}"
-            for cat in ("nlr", "blr", "feii", "torus")
-            if selectors[cat] != "none"
-        ]
+    # Rule 3: no disc, active ANCHORED downstream. Only the (category, name)
+    # pairs in _DOWNSTREAM_NEEDS_L5100 actually read l5100_disc for their
+    # normalization (measured per-block, see the module docstring's Rule 3
+    # entry): most torus/nlr/blr/feii impls normalize off agn_log_lbol
+    # directly and emit non-zero flux even with disc='none', so naming them
+    # here would be a false advisory (R48 -- the prior version named every
+    # active torus block regardless). ``agn_norm`` is accepted for a future
+    # policy-aware check but does not change any block's anchoring today.
+    del agn_norm  # unused: measured, no registered agn_norm policy changes anchoring
+    anchored_active = [
+        f"{cat}={selectors[cat]!r}"
+        for cat in ("nlr", "blr", "feii", "torus")
+        if selectors[cat] != "none"
+        and selectors[cat] in _DOWNSTREAM_NEEDS_L5100.get(cat, frozenset())
+    ]
+    if selectors["disc"] == "none" and anchored_active:
         _emit(
             f"Composable AGN: agn_disc_block='none' but downstream "
-            f"blocks are active ({', '.join(active)}). These blocks "
+            f"blocks are active ({', '.join(anchored_active)}). These blocks "
             f"normalize to lambda*L_lambda(5100A) of the disc, which "
             f"is zero, the active blocks will emit zero. Pick a disc "
             f"impl (e.g. 'grahsp_sbpl' or 'powerlaw')."

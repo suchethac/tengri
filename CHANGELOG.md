@@ -273,6 +273,20 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 
 ### Fixed
 
+- The composable AGN `validate_block_recipe` "no disc, active downstream"
+  advisory (Rule 3) named every active `nlr`/`blr`/`feii`/`torus` block when
+  `agn_disc_block='none'`, but only a block that actually reads
+  `l5100_disc` for its normalization goes to zero there. Measured: a
+  torus-only build (`agn_torus_block='cat3d_wind'`, `agn_disc_block='none'`)
+  emits `sed_agn_torus` summing to 3.849e34 under both `agn_norm='independent'`
+  and `agn_norm='cigale_joint'` — never zero — so the advisory was false for
+  it (and for every production torus except `'grahsp'`, the one torus block
+  whose body reads `l5100_disc`). The advisory now names only the
+  `(category, block)` pairs in `_DOWNSTREAM_NEEDS_L5100` (R48). `agn_norm` is
+  threaded from `Parameters` into `validate_block_recipe` so the check can
+  become policy-aware if a future norm policy changes anchoring; measured at
+  this HEAD, none does.
+
 - `_mass_scale_lnu`'s forward product went `nan` in float32 on the
   `SpectrumPrecomp` path under jaxlib 0.11.1, where jaxlib 0.11.0 was finite —
   with **byte-identical optimized HLO**, so the graph did not change and the

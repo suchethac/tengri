@@ -130,6 +130,46 @@ def test_validate_active_downstream_no_disc_warns():
         )
 
 
+def test_validate_torus_only_no_disc_emits_no_recipe_warning():
+    """R48: a torus-only composable build (disc='none') must NOT trigger the
+    Rule-3 'no disc, active downstream' advisory. Every torus impl except
+    'grahsp' normalizes off ``agn_log_lbol``/``agn_torus_frac`` directly and
+    emits non-zero flux with disc='none' (measured: ``cat3d_wind`` under both
+    ``norm='independent'`` and ``norm='cigale_joint'`` sums sed_agn_torus to
+    3.849e34 -- never zero), so the disc-anchored advisory was false for it.
+    """
+    with warnings.catch_warnings(record=True) as w:
+        warnings.simplefilter("always", RecipeWarning)
+        issues = validate_block_recipe(
+            agn_disc_block="none",
+            agn_nlr_block="none",
+            agn_blr_block="none",
+            agn_feii_block="none",
+            agn_torus_block="cat3d_wind",
+            agn_attenuation_block="none",
+        )
+    assert issues == [], issues
+    assert not any(issubclass(x.category, RecipeWarning) for x in w)
+
+
+def test_validate_anchored_downstream_alone_names_only_that_block():
+    """A genuinely disc-anchored block (feii='boroson_green', which reads
+    ``l5100_disc`` for its normalization) alone with disc='none' still warns,
+    naming only itself -- never a torus block that happens to also be
+    inactive ('none') here."""
+    with pytest.warns(RecipeWarning, match=r"feii='boroson_green'"):
+        issues = validate_block_recipe(
+            agn_disc_block="none",
+            agn_nlr_block="none",
+            agn_blr_block="none",
+            agn_feii_block="boroson_green",
+            agn_torus_block="none",
+            agn_attenuation_block="none",
+        )
+    assert len(issues) == 1, issues
+    assert "torus=" not in issues[0]
+
+
 def test_validate_unknown_block_raises_not_warns():
     """Typo in selector should be a hard error."""
     with pytest.raises(ValueError, match="Unknown disc block"):
