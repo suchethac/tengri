@@ -960,7 +960,11 @@ save_fig("prospect_r_08_nebular.png")
 # `norm=1/∫dust`), and deprecated monolithic `agn={'type':'skirtor'}`
 # (power-law disc, ~0.28×). The residual to 1.0× is a parameter-convention
 # mismatch (ProSpect's `ct`/`rm` vs SKIRTOR's `oa`/`R`) — not the disc/total
-# treatment.
+# treatment. tengri deprecates `skirtor_stalevski` as a public model name
+# (it has no composable disc+torus recipe equivalent), and this section
+# selects it anyway on purpose: it is the one tengri model that reads
+# ProSpect's own raw SKIRTOR total-SED template rather than a composable
+# reinterpretation of it, which is the deliberate comparison target here.
 
 # %% [markdown]
 # **Verification Status:** CROSSVAL — Nenkova+08 (CLUMPY) torus

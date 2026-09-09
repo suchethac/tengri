@@ -1030,6 +1030,10 @@ print(
 # compare mid-IR shape and peak at matched bolometric luminosity. The
 # parametric `two_temperature` peaks warmer than 1000 K BB; the radiative-transfer
 # `nenkova` (CLUMPY) peaks cooler — the spread reflects model-family differences.
+# tengri deprecates `two_temperature_torus` as a toy model unsuitable for science
+# fits; this comparison selects it anyway because, like Synthesizer's own
+# blackbody torus, it is a parametric graybody rather than a radiative-transfer
+# template — the matched footing for this shape comparison.
 
 # %%
 w_torus_s, L_torus_s = agn["torus"]
@@ -1115,7 +1119,11 @@ print(
 # `cosine_inclination = 0.5`; tengri by intrinsic bolometric), so they do not
 # fade with inclination. (tengri's physically Type-2-obscured BLR is the
 # separate `nlr_blr_synthesizer` path in `recipes.unified_agn()`; here we
-# reproduce Synthesizer's isotropic convention.)
+# reproduce Synthesizer's isotropic convention.) The unified build's torus is
+# `_agn_grammar`'s default, tengri's deprecated `simple_torus` — a
+# single-temperature blackbody, which is exactly what Synthesizer's own torus
+# is, so the deprecated toy model is the deliberate match here, not a
+# production choice.
 
 # %%
 # tengri builds the *entire* unified AGN in ONE ``SEDModel.build`` call (via the
