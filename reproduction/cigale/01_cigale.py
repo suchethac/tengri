@@ -813,6 +813,29 @@ m_d = SEDModel.build(
 s_d = m_d.predict_state({})
 _assert_comparable(L_c_d, s_d.derived["sed_dust_attenuated"], name="§5 dust applied")
 
+# The four panels are two comparisons — intrinsic and attenuated — and a
+# side-by-side layout with independent y-axes cannot show a normalization
+# offset in either. One number each.
+print("§5 attenuation applied (tengri / CIGALE, on CIGALE's grid):")
+for _name, _wc, _Lc, _wt, _Lt in (
+    ("intrinsic ", w_c_nd, L_c_nd, np.asarray(s_nd.wave), np.asarray(s_nd.sed_intrinsic)),
+    (
+        "attenuated",
+        w_c_d,
+        L_c_d,
+        np.asarray(s_d.wave),
+        np.asarray(s_d.derived["sed_dust_attenuated"]),
+    ),
+):
+    _Lt_on_c = U.regrid(_wt, _Lt, _wc)
+    _r5 = _Lt_on_c / np.where(_Lc > 0, _Lc, np.nan)
+    for _lo, _hi, _wname in ((912.0, 1200.0, "912–1200 Å"), (1000.0, 10000.0, "0.1–1 µm  ")):
+        _m5 = (_wc >= _lo) & (_wc <= _hi) & np.isfinite(_r5)
+        print(
+            f"    {_name} {_wname}: median {float(np.median(_r5[_m5])):.4f}×, "
+            f"max |Δ| {float(np.abs(_r5[_m5] - 1.0).max()) * 100:.2f}%"
+        )
+
 fig, ((ax_l1, ax_r1), (ax_l2, ax_r2)) = plt.subplots(2, 2, sharey=True, figsize=(12, 8))
 U.panel(ax_l1, ax_r1, label_l="pcigale  intrinsic", label_r="tengri  intrinsic")
 U.panel(
@@ -1048,6 +1071,12 @@ def _nu_lnu(wave_aa, l_nu):
     return w, _c_aa_dust / w * np.asarray(l_nu)
 
 
+def _band_median(ratio, wave_aa, lo_um, hi_um):
+    """Median of ``ratio`` over ``[lo_um, hi_um]`` on the Å grid ``wave_aa``."""
+    m = (wave_aa >= lo_um * 1e4) & (wave_aa <= hi_um * 1e4) & np.isfinite(ratio)
+    return float(np.median(ratio[m])) if m.any() else float("nan")
+
+
 fig, (ax_l, ax_r) = plt.subplots(1, 2, figsize=(11, 4.4))
 
 # Where the two codes agree, a thin pcigale line simply disappears under
@@ -1063,6 +1092,7 @@ _peaks = []
 # LEFT — Dale 2014 AGN fraction: pcigale dale2014.fracAGN (band) vs tengri (line).
 m_frac = _knob_model("dale2014_cigale", alpha_dale=Fixed(2.0))
 p_frac = dict(m_frac.spec.sample(jax.random.PRNGKey(0)))
+print("§6 knobs — Dale 2014 fracAGN sweep (tengri / CIGALE, median in band):")
 for f, c in zip([0.0, 0.3, 0.6], ["C0", "C1", "C3"]):
     sed = C.run_chain(
         [_SFH_CHAIN, _BC03_CHAIN, _DUSTATT_CHAIN, ("dale2014", dict(alpha=2.0, fracAGN=f))]
@@ -1073,6 +1103,11 @@ for f, c in zip([0.0, 0.3, 0.6], ["C0", "C1", "C3"]):
     w_t, nl_t = _nu_lnu(o.wavelength, o.sed)
     ax_l.loglog(w_t, nl_t, color=c, lw=_TNG_LW, label=rf"$f_{{\rm AGN}}={f}$")
     _peaks.append(float(np.nanmax(nl_t)))
+    _rk = U.regrid(w_t, nl_t, w_c) / np.where(nl_c > 0, nl_c * _KNOB_MASS, np.nan)
+    print(
+        f"    f_AGN = {f}:  3–8 µm {_band_median(_rk, w_c, 3.0, 8.0):.4f}×"
+        f"   8–1000 µm {_band_median(_rk, w_c, 8.0, 1000.0):.4f}×"
+    )
 ax_l.plot([], [], "k-", **_REF_KW, label="pcigale")
 ax_l.plot([], [], "k-", lw=_TNG_LW, label="tengri")
 ax_l.set(
@@ -1086,6 +1121,7 @@ ax_l.legend(fontsize=8, frameon=False, ncol=2)
 # RIGHT — THEMIS slope alpha, matched qhac=0.17, umin=1.0, gamma=0.1.
 m_alpha = _knob_model("themis", dust_gamma_dl=Fixed(0.1), dust_qhac=Fixed(0.17))
 p_alpha = dict(m_alpha.spec.sample(jax.random.PRNGKey(0)))
+print("§6 knobs — THEMIS α sweep (tengri / CIGALE, median in band):")
 for a, c in zip([1.0, 2.0, 3.0], ["C0", "C1", "C3"]):
     sed = C.run_chain(
         [
@@ -1101,6 +1137,11 @@ for a, c in zip([1.0, 2.0, 3.0], ["C0", "C1", "C3"]):
     w_t, nl_t = _nu_lnu(o.wavelength, o.sed)
     ax_r.loglog(w_t, nl_t, color=c, lw=_TNG_LW, label=rf"$\alpha={a}$")
     _peaks.append(float(np.nanmax(nl_t)))
+    _rk = U.regrid(w_t, nl_t, w_c) / np.where(nl_c > 0, nl_c * _KNOB_MASS, np.nan)
+    print(
+        f"    α = {a}:  8–30 µm {_band_median(_rk, w_c, 8.0, 30.0):.4f}×"
+        f"   8–1000 µm {_band_median(_rk, w_c, 8.0, 1000.0):.4f}×"
+    )
 ax_r.plot([], [], "k-", **_REF_KW, label="pcigale")
 ax_r.plot([], [], "k-", lw=_TNG_LW, label="tengri")
 ax_r.set(xlim=(3e4, 1e7), xlabel=r"$\lambda$ [Å]", title=r"THEMIS radiation-field slope $\alpha$")
@@ -1130,6 +1171,26 @@ plt.show()
 # `dust_attenuation={'lyman_cutoff': True}` applies the same 912 Å clip on both sides.
 
 # %%
+# Two panels on independent y-axes read as agreement whatever they contain,
+# so the band-by-band ratio is printed beside them. The §6 model, seen from
+# the Lyman continuum to the submillimeter.
+_r_pan = U.regrid(np.asarray(s_ir.wave), np.asarray(s_ir.sed_intrinsic), w_c_ir) / np.where(
+    L_c_ir > 0, L_c_ir, np.nan
+)
+print("§7 panchromatic median ratio (tengri / CIGALE):")
+for _lo, _hi, _wname in (
+    (200.0, 912.0, "200–912 Å (LyC) "),
+    (912.0, 1200.0, "912–1200 Å      "),
+    (1200.0, 3000.0, "1200–3000 Å     "),
+    (3000.0, 10000.0, "0.3–1 µm        "),
+    (3.0e4, 8.0e4, "3–8 µm          "),
+    (1.0e5, 1.0e6, "10–100 µm       "),
+    (1.0e6, 1.0e7, "100–1000 µm     "),
+):
+    _mp = (w_c_ir >= _lo) & (w_c_ir <= _hi) & np.isfinite(_r_pan)
+    if _mp.any():
+        print(f"    {_wname}: {float(np.median(_r_pan[_mp])):.4f}×")
+
 fig, (ax_l, ax_r) = plt.subplots(1, 2, sharey=True, figsize=(12, 5))
 U.panel(
     ax_l, ax_r, label_l="pcigale  fiducial chain", label_r="tengri  sfh.delayed + dust.dale2014"
@@ -1367,6 +1428,22 @@ _m_neb_dense = SEDModel.build(
 _s_neb_dense = _m_neb_dense.predict_state({})
 _w_t_dense = np.asarray(_s_neb_dense.wave)
 _L_t_dense = np.asarray(_s_neb_dense.derived["sed_nebular"])
+
+# The ionizing budget first. Every line scales with the Q_H handed to the
+# emitter, so a line ratio read without it cannot separate "different line
+# physics" from "different number of ionizing photons". CIGALE publishes it
+# as ``stellar.n_ly``; tengri as ``derived["nion"]``. Both sides form 1 M☉,
+# so the two are directly comparable.
+_n_ly_c = float(sed_c_neb.info["stellar.n_ly"])
+print("§8 ionizing photon rate Q_H reaching the emitter [ph/s per M☉ formed]:")
+print(f"    CIGALE  stellar.n_ly on BC03      {_n_ly_c:.4e}")
+for _label, _st in (
+    ("tengri  shared BC03 SSP          ", s_neb),
+    ("tengri  dense FSPS MIST+MILES    ", _s_neb_dense),
+):
+    _qh = float(np.asarray(_st.derived["nion"]))
+    print(f"    {_label}{_qh:.4e}  → {_qh / _n_ly_c:.3f}×")
+
 print("§8 integrated line luminosity (tengri Cue / CIGALE CLOUDY; tengri on dense FSPS SSP):")
 for _c, _name in [(6563.0, "Hα"), (5007.0, "[O III]"), (4861.0, "Hβ")]:
     _lc = U.line_lum(w_c_neb, L_c_neb_only, _c)
@@ -1375,6 +1452,10 @@ for _c, _name in [(6563.0, "Hα"), (5007.0, "[O III]"), (4861.0, "Hβ")]:
         print(
             f"    {_name} {_c:.0f} Å: CIGALE {_lc:.2e}, tengri {_lt:.2e} erg/s → {_lt / _lc:.2f}×"
         )
+    else:
+        # Not skipped silently: an empty CIGALE window is a grid-resolution
+        # failure of the measurement, not an absent line.
+        print(f"    {_name} {_c:.0f} Å: CIGALE window holds < 2 grid points — not measurable here")
 
 
 # %% [markdown]
@@ -1655,6 +1736,78 @@ for _name, _lo, _hi in [
     _m = (w_c_agn >= _lo) & (w_c_agn <= _hi) & (L_c_agn > 0)
     if _m.any():
         print(f"  {_name}: {float(np.median(ratio_agn[_m])):.3f}×")
+
+
+# A band ratio locates a residual in wavelength; it does not say which
+# component carries it, and in the FIR three of them overlap. CIGALE separates
+# its SKIRTOR contributions (``agn.SKIRTOR2016_disk`` / ``_torus`` /
+# ``_polar_dust``) and tengri publishes the same three on ``state.derived``,
+# so the comparison can be made component by component instead.
+def _lbol_nu(wave_aa, l_nu):
+    """∫L_ν dν [erg/s] from L_ν [erg/s/Hz] on an Å grid."""
+    w = np.asarray(wave_aa)
+    order = np.argsort(w)[::-1]  # → increasing frequency
+    return float(np.trapezoid(np.asarray(l_nu)[order], C_AA / w[order]))
+
+
+def _agn_component_pair(sed_c, state_t, cig_key, tengri_key):
+    """(CIGALE, tengri) ∫L_ν dν for one AGN component, on their shared support.
+
+    Both codes are integrated over the same wavelength points — CIGALE's grid,
+    masked to where both sides are non-zero — so the ratio is a luminosity
+    comparison and not a difference in grid extent.
+    """
+    _wc, _Lc = U.wnm_to_erg_per_hz_per_aa(
+        np.asarray(sed_c.wavelength_grid), np.asarray(sed_c.luminosities[cig_key])
+    )
+    _Lt_on_c = U.regrid(np.asarray(state_t.wave), np.asarray(state_t.derived[tengri_key]), _wc)
+    _m = (_Lc > 0) & (_Lt_on_c > 0)
+    if int(_m.sum()) < 2:
+        return float("nan"), float("nan")
+    return _lbol_nu(_wc[_m], _Lc[_m]), _lbol_nu(_wc[_m], _Lt_on_c[_m])
+
+
+_AGN_COMPONENTS = (
+    ("disc      ", "agn.SKIRTOR2016_disk", "sed_agn_disc"),
+    ("torus     ", "agn.SKIRTOR2016_torus", "sed_agn_torus"),
+    ("polar dust", "agn.SKIRTOR2016_polar_dust", "sed_agn_polar"),
+)
+
+
+def _disc_shape_dev(sed_c, state_t, lo=1000.0, hi=5000.0):
+    """max |Δ| between the emergent disc shapes, each set to 1 at 2500 Å.
+
+    Normalizing at 2500 Å removes the luminosity scale, which the component
+    ladder reports separately. What is left is the *shape* of the disc that
+    emerges — the analytic disc times the polar-dust screen, because both
+    codes redden the disc before publishing it.
+    """
+    _wc, _Lc = U.wnm_to_erg_per_hz_per_aa(
+        np.asarray(sed_c.wavelength_grid),
+        np.asarray(sed_c.luminosities["agn.SKIRTOR2016_disk"]),
+    )
+    _Lt = U.regrid(np.asarray(state_t.wave), np.asarray(state_t.derived["sed_agn_disc"]), _wc)
+    _j = int(np.argmin(np.abs(_wc - 2500.0)))
+    _r = (_Lt / _Lt[_j]) / (_Lc / _Lc[_j])
+    _m = (_wc >= lo) & (_wc <= hi) & (_Lc > 0) & (_Lt > 0)
+    return float(np.abs(_r[_m] - 1.0).max()), int(_m.sum())
+
+
+def _print_agn_report(header, sed_c, state_t):
+    """Print the emergent-disc shape deviation and the three component ratios."""
+    print(header)
+    _dev, _n = _disc_shape_dev(sed_c, state_t)
+    print(f"  disc shape, 1000–5000 Å, normalized at 2500 Å: max |Δ| = {_dev * 100:.2f}% ({_n} pts)")
+    for _name, _ck, _tk in _AGN_COMPONENTS:
+        _bc, _bt = _agn_component_pair(sed_c, state_t, _ck, _tk)
+        print(f"  {_name}: CIGALE {_bc:.4e}, tengri {_bt:.4e} erg/s → {_bt / _bc:.4f}×")
+
+
+_print_agn_report(
+    "§9 AGN parity, component by component (∫L_ν dν; schartmann2005 disc):",
+    sed_skirtor,
+    s_agn,
+)
 fig.tight_layout()
 save_fig("cigale_09c_agn_parity_ratio.png")
 plt.show()
@@ -1665,13 +1818,19 @@ plt.show()
 #
 # CIGALE's `skirtor2016` offers two analytic discs (`skirtor2016.py`):
 # `disk_type=0` → `skirtor_disk()` and `disk_type=1` →
-# `schartmann2005_disk()`. tengri ships **both, bit-for-bit**, each to
-# machine precision (the unit-area disc shapes agree to ~1e-16). The panel
-# above pins the `disk_type=1` pairing; this one swaps to `disc.skirtor`.
-# The UV–optical disc continuum (where the disc, not the torus, dominates)
-# overlies CIGALE exactly — the shallower SKIRTOR disc with its 1200 Å
-# bend, distinct from the Schartmann disc's shape. The MIR/FIR torus
-# agreement is independent of the disc choice.
+# `schartmann2005_disk()`. tengri ships both, as `disc.skirtor` and
+# `disc.schartmann2005`; §9 pins the `disk_type=1` pairing and this one swaps
+# to `disc.skirtor`, the shallower SKIRTOR disc with its 1200 Å bend. Only the
+# disc changes: the torus, the polar-dust block and the `fracAGN` coupling are
+# §9's, so the printed ladder repeats §9's with one entry moved.
+#
+# **What the disc-shape number contains.** Both codes publish the disc *after*
+# the polar-dust screen, so the deviation printed below is the analytic disc
+# shape and the SMC screen together, and the screen is the larger of the two.
+# The disc-dependent part is the difference between this section's number and
+# §9's, printed under the same definition on the same grid; whatever is common
+# to both is the screen, not the disc. Turning the screen off on both sides
+# leaves ~1 %, which is the regridding onto CIGALE's grid.
 
 # %%
 sed_skirtor0 = C.run_chain(
@@ -1741,6 +1900,12 @@ m_agn_sk = SEDModel.build(
     neb={"type": "ssp"}, redshift=Fixed(0.0),
 )
 s_agn_sk = m_agn_sk.predict_state({})
+
+_print_agn_report(
+    "§9b AGN parity, component by component (∫L_ν dν; skirtor disc):",
+    sed_skirtor0,
+    s_agn_sk,
+)
 
 fig, ax_l, ax_r = U.two_panel_fig()
 U.panel(
@@ -1894,15 +2059,12 @@ def _tengri_xray(log_lbol, cos_inc):
             "type": "composable",
             "disc": {"type": "schartmann2005", "all_params": Fixed(DEFAULT)},
             "torus": {"type": "skirtor", "all_params": Fixed(DEFAULT)},
-            # Polar dust is declared and switched off, matching the ``EBV=0.0``
-            # in this section's skirtor2016 call. Leaving the block out would
-            # reach the same SED, but by omission rather than by statement —
-            # and it is the one AGN input §9 and §10 deliberately differ on.
-            "atten": {
-                "type": "polar_dust",
-                "agn_polar_ebv": Fixed(0.0),
-                "all_params": Fixed(DEFAULT),
-            },
+            # Polar dust off, matching the ``EBV=0.0`` in this section's
+            # skirtor2016 call — stated rather than left to omission, since it
+            # is the one AGN input §9 and §10 deliberately differ on.
+            # ``type='none'`` and not ``polar_dust`` with ebv = 0: the block
+            # refuses to be selected with no extinction to apply.
+            "atten": {"type": "none"},
             # No ``agn_ir_frac`` here: this section solves for the disc power
             # directly, so ``agn_log_lbol`` is the knob that acts.
             "agn_log_lbol": Fixed(log_lbol),
