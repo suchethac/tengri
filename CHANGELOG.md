@@ -8,6 +8,21 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 
 ### Fixed
 
+- The no-state emission-line dust screen (`SEDModel._attenuate_line_catalog`,
+  used when `dust_model` is `off`/`wg00` and by the #950
+  `enable_fast_nebular()` grid path) built its own law kwargs from exactly
+  `dust_slope` and `dust_bump_strength` via `emission_helpers.attenuate_emission`,
+  so `dust_delta` (kriek_conroy, salim, noll09, salim_sbl18, tea), `dust_Rv`
+  (cardelli, conroy2010) and `redshift` (narayanan_z) reached the CONTINUUM
+  screen but not the LINE screen, and per-screen overrides
+  (`slope_bc`/`slope_diff`) and `dust_f_obscuration` reached neither the
+  Lyman clip nor the covering fraction on the line side at all. It now
+  dispatches to the dust component's own `attenuate_line_catalog`
+  (`DustSEDComponent` / `DustAttenuationSEDComponent`), the same method the
+  live forward pass calls for its continuum, so there is exactly one
+  implementation of the two-component line screen. `attenuate_emission` is
+  removed; it had no public callers left (#2223).
+
 - `multicolor_disc`'s pure-float32 bolometric renormalization returned
   `l_nu_intrinsic * scale`, and transposing that product makes JAX form
   `sum(g * l_nu_intrinsic)`. With the raw disc SED (~1e28) and the cotangent
