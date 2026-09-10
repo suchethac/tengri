@@ -178,7 +178,13 @@ def test_wildcard_never_frees_torus_frac_when_fracagn_active(ssp, obs, torus_typ
         "disc": {"type": "skirtor", "all_params": Fixed(DEFAULT)},
         "torus": {"type": torus_type, "all_params": FREE},
         "agn_log_lbol": Fixed(12.0),
-        "norm": "independent",
+        # 'conserving', not 'independent': R65 refuses 'independent' beside an
+        # active fracAGN (disc and torus would sit on unrelated luminosity
+        # scales). The narrowing this test measures is a property of an active
+        # fracAGN alone -- AGNSEDComponent.apply() overrides agn_torus_frac
+        # "regardless of agn_norm" -- so any policy that admits the pair
+        # exercises it.
+        "norm": "conserving",
         "ir_frac": Fixed(0.5),
     }
     with warnings.catch_warnings():
@@ -276,7 +282,10 @@ def _build_with_placement(
         "disc": {"type": "skirtor", "all_params": Fixed(DEFAULT)},
         "torus": torus,
         "agn_log_lbol": Fixed(12.0),
-        "norm": "independent",
+        # Every placement below makes fracAGN active, and R65 refuses
+        # 'independent' beside an active fracAGN; 'conserving' admits the pair
+        # and the override this file measures is agn_norm-independent.
+        "norm": "conserving",
     }
     if location == "<top>":
         agn[key] = Fixed(0.5)

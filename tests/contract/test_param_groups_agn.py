@@ -1582,6 +1582,12 @@ class TestAgnLogLbolFracAgnConflict:
     cigale_joint + skirtor, ``agn_ir_frac=0.0``   2.51e+05  live
     ==========================================  ==========  ======
 
+    The ``norm='independent'`` row stays live and R55 still does not refuse
+    it -- but that build is refused one guard over, by R65
+    (``_validate_independent_norm_without_fracagn``), because disc and torus
+    then sit on unrelated luminosity scales. R55's message no longer offers it
+    as a way out.
+
     Exactly one row is inert, so the refusal must be that narrow. It is, and
     not by restating those five carve-outs as a condition list that can go
     stale: #2069's guard *measures* the SED at the prior bounds and refuses
@@ -1689,15 +1695,38 @@ class TestAgnLogLbolFracAgnConflict:
         model = self._build(synthetic_ssp_wide, log_lbol=Fixed(12.0), ir_frac=Fixed(0.0))
         assert model.spec.agn_model == "composable"
 
-    def test_independent_norm_does_not_raise(self, synthetic_ssp_wide):
-        """``norm='independent'`` puts the disc on ``agn_log_lbol`` itself.
+    def test_independent_norm_with_active_ir_frac_now_raises(self, synthetic_ssp_wide):
+        """R65 refuses this build; R55's own measurement is unchanged.
 
-        Measured live: 2.51e5 relative across the prior, with
-        ``agn_ir_frac=0.3`` active.
+        ``norm='independent'`` does put the disc on ``agn_log_lbol`` itself --
+        measured live 2.51e5 relative across the prior with
+        ``agn_ir_frac=0.3`` active, the table row above, and that is why R55
+        does not refuse it. It is now refused one guard over, by R65
+        (``_validate_independent_norm_without_fracagn``), for a different
+        reason: the disc is then on ``agn_log_lbol`` while the torus follows
+        ``L_absorbed x f/(1 - f)``, so ``int(disc)/int(torus)`` reports the
+        stellar mass (measured 5.00e+10 at ``log M* = 0`` down to 5.00e-02 at
+        ``log M* = 12``). R65 fires first, so the two refusals are told apart
+        by which message comes back -- this asserts R65's, and
+        ``tests/contract/test_agn_norm_ir_frac_coherence.py`` holds the rest.
+        R55's own remedy no longer names this configuration.
         """
-        model = self._build(
-            synthetic_ssp_wide, log_lbol=Fixed(12.0), ir_frac=Fixed(0.3), norm="independent"
-        )
+        from tengri.config.exceptions import ConfigError
+
+        with pytest.raises(ConfigError, match=r"agn_norm='independent'") as exc:
+            self._build(
+                synthetic_ssp_wide, log_lbol=Fixed(12.0), ir_frac=Fixed(0.3), norm="independent"
+            )
+        assert "cigale_joint" in str(exc.value)
+
+    def test_independent_norm_without_ir_frac_still_builds(self, synthetic_ssp_wide):
+        """The half of the row R65 leaves alone: no coupling, no refusal.
+
+        Keeps the ``norm='independent'`` arm of R55's table live after R65
+        narrowed it, so the guard above is not the only thing this class says
+        about that policy.
+        """
+        model = self._build(synthetic_ssp_wide, log_lbol=Fixed(12.0), norm="independent")
         assert model.spec.agn_model == "composable"
 
     def test_non_skirtor_torus_does_not_raise(self, synthetic_ssp_wide):

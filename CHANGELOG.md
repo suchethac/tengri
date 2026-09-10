@@ -391,6 +391,31 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
   (`resolve_dust_screen_laws`), so the diffuse screen's law is always stated,
   not inherited (#2021).
 
+- **`agn={'norm': 'independent'}` beside an active `agn_ir_frac` now raises
+  `ConfigError` at build time instead of silently producing an AGN whose
+  disc/torus ratio reports the stellar mass.** fracAGN is the CIGALE
+  `skirtor2016` coupling: it derives the AGN power from the dust-absorbed
+  stellar luminosity, `L_absorbed * f/(1 - f)`, and every `agn_norm` policy
+  routes the torus through that derived power. `'independent'`, by its own
+  contract, does not route the disc through it — the disc stays on
+  `10**agn_log_lbol`. Measured (composable `disc='schartmann2005'` +
+  `torus='skirtor'`, `dust_emission='dale2014_cigale'`), sweeping only the
+  stellar mass and reading `int(sed_agn_disc)/int(sed_agn_torus)`: `5.00e+10`
+  at `log M* = 0` down to `5.00e-02` at `log M* = 12` — twelve orders of
+  magnitude, exactly `1/M*`. The same sweep holds `2.838156` at every mass
+  under `'cigale_joint'` and `2.001533` under `'independent'` with no fracAGN,
+  so the pathology is the *pair*, and only the pair is refused. Nothing
+  raised or warned before, and the four sub-block SEDs still summed to
+  `sed_agn` exactly, so the accounting looked intact.
+
+  An explicit `agn_ir_frac=Fixed(0.0)` states "no coupling" and stays legal —
+  it is one of the three remedies the refusal names. The #2069/R55
+  `agn_log_lbol` refusal previously offered "set `agn_norm='independent'`" as
+  a way out; that advice named this configuration, so it has been corrected
+  to say `agn_ir_frac=0.0` (which then lets `'independent'` put the disc on
+  `agn_log_lbol`) and to state that switching policy while keeping fracAGN
+  active is refused separately.
+
 - **The CIGALE-lineage SKIRTOR grid's stored inclination normalization is now
   read and applied, so every `agn_norm='cigale_joint'` + `torus='skirtor'`
   render becomes inclination-dependent where it was flat.**
