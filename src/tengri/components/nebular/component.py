@@ -133,8 +133,11 @@ class NebularSEDComponentConfig(SEDComponentConfig):
         :meth:`tengri.forward.prediction.EmissionLines.get`. Default
         ``False`` matches the pre-#303 behavior (128 CLOUDY/FSPS
         lines) and avoids surprising users who iterate over
-        ``all_waves`` / ``all_lums``. No effect on the headline
-        Hα/Hβ/etc. named accessors, which always work.
+        ``all_waves`` / ``all_lums``. Affects one headline accessor:
+        ``civ_1549`` (C IV, a Cue-only line) has no entry within 5 A
+        in the default 128-line subset and returns NaN there (#2192's
+        no-match answer), while every other headline Hα/Hβ/etc.
+        accessor is unaffected either way (#2236).
     """
 
     name: str = "nebular"
