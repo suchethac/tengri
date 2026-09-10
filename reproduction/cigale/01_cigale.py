@@ -50,13 +50,19 @@ os.environ.setdefault("TENGRI_NO_BACKGROUND_COMPILE", "1")
 import warnings
 
 # Register CIGALE's own Dale et al. 2014 grid for this reproduction notebook.
-# The shipped ``data/dale2014_templates.h5`` is the unmodified Wyoming-source
-# Dale et al. 2014 release, whose tengri name (``dale2014``) embeds an SF
-# radio tail and so refuses to compose with a separate ``radio={...}`` block
-# (#1970). ``data/dale2014_templates_cigale.h5`` matches CIGALE's actual
-# ``dale2014`` SED template directly and carries no such tail -- register it
-# under tengri's tail-free Dale name, ``dale2014_cigale``, the name whose
-# contract is exactly "no radio tail; compose with a separate radio block".
+# tengri ships two Dale grids and they are different data, which is why the
+# comparison has to name one. ``data/dale2014_templates.h5`` (tengri's
+# ``dale2014``) is the unmodified Wyoming-source release, and it embeds a
+# star-forming radio synchrotron continuum rising to 2.2459e9 Å;
+# ``data/dale2014_templates_cigale.h5`` (``dale2014_cigale``) is CIGALE's own
+# ``dale2014`` SED template, whose red end falls away (measured slope -5.5),
+# because CIGALE adds radio in a separate module. This notebook wants the
+# latter: it is what pcigale evaluates on the other side of every panel, and
+# it is also the only one of the two that can compose with a separate
+# ``radio={...}`` block without double-counting the synchrotron between
+# ~1.34 and ~10 GHz. tengri refuses that composition by reading the selected
+# grid's own red edge, not by its registry name, so this is a choice about
+# which templates the reproduction needs rather than a way around a guard.
 # Both files come from ``scripts/regenerate_dale2014_from_{cigale,official}.py``.
 from pathlib import (
     Path,
@@ -2884,10 +2890,15 @@ plt.show()
 #   the emitter difference rather than measuring it. A Cloudy-against-Cloudy
 #   comparison at matched Q_H would close it and is not run here.
 # * **§9 AGN.** Disc, torus and polar dust are compared as three separate
-#   luminosities rather than as band medians of their sum, so a FIR residual
-#   can be attributed to a component instead of to a wavelength. The disc
-#   agrees to a few percent under either `disk_type`; the AGN dust budget does
-#   not, and §9c and §9b print which of the two dust components carries it.
+#   integrated luminosities rather than as band medians of their sum, so a FIR
+#   residual can be attributed to a component instead of to a wavelength — at
+#   100 µm all three overlap. Under the `cigale_joint` normalization the torus
+#   lands 6–8 % above CIGALE's and the polar graybody 13–20 % below it, while
+#   the disc is 2.8 % high with the Schartmann shape (§9) and 7 % low with the
+#   SKIRTOR one (§9b). The emergent disc *shape* differs by 4.7 % and 6.0 %
+#   respectively, most of which is the two codes' polar SMC screens rather
+#   than the disc: it is common to both pairings, and only the gap between
+#   them is the disc.
 # * **§10 X-ray.** Matched to 4 decimal places on disc L_2500, then a
 #   fraction of a percent at 2 keV, and the Yang+2022 inclination tilt is the
 #   same function on both sides across i = 0–80°.
