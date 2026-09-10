@@ -8,6 +8,21 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 
 ### Fixed
 
+- The flat `Parameters(...)` form refuses a dust shape parameter or a
+  `dust_law_overrides` entry that the resolved attenuation law never reads, and
+  an override screen other than `bc`/`diff`/`neb`, through the same validator
+  the `SEDModel.build` grammar uses; before, `Parameters(dust_law_bc="calzetti",
+  dust_Rv=Fixed(4.0))` built and `dust_Rv` silently never reached the model.
+  Registry defaults on omission are unchanged. Inside `dust_attenuation={...}`
+  the full registry spellings (`dust_tau_bc`, `dust_law_bc`) are normalized to
+  the grammar stems before any check runs, so `tau_bc` plus `dust_tau_diff` no
+  longer trips a false completeness error and two spellings of one key raise.
+  `with_params()` and `merge_observation_params()` carry a fresh provenance map,
+  so a shape parameter merged into a flat spec is live. The twelve per-screen
+  grammar keys derive from one constant (`tengri.parameters._dust_keys`), and
+  `check_dust_law_kwargs.py` checks law keyword spelling at every call site in
+  `src/`, `tests/`, `bench/`, `examples/` and `analysis/`.
+
 - LogNormal, StudentT and Laplace derive their truncation flag from the distribution's natural support instead of from CDF values that underflow beyond ~8 sigma, so a far finite bound is no longer silently ignored in latent space; Gaussian shares the same rule via Distribution._is_truncated (#2233).
 
 - The no-state emission-line dust screen (`SEDModel._attenuate_line_catalog`,
