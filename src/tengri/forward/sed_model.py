@@ -5360,31 +5360,40 @@ class SEDModel:
         backend = getattr(self, "_nebular_backend", None)
         return backend is not None and hasattr(backend, "predict_nebular_line_luminosities")
 
-    def _attenuate_line_catalog(self, params, line_waves, line_lums):
-        """Dust-redden a discrete nebular line catalog at its wavelengths.
-
-        THE single source of nebular-line reddening (Charlot & Fall 2000 birth-
-        cloud + diffuse), used by :meth:`predict_line_fluxes` AND the interactive
-        ``model.predict(params).lines`` catalog, so no public line path is
-        silently intrinsic while carrying an "observed" contract. Backends publish
-        INTRINSIC ``line_lums``; this applies the same operator the continuum
-        nebular SED gets. JIT-safe (pure ``jnp`` via ``attenuate_emission``).
+    def _line_dust_component(self):
+        """The chain's dust component (``name`` "dust"/"dust_attenuation"), or
+        ``None`` for dust off/wg00 (neither declares ``attenuate_line_catalog``).
         """
-        from tengri.forward.emission_helpers import attenuate_emission
+        chain = getattr(self, "_cached_component_chain", None) or self._build_component_chain()
+        for component in chain:
+            if getattr(component, "name", None) in ("dust", "dust_attenuation"):
+                return component
+        return None
 
-        _is_single = self._dust_model == "single_component"
-        return attenuate_emission(
-            line_lums,
-            line_waves,
-            self._neb_dust_mode,
-            jnp.asarray(params.get("dust_tau_bc", params.get("dust_tau_v", 0.0))),
-            jnp.asarray(params.get("dust_tau_diff", 0.0)),
-            self._dust_law_bc_fn,
-            self._dust_law_bc_fn if _is_single else self._dust_law_diff_fn,
-            neb_bc_fn=self._neb_dust_law_bc_fn,
-            dust_slope=jnp.asarray(params.get("dust_slope", -0.7)),
-            dust_bump_strength=jnp.asarray(params.get("dust_bump_strength", 0.0)),
+    def _attenuate_line_catalog(self, params, line_waves, line_lums):
+        """Dust-redden a line catalog with no :class:`ForwardState` (#2223).
+
+        THE no-state fallback for :meth:`predict_line_fluxes` (dust
+        off/wg00, or the #950 ``enable_fast_nebular()`` grid path) and the
+        deprecated :meth:`predict_emission_lines`. Dispatches to
+        :meth:`_line_dust_component`'s own ``attenuate_line_catalog`` -- the
+        SAME method the live forward pass calls for its continuum -- so this
+        path cannot thread a different ``dust_delta``/``dust_Rv``/``redshift``/
+        per-screen override than the live one. ``line_lums`` is INTRINSIC and
+        LINEAR [erg/s]; returns it unchanged when dust is off/wg00. JIT-safe
+        (pure ``jnp`` once the static component lookup completes); the linear
+        contract can itself overflow float32 at typical line luminosities, a
+        pre-existing caveat (#1206 §3), not introduced here.
+        """
+        component = self._line_dust_component()
+        if component is None:
+            return line_lums
+        from tengri.utils.scale import log10_magnitude, pow10
+
+        log_atten = component.attenuate_line_catalog(
+            params, jnp.asarray(line_waves), log10_magnitude(jnp.asarray(line_lums))
         )
+        return pow10(log_atten)
 
     def predict_line_fluxes(
         self, params, target_wavelengths=None, tolerance_aa=5.0, *, redden=True, state=None
@@ -5538,16 +5547,22 @@ class SEDModel:
         # surfaces are on ONE screen. "Single-sourced" is what the previous
         # comment here claimed; it was not, and the two differed.
         #
-        # `_attenuate_line_catalog` routes through
-        # `emission_helpers.attenuate_emission`, whose signature names only
-        # `dust_slope` and `dust_bump_strength`, it cannot thread `dust_delta`
-        # or `dust_Rv` at all, and forces the bump to the spec's Fixed(0.0)
-        # over any law's own default (#1858). Measured on the Balmer decrement,
-        # property surface against this one: `calzetti` (which reads no shape
-        # parameter) agreed to 4e-15, while `narayanan_z` (bump 1.0, delta -0.2)
-        # disagreed by 1.1e-3 rising to 2.5e-3. The law that cannot see the
-        # defect agreeing to machine precision is what identifies the shape
-        # parameters as the whole of it.
+        # Before #2223, `_attenuate_line_catalog` routed through
+        # `emission_helpers.attenuate_emission`, whose signature named only
+        # `dust_slope` and `dust_bump_strength`: it could not thread `dust_delta`
+        # or `dust_Rv` at all, and forced the bump to the spec's Fixed(0.0)
+        # over any law's own default (#1858). This published-catalog route
+        # exists because of that gap: it reads the catalog the live dust
+        # component already reddened correctly, rather than re-deriving it
+        # through the broken fallback. Pre-#2223 measurement on the Balmer
+        # decrement, property surface against this one: `calzetti` (which
+        # reads no shape parameter) agreed to 4e-15, while `narayanan_z`
+        # (bump 1.0, delta -0.2) disagreed by 1.1e-3 rising to 2.5e-3. The law
+        # that could not see the defect agreeing to machine precision is what
+        # identified the shape parameters as the whole of it. Since #2223 the
+        # fallback dispatches to the dust component's own
+        # `attenuate_line_catalog`, so this route and the fallback below now
+        # agree by construction.
         #
         # The fallback keeps `redden=True` meaningful for a chain that publishes
         # no attenuated catalog, no dust component, or a backend with no
@@ -7262,10 +7277,15 @@ class SEDModel:
 
         Notes
         -----
-        Dust attenuation is applied to the line luminosities in the
-        attenuation regime selected by ``_neb_dust_mode`` (default
-        ``"bc"``, birth-cloud + diffuse, Charlot & Fall 2000 [1]_).
-        The line-attenuated values match the continuum treatment in
+        Dust attenuation is applied to the line luminosities through the
+        configured dust component (birth-cloud + diffuse, Charlot & Fall
+        2000 [1]_, for ``two_component``; the single screen for
+        ``single_component``; unattenuated for ``off``/``wg00``), the same
+        dispatch :meth:`_attenuate_line_catalog` uses (#2223). ``_neb_dust_mode``
+        / ``neb_dust_law_bc`` are unused config left over from an older,
+        mode-selectable nebular screen that nothing in the grammar sets
+        anymore; the live path always applies the birth-cloud + diffuse
+        treatment. The line-attenuated values match the continuum treatment in
         :meth:`predict_rest_sed`, so Balmer decrement, BPT, and other
         line-ratio diagnostics behave correctly under a dust sweep
         (regression: issue #313).
@@ -7302,7 +7322,6 @@ class SEDModel:
                 "line wavelength range yourself."
             )
         from tengri.forward import state_to_emission_lines
-        from tengri.forward.emission_helpers import attenuate_emission
 
         state = self.predict_state(params)
         lines = state_to_emission_lines(state)
@@ -7323,28 +7342,11 @@ class SEDModel:
 
             atten_lums = pow10(jnp.asarray(_log_atten))
         else:
-            # Fallback for a chain that published no attenuated catalog. Charlot
-            # & Fall 2000: lines from young populations (HII regions) experience
-            # BC + diffuse; single-component dust applies the BC law twice
-            # (degenerate fallback).
-            tau_bc = jnp.asarray(params.get("dust_tau_bc", params.get("dust_tau_v", 0.0)))
-            tau_diff = jnp.asarray(params.get("dust_tau_diff", 0.0))
-            dust_kw = dict(
-                dust_slope=jnp.asarray(params.get("dust_slope", -0.7)),
-                dust_bump_strength=jnp.asarray(params.get("dust_bump_strength", 0.0)),
-            )
-            _is_single = self._dust_model == "single_component"
-            atten_lums = attenuate_emission(
-                lines.all_lums,
-                lines.all_waves,
-                self._neb_dust_mode,
-                tau_bc,
-                tau_diff,
-                self._dust_law_bc_fn,
-                self._dust_law_diff_fn if not _is_single else self._dust_law_bc_fn,
-                neb_bc_fn=self._neb_dust_law_bc_fn,
-                **dust_kw,
-            )
+            # Fallback for a chain that published no attenuated catalog
+            # (dust off/wg00): the SAME no-state screen `predict_line_fluxes`
+            # falls back to (#2223), so this deprecated surface cannot drift
+            # from its replacement even off that published-catalog fast path.
+            atten_lums = self._attenuate_line_catalog(params, lines.all_waves, lines.all_lums)
 
         # Re-extract the headline scalars from the attenuated catalog
         # so EmissionLines.halpha / .hbeta / etc. reflect dust.
