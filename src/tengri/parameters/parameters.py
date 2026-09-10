@@ -53,6 +53,7 @@ Shorthand DPL equivalent::
 from __future__ import annotations
 
 import copy
+import types
 import zlib
 
 import jax
@@ -67,6 +68,11 @@ from tengri.parameters._builders import (
     SETTINGS_KEYS,
     _build_param_registry,
     _resolve_lazy_bucket,
+)
+from tengri.parameters._dust_keys import (
+    OVERRIDE_STEMS,
+    short_to_full,
+    validate_shape_requests,
 )
 from tengri.parameters._dust_laws import resolve_dust_screen_laws
 from tengri.parameters.priors import (
@@ -438,11 +444,14 @@ class Parameters:
         # propagates through to :meth:`SEDModel._init_igm` (#344, #440).
         self.igm_model = kwargs.pop("igm_model", "inoue")
 
+        # Pop private grammar flag before any user-facing bookkeeping
+        grammar_validated = bool(kwargs.pop("_grammar_validated", False))
+
         # ── Nebular emission ──────────────────────────────────────
         self._init_nebular_config(kwargs)
 
         # ── Dust ──────────────────────────────────────────────────
-        self._init_dust_config(kwargs)
+        self._init_dust_config(kwargs, validate_flat=not grammar_validated)
 
         # ── Component flags ───────────────────────────────────────
         self.igm_patchy = kwargs.pop("igm_patchy", False)
@@ -699,10 +708,12 @@ class Parameters:
         # today, ``SEDModel._requested_law_shape_params``, falls back to this
         # map ONLY when ``_group_provenance`` is absent, so parse_groups' own
         # map -- attached after this constructor returns -- always wins.
-        self._flat_provenance: dict[str, str] = {
-            name: ("user_fixed" if self._distributions[name].is_fixed else "user_prior")
-            for name in user_names
-        }
+        self._flat_provenance: types.MappingProxyType = types.MappingProxyType(
+            {
+                name: ("user_fixed" if self._distributions[name].is_fixed else "user_prior")
+                for name in user_names
+            }
+        )
 
         # Eagerly validate the composable block recipe now that distributions
         # exist: a typo raises and suspicious combos warn *before* the forward
@@ -895,7 +906,7 @@ class Parameters:
                     )
                     kwargs.pop(name)
 
-    def _init_dust_config(self, kwargs):
+    def _init_dust_config(self, kwargs, *, validate_flat: bool = True):
         """Resolve dust model, attenuation law, and emission from kwargs."""
         self.dust_model = kwargs.pop("dust_model", "two_component")
         # 'none' is the user-facing spelling; 'off' is the internal sentinel the
@@ -947,6 +958,25 @@ class Parameters:
         # nebular birth cloud inherits the stellar birth-cloud params. Set by
         # the builder from slope_bc / delta_diff / slope_neb /…
         self.dust_law_overrides = kwargs.pop("dust_law_overrides", {}) or {}
+
+        # Validate flat-form dust shape parameters against the resolved laws.
+        # The grammar passes all shape parameters at their registry defaults and has
+        # already validated per-screen keys via _reject_per_screen_keys_no_law_reads
+        # and shared spellings via _dust_wildcard_scopes. Direct Parameters(...) calls
+        # name only what they mean, so this check only runs for them.
+        if validate_flat:
+            shape_names = tuple(short_to_full(stem) for stem in OVERRIDE_STEMS)
+            requests = [(name, None) for name in shape_names if name in kwargs]
+            for comp, overrides in self.dust_law_overrides.items():
+                for law_kw in overrides:
+                    requests.append((law_kw, comp))
+            if requests:
+                validate_shape_requests(
+                    requests,
+                    {"bc": self.dust_law_bc, "diff": self.dust_law_diff, "neb": self.dust_law_neb},
+                    surface="flat",
+                )
+
         # Lyman-limit clip [Å]: zero the attenuation curve below this wavelength
         # (0.0 -> off). Static config, set by the builder from ``lyman_cutoff``.
         self.dust_lyman_cutoff_aa = float(kwargs.pop("dust_lyman_cutoff_aa", 0.0) or 0.0)
@@ -1532,6 +1562,7 @@ class Parameters:
         new_registry = dict(self._param_registry)
         new_defaults = dict(self._defaults)
 
+        merged_provenance = dict(self._flat_provenance)
         for name, val in kwargs.items():
             if name in self._user_provided:
                 # User explicitly set this param: their definition wins
@@ -1544,6 +1575,7 @@ class Parameters:
                 "",
             )
             new_defaults[name] = dist
+            merged_provenance[name] = "user_fixed" if dist.is_fixed else "user_prior"
 
         object.__setattr__(new_spec, "_distributions", new_distributions)
         object.__setattr__(new_spec, "_param_registry", new_registry)
@@ -1555,6 +1587,7 @@ class Parameters:
         )
         # Preserve user_provided set: auto-merged params are NOT user-provided
         object.__setattr__(new_spec, "_user_provided", self._user_provided)
+        object.__setattr__(new_spec, "_flat_provenance", types.MappingProxyType(merged_provenance))
         return new_spec
 
     def resolve_mirrors(self, params: dict) -> dict:
@@ -1803,8 +1836,14 @@ class Parameters:
         2
         """
         new_spec = copy.copy(self)
-        new_spec._distributions = {**self._distributions, **extra_params}
-        new_spec._valid_param_names = self._valid_param_names | frozenset(extra_params.keys())
+        new_distributions = {**self._distributions, **extra_params}
+        merged_provenance = dict(self._flat_provenance)
+        for name, dist in extra_params.items():
+            merged_provenance[name] = "user_fixed" if dist.is_fixed else "user_prior"
+        object.__setattr__(new_spec, "_distributions", new_distributions)
+        new_valid_names = self._valid_param_names | frozenset(extra_params.keys())
+        object.__setattr__(new_spec, "_valid_param_names", new_valid_names)
+        object.__setattr__(new_spec, "_flat_provenance", types.MappingProxyType(merged_provenance))
         return new_spec
 
     def sample(self, key: jax.Array) -> dict[str, jnp.ndarray]:

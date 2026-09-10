@@ -986,7 +986,8 @@ def parse_groups(**kwargs) -> Parameters:
     # range as a defect after that range has already been fixed (#1586).
     with warnings.catch_warnings():
         warnings.simplefilter("ignore", AdvisoryWarning)
-        structural_params = Parameters(**structural_kwargs)
+        # structural_kwargs has registry defaults; bypass validation (not user-provided)
+        structural_params = Parameters(**structural_kwargs, _grammar_validated=True)
 
     # Partition declared params by owning group. ``met_*`` lands in
     # ``"stellar"`` when the user opted into the new top-level slot
@@ -1252,7 +1253,7 @@ def parse_groups(**kwargs) -> Parameters:
     _narrow_free_priors_to_grid(resolved_kwargs, provenance, structural_params)
     _narrow_free_priors_to_z(resolved_kwargs, provenance)
 
-    final_params = Parameters(**resolved_kwargs)
+    final_params = Parameters(**resolved_kwargs, _grammar_validated=True)
     # Fill in provenance for params not touched by user/wildcard
     for name in list(final_params._distributions.keys()):
         provenance.setdefault(name, "registry_default")
