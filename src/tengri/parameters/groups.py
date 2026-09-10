@@ -110,6 +110,15 @@ from tengri.config.exceptions import (
     warn_measured,
 )
 from tengri.parameters._builders import _resolve_lazy_bucket
+from tengri.parameters._dust_keys import (
+    OVERRIDE_STEMS,
+    SCREENS,
+    full_to_short,
+    normalize_dust_group_keys,
+    per_screen_keys,
+    short_to_full,
+    validate_shape_requests,
+)
 from tengri.parameters.parameters import Parameters
 from tengri.parameters.priors import Distribution, Fixed, _is_default_fixed
 from tengri.parameters.sentinels import (
@@ -945,6 +954,21 @@ def parse_groups(**kwargs) -> Parameters:
         # the warning machinery doesn't complain about a missing disposition on an
         # empty-parameter group.
         kwargs["dust_attenuation"]["*"] = Fixed(DEFAULT)
+
+    # ── Pass 0d: one spelling for dust_attenuation keys ─────────────────
+    # Full registry names inside the group dict (dust_tau_bc, dust_law_bc,
+    # dust_slope_bc) become the grammar stems (tau_bc, law_bc, slope_bc) before
+    # ANY later pass reads the dict, so the structural translator, the two-screen
+    # completeness check and _check_dict_keys all see one spelling. Before this
+    # pass, {'tau_bc': ..., 'dust_tau_diff': ...} tripped a false "names
+    # 'tau_bc' but not 'tau_diff'" because only the stem loop was consulted.
+    if isinstance(kwargs.get("dust_attenuation"), dict):
+        kwargs = {
+            **kwargs,
+            "dust_attenuation": normalize_dust_group_keys(
+                kwargs["dust_attenuation"], _dust_group_accepted_keys()
+            ),
+        }
 
     # ── Pass 1: Translate structural choices ──────────────────────────
 
@@ -2211,7 +2235,7 @@ def _law_shape_params(law_name: str) -> frozenset[str]:
     it is gone from the laws, and ``tools/check_dust_law_kwargs.py`` refuses a
     new one.
 
-    Two spellings reach the same quantity: the law kwarg (``n_slope``) and the
+    Two spellings reach the same quantity: the law kwarg (``dust_slope``) and the
     flat parameter (``dust_slope``). ``_TWO_COMPONENT_LAW_PARAMS`` is the
     existing map between them; a signature name already spelled ``dust_*`` is
     its own flat name.
@@ -2985,7 +3009,7 @@ def _reject_per_screen_keys_no_law_reads(
     and they route past the parameter partition entirely (they are structural
     keys carrying a static float, not declared parameters). So
     ``{'law': 'noll09', 'slope_bc': -1.0, 'slope_diff': -1.0}`` reached
-    ``noll09``, which reads ``dust_delta`` and not ``n_slope``, and the value
+    ``noll09``, which reads ``dust_delta`` and not ``dust_slope``, and the value
     was discarded at the law's signature: 72 (law, key) pairs across the 22
     registered laws, measured bit-identical to omitting the key (#2185).
 
@@ -2994,20 +3018,19 @@ def _reject_per_screen_keys_no_law_reads(
     inheritance ``DustSEDComponent`` applies, so the check and the forward model
     cannot disagree about which law a key is being tested against.
     """
-    from tengri.components.dust.attenuation import TWO_COMPONENT_OVERRIDE_KEYS
-    from tengri.components.dust.laws._registry import law_kwarg_names
 
+    # Gather present per-screen keys
     present = [
-        (f"{short}_{comp}", short, comp)
-        for short in TWO_COMPONENT_OVERRIDE_KEYS
-        for comp in ("bc", "diff", "neb")
-        if f"{short}_{comp}" in dust_atten_dict
+        (short_to_full(stem), comp)
+        for stem in OVERRIDE_STEMS
+        for comp in SCREENS
+        if f"{stem}_{comp}" in dust_atten_dict
     ]
     if not present:
         return
 
     if dust_type != "two_component":
-        named = ", ".join(repr(key) for key, _, _ in present)
+        named = ", ".join(repr(f"{full_to_short(kw)}_{comp}") for kw, comp in present)
         raise ParameterError(
             f"{named} {'are' if len(present) > 1 else 'is'} a per-screen "
             f"dust_attenuation override, and type={dust_type!r} has only one screen, "
@@ -3017,31 +3040,15 @@ def _reject_per_screen_keys_no_law_reads(
             f"type='two_component'."
         )
 
-    kw_to_short = {law_kw: short for short, law_kw in TWO_COMPONENT_OVERRIDE_KEYS.items()}
-    law_for = {
-        "bc": result.get("dust_law_bc"),
-        "diff": result.get("dust_law_diff"),
-        "neb": result.get("dust_law_neb") or result.get("dust_law_bc"),
-    }
-    screen_name = {"bc": "birth-cloud", "diff": "diffuse-ISM", "neb": "nebular birth-cloud"}
-
-    for key, short, comp in present:
-        law = law_for[comp]
-        if law is None:
-            continue
-        reads = law_kwarg_names(law)
-        if TWO_COMPONENT_OVERRIDE_KEYS[short] in reads:
-            continue
-        accepted = sorted(
-            f"{kw_to_short[law_kw]}_{comp}" for law_kw in reads if law_kw in kw_to_short
-        )
-        accepts = ", ".join(accepted) if accepted else "no per-screen keys at all"
-        raise ParameterError(
-            f"{key!r} is not read by the 'dust_attenuation' {screen_name[comp]} law "
-            f"{law!r}, so writing it here would be silently ignored: the key belongs to "
-            f"another attenuation law. Law {law!r} accepts: {accepts}. "
-            f"Drop the key, or select a law that reads it."
-        )
+    validate_shape_requests(
+        present,
+        {
+            "bc": result.get("dust_law_bc"),
+            "diff": result.get("dust_law_diff"),
+            "neb": result.get("dust_law_neb"),
+        },
+        surface="grammar",
+    )
 
 
 def _translate_dust_attenuation(dust_atten_dict: dict, result: dict) -> None:
@@ -3239,7 +3246,7 @@ def _translate_dust_attenuation(dust_atten_dict: dict, result: dict) -> None:
     # give, because noll09 has no slope to set. Demanding one there and then
     # refusing it as unread (#2185) would leave no spelling that parses.
     if dust_type == "two_component" and not ({"all_params", "*"} & set(dust_atten_dict)):
-        for stem in ("tau", "Rv", "delta", "slope", "bump_strength"):
+        for stem in ("tau", *OVERRIDE_STEMS):
             bc, diff = f"{stem}_bc", f"{stem}_diff"
             has_bc = dust_atten_dict.get(bc) is not None
             has_diff = dust_atten_dict.get(diff) is not None
@@ -3360,16 +3367,15 @@ def _translate_dust_attenuation(dust_atten_dict: dict, result: dict) -> None:
     # dict {'bc': {law_kwarg: value}, 'diff': {...}, 'neb': {...}} consumed by
     # DustSEDComponent. The 'neb' channel reddens only the nebular birth cloud
     # (shares the diffuse ISM screen with the stars).
-    from tengri.components.dust.attenuation import TWO_COMPONENT_OVERRIDE_KEYS
 
     _reject_per_screen_keys_no_law_reads(dust_atten_dict, result, dust_type)
 
     overrides: dict[str, dict[str, float]] = {}
-    for short, law_kw in TWO_COMPONENT_OVERRIDE_KEYS.items():
-        for comp in ("bc", "diff", "neb"):
-            key = f"{short}_{comp}"
+    for stem in OVERRIDE_STEMS:
+        for comp in SCREENS:
+            key = f"{stem}_{comp}"
             if key in dust_atten_dict:
-                overrides.setdefault(comp, {})[law_kw] = float(dust_atten_dict[key])
+                overrides.setdefault(comp, {})[short_to_full(stem)] = float(dust_atten_dict[key])
     if overrides:
         result["dust_law_overrides"] = overrides
 
@@ -4138,21 +4144,11 @@ _GROUP_STRUCTURAL_KEYS: dict[str, frozenset[str]] = {
             "dust_curve",
             "geometry",
             "structure",
-            # Per-component law-parameter overrides (TWO_COMPONENT_OVERRIDE_KEYS
-            # × {bc, diff, neb}); routed to dust_law_overrides, not declared
-            # params. The 'neb' channel reddens only the nebular birth cloud.
-            "slope_bc",
-            "slope_diff",
-            "slope_neb",
-            "bump_strength_bc",
-            "bump_strength_diff",
-            "bump_strength_neb",
-            "delta_bc",
-            "delta_diff",
-            "delta_neb",
-            "Rv_bc",
-            "Rv_diff",
-            "Rv_neb",
+            # Per-component law-parameter overrides (derived from
+            # OVERRIDE_STEMS × SCREENS in _dust_keys.py); routed to
+            # dust_law_overrides, not declared params. The 'neb' channel
+            # reddens only the nebular birth cloud.
+            *per_screen_keys(),
             # Lyman-limit clip: zero the attenuation curve below 912 Å (CIGALE
             # parity). Two-component only; routed to dust_lyman_cutoff_aa.
             "lyman_cutoff",
@@ -5498,6 +5494,31 @@ def _override_key_for(param_name: str, group_dict: dict, *, warn: bool = True) -
     return None
 
 
+def _dust_group_accepted_keys() -> frozenset[str]:
+    """Build the set of accepted dust_attenuation group keys for normalization.
+
+    Includes structural keys and the short forms of all declared dust parameters.
+    This is used by normalize_dust_group_keys to decide which dust_* keys should
+    be stripped to their short forms.
+
+    Returns
+    -------
+    frozenset of str
+        All accepted key names (stems and structural keys).
+    """
+    from tengri.components.dust import _params
+
+    structural = _GROUP_STRUCTURAL_KEYS["dust_attenuation"]
+    # Gather the short forms of all dust attenuation parameters
+    param_short_forms = frozenset()
+    for param_tuple in [_params.ATTENUATION_PARAMS, _params.SINGLE_COMPONENT_PARAMS]:
+        param_short_forms |= frozenset(
+            param.name[len("dust_") :] if param.name.startswith("dust_") else param.name
+            for param in param_tuple
+        )
+    return structural | param_short_forms
+
+
 def _resolve_value(
     param_name: str,
     group_dict: dict,
@@ -5561,18 +5582,7 @@ def _resolve_value(
             "emission",
             "patchy",
             "dla",
-            "slope_bc",
-            "slope_diff",
-            "slope_neb",
-            "bump_strength_bc",
-            "bump_strength_diff",
-            "bump_strength_neb",
-            "delta_bc",
-            "delta_diff",
-            "delta_neb",
-            "Rv_bc",
-            "Rv_diff",
-            "Rv_neb",
+            *per_screen_keys(),
             "lyman_cutoff",
             "lyc_absorb_all",
             "eb_include_lyc",
