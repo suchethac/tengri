@@ -3659,16 +3659,21 @@ class SEDModel:
         renormalizes it there. See
         :func:`_polar_reference_required_extent_aa`.
 
-        Measured (``disc='schartmann2005'``, i=30, ``agn_ir_frac=0.3``,
-        reading ``int(polar)/int(torus)``): 0.264063 on a covering 8 A - 1e8 A
-        grid, bit-identical on 0.0413 A - 3e11 A, against 0.290990 on
-        500 A - 1e8 A (**+10.20%**) and 0.284060 on 80 A - 1e7 A (**+7.57%**).
-        The second of those is why the requirement is the template axis and
-        not the disc block's own breakpoints: 80 A - 1e7 A spans the CIGALE
-        piecewise disc's declared 8 - 1e6 nm limits entirely and is still
-        7.6% off, because the shape extrapolates its end segments (those
-        limits hold 86.99% of its integral) and because the zero-fill happens
-        on the template axis.
+        Measured (``disc='skirtor'``, i=30, ``agn_ir_frac=0.3``, reading
+        ``int(polar)/int(torus)``): 0.264046724 on a covering 8 A - 1e8 A grid
+        and bit-identical on 0.0413 A - 3e11 A, 1 A - 1e9 A and 8 A - 1e8 A at
+        n=6000, against 0.290982429 on 500 A - 1e8 A (**+10.20%**),
+        0.284060926 on 80 A - 1e7 A (**+7.58%**) and 0.286324800 on
+        100 A - 1e6 A (**+8.44%**). The second of those is why the requirement
+        is the template axis and not the disc block's own breakpoints:
+        80 A - 1e7 A spans the CIGALE piecewise disc's declared 8 - 1e6 nm
+        limits entirely and is still 7.6% off, because the shape extrapolates
+        its end segments (those limits hold 86.99% of its integral) and
+        because the zero-fill happens on the template axis. With
+        ``disc='schartmann2005'`` the same grids move by 0.1% / -3.0% / 0.1%
+        instead -- how much a truncation costs is a property of the shape
+        being zero-filled, which is why the guard refuses the truncation
+        rather than bounding the error.
 
         A ``torus='skirtor'`` build covers this by construction --
         ``forward.wavelength_extension._AGN_TORUS_TEMPLATES`` puts the
@@ -3717,8 +3722,9 @@ class SEDModel:
             "disc is resampled onto that axis with zero fill, so wherever "
             "the grid does not reach the disc is set to zero and the "
             "unit-area shape is renormalized over a truncated spectrum. "
-            "Measured, this moves int(polar)/int(torus) by +10.20% on a "
-            "500 A - 1e8 A grid and +7.57% on an 80 A - 1e7 A one, silently. "
+            "Measured with disc='skirtor', this moves int(polar)/int(torus) "
+            "by +10.20% on a 500 A - 1e8 A grid, +8.44% on a 100 A - 1e6 A "
+            "one and +7.58% on an 80 A - 1e7 A one, silently. "
             "Fix: widen the wavelength grid to cover "
             f"{lo_req:.6g} A - {hi_req:.6g} A -- normally the SKIRTOR torus "
             "does that for you, by contributing its template axis to the "

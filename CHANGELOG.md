@@ -399,18 +399,32 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
   integrates its `l_ext` proxy over — and the caller's disc array is
   resampled onto it with zero fill, so wherever the model's grid does not
   reach, the disc is zeroed and the unit-area shape is renormalized over a
-  truncated spectrum. Measured (`disc='schartmann2005'`, i=30,
-  `agn_ir_frac=0.3`), `int(polar)/int(torus)`: 0.264063 on a covering
-  8 Å – 1e8 Å grid, bit-identical on 0.0413 Å – 3e11 Å, against 0.290990 on
-  500 Å – 1e8 Å (**+10.20%**) and 0.284060 on 80 Å – 1e7 Å (**+7.57%**).
+  truncated spectrum. Measured (`disc='skirtor'`, i=30, `agn_ir_frac=0.3`),
+  `int(polar)/int(torus)`:
 
-  The second row is why the requirement is the template axis rather than the
-  disc block's own breakpoints: 80 Å – 1e7 Å spans the CIGALE piecewise
-  disc's declared 8–1e6 nm limits in full and is still 7.6% off, because
-  `piecewise_powerlaw_disk` extrapolates its end segments (those limits hold
-  only 86.99% of the shape's integral) and because the zero-fill happens on
-  the template axis. The bounds are read off the array the resampling
-  targets, so a regenerated grid moves the requirement with it.
+  | model grid | `polar/torus` | vs covering |
+  |---|---|---|
+  | 8 Å – 1e8 Å, n=3000 | 0.264046724 | 1.000000 |
+  | 0.0413 Å – 3e11 Å, n=4000 | 0.264046724 | 1.000000 |
+  | 1 Å – 1e9 Å, n=6000 | 0.264046724 | 1.000000 |
+  | 8 Å – 1e8 Å, n=6000 (resolution control) | 0.264046724 | 1.000000 |
+  | 80 Å – 1e7 Å, n=3000 | 0.284060926 | **1.075798** |
+  | 500 Å – 1e8 Å, n=3000 | 0.290982429 | **1.102011** |
+  | 8 Å – 1e6 Å, n=3000 | 0.263936198 | 0.999581 |
+  | 100 Å – 1e6 Å, n=1500 | 0.286324800 | **1.084372** |
+
+  Four covering grids agree bit-for-bit at two resolutions, so the effect is
+  extent and not quadrature. The 80 Å – 1e7 Å row is why the requirement is
+  the template axis rather than the disc block's own breakpoints: it spans the
+  CIGALE piecewise disc's declared 8–1e6 nm limits in full and is still 7.6%
+  off, because `piecewise_powerlaw_disk` extrapolates its end segments (those
+  limits hold only 86.99% of the `skirtor` shape's integral) and because the
+  zero-fill happens on the template axis. The bounds are read off the array
+  the resampling targets, so a regenerated grid moves the requirement with it.
+  How much a truncation costs depends on the shape being zero-filled — the
+  same grids move `disc='schartmann2005'` by 0.1% / −3.0% / 0.1% / 0.1% —
+  which is why the guard refuses the truncation rather than bounding the
+  error.
 
   A `torus='skirtor'` build covers this by construction — the torus
   contributes its template axis to the master-grid union, measured to take a

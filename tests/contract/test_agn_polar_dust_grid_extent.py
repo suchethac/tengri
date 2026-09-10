@@ -12,25 +12,38 @@ over a truncated spectrum.
 
 Measured on this branch (composable ``torus='skirtor'`` +
 ``atten='polar_dust'``, ``agn_norm='cigale_joint'``, ``agn_ir_frac=0.3``,
-i=30, reading ``int(polar)/int(torus)`` over frequency):
+i=30, reading ``int(polar)/int(torus)`` over frequency). Both CIGALE-lineage
+disc shapes, because the size of the error is a property of the shape being
+zero-filled and not of the guard:
 
-=========================================  ================  =========
-model grid                                 ``polar/torus``   vs covered
-=========================================  ================  =========
-8 A - 1e8 A, n=3000                             0.264063       1.0000
-0.0413 A - 3e11 A, n=4000                       0.264063       1.0000  (bit-identical)
-80 A - 1e7 A, n=3000                            0.284060       1.0757
-500 A - 1e8 A, n=3000                           0.290990       1.1020
-8 A - 1e6 A, n=3000                             0.263950       0.9996
-=========================================  ================  =========
+=========================================  ====================  =============
+model grid                                 ``polar/torus``       vs covered
+                                           disc=skirtor          disc=skirtor
+=========================================  ====================  =============
+8 A - 1e8 A, n=3000                              0.264046724       1.000000
+0.0413 A - 3e11 A, n=4000                        0.264046724       1.000000
+1 A - 1e9 A, n=6000                              0.264046724       1.000000
+8 A - 1e8 A, n=6000 (resolution control)         0.264046724       1.000000
+80 A - 1e7 A, n=3000                             0.284060926       1.075798
+500 A - 1e8 A, n=3000                            0.290982429       1.102011
+8 A - 1e6 A, n=3000                              0.263936198       0.999581
+100 A - 1e6 A, n=1500                            0.286324800       1.084372
+=========================================  ====================  =============
+
+Four grids that cover agree **bit-for-bit**, at two different resolutions, so
+the effect is extent and not quadrature. With ``disc='schartmann2005'`` the
+same grids give 0.257339472 (all four covering, again bit-identical),
+1.001058, 0.970316, 0.999593 and 1.000584 -- same sign of failure, an order of
+magnitude smaller, because that shape carries less of its integral outside
+the model's grid.
 
 The 80 A - 1e7 A row is the one that settles what "cover" has to mean: it
 spans the CIGALE piecewise disc's own declared breakpoints (8 - 1e6 nm) in
 full and is still 7.6% off, because ``piecewise_powerlaw_disk`` extrapolates
 its end segments rather than truncating -- those breakpoints hold only 86.99%
-of the shape's integral -- and because the zero-fill happens on the TEMPLATE
-axis, not on the breakpoints. So the required range is the SKIRTOR axis, read
-off the grid file, and the guard says so.
+of the ``skirtor`` shape's integral -- and because the zero-fill happens on
+the TEMPLATE axis, not on the breakpoints. So the required range is the
+SKIRTOR axis, read off the grid file, and the guard says so.
 
 A real ``SEDModel.build`` gets there for free: ``torus='skirtor'`` puts the
 template axis into the master-grid union
