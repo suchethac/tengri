@@ -925,47 +925,56 @@ agn_torus_block, agn_attenuation_block : str
         # is nearly transparent in the IR, which is why it stayed small and
         # unnoticed) while making the torus carry a screen it should not see.
         #
-        # R60: which cone factor applies depends on what ``L_lambda_disc``
-        # represents under the active policy -- the two frames are exactly
-        # 18/7 apart, so this is stated, never inherited. Under cigale_joint
-        # with the SKIRTOR torus the Stage-4 R-tie has just normalized the disc
-        # to CIGALE's own inclination-specific ``disk`` (``agn_power x R``), so
-        # the face-on convention applies; otherwise the disc carries the
-        # hemisphere-integrated bolometric ``10**agn_log_lbol``.
-        _polar_reference = (
-            "face_on"
-            if (_agn_norm == "cigale_joint" and agn_torus_block == "skirtor")
-            else "bolometric"
-        )
-        # R60, carried to its conclusion: ``g`` is referenced to
-        # ``int L(theta=0) dlambda``, CIGALE's face-on, UN-reddened SKIRTOR
-        # disc integral -- not the OBSERVER-inclination, R-tied
-        # ``L_lambda_disc`` Stage 4 just built (which carries both the
-        # ``disk(i)/disk(0)`` reweighting and the reddened, anisotropy-scaled
-        # ``_disc_R``). Handing that array to ``g`` would apply a face-on
-        # factor to a non-face-on, wrongly-scaled luminosity -- the very frame
-        # mismatch the ruling forbids. ``skirtor_disc_dust_ratio`` already
-        # derives exactly the right scale for this,
-        # ``_disc_R_faceon = int_disk0 / int_dust`` (its own docstring: "the
-        # ratio the polar l_ext proxy needs") -- so rebuild the face-on array
-        # from the PRE-Stage-4 disc shape (``_disc_intrinsic``, before the
-        # inclination reweighting and before the ``_disc_R`` rescale),
-        # renormalized to unit integral and rescaled by
-        # ``agn_power * _disc_R_faceon``, mirroring exactly how Stage 4 built
-        # ``_disc_scaled`` from the same shape via ``agn_power * _disc_R``.
-        _polar_disc = L_lambda_disc
-        if _polar_reference == "face_on" and _disc_R_faceon is not None:
-            _disc_shape_unit = _disc_intrinsic / jnp.maximum(
-                jnp.trapezoid(_disc_intrinsic, wave), 1e-30
-            )
-            _polar_disc = _disc_shape_unit * (_agn_power * _disc_R_faceon)
+        # R60: which cone factor applies depends on what the disc the polar
+        # dust reprocesses represents -- the two frames are exactly 18/7
+        # apart, so this is stated, never inherited. And it is decided by the
+        # SAME predicate that decided the disc's frame at Stage 4: the
+        # *traced* ``agn_ir_frac > 0``.
+        #   * fracAGN > 0: Stage 4's R-tie normalized the disc to CIGALE's
+        #     inclination-specific ``disk`` (``agn_power x R``), so the
+        #     reference is CIGALE's face-on ``disk`` and the factor is ``g``.
+        #     ``g`` is referenced to ``int L(theta=0) dlambda`` -- NOT the
+        #     observer-inclination, R-tied ``L_lambda_disc`` Stage 4 just
+        #     built (which carries both the ``disk(i)/disk(0)`` reweighting
+        #     and the anisotropy-scaled ``_disc_R``), so the face-on array is
+        #     rebuilt from the PRE-Stage-4 disc shape (``_disc_intrinsic``)
+        #     renormalized and rescaled by ``agn_power * _disc_R_faceon``
+        #     (``skirtor_disc_dust_ratio``'s ``int_disk0 / int_dust``,
+        #     "the ratio the polar l_ext proxy needs"), mirroring exactly how
+        #     Stage 4 built ``_disc_scaled`` via ``agn_power * _disc_R``.
+        #   * fracAGN = 0 (the registry default): there is no R-tie, the disc
+        #     in the SED is the bolometric-frame disc debited by
+        #     ``(1 - agn_torus_frac)``, and the factor is ``f_cone`` on that
+        #     very array.
+        # A STATIC branch here (on ``agn_norm``/``agn_torus_block`` alone)
+        # applied ``g`` to a rebuilt face-on array in BOTH regimes, so at the
+        # default ``agn_ir_frac = 0`` ``sed_agn_polar`` came out 1.58x high
+        # and bit-identical across a 2.84x change in the disc it reprocesses.
+        # Both branches are cheap (one extinction curve, one graybody), so
+        # they are both evaluated and selected with ``jnp.where`` on the
+        # tracer -- a Python ``if`` on ``_agn_fracAGN`` would not trace.
         _polar_params = {k: v for k, v in params.items() if k != "agn_polar_reference"}
         L_nu_reemit = polar_dust_reemission_lnu(
             wave,
-            _polar_disc,
-            agn_polar_reference=_polar_reference,
+            L_lambda_disc,
+            agn_polar_reference="bolometric",
             **_polar_params,
         )
+        if _disc_R_faceon is not None:
+            _disc_shape_unit = _disc_intrinsic / jnp.maximum(
+                jnp.trapezoid(_disc_intrinsic, wave), 1e-30
+            )
+            _polar_disc_face_on = _disc_shape_unit * (_agn_power * _disc_R_faceon)
+            L_nu_reemit = jnp.where(
+                _agn_fracAGN > 0.0,
+                polar_dust_reemission_lnu(
+                    wave,
+                    _polar_disc_face_on,
+                    agn_polar_reference="face_on",
+                    **_polar_params,
+                ),
+                L_nu_reemit,
+            )
 
         # R59: under the joint and conserving policies the AGN dust budget
         # INCLUDES the polar re-emission -- torus + polar = the budget -- so

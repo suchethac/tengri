@@ -405,8 +405,20 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
   replaces the single-reference `polar_cone_covering_fraction`: CIGALE's
   `g(oa) = 7/18 - sin^2(oa)/6 - (2/9)sin^3(oa)` (referenced to
   `int L(theta=0) dlambda`, its face-on flux-table convention) applies when the
-  disc is CIGALE's inclination-specific `disk` template
-  (`agn_norm='cigale_joint'` with the SKIRTOR torus, tied via `agn_power x R`);
+  disc is CIGALE's inclination-specific `disk` template -- that is,
+  `agn_norm='cigale_joint'` with the SKIRTOR torus **and** a non-zero
+  `agn_ir_frac`, which is the *traced* condition under which the runner ties
+  the disc to `agn_power x R`. The reference is selected by that same
+  predicate, so it cannot disagree with the frame the disc in the SED actually
+  carries: at `agn_ir_frac = 0` (the registry default, and what the shipped
+  gallery example and any composable SKIRTOR + polar-dust build without an
+  explicit `ir_frac` carries) there is no `R`-tie, the disc is the
+  bolometric-frame one debited by `(1 - agn_torus_frac)`, and `f_cone` applies
+  to that array. Deciding the reference by a *static* branch on
+  `agn_norm`/`torus` alone instead applied `g` to a rebuilt face-on array in
+  both regimes, which left `sed_agn_polar` **1.57x** high at the default
+  `agn_ir_frac = 0` (3.731924e+44 against 2.370195e+44 erg/s at the fiducial
+  below) and bit-identical across a 2.84x change in the disc it reprocesses.
   `f_cone(oa) = 1 - (3/7)sin^2 oa - (4/7)sin^3 oa` (hemisphere-integrated
   bolometric) applies under `'independent'`/`'conserving'`. The two factors are
   exactly proportional (`f_cone/g = 18/7`), so picking the wrong one silently

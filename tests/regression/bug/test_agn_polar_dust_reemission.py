@@ -32,6 +32,7 @@ from __future__ import annotations
 
 import jax
 import jax.numpy as jnp
+import numpy as np
 import pytest
 
 from tengri.components.agn.blocks.atten import polar_dust_reemission_lnu
@@ -349,3 +350,209 @@ class TestPolarDustGradients:
     def test_beta_gradient_nonzero(self):
         g = self._objective("agn_polar_beta", 1.6)
         assert g != 0.0, "d(sum(sed))/d(agn_polar_beta) is exactly zero."
+
+
+#: Wide grid for the cigale_joint frame tests: the polar-cone budget is read off
+#: the FIR graybody and the AGN dust budget off the SKIRTOR torus, so the grid
+#: has to span the disc UV (500 A) and the whole torus/graybody IR (1e8 A).
+_WAVE_JOINT = jnp.asarray(np.geomspace(500.0, 1.0e8, 3000))
+
+#: The SKIRTOR fiducial the CIGALE reproduction uses (t=7, pl=1, q=1, oa=40,
+#: i=30, disk_type=1 -> schartmann2005, E(B-V)=0.03, T=100 K, beta=1.6).
+_JOINT_BASE = dict(
+    agn_disc_block="schartmann2005",
+    agn_nlr_block="none",
+    agn_blr_block="none",
+    agn_feii_block="none",
+    agn_torus_block="skirtor",
+    agn_attenuation_block="polar_dust",
+    agn_norm="cigale_joint",
+    agn_tau_skirtor=7.0,
+    agn_p_skirtor=1.0,
+    agn_q_skirtor=1.0,
+    agn_oa_skirtor=40.0,
+    agn_polar_ebv=0.03,
+    agn_polar_oa=40.0,
+    agn_polar_T=100.0,
+    agn_polar_beta=1.6,
+)
+
+
+def _joint_integrals(*, ir_frac, torus_frac, wave=_WAVE_JOINT, **over):
+    """Bolometric ``polar``/``torus``/``disc`` of one cigale_joint build [erg/s]."""
+    from tengri.components.agn.blocks.runner import compose_l_nu
+
+    nu = C_AA / wave
+    order = jnp.argsort(nu)
+    _sed, comps = compose_l_nu(
+        wave,
+        12.0,
+        agn_ir_frac=ir_frac,
+        agn_torus_frac=torus_frac,
+        return_components=True,
+        **{**_JOINT_BASE, **over},
+    )
+    return {
+        key: float(jnp.abs(jnp.trapezoid(jnp.asarray(comps[key])[order], nu[order])))
+        for key in ("polar", "torus", "disc")
+    }
+
+
+def _frame_invariant(integrals):
+    """``q = (P/B) / (c D/B)``: cone-absorbed power per unit disc reference.
+
+    Constant of the geometry when the cone factor is referenced to the disc
+    the SED carries (see :class:`TestPolarReemissionFollowsTheDiscsActualFrame`).
+    """
+    budget = integrals["polar"] + integrals["torus"]
+    return (integrals["polar"] / integrals["torus"]) * budget / integrals["disc"]
+
+
+class TestPolarReemissionFollowsTheDiscsActualFrame:
+    """R60, finished: ONE traced predicate picks the disc's frame AND the
+    covering-factor reference.
+
+    Stage 4 of the composable runner selects the disc's normalization frame
+    with a **traced** ``jnp.where(agn_ir_frac > 0, ...)``: at ``agn_ir_frac >
+    0`` the disc is tied to CIGALE's face-on ``disk`` template
+    (``agn_power x R``), and at ``agn_ir_frac = 0`` -- the registry default,
+    and what the shipped gallery example and any composable
+    skirtor+polar_dust build without an explicit ``ir_frac`` carry -- it is
+    the bolometric-frame disc debited by ``(1 - agn_torus_frac)``.
+
+    The polar-cone reference used to be chosen by a *static* Python branch on
+    ``(agn_norm, agn_torus_block)`` alone, so in the ``agn_ir_frac = 0``
+    regime a face-on ``g`` factor was applied to a rebuilt face-on array
+    while the disc in the SED was the bolometric-frame one. Measured at the
+    fiducial: ``sed_agn_polar`` was **bit-identical** across the two regimes
+    (3.731930e+44 erg/s at both) although the disc it reprocesses differs by
+    2.8357x, and the polar-to-torus ratio was **exactly** 0.243324 at
+    ``agn_torus_frac`` = 0.2 and 0.6, where the disc-to-torus ratio moves 6x
+    (3.942284 -> 0.657047). Frame-consistent, the ``agn_ir_frac = 0`` polar
+    is 1.58x smaller than what shipped.
+
+    The observable both tests use is ``r = int(polar) / int(torus)``. Under
+    the joint budget (R59) ``polar = B s`` and ``torus = B (1 - s)`` with
+    ``s = P/(B + P)``, so ``r = P/B`` exactly: the raw cone-absorbed power
+    over the AGN dust budget, with the budget's own normalization divided
+    out. The disc's own frame is read off the same build as
+    ``d = int(disc)/(int(polar) + int(torus)) = c D/B``, where ``D`` is the
+    disc reference luminosity and ``c`` the mask/attenuation weighting the
+    two builds share, so
+
+    ``q = r/d = f_cone(oa) x absorbed_fraction / c``
+
+    is a constant of the geometry -- invariant under anything that moves the
+    disc and the budget together, ``agn_torus_frac`` included -- whenever the
+    cone factor is referenced to the disc the SED carries.
+    """
+
+    @staticmethod
+    def _skip_without_grid():
+        from tengri.components.agn.skirtor import _load_raw_disk_dust_grid
+
+        if _load_raw_disk_dust_grid() is None:
+            pytest.skip("raw SKIRTOR disk/dust grid not available")
+
+    def test_bolometric_regime_polar_tracks_the_disc(self):
+        """agn_ir_frac=0: the polar re-emission moves with the disc it reprocesses.
+
+        ``agn_torus_frac`` moves the debited disc as ``(1 - f)`` and the torus
+        as ``f``, so a frame-consistent polar moves ``r`` exactly as ``d``
+        moves. A face-on reference applied here instead reads the rebuilt
+        ``agn_power x R_faceon`` array, whose ratio to the budget is
+        independent of ``agn_torus_frac``: ``r`` then does not move at all.
+        """
+        self._skip_without_grid()
+        lo = _joint_integrals(ir_frac=0.0, torus_frac=0.2)
+        hi = _joint_integrals(ir_frac=0.0, torus_frac=0.6)
+        q_lo = _frame_invariant(lo)
+        q_hi = _frame_invariant(hi)
+        d_ratio = (hi["disc"] / (hi["polar"] + hi["torus"])) / (
+            lo["disc"] / (lo["polar"] + lo["torus"])
+        )
+        assert not (0.9 < d_ratio < 1.1), (
+            f"probe setup failed: agn_torus_frac barely moved the disc's share of the "
+            f"AGN dust budget ({d_ratio:.6f}), so this configuration cannot tell the "
+            "two frames apart"
+        )
+        assert q_hi == pytest.approx(q_lo, rel=1e-6, abs=0.0), (
+            f"at agn_ir_frac=0 the cone-absorbed power per unit disc moved from "
+            f"{q_lo:.6f} to {q_hi:.6f} ({q_hi / q_lo:.4f}x) when agn_torus_frac went "
+            f"0.2 -> 0.6, which moved the disc's share of the budget by {d_ratio:.6f}: "
+            "the covering factor is referenced to a disc frame the SED does not "
+            "carry (R60)."
+        )
+
+    def test_face_on_regime_reemits_g_times_the_face_on_disc(self):
+        """agn_ir_frac>0: the reference is CIGALE's face-on disk and ``g``.
+
+        Independent reconstruction from the public physics functions:
+        ``r = P/B = g(oa) x int(faceon_disc (1 - ext)) / agn_power`` with the
+        face-on disc built the way Stage 4's R-tie builds the disc,
+        ``agn_power x R_faceon`` on the unit-normalized intrinsic disc shape.
+        A bolometric reference here would read ``f_cone x R`` instead --
+        0.671162 x 2.2 against 0.261007 x 4.42, a 28% error.
+        """
+        self._skip_without_grid()
+        from tengri.components.agn.blocks import resolve_agn_block
+        from tengri.components.agn.polar_dust import polar_cone_covering_factor
+        from tengri.components.agn.skirtor import skirtor_disc_dust_ratio
+
+        wave = _WAVE_JOINT
+        cos_inc = 0.86602540378443864
+        disc = jnp.asarray(
+            resolve_agn_block("disc", _JOINT_BASE["agn_disc_block"])(
+                wave, agn_log_lbol=12.0, templates=None
+            )
+        )
+        _r, _incl, r_faceon = skirtor_disc_dust_ratio(
+            wave,
+            disc,
+            jnp.ones_like(wave),
+            agn_tau_skirtor=_JOINT_BASE["agn_tau_skirtor"],
+            agn_p_skirtor=_JOINT_BASE["agn_p_skirtor"],
+            agn_q_skirtor=_JOINT_BASE["agn_q_skirtor"],
+            agn_oa_skirtor=_JOINT_BASE["agn_oa_skirtor"],
+            agn_cos_inc=cos_inc,
+        )
+        # The grid the face-on reference is normalized and absorbed on.
+        ref_wave, ref_disc = wave, disc
+        idx = jnp.argsort(ref_wave)
+        shape_unit = ref_disc / jnp.trapezoid(ref_disc[idx], ref_wave[idx])
+        _att, absorbed_per_bin = polar_dust_extinction(
+            shape_unit * float(r_faceon),
+            ref_wave,
+            cos_inc=cos_inc,
+            opening_angle_deg=_JOINT_BASE["agn_polar_oa"],
+            ebv=_JOINT_BASE["agn_polar_ebv"],
+            law="smc",
+        )
+        absorbed_over_power = float(jnp.trapezoid(absorbed_per_bin[idx], ref_wave[idx]))
+        expected = (
+            float(polar_cone_covering_factor(_JOINT_BASE["agn_polar_oa"], reference="face_on"))
+            * absorbed_over_power
+        )
+
+        got = _joint_integrals(ir_frac=0.3, torus_frac=0.5)
+        r = got["polar"] / got["torus"]
+        assert r == pytest.approx(expected, rel=1e-4, abs=0.0), (
+            f"agn_ir_frac=0.3: polar/torus = {r:.6f}, but g x absorbed(face-on disc) / "
+            f"agn_power = {expected:.6f}; the face-on frame is not the one applied."
+        )
+
+    def test_face_on_regime_is_tied_to_agn_power(self):
+        """The R-tie's own signature: at agn_ir_frac>0 the disc scales WITH the
+        budget, so ``r`` does not move with agn_torus_frac. The negative
+        control for the test above: it is the ``agn_ir_frac=0`` regime, and
+        only that one, whose polar must follow ``agn_torus_frac``."""
+        self._skip_without_grid()
+        lo = _joint_integrals(ir_frac=0.3, torus_frac=0.2)
+        hi = _joint_integrals(ir_frac=0.3, torus_frac=0.6)
+        assert _frame_invariant(hi) == pytest.approx(_frame_invariant(lo), rel=1e-6, abs=0.0)
+        assert (hi["polar"] / hi["torus"]) == pytest.approx(
+            lo["polar"] / lo["torus"], rel=1e-9, abs=0.0
+        )
+        assert (hi["disc"] / (hi["polar"] + hi["torus"])) == pytest.approx(
+            lo["disc"] / (lo["polar"] + lo["torus"]), rel=1e-9, abs=0.0
+        )
