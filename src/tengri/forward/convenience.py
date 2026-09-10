@@ -14,6 +14,7 @@ import jax.numpy as jnp
 import numpy as np
 
 from tengri.inference._backend_registry import DEFAULT_METHOD
+from tengri.parameters._dust_laws import resolve_dust_screen_laws, resolve_from_config_dust_law
 from tengri.parameters.defaults import UNSET as _UNSET
 
 if TYPE_CHECKING:
@@ -890,7 +891,7 @@ def build_model_from_config(
     model_cls,
     ssp,
     sfh=_UNSET,
-    dust=_UNSET,
+    dust_attenuation_law=_UNSET,
     nebular=_UNSET,
     agn=_UNSET,
     redshift=_UNSET,
@@ -912,8 +913,13 @@ def build_model_from_config(
         Path to SSP data file or SSPData object.
     sfh : str, optional
         SFH model type (e.g. "dpl", "tsnorm"). Uses default if unset.
-    dust : str, optional
-        Dust law (e.g. "charlot_fall", "kl04"). Uses default if unset.
+    dust_attenuation_law : str, optional
+        Dust attenuation law applied to BOTH screens (birth cloud + diffuse
+        ISM) of the default two-component model, e.g. ``"calzetti"``,
+        ``"kl04"``. ``"charlot_fall"`` (the default) is an alias for
+        ``"power_law"`` on both screens -- the classic Charlot & Fall (2000)
+        model -- not a law-registry name. ``dust=`` is a deprecated alias for
+        this parameter. Uses default if unset.
     nebular : str or None, optional
         Nebular backend (e.g. "cloudy_grid", "linratios"). Uses default if unset.
     agn : str or None, optional
@@ -927,7 +933,8 @@ def build_model_from_config(
     priors : dict, optional
         Prior overrides for parameters.
     **model_kwargs
-        Additional keyword arguments for model constructor.
+        Additional keyword arguments for model constructor. May also carry
+        the deprecated ``dust=`` alias for ``dust_attenuation_law``.
 
     Returns
     -------
@@ -938,13 +945,38 @@ def build_model_from_config(
     -----
     **JIT-compatible**: no, uses Python-level model construction.
     """
+    import warnings
+
     from tengri.parameters.defaults import get_from_config_defaults
     from tengri.parameters.translate import resolve_short_names
+
+    # Deprecated dust= alias (#2021): forward it, but refuse a disagreeing
+    # dust_attenuation_law= rather than silently picking one. stacklevel=3
+    # so the warning points at the caller of SEDModel.from_config (frame 0 is
+    # this warn() call, frame 1 is build_model_from_config's own caller --
+    # from_config -- frame 2 is from_config's caller).
+    legacy_dust = model_kwargs.pop("dust", _UNSET)
+    if legacy_dust is not _UNSET:
+        warnings.warn(
+            "from_config(dust=...) is deprecated; use dust_attenuation_law=... "
+            "(one law applied to both attenuation screens).",
+            DeprecationWarning,
+            stacklevel=3,
+        )
+        if dust_attenuation_law is not _UNSET and dust_attenuation_law != legacy_dust:
+            raise ValueError(
+                f"from_config() received both the deprecated dust={legacy_dust!r} "
+                f"and dust_attenuation_law={dust_attenuation_law!r}, and they "
+                f"disagree. Pass only dust_attenuation_law=."
+            )
+        dust_attenuation_law = legacy_dust
 
     # Resolve each argument: use caller value if supplied, else read from TOML.
     _defs = get_from_config_defaults()
     sfh = _defs["sfh"] if sfh is _UNSET else sfh
-    dust = _defs["dust"] if dust is _UNSET else dust
+    dust_attenuation_law = (
+        _defs["dust_attenuation_law"] if dust_attenuation_law is _UNSET else dust_attenuation_law
+    )
     nebular = _defs["nebular"] if nebular is _UNSET else nebular
     agn = _defs["agn"] if agn is _UNSET else agn
     redshift = _defs["redshift"] if redshift is _UNSET else redshift
@@ -985,8 +1017,12 @@ def build_model_from_config(
     spec_kwargs: dict = dict(expanded)
     spec_kwargs["mean_sfh_type"] = sfh_tokens
 
-    if dust != "charlot_fall":
-        spec_kwargs["dust_law_bc"] = dust
+    # Names BOTH screens explicitly instead of relying on Parameters' two-
+    # component inheritance to fill in dust_law_diff by accident (#2021).
+    law = resolve_from_config_dust_law(dust_attenuation_law)
+    spec_kwargs["dust_law_bc"], spec_kwargs["dust_law_diff"] = resolve_dust_screen_laws(
+        spec_kwargs.get("dust_model", "two_component"), law, law
+    )
 
     if nebular is not None:
         spec_kwargs["nebular"] = nebular

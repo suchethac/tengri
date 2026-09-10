@@ -95,7 +95,7 @@ def test_cue_weights_aux_is_hashable():
     pytest.importorskip("jax")
     try:
         from tengri.components.nebular.cue import load_cue_weights
-    except Exception:
+    except ImportError:
         pytest.skip("cue module not importable")
 
     try:

@@ -36,7 +36,7 @@ class TestDustEmissionCombinations:
                 L = np.array(fn(wl, 1e44, dust_alpha_dale=2.0))
             else:
                 L = np.array(fn(wl, 1e44, dust_umin=1.0, dust_gamma_dl=0.01, dust_qpah=2.5))
-        except (FileNotFoundError, KeyError):
+        except FileNotFoundError:
             pytest.skip(f"{name} requires data files not present")
         peak_um = float(wl[L.argmax()]) * 1e-4
         assert 8.0 < peak_um < 1000.0, f"{name}: peak at {peak_um:.1f} μm"
@@ -57,7 +57,7 @@ class TestDustEmissionCombinations:
                 L = np.array(fn(wl, 1e44, dust_T=35.0))
             else:
                 L = np.array(fn(wl, 1e44, dust_umin=1.0, dust_gamma_dl=0.01, dust_qpah=2.5))
-        except (FileNotFoundError, KeyError):
+        except FileNotFoundError:
             pytest.skip(f"{name} requires data files not present")
         nu = 2.998e18 / np.array(wl)
         L_int = -np.trapezoid(L, nu)

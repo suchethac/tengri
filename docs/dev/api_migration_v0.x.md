@@ -1315,6 +1315,27 @@ test's own "regenerate a line only for a deliberate recipe change" rule.
 
 ---
 
+## `from_config(dust=)` renamed to `dust_attenuation_law=` (2026-09-09, #2021)
+
+`SEDModel.from_config` / `build_model_from_config` named only the birth-cloud
+attenuation screen from a single `dust=` string; the diffuse-ISM screen's law
+was filled in only because the model happens to stay
+`dust_model="two_component"` and the low-level inheritance of #1989
+backfilled `dust_law_diff` from `dust_law_bc`. Renamed to make explicit what
+the parameter actually does: one law, applied to BOTH screens.
+
+| Old spelling                          | New spelling                                     | Status (v0.x)                                     |
+| -------------------------------------- | ------------------------------------------------- | -------------------------------------------------- |
+| `SEDModel.from_config(dust="calzetti")` | `SEDModel.from_config(dust_attenuation_law="calzetti")` | `dust=` still works: deprecated alias, warns, forwards |
+
+`"charlot_fall"` (the default) is documented as an alias for `"power_law"`
+applied to both screens -- the classic Charlot & Fall (2000) model -- not a
+law-registry name. Passing both `dust=` and `dust_attenuation_law=` with
+disagreeing values raises `ValueError`; the deprecated alias is slated for
+removal in a later release.
+
+---
+
 ## How to update this document
 
 1. Land the rename or move with a `deprecated_alias` shim in

@@ -11,6 +11,48 @@ See [No nebular continuum](#no-nebular-continuum) below for what this means and
 how to work around it.
 :::
 
+## Status (2026-09)
+
+`scripts/download_cb19_templates.py` cannot currently build
+`data/cb19_templates.h5`. A read-only probe of the 3MdB servers on
+2026-09-07 found no `ref='CB_19'` row, under any spelling, in any reachable
+database:
+
+- `3MdB_17.tab_17` (the table this script queries) carries six refs:
+  `PNe_2020`, `PNe_2021`, `BOND_2`, `CALIFA_2`, `BOND`, `CALIFA`.
+- `3MdB.tab` carries eight: `PNe_2014`, `CALIFA`, `PNe_2014_c13`, `DIG_HR`,
+  `PNe_2016`, `BOND`, `CALIFA_ah`, `HII_CHIm`.
+- `3MdBs.projects` carries four: `Allen08`, `Gutkin16`, `Alarie19s`,
+  `Allen08-cut`.
+
+No `CB_19`, or any near-miss spelling (`CB19`, `CB_2019`, `Bruzual`,
+`Charlot`), appears in any of the three.
+
+The 3MdB project page for CB_19
+(<https://sites.google.com/site/mexicanmillionmodels/the-different-projects/cb_19>)
+carries a standing notice from the grid's own authors: there is a bug in how
+chemical abundances and metallicities are defined in the grid, and they will
+produce a new grid and an erratum explaining the consequences. That page
+also names the database as `3MdB`, not `3MdB_17` as the script queries; a
+direct query of `3MdB.tab` finds no CB_19 rows either, so the mismatch is
+not (solely) which of the two databases is queried.
+
+`data/README.md` forbids redistributing the CB_19 grid as part of tengri, and
+no permissively licensed repackaging of this exact product is known to
+exist, so tengri does not ship one.
+
+**What this means today.** `neb={'type': 'cb19'}` still works against a
+grid you supply yourself: place a real CB_19 HDF5 file with genuine
+variation at `data/cb19_templates.h5` (or under `$TENGRI_DATA_DIR`) --
+`SEDModel.build`'s `neb` grammar has no `grid` key for `cb19` (unlike
+`cloudy`, `mappings`, and `mappings_agn`), so the resolved default path is
+the only route through the build API; `CB19Backend(grid_path=...)` accepts
+an explicit path directly if you construct the backend yourself. Until 3MdB
+republishes the grid, `scripts/download_cb19_templates.py` cannot populate
+that file, and the alternatives are `neb={'type': 'cue'}`,
+`neb={'type': 'cloudy', 'grid': <path>}`, or `neb={'type': 'ssp'}` with a
+wNE SSP grid.
+
 ## Quick start
 
 ```python
@@ -36,15 +78,17 @@ Short keys inside the ``neb`` group resolve to the full parameter names
 ``logZ_gas`` is **log10(Z/Zsun)** — relative to solar, so ``0.0`` means
 solar gas metallicity.
 
-Build the template file once before first use:
+The template file was built once, before first use, with:
 
 ```bash
 python scripts/download_cb19_templates.py
 ```
 
-This downloads ~2.4 million CLOUDY models from the 3MdB_17 database
-(`3mdb.astro.unam.mx`, table `tab_17`, ref='CB_19') and saves
-`data/cb19_templates.h5` (~2 GB).
+which downloads CLOUDY models from the 3MdB_17 database (`3mdb.astro.unam.mx`,
+table `tab_17`, ref='CB_19') and saves `data/cb19_templates.h5`. As described
+in [Status (2026-09)](#status-2026-09) above, this route does not currently
+work: supply your own `data/cb19_templates.h5` until 3MdB republishes the
+grid.
 
 ## Unit convention: Hβ ratios → L/Q_H
 

@@ -720,6 +720,14 @@ class FeaturePrecomp:
     *not* allowed for spectral indices, where a break is a flux **ratio** and a
     smooth additive offset does not cancel.
 
+    **What it refuses.** The grid tabulates a single photoionization regime, so
+    DIG mixing has no place in it: a build with ``neb_dig_frac`` free or fixed
+    non-zero raises
+    :class:`~tengri.config.exceptions.DIGNotOnNebularGridError` rather than
+    reconstructing the HII term alone and leaving both DIG parameters inert
+    (#2195). Pin ``neb_dig_frac`` at 0, its declared default, or keep the exact
+    path for the nebular channel.
+
     **JIT-compatible**: the resulting line prediction is JIT- and gradient-safe;
     the one-time build is eager.
 
@@ -5619,6 +5627,12 @@ class SEDModel:
         ------
         ValueError
             If no Q_H-linear nebular backend (Cue) is configured.
+        DIGNotOnNebularGridError
+            If DIG mixing is active (``neb_dig_frac`` free, or fixed non-zero).
+            The grid has no DIG axis and no second photoionization regime to
+            mix, so it would answer with the HII term alone and leave both DIG
+            parameters inert (#2195). Reachable on dusty builds too: dust
+            disarms the grid for photometry, not for the line channel.
 
         Notes
         -----
@@ -8108,10 +8122,19 @@ class SEDModel:
 
         Returns ``None`` unless the model uses ``approx=WavePrecomp()`` with a
         two-component :class:`DustSEDComponent` that re-emits IR, the SSP needs
-        no per-call alpha interpolation, and every *free* ``dust_*`` parameter
-        is either an optical depth / eta scaling or an emission-shape knob, so
-        the attenuation *curve* is fixed and the absorbed luminosity is a smooth
-        function of ``(tau_bc, tau_diff)`` alone.
+        no per-call alpha interpolation, and nothing the attenuation *curve*
+        depends on is free: every free ``dust_*`` parameter is an optical depth
+        / eta scaling or an emission-shape knob, and ``redshift`` is fixed
+        whenever a law in play reads it. Only then is the absorbed luminosity a
+        smooth function of ``(tau_bc, tau_diff)`` alone.
+
+        The curve baked in here is resolved from the *fixed* values, ``redshift``
+        among them (#2199): ``narayanan_z`` reads the model redshift, so a LUT
+        built without it would put ``L_ir`` on the z = 0 curve while
+        :meth:`DustSEDComponent.apply` used the z-scaled one. Measured before
+        that was fixed, two-component + dale2014 under ``WavePrecomp``: the IR
+        band agreed at z = 0 and drifted 1.1e-2 at z = 2 and 1.74e-1 at z = 6,
+        against an exact path that agreed at every z.
         """
         cached = getattr(self, "_energy_balance_lut_cache", "unset")
         if cached != "unset":
@@ -8121,6 +8144,7 @@ class SEDModel:
         from tengri.components.dust.energy_balance_precompute import (
             build_energy_balance_lut,
         )
+        from tengri.components.dust.laws._registry import law_kwarg_names
         from tengri.components.dust.two_component import DustSEDComponent
 
         lut = None
@@ -8133,6 +8157,15 @@ class SEDModel:
             and p not in self._EB_ATTEN_FREE_OK
             and p not in self._EB_EMISSION_PARAMS
         }
+        # A free ``redshift`` is a free curve-shape parameter for any law that
+        # reads it, and this LUT bakes one curve at build time. It is not spelled
+        # ``dust_*``, so the set comprehension above cannot see it; give it the
+        # same disposition a free ``dust_delta`` gets, which is no LUT and the
+        # exact energy-balance integral instead (#2199).
+        if "redshift" in free and dust is not None:
+            laws_in_play = (dust.config.law_bc, dust.config.law_diff, dust.config.law_neb)
+            if any(law and "redshift" in law_kwarg_names(law) for law in laws_in_play):
+                unsafe_free.add("redshift")
         # Detect dust emission: either old path (DustSEDComponent.emission_model)
         # or new path (separate dust emission component in the pipeline).
         # After the switchover, dust_emission_model is set from the spec even
@@ -8167,6 +8200,7 @@ class SEDModel:
                 dust.config.live_shape_params,
                 bc_law=dust.config.law_bc,
                 diff_law=dust.config.law_diff,
+                redshift=fixed.get("redshift"),
             )
             ssp_ages_yr = (10.0**self.ssp_data.ssp_lg_age_gyr) * 1e9
 
@@ -8469,6 +8503,16 @@ class SEDModel:
         dropped as unrequested while the user had plainly requested it. See
         :attr:`DustAttenuationSEDComponentConfig.live_shape_params` (#1808) and
         :attr:`DustSEDComponentConfig.live_shape_params` (#1833).
+
+        ``redshift`` bypasses the provenance filter (#2199). The filter answers
+        "did somebody ask for this ``dust_*`` value, or should the law's own
+        published default stand?", and ``redshift`` has no per-law default to
+        stand: a law that names it in its signature reads the model's redshift
+        or reads nothing. Where that bypass is load-bearing is the flat
+        ``Parameters(...)`` escape hatch, whose specs carry no
+        ``_group_provenance`` at all, so every name there reads as
+        ``registry_default``; :meth:`SEDModel.build` requires a redshift and
+        always records it as a request, so on that path the two branches agree.
         """
         from tengri.parameters.groups import _law_shape_params
 
@@ -8491,7 +8535,8 @@ class SEDModel:
             for name in reads
             # ``_grid`` suffixes mark a declared free prior intersected with a
             # template grid; still a request, so match on the stem.
-            if str(provenance.get(name, "registry_default")).removesuffix("_grid")
+            if name == "redshift"
+            or str(provenance.get(name, "registry_default")).removesuffix("_grid")
             in self._REQUESTED_PROVENANCE
         )
 
@@ -8952,7 +8997,7 @@ class SEDModel:
         cls,
         ssp,
         sfh=...,
-        dust=...,
+        dust_attenuation_law=...,
         nebular=...,
         agn=...,
         redshift=...,
@@ -8973,8 +9018,13 @@ class SEDModel:
             Path to SSP HDF5 file, or a pre-loaded ``SSPData`` instance.
         sfh : str
             SFH family name, e.g. ``"tsnorm"``, ``"dpl"``, ``"dpl+field"``.
-        dust : str
-            Dust attenuation law. ``"charlot_fall"`` (default), ``"calzetti"``, etc.
+        dust_attenuation_law : str
+            Dust attenuation law applied to BOTH screens (birth cloud +
+            diffuse ISM) of the default two-component model, e.g.
+            ``"calzetti"``, ``"kl04"``. ``"charlot_fall"`` (the default) is
+            an alias for ``"power_law"`` on both screens -- the classic
+            Charlot & Fall (2000) model -- not a law-registry name. ``dust=``
+            is a deprecated alias for this parameter.
         nebular : str or None
             Nebular emission backend. ``"baked_in"``, ``"cloudy_grid"``, ``"cb19"``,
             ``"mappings"``, ``"cue"``, ``"shock"``, or None.
@@ -9001,8 +9051,8 @@ class SEDModel:
         Notes
         -----
         Ellipsis (``...``) placeholders in optional parameters map to
-        defaults from ``defaults.toml``. For example, ``dust=...`` uses
-        the default dust attenuation law.
+        defaults from ``defaults.toml``. For example,
+        ``dust_attenuation_law=...`` uses the default dust attenuation law.
 
         Examples
         --------
@@ -9031,7 +9081,7 @@ class SEDModel:
             cls,
             ssp,
             sfh=_r(sfh),
-            dust=_r(dust),
+            dust_attenuation_law=_r(dust_attenuation_law),
             nebular=_r(nebular),
             agn=_r(agn),
             redshift=_r(redshift),

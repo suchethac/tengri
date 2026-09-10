@@ -159,7 +159,7 @@ class TestNebularFdustIntegration:
             from tengri.components.stellar.sps.dsps_wrapper import load_ssp_data
 
             ssp_data = load_ssp_data(data_dir / "test_ssp.h5")
-        except Exception:
+        except (FileNotFoundError, ImportError, OSError):
             pytest.skip("Test SSP data not available")
 
         backend = CloudyGridBackend(str(grid_path), ssp_data=ssp_data)
@@ -222,7 +222,7 @@ class TestNebularFdustIntegration:
             from tengri.components.stellar.sps.dsps_wrapper import load_ssp_data
 
             ssp_data = load_ssp_data(data_dir / "test_ssp.h5")
-        except Exception:
+        except (FileNotFoundError, ImportError, OSError):
             pytest.skip("Test SSP data not available")
 
         backend = CB19Backend(grid_path=str(grid_path), ssp_data=ssp_data)
