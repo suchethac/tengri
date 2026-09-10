@@ -1079,6 +1079,54 @@ def _validate_torus_frac_fracagn_conflict(spec) -> None:
     )
 
 
+def _polar_reference_required_extent_aa(torus_block: str | None) -> tuple[float, float] | None:
+    """Wavelength range the polar dust's absorbed-power reference is built on.
+
+    Under ``agn_norm='cigale_joint'`` the disc is tied to the torus only for
+    the SKIRTOR torus (``blocks/runner.py``), and that tie is the one place a
+    caller's disc array gets resampled onto a foreign axis:
+    ``skirtor_disc_dust_ratio`` brings it onto the SKIRTOR templates' NATIVE
+    grid with ``left=0.0, right=0.0`` and renormalizes it there, because that
+    is the grid CIGALE's ``skirtor2016`` integrates the polar ``l_ext`` proxy
+    over (``x=AGN1.wl``). A model grid that does not reach that far leaves the
+    disc zero-filled over the difference.
+
+    Parameters
+    ----------
+    torus_block : str or None
+        Selected composable torus block name.
+
+    Returns
+    -------
+    tuple of float, or None
+        ``(min, max)`` of the native axis [A], read off the array the
+        resampling actually targets, so a regenerated grid moves the
+        requirement with it. ``None`` for every other torus block -- no tie,
+        no foreign axis, nothing to require -- and ``None`` when the SKIRTOR
+        disk/dust library is unavailable, in which case
+        ``skirtor_disc_dust_ratio`` takes its unity-ratio fallback and never
+        resamples at all.
+
+    Notes
+    -----
+    **JIT-compatible**: not applicable -- composition-time only.
+    """
+    if torus_block != "skirtor":
+        return None
+    from tengri.components.agn.skirtor import _load_raw_disk_dust_grid
+
+    try:
+        grid = _load_raw_disk_dust_grid()
+    except FileNotFoundError:
+        return None
+    if grid is None:
+        return None
+    axis = np.asarray(grid.wave_grid)
+    if axis.size == 0:
+        return None
+    return float(axis.min()), float(axis.max())
+
+
 def _validate_independent_norm_without_fracagn(spec) -> None:
     """Raise if ``agn_norm='independent'`` is paired with an active fracAGN (R65).
 
@@ -2077,6 +2125,13 @@ class SEDModel:
 
         # ── Multiwavelength (radio, X-ray, shock) ─────────────────
         param_map_deltas.append(self._init_multiwavelength(spec, ssp_data))
+
+        # ── The polar reference's integration range (R66) ─────────
+        # Runs here and not beside the ``spec``-only guards in ``build``
+        # because it is about the master rest-wavelength grid, which
+        # ``_init_multiwavelength`` just built out of the SSP grid and every
+        # attached component's native axis.
+        self._validate_polar_reference_grid_extent()
 
         # ── Instrument (velocity dispersion, LSF) ─────────────────
         self._init_instrument(spec, observation)
@@ -3592,6 +3647,87 @@ class SEDModel:
                 f"followed L_absorbed * f/(1 - f), so their ratio would "
                 f"report the stellar mass. See issues #2069 and #2210."
             )
+
+    def _validate_polar_reference_grid_extent(self) -> None:
+        """Refuse a master grid that truncates the polar dust's reference (R66).
+
+        Active only where the truncation has a measured consequence: the
+        ``polar_dust`` attenuation block together with the CIGALE-joint tie
+        (``agn_norm='cigale_joint'`` + ``torus='skirtor'``), which is the one
+        configuration that resamples the caller's disc onto a foreign axis --
+        the SKIRTOR templates' native 10 A - 1e8 A grid -- with zero fill and
+        renormalizes it there. See
+        :func:`_polar_reference_required_extent_aa`.
+
+        Measured (``disc='schartmann2005'``, i=30, ``agn_ir_frac=0.3``,
+        reading ``int(polar)/int(torus)``): 0.264063 on a covering 8 A - 1e8 A
+        grid, bit-identical on 0.0413 A - 3e11 A, against 0.290990 on
+        500 A - 1e8 A (**+10.20%**) and 0.284060 on 80 A - 1e7 A (**+7.57%**).
+        The second of those is why the requirement is the template axis and
+        not the disc block's own breakpoints: 80 A - 1e7 A spans the CIGALE
+        piecewise disc's declared 8 - 1e6 nm limits entirely and is still
+        7.6% off, because the shape extrapolates its end segments (those
+        limits hold 86.99% of its integral) and because the zero-fill happens
+        on the template axis.
+
+        A ``torus='skirtor'`` build covers this by construction --
+        ``forward.wavelength_extension._AGN_TORUS_TEMPLATES`` puts the
+        template axis into the master-grid union, measured to take a
+        91 A - 1e8 A SSP grid to 10 A - 1e8 A -- so this is a ratchet on that
+        union rather than a refusal callers will meet.
+
+        Raises
+        ------
+        ConfigError
+            If the polar block and the joint tie are both active and
+            ``self._rest_wavelength`` does not cover the required range.
+
+        Notes
+        -----
+        **JIT-compatible**: not applicable -- construction-time only.
+        """
+        if getattr(self, "_agn_attenuation_block", "none") != "polar_dust":
+            return
+        if str(getattr(self, "_agn_norm", "cigale_joint") or "cigale_joint") != "cigale_joint":
+            return
+        required = _polar_reference_required_extent_aa(getattr(self, "_agn_torus_block", None))
+        if required is None:
+            return
+
+        lo_req, hi_req = required
+        wave = np.asarray(self._rest_wavelength)
+        lo_got, hi_got = float(wave.min()), float(wave.max())
+        # Node coincidence is enough: resample_template zero-fills strictly
+        # outside the caller's span, so an endpoint exactly on the requirement
+        # loses nothing. A 1e-9 relative slack absorbs the float32 grid
+        # canonicalization, which can move an endpoint in the last bit.
+        if lo_got <= lo_req * (1.0 + 1e-9) and hi_got >= hi_req * (1.0 - 1e-9):
+            return
+
+        from tengri.config.exceptions import ConfigError
+
+        raise ConfigError(
+            "the polar_dust attenuation block is active under "
+            "agn_norm='cigale_joint' with torus='skirtor', so the polar "
+            "dust's absorbed-power reference is built on the SKIRTOR "
+            f"templates' native wavelength axis, {lo_req:.6g} A to "
+            f"{hi_req:.6g} A (the grid CIGALE's skirtor2016 integrates its "
+            "l_ext proxy over). The model's rest-wavelength grid is "
+            f"{lo_got:.6g} A to {hi_got:.6g} A, which does not cover it: the "
+            "disc is resampled onto that axis with zero fill, so wherever "
+            "the grid does not reach the disc is set to zero and the "
+            "unit-area shape is renormalized over a truncated spectrum. "
+            "Measured, this moves int(polar)/int(torus) by +10.20% on a "
+            "500 A - 1e8 A grid and +7.57% on an 80 A - 1e7 A one, silently. "
+            "Fix: widen the wavelength grid to cover "
+            f"{lo_req:.6g} A - {hi_req:.6g} A -- normally the SKIRTOR torus "
+            "does that for you, by contributing its template axis to the "
+            "master-grid union (forward.wavelength_extension), so a grid "
+            "this narrow means that contribution is not arriving; check that "
+            "data/skirtor_templates_v3.h5 is present and registered. Or, if "
+            "you do not want the polar dust tied to the SKIRTOR reference, "
+            "select a different agn_norm or a different torus block."
+        )
 
     def _init_multiwavelength(self, spec, ssp_data):
         """Configure radio, X-ray, shock, and build wavelength grid.

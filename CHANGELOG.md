@@ -391,6 +391,32 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
   (`resolve_dust_screen_laws`), so the diffuse screen's law is always stated,
   not inherited (#2021).
 
+- **A model wavelength grid that truncates the polar dust's absorbed-power
+  reference is now refused at build time instead of shifting the torus/polar
+  split silently.** Under `agn_norm='cigale_joint'` with `torus='skirtor'` and
+  the `polar_dust` attenuation block, that reference is built on the SKIRTOR
+  templates' native axis (10 Å – 1e8 Å) — the grid CIGALE's `skirtor2016`
+  integrates its `l_ext` proxy over — and the caller's disc array is
+  resampled onto it with zero fill, so wherever the model's grid does not
+  reach, the disc is zeroed and the unit-area shape is renormalized over a
+  truncated spectrum. Measured (`disc='schartmann2005'`, i=30,
+  `agn_ir_frac=0.3`), `int(polar)/int(torus)`: 0.264063 on a covering
+  8 Å – 1e8 Å grid, bit-identical on 0.0413 Å – 3e11 Å, against 0.290990 on
+  500 Å – 1e8 Å (**+10.20%**) and 0.284060 on 80 Å – 1e7 Å (**+7.57%**).
+
+  The second row is why the requirement is the template axis rather than the
+  disc block's own breakpoints: 80 Å – 1e7 Å spans the CIGALE piecewise
+  disc's declared 8–1e6 nm limits in full and is still 7.6% off, because
+  `piecewise_powerlaw_disk` extrapolates its end segments (those limits hold
+  only 86.99% of the shape's integral) and because the zero-fill happens on
+  the template axis. The bounds are read off the array the resampling
+  targets, so a regenerated grid moves the requirement with it.
+
+  A `torus='skirtor'` build covers this by construction — the torus
+  contributes its template axis to the master-grid union, measured to take a
+  91 Å – 1e8 Å SSP grid to 10 Å – 1e8 Å — so the refusal is a ratchet on that
+  union rather than something callers will meet, and its message says so.
+
 - **`agn={'norm': 'independent'}` beside an active `agn_ir_frac` now raises
   `ConfigError` at build time instead of silently producing an AGN whose
   disc/torus ratio reports the stellar mass.** fracAGN is the CIGALE
