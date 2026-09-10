@@ -72,6 +72,49 @@ class SKIRTORComponents(NamedTuple):
     total: jnp.ndarray
 
 
+class SkirtorDiscTie(NamedTuple):
+    r"""What the CIGALE-joint disc normalization reads off the SKIRTOR pair.
+
+    Every field is measured on the SKIRTOR templates' **native** wavelength
+    grid, which is the grid CIGALE integrates on
+    (``skirtor2016.py`` uses ``x=AGN1.wl`` and ``x=self.SKIRTOR2016.wl``
+    throughout, never the model's output grid) and the only grid on which the
+    disk/dust integral ratio is undistorted -- resampling those templates onto
+    a caller grid moves the ratio by ~10%.
+
+    Attributes
+    ----------
+    R : jnp.ndarray, scalar
+        Reddened, inclination-weighted disc/dust bolometric ratio, carrying
+        the anisotropy factor :math:`\eta(i)`: what the disc *output* is
+        normalized to via ``agn_power x R``.
+    incl_ratio : jnp.ndarray, shape (n_wave,)
+        ``disk(i)/disk(0)``, resampled onto the CALLER's grid (it multiplies
+        the caller's disc spectrum, so it is the one field that belongs
+        there).
+    R_faceon : jnp.ndarray, scalar
+        Face-on, UN-reddened ratio :math:`\int disk(i=0)/\int dust(i)`: the
+        scale CIGALE's polar ``l_ext`` proxy is referenced to.
+    faceon_shape_native : jnp.ndarray, shape (n_native,)
+        The analytic disc shape resampled onto ``wave_native`` and normalized
+        to unit integral **there**, i.e. CIGALE's ``AGN1.disk / int_disk0``.
+        Multiplying it by ``agn_power * R_faceon`` reproduces CIGALE's
+        ``AGN1.disk`` on its own grid; unit-normalizing the same shape on a
+        caller grid instead makes the polar share depend on that grid's
+        extent (measured: 11.0% for the ``skirtor`` disc block between
+        8-1e8 A and 500-1e8 A).
+    wave_native : jnp.ndarray, shape (n_native,)
+        The SKIRTOR template wavelength grid ``faceon_shape_native`` is
+        defined and unit-normalized on [A].
+    """
+
+    R: jnp.ndarray
+    incl_ratio: jnp.ndarray
+    R_faceon: jnp.ndarray
+    faceon_shape_native: jnp.ndarray
+    wave_native: jnp.ndarray
+
+
 # ── Template grid interpolation ───────────────────────────────────
 
 
@@ -686,7 +729,7 @@ def skirtor_disc_dust_ratio(
     agn_radius_ratio: float = 20.0,
     agn_cos_inc: float = DEFAULT_AGN_COS_INC,
     _template=None,
-) -> jnp.ndarray:
+) -> SkirtorDiscTie:
     r"""CIGALE disc/dust bolometric ratio ``R = lumin_disk / lumin_dust``.
 
     Replicates CIGALE ``skirtor2016.py`` so the composable AGN can tie the
@@ -721,17 +764,17 @@ def skirtor_disc_dust_ratio(
 
     Returns
     -------
-    R : ndarray, scalar
-        Disc/dust bolometric luminosity ratio. Returns 1.0 if the v3 grid
-        (separate disk/dust components) is unavailable.
-    incl_ratio : ndarray, shape (n_wave,)
-        Wavelength-dependent disc inclination attenuation ``disk(i)/disk(0)``
-        for reweighting the disc output spectrum. Ones if the grid is
-        unavailable.
-    R_faceon : ndarray, scalar
-        Face-on UN-reddened disc/dust ratio ``∫disk(i=0)/∫dust(i)``: the
-        ratio the polar ``l_ext`` proxy needs (CIGALE ``l_ext =
-        geom·∫AGN1.disk·(1-ext_fac)``). 1.0 if the grid is unavailable.
+    tie : SkirtorDiscTie
+        ``(R, incl_ratio, R_faceon, faceon_shape_native, wave_native)`` -- see
+        :class:`SkirtorDiscTie` for each field. ``R`` and ``R_faceon`` are the
+        disc/dust bolometric ratios (reddened+inclination-weighted, and
+        face-on un-reddened, respectively), ``incl_ratio`` is
+        ``disk(i)/disk(0)`` on the CALLER's grid, and the last two fields
+        carry the unit-integral face-on disc shape together with the native
+        template grid it is normalized on. When the v3 grid (separate
+        disk/dust components) is unavailable the ratios are 1.0,
+        ``incl_ratio`` is ones, and the native pair degrades to the caller's
+        own grid and shape.
 
     Notes
     -----
@@ -744,7 +787,17 @@ def skirtor_disc_dust_ratio(
     # templates into the graph as constants.
     raw = _template if _template is not None else _load_raw_disk_dust_grid()
     if raw is None:
-        return jnp.asarray(1.0), jnp.ones_like(wave), jnp.asarray(1.0)
+        # No native grid to normalize on, so the native pair degrades to the
+        # caller's grid and its own unit-integral shape: the ratios are 1.0,
+        # so nothing downstream is scaled by a number this fallback invented.
+        return SkirtorDiscTie(
+            R=jnp.asarray(1.0),
+            incl_ratio=jnp.ones_like(wave),
+            R_faceon=jnp.asarray(1.0),
+            faceon_shape_native=disc_lambda_unreddened
+            / jnp.maximum(jnp.trapezoid(disc_lambda_unreddened, wave), 1e-30),
+            wave_native=jnp.asarray(wave),
+        )
     disk_jax, dust_jax, wave_grid, axes = raw
 
     def _interp_native(grid, cos_inc):
@@ -795,7 +848,20 @@ def skirtor_disc_dust_ratio(
     # ``SKIRTOR.disk(i)/AGN1.disk(0)``); the caller applies it to the disc
     # output *shape* so the disc spectrum (not just its bolometric R) is
     # inclination-correct.
-    return R, incl_ratio, R_faceon
+    #
+    # ``shape_n`` and ``wave_grid`` travel out with the ratios because
+    # ``R_faceon`` is only meaningful against a shape normalized on the SAME
+    # grid: ``shape_n * (agn_power * R_faceon)`` is CIGALE's ``AGN1.disk``
+    # rescaled to the joint budget, and CIGALE integrates the polar ``l_ext``
+    # proxy over exactly this grid (``x=AGN1.wl``). Re-normalizing the shape
+    # on a caller grid pairs a native-grid ratio with a caller-grid integral.
+    return SkirtorDiscTie(
+        R=R,
+        incl_ratio=incl_ratio,
+        R_faceon=R_faceon,
+        faceon_shape_native=shape_n,
+        wave_native=wave_grid,
+    )
 
 
 @functools.cache

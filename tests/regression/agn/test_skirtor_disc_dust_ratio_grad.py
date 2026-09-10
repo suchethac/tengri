@@ -37,8 +37,15 @@ def _skirtor_grid():
 )
 @pytest.mark.parametrize("at_node", [True, False])
 def test_skirtor_disc_dust_ratio_grad_finite(param, at_node):
-    """R and R_faceon are differentiable w.r.t. each SKIRTOR grid-axis param,
-    both at grid nodes and off-node."""
+    """Every field of the returned tie is differentiable w.r.t. each SKIRTOR
+    grid-axis param, both at grid nodes and off-node.
+
+    ``faceon_shape_native`` joined the return value when the polar-dust
+    face-on reference moved onto the native grid (R60), and it is
+    ``disc_n / trapezoid(disc_n, wave_grid)`` with ``disc_n`` resampled from
+    the caller's grid -- a second path through the same PCHIP interpolant, so
+    it is summed into the loss here rather than left unguarded.
+    """
     from tengri.components.agn.blocks import resolve_agn_block
     from tengri.components.agn.skirtor import skirtor_disc_dust_ratio
 
@@ -63,8 +70,14 @@ def test_skirtor_disc_dust_ratio_grad_finite(param, at_node):
     def loss(v):
         kw = dict(base)
         kw[param] = v
-        R, incl, R_faceon = skirtor_disc_dust_ratio(wave, disc, ext, agn_cos_inc=0.6, **kw)
-        return R + jnp.sum(incl) + R_faceon
+        tie = skirtor_disc_dust_ratio(wave, disc, ext, agn_cos_inc=0.6, **kw)
+        return (
+            tie.R
+            + jnp.sum(tie.incl_ratio)
+            + tie.R_faceon
+            + jnp.sum(tie.faceon_shape_native)
+            + jnp.sum(tie.wave_native)
+        )
 
     g = float(jax.grad(loss)(base[param]))
     assert np.isfinite(g), (

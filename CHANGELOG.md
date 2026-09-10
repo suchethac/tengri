@@ -429,6 +429,24 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
   derived there for exactly this, previously discarded) -- rescaling the
   Stage-4 R-tied (inclination-weighted, `R`-scaled) disc by the inclination
   ratio alone reuses the wrong proportionality constant and was off by ~20%.
+  That face-on reference is normalized, and its absorbed power integrated, on
+  the **SKIRTOR templates' own wavelength grid** -- the grid `R_faceon` was
+  derived on, and the one CIGALE integrates over throughout
+  (`trapezoid(AGN1.disk * (1 - ext_fac), x=AGN1.wl)`). Unit-normalizing the
+  same shape on the caller's grid instead paired a native-grid ratio with a
+  caller-grid integral and made the polar share depend on the model's
+  wavelength extent, which is not a physical parameter: `sed_agn_polar /
+  sed_agn_torus` read 0.2559089362 on an 8 Å - 1e8 Å grid and 0.2538381129 on
+  a 0.0413 Å - 3e11 Å one for the `skirtor` disc block (0.8% apart, and 11.0%
+  apart against a 500 Å - 1e8 Å grid), where it is now bit-identical
+  (0.2565718334) across every grid that spans the disc's own support.
+  `skirtor_disc_dust_ratio` returns a named `SkirtorDiscTie` rather than a
+  bare 3-tuple, so the face-on shape and the grid it is normalized on travel
+  together and cannot drift apart. **Caveat**: a model whose wavelength grid
+  starts redward of its disc block's own support still carries no disc light
+  there, so the resampled shape genuinely differs and the split moves with it
+  (+10.2% on a 500 Å grid for the `skirtor` disc block, with the disc's own
+  share of the budget moving alongside it) -- span the disc's support.
   Measured at the SKIRTOR fiducial (`t=7, pl=1, q=1, oa=40, i=30, disk_type=1,
   fracAGN=0.3, law=0, EBV=0.03, T=100, beta=1.6`) against a live `pcigale`
   `skirtor2016` run, normalized to the same AGN dust budget: torus 1.05x

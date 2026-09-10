@@ -100,6 +100,7 @@ def polar_dust_reemission_lnu(
     wavelength: Array,
     l_in: Array,
     *,
+    l_in_wavelength: Array | None = None,
     # Differs from the declared agn_polar_ebv default (0.03) on purpose: this is
     # an opt-in attenuation stage, so its default must be the no-op. A caller who
     # selects the block without asking for reddening gets none.
@@ -129,8 +130,28 @@ def polar_dust_reemission_lnu(
     ----------
     wavelength : array_like, shape (n_wave,)
         Rest-frame wavelength [Å].
-    l_in : array_like, shape (n_wave,)
-        Pre-attenuation AGN SED in :math:`L_\lambda` [erg/s/Å].
+    l_in : array_like, shape (n_in,)
+        Pre-attenuation AGN SED in :math:`L_\lambda` [erg/s/Å], on
+        ``l_in_wavelength`` when that is given and on ``wavelength``
+        otherwise.
+    l_in_wavelength : array_like, shape (n_in,), optional
+        The grid ``l_in`` is defined on, when it is NOT ``wavelength``. The
+        absorbed power is then measured there and only the graybody comes
+        back on ``wavelength``, so the two grids are decoupled.
+
+        This exists because an ``l_in`` whose normalization was derived on
+        one grid cannot be re-normalized on another without changing the
+        answer. CIGALE's ``skirtor2016`` measures the polar proxy on the
+        SKIRTOR templates' own grid throughout -- ``AGN1.disk`` is the
+        analytic shape unit-normalized on ``SKIRTOR2016.wl`` times
+        ``trapezoid(AGN1.disk, x=AGN1.wl)``, and ``l_ext = g(oa) *
+        trapezoid(AGN1.disk * (1 - ext_fac), x=AGN1.wl)`` -- never on the
+        model's output grid. Passing the face-on reference on the caller's
+        grid instead pairs a native-grid ratio (``R_faceon``) with a
+        caller-grid integral, and the polar share then moves with the
+        caller's wavelength extent, which is not a physical parameter
+        (measured: 11.0% for the ``skirtor`` disc block between an 8-1e8 Å
+        and a 500-1e8 Å grid).
     agn_polar_ebv : float, optional
         :math:`E(B-V)` of the polar dust [mag]. Default ``0.0``.
     agn_cos_inc : float, optional
@@ -195,11 +216,16 @@ def polar_dust_reemission_lnu(
     """
     wave_aa = jnp.asarray(wavelength)
     l_lambda_in = jnp.asarray(l_in)
+    # The grid the ABSORBED POWER is measured on. Defaults to the output grid
+    # (``l_in`` and the graybody then share one grid, the common case); a
+    # caller whose ``l_in`` carries a normalization derived elsewhere names
+    # that grid instead, and only the graybody comes back on ``wavelength``.
+    ref_wave_aa = wave_aa if l_in_wavelength is None else jnp.asarray(l_in_wavelength)
 
     # l_absorbed_per_bin is the per-bin absorbed luminosity, geometry-independent.
     _l_nu_atten, l_absorbed_per_bin = polar_dust_extinction(
         l_lambda_in,
-        wave_aa,
+        ref_wave_aa,
         cos_inc=agn_cos_inc,
         opening_angle_deg=agn_polar_oa,
         ebv=agn_polar_ebv,
@@ -209,8 +235,8 @@ def polar_dust_reemission_lnu(
     # l_absorbed_per_bin shares units with l_in (L_λ in erg/s/Å here), so
     # integrate over wavelength (sorted ascending). Integrating over ν would
     # mix erg/s/Å with Hz and produce a ~12-dex overshoot in the reemission.
-    idx_w = jnp.argsort(wave_aa)
-    l_absorbed_total = jnp.trapezoid(l_absorbed_per_bin[idx_w], wave_aa[idx_w])
+    idx_w = jnp.argsort(ref_wave_aa)
+    l_absorbed_total = jnp.trapezoid(l_absorbed_per_bin[idx_w], ref_wave_aa[idx_w])
 
     # Cone-covering factor (task13 fix-round-1 item 1): only the fraction of
     # the disc's bolometric luminosity within the polar cone can ever be

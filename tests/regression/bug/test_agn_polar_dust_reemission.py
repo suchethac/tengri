@@ -493,11 +493,23 @@ class TestPolarReemissionFollowsTheDiscsActualFrame:
         ``agn_power x R_faceon`` on the unit-normalized intrinsic disc shape.
         A bolometric reference here would read ``f_cone x R`` instead --
         0.671162 x 2.2 against 0.261007 x 4.42, a 28% error.
+
+        The shape is normalized, and the absorbed integral taken, on the
+        SKIRTOR templates' NATIVE grid -- the grid ``R_faceon`` itself was
+        derived on, and the grid CIGALE integrates its own polar proxy over
+        (``x=AGN1.wl``). On the native grid the reconstruction reproduces the
+        shipped ratio to every digit printed (0.242631734 at
+        ``agn_torus_frac=0.5`` on ``_WAVE_JOINT``); reconstructing the same
+        expression on ``_WAVE_JOINT`` instead reads 0.243324134, +0.29%, which
+        this test's 1e-4 tolerance rejects -- and it would make the
+        expectation move with whatever grid the test happens to use
+        (:class:`TestFaceOnReferenceUsesTheNativeSkirtorGrid`).
         """
         self._skip_without_grid()
         from tengri.components.agn.blocks import resolve_agn_block
         from tengri.components.agn.polar_dust import polar_cone_covering_factor
         from tengri.components.agn.skirtor import skirtor_disc_dust_ratio
+        from tengri.utils.grid_interp import resample_template
 
         wave = _WAVE_JOINT
         cos_inc = 0.86602540378443864
@@ -506,7 +518,7 @@ class TestPolarReemissionFollowsTheDiscsActualFrame:
                 wave, agn_log_lbol=12.0, templates=None
             )
         )
-        _r, _incl, r_faceon = skirtor_disc_dust_ratio(
+        tie = skirtor_disc_dust_ratio(
             wave,
             disc,
             jnp.ones_like(wave),
@@ -516,8 +528,13 @@ class TestPolarReemissionFollowsTheDiscsActualFrame:
             agn_oa_skirtor=_JOINT_BASE["agn_oa_skirtor"],
             agn_cos_inc=cos_inc,
         )
-        # The grid the face-on reference is normalized and absorbed on.
-        ref_wave, ref_disc = wave, disc
+        r_faceon = tie.R_faceon
+        # The grid the face-on reference is normalized and absorbed on: the
+        # native template grid. Rebuilt here from the raw disc rather than
+        # read off ``tie.faceon_shape_native``, so the normalization step
+        # itself is reconstructed and not just echoed.
+        ref_wave = tie.wave_native
+        ref_disc = resample_template(ref_wave, wave, disc, left=0.0, right=0.0)
         idx = jnp.argsort(ref_wave)
         shape_unit = ref_disc / jnp.trapezoid(ref_disc[idx], ref_wave[idx])
         _att, absorbed_per_bin = polar_dust_extinction(
@@ -556,3 +573,83 @@ class TestPolarReemissionFollowsTheDiscsActualFrame:
         assert (hi["disc"] / (hi["polar"] + hi["torus"])) == pytest.approx(
             lo["disc"] / (lo["polar"] + lo["torus"]), rel=1e-9, abs=0.0
         )
+
+
+#: Three user grids of different extent AND resolution, each carrying the
+#: whole of the analytic disc's 8 A - 1e6 A support and the whole of the
+#: SKIRTOR templates' 10 A - 1e8 A support. Nothing physical distinguishes
+#: them, so nothing in the SED's component split may.
+_GRID_SKIRTOR_SPAN = jnp.asarray(np.geomspace(8.0, 1.0e8, 3000))
+_GRID_PANCHROMATIC = jnp.asarray(np.geomspace(0.0413, 3.0e11, 4000))
+_GRID_SKIRTOR_SPAN_FINE = jnp.asarray(np.geomspace(1.0, 1.0e9, 6000))
+
+
+class TestFaceOnReferenceUsesTheNativeSkirtorGrid:
+    """R60/Item B: the face-on reference is normalized on the grid that
+    produced ``R_faceon``, not on the caller's wavelength grid.
+
+    ``skirtor_disc_dust_ratio`` derives ``R_faceon = int_disk0/int_dust`` on
+    the SKIRTOR templates' NATIVE grid, with its own comment that resampling
+    those templates onto a user grid distorts the integrals by ~10%. CIGALE
+    does the same: ``skirtor2016.py`` normalizes the analytic disc shape with
+    ``disk(SKIRTOR2016.wl) * trapezoid(AGN1.disk, x=AGN1.wl)`` and integrates
+    ``AGN1.disk * (1 - ext_fac)`` over ``AGN1.wl`` -- the template grid, never
+    the model's output grid. Unit-normalizing that shape on the caller's grid
+    instead pairs a native-grid ratio with a caller-grid integral, and the
+    polar share then moves with the caller's wavelength extent, which is not
+    a physical parameter.
+
+    The observable is ``r = int(polar)/int(torus)``. Under the joint budget
+    (R59) ``polar = B s`` and ``torus = B (1 - s)`` with ``s = P/(B + P)``, so
+    ``r = P/B``: the raw cone-absorbed power over the AGN dust budget. ``P``
+    is built from ``agn_power x R_faceon`` and ``agn_power`` is the torus
+    integral on the user grid, so ``r`` divides the user grid's effect on the
+    torus normalization back out and isolates the grid the reference shape is
+    normalized on.
+
+    Measured at ``agn_ir_frac=0.3`` and the SKIRTOR fiducial, on the caller
+    grid: ``r`` = 0.255908936 (8 A - 1e8 A, n=3000) vs 0.253838113
+    (0.0413 A - 3e11 A, n=4000) for the ``skirtor`` disc block and
+    0.249880352 vs 0.249874295 for ``schartmann2005``. On the native grid all
+    three grids below agree bit-for-bit (0.2565718334 / 0.2500544570).
+
+    One caveat this does NOT fix, and cannot: a caller grid that truncates the
+    disc block's own support carries no disc light there, so the resampled
+    shape really is different and ``r`` really does move (0.2827450165 on
+    500 A - 1e8 A for the ``skirtor`` block, +10.2%). The disc's own share of
+    the budget moves with it (2.20985 -> 2.14773), so the frames stay
+    consistent -- but a model whose grid starts redward of its disc's peak is
+    reprocessing a disc it never emitted. Span the disc's support.
+    """
+
+    @staticmethod
+    def _skip_without_grid():
+        from tengri.components.agn.skirtor import _load_raw_disk_dust_grid
+
+        if _load_raw_disk_dust_grid() is None:
+            pytest.skip("raw SKIRTOR disk/dust grid not available")
+
+    @pytest.mark.parametrize("disc_block", ("skirtor", "schartmann2005"))
+    def test_polar_share_invariant_to_user_grid(self, disc_block):
+        self._skip_without_grid()
+        rs = {}
+        for tag, grid in (
+            ("8 A - 1e8 A n=3000", _GRID_SKIRTOR_SPAN),
+            ("0.0413 A - 3e11 A n=4000", _GRID_PANCHROMATIC),
+            ("1 A - 1e9 A n=6000", _GRID_SKIRTOR_SPAN_FINE),
+        ):
+            got = _joint_integrals(
+                ir_frac=0.3, torus_frac=0.5, wave=grid, agn_disc_block=disc_block
+            )
+            rs[tag] = got["polar"] / got["torus"]
+        ref_tag = "8 A - 1e8 A n=3000"
+        ref = rs[ref_tag]
+        for tag, r in rs.items():
+            assert r == pytest.approx(ref, rel=1e-6, abs=0.0), (
+                f"{disc_block!r}: polar/torus = {ref:.10f} on {ref_tag} and {r:.10f} on "
+                f"{tag} ({r / ref:.6f}x). Every grid here spans the whole disc AND the "
+                "whole SKIRTOR template support, so no physical quantity differs "
+                "between them; the face-on reference shape is being unit-normalized on "
+                "the caller's grid instead of the native grid that produced R_faceon "
+                "(R60). Measured spread before the fix: 1.008158x for 'skirtor'."
+            )

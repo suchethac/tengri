@@ -702,6 +702,8 @@ agn_torus_block, agn_attenuation_block : str
     _disc_R = None
     _disc_incl = None
     _disc_R_faceon = None
+    _disc_shape_faceon = None
+    _disc_wave_native = None
     # ``agn_norm`` policy: "cigale_joint" (current default) ties disc/torus to
     # the single agn_power reference (only meaningful for the SKIRTOR torus,
     # whose template ratios define R, #556); "conserving" debits the disc
@@ -718,7 +720,7 @@ agn_torus_block, agn_attenuation_block : str
     _torus_frac = jnp.clip(jnp.asarray(params.get("agn_torus_frac", 0.5)), 0.0, 1.0)
     if _agn_norm == "cigale_joint" and agn_torus_block == "skirtor":
         _skirtor_bundle = _templates_for("torus", agn_torus_block)
-        _disc_R, _disc_incl, _disc_R_faceon = skirtor_disc_dust_ratio(
+        _disc_tie = skirtor_disc_dust_ratio(
             wave,
             L_lambda_disc,
             jnp.ones_like(wave),
@@ -731,6 +733,13 @@ agn_torus_block, agn_attenuation_block : str
             agn_oa_skirtor=params.get("agn_oa_skirtor", 40.0),
             agn_cos_inc=_cos_inc,
         )
+        _disc_R = _disc_tie.R
+        _disc_incl = _disc_tie.incl_ratio
+        _disc_R_faceon = _disc_tie.R_faceon
+        # The face-on reference travels with the grid it was normalized on --
+        # see the Stage-6 polar block and :class:`SkirtorDiscTie`.
+        _disc_shape_faceon = _disc_tie.faceon_shape_native
+        _disc_wave_native = _disc_tie.wave_native
 
     # Compute lambda*L_lambda(5100Å) for downstream block (line/FeII/torus)
     # normalizations. Convention: this is the intrinsic (un-reddened) disc,
@@ -961,15 +970,27 @@ agn_torus_block, agn_attenuation_block : str
             **_polar_params,
         )
         if _disc_R_faceon is not None:
-            _disc_shape_unit = _disc_intrinsic / jnp.maximum(
-                jnp.trapezoid(_disc_intrinsic, wave), 1e-30
-            )
-            _polar_disc_face_on = _disc_shape_unit * (_agn_power * _disc_R_faceon)
+            # ``R_faceon = int_disk0/int_dust`` was derived on the SKIRTOR
+            # templates' NATIVE grid, with ``skirtor_disc_dust_ratio``'s own
+            # note that resampling those templates onto a caller grid moves
+            # the integrals ~10%. So the shape it multiplies must be
+            # unit-normalized on that SAME grid, and the absorbed-power
+            # integral taken there too -- which is also what CIGALE does
+            # (``l_ext = g(oa) * trapezoid(AGN1.disk * (1 - ext_fac),
+            # x=AGN1.wl)``, the template grid). ``skirtor_disc_dust_ratio``
+            # hands both out (``faceon_shape_native``, ``wave_native``), so
+            # the pairing cannot drift apart. Unit-normalizing the same shape
+            # on ``wave`` instead made the polar share depend on the caller's
+            # wavelength extent -- 11.0% for the ``skirtor`` disc block
+            # between an 8-1e8 A and a 500-1e8 A grid, neither of which
+            # truncates the SKIRTOR templates at all.
+            _polar_disc_face_on = _disc_shape_faceon * (_agn_power * _disc_R_faceon)
             L_nu_reemit = jnp.where(
                 _agn_fracAGN > 0.0,
                 polar_dust_reemission_lnu(
                     wave,
                     _polar_disc_face_on,
+                    l_in_wavelength=_disc_wave_native,
                     agn_polar_reference="face_on",
                     **_polar_params,
                 ),
