@@ -1226,6 +1226,7 @@ def parse_groups(**kwargs) -> Parameters:
     # ── Construct final Parameters ────────────────────────────────────
 
     _narrow_free_priors_to_grid(resolved_kwargs, provenance, structural_params)
+    _narrow_free_priors_to_z(resolved_kwargs, provenance)
 
     final_params = Parameters(**resolved_kwargs)
     # Fill in provenance for params not touched by user/wildcard
@@ -1264,6 +1265,12 @@ _GRID_NARROWED_SUFFIX = "_grid"
 #: is carried by the base tag, so :func:`_base_provenance` strips either.
 _WILDCARD_PINNED_SUFFIX = "_pinned"
 
+#: Marks a provenance tag whose free prior was capped at the age of the
+#: universe at the build's own source redshift (see
+#: :func:`_narrow_free_priors_to_z`). A parse-time cosmological narrowing, not
+#: a component grid, hence its own suffix distinct from ``_GRID_NARROWED_SUFFIX``.
+_Z_NARROWED_SUFFIX = "_zcap"
+
 #: Least fraction of a declared range that may survive an automatic narrowing.
 #:
 #: Trimming a modest dead tail is a tidy-up. Cutting a 2.5 dex prior down to
@@ -1290,6 +1297,11 @@ def _base_provenance(tag: str) -> str:
     the user asked for ``all_params: FREE`` and that is what ``to_groups()``
     should hand back.
 
+    ``wildcard_free_zcap`` is the same shape again: the declared free prior
+    was capped at the age of the universe at the build's own source redshift
+    (:func:`_narrow_free_priors_to_z`), and the request was still
+    ``all_params: FREE``, not an explicit narrowed range.
+
     Parameters
     ----------
     tag : str
@@ -1300,7 +1312,7 @@ def _base_provenance(tag: str) -> str:
     str
         The tag without its outcome marker.
     """
-    for suffix in (_GRID_NARROWED_SUFFIX, _WILDCARD_PINNED_SUFFIX):
+    for suffix in (_GRID_NARROWED_SUFFIX, _WILDCARD_PINNED_SUFFIX, _Z_NARROWED_SUFFIX):
         if tag.endswith(suffix):
             return tag[: -len(suffix)]
     return tag
@@ -1442,6 +1454,180 @@ def _narrow_free_priors_to_grid(
                 default=default,
             )
             provenance[pname] = provenance[pname] + "_grid"
+
+
+#: SFH onset-lookback parameters whose ``free_prior`` ceiling is only ever
+#: correct at z=0 (today's cosmic age): :func:`_narrow_free_priors_to_z` caps
+#: each one at ``age_at_z(z)`` when the build's redshift floor is known.
+#: Membership here is purely "this narrows", not "this is freeable" -- that is
+#: the declaration's business (``free_prior`` in the SFH registry, see
+#: ``sfh_exp_start_gyr`` / ``sfh_dexp_start_gyr`` / ``sfh_const_start_gyr`` in
+#: ``components/stellar/sfh/registry.py``). A model that does not declare one
+#: of these (e.g. a ``dpl``-only build) simply never resolves it, and this
+#: tuple has nothing to narrow.
+_Z_CAPPED_ONSET_PARAMS: tuple[str, ...] = (
+    "sfh_exp_start_gyr",
+    "sfh_dexp_start_gyr",
+    "sfh_const_start_gyr",
+)
+
+
+def _narrow_free_priors_to_z(resolved: dict, provenance: dict[str, str]) -> None:
+    """Cap SF-onset lookback priors at the age of the universe at the source z.
+
+    :data:`_Z_CAPPED_ONSET_PARAMS` each declare a static ``free_prior``
+    ceiling of today's cosmic age (``_AGE_UNIV_GYR``, z=0) -- the widest value
+    that is ever correct, since a registry declaration cannot know the source
+    redshift a given build will use. This intersects that declared range with
+    ``[lo, age_at_z(z_floor)]``, where ``z_floor`` is the lowest redshift the
+    build's ``redshift`` prior admits (its floor for a free redshift, or the
+    value itself for ``Fixed``): a bound generous enough for z~0 otherwise
+    admits draws at z=2 where star formation never happens, producing a
+    zero-mass galaxy with an exactly-zero gradient (measured in
+    ``test_bug_1031_dense_basis_composite::test_working_sfh_topologies_still_predict[dexp]``).
+
+    Mutates ``resolved`` in place and retags ``provenance`` so
+    :meth:`~tengri.parameters.parameters.Parameters.summary` shows the
+    narrowing rather than silently reporting a range the declaration never
+    promised on its own.
+
+    Parameters
+    ----------
+    resolved : dict
+        Resolved ``{param_name: Distribution}`` kwargs, mutated in place.
+    provenance : dict of str to str
+        Resolution tag per parameter.
+
+    Raises
+    ------
+    ParameterError
+        If the cap falls at or below the parameter's declared floor -- the
+        onset window has vanished entirely (only reachable for
+        ``sfh_const_start_gyr``'s 0.01 Gyr floor at z >~ 30, so in practice
+        never, but handled rather than silently producing an inverted
+        ``Uniform``).
+
+    Notes
+    -----
+    **JIT-compatible**: not applicable; composition-time only.
+
+    Deliberately narrow in scope, mirroring :func:`_narrow_free_priors_to_grid`:
+
+    - Only :class:`~tengri.parameters.priors.Uniform` is narrowed, and only a
+      parameter whose provenance is in :data:`_DECLARATION_SOURCED_FREE` --
+      never a user's own explicit ``Uniform`` (that would silently substitute
+      a different prior for the one they wrote).
+    - Narrowing only ever shrinks: ``new_hi = min(hi, cap)``, never raised.
+    - Degrades to a no-op, rather than raising, when the redshift cannot be
+      read at this point: introspection callers (``_allow_empty_wildcard``)
+      legitimately reach here with no ``"redshift"`` key at all, and the
+      required-redshift ``ValueError`` that would otherwise catch a genuine
+      omission is raised later, after this function returns.
+
+    Deliberately does **NOT** apply :data:`_MIN_RETAINED_FRACTION`: at z=6 the
+    cap retains roughly 6.5% of the 13.81 Gyr declared range (0.9 / 13.81),
+    and declining to narrow on that basis would reintroduce exactly the
+    zero-flux draws this pass exists to prevent. For a cosmological ceiling
+    the narrowing IS the physics, not a tidy-up of an incidentally dead tail.
+
+    A catalog fit with a per-galaxy redshift cannot be narrowed here: the
+    build's ``redshift`` is one placeholder value (``Fixed(z0)`` with a
+    ``catalog_z_range``, or one galaxy's), and ``parse_groups`` never sees the
+    catalog table -- ``approx=WavePrecomp(catalog_z_range=...)`` is dropped by
+    :data:`_SEDMODEL_PASSTHROUGH` before this function runs. That case is
+    refused where the catalog IS visible:
+    :class:`~tengri.inference.catalog.Catalog` raises when it finds a
+    z-narrowed onset parameter free beside a ``redshift_col``; see
+    :func:`_z_narrowed_onset_params`.
+    """
+    from tengri.parameters.priors import Uniform
+    from tengri.utils.cosmology import age_at_z
+
+    redshift_dist = resolved.get("redshift")
+    if redshift_dist is None:
+        # No redshift to narrow against yet -- either not given at all
+        # (introspection's `_allow_empty_wildcard`, whose caller has no
+        # target redshift) or not yet resolved. Either way, raising here
+        # would preempt the more specific "redshift is required" error this
+        # function's caller raises afterwards; leaving the static declaration
+        # untouched is exactly the earlier, correct-but-wide behavior.
+        return
+    try:
+        z_floor = redshift_dist.bounds[0]
+    except (AttributeError, NotImplementedError):
+        return
+    if z_floor is None:
+        return
+    cap = float(age_at_z(float(z_floor)))
+
+    for pname in _Z_CAPPED_ONSET_PARAMS:
+        if provenance.get(pname) not in _DECLARATION_SOURCED_FREE:
+            continue
+        dist = resolved.get(pname)
+        if not isinstance(dist, Uniform):
+            continue
+        lo, hi = dist.bounds
+        new_hi = min(hi, cap)
+        if new_hi <= lo:
+            raise ParameterError(
+                f"{pname!r}: the age of the universe at redshift {z_floor:g} is "
+                f"{cap:.4g} Gyr, at or below this parameter's declared floor of "
+                f"{lo:g} Gyr -- there is no admissible SF-onset window left at "
+                f"this redshift. Pass an explicit prior for {pname} that is "
+                f"valid for your target (e.g. {pname}=Uniform({lo:g}, ...) as a "
+                f"flat kwarg, or the equivalent sfh={{...}} override), or use a "
+                f"lower redshift."
+            )
+        if new_hi >= hi:
+            continue  # declared range already sits inside the cap
+        default = dist.default
+        if default is not None:
+            default = min(max(default, lo), new_hi)
+        resolved[pname] = Uniform(
+            lo,
+            new_hi,
+            dist.description,
+            units=dist.units,
+            default=default,
+        )
+        provenance[pname] = provenance[pname] + _Z_NARROWED_SUFFIX
+
+
+def _z_narrowed_onset_params(spec) -> frozenset[str]:
+    """Free :data:`_Z_CAPPED_ONSET_PARAMS` on ``spec`` whose prior was z-narrowed.
+
+    Parameters
+    ----------
+    spec : Parameters
+        A spec built via :func:`parse_groups` (or ``SEDModel.build``).
+
+    Returns
+    -------
+    frozenset of str
+        Names from :data:`_Z_CAPPED_ONSET_PARAMS` that are free on ``spec``
+        and whose provenance carries :data:`_Z_NARROWED_SUFFIX` -- i.e.
+        ``all_params: FREE`` (or an explicit per-parameter ``FREE``) was
+        capped at ``age_at_z`` of the build's own redshift. Empty for a spec
+        not built via ``parse_groups`` (no ``_group_provenance``), or one
+        whose onset params were never freed, or freed against an explicit
+        user prior (never narrowed).
+
+    Notes
+    -----
+    **JIT-compatible**: not applicable; introspection only.
+
+    Exists so a caller that CAN see a catalog's per-galaxy redshift --
+    :class:`~tengri.inference.catalog.Catalog` -- can detect a cap computed
+    against a single placeholder redshift without duplicating
+    :data:`_Z_CAPPED_ONSET_PARAMS` or the provenance-suffix convention.
+    """
+    provenance = getattr(spec, "_group_provenance", None) or {}
+    free = set(getattr(spec, "free_params", ()))
+    return frozenset(
+        name
+        for name in _Z_CAPPED_ONSET_PARAMS
+        if name in free and str(provenance.get(name, "")).endswith(_Z_NARROWED_SUFFIX)
+    )
 
 
 #: Sub-block group name -> the ``structural_params`` attribute naming the

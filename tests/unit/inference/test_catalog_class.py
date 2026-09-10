@@ -75,6 +75,35 @@ def fwd_3band_zrange(synthetic_ssp_wide, simple_observation):
 
 
 @pytest.fixture
+def fwd_3band_zcapped_onset(synthetic_ssp_wide, simple_observation):
+    """3-band ForwardModel with a z-narrowed SF-onset prior (dexp, all_params: FREE).
+
+    ``sfh_dexp_start_gyr`` is freed by the wildcard and capped at
+    ``age_at_z(0.5)`` by ``_narrow_free_priors_to_z`` -- the exact shape the
+    catalog guard in ``Catalog.__init__`` must refuse once a per-galaxy
+    ``redshift_col`` is layered on top of this single-redshift build.
+    """
+    from tengri import DEFAULT, FREE, Fixed, ForwardModel, SEDModel, WavePrecomp
+
+    sed = SEDModel.build(
+        ssp_data=synthetic_ssp_wide,
+        observation=simple_observation,
+        sfh={"type": "dexp", "all_params": FREE},
+        dust_attenuation={
+            "law": "power_law",
+            "type": "two_component",
+            "all_params": Fixed(DEFAULT),
+            "tau_bc": 0.5,
+        },
+        neb={"type": "none"},
+        redshift=Fixed(0.5),
+        approx=WavePrecomp(catalog_z_range=(0.01, 2.0)),
+    )
+    fwd = ForwardModel.build(sed=sed, observation=simple_observation)
+    return fwd
+
+
+@pytest.fixture
 def table_3band():
     """3-row table with 3 bands and redshifts."""
     return {
@@ -141,6 +170,23 @@ def test_construction_validates_eagerly(fwd_3band, table_3band_bad_missing_col):
 
     with pytest.raises(ValueError):  # missing err column found at __init__
         Catalog(fwd_3band, table_3band_bad_missing_col, flux_unit="cgs_fnu")
+
+
+def test_catalog_refuses_z_narrowed_onset_beside_per_galaxy_redshift(
+    fwd_3band_zcapped_onset, table_3band
+):
+    """A z-narrowed onset prior is invalid across a catalog's per-galaxy redshifts.
+
+    ``sfh_dexp_start_gyr`` was capped at ``age_at_z(0.5)`` -- the ONE redshift
+    the model was built with -- but ``table_3band``'s ``"z"`` column carries
+    three different redshifts (0.1, 0.5, 0.3). Fitting all three against a
+    cap computed for z=0.5 is wrong for the other two, so construction must
+    refuse rather than silently fit every galaxy against one galaxy's cap.
+    """
+    from tengri import Catalog
+
+    with pytest.raises(ValueError, match="redshift_col"):
+        Catalog(fwd_3band_zcapped_onset, table_3band, flux_unit="cgs_fnu", redshift_col="z")
 
 
 def test_fit_default_is_map_and_returns_catalog_posterior(fwd_3band, table_3band):

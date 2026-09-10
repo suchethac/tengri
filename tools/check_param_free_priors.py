@@ -37,11 +37,15 @@ grounds for refusing, and the distinction matters when revisiting them:
 ``target-dependent``
     The admissible range is set by the source being fitted rather than by
     physics or a grid, so no static interval is correct for every target. An
-    absolute luminosity or SFR has no galaxy-independent scale; an SF-onset
-    lookback is capped by the age of the universe at the source redshift (8.6
-    Gyr at z=0.5, 0.9 at z=6), so a bound generous enough for z~0 admits
-    zero-star-formation draws at z=2. These must be freed against the caller's
-    own target.
+    absolute luminosity or SFR has no galaxy-independent scale (``dust_L_agn_ir``)
+    and must be freed against the caller's own target. SF-onset lookbacks used
+    to sit here too -- capped by the age of the universe at the source
+    redshift (8.6 Gyr at z=0.5, 0.9 at z=6), so a bound generous enough for
+    z~0 admits zero-star-formation draws at z=2 -- until a parse-time
+    ``age_at_z(z)`` narrowing pass (``parameters/groups.py``'s
+    ``_narrow_free_priors_to_z``) made a static declaration usable: see
+    ``sfh_exp_start_gyr`` / ``sfh_dexp_start_gyr`` / ``sfh_const_start_gyr``
+    in the SFH registry, now declared rather than refused.
 ``explicit-only``
     A genuine per-object freedom with a genuine range, withheld from the
     wildcard because the data a default fit has cannot constrain it. Freeing it
@@ -100,10 +104,15 @@ REFUSED: dict[str, tuple[str, str]] = {
     "met_alpha_fe": ("fixed-by-physics", "pre-existing decision; only constrained by spectra"),
     "met_alpha_fe_young": ("fixed-by-physics", "as met_alpha_fe"),
     # ── target-dependent: the bound is set by the source, not by physics ──
+    # The three SF-onset lookbacks that used to sit here --
+    # sfh_exp_start_gyr / sfh_dexp_start_gyr / sfh_const_start_gyr -- are
+    # declared now: a static Uniform(lo, _AGE_UNIV_GYR) ceiling in the SFH
+    # registry, narrowed at parse time to age_at_z(z) by
+    # parameters/groups.py's _narrow_free_priors_to_z whenever the build's
+    # redshift is known. Scoping the ceiling to the actual source redshift is
+    # what made them declarable, which is the general remedy this ground was
+    # pointing at (same shape as the "inert" scoping fix noted above).
     "dust_L_agn_ir": ("target-dependent", "absolute luminosity; no galaxy-independent scale"),
-    "sfh_exp_start_gyr": ("target-dependent", "onset capped by the age of the universe at z"),
-    "sfh_dexp_start_gyr": ("target-dependent", "as sfh_exp_start_gyr; caught by test_bug_1031"),
-    "sfh_const_start_gyr": ("target-dependent", "as sfh_exp_start_gyr"),
     # ── not-continuous: discrete values, sentinels, or ordering constraints ──
     "sfh_periodic_burst_type": (
         "not-continuous",

@@ -625,7 +625,13 @@ class Gaussian(Distribution):
         # Φ((lo−μ)/σ), Φ((hi−μ)/σ) and the mass Z = Φ(β) − Φ(α) in [lo, hi].
         self._cdf_lo = _norm_cdf_float((self._lo - self._mu) / self._sigma)
         self._cdf_hi = _norm_cdf_float((self._hi - self._mu) / self._sigma)
-        self._truncated = self._cdf_lo > 0.0 or self._cdf_hi < 1.0
+        # Structural, not derived from the CDF values: erf underflows to
+        # exactly 0.0 (or 1.0) once a finite bound sits beyond ~8.3 sigma, so
+        # for a bound that far out `_cdf_lo > 0.0` reads False even though the
+        # bound is very much still there -- unstandardize/sample would then
+        # fall back to the untruncated affine map and can return values
+        # outside [lo, hi] (#2226).
+        self._truncated = self._lo > float("-inf") or self._hi < float("inf")
         self.description = description
         self.units = units
         self._register_default(default)

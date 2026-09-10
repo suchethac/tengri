@@ -404,7 +404,17 @@ ATTENUATION_PARAMS: tuple[ParamDeclaration, ...] = (
         # attenuation.py:426 computes
         # ``e_b = dust_bump_strength * (0.85 - 1.9 * dust_delta)`` (KC13 Eq. 3),
         # so 0 is bump-free (this default) and 1 is KC13 as published.
-        free_prior=Uniform(0.0, 2.0, "UV bump strength at 2175A", default=0.0),
+        #
+        # The ceiling is 4.0, not 1.0 or 2.0 (#2226): Narayanan, Conroy, Davé,
+        # Johnson & Popping (2018, ApJ 869, 70, doi:10.3847/1538-4357/aaed25)
+        # fit MUFASA-simulated galaxies with bump multipliers up to 3.634 (at
+        # z=4, ``_NARAYANAN_BUMP_STRENGTH`` in ``attenuation.py``) -- a
+        # ``kriek_conroy`` fit with ``dust_bump_strength: FREE`` needs to reach
+        # what the paper finds, not only KC13's own value of 1. 4.0 sits ~10%
+        # above the highest fitted node. ``narayanan_prior``'s explicit
+        # ``Gaussian`` (``components/dust/priors.py``) bypasses this
+        # ``free_prior`` entirely; only FREE/wildcard callers see the ceiling.
+        free_prior=Uniform(0.0, 4.0, "UV bump strength at 2175A", default=0.0),
     ),
     ParamDeclaration(
         "dust_delta",
