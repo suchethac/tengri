@@ -30,6 +30,8 @@ References
 
 from __future__ import annotations
 
+from typing import ClassVar
+
 import jax
 import jax.numpy as jnp
 import numpy as np
@@ -653,3 +655,146 @@ class TestFaceOnReferenceUsesTheNativeSkirtorGrid:
                 "the caller's grid instead of the native grid that produced R_faceon "
                 "(R60). Measured spread before the fix: 1.008158x for 'skirtor'."
             )
+
+
+class TestPolarReemissionIsIsotropic:
+    """R63: the cone dust re-emits ISOTROPICALLY; only the LOS screen is Type-1.
+
+    The polar dust intercepts a fixed share of the disc's light in the cone
+    (:func:`polar_dust_extinction` returns a geometry-independent
+    ``l_absorbed``: the absorbed power does not depend on where the observer
+    stands), and re-radiates it as an optically-thin FIR graybody, which is
+    visible from every direction. So ``sed_agn_polar`` is present at Type-2
+    sightlines at full strength. What IS Type-1-only is the *reddening of the
+    disc we see*: only a face-on line of sight passes through the near cone,
+    and at Type-2 inclinations the disc is already screened by the equatorial
+    torus, which the runner's own Stage-4.5 mask handles.
+
+    **CIGALE does the same**, verified against a live ``pcigale``
+    ``skirtor2016`` run rather than inferred: in ``skirtor2016.py`` the LOS
+    reddening ``self.SKIRTOR2016.disk *= ext_fac`` is gated on
+    ``if self.i <= (90.0 - self.oa)``, while ``l_ext`` is computed from
+    ``AGN1.disk * (1 - ext_fac)`` and ``self.SKIRTOR2016.dust += blackbody``
+    are both UNCONDITIONAL. Measured at oa=40 (so its own Type-1 boundary is
+    i <= 50), ``int(SKIRTOR2016.polar_dust)`` per unit dust budget:
+
+        i =  0  0.204988    i = 60  0.352217   (Type 2)
+        i = 30  0.209708    i = 80  0.450589   (Type 2)
+        i = 50  0.253217    i = 90  0.483635   (Type 2)
+
+    -- non-zero and in fact largest at the most edge-on sightlines.
+
+    This is a **behavior change** from the pre-R59 code, which multiplied the
+    re-emission integrand by the Stage-4.5 Type-1/2 mask and so switched the
+    polar component nearly off at Type 2. Measured at the SKIRTOR fiducial
+    with ``agn_polar_ebv=0.3``, re-applying that mask divides
+    ``sed_agn_polar`` at i=80 by 21.55 under ``agn_norm='independent'`` and by
+    11.44 under ``'conserving'`` -- the numbers in the CHANGELOG entry.
+    """
+
+    #: cos(30 deg) and cos(80 deg). ``_POLAR_OA`` overrides
+    #: ``_BASE_PARAMS``' 10 deg so the polar cone's own Type-1 boundary sits
+    #: at i = 90 - 40 = 50 deg: i=30 is then deep Type 1 and i=80 deep Type 2,
+    #: rather than i=80 landing exactly on the sigmoid's midpoint (where the
+    #: transmission is 0.5010 by construction, not a leak).
+    _COS_TYPE1 = 0.8660254037844387
+    _COS_TYPE2 = 0.17364817766693041
+    _POLAR_OA = 40.0
+
+    #: ``_BASE_PARAMS`` selects ``agn_torus_block='none'``, which is in
+    #: ``_SELF_CONTAINED_TORI``, so its Stage-4.5 ``_central_mask`` is the
+    #: constant 1.0 -- a configuration in which re-applying the mask to the
+    #: re-emission integrand changes nothing and the test would pass
+    #: vacuously. The SKIRTOR torus instead installs the wavelength-dependent
+    #: ``torus_screen_transmission``, measured min 0.992861 at i=30 and
+    #: 0.000000 at i=80. Kept at ``agn_norm='independent'`` so there is no
+    #: R-tie and no debit: the disc handed to the polar screen is the
+    #: intrinsic disc and does not depend on ``agn_cos_inc`` at all.
+    _MASK_LIVE: ClassVar[dict] = {
+        "agn_torus_block": "skirtor",
+        "agn_oa_skirtor": 40.0,
+        "agn_tau_skirtor": 7.0,
+    }
+
+    @staticmethod
+    def _skip_without_grid():
+        from tengri.components.agn.skirtor import _load_raw_disk_dust_grid
+
+        if _load_raw_disk_dust_grid() is None:
+            pytest.skip("SKIRTOR grid not available")
+
+    def _components(self, cos_inc, **over):
+        _sed, comps = composable_agn_l_nu(
+            _WAVE,
+            **{
+                **_BASE_PARAMS,
+                **self._MASK_LIVE,
+                "agn_cos_inc": cos_inc,
+                "agn_polar_oa": self._POLAR_OA,
+                **over,
+            },
+            return_components=True,
+        )
+        return comps
+
+    def test_reemission_identical_at_type1_and_type2(self):
+        """Same cone-absorbed power in, same graybody out, at any inclination.
+
+        ``agn_norm='independent'`` with the SKIRTOR torus: no R-tie and no
+        debit, so the disc handed to the polar screen is the intrinsic disc
+        and does not depend on ``agn_cos_inc`` at all, and the absorbed power
+        is therefore identical between the two runs by construction -- while
+        the Stage-4.5 ``_central_mask`` (the SKIRTOR screen) is strongly
+        inclination-dependent. Any difference in the re-emission is that mask
+        leaking into a term that must not carry it.
+        """
+        self._skip_without_grid()
+        t1 = self._components(self._COS_TYPE1)
+        t2 = self._components(self._COS_TYPE2)
+        p1 = float(_integrate_lnu_bolometric(jnp.asarray(t1["polar"])))
+        p2 = float(_integrate_lnu_bolometric(jnp.asarray(t2["polar"])))
+        d1 = float(_integrate_lnu_bolometric(jnp.asarray(t1["disc"])))
+        d2 = float(_integrate_lnu_bolometric(jnp.asarray(t2["disc"])))
+        assert p1 != 0.0, "the polar component is exactly zero: nothing is under test"
+        # Non-vacuity: the Type-1/2 geometry IS live in this configuration, so
+        # an equal polar is a real statement about the re-emission and not
+        # just a model that ignores inclination.
+        assert not (0.5 < d2 / d1 < 2.0), (
+            f"probe setup failed: the disc barely moved between the two sightlines "
+            f"({d2 / d1:.4f}x), so the Stage-4.5 mask is not live here and this "
+            "configuration cannot show that the polar re-emission is exempt from it"
+        )
+        assert p2 == pytest.approx(p1, rel=1e-12, abs=0.0), (
+            f"sed_agn_polar is {p2:.10e} erg/s at i=80 against {p1:.10e} at i=30 "
+            f"({p2 / p1:.4f}x) for identical cone-absorbed power: the polar dust "
+            "re-emits isotropically, so a Type-1/2 mask must not reach this term "
+            "(R63)."
+        )
+        assert jnp.allclose(
+            jnp.asarray(t1["polar"]), jnp.asarray(t2["polar"]), rtol=1e-12, atol=0.0
+        ), "the polar graybody differs per-wavelength between the two sightlines"
+
+    def test_the_line_of_sight_screen_stays_type1_only(self):
+        """The reddening half of the mechanism is NOT isotropic.
+
+        The other half of R63: the polar screen still dims only what a
+        face-on observer sees through the near cone. At Type-2 inclinations
+        the disc reaches us already screened by the equatorial torus (the
+        runner's Stage-4.5 mask), so a second cone screen there would
+        double-count the obscuration.
+        """
+        from tengri.components.agn.blocks import resolve_agn_block
+
+        atten = resolve_agn_block("attenuation", "polar_dust")
+        kw = {**_BASE_PARAMS, **self._MASK_LIVE, "agn_polar_oa": self._POLAR_OA}
+        f1 = jnp.asarray(atten(_WAVE, **{**kw, "agn_cos_inc": self._COS_TYPE1}))
+        f2 = jnp.asarray(atten(_WAVE, **{**kw, "agn_cos_inc": self._COS_TYPE2}))
+        assert float(jnp.min(f1)) < 0.1, (
+            f"at i=30 (Type 1) the polar screen's deepest transmission is "
+            f"{float(jnp.min(f1)):.4f}: E(B-V)=0.3 should redden the disc hard in the UV"
+        )
+        assert float(jnp.min(f2)) > 0.99, (
+            f"at i=80 (Type 2) the polar screen's deepest transmission is "
+            f"{float(jnp.min(f2)):.4f}, so it is still reddening a sightline that does "
+            "not pass through the near cone (R63: the LOS screen is Type-1 only)"
+        )

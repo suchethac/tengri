@@ -457,6 +457,32 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
   the screen input and the absorbed-luminosity integrand (CIGALE reddens only
   `disk`, never its torus thermal emission).
 
+  **Behavior change at Type-2 sightlines.** The polar re-emission is now
+  ISOTROPIC: the absorbed-luminosity integrand is the *unmasked* disc, so
+  `sed_agn_polar` is present at full strength at every inclination. The cone
+  dust intercepts a fixed share of the disc's light regardless of where the
+  observer stands and re-radiates it as an optically-thin FIR graybody, which
+  no viewing angle can hide; what is Type-1-only is the *reddening of the disc
+  we see*, and at Type-2 inclinations that sightline does not pass through the
+  near cone and the disc arrives already screened by the equatorial torus.
+  Previously the Stage-4.5 Type-1/2 mask multiplied the re-emission integrand
+  too, which switched the polar component nearly off edge-on. Measured at the
+  SKIRTOR fiducial with `agn_polar_ebv=0.3`, `int(sed_agn_polar) dnu` at
+  i = 80 deg: **1.767569e+45 against 1.791134e+43 erg/s (98.7x) under
+  `agn_norm='independent'`** and **6.035863e+44 against 8.913741e+42 erg/s
+  (67.7x) under `'conserving'`**; at i = 30 deg it moves by 0.4% and 0.3%.
+  Under `'cigale_joint'` with a non-zero `agn_ir_frac` the polar reference is
+  the face-on `disk`, which never carried the mask, so that path is unchanged
+  (8.421947e+44 erg/s either way). CIGALE `skirtor2016` does the same, checked
+  against a live run rather than inferred: `self.SKIRTOR2016.disk *= ext_fac`
+  is gated on `i <= 90 - oa` while `l_ext` and
+  `self.SKIRTOR2016.dust += blackbody` are unconditional, and its
+  `int(polar_dust)` per unit dust budget at `oa=40` runs 0.204988 (i=0),
+  0.209708 (i=30), 0.253217 (i=50), 0.352217 (i=60), 0.450589 (i=80), 0.483635
+  (i=90) -- non-zero and largest edge-on. Renders that move:
+  `examples/agn/plot_polar_dust_ebv_type12_sweep.py` and its committed
+  `docs/auto_examples/agn/` outputs.
+
 - Rule 4 of the composable-AGN recipe validator no longer names
   `nlr={'type': 'analytic'}` as disc-anchored. `nlr_analytic_block` is
   illuminated by the intrinsic bolometric `10**agn_log_lbol` and its body opens

@@ -126,6 +126,31 @@ def polar_dust_reemission_lnu(
     see :func:`tengri.components.agn.polar_dust.polar_cone_covering_fraction`
     for the derivation.
 
+    **Type 1 vs Type 2 (R63).** The two halves of the polar-dust mechanism
+    carry different geometry, and only one of them is a line-of-sight effect:
+
+    * the **re-emission** this function returns is ISOTROPIC. The cone dust
+      intercepts a fixed share of the disc's light regardless of where the
+      observer stands, and re-radiates it as an optically-thin FIR graybody,
+      so it is present at full strength at Type-2 inclinations. The caller
+      must NOT gate it on a Type-1/2 mask.
+    * the **reddening** of the disc we observe is Type-1 only, and
+      :func:`~tengri.components.agn.polar_dust.polar_dust_extinction` already
+      applies that mask to its ``l_nu_attenuated`` output: a Type-2 sightline
+      does not pass through the near cone, and the disc reaches us already
+      screened by the equatorial torus.
+
+    CIGALE's ``skirtor2016`` does the same, verified against a live run and
+    not inferred from the equations: there, ``self.SKIRTOR2016.disk *=
+    ext_fac`` is gated on ``if self.i <= (90.0 - self.oa)``, while both
+    ``l_ext = g(oa) * trapezoid(AGN1.disk * (1 - ext_fac), x=AGN1.wl)`` and
+    ``self.SKIRTOR2016.dust += blackbody`` are unconditional. Measured at
+    ``oa=40`` (its Type-1 boundary is then ``i <= 50``),
+    ``int(SKIRTOR2016.polar_dust)`` per unit dust budget runs 0.204988
+    (i=0), 0.209708 (i=30), 0.253217 (i=50), 0.352217 (i=60), 0.450589
+    (i=80), 0.483635 (i=90) -- non-zero, and largest, at the most edge-on
+    sightlines.
+
     Parameters
     ----------
     wavelength : array_like, shape (n_wave,)

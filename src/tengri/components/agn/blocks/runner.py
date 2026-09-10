@@ -934,6 +934,20 @@ agn_torus_block, agn_attenuation_block : str
         # is nearly transparent in the IR, which is why it stayed small and
         # unnoticed) while making the torus carry a screen it should not see.
         #
+        # R63: the integrand is the UNMASKED disc. The cone dust re-emits what
+        # it absorbed isotropically -- the absorbed power does not depend on
+        # where the observer stands -- so ``sed_agn_polar`` is present at full
+        # strength at Type-2 sightlines and the Stage-4.5 ``_central_mask``
+        # must not reach this term. Only the LOS reddening is Type-1 only, and
+        # ``polar_dust_extinction`` already gates that half itself. CIGALE
+        # agrees (verified against a live skirtor2016 run: its polar blackbody
+        # is added unconditionally, only ``disk *= ext_fac`` is gated on
+        # ``i <= 90 - oa``); see ``polar_dust_reemission_lnu``'s docstring for
+        # the measured per-inclination numbers. Re-applying the mask here
+        # divides the Type-2 (i=80) ``sed_agn_polar`` by 98.7x under
+        # ``independent`` and 67.7x under ``conserving`` at the fiducial with
+        # ``agn_polar_ebv=0.3``.
+        #
         # R60: which cone factor applies depends on what the disc the polar
         # dust reprocesses represents -- the two frames are exactly 18/7
         # apart, so this is stated, never inherited. And it is decided by the
