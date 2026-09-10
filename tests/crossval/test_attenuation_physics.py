@@ -518,7 +518,7 @@ class TestPowerLawPhysics:
 
         wave = jnp.array([1000.0, 2750.0, 5500.0, 11000.0])
         n = -0.7
-        k = power_law(wave, n_slope=n)
+        k = power_law(wave, dust_slope=n)
         expected = (wave / 5500.0) ** n
         np.testing.assert_allclose(k, expected, rtol=1e-12)
 
@@ -526,8 +526,8 @@ class TestPowerLawPhysics:
         """More negative slope → steeper UV rise."""
         from tengri.components.dust.attenuation import power_law
 
-        k_steep = power_law(WAVE, n_slope=-1.3)
-        k_flat = power_law(WAVE, n_slope=-0.3)
+        k_steep = power_law(WAVE, dust_slope=-1.3)
+        k_flat = power_law(WAVE, dust_slope=-0.3)
 
         uv_idx = int(jnp.argmin(jnp.abs(WAVE - 1500.0)))
         nir_idx = int(jnp.argmin(jnp.abs(WAVE - 20000.0)))

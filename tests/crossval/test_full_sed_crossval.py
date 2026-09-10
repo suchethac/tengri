@@ -3372,7 +3372,7 @@ class TestSMCLMCDustLaw:
         wave_jax = jnp.array(wave)
 
         smc_curve = np.asarray(smc(wave_jax))
-        pl_curve = np.asarray(power_law(wave_jax, n_slope=-0.7))
+        pl_curve = np.asarray(power_law(wave_jax, dust_slope=-0.7))
 
         # Normalize both to 1 at V (5500 Å)
         v_idx = np.argmin(np.abs(wave - 5500.0))

@@ -98,7 +98,7 @@ t_dust_pl, dust_pl = bench(
         p["tau_diff"],
         law_bc="power_law",
         law_diff="power_law",
-        n_slope=p["dust_slope"],
+        dust_slope=p["dust_slope"],
     ),
 )
 print(f"  5a. Dust (power_law):         {t_dust_pl:8.1f} μs")
@@ -113,7 +113,7 @@ t_dust_cal, dust_cal = bench(
         p["tau_diff"],
         law_bc="calzetti",
         law_diff="calzetti",
-        n_slope=p["dust_slope"],
+        dust_slope=p["dust_slope"],
     ),
 )
 print(f"  5b. Dust (calzetti):          {t_dust_cal:8.1f} μs")
@@ -128,7 +128,7 @@ t_dust_kc, _ = bench(
         p["tau_diff"],
         law_bc="kriek_conroy",
         law_diff="kriek_conroy",
-        n_slope=p["dust_slope"],
+        dust_slope=p["dust_slope"],
     ),
 )
 print(f"  5c. Dust (kriek_conroy):      {t_dust_kc:8.1f} μs")
@@ -143,7 +143,7 @@ t_dust_smc, _ = bench(
         p["tau_diff"],
         law_bc="smc",
         law_diff="smc",
-        n_slope=p["dust_slope"],
+        dust_slope=p["dust_slope"],
     ),
 )
 print(f"  5d. Dust (smc):               {t_dust_smc:8.1f} μs")

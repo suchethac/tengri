@@ -477,6 +477,13 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 
 ### Deprecated
 
+- Attenuation-law keyword `n_slope` is renamed `dust_slope` on `power_law` and
+  `conroy2010`, so the law keyword equals the registry name (`dust_slope`) and the
+  grammar stem (`slope`) for every shape parameter. `n_slope=` still works on the
+  public law functions with a DeprecationWarning; the registry callables, the
+  law-kwarg resolver and the per-screen override dicts (`dust_law_overrides`,
+  `bc_law_overrides`, `neb_law_overrides`) use `dust_slope` only.
+
 - `SEDModel.from_config(dust=...)` / `build_model_from_config(dust=...)`:
   renamed to `dust_attenuation_law=...`. `dust=` still works and forwards to
   `dust_attenuation_law`, but emits a `DeprecationWarning`; passing both with

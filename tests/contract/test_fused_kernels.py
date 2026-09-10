@@ -191,7 +191,7 @@ def _unfused_photometry(
         tau_v2=tau_v2,
         law_bc="power_law",
         law_diff="power_law",
-        n_slope=dust_n,
+        dust_slope=dust_n,
     )
     return fast_photometry(weights, ssp_at_z, dust, log10_flux_scale)
 
@@ -434,7 +434,7 @@ class TestFusedSpectrumAccuracy:
             tau_v2=tau_v2,
             law_bc="power_law",
             law_diff="power_law",
-            n_slope=dust_n,
+            dust_slope=dust_n,
         )
         flux = fast_spectrum(weights, ssp_at_z, dust, log10_flux_scale)
         result_unfused = flux * LSUN_ERG_PER_S

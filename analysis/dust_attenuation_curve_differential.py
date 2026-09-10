@@ -73,7 +73,7 @@ def tengri_two_component_curve(
     inside the birth-cloud (1e6 yr) or far outside it (1e10 yr), so the sigmoid
     weight collapses to 1 or 0 and the curve is the pure component combination.
     Both birth-cloud and diffuse laws are ``power_law`` and currently share the
-    one ``n_slope`` argument (the crux of the discrepancy).
+    one ``dust_slope`` argument (the crux of the discrepancy).
     """
     age = jnp.asarray([1.0e6 if young else 1.0e10])
     trans = two_component_dust(
@@ -86,7 +86,7 @@ def tengri_two_component_curve(
         # Per-component birth-cloud slope via the new bc_params overlay (the
         # diffuse ISM keeps the shared -0.7). For tau_diff=0 this isolates the
         # birth cloud; for the default slope it reproduces the old behaviour.
-        bc_params={"n_slope": slope},
+        bc_params={"dust_slope": slope},
     )[0]
     return -2.5 * np.log10(np.asarray(trans))
 

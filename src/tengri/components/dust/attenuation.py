@@ -73,6 +73,7 @@ import jax
 import jax.numpy as jnp
 import numpy as np
 
+from tengri._deprecated import renamed_kwarg as renamed_kwarg
 from tengri.components.dust.laws._registry import (
     _HEADLINE_LAWS as _HEADLINE_LAWS,
     DUST_LAWS as DUST_LAWS,
@@ -92,6 +93,7 @@ from tengri.utils.physics_constants import V_BAND_ANGSTROM
 # ── Attenuation curves ────────────────────────────────────────────
 
 
+@renamed_kwarg("n_slope", "dust_slope")
 @register_dust_law(
     "power_law",
     citation="Charlot & Fall 2000 (ApJ 539, 718)",
@@ -99,7 +101,7 @@ from tengri.utils.physics_constants import V_BAND_ANGSTROM
 )
 def power_law(
     wavelength: jnp.ndarray,
-    n_slope: float = -0.7,
+    dust_slope: float = -0.7,
 ) -> jnp.ndarray:
     r"""Power-law dust attenuation curve following Charlot & Fall (2000).
 
@@ -107,7 +109,7 @@ def power_law(
     ----------
     wavelength : array_like, shape (n_wave,)
         Wavelength grid. [Å]
-    n_slope : float, optional
+    dust_slope : float, optional
         Power-law slope. Default: -0.7 (standard Charlot & Fall). [dimensionless]
 
     Returns
@@ -134,7 +136,7 @@ def power_law(
        Dust in Galaxies," ApJ, 539, 718 (2000).
        https://doi.org/10.1086/309250
     """
-    return (wavelength / V_BAND_ANGSTROM) ** n_slope
+    return (wavelength / V_BAND_ANGSTROM) ** dust_slope
 
 
 @register_dust_law(
@@ -172,7 +174,7 @@ def vw07_bc(
 
     :math:`n = -1.3` is the Charlot & Fall (2000) [2]_ birth-cloud slope and is
     a constant OF this law, not a parameter of it: the signature declares no
-    ``n_slope``, so ``dust_attenuation={'law': 'vw07_bc', 'slope': ...}`` raises
+    ``dust_slope``, so ``dust_attenuation={'law': 'vw07_bc', 'slope': ...}`` raises
     rather than being accepted and discarded (#2185). Use ``power_law``, which
     is the same curve with the slope free.
 
@@ -222,7 +224,7 @@ def vw07_diff(
 
     :math:`n = -0.7` is the Charlot & Fall (2000) [2]_ effective absorption
     curve and is a constant OF this law, not a parameter of it: the signature
-    declares no ``n_slope``, so
+    declares no ``dust_slope``, so
     ``dust_attenuation={'law': 'vw07_diff', 'slope': ...}`` raises rather than
     being accepted and discarded (#2185). Use ``power_law``, which is the same
     curve with the slope free and the same -0.7 default.
@@ -1420,6 +1422,7 @@ def narayanan_z(
     return kriek_conroy(wavelength, dust_delta=delta_z, dust_bump_strength=bump_z)
 
 
+@renamed_kwarg("n_slope", "dust_slope")
 @register_dust_law(
     "conroy2010",
     citation="Conroy et al. 2010 (ApJ 708, 58)",
@@ -1428,7 +1431,7 @@ def narayanan_z(
 def conroy2010(
     wavelength: jnp.ndarray,
     dust_Rv: float = 3.1,
-    n_slope: float = -0.7,
+    dust_slope: float = -0.7,
 ) -> jnp.ndarray:
     r"""Conroy+2010 mixed MW + power-law attenuation (FSPS dust_type=1).
 
@@ -1441,7 +1444,7 @@ def conroy2010(
         Wavelength grid. [Å]
     dust_Rv : float
         Total-to-selective extinction ratio for the MW component. [dimensionless] Default: 3.1.
-    n_slope : float
+    dust_slope : float
         Power-law index for the long-wavelength component. [dimensionless] Default: -0.7.
 
     Returns
@@ -1469,7 +1472,7 @@ def conroy2010(
        https://doi.org/10.1088/0004-637X/708/1/58
     """
     k_mw = cardelli(wavelength, dust_Rv=dust_Rv)
-    k_pl = power_law(wavelength, n_slope=n_slope)
+    k_pl = power_law(wavelength, dust_slope=dust_slope)
     # Smooth sigmoid blend: MW dominates UV, power-law dominates IR
     x = jnp.log10(wavelength / V_BAND_ANGSTROM)
     blend = jax.nn.sigmoid(x / 0.05)

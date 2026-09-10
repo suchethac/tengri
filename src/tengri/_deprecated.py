@@ -32,6 +32,7 @@ __all__ = [
     "UNSET",
     "deprecated_alias",
     "deprecated_attribute",
+    "renamed_kwarg",
     "resolve_renamed_flag",
 ]
 
@@ -222,3 +223,84 @@ def deprecated_attribute(
         stacklevel=3,
     )
     return value
+
+
+def renamed_kwarg(old: str, new: str, *, drop_version: str = "1.0") -> Callable[[F], F]:
+    """Decorator accepting a renamed keyword argument under its old name.
+
+    Wraps a function to accept *old* as a deprecated alias for *new*.
+    Both keywords cannot be passed together; if only *old* is passed,
+    it is renamed to *new* with a DeprecationWarning. The wrapped function's
+    ``inspect.signature`` reports the *new* name only (via ``functools.wraps``
+    and ``__wrapped__``).
+
+    Parameters
+    ----------
+    old : str
+        The deprecated keyword name.
+    new : str
+        The current keyword name.
+    drop_version : str, optional
+        Version in which the old keyword will be removed. Default ``"1.0"``.
+
+    Returns
+    -------
+    callable
+        A decorator that wraps a function to accept *old* with a
+        DeprecationWarning.
+
+    Raises
+    ------
+    TypeError
+        If both *old* and *new* are passed in the same call.
+
+    Notes
+    -----
+    Use as a decorator on a function before the registry decorator::
+
+        @renamed_kwarg("n_slope", "dust_slope")
+        @register_dust_law("power_law", ...)
+        def power_law(wavelength, dust_slope: float = -0.7): ...
+
+    Python applies decorators bottom-up, so the registry decorator
+    stores the raw function (with the *new* name), and the
+    ``inspect.signature`` reports only the *new* parameter.
+    The wrapper, stored at the module level, still accepts *old*.
+
+    Examples
+    --------
+    >>> @renamed_kwarg("n_slope", "dust_slope")
+    ... def scaled(wavelength, dust_slope=-0.7):
+    ...     return wavelength * dust_slope
+    >>> scaled(2.0, dust_slope=-0.5)  # current name: no warning
+    -1.0
+    >>> import warnings
+    >>> with warnings.catch_warnings(record=True) as w:
+    ...     warnings.simplefilter("always")
+    ...     value = scaled(2.0, n_slope=-0.5)  # old name: forwarded with a warning
+    >>> value
+    -1.0
+    >>> issubclass(w[0].category, DeprecationWarning), "n_slope" in str(w[0].message)
+    (True, True)
+    """
+
+    def decorator(fn: F) -> F:
+        @functools.wraps(fn)
+        def wrapper(*args: Any, **kwargs: Any) -> Any:
+            # Check if both old and new are present
+            if old in kwargs and new in kwargs:
+                raise TypeError(f"{fn.__name__}() got both {old!r} (deprecated) and {new!r}")
+            # If only old is present, rename it and emit warning
+            if old in kwargs:
+                warnings.warn(
+                    f"`{fn.__name__}({old}=...)` is deprecated and will be removed in "
+                    f"tengri v{drop_version}; use `{new}=` instead.",
+                    DeprecationWarning,
+                    stacklevel=2,
+                )
+                kwargs[new] = kwargs.pop(old)
+            return fn(*args, **kwargs)
+
+        return wrapper  # type: ignore[return-value]
+
+    return decorator

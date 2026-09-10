@@ -1,6 +1,6 @@
 # SPDX-License-Identifier: BSD-3-Clause
 """Regression: the no-state line screen must reach the SAME law kwargs the
-continuum does, not a private ``{n_slope, dust_bump_strength}`` dict (#2223).
+continuum does, not a private ``{dust_slope, dust_bump_strength}`` dict (#2223).
 
 ``SEDModel._attenuate_line_catalog`` (the no-state fallback used when
 ``dust_model`` is ``off``/``wg00``, and by the #950 ``enable_fast_nebular()``
@@ -137,7 +137,7 @@ def _resolved_transmission(model, params, wave) -> np.ndarray:
 
     Independent of ``attenuate_line_catalog`` in the sense that matters for
     #2223: it is a SEPARATE call into the resolver and the law registry, not a
-    call to the method under test, so a hand-built ``{n_slope,
+    call to the method under test, so a hand-built ``{dust_slope,
     dust_bump_strength}`` dict (the old ``attenuate_emission`` fallback) would
     diverge from it exactly as it diverges from the live continuum.
     """
@@ -194,7 +194,7 @@ def test_line_screen_matches_continuum_for_shape_kwarg(
 ):
     """The line channel must see the SAME shape kwarg as the continuum.
 
-    Mutation to catch: a hand-built ``{n_slope, dust_bump_strength}`` dict
+    Mutation to catch: a hand-built ``{dust_slope, dust_bump_strength}`` dict
     (the old ``attenuate_emission`` fallback) has no ``dust_delta``/``dust_Rv``
     slot at all, so the line side would stay pinned at the law's published
     default while the continuum moved with the shaped value -- the parity

@@ -87,7 +87,6 @@ SRC = REPO_ROOT / "src" / "tengri"
 # keyword is the hand-binding this guard exists to catch.
 SHAPE_KWARGS = frozenset(
     {
-        "n_slope",
         "dust_slope",
         "dust_bump_strength",
         "dust_delta",

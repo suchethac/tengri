@@ -101,7 +101,7 @@ def precompute_dust_age_mask(
 #: Maps the law-function keyword to ``(flat_param_name, default)``. The
 #: per-component flat names are ``<flat_param_name>_bc`` / ``_diff``.
 _TWO_COMPONENT_LAW_PARAMS: tuple[tuple[str, str, float], ...] = (
-    ("n_slope", "dust_slope", -0.7),
+    ("dust_slope", "dust_slope", -0.7),
     ("dust_bump_strength", "dust_bump_strength", 0.0),
     ("dust_delta", "dust_delta", 0.0),
     ("dust_Rv", "dust_Rv", 3.1),
@@ -111,7 +111,7 @@ _TWO_COMPONENT_LAW_PARAMS: tuple[tuple[str, str, float], ...] = (
 #: builder grammar to accept ``slope_bc`` / ``slope_diff`` / ``delta_bc`` etc.
 #: in the ``dust`` group and route them onto the per-component overrides.
 TWO_COMPONENT_OVERRIDE_KEYS: dict[str, str] = {
-    "slope": "n_slope",
+    "slope": "dust_slope",
     "bump_strength": "dust_bump_strength",
     "delta": "dust_delta",
     "Rv": "dust_Rv",
@@ -132,7 +132,7 @@ def resolve_bc_diff_law_params(
     For each two-component law parameter (slope, bump, delta, Rv), the value is
     the shared ``dust_<x>`` from ``params``, unless a per-component override is
     supplied in ``bc_overrides`` / ``diff_overrides`` (keyed by law-function
-    kwarg, e.g. ``n_slope``). The overrides are the static per-component
+    kwarg, e.g. ``dust_slope``). The overrides are the static per-component
     settings carried on :class:`DustSEDComponentConfig`. This is the single
     source of truth shared by every stellar two-component attenuation path, so
     they cannot diverge.
@@ -145,7 +145,7 @@ def resolve_bc_diff_law_params(
     params : Mapping
         Flat ``dust_*`` parameter mapping (JAX scalars or floats).
     bc_overrides, diff_overrides : Mapping, optional
-        Per-component law-kwarg overrides (e.g. ``{"n_slope": -1.0}`` for the
+        Per-component law-kwarg overrides (e.g. ``{"dust_slope": -1.0}`` for the
         FSPS birth-cloud convention). Always honored: an override *is* a
         request, whatever the provenance of the shared parameter.
     live_shape_params : frozenset of str, optional
@@ -168,7 +168,7 @@ def resolve_bc_diff_law_params(
     -------
     bc_params, diff_params : dict
         Keyword dicts ready to splat into an attenuation-law function (keys are
-        law-function kwargs, e.g. ``n_slope``).
+        law-function kwargs, e.g. ``dust_slope``).
 
     Notes
     -----
@@ -306,7 +306,7 @@ def two_component_dust(
         Sigmoid transition width in dex. [dimensionless] Default: 0.3 (~5-20 Myr range).
     bc_params : dict, optional
         Per-component overrides for the **birth-cloud** law (e.g.
-        ``{"n_slope": -1.0}``). Merged on top of ``**law_params``, so any key
+        ``{"dust_slope": -1.0}``). Merged on top of ``**law_params``, so any key
         absent here falls back to the shared value. Enables FSPS-style
         independent indices (birth cloud ``dust1_index`` ≠ diffuse
         ``dust_index``). Default ``None`` → shared parameters.
@@ -320,7 +320,7 @@ def two_component_dust(
         :func:`apply_lyman_cutoff`).
     **law_params
         Shared keyword arguments passed to both attenuation curve functions
-        (e.g., ``n_slope``, ``dust_bump_strength``, ``dust_delta``,
+        (e.g., ``dust_slope``, ``dust_bump_strength``, ``dust_delta``,
         ``dust_Rv``). ``bc_params`` / ``diff_params`` override these
         per-component.
 
@@ -548,7 +548,7 @@ def two_component_dust_fast(
     f_obscuration : float
         Fraction of unattenuated sightlines. [dimensionless, in [0, 1]] Default: 0.0 (Lower 2022).
     **law_params
-        Passed to curve functions: ``n_slope``, ``dust_bump_strength``,
+        Passed to curve functions: ``dust_slope``, ``dust_bump_strength``,
         ``dust_delta``, ``dust_Rv``, etc.
 
     Returns
@@ -601,7 +601,7 @@ def single_component_dust(
         Default: 0.0 (uniform foreground screen).
     **law_params
         Keyword arguments passed to the attenuation curve function
-        (e.g., ``n_slope``, ``dust_bump_strength``, ``dust_delta``, ``dust_Rv``).
+        (e.g., ``dust_slope``, ``dust_bump_strength``, ``dust_delta``, ``dust_Rv``).
 
     Returns
     -------

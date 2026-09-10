@@ -416,7 +416,7 @@ for law_name in ["power_law", "calzetti", "kriek_conroy", "smc", "cardelli", "sa
         p["tau_diff"],
         law_bc=ln,
         law_diff=ln,
-        n_slope=p["dust_slope"],
+        dust_slope=p["dust_slope"],
     )
     t_fwd, r = bench(fn, n=200)
     grad_fn = jax.jit(
@@ -429,7 +429,7 @@ for law_name in ["power_law", "calzetti", "kriek_conroy", "smc", "cardelli", "sa
                     p["tau_diff"],
                     law_bc=ln,
                     law_diff=ln,
-                    n_slope=p["dust_slope"],
+                    dust_slope=p["dust_slope"],
                 )
             )
         )
@@ -811,7 +811,7 @@ t6, dust_ex = bench(
         model_exact.ssp_ages_yr,
         p_ex["tau_bc"],
         p_ex["tau_diff"],
-        n_slope=p_ex["dust_slope"],
+        dust_slope=p_ex["dust_slope"],
     ),
     n=200,
 )
