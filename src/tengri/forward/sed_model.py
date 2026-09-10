@@ -1134,7 +1134,7 @@ def _validate_firrc_requires_dust(spec) -> None:
 
 
 def _validate_dale2014_requires_no_sf_radio(spec) -> None:
-    """Raise if a radio-bearing dust template is combined with SF radio (#1970).
+    r"""Raise if a radio-bearing dust template is combined with SF radio (#1970).
 
     Dale+2014's published dust emission templates embed a star-forming radio
     synchrotron continuum rising to 2.2459e9 Å (1.335 GHz). Pairing them with
@@ -1152,12 +1152,16 @@ def _validate_dale2014_requires_no_sf_radio(spec) -> None:
     refusal now reads the selected grid, via
     :func:`~tengri.components.dust.emission_templates.dust_emission_radio_tail_aa`.
 
-    That function requires the tail to be both far enough red (past 1e8 Å =
-    30 GHz) and **rising** in :math:`L_\nu`, because reach alone is not
-    synchrotron: ``astrodust`` emits out to 3.0e8 Å on its spinning-dust
-    component and double-counts nothing. Measured, only ``dale2014``
-    qualifies -- slope +0.665, against -3.111 (bosa), -3.326 (astrodust),
-    -4.810 (schreiber2016) and -5.510 (dale2014_cigale).
+    That function requires the tail to be both far enough red (strictly past
+    1e8 Å = 30 GHz) and **non-thermal**, because reach alone is not radio:
+    ``astrodust`` emits out to 3.0e8 Å on its spinning-dust component and
+    double-counts nothing. Non-thermal means the red-end spectral index
+    :math:`\alpha = d\ln L_\nu / d\ln\nu` is below 1 (R62): radio continua
+    are flat or falling toward higher frequency (synchrotron -0.8, free-free
+    -0.1, flat-spectrum 0), while thermal dust on its Rayleigh-Jeans side
+    rises as :math:`\nu^{2+\beta}`, i.e. :math:`\alpha \ge 3`. Measured, only
+    ``dale2014`` qualifies -- :math:`\alpha` = -0.665, against +3.111 (bosa),
+    +3.326 (astrodust), +4.810 (schreiber2016) and +5.510 (dale2014_cigale).
 
     A model whose red end cannot be measured -- a closed-form emission law, or
     a grid that is not installed -- is not refused: an absent file must not
@@ -1179,9 +1183,10 @@ def _validate_dale2014_requires_no_sf_radio(spec) -> None:
     Raises
     ------
     ConfigError
-        If the selected dust-emission template carries a rising non-thermal
-        tail past 1e8 Å AND radio is active with SF synchrotron enabled
-        (``radio=True`` and ``radio_sfr_mode != 'none'``).
+        If the selected dust-emission template carries a non-thermal tail
+        (red-end :math:`d\ln L_\nu / d\ln\nu < 1`) past 1e8 Å AND radio is
+        active with SF synchrotron enabled (``radio=True`` and
+        ``radio_sfr_mode != 'none'``).
 
     See Also
     --------
@@ -1213,14 +1218,17 @@ def _validate_dale2014_requires_no_sf_radio(spec) -> None:
     if red_edge is None:
         return  # Not template-backed, grid absent, or no rising radio tail
 
-    slope = _dust_emission_red_end(emission)[1]
+    index = _dust_emission_red_end(emission)[1]
     ghz = 2.99792458e18 / red_edge / 1.0e9
     raise ConfigError(
         f"The Dale+2014-family dust emission template selected by "
         f"dust.emission={emission!r} embeds its own star-forming radio "
-        f"synchrotron continuum: measured, it still emits at {red_edge:.4e} A "
-        f"({ghz:.3f} GHz) and is RISING in L_nu there (slope {slope:+.3f}), "
-        f"the signature of synchrotron rather than dust. Combining it with an "
+        f"continuum: measured, it still emits at {red_edge:.4e} A "
+        f"({ghz:.3f} GHz), and its red-end spectral index there is "
+        f"dlnL_nu/dlnnu = {index:+.3f}, below the 1.0 that separates a radio "
+        f"continuum (flat or falling toward higher frequency: synchrotron "
+        f"-0.8, free-free -0.1) from thermal dust (Rayleigh-Jeans, "
+        f"nu^(2+beta), so >= 3). Combining it with an "
         f"active SF radio block (radio.sf.type != 'none') causes "
         f"double-counting of the radio continuum (~2x in rest_sed between "
         f"~1.34 and ~10 GHz). "

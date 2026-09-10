@@ -491,35 +491,37 @@ class TestDaleRadioGuardMeasuresTheTemplate:
             **kw,
         )
 
-    #: ``registry name -> (grid file, red edge [A], red-end dlogLnu/dloglam)``,
-    #: every template-backed emission model whose grid ships here. Only the
-    #: first is a radio tail: the others either stop blueward of 1e8 A or fall
-    #: steeply in L_nu where a synchrotron tail rises.
+    #: ``registry name -> (grid file, red edge [A], red-end dlnLnu/dlnnu)``,
+    #: every template-backed emission model whose grid ships here. The third
+    #: entry is the red-end spectral index in FREQUENCY, so a thermal tail is
+    #: steeply POSITIVE (Rayleigh-Jeans is 2 + beta) and a non-thermal one is
+    #: near zero or negative. Only the first is a radio tail: the others
+    #: either stop blueward of 1e8 A or rise as dust must.
     _MEASURED_RED_ENDS: ClassVar[dict[str, tuple[str, float, float]]] = {
-        "dale2014": ("data/dale2014_templates.h5", 2.245912e9, +0.665),
-        "dale2014_cigale": ("data/dale2014_templates_cigale.h5", 7.727e7, -5.510),
-        "astrodust": ("data/astrodust_templates.h5", 3.0e8, -3.326),
-        "bosa": ("data/bosa_templates.h5", 1.0e8, -3.111),
-        "schreiber2016": ("data/schreiber2016_templates.h5", 3.001310e7, -4.810),
+        "dale2014": ("data/dale2014_templates.h5", 2.245912e9, -0.665),
+        "dale2014_cigale": ("data/dale2014_templates_cigale.h5", 7.727e7, +5.510),
+        "astrodust": ("data/astrodust_templates.h5", 3.0e8, +3.326),
+        "bosa": ("data/bosa_templates.h5", 1.0e8, +3.111),
+        "schreiber2016": ("data/schreiber2016_templates.h5", 3.001310e7, +4.810),
     }
 
     @pytest.mark.parametrize("name", sorted(_MEASURED_RED_ENDS))
     def test_measured_red_end_of_every_shipped_grid(self, name):
-        """Pin the edge AND the slope for every grid the guard can see."""
+        """Pin the edge AND the frequency index for every grid the guard sees."""
         import os
 
         from tengri.components.dust.emission_templates import _red_end_from_grid_file
 
-        path, edge, slope = self._MEASURED_RED_ENDS[name]
+        path, edge, index = self._MEASURED_RED_ENDS[name]
         if not os.path.exists(path):
             pytest.skip(f"{path} not available")
-        got_edge, got_slope = _red_end_from_grid_file(path)
+        got_edge, got_index = _red_end_from_grid_file(path)
         assert got_edge == pytest.approx(edge, rel=1e-3, abs=0.0)
-        assert got_slope == pytest.approx(slope, rel=1e-2, abs=0.0)
+        assert got_index == pytest.approx(index, rel=1e-2, abs=0.0)
 
     @pytest.mark.parametrize("name", sorted(_MEASURED_RED_ENDS))
     def test_only_dale2014_reads_as_a_radio_tail(self, name):
-        """The rising-slope condition is what keeps astrodust out.
+        """The non-thermal-index condition is what keeps astrodust out.
 
         astrodust reaches 3.0e8 A -- past the 1e8 A threshold -- so an
         edge-only test would newly refuse ``astrodust`` + SF radio, which
@@ -633,3 +635,139 @@ class TestDaleRadioGuardMeasuresTheTemplate:
         """``dale2014_cigale`` keeps working, by measurement now not by name."""
         model = self._build(synthetic_ssp_wide, "dale2014_cigale")
         assert model.spec.dust_emission == "dale2014_cigale"
+
+
+@pytest.mark.contract
+class TestRadioTailRuleIsNonThermalAtItsBoundaries:
+    """R62: the #1970 guard refuses NON-THERMAL red ends, at tested boundaries.
+
+    What the guard must catch is a template that embeds star-forming RADIO
+    emission. Radio continua are flat or falling toward higher frequency:
+    with :math:`L_\\nu \\propto \\nu^\\alpha`, optically-thin synchrotron sits
+    at :math:`\\alpha \\approx -0.8`, optically-thin free-free at
+    :math:`\\alpha \\approx -0.1`, and a flat-spectrum source at
+    :math:`\\alpha = 0`. What it must NOT catch is thermal dust: on the
+    Rayleigh-Jeans side a modified blackbody goes as
+    :math:`\\nu^{2+\\beta}`, i.e. :math:`\\alpha = 3.6` at
+    :math:`\\beta = 1.6`, and spinning dust (AME, peaking near 30 GHz) also
+    rises toward higher frequency below its peak -- which is why
+    ``astrodust``'s 3.0e8 A edge measures :math:`\\alpha = +3.326`.
+
+    So the rule is: refuse when the emitting span reaches past
+    ``_RADIO_TAIL_RED_EDGE_AA`` (1e8 A = 1 cm = 30 GHz, blueward of the whole
+    1.34-10 GHz double-count window) AND the red-end index
+    :math:`d\\ln L_\\nu / d\\ln\\nu` over the reddest decade is
+    :math:`< 1`. The threshold at 1 leaves margin on both sides: every
+    shipped thermal grid measures +3.1 or steeper (2.1 of margin) and
+    ``dale2014`` measures -0.665 (1.665 of margin).
+
+    The rule this replaces was "index rising in wavelength", i.e.
+    :math:`\\alpha < 0`, which let the whole flat-and-inverted family through:
+    measured on a synthetic grid, an :math:`\\alpha = 0` flat-spectrum radio
+    tail at 2.2e9 A read ``None`` (not refused), and so did every
+    :math:`0 \\le \\alpha < 1`. Neither the edge threshold nor the index
+    threshold had a test at its boundary; ``bosa`` sits exactly at 1.0e8 A but
+    its ``None`` verdict is double-caused (the edge is not strictly greater
+    AND the index is +3.111), so it pins neither.
+    """
+
+    @staticmethod
+    def _synthetic_grid(path, edge_aa, index_nu, blue_aa=3600.0):
+        """One-row Dale-shaped grid emitting ``blue_aa..edge_aa``.
+
+        ``L_nu \\propto \\nu^{index_nu}``, i.e. ``lambda^{-index_nu}``, so the
+        measured red-end index is ``index_nu`` by construction.
+        """
+        import h5py
+        import numpy as np
+
+        from tengri.components.dust.emission_templates import DALE2014_UNIT_L_NU
+
+        wave = np.geomspace(blue_aa, edge_aa, 600)
+        rows = (wave / 1.0e6) ** (-index_nu)
+        with h5py.File(path, "w") as f:
+            f.create_dataset("wavelength_aa", data=wave)
+            f.create_dataset("alpha_grid", data=np.array([1.0, 2.0]))
+            f.create_dataset("templates_sf", data=np.vstack([rows, rows]))
+            f.attrs["spectra_unit"] = DALE2014_UNIT_L_NU
+        return str(path)
+
+    def _verdict(self, tmp_path, edge_aa, index_nu):
+        """``dust_emission_radio_tail_aa`` on a synthetic grid, end to end.
+
+        Registered under ``dale2014_cigale`` because that is a name the
+        ``dust_emission={'type': ...}`` grammar can actually reach, and
+        ``register_dale2014_tabulated`` stamps the grid's measured red end
+        onto the closure it files -- the same path a user's own grid takes.
+        """
+        from tengri.components.dust.emission.emission import DUST_EMISSION_MODELS
+        from tengri.components.dust.emission_templates import (
+            dust_emission_radio_tail_aa,
+            register_dale2014_tabulated,
+        )
+
+        path = self._synthetic_grid(tmp_path / "synthetic.h5", edge_aa, index_nu)
+        saved = DUST_EMISSION_MODELS.get("dale2014_cigale")
+        register_dale2014_tabulated(path, name="dale2014_cigale")
+        try:
+            return dust_emission_radio_tail_aa("dale2014_cigale")
+        finally:
+            if saved is not None:
+                DUST_EMISSION_MODELS["dale2014_cigale"] = saved
+            else:
+                DUST_EMISSION_MODELS.pop("dale2014_cigale", None)
+
+    def test_measured_index_matches_the_synthetic_construction(self, tmp_path):
+        """The measurement itself, before any rule is applied to it."""
+        from tengri.components.dust.emission_templates import _red_end_from_grid_file
+
+        for index_nu in (-0.8, -0.1, 0.0, 0.99, 1.0, 3.6):
+            path = self._synthetic_grid(tmp_path / f"m{index_nu}.h5", 2.2e9, index_nu)
+            edge, got = _red_end_from_grid_file(path)
+            assert edge == pytest.approx(2.2e9, rel=1e-9, abs=0.0)
+            assert got == pytest.approx(index_nu, rel=0.0, abs=1e-9), (
+                f"a synthetic L_nu ~ nu^{index_nu} tail measured {got}"
+            )
+
+    @pytest.mark.parametrize(
+        ("label", "index_nu", "refused"),
+        [
+            ("optically-thin synchrotron, alpha = -0.8", -0.8, True),
+            ("optically-thin free-free, alpha = -0.1", -0.1, True),
+            ("flat-spectrum radio, alpha = 0", 0.0, True),
+            ("index just below the threshold, alpha = 0.99", 0.99, True),
+            ("index exactly at the threshold, alpha = 1.0", 1.0, False),
+            ("Rayleigh-Jeans dust, beta = 1.6 -> alpha = 3.6", 3.6, False),
+        ],
+    )
+    def test_index_threshold_is_at_one_and_accepts_exactly_one(
+        self, tmp_path, label, index_nu, refused
+    ):
+        """Non-thermal is ``alpha < 1``; ``alpha = 1`` itself is accepted."""
+        tail = self._verdict(tmp_path, 2.2e9, index_nu)
+        if refused:
+            assert tail == pytest.approx(2.2e9, rel=1e-9, abs=0.0), (
+                f"{label} at 2.2e9 A must be refused as an embedded radio continuum, got {tail!r}"
+            )
+        else:
+            assert tail is None, f"{label} at 2.2e9 A is thermal dust; got {tail!r}"
+
+    @pytest.mark.parametrize(
+        ("edge_aa", "refused"),
+        [(9.9e7, False), (1.0e8, False), (1.0000001e8, True), (2.2e9, True)],
+    )
+    def test_edge_threshold_is_strictly_past_one_cm(self, tmp_path, edge_aa, refused):
+        """1e8 A exactly is accepted: the rule is *past* 1 cm, not at it.
+
+        30 GHz is blueward of the whole 1.34-10 GHz window an SF radio block
+        occupies, so a template stopping at or before it cannot double-count.
+        """
+        tail = self._verdict(tmp_path, edge_aa, -0.8)
+        if refused:
+            assert tail == pytest.approx(edge_aa, rel=1e-9, abs=0.0)
+        else:
+            assert tail is None, (
+                f"an alpha = -0.8 tail stopping at {edge_aa:.7e} A is at or blueward of "
+                f"the 1e8 A threshold and cannot overlap the 1.34-10 GHz window; "
+                f"got {tail!r}"
+            )

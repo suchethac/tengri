@@ -2424,8 +2424,25 @@ def dust_emission_grid_support(name: str) -> dict[str, tuple[float, float]]:
 #: Blueward of the whole 1.34-10 GHz window in which the Dale+2014 embedded
 #: continuum double-counts an SF radio block. The shipped grids sit either
 #: side with margin: ``dale2014`` emits to 2.2459e9 Å (22x redward) and
-#: ``dale2014_cigale`` stops at 7.727e7 Å (1.29x blueward).
+#: ``dale2014_cigale`` stops at 7.727e7 Å (1.29x blueward). The comparison is
+#: strict (``>``): a template stopping exactly at 30 GHz is blueward of the
+#: whole window and cannot double-count.
 _RADIO_TAIL_RED_EDGE_AA = 1.0e8
+
+#: Red-end spectral index below which an emitting tail reads as NON-thermal.
+#:
+#: With :math:`L_\nu \propto \nu^\alpha`, thermal dust on its
+#: Rayleigh-Jeans side goes as :math:`\nu^{2+\beta}`, so
+#: :math:`\alpha \ge 3` for any physical emissivity index; spinning dust
+#: (AME) below its ~30 GHz peak also rises toward higher frequency. Radio
+#: continua do the opposite or stay flat: optically-thin synchrotron
+#: :math:`\alpha \approx -0.8`, optically-thin free-free
+#: :math:`\alpha \approx -0.1`, flat-spectrum sources :math:`\alpha = 0`.
+#: A threshold at 1 separates the two families with margin on both sides:
+#: every shipped thermal grid measures +3.1 or steeper and ``dale2014``
+#: measures -0.665. Accepting :math:`\alpha = 1` exactly keeps the refusal on
+#: the side that never fires spuriously.
+_RADIO_TAIL_MIN_THERMAL_INDEX = 1.0
 
 
 def _red_end_from_grid_file(path: str) -> tuple[float, float] | None:
@@ -2439,25 +2456,30 @@ def _red_end_from_grid_file(path: str) -> tuple[float, float] | None:
     Returns
     -------
     tuple[float, float] or None
-        ``(red_edge_aa, slope)`` -- the reddest wavelength [Å] at which any
-        template row is non-zero, and the steepest (most positive)
-        :math:`d\log L_\nu / d\log\lambda` any row shows over the reddest
+        ``(red_edge_aa, red_end_index)`` -- the reddest wavelength [Å] at
+        which any template row is non-zero, and the SMALLEST red-end spectral
+        index :math:`d\ln L_\nu / d\ln\nu` any row shows over the reddest
         decade of that span. ``None`` when the file carries no recognizable
         wavelength/template pair.
 
     Notes
     -----
-    The slope is what separates an embedded non-thermal continuum from a cold
-    or spinning-dust tail that merely reaches long wavelengths. Synchrotron is
-    :math:`S_\nu \propto \nu^{-\alpha}`, so :math:`L_\nu` RISES with
-    wavelength; dust past its peak falls steeply. Measured on the shipped
-    grids: ``dale2014`` +0.665 (a textbook SF synchrotron index) against
-    -3.111 (bosa), -3.326 (astrodust), -4.810 (schreiber2016) and -5.510
-    (dale2014_cigale). The two families are separated by 3.8 in slope, so a
-    threshold at 0 is nowhere near either.
+    The index is what separates an embedded non-thermal continuum from a cold
+    or spinning-dust tail that merely reaches long wavelengths. Writing
+    :math:`L_\nu \propto \nu^\alpha`, thermal dust on its Rayleigh-Jeans side
+    has :math:`\alpha = 2 + \beta \ge 3`, while radio continua are flat or
+    falling toward higher frequency (synchrotron
+    :math:`\alpha \approx -0.8`, free-free :math:`\alpha \approx -0.1`,
+    flat-spectrum :math:`\alpha = 0`). Measured on the shipped grids:
+    ``dale2014`` -0.665 (a textbook SF synchrotron index) against +3.111
+    (bosa), +3.326 (astrodust), +4.810 (schreiber2016) and +5.510
+    (dale2014_cigale) -- the two families are 3.8 apart, either side of
+    :data:`_RADIO_TAIL_MIN_THERMAL_INDEX`.
 
-    Notes
-    -----
+    The MINIMUM over rows, not the mean or the sum's: one radio-bearing row in
+    an otherwise thermal library is still a double-count wherever the model
+    can reach it, and the minimum in :math:`\nu` is the most non-thermal row.
+
     **JIT-compatible**: no, file I/O. Composition-time only.
 
     Reads the *non-zero span*, not the grid extent: a grid may be padded with
@@ -2521,20 +2543,25 @@ def _red_end_from_grid_file(path: str) -> tuple[float, float] | None:
             return None
         edge = float(wave[emitting].max())
 
-    # Steepest rise any row shows over the reddest decade of the emitting span.
-    # Per-row, not on the row sum: one radio-bearing row in an otherwise
-    # thermal library is still a double-count wherever the model can reach it.
+    # Most non-thermal index any row shows over the reddest decade of the
+    # emitting span. Per-row, not on the row sum: one radio-bearing row in an
+    # otherwise thermal library is still a double-count wherever the model can
+    # reach it.
+    #
+    # Fitted against ``-log10(lambda)``, which IS ``log10(nu)`` up to an
+    # additive constant that only moves the intercept: the returned number is
+    # ``d ln L_nu / d ln nu`` directly, needing no sign flip at the call site.
     window = emitting & (wave >= edge / 10.0) & (wave <= edge)
-    slope = -np.inf
+    index = np.inf
     for row in np.vstack(rows_all):
         m = window & (row > 0.0)
         if int(m.sum()) < 3:
             continue
-        fit = np.polyfit(np.log10(wave[m]), np.log10(row[m]), 1)
-        slope = max(slope, float(fit[0]))
-    if not np.isfinite(slope):
+        fit = np.polyfit(-np.log10(wave[m]), np.log10(row[m]), 1)
+        index = min(index, float(fit[0]))
+    if not np.isfinite(index):
         return None
-    return edge, slope
+    return edge, index
 
 
 def dust_emission_red_edge_aa(name: str) -> float | None:
@@ -2565,20 +2592,27 @@ def dust_emission_red_edge_aa(name: str) -> float | None:
 
     Measured on the shipped grids: ``dale2014`` reaches 2.2459e9 Å (1.335 GHz,
     the embedded star-forming synchrotron continuum) and ``dale2014_cigale``
-    stops at 6.026e7 Å (6 mm), CIGALE having stripped that tail.
+    stops at 7.727e7 Å (7.7 mm), CIGALE having stripped that tail. The
+    ``alpha=2.0`` row alone stops at 6.026e7 Å; this returns the 64-row union,
+    because a build-time refusal has to hold for every alpha a model can
+    reach.
 
     Examples
     --------
     >>> from tengri.components.dust.emission_templates import dust_emission_red_edge_aa
     >>> dust_emission_red_edge_aa("dale2014_cigale")  # doctest: +SKIP
-    60255959.0
+    77270000.0
     """
     measured = _dust_emission_red_end(name)
     return None if measured is None else measured[0]
 
 
 def _dust_emission_red_end(name: str) -> tuple[float, float] | None:
-    """``(red_edge_aa, red_end_slope)`` of the grid ``name`` will evaluate."""
+    r"""``(red_edge_aa, red_end_index)`` of the grid ``name`` will evaluate.
+
+    The index is :math:`d\ln L_\nu / d\ln\nu` over the reddest decade of
+    the emitting span -- see :func:`_red_end_from_grid_file`.
+    """
     from tengri._data_setup import find_data
 
     from .emission.emission import DUST_EMISSION_MODELS
@@ -2601,55 +2635,75 @@ def _dust_emission_red_end(name: str) -> tuple[float, float] | None:
 
 
 def dust_emission_radio_tail_aa(name: str) -> float | None:
-    r"""Red edge of ``name``'s embedded radio synchrotron tail, if it has one.
+    r"""Red edge of ``name``'s embedded NON-THERMAL radio tail, if it has one.
 
-        The question the #1970 double-count guard actually asks: does the template
-        this model will evaluate carry its own **non-thermal** continuum into the
-        radio? Two measured conditions, both required.
+    The question the #1970 double-count guard actually asks: does the
+    template this model will evaluate carry its own **radio continuum**,
+    which a separately-modeled SF radio block would then emit a second time?
+    Two measured conditions, both required (R62).
 
-        1. The emitting span reaches past 1e8 Å (1 cm, 30 GHz), blueward of the
-           whole 1.34-10 GHz window where an embedded continuum overlaps an SF
-           radio block.
-        2. :math:`L_
-    u` is RISING at the red end. Synchrotron is
-           :math:`S_
-    u \propto
-    u^{-lpha}`, so it rises with wavelength;
-           cold dust and spinning dust past their peaks fall steeply. Without
-           this, any template merely reaching the microwave is caught: measured,
-           ``astrodust`` emits to 3.0e8 Å on its spinning-dust component, which
-           is dust emission and double-counts nothing.
+    1. The emitting span reaches strictly past
+       :data:`_RADIO_TAIL_RED_EDGE_AA` (1e8 Å = 1 cm = 30 GHz), which is
+       blueward of the whole 1.34-10 GHz window where an embedded continuum
+       overlaps an SF radio block.
+    2. The red-end spectral index :math:`d\ln L_\nu / d\ln\nu`, measured over
+       the reddest decade of the emitting span, is below
+       :data:`_RADIO_TAIL_MIN_THERMAL_INDEX` (1.0).
 
-        Parameters
-        ----------
-        name : str
-            Registry name of the emission model, e.g. ``'dale2014'``.
+    Condition 2 is the physics. Writing :math:`L_\nu \propto \nu^\alpha`:
 
-        Returns
-        -------
-        float or None
-            The red edge [Å] when both conditions hold, else ``None``.
+    * **Radio continua are flat or falling toward higher frequency.**
+      Optically-thin synchrotron sits at :math:`\alpha \approx -0.8`,
+      optically-thin free-free at :math:`\alpha \approx -0.1`, and a
+      flat-spectrum source at :math:`\alpha = 0`. All are far below 1.
+    * **Thermal dust rises steeply toward higher frequency.** On the
+      Rayleigh-Jeans side a modified blackbody goes as
+      :math:`\nu^{2+\beta}`, so :math:`\alpha \ge 3` for any physical
+      emissivity index (:math:`\alpha = 3.6` at :math:`\beta = 1.6`).
+      Spinning dust (AME), peaking near 30 GHz, likewise rises toward higher
+      frequency below its peak -- which is exactly what ``astrodust``'s
+      3.0e8 Å edge is, and it measures :math:`\alpha = +3.326`.
 
-        Notes
-        -----
-        **JIT-compatible**: no, file I/O. Call at composition time.
+    Reach alone is therefore not enough: without condition 2 every template
+    that merely touches the microwave is refused, ``astrodust`` included,
+    which double-counts nothing. And condition 2 has to be stated as an index
+    threshold rather than "rising toward longer wavelength"
+    (:math:`\alpha < 0`): that weaker form let the whole flat-and-inverted
+    family through, measured on synthetic grids at :math:`\alpha = 0` and
+    :math:`\alpha = 0.99`, both of which are radio and neither of which was
+    refused.
 
-        Measured on every installed template-backed grid: only ``dale2014``
-        qualifies, at 2.2459e9 Å with slope +0.665. The rest fall -3.111 (bosa),
-        -3.326 (astrodust), -4.810 (schreiber2016), -5.510 (dale2014_cigale) --
-        separated from Dale's rise by 3.8 in slope.
+    Parameters
+    ----------
+    name : str
+        Registry name of the emission model, e.g. ``'dale2014'``.
 
-        Examples
-        --------
-        >>> from tengri.components.dust.emission_templates import dust_emission_radio_tail_aa
-        >>> dust_emission_radio_tail_aa("dale2014_cigale") is None  # doctest: +SKIP
-        True
+    Returns
+    -------
+    float or None
+        The red edge [Å] when both conditions hold, else ``None``.
+
+    Notes
+    -----
+    **JIT-compatible**: no, file I/O. Call at composition time.
+
+    Measured on every installed template-backed grid, only ``dale2014``
+    qualifies: 2.2459e9 Å at :math:`\alpha = -0.665`. The rest measure
+    +3.111 (bosa), +3.326 (astrodust), +4.810 (schreiber2016) and +5.510
+    (dale2014_cigale) -- 3.8 away from Dale's, with the threshold between
+    them. ``bosa`` stops exactly at 1.0e8 Å, so it also fails condition 1.
+
+    Examples
+    --------
+    >>> from tengri.components.dust.emission_templates import dust_emission_radio_tail_aa
+    >>> dust_emission_radio_tail_aa("dale2014_cigale") is None  # doctest: +SKIP
+    True
     """
     measured = _dust_emission_red_end(name)
     if measured is None:
         return None
-    edge, slope = measured
-    if edge > _RADIO_TAIL_RED_EDGE_AA and slope > 0.0:
+    edge, index = measured
+    if edge > _RADIO_TAIL_RED_EDGE_AA and index < _RADIO_TAIL_MIN_THERMAL_INDEX:
         return edge
     return None
 

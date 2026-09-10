@@ -482,14 +482,30 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
   although it carries no radio, and the tail-bearing grid filed under the
   tail-free name `dale2014_cigale` was accepted. The guard now reads the grid
   via the new `dust_emission_radio_tail_aa`, which requires two measured
-  conditions: the emitting span reaches past 1e8 Å (1 cm, 30 GHz, blueward of
-  the whole 1.34-10 GHz double-count window) **and** `L_nu` is rising there.
-  Reach alone would have newly refused `astrodust`, whose spinning-dust
-  component emits to 3.0e8 Å and double-counts nothing. Measured red-end
-  `dlogL_nu/dloglambda`: `dale2014` **+0.665** (a textbook SF synchrotron
-  index) against -3.111 (`bosa`), -3.326 (`astrodust`), -4.810
-  (`schreiber2016`), -5.510 (`dale2014_cigale`) -- the two families are 3.8
-  apart in slope, so only `dale2014` qualifies. The span is the union over
+  conditions: the emitting span reaches *strictly* past 1e8 Å (1 cm, 30 GHz,
+  blueward of the whole 1.34-10 GHz double-count window) **and** its red end
+  is **non-thermal**. Reach alone would have newly refused `astrodust`, whose
+  spinning-dust component emits to 3.0e8 Å and double-counts nothing.
+  Non-thermal is stated as a threshold on the red-end spectral index in
+  FREQUENCY, `alpha = dlnL_nu/dlnnu < 1` measured over the reddest decade of
+  the emitting span, because that is where the two families actually separate:
+  radio continua are flat or falling toward higher frequency (optically-thin
+  synchrotron `alpha ~ -0.8`, optically-thin free-free `alpha ~ -0.1`,
+  flat-spectrum `alpha = 0`) while thermal dust on its Rayleigh-Jeans side
+  rises as `nu^(2+beta)`, i.e. `alpha >= 3`, and spinning dust below its
+  ~30 GHz peak rises too. Measured red-end `alpha`: `dale2014` **-0.665** (a
+  textbook SF synchrotron index) against +3.111 (`bosa`), +3.326
+  (`astrodust`), +4.810 (`schreiber2016`), +5.510 (`dale2014_cigale`) -- the
+  two families are 3.8 apart, with the threshold between them and 1.7-2.1 of
+  margin on each side, so only `dale2014` qualifies. The weaker rule this
+  replaces -- "`L_nu` rising toward longer wavelength", i.e. `alpha < 0` --
+  let the whole flat-and-inverted radio family through: measured on synthetic
+  grids, an `alpha = 0` flat-spectrum tail at 2.2e9 Å and an `alpha = 0.99`
+  one were both accepted. Both thresholds are now pinned at their boundaries
+  with synthetic grids (`alpha` = -0.8/-0.1/0/0.99 refused, 1.0/3.6 accepted;
+  edge 9.9e7 and exactly 1.0e8 Å accepted, 1.0000001e8 Å refused) -- `bosa`
+  sits exactly at 1.0e8 Å but its verdict is double-caused, so it pinned
+  neither. The span is the union over
   every template row, not one row's: `dale2014_cigale` stops emitting at
   7.727e7 Å over its 64 alpha rows (the strip edge its component documents)
   while its `alpha=2.0` row alone stops at 6.026e7 Å, and a build-time refusal
