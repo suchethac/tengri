@@ -146,32 +146,64 @@ def test_warm_model_matches_fresh_model(ssp_data_fsps, target, name):
     )
 
 
+#: Bound, not pin: measured 0, 1, 0, 3 divergences of 400 draws across seeds
+#: 3-6 on macOS and 1 of 400 on Linux CI for seed 3 -- this test's exact
+#: settings -- so 1% sits above every observed rate with margin while a
+#: sampler that diverges on tens of draws still fails. The exact zero this
+#: replaces was a one-machine measurement, not the property this test
+#: guards.
+_MAX_DIVERGENCE_FRAC = 0.01
+
+
 def test_nuts_split_warmup_keeps_sampling_quality(ssp_data_fsps, target):
     """Splitting warmup out of the NUTS scan must not cost mixing.
 
     The sampling phase now starts from ``init_flat`` rather than continuing
     from the warmup end state, matching HMC. That is only acceptable if the
-    chain still mixes, so pin the diagnostics rather than trusting the shape.
+    chain still mixes, so pin the diagnostics rather than trusting the
+    shape. This guards single-run mixing quality after the warmup/sampling
+    split, not the #1853 reproducibility contract itself (two separate
+    calls returning the same chain for the same key), which is asserted
+    above by ``test_repeated_fit_on_reused_model_is_identical`` and
+    ``test_warm_model_matches_fresh_model``.
+
+    ``n_divergent`` is the sum of BlackJAX's per-draw ``is_divergent`` over
+    the sampling-phase scan across all chains and post-warmup samples
+    (``inference/backends/mcmc/nuts.py:794``); warmup-phase divergences are
+    excluded from this count and tracked separately as
+    ``warmup_divergence_frac``. The bound below is a fraction, not an exact
+    zero, matching the codebase's own fraction-based dead-fit guards
+    (``refuse_dead_sampling``, ``inference/backends/mcmc/_shared.py:586``;
+    ``refuse_dead_warmup``, ``inference/backends/mcmc/_shared.py:490``) --
+    see ``_MAX_DIVERGENCE_FRAC`` above for the measurements behind the 1%
+    bound.
     """
     flux, noise = target
     _, forward = _build(ssp_data_fsps)
+    n_samples = 200
+    n_chains = 2
     posterior = forward.fit(
         flux,
         noise,
         key=jax.random.PRNGKey(3),
         method="mcmc_nuts",
         n_warmup=300,
-        n_samples=200,
-        n_chains=2,
+        n_samples=n_samples,
+        n_chains=n_chains,
         n_burnin=0,
         dense_mass_matrix=False,
     )
 
     worst_rhat = max(float(v) for v in posterior.rhat().values())
-    n_divergent = posterior.diagnostics.get("n_divergent", 0)
+    n_divergent = int(posterior.diagnostics.get("n_divergent", 0))
+    n_draws = n_samples * n_chains
+    divergent_frac = n_divergent / n_draws
 
     assert worst_rhat < 1.1, f"NUTS did not mix after the split: max R-hat {worst_rhat}"
-    assert int(n_divergent) == 0, f"NUTS diverged {n_divergent} times after the split"
+    assert divergent_frac <= _MAX_DIVERGENCE_FRAC, (
+        f"NUTS diverged {n_divergent}/{n_draws} draws ({divergent_frac:.2%}) after the "
+        f"split, above the {_MAX_DIVERGENCE_FRAC:.0%} bound"
+    )
 
 
 def test_n_warmup_is_not_ignored_on_a_reused_model(ssp_data_fsps, target):
