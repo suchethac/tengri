@@ -289,7 +289,7 @@ def _load_grid_arrays(grid_path: str):
     2016 [2]_) by that model's own dust integral
     :math:`\\int L_\\lambda^{\\rm dust}\\,{\\rm d}\\lambda`, so every stored
     ``dust_emission`` integrates to 1 (10 on the Angstrom axis, which is the
-    nanometre axis scaled by 10) and ``norm`` carries the luminosity the
+    nanometer axis scaled by 10) and ``norm`` carries the luminosity the
     normalization removed.  It is therefore required to compare records at
     DIFFERENT inclinations, which sit on different scales: an edge-on model
     radiates less dust emission per unit intrinsic AGN power, so its ``norm``
