@@ -2115,6 +2115,12 @@ class Parameters:
             # not the one the declaration carries (#1586).
             "user_free_grid": "[user FREE -> grid]",
             "wildcard_free_grid": f"[{WILDCARD_ALIAS} FREE -> grid]",
+            # The "_zcap" suffix marks a declared free prior (an SF-onset
+            # lookback) that was capped at the age of the universe at the
+            # build's own source redshift. Same shown-never-silent principle
+            # as "_grid" above, see _narrow_free_priors_to_z.
+            "user_free_zcap": "[user FREE -> z cap]",
+            "wildcard_free_zcap": f"[{WILDCARD_ALIAS} FREE -> z cap]",
             # A wildcard-FREE that found no declared prior. The parameter stays
             # Fixed, so reporting the request would put a row reading FREE
             # inside the Fixed block (#1726). The remedy is in the tag: give it

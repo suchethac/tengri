@@ -196,6 +196,18 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 
 ### Added
 
+- `sfh_exp_start_gyr` / `sfh_dexp_start_gyr` / `sfh_const_start_gyr` (the
+  SF-onset lookback for the `exp`, `dexp` and `const` SFH models) declare a
+  `free_prior` and are dropped from `tools/check_param_free_priors.py`'s
+  REFUSED ledger. A static ceiling of today's cosmic age is narrowed to
+  `age_at_z(z)` at parse time (`parameters/groups.py`'s new
+  `_narrow_free_priors_to_z`) whenever the build's redshift is knowable, so
+  `'all_params': FREE` genuinely frees these onsets instead of silently
+  leaving them pinned. A catalog with a per-galaxy redshift refuses the
+  combination outright (the cap is only valid for one redshift). See
+  `docs/dev/api_migration_v0.x.md` for the full migration note, including the
+  one shipped recipe (`quiescent_z0`) whose free-parameter count changes.
+
 - `bench/scripts/probe_block_metric_structure.py` — scores a candidate
   mass-matrix structure against the analytic metric without running a sampler.
   For a layout it forms the structured inverse mass matrix, whitens with it, and
