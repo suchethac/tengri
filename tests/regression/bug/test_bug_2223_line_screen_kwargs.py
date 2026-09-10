@@ -356,12 +356,9 @@ def test_fallback_is_actually_exercised_by_fast_nebular(ssp_bare, observation, m
         pytest.skip("SEDModel.enable_fast_nebular is not available")
 
     target_wavelengths = jnp.asarray([HBETA_AA, HALPHA_AA])
-    try:
-        with warnings.catch_warnings():
-            warnings.simplefilter("ignore")
-            model.enable_fast_nebular(target_wavelengths, n_grid=2)
-    except Exception as exc:  # pragma: no cover - depends on checkout data
-        pytest.skip(f"enable_fast_nebular could not be built locally: {exc}")
+    with warnings.catch_warnings():
+        warnings.simplefilter("ignore")
+        model.enable_fast_nebular(target_wavelengths, n_grid=2)
 
     calls: list[int] = []
     original = type(model)._attenuate_line_catalog
