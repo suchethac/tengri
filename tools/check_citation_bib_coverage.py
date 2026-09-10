@@ -220,7 +220,6 @@ UNCURATED_DOIS = frozenset(
         "10.3847/1538-4357/833/1/98",  # agn_priors.py
         "10.3847/1538-4357/aab0a7",  # sed_model.py
         "10.3847/1538-4357/aad235",  # attenuation.py
-        "10.3847/1538-4357/aae386",  # attenuation.py
         "10.3847/1538-4357/aae8e0",  # psd_models.py
         "10.3847/1538-4357/aaf563",  # dense_basis.py
         "10.3847/1538-4357/ab2052",  # dense_basis.py

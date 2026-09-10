@@ -2801,7 +2801,7 @@ def suggest_parameters(
     mean_sfh_type: str | list[str] = "dpl",
     agn_model: str | None = None,
     dust_law: str | None = None,
-    dust_law_bc: str | None = "power_law",
+    dust_law_bc: str | None = None,
     dust_law_diff: str | None = None,
     dust_emission: str | None = None,
     dust_model: str = "two_component",
@@ -2835,9 +2835,20 @@ def suggest_parameters(
     agn_model : str, optional
         Name from ``tengri.list_agn_models()``.  ``None`` → AGN off.
     dust_law : str, optional
-        Attenuation law name. For flat-kwarg Parameter() builds, defaults to
-        power_law when unset. For grammar builds (SEDModel.build), use 'law'
-        for single_component or both 'law_bc' and 'law_diff' for two_component.
+        Attenuation law name applied to BOTH screens: fills whichever of
+        ``dust_law_bc``/``dust_law_diff`` the caller left unnamed, so a lone
+        ``dust_law`` on ``single_component`` names its one screen, and on
+        ``two_component`` it names both unless overridden by an explicit
+        per-screen ``dust_law_bc``/``dust_law_diff``. For flat-kwarg
+        Parameter() builds, defaults to power_law when unset. For grammar
+        builds (SEDModel.build), use 'law' for single_component or both
+        'law_bc' and 'law_diff' for two_component.
+    dust_law_bc, dust_law_diff : str, optional
+        Default None. Mirror ``Parameters()``'s own ``dust_law_bc``/
+        ``dust_law_diff`` flat kwargs and are resolved through the same
+        ``tengri.parameters._dust_laws.resolve_dust_screen_laws`` rule, so
+        this cheatsheet cannot describe a configuration ``Parameters()``
+        itself would refuse.
     dust_emission : str, optional
         IR emission template family from
         ``tengri.list_dust_emission_models()``.
@@ -2867,11 +2878,22 @@ def suggest_parameters(
     >>> tengri.suggest_parameters(mean_sfh_type=["dpl", "field"])
     """
     from tengri.parameters._builders import _build_param_registry
+    from tengri.parameters._dust_laws import resolve_dust_screen_laws
 
     nebular_flag = nebular_backend is not None
-    if dust_law and not dust_law_diff:
-        # Treat single dust_law= as the diffuse component for two-component
-        dust_law_diff = dust_law
+    if dust_law:
+        # dust_law names ONE law for both screens (the single-law spelling
+        # documented above, e.g. "use 'law' for single_component"): it fills
+        # whichever screen the caller left unnamed, never only the diffuse
+        # one. Folding it into dust_law_diff alone regressed #2224's fix --
+        # a single-component dust_law_bc stayed None and the resolver
+        # correctly refused the resulting lone dust_law_diff.
+        dust_law_bc = dust_law_bc or dust_law
+        dust_law_diff = dust_law_diff or dust_law
+    # Same resolution rule Parameters._init_dust_config applies (#2224): the
+    # printed cheatsheet must not describe a (dust_model, dust_law_bc,
+    # dust_law_diff) triple that Parameters() itself would refuse.
+    dust_law_bc, dust_law_diff = resolve_dust_screen_laws(dust_model, dust_law_bc, dust_law_diff)
     registry, defaults = _build_param_registry(
         mean_sfh_type=mean_sfh_type,
         nebular=nebular_flag,
@@ -2911,8 +2933,9 @@ def suggest_parameters(
         parts.append(f"agn_model={agn_model!r}")
     if dust_emission:
         parts.append(f"dust_emission={dust_emission!r}")
-    if dust_law or dust_law_diff:
-        parts.append(f"dust_law_diff={(dust_law_diff or dust_law)!r}")
+    parts.append(f"dust_law_bc={dust_law_bc!r}")
+    if dust_law_diff != dust_law_bc:
+        parts.append(f"dust_law_diff={dust_law_diff!r}")
     if nebular_backend:
         parts.append(f"nebular_backend={nebular_backend!r}")
     _display(f"\nParameters configuration: {', '.join(parts)}")

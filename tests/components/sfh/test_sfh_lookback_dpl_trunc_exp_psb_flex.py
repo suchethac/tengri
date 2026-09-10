@@ -22,8 +22,8 @@ one stated way:
     The Suess+2022 post-starburst SFH with its flexible quenching zone cut into
     five equal-width bins instead of one. ``psb_suess2022`` is the one-bin
     special case; the shared shape function must return a *bit-identical* SFH
-    when no ``flex_*`` ratio is supplied, which is what keeps every existing
-    ``psb_suess2022`` build unchanged.
+    when no ``flex_*`` ratio is supplied, which is what makes that entry a case
+    of this one rather than a second implementation of the same physics.
 
 These tests need no external package and run in the default tier; the numerical
 comparison against Synthesizer lives in
@@ -121,8 +121,8 @@ def _legacy_psb(age_yr, log_total_mass, tlast_gyr, tflex_gyr, fixed_edges_gyr, *
 def test_psb_continuity_without_flex_ratios_is_the_one_bin_model(case):
     """No ``flex_*`` kwarg means one flexible bin, exactly as before.
 
-    This is what lets ``psb_suess2022`` keep its shipped parameter set while
-    the same function grows the resolved zone ``psb_flex`` needs.
+    This is what makes ``psb_suess2022`` the ``nflex = 1`` case of the same
+    function rather than a second implementation of the same physics.
     """
     got = np.asarray(psb_continuity(T_FINE_YR, **case, bin_edges_gyr=PSB_FIXED_EDGES_GYR))
     want = _legacy_psb(np.asarray(T_FINE_YR), **case, fixed_edges_gyr=PSB_FIXED_EDGES_GYR)
@@ -198,7 +198,7 @@ def test_psb_flex_conserves_the_declared_total_mass():
     assert bool(jnp.all(sfr >= 0.0))
 
 
-@pytest.mark.parametrize("tflex_gyr", [0.5, 0.9, 2.0, 5.0])
+@pytest.mark.parametrize("tflex_gyr", [1.0, 1.4, 2.0, 5.0])
 def test_psb_flex_ladder_is_ascending_for_every_tflex_in_its_prior(tflex_gyr):
     """``psb_flex`` lays its fixed bins out FROM ``tflex``, so they never cross.
 
@@ -206,7 +206,8 @@ def test_psb_flex_ladder_is_ascending_for_every_tflex_in_its_prior(tflex_gyr):
     fixed edges, so it is the caller's job to keep ``tflex_gyr`` below the
     first of them. That is checked here on the derived ladder, which is what
     makes ``jnp.searchsorted`` well defined and the mass sum exact across the
-    whole Uniform(0.5, 5.0) prior on ``tflex_gyr``.
+    whole Uniform(1.0, 5.0) prior on ``tflex_gyr`` (floor raised to the
+    ``tlast_gyr`` ceiling in #2184, so the joint prior cannot cross either).
     """
     fixed = np.linspace(tflex_gyr, PSB_FLEX_DEFAULT_MAX_AGE_GYR, PSB_FLEX_DEFAULT_N_FIXED + 1)
     edges = np.concatenate([[0.0, 0.2, tflex_gyr], fixed[1:]])
@@ -568,8 +569,18 @@ def test_wildcard_free_builds_a_fittable_model(ssp_data_fsps, sfh_type):
     assert all(p.startswith(f"sfh_{sfh_type}_") for p in free), free
 
 
-def test_psb_suess2022_parameter_set_is_unchanged_by_the_flex_variant():
-    """Adding ``psb_flex`` must not touch the model it generalizes."""
+def test_psb_flex_adds_only_the_flex_ratios_to_the_psb_suess2022_parameter_set():
+    """The two entries differ by the ``ratio_flex_*`` block and by nothing else.
+
+    ``psb_suess2022`` is the ``nflex = 1`` case of the same shape function, so
+    its parameters are ``psb_flex``'s with the flexible-zone ratios removed and
+    the fixed section (three equal-width old bins, two adjacent-step ratios)
+    shared name for name.
+
+    This pinned a seven-name set until #2184, ending in a ``ratio_old_2`` that
+    the corrected three-bin fixed section has no step for: it sampled a prior,
+    cost a dimension, and reached no bin.
+    """
     assert list(SFH_REGISTRY["psb_suess2022"].params) == [
         "sfh_psb2022_log_total_mass",
         "sfh_psb2022_tlast_gyr",
@@ -577,5 +588,12 @@ def test_psb_suess2022_parameter_set_is_unchanged_by_the_flex_variant():
         "sfh_psb2022_ratio_young",
         "sfh_psb2022_ratio_old_0",
         "sfh_psb2022_ratio_old_1",
-        "sfh_psb2022_ratio_old_2",
     ]
+
+    def _suffixes(prefix, name):
+        return [p[len(prefix) :] for p in SFH_REGISTRY[name].params]
+
+    flex = _suffixes("sfh_psb_flex_", "psb_flex")
+    assert [s for s in flex if not s.startswith("ratio_flex_")] == _suffixes(
+        "sfh_psb2022_", "psb_suess2022"
+    )

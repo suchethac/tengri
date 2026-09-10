@@ -127,7 +127,7 @@ def test_sed_dust_ir_is_proportional_to_l_ir(synthetic_ssp_wide, model_name):
         s2 = _sed_dust_ir(synthetic_ssp_wide, model_name, 2.0)
     except pytest.skip.Exception:
         raise
-    except (ValueError, KeyError) as exc:
+    except (FileNotFoundError, OSError) as exc:
         pytest.skip(f"{model_name} not constructible here: {type(exc).__name__}: {exc}")
 
     nonzero = np.abs(s1) > 0

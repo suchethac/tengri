@@ -483,6 +483,7 @@ class DustSEDComponent(TemplateThreading):
             self.config.live_shape_params,
             bc_law=self.config.law_bc,
             diff_law=self.config.law_diff,
+            redshift=params.get("redshift"),
         )
         return self._transmission_from_law_params(
             params, wavelength, ssp_ages_yr, bc_law_params, diff_law_params
@@ -565,6 +566,7 @@ class DustSEDComponent(TemplateThreading):
             self.config.live_shape_params,
             bc_law=self.config.law_bc,
             diff_law=self.config.law_diff,
+            redshift=params.get("redshift"),
         )
         # The ONE binding for every curve evaluation in this method. Hoisted to
         # method scope on purpose: the photometry LUT and the spectroscopy pixel

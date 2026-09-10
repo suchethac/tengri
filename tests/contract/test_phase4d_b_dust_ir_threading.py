@@ -136,7 +136,7 @@ def test_pahspec_dust_does_not_thread_template_data(ssp_wneref, obs):
 
     try:
         model = _silent_build(_base_spec(dust_emission="draine2021_pah"), ssp_wneref, obs)
-    except (ImportError, FileNotFoundError, KeyError):
+    except (ImportError, FileNotFoundError):
         pytest.skip("PAHspec build unavailable")
 
     td = model._template_data_for_jit()
@@ -156,7 +156,7 @@ def test_astrodust_dust_does_not_thread_template_data(ssp_wneref, obs):
 
     try:
         model = _silent_build(_base_spec(dust_emission="astrodust"), ssp_wneref, obs)
-    except (ImportError, FileNotFoundError, KeyError):
+    except (ImportError, FileNotFoundError):
         pytest.skip("Astrodust build unavailable")
 
     td = model._template_data_for_jit()
@@ -213,7 +213,7 @@ def test_jit_and_non_jit_paths_agree_with_pahspec(ssp_wneref, obs):
     try:
         dust_cfg = "draine2021_pah"
         model = _silent_build(_base_spec(dust_emission=dust_cfg), ssp_wneref, obs)
-    except (ImportError, FileNotFoundError, KeyError):
+    except (ImportError, FileNotFoundError):
         pytest.skip("PAHspec template files not available")
 
     params = {}
@@ -231,7 +231,7 @@ def test_jit_and_non_jit_paths_agree_with_astrodust(ssp_wneref, obs):
     try:
         dust_cfg = "astrodust"
         model = _silent_build(_base_spec(dust_emission=dust_cfg), ssp_wneref, obs)
-    except (ImportError, FileNotFoundError, KeyError):
+    except (ImportError, FileNotFoundError):
         pytest.skip("Astrodust template files not available")
 
     params = {}

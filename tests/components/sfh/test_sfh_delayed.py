@@ -101,7 +101,7 @@ def test_delayed_buildable_via_sedmodel_build():
 
     try:
         ssp = tengri.load_ssp()
-    except Exception:
+    except FileNotFoundError:
         pytest.skip("SSP fixture not present")
 
     model = tengri.SEDModel.build(
@@ -121,5 +121,19 @@ def test_delayed_buildable_via_sedmodel_build():
         neb={"type": "ssp", "all_params": tengri.Fixed(tengri.DEFAULT)},
         redshift=tengri.Fixed(0.05),
     )
-    # If we got here the registry round-tripped — that's the contract this test pins.
-    assert model is not None
+    # The docstring's claim is that the registry round-tripped to *delayed*.
+    # ``assert model is not None`` is satisfied by any successful constructor,
+    # including one that silently resolved to a different SFH type, so pin the
+    # resolution and the values that arrived instead.
+    assert "sfh_delayed_tau_gyr" in model.spec.fixed_params, (
+        f"build did not resolve to the delayed SFH; fixed params are "
+        f"{sorted(model.spec.fixed_params)}"
+    )
+    for name, expected in (
+        ("sfh_delayed_log_total_mass", 10.0),
+        ("sfh_delayed_tau_gyr", 1.0),
+        ("sfh_delayed_age_gyr", 5.0),
+    ):
+        assert float(model.spec.fixed_value(name)) == expected, (
+            f"{name} did not arrive: {float(model.spec.fixed_value(name))} != {expected}"
+        )

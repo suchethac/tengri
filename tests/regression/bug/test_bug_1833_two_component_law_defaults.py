@@ -22,6 +22,12 @@ shared law kwargs unconditionally, and the spec declares one shared
 ``dust_bump_strength`` / ``dust_delta``, both ``Fixed(0.0)`` -- so the paper
 value was overwritten with zero on every build.
 
+That table is the 2026-08 measurement and stands as history. ``narayanan_z``
+has since stopped declaring either parameter (#2199): it is the Narayanan+2018
+median curve at the model redshift and reads only ``redshift``, so it has no
+shape default left to overwrite. See
+:func:`test_narayanan_z_declares_no_shape_parameter_to_protect` below.
+
 For ``kriek_conroy`` that removes the 2175 Å Drude bump entirely. Kriek &
 Conroy (2013), ApJ 775, L16, Eqn 3:
 
@@ -66,7 +72,14 @@ _INERT_TOL = 1e-9
 _TAU = 1.0
 
 #: Laws whose signature carries a non-zero shape default -- the ones #1833 broke.
-_PAPER_DEFAULT_LAWS = ("kriek_conroy", "narayanan_z", "tea")
+#:
+#: ``narayanan_z`` was here until #2199. It no longer declares ``dust_delta`` or
+#: ``dust_bump_strength`` at all: it *is* the Narayanan+2018 median curve at the
+#: model redshift, and reads only ``redshift``. So it has no published shape
+#: default left to protect, and stating one now raises rather than being a no-op.
+#: :func:`test_narayanan_z_declares_no_shape_parameter_to_protect` pins that,
+#: so this list shrinking is a recorded fact and not a silent deletion.
+_PAPER_DEFAULT_LAWS = ("kriek_conroy", "tea")
 
 
 def _all_laws() -> tuple[str, ...]:
@@ -198,6 +211,25 @@ def test_two_component_honors_the_published_default(law, dust_ssp, uv_obs):
         f"'{law}': stating its own published default {explicit} changed the SED by "
         f"{moved:.6e}, so the default in use is not the published one (#1833)."
     )
+
+
+def test_narayanan_z_declares_no_shape_parameter_to_protect(dust_ssp, uv_obs):
+    """Why ``narayanan_z`` left ``_PAPER_DEFAULT_LAWS`` (#2199).
+
+    Its two shape parameters were sentinels: ``dust_delta == -0.2`` meant "use
+    the redshift table", any other value meant "use mine", and k(1500 A) jumped
+    61 % across 1e-6 in ``dust_delta`` at z = 0. The law now takes only
+    ``redshift``, so the grammar refuses the two keys rather than accepting a
+    value it would have to ignore -- and the message names the law that does
+    read them.
+    """
+    from tengri.components.dust.laws._registry import law_kwarg_names
+    from tengri.config.exceptions import ParameterError
+
+    assert law_kwarg_names("narayanan_z") == frozenset({"redshift"})
+    for key in ("delta", "bump_strength"):
+        with pytest.raises(ParameterError, match="kriek_conroy"):
+            _build(dust_ssp, uv_obs, _two("narayanan_z", **{key: Fixed(-0.2)}))
 
 
 def test_kriek_conroy_keeps_its_2175_angstrom_bump(dust_ssp, uv_obs):
