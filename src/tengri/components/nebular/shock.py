@@ -131,6 +131,16 @@ def _resolve_abundance(name: str, available: list[str]) -> int:
 
 _VALID_COMPONENTS = frozenset({"shock", "precursor", "combined"})
 
+#: ``shock_component`` -> population-mask field name. The single mapping shared
+#: by :func:`shock_line_ratios` (which applies the mask) and
+#: :func:`population_envelope` (the build-time #2065 coverage guard), so the
+#: two cannot drift.
+_COMPONENT_MASK_FIELD: dict[str, str] = {
+    "shock": "shock_pop_mask",
+    "precursor": "precursor_pop_mask",
+    "combined": "combined_pop_mask",
+}
+
 
 def _validate_shock_params(
     shock_velocity: float,
@@ -376,6 +386,75 @@ def load_shock_template_grid() -> ShockTemplateGrid | None:
     )
 
 
+def population_envelope(
+    shock_abundance: str, shock_component: str = "combined"
+) -> tuple[float, float, float, float] | None:
+    """Populated (density, B-field) envelope for one (abundance, component) grid.
+
+    A cheap, numpy-only, build-time summary of the sparse MAPPINGS V grid's
+    coverage (#2065): the outer bounding interval, on each axis
+    *independently*, of grid nodes that have at least one populated companion
+    on the other axis (``mask.any(axis=...)``). Backs
+    ``SEDModel._validate_shock_coverage`` (private), the build-time guard
+    that refuses a ``shock_log_density`` / ``shock_b_over_sqrt_n`` value with
+    no grid support before it can silently predict an exactly-zero shock
+    spectrum.
+
+    This is deliberately coarse, not the true 2-D-coupled population: a value
+    inside the envelope on one axis can still land in a locally-unpopulated
+    pocket paired with the other axis's value (the solar grid has **no**
+    fully-populated 3x3 neighborhood anywhere -- see the case (c) diagnosis
+    at ``docs/internal/specs/2026-09-05-shock-family-interp-diagnosis.md``, #2066,
+    which is what a family-aware interpolant would fix). What this envelope
+    does guarantee: a value strictly *outside* it receives no contribution
+    from any populated cell.
+
+    Parameters
+    ----------
+    shock_abundance : str
+        Abundance short name or full 3MdBs DB name (see
+        :func:`_resolve_abundance`).
+    shock_component : str
+        ``"shock"``, ``"precursor"``, or ``"combined"``. Default
+        ``"combined"``.
+
+    Returns
+    -------
+    tuple[float, float, float, float] or None
+        ``(dens_lo, dens_hi, b_lo, b_hi)``: populated envelope in the grid's
+        native units (log10(cm^-3), uG). ``nan`` for all four when the
+        (abundance, component) combination has no populated cells at all.
+        ``None`` when ``data/mappings_templates.h5`` is absent: the fallback
+        Allen+2008 Table 5 path has no sparsity to guard against.
+
+    Notes
+    -----
+    **JIT-compatible**: no; build-time only, which is the point (#2065's
+    guard needs a concrete Python ``shock_abundance`` string, never legal
+    inside a JAX trace).
+    """
+    grids = _load_mappings_grids()
+    if grids is None or "mappings5" not in grids:
+        return None
+    g = grids["mappings5"]
+    i_abund = _resolve_abundance(shock_abundance, g["abundance_names"])
+    mask_field = _COMPONENT_MASK_FIELD.get(shock_component, "combined_pop_mask")
+    mask = np.asarray(g[mask_field])[i_abund]  # (N_n, N_B)
+
+    dens_pop = mask.any(axis=1)
+    b_pop = mask.any(axis=0)
+    if not dens_pop.any() or not b_pop.any():
+        return (float("nan"), float("nan"), float("nan"), float("nan"))
+
+    dens_grid = np.asarray(g["log_density_cm3"])
+    b_grid = np.asarray(g["b_axis"])
+    dens_lo = float(dens_grid[dens_pop][0])
+    dens_hi = float(dens_grid[dens_pop][-1])
+    b_lo = float(b_grid[b_pop][0])
+    b_hi = float(b_grid[b_pop][-1])
+    return dens_lo, dens_hi, b_lo, b_hi
+
+
 # ── Public API ────────────────────────────────────────────────────
 
 
@@ -401,11 +480,24 @@ def shock_line_ratios(
         if out of range.  Continuously interpolated: safe under ``jax.jit``.
     shock_log_density : float
         Log10 pre-shock density in cm⁻³ (e.g. ``0.0`` = 1 cm⁻³).
-        Must be within ``[0, 3]``.  Continuously interpolated via triweight
-        kernel: safe under ``jax.jit``.  Raises ``ValueError`` if out of range.
+        Must be within the HDF5 grid's declared axis, ``[-2, 3]`` (this
+        function's own range check enforces exactly this; the range
+        previously documented here, ``[0, 3]``, was narrower than what the
+        code actually accepted -- #2065). Not all of ``[-2, 3]`` is
+        *populated* for every abundance: see :func:`population_envelope`
+        for the per-abundance coverage. A model built via the
+        ``shock={...}`` grammar group additionally gets a build-time guard
+        (``SEDModel._validate_shock_coverage``, private) against silently
+        landing in an unpopulated region; a direct call to this function
+        does not go through that guard. Continuously interpolated via
+        triweight kernel: safe under ``jax.jit``. Raises ``ValueError`` if
+        out of range.
     shock_b_over_sqrt_n : float
         Absolute B-field strength in μG (3MdBs MAPPINGS V convention).
-        Must be within ``[0.0001, 10]`` μG.  Continuously interpolated via
+        Must be within the HDF5 grid's declared axis, ``[0.0001, 1000]`` μG
+        (this function's own range check enforces exactly this; the range
+        previously documented here, ``[0.0001, 10]``, was narrower than what
+        the code actually accepted -- #2065). Continuously interpolated via
         triweight kernel: safe under ``jax.jit``.  Raises ``ValueError`` if
         out of range.
     shock_abundance : str
@@ -521,13 +613,9 @@ def shock_line_ratios(
         # The mask tells us which (density, B) pairs are populated.
         # Unpopulated cells (mask=0) are already zero-filled, but we apply the mask
         # explicitly so gradients correctly track only through populated cells.
-        mask_field_name = (
-            "shock_pop_mask"
-            if ratio_field == "shock_ratios"
-            else (
-                "precursor_pop_mask" if ratio_field == "precursor_ratios" else "combined_pop_mask"
-            )
-        )
+        # ``_COMPONENT_MASK_FIELD`` is the single component->mask-field mapping,
+        # shared with :func:`population_envelope`'s build-time #2065 guard.
+        mask_field_name = _COMPONENT_MASK_FIELD.get(shock_component, "combined_pop_mask")
         mask_abund = g[mask_field_name][i_abund]  # (N_n, N_B)
 
         # Reshape mask to broadcast with grid_vbn: (1, N_B, N_n, 1)

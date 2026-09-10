@@ -91,3 +91,71 @@ To improve beyond 18% B-field gradient error would require:
 3. Accepting the current limitation as a design trade-off
 
 The current implementation represents the best that can be achieved with the triweight kernel while maintaining code clarity and correctness.
+
+## Outcome (2026-09-10)
+
+Landed in this PR, closing #2065 and the density half of #2066; the B-field
+half of #2066 (case (c)) remains open by design.
+
+**Landed:**
+
+- **Population masks + index-space interpolation** (this WIP, current at the
+  cherry-pick): `shock.py` applies the per-(abundance, component) population
+  mask before interpolation; `grid_interp.py` uses index-space triweight
+  weights on the non-uniform B axis. Verified current against main:
+  `tests/components/nebular/test_shock_interpolation.py` runs 10 passed, 2
+  xfailed unchanged. Four pre-existing failures surfaced in
+  `tests/components/nebular/test_shock.py` /
+  `test_shock_emission.py` (Hβ-must-equal-1 assertions evaluated at the
+  function defaults, `shock_log_density=0.0, shock_b_over_sqrt_n=1.0`, where
+  only 35.7% of the solar grid is populated) — not a rebase regression but a
+  pre-existing gap in those older tests' coverage of the real (sparse) H5
+  grid; fixed by querying a verified fully-populated 3x3 neighborhood
+  (`log_density=-2.0, b_over_sqrt_n=0.01`) instead, and by making
+  `test_backward_compat_solar_n1` actually force the fallback path its
+  docstring always claimed to test.
+- **#2065 build-time guard** (`SEDModel._validate_shock_coverage`, backed by
+  `tengri.components.nebular.shock.population_envelope`): a shock build whose
+  `shock_log_density` / `shock_b_over_sqrt_n` has no grid support now raises
+  `ParameterError` at construction (Fixed value or free-prior support
+  entirely outside the populated envelope) or warns with the exact dead
+  fraction (partial free-prior overlap), instead of silently predicting an
+  exactly-zero shock spectrum. Coarse by design: a per-axis marginal ("any
+  populated companion") envelope, not the true 2-D-coupled population — see
+  case (c) above for why a precise version needs the same family-aware
+  interpolant #2066 asks for.
+- **`shock_log_density` free_prior**: declared `Uniform(-2.0, 3.0)` on
+  `SHOCK_PARAMS` in `_params.py`, measured from the solar-abundance
+  population mask (every density node has at least one populated B cell, so
+  the envelope equals the grid's full declared axis). Also documented,
+  per-abundance: the four other shipped abundances (SMC, LMC, Dopita2005,
+  TwiceSolar) have data at exactly one density node (0.0) each — a
+  degenerate single-point envelope the interval above still contains, so the
+  #2065 guard warns (not raises) rather than blocking `all_params: FREE`
+  outright when a non-solar abundance is selected. `shock_velocity` and
+  `shock_frac` / `shock_log_lhalpha` already had free priors;
+  `shock_log_density` was the last of the shock group's continuous knobs
+  without one.
+- **Stale documentation fixed as a direct consequence**: `shock_line_ratios`'s
+  docstring claimed `shock_log_density` valid on `[0, 3]` and
+  `shock_b_over_sqrt_n` on `[0.0001, 10]` μG; the code's own range check
+  (`_validate_shock_params`) always enforced the wider `[-2, 3]` /
+  `[0.0001, 1000]` -- exactly the discrepancy #2065 is about. Docstrings now
+  match the code.
+
+**Still open (not this PR):**
+
+- **#2066, B-field axis**: `shock_b_over_sqrt_n` stays `Fixed`-only in
+  `SHOCK_PARAMS` (ground: `inert`, `tools/check_param_free_priors.py`). The
+  ~18% autodiff-vs-FD mismatch documented above is unchanged; explicit
+  `Uniform(...)` priors work today (per-object, opted in by the caller), but
+  a default free prior needs the family-aware interpolant this diagnosis
+  concluded is required, not a masking or bandwidth tweak.
+- **The true 2-D-coupled population** is still invisible to any cheap guard:
+  `population_envelope`'s per-axis marginal is a conservative outer bound, so
+  a value can sit inside the envelope on both axes and still land in a
+  locally-unpopulated pocket (verified: the solar grid has **no** fully
+  populated 3x3 (density x B) neighborhood anywhere). This is exactly what a
+  family-aware interpolant (#2066) would resolve; until then, both this
+  guard's coverage and the B-field gradient's accuracy share the same root
+  cause.
