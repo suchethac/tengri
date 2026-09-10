@@ -391,6 +391,52 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
   (`resolve_dust_screen_laws`), so the diffuse screen's law is always stated,
   not inherited (#2021).
 
+- **The CIGALE-lineage SKIRTOR grid's stored inclination normalization is now
+  read and applied, so every `agn_norm='cigale_joint'` + `torus='skirtor'`
+  render becomes inclination-dependent where it was flat.**
+  `data/skirtor_templates_v3.h5` stores each SKIRTOR model divided by its own
+  dust integral, with the physical scale factored out into `spectra/norm` (one
+  number per parameter cell, no wavelength axis). The loader never read it, so
+  the face-on disc integral and the observer-inclination dust integral were
+  divided across two different luminosity scales: `R_faceon` came out
+  **4.4246 at every inclination** (measured at i = 0, 30, 50, 60, 80, 90),
+  and the polar dust's share of the AGN dust budget came out
+  inclination-**flat** at 0.200035. `R_faceon` now carries `norm(0)/norm(i)`
+  — 1.0 face-on to 3.621 edge-on at the fiducial (tau=7, p=q=1, oa=40, R=20)
+  — which is where CIGALE's `skirtor2016` applies it
+  (`AGN1.disk *= AGN1.norm / self.SKIRTOR2016.norm`, one line before the
+  face-on disc becomes the polar dust's absorbed-power reference). It reaches
+  exactly that one quantity: the observed disc divides the factor straight back
+  out, so `R` and the disc SED are untouched.
+
+  Measured at the SKIRTOR fiducial with `agn_ir_frac=0.3`, the polar share
+  against a live CIGALE `skirtor2016`, before → after:
+
+  | i | tengri before | tengri after | CIGALE | after/CIGALE |
+  |---|---|---|---|---|
+  | 0 | 0.200035 | 0.200035 | 0.204988 | 0.9758 |
+  | 30 | 0.200035 | 0.204670 | 0.209708 | 0.9760 |
+  | 60 | 0.200035 | 0.344936 | 0.352217 | 0.9793 |
+  | 80 | 0.200035 | 0.442378 | 0.450589 | 0.9818 |
+
+  Blast radius: **every** `agn_norm='cigale_joint'` build carrying the
+  composable `torus={'type': 'skirtor'}` (with the `disc` blocks `skirtor`,
+  `schartmann2005`, `schartmann2005_skirtor_atten` or `adaf_lopez2024`) and a
+  non-zero `agn_ir_frac` — the CIGALE reproduction, the `polar_dust` recipe,
+  and `examples/agn/plot_polar_dust_ebv_type12_sweep.py`. At the i=30 fiducial
+  the polar component rises 2.91%; at i=80 it rises 2.21x. Face-on is
+  unchanged, and `agn_ir_frac=0` is unchanged (no R-tie there).
+
+  **The AGNfitter-rX SKIRTOR reductions are unchanged.** `skirtor_agnfitter`,
+  `skirtor_agnfitter_1p` and `skirtor_agnfitter_2p` read their own
+  inclination-averaged, dust-only libraries
+  (`data/skirtor_mean{3,1,2}p_torus_grid.h5`), which carry no such
+  normalization and no disc component; so are the monolithic `skirtor` and
+  `skirtor_stalevski` models and the `schartmann2005_skirtor_atten` disc
+  transmission, all pinned bit-identical across this change.
+  `tests/components/agn/test_skirtor_lineage_separation.py` holds the
+  separation.
+
 - The composable-AGN polar-dust attenuation block no longer disagrees with
   CIGALE's `skirtor2016` module on how the torus and polar re-emission share
   the AGN dust budget, which reference luminosity the polar covering factor

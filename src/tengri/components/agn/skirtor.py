@@ -72,6 +72,86 @@ class SKIRTORComponents(NamedTuple):
     total: jnp.ndarray
 
 
+class SkirtorDiscDustGrid(NamedTuple):
+    r"""The CIGALE-lineage SKIRTOR disk/dust library, as one threadable pytree.
+
+    Read from ``data/skirtor_templates_v3.h5`` (the full 6-axis grid), which
+    is the only SKIRTOR file tengri ships that carries separate ``disk`` and
+    ``dust`` components and the per-cell ``norm`` beside them. The
+    AGNfitter-rX reductions (``skirtor_mean{1,2,3}p_torus_grid.h5``, behind
+    the ``skirtor_agnfitter*`` blocks) are inclination-averaged
+    dust-only libraries with no such split and no ``norm``; they are loaded
+    by their own modules and never reach here.
+
+    The field order is positional-compatible with the plain
+    ``(disk, dust, wave_grid, axes)`` tuple this replaced, so ``grid[3]`` is
+    still the axes.
+
+    Attributes
+    ----------
+    disk : jnp.ndarray, shape (*axes_shape, n_native)
+        Accretion-disc (direct + scattered) template :math:`L_\lambda`,
+        divided by the cell's ``norm``. [normalized]
+    dust : jnp.ndarray, shape (*axes_shape, n_native)
+        Torus thermal template :math:`L_\lambda`, divided by the same
+        ``norm``, hence of unit integral over the native grid (10 on the
+        Angstrom axis). [normalized]
+    wave_grid : jnp.ndarray, shape (n_native,)
+        The templates' native wavelength grid [A].
+    axes : tuple of jnp.ndarray
+        Strictly-ascending parameter axes ``(tau, p, q, oa, R, cos_inc)``
+        (a legacy 5-axis grid drops ``R``).
+    norm : jnp.ndarray, shape (*axes_shape), or None
+        The physical scale divided out of ``disk`` and ``dust``, per
+        parameter cell and with no wavelength axis: see
+        :func:`_load_grid_arrays`. ``None`` for a grid that carries the
+        component split without it, in which case
+        :func:`skirtor_disc_dust_ratio` leaves the inclination
+        normalization at 1.0 and says so.
+    """
+
+    disk: jnp.ndarray
+    dust: jnp.ndarray
+    wave_grid: jnp.ndarray
+    axes: tuple
+    norm: jnp.ndarray | None
+
+
+def _as_disc_dust_grid(raw) -> SkirtorDiscDustGrid:
+    """Accept a :class:`SkirtorDiscDustGrid` or the 4-field tuple it replaced.
+
+    Parameters
+    ----------
+    raw : SkirtorDiscDustGrid or tuple
+        Either the named grid, or ``(disk, dust, wave_grid, axes)`` from a
+        caller that built the library before ``norm`` was read, in which case
+        the inclination normalization is reported absent rather than assumed
+        to be unity silently.
+
+    Returns
+    -------
+    SkirtorDiscDustGrid
+
+    Raises
+    ------
+    TypeError
+        If *raw* is neither, so a mis-threaded template fails at the boundary
+        instead of unpacking into the wrong fields.
+    """
+    if isinstance(raw, SkirtorDiscDustGrid):
+        return raw
+    if isinstance(raw, tuple) and len(raw) == 4:
+        disk, dust, wave_grid, axes = raw
+        return SkirtorDiscDustGrid(disk=disk, dust=dust, wave_grid=wave_grid, axes=axes, norm=None)
+    raise TypeError(
+        "SKIRTOR disk/dust library must be a SkirtorDiscDustGrid (or the "
+        "4-field (disk, dust, wave_grid, axes) tuple it replaced); got "
+        f"{type(raw).__name__}"
+        + (f" of length {len(raw)}" if isinstance(raw, tuple) else "")
+        + "."
+    )
+
+
 class SkirtorDiscTie(NamedTuple):
     r"""What the CIGALE-joint disc normalization reads off the SKIRTOR pair.
 
@@ -93,8 +173,14 @@ class SkirtorDiscTie(NamedTuple):
         the caller's disc spectrum, so it is the one field that belongs
         there).
     R_faceon : jnp.ndarray, scalar
-        Face-on, UN-reddened ratio :math:`\int disk(i=0)/\int dust(i)`: the
-        scale CIGALE's polar ``l_ext`` proxy is referenced to.
+        Face-on, UN-reddened ratio
+        :math:`{\rm norm}(0)/{\rm norm}(i) \int disk(i=0)/\int dust(i)`: the
+        scale CIGALE's polar ``l_ext`` proxy is referenced to. The
+        ``norm(0)/norm(i)`` factor is the CIGALE-lineage grid's own stored
+        inclination normalization (see :class:`SkirtorDiscDustGrid`), without
+        which the face-on disc and the observer-inclination dust sit on
+        different luminosity scales and this ratio comes out
+        inclination-FLAT (R64).
     faceon_shape_native : jnp.ndarray, shape (n_native,)
         The analytic disc shape resampled onto ``wave_native`` and normalized
         to unit integral **there**, i.e. CIGALE's ``AGN1.disk / int_disk0``.
@@ -140,7 +226,7 @@ def _ascending_axes(result: dict) -> dict:
     ----------
     result : dict
         Raw arrays as read from the grid file (``axes`` plus any of
-        ``total``, ``disk``, ``dust``).
+        ``total``, ``disk``, ``dust``, ``norm``).
 
     Returns
     -------
@@ -159,8 +245,15 @@ def _ascending_axes(result: dict) -> dict:
     for i in descending:
         axes[i] = axes[i][::-1]
     # The parameter axes are the leading dimensions of every cube (trailing
-    # dimension is wavelength), so axis index i is the same in both.
-    for key in ("total", "disk", "dust"):
+    # dimension is wavelength), so axis index i is the same in both.  ``norm``
+    # is parameter-shaped with NO wavelength axis at all, which makes axis i
+    # the same index there too -- so it flips with the same loop.  It MUST
+    # flip: it is indexed by the very ``cos_inclination`` axis being reversed
+    # here, and a norm left in file order would pair each model's spectra with
+    # a different model's normalization (the ratio it is read for runs from
+    # 1.0 face-on to 3.62 edge-on, so the mispairing is a factor-of-3.6 error,
+    # not a rounding one).
+    for key in ("total", "disk", "dust", "norm"):
         if key in out:
             cube = np.asarray(out[key])
             for i in descending:
@@ -183,12 +276,40 @@ def _load_grid_arrays(grid_path: str):
     dict
         Keys: ``wave``, ``total``, ``axes`` (tau, p, q, oa, cos_inc, plus
         radius_ratio before cos_inc on v3 grids, see ``has_radius_ratio``),
-        and optionally ``disk``, ``dust``.  Axes are always strictly
-        ascending: see :func:`_ascending_axes`.
+        and optionally ``disk``, ``dust``, ``norm``.  Axes are always
+        strictly ascending: see :func:`_ascending_axes`.
 
     Notes
     -----
+    ``norm`` (present as ``spectra/norm`` on the CIGALE-lineage v3 grid,
+    ``data/skirtor_templates_v3.h5``) is the **physical scale** that was
+    divided out of every stored spectrum, one number per parameter cell and
+    no wavelength axis: the grid is built by dividing both ``disk_emission``
+    and ``dust_emission`` of each SKIRTOR model (Stalevski et al. 2012 [1]_,
+    2016 [2]_) by that model's own dust integral
+    :math:`\\int L_\\lambda^{\\rm dust}\\,{\\rm d}\\lambda`, so every stored
+    ``dust_emission`` integrates to 1 (10 on the Angstrom axis, which is the
+    nanometre axis scaled by 10) and ``norm`` carries the luminosity the
+    normalization removed.  It is therefore required to compare records at
+    DIFFERENT inclinations, which sit on different scales: an edge-on model
+    radiates less dust emission per unit intrinsic AGN power, so its ``norm``
+    is smaller (measured at the fiducial tau=7, p=q=1, oa=40, R=20:
+    1.883e-11 face-on falling to 5.200e-12 edge-on).  The ratio
+    ``norm(i=0)/norm(i)`` is exactly the factor CIGALE's ``skirtor2016``
+    applies as ``AGN1.disk *= AGN1.norm / SKIRTOR2016.norm`` before using the
+    face-on disc as the polar dust's absorbed-power reference.
+    :func:`skirtor_disc_dust_ratio` is the one consumer.
+
     **JIT-compatible**: no, performs file I/O at module load time.
+
+    References
+    ----------
+    .. [1] Stalevski, M., Fritz, J., Baes, M., Nakos, T., Popovic, L. C.
+       2012, MNRAS, 420, 2756, "3D radiative transfer modelling of the dusty
+       tori around active galactic nuclei as a clumpy two-phase medium".
+    .. [2] Stalevski, M., Ricci, C., Ueda, Y., Lira, P., Fritz, J.,
+       Baes, M. 2016, MNRAS, 458, 2288, "The dust covering factor in active
+       galactic nuclei".
     """
     import numpy as np
 
@@ -234,6 +355,10 @@ def _load_grid_arrays(grid_path: str):
                     result["disk"] = np.array(f["spectra/disk_emission"][:])
                 if "spectra/dust_emission" in f:
                     result["dust"] = np.array(f["spectra/dust_emission"][:])
+                # The per-cell physical scale factored out of both spectra
+                # (see Notes). Parameter-shaped, no wavelength axis.
+                if "spectra/norm" in f:
+                    result["norm"] = np.array(f["spectra/norm"][:])
             else:
                 result["total"] = np.array(f["grid"][:])
                 result["axes"] = (
@@ -776,9 +901,23 @@ def skirtor_disc_dust_ratio(
         ``incl_ratio`` is ones, and the native pair degrades to the caller's
         own grid and shape.
 
+    Raises
+    ------
+    TypeError
+        If ``_template`` is neither a :class:`SkirtorDiscDustGrid` nor the
+        4-field tuple it replaced.
+
     Notes
     -----
     **JIT-compatible**: yes, grid interpolation is pure JAX.
+
+    ``R_faceon`` carries the CIGALE-lineage grid's stored inclination
+    normalization ``norm(0)/norm(i)`` (R64): the face-on disc integral and the
+    observer-inclination dust integral are read from records stored on
+    different luminosity scales, and this is the factor that puts them on one.
+    The AGNfitter-rX SKIRTOR reductions behind ``skirtor_agnfitter*`` are
+    dust-only, inclination-averaged libraries with no such normalization and
+    do not reach this function.
 
     **Reference**: Implements CIGALE ``skirtor2016.py`` (Boquien+2019).
     """
@@ -798,7 +937,7 @@ def skirtor_disc_dust_ratio(
             / jnp.maximum(jnp.trapezoid(disc_lambda_unreddened, wave), 1e-30),
             wave_native=jnp.asarray(wave),
         )
-    disk_jax, dust_jax, wave_grid, axes = raw
+    disk_jax, dust_jax, wave_grid, axes, norm_jax = _as_disc_dust_grid(raw)
 
     def _interp_native(grid, cos_inc):
         point = (
@@ -840,7 +979,49 @@ def skirtor_disc_dust_ratio(
     # polar ``l_ext`` proxy needs (CIGALE l_ext = geom·∫AGN1.disk·(1-ext_fac)),
     # distinct from ``R`` (the reddened, inclination-weighted *observed* disc
     # used for the disc output bolometric).
-    R_faceon = int_disk0 / int_dust
+    #
+    # R64: the two integrals come from records at DIFFERENT inclinations, and
+    # on the CIGALE-lineage grid each record is stored divided by its OWN
+    # physical scale (``spectra/norm``, see :class:`SkirtorDiscDustGrid`), so
+    # the quotient is meaningless until the face-on numerator is brought onto
+    # the observer-inclination record's scale. That is exactly what CIGALE's
+    # ``skirtor2016`` does one line before it uses the face-on disc:
+    #
+    #     AGN1.disk *= AGN1.norm / self.SKIRTOR2016.norm
+    #
+    # ``AGN1`` being the i=0 record and ``SKIRTOR2016`` the observer's, that
+    # factor is ``norm(0)/norm(i)``: 1.0 face-on rising to 3.62 edge-on at
+    # this grid's fiducial. It reaches ONE quantity and no other: the observed
+    # disc ``SKIRTOR2016.disk = disk·SKIRTOR2016.disk/AGN1.disk`` divides it
+    # straight back out, so ``R`` above is untouched, while the polar dust's
+    # absorbed-power reference carries it in full. Without it ``R_faceon`` was
+    # 4.4246 at every inclination (measured at i = 0, 30, 50, 60, 80, 90)
+    # against CIGALE's 4.4331 → 16.103 rise, and the polar dust's share of the
+    # AGN dust budget came out inclination-flat at 0.200035 against CIGALE's
+    # 0.204988 (i=0) → 0.450589 (i=80): 2.4% low face-on, 2.25x low edge-on,
+    # and invisible at the i=30 fiducial everything else is measured at.
+    #
+    # ``norm`` is parameter-shaped with no trailing wavelength axis, so the
+    # same node-exact PCHIP interpolant returns it as a scalar.
+    if norm_jax is None:
+        # A component-split grid that carries no ``norm`` (the legacy 4-field
+        # tuple, or a regenerated file that dropped it). Leaving the factor at
+        # 1.0 reproduces the pre-R64 face-on reference rather than inventing a
+        # scale; ``SkirtorDiscDustGrid.norm`` documents it as absent.
+        incl_norm_ratio = jnp.asarray(1.0)
+    else:
+        norm_i = _interp_native(norm_jax, agn_cos_inc)
+        norm_0 = _interp_native(norm_jax, 1.0)
+        # A non-positive interpolated norm can only come from an incompletely
+        # covered regenerated grid, where ``norm = 0`` marks a cell carrying no
+        # template at all and the 1e-99 filler spectra already make R
+        # meaningless; degrade to 1.0 there rather than push an inf through
+        # every AGN component. The shipped v3 grid is fully covered (19200/19200
+        # cells with norm > 0), which is asserted by the test suite.
+        incl_norm_ratio = jnp.where(
+            norm_i > 0.0, norm_0 / jnp.where(norm_i > 0.0, norm_i, 1.0), 1.0
+        )
+    R_faceon = int_disk0 * incl_norm_ratio / int_dust
     # ``incl_ratio`` on the *user* grid for the disc-shape reweighting.
     incl_ratio = resample_template(wave, wave_grid, incl_n, left=0.0, right=0.0)
     # ``incl_ratio`` = disk(i)/disk(0) is the wavelength-dependent SKIRTOR
@@ -865,14 +1046,15 @@ def skirtor_disc_dust_ratio(
 
 
 @functools.cache
-def _load_raw_disk_dust_grid():
-    """Load raw (un-normalized) SKIRTOR disk/dust template grids for R.
+def _load_raw_disk_dust_grid() -> SkirtorDiscDustGrid | None:
+    """Load the CIGALE-lineage SKIRTOR disk/dust template grids for R.
 
-    Returns ``(disk_jax, dust_jax, wave_grid, axes)`` or ``None`` if the v3
-    grid (separate disk/dust components) is unavailable. ``_load_grid_arrays``
+    Returns a :class:`SkirtorDiscDustGrid`, or ``None`` if the v3 grid
+    (separate disk/dust components) is unavailable. ``_load_grid_arrays``
     has already reversed the descending ``cos_inclination`` axis (#1911), so
     the node-exact PCHIP interpolant used for R sees strictly-ascending
-    coordinates.
+    coordinates -- and, since R64, has reversed ``norm`` along the same axis
+    with them.
     """
     raw = _load_grid_arrays(_find_skirtor_grid())
     if "disk" not in raw or "dust" not in raw:
@@ -882,7 +1064,10 @@ def _load_raw_disk_dust_grid():
         dust_jax = jnp.array(raw["dust"])
         wave_grid = jnp.array(raw["wave"])
         axes = tuple(jnp.array(ax) for ax in raw["axes"])
-    return disk_jax, dust_jax, wave_grid, axes
+        norm_jax = jnp.array(raw["norm"]) if "norm" in raw else None
+    return SkirtorDiscDustGrid(
+        disk=disk_jax, dust=dust_jax, wave_grid=wave_grid, axes=axes, norm=norm_jax
+    )
 
 
 class SKIRTORBundle(NamedTuple):
@@ -898,14 +1083,14 @@ class SKIRTORBundle(NamedTuple):
     ----------
     torus : SKIRTORGrid
         Dust-cube grid consumed by :func:`skirtor_sed`.
-    disc_dust : tuple or None
-        ``(disk, dust, wave_grid, axes)`` for
+    disc_dust : SkirtorDiscDustGrid or None
+        ``(disk, dust, wave_grid, axes, norm)`` for
         :func:`skirtor_disc_dust_ratio`; ``None`` when the on-disk grid
         predates the v3 split and carries no separate disk component.
     """
 
     torus: SKIRTORGrid
-    disc_dust: tuple | None
+    disc_dust: SkirtorDiscDustGrid | None
 
 
 def load_skirtor_grid(grid_path: str | None = None) -> SKIRTORGrid:
